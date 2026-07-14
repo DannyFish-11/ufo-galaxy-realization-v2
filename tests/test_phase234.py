@@ -15,10 +15,11 @@ Phase 2/3/4 综合测试
 import asyncio
 import json
 import os
-import sys
-import time
-import tempfile
 import shutil
+import sys
+import tempfile
+import time
+
 import pytest
 
 # 确保项目根目录在 path 中
@@ -28,6 +29,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 # ============================================================================
 # Test 1: ProxyRelay 基础中继
 # ============================================================================
+
 
 @pytest.mark.asyncio
 async def test_1_proxy_relay_basic():
@@ -74,6 +76,7 @@ async def test_1_proxy_relay_basic():
 # Test 2: ProxyRelay 带回复的中继
 # ============================================================================
 
+
 @pytest.mark.asyncio
 async def test_2_proxy_relay_with_reply():
     """测试 ProxyRelay 带回复的中继"""
@@ -97,9 +100,7 @@ async def test_2_proxy_relay_with_reply():
     # 在后台模拟回复
     async def simulate_reply():
         await asyncio.sleep(0.3)
-        await relay.handle_relay_reply(
-            req.relay_id, {"battery": 85, "charging": True}
-        )
+        await relay.handle_relay_reply(req.relay_id, {"battery": 85, "charging": True})
 
     asyncio.create_task(simulate_reply())
     result = await relay.relay(req)
@@ -113,6 +114,7 @@ async def test_2_proxy_relay_with_reply():
 # ============================================================================
 # Test 3: ProxyRelay 广播
 # ============================================================================
+
 
 @pytest.mark.asyncio
 async def test_3_proxy_relay_broadcast():
@@ -148,11 +150,14 @@ async def test_3_proxy_relay_broadcast():
 # Test 4: HybridExecutionArbiter 降级链
 # ============================================================================
 
+
 @pytest.mark.asyncio
 async def test_4_hybrid_arbiter_degradation():
     """测试 Hybrid Execution Arbiter 降级链"""
     from core.hybrid_executor import (
-        HybridExecutionArbiter, ExecutionLevel, ExecutionStatus,
+        ExecutionLevel,
+        ExecutionStatus,
+        HybridExecutionArbiter,
     )
 
     call_log = []
@@ -204,11 +209,13 @@ async def test_4_hybrid_arbiter_degradation():
 # Test 5: HybridExecutionArbiter 强制级别
 # ============================================================================
 
+
 @pytest.mark.asyncio
 async def test_5_hybrid_force_level():
     """测试强制指定执行级别"""
     from core.hybrid_executor import (
-        HybridExecutionArbiter, ExecutionLevel,
+        ExecutionLevel,
+        HybridExecutionArbiter,
     )
 
     async def mock_vlm(device_id, instruction, screenshot):
@@ -234,6 +241,7 @@ async def test_5_hybrid_force_level():
 # ============================================================================
 # Test 6: RAGMemory 经验记录与检索
 # ============================================================================
+
 
 def test_6_rag_memory_experience():
     """测试 RAG 经验记录与检索"""
@@ -294,6 +302,7 @@ def test_6_rag_memory_experience():
 # Test 7: RAGMemory Pattern 检测
 # ============================================================================
 
+
 def test_7_rag_pattern_detection():
     """测试 RAG Pattern 检测"""
     from core.rag_memory import RAGMemory
@@ -326,6 +335,7 @@ def test_7_rag_pattern_detection():
 # Test 8: SafeExecutor 安全检查
 # ============================================================================
 
+
 def test_8_safe_executor_security():
     """测试 SafeExecutor 安全检查"""
     from core.safe_executor import check_code_safety
@@ -348,6 +358,7 @@ def test_8_safe_executor_security():
 # ============================================================================
 # Test 9: SafeExecutor 代码执行
 # ============================================================================
+
 
 @pytest.mark.asyncio
 async def test_9_safe_executor_run():
@@ -388,6 +399,7 @@ async def test_9_safe_executor_run():
 # Test 10: AIP v2 协议扩展
 # ============================================================================
 
+
 def test_10_aip_v2_extended_types():
     """测试 AIP v3 统一消息类型（之前的 v2 ExtendedMessageType 已合并进 v3 MessageType）"""
     from galaxy_gateway.protocol.aip_v3 import MessageType
@@ -419,6 +431,7 @@ def test_10_aip_v2_extended_types():
 # Test 11: Scheduler 新增工具
 # ============================================================================
 
+
 def test_11_scheduler_new_tools():
     """测试 Scheduler 新增 relay_to_device 和 execute_code 工具"""
     from core.scheduler import AutonomousScheduler
@@ -440,6 +453,7 @@ def test_11_scheduler_new_tools():
 # Test 12: E2E — Agent ReAct + RAG + SafeExecutor
 # ============================================================================
 
+
 @pytest.mark.asyncio
 async def test_12_e2e_rag_safe_executor():
     """E2E: Agent 使用 RAG 增强 + SafeExecutor"""
@@ -454,8 +468,7 @@ async def test_12_e2e_rag_safe_executor():
             agent_name="math_agent",
             instruction="计算 fibonacci 数列第 10 项",
             steps=[
-                {"thought": "Need to compute fibonacci", "action": "execute_code",
-                 "observation": "55"},
+                {"thought": "Need to compute fibonacci", "action": "execute_code", "observation": "55"},
             ],
             final_output="fibonacci(10) = 55",
             success=True,
@@ -485,8 +498,7 @@ print(fib(20))
         rag.log_experience(
             agent_name="math_agent",
             instruction="计算 fibonacci 第 20 项",
-            steps=[{"thought": "Execute fib code", "action": "execute_code",
-                     "observation": result.stdout.strip()}],
+            steps=[{"thought": "Execute fib code", "action": "execute_code", "observation": result.stdout.strip()}],
             final_output=f"fibonacci(20) = {result.stdout.strip()}",
             success=True,
         )
@@ -505,9 +517,10 @@ print(fib(20))
 # Test 13: CapabilityRegistry
 # ============================================================================
 
+
 def test_13_capability_registry():
     """测试应用能力注册表"""
-    from core.hybrid_executor import CapabilityRegistry, ExecutionLevel, AppCapability
+    from core.hybrid_executor import AppCapability, CapabilityRegistry, ExecutionLevel
 
     registry = CapabilityRegistry()
 
@@ -524,11 +537,13 @@ def test_13_capability_registry():
     assert levels == [ExecutionLevel.A2A, ExecutionLevel.GUI, ExecutionLevel.VLM]
 
     # 注册新应用
-    registry.register(AppCapability(
-        app_id="com.custom.app",
-        a2a_endpoint="http://localhost:9999",
-        a2a_actions=["do_thing"],
-    ))
+    registry.register(
+        AppCapability(
+            app_id="com.custom.app",
+            a2a_endpoint="http://localhost:9999",
+            a2a_actions=["do_thing"],
+        )
+    )
     assert registry.get("com.custom.app") is not None
     levels = registry.get_preferred_levels("com.custom.app")
     assert ExecutionLevel.A2A in levels
@@ -539,6 +554,7 @@ def test_13_capability_registry():
 # ============================================================================
 # Test 14: ProxyRelay 链式转发
 # ============================================================================
+
 
 @pytest.mark.asyncio
 async def test_14_proxy_relay_chain():
@@ -575,14 +591,18 @@ async def test_14_proxy_relay_chain():
 # Test 15: 模块导入完整性
 # ============================================================================
 
+
 def test_15_module_imports():
     """验证所有新模块可正常导入"""
-    from core.proxy_relay import ProxyRelay, RelayRequest, RelayResult, get_proxy_relay
     from core.hybrid_executor import (
-        HybridExecutionArbiter, ExecutionLevel, CapabilityRegistry, get_hybrid_arbiter,
+        CapabilityRegistry,
+        ExecutionLevel,
+        HybridExecutionArbiter,
+        get_hybrid_arbiter,
     )
-    from core.rag_memory import RAGMemory, ExperienceEntry, KnowledgeChunk, get_rag_memory
-    from core.safe_executor import SafeExecutor, ExecutionResult, check_code_safety, get_safe_executor
+    from core.proxy_relay import ProxyRelay, RelayRequest, RelayResult, get_proxy_relay
+    from core.rag_memory import ExperienceEntry, KnowledgeChunk, RAGMemory, get_rag_memory
+    from core.safe_executor import ExecutionResult, SafeExecutor, check_code_safety, get_safe_executor
     from galaxy_gateway.protocol.aip_v3 import MessageType  # v3-only source of truth
 
     # 单例可实例化

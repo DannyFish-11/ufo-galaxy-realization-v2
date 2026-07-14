@@ -110,6 +110,7 @@ class ExecutionEvent:
         instances (from ``core.continuum.types``) or plain strings — both are
         normalised to their ``.value`` string.
         """
+
         def _to_str(v: Any) -> Optional[str]:
             if v is None:
                 return None

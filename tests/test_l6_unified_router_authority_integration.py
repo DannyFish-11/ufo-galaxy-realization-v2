@@ -83,24 +83,32 @@ def _make_stub_multi_router(provider: str = "stub_provider", model: str = "stub_
     _provider = provider
     _model = model
 
-    _d = type("_Decision", (), {
-        "provider": _provider,
-        "model": _model,
-        "reason": "stub",
-        "alternatives": [],
-    })()
+    _d = type(
+        "_Decision",
+        (),
+        {
+            "provider": _provider,
+            "model": _model,
+            "reason": "stub",
+            "alternatives": [],
+        },
+    )()
 
     class _StubRouter:
         def route(self, task_type=None, preferred_provider=None, complexity_score=0.5):
             return _d
 
         async def chat(self, messages=None, task_type=None, **kwargs):
-            r = type("_R", (), {
-                "content": "stub response",
-                "provider": _provider,
-                "model": _model,
-                "usage": {},
-            })()
+            r = type(
+                "_R",
+                (),
+                {
+                    "content": "stub response",
+                    "provider": _provider,
+                    "model": _model,
+                    "usage": {},
+                },
+            )()
             return r
 
         def get_status(self):
@@ -473,9 +481,7 @@ def test_34_chat_with_tools_calls_enrich_l3_context():
     r._enrich_l3_context = spy  # type: ignore[method-assign]
 
     messages = [{"role": "user", "content": "use tools"}]
-    asyncio.new_event_loop().run_until_complete(
-        r.chat_with_tools(messages, task_type="general")
-    )
+    asyncio.new_event_loop().run_until_complete(r.chat_with_tools(messages, task_type="general"))
 
     assert "messages" in called
 
@@ -495,9 +501,7 @@ def test_35_chat_with_tools_calls_consult_l1_route():
     r._consult_l1_route = spy  # type: ignore[method-assign]
 
     messages = [{"role": "user", "content": "use tools"}]
-    asyncio.new_event_loop().run_until_complete(
-        r.chat_with_tools(messages, task_type="coding")
-    )
+    asyncio.new_event_loop().run_until_complete(r.chat_with_tools(messages, task_type="coding"))
 
     assert called.get("task_type") == "coding"
 
@@ -517,9 +521,7 @@ def test_36_chat_with_tools_calls_consult_l2_supply():
     r._consult_l2_supply = spy  # type: ignore[method-assign]
 
     messages = [{"role": "user", "content": "use tools"}]
-    asyncio.new_event_loop().run_until_complete(
-        r.chat_with_tools(messages)
-    )
+    asyncio.new_event_loop().run_until_complete(r.chat_with_tools(messages))
 
     assert called.get("invoked") is True
 
@@ -592,20 +594,19 @@ def test_39_openclawd_process_method_exists():
     """OpenClawd.process() must still exist — the cognitive spine is preserved."""
     try:
         from core.openclawd import OpenClawd  # type: ignore[import]
+
         assert hasattr(OpenClawd, "process"), "OpenClawd.process() must exist"
     except ImportError:
         # If the module cannot be imported in this environment, verify the file exists.
         import os
+
         path = os.path.join(_REPO_ROOT, "core", "openclawd.py")
         assert os.path.exists(path), "core/openclawd.py must exist"
         import ast
+
         with open(path) as fh:
             tree = ast.parse(fh.read())
-        methods = [
-            node.name
-            for node in ast.walk(tree)
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-        ]
+        methods = [node.name for node in ast.walk(tree) if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))]
         assert "process" in methods, "OpenClawd.process() must exist in the source"
 
 
@@ -617,9 +618,7 @@ def test_40_l4_not_imported_by_unified_llm_router():
     """
     import ast
 
-    router_path = os.path.join(
-        _REPO_ROOT, "core", "unified", "llm_router.py"
-    )
+    router_path = os.path.join(_REPO_ROOT, "core", "unified", "llm_router.py")
     with open(router_path) as fh:
         source = fh.read()
 
@@ -643,9 +642,7 @@ def test_41_chat_raises_when_no_backend():
     r = _fresh_router(stub_backend=None)
 
     with pytest.raises(NoAvailableProviderError):
-        asyncio.new_event_loop().run_until_complete(
-            r.chat(LLMRequest(messages=[{"role": "user", "content": "hi"}]))
-        )
+        asyncio.new_event_loop().run_until_complete(r.chat(LLMRequest(messages=[{"role": "user", "content": "hi"}])))
 
 
 def test_42_chat_with_tools_raises_when_no_backend():
@@ -654,9 +651,7 @@ def test_42_chat_with_tools_raises_when_no_backend():
     r = _fresh_router(stub_backend=None)
 
     with pytest.raises(NoAvailableProviderError):
-        asyncio.new_event_loop().run_until_complete(
-            r.chat_with_tools([{"role": "user", "content": "hi"}])
-        )
+        asyncio.new_event_loop().run_until_complete(r.chat_with_tools([{"role": "user", "content": "hi"}]))
 
 
 # ---------------------------------------------------------------------------
@@ -706,6 +701,5 @@ def test_44_l3_enriched_messages_passed_to_backend_in_chat():
 
     roles = [m.get("role") for m in backend_messages_received]
     assert "system" in roles, (
-        "L3 context enrichment should add a system message; "
-        "backend did not receive a system message."
+        "L3 context enrichment should add a system message; " "backend did not receive a system message."
     )

@@ -389,9 +389,7 @@ class ReplayOrderingAuthority(str, Enum):
     ambiguous = "ambiguous"
 
     @classmethod
-    def from_string(
-        cls, value: str, *, default: "ReplayOrderingAuthority" = None
-    ) -> "ReplayOrderingAuthority":
+    def from_string(cls, value: str, *, default: "ReplayOrderingAuthority" = None) -> "ReplayOrderingAuthority":
         if not isinstance(value, str):
             return default if default is not None else cls.ambiguous
         try:
@@ -603,12 +601,8 @@ class OfflineReplayItemEvaluation:
         return cls(
             item_id=str(d.get("item_id", "")),
             seq=int(d.get("seq", 0)),
-            status=ReplaySequenceStatus(
-                d.get("status", ReplaySequenceStatus.ambiguous.value)
-            ),
-            decision=OfflineReplayItemDecision(
-                d.get("decision", OfflineReplayItemDecision.ambiguous_authority.value)
-            ),
+            status=ReplaySequenceStatus(d.get("status", ReplaySequenceStatus.ambiguous.value)),
+            decision=OfflineReplayItemDecision(d.get("decision", OfflineReplayItemDecision.ambiguous_authority.value)),
             is_duplicate=bool(d.get("is_duplicate", False)),
             is_stale=bool(d.get("is_stale", False)),
             is_out_of_order=bool(d.get("is_out_of_order", False)),
@@ -674,15 +668,9 @@ class OfflineReplayOrderingReport:
     authority_sentinel: str = OFFLINE_REPLAY_ORDERING_CONTRACT_AUTHORITY
     pr_sentinel: str = OFFLINE_REPLAY_ORDERING_CONTRACT_PR_P03_SENTINEL
     ordering_authority: ReplayOrderingAuthority = ReplayOrderingAuthority.v2_side
-    ordering_guarantee: ReplayOrderingGuarantee = (
-        ReplayOrderingGuarantee.strict_fifo_within_session
-    )
-    duplicate_avoidance_boundary: DuplicateAvoidanceBoundary = (
-        DuplicateAvoidanceBoundary.v2_signal_guard
-    )
-    verdict: OfflineReplayContractVerdict = (
-        OfflineReplayContractVerdict.contract_not_yet_evidenced
-    )
+    ordering_guarantee: ReplayOrderingGuarantee = ReplayOrderingGuarantee.strict_fifo_within_session
+    duplicate_avoidance_boundary: DuplicateAvoidanceBoundary = DuplicateAvoidanceBoundary.v2_signal_guard
+    verdict: OfflineReplayContractVerdict = OfflineReplayContractVerdict.contract_not_yet_evidenced
     items: List[OfflineReplayItemEvaluation] = field(default_factory=list)
     accepted_count: int = 0
     rejected_duplicate_count: int = 0
@@ -764,10 +752,7 @@ class OfflineReplayOrderingReport:
                     OfflineReplayContractVerdict.contract_not_yet_evidenced.value,
                 )
             ),
-            items=[
-                OfflineReplayItemEvaluation.from_dict(i)
-                for i in d.get("items", [])
-            ],
+            items=[OfflineReplayItemEvaluation.from_dict(i) for i in d.get("items", [])],
             accepted_count=int(d.get("accepted_count", 0)),
             rejected_duplicate_count=int(d.get("rejected_duplicate_count", 0)),
             rejected_stale_count=int(d.get("rejected_stale_count", 0)),

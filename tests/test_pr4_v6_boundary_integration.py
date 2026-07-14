@@ -45,13 +45,14 @@ _METHOD_SCAN_WINDOW: int = 4000
 
 try:
     from core.center_authority_boundary import (
-        evaluate_center_authority_boundary,
-        assert_center_authority_intact,
+        CENTER_AUTHORITY_BOUNDARY_AUTHORITY,
+        AuthorityDomain,
         CenterAuthorityBoundaryReport,
         DomainBoundaryStatus,
-        AuthorityDomain,
-        CENTER_AUTHORITY_BOUNDARY_AUTHORITY,
+        assert_center_authority_intact,
+        evaluate_center_authority_boundary,
     )
+
     _V6_AVAILABLE = True
 except ImportError:
     _V6_AVAILABLE = False
@@ -63,12 +64,14 @@ _skip_v6 = pytest.mark.skipif(not _V6_AVAILABLE, reason="core.center_authority_b
 # 1. Startup integration — Phase 7 surfaces V6 boundary status
 # ===========================================================================
 
+
 class TestStartupPhase7Integration:
     """V6 is wired into SystemOrchestrator Phase 7 (READINESS_SUMMARY)."""
 
     def test_phase7_result_data_contains_authority_boundary_status(self):
         """Phase 7 data must include authority_boundary_status key."""
-        from core.system_orchestrator import SystemOrchestrator, StartupPhase
+        from core.system_orchestrator import StartupPhase, SystemOrchestrator
+
         orch = SystemOrchestrator(continue_on_failure=True)
         summary = orch.run_startup_sequence()
         phase7 = next(
@@ -76,13 +79,14 @@ class TestStartupPhase7Integration:
             None,
         )
         assert phase7 is not None, "Phase 7 (READINESS_SUMMARY) must be present in results"
-        assert "authority_boundary_status" in phase7.data, (
-            "Phase 7 data must contain 'authority_boundary_status' from V6 boundary check"
-        )
+        assert (
+            "authority_boundary_status" in phase7.data
+        ), "Phase 7 data must contain 'authority_boundary_status' from V6 boundary check"
 
     def test_phase7_result_data_contains_authority_boundary_dict(self):
         """Phase 7 data must include authority_boundary sub-dict."""
-        from core.system_orchestrator import SystemOrchestrator, StartupPhase
+        from core.system_orchestrator import StartupPhase, SystemOrchestrator
+
         orch = SystemOrchestrator(continue_on_failure=True)
         summary = orch.run_startup_sequence()
         phase7 = next(
@@ -90,15 +94,16 @@ class TestStartupPhase7Integration:
             None,
         )
         assert phase7 is not None
-        assert "authority_boundary" in phase7.data, (
-            "Phase 7 data must contain 'authority_boundary' dict from V6 boundary check"
-        )
+        assert (
+            "authority_boundary" in phase7.data
+        ), "Phase 7 data must contain 'authority_boundary' dict from V6 boundary check"
         assert isinstance(phase7.data["authority_boundary"], dict)
 
     @_skip_v6
     def test_phase7_authority_boundary_status_is_intact_on_clean_system(self):
         """On a system where V6 modules are present, Phase 7 status should be intact."""
-        from core.system_orchestrator import SystemOrchestrator, StartupPhase
+        from core.system_orchestrator import StartupPhase, SystemOrchestrator
+
         orch = SystemOrchestrator(continue_on_failure=True)
         summary = orch.run_startup_sequence()
         phase7 = next(
@@ -107,17 +112,22 @@ class TestStartupPhase7Integration:
         )
         assert phase7 is not None
         status = phase7.data.get("authority_boundary_status", "")
-        assert status in ("intact", "degraded", "not_checked", "error"), (
-            f"authority_boundary_status must be a valid value, got: {status!r}"
-        )
+        assert status in (
+            "intact",
+            "degraded",
+            "not_checked",
+            "error",
+        ), f"authority_boundary_status must be a valid value, got: {status!r}"
 
     @_skip_v6
     def test_phase7_becomes_degraded_when_boundary_broken(self):
         """Phase 7 must return DEGRADED (not OK) when the V6 boundary check fails."""
-        from core.system_orchestrator import (
-            SystemOrchestrator, StartupPhase, PhaseStatus,
-        )
         from core.center_authority_boundary import CenterAuthorityBoundaryReport
+        from core.system_orchestrator import (
+            PhaseStatus,
+            StartupPhase,
+            SystemOrchestrator,
+        )
 
         # Build a degraded boundary report
         degraded_report = CenterAuthorityBoundaryReport()
@@ -137,15 +147,14 @@ class TestStartupPhase7Integration:
         )
         assert phase7 is not None
         assert phase7.status == PhaseStatus.DEGRADED, (
-            "Phase 7 must be DEGRADED when V6 boundary is broken, "
-            f"got: {phase7.status.name}"
+            "Phase 7 must be DEGRADED when V6 boundary is broken, " f"got: {phase7.status.name}"
         )
 
     @_skip_v6
     def test_phase7_degraded_detail_mentions_authority_boundary(self):
         """When boundary is broken, Phase 7 detail must mention the failure."""
-        from core.system_orchestrator import SystemOrchestrator, StartupPhase
         from core.center_authority_boundary import CenterAuthorityBoundaryReport
+        from core.system_orchestrator import StartupPhase, SystemOrchestrator
 
         degraded_report = CenterAuthorityBoundaryReport()
         degraded_report.degraded_domains = ["orchestration_truth"]
@@ -163,17 +172,19 @@ class TestStartupPhase7Integration:
             None,
         )
         assert phase7 is not None
-        assert "authority_boundary" in phase7.detail.lower() or "degraded" in phase7.detail.lower(), (
-            "Phase 7 detail must mention authority_boundary when V6 check fails"
-        )
+        assert (
+            "authority_boundary" in phase7.detail.lower() or "degraded" in phase7.detail.lower()
+        ), "Phase 7 detail must mention authority_boundary when V6 check fails"
 
     @_skip_v6
     def test_phase7_ok_when_boundary_intact(self):
         """Phase 7 must remain OK when boundary is intact."""
-        from core.system_orchestrator import (
-            SystemOrchestrator, StartupPhase, PhaseStatus,
-        )
         from core.center_authority_boundary import CenterAuthorityBoundaryReport
+        from core.system_orchestrator import (
+            PhaseStatus,
+            StartupPhase,
+            SystemOrchestrator,
+        )
 
         intact_report = CenterAuthorityBoundaryReport()
         intact_report.degraded_domains = []
@@ -191,15 +202,14 @@ class TestStartupPhase7Integration:
             None,
         )
         assert phase7 is not None
-        assert phase7.status == PhaseStatus.OK, (
-            "Phase 7 should remain OK when boundary is intact"
-        )
+        assert phase7.status == PhaseStatus.OK, "Phase 7 should remain OK when boundary is intact"
         assert phase7.data.get("authority_boundary_status") == "intact"
 
 
 # ===========================================================================
 # 2. Health endpoint helper
 # ===========================================================================
+
 
 class TestHealthEndpointHelper:
     """health_monitor._get_authority_boundary_status() is wired correctly."""
@@ -208,15 +218,13 @@ class TestHealthEndpointHelper:
         """Load health_monitor.py with problematic optional deps stubbed out."""
         import importlib.util
         import sys
+
         # Stub out heavy optional dependencies that are not installed in the
         # unit-test environment.  We only need the pure-Python helper function.
-        for dep in ("httpx", "fastapi", "fastapi.middleware.cors",
-                    "fastapi.responses", "uvicorn"):
+        for dep in ("httpx", "fastapi", "fastapi.middleware.cors", "fastapi.responses", "uvicorn"):
             sys.modules.setdefault(dep, MagicMock())
         sys.modules.setdefault("system_manager", MagicMock())
-        spec = importlib.util.spec_from_file_location(
-            name, str(PROJECT_ROOT / "health_monitor.py")
-        )
+        spec = importlib.util.spec_from_file_location(name, str(PROJECT_ROOT / "health_monitor.py"))
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)  # type: ignore[union-attr]
         return mod
@@ -224,9 +232,9 @@ class TestHealthEndpointHelper:
     def test_helper_function_exists_in_health_monitor(self):
         """_get_authority_boundary_status must be defined in health_monitor."""
         mod = self._load_health_monitor_mod("_hm_exists")
-        assert hasattr(mod, "_get_authority_boundary_status"), (
-            "health_monitor must define _get_authority_boundary_status()"
-        )
+        assert hasattr(
+            mod, "_get_authority_boundary_status"
+        ), "health_monitor must define _get_authority_boundary_status()"
         assert callable(mod._get_authority_boundary_status)
 
     @_skip_v6
@@ -252,9 +260,7 @@ class TestHealthEndpointHelper:
         ):
             result = mod._get_authority_boundary_status()
 
-        assert result.get("status") == "intact", (
-            f"Expected 'intact', got {result.get('status')!r}"
-        )
+        assert result.get("status") == "intact", f"Expected 'intact', got {result.get('status')!r}"
         assert result.get("all_domains_intact") is True
 
     @_skip_v6
@@ -272,9 +278,7 @@ class TestHealthEndpointHelper:
         ):
             result = mod._get_authority_boundary_status()
 
-        assert result.get("status") == "degraded", (
-            f"Expected 'degraded', got {result.get('status')!r}"
-        )
+        assert result.get("status") == "degraded", f"Expected 'degraded', got {result.get('status')!r}"
         assert result.get("all_domains_intact") is False
 
     def test_helper_returns_error_dict_when_module_unavailable(self):
@@ -289,14 +293,17 @@ class TestHealthEndpointHelper:
 
         assert isinstance(result, dict)
         # Should surface error gracefully
-        assert result.get("status") in ("error", "intact", "degraded"), (
-            "Must return a dict with a 'status' key even when V6 raises"
-        )
+        assert result.get("status") in (
+            "error",
+            "intact",
+            "degraded",
+        ), "Must return a dict with a 'status' key even when V6 raises"
 
 
 # ===========================================================================
 # 3. Release / CI integrity gate
 # ===========================================================================
+
 
 class TestReleaseCIGate:
     """validate_runtime.check_center_authority_boundary() functions as CI gate."""
@@ -304,9 +311,8 @@ class TestReleaseCIGate:
     def test_check_function_exists_in_validate_runtime(self):
         """validate_runtime.py must define check_center_authority_boundary()."""
         import importlib.util
-        spec = importlib.util.spec_from_file_location(
-            "_vr_ci", str(PROJECT_ROOT / "scripts" / "validate_runtime.py")
-        )
+
+        spec = importlib.util.spec_from_file_location("_vr_ci", str(PROJECT_ROOT / "scripts" / "validate_runtime.py"))
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)  # type: ignore[union-attr]
         assert hasattr(mod, "check_center_authority_boundary"), (
@@ -318,19 +324,20 @@ class TestReleaseCIGate:
     def test_check_function_is_called_from_main(self):
         """check_center_authority_boundary() must appear in validate_runtime main()."""
         content = (PROJECT_ROOT / "scripts" / "validate_runtime.py").read_text()
-        assert "check_center_authority_boundary" in content, (
-            "validate_runtime.py main() must call check_center_authority_boundary()"
-        )
+        assert (
+            "check_center_authority_boundary" in content
+        ), "validate_runtime.py main() must call check_center_authority_boundary()"
         # Verify it appears in main() body (after the main() def)
         main_idx = content.index("def main()")
-        assert "check_center_authority_boundary" in content[main_idx:], (
-            "check_center_authority_boundary() must be called from main()"
-        )
+        assert (
+            "check_center_authority_boundary" in content[main_idx:]
+        ), "check_center_authority_boundary() must be called from main()"
 
     @_skip_v6
     def test_check_function_produces_pass_results_on_clean_system(self):
         """On a system with V6 modules present, CI gate should produce PASS results."""
         import importlib.util
+
         spec = importlib.util.spec_from_file_location(
             "_vr_ci_run", str(PROJECT_ROOT / "scripts" / "validate_runtime.py")
         )
@@ -345,13 +352,13 @@ class TestReleaseCIGate:
         assert len(new_results) > 0, "check_center_authority_boundary() must record results"
         fails = [r for r in new_results if r.status == "FAIL"]
         assert not fails, (
-            f"check_center_authority_boundary() produced FAIL results: "
-            f"{[(r.name, r.detail) for r in fails]}"
+            f"check_center_authority_boundary() produced FAIL results: " f"{[(r.name, r.detail) for r in fails]}"
         )
 
     def test_check_function_records_v6_module_importability(self):
         """CI gate must check that core.center_authority_boundary is importable."""
         import importlib.util
+
         spec = importlib.util.spec_from_file_location(
             "_vr_ci_imp", str(PROJECT_ROOT / "scripts" / "validate_runtime.py")
         )
@@ -363,14 +370,15 @@ class TestReleaseCIGate:
         new_results = mod._results[before_count:]
 
         names = [r.name for r in new_results]
-        assert any("center_authority_boundary" in n.lower() or "v6" in n.lower() for n in names), (
-            "CI gate results must include a check mentioning 'center_authority_boundary' or 'v6'"
-        )
+        assert any(
+            "center_authority_boundary" in n.lower() or "v6" in n.lower() for n in names
+        ), "CI gate results must include a check mentioning 'center_authority_boundary' or 'v6'"
 
 
 # ===========================================================================
 # 4. Hot-path exclusion
 # ===========================================================================
+
 
 class TestHotPathExclusion:
     """V6 must NOT be wired into per-request hot paths."""
@@ -391,7 +399,7 @@ class TestHotPathExclusion:
             return
         # Find the approximate end of process() by looking for the next top-level def
         # (heuristic: next line starting with "    def " or "def " at same indentation)
-        process_block = content[process_idx: process_idx + _METHOD_SCAN_WINDOW]
+        process_block = content[process_idx : process_idx + _METHOD_SCAN_WINDOW]
         assert "evaluate_center_authority_boundary" not in process_block, (
             "OpenClawd.process() must not call evaluate_center_authority_boundary() "
             "— V6 belongs at the boundary/startup layer, not the per-request hot path"
@@ -410,7 +418,7 @@ class TestHotPathExclusion:
         route_idx = content.find("def route_envelope(")
         if route_idx == -1:
             return
-        route_block = content[route_idx: route_idx + _METHOD_SCAN_WINDOW]
+        route_block = content[route_idx : route_idx + _METHOD_SCAN_WINDOW]
         assert "evaluate_center_authority_boundary" not in route_block, (
             "CommandRouter.route_envelope() must not call evaluate_center_authority_boundary() "
             "— V6 belongs at the boundary/startup layer, not the per-request hot path"
@@ -423,18 +431,20 @@ class TestHotPathExclusion:
     def test_phase7_is_only_readiness_summary_not_per_request(self):
         """V6 in SystemOrchestrator runs at Phase 7 (READINESS_SUMMARY), not per-request."""
         from core.system_orchestrator import StartupPhase
+
         # Phase 7 value must be 7 — the final readiness summary, not a request phase
         assert StartupPhase.READINESS_SUMMARY.value == 7
         # Ensure there is no StartupPhase that indicates per-request processing
         phase_names = {p.name for p in StartupPhase}
-        assert "REQUEST" not in " ".join(phase_names), (
-            "No startup phase should be named REQUEST — V6 is startup-layer only"
-        )
+        assert "REQUEST" not in " ".join(
+            phase_names
+        ), "No startup phase should be named REQUEST — V6 is startup-layer only"
 
 
 # ===========================================================================
 # 5. V6 module structure
 # ===========================================================================
+
 
 @_skip_v6
 class TestV6ModuleStructure:
@@ -476,6 +486,7 @@ class TestV6ModuleStructure:
     def test_assert_raises_on_degraded_system(self):
         """assert_center_authority_intact() must raise CenterAuthorityViolation when degraded."""
         from core.center_authority_boundary import CenterAuthorityViolation
+
         degraded_report = CenterAuthorityBoundaryReport()
         degraded_report.degraded_domains = ["completion_truth"]
         degraded_report.all_domains_intact = False
@@ -494,9 +505,11 @@ class TestV6ModuleStructure:
         paths (e.g. 'core.android_*') are not appropriate at this boundary
         layer.
         """
-        import inspect
         import ast
+        import inspect
+
         import core.center_authority_boundary as cab
+
         source = inspect.getsource(cab)
         tree = ast.parse(source)
         for node in ast.walk(tree):
@@ -514,21 +527,23 @@ class TestV6ModuleStructure:
     def test_policy_sentinels_are_participant_generic(self):
         """Policy sentinels at the authority-boundary layer must not name Android runtimes."""
         from core.center_authority_boundary import (
-            EXTERNAL_SURFACES_ARE_PARTICIPANT_ONLY_POLICY,
             COMPAT_INGRESS_TERMINATES_IN_CENTER_MODEL_POLICY,
+            EXTERNAL_SURFACES_ARE_PARTICIPANT_ONLY_POLICY,
         )
+
         # The boundary layer should use participant-generic terminology
-        assert "participant" in EXTERNAL_SURFACES_ARE_PARTICIPANT_ONLY_POLICY.lower(), (
-            "EXTERNAL_SURFACES policy must reference 'participant' semantics"
-        )
-        assert "compat" in COMPAT_INGRESS_TERMINATES_IN_CENTER_MODEL_POLICY.lower(), (
-            "COMPAT_INGRESS policy must reference 'compat' semantics"
-        )
+        assert (
+            "participant" in EXTERNAL_SURFACES_ARE_PARTICIPANT_ONLY_POLICY.lower()
+        ), "EXTERNAL_SURFACES policy must reference 'participant' semantics"
+        assert (
+            "compat" in COMPAT_INGRESS_TERMINATES_IN_CENTER_MODEL_POLICY.lower()
+        ), "COMPAT_INGRESS policy must reference 'compat' semantics"
 
 
 # ===========================================================================
 # 6. Readiness probe endpoint
 # ===========================================================================
+
 
 class TestReadinessProbeEndpoint:
     """health_monitor./health/ready readiness probe returns 200/503 correctly."""
@@ -537,13 +552,11 @@ class TestReadinessProbeEndpoint:
         """Load health_monitor.py with optional deps stubbed out."""
         import importlib.util
         import sys
-        for dep in ("httpx", "fastapi", "fastapi.middleware.cors",
-                    "fastapi.responses", "uvicorn"):
+
+        for dep in ("httpx", "fastapi", "fastapi.middleware.cors", "fastapi.responses", "uvicorn"):
             sys.modules.setdefault(dep, MagicMock())
         sys.modules.setdefault("system_manager", MagicMock())
-        spec = importlib.util.spec_from_file_location(
-            name, str(PROJECT_ROOT / "health_monitor.py")
-        )
+        spec = importlib.util.spec_from_file_location(name, str(PROJECT_ROOT / "health_monitor.py"))
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)  # type: ignore[union-attr]
         return mod
@@ -551,16 +564,12 @@ class TestReadinessProbeEndpoint:
     def test_health_ready_endpoint_exists_in_health_monitor(self):
         """health_monitor must define the /health/ready readiness probe."""
         content = (PROJECT_ROOT / "health_monitor.py").read_text()
-        assert "/health/ready" in content, (
-            "health_monitor.py must define a /health/ready readiness probe endpoint"
-        )
+        assert "/health/ready" in content, "health_monitor.py must define a /health/ready readiness probe endpoint"
 
     def test_health_ready_endpoint_callable(self):
         """health_ready() function must be defined and callable."""
         mod = self._load_health_monitor_mod("_hm_ready_callable")
-        assert hasattr(mod, "health_ready"), (
-            "health_monitor must define health_ready() for /health/ready"
-        )
+        assert hasattr(mod, "health_ready"), "health_monitor must define health_ready() for /health/ready"
 
     @_skip_v6
     def test_helper_status_intact_gives_ready_true(self):

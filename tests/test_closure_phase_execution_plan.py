@@ -10,7 +10,6 @@ from core.closure_phase_execution_plan import (
 )
 from core.complete_joint_system_review import REVIEW_AUTHORITY, StageGate, StageVerdict
 
-
 _EXPECTED_ISSUES = {f"R{i}" for i in range(1, 14)}
 
 

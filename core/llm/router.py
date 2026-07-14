@@ -17,6 +17,7 @@ All downstream code should import from ``core.llm.router`` (or the package
 root ``core.llm``) rather than reaching directly into
 ``core.multi_llm_router``.
 """
+
 from __future__ import annotations
 
 # ── module authority sentinel ─────────────────────────────────────────────
@@ -29,12 +30,12 @@ multi-LLM routing entry point.
 
 # ── re-export from canonical implementation ───────────────────────────────
 from core.multi_llm_router import (  # noqa: F401
-    MultiLLMRouter,
-    TaskType,
-    ProviderStatus,
-    ProviderConfig,
-    RoutingDecision,
     LLMResponse,
+    MultiLLMRouter,
+    ProviderConfig,
+    ProviderStatus,
+    RoutingDecision,
+    TaskType,
     get_llm_router,
     refresh_llm_router,
 )

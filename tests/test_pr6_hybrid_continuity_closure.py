@@ -98,43 +98,50 @@ import tempfile
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _reset_registry() -> None:
     from core.hybrid_orchestration_continuity import reset_continuity_registry
+
     reset_continuity_registry()
 
 
 def _reset_store() -> None:
     from core.hybrid_orchestration_continuity import reset_hybrid_persistence_store
+
     reset_hybrid_persistence_store()
 
 
 def _make_registry():
     from core.hybrid_orchestration_continuity import HybridOrchestrationContinuityRegistry
+
     return HybridOrchestrationContinuityRegistry()
 
 
 def _make_record(**kwargs):
     from core.hybrid_orchestration_continuity import HybridOrchestrationRecord
+
     return HybridOrchestrationRecord(**kwargs)
 
 
 def _make_store(tmp_dir: str):
     from core.hybrid_orchestration_continuity import HybridContinuityPersistenceStore
+
     return HybridContinuityPersistenceStore(store_dir=tmp_dir)
 
 
 def _state(name: str):
     from core.hybrid_orchestration_continuity import HybridOrchestrationLifecycleState
+
     return HybridOrchestrationLifecycleState(name)
 
 
 def _disposition(name: str):
     from core.hybrid_orchestration_continuity import HybridPartialResultDisposition
+
     return HybridPartialResultDisposition(name)
 
 
@@ -142,9 +149,11 @@ def _disposition(name: str):
 # 71–74: Sentinels
 # ---------------------------------------------------------------------------
 
+
 class TestSentinelsPR6:
     def test_71_partial_result_merge_policy_non_empty(self):
         from core.hybrid_orchestration_continuity import HYBRID_PARTIAL_RESULT_MERGE_POLICY
+
         assert isinstance(HYBRID_PARTIAL_RESULT_MERGE_POLICY, str)
         assert len(HYBRID_PARTIAL_RESULT_MERGE_POLICY) > 0
 
@@ -152,14 +161,17 @@ class TestSentinelsPR6:
         from core.hybrid_orchestration_continuity import (
             HYBRID_CONTINUITY_PERSISTENCE_IS_DURABLE_POLICY,
         )
+
         assert len(HYBRID_CONTINUITY_PERSISTENCE_IS_DURABLE_POLICY) > 0
 
     def test_73_pr6_sentinel_contains_pr6(self):
         from core.hybrid_orchestration_continuity import HYBRID_CONTINUITY_PR6_SENTINEL
+
         assert "pr6" in HYBRID_CONTINUITY_PR6_SENTINEL.lower()
 
     def test_74_reconstruction_policy_in_recovery_module(self):
         from core.runtime_restart_recovery import HYBRID_CONTINUITY_RECONSTRUCTION_POLICY
+
         assert len(HYBRID_CONTINUITY_RECONSTRUCTION_POLICY) > 0
 
 
@@ -167,14 +179,17 @@ class TestSentinelsPR6:
 # 75–76: HybridPartialResultDisposition
 # ---------------------------------------------------------------------------
 
+
 class TestPartialResultDispositionEnum:
     def test_75_all_disposition_values_present(self):
         from core.hybrid_orchestration_continuity import HybridPartialResultDisposition
+
         values = {d.value for d in HybridPartialResultDisposition}
         assert {"preserved", "invalidated", "merged", "resumed"}.issubset(values)
 
     def test_76_dispositions_are_str_enum(self):
         from core.hybrid_orchestration_continuity import HybridPartialResultDisposition
+
         for d in HybridPartialResultDisposition:
             assert isinstance(d.value, str)
 
@@ -182,6 +197,7 @@ class TestPartialResultDispositionEnum:
 # ---------------------------------------------------------------------------
 # 77–84: HybridOrchestrationRecord — partial result fields
 # ---------------------------------------------------------------------------
+
 
 class TestRecordPartialResultFields:
     def test_77_partial_result_snapshot_defaults_none(self):
@@ -205,6 +221,7 @@ class TestRecordPartialResultFields:
 
     def test_81_from_dict_roundtrip_partial_result_snapshot(self):
         from core.hybrid_orchestration_continuity import HybridOrchestrationRecord
+
         r = _make_record()
         r.partial_result_snapshot = {"output": "partial_data"}
         r2 = HybridOrchestrationRecord.from_dict(r.to_dict())
@@ -212,6 +229,7 @@ class TestRecordPartialResultFields:
 
     def test_82_from_dict_roundtrip_partial_result_origin(self):
         from core.hybrid_orchestration_continuity import HybridOrchestrationRecord
+
         r = _make_record()
         r.partial_result_origin = "local"
         r2 = HybridOrchestrationRecord.from_dict(r.to_dict())
@@ -219,6 +237,7 @@ class TestRecordPartialResultFields:
 
     def test_83_from_dict_roundtrip_partial_result_disposition(self):
         from core.hybrid_orchestration_continuity import HybridOrchestrationRecord
+
         r = _make_record()
         r.partial_result_disposition = "preserved"
         r2 = HybridOrchestrationRecord.from_dict(r.to_dict())
@@ -226,6 +245,7 @@ class TestRecordPartialResultFields:
 
     def test_84_from_dict_defaults_origin_to_empty(self):
         from core.hybrid_orchestration_continuity import HybridOrchestrationRecord
+
         r = HybridOrchestrationRecord.from_dict({})
         assert r.partial_result_origin == ""
 
@@ -233,6 +253,7 @@ class TestRecordPartialResultFields:
 # ---------------------------------------------------------------------------
 # 85–89: HybridOrchestrationRecord — set_partial_result
 # ---------------------------------------------------------------------------
+
 
 class TestSetPartialResult:
     def test_85_set_partial_result_stores_snapshot_and_origin(self):
@@ -271,6 +292,7 @@ class TestSetPartialResult:
 # ---------------------------------------------------------------------------
 # 90–95: HybridOrchestrationContinuityRegistry — invalidate_remote_partial_results
 # ---------------------------------------------------------------------------
+
 
 class TestInvalidateRemotePartialResults:
     def test_90_invalidates_remote_origin_records(self):
@@ -325,6 +347,7 @@ class TestInvalidateRemotePartialResults:
 # ---------------------------------------------------------------------------
 # 96–105: HybridContinuityPersistenceStore — basic I/O
 # ---------------------------------------------------------------------------
+
 
 class TestPersistenceStoreIO:
     def test_96_store_created_with_tmp_dir(self, tmp_path):
@@ -416,6 +439,7 @@ class TestPersistenceStoreIO:
 # 106–111: HybridContinuityPersistenceStore — round-trip fidelity
 # ---------------------------------------------------------------------------
 
+
 class TestPersistenceStoreRoundTrip:
     def test_106_roundtrip_lifecycle_state(self, tmp_path):
         store = _make_store(str(tmp_path))
@@ -476,6 +500,7 @@ class TestPersistenceStoreRoundTrip:
 # ---------------------------------------------------------------------------
 # 112–116: HybridOrchestrationContinuityRegistry — restore_from_persistence
 # ---------------------------------------------------------------------------
+
 
 class TestRestoreFromPersistence:
     def test_112_restores_non_terminal_records(self, tmp_path):
@@ -546,26 +571,31 @@ class TestRestoreFromPersistence:
 # 117–120: RuntimeRecoveryReport — PR-6 fields
 # ---------------------------------------------------------------------------
 
+
 class TestRecoveryReportPR6Fields:
     def test_117_hybrid_executions_restored_field(self):
         from core.runtime_restart_recovery import RuntimeRecoveryReport
+
         report = RuntimeRecoveryReport()
         assert hasattr(report, "hybrid_executions_restored")
         assert report.hybrid_executions_restored == 0
 
     def test_118_hybrid_remote_partial_invalidated_field(self):
         from core.runtime_restart_recovery import RuntimeRecoveryReport
+
         report = RuntimeRecoveryReport()
         assert hasattr(report, "hybrid_remote_partial_invalidated")
         assert report.hybrid_remote_partial_invalidated == 0
 
     def test_119_to_dict_includes_restored_key(self):
         from core.runtime_restart_recovery import RuntimeRecoveryReport
+
         d = RuntimeRecoveryReport().to_dict()
         assert "hybrid_executions_restored" in d
 
     def test_120_to_dict_includes_invalidated_key(self):
         from core.runtime_restart_recovery import RuntimeRecoveryReport
+
         d = RuntimeRecoveryReport().to_dict()
         assert "hybrid_remote_partial_invalidated" in d
 
@@ -574,12 +604,14 @@ class TestRecoveryReportPR6Fields:
 # 121–124: RuntimeRestartRecoveryCoordinator — PR-6 store parameter
 # ---------------------------------------------------------------------------
 
+
 class TestCoordinatorPR6Store:
     def setup_method(self):
         _reset_registry()
 
     def test_121_coordinator_accepts_hybrid_continuity_store(self, tmp_path):
         from core.runtime_restart_recovery import RuntimeRestartRecoveryCoordinator
+
         store = _make_store(str(tmp_path))
         reg = _make_registry()
         coordinator = RuntimeRestartRecoveryCoordinator(
@@ -590,6 +622,7 @@ class TestCoordinatorPR6Store:
 
     def test_122_run_recovery_with_store_sets_restored_field(self, tmp_path):
         from core.runtime_restart_recovery import RuntimeRestartRecoveryCoordinator
+
         store = _make_store(str(tmp_path))
         # Put a non-terminal record in the store
         r = _make_record()
@@ -608,6 +641,7 @@ class TestCoordinatorPR6Store:
 
     def test_123_run_recovery_with_store_invalidates_remote_partial(self, tmp_path):
         from core.runtime_restart_recovery import RuntimeRestartRecoveryCoordinator
+
         store = _make_store(str(tmp_path))
         # Record with remote partial result
         r = _make_record()
@@ -628,6 +662,7 @@ class TestCoordinatorPR6Store:
 
     def test_124_run_recovery_without_store_leaves_restored_at_zero(self):
         from core.runtime_restart_recovery import RuntimeRestartRecoveryCoordinator
+
         reg = _make_registry()
         coordinator = RuntimeRestartRecoveryCoordinator(
             hybrid_continuity_registry=reg,
@@ -640,12 +675,14 @@ class TestCoordinatorPR6Store:
 # 125–126: run_startup_recovery — PR-6 store parameter
 # ---------------------------------------------------------------------------
 
+
 class TestRunStartupRecoveryPR6:
     def setup_method(self):
         _reset_registry()
 
     def test_125_accepts_hybrid_continuity_store_parameter(self, tmp_path):
         from core.runtime_restart_recovery import run_startup_recovery
+
         store = _make_store(str(tmp_path))
         reg = _make_registry()
         report = run_startup_recovery(
@@ -656,6 +693,7 @@ class TestRunStartupRecoveryPR6:
 
     def test_126_report_includes_restored_field(self, tmp_path):
         from core.runtime_restart_recovery import run_startup_recovery
+
         store = _make_store(str(tmp_path))
         # Pre-populate store with an interrupted record
         r = _make_record()
@@ -675,6 +713,7 @@ class TestRunStartupRecoveryPR6:
 # ---------------------------------------------------------------------------
 # 127–130: Full continuity scenario
 # ---------------------------------------------------------------------------
+
 
 class TestFullContinuityScenario:
     def setup_method(self):
@@ -843,8 +882,8 @@ class TestRecoverHybridExecutionsConvenience:
 
     def test_recover_hybrid_executions_persists_restart_normalisation(self, tmp_path):
         from core.hybrid_orchestration_continuity import (
-            recover_hybrid_executions,
             load_hybrid_execution,
+            recover_hybrid_executions,
         )
 
         store = _make_store(str(tmp_path))

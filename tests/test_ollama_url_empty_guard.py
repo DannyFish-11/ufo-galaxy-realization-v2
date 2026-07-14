@@ -6,6 +6,7 @@
 URL 发 httpx 就炸。两个最内层消费端(LocalBrainManager / OllamaBackend)对
 【空值】和【无协议头】都必须兜底成合法 URL,绝不放空 URL 出门。
 """
+
 from __future__ import annotations
 
 import pytest

@@ -6,6 +6,7 @@
 ".env 旧值重启时盖住 secrets.env" 的历史丢 key 根因。ConfigService 不可用时回落
 .env,不丢持久化。
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -58,6 +59,7 @@ def test_secret_goes_to_canonical_store_not_plaintext_dotenv():
 def test_secret_falls_back_to_dotenv_when_store_unavailable(monkeypatch):
     def _boom(*a, **k):
         raise RuntimeError("config service unavailable")
+
     monkeypatch.setattr("core.config_service.ConfigService", _boom)
     _run({"DEEPSEEK_API_KEY": "sk-fallback"})
     env_text = cfg.ENV_FILE.read_text(encoding="utf-8")

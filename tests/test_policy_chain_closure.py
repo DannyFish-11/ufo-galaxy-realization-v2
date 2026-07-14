@@ -55,8 +55,8 @@ Test classes
 from __future__ import annotations
 
 import json
-import sys
 import os
+import sys
 import unittest
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
@@ -65,13 +65,12 @@ from unittest.mock import MagicMock, patch
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from core.admissibility_policy_convergence import (
-    PolicyConvergenceOutput,
-    evaluate_policy_convergence,
     ADMISSIBILITY_POLICY_CONVERGENCE_AUTHORITY,
     POLICY_CONVERGENCE_LAYER_POSITION,
     POLICY_OUTPUT_CONTRACT_VERSION,
+    PolicyConvergenceOutput,
+    evaluate_policy_convergence,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -252,12 +251,11 @@ class TestIneligibleDeviceHasFailureDomain(unittest.TestCase):
 
     def test_failure_domain_is_valid_string(self) -> None:
         from core.failure_domains import FailureDomain
+
         output = self._run_ineligible()
         # Should be a valid FailureDomain value
         values = {d.value for d in FailureDomain}
-        assert output.failure_domain in values, (
-            f"failure_domain {output.failure_domain!r} not in FailureDomain values"
-        )
+        assert output.failure_domain in values, f"failure_domain {output.failure_domain!r} not in FailureDomain values"
 
     def test_ineligible_device_has_selected_target_reason(self) -> None:
         output = self._run_ineligible()

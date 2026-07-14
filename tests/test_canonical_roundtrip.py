@@ -18,13 +18,13 @@ Validates:
    via android_device_state_store.absorb_execution_event().
 10. Regressions in roundtrip wiring are detectable (regression guards).
 """
+
 from __future__ import annotations
 
 import time
 import unittest
 from typing import Any, Dict
 from unittest.mock import MagicMock, patch
-
 
 # ---------------------------------------------------------------------------
 # A. ExecutionRoundtripRecord — structure and serialisation
@@ -36,20 +36,23 @@ class TestExecutionRoundtripRecord(unittest.TestCase):
 
     def setUp(self):
         from core.canonical_roundtrip import reset_execution_roundtrip
+
         reset_execution_roundtrip()
 
     def test_A01_import_succeeds(self):
         from core.canonical_roundtrip import (
-            ExecutionRoundtripRecord,
             CANONICAL_ROUNDTRIP_AUTHORITY,
             ROUNDTRIP_SCHEMA_VERSION,
+            ExecutionRoundtripRecord,
         )
+
         self.assertIsInstance(CANONICAL_ROUNDTRIP_AUTHORITY, str)
         self.assertIn("CANONICAL_ROUNDTRIP_V1", CANONICAL_ROUNDTRIP_AUTHORITY)
         self.assertEqual(ROUNDTRIP_SCHEMA_VERSION, "1.0")
 
     def test_A02_default_construction(self):
         from core.canonical_roundtrip import ExecutionRoundtripRecord
+
         r = ExecutionRoundtripRecord()
         self.assertTrue(r.roundtrip_id.startswith("rt_"))
         self.assertEqual(r.execution_phase, "dispatched")
@@ -61,6 +64,7 @@ class TestExecutionRoundtripRecord(unittest.TestCase):
 
     def test_A03_to_dict_has_required_keys(self):
         from core.canonical_roundtrip import ExecutionRoundtripRecord
+
         r = ExecutionRoundtripRecord(
             action_id="act_abc",
             action_kind="dispatch",
@@ -71,17 +75,27 @@ class TestExecutionRoundtripRecord(unittest.TestCase):
         )
         d = r.to_dict()
         for key in [
-            "roundtrip_id", "action_id", "action_kind", "trace_id",
-            "session_id", "execution_phase", "execution_success",
-            "execution_result_data", "android_terminal_phase",
-            "android_device_id", "android_flow_id",
-            "feedback_projected_at", "generated_at",
-            "schema_version", "authority",
+            "roundtrip_id",
+            "action_id",
+            "action_kind",
+            "trace_id",
+            "session_id",
+            "execution_phase",
+            "execution_success",
+            "execution_result_data",
+            "android_terminal_phase",
+            "android_device_id",
+            "android_flow_id",
+            "feedback_projected_at",
+            "generated_at",
+            "schema_version",
+            "authority",
         ]:
             self.assertIn(key, d, f"Key {key!r} missing from to_dict()")
 
     def test_A04_compact_dict_has_required_keys(self):
         from core.canonical_roundtrip import ExecutionRoundtripRecord
+
         r = ExecutionRoundtripRecord(
             action_id="act_xyz",
             trace_id="trace_001",
@@ -90,16 +104,24 @@ class TestExecutionRoundtripRecord(unittest.TestCase):
         )
         cd = r.compact_dict()
         for key in [
-            "roundtrip_id", "action_id", "action_kind", "trace_id",
-            "execution_phase", "execution_success",
-            "android_terminal_phase", "android_device_id", "android_flow_id",
-            "feedback_projected_at", "_source",
+            "roundtrip_id",
+            "action_id",
+            "action_kind",
+            "trace_id",
+            "execution_phase",
+            "execution_success",
+            "android_terminal_phase",
+            "android_device_id",
+            "android_flow_id",
+            "feedback_projected_at",
+            "_source",
         ]:
             self.assertIn(key, cd, f"Key {key!r} missing from compact_dict()")
         self.assertEqual(cd["_source"], "canonical_roundtrip")
 
     def test_A05_android_fields_populated(self):
         from core.canonical_roundtrip import ExecutionRoundtripRecord
+
         r = ExecutionRoundtripRecord(
             action_kind="android_terminal",
             execution_phase="completed",
@@ -124,13 +146,15 @@ class TestRecordExecutionRoundtrip(unittest.TestCase):
 
     def setUp(self):
         from core.canonical_roundtrip import reset_execution_roundtrip
+
         reset_execution_roundtrip()
 
     def test_B01_success_result_maps_to_completed(self):
         from core.canonical_roundtrip import (
-            record_execution_roundtrip,
             get_last_execution_roundtrip,
+            record_execution_roundtrip,
         )
+
         r = record_execution_roundtrip(
             action_id="act_001",
             action_kind="dispatch",
@@ -148,6 +172,7 @@ class TestRecordExecutionRoundtrip(unittest.TestCase):
 
     def test_B02_failure_result_maps_to_failed(self):
         from core.canonical_roundtrip import record_execution_roundtrip
+
         r = record_execution_roundtrip(
             action_id="act_002",
             action_kind="dispatch",
@@ -158,6 +183,7 @@ class TestRecordExecutionRoundtrip(unittest.TestCase):
 
     def test_B03_error_string_maps_to_failed(self):
         from core.canonical_roundtrip import record_execution_roundtrip
+
         r = record_execution_roundtrip(
             action_id="act_003",
             runtime_result={"error": "something went wrong"},
@@ -167,6 +193,7 @@ class TestRecordExecutionRoundtrip(unittest.TestCase):
 
     def test_B04_no_terminal_outcome_maps_to_dispatched(self):
         from core.canonical_roundtrip import record_execution_roundtrip
+
         r = record_execution_roundtrip(
             action_id="act_004",
             runtime_result={"runtime_session_id": "sess_async"},
@@ -176,12 +203,14 @@ class TestRecordExecutionRoundtrip(unittest.TestCase):
 
     def test_B05_empty_runtime_result_maps_to_dispatched(self):
         from core.canonical_roundtrip import record_execution_roundtrip
+
         r = record_execution_roundtrip(action_id="act_005")
         self.assertEqual(r.execution_phase, "dispatched")
         self.assertIsNone(r.execution_success)
 
     def test_B06_trace_id_extracted_from_runtime_result(self):
         from core.canonical_roundtrip import record_execution_roundtrip
+
         r = record_execution_roundtrip(
             action_id="act_006",
             runtime_result={"trace_id": "outer_trace", "runtime_session_id": "sess_rt"},
@@ -190,6 +219,7 @@ class TestRecordExecutionRoundtrip(unittest.TestCase):
 
     def test_B07_session_id_extracted_from_runtime_result(self):
         from core.canonical_roundtrip import record_execution_roundtrip
+
         r = record_execution_roundtrip(
             action_id="act_007",
             runtime_result={"runtime_session_id": "sess_rt"},
@@ -198,9 +228,10 @@ class TestRecordExecutionRoundtrip(unittest.TestCase):
 
     def test_B08_multiple_records_accumulated(self):
         from core.canonical_roundtrip import (
-            record_execution_roundtrip,
             get_execution_roundtrip_store,
+            record_execution_roundtrip,
         )
+
         for i in range(5):
             record_execution_roundtrip(
                 action_id=f"act_{i:03d}",
@@ -211,6 +242,7 @@ class TestRecordExecutionRoundtrip(unittest.TestCase):
 
     def test_B09_device_dispatch_kind_preserved(self):
         from core.canonical_roundtrip import record_execution_roundtrip
+
         r = record_execution_roundtrip(
             action_id="act_dev",
             action_kind="device_dispatch",
@@ -220,6 +252,7 @@ class TestRecordExecutionRoundtrip(unittest.TestCase):
 
     def test_B10_flow_cancel_kind_preserved(self):
         from core.canonical_roundtrip import record_execution_roundtrip
+
         r = record_execution_roundtrip(
             action_id="act_cancel",
             action_kind="flow_cancel",
@@ -238,13 +271,15 @@ class TestNotifyAndroidExecutionTerminal(unittest.TestCase):
 
     def setUp(self):
         from core.canonical_roundtrip import reset_execution_roundtrip
+
         reset_execution_roundtrip()
 
     def test_C01_completed_phase_maps_to_success(self):
         from core.canonical_roundtrip import (
-            notify_android_execution_terminal,
             get_last_execution_roundtrip,
+            notify_android_execution_terminal,
         )
+
         r = notify_android_execution_terminal(
             flow_id="flow_abc",
             device_id="dev_pixel",
@@ -265,6 +300,7 @@ class TestNotifyAndroidExecutionTerminal(unittest.TestCase):
 
     def test_C02_failed_phase_maps_to_failure(self):
         from core.canonical_roundtrip import notify_android_execution_terminal
+
         r = notify_android_execution_terminal(
             flow_id="flow_fail",
             device_id="dev_galaxy",
@@ -276,6 +312,7 @@ class TestNotifyAndroidExecutionTerminal(unittest.TestCase):
 
     def test_C03_stagnation_phase_maps_to_failure(self):
         from core.canonical_roundtrip import notify_android_execution_terminal
+
         r = notify_android_execution_terminal(
             flow_id="flow_stag",
             device_id="dev_test",
@@ -287,6 +324,7 @@ class TestNotifyAndroidExecutionTerminal(unittest.TestCase):
 
     def test_C04_evidence_stored_in_result_data(self):
         from core.canonical_roundtrip import notify_android_execution_terminal
+
         r = notify_android_execution_terminal(
             flow_id="flow_ev",
             device_id="dev_ev",
@@ -300,12 +338,9 @@ class TestNotifyAndroidExecutionTerminal(unittest.TestCase):
 
     def test_C05_roundtrip_id_is_unique_per_call(self):
         from core.canonical_roundtrip import notify_android_execution_terminal
-        r1 = notify_android_execution_terminal(
-            flow_id="flow_1", device_id="dev_1", phase="completed"
-        )
-        r2 = notify_android_execution_terminal(
-            flow_id="flow_2", device_id="dev_1", phase="completed"
-        )
+
+        r1 = notify_android_execution_terminal(flow_id="flow_1", device_id="dev_1", phase="completed")
+        r2 = notify_android_execution_terminal(flow_id="flow_2", device_id="dev_1", phase="completed")
         self.assertNotEqual(r1.roundtrip_id, r2.roundtrip_id)
 
 
@@ -319,17 +354,20 @@ class TestRoundtripStore(unittest.TestCase):
 
     def setUp(self):
         from core.canonical_roundtrip import reset_execution_roundtrip
+
         reset_execution_roundtrip()
 
     def test_D01_empty_store_returns_none(self):
         from core.canonical_roundtrip import get_last_execution_roundtrip
+
         self.assertIsNone(get_last_execution_roundtrip())
 
     def test_D02_get_last_returns_most_recent(self):
         from core.canonical_roundtrip import (
-            record_execution_roundtrip,
             get_last_execution_roundtrip,
+            record_execution_roundtrip,
         )
+
         r1 = record_execution_roundtrip(action_id="first", runtime_result={"success": True})
         r2 = record_execution_roundtrip(action_id="second", runtime_result={"success": False})
         last = get_last_execution_roundtrip()
@@ -338,11 +376,12 @@ class TestRoundtripStore(unittest.TestCase):
 
     def test_D03_reset_clears_store(self):
         from core.canonical_roundtrip import (
-            record_execution_roundtrip,
-            get_last_execution_roundtrip,
             get_execution_roundtrip_store,
+            get_last_execution_roundtrip,
+            record_execution_roundtrip,
             reset_execution_roundtrip,
         )
+
         record_execution_roundtrip(action_id="to_be_cleared", runtime_result={})
         self.assertIsNotNone(get_last_execution_roundtrip())
         reset_execution_roundtrip()
@@ -351,9 +390,10 @@ class TestRoundtripStore(unittest.TestCase):
 
     def test_D04_store_snapshot_is_copy(self):
         from core.canonical_roundtrip import (
-            record_execution_roundtrip,
             get_execution_roundtrip_store,
+            record_execution_roundtrip,
         )
+
         record_execution_roundtrip(action_id="snap_test", runtime_result={})
         snap1 = get_execution_roundtrip_store()
         record_execution_roundtrip(action_id="snap_test_2", runtime_result={})
@@ -372,12 +412,14 @@ class TestUnifiedPanelPayloadExecutionResult(unittest.TestCase):
 
     def test_E01_last_execution_result_field_exists(self):
         from core.unified_panel_aggregation import UnifiedPanelPayload
+
         p = UnifiedPanelPayload()
         self.assertIsInstance(p.last_execution_result, dict)
         self.assertEqual(p.last_execution_result, {})
 
     def test_E02_to_dict_includes_last_execution_result(self):
         from core.unified_panel_aggregation import UnifiedPanelPayload
+
         p = UnifiedPanelPayload()
         d = p.to_dict()
         self.assertIn("last_execution_result", d)
@@ -385,6 +427,7 @@ class TestUnifiedPanelPayloadExecutionResult(unittest.TestCase):
 
     def test_E03_last_execution_result_can_be_populated(self):
         from core.unified_panel_aggregation import UnifiedPanelPayload
+
         p = UnifiedPanelPayload()
         p.last_execution_result = {
             "roundtrip_id": "rt_test",
@@ -409,17 +452,20 @@ class TestUnifiedPanelRoundtripFill(unittest.TestCase):
     def setUp(self):
         from core.canonical_roundtrip import reset_execution_roundtrip
         from core.unified_panel_aggregation import reset_unified_panel_aggregation_service
+
         reset_execution_roundtrip()
         reset_unified_panel_aggregation_service()
 
     def tearDown(self):
         from core.canonical_roundtrip import reset_execution_roundtrip
         from core.unified_panel_aggregation import reset_unified_panel_aggregation_service
+
         reset_execution_roundtrip()
         reset_unified_panel_aggregation_service()
 
     def test_F01_empty_roundtrip_store_yields_empty_dict(self):
         from core.unified_panel_aggregation import build_unified_panel_payload
+
         payload = build_unified_panel_payload()
         # No roundtrip recorded — last_execution_result should be empty
         self.assertIsInstance(payload.last_execution_result, dict)
@@ -503,14 +549,16 @@ class TestAndroidTerminalEventWiring(unittest.TestCase):
     """Android terminal execution events must trigger notify_android_execution_terminal()."""
 
     def setUp(self):
-        from core.canonical_roundtrip import reset_execution_roundtrip
         from core.android_device_state_store import reset_android_device_state_store
+        from core.canonical_roundtrip import reset_execution_roundtrip
+
         reset_execution_roundtrip()
         reset_android_device_state_store()
 
     def tearDown(self):
-        from core.canonical_roundtrip import reset_execution_roundtrip
         from core.android_device_state_store import reset_android_device_state_store
+        from core.canonical_roundtrip import reset_execution_roundtrip
+
         reset_execution_roundtrip()
         reset_android_device_state_store()
 
@@ -519,12 +567,15 @@ class TestAndroidTerminalEventWiring(unittest.TestCase):
         from core.canonical_roundtrip import get_last_execution_roundtrip
 
         # "grounding" is not a terminal phase
-        absorb_device_execution_event("dev_001", {
-            "flow_id": "flow_non_terminal",
-            "task_id": "task_001",
-            "phase": "grounding",
-            "step_index": 1,
-        })
+        absorb_device_execution_event(
+            "dev_001",
+            {
+                "flow_id": "flow_non_terminal",
+                "task_id": "task_001",
+                "phase": "grounding",
+                "step_index": 1,
+            },
+        )
         # No roundtrip should be recorded for non-terminal phases
         last = get_last_execution_roundtrip()
         # It's OK if last is None (non-terminal) — no terminal roundtrip
@@ -535,12 +586,15 @@ class TestAndroidTerminalEventWiring(unittest.TestCase):
         from core.android_device_state_store import absorb_device_execution_event
         from core.canonical_roundtrip import get_last_execution_roundtrip
 
-        absorb_device_execution_event("dev_completed", {
-            "flow_id": "flow_terminal_complete",
-            "task_id": "task_terminal",
-            "phase": "completed",
-            "step_index": 10,
-        })
+        absorb_device_execution_event(
+            "dev_completed",
+            {
+                "flow_id": "flow_terminal_complete",
+                "task_id": "task_terminal",
+                "phase": "completed",
+                "step_index": 10,
+            },
+        )
         last = get_last_execution_roundtrip()
         self.assertIsNotNone(last)
         self.assertEqual(last.android_terminal_phase, "completed")
@@ -552,12 +606,15 @@ class TestAndroidTerminalEventWiring(unittest.TestCase):
         from core.android_device_state_store import absorb_device_execution_event
         from core.canonical_roundtrip import get_last_execution_roundtrip
 
-        absorb_device_execution_event("dev_fail", {
-            "flow_id": "flow_terminal_fail",
-            "task_id": "task_fail",
-            "phase": "failed",
-            "step_index": 3,
-        })
+        absorb_device_execution_event(
+            "dev_fail",
+            {
+                "flow_id": "flow_terminal_fail",
+                "task_id": "task_fail",
+                "phase": "failed",
+                "step_index": 3,
+            },
+        )
         last = get_last_execution_roundtrip()
         self.assertIsNotNone(last)
         self.assertEqual(last.android_terminal_phase, "failed")
@@ -569,14 +626,18 @@ class TestAndroidTerminalEventWiring(unittest.TestCase):
             build_unified_panel_payload,
             reset_unified_panel_aggregation_service,
         )
+
         reset_unified_panel_aggregation_service()
 
-        absorb_device_execution_event("dev_panel_android", {
-            "flow_id": "flow_panel_android",
-            "task_id": "task_panel",
-            "phase": "completed",
-            "step_index": 7,
-        })
+        absorb_device_execution_event(
+            "dev_panel_android",
+            {
+                "flow_id": "flow_panel_android",
+                "task_id": "task_panel",
+                "phase": "completed",
+                "step_index": 7,
+            },
+        )
         payload = build_unified_panel_payload()
         result_field = payload.last_execution_result
         self.assertIsInstance(result_field, dict)
@@ -596,10 +657,12 @@ class TestRoundtripRegressionGuards(unittest.TestCase):
 
     def setUp(self):
         from core.canonical_roundtrip import reset_execution_roundtrip
+
         reset_execution_roundtrip()
 
     def test_H01_canonical_roundtrip_module_importable(self):
         import core.canonical_roundtrip as m
+
         self.assertTrue(hasattr(m, "ExecutionRoundtripRecord"))
         self.assertTrue(hasattr(m, "record_execution_roundtrip"))
         self.assertTrue(hasattr(m, "notify_android_execution_terminal"))
@@ -611,12 +674,14 @@ class TestRoundtripRegressionGuards(unittest.TestCase):
 
     def test_H02_unified_panel_payload_has_last_execution_result(self):
         from core.unified_panel_aggregation import UnifiedPanelPayload
+
         p = UnifiedPanelPayload()
         self.assertTrue(hasattr(p, "last_execution_result"))
         self.assertIn("last_execution_result", p.to_dict())
 
     def test_H03_android_store_has_terminal_phases_constant(self):
         from core.android_device_state_store import _ANDROID_TERMINAL_PHASES
+
         self.assertIsInstance(_ANDROID_TERMINAL_PHASES, frozenset)
         self.assertIn("completed", _ANDROID_TERMINAL_PHASES)
         self.assertIn("failed", _ANDROID_TERMINAL_PHASES)
@@ -625,13 +690,14 @@ class TestRoundtripRegressionGuards(unittest.TestCase):
     def test_H04_action_to_result_roundtrip_closure(self):
         """Full roundtrip: action → record → panel reflects outcome."""
         from core.canonical_roundtrip import (
-            record_execution_roundtrip,
             get_last_execution_roundtrip,
+            record_execution_roundtrip,
         )
         from core.unified_panel_aggregation import (
             build_unified_panel_payload,
             reset_unified_panel_aggregation_service,
         )
+
         reset_unified_panel_aggregation_service()
 
         # 1. Record an action result (simulating operator action completion)
@@ -665,6 +731,7 @@ class TestRoundtripRegressionGuards(unittest.TestCase):
             build_unified_panel_payload,
             reset_unified_panel_aggregation_service,
         )
+
         reset_unified_panel_aggregation_service()
 
         rt = notify_android_execution_terminal(
@@ -684,19 +751,23 @@ class TestRoundtripRegressionGuards(unittest.TestCase):
     def test_H06_operator_routes_import_record_execution_roundtrip(self):
         """Operator routes module must be importable and reference canonical_roundtrip."""
         import importlib
+
         import core.routes.operator as op_mod
+
         # The module must be importable without errors
         self.assertIsNotNone(op_mod)
         # And the canonical_roundtrip module must exist
         import core.canonical_roundtrip as cr_mod
+
         self.assertIsNotNone(cr_mod)
 
     def test_H07_record_execution_roundtrip_is_idempotent_for_multiple_actions(self):
         """Multiple actions all produce distinct roundtrip records."""
         from core.canonical_roundtrip import (
-            record_execution_roundtrip,
             get_execution_roundtrip_store,
+            record_execution_roundtrip,
         )
+
         ids = set()
         for i in range(3):
             r = record_execution_roundtrip(

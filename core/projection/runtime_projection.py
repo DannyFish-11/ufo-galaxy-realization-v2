@@ -43,7 +43,6 @@ from pydantic import BaseModel, Field
 
 from core.continuum.types import RuntimeDomain, TriStatePhase
 
-
 # ---------------------------------------------------------------------------
 # RuntimeProjection
 # ---------------------------------------------------------------------------
@@ -254,9 +253,7 @@ class RuntimeProjection(BaseModel):
         """
         return {
             "tri_state_phase": self.tri_state_phase.value,
-            "runtime_domain": (
-                self.runtime_domain.value if self.runtime_domain is not None else None
-            ),
+            "runtime_domain": (self.runtime_domain.value if self.runtime_domain is not None else None),
             "presence_intensity": self.presence_intensity,
             "coherence": self.coherence,
             "collapse_tendency": self.collapse_tendency,

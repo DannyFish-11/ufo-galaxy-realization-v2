@@ -78,9 +78,7 @@ class UDPAdapter(TransportAdapter):
             packet = MAGIC_HEADER + struct.pack(">I", len(payload)) + payload
 
             loop = asyncio.get_event_loop()
-            await loop.run_in_executor(
-                None, self._socket.sendto, packet, (host, port)
-            )
+            await loop.run_in_executor(None, self._socket.sendto, packet, (host, port))
 
             return {"success": True, "via": "udp", "bytes": len(payload), "to": f"{host}:{port}"}
 
@@ -106,17 +104,13 @@ class UDPAdapter(TransportAdapter):
 
             # 广播
             loop = asyncio.get_event_loop()
-            await loop.run_in_executor(
-                None, self._socket.sendto, packet, (BROADCAST_ADDR, self._local_port)
-            )
+            await loop.run_in_executor(None, self._socket.sendto, packet, (BROADCAST_ADDR, self._local_port))
 
             # 也发送给所有已知 peer
             results = {"broadcast": True}
             for device_id, (host, port) in self._peers.items():
                 try:
-                    await loop.run_in_executor(
-                        None, self._socket.sendto, packet, (host, port)
-                    )
+                    await loop.run_in_executor(None, self._socket.sendto, packet, (host, port))
                     results[device_id] = True
                 except Exception:
                     results[device_id] = False
@@ -169,7 +163,7 @@ class UDPAdapter(TransportAdapter):
 
             # 解析长度 + payload
             payload_len = struct.unpack(">I", data[4:8])[0]
-            payload = data[8:8 + payload_len]
+            payload = data[8 : 8 + payload_len]
             message = json.loads(payload.decode("utf-8"))
 
             device_id = message.get("device_id", "")

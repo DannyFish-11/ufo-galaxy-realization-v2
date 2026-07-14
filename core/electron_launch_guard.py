@@ -26,7 +26,6 @@ from __future__ import annotations
 
 import os
 
-
 _LOCK_FILENAME = ".electron.pid"
 
 
@@ -55,6 +54,7 @@ def resolve_gateway_port() -> int:
                 pass
     try:
         from core.port_config import get_service_port
+
         return get_service_port("unified_launcher")
     except Exception:
         return 9000
@@ -71,7 +71,7 @@ def already_running() -> bool:
     if not os.path.exists(path):
         return False
     try:
-        with open(path, encoding='utf-8') as f:
+        with open(path, encoding="utf-8") as f:
             existing_pid = int(f.read().strip())
         os.kill(existing_pid, 0)  # 存活则不抛异常;POSIX/Windows 均可用
         return True
@@ -86,7 +86,7 @@ def already_running() -> bool:
 def write_lock(pid: int) -> None:
     """子进程成功拉起后写入其 pid,供其余启动路径的 already_running() 探测到。"""
     try:
-        with open(lock_path(), "w", encoding='utf-8') as f:
+        with open(lock_path(), "w", encoding="utf-8") as f:
             f.write(str(pid))
     except OSError:
         pass
@@ -106,7 +106,4 @@ def electron_package_intact(electron_dir: str) -> bool:
     这里检查 electron 包的两个关键文件都在,任何一个缺失都视为"需要修复安装"。
     """
     pkg = os.path.join(electron_dir, "node_modules", "electron")
-    return (
-        os.path.isfile(os.path.join(pkg, "package.json"))
-        and os.path.isfile(os.path.join(pkg, "cli.js"))
-    )
+    return os.path.isfile(os.path.join(pkg, "package.json")) and os.path.isfile(os.path.join(pkg, "cli.js"))

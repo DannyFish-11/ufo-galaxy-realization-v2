@@ -288,8 +288,8 @@ class ModelSelectionPolicy:
     prefer_native_multimodal: bool = True
     allow_partial_multimodal: bool = True
     latency_budget_ms: Optional[float] = None
-    cost_tier: Optional[str] = None          # "low" | "medium" | "high" | None
-    quality_tier: Optional[str] = None       # "standard" | "premium" | None
+    cost_tier: Optional[str] = None  # "low" | "medium" | "high" | None
+    quality_tier: Optional[str] = None  # "standard" | "premium" | None
     preferred_locality: Optional[str] = None  # "local" | "cloud" | "hybrid" | "any" | None
     allow_auxiliary_models: bool = True
     trace_id: Optional[str] = None
@@ -313,11 +313,7 @@ class ModelSelectionPolicy:
             required_modalities=list(d.get("required_modalities") or []),
             prefer_native_multimodal=bool(d.get("prefer_native_multimodal", True)),
             allow_partial_multimodal=bool(d.get("allow_partial_multimodal", True)),
-            latency_budget_ms=(
-                float(d["latency_budget_ms"])
-                if d.get("latency_budget_ms") is not None
-                else None
-            ),
+            latency_budget_ms=(float(d["latency_budget_ms"]) if d.get("latency_budget_ms") is not None else None),
             cost_tier=d.get("cost_tier"),
             quality_tier=d.get("quality_tier"),
             preferred_locality=d.get("preferred_locality"),
@@ -423,11 +419,7 @@ class ModelSelectionDecision:
             mm_flag = " [native-multimodal]"
         elif self.is_partial_multimodal:
             mm_flag = " [partial-multimodal]"
-        primary_reason = (
-            self.selection_reasons[0].code
-            if self.selection_reasons
-            else "unspecified"
-        )
+        primary_reason = self.selection_reasons[0].code if self.selection_reasons else "unspecified"
         return (
             f"selected={self.chosen_provider_id}/{self.chosen_model_id}{mm_flag} "
             f"reason={primary_reason} "
@@ -453,10 +445,7 @@ class ModelSelectionDecision:
     def from_dict(cls, d: Dict[str, Any]) -> "ModelSelectionDecision":
         """Reconstruct from a serialised dict; unknown keys degrade gracefully."""
         reasons_raw = d.get("selection_reasons") or []
-        reasons = [
-            SelectionReason.from_dict(r) if isinstance(r, dict) else r
-            for r in reasons_raw
-        ]
+        reasons = [SelectionReason.from_dict(r) if isinstance(r, dict) else r for r in reasons_raw]
         obj = cls(
             chosen_provider_id=d.get("chosen_provider_id"),
             chosen_model_id=d.get("chosen_model_id"),
@@ -543,12 +532,14 @@ def _score_provider(
     health_str = str(record.get("health_status") or "unknown").lower()
     h_score = _HEALTH_SCORE.get(health_str, 1.0)
     score += h_score
-    reasons.append(SelectionReason(
-        code=SelectionReasonCode.HEALTH_TIEBREAK.value,
-        dimension=SelectionDimension.HEALTH_STATUS.value,
-        detail=f"health={health_str}",
-        score_contribution=h_score,
-    ))
+    reasons.append(
+        SelectionReason(
+            code=SelectionReasonCode.HEALTH_TIEBREAK.value,
+            dimension=SelectionDimension.HEALTH_STATUS.value,
+            detail=f"health={health_str}",
+            score_contribution=h_score,
+        )
+    )
 
     # ── Multimodal capability ─────────────────────────────────────────────────
     req = policy.required_modalities
@@ -562,41 +553,49 @@ def _score_provider(
 
         if is_native and full_match and policy.prefer_native_multimodal:
             mm_score = 40.0
-            reasons.append(SelectionReason(
-                code=SelectionReasonCode.NATIVE_MULTIMODAL_PREFERRED.value,
-                dimension=SelectionDimension.NATIVE_MULTIMODAL_MATCH.value,
-                detail=f"native_multimodal: required={req} supported={cap_modalities}",
-                score_contribution=mm_score,
-            ))
+            reasons.append(
+                SelectionReason(
+                    code=SelectionReasonCode.NATIVE_MULTIMODAL_PREFERRED.value,
+                    dimension=SelectionDimension.NATIVE_MULTIMODAL_MATCH.value,
+                    detail=f"native_multimodal: required={req} supported={cap_modalities}",
+                    score_contribution=mm_score,
+                )
+            )
             score += mm_score
         elif is_native and partial_match and policy.allow_partial_multimodal:
             mm_score = 20.0
-            reasons.append(SelectionReason(
-                code=SelectionReasonCode.PARTIAL_MULTIMODAL_BEST_AVAILABLE.value,
-                dimension=SelectionDimension.PARTIAL_MULTIMODAL_MATCH.value,
-                detail=(
-                    f"partial_multimodal: required={req} "
-                    f"matched={overlap} not_matched={[m for m in req if m not in overlap]}"
-                ),
-                score_contribution=mm_score,
-            ))
+            reasons.append(
+                SelectionReason(
+                    code=SelectionReasonCode.PARTIAL_MULTIMODAL_BEST_AVAILABLE.value,
+                    dimension=SelectionDimension.PARTIAL_MULTIMODAL_MATCH.value,
+                    detail=(
+                        f"partial_multimodal: required={req} "
+                        f"matched={overlap} not_matched={[m for m in req if m not in overlap]}"
+                    ),
+                    score_contribution=mm_score,
+                )
+            )
             score += mm_score
         else:
             # Text-only provider for a multimodal request
-            reasons.append(SelectionReason(
-                code=SelectionReasonCode.TEXT_ONLY_SELECTED.value,
-                dimension=SelectionDimension.TEXT_ONLY_FALLBACK.value,
-                detail=f"no_native_multimodal: required={req} provider_caps={cap_modalities}",
-                score_contribution=0.0,
-            ))
+            reasons.append(
+                SelectionReason(
+                    code=SelectionReasonCode.TEXT_ONLY_SELECTED.value,
+                    dimension=SelectionDimension.TEXT_ONLY_FALLBACK.value,
+                    detail=f"no_native_multimodal: required={req} provider_caps={cap_modalities}",
+                    score_contribution=0.0,
+                )
+            )
     else:
         # Text-only request
-        reasons.append(SelectionReason(
-            code=SelectionReasonCode.TEXT_ONLY_SELECTED.value,
-            dimension=SelectionDimension.TEXT_ONLY_FALLBACK.value,
-            detail="text_only_request",
-            score_contribution=0.0,
-        ))
+        reasons.append(
+            SelectionReason(
+                code=SelectionReasonCode.TEXT_ONLY_SELECTED.value,
+                dimension=SelectionDimension.TEXT_ONLY_FALLBACK.value,
+                detail="text_only_request",
+                score_contribution=0.0,
+            )
+        )
 
     # ── Locality ──────────────────────────────────────────────────────────────
     pref_loc = (policy.preferred_locality or "any").lower()
@@ -605,12 +604,14 @@ def _score_provider(
         locality_bonus = _LOCALITY_SCORE.get(pref_loc, {}).get(provider_loc, 0.0)
         if locality_bonus:
             score += locality_bonus
-            reasons.append(SelectionReason(
-                code=SelectionReasonCode.LOCALITY_PREFERRED.value,
-                dimension=SelectionDimension.LOCALITY_MATCH.value,
-                detail=f"locality: preferred={pref_loc} actual={provider_loc}",
-                score_contribution=locality_bonus,
-            ))
+            reasons.append(
+                SelectionReason(
+                    code=SelectionReasonCode.LOCALITY_PREFERRED.value,
+                    dimension=SelectionDimension.LOCALITY_MATCH.value,
+                    detail=f"locality: preferred={pref_loc} actual={provider_loc}",
+                    score_contribution=locality_bonus,
+                )
+            )
 
     # ── Latency budget ────────────────────────────────────────────────────────
     if policy.latency_budget_ms is not None:
@@ -618,37 +619,41 @@ def _score_provider(
         if avg_latency > 0 and avg_latency > policy.latency_budget_ms:
             penalty = -5.0
             score += penalty
-            reasons.append(SelectionReason(
-                code=SelectionReasonCode.LATENCY_OVER_BUDGET.value,
-                dimension=SelectionDimension.LATENCY_BUDGET.value,
-                detail=(
-                    f"latency={avg_latency:.0f}ms > budget={policy.latency_budget_ms:.0f}ms"
-                ),
-                score_contribution=penalty,
-            ))
+            reasons.append(
+                SelectionReason(
+                    code=SelectionReasonCode.LATENCY_OVER_BUDGET.value,
+                    dimension=SelectionDimension.LATENCY_BUDGET.value,
+                    detail=(f"latency={avg_latency:.0f}ms > budget={policy.latency_budget_ms:.0f}ms"),
+                    score_contribution=penalty,
+                )
+            )
 
     # ── Cost tier ─────────────────────────────────────────────────────────────
     # Cost tier adjustment is applied in post-processing (relative ranking),
     # recorded here as informational reason only.
     if policy.cost_tier in ("low", "high"):
         cost_input = float(record.get("cost_per_1k_input") or 0.0)
-        reasons.append(SelectionReason(
-            code=SelectionReasonCode.COST_ALIGNED.value,
-            dimension=SelectionDimension.COST_TIER.value,
-            detail=f"cost_tier={policy.cost_tier} cost_per_1k={cost_input:.6f}",
-            score_contribution=0.0,  # adjusted below in engine
-        ))
+        reasons.append(
+            SelectionReason(
+                code=SelectionReasonCode.COST_ALIGNED.value,
+                dimension=SelectionDimension.COST_TIER.value,
+                detail=f"cost_tier={policy.cost_tier} cost_per_1k={cost_input:.6f}",
+                score_contribution=0.0,  # adjusted below in engine
+            )
+        )
 
     # ── Auxiliary eligibility ─────────────────────────────────────────────────
     if record.get("is_support_model_candidate") and policy.allow_auxiliary_models:
         aux_score = 2.0
         score += aux_score
-        reasons.append(SelectionReason(
-            code=SelectionReasonCode.AUXILIARY_CANDIDATE.value,
-            dimension=SelectionDimension.AUXILIARY_ELIGIBLE.value,
-            detail="support_model_candidate",
-            score_contribution=aux_score,
-        ))
+        reasons.append(
+            SelectionReason(
+                code=SelectionReasonCode.AUXILIARY_CANDIDATE.value,
+                dimension=SelectionDimension.AUXILIARY_ELIGIBLE.value,
+                detail="support_model_candidate",
+                score_contribution=aux_score,
+            )
+        )
 
     return score, reasons
 
@@ -702,9 +707,7 @@ class ModelSelectionPolicyEngine:
         try:
             return self._evaluate_inner(policy, canonical_supply)
         except Exception as _err:
-            logger.warning(
-                "ModelSelectionPolicyEngine.evaluate failed (degraded): %s", _err
-            )
+            logger.warning("ModelSelectionPolicyEngine.evaluate failed (degraded): %s", _err)
             return ModelSelectionDecision.unavailable(
                 policy=policy,
                 detail=f"engine_error={_err}",
@@ -722,29 +725,18 @@ class ModelSelectionPolicyEngine:
 
         # ── Guard: no supply state ────────────────────────────────────────────
         if not canonical_supply:
-            logger.debug(
-                "ModelSelectionPolicyEngine: supply_state unavailable; "
-                "returning no-selection decision"
-            )
+            logger.debug("ModelSelectionPolicyEngine: supply_state unavailable; " "returning no-selection decision")
             return ModelSelectionDecision.unavailable(
                 policy=policy,
                 detail="supply_state_unavailable",
             )
 
         providers: Dict[str, Any] = canonical_supply.get("providers") or {}
-        available_ids: List[str] = list(
-            canonical_supply.get("available_provider_ids") or []
-        )
-        capability_registry: Dict[str, Any] = (
-            canonical_supply.get("multimodal_registry") or {}
-        )
+        available_ids: List[str] = list(canonical_supply.get("available_provider_ids") or [])
+        capability_registry: Dict[str, Any] = canonical_supply.get("multimodal_registry") or {}
         # Support/fallback hints from supply state
-        fallback_candidates: List[str] = list(
-            canonical_supply.get("fallback_candidates") or []
-        )
-        support_candidates: List[str] = list(
-            canonical_supply.get("support_model_candidates") or []
-        )
+        fallback_candidates: List[str] = list(canonical_supply.get("fallback_candidates") or [])
+        support_candidates: List[str] = list(canonical_supply.get("support_model_candidates") or [])
 
         all_provider_ids = list(providers.keys())
         considered = all_provider_ids
@@ -773,10 +765,9 @@ class ModelSelectionPolicyEngine:
         for tiebreak_idx, pid in enumerate(available_ids):
             record = providers.get(pid) or {}
             # Capability info may be embedded in the record or in a separate registry
-            cap: Optional[Dict[str, Any]] = (
-                record.get("capability")
-                or (capability_registry.get("capabilities") or {}).get(pid)
-            )
+            cap: Optional[Dict[str, Any]] = record.get("capability") or (
+                capability_registry.get("capabilities") or {}
+            ).get(pid)
             raw_score, reasons = _score_provider(pid, record, policy, cap)
             scored.append((raw_score, tiebreak_idx, pid, reasons))
 
@@ -784,7 +775,7 @@ class ModelSelectionPolicyEngine:
         # Apply relative cost adjustment after initial scoring.
         if policy.cost_tier in ("low", "high"):
             costs = []
-            for (sc, ti, pid, _) in scored:
+            for sc, ti, pid, _ in scored:
                 rec = providers.get(pid) or {}
                 costs.append(float(rec.get("cost_per_1k_input") or 0.0))
             # Avoid division by zero; only adjust when cost data is present
@@ -820,10 +811,9 @@ class ModelSelectionPolicyEngine:
 
         winner_score, _, winner_id, winner_reasons = scored[0]
         winner_record = providers.get(winner_id) or {}
-        winner_cap: Optional[Dict[str, Any]] = (
-            winner_record.get("capability")
-            or (capability_registry.get("capabilities") or {}).get(winner_id)
-        )
+        winner_cap: Optional[Dict[str, Any]] = winner_record.get("capability") or (
+            capability_registry.get("capabilities") or {}
+        ).get(winner_id)
 
         # ── Determine multimodal flags for winner ────────────────────────────
         is_native_mm = False
@@ -840,26 +830,24 @@ class ModelSelectionPolicyEngine:
 
         # ── Add sole-candidate reason when only one option ───────────────────
         if len(available_ids) == 1:
-            winner_reasons.append(SelectionReason(
-                code=SelectionReasonCode.SOLE_CANDIDATE.value,
-                dimension=SelectionDimension.ONLY_AVAILABLE.value,
-                detail="only_available_provider",
-            ))
+            winner_reasons.append(
+                SelectionReason(
+                    code=SelectionReasonCode.SOLE_CANDIDATE.value,
+                    dimension=SelectionDimension.ONLY_AVAILABLE.value,
+                    detail="only_available_provider",
+                )
+            )
 
         # ── Add fallback reason when winner is not the primary supply hint ────
         primary_hint = canonical_supply.get("primary_provider_id")
-        if (
-            primary_hint
-            and winner_id != primary_hint
-            and len(scored) > 1
-        ):
-            winner_reasons.append(SelectionReason(
-                code=SelectionReasonCode.FALLBACK_SELECTED.value,
-                dimension=SelectionDimension.ONLY_AVAILABLE.value,
-                detail=(
-                    f"policy_winner={winner_id} supply_primary_hint={primary_hint}"
-                ),
-            ))
+        if primary_hint and winner_id != primary_hint and len(scored) > 1:
+            winner_reasons.append(
+                SelectionReason(
+                    code=SelectionReasonCode.FALLBACK_SELECTED.value,
+                    dimension=SelectionDimension.ONLY_AVAILABLE.value,
+                    detail=(f"policy_winner={winner_id} supply_primary_hint={primary_hint}"),
+                )
+            )
 
         # ── Build fallback chain from remaining scored candidates ─────────────
         fallback_chain: List[str] = [pid for (_, _, pid, _) in scored[1:]]
@@ -868,8 +856,7 @@ class ModelSelectionPolicyEngine:
         chosen_model = winner_record.get("default_model") or winner_id
 
         logger.debug(
-            "ModelSelectionPolicyEngine: winner=%s model=%s score=%.1f "
-            "is_native_mm=%s fallbacks=%d trace=%s",
+            "ModelSelectionPolicyEngine: winner=%s model=%s score=%.1f " "is_native_mm=%s fallbacks=%d trace=%s",
             winner_id,
             chosen_model,
             winner_score,
@@ -929,12 +916,8 @@ def build_model_selection_policy_from_perception(
     if not canonical_perception:
         return ModelSelectionPolicy.text_only(trace_id=trace_id)
 
-    active_modalities: List[str] = list(
-        canonical_perception.get("active_modalities") or []
-    )
-    requires_native = bool(
-        canonical_perception.get("requires_native_multimodal", False)
-    )
+    active_modalities: List[str] = list(canonical_perception.get("active_modalities") or [])
+    requires_native = bool(canonical_perception.get("requires_native_multimodal", False))
 
     if not active_modalities and not requires_native:
         return ModelSelectionPolicy(

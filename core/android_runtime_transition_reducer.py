@@ -348,14 +348,16 @@ def reduce_handoff_result(
                 )
             else:
                 return AndroidRuntimeTransitionResult(
-                    record=record, was_transitioned=False,
+                    record=record,
+                    was_transitioned=False,
                     transition_description="session_state_unavailable",
                 )
         return _apply(record, sig, f"handoff_result:{response_type}→{sig.value}")
     except Exception as exc:  # noqa: BLE001
         logger.debug("reduce_handoff_result: failed (non-fatal): %s", exc)
         return AndroidRuntimeTransitionResult(
-            record=record, was_transitioned=False,
+            record=record,
+            was_transitioned=False,
             transition_description=f"reduce_handoff_result_error:{exc}",
         )
 
@@ -381,7 +383,8 @@ def reduce_takeover_response(
     try:
         if not _SESSION_STATE_AVAILABLE:
             return AndroidRuntimeTransitionResult(
-                record=record, was_transitioned=False,
+                record=record,
+                was_transitioned=False,
                 transition_description="session_state_unavailable",
             )
         sig = (
@@ -398,7 +401,8 @@ def reduce_takeover_response(
     except Exception as exc:  # noqa: BLE001
         logger.debug("reduce_takeover_response: failed (non-fatal): %s", exc)
         return AndroidRuntimeTransitionResult(
-            record=record, was_transitioned=False,
+            record=record,
+            was_transitioned=False,
             transition_description=f"reduce_takeover_response_error:{exc}",
         )
 
@@ -428,26 +432,30 @@ def reduce_reconciliation_signal(
     try:
         if not _SESSION_STATE_AVAILABLE:
             return AndroidRuntimeTransitionResult(
-                record=record, was_transitioned=False,
+                record=record,
+                was_transitioned=False,
                 transition_description="session_state_unavailable",
             )
         if not was_reconciled:
             normalized_reject = _normalize_reconciliation_reject_reason(reject_reason)
             return AndroidRuntimeTransitionResult(
-                record=record, was_transitioned=False,
+                record=record,
+                was_transitioned=False,
                 transition_description=f"reconciliation_signal_not_reconciled:{normalized_reject}",
             )
         sig = _TRUTH_KIND_TO_SIGNAL.get(truth_kind.lower() if truth_kind else "")
         if sig is None:
             return AndroidRuntimeTransitionResult(
-                record=record, was_transitioned=False,
+                record=record,
+                was_transitioned=False,
                 transition_description=f"reconciliation_signal_unknown_truth_kind:{truth_kind}",
             )
         return _apply(record, sig, f"reconciliation_signal:{truth_kind}→{sig.value}")
     except Exception as exc:  # noqa: BLE001
         logger.debug("reduce_reconciliation_signal: failed (non-fatal): %s", exc)
         return AndroidRuntimeTransitionResult(
-            record=record, was_transitioned=False,
+            record=record,
+            was_transitioned=False,
             transition_description=f"reduce_reconciliation_signal_error:{exc}",
         )
 
@@ -477,25 +485,29 @@ def reduce_execution_signal(
     try:
         if not _SESSION_STATE_AVAILABLE:
             return AndroidRuntimeTransitionResult(
-                record=record, was_transitioned=False,
+                record=record,
+                was_transitioned=False,
                 transition_description="session_state_unavailable",
             )
         if not was_updated:
             return AndroidRuntimeTransitionResult(
-                record=record, was_transitioned=False,
+                record=record,
+                was_transitioned=False,
                 transition_description=f"execution_signal_not_updated:{reject_reason}",
             )
         sig = _EXECUTION_KIND_TO_SIGNAL.get(signal_kind.lower() if signal_kind else "")
         if sig is None:
             return AndroidRuntimeTransitionResult(
-                record=record, was_transitioned=False,
+                record=record,
+                was_transitioned=False,
                 transition_description=f"execution_signal_unknown_kind:{signal_kind}",
             )
         return _apply(record, sig, f"execution_signal:{signal_kind}→{sig.value}")
     except Exception as exc:  # noqa: BLE001
         logger.debug("reduce_execution_signal: failed (non-fatal): %s", exc)
         return AndroidRuntimeTransitionResult(
-            record=record, was_transitioned=False,
+            record=record,
+            was_transitioned=False,
             transition_description=f"reduce_execution_signal_error:{exc}",
         )
 
@@ -524,26 +536,30 @@ def reduce_participant_truth(
     try:
         if not _SESSION_STATE_AVAILABLE:
             return AndroidRuntimeTransitionResult(
-                record=record, was_transitioned=False,
+                record=record,
+                was_transitioned=False,
                 transition_description="session_state_unavailable",
             )
         if not was_reconciled:
             normalized_reject = _normalize_reconciliation_reject_reason(reject_reason)
             return AndroidRuntimeTransitionResult(
-                record=record, was_transitioned=False,
+                record=record,
+                was_transitioned=False,
                 transition_description=f"participant_truth_not_reconciled:{normalized_reject}",
             )
         sig = _TRUTH_KIND_TO_SIGNAL.get(truth_kind.lower() if truth_kind else "")
         if sig is None:
             return AndroidRuntimeTransitionResult(
-                record=record, was_transitioned=False,
+                record=record,
+                was_transitioned=False,
                 transition_description=f"participant_truth_unknown_kind:{truth_kind}",
             )
         return _apply(record, sig, f"participant_truth:{truth_kind}→{sig.value}")
     except Exception as exc:  # noqa: BLE001
         logger.debug("reduce_participant_truth: failed (non-fatal): %s", exc)
         return AndroidRuntimeTransitionResult(
-            record=record, was_transitioned=False,
+            record=record,
+            was_transitioned=False,
             transition_description=f"reduce_participant_truth_error:{exc}",
         )
 

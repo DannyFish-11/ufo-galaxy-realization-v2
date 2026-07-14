@@ -20,7 +20,6 @@ from __future__ import annotations
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Import the audit module — this must not raise.
 # ---------------------------------------------------------------------------
@@ -29,6 +28,7 @@ import pytest
 @pytest.fixture(scope="module")
 def audit_module():
     from core import final_code_only_dual_repo_audit as m
+
     return m
 
 
@@ -71,93 +71,67 @@ def test_system_verdict_explanation_is_declared(audit_module):
 
 def test_check_canonical_ws_ingress(audit_module):
     result = audit_module.check_canonical_ws_ingress()
-    assert result.passed, (
-        f"check_canonical_ws_ingress FAILED: {result.failure_detail}"
-    )
+    assert result.passed, f"check_canonical_ws_ingress FAILED: {result.failure_detail}"
 
 
 def test_check_message_type_coverage(audit_module):
     result = audit_module.check_message_type_coverage()
-    assert result.passed, (
-        f"check_message_type_coverage FAILED: {result.failure_detail}"
-    )
+    assert result.passed, f"check_message_type_coverage FAILED: {result.failure_detail}"
 
 
 def test_check_handler_registration_completeness(audit_module):
     result = audit_module.check_handler_registration_completeness()
-    assert result.passed, (
-        f"check_handler_registration_completeness FAILED: {result.failure_detail}"
-    )
+    assert result.passed, f"check_handler_registration_completeness FAILED: {result.failure_detail}"
 
 
 def test_check_reconciliation_signal_handler_wired(audit_module):
     result = audit_module.check_reconciliation_signal_handler_wired()
-    assert result.passed, (
-        f"check_reconciliation_signal_handler_wired FAILED: {result.failure_detail}"
-    )
+    assert result.passed, f"check_reconciliation_signal_handler_wired FAILED: {result.failure_detail}"
 
 
 def test_check_handoff_v2_result_handler_wired(audit_module):
     result = audit_module.check_handoff_v2_result_handler_wired()
-    assert result.passed, (
-        f"check_handoff_v2_result_handler_wired FAILED: {result.failure_detail}"
-    )
+    assert result.passed, f"check_handoff_v2_result_handler_wired FAILED: {result.failure_detail}"
 
 
 def test_check_pending_delivery_buffer_implemented(audit_module):
     result = audit_module.check_pending_delivery_buffer_implemented()
-    assert result.passed, (
-        f"check_pending_delivery_buffer_implemented FAILED: {result.failure_detail}"
-    )
+    assert result.passed, f"check_pending_delivery_buffer_implemented FAILED: {result.failure_detail}"
 
 
 def test_check_reconnect_canonical_path_sentinel(audit_module):
     result = audit_module.check_reconnect_canonical_path_sentinel()
-    assert result.passed, (
-        f"check_reconnect_canonical_path_sentinel FAILED: {result.failure_detail}"
-    )
+    assert result.passed, f"check_reconnect_canonical_path_sentinel FAILED: {result.failure_detail}"
 
 
 def test_check_attached_session_registry_reconnect(audit_module):
     result = audit_module.check_attached_session_registry_reconnect()
-    assert result.passed, (
-        f"check_attached_session_registry_reconnect FAILED: {result.failure_detail}"
-    )
+    assert result.passed, f"check_attached_session_registry_reconnect FAILED: {result.failure_detail}"
 
 
 def test_check_governance_gate_enforcement_sentinel(audit_module):
     result = audit_module.check_governance_gate_enforcement_sentinel()
-    assert result.passed, (
-        f"check_governance_gate_enforcement_sentinel FAILED: {result.failure_detail}"
-    )
+    assert result.passed, f"check_governance_gate_enforcement_sentinel FAILED: {result.failure_detail}"
 
 
 def test_check_cross_repo_consistency_gates_implemented(audit_module):
     result = audit_module.check_cross_repo_consistency_gates_implemented()
-    assert result.passed, (
-        f"check_cross_repo_consistency_gates_implemented FAILED: {result.failure_detail}"
-    )
+    assert result.passed, f"check_cross_repo_consistency_gates_implemented FAILED: {result.failure_detail}"
 
 
 def test_check_dispatch_blocked_on_registration_gap(audit_module):
     result = audit_module.check_dispatch_blocked_on_registration_gap()
-    assert result.passed, (
-        f"check_dispatch_blocked_on_registration_gap FAILED: {result.failure_detail}"
-    )
+    assert result.passed, f"check_dispatch_blocked_on_registration_gap FAILED: {result.failure_detail}"
 
 
 def test_check_aip_compat_normalizer(audit_module):
     result = audit_module.check_aip_compat_normalizer()
-    assert result.passed, (
-        f"check_aip_compat_normalizer FAILED: {result.failure_detail}"
-    )
+    assert result.passed, f"check_aip_compat_normalizer FAILED: {result.failure_detail}"
 
 
 def test_check_lifecycle_coordinator_exists(audit_module):
     result = audit_module.check_lifecycle_coordinator_exists()
-    assert result.passed, (
-        f"check_lifecycle_coordinator_exists FAILED: {result.failure_detail}"
-    )
+    assert result.passed, f"check_lifecycle_coordinator_exists FAILED: {result.failure_detail}"
 
 
 # ---------------------------------------------------------------------------
@@ -170,8 +144,13 @@ def test_build_audit_snapshot_structure(audit_module):
     snapshot = audit_module.build_audit_snapshot()
     assert isinstance(snapshot, dict)
     required_keys = {
-        "methodology", "verdict", "deployment_conditions",
-        "checks", "passed_count", "failed_count", "all_checks_passed",
+        "methodology",
+        "verdict",
+        "deployment_conditions",
+        "checks",
+        "passed_count",
+        "failed_count",
+        "all_checks_passed",
     }
     assert required_keys.issubset(set(snapshot.keys()))
 
@@ -180,12 +159,8 @@ def test_build_audit_snapshot_all_checks_pass(audit_module):
     """All checks in the snapshot must pass."""
     snapshot = audit_module.build_audit_snapshot()
     failed = [c for c in snapshot["checks"] if not c["passed"]]
-    assert snapshot["all_checks_passed"], (
-        f"{snapshot['failed_count']} check(s) failed:\n"
-        + "\n".join(
-            f"  [{c['check_name']}] {c['failure_detail']}"
-            for c in failed
-        )
+    assert snapshot["all_checks_passed"], f"{snapshot['failed_count']} check(s) failed:\n" + "\n".join(
+        f"  [{c['check_name']}] {c['failure_detail']}" for c in failed
     )
 
 
@@ -207,9 +182,7 @@ def test_build_audit_snapshot_checks_have_evidence(audit_module):
     """Every check result must include a non-empty evidence string."""
     snapshot = audit_module.build_audit_snapshot()
     for check in snapshot["checks"]:
-        assert isinstance(check["evidence"], str), (
-            f"Check {check['check_name']!r} has no evidence string"
-        )
-        assert len(check["evidence"]) > 5, (
-            f"Check {check['check_name']!r} has too-short evidence: {check['evidence']!r}"
-        )
+        assert isinstance(check["evidence"], str), f"Check {check['check_name']!r} has no evidence string"
+        assert (
+            len(check["evidence"]) > 5
+        ), f"Check {check['check_name']!r} has too-short evidence: {check['evidence']!r}"

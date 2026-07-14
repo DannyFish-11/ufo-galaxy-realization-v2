@@ -169,6 +169,7 @@ def _diagnostic_semantics() -> Dict[str, List[str]]:
     """
     return {k: list(v) for k, v in DIAGNOSTIC_SEMANTICS_TEMPLATE.items()}
 
+
 # ---------------------------------------------------------------------------
 # Authority sentinels
 # ---------------------------------------------------------------------------
@@ -465,14 +466,8 @@ class RuntimeDecisionExplanation:
 
     @classmethod
     def from_dict(cls, d: Dict[str, Any]) -> "RuntimeDecisionExplanation":
-        hard_gates = [
-            RuntimeDecisionRecord.from_dict(r)
-            for r in (d.get("hard_gates") or [])
-        ]
-        soft_influences = [
-            RuntimeDecisionRecord.from_dict(r)
-            for r in (d.get("soft_influences") or [])
-        ]
+        hard_gates = [RuntimeDecisionRecord.from_dict(r) for r in (d.get("hard_gates") or [])]
+        soft_influences = [RuntimeDecisionRecord.from_dict(r) for r in (d.get("soft_influences") or [])]
         return cls(
             execution_path=d.get("execution_path", ""),
             model_selected=d.get("model_selected"),
@@ -491,12 +486,8 @@ class RuntimeDecisionExplanation:
             memory_influenced_planner=bool(d.get("memory_influenced_planner", False)),
             cognitive_region=d.get("cognitive_region"),
             execution_path_preference=d.get("execution_path_preference"),
-            execution_path_preference_binding=d.get(
-                "execution_path_preference_binding", "advisory_only_non_binding"
-            ),
-            execution_path_preference_authority=d.get(
-                "execution_path_preference_authority", "soft_hint_non_binding"
-            ),
+            execution_path_preference_binding=d.get("execution_path_preference_binding", "advisory_only_non_binding"),
+            execution_path_preference_authority=d.get("execution_path_preference_authority", "soft_hint_non_binding"),
             planner_strategy=d.get("planner_strategy"),
             source_authority=d.get("source_authority", "core.runtime_decision_observability"),
             assembled_at=float(d.get("assembled_at", 0.0)),
@@ -640,17 +631,19 @@ def _build_explanation_impl(
         node_allowed = bool(_eligible)
         node_denial_reasons = list(_denial)
         _gov_active = not node_allowed
-        hard_gates.append(RuntimeDecisionRecord(
-            layer_name="invocation_governance",
-            influence_class=InfluenceClass.HARD_GATE,
-            active=_gov_active,
-            authority_module="core.node_invocation_governance",
-            summary=(
-                f"Governance gate: node {'allowed' if node_allowed else 'denied'}"
-                + (f" — {'; '.join(node_denial_reasons[:2])}" if node_denial_reasons else "")
-            ),
-            detail=dict(governance_decision),
-        ))
+        hard_gates.append(
+            RuntimeDecisionRecord(
+                layer_name="invocation_governance",
+                influence_class=InfluenceClass.HARD_GATE,
+                active=_gov_active,
+                authority_module="core.node_invocation_governance",
+                summary=(
+                    f"Governance gate: node {'allowed' if node_allowed else 'denied'}"
+                    + (f" — {'; '.join(node_denial_reasons[:2])}" if node_denial_reasons else "")
+                ),
+                detail=dict(governance_decision),
+            )
+        )
 
     # ------------------------------------------------------------------
     # 2. Activation-budget influence layer (PR-18)
@@ -662,17 +655,19 @@ def _build_explanation_impl(
         _budg_influenced = bool(activation_budget_hint.get("influenced_runtime_decision", False))
         activation_budget_active = _budg_influenced
         activation_budget_mode = activation_budget_hint.get("breadth_mode")
-        soft_influences.append(RuntimeDecisionRecord(
-            layer_name="activation_budget",
-            influence_class=InfluenceClass.EXECUTION_POSTURE,
-            active=_budg_influenced,
-            authority_module="core.cognitive.cognitive_activation_budget",
-            summary=(
-                f"Activation budget: breadth_mode={activation_budget_mode or 'unknown'}, "
-                f"influenced={_budg_influenced}"
-            ),
-            detail=dict(activation_budget_hint),
-        ))
+        soft_influences.append(
+            RuntimeDecisionRecord(
+                layer_name="activation_budget",
+                influence_class=InfluenceClass.EXECUTION_POSTURE,
+                active=_budg_influenced,
+                authority_module="core.cognitive.cognitive_activation_budget",
+                summary=(
+                    f"Activation budget: breadth_mode={activation_budget_mode or 'unknown'}, "
+                    f"influenced={_budg_influenced}"
+                ),
+                detail=dict(activation_budget_hint),
+            )
+        )
 
     # ------------------------------------------------------------------
     # 3. Memory-bias influence layer (PR-19)
@@ -685,17 +680,16 @@ def _build_explanation_impl(
         _mem_influenced = bool(memory_bias_hint.get("influenced_runtime_decision", False))
         memory_bias_posture = _mem_posture
         memory_influenced_planner = _mem_influenced
-        soft_influences.append(RuntimeDecisionRecord(
-            layer_name="memory_bias",
-            influence_class=InfluenceClass.MEMORY_INFLUENCE,
-            active=_mem_influenced,
-            authority_module="core.cognitive.memory_bias_layer",
-            summary=(
-                f"Memory bias: posture={_mem_posture or 'unknown'}, "
-                f"influenced={_mem_influenced}"
-            ),
-            detail=dict(memory_bias_hint),
-        ))
+        soft_influences.append(
+            RuntimeDecisionRecord(
+                layer_name="memory_bias",
+                influence_class=InfluenceClass.MEMORY_INFLUENCE,
+                active=_mem_influenced,
+                authority_module="core.cognitive.memory_bias_layer",
+                summary=(f"Memory bias: posture={_mem_posture or 'unknown'}, " f"influenced={_mem_influenced}"),
+                detail=dict(memory_bias_hint),
+            )
+        )
 
     # ------------------------------------------------------------------
     # 4. Cognitive execution-hint / execution-posture layer (PR-18)
@@ -707,38 +701,42 @@ def _build_explanation_impl(
         cognitive_region = cognitive_hint_dict.get("cognitive_region")
         execution_path_preference = cognitive_hint_dict.get("execution_path_preference")
         _cog_active = cognitive_region is not None
-        soft_influences.append(RuntimeDecisionRecord(
-            layer_name="cognitive_execution_policy",
-            influence_class=InfluenceClass.SOFT_HINT,
-            active=_cog_active,
-            authority_module="core.cognitive.cognitive_execution_policy",
-            summary=(
-                f"Cognitive posture: region={cognitive_region or 'unknown'}, "
-                f"path_pref={execution_path_preference or 'unknown'}"
-            ),
-            detail=dict(cognitive_hint_dict),
-        ))
+        soft_influences.append(
+            RuntimeDecisionRecord(
+                layer_name="cognitive_execution_policy",
+                influence_class=InfluenceClass.SOFT_HINT,
+                active=_cog_active,
+                authority_module="core.cognitive.cognitive_execution_policy",
+                summary=(
+                    f"Cognitive posture: region={cognitive_region or 'unknown'}, "
+                    f"path_pref={execution_path_preference or 'unknown'}"
+                ),
+                detail=dict(cognitive_hint_dict),
+            )
+        )
 
     # ------------------------------------------------------------------
     # 5. Task-semantic influence layer (PR-17)
     # ------------------------------------------------------------------
     if task_hint:
-        soft_influences.append(RuntimeDecisionRecord(
-            layer_name="task_semantic",
-            influence_class=InfluenceClass.TASK_SEMANTIC_INFLUENCE,
-            active=(task_semantic_influenced_routing or task_semantic_influenced_planner),
-            authority_module="core.agent.kernel",
-            summary=(
-                f"Task semantic hint={task_hint!r}; "
-                f"influenced_routing={task_semantic_influenced_routing}, "
-                f"influenced_planner={task_semantic_influenced_planner}"
-            ),
-            detail={
-                "task_hint": task_hint,
-                "influenced_routing": task_semantic_influenced_routing,
-                "influenced_planner": task_semantic_influenced_planner,
-            },
-        ))
+        soft_influences.append(
+            RuntimeDecisionRecord(
+                layer_name="task_semantic",
+                influence_class=InfluenceClass.TASK_SEMANTIC_INFLUENCE,
+                active=(task_semantic_influenced_routing or task_semantic_influenced_planner),
+                authority_module="core.agent.kernel",
+                summary=(
+                    f"Task semantic hint={task_hint!r}; "
+                    f"influenced_routing={task_semantic_influenced_routing}, "
+                    f"influenced_planner={task_semantic_influenced_planner}"
+                ),
+                detail={
+                    "task_hint": task_hint,
+                    "influenced_routing": task_semantic_influenced_routing,
+                    "influenced_planner": task_semantic_influenced_planner,
+                },
+            )
+        )
 
     # ------------------------------------------------------------------
     # 6. Planner execution-posture layer
@@ -749,23 +747,25 @@ def _build_explanation_impl(
         _driven_by_budget = activation_budget_active
         _driven_by_memory = memory_influenced_planner
         _driven_by_task = task_semantic_influenced_planner
-        soft_influences.append(RuntimeDecisionRecord(
-            layer_name="planner_strategy",
-            influence_class=InfluenceClass.EXECUTION_POSTURE,
-            active=_posture_active,
-            authority_module="core.agent.execution_planner",
-            summary=(
-                f"Planner strategy={planner_strategy!r}; "
-                f"driven_by: budget={_driven_by_budget}, memory={_driven_by_memory}, "
-                f"task_semantic={_driven_by_task}"
-            ),
-            detail={
-                "strategy": planner_strategy,
-                "driven_by_activation_budget": _driven_by_budget,
-                "driven_by_memory_bias": _driven_by_memory,
-                "driven_by_task_semantic": _driven_by_task,
-            },
-        ))
+        soft_influences.append(
+            RuntimeDecisionRecord(
+                layer_name="planner_strategy",
+                influence_class=InfluenceClass.EXECUTION_POSTURE,
+                active=_posture_active,
+                authority_module="core.agent.execution_planner",
+                summary=(
+                    f"Planner strategy={planner_strategy!r}; "
+                    f"driven_by: budget={_driven_by_budget}, memory={_driven_by_memory}, "
+                    f"task_semantic={_driven_by_task}"
+                ),
+                detail={
+                    "strategy": planner_strategy,
+                    "driven_by_activation_budget": _driven_by_budget,
+                    "driven_by_memory_bias": _driven_by_memory,
+                    "driven_by_task_semantic": _driven_by_task,
+                },
+            )
+        )
 
     # ------------------------------------------------------------------
     # 7. Append caller-provided extra records
@@ -858,12 +858,8 @@ def build_runtime_decision_diagnostics(
             return _minimal_diagnostics_fallback()
 
         all_records: List[Dict[str, Any]] = []
-        for rec in (explanation.hard_gates + explanation.soft_influences):
-            _decision_role = (
-                "hard_authority"
-                if rec.influence_class == InfluenceClass.HARD_GATE
-                else "soft_influence"
-            )
+        for rec in explanation.hard_gates + explanation.soft_influences:
+            _decision_role = "hard_authority" if rec.influence_class == InfluenceClass.HARD_GATE else "soft_influence"
             entry: Dict[str, Any] = {
                 "layer_name": rec.layer_name,
                 "influence_class": rec.influence_class.value,
@@ -1015,12 +1011,8 @@ def enrich_governance_decision_with_observability(
     try:
         obs: Dict[str, Any] = {
             "task_hint": task_hint,
-            "activation_budget_mode": (
-                (activation_budget_hint or {}).get("breadth_mode")
-            ),
-            "memory_bias_posture": (
-                (memory_bias_hint or {}).get("posture")
-            ),
+            "activation_budget_mode": ((activation_budget_hint or {}).get("breadth_mode")),
+            "memory_bias_posture": ((memory_bias_hint or {}).get("posture")),
             "observability_pr20_active": True,
             "observability_authority": RUNTIME_DECISION_OBSERVABILITY_PR20_SENTINEL,
         }

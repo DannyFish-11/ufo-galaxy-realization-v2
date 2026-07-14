@@ -141,6 +141,7 @@ _skip_flow_truth = pytest.mark.skipif(
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_governance_artifact_message(
     *,
     device_id: str = "dev-test",
@@ -199,9 +200,7 @@ class TestGroupA_AndroidEvaluatorArtifactKind:
             AndroidEvaluatorArtifactKind.acceptance,
             AndroidEvaluatorArtifactKind.strategy,
         ):
-            assert k.is_canonical_gate_input() is True, (
-                f"{k.value} must be a canonical gate input (AC4)"
-            )
+            assert k.is_canonical_gate_input() is True, f"{k.value} must be a canonical gate input (AC4)"
 
     @_skip_ingress
     def test_A05_unknown_kind_is_not_canonical_gate_input(self):
@@ -354,10 +353,12 @@ class TestGroupD_AndroidEvaluatorArtifactRegistry:
         import json
 
         reg = AndroidEvaluatorArtifactRegistry()
-        reg.record(AndroidEvaluatorArtifact(
-            kind=AndroidEvaluatorArtifactKind.readiness,
-            device_id="dev-D04",
-        ))
+        reg.record(
+            AndroidEvaluatorArtifact(
+                kind=AndroidEvaluatorArtifactKind.readiness,
+                device_id="dev-D04",
+            )
+        )
         snapshot = reg.build_snapshot()
         json.dumps(snapshot)  # must not raise
 
@@ -459,9 +460,9 @@ class TestGroupF_GovernanceArtifactTruthKindIsNotAdvisory:
     def test_F02_governance_artifact_affects_canonical_state(self):
         """governance_artifact must be in affects_canonical_state() = True."""
         kind = AndroidParticipantTruthKind.governance_artifact
-        assert kind.affects_canonical_state() is True, (
-            "governance_artifact must affect canonical state (first-class gate input)"
-        )
+        assert (
+            kind.affects_canonical_state() is True
+        ), "governance_artifact must affect canonical state (first-class gate input)"
 
     @_skip_truth_ingress
     def test_F03_governance_artifact_truth_ingress_returns_not_local_only(self):
@@ -481,9 +482,9 @@ class TestGroupF_GovernanceArtifactTruthKindIsNotAdvisory:
         }
         outcome = ingest_android_participant_truth_message(msg)
         # governance_artifact is NOT advisory — local_only must be False
-        assert outcome.local_only is False, (
-            "governance_artifact must not be advisory/local-only (AC4: first-class canonical input)"
-        )
+        assert (
+            outcome.local_only is False
+        ), "governance_artifact must not be advisory/local-only (AC4: first-class canonical input)"
 
     @_skip_truth_ingress
     def test_F04_readiness_assessment_remains_advisory_by_policy(self):
@@ -501,9 +502,9 @@ class TestGroupF_GovernanceArtifactTruthKindIsNotAdvisory:
             },
         }
         outcome = ingest_android_participant_truth_message(msg)
-        assert outcome.local_only is True, (
-            "readiness_assessment must remain advisory/local-only per READINESS_ASSESSMENT_IS_ADVISORY_POLICY"
-        )
+        assert (
+            outcome.local_only is True
+        ), "readiness_assessment must remain advisory/local-only per READINESS_ASSESSMENT_IS_ADVISORY_POLICY"
 
     @_skip_truth_ingress
     def test_F05_governance_artifact_policy_sentinel_is_importable(self):
@@ -558,9 +559,9 @@ class TestGroupG_GovernanceArtifactAlignAndRecord:
         align_and_record(ctx)
 
         snapshot_after = runtime.build_snapshot()
-        assert snapshot_after.total_decisions > before_count, (
-            "governance_artifact must increment FlowTruthAlignmentRuntime.total_decisions (AC2)"
-        )
+        assert (
+            snapshot_after.total_decisions > before_count
+        ), "governance_artifact must increment FlowTruthAlignmentRuntime.total_decisions (AC2)"
 
     @_skip_flow_truth
     def test_G03_governance_artifact_is_classified_as_authoritative(self):
@@ -578,9 +579,9 @@ class TestGroupG_GovernanceArtifactAlignAndRecord:
             posture_changed=False,
         )
         artifact = align_and_record(ctx)
-        assert artifact.decision == FlowTruthDecisionKind.accept_as_authoritative, (
-            f"governance_artifact must be accept_as_authoritative, got {artifact.decision} (AC4)"
-        )
+        assert (
+            artifact.decision == FlowTruthDecisionKind.accept_as_authoritative
+        ), f"governance_artifact must be accept_as_authoritative, got {artifact.decision} (AC4)"
 
 
 # ===========================================================================
@@ -611,9 +612,7 @@ class TestGroupH_ReadinessAssessmentRemainsAdvisory:
         assert artifact.decision in (
             FlowTruthDecisionKind.accept_as_advisory,
             FlowTruthDecisionKind.record_as_execution_evidence,
-        ), (
-            f"readiness_assessment must be advisory, got {artifact.decision} (AC4)"
-        )
+        ), f"readiness_assessment must be advisory, got {artifact.decision} (AC4)"
 
 
 # ===========================================================================
@@ -636,9 +635,9 @@ class TestGroupI_ReadinessGateTruthOwnership:
         report = gate.evaluate()
 
         assert isinstance(report, DelegatedFlowReadinessReport)
-        assert ReadinessDimension.truth_ownership.value in report.dimensions, (
-            "truth_ownership dimension must be present in gate report (AC3)"
-        )
+        assert (
+            ReadinessDimension.truth_ownership.value in report.dimensions
+        ), "truth_ownership dimension must be present in gate report (AC3)"
 
     @_skip_readiness_gate
     @_skip_flow_truth
@@ -664,9 +663,9 @@ class TestGroupI_ReadinessGateTruthOwnership:
 
         # truth_ownership dimension must be present
         truth_dim = report.dimensions.get(ReadinessDimension.truth_ownership.value)
-        assert truth_dim is not None, (
-            "truth_ownership dimension must appear in gate report after governance_artifact (AC3)"
-        )
+        assert (
+            truth_dim is not None
+        ), "truth_ownership dimension must appear in gate report after governance_artifact (AC3)"
 
     @_skip_readiness_gate
     @_skip_flow_truth
@@ -676,8 +675,8 @@ class TestGroupI_ReadinessGateTruthOwnership:
 
         AC3: gate can read artifacts and produce a meaningful verdict.
         """
-        from core.flow_level_truth_ownership import FlowTruthDecisionKind
         from core.delegated_flow_readiness_gate import DimensionReadinessStatus
+        from core.flow_level_truth_ownership import FlowTruthDecisionKind
 
         reset_flow_truth_alignment_runtime()
         reset_readiness_gate()
@@ -697,9 +696,9 @@ class TestGroupI_ReadinessGateTruthOwnership:
 
         truth_dim = report.dimensions.get(ReadinessDimension.truth_ownership.value)
         if truth_dim is not None:
-            assert truth_dim.status != DimensionReadinessStatus.unknown, (
-                "truth_ownership must not be 'unknown' when FlowTruthAlignmentRuntime has decisions (AC3)"
-            )
+            assert (
+                truth_dim.status != DimensionReadinessStatus.unknown
+            ), "truth_ownership must not be 'unknown' when FlowTruthAlignmentRuntime has decisions (AC3)"
 
 
 # ===========================================================================
@@ -743,9 +742,7 @@ class TestGroupJ_EndToEndChain:
         # If flow_level_truth_ownership is available, FlowTruthAlignmentRuntime
         # must have accumulated a new decision
         after = runtime.build_snapshot().total_decisions
-        assert after > before, (
-            "ingest_android_evaluator_artifact() must write to FlowTruthAlignmentRuntime (AC2)"
-        )
+        assert after > before, "ingest_android_evaluator_artifact() must write to FlowTruthAlignmentRuntime (AC2)"
 
     @_skip_ingress
     def test_J02_all_four_evaluator_kinds_are_ingested_and_stored(self):
@@ -761,16 +758,12 @@ class TestGroupJ_EndToEndChain:
                 evaluator_kind=kind_str,
             )
             outcome = ingest_android_evaluator_artifact(msg, registry=reg)
-            assert outcome.was_stored is True, (
-                f"Evaluator kind '{kind_str}' must be stored in registry (AC1)"
-            )
+            assert outcome.was_stored is True, f"Evaluator kind '{kind_str}' must be stored in registry (AC1)"
             stored = reg.get_latest_for_device_kind(
                 f"dev-J02-{kind_str}",
                 AndroidEvaluatorArtifactKind.from_string(kind_str),
             )
-            assert stored is not None, (
-                f"Registry must have artifact for kind '{kind_str}' (AC2)"
-            )
+            assert stored is not None, f"Registry must have artifact for kind '{kind_str}' (AC2)"
 
     @_skip_ingress
     @_skip_readiness_gate
@@ -799,10 +792,11 @@ class TestGroupJ_EndToEndChain:
         assert truth_dim is not None, "truth_ownership dimension must be present (AC3)"
 
         from core.delegated_flow_readiness_gate import DimensionReadinessStatus
+
         # The dimension must NOT be 'unknown' since we just ingested an artifact
-        assert truth_dim.status != DimensionReadinessStatus.unknown, (
-            "truth_ownership dimension must reflect the governance artifact, not 'unknown' (AC3)"
-        )
+        assert (
+            truth_dim.status != DimensionReadinessStatus.unknown
+        ), "truth_ownership dimension must reflect the governance artifact, not 'unknown' (AC3)"
 
 
 # ===========================================================================
@@ -874,9 +868,7 @@ class TestGroupL_ValidationMatrix:
         snapshot = reg.build_snapshot()
         counts = snapshot["artifact_counts_by_kind"]
         for kind_str in ("governance", "readiness", "acceptance", "strategy"):
-            assert counts.get(kind_str, 0) >= 1, (
-                f"Registry snapshot must show at least 1 artifact of kind '{kind_str}'"
-            )
+            assert counts.get(kind_str, 0) >= 1, f"Registry snapshot must show at least 1 artifact of kind '{kind_str}'"
 
     @_skip_ingress
     def test_L03_all_canonical_kinds_in_snapshot_gate_input_list(self):
@@ -885,6 +877,4 @@ class TestGroupL_ValidationMatrix:
         snapshot = reg.build_snapshot()
         gate_kinds = snapshot["canonical_gate_input_kinds"]
         for k in ("governance", "readiness", "acceptance", "strategy"):
-            assert k in gate_kinds, (
-                f"'{k}' must be in canonical_gate_input_kinds (AC4: first-class gate input)"
-            )
+            assert k in gate_kinds, f"'{k}' must be in canonical_gate_input_kinds (AC4: first-class gate input)"

@@ -162,10 +162,10 @@ _RETRIEVAL_RELEVANCE_HIGH: float = 0.4
 """Long-term-memory depth score above which RETRIEVAL_SEEKING is inferred."""
 
 # Working-memory entry counts that map to continuity scores
-_WM_ENTRIES_HIGH: int = 5   # >= 5 recent entries → high continuity
-_WM_ENTRIES_MED: int = 2    # >= 2 recent entries → moderate continuity
+_WM_ENTRIES_HIGH: int = 5  # >= 5 recent entries → high continuity
+_WM_ENTRIES_MED: int = 2  # >= 2 recent entries → moderate continuity
 _LTM_ENTRIES_HIGH: int = 3  # >= 3 LTM entries → meaningful retrieval potential
-_LTM_ENTRIES_MED: int = 1   # >= 1 LTM entry → low retrieval potential
+_LTM_ENTRIES_MED: int = 1  # >= 1 LTM entry → low retrieval potential
 
 # Recent task-memory recency window (seconds)
 _TASK_MEMORY_RECENCY_WINDOW: float = 3600.0  # last 1 hour
@@ -319,9 +319,7 @@ class MemoryPlannerGuidance:
             "posture": self.posture,
             "decomposition_hint": self.decomposition_hint,
             "prefer_single_agent": self.prefer_single_agent,
-            "complexity_threshold_adjustment": round(
-                self.complexity_threshold_adjustment, 4
-            ),
+            "complexity_threshold_adjustment": round(self.complexity_threshold_adjustment, 4),
             "influenced_by_memory": self.influenced_by_memory,
             "diagnostic_note": self.diagnostic_note,
         }
@@ -484,6 +482,7 @@ def _derive_memory_bias_impl(
     # ── 1. Working-memory depth (per-session continuity signal) ──────────────
     try:
         from core.cognitive.working_memory import get_working_memory as _get_wm
+
         _wm = _get_wm()
         if session_id:
             entries = _wm.get(session_id=session_id)
@@ -498,6 +497,7 @@ def _derive_memory_bias_impl(
     # ── 2. Long-term memory depth (retrieval signal) ─────────────────────────
     try:
         from core.cognitive.long_term_memory import get_long_term_memory as _get_ltm
+
         _ltm = _get_ltm()
         _global_entries = _ltm.retrieve_all(namespace="global")
         ltm_depth = len(_global_entries) if _global_entries else 0
@@ -507,12 +507,12 @@ def _derive_memory_bias_impl(
     # ── 3. Task-memory recency (continuity reinforcement) ────────────────────
     try:
         from core.task_memory import get_task_memory as _get_tm
+
         _tm = _get_tm()
         _recent = _tm.get_recent_summaries(n=10)
         _now = time.time()
         recent_task_count = sum(
-            1 for s in (_recent or [])
-            if (_now - getattr(s, "timestamp", 0.0)) <= _TASK_MEMORY_RECENCY_WINDOW
+            1 for s in (_recent or []) if (_now - getattr(s, "timestamp", 0.0)) <= _TASK_MEMORY_RECENCY_WINDOW
         )
     except Exception as _tm_err:
         logger.debug("derive_memory_bias: TaskMemory read failed — %s", _tm_err)
@@ -522,17 +522,20 @@ def _derive_memory_bias_impl(
     pattern_count = 0
     try:
         from core.cognitive.pattern_miner import get_pattern_miner as _get_pm
+
         _pm = _get_pm()
         _patterns = _pm.match_patterns(
-            task_type="", hour=None, min_activation=0.2, limit=10,
+            task_type="",
+            hour=None,
+            min_activation=0.2,
+            limit=10,
         )
         if _patterns:
             # High-activation patterns indicate the system has learned about
             # the user's behavior — this is a continuity signal
             pattern_boost = min(
                 0.15,  # cap at 0.15 to not overwhelm other signals
-                sum(p.activation_score * p.confidence for p in _patterns)
-                / max(len(_patterns), 1),
+                sum(p.activation_score * p.confidence for p in _patterns) / max(len(_patterns), 1),
             )
             pattern_count = len(_patterns)
     except Exception as _pm_err:
@@ -548,9 +551,7 @@ def _derive_memory_bias_impl(
     posture = _classify_posture(continuity_score, retrieval_relevance)
 
     # ── 7. Determine if memory signals are meaningful ─────────────────────────
-    influenced = (
-        wm_depth > 0 or ltm_depth > 0 or recent_task_count > 0 or pattern_count > 0
-    )
+    influenced = wm_depth > 0 or ltm_depth > 0 or recent_task_count > 0 or pattern_count > 0
 
     logger.debug(
         "MemoryBiasLayer: session=%s wm_depth=%d ltm_depth=%d recent_tasks=%d "

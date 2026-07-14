@@ -266,6 +266,7 @@ def _operator_consumption_contract_boundary() -> Dict[str, Any]:
 # Router factory
 # ---------------------------------------------------------------------------
 
+
 def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG001
     """Create and return the operator inspection router.
 
@@ -297,6 +298,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         """
         try:
             from core.operator_surface import get_operator_surface
+
             surface = get_operator_surface()
             snap = surface.operator_snapshot()
             return JSONResponse(content=snap.to_dict())
@@ -344,6 +346,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         """
         try:
             from core.operator_surface import get_operator_surface
+
             surface = get_operator_surface()
             result = surface.inspect_task(task_id)
             if result is None:
@@ -371,6 +374,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         """
         try:
             from core.operator_surface import get_operator_surface
+
             surface = get_operator_surface()
             result = surface.inspect_route(task_id)
             if result is None:
@@ -398,6 +402,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         """
         try:
             from core.operator_surface import get_operator_surface
+
             surface = get_operator_surface()
             result = surface.inspect_executor(node_id)
             if result is None:
@@ -425,6 +430,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         """
         try:
             from core.operator_surface import get_operator_surface
+
             surface = get_operator_surface()
             result = surface.inspect_failure_domain(task_id)
             if result is None:
@@ -452,6 +458,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         """
         try:
             from core.operator_surface import get_operator_surface
+
             surface = get_operator_surface()
             result = surface.inspect_lineage(task_id)
             if result is None:
@@ -483,6 +490,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         """
         try:
             from core.operator_surface import get_operator_surface
+
             surface = get_operator_surface()
             result = surface.inspect_recovery(task_id)
             if result is None:
@@ -514,6 +522,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         """
         try:
             from core.operator_surface import get_operator_surface
+
             surface = get_operator_surface()
             result = surface.inspect_partial_result(task_id)
             if result is None:
@@ -544,6 +553,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         """
         try:
             from core.operator_surface import get_operator_surface
+
             surface = get_operator_surface()
             result = surface.inspect_audit_evidence(task_id)
             return JSONResponse(content=result.to_dict())
@@ -571,6 +581,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         """
         try:
             from core.operator_surface import get_operator_surface
+
             surface = get_operator_surface()
             result = surface.end_to_end_review(task_id)
             return JSONResponse(content=result.to_dict())
@@ -609,6 +620,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         """
         try:
             from core.operator_surface import get_operator_surface
+
             surface = get_operator_surface()
             result = surface.inspect_flow(flow_id)
             if result is None:
@@ -641,6 +653,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         """
         try:
             from core.runtime_readiness_matrix import get_readiness_matrix
+
             matrix = get_readiness_matrix()
             return JSONResponse(content=matrix.to_dict())
         except Exception as exc:
@@ -680,14 +693,14 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                 if proj is not None:
                     projections.append(proj.to_dict())
 
-            return JSONResponse(content={
-                "flows": projections,
-                "total": len(projections),
-                "active": sum(
-                    1 for e in all_entities if e.phase.is_active()
-                ),
-                "authority": "OPERATOR_ROUTES_V1",
-            })
+            return JSONResponse(
+                content={
+                    "flows": projections,
+                    "total": len(projections),
+                    "active": sum(1 for e in all_entities if e.phase.is_active()),
+                    "authority": "OPERATOR_ROUTES_V1",
+                }
+            )
         except Exception as exc:
             logger.error("list_flows endpoint error: %s", exc)
             return JSONResponse(
@@ -708,6 +721,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         """
         try:
             from core.operator_surface import get_operator_surface
+
             surface = get_operator_surface()
             result = surface.inspect_flow(flow_id)
             if result is None:
@@ -743,6 +757,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             llm_router = None
             try:
                 from core.llm_manager import get_llm_manager
+
                 llm_router = get_llm_manager()
             except Exception as exc:
                 logger.warning("Exception suppressed: %s", exc)
@@ -750,16 +765,19 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             if llm_router is None:
                 try:
                     from core.multi_llm_router import MultiLLMRouter
+
                     llm_router = MultiLLMRouter()
                 except Exception as exc:
                     logger.warning("Exception suppressed: %s", exc)
 
             if llm_router is None:
-                return JSONResponse(content={
-                    "available": False,
-                    "detail": "LLM router not available",
-                    "authority": "OPERATOR_ROUTES_V1",
-                })
+                return JSONResponse(
+                    content={
+                        "available": False,
+                        "detail": "LLM router not available",
+                        "authority": "OPERATOR_ROUTES_V1",
+                    }
+                )
 
             if hasattr(llm_router, "get_status"):
                 status = llm_router.get_status()
@@ -804,18 +822,20 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
 
             posture = evaluate_nats_posture()
             stats = posture.get("bus", {})
-            return JSONResponse(content={
-                "connected": posture.get("connected", False),
-                "noop_mode": posture.get("noop_mode", True),
-                "nats_url": posture.get("nats_url", "nats://localhost:4222"),
-                "posture": posture.get("posture"),
-                "required": posture.get("required", False),
-                "assertion_ok": posture.get("assertion_ok", True),
-                "violation_reason": posture.get("violation_reason", ""),
-                "system_mode": posture.get("system_mode", "desktop-local"),
-                "stats": stats,
-                "authority": "OPERATOR_ROUTES_V1",
-            })
+            return JSONResponse(
+                content={
+                    "connected": posture.get("connected", False),
+                    "noop_mode": posture.get("noop_mode", True),
+                    "nats_url": posture.get("nats_url", "nats://localhost:4222"),
+                    "posture": posture.get("posture"),
+                    "required": posture.get("required", False),
+                    "assertion_ok": posture.get("assertion_ok", True),
+                    "violation_reason": posture.get("violation_reason", ""),
+                    "system_mode": posture.get("system_mode", "desktop-local"),
+                    "stats": stats,
+                    "authority": "OPERATOR_ROUTES_V1",
+                }
+            )
         except Exception as exc:
             logger.error("nats_status endpoint error: %s", exc)
             return JSONResponse(
@@ -848,28 +868,32 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         """
         try:
             from core.openclawd_heartbeat import get_heartbeat_scheduler
+
             scheduler = get_heartbeat_scheduler()
             if scheduler is None:
-                return JSONResponse(content={
-                    "enabled": False,
-                    "running": False,
-                    "detail": "HeartbeatScheduler not initialised (OpenClawd unavailable)",
-                    "authority": "OPERATOR_ROUTES_V1",
-                })
+                return JSONResponse(
+                    content={
+                        "enabled": False,
+                        "running": False,
+                        "detail": "HeartbeatScheduler not initialised (OpenClawd unavailable)",
+                        "authority": "OPERATOR_ROUTES_V1",
+                    }
+                )
             running = (
-                scheduler._task is not None
-                and not scheduler._task.done()
-            ) if hasattr(scheduler, "_task") else False
-            return JSONResponse(content={
-                "enabled": scheduler.is_enabled(),
-                "running": running,
-                "cycle_count": getattr(scheduler, "_cycle_count", 0),
-                "interval_seconds": getattr(scheduler, "_interval_seconds", None),
-                "task_file": getattr(scheduler, "_task_file", None),
-                "tier1_model": getattr(scheduler, "_tier1_model", None),
-                "tier2_model": getattr(scheduler, "_tier2_model", None),
-                "authority": "OPERATOR_ROUTES_V1",
-            })
+                (scheduler._task is not None and not scheduler._task.done()) if hasattr(scheduler, "_task") else False
+            )
+            return JSONResponse(
+                content={
+                    "enabled": scheduler.is_enabled(),
+                    "running": running,
+                    "cycle_count": getattr(scheduler, "_cycle_count", 0),
+                    "interval_seconds": getattr(scheduler, "_interval_seconds", None),
+                    "task_file": getattr(scheduler, "_task_file", None),
+                    "tier1_model": getattr(scheduler, "_tier1_model", None),
+                    "tier2_model": getattr(scheduler, "_tier2_model", None),
+                    "authority": "OPERATOR_ROUTES_V1",
+                }
+            )
         except Exception as exc:
             logger.error("heartbeat_status endpoint error: %s", exc)
             return JSONResponse(
@@ -897,12 +921,15 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         """
         try:
             from core.port_config import PortConfig
+
             pc = PortConfig()
-            return JSONResponse(content={
-                "node_ports": pc.list_node_ports(),
-                "service_ports": pc.list_service_ports(),
-                "authority": "OPERATOR_ROUTES_V1",
-            })
+            return JSONResponse(
+                content={
+                    "node_ports": pc.list_node_ports(),
+                    "service_ports": pc.list_service_ports(),
+                    "authority": "OPERATOR_ROUTES_V1",
+                }
+            )
         except Exception as exc:
             logger.error("ports endpoint error: %s", exc)
             return JSONResponse(
@@ -947,6 +974,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         """
         try:
             from core.android_device_state_store import get_device_ecosystem_summary
+
             summary = get_device_ecosystem_summary()
             devices = summary.get("devices") if isinstance(summary.get("devices"), list) else []
             absorbed_candidates = [
@@ -954,29 +982,31 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                 for d in devices
                 if isinstance(d, dict) and isinstance(d.get("absorbed_at"), (int, float))
             ]
-            return JSONResponse(content={
-                "authority": "OPERATOR_ROUTES_V1",
-                **summary,
-                "authority_source_fingerprint": build_authority_source_fingerprint(
-                    surface_path="/api/v1/operator/devices/ecosystem",
-                    primary_source_kind=SOURCE_KIND_RUNTIME_VISIBLE_STATE,
-                    source_roles={
-                        SOURCE_KIND_RUNTIME_VISIBLE_STATE: "primary",
-                        SOURCE_KIND_OPERATOR_DERIVED_SURFACE: "supporting",
-                        SOURCE_KIND_DIAGNOSTICS_VISIBLE_STATE: "supporting",
-                        SOURCE_KIND_CANONICAL_TRUTH: "none",
-                        SOURCE_KIND_COMPILED_OUTWARD_TRUTH: "none",
-                    },
-                    source_freshness={
-                        "latest_device_absorbed_at": max(absorbed_candidates) if absorbed_candidates else None,
-                        "total_devices_with_snapshot": summary.get("total_devices_with_snapshot"),
-                    },
-                    observation_basis={
-                        "snapshot_source_path": "core.android_device_state_store.get_device_ecosystem_summary",
-                        "device_snapshot_count": len(devices),
-                    },
-                ),
-            })
+            return JSONResponse(
+                content={
+                    "authority": "OPERATOR_ROUTES_V1",
+                    **summary,
+                    "authority_source_fingerprint": build_authority_source_fingerprint(
+                        surface_path="/api/v1/operator/devices/ecosystem",
+                        primary_source_kind=SOURCE_KIND_RUNTIME_VISIBLE_STATE,
+                        source_roles={
+                            SOURCE_KIND_RUNTIME_VISIBLE_STATE: "primary",
+                            SOURCE_KIND_OPERATOR_DERIVED_SURFACE: "supporting",
+                            SOURCE_KIND_DIAGNOSTICS_VISIBLE_STATE: "supporting",
+                            SOURCE_KIND_CANONICAL_TRUTH: "none",
+                            SOURCE_KIND_COMPILED_OUTWARD_TRUTH: "none",
+                        },
+                        source_freshness={
+                            "latest_device_absorbed_at": max(absorbed_candidates) if absorbed_candidates else None,
+                            "total_devices_with_snapshot": summary.get("total_devices_with_snapshot"),
+                        },
+                        observation_basis={
+                            "snapshot_source_path": "core.android_device_state_store.get_device_ecosystem_summary",
+                            "device_snapshot_count": len(devices),
+                        },
+                    ),
+                }
+            )
         except Exception as exc:
             logger.error("devices_ecosystem endpoint error: %s", exc)
             return JSONResponse(
@@ -996,6 +1026,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         """
         try:
             from core.android_device_state_store import get_device_state_snapshot
+
             snap = get_device_state_snapshot(device_id)
             if snap is None:
                 return JSONResponse(
@@ -1003,30 +1034,32 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                     status_code=404,
                 )
             snapshot_dict = snap.to_dict()
-            return JSONResponse(content={
-                "authority": "OPERATOR_ROUTES_V1",
-                **snapshot_dict,
-                "authority_source_fingerprint": build_authority_source_fingerprint(
-                    surface_path="/api/v1/operator/devices/ecosystem/{device_id}",
-                    primary_source_kind=SOURCE_KIND_RUNTIME_VISIBLE_STATE,
-                    source_roles={
-                        SOURCE_KIND_RUNTIME_VISIBLE_STATE: "primary",
-                        SOURCE_KIND_OPERATOR_DERIVED_SURFACE: "supporting",
-                        SOURCE_KIND_DIAGNOSTICS_VISIBLE_STATE: "supporting",
-                        SOURCE_KIND_CANONICAL_TRUTH: "none",
-                        SOURCE_KIND_COMPILED_OUTWARD_TRUTH: "none",
-                    },
-                    source_freshness={
-                        "device_id": device_id,
-                        "absorbed_at": snapshot_dict.get("absorbed_at"),
-                        "snapshot_ts": snapshot_dict.get("snapshot_ts"),
-                    },
-                    observation_basis={
-                        "snapshot_source": snapshot_dict.get("_source"),
-                        "canonical_reconciliation_status": snapshot_dict.get("canonical_reconciliation_status"),
-                    },
-                ),
-            })
+            return JSONResponse(
+                content={
+                    "authority": "OPERATOR_ROUTES_V1",
+                    **snapshot_dict,
+                    "authority_source_fingerprint": build_authority_source_fingerprint(
+                        surface_path="/api/v1/operator/devices/ecosystem/{device_id}",
+                        primary_source_kind=SOURCE_KIND_RUNTIME_VISIBLE_STATE,
+                        source_roles={
+                            SOURCE_KIND_RUNTIME_VISIBLE_STATE: "primary",
+                            SOURCE_KIND_OPERATOR_DERIVED_SURFACE: "supporting",
+                            SOURCE_KIND_DIAGNOSTICS_VISIBLE_STATE: "supporting",
+                            SOURCE_KIND_CANONICAL_TRUTH: "none",
+                            SOURCE_KIND_COMPILED_OUTWARD_TRUTH: "none",
+                        },
+                        source_freshness={
+                            "device_id": device_id,
+                            "absorbed_at": snapshot_dict.get("absorbed_at"),
+                            "snapshot_ts": snapshot_dict.get("snapshot_ts"),
+                        },
+                        observation_basis={
+                            "snapshot_source": snapshot_dict.get("_source"),
+                            "canonical_reconciliation_status": snapshot_dict.get("canonical_reconciliation_status"),
+                        },
+                    ),
+                }
+            )
         except Exception as exc:
             logger.error("device_ecosystem(%s) endpoint error: %s", device_id, exc)
             return JSONResponse(
@@ -1082,6 +1115,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         """
         try:
             from core.android_device_state_store import list_recent_execution_events
+
             events = list_recent_execution_events(
                 flow_id=flow_id or None,
                 device_id=device_id or None,
@@ -1092,31 +1126,33 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                 for absorbed_at in (getattr(e, "absorbed_at", None) for e in events)
                 if isinstance(absorbed_at, (int, float))
             ]
-            return JSONResponse(content={
-                "total_events": len(events),
-                "events": [e.to_dict() for e in events],
-                "authority": "OPERATOR_ROUTES_V1",
-                "authority_source_fingerprint": build_authority_source_fingerprint(
-                    surface_path="/api/v1/operator/devices/execution-events",
-                    primary_source_kind=SOURCE_KIND_DIAGNOSTICS_VISIBLE_STATE,
-                    source_roles={
-                        SOURCE_KIND_DIAGNOSTICS_VISIBLE_STATE: "primary",
-                        SOURCE_KIND_RUNTIME_VISIBLE_STATE: "supporting",
-                        SOURCE_KIND_OPERATOR_DERIVED_SURFACE: "supporting",
-                        SOURCE_KIND_CANONICAL_TRUTH: "none",
-                        SOURCE_KIND_COMPILED_OUTWARD_TRUTH: "none",
-                    },
-                    source_freshness={
-                        "latest_event_absorbed_at": max(event_absorbed_at_timestamps, default=None),
-                        "event_count": len(events),
-                    },
-                    observation_basis={
-                        "event_source_path": "core.android_device_state_store.list_recent_execution_events",
-                        "filter_device_id": device_id,
-                        "filter_flow_id": flow_id,
-                    },
-                ),
-            })
+            return JSONResponse(
+                content={
+                    "total_events": len(events),
+                    "events": [e.to_dict() for e in events],
+                    "authority": "OPERATOR_ROUTES_V1",
+                    "authority_source_fingerprint": build_authority_source_fingerprint(
+                        surface_path="/api/v1/operator/devices/execution-events",
+                        primary_source_kind=SOURCE_KIND_DIAGNOSTICS_VISIBLE_STATE,
+                        source_roles={
+                            SOURCE_KIND_DIAGNOSTICS_VISIBLE_STATE: "primary",
+                            SOURCE_KIND_RUNTIME_VISIBLE_STATE: "supporting",
+                            SOURCE_KIND_OPERATOR_DERIVED_SURFACE: "supporting",
+                            SOURCE_KIND_CANONICAL_TRUTH: "none",
+                            SOURCE_KIND_COMPILED_OUTWARD_TRUTH: "none",
+                        },
+                        source_freshness={
+                            "latest_event_absorbed_at": max(event_absorbed_at_timestamps, default=None),
+                            "event_count": len(events),
+                        },
+                        observation_basis={
+                            "event_source_path": "core.android_device_state_store.list_recent_execution_events",
+                            "filter_device_id": device_id,
+                            "filter_flow_id": flow_id,
+                        },
+                    ),
+                }
+            )
         except Exception as exc:
             logger.error("devices_execution_events endpoint error: %s", exc)
             return JSONResponse(
@@ -1194,6 +1230,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             from core.operator_action_contract import OperatorActionRequest
             from core.operator_surface import get_operator_surface
             from core.unified_panel_aggregation import record_last_operator_action_result
+
             request = OperatorActionRequest.from_dict(body)
             surface = get_operator_surface()
             result = await surface.execute_operator_action(request)
@@ -1202,6 +1239,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             # reflects the actual execution outcome (not just "accepted").
             try:
                 from core.canonical_roundtrip import record_execution_roundtrip
+
                 record_execution_roundtrip(
                     action_id=result.action_id,
                     action_kind=result.action_kind,
@@ -1269,18 +1307,15 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         """
         try:
             from core.operator_action_contract import (
-                OperatorActionRequest,
                 OperatorActionKind,
+                OperatorActionRequest,
             )
             from core.operator_surface import get_operator_surface
             from core.unified_panel_aggregation import record_last_operator_action_result
+
             # Determine kind: device_dispatch when device_id is present
             device_id = body.get("device_id") or None
-            kind = (
-                OperatorActionKind.device_dispatch.value
-                if device_id
-                else OperatorActionKind.dispatch.value
-            )
+            kind = OperatorActionKind.device_dispatch.value if device_id else OperatorActionKind.dispatch.value
             request = OperatorActionRequest(
                 action_kind=kind,
                 message=body.get("message", ""),
@@ -1297,6 +1332,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             # reflects the actual execution outcome (not just "accepted").
             try:
                 from core.canonical_roundtrip import record_execution_roundtrip
+
                 record_execution_roundtrip(
                     action_id=result.action_id,
                     action_kind=result.action_kind,
@@ -1362,11 +1398,12 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         """
         try:
             from core.operator_action_contract import (
-                OperatorActionRequest,
                 OperatorActionKind,
+                OperatorActionRequest,
             )
             from core.operator_surface import get_operator_surface
             from core.unified_panel_aggregation import record_last_operator_action_result
+
             request = OperatorActionRequest(
                 action_kind=OperatorActionKind.flow_cancel.value,
                 flow_id=flow_id,
@@ -1378,6 +1415,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             # the cancellation outcome.
             try:
                 from core.canonical_roundtrip import record_execution_roundtrip
+
                 record_execution_roundtrip(
                     action_id=result.action_id,
                     action_kind=result.action_kind,
@@ -1449,16 +1487,19 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         """
         try:
             from core.pr4_operator_action_governance import get_operator_action_audit_log
+
             records = get_operator_action_audit_log(
                 limit=limit,
                 action_kind=action_kind or None,
                 outcome=outcome or None,
             )
-            return JSONResponse(content={
-                "total": len(records),
-                "records": [r.to_dict() for r in records],
-                "authority": "OPERATOR_ROUTES_V1",
-            })
+            return JSONResponse(
+                content={
+                    "total": len(records),
+                    "records": [r.to_dict() for r in records],
+                    "authority": "OPERATOR_ROUTES_V1",
+                }
+            )
         except Exception as exc:
             logger.error("operator_actions_audit endpoint error: %s", exc)
             return JSONResponse(
@@ -1496,23 +1537,26 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         """
         try:
             from core.pr4_operator_action_governance import build_operator_board_projection
+
             proj = build_operator_board_projection()
-            return JSONResponse(content={
-                **proj.to_dict(),
-                "authority": "OPERATOR_ROUTES_V1",
-                "consumption_contract_boundary": _operator_consumption_contract_boundary(),
-                "authority_source_fingerprint": build_authority_source_fingerprint(
-                    surface_path="/api/v1/operator/board/operable-truth",
-                    primary_source_kind=SOURCE_KIND_OPERATOR_DERIVED_SURFACE,
-                    source_roles={
-                        SOURCE_KIND_OPERATOR_DERIVED_SURFACE: "primary",
-                        SOURCE_KIND_CANONICAL_TRUTH: "supporting",
-                        SOURCE_KIND_RUNTIME_VISIBLE_STATE: "supporting",
-                        SOURCE_KIND_COMPILED_OUTWARD_TRUTH: "none",
-                        SOURCE_KIND_DIAGNOSTICS_VISIBLE_STATE: "none",
-                    },
-                ),
-            })
+            return JSONResponse(
+                content={
+                    **proj.to_dict(),
+                    "authority": "OPERATOR_ROUTES_V1",
+                    "consumption_contract_boundary": _operator_consumption_contract_boundary(),
+                    "authority_source_fingerprint": build_authority_source_fingerprint(
+                        surface_path="/api/v1/operator/board/operable-truth",
+                        primary_source_kind=SOURCE_KIND_OPERATOR_DERIVED_SURFACE,
+                        source_roles={
+                            SOURCE_KIND_OPERATOR_DERIVED_SURFACE: "primary",
+                            SOURCE_KIND_CANONICAL_TRUTH: "supporting",
+                            SOURCE_KIND_RUNTIME_VISIBLE_STATE: "supporting",
+                            SOURCE_KIND_COMPILED_OUTWARD_TRUTH: "none",
+                            SOURCE_KIND_DIAGNOSTICS_VISIBLE_STATE: "none",
+                        },
+                    ),
+                }
+            )
         except Exception as exc:
             logger.error("operator_board_operable_truth endpoint error: %s", exc)
             return JSONResponse(
@@ -1544,12 +1588,15 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         """
         try:
             from core.pr4_operator_action_governance import build_pr4_operable_surface_snapshot
+
             snap = build_pr4_operable_surface_snapshot(recent_audit_limit=audit_limit)
-            return JSONResponse(content={
-                **snap.to_dict(),
-                "authority": "OPERATOR_ROUTES_V1",
-                "consumption_contract_boundary": _operator_consumption_contract_boundary(),
-            })
+            return JSONResponse(
+                content={
+                    **snap.to_dict(),
+                    "authority": "OPERATOR_ROUTES_V1",
+                    "consumption_contract_boundary": _operator_consumption_contract_boundary(),
+                }
+            )
         except Exception as exc:
             logger.error("pr4_operable_surface_snapshot endpoint error: %s", exc)
             return JSONResponse(
@@ -1636,20 +1683,20 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                 target_task_id=body.get("target_task_id", ""),
                 target_session_id=body.get("target_session_id", ""),
                 routed_subject_ids=[
-                    str(x).strip()
-                    for x in list(body.get("routed_subject_ids") or [])
-                    if str(x).strip()
+                    str(x).strip() for x in list(body.get("routed_subject_ids") or []) if str(x).strip()
                 ],
                 payload=dict(body.get("payload") or {}),
             )
             audit_record = record_android_directed_action_dispatch_trace(spec)
 
-            return JSONResponse(content={
-                **spec.to_dict(),
-                "pending": True,
-                "audit_id": audit_record.audit_id,
-                "authority": "OPERATOR_ROUTES_V1",
-            })
+            return JSONResponse(
+                content={
+                    **spec.to_dict(),
+                    "pending": True,
+                    "audit_id": audit_record.audit_id,
+                    "authority": "OPERATOR_ROUTES_V1",
+                }
+            )
         except Exception as exc:
             logger.error("operator_android_directed_action endpoint error: %s", exc)
             return JSONResponse(
@@ -1695,23 +1742,18 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         try:
             from core.pr4_operator_action_governance import (
                 acknowledge_android_directed_action,
-                get_android_directed_action_terminal_state,
                 get_android_directed_action_pending_state,
+                get_android_directed_action_terminal_state,
             )
+
             body = dict(body or {})
             acked = acknowledge_android_directed_action(
                 dispatch_id,
-                ack_subject_ids=[
-                    str(x).strip()
-                    for x in list(body.get("ack_subject_ids") or [])
-                    if str(x).strip()
-                ],
+                ack_subject_ids=[str(x).strip() for x in list(body.get("ack_subject_ids") or []) if str(x).strip()],
                 truth_convergence_state=str(body.get("truth_convergence_state") or ""),
                 closure_verification_state=str(body.get("closure_verification_state") or ""),
                 failure_diagnostics=[
-                    str(x).strip()
-                    for x in list(body.get("failure_diagnostics") or [])
-                    if str(x).strip()
+                    str(x).strip() for x in list(body.get("failure_diagnostics") or []) if str(x).strip()
                 ],
             )
             if not acked:
@@ -1719,10 +1761,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                 if terminal_state.get("state") == "timed_out":
                     return JSONResponse(
                         content={
-                            "detail": (
-                                f"pending android action '{dispatch_id}' timed out "
-                                "before ack"
-                            ),
+                            "detail": (f"pending android action '{dispatch_id}' timed out " "before ack"),
                             "dispatch_state": "timed_out",
                             "authority": "OPERATOR_ROUTES_V1",
                         },
@@ -1742,18 +1781,16 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
                 or (pending_state or {}).get("operator_control_closure_trace")
                 or {}
             )
-            dispatch_state = (
-                (terminal_state or {}).get("state")
-                or (pending_state or {}).get("state")
-                or "acked"
+            dispatch_state = (terminal_state or {}).get("state") or (pending_state or {}).get("state") or "acked"
+            return JSONResponse(
+                content={
+                    "acked": True,
+                    "dispatch_id": dispatch_id,
+                    "dispatch_state": dispatch_state,
+                    "closure_trace": closure_trace,
+                    "authority": "OPERATOR_ROUTES_V1",
+                }
             )
-            return JSONResponse(content={
-                "acked": True,
-                "dispatch_id": dispatch_id,
-                "dispatch_state": dispatch_state,
-                "closure_trace": closure_trace,
-                "authority": "OPERATOR_ROUTES_V1",
-            })
         except Exception as exc:
             logger.error(
                 "operator_android_directed_action_ack(%s) endpoint error: %s",
@@ -1812,15 +1849,16 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         """
         try:
             from core.device_dispatch_readiness_surface import get_device_dispatch_readiness
+
             result = get_device_dispatch_readiness(device_id)
-            return JSONResponse(content={
-                **result,
-                "authority": "OPERATOR_ROUTES_V1",
-            })
-        except Exception as exc:
-            logger.error(
-                "device_dispatch_readiness(%s) endpoint error: %s", device_id, exc
+            return JSONResponse(
+                content={
+                    **result,
+                    "authority": "OPERATOR_ROUTES_V1",
+                }
             )
+        except Exception as exc:
+            logger.error("device_dispatch_readiness(%s) endpoint error: %s", device_id, exc)
             return JSONResponse(
                 content={"error": str(exc), "authority": "OPERATOR_ROUTES_V1"},
                 status_code=500,
@@ -1893,14 +1931,17 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         """
         try:
             from core.device_dispatch_readiness_surface import get_dispatch_readiness_panel
+
             explicit_ids: Optional[list] = None
             if device_ids:
                 explicit_ids = [d.strip() for d in device_ids.split(",") if d.strip()]
             panel = get_dispatch_readiness_panel(device_ids=explicit_ids)
-            return JSONResponse(content={
-                **panel,
-                "authority": "OPERATOR_ROUTES_V1",
-            })
+            return JSONResponse(
+                content={
+                    **panel,
+                    "authority": "OPERATOR_ROUTES_V1",
+                }
+            )
         except Exception as exc:
             logger.error("devices_dispatch_readiness_panel endpoint error: %s", exc)
             return JSONResponse(

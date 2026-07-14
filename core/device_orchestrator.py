@@ -63,10 +63,12 @@ DEVICE_ORCHESTRATOR_SPINE_CONVERGENCE: str = (
 # Lazy imports — 避免循环依赖
 # ---------------------------------------------------------------------------
 
+
 def _get_device_registry():
     """延迟导入设备注册表"""
     try:
         from core.device_registry import DeviceRegistry
+
         return DeviceRegistry.get_instance()
     except Exception as exc:
         logger.warning(f"DeviceRegistry 不可用: {exc}")
@@ -77,6 +79,7 @@ def _get_node_registry():
     """延迟导入节点注册表"""
     try:
         from core.node_registry import get_registry
+
         return get_registry()
     except Exception as exc:
         logger.warning(f"NodeRegistry 不可用: {exc}")
@@ -87,6 +90,7 @@ def _get_connection_manager():
     """延迟导入连接管理器"""
     try:
         from core.connection_manager import get_connection_manager
+
         return get_connection_manager()
     except Exception as exc:
         logger.debug(f"ConnectionManager 不可用: {exc}")
@@ -97,6 +101,7 @@ def _resolve_device_type(raw: str):
     """延迟导入设备类型解析"""
     try:
         from core.device_types import resolve_device_type
+
         return resolve_device_type(raw)
     except Exception as exc:
         return None
@@ -105,6 +110,7 @@ def _resolve_device_type(raw: str):
 # ===========================================================================
 # DeviceOrchestrator
 # ===========================================================================
+
 
 class DeviceOrchestrator:
     """统一设备编排器 — 所有设备操作的高层入口。
@@ -158,9 +164,7 @@ class DeviceOrchestrator:
                     if device_type:
                         params["device_type"] = device_type
                     params["online_only"] = online_only
-                    result = await node_registry.call_node(
-                        "Node_71", "discover", params
-                    )
+                    result = await node_registry.call_node("Node_71", "discover", params)
                     if result.get("success") and "data" in result:
                         data = result["data"]
                         if isinstance(data, list):
@@ -219,11 +223,7 @@ class DeviceOrchestrator:
                     "device_id": device_id,
                     "status": conn_info.state.value,
                     "online": conn_info.state.value == "connected",
-                    "last_seen": (
-                        conn_info.last_heartbeat.isoformat()
-                        if conn_info.last_heartbeat
-                        else None
-                    ),
+                    "last_seen": (conn_info.last_heartbeat.isoformat() if conn_info.last_heartbeat else None),
                     "telemetry": {},
                 }
 
@@ -270,6 +270,7 @@ class DeviceOrchestrator:
         # PR-3: Record ingress in execution spine log.
         try:
             from core.execution_spine import ExecutionIngressSource, record_legacy_ingress
+
             record_legacy_ingress(
                 ExecutionIngressSource.DEVICE_ORCHESTRATOR,
                 {"device_id": device_id, "command": command, "params": params},
@@ -284,6 +285,7 @@ class DeviceOrchestrator:
         # rather than bypassing it entirely.
         try:
             from core.command_router import get_command_router as _gcr_do
+
             _cmd_router_do = _gcr_do()
         except Exception as exc:
             logger.debug("Fallback triggered: %s", exc)
@@ -291,10 +293,9 @@ class DeviceOrchestrator:
 
         if _cmd_router_do is not None:
             try:
-                from core.execution_spine import (
-                    ExecutionIngressSource as _EIS_do,
-                    normalize_ingress_to_envelope as _norm_do,
-                )
+                from core.execution_spine import ExecutionIngressSource as _EIS_do
+                from core.execution_spine import normalize_ingress_to_envelope as _norm_do
+
                 _envelope_do = _norm_do(
                     {
                         "task_id": command_id,
@@ -395,13 +396,15 @@ class DeviceOrchestrator:
         output: List[Dict[str, Any]] = []
         for idx, res in enumerate(results):
             if isinstance(res, Exception):
-                output.append({
-                    "device_id": commands[idx].get("device_id", ""),
-                    "command_id": "",
-                    "status": "error",
-                    "result": str(res),
-                    "execution_time_ms": 0.0,
-                })
+                output.append(
+                    {
+                        "device_id": commands[idx].get("device_id", ""),
+                        "command_id": "",
+                        "status": "error",
+                        "result": str(res),
+                        "execution_time_ms": 0.0,
+                    }
+                )
             else:
                 output.append(res)
         return output
@@ -434,9 +437,7 @@ class DeviceOrchestrator:
 
         try:
             # 从源设备读取
-            read_result = await self.send_command(
-                source_device, "file_read", {"path": file_path}
-            )
+            read_result = await self.send_command(source_device, "file_read", {"path": file_path})
             if read_result.get("status") != "success":
                 return {
                     "transfer_id": transfer_id,
@@ -448,9 +449,7 @@ class DeviceOrchestrator:
             file_data = read_result.get("result", {})
 
             # 写入目标设备
-            write_result = await self.send_command(
-                target_device, "file_write", {"path": file_path, "data": file_data}
-            )
+            write_result = await self.send_command(target_device, "file_write", {"path": file_path, "data": file_data})
             elapsed_ms = round((time.monotonic() - start) * 1000, 2)
 
             if write_result.get("status") != "success":
@@ -502,9 +501,7 @@ class DeviceOrchestrator:
 
         try:
             # 读取源剪贴板
-            read_result = await self.send_command(
-                source_device, "clipboard_read", {}
-            )
+            read_result = await self.send_command(source_device, "clipboard_read", {})
             if read_result.get("status") != "success":
                 return {
                     "status": "error",
@@ -515,9 +512,7 @@ class DeviceOrchestrator:
             clipboard_data = read_result.get("result", "")
 
             # 写入目标剪贴板
-            write_result = await self.send_command(
-                target_device, "clipboard_write", {"content": clipboard_data}
-            )
+            write_result = await self.send_command(target_device, "clipboard_write", {"content": clipboard_data})
             elapsed_ms = round((time.monotonic() - start) * 1000, 2)
 
             if write_result.get("status") != "success":
@@ -569,9 +564,7 @@ class DeviceOrchestrator:
                         "device_id": device_id,
                         "source": "registry_cache",
                         "telemetry": telemetry,
-                        "timestamp": datetime.fromtimestamp(
-                            device.last_seen
-                        ).isoformat(),
+                        "timestamp": datetime.fromtimestamp(device.last_seen).isoformat(),
                     }
 
         # 回退：直接向设备请求
@@ -620,6 +613,7 @@ class DeviceOrchestrator:
         """
         try:
             from core.device_pool_manager import get_device_pool_manager
+
             pool = get_device_pool_manager()
             return pool.select_device(
                 required_capabilities=required_capabilities,
@@ -645,6 +639,7 @@ class DeviceOrchestrator:
         """
         try:
             from core.device_pool_manager import get_device_pool_manager
+
             pool = get_device_pool_manager()
             pool.register_device(
                 device_id,

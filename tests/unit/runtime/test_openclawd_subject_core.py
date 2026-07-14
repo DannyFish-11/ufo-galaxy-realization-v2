@@ -49,22 +49,23 @@ Structural / Regression Guardrails
 
 from __future__ import annotations
 
-import inspect
 import asyncio
+import inspect
 from typing import Any, Dict, List, Optional
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_openclawd():
     """Return a minimal OpenClawd with heavy init suppressed."""
     with patch("core.openclawd.OpenClawd.__init__", return_value=None):
         from core.openclawd import OpenClawd
+
         oc = OpenClawd.__new__(OpenClawd)
     oc._continuum_orchestrator = None
     oc._decision_executor = None
@@ -87,41 +88,44 @@ def _make_openclawd():
 # 1-5: Architecture / Role
 # ---------------------------------------------------------------------------
 
+
 class TestArchitecturalRole:
     """OpenClawd must be identified as the subject/decision core."""
 
     def test_module_docstring_contains_subject_core(self):
         """Module-level docstring must name OpenClawd as subject core."""
         import core.openclawd as mod
+
         doc = mod.__doc__ or ""
-        assert "subject core" in doc.lower() or "subject core" in doc, (
-            "core/openclawd.py module docstring must mention 'subject core'"
-        )
+        assert (
+            "subject core" in doc.lower() or "subject core" in doc
+        ), "core/openclawd.py module docstring must mention 'subject core'"
 
     def test_class_docstring_contains_subject_core_or_decision_core(self):
         """OpenClawd class docstring must name it as subject core / decision core."""
         from core.openclawd import OpenClawd
+
         doc = OpenClawd.__doc__ or ""
-        assert "subject core" in doc.lower() or "decision core" in doc.lower(), (
-            "OpenClawd class docstring must mention 'subject core' or 'decision core'"
-        )
+        assert (
+            "subject core" in doc.lower() or "decision core" in doc.lower()
+        ), "OpenClawd class docstring must mention 'subject core' or 'decision core'"
 
     def test_class_docstring_mentions_delegation_boundaries(self):
         """Class docstring must name at least two of the delegation boundaries."""
         from core.openclawd import OpenClawd
+
         doc = OpenClawd.__doc__ or ""
         found = sum(1 for term in ("local manifestation", "single remote", "multi-device") if term in doc.lower())
-        assert found >= 2, (
-            f"OpenClawd class docstring should name delegation boundaries; found {found}/3"
-        )
+        assert found >= 2, f"OpenClawd class docstring should name delegation boundaries; found {found}/3"
 
     def test_desktop_presence_runtime_is_outer_shell(self):
         """DesktopPresenceRuntime module must describe itself as outer shell."""
         import core.desktop_presence_runtime as dpr_mod
+
         doc = dpr_mod.__doc__ or ""
-        assert "shell" in doc.lower() or "outer" in doc.lower(), (
-            "desktop_presence_runtime module should identify itself as 'shell' or 'outer'"
-        )
+        assert (
+            "shell" in doc.lower() or "outer" in doc.lower()
+        ), "desktop_presence_runtime module should identify itself as 'shell' or 'outer'"
 
     def test_openclawd_not_described_as_surface_authority(self):
         """OpenClawd docstring must clarify it is NOT a surface authority.
@@ -131,6 +135,7 @@ class TestArchitecturalRole:
         mentioning it.
         """
         from core.openclawd import OpenClawd
+
         doc = (OpenClawd.__doc__ or "").lower()
         # The docstring should explicitly say OpenClawd is NOT a surface
         # authority / transport substrate.  Both phrases appear in the PR-3
@@ -142,83 +147,89 @@ class TestArchitecturalRole:
             or "not a parallel entrypoint" in doc
         )
         assert has_negation, (
-            "OpenClawd class docstring must explicitly say it is NOT a "
-            "surface authority / transport substrate"
+            "OpenClawd class docstring must explicitly say it is NOT a " "surface authority / transport substrate"
         )
 
     def test_agent_kernel_is_embedded_inside_openclawd(self):
         """AgentKernel should be lazy-initialised inside OpenClawd (not separate)."""
         from core.openclawd import OpenClawd
+
         # The _kernel attribute exists on OpenClawd instances — it is the
         # embedded cognition sub-layer, not a separate authority.
         oc = _make_openclawd()
-        assert hasattr(oc, "_kernel"), (
-            "OpenClawd must have a '_kernel' attribute (embedded AgentKernel)"
-        )
+        assert hasattr(oc, "_kernel"), "OpenClawd must have a '_kernel' attribute (embedded AgentKernel)"
 
 
 # ---------------------------------------------------------------------------
 # 6-11: Delegation boundary helpers exist and return correct metadata
 # ---------------------------------------------------------------------------
 
+
 class TestDelegationBoundaryHelpers:
     """PR-3 delegation helpers must exist and stamp delegation_point."""
 
     def test_delegate_local_manifestation_exists(self):
         from core.openclawd import OpenClawd
-        assert hasattr(OpenClawd, "_delegate_local_manifestation"), (
-            "OpenClawd must have '_delegate_local_manifestation' delegation helper"
-        )
-        assert asyncio.iscoroutinefunction(OpenClawd._delegate_local_manifestation), (
-            "_delegate_local_manifestation must be an async method"
-        )
+
+        assert hasattr(
+            OpenClawd, "_delegate_local_manifestation"
+        ), "OpenClawd must have '_delegate_local_manifestation' delegation helper"
+        assert asyncio.iscoroutinefunction(
+            OpenClawd._delegate_local_manifestation
+        ), "_delegate_local_manifestation must be an async method"
 
     def test_delegate_single_remote_exists(self):
         from core.openclawd import OpenClawd
-        assert hasattr(OpenClawd, "_delegate_single_remote"), (
-            "OpenClawd must have '_delegate_single_remote' delegation helper"
-        )
-        assert asyncio.iscoroutinefunction(OpenClawd._delegate_single_remote), (
-            "_delegate_single_remote must be an async method"
-        )
+
+        assert hasattr(
+            OpenClawd, "_delegate_single_remote"
+        ), "OpenClawd must have '_delegate_single_remote' delegation helper"
+        assert asyncio.iscoroutinefunction(
+            OpenClawd._delegate_single_remote
+        ), "_delegate_single_remote must be an async method"
 
     def test_delegate_multi_device_orchestration_exists(self):
         from core.openclawd import OpenClawd
-        assert hasattr(OpenClawd, "_delegate_multi_device_orchestration"), (
-            "OpenClawd must have '_delegate_multi_device_orchestration' delegation helper"
-        )
-        assert asyncio.iscoroutinefunction(OpenClawd._delegate_multi_device_orchestration), (
-            "_delegate_multi_device_orchestration must be an async method"
-        )
+
+        assert hasattr(
+            OpenClawd, "_delegate_multi_device_orchestration"
+        ), "OpenClawd must have '_delegate_multi_device_orchestration' delegation helper"
+        assert asyncio.iscoroutinefunction(
+            OpenClawd._delegate_multi_device_orchestration
+        ), "_delegate_multi_device_orchestration must be an async method"
 
     @pytest.mark.asyncio
     async def test_delegate_local_manifestation_stamps_delegation_point(self):
         """`_delegate_local_manifestation` must stamp `delegation_point='local'`."""
         oc = _make_openclawd()
-        oc.handle_agent_task = AsyncMock(return_value={
-            "success": True,
-            "response": "done",
-            "metadata": {},
-        })
+        oc.handle_agent_task = AsyncMock(
+            return_value={
+                "success": True,
+                "response": "done",
+                "metadata": {},
+            }
+        )
         result = await oc._delegate_local_manifestation(
             message="test",
             intent=None,
             session_id="s1",
             trace_id="t1",
         )
-        assert result.get("metadata", {}).get("delegation_point") == "local", (
-            f"Expected delegation_point='local', got: {result.get('metadata', {})}"
-        )
+        assert (
+            result.get("metadata", {}).get("delegation_point") == "local"
+        ), f"Expected delegation_point='local', got: {result.get('metadata', {})}"
 
     @pytest.mark.asyncio
     async def test_delegate_single_remote_stamps_delegation_point(self):
         """`_delegate_single_remote` must stamp `delegation_point='single_remote'`."""
         oc = _make_openclawd()
-        oc._dispatch_remote_agent = AsyncMock(return_value={
-            "success": True,
-            "response": "remote done",
-            "metadata": {},
-        })
+        oc._dispatch_remote_agent = AsyncMock(
+            return_value={
+                "success": True,
+                "response": "remote done",
+                "metadata": {},
+            }
+        )
         result = await oc._delegate_single_remote(
             message="test",
             intent=None,
@@ -226,39 +237,43 @@ class TestDelegationBoundaryHelpers:
             session_id="s1",
             trace_id="t1",
         )
-        assert result.get("metadata", {}).get("delegation_point") == "single_remote", (
-            f"Expected delegation_point='single_remote', got: {result.get('metadata', {})}"
-        )
+        assert (
+            result.get("metadata", {}).get("delegation_point") == "single_remote"
+        ), f"Expected delegation_point='single_remote', got: {result.get('metadata', {})}"
 
     @pytest.mark.asyncio
     async def test_delegate_multi_device_orchestration_stamps_delegation_point(self):
         """`_delegate_multi_device_orchestration` must stamp the correct point."""
         oc = _make_openclawd()
-        oc._dispatch_parallel_goal = AsyncMock(return_value={
-            "success": True,
-            "response": "parallel done",
-            "metadata": {},
-        })
+        oc._dispatch_parallel_goal = AsyncMock(
+            return_value={
+                "success": True,
+                "response": "parallel done",
+                "metadata": {},
+            }
+        )
         result = await oc._delegate_multi_device_orchestration(
             message="test",
             intent=None,
             session_id="s1",
             trace_id="t1",
         )
-        assert result.get("metadata", {}).get("delegation_point") == "multi_device_orchestration", (
-            f"Expected delegation_point='multi_device_orchestration', got: {result.get('metadata', {})}"
-        )
+        assert (
+            result.get("metadata", {}).get("delegation_point") == "multi_device_orchestration"
+        ), f"Expected delegation_point='multi_device_orchestration', got: {result.get('metadata', {})}"
 
 
 # ---------------------------------------------------------------------------
 # 12-16: Execution-path branching
 # ---------------------------------------------------------------------------
 
+
 class TestExecutionPathBranching:
     """_determine_execution_path must correctly map all four branches."""
 
     def _ep(self, entry_mode, action_taken, cross_device=False):
         from core.openclawd import OpenClawd
+
         return OpenClawd._determine_execution_path(
             entry_mode=entry_mode,
             execution_result={"action_taken": action_taken},
@@ -289,16 +304,18 @@ class TestExecutionPathBranching:
     def test_docstring_names_four_paths(self):
         """_determine_execution_path docstring must describe all four paths."""
         from core.openclawd import OpenClawd
+
         doc = OpenClawd._determine_execution_path.__doc__ or ""
         for path in ("local", "cross_device", "hybrid", "none"):
-            assert f'"{path}"' in doc or f"``{path}``" in doc, (
-                f"_determine_execution_path docstring must document path '{path}'"
-            )
+            assert (
+                f'"{path}"' in doc or f"``{path}``" in doc
+            ), f"_determine_execution_path docstring must document path '{path}'"
 
 
 # ---------------------------------------------------------------------------
 # 17-19: _dispatch_agent delegation routing
 # ---------------------------------------------------------------------------
+
 
 class TestDispatchAgentRouting:
     """_dispatch_agent must route to the correct delegation boundary."""
@@ -307,12 +324,20 @@ class TestDispatchAgentRouting:
     async def test_no_device_routes_to_local_manifestation(self):
         """With no device_id and no intent target, route to local."""
         oc = _make_openclawd()
-        local_mock = AsyncMock(return_value={
-            "success": True, "response": "local", "metadata": {"delegation_point": "local"},
-        })
-        remote_mock = AsyncMock(return_value={
-            "success": True, "response": "remote", "metadata": {"delegation_point": "single_remote"},
-        })
+        local_mock = AsyncMock(
+            return_value={
+                "success": True,
+                "response": "local",
+                "metadata": {"delegation_point": "local"},
+            }
+        )
+        remote_mock = AsyncMock(
+            return_value={
+                "success": True,
+                "response": "remote",
+                "metadata": {"delegation_point": "single_remote"},
+            }
+        )
         oc._delegate_local_manifestation = local_mock
         oc._delegate_single_remote = remote_mock
 
@@ -325,17 +350,27 @@ class TestDispatchAgentRouting:
     async def test_remote_device_routes_to_single_remote(self):
         """With a non-local device_id, route to single-remote delegation."""
         oc = _make_openclawd()
-        local_mock = AsyncMock(return_value={
-            "success": True, "response": "local", "metadata": {"delegation_point": "local"},
-        })
-        remote_mock = AsyncMock(return_value={
-            "success": True, "response": "remote", "metadata": {"delegation_point": "single_remote"},
-        })
+        local_mock = AsyncMock(
+            return_value={
+                "success": True,
+                "response": "local",
+                "metadata": {"delegation_point": "local"},
+            }
+        )
+        remote_mock = AsyncMock(
+            return_value={
+                "success": True,
+                "response": "remote",
+                "metadata": {"delegation_point": "single_remote"},
+            }
+        )
         oc._delegate_local_manifestation = local_mock
         oc._delegate_single_remote = remote_mock
 
         result = await oc._dispatch_agent(
-            message="hello", intent=None, device_id="phone_01",
+            message="hello",
+            intent=None,
+            device_id="phone_01",
         )
         remote_mock.assert_called_once()
         local_mock.assert_not_called()
@@ -345,17 +380,27 @@ class TestDispatchAgentRouting:
     async def test_local_device_id_routes_to_local_manifestation(self):
         """With a local device_id ('local'), route to local manifestation."""
         oc = _make_openclawd()
-        local_mock = AsyncMock(return_value={
-            "success": True, "response": "local", "metadata": {"delegation_point": "local"},
-        })
-        remote_mock = AsyncMock(return_value={
-            "success": True, "response": "remote", "metadata": {"delegation_point": "single_remote"},
-        })
+        local_mock = AsyncMock(
+            return_value={
+                "success": True,
+                "response": "local",
+                "metadata": {"delegation_point": "local"},
+            }
+        )
+        remote_mock = AsyncMock(
+            return_value={
+                "success": True,
+                "response": "remote",
+                "metadata": {"delegation_point": "single_remote"},
+            }
+        )
         oc._delegate_local_manifestation = local_mock
         oc._delegate_single_remote = remote_mock
 
         result = await oc._dispatch_agent(
-            message="hello", intent=None, device_id="local",
+            message="hello",
+            intent=None,
+            device_id="local",
         )
         local_mock.assert_called_once()
         remote_mock.assert_not_called()
@@ -364,12 +409,20 @@ class TestDispatchAgentRouting:
     async def test_intent_target_device_used_for_routing(self):
         """intent.target_device should also trigger single-remote delegation."""
         oc = _make_openclawd()
-        local_mock = AsyncMock(return_value={
-            "success": True, "response": "local", "metadata": {"delegation_point": "local"},
-        })
-        remote_mock = AsyncMock(return_value={
-            "success": True, "response": "remote", "metadata": {"delegation_point": "single_remote"},
-        })
+        local_mock = AsyncMock(
+            return_value={
+                "success": True,
+                "response": "local",
+                "metadata": {"delegation_point": "local"},
+            }
+        )
+        remote_mock = AsyncMock(
+            return_value={
+                "success": True,
+                "response": "remote",
+                "metadata": {"delegation_point": "single_remote"},
+            }
+        )
         oc._delegate_local_manifestation = local_mock
         oc._delegate_single_remote = remote_mock
 
@@ -377,7 +430,9 @@ class TestDispatchAgentRouting:
         intent.target_device = "tablet_02"
 
         result = await oc._dispatch_agent(
-            message="hello", intent=intent, device_id=None,
+            message="hello",
+            intent=intent,
+            device_id=None,
         )
         remote_mock.assert_called_once()
         local_mock.assert_not_called()
@@ -386,6 +441,7 @@ class TestDispatchAgentRouting:
 # ---------------------------------------------------------------------------
 # 20-22: process() response guardrails
 # ---------------------------------------------------------------------------
+
 
 class TestProcessResponseGuardrails:
     """process() must always return execution_path and execution_result."""
@@ -399,17 +455,21 @@ class TestProcessResponseGuardrails:
         oc._get_router = lambda: None
         oc._ensure_initialized = lambda: None
         oc._record_turn = AsyncMock()
-        oc._parse_intent = AsyncMock(return_value=MagicMock(
-            intent="chat",
-            confidence=0.9,
-            suggestions=[],
-            target_device=None,
-        ))
-        oc._dispatch_chat = AsyncMock(return_value={
-            "success": True,
-            "response": "ok",
-            "metadata": {},
-        })
+        oc._parse_intent = AsyncMock(
+            return_value=MagicMock(
+                intent="chat",
+                confidence=0.9,
+                suggestions=[],
+                target_device=None,
+            )
+        )
+        oc._dispatch_chat = AsyncMock(
+            return_value={
+                "success": True,
+                "response": "ok",
+                "metadata": {},
+            }
+        )
         oc._run_continuum = lambda **kw: {
             "decision": {"action_level": "observe"},
             "metadata": {},
@@ -439,11 +499,11 @@ class TestProcessResponseGuardrails:
     async def test_process_returns_runtime_session_id(self):
         oc = self._stub_openclawd_for_process()
         result = await oc.process(
-            message="hello", session_id="s1", runtime_session_id="rsid_abc",
+            message="hello",
+            session_id="s1",
+            runtime_session_id="rsid_abc",
         )
-        assert result.get("runtime_session_id") == "rsid_abc", (
-            "process() must echo runtime_session_id in the response"
-        )
+        assert result.get("runtime_session_id") == "rsid_abc", "process() must echo runtime_session_id in the response"
 
     @pytest.mark.asyncio
     async def test_kernel_path_has_delegation_point_local(self):
@@ -479,19 +539,23 @@ class TestProcessResponseGuardrails:
         oc._get_router = lambda: None
         oc._run_continuum = lambda **kw: {"decision": {"action_level": "observe"}, "metadata": {}}
         oc._run_execution = lambda state, entry_mode=None: {
-            "action_taken": "noop", "target": None, "success": False,
-            "skipped_reason": "test", "metadata": {},
+            "action_taken": "noop",
+            "target": None,
+            "success": False,
+            "skipped_reason": "test",
+            "metadata": {},
         }
 
         result = await oc.process(message="hello", session_id="s1")
-        assert result.get("metadata", {}).get("delegation_point") == "local", (
-            f"Kernel path must set delegation_point='local'; got: {result.get('metadata', {}).get('delegation_point')}"
-        )
+        assert (
+            result.get("metadata", {}).get("delegation_point") == "local"
+        ), f"Kernel path must set delegation_point='local'; got: {result.get('metadata', {}).get('delegation_point')}"
 
 
 # ---------------------------------------------------------------------------
 # 23-24: Structural / Regression Guardrails
 # ---------------------------------------------------------------------------
+
 
 class TestStructuralGuardrails:
     """OpenClawd must not inherit from surface classes or import route modules."""
@@ -499,12 +563,11 @@ class TestStructuralGuardrails:
     def test_openclawd_not_subclass_of_surface_classes(self):
         """OpenClawd must be a plain class, not subclassing any surface."""
         from core.openclawd import OpenClawd
+
         mro_names = [c.__name__ for c in OpenClawd.__mro__]
         surface_names = {"APIRouter", "FastAPI", "Blueprint", "Route", "BaseHTTPHandler"}
         overlap = surface_names.intersection(set(mro_names))
-        assert not overlap, (
-            f"OpenClawd must NOT inherit from surface classes; found: {overlap}"
-        )
+        assert not overlap, f"OpenClawd must NOT inherit from surface classes; found: {overlap}"
 
     def test_openclawd_module_does_not_statically_import_routes(self):
         """core/openclawd.py must not have *top-level* imports from core/routes.
@@ -515,6 +578,7 @@ class TestStructuralGuardrails:
         """
         import ast
         import pathlib
+
         src = pathlib.Path("core/openclawd.py").read_text()
         tree = ast.parse(src)
         # Only check top-level import nodes (direct children of the Module node)
@@ -528,16 +592,21 @@ class TestStructuralGuardrails:
     def test_delegation_helpers_are_not_public_api(self):
         """Delegation boundary helpers should be private (prefixed with _)."""
         from core.openclawd import OpenClawd
-        for name in ("_delegate_local_manifestation", "_delegate_single_remote",
-                     "_delegate_multi_device_orchestration"):
+
+        for name in (
+            "_delegate_local_manifestation",
+            "_delegate_single_remote",
+            "_delegate_multi_device_orchestration",
+        ):
             assert name.startswith("_"), f"{name} should be private (start with _)"
             assert hasattr(OpenClawd, name), f"OpenClawd must have {name}"
 
     def test_intent_handler_map_present(self):
         """_INTENT_HANDLER_MAP must still be present — backward compatibility."""
         from core.openclawd import OpenClawd
-        assert hasattr(OpenClawd, "_INTENT_HANDLER_MAP"), (
-            "OpenClawd._INTENT_HANDLER_MAP must remain for backward compatibility"
-        )
+
+        assert hasattr(
+            OpenClawd, "_INTENT_HANDLER_MAP"
+        ), "OpenClawd._INTENT_HANDLER_MAP must remain for backward compatibility"
         assert "chat" in OpenClawd._INTENT_HANDLER_MAP
         assert "parallel_goal" in OpenClawd._INTENT_HANDLER_MAP

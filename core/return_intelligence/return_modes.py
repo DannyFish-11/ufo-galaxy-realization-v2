@@ -76,9 +76,7 @@ class ReturnMode(str, Enum):
 # ---------------------------------------------------------------------------
 
 #: ReturnModes that suppress ``stage_ready`` on the Manifest Surface.
-MODES_THAT_SUPPRESS_MANIFEST: frozenset[ReturnMode] = frozenset(
-    {ReturnMode.STEP_DOWN, ReturnMode.RETURN_TO_FORMLESS}
-)
+MODES_THAT_SUPPRESS_MANIFEST: frozenset[ReturnMode] = frozenset({ReturnMode.STEP_DOWN, ReturnMode.RETURN_TO_FORMLESS})
 
 #: ReturnModes that cause liminal ambient intensity to soften.
 MODES_THAT_SOFTEN_LIMINAL: frozenset[ReturnMode] = frozenset(

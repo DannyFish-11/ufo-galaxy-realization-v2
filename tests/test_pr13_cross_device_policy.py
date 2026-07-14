@@ -151,7 +151,7 @@ class TestDeviceRoleEnum:
         assert DeviceRole.UNASSIGNED.value == "unassigned"
 
     def test_role_precedence_ordering(self):
-        from core.cross_device_policy import DeviceRole, ROLE_PRECEDENCE
+        from core.cross_device_policy import ROLE_PRECEDENCE, DeviceRole
 
         # PRIMARY_EXECUTION should be first (highest precedence)
         assert ROLE_PRECEDENCE[0] is DeviceRole.PRIMARY_EXECUTION
@@ -174,7 +174,7 @@ class TestDeviceRoleEnum:
 
 class TestDeviceRoleAssignment:
     def test_default_construction(self):
-        from core.cross_device_policy import DeviceRoleAssignment, DeviceRole
+        from core.cross_device_policy import DeviceRole, DeviceRoleAssignment
 
         a = DeviceRoleAssignment()
         assert a.device_id is None
@@ -184,7 +184,7 @@ class TestDeviceRoleAssignment:
         assert a.is_local is False
 
     def test_construction_with_all_fields(self):
-        from core.cross_device_policy import DeviceRoleAssignment, DeviceRole
+        from core.cross_device_policy import DeviceRole, DeviceRoleAssignment
 
         a = DeviceRoleAssignment(
             device_id="phone-1",
@@ -198,7 +198,7 @@ class TestDeviceRoleAssignment:
         assert a.capabilities == ["camera", "microphone"]
 
     def test_to_dict_serialisation(self):
-        from core.cross_device_policy import DeviceRoleAssignment, DeviceRole
+        from core.cross_device_policy import DeviceRole, DeviceRoleAssignment
 
         a = DeviceRoleAssignment(
             device_id="tablet-1",
@@ -213,7 +213,7 @@ class TestDeviceRoleAssignment:
         assert d["is_local"] is False
 
     def test_from_dict_reconstruction(self):
-        from core.cross_device_policy import DeviceRoleAssignment, DeviceRole
+        from core.cross_device_policy import DeviceRole, DeviceRoleAssignment
 
         data = {
             "device_id": "pc-main",
@@ -229,13 +229,13 @@ class TestDeviceRoleAssignment:
         assert a.is_local is True
 
     def test_from_dict_invalid_role_defaults_to_unassigned(self):
-        from core.cross_device_policy import DeviceRoleAssignment, DeviceRole
+        from core.cross_device_policy import DeviceRole, DeviceRoleAssignment
 
         a = DeviceRoleAssignment.from_dict({"role": "nonexistent_role"})
         assert a.role is DeviceRole.UNASSIGNED
 
     def test_round_trip(self):
-        from core.cross_device_policy import DeviceRoleAssignment, DeviceRole
+        from core.cross_device_policy import DeviceRole, DeviceRoleAssignment
 
         original = DeviceRoleAssignment(
             device_id="d1",
@@ -252,14 +252,14 @@ class TestDeviceRoleAssignment:
         assert reconstructed.is_local == original.is_local
 
     def test_frozen_immutable(self):
-        from core.cross_device_policy import DeviceRoleAssignment, DeviceRole
+        from core.cross_device_policy import DeviceRole, DeviceRoleAssignment
 
         a = DeviceRoleAssignment(device_id="x", role=DeviceRole.SOURCE)
         with pytest.raises((AttributeError, TypeError)):
             a.device_id = "y"  # type: ignore[misc]
 
     def test_repr_smoke(self):
-        from core.cross_device_policy import DeviceRoleAssignment, DeviceRole
+        from core.cross_device_policy import DeviceRole, DeviceRoleAssignment
 
         a = DeviceRoleAssignment(device_id="test", role=DeviceRole.RELAY)
         r = repr(a)
@@ -302,7 +302,7 @@ class TestRoutingPostureEnum:
         assert RoutingPosture.UNDECIDED.value == "undecided"
 
     def test_posture_descriptions_covers_all(self):
-        from core.cross_device_policy import RoutingPosture, POSTURE_DESCRIPTIONS
+        from core.cross_device_policy import POSTURE_DESCRIPTIONS, RoutingPosture
 
         for posture in RoutingPosture:
             assert posture.value in POSTURE_DESCRIPTIONS
@@ -341,7 +341,7 @@ class TestRoutingPolicy:
         assert undecided.is_cross_device is False
 
     def test_primary_execution_device_id_property(self):
-        from core.cross_device_policy import RoutingPolicy, DeviceRole, DeviceRoleAssignment
+        from core.cross_device_policy import DeviceRole, DeviceRoleAssignment, RoutingPolicy
 
         p = RoutingPolicy(
             assigned_devices=[
@@ -352,7 +352,7 @@ class TestRoutingPolicy:
         assert p.primary_execution_device_id == "pc"
 
     def test_primary_execution_device_id_none_when_absent(self):
-        from core.cross_device_policy import RoutingPolicy, DeviceRole, DeviceRoleAssignment
+        from core.cross_device_policy import DeviceRole, DeviceRoleAssignment, RoutingPolicy
 
         p = RoutingPolicy(
             assigned_devices=[
@@ -362,7 +362,7 @@ class TestRoutingPolicy:
         assert p.primary_execution_device_id is None
 
     def test_source_assignment_property(self):
-        from core.cross_device_policy import RoutingPolicy, DeviceRole, DeviceRoleAssignment
+        from core.cross_device_policy import DeviceRole, DeviceRoleAssignment, RoutingPolicy
 
         p = RoutingPolicy(
             assigned_devices=[
@@ -373,7 +373,7 @@ class TestRoutingPolicy:
         assert p.source_assignment.device_id == "src"
 
     def test_devices_with_role_filter(self):
-        from core.cross_device_policy import RoutingPolicy, DeviceRole, DeviceRoleAssignment
+        from core.cross_device_policy import DeviceRole, DeviceRoleAssignment, RoutingPolicy
 
         p = RoutingPolicy(
             assigned_devices=[
@@ -532,7 +532,7 @@ class TestCrossDeviceAssignmentSummary:
 
 class TestBuildAssignmentSummary:
     def test_none_policy_returns_idle_like(self):
-        from core.cross_device_policy import build_assignment_summary, RoutingPosture
+        from core.cross_device_policy import RoutingPosture, build_assignment_summary
 
         s = build_assignment_summary(None)
         assert s.posture == RoutingPosture.LOCAL_PREFERRED.value
@@ -541,9 +541,9 @@ class TestBuildAssignmentSummary:
 
     def test_local_policy_returns_local_summary(self):
         from core.cross_device_policy import (
-            build_assignment_summary,
             RoutingPolicy,
             RoutingPosture,
+            build_assignment_summary,
         )
 
         policy = RoutingPolicy(
@@ -556,11 +556,11 @@ class TestBuildAssignmentSummary:
 
     def test_cross_device_policy_populates_role_lists(self):
         from core.cross_device_policy import (
-            build_assignment_summary,
-            RoutingPolicy,
-            RoutingPosture,
             DeviceRole,
             DeviceRoleAssignment,
+            RoutingPolicy,
+            RoutingPosture,
+            build_assignment_summary,
         )
 
         policy = RoutingPolicy(
@@ -594,8 +594,8 @@ class TestBuildAssignmentSummary:
 class TestAttachCrossDeviceToProjection:
     def test_adds_cross_device_routing_key(self):
         from core.cross_device_policy import (
-            attach_cross_device_to_projection,
             IDLE_ASSIGNMENT_SUMMARY,
+            attach_cross_device_to_projection,
         )
 
         proj = {"tri_state_phase": "manifest", "runtime_domain": "cross_device"}
@@ -603,7 +603,7 @@ class TestAttachCrossDeviceToProjection:
         assert "cross_device_routing" in enriched
 
     def test_original_dict_not_modified(self):
-        from core.cross_device_policy import attach_cross_device_to_projection, IDLE_ASSIGNMENT_SUMMARY
+        from core.cross_device_policy import IDLE_ASSIGNMENT_SUMMARY, attach_cross_device_to_projection
 
         proj = {"tri_state_phase": "manifest"}
         _ = attach_cross_device_to_projection(proj, IDLE_ASSIGNMENT_SUMMARY)
@@ -611,8 +611,8 @@ class TestAttachCrossDeviceToProjection:
 
     def test_none_summary_uses_idle(self):
         from core.cross_device_policy import (
-            attach_cross_device_to_projection,
             RoutingPosture,
+            attach_cross_device_to_projection,
         )
 
         proj = {}
@@ -620,7 +620,7 @@ class TestAttachCrossDeviceToProjection:
         assert enriched["cross_device_routing"]["posture"] == RoutingPosture.LOCAL_PREFERRED.value
 
     def test_existing_fields_preserved(self):
-        from core.cross_device_policy import attach_cross_device_to_projection, IDLE_ASSIGNMENT_SUMMARY
+        from core.cross_device_policy import IDLE_ASSIGNMENT_SUMMARY, attach_cross_device_to_projection
 
         proj = {"tri_state_phase": "silent", "runtime_domain": "local", "custom": 42}
         enriched = attach_cross_device_to_projection(proj, IDLE_ASSIGNMENT_SUMMARY)
@@ -643,7 +643,7 @@ class TestGetAssignmentHints:
         assert hints["has_primary"] is False
 
     def test_local_summary_hints(self):
-        from core.cross_device_policy import get_assignment_hints, IDLE_ASSIGNMENT_SUMMARY
+        from core.cross_device_policy import IDLE_ASSIGNMENT_SUMMARY, get_assignment_hints
 
         hints = get_assignment_hints(IDLE_ASSIGNMENT_SUMMARY)
         assert hints["is_cross_device"] is False
@@ -653,8 +653,8 @@ class TestGetAssignmentHints:
 
     def test_cross_device_summary_hints(self):
         from core.cross_device_policy import (
-            get_assignment_hints,
             CrossDeviceAssignmentSummary,
+            get_assignment_hints,
         )
 
         s = CrossDeviceAssignmentSummary(
@@ -682,25 +682,25 @@ class TestGetAssignmentHints:
 
 class TestResolveRoutingDomainPrimary:
     def test_none_domain_returns_local_preferred(self):
-        from core.cross_device_policy import resolve_routing, RoutingPosture
+        from core.cross_device_policy import RoutingPosture, resolve_routing
 
         p = resolve_routing(runtime_domain=None)
         assert p.posture is RoutingPosture.LOCAL_PREFERRED
 
     def test_local_domain_returns_local_preferred(self):
-        from core.cross_device_policy import resolve_routing, RoutingPosture
+        from core.cross_device_policy import RoutingPosture, resolve_routing
 
         p = resolve_routing(runtime_domain="local")
         assert p.posture is RoutingPosture.LOCAL_PREFERRED
 
     def test_transition_domain_returns_local_preferred(self):
-        from core.cross_device_policy import resolve_routing, RoutingPosture
+        from core.cross_device_policy import RoutingPosture, resolve_routing
 
         p = resolve_routing(runtime_domain="transition")
         assert p.posture is RoutingPosture.LOCAL_PREFERRED
 
     def test_cross_device_no_policy_blocked(self):
-        from core.cross_device_policy import resolve_routing, RoutingPosture
+        from core.cross_device_policy import RoutingPosture, resolve_routing
 
         p = resolve_routing(runtime_domain="cross_device", execution_policy=None)
         # No execution policy → conservative → cross-device blocked
@@ -715,7 +715,7 @@ class TestResolveRoutingDomainPrimary:
 
 class TestResolveRoutingCrossDevice:
     def test_cross_device_allowed_false_blocks_expansion(self):
-        from core.cross_device_policy import resolve_routing, RoutingPosture
+        from core.cross_device_policy import RoutingPosture, resolve_routing
 
         policy = {"cross_device_allowed": False, "requires_confirmation": True}
         p = resolve_routing(runtime_domain="cross_device", execution_policy=policy)
@@ -723,7 +723,7 @@ class TestResolveRoutingCrossDevice:
         assert p.expansion_allowed_by_execution_policy is False
 
     def test_cross_device_allowed_true_default_posture(self):
-        from core.cross_device_policy import resolve_routing, RoutingPosture
+        from core.cross_device_policy import RoutingPosture, resolve_routing
 
         policy = {"cross_device_allowed": True, "requires_confirmation": False}
         p = resolve_routing(runtime_domain="cross_device", execution_policy=policy)
@@ -731,7 +731,7 @@ class TestResolveRoutingCrossDevice:
         assert p.expansion_allowed_by_execution_policy is True
 
     def test_split_execution_hint(self):
-        from core.cross_device_policy import resolve_routing, RoutingPosture
+        from core.cross_device_policy import RoutingPosture, resolve_routing
 
         policy = {"cross_device_allowed": True}
         p = resolve_routing(
@@ -742,7 +742,7 @@ class TestResolveRoutingCrossDevice:
         assert p.posture is RoutingPosture.SPLIT_EXECUTION
 
     def test_remote_required_hint(self):
-        from core.cross_device_policy import resolve_routing, RoutingPosture
+        from core.cross_device_policy import RoutingPosture, resolve_routing
 
         policy = {"cross_device_allowed": True}
         p = resolve_routing(
@@ -753,7 +753,7 @@ class TestResolveRoutingCrossDevice:
         assert p.posture is RoutingPosture.REMOTE_REQUIRED
 
     def test_mirrored_observation_hint(self):
-        from core.cross_device_policy import resolve_routing, RoutingPosture
+        from core.cross_device_policy import RoutingPosture, resolve_routing
 
         policy = {"cross_device_allowed": True}
         p = resolve_routing(
@@ -764,7 +764,7 @@ class TestResolveRoutingCrossDevice:
         assert p.posture is RoutingPosture.MIRRORED_OBSERVATION
 
     def test_explicit_target_device_ids_gives_local_then_expand(self):
-        from core.cross_device_policy import resolve_routing, RoutingPosture
+        from core.cross_device_policy import RoutingPosture, resolve_routing
 
         policy = {"cross_device_allowed": True}
         p = resolve_routing(
@@ -796,7 +796,7 @@ class TestResolveRoutingCrossDevice:
 
 class TestResolveRoutingAuthorityRole:
     def test_legacy_compatibility_blocks_cross_device(self):
-        from core.cross_device_policy import resolve_routing, RoutingPosture
+        from core.cross_device_policy import RoutingPosture, resolve_routing
 
         policy = {"cross_device_allowed": True, "requires_confirmation": False}
         p = resolve_routing(
@@ -808,7 +808,7 @@ class TestResolveRoutingAuthorityRole:
         assert p.expansion_allowed_by_execution_policy is False
 
     def test_deprecated_authority_blocks_cross_device(self):
-        from core.cross_device_policy import resolve_routing, RoutingPosture
+        from core.cross_device_policy import RoutingPosture, resolve_routing
 
         policy = {"cross_device_allowed": True}
         p = resolve_routing(
@@ -820,7 +820,7 @@ class TestResolveRoutingAuthorityRole:
         assert p.expansion_allowed_by_execution_policy is False
 
     def test_authoritative_entrypoint_allows_cross_device(self):
-        from core.cross_device_policy import resolve_routing, RoutingPosture
+        from core.cross_device_policy import RoutingPosture, resolve_routing
 
         policy = {"cross_device_allowed": True}
         p = resolve_routing(
@@ -832,10 +832,11 @@ class TestResolveRoutingAuthorityRole:
         assert p.expansion_allowed_by_execution_policy is True
 
     def test_authority_role_as_enum_object(self):
-        from core.cross_device_policy import resolve_routing, RoutingPosture
+        from core.cross_device_policy import RoutingPosture, resolve_routing
 
         try:
             from core.orchestration_authority import AuthorityRole
+
             policy = {"cross_device_allowed": True}
             p = resolve_routing(
                 runtime_domain="cross_device",
@@ -854,7 +855,7 @@ class TestResolveRoutingAuthorityRole:
 
 class TestResolveRoutingDeviceAssignments:
     def test_source_device_id_gets_source_role(self):
-        from core.cross_device_policy import resolve_routing, DeviceRole
+        from core.cross_device_policy import DeviceRole, resolve_routing
 
         policy = {"cross_device_allowed": True}
         p = resolve_routing(
@@ -867,7 +868,7 @@ class TestResolveRoutingDeviceAssignments:
         assert src_assignments[0].device_id == "src-device"
 
     def test_first_target_gets_primary_execution(self):
-        from core.cross_device_policy import resolve_routing, DeviceRole
+        from core.cross_device_policy import DeviceRole, resolve_routing
 
         policy = {"cross_device_allowed": True}
         p = resolve_routing(
@@ -880,7 +881,7 @@ class TestResolveRoutingDeviceAssignments:
         assert primaries[0].device_id == "primary-dev"
 
     def test_subsequent_targets_get_support_role_for_local_then_expand(self):
-        from core.cross_device_policy import resolve_routing, DeviceRole
+        from core.cross_device_policy import DeviceRole, resolve_routing
 
         policy = {"cross_device_allowed": True}
         p = resolve_routing(
@@ -892,7 +893,7 @@ class TestResolveRoutingDeviceAssignments:
         assert len(supports) == 2
 
     def test_mirrored_additional_targets_get_observer_role(self):
-        from core.cross_device_policy import resolve_routing, DeviceRole, RoutingPosture
+        from core.cross_device_policy import DeviceRole, RoutingPosture, resolve_routing
 
         policy = {"cross_device_allowed": True}
         p = resolve_routing(
@@ -926,14 +927,14 @@ class TestResolveRoutingDeviceAssignments:
 
 class TestResolveRoutingGracefulDegradation:
     def test_invalid_domain_string_safe_default(self):
-        from core.cross_device_policy import resolve_routing, RoutingPosture
+        from core.cross_device_policy import RoutingPosture, resolve_routing
 
         # Unknown domain strings fall through to local
         p = resolve_routing(runtime_domain="some_unknown_domain")
         assert p.posture is RoutingPosture.LOCAL_PREFERRED
 
     def test_execution_policy_as_dict(self):
-        from core.cross_device_policy import resolve_routing, RoutingPosture
+        from core.cross_device_policy import RoutingPosture, resolve_routing
 
         policy = {"cross_device_allowed": True, "requires_confirmation": False}
         p = resolve_routing(runtime_domain="cross_device", execution_policy=policy)
@@ -941,22 +942,20 @@ class TestResolveRoutingGracefulDegradation:
         assert p.expansion_allowed_by_execution_policy is True
 
     def test_execution_policy_as_object(self):
-        from core.cross_device_policy import resolve_routing, RoutingPosture
+        from core.cross_device_policy import RoutingPosture, resolve_routing
 
         try:
             from core.execution_policy import resolve_policy
 
             exec_policy = resolve_policy(phase="manifest", domain="cross_device")
-            p = resolve_routing(
-                runtime_domain="cross_device", execution_policy=exec_policy
-            )
+            p = resolve_routing(runtime_domain="cross_device", execution_policy=exec_policy)
             # Should at least not raise and return a valid policy
             assert isinstance(p.posture, RoutingPosture)
         except ImportError:
             pytest.skip("execution_policy not available")
 
     def test_none_inputs_returns_safe_default(self):
-        from core.cross_device_policy import resolve_routing, RoutingPosture
+        from core.cross_device_policy import RoutingPosture, resolve_routing
 
         p = resolve_routing()
         assert p.posture is RoutingPosture.LOCAL_PREFERRED
@@ -980,13 +979,13 @@ class TestResolveRoutingGracefulDegradation:
 
 class TestResolveRoutingSummary:
     def test_returns_cross_device_assignment_summary(self):
-        from core.cross_device_policy import resolve_routing_summary, CrossDeviceAssignmentSummary
+        from core.cross_device_policy import CrossDeviceAssignmentSummary, resolve_routing_summary
 
         s = resolve_routing_summary()
         assert isinstance(s, CrossDeviceAssignmentSummary)
 
     def test_local_domain_returns_local_summary(self):
-        from core.cross_device_policy import resolve_routing_summary, RoutingPosture
+        from core.cross_device_policy import RoutingPosture, resolve_routing_summary
 
         s = resolve_routing_summary(runtime_domain="local")
         assert s.posture == RoutingPosture.LOCAL_PREFERRED.value
@@ -1052,16 +1051,16 @@ class TestPublicApiCompleteness:
             assert hasattr(pkg, name), f"Missing public export: {name}"
 
     def test_package_attributes_types(self):
+        from enum import Enum
+
         from core.cross_device_policy import (
-            DeviceRole,
-            RoutingPosture,
-            RoutingPolicy,
-            CrossDeviceAssignmentSummary,
             DEFAULT_LOCAL_ROUTING_POLICY,
             IDLE_ASSIGNMENT_SUMMARY,
+            CrossDeviceAssignmentSummary,
+            DeviceRole,
+            RoutingPolicy,
+            RoutingPosture,
         )
-
-        from enum import Enum
 
         assert issubclass(DeviceRole, Enum)
         assert issubclass(RoutingPosture, Enum)

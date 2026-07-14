@@ -27,9 +27,9 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from core.continuum.config import (
+    DEFAULT_CONTINUUM_CONFIG,
     ContinuumConfig,
     FeatureFlags,
-    DEFAULT_CONTINUUM_CONFIG,
 )
 from core.continuum.expression_engine import ExpressionEngine
 from core.continuum.orchestrator import ContinuumOrchestrator, _MinimalFrame
@@ -43,7 +43,6 @@ from core.continuum.types import (
     SpatialPresence,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -51,16 +50,12 @@ from core.continuum.types import (
 
 def _disabled_config() -> ContinuumConfig:
     """Return a ContinuumConfig with the continuum disabled."""
-    return DEFAULT_CONTINUUM_CONFIG.model_copy(
-        update={"flags": FeatureFlags(enabled=False)}
-    )
+    return DEFAULT_CONTINUUM_CONFIG.model_copy(update={"flags": FeatureFlags(enabled=False)})
 
 
 def _debug_config() -> ContinuumConfig:
     """Return a ContinuumConfig with debug logging enabled."""
-    return DEFAULT_CONTINUUM_CONFIG.model_copy(
-        update={"flags": FeatureFlags(enabled=True, debug=True)}
-    )
+    return DEFAULT_CONTINUUM_CONFIG.model_copy(update={"flags": FeatureFlags(enabled=True, debug=True)})
 
 
 def _state(phase: ContinuumPhase = ContinuumPhase.FORMLESS, **kw) -> ContinuumState:
@@ -154,6 +149,7 @@ class TestContinuumOrchestratorContract:
 
     def test_history_does_not_grow_unbounded(self):
         from core.continuum.orchestrator import _HISTORY_WINDOW
+
         orch = ContinuumOrchestrator()
         for _ in range(_HISTORY_WINDOW + 10):
             orch.run()
@@ -161,6 +157,7 @@ class TestContinuumOrchestratorContract:
 
     def test_state_dict_is_json_serialisable(self):
         import json
+
         orch = ContinuumOrchestrator()
         result = orch.run(trace_id="json-check")
         dumped = json.dumps(result.model_dump())
@@ -291,6 +288,7 @@ class TestRunContinuumHelper:
     def _make_openclawd(self):
         """Return an OpenClawd instance without triggering full initialisation."""
         from core.openclawd import OpenClawd
+
         oc = OpenClawd.__new__(OpenClawd)
         # Minimal attribute bootstrap (mirrors __init__)
         oc._initialized = False
@@ -298,6 +296,7 @@ class TestRunContinuumHelper:
         oc._request_count = 0
         oc._error_count = 0
         import time
+
         oc._start_time = time.time()
         oc._node_actions_cache = {}
         oc._node_id_to_key = {}
@@ -328,9 +327,7 @@ class TestRunContinuumHelper:
     def test_disabled_via_extra_flags_returns_formless_dict(self):
         oc = self._make_openclawd()
         # Pre-wire orchestrator with disabled config
-        oc._continuum_orchestrator = ContinuumOrchestrator(
-            extra_flags={"enable_continuum": False}
-        )
+        oc._continuum_orchestrator = ContinuumOrchestrator(extra_flags={"enable_continuum": False})
         result = oc._run_continuum(trace_id="disabled")
         # disabled → ContinuumState.formless_default() → still a dict (not None),
         # but phase should be "formless"
@@ -473,9 +470,15 @@ class TestBackwardCompatibility:
     def test_existing_output_fields_not_changed(self):
         """Regression: adding state_continuum does not displace other fields."""
         required_keys = {
-            "success", "response", "intent", "trace_id",
-            "interaction", "persona_state", "interaction_envelope",
-            "output_plan", "metadata",
+            "success",
+            "response",
+            "intent",
+            "trace_id",
+            "interaction",
+            "persona_state",
+            "interaction_envelope",
+            "output_plan",
+            "metadata",
         }
         # Simulate a response dict as returned by both kernel and direct paths
         mock_response = {k: None for k in required_keys}
@@ -568,8 +571,10 @@ class TestModalityDegradedInput:
         orch = ContinuumOrchestrator()
         # Sabotage the temporal engine to simulate failure
         original_tick = orch._temporal.tick
+
         def _boom(state):
             raise RuntimeError("simulated tick failure")
+
         orch._temporal.tick = _boom
         result = orch.run(trace_id="boom")
         assert result.degraded

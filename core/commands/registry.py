@@ -36,6 +36,7 @@ Usage::
 
     handler = registry.get("screenshot")
 """
+
 from __future__ import annotations
 
 import logging
@@ -90,6 +91,7 @@ class CommandRegistry:
         **metadata:
             Arbitrary metadata stored alongside the registration.
         """
+
         def _decorator(func: Callable) -> Callable:
             if command in self._handlers:
                 logger.warning(
@@ -166,10 +168,7 @@ class CommandRegistry:
         return len(self._handlers)
 
     def __repr__(self) -> str:
-        return (
-            f"CommandRegistry(name={self._name!r}, "
-            f"commands={self.list_commands()!r})"
-        )
+        return f"CommandRegistry(name={self._name!r}, " f"commands={self.list_commands()!r})"
 
 
 # ── module-level default registry (shared singleton) ─────────────────────

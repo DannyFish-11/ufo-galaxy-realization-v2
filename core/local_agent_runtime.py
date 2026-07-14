@@ -35,10 +35,10 @@ Phase 1 Matrix OS 核心组件。
 import json
 import logging
 import time
-import uuid
 import traceback
-from typing import Dict, Any, Callable, Awaitable, List
+import uuid
 from dataclasses import dataclass, field
+from typing import Any, Awaitable, Callable, Dict, List
 
 logger = logging.getLogger("Galaxy.LocalRuntime")
 
@@ -46,6 +46,7 @@ logger = logging.getLogger("Galaxy.LocalRuntime")
 @dataclass
 class AgentStep:
     """单步执行记录"""
+
     step_id: int
     thought: str = ""
     action: str = ""
@@ -69,6 +70,7 @@ class AgentStep:
 @dataclass
 class RuntimeResult:
     """执行结果"""
+
     manifest_id: str
     success: bool
     steps: List[Dict] = field(default_factory=list)
@@ -186,6 +188,7 @@ class LocalAgentRuntime:
         if mcp_endpoint:
             try:
                 import httpx
+
                 async with httpx.AsyncClient(timeout=5) as client:
                     resp = await client.get(f"{mcp_endpoint}/mcp/tools")
                     if resp.status_code == 200:
@@ -252,6 +255,7 @@ class LocalAgentRuntime:
     async def _execute_react(self, manifest_dict: Dict) -> RuntimeResult:
         """LLM 驱动的 ReAct Loop"""
         from core.agent.react_loop import ReactConfig, is_repeating
+
         _cfg = ReactConfig.from_env()
         manifest_id = manifest_dict["manifest_id"]
         # max_turns 取 manifest 显式值，否则取集中配置默认（统一 8/6/10 魔数来源）
@@ -260,15 +264,18 @@ class LocalAgentRuntime:
         tasks = manifest_dict.get("tasks", [])
 
         # 构建初始用户消息
-        user_instruction = "\n".join(
-            t.get("instruction", "") for t in tasks if t.get("instruction")
-        ) or "Execute the assigned tasks."
+        user_instruction = (
+            "\n".join(t.get("instruction", "") for t in tasks if t.get("instruction")) or "Execute the assigned tasks."
+        )
 
         # 构建工具列表 (OpenAI function calling 格式)
         tool_defs = self._build_openai_tools()
 
         messages = [
-            {"role": "system", "content": system_prompt or "You are an autonomous agent. Use tools to accomplish the task."},
+            {
+                "role": "system",
+                "content": system_prompt or "You are an autonomous agent. Use tools to accomplish the task.",
+            },
             {"role": "user", "content": user_instruction},
         ]
 
@@ -308,9 +315,7 @@ class LocalAgentRuntime:
                 break
 
             # 环路检测：连续重复相同工具+参数 → 提前终止，避免空转耗尽 turns
-            _sig = "|".join(
-                f"{tc.get('name', '')}:{tc.get('arguments', '')}" for tc in tool_calls
-            )
+            _sig = "|".join(f"{tc.get('name', '')}:{tc.get('arguments', '')}" for tc in tool_calls)
             _sig_history.append(_sig)
             if is_repeating(_sig_history, _cfg.loop_detection_window):
                 logger.info("ReAct(manifest) loop-detection triggered at turn=%d", turn + 1)
@@ -369,13 +374,10 @@ class LocalAgentRuntime:
     async def _execute_autonomous(self, manifest_dict: Dict) -> RuntimeResult:
         """自主执行: 先发现工具, 再自主规划"""
         # 自主模式 = ReAct 模式 + 工具发现结果注入到 system_prompt
-        tool_info = "\n".join(
-            f"- {name}: {t.get('description', '')}" for name, t in self._local_tools.items()
-        )
+        tool_info = "\n".join(f"- {name}: {t.get('description', '')}" for name, t in self._local_tools.items())
         manifest_dict = dict(manifest_dict)
         manifest_dict["system_prompt"] = (
-            manifest_dict.get("system_prompt", "") +
-            f"\n\nAVAILABLE LOCAL TOOLS (discovered via MCP):\n{tool_info}\n"
+            manifest_dict.get("system_prompt", "") + f"\n\nAVAILABLE LOCAL TOOLS (discovered via MCP):\n{tool_info}\n"
             "Use these tools to accomplish your task autonomously."
         )
         return await self._execute_react(manifest_dict)
@@ -394,14 +396,16 @@ class LocalAgentRuntime:
                     "type": "object",
                     "properties": params,
                 }
-            tools.append({
-                "type": "function",
-                "function": {
-                    "name": name,
-                    "description": tool.get("description", f"Tool: {name}"),
-                    "parameters": params,
+            tools.append(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": name,
+                        "description": tool.get("description", f"Tool: {name}"),
+                        "parameters": params,
+                    },
                 }
-            })
+            )
         return tools
 
     async def _report_status(self, manifest_id: str, step: AgentStep):

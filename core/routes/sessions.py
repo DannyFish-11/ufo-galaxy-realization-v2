@@ -21,13 +21,14 @@ from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from core.session_manager import get_session_manager
 from core.routes._shared import connection_manager
+from core.session_manager import get_session_manager
 
 logger = logging.getLogger("Galaxy.API.Sessions")
 
 
 # ══════════════ Request Models ══════════════
+
 
 class CreateSessionRequest(BaseModel):
     user_id: str
@@ -45,6 +46,7 @@ class SyncSessionRequest(BaseModel):
 
 class ReconcileSessionRequest(BaseModel):
     """把设备本地(离线)自建的会话认领到用户 canonical 主线。"""
+
     local_session_id: str
     canonical_session_id: str = ""
     user_id: str = ""
@@ -61,6 +63,7 @@ class IngestTurnModel(BaseModel):
 
 class IngestTurnsRequest(BaseModel):
     """手机离线期间记录的对话轮次,重连后补录进统一主线。"""
+
     session_id: str
     user_id: str = ""
     device_id: str = ""
@@ -238,12 +241,15 @@ async def reconcile_session_to_canonical(
     history = sm.get_full_history(canonical)
     if device_id:
         try:
-            await cm.send_to_device(device_id, {
-                "type": "session_sync",
-                "session_id": canonical,
-                "history": history,
-                "reconciled_from": local_session_id,
-            })
+            await cm.send_to_device(
+                device_id,
+                {
+                    "type": "session_sync",
+                    "session_id": canonical,
+                    "history": history,
+                    "reconciled_from": local_session_id,
+                },
+            )
         except Exception as exc:  # noqa: BLE001
             logger.warning("reconcile session_sync push failed: %s", exc)
 
@@ -310,6 +316,7 @@ async def ingest_conversation_turns(
 
 # ══════════════ Router ══════════════
 
+
 def create_router(service_manager=None, config=None) -> APIRouter:
     router = APIRouter()
     sm = get_session_manager()
@@ -323,9 +330,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             "message": message,
         }
         for device_id in devices:
-            asyncio.ensure_future(
-                connection_manager.send_to_device(device_id, payload)
-            )
+            asyncio.ensure_future(connection_manager.send_to_device(device_id, payload))
         # 同时推送给 status 订阅者
         asyncio.ensure_future(connection_manager.broadcast_status(payload))
 
@@ -344,10 +349,12 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     async def create_session(req: CreateSessionRequest):
         """创建新会话"""
         session = sm.create_session(req.user_id, req.device_id)
-        return JSONResponse({
-            "success": True,
-            "session": session.to_summary(),
-        })
+        return JSONResponse(
+            {
+                "success": True,
+                "session": session.to_summary(),
+            }
+        )
 
     @router.get("/api/v1/sessions/{session_id}")
     async def get_session(session_id: str):
@@ -371,11 +378,14 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             )
         # 向新设备推送会话历史
         history = sm.get_full_history(session_id)
-        await connection_manager.send_to_device(req.device_id, {
-            "type": "session_sync",
-            "session_id": session_id,
-            "history": history,
-        })
+        await connection_manager.send_to_device(
+            req.device_id,
+            {
+                "type": "session_sync",
+                "session_id": session_id,
+                "history": history,
+            },
+        )
         return JSONResponse({"success": True, "message": f"设备 {req.device_id} 已加入会话"})
 
     @router.get("/api/v1/sessions/{session_id}/history")
@@ -403,18 +413,24 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             )
         history = sm.get_full_history(session_id)
         if req.max_turns and len(history) > req.max_turns:
-            history = history[-req.max_turns:]
+            history = history[-req.max_turns :]
 
-        sent = await connection_manager.send_to_device(req.device_id, {
-            "type": "session_sync",
-            "session_id": session_id,
-            "history": history,
-        })
-        return JSONResponse({
-            "success": sent,
-            "message": f"已同步 {len(history)} 条消息到设备 {req.device_id}" if sent
-                       else f"设备 {req.device_id} 不在线",
-        })
+        sent = await connection_manager.send_to_device(
+            req.device_id,
+            {
+                "type": "session_sync",
+                "session_id": session_id,
+                "history": history,
+            },
+        )
+        return JSONResponse(
+            {
+                "success": sent,
+                "message": (
+                    f"已同步 {len(history)} 条消息到设备 {req.device_id}" if sent else f"设备 {req.device_id} 不在线"
+                ),
+            }
+        )
 
     # ──────────────────────────────────────────────────────────────────────
     # Phase 4: Cross-device session migration

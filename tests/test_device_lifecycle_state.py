@@ -47,8 +47,8 @@ N.  prior_stage 在转换记录中正确追踪。
 
 from __future__ import annotations
 
-import sys
 import os
+import sys
 from typing import Any, Dict, List
 
 import pytest
@@ -62,28 +62,28 @@ if _PROJECT_ROOT not in sys.path:
 # ---------------------------------------------------------------------------
 
 from core.device_lifecycle_state import (
-    DEVICE_LIFECYCLE_STATE_AUTHORITY,
-    DEVICE_LIFECYCLE_CONTRACT_VERSION,
-    LIFECYCLE_STAGE_SEMANTICS,
     ANDROID_SIDE_LIFECYCLE_CONTRACT,
+    DEVICE_LIFECYCLE_CONTRACT_VERSION,
+    DEVICE_LIFECYCLE_STATE_AUTHORITY,
+    LIFECYCLE_STAGE_SEMANTICS,
+    DeviceLifecycleRecord,
     DeviceLifecycleStage,
     DeviceLifecycleTransitionEvent,
-    DeviceLifecycleRecord,
     derive_device_lifecycle_stage,
     evaluate_device_lifecycle_stage,
-    transition_device_lifecycle,
     get_lifecycle_record,
-    record_lifecycle_state,
     get_stored_lifecycle_record,
+    participation_tier_for_stage,
+    record_lifecycle_state,
     reset_lifecycle_store,
     stage_for_participation_tier,
-    participation_tier_for_stage,
+    transition_device_lifecycle,
 )
-
 
 # ---------------------------------------------------------------------------
 # 测试辅助 fixture
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(autouse=True)
 def _clear_store():
@@ -97,6 +97,7 @@ def _clear_store():
 # A. 模块导入与权威常量
 # ---------------------------------------------------------------------------
 
+
 class TestModuleImport:
     def test_authority_sentinel_nonempty(self):
         assert DEVICE_LIFECYCLE_STATE_AUTHORITY
@@ -109,9 +110,9 @@ class TestModuleImport:
 
     def test_lifecycle_stage_semantics_covers_all_stages(self):
         for stage in DeviceLifecycleStage:
-            assert stage.value in LIFECYCLE_STAGE_SEMANTICS, (
-                f"LIFECYCLE_STAGE_SEMANTICS 缺少阶段 {stage.value!r} 的语义描述"
-            )
+            assert (
+                stage.value in LIFECYCLE_STAGE_SEMANTICS
+            ), f"LIFECYCLE_STAGE_SEMANTICS 缺少阶段 {stage.value!r} 的语义描述"
 
     def test_android_side_contract_nonempty(self):
         assert ANDROID_SIDE_LIFECYCLE_CONTRACT
@@ -122,11 +123,16 @@ class TestModuleImport:
 # B. DeviceLifecycleStage 枚举值与顺序
 # ---------------------------------------------------------------------------
 
+
 class TestDeviceLifecycleStageEnum:
     def test_all_stages_present(self):
         expected = {
-            "unregistered", "registered", "connected",
-            "ready", "participating", "takeover_eligible",
+            "unregistered",
+            "registered",
+            "connected",
+            "ready",
+            "participating",
+            "takeover_eligible",
         }
         actual = {s.value for s in DeviceLifecycleStage}
         assert actual == expected
@@ -153,11 +159,16 @@ class TestDeviceLifecycleStageEnum:
 # C. DeviceLifecycleTransitionEvent 枚举值
 # ---------------------------------------------------------------------------
 
+
 class TestDeviceLifecycleTransitionEvent:
     def test_upward_events_present(self):
         upward = {
-            "websocket_connected", "register_ack_sent", "registration_fully_attached",
-            "readiness_satisfied", "execution_session_started", "takeover_eligibility_gained",
+            "websocket_connected",
+            "register_ack_sent",
+            "registration_fully_attached",
+            "readiness_satisfied",
+            "execution_session_started",
+            "takeover_eligibility_gained",
             "operator_suspension_lifted",
         }
         actual = {e.value for e in DeviceLifecycleTransitionEvent}
@@ -166,9 +177,13 @@ class TestDeviceLifecycleTransitionEvent:
 
     def test_downward_events_present(self):
         downward = {
-            "websocket_disconnected", "registration_gap_detected", "readiness_lost",
-            "execution_session_ended", "takeover_eligibility_lost",
-            "operator_suspended", "attachment_break",
+            "websocket_disconnected",
+            "registration_gap_detected",
+            "readiness_lost",
+            "execution_session_ended",
+            "takeover_eligibility_lost",
+            "operator_suspended",
+            "attachment_break",
         }
         actual = {e.value for e in DeviceLifecycleTransitionEvent}
         for ev in downward:
@@ -178,6 +193,7 @@ class TestDeviceLifecycleTransitionEvent:
 # ---------------------------------------------------------------------------
 # D. derive_device_lifecycle_stage — 完整生命周期路径
 # ---------------------------------------------------------------------------
+
 
 class TestDeriveDeviceLifecycleStage:
     """D. derive_device_lifecycle_stage 阶段推导测试。"""
@@ -204,8 +220,9 @@ class TestDeriveDeviceLifecycleStage:
         assert self._derive(websocket_connected=False) == DeviceLifecycleStage.unregistered
 
     def test_D2_unregistered_websocket_no_ack(self):
-        assert self._derive(websocket_connected=True, registration_ack_success=False) \
-            == DeviceLifecycleStage.unregistered
+        assert (
+            self._derive(websocket_connected=True, registration_ack_success=False) == DeviceLifecycleStage.unregistered
+        )
 
     def test_D3_registered_with_gaps(self):
         stage = self._derive(
@@ -322,6 +339,7 @@ class TestDeriveDeviceLifecycleStage:
 # ---------------------------------------------------------------------------
 # E. transition_device_lifecycle — 事件驱动转换
 # ---------------------------------------------------------------------------
+
 
 class TestTransitionDeviceLifecycle:
     """E. transition_device_lifecycle 事件驱动转换。"""
@@ -572,6 +590,7 @@ class TestTransitionDeviceLifecycle:
 # F. 完整生命周期往返路径
 # ---------------------------------------------------------------------------
 
+
 class TestFullLifecyclePath:
     """F. 完整生命周期路径测试。"""
 
@@ -637,6 +656,7 @@ class TestFullLifecyclePath:
 # G. record_lifecycle_state / get_stored_lifecycle_record 往返
 # ---------------------------------------------------------------------------
 
+
 class TestStoreAndRetrieve:
     """G. 存储和检索测试。"""
 
@@ -673,6 +693,7 @@ class TestStoreAndRetrieve:
 # H. reset_lifecycle_store 清除
 # ---------------------------------------------------------------------------
 
+
 class TestResetStore:
     """H. reset_lifecycle_store 清除测试。"""
 
@@ -693,6 +714,7 @@ class TestResetStore:
 # ---------------------------------------------------------------------------
 # I. get_lifecycle_record — 存储优先，降级到 unregistered
 # ---------------------------------------------------------------------------
+
 
 class TestGetLifecycleRecord:
     """I. get_lifecycle_record 优先级测试。"""
@@ -718,11 +740,13 @@ class TestGetLifecycleRecord:
 # J. DeviceLifecycleRecord.to_dict()
 # ---------------------------------------------------------------------------
 
+
 class TestToDict:
     """J. DeviceLifecycleRecord.to_dict() 序列化测试。"""
 
     def test_to_dict_is_json_serializable(self):
         import json
+
         rec = DeviceLifecycleRecord(
             device_id="serialize-test",
             stage=DeviceLifecycleStage.ready,
@@ -765,6 +789,7 @@ class TestToDict:
 # K. 参与层映射一致性
 # ---------------------------------------------------------------------------
 
+
 class TestMappingFunctions:
     """K. stage_for_participation_tier / participation_tier_for_stage 映射。"""
 
@@ -793,6 +818,7 @@ class TestMappingFunctions:
 # L. DeviceLifecycleStage 顺序比较
 # ---------------------------------------------------------------------------
 
+
 class TestStageComparisons:
     """L. 阶段顺序比较运算符。"""
 
@@ -811,8 +837,7 @@ class TestStageComparisons:
                 assert DeviceLifecycleStage.unregistered < stage
 
     def test_participating_and_takeover_eligible_are_equal_ordinal(self):
-        assert DeviceLifecycleStage.participating.ordinal() \
-            == DeviceLifecycleStage.takeover_eligible.ordinal()
+        assert DeviceLifecycleStage.participating.ordinal() == DeviceLifecycleStage.takeover_eligible.ordinal()
 
     def test_ready_le_participating(self):
         assert DeviceLifecycleStage.ready <= DeviceLifecycleStage.participating
@@ -826,6 +851,7 @@ class TestStageComparisons:
 # M. to_dict() 权威字段
 # ---------------------------------------------------------------------------
 
+
 class TestRecordToDictAuthority:
     """M. DeviceLifecycleRecord.to_dict() 包含必要的权威字段。"""
 
@@ -833,13 +859,24 @@ class TestRecordToDictAuthority:
         rec = DeviceLifecycleRecord(device_id="check-fields")
         d = rec.to_dict()
         required_fields = {
-            "device_id", "stage", "last_event", "prior_stage",
-            "websocket_connected", "registration_ack_success",
-            "registration_fully_attached", "registration_gaps",
-            "capability_visible", "readiness_satisfied", "dispatch_gate_passed",
-            "execution_active", "takeover_eligible", "operator_suspended",
-            "blocking_reasons", "stage_derivation_notes",
-            "_authority", "_contract_version",
+            "device_id",
+            "stage",
+            "last_event",
+            "prior_stage",
+            "websocket_connected",
+            "registration_ack_success",
+            "registration_fully_attached",
+            "registration_gaps",
+            "capability_visible",
+            "readiness_satisfied",
+            "dispatch_gate_passed",
+            "execution_active",
+            "takeover_eligible",
+            "operator_suspended",
+            "blocking_reasons",
+            "stage_derivation_notes",
+            "_authority",
+            "_contract_version",
         }
         for f in required_fields:
             assert f in d, f"字段 {f!r} 缺失于 to_dict() 输出"
@@ -848,6 +885,7 @@ class TestRecordToDictAuthority:
 # ---------------------------------------------------------------------------
 # N. prior_stage 追踪
 # ---------------------------------------------------------------------------
+
 
 class TestPriorStageTracking:
     """N. prior_stage 在转换记录中正确追踪。"""

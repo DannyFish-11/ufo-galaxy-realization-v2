@@ -145,12 +145,8 @@ def test_session_attached_tiers_are_not_operability_participating() -> None:
             device_mode="cross_device",
         )
         semantics = model["participation_semantics"]
-        assert semantics["operability_participating"] is False, (
-            f"tier={tier!r} 不应为 operability_participating=True"
-        )
-        assert semantics["dispatch_gate_passed"] is False, (
-            f"tier={tier!r} 不应为 dispatch_gate_passed=True"
-        )
+        assert semantics["operability_participating"] is False, f"tier={tier!r} 不应为 operability_participating=True"
+        assert semantics["dispatch_gate_passed"] is False, f"tier={tier!r} 不应为 dispatch_gate_passed=True"
 
 
 def test_fully_attached_dispatch_gap_is_explicit_in_summary() -> None:
@@ -168,4 +164,3 @@ def test_fully_attached_dispatch_gap_is_explicit_in_summary() -> None:
     summary_en: str = semantics["participating_summary_en"]
     assert "dispatch_gate_passed" in summary_en
     assert "派发门控通过" in summary_zh
-

@@ -117,7 +117,6 @@ import dataclasses
 from enum import Enum
 from typing import Any, Dict, Optional
 
-
 __all__ = [
     "FailureDomain",
     "FailureClassification",
@@ -187,21 +186,16 @@ class FailureDomain(str, Enum):
 # ---------------------------------------------------------------------------
 
 DOMAIN_DESCRIPTIONS: Dict[FailureDomain, str] = {
-    FailureDomain.LOCAL_RUNTIME_FAILURE: (
-        "Local execution raised an error or returned a failure result."
-    ),
+    FailureDomain.LOCAL_RUNTIME_FAILURE: ("Local execution raised an error or returned a failure result."),
     FailureDomain.REMOTE_CAPABILITY_MISMATCH: (
         "Target device profile does not support the required execution mode or capability."
     ),
-    FailureDomain.REMOTE_DEVICE_UNAVAILABLE: (
-        "Target device is not registered, offline, or unreachable."
-    ),
+    FailureDomain.REMOTE_DEVICE_UNAVAILABLE: ("Target device is not registered, offline, or unreachable."),
     FailureDomain.GATEWAY_TRANSPORT_FAILURE: (
         "Transport layer experienced a connection error, disconnect, or delivery failure."
     ),
     FailureDomain.SUBSTRATE_DISPATCH_FAILURE: (
-        "Execution substrate was unable to dispatch the envelope "
-        "(invalid envelope, ACL denial, routing error)."
+        "Execution substrate was unable to dispatch the envelope " "(invalid envelope, ACL denial, routing error)."
     ),
     FailureDomain.ORCHESTRATION_PARTIAL_FAILURE: (
         "Multi-device orchestration partially succeeded; at least one member failed."
@@ -209,36 +203,28 @@ DOMAIN_DESCRIPTIONS: Dict[FailureDomain, str] = {
     FailureDomain.CONTRACT_VALIDATION_FAILURE: (
         "Schema validation, ACL enforcement, or HITL denial rejected the execution attempt."
     ),
-    FailureDomain.TIMEOUT_FAILURE: (
-        "Operation did not complete within the permitted time window."
-    ),
-    FailureDomain.UNKNOWN_FAILURE: (
-        "Failure cannot be classified into a known domain."
-    ),
+    FailureDomain.TIMEOUT_FAILURE: ("Operation did not complete within the permitted time window."),
+    FailureDomain.UNKNOWN_FAILURE: ("Failure cannot be classified into a known domain."),
     # PR-B canonical architectural vocabulary
     FailureDomain.SEMANTIC_FAILURE: (
         "Intent / capability / meaning mismatch: task was understood but could not "
         "be matched to available capabilities or the semantic routing decision failed."
     ),
     FailureDomain.VALIDATION_FAILURE: (
-        "Canonical validation failure at any layer (contract schema, ACL, "
-        "capability check, or HITL denial)."
+        "Canonical validation failure at any layer (contract schema, ACL, " "capability check, or HITL denial)."
     ),
     FailureDomain.POLICY_FAILURE: (
-        "Admissibility or selection policy rejected the execution attempt "
-        "(e.g. eligibility=False, policy_score=0)."
+        "Admissibility or selection policy rejected the execution attempt " "(e.g. eligibility=False, policy_score=0)."
     ),
     FailureDomain.ROUTING_FAILURE: (
-        "Routing layer (CommandRouter / DeviceRouter / substrate) could not "
-        "determine a valid dispatch path."
+        "Routing layer (CommandRouter / DeviceRouter / substrate) could not " "determine a valid dispatch path."
     ),
     FailureDomain.FABRIC_FAILURE: (
         "Execution fabric (NATS bus / agent bus layer) experienced a connectivity "
         "or delivery failure at the fabric level."
     ),
     FailureDomain.TRANSPORT_FAILURE: (
-        "Transport mechanism (WebSocket / relay / gateway) failed to deliver "
-        "the message to the target endpoint."
+        "Transport mechanism (WebSocket / relay / gateway) failed to deliver " "the message to the target endpoint."
     ),
     FailureDomain.EXECUTOR_FAILURE: (
         "Executor (worker / node / MCP tool / skill / local runtime) raised an "
@@ -309,6 +295,7 @@ def is_retryable_by_domain(
 # ---------------------------------------------------------------------------
 # Downgrade hints by domain
 # ---------------------------------------------------------------------------
+
 
 def downgrade_hint_for_domain(domain: FailureDomain) -> Optional[str]:
     """Return a canonical downgrade hint string for *domain*, or ``None``.

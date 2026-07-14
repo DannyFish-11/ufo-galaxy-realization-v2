@@ -31,12 +31,14 @@ import pytest
 
 try:
     import pydantic  # noqa: F401
+
     _PYDANTIC_AVAILABLE = True
 except ImportError:
     _PYDANTIC_AVAILABLE = False
 
 try:
     import fastapi  # noqa: F401
+
     _FASTAPI_AVAILABLE = True
 except ImportError:
     _FASTAPI_AVAILABLE = False
@@ -52,29 +54,32 @@ class TestProtocolEnumeration:
 
     def test_mesh_join_in_message_type(self):
         from galaxy_gateway.protocol.aip_v3 import MessageType
+
         assert MessageType.MESH_JOIN == "mesh_join"
 
     def test_mesh_result_in_message_type(self):
         from galaxy_gateway.protocol.aip_v3 import MessageType
+
         assert MessageType.MESH_RESULT == "mesh_result"
 
     def test_mesh_leave_in_message_type(self):
         from galaxy_gateway.protocol.aip_v3 import MessageType
+
         assert MessageType.MESH_LEAVE == "mesh_leave"
 
     def test_all_three_parseable_from_string(self):
         """MessageType('mesh_join') 等不再抛出 ValueError。"""
         from galaxy_gateway.protocol.aip_v3 import MessageType
+
         for wire_val in ("mesh_join", "mesh_result", "mesh_leave"):
             mt = MessageType(wire_val)
             assert mt.value == wire_val
 
     def test_unified_message_types_recognizes_lifecycle_types(self):
         from galaxy_gateway.protocol.aip_v3 import UnifiedMessageTypes
+
         for wire_val in ("mesh_join", "mesh_result", "mesh_leave"):
-            assert UnifiedMessageTypes.is_valid(wire_val), (
-                f"UnifiedMessageTypes.is_valid('{wire_val}') should be True"
-            )
+            assert UnifiedMessageTypes.is_valid(wire_val), f"UnifiedMessageTypes.is_valid('{wire_val}') should be True"
 
 
 # ===========================================================================
@@ -89,22 +94,22 @@ class TestAndroidBridgeDispatch:
         """验证源码中 MESH_JOIN/RESULT/LEAVE 被路由到 handle_mesh_* 处理器。"""
         import ast
         import inspect
+
         from galaxy_gateway import android_bridge
 
         src = inspect.getsource(android_bridge)
         # 三个类型都应被路由
         for handler in ("handle_mesh_join", "handle_mesh_result", "handle_mesh_leave"):
-            assert handler in src, (
-                f"android_bridge.py 应导入并注册 {handler}"
-            )
+            assert handler in src, f"android_bridge.py 应导入并注册 {handler}"
 
     def test_mesh_lifecycle_module_importable(self):
         from galaxy_gateway.android.handlers.mesh_lifecycle import (
-            handle_mesh_join,
-            handle_mesh_result,
-            handle_mesh_leave,
             MESH_LIFECYCLE_HANDLER_IS_CANONICAL_PR13,
+            handle_mesh_join,
+            handle_mesh_leave,
+            handle_mesh_result,
         )
+
         assert callable(handle_mesh_join)
         assert callable(handle_mesh_result)
         assert callable(handle_mesh_leave)
@@ -114,6 +119,7 @@ class TestAndroidBridgeDispatch:
         """bridge.dispatch_map 应将三种类型映射到专用处理器，而非 generic_forward。"""
         import ast
         import inspect
+
         from galaxy_gateway import android_bridge
 
         src = inspect.getsource(android_bridge)
@@ -121,10 +127,10 @@ class TestAndroidBridgeDispatch:
         lines = src.splitlines()
         for i, line in enumerate(lines):
             if "MESH_JOIN" in line or "MESH_RESULT" in line or "MESH_LEAVE" in line:
-                snippet = "\n".join(lines[max(0, i - 2): i + 3])
-                assert "handle_generic_forward" not in snippet, (
-                    f"MESH_JOIN/RESULT/LEAVE 不应路由到 handle_generic_forward：\n{snippet}"
-                )
+                snippet = "\n".join(lines[max(0, i - 2) : i + 3])
+                assert (
+                    "handle_generic_forward" not in snippet
+                ), f"MESH_JOIN/RESULT/LEAVE 不应路由到 handle_generic_forward：\n{snippet}"
 
 
 # ===========================================================================
@@ -135,8 +141,9 @@ class TestAndroidBridgeDispatch:
 class TestHandleMeshJoin:
     @pytest.mark.asyncio
     async def test_basic_ack_structure(self):
-        from galaxy_gateway.android.handlers.mesh_lifecycle import handle_mesh_join
         from core.mesh.android_mesh_lifecycle_store import reset_android_mesh_lifecycle_store
+        from galaxy_gateway.android.handlers.mesh_lifecycle import handle_mesh_join
+
         reset_android_mesh_lifecycle_store()
 
         bridge = MagicMock()
@@ -158,8 +165,9 @@ class TestHandleMeshJoin:
 
     @pytest.mark.asyncio
     async def test_session_id_auto_generated_when_absent(self):
-        from galaxy_gateway.android.handlers.mesh_lifecycle import handle_mesh_join
         from core.mesh.android_mesh_lifecycle_store import reset_android_mesh_lifecycle_store
+        from galaxy_gateway.android.handlers.mesh_lifecycle import handle_mesh_join
+
         reset_android_mesh_lifecycle_store()
 
         bridge = MagicMock()
@@ -173,12 +181,13 @@ class TestHandleMeshJoin:
 
     @pytest.mark.asyncio
     async def test_join_event_stored_in_lifecycle_store(self):
-        from galaxy_gateway.android.handlers.mesh_lifecycle import handle_mesh_join
         from core.mesh.android_mesh_lifecycle_store import (
-            reset_android_mesh_lifecycle_store,
-            get_android_mesh_lifecycle_store,
             AndroidMeshSessionStatus,
+            get_android_mesh_lifecycle_store,
+            reset_android_mesh_lifecycle_store,
         )
+        from galaxy_gateway.android.handlers.mesh_lifecycle import handle_mesh_join
+
         reset_android_mesh_lifecycle_store()
 
         bridge = MagicMock()
@@ -204,8 +213,8 @@ class TestHandleMeshJoin:
     @pytest.mark.asyncio
     async def test_store_error_does_not_crash_handler(self):
         """store 异常时处理器仍应返回有效 ACK。"""
-        from galaxy_gateway.android.handlers.mesh_lifecycle import handle_mesh_join
         import galaxy_gateway.android.handlers.mesh_lifecycle as _mod
+        from galaxy_gateway.android.handlers.mesh_lifecycle import handle_mesh_join
 
         bridge = MagicMock()
         ws = MagicMock()
@@ -226,8 +235,9 @@ class TestHandleMeshJoin:
 class TestHandleMeshResult:
     @pytest.mark.asyncio
     async def test_basic_ack_structure(self):
-        from galaxy_gateway.android.handlers.mesh_lifecycle import handle_mesh_result
         from core.mesh.android_mesh_lifecycle_store import reset_android_mesh_lifecycle_store
+        from galaxy_gateway.android.handlers.mesh_lifecycle import handle_mesh_result
+
         reset_android_mesh_lifecycle_store()
 
         bridge = MagicMock()
@@ -249,26 +259,37 @@ class TestHandleMeshResult:
 
     @pytest.mark.asyncio
     async def test_session_status_becomes_active(self):
-        from galaxy_gateway.android.handlers.mesh_lifecycle import handle_mesh_join, handle_mesh_result
         from core.mesh.android_mesh_lifecycle_store import (
-            reset_android_mesh_lifecycle_store,
-            get_android_mesh_lifecycle_store,
             AndroidMeshSessionStatus,
+            get_android_mesh_lifecycle_store,
+            reset_android_mesh_lifecycle_store,
         )
+        from galaxy_gateway.android.handlers.mesh_lifecycle import handle_mesh_join, handle_mesh_result
+
         reset_android_mesh_lifecycle_store()
 
         bridge = MagicMock()
         ws = MagicMock()
         sid = "sess-result-test"
 
-        await handle_mesh_join(bridge, ws, {
-            "type": "mesh_join", "device_id": "dev-05",
-            "payload": {"session_id": sid},
-        })
-        await handle_mesh_result(bridge, ws, {
-            "type": "mesh_result", "device_id": "dev-05",
-            "payload": {"session_id": sid, "output": "ok"},
-        })
+        await handle_mesh_join(
+            bridge,
+            ws,
+            {
+                "type": "mesh_join",
+                "device_id": "dev-05",
+                "payload": {"session_id": sid},
+            },
+        )
+        await handle_mesh_result(
+            bridge,
+            ws,
+            {
+                "type": "mesh_result",
+                "device_id": "dev-05",
+                "payload": {"session_id": sid, "output": "ok"},
+            },
+        )
 
         store = get_android_mesh_lifecycle_store()
         rec = store.get_session(sid)
@@ -278,8 +299,9 @@ class TestHandleMeshResult:
 
     @pytest.mark.asyncio
     async def test_result_count_in_ack(self):
-        from galaxy_gateway.android.handlers.mesh_lifecycle import handle_mesh_result
         from core.mesh.android_mesh_lifecycle_store import reset_android_mesh_lifecycle_store
+        from galaxy_gateway.android.handlers.mesh_lifecycle import handle_mesh_result
+
         reset_android_mesh_lifecycle_store()
 
         bridge = MagicMock()
@@ -306,8 +328,9 @@ class TestHandleMeshResult:
 class TestHandleMeshLeave:
     @pytest.mark.asyncio
     async def test_basic_ack_structure(self):
-        from galaxy_gateway.android.handlers.mesh_lifecycle import handle_mesh_leave
         from core.mesh.android_mesh_lifecycle_store import reset_android_mesh_lifecycle_store
+        from galaxy_gateway.android.handlers.mesh_lifecycle import handle_mesh_leave
+
         reset_android_mesh_lifecycle_store()
 
         bridge = MagicMock()
@@ -329,34 +352,50 @@ class TestHandleMeshLeave:
 
     @pytest.mark.asyncio
     async def test_session_status_becomes_left(self):
+        from core.mesh.android_mesh_lifecycle_store import (
+            AndroidMeshSessionStatus,
+            get_android_mesh_lifecycle_store,
+            reset_android_mesh_lifecycle_store,
+        )
         from galaxy_gateway.android.handlers.mesh_lifecycle import (
             handle_mesh_join,
-            handle_mesh_result,
             handle_mesh_leave,
+            handle_mesh_result,
         )
-        from core.mesh.android_mesh_lifecycle_store import (
-            reset_android_mesh_lifecycle_store,
-            get_android_mesh_lifecycle_store,
-            AndroidMeshSessionStatus,
-        )
+
         reset_android_mesh_lifecycle_store()
 
         bridge = MagicMock()
         ws = MagicMock()
         sid = "sess-leave-test"
 
-        await handle_mesh_join(bridge, ws, {
-            "type": "mesh_join", "device_id": "dev-07",
-            "payload": {"session_id": sid},
-        })
-        await handle_mesh_result(bridge, ws, {
-            "type": "mesh_result", "device_id": "dev-07",
-            "payload": {"session_id": sid},
-        })
-        await handle_mesh_leave(bridge, ws, {
-            "type": "mesh_leave", "device_id": "dev-07",
-            "payload": {"session_id": sid},
-        })
+        await handle_mesh_join(
+            bridge,
+            ws,
+            {
+                "type": "mesh_join",
+                "device_id": "dev-07",
+                "payload": {"session_id": sid},
+            },
+        )
+        await handle_mesh_result(
+            bridge,
+            ws,
+            {
+                "type": "mesh_result",
+                "device_id": "dev-07",
+                "payload": {"session_id": sid},
+            },
+        )
+        await handle_mesh_leave(
+            bridge,
+            ws,
+            {
+                "type": "mesh_leave",
+                "device_id": "dev-07",
+                "payload": {"session_id": sid},
+            },
+        )
 
         store = get_android_mesh_lifecycle_store()
         rec = store.get_session(sid)
@@ -367,12 +406,13 @@ class TestHandleMeshLeave:
     @pytest.mark.asyncio
     async def test_leave_without_prior_join_still_succeeds(self):
         """孤立 leave 事件不应导致崩溃，session 应被创建并标记为 LEFT。"""
-        from galaxy_gateway.android.handlers.mesh_lifecycle import handle_mesh_leave
         from core.mesh.android_mesh_lifecycle_store import (
-            reset_android_mesh_lifecycle_store,
-            get_android_mesh_lifecycle_store,
             AndroidMeshSessionStatus,
+            get_android_mesh_lifecycle_store,
+            reset_android_mesh_lifecycle_store,
         )
+        from galaxy_gateway.android.handlers.mesh_lifecycle import handle_mesh_leave
+
         reset_android_mesh_lifecycle_store()
 
         bridge = MagicMock()
@@ -400,18 +440,21 @@ class TestHandleMeshLeave:
 class TestAndroidMeshLifecycleStore:
     def setup_method(self):
         from core.mesh.android_mesh_lifecycle_store import reset_android_mesh_lifecycle_store
+
         reset_android_mesh_lifecycle_store()
 
     def test_authority_sentinel_present(self):
         from core.mesh.android_mesh_lifecycle_store import ANDROID_MESH_LIFECYCLE_STORE_IS_AUTHORITY
+
         assert "AUTHORITY" in ANDROID_MESH_LIFECYCLE_STORE_IS_AUTHORITY
         assert "PR-13" in ANDROID_MESH_LIFECYCLE_STORE_IS_AUTHORITY
 
     def test_record_join_creates_session(self):
         from core.mesh.android_mesh_lifecycle_store import (
-            get_android_mesh_lifecycle_store,
             AndroidMeshSessionStatus,
+            get_android_mesh_lifecycle_store,
         )
+
         store = get_android_mesh_lifecycle_store()
         store.record_join(device_id="d1", session_id="s1")
 
@@ -423,9 +466,10 @@ class TestAndroidMeshLifecycleStore:
 
     def test_record_result_transitions_to_active(self):
         from core.mesh.android_mesh_lifecycle_store import (
-            get_android_mesh_lifecycle_store,
             AndroidMeshSessionStatus,
+            get_android_mesh_lifecycle_store,
         )
+
         store = get_android_mesh_lifecycle_store()
         store.record_join(device_id="d1", session_id="s1")
         store.record_result(device_id="d1", session_id="s1", payload={"out": "x"})
@@ -436,9 +480,10 @@ class TestAndroidMeshLifecycleStore:
 
     def test_record_leave_transitions_to_left(self):
         from core.mesh.android_mesh_lifecycle_store import (
-            get_android_mesh_lifecycle_store,
             AndroidMeshSessionStatus,
+            get_android_mesh_lifecycle_store,
         )
+
         store = get_android_mesh_lifecycle_store()
         store.record_join(device_id="d1", session_id="s1")
         store.record_result(device_id="d1", session_id="s1")
@@ -450,6 +495,7 @@ class TestAndroidMeshLifecycleStore:
 
     def test_get_sessions_for_device(self):
         from core.mesh.android_mesh_lifecycle_store import get_android_mesh_lifecycle_store
+
         store = get_android_mesh_lifecycle_store()
         store.record_join(device_id="dA", session_id="sA1")
         store.record_join(device_id="dA", session_id="sA2")
@@ -464,9 +510,10 @@ class TestAndroidMeshLifecycleStore:
 
     def test_get_all_active_sessions_excludes_left(self):
         from core.mesh.android_mesh_lifecycle_store import (
-            get_android_mesh_lifecycle_store,
             AndroidMeshSessionStatus,
+            get_android_mesh_lifecycle_store,
         )
+
         store = get_android_mesh_lifecycle_store()
         store.record_join(device_id="dC", session_id="active-s")
         store.record_result(device_id="dC", session_id="active-s")
@@ -480,6 +527,7 @@ class TestAndroidMeshLifecycleStore:
 
     def test_session_count_and_active_count(self):
         from core.mesh.android_mesh_lifecycle_store import get_android_mesh_lifecycle_store
+
         store = get_android_mesh_lifecycle_store()
         store.record_join(device_id="dD", session_id="s1")
         store.record_join(device_id="dD", session_id="s2")
@@ -491,6 +539,7 @@ class TestAndroidMeshLifecycleStore:
     def test_session_id_extracted_from_payload_mesh_session_id(self):
         """payload.mesh_session_id 字段应作为 session_id 备用提取字段。"""
         from core.mesh.android_mesh_lifecycle_store import get_android_mesh_lifecycle_store
+
         store = get_android_mesh_lifecycle_store()
         store.record_join(
             device_id="dE",
@@ -501,6 +550,7 @@ class TestAndroidMeshLifecycleStore:
 
     def test_to_dict_serializable(self):
         from core.mesh.android_mesh_lifecycle_store import get_android_mesh_lifecycle_store
+
         store = get_android_mesh_lifecycle_store()
         store.record_join(device_id="dF", session_id="sF1")
         store.record_result(device_id="dF", session_id="sF1", payload={"r": 1})
@@ -522,14 +572,16 @@ class TestLongTailCatalogMeshLifecycle:
 
     def test_mesh_lifecycle_kind_defined(self):
         from core.long_tail_compat_surface import LongTailPathKind
+
         assert LongTailPathKind.MESH_LIFECYCLE == "mesh_lifecycle"
 
     def test_catalog_contains_mesh_join(self):
         from core.long_tail_compat_surface import (
-            get_long_tail_catalog,
             LongTailTransitionStatus,
             LongTailValueTier,
+            get_long_tail_catalog,
         )
+
         catalog = {r.message_type: r for r in get_long_tail_catalog()}
         assert "mesh_join" in catalog, "mesh_join 应在目录中"
         rec = catalog["mesh_join"]
@@ -540,10 +592,11 @@ class TestLongTailCatalogMeshLifecycle:
 
     def test_catalog_contains_mesh_result(self):
         from core.long_tail_compat_surface import (
-            get_long_tail_catalog,
             LongTailTransitionStatus,
             LongTailValueTier,
+            get_long_tail_catalog,
         )
+
         catalog = {r.message_type: r for r in get_long_tail_catalog()}
         assert "mesh_result" in catalog
         rec = catalog["mesh_result"]
@@ -553,10 +606,11 @@ class TestLongTailCatalogMeshLifecycle:
 
     def test_catalog_contains_mesh_leave(self):
         from core.long_tail_compat_surface import (
-            get_long_tail_catalog,
             LongTailTransitionStatus,
             LongTailValueTier,
+            get_long_tail_catalog,
         )
+
         catalog = {r.message_type: r for r in get_long_tail_catalog()}
         assert "mesh_leave" in catalog
         rec = catalog["mesh_leave"]
@@ -566,15 +620,15 @@ class TestLongTailCatalogMeshLifecycle:
 
     def test_catalog_summary_includes_mesh_lifecycle_in_canonical(self):
         from core.long_tail_compat_surface import build_catalog_summary
+
         summary = build_catalog_summary()
         for mt in ("mesh_join", "mesh_result", "mesh_leave"):
-            assert mt in summary.canonical_message_types, (
-                f"{mt} 应在 canonical_message_types 中"
-            )
+            assert mt in summary.canonical_message_types, f"{mt} 应在 canonical_message_types 中"
 
     def test_highest_tier_count_increased_to_seven(self):
         """最高价值流数量应从原来的 4 增加至 7（加入三个 mesh 生命周期类型）。"""
-        from core.long_tail_compat_surface import build_catalog_summary, LongTailValueTier
+        from core.long_tail_compat_surface import LongTailValueTier, build_catalog_summary
+
         summary = build_catalog_summary()
         highest = summary.by_tier.get(LongTailValueTier.HIGHEST.value, 0)
         assert highest == 7, f"HIGHEST 级别条目应为 7，实际：{highest}"
@@ -590,11 +644,12 @@ class TestAndroidLifecycleEndpoint:
     def test_endpoint_returns_valid_structure(self):
         """直接调用 build_android_lifecycle_truth 验证输出结构。"""
         from core.mesh.android_mesh_lifecycle_store import (
-            reset_android_mesh_lifecycle_store,
             build_android_lifecycle_truth,
             record_mesh_join,
             record_mesh_result,
+            reset_android_mesh_lifecycle_store,
         )
+
         reset_android_mesh_lifecycle_store()
         record_mesh_join("dev-truth", session_id="sess-t1")
         record_mesh_result("dev-truth", session_id="sess-t1")
@@ -611,9 +666,10 @@ class TestAndroidLifecycleEndpoint:
     @pytest.mark.skipif(not _FASTAPI_AVAILABLE, reason="fastapi not installed")
     def test_endpoint_source_key_present(self):
         from core.mesh.android_mesh_lifecycle_store import (
-            reset_android_mesh_lifecycle_store,
             build_android_lifecycle_truth,
+            reset_android_mesh_lifecycle_store,
         )
+
         reset_android_mesh_lifecycle_store()
         truth = build_android_lifecycle_truth()
         assert "_source" in truth
@@ -623,12 +679,11 @@ class TestAndroidLifecycleEndpoint:
     def test_endpoint_registered_in_projection(self):
         """验证 /api/v1/mesh/android-lifecycle 已在 projection.py 中注册。"""
         import inspect
+
         from core.routes import projection
 
         src = inspect.getsource(projection)
-        assert "android-lifecycle" in src, (
-            "/api/v1/mesh/android-lifecycle 端点应在 projection.py 中注册"
-        )
+        assert "android-lifecycle" in src, "/api/v1/mesh/android-lifecycle 端点应在 projection.py 中注册"
 
 
 # ===========================================================================
@@ -639,6 +694,7 @@ class TestAndroidLifecycleEndpoint:
 class TestSessionIdExtraction:
     def setup_method(self):
         from core.mesh.android_mesh_lifecycle_store import reset_android_mesh_lifecycle_store
+
         reset_android_mesh_lifecycle_store()
 
     @pytest.mark.asyncio
@@ -680,8 +736,8 @@ class TestSessionIdExtraction:
 class TestDegradationSafety:
     @pytest.mark.asyncio
     async def test_mesh_result_store_error_non_fatal(self):
-        from galaxy_gateway.android.handlers.mesh_lifecycle import handle_mesh_result
         import galaxy_gateway.android.handlers.mesh_lifecycle as _mod
+        from galaxy_gateway.android.handlers.mesh_lifecycle import handle_mesh_result
 
         bridge = MagicMock()
         ws = MagicMock()
@@ -695,8 +751,8 @@ class TestDegradationSafety:
 
     @pytest.mark.asyncio
     async def test_mesh_leave_store_error_non_fatal(self):
-        from galaxy_gateway.android.handlers.mesh_lifecycle import handle_mesh_leave
         import galaxy_gateway.android.handlers.mesh_lifecycle as _mod
+        from galaxy_gateway.android.handlers.mesh_lifecycle import handle_mesh_leave
 
         bridge = MagicMock()
         ws = MagicMock()
@@ -717,10 +773,12 @@ class TestDegradationSafety:
 class TestBuildAndroidLifecycleTruth:
     def setup_method(self):
         from core.mesh.android_mesh_lifecycle_store import reset_android_mesh_lifecycle_store
+
         reset_android_mesh_lifecycle_store()
 
     def test_empty_store_returns_valid_structure(self):
         from core.mesh.android_mesh_lifecycle_store import build_android_lifecycle_truth
+
         truth = build_android_lifecycle_truth()
 
         assert truth["active_session_count"] == 0
@@ -733,6 +791,7 @@ class TestBuildAndroidLifecycleTruth:
             build_android_lifecycle_truth,
             record_mesh_join,
         )
+
         record_mesh_join("d1", session_id="s1")
 
         truth = build_android_lifecycle_truth()
@@ -746,6 +805,7 @@ class TestBuildAndroidLifecycleTruth:
             record_mesh_join,
             record_mesh_leave,
         )
+
         record_mesh_join("d1", session_id="s-active")
         record_mesh_join("d1", session_id="s-left")
         record_mesh_leave("d1", session_id="s-left")
@@ -766,18 +826,19 @@ class TestBuildAndroidLifecycleTruth:
 class TestFullLifecycleSequence:
     def setup_method(self):
         from core.mesh.android_mesh_lifecycle_store import reset_android_mesh_lifecycle_store
+
         reset_android_mesh_lifecycle_store()
 
     @pytest.mark.asyncio
     async def test_full_join_result_leave_sequence(self):
+        from core.mesh.android_mesh_lifecycle_store import (
+            AndroidMeshSessionStatus,
+            get_android_mesh_lifecycle_store,
+        )
         from galaxy_gateway.android.handlers.mesh_lifecycle import (
             handle_mesh_join,
-            handle_mesh_result,
             handle_mesh_leave,
-        )
-        from core.mesh.android_mesh_lifecycle_store import (
-            get_android_mesh_lifecycle_store,
-            AndroidMeshSessionStatus,
+            handle_mesh_result,
         )
 
         bridge = MagicMock()
@@ -785,11 +846,15 @@ class TestFullLifecycleSequence:
         sid = "full-seq-session"
 
         # 阶段 1：join
-        r_join = await handle_mesh_join(bridge, ws, {
-            "type": "mesh_join",
-            "device_id": "full-dev",
-            "payload": {"session_id": sid},
-        })
+        r_join = await handle_mesh_join(
+            bridge,
+            ws,
+            {
+                "type": "mesh_join",
+                "device_id": "full-dev",
+                "payload": {"session_id": sid},
+            },
+        )
         assert r_join["lifecycle_state"] == "joining"
 
         store = get_android_mesh_lifecycle_store()
@@ -800,16 +865,24 @@ class TestFullLifecycleSequence:
         )
 
         # 阶段 2：result（两次）
-        await handle_mesh_result(bridge, ws, {
-            "type": "mesh_result",
-            "device_id": "full-dev",
-            "payload": {"session_id": sid, "subtask": "A", "output": "x"},
-        })
-        r_result2 = await handle_mesh_result(bridge, ws, {
-            "type": "mesh_result",
-            "device_id": "full-dev",
-            "payload": {"session_id": sid, "subtask": "B", "output": "y"},
-        })
+        await handle_mesh_result(
+            bridge,
+            ws,
+            {
+                "type": "mesh_result",
+                "device_id": "full-dev",
+                "payload": {"session_id": sid, "subtask": "A", "output": "x"},
+            },
+        )
+        r_result2 = await handle_mesh_result(
+            bridge,
+            ws,
+            {
+                "type": "mesh_result",
+                "device_id": "full-dev",
+                "payload": {"session_id": sid, "subtask": "B", "output": "y"},
+            },
+        )
         assert r_result2["result_count"] == 2
 
         rec = store.get_session(sid)
@@ -817,11 +890,15 @@ class TestFullLifecycleSequence:
         assert len(rec.result_events) == 2
 
         # 阶段 3：leave
-        r_leave = await handle_mesh_leave(bridge, ws, {
-            "type": "mesh_leave",
-            "device_id": "full-dev",
-            "payload": {"session_id": sid},
-        })
+        r_leave = await handle_mesh_leave(
+            bridge,
+            ws,
+            {
+                "type": "mesh_leave",
+                "device_id": "full-dev",
+                "payload": {"session_id": sid},
+            },
+        )
         assert r_leave["lifecycle_state"] == "left"
 
         rec = store.get_session(sid)
@@ -832,35 +909,50 @@ class TestFullLifecycleSequence:
 
     @pytest.mark.asyncio
     async def test_multiple_devices_independent_sessions(self):
+        from core.mesh.android_mesh_lifecycle_store import (
+            AndroidMeshSessionStatus,
+            get_android_mesh_lifecycle_store,
+        )
         from galaxy_gateway.android.handlers.mesh_lifecycle import (
             handle_mesh_join,
             handle_mesh_leave,
-        )
-        from core.mesh.android_mesh_lifecycle_store import (
-            get_android_mesh_lifecycle_store,
-            AndroidMeshSessionStatus,
         )
 
         bridge = MagicMock()
         ws = MagicMock()
 
         # 两台设备各自独立的 session
-        await handle_mesh_join(bridge, ws, {
-            "type": "mesh_join", "device_id": "phone-1",
-            "payload": {"session_id": "sess-phone-1"},
-        })
-        await handle_mesh_join(bridge, ws, {
-            "type": "mesh_join", "device_id": "tablet-2",
-            "payload": {"session_id": "sess-tablet-2"},
-        })
+        await handle_mesh_join(
+            bridge,
+            ws,
+            {
+                "type": "mesh_join",
+                "device_id": "phone-1",
+                "payload": {"session_id": "sess-phone-1"},
+            },
+        )
+        await handle_mesh_join(
+            bridge,
+            ws,
+            {
+                "type": "mesh_join",
+                "device_id": "tablet-2",
+                "payload": {"session_id": "sess-tablet-2"},
+            },
+        )
 
         store = get_android_mesh_lifecycle_store()
 
         # 设备 1 离开
-        await handle_mesh_leave(bridge, ws, {
-            "type": "mesh_leave", "device_id": "phone-1",
-            "payload": {"session_id": "sess-phone-1"},
-        })
+        await handle_mesh_leave(
+            bridge,
+            ws,
+            {
+                "type": "mesh_leave",
+                "device_id": "phone-1",
+                "payload": {"session_id": "sess-phone-1"},
+            },
+        )
 
         rec1 = store.get_session("sess-phone-1")
         rec2 = store.get_session("sess-tablet-2")

@@ -15,6 +15,7 @@ logger = logging.getLogger("Galaxy.Adapter.CANBus")
 
 try:
     import can
+
     CAN_AVAILABLE = True
 except ImportError:
     can = None

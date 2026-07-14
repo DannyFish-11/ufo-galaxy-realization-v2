@@ -46,7 +46,6 @@ from core.routes.chat import (
     _apply_hidden_visible_boundary,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -123,8 +122,8 @@ class TestAndroidOriginatedBoundaryClassification:
     def test_boundary_decision_separates_into_three_tiers(self):
         """Boundary decision must separate android info into foreground / background / operator."""
         android_info = {
-            "android_blocker": "permission_denied",          # foreground
-            "android_device_state": {"battery": 20},        # background
+            "android_blocker": "permission_denied",  # foreground
+            "android_device_state": {"battery": 20},  # background
             "android_execution_signal": "step_3_complete",  # operator
         }
         visible = _empty_visible_action()
@@ -190,8 +189,8 @@ class TestDualRepoSharedBoundaryLogic:
         # Monkeypatching is not used here because the goal is to verify the
         # shared logic is wired correctly via observable outputs.
         android_info = {
-            "android_blocker": "storage_full",       # foreground
-            "android_context": "ambient_session",    # background (suppressed)
+            "android_blocker": "storage_full",  # foreground
+            "android_context": "ambient_session",  # background (suppressed)
         }
         visible = _empty_visible_action()
         demoted: list = []
@@ -224,6 +223,7 @@ class TestDualRepoSharedBoundaryLogic:
         """Every key in ANDROID_INFO_CONTENT_KEYS must be registered in
         LAYER_CONTENT_RULES so classify_content_layer returns a non-default tier."""
         from core.hidden_context_visible_action_surface import LAYER_CONTENT_RULES
+
         registered_keys = {r.content_key for r in LAYER_CONTENT_RULES}
         for key in ANDROID_INFO_CONTENT_KEYS:
             assert key in registered_keys, (

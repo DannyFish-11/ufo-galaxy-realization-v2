@@ -106,8 +106,8 @@ def test_runtime_registry_updates_canonical_record_projection() -> None:
 
 
 def test_gateway_registry_projects_same_unified_capability_plane() -> None:
-    from galaxy_gateway.capability_registry import GatewayCapabilityRegistry
     from core.unified.capability_resolver import get_capability_resolver
+    from galaxy_gateway.capability_registry import GatewayCapabilityRegistry
 
     _reset_capability_plane()
     GatewayCapabilityRegistry().upsert(

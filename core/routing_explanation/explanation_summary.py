@@ -45,8 +45,8 @@ from .decision_basis import (
     make_decision_basis,
 )
 from .route_confidence import (
-    ConfidenceBand,
     UNDETERMINED_CONFIDENCE,
+    ConfidenceBand,
 )
 from .route_explanation import (
     RejectedCandidate,
@@ -118,9 +118,7 @@ class RoutingExplanationSummary:
     schema_version: int = 1
     route_target: Optional[str] = None
     decision_basis_list: List[Dict[str, Any]] = dataclasses.field(default_factory=list)
-    confidence: Dict[str, Any] = dataclasses.field(
-        default_factory=lambda: UNDETERMINED_CONFIDENCE.to_dict()
-    )
+    confidence: Dict[str, Any] = dataclasses.field(default_factory=lambda: UNDETERMINED_CONFIDENCE.to_dict())
     rejected_alternatives: List[Dict[str, Any]] = dataclasses.field(default_factory=list)
     fallback_plan: Optional[str] = None
     owner_agent: Optional[str] = None
@@ -303,17 +301,14 @@ def _resolve_from_projection_impl(
     policy_reason = str(cross_device.get("policy_reason", "no policy reason available"))
     is_cross_device: bool = bool(cross_device.get("is_cross_device", False))
 
-    primary_target: Optional[str] = (
-        cross_device.get("primary_execution_device_id")
-        or cross_device.get("source_device_id")
+    primary_target: Optional[str] = cross_device.get("primary_execution_device_id") or cross_device.get(
+        "source_device_id"
     )
 
     if posture != "undecided":
         bases.append(basis_from_policy_posture(posture, policy_reason))
 
-    expansion_allowed: bool = bool(
-        cross_device.get("expansion_allowed_by_execution_policy", False)
-    )
+    expansion_allowed: bool = bool(cross_device.get("expansion_allowed_by_execution_policy", False))
     if not expansion_allowed and is_cross_device:
         bases.append(
             make_decision_basis(
@@ -375,9 +370,7 @@ def _resolve_from_projection_impl(
     if fallback_available:
         fallback_device_ids = formation.get("fallback_device_ids", [])
         if fallback_device_ids:
-            fallback_plan = (
-                f"Fallback device(s) available: {', '.join(fallback_device_ids)}"
-            )
+            fallback_plan = f"Fallback device(s) available: {', '.join(fallback_device_ids)}"
         else:
             fallback_plan = "Fallback path available (device IDs not specified)"
 
@@ -479,7 +472,11 @@ def get_explanation_hints(
         A flat JSON-serialisable dict with routing explanation quick-checks.
     """
     conf = summary.confidence
-    conf_band = conf.get("band", ConfidenceBand.UNDETERMINED.value) if isinstance(conf, dict) else ConfidenceBand.UNDETERMINED.value
+    conf_band = (
+        conf.get("band", ConfidenceBand.UNDETERMINED.value)
+        if isinstance(conf, dict)
+        else ConfidenceBand.UNDETERMINED.value
+    )
     conf_score = conf.get("score", 0.0) if isinstance(conf, dict) else 0.0
 
     return {

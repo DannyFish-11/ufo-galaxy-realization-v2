@@ -33,13 +33,12 @@ from core.capabilities.canonical_dispatcher import (  # noqa: F401
     DispatchResult,
     get_canonical_dispatcher,
 )
-
 from core.capability_bus import (  # noqa: F401
+    BusSnapshot,
     CapabilityBus,
     CapabilityBusEntry,
     CapabilityBusRole,
     CapabilityHealthStatus,
-    BusSnapshot,
     get_capability_bus,
     reset_capability_bus,
 )

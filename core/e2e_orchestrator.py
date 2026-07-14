@@ -68,10 +68,12 @@ as an independent orchestration authority."""
 # PR-5: DAG execution helpers
 # ---------------------------------------------------------------------------
 
+
 def _is_dag_enabled() -> bool:
     """Return True when the task-DAG feature flag is on."""
     try:
         from core.unified_config import get_config
+
         cfg = get_config()
         if hasattr(cfg, "get"):
             return bool(cfg.get("enable_task_dag", True))
@@ -111,13 +113,14 @@ async def compile_and_run_dag(
         Dict with keys ``success``, ``done``, ``failed``, ``skipped``,
         ``elapsed_ms``, ``graph_id``, ``trace_id``, ``node_statuses``.
     """
-    from core.task_graph import compile_subtasks_to_graph, RetryPolicy
+    from core.task_graph import RetryPolicy, compile_subtasks_to_graph
 
     # Read retry defaults from config
     max_retries = 1
     retry_delay = 1.0
     try:
         from core.unified_config import get_config
+
         cfg = get_config()
         _get = cfg.get if hasattr(cfg, "get") else lambda k, d: getattr(cfg, k, d)
         max_retries = int(_get("task_dag_default_max_retries", 1))
@@ -136,8 +139,7 @@ async def compile_and_run_dag(
         )
     except ValueError as exc:
         logger.warning(
-            "compile_and_run_dag: DAG compilation failed (%s), "
-            "caller should fall back to linear execution.",
+            "compile_and_run_dag: DAG compilation failed (%s), " "caller should fall back to linear execution.",
             exc,
         )
         return {
@@ -232,14 +234,14 @@ async def run_multi_device_via_task_graph(
     if policy is not None:
         try:
             from core.execution_policy.policy_enforcement import enforce_cross_device
+
             cross_device_decision = enforce_cross_device(
                 policy,
                 context={"trace_id": trace_id, "subtask_count": len(subtasks)},
             )
             if not cross_device_decision.is_allowed:
                 logger.info(
-                    "PR-2 run_multi_device_via_task_graph: blocked by policy | "
-                    "outcome=%s reason=%s | trace_id=%s",
+                    "PR-2 run_multi_device_via_task_graph: blocked by policy | " "outcome=%s reason=%s | trace_id=%s",
                     cross_device_decision.outcome.value,
                     cross_device_decision.reason,
                     trace_id,
@@ -254,11 +256,7 @@ async def run_multi_device_via_task_graph(
                     "trace_id": trace_id,
                     "node_statuses": {},
                     "policy_outcome": cross_device_decision.outcome.value,
-                    "policy_band": (
-                        policy.policy_band.value
-                        if hasattr(policy, "policy_band")
-                        else None
-                    ),
+                    "policy_band": (policy.policy_band.value if hasattr(policy, "policy_band") else None),
                     "policy_reason": cross_device_decision.reason,
                     "error": cross_device_decision.hint,
                 }
@@ -272,6 +270,7 @@ async def run_multi_device_via_task_graph(
     # Log canonical envelope creation for observability
     try:
         from core.unified.command_envelope import CommandEnvelope, log_command_envelope
+
         env = CommandEnvelope(
             trace_id=trace_id,
             runtime_session_id=runtime_session_id,
@@ -284,8 +283,7 @@ async def run_multi_device_via_task_graph(
         pass  # never block execution path for observability
 
     logger.info(
-        "PR-2 run_multi_device_via_task_graph: routing %d subtasks through TaskGraph "
-        "| trace_id=%s session=%s",
+        "PR-2 run_multi_device_via_task_graph: routing %d subtasks through TaskGraph " "| trace_id=%s session=%s",
         len(subtasks),
         trace_id,
         runtime_session_id,
@@ -356,6 +354,7 @@ async def process_user_input(
     # ── Guardrail: warn when ConstellationRuntime is explicitly bypassed ──────
     if not use_constellation:
         import uuid as _uuid
+
         _ctx0 = context[0] if context and isinstance(context[0], dict) else {}
         _trace_id = _ctx0.get("trace_id") or _uuid.uuid4().hex[:12]
         # PR-R9-CLEAN: Demoted to DEBUG — legacy path still functional.
@@ -368,6 +367,7 @@ async def process_user_input(
     _resolved_entry_mode = "local"
     try:
         from core.unified.entrypoint_router import resolve_entry_mode as _resolve_em
+
         _resolved_entry_mode = _resolve_em(
             explicit_entry_mode=entry_mode or None,
             target_device=target_device or None,
@@ -379,6 +379,7 @@ async def process_user_input(
     # ── Primary path: DesktopPresenceRuntime（控制面）────────────────────────
     try:
         from core.desktop_presence_runtime import get_desktop_presence_runtime
+
         runtime = get_desktop_presence_runtime()
         result = await runtime.handle_request(
             message=message,
@@ -396,14 +397,13 @@ async def process_user_input(
         result.setdefault("devices_notified", [])
         return result
     except Exception as exc:
-        logger.warning(
-            "DesktopPresenceRuntime unavailable in E2EOrchestrator, falling back: %s", exc
-        )
+        logger.warning("DesktopPresenceRuntime unavailable in E2EOrchestrator, falling back: %s", exc)
 
     # ── Fallback: ConstellationRuntime 优先路径 ──────────────────────────────
     if use_constellation:
         try:
             from core.constellation_runtime import get_constellation_runtime
+
             runtime = get_constellation_runtime()
             ctx: Dict[str, Any] = {
                 "user_id": user_id,
@@ -426,6 +426,7 @@ async def process_user_input(
             _subtasks = result.get("subtasks") or result.get("data", {}).get("subtasks")
             if _subtasks and _is_dag_enabled():
                 import uuid as _uuid
+
                 _trace = result.get("trace_id") or ctx.get("trace_id") or _uuid.uuid4().hex[:12]
                 _session = result.get("runtime_session_id") or session_id or ""
                 logger.info(
@@ -502,10 +503,7 @@ async def process_wake_event(
             wake_word=wake_word,
             meta={"task_type": task_type, **(extra or {})},
         )
-        logger.info(
-            f"唤醒事件已处理: device={device_id} wake_word={wake_word} "
-            f"session={session.session_id}"
-        )
+        logger.info(f"唤醒事件已处理: device={device_id} wake_word={wake_word} " f"session={session.session_id}")
         return {
             "session_id": session.session_id,
             "status": "session_created",

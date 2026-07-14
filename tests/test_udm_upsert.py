@@ -19,23 +19,26 @@ Covers:
 
 from __future__ import annotations
 
-import pytest
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
+import pytest
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _reset_udm():
     from core.unified import device_manager as _mod
+
     _mod.UnifiedDeviceManager._instance = None
 
 
 def _fresh_udm():
     _reset_udm()
     from core.unified.device_manager import get_unified_device_manager
+
     return get_unified_device_manager()
 
 
@@ -46,6 +49,7 @@ def _register_device(udm, device_id: str, device_type: str = "android"):
 # ===========================================================================
 # A  Partial status update
 # ===========================================================================
+
 
 class TestUpsertDeviceStateStatusUpdate:
 
@@ -73,6 +77,7 @@ class TestUpsertDeviceStateStatusUpdate:
     def test_status_accepts_enum_instance(self):
         udm = _fresh_udm()
         from core.unified.models import UnifiedDeviceStatus
+
         _register_device(udm, "upsert_a_003")
 
         result = udm.upsert_device_state(
@@ -88,6 +93,7 @@ class TestUpsertDeviceStateStatusUpdate:
 # ===========================================================================
 # B  Capabilities full-replace
 # ===========================================================================
+
 
 class TestUpsertDeviceStateCapabilities:
 
@@ -120,6 +126,7 @@ class TestUpsertDeviceStateCapabilities:
 # ===========================================================================
 # C  Metadata deep-merge
 # ===========================================================================
+
 
 class TestUpsertDeviceStateMetadata:
 
@@ -160,6 +167,7 @@ class TestUpsertDeviceStateMetadata:
 # D  state_version increments
 # ===========================================================================
 
+
 class TestUpsertStateVersion:
 
     def test_version_starts_at_zero_after_register(self):
@@ -183,6 +191,7 @@ class TestUpsertStateVersion:
     def test_version_increments_on_update_device_status(self):
         udm = _fresh_udm()
         from core.unified.models import UnifiedDeviceStatus
+
         _register_device(udm, "upsert_d_003")
 
         udm.update_device_status("upsert_d_003", UnifiedDeviceStatus.OFFLINE)
@@ -201,6 +210,7 @@ class TestUpsertStateVersion:
 # ===========================================================================
 # E  updated_at is set on every upsert
 # ===========================================================================
+
 
 class TestUpsertUpdatedAt:
 
@@ -221,6 +231,7 @@ class TestUpsertUpdatedAt:
 
     def test_updated_at_advances_on_successive_upserts(self):
         import time
+
         udm = _fresh_udm()
         _register_device(udm, "upsert_e_003")
 
@@ -241,6 +252,7 @@ class TestUpsertUpdatedAt:
 # F  upsert returns None for unknown device
 # ===========================================================================
 
+
 class TestUpsertUnknownDevice:
 
     def test_returns_none_for_unknown(self):
@@ -257,6 +269,7 @@ class TestUpsertUnknownDevice:
 # ===========================================================================
 # G  Successive upserts accumulate version monotonically
 # ===========================================================================
+
 
 class TestUpsertVersionMonotonic:
 
@@ -280,12 +293,13 @@ class TestUpsertVersionMonotonic:
 # H  udm_write_upsert SSOT helper
 # ===========================================================================
 
+
 class TestSSOTUpsertHelper:
 
     def test_udm_write_upsert_returns_true_on_success(self):
         _reset_udm()
-        from galaxy_gateway.ssot import udm_write_upsert
         from core.unified.device_manager import get_unified_device_manager
+        from galaxy_gateway.ssot import udm_write_upsert
 
         udm = get_unified_device_manager()
         udm.register_device_from_dict("ssot_h_001", {"device_type": "android"})
@@ -295,9 +309,9 @@ class TestSSOTUpsertHelper:
 
     def test_udm_write_upsert_returns_false_on_failure(self):
         _reset_udm()
-        from galaxy_gateway.ssot import udm_write_upsert
-        from core.unified.device_manager import get_unified_device_manager
         import core.unified.device_manager as _dm_mod
+        from core.unified.device_manager import get_unified_device_manager
+        from galaxy_gateway.ssot import udm_write_upsert
 
         # Patch get_unified_device_manager to raise an exception
         with patch.object(_dm_mod, "UnifiedDeviceManager") as mock_cls:
@@ -311,8 +325,8 @@ class TestSSOTUpsertHelper:
 
     def test_udm_write_upsert_updates_state_version(self):
         _reset_udm()
-        from galaxy_gateway.ssot import udm_write_upsert
         from core.unified.device_manager import get_unified_device_manager
+        from galaxy_gateway.ssot import udm_write_upsert
 
         udm = get_unified_device_manager()
         udm.register_device_from_dict("ssot_h_003", {"device_type": "android"})
@@ -329,6 +343,7 @@ class TestSSOTUpsertHelper:
 # I  heartbeat and update_device_status increment state_version
 # ===========================================================================
 
+
 class TestLegacyWritesBumpVersion:
 
     def test_heartbeat_bumps_version(self):
@@ -344,6 +359,7 @@ class TestLegacyWritesBumpVersion:
     def test_update_device_status_bumps_version(self):
         udm = _fresh_udm()
         from core.unified.models import UnifiedDeviceStatus
+
         _register_device(udm, "upsert_i_002")
 
         udm.update_device_status("upsert_i_002", UnifiedDeviceStatus.OFFLINE)
@@ -355,6 +371,7 @@ class TestLegacyWritesBumpVersion:
     def test_mixed_writes_version_monotonic(self):
         udm = _fresh_udm()
         from core.unified.models import UnifiedDeviceStatus
+
         _register_device(udm, "upsert_i_003")
 
         udm.heartbeat("upsert_i_003")

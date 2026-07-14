@@ -134,8 +134,7 @@ __all__ = [
 #: Module authority marker — import this sentinel to assert that the canonical
 #: capability assimilation layer (PR-7, extended in PR-D) is present and active.
 CAPABILITY_ASSIMILATION_AUTHORITY: str = (
-    "core.capability_assimilation"
-    " — canonical capability & node assimilation layer (PR-7/PR-D)"
+    "core.capability_assimilation" " — canonical capability & node assimilation layer (PR-7/PR-D)"
 )
 
 #: Layer position in the canonical control-plane stack.
@@ -146,8 +145,7 @@ CAPABILITY_ASSIMILATION_LAYER_POSITION: int = 7
 #: Governs node-level orchestrators: they are adapter/facade/local-coordinator
 #: **only** and MUST NOT redefine the system execution spine.
 NODE_ORCHESTRATOR_ASSIMILATION_POLICY: str = (
-    "NODE_ORCHESTRATOR_IS_ADAPTER_FACADE_ONLY"
-    " — no parallel execution authority permitted"
+    "NODE_ORCHESTRATOR_IS_ADAPTER_FACADE_ONLY" " — no parallel execution authority permitted"
 )
 
 #: Contract version for :class:`AssimilationRecord` serialisation.
@@ -576,9 +574,7 @@ class CapabilityAssimilationLayer:
             if not caps and existing is not None:
                 caps = list(existing.capability_descriptor.capabilities)
             is_rejoin = (
-                existing is not None
-                and existing.fabric_presence.presence_state
-                == AssimilationPresenceState.OFFLINE
+                existing is not None and existing.fabric_presence.presence_state == AssimilationPresenceState.OFFLINE
             )
 
             cap_desc = CapabilityDescriptor(
@@ -604,11 +600,7 @@ class CapabilityAssimilationLayer:
                 port=port,
                 transport_hints=hints,
                 heartbeat_count=1 if not existing else existing.fabric_presence.heartbeat_count + 1,
-                registered_at=(
-                    existing.fabric_presence.registered_at
-                    if existing
-                    else time.monotonic()
-                ),
+                registered_at=(existing.fabric_presence.registered_at if existing else time.monotonic()),
             )
 
             notes: List[str] = []
@@ -619,14 +611,10 @@ class CapabilityAssimilationLayer:
                 NodeParticipantKind.LEGACY_FACADE,
                 NodeParticipantKind.FABRIC_PARTICIPANT,
             ):
-                projected_task = self._project_to_task_graph(
-                    node_id, exec_profile, notes
-                )
+                projected_task = self._project_to_task_graph(node_id, exec_profile, notes)
 
             # ── Project to network graph runtime (defensive) ─────────────
-            projected_network = self._project_to_network_graph(
-                node_id, fabric, cap_desc, notes
-            )
+            projected_network = self._project_to_network_graph(node_id, fabric, cap_desc, notes)
 
             record = AssimilationRecord(
                 node_id=node_id,
@@ -645,9 +633,9 @@ class CapabilityAssimilationLayer:
             node_id,
             {
                 "capabilities": caps,
-                "participant_kind": participant_kind.value
-                if isinstance(participant_kind, NodeParticipantKind)
-                else participant_kind,
+                "participant_kind": (
+                    participant_kind.value if isinstance(participant_kind, NodeParticipantKind) else participant_kind
+                ),
                 "host": host,
                 "port": port,
             },
@@ -658,9 +646,7 @@ class CapabilityAssimilationLayer:
         logger.debug(
             "Assimilated node %s as %s (%s capabilities)",
             node_id,
-            participant_kind.value
-            if isinstance(participant_kind, NodeParticipantKind)
-            else participant_kind,
+            participant_kind.value if isinstance(participant_kind, NodeParticipantKind) else participant_kind,
             len(caps),
         )
         return record
@@ -701,11 +687,7 @@ class CapabilityAssimilationLayer:
             host = getattr(node_info, "host", "localhost")
             port = getattr(node_info, "port", 0)
             role_str = str(getattr(getattr(node_info, "role", None), "value", "worker"))
-            arch_str = str(
-                getattr(
-                    getattr(node_info, "architectural_class", None), "value", "capability_node"
-                )
-            )
+            arch_str = str(getattr(getattr(node_info, "architectural_class", None), "value", "capability_node"))
             meta = dict(getattr(node_info, "metadata", {}) or {})
 
         # Normalise capability names from either str or objects with .name
@@ -901,12 +883,8 @@ class CapabilityAssimilationLayer:
             "total_nodes": len(records),
             "by_participant_kind": by_kind,
             "by_presence_state": by_presence,
-            "projected_to_task_graph": sum(
-                1 for r in records if r.projected_to_task_graph
-            ),
-            "projected_to_network_graph": sum(
-                1 for r in records if r.projected_to_network_graph
-            ),
+            "projected_to_task_graph": sum(1 for r in records if r.projected_to_task_graph),
+            "projected_to_network_graph": sum(1 for r in records if r.projected_to_network_graph),
         }
 
     # ── Internal helpers ──────────────────────────────────────────────────
@@ -919,7 +897,7 @@ class CapabilityAssimilationLayer:
     ) -> bool:
         """Project an execution-participant node into the task graph runtime."""
         try:
-            from core.task_graph_runtime import get_task_graph_runtime, GraphNode
+            from core.task_graph_runtime import GraphNode, get_task_graph_runtime
 
             runtime = get_task_graph_runtime()
             node = GraphNode(
@@ -938,9 +916,7 @@ class CapabilityAssimilationLayer:
             runtime.register_node(node)
             return True
         except Exception as exc:
-            notes.append(
-                f"task_graph_projection skipped: {exc}"
-            )
+            notes.append(f"task_graph_projection skipped: {exc}")
             logger.debug(
                 "capability_assimilation: task graph projection unavailable for %s — %s",
                 node_id,
@@ -958,9 +934,9 @@ class CapabilityAssimilationLayer:
         """Project a node into the network graph runtime as a fabric participant."""
         try:
             from core.network_graph_runtime import (
-                get_network_graph_runtime,
                 NetworkNode,
                 NetworkNodeRole,
+                get_network_graph_runtime,
             )
 
             runtime = get_network_graph_runtime()
@@ -976,9 +952,7 @@ class CapabilityAssimilationLayer:
             runtime.register_node(net_node)
             return True
         except Exception as exc:
-            notes.append(
-                f"network_graph_projection skipped: {exc}"
-            )
+            notes.append(f"network_graph_projection skipped: {exc}")
             logger.debug(
                 "capability_assimilation: network graph projection unavailable for %s — %s",
                 node_id,

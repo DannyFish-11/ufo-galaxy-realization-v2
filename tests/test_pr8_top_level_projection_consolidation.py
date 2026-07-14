@@ -68,7 +68,6 @@ from unittest.mock import patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -119,20 +118,24 @@ class TestCanonicalMarkers:
 
     def test_canonical_top_level_projection_sentinel(self):
         from contracts.multi_device_runtime_projection import CANONICAL_TOP_LEVEL_PROJECTION
+
         assert CANONICAL_TOP_LEVEL_PROJECTION is True
 
     def test_canonical_authority_string_present(self):
         from contracts.multi_device_runtime_projection import __canonical_authority__
+
         assert isinstance(__canonical_authority__, str)
         assert len(__canonical_authority__) > 20
         assert "MultiDeviceRuntimeProjection" in __canonical_authority__
 
     def test_module_is_importable(self):
         import contracts.multi_device_runtime_projection as m
+
         assert hasattr(m, "MultiDeviceRuntimeProjection")
 
     def test_canonical_top_level_projection_exported_from_contracts(self):
         from contracts import CANONICAL_TOP_LEVEL_PROJECTION
+
         assert CANONICAL_TOP_LEVEL_PROJECTION is True
 
 
@@ -146,6 +149,7 @@ class TestFromRegisteredRuntimeDevice:
 
     def _adapter(self):
         from contracts.multi_device_runtime_projection import from_registered_runtime_device
+
         return from_registered_runtime_device
 
     def test_builds_from_dict(self):
@@ -157,6 +161,7 @@ class TestFromRegisteredRuntimeDevice:
     def test_builds_from_pydantic_object(self):
         adapter = self._adapter()
         from contracts.registered_runtime_device import build_registered_runtime_device
+
         obj = build_registered_runtime_device(
             device_id="rrd_test_obj",
             platform="android",
@@ -233,6 +238,7 @@ class TestFromRegisteredRuntimeDevice:
             RuntimeProjectionDeviceEntry,
             from_registered_runtime_device,
         )
+
         entry = from_registered_runtime_device(_make_rrd_dict())
         assert isinstance(entry, RuntimeProjectionDeviceEntry)
 
@@ -247,6 +253,7 @@ class TestProjectionAssemblyWithCanonicalDevices:
 
     def test_project_runtime_devices_returns_canonical_entries(self):
         from contracts.multi_device_runtime_projection import project_runtime_devices
+
         devices = [
             _make_rrd_dict(device_id="d1"),
             _make_rrd_dict(device_id="d2"),
@@ -258,6 +265,7 @@ class TestProjectionAssemblyWithCanonicalDevices:
 
     def test_project_runtime_devices_handles_bad_items(self):
         from contracts.multi_device_runtime_projection import project_runtime_devices
+
         devices = [
             _make_rrd_dict(device_id="good_1"),
             None,
@@ -272,6 +280,7 @@ class TestProjectionAssemblyWithCanonicalDevices:
 
     def test_build_projection_assembles_device_entries(self):
         from contracts.multi_device_runtime_projection import build_multi_device_runtime_projection
+
         devices = [
             _make_rrd_dict(device_id="phone_001"),
             _make_rrd_dict(device_id="tablet_002", form_factor="tablet"),
@@ -281,6 +290,7 @@ class TestProjectionAssemblyWithCanonicalDevices:
 
     def test_build_projection_device_ids_correct(self):
         from contracts.multi_device_runtime_projection import build_multi_device_runtime_projection
+
         devices = [_make_rrd_dict(device_id="phone_A"), _make_rrd_dict(device_id="desktop_B")]
         proj = build_multi_device_runtime_projection(runtime_devices=devices)
         ids = {e.device_id for e in proj.runtime_devices}
@@ -289,6 +299,7 @@ class TestProjectionAssemblyWithCanonicalDevices:
     def test_build_projection_with_rrd_objects(self):
         from contracts.multi_device_runtime_projection import build_multi_device_runtime_projection
         from contracts.registered_runtime_device import build_registered_runtime_device
+
         rrd = build_registered_runtime_device(
             device_id="obj_dev_001",
             platform="windows",
@@ -303,6 +314,7 @@ class TestProjectionAssemblyWithCanonicalDevices:
             MultiDeviceRuntimeProjection,
             build_multi_device_runtime_projection,
         )
+
         devices = [_make_rrd_dict(device_id="rt_dev_001")]
         proj = build_multi_device_runtime_projection(runtime_devices=devices)
         d = proj.to_dict()
@@ -312,6 +324,7 @@ class TestProjectionAssemblyWithCanonicalDevices:
 
     def test_projection_from_registered_runtime_device_exported_from_contracts(self):
         from contracts import projection_from_registered_runtime_device
+
         assert callable(projection_from_registered_runtime_device)
         entry = projection_from_registered_runtime_device(_make_rrd_dict(device_id="exp_dev"))
         assert entry.device_id == "exp_dev"
@@ -327,6 +340,7 @@ class TestAntiDriftVisitor:
 
     def _visitor(self, source: str):
         from scripts.audit_udm_write_paths import _AntiDriftVisitor
+
         tree = ast.parse(source)
         lines = source.splitlines()
         v = _AntiDriftVisitor(lines)
@@ -384,6 +398,7 @@ class TestAntiDriftAllowList:
 
     def _allowed(self, path: str) -> bool:
         from scripts.audit_udm_write_paths import _is_anti_drift_allowed
+
         return _is_anti_drift_allowed(path)
 
     def test_canonical_single_device_contract_allowed(self):
@@ -413,11 +428,13 @@ class TestCheckAntiDrift:
 
     def test_empty_file_list_returns_empty(self):
         from scripts.audit_udm_write_paths import _check_anti_drift
+
         findings = _check_anti_drift(Path("/nonexistent"), py_files=[])
         assert findings == []
 
     def test_detects_runtime_device_in_synthetic_file(self):
         from scripts.audit_udm_write_paths import _check_anti_drift
+
         source = textwrap.dedent("""\
             class NewRuntimeDevice:
                 device_id: str = ""
@@ -431,6 +448,7 @@ class TestCheckAntiDrift:
 
     def test_detects_multi_device_projection_in_synthetic_file(self):
         from scripts.audit_udm_write_paths import _check_anti_drift
+
         source = textwrap.dedent("""\
             class MyMultiDeviceProjection:
                 runtime_devices: list = []
@@ -448,12 +466,14 @@ class TestAuditResultAntiDrift:
 
     def test_audit_result_has_anti_drift_field(self):
         from scripts.audit_udm_write_paths import AuditResult
+
         result = AuditResult()
         assert hasattr(result, "anti_drift_findings")
         assert isinstance(result.anti_drift_findings, list)
 
     def test_audit_result_to_dict_includes_anti_drift_key(self):
         from scripts.audit_udm_write_paths import AuditResult
+
         result = AuditResult(anti_drift_findings=[{"kind": "test", "file": "x.py", "line": 1, "detail": "d"}])
         d = result.to_dict()
         assert "anti_drift_findings" in d
@@ -477,11 +497,12 @@ class TestEndToEndUnifiedDeviceFlow:
         health_score: float = 0.8,
     ):
         """Simulate registration → single-device projection → top-level projection."""
-        from contracts.registered_runtime_device import build_registered_runtime_device
         from contracts.multi_device_runtime_projection import (
             build_multi_device_runtime_projection,
             from_registered_runtime_device,
         )
+        from contracts.registered_runtime_device import build_registered_runtime_device
+
         # Step 1: registration → canonical single-device projection
         rrd = build_registered_runtime_device(
             device_id=device_id,
@@ -497,6 +518,7 @@ class TestEndToEndUnifiedDeviceFlow:
 
     def test_registration_produces_rrd(self):
         from contracts.registered_runtime_device import build_registered_runtime_device
+
         rrd = build_registered_runtime_device(device_id="e2e_basic", platform="android")
         assert rrd.device_id == "e2e_basic"
 
@@ -519,12 +541,14 @@ class TestEndToEndUnifiedDeviceFlow:
 
     def test_projection_id_unique_per_build(self):
         from contracts.multi_device_runtime_projection import build_multi_device_runtime_projection
+
         p1 = build_multi_device_runtime_projection()
         p2 = build_multi_device_runtime_projection()
         assert p1.projection_id != p2.projection_id
 
     def test_generated_at_is_populated(self):
         from contracts.multi_device_runtime_projection import build_multi_device_runtime_projection
+
         proj = build_multi_device_runtime_projection()
         assert proj.generated_at > 0
 
@@ -534,10 +558,8 @@ class TestEndToEndUnifiedDeviceFlow:
             build_multi_device_runtime_projection,
         )
         from contracts.registered_runtime_device import build_registered_runtime_device
-        devices = [
-            build_registered_runtime_device(device_id=f"rt_{i}", platform="android")
-            for i in range(3)
-        ]
+
+        devices = [build_registered_runtime_device(device_id=f"rt_{i}", platform="android") for i in range(3)]
         proj = build_multi_device_runtime_projection(runtime_devices=devices)
         d = proj.to_dict()
         proj2 = MultiDeviceRuntimeProjection.from_dict(d)
@@ -549,6 +571,7 @@ class TestEndToEndUnifiedDeviceFlow:
             build_multi_device_runtime_projection,
         )
         from contracts.registered_runtime_device import build_registered_runtime_device
+
         ids_in = ["alpha", "beta", "gamma"]
         devices = [build_registered_runtime_device(device_id=did) for did in ids_in]
         proj = build_multi_device_runtime_projection(runtime_devices=devices)
@@ -558,8 +581,9 @@ class TestEndToEndUnifiedDeviceFlow:
         assert set(ids_in) == ids_out
 
     def test_full_flow_multiple_devices(self):
-        from contracts.registered_runtime_device import build_registered_runtime_device
         from contracts.multi_device_runtime_projection import build_multi_device_runtime_projection
+        from contracts.registered_runtime_device import build_registered_runtime_device
+
         devices = [
             build_registered_runtime_device(device_id="phone_01", platform="android", status="online"),
             build_registered_runtime_device(device_id="tablet_02", platform="ios", status="online"),
@@ -572,6 +596,7 @@ class TestEndToEndUnifiedDeviceFlow:
 
     def test_health_score_propagated(self):
         from contracts.multi_device_runtime_projection import build_multi_device_runtime_projection
+
         # health_score is a first-class field on RuntimeProjectionDeviceEntry
         # and is passed via a compatible dict (health_score comes from device data)
         device_dict = _make_rrd_dict(device_id="e2e_hs", health_score=0.42)
@@ -579,8 +604,9 @@ class TestEndToEndUnifiedDeviceFlow:
         assert proj.runtime_devices[0].health_score == pytest.approx(0.42)
 
     def test_metadata_propagated(self):
-        from contracts.registered_runtime_device import build_registered_runtime_device
         from contracts.multi_device_runtime_projection import build_multi_device_runtime_projection
+        from contracts.registered_runtime_device import build_registered_runtime_device
+
         rrd = build_registered_runtime_device(
             device_id="e2e_meta",
             metadata={"region": "eu-west"},

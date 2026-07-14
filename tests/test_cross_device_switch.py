@@ -34,11 +34,11 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from galaxy_gateway.cross_device_switch import (  # noqa: E402
-    CrossDeviceDisabledError,
     ERROR_CODE_CROSS_DEVICE_DISABLED,
     ERROR_MSG_CROSS_DEVICE_DISABLED,
     HTTP_STATUS_CROSS_DEVICE_DISABLED,
     WS_CLOSE_CODE_CROSS_DEVICE_DISABLED,
+    CrossDeviceDisabledError,
     guard_cross_device,
     is_cross_device_enabled,
     make_disabled_response,
@@ -49,10 +49,10 @@ from galaxy_gateway.webrtc_proxy import (  # noqa: E402
     proxy_webrtc_signaling,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_ws() -> MagicMock:
     """Build a minimal fake FastAPI WebSocket."""
@@ -66,6 +66,7 @@ def _make_ws() -> MagicMock:
 # ===========================================================================
 # 1. Feature-flag module — is_cross_device_enabled()
 # ===========================================================================
+
 
 class TestIsEnabled:
     """is_cross_device_enabled() reflects GALAXY_CROSS_DEVICE_ENABLED."""
@@ -103,6 +104,7 @@ class TestIsEnabled:
 # 2. guard_cross_device()
 # ===========================================================================
 
+
 class TestGuardCrossDevice:
     """guard_cross_device() raises when OFF and is silent when ON."""
 
@@ -131,6 +133,7 @@ class TestGuardCrossDevice:
     def test_raises_logs_warning(self, monkeypatch, caplog):
         monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", "0")
         import logging
+
         with caplog.at_level(logging.WARNING, logger="galaxy_gateway.cross_device_switch"):
             with pytest.raises(CrossDeviceDisabledError):
                 guard_cross_device(trace_id="test-trace-123")
@@ -142,6 +145,7 @@ class TestGuardCrossDevice:
 # ===========================================================================
 # 3. make_disabled_response()
 # ===========================================================================
+
 
 class TestMakeDisabledResponse:
     """make_disabled_response() returns canonical error dict."""
@@ -165,6 +169,7 @@ class TestMakeDisabledResponse:
 
     def test_logs_warning(self, caplog):
         import logging
+
         with caplog.at_level(logging.WARNING, logger="galaxy_gateway.cross_device_switch"):
             make_disabled_response(trace_id="warn-trace")
         assert "cross_device_blocked" in caplog.text
@@ -174,6 +179,7 @@ class TestMakeDisabledResponse:
 # ===========================================================================
 # 4. DeviceRouter.route_task() — switch OFF blocks cross-device tasks
 # ===========================================================================
+
 
 class TestDeviceRouterSwitchOff:
     """When cross-device switch is OFF, route_task() must short-circuit."""
@@ -241,6 +247,7 @@ class TestDeviceRouterSwitchOff:
 # 5. DeviceRouter._dispatch_cross_device_task() — switch OFF guard
 # ===========================================================================
 
+
 class TestDispatchCrossDeviceTaskGuard:
     """_dispatch_cross_device_task() must short-circuit when switch is OFF."""
 
@@ -281,6 +288,7 @@ class TestDispatchCrossDeviceTaskGuard:
 # 6. proxy_webrtc_signaling() — WS closed with 4001 when switch is OFF
 # ===========================================================================
 
+
 class TestProxyWebRTCSignalingSwitchOff:
     """proxy_webrtc_signaling() must close WS with 4001 when switch is OFF."""
 
@@ -305,9 +313,7 @@ class TestProxyWebRTCSignalingSwitchOff:
         await proxy_webrtc_signaling(ws, "device-xyz")
 
         call_kwargs = ws.close.call_args
-        reason = call_kwargs.kwargs.get("reason", "") or (
-            call_kwargs.args[1] if len(call_kwargs.args) > 1 else ""
-        )
+        reason = call_kwargs.kwargs.get("reason", "") or (call_kwargs.args[1] if len(call_kwargs.args) > 1 else "")
         assert "disabled" in reason.lower()
 
     @pytest.mark.asyncio
@@ -327,6 +333,7 @@ class TestProxyWebRTCSignalingSwitchOff:
 # ===========================================================================
 # 7. get_webrtc_endpoint_info() — includes cross_device_enabled flag
 # ===========================================================================
+
 
 class TestWebRTCEndpointInfo:
     """get_webrtc_endpoint_info() must expose the cross_device_enabled flag."""
@@ -348,6 +355,7 @@ class TestWebRTCEndpointInfo:
 # 8 & 9. ON (regression pass-through) — route_task & WebRTC work normally
 # ===========================================================================
 
+
 class TestCrossDeviceSwitchOn:
     """When switch is ON, cross-device paths proceed normally (regression)."""
 
@@ -358,9 +366,7 @@ class TestCrossDeviceSwitchOn:
 
         router = DeviceRouter()
         coordinator_mock = MagicMock()
-        coordinator_mock.execute_cross_device_task = AsyncMock(
-            return_value={"success": True, "result": "done"}
-        )
+        coordinator_mock.execute_cross_device_task = AsyncMock(return_value={"success": True, "result": "done"})
 
         async def _fake_analyze(command, context=None):
             return {"requires_cross_device": True, "task_type": "cross_device"}
@@ -390,22 +396,23 @@ class TestCrossDeviceSwitchOn:
         # If close was called, it must NOT be with the cross-device-disabled code
         for call in ws.close.call_args_list:
             code = call.kwargs.get("code") or (call.args[0] if call.args else None)
-            assert code != WS_CLOSE_CODE_CROSS_DEVICE_DISABLED, (
-                "WS must not be closed with 4001 when cross-device is ON"
-            )
+            assert (
+                code != WS_CLOSE_CODE_CROSS_DEVICE_DISABLED
+            ), "WS must not be closed with 4001 when cross-device is ON"
 
 
 # ===========================================================================
 # 10. Single dispatcher — DeviceRouter is the canonical path
 # ===========================================================================
 
+
 class TestSingleDispatcher:
     """DeviceRouter.dispatch_task() is the canonical single dispatcher."""
 
     def test_device_router_exposes_dispatch_task(self):
-        assert hasattr(DeviceRouter, "dispatch_task"), (
-            "DeviceRouter must expose dispatch_task() as the canonical dispatcher"
-        )
+        assert hasattr(
+            DeviceRouter, "dispatch_task"
+        ), "DeviceRouter must expose dispatch_task() as the canonical dispatcher"
 
     def test_cross_device_switch_module_exists(self):
         """cross_device_switch.py must exist as the gate for all cross-device paths."""
@@ -414,13 +421,14 @@ class TestSingleDispatcher:
     def test_device_router_uses_switch_module(self):
         """device_router imports from cross_device_switch (not a local copy)."""
         import galaxy_gateway.device_router as dr_module
+
         # Verify the module-level names exist in device_router's namespace
-        assert hasattr(dr_module, "is_cross_device_enabled"), (
-            "device_router must import is_cross_device_enabled from cross_device_switch"
-        )
-        assert hasattr(dr_module, "make_disabled_response"), (
-            "device_router must import make_disabled_response from cross_device_switch"
-        )
+        assert hasattr(
+            dr_module, "is_cross_device_enabled"
+        ), "device_router must import is_cross_device_enabled from cross_device_switch"
+        assert hasattr(
+            dr_module, "make_disabled_response"
+        ), "device_router must import make_disabled_response from cross_device_switch"
 
 
 # ---------------------------------------------------------------------------

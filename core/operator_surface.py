@@ -113,8 +113,8 @@ logger = logging.getLogger("Galaxy.OperatorSurface")
 # import of core.flow_level_operator_surface.
 try:
     from core.flow_level_operator_surface import (  # noqa: F401
-        AndroidExecutionPhase,
         AndroidCanonicalExecutionEvent,
+        AndroidExecutionPhase,
         FlowOperatorProjection,
     )
 except Exception as exc:
@@ -124,12 +124,12 @@ except Exception as exc:
 # the read surface do not transitively import the async action path.
 try:
     from core.operator_action_contract import (  # noqa: F401
+        OPERATOR_ACTION_CONTRACT_AUTHORITY,
+        OPERATOR_ACTION_ENTRY_MODE,
+        OPERATOR_CONTROL_PLANE_IS_CANONICAL_AUTHORITY,
         OperatorActionKind,
         OperatorActionRequest,
         OperatorActionResult,
-        OPERATOR_ACTION_CONTRACT_AUTHORITY,
-        OPERATOR_CONTROL_PLANE_IS_CANONICAL_AUTHORITY,
-        OPERATOR_ACTION_ENTRY_MODE,
         build_operator_action_result_from_runtime_result,
     )
 except Exception as exc:
@@ -218,15 +218,17 @@ TOPOLOGY_VIEWER_ROLE: str = "TOPOLOGY_VIEWER"
 # Snapshot constants
 # ---------------------------------------------------------------------------
 
-ANDROID_ECOSYSTEM_SNAPSHOT_KEYS: frozenset = frozenset({
-    "total_devices_with_snapshot",
-    "local_ai_ready_count",
-    "model_ready_count",
-    "accessibility_ready_count",
-    "overlay_ready_count",
-    "local_loop_ready_count",
-    "pending_first_download_count",
-})
+ANDROID_ECOSYSTEM_SNAPSHOT_KEYS: frozenset = frozenset(
+    {
+        "total_devices_with_snapshot",
+        "local_ai_ready_count",
+        "model_ready_count",
+        "accessibility_ready_count",
+        "overlay_ready_count",
+        "local_loop_ready_count",
+        "pending_first_download_count",
+    }
+)
 """Whitelist of count-level keys retained in OperatorSnapshot.android_ecosystem.
 
 These keys correspond to the aggregate count fields returned by
@@ -1169,30 +1171,37 @@ class OperatorSurface:
                 # ── Stage 3: ReplayFoundation — continuum ticks + subject transitions (fix: lineage-reads-replay)
                 try:
                     from core.replay_foundation import get_replay_foundation
+
                     rf = get_replay_foundation()
                     replay_events = rf.get_task_lineage(task_id)
                     for ev in replay_events:
                         ev_kind = getattr(ev, "kind", None) or (ev.get("kind") if isinstance(ev, dict) else None)
-                        ev_payload = getattr(ev, "payload", {}) or (ev.get("payload", {}) if isinstance(ev, dict) else {})
+                        ev_payload = getattr(ev, "payload", {}) or (
+                            ev.get("payload", {}) if isinstance(ev, dict) else {}
+                        )
                         ev_ts = getattr(ev, "timestamp", 0) or (ev.get("timestamp", 0) if isinstance(ev, dict) else 0)
                         if ev_kind == "CONTINUUM_TICK":
                             c = ev_payload.get("continuum", {}) if isinstance(ev_payload, dict) else {}
-                            timeline.append({
-                                "event": f"continuum_{c.get('phase', 'unknown')}",
-                                "ts": ev_ts,
-                                "phase": c.get("phase"),
-                                "source": "replay_foundation",
-                            })
+                            timeline.append(
+                                {
+                                    "event": f"continuum_{c.get('phase', 'unknown')}",
+                                    "ts": ev_ts,
+                                    "phase": c.get("phase"),
+                                    "source": "replay_foundation",
+                                }
+                            )
                         elif ev_kind == "SUBJECT_STATE_TRANSITION":
                             p = ev_payload if isinstance(ev_payload, dict) else {}
-                            timeline.append({
-                                "event": f"subject_transition_{p.get('subject_id', 'unknown')}",
-                                "ts": ev_ts,
-                                "subject_role": p.get("subject_role"),
-                                "old_state": p.get("old_state"),
-                                "new_state": p.get("new_state"),
-                                "source": "replay_foundation",
-                            })
+                            timeline.append(
+                                {
+                                    "event": f"subject_transition_{p.get('subject_id', 'unknown')}",
+                                    "ts": ev_ts,
+                                    "subject_role": p.get("subject_role"),
+                                    "old_state": p.get("old_state"),
+                                    "new_state": p.get("new_state"),
+                                    "source": "replay_foundation",
+                                }
+                            )
                     timeline.sort(key=lambda e: e["ts"])
                 except Exception as exc:
                     logger.debug("Fallback triggered: %s", exc)
@@ -1281,10 +1290,11 @@ class OperatorSurface:
 
         try:
             from core.task_lifecycle_persistence import (
+                InFlightTaskDisposition,
                 classify_disposition,
                 get_task_lifecycle_store,
-                InFlightTaskDisposition,
             )
+
             store = get_task_lifecycle_store()
             snapshot = store.load()
             if snapshot is not None:
@@ -1296,9 +1306,7 @@ class OperatorSurface:
                         owner_str = raw_rec.get("owner", "")
                         disp = classify_disposition(owner_str)
                         recovery_disposition = disp.value
-                        recovery_action_taken = (
-                            disp != InFlightTaskDisposition.TERMINAL_ON_INTERRUPT
-                        )
+                        recovery_action_taken = disp != InFlightTaskDisposition.TERMINAL_ON_INTERRUPT
                         recovery_note = (
                             f"Recovered from snapshot {snapshot_id}: "
                             f"disposition={recovery_disposition}, "
@@ -1308,9 +1316,7 @@ class OperatorSurface:
                             current_owner = owner_str
                         break
         except Exception as exc:
-            logger.debug(
-                "inspect_recovery(%s): snapshot query failed: %s", task_id, exc
-            )
+            logger.debug("inspect_recovery(%s): snapshot query failed: %s", task_id, exc)
 
         if not current_owner and not is_recovered:
             return None
@@ -1319,6 +1325,7 @@ class OperatorSurface:
         if not trace_id:
             try:
                 from core.canonical_task import get_canonical_task_runtime
+
                 ct = get_canonical_task_runtime().get_by_task_id(task_id)
                 if ct is not None:
                     trace_id = ct.identity.trace_id
@@ -1394,11 +1401,7 @@ class OperatorSurface:
         Checks ``task_id``, ``canonical_task_id``, and ``execution_task_id``
         in order, returning the first truthy value found.
         """
-        return (
-            payload.get("task_id")
-            or payload.get("canonical_task_id")
-            or payload.get("execution_task_id")
-        )
+        return payload.get("task_id") or payload.get("canonical_task_id") or payload.get("execution_task_id")
 
     @staticmethod
     def _is_reviewable(
@@ -1407,11 +1410,7 @@ class OperatorSurface:
         recovery_insp: Optional["RecoveryInspection"],
     ) -> bool:
         """Return True when sufficient evidence exists for a postmortem review."""
-        return (
-            task_insp is not None
-            or audit_insp.has_evidence
-            or recovery_insp is not None
-        )
+        return task_insp is not None or audit_insp.has_evidence or recovery_insp is not None
 
     # ── Audit Evidence Inspection ────────────────────────────────────────
 
@@ -1501,9 +1500,7 @@ class OperatorSurface:
         audit_insp = self.inspect_audit_evidence(task_id)
         summary.audit_evidence = audit_insp
         if not audit_insp.has_evidence:
-            notes.append(
-                "Audit evidence: no durable audit records found for this task_id."
-            )
+            notes.append("Audit evidence: no durable audit records found for this task_id.")
 
         # Lineage
         lineage_insp = self.inspect_lineage(task_id)
@@ -1541,6 +1538,7 @@ class OperatorSurface:
             from core.flow_level_operator_surface import (
                 get_flow_level_operator_surface,
             )
+
             return get_flow_level_operator_surface().inspect_flow(flow_id)
         except Exception as exc:
             logger.warning("inspect_flow(%s) failed: %s", flow_id, exc)
@@ -1772,10 +1770,9 @@ class OperatorSurface:
         # ANDROID_ECOSYSTEM_SNAPSHOT_KEYS.
         try:
             from core.android_device_state_store import get_device_ecosystem_summary
+
             eco = get_device_ecosystem_summary()
-            snap.android_ecosystem = {
-                k: v for k, v in eco.items() if k in ANDROID_ECOSYSTEM_SNAPSHOT_KEYS
-            }
+            snap.android_ecosystem = {k: v for k, v in eco.items() if k in ANDROID_ECOSYSTEM_SNAPSHOT_KEYS}
             filtered = set(eco.keys()) - ANDROID_ECOSYSTEM_SNAPSHOT_KEYS
             if filtered:
                 logger.debug(
@@ -1790,11 +1787,10 @@ class OperatorSurface:
         # For per-flow detail see GET /api/v1/operator/flows.
         try:
             from core.delegated_flow_entity import get_delegated_flow_entity_runtime
+
             flow_runtime = get_delegated_flow_entity_runtime()
             all_entities = flow_runtime.list_all()
-            snap.active_flow_count = sum(
-                1 for e in all_entities if e.phase.is_active()
-            )
+            snap.active_flow_count = sum(1 for e in all_entities if e.phase.is_active())
         except Exception as exc:
             logger.debug("operator_snapshot: delegated flow count unavailable: %s", exc)
 
@@ -1802,9 +1798,8 @@ class OperatorSurface:
         # the SystemStateMachine singleton.  Gracefully degrades when the module
         # is unavailable (e.g. headless / non-desktop deployments).
         try:
-            from system_integration.state_machine_ui_integration import (
-                SystemStateMachine as _SSM,
-            )
+            from system_integration.state_machine_ui_integration import SystemStateMachine as _SSM
+
             _ssm = _SSM()
             snap.desktop_shell_state = _ssm.current_state.value
         except Exception as exc:
@@ -1815,15 +1810,12 @@ class OperatorSurface:
         # whether the subject is currently at rest, processing, or manifesting.
         try:
             from core.desktop_presence_runtime import get_desktop_presence_runtime as _get_dpr
+
             _psum = _get_dpr().presence_summary()
             snap.presence_tristate = _psum.get("dominant_tristate", "silent")
             snap.desktop_presence_system = dict(_psum.get("desktop_presence_system") or {})
-            snap.shared_subject_panel = dict(
-                snap.desktop_presence_system.get("subject_panel") or {}
-            )
-            snap.shared_subject_lineage = dict(
-                snap.desktop_presence_system.get("subject_unified_lineage") or {}
-            )
+            snap.shared_subject_panel = dict(snap.desktop_presence_system.get("subject_panel") or {})
+            snap.shared_subject_lineage = dict(snap.desktop_presence_system.get("subject_unified_lineage") or {})
         except Exception as exc:
             logger.debug("operator_snapshot: presence tristate unavailable: %s", exc)
 
@@ -1889,9 +1881,11 @@ class OperatorSurface:
             ``error`` field on failure.
         """
         from core.operator_action_contract import (
+            OPERATOR_ACTION_ENTRY_MODE,
             OperatorActionKind,
             OperatorActionResult,
-            OPERATOR_ACTION_ENTRY_MODE,
+        )
+        from core.operator_action_contract import (
             build_operator_action_result_from_runtime_result as build_result_from_runtime_result,
         )
 
@@ -1919,8 +1913,7 @@ class OperatorSurface:
                 action_kind=action_kind,
                 accepted=False,
                 error=(
-                    "action blocked by policy/state gate: "
-                    f"{action_policy.get('reason', 'not currently available')}"
+                    "action blocked by policy/state gate: " f"{action_policy.get('reason', 'not currently available')}"
                 ),
                 runtime_result={
                     "policy_evaluation": "state_gate_blocked",
@@ -1948,6 +1941,7 @@ class OperatorSurface:
         ):
             try:
                 from core.desktop_presence_runtime import get_desktop_presence_runtime
+
                 runtime = get_desktop_presence_runtime()
                 result = await runtime.handle_request(
                     message=request.message,
@@ -1957,9 +1951,7 @@ class OperatorSurface:
                     user_id=request.user_id or "operator",
                     context=list(request.context) if request.context else None,
                     required_capabilities=(
-                        list(request.required_capabilities)
-                        if request.required_capabilities
-                        else None
+                        list(request.required_capabilities) if request.required_capabilities else None
                     ),
                     entry_mode=OPERATOR_ACTION_ENTRY_MODE,
                 )
@@ -1999,10 +1991,11 @@ class OperatorSurface:
                 )
             try:
                 from core.delegated_flow_entity import (
-                    get_delegated_flow,
-                    advance_flow_phase,
                     DelegatedFlowSignal,
+                    advance_flow_phase,
+                    get_delegated_flow,
                 )
+
                 entity = get_delegated_flow(flow_id)
                 if entity is None:
                     return OperatorActionResult(
@@ -2071,9 +2064,10 @@ class OperatorSurface:
             # runtime handling + full causal audit recording.
             try:
                 from core.pr4_operator_action_governance import (
-                    execute_governed_operator_action,
                     OperatorActionOrchestrationOutcome,
+                    execute_governed_operator_action,
                 )
+
                 orchestration = execute_governed_operator_action(
                     action_kind=action_kind,
                     action_id=action_id,

@@ -20,18 +20,19 @@ Usage
 from __future__ import annotations
 
 import logging  # auto: ensure module logger is defined
+
 logger = logging.getLogger(__name__)
 
 
 from typing import Optional
 
 from core.control_plane.audit_ledger import AuditLedger
-from core.control_plane.smart_scheduler import DeviceScoringEngine
+from core.control_plane.device_health_registry import DeviceHealthRegistry
 from core.control_plane.security_interceptor import (
     ApprovalRegistry,
     SecurityInterceptor,
 )
-from core.control_plane.device_health_registry import DeviceHealthRegistry
+from core.control_plane.smart_scheduler import DeviceScoringEngine
 
 # ---------------------------------------------------------------------------
 # Lazy singletons
@@ -108,11 +109,7 @@ def _wire_health_audit_callback(registry: DeviceHealthRegistry) -> None:
         if ev_type is None:
             return
         try:
-            severity = (
-                Severity.WARNING
-                if ev_type == EventType.DEVICE_CIRCUIT_OPEN
-                else Severity.INFO
-            )
+            severity = Severity.WARNING if ev_type == EventType.DEVICE_CIRCUIT_OPEN else Severity.INFO
             get_audit_ledger().append(
                 ev_type,
                 severity=severity,

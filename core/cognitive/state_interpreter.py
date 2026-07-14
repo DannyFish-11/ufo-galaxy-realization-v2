@@ -288,9 +288,7 @@ class StateInterpreter:
             import json
             import pathlib
 
-            return json.loads(
-                (pathlib.Path(__file__).parents[2] / "config.json").read_text()
-            )
+            return json.loads((pathlib.Path(__file__).parents[2] / "config.json").read_text())
         except Exception:
             return {}
 

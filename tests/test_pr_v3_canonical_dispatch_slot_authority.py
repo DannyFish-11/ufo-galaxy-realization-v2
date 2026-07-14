@@ -88,11 +88,12 @@ try:
         POLICY_ALLOWANCE_GATES_DISPATCH_POLICY,
         WAKE_MUST_NOT_BYPASS_CANONICAL_SLOT_POLICY,
         CanonicalDispatchSlot,
-        CanonicalDispatchSlotStatus,
         CanonicalDispatchSlotsResult,
+        CanonicalDispatchSlotStatus,
         evaluate_canonical_dispatch_slot,
         get_canonical_dispatch_slots,
     )
+
     _AUTHORITY_AVAILABLE = True
 except ImportError:
     _AUTHORITY_AVAILABLE = False
@@ -102,6 +103,7 @@ try:
         CANONICAL_DISPATCH_SLOT_AUTHORITY_CONSUMES_THIS_GATE_POLICY,
         DispatchReadinessStatus,
     )
+
     _GATE_AVAILABLE = True
 except ImportError:
     _GATE_AVAILABLE = False
@@ -110,6 +112,7 @@ try:
     from core.unified_orchestration_spine import (
         CANONICAL_DISPATCH_SLOT_AUTHORITY_IS_SPINE_CONSUMER_POLICY,
     )
+
     _SPINE_AVAILABLE = True
 except ImportError:
     _SPINE_AVAILABLE = False
@@ -130,6 +133,7 @@ def _make_ready_gate_result(device_id: str) -> Any:
         DispatchReadinessResult,
         DispatchReadinessStatus,
     )
+
     return DispatchReadinessResult(
         device_id=device_id,
         dispatch_ready=True,
@@ -148,6 +152,7 @@ def _make_ready_gate_result(device_id: str) -> Any:
 def _make_blocked_gate_result(device_id: str, status: str, reason: str) -> Any:
     """Build a mock DispatchReadinessResult that blocks at the base gate."""
     from core.unified_dispatch_readiness_gate import DispatchReadinessResult
+
     return DispatchReadinessResult(
         device_id=device_id,
         dispatch_ready=False,
@@ -259,15 +264,11 @@ class TestSlotStatusEnum:
 
     def test_all_expected_statuses_present(self) -> None:
         actual = {m.value for m in CanonicalDispatchSlotStatus}
-        assert self._EXPECTED_STATUSES <= actual, (
-            f"Missing statuses: {self._EXPECTED_STATUSES - actual}"
-        )
+        assert self._EXPECTED_STATUSES <= actual, f"Missing statuses: {self._EXPECTED_STATUSES - actual}"
 
     def test_statuses_are_strings(self) -> None:
         for member in CanonicalDispatchSlotStatus:
-            assert isinstance(member.value, str), (
-                f"Status {member.name!r} value is not a string"
-            )
+            assert isinstance(member.value, str), f"Status {member.name!r} value is not a string"
 
     def test_slot_approved_is_the_only_positive_status(self) -> None:
         approved = [m for m in CanonicalDispatchSlotStatus if m.value == "slot_approved"]
@@ -284,12 +285,25 @@ class TestSlotSerialisation:
     """CanonicalDispatchSlot to_dict / to_json are stable."""
 
     _REQUIRED_FIELDS = {
-        "device_id", "execution_mode", "slot_approved", "status", "reason",
-        "dimension_results", "blocking_dimension", "registered",
-        "transport_alive", "attachment_state", "runtime_session_id",
-        "runtime_attachment_session_id", "registration_gaps",
-        "continuity_verdict", "execution_mode_eligible", "occupancy_clear",
-        "policy_allowed", "delegated_handoff_acceptable", "authority_notes",
+        "device_id",
+        "execution_mode",
+        "slot_approved",
+        "status",
+        "reason",
+        "dimension_results",
+        "blocking_dimension",
+        "registered",
+        "transport_alive",
+        "attachment_state",
+        "runtime_session_id",
+        "runtime_attachment_session_id",
+        "registration_gaps",
+        "continuity_verdict",
+        "execution_mode_eligible",
+        "occupancy_clear",
+        "policy_allowed",
+        "delegated_handoff_acceptable",
+        "authority_notes",
         "authority",
     }
 
@@ -352,6 +366,7 @@ class TestSlotHappyPath:
             _eval_occupancy,
             _eval_policy_allowance,
         )
+
         ready = _make_ready_gate_result(device_id)
         patches = [
             patch(
@@ -390,7 +405,9 @@ class TestSlotHappyPath:
             patch("core.canonical_dispatch_slot_authority._eval_execution_mode_eligibility", return_value=(True, [])),
             patch("core.canonical_dispatch_slot_authority._eval_occupancy", return_value=(True, [])),
             patch("core.canonical_dispatch_slot_authority._eval_policy_allowance", return_value=(True, [])),
-            patch("core.canonical_dispatch_slot_authority._eval_delegated_handoff_acceptability", return_value=(True, [])),
+            patch(
+                "core.canonical_dispatch_slot_authority._eval_delegated_handoff_acceptability", return_value=(True, [])
+            ),
         ):
             slot = evaluate_canonical_dispatch_slot(did, "cross_device")
 
@@ -406,7 +423,9 @@ class TestSlotHappyPath:
             patch("core.canonical_dispatch_slot_authority._eval_execution_mode_eligibility", return_value=(True, [])),
             patch("core.canonical_dispatch_slot_authority._eval_occupancy", return_value=(True, [])),
             patch("core.canonical_dispatch_slot_authority._eval_policy_allowance", return_value=(True, [])),
-            patch("core.canonical_dispatch_slot_authority._eval_delegated_handoff_acceptability", return_value=(True, [])),
+            patch(
+                "core.canonical_dispatch_slot_authority._eval_delegated_handoff_acceptability", return_value=(True, [])
+            ),
         ):
             slot = evaluate_canonical_dispatch_slot(did, "cross_device")
 
@@ -421,15 +440,22 @@ class TestSlotHappyPath:
             patch("core.canonical_dispatch_slot_authority._eval_execution_mode_eligibility", return_value=(True, [])),
             patch("core.canonical_dispatch_slot_authority._eval_occupancy", return_value=(True, [])),
             patch("core.canonical_dispatch_slot_authority._eval_policy_allowance", return_value=(True, [])),
-            patch("core.canonical_dispatch_slot_authority._eval_delegated_handoff_acceptability", return_value=(True, [])),
+            patch(
+                "core.canonical_dispatch_slot_authority._eval_delegated_handoff_acceptability", return_value=(True, [])
+            ),
         ):
             slot = evaluate_canonical_dispatch_slot(did, "cross_device")
 
         expected_dims = {
-            "transport_readiness", "registration_validity", "attachment_validity",
-            "capability_fit", "cross_device_reachability",
-            "continuity_legality", "execution_mode_eligibility",
-            "occupancy", "policy_allowance",
+            "transport_readiness",
+            "registration_validity",
+            "attachment_validity",
+            "capability_fit",
+            "cross_device_reachability",
+            "continuity_legality",
+            "execution_mode_eligibility",
+            "occupancy",
+            "policy_allowance",
         }
         for dim in expected_dims:
             assert dim in slot.dimension_results, f"Missing dimension: {dim!r}"
@@ -462,9 +488,7 @@ class TestBaseGateBlocking:
 
     def test_stale_attachment_produces_slot_blocked_attachment(self) -> None:
         did = _device_id()
-        blocked = _make_blocked_gate_result(
-            did, "blocked_stale_attachment", "session replaced"
-        )
+        blocked = _make_blocked_gate_result(did, "blocked_stale_attachment", "session replaced")
         with patch("core.canonical_dispatch_slot_authority._eval_base_readiness_gate", return_value=blocked):
             slot = evaluate_canonical_dispatch_slot(did, "delegated_runtime")
         assert slot.slot_approved is False
@@ -472,9 +496,7 @@ class TestBaseGateBlocking:
 
     def test_registration_gap_produces_slot_blocked_registration(self) -> None:
         did = _device_id()
-        blocked = _make_blocked_gate_result(
-            did, "blocked_registration_gap", "UDM write failed"
-        )
+        blocked = _make_blocked_gate_result(did, "blocked_registration_gap", "UDM write failed")
         blocked.registration_gaps = ["udm_write_failed"]
         with patch("core.canonical_dispatch_slot_authority._eval_base_readiness_gate", return_value=blocked):
             slot = evaluate_canonical_dispatch_slot(did, "single_device_remote")
@@ -499,8 +521,10 @@ class TestNewDimensionBlocking:
         ready = self._ready_gate(did)
         with (
             patch("core.canonical_dispatch_slot_authority._eval_base_readiness_gate", return_value=ready),
-            patch("core.canonical_dispatch_slot_authority._eval_continuity_legality",
-                  return_value=("reject", ["stale runtime identity"])),
+            patch(
+                "core.canonical_dispatch_slot_authority._eval_continuity_legality",
+                return_value=("reject", ["stale runtime identity"]),
+            ),
         ):
             slot = evaluate_canonical_dispatch_slot(did, "cross_device")
         assert slot.slot_approved is False
@@ -512,8 +536,10 @@ class TestNewDimensionBlocking:
         ready = self._ready_gate(did)
         with (
             patch("core.canonical_dispatch_slot_authority._eval_base_readiness_gate", return_value=ready),
-            patch("core.canonical_dispatch_slot_authority._eval_continuity_legality",
-                  return_value=("hard_reject", ["revoked session"])),
+            patch(
+                "core.canonical_dispatch_slot_authority._eval_continuity_legality",
+                return_value=("hard_reject", ["revoked session"]),
+            ),
         ):
             slot = evaluate_canonical_dispatch_slot(did, "delegated_runtime")
         assert slot.slot_approved is False
@@ -524,10 +550,11 @@ class TestNewDimensionBlocking:
         ready = self._ready_gate(did)
         with (
             patch("core.canonical_dispatch_slot_authority._eval_base_readiness_gate", return_value=ready),
-            patch("core.canonical_dispatch_slot_authority._eval_continuity_legality",
-                  return_value=("allow", [])),
-            patch("core.canonical_dispatch_slot_authority._eval_execution_mode_eligibility",
-                  return_value=(False, ["device does not support concurrent execution"])),
+            patch("core.canonical_dispatch_slot_authority._eval_continuity_legality", return_value=("allow", [])),
+            patch(
+                "core.canonical_dispatch_slot_authority._eval_execution_mode_eligibility",
+                return_value=(False, ["device does not support concurrent execution"]),
+            ),
         ):
             slot = evaluate_canonical_dispatch_slot(did, "parallel_fanout")
         assert slot.slot_approved is False
@@ -539,12 +566,12 @@ class TestNewDimensionBlocking:
         ready = self._ready_gate(did)
         with (
             patch("core.canonical_dispatch_slot_authority._eval_base_readiness_gate", return_value=ready),
-            patch("core.canonical_dispatch_slot_authority._eval_continuity_legality",
-                  return_value=("allow", [])),
-            patch("core.canonical_dispatch_slot_authority._eval_execution_mode_eligibility",
-                  return_value=(True, [])),
-            patch("core.canonical_dispatch_slot_authority._eval_occupancy",
-                  return_value=(False, ["device at task capacity"])),
+            patch("core.canonical_dispatch_slot_authority._eval_continuity_legality", return_value=("allow", [])),
+            patch("core.canonical_dispatch_slot_authority._eval_execution_mode_eligibility", return_value=(True, [])),
+            patch(
+                "core.canonical_dispatch_slot_authority._eval_occupancy",
+                return_value=(False, ["device at task capacity"]),
+            ),
         ):
             slot = evaluate_canonical_dispatch_slot(did, "cross_device")
         assert slot.slot_approved is False
@@ -556,14 +583,13 @@ class TestNewDimensionBlocking:
         ready = self._ready_gate(did)
         with (
             patch("core.canonical_dispatch_slot_authority._eval_base_readiness_gate", return_value=ready),
-            patch("core.canonical_dispatch_slot_authority._eval_continuity_legality",
-                  return_value=("allow", [])),
-            patch("core.canonical_dispatch_slot_authority._eval_execution_mode_eligibility",
-                  return_value=(True, [])),
-            patch("core.canonical_dispatch_slot_authority._eval_occupancy",
-                  return_value=(True, [])),
-            patch("core.canonical_dispatch_slot_authority._eval_policy_allowance",
-                  return_value=(False, ["device is in maintenance mode"])),
+            patch("core.canonical_dispatch_slot_authority._eval_continuity_legality", return_value=("allow", [])),
+            patch("core.canonical_dispatch_slot_authority._eval_execution_mode_eligibility", return_value=(True, [])),
+            patch("core.canonical_dispatch_slot_authority._eval_occupancy", return_value=(True, [])),
+            patch(
+                "core.canonical_dispatch_slot_authority._eval_policy_allowance",
+                return_value=(False, ["device is in maintenance mode"]),
+            ),
         ):
             slot = evaluate_canonical_dispatch_slot(did, "single_device_remote")
         assert slot.slot_approved is False
@@ -575,16 +601,14 @@ class TestNewDimensionBlocking:
         ready = self._ready_gate(did)
         with (
             patch("core.canonical_dispatch_slot_authority._eval_base_readiness_gate", return_value=ready),
-            patch("core.canonical_dispatch_slot_authority._eval_continuity_legality",
-                  return_value=("allow", [])),
-            patch("core.canonical_dispatch_slot_authority._eval_execution_mode_eligibility",
-                  return_value=(True, [])),
-            patch("core.canonical_dispatch_slot_authority._eval_occupancy",
-                  return_value=(True, [])),
-            patch("core.canonical_dispatch_slot_authority._eval_policy_allowance",
-                  return_value=(True, [])),
-            patch("core.canonical_dispatch_slot_authority._eval_delegated_handoff_acceptability",
-                  return_value=(False, ["DelegatedFlowAcceptanceGate: rejected"])),
+            patch("core.canonical_dispatch_slot_authority._eval_continuity_legality", return_value=("allow", [])),
+            patch("core.canonical_dispatch_slot_authority._eval_execution_mode_eligibility", return_value=(True, [])),
+            patch("core.canonical_dispatch_slot_authority._eval_occupancy", return_value=(True, [])),
+            patch("core.canonical_dispatch_slot_authority._eval_policy_allowance", return_value=(True, [])),
+            patch(
+                "core.canonical_dispatch_slot_authority._eval_delegated_handoff_acceptability",
+                return_value=(False, ["DelegatedFlowAcceptanceGate: rejected"]),
+            ),
         ):
             slot = evaluate_canonical_dispatch_slot(did, "delegated_runtime")
         assert slot.slot_approved is False
@@ -704,17 +728,20 @@ class TestExecutionModesCoverageByAuthority:
             reason="mock",
         )
 
-    @pytest.mark.parametrize("mode", [
-        "parallel_fanout",
-        "delegated_runtime",
-        "wake_routed",
-        "handoff",
-        "hybrid",
-        "cross_device",
-        "single_device_remote",
-        "local",
-        "takeover",
-    ])
+    @pytest.mark.parametrize(
+        "mode",
+        [
+            "parallel_fanout",
+            "delegated_runtime",
+            "wake_routed",
+            "handoff",
+            "hybrid",
+            "cross_device",
+            "single_device_remote",
+            "local",
+            "takeover",
+        ],
+    )
     def test_mode_calls_evaluate_canonical_slot(self, mode: str) -> None:
         """evaluate_canonical_dispatch_slot is the call site for every mode."""
         did = _device_id()
@@ -765,14 +792,10 @@ class TestExecutionModesCoverageByAuthority:
         ready = _make_ready_gate_result(did)
         with (
             patch("core.canonical_dispatch_slot_authority._eval_base_readiness_gate", return_value=ready),
-            patch("core.canonical_dispatch_slot_authority._eval_continuity_legality",
-                  return_value=("allow", [])),
-            patch("core.canonical_dispatch_slot_authority._eval_execution_mode_eligibility",
-                  return_value=(True, [])),
-            patch("core.canonical_dispatch_slot_authority._eval_occupancy",
-                  return_value=(True, [])),
-            patch("core.canonical_dispatch_slot_authority._eval_policy_allowance",
-                  return_value=(True, [])),
+            patch("core.canonical_dispatch_slot_authority._eval_continuity_legality", return_value=("allow", [])),
+            patch("core.canonical_dispatch_slot_authority._eval_execution_mode_eligibility", return_value=(True, [])),
+            patch("core.canonical_dispatch_slot_authority._eval_occupancy", return_value=(True, [])),
+            patch("core.canonical_dispatch_slot_authority._eval_policy_allowance", return_value=(True, [])),
             patch(
                 "core.canonical_dispatch_slot_authority._eval_delegated_handoff_acceptability",
                 return_value=(True, []),
@@ -845,11 +868,15 @@ class TestDispatchReadinessStatusNewValues:
     def test_original_values_still_present(self) -> None:
         """Ensure backward compatibility — original statuses must still exist."""
         for name in (
-            "DISPATCH_READY", "REGISTERED_NOT_READY", "BLOCKED_REGISTRATION_GAP",
-            "BLOCKED_STALE_ATTACHMENT", "BLOCKED_TRANSPORT", "BLOCKED_CAPABILITY",
-            "BLOCKED_SESSION_VALIDITY", "BLOCKED_CROSS_DEVICE_ELIGIBILITY",
-            "NOT_REGISTERED", "GATE_ERROR",
+            "DISPATCH_READY",
+            "REGISTERED_NOT_READY",
+            "BLOCKED_REGISTRATION_GAP",
+            "BLOCKED_STALE_ATTACHMENT",
+            "BLOCKED_TRANSPORT",
+            "BLOCKED_CAPABILITY",
+            "BLOCKED_SESSION_VALIDITY",
+            "BLOCKED_CROSS_DEVICE_ELIGIBILITY",
+            "NOT_REGISTERED",
+            "GATE_ERROR",
         ):
-            assert hasattr(DispatchReadinessStatus, name), (
-                f"Original DispatchReadinessStatus.{name} is missing"
-            )
+            assert hasattr(DispatchReadinessStatus, name), f"Original DispatchReadinessStatus.{name} is missing"

@@ -147,18 +147,21 @@ MERGE_TRIGGERED_WHEN_BARRIER_RELEASED_POLICY: str = (
 def _import_session_contracts() -> Any:
     """Lazily import contracts.mesh_session."""
     from contracts import mesh_session as _mod
+
     return _mod
 
 
 def _import_live_coordinator() -> Any:
     """Lazily import LiveMeshSessionCoordinator."""
     from core.mesh.live_mesh_session_coordinator import LiveMeshSessionCoordinator
+
     return LiveMeshSessionCoordinator
 
 
 def _import_coordinator_contracts() -> Any:
     """Lazily import contracts.mesh_session_coordinator."""
     from contracts import mesh_session_coordinator as _mod
+
     return _mod
 
 
@@ -287,17 +290,11 @@ class MeshSessionProgressionDriver:
             if isinstance(mesh_session, mod.MeshSession):
                 return mesh_session
             if isinstance(mesh_session, dict):
-                return mod.MeshSession(**{
-                    k: v for k, v in mesh_session.items()
-                    if k in mod.MeshSession.model_fields
-                })
+                return mod.MeshSession(**{k: v for k, v in mesh_session.items() if k in mod.MeshSession.model_fields})
             # Accept anything with a to_dict / model_dump surface
             if hasattr(mesh_session, "to_dict"):
                 d = mesh_session.to_dict()
-                return mod.MeshSession(**{
-                    k: v for k, v in d.items()
-                    if k in mod.MeshSession.model_fields
-                })
+                return mod.MeshSession(**{k: v for k, v in d.items() if k in mod.MeshSession.model_fields})
             return mesh_session
         except Exception as exc:
             self._errors.append(f"normalise_session_error:{exc}")
@@ -393,9 +390,7 @@ class MeshSessionProgressionDriver:
         with self._lock:
             try:
                 if self._coordinator is not None:
-                    self._coordinator.add_participant(
-                        device_id, roles=roles, online=online, metadata=metadata
-                    )
+                    self._coordinator.add_participant(device_id, roles=roles, online=online, metadata=metadata)
                 _logger.info(
                     "progression_driver_event: participant_added session=%s device=%s",
                     self._session_id_unlocked(),
@@ -517,9 +512,7 @@ class MeshSessionProgressionDriver:
             return None
         return getattr(self._session, "session_id", None)
 
-    def _update_assignment_status_unlocked(
-        self, device_id: str, status: str
-    ) -> None:
+    def _update_assignment_status_unlocked(self, device_id: str, status: str) -> None:
         """Update ``MeshSubtaskAssignment.status`` for the given device."""
         try:
             if self._session is None:
@@ -574,9 +567,7 @@ class MeshSessionProgressionDriver:
                 return
 
             mod_session = _import_session_contracts()
-            current_session_status = getattr(
-                self._session, "status", mod_session.MeshSessionStatus.UNKNOWN
-            )
+            current_session_status = getattr(self._session, "status", mod_session.MeshSessionStatus.UNKNOWN)
             current_val = (
                 current_session_status.value
                 if hasattr(current_session_status, "value")
@@ -606,11 +597,7 @@ class MeshSessionProgressionDriver:
             coord_val = ""
             if coord_state is not None:
                 coord_status = getattr(coord_state, "status", None)
-                coord_val = (
-                    coord_status.value
-                    if hasattr(coord_status, "value")
-                    else str(coord_status or "")
-                )
+                coord_val = coord_status.value if hasattr(coord_status, "value") else str(coord_status or "")
 
             # Check if any participants are actively working (for ACTIVE transition)
             has_active_participants = False
@@ -618,9 +605,7 @@ class MeshSessionProgressionDriver:
                 participants = getattr(coord_state, "participants", []) or []
                 for p in participants:
                     p_status = getattr(p, "status", None)
-                    p_val = (
-                        p_status.value if hasattr(p_status, "value") else str(p_status or "")
-                    )
+                    p_val = p_status.value if hasattr(p_status, "value") else str(p_status or "")
                     if p_val in ("working", "ready", "completed", "waiting"):
                         has_active_participants = True
                         break
@@ -654,20 +639,16 @@ class MeshSessionProgressionDriver:
             allowed = valid_map.get(current_session_status, set())
             if target not in allowed:
                 _logger.debug(
-                    "progression_driver_event: skipping_invalid_transition "
-                    "session=%s from=%s to=%s",
+                    "progression_driver_event: skipping_invalid_transition " "session=%s from=%s to=%s",
                     self._session_id_unlocked(),
                     current_val,
                     target.value if hasattr(target, "value") else str(target),
                 )
                 return
 
-            self._session = self._session.model_copy(
-                update={"status": target, "updated_at": time.time()}
-            )
+            self._session = self._session.model_copy(update={"status": target, "updated_at": time.time()})
             _logger.info(
-                "progression_driver_event: session_status_advanced session=%s "
-                "from=%s to=%s coordinator_status=%s",
+                "progression_driver_event: session_status_advanced session=%s " "from=%s to=%s coordinator_status=%s",
                 self._session_id_unlocked(),
                 current_val,
                 target.value if hasattr(target, "value") else str(target),
@@ -675,9 +656,7 @@ class MeshSessionProgressionDriver:
             )
         except Exception as exc:
             self._errors.append(f"advance_session_status_error:{exc}")
-            _logger.warning(
-                "MeshSessionProgressionDriver._advance_session_status_unlocked: %s", exc
-            )
+            _logger.warning("MeshSessionProgressionDriver._advance_session_status_unlocked: %s", exc)
 
     # ------------------------------------------------------------------
     # Finalisation
@@ -729,9 +708,7 @@ class MeshSessionProgressionDriver:
 
             # Propagate coordinator errors
             if run_result is not None and hasattr(run_result, "errors") and snapshot_errors:
-                combined = list(run_result.errors) + [
-                    e for e in snapshot_errors if e not in run_result.errors
-                ]
+                combined = list(run_result.errors) + [e for e in snapshot_errors if e not in run_result.errors]
                 run_result.errors = combined
 
             return MeshSessionProgressionFinalResult(
@@ -749,9 +726,7 @@ class MeshSessionProgressionDriver:
                 errors=snapshot_errors,
             )
 
-    def _advance_session_status_from_run_result_unlocked(
-        self, run_result: Any
-    ) -> None:
+    def _advance_session_status_from_run_result_unlocked(self, run_result: Any) -> None:
         """Final session status update based on the run_result outcome."""
         try:
             if self._session is None or run_result is None:
@@ -774,9 +749,7 @@ class MeshSessionProgressionDriver:
             if target not in allowed:
                 return
 
-            self._session = self._session.model_copy(
-                update={"status": target, "updated_at": time.time()}
-            )
+            self._session = self._session.model_copy(update={"status": target, "updated_at": time.time()})
             _logger.info(
                 "progression_driver_event: session_finalized session=%s outcome=%s final_status=%s",
                 self._session_id_unlocked(),

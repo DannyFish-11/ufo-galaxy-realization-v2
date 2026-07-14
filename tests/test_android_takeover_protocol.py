@@ -28,10 +28,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _run(coro):
     return asyncio.new_event_loop().run_until_complete(coro)
@@ -71,14 +71,17 @@ def _make_reject_message(
 # A.  MessageType enum
 # ============================================================================
 
+
 class TestMessageTypeEnum:
 
     def test_A01_takeover_request_present(self):
         from galaxy_gateway.protocol.aip_v3 import MessageType
+
         assert MessageType.TAKEOVER_REQUEST.value == "takeover_request"
 
     def test_A02_takeover_response_present(self):
         from galaxy_gateway.protocol.aip_v3 import MessageType
+
         assert MessageType.TAKEOVER_RESPONSE.value == "takeover_response"
 
 
@@ -86,10 +89,12 @@ class TestMessageTypeEnum:
 # B.  MessageBuilder
 # ============================================================================
 
+
 class TestMessageBuilder:
 
     def test_B01_takeover_request_type(self):
         from galaxy_gateway.android.message_builder import MessageBuilder
+
         msg = MessageBuilder.takeover_request(
             device_id="dev-1",
             takeover_id="tkv-abc",
@@ -98,6 +103,7 @@ class TestMessageBuilder:
 
     def test_B02_takeover_request_required_fields(self):
         from galaxy_gateway.android.message_builder import MessageBuilder
+
         msg = MessageBuilder.takeover_request(
             device_id="dev-1",
             takeover_id="tkv-abc",
@@ -110,6 +116,7 @@ class TestMessageBuilder:
 
     def test_B03_takeover_request_optional_fields(self):
         from galaxy_gateway.android.message_builder import MessageBuilder
+
         ctx = {"goal": "open camera"}
         msg = MessageBuilder.takeover_request(
             device_id="dev-1",
@@ -128,6 +135,7 @@ class TestMessageBuilder:
 
     def test_B04_takeover_request_default_timeout(self):
         from galaxy_gateway.android.message_builder import MessageBuilder
+
         msg = MessageBuilder.takeover_request(device_id="dev-1", takeover_id="tkv-abc")
         assert msg["timeout"] == 60
 
@@ -136,6 +144,7 @@ class TestMessageBuilder:
 # C.  Handler module importability
 # ============================================================================
 
+
 class TestHandlerImport:
 
     def test_C01_module_importable(self):
@@ -143,6 +152,7 @@ class TestHandlerImport:
 
     def test_C02_handle_takeover_response_is_coroutine_function(self):
         from galaxy_gateway.android.handlers.takeover_response import handle_takeover_response
+
         assert asyncio.iscoroutinefunction(handle_takeover_response)
 
 
@@ -150,21 +160,25 @@ class TestHandlerImport:
 # D.  AndroidBridge handler registration
 # ============================================================================
 
+
 class TestHandlerRegistration:
 
     def _make_bridge(self) -> Any:
         from galaxy_gateway.android_bridge import AndroidBridge
+
         return AndroidBridge()
 
     def test_D01_takeover_response_registered(self):
         from galaxy_gateway.protocol.aip_v3 import MessageType
+
         bridge = self._make_bridge()
         assert MessageType.TAKEOVER_RESPONSE in bridge._message_handlers
 
     def test_D02_handler_is_not_catch_all(self):
         """TAKEOVER_RESPONSE must not fall back to handle_unregistered."""
-        from galaxy_gateway.protocol.aip_v3 import MessageType
         from galaxy_gateway.android.handlers.generic import handle_generic_forward
+        from galaxy_gateway.protocol.aip_v3 import MessageType
+
         bridge = self._make_bridge()
         # The registered handler wrapper is distinct from the unregistered catch-all.
         # We verify it is set (not None) and is callable.
@@ -177,22 +191,26 @@ class TestHandlerRegistration:
 # E.  Handler behaviour — Android accepts takeover
 # ============================================================================
 
+
 class TestHandlerAccept:
 
     def test_E01_returns_ack_type_on_accept(self):
         from galaxy_gateway.android.handlers.takeover_response import handle_takeover_response
+
         msg = _make_accept_message()
         resp = _run(handle_takeover_response(MagicMock(), None, msg))
         assert resp["type"] == "takeover_response_ack"
 
     def test_E02_ack_reflects_accepted_true(self):
         from galaxy_gateway.android.handlers.takeover_response import handle_takeover_response
+
         msg = _make_accept_message()
         resp = _run(handle_takeover_response(MagicMock(), None, msg))
         assert resp["accepted"] is True
 
     def test_E03_ack_echoes_takeover_id(self):
         from galaxy_gateway.android.handlers.takeover_response import handle_takeover_response
+
         tid = f"tkv_{uuid.uuid4().hex[:10]}"
         msg = _make_accept_message(takeover_id=tid)
         resp = _run(handle_takeover_response(MagicMock(), None, msg))
@@ -203,22 +221,26 @@ class TestHandlerAccept:
 # F.  Handler behaviour — Android rejects takeover
 # ============================================================================
 
+
 class TestHandlerReject:
 
     def test_F01_returns_ack_type_on_reject(self):
         from galaxy_gateway.android.handlers.takeover_response import handle_takeover_response
+
         msg = _make_reject_message()
         resp = _run(handle_takeover_response(MagicMock(), None, msg))
         assert resp["type"] == "takeover_response_ack"
 
     def test_F02_ack_reflects_accepted_false(self):
         from galaxy_gateway.android.handlers.takeover_response import handle_takeover_response
+
         msg = _make_reject_message()
         resp = _run(handle_takeover_response(MagicMock(), None, msg))
         assert resp["accepted"] is False
 
     def test_F03_ack_echoes_takeover_id(self):
         from galaxy_gateway.android.handlers.takeover_response import handle_takeover_response
+
         tid = f"tkv_{uuid.uuid4().hex[:10]}"
         msg = _make_reject_message(takeover_id=tid)
         resp = _run(handle_takeover_response(MagicMock(), None, msg))
@@ -229,10 +251,12 @@ class TestHandlerReject:
 # G.  Tracking integration called on accept
 # ============================================================================
 
+
 class TestTrackingOnAccept:
 
     def test_G01_tracking_called_with_accepted_true(self):
         from galaxy_gateway.android.handlers.takeover_response import handle_takeover_response
+
         tid = f"tkv_{uuid.uuid4().hex[:10]}"
         msg = _make_accept_message(takeover_id=tid)
 
@@ -251,6 +275,7 @@ class TestTrackingOnAccept:
 
     def test_G02_tracking_receives_device_id_on_accept(self):
         from galaxy_gateway.android.handlers.takeover_response import handle_takeover_response
+
         msg = _make_accept_message(device_id="my-android-device")
 
         coordinator = MagicMock()
@@ -267,10 +292,12 @@ class TestTrackingOnAccept:
 # H.  Tracking integration called on reject
 # ============================================================================
 
+
 class TestTrackingOnReject:
 
     def test_H01_tracking_called_with_accepted_false(self):
         from galaxy_gateway.android.handlers.takeover_response import handle_takeover_response
+
         tid = f"tkv_{uuid.uuid4().hex[:10]}"
         msg = _make_reject_message(takeover_id=tid)
 
@@ -287,6 +314,7 @@ class TestTrackingOnReject:
 
     def test_H02_tracking_receives_reason_on_reject(self):
         from galaxy_gateway.android.handlers.takeover_response import handle_takeover_response
+
         msg = _make_reject_message()
         msg["reason"] = "screen locked"
 
@@ -304,6 +332,7 @@ class TestTrackingOnReject:
 # I.  Session recovery across reconnect takeover responses
 # ============================================================================
 
+
 class TestTakeoverResponseSessionRecovery:
 
     def test_I01_missing_session_id_uses_active_registry_session(self):
@@ -315,12 +344,15 @@ class TestTakeoverResponseSessionRecovery:
         coordinator = MagicMock()
         coordinator.on_takeover_response = MagicMock()
 
-        with patch(
-            "galaxy_gateway.android.handlers.takeover_response._lookup_session_by_device",
-            return_value=SimpleNamespace(runtime_session_id=expected_session_id),
-        ) as mock_lookup, patch(
-            "galaxy_gateway.android.handlers.takeover_response._get_lifecycle_coordinator",
-            return_value=coordinator,
+        with (
+            patch(
+                "galaxy_gateway.android.handlers.takeover_response._lookup_session_by_device",
+                return_value=SimpleNamespace(runtime_session_id=expected_session_id),
+            ) as mock_lookup,
+            patch(
+                "galaxy_gateway.android.handlers.takeover_response._get_lifecycle_coordinator",
+                return_value=coordinator,
+            ),
         ):
             _run(handle_takeover_response(MagicMock(), None, msg))
 
@@ -335,28 +367,33 @@ class TestTakeoverResponseSessionRecovery:
         coordinator = MagicMock()
         coordinator.on_takeover_response = MagicMock()
 
-        with patch(
-            "galaxy_gateway.android.handlers.takeover_response._lookup_session_by_device",
-            return_value=None,
-        ), patch(
-            "galaxy_gateway.android.handlers.takeover_response._get_lifecycle_coordinator",
-            return_value=coordinator,
+        with (
+            patch(
+                "galaxy_gateway.android.handlers.takeover_response._lookup_session_by_device",
+                return_value=None,
+            ),
+            patch(
+                "galaxy_gateway.android.handlers.takeover_response._get_lifecycle_coordinator",
+                return_value=coordinator,
+            ),
         ):
             _run(handle_takeover_response(MagicMock(), None, msg))
 
-        assert coordinator.on_takeover_response.call_args.kwargs["session_id"] == "", (
-            "Coordinator API preserves empty-string session_id when lookup cannot recover it"
-        )
+        assert (
+            coordinator.on_takeover_response.call_args.kwargs["session_id"] == ""
+        ), "Coordinator API preserves empty-string session_id when lookup cannot recover it"
 
 
 # ============================================================================
 # J.  Tracking import failure degrades gracefully
 # ============================================================================
 
+
 class TestTrackingDegradeGracefully:
 
     def test_I01_ack_returned_even_when_tracking_unavailable(self):
         from galaxy_gateway.android.handlers.takeover_response import handle_takeover_response
+
         msg = _make_accept_message()
 
         with patch(
@@ -368,6 +405,7 @@ class TestTrackingDegradeGracefully:
 
     def test_I02_ack_returned_when_tracking_raises(self):
         from galaxy_gateway.android.handlers.takeover_response import handle_takeover_response
+
         msg = _make_reject_message()
 
         coordinator = MagicMock()
@@ -385,10 +423,12 @@ class TestTrackingDegradeGracefully:
 # K.  ACK response shape
 # ============================================================================
 
+
 class TestAckResponseShape:
 
     def _get_ack(self, accepted: bool) -> Dict[str, Any]:
         from galaxy_gateway.android.handlers.takeover_response import handle_takeover_response
+
         if accepted:
             msg = _make_accept_message()
         else:
@@ -422,6 +462,7 @@ class TestAckResponseShape:
 # L.  __init__.py re-exports
 # ============================================================================
 
+
 class TestInitReExport:
 
     def test_K01_handle_takeover_response_in_init(self):
@@ -429,6 +470,7 @@ class TestInitReExport:
 
     def test_K02_in_all_list(self):
         import galaxy_gateway.android.handlers as pkg
+
         assert "handle_takeover_response" in pkg.__all__
 
 
@@ -436,10 +478,12 @@ class TestInitReExport:
 # M.  AndroidBridge.send_takeover_request()
 # ============================================================================
 
+
 class TestSendTakeoverRequest:
 
     def _make_bridge(self) -> Any:
         from galaxy_gateway.android_bridge import AndroidBridge
+
         return AndroidBridge()
 
     def test_L01_method_exists(self):
@@ -477,13 +521,15 @@ class TestSendTakeoverRequest:
 
         bridge.send_to_device = _fake_send
 
-        _run(bridge.send_takeover_request(
-            "dev-1",
-            "tkv-xyz",
-            session_id="sess-99",
-            reason="need control",
-            trace_id="trace-001",
-        ))
+        _run(
+            bridge.send_takeover_request(
+                "dev-1",
+                "tkv-xyz",
+                session_id="sess-99",
+                reason="need control",
+                trace_id="trace-001",
+            )
+        )
 
         msg = sent_messages[0]
         assert msg.get("session_id") == "sess-99"
@@ -501,6 +547,7 @@ class TestSendTakeoverRequest:
 # N.  Mode gate — Axis-1 + Axis-7: takeover is mode-gated
 # ============================================================================
 
+
 class TestTakeoverModeGate:
     """Verify that send_takeover_request is strictly gated by system mode.
 
@@ -512,6 +559,7 @@ class TestTakeoverModeGate:
 
     def _make_bridge(self) -> Any:
         from galaxy_gateway.android_bridge import AndroidBridge
+
         return AndroidBridge()
 
     def test_M01_blocked_when_cross_device_disabled(self):
@@ -540,11 +588,13 @@ class TestTakeoverModeGate:
         bridge.send_to_device = AsyncMock()
 
         with patch("galaxy_gateway.android_bridge._is_cross_device_enabled", return_value=False):
-            result = _run(bridge.send_takeover_request(
-                "my-android",
-                "tkv-xyz",
-                trace_id="trace-999",
-            ))
+            result = _run(
+                bridge.send_takeover_request(
+                    "my-android",
+                    "tkv-xyz",
+                    trace_id="trace-999",
+                )
+            )
 
         assert result["takeover_id"] == "tkv-xyz"
         assert result["device_id"] == "my-android"
@@ -587,15 +637,13 @@ class TestTakeoverModeGate:
 
         def _fake_coordinator():
             coord = MagicMock()
-            coord.on_takeover_requested = MagicMock(
-                side_effect=lambda **kw: coordinator_calls.append(kw)
-            )
+            coord.on_takeover_requested = MagicMock(side_effect=lambda **kw: coordinator_calls.append(kw))
             return coord
 
-        with patch("galaxy_gateway.android_bridge._is_cross_device_enabled", return_value=False), \
-             patch("galaxy_gateway.android_bridge._get_lifecycle_coordinator", _fake_coordinator):
+        with (
+            patch("galaxy_gateway.android_bridge._is_cross_device_enabled", return_value=False),
+            patch("galaxy_gateway.android_bridge._get_lifecycle_coordinator", _fake_coordinator),
+        ):
             _run(bridge.send_takeover_request("dev-1", "tkv-blocked"))
 
-        assert len(coordinator_calls) == 0, (
-            "Lifecycle coordinator must not record a blocked takeover request"
-        )
+        assert len(coordinator_calls) == 0, "Lifecycle coordinator must not record a blocked takeover request"

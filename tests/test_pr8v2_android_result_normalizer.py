@@ -221,40 +221,55 @@ class TestGroupB_AndroidResultCategory:
 class TestGroupC_MessageTypeCategoryMapping:
 
     def test_C01_task_result_is_business_result(self) -> None:
-        assert classify_android_result_message({"type": "task_result"}) == \
-               AndroidResultCategory.user_visible_business_result
+        assert (
+            classify_android_result_message({"type": "task_result"})
+            == AndroidResultCategory.user_visible_business_result
+        )
 
     def test_C02_goal_execution_result_is_business_result(self) -> None:
-        assert classify_android_result_message({"type": "goal_execution_result"}) == \
-               AndroidResultCategory.user_visible_business_result
+        assert (
+            classify_android_result_message({"type": "goal_execution_result"})
+            == AndroidResultCategory.user_visible_business_result
+        )
 
     def test_C03_delegated_execution_signal_is_lifecycle(self) -> None:
-        assert classify_android_result_message({"type": "delegated_execution_signal"}) == \
-               AndroidResultCategory.runtime_lifecycle_signal
+        assert (
+            classify_android_result_message({"type": "delegated_execution_signal"})
+            == AndroidResultCategory.runtime_lifecycle_signal
+        )
 
     def test_C04_reconciliation_signal_is_authoritative_update(self) -> None:
-        assert classify_android_result_message({"type": "reconciliation_signal"}) == \
-               AndroidResultCategory.reconciliation_authoritative_update
+        assert (
+            classify_android_result_message({"type": "reconciliation_signal"})
+            == AndroidResultCategory.reconciliation_authoritative_update
+        )
 
     def test_C05_handoff_ack_is_authoritative_update(self) -> None:
-        assert classify_android_result_message({"type": "handoff_ack"}) == \
-               AndroidResultCategory.reconciliation_authoritative_update
+        assert (
+            classify_android_result_message({"type": "handoff_ack"})
+            == AndroidResultCategory.reconciliation_authoritative_update
+        )
 
     def test_C06_handoff_result_is_authoritative_update(self) -> None:
-        assert classify_android_result_message({"type": "handoff_result"}) == \
-               AndroidResultCategory.reconciliation_authoritative_update
+        assert (
+            classify_android_result_message({"type": "handoff_result"})
+            == AndroidResultCategory.reconciliation_authoritative_update
+        )
 
     def test_C07_handoff_failure_is_authoritative_update(self) -> None:
-        assert classify_android_result_message({"type": "handoff_failure"}) == \
-               AndroidResultCategory.reconciliation_authoritative_update
+        assert (
+            classify_android_result_message({"type": "handoff_failure"})
+            == AndroidResultCategory.reconciliation_authoritative_update
+        )
 
     def test_C08_handoff_envelope_v2_result_is_authoritative_update(self) -> None:
-        assert classify_android_result_message({"type": "handoff_envelope_v2_result"}) == \
-               AndroidResultCategory.reconciliation_authoritative_update
+        assert (
+            classify_android_result_message({"type": "handoff_envelope_v2_result"})
+            == AndroidResultCategory.reconciliation_authoritative_update
+        )
 
     def test_C09_unknown_type_returns_unknown(self) -> None:
-        assert classify_android_result_message({"type": "some_unknown_type"}) == \
-               AndroidResultCategory.unknown
+        assert classify_android_result_message({"type": "some_unknown_type"}) == AndroidResultCategory.unknown
 
     def test_C10_missing_type_returns_unknown(self) -> None:
         assert classify_android_result_message({}) == AndroidResultCategory.unknown
@@ -270,12 +285,16 @@ class TestGroupD_ClassifyMessage:
 
     def test_D01_case_sensitive_type_field(self) -> None:
         # Type values are lowercased before lookup; mixed case should match
-        assert classify_android_result_message({"type": "TASK_RESULT"}) == \
-               AndroidResultCategory.user_visible_business_result
+        assert (
+            classify_android_result_message({"type": "TASK_RESULT"})
+            == AndroidResultCategory.user_visible_business_result
+        )
 
     def test_D02_whitespace_stripped(self) -> None:
-        assert classify_android_result_message({"type": " task_result "}) == \
-               AndroidResultCategory.user_visible_business_result
+        assert (
+            classify_android_result_message({"type": " task_result "})
+            == AndroidResultCategory.user_visible_business_result
+        )
 
     def test_D03_none_type_returns_unknown(self) -> None:
         assert classify_android_result_message({"type": None}) == AndroidResultCategory.unknown
@@ -294,6 +313,7 @@ class TestGroupE_DedupGuard:
 
     def test_E01_reset_clears_guard(self) -> None:
         from core.android_result_normalizer import _dedup_commit, _dedup_is_committed
+
         _dedup_commit("contract:abc", "task_result")
         assert _dedup_is_committed("contract:abc")
         reset_terminal_dedup_guard()
@@ -301,6 +321,7 @@ class TestGroupE_DedupGuard:
 
     def test_E02_commit_then_hit(self) -> None:
         from core.android_result_normalizer import _dedup_commit, _dedup_is_committed
+
         key = "contract:" + str(uuid.uuid4())
         assert not _dedup_is_committed(key)
         _dedup_commit(key, "task_result")
@@ -308,6 +329,7 @@ class TestGroupE_DedupGuard:
 
     def test_E03_empty_key_never_commits(self) -> None:
         from core.android_result_normalizer import _dedup_commit, _dedup_is_committed
+
         _dedup_commit("", "task_result")
         assert not _dedup_is_committed("")
 
@@ -770,12 +792,15 @@ class TestGroupM_ResultAndReconciliationSignalDedup:
         non_terminal_signal = _make_accepted_signal_reconcile_outcome(phase_terminal=False)
         terminal_truth = _make_accepted_participant_truth_outcome(contract_id=contract_id)
 
-        with patch(
-            "core.android_result_normalizer._ingest_delegated_signal",
-            return_value=non_terminal_signal,
-        ), patch(
-            "core.android_result_normalizer._ingest_participant_truth",
-            return_value=terminal_truth,
+        with (
+            patch(
+                "core.android_result_normalizer._ingest_delegated_signal",
+                return_value=non_terminal_signal,
+            ),
+            patch(
+                "core.android_result_normalizer._ingest_participant_truth",
+                return_value=terminal_truth,
+            ),
         ):
             prog_out = normalize_android_result(progress_msg)
             result_out = normalize_android_result(result_msg)
@@ -799,6 +824,7 @@ class TestGroupN_GoalExecutionResultTruthIngress:
             from galaxy_gateway.android.handlers.goal_execution import (
                 _try_ingest_goal_result_truth,
             )
+
             assert callable(_try_ingest_goal_result_truth)
         except ImportError:
             pytest.skip("goal_execution handler unavailable")
@@ -807,6 +833,7 @@ class TestGroupN_GoalExecutionResultTruthIngress:
         """规范摄入绑定必须存在(收口时更名为 *_via_canonical_ingress)。"""
         try:
             import galaxy_gateway.android.handlers.goal_execution as ge
+
             assert hasattr(ge, "_ingest_goal_result_via_canonical_ingress")
         except ImportError:
             pytest.skip("goal_execution handler unavailable")
@@ -815,11 +842,13 @@ class TestGroupN_GoalExecutionResultTruthIngress:
         """handle_goal_execution_result must call _try_ingest_goal_result_truth."""
         try:
             import inspect
+
             import galaxy_gateway.android.handlers.goal_execution as ge
+
             src = inspect.getsource(ge.handle_goal_execution_result)
-            assert "_try_ingest_goal_result_truth" in src, (
-                "_try_ingest_goal_result_truth not called in handle_goal_execution_result"
-            )
+            assert (
+                "_try_ingest_goal_result_truth" in src
+            ), "_try_ingest_goal_result_truth not called in handle_goal_execution_result"
         except ImportError:
             pytest.skip("goal_execution handler unavailable")
 
@@ -827,6 +856,7 @@ class TestGroupN_GoalExecutionResultTruthIngress:
         """_try_ingest_goal_result_truth must not raise when ingress is None."""
         try:
             import galaxy_gateway.android.handlers.goal_execution as ge
+
             with patch.object(ge, "_ingest_goal_result_via_canonical_ingress", None):
                 ge._try_ingest_goal_result_truth({"type": "goal_execution_result"})
         except ImportError:

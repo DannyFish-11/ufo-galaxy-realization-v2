@@ -61,9 +61,7 @@ logger = logging.getLogger(__name__)
 # PR-3 canonical path sentinel
 # ---------------------------------------------------------------------------
 
-CANONICAL_HANDOFF_PATH_MAIN_REPO: str = (
-    "pr3_post533_canonical_handoff_path_main_repo_active"
-)
+CANONICAL_HANDOFF_PATH_MAIN_REPO: str = "pr3_post533_canonical_handoff_path_main_repo_active"
 """Sentinel: The canonical main-repo-side handoff/takeover path is active.
 
 The path is:
@@ -75,17 +73,13 @@ The path is:
 Both posture and coordination_role are propagated without loss.
 """
 
-CANONICAL_HANDOFF_POSTURE_AND_AUTHORITY_UNIFIED: str = (
-    "pr3_post533_canonical_handoff_posture_and_authority_unified"
-)
+CANONICAL_HANDOFF_POSTURE_AND_AUTHORITY_UNIFIED: str = "pr3_post533_canonical_handoff_posture_and_authority_unified"
 """Sentinel: Both source_runtime_posture (posture axis) and coordination_role
 (authority axis from PR-538) are first-class fields in HandoffContract and
 HandoffEnvelopeV2.  No loss at bridge, legacy-adapter, or envelope-builder
 boundaries."""
 
-CANONICAL_HANDOFF_PATH_SINGLE_CHAIN_ENFORCED: str = (
-    "pr3_post533_canonical_handoff_path_single_chain_enforced"
-)
+CANONICAL_HANDOFF_PATH_SINGLE_CHAIN_ENFORCED: str = "pr3_post533_canonical_handoff_path_single_chain_enforced"
 """Sentinel: All new handoff/takeover code on the main-repo side MUST go
 through the canonical chain.  Parallel/compat paths that bypass
 HandoffContract are legacy and MUST emit guardrail warnings."""
@@ -98,6 +92,12 @@ HandoffContract are legacy and MUST emit guardrail warnings."""
 # should import from here so they depend on the stable canonical surface
 # rather than the internal gateway/contracts modules directly.
 
+from contracts.handoff_envelope_v2 import (  # noqa: E402
+    HandoffEnvelopeV2,
+    build_handoff_envelope_v2,
+    from_bridge_inputs,
+    from_legacy_handoff_contract,
+)
 from galaxy_gateway.agent_bridge import (  # noqa: E402
     CANONICAL_HANDOFF_PATH_PR3,
     CANONICAL_HANDOFF_POSTURE_PROPAGATION_ACTIVE,
@@ -111,17 +111,11 @@ from galaxy_gateway.agent_bridge import (  # noqa: E402
     get_agent_bridge,
     handoff_contract_from_envelope,
 )
-from contracts.handoff_envelope_v2 import (  # noqa: E402
-    HandoffEnvelopeV2,
-    build_handoff_envelope_v2,
-    from_bridge_inputs,
-    from_legacy_handoff_contract,
-)
-
 
 # ---------------------------------------------------------------------------
 # Canonical handoff contract builder
 # ---------------------------------------------------------------------------
+
 
 def build_canonical_handoff_contract(
     *,
@@ -181,6 +175,7 @@ def build_canonical_handoff_contract(
     _resolved_posture: str = "control_only"
     try:
         from contracts.source_posture_contract import normalize_posture_for_ingress
+
         _resolved_posture = normalize_posture_for_ingress(source_runtime_posture or "")
     except Exception as _posture_err:  # noqa: BLE001
         logger.debug(
@@ -195,6 +190,7 @@ def build_canonical_handoff_contract(
     if not _resolved_role:
         try:
             from core.multi_device_coordination_authority import derive_coordination_role
+
             _role_obj = derive_coordination_role(
                 source_runtime_posture=_resolved_posture,
                 formation_role=formation_role,

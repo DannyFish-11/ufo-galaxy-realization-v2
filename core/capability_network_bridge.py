@@ -104,8 +104,7 @@ __all__ = [
 # ---------------------------------------------------------------------------
 
 CAPABILITY_NETWORK_BRIDGE_AUTHORITY: str = (
-    "core.capability_network_bridge"
-    " — canonical capability ↔ network bridge (PR-D)"
+    "core.capability_network_bridge" " — canonical capability ↔ network bridge (PR-D)"
 )
 """Sentinel: this module is the canonical dual-graph selection bridge.
 
@@ -239,9 +238,7 @@ class JointSelectionResult:
     def to_dict(self) -> Dict[str, Any]:
         return {
             "selected_provider_id": self.selected_provider_id,
-            "capability_fit_score": self.capability_fit_score.to_dict()
-            if self.capability_fit_score
-            else None,
+            "capability_fit_score": self.capability_fit_score.to_dict() if self.capability_fit_score else None,
             "path_availability": self.path_availability.to_dict(),
             "joint_score": self.joint_score,
             "fallback_provider_id": self.fallback_provider_id,
@@ -523,6 +520,7 @@ def joint_select(
     if target_id:
         try:
             from core.capability_assimilation import get_capability_assimilation_layer
+
             layer = get_capability_assimilation_layer()
             record = layer.get_record(target_id)
             candidates = [record] if record else []
@@ -646,21 +644,15 @@ def explain_joint_selection(result: JointSelectionResult) -> JointSelectionExpla
             )
         else:
             provider_reason = (
-                f"Provider '{result.selected_provider_id}' selected: "
-                "only available provider (no capability match)."
+                f"Provider '{result.selected_provider_id}' selected: " "only available provider (no capability match)."
             )
     else:
-        provider_reason = (
-            f"Provider '{result.selected_provider_id}' selected (capability score unavailable)."
-        )
+        provider_reason = f"Provider '{result.selected_provider_id}' selected (capability score unavailable)."
 
     # Path reason
     path = result.path_availability
     if not path.is_reachable:
-        path_reason = (
-            f"No reachable network path to '{path.node_id}'. "
-            "Provider is currently unreachable."
-        )
+        path_reason = f"No reachable network path to '{path.node_id}'. " "Provider is currently unreachable."
     else:
         path_reason = (
             f"Transport path to '{path.node_id}': effective_path='{path.effective_path}' "
@@ -683,8 +675,7 @@ def explain_joint_selection(result: JointSelectionResult) -> JointSelectionExpla
         )
     else:
         fallback_reason = (
-            "No pre-computed fallback provider or path. "
-            "Use fallback_joint_select() to find alternatives on demand."
+            "No pre-computed fallback provider or path. " "Use fallback_joint_select() to find alternatives on demand."
         )
 
     # Degraded explanation
@@ -736,8 +727,8 @@ def fallback_joint_select(
         or an empty/degraded result if no fallback is available.
     """
     from core.capability_graph_selection import (  # lazy import
-        select_fallback_providers,
         score_provider,
+        select_fallback_providers,
     )
 
     required: List[str] = list(required_capabilities or [])
@@ -782,8 +773,7 @@ def fallback_joint_select(
         cap_state = rec.fabric_presence.presence_state
         cap_state_str = cap_state.value if hasattr(cap_state, "value") else str(cap_state)
         is_degraded = (
-            path_avail.path_state in ("degraded", "fallback", "latent", "unknown")
-            or cap_state_str == "degraded"
+            path_avail.path_state in ("degraded", "fallback", "latent", "unknown") or cap_state_str == "degraded"
         )
 
         joint_score = _compute_joint_score(

@@ -152,7 +152,6 @@ import json
 import unittest
 from typing import Any, Dict, Optional
 
-
 # ---------------------------------------------------------------------------
 # Helpers / shared fixtures
 # ---------------------------------------------------------------------------
@@ -301,6 +300,7 @@ class TestRuntimeIntrospectionSnapshot(unittest.TestCase):
 
     def setUp(self):
         from core.runtime_introspection import RuntimeIntrospectionSnapshot
+
         self.cls = RuntimeIntrospectionSnapshot
 
     def test_default_construction(self):
@@ -329,17 +329,28 @@ class TestRuntimeIntrospectionSnapshot(unittest.TestCase):
         snap = self.cls()
         d = snap.to_dict()
         expected_keys = [
-            "entry_surface", "entry_source",
-            "runtime_shell_authority", "subject_decision_authority",
-            "cognition_layer_role", "execution_substrate_role",
+            "entry_surface",
+            "entry_source",
+            "runtime_shell_authority",
+            "subject_decision_authority",
+            "cognition_layer_role",
+            "execution_substrate_role",
             "orchestration_role",
-            "execution_plan_summary", "lifecycle_state", "lifecycle_trail",
-            "execution_mode", "target_devices", "resolver_decision",
+            "execution_plan_summary",
+            "lifecycle_state",
+            "lifecycle_trail",
+            "execution_mode",
+            "target_devices",
+            "resolver_decision",
             "delegation_point",
-            "failure_domain", "failure_classification",
-            "retry_policy", "fallback_policy",
-            "diagnostics_report", "authority_chain_valid",
-            "trace_id", "request_success",
+            "failure_domain",
+            "failure_classification",
+            "retry_policy",
+            "fallback_policy",
+            "diagnostics_report",
+            "authority_chain_valid",
+            "trace_id",
+            "request_success",
             "raw_metadata",
         ]
         for key in expected_keys:
@@ -361,6 +372,7 @@ class TestBuildIntrospectionSnapshotLocalFlow(unittest.TestCase):
 
     def setUp(self):
         from core.runtime_introspection import build_introspection_snapshot
+
         self.build = build_introspection_snapshot
 
     def test_runtime_shell_populates_entry_source(self):
@@ -450,6 +462,7 @@ class TestBuildIntrospectionSnapshotRemoteCommand(unittest.TestCase):
 
     def setUp(self):
         from core.runtime_introspection import build_introspection_snapshot
+
         self.build = build_introspection_snapshot
 
     def test_substrate_populates_execution_substrate_role(self):
@@ -510,6 +523,7 @@ class TestBuildIntrospectionSnapshotRemoteAgent(unittest.TestCase):
 
     def setUp(self):
         from core.runtime_introspection import build_introspection_snapshot
+
         self.build = build_introspection_snapshot
 
     def test_agent_runtime_mode_propagated(self):
@@ -546,6 +560,7 @@ class TestBuildIntrospectionSnapshotOrchestration(unittest.TestCase):
 
     def setUp(self):
         from core.runtime_introspection import build_introspection_snapshot
+
         self.build = build_introspection_snapshot
 
     def test_orchestration_role_from_meta(self):
@@ -588,6 +603,7 @@ class TestBuildIntrospectionSnapshotFailureFallback(unittest.TestCase):
 
     def setUp(self):
         from core.runtime_introspection import build_introspection_snapshot
+
         self.build = build_introspection_snapshot
 
     def test_failure_domain_visible(self):
@@ -639,6 +655,7 @@ class TestIntrospectionSnapshotFromResponse(unittest.TestCase):
 
     def setUp(self):
         from core.runtime_introspection import introspection_snapshot_from_response
+
         self.from_response = introspection_snapshot_from_response
 
     def test_runtime_shell_arch_layer_id_routes_correctly(self):
@@ -671,6 +688,7 @@ class TestIntrospectionSnapshotFromResponse(unittest.TestCase):
     def test_non_dict_returns_empty_snapshot(self):
         snap = self.from_response(None, run_diagnostics=False)
         from core.runtime_introspection import RuntimeIntrospectionSnapshot
+
         self.assertIsInstance(snap, RuntimeIntrospectionSnapshot)
         self.assertIsNone(snap.trace_id)
 
@@ -685,6 +703,7 @@ class TestMergeLayerSnapshots(unittest.TestCase):
 
     def setUp(self):
         from core.runtime_introspection import RuntimeIntrospectionSnapshot, merge_layer_snapshots
+
         self.cls = RuntimeIntrospectionSnapshot
         self.merge = merge_layer_snapshots
 
@@ -735,6 +754,7 @@ class TestArchitectureStatusReport(unittest.TestCase):
 
     def setUp(self):
         from core.architecture_status_report import ArchitectureStatusReport
+
         self.cls = ArchitectureStatusReport
 
     def test_default_construction(self):
@@ -758,10 +778,17 @@ class TestArchitectureStatusReport(unittest.TestCase):
     def test_to_dict_contains_expected_keys(self):
         rpt = self.cls()
         d = rpt.to_dict()
-        for k in ["authority_chain_present", "authority_chain_valid",
-                  "authority_chain_summary", "remote_execution_coherent",
-                  "substrate_distinct_from_orchestration", "diagnostics_findings",
-                  "overall_valid", "notes", "raw_diagnostics_report"]:
+        for k in [
+            "authority_chain_present",
+            "authority_chain_valid",
+            "authority_chain_summary",
+            "remote_execution_coherent",
+            "substrate_distinct_from_orchestration",
+            "diagnostics_findings",
+            "overall_valid",
+            "notes",
+            "raw_diagnostics_report",
+        ]:
             self.assertIn(k, d, f"Missing key: {k}")
 
     def test_repr_smoke(self):
@@ -780,6 +807,7 @@ class TestBuildArchitectureStatusReport(unittest.TestCase):
 
     def setUp(self):
         from core.architecture_status_report import build_architecture_status_report
+
         self.build = build_architecture_status_report
 
     def _all_layers(self):
@@ -847,6 +875,7 @@ class TestArchitectureStatusReportDiagnostics(unittest.TestCase):
 
     def setUp(self):
         from core.architecture_status_report import build_architecture_status_report
+
         self.build = build_architecture_status_report
 
     def test_with_valid_layers_overall_valid_is_not_none(self):
@@ -891,6 +920,7 @@ class TestArchitectureStatusFromSnapshot(unittest.TestCase):
     def setUp(self):
         from core.architecture_status_report import architecture_status_from_snapshot
         from core.runtime_introspection import RuntimeIntrospectionSnapshot
+
         self.from_snapshot = architecture_status_from_snapshot
         self.snapshot_cls = RuntimeIntrospectionSnapshot
 
@@ -935,6 +965,7 @@ class TestExecutionStatusReport(unittest.TestCase):
 
     def setUp(self):
         from core.execution_status_report import ExecutionStatusReport
+
         self.cls = ExecutionStatusReport
 
     def test_default_construction(self):
@@ -958,13 +989,22 @@ class TestExecutionStatusReport(unittest.TestCase):
         rpt = self.cls()
         d = rpt.to_dict()
         for k in [
-            "execution_path", "delegation_point", "execution_mode",
-            "target_devices", "resolver_decision",
-            "execution_plan_summary", "plan_step_types",
-            "lifecycle_state", "lifecycle_trail", "is_terminal",
+            "execution_path",
+            "delegation_point",
+            "execution_mode",
+            "target_devices",
+            "resolver_decision",
+            "execution_plan_summary",
+            "plan_step_types",
+            "lifecycle_state",
+            "lifecycle_trail",
+            "is_terminal",
             "request_success",
-            "failure_domain", "failure_classification",
-            "retry_policy", "fallback_policy", "failure_summary",
+            "failure_domain",
+            "failure_classification",
+            "retry_policy",
+            "fallback_policy",
+            "failure_summary",
         ]:
             self.assertIn(k, d, f"Missing key: {k}")
 
@@ -984,6 +1024,7 @@ class TestBuildExecutionStatusReportPlan(unittest.TestCase):
 
     def setUp(self):
         from core.execution_status_report import build_execution_status_report
+
         self.build = build_execution_status_report
 
     def test_execution_plan_summary_from_subject_core_metadata(self):
@@ -1046,6 +1087,7 @@ class TestBuildExecutionStatusReportFailure(unittest.TestCase):
 
     def setUp(self):
         from core.execution_status_report import build_execution_status_report
+
         self.build = build_execution_status_report
 
     def test_failure_domain_from_substrate(self):
@@ -1100,6 +1142,7 @@ class TestBuildExecutionStatusReportRouting(unittest.TestCase):
 
     def setUp(self):
         from core.execution_status_report import build_execution_status_report
+
         self.build = build_execution_status_report
 
     def test_delegation_point_from_subject_core(self):
@@ -1130,8 +1173,10 @@ class TestBuildExecutionStatusReportRouting(unittest.TestCase):
         self.assertIn("d1", rpt.target_devices)
 
     def test_resolver_decision_from_orchestration_meta(self):
-        orch = {"arch_layer_id": "orchestration_layer",
-                "resolver_decision": {"mode": "command_only", "rationale": "thin_device"}}
+        orch = {
+            "arch_layer_id": "orchestration_layer",
+            "resolver_decision": {"mode": "command_only", "rationale": "thin_device"},
+        }
         rpt = self.build(orchestration_meta=orch)
         self.assertIsNotNone(rpt.resolver_decision)
         self.assertEqual(rpt.resolver_decision.get("mode"), "command_only")
@@ -1148,6 +1193,7 @@ class TestExecutionStatusFromSnapshot(unittest.TestCase):
     def setUp(self):
         from core.execution_status_report import execution_status_from_snapshot
         from core.runtime_introspection import RuntimeIntrospectionSnapshot
+
         self.from_snapshot = execution_status_from_snapshot
         self.snapshot_cls = RuntimeIntrospectionSnapshot
 
@@ -1194,9 +1240,10 @@ class TestIntegrationPipelineSnapshots(unittest.TestCase):
     """R) Integration: representative full-pipeline snapshots."""
 
     def setUp(self):
-        from core.runtime_introspection import build_introspection_snapshot
         from core.architecture_status_report import build_architecture_status_report
         from core.execution_status_report import build_execution_status_report
+        from core.runtime_introspection import build_introspection_snapshot
+
         self.build_snap = build_introspection_snapshot
         self.build_arch = build_architecture_status_report
         self.build_exec = build_execution_status_report
@@ -1340,6 +1387,7 @@ class TestIntrospectionSnapshotFieldOnLayerResults(unittest.TestCase):
     def test_desktop_presence_runtime_stamps_introspection_snapshot(self):
         """DesktopPresenceRuntime.handle_request result carries introspection_snapshot."""
         import asyncio
+
         try:
             from core.desktop_presence_runtime import DesktopPresenceRuntime
         except Exception:
@@ -1356,16 +1404,22 @@ class TestIntrospectionSnapshotFieldOnLayerResults(unittest.TestCase):
             source = "test"
 
             # Replicate what handle_request does: call setdefault for introspection_snapshot
-            result.setdefault("authority_metadata", {
-                "layer_role": "runtime_shell_authority",
-                "canonical_module": "core.desktop_presence_runtime",
-            })
+            result.setdefault(
+                "authority_metadata",
+                {
+                    "layer_role": "runtime_shell_authority",
+                    "canonical_module": "core.desktop_presence_runtime",
+                },
+            )
             result.setdefault("arch_layer_id", "runtime_shell")
-            result.setdefault("introspection_snapshot", {
-                "authority_role": "runtime_shell_authority",
-                "entry_source": source,
-                "trace_id": result.get("trace_id"),
-            })
+            result.setdefault(
+                "introspection_snapshot",
+                {
+                    "authority_role": "runtime_shell_authority",
+                    "entry_source": source,
+                    "trace_id": result.get("trace_id"),
+                },
+            )
 
             self.assertIn("introspection_snapshot", result)
             self.assertEqual(result["introspection_snapshot"]["authority_role"], "runtime_shell_authority")
@@ -1381,15 +1435,18 @@ class TestIntrospectionSnapshotFieldOnLayerResults(unittest.TestCase):
             "arch_layer_id": "execution_substrate",
             "lifecycle_state": "succeeded",
         }
-        result.setdefault("introspection_snapshot", {
-            "authority_role": "execution_substrate",
-            "execution_substrate_role": result.get("execution_substrate_role", "execution_substrate"),
-            "execution_mode": result.get("remote_execution_mode"),
-            "lifecycle_state": result.get("lifecycle_state"),
-            "failure_domain": result.get("failure_domain"),
-            "failure_is_retryable": result.get("failure_is_retryable"),
-            "success": result.get("success"),
-        })
+        result.setdefault(
+            "introspection_snapshot",
+            {
+                "authority_role": "execution_substrate",
+                "execution_substrate_role": result.get("execution_substrate_role", "execution_substrate"),
+                "execution_mode": result.get("remote_execution_mode"),
+                "lifecycle_state": result.get("lifecycle_state"),
+                "failure_domain": result.get("failure_domain"),
+                "failure_is_retryable": result.get("failure_is_retryable"),
+                "success": result.get("success"),
+            },
+        )
         self.assertIn("introspection_snapshot", result)
         snap = result["introspection_snapshot"]
         self.assertEqual(snap["authority_role"], "execution_substrate")

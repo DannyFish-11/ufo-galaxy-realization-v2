@@ -595,12 +595,8 @@ class UnifiedPanelAggregationService:
 
     def _annotate_authority_source_fingerprint(self, payload: UnifiedPanelPayload) -> None:
         """Attach runtime-observed source metadata for panel unified response."""
-        evidence = payload.truth_compilation_evidence if isinstance(
-            payload.truth_compilation_evidence, dict
-        ) else {}
-        semantics = payload.truth_surface_semantics if isinstance(
-            payload.truth_surface_semantics, dict
-        ) else {}
+        evidence = payload.truth_compilation_evidence if isinstance(payload.truth_compilation_evidence, dict) else {}
+        semantics = payload.truth_surface_semantics if isinstance(payload.truth_surface_semantics, dict) else {}
         assembly_mode = str(evidence.get("assembly_mode") or "unknown")
         support_paths = list(evidence.get("supporting_paths") or [])
         if not support_paths:
@@ -641,9 +637,7 @@ class UnifiedPanelAggregationService:
             source_freshness={
                 "panel_generated_at": payload.generated_at,
                 "outward_truth_compiled_at": (
-                    payload.outward_truth.get("compiled_at")
-                    if isinstance(payload.outward_truth, dict)
-                    else None
+                    payload.outward_truth.get("compiled_at") if isinstance(payload.outward_truth, dict) else None
                 ),
                 "truth_compilation_assembly_mode": assembly_mode,
             },
@@ -709,9 +703,11 @@ class UnifiedPanelAggregationService:
             evidence.setdefault("fallback_used", False)
             evidence.setdefault(
                 "assembly_mode",
-                "mixed_source_fallback"
-                if bool(evidence.get("mixed_source", False)) or bool(evidence.get("fallback_used", False))
-                else "compiled_outward_truth_primary",
+                (
+                    "mixed_source_fallback"
+                    if bool(evidence.get("mixed_source", False)) or bool(evidence.get("fallback_used", False))
+                    else "compiled_outward_truth_primary"
+                ),
             )
             critical_keys_missing = "primary_path" in missing or "assembly_mode" in missing
             if critical_keys_missing:
@@ -827,6 +823,7 @@ class UnifiedPanelAggregationService:
         """Fill operator/control-plane and shell/presence fields from OperatorSnapshot."""
         try:
             from core.operator_surface import get_operator_surface
+
             snap = get_operator_surface().operator_snapshot()
 
             payload.active_task_count = snap.active_task_count
@@ -855,9 +852,7 @@ class UnifiedPanelAggregationService:
             eco = get_device_ecosystem_summary()
             # Apply the same whitelist used by OperatorSnapshot to maintain
             # consistency with the existing canonical surface.
-            payload.android_ecosystem = {
-                k: v for k, v in eco.items() if k in ANDROID_ECOSYSTEM_SNAPSHOT_KEYS
-            }
+            payload.android_ecosystem = {k: v for k, v in eco.items() if k in ANDROID_ECOSYSTEM_SNAPSHOT_KEYS}
 
             # Build per-device execution-phase digest from raw snapshots.
             # This is a lightweight summary — full per-device detail stays
@@ -869,35 +864,37 @@ class UnifiedPanelAggregationService:
                     readiness_fn = getattr(snap, "readiness_summary", None)
                     readiness = readiness_fn() if callable(readiness_fn) else {}
                     local_ai_fn = getattr(snap, "is_local_ai_ready", None)
-                    digest.append({
-                        "device_id": snap.device_id,
-                        "absorbed_at": snap.absorbed_at,
-                        "model_ready": snap.model_ready,
-                        "accessibility_ready": snap.accessibility_ready,
-                        "local_ai_ready": local_ai_fn() if callable(local_ai_fn) else False,
-                        "mobilevlm_present": getattr(snap, "mobilevlm_present", False),
-                        "seeclick_present": getattr(snap, "seeclick_present", False),
-                        "dispatch_capability_status": {
-                            "authoritative_scoring_fields": {
-                                "model_ready": getattr(snap, "model_ready", None),
-                                "accessibility_ready": getattr(snap, "accessibility_ready", None),
-                                "local_loop_ready": getattr(snap, "local_loop_ready", None),
-                                "warmup_result": getattr(snap, "warmup_result", None),
-                                "current_fallback_tier": getattr(snap, "current_fallback_tier", None),
+                    digest.append(
+                        {
+                            "device_id": snap.device_id,
+                            "absorbed_at": snap.absorbed_at,
+                            "model_ready": snap.model_ready,
+                            "accessibility_ready": snap.accessibility_ready,
+                            "local_ai_ready": local_ai_fn() if callable(local_ai_fn) else False,
+                            "mobilevlm_present": getattr(snap, "mobilevlm_present", False),
+                            "seeclick_present": getattr(snap, "seeclick_present", False),
+                            "dispatch_capability_status": {
+                                "authoritative_scoring_fields": {
+                                    "model_ready": getattr(snap, "model_ready", None),
+                                    "accessibility_ready": getattr(snap, "accessibility_ready", None),
+                                    "local_loop_ready": getattr(snap, "local_loop_ready", None),
+                                    "warmup_result": getattr(snap, "warmup_result", None),
+                                    "current_fallback_tier": getattr(snap, "current_fallback_tier", None),
+                                },
+                                "capability_presence_only_fields": {
+                                    "mobilevlm_present": getattr(snap, "mobilevlm_present", None),
+                                    "mobilevlm_checksum_ok": getattr(snap, "mobilevlm_checksum_ok", None),
+                                    "seeclick_present": getattr(snap, "seeclick_present", None),
+                                },
+                                "authority_note": (
+                                    "runtime-truth fields above drive dispatch scoring; "
+                                    "capability_presence_only_fields are observability-only"
+                                ),
                             },
-                            "capability_presence_only_fields": {
-                                "mobilevlm_present": getattr(snap, "mobilevlm_present", None),
-                                "mobilevlm_checksum_ok": getattr(snap, "mobilevlm_checksum_ok", None),
-                                "seeclick_present": getattr(snap, "seeclick_present", None),
-                            },
-                            "authority_note": (
-                                "runtime-truth fields above drive dispatch scoring; "
-                                "capability_presence_only_fields are observability-only"
-                            ),
-                        },
-                        "readiness": readiness,
-                        "_source": "android_device_state_store",
-                    })
+                            "readiness": readiness,
+                            "_source": "android_device_state_store",
+                        }
+                    )
                 except Exception as inner_exc:
                     logger.debug("build_payload: device digest entry error: %s", inner_exc)
             payload.android_device_execution_digest = digest
@@ -908,8 +905,8 @@ class UnifiedPanelAggregationService:
     def _fill_from_runtime_projection(self, payload: UnifiedPanelPayload) -> None:
         """Fill continuum/flow execution fields from RuntimeProjection."""
         try:
+            from core.continuum.types import ContinuumPhase, ContinuumState  # noqa: F401
             from core.projection import build_runtime_projection
-            from core.continuum.types import ContinuumState, ContinuumPhase  # noqa: F401
         except Exception as exc:
             logger.debug("build_payload: projection imports unavailable: %s", exc)
             return
@@ -920,6 +917,7 @@ class UnifiedPanelAggregationService:
             continuum_state: Optional[Any] = None
             try:
                 from core.desktop_presence_runtime import get_desktop_presence_runtime
+
                 dpr = get_desktop_presence_runtime()
                 cs = getattr(dpr, "_continuum_state", None) or getattr(dpr, "continuum_state", None)
                 if cs is None:
@@ -954,6 +952,7 @@ class UnifiedPanelAggregationService:
         """Fill execution readiness fields from ReadinessMatrix."""
         try:
             from core.runtime_readiness_matrix import get_readiness_matrix
+
             matrix = get_readiness_matrix()
             d = matrix.to_dict()
             # Normalise to uppercase for consistency with the READY/BLOCKED/
@@ -964,12 +963,11 @@ class UnifiedPanelAggregationService:
         except Exception as exc:
             logger.debug("build_payload: readiness matrix unavailable: %s", exc)
 
-    def _fill_active_surface_spec(
-        self, payload: UnifiedPanelPayload, *, mode: str = "chat"
-    ) -> None:
+    def _fill_active_surface_spec(self, payload: UnifiedPanelPayload, *, mode: str = "chat") -> None:
         """Fill active_surface_spec from SurfaceSelector."""
         try:
             from core.generative_ui.surface_selector import SurfaceSelector
+
             selector = SurfaceSelector()
             spec = selector.select_surface(mode=mode)
             payload.active_surface_spec = spec.to_dict()
@@ -1053,6 +1051,7 @@ class UnifiedPanelAggregationService:
         """
         try:
             from core.android_mode_gate_policy import build_cross_device_readiness_panel_dict
+
             payload.android_mode_gate_state = build_cross_device_readiness_panel_dict()
         except Exception as exc:
             logger.debug("build_payload: android mode gate policy unavailable: %s", exc)
@@ -1122,9 +1121,7 @@ class UnifiedPanelAggregationService:
                     ],
                     governance_state=payload.governance_state,
                 )
-                payload.unified_mode_model = dict(
-                    payload.runtime_decision_reasoning.get("unified_mode_model") or {}
-                )
+                payload.unified_mode_model = dict(payload.runtime_decision_reasoning.get("unified_mode_model") or {})
                 return
 
             connected_count = len(snapshots)
@@ -1166,9 +1163,7 @@ class UnifiedPanelAggregationService:
             payload.android_participation_verdict = verdict
             payload.runtime_decision_reasoning = build_runtime_decision_reasoning_block(
                 selected_runtime=(
-                    "android_delegated"
-                    if best_block is not None and bool(best_block.dispatch_eligible)
-                    else "v2_local"
+                    "android_delegated" if best_block is not None and bool(best_block.dispatch_eligible) else "v2_local"
                 ),
                 selected_device=verdict.get("device_id"),
                 android_truth_block=best_block,
@@ -1177,11 +1172,7 @@ class UnifiedPanelAggregationService:
                 # device_mode 消费(local → 折叠成 android_local)。V2 连续体的
                 # runtime_domain(LOCAL=在本机执行)是另一个维度,不能放在设备
                 # 模式前面,否则 V2 本机运行时委派执行会被误报成 android_local。
-                mode_state=str(
-                    getattr(best_block, "device_mode", None)
-                    or payload.runtime_domain
-                    or "unknown"
-                ),
+                mode_state=str(getattr(best_block, "device_mode", None) or payload.runtime_domain or "unknown"),
                 ready_to_route=str(payload.readiness_verdict or "").upper() == "READY",
                 readiness_summary={
                     "verdict": payload.readiness_verdict,
@@ -1199,9 +1190,7 @@ class UnifiedPanelAggregationService:
                 ],
                 governance_state=payload.governance_state,
             )
-            payload.unified_mode_model = dict(
-                payload.runtime_decision_reasoning.get("unified_mode_model") or {}
-            )
+            payload.unified_mode_model = dict(payload.runtime_decision_reasoning.get("unified_mode_model") or {})
         except Exception as exc:
             logger.debug("build_payload: android participation verdict unavailable: %s", exc)
 
@@ -1276,9 +1265,7 @@ class UnifiedPanelAggregationService:
         """Attach the implementation-grounded system reality checkpoint."""
         from core.system_reality_checkpoint import build_system_reality_checkpoint
 
-        payload.system_reality_checkpoint = build_system_reality_checkpoint(
-            panel_generated_at=payload.generated_at
-        )
+        payload.system_reality_checkpoint = build_system_reality_checkpoint(panel_generated_at=payload.generated_at)
 
     def _fill_system_state_narrative(self, payload: UnifiedPanelPayload) -> None:
         """Fill the unified system-state narrative (focused convergence pass).
@@ -1296,6 +1283,7 @@ class UnifiedPanelAggregationService:
             return
 
         from core.unified_system_state_narrative import build_system_state_narrative
+
         narrative = build_system_state_narrative()
         payload.system_state_narrative = narrative.to_dict()
 
@@ -1454,7 +1442,7 @@ def _get_continuum_state_fallback() -> Optional[Any]:
     that private helper directly.
     """
     try:
-        from core.continuum.types import ContinuumState, ContinuumPhase
+        from core.continuum.types import ContinuumPhase, ContinuumState
 
         # Attempt to obtain a live ContinuumState from the cognitive field engine.
         # 修复:模块路径写错了("core.cognitive_field_engine" 不存在，真实路径是
@@ -1463,6 +1451,7 @@ def _get_continuum_state_fallback() -> Optional[Any]:
         # SILENT 兜底，从未真正尝试过读取认知场引擎的活跃状态。
         try:
             from core.cognitive.cognitive_field_engine import get_cognitive_field_engine
+
             cfe = get_cognitive_field_engine()
             cs = getattr(cfe, "continuum_state", None) or getattr(cfe, "_state", None)
             if cs is not None and isinstance(cs, ContinuumState):

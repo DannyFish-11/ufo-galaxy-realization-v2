@@ -356,8 +356,7 @@ def build_android_presence_participation_for_default_path() -> Optional[Any]:
         )
     except ImportError as _imp_err:
         logger.debug(
-            "build_android_presence_participation_for_default_path: "
-            "import failed (structural absence) — %s",
+            "build_android_presence_participation_for_default_path: " "import failed (structural absence) — %s",
             _imp_err,
         )
         return None
@@ -366,8 +365,7 @@ def build_android_presence_participation_for_default_path() -> Optional[Any]:
         snapshots = list_device_state_snapshots()
     except Exception as _snap_err:
         logger.debug(
-            "build_android_presence_participation_for_default_path: "
-            "list_device_state_snapshots failed — %s",
+            "build_android_presence_participation_for_default_path: " "list_device_state_snapshots failed — %s",
             _snap_err,
         )
         return None
@@ -377,27 +375,24 @@ def build_android_presence_participation_for_default_path() -> Optional[Any]:
         try:
             record = derive_android_presence_participation(
                 device_id=snap.device_id,
-                active_engagement=bool(snap.active_engagement)
-                if hasattr(snap, "active_engagement")
-                else False,
-                sensing_stream_active=bool(snap.sensing_stream_active)
-                if hasattr(snap, "sensing_stream_active")
-                else False,
-                handoff_interaction_active=bool(snap.handoff_interaction_active)
-                if hasattr(snap, "handoff_interaction_active")
-                else False,
-                execution_presence_coupled=bool(snap.execution_presence_coupled)
-                if hasattr(snap, "execution_presence_coupled")
-                else False,
-                is_foreground_surface=bool(snap.is_foreground_surface)
-                if hasattr(snap, "is_foreground_surface")
-                else False,
+                active_engagement=bool(snap.active_engagement) if hasattr(snap, "active_engagement") else False,
+                sensing_stream_active=(
+                    bool(snap.sensing_stream_active) if hasattr(snap, "sensing_stream_active") else False
+                ),
+                handoff_interaction_active=(
+                    bool(snap.handoff_interaction_active) if hasattr(snap, "handoff_interaction_active") else False
+                ),
+                execution_presence_coupled=(
+                    bool(snap.execution_presence_coupled) if hasattr(snap, "execution_presence_coupled") else False
+                ),
+                is_foreground_surface=(
+                    bool(snap.is_foreground_surface) if hasattr(snap, "is_foreground_surface") else False
+                ),
             )
             records.append(record)
         except Exception as _rec_err:
             logger.debug(
-                "build_android_presence_participation_for_default_path: "
-                "derive failed for device_id=%s — %s",
+                "build_android_presence_participation_for_default_path: " "derive failed for device_id=%s — %s",
                 getattr(snap, "device_id", "?"),
                 _rec_err,
             )
@@ -406,8 +401,7 @@ def build_android_presence_participation_for_default_path() -> Optional[Any]:
         return summarise_android_presence_participation(records)
     except Exception as _sum_err:
         logger.debug(
-            "build_android_presence_participation_for_default_path: "
-            "summarise failed — %s",
+            "build_android_presence_participation_for_default_path: " "summarise failed — %s",
             _sum_err,
         )
         return None
@@ -527,10 +521,7 @@ def classify_android_v2_path(
     if not state_store_available:
         return AndroidV2PathClassification(
             path_kind=AndroidV2PathKind.fallback,
-            reason=(
-                "android_device_state_store is structurally absent; "
-                "canonical default path cannot execute"
-            ),
+            reason=("android_device_state_store is structurally absent; " "canonical default path cannot execute"),
         )
 
     if is_compat_bridge_active:

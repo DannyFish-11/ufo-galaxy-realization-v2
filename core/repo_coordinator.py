@@ -17,13 +17,13 @@
 版本: v2.3.23
 """
 
+import asyncio
+import json
+import logging
 import os
 import sys
-import json
-import asyncio
-import logging
 from datetime import datetime
-from typing import Dict, List, Optional, Any
+from typing import Any, Dict, List, Optional
 
 # 添加项目路径
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -31,9 +31,9 @@ sys.path.insert(0, PROJECT_ROOT)
 
 # 导入已有协议
 try:
-    from galaxy_gateway.protocol.aip_v3 import (
-        AIPMessage, MessageType as AIPMessageType
-    )
+    from galaxy_gateway.protocol.aip_v3 import AIPMessage
+    from galaxy_gateway.protocol.aip_v3 import MessageType as AIPMessageType
+
     AIPProtocol = None  # no AIPProtocol in v3; legacy enhancements only
 except ImportError:
     AIPMessage = AIPMessageType = AIPProtocol = None
@@ -86,11 +86,7 @@ class RepoCoordinator:
     # Android 设备注册 — delegates to UDM (PR-S4)
     # =========================================================================
 
-    async def register_android_device(
-        self,
-        device_id: str,
-        device_info: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    async def register_android_device(self, device_id: str, device_info: Dict[str, Any]) -> Dict[str, Any]:
         """注册 Android 设备 — canonical 写入委托 UDM（PR-S4）。
 
         Canonical write path: UnifiedDeviceManager (UDM).
@@ -107,16 +103,15 @@ class RepoCoordinator:
             "android_version": device_info.get("android_version", ""),
             "endpoint": device_info.get("endpoint", ""),
             "websocket_url": device_info.get("websocket_url", ""),
-            "capabilities": device_info.get("capabilities", [
-                "click", "swipe", "input", "screenshot", "open_app"
-            ]),
+            "capabilities": device_info.get("capabilities", ["click", "swipe", "input", "screenshot", "open_app"]),
             "status": "online",
-            "registered_at": datetime.now().isoformat()
+            "registered_at": datetime.now().isoformat(),
         }
 
         # Step 1 — canonical write to UDM (SSOT).
         try:
             from core.unified.device_manager import UnifiedDeviceManager
+
             udm = UnifiedDeviceManager()
             udm.register_device_from_dict(device_id, device_record)
             logger.info(
@@ -125,9 +120,9 @@ class RepoCoordinator:
             )
         except Exception as udm_err:
             logger.warning(
-                "repo_coordinator: UDM registration write failed (non-fatal): "
-                "device_id=%s error=%s",
-                device_id, udm_err,
+                "repo_coordinator: UDM registration write failed (non-fatal): " "device_id=%s error=%s",
+                device_id,
+                udm_err,
             )
 
         # Step 2 — update legacy compat cache.
@@ -145,15 +140,11 @@ class RepoCoordinator:
                 payload={
                     "device_type": "android",
                     "name": device_info.get("name", "Android Device"),
-                    "capabilities": device_info.get("capabilities", [])
-                }
+                    "capabilities": device_info.get("capabilities", []),
+                },
             )
 
-        return {
-            "success": True,
-            "device_id": device_id,
-            "message": "Device registered successfully"
-        }
+        return {"success": True, "device_id": device_id, "message": "Device registered successfully"}
 
     async def unregister_android_device(self, device_id: str) -> Dict[str, Any]:
         """注销 Android 设备 — canonical 写入委托 UDM（PR-S4）。
@@ -164,16 +155,18 @@ class RepoCoordinator:
         # Step 1 — canonical unregister in UDM.
         try:
             from core.unified.device_manager import UnifiedDeviceManager
+
             udm = UnifiedDeviceManager()
             udm.unregister_device(device_id)
             logger.info(
-                "repo_coordinator: unregistered from UDM: device_id=%s", device_id,
+                "repo_coordinator: unregistered from UDM: device_id=%s",
+                device_id,
             )
         except Exception as udm_err:
             logger.warning(
-                "repo_coordinator: UDM unregister failed (non-fatal): "
-                "device_id=%s error=%s",
-                device_id, udm_err,
+                "repo_coordinator: UDM unregister failed (non-fatal): " "device_id=%s error=%s",
+                device_id,
+                udm_err,
             )
 
         # Step 2 — clear legacy compat cache.
@@ -192,13 +185,14 @@ class RepoCoordinator:
         # Step 1 — canonical heartbeat in UDM.
         try:
             from core.unified.device_manager import UnifiedDeviceManager
+
             udm = UnifiedDeviceManager()
             udm.heartbeat(device_id)
         except Exception as udm_err:
             logger.debug(
-                "repo_coordinator: UDM heartbeat failed (non-fatal): "
-                "device_id=%s error=%s",
-                device_id, udm_err,
+                "repo_coordinator: UDM heartbeat failed (non-fatal): " "device_id=%s error=%s",
+                device_id,
+                udm_err,
             )
 
         # Step 2 — update legacy compat cache.
@@ -212,12 +206,7 @@ class RepoCoordinator:
     # Agent 分发到 Android 设备
     # =========================================================================
 
-    async def dispatch_agent_to_android(
-        self,
-        device_id: str,
-        task_type: str,
-        params: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    async def dispatch_agent_to_android(self, device_id: str, task_type: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """分发 Agent 到 Android 设备 — delegates to DeviceRouter (PR-S3).
 
         Dispatch authority is delegated to DeviceRouter.route_task() as the
@@ -235,6 +224,7 @@ class RepoCoordinator:
         # PR-S3: delegate dispatch authority to DeviceRouter.route_task().
         try:
             from galaxy_gateway.device_router import device_router as _device_router
+
             command = task_type
             context = {
                 "device_id": device_id,
@@ -259,11 +249,7 @@ class RepoCoordinator:
             message = AIPMessage(
                 type=AIPMessageType.TASK_ASSIGN,
                 device_id=device_id,
-                payload={
-                    "task_type": task_type,
-                    "params": params,
-                    "timestamp": datetime.now().isoformat()
-                }
+                payload={"task_type": task_type, "params": params, "timestamp": datetime.now().isoformat()},
             )
 
         try:
@@ -283,11 +269,7 @@ class RepoCoordinator:
             logger.error(f"分发 Agent 到 {device_id} 失败: {e}")
             return {"success": False, "error": str(e)}
 
-    async def _send_via_websocket(
-        self,
-        ws_url: str,
-        message: AIPMessage
-    ) -> Dict[str, Any]:
+    async def _send_via_websocket(self, ws_url: str, message: AIPMessage) -> Dict[str, Any]:
         """通过 WebSocket 发送"""
         import websockets
 
@@ -300,19 +282,11 @@ class RepoCoordinator:
             logger.error(f"WebSocket 发送失败: {e}")
             return {"success": False, "error": str(e)}
 
-    async def _send_via_http(
-        self,
-        endpoint: str,
-        message: AIPMessage
-    ) -> Dict[str, Any]:
+    async def _send_via_http(self, endpoint: str, message: AIPMessage) -> Dict[str, Any]:
         """通过 HTTP 发送"""
         try:
             client = await self._get_http_client()
-            response = await client.post(
-                f"{endpoint}/task/execute",
-                json=message.to_dict(),
-                timeout=30
-            )
+            response = await client.post(f"{endpoint}/task/execute", json=message.to_dict(), timeout=30)
             return response.json()
         except Exception as e:
             logger.error(f"HTTP 发送失败: {e}")
@@ -322,11 +296,7 @@ class RepoCoordinator:
     # 批量操作
     # =========================================================================
 
-    async def broadcast_to_all_android(
-        self,
-        task_type: str,
-        params: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    async def broadcast_to_all_android(self, task_type: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """广播到所有 Android 设备 — device list from UDM (PR-S4).
 
         Reads the target device list from UnifiedDeviceManager for canonical
@@ -337,9 +307,11 @@ class RepoCoordinator:
         device_ids: List[str] = []
         try:
             from core.unified.device_manager import UnifiedDeviceManager
+
             udm = UnifiedDeviceManager()
             device_ids = [
-                d.device_id for d in udm.list_devices()
+                d.device_id
+                for d in udm.list_devices()
                 if str(getattr(d.device_type, "value", d.device_type)).lower()
                 in ("android", "android_phone", "android_tablet")
             ]
@@ -349,10 +321,7 @@ class RepoCoordinator:
 
         results = {}
 
-        tasks = [
-            self.dispatch_agent_to_android(device_id, task_type, params)
-            for device_id in device_ids
-        ]
+        tasks = [self.dispatch_agent_to_android(device_id, task_type, params) for device_id in device_ids]
 
         responses = await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -362,11 +331,7 @@ class RepoCoordinator:
             else:
                 results[device_id] = response
 
-        return {
-            "success": True,
-            "total": len(results),
-            "results": results
-        }
+        return {"success": True, "total": len(results), "results": results}
 
     # =========================================================================
     # 状态查询 — delegates to UDM (PR-S4)
@@ -381,6 +346,7 @@ class RepoCoordinator:
         """
         try:
             from core.unified.device_manager import UnifiedDeviceManager
+
             udm = UnifiedDeviceManager()
             udm_devices = [
                 {
@@ -393,9 +359,8 @@ class RepoCoordinator:
                     **d.metadata,
                 }
                 for d in udm.list_devices()
-                if str(getattr(d.device_type, "value", d.device_type)).lower() in (
-                    "android", "android_phone", "android_tablet"
-                )
+                if str(getattr(d.device_type, "value", d.device_type)).lower()
+                in ("android", "android_phone", "android_tablet")
             ]
             if udm_devices:
                 return udm_devices
@@ -415,6 +380,7 @@ class RepoCoordinator:
         """
         try:
             from core.unified.device_manager import UnifiedDeviceManager
+
             udm = UnifiedDeviceManager()
             device = udm.get_device(device_id)
             if device is not None:
@@ -439,17 +405,19 @@ class RepoCoordinator:
         """获取协调器状态摘要 — 优先使用 UDM 设备计数（PR-S4）。"""
         try:
             from core.unified.device_manager import UnifiedDeviceManager
+
             udm = UnifiedDeviceManager()
             all_devices = udm.list_devices()
             from core.unified.models import UnifiedDeviceStatus
+
             android_devices = [
-                d for d in all_devices
+                d
+                for d in all_devices
                 if str(getattr(d.device_type, "value", d.device_type)).lower()
                 in ("android", "android_phone", "android_tablet")
             ]
             online_count = sum(
-                1 for d in android_devices
-                if getattr(d.status, "value", d.status) == UnifiedDeviceStatus.ONLINE.value
+                1 for d in android_devices if getattr(d.status, "value", d.status) == UnifiedDeviceStatus.ONLINE.value
             )
             return {
                 "android_devices": len(android_devices),
@@ -462,10 +430,7 @@ class RepoCoordinator:
             logger.warning("Exception suppressed: %s", exc)
 
         # Legacy compat cache fallback.
-        online_count = sum(
-            1 for d in self.android_devices.values()
-            if d.get("status") == "online"
-        )
+        online_count = sum(1 for d in self.android_devices.values() if d.get("status") == "online")
         return {
             "android_devices": len(self.android_devices),
             "online_devices": online_count,

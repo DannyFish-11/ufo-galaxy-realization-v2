@@ -92,9 +92,7 @@ def _build_truth_payload(device_id: str) -> Dict[str, Any]:
         },
     }
     truth_payload["shared_execution_visibility"] = _derive_shared_execution_visibility(truth_payload)
-    truth_payload["participation_truth_consumption"] = _build_participation_truth_consumption(
-        truth_payload
-    )
+    truth_payload["participation_truth_consumption"] = _build_participation_truth_consumption(truth_payload)
     return truth_payload
 
 
@@ -197,9 +195,7 @@ class TestCrossRepoAcceptanceChain:
         truth_payload = _build_truth_payload(device_id)
         board_payload = {
             "shared_execution_visibility": dict(truth_payload["shared_execution_visibility"]),
-            "participation_truth_consumption": dict(
-                truth_payload["participation_truth_consumption"]
-            ),
+            "participation_truth_consumption": dict(truth_payload["participation_truth_consumption"]),
         }
         snapshot = build_cross_repo_acceptance_chain(
             device_id=device_id,
@@ -254,9 +250,7 @@ class TestCrossRepoAcceptanceChain:
         truth_payload = _build_truth_payload(device_id)
         board_payload = {
             "shared_execution_visibility": dict(truth_payload["shared_execution_visibility"]),
-            "participation_truth_consumption": dict(
-                truth_payload["participation_truth_consumption"]
-            ),
+            "participation_truth_consumption": dict(truth_payload["participation_truth_consumption"]),
         }
         snapshot = build_cross_repo_acceptance_chain(
             device_id=device_id,
@@ -285,9 +279,7 @@ class TestCrossRepoAcceptanceChain:
         truth_payload = _build_truth_payload(device_id)
         board_payload = {
             "shared_execution_visibility": dict(truth_payload["shared_execution_visibility"]),
-            "participation_truth_consumption": dict(
-                truth_payload["participation_truth_consumption"]
-            ),
+            "participation_truth_consumption": dict(truth_payload["participation_truth_consumption"]),
         }
         snapshot = build_cross_repo_acceptance_chain(
             device_id=device_id,
@@ -356,14 +348,10 @@ class TestCrossRepoAcceptanceChain:
                 "acceptance_canonical_confirmation_required": True,
             },
         }
-        truth_payload["shared_execution_visibility"] = _derive_shared_execution_visibility(
-            truth_payload
-        )
+        truth_payload["shared_execution_visibility"] = _derive_shared_execution_visibility(truth_payload)
         board_payload = {
             "shared_execution_visibility": dict(truth_payload["shared_execution_visibility"]),
-            "participation_truth_consumption": dict(
-                truth_payload["participation_truth_consumption"]
-            ),
+            "participation_truth_consumption": dict(truth_payload["participation_truth_consumption"]),
         }
 
         snapshot = build_cross_repo_acceptance_chain(
@@ -419,9 +407,7 @@ class TestCrossRepoAcceptanceChain:
         truth_payload = _build_truth_payload(device_id)
         board_payload = {
             "shared_execution_visibility": dict(truth_payload["shared_execution_visibility"]),
-            "participation_truth_consumption": dict(
-                truth_payload["participation_truth_consumption"]
-            ),
+            "participation_truth_consumption": dict(truth_payload["participation_truth_consumption"]),
         }
         strict_snapshot = build_cross_repo_acceptance_chain(
             device_id=device_id,

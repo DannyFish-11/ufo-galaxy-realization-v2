@@ -57,12 +57,7 @@ async def test_canonical_session_migration_helper_updates_session_manager_state(
 
 @pytest.mark.asyncio
 async def test_gateway_session_route_uses_canonical_helper() -> None:
-    module_path = (
-        Path(__file__).resolve().parent.parent
-        / "galaxy_gateway"
-        / "routes"
-        / "sessions.py"
-    )
+    module_path = Path(__file__).resolve().parent.parent / "galaxy_gateway" / "routes" / "sessions.py"
     spec = importlib.util.spec_from_file_location("gateway_sessions_module", module_path)
     assert spec and spec.loader
     gateway_sessions = importlib.util.module_from_spec(spec)
@@ -71,6 +66,7 @@ async def test_gateway_session_route_uses_canonical_helper() -> None:
     fake_result = {"success": True, "history_count": 3}
     mp = pytest.MonkeyPatch()
     try:
+
         async def _fake_migrate_session_via_canonical_manager(**kwargs):
             return dict(fake_result)
 

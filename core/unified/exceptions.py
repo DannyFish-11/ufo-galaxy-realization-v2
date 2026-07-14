@@ -21,7 +21,6 @@ from __future__ import annotations
 
 from ..error_framework import GalaxyError as _FrameworkGalaxyError
 
-
 # ============================================================================
 # 基础异常
 # ============================================================================

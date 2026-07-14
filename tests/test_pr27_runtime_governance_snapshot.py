@@ -122,7 +122,6 @@ from core.runtime_governance.snapshot import (
     summarize_runtime_readiness,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers — minimal stub objects
 # ---------------------------------------------------------------------------
@@ -287,9 +286,7 @@ class TestRuntimeGovernanceExecutionSummary:
         assert s.confidence == 0.95
 
     def test_to_dict_json_serialisable(self):
-        s = RuntimeGovernanceExecutionSummary(
-            intent_id="x-1", action_level="execute", available=True
-        )
+        s = RuntimeGovernanceExecutionSummary(intent_id="x-1", action_level="execute", available=True)
         d = s.to_dict()
         json_str = json.dumps(d)
         assert isinstance(json_str, str)
@@ -339,9 +336,7 @@ class TestRuntimeGovernancePolicySummary:
         assert s.degraded is True
 
     def test_to_dict_json_serialisable(self):
-        s = RuntimeGovernancePolicySummary(
-            ready=True, status="ready", blocked=False, available=True
-        )
+        s = RuntimeGovernancePolicySummary(ready=True, status="ready", blocked=False, available=True)
         d = s.to_dict()
         json_str = json.dumps(d)
         assert "ready" in d
@@ -383,8 +378,7 @@ class TestRuntimeGovernanceTraceSummary:
 
     def test_to_dict_json_serialisable(self):
         s = RuntimeGovernanceTraceSummary(
-            trace_id="t-2", final_status="success", stage_count=2,
-            stages=["a", "b"], available=True
+            trace_id="t-2", final_status="success", stage_count=2, stages=["a", "b"], available=True
         )
         d = s.to_dict()
         json_str = json.dumps(d)
@@ -430,9 +424,7 @@ class TestRuntimeGovernanceProjectionSummary:
         assert s.tri_state_phase == "manifest"
 
     def test_to_dict_json_serialisable(self):
-        s = RuntimeGovernanceProjectionSummary(
-            governance_available=True, action_level="execute", available=True
-        )
+        s = RuntimeGovernanceProjectionSummary(governance_available=True, action_level="execute", available=True)
         d = s.to_dict()
         json_str = json.dumps(d)
         assert isinstance(json_str, str)
@@ -473,10 +465,20 @@ class TestRuntimeGovernanceSnapshot:
         s = RuntimeGovernanceSnapshot(tri_state_phase="manifest")
         d = s.to_dict()
         expected_keys = {
-            "snapshot_id", "trace_id", "runtime_session_id", "tri_state_phase",
-            "runtime_domain", "governance_available", "intent_summary",
-            "readiness_summary", "fallback_summary", "execution_trace_summary",
-            "projection_governance_summary", "posture", "blocked", "degraded",
+            "snapshot_id",
+            "trace_id",
+            "runtime_session_id",
+            "tri_state_phase",
+            "runtime_domain",
+            "governance_available",
+            "intent_summary",
+            "readiness_summary",
+            "fallback_summary",
+            "execution_trace_summary",
+            "projection_governance_summary",
+            "posture",
+            "blocked",
+            "degraded",
             "timestamp",
         }
         assert expected_keys.issubset(set(d.keys()))
@@ -552,8 +554,12 @@ class TestSummarizeRuntimeIntent:
 
     def test_extracts_from_compact_summary(self):
         profile = _make_intent_profile(
-            intent_id="i-1", source="openclawd", action_level="execute",
-            intent_mode="direct", runtime_domain="local", confidence=0.95
+            intent_id="i-1",
+            source="openclawd",
+            action_level="execute",
+            intent_mode="direct",
+            runtime_domain="local",
+            confidence=0.95,
         )
         s = summarize_runtime_intent(profile)
         assert s.available is True
@@ -604,9 +610,7 @@ class TestSummarizeRuntimeReadiness:
         assert s.ready is False
 
     def test_extracts_ready_status_reason(self):
-        rr = _make_readiness_result(
-            ready=True, status="ready", reason="ok", action_level="execute"
-        )
+        rr = _make_readiness_result(ready=True, status="ready", reason="ok", action_level="execute")
         s = summarize_runtime_readiness(rr)
         assert s.available is True
         assert s.ready is True
@@ -620,16 +624,13 @@ class TestSummarizeRuntimeReadiness:
         assert s.ready is False
 
     def test_degraded_true_when_action_level_observe(self):
-        rr = _make_readiness_result(
-            ready=False, status="observe_only", action_level="observe"
-        )
+        rr = _make_readiness_result(ready=False, status="observe_only", action_level="observe")
         s = summarize_runtime_readiness(rr)
         assert s.degraded is True
 
     def test_requires_confirmation_extracted(self):
         rr = _make_readiness_result(
-            ready=True, status="confirm_required", requires_confirmation=True,
-            action_level="execute"
+            ready=True, status="confirm_required", requires_confirmation=True, action_level="execute"
         )
         s = summarize_runtime_readiness(rr)
         assert s.requires_confirmation is True
@@ -813,18 +814,14 @@ class TestAssembleRuntimeGovernanceSnapshot:
         assert before <= snap.timestamp <= after
 
     def test_governance_available_true_when_intent_present(self):
-        snap = assemble_runtime_governance_snapshot(
-            intent_profile=_make_intent_profile()
-        )
+        snap = assemble_runtime_governance_snapshot(intent_profile=_make_intent_profile())
         assert snap.governance_available is True
         assert snap.intent_summary.available is True
 
     def test_posture_execute_when_readiness_ready(self):
         snap = assemble_runtime_governance_snapshot(
             intent_profile=_make_intent_profile(action_level="execute"),
-            readiness_result=_make_readiness_result(
-                ready=True, status="ready", action_level="execute"
-            ),
+            readiness_result=_make_readiness_result(ready=True, status="ready", action_level="execute"),
         )
         assert snap.posture == "execute"
         assert snap.blocked is False
@@ -833,9 +830,7 @@ class TestAssembleRuntimeGovernanceSnapshot:
     def test_posture_blocked_when_readiness_blocked(self):
         snap = assemble_runtime_governance_snapshot(
             intent_profile=_make_intent_profile(action_level="execute"),
-            readiness_result=_make_readiness_result(
-                ready=False, status="blocked", action_level="observe"
-            ),
+            readiness_result=_make_readiness_result(ready=False, status="blocked", action_level="observe"),
         )
         assert snap.posture == "blocked"
         assert snap.blocked is True
@@ -843,9 +838,7 @@ class TestAssembleRuntimeGovernanceSnapshot:
 
     def test_posture_degraded_when_readiness_degraded(self):
         snap = assemble_runtime_governance_snapshot(
-            readiness_result=_make_readiness_result(
-                ready=False, status="observe_only", action_level="observe"
-            ),
+            readiness_result=_make_readiness_result(ready=False, status="observe_only", action_level="observe"),
         )
         assert snap.posture == "degraded"
         assert snap.degraded is True
@@ -1023,6 +1016,7 @@ class TestAdditiveIntegration:
             RuntimeGovernanceSnapshot,
             assemble_runtime_governance_snapshot,
         )
+
         assert RuntimeGovernanceSnapshot is not None
         assert assemble_runtime_governance_snapshot is not None
 
@@ -1040,6 +1034,7 @@ class TestAdditiveIntegration:
             summarize_runtime_intent,
             summarize_runtime_readiness,
         )
+
         for obj in [
             RuntimeGovernanceExecutionSummary,
             RuntimeGovernancePolicySummary,
@@ -1056,8 +1051,9 @@ class TestAdditiveIntegration:
             assert obj is not None
 
     def test_runtime_projection_has_snapshot_field(self):
-        from core.projection.runtime_projection import RuntimeProjection
         from pydantic.fields import FieldInfo
+
+        from core.projection.runtime_projection import RuntimeProjection
 
         fields = RuntimeProjection.model_fields
         assert "runtime_governance_snapshot" in fields
@@ -1090,8 +1086,12 @@ class TestAdditiveIntegration:
         # Verify both old and new fields are declared on the model
         fields = RuntimeProjection.model_fields
         for field_name in [
-            "tri_state_phase", "runtime_domain", "presence_intensity",
-            "primary_model_id", "governance", "runtime_governance_snapshot",
+            "tri_state_phase",
+            "runtime_domain",
+            "presence_intensity",
+            "primary_model_id",
+            "governance",
+            "runtime_governance_snapshot",
             "timestamp",
         ]:
             assert field_name in fields, f"Expected field {field_name!r} missing"

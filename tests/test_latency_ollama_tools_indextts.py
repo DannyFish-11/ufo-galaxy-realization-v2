@@ -9,35 +9,44 @@
   4. IndexTTS 质量档:默认不自动拉取权重、缺参考音频不可用、
      GALAXY_TTS_ENGINE=indextts 不可用时落回默认链。
 """
+
 import json
 from types import SimpleNamespace
+
 import httpx
 import pytest
 
 
 def _mk_ollama_adapter():
     from core.multi_llm_router import OllamaAdapter, ProviderConfig
+
     cfg = ProviderConfig(
-        name="ollama", api_key="", base_url="http://localhost:11434",
-        models=["qwen3:4b"], default_model="qwen3:4b",
+        name="ollama",
+        api_key="",
+        base_url="http://localhost:11434",
+        models=["qwen3:4b"],
+        default_model="qwen3:4b",
     )
     return OllamaAdapter(cfg)
 
 
 def _ok_response(payload: dict) -> httpx.Response:
     return httpx.Response(
-        200, json=payload, request=httpx.Request("POST", "http://t/api/chat"),
+        200,
+        json=payload,
+        request=httpx.Request("POST", "http://t/api/chat"),
     )
 
 
-TOOLS = [{"type": "function",
-          "function": {"name": "node__06__list",
-                       "parameters": {"type": "object", "properties": {}}}}]
+TOOLS = [
+    {"type": "function", "function": {"name": "node__06__list", "parameters": {"type": "object", "properties": {}}}}
+]
 
 
 # ---------------------------------------------------------------------------
 # 1/2. Ollama 原生工具 + num_ctx
 # ---------------------------------------------------------------------------
+
 
 class TestOllamaNativeTools:
     @pytest.mark.asyncio
@@ -48,12 +57,10 @@ class TestOllamaNativeTools:
 
         async def _fake_post(url, headers, body):
             seen.update(body)
-            return _ok_response({"message": {"content": "好"},
-                                 "prompt_eval_count": 1, "eval_count": 1})
+            return _ok_response({"message": {"content": "好"}, "prompt_eval_count": 1, "eval_count": 1})
 
         ad._post_with_retry = _fake_post
-        resp = await ad.chat([{"role": "user", "content": "q"}],
-                             model="qwen3:4b", tools=TOOLS)
+        resp = await ad.chat([{"role": "user", "content": "q"}], model="qwen3:4b", tools=TOOLS)
         assert seen.get("tools") == TOOLS, "tools 必须随请求体发给 Ollama"
         assert seen["options"]["num_ctx"] == 8192
         assert resp.content == "好"
@@ -79,15 +86,17 @@ class TestOllamaNativeTools:
         ad = _mk_ollama_adapter()
 
         async def _fake_post(url, headers, body):
-            return _ok_response({"message": {
-                "content": "",
-                "tool_calls": [{"function": {"name": "node__06__list",
-                                             "arguments": {"path": "/a"}}}],
-            }})
+            return _ok_response(
+                {
+                    "message": {
+                        "content": "",
+                        "tool_calls": [{"function": {"name": "node__06__list", "arguments": {"path": "/a"}}}],
+                    }
+                }
+            )
 
         ad._post_with_retry = _fake_post
-        resp = await ad.chat([{"role": "user", "content": "q"}],
-                             model="m", tools=TOOLS)
+        resp = await ad.chat([{"role": "user", "content": "q"}], model="m", tools=TOOLS)
         assert resp.tool_calls and len(resp.tool_calls) == 1
         tc = resp.tool_calls[0]
         assert tc["id"]
@@ -100,6 +109,7 @@ class TestOllamaNativeTools:
         模型用一行 JSON 表达调用,解析归一后 gemma 也能真正调工具;且模型名
         进缓存,后续请求直达文本协议不再吃 400。"""
         from core.multi_llm_router import OllamaAdapter
+
         monkeypatch.setattr(OllamaAdapter, "_text_protocol_models", set())
         ad = _mk_ollama_adapter()
         bodies = []
@@ -108,21 +118,18 @@ class TestOllamaNativeTools:
             bodies.append(body)
             if "tools" in body:
                 req = httpx.Request("POST", url)
-                resp = httpx.Response(
-                    400, text='{"error":"gemma3 does not support tools"}',
-                    request=req)
+                resp = httpx.Response(400, text='{"error":"gemma3 does not support tools"}', request=req)
                 raise httpx.HTTPStatusError("400", request=req, response=resp)
-            return _ok_response({"message": {"content":
-                '{"tool_call": {"name": "node__06__list", "arguments": {"path": "/a"}}}'}})
+            return _ok_response(
+                {"message": {"content": '{"tool_call": {"name": "node__06__list", "arguments": {"path": "/a"}}}'}}
+            )
 
         ad._post_with_retry = _fake_post
-        resp = await ad.chat([{"role": "user", "content": "列目录"}],
-                             model="gemma3:4b", tools=TOOLS)
+        resp = await ad.chat([{"role": "user", "content": "列目录"}], model="gemma3:4b", tools=TOOLS)
         # 第一次吃 400,第二次文本协议:无 tools 键、系统消息里注入了工具清单
         assert len(bodies) == 2
         assert "tools" in bodies[0] and "tools" not in bodies[1]
-        sys_msgs = [m["content"] for m in bodies[1]["messages"]
-                    if m.get("role") == "system"]
+        sys_msgs = [m["content"] for m in bodies[1]["messages"] if m.get("role") == "system"]
         assert any("tool_call" in c and "node__06__list" in c for c in sys_msgs)
         # 文本 JSON 调用被解析归一成 OpenAI 形状
         assert resp.tool_calls and resp.tool_calls[0]["function"]["name"] == "node__06__list"
@@ -130,15 +137,15 @@ class TestOllamaNativeTools:
         assert resp.content == ""  # 协议载荷不进用户气泡
 
         # 模型已缓存:再次调用直达文本协议(只多一次 post,不再 400)
-        await ad.chat([{"role": "user", "content": "再来"}],
-                      model="gemma3:4b", tools=TOOLS)
+        await ad.chat([{"role": "user", "content": "再来"}], model="gemma3:4b", tools=TOOLS)
         assert len(bodies) == 3 and "tools" not in bodies[2]
 
     @pytest.mark.asyncio
     async def test_text_protocol_plain_answer_feeds_sink(self, monkeypatch):
         """文本协议下没有工具调用 → 普通回答,整段补喂 sink(面板仍有字)。"""
-        from core.multi_llm_router import OllamaAdapter
         from core.llm_stream import TokenStream
+        from core.multi_llm_router import OllamaAdapter
+
         monkeypatch.setattr(OllamaAdapter, "_text_protocol_models", {"gemma3:4b"})
         ad = _mk_ollama_adapter()
 
@@ -147,15 +154,19 @@ class TestOllamaNativeTools:
 
         ad._post_with_retry = _fake_post
         got = []
-        resp = await ad.chat([{"role": "user", "content": "你好"}],
-                             model="gemma3:4b", tools=TOOLS,
-                             stream=TokenStream(on_delta=got.append))
+        resp = await ad.chat(
+            [{"role": "user", "content": "你好"}],
+            model="gemma3:4b",
+            tools=TOOLS,
+            stream=TokenStream(on_delta=got.append),
+        )
         assert resp.tool_calls is None
         assert resp.content == "普通回答,不需要工具。"
         assert got == ["普通回答,不需要工具。"]
 
     def test_parse_text_tool_calls_robustness(self):
         from core.multi_llm_router import OllamaAdapter
+
         parse = OllamaAdapter._parse_text_tool_calls
         assert parse("纯文本回答") is None
         assert parse("") is None
@@ -164,8 +175,9 @@ class TestOllamaNativeTools:
         assert out and out[0]["function"]["name"] == "t1"
         assert json.loads(out[0]["function"]["arguments"]) == {"a": 1}
         # 多个调用
-        out = parse('{"tool_call": {"name": "a", "arguments": {}}}\n'
-                    '{"tool_call": {"name": "b", "arguments": {"x": 2}}}')
+        out = parse(
+            '{"tool_call": {"name": "a", "arguments": {}}}\n' '{"tool_call": {"name": "b", "arguments": {"x": 2}}}'
+        )
         assert [c["function"]["name"] for c in out] == ["a", "b"]
         # 坏 JSON 不炸
         assert parse('{"tool_call": {"name": ') is None
@@ -174,13 +186,21 @@ class TestOllamaNativeTools:
         """工具轮历史文本化:assistant.tool_calls → JSON 行;role=tool →
         [工具结果] user 消息——无模板模型的模板不炸、语义不丢。"""
         from core.multi_llm_router import OllamaAdapter
+
         msgs = [
             {"role": "system", "content": "s"},
             {"role": "user", "content": "列目录"},
-            {"role": "assistant", "content": "",
-             "tool_calls": [{"id": "c1", "type": "function",
-                             "function": {"name": "node__06__list",
-                                          "arguments": '{"path": "/a"}'}}]},
+            {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                    {
+                        "id": "c1",
+                        "type": "function",
+                        "function": {"name": "node__06__list", "arguments": '{"path": "/a"}'},
+                    }
+                ],
+            },
             {"role": "tool", "tool_call_id": "c1", "content": '{"files": []}'},
         ]
         out = OllamaAdapter._textualize_tool_history(msgs)
@@ -204,6 +224,7 @@ class TestOllamaNativeTools:
 
     def test_normalize_tool_calls_edge_shapes(self):
         from core.multi_llm_router import OllamaAdapter
+
         norm = OllamaAdapter._normalize_tool_calls
         assert norm(None) is None
         assert norm([]) is None
@@ -217,13 +238,16 @@ class TestOllamaNativeTools:
 # 3. context_trim
 # ---------------------------------------------------------------------------
 
+
 class TestContextTrim:
     def test_clip_short_passthrough(self):
         from core.context_trim import clip_tool_result
+
         assert clip_tool_result("短结果", max_chars=100) == "短结果"
 
     def test_clip_keeps_head_and_tail(self):
         from core.context_trim import clip_tool_result
+
         text = "开头" + "x" * 5000 + "结尾成功exit0"
         out = clip_tool_result(text, max_chars=1000)
         assert len(out) < len(text)
@@ -233,16 +257,18 @@ class TestContextTrim:
 
     def _mk_round(self, i, tool_len):
         return [
-            {"role": "assistant", "content": "",
-             "tool_calls": [{"id": f"c{i}", "type": "function",
-                             "function": {"name": "t", "arguments": "{}"}}]},
+            {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [{"id": f"c{i}", "type": "function", "function": {"name": "t", "arguments": "{}"}}],
+            },
             {"role": "tool", "tool_call_id": f"c{i}", "content": "R" * tool_len},
         ]
 
     def test_prune_keeps_recent_rounds_and_small_results(self):
         from core.context_trim import prune_stale_tool_results
-        messages = [{"role": "system", "content": "s"},
-                    {"role": "user", "content": "u"}]
+
+        messages = [{"role": "system", "content": "s"}, {"role": "user", "content": "u"}]
         for i in range(5):  # 5 轮:前 2 轮该剪(大),第 3 轮小不剪,后 2 轮保留
             messages += self._mk_round(i, 2000 if i < 2 else (100 if i == 2 else 2000))
 
@@ -251,44 +277,49 @@ class TestContextTrim:
         tool_msgs = [m for m in messages if m["role"] == "tool"]
         assert "已修剪" in tool_msgs[0]["content"]
         assert "已修剪" in tool_msgs[1]["content"]
-        assert tool_msgs[2]["content"] == "R" * 100        # 小结果原样
-        assert tool_msgs[3]["content"] == "R" * 2000       # 最近轮完整
+        assert tool_msgs[2]["content"] == "R" * 100  # 小结果原样
+        assert tool_msgs[3]["content"] == "R" * 2000  # 最近轮完整
         assert tool_msgs[4]["content"] == "R" * 2000
 
     def test_prune_disabled_or_few_rounds_noop(self):
         from core.context_trim import prune_stale_tool_results
+
         messages = self._mk_round(0, 9000)
         assert prune_stale_tool_results(messages, keep_rounds=0) == 0
         assert prune_stale_tool_results(messages, keep_rounds=3) == 0
         assert messages[1]["content"] == "R" * 9000
 
     def _mk_tools(self, n):
-        return [{"type": "function",
-                 "function": {"name": f"node__{i:02d}__act{i}",
-                              "description": f"desc {i}"}} for i in range(n)]
+        return [
+            {"type": "function", "function": {"name": f"node__{i:02d}__act{i}", "description": f"desc {i}"}}
+            for i in range(n)
+        ]
 
     def test_slim_under_threshold_returns_unchanged(self, monkeypatch):
         from core.context_trim import slim_tools
+
         monkeypatch.setenv("GALAXY_TOOLS_SLIM", "auto")
         tools = self._mk_tools(10)
         assert slim_tools(tools, "随便问问", max_tools=24) is tools
 
     def test_slim_over_threshold_prefers_relevant_and_core(self, monkeypatch):
         from core.context_trim import slim_tools
+
         monkeypatch.setenv("GALAXY_TOOLS_SLIM", "auto")
         tools = self._mk_tools(30)
-        tools.append({"type": "function", "function": {
-            "name": "node__fs__截图屏幕", "description": "截取当前屏幕画面"}})
-        tools.append({"type": "function", "function": {
-            "name": "memory__recall", "description": "记忆召回"}})
+        tools.append(
+            {"type": "function", "function": {"name": "node__fs__截图屏幕", "description": "截取当前屏幕画面"}}
+        )
+        tools.append({"type": "function", "function": {"name": "memory__recall", "description": "记忆召回"}})
         out = slim_tools(tools, "帮我截图屏幕看看", max_tools=5)
         names = [t["function"]["name"] for t in out]
         assert len(out) == 5
-        assert "node__fs__截图屏幕" in names   # 相关工具入选
-        assert "memory__recall" in names       # 核心工具永不裁
+        assert "node__fs__截图屏幕" in names  # 相关工具入选
+        assert "memory__recall" in names  # 核心工具永不裁
 
     def test_slim_off_switch(self, monkeypatch):
         from core.context_trim import slim_tools
+
         monkeypatch.setenv("GALAXY_TOOLS_SLIM", "off")
         tools = self._mk_tools(50)
         assert slim_tools(tools, "q", max_tools=5) is tools
@@ -298,22 +329,27 @@ class TestContextTrim:
 # 4. IndexTTS 质量档
 # ---------------------------------------------------------------------------
 
+
 class TestIndexTTSEngine:
     def test_autofetch_default_off(self, monkeypatch):
         """数 GB 权重绝不静默下载:默认关,显式 =1 才拉。"""
         import core.tts.indextts_engine as ie
+
         monkeypatch.delenv("GALAXY_INDEXTTS_AUTOFETCH", raising=False)
         monkeypatch.setattr(ie, "_fetch_started", False)
         started = []
-        monkeypatch.setattr(ie.threading, "Thread",
-                            lambda **kw: started.append(kw) or SimpleNamespace(start=lambda: None))
+        monkeypatch.setattr(
+            ie.threading, "Thread", lambda **kw: started.append(kw) or SimpleNamespace(start=lambda: None)
+        )
         ie.kick_background_fetch()
         assert not started
 
     def test_unavailable_without_ref_audio(self, monkeypatch, tmp_path):
         """包在、模型在、但没配参考音频 → 不可用(零样本克隆必须有音色来源)。"""
         import sys
+
         import core.tts.indextts_engine as ie
+
         monkeypatch.setitem(sys.modules, "indextts", SimpleNamespace())
         monkeypatch.setenv("GALAXY_INDEXTTS_DIR", str(tmp_path))
         (tmp_path / "config.yaml").write_text("ok")
@@ -323,7 +359,9 @@ class TestIndexTTSEngine:
 
     def test_available_when_all_present(self, monkeypatch, tmp_path):
         import sys
+
         import core.tts.indextts_engine as ie
+
         monkeypatch.setitem(sys.modules, "indextts", SimpleNamespace())
         monkeypatch.setenv("GALAXY_INDEXTTS_DIR", str(tmp_path))
         (tmp_path / "config.yaml").write_text("ok")
@@ -336,6 +374,7 @@ class TestIndexTTSEngine:
     @pytest.mark.asyncio
     async def test_synthesize_passes_clone_and_emotion(self, monkeypatch, tmp_path):
         import core.tts.indextts_engine as ie
+
         ref = tmp_path / "ref.wav"
         ref.write_bytes(b"RIFF")
         monkeypatch.setenv("GALAXY_INDEXTTS_REF_AUDIO", str(ref))
@@ -362,6 +401,7 @@ class TestIndexTTSEngine:
     async def test_signature_drift_falls_back_to_minimal(self, monkeypatch, tmp_path):
         """v1 无情绪参数:TypeError → 最小参数集重试,宁丢情绪也要出声。"""
         import core.tts.indextts_engine as ie
+
         ref = tmp_path / "ref.wav"
         ref.write_bytes(b"RIFF")
         monkeypatch.setenv("GALAXY_INDEXTTS_REF_AUDIO", str(ref))
@@ -383,6 +423,7 @@ class TestIndexTTSEngine:
     def test_engine_choice_falls_back_when_unavailable(self, monkeypatch):
         """GALAXY_TTS_ENGINE=indextts 但引擎不可用 → 落回默认链,绝不整段哑。"""
         import core.speech_output as so
+
         monkeypatch.setenv("GALAXY_TTS_ENGINE", "indextts")
         monkeypatch.setattr(so, "_engine", None)
         monkeypatch.setattr(so, "_engine_failed", False)
@@ -390,12 +431,14 @@ class TestIndexTTSEngine:
 
         sentinel = object()
         import core.tts.indextts_engine as ie
+
         monkeypatch.setattr(ie.IndexTTSEngine, "available", lambda self: False)
         # 默认链第一站 edge 直接给假引擎,证明链条接上了
         import core.tts as tts_pkg
-        monkeypatch.setattr(tts_pkg, "EdgeTTSEngine",
-                            lambda voice=None: sentinel, raising=False)
+
+        monkeypatch.setattr(tts_pkg, "EdgeTTSEngine", lambda voice=None: sentinel, raising=False)
         import sys
+
         monkeypatch.setitem(sys.modules, "edge_tts", SimpleNamespace())
 
         eng = so._get_engine()

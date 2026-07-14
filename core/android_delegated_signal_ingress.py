@@ -116,12 +116,10 @@ from core.delegated_runtime_execution_tracker import DelegatedExecutionTrackingR
 # PR-18: Recovery guard — imported lazily via try/except so that the ingress
 # module remains loadable even when the recovery-readiness module is absent.
 try:
-    from core.attached_runtime_recovery_readiness import (
-        SignalGuardDecision as _SignalGuardDecision,
-        SignalGuardOutcome as _SignalGuardOutcome,
-        RecoveryReadinessRuntime as _RecoveryReadinessRuntime,
-        guard_inbound_signal as _guard_inbound_signal,
-    )
+    from core.attached_runtime_recovery_readiness import RecoveryReadinessRuntime as _RecoveryReadinessRuntime
+    from core.attached_runtime_recovery_readiness import SignalGuardDecision as _SignalGuardDecision
+    from core.attached_runtime_recovery_readiness import SignalGuardOutcome as _SignalGuardOutcome
+    from core.attached_runtime_recovery_readiness import guard_inbound_signal as _guard_inbound_signal
 
     _RECOVERY_GUARD_AVAILABLE: bool = True
 except ImportError:  # pragma: no cover
@@ -134,11 +132,9 @@ except ImportError:  # pragma: no cover
 # PR-22: Registry gate — imported lazily so the module remains loadable when
 # the session registry is unavailable.
 try:
-    from core.attached_runtime_session_registry import (
-        AttachedSessionRegistry as _IngressAttachedSessionRegistry,
-        get_session_registry as _ingress_get_session_registry,
-        lookup_active_session as _ingress_lookup_active_session,
-    )
+    from core.attached_runtime_session_registry import AttachedSessionRegistry as _IngressAttachedSessionRegistry
+    from core.attached_runtime_session_registry import get_session_registry as _ingress_get_session_registry
+    from core.attached_runtime_session_registry import lookup_active_session as _ingress_lookup_active_session
 
     _INGRESS_REGISTRY_AVAILABLE: bool = True
 except ImportError:  # pragma: no cover
@@ -152,8 +148,7 @@ except ImportError:  # pragma: no cover
 # ---------------------------------------------------------------------------
 
 ANDROID_DELEGATED_SIGNAL_INGRESS_AUTHORITY: str = (
-    "core.android_delegated_signal_ingress::PR16::canonical-ingress-for-"
-    "android-delegated-execution-signals"
+    "core.android_delegated_signal_ingress::PR16::canonical-ingress-for-" "android-delegated-execution-signals"
 )
 
 # ---------------------------------------------------------------------------
@@ -496,8 +491,15 @@ class ResultKind(str, Enum):
 # Payload content keys harvested from the payload sub-dict into the envelope
 # snapshot during extraction.
 _DELEGATED_PAYLOAD_CONTENT_KEYS: tuple = (
-    "result", "details", "error", "error_message", "latency_ms",
-    "step_count", "partial_result", "decision", "input",
+    "result",
+    "details",
+    "error",
+    "error_message",
+    "latency_ms",
+    "step_count",
+    "partial_result",
+    "decision",
+    "input",
 )
 
 
@@ -704,56 +706,33 @@ def extract_delegated_signal_envelope(
     payload: Dict[str, Any] = message.get("payload") or {}
 
     # ---- device_id, task_id — top-level first ----
-    device_id: str = (
-        str(message.get("device_id") or "")
-        or str(payload.get("device_id") or "")
-    )
-    task_id: str = (
-        str(message.get("task_id") or "")
-        or str(payload.get("task_id") or "")
-    )
+    device_id: str = str(message.get("device_id") or "") or str(payload.get("device_id") or "")
+    task_id: str = str(message.get("task_id") or "") or str(payload.get("task_id") or "")
 
     # ---- contract_id, session_id, trace_id — payload first ----
-    contract_id: str = (
-        str(payload.get("contract_id") or "")
-        or str(message.get("contract_id") or "")
-    )
+    contract_id: str = str(payload.get("contract_id") or "") or str(message.get("contract_id") or "")
     session_id: str = (
         str(payload.get("session_id") or "")
         or str(payload.get("runtime_session_id") or "")
         or str(message.get("session_id") or "")
         or str(message.get("runtime_session_id") or "")
     )
-    trace_id: str = (
-        str(payload.get("trace_id") or "")
-        or str(message.get("trace_id") or "")
-    )
+    trace_id: str = str(payload.get("trace_id") or "") or str(message.get("trace_id") or "")
 
     # ---- signal_kind — payload first ----
-    raw_signal_kind: str = (
-        str(payload.get("signal_kind") or "")
-        or str(message.get("signal_kind") or "")
-    )
+    raw_signal_kind: str = str(payload.get("signal_kind") or "") or str(message.get("signal_kind") or "")
     signal_kind = DelegatedSignalKind.from_string(raw_signal_kind)
 
     # ---- result_kind — payload first ----
-    raw_result_kind: str = (
-        str(payload.get("result_kind") or "")
-        or str(message.get("result_kind") or "")
-    )
+    raw_result_kind: str = str(payload.get("result_kind") or "") or str(message.get("result_kind") or "")
     result_kind = ResultKind.from_string(raw_result_kind)
 
     # ---- signal_id — payload first ----
-    signal_id: str = (
-        str(payload.get("signal_id") or "")
-        or str(message.get("signal_id") or "")
-    )
+    signal_id: str = str(payload.get("signal_id") or "") or str(message.get("signal_id") or "")
 
     # ---- emission_seq — payload first, coerced to int ----
     raw_emission_seq = (
-        payload.get("emission_seq")
-        if payload.get("emission_seq") is not None
-        else message.get("emission_seq")
+        payload.get("emission_seq") if payload.get("emission_seq") is not None else message.get("emission_seq")
     )
     try:
         emission_seq: int = int(raw_emission_seq) if raw_emission_seq is not None else 0
@@ -862,9 +841,7 @@ def ingest_delegated_execution_signal(
     # ------------------------------------------------------------------ #
     if _INGRESS_REGISTRY_AVAILABLE and _ingress_lookup_active_session is not None and delegated_envelope.session_id:
         _reg = registry if registry is not None else _ingress_get_session_registry()
-        _entry = _ingress_lookup_active_session(
-            delegated_envelope.session_id, active_only=False, registry=_reg
-        )
+        _entry = _ingress_lookup_active_session(delegated_envelope.session_id, active_only=False, registry=_reg)
         if _entry is not None and not _entry.is_active():
             android_envelope = delegated_envelope.to_android_execution_signal_envelope()
             return AndroidSignalReconcileOutcome(
@@ -884,9 +861,7 @@ def ingest_delegated_execution_signal(
     # ------------------------------------------------------------------ #
     if _RECOVERY_GUARD_AVAILABLE and _guard_inbound_signal is not None:
         try:
-            guard_outcome = _guard_inbound_signal(
-                delegated_envelope, runtime=guard_runtime
-            )
+            guard_outcome = _guard_inbound_signal(delegated_envelope, runtime=guard_runtime)
             if not guard_outcome.is_accepted():
                 logger.debug(
                     "PR-18 recovery guard rejected inbound signal: "
@@ -909,8 +884,7 @@ def ingest_delegated_execution_signal(
             # Guard evaluation failure is non-fatal; log and continue to
             # reconcile so that a buggy guard never silently drops valid signals.
             logger.debug(
-                "PR-18 recovery guard evaluation failed (non-fatal); "
-                "proceeding to reconcile: exc=%s",
+                "PR-18 recovery guard evaluation failed (non-fatal); " "proceeding to reconcile: exc=%s",
                 exc,
             )
 

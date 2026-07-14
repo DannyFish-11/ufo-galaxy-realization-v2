@@ -56,6 +56,7 @@ def _get_policy():
     global _policy
     if _policy is None:
         from core.governance.policy_schema import load_governance_policy
+
         _policy = load_governance_policy()
     return _policy
 
@@ -64,6 +65,7 @@ def _get_budget_enforcer():
     global _budget_enforcer
     if _budget_enforcer is None:
         from core.governance.budget_enforcer import BudgetEnforcer
+
         p = _get_policy()
         _budget_enforcer = BudgetEnforcer(p.budget_policy, p.model_policy)
     return _budget_enforcer
@@ -73,6 +75,7 @@ def _get_tool_governor():
     global _tool_governor
     if _tool_governor is None:
         from core.governance.tool_governor import ToolGovernor
+
         p = _get_policy()
         _tool_governor = ToolGovernor(p.tool_policy)
     return _tool_governor
@@ -93,6 +96,7 @@ def set_task_queue(queue) -> None:
 # Request / response models
 # ---------------------------------------------------------------------------
 
+
 class BudgetRecordRequest(BaseModel):
     session_id: str = Field(..., description="Session identifier")
     tenant_id: str = Field(default="default", description="Tenant identifier")
@@ -109,6 +113,7 @@ class ToolCheckRequest(BaseModel):
 # ---------------------------------------------------------------------------
 # Router factory
 # ---------------------------------------------------------------------------
+
 
 def create_router() -> APIRouter:
     """Create and return the governance API router."""

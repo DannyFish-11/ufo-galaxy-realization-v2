@@ -194,9 +194,15 @@ class TestRecoveryIncidentType:
         from contracts.runtime_recovery_reconciliation import RecoveryIncidentType
 
         expected = {
-            "dispatch_failure", "handoff_interrupted", "takeover_failed",
-            "merge_conflict", "coordinator_lost", "session_diverged",
-            "result_stale", "partial_completion", "unknown",
+            "dispatch_failure",
+            "handoff_interrupted",
+            "takeover_failed",
+            "merge_conflict",
+            "coordinator_lost",
+            "session_diverged",
+            "result_stale",
+            "partial_completion",
+            "unknown",
         }
         actual = {e.value for e in RecoveryIncidentType}
         assert expected == actual
@@ -216,9 +222,15 @@ class TestRecoveryActionType:
         from contracts.runtime_recovery_reconciliation import RecoveryActionType
 
         expected = {
-            "retry_handoff", "resume_local", "request_merge_confirmation",
-            "repair_mesh_session", "mark_stale", "fallback_local",
-            "replay_assignment", "wait_for_participant", "escalate",
+            "retry_handoff",
+            "resume_local",
+            "request_merge_confirmation",
+            "repair_mesh_session",
+            "mark_stale",
+            "fallback_local",
+            "replay_assignment",
+            "wait_for_participant",
+            "escalate",
         }
         actual = {e.value for e in RecoveryActionType}
         assert expected == actual
@@ -261,9 +273,15 @@ class TestRecoveryParticipantStateFieldNames:
         p = RecoveryParticipantState(device_id="dev_001")
         d = p.to_dict()
         for field in (
-            "device_id", "runtime_id", "status", "authoritative",
-            "replay_required", "resume_allowed",
-            "last_known_assignment_ids", "last_known_result_unit_ids", "metadata",
+            "device_id",
+            "runtime_id",
+            "status",
+            "authoritative",
+            "replay_required",
+            "resume_allowed",
+            "last_known_assignment_ids",
+            "last_known_result_unit_ids",
+            "metadata",
         ):
             assert field in d, f"Missing field: {field}"
 
@@ -418,13 +436,29 @@ class TestRuntimeRecoveryIncidentFieldNames:
         inc = RuntimeRecoveryIncident()
         d = inc.to_dict()
         for field in (
-            "recovery_id", "generated_at", "trace_id", "task_id", "session_id",
-            "mesh_session_id", "source_device_id", "primary_device_id",
-            "incident_type", "status", "affected_devices", "affected_runtime_ids",
-            "participant_states", "stale_result_unit_ids", "authoritative_result_unit_ids",
-            "pending_result_unit_ids", "replay_required", "resume_allowed",
-            "merge_confirmation_required", "barrier_state", "recommended_actions",
-            "reason", "metadata",
+            "recovery_id",
+            "generated_at",
+            "trace_id",
+            "task_id",
+            "session_id",
+            "mesh_session_id",
+            "source_device_id",
+            "primary_device_id",
+            "incident_type",
+            "status",
+            "affected_devices",
+            "affected_runtime_ids",
+            "participant_states",
+            "stale_result_unit_ids",
+            "authoritative_result_unit_ids",
+            "pending_result_unit_ids",
+            "replay_required",
+            "resume_allowed",
+            "merge_confirmation_required",
+            "barrier_state",
+            "recommended_actions",
+            "reason",
+            "metadata",
         ):
             assert field in d, f"Missing field: {field}"
 
@@ -436,16 +470,26 @@ class TestRuntimeRecoveryIncidentCompactSummary:
         inc = RuntimeRecoveryIncident()
         s = inc.to_compact_summary()
         for field in (
-            "recovery_id", "incident_type", "status",
-            "affected_device_count", "participant_count",
-            "replay_required", "resume_allowed", "merge_confirmation_required",
-            "has_barrier", "recommended_action_count", "reason", "generated_at",
+            "recovery_id",
+            "incident_type",
+            "status",
+            "affected_device_count",
+            "participant_count",
+            "replay_required",
+            "resume_allowed",
+            "merge_confirmation_required",
+            "has_barrier",
+            "recommended_action_count",
+            "reason",
+            "generated_at",
         ):
             assert field in s, f"Missing compact summary field: {field}"
 
     def test_compact_summary_counts(self):
         from contracts.runtime_recovery_reconciliation import (
-            RuntimeRecoveryIncident, RecoveryParticipantState, RecoveryActionRecommendation,
+            RecoveryActionRecommendation,
+            RecoveryParticipantState,
+            RuntimeRecoveryIncident,
         )
 
         inc = RuntimeRecoveryIncident(
@@ -504,10 +548,18 @@ class TestRuntimeReconciliationStateSerialization:
         rec = RuntimeReconciliationState()
         s = rec.to_compact_summary()
         for field in (
-            "reconciliation_id", "status", "participant_count",
-            "authoritative_result_count", "stale_result_count",
-            "pending_result_count", "replay_required", "resume_allowed",
-            "merge_confirmation_required", "incident_count", "reason", "generated_at",
+            "reconciliation_id",
+            "status",
+            "participant_count",
+            "authoritative_result_count",
+            "stale_result_count",
+            "pending_result_count",
+            "replay_required",
+            "resume_allowed",
+            "merge_confirmation_required",
+            "incident_count",
+            "reason",
+            "generated_at",
         ):
             assert field in s, f"Missing compact summary field: {field}"
 
@@ -525,12 +577,28 @@ class TestRuntimeReconciliationStateFieldNames:
         rec = RuntimeReconciliationState()
         d = rec.to_dict()
         for field in (
-            "reconciliation_id", "generated_at", "recovery_id", "trace_id", "task_id",
-            "session_id", "mesh_session_id", "source_device_id", "primary_device_id",
-            "status", "participant_states", "authoritative_result_unit_ids",
-            "stale_result_unit_ids", "pending_result_unit_ids",
-            "replay_required", "resume_allowed", "merge_confirmation_required",
-            "barrier_state", "recommended_actions", "incidents", "reason", "metadata",
+            "reconciliation_id",
+            "generated_at",
+            "recovery_id",
+            "trace_id",
+            "task_id",
+            "session_id",
+            "mesh_session_id",
+            "source_device_id",
+            "primary_device_id",
+            "status",
+            "participant_states",
+            "authoritative_result_unit_ids",
+            "stale_result_unit_ids",
+            "pending_result_unit_ids",
+            "replay_required",
+            "resume_allowed",
+            "merge_confirmation_required",
+            "barrier_state",
+            "recommended_actions",
+            "incidents",
+            "reason",
+            "metadata",
         ):
             assert field in d, f"Missing field: {field}"
 
@@ -582,11 +650,22 @@ class TestRecoverySummaryFieldNames:
         s = RecoverySummary()
         d = s.to_dict()
         for field in (
-            "summary_id", "generated_at", "overall_status", "incident_count",
-            "resolved_incident_count", "pending_incident_count",
-            "needs_intervention_count", "replay_required", "resume_allowed",
-            "merge_confirmation_required", "has_barrier", "recommended_action_types",
-            "most_recent_incident_type", "most_recent_recovery_id", "reason", "metadata",
+            "summary_id",
+            "generated_at",
+            "overall_status",
+            "incident_count",
+            "resolved_incident_count",
+            "pending_incident_count",
+            "needs_intervention_count",
+            "replay_required",
+            "resume_allowed",
+            "merge_confirmation_required",
+            "has_barrier",
+            "recommended_action_types",
+            "most_recent_incident_type",
+            "most_recent_recovery_id",
+            "reason",
+            "metadata",
         ):
             assert field in d, f"Missing field: {field}"
 
@@ -615,10 +694,10 @@ class TestBuildRuntimeRecoveryIncidentEmpty:
 class TestBuildRuntimeRecoveryIncidentFull:
     def test_full_inputs(self):
         from contracts.runtime_recovery_reconciliation import (
-            build_runtime_recovery_incident,
-            RecoveryParticipantState,
             RecoveryActionRecommendation,
             RecoveryBarrierState,
+            RecoveryParticipantState,
+            build_runtime_recovery_incident,
         )
 
         inc = build_runtime_recovery_incident(
@@ -671,8 +750,8 @@ class TestBuildRuntimeRecoveryIncidentFull:
 
     def test_participant_dicts_parsed(self):
         from contracts.runtime_recovery_reconciliation import (
-            build_runtime_recovery_incident,
             RecoveryParticipantState,
+            build_runtime_recovery_incident,
         )
 
         inc = build_runtime_recovery_incident(
@@ -710,8 +789,8 @@ class TestBuildRuntimeReconciliationStateEmpty:
 class TestBuildRuntimeReconciliationStateFull:
     def test_incident_dicts_parsed(self):
         from contracts.runtime_recovery_reconciliation import (
-            build_runtime_reconciliation_state,
             RuntimeRecoveryIncident,
+            build_runtime_reconciliation_state,
         )
 
         inc = RuntimeRecoveryIncident(incident_type="dispatch_failure")
@@ -757,7 +836,8 @@ class TestBuildRecoverySummary:
 
     def test_all_resolved_incidents(self):
         from contracts.runtime_recovery_reconciliation import (
-            build_recovery_summary, RuntimeRecoveryIncident,
+            RuntimeRecoveryIncident,
+            build_recovery_summary,
         )
 
         incidents = [
@@ -770,7 +850,8 @@ class TestBuildRecoverySummary:
 
     def test_pending_incidents(self):
         from contracts.runtime_recovery_reconciliation import (
-            build_recovery_summary, RuntimeRecoveryIncident,
+            RuntimeRecoveryIncident,
+            build_recovery_summary,
         )
 
         incidents = [RuntimeRecoveryIncident(status="pending")]
@@ -780,7 +861,8 @@ class TestBuildRecoverySummary:
 
     def test_needs_intervention(self):
         from contracts.runtime_recovery_reconciliation import (
-            build_recovery_summary, RuntimeRecoveryIncident,
+            RuntimeRecoveryIncident,
+            build_recovery_summary,
         )
 
         incidents = [RuntimeRecoveryIncident(status="needs_intervention")]
@@ -790,7 +872,8 @@ class TestBuildRecoverySummary:
 
     def test_replay_required_aggregation(self):
         from contracts.runtime_recovery_reconciliation import (
-            build_recovery_summary, RuntimeRecoveryIncident,
+            RuntimeRecoveryIncident,
+            build_recovery_summary,
         )
 
         incidents = [
@@ -802,7 +885,8 @@ class TestBuildRecoverySummary:
 
     def test_resume_allowed_aggregation(self):
         from contracts.runtime_recovery_reconciliation import (
-            build_recovery_summary, RuntimeRecoveryIncident,
+            RuntimeRecoveryIncident,
+            build_recovery_summary,
         )
 
         incidents = [
@@ -813,7 +897,8 @@ class TestBuildRecoverySummary:
 
     def test_merge_confirmation_aggregation(self):
         from contracts.runtime_recovery_reconciliation import (
-            build_recovery_summary, RuntimeRecoveryIncident,
+            RuntimeRecoveryIncident,
+            build_recovery_summary,
         )
 
         incidents = [RuntimeRecoveryIncident(merge_confirmation_required=True)]
@@ -822,7 +907,9 @@ class TestBuildRecoverySummary:
 
     def test_recommended_action_types_deduplicated(self):
         from contracts.runtime_recovery_reconciliation import (
-            build_recovery_summary, RuntimeRecoveryIncident, RecoveryActionRecommendation,
+            RecoveryActionRecommendation,
+            RuntimeRecoveryIncident,
+            build_recovery_summary,
         )
 
         inc1 = RuntimeRecoveryIncident(
@@ -842,7 +929,8 @@ class TestBuildRecoverySummary:
 
     def test_most_recent_incident_populated(self):
         from contracts.runtime_recovery_reconciliation import (
-            build_recovery_summary, RuntimeRecoveryIncident,
+            RuntimeRecoveryIncident,
+            build_recovery_summary,
         )
 
         inc = RuntimeRecoveryIncident(incident_type="coordinator_lost")
@@ -852,8 +940,9 @@ class TestBuildRecoverySummary:
 
     def test_from_reconciliation_incidents(self):
         from contracts.runtime_recovery_reconciliation import (
-            build_recovery_summary, build_runtime_reconciliation_state,
             RuntimeRecoveryIncident,
+            build_recovery_summary,
+            build_runtime_reconciliation_state,
         )
 
         inc = RuntimeRecoveryIncident(status="pending")
@@ -1148,48 +1237,50 @@ class TestFromMultiDeviceProjection:
 class TestContractsPackageReExports:
     def test_contracts_re_exports(self):
         from contracts import (
-            RecoveryIncidentType,
-            RecoveryStatus,
-            RecoveryActionType,
-            RecoveryParticipantState,
             RecoveryActionRecommendation,
+            RecoveryActionType,
             RecoveryBarrierState,
-            RuntimeRecoveryIncident,
-            RuntimeReconciliationState,
+            RecoveryIncidentType,
+            RecoveryParticipantState,
+            RecoveryStatus,
             RecoverySummary,
-            build_runtime_recovery_incident,
-            build_runtime_reconciliation_state,
+            RuntimeReconciliationState,
+            RuntimeRecoveryIncident,
             build_recovery_summary,
-            recovery_from_dispatch_result,
-            recovery_from_takeover_result,
+            build_runtime_reconciliation_state,
+            build_runtime_recovery_incident,
             recovery_from_coordinator,
+            recovery_from_dispatch_result,
             recovery_from_merged_result,
             recovery_from_projection,
+            recovery_from_takeover_result,
         )
+
         assert RecoveryIncidentType is not None
         assert RuntimeRecoveryIncident is not None
         assert build_recovery_summary is not None
 
     def test_core_unified_re_exports(self):
         from core.unified import (
-            RecoveryIncidentType,
-            RecoveryStatus,
-            RecoveryActionType,
-            RecoveryParticipantState,
             RecoveryActionRecommendation,
+            RecoveryActionType,
             RecoveryBarrierState,
-            RuntimeRecoveryIncident,
-            RuntimeReconciliationState,
+            RecoveryIncidentType,
+            RecoveryParticipantState,
+            RecoveryStatus,
             RecoverySummary,
-            build_runtime_recovery_incident,
-            build_runtime_reconciliation_state,
+            RuntimeReconciliationState,
+            RuntimeRecoveryIncident,
             build_recovery_summary,
-            recovery_from_dispatch_result,
-            recovery_from_takeover_result,
+            build_runtime_reconciliation_state,
+            build_runtime_recovery_incident,
             recovery_from_coordinator,
+            recovery_from_dispatch_result,
             recovery_from_merged_result,
             recovery_from_projection,
+            recovery_from_takeover_result,
         )
+
         assert RuntimeReconciliationState is not None
         assert build_runtime_reconciliation_state is not None
 
@@ -1210,6 +1301,7 @@ class TestRuntimeRecoveryRoute:
     def test_route_returns_valid_json(self):
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
+
         from core.routes.projection import create_router
 
         app = FastAPI()
@@ -1223,6 +1315,7 @@ class TestRuntimeRecoveryRoute:
     def test_route_stable_top_level_keys(self):
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
+
         from core.routes.projection import create_router
 
         app = FastAPI()
@@ -1231,12 +1324,21 @@ class TestRuntimeRecoveryRoute:
         resp = client.get("/api/v1/projection/runtime/recovery")
         data = resp.json()
         for key in (
-            "summary_id", "overall_status", "incident_count",
-            "resolved_incident_count", "pending_incident_count",
-            "needs_intervention_count", "replay_required", "resume_allowed",
-            "merge_confirmation_required", "has_barrier",
-            "recommended_action_types", "most_recent_incident_type",
-            "most_recent_recovery_id", "reason", "metadata",
+            "summary_id",
+            "overall_status",
+            "incident_count",
+            "resolved_incident_count",
+            "pending_incident_count",
+            "needs_intervention_count",
+            "replay_required",
+            "resume_allowed",
+            "merge_confirmation_required",
+            "has_barrier",
+            "recommended_action_types",
+            "most_recent_incident_type",
+            "most_recent_recovery_id",
+            "reason",
+            "metadata",
         ):
             assert key in data, f"Missing key in recovery route response: {key}"
 

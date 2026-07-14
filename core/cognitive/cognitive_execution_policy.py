@@ -267,17 +267,17 @@ FALLBACK_COGNITIVE_HINT: CognitiveExecutionHint = CognitiveExecutionHint(
 
 # Maps CognitiveRegion string value -> (exec_path_pref, delegation_bias, planning_intensity)
 _REGION_HINT_MAP: Dict[str, tuple] = {
-    "silent":   (EXEC_PATH_PREF_DEFERRED,  DELEGATION_BIAS_PREFER_DEFERRED,  PLANNING_INTENSITY_MINIMAL),
-    "passive":  (EXEC_PATH_PREF_DEFERRED,  DELEGATION_BIAS_PREFER_DEFERRED,  PLANNING_INTENSITY_MINIMAL),
-    "liminal":  (EXEC_PATH_PREF_PLANNING,  DELEGATION_BIAS_PREFER_PLANNING,  PLANNING_INTENSITY_HEAVY),
-    "manifest": (EXEC_PATH_PREF_DIRECT,    DELEGATION_BIAS_PREFER_LOCAL,     PLANNING_INTENSITY_STANDARD),
+    "silent": (EXEC_PATH_PREF_DEFERRED, DELEGATION_BIAS_PREFER_DEFERRED, PLANNING_INTENSITY_MINIMAL),
+    "passive": (EXEC_PATH_PREF_DEFERRED, DELEGATION_BIAS_PREFER_DEFERRED, PLANNING_INTENSITY_MINIMAL),
+    "liminal": (EXEC_PATH_PREF_PLANNING, DELEGATION_BIAS_PREFER_PLANNING, PLANNING_INTENSITY_HEAVY),
+    "manifest": (EXEC_PATH_PREF_DIRECT, DELEGATION_BIAS_PREFER_LOCAL, PLANNING_INTENSITY_STANDARD),
 }
 
 # Maps CognitiveRegion string value -> base activation_budget
 _REGION_ACTIVATION_BUDGET: Dict[str, float] = {
-    "silent":   0.2,
-    "passive":  0.2,
-    "liminal":  0.6,
+    "silent": 0.2,
+    "passive": 0.2,
+    "liminal": 0.6,
     "manifest": 1.0,
 }
 
@@ -359,9 +359,7 @@ def _derive_hint_impl(
     # ------------------------------------------------------------------
     # 2. Base hint from region mapping table
     # ------------------------------------------------------------------
-    exec_path_pref, delegation_bias, planning_intensity = _REGION_HINT_MAP.get(
-        region_str, _REGION_HINT_MAP["silent"]
-    )
+    exec_path_pref, delegation_bias, planning_intensity = _REGION_HINT_MAP.get(region_str, _REGION_HINT_MAP["silent"])
     base_budget: float = _REGION_ACTIVATION_BUDGET.get(region_str, 0.2)
 
     # ------------------------------------------------------------------
@@ -447,7 +445,7 @@ def _refine_budget_from_continuum(
                 action_level_boost = 0.08
 
         # Blend: 60% presence_intensity + 40% base_budget + coherence bonus
-        blended = (presence_intensity * 0.6 + base_budget * 0.4)
+        blended = presence_intensity * 0.6 + base_budget * 0.4
         # Coherence above 0.7 provides a small boost; below 0.3 slightly restricts.
         coherence_adj = (coherence - 0.5) * 0.1
         refined = min(1.0, max(0.0, blended + coherence_adj + action_level_boost))
@@ -470,7 +468,7 @@ def _refine_budget_from_field(
     manifest_score and arousal to produce a budget close to the base.
     """
     try:
-        blended = (manifest_score * 0.5 + arousal * 0.3 + base_budget * 0.2)
+        blended = manifest_score * 0.5 + arousal * 0.3 + base_budget * 0.2
         # High uncertainty slightly restricts.
         unc_adj = -(uncertainty - 0.5) * 0.10
         refined = min(1.0, max(0.0, blended + unc_adj))

@@ -77,10 +77,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers / stub implementations
 # ---------------------------------------------------------------------------
+
 
 def _make_stub_discovery_node(node_id: str, state_str: str = "registered"):
     """Return a minimal stub DiscoveredNode-like object."""
@@ -118,9 +118,7 @@ def _make_stub_fabric(nodes: List[Any]) -> MagicMock:
     """Return a stub NodeFabricRegistry with list_nodes / list_healthy."""
     fabric = MagicMock()
     fabric.list_nodes.return_value = nodes
-    fabric.list_healthy.return_value = [
-        n for n in nodes if n.status.value == "healthy"
-    ]
+    fabric.list_healthy.return_value = [n for n in nodes if n.status.value == "healthy"]
     return fabric
 
 
@@ -128,7 +126,7 @@ def _make_stub_discovery(existing_node_ids: Optional[List[str]] = None) -> Magic
     """Return a stub NodeDiscoveryService with .nodes dict and register_node()."""
     discovery = MagicMock()
     discovery.nodes = {}
-    for nid in (existing_node_ids or []):
+    for nid in existing_node_ids or []:
         discovery.nodes[nid] = _make_stub_discovery_node(nid)
     return discovery
 
@@ -137,45 +135,57 @@ def _make_stub_discovery(existing_node_ids: Optional[List[str]] = None) -> Magic
 # A. Sentinel / policy strings
 # ---------------------------------------------------------------------------
 
+
 class TestSentinels:
     def test_authority_importable_and_non_empty(self):
         from core.node_discovery_runtime import NODE_DISCOVERY_IS_RUNTIME_PARTICIPANT_AUTHORITY
+
         assert isinstance(NODE_DISCOVERY_IS_RUNTIME_PARTICIPANT_AUTHORITY, str)
         assert len(NODE_DISCOVERY_IS_RUNTIME_PARTICIPANT_AUTHORITY) > 10
 
     def test_pr7_sentinel_importable_and_non_empty(self):
         from core.node_discovery_runtime import NODE_DISCOVERY_RUNTIME_INTEGRATION_PR7_SENTINEL
+
         assert isinstance(NODE_DISCOVERY_RUNTIME_INTEGRATION_PR7_SENTINEL, str)
-        assert "PR7" in NODE_DISCOVERY_RUNTIME_INTEGRATION_PR7_SENTINEL or "discovery" in NODE_DISCOVERY_RUNTIME_INTEGRATION_PR7_SENTINEL.lower()
+        assert (
+            "PR7" in NODE_DISCOVERY_RUNTIME_INTEGRATION_PR7_SENTINEL
+            or "discovery" in NODE_DISCOVERY_RUNTIME_INTEGRATION_PR7_SENTINEL.lower()
+        )
 
     def test_pr7_sentinel_contains_key_terms(self):
         from core.node_discovery_runtime import NODE_DISCOVERY_RUNTIME_INTEGRATION_PR7_SENTINEL
+
         text = NODE_DISCOVERY_RUNTIME_INTEGRATION_PR7_SENTINEL.lower()
         assert "discovery" in text
         assert "startup" in text
 
     def test_active_nodes_discoverable_policy(self):
         from core.node_discovery_runtime import ACTIVE_NODES_ARE_DISCOVERABLE_POLICY
+
         assert isinstance(ACTIVE_NODES_ARE_DISCOVERABLE_POLICY, str)
         assert len(ACTIVE_NODES_ARE_DISCOVERABLE_POLICY) > 10
 
     def test_discovery_state_reflects_runtime_state_policy(self):
         from core.node_discovery_runtime import DISCOVERY_STATE_REFLECTS_RUNTIME_STATE_POLICY
+
         assert isinstance(DISCOVERY_STATE_REFLECTS_RUNTIME_STATE_POLICY, str)
         assert len(DISCOVERY_STATE_REFLECTS_RUNTIME_STATE_POLICY) > 10
 
     def test_discovery_mismatch_diagnosable_policy(self):
         from core.node_discovery_runtime import DISCOVERY_MISMATCH_IS_DIAGNOSABLE_POLICY
+
         assert isinstance(DISCOVERY_MISMATCH_IS_DIAGNOSABLE_POLICY, str)
         assert len(DISCOVERY_MISMATCH_IS_DIAGNOSABLE_POLICY) > 10
 
     def test_discovery_participates_in_startup_path_policy(self):
         from core.node_discovery_runtime import DISCOVERY_PARTICIPATES_IN_STARTUP_PATH_POLICY
+
         assert isinstance(DISCOVERY_PARTICIPATES_IN_STARTUP_PATH_POLICY, str)
         assert len(DISCOVERY_PARTICIPATES_IN_STARTUP_PATH_POLICY) > 10
 
     def test_undiscovered_active_nodes_flagged_policy(self):
         from core.node_discovery_runtime import UNDISCOVERED_ACTIVE_NODES_ARE_FLAGGED_POLICY
+
         assert isinstance(UNDISCOVERED_ACTIVE_NODES_ARE_FLAGGED_POLICY, str)
         assert len(UNDISCOVERED_ACTIVE_NODES_ARE_FLAGGED_POLICY) > 10
 
@@ -184,9 +194,11 @@ class TestSentinels:
 # B. NodeDiscoveryParticipationRecord dataclass
 # ---------------------------------------------------------------------------
 
+
 class TestNodeDiscoveryParticipationRecord:
     def test_instantiable_with_defaults(self):
         from core.node_discovery_runtime import NodeDiscoveryParticipationRecord
+
         rec = NodeDiscoveryParticipationRecord(node_id="Node_01_Test")
         assert rec.node_id == "Node_01_Test"
         assert rec.in_fabric_registry is False
@@ -196,6 +208,7 @@ class TestNodeDiscoveryParticipationRecord:
 
     def test_to_dict_required_fields(self):
         from core.node_discovery_runtime import NodeDiscoveryParticipationRecord
+
         rec = NodeDiscoveryParticipationRecord(
             node_id="Node_02_Test",
             in_fabric_registry=True,
@@ -217,12 +230,14 @@ class TestNodeDiscoveryParticipationRecord:
 
     def test_all_alignment_values_accepted(self):
         from core.node_discovery_runtime import NodeDiscoveryParticipationRecord
+
         for alignment in ("aligned", "undiscovered_active", "discovery_orphan", "inactive"):
             rec = NodeDiscoveryParticipationRecord(node_id="x", alignment=alignment)
             assert rec.alignment == alignment
 
     def test_diagnostic_notes_serialised(self):
         from core.node_discovery_runtime import NodeDiscoveryParticipationRecord
+
         rec = NodeDiscoveryParticipationRecord(
             node_id="Node_03_Test",
             diagnostic_notes=["note1", "note2"],
@@ -235,9 +250,11 @@ class TestNodeDiscoveryParticipationRecord:
 # C. DiscoveryRuntimeSnapshot dataclass
 # ---------------------------------------------------------------------------
 
+
 class TestDiscoveryRuntimeSnapshot:
     def test_instantiable_with_defaults(self):
         from core.node_discovery_runtime import DiscoveryRuntimeSnapshot
+
         snap = DiscoveryRuntimeSnapshot()
         assert snap.seeded_count == 0
         assert snap.healthy_count == 0
@@ -248,6 +265,7 @@ class TestDiscoveryRuntimeSnapshot:
 
     def test_to_dict_required_fields(self):
         from core.node_discovery_runtime import DiscoveryRuntimeSnapshot, NodeDiscoveryParticipationRecord
+
         rec = NodeDiscoveryParticipationRecord(node_id="n1")
         snap = DiscoveryRuntimeSnapshot(
             seeded_count=3,
@@ -267,10 +285,8 @@ class TestDiscoveryRuntimeSnapshot:
 
     def test_participation_records_serialised(self):
         from core.node_discovery_runtime import DiscoveryRuntimeSnapshot, NodeDiscoveryParticipationRecord
-        recs = [
-            NodeDiscoveryParticipationRecord(node_id=f"Node_{i}", alignment="aligned")
-            for i in range(3)
-        ]
+
+        recs = [NodeDiscoveryParticipationRecord(node_id=f"Node_{i}", alignment="aligned") for i in range(3)]
         snap = DiscoveryRuntimeSnapshot(participation_records=recs)
         d = snap.to_dict()
         assert len(d["participation_records"]) == 3
@@ -280,6 +296,7 @@ class TestDiscoveryRuntimeSnapshot:
 # ---------------------------------------------------------------------------
 # D. seed_fabric_nodes_into_discovery
 # ---------------------------------------------------------------------------
+
 
 class TestSeedFabricNodesIntoDiscovery:
     def test_seeds_healthy_fabric_nodes(self):
@@ -370,6 +387,7 @@ class TestSeedFabricNodesIntoDiscovery:
 # E. announce_node_to_discovery
 # ---------------------------------------------------------------------------
 
+
 class TestAnnounceNodeToDiscovery:
     def test_registers_new_node(self):
         from core.node_discovery_runtime import announce_node_to_discovery
@@ -423,8 +441,8 @@ class TestAnnounceNodeToDiscovery:
 
     def test_default_capabilities_is_node_id(self):
         """When no capabilities provided, defaults to [node_id]."""
-        from core.node_discovery_runtime import announce_node_to_discovery
         from core.node_discovery import DiscoveredNode
+        from core.node_discovery_runtime import announce_node_to_discovery
 
         # Use a real DiscoveredNode to check capabilities.
         discovery = MagicMock()
@@ -445,6 +463,7 @@ class TestAnnounceNodeToDiscovery:
 # ---------------------------------------------------------------------------
 # F. initialize_discovery_from_startup
 # ---------------------------------------------------------------------------
+
 
 class TestInitializeDiscoveryFromStartup:
     def test_seeds_all_healthy_nodes(self):
@@ -484,6 +503,7 @@ class TestInitializeDiscoveryFromStartup:
 # ---------------------------------------------------------------------------
 # G. build_discovery_runtime_snapshot — alignment classification
 # ---------------------------------------------------------------------------
+
 
 class TestBuildDiscoveryRuntimeSnapshot:
     def _make_simple_snapshot(self, fab_healthy, fab_offline, disc_present):
@@ -547,9 +567,9 @@ class TestBuildDiscoveryRuntimeSnapshot:
             fab_offline=["Node_03"],
             disc_present=["Node_01", "Node_03"],
         )
-        assert snap.healthy_count == 1          # Node_01 aligned
+        assert snap.healthy_count == 1  # Node_01 aligned
         assert snap.undiscovered_active_count == 1  # Node_02 undiscovered
-        assert snap.discovery_orphan_count == 1   # Node_03 orphan
+        assert snap.discovery_orphan_count == 1  # Node_03 orphan
 
     def test_empty_fabric_and_discovery(self):
         from core.node_discovery_runtime import build_discovery_runtime_snapshot
@@ -578,6 +598,7 @@ class TestBuildDiscoveryRuntimeSnapshot:
 # ---------------------------------------------------------------------------
 # H. build_discovery_runtime_snapshot — launcher_active_nodes
 # ---------------------------------------------------------------------------
+
 
 class TestSnapshotLauncherNodes:
     def test_in_launcher_active_flagged(self):
@@ -621,6 +642,7 @@ class TestSnapshotLauncherNodes:
 # I. get_discovery_participation_summary
 # ---------------------------------------------------------------------------
 
+
 class TestGetDiscoveryParticipationSummary:
     def _make_discovery_with_healthy(self, healthy_ids: List[str]) -> MagicMock:
         discovery = _make_stub_discovery(existing_node_ids=healthy_ids)
@@ -635,9 +657,15 @@ class TestGetDiscoveryParticipationSummary:
         discovery = _make_stub_discovery()
 
         summary = get_discovery_participation_summary(discovery, fabric)
-        for key in ("discovery_total", "discovery_healthy", "fabric_total",
-                    "fabric_healthy", "undiscovered_active",
-                    "discovery_participation", "authority"):
+        for key in (
+            "discovery_total",
+            "discovery_healthy",
+            "fabric_total",
+            "fabric_healthy",
+            "undiscovered_active",
+            "discovery_participation",
+            "authority",
+        ):
             assert key in summary, f"Missing key: {key}"
 
     def test_full_participation(self):
@@ -688,9 +716,10 @@ class TestGetDiscoveryParticipationSummary:
 
     def test_authority_present(self):
         from core.node_discovery_runtime import (
-            get_discovery_participation_summary,
             NODE_DISCOVERY_IS_RUNTIME_PARTICIPANT_AUTHORITY,
+            get_discovery_participation_summary,
         )
+
         fabric = _make_stub_fabric([])
         discovery = _make_stub_discovery()
         summary = get_discovery_participation_summary(discovery, fabric)
@@ -701,9 +730,11 @@ class TestGetDiscoveryParticipationSummary:
 # J. launcher/node_startup.py integration sentinels
 # ---------------------------------------------------------------------------
 
+
 class TestNodeStartupLauncherIntegration:
     def test_node_discovery_startup_wired_pr7_sentinel(self):
         from launcher.node_startup import NODE_DISCOVERY_STARTUP_WIRED_PR7
+
         assert isinstance(NODE_DISCOVERY_STARTUP_WIRED_PR7, str)
         assert len(NODE_DISCOVERY_STARTUP_WIRED_PR7) > 10
         text = NODE_DISCOVERY_STARTUP_WIRED_PR7.lower()
@@ -711,39 +742,43 @@ class TestNodeStartupLauncherIntegration:
 
     def test_announce_node_to_discovery_method_exists(self):
         from launcher.node_startup import NodeSystemLauncher
+
         assert hasattr(NodeSystemLauncher, "_announce_node_to_discovery")
         assert callable(NodeSystemLauncher._announce_node_to_discovery)
 
     def test_initialize_discovery_after_startup_method_exists(self):
         import inspect
+
         from launcher.node_startup import NodeSystemLauncher
+
         assert hasattr(NodeSystemLauncher, "initialize_discovery_after_startup")
         method = NodeSystemLauncher.initialize_discovery_after_startup
-        assert asyncio_or_coroutine(method), (
-            "initialize_discovery_after_startup should be an async method"
-        )
+        assert asyncio_or_coroutine(method), "initialize_discovery_after_startup should be an async method"
 
     def test_register_with_runtime_registry_calls_announce(self):
         """_register_node_with_runtime_registry delegates to _announce_node_to_discovery."""
         import inspect
+
         from launcher.node_startup import NodeSystemLauncher
 
         src = inspect.getsource(NodeSystemLauncher._register_node_with_runtime_registry)
-        assert "_announce_node_to_discovery" in src, (
-            "_register_node_with_runtime_registry should call _announce_node_to_discovery"
-        )
+        assert (
+            "_announce_node_to_discovery" in src
+        ), "_register_node_with_runtime_registry should call _announce_node_to_discovery"
 
 
 def asyncio_or_coroutine(func) -> bool:
     """Return True if func is an async function or coroutine function."""
     import asyncio
     import inspect
+
     return asyncio.iscoroutinefunction(func) or inspect.iscoroutinefunction(func)
 
 
 # ---------------------------------------------------------------------------
 # K. projection.py sentinel
 # ---------------------------------------------------------------------------
+
 
 class TestProjectionSentinel:
     def test_sentinel_importable(self):

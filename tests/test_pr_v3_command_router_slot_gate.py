@@ -30,6 +30,7 @@ import pytest
 
 try:
     from core.command_router import CommandRouter, GatewayErrorCode
+
     _ROUTER_AVAILABLE = True
 except ImportError:
     _ROUTER_AVAILABLE = False
@@ -37,16 +38,18 @@ except ImportError:
 try:
     from core.canonical_dispatch_slot_authority import (
         CanonicalDispatchSlot,
-        CanonicalDispatchSlotStatus,
         CanonicalDispatchSlotsResult,
+        CanonicalDispatchSlotStatus,
         get_canonical_dispatch_slots,
     )
+
     _AUTHORITY_AVAILABLE = True
 except ImportError:
     _AUTHORITY_AVAILABLE = False
 
 try:
     from core.schemas.task_envelope import TaskEnvelope
+
     _ENVELOPE_AVAILABLE = True
 except ImportError:
     _ENVELOPE_AVAILABLE = False
@@ -55,6 +58,7 @@ except ImportError:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _task_id() -> str:
     return f"v3gate_test_{uuid.uuid4().hex[:8]}"
@@ -117,15 +121,14 @@ def _make_slots_result(
 # Section 1 — V3_SLOT_BLOCKED error code
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.skipif(not _ROUTER_AVAILABLE, reason="CommandRouter unavailable")
 class TestV3SlotBlockedErrorCode:
     """V3_SLOT_BLOCKED must exist in GatewayErrorCode."""
 
     def test_v3_slot_blocked_error_code_exists(self) -> None:
         codes = [e.value for e in GatewayErrorCode]
-        assert "V3_SLOT_BLOCKED" in codes, (
-            "GatewayErrorCode must have V3_SLOT_BLOCKED for V3 dispatch gate"
-        )
+        assert "V3_SLOT_BLOCKED" in codes, "GatewayErrorCode must have V3_SLOT_BLOCKED for V3 dispatch gate"
 
     def test_v3_slot_blocked_is_string_enum(self) -> None:
         assert GatewayErrorCode.V3_SLOT_BLOCKED == "V3_SLOT_BLOCKED"
@@ -134,6 +137,7 @@ class TestV3SlotBlockedErrorCode:
 # ---------------------------------------------------------------------------
 # Section 2 — route_envelope() consults V3 before dispatch
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.skipif(
     not (_ROUTER_AVAILABLE and _AUTHORITY_AVAILABLE and _ENVELOPE_AVAILABLE),
@@ -195,14 +199,10 @@ class TestRouteEnvelopeConsultsV3:
                         return await router.route_envelope(env)
 
         result = asyncio.new_event_loop().run_until_complete(_run())
-        assert len(call_log) >= 1, (
-            "get_canonical_dispatch_slots must be called at least once during route_envelope"
-        )
+        assert len(call_log) >= 1, "get_canonical_dispatch_slots must be called at least once during route_envelope"
         # Verify device_alpha was in the targets passed to V3
         first_call = call_log[0]
-        assert "device_alpha" in first_call.get("device_ids", []), (
-            "V3 must receive the target device IDs"
-        )
+        assert "device_alpha" in first_call.get("device_ids", []), "V3 must receive the target device IDs"
 
     def test_v3_consulted_for_multiple_targets(self) -> None:
         """V3 is consulted when multiple targets are present."""
@@ -251,6 +251,7 @@ class TestRouteEnvelopeConsultsV3:
 # ---------------------------------------------------------------------------
 # Section 3 — Non-SLOT_APPROVED targets are filtered
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.skipif(
     not (_ROUTER_AVAILABLE and _AUTHORITY_AVAILABLE and _ENVELOPE_AVAILABLE),
@@ -309,14 +310,13 @@ class TestSlotApprovedFiltering:
                         return await router.route_envelope(env)
 
         asyncio.new_event_loop().run_until_complete(_run())
-        assert "dev_blocked" not in dispatched_to, (
-            "dev_blocked is not SLOT_APPROVED and must not be dispatched"
-        )
+        assert "dev_blocked" not in dispatched_to, "dev_blocked is not SLOT_APPROVED and must not be dispatched"
 
 
 # ---------------------------------------------------------------------------
 # Section 4 — Dispatch blocked when all targets fail slot legality
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.skipif(
     not (_ROUTER_AVAILABLE and _AUTHORITY_AVAILABLE and _ENVELOPE_AVAILABLE),
@@ -347,9 +347,9 @@ class TestAllTargetsBlocked:
 
         result = asyncio.new_event_loop().run_until_complete(_run())
         assert result["success"] is False, "Dispatch must fail when all targets are V3-blocked"
-        assert result["error_code"] == GatewayErrorCode.V3_SLOT_BLOCKED.value, (
-            f"error_code must be V3_SLOT_BLOCKED, got {result['error_code']!r}"
-        )
+        assert (
+            result["error_code"] == GatewayErrorCode.V3_SLOT_BLOCKED.value
+        ), f"error_code must be V3_SLOT_BLOCKED, got {result['error_code']!r}"
 
     def test_all_blocked_result_includes_block_reason(self) -> None:
         """V3_SLOT_BLOCKED result must include block reason for diagnostics."""
@@ -373,9 +373,9 @@ class TestAllTargetsBlocked:
 
         result = asyncio.new_event_loop().run_until_complete(_run())
         assert result["success"] is False
-        assert "device occupancy conflict" in result.get("error_message", ""), (
-            "Block reason must appear in error_message for diagnostics"
-        )
+        assert "device occupancy conflict" in result.get(
+            "error_message", ""
+        ), "Block reason must appear in error_message for diagnostics"
 
     def test_all_blocked_result_includes_v3_slot_gate_info(self) -> None:
         """V3_SLOT_BLOCKED result carries v3_slot_gate dict for observability."""
@@ -445,6 +445,7 @@ class TestAllTargetsBlocked:
 # Section 5 — Existing downstream gates still function
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.skipif(
     not (_ROUTER_AVAILABLE and _ENVELOPE_AVAILABLE),
     reason="CommandRouter or TaskEnvelope unavailable",
@@ -476,6 +477,7 @@ class TestExistingGatesPreserved:
             ):
                 try:
                     from core.acl_enforcer import get_acl_enforcer
+
                     mock_enforcer = MagicMock()
                     mock_enforcer.check.return_value = MagicMock(allowed=False, reason="ACL denied: test")
                     with patch("core.acl_enforcer.get_acl_enforcer", return_value=mock_enforcer):
@@ -587,6 +589,7 @@ class TestExistingGatesPreserved:
 # Section 6 — Delegated / multi-device dispatch compatibility
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.skipif(
     not (_ROUTER_AVAILABLE and _AUTHORITY_AVAILABLE and _ENVELOPE_AVAILABLE),
     reason="CommandRouter, V3 authority, or TaskEnvelope unavailable",
@@ -624,9 +627,7 @@ class TestMultiDeviceDelegatedCompatibility:
         asyncio.new_event_loop().run_until_complete(_run())
         if fanout_targets_seen:
             targets_used = fanout_targets_seen[-1]
-            assert "fan_b" not in targets_used, (
-                "fan_b is V3-blocked and must not appear in parallel_fanout targets"
-            )
+            assert "fan_b" not in targets_used, "fan_b is V3-blocked and must not appear in parallel_fanout targets"
             assert "fan_a" in targets_used
             assert "fan_c" in targets_used
 
@@ -667,9 +668,7 @@ class TestMultiDeviceDelegatedCompatibility:
                     return await router.route_envelope(env)
 
         asyncio.new_event_loop().run_until_complete(_run())
-        assert len(v3_call_args) >= 1, (
-            "V3 must be consulted for delegated/cross_device dispatch"
-        )
+        assert len(v3_call_args) >= 1, "V3 must be consulted for delegated/cross_device dispatch"
 
     def test_multi_device_all_blocked_returns_v3_slot_blocked(self) -> None:
         """Multi-device delegated dispatch blocked when all V3-reject."""
@@ -702,6 +701,7 @@ class TestMultiDeviceDelegatedCompatibility:
 # ---------------------------------------------------------------------------
 # Section 7 — Constraint chain trace carries V3 info
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.skipif(
     not (_ROUTER_AVAILABLE and _AUTHORITY_AVAILABLE and _ENVELOPE_AVAILABLE),

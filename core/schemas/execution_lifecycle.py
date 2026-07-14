@@ -95,7 +95,6 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional, Set
 
-
 __all__ = [
     "ExecutionLifecycleState",
     "LifecycleTransition",
@@ -263,6 +262,7 @@ def is_terminal(state: ExecutionLifecycleState) -> bool:
 # ---------------------------------------------------------------------------
 # Initial state mapping
 # ---------------------------------------------------------------------------
+
 
 def initial_state_for_step_type(step_type_value: str) -> ExecutionLifecycleState:
     """Return the initial lifecycle state for a given step type value.

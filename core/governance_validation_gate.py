@@ -95,11 +95,10 @@ logger = logging.getLogger("Galaxy.GovernanceValidationGate")
 # Unified taxonomy alignment
 # ---------------------------------------------------------------------------
 try:
-    from core.release_governance_taxonomy import (  # noqa: F401
-        TAXONOMY_AUTHORITY as _TAXONOMY_AUTHORITY,
-        IssueClassification as _IssueClassification,
-        verdict_to_classification as _verdict_to_classification,
-    )
+    from core.release_governance_taxonomy import TAXONOMY_AUTHORITY as _TAXONOMY_AUTHORITY  # noqa: F401
+    from core.release_governance_taxonomy import IssueClassification as _IssueClassification
+    from core.release_governance_taxonomy import verdict_to_classification as _verdict_to_classification
+
     _TAXONOMY_AVAILABLE = True
 except ImportError:  # pragma: no cover
     _TAXONOMY_AVAILABLE = False
@@ -296,8 +295,7 @@ class GovernanceValidationError(Exception):
     def __init__(self, result: "ValidationResult") -> None:
         reason = result.fail_reasons[0].value if result.fail_reasons else "unknown"
         super().__init__(
-            f"GovernanceValidation FAILED: outcome={result.outcome.value} "
-            f"reason={reason} — {result.summary}"
+            f"GovernanceValidation FAILED: outcome={result.outcome.value} " f"reason={reason} — {result.summary}"
         )
         self.result = result
 
@@ -374,9 +372,7 @@ class ValidationResult:
             "details": self.details,
         }
         if _TAXONOMY_AVAILABLE:
-            result["taxonomy_classification"] = _verdict_to_classification(
-                self.outcome.value
-            ).value
+            result["taxonomy_classification"] = _verdict_to_classification(self.outcome.value).value
             result["taxonomy_alignment"] = "core.release_governance_taxonomy::PR8"
         return result
 
@@ -401,10 +397,9 @@ class ValidationResult:
 # ---------------------------------------------------------------------------
 
 try:
-    from core.distributed_release_gate_skeleton import (
-        evaluate_distributed_release_gate as _evaluate_distributed_gate,
-        ReleaseGateVerdict as _ReleaseGateVerdict,
-    )
+    from core.distributed_release_gate_skeleton import ReleaseGateVerdict as _ReleaseGateVerdict
+    from core.distributed_release_gate_skeleton import evaluate_distributed_release_gate as _evaluate_distributed_gate
+
     _DISTRIBUTED_GATE_AVAILABLE = True
 except ImportError:  # pragma: no cover
     _DISTRIBUTED_GATE_AVAILABLE = False
@@ -412,10 +407,9 @@ except ImportError:  # pragma: no cover
     _ReleaseGateVerdict = None  # type: ignore[assignment]
 
 try:
-    from core.execution.readiness_gate import (
-        evaluate_readiness as _evaluate_readiness,
-        ReadinessStatus as _ReadinessStatus,
-    )
+    from core.execution.readiness_gate import ReadinessStatus as _ReadinessStatus
+    from core.execution.readiness_gate import evaluate_readiness as _evaluate_readiness
+
     _READINESS_GATE_AVAILABLE = True
 except ImportError:  # pragma: no cover
     _READINESS_GATE_AVAILABLE = False
@@ -423,19 +417,19 @@ except ImportError:  # pragma: no cover
     _ReadinessStatus = None  # type: ignore[assignment]
 
 try:
-    from core.delegated_flow_readiness_gate import (
-        DelegatedFlowReadinessGate as _DelegatedFlowReadinessGate,
-    )
+    from core.delegated_flow_readiness_gate import DelegatedFlowReadinessGate as _DelegatedFlowReadinessGate
+
     _DELEGATED_READINESS_AVAILABLE = True
 except ImportError:  # pragma: no cover
     _DELEGATED_READINESS_AVAILABLE = False
     _DelegatedFlowReadinessGate = None  # type: ignore[assignment]
 
 try:
+    from core.capability_tier import CapabilityTier as _CapabilityTier
     from core.capability_tier import (
         get_capability_tier,
-        CapabilityTier as _CapabilityTier,
     )
+
     _CAPABILITY_TIER_AVAILABLE = True
 except ImportError:  # pragma: no cover
     _CAPABILITY_TIER_AVAILABLE = False
@@ -540,10 +534,7 @@ class GovernanceValidationGate:
 
                 if release_gate_verdict == "blocked":
                     fail_reasons.append(ValidationFailReason.governance_blocked)
-                    blocked_evals = [
-                        e for e in gate_report.category_evaluations
-                        if e.verdict == "blocked"
-                    ]
+                    blocked_evals = [e for e in gate_report.category_evaluations if e.verdict == "blocked"]
                     details["blocked_categories"] = [e.category for e in blocked_evals]
                     details["blocked_category_states"] = [
                         {
@@ -557,9 +548,7 @@ class GovernanceValidationGate:
                         for e in blocked_evals
                     ]
             except Exception as exc:  # noqa: BLE001
-                logger.warning(
-                    "GovernanceValidationGate: distributed gate eval failed: %s", exc
-                )
+                logger.warning("GovernanceValidationGate: distributed gate eval failed: %s", exc)
                 release_gate_verdict = "error"
                 fail_reasons.append(ValidationFailReason.evidence_surface_unavailable)
                 details["distributed_gate_error"] = str(exc)
@@ -577,23 +566,15 @@ class GovernanceValidationGate:
                 if readiness_result.status.value == "blocked":
                     fail_reasons.append(ValidationFailReason.readiness_blocked)
                     details["readiness_blocked_by"] = (
-                        readiness_result.blocked_by.value
-                        if readiness_result.blocked_by
-                        else None
+                        readiness_result.blocked_by.value if readiness_result.blocked_by else None
                     )
             except Exception as exc:  # noqa: BLE001
-                logger.warning(
-                    "GovernanceValidationGate: readiness gate eval failed: %s", exc
-                )
+                logger.warning("GovernanceValidationGate: readiness gate eval failed: %s", exc)
                 readiness_status = "error"
                 details["readiness_error"] = str(exc)
 
         # -- DelegatedFlowReadinessGate check --------------------------------
-        if (
-            check_delegated_readiness
-            and _DELEGATED_READINESS_AVAILABLE
-            and _DelegatedFlowReadinessGate is not None
-        ):
+        if check_delegated_readiness and _DELEGATED_READINESS_AVAILABLE and _DelegatedFlowReadinessGate is not None:
             try:
                 delegated_report = _DelegatedFlowReadinessGate().evaluate()
                 delegated_readiness_verdict = delegated_report.verdict.value
@@ -602,19 +583,12 @@ class GovernanceValidationGate:
                     fail_reasons.append(ValidationFailReason.delegated_readiness_not_ready)
                     details["delegated_gaps"] = delegated_report.gaps
             except Exception as exc:  # noqa: BLE001
-                logger.warning(
-                    "GovernanceValidationGate: delegated readiness eval failed: %s", exc
-                )
+                logger.warning("GovernanceValidationGate: delegated readiness eval failed: %s", exc)
                 delegated_readiness_verdict = "error"
                 details["delegated_readiness_error"] = str(exc)
 
         # -- Capability tier check ------------------------------------------
-        if (
-            capability
-            and check_capability_tier
-            and _CAPABILITY_TIER_AVAILABLE
-            and get_capability_tier is not None
-        ):
+        if capability and check_capability_tier and _CAPABILITY_TIER_AVAILABLE and get_capability_tier is not None:
             try:
                 tier = get_capability_tier(capability)
                 cap_tier = tier.value
@@ -625,9 +599,7 @@ class GovernanceValidationGate:
                 elif tier.value == "QUASI_MAIN_CHAIN":
                     fail_reasons.append(ValidationFailReason.capability_tier_quasi_main_chain)
             except Exception as exc:  # noqa: BLE001
-                logger.warning(
-                    "GovernanceValidationGate: capability tier check failed: %s", exc
-                )
+                logger.warning("GovernanceValidationGate: capability tier check failed: %s", exc)
                 details["capability_tier_error"] = str(exc)
 
         # -- Determine outcome ----------------------------------------------
@@ -684,9 +656,7 @@ class GovernanceValidationGate:
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _compute_outcome(
-        self, fail_reasons: List[ValidationFailReason]
-    ) -> ValidationOutcome:
+    def _compute_outcome(self, fail_reasons: List[ValidationFailReason]) -> ValidationOutcome:
         """Compute the overall outcome from the accumulated fail reasons.
 
         Rules
@@ -735,16 +705,12 @@ _default_gate: Optional[GovernanceValidationGate] = None
 _gate_lock = threading.Lock()
 
 
-def get_governance_validation_gate(
-    *, strict_on_unavailable: bool = False
-) -> GovernanceValidationGate:
+def get_governance_validation_gate(*, strict_on_unavailable: bool = False) -> GovernanceValidationGate:
     """Return the process-level :class:`GovernanceValidationGate` singleton."""
     global _default_gate
     with _gate_lock:
         if _default_gate is None:
-            _default_gate = GovernanceValidationGate(
-                strict_on_unavailable=strict_on_unavailable
-            )
+            _default_gate = GovernanceValidationGate(strict_on_unavailable=strict_on_unavailable)
     return _default_gate
 
 
@@ -839,19 +805,17 @@ def run_governance_verdict_ci(
     verdict_dict["ci_blocking_dimensions"] = list(CI_BLOCKING_DIMENSIONS)
     verdict_dict["ci_advisory_dimensions"] = list(CI_ADVISORY_DIMENSIONS)
     verdict_dict["strict_mode"] = strict
-    verdict_dict["blocking_fail_reasons"] = [
-        r for r in verdict_dict["fail_reasons"] if r in CI_BLOCKING_DIMENSIONS
-    ]
-    verdict_dict["advisory_fail_reasons"] = [
-        r for r in verdict_dict["fail_reasons"] if r in CI_ADVISORY_DIMENSIONS
-    ]
+    verdict_dict["blocking_fail_reasons"] = [r for r in verdict_dict["fail_reasons"] if r in CI_BLOCKING_DIMENSIONS]
+    verdict_dict["advisory_fail_reasons"] = [r for r in verdict_dict["fail_reasons"] if r in CI_ADVISORY_DIMENSIONS]
     blocked_category_states = list(result.details.get("blocked_category_states") or [])
     verdict_dict["blocked_category_states"] = blocked_category_states
-    verdict_dict["blocked_condition_types"] = sorted({
-        str(item.get("blocking_condition_type") or "")
-        for item in blocked_category_states
-        if item.get("blocking_condition_type")
-    })
+    verdict_dict["blocked_condition_types"] = sorted(
+        {
+            str(item.get("blocking_condition_type") or "")
+            for item in blocked_category_states
+            if item.get("blocking_condition_type")
+        }
+    )
 
     verdict_json = _json.dumps(verdict_dict, indent=2)
 
@@ -877,6 +841,7 @@ def run_governance_verdict_ci(
     # Write JSON artifact if requested
     if output_path:
         import pathlib as _pathlib
+
         _pathlib.Path(output_path).write_text(verdict_json, encoding="utf-8")
         print(f"  verdict JSON written to: {output_path}")
 
@@ -901,9 +866,7 @@ if __name__ == "__main__":
     if _repo_root not in _sys.path:
         _sys.path.insert(0, _repo_root)
 
-    _parser = _argparse.ArgumentParser(
-        description="Governance / Readiness verdict CI blocking gate."
-    )
+    _parser = _argparse.ArgumentParser(description="Governance / Readiness verdict CI blocking gate.")
     _parser.add_argument(
         "--output",
         metavar="PATH",

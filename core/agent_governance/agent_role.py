@@ -174,20 +174,24 @@ AGENT_ROLE_PRECEDENCE: List[AgentRole] = [
 ]
 
 #: Roles that are permitted to initiate a handoff (outgoing side).
-ROLE_CAN_INITIATE_HANDOFF: frozenset = frozenset({
-    AgentRole.PLANNER,
-    AgentRole.EXECUTOR,
-    AgentRole.LOCAL_ASSISTANT,
-    AgentRole.BRIDGE,
-})
+ROLE_CAN_INITIATE_HANDOFF: frozenset = frozenset(
+    {
+        AgentRole.PLANNER,
+        AgentRole.EXECUTOR,
+        AgentRole.LOCAL_ASSISTANT,
+        AgentRole.BRIDGE,
+    }
+)
 
 #: Roles that are permitted to receive a handoff (incoming side).
-ROLE_CAN_RECEIVE_HANDOFF: frozenset = frozenset({
-    AgentRole.EXECUTOR,
-    AgentRole.REMOTE_SPECIALIST,
-    AgentRole.BRIDGE,
-    AgentRole.RECOVERY,
-})
+ROLE_CAN_RECEIVE_HANDOFF: frozenset = frozenset(
+    {
+        AgentRole.EXECUTOR,
+        AgentRole.REMOTE_SPECIALIST,
+        AgentRole.BRIDGE,
+        AgentRole.RECOVERY,
+    }
+)
 
 
 def agent_role_description(role: AgentRole) -> str:

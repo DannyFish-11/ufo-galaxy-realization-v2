@@ -1,4 +1,5 @@
 """PR-HITL: tests for the human-in-the-loop pending-decision registry."""
+
 import asyncio
 
 import pytest
@@ -45,8 +46,11 @@ async def test_resolve_wins():
 async def test_timeout_default_option():
     reg = _fresh()
     rec = reg.register(
-        options=["a", "b"], default_option="a",
-        on_timeout=OnTimeout.DEFAULT_OPTION, timeout_s=0.05, decision_id="d2",
+        options=["a", "b"],
+        default_option="a",
+        on_timeout=OnTimeout.DEFAULT_OPTION,
+        timeout_s=0.05,
+        decision_id="d2",
     )
     outcome = await reg.await_decision(rec)
     assert outcome.status == DecisionStatus.TIMEOUT_DEFAULT

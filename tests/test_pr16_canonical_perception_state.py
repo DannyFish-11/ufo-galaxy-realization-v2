@@ -16,14 +16,15 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_audio_state(**kwargs) -> Any:
     """Return a minimal AudioState-like mock."""
     from core.multimodal.audio_features import AudioState
+
     return AudioState(
         energy=kwargs.get("energy", 0.1),
         speaking_ratio=kwargs.get("speaking_ratio", 0.5),
@@ -36,6 +37,7 @@ def _make_audio_state(**kwargs) -> Any:
 
 def _make_video_state(**kwargs) -> Any:
     from core.multimodal.video_features import VideoState
+
     return VideoState(
         motion_level=kwargs.get("motion_level", 0.3),
         scene_change_rate=kwargs.get("scene_change_rate", 0.1),
@@ -47,7 +49,7 @@ def _make_video_state(**kwargs) -> Any:
 def _make_perception_frame(with_audio=True, with_video=False) -> Any:
     """Build a minimal PerceptionFrame for testing."""
     from core.multimodal.perception_frame import PerceptionFrame, SystemSignals
-    from core.multimodal.signal_quality import SignalQuality, QualityFlag
+    from core.multimodal.signal_quality import QualityFlag, SignalQuality
 
     audio = _make_audio_state() if with_audio else None
     audio_q = SignalQuality(flag=QualityFlag.OK, freshness_ms=50.0, confidence=0.9)
@@ -68,22 +70,17 @@ def _make_perception_frame(with_audio=True, with_video=False) -> Any:
 
 def _make_multimodal_context(n_images=1, n_audio=0, screen=None):
     """Build a minimal MultiModalContext for testing."""
-    from core.schemas.multimodal import MultiModalContext, MultiModalImage, MultiModalAudio
+    from core.schemas.multimodal import MultiModalAudio, MultiModalContext, MultiModalImage
 
-    images = [
-        MultiModalImage(mime="image/jpeg", data="FAKEBASE64==", source="webcam")
-        for _ in range(n_images)
-    ]
-    audio = [
-        MultiModalAudio(mime="audio/wav", data="FAKEAUDIO==", source="microphone")
-        for _ in range(n_audio)
-    ]
+    images = [MultiModalImage(mime="image/jpeg", data="FAKEBASE64==", source="webcam") for _ in range(n_images)]
+    audio = [MultiModalAudio(mime="audio/wav", data="FAKEAUDIO==", source="microphone") for _ in range(n_audio)]
     return MultiModalContext(images=images, audio=audio, screen=screen)
 
 
 # ---------------------------------------------------------------------------
 # 1. Text-only request: valid canonical state, no multimodal breakage
 # ---------------------------------------------------------------------------
+
 
 class TestTextOnlyProducesValidCanonicalState:
     """A text-only request must produce a valid CanonicalPerceptionState."""
@@ -169,6 +166,7 @@ class TestTextOnlyProducesValidCanonicalState:
 # ---------------------------------------------------------------------------
 # 2. Request-bound multimodal context is reflected
 # ---------------------------------------------------------------------------
+
 
 class TestRequestMultimodalContextReflected:
     """Request-bound multimodal context must be accurately reflected in the state."""
@@ -297,6 +295,7 @@ class TestRequestMultimodalContextReflected:
 # 3. Continuous perception presence is reflected when ingress is available
 # ---------------------------------------------------------------------------
 
+
 class TestContinuousPerceptionReflected:
     """When a PerceptionFrame is supplied, the state must reflect it."""
 
@@ -392,6 +391,7 @@ class TestContinuousPerceptionReflected:
 # 4. State remains valid when continuous ingress is unavailable
 # ---------------------------------------------------------------------------
 
+
 class TestContinuousIngressUnavailableGraceful:
     """When the ingress bus is down, the state must still be valid."""
 
@@ -445,11 +445,13 @@ class TestContinuousIngressUnavailableGraceful:
 # 5. Shell/core boundary preservation
 # ---------------------------------------------------------------------------
 
+
 class TestShellCoreBoundary:
     """The shell owns continuous perception; OpenClawd consumes canonical state."""
 
     def test_desktop_presence_runtime_has_snapshot_method(self):
         from core.desktop_presence_runtime import DesktopPresenceRuntime
+
         assert hasattr(DesktopPresenceRuntime, "snapshot_continuous_perception")
         assert callable(DesktopPresenceRuntime.snapshot_continuous_perception)
 
@@ -459,23 +461,25 @@ class TestShellCoreBoundary:
         # 默认开之前的退役契约。text-only/受限部署是显式 opt-out——钉
         # opt-out 形态下 snapshot 返回 None。
         from unittest.mock import patch
+
         from core.desktop_presence_runtime import DesktopPresenceRuntime
-        with patch.object(DesktopPresenceRuntime, "_try_start_ingest_bus",
-                          lambda self: None):
+
+        with patch.object(DesktopPresenceRuntime, "_try_start_ingest_bus", lambda self: None):
             runtime = DesktopPresenceRuntime()
-        with patch("core.multimodal.ingest_runtime.get_ingest_bus",
-                   return_value=None):
+        with patch("core.multimodal.ingest_runtime.get_ingest_bus", return_value=None):
             result = runtime.snapshot_continuous_perception()
         assert result is None
 
     def test_openclawd_has_build_canonical_perception_state_helper(self):
         from core.openclawd import OpenClawd
+
         oc = OpenClawd()
         assert hasattr(oc, "_build_canonical_perception_state")
         assert callable(oc._build_canonical_perception_state)
 
     def test_openclawd_build_canonical_returns_dict_or_none(self):
         from core.openclawd import OpenClawd
+
         oc = OpenClawd()
         result = oc._build_canonical_perception_state(
             runtime_session_id="rs-test",
@@ -488,6 +492,7 @@ class TestShellCoreBoundary:
 
     def test_canonical_perception_state_module_is_in_perception_package(self):
         import core.perception.canonical_perception_state as _mod
+
         assert hasattr(_mod, "CanonicalPerceptionState")
         assert hasattr(_mod, "build_canonical_perception_state")
 
@@ -503,10 +508,14 @@ class TestShellCoreBoundary:
 
         # Only request
         ctx = _make_multimodal_context(n_images=1)
-        fused = {"images": [{"source": "webcam"}], "audio": [], "screen": {}, "device": {},
-                 "fusion_summary": "[Multimodal context: 1 image(s)]"}
-        s2 = build_canonical_perception_state(continuous_frame=None, multimodal_context=ctx,
-                                              fused_context=fused)
+        fused = {
+            "images": [{"source": "webcam"}],
+            "audio": [],
+            "screen": {},
+            "device": {},
+            "fusion_summary": "[Multimodal context: 1 image(s)]",
+        }
+        s2 = build_canonical_perception_state(continuous_frame=None, multimodal_context=ctx, fused_context=fused)
         assert s2.has_continuous_perception is False
         assert s2.has_request_multimodal is True
 
@@ -519,6 +528,7 @@ class TestShellCoreBoundary:
 # ---------------------------------------------------------------------------
 # 6. Serializable and safe for diagnostics
 # ---------------------------------------------------------------------------
+
 
 class TestSerializability:
     """CanonicalPerceptionState.to_dict() must be JSON-safe and complete."""
@@ -554,6 +564,7 @@ class TestSerializability:
 
     def test_to_dict_is_json_serializable(self):
         import json
+
         from core.perception.canonical_perception_state import build_canonical_perception_state
 
         frame = _make_perception_frame(with_audio=True)
@@ -583,6 +594,7 @@ class TestSerializability:
         """No base64 blobs should appear in the serialized state."""
         import json
         import re
+
         from core.perception.canonical_perception_state import build_canonical_perception_state
 
         ctx = _make_multimodal_context(n_images=2)
@@ -629,6 +641,7 @@ class TestSerializability:
 # 7. OpenClawd integration: canonical_perception_state in response metadata
 # ---------------------------------------------------------------------------
 
+
 class TestOpenClawdIntegration:
     """OpenClawd.process() should include canonical_perception_state in metadata."""
 
@@ -639,13 +652,11 @@ class TestOpenClawdIntegration:
         oc = OpenClawd()
 
         async def _mock_chat(message, intent=None, device_id=None, session_id=None, trace_id=None):
-            return {"success": True, "response": "ok", "intent": "chat",
-                    "metadata": {}, "execution_path": "local"}
+            return {"success": True, "response": "ok", "intent": "chat", "metadata": {}, "execution_path": "local"}
 
         # 连续感知默认开(规范路径):text-only 形态须显式 opt-out,
         # 否则进程内已存在的 ingest bus 会让 has_continuous_perception=True。
-        with patch("core.multimodal.ingest_runtime.get_ingest_bus",
-                   return_value=None):
+        with patch("core.multimodal.ingest_runtime.get_ingest_bus", return_value=None):
             with patch.object(oc, "_get_kernel", return_value=None):
                 with patch.object(oc, "sync_device_capabilities", return_value=0):
                     with patch.object(oc, "_parse_intent", return_value=None):
@@ -670,13 +681,10 @@ class TestOpenClawdIntegration:
         from core.schemas.multimodal import MultiModalContext, MultiModalImage
 
         oc = OpenClawd()
-        ctx = MultiModalContext(
-            images=[MultiModalImage(mime="image/jpeg", data="FAKE==", source="webcam")]
-        )
+        ctx = MultiModalContext(images=[MultiModalImage(mime="image/jpeg", data="FAKE==", source="webcam")])
 
         async def _mock_chat(message, intent=None, device_id=None, session_id=None, trace_id=None):
-            return {"success": True, "response": "ok", "intent": "chat",
-                    "metadata": {}, "execution_path": "local"}
+            return {"success": True, "response": "ok", "intent": "chat", "metadata": {}, "execution_path": "local"}
 
         with patch.object(oc, "_get_kernel", return_value=None):
             with patch.object(oc, "sync_device_capabilities", return_value=0):
@@ -703,8 +711,7 @@ class TestOpenClawdIntegration:
         oc = OpenClawd()
 
         async def _mock_chat(message, intent=None, device_id=None, session_id=None, trace_id=None):
-            return {"success": True, "response": "ok", "intent": "chat",
-                    "metadata": {}, "execution_path": "local"}
+            return {"success": True, "response": "ok", "intent": "chat", "metadata": {}, "execution_path": "local"}
 
         with patch.object(oc, "_get_kernel", return_value=None):
             with patch.object(oc, "sync_device_capabilities", return_value=0):

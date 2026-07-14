@@ -35,7 +35,6 @@ from core.device_policy import requires_agent_deploy  # noqa: E402
 from core.unified.device_manager import UnifiedDeviceManager  # noqa: E402
 from core.unified.models import UnifiedDevice, UnifiedDeviceType  # noqa: E402
 
-
 # ---------------------------------------------------------------------------
 # 门豁免夹具:本套件钉的是【预部署顺序契约】(物理设备先 deploy 后 execute),
 # 不是设备级准入策略。后来加入的 PR-CAP-DEFAULT 能力推断 + V3 canonical 槽
@@ -44,12 +43,13 @@ from core.unified.models import UnifiedDevice, UnifiedDeviceType  # noqa: E402
 # 契约由其各自的守卫套件钉。
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture(autouse=True)
 def _bypass_dispatch_gates(monkeypatch):
     from core.canonical_dispatch_slot_authority import (
         CanonicalDispatchSlot,
-        CanonicalDispatchSlotStatus,
         CanonicalDispatchSlotsResult,
+        CanonicalDispatchSlotStatus,
     )
 
     def _approve_all(device_ids, execution_mode, **kwargs):
@@ -85,6 +85,7 @@ def _bypass_dispatch_gates(monkeypatch):
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_device(device_id: str, device_type: str) -> UnifiedDevice:
     return UnifiedDevice(
         device_id=device_id,
@@ -96,17 +97,18 @@ def _make_device(device_id: str, device_type: str) -> UnifiedDevice:
 def _create_test_ids():
     """Generate fresh UUIDs for device_id, agent_id, trace_id, task_id, session_id."""
     return (
-        str(uuid.uuid4()),   # device_id
-        str(uuid.uuid4()),   # agent_id
-        str(uuid.uuid4()),   # trace_id
-        str(uuid.uuid4()),   # task_id
-        str(uuid.uuid4()),   # session_id
+        str(uuid.uuid4()),  # device_id
+        str(uuid.uuid4()),  # agent_id
+        str(uuid.uuid4()),  # trace_id
+        str(uuid.uuid4()),  # task_id
+        str(uuid.uuid4()),  # session_id
     )
 
 
 # ---------------------------------------------------------------------------
 # UnifiedDeviceManager.get_device_type tests
 # ---------------------------------------------------------------------------
+
 
 class TestGetDeviceType:
     def setup_method(self):
@@ -137,17 +139,22 @@ class TestGetDeviceType:
 # dispatch_agent_remote — physical device two-step flow
 # ---------------------------------------------------------------------------
 
+
 class TestDispatchAgentRemotePhysicalDevice:
     """Two-step deploy→execute must fire for all physical device types."""
 
     def _build_router(self):
         """Import CommandRouter lazily to avoid heavy dep loading at module level."""
         from core.command_router import CommandRouter
+
         router = CommandRouter.__new__(CommandRouter)
         # Minimal attribute initialisation to avoid __init__ side-effects
         router._stats = {
-            "total_routed": 0, "total_failed": 0, "total_retried": 0,
-            "total_cb_rejected": 0, "total_queued": 0,
+            "total_routed": 0,
+            "total_failed": 0,
+            "total_retried": 0,
+            "total_cb_rejected": 0,
+            "total_queued": 0,
         }
         router._queue_depth = 0
         router._cb = MagicMock(is_open=MagicMock(return_value=True))
@@ -156,9 +163,19 @@ class TestDispatchAgentRemotePhysicalDevice:
         return router
 
     @pytest.mark.asyncio
-    @pytest.mark.parametrize("device_type", [
-        "android", "ios", "windows", "macos", "linux", "iot", "robot", "drone",
-    ])
+    @pytest.mark.parametrize(
+        "device_type",
+        [
+            "android",
+            "ios",
+            "windows",
+            "macos",
+            "linux",
+            "iot",
+            "robot",
+            "drone",
+        ],
+    )
     async def test_deploy_sent_before_execute_for_physical_device(self, device_type: str):
         """agent_deploy must be sent and agent_execute must follow on success."""
         # Reset UDM singleton
@@ -188,8 +205,12 @@ class TestDispatchAgentRemotePhysicalDevice:
         fake_cm.active_devices = {device_id}
         fake_cm.send_to_device = AsyncMock(side_effect=fake_send_to_device)
 
-        with patch("core.command_router.CommandRouter.route_envelope", new=AsyncMock(return_value=fake_route_result)) as mock_route, \
-             patch("core.routes._shared.connection_manager", fake_cm):
+        with (
+            patch(
+                "core.command_router.CommandRouter.route_envelope", new=AsyncMock(return_value=fake_route_result)
+            ) as mock_route,
+            patch("core.routes._shared.connection_manager", fake_cm),
+        ):
             result = await router.dispatch_agent_remote(
                 device_id=device_id,
                 agent_id=agent_id,
@@ -201,20 +222,17 @@ class TestDispatchAgentRemotePhysicalDevice:
             )
 
         # agent_deploy must come first
-        assert "agent_deploy" in call_order, (
-            f"agent_deploy not sent for device_type={device_type}"
-        )
-        assert call_order[0] == "agent_deploy", (
-            f"agent_deploy was not the first message sent (order={call_order})"
-        )
+        assert "agent_deploy" in call_order, f"agent_deploy not sent for device_type={device_type}"
+        assert call_order[0] == "agent_deploy", f"agent_deploy was not the first message sent (order={call_order})"
         # agent_execute must follow — PR-7 起 execute 经 route_envelope
         # (统一基底根)承载,route_command 为有意绕开的 compat shim。
         mock_route.assert_called_once()
-        _envelope = mock_route.call_args.args[0] if mock_route.call_args.args \
-            else mock_route.call_args.kwargs.get("envelope")
-        assert getattr(_envelope, "tool_name", None) == "agent_execute", (
-            f"route_envelope 未携带 agent_execute(got {getattr(_envelope, 'tool_name', None)!r})"
+        _envelope = (
+            mock_route.call_args.args[0] if mock_route.call_args.args else mock_route.call_args.kwargs.get("envelope")
         )
+        assert (
+            getattr(_envelope, "tool_name", None) == "agent_execute"
+        ), f"route_envelope 未携带 agent_execute(got {getattr(_envelope, 'tool_name', None)!r})"
         assert getattr(_envelope, "targets", None) == [device_id]
 
         assert result["success"] is True
@@ -241,8 +259,10 @@ class TestDispatchAgentRemotePhysicalDevice:
         fake_cm.is_online = MagicMock(return_value=False)
         fake_cm.send_to_device = AsyncMock(return_value=True)
 
-        with patch("core.command_router.CommandRouter.route_envelope", new=AsyncMock()) as mock_route, \
-             patch("core.routes._shared.connection_manager", fake_cm):
+        with (
+            patch("core.command_router.CommandRouter.route_envelope", new=AsyncMock()) as mock_route,
+            patch("core.routes._shared.connection_manager", fake_cm),
+        ):
             result = await router.dispatch_agent_remote(
                 device_id=device_id,
                 agent_id=agent_id,
@@ -254,8 +274,7 @@ class TestDispatchAgentRemotePhysicalDevice:
             )
 
         assert result["success"] is False
-        assert "offline" in result.get("error_message", "").lower() or \
-               "offline" in result.get("error_code", "").lower()
+        assert "offline" in result.get("error_message", "").lower() or "offline" in result.get("error_code", "").lower()
         # agent_execute must NOT have been called
         mock_route.assert_not_called()
 
@@ -275,8 +294,10 @@ class TestDispatchAgentRemotePhysicalDevice:
         fake_cm.active_devices = {device_id}
         fake_cm.send_to_device = AsyncMock(return_value=False)  # send fails
 
-        with patch("core.command_router.CommandRouter.route_envelope", new=AsyncMock()) as mock_route, \
-             patch("core.routes._shared.connection_manager", fake_cm):
+        with (
+            patch("core.command_router.CommandRouter.route_envelope", new=AsyncMock()) as mock_route,
+            patch("core.routes._shared.connection_manager", fake_cm),
+        ):
             result = await router.dispatch_agent_remote(
                 device_id=device_id,
                 agent_id=agent_id,
@@ -288,8 +309,7 @@ class TestDispatchAgentRemotePhysicalDevice:
             )
 
         assert result["success"] is False
-        assert "deploy" in result.get("error_code", "").lower() or \
-               "deploy" in result.get("error_message", "").lower()
+        assert "deploy" in result.get("error_code", "").lower() or "deploy" in result.get("error_message", "").lower()
         mock_route.assert_not_called()
 
 
@@ -297,13 +317,18 @@ class TestDispatchAgentRemotePhysicalDevice:
 # dispatch_agent_remote — non-physical device: direct route (no deploy)
 # ---------------------------------------------------------------------------
 
+
 class TestDispatchAgentRemoteNonPhysical:
     def _build_router(self):
         from core.command_router import CommandRouter
+
         router = CommandRouter.__new__(CommandRouter)
         router._stats = {
-            "total_routed": 0, "total_failed": 0, "total_retried": 0,
-            "total_cb_rejected": 0, "total_queued": 0,
+            "total_routed": 0,
+            "total_failed": 0,
+            "total_retried": 0,
+            "total_cb_rejected": 0,
+            "total_queued": 0,
         }
         router._queue_depth = 0
         router._cb = MagicMock(is_open=MagicMock(return_value=True))
@@ -344,8 +369,12 @@ class TestDispatchAgentRemoteNonPhysical:
         fake_cm.active_devices = {device_id}
         fake_cm.send_to_device = AsyncMock(return_value=True)
 
-        with patch("core.command_router.CommandRouter.route_envelope", new=AsyncMock(return_value=fake_route_result)) as mock_route, \
-             patch("core.routes._shared.connection_manager", fake_cm):
+        with (
+            patch(
+                "core.command_router.CommandRouter.route_envelope", new=AsyncMock(return_value=fake_route_result)
+            ) as mock_route,
+            patch("core.routes._shared.connection_manager", fake_cm),
+        ):
             result = await router.dispatch_agent_remote(
                 device_id=device_id,
                 agent_id=agent_id,
@@ -360,7 +389,8 @@ class TestDispatchAgentRemoteNonPhysical:
         fake_cm.send_to_device.assert_not_called()
         # PR-7:直连 execute 同样经 route_envelope 承载
         mock_route.assert_called_once()
-        _envelope = mock_route.call_args.args[0] if mock_route.call_args.args \
-            else mock_route.call_args.kwargs.get("envelope")
+        _envelope = (
+            mock_route.call_args.args[0] if mock_route.call_args.args else mock_route.call_args.kwargs.get("envelope")
+        )
         assert getattr(_envelope, "tool_name", None) == "agent_execute"
         assert result["success"] is True

@@ -82,19 +82,20 @@ if str(PROJECT_ROOT) not in sys.path:
 
 try:
     from core.governance_validation_gate import (
+        EXPERIMENTAL_CAPABILITY_MUST_NOT_CLAIM_MAIN_CHAIN_POLICY,
         GOVERNANCE_VALIDATION_GATE_AUTHORITY,
         GOVERNANCE_VERDICT_AFFECTS_VALIDATION_POLICY,
         NOT_READY_BLOCKS_VALIDATION_POLICY,
-        EXPERIMENTAL_CAPABILITY_MUST_NOT_CLAIM_MAIN_CHAIN_POLICY,
-        ValidationOutcome,
-        ValidationFailReason,
         GovernanceValidationError,
-        ValidationResult,
         GovernanceValidationGate,
+        ValidationFailReason,
+        ValidationOutcome,
+        ValidationResult,
         evaluate_governance_validation,
         get_governance_validation_gate,
         reset_governance_validation_gate,
     )
+
     _MODULE_AVAILABLE = True
 except ImportError as _import_err:  # pragma: no cover
     _MODULE_AVAILABLE = False
@@ -109,6 +110,7 @@ _skip_if_unavailable = pytest.mark.skipif(
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_gate_report(
     overall_verdict: str = "open",
@@ -179,6 +181,7 @@ class TestGroupA_ModuleLevel:
 
     def test_A06_all_contains_required_names(self):
         from core import governance_validation_gate as mod
+
         required = {
             "GOVERNANCE_VALIDATION_GATE_AUTHORITY",
             "ValidationOutcome",
@@ -222,24 +225,25 @@ class TestGroupB_ValidationResult:
         )
         d = result.to_dict()
         required_keys = {
-            "result_id", "generated_at", "outcome", "fail_reasons",
-            "summary", "release_gate_verdict", "readiness_status",
-            "blocked_gate_worthy_count", "capability_tier", "enforce_mode",
+            "result_id",
+            "generated_at",
+            "outcome",
+            "fail_reasons",
+            "summary",
+            "release_gate_verdict",
+            "readiness_status",
+            "blocked_gate_worthy_count",
+            "capability_tier",
+            "enforce_mode",
         }
         assert required_keys.issubset(d.keys())
         assert d["outcome"] == "fail"
         assert d["fail_reasons"] == ["governance_blocked"]
 
     def test_B03_pass_fail_warn_properties(self):
-        pass_result = ValidationResult(
-            result_id="p", generated_at=0.0, outcome=ValidationOutcome.PASS
-        )
-        fail_result = ValidationResult(
-            result_id="f", generated_at=0.0, outcome=ValidationOutcome.FAIL
-        )
-        warn_result = ValidationResult(
-            result_id="w", generated_at=0.0, outcome=ValidationOutcome.WARN
-        )
+        pass_result = ValidationResult(result_id="p", generated_at=0.0, outcome=ValidationOutcome.PASS)
+        fail_result = ValidationResult(result_id="f", generated_at=0.0, outcome=ValidationOutcome.FAIL)
+        warn_result = ValidationResult(result_id="w", generated_at=0.0, outcome=ValidationOutcome.WARN)
         assert pass_result.passed and not pass_result.failed and not pass_result.warned
         assert fail_result.failed and not fail_result.passed
         assert warn_result.warned and not warn_result.failed
@@ -263,13 +267,13 @@ class TestGroupC_ValidateOutcomeSemantics:
             overall_verdict="blocked",
             blocked_gate_worthy_count=2,
         )
-        with patch(
-            "core.governance_validation_gate._evaluate_distributed_gate",
-            return_value=gate_report,
-        ), patch(
-            "core.governance_validation_gate._DISTRIBUTED_GATE_AVAILABLE", True
-        ), patch(
-            "core.governance_validation_gate._READINESS_GATE_AVAILABLE", False
+        with (
+            patch(
+                "core.governance_validation_gate._evaluate_distributed_gate",
+                return_value=gate_report,
+            ),
+            patch("core.governance_validation_gate._DISTRIBUTED_GATE_AVAILABLE", True),
+            patch("core.governance_validation_gate._READINESS_GATE_AVAILABLE", False),
         ):
             gate = GovernanceValidationGate()
             result = gate.validate(check_readiness=False, check_capability_tier=False)
@@ -282,16 +286,17 @@ class TestGroupC_ValidateOutcomeSemantics:
         gate_report = _make_gate_report(overall_verdict="open")
         readiness_result = _make_readiness_result(status="blocked", ready=False)
 
-        with patch(
-            "core.governance_validation_gate._evaluate_distributed_gate",
-            return_value=gate_report,
-        ), patch(
-            "core.governance_validation_gate._DISTRIBUTED_GATE_AVAILABLE", True
-        ), patch(
-            "core.governance_validation_gate._evaluate_readiness",
-            return_value=readiness_result,
-        ), patch(
-            "core.governance_validation_gate._READINESS_GATE_AVAILABLE", True
+        with (
+            patch(
+                "core.governance_validation_gate._evaluate_distributed_gate",
+                return_value=gate_report,
+            ),
+            patch("core.governance_validation_gate._DISTRIBUTED_GATE_AVAILABLE", True),
+            patch(
+                "core.governance_validation_gate._evaluate_readiness",
+                return_value=readiness_result,
+            ),
+            patch("core.governance_validation_gate._READINESS_GATE_AVAILABLE", True),
         ):
             gate = GovernanceValidationGate()
             result = gate.validate(check_readiness=True, check_capability_tier=False)
@@ -301,10 +306,9 @@ class TestGroupC_ValidateOutcomeSemantics:
 
     def test_C03_evidence_surface_unavailable_produces_WARN_not_FAIL(self):
         """Unavailable evidence surface → WARN (safe degradation)."""
-        with patch(
-            "core.governance_validation_gate._DISTRIBUTED_GATE_AVAILABLE", False
-        ), patch(
-            "core.governance_validation_gate._READINESS_GATE_AVAILABLE", False
+        with (
+            patch("core.governance_validation_gate._DISTRIBUTED_GATE_AVAILABLE", False),
+            patch("core.governance_validation_gate._READINESS_GATE_AVAILABLE", False),
         ):
             gate = GovernanceValidationGate(strict_on_unavailable=False)
             result = gate.validate(check_capability_tier=False)
@@ -314,10 +318,9 @@ class TestGroupC_ValidateOutcomeSemantics:
 
     def test_C04_strict_on_unavailable_produces_FAIL(self):
         """strict_on_unavailable=True → unavailable surface is FAIL."""
-        with patch(
-            "core.governance_validation_gate._DISTRIBUTED_GATE_AVAILABLE", False
-        ), patch(
-            "core.governance_validation_gate._READINESS_GATE_AVAILABLE", False
+        with (
+            patch("core.governance_validation_gate._DISTRIBUTED_GATE_AVAILABLE", False),
+            patch("core.governance_validation_gate._READINESS_GATE_AVAILABLE", False),
         ):
             gate = GovernanceValidationGate(strict_on_unavailable=True)
             result = gate.validate(check_capability_tier=False)
@@ -329,16 +332,17 @@ class TestGroupC_ValidateOutcomeSemantics:
         gate_report = _make_gate_report(overall_verdict="open", blocked_gate_worthy_count=0)
         readiness_result = _make_readiness_result(status="ready", ready=True)
 
-        with patch(
-            "core.governance_validation_gate._evaluate_distributed_gate",
-            return_value=gate_report,
-        ), patch(
-            "core.governance_validation_gate._DISTRIBUTED_GATE_AVAILABLE", True
-        ), patch(
-            "core.governance_validation_gate._evaluate_readiness",
-            return_value=readiness_result,
-        ), patch(
-            "core.governance_validation_gate._READINESS_GATE_AVAILABLE", True
+        with (
+            patch(
+                "core.governance_validation_gate._evaluate_distributed_gate",
+                return_value=gate_report,
+            ),
+            patch("core.governance_validation_gate._DISTRIBUTED_GATE_AVAILABLE", True),
+            patch(
+                "core.governance_validation_gate._evaluate_readiness",
+                return_value=readiness_result,
+            ),
+            patch("core.governance_validation_gate._READINESS_GATE_AVAILABLE", True),
         ):
             gate = GovernanceValidationGate()
             result = gate.validate(check_capability_tier=False)
@@ -350,16 +354,17 @@ class TestGroupC_ValidateOutcomeSemantics:
         gate_report = _make_gate_report(overall_verdict="deferred", blocked_gate_worthy_count=0)
         readiness_result = _make_readiness_result(status="ready", ready=True)
 
-        with patch(
-            "core.governance_validation_gate._evaluate_distributed_gate",
-            return_value=gate_report,
-        ), patch(
-            "core.governance_validation_gate._DISTRIBUTED_GATE_AVAILABLE", True
-        ), patch(
-            "core.governance_validation_gate._evaluate_readiness",
-            return_value=readiness_result,
-        ), patch(
-            "core.governance_validation_gate._READINESS_GATE_AVAILABLE", True
+        with (
+            patch(
+                "core.governance_validation_gate._evaluate_distributed_gate",
+                return_value=gate_report,
+            ),
+            patch("core.governance_validation_gate._DISTRIBUTED_GATE_AVAILABLE", True),
+            patch(
+                "core.governance_validation_gate._evaluate_readiness",
+                return_value=readiness_result,
+            ),
+            patch("core.governance_validation_gate._READINESS_GATE_AVAILABLE", True),
         ):
             gate = GovernanceValidationGate()
             result = gate.validate(check_capability_tier=False)
@@ -375,16 +380,17 @@ class TestGroupC_ValidateOutcomeSemantics:
         gate_report = _make_gate_report(overall_verdict="blocked", blocked_gate_worthy_count=3)
         readiness_result = _make_readiness_result(status="blocked", ready=False)
 
-        with patch(
-            "core.governance_validation_gate._evaluate_distributed_gate",
-            return_value=gate_report,
-        ), patch(
-            "core.governance_validation_gate._DISTRIBUTED_GATE_AVAILABLE", True
-        ), patch(
-            "core.governance_validation_gate._evaluate_readiness",
-            return_value=readiness_result,
-        ), patch(
-            "core.governance_validation_gate._READINESS_GATE_AVAILABLE", True
+        with (
+            patch(
+                "core.governance_validation_gate._evaluate_distributed_gate",
+                return_value=gate_report,
+            ),
+            patch("core.governance_validation_gate._DISTRIBUTED_GATE_AVAILABLE", True),
+            patch(
+                "core.governance_validation_gate._evaluate_readiness",
+                return_value=readiness_result,
+            ),
+            patch("core.governance_validation_gate._READINESS_GATE_AVAILABLE", True),
         ):
             gate = GovernanceValidationGate()
             # Must not raise
@@ -412,13 +418,13 @@ class TestGroupD_EnforceSemantics:
         """enforce=True raises GovernanceValidationError when outcome is FAIL."""
         gate_report = _make_gate_report(overall_verdict="blocked", blocked_gate_worthy_count=1)
 
-        with patch(
-            "core.governance_validation_gate._evaluate_distributed_gate",
-            return_value=gate_report,
-        ), patch(
-            "core.governance_validation_gate._DISTRIBUTED_GATE_AVAILABLE", True
-        ), patch(
-            "core.governance_validation_gate._READINESS_GATE_AVAILABLE", False
+        with (
+            patch(
+                "core.governance_validation_gate._evaluate_distributed_gate",
+                return_value=gate_report,
+            ),
+            patch("core.governance_validation_gate._DISTRIBUTED_GATE_AVAILABLE", True),
+            patch("core.governance_validation_gate._READINESS_GATE_AVAILABLE", False),
         ):
             gate = GovernanceValidationGate()
             with pytest.raises(GovernanceValidationError) as exc_info:
@@ -433,16 +439,17 @@ class TestGroupD_EnforceSemantics:
         gate_report = _make_gate_report(overall_verdict="open", blocked_gate_worthy_count=0)
         readiness_result = _make_readiness_result(status="ready", ready=True)
 
-        with patch(
-            "core.governance_validation_gate._evaluate_distributed_gate",
-            return_value=gate_report,
-        ), patch(
-            "core.governance_validation_gate._DISTRIBUTED_GATE_AVAILABLE", True
-        ), patch(
-            "core.governance_validation_gate._evaluate_readiness",
-            return_value=readiness_result,
-        ), patch(
-            "core.governance_validation_gate._READINESS_GATE_AVAILABLE", True
+        with (
+            patch(
+                "core.governance_validation_gate._evaluate_distributed_gate",
+                return_value=gate_report,
+            ),
+            patch("core.governance_validation_gate._DISTRIBUTED_GATE_AVAILABLE", True),
+            patch(
+                "core.governance_validation_gate._evaluate_readiness",
+                return_value=readiness_result,
+            ),
+            patch("core.governance_validation_gate._READINESS_GATE_AVAILABLE", True),
         ):
             gate = GovernanceValidationGate()
             result = gate.validate(enforce=True, check_capability_tier=False)
@@ -451,10 +458,9 @@ class TestGroupD_EnforceSemantics:
 
     def test_D03_enforce_True_does_not_raise_on_WARN(self):
         """enforce=True does NOT raise on WARN — only FAIL raises."""
-        with patch(
-            "core.governance_validation_gate._DISTRIBUTED_GATE_AVAILABLE", False
-        ), patch(
-            "core.governance_validation_gate._READINESS_GATE_AVAILABLE", False
+        with (
+            patch("core.governance_validation_gate._DISTRIBUTED_GATE_AVAILABLE", False),
+            patch("core.governance_validation_gate._READINESS_GATE_AVAILABLE", False),
         ):
             gate = GovernanceValidationGate(strict_on_unavailable=False)
             # Should NOT raise — WARN is not a hard failure
@@ -466,13 +472,13 @@ class TestGroupD_EnforceSemantics:
         """GovernanceValidationError.result is the full ValidationResult."""
         gate_report = _make_gate_report(overall_verdict="blocked", blocked_gate_worthy_count=1)
 
-        with patch(
-            "core.governance_validation_gate._evaluate_distributed_gate",
-            return_value=gate_report,
-        ), patch(
-            "core.governance_validation_gate._DISTRIBUTED_GATE_AVAILABLE", True
-        ), patch(
-            "core.governance_validation_gate._READINESS_GATE_AVAILABLE", False
+        with (
+            patch(
+                "core.governance_validation_gate._evaluate_distributed_gate",
+                return_value=gate_report,
+            ),
+            patch("core.governance_validation_gate._DISTRIBUTED_GATE_AVAILABLE", True),
+            patch("core.governance_validation_gate._READINESS_GATE_AVAILABLE", False),
         ):
             gate = GovernanceValidationGate()
             with pytest.raises(GovernanceValidationError) as exc_info:
@@ -485,13 +491,13 @@ class TestGroupD_EnforceSemantics:
         """assert_pass() is equivalent to validate(enforce=True)."""
         gate_report = _make_gate_report(overall_verdict="blocked", blocked_gate_worthy_count=1)
 
-        with patch(
-            "core.governance_validation_gate._evaluate_distributed_gate",
-            return_value=gate_report,
-        ), patch(
-            "core.governance_validation_gate._DISTRIBUTED_GATE_AVAILABLE", True
-        ), patch(
-            "core.governance_validation_gate._READINESS_GATE_AVAILABLE", False
+        with (
+            patch(
+                "core.governance_validation_gate._evaluate_distributed_gate",
+                return_value=gate_report,
+            ),
+            patch("core.governance_validation_gate._DISTRIBUTED_GATE_AVAILABLE", True),
+            patch("core.governance_validation_gate._READINESS_GATE_AVAILABLE", False),
         ):
             gate = GovernanceValidationGate()
             with pytest.raises(GovernanceValidationError):
@@ -501,13 +507,13 @@ class TestGroupD_EnforceSemantics:
         """enforce() is equivalent to assert_pass()."""
         gate_report = _make_gate_report(overall_verdict="blocked", blocked_gate_worthy_count=1)
 
-        with patch(
-            "core.governance_validation_gate._evaluate_distributed_gate",
-            return_value=gate_report,
-        ), patch(
-            "core.governance_validation_gate._DISTRIBUTED_GATE_AVAILABLE", True
-        ), patch(
-            "core.governance_validation_gate._READINESS_GATE_AVAILABLE", False
+        with (
+            patch(
+                "core.governance_validation_gate._evaluate_distributed_gate",
+                return_value=gate_report,
+            ),
+            patch("core.governance_validation_gate._DISTRIBUTED_GATE_AVAILABLE", True),
+            patch("core.governance_validation_gate._READINESS_GATE_AVAILABLE", False),
         ):
             gate = GovernanceValidationGate()
             with pytest.raises(GovernanceValidationError):
@@ -535,20 +541,21 @@ class TestGroupE_CapabilityTierIntegration:
         """MAIN_CHAIN capability → no tier-related fail_reason."""
         gate_report, readiness_result = self._make_open_context()
 
-        with patch(
-            "core.governance_validation_gate._evaluate_distributed_gate",
-            return_value=gate_report,
-        ), patch(
-            "core.governance_validation_gate._DISTRIBUTED_GATE_AVAILABLE", True
-        ), patch(
-            "core.governance_validation_gate._evaluate_readiness",
-            return_value=readiness_result,
-        ), patch(
-            "core.governance_validation_gate._READINESS_GATE_AVAILABLE", True
-        ), patch(
-            "core.governance_validation_gate._CAPABILITY_TIER_AVAILABLE", True
+        with (
+            patch(
+                "core.governance_validation_gate._evaluate_distributed_gate",
+                return_value=gate_report,
+            ),
+            patch("core.governance_validation_gate._DISTRIBUTED_GATE_AVAILABLE", True),
+            patch(
+                "core.governance_validation_gate._evaluate_readiness",
+                return_value=readiness_result,
+            ),
+            patch("core.governance_validation_gate._READINESS_GATE_AVAILABLE", True),
+            patch("core.governance_validation_gate._CAPABILITY_TIER_AVAILABLE", True),
         ):
             from core.capability_tier import CapabilityTier
+
             with patch(
                 "core.governance_validation_gate.get_capability_tier",
                 return_value=CapabilityTier.MAIN_CHAIN,
@@ -566,20 +573,21 @@ class TestGroupE_CapabilityTierIntegration:
         """EXPERIMENTAL capability → WARN in fail_reasons."""
         gate_report, readiness_result = self._make_open_context()
 
-        with patch(
-            "core.governance_validation_gate._evaluate_distributed_gate",
-            return_value=gate_report,
-        ), patch(
-            "core.governance_validation_gate._DISTRIBUTED_GATE_AVAILABLE", True
-        ), patch(
-            "core.governance_validation_gate._evaluate_readiness",
-            return_value=readiness_result,
-        ), patch(
-            "core.governance_validation_gate._READINESS_GATE_AVAILABLE", True
-        ), patch(
-            "core.governance_validation_gate._CAPABILITY_TIER_AVAILABLE", True
+        with (
+            patch(
+                "core.governance_validation_gate._evaluate_distributed_gate",
+                return_value=gate_report,
+            ),
+            patch("core.governance_validation_gate._DISTRIBUTED_GATE_AVAILABLE", True),
+            patch(
+                "core.governance_validation_gate._evaluate_readiness",
+                return_value=readiness_result,
+            ),
+            patch("core.governance_validation_gate._READINESS_GATE_AVAILABLE", True),
+            patch("core.governance_validation_gate._CAPABILITY_TIER_AVAILABLE", True),
         ):
             from core.capability_tier import CapabilityTier
+
             with patch(
                 "core.governance_validation_gate.get_capability_tier",
                 return_value=CapabilityTier.EXPERIMENTAL,
@@ -594,20 +602,21 @@ class TestGroupE_CapabilityTierIntegration:
         """QUASI_MAIN_CHAIN capability → WARN in fail_reasons."""
         gate_report, readiness_result = self._make_open_context()
 
-        with patch(
-            "core.governance_validation_gate._evaluate_distributed_gate",
-            return_value=gate_report,
-        ), patch(
-            "core.governance_validation_gate._DISTRIBUTED_GATE_AVAILABLE", True
-        ), patch(
-            "core.governance_validation_gate._evaluate_readiness",
-            return_value=readiness_result,
-        ), patch(
-            "core.governance_validation_gate._READINESS_GATE_AVAILABLE", True
-        ), patch(
-            "core.governance_validation_gate._CAPABILITY_TIER_AVAILABLE", True
+        with (
+            patch(
+                "core.governance_validation_gate._evaluate_distributed_gate",
+                return_value=gate_report,
+            ),
+            patch("core.governance_validation_gate._DISTRIBUTED_GATE_AVAILABLE", True),
+            patch(
+                "core.governance_validation_gate._evaluate_readiness",
+                return_value=readiness_result,
+            ),
+            patch("core.governance_validation_gate._READINESS_GATE_AVAILABLE", True),
+            patch("core.governance_validation_gate._CAPABILITY_TIER_AVAILABLE", True),
         ):
             from core.capability_tier import CapabilityTier
+
             with patch(
                 "core.governance_validation_gate.get_capability_tier",
                 return_value=CapabilityTier.QUASI_MAIN_CHAIN,
@@ -622,20 +631,21 @@ class TestGroupE_CapabilityTierIntegration:
         """UNKNOWN capability tier → WARN in fail_reasons."""
         gate_report, readiness_result = self._make_open_context()
 
-        with patch(
-            "core.governance_validation_gate._evaluate_distributed_gate",
-            return_value=gate_report,
-        ), patch(
-            "core.governance_validation_gate._DISTRIBUTED_GATE_AVAILABLE", True
-        ), patch(
-            "core.governance_validation_gate._evaluate_readiness",
-            return_value=readiness_result,
-        ), patch(
-            "core.governance_validation_gate._READINESS_GATE_AVAILABLE", True
-        ), patch(
-            "core.governance_validation_gate._CAPABILITY_TIER_AVAILABLE", True
+        with (
+            patch(
+                "core.governance_validation_gate._evaluate_distributed_gate",
+                return_value=gate_report,
+            ),
+            patch("core.governance_validation_gate._DISTRIBUTED_GATE_AVAILABLE", True),
+            patch(
+                "core.governance_validation_gate._evaluate_readiness",
+                return_value=readiness_result,
+            ),
+            patch("core.governance_validation_gate._READINESS_GATE_AVAILABLE", True),
+            patch("core.governance_validation_gate._CAPABILITY_TIER_AVAILABLE", True),
         ):
             from core.capability_tier import CapabilityTier
+
             with patch(
                 "core.governance_validation_gate.get_capability_tier",
                 return_value=CapabilityTier.UNKNOWN,
@@ -657,16 +667,17 @@ class TestGroupE_CapabilityTierIntegration:
         """capability=None skips capability tier check entirely."""
         gate_report, readiness_result = self._make_open_context()
 
-        with patch(
-            "core.governance_validation_gate._evaluate_distributed_gate",
-            return_value=gate_report,
-        ), patch(
-            "core.governance_validation_gate._DISTRIBUTED_GATE_AVAILABLE", True
-        ), patch(
-            "core.governance_validation_gate._evaluate_readiness",
-            return_value=readiness_result,
-        ), patch(
-            "core.governance_validation_gate._READINESS_GATE_AVAILABLE", True
+        with (
+            patch(
+                "core.governance_validation_gate._evaluate_distributed_gate",
+                return_value=gate_report,
+            ),
+            patch("core.governance_validation_gate._DISTRIBUTED_GATE_AVAILABLE", True),
+            patch(
+                "core.governance_validation_gate._evaluate_readiness",
+                return_value=readiness_result,
+            ),
+            patch("core.governance_validation_gate._READINESS_GATE_AVAILABLE", True),
         ):
             gate = GovernanceValidationGate()
             result = gate.validate(capability=None, check_capability_tier=True)
@@ -696,16 +707,17 @@ class TestGroupF_MultipleFailConditions:
         gate_report = _make_gate_report(overall_verdict="blocked", blocked_gate_worthy_count=2)
         readiness_result = _make_readiness_result(status="blocked", ready=False)
 
-        with patch(
-            "core.governance_validation_gate._evaluate_distributed_gate",
-            return_value=gate_report,
-        ), patch(
-            "core.governance_validation_gate._DISTRIBUTED_GATE_AVAILABLE", True
-        ), patch(
-            "core.governance_validation_gate._evaluate_readiness",
-            return_value=readiness_result,
-        ), patch(
-            "core.governance_validation_gate._READINESS_GATE_AVAILABLE", True
+        with (
+            patch(
+                "core.governance_validation_gate._evaluate_distributed_gate",
+                return_value=gate_report,
+            ),
+            patch("core.governance_validation_gate._DISTRIBUTED_GATE_AVAILABLE", True),
+            patch(
+                "core.governance_validation_gate._evaluate_readiness",
+                return_value=readiness_result,
+            ),
+            patch("core.governance_validation_gate._READINESS_GATE_AVAILABLE", True),
         ):
             gate = GovernanceValidationGate()
             result = gate.validate(check_capability_tier=False)
@@ -716,14 +728,13 @@ class TestGroupF_MultipleFailConditions:
 
     def test_F02_unavailable_plus_experimental_tier_produces_WARN(self):
         """Unavailable evidence + experimental tier → WARN (both are soft-warn)."""
-        with patch(
-            "core.governance_validation_gate._DISTRIBUTED_GATE_AVAILABLE", False
-        ), patch(
-            "core.governance_validation_gate._READINESS_GATE_AVAILABLE", False
-        ), patch(
-            "core.governance_validation_gate._CAPABILITY_TIER_AVAILABLE", True
+        with (
+            patch("core.governance_validation_gate._DISTRIBUTED_GATE_AVAILABLE", False),
+            patch("core.governance_validation_gate._READINESS_GATE_AVAILABLE", False),
+            patch("core.governance_validation_gate._CAPABILITY_TIER_AVAILABLE", True),
         ):
             from core.capability_tier import CapabilityTier
+
             with patch(
                 "core.governance_validation_gate.get_capability_tier",
                 return_value=CapabilityTier.EXPERIMENTAL,
@@ -782,13 +793,13 @@ class TestGroupH_ConvenienceFunction:
         """evaluate_governance_validation(enforce=True) raises on FAIL."""
         gate_report = _make_gate_report(overall_verdict="blocked", blocked_gate_worthy_count=1)
 
-        with patch(
-            "core.governance_validation_gate._evaluate_distributed_gate",
-            return_value=gate_report,
-        ), patch(
-            "core.governance_validation_gate._DISTRIBUTED_GATE_AVAILABLE", True
-        ), patch(
-            "core.governance_validation_gate._READINESS_GATE_AVAILABLE", False
+        with (
+            patch(
+                "core.governance_validation_gate._evaluate_distributed_gate",
+                return_value=gate_report,
+            ),
+            patch("core.governance_validation_gate._DISTRIBUTED_GATE_AVAILABLE", True),
+            patch("core.governance_validation_gate._READINESS_GATE_AVAILABLE", False),
         ):
             with pytest.raises(GovernanceValidationError):
                 evaluate_governance_validation(

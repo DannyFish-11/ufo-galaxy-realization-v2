@@ -69,9 +69,7 @@ import pytest
 # Helpers
 # ---------------------------------------------------------------------------
 
-_GATEWAY_ROOT = os.path.join(
-    os.path.dirname(__file__), "..", "galaxy_gateway"
-)
+_GATEWAY_ROOT = os.path.join(os.path.dirname(__file__), "..", "galaxy_gateway")
 
 
 def _read_gateway_file(relpath: str) -> str:
@@ -98,6 +96,7 @@ def _import_sentinel(module_path: str, attr: str):
 # ---------------------------------------------------------------------------
 # Fixtures: read source files directly (avoids heavy import side-effects)
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(scope="module")
 def ws_source():
@@ -133,9 +132,11 @@ def readme_doc():
 # Helper: extract sentinel value from source text
 # ---------------------------------------------------------------------------
 
+
 def _extract_sentinel(source: str, name: str) -> str:
     """Return the string value assigned to *name* in *source*, or ''."""
     import re
+
     pattern = rf'{re.escape(name)}\s*=\s*["\']([^"\']+)["\']'
     # Multi-line: value may span a continuation
     pattern2 = rf'{re.escape(name)}\s*=\s*\(\s*["\']([^"\']+)["\']'
@@ -146,6 +147,7 @@ def _extract_sentinel(source: str, name: str) -> str:
 # ---------------------------------------------------------------------------
 # 1-3: websocket_handler sentinel
 # ---------------------------------------------------------------------------
+
 
 def test_01_ws_sentinel_present(ws_source):
     assert "WEBSOCKET_HANDLER_TRANSPORT_AUTHORITY" in ws_source
@@ -165,6 +167,7 @@ def test_03_ws_sentinel_contains_transport(ws_source):
 # 4-6: device_router sentinel
 # ---------------------------------------------------------------------------
 
+
 def test_04_dr_sentinel_present(dr_source):
     assert "DEVICE_ROUTER_TRANSPORT_AUTHORITY" in dr_source
 
@@ -182,6 +185,7 @@ def test_06_dr_sentinel_routing_substrate(dr_source):
 # ---------------------------------------------------------------------------
 # 7-9: cross_device_coordinator sentinel
 # ---------------------------------------------------------------------------
+
 
 def test_07_cdc_sentinel_present(cdc_source):
     assert "CROSS_DEVICE_COORDINATOR_TRANSPORT_AUTHORITY" in cdc_source
@@ -201,6 +205,7 @@ def test_09_cdc_sentinel_transport_layer(cdc_source):
 # 10-12: ssot sentinel
 # ---------------------------------------------------------------------------
 
+
 def test_10_ssot_sentinel_present(ssot_source):
     assert "GATEWAY_SSOT_WRITE_AUTHORITY" in ssot_source
 
@@ -218,6 +223,7 @@ def test_12_ssot_sentinel_write_path(ssot_source):
 # ---------------------------------------------------------------------------
 # 13-16: sentinels do NOT claim wrong authority
 # ---------------------------------------------------------------------------
+
 
 def test_13_ws_sentinel_not_orchestration(ws_source):
     val = _extract_sentinel(ws_source, "WEBSOCKET_HANDLER_TRANSPORT_AUTHORITY")
@@ -242,6 +248,7 @@ def test_16_ssot_sentinel_not_system_wide_readiness(ssot_source):
 # ---------------------------------------------------------------------------
 # 17-23: GATEWAY_TRANSPORT_BOUNDARY.md
 # ---------------------------------------------------------------------------
+
 
 def test_17_boundary_doc_exists():
     path = os.path.normpath(os.path.join(_GATEWAY_ROOT, "GATEWAY_TRANSPORT_BOUNDARY.md"))
@@ -276,6 +283,7 @@ def test_23_boundary_doc_ssot_sentinel_name(boundary_doc):
 # 24-30: galaxy_gateway/README.md
 # ---------------------------------------------------------------------------
 
+
 def test_24_readme_architectural_boundaries(readme_doc):
     assert "Architectural Boundaries" in readme_doc or "Architectural boundary" in readme_doc
 
@@ -307,6 +315,7 @@ def test_30_readme_global_readiness_non_responsibility(readme_doc):
 # ---------------------------------------------------------------------------
 # 31-38: module docstrings
 # ---------------------------------------------------------------------------
+
 
 def test_31_ws_docstring_not_responsible(ws_source):
     assert "NOT responsible for" in ws_source
@@ -344,6 +353,7 @@ def test_38_ssot_docstring_write_path(ssot_source):
 # 39-40: sentinel uniqueness and safety
 # ---------------------------------------------------------------------------
 
+
 def test_39_all_sentinels_distinct(ws_source, dr_source, cdc_source, ssot_source):
     vals = [
         _extract_sentinel(ws_source, "WEBSOCKET_HANDLER_TRANSPORT_AUTHORITY"),
@@ -366,6 +376,4 @@ def test_40_sentinels_no_secrets(ws_source, dr_source, cdc_source, ssot_source):
     for src, name in sentinel_pairs:
         val = _extract_sentinel(src, name).lower()
         for pat in bad_patterns:
-            assert pat not in val, (
-                f"Sentinel {name!r} value contains sensitive keyword {pat!r}: {val!r}"
-            )
+            assert pat not in val, f"Sentinel {name!r} value contains sensitive keyword {pat!r}: {val!r}"

@@ -149,16 +149,19 @@ def _reset_openclawd_singleton() -> None:
     """Reset the OpenClawd singleton so each test gets a fresh instance."""
     try:
         import core.openclawd as _oc_mod
+
         _oc_mod._openclawd_instance = None
     except Exception:
         pass
     try:
         from core.unified.llm_router import reset_unified_llm_router
+
         reset_unified_llm_router()
     except Exception:
         pass
     try:
         from core.session_execution_lane import reset_session_execution_lane_manager
+
         reset_session_execution_lane_manager()
     except Exception:
         pass
@@ -168,6 +171,7 @@ def _reset_dpr_singleton() -> None:
     """Reset the DesktopPresenceRuntime singleton."""
     try:
         import core.desktop_presence_runtime as _dpr_mod
+
         _dpr_mod._desktop_presence_runtime = None
     except Exception:
         pass
@@ -176,6 +180,7 @@ def _reset_dpr_singleton() -> None:
 def _make_stub():
     """Return a fresh LLMContractStub."""
     from tests.integration.stubs.llm_contract_stub import LLMContractStub
+
     return LLMContractStub()
 
 
@@ -196,6 +201,7 @@ async def _run_handle_request(
 ) -> Dict[str, Any]:
     """Invoke a fresh DesktopPresenceRuntime with the given arguments."""
     from core.desktop_presence_runtime import DesktopPresenceRuntime
+
     runtime = DesktopPresenceRuntime()
     kw.setdefault("session_id", "mm-proof-session")
     kw.setdefault("user_id", "mm-proof-user")
@@ -221,16 +227,14 @@ class TestMultimodalContextStructure:
 
     def test_make_image_context_produces_valid_schema(self):
         """make_image_context() must return a MultiModalContext with one image."""
-        from tests.integration.stubs.multimodal_perception_stub import (
-            make_image_context,
-            STUB_IMAGE_SOURCE,
-        )
         from core.schemas.multimodal import MultiModalContext
+        from tests.integration.stubs.multimodal_perception_stub import (
+            STUB_IMAGE_SOURCE,
+            make_image_context,
+        )
 
         ctx = make_image_context()
-        assert isinstance(ctx, MultiModalContext), (
-            "make_image_context must return a MultiModalContext instance"
-        )
+        assert isinstance(ctx, MultiModalContext), "make_image_context must return a MultiModalContext instance"
         assert len(ctx.images) == 1, "stub context must carry exactly one image"
         assert ctx.images[0].source == STUB_IMAGE_SOURCE
         assert ctx.images[0].mime == "image/png"
@@ -243,17 +247,15 @@ class TestMultimodalContextStructure:
         )
 
         ctx = make_android_vision_context(device_id="android-001")
-        assert ctx.images[0].source == "android_screen:android-001", (
-            "android vision context source must match the real handler convention"
-        )
-        assert ctx.screen == {"mode": "full", "source": "android"}, (
-            "android vision context must carry screen metadata"
-        )
+        assert (
+            ctx.images[0].source == "android_screen:android-001"
+        ), "android vision context source must match the real handler convention"
+        assert ctx.screen == {"mode": "full", "source": "android"}, "android vision context must carry screen metadata"
 
     def test_make_audio_context_produces_audio_modality(self):
         """make_audio_context() must return a MultiModalContext with audio."""
-        from tests.integration.stubs.multimodal_perception_stub import make_audio_context
         from core.schemas.multimodal import MultiModalContext
+        from tests.integration.stubs.multimodal_perception_stub import make_audio_context
 
         ctx = make_audio_context()
         assert isinstance(ctx, MultiModalContext)
@@ -314,9 +316,7 @@ class TestMultimodalContextEntersOpenClawd:
         ctx = make_image_context()
 
         with _patch_llm_router(stub):
-            result = asyncio.run(
-                _run_handle_request("What do you see?", multimodal_context=ctx)
-            )
+            result = asyncio.run(_run_handle_request("What do you see?", multimodal_context=ctx))
 
         for field in CANONICAL_DPR_FIELDS:
             assert field in result, (
@@ -334,13 +334,9 @@ class TestMultimodalContextEntersOpenClawd:
         ctx = make_image_context()
 
         with _patch_llm_router(stub):
-            result = asyncio.run(
-                _run_handle_request("Describe", multimodal_context=ctx)
-            )
+            result = asyncio.run(_run_handle_request("Describe", multimodal_context=ctx))
 
-        assert result.get("success"), (
-            "handle_request must succeed for a multimodal request with a stub LLM"
-        )
+        assert result.get("success"), "handle_request must succeed for a multimodal request with a stub LLM"
 
     def test_audio_context_also_produces_non_text_only_route(self):
         """Audio multimodal_context must also produce route_type != 'text_only'."""
@@ -351,15 +347,11 @@ class TestMultimodalContextEntersOpenClawd:
         ctx = make_audio_context()
 
         with _patch_llm_router(stub):
-            result = asyncio.run(
-                _run_handle_request("Transcribe this", multimodal_context=ctx)
-            )
+            result = asyncio.run(_run_handle_request("Transcribe this", multimodal_context=ctx))
 
         md = result.get("metadata", {})
         route_type = md.get("multimodal_route_decision", {}).get("route_type", "")
-        assert route_type != ROUTE_TYPE_TEXT_ONLY, (
-            "Audio multimodal_context must also drive route_type != 'text_only'"
-        )
+        assert route_type != ROUTE_TYPE_TEXT_ONLY, "Audio multimodal_context must also drive route_type != 'text_only'"
 
 
 # ---------------------------------------------------------------------------
@@ -382,15 +374,13 @@ class TestCanonicalPerceptionStateWithMultimodal:
         ctx = make_image_context()
 
         with _patch_llm_router(stub):
-            result = asyncio.run(
-                _run_handle_request("Analyse image", multimodal_context=ctx)
-            )
+            result = asyncio.run(_run_handle_request("Analyse image", multimodal_context=ctx))
 
         cps = result.get("metadata", {}).get("canonical_perception_state", {})
         assert cps, "canonical_perception_state must be present in metadata"
-        assert cps.get("has_request_multimodal") is True, (
-            "has_request_multimodal must be True when images are in multimodal_context"
-        )
+        assert (
+            cps.get("has_request_multimodal") is True
+        ), "has_request_multimodal must be True when images are in multimodal_context"
 
     def test_active_modalities_includes_image(self):
         """active_modalities must include 'image' for an image request."""
@@ -401,15 +391,12 @@ class TestCanonicalPerceptionStateWithMultimodal:
         ctx = make_image_context()
 
         with _patch_llm_router(stub):
-            result = asyncio.run(
-                _run_handle_request("Describe image", multimodal_context=ctx)
-            )
+            result = asyncio.run(_run_handle_request("Describe image", multimodal_context=ctx))
 
         cps = result.get("metadata", {}).get("canonical_perception_state", {})
         modalities = cps.get("active_modalities", [])
         assert "image" in modalities, (
-            f"active_modalities must include 'image' for an image multimodal_context, "
-            f"got: {modalities!r}"
+            f"active_modalities must include 'image' for an image multimodal_context, " f"got: {modalities!r}"
         )
 
     def test_requires_native_multimodal_true_when_image_present(self):
@@ -421,9 +408,7 @@ class TestCanonicalPerceptionStateWithMultimodal:
         ctx = make_image_context()
 
         with _patch_llm_router(stub):
-            result = asyncio.run(
-                _run_handle_request("Describe image", multimodal_context=ctx)
-            )
+            result = asyncio.run(_run_handle_request("Describe image", multimodal_context=ctx))
 
         cps = result.get("metadata", {}).get("canonical_perception_state", {})
         assert cps.get("requires_native_multimodal") is True, (
@@ -437,14 +422,12 @@ class TestCanonicalPerceptionStateWithMultimodal:
         _reset_openclawd_singleton()
 
         with _patch_llm_router(stub):
-            result = asyncio.run(
-                _run_handle_request("Hello, no image", multimodal_context=None)
-            )
+            result = asyncio.run(_run_handle_request("Hello, no image", multimodal_context=None))
 
         cps = result.get("metadata", {}).get("canonical_perception_state", {})
-        assert not cps.get("has_request_multimodal", False), (
-            "has_request_multimodal must be False for a text-only request"
-        )
+        assert not cps.get(
+            "has_request_multimodal", False
+        ), "has_request_multimodal must be False for a text-only request"
 
 
 # ---------------------------------------------------------------------------
@@ -467,9 +450,7 @@ class TestMultimodalRouteDecisionInResult:
         ctx = make_image_context()
 
         with _patch_llm_router(stub):
-            result = asyncio.run(
-                _run_handle_request("Image test", multimodal_context=ctx)
-            )
+            result = asyncio.run(_run_handle_request("Image test", multimodal_context=ctx))
 
         md = result.get("metadata", {})
         assert "multimodal_route_decision" in md, (
@@ -486,9 +467,7 @@ class TestMultimodalRouteDecisionInResult:
         ctx = make_image_context()
 
         with _patch_llm_router(stub):
-            result = asyncio.run(
-                _run_handle_request("Image routing test", multimodal_context=ctx)
-            )
+            result = asyncio.run(_run_handle_request("Image routing test", multimodal_context=ctx))
 
         mrd = result.get("metadata", {}).get("multimodal_route_decision", {})
         for key in ("route_type", "is_native_multimodal", "active_modalities"):
@@ -506,9 +485,7 @@ class TestMultimodalRouteDecisionInResult:
         ctx = make_image_context()
 
         with _patch_llm_router(stub):
-            result = asyncio.run(
-                _run_handle_request("Modality consistency test", multimodal_context=ctx)
-            )
+            result = asyncio.run(_run_handle_request("Modality consistency test", multimodal_context=ctx))
 
         md = result.get("metadata", {})
         mrd_modalities = md.get("multimodal_route_decision", {}).get("active_modalities", [])
@@ -549,9 +526,7 @@ class TestRoutingObservabilityEvent:
         ctx = make_image_context()
 
         with _patch_llm_router(stub):
-            result = asyncio.run(
-                _run_handle_request("RDE test", multimodal_context=ctx)
-            )
+            result = asyncio.run(_run_handle_request("RDE test", multimodal_context=ctx))
 
         md = result.get("metadata", {})
         rde = md.get("routing_decision_event")
@@ -569,14 +544,11 @@ class TestRoutingObservabilityEvent:
         ctx = make_image_context()
 
         with _patch_llm_router(stub):
-            result = asyncio.run(
-                _run_handle_request("RDE route_kind test", multimodal_context=ctx)
-            )
+            result = asyncio.run(_run_handle_request("RDE route_kind test", multimodal_context=ctx))
 
         rde = result.get("metadata", {}).get("routing_decision_event", {})
         assert "route_kind" in rde, (
-            "routing_decision_event must contain 'route_kind' — "
-            "this is the stable, serializable route tier outcome"
+            "routing_decision_event must contain 'route_kind' — " "this is the stable, serializable route tier outcome"
         )
         assert rde["route_kind"] != ROUTE_TYPE_TEXT_ONLY, (
             "routing_decision_event.route_kind must NOT be 'text_only' for "
@@ -593,15 +565,11 @@ class TestRoutingObservabilityEvent:
         ctx = make_image_context()
 
         with _patch_llm_router(stub):
-            result = asyncio.run(
-                _run_handle_request("RDE modalities test", multimodal_context=ctx)
-            )
+            result = asyncio.run(_run_handle_request("RDE modalities test", multimodal_context=ctx))
 
         rde = result.get("metadata", {}).get("routing_decision_event", {})
         modalities = rde.get("active_modalities", [])
-        assert isinstance(modalities, list), (
-            "routing_decision_event.active_modalities must be a list"
-        )
+        assert isinstance(modalities, list), "routing_decision_event.active_modalities must be a list"
         assert "image" in modalities, (
             f"routing_decision_event.active_modalities must include 'image' "
             f"for an image context, got: {modalities!r}"
@@ -629,18 +597,11 @@ class TestMultimodalVsTextOnlyRegression:
         _reset_openclawd_singleton()
 
         with _patch_llm_router(stub):
-            result = asyncio.run(
-                _run_handle_request("Hello, text only")
-            )
+            result = asyncio.run(_run_handle_request("Hello, text only"))
 
-        route_type = (
-            result.get("metadata", {})
-            .get("multimodal_route_decision", {})
-            .get("route_type", "")
-        )
+        route_type = result.get("metadata", {}).get("multimodal_route_decision", {}).get("route_type", "")
         assert route_type == ROUTE_TYPE_TEXT_ONLY, (
-            f"A text-only request must produce route_type='text_only', "
-            f"got: {route_type!r}"
+            f"A text-only request must produce route_type='text_only', " f"got: {route_type!r}"
         )
 
     def test_image_multimodal_route_differs_from_text_only(self):
@@ -656,32 +617,18 @@ class TestMultimodalVsTextOnlyRegression:
         _reset_openclawd_singleton()
 
         with _patch_llm_router(stub):
-            text_result = asyncio.run(
-                _run_handle_request("Text only message")
-            )
+            text_result = asyncio.run(_run_handle_request("Text only message"))
 
         _reset_openclawd_singleton()
         ctx = make_image_context()
 
         with _patch_llm_router(stub):
-            mm_result = asyncio.run(
-                _run_handle_request("What is in this image?", multimodal_context=ctx)
-            )
+            mm_result = asyncio.run(_run_handle_request("What is in this image?", multimodal_context=ctx))
 
-        text_route = (
-            text_result.get("metadata", {})
-            .get("multimodal_route_decision", {})
-            .get("route_type", "")
-        )
-        mm_route = (
-            mm_result.get("metadata", {})
-            .get("multimodal_route_decision", {})
-            .get("route_type", "")
-        )
+        text_route = text_result.get("metadata", {}).get("multimodal_route_decision", {}).get("route_type", "")
+        mm_route = mm_result.get("metadata", {}).get("multimodal_route_decision", {}).get("route_type", "")
 
-        assert text_route == ROUTE_TYPE_TEXT_ONLY, (
-            f"text-only baseline must be 'text_only', got: {text_route!r}"
-        )
+        assert text_route == ROUTE_TYPE_TEXT_ONLY, f"text-only baseline must be 'text_only', got: {text_route!r}"
         assert mm_route != ROUTE_TYPE_TEXT_ONLY, (
             f"multimodal request must produce route_type != 'text_only', "
             f"got: {mm_route!r}.  Regression detected: multimodal participation "
@@ -696,27 +643,23 @@ class TestMultimodalVsTextOnlyRegression:
         _reset_openclawd_singleton()
 
         with _patch_llm_router(stub):
-            text_result = asyncio.run(
-                _run_handle_request("Text only baseline")
-            )
+            text_result = asyncio.run(_run_handle_request("Text only baseline"))
 
         _reset_openclawd_singleton()
         ctx = make_image_context()
 
         with _patch_llm_router(stub):
-            mm_result = asyncio.run(
-                _run_handle_request("MM regression check", multimodal_context=ctx)
-            )
+            mm_result = asyncio.run(_run_handle_request("MM regression check", multimodal_context=ctx))
 
         text_cps = text_result.get("metadata", {}).get("canonical_perception_state", {})
         mm_cps = mm_result.get("metadata", {}).get("canonical_perception_state", {})
 
-        assert not text_cps.get("has_request_multimodal", False), (
-            "text-only request must have has_request_multimodal=False"
-        )
-        assert mm_cps.get("has_request_multimodal") is True, (
-            "image multimodal request must have has_request_multimodal=True"
-        )
+        assert not text_cps.get(
+            "has_request_multimodal", False
+        ), "text-only request must have has_request_multimodal=False"
+        assert (
+            mm_cps.get("has_request_multimodal") is True
+        ), "image multimodal request must have has_request_multimodal=True"
 
 
 # ---------------------------------------------------------------------------
@@ -734,10 +677,11 @@ class TestAndroidVisionIngress:
     def test_android_vision_handler_importable(self):
         """galaxy_gateway.android.handlers.vision must be importable."""
         import importlib
+
         mod = importlib.import_module("galaxy_gateway.android.handlers.vision")
-        assert hasattr(mod, "handle_vision_request"), (
-            "handle_vision_request must be present in the Android vision handler"
-        )
+        assert hasattr(
+            mod, "handle_vision_request"
+        ), "handle_vision_request must be present in the Android vision handler"
         assert hasattr(mod, "_process_via_runtime_shell"), (
             "_process_via_runtime_shell must exist — this is the canonical path "
             "that routes Android vision through DPR → OpenClawd"
@@ -748,9 +692,7 @@ class TestAndroidVisionIngress:
 
         Evidence: galaxy_gateway/android/handlers/vision.py lines 109-110
         """
-        handler_src = (
-            REPO_ROOT / "galaxy_gateway" / "android" / "handlers" / "vision.py"
-        ).read_text(encoding="utf-8")
+        handler_src = (REPO_ROOT / "galaxy_gateway" / "android" / "handlers" / "vision.py").read_text(encoding="utf-8")
         assert "android_screen" in handler_src, (
             "Android vision handler must use 'android_screen:' source prefix — "
             "this is the canonical Android visual origin marker"
@@ -786,17 +728,14 @@ class TestAndroidVisionIngress:
         # DPR must return a result dict with the canonical source tag.
         # success may be False in degraded stub environments; we check the
         # multimodal routing evidence that is always set early in process().
-        assert isinstance(result, dict), (
-            "DPR must return a dict for Android vision multimodal requests"
-        )
-        assert result.get("entrypoint_source") == "android_vision", (
-            "entrypoint_source must be 'android_vision' for Android-sourced requests"
-        )
+        assert isinstance(result, dict), "DPR must return a dict for Android vision multimodal requests"
+        assert (
+            result.get("entrypoint_source") == "android_vision"
+        ), "entrypoint_source must be 'android_vision' for Android-sourced requests"
         md = result.get("metadata", {})
         route_type = md.get("multimodal_route_decision", {}).get("route_type", "")
         assert route_type != ROUTE_TYPE_TEXT_ONLY, (
-            f"Android vision multimodal request must produce route_type != 'text_only', "
-            f"got: {route_type!r}"
+            f"Android vision multimodal request must produce route_type != 'text_only', " f"got: {route_type!r}"
         )
 
     def test_android_vision_result_includes_multimodal_route_decision(self):
@@ -827,19 +766,18 @@ class TestAndroidVisionIngress:
         )
         cps = md.get("canonical_perception_state", {})
         assert cps.get("has_request_multimodal") is True, (
-            "canonical_perception_state.has_request_multimodal must be True "
-            "for Android vision requests"
+            "canonical_perception_state.has_request_multimodal must be True " "for Android vision requests"
         )
 
     def test_android_vision_default_participation_is_request_bound(self):
         """Default Android vision participation must be one-shot request-bound."""
-        from tests.integration.stubs.multimodal_perception_stub import (
-            make_android_vision_context,
-        )
         from core.android_perception_ingress_contract import (
             ANDROID_PERCEPTION_ONE_SHOT,
             ANDROID_PERCEPTION_ROUTE_REQUEST_BOUND,
             V2_MULTIMODAL_AUTHORITY,
+        )
+        from tests.integration.stubs.multimodal_perception_stub import (
+            make_android_vision_context,
         )
 
         stub = _make_stub()
@@ -858,21 +796,18 @@ class TestAndroidVisionIngress:
         icc = result.get("ingress_carrier_context", {})
         assert icc.get("multimodal_authority") == V2_MULTIMODAL_AUTHORITY
         assert icc.get("android_perception_participation") == ANDROID_PERCEPTION_ONE_SHOT
-        assert (
-            icc.get("android_perception_ingress_route")
-            == ANDROID_PERCEPTION_ROUTE_REQUEST_BOUND
-        )
+        assert icc.get("android_perception_ingress_route") == ANDROID_PERCEPTION_ROUTE_REQUEST_BOUND
         assert icc.get("android_perception_can_enter_ingress_bus") is False
 
     def test_android_vision_canonical_requires_ingest_gate(self):
         """Canonical Android participation enters ingress bus only when gate is enabled."""
-        from tests.integration.stubs.multimodal_perception_stub import (
-            make_android_vision_context,
-        )
         from core.android_perception_ingress_contract import (
             ANDROID_PERCEPTION_CANONICAL,
             ANDROID_PERCEPTION_ROUTE_INGRESS_BUS,
             ANDROID_PERCEPTION_ROUTE_REQUEST_BOUND,
+        )
+        from tests.integration.stubs.multimodal_perception_stub import (
+            make_android_vision_context,
         )
 
         stub = _make_stub()
@@ -894,10 +829,7 @@ class TestAndroidVisionIngress:
                 )
 
         disabled_icc = disabled_result.get("ingress_carrier_context", {})
-        assert (
-            disabled_icc.get("android_perception_ingress_route")
-            == ANDROID_PERCEPTION_ROUTE_REQUEST_BOUND
-        )
+        assert disabled_icc.get("android_perception_ingress_route") == ANDROID_PERCEPTION_ROUTE_REQUEST_BOUND
         assert disabled_icc.get("android_perception_can_enter_ingress_bus") is False
 
         with patch(
@@ -914,10 +846,7 @@ class TestAndroidVisionIngress:
                 )
 
         enabled_icc = enabled_result.get("ingress_carrier_context", {})
-        assert (
-            enabled_icc.get("android_perception_ingress_route")
-            == ANDROID_PERCEPTION_ROUTE_INGRESS_BUS
-        )
+        assert enabled_icc.get("android_perception_ingress_route") == ANDROID_PERCEPTION_ROUTE_INGRESS_BUS
         assert enabled_icc.get("android_perception_can_enter_ingress_bus") is True
 
 
@@ -971,9 +900,9 @@ class TestAndroidSideMultimodalPresence:
 
         snapshot = DeviceStateSnapshot(device_id="test-android")
         d = snapshot.to_dict()
-        assert d.get("_source") == "android_device_state_store", (
-            "DeviceStateSnapshot provenance must be 'android_device_state_store'"
-        )
+        assert (
+            d.get("_source") == "android_device_state_store"
+        ), "DeviceStateSnapshot provenance must be 'android_device_state_store'"
 
     def test_android_vision_handler_references_multimodal_route_in_result(self):
         """The Android vision handler must include multimodal_route in result.
@@ -981,9 +910,7 @@ class TestAndroidSideMultimodalPresence:
         Evidence: galaxy_gateway/android/handlers/vision.py — the result dict
         built by _process_via_runtime_shell() includes analysis.multimodal_route.
         """
-        handler_src = (
-            REPO_ROOT / "galaxy_gateway" / "android" / "handlers" / "vision.py"
-        ).read_text(encoding="utf-8")
+        handler_src = (REPO_ROOT / "galaxy_gateway" / "android" / "handlers" / "vision.py").read_text(encoding="utf-8")
         assert "multimodal_route" in handler_src, (
             "Android vision handler result must include 'multimodal_route' key — "
             "proves Android side propagates the multimodal routing decision"
@@ -991,9 +918,7 @@ class TestAndroidSideMultimodalPresence:
 
     def test_android_vision_handler_stamps_perception_contract_metadata(self):
         """Android vision handler must stamp payload-level perception contract metadata."""
-        handler_src = (
-            REPO_ROOT / "galaxy_gateway" / "android" / "handlers" / "vision.py"
-        ).read_text(encoding="utf-8")
+        handler_src = (REPO_ROOT / "galaxy_gateway" / "android" / "handlers" / "vision.py").read_text(encoding="utf-8")
         assert "build_android_perception_payload_contract" in handler_src, (
             "vision.py must build Android perception payload contract metadata "
             "to standardize one-shot vs canonical participation semantics."
@@ -1006,15 +931,16 @@ class TestAndroidSideMultimodalPresence:
     def test_device_state_store_module_level_functions_present(self):
         """Core android_device_state_store must expose module-level public API."""
         import core.android_device_state_store as store_mod
-        assert hasattr(store_mod, "get_device_state_snapshot"), (
-            "android_device_state_store must expose get_device_state_snapshot()"
-        )
-        assert hasattr(store_mod, "get_device_ecosystem_summary"), (
-            "android_device_state_store must expose get_device_ecosystem_summary()"
-        )
-        assert hasattr(store_mod, "list_recent_execution_events"), (
-            "android_device_state_store must expose list_recent_execution_events()"
-        )
+
+        assert hasattr(
+            store_mod, "get_device_state_snapshot"
+        ), "android_device_state_store must expose get_device_state_snapshot()"
+        assert hasattr(
+            store_mod, "get_device_ecosystem_summary"
+        ), "android_device_state_store must expose get_device_ecosystem_summary()"
+        assert hasattr(
+            store_mod, "list_recent_execution_events"
+        ), "android_device_state_store must expose list_recent_execution_events()"
 
 
 # ---------------------------------------------------------------------------
@@ -1094,9 +1020,9 @@ class TestAmbientIngestRemainsGated:
             "Explicit opt-out (enable_multimodal_ingest=False) must resolve "
             "SAFE_DEFAULT — the opt-out posture must still function correctly."
         )
-        assert opt_out_snapshot.enable_multimodal_ingest is False, (
-            "Explicit opt-out snapshot must have enable_multimodal_ingest=False."
-        )
+        assert (
+            opt_out_snapshot.enable_multimodal_ingest is False
+        ), "Explicit opt-out snapshot must have enable_multimodal_ingest=False."
 
     def test_multimodal_ingest_runtime_does_not_start_without_activation(self):
         """get_ingest_bus() must return None when the bus has not been started."""
@@ -1113,22 +1039,18 @@ class TestAmbientIngestRemainsGated:
         """MultimodalIngressBus must be importable (infrastructure exists)."""
         from core.multimodal.ingress_bus import MultimodalIngressBus
 
-        assert MultimodalIngressBus is not None, (
-            "MultimodalIngressBus must be importable — infrastructure is present"
-        )
+        assert MultimodalIngressBus is not None, "MultimodalIngressBus must be importable — infrastructure is present"
 
     def test_source_contains_safe_default_in_runtime_profile(self):
         """core/multimodal_runtime_profile.py must contain SAFE_DEFAULT text."""
-        profile_src = (
-            REPO_ROOT / "core" / "multimodal_runtime_profile.py"
-        ).read_text(encoding="utf-8")
+        profile_src = (REPO_ROOT / "core" / "multimodal_runtime_profile.py").read_text(encoding="utf-8")
         assert "SAFE_DEFAULT" in profile_src, (
             "core/multimodal_runtime_profile.py must define SAFE_DEFAULT — "
             "preserved as an explicit opt-out posture for text-only deployments"
         )
-        assert "enable_multimodal_ingest" in profile_src, (
-            "core/multimodal_runtime_profile.py must contain enable_multimodal_ingest"
-        )
+        assert (
+            "enable_multimodal_ingest" in profile_src
+        ), "core/multimodal_runtime_profile.py must contain enable_multimodal_ingest"
 
     def test_canonical_default_path_sentinel_in_ingest_runtime(self):
         """ingest_runtime.py must export MULTIMODAL_INGEST_CANONICAL_DEFAULT_PATH sentinel."""
@@ -1166,16 +1088,13 @@ class TestFiveDomainReviewUpgrade:
     def test_this_test_file_is_detected_by_review(self):
         """five_domain_implementation_review must detect this file as e2e proof."""
         from core.five_domain_implementation_review import (
-            build_five_domain_review,
-            ReviewDomain,
             EvidenceStrength,
+            ReviewDomain,
+            build_five_domain_review,
         )
 
         review = build_five_domain_review()
-        mm_entry = next(
-            e for e in review.domain_entries
-            if e.domain == ReviewDomain.MULTIMODAL_CANONICAL_PATH
-        )
+        mm_entry = next(e for e in review.domain_entries if e.domain == ReviewDomain.MULTIMODAL_CANONICAL_PATH)
         assert mm_entry.evidence_strength == EvidenceStrength.PARTIALLY_ESTABLISHED, (
             f"MULTIMODAL_CANONICAL_PATH evidence_strength must be "
             f"PARTIALLY_ESTABLISHED now that the e2e test file exists, "
@@ -1185,9 +1104,7 @@ class TestFiveDomainReviewUpgrade:
 
     def test_mm_e2e_test_candidate_list_includes_this_file(self):
         """mm_e2e_test_candidates in five_domain_review must include this test module."""
-        review_src = (
-            REPO_ROOT / "core" / "five_domain_implementation_review.py"
-        ).read_text(encoding="utf-8")
+        review_src = (REPO_ROOT / "core" / "five_domain_implementation_review.py").read_text(encoding="utf-8")
         assert "test_multimodal_canonical_path" in review_src, (
             "five_domain_implementation_review.py must list "
             "'test_multimodal_canonical_path' in mm_e2e_test_candidates"
@@ -1197,14 +1114,10 @@ class TestFiveDomainReviewUpgrade:
         """ReviewDomain enum must include MULTIMODAL_CANONICAL_PATH."""
         from core.five_domain_implementation_review import ReviewDomain
 
-        assert hasattr(ReviewDomain, "MULTIMODAL_CANONICAL_PATH"), (
-            "ReviewDomain must include MULTIMODAL_CANONICAL_PATH"
-        )
+        assert hasattr(ReviewDomain, "MULTIMODAL_CANONICAL_PATH"), "ReviewDomain must include MULTIMODAL_CANONICAL_PATH"
 
     def test_evidence_strength_partially_established_exists(self):
         """EvidenceStrength must include PARTIALLY_ESTABLISHED."""
         from core.five_domain_implementation_review import EvidenceStrength
 
-        assert hasattr(EvidenceStrength, "PARTIALLY_ESTABLISHED"), (
-            "EvidenceStrength must include PARTIALLY_ESTABLISHED"
-        )
+        assert hasattr(EvidenceStrength, "PARTIALLY_ESTABLISHED"), "EvidenceStrength must include PARTIALLY_ESTABLISHED"

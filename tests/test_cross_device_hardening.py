@@ -42,6 +42,7 @@ if str(PROJECT_ROOT) not in sys.path:
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _ws() -> MagicMock:
     ws = MagicMock()
     ws.send = AsyncMock()
@@ -64,6 +65,7 @@ def _msg(msg_type: str, device_id: str, **extra) -> Dict[str, Any]:
 # 1. Protocol SSOT
 # ===========================================================================
 
+
 class TestProtocolSSOT:
     """android_bridge must import MessageType from aip_v3.py, not redefine it."""
 
@@ -72,9 +74,7 @@ class TestProtocolSSOT:
         from galaxy_gateway.android_bridge import MessageType as BridgeMT
         from galaxy_gateway.protocol.aip_v3 import MessageType as V3MT
 
-        assert BridgeMT is V3MT, (
-            "android_bridge.MessageType must be imported from aip_v3, not a separate copy"
-        )
+        assert BridgeMT is V3MT, "android_bridge.MessageType must be imported from aip_v3, not a separate copy"
 
     def test_android_bridge_uses_aip_v3_task_status(self):
         from galaxy_gateway.android_bridge import TaskStatus as BridgeTS
@@ -91,14 +91,17 @@ class TestProtocolSSOT:
     def test_task_execute_present_in_aip_v3(self):
         """TASK_EXECUTE must be present in aip_v3.py MessageType (used by android_bridge)."""
         from galaxy_gateway.protocol.aip_v3 import MessageType
+
         assert MessageType.TASK_EXECUTE == "task_execute"
 
     def test_task_end_present_in_aip_v3(self):
         from galaxy_gateway.protocol.aip_v3 import MessageType
+
         assert MessageType.TASK_END == "task_end"
 
     def test_device_status_present_in_aip_v3(self):
         from galaxy_gateway.protocol.aip_v3 import MessageType
+
         assert MessageType.DEVICE_STATUS == "device_status"
 
 
@@ -106,11 +109,13 @@ class TestProtocolSSOT:
 # 2. AIP v3 Protocol Serialization
 # ===========================================================================
 
+
 class TestAIPv3Serialization:
     """Key AIP v3 message types must serialize / deserialize correctly."""
 
     def test_aip_message_round_trip_heartbeat(self):
         from galaxy_gateway.protocol.aip_v3 import AIPMessage, MessageType, parse_message
+
         msg = AIPMessage(type=MessageType.DEVICE_HEARTBEAT, device_id="dev-001")
         raw = msg.model_dump_json()
         restored = parse_message(raw)
@@ -119,7 +124,8 @@ class TestAIPv3Serialization:
         assert restored.version == "3.0"
 
     def test_aip_message_round_trip_task_assign(self):
-        from galaxy_gateway.protocol.aip_v3 import AIPMessage, MessageType, Command, parse_message
+        from galaxy_gateway.protocol.aip_v3 import AIPMessage, Command, MessageType, parse_message
+
         cmd = Command(tool_name="screenshot", tool_type="data_collection", parameters={})
         msg = AIPMessage(
             type=MessageType.TASK_ASSIGN,
@@ -137,6 +143,7 @@ class TestAIPv3Serialization:
     def test_message_type_values_stable(self):
         """Wire-format values must not change — clients depend on them."""
         from galaxy_gateway.protocol.aip_v3 import MessageType
+
         assert MessageType.DEVICE_REGISTER.value == "device_register"
         assert MessageType.DEVICE_HEARTBEAT.value == "heartbeat"
         assert MessageType.DEVICE_HEARTBEAT_ACK.value == "heartbeat_ack"
@@ -150,6 +157,7 @@ class TestAIPv3Serialization:
 
     def test_task_status_values_stable(self):
         from galaxy_gateway.protocol.aip_v3 import TaskStatus
+
         assert TaskStatus.PENDING.value == "pending"
         assert TaskStatus.RUNNING.value == "running"
         assert TaskStatus.COMPLETED.value == "completed"
@@ -157,6 +165,7 @@ class TestAIPv3Serialization:
 
     def test_result_status_values_stable(self):
         from galaxy_gateway.protocol.aip_v3 import ResultStatus
+
         assert ResultStatus.SUCCESS.value == "success"
         assert ResultStatus.FAILURE.value == "failure"
         assert ResultStatus.TIMEOUT.value == "timeout"
@@ -164,6 +173,7 @@ class TestAIPv3Serialization:
     def test_aip_message_defaults(self):
         """AIPMessage must auto-generate message_id and default version to '3.0'."""
         from galaxy_gateway.protocol.aip_v3 import AIPMessage, MessageType
+
         msg = AIPMessage(type=MessageType.DEVICE_HEARTBEAT, device_id="dev")
         assert msg.version == "3.0"
         assert len(msg.message_id) > 0
@@ -173,6 +183,7 @@ class TestAIPv3Serialization:
 # 3. Android WebSocket routing through android_bridge
 # ===========================================================================
 
+
 class TestAndroidWSRouting:
     """
     /ws/android/{device_id} and /ws/android must route through android_bridge.
@@ -181,8 +192,10 @@ class TestAndroidWSRouting:
 
     @pytest.fixture(scope="class")
     def gw_client(self):
-        from galaxy_gateway.app import app as gateway_app
         from fastapi.testclient import TestClient
+
+        from galaxy_gateway.app import app as gateway_app
+
         with TestClient(gateway_app) as c:
             yield c
 
@@ -192,8 +205,7 @@ class TestAndroidWSRouting:
 
         with client.websocket_connect(url) as ws:
             # register first
-            ws.send_text(json.dumps(_msg("device_register", device_id,
-                                        platform="android", model="TestPhone")))
+            ws.send_text(json.dumps(_msg("device_register", device_id, platform="android", model="TestPhone")))
             reg_resp = ws.receive_json()
             # then heartbeat
             ws.send_text(json.dumps(_msg("heartbeat", device_id)))
@@ -232,11 +244,15 @@ class TestAndroidWSRouting:
     def test_android_auto_device_id_heartbeat_ack(self, gw_client):
         """/ws/android without device_id returns heartbeat_ack."""
         with gw_client.websocket_connect("/ws/android") as ws:
-            ws.send_text(json.dumps({
-                "version": "3.0",
-                "type": "heartbeat",
-                "device_id": "auto-dev",
-            }))
+            ws.send_text(
+                json.dumps(
+                    {
+                        "version": "3.0",
+                        "type": "heartbeat",
+                        "device_id": "auto-dev",
+                    }
+                )
+            )
             resp = ws.receive_json()
         assert resp["type"] == "heartbeat_ack"
 
@@ -253,11 +269,15 @@ class TestAndroidWSRouting:
         """/ws/android/{device_id} returns error when device_id absent from payload."""
         device_id = f"noid-{uuid.uuid4().hex[:8]}"
         with gw_client.websocket_connect(f"/ws/android/{device_id}") as ws:
-            ws.send_text(json.dumps({
-                "version": "3.0",
-                "type": "heartbeat",
-                # intentionally missing device_id
-            }))
+            ws.send_text(
+                json.dumps(
+                    {
+                        "version": "3.0",
+                        "type": "heartbeat",
+                        # intentionally missing device_id
+                    }
+                )
+            )
             resp = ws.receive_json()
         assert resp["type"] == "error"
         assert resp.get("error_code") == "MISSING_REQUIRED_FIELDS"
@@ -267,20 +287,20 @@ class TestAndroidWSRouting:
 # 4. Device registration and heartbeat handling (unit tests)
 # ===========================================================================
 
+
 class TestDeviceRegistrationAndHeartbeat:
     """Device registration ack, failure handling, and heartbeat edge-cases."""
 
     @pytest.fixture()
     def bridge(self):
         from galaxy_gateway.android_bridge import AndroidBridge
+
         return AndroidBridge()
 
     @pytest.mark.asyncio
     async def test_register_success(self, bridge):
         ws = _ws()
-        resp = await bridge.handle_message(ws, _msg(
-            "device_register", "dev-001", platform="android", model="Pixel"
-        ))
+        resp = await bridge.handle_message(ws, _msg("device_register", "dev-001", platform="android", model="Pixel"))
         assert resp["type"] == "device_register_ack"
         assert resp["success"] is True
         assert "session_id" in resp
@@ -289,9 +309,7 @@ class TestDeviceRegistrationAndHeartbeat:
     @pytest.mark.asyncio
     async def test_register_ack_contains_device_id(self, bridge):
         ws = _ws()
-        resp = await bridge.handle_message(ws, _msg(
-            "device_register", "dev-ack", platform="android"
-        ))
+        resp = await bridge.handle_message(ws, _msg("device_register", "dev-ack", platform="android"))
         assert resp["device_id"] == "dev-ack"
 
     @pytest.mark.asyncio
@@ -319,12 +337,15 @@ class TestDeviceRegistrationAndHeartbeat:
     @pytest.mark.asyncio
     async def test_register_missing_device_id_returns_error(self, bridge):
         ws = _ws()
-        resp = await bridge.handle_message(ws, {
-            "version": "3.0",
-            "type": "device_register",
-            "message_id": str(uuid.uuid4()),
-            "timestamp": int(time.time() * 1000),
-        })
+        resp = await bridge.handle_message(
+            ws,
+            {
+                "version": "3.0",
+                "type": "device_register",
+                "message_id": str(uuid.uuid4()),
+                "timestamp": int(time.time() * 1000),
+            },
+        )
         assert resp["type"] == "error"
         assert resp["error_code"] == "MISSING_REQUIRED_FIELDS"
 
@@ -333,10 +354,14 @@ class TestDeviceRegistrationAndHeartbeat:
         """device_status messages get a device_status_ack response."""
         ws = _ws()
         await bridge.handle_message(ws, _msg("device_register", "dev-st"))
-        resp = await bridge.handle_message(ws, _msg(
-            "device_status", "dev-st",
-            status={"battery": 85, "cpu": 32},
-        ))
+        resp = await bridge.handle_message(
+            ws,
+            _msg(
+                "device_status",
+                "dev-st",
+                status={"battery": 85, "cpu": 32},
+            ),
+        )
         assert resp is not None
         assert resp["type"] == "device_status_ack"
 
@@ -344,6 +369,7 @@ class TestDeviceRegistrationAndHeartbeat:
 # ===========================================================================
 # 5. Task lifecycle
 # ===========================================================================
+
 
 class TestTaskLifecycle:
     """
@@ -354,6 +380,7 @@ class TestTaskLifecycle:
     @pytest.fixture()
     def bridge(self):
         from galaxy_gateway.android_bridge import AndroidBridge
+
         return AndroidBridge()
 
     @pytest.mark.asyncio
@@ -402,9 +429,7 @@ class TestTaskLifecycle:
         task_id = str(uuid.uuid4())
 
         await bridge.handle_message(ws, _msg("device_register", device_id))
-        resp = await bridge.handle_message(ws, _msg(
-            "task_progress", device_id, task_id=task_id, progress=50
-        ))
+        resp = await bridge.handle_message(ws, _msg("task_progress", device_id, task_id=task_id, progress=50))
         # task_progress handler returns None (no ack required by spec)
         assert resp is None
 
@@ -423,7 +448,8 @@ class TestTaskLifecycle:
         bridge._pending_responses[task_id] = future
 
         result_msg = _msg(
-            "task_result", device_id,
+            "task_result",
+            device_id,
             task_id=task_id,
             status="completed",
             route_mode="cross_device",
@@ -446,9 +472,7 @@ class TestTaskLifecycle:
         device = bridge.get_device(device_id)
         device.current_task_id = task_id
 
-        await bridge.handle_message(ws, _msg(
-            "task_result", device_id, task_id=task_id, status="completed"
-        ))
+        await bridge.handle_message(ws, _msg("task_result", device_id, task_id=task_id, status="completed"))
 
         assert device.current_task_id is None
 
@@ -460,9 +484,7 @@ class TestTaskLifecycle:
         task_id = str(uuid.uuid4())
 
         await bridge.handle_message(ws, _msg("device_register", device_id))
-        resp = await bridge.handle_message(ws, _msg(
-            "task_end", device_id, task_id=task_id, status="completed"
-        ))
+        resp = await bridge.handle_message(ws, _msg("task_end", device_id, task_id=task_id, status="completed"))
 
         assert resp is not None
         assert resp["type"] == "task_end_ack"
@@ -480,9 +502,7 @@ class TestTaskLifecycle:
         device = bridge.get_device(device_id)
         device.current_task_id = task_id
 
-        await bridge.handle_message(ws, _msg(
-            "task_end", device_id, task_id=task_id, status="completed"
-        ))
+        await bridge.handle_message(ws, _msg("task_end", device_id, task_id=task_id, status="completed"))
 
         assert device.current_task_id is None
 
@@ -499,9 +519,7 @@ class TestTaskLifecycle:
         future: asyncio.Future = loop.create_future()
         bridge._pending_responses[task_id] = future
 
-        await bridge.handle_message(ws, _msg(
-            "task_end", device_id, task_id=task_id, status="completed"
-        ))
+        await bridge.handle_message(ws, _msg("task_end", device_id, task_id=task_id, status="completed"))
 
         assert future.done()
 
@@ -509,6 +527,7 @@ class TestTaskLifecycle:
 # ===========================================================================
 # 6. OpenClawd memory backflow
 # ===========================================================================
+
 
 class TestOpenClawdMemoryBackflow:
     """Completed tasks are stored in memory DB with device_id and route_mode."""
@@ -521,19 +540,21 @@ class TestOpenClawdMemoryBackflow:
         recorded = []
 
         class MockTaskMemory:
-            def record_task(self, task, result_summary="", success=True,
-                            strategy="", session_id="", tags=None, extra=None):
-                recorded.append({
-                    "task": task,
-                    "result_summary": result_summary,
-                    "success": success,
-                    "strategy": strategy,
-                    "tags": tags or [],
-                    "extra": extra or {},
-                })
+            def record_task(
+                self, task, result_summary="", success=True, strategy="", session_id="", tags=None, extra=None
+            ):
+                recorded.append(
+                    {
+                        "task": task,
+                        "result_summary": result_summary,
+                        "success": success,
+                        "strategy": strategy,
+                        "tags": tags or [],
+                        "extra": extra or {},
+                    }
+                )
 
-        with patch("core.openclawd_memory_backflow.get_task_memory",
-                   return_value=MockTaskMemory()):
+        with patch("core.openclawd_memory_backflow.get_task_memory", return_value=MockTaskMemory()):
             await store_task_result(
                 task_id="t-001",
                 device_id="dev-bf-001",
@@ -558,12 +579,12 @@ class TestOpenClawdMemoryBackflow:
         recorded = []
 
         class MockTaskMemory:
-            def record_task(self, task, result_summary="", success=True,
-                            strategy="", session_id="", tags=None, extra=None):
+            def record_task(
+                self, task, result_summary="", success=True, strategy="", session_id="", tags=None, extra=None
+            ):
                 recorded.append({"success": success})
 
-        with patch("core.openclawd_memory_backflow.get_task_memory",
-                   return_value=MockTaskMemory()):
+        with patch("core.openclawd_memory_backflow.get_task_memory", return_value=MockTaskMemory()):
             await store_task_result(
                 task_id="t-002",
                 device_id="dev-002",
@@ -597,19 +618,21 @@ class TestOpenClawdMemoryBackflow:
         backflow_called = []
 
         async def _mock_store(task_id, device_id, route_mode, result, **kw):
-            backflow_called.append({"task_id": task_id, "device_id": device_id,
-                                    "route_mode": route_mode})
+            backflow_called.append({"task_id": task_id, "device_id": device_id, "route_mode": route_mode})
 
         # store_task_result is imported and called inside task_lifecycle.py;
         # patch the reference there (not the android_bridge module-level alias).
-        with patch("galaxy_gateway.android.handlers.task_lifecycle.store_task_result",
-                   _mock_store):
-            await bridge.handle_message(ws, _msg(
-                "task_result", device_id,
-                task_id=task_id,
-                status="completed",
-                route_mode="cross_device",
-            ))
+        with patch("galaxy_gateway.android.handlers.task_lifecycle.store_task_result", _mock_store):
+            await bridge.handle_message(
+                ws,
+                _msg(
+                    "task_result",
+                    device_id,
+                    task_id=task_id,
+                    status="completed",
+                    route_mode="cross_device",
+                ),
+            )
 
         # Verify backflow was called with correct params
         assert len(backflow_called) == 1
@@ -627,8 +650,7 @@ class TestOpenClawdMemoryBackflow:
                 raise RuntimeError("DB unavailable")
 
         # Simulate record_task raising
-        with patch("core.openclawd_memory_backflow.get_task_memory",
-                   return_value=_BrokenMemory()):
+        with patch("core.openclawd_memory_backflow.get_task_memory", return_value=_BrokenMemory()):
             # Should not raise
             await store_task_result(
                 task_id="safe-task",
@@ -642,6 +664,7 @@ class TestOpenClawdMemoryBackflow:
 # 7. WebRTC gateway health checks
 # ===========================================================================
 
+
 class TestWebRTCGatewayHealth:
     """
     Verify /api/v1/webrtc/endpoint is wired and Node_95 signaling passthrough
@@ -652,12 +675,14 @@ class TestWebRTCGatewayHealth:
     async def test_check_node95_reachable_returns_bool(self):
         """check_node95_reachable() returns a boolean regardless of state."""
         from galaxy_gateway.webrtc_proxy import check_node95_reachable
+
         result = await check_node95_reachable()
         assert isinstance(result, bool)
 
     def test_webrtc_endpoint_info_structure(self):
         """get_webrtc_endpoint_info() returns required keys."""
         from galaxy_gateway.webrtc_proxy import get_webrtc_endpoint_info
+
         info = get_webrtc_endpoint_info()
         assert "node95_url" in info
         assert "gateway_ws_url" in info
@@ -668,12 +693,14 @@ class TestWebRTCGatewayHealth:
     def test_webrtc_endpoint_rest_route_exists(self):
         """GET /api/v1/webrtc/endpoint route must exist in the gateway app."""
         from galaxy_gateway.app import app as gateway_app
+
         routes = [r.path for r in gateway_app.routes]  # type: ignore[attr-defined]
         assert "/api/v1/webrtc/endpoint" in routes
 
     def test_webrtc_ws_route_exists(self):
         """WebSocket /ws/webrtc/{device_id} route must exist in the gateway app."""
         from galaxy_gateway.app import app as gateway_app
+
         routes = [r.path for r in gateway_app.routes]  # type: ignore[attr-defined]
         assert "/ws/webrtc/{device_id}" in routes
 

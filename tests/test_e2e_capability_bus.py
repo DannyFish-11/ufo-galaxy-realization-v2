@@ -23,10 +23,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 # 辅助 —— 重置单例，保证每个测试函数隔离
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 def _reset_singletons():
     """重置 SkillLoader / CapabilityRegistry 单例，避免测试间状态污染。"""
-    from core.skill_loader import SkillLoader
     from core.agent.capability_registry import CapabilityRegistry
+    from core.skill_loader import SkillLoader
 
     SkillLoader._instance = None
     CapabilityRegistry._instance = None
@@ -36,12 +37,13 @@ def _reset_singletons():
 # 测试 1：Skill 加载 & schema 校验
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 async def test_skill_load_and_schema():
     """验收条件 1 + 2：hello_skill 加载成功，schema 字段完整。"""
     print("\n=== [1+2] Skill 加载 & Schema 校验 ===")
     _reset_singletons()
 
-    from core.skill_loader import skill_loader, SkillStatus
+    from core.skill_loader import SkillStatus, skill_loader
 
     skill_path = Path(__file__).parent.parent / "skills" / "examples" / "hello_skill"
     assert skill_path.exists(), f"示例技能不存在: {skill_path}"
@@ -78,13 +80,14 @@ async def test_skill_load_and_schema():
 # 测试 2：Skill 自动注入能力总线
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 async def test_skill_injected_into_capability_bus():
     """验收条件 3：Skill 加载后自动进入 CapabilityRegistry（能力总线）。"""
     print("\n=== [3] Skill 自动注入能力总线 ===")
     _reset_singletons()
 
-    from core.skill_loader import skill_loader
     from core.agent.capability_registry import CapabilityRegistry
+    from core.skill_loader import skill_loader
 
     skill_path = Path(__file__).parent.parent / "skills" / "examples" / "hello_skill"
     result = await skill_loader.load(str(skill_path))
@@ -114,13 +117,14 @@ async def test_skill_injected_into_capability_bus():
 # 测试 3：OpenClawd._collect_tools 从总线取工具
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 async def test_collect_tools_uses_capability_bus():
     """验收条件 3+4（前半段）：_collect_tools() 从能力总线取到已注入的 Skill 工具。"""
     print("\n=== [3+4a] _collect_tools 通过能力总线 ===")
     _reset_singletons()
 
-    from core.skill_loader import skill_loader
     from core.openclawd import OpenClawd
+    from core.skill_loader import skill_loader
 
     skill_path = Path(__file__).parent.parent / "skills" / "examples" / "hello_skill"
     result = await skill_loader.load(str(skill_path))
@@ -136,9 +140,7 @@ async def test_collect_tools_uses_capability_bus():
     tools = oc._collect_tools()
     tool_names = [t["function"]["name"] for t in tools if "function" in t]
 
-    assert f"skill__{skill_id}" in tool_names, (
-        f"skill__{skill_id} 不在 _collect_tools 结果中: {tool_names[:10]}"
-    )
+    assert f"skill__{skill_id}" in tool_names, f"skill__{skill_id} 不在 _collect_tools 结果中: {tool_names[:10]}"
     print(f"  ✅ skill__{skill_id} 已出现在 _collect_tools 返回值中")
 
     # 校验 schema 结构
@@ -156,13 +158,14 @@ async def test_collect_tools_uses_capability_bus():
 # 测试 4：OpenClawd._dispatch_tool_call 真实调用 Skill
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 async def test_dispatch_tool_call_real_execution():
     """验收条件 4（完整）：_dispatch_tool_call 实际调用 hello_skill 并返回真实结果（非 mock）。"""
     print("\n=== [4] _dispatch_tool_call 真实调用 ===")
     _reset_singletons()
 
-    from core.skill_loader import skill_loader
     from core.openclawd import OpenClawd
+    from core.skill_loader import skill_loader
 
     skill_path = Path(__file__).parent.parent / "skills" / "examples" / "hello_skill"
     result = await skill_loader.load(str(skill_path))
@@ -200,6 +203,7 @@ async def test_dispatch_tool_call_real_execution():
 # 测试 5：schema 校验失败时不注入能力总线
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 async def test_schema_validation_failure_not_injected():
     """验收：schema 校验失败时，有清晰错误日志，且不注入能力总线。"""
     print("\n=== [2] Schema 校验失败 → 不注入 ===")
@@ -223,9 +227,7 @@ async def test_schema_validation_failure_not_injected():
     # 应记录校验错误
     stats = reg.stats()
     errors = stats.get("validation_errors", [])
-    assert any(e.get("id") == "bad_skill" for e in errors), (
-        f"应记录 bad_skill 的校验错误，实际: {errors}"
-    )
+    assert any(e.get("id") == "bad_skill" for e in errors), f"应记录 bad_skill 的校验错误，实际: {errors}"
     print(f"  ✅ 非 dict schema 被拒绝，错误已记录: {errors}")
 
 
@@ -233,13 +235,14 @@ async def test_schema_validation_failure_not_injected():
 # 测试 6：Skill 卸载后从总线移除
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 async def test_skill_unload_ejects_from_bus():
     """验证 skill 卸载后从能力总线移除。"""
     print("\n=== [3] Skill 卸载 → 能力总线移除 ===")
     _reset_singletons()
 
-    from core.skill_loader import skill_loader
     from core.agent.capability_registry import CapabilityRegistry
+    from core.skill_loader import skill_loader
 
     skill_path = Path(__file__).parent.parent / "skills" / "examples" / "hello_skill"
     load_result = await skill_loader.load(str(skill_path))
@@ -258,6 +261,7 @@ async def test_skill_unload_ejects_from_bus():
 # ──────────────────────────────────────────────────────────────────────────────
 # 主入口
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 async def main():
     print("=" * 65)
@@ -282,6 +286,7 @@ async def main():
             passed += 1
         except Exception as exc:
             import traceback
+
             print(f"  FAIL  {name}: {exc}")
             traceback.print_exc()
             failed += 1

@@ -19,6 +19,7 @@ These tests prove the following claims:
 No test here validates field presence alone; each test exercises a behavioural
 consequence of Android presence participation.
 """
+
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -26,7 +27,6 @@ from typing import Any, List
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 
 # ===========================================================================
 # Group A — Android presence participation structure
@@ -39,8 +39,8 @@ class TestAndroidPresenceParticipationStructure:
 
     def test_execution_only_device_is_not_a_presence_participant(self):
         from core.presence.android_presence_participation import (
-            derive_android_presence_participation,
             AndroidPresenceParticipationMode,
+            derive_android_presence_participation,
         )
 
         rec = derive_android_presence_participation("device-exec-only")
@@ -52,8 +52,8 @@ class TestAndroidPresenceParticipationStructure:
 
     def test_active_engagement_makes_device_a_presence_participant(self):
         from core.presence.android_presence_participation import (
-            derive_android_presence_participation,
             AndroidPresenceParticipationMode,
+            derive_android_presence_participation,
         )
 
         rec = derive_android_presence_participation(
@@ -92,8 +92,8 @@ class TestAndroidPresenceParticipationStructure:
 
     def test_foreground_surface_plus_active_engagement_is_foreground_presence(self):
         from core.presence.android_presence_participation import (
-            derive_android_presence_participation,
             AndroidPresenceParticipationMode,
+            derive_android_presence_participation,
         )
 
         rec = derive_android_presence_participation(
@@ -106,8 +106,8 @@ class TestAndroidPresenceParticipationStructure:
 
     def test_execution_only_override_suppresses_presence_signals(self):
         from core.presence.android_presence_participation import (
-            derive_android_presence_participation,
             AndroidPresenceParticipationMode,
+            derive_android_presence_participation,
         )
 
         # Even with active engagement, execution_only_override forces EXECUTION_ONLY.
@@ -170,6 +170,7 @@ class TestPresenceBehaviorDifferenceWithAndroidParticipation:
 
     def _make_sm(self):
         from core.desktop_presence_system import DesktopPresenceStateMachine
+
         sm = DesktopPresenceStateMachine()
         # Advance time so min-hold constraints don't block transitions.
         sm.simulate_elapsed_time_for_testing(2.0)
@@ -198,9 +199,11 @@ class TestPresenceBehaviorDifferenceWithAndroidParticipation:
         )
 
         sm = self._make_sm()
-        android_summary = summarise_android_presence_participation([
-            derive_android_presence_participation("device-A", active_engagement=True),
-        ])
+        android_summary = summarise_android_presence_participation(
+            [
+                derive_android_presence_participation("device-A", active_engagement=True),
+            ]
+        )
 
         result = sm.update(
             tri_state="silent",
@@ -226,10 +229,12 @@ class TestPresenceBehaviorDifferenceWithAndroidParticipation:
         )
 
         sm = self._make_sm()
-        android_summary = summarise_android_presence_participation([
-            # execution_only_override=True: Android is only an execution node.
-            derive_android_presence_participation("device-exec", execution_only_override=True),
-        ])
+        android_summary = summarise_android_presence_participation(
+            [
+                # execution_only_override=True: Android is only an execution node.
+                derive_android_presence_participation("device-exec", execution_only_override=True),
+            ]
+        )
 
         result = sm.update(
             tri_state="silent",
@@ -252,13 +257,15 @@ class TestPresenceBehaviorDifferenceWithAndroidParticipation:
         )
 
         sm = self._make_sm()
-        android_summary = summarise_android_presence_participation([
-            derive_android_presence_participation(
-                "device-exec-coupled",
-                active_engagement=True,
-                execution_presence_coupled=True,
-            ),
-        ])
+        android_summary = summarise_android_presence_participation(
+            [
+                derive_android_presence_participation(
+                    "device-exec-coupled",
+                    active_engagement=True,
+                    execution_presence_coupled=True,
+                ),
+            ]
+        )
 
         result = sm.update(
             tri_state="silent",
@@ -306,28 +313,26 @@ class TestPresenceProjectionIncludesAndroidPresenceParticipant:
         return entry
 
     def test_android_presence_participant_gets_stamped_on_projection_event(self):
-        from core.presence.presence_projection import (
-            PresenceProjection,
-            ProjectionIntensity,
-        )
         from core.presence.android_presence_participation import (
             derive_android_presence_participation,
             summarise_android_presence_participation,
         )
+        from core.presence.presence_projection import (
+            PresenceProjection,
+            ProjectionIntensity,
+        )
 
         proj = PresenceProjection()
-        android_summary = summarise_android_presence_participation([
-            derive_android_presence_participation("android-device-1", active_engagement=True),
-        ])
+        android_summary = summarise_android_presence_participation(
+            [
+                derive_android_presence_participation("android-device-1", active_engagement=True),
+            ]
+        )
 
         entries = [self._make_entry("android-device-1")]
 
-        with patch(
-            "core.presence.presence_projection.PresenceProjection._emit_event"
-        ):
-            with patch(
-                "core.mesh.body_mesh_registry.get_body_mesh_registry"
-            ) as mock_registry:
+        with patch("core.presence.presence_projection.PresenceProjection._emit_event"):
+            with patch("core.mesh.body_mesh_registry.get_body_mesh_registry") as mock_registry:
                 registry = MagicMock()
                 registry.list_entries.return_value = entries
                 registry.get_by_session.return_value = []
@@ -345,26 +350,24 @@ class TestPresenceProjectionIncludesAndroidPresenceParticipant:
         assert evt.intensity >= float(ProjectionIntensity.MEDIUM)
 
     def test_execution_only_android_device_gets_no_participation_stamp(self):
-        from core.presence.presence_projection import PresenceProjection
         from core.presence.android_presence_participation import (
             derive_android_presence_participation,
             summarise_android_presence_participation,
         )
+        from core.presence.presence_projection import PresenceProjection
 
         proj = PresenceProjection()
-        android_summary = summarise_android_presence_participation([
-            # execution_only: Android is not a presence participant.
-            derive_android_presence_participation("exec-device", execution_only_override=True),
-        ])
+        android_summary = summarise_android_presence_participation(
+            [
+                # execution_only: Android is not a presence participant.
+                derive_android_presence_participation("exec-device", execution_only_override=True),
+            ]
+        )
 
         entries = [self._make_entry("exec-device")]
 
-        with patch(
-            "core.presence.presence_projection.PresenceProjection._emit_event"
-        ):
-            with patch(
-                "core.mesh.body_mesh_registry.get_body_mesh_registry"
-            ) as mock_registry:
+        with patch("core.presence.presence_projection.PresenceProjection._emit_event"):
+            with patch("core.mesh.body_mesh_registry.get_body_mesh_registry") as mock_registry:
                 registry = MagicMock()
                 registry.list_entries.return_value = entries
                 registry.get_by_session.return_value = []
@@ -381,32 +384,30 @@ class TestPresenceProjectionIncludesAndroidPresenceParticipant:
         assert evt.android_presence_participation_mode is None
 
     def test_foreground_presence_device_gets_full_intensity(self):
-        from core.presence.presence_projection import (
-            PresenceProjection,
-            ProjectionIntensity,
-        )
         from core.presence.android_presence_participation import (
             derive_android_presence_participation,
             summarise_android_presence_participation,
         )
+        from core.presence.presence_projection import (
+            PresenceProjection,
+            ProjectionIntensity,
+        )
 
         proj = PresenceProjection()
-        android_summary = summarise_android_presence_participation([
-            derive_android_presence_participation(
-                "fg-device",
-                active_engagement=True,
-                is_foreground_surface=True,
-            ),
-        ])
+        android_summary = summarise_android_presence_participation(
+            [
+                derive_android_presence_participation(
+                    "fg-device",
+                    active_engagement=True,
+                    is_foreground_surface=True,
+                ),
+            ]
+        )
 
         entries = [self._make_entry("fg-device")]
 
-        with patch(
-            "core.presence.presence_projection.PresenceProjection._emit_event"
-        ):
-            with patch(
-                "core.mesh.body_mesh_registry.get_body_mesh_registry"
-            ) as mock_registry:
+        with patch("core.presence.presence_projection.PresenceProjection._emit_event"):
+            with patch("core.mesh.body_mesh_registry.get_body_mesh_registry") as mock_registry:
                 registry = MagicMock()
                 registry.list_entries.return_value = entries
                 registry.get_by_session.return_value = []
@@ -428,12 +429,8 @@ class TestPresenceProjectionIncludesAndroidPresenceParticipant:
         proj = PresenceProjection()
         entries = [self._make_entry("desktop")]
 
-        with patch(
-            "core.presence.presence_projection.PresenceProjection._emit_event"
-        ):
-            with patch(
-                "core.mesh.body_mesh_registry.get_body_mesh_registry"
-            ) as mock_registry:
+        with patch("core.presence.presence_projection.PresenceProjection._emit_event"):
+            with patch("core.mesh.body_mesh_registry.get_body_mesh_registry") as mock_registry:
                 registry = MagicMock()
                 registry.list_entries.return_value = entries
                 registry.get_by_session.return_value = []
@@ -468,8 +465,8 @@ class TestExecutionVsPresenceDistinction:
         active_engagement=True (presence participant) and the other does not.
         Their participation modes must differ."""
         from core.presence.android_presence_participation import (
-            derive_android_presence_participation,
             AndroidPresenceParticipationMode,
+            derive_android_presence_participation,
         )
 
         exec_node = derive_android_presence_participation(
@@ -498,9 +495,11 @@ class TestExecutionVsPresenceDistinction:
         # Scenario A: only execution node online (no presence participation).
         sm_a = DesktopPresenceStateMachine()
         sm_a.simulate_elapsed_time_for_testing(2.0)
-        exec_only_summary = summarise_android_presence_participation([
-            derive_android_presence_participation("exec-node", execution_only_override=True),
-        ])
+        exec_only_summary = summarise_android_presence_participation(
+            [
+                derive_android_presence_participation("exec-node", execution_only_override=True),
+            ]
+        )
         result_a = sm_a.update(
             tri_state="silent",
             task_active=False,
@@ -516,10 +515,12 @@ class TestExecutionVsPresenceDistinction:
         # Scenario B: same execution node + presence participant online.
         sm_b = DesktopPresenceStateMachine()
         sm_b.simulate_elapsed_time_for_testing(2.0)
-        mixed_summary = summarise_android_presence_participation([
-            derive_android_presence_participation("exec-node", execution_only_override=True),
-            derive_android_presence_participation("presence-node", active_engagement=True),
-        ])
+        mixed_summary = summarise_android_presence_participation(
+            [
+                derive_android_presence_participation("exec-node", execution_only_override=True),
+                derive_android_presence_participation("presence-node", active_engagement=True),
+            ]
+        )
         result_b = sm_b.update(
             tri_state="silent",
             task_active=False,
@@ -538,18 +539,20 @@ class TestExecutionVsPresenceDistinction:
         participant count in its return value — this is the canonical evidence
         that Android presence participation (not execution) reached the
         director layer."""
-        from core.presence.presence_director import PresenceDirector, DirectorConfig
         from core.presence.android_presence_participation import (
             derive_android_presence_participation,
             summarise_android_presence_participation,
         )
+        from core.presence.presence_director import DirectorConfig, PresenceDirector
 
         director = PresenceDirector(config=DirectorConfig(project_on_manifest=False))
-        android_summary = summarise_android_presence_participation([
-            derive_android_presence_participation("d1", active_engagement=True),
-            derive_android_presence_participation("d2", sensing_stream_active=True),
-            derive_android_presence_participation("d3", execution_only_override=True),
-        ])
+        android_summary = summarise_android_presence_participation(
+            [
+                derive_android_presence_participation("d1", active_engagement=True),
+                derive_android_presence_participation("d2", sensing_stream_active=True),
+                derive_android_presence_participation("d3", execution_only_override=True),
+            ]
+        )
 
         result = director.on_phase_transition(
             from_phase="liminal",

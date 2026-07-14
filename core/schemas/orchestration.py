@@ -22,6 +22,7 @@ from pydantic import BaseModel, Field
 
 class SubTaskStatus(str, Enum):
     """子任务状态"""
+
     PENDING = "pending"
     RUNNING = "running"
     SUCCESS = "success"
@@ -32,6 +33,7 @@ class SubTaskStatus(str, Enum):
 
 class OrchestrationStatus(str, Enum):
     """编排整体状态"""
+
     PLANNING = "planning"
     EXECUTING = "executing"
     SUCCESS = "success"

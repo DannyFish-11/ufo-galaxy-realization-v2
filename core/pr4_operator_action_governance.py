@@ -135,9 +135,7 @@ PR4_CONVERGENCE_CONTRACT_VERSION: str = "4.0.0"
 OPERATOR_ACTION_CANONICAL_ENTRY: str = "/api/v1/operator/action"
 ANDROID_DIRECTED_ACTION_CANONICAL_ENTRY: str = "/api/v1/operator/actions/android-directed"
 ANDROID_DIRECTED_ACK_CANONICAL_ENTRY: str = "/api/v1/operator/actions/android-directed/{dispatch_id}/ack"
-CANONICAL_GOVERNANCE_CONTRACT: str = (
-    "core.v2_unified_state_contract.build_control_plane_surface_contract"
-)
+CANONICAL_GOVERNANCE_CONTRACT: str = "core.v2_unified_state_contract.build_control_plane_surface_contract"
 
 PR4_CONVERGENCE_SENTINEL: str = (
     "PR4_SENTINEL::pr4_operator_action_governance::4.0.0 "
@@ -690,6 +688,7 @@ def _capture_pre_state() -> OperatorActionPreState:
 
     try:
         from core.operator_surface import get_operator_surface
+
         surface = get_operator_surface()
         snap = surface.operator_snapshot()
         policy_layer = snap.governance_state.get("policy_layer", {})
@@ -705,6 +704,7 @@ def _capture_pre_state() -> OperatorActionPreState:
 
     try:
         from core.v2_android_truth_ssot import get_best_v2_android_truth_block
+
         best_block = get_best_v2_android_truth_block()
         pre.participation_tier = best_block.participation_tier
     except Exception as exc:
@@ -712,6 +712,7 @@ def _capture_pre_state() -> OperatorActionPreState:
 
     try:
         from core.pr3_session_continuity_authority import build_pr3_convergence_audit_snapshot
+
         pr3_snap = build_pr3_convergence_audit_snapshot()
         pre.session_state = pr3_snap.get("session_state", "")
         pre.takeover_proof_quality = pr3_snap.get("takeover_proof_quality", "")
@@ -728,6 +729,7 @@ def _capture_post_state() -> OperatorActionPostState:
 
     try:
         from core.operator_surface import get_operator_surface
+
         surface = get_operator_surface()
         snap = surface.operator_snapshot()
         post.active_flow_count = snap.active_flow_count
@@ -847,9 +849,7 @@ def _lookup_canonical_task_snapshot(task_id: Optional[str]) -> Dict[str, str]:
         if task is None:
             return {}
         lifecycle = getattr(task, "lifecycle", "")
-        lifecycle_text = (
-            lifecycle.value if hasattr(lifecycle, "value") else str(lifecycle)
-        ).strip().lower()
+        lifecycle_text = (lifecycle.value if hasattr(lifecycle, "value") else str(lifecycle)).strip().lower()
         identity = getattr(task, "identity", None)
         task_session_id_text = str(getattr(identity, "session_id", "") or "").strip()
         return {
@@ -909,8 +909,8 @@ def _evaluate_operator_intervention_adjudication(
         is_unsanctioned_terminal_reopen = (
             task_lifecycle in _TERMINAL_TASK_LIFECYCLES
             and not _is_sanctioned_reopen_path(
-            approval_token=approval_token,
-            action_notes=action_notes,
+                approval_token=approval_token,
+                action_notes=action_notes,
             )
         )
         if is_unsanctioned_terminal_reopen:
@@ -1040,7 +1040,7 @@ def record_operator_action_audit(record: OperatorActionAuditRecord) -> None:
     """
     global _AUDIT_LOG
     if len(_AUDIT_LOG) >= _AUDIT_LOG_MAX_RECORDS:
-        _AUDIT_LOG = _AUDIT_LOG[-(_AUDIT_LOG_MAX_RECORDS - 1):]
+        _AUDIT_LOG = _AUDIT_LOG[-(_AUDIT_LOG_MAX_RECORDS - 1) :]
     _AUDIT_LOG.append(record)
     logger.debug(
         "operator_action_audit: recorded %s (action_id=%s outcome=%s)",
@@ -1156,15 +1156,10 @@ def record_android_directed_action_dispatch_trace(spec: AndroidDirectedActionSpe
         action_kind=spec.action_kind,
         operator_user_id=spec.operator_user_id,
         policy_evaluation="canonical_android_directed_entry_accepted",
-        policy_basis=(
-            "operator/control entry accepted as canonical contract-governed "
-            "android-directed action"
-        ),
+        policy_basis=("operator/control entry accepted as canonical contract-governed " "android-directed action"),
         outcome=OperatorActionOrchestrationOutcome.accepted_pending.value,
         affected_entity_ids=list(routed_subjects),
-        downstream_effects=[
-            f"android_directed_action_dispatched:dispatch_id={spec.android_dispatch_id}"
-        ],
+        downstream_effects=[f"android_directed_action_dispatched:dispatch_id={spec.android_dispatch_id}"],
         android_dispatch_id=spec.android_dispatch_id,
         android_dispatched_at=spec.dispatched_at,
         canonical_entry=ANDROID_DIRECTED_ACTION_CANONICAL_ENTRY,
@@ -1214,9 +1209,7 @@ def _expire_pending_android_directed_actions(now: Optional[float] = None) -> Lis
                 operator_user_id=spec.operator_user_id,
                 outcome=OperatorActionOrchestrationOutcome.failed.value,
                 affected_entity_ids=[spec.device_id] if spec.device_id else [],
-                downstream_effects=[
-                    f"android_directed_action_timeout:dispatch_id={dispatch_id}"
-                ],
+                downstream_effects=[f"android_directed_action_timeout:dispatch_id={dispatch_id}"],
                 error=(
                     "android_directed_action_ack_timeout:"
                     f"dispatch_id={dispatch_id}:expected_ack_within_seconds={spec.expected_ack_within_seconds}"
@@ -1286,21 +1279,13 @@ def acknowledge_android_directed_action(
         spec.lifecycle_state = "partial_ack"
     spec.lifecycle_failure_reason = ""
     spec.payload["_acked_subject_ids"] = list(acked_subject_ids)
-    resolved_truth_state = (
-        truth_convergence_state.strip()
-        or (
-            "participant_ack_recorded_pending_canonical_truth"
-            if all_subjects_acked
-            else "participant_ack_partial_pending_canonical_truth"
-        )
+    resolved_truth_state = truth_convergence_state.strip() or (
+        "participant_ack_recorded_pending_canonical_truth"
+        if all_subjects_acked
+        else "participant_ack_partial_pending_canonical_truth"
     )
-    resolved_closure_state = (
-        closure_verification_state.strip()
-        or (
-            "pending_canonical_closure_verification"
-            if all_subjects_acked
-            else "pending_participant_ack_completion"
-        )
+    resolved_closure_state = closure_verification_state.strip() or (
+        "pending_canonical_closure_verification" if all_subjects_acked else "pending_participant_ack_completion"
     )
     diagnostics = [str(x).strip() for x in list(failure_diagnostics or []) if str(x).strip()]
     closure_trace = _build_operator_control_closure_trace(
@@ -1334,10 +1319,7 @@ def acknowledge_android_directed_action(
             affected_entity_ids=expected_subject_ids,
             downstream_effects=[
                 f"android_directed_action_ack_received:dispatch_id={android_dispatch_id}",
-                (
-                    "android_directed_action_ack_coverage:"
-                    f"{len(acked_subject_ids)}/{len(expected_subject_ids)}"
-                ),
+                ("android_directed_action_ack_coverage:" f"{len(acked_subject_ids)}/{len(expected_subject_ids)}"),
             ],
             android_dispatch_id=android_dispatch_id,
             android_dispatched_at=spec.dispatched_at,
@@ -1459,8 +1441,7 @@ def execute_governed_operator_action(
                 f"{intervention_adjudication.get('triggering_reason', '')}"
             )
             downstream_effects.append(
-                "operator_intervention_rejected:"
-                f"{intervention_adjudication.get('disposition', 'unknown')}"
+                "operator_intervention_rejected:" f"{intervention_adjudication.get('disposition', 'unknown')}"
             )
             logger.debug(
                 "operator_intervention blocked before orchestration: action_kind=%s reason=%s",
@@ -1471,14 +1452,13 @@ def execute_governed_operator_action(
         elif action_kind == OperatorActionKind.retry_admission.value:
             if task_id:
                 affected_entity_ids.append(task_id)
-                downstream_effects.append(
-                    f"admission_retry_requested:task_id={task_id}"
-                )
+                downstream_effects.append(f"admission_retry_requested:task_id={task_id}")
             # Signal the governance validation gate to re-evaluate
             try:
                 from core.governance_validation_gate import (
                     get_governance_validation_gate,
                 )
+
                 gate = get_governance_validation_gate()
                 if hasattr(gate, "request_revalidation"):
                     gate.request_revalidation(task_id or "")
@@ -1493,23 +1473,20 @@ def execute_governed_operator_action(
                 from core.capability_assimilation import (
                     get_capability_assimilation_layer,
                 )
+
                 layer = get_capability_assimilation_layer()
                 if device_id:
                     if hasattr(layer, "revalidate_node"):
                         layer.revalidate_node(device_id)
                         affected_entity_ids.append(device_id)
-                        downstream_effects.append(
-                            f"capability_revalidation_requested:device_id={device_id}"
-                        )
+                        downstream_effects.append(f"capability_revalidation_requested:device_id={device_id}")
                 else:
                     if hasattr(layer, "request_revalidation"):
                         layer.request_revalidation()
                     downstream_effects.append("capability_revalidation_requested:all_nodes")
                 outcome = OperatorActionOrchestrationOutcome.success.value
             except Exception as exc:
-                logger.debug(
-                    "request_capability_revalidation: capability layer unavailable: %s", exc
-                )
+                logger.debug("request_capability_revalidation: capability layer unavailable: %s", exc)
                 outcome = OperatorActionOrchestrationOutcome.success.value
                 downstream_effects.append("capability_revalidation_requested:capability_layer_unavailable")
 
@@ -1523,9 +1500,7 @@ def execute_governed_operator_action(
                 )
                 android_dispatch_id = spec.android_dispatch_id
                 android_dispatched_at = spec.dispatched_at
-                downstream_effects.append(
-                    f"android_directed_action_dispatched:dispatch_id={android_dispatch_id}"
-                )
+                downstream_effects.append(f"android_directed_action_dispatched:dispatch_id={android_dispatch_id}")
 
         # ── reopen_session_continuity ─────────────────────────────────────
         elif action_kind == OperatorActionKind.reopen_session_continuity.value:
@@ -1536,13 +1511,12 @@ def execute_governed_operator_action(
                 from core.pr3_session_continuity_authority import (
                     classify_reconnect_event,
                 )
+
                 result = classify_reconnect_event(
                     device_id=device_id or None,
                     runtime_session_id=target_sid or None,
                 )
-                downstream_effects.append(
-                    f"reconnect_classified:{result.reconnect_class.value}"
-                )
+                downstream_effects.append(f"reconnect_classified:{result.reconnect_class.value}")
             except Exception as exc:
                 logger.debug("reopen_session_continuity: pr3 unavailable: %s", exc)
 
@@ -1556,9 +1530,7 @@ def execute_governed_operator_action(
                 )
                 android_dispatch_id = spec.android_dispatch_id
                 android_dispatched_at = spec.dispatched_at
-                downstream_effects.append(
-                    f"android_rebind_session_dispatched:dispatch_id={android_dispatch_id}"
-                )
+                downstream_effects.append(f"android_rebind_session_dispatched:dispatch_id={android_dispatch_id}")
                 outcome = OperatorActionOrchestrationOutcome.accepted_pending.value
             else:
                 outcome = OperatorActionOrchestrationOutcome.success.value
@@ -1579,9 +1551,7 @@ def execute_governed_operator_action(
                 android_dispatch_id = spec.android_dispatch_id
                 android_dispatched_at = spec.dispatched_at
                 affected_entity_ids.append(device_id)
-                downstream_effects.append(
-                    f"android_rebind_session_dispatched:dispatch_id={android_dispatch_id}"
-                )
+                downstream_effects.append(f"android_rebind_session_dispatched:dispatch_id={android_dispatch_id}")
                 outcome = OperatorActionOrchestrationOutcome.accepted_pending.value
             else:
                 # V2-local rebind via continuation registry
@@ -1589,12 +1559,11 @@ def execute_governed_operator_action(
                     from core.continuation_rebind_registry import (
                         get_continuation_rebind_registry,
                     )
+
                     reg = get_continuation_rebind_registry()
                     if hasattr(reg, "request_rebind"):
                         reg.request_rebind(target_sid)
-                        downstream_effects.append(
-                            "continuation_rebind_requested:local"
-                        )
+                        downstream_effects.append("continuation_rebind_requested:local")
                 except Exception as exc:
                     logger.debug("rebind_session_continuity: rebind registry unavailable: %s", exc)
                 outcome = OperatorActionOrchestrationOutcome.success.value
@@ -1608,21 +1577,16 @@ def execute_governed_operator_action(
                     from core.delegated_flow_recovery_coordinator import (
                         DelegatedFlowRecoveryCoordinator,
                     )
+
                     coordinator = DelegatedFlowRecoveryCoordinator()
                     if hasattr(coordinator, "trigger_recovery_for_flow"):
                         coordinator.trigger_recovery_for_flow(target_flow)
-                        downstream_effects.append(
-                            f"recovery_triggered:flow_id={target_flow}"
-                        )
+                        downstream_effects.append(f"recovery_triggered:flow_id={target_flow}")
                     else:
-                        downstream_effects.append(
-                            f"recovery_coordinator_contacted:flow_id={target_flow}"
-                        )
+                        downstream_effects.append(f"recovery_coordinator_contacted:flow_id={target_flow}")
                 except Exception as exc:
                     logger.debug("trigger_recovery: coordinator unavailable: %s", exc)
-                    downstream_effects.append(
-                        f"recovery_coordinator_unavailable:flow_id={target_flow}"
-                    )
+                    downstream_effects.append(f"recovery_coordinator_unavailable:flow_id={target_flow}")
             if device_id:
                 spec = build_android_directed_action_spec(
                     action_kind=AndroidDirectedActionKind.trigger_device_recovery.value,
@@ -1635,9 +1599,7 @@ def execute_governed_operator_action(
                 android_dispatch_id = spec.android_dispatch_id
                 android_dispatched_at = spec.dispatched_at
                 affected_entity_ids.append(device_id)
-                downstream_effects.append(
-                    f"android_recovery_dispatched:dispatch_id={android_dispatch_id}"
-                )
+                downstream_effects.append(f"android_recovery_dispatched:dispatch_id={android_dispatch_id}")
                 outcome = OperatorActionOrchestrationOutcome.accepted_pending.value
             else:
                 outcome = OperatorActionOrchestrationOutcome.success.value
@@ -1663,12 +1625,11 @@ def execute_governed_operator_action(
                     from core.android_participant_session_state import (
                         get_participant_session_state,
                     )
+
                     state = get_participant_session_state(device_id)
                     if state and hasattr(state, "suspend"):
                         state.suspend()
-                        downstream_effects.append(
-                            f"participant_session_suspended:device_id={device_id}"
-                        )
+                        downstream_effects.append(f"participant_session_suspended:device_id={device_id}")
                 except Exception as exc:
                     logger.debug("suspend_participant: session state unavailable: %s", exc)
 
@@ -1680,9 +1641,7 @@ def execute_governed_operator_action(
                 )
                 android_dispatch_id = spec.android_dispatch_id
                 android_dispatched_at = spec.dispatched_at
-                downstream_effects.append(
-                    f"android_suspend_dispatched:dispatch_id={android_dispatch_id}"
-                )
+                downstream_effects.append(f"android_suspend_dispatched:dispatch_id={android_dispatch_id}")
                 outcome = OperatorActionOrchestrationOutcome.accepted_pending.value
 
         # ── isolate_device ────────────────────────────────────────────────
@@ -1694,11 +1653,10 @@ def execute_governed_operator_action(
                 affected_entity_ids.append(device_id)
                 try:
                     from core.android_device_state_store import isolate_device
+
                     if callable(isolate_device):
                         isolate_device(device_id)
-                        downstream_effects.append(
-                            f"device_isolated_in_state_store:device_id={device_id}"
-                        )
+                        downstream_effects.append(f"device_isolated_in_state_store:device_id={device_id}")
                 except Exception as exc:
                     logger.debug("isolate_device: state store unavailable: %s", exc)
 
@@ -1710,9 +1668,7 @@ def execute_governed_operator_action(
                 )
                 android_dispatch_id = spec.android_dispatch_id
                 android_dispatched_at = spec.dispatched_at
-                downstream_effects.append(
-                    f"android_isolate_dispatched:dispatch_id={android_dispatch_id}"
-                )
+                downstream_effects.append(f"android_isolate_dispatched:dispatch_id={android_dispatch_id}")
                 outcome = OperatorActionOrchestrationOutcome.accepted_pending.value
 
         # ── switch_path_selection / reevaluate_path_selection ─────────────
@@ -1724,13 +1680,12 @@ def execute_governed_operator_action(
                 affected_entity_ids.append(flow_id)
             if task_id:
                 affected_entity_ids.append(task_id)
-            downstream_effects.append(
-                f"path_selection_requested:action={action_kind}"
-            )
+            downstream_effects.append(f"path_selection_requested:action={action_kind}")
             try:
                 from core.device_node_domain_governance import (
                     get_device_node_domain_governance,
                 )
+
                 gov = get_device_node_domain_governance()
                 if hasattr(gov, "request_path_reevaluation"):
                     gov.request_path_reevaluation(flow_id or task_id or "")
@@ -1749,12 +1704,11 @@ def execute_governed_operator_action(
                 from core.closed_loop_governance_consolidation import (
                     get_closed_loop_governance,
                 )
+
                 gov = get_closed_loop_governance()
                 if hasattr(gov, "reopen_closure"):
                     gov.reopen_closure(task_id or flow_id or "")
-                    downstream_effects.append(
-                        f"closure_reopened:entity={task_id or flow_id or 'unknown'}"
-                    )
+                    downstream_effects.append(f"closure_reopened:entity={task_id or flow_id or 'unknown'}")
             except Exception as exc:
                 logger.debug("reopen_closure: governance unavailable: %s", exc)
                 downstream_effects.append("closure_reopen_requested:governance_unavailable")
@@ -1770,12 +1724,11 @@ def execute_governed_operator_action(
                 from core.closed_loop_governance_consolidation import (
                     get_closed_loop_governance,
                 )
+
                 gov = get_closed_loop_governance()
                 if hasattr(gov, "finalize_closure"):
                     gov.finalize_closure(task_id or flow_id or "")
-                    downstream_effects.append(
-                        f"closure_finalized:entity={task_id or flow_id or 'unknown'}"
-                    )
+                    downstream_effects.append(f"closure_finalized:entity={task_id or flow_id or 'unknown'}")
             except Exception as exc:
                 logger.debug("finalize_closure: governance unavailable: %s", exc)
                 downstream_effects.append("closure_finalize_requested:governance_unavailable")
@@ -1791,12 +1744,11 @@ def execute_governed_operator_action(
                 from core.closed_loop_governance_consolidation import (
                     get_closed_loop_governance,
                 )
+
                 gov = get_closed_loop_governance()
                 if hasattr(gov, "reject_closure"):
                     gov.reject_closure(task_id or flow_id or "")
-                    downstream_effects.append(
-                        f"closure_rejected:entity={task_id or flow_id or 'unknown'}"
-                    )
+                    downstream_effects.append(f"closure_rejected:entity={task_id or flow_id or 'unknown'}")
             except Exception as exc:
                 logger.debug("reject_closure: governance unavailable: %s", exc)
                 downstream_effects.append("closure_reject_requested:governance_unavailable")
@@ -1806,9 +1758,7 @@ def execute_governed_operator_action(
         elif action_kind == OperatorActionKind.acknowledge_blocker.value:
             if task_id:
                 affected_entity_ids.append(task_id)
-            downstream_effects.append(
-                f"blocker_acknowledged:task_id={task_id or 'unknown'}"
-            )
+            downstream_effects.append(f"blocker_acknowledged:task_id={task_id or 'unknown'}")
             outcome = OperatorActionOrchestrationOutcome.success.value
 
         # ── escalate_dependency_failure ───────────────────────────────────
@@ -1817,9 +1767,7 @@ def execute_governed_operator_action(
                 affected_entity_ids.append(task_id)
             if flow_id:
                 affected_entity_ids.append(flow_id)
-            downstream_effects.append(
-                f"dependency_failure_escalated:entity={task_id or flow_id or 'unknown'}"
-            )
+            downstream_effects.append(f"dependency_failure_escalated:entity={task_id or flow_id or 'unknown'}")
             outcome = OperatorActionOrchestrationOutcome.success.value
 
         # ── retry_admission with flow ─────────────────────────────────────
@@ -1836,14 +1784,10 @@ def execute_governed_operator_action(
                     )
                     android_dispatch_id = spec.android_dispatch_id
                     android_dispatched_at = spec.dispatched_at
-                    downstream_effects.append(
-                        f"android_retry_execution_dispatched:dispatch_id={android_dispatch_id}"
-                    )
+                    downstream_effects.append(f"android_retry_execution_dispatched:dispatch_id={android_dispatch_id}")
                     outcome = OperatorActionOrchestrationOutcome.accepted_pending.value
                 else:
-                    downstream_effects.append(
-                        f"retry_admission_requested:flow_id={flow_id}"
-                    )
+                    downstream_effects.append(f"retry_admission_requested:flow_id={flow_id}")
                     outcome = OperatorActionOrchestrationOutcome.success.value
             else:
                 outcome = OperatorActionOrchestrationOutcome.success.value
@@ -1868,9 +1812,7 @@ def execute_governed_operator_action(
         action_kind=action_kind,
         outcome=outcome,
         idempotency_key=str(intervention_adjudication.get("idempotency_key") or ""),
-        idempotency_reserved=bool(
-            intervention_adjudication.get("idempotency_reserved", False)
-        ),
+        idempotency_reserved=bool(intervention_adjudication.get("idempotency_reserved", False)),
     )
     routed_subject_ids: List[str] = []
     routed_subject_seen: Set[str] = set()
@@ -1915,15 +1857,9 @@ def execute_governed_operator_action(
         participant_ack_state=participant_ack_state,
         truth_convergence_state=truth_convergence_state,
         closure_verification_state=closure_verification_state,
-        continuity_adjudication_classification=str(
-            intervention_adjudication.get("classification") or ""
-        ),
-        continuity_adjudication_disposition=str(
-            intervention_adjudication.get("disposition") or ""
-        ),
-        continuity_adjudication_evidence=dict(
-            intervention_adjudication.get("evidence") or {}
-        ),
+        continuity_adjudication_classification=str(intervention_adjudication.get("classification") or ""),
+        continuity_adjudication_disposition=str(intervention_adjudication.get("disposition") or ""),
+        continuity_adjudication_evidence=dict(intervention_adjudication.get("evidence") or {}),
     )
     record_operator_action_audit(audit_record)
 
@@ -1964,6 +1900,7 @@ def build_operator_board_projection() -> OperatorActionBoardProjection:
     # --- What is wrong ---
     try:
         from core.operator_surface import get_operator_surface
+
         surface = get_operator_surface()
         snap = surface.operator_snapshot()
         policy_layer = snap.governance_state.get("policy_layer", {})
@@ -1983,21 +1920,13 @@ def build_operator_board_projection() -> OperatorActionBoardProjection:
             if isinstance(dev_gov, dict):
                 for rule_id, rule in dev_gov.items():
                     if isinstance(rule, dict) and rule.get("decision") == "hard_block":
-                        proj.active_blockers.append(
-                            f"{device_id}:{rule_id}:{rule.get('reason', '')}"
-                        )
+                        proj.active_blockers.append(f"{device_id}:{rule_id}:{rule.get('reason', '')}")
 
         # --- What can currently be done / why ---
-        action_catalog = dict(
-            (snap.operator_action_layer or {}).get("actions", {}) or {}
-        )
-        state_basis = dict(
-            (snap.operator_action_layer or {}).get("state_basis", {}) or {}
-        )
+        action_catalog = dict((snap.operator_action_layer or {}).get("actions", {}) or {})
+        state_basis = dict((snap.operator_action_layer or {}).get("state_basis", {}) or {})
         proj.availability_state_basis = state_basis
-        proj.policy_version = str(
-            (snap.operator_action_layer or {}).get("policy", "")
-        )
+        proj.policy_version = str((snap.operator_action_layer or {}).get("policy", ""))
 
         for action_kind, action_info in action_catalog.items():
             entry = {
@@ -2039,32 +1968,22 @@ def build_operator_board_projection() -> OperatorActionBoardProjection:
         proj.last_action_closure_trace["continuity_adjudication_classification"] = (
             last.continuity_adjudication_classification
         )
-        proj.last_action_closure_trace["continuity_adjudication_disposition"] = (
-            last.continuity_adjudication_disposition
-        )
+        proj.last_action_closure_trace["continuity_adjudication_disposition"] = last.continuity_adjudication_disposition
         proj.last_action_closure_trace["continuity_adjudication_evidence"] = dict(
             last.continuity_adjudication_evidence or {}
         )
 
     # --- Pending Android-directed actions ---
-    proj.pending_android_directed_actions = [
-        spec.to_dict() for spec in get_pending_android_directed_actions()
-    ]
+    proj.pending_android_directed_actions = [spec.to_dict() for spec in get_pending_android_directed_actions()]
 
     # --- Android participation verdict from unified panel aggregation ---
     try:
         from core.unified_panel_aggregation import build_unified_panel_payload
 
         panel_payload = build_unified_panel_payload(mode="operator")
-        proj.android_participation_verdict = dict(
-            getattr(panel_payload, "android_participation_verdict", {}) or {}
-        )
-        proj.runtime_decision_reasoning = dict(
-            getattr(panel_payload, "runtime_decision_reasoning", {}) or {}
-        )
-        proj.unified_mode_model = dict(
-            getattr(panel_payload, "unified_mode_model", {}) or {}
-        )
+        proj.android_participation_verdict = dict(getattr(panel_payload, "android_participation_verdict", {}) or {})
+        proj.runtime_decision_reasoning = dict(getattr(panel_payload, "runtime_decision_reasoning", {}) or {})
+        proj.unified_mode_model = dict(getattr(panel_payload, "unified_mode_model", {}) or {})
     except Exception as exc:
         logger.debug(
             "build_operator_board_projection: panel android participation verdict unavailable: %s",
@@ -2119,8 +2038,7 @@ def build_operator_board_projection() -> OperatorActionBoardProjection:
                 },
                 acceptance_verdict=latest_entry.acceptance_verdict or None,
                 is_fully_closed=(
-                    latest_entry.acceptance_verdict == "accept"
-                    and bool(latest_entry.truth_chain_complete)
+                    latest_entry.acceptance_verdict == "accept" and bool(latest_entry.truth_chain_complete)
                 ),
                 truth_chain_complete=latest_entry.truth_chain_complete,
                 evidence_state=latest_entry.evidence_state,
@@ -2139,14 +2057,10 @@ def build_operator_board_projection() -> OperatorActionBoardProjection:
             )
             reasoning_block_dict = dict(reasoning_block)
             proj.runtime_decision_reasoning = reasoning_block_dict
-            proj.unified_mode_model = dict(
-                reasoning_block_dict.get("unified_mode_model") or {}
-            )
+            proj.unified_mode_model = dict(reasoning_block_dict.get("unified_mode_model") or {})
             proj.latest_closure_reasoning = reasoning_block_dict
         elif proj.runtime_decision_reasoning:
-            proj.unified_mode_model = dict(
-                proj.runtime_decision_reasoning.get("unified_mode_model") or {}
-            )
+            proj.unified_mode_model = dict(proj.runtime_decision_reasoning.get("unified_mode_model") or {})
             proj.latest_closure_reasoning = dict(proj.runtime_decision_reasoning)
     except Exception as exc:
         logger.debug(

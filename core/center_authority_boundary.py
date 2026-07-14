@@ -426,9 +426,7 @@ class CenterAuthorityBoundaryReport:
         Top-level diagnostic notes.
     """
 
-    report_id: str = field(
-        default_factory=lambda: f"cab_rpt_{uuid.uuid4().hex[:12]}"
-    )
+    report_id: str = field(default_factory=lambda: f"cab_rpt_{uuid.uuid4().hex[:12]}")
     all_domains_intact: bool = False
     domain_states: Dict[str, DomainBoundaryState] = field(default_factory=dict)
     degraded_domains: List[str] = field(default_factory=list)
@@ -439,9 +437,7 @@ class CenterAuthorityBoundaryReport:
         return {
             "report_id": self.report_id,
             "all_domains_intact": self.all_domains_intact,
-            "domain_states": {
-                k: v.to_dict() for k, v in self.domain_states.items()
-            },
+            "domain_states": {k: v.to_dict() for k, v in self.domain_states.items()},
             "degraded_domains": list(self.degraded_domains),
             "authority": self.authority,
             "notes": list(self.notes),
@@ -481,9 +477,7 @@ def _evaluate_completion_truth_domain() -> DomainBoundaryState:
             mod = importlib.import_module(module_path)
             state.canonical_modules.append(module_path)
             sentinel_value = getattr(mod, sentinel_name, None)
-            state.sentinel_checks[sentinel_name] = bool(
-                sentinel_value and isinstance(sentinel_value, str)
-            )
+            state.sentinel_checks[sentinel_name] = bool(sentinel_value and isinstance(sentinel_value, str))
         except (ImportError, AttributeError) as exc:  # pragma: no cover
             state.missing_modules.append(module_path)
             state.notes.append(f"Import failed for {module_path}: {exc}")
@@ -524,9 +518,7 @@ def _evaluate_continuity_legality_domain() -> DomainBoundaryState:
             if module_path not in state.canonical_modules:
                 state.canonical_modules.append(module_path)
             sentinel_value = getattr(mod, sentinel_name, None)
-            state.sentinel_checks[sentinel_name] = bool(
-                sentinel_value and isinstance(sentinel_value, str)
-            )
+            state.sentinel_checks[sentinel_name] = bool(sentinel_value and isinstance(sentinel_value, str))
         except (ImportError, AttributeError) as exc:  # pragma: no cover
             if module_path not in state.missing_modules:
                 state.missing_modules.append(module_path)
@@ -571,9 +563,7 @@ def _evaluate_dispatch_readiness_domain() -> DomainBoundaryState:
             if module_path not in state.canonical_modules:
                 state.canonical_modules.append(module_path)
             sentinel_value = getattr(mod, sentinel_name, None)
-            state.sentinel_checks[sentinel_name] = bool(
-                sentinel_value and isinstance(sentinel_value, str)
-            )
+            state.sentinel_checks[sentinel_name] = bool(sentinel_value and isinstance(sentinel_value, str))
         except (ImportError, AttributeError) as exc:  # pragma: no cover
             if module_path not in state.missing_modules:
                 state.missing_modules.append(module_path)
@@ -618,9 +608,7 @@ def _evaluate_orchestration_truth_domain() -> DomainBoundaryState:
             if module_path not in state.canonical_modules:
                 state.canonical_modules.append(module_path)
             sentinel_value = getattr(mod, sentinel_name, None)
-            state.sentinel_checks[sentinel_name] = bool(
-                sentinel_value and isinstance(sentinel_value, str)
-            )
+            state.sentinel_checks[sentinel_name] = bool(sentinel_value and isinstance(sentinel_value, str))
         except (ImportError, AttributeError) as exc:  # pragma: no cover
             if module_path not in state.missing_modules:
                 state.missing_modules.append(module_path)

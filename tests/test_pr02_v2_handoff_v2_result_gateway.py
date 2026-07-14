@@ -27,20 +27,22 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 # ============================================================================
 # A.  MessageType enum — HANDOFF_ENVELOPE_V2_RESULT
 # ============================================================================
+
 
 class TestMessageTypeEnum:
 
     def test_A01_handoff_envelope_v2_result_present(self):
         """PR-02-V2 canonical uplink wire type must be in the enum."""
         from galaxy_gateway.protocol.aip_v3 import MessageType
+
         assert MessageType.HANDOFF_ENVELOPE_V2_RESULT.value == "handoff_envelope_v2_result"
 
     def test_A02_existing_uplink_types_still_present(self):
         from galaxy_gateway.protocol.aip_v3 import MessageType
+
         assert MessageType.HANDOFF_ACK.value == "handoff_ack"
         assert MessageType.HANDOFF_RESULT.value == "handoff_result"
         assert MessageType.HANDOFF_FAILURE.value == "handoff_failure"
@@ -49,6 +51,7 @@ class TestMessageTypeEnum:
 # ============================================================================
 # B.  Handler module importability
 # ============================================================================
+
 
 class TestHandlerImport:
 
@@ -59,6 +62,7 @@ class TestHandlerImport:
         from galaxy_gateway.android.handlers.handoff_v2_result import (
             handle_handoff_v2_result,
         )
+
         assert asyncio.iscoroutinefunction(handle_handoff_v2_result)
 
 
@@ -66,29 +70,35 @@ class TestHandlerImport:
 # C.  android_bridge handler registration
 # ============================================================================
 
+
 class TestHandlerRegistration:
 
     def _make_bridge(self) -> Any:
         from galaxy_gateway.android_bridge import AndroidBridge
+
         return AndroidBridge()
 
     def test_C01_handoff_ack_registered(self):
         from galaxy_gateway.protocol.aip_v3 import MessageType
+
         bridge = self._make_bridge()
         assert MessageType.HANDOFF_ACK in bridge._message_handlers
 
     def test_C02_handoff_result_registered(self):
         from galaxy_gateway.protocol.aip_v3 import MessageType
+
         bridge = self._make_bridge()
         assert MessageType.HANDOFF_RESULT in bridge._message_handlers
 
     def test_C03_handoff_failure_registered(self):
         from galaxy_gateway.protocol.aip_v3 import MessageType
+
         bridge = self._make_bridge()
         assert MessageType.HANDOFF_FAILURE in bridge._message_handlers
 
     def test_C04_handoff_envelope_v2_result_registered(self):
         from galaxy_gateway.protocol.aip_v3 import MessageType
+
         bridge = self._make_bridge()
         assert MessageType.HANDOFF_ENVELOPE_V2_RESULT in bridge._message_handlers
 
@@ -110,6 +120,7 @@ class TestHandlerRegistration:
 # ============================================================================
 # Helpers
 # ============================================================================
+
 
 def _make_ack_message(handoff_id: str = "", device_id: str = "device-test") -> Dict[str, Any]:
     return {
@@ -161,9 +172,7 @@ def _make_failure_message(handoff_id: str = "", device_id: str = "device-test") 
     }
 
 
-def _make_envelope_v2_result_message(
-    handoff_id: str = "", device_id: str = "device-test"
-) -> Dict[str, Any]:
+def _make_envelope_v2_result_message(handoff_id: str = "", device_id: str = "device-test") -> Dict[str, Any]:
     return {
         "type": "handoff_envelope_v2_result",
         # 终局上行还须带 completion-closure 契约版本(PR-46 第二层门)。
@@ -188,11 +197,12 @@ def _run(coro):
 # D.  Handler behaviour — ack
 # ============================================================================
 
+
 class TestHandlerAck:
 
     def test_D01_ingest_called_for_ack(self):
-        from galaxy_gateway.android.handlers.handoff_v2_result import handle_handoff_v2_result
         from core.android_handoff_v2_response_ingress import HandoffV2ResponseRuntime
+        from galaxy_gateway.android.handlers.handoff_v2_result import handle_handoff_v2_result
 
         rt = HandoffV2ResponseRuntime()
         handoff_id = f"hev2_{uuid.uuid4().hex[:12]}"
@@ -201,12 +211,11 @@ class TestHandlerAck:
 
         msg = _make_ack_message(handoff_id=handoff_id)
 
-        with patch(
-            "galaxy_gateway.android.handlers.handoff_v2_result._ingest_handoff_response"
-        ) as mock_ingest:
+        with patch("galaxy_gateway.android.handlers.handoff_v2_result._ingest_handoff_response") as mock_ingest:
             from core.android_handoff_v2_response_ingress import (
                 ingest_android_handoff_response,
             )
+
             # Let ingest actually run so we get a real outcome
             mock_ingest.side_effect = lambda m: ingest_android_handoff_response(m, runtime=rt)
             resp = _run(handle_handoff_v2_result(MagicMock(), None, msg))
@@ -220,6 +229,7 @@ class TestHandlerAck:
             HandoffV2ResponseRuntime,
             ingest_android_handoff_response,
         )
+
         rt = HandoffV2ResponseRuntime()
         handoff_id = f"hev2_{uuid.uuid4().hex[:12]}"
         rt.register(handoff_id, lambda _: None)
@@ -235,11 +245,12 @@ class TestHandlerAck:
 # E.  Handler behaviour — result
 # ============================================================================
 
+
 class TestHandlerResult:
 
     def test_E01_ingest_called_for_result(self):
-        from galaxy_gateway.android.handlers.handoff_v2_result import handle_handoff_v2_result
         from core.android_handoff_v2_response_ingress import HandoffV2ResponseRuntime
+        from galaxy_gateway.android.handlers.handoff_v2_result import handle_handoff_v2_result
 
         rt = HandoffV2ResponseRuntime()
         handoff_id = f"hev2_{uuid.uuid4().hex[:12]}"
@@ -248,12 +259,11 @@ class TestHandlerResult:
 
         msg = _make_result_message(handoff_id=handoff_id)
 
-        with patch(
-            "galaxy_gateway.android.handlers.handoff_v2_result._ingest_handoff_response"
-        ) as mock_ingest:
+        with patch("galaxy_gateway.android.handlers.handoff_v2_result._ingest_handoff_response") as mock_ingest:
             from core.android_handoff_v2_response_ingress import (
                 ingest_android_handoff_response,
             )
+
             mock_ingest.side_effect = lambda m: ingest_android_handoff_response(m, runtime=rt)
             resp = _run(handle_handoff_v2_result(MagicMock(), None, msg))
             mock_ingest.assert_called_once_with(msg)
@@ -267,6 +277,7 @@ class TestHandlerResult:
             HandoffV2ResponseRuntime,
             ingest_android_handoff_response,
         )
+
         rt = HandoffV2ResponseRuntime()
         handoff_id = f"hev2_{uuid.uuid4().hex[:12]}"
         rt.register(handoff_id, lambda _: None)
@@ -283,11 +294,12 @@ class TestHandlerResult:
 # F.  Handler behaviour — failure
 # ============================================================================
 
+
 class TestHandlerFailure:
 
     def test_F01_ingest_called_for_failure(self):
-        from galaxy_gateway.android.handlers.handoff_v2_result import handle_handoff_v2_result
         from core.android_handoff_v2_response_ingress import HandoffV2ResponseRuntime
+        from galaxy_gateway.android.handlers.handoff_v2_result import handle_handoff_v2_result
 
         rt = HandoffV2ResponseRuntime()
         handoff_id = f"hev2_{uuid.uuid4().hex[:12]}"
@@ -296,12 +308,11 @@ class TestHandlerFailure:
 
         msg = _make_failure_message(handoff_id=handoff_id)
 
-        with patch(
-            "galaxy_gateway.android.handlers.handoff_v2_result._ingest_handoff_response"
-        ) as mock_ingest:
+        with patch("galaxy_gateway.android.handlers.handoff_v2_result._ingest_handoff_response") as mock_ingest:
             from core.android_handoff_v2_response_ingress import (
                 ingest_android_handoff_response,
             )
+
             mock_ingest.side_effect = lambda m: ingest_android_handoff_response(m, runtime=rt)
             resp = _run(handle_handoff_v2_result(MagicMock(), None, msg))
             mock_ingest.assert_called_once_with(msg)
@@ -314,6 +325,7 @@ class TestHandlerFailure:
             HandoffV2ResponseRuntime,
             ingest_android_handoff_response,
         )
+
         rt = HandoffV2ResponseRuntime()
         handoff_id = f"hev2_{uuid.uuid4().hex[:12]}"
         rt.register(handoff_id, lambda _: None)
@@ -329,6 +341,7 @@ class TestHandlerFailure:
 # G.  Handler behaviour — handoff_envelope_v2_result
 # ============================================================================
 
+
 class TestHandlerEnvelopeV2Result:
 
     def test_G01_ingest_called_for_envelope_v2_result(self):
@@ -336,9 +349,7 @@ class TestHandlerEnvelopeV2Result:
 
         msg = _make_envelope_v2_result_message()
 
-        with patch(
-            "galaxy_gateway.android.handlers.handoff_v2_result._ingest_handoff_response"
-        ) as mock_ingest:
+        with patch("galaxy_gateway.android.handlers.handoff_v2_result._ingest_handoff_response") as mock_ingest:
             mock_ingest.return_value = MagicMock(
                 was_correlated=True,
                 callback_invoked=True,
@@ -358,21 +369,21 @@ class TestHandlerEnvelopeV2Result:
 # H.  Handler behaviour — ingest miss (no pending entry)
 # ============================================================================
 
+
 class TestHandlerIngestMiss:
 
     def test_H01_ack_returned_even_when_no_pending_entry(self):
-        from galaxy_gateway.android.handlers.handoff_v2_result import handle_handoff_v2_result
         from core.android_handoff_v2_response_ingress import HandoffV2ResponseRuntime
+        from galaxy_gateway.android.handlers.handoff_v2_result import handle_handoff_v2_result
 
         rt = HandoffV2ResponseRuntime()  # empty — no pending dispatches
         msg = _make_result_message()
 
-        with patch(
-            "galaxy_gateway.android.handlers.handoff_v2_result._ingest_handoff_response"
-        ) as mock_ingest:
+        with patch("galaxy_gateway.android.handlers.handoff_v2_result._ingest_handoff_response") as mock_ingest:
             from core.android_handoff_v2_response_ingress import (
                 ingest_android_handoff_response,
             )
+
             mock_ingest.side_effect = lambda m: ingest_android_handoff_response(m, runtime=rt)
             resp = _run(handle_handoff_v2_result(MagicMock(), None, msg))
 
@@ -385,10 +396,12 @@ class TestHandlerIngestMiss:
 # I.  Handler behaviour — ingest import failure degrades gracefully
 # ============================================================================
 
+
 class TestHandlerImportFailure:
 
     def test_I01_ack_returned_when_ingest_is_none(self):
         from galaxy_gateway.android.handlers import handoff_v2_result as hv2_mod
+
         msg = _make_ack_message()
         original = hv2_mod._ingest_handoff_response
         try:
@@ -404,6 +417,7 @@ class TestHandlerImportFailure:
 # J.  ACK response shape
 # ============================================================================
 
+
 class TestAckResponseShape:
 
     @pytest.mark.parametrize(
@@ -414,9 +428,7 @@ class TestAckResponseShape:
         from galaxy_gateway.android.handlers.handoff_v2_result import handle_handoff_v2_result
 
         msg = msg_factory()
-        with patch(
-            "galaxy_gateway.android.handlers.handoff_v2_result._ingest_handoff_response"
-        ) as mock_ingest:
+        with patch("galaxy_gateway.android.handlers.handoff_v2_result._ingest_handoff_response") as mock_ingest:
             mock_ingest.return_value = MagicMock(
                 was_correlated=False,
                 reject_reason="no pending entry",
@@ -434,9 +446,7 @@ class TestAckResponseShape:
         from galaxy_gateway.android.handlers.handoff_v2_result import handle_handoff_v2_result
 
         msg = _make_ack_message()
-        with patch(
-            "galaxy_gateway.android.handlers.handoff_v2_result._ingest_handoff_response"
-        ) as mock_ingest:
+        with patch("galaxy_gateway.android.handlers.handoff_v2_result._ingest_handoff_response") as mock_ingest:
             mock_ingest.return_value = MagicMock(
                 was_correlated=False,
                 reject_reason="",
@@ -453,9 +463,7 @@ class TestAckResponseShape:
         msg = _make_ack_message()
         msg["message_id"] = incoming_mid
 
-        with patch(
-            "galaxy_gateway.android.handlers.handoff_v2_result._ingest_handoff_response"
-        ) as mock_ingest:
+        with patch("galaxy_gateway.android.handlers.handoff_v2_result._ingest_handoff_response") as mock_ingest:
             mock_ingest.return_value = MagicMock(
                 was_correlated=False,
                 reject_reason="",
@@ -470,20 +478,24 @@ class TestAckResponseShape:
 # K.  __init__.py re-exports handle_handoff_v2_result
 # ============================================================================
 
+
 class TestInitReexport:
 
     def test_K01_handle_handoff_v2_result_in_init(self):
         from galaxy_gateway.android.handlers import handle_handoff_v2_result  # noqa: F401
+
         assert callable(handle_handoff_v2_result)
 
     def test_K02_handle_handoff_v2_result_in_all(self):
         import galaxy_gateway.android.handlers as pkg
+
         assert "handle_handoff_v2_result" in pkg.__all__
 
 
 # ============================================================================
 # L.  Terminal reconciliation — lifecycle + task graph convergence
 # ============================================================================
+
 
 class TestTerminalRuntimeTruthReconciliation:
 
@@ -508,11 +520,13 @@ class TestTerminalRuntimeTruthReconciliation:
         registry = MagicMock()
         graph = MagicMock()
 
-        with patch("galaxy_gateway.android.handlers.handoff_v2_result._ingest_handoff_response", return_value=outcome), \
-             patch("contracts.cross_repo_schema_version_gate.evaluate_android_uplink_schema_gate", return_value=None), \
-             patch("core.task_envelope_lifecycle_registry.get_lifecycle_registry", return_value=registry), \
-             patch("core.task_graph_runtime.get_task_graph_runtime", return_value=graph), \
-             patch("galaxy_gateway.device_router.device_router.handle_task_result", new=AsyncMock()):
+        with (
+            patch("galaxy_gateway.android.handlers.handoff_v2_result._ingest_handoff_response", return_value=outcome),
+            patch("contracts.cross_repo_schema_version_gate.evaluate_android_uplink_schema_gate", return_value=None),
+            patch("core.task_envelope_lifecycle_registry.get_lifecycle_registry", return_value=registry),
+            patch("core.task_graph_runtime.get_task_graph_runtime", return_value=graph),
+            patch("galaxy_gateway.device_router.device_router.handle_task_result", new=AsyncMock()),
+        ):
             resp = _run(handle_handoff_v2_result(MagicMock(), None, msg))
 
         assert resp["type"] == "handoff_v2_result_ack"
@@ -543,11 +557,13 @@ class TestTerminalRuntimeTruthReconciliation:
         registry = MagicMock()
         graph = MagicMock()
 
-        with patch("galaxy_gateway.android.handlers.handoff_v2_result._ingest_handoff_response", return_value=outcome), \
-             patch("contracts.cross_repo_schema_version_gate.evaluate_android_uplink_schema_gate", return_value=None), \
-             patch("core.task_envelope_lifecycle_registry.get_lifecycle_registry", return_value=registry), \
-             patch("core.task_graph_runtime.get_task_graph_runtime", return_value=graph), \
-             patch("galaxy_gateway.device_router.device_router.handle_task_result", new=AsyncMock()):
+        with (
+            patch("galaxy_gateway.android.handlers.handoff_v2_result._ingest_handoff_response", return_value=outcome),
+            patch("contracts.cross_repo_schema_version_gate.evaluate_android_uplink_schema_gate", return_value=None),
+            patch("core.task_envelope_lifecycle_registry.get_lifecycle_registry", return_value=registry),
+            patch("core.task_graph_runtime.get_task_graph_runtime", return_value=graph),
+            patch("galaxy_gateway.device_router.device_router.handle_task_result", new=AsyncMock()),
+        ):
             resp = _run(handle_handoff_v2_result(MagicMock(), None, msg))
 
         assert resp["type"] == "handoff_v2_result_ack"
@@ -577,10 +593,12 @@ class TestTerminalRuntimeTruthReconciliation:
         registry = MagicMock()
         graph = MagicMock()
 
-        with patch("galaxy_gateway.android.handlers.handoff_v2_result._ingest_handoff_response", return_value=outcome), \
-             patch("contracts.cross_repo_schema_version_gate.evaluate_android_uplink_schema_gate", return_value=None), \
-             patch("core.task_envelope_lifecycle_registry.get_lifecycle_registry", return_value=registry), \
-             patch("core.task_graph_runtime.get_task_graph_runtime", return_value=graph):
+        with (
+            patch("galaxy_gateway.android.handlers.handoff_v2_result._ingest_handoff_response", return_value=outcome),
+            patch("contracts.cross_repo_schema_version_gate.evaluate_android_uplink_schema_gate", return_value=None),
+            patch("core.task_envelope_lifecycle_registry.get_lifecycle_registry", return_value=registry),
+            patch("core.task_graph_runtime.get_task_graph_runtime", return_value=graph),
+        ):
             resp = _run(handle_handoff_v2_result(MagicMock(), None, msg))
 
         assert resp["type"] == "handoff_v2_result_ack"

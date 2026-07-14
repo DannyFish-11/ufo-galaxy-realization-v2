@@ -79,18 +79,19 @@ if str(PROJECT_ROOT) not in sys.path:
 try:
     from core.capability_tier import (
         CAPABILITY_TIER_AUTHORITY,
-        MAIN_CHAIN_IS_VERIFIED_POLICY,
+        CAPABILITY_TIER_REGISTRY,
         EXPERIMENTAL_MUST_NOT_CLAIM_MAIN_CHAIN_POLICY,
+        MAIN_CHAIN_IS_VERIFIED_POLICY,
         QUASI_MAIN_CHAIN_HAS_KNOWN_GAPS_POLICY,
         CapabilityTier,
         CapabilityTierViolationError,
-        get_capability_tier,
         assert_main_chain_capability,
-        require_main_chain_capability,
+        get_capability_tier,
         get_tier_registry,
         list_capabilities_by_tier,
-        CAPABILITY_TIER_REGISTRY,
+        require_main_chain_capability,
     )
+
     _MODULE_AVAILABLE = True
 except ImportError as _import_err:  # pragma: no cover
     _MODULE_AVAILABLE = False
@@ -133,6 +134,7 @@ class TestGroupA_ModuleLevel:
 
     def test_A05_all_contains_required_names(self):
         from core import capability_tier as mod
+
         required = {
             "CAPABILITY_TIER_AUTHORITY",
             "CapabilityTier",
@@ -184,9 +186,7 @@ class TestGroupB_GetCapabilityTier:
     def test_B06_all_registry_entries_have_valid_tier_values(self):
         valid_values = {t.value for t in CapabilityTier}
         for cap_name, tier_value in CAPABILITY_TIER_REGISTRY.items():
-            assert tier_value in valid_values, (
-                f"Capability '{cap_name}' has invalid tier value '{tier_value}'"
-            )
+            assert tier_value in valid_values, f"Capability '{cap_name}' has invalid tier value '{tier_value}'"
 
 
 # ===========================================================================
@@ -212,9 +212,7 @@ class TestGroupC_TierClassificationCorrectness:
         ]
         for cap in main_chain_required:
             tier = get_capability_tier(cap)
-            assert tier == CapabilityTier.MAIN_CHAIN, (
-                f"Expected '{cap}' to be MAIN_CHAIN, got {tier.value}"
-            )
+            assert tier == CapabilityTier.MAIN_CHAIN, f"Expected '{cap}' to be MAIN_CHAIN, got {tier.value}"
 
     def test_C02_vlm_webrtc_live_mesh_are_EXPERIMENTAL(self):
         """VLM, WebRTC, and live mesh runtime must be EXPERIMENTAL."""
@@ -228,9 +226,7 @@ class TestGroupC_TierClassificationCorrectness:
         ]
         for cap in experimental_required:
             tier = get_capability_tier(cap)
-            assert tier == CapabilityTier.EXPERIMENTAL, (
-                f"Expected '{cap}' to be EXPERIMENTAL, got {tier.value}"
-            )
+            assert tier == CapabilityTier.EXPERIMENTAL, f"Expected '{cap}' to be EXPERIMENTAL, got {tier.value}"
 
     def test_C03_staged_mesh_and_session_migration_are_QUASI_MAIN_CHAIN(self):
         """Staged mesh and session migration must be QUASI_MAIN_CHAIN."""
@@ -242,9 +238,7 @@ class TestGroupC_TierClassificationCorrectness:
         ]
         for cap in quasi_required:
             tier = get_capability_tier(cap)
-            assert tier == CapabilityTier.QUASI_MAIN_CHAIN, (
-                f"Expected '{cap}' to be QUASI_MAIN_CHAIN, got {tier.value}"
-            )
+            assert tier == CapabilityTier.QUASI_MAIN_CHAIN, f"Expected '{cap}' to be QUASI_MAIN_CHAIN, got {tier.value}"
 
     def test_C04_no_experimental_capability_classified_as_MAIN_CHAIN(self):
         """Critical invariant: no EXPERIMENTAL capability is classified MAIN_CHAIN."""

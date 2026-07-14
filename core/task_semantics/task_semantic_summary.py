@@ -38,6 +38,7 @@ quick downstream checks.
 from __future__ import annotations
 
 import logging  # auto: ensure module logger is defined
+
 logger = logging.getLogger(__name__)
 
 
@@ -92,9 +93,7 @@ class ClassifiedStep:
         return {
             "step_id": self.step_id,
             "step_label": self.step_label,
-            "step_kind": self.step_kind.value
-            if isinstance(self.step_kind, StepKind)
-            else str(self.step_kind),
+            "step_kind": self.step_kind.value if isinstance(self.step_kind, StepKind) else str(self.step_kind),
             "policy": self.policy.to_dict() if self.policy is not None else None,
             "source_hint": self.source_hint,
         }
@@ -124,10 +123,7 @@ class ClassifiedStep:
 
     def __repr__(self) -> str:
         return (
-            f"<ClassifiedStep "
-            f"id={self.step_id!r} "
-            f"kind={self.step_kind.value} "
-            f"source={self.source_hint!r}>"
+            f"<ClassifiedStep " f"id={self.step_id!r} " f"kind={self.step_kind.value} " f"source={self.source_hint!r}>"
         )
 
 
@@ -173,17 +169,13 @@ class TaskSemanticSummary:
     task_id: str = ""
     trace_id: str = ""
     runtime_session_id: str = ""
-    classified_steps: List[ClassifiedStep] = dataclasses.field(
-        default_factory=list
-    )
+    classified_steps: List[ClassifiedStep] = dataclasses.field(default_factory=list)
     has_side_effectful_steps: bool = False
     has_cross_device_steps: bool = False
     has_confirmation_required_steps: bool = False
     has_rollback_steps: bool = False
     primary_visible_steps: List[str] = dataclasses.field(default_factory=list)
-    observability_highlight_steps: List[str] = dataclasses.field(
-        default_factory=list
-    )
+    observability_highlight_steps: List[str] = dataclasses.field(default_factory=list)
     unresolved_count: int = 0
     summarised_at: float = dataclasses.field(default_factory=time.time)
 
@@ -218,9 +210,7 @@ class TaskSemanticSummary:
             "has_confirmation_required_steps": self.has_confirmation_required_steps,
             "has_rollback_steps": self.has_rollback_steps,
             "primary_visible_steps": list(self.primary_visible_steps),
-            "observability_highlight_steps": list(
-                self.observability_highlight_steps
-            ),
+            "observability_highlight_steps": list(self.observability_highlight_steps),
             "unresolved_count": self.unresolved_count,
             "is_fully_resolved": self.is_fully_resolved,
             "summarised_at": self.summarised_at,
@@ -243,20 +233,12 @@ class TaskSemanticSummary:
             trace_id=str(data.get("trace_id") or ""),
             runtime_session_id=str(data.get("runtime_session_id") or ""),
             classified_steps=classified_steps,
-            has_side_effectful_steps=bool(
-                data.get("has_side_effectful_steps", False)
-            ),
+            has_side_effectful_steps=bool(data.get("has_side_effectful_steps", False)),
             has_cross_device_steps=bool(data.get("has_cross_device_steps", False)),
-            has_confirmation_required_steps=bool(
-                data.get("has_confirmation_required_steps", False)
-            ),
+            has_confirmation_required_steps=bool(data.get("has_confirmation_required_steps", False)),
             has_rollback_steps=bool(data.get("has_rollback_steps", False)),
-            primary_visible_steps=list(
-                data.get("primary_visible_steps") or []
-            ),
-            observability_highlight_steps=list(
-                data.get("observability_highlight_steps") or []
-            ),
+            primary_visible_steps=list(data.get("primary_visible_steps") or []),
+            observability_highlight_steps=list(data.get("observability_highlight_steps") or []),
             unresolved_count=int(data.get("unresolved_count", 0)),
             summarised_at=float(data.get("summarised_at") or time.time()),
         )
@@ -364,9 +346,7 @@ def get_semantic_hints(summary: TaskSemanticSummary) -> Dict[str, Any]:
         "has_confirmation_required_steps": summary.has_confirmation_required_steps,
         "has_rollback_steps": summary.has_rollback_steps,
         "primary_visible_step_count": len(summary.primary_visible_steps),
-        "observability_highlight_count": len(
-            summary.observability_highlight_steps
-        ),
+        "observability_highlight_count": len(summary.observability_highlight_steps),
         "task_id": summary.task_id,
         "trace_id": summary.trace_id,
     }

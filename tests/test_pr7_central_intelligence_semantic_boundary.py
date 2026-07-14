@@ -56,24 +56,19 @@ from core.central_intelligence_layer import (
     get_surfaces_by_ci_role,
 )
 
-
 # ---------------------------------------------------------------------------
 # 1. Module sentinels
 # ---------------------------------------------------------------------------
 
 
 def test_authority_sentinel_format():
-    assert CENTRAL_INTELLIGENCE_LAYER_AUTHORITY.startswith(
-        "CENTRAL_INTELLIGENCE_LAYER_AUTHORITY::"
-    )
+    assert CENTRAL_INTELLIGENCE_LAYER_AUTHORITY.startswith("CENTRAL_INTELLIGENCE_LAYER_AUTHORITY::")
     assert "core.central_intelligence_layer" in CENTRAL_INTELLIGENCE_LAYER_AUTHORITY
     assert "central-intelligence" in CENTRAL_INTELLIGENCE_LAYER_AUTHORITY.lower()
 
 
 def test_pr7_sentinel_format():
-    assert CENTRAL_INTELLIGENCE_LAYER_PR7_SENTINEL.startswith(
-        "CENTRAL_INTELLIGENCE_LAYER_PR7_SENTINEL::"
-    )
+    assert CENTRAL_INTELLIGENCE_LAYER_PR7_SENTINEL.startswith("CENTRAL_INTELLIGENCE_LAYER_PR7_SENTINEL::")
     assert "PR7" in CENTRAL_INTELLIGENCE_LAYER_PR7_SENTINEL
     assert "central-intelligence-semantic-boundary-v1" in CENTRAL_INTELLIGENCE_LAYER_PR7_SENTINEL
     assert "core.central_intelligence_layer" in CENTRAL_INTELLIGENCE_LAYER_PR7_SENTINEL
@@ -301,6 +296,7 @@ def test_build_ci_layer_boundary_report_constrained_surfaces_subset_of_ids():
 
 def test_build_ci_layer_boundary_report_generated_at_is_recent():
     import time
+
     before = time.time()
     report = build_ci_layer_boundary_report()
     after = time.time()
@@ -338,12 +334,15 @@ def test_central_intelligence_main_layer_includes_desktop_presence_runtime():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("surface_id", [
-    "agent_kernel",
-    "execution_planner",
-    "team_manager",
-    "agent_team",
-])
+@pytest.mark.parametrize(
+    "surface_id",
+    [
+        "agent_kernel",
+        "execution_planner",
+        "team_manager",
+        "agent_team",
+    ],
+)
 def test_expert_capability_sub_layer_classification(surface_id):
     surface = classify_ci_surface(surface_id)
     assert surface is not None, f"{surface_id} not found in registry"
@@ -376,11 +375,14 @@ def test_team_manager_notes_mention_executionplanner():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("surface_id", [
-    "unified_orchestration_spine",
-    "device_orchestrator",
-    "swarm_coordinator",
-])
+@pytest.mark.parametrize(
+    "surface_id",
+    [
+        "unified_orchestration_spine",
+        "device_orchestrator",
+        "swarm_coordinator",
+    ],
+)
 def test_sub_domain_coordinator_is_not_central_intelligence(surface_id):
     surface = classify_ci_surface(surface_id)
     assert surface is not None, f"{surface_id} not found in registry"
@@ -401,11 +403,14 @@ def test_unified_orchestration_spine_notes_mention_not_per_request():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("surface_id", [
-    "e2e_orchestrator",
-    "repo_coordinator",
-    "system_orchestrator",
-])
+@pytest.mark.parametrize(
+    "surface_id",
+    [
+        "e2e_orchestrator",
+        "repo_coordinator",
+        "system_orchestrator",
+    ],
+)
 def test_facade_compat_helper_is_not_central_intelligence(surface_id):
     surface = classify_ci_surface(surface_id)
     assert surface is not None, f"{surface_id} not found in registry"
@@ -434,24 +439,28 @@ def test_system_orchestrator_notes_mention_startup():
 
 def test_side_path_registry_contains_agent_kernel():
     from core.canonical_execution_chain import SIDE_PATH_MODULE_REGISTRY
+
     assert "core.agent.kernel" in SIDE_PATH_MODULE_REGISTRY
     assert SIDE_PATH_MODULE_REGISTRY["core.agent.kernel"] == "embedded_cognition_sub_layer"
 
 
 def test_side_path_registry_contains_execution_planner():
     from core.canonical_execution_chain import SIDE_PATH_MODULE_REGISTRY
+
     assert "core.agent.execution_planner" in SIDE_PATH_MODULE_REGISTRY
     assert SIDE_PATH_MODULE_REGISTRY["core.agent.execution_planner"] == "execution_planning_helper"
 
 
 def test_side_path_registry_contains_agent_team():
     from core.canonical_execution_chain import SIDE_PATH_MODULE_REGISTRY
+
     assert "core.agent_team" in SIDE_PATH_MODULE_REGISTRY
     assert SIDE_PATH_MODULE_REGISTRY["core.agent_team"] == "expert_execution_sub_layer"
 
 
 def test_side_path_registry_contains_system_orchestrator():
     from core.canonical_execution_chain import SIDE_PATH_MODULE_REGISTRY
+
     assert "core.system_orchestrator" in SIDE_PATH_MODULE_REGISTRY
     assert SIDE_PATH_MODULE_REGISTRY["core.system_orchestrator"] == "startup_phase_helper"
 
@@ -461,22 +470,26 @@ def test_side_path_registry_contains_system_orchestrator():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("module_name", [
-    "core.agent.kernel",
-    "core.agent.execution_planner",
-    "core.agent_team",
-    "core.system_orchestrator",
-    "core.unified_orchestration_spine",
-    "core.e2e_orchestrator",
-    "core.repo_coordinator",
-    "core.device_orchestrator",
-    "core.swarm_coordinator",
-])
+@pytest.mark.parametrize(
+    "module_name",
+    [
+        "core.agent.kernel",
+        "core.agent.execution_planner",
+        "core.agent_team",
+        "core.system_orchestrator",
+        "core.unified_orchestration_spine",
+        "core.e2e_orchestrator",
+        "core.repo_coordinator",
+        "core.device_orchestrator",
+        "core.swarm_coordinator",
+    ],
+)
 def test_pr7_side_path_entries_not_in_minimal_mainline(module_name):
     from core.canonical_execution_chain import MINIMAL_RUNTIME_MAINLINE_MODULES
-    assert module_name not in MINIMAL_RUNTIME_MAINLINE_MODULES, (
-        f"{module_name!r} must NOT be in MINIMAL_RUNTIME_MAINLINE_MODULES"
-    )
+
+    assert (
+        module_name not in MINIMAL_RUNTIME_MAINLINE_MODULES
+    ), f"{module_name!r} must NOT be in MINIMAL_RUNTIME_MAINLINE_MODULES"
 
 
 # ---------------------------------------------------------------------------

@@ -131,10 +131,7 @@ async def test_desktop_runtime_threads_canonical_session_ids_and_lane_metadata(m
     assert result["conversation_session_id"].startswith("session_")
     assert result["control_session_id"].startswith("control_")
     assert result["metadata"]["session_id"] == result["conversation_session_id"]
-    assert (
-        result["metadata"]["session_execution_lane"]["conversation_session_id"]
-        == result["conversation_session_id"]
-    )
+    assert result["metadata"]["session_execution_lane"]["conversation_session_id"] == result["conversation_session_id"]
 
 
 @pytest.mark.asyncio

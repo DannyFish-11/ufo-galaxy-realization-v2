@@ -10,9 +10,11 @@ logger = logging.getLogger("Galaxy.SessionMemoryFacade")
 
 # ── TaskMemory bridge (unified access) ──
 
+
 def _get_task_memory():
     """Lazy import to avoid circular deps."""
     from core.task_memory import get_task_memory
+
     return get_task_memory()
 
 
@@ -93,6 +95,7 @@ async def record_session_turn(
     # 偏好学习钩子(ConversationMemory 的独有能力;不再让它另存一份轮次)。
     try:
         from core.ai_intent import get_conversation_memory
+
         get_conversation_memory().learn(conversation_session_id, role, content)
     except Exception as exc:
         logger.warning("Exception suppressed: %s", exc)
@@ -102,6 +105,7 @@ async def record_session_turn(
     if content and role in ("user", "assistant"):
         try:
             import asyncio as _aio
+
             from core.memory import get_unified_memory
 
             _um = get_unified_memory()
@@ -122,26 +126,36 @@ async def record_session_turn(
     if role == "user":
         try:
             import os as _os_mm
+
             if _os_mm.getenv("GALAXY_MEMORY_MEDIA", "0").strip().lower() in ("1", "true", "yes", "on"):
                 import asyncio as _aio_mm
+
                 from core.memory import get_unified_memory as _gum
+
                 _um2 = _gum()
                 if _um2.enabled:
                     from core.perception.desktop_perception_store import get_desktop_perception_store
+
                     _snap = get_desktop_perception_store().snapshot_media()
                     _md = {"session_id": conversation_session_id, "linked_turn": content[:120]}
                     if _snap.get("image_b64"):
                         await _aio_mm.to_thread(
-                            _um2.remember_media, _snap["image_b64"],
-                            modality="image", mime=_snap.get("image_mime", ""),
-                            tags=["perception"], metadata=dict(_md),
+                            _um2.remember_media,
+                            _snap["image_b64"],
+                            modality="image",
+                            mime=_snap.get("image_mime", ""),
+                            tags=["perception"],
+                            metadata=dict(_md),
                             caption=f"[camera @ user turn] {content[:80]}",
                         )
                     if _snap.get("audio_b64"):
                         await _aio_mm.to_thread(
-                            _um2.remember_media, _snap["audio_b64"],
-                            modality="audio", mime=_snap.get("audio_mime", ""),
-                            tags=["perception"], metadata=dict(_md),
+                            _um2.remember_media,
+                            _snap["audio_b64"],
+                            modality="audio",
+                            mime=_snap.get("audio_mime", ""),
+                            tags=["perception"],
+                            metadata=dict(_md),
                             caption=f"[mic @ user turn] {content[:80]}",
                         )
         except Exception as exc:  # noqa: BLE001 — 跨模态记忆写入失败不影响主流程
@@ -223,6 +237,7 @@ def get_task_lineage(keyword: str) -> str:
 
 # ── Unified memory query (single entry point for ALL memory) ──
 
+
 def get_unified_context(
     session_id: str,
     query: str = "",
@@ -244,14 +259,17 @@ def get_unified_context(
     # 1. Long-term preferences
     try:
         from core.cognitive.long_term_memory import get_long_term_memory
+
         ltm = get_long_term_memory()
         prefs = ltm.retrieve_all(namespace="preferences")
         if prefs:
             lines = [f"- {e['key']}: {e['value']}" for e in prefs[:10]]
-            messages.append({
-                "role": "system",
-                "content": "[Long-term memory — user preferences]\n" + "\n".join(lines),
-            })
+            messages.append(
+                {
+                    "role": "system",
+                    "content": "[Long-term memory — user preferences]\n" + "\n".join(lines),
+                }
+            )
     except Exception as exc:
         logger.warning("Exception suppressed: %s", exc)
 
@@ -260,6 +278,7 @@ def get_unified_context(
     if query:
         try:
             from core.cognitive.long_term_memory import get_long_term_memory
+
             ltm = get_long_term_memory()
             hits: List[Dict[str, Any]] = []
             for ns in ("preferences", "facts", "skills", "global"):
@@ -267,10 +286,12 @@ def get_unified_context(
             hits.sort(key=lambda h: h.get("_score", 0.0), reverse=True)
             if hits:
                 lines = [f"- {h['key']}: {h['value']}" for h in hits[:5]]
-                messages.append({
-                    "role": "system",
-                    "content": "[Long-term memory — relevant to query]\n" + "\n".join(lines),
-                })
+                messages.append(
+                    {
+                        "role": "system",
+                        "content": "[Long-term memory — relevant to query]\n" + "\n".join(lines),
+                    }
+                )
         except Exception as exc:
             logger.warning("Exception suppressed: %s", exc)
 
@@ -310,10 +331,12 @@ def get_unified_context(
                 _hits = _um.recall(query, top_k=3)
                 _lines = [f"- {h.content[:300]}" for h in _hits if h.content]
                 if _lines:
-                    messages.append({
-                        "role": "system",
-                        "content": "[Semantic long-term memory]\n" + "\n".join(_lines),
-                    })
+                    messages.append(
+                        {
+                            "role": "system",
+                            "content": "[Semantic long-term memory]\n" + "\n".join(_lines),
+                        }
+                    )
         except Exception as exc:
             logger.warning("Exception suppressed: %s", exc)
 
@@ -340,11 +363,13 @@ def recall(
     """
     msgs = get_unified_context(session_id, query=query, depth=depth, max_turns=max_turns)
     try:
-        from core.session_manager import record_evidence, EvidenceKind
+        from core.session_manager import EvidenceKind, record_evidence
+
         record_evidence(
-            session_id, EvidenceKind.NOTE, actor="memory.recall",
-            payload={"event": "recall", "query": query[:200],
-                     "recalled_blocks": len(msgs)},
+            session_id,
+            EvidenceKind.NOTE,
+            actor="memory.recall",
+            payload={"event": "recall", "query": query[:200], "recalled_blocks": len(msgs)},
         )
     except Exception:  # noqa: BLE001
         pass
@@ -424,9 +449,13 @@ class MemoryScope:
         # 里直接调用会占住共享事件循环——offload 到线程,避免每次进入 MemoryScope
         # 都让其它并发请求集体卡顿。
         import asyncio as _aio
+
         self.context = await _aio.to_thread(
-            recall, self.session_id, self.query,
-            depth=self._depth, max_turns=self._max_turns,
+            recall,
+            self.session_id,
+            self.query,
+            depth=self._depth,
+            max_turns=self._max_turns,
         )
         return self
 
@@ -450,9 +479,12 @@ class MemoryScope:
     async def __aexit__(self, exc_type, exc, tb) -> bool:
         # 不吞异常（返回 False）；仅在证据链上标记 scope 结束，便于回放。
         try:
-            from core.session_manager import record_evidence, EvidenceKind
+            from core.session_manager import EvidenceKind, record_evidence
+
             record_evidence(
-                self.session_id, EvidenceKind.NOTE, actor="memory.scope",
+                self.session_id,
+                EvidenceKind.NOTE,
+                actor="memory.scope",
                 payload={"event": "scope_exit", "errored": exc_type is not None},
             )
         except Exception:  # noqa: BLE001

@@ -28,6 +28,7 @@ Usage::
     validator = EnvelopeValidator()
     validator.validate(device_id="phone-1", command="screenshot", ...)
 """
+
 from __future__ import annotations
 
 import abc
@@ -51,14 +52,29 @@ validator sub-package.
 """
 
 # ── high-risk commands (mirrors CommandRouter._HIGH_RISK_COMMANDS) ────────
-_HIGH_RISK_COMMANDS: frozenset = frozenset({
-    "delete", "format", "shutdown", "reboot", "wipe",
-    "rm", "remove", "purge", "factory_reset",
-    "execute_shell", "run_script", "sudo",
-    "transfer_funds", "payment", "checkout",
-    "drone_takeoff", "arm_system",
-    "system_change", "registry_write",
-})
+_HIGH_RISK_COMMANDS: frozenset = frozenset(
+    {
+        "delete",
+        "format",
+        "shutdown",
+        "reboot",
+        "wipe",
+        "rm",
+        "remove",
+        "purge",
+        "factory_reset",
+        "execute_shell",
+        "run_script",
+        "sudo",
+        "transfer_funds",
+        "payment",
+        "checkout",
+        "drone_takeoff",
+        "arm_system",
+        "system_change",
+        "registry_write",
+    }
+)
 
 
 class ValidationError(Exception):

@@ -80,26 +80,36 @@ OPERABILITY_BLOCKED: str = "blocked"
 OPERABILITY_DEGRADED: str = "degraded"
 OPERABILITY_UNKNOWN: str = "unknown"
 
-ALL_KNOWN_OPERABILITY_STATES: frozenset = frozenset({
-    OPERABILITY_OPERABLE,
-    OPERABILITY_BLOCKED,
-    OPERABILITY_DEGRADED,
-    OPERABILITY_UNKNOWN,
-    "error",
-    "unavailable",
-    "no_active_degradation",
-})
+ALL_KNOWN_OPERABILITY_STATES: frozenset = frozenset(
+    {
+        OPERABILITY_OPERABLE,
+        OPERABILITY_BLOCKED,
+        OPERABILITY_DEGRADED,
+        OPERABILITY_UNKNOWN,
+        "error",
+        "unavailable",
+        "no_active_degradation",
+    }
+)
 
 # ---------------------------------------------------------------------------
 # Autonomy tier classification constants
 # ---------------------------------------------------------------------------
 
-_STRONG_AUTONOMY_TIERS: frozenset = frozenset({
-    "semi_autonomous", "distributed_participant", "strong",
-})
-_LIMITED_AUTONOMY_TIERS: frozenset = frozenset({
-    "observable", "participant", "limited",
-})
+_STRONG_AUTONOMY_TIERS: frozenset = frozenset(
+    {
+        "semi_autonomous",
+        "distributed_participant",
+        "strong",
+    }
+)
+_LIMITED_AUTONOMY_TIERS: frozenset = frozenset(
+    {
+        "observable",
+        "participant",
+        "limited",
+    }
+)
 
 # ---------------------------------------------------------------------------
 # Dimension names (stable constants for downstream consumers)
@@ -245,9 +255,7 @@ class SystemStateNarrative:
     overall_operability: str = "unknown"
     overall_explanation: str = ""
     main_view: Dict[str, Any] = field(default_factory=dict)
-    semantic_vocabulary: Dict[str, str] = field(
-        default_factory=lambda: dict(CANONICAL_OUTWARD_VOCABULARY)
-    )
+    semantic_vocabulary: Dict[str, str] = field(default_factory=lambda: dict(CANONICAL_OUTWARD_VOCABULARY))
 
     def get_dimension(self, name: str) -> Optional[NarrativeDimension]:
         """Return a dimension by name, or ``None`` if absent."""
@@ -317,6 +325,7 @@ def _build_overall_runtime_state() -> NarrativeDimension:
 
     try:
         from core.runtime_readiness_matrix import ReadinessMatrix, ReadinessVerdict
+
         matrix = ReadinessMatrix()
         verdict = matrix.evaluate()
         verdict_str = verdict.verdict if hasattr(verdict, "verdict") else str(verdict)
@@ -385,9 +394,7 @@ def _build_overall_runtime_state() -> NarrativeDimension:
                     f" However, {outward.unavailable_source_count} canonical source(s) "
                     f"were unavailable during truth compilation, indicating partial degradation."
                 )
-            trace.append(
-                f"outward_truth_surfacing_complete={outward.surfacing_complete}"
-            )
+            trace.append(f"outward_truth_surfacing_complete={outward.surfacing_complete}")
             is_canonical = True
     except Exception as exc:
         logger.debug("overall_runtime_state: outward truth unavailable: %s", exc)
@@ -401,9 +408,7 @@ def _build_overall_runtime_state() -> NarrativeDimension:
         explanation=explanation,
         evidence_basis=evidence,
         traceability=trace,
-        source_authority=(
-            "RUNTIME_READINESS_MATRIX_AUTHORITY + OUTWARD_RUNTIME_TRUTH_AUTHORITY"
-        ),
+        source_authority=("RUNTIME_READINESS_MATRIX_AUTHORITY + OUTWARD_RUNTIME_TRUTH_AUTHORITY"),
     )
 
 
@@ -420,6 +425,7 @@ def _build_operating_structure() -> NarrativeDimension:
             CANONICAL_RUNTIME_NODE_REGISTRY_AUTHORITY,
             get_node_fabric_registry,
         )
+
         fab = get_node_fabric_registry()
         nodes = fab.list_nodes()
         node_count = len(nodes)
@@ -427,11 +433,7 @@ def _build_operating_structure() -> NarrativeDimension:
         # Node role breakdown
         role_counts: Dict[str, int] = {}
         for n in nodes:
-            role = (
-                getattr(n, "role", None)
-                or (n.get("role") if isinstance(n, dict) else None)
-                or "unknown"
-            )
+            role = getattr(n, "role", None) or (n.get("role") if isinstance(n, dict) else None) or "unknown"
             role_counts[str(role)] = role_counts.get(str(role), 0) + 1
 
         state = f"active:{node_count}_nodes"
@@ -461,18 +463,15 @@ def _build_operating_structure() -> NarrativeDimension:
     # Supplement with topology info if available
     try:
         from core.network_topology_runtime import get_network_topology_runtime
+
         topo = get_network_topology_runtime()
-        topo_nodes = topo.node_count() if hasattr(topo, "node_count") else len(
-            getattr(topo, "_nodes", {}) or {}
-        )
-        topo_edges = topo.edge_count() if hasattr(topo, "edge_count") else len(
-            getattr(topo, "_edges", []) or []
-        )
+        topo_nodes = topo.node_count() if hasattr(topo, "node_count") else len(getattr(topo, "_nodes", {}) or {})
+        topo_edges = topo.edge_count() if hasattr(topo, "edge_count") else len(getattr(topo, "_edges", []) or [])
         evidence["topology_node_count"] = topo_nodes
         evidence["topology_edge_count"] = topo_edges
-        evidence[
-            "topology_note"
-        ] = "Topology is a runtime projection of node relations, not an independent truth store."
+        evidence["topology_note"] = (
+            "Topology is a runtime projection of node relations, not an independent truth store."
+        )
         trace.append(f"topology_nodes={topo_nodes},edges={topo_edges}")
         is_canonical = True
     except Exception as exc:
@@ -501,14 +500,19 @@ def _build_task_execution_state() -> NarrativeDimension:
 
     try:
         from core.canonical_task import get_canonical_task_runtime
+
         runtime = get_canonical_task_runtime()
         active_records = runtime.list_allocation_records(limit=256)
         active_count = len(active_records)
 
         # Classify records by state using the shared helper
         pending = [r for r in active_records if _get_record_status(r) in ("pending", "waiting", "queued")]
-        executing = [r for r in active_records if _get_record_status(r) in ("executing", "running", "active", "in_progress")]
-        completed = [r for r in active_records if _get_record_status(r) in ("completed", "success", "closed", "terminal")]
+        executing = [
+            r for r in active_records if _get_record_status(r) in ("executing", "running", "active", "in_progress")
+        ]
+        completed = [
+            r for r in active_records if _get_record_status(r) in ("completed", "success", "closed", "terminal")
+        ]
         failed = [r for r in active_records if _get_record_status(r) in ("failed", "error", "rejected", "blocked")]
 
         if active_count == 0:
@@ -532,10 +536,7 @@ def _build_task_execution_state() -> NarrativeDimension:
             )
         else:
             state = f"records:{active_count}"
-            explanation = (
-                f"CanonicalTaskRuntime has {active_count} allocation record(s) "
-                f"in mixed states."
-            )
+            explanation = f"CanonicalTaskRuntime has {active_count} allocation record(s) " f"in mixed states."
 
         evidence = {
             "total_allocation_records": active_count,
@@ -583,6 +584,7 @@ def _build_device_dispatch_support_state() -> NarrativeDimension:
             DEVICE_DISPATCH_READINESS_SURFACE_AUTHORITY,
             get_dispatch_readiness_panel,
         )
+
         panel = get_dispatch_readiness_panel()
         devices = panel.get("devices") or []
         summary = panel.get("summary") or {}
@@ -622,11 +624,13 @@ def _build_device_dispatch_support_state() -> NarrativeDimension:
             did = d.get("device_id", "unknown")
             is_ready = bool(d.get("dispatch_ready", False))
             blockers = d.get("blockers") or d.get("blocking_reasons") or []
-            device_blockers.append({
-                "device_id": did,
-                "dispatch_ready": is_ready,
-                "blockers": blockers,
-            })
+            device_blockers.append(
+                {
+                    "device_id": did,
+                    "dispatch_ready": is_ready,
+                    "blockers": blockers,
+                }
+            )
 
         evidence = {
             "total_devices": total_count,
@@ -643,9 +647,7 @@ def _build_device_dispatch_support_state() -> NarrativeDimension:
         ]
         for d in device_blockers:
             if not d["dispatch_ready"]:
-                trace.append(
-                    f"device:{d['device_id']} blocked by: {d['blockers']}"
-                )
+                trace.append(f"device:{d['device_id']} blocked by: {d['blockers']}")
         is_canonical = True
 
         return NarrativeDimension(
@@ -669,11 +671,10 @@ def _build_device_dispatch_support_state() -> NarrativeDimension:
             NEAR_PEER_OPERATIONAL_TYPES,
             OBSERVABLE_BUT_NON_OPERATIONAL_TYPES,
         )
+
         evidence["near_peer_operational_types"] = sorted(NEAR_PEER_OPERATIONAL_TYPES)
         evidence["observable_only_types"] = sorted(OBSERVABLE_BUT_NON_OPERATIONAL_TYPES)
-        evidence[
-            "support_note"
-        ] = "Static device support classification — runtime dispatch readiness unavailable."
+        evidence["support_note"] = "Static device support classification — runtime dispatch readiness unavailable."
         state = "support_classification_only"
         explanation = (
             "Runtime dispatch readiness surface is unavailable; falling back to static "
@@ -720,11 +721,12 @@ def _build_autonomy_participation_state() -> NarrativeDimension:
     is_canonical = False
 
     try:
+        from core.android_device_state_store import list_device_state_snapshots
         from core.android_network_participation import (
             ANDROID_NETWORK_PARTICIPATION_AUTHORITY,
             get_participation_state_for_device,
         )
-        from core.android_device_state_store import list_device_state_snapshots
+
         snaps = list_device_state_snapshots()
         device_results = []
         for snap in snaps:
@@ -738,12 +740,14 @@ def _build_autonomy_participation_state() -> NarrativeDimension:
                 )
                 reasons = getattr(part_state, "blocking_reasons", []) or []
                 notes = getattr(part_state, "tier_derivation_notes", []) or []
-                device_results.append({
-                    "device_id": did,
-                    "tier": tier,
-                    "blocking_reasons": list(reasons),
-                    "tier_derivation_notes": list(notes),
-                })
+                device_results.append(
+                    {
+                        "device_id": did,
+                        "tier": tier,
+                        "blocking_reasons": list(reasons),
+                        "tier_derivation_notes": list(notes),
+                    }
+                )
             except Exception as inner:
                 device_results.append({"device_id": did, "tier": "unknown", "error": str(inner)})
 
@@ -810,6 +814,7 @@ def _build_autonomy_participation_state() -> NarrativeDimension:
             DEVICE_AUTONOMY_EVIDENCE_AUTHORITY,
             build_device_autonomy_summary,
         )
+
         summary = build_device_autonomy_summary()
         state = summary.get("overall_class", "unknown")
         explanation = summary.get("explanation", "Device autonomy evidence summary.")
@@ -856,31 +861,24 @@ def _build_topology_allocation_relations() -> NarrativeDimension:
     # Allocation records from canonical task runtime
     try:
         from core.canonical_task import get_canonical_task_runtime
+
         runtime = get_canonical_task_runtime()
         alloc_records = runtime.list_allocation_records(limit=256)
 
         accepted = [
-            r for r in alloc_records
-            if str(_get_record_value(r, "accepted_allocation") or "").lower() == "accepted"
+            r for r in alloc_records if str(_get_record_value(r, "accepted_allocation") or "").lower() == "accepted"
         ]
         active_executors: Dict[str, int] = {}
         for r in accepted:
-            exec_loc = (
-                _get_record_value(r, "execution_location")
-                or _get_record_value(r, "selected_executor")
-            )
+            exec_loc = _get_record_value(r, "execution_location") or _get_record_value(r, "selected_executor")
             if exec_loc:
                 active_executors[str(exec_loc)] = active_executors.get(str(exec_loc), 0) + 1
 
         evidence["allocation_records_total"] = len(alloc_records)
         evidence["accepted_allocation_count"] = len(accepted)
         evidence["active_executors"] = dict(active_executors)
-        evidence[
-            "allocation_source"
-        ] = "core.canonical_task.CanonicalTaskRuntime.list_allocation_records"
-        trace.append(
-            f"canonical_task_runtime: {len(alloc_records)} records, {len(accepted)} accepted"
-        )
+        evidence["allocation_source"] = "core.canonical_task.CanonicalTaskRuntime.list_allocation_records"
+        trace.append(f"canonical_task_runtime: {len(alloc_records)} records, {len(accepted)} accepted")
         is_canonical = True
     except Exception as exc:
         logger.debug("topology_allocation_relations: canonical task runtime failed: %s", exc)
@@ -889,18 +887,13 @@ def _build_topology_allocation_relations() -> NarrativeDimension:
     # Topology from NetworkTopologyRuntime
     try:
         from core.network_topology_runtime import get_network_topology_runtime
+
         topo = get_network_topology_runtime()
-        topo_nodes = topo.node_count() if hasattr(topo, "node_count") else len(
-            getattr(topo, "_nodes", {}) or {}
-        )
-        topo_edges = topo.edge_count() if hasattr(topo, "edge_count") else len(
-            getattr(topo, "_edges", []) or []
-        )
+        topo_nodes = topo.node_count() if hasattr(topo, "node_count") else len(getattr(topo, "_nodes", {}) or {})
+        topo_edges = topo.edge_count() if hasattr(topo, "edge_count") else len(getattr(topo, "_edges", []) or [])
         evidence["topology_node_count"] = topo_nodes
         evidence["topology_edge_count"] = topo_edges
-        evidence[
-            "topology_projection_note"
-        ] = (
+        evidence["topology_projection_note"] = (
             "Topology is a runtime projection of node/device relations. "
             "Relation strength depends on underlying state quality."
         )
@@ -954,6 +947,7 @@ def _build_recovery_degradation_blockage() -> NarrativeDimension:
     # Runtime readiness matrix — blocked/degraded dimensions
     try:
         from core.runtime_readiness_matrix import ReadinessMatrix
+
         matrix = ReadinessMatrix()
         verdict = matrix.evaluate()
         verdict_str = verdict.verdict if hasattr(verdict, "verdict") else str(verdict)
@@ -963,9 +957,7 @@ def _build_recovery_degradation_blockage() -> NarrativeDimension:
         evidence["readiness_verdict"] = verdict_str
         evidence["blocked_dimensions"] = list(blocked)
         evidence["degraded_dimensions"] = list(degraded)
-        trace.append(
-            f"readiness_matrix: verdict={verdict_str}, blocked={blocked}, degraded={degraded}"
-        )
+        trace.append(f"readiness_matrix: verdict={verdict_str}, blocked={blocked}, degraded={degraded}")
         is_canonical = True
     except Exception as exc:
         logger.debug("recovery_degradation: readiness matrix failed: %s", exc)
@@ -976,6 +968,7 @@ def _build_recovery_degradation_blockage() -> NarrativeDimension:
         from core.delegated_flow_recovery_coordinator import (
             get_recovery_coordinator,
         )
+
         coord = get_recovery_coordinator()
         recovery_state = coord.get_recovery_state() if hasattr(coord, "get_recovery_state") else {}
         if recovery_state:
@@ -990,12 +983,9 @@ def _build_recovery_degradation_blockage() -> NarrativeDimension:
         from core.android_continuity_recovery_state_router import (
             get_recovery_state_router,
         )
+
         router = get_recovery_state_router()
-        android_recovery = (
-            router.get_current_recovery_state()
-            if hasattr(router, "get_current_recovery_state")
-            else {}
-        )
+        android_recovery = router.get_current_recovery_state() if hasattr(router, "get_current_recovery_state") else {}
         if android_recovery:
             evidence["android_recovery_state"] = dict(android_recovery)
             trace.append(f"android_recovery_state: {android_recovery}")
@@ -1006,6 +996,7 @@ def _build_recovery_degradation_blockage() -> NarrativeDimension:
     # Runtime restart recovery
     try:
         from core.runtime_restart_recovery import get_recovery_surface
+
         recovery_surface = get_recovery_surface()
         restart_state = recovery_surface.get_restart_state() if hasattr(recovery_surface, "get_restart_state") else {}
         if restart_state:
@@ -1042,15 +1033,11 @@ def _build_recovery_degradation_blockage() -> NarrativeDimension:
     elif readiness in ("READY", "operable") or (not blocked_dims and not degraded_dims and is_canonical):
         state = "no_active_degradation"
         explanation = (
-            "No active blocking or degraded readiness dimensions detected. "
-            "Recovery surfaces report nominal state."
+            "No active blocking or degraded readiness dimensions detected. " "Recovery surfaces report nominal state."
         )
     else:
         state = "recovery_degradation_state_unavailable"
-        explanation = (
-            "Recovery and degradation signals could not be fully queried. "
-            "System state is partially known."
-        )
+        explanation = "Recovery and degradation signals could not be fully queried. " "System state is partially known."
 
     return NarrativeDimension(
         dimension=DIM_RECOVERY_DEGRADATION_BLOCKAGE,
@@ -1119,7 +1106,7 @@ def _derive_main_view(narrative: SystemStateNarrative) -> Dict[str, Any]:
         if blocked:
             limiters.append(f"blocked_readiness:{','.join(str(x) for x in blocked)}")
     if dispatch:
-        for item in (dispatch.evidence_basis.get("device_blockers") or []):
+        for item in dispatch.evidence_basis.get("device_blockers") or []:
             if not item.get("dispatch_ready", False):
                 did = item.get("device_id", "unknown")
                 blockers = item.get("blockers") or []

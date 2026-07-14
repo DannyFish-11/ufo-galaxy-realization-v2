@@ -44,6 +44,7 @@ logger = logging.getLogger("Galaxy.TaskLifecycle")
 
 try:
     from core.task_memory import get_task_memory as _get_task_memory
+
     _MEMORY_OK = True
 except ImportError:
     _MEMORY_OK = False
@@ -55,17 +56,22 @@ except ImportError:
 def _emit_lifecycle_event(envelope: Any, status: str) -> None:
     """Best-effort M2 task.lifecycle event emission."""
     try:
-        from integration.event_bus import event_bus, EventType
+        from integration.event_bus import EventType, event_bus
+
         et = getattr(EventType, "TASK_LIFECYCLE", None)
         if et is not None:
-            event_bus.publish_sync(et, "task_lifecycle_manager", {
-                "task_id": envelope.task_id,
-                "trace_id": envelope.trace_id,
-                "session_id": envelope.session_id,
-                "tool_name": envelope.tool_name,
-                "status": status,
-                "ts": time.time(),
-            })
+            event_bus.publish_sync(
+                et,
+                "task_lifecycle_manager",
+                {
+                    "task_id": envelope.task_id,
+                    "trace_id": envelope.trace_id,
+                    "session_id": envelope.session_id,
+                    "tool_name": envelope.tool_name,
+                    "status": status,
+                    "ts": time.time(),
+                },
+            )
     except Exception as exc:
         logger.warning("Exception suppressed: %s", exc)
 
@@ -80,13 +86,15 @@ def _emit_state_bus_event(envelope: Any, status: str) -> None:
     ``emit_state()`` so downstream consumers can use typed state objects.
     """
     try:
-        from core.state_event_bus import emit as _seb_emit, StateEventType
+        from core.state_event_bus import StateEventType
+        from core.state_event_bus import emit as _seb_emit
+
         _type_map = {
-            "running":     StateEventType.TASK_STARTED,
-            "done":        StateEventType.TASK_DONE,
-            "failed":      StateEventType.TASK_FAILED,
+            "running": StateEventType.TASK_STARTED,
+            "done": StateEventType.TASK_DONE,
+            "failed": StateEventType.TASK_FAILED,
             # Block-4 new terminal states: map to TASK_FAILED for bus compat
-            "cancelled":   StateEventType.TASK_FAILED,
+            "cancelled": StateEventType.TASK_FAILED,
             "interrupted": StateEventType.TASK_FAILED,
         }
         et = _type_map.get(status)
@@ -110,6 +118,7 @@ def _emit_state_bus_event(envelope: Any, status: str) -> None:
     try:
         from core.state_event_bus import emit_state as _seb_emit_state
         from core.unified.state_schema import TaskState
+
         ts = TaskState(
             task_id=getattr(envelope, "task_id", ""),
             trace_id=getattr(envelope, "trace_id", ""),
@@ -127,6 +136,7 @@ def _emit_state_bus_event(envelope: Any, status: str) -> None:
 # TaskLifecycleManager
 # ---------------------------------------------------------------------------
 
+
 class TaskLifecycleManager:
     """Manages task.lifecycle state transitions for TaskEnvelope objects.
 
@@ -142,7 +152,9 @@ class TaskLifecycleManager:
         updated = envelope.transition("running")
         logger.info(
             "task.lifecycle | task_id=%s trace_id=%s status=running tool=%s",
-            updated.task_id, updated.trace_id, updated.tool_name,
+            updated.task_id,
+            updated.trace_id,
+            updated.tool_name,
         )
         _emit_lifecycle_event(updated, "running")
         return updated
@@ -160,7 +172,9 @@ class TaskLifecycleManager:
         updated = envelope.transition("done")
         logger.info(
             "task.lifecycle | task_id=%s trace_id=%s status=done tool=%s summary=%r",
-            updated.task_id, updated.trace_id, updated.tool_name,
+            updated.task_id,
+            updated.trace_id,
+            updated.tool_name,
             result_summary[:120] if result_summary else "",
         )
         _emit_lifecycle_event(updated, "done")
@@ -180,7 +194,9 @@ class TaskLifecycleManager:
         updated = envelope.transition("failed")
         logger.warning(
             "task.lifecycle | task_id=%s trace_id=%s status=failed tool=%s error=%r",
-            updated.task_id, updated.trace_id, updated.tool_name,
+            updated.task_id,
+            updated.trace_id,
+            updated.tool_name,
             error[:200] if error else "",
         )
         _emit_lifecycle_event(updated, "failed")

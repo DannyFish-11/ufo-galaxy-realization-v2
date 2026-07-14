@@ -55,7 +55,7 @@ class UnifiedMemory:
         """
         if not self.providers or not data_b64:
             return
-        from core.memory._media import write_temp_media, remove_temp
+        from core.memory._media import remove_temp, write_temp_media
 
         path = write_temp_media(data_b64, mime, modality)
         try:
@@ -98,15 +98,19 @@ def _build() -> UnifiedMemory:
     providers: List[MemoryProvider] = []
     if {"vector", "vector_backend"} & wanted:
         from core.memory.vector_backend_provider import VectorBackendProvider
+
         providers.append(VectorBackendProvider())
     if {"omni", "omni_simplemem", "simplemem"} & wanted:
         from core.memory.omni_simplemem_provider import OmniSimpleMemProvider
+
         providers.append(OmniSimpleMemProvider())
     if {"clip", "crossmodal", "cross_modal"} & wanted:
         from core.memory.clip_provider import ClipMemoryProvider
+
         providers.append(ClipMemoryProvider())
     if {"clap", "audio"} & wanted:
         from core.memory.clap_provider import ClapMemoryProvider
+
         providers.append(ClapMemoryProvider())
     um = UnifiedMemory(providers)
     logger.info("UnifiedMemory initialised | backends=%s", um.backend_names or "none")

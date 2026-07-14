@@ -52,10 +52,10 @@ import pytest
 
 try:
     from core.ownership_transfer_proof_quality import (
-        OWNERSHIP_TRANSFER_PROOF_QUALITY_SENTINEL,
         OWNERSHIP_TRANSFER_PROOF_QUALITY_CONTRACT_VERSION,
-        RESUMED_OWNERSHIP_TRANSFER_REQUIRES_PROOF_POLICY,
         OWNERSHIP_TRANSFER_PROOF_QUALITY_POLICY,
+        OWNERSHIP_TRANSFER_PROOF_QUALITY_SENTINEL,
+        RESUMED_OWNERSHIP_TRANSFER_REQUIRES_PROOF_POLICY,
         STALE_OWNERSHIP_EVIDENCE_THRESHOLD_SECONDS,
         OwnershipTransferProofClass,
         OwnershipTransferProofQualityResult,
@@ -63,16 +63,17 @@ try:
         get_latest_ownership_transfer_proof_quality_for_device,
     )
     from core.takeover_tracking import (
-        TakeoverOwnershipState,
+        OWNERSHIP_STALE_EVIDENCE_THRESHOLD_SECONDS,
+        RESUMED_OWNERSHIP_TRANSFER_REQUIRES_FRESH_PROOF_POLICY,
+        TakeoverDecision,
         TakeoverEvidenceQuality,
         TakeoverOwnershipConvergenceVerdict,
-        TakeoverDecision,
+        TakeoverOwnershipState,
         adjudicate_takeover_ownership_convergence,
         record_takeover_response,
         reset_takeover_tracking_runtime,
-        OWNERSHIP_STALE_EVIDENCE_THRESHOLD_SECONDS,
-        RESUMED_OWNERSHIP_TRANSFER_REQUIRES_FRESH_PROOF_POLICY,
     )
+
     _AVAILABLE = True
 except ImportError:  # pragma: no cover
     _AVAILABLE = False
@@ -580,12 +581,8 @@ class TestGroupE_AdjudicationStaleDetection:
     def test_E07_conflicting_decisions_still_detected_before_stale_check(self) -> None:
         """Conflict detection must take priority over stale detection."""
         takeover_id = _uid()
-        record_takeover_response(
-            takeover_id=takeover_id, device_id="dev-E07", session_id="sess-E07", accepted=True
-        )
-        record_takeover_response(
-            takeover_id=takeover_id, device_id="dev-E07", session_id="sess-E07", accepted=False
-        )
+        record_takeover_response(takeover_id=takeover_id, device_id="dev-E07", session_id="sess-E07", accepted=True)
+        record_takeover_response(takeover_id=takeover_id, device_id="dev-E07", session_id="sess-E07", accepted=False)
         future_now = time.time() + 9999.0
         verdict = adjudicate_takeover_ownership_convergence(
             takeover_id=takeover_id,
@@ -653,12 +650,8 @@ class TestGroupF_GetLatestProofQualityForDevice:
     def test_F04_returns_degraded_conflicting_for_conflicting_records(self) -> None:
         takeover_id = _uid()
         device_id = "dev-F04"
-        record_takeover_response(
-            takeover_id=takeover_id, device_id=device_id, session_id="sess-F04", accepted=True
-        )
-        record_takeover_response(
-            takeover_id=takeover_id, device_id=device_id, session_id="sess-F04", accepted=False
-        )
+        record_takeover_response(takeover_id=takeover_id, device_id=device_id, session_id="sess-F04", accepted=True)
+        record_takeover_response(takeover_id=takeover_id, device_id=device_id, session_id="sess-F04", accepted=False)
         result = get_latest_ownership_transfer_proof_quality_for_device(
             device_id,
             session_id="sess-F04",
@@ -680,8 +673,9 @@ class TestGroupG_GovernanceStateDecisionCausality:
     def test_G01_decision_causality_fields_are_present(self) -> None:
         """ownership_transfer_proof_class and related fields exist in causality."""
         try:
-            from core.unified_governance_semantics import build_unified_governance_state
             from unittest.mock import patch
+
+            from core.unified_governance_semantics import build_unified_governance_state
         except ImportError:  # pragma: no cover
             pytest.skip("unified_governance_semantics unavailable")
 
@@ -700,9 +694,10 @@ class TestGroupG_GovernanceStateDecisionCausality:
         """For a device with an active record, governance state carries
         ownership_transfer_proof_* in decision_causality."""
         try:
-            from core.unified_governance_semantics import build_unified_governance_state
             from types import SimpleNamespace
             from unittest.mock import patch
+
+            from core.unified_governance_semantics import build_unified_governance_state
         except ImportError:  # pragma: no cover
             pytest.skip("unified_governance_semantics unavailable")
 
@@ -724,21 +719,27 @@ class TestGroupG_GovernanceStateDecisionCausality:
             is_takeover_eligible=False,
         )
 
-        with patch(
-            "core.attached_runtime_session_registry.list_active_sessions",
-            return_value=[mock_session],
-        ), patch(
-            "core.android_mode_gate_policy.build_mode_state_for_device",
-            return_value=mock_mode_state,
-        ), patch(
-            "core.android_mode_gate_policy.evaluate_android_mode_readiness",
-            return_value=mock_readiness,
-        ), patch(
-            "core.unified_execution_governance.is_takeover_active",
-            return_value=False,
-        ), patch(
-            "core.unified_execution_governance.get_execution_runtime_snapshot",
-            return_value={"devices": [{"device_id": device_id}]},
+        with (
+            patch(
+                "core.attached_runtime_session_registry.list_active_sessions",
+                return_value=[mock_session],
+            ),
+            patch(
+                "core.android_mode_gate_policy.build_mode_state_for_device",
+                return_value=mock_mode_state,
+            ),
+            patch(
+                "core.android_mode_gate_policy.evaluate_android_mode_readiness",
+                return_value=mock_readiness,
+            ),
+            patch(
+                "core.unified_execution_governance.is_takeover_active",
+                return_value=False,
+            ),
+            patch(
+                "core.unified_execution_governance.get_execution_runtime_snapshot",
+                return_value={"devices": [{"device_id": device_id}]},
+            ),
         ):
             state = build_unified_governance_state()
 
@@ -757,10 +758,7 @@ class TestGroupG_GovernanceStateDecisionCausality:
                 assert "ownership_transfer_proof_degraded" in causality
                 assert "ownership_transfer_proof_diagnosis" in causality
                 break
-        assert found_field, (
-            "Expected 'ownership_transfer_proof_class' in at least one "
-            "decision_causality dict"
-        )
+        assert found_field, "Expected 'ownership_transfer_proof_class' in at least one " "decision_causality dict"
 
     def test_G03_ownership_transfer_proof_class_is_confirmed_strong_for_fresh_record(
         self,
@@ -768,9 +766,10 @@ class TestGroupG_GovernanceStateDecisionCausality:
         """For a fresh rejection record, proof_class should be confirmed_strong
         and proof_sufficient should be True in decision_causality."""
         try:
-            from core.unified_governance_semantics import build_unified_governance_state
             from types import SimpleNamespace
             from unittest.mock import patch
+
+            from core.unified_governance_semantics import build_unified_governance_state
         except ImportError:  # pragma: no cover
             pytest.skip("unified_governance_semantics unavailable")
 
@@ -792,21 +791,27 @@ class TestGroupG_GovernanceStateDecisionCausality:
             is_takeover_eligible=False,
         )
 
-        with patch(
-            "core.attached_runtime_session_registry.list_active_sessions",
-            return_value=[mock_session],
-        ), patch(
-            "core.android_mode_gate_policy.build_mode_state_for_device",
-            return_value=mock_mode_state,
-        ), patch(
-            "core.android_mode_gate_policy.evaluate_android_mode_readiness",
-            return_value=mock_readiness,
-        ), patch(
-            "core.unified_execution_governance.is_takeover_active",
-            return_value=False,
-        ), patch(
-            "core.unified_execution_governance.get_execution_runtime_snapshot",
-            return_value={"devices": [{"device_id": device_id}]},
+        with (
+            patch(
+                "core.attached_runtime_session_registry.list_active_sessions",
+                return_value=[mock_session],
+            ),
+            patch(
+                "core.android_mode_gate_policy.build_mode_state_for_device",
+                return_value=mock_mode_state,
+            ),
+            patch(
+                "core.android_mode_gate_policy.evaluate_android_mode_readiness",
+                return_value=mock_readiness,
+            ),
+            patch(
+                "core.unified_execution_governance.is_takeover_active",
+                return_value=False,
+            ),
+            patch(
+                "core.unified_execution_governance.get_execution_runtime_snapshot",
+                return_value={"devices": [{"device_id": device_id}]},
+            ),
         ):
             state = build_unified_governance_state()
 
@@ -817,9 +822,9 @@ class TestGroupG_GovernanceStateDecisionCausality:
         for path_val in governance_paths.values():
             causality = path_val.get("decision_causality", {})
             if "ownership_transfer_proof_class" in causality:
-                assert causality["ownership_transfer_proof_class"] == "confirmed_strong", (
-                    f"Expected confirmed_strong, got {causality['ownership_transfer_proof_class']}"
-                )
+                assert (
+                    causality["ownership_transfer_proof_class"] == "confirmed_strong"
+                ), f"Expected confirmed_strong, got {causality['ownership_transfer_proof_class']}"
                 assert causality["ownership_transfer_proof_sufficient"] is True
                 assert causality["ownership_transfer_proof_degraded"] is False
                 break

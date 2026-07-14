@@ -114,7 +114,6 @@ from unittest.mock import MagicMock
 
 import pytest
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 # Helpers
 # ─────────────────────────────────────────────────────────────────────────────
@@ -178,37 +177,44 @@ def _make_cognitive_hint_dict(
 class TestGroupA_Sentinels:
     def test_A01_is_authority_sentinel_exists(self):
         from core.runtime_decision_observability import RUNTIME_DECISION_OBSERVABILITY_IS_AUTHORITY
+
         assert isinstance(RUNTIME_DECISION_OBSERVABILITY_IS_AUTHORITY, str)
         assert "CANONICAL_AUTHORITY" in RUNTIME_DECISION_OBSERVABILITY_IS_AUTHORITY
 
     def test_A02_pr20_sentinel_exists(self):
         from core.runtime_decision_observability import RUNTIME_DECISION_OBSERVABILITY_PR20_SENTINEL
+
         assert isinstance(RUNTIME_DECISION_OBSERVABILITY_PR20_SENTINEL, str)
         assert "PR20_SENTINEL" in RUNTIME_DECISION_OBSERVABILITY_PR20_SENTINEL
 
     def test_A03_hard_gates_policy_exists(self):
         from core.runtime_decision_observability import HARD_GATES_ARE_PRIMARY_AUTHORITY_POLICY
+
         assert isinstance(HARD_GATES_ARE_PRIMARY_AUTHORITY_POLICY, str)
         assert "POLICY_1" in HARD_GATES_ARE_PRIMARY_AUTHORITY_POLICY
 
     def test_A04_real_decisions_policy_exists(self):
         from core.runtime_decision_observability import OBSERVABILITY_REFLECTS_REAL_DECISIONS_POLICY
+
         assert isinstance(OBSERVABILITY_REFLECTS_REAL_DECISIONS_POLICY, str)
         assert "POLICY_2" in OBSERVABILITY_REFLECTS_REAL_DECISIONS_POLICY
 
     def test_A05_influence_layers_policy_exists(self):
         from core.runtime_decision_observability import INFLUENCE_LAYERS_ARE_NON_AUTHORITATIVE_POLICY
+
         assert isinstance(INFLUENCE_LAYERS_ARE_NON_AUTHORITATIVE_POLICY, str)
         assert "POLICY_3" in INFLUENCE_LAYERS_ARE_NON_AUTHORITATIVE_POLICY
 
     def test_A06_diagnostics_canonical_policy_exists(self):
         from core.runtime_decision_observability import DIAGNOSTICS_SURFACE_IS_CANONICAL_NOT_PARALLEL_POLICY
+
         assert isinstance(DIAGNOSTICS_SURFACE_IS_CANONICAL_NOT_PARALLEL_POLICY, str)
         assert "POLICY_4" in DIAGNOSTICS_SURFACE_IS_CANONICAL_NOT_PARALLEL_POLICY
 
     def test_A07_kernel_sentinel_exists(self):
         try:
             from core.agent.kernel import RUNTIME_DECISION_OBSERVABILITY_WIRED_INTO_KERNEL_PR20
+
             assert isinstance(RUNTIME_DECISION_OBSERVABILITY_WIRED_INTO_KERNEL_PR20, str)
             assert "PR20" in RUNTIME_DECISION_OBSERVABILITY_WIRED_INTO_KERNEL_PR20
         except ImportError:
@@ -221,11 +227,13 @@ class TestGroupA_Sentinels:
 
     def test_A09_governance_sentinel_exists(self):
         from core.node_invocation_governance import RUNTIME_DECISION_OBSERVABILITY_ALIGNED_GOVERNANCE_PR20
+
         assert isinstance(RUNTIME_DECISION_OBSERVABILITY_ALIGNED_GOVERNANCE_PR20, str)
         assert "PR20" in RUNTIME_DECISION_OBSERVABILITY_ALIGNED_GOVERNANCE_PR20
 
     def test_A10_empty_explanation_sentinel_has_expected_shape(self):
         from core.runtime_decision_observability import EMPTY_RUNTIME_DECISION_EXPLANATION
+
         assert EMPTY_RUNTIME_DECISION_EXPLANATION.execution_path == "unknown"
         assert "EMPTY_SENTINEL" in EMPTY_RUNTIME_DECISION_EXPLANATION.source_authority
 
@@ -238,12 +246,14 @@ class TestGroupA_Sentinels:
 class TestGroupB_InfluenceClass:
     def test_B01_all_values_are_strings(self):
         from core.runtime_decision_observability import InfluenceClass
+
         for member in InfluenceClass:
             assert isinstance(member.value, str)
             assert member.value
 
     def test_B02_known_values_stable(self):
         from core.runtime_decision_observability import InfluenceClass
+
         assert InfluenceClass.HARD_GATE.value == "hard_gate"
         assert InfluenceClass.SOFT_HINT.value == "soft_hint"
         assert InfluenceClass.POLICY_BIAS.value == "policy_bias"
@@ -254,6 +264,7 @@ class TestGroupB_InfluenceClass:
 
     def test_B03_round_trip_via_value(self):
         from core.runtime_decision_observability import InfluenceClass
+
         for member in InfluenceClass:
             assert InfluenceClass(member.value) is member
 
@@ -265,7 +276,8 @@ class TestGroupB_InfluenceClass:
 
 class TestGroupC_RuntimeDecisionRecord:
     def test_C01_construction_with_defaults(self):
-        from core.runtime_decision_observability import RuntimeDecisionRecord, InfluenceClass
+        from core.runtime_decision_observability import InfluenceClass, RuntimeDecisionRecord
+
         r = RuntimeDecisionRecord(
             layer_name="test",
             influence_class=InfluenceClass.SOFT_HINT,
@@ -276,7 +288,8 @@ class TestGroupC_RuntimeDecisionRecord:
         assert r.detail == {}
 
     def test_C02_to_dict_expected_keys(self):
-        from core.runtime_decision_observability import RuntimeDecisionRecord, InfluenceClass
+        from core.runtime_decision_observability import InfluenceClass, RuntimeDecisionRecord
+
         r = RuntimeDecisionRecord(
             layer_name="memory_bias",
             influence_class=InfluenceClass.MEMORY_INFLUENCE,
@@ -289,7 +302,8 @@ class TestGroupC_RuntimeDecisionRecord:
         assert d["influence_class"] == "memory_influence"
 
     def test_C03_from_dict_round_trip(self):
-        from core.runtime_decision_observability import RuntimeDecisionRecord, InfluenceClass
+        from core.runtime_decision_observability import InfluenceClass, RuntimeDecisionRecord
+
         r = RuntimeDecisionRecord(
             layer_name="task_semantic",
             influence_class=InfluenceClass.TASK_SEMANTIC_INFLUENCE,
@@ -306,12 +320,15 @@ class TestGroupC_RuntimeDecisionRecord:
         assert r2.detail == r.detail
 
     def test_C04_from_dict_degrades_on_unknown_influence_class(self):
-        from core.runtime_decision_observability import RuntimeDecisionRecord, InfluenceClass
-        r = RuntimeDecisionRecord.from_dict({
-            "layer_name": "unknown",
-            "influence_class": "nonexistent_class",
-            "active": True,
-        })
+        from core.runtime_decision_observability import InfluenceClass, RuntimeDecisionRecord
+
+        r = RuntimeDecisionRecord.from_dict(
+            {
+                "layer_name": "unknown",
+                "influence_class": "nonexistent_class",
+                "active": True,
+            }
+        )
         # Should default to SOFT_HINT
         assert r.influence_class == InfluenceClass.SOFT_HINT
 
@@ -324,6 +341,7 @@ class TestGroupC_RuntimeDecisionRecord:
 class TestGroupD_RuntimeDecisionExplanation:
     def test_D01_construction_with_defaults(self):
         from core.runtime_decision_observability import RuntimeDecisionExplanation
+
         e = RuntimeDecisionExplanation()
         assert e.execution_path == ""
         assert e.hard_gates == []
@@ -332,24 +350,38 @@ class TestGroupD_RuntimeDecisionExplanation:
 
     def test_D02_to_dict_all_guaranteed_keys(self):
         from core.runtime_decision_observability import RuntimeDecisionExplanation
+
         e = RuntimeDecisionExplanation(execution_path="agent_execute")
         d = e.to_dict()
         for key in (
-            "execution_path", "model_selected", "provider_selected",
-            "model_selection_reason", "task_hint",
-            "task_semantic_influenced_routing", "task_semantic_influenced_planner",
-            "hard_gates", "soft_influences",
-            "node_allowed", "node_denial_reasons",
-            "activation_budget_active", "activation_budget_mode",
-            "memory_bias_posture", "memory_influenced_planner",
-            "cognitive_region", "execution_path_preference",
-            "execution_path_preference_binding", "execution_path_preference_authority",
-            "planner_strategy", "source_authority", "assembled_at",
+            "execution_path",
+            "model_selected",
+            "provider_selected",
+            "model_selection_reason",
+            "task_hint",
+            "task_semantic_influenced_routing",
+            "task_semantic_influenced_planner",
+            "hard_gates",
+            "soft_influences",
+            "node_allowed",
+            "node_denial_reasons",
+            "activation_budget_active",
+            "activation_budget_mode",
+            "memory_bias_posture",
+            "memory_influenced_planner",
+            "cognitive_region",
+            "execution_path_preference",
+            "execution_path_preference_binding",
+            "execution_path_preference_authority",
+            "planner_strategy",
+            "source_authority",
+            "assembled_at",
         ):
             assert key in d, f"Missing key: {key}"
 
     def test_D03_from_dict_round_trip(self):
         from core.runtime_decision_observability import RuntimeDecisionExplanation
+
         e = RuntimeDecisionExplanation(
             execution_path="multimodal_route",
             model_selected="gpt-4o",
@@ -363,13 +395,17 @@ class TestGroupD_RuntimeDecisionExplanation:
 
     def test_D04_has_hard_gate_false_when_no_gates(self):
         from core.runtime_decision_observability import RuntimeDecisionExplanation
+
         e = RuntimeDecisionExplanation()
         assert e.has_hard_gate is False
 
     def test_D05_has_hard_gate_true_when_active_hard_gate(self):
         from core.runtime_decision_observability import (
-            RuntimeDecisionExplanation, RuntimeDecisionRecord, InfluenceClass
+            InfluenceClass,
+            RuntimeDecisionExplanation,
+            RuntimeDecisionRecord,
         )
+
         gate = RuntimeDecisionRecord(
             layer_name="governance",
             influence_class=InfluenceClass.HARD_GATE,
@@ -380,8 +416,11 @@ class TestGroupD_RuntimeDecisionExplanation:
 
     def test_D06_active_influence_count_counts_active_soft(self):
         from core.runtime_decision_observability import (
-            RuntimeDecisionExplanation, RuntimeDecisionRecord, InfluenceClass
+            InfluenceClass,
+            RuntimeDecisionExplanation,
+            RuntimeDecisionRecord,
         )
+
         r1 = RuntimeDecisionRecord("a", InfluenceClass.SOFT_HINT, active=True)
         r2 = RuntimeDecisionRecord("b", InfluenceClass.MEMORY_INFLUENCE, active=False)
         r3 = RuntimeDecisionRecord("c", InfluenceClass.TASK_SEMANTIC_INFLUENCE, active=True)
@@ -390,6 +429,7 @@ class TestGroupD_RuntimeDecisionExplanation:
 
     def test_D07_from_dict_degrades_on_partial_data(self):
         from core.runtime_decision_observability import RuntimeDecisionExplanation
+
         e = RuntimeDecisionExplanation.from_dict({})
         assert e.execution_path == ""
         assert e.hard_gates == []
@@ -403,19 +443,20 @@ class TestGroupD_RuntimeDecisionExplanation:
 
 class TestGroupE_BuildExplanation:
     def test_E01_empty_call_returns_valid_explanation(self):
-        from core.runtime_decision_observability import (
-            build_runtime_decision_explanation, RuntimeDecisionExplanation
-        )
+        from core.runtime_decision_observability import RuntimeDecisionExplanation, build_runtime_decision_explanation
+
         e = build_runtime_decision_explanation()
         assert isinstance(e, RuntimeDecisionExplanation)
 
     def test_E02_task_hint_reflected(self):
         from core.runtime_decision_observability import build_runtime_decision_explanation
+
         e = build_runtime_decision_explanation(task_hint="CODING")
         assert e.task_hint == "CODING"
 
     def test_E03_task_semantic_influenced_routing_reflected(self):
         from core.runtime_decision_observability import build_runtime_decision_explanation
+
         e = build_runtime_decision_explanation(
             task_hint="CODING",
             task_semantic_influenced_routing=True,
@@ -424,6 +465,7 @@ class TestGroupE_BuildExplanation:
 
     def test_E04_task_semantic_influenced_planner_reflected(self):
         from core.runtime_decision_observability import build_runtime_decision_explanation
+
         e = build_runtime_decision_explanation(
             task_hint="CODING",
             task_semantic_influenced_planner=True,
@@ -432,6 +474,7 @@ class TestGroupE_BuildExplanation:
 
     def test_E05_activation_budget_hint_reflected(self):
         from core.runtime_decision_observability import build_runtime_decision_explanation
+
         hint = _make_budget_hint(breadth_mode="broad", influenced=True)
         e = build_runtime_decision_explanation(activation_budget_hint=hint)
         assert e.activation_budget_active is True
@@ -439,6 +482,7 @@ class TestGroupE_BuildExplanation:
 
     def test_E06_memory_bias_hint_reflected(self):
         from core.runtime_decision_observability import build_runtime_decision_explanation
+
         hint = _make_memory_hint(posture="retrieval", influenced=True)
         e = build_runtime_decision_explanation(memory_bias_hint=hint)
         assert e.memory_bias_posture == "retrieval"
@@ -446,6 +490,7 @@ class TestGroupE_BuildExplanation:
 
     def test_E07_governance_denied_creates_hard_gate(self):
         from core.runtime_decision_observability import build_runtime_decision_explanation
+
         gov = _make_governance_dict(eligible=False, denial_reasons=["node_archived"])
         e = build_runtime_decision_explanation(governance_decision=gov)
         assert e.has_hard_gate is True
@@ -454,6 +499,7 @@ class TestGroupE_BuildExplanation:
 
     def test_E08_governance_allowed_sets_node_allowed_true(self):
         from core.runtime_decision_observability import build_runtime_decision_explanation
+
         gov = _make_governance_dict(eligible=True)
         e = build_runtime_decision_explanation(governance_decision=gov)
         assert e.node_allowed is True
@@ -461,6 +507,7 @@ class TestGroupE_BuildExplanation:
 
     def test_E09_cognitive_hint_dict_reflected(self):
         from core.runtime_decision_observability import build_runtime_decision_explanation
+
         cog = _make_cognitive_hint_dict(region="MANIFEST", path_pref="direct")
         e = build_runtime_decision_explanation(cognitive_hint_dict=cog)
         assert e.cognitive_region == "MANIFEST"
@@ -468,11 +515,13 @@ class TestGroupE_BuildExplanation:
 
     def test_E10_planner_strategy_reflected(self):
         from core.runtime_decision_observability import build_runtime_decision_explanation
+
         e = build_runtime_decision_explanation(planner_strategy="team_swarm")
         assert e.planner_strategy == "team_swarm"
 
     def test_E11_planner_strategy_driven_by_fields(self):
         from core.runtime_decision_observability import build_runtime_decision_explanation
+
         e = build_runtime_decision_explanation(
             planner_strategy="single_agent",
             activation_budget_hint=_make_budget_hint(influenced=True),
@@ -489,8 +538,11 @@ class TestGroupE_BuildExplanation:
 
     def test_E12_extra_records_appended_to_soft_influences(self):
         from core.runtime_decision_observability import (
-            build_runtime_decision_explanation, RuntimeDecisionRecord, InfluenceClass
+            InfluenceClass,
+            RuntimeDecisionRecord,
+            build_runtime_decision_explanation,
         )
+
         extra = RuntimeDecisionRecord(
             layer_name="custom_layer",
             influence_class=InfluenceClass.TOPOLOGY_INFLUENCE,
@@ -503,8 +555,11 @@ class TestGroupE_BuildExplanation:
 
     def test_E13_extra_records_hard_gate_to_hard_gates(self):
         from core.runtime_decision_observability import (
-            build_runtime_decision_explanation, RuntimeDecisionRecord, InfluenceClass
+            InfluenceClass,
+            RuntimeDecisionRecord,
+            build_runtime_decision_explanation,
         )
+
         extra = RuntimeDecisionRecord(
             layer_name="custom_gate",
             influence_class=InfluenceClass.HARD_GATE,
@@ -516,16 +571,20 @@ class TestGroupE_BuildExplanation:
 
     def test_E14_never_raises_on_error(self):
         from core.runtime_decision_observability import (
-            build_runtime_decision_explanation, EMPTY_RUNTIME_DECISION_EXPLANATION
+            EMPTY_RUNTIME_DECISION_EXPLANATION,
+            build_runtime_decision_explanation,
         )
+
         # Pass in garbage extra_records to trigger internal error
         e = build_runtime_decision_explanation(extra_records=["not_a_record"])  # type: ignore
         # Should either return a valid explanation or the empty sentinel
         from core.runtime_decision_observability import RuntimeDecisionExplanation
+
         assert isinstance(e, RuntimeDecisionExplanation)
 
     def test_E15_no_task_hint_no_task_semantic_influence(self):
         from core.runtime_decision_observability import build_runtime_decision_explanation
+
         e = build_runtime_decision_explanation(task_hint=None)
         assert e.task_hint is None
         assert e.task_semantic_influenced_routing is False
@@ -541,15 +600,25 @@ class TestGroupE_BuildExplanation:
 
 class TestGroupF_BuildDiagnostics:
     _REQUIRED_KEYS = (
-        "execution_path", "model_selected", "provider_selected",
-        "model_selection_reason", "task_hint",
-        "task_semantic_influenced_routing", "task_semantic_influenced_planner",
-        "has_hard_gate", "hard_gate_count",
-        "node_allowed", "node_denial_reasons",
-        "activation_budget_active", "activation_budget_mode",
-        "memory_bias_posture", "memory_influenced_planner",
-        "cognitive_region", "execution_path_preference",
-        "execution_path_preference_binding", "execution_path_preference_authority",
+        "execution_path",
+        "model_selected",
+        "provider_selected",
+        "model_selection_reason",
+        "task_hint",
+        "task_semantic_influenced_routing",
+        "task_semantic_influenced_planner",
+        "has_hard_gate",
+        "hard_gate_count",
+        "node_allowed",
+        "node_denial_reasons",
+        "activation_budget_active",
+        "activation_budget_mode",
+        "memory_bias_posture",
+        "memory_influenced_planner",
+        "cognitive_region",
+        "execution_path_preference",
+        "execution_path_preference_binding",
+        "execution_path_preference_authority",
         "planner_strategy",
         "active_soft_influence_count",
         "influence_layers",
@@ -559,20 +628,24 @@ class TestGroupF_BuildDiagnostics:
 
     def test_F01_none_input_returns_fallback_with_all_keys(self):
         from core.runtime_decision_observability import build_runtime_decision_diagnostics
+
         d = build_runtime_decision_diagnostics(None)
         for key in self._REQUIRED_KEYS:
             assert key in d, f"Missing key: {key}"
 
     def test_F02_non_explanation_input_returns_fallback(self):
         from core.runtime_decision_observability import build_runtime_decision_diagnostics
+
         d = build_runtime_decision_diagnostics("not_an_explanation")  # type: ignore
         for key in self._REQUIRED_KEYS:
             assert key in d, f"Missing key: {key}"
 
     def test_F03_full_explanation_all_keys_present(self):
         from core.runtime_decision_observability import (
-            build_runtime_decision_explanation, build_runtime_decision_diagnostics
+            build_runtime_decision_diagnostics,
+            build_runtime_decision_explanation,
         )
+
         e = build_runtime_decision_explanation(
             execution_path="agent_execute",
             task_hint="CODING",
@@ -585,28 +658,30 @@ class TestGroupF_BuildDiagnostics:
 
     def test_F04_has_hard_gate_reflects_explanation(self):
         from core.runtime_decision_observability import (
-            build_runtime_decision_explanation, build_runtime_decision_diagnostics
+            build_runtime_decision_diagnostics,
+            build_runtime_decision_explanation,
         )
-        e = build_runtime_decision_explanation(
-            governance_decision=_make_governance_dict(eligible=False)
-        )
+
+        e = build_runtime_decision_explanation(governance_decision=_make_governance_dict(eligible=False))
         d = build_runtime_decision_diagnostics(e)
         assert d["has_hard_gate"] is True
 
     def test_F05_hard_gate_count(self):
         from core.runtime_decision_observability import (
-            build_runtime_decision_explanation, build_runtime_decision_diagnostics
+            build_runtime_decision_diagnostics,
+            build_runtime_decision_explanation,
         )
-        e = build_runtime_decision_explanation(
-            governance_decision=_make_governance_dict(eligible=False)
-        )
+
+        e = build_runtime_decision_explanation(governance_decision=_make_governance_dict(eligible=False))
         d = build_runtime_decision_diagnostics(e)
         assert d["hard_gate_count"] >= 1
 
     def test_F05b_execution_path_preference_marked_non_binding(self):
         from core.runtime_decision_observability import (
-            build_runtime_decision_explanation, build_runtime_decision_diagnostics
+            build_runtime_decision_diagnostics,
+            build_runtime_decision_explanation,
         )
+
         e = build_runtime_decision_explanation(
             cognitive_hint_dict=_make_cognitive_hint_dict(region="LIMINAL", path_pref="planning")
         )
@@ -616,8 +691,10 @@ class TestGroupF_BuildDiagnostics:
 
     def test_F06_active_soft_influence_count(self):
         from core.runtime_decision_observability import (
-            build_runtime_decision_explanation, build_runtime_decision_diagnostics
+            build_runtime_decision_diagnostics,
+            build_runtime_decision_explanation,
         )
+
         e = build_runtime_decision_explanation(
             activation_budget_hint=_make_budget_hint(influenced=True),
             memory_bias_hint=_make_memory_hint(influenced=True),
@@ -627,8 +704,10 @@ class TestGroupF_BuildDiagnostics:
 
     def test_F07_influence_layers_lists_all_records(self):
         from core.runtime_decision_observability import (
-            build_runtime_decision_explanation, build_runtime_decision_diagnostics
+            build_runtime_decision_diagnostics,
+            build_runtime_decision_explanation,
         )
+
         e = build_runtime_decision_explanation(
             task_hint="REASONING",
             task_semantic_influenced_routing=True,
@@ -640,8 +719,10 @@ class TestGroupF_BuildDiagnostics:
 
     def test_F08_include_detail_true_adds_detail_key(self):
         from core.runtime_decision_observability import (
-            build_runtime_decision_explanation, build_runtime_decision_diagnostics
+            build_runtime_decision_diagnostics,
+            build_runtime_decision_explanation,
         )
+
         e = build_runtime_decision_explanation(
             activation_budget_hint=_make_budget_hint(),
         )
@@ -651,8 +732,10 @@ class TestGroupF_BuildDiagnostics:
 
     def test_F09_include_detail_false_omits_detail(self):
         from core.runtime_decision_observability import (
-            build_runtime_decision_explanation, build_runtime_decision_diagnostics
+            build_runtime_decision_diagnostics,
+            build_runtime_decision_explanation,
         )
+
         e = build_runtime_decision_explanation(
             activation_budget_hint=_make_budget_hint(),
         )
@@ -662,12 +745,14 @@ class TestGroupF_BuildDiagnostics:
 
     def test_F10_observability_authority_key_present(self):
         from core.runtime_decision_observability import build_runtime_decision_diagnostics
+
         d = build_runtime_decision_diagnostics(None)
         assert "observability_authority" in d
         assert d["observability_authority"]
 
     def test_F11_never_raises_on_bad_input(self):
         from core.runtime_decision_observability import build_runtime_decision_diagnostics
+
         for bad in (None, "string", 42, {}, []):
             d = build_runtime_decision_diagnostics(bad)  # type: ignore
             assert isinstance(d, dict)
@@ -681,24 +766,28 @@ class TestGroupF_BuildDiagnostics:
 class TestGroupG_EnrichMultimodalRoute:
     def test_G01_adds_pr20_task_hint(self):
         from core.runtime_decision_observability import enrich_multimodal_route_with_observability
+
         route = {"route_type": "text_only", "is_native_multimodal": False}
         enrich_multimodal_route_with_observability(route, task_hint="CODING")
         assert route["pr20_task_hint"] == "CODING"
 
     def test_G02_adds_pr20_task_semantic_influenced_routing(self):
         from core.runtime_decision_observability import enrich_multimodal_route_with_observability
+
         route = {"route_type": "native_multimodal"}
         enrich_multimodal_route_with_observability(route, task_semantic_influenced=True)
         assert route["pr20_task_semantic_influenced_routing"] is True
 
     def test_G03_adds_pr20_observability_source(self):
         from core.runtime_decision_observability import enrich_multimodal_route_with_observability
+
         route = {}
         enrich_multimodal_route_with_observability(route)
         assert "pr20_observability_source" in route
 
     def test_G04_original_route_type_preserved(self):
         from core.runtime_decision_observability import enrich_multimodal_route_with_observability
+
         route = {"route_type": "partial_multimodal", "model": "gpt-4o"}
         enrich_multimodal_route_with_observability(route, task_hint="CREATIVE")
         assert route["route_type"] == "partial_multimodal"
@@ -706,6 +795,7 @@ class TestGroupG_EnrichMultimodalRoute:
 
     def test_G05_never_raises_on_none_task_hint(self):
         from core.runtime_decision_observability import enrich_multimodal_route_with_observability
+
         route = {}
         enrich_multimodal_route_with_observability(route, task_hint=None)
         assert route["pr20_task_hint"] is None
@@ -719,40 +809,42 @@ class TestGroupG_EnrichMultimodalRoute:
 class TestGroupH_EnrichGovernanceDecision:
     def test_H01_adds_pr20_observability_context(self):
         from core.runtime_decision_observability import enrich_governance_decision_with_observability
+
         d = {"node_id": "test_node"}
         enrich_governance_decision_with_observability(d)
         assert "pr20_observability_context" in d
 
     def test_H02_pr20_context_has_task_hint(self):
         from core.runtime_decision_observability import enrich_governance_decision_with_observability
+
         d = {}
         enrich_governance_decision_with_observability(d, task_hint="CODING")
         assert d["pr20_observability_context"]["task_hint"] == "CODING"
 
     def test_H03_pr20_context_has_activation_budget_mode(self):
         from core.runtime_decision_observability import enrich_governance_decision_with_observability
+
         d = {}
-        enrich_governance_decision_with_observability(
-            d, activation_budget_hint=_make_budget_hint(breadth_mode="broad")
-        )
+        enrich_governance_decision_with_observability(d, activation_budget_hint=_make_budget_hint(breadth_mode="broad"))
         assert d["pr20_observability_context"]["activation_budget_mode"] == "broad"
 
     def test_H04_pr20_context_has_memory_bias_posture(self):
         from core.runtime_decision_observability import enrich_governance_decision_with_observability
+
         d = {}
-        enrich_governance_decision_with_observability(
-            d, memory_bias_hint=_make_memory_hint(posture="retrieval")
-        )
+        enrich_governance_decision_with_observability(d, memory_bias_hint=_make_memory_hint(posture="retrieval"))
         assert d["pr20_observability_context"]["memory_bias_posture"] == "retrieval"
 
     def test_H05_observability_pr20_active_true(self):
         from core.runtime_decision_observability import enrich_governance_decision_with_observability
+
         d = {}
         enrich_governance_decision_with_observability(d)
         assert d["pr20_observability_context"]["observability_pr20_active"] is True
 
     def test_H06_never_raises_on_none_inputs(self):
         from core.runtime_decision_observability import enrich_governance_decision_with_observability
+
         d = {}
         enrich_governance_decision_with_observability(
             d,
@@ -770,19 +862,24 @@ class TestGroupH_EnrichGovernanceDecision:
 
 class TestGroupI_GovernanceWiring:
     def test_I01_evaluate_invocation_governance_accepts_memory_bias(self):
-        from core.node_invocation_governance import evaluate_invocation_governance
         import inspect
+
+        from core.node_invocation_governance import evaluate_invocation_governance
+
         sig = inspect.signature(evaluate_invocation_governance)
         assert "memory_bias" in sig.parameters
 
     def test_I02_evaluate_invocation_governance_accepts_task_hint(self):
-        from core.node_invocation_governance import evaluate_invocation_governance
         import inspect
+
+        from core.node_invocation_governance import evaluate_invocation_governance
+
         sig = inspect.signature(evaluate_invocation_governance)
         assert "task_hint" in sig.parameters
 
     def test_I03_no_crash_with_none_memory_bias_and_task_hint(self):
         from core.node_invocation_governance import evaluate_invocation_governance
+
         # Should not raise even with both None (unregistered node path)
         result = evaluate_invocation_governance(
             "nonexistent_node_xyz",
@@ -794,6 +891,7 @@ class TestGroupI_GovernanceWiring:
 
     def test_I04_governance_decision_structure_unchanged(self):
         from core.node_invocation_governance import evaluate_invocation_governance
+
         result = evaluate_invocation_governance("some_node_abc")
         d = result.to_dict()
         # PR-11 fields must still be present
@@ -811,8 +909,10 @@ class TestGroupI_GovernanceWiring:
 class TestGroupJ_KernelWiring:
     def test_J01_kernel_response_has_runtime_decision_explanation_field(self):
         try:
-            from core.agent.kernel import KernelResponse
             import inspect
+
+            from core.agent.kernel import KernelResponse
+
             # Check field exists in class fields (pydantic model)
             fields = KernelResponse.model_fields
             assert "runtime_decision_explanation" in fields
@@ -822,6 +922,7 @@ class TestGroupJ_KernelWiring:
     def test_J02_to_api_dict_includes_runtime_decision_explanation_key(self):
         try:
             from core.agent.kernel import KernelResponse
+
             with open("core/agent/kernel.py") as f:
                 content = f.read()
             assert '"runtime_decision_explanation"' in content
@@ -836,22 +937,21 @@ class TestGroupJ_KernelWiring:
 
 class TestGroupK_BackwardCompatibility:
     def test_K01_empty_call_to_build_explanation_works(self):
-        from core.runtime_decision_observability import (
-            build_runtime_decision_explanation, RuntimeDecisionExplanation
-        )
+        from core.runtime_decision_observability import RuntimeDecisionExplanation, build_runtime_decision_explanation
+
         e = build_runtime_decision_explanation()
         assert isinstance(e, RuntimeDecisionExplanation)
 
     def test_K02_governance_without_new_params_works(self):
         from core.node_invocation_governance import evaluate_invocation_governance
+
         # Old-style call without memory_bias / task_hint
         result = evaluate_invocation_governance("nonexistent_compat_node")
         assert result is not None
 
     def test_K03_build_explanation_never_raises_on_garbage(self):
-        from core.runtime_decision_observability import (
-            build_runtime_decision_explanation, RuntimeDecisionExplanation
-        )
+        from core.runtime_decision_observability import RuntimeDecisionExplanation, build_runtime_decision_explanation
+
         for garbage in (
             {"activation_budget_hint": "string_not_dict"},
             {"memory_bias_hint": 42},
@@ -862,6 +962,7 @@ class TestGroupK_BackwardCompatibility:
 
     def test_K04_build_diagnostics_never_raises_on_garbage(self):
         from core.runtime_decision_observability import build_runtime_decision_diagnostics
+
         for garbage in (None, "bad", 0, [], {}):
             d = build_runtime_decision_diagnostics(garbage)  # type: ignore
             assert isinstance(d, dict)
@@ -874,7 +975,8 @@ class TestGroupK_BackwardCompatibility:
 
 class TestGroupL_InfluenceHierarchy:
     def test_L01_memory_novelty_does_not_create_hard_gate(self):
-        from core.runtime_decision_observability import build_runtime_decision_explanation, InfluenceClass
+        from core.runtime_decision_observability import InfluenceClass, build_runtime_decision_explanation
+
         hint = _make_memory_hint(posture="novelty", influenced=True)
         e = build_runtime_decision_explanation(memory_bias_hint=hint)
         # Memory influence should be in soft_influences, NOT in hard_gates
@@ -885,7 +987,8 @@ class TestGroupL_InfluenceHierarchy:
         assert mem_soft[0].influence_class == InfluenceClass.MEMORY_INFLUENCE
 
     def test_L02_governance_denial_creates_hard_gate_record(self):
-        from core.runtime_decision_observability import build_runtime_decision_explanation, InfluenceClass
+        from core.runtime_decision_observability import InfluenceClass, build_runtime_decision_explanation
+
         gov = _make_governance_dict(eligible=False, denial_reasons=["archived"])
         e = build_runtime_decision_explanation(governance_decision=gov)
         gov_gates = [r for r in e.hard_gates if r.layer_name == "invocation_governance"]
@@ -894,7 +997,8 @@ class TestGroupL_InfluenceHierarchy:
         assert gov_gates[0].active is True
 
     def test_L03_task_semantic_does_not_elevate_to_hard_gate(self):
-        from core.runtime_decision_observability import build_runtime_decision_explanation, InfluenceClass
+        from core.runtime_decision_observability import InfluenceClass, build_runtime_decision_explanation
+
         e = build_runtime_decision_explanation(
             task_hint="CODING",
             task_semantic_influenced_routing=True,
@@ -906,7 +1010,8 @@ class TestGroupL_InfluenceHierarchy:
         assert task_soft[0].influence_class == InfluenceClass.TASK_SEMANTIC_INFLUENCE
 
     def test_L04_execution_posture_does_not_elevate_to_hard_gate(self):
-        from core.runtime_decision_observability import build_runtime_decision_explanation, InfluenceClass
+        from core.runtime_decision_observability import InfluenceClass, build_runtime_decision_explanation
+
         hint = _make_budget_hint(influenced=True)
         e = build_runtime_decision_explanation(activation_budget_hint=hint)
         budget_hard = [r for r in e.hard_gates if r.layer_name == "activation_budget"]
@@ -917,6 +1022,7 @@ class TestGroupL_InfluenceHierarchy:
 
     def test_L05_multiple_soft_influences_stack(self):
         from core.runtime_decision_observability import build_runtime_decision_explanation
+
         e = build_runtime_decision_explanation(
             task_hint="REASONING",
             task_semantic_influenced_routing=True,
@@ -937,8 +1043,8 @@ class TestGroupL_InfluenceHierarchy:
 class TestGroupM_DiagnosticSemantics:
     def test_M01_diagnostics_explicitly_classifies_field_semantics(self):
         from core.runtime_decision_observability import (
-            build_runtime_decision_explanation,
             build_runtime_decision_diagnostics,
+            build_runtime_decision_explanation,
         )
 
         explanation = build_runtime_decision_explanation(
@@ -961,8 +1067,8 @@ class TestGroupM_DiagnosticSemantics:
 
     def test_M02_influence_layers_mark_decision_role(self):
         from core.runtime_decision_observability import (
-            build_runtime_decision_explanation,
             build_runtime_decision_diagnostics,
+            build_runtime_decision_explanation,
         )
 
         explanation = build_runtime_decision_explanation(

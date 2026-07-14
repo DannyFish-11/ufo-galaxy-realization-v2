@@ -97,6 +97,11 @@ from collections import deque
 import pytest
 
 import core.network_graph_runtime as _nmod
+from core.capability_assimilation import (
+    NodeParticipantKind,
+    get_capability_assimilation_layer,
+    reset_capability_assimilation_layer,
+)
 from core.network_graph_runtime import (
     NETWORK_GRAPH_CONTRACT_VERSION,
     NETWORK_GRAPH_RUNTIME_AUTHORITY,
@@ -111,16 +116,10 @@ from core.network_graph_runtime import (
     get_network_graph_runtime,
     reset_network_graph_runtime,
 )
-from core.capability_assimilation import (
-    NodeParticipantKind,
-    get_capability_assimilation_layer,
-    reset_capability_assimilation_layer,
-)
 from core.task_graph_runtime import (
     get_task_graph_runtime,
     reset_task_graph_runtime,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -211,8 +210,17 @@ def test_d01_network_node_minimal_construction():
 def test_d02_network_node_to_dict_keys():
     n = NetworkNode(node_id="n1")
     d = n.to_dict()
-    for key in ("node_id", "role", "host", "port", "transport_hints", "tags",
-                "metadata", "registered_at", "last_updated_at"):
+    for key in (
+        "node_id",
+        "role",
+        "host",
+        "port",
+        "transport_hints",
+        "tags",
+        "metadata",
+        "registered_at",
+        "last_updated_at",
+    ):
         assert key in d, f"Missing key: {key}"
 
 
@@ -254,16 +262,12 @@ def test_e03_network_edge_to_dict_json_serialisable():
 
 
 def test_f01_network_graph_record_construction():
-    rec = NetworkGraphRecord(
-        record_id="r1", event_kind="node_registered", node_id="n1"
-    )
+    rec = NetworkGraphRecord(record_id="r1", event_kind="node_registered", node_id="n1")
     assert rec.record_id == "r1"
 
 
 def test_f02_network_graph_record_to_dict_keys():
-    rec = NetworkGraphRecord(
-        record_id="r1", event_kind="node_registered", node_id="n1"
-    )
+    rec = NetworkGraphRecord(record_id="r1", event_kind="node_registered", node_id="n1")
     d = rec.to_dict()
     for key in ("record_id", "event_kind", "node_id", "role", "timestamp", "details"):
         assert key in d, f"Missing key: {key}"
@@ -376,9 +380,7 @@ def test_i01_register_edge_returns_edge():
 def test_i02_register_edge_empty_id_raises():
     runtime = get_network_graph_runtime()
     with pytest.raises(ValueError):
-        runtime.register_edge(
-            NetworkEdge(edge_id="", source_node_id="a", target_node_id="b")
-        )
+        runtime.register_edge(NetworkEdge(edge_id="", source_node_id="a", target_node_id="b"))
 
 
 def test_i03_all_edges_returns_list():
@@ -489,17 +491,13 @@ def test_l01_worker_node_projects_to_task_graph():
 
 def test_l02_legacy_facade_not_projected_to_task_graph():
     layer = get_capability_assimilation_layer()
-    rec = layer.assimilate(
-        "legacy-facade-1", participant_kind=NodeParticipantKind.LEGACY_FACADE
-    )
+    rec = layer.assimilate("legacy-facade-1", participant_kind=NodeParticipantKind.LEGACY_FACADE)
     assert rec.projected_to_task_graph is False
 
 
 def test_l03_fabric_participant_not_projected_to_task_graph():
     layer = get_capability_assimilation_layer()
-    rec = layer.assimilate(
-        "fabric-only-1", participant_kind=NodeParticipantKind.FABRIC_PARTICIPANT
-    )
+    rec = layer.assimilate("fabric-only-1", participant_kind=NodeParticipantKind.FABRIC_PARTICIPANT)
     assert rec.projected_to_task_graph is False
 
 

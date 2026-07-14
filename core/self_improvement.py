@@ -83,8 +83,10 @@ logger = logging.getLogger("Galaxy.SelfImprovement")
 try:
     from core.rag_memory import get_rag_memory  # noqa: F401 — re-exported for patching
 except ImportError:
+
     def get_rag_memory():  # type: ignore[misc]
         raise ImportError("core.rag_memory is not available")
+
 
 # ---------------------------------------------------------------------------
 # Source type used when recording fixes in the Knowledge Core
@@ -353,7 +355,9 @@ class SelfHealingLoop:
             self._proposals[proposal.proposal_id] = proposal
         logger.info(
             "SelfHealingLoop: new proposal %s from '%s' — %s",
-            proposal.proposal_id, source, issue_summary[:80],
+            proposal.proposal_id,
+            source,
+            issue_summary[:80],
         )
         return proposal
 
@@ -436,7 +440,8 @@ class SelfHealingLoop:
             proposal.updated_at = time.time()
         logger.info(
             "SelfHealingLoop: proposal %s → PLAN_PATCH (files=%s)",
-            proposal_id, target_files,
+            proposal_id,
+            target_files,
         )
         return {"success": True, "proposal_id": proposal_id, "stage": EngineeringStage.PLAN_PATCH.value}
 
@@ -554,9 +559,7 @@ class SelfHealingLoop:
             proposal.validation_notes = validation_notes
             proposal.stage = EngineeringStage.VALIDATE
             proposal.updated_at = time.time()
-        logger.info(
-            "SelfHealingLoop: proposal %s → VALIDATE (passed=%s)", proposal_id, passed
-        )
+        logger.info("SelfHealingLoop: proposal %s → VALIDATE (passed=%s)", proposal_id, passed)
         return {
             "success": True,
             "proposal_id": proposal_id,
@@ -626,12 +629,14 @@ class SelfHealingLoop:
             )
             logger.info(
                 "SelfHealingLoop: proposal %s recorded to Knowledge Core → %s",
-                proposal_id, knowledge_entry_id,
+                proposal_id,
+                knowledge_entry_id,
             )
         except Exception as exc:
             logger.warning(
                 "SelfHealingLoop: Knowledge Core ingestion failed for proposal %s: %s",
-                proposal_id, exc,
+                proposal_id,
+                exc,
             )
 
         stages_completed = [s.value for s in _STAGE_ORDER]
@@ -657,7 +662,7 @@ class SelfHealingLoop:
             self._records.append(record)
             # trim oldest records if necessary
             if len(self._records) > self._max_records:
-                self._records = self._records[-self._max_records:]
+                self._records = self._records[-self._max_records :]
             # remove from pending proposals
             self._proposals.pop(proposal_id, None)
 

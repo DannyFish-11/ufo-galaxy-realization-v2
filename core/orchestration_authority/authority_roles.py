@@ -232,10 +232,7 @@ ROLE_CATALOG: Dict[AuthorityRole, Dict[str, Any]] = {
 
 #: Flat string-keyed descriptions (role value → description string).
 #: Useful for logging/docs generation without full metadata traversal.
-ROLE_DESCRIPTIONS: Dict[str, str] = {
-    role.value: info["description"]
-    for role, info in ROLE_CATALOG.items()
-}
+ROLE_DESCRIPTIONS: Dict[str, str] = {role.value: info["description"] for role, info in ROLE_CATALOG.items()}
 
 
 # ---------------------------------------------------------------------------

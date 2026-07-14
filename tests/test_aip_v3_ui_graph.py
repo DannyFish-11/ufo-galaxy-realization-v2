@@ -4,6 +4,7 @@
 AIP v3 TASK_ASSIGN / TASK_RESULT 携带结构化界面态(AG-UI ui_graph)。
 让 DAG 任务节点带着结构化控件图流转——执行侧结构优先 grounding、闭环校验。
 """
+
 from __future__ import annotations
 
 from core.schemas.aip_v3 import TaskAssignMsg, TaskResultMsg
@@ -18,12 +19,21 @@ from core.schemas.ui_element import (
 
 def _graph() -> UIGraph:
     return UIGraph(
-        root=UIElementNode(role="window", label="微信", children=[
-            UIElementNode(role="button", label="发送", clickable=True,
-                          actions=[UIActionKind.TAP],
-                          bounds=UIBounds(x=1180, y=2020, width=120, height=80)),
-        ]),
-        source=UISource.ANDROID_A11Y, app="com.tencent.mm",
+        root=UIElementNode(
+            role="window",
+            label="微信",
+            children=[
+                UIElementNode(
+                    role="button",
+                    label="发送",
+                    clickable=True,
+                    actions=[UIActionKind.TAP],
+                    bounds=UIBounds(x=1180, y=2020, width=120, height=80),
+                ),
+            ],
+        ),
+        source=UISource.ANDROID_A11Y,
+        app="com.tencent.mm",
     )
 
 

@@ -6,6 +6,7 @@ AttachedSessionRegistry;attached_runtime_session(生命周期投影)【接收】
 绝不各自铸 id。此前注册链先写投影(自铸/留空)再写 registry(另铸)——同一设备
 在两个存储里挂不同 id(双权威分歧)。
 """
+
 from __future__ import annotations
 
 import pytest
@@ -33,7 +34,8 @@ def test_fork_reuses_registry_id_when_caller_has_none():
 def test_fork_respects_explicit_id():
     reg.register_session("dev-2", posture="join_runtime")
     rec = fork.attach_runtime_session(
-        "dev-2", source_runtime_posture="join_runtime",
+        "dev-2",
+        source_runtime_posture="join_runtime",
         runtime_attachment_session_id="explicit-xyz",
     )
     assert rec.runtime_attachment_session_id == "explicit-xyz"
@@ -49,7 +51,8 @@ def test_no_divergence_registry_first_then_fork():
     """注册链顺序(registry 先铸 → 投影接收)下,两存储 id 恒一致。"""
     entry = reg.register_session("dev-4", posture="join_runtime")
     rec = fork.attach_runtime_session(
-        "dev-4", source_runtime_posture="join_runtime",
+        "dev-4",
+        source_runtime_posture="join_runtime",
         runtime_attachment_session_id=entry.runtime_attachment_session_id,
     )
     assert rec.runtime_attachment_session_id == entry.runtime_attachment_session_id

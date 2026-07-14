@@ -576,10 +576,7 @@ _DECOMMISSION_CATALOG: List[DecommissionEntry] = [
         ),
         conflict_closed="CONFLICT-009",
         pr_origin="pre-PR-S6",
-        notes=(
-            "Retained as a compatibility shim.  Must not be invoked as a "
-            "primary server-side task planner."
-        ),
+        notes=("Retained as a compatibility shim.  Must not be invoked as a " "primary server-side task planner."),
     ),
     # ------------------------------------------------------------------
     # Dispatch authority: TaskRouter / TaskScheduler retired.
@@ -637,10 +634,7 @@ _DECOMMISSION_CATALOG: List[DecommissionEntry] = [
         conflict_closed="",
         pr_origin="PR-S5",
         pr_decommission="PR-516",
-        notes=(
-            "Gated — RESIDUAL: device-side sandbox only.  "
-            "Server-side planner role is retired."
-        ),
+        notes=("Gated — RESIDUAL: device-side sandbox only.  " "Server-side planner role is retired."),
     ),
     # ------------------------------------------------------------------
     # CONFLICT-010: Projection contract — canonical ProjectionSurfaceBridge
@@ -712,14 +706,10 @@ _DECOMMISSION_CATALOG: List[DecommissionEntry] = [
 ]
 
 # Lookup index for fast path_id → entry resolution
-_CATALOG_INDEX: Dict[str, DecommissionEntry] = {
-    e.path_id: e for e in _DECOMMISSION_CATALOG
-}
+_CATALOG_INDEX: Dict[str, DecommissionEntry] = {e.path_id: e for e in _DECOMMISSION_CATALOG}
 
 # Conflicts formally closed by this PR-516 sweep
-_CONFLICTS_CLOSED: List[str] = sorted(
-    {e.conflict_closed for e in _DECOMMISSION_CATALOG if e.conflict_closed}
-)
+_CONFLICTS_CLOSED: List[str] = sorted({e.conflict_closed for e in _DECOMMISSION_CATALOG if e.conflict_closed})
 
 
 # ===========================================================================
@@ -832,8 +822,7 @@ class LegacySystemDecommissionRuntime:
                     reason="RETIRED path activated — non-regression violation",
                 )
                 self._logger.error(
-                    "NON-REGRESSION VIOLATION: RETIRED path activated | "
-                    "path_id=%s caller=%s canonical=%s",
+                    "NON-REGRESSION VIOLATION: RETIRED path activated | " "path_id=%s caller=%s canonical=%s",
                     path_id,
                     caller,
                     entry.canonical_replacement,

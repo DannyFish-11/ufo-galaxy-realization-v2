@@ -41,7 +41,6 @@ import json
 import re
 from typing import Any, Dict, List, Optional
 
-
 # ---------------------------------------------------------------------------
 # LLM Response stand-in
 # ---------------------------------------------------------------------------
@@ -76,9 +75,7 @@ STUB_MODEL: str = "contract-stub-v1"
 
 # Valid intent-classification JSON so IntentRouter's LLM-enhancement path
 # can parse the result and route the conversation correctly.
-_STUB_INTENT_JSON: str = json.dumps(
-    {"mode": "chat_only", "confidence": 0.92, "intent": "chat", "task_hint": ""}
-)
+_STUB_INTENT_JSON: str = json.dumps({"mode": "chat_only", "confidence": 0.92, "intent": "chat", "task_hint": ""})
 
 
 class LLMContractStub:
@@ -125,15 +122,10 @@ class LLMContractStub:
         # Detect intent-classification calls so IntentRouter can parse the
         # JSON and classify the intent correctly.  The classification prompt
         # always asks for JSON with "mode"/"confidence" fields.
-        content_combined = " ".join(
-            str(m.get("content", "")) for m in (messages or [])
-        )
+        content_combined = " ".join(str(m.get("content", "")) for m in (messages or []))
         is_classification = bool(
             "JSON" in content_combined
-            or (
-                re.search(r"\bmode\b", content_combined, re.I)
-                and re.search(r"\bconfidence\b", content_combined, re.I)
-            )
+            or (re.search(r"\bmode\b", content_combined, re.I) and re.search(r"\bconfidence\b", content_combined, re.I))
         )
 
         reply = _STUB_INTENT_JSON if is_classification else self._reply
@@ -153,6 +145,7 @@ class LLMContractStub:
         """Return a GENERAL task-type token (used by OpenClawd PR-17 path)."""
         try:
             from core.multi_llm_router import TaskType
+
             return TaskType.GENERAL
         except ImportError:
             # Fall back to a duck-typed stand-in when the enum is unavailable.
@@ -178,6 +171,4 @@ class LLMContractStub:
     # ------------------------------------------------------------------
 
     def __repr__(self) -> str:
-        return (
-            f"LLMContractStub(model={self._model!r}, calls={self.call_count})"
-        )
+        return f"LLMContractStub(model={self._model!r}, calls={self.call_count})"

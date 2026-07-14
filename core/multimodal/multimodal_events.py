@@ -7,6 +7,7 @@ react without coupling to specific pipeline internals.
 All events carry an optional ``trace_id`` and ``runtime_session_id`` to
 allow end-to-end correlation across the Galaxy control plane.
 """
+
 from __future__ import annotations
 
 import time
@@ -15,10 +16,10 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, Optional
 
-
 # ---------------------------------------------------------------------------
 # Event types
 # ---------------------------------------------------------------------------
+
 
 class MultimodalEventType(str, Enum):
     """Canonical event types for the multimodal I/O subsystem."""
@@ -51,6 +52,7 @@ class MultimodalEventType(str, Enum):
 # Base event
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class MultimodalEvent:
     """Base class for all multimodal runtime events.
@@ -80,13 +82,12 @@ class MultimodalEvent:
 # Audio events
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class AudioStreamStartedEvent(MultimodalEvent):
     """Emitted when the microphone capture pipeline begins streaming."""
 
-    event_type: MultimodalEventType = field(
-        default=MultimodalEventType.AUDIO_STREAM_STARTED, init=False
-    )
+    event_type: MultimodalEventType = field(default=MultimodalEventType.AUDIO_STREAM_STARTED, init=False)
     sample_rate: int = 16000
     chunk_duration_ms: int = 100
     device: Optional[int] = None
@@ -96,9 +97,7 @@ class AudioStreamStartedEvent(MultimodalEvent):
 class AudioStreamStoppedEvent(MultimodalEvent):
     """Emitted when the microphone capture pipeline has stopped."""
 
-    event_type: MultimodalEventType = field(
-        default=MultimodalEventType.AUDIO_STREAM_STOPPED, init=False
-    )
+    event_type: MultimodalEventType = field(default=MultimodalEventType.AUDIO_STREAM_STOPPED, init=False)
     reason: str = "stopped"
     total_chunks_processed: int = 0
     total_duration_s: float = 0.0
@@ -108,9 +107,7 @@ class AudioStreamStoppedEvent(MultimodalEvent):
 class AudioStreamErrorEvent(MultimodalEvent):
     """Emitted on an unrecoverable audio pipeline error."""
 
-    event_type: MultimodalEventType = field(
-        default=MultimodalEventType.AUDIO_STREAM_ERROR, init=False
-    )
+    event_type: MultimodalEventType = field(default=MultimodalEventType.AUDIO_STREAM_ERROR, init=False)
     error: str = ""
     recoverable: bool = False
 
@@ -119,9 +116,7 @@ class AudioStreamErrorEvent(MultimodalEvent):
 class AudioQualityDegradedEvent(MultimodalEvent):
     """Emitted when audio latency or chunk delay exceeds threshold."""
 
-    event_type: MultimodalEventType = field(
-        default=MultimodalEventType.AUDIO_QUALITY_DEGRADED, init=False
-    )
+    event_type: MultimodalEventType = field(default=MultimodalEventType.AUDIO_QUALITY_DEGRADED, init=False)
     latency_ms: float = 0.0
     quality_flag: str = "degraded"
 
@@ -130,13 +125,12 @@ class AudioQualityDegradedEvent(MultimodalEvent):
 # WebRTC events
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class WebRTCSessionStartedEvent(MultimodalEvent):
     """Emitted when a WebRTC peer connection reaches 'connected' state."""
 
-    event_type: MultimodalEventType = field(
-        default=MultimodalEventType.WEBRTC_SESSION_STARTED, init=False
-    )
+    event_type: MultimodalEventType = field(default=MultimodalEventType.WEBRTC_SESSION_STARTED, init=False)
     session_id: str = ""
     has_video: bool = True
     has_audio: bool = False
@@ -146,9 +140,7 @@ class WebRTCSessionStartedEvent(MultimodalEvent):
 class WebRTCSessionStoppedEvent(MultimodalEvent):
     """Emitted when a WebRTC session is closed or fails permanently."""
 
-    event_type: MultimodalEventType = field(
-        default=MultimodalEventType.WEBRTC_SESSION_STOPPED, init=False
-    )
+    event_type: MultimodalEventType = field(default=MultimodalEventType.WEBRTC_SESSION_STOPPED, init=False)
     session_id: str = ""
     reason: str = "closed"
     total_reconnect_attempts: int = 0
@@ -158,9 +150,7 @@ class WebRTCSessionStoppedEvent(MultimodalEvent):
 class WebRTCSessionErrorEvent(MultimodalEvent):
     """Emitted when a WebRTC session encounters a non-fatal or fatal error."""
 
-    event_type: MultimodalEventType = field(
-        default=MultimodalEventType.WEBRTC_SESSION_ERROR, init=False
-    )
+    event_type: MultimodalEventType = field(default=MultimodalEventType.WEBRTC_SESSION_ERROR, init=False)
     session_id: str = ""
     error: str = ""
     recoverable: bool = True
@@ -170,9 +160,7 @@ class WebRTCSessionErrorEvent(MultimodalEvent):
 class WebRTCReconnectingEvent(MultimodalEvent):
     """Emitted when WebRTC session manager initiates a reconnect attempt."""
 
-    event_type: MultimodalEventType = field(
-        default=MultimodalEventType.WEBRTC_RECONNECTING, init=False
-    )
+    event_type: MultimodalEventType = field(default=MultimodalEventType.WEBRTC_RECONNECTING, init=False)
     session_id: str = ""
     attempt: int = 1
     max_attempts: int = 5
@@ -190,9 +178,7 @@ class WebRTCQualityMetricsEvent(MultimodalEvent):
     rtt_ms          Round-trip time in milliseconds (if available).
     """
 
-    event_type: MultimodalEventType = field(
-        default=MultimodalEventType.WEBRTC_QUALITY_METRICS, init=False
-    )
+    event_type: MultimodalEventType = field(default=MultimodalEventType.WEBRTC_QUALITY_METRICS, init=False)
     session_id: str = ""
     bitrate_kbps: float = 0.0
     packet_loss_pct: float = 0.0
@@ -203,9 +189,7 @@ class WebRTCQualityMetricsEvent(MultimodalEvent):
 class TransportFallbackEvent(MultimodalEvent):
     """Emitted when the transport router falls back from WebRTC to screenshot."""
 
-    event_type: MultimodalEventType = field(
-        default=MultimodalEventType.TRANSPORT_FALLBACK, init=False
-    )
+    event_type: MultimodalEventType = field(default=MultimodalEventType.TRANSPORT_FALLBACK, init=False)
     from_method: str = "webrtc"
     to_method: str = "http"
     reason: str = ""
@@ -216,6 +200,7 @@ class TransportFallbackEvent(MultimodalEvent):
 # WebRTC task-lifecycle integration events (PR-6)
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class WebRTCTaskBoundEvent(MultimodalEvent):
     """Emitted when a WebRTC session is bound to a canonical task.
@@ -224,9 +209,7 @@ class WebRTCTaskBoundEvent(MultimodalEvent):
     its lifecycle will be governed by the transport state of that session.
     """
 
-    event_type: MultimodalEventType = field(
-        default=MultimodalEventType.WEBRTC_TASK_BOUND, init=False
-    )
+    event_type: MultimodalEventType = field(default=MultimodalEventType.WEBRTC_TASK_BOUND, init=False)
     task_id: str = ""
     webrtc_session_id: str = ""
     device_id: str = ""
@@ -241,9 +224,7 @@ class WebRTCTaskLifecycleChangedEvent(MultimodalEvent):
     resulting task lifecycle action so that observers can react appropriately.
     """
 
-    event_type: MultimodalEventType = field(
-        default=MultimodalEventType.WEBRTC_TASK_LIFECYCLE_CHANGED, init=False
-    )
+    event_type: MultimodalEventType = field(default=MultimodalEventType.WEBRTC_TASK_LIFECYCLE_CHANGED, init=False)
     task_id: str = ""
     webrtc_session_id: str = ""
     transport_state: str = "unknown"
@@ -260,9 +241,7 @@ class WebRTCTaskTornDownEvent(MultimodalEvent):
     and its resources released.
     """
 
-    event_type: MultimodalEventType = field(
-        default=MultimodalEventType.WEBRTC_TASK_TORN_DOWN, init=False
-    )
+    event_type: MultimodalEventType = field(default=MultimodalEventType.WEBRTC_TASK_TORN_DOWN, init=False)
     task_id: str = ""
     webrtc_session_id: str = ""
     device_id: str = ""

@@ -49,27 +49,26 @@ Test classes
 from __future__ import annotations
 
 import json
-import sys
 import os
+import sys
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from core.truth_source_lock import (
+    CANONICAL_MULTI_DEVICE_READ_PROJECTION,
+    CANONICAL_SINGLE_DEVICE_READ_CONTRACT,
+    COMPAT_CACHE_READ_ONLY,
+    DEVICE_WRITE_SSOT,
+    MODEL_CLASSIFICATION,
     TRUTH_SOURCE_LOCK_AUTHORITY,
     TRUTH_SOURCE_LOCK_LAYER_POSITION,
-    DEVICE_WRITE_SSOT,
-    CANONICAL_SINGLE_DEVICE_READ_CONTRACT,
-    CANONICAL_MULTI_DEVICE_READ_PROJECTION,
-    COMPAT_CACHE_READ_ONLY,
-    MODEL_CLASSIFICATION,
-    get_write_ssot,
-    get_single_device_read_contract,
-    get_multi_device_read_projection,
     classify_model_role,
     describe_truth_source_lock,
+    get_multi_device_read_projection,
+    get_single_device_read_contract,
+    get_write_ssot,
 )
-
 
 # ---------------------------------------------------------------------------
 # 1. Sentinels
@@ -124,9 +123,7 @@ class TestReadContracts(unittest.TestCase):
         assert get_multi_device_read_projection() == CANONICAL_MULTI_DEVICE_READ_PROJECTION
 
     def test_single_and_multi_device_contracts_differ(self) -> None:
-        assert (
-            CANONICAL_SINGLE_DEVICE_READ_CONTRACT != CANONICAL_MULTI_DEVICE_READ_PROJECTION
-        )
+        assert CANONICAL_SINGLE_DEVICE_READ_CONTRACT != CANONICAL_MULTI_DEVICE_READ_PROJECTION
 
 
 # ---------------------------------------------------------------------------
@@ -160,45 +157,35 @@ class TestModelClassification(unittest.TestCase):
 
     def test_all_expected_models_present(self) -> None:
         for name in self._EXPECTED_MODELS:
-            assert name in MODEL_CLASSIFICATION, (
-                f"Expected model {name!r} in MODEL_CLASSIFICATION"
-            )
+            assert name in MODEL_CLASSIFICATION, f"Expected model {name!r} in MODEL_CLASSIFICATION"
 
     def test_each_entry_has_required_keys(self) -> None:
         for name, entry in MODEL_CLASSIFICATION.items():
             for key in ("role", "module", "description"):
-                assert key in entry, (
-                    f"Model {name!r} is missing key {key!r}"
-                )
+                assert key in entry, f"Model {name!r} is missing key {key!r}"
 
     def test_expected_roles(self) -> None:
         for name, expected_role in self._EXPECTED_MODELS.items():
             actual = MODEL_CLASSIFICATION[name]["role"]
-            assert actual == expected_role, (
-                f"Model {name!r}: expected role {expected_role!r}, got {actual!r}"
-            )
+            assert actual == expected_role, f"Model {name!r}: expected role {expected_role!r}, got {actual!r}"
 
     def test_classify_model_role_by_short_name(self) -> None:
         for name, expected_role in self._EXPECTED_MODELS.items():
-            assert classify_model_role(name) == expected_role, (
-                f"classify_model_role({name!r}) should return {expected_role!r}"
-            )
+            assert (
+                classify_model_role(name) == expected_role
+            ), f"classify_model_role({name!r}) should return {expected_role!r}"
 
     def test_classify_model_role_unknown(self) -> None:
         assert classify_model_role("NonExistentModel") == "unknown"
 
     def test_classify_model_role_by_qualified_name(self) -> None:
-        result = classify_model_role(
-            "contracts.registered_runtime_device.RegisteredRuntimeDevice"
-        )
+        result = classify_model_role("contracts.registered_runtime_device.RegisteredRuntimeDevice")
         assert result == "read"
 
     def test_all_valid_roles(self) -> None:
         valid_roles = {"write", "read", "adapter", "compat", "enrich"}
         for name, entry in MODEL_CLASSIFICATION.items():
-            assert entry["role"] in valid_roles, (
-                f"Model {name!r} has unexpected role {entry['role']!r}"
-            )
+            assert entry["role"] in valid_roles, f"Model {name!r} has unexpected role {entry['role']!r}"
 
 
 # ---------------------------------------------------------------------------
@@ -208,34 +195,25 @@ class TestModelClassification(unittest.TestCase):
 
 class TestWriteReadSeparation(unittest.TestCase):
     def _models_by_role(self, role: str) -> set:
-        return {
-            name for name, entry in MODEL_CLASSIFICATION.items()
-            if entry["role"] == role
-        }
+        return {name for name, entry in MODEL_CLASSIFICATION.items() if entry["role"] == role}
 
     def test_write_models_do_not_overlap_with_read_models(self) -> None:
         write_models = self._models_by_role("write")
         read_models = self._models_by_role("read")
         overlap = write_models & read_models
-        assert not overlap, (
-            f"Models cannot be both write and read: {overlap}"
-        )
+        assert not overlap, f"Models cannot be both write and read: {overlap}"
 
     def test_adapter_models_do_not_overlap_with_canonical_read_models(self) -> None:
         adapter_models = self._models_by_role("adapter")
         read_models = self._models_by_role("read")
         overlap = adapter_models & read_models
-        assert not overlap, (
-            f"Adapter models cannot be canonical read models: {overlap}"
-        )
+        assert not overlap, f"Adapter models cannot be canonical read models: {overlap}"
 
     def test_compat_models_do_not_overlap_with_write_models(self) -> None:
         compat_models = self._models_by_role("compat")
         write_models = self._models_by_role("write")
         overlap = compat_models & write_models
-        assert not overlap, (
-            f"Compat (read-only) models cannot be write models: {overlap}"
-        )
+        assert not overlap, f"Compat (read-only) models cannot be write models: {overlap}"
 
     def test_participation_is_enrich_not_write(self) -> None:
         assert classify_model_role("ParticipationSummary") == "enrich"
@@ -271,12 +249,8 @@ class TestDescribeTruthSourceLock(unittest.TestCase):
         assert "UnifiedDeviceManager" in self.desc["device_write_ssot"]
 
     def test_has_read_contracts(self) -> None:
-        assert "RegisteredRuntimeDevice" in self.desc[
-            "canonical_single_device_read_contract"
-        ]
-        assert "resolve_all_device_truth" in self.desc[
-            "canonical_multi_device_read_projection"
-        ]
+        assert "RegisteredRuntimeDevice" in self.desc["canonical_single_device_read_contract"]
+        assert "resolve_all_device_truth" in self.desc["canonical_multi_device_read_projection"]
 
     def test_compat_cache_read_only_true(self) -> None:
         assert self.desc["compat_cache_read_only"] is True

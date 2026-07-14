@@ -10,9 +10,7 @@ from __future__ import annotations
 import dataclasses
 from typing import Any, Dict, List, Optional
 
-COMPAT_FREEZE_ENFORCEMENT_IS_AUTHORITY = (
-    "COMPAT_FREEZE_ENFORCEMENT::COMPAT_BUDGET_IS_FROZEN_AT_PR11_V1"
-)
+COMPAT_FREEZE_ENFORCEMENT_IS_AUTHORITY = "COMPAT_FREEZE_ENFORCEMENT::COMPAT_BUDGET_IS_FROZEN_AT_PR11_V1"
 COMPAT_FREEZE_ENFORCEMENT_PR11_SENTINEL = (
     "COMPAT_FREEZE_ENFORCEMENT::NO_NEW_COMPAT_SURFACES_WITHOUT_EXPLICIT_BUDGET_CHANGE_V1"
 )
@@ -58,9 +56,7 @@ class CompatFreezeSnapshot:
             "production_baseline_legacy_count": self.production_baseline_legacy_count,
             "frozen_compat_surface_budget": self.frozen_compat_surface_budget,
             "frozen_legacy_path_budget": self.frozen_legacy_path_budget,
-            "frozen_production_baseline_legacy_budget": (
-                self.frozen_production_baseline_legacy_budget
-            ),
+            "frozen_production_baseline_legacy_budget": (self.frozen_production_baseline_legacy_budget),
             "is_frozen": len(self.violations) == 0,
             "violations": list(self.violations),
             "policy_sentinels": [
@@ -94,17 +90,11 @@ def build_compat_freeze_snapshot(
 
     violations: List[str] = []
     if compat_surface_count > FROZEN_COMPAT_SURFACE_BUDGET:
-        violations.append(
-            "compat_surface_retirement inventory exceeds frozen PR-11 budget"
-        )
+        violations.append("compat_surface_retirement inventory exceeds frozen PR-11 budget")
     if legacy_path_count > FROZEN_LEGACY_PATH_BUDGET:
-        violations.append(
-            "orchestration_authority legacy path registry exceeds frozen PR-11 budget"
-        )
+        violations.append("orchestration_authority legacy path registry exceeds frozen PR-11 budget")
     if production_baseline_legacy_count > FROZEN_PRODUCTION_BASELINE_LEGACY_BUDGET:
-        violations.append(
-            "production baseline legacy declaration count exceeds frozen PR-11 budget"
-        )
+        violations.append("production baseline legacy declaration count exceeds frozen PR-11 budget")
 
     return CompatFreezeSnapshot(
         compat_surface_count=compat_surface_count,

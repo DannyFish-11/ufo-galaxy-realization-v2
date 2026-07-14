@@ -18,9 +18,9 @@ Routes:
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import JSONResponse
 
 from core.auth import require_auth
-from fastapi.responses import JSONResponse
 
 logger = logging.getLogger("Galaxy.API")
 
@@ -32,6 +32,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     # Rate limiters for sensitive endpoints (in-memory token bucket per client IP)
     try:
         from core.security_middleware import RateLimiter as _RateLimiter
+
         _vault_fetch_limiter = _RateLimiter(requests_per_minute=30, burst_size=10)
     except Exception as exc:
         logger.debug("Fallback triggered: %s", exc)
@@ -47,6 +48,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             raise HTTPException(status_code=400, detail="key_name and value are required")
         try:
             from core.credential_vault import get_vault
+
             get_vault().set_credential(key_name, value)
             return JSONResponse({"success": True, "key_name": key_name})
         except Exception as e:
@@ -57,6 +59,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """列出所有凭证键名（不返回值）"""
         try:
             from core.credential_vault import get_vault
+
             return JSONResponse({"keys": get_vault().list_credential_keys()})
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
@@ -66,6 +69,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """删除 Vault 内的凭证"""
         try:
             from core.credential_vault import get_vault
+
             deleted = get_vault().delete_credential(key_name)
             if not deleted:
                 raise HTTPException(status_code=404, detail=f"Credential '{key_name}' not found")
@@ -86,6 +90,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             raise HTTPException(status_code=400, detail="device_id is required")
         try:
             from core.credential_vault import get_vault
+
             token = get_vault().issue_token(device_id, ttl=ttl, scopes=scopes)
             return JSONResponse({"success": True, "token": token, "ttl": ttl})
         except Exception as e:
@@ -105,6 +110,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             raise HTTPException(status_code=400, detail="token and key_name are required")
         try:
             from core.credential_vault import get_vault
+
             value = get_vault().get_credential_by_token(token, key_name)
             if value is None:
                 raise HTTPException(status_code=403, detail="Invalid token or insufficient scope")
@@ -119,6 +125,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """获取最近 N 条凭证访问审计记录"""
         try:
             from core.credential_vault import get_vault
+
             return JSONResponse({"records": get_vault().get_audit_log(limit=limit)})
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
@@ -128,6 +135,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """清理过期 token，返回清理数量"""
         try:
             from core.credential_vault import get_vault
+
             count = get_vault().cleanup_expired_tokens()
             return JSONResponse({"success": True, "cleaned_up": count})
         except Exception as e:
@@ -138,6 +146,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """Vault 健康状态：token 数量、凭证键数量、审计条目数"""
         try:
             from core.credential_vault import get_vault
+
             return JSONResponse(get_vault().get_health_metrics())
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
@@ -147,6 +156,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """获取 token 元信息（device_id、过期时间、scopes 等，不含凭证值）"""
         try:
             from core.credential_vault import get_vault
+
             info = get_vault().get_token_info(token)
             if info is None:
                 raise HTTPException(status_code=404, detail="Token not found or expired")
@@ -165,6 +175,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             raise HTTPException(status_code=400, detail="token is required")
         try:
             from core.credential_vault import get_vault
+
             valid, device_id = get_vault().validate_token(token)
             return JSONResponse({"valid": valid, "device_id": device_id})
         except Exception as e:

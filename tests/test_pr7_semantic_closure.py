@@ -71,15 +71,13 @@ class TestCanonicalClosureDocsExist:
 
     def test_desktop_semantic_closure_doc_defines_authority(self) -> None:
         content = _repo_file("docs/DESKTOP_SEMANTIC_CLOSURE.md").read_text()
-        assert "DesktopPresenceRuntime" in content, (
-            "DESKTOP_SEMANTIC_CLOSURE.md must name DesktopPresenceRuntime as tri-state authority"
-        )
+        assert (
+            "DesktopPresenceRuntime" in content
+        ), "DESKTOP_SEMANTIC_CLOSURE.md must name DesktopPresenceRuntime as tri-state authority"
 
     def test_desktop_semantic_closure_doc_mentions_invariants(self) -> None:
         content = _repo_file("docs/DESKTOP_SEMANTIC_CLOSURE.md").read_text().lower()
-        assert "invariant" in content, (
-            "DESKTOP_SEMANTIC_CLOSURE.md must define tri-state invariants"
-        )
+        assert "invariant" in content, "DESKTOP_SEMANTIC_CLOSURE.md must define tri-state invariants"
 
     def test_configuration_entry_unification_doc_exists(self) -> None:
         p = _repo_file("docs/CONFIGURATION_ENTRY_UNIFICATION.md")
@@ -87,15 +85,15 @@ class TestCanonicalClosureDocsExist:
 
     def test_configuration_entry_unification_doc_mentions_canonical_entry(self) -> None:
         content = _repo_file("docs/CONFIGURATION_ENTRY_UNIFICATION.md").read_text()
-        assert "config.json" in content.lower() or "unified_config" in content.lower(), (
-            "CONFIGURATION_ENTRY_UNIFICATION.md must reference the canonical config entry point"
-        )
+        assert (
+            "config.json" in content.lower() or "unified_config" in content.lower()
+        ), "CONFIGURATION_ENTRY_UNIFICATION.md must reference the canonical config entry point"
 
     def test_configuration_entry_unification_doc_references_config_governance(self) -> None:
         content = _repo_file("docs/CONFIGURATION_ENTRY_UNIFICATION.md").read_text()
-        assert "CONFIG_GOVERNANCE" in content, (
-            "CONFIGURATION_ENTRY_UNIFICATION.md must cross-reference CONFIG_GOVERNANCE.md"
-        )
+        assert (
+            "CONFIG_GOVERNANCE" in content
+        ), "CONFIGURATION_ENTRY_UNIFICATION.md must cross-reference CONFIG_GOVERNANCE.md"
 
     def test_status_and_statistics_ownership_doc_exists(self) -> None:
         p = _repo_file("docs/STATUS_AND_STATISTICS_OWNERSHIP.md")
@@ -103,15 +101,15 @@ class TestCanonicalClosureDocsExist:
 
     def test_status_and_statistics_ownership_doc_mentions_projection(self) -> None:
         content = _repo_file("docs/STATUS_AND_STATISTICS_OWNERSHIP.md").read_text()
-        assert "DesktopStatusProjection" in content, (
-            "STATUS_AND_STATISTICS_OWNERSHIP.md must reference DesktopStatusProjection"
-        )
+        assert (
+            "DesktopStatusProjection" in content
+        ), "STATUS_AND_STATISTICS_OWNERSHIP.md must reference DesktopStatusProjection"
 
     def test_status_and_statistics_ownership_doc_mentions_liminal_chain(self) -> None:
         content = _repo_file("docs/STATUS_AND_STATISTICS_OWNERSHIP.md").read_text().lower()
-        assert "local execution chain" in content or "cross-device" in content, (
-            "STATUS_AND_STATISTICS_OWNERSHIP.md must cover liminal-space chain statistics"
-        )
+        assert (
+            "local execution chain" in content or "cross-device" in content
+        ), "STATUS_AND_STATISTICS_OWNERSHIP.md must cover liminal-space chain statistics"
 
 
 # ---------------------------------------------------------------------------
@@ -124,22 +122,28 @@ class TestTriStateSemanticInvariants:
 
     def test_tristate_enum_has_silent(self) -> None:
         from core.desktop_presence_runtime import TriState
+
         assert TriState.SILENT.value == "silent"
 
     def test_tristate_enum_has_liminal(self) -> None:
         from core.desktop_presence_runtime import TriState
+
         assert TriState.LIMINAL.value == "liminal"
 
     def test_tristate_enum_has_manifest(self) -> None:
         from core.desktop_presence_runtime import TriState
+
         assert TriState.MANIFEST.value == "manifest"
 
     def test_tristate_enum_has_exactly_three_values(self) -> None:
         from core.desktop_presence_runtime import TriState
+
         values = {m.value for m in TriState}
-        assert values == {"silent", "liminal", "manifest"}, (
-            "TriState must have exactly three values: silent / liminal / manifest"
-        )
+        assert values == {
+            "silent",
+            "liminal",
+            "manifest",
+        }, "TriState must have exactly three values: silent / liminal / manifest"
 
     def test_continuum_tristate_phase_matches(self) -> None:
         """TriStatePhase in core.continuum.types must use the same three values.
@@ -159,9 +163,7 @@ class TestTriStateSemanticInvariants:
         spec.loader.exec_module(mod)
         TriStatePhase = mod.TriStatePhase
         values = {m.value for m in TriStatePhase}
-        assert values == {"silent", "liminal", "manifest"}, (
-            "TriStatePhase must match the canonical tri-state values"
-        )
+        assert values == {"silent", "liminal", "manifest"}, "TriStatePhase must match the canonical tri-state values"
 
     def test_desktop_presence_runtime_is_tristate_authority(self) -> None:
         """DesktopPresenceRuntime must expose a TriState enum and handle_request method.
@@ -170,23 +172,25 @@ class TestTriStateSemanticInvariants:
         (which would trigger the numpy transitive dependency).
         """
         from core.desktop_presence_runtime import TriState
+
         # Verify TriState has exactly the three canonical values.
         values = {m.value for m in TriState}
-        assert values == {"silent", "liminal", "manifest"}, (
-            "DesktopPresenceRuntime.TriState must carry the three canonical values"
-        )
+        assert values == {
+            "silent",
+            "liminal",
+            "manifest",
+        }, "DesktopPresenceRuntime.TriState must carry the three canonical values"
         # Verify the class at least declares handle_request as the lifecycle entry.
         from core.desktop_presence_runtime import DesktopPresenceRuntime
-        assert hasattr(DesktopPresenceRuntime, "handle_request"), (
-            "DesktopPresenceRuntime must expose 'handle_request' as the lifecycle driver"
-        )
+
+        assert hasattr(
+            DesktopPresenceRuntime, "handle_request"
+        ), "DesktopPresenceRuntime must expose 'handle_request' as the lifecycle driver"
 
     def test_closure_doc_references_all_three_states(self) -> None:
         content = _repo_file("docs/DESKTOP_SEMANTIC_CLOSURE.md").read_text().lower()
         for state in ("silent", "liminal", "manifest"):
-            assert state in content, (
-                f"DESKTOP_SEMANTIC_CLOSURE.md must define the '{state}' state"
-            )
+            assert state in content, f"DESKTOP_SEMANTIC_CLOSURE.md must define the '{state}' state"
 
 
 # ---------------------------------------------------------------------------
@@ -209,27 +213,22 @@ class TestLegacyResidueIsolation:
         # canonical 面板端点契约仍由 core 路由套件专钉;此处只钉退役终态
         assert not _repo_file("dashboard/frontend").exists()
 
-
     def test_status_board_py_fully_decommissioned(self) -> None:
         # 收口已推进到终态:windows_client/status_board.py 被整体拆除,
         # 比"留着文件挂弃用说明"更强。钉住"不得复活"。
         sb_path = _repo_file("windows_client/status_board.py")
-        assert not sb_path.exists(), (
-            "windows_client/status_board.py 已退役拆除,不应被重新引入"
-        )
+        assert not sb_path.exists(), "windows_client/status_board.py 已退役拆除,不应被重新引入"
 
     def test_active_surface_md_references_semantic_closure_doc(self) -> None:
         content = _repo_file("windows_client/status_board_v2/ACTIVE_SURFACE.md").read_text()
-        assert "DESKTOP_SEMANTIC_CLOSURE" in content, (
-            "ACTIVE_SURFACE.md must reference docs/DESKTOP_SEMANTIC_CLOSURE.md"
-        )
+        assert (
+            "DESKTOP_SEMANTIC_CLOSURE" in content
+        ), "ACTIVE_SURFACE.md must reference docs/DESKTOP_SEMANTIC_CLOSURE.md"
 
     def test_active_surface_md_lists_all_three_states(self) -> None:
         content = _repo_file("windows_client/status_board_v2/ACTIVE_SURFACE.md").read_text().lower()
         for state in ("silent", "liminal", "manifest"):
-            assert state in content, (
-                f"ACTIVE_SURFACE.md must reference the '{state}' tri-state value"
-            )
+            assert state in content, f"ACTIVE_SURFACE.md must reference the '{state}' tri-state value"
 
 
 # ---------------------------------------------------------------------------
@@ -250,26 +249,27 @@ class TestStatisticsOwnership:
     def test_statistics_doc_references_liminal_surface(self) -> None:
         content = _repo_file("docs/STATUS_AND_STATISTICS_OWNERSHIP.md").read_text()
         assert "liminal_surface" in content or "liminal space" in content.lower(), (
-            "STATUS_AND_STATISTICS_OWNERSHIP.md must reference liminal_surface for "
-            "execution-chain statistics"
+            "STATUS_AND_STATISTICS_OWNERSHIP.md must reference liminal_surface for " "execution-chain statistics"
         )
 
     def test_statistics_doc_references_desktop_display_boundaries(self) -> None:
         content = _repo_file("docs/STATUS_AND_STATISTICS_OWNERSHIP.md").read_text()
-        assert "DESKTOP_DISPLAY_BOUNDARIES" in content, (
-            "STATUS_AND_STATISTICS_OWNERSHIP.md must cross-reference DESKTOP_DISPLAY_BOUNDARIES.md"
-        )
+        assert (
+            "DESKTOP_DISPLAY_BOUNDARIES" in content
+        ), "STATUS_AND_STATISTICS_OWNERSHIP.md must cross-reference DESKTOP_DISPLAY_BOUNDARIES.md"
 
     def test_status_board_v2_doc_references_statistics_ownership(self) -> None:
         content = _repo_file("docs/STATUS_BOARD_V2.md").read_text()
-        assert "STATUS_AND_STATISTICS_OWNERSHIP" in content, (
-            "STATUS_BOARD_V2.md must cross-reference STATUS_AND_STATISTICS_OWNERSHIP.md"
-        )
+        assert (
+            "STATUS_AND_STATISTICS_OWNERSHIP" in content
+        ), "STATUS_BOARD_V2.md must cross-reference STATUS_AND_STATISTICS_OWNERSHIP.md"
 
     def test_liminal_surface_does_not_render_routing_stats(self) -> None:
         """LiminalSurface render must not show routing topology keywords."""
         import re
+
         from windows_client.status_board_v2.liminal_surface import LiminalSurface
+
         projection: Dict[str, Any] = {
             "tri_state_phase": "liminal",
             "runtime_domain": "local",
@@ -291,9 +291,7 @@ class TestStatisticsOwnership:
         plain = re.sub(r"\x1b\[[0-9;]*m", "", rendered)
         forbidden = ["Provider List", "OneAPI Status", "Metrics Board", "Weight Bar"]
         for kw in forbidden:
-            assert kw not in plain, (
-                f"LiminalSurface must not render routing stat keyword '{kw}'"
-            )
+            assert kw not in plain, f"LiminalSurface must not render routing stat keyword '{kw}'"
 
 
 # ---------------------------------------------------------------------------
@@ -310,21 +308,21 @@ class TestConfigurationEntrySemantics:
 
     def test_config_entry_doc_describes_ownership_tiers(self) -> None:
         content = _repo_file("docs/CONFIGURATION_ENTRY_UNIFICATION.md").read_text().lower()
-        assert "system" in content and ("surface" in content or "node" in content), (
-            "CONFIGURATION_ENTRY_UNIFICATION.md must describe configuration ownership tiers"
-        )
+        assert "system" in content and (
+            "surface" in content or "node" in content
+        ), "CONFIGURATION_ENTRY_UNIFICATION.md must describe configuration ownership tiers"
 
     def test_config_entry_doc_prohibits_secrets_in_config_json(self) -> None:
         content = _repo_file("docs/CONFIGURATION_ENTRY_UNIFICATION.md").read_text().lower()
-        assert "secret" in content or "api_key" in content, (
-            "CONFIGURATION_ENTRY_UNIFICATION.md must address secrets / API key placement"
-        )
+        assert (
+            "secret" in content or "api_key" in content
+        ), "CONFIGURATION_ENTRY_UNIFICATION.md must address secrets / API key placement"
 
     def test_active_surface_md_references_configuration_entry_doc(self) -> None:
         content = _repo_file("windows_client/status_board_v2/ACTIVE_SURFACE.md").read_text()
-        assert "CONFIGURATION_ENTRY_UNIFICATION" in content, (
-            "ACTIVE_SURFACE.md must reference CONFIGURATION_ENTRY_UNIFICATION.md"
-        )
+        assert (
+            "CONFIGURATION_ENTRY_UNIFICATION" in content
+        ), "ACTIVE_SURFACE.md must reference CONFIGURATION_ENTRY_UNIFICATION.md"
 
     def test_config_governance_doc_exists(self) -> None:
         """The pre-existing CONFIG_GOVERNANCE.md must still exist."""

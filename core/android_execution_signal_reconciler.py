@@ -99,10 +99,6 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, Optional, Tuple
 
-# ---------------------------------------------------------------------------
-# Imports from prior PR packages
-# ---------------------------------------------------------------------------
-
 from core.delegated_runtime_execution_tracker import (
     AcknowledgmentSignal,
     DelegatedExecutionResult,
@@ -113,15 +109,18 @@ from core.delegated_runtime_execution_tracker import (
     get_execution_tracking_runtime,
 )
 
+# ---------------------------------------------------------------------------
+# Imports from prior PR packages
+# ---------------------------------------------------------------------------
+
+
 # PR-22: Registry gate — imported lazily so the module remains loadable when
 # the session registry is unavailable.
 try:
-    from core.attached_runtime_session_registry import (
-        AttachedSessionRegistry as _AttachedSessionRegistry,
-        RegistryEntryState as _ReconcilerRegistryEntryState,
-        get_session_registry as _reconciler_get_session_registry,
-        lookup_active_session as _reconciler_lookup_active_session,
-    )
+    from core.attached_runtime_session_registry import AttachedSessionRegistry as _AttachedSessionRegistry
+    from core.attached_runtime_session_registry import RegistryEntryState as _ReconcilerRegistryEntryState
+    from core.attached_runtime_session_registry import get_session_registry as _reconciler_get_session_registry
+    from core.attached_runtime_session_registry import lookup_active_session as _reconciler_lookup_active_session
 
     _RECONCILER_REGISTRY_AVAILABLE: bool = True
 except ImportError:  # pragma: no cover
@@ -521,133 +520,121 @@ class AndroidSignalReconcileOutcome:
 
 _TYPE_STATUS_MAP: Dict[Tuple[str, str], AndroidSignalKind] = {
     # task_cancel: Android requests cancellation; treat as cancelled signal
-    ("task_cancel", ""):              AndroidSignalKind.cancelled,
-    ("task_cancel", "cancelled"):     AndroidSignalKind.cancelled,
-
+    ("task_cancel", ""): AndroidSignalKind.cancelled,
+    ("task_cancel", "cancelled"): AndroidSignalKind.cancelled,
     # task_status: Android queries current status; treated as a progress ack
-    ("task_status", ""):              AndroidSignalKind.ack,
-    ("task_status", "running"):       AndroidSignalKind.progress,
-    ("task_status", "pending"):       AndroidSignalKind.ack,
-    ("task_status", "completed"):     AndroidSignalKind.final_result,
-    ("task_status", "failed"):        AndroidSignalKind.error,
-    ("task_status", "cancelled"):     AndroidSignalKind.cancelled,
-
+    ("task_status", ""): AndroidSignalKind.ack,
+    ("task_status", "running"): AndroidSignalKind.progress,
+    ("task_status", "pending"): AndroidSignalKind.ack,
+    ("task_status", "completed"): AndroidSignalKind.final_result,
+    ("task_status", "failed"): AndroidSignalKind.error,
+    ("task_status", "cancelled"): AndroidSignalKind.cancelled,
     # task_result
-    ("task_result", "completed"):     AndroidSignalKind.final_result,
-    ("task_result", "success"):       AndroidSignalKind.final_result,
-    ("task_result", "failed"):        AndroidSignalKind.error,
-    ("task_result", "failure"):       AndroidSignalKind.error,
-    ("task_result", "cancelled"):     AndroidSignalKind.cancelled,
-    ("task_result", "timeout"):       AndroidSignalKind.timeout,
-    ("task_result", "running"):       AndroidSignalKind.progress,
-    ("task_result", ""):              AndroidSignalKind.final_result,  # bare task_result → assume completion
-
+    ("task_result", "completed"): AndroidSignalKind.final_result,
+    ("task_result", "success"): AndroidSignalKind.final_result,
+    ("task_result", "failed"): AndroidSignalKind.error,
+    ("task_result", "failure"): AndroidSignalKind.error,
+    ("task_result", "cancelled"): AndroidSignalKind.cancelled,
+    ("task_result", "timeout"): AndroidSignalKind.timeout,
+    ("task_result", "running"): AndroidSignalKind.progress,
+    ("task_result", ""): AndroidSignalKind.final_result,  # bare task_result → assume completion
     # task_progress
-    ("task_progress", ""):            AndroidSignalKind.progress,
-    ("task_progress", "running"):     AndroidSignalKind.progress,
-    ("task_progress", "continue"):    AndroidSignalKind.progress,
-    ("task_progress", "pending"):     AndroidSignalKind.ack,
-
+    ("task_progress", ""): AndroidSignalKind.progress,
+    ("task_progress", "running"): AndroidSignalKind.progress,
+    ("task_progress", "continue"): AndroidSignalKind.progress,
+    ("task_progress", "pending"): AndroidSignalKind.ack,
     # task_end
-    ("task_end", "completed"):        AndroidSignalKind.final_result,
-    ("task_end", "success"):          AndroidSignalKind.final_result,
-    ("task_end", "failed"):           AndroidSignalKind.error,
-    ("task_end", "failure"):          AndroidSignalKind.error,
-    ("task_end", "cancelled"):        AndroidSignalKind.cancelled,
-    ("task_end", "timeout"):          AndroidSignalKind.timeout,
-    ("task_end", ""):                 AndroidSignalKind.final_result,  # bare task_end → assume completion
-
+    ("task_end", "completed"): AndroidSignalKind.final_result,
+    ("task_end", "success"): AndroidSignalKind.final_result,
+    ("task_end", "failed"): AndroidSignalKind.error,
+    ("task_end", "failure"): AndroidSignalKind.error,
+    ("task_end", "cancelled"): AndroidSignalKind.cancelled,
+    ("task_end", "timeout"): AndroidSignalKind.timeout,
+    ("task_end", ""): AndroidSignalKind.final_result,  # bare task_end → assume completion
     # goal_execution_result
-    ("goal_execution_result", "completed"):  AndroidSignalKind.final_result,
-    ("goal_execution_result", "success"):    AndroidSignalKind.final_result,
-    ("goal_execution_result", "true"):       AndroidSignalKind.final_result,
-    ("goal_execution_result", "failed"):     AndroidSignalKind.error,
-    ("goal_execution_result", "failure"):    AndroidSignalKind.error,
-    ("goal_execution_result", "false"):      AndroidSignalKind.error,
-    ("goal_execution_result", "cancelled"):  AndroidSignalKind.cancelled,
-    ("goal_execution_result", "timeout"):    AndroidSignalKind.timeout,
-    ("goal_execution_result", ""):           AndroidSignalKind.final_result,
-
+    ("goal_execution_result", "completed"): AndroidSignalKind.final_result,
+    ("goal_execution_result", "success"): AndroidSignalKind.final_result,
+    ("goal_execution_result", "true"): AndroidSignalKind.final_result,
+    ("goal_execution_result", "failed"): AndroidSignalKind.error,
+    ("goal_execution_result", "failure"): AndroidSignalKind.error,
+    ("goal_execution_result", "false"): AndroidSignalKind.error,
+    ("goal_execution_result", "cancelled"): AndroidSignalKind.cancelled,
+    ("goal_execution_result", "timeout"): AndroidSignalKind.timeout,
+    ("goal_execution_result", ""): AndroidSignalKind.final_result,
     # error
-    ("error", ""):                    AndroidSignalKind.error,
-    ("error", "timeout"):             AndroidSignalKind.timeout,
-    ("error", "cancelled"):           AndroidSignalKind.cancelled,
-
+    ("error", ""): AndroidSignalKind.error,
+    ("error", "timeout"): AndroidSignalKind.timeout,
+    ("error", "cancelled"): AndroidSignalKind.cancelled,
     # agent_result
-    ("agent_result", "completed"):    AndroidSignalKind.final_result,
-    ("agent_result", "success"):      AndroidSignalKind.final_result,
-    ("agent_result", "failed"):       AndroidSignalKind.error,
-    ("agent_result", "failure"):      AndroidSignalKind.error,
-    ("agent_result", "cancelled"):    AndroidSignalKind.cancelled,
-    ("agent_result", "timeout"):      AndroidSignalKind.timeout,
-    ("agent_result", ""):             AndroidSignalKind.final_result,
-
+    ("agent_result", "completed"): AndroidSignalKind.final_result,
+    ("agent_result", "success"): AndroidSignalKind.final_result,
+    ("agent_result", "failed"): AndroidSignalKind.error,
+    ("agent_result", "failure"): AndroidSignalKind.error,
+    ("agent_result", "cancelled"): AndroidSignalKind.cancelled,
+    ("agent_result", "timeout"): AndroidSignalKind.timeout,
+    ("agent_result", ""): AndroidSignalKind.final_result,
     # agent_status
-    ("agent_status", "pending"):      AndroidSignalKind.ack,
-    ("agent_status", "running"):      AndroidSignalKind.progress,
-    ("agent_status", "continue"):     AndroidSignalKind.progress,
-    ("agent_status", "completed"):    AndroidSignalKind.final_result,
-    ("agent_status", "failed"):       AndroidSignalKind.error,
-    ("agent_status", "cancelled"):    AndroidSignalKind.cancelled,
-    ("agent_status", ""):             AndroidSignalKind.progress,
-
+    ("agent_status", "pending"): AndroidSignalKind.ack,
+    ("agent_status", "running"): AndroidSignalKind.progress,
+    ("agent_status", "continue"): AndroidSignalKind.progress,
+    ("agent_status", "completed"): AndroidSignalKind.final_result,
+    ("agent_status", "failed"): AndroidSignalKind.error,
+    ("agent_status", "cancelled"): AndroidSignalKind.cancelled,
+    ("agent_status", ""): AndroidSignalKind.progress,
     # task_assign (host→Android) used as a receipt ACK in tests
-    ("task_assign", "pending"):       AndroidSignalKind.ack,
-    ("task_assign", ""):              AndroidSignalKind.ack,
-
+    ("task_assign", "pending"): AndroidSignalKind.ack,
+    ("task_assign", ""): AndroidSignalKind.ack,
     # parallel_result
     ("parallel_result", "completed"): AndroidSignalKind.final_result,
-    ("parallel_result", "success"):   AndroidSignalKind.final_result,
-    ("parallel_result", "failed"):    AndroidSignalKind.error,
-    ("parallel_result", ""):          AndroidSignalKind.final_result,
-
+    ("parallel_result", "success"): AndroidSignalKind.final_result,
+    ("parallel_result", "failed"): AndroidSignalKind.error,
+    ("parallel_result", ""): AndroidSignalKind.final_result,
     # command_result — v3 AIP native result type; also the target of v1/v2
     # compat normalisation ("response" → command_result).  A bare
     # command_result without a terminal status is treated as an ACK (the
     # remote surface acknowledged receipt of the command); terminal statuses
     # map to the matching phase-advancing signals.
-    ("command_result", ""):           AndroidSignalKind.ack,
-    ("command_result", "completed"):  AndroidSignalKind.final_result,
-    ("command_result", "success"):    AndroidSignalKind.final_result,
-    ("command_result", "failed"):     AndroidSignalKind.error,
-    ("command_result", "failure"):    AndroidSignalKind.error,
-    ("command_result", "running"):    AndroidSignalKind.progress,
-    ("command_result", "cancelled"):  AndroidSignalKind.cancelled,
-    ("command_result", "timeout"):    AndroidSignalKind.timeout,
-
+    ("command_result", ""): AndroidSignalKind.ack,
+    ("command_result", "completed"): AndroidSignalKind.final_result,
+    ("command_result", "success"): AndroidSignalKind.final_result,
+    ("command_result", "failed"): AndroidSignalKind.error,
+    ("command_result", "failure"): AndroidSignalKind.error,
+    ("command_result", "running"): AndroidSignalKind.progress,
+    ("command_result", "cancelled"): AndroidSignalKind.cancelled,
+    ("command_result", "timeout"): AndroidSignalKind.timeout,
     # delegated_execution_signal (PR-16 canonical ingress message type)
     # signal_kind is read directly from the payload field in this case;
     # these fallbacks handle the compat path via normalize_android_message_to_signal_kind.
-    ("delegated_execution_signal", "ack"):        AndroidSignalKind.ack,
-    ("delegated_execution_signal", "progress"):   AndroidSignalKind.progress,
-    ("delegated_execution_signal", "result"):     AndroidSignalKind.final_result,
-    ("delegated_execution_signal", "timeout"):    AndroidSignalKind.timeout,
-    ("delegated_execution_signal", "cancelled"):  AndroidSignalKind.cancelled,
-    ("delegated_execution_signal", "success"):    AndroidSignalKind.final_result,
-    ("delegated_execution_signal", "failure"):    AndroidSignalKind.error,
-    ("delegated_execution_signal", "completed"):  AndroidSignalKind.final_result,
-    ("delegated_execution_signal", "failed"):     AndroidSignalKind.error,
-    ("delegated_execution_signal", ""):           AndroidSignalKind.progress,
+    ("delegated_execution_signal", "ack"): AndroidSignalKind.ack,
+    ("delegated_execution_signal", "progress"): AndroidSignalKind.progress,
+    ("delegated_execution_signal", "result"): AndroidSignalKind.final_result,
+    ("delegated_execution_signal", "timeout"): AndroidSignalKind.timeout,
+    ("delegated_execution_signal", "cancelled"): AndroidSignalKind.cancelled,
+    ("delegated_execution_signal", "success"): AndroidSignalKind.final_result,
+    ("delegated_execution_signal", "failure"): AndroidSignalKind.error,
+    ("delegated_execution_signal", "completed"): AndroidSignalKind.final_result,
+    ("delegated_execution_signal", "failed"): AndroidSignalKind.error,
+    ("delegated_execution_signal", ""): AndroidSignalKind.progress,
 }
 
 # Fallback: message_type only (status ignored / absent)
 _TYPE_ONLY_MAP: Dict[str, AndroidSignalKind] = {
-    "task_result":                  AndroidSignalKind.final_result,
-    "task_end":                     AndroidSignalKind.final_result,
-    "task_cancel":                  AndroidSignalKind.cancelled,
-    "task_status":                  AndroidSignalKind.ack,
-    "goal_execution_result":        AndroidSignalKind.final_result,
-    "agent_result":                 AndroidSignalKind.final_result,
-    "error":                        AndroidSignalKind.error,
-    "task_progress":                AndroidSignalKind.progress,
-    "agent_status":                 AndroidSignalKind.progress,
-    "parallel_result":              AndroidSignalKind.final_result,
-    "task_assign":                  AndroidSignalKind.ack,
-    "command_result":               AndroidSignalKind.ack,
-    "device_register_ack":          AndroidSignalKind.ack,
-    "heartbeat_ack":                AndroidSignalKind.ack,
+    "task_result": AndroidSignalKind.final_result,
+    "task_end": AndroidSignalKind.final_result,
+    "task_cancel": AndroidSignalKind.cancelled,
+    "task_status": AndroidSignalKind.ack,
+    "goal_execution_result": AndroidSignalKind.final_result,
+    "agent_result": AndroidSignalKind.final_result,
+    "error": AndroidSignalKind.error,
+    "task_progress": AndroidSignalKind.progress,
+    "agent_status": AndroidSignalKind.progress,
+    "parallel_result": AndroidSignalKind.final_result,
+    "task_assign": AndroidSignalKind.ack,
+    "command_result": AndroidSignalKind.ack,
+    "device_register_ack": AndroidSignalKind.ack,
+    "heartbeat_ack": AndroidSignalKind.ack,
     # PR-16 canonical ingress: bare delegated_execution_signal → progress (keep alive)
-    "delegated_execution_signal":   AndroidSignalKind.progress,
+    "delegated_execution_signal": AndroidSignalKind.progress,
 }
 
 
@@ -737,10 +724,7 @@ def extract_signal_envelope(
     message_type: str = str(message.get("type") or "")
 
     # ---- status resolution ----
-    status: str = (
-        str(message.get("status") or "")
-        or str(payload.get("status") or "")
-    )
+    status: str = str(message.get("status") or "") or str(payload.get("status") or "")
     if not status:
         success_val = payload.get("success")
         if success_val is not None:
@@ -750,55 +734,40 @@ def extract_signal_envelope(
     signal_kind = normalize_android_message_to_signal_kind(message_type, status)
 
     # ---- device_id, task_id — top-level first ----
-    device_id: str = (
-        str(message.get("device_id") or "")
-        or str(payload.get("device_id") or "")
-    )
-    task_id: str = (
-        str(message.get("task_id") or "")
-        or str(payload.get("task_id") or "")
-    )
+    device_id: str = str(message.get("device_id") or "") or str(payload.get("device_id") or "")
+    task_id: str = str(message.get("task_id") or "") or str(payload.get("task_id") or "")
 
     # ---- contract_id, session_id, trace_id — payload first ----
-    contract_id: str = (
-        str(payload.get("contract_id") or "")
-        or str(message.get("contract_id") or "")
-    )
+    contract_id: str = str(payload.get("contract_id") or "") or str(message.get("contract_id") or "")
     session_id: str = (
         str(payload.get("session_id") or "")
         or str(payload.get("runtime_session_id") or "")
         or str(message.get("session_id") or "")
         or str(message.get("runtime_session_id") or "")
     )
-    trace_id: str = (
-        str(payload.get("trace_id") or "")
-        or str(message.get("trace_id") or "")
-    )
+    trace_id: str = str(payload.get("trace_id") or "") or str(message.get("trace_id") or "")
 
     # ---- signal_id, emission_seq, result_kind (PR-16 fields) — payload first ----
-    signal_id: str = (
-        str(payload.get("signal_id") or "")
-        or str(message.get("signal_id") or "")
-    )
+    signal_id: str = str(payload.get("signal_id") or "") or str(message.get("signal_id") or "")
     raw_emission_seq = (
-        payload.get("emission_seq")
-        if payload.get("emission_seq") is not None
-        else message.get("emission_seq")
+        payload.get("emission_seq") if payload.get("emission_seq") is not None else message.get("emission_seq")
     )
     try:
         emission_seq: int = int(raw_emission_seq) if raw_emission_seq is not None else 0
     except (TypeError, ValueError):
         emission_seq = 0
-    result_kind: str = (
-        str(payload.get("result_kind") or "")
-        or str(message.get("result_kind") or "")
-    )
+    result_kind: str = str(payload.get("result_kind") or "") or str(message.get("result_kind") or "")
 
     # ---- payload snapshot — merge top-level extras + payload dict ----
     # Keys harvested from the payload sub-dict into the envelope snapshot.
     _PAYLOAD_CONTENT_KEYS = (
-        "result", "details", "error", "error_message", "latency_ms",
-        "step_count", "partial_result",
+        "result",
+        "details",
+        "error",
+        "error_message",
+        "latency_ms",
+        "step_count",
+        "partial_result",
     )
     payload_snapshot: Dict[str, Any] = {}
     for key in _PAYLOAD_CONTENT_KEYS:
@@ -892,8 +861,7 @@ def reconcile_android_execution_signal(
             record=None,
             was_updated=False,
             reject_reason=(
-                "reconciliation requires at least one of contract_id or session_id; "
-                "both are empty in this envelope"
+                "reconciliation requires at least one of contract_id or session_id; " "both are empty in this envelope"
             ),
             envelope=envelope,
         )
@@ -901,9 +869,7 @@ def reconcile_android_execution_signal(
     # Step 1a — PR-22 registry gate
     if _RECONCILER_REGISTRY_AVAILABLE and _reconciler_lookup_active_session is not None and envelope.session_id:
         _reg = registry if registry is not None else _reconciler_get_session_registry()
-        _entry = _reconciler_lookup_active_session(
-            envelope.session_id, active_only=False, registry=_reg
-        )
+        _entry = _reconciler_lookup_active_session(envelope.session_id, active_only=False, registry=_reg)
         if _entry is not None and not _entry.is_active():
             return AndroidSignalReconcileOutcome(
                 record=None,
@@ -926,9 +892,7 @@ def reconcile_android_execution_signal(
     # Step 3 — miss
     if record is None:
         lookup_desc = (
-            f"contract_id={envelope.contract_id!r}"
-            if envelope.contract_id
-            else f"session_id={envelope.session_id!r}"
+            f"contract_id={envelope.contract_id!r}" if envelope.contract_id else f"session_id={envelope.session_id!r}"
         )
         return AndroidSignalReconcileOutcome(
             record=None,
@@ -967,8 +931,7 @@ def reconcile_android_execution_signal(
                 or "android execution error"
             )
         result_payload: Dict[str, Any] = {
-            k: v for k, v in envelope.payload.items()
-            if k not in ("contract_id", "session_id", "device_id", "trace_id")
+            k: v for k, v in envelope.payload.items() if k not in ("contract_id", "session_id", "device_id", "trace_id")
         }
         result_obj = DelegatedExecutionResult(
             success=is_success,

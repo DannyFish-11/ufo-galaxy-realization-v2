@@ -55,6 +55,7 @@ def _is_local_device(device_id: str) -> bool:
 # Parallel-group state machine
 # ---------------------------------------------------------------------------
 
+
 class _SubtaskStatus(str, enum.Enum):
     PENDING = "pending"
     RUNNING = "running"
@@ -66,29 +67,30 @@ class _SubtaskStatus(str, enum.Enum):
 
 @dataclasses.dataclass
 class _SubtaskEntry:
-    task_id:       str
-    group_id:      str
+    task_id: str
+    group_id: str
     subtask_index: int
-    device_id:     str
-    subtask:       str
-    status:        _SubtaskStatus = _SubtaskStatus.PENDING
-    started_at:    Optional[float] = None
-    finished_at:   Optional[float] = None
-    result:        Optional[Dict] = None
-    error:         Optional[str] = None
-    retry_count:   int = 0
+    device_id: str
+    subtask: str
+    status: _SubtaskStatus = _SubtaskStatus.PENDING
+    started_at: Optional[float] = None
+    finished_at: Optional[float] = None
+    result: Optional[Dict] = None
+    error: Optional[str] = None
+    retry_count: int = 0
 
 
 @dataclasses.dataclass
 class ParallelResult:
     """Aggregated result for a parallel_group execution."""
-    group_id:       str
+
+    group_id: str
     device_results: List[Dict]
-    summary_status: str          # "success" | "partial" | "failed" | "cancelled"
-    succeeded:      int
-    failed:         int
-    cancelled:      int
-    total:          int
+    summary_status: str  # "success" | "partial" | "failed" | "cancelled"
+    succeeded: int
+    failed: int
+    cancelled: int
+    total: int
 
     def to_dict(self) -> Dict:
         return dataclasses.asdict(self)
@@ -124,7 +126,8 @@ class ParallelGroupTracker:
         self._groups[group_id] = {e.task_id: e for e in entries}
         logger.debug(
             "ParallelGroupTracker: registered group=%s subtasks=%d",
-            group_id, len(entries),
+            group_id,
+            len(entries),
         )
 
     def mark_running(self, group_id: str, task_id: str) -> None:
@@ -172,10 +175,7 @@ class ParallelGroupTracker:
         entry = self._get_entry(group_id, task_id)
         if entry is None:
             return False
-        return (
-            entry.status in (_SubtaskStatus.FAILED, _SubtaskStatus.TIMEOUT)
-            and entry.retry_count < self._MAX_RETRIES
-        )
+        return entry.status in (_SubtaskStatus.FAILED, _SubtaskStatus.TIMEOUT) and entry.retry_count < self._MAX_RETRIES
 
     def backoff_delay(self, group_id: str, task_id: str) -> float:
         entry = self._get_entry(group_id, task_id)
@@ -205,16 +205,18 @@ class ParallelGroupTracker:
             latency_ms: Optional[float] = None
             if e.started_at is not None and e.finished_at is not None:
                 latency_ms = round((e.finished_at - e.started_at) * 1000, 1)
-            device_results.append({
-                "group_id":      group_id,
-                "subtask_index": e.subtask_index,
-                "device_id":     e.device_id,
-                "task_id":       e.task_id,
-                "status":        e.status.value,
-                "result":        e.result,
-                "error":         e.error,
-                "latency_ms":    latency_ms,
-            })
+            device_results.append(
+                {
+                    "group_id": group_id,
+                    "subtask_index": e.subtask_index,
+                    "device_id": e.device_id,
+                    "task_id": e.task_id,
+                    "status": e.status.value,
+                    "result": e.result,
+                    "error": e.error,
+                    "latency_ms": latency_ms,
+                }
+            )
 
         succeeded = sum(1 for e in entries if e.status == _SubtaskStatus.SUCCESS)
         cancelled = sum(1 for e in entries if e.status == _SubtaskStatus.CANCELLED)
@@ -252,6 +254,7 @@ class ParallelGroupTracker:
 # ---------------------------------------------------------------------------
 # LifecycleManager
 # ---------------------------------------------------------------------------
+
 
 class LifecycleManager:
     """Manages task/group cancellation registry and plan lifecycle transitions."""

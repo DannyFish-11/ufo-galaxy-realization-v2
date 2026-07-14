@@ -115,7 +115,6 @@ from core.runtime_invariant_enforcement import (
     run_invariant_gate,
 )
 
-
 # ---------------------------------------------------------------------------
 # A. Module importable; authority and sentinel non-empty
 # ---------------------------------------------------------------------------
@@ -127,9 +126,7 @@ def test_authority_sentinel_non_empty() -> None:
 
 
 def test_authority_sentinel_has_expected_tokens() -> None:
-    assert RUNTIME_INVARIANT_ENFORCEMENT_IS_AUTHORITY.startswith(
-        "RUNTIME_INVARIANT_ENFORCEMENT_IS_AUTHORITY::"
-    )
+    assert RUNTIME_INVARIANT_ENFORCEMENT_IS_AUTHORITY.startswith("RUNTIME_INVARIANT_ENFORCEMENT_IS_AUTHORITY::")
     assert "core.runtime_invariant_enforcement" in RUNTIME_INVARIANT_ENFORCEMENT_IS_AUTHORITY
     assert "PR-8" in RUNTIME_INVARIANT_ENFORCEMENT_IS_AUTHORITY
 
@@ -140,9 +137,7 @@ def test_pr8_sentinel_non_empty() -> None:
 
 
 def test_pr8_sentinel_has_expected_tokens() -> None:
-    assert RUNTIME_INVARIANT_ENFORCEMENT_PR8_SENTINEL.startswith(
-        "RUNTIME_INVARIANT_ENFORCEMENT_PR8_SENTINEL::"
-    )
+    assert RUNTIME_INVARIANT_ENFORCEMENT_PR8_SENTINEL.startswith("RUNTIME_INVARIANT_ENFORCEMENT_PR8_SENTINEL::")
     assert "PR8" in RUNTIME_INVARIANT_ENFORCEMENT_PR8_SENTINEL
     assert "runtime-invariant-enforcement-v1" in RUNTIME_INVARIANT_ENFORCEMENT_PR8_SENTINEL
     assert "core.runtime_invariant_enforcement" in RUNTIME_INVARIANT_ENFORCEMENT_PR8_SENTINEL
@@ -173,9 +168,7 @@ def test_policy_sentinels_have_policy_prefix() -> None:
         ACCEPTANCE_COVERAGE_MUST_PROTECT_CANONICAL_MODEL_POLICY,
         INVARIANT_VIOLATIONS_MUST_BE_OBSERVABLE_POLICY,
     ]:
-        assert sentinel.startswith("POLICY::"), (
-            f"Sentinel does not start with 'POLICY::': {sentinel!r}"
-        )
+        assert sentinel.startswith("POLICY::"), f"Sentinel does not start with 'POLICY::': {sentinel!r}"
 
 
 # ---------------------------------------------------------------------------
@@ -257,12 +250,8 @@ def test_every_invariant_has_required_non_empty_fields() -> None:
     for record in get_invariant_registry():
         assert record.invariant_id, f"invariant_id empty for {record}"
         assert record.description, f"description empty for {record.invariant_id}"
-        assert record.enforcement_mechanism, (
-            f"enforcement_mechanism empty for {record.invariant_id}"
-        )
-        assert record.prior_pr_reference, (
-            f"prior_pr_reference empty for {record.invariant_id}"
-        )
+        assert record.enforcement_mechanism, f"enforcement_mechanism empty for {record.invariant_id}"
+        assert record.prior_pr_reference, f"prior_pr_reference empty for {record.invariant_id}"
         assert isinstance(record.domain, InvariantDomain)
         assert isinstance(record.severity, InvariantSeverity)
         assert isinstance(record.status, InvariantStatus)
@@ -305,9 +294,7 @@ def test_every_assumption_has_required_non_empty_fields() -> None:
         assert record.v2_surface, f"v2_surface empty for {record.assumption_id}"
         assert record.android_surface, f"android_surface empty for {record.assumption_id}"
         assert record.description, f"description empty for {record.assumption_id}"
-        assert record.validation_mechanism, (
-            f"validation_mechanism empty for {record.assumption_id}"
-        )
+        assert record.validation_mechanism, f"validation_mechanism empty for {record.assumption_id}"
         assert isinstance(record.domain, InvariantDomain)
 
 
@@ -328,8 +315,16 @@ def test_assumption_ids_are_unique() -> None:
 
 def test_invariant_registry_contains_all_expected_ids() -> None:
     expected_ids = {
-        "INV-001", "INV-002", "INV-003", "INV-004", "INV-005",
-        "INV-006", "INV-007", "INV-008", "INV-009", "INV-010",
+        "INV-001",
+        "INV-002",
+        "INV-003",
+        "INV-004",
+        "INV-005",
+        "INV-006",
+        "INV-007",
+        "INV-008",
+        "INV-009",
+        "INV-010",
     }
     actual_ids = {r.invariant_id for r in get_invariant_registry()}
     missing = expected_ids - actual_ids
@@ -343,8 +338,12 @@ def test_invariant_registry_contains_all_expected_ids() -> None:
 
 def test_assumption_registry_contains_all_expected_ids() -> None:
     expected_ids = {
-        "ASSUME-001", "ASSUME-002", "ASSUME-003",
-        "ASSUME-004", "ASSUME-005", "ASSUME-006",
+        "ASSUME-001",
+        "ASSUME-002",
+        "ASSUME-003",
+        "ASSUME-004",
+        "ASSUME-005",
+        "ASSUME-006",
     }
     actual_ids = {r.assumption_id for r in get_cross_repo_assumption_registry()}
     missing = expected_ids - actual_ids
@@ -361,9 +360,7 @@ def test_get_invariants_by_domain_returns_only_matching() -> None:
         results = get_invariants_by_domain(domain)
         assert isinstance(results, list)
         for r in results:
-            assert r.domain == domain, (
-                f"Domain mismatch: expected {domain}, got {r.domain} for {r.invariant_id}"
-            )
+            assert r.domain == domain, f"Domain mismatch: expected {domain}, got {r.domain} for {r.invariant_id}"
 
 
 def test_get_invariants_by_domain_non_empty_for_task_lifecycle() -> None:
@@ -402,8 +399,7 @@ def test_get_violated_invariants_empty_in_clean_state() -> None:
     # In the clean registry there should be no REGRESSION_RISK invariants
     violated = get_violated_invariants()
     assert violated == [], (
-        f"Expected no REGRESSION_RISK invariants in clean state, found: "
-        f"{[r.invariant_id for r in violated]}"
+        f"Expected no REGRESSION_RISK invariants in clean state, found: " f"{[r.invariant_id for r in violated]}"
     )
 
 
@@ -421,8 +417,7 @@ def test_get_unvalidated_assumptions_empty_in_clean_state() -> None:
     # In the clean registry all assumptions should be validated
     unvalidated = get_unvalidated_assumptions()
     assert unvalidated == [], (
-        f"Expected no unvalidated assumptions in clean state, found: "
-        f"{[a.assumption_id for a in unvalidated]}"
+        f"Expected no unvalidated assumptions in clean state, found: " f"{[a.assumption_id for a in unvalidated]}"
     )
 
 
@@ -542,9 +537,7 @@ def test_run_cross_repo_validation_gate_verdict_non_none() -> None:
 def test_run_all_enforcement_gates_length() -> None:
     results = run_all_enforcement_gates()
     expected_len = len(list(InvariantDomain)) + 1
-    assert len(results) == expected_len, (
-        f"Expected {expected_len} gate results, got {len(results)}"
-    )
+    assert len(results) == expected_len, f"Expected {expected_len} gate results, got {len(results)}"
 
 
 def test_run_all_enforcement_gates_all_correct_type() -> None:
@@ -576,8 +569,7 @@ def test_snapshot_invariant_counts_consistent() -> None:
         + snapshot.regression_risk_count
     )
     assert snapshot.total_invariants == total, (
-        f"Snapshot invariant count inconsistency: total={snapshot.total_invariants}, "
-        f"sum={total}"
+        f"Snapshot invariant count inconsistency: total={snapshot.total_invariants}, " f"sum={total}"
     )
 
 
@@ -590,8 +582,7 @@ def test_snapshot_assumption_counts_consistent() -> None:
     snapshot = build_enforcement_snapshot()
     total = snapshot.validated_assumption_count + snapshot.unvalidated_assumption_count
     assert snapshot.total_assumptions == total, (
-        f"Snapshot assumption count inconsistency: total={snapshot.total_assumptions}, "
-        f"sum={total}"
+        f"Snapshot assumption count inconsistency: total={snapshot.total_assumptions}, " f"sum={total}"
     )
 
 
@@ -631,17 +622,13 @@ def test_snapshot_to_dict_expected_keys() -> None:
         "invariant_summaries",
         "assumption_summaries",
     }
-    assert expected_keys == set(d.keys()), (
-        f"Snapshot dict keys mismatch: {set(d.keys()) ^ expected_keys}"
-    )
+    assert expected_keys == set(d.keys()), f"Snapshot dict keys mismatch: {set(d.keys()) ^ expected_keys}"
 
 
 def test_snapshot_to_dict_by_status_keys() -> None:
     snapshot = build_enforcement_snapshot()
     by_status = snapshot.to_dict()["by_status"]
-    assert set(by_status.keys()) == {
-        "enforced", "partially_enforced", "documented_only", "regression_risk"
-    }
+    assert set(by_status.keys()) == {"enforced", "partially_enforced", "documented_only", "regression_risk"}
 
 
 def test_snapshot_to_dict_cross_repo_assumptions_keys() -> None:
@@ -657,17 +644,22 @@ def test_snapshot_to_dict_cross_repo_assumptions_keys() -> None:
 
 def test_invariant_record_to_dict_has_required_keys() -> None:
     required_keys = {
-        "invariant_id", "domain", "severity", "status",
-        "description", "enforcement_mechanism", "prior_pr_reference",
-        "violation_log_prefix", "regression_risk_detail",
-        "acceptance_test_gap", "notes",
+        "invariant_id",
+        "domain",
+        "severity",
+        "status",
+        "description",
+        "enforcement_mechanism",
+        "prior_pr_reference",
+        "violation_log_prefix",
+        "regression_risk_detail",
+        "acceptance_test_gap",
+        "notes",
     }
     for record in get_invariant_registry():
         d = record.to_dict()
         missing = required_keys - set(d.keys())
-        assert not missing, (
-            f"Missing keys in {record.invariant_id}.to_dict(): {missing}"
-        )
+        assert not missing, f"Missing keys in {record.invariant_id}.to_dict(): {missing}"
 
 
 # ---------------------------------------------------------------------------
@@ -677,16 +669,21 @@ def test_invariant_record_to_dict_has_required_keys() -> None:
 
 def test_assumption_record_to_dict_has_required_keys() -> None:
     required_keys = {
-        "assumption_id", "domain", "v2_surface", "android_surface",
-        "description", "validation_mechanism", "validated",
-        "validation_evidence", "drift_consequence", "notes",
+        "assumption_id",
+        "domain",
+        "v2_surface",
+        "android_surface",
+        "description",
+        "validation_mechanism",
+        "validated",
+        "validation_evidence",
+        "drift_consequence",
+        "notes",
     }
     for record in get_cross_repo_assumption_registry():
         d = record.to_dict()
         missing = required_keys - set(d.keys())
-        assert not missing, (
-            f"Missing keys in {record.assumption_id}.to_dict(): {missing}"
-        )
+        assert not missing, f"Missing keys in {record.assumption_id}.to_dict(): {missing}"
 
 
 # ---------------------------------------------------------------------------
@@ -696,16 +693,20 @@ def test_assumption_record_to_dict_has_required_keys() -> None:
 
 def test_gate_result_to_dict_has_required_keys() -> None:
     required_keys = {
-        "gate_id", "domain", "verdict", "regression_risk_count",
-        "documented_only_count", "unvalidated_assumption_count",
-        "details", "issues", "checked_at",
+        "gate_id",
+        "domain",
+        "verdict",
+        "regression_risk_count",
+        "documented_only_count",
+        "unvalidated_assumption_count",
+        "details",
+        "issues",
+        "checked_at",
     }
     for result in run_all_enforcement_gates():
         d = result.to_dict()
         missing = required_keys - set(d.keys())
-        assert not missing, (
-            f"Missing keys in gate {result.gate_id}.to_dict(): {missing}"
-        )
+        assert not missing, f"Missing keys in gate {result.gate_id}.to_dict(): {missing}"
 
 
 # ---------------------------------------------------------------------------
@@ -751,8 +752,7 @@ def test_invariants_with_acceptance_test_gap_have_non_empty_description() -> Non
         # acceptance_test_gap is either empty or has a meaningful description
         if record.acceptance_test_gap:
             assert len(record.acceptance_test_gap) > 10, (
-                f"acceptance_test_gap for {record.invariant_id} is too short: "
-                f"{record.acceptance_test_gap!r}"
+                f"acceptance_test_gap for {record.invariant_id} is too short: " f"{record.acceptance_test_gap!r}"
             )
 
 
@@ -765,8 +765,7 @@ def test_validated_assumptions_have_non_empty_evidence() -> None:
     for record in get_cross_repo_assumption_registry():
         if record.validated:
             assert record.validation_evidence, (
-                f"Validated assumption {record.assumption_id} must have "
-                "non-empty validation_evidence."
+                f"Validated assumption {record.assumption_id} must have " "non-empty validation_evidence."
             )
 
 
@@ -788,13 +787,8 @@ def test_all_gate_results_to_dict_have_gate_id_and_verdict() -> None:
 
 
 def test_no_regression_risk_invariants_in_clean_state() -> None:
-    regression = [
-        r.invariant_id for r in get_invariant_registry()
-        if r.status == InvariantStatus.REGRESSION_RISK
-    ]
-    assert regression == [], (
-        f"REGRESSION_RISK invariants found in registry: {regression}"
-    )
+    regression = [r.invariant_id for r in get_invariant_registry() if r.status == InvariantStatus.REGRESSION_RISK]
+    assert regression == [], f"REGRESSION_RISK invariants found in registry: {regression}"
 
 
 # ---------------------------------------------------------------------------
@@ -851,9 +845,7 @@ def test_assume001_validated_and_has_evidence() -> None:
 def test_inv009_is_enforced() -> None:
     record = check_invariant("INV-009")
     assert record is not None
-    assert record.status == InvariantStatus.ENFORCED, (
-        f"INV-009 expected ENFORCED, got {record.status}"
-    )
+    assert record.status == InvariantStatus.ENFORCED, f"INV-009 expected ENFORCED, got {record.status}"
 
 
 # ---------------------------------------------------------------------------
@@ -864,9 +856,7 @@ def test_inv009_is_enforced() -> None:
 def test_inv010_is_enforced() -> None:
     record = check_invariant("INV-010")
     assert record is not None
-    assert record.status == InvariantStatus.ENFORCED, (
-        f"INV-010 expected ENFORCED, got {record.status}"
-    )
+    assert record.status == InvariantStatus.ENFORCED, f"INV-010 expected ENFORCED, got {record.status}"
 
 
 # ---------------------------------------------------------------------------
@@ -887,9 +877,7 @@ def test_all_invariant_violation_log_prefixes_follow_convention() -> None:
 def test_all_cross_repo_assumptions_have_drift_consequence() -> None:
     """Every cross-repo assumption should document the consequence of violation."""
     for record in get_cross_repo_assumption_registry():
-        assert record.drift_consequence, (
-            f"CrossRepoAssumptionRecord {record.assumption_id} missing drift_consequence"
-        )
+        assert record.drift_consequence, f"CrossRepoAssumptionRecord {record.assumption_id} missing drift_consequence"
 
 
 def test_snapshot_invariant_summaries_length_matches_registry() -> None:
@@ -913,8 +901,7 @@ def test_cross_repo_validation_gate_pass_in_clean_state() -> None:
         ValidationGateVerdict.pass_,
         ValidationGateVerdict.warn,
     ), (
-        f"Cross-repo validation gate should be pass or warn in clean state, "
-        f"got: {result.verdict}"
+        f"Cross-repo validation gate should be pass or warn in clean state, " f"got: {result.verdict}"
     )
 
 
@@ -923,8 +910,7 @@ def test_invariant_gate_no_fail_verdicts_in_clean_state() -> None:
     for domain in InvariantDomain:
         result = run_invariant_gate(domain)
         assert result.verdict != ValidationGateVerdict.fail, (
-            f"Domain gate {domain.value} returned fail verdict in clean state: "
-            f"{result.details}"
+            f"Domain gate {domain.value} returned fail verdict in clean state: " f"{result.details}"
         )
 
 
@@ -933,6 +919,4 @@ def test_enforcement_snapshot_generated_at_is_recent() -> None:
     snapshot = build_enforcement_snapshot()
     now = time.time()
     assert snapshot.generated_at <= now
-    assert snapshot.generated_at > now - 60, (
-        "Snapshot generated_at is unexpectedly old"
-    )
+    assert snapshot.generated_at > now - 60, "Snapshot generated_at is unexpectedly old"

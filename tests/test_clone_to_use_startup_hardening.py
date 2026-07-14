@@ -175,7 +175,7 @@ class TestOrchestratorNatsPostureGuard:
     """Phase-4 preflight should enforce required NATS posture."""
 
     def test_phase4_fails_when_required_posture_assertion_fails(self, monkeypatch):
-        from core.system_orchestrator import SystemOrchestrator, PhaseStatus
+        from core.system_orchestrator import PhaseStatus, SystemOrchestrator
 
         monkeypatch.setattr(
             "core.nats_posture.evaluate_nats_posture",
@@ -191,7 +191,7 @@ class TestOrchestratorNatsPostureGuard:
         assert "required_nats_unreachable" in result.detail
 
     def test_phase4_ok_when_development_posture_allows_degraded(self, monkeypatch):
-        from core.system_orchestrator import SystemOrchestrator, PhaseStatus
+        from core.system_orchestrator import PhaseStatus, SystemOrchestrator
 
         monkeypatch.setattr(
             "core.nats_posture.evaluate_nats_posture",

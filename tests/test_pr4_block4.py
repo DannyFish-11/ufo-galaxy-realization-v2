@@ -36,11 +36,11 @@ def _reset_all() -> None:
     """Reset all Block-4 singletons."""
     from core.mesh.body_mesh_registry import reset_body_mesh_registry
     from core.mesh.device_role_allocator import reset_device_role_allocator
-    from core.unified.device_health import reset_device_health_scorer
     from core.policy.hitl_policy import reset_hitl_policy
-    from core.presence.presence_projection import reset_presence_projection
     from core.presence.presence_director import reset_presence_director
+    from core.presence.presence_projection import reset_presence_projection
     from core.state_event_bus import reset_state_event_bus
+    from core.unified.device_health import reset_device_health_scorer
 
     reset_body_mesh_registry()
     reset_device_role_allocator()
@@ -199,24 +199,24 @@ class TestDeviceRoleAllocator:
         _reset_all()
 
     def test_infer_roles_camera(self):
-        from core.mesh.device_role_allocator import DeviceRoleAllocator
         from core.mesh.body_mesh_registry import DeviceRole
+        from core.mesh.device_role_allocator import DeviceRoleAllocator
 
         alloc = DeviceRoleAllocator()
         roles = alloc.infer_roles(["camera", "microphone"])
         assert DeviceRole.PERCEPTION in roles
 
     def test_infer_roles_touch(self):
-        from core.mesh.device_role_allocator import DeviceRoleAllocator
         from core.mesh.body_mesh_registry import DeviceRole
+        from core.mesh.device_role_allocator import DeviceRoleAllocator
 
         alloc = DeviceRoleAllocator()
         roles = alloc.infer_roles(["touch", "keyboard"])
         assert DeviceRole.ACTION in roles
 
     def test_infer_roles_screen(self):
-        from core.mesh.device_role_allocator import DeviceRoleAllocator
         from core.mesh.body_mesh_registry import DeviceRole
+        from core.mesh.device_role_allocator import DeviceRoleAllocator
 
         alloc = DeviceRoleAllocator()
         roles = alloc.infer_roles(["screen", "speaker"])
@@ -235,8 +235,8 @@ class TestDeviceRoleAllocator:
         assert alloc.infer_roles(["flux_capacitor"]) == []
 
     def test_allocate_writes_to_registry(self):
+        from core.mesh.body_mesh_registry import DeviceRole, get_body_mesh_registry
         from core.mesh.device_role_allocator import DeviceRoleAllocator
-        from core.mesh.body_mesh_registry import get_body_mesh_registry, DeviceRole
 
         alloc = DeviceRoleAllocator()
         result = alloc.allocate("dev_x", capabilities=["camera", "screen"], health_score=0.9)
@@ -249,8 +249,8 @@ class TestDeviceRoleAllocator:
         assert entry is not None
 
     def test_register_capability_rule(self):
-        from core.mesh.device_role_allocator import DeviceRoleAllocator
         from core.mesh.body_mesh_registry import DeviceRole
+        from core.mesh.device_role_allocator import DeviceRoleAllocator
 
         alloc = DeviceRoleAllocator()
         alloc.register_capability_rule("teleporter", DeviceRole.ACTION)
@@ -404,7 +404,7 @@ class TestCommandEnvelopeCancelVerbs:
         assert env.verb == CommandVerb.EXECUTE
 
     def test_make_cancel(self):
-        from core.unified.command_envelope import CommandEnvelope, CommandVerb, CancelReason
+        from core.unified.command_envelope import CancelReason, CommandEnvelope, CommandVerb
 
         env = CommandEnvelope.make_cancel(
             task_id="task_123",
@@ -435,7 +435,7 @@ class TestCommandEnvelopeCancelVerbs:
         assert d["verb"] == CommandVerb.CANCEL.value
 
     def test_from_dict_round_trip_with_verb(self):
-        from core.unified.command_envelope import CommandEnvelope, CommandVerb, CancelReason
+        from core.unified.command_envelope import CancelReason, CommandEnvelope, CommandVerb
 
         env = CommandEnvelope.make_cancel(
             task_id="task_round",
@@ -458,6 +458,7 @@ class TestCommandEnvelopeCancelVerbs:
         env = CommandEnvelope.from_dict(d)
         # Unknown verb is dropped; default EXECUTE is used
         from core.unified.command_envelope import CommandVerb
+
         assert env.verb == CommandVerb.EXECUTE
 
     def test_cancel_target_task_ids_in_to_dict(self):
@@ -475,7 +476,7 @@ class TestCommandEnvelopeCancelVerbs:
 
 class TestTaskGraphCancellation:
     def test_cancel_marks_pending_nodes_cancelled(self):
-        from core.task_graph import TaskGraph, NodeStatus
+        from core.task_graph import NodeStatus, TaskGraph
 
         async def handler(node, ctx):
             return {}
@@ -494,7 +495,7 @@ class TestTaskGraphCancellation:
         assert NodeStatus.CANCELLED in statuses or NodeStatus.INTERRUPTED in statuses
 
     def test_interrupt_marks_pending_nodes_interrupted(self):
-        from core.task_graph import TaskGraph, NodeStatus
+        from core.task_graph import NodeStatus, TaskGraph
 
         async def handler(node, ctx):
             return {}
@@ -510,9 +511,7 @@ class TestTaskGraphCancellation:
         # All pending nodes should be interrupted
         for nid, node in graph._nodes.items():
             if node.status != "done":
-                assert node.status in (
-                    NodeStatus.INTERRUPTED, NodeStatus.CANCELLED, "interrupted", "cancelled"
-                )
+                assert node.status in (NodeStatus.INTERRUPTED, NodeStatus.CANCELLED, "interrupted", "cancelled")
 
     def test_cancel_flag_set(self):
         from core.task_graph import TaskGraph
@@ -597,7 +596,7 @@ class TestHITLPolicy:
         _reset_all()
 
     def test_auto_mode_always_approves(self):
-        from core.policy.hitl_policy import HITLPolicy, HITLMode
+        from core.policy.hitl_policy import HITLMode, HITLPolicy
 
         policy = HITLPolicy(mode=HITLMode.AUTO)
         decision = policy.evaluate("manifest_projection")
@@ -605,28 +604,28 @@ class TestHITLPolicy:
         assert decision.decided_by == "auto"
 
     def test_semi_mode_low_risk_auto_approves(self):
-        from core.policy.hitl_policy import HITLPolicy, HITLMode
+        from core.policy.hitl_policy import HITLMode, HITLPolicy
 
         policy = HITLPolicy(mode=HITLMode.SEMI)
         decision = policy.evaluate("fetch_data")  # not high risk
         assert decision.approved is True
 
     def test_semi_mode_high_risk_creates_request(self):
-        from core.policy.hitl_policy import HITLPolicy, HITLMode
+        from core.policy.hitl_policy import HITLMode, HITLPolicy
 
         policy = HITLPolicy(mode=HITLMode.SEMI, timeout_default_approve=True)
         decision = policy.evaluate("manifest_projection")
         assert decision.request_id.startswith("hitl_")
 
     def test_manual_mode_all_create_requests(self):
-        from core.policy.hitl_policy import HITLPolicy, HITLMode
+        from core.policy.hitl_policy import HITLMode, HITLPolicy
 
         policy = HITLPolicy(mode=HITLMode.MANUAL, timeout_default_approve=False)
         decision = policy.evaluate("fetch_data")
         assert decision.approved is False  # pessimistic default
 
     def test_decide_approves_request(self):
-        from core.policy.hitl_policy import HITLPolicy, HITLMode, HITLDecisionOutcome
+        from core.policy.hitl_policy import HITLDecisionOutcome, HITLMode, HITLPolicy
 
         policy = HITLPolicy(mode=HITLMode.MANUAL, timeout_default_approve=True)
         initial_decision = policy.evaluate("manifest_projection")
@@ -638,7 +637,7 @@ class TestHITLPolicy:
         assert final.decided_by == "alice"
 
     def test_decide_rejects_request(self):
-        from core.policy.hitl_policy import HITLPolicy, HITLMode, HITLDecisionOutcome
+        from core.policy.hitl_policy import HITLDecisionOutcome, HITLMode, HITLPolicy
 
         policy = HITLPolicy(mode=HITLMode.MANUAL, timeout_default_approve=True)
         initial = policy.evaluate("cross_device_control")
@@ -654,7 +653,7 @@ class TestHITLPolicy:
         assert result is None
 
     def test_pending_requests_list(self):
-        from core.policy.hitl_policy import HITLPolicy, HITLMode
+        from core.policy.hitl_policy import HITLMode, HITLPolicy
 
         policy = HITLPolicy(mode=HITLMode.MANUAL, timeout_default_approve=True)
         policy.evaluate("action_1")
@@ -663,7 +662,7 @@ class TestHITLPolicy:
         assert len(pending) == 2
 
     def test_high_risk_classifier_callable(self):
-        from core.policy.hitl_policy import HITLPolicy, HITLMode
+        from core.policy.hitl_policy import HITLMode, HITLPolicy
 
         policy = HITLPolicy(
             mode=HITLMode.SEMI,
@@ -677,14 +676,14 @@ class TestHITLPolicy:
         assert risky.request_id.startswith("hitl_")
 
     def test_mode_setter(self):
-        from core.policy.hitl_policy import HITLPolicy, HITLMode
+        from core.policy.hitl_policy import HITLMode, HITLPolicy
 
         policy = HITLPolicy(mode=HITLMode.AUTO)
         policy.mode = HITLMode.MANUAL
         assert policy.mode == HITLMode.MANUAL
 
     def test_decision_history_recorded(self):
-        from core.policy.hitl_policy import HITLPolicy, HITLMode
+        from core.policy.hitl_policy import HITLMode, HITLPolicy
 
         policy = HITLPolicy(mode=HITLMode.MANUAL, timeout_default_approve=True)
         d1 = policy.evaluate("op_1")
@@ -693,7 +692,7 @@ class TestHITLPolicy:
         assert len(history) >= 1
 
     def test_hitl_request_to_dict(self):
-        from core.policy.hitl_policy import HITLPolicy, HITLMode
+        from core.policy.hitl_policy import HITLMode, HITLPolicy
 
         policy = HITLPolicy(mode=HITLMode.MANUAL, timeout_default_approve=True)
         d = policy.evaluate("op_x")
@@ -778,8 +777,8 @@ class TestPresenceProjection:
         assert intensity == float(ProjectionIntensity.FULL)
 
     def test_project_uses_registry_entries(self):
+        from core.mesh.body_mesh_registry import DeviceRole, get_body_mesh_registry
         from core.presence.presence_projection import PresenceProjection
-        from core.mesh.body_mesh_registry import get_body_mesh_registry, DeviceRole
 
         reg = get_body_mesh_registry()
         reg.register("dev_a", roles=[DeviceRole.PRESENCE])
@@ -819,8 +818,8 @@ class TestPresenceDirector:
         _reset_all()
 
     def test_on_phase_transition_manifest_projects(self):
-        from core.presence.presence_director import PresenceDirector, DirectorConfig
-        from core.mesh.body_mesh_registry import get_body_mesh_registry, DeviceRole
+        from core.mesh.body_mesh_registry import DeviceRole, get_body_mesh_registry
+        from core.presence.presence_director import DirectorConfig, PresenceDirector
 
         reg = get_body_mesh_registry()
         reg.register("dev_screen", roles=[DeviceRole.PRESENCE])
@@ -830,15 +829,15 @@ class TestPresenceDirector:
         assert result["projected"] is True
 
     def test_on_phase_transition_silent_no_projection(self):
-        from core.presence.presence_director import PresenceDirector, DirectorConfig
+        from core.presence.presence_director import DirectorConfig, PresenceDirector
 
         director = PresenceDirector(DirectorConfig(project_on_manifest=True))
         result = director.on_phase_transition("manifest", "silent")
         assert result["projected"] is False
 
     def test_hitl_gating_blocks_when_rejected(self):
-        from core.presence.presence_director import PresenceDirector, DirectorConfig
-        from core.policy.hitl_policy import get_hitl_policy, HITLMode
+        from core.policy.hitl_policy import HITLMode, get_hitl_policy
+        from core.presence.presence_director import DirectorConfig, PresenceDirector
 
         # Set policy to MANUAL with pessimistic default
         policy = get_hitl_policy()
@@ -852,8 +851,8 @@ class TestPresenceDirector:
         assert result["projected"] is False
 
     def test_hitl_gating_allows_when_approved(self):
-        from core.presence.presence_director import PresenceDirector, DirectorConfig
-        from core.policy.hitl_policy import get_hitl_policy, HITLMode
+        from core.policy.hitl_policy import HITLMode, get_hitl_policy
+        from core.presence.presence_director import DirectorConfig, PresenceDirector
 
         # Set policy to MANUAL with optimistic default
         policy = get_hitl_policy()
@@ -866,7 +865,7 @@ class TestPresenceDirector:
         assert result["projected"] is True
 
     def test_trace_log_populated(self):
-        from core.presence.presence_director import PresenceDirector, DirectorConfig
+        from core.presence.presence_director import DirectorConfig, PresenceDirector
 
         director = PresenceDirector(DirectorConfig(project_on_manifest=True))
         director.on_phase_transition("liminal", "manifest")
@@ -875,8 +874,8 @@ class TestPresenceDirector:
         assert len(log) == 2
 
     def test_refresh_presence_returns_events(self):
+        from core.mesh.body_mesh_registry import DeviceRole, get_body_mesh_registry
         from core.presence.presence_director import PresenceDirector
-        from core.mesh.body_mesh_registry import get_body_mesh_registry, DeviceRole
 
         reg = get_body_mesh_registry()
         reg.register("dev_r", roles=[DeviceRole.PRESENCE])
@@ -925,7 +924,7 @@ class TestStateEventBusNewTypes:
         assert hasattr(StateEventType, "TASK_CANCELLED")
 
     def test_subscribe_and_receive_presence_projected(self):
-        from core.state_event_bus import get_state_event_bus, StateEventType
+        from core.state_event_bus import StateEventType, get_state_event_bus
 
         bus = get_state_event_bus()
         received = []
@@ -940,7 +939,7 @@ class TestStateEventBusNewTypes:
         bus.unsubscribe(token)
 
     def test_hitl_evaluated_publish_receive(self):
-        from core.state_event_bus import get_state_event_bus, StateEventType
+        from core.state_event_bus import StateEventType, get_state_event_bus
 
         bus = get_state_event_bus()
         received = []
@@ -965,12 +964,13 @@ class TestDeviceManagerHealthIntegration:
         _reset_all()
         # Reset UDM singleton too
         from core.unified.device_manager import UnifiedDeviceManager
+
         UnifiedDeviceManager._instance = None
 
     def test_heartbeat_feeds_health_scorer(self):
+        from core.unified.device_health import get_device_health_scorer
         from core.unified.device_manager import UnifiedDeviceManager
         from core.unified.models import UnifiedDevice, UnifiedDeviceStatus
-        from core.unified.device_health import get_device_health_scorer
 
         udm = UnifiedDeviceManager()
         device = UnifiedDevice(
@@ -990,9 +990,9 @@ class TestDeviceManagerHealthIntegration:
         assert hs is not None
 
     def test_get_device_health_returns_score(self):
+        from core.unified.device_health import get_device_health_scorer
         from core.unified.device_manager import UnifiedDeviceManager
         from core.unified.models import UnifiedDevice, UnifiedDeviceStatus
-        from core.unified.device_health import get_device_health_scorer
 
         udm = UnifiedDeviceManager()
         device = UnifiedDevice(
@@ -1011,23 +1011,25 @@ class TestDeviceManagerHealthIntegration:
         assert 0.0 <= hs.total_score <= 1.0
 
     def test_get_online_devices_by_health_ordering(self):
+        from core.unified.device_health import get_device_health_scorer
         from core.unified.device_manager import UnifiedDeviceManager
         from core.unified.models import UnifiedDevice, UnifiedDeviceStatus
-        from core.unified.device_health import get_device_health_scorer
 
         udm = UnifiedDeviceManager()
         for dev_id in ("dh_a", "dh_b", "dh_c"):
-            udm.register_device(UnifiedDevice(
-                device_id=dev_id,
-                device_name=dev_id,
-                status=UnifiedDeviceStatus.ONLINE,
-            ))
+            udm.register_device(
+                UnifiedDevice(
+                    device_id=dev_id,
+                    device_name=dev_id,
+                    status=UnifiedDeviceStatus.ONLINE,
+                )
+            )
 
         scorer = get_device_health_scorer()
-        scorer.update("dh_a", latency_ms=10.0)    # best
-        scorer.update("dh_b", latency_ms=500.0)   # medium
+        scorer.update("dh_a", latency_ms=10.0)  # best
+        scorer.update("dh_b", latency_ms=500.0)  # medium
         for _ in range(5):
-            scorer.update("dh_c", error=True)      # worst
+            scorer.update("dh_c", error=True)  # worst
 
         ordered = udm.get_online_devices_by_health()
         ids = [d.device_id for d in ordered]

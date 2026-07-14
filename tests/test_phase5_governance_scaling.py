@@ -27,12 +27,14 @@ import pytest
 # Governance policy tests
 # ---------------------------------------------------------------------------
 
+
 class TestGovernancePolicyParsing:
     """Tests for core.governance.policy_schema."""
 
     def test_load_default_file(self):
         """The default governance_policy.json should parse cleanly."""
         from core.governance.policy_schema import load_governance_policy
+
         policy = load_governance_policy()
         assert policy.version is not None
         assert policy.budget_policy.session_budget_usd > 0
@@ -40,11 +42,13 @@ class TestGovernancePolicyParsing:
 
     def test_model_policy_defaults(self):
         from core.governance.policy_schema import GovernancePolicy
+
         p = GovernancePolicy()
         assert p.model_policy.fallback_model == "llama2"
 
     def test_budget_policy_defaults(self):
         from core.governance.policy_schema import GovernancePolicy
+
         p = GovernancePolicy()
         assert p.budget_policy.session_budget_usd == 1.0
         assert p.budget_policy.daily_budget_usd == 20.0
@@ -52,17 +56,20 @@ class TestGovernancePolicyParsing:
 
     def test_tool_policy_defaults(self):
         from core.governance.policy_schema import GovernancePolicy
+
         p = GovernancePolicy()
         assert p.tool_policy.default_action.value in ("allow", "deny")
 
     def test_queue_policy_defaults(self):
         from core.governance.policy_schema import GovernancePolicy
+
         p = GovernancePolicy()
         assert p.queue_policy.max_concurrent_tasks >= 1
         assert 0 < p.queue_policy.backpressure_threshold <= 1
 
     def test_parse_from_dict(self):
         from core.governance.policy_schema import GovernancePolicy
+
         raw = {
             "version": "2.0.0",
             "budget_policy": {
@@ -77,13 +84,16 @@ class TestGovernancePolicyParsing:
         assert p.budget_policy.on_exceed.value == "deny"
 
     def test_invalid_warning_threshold_raises(self):
-        from core.governance.policy_schema import BudgetPolicy
         import pydantic
+
+        from core.governance.policy_schema import BudgetPolicy
+
         with pytest.raises(pydantic.ValidationError):
             BudgetPolicy(warning_threshold=1.5)
 
     def test_load_nonexistent_file_returns_defaults(self):
         from core.governance.policy_schema import load_governance_policy
+
         policy = load_governance_policy("/tmp/does_not_exist_xyz.json")
         assert policy.version is not None  # graceful fallback
 
@@ -91,18 +101,20 @@ class TestGovernancePolicyParsing:
         bad = tmp_path / "bad.json"
         bad.write_text("{ NOT VALID JSON }", encoding="utf-8")
         from core.governance.policy_schema import load_governance_policy
+
         policy = load_governance_policy(str(bad))
         assert policy.version is not None
 
     def test_safety_tier_config(self):
         from core.governance.policy_schema import GovernancePolicy, SafetyTierConfig
-        p = GovernancePolicy.model_validate({
-            "model_policy": {
-                "safety_tiers": {
-                    "restricted": {"allowed_models": ["llama2"], "max_tokens_per_request": 1024}
+
+        p = GovernancePolicy.model_validate(
+            {
+                "model_policy": {
+                    "safety_tiers": {"restricted": {"allowed_models": ["llama2"], "max_tokens_per_request": 1024}}
                 }
             }
-        })
+        )
         assert "restricted" in p.model_policy.safety_tiers
         assert p.model_policy.safety_tiers["restricted"].max_tokens_per_request == 1024
 
@@ -111,12 +123,14 @@ class TestGovernancePolicyParsing:
 # Budget enforcement tests
 # ---------------------------------------------------------------------------
 
+
 class TestBudgetEnforcer:
     """Tests for core.governance.budget_enforcer.BudgetEnforcer."""
 
     def _make_enforcer(self, session_usd=1.0, daily_usd=20.0, tenant_usd=100.0, on_exceed="downgrade"):
-        from core.governance.policy_schema import BudgetPolicy, ModelPolicy, OnBudgetExceed
         from core.governance.budget_enforcer import BudgetEnforcer
+        from core.governance.policy_schema import BudgetPolicy, ModelPolicy, OnBudgetExceed
+
         bp = BudgetPolicy(
             session_budget_usd=session_usd,
             daily_budget_usd=daily_usd,
@@ -130,8 +144,10 @@ class TestBudgetEnforcer:
     async def test_within_budget_returns_requested_model(self):
         enforcer = self._make_enforcer()
         model = await enforcer.enforce_pre_call(
-            session_id="s1", tenant_id="t1",
-            requested_model="gpt-4", estimated_cost_usd=0.10,
+            session_id="s1",
+            tenant_id="t1",
+            requested_model="gpt-4",
+            estimated_cost_usd=0.10,
         )
         assert model == "gpt-4"
 
@@ -140,28 +156,35 @@ class TestBudgetEnforcer:
         enforcer = self._make_enforcer(session_usd=0.05)
         # First call fine
         model = await enforcer.enforce_pre_call(
-            session_id="s1", tenant_id="t1",
-            requested_model="gpt-4", estimated_cost_usd=0.03,
+            session_id="s1",
+            tenant_id="t1",
+            requested_model="gpt-4",
+            estimated_cost_usd=0.03,
         )
         assert model == "gpt-4"
         # Record the usage
         await enforcer.record_usage("s1", "t1", "gpt-4", 100, 0.03)
         # Second call exceeds session budget -> downgrade
         model = await enforcer.enforce_pre_call(
-            session_id="s1", tenant_id="t1",
-            requested_model="gpt-4", estimated_cost_usd=0.03,
+            session_id="s1",
+            tenant_id="t1",
+            requested_model="gpt-4",
+            estimated_cost_usd=0.03,
         )
         assert model == "llama2"
 
     @pytest.mark.asyncio
     async def test_budget_exceeded_deny_raises(self):
         from core.governance.budget_enforcer import BudgetExceededError
+
         enforcer = self._make_enforcer(session_usd=0.01, on_exceed="deny")
         await enforcer.record_usage("s1", "t1", "gpt-4", 100, 0.01)
         with pytest.raises(BudgetExceededError):
             await enforcer.enforce_pre_call(
-                session_id="s1", tenant_id="t1",
-                requested_model="gpt-4", estimated_cost_usd=0.01,
+                session_id="s1",
+                tenant_id="t1",
+                requested_model="gpt-4",
+                estimated_cost_usd=0.01,
             )
 
     @pytest.mark.asyncio
@@ -202,8 +225,9 @@ class TestBudgetEnforcer:
 
     @pytest.mark.asyncio
     async def test_warning_flag(self):
-        from core.governance.policy_schema import BudgetPolicy, ModelPolicy
         from core.governance.budget_enforcer import BudgetEnforcer
+        from core.governance.policy_schema import BudgetPolicy, ModelPolicy
+
         bp = BudgetPolicy(session_budget_usd=1.0, warning_threshold=0.5)
         enforcer = BudgetEnforcer(bp)
         await enforcer.record_usage("s1", "t1", "gpt-4", 1000, 0.60)
@@ -215,22 +239,24 @@ class TestBudgetEnforcer:
 # Tool governance tests
 # ---------------------------------------------------------------------------
 
+
 class TestToolGovernor:
     """Tests for core.governance.tool_governor.ToolGovernor."""
 
-    def _make_governor(self, deny_list=None, allow_list=None,
-                       risk_tiers=None, per_tool=None):
-        from core.governance.policy_schema import ToolPolicy, RiskTierConfig, DefaultToolAction
+    def _make_governor(self, deny_list=None, allow_list=None, risk_tiers=None, per_tool=None):
+        from core.governance.policy_schema import DefaultToolAction, RiskTierConfig, ToolPolicy
         from core.governance.tool_governor import ToolGovernor
+
         tp = ToolPolicy(
             default_action=DefaultToolAction.ALLOW,
             deny_list=deny_list or [],
             allow_list=allow_list or [],
-            risk_tiers=risk_tiers or {
-                "safe":     RiskTierConfig(action="allow", rate_limit_per_minute=120),
+            risk_tiers=risk_tiers
+            or {
+                "safe": RiskTierConfig(action="allow", rate_limit_per_minute=120),
                 "moderate": RiskTierConfig(action="allow", rate_limit_per_minute=60),
-                "high":     RiskTierConfig(action="allow", rate_limit_per_minute=10, require_audit=True),
-                "critical": RiskTierConfig(action="deny",  rate_limit_per_minute=0,  require_audit=True),
+                "high": RiskTierConfig(action="allow", rate_limit_per_minute=10, require_audit=True),
+                "critical": RiskTierConfig(action="deny", rate_limit_per_minute=0, require_audit=True),
             },
             per_tool_overrides=per_tool or {},
         )
@@ -257,14 +283,15 @@ class TestToolGovernor:
 
     @pytest.mark.asyncio
     async def test_rate_limit_exhaustion(self):
-        from core.governance.policy_schema import ToolPolicy, RiskTierConfig, DefaultToolAction
+        from core.governance.policy_schema import DefaultToolAction, RiskTierConfig, ToolPolicy
         from core.governance.tool_governor import ToolGovernor
+
         # Rate limit of 1/min means only 1 token in bucket
         tp = ToolPolicy(
             default_action=DefaultToolAction.ALLOW,
             risk_tiers={
                 "safe": RiskTierConfig(action="allow", rate_limit_per_minute=1),
-            }
+            },
         )
         gov = ToolGovernor(tp)
         # First call should succeed
@@ -278,22 +305,22 @@ class TestToolGovernor:
     @pytest.mark.asyncio
     async def test_per_tool_override_deny(self):
         from core.governance.policy_schema import RiskTierConfig
-        gov = self._make_governor(per_tool={
-            "shell_exec": RiskTierConfig(action="deny", rate_limit_per_minute=0)
-        })
+
+        gov = self._make_governor(per_tool={"shell_exec": RiskTierConfig(action="deny", rate_limit_per_minute=0)})
         d = await gov.check("shell_exec", "safe")
         assert d.allowed is False
 
     @pytest.mark.asyncio
     async def test_allow_list_bypasses_default_deny(self):
-        from core.governance.policy_schema import ToolPolicy, RiskTierConfig, DefaultToolAction
+        from core.governance.policy_schema import DefaultToolAction, RiskTierConfig, ToolPolicy
         from core.governance.tool_governor import ToolGovernor
+
         tp = ToolPolicy(
             default_action=DefaultToolAction.DENY,
             allow_list=["safe_tool"],
             risk_tiers={
                 "safe": RiskTierConfig(action="allow", rate_limit_per_minute=60),
-            }
+            },
         )
         gov = ToolGovernor(tp)
         d = await gov.check("safe_tool", "safe")
@@ -329,8 +356,9 @@ class TestToolGovernor:
     @pytest.mark.asyncio
     async def test_bucket_refill_over_time(self):
         """After a short wait, the bucket should refill and allow another call."""
-        from core.governance.policy_schema import ToolPolicy, RiskTierConfig, DefaultToolAction
+        from core.governance.policy_schema import DefaultToolAction, RiskTierConfig, ToolPolicy
         from core.governance.tool_governor import ToolGovernor
+
         tp = ToolPolicy(
             default_action=DefaultToolAction.ALLOW,
             risk_tiers={"safe": RiskTierConfig(action="allow", rate_limit_per_minute=60)},
@@ -358,17 +386,21 @@ class TestToolGovernor:
 # Async queue tests
 # ---------------------------------------------------------------------------
 
+
 class TestAsyncTaskQueue:
     """Tests for core.queueing.async_queue.AsyncTaskQueue."""
 
     @pytest.mark.asyncio
     async def test_basic_submit_and_result(self):
         from core.queueing.async_queue import AsyncTaskQueue
+
         q = AsyncTaskQueue(max_queue_size=10, max_concurrent=2)
         await q.start()
         try:
+
             async def double(x):
                 return x * 2
+
             future = await q.submit(double, 21)
             result = await asyncio.wait_for(future, timeout=5.0)
             assert result == 42
@@ -378,9 +410,11 @@ class TestAsyncTaskQueue:
     @pytest.mark.asyncio
     async def test_concurrent_tasks(self):
         from core.queueing.async_queue import AsyncTaskQueue
+
         q = AsyncTaskQueue(max_queue_size=50, max_concurrent=4)
         await q.start()
         try:
+
             async def slow_add(a, b):
                 await asyncio.sleep(0.05)
                 return a + b
@@ -394,6 +428,7 @@ class TestAsyncTaskQueue:
     @pytest.mark.asyncio
     async def test_queue_full_reject_new(self):
         from core.queueing.async_queue import AsyncTaskQueue, QueueFullError
+
         q = AsyncTaskQueue(
             max_queue_size=5,
             max_concurrent=1,
@@ -402,8 +437,10 @@ class TestAsyncTaskQueue:
         )
         await q.start()
         try:
+
             async def slow():
                 await asyncio.sleep(5)
+
             # Fill beyond threshold
             submitted = 0
             for _ in range(10):
@@ -419,6 +456,7 @@ class TestAsyncTaskQueue:
     @pytest.mark.asyncio
     async def test_queue_full_drop_oldest(self):
         from core.queueing.async_queue import AsyncTaskQueue, QueueFullError
+
         q = AsyncTaskQueue(
             max_queue_size=3,
             max_concurrent=1,
@@ -427,8 +465,10 @@ class TestAsyncTaskQueue:
         )
         await q.start()
         try:
+
             async def slow():
                 await asyncio.sleep(5)
+
             # Overfill — should not raise
             for _ in range(5):
                 try:
@@ -441,11 +481,14 @@ class TestAsyncTaskQueue:
     @pytest.mark.asyncio
     async def test_task_timeout(self):
         from core.queueing.async_queue import AsyncTaskQueue
+
         q = AsyncTaskQueue(max_queue_size=10, max_concurrent=2, task_timeout=0.05)
         await q.start()
         try:
+
             async def never_finishes():
                 await asyncio.sleep(999)
+
             future = await q.submit(never_finishes)
             with pytest.raises((TimeoutError, asyncio.TimeoutError)):
                 await asyncio.wait_for(future, timeout=2.0)
@@ -455,11 +498,14 @@ class TestAsyncTaskQueue:
     @pytest.mark.asyncio
     async def test_stats_tracking(self):
         from core.queueing.async_queue import AsyncTaskQueue
+
         q = AsyncTaskQueue(max_queue_size=20, max_concurrent=2)
         await q.start()
         try:
+
             async def noop():
                 return None
+
             futures = [await q.submit(noop) for _ in range(5)]
             await asyncio.gather(*futures)
             s = q.stats()
@@ -473,6 +519,7 @@ class TestAsyncTaskQueue:
     @pytest.mark.asyncio
     async def test_stats_to_dict(self):
         from core.queueing.async_queue import AsyncTaskQueue
+
         q = AsyncTaskQueue(max_queue_size=10, max_concurrent=2)
         await q.start()
         try:
@@ -488,6 +535,7 @@ class TestAsyncTaskQueue:
     @pytest.mark.asyncio
     async def test_submit_before_start_raises(self):
         from core.queueing.async_queue import AsyncTaskQueue
+
         q = AsyncTaskQueue()
         with pytest.raises(RuntimeError):
             await q.submit(asyncio.sleep, 0)
@@ -495,11 +543,14 @@ class TestAsyncTaskQueue:
     @pytest.mark.asyncio
     async def test_exception_propagates(self):
         from core.queueing.async_queue import AsyncTaskQueue
+
         q = AsyncTaskQueue(max_queue_size=10, max_concurrent=2)
         await q.start()
         try:
+
             async def boom():
                 raise ValueError("test error")
+
             future = await q.submit(boom)
             with pytest.raises(ValueError, match="test error"):
                 await asyncio.wait_for(future, timeout=5.0)
@@ -511,6 +562,7 @@ class TestAsyncTaskQueue:
     @pytest.mark.asyncio
     async def test_rejected_count_increments(self):
         from core.queueing.async_queue import AsyncTaskQueue, QueueFullError
+
         q = AsyncTaskQueue(
             max_queue_size=2,
             max_concurrent=1,
@@ -519,8 +571,10 @@ class TestAsyncTaskQueue:
         )
         await q.start()
         try:
+
             async def slow():
                 await asyncio.sleep(5)
+
             rejected = 0
             for _ in range(5):
                 try:
@@ -537,11 +591,13 @@ class TestAsyncTaskQueue:
 # Audit ledger event types
 # ---------------------------------------------------------------------------
 
+
 class TestGovernanceAuditLedgerEvents:
     """Ensure new governance EventTypes are present in the ledger."""
 
     def test_governance_event_types_exist(self):
         from core.control_plane.audit_ledger import EventType
+
         assert EventType.BUDGET_WARNING == "budget_warning"
         assert EventType.BUDGET_EXCEEDED == "budget_exceeded"
         assert EventType.BUDGET_DOWNGRADE == "budget_downgrade"
@@ -554,6 +610,7 @@ class TestGovernanceAuditLedgerEvents:
 
     def test_append_governance_event(self):
         from core.control_plane.audit_ledger import AuditLedger, EventType, Severity
+
         ledger = AuditLedger()
         eid = ledger.append(
             event_type=EventType.BUDGET_EXCEEDED,
@@ -571,7 +628,7 @@ class TestGovernanceAuditLedgerEvents:
     async def test_tool_governor_emits_to_ledger(self):
         """Tool denials should be recorded in the AuditLedger when one is wired."""
         from core.control_plane.audit_ledger import AuditLedger, EventType
-        from core.governance.policy_schema import ToolPolicy, RiskTierConfig, DefaultToolAction
+        from core.governance.policy_schema import DefaultToolAction, RiskTierConfig, ToolPolicy
         from core.governance.tool_governor import ToolGovernor
 
         ledger = AuditLedger()
@@ -600,8 +657,10 @@ class TestGovernanceAuditLedgerEvents:
         q = AsyncTaskQueue(max_queue_size=10, max_concurrent=2, ledger=ledger)
         await q.start()
         try:
+
             async def noop():
                 return None
+
             future = await q.submit(noop)
             await asyncio.wait_for(future, timeout=5.0)
             # Give the worker time to emit the metric
@@ -616,6 +675,7 @@ class TestGovernanceAuditLedgerEvents:
 # Governance API routes
 # ---------------------------------------------------------------------------
 
+
 class TestGovernanceAPIRoutes:
     """Smoke-tests for the governance FastAPI router."""
 
@@ -623,7 +683,9 @@ class TestGovernanceAPIRoutes:
     def client(self):
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
+
         from core.routes.governance import create_router
+
         app = FastAPI()
         app.include_router(create_router())
         return TestClient(app)
@@ -642,13 +704,16 @@ class TestGovernanceAPIRoutes:
         assert "session" in data
 
     def test_record_budget_usage(self, client):
-        resp = client.post("/api/v1/governance/budget/record", json={
-            "session_id": "s1",
-            "tenant_id": "t1",
-            "model": "gpt-4",
-            "tokens_used": 500,
-            "cost_usd": 0.01,
-        })
+        resp = client.post(
+            "/api/v1/governance/budget/record",
+            json={
+                "session_id": "s1",
+                "tenant_id": "t1",
+                "model": "gpt-4",
+                "tokens_used": 500,
+                "cost_usd": 0.01,
+            },
+        )
         assert resp.status_code == 200
         assert resp.json()["ok"] is True
 
@@ -659,30 +724,39 @@ class TestGovernanceAPIRoutes:
         assert "default_action" in data
 
     def test_check_tool_allowed(self, client):
-        resp = client.post("/api/v1/governance/tools/check", json={
-            "tool_name": "safe_tool",
-            "risk_tier": "safe",
-        })
+        resp = client.post(
+            "/api/v1/governance/tools/check",
+            json={
+                "tool_name": "safe_tool",
+                "risk_tier": "safe",
+            },
+        )
         assert resp.status_code == 200
         data = resp.json()
         assert "allowed" in data
 
     def test_check_tool_denied(self, client):
         # "wipe_filesystem" is in the default deny list
-        resp = client.post("/api/v1/governance/tools/check", json={
-            "tool_name": "wipe_filesystem",
-            "risk_tier": "critical",
-        })
+        resp = client.post(
+            "/api/v1/governance/tools/check",
+            json={
+                "tool_name": "wipe_filesystem",
+                "risk_tier": "critical",
+            },
+        )
         assert resp.status_code == 200
         data = resp.json()
         assert data["allowed"] is False
 
     def test_get_tool_audit(self, client):
         # Trigger a denial first
-        client.post("/api/v1/governance/tools/check", json={
-            "tool_name": "drop_database",
-            "risk_tier": "critical",
-        })
+        client.post(
+            "/api/v1/governance/tools/check",
+            json={
+                "tool_name": "drop_database",
+                "risk_tier": "critical",
+            },
+        )
         resp = client.get("/api/v1/governance/tools/audit")
         assert resp.status_code == 200
         assert isinstance(resp.json(), list)

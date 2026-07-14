@@ -543,10 +543,7 @@ class TaskContinuityReport:
             abandoned_count=int(d.get("abandoned_count", 0)),
             needs_reconcile_count=int(d.get("needs_reconcile_count", 0)),
             ambiguous_count=int(d.get("ambiguous_count", 0)),
-            records=[
-                InFlightTaskContinuityRecord.from_dict(r)
-                for r in d.get("records", [])
-            ],
+            records=[InFlightTaskContinuityRecord.from_dict(r) for r in d.get("records", [])],
         )
         return obj
 
@@ -629,9 +626,7 @@ class InFlightTaskContinuityContract:
             if tid:
                 task_id_occurrences[tid] = task_id_occurrences.get(tid, 0) + 1
 
-        duplicate_task_ids: Set[str] = {
-            tid for tid, cnt in task_id_occurrences.items() if cnt > 1
-        }
+        duplicate_task_ids: Set[str] = {tid for tid, cnt in task_id_occurrences.items() if cnt > 1}
 
         report = TaskContinuityReport()
         report.total_evaluated = len(restored_records)
@@ -698,9 +693,7 @@ class InFlightTaskContinuityContract:
         # Extract disposition value — handles enum or string
         raw_disp = getattr(rec, "disposition", None)
         if raw_disp is not None:
-            disposition_raw = (
-                raw_disp.value if hasattr(raw_disp, "value") else str(raw_disp)
-            )
+            disposition_raw = raw_disp.value if hasattr(raw_disp, "value") else str(raw_disp)
 
         # Compute snapshot age
         ref_ts = snapshot_timestamp if snapshot_timestamp is not None else registered_at
@@ -871,11 +864,7 @@ def build_continuity_report(
     -------
     TaskContinuityReport
     """
-    threshold = (
-        stale_threshold_seconds
-        if stale_threshold_seconds is not None
-        else STALE_SNAPSHOT_THRESHOLD_SECONDS
-    )
+    threshold = stale_threshold_seconds if stale_threshold_seconds is not None else STALE_SNAPSHOT_THRESHOLD_SECONDS
     contract = InFlightTaskContinuityContract(stale_threshold_seconds=threshold)
     return contract.evaluate(
         restored_records,

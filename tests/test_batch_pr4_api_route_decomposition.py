@@ -42,14 +42,15 @@ from __future__ import annotations
 
 import importlib
 import sys
-from pathlib import Path
 import unittest
+from pathlib import Path
 
 # ── project root ─────────────────────────────────────────────────────────────
 PROJECT_ROOT = Path(__file__).parent.parent
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
+
 
 def _read(rel_path: str) -> str:
     return (PROJECT_ROOT / rel_path).read_text(encoding="utf-8")
@@ -78,46 +79,40 @@ class TestBatchPR4APIRouteDecomposition(unittest.TestCase):
     # ------------------------------------------------------------------
 
     def test_01_health_module_exists(self):
-        self.assertTrue(_exists("core/routes/health.py"),
-                        "core/routes/health.py must exist")
+        self.assertTrue(_exists("core/routes/health.py"), "core/routes/health.py must exist")
 
     def test_02_health_module_has_authority_sentinel(self):
         content = _read("core/routes/health.py")
-        self.assertIn("HEALTH_ROUTES_AUTHORITY", content,
-                      "health.py must define HEALTH_ROUTES_AUTHORITY sentinel")
+        self.assertIn("HEALTH_ROUTES_AUTHORITY", content, "health.py must define HEALTH_ROUTES_AUTHORITY sentinel")
 
     def test_03_health_module_has_create_router(self):
         content = _read("core/routes/health.py")
-        self.assertIn("def create_router", content,
-                      "health.py must define create_router()")
+        self.assertIn("def create_router", content, "health.py must define create_router()")
 
     def test_04_health_module_has_unified_route(self):
         content = _read("core/routes/health.py")
-        self.assertIn("/api/v1/health/unified", content,
-                      "health.py must define /api/v1/health/unified route")
+        self.assertIn("/api/v1/health/unified", content, "health.py must define /api/v1/health/unified route")
 
     def test_05_health_module_has_quick_route(self):
         content = _read("core/routes/health.py")
-        self.assertIn("/api/v1/health/quick", content,
-                      "health.py must define /api/v1/health/quick route")
+        self.assertIn("/api/v1/health/quick", content, "health.py must define /api/v1/health/quick route")
 
     # ------------------------------------------------------------------
     # Group 2: diagnostics.py domain module
     # ------------------------------------------------------------------
 
     def test_06_diagnostics_module_exists(self):
-        self.assertTrue(_exists("core/routes/diagnostics.py"),
-                        "core/routes/diagnostics.py must exist")
+        self.assertTrue(_exists("core/routes/diagnostics.py"), "core/routes/diagnostics.py must exist")
 
     def test_07_diagnostics_module_has_authority_sentinel(self):
         content = _read("core/routes/diagnostics.py")
-        self.assertIn("DIAGNOSTICS_ROUTES_AUTHORITY", content,
-                      "diagnostics.py must define DIAGNOSTICS_ROUTES_AUTHORITY sentinel")
+        self.assertIn(
+            "DIAGNOSTICS_ROUTES_AUTHORITY", content, "diagnostics.py must define DIAGNOSTICS_ROUTES_AUTHORITY sentinel"
+        )
 
     def test_08_diagnostics_module_has_create_router(self):
         content = _read("core/routes/diagnostics.py")
-        self.assertIn("def create_router", content,
-                      "diagnostics.py must define create_router()")
+        self.assertIn("def create_router", content, "diagnostics.py must define create_router()")
 
     def test_09_diagnostics_has_concurrency_route(self):
         content = _read("core/routes/diagnostics.py")
@@ -153,23 +148,25 @@ class TestBatchPR4APIRouteDecomposition(unittest.TestCase):
 
     def test_16_api_routes_has_canonical_authority_sentinel(self):
         content = _read("core/api_routes.py")
-        self.assertIn("CANONICAL_API_ROUTES_AUTHORITY", content,
-                      "core/api_routes.py must define CANONICAL_API_ROUTES_AUTHORITY")
+        self.assertIn(
+            "CANONICAL_API_ROUTES_AUTHORITY", content, "core/api_routes.py must define CANONICAL_API_ROUTES_AUTHORITY"
+        )
 
     def test_17_canonical_authority_value(self):
         content = _read("core/api_routes.py")
-        self.assertIn('CANONICAL_API_ROUTES_AUTHORITY = "core.api_routes"', content,
-                      "CANONICAL_API_ROUTES_AUTHORITY must equal 'core.api_routes'")
+        self.assertIn(
+            'CANONICAL_API_ROUTES_AUTHORITY = "core.api_routes"',
+            content,
+            "CANONICAL_API_ROUTES_AUTHORITY must equal 'core.api_routes'",
+        )
 
     def test_18_api_routes_includes_health_module(self):
         content = _read("core/api_routes.py")
-        self.assertIn("health_routes", content,
-                      "create_api_routes() must include health_routes sub-module")
+        self.assertIn("health_routes", content, "create_api_routes() must include health_routes sub-module")
 
     def test_19_api_routes_includes_diagnostics_module(self):
         content = _read("core/api_routes.py")
-        self.assertIn("diagnostics_routes", content,
-                      "create_api_routes() must include diagnostics_routes sub-module")
+        self.assertIn("diagnostics_routes", content, "create_api_routes() must include diagnostics_routes sub-module")
 
     # ------------------------------------------------------------------
     # Group 4: dashboard demotion
@@ -178,8 +175,7 @@ class TestBatchPR4APIRouteDecomposition(unittest.TestCase):
     # 终态(用户裁决):dashboard/ 整体删除(ui_surface_authority: DELETED,
     # do not recreate)。原哨兵/文档标记检查随之收敛为退役终态钉。
     def test_20_dashboard_has_legacy_authority_sentinel(self):
-        self.assertFalse(_exists("dashboard/backend/main.py"),
-                         "dashboard/backend/main.py 已随目录退役删除,不得复活")
+        self.assertFalse(_exists("dashboard/backend/main.py"), "dashboard/backend/main.py 已随目录退役删除,不得复活")
 
     def test_21_dashboard_legacy_sentinel_contains_legacy_surface(self):
         self.assertFalse(_exists("dashboard"))
@@ -193,13 +189,19 @@ class TestBatchPR4APIRouteDecomposition(unittest.TestCase):
 
     def test_23_monitoring_does_not_own_health_unified(self):
         content = _read("core/routes/monitoring.py")
-        self.assertNotIn('/api/v1/health/unified', content,
-                         "monitoring.py must not define /api/v1/health/unified (moved to health.py)")
+        self.assertNotIn(
+            "/api/v1/health/unified",
+            content,
+            "monitoring.py must not define /api/v1/health/unified (moved to health.py)",
+        )
 
     def test_24_monitoring_does_not_own_concurrency(self):
         content = _read("core/routes/monitoring.py")
-        self.assertNotIn('/api/v1/concurrency/status', content,
-                         "monitoring.py must not define /api/v1/concurrency/status (moved to diagnostics.py)")
+        self.assertNotIn(
+            "/api/v1/concurrency/status",
+            content,
+            "monitoring.py must not define /api/v1/concurrency/status (moved to diagnostics.py)",
+        )
 
     # ------------------------------------------------------------------
     # Group 6: routes/__init__.py documents new modules
@@ -207,13 +209,11 @@ class TestBatchPR4APIRouteDecomposition(unittest.TestCase):
 
     def test_25_routes_init_documents_health(self):
         content = _read("core/routes/__init__.py")
-        self.assertIn("health.py", content,
-                      "core/routes/__init__.py must document health.py module")
+        self.assertIn("health.py", content, "core/routes/__init__.py must document health.py module")
 
     def test_26_routes_init_documents_diagnostics(self):
         content = _read("core/routes/__init__.py")
-        self.assertIn("diagnostics.py", content,
-                      "core/routes/__init__.py must document diagnostics.py module")
+        self.assertIn("diagnostics.py", content, "core/routes/__init__.py must document diagnostics.py module")
 
     # ------------------------------------------------------------------
     # Group 7: architecture docs
@@ -221,13 +221,11 @@ class TestBatchPR4APIRouteDecomposition(unittest.TestCase):
 
     def test_27_canonical_entrypoints_documents_health_module(self):
         content = _read("docs/architecture/CANONICAL_ENTRYPOINTS.md")
-        self.assertIn("health.py", content,
-                      "CANONICAL_ENTRYPOINTS.md must reference health.py")
+        self.assertIn("health.py", content, "CANONICAL_ENTRYPOINTS.md must reference health.py")
 
     def test_28_canonical_entrypoints_documents_diagnostics_module(self):
         content = _read("docs/architecture/CANONICAL_ENTRYPOINTS.md")
-        self.assertIn("diagnostics.py", content,
-                      "CANONICAL_ENTRYPOINTS.md must reference diagnostics.py")
+        self.assertIn("diagnostics.py", content, "CANONICAL_ENTRYPOINTS.md must reference diagnostics.py")
 
     # ------------------------------------------------------------------
     # Group 8: functional validation — aggregated router exposes routes
@@ -237,6 +235,7 @@ class TestBatchPR4APIRouteDecomposition(unittest.TestCase):
         """create_api_routes() must include /api/v1/health/unified."""
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
+
         from core.api_routes import create_api_routes
 
         app = FastAPI()
@@ -247,13 +246,14 @@ class TestBatchPR4APIRouteDecomposition(unittest.TestCase):
         # The route should exist (200 or 5xx is fine — we test route registration)
         # FastAPI 0.137 懒挂载:经统一助手摊平后再内省(见 route_introspection)
         from tests.route_introspection import route_paths
+
         paths = route_paths(app)
-        self.assertIn("/api/v1/health/unified", paths,
-                      "/api/v1/health/unified must be registered in aggregated router")
+        self.assertIn("/api/v1/health/unified", paths, "/api/v1/health/unified must be registered in aggregated router")
 
     def test_30_aggregated_router_serves_diagnostics_route(self):
         """create_api_routes() must include /api/v1/concurrency/status."""
         from fastapi import FastAPI
+
         from core.api_routes import create_api_routes
 
         app = FastAPI()
@@ -261,9 +261,11 @@ class TestBatchPR4APIRouteDecomposition(unittest.TestCase):
         app.include_router(router)
 
         from tests.route_introspection import route_paths
+
         paths = route_paths(app)
-        self.assertIn("/api/v1/concurrency/status", paths,
-                      "/api/v1/concurrency/status must be registered in aggregated router")
+        self.assertIn(
+            "/api/v1/concurrency/status", paths, "/api/v1/concurrency/status must be registered in aggregated router"
+        )
 
 
 if __name__ == "__main__":

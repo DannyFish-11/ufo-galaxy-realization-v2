@@ -90,7 +90,6 @@ from typing import Any, Dict, List, Optional
 
 import pytest
 
-
 # ===========================================================================
 # Helpers
 # ===========================================================================
@@ -260,8 +259,8 @@ class TestModalityConfidencePolicy:
         from core.multimodal.modality_confidence_policy import (
             ModalityConfidencePolicy,
             ModalityPresence,
-            SourceDegradationSeverity,
             ModalitySemantics,
+            SourceDegradationSeverity,
         )
 
         pol = ModalityConfidencePolicy(modality="audio")
@@ -280,8 +279,8 @@ class TestModalityConfidencePolicy:
         from core.multimodal.modality_confidence_policy import (
             ModalityConfidencePolicy,
             ModalityPresence,
-            SourceDegradationSeverity,
             ModalitySemantics,
+            SourceDegradationSeverity,
         )
 
         pol = ModalityConfidencePolicy(
@@ -321,8 +320,8 @@ class TestModalityConfidencePolicy:
         from core.multimodal.modality_confidence_policy import (
             ModalityConfidencePolicy,
             ModalityPresence,
-            SourceDegradationSeverity,
             ModalitySemantics,
+            SourceDegradationSeverity,
         )
 
         original = ModalityConfidencePolicy(
@@ -464,9 +463,9 @@ class TestPerceptionRoutingReadiness:
 class TestAssessModalityConfidence:
     def test_absent_when_no_source_records(self):
         from core.multimodal.modality_confidence_policy import (
-            assess_modality_confidence,
             ModalityPresence,
             SourceDegradationSeverity,
+            assess_modality_confidence,
         )
 
         pol = assess_modality_confidence(modality="audio", source_records=None)
@@ -476,8 +475,8 @@ class TestAssessModalityConfidence:
 
     def test_absent_when_empty_source_records(self):
         from core.multimodal.modality_confidence_policy import (
-            assess_modality_confidence,
             ModalityPresence,
+            assess_modality_confidence,
         )
 
         pol = assess_modality_confidence(modality="audio", source_records=[])
@@ -485,9 +484,9 @@ class TestAssessModalityConfidence:
 
     def test_healthy_active_source_high_confidence(self):
         from core.multimodal.modality_confidence_policy import (
-            assess_modality_confidence,
             ModalityPresence,
             SourceDegradationSeverity,
+            assess_modality_confidence,
         )
 
         rec = _make_source_record(
@@ -511,9 +510,9 @@ class TestAssessModalityConfidence:
 
     def test_degraded_source_reduces_confidence(self):
         from core.multimodal.modality_confidence_policy import (
-            assess_modality_confidence,
             ModalityPresence,
             SourceDegradationSeverity,
+            assess_modality_confidence,
         )
 
         rec = _make_source_record(
@@ -531,8 +530,8 @@ class TestAssessModalityConfidence:
 
     def test_unavailable_source_zero_confidence(self):
         from core.multimodal.modality_confidence_policy import (
-            assess_modality_confidence,
             SourceDegradationSeverity,
+            assess_modality_confidence,
         )
 
         rec = _make_source_record(
@@ -547,8 +546,8 @@ class TestAssessModalityConfidence:
 
     def test_stale_source_flagged(self):
         from core.multimodal.modality_confidence_policy import (
-            assess_modality_confidence,
             CONTINUOUS_PERCEPTION_STALENESS_THRESHOLD_S,
+            assess_modality_confidence,
         )
 
         stale_ts = time.time() - CONTINUOUS_PERCEPTION_STALENESS_THRESHOLD_S - 2.0
@@ -583,12 +582,8 @@ class TestAssessModalityConfidence:
     def test_multiple_sources_uses_best(self):
         from core.multimodal.modality_confidence_policy import assess_modality_confidence
 
-        rec_bad = _make_source_record(
-            source_id="src-bad", health="degraded", quality_score=0.2, is_active=True
-        )
-        rec_good = _make_source_record(
-            source_id="src-good", health="healthy", quality_score=0.9, is_active=True
-        )
+        rec_bad = _make_source_record(source_id="src-bad", health="degraded", quality_score=0.2, is_active=True)
+        rec_good = _make_source_record(source_id="src-good", health="healthy", quality_score=0.9, is_active=True)
         pol = assess_modality_confidence(
             modality="audio",
             source_records=[rec_bad, rec_good],
@@ -618,8 +613,8 @@ class TestAssessModalityConfidence:
 class TestAssessRoutingEligibility:
     def test_empty_policies_not_eligible(self):
         from core.multimodal.modality_confidence_policy import (
-            assess_routing_eligibility,
             RoutingEligibilityReason,
+            assess_routing_eligibility,
         )
 
         assessment = assess_routing_eligibility([])
@@ -628,12 +623,12 @@ class TestAssessRoutingEligibility:
 
     def test_strong_signal_eligible(self):
         from core.multimodal.modality_confidence_policy import (
-            assess_routing_eligibility,
             ModalityConfidencePolicy,
             ModalityPresence,
-            SourceDegradationSeverity,
             ModalitySemantics,
             RoutingEligibilityReason,
+            SourceDegradationSeverity,
+            assess_routing_eligibility,
         )
 
         pol = ModalityConfidencePolicy(
@@ -650,11 +645,11 @@ class TestAssessRoutingEligibility:
 
     def test_adequate_signal_eligible(self):
         from core.multimodal.modality_confidence_policy import (
-            assess_routing_eligibility,
             ModalityConfidencePolicy,
             ModalityPresence,
-            SourceDegradationSeverity,
             RoutingEligibilityReason,
+            SourceDegradationSeverity,
+            assess_routing_eligibility,
         )
 
         pol = ModalityConfidencePolicy(
@@ -669,11 +664,11 @@ class TestAssessRoutingEligibility:
 
     def test_confidence_below_threshold_not_eligible(self):
         from core.multimodal.modality_confidence_policy import (
-            assess_routing_eligibility,
             ModalityConfidencePolicy,
             ModalityPresence,
-            SourceDegradationSeverity,
             RoutingEligibilityReason,
+            SourceDegradationSeverity,
+            assess_routing_eligibility,
         )
 
         pol = ModalityConfidencePolicy(
@@ -691,11 +686,11 @@ class TestAssessRoutingEligibility:
 
     def test_degraded_source_lowers_eligibility(self):
         from core.multimodal.modality_confidence_policy import (
-            assess_routing_eligibility,
             ModalityConfidencePolicy,
             ModalityPresence,
-            SourceDegradationSeverity,
             RoutingEligibilityReason,
+            SourceDegradationSeverity,
+            assess_routing_eligibility,
         )
 
         pol = ModalityConfidencePolicy(
@@ -710,11 +705,11 @@ class TestAssessRoutingEligibility:
 
     def test_required_modality_absent_blocks(self):
         from core.multimodal.modality_confidence_policy import (
-            assess_routing_eligibility,
             ModalityConfidencePolicy,
             ModalityPresence,
             ModalitySemantics,
             RoutingEligibilityReason,
+            assess_routing_eligibility,
         )
 
         pol = ModalityConfidencePolicy(
@@ -730,11 +725,11 @@ class TestAssessRoutingEligibility:
 
     def test_all_reasons_are_stable_enum_values(self):
         from core.multimodal.modality_confidence_policy import (
-            assess_routing_eligibility,
             ModalityConfidencePolicy,
             ModalityPresence,
-            SourceDegradationSeverity,
             RoutingEligibilityReason,
+            SourceDegradationSeverity,
+            assess_routing_eligibility,
         )
 
         pol = ModalityConfidencePolicy(
@@ -750,9 +745,9 @@ class TestAssessRoutingEligibility:
 
     def test_eligibility_summary_is_non_empty_string(self):
         from core.multimodal.modality_confidence_policy import (
-            assess_routing_eligibility,
             ModalityConfidencePolicy,
             ModalityPresence,
+            assess_routing_eligibility,
         )
 
         pol = ModalityConfidencePolicy(
@@ -773,8 +768,8 @@ class TestAssessRoutingEligibility:
 class TestBuildPerceptionRoutingReadiness:
     def test_none_perception_not_eligible(self):
         from core.multimodal.modality_confidence_policy import (
-            build_perception_routing_readiness,
             RoutingEligibilityReason,
+            build_perception_routing_readiness,
         )
 
         readiness = build_perception_routing_readiness(canonical_perception=None)
@@ -812,8 +807,8 @@ class TestBuildPerceptionRoutingReadiness:
 
     def test_degraded_source_lowers_eligibility(self):
         from core.multimodal.modality_confidence_policy import (
-            build_perception_routing_readiness,
             SourceDegradationSeverity,
+            build_perception_routing_readiness,
         )
 
         perception = _make_perception_dict(
@@ -823,15 +818,17 @@ class TestBuildPerceptionRoutingReadiness:
             requires_native_multimodal=True,
             continuous_wall_clock=time.time(),
         )
-        registry = _make_registry_snapshot([
-            _make_source_record(
-                source_id="mic-deg",
-                modality="audio",
-                health="unavailable",
-                is_active=False,
-                quality_score=0.0,
-            )
-        ])
+        registry = _make_registry_snapshot(
+            [
+                _make_source_record(
+                    source_id="mic-deg",
+                    modality="audio",
+                    health="unavailable",
+                    is_active=False,
+                    quality_score=0.0,
+                )
+            ]
+        )
         readiness = build_perception_routing_readiness(
             canonical_perception=perception,
             source_registry_snapshot=registry,
@@ -841,15 +838,12 @@ class TestBuildPerceptionRoutingReadiness:
         # The modality policy should reflect the unavailable severity
         policies = readiness.eligibility.modality_policies
         assert len(policies) > 0
-        assert any(
-            p.degradation_severity == SourceDegradationSeverity.UNAVAILABLE
-            for p in policies
-        )
+        assert any(p.degradation_severity == SourceDegradationSeverity.UNAVAILABLE for p in policies)
 
     def test_stale_continuous_perception_flagged(self):
         from core.multimodal.modality_confidence_policy import (
-            build_perception_routing_readiness,
             CONTINUOUS_PERCEPTION_STALENESS_THRESHOLD_S,
+            build_perception_routing_readiness,
         )
 
         now = time.time()
@@ -869,8 +863,8 @@ class TestBuildPerceptionRoutingReadiness:
 
     def test_request_bound_overrides_missing_continuous(self):
         from core.multimodal.modality_confidence_policy import (
-            build_perception_routing_readiness,
             RoutingEligibilityReason,
+            build_perception_routing_readiness,
         )
 
         perception = _make_perception_dict(
@@ -895,16 +889,18 @@ class TestBuildPerceptionRoutingReadiness:
             requires_native_multimodal=True,
             continuous_wall_clock=time.time(),
         )
-        registry = _make_registry_snapshot([
-            _make_source_record(
-                source_id="mic-ok",
-                modality="audio",
-                health="healthy",
-                is_active=True,
-                quality_score=0.9,
-                last_seen_at=time.time(),
-            )
-        ])
+        registry = _make_registry_snapshot(
+            [
+                _make_source_record(
+                    source_id="mic-ok",
+                    modality="audio",
+                    health="healthy",
+                    is_active=True,
+                    quality_score=0.9,
+                    last_seen_at=time.time(),
+                )
+            ]
+        )
         readiness = build_perception_routing_readiness(
             canonical_perception=perception,
             source_registry_snapshot=registry,
@@ -940,6 +936,7 @@ class TestSelectMultimodalRouteIntegration:
         """Build a minimal OpenClawd instance with no real providers."""
         try:
             from core.openclawd import OpenClawd
+
             oc = OpenClawd.__new__(OpenClawd)
             oc._router = None
             oc._provider_config = {}
@@ -985,15 +982,17 @@ class TestSelectMultimodalRouteIntegration:
             "continuous_wall_clock": time.time(),
         }
         # Registry with unavailable source
-        degraded_registry = _make_registry_snapshot([
-            _make_source_record(
-                source_id="mic-unavail",
-                modality="audio",
-                health="unavailable",
-                is_active=False,
-                quality_score=0.0,
-            )
-        ])
+        degraded_registry = _make_registry_snapshot(
+            [
+                _make_source_record(
+                    source_id="mic-unavail",
+                    modality="audio",
+                    health="unavailable",
+                    is_active=False,
+                    quality_score=0.0,
+                )
+            ]
+        )
         result = oc._select_multimodal_route(mm_perception, degraded_registry)
         # Should degrade to text_only (eligibility gate) or advisory (router_unavailable)
         assert result["route_type"] in ("text_only", "advisory")
@@ -1022,17 +1021,18 @@ class TestSelectMultimodalRouteIntegration:
 class TestAdditiveIntegration:
     def test_exports_available_from_core_multimodal(self):
         from core.multimodal import (
-            ModalityPresence,
-            SourceDegradationSeverity,
-            ModalitySemantics,
-            RoutingEligibilityReason,
             ModalityConfidencePolicy,
-            RoutingEligibilityAssessment,
+            ModalityPresence,
+            ModalitySemantics,
             PerceptionRoutingReadiness,
+            RoutingEligibilityAssessment,
+            RoutingEligibilityReason,
+            SourceDegradationSeverity,
             assess_modality_confidence,
             assess_routing_eligibility,
             build_perception_routing_readiness,
         )
+
         assert ModalityPresence is not None
         assert PerceptionRoutingReadiness is not None
         assert callable(build_perception_routing_readiness)
@@ -1040,12 +1040,13 @@ class TestAdditiveIntegration:
     def test_import_does_not_break_existing_exports(self):
         """Importing the PR-27 module must not remove existing exports."""
         from core.multimodal import (
+            PerceptionSourceRecord,
             PerceptionSourceRegistry,
             PerceptionSourceType,
-            SourceModality,
             SourceHealthStatus,
-            PerceptionSourceRecord,
+            SourceModality,
         )
+
         assert PerceptionSourceRegistry is not None
         assert SourceModality is not None
 

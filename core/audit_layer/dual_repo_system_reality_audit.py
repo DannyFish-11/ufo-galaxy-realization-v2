@@ -576,9 +576,7 @@ class DualRepoRealityAuditReport:
 
     report_id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
     dimensions: List[DimensionAuditEntry] = field(default_factory=list)
-    system_verdict: SystemRealityVerdict = (
-        SystemRealityVerdict.insufficient_evidence_to_conclude
-    )
+    system_verdict: SystemRealityVerdict = SystemRealityVerdict.insufficient_evidence_to_conclude
     main_chain_authenticity_conclusion: str = ""
     recovery_maturity_conclusion: str = ""
     governance_enforcement_conclusion: str = ""
@@ -594,16 +592,10 @@ class DualRepoRealityAuditReport:
             "report_id": self.report_id,
             "dimensions": [e.to_dict() for e in self.dimensions],
             "system_verdict": self.system_verdict.value,
-            "main_chain_authenticity_conclusion": (
-                self.main_chain_authenticity_conclusion
-            ),
+            "main_chain_authenticity_conclusion": (self.main_chain_authenticity_conclusion),
             "recovery_maturity_conclusion": self.recovery_maturity_conclusion,
-            "governance_enforcement_conclusion": (
-                self.governance_enforcement_conclusion
-            ),
-            "operational_readiness_contribution": (
-                self.operational_readiness_contribution
-            ),
+            "governance_enforcement_conclusion": (self.governance_enforcement_conclusion),
+            "operational_readiness_contribution": (self.operational_readiness_contribution),
             "unresolved_blocking_gaps": self.unresolved_blocking_gaps,
             "summary": self.summary,
             "generated_at": self.generated_at,
@@ -617,38 +609,22 @@ class DualRepoRealityAuditReport:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "DualRepoRealityAuditReport":
         """Construct from a dict (round-trip complement of ``to_dict``)."""
-        dims: List[DimensionAuditEntry] = [
-            DimensionAuditEntry.from_dict(d) for d in data.get("dimensions", [])
-        ]
+        dims: List[DimensionAuditEntry] = [DimensionAuditEntry.from_dict(d) for d in data.get("dimensions", [])]
         return cls(
             report_id=data.get("report_id", uuid.uuid4().hex[:12]),
             dimensions=dims,
-            system_verdict=SystemRealityVerdict.from_string(
-                data.get("system_verdict", "")
-            ),
-            main_chain_authenticity_conclusion=data.get(
-                "main_chain_authenticity_conclusion", ""
-            ),
-            recovery_maturity_conclusion=data.get(
-                "recovery_maturity_conclusion", ""
-            ),
-            governance_enforcement_conclusion=data.get(
-                "governance_enforcement_conclusion", ""
-            ),
-            operational_readiness_contribution=data.get(
-                "operational_readiness_contribution", ""
-            ),
-            unresolved_blocking_gaps=list(
-                data.get("unresolved_blocking_gaps", [])
-            ),
+            system_verdict=SystemRealityVerdict.from_string(data.get("system_verdict", "")),
+            main_chain_authenticity_conclusion=data.get("main_chain_authenticity_conclusion", ""),
+            recovery_maturity_conclusion=data.get("recovery_maturity_conclusion", ""),
+            governance_enforcement_conclusion=data.get("governance_enforcement_conclusion", ""),
+            operational_readiness_contribution=data.get("operational_readiness_contribution", ""),
+            unresolved_blocking_gaps=list(data.get("unresolved_blocking_gaps", [])),
             summary=data.get("summary", ""),
             generated_at=data.get("generated_at", time.time()),
             auditor_version=data.get("auditor_version", "1.0"),
         )
 
-    def get_dimension_entry(
-        self, dim: AuditDimension
-    ) -> Optional[DimensionAuditEntry]:
+    def get_dimension_entry(self, dim: AuditDimension) -> Optional[DimensionAuditEntry]:
         """Return the :class:`DimensionAuditEntry` for *dim*, or ``None``."""
         for entry in self.dimensions:
             if entry.dimension == dim:
@@ -756,29 +732,15 @@ class DualRepoSystemRealityAuditor:
         verdict = self._compute_verdict(entries)
         blocking_gaps = self._collect_blocking_gaps(entries)
 
-        main_chain_entry = self._find_entry(
-            entries, AuditDimension.main_chain_authenticity
-        )
-        recovery_entry = self._find_entry(
-            entries, AuditDimension.recovery_redispatch_reconnect
-        )
-        governance_entry = self._find_entry(
-            entries, AuditDimension.governance_readiness_release_gate
-        )
-        workflow_entry = self._find_entry(
-            entries, AuditDimension.workflow_tests_audit_outputs
-        )
+        main_chain_entry = self._find_entry(entries, AuditDimension.main_chain_authenticity)
+        recovery_entry = self._find_entry(entries, AuditDimension.recovery_redispatch_reconnect)
+        governance_entry = self._find_entry(entries, AuditDimension.governance_readiness_release_gate)
+        workflow_entry = self._find_entry(entries, AuditDimension.workflow_tests_audit_outputs)
 
-        main_chain_conclusion = self._build_main_chain_conclusion(
-            main_chain_entry
-        )
+        main_chain_conclusion = self._build_main_chain_conclusion(main_chain_entry)
         recovery_conclusion = self._build_recovery_conclusion(recovery_entry)
-        governance_conclusion = self._build_governance_conclusion(
-            governance_entry
-        )
-        readiness_conclusion = self._build_readiness_conclusion(
-            entries, workflow_entry
-        )
+        governance_conclusion = self._build_governance_conclusion(governance_entry)
+        readiness_conclusion = self._build_readiness_conclusion(entries, workflow_entry)
 
         summary = self._build_summary(
             verdict,
@@ -837,14 +799,10 @@ class DualRepoSystemRealityAuditor:
         #    in the minimal test environment).
         importable: List[str] = [m for m in all_expected if _try_import(m)]
         file_present_not_importable: List[str] = [
-            m
-            for m in all_expected
-            if m not in importable and _module_file_exists(m)
+            m for m in all_expected if m not in importable and _module_file_exists(m)
         ]
         genuinely_absent: List[str] = [
-            m
-            for m in all_expected
-            if m not in importable and m not in file_present_not_importable
+            m for m in all_expected if m not in importable and m not in file_present_not_importable
         ]
 
         # Test and workflow evidence
@@ -852,9 +810,7 @@ class DualRepoSystemRealityAuditor:
         if _file_exists("tests/test_pr001_canonical_dispatcher.py"):
             test_refs.append("tests/test_pr001_canonical_dispatcher.py")
         if _file_exists("tests/test_pr530_runtime_acceptance_and_spine_hardening.py"):
-            test_refs.append(
-                "tests/test_pr530_runtime_acceptance_and_spine_hardening.py"
-            )
+            test_refs.append("tests/test_pr530_runtime_acceptance_and_spine_hardening.py")
         if _file_exists(".github/workflows/ci.yml"):
             test_refs.append(".github/workflows/ci.yml (lint + v3-protocol-guard)")
 
@@ -862,9 +818,7 @@ class DualRepoSystemRealityAuditor:
         for m in genuinely_absent:
             gaps.append(f"Module file absent: {m}")
         for m in file_present_not_importable:
-            gaps.append(
-                f"Module file present but not importable (dependency gap): {m}"
-            )
+            gaps.append(f"Module file present but not importable (dependency gap): {m}")
 
         # Maturity determination — importable modules are required for
         # implementation credit. File presence is tracked as a gap signal only.
@@ -885,28 +839,22 @@ class DualRepoSystemRealityAuditor:
             )
         elif found < total // 2:
             maturity = MaturityLabel.partially_implemented
-            rationale = (
-                f"Only {found}/{total} main-chain modules are importable; "
-                "chain is incomplete."
-            )
+            rationale = f"Only {found}/{total} main-chain modules are importable; " "chain is incomplete."
         elif found < total:
             maturity = MaturityLabel.implemented
             rationale = (
-                f"{found}/{total} main-chain modules are importable; "
-                "remaining modules are absent or not importable."
+                f"{found}/{total} main-chain modules are importable; " "remaining modules are absent or not importable."
             )
         elif test_refs:
             # All importable and test/CI evidence exists
             maturity = MaturityLabel.automated_verified
             rationale = (
-                f"All {total} main-chain modules importable and "
-                f"{len(test_refs)} test/CI reference(s) found."
+                f"All {total} main-chain modules importable and " f"{len(test_refs)} test/CI reference(s) found."
             )
         else:
             maturity = MaturityLabel.mainchained
             rationale = (
-                f"All {total} main-chain modules importable; "
-                "no test/CI reference found for automated_verified."
+                f"All {total} main-chain modules importable; " "no test/CI reference found for automated_verified."
             )
 
         evidence_summary = (
@@ -936,9 +884,7 @@ class DualRepoSystemRealityAuditor:
         # The gate itself must be importable
         gate_available = _try_import("core.capability_routing_gate")
         # The enforcement wiring confirms the gate is on the default path
-        enforcement_available = _try_import(
-            "core.gateway_capability_default_enforcement"
-        )
+        enforcement_available = _try_import("core.gateway_capability_default_enforcement")
         # Delegated-flow readiness gate (PR-9V2)
         readiness_available = _try_import("core.delegated_flow_readiness_gate")
         # Delegated-flow acceptance gate (PR-10V2)
@@ -966,13 +912,9 @@ class DualRepoSystemRealityAuditor:
 
         test_refs: List[str] = []
         if _file_exists("tests/test_pr10_v2_delegated_flow_acceptance_gate.py"):
-            test_refs.append(
-                "tests/test_pr10_v2_delegated_flow_acceptance_gate.py"
-            )
+            test_refs.append("tests/test_pr10_v2_delegated_flow_acceptance_gate.py")
         if _file_exists("tests/test_pr535_v2_readiness_governance_evidence_surface.py"):
-            test_refs.append(
-                "tests/test_pr535_v2_readiness_governance_evidence_surface.py"
-            )
+            test_refs.append("tests/test_pr535_v2_readiness_governance_evidence_surface.py")
 
         gaps: List[str] = []
         for m in missing:
@@ -992,10 +934,7 @@ class DualRepoSystemRealityAuditor:
             rationale = "No capability routing module could be imported."
         elif found < 2:
             maturity = MaturityLabel.partially_implemented
-            rationale = (
-                f"Only {found}/{total} modules importable; enforcement wiring "
-                "not confirmed."
-            )
+            rationale = f"Only {found}/{total} modules importable; enforcement wiring " "not confirmed."
         elif not enforcement_available:
             maturity = MaturityLabel.implemented
             rationale = (
@@ -1038,12 +977,8 @@ class DualRepoSystemRealityAuditor:
         dim = AuditDimension.recovery_redispatch_reconnect
 
         continuity_available = _try_import("core.flow_continuity_coordinator")
-        recovery_available = _try_import(
-            "core.delegated_flow_recovery_coordinator"
-        )
-        closure_available = _try_import(
-            "core.recovery_durability_closure_validator"
-        )
+        recovery_available = _try_import("core.delegated_flow_recovery_coordinator")
+        closure_available = _try_import("core.recovery_durability_closure_validator")
         restart_available = _try_import("core.runtime_restart_recovery")
         truth_surface_available = _try_import("core.recovery_truth_surface")
 
@@ -1094,6 +1029,7 @@ class DualRepoSystemRealityAuditor:
                 from core.recovery_truth_surface import (  # type: ignore[import]
                     build_recovery_truth_report,
                 )
+
                 tr = build_recovery_truth_report()
                 truth_open_dims = tr.open_dimensions
                 truth_deferred_dims = tr.deferred_dimensions
@@ -1105,12 +1041,8 @@ class DualRepoSystemRealityAuditor:
                 truth_v2_internal_success = None
 
         test_refs: List[str] = []
-        if _file_exists(
-            "tests/test_pr534_continuity_recovery_durability_closure.py"
-        ):
-            test_refs.append(
-                "tests/test_pr534_continuity_recovery_durability_closure.py"
-            )
+        if _file_exists("tests/test_pr534_continuity_recovery_durability_closure.py"):
+            test_refs.append("tests/test_pr534_continuity_recovery_durability_closure.py")
         if _file_exists("tests/test_recovery_truth_surface.py"):
             test_refs.append("tests/test_recovery_truth_surface.py")
 
@@ -1124,10 +1056,7 @@ class DualRepoSystemRealityAuditor:
             )
         if truth_surface_available and truth_open_dims:
             for d in truth_open_dims:
-                gaps.append(
-                    f"RecoveryTruthSurface dimension '{d}' is open "
-                    "(partial/deferred/unknown)."
-                )
+                gaps.append(f"RecoveryTruthSurface dimension '{d}' is open " "(partial/deferred/unknown).")
 
         found = len(available)
         total = 5  # now 5 modules including recovery_truth_surface
@@ -1137,16 +1066,10 @@ class DualRepoSystemRealityAuditor:
             rationale = "No recovery module could be imported."
         elif found < 2:
             maturity = MaturityLabel.partially_implemented
-            rationale = (
-                f"Only {found}/{total} recovery modules importable; "
-                "chain is incomplete."
-            )
+            rationale = f"Only {found}/{total} recovery modules importable; " "chain is incomplete."
         elif found < 4:
             maturity = MaturityLabel.implemented
-            rationale = (
-                f"{found}/{total} recovery modules importable; "
-                f"missing: {missing!r}"
-            )
+            rationale = f"{found}/{total} recovery modules importable; " f"missing: {missing!r}"
         elif (
             test_refs
             and (closure_all_closed is True or closure_all_closed is None)
@@ -1177,10 +1100,7 @@ class DualRepoSystemRealityAuditor:
             )
         else:
             maturity = MaturityLabel.mainchained
-            rationale = (
-                f"{found}/{total} recovery modules importable; "
-                "no automated test reference found."
-            )
+            rationale = f"{found}/{total} recovery modules importable; " "no automated test reference found."
 
         evidence_summary = (
             f"Probed {total} recovery modules; {found} importable.  "
@@ -1208,13 +1128,9 @@ class DualRepoSystemRealityAuditor:
         dim = AuditDimension.governance_readiness_release_gate
 
         gov_gate_available = _try_import("core.governance_validation_gate")
-        release_skeleton_available = _try_import(
-            "core.distributed_release_gate_skeleton"
-        )
+        release_skeleton_available = _try_import("core.distributed_release_gate_skeleton")
         acceptance_available = _try_import("core.system_final_acceptance_verdict")
-        evidence_surface_available = _try_import(
-            "core.v2_readiness_governance_evidence_surface"
-        )
+        evidence_surface_available = _try_import("core.v2_readiness_governance_evidence_surface")
 
         # Check whether the release gate skeleton is enforcing or not
         skeleton_is_enforcing: Optional[bool] = None
@@ -1251,26 +1167,14 @@ class DualRepoSystemRealityAuditor:
             missing.append("core.v2_readiness_governance_evidence_surface")
 
         test_refs: List[str] = []
-        if _file_exists(
-            "tests/test_pr536_distributed_release_gate_skeleton.py"
-        ):
-            test_refs.append(
-                "tests/test_pr536_distributed_release_gate_skeleton.py"
-            )
-        if _file_exists(
-            "tests/test_pr17_v2_system_final_acceptance_verdict.py"
-        ):
-            test_refs.append(
-                "tests/test_pr17_v2_system_final_acceptance_verdict.py"
-            )
+        if _file_exists("tests/test_pr536_distributed_release_gate_skeleton.py"):
+            test_refs.append("tests/test_pr536_distributed_release_gate_skeleton.py")
+        if _file_exists("tests/test_pr17_v2_system_final_acceptance_verdict.py"):
+            test_refs.append("tests/test_pr17_v2_system_final_acceptance_verdict.py")
         if _file_exists(".github/workflows/system_acceptance.yml"):
-            test_refs.append(
-                ".github/workflows/system_acceptance.yml"
-            )
+            test_refs.append(".github/workflows/system_acceptance.yml")
         if _file_exists(".github/workflows/governance_gate_enforcement.yml"):
-            test_refs.append(
-                ".github/workflows/governance_gate_enforcement.yml"
-            )
+            test_refs.append(".github/workflows/governance_gate_enforcement.yml")
 
         gaps: List[str] = []
         for m in missing:
@@ -1291,10 +1195,7 @@ class DualRepoSystemRealityAuditor:
             rationale = "No governance/readiness module could be imported."
         elif found < 2:
             maturity = MaturityLabel.partially_implemented
-            rationale = (
-                f"Only {found}/{total} governance modules importable; "
-                "gate machinery incomplete."
-            )
+            rationale = f"Only {found}/{total} governance modules importable; " "gate machinery incomplete."
         elif skeleton_is_enforcing is False:
             # All or most modules importable but the gate is explicitly
             # non-enforcing — this is an important honesty signal
@@ -1307,10 +1208,7 @@ class DualRepoSystemRealityAuditor:
             )
         elif found < total:
             maturity = MaturityLabel.implemented
-            rationale = (
-                f"{found}/{total} governance modules importable; "
-                f"missing: {missing!r}"
-            )
+            rationale = f"{found}/{total} governance modules importable; " f"missing: {missing!r}"
         elif test_refs:
             maturity = MaturityLabel.automated_verified
             rationale = (
@@ -1322,8 +1220,7 @@ class DualRepoSystemRealityAuditor:
         else:
             maturity = MaturityLabel.mainchained
             rationale = (
-                f"All {total} governance modules importable; "
-                "no test/CI reference found for automated_verified."
+                f"All {total} governance modules importable; " "no test/CI reference found for automated_verified."
             )
 
         evidence_summary = (
@@ -1372,13 +1269,9 @@ class DualRepoSystemRealityAuditor:
         found_tests = [f for f in key_test_files if _file_exists(f)]
         found_audit_mods = [m for m in audit_modules if _try_import(m)]
 
-        missing_workflows = [
-            f for f in workflow_files if f not in found_workflows
-        ]
+        missing_workflows = [f for f in workflow_files if f not in found_workflows]
         missing_tests = [f for f in key_test_files if f not in found_tests]
-        missing_audit_mods = [
-            m for m in audit_modules if m not in found_audit_mods
-        ]
+        missing_audit_mods = [m for m in audit_modules if m not in found_audit_mods]
 
         code_refs = found_audit_mods
         test_refs = found_workflows + found_tests
@@ -1391,9 +1284,7 @@ class DualRepoSystemRealityAuditor:
         for m in missing_audit_mods:
             gaps.append(f"Audit output module not importable: {m}")
 
-        total_expected = (
-            len(workflow_files) + len(key_test_files) + len(audit_modules)
-        )
+        total_expected = len(workflow_files) + len(key_test_files) + len(audit_modules)
         total_found = len(found_workflows) + len(found_tests) + len(found_audit_mods)
 
         if total_found == 0:
@@ -1401,20 +1292,13 @@ class DualRepoSystemRealityAuditor:
             rationale = "No workflow, test, or audit module found."
         elif total_found < total_expected // 2:
             maturity = MaturityLabel.partially_implemented
-            rationale = (
-                f"Only {total_found}/{total_expected} expected artifacts found."
-            )
+            rationale = f"Only {total_found}/{total_expected} expected artifacts found."
         elif gaps:
             maturity = MaturityLabel.implemented
-            rationale = (
-                f"{total_found}/{total_expected} artifacts found; "
-                f"{len(gaps)} missing: {gaps!r}"
-            )
+            rationale = f"{total_found}/{total_expected} artifacts found; " f"{len(gaps)} missing: {gaps!r}"
         else:
             maturity = MaturityLabel.automated_verified
-            rationale = (
-                f"All {total_expected} workflow/test/audit artifacts found."
-            )
+            rationale = f"All {total_expected} workflow/test/audit artifacts found."
 
         evidence_summary = (
             f"Found {len(found_workflows)}/{len(workflow_files)} workflows, "
@@ -1436,9 +1320,7 @@ class DualRepoSystemRealityAuditor:
     # Verdict computation
     # ------------------------------------------------------------------
 
-    def _compute_verdict(
-        self, entries: List[DimensionAuditEntry]
-    ) -> SystemRealityVerdict:
+    def _compute_verdict(self, entries: List[DimensionAuditEntry]) -> SystemRealityVerdict:
         """Compute the system-level verdict from dimension entries.
 
         Rules (fail-conservative):
@@ -1464,9 +1346,7 @@ class DualRepoSystemRealityAuditor:
 
         return SystemRealityVerdict.platform_baseline_established
 
-    def _collect_blocking_gaps(
-        self, entries: List[DimensionAuditEntry]
-    ) -> List[str]:
+    def _collect_blocking_gaps(self, entries: List[DimensionAuditEntry]) -> List[str]:
         """Collect all gap descriptions across all dimensions."""
         gaps: List[str] = []
         for entry in entries:
@@ -1475,9 +1355,7 @@ class DualRepoSystemRealityAuditor:
         return gaps
 
     @staticmethod
-    def _find_entry(
-        entries: List[DimensionAuditEntry], dim: AuditDimension
-    ) -> Optional[DimensionAuditEntry]:
+    def _find_entry(entries: List[DimensionAuditEntry], dim: AuditDimension) -> Optional[DimensionAuditEntry]:
         """Return the entry for *dim* or None."""
         for e in entries:
             if e.dimension == dim:
@@ -1488,15 +1366,10 @@ class DualRepoSystemRealityAuditor:
     # Conclusion builders
     # ------------------------------------------------------------------
 
-    def _build_main_chain_conclusion(
-        self, entry: Optional[DimensionAuditEntry]
-    ) -> str:
+    def _build_main_chain_conclusion(self, entry: Optional[DimensionAuditEntry]) -> str:
         """Produce the formal main-chain authenticity conclusion."""
         if entry is None:
-            return (
-                "MAIN CHAIN AUTHENTICITY: INSUFFICIENT EVIDENCE — "
-                "dimension entry absent."
-            )
+            return "MAIN CHAIN AUTHENTICITY: INSUFFICIENT EVIDENCE — " "dimension entry absent."
         label = entry.maturity.value.upper()
         if entry.maturity == MaturityLabel.automated_verified:
             return (
@@ -1542,15 +1415,10 @@ class DualRepoSystemRealityAuditor:
                 "only nominally."
             )
 
-    def _build_recovery_conclusion(
-        self, entry: Optional[DimensionAuditEntry]
-    ) -> str:
+    def _build_recovery_conclusion(self, entry: Optional[DimensionAuditEntry]) -> str:
         """Produce the formal recovery maturity conclusion."""
         if entry is None:
-            return (
-                "RECOVERY MATURITY: INSUFFICIENT EVIDENCE — "
-                "dimension entry absent."
-            )
+            return "RECOVERY MATURITY: INSUFFICIENT EVIDENCE — " "dimension entry absent."
         label = entry.maturity.value.upper()
         if entry.maturity in (
             MaturityLabel.automated_verified,
@@ -1564,16 +1432,9 @@ class DualRepoSystemRealityAuditor:
                 "RuntimeRestartRecovery) are importable."
             )
         elif entry.maturity == MaturityLabel.implemented:
-            return (
-                f"RECOVERY MATURITY: {label} — "
-                "Recovery modules are mostly importable; "
-                f"gaps: {entry.gaps!r}"
-            )
+            return f"RECOVERY MATURITY: {label} — " "Recovery modules are mostly importable; " f"gaps: {entry.gaps!r}"
         elif entry.maturity == MaturityLabel.partially_implemented:
-            return (
-                f"RECOVERY MATURITY: {label} — "
-                "Partial recovery implementation; key modules missing."
-            )
+            return f"RECOVERY MATURITY: {label} — " "Partial recovery implementation; key modules missing."
         else:
             return (
                 f"RECOVERY MATURITY: {label} — "
@@ -1581,22 +1442,14 @@ class DualRepoSystemRealityAuditor:
                 "only nominally."
             )
 
-    def _build_governance_conclusion(
-        self, entry: Optional[DimensionAuditEntry]
-    ) -> str:
+    def _build_governance_conclusion(self, entry: Optional[DimensionAuditEntry]) -> str:
         """Produce the formal governance enforcement conclusion."""
         if entry is None:
-            return (
-                "GOVERNANCE ENFORCEMENT: INSUFFICIENT EVIDENCE — "
-                "dimension entry absent."
-            )
+            return "GOVERNANCE ENFORCEMENT: INSUFFICIENT EVIDENCE — " "dimension entry absent."
         label = entry.maturity.value.upper()
 
         # Check whether skeleton is non-enforcing gap exists
-        non_enforcing_gap = any(
-            "non-enforcing skeleton" in g or "is_enforcing is False" in g
-            for g in entry.gaps
-        )
+        non_enforcing_gap = any("non-enforcing skeleton" in g or "is_enforcing is False" in g for g in entry.gaps)
 
         if non_enforcing_gap:
             return (
@@ -1617,15 +1470,9 @@ class DualRepoSystemRealityAuditor:
                 "and automated verification exists."
             )
         elif entry.maturity == MaturityLabel.implemented:
-            return (
-                f"GOVERNANCE ENFORCEMENT: {label} — "
-                f"Governance modules mostly importable; gaps: {entry.gaps!r}"
-            )
+            return f"GOVERNANCE ENFORCEMENT: {label} — " f"Governance modules mostly importable; gaps: {entry.gaps!r}"
         else:
-            return (
-                f"GOVERNANCE ENFORCEMENT: {label} — "
-                "Governance machinery is largely absent or incomplete."
-            )
+            return f"GOVERNANCE ENFORCEMENT: {label} — " "Governance machinery is largely absent or incomplete."
 
     def _build_readiness_conclusion(
         self,
@@ -1633,9 +1480,7 @@ class DualRepoSystemRealityAuditor:
         workflow_entry: Optional[DimensionAuditEntry],
     ) -> str:
         """Produce the operational readiness contribution conclusion."""
-        blocking = [
-            e for e in entries if e.maturity.is_blocking()
-        ]
+        blocking = [e for e in entries if e.maturity.is_blocking()]
         if blocking:
             dims = [e.dimension.value for e in blocking]
             return (
@@ -1644,9 +1489,7 @@ class DualRepoSystemRealityAuditor:
                 "Platform cannot be declared platform_baseline_established "
                 "until these are closed."
             )
-        all_verified = all(
-            e.maturity == MaturityLabel.automated_verified for e in entries
-        )
+        all_verified = all(e.maturity == MaturityLabel.automated_verified for e in entries)
         if all_verified:
             return (
                 "FULLY-OPERATIONAL READINESS CONTRIBUTION: FULL — "
@@ -1693,9 +1536,7 @@ class DualRepoSystemRealityAuditor:
             ref_count = len(entry.code_references) + len(entry.test_references)
             gap_count = len(entry.gaps)
             lines.append(
-                f"  {entry.dimension.value:<42}  "
-                f"{entry.maturity.value:<30}  "
-                f"refs={ref_count}  gaps={gap_count}"
+                f"  {entry.dimension.value:<42}  " f"{entry.maturity.value:<30}  " f"refs={ref_count}  gaps={gap_count}"
             )
 
         lines += [
@@ -1738,10 +1579,7 @@ class DualRepoSystemRealityAuditor:
                 "declared until these gaps are closed."
             )
         elif verdict.is_inconclusive:
-            lines.append(
-                "Insufficient evidence to conclude.  Import environment may "
-                "be severely broken."
-            )
+            lines.append("Insufficient evidence to conclude.  Import environment may " "be severely broken.")
         else:
             lines.append(
                 "Partial baseline: most dimensions are implemented but at "

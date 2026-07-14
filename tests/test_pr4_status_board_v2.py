@@ -226,6 +226,7 @@ class TestProjectionReaderFile:
         f = tmp_path / "proj.json"
         f.write_text(json.dumps(_SAMPLE_PROJECTION))
         from windows_client.status_board_v2.projection_reader import ProjectionReader
+
         reader = ProjectionReader(base_url=None, file_path=str(f))
         result = reader.read()
         assert result["tri_state_phase"] == "liminal"
@@ -236,6 +237,7 @@ class TestProjectionReaderFile:
         f = tmp_path / "minimal.json"
         f.write_text(json.dumps(_MINIMAL_PROJECTION))
         from windows_client.status_board_v2.projection_reader import ProjectionReader
+
         reader = ProjectionReader(base_url=None, file_path=str(f))
         result = reader.read()
         assert result["tri_state_phase"] == "silent"
@@ -244,9 +246,10 @@ class TestProjectionReaderFile:
 
     def test_runtime_truth_payload_normalizes_to_runtime_projection(self):
         from windows_client.status_board_v2.projection_reader import (
-            _normalize_board_projection_payload,
             RUNTIME_TRUTH_ENDPOINT,
+            _normalize_board_projection_payload,
         )
+
         result = _normalize_board_projection_payload(
             dict(_RUNTIME_TRUTH_PAYLOAD),
             RUNTIME_TRUTH_ENDPOINT,
@@ -265,9 +268,10 @@ class TestProjectionReaderFile:
 
     def test_desktop_status_board_payload_normalizes_to_runtime_projection(self):
         from windows_client.status_board_v2.projection_reader import (
-            _normalize_board_projection_payload,
             DESKTOP_STATUS_BOARD_ENDPOINT,
+            _normalize_board_projection_payload,
         )
+
         result = _normalize_board_projection_payload(
             dict(_DESKTOP_STATUS_BOARD_PAYLOAD),
             DESKTOP_STATUS_BOARD_ENDPOINT,
@@ -288,6 +292,7 @@ class TestProjectionReaderFile:
             ProjectionReader,
             ProjectionReadError,
         )
+
         reader = ProjectionReader(base_url=None, file_path=str(f))
         with pytest.raises(ProjectionReadError, match="tri_state_phase"):
             reader.read()
@@ -299,6 +304,7 @@ class TestProjectionReaderFile:
             ProjectionReader,
             ProjectionReadError,
         )
+
         reader = ProjectionReader(base_url=None, file_path=str(f))
         with pytest.raises(ProjectionReadError, match="Expected a JSON object"):
             reader.read()
@@ -309,6 +315,7 @@ class TestProjectionReaderStdin:
 
     def test_stdin_cache(self):
         from windows_client.status_board_v2.projection_reader import ProjectionReader
+
         reader = ProjectionReader(base_url=None, from_stdin=True)
         # Pre-load the cache to avoid actually reading stdin in tests.
         reader._stdin_cache = dict(_SAMPLE_PROJECTION)
@@ -317,6 +324,7 @@ class TestProjectionReaderStdin:
 
     def test_stdin_cache_stable_across_reads(self):
         from windows_client.status_board_v2.projection_reader import ProjectionReader
+
         reader = ProjectionReader(base_url=None, from_stdin=True)
         reader._stdin_cache = dict(_SAMPLE_PROJECTION)
         first = reader.read()
@@ -332,6 +340,7 @@ class TestProjectionReaderAllFail:
             ProjectionReader,
             ProjectionReadError,
         )
+
         reader = ProjectionReader(base_url=None, file_path=None, from_stdin=False)
         with pytest.raises(ProjectionReadError):
             reader.read()
@@ -341,6 +350,7 @@ class TestProjectionReaderAllFail:
             ProjectionReader,
             ProjectionReadError,
         )
+
         reader = ProjectionReader(
             base_url="http://127.0.0.1:1",  # port 1 should be unreachable
             file_path=None,
@@ -352,10 +362,11 @@ class TestProjectionReaderAllFail:
 
     def test_http_read_prefers_runtime_truth_then_falls_back(self):
         from windows_client.status_board_v2.projection_reader import (
-            ProjectionReader,
-            RUNTIME_TRUTH_ENDPOINT,
             PROJECTION_ENDPOINT,
+            RUNTIME_TRUTH_ENDPOINT,
+            ProjectionReader,
         )
+
         reader = ProjectionReader(base_url="http://127.0.0.1:9000")
 
         def _fake_read(endpoint: str):
@@ -501,12 +512,14 @@ class TestParticipationTruthConsumption:
 # 2. Surface rendering tests
 # ---------------------------------------------------------------------------
 
+
 class TestPhaseSurface:
     """PhaseSurface snapshot text formatting."""
 
     @pytest.fixture(autouse=True)
     def _disable_ansi(self):
         import windows_client.status_board_v2._ansi as ansi_mod
+
         orig = ansi_mod.ANSI_ENABLED
         ansi_mod.ANSI_ENABLED = False
         yield
@@ -514,22 +527,26 @@ class TestPhaseSurface:
 
     def test_render_silent(self):
         from windows_client.status_board_v2.phase_surface import PhaseSurface
+
         out = PhaseSurface().render({"tri_state_phase": "silent"})
         assert "SILENT" in out
         assert "Phase" in out
 
     def test_render_liminal(self):
         from windows_client.status_board_v2.phase_surface import PhaseSurface
+
         out = PhaseSurface().render({"tri_state_phase": "liminal"})
         assert "LIMINAL" in out
 
     def test_render_manifest(self):
         from windows_client.status_board_v2.phase_surface import PhaseSurface
+
         out = PhaseSurface().render({"tri_state_phase": "manifest"})
         assert "MANIFEST" in out
 
     def test_render_unknown_phase(self):
         from windows_client.status_board_v2.phase_surface import PhaseSurface
+
         out = PhaseSurface().render({"tri_state_phase": "unknown_phase"})
         # Should not crash; phase key present
         assert "Phase" in out
@@ -541,6 +558,7 @@ class TestDomainSurface:
     @pytest.fixture(autouse=True)
     def _disable_ansi(self):
         import windows_client.status_board_v2._ansi as ansi_mod
+
         orig = ansi_mod.ANSI_ENABLED
         ansi_mod.ANSI_ENABLED = False
         yield
@@ -548,21 +566,25 @@ class TestDomainSurface:
 
     def test_render_local(self):
         from windows_client.status_board_v2.domain_surface import DomainSurface
+
         out = DomainSurface().render({"runtime_domain": "local"})
         assert "LOCAL" in out
 
     def test_render_cross_device(self):
         from windows_client.status_board_v2.domain_surface import DomainSurface
+
         out = DomainSurface().render({"runtime_domain": "cross_device"})
         assert "CROSS_DEVICE" in out
 
     def test_render_transition(self):
         from windows_client.status_board_v2.domain_surface import DomainSurface
+
         out = DomainSurface().render({"runtime_domain": "transition"})
         assert "TRANSITION" in out
 
     def test_render_none_domain(self):
         from windows_client.status_board_v2.domain_surface import DomainSurface
+
         out = DomainSurface().render({"runtime_domain": None})
         assert "UNKNOWN" in out.upper() or "unknown" in out.lower()
 
@@ -573,6 +595,7 @@ class TestTopologySurface:
     @pytest.fixture(autouse=True)
     def _disable_ansi(self):
         import windows_client.status_board_v2._ansi as ansi_mod
+
         orig = ansi_mod.ANSI_ENABLED
         ansi_mod.ANSI_ENABLED = False
         yield
@@ -580,6 +603,7 @@ class TestTopologySurface:
 
     def test_render_with_weights(self):
         from windows_client.status_board_v2.topology_surface import TopologySurface
+
         out = TopologySurface().render(_SAMPLE_PROJECTION)
         assert "gpt-4o" in out
         assert "MAIN ROUTE" in out  # Updated: header is now "MAIN ROUTE" (native-multimodal-first)
@@ -588,28 +612,33 @@ class TestTopologySurface:
 
     def test_render_primary_marker(self):
         from windows_client.status_board_v2.topology_surface import TopologySurface
+
         out = TopologySurface().render(_SAMPLE_PROJECTION)
         # Primary model should be marked with ★
         assert "★" in out
 
     def test_render_no_weights(self):
         from windows_client.status_board_v2.topology_surface import TopologySurface
+
         proj = dict(_MINIMAL_PROJECTION)
         out = TopologySurface().render(proj)
         assert "no topology data" in out
 
     def test_render_support_models(self):
         from windows_client.status_board_v2.topology_surface import TopologySurface
+
         out = TopologySurface().render(_SAMPLE_PROJECTION)
         assert "claude-3" in out
 
     def test_render_route_reason(self):
         from windows_client.status_board_v2.topology_surface import TopologySurface
+
         out = TopologySurface().render(_SAMPLE_PROJECTION)
         assert "Native multimodal" in out
 
     def test_render_long_reason_truncated(self):
         from windows_client.status_board_v2.topology_surface import TopologySurface
+
         proj = dict(_SAMPLE_PROJECTION, route_reason="x" * 100)
         out = TopologySurface().render(proj)
         assert "..." in out
@@ -621,6 +650,7 @@ class TestDeviceSurface:
     @pytest.fixture(autouse=True)
     def _disable_ansi(self):
         import windows_client.status_board_v2._ansi as ansi_mod
+
         orig = ansi_mod.ANSI_ENABLED
         ansi_mod.ANSI_ENABLED = False
         yield
@@ -628,37 +658,44 @@ class TestDeviceSurface:
 
     def test_render_with_devices(self):
         from windows_client.status_board_v2.device_surface import DeviceSurface
+
         out = DeviceSurface().render(_SAMPLE_PROJECTION)
         assert "desktop-win" in out
 
     def test_render_no_devices(self):
         from windows_client.status_board_v2.device_surface import DeviceSurface
+
         out = DeviceSurface().render(_MINIMAL_PROJECTION)
         assert "none active" in out
 
     def test_render_execution_stage(self):
         from windows_client.status_board_v2.device_surface import DeviceSurface
+
         out = DeviceSurface().render(_SAMPLE_PROJECTION)
         assert "planning" in out
 
     def test_render_idle_stage(self):
         from windows_client.status_board_v2.device_surface import DeviceSurface
+
         out = DeviceSurface().render(_MINIMAL_PROJECTION)
         assert "idle" in out
 
     def test_render_task_summary(self):
         from windows_client.status_board_v2.device_surface import DeviceSurface
+
         out = DeviceSurface().render(_SAMPLE_PROJECTION)
         assert "Drafting email" in out
 
     def test_render_long_task_truncated(self):
         from windows_client.status_board_v2.device_surface import DeviceSurface
+
         proj = dict(_SAMPLE_PROJECTION, current_task_summary="t" * 100)
         out = DeviceSurface().render(proj)
         assert "..." in out
 
     def test_render_participation_truth_fields(self):
         from windows_client.status_board_v2.device_surface import DeviceSurface
+
         proj = dict(
             _SAMPLE_PROJECTION,
             participation_truth_consumption=dict(_RUNTIME_TRUTH_PAYLOAD["participation_truth_consumption"]),
@@ -696,6 +733,7 @@ class TestMetricsSurface:
     @pytest.fixture(autouse=True)
     def _disable_ansi(self):
         import windows_client.status_board_v2._ansi as ansi_mod
+
         orig = ansi_mod.ANSI_ENABLED
         ansi_mod.ANSI_ENABLED = False
         yield
@@ -703,6 +741,7 @@ class TestMetricsSurface:
 
     def test_render_with_values(self):
         from windows_client.status_board_v2.metrics_surface import MetricsSurface
+
         out = MetricsSurface().render(_SAMPLE_PROJECTION)
         assert "Presence" in out
         assert "Coherence" in out
@@ -713,11 +752,13 @@ class TestMetricsSurface:
 
     def test_render_none_values(self):
         from windows_client.status_board_v2.metrics_surface import MetricsSurface
+
         out = MetricsSurface().render(_MINIMAL_PROJECTION)
         assert "(n/a)" in out
 
     def test_render_boundary_zero(self):
         from windows_client.status_board_v2.metrics_surface import MetricsSurface
+
         proj = dict(
             _MINIMAL_PROJECTION,
             presence_intensity=0.0,
@@ -730,6 +771,7 @@ class TestMetricsSurface:
 
     def test_render_boundary_one(self):
         from windows_client.status_board_v2.metrics_surface import MetricsSurface
+
         proj = dict(
             _MINIMAL_PROJECTION,
             presence_intensity=1.0,
@@ -745,12 +787,14 @@ class TestMetricsSurface:
 # 3. StatusBoardV2App integration tests
 # ---------------------------------------------------------------------------
 
+
 class TestStatusBoardV2App:
     """StatusBoardV2App.render_once integration tests."""
 
     @pytest.fixture(autouse=True)
     def _disable_ansi(self):
         import windows_client.status_board_v2._ansi as ansi_mod
+
         orig = ansi_mod.ANSI_ENABLED
         ansi_mod.ANSI_ENABLED = False
         yield
@@ -758,39 +802,40 @@ class TestStatusBoardV2App:
 
     def test_render_once_contains_phase(self):
         from windows_client.status_board_v2.app import StatusBoardV2App
+
         app = StatusBoardV2App(no_color=True)
         out = app.render_once(_SAMPLE_PROJECTION)
         assert "LIMINAL" in out
 
     def test_render_once_contains_domain(self):
         from windows_client.status_board_v2.app import StatusBoardV2App
+
         app = StatusBoardV2App(no_color=True)
         out = app.render_once(_SAMPLE_PROJECTION)
         assert "LOCAL" in out
 
     def test_render_once_contains_primary_model(self):
         from windows_client.status_board_v2.app import StatusBoardV2App
+
         app = StatusBoardV2App(no_color=True)
         out = app.render_once(_SAMPLE_PROJECTION)
         assert "gpt-4o" in out
 
     def test_render_once_contains_device(self):
         from windows_client.status_board_v2.app import StatusBoardV2App
+
         app = StatusBoardV2App(no_color=True)
         out = app.render_once(_SAMPLE_PROJECTION)
         assert "desktop-win" in out
 
     def test_render_once_exposes_participation_truth_fields(self):
         from windows_client.status_board_v2.app import StatusBoardV2App
+
         app = StatusBoardV2App(no_color=True)
         projection = dict(_SAMPLE_PROJECTION)
-        projection["participation_truth_consumption"] = dict(
-            _RUNTIME_TRUTH_PAYLOAD["participation_truth_consumption"]
-        )
+        projection["participation_truth_consumption"] = dict(_RUNTIME_TRUTH_PAYLOAD["participation_truth_consumption"])
         projection["foundational_system_truth"] = dict(_RUNTIME_TRUTH_PAYLOAD["foundational_system_truth"])
-        projection["cross_repo_acceptance_chain"] = dict(
-            _RUNTIME_TRUTH_PAYLOAD["cross_repo_acceptance_chain"]
-        )
+        projection["cross_repo_acceptance_chain"] = dict(_RUNTIME_TRUTH_PAYLOAD["cross_repo_acceptance_chain"])
         out = app.render_once(projection)
         assert "android-prod-1" in out
         assert "dispatch_eligible" in out
@@ -805,12 +850,14 @@ class TestStatusBoardV2App:
 
     def test_render_once_contains_metrics(self):
         from windows_client.status_board_v2.app import StatusBoardV2App
+
         app = StatusBoardV2App(no_color=True)
         out = app.render_once(_SAMPLE_PROJECTION)
         assert "Coherence" in out
 
     def test_render_once_includes_operational_state_board_when_present(self):
         from windows_client.status_board_v2.app import StatusBoardV2App
+
         app = StatusBoardV2App(no_color=True)
         projection = dict(_SAMPLE_PROJECTION)
         projection["operational_state_board"] = _DESKTOP_STATUS_BOARD_PAYLOAD["operational_state_board"]
@@ -823,18 +870,21 @@ class TestStatusBoardV2App:
         # PR-8: board is now a desktop control surface, not read-only.
         # Validates the board title is rendered in each frame.
         from windows_client.status_board_v2.app import StatusBoardV2App
+
         app = StatusBoardV2App(no_color=True)
         out = app.render_once(_SAMPLE_PROJECTION)
         assert "Status Board V2" in out
 
     def test_render_once_source_defaults_to_runtime_truth_endpoint(self):
         from windows_client.status_board_v2.app import StatusBoardV2App
+
         app = StatusBoardV2App(no_color=True)
         out = app.render_once(_SAMPLE_PROJECTION)
         assert "/api/v1/projection/runtime-truth" in out
 
     def test_render_offline_contains_offline(self):
         from windows_client.status_board_v2.app import StatusBoardV2App
+
         app = StatusBoardV2App(no_color=True)
         out = app.render_offline("connection refused")
         assert "OFFLINE" in out
@@ -842,6 +892,7 @@ class TestStatusBoardV2App:
 
     def test_render_once_timestamp_shown(self):
         from windows_client.status_board_v2.app import StatusBoardV2App
+
         app = StatusBoardV2App(no_color=True)
         out = app.render_once(_SAMPLE_PROJECTION)
         # Timestamp formatted as HH:MM:SS should be in the board.
@@ -850,6 +901,7 @@ class TestStatusBoardV2App:
     def test_render_once_no_chat_input_text(self):
         """Board title must not contain chat-like prompts."""
         from windows_client.status_board_v2.app import StatusBoardV2App
+
         app = StatusBoardV2App(no_color=True)
         out = app.render_once(_SAMPLE_PROJECTION)
         assert ">" not in out or "→" in out  # directional arrows ok, prompt chars not expected
@@ -862,12 +914,14 @@ class TestStatusBoardV2App:
 # 4. Projection endpoint tests
 # ---------------------------------------------------------------------------
 
+
 class TestProjectionEndpoint:
     """GET /api/v1/projection/runtime returns a valid RuntimeProjection dict."""
 
     def _call_endpoint(self):
         """Import and call the projection assembly function directly."""
         from core.routes.projection import _assemble_projection
+
         return _assemble_projection()
 
     def test_endpoint_returns_dict(self):
@@ -876,6 +930,7 @@ class TestProjectionEndpoint:
 
     def test_endpoint_has_required_keys(self):
         from windows_client.status_board_v2.projection_reader import _REQUIRED_FIELDS
+
         result = self._call_endpoint()
         for key in _REQUIRED_FIELDS:
             assert key in result, f"Missing required key: {key!r}"
@@ -903,8 +958,10 @@ class TestProjectionEndpoint:
 
     def test_endpoint_creates_fastapi_router(self):
         """create_router() returns an APIRouter (smoke test for registration)."""
-        from core.routes.projection import create_router
         from fastapi import APIRouter
+
+        from core.routes.projection import create_router
+
         router = create_router()
         assert isinstance(router, APIRouter)
         # Check the endpoint is registered.
@@ -915,6 +972,7 @@ class TestProjectionEndpoint:
         """_minimal_fallback_payload returns a valid minimal projection."""
         from core.routes.projection import _minimal_fallback_payload
         from windows_client.status_board_v2.projection_reader import _REQUIRED_FIELDS
+
         payload = _minimal_fallback_payload()
         for key in _REQUIRED_FIELDS:
             assert key in payload, f"Fallback missing key: {key!r}"

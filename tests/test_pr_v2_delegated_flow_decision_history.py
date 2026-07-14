@@ -67,8 +67,8 @@ AZ. system_final_acceptance_verdict._evaluate_delegated_flow integrates history:
 from __future__ import annotations
 
 import json
-import sys
 import os
+import sys
 import time
 from typing import Any, Dict, List
 from unittest.mock import MagicMock, patch
@@ -85,20 +85,19 @@ from core.delegated_flow_decision_history import (
     DELEGATED_FLOW_DECISION_HISTORY_PR_V2_4DH_SENTINEL,
     HISTORY_FAIL_CONSERVATIVE_POLICY,
     HISTORY_FIVE_STATE_EVIDENCE_STATUS_POLICY,
-    HISTORY_STRUCTURE_VS_RUNTIME_CLOSURE_POLICY,
-    HISTORY_STALENESS_IS_DOWNGRADE_POLICY,
     HISTORY_SILENCE_IS_NOT_EVIDENCE_POLICY,
-    HistoryEvidenceStatus,
+    HISTORY_STALENESS_IS_DOWNGRADE_POLICY,
+    HISTORY_STRUCTURE_VS_RUNTIME_CLOSURE_POLICY,
+    DelegatedFlowDecisionHistory,
     DelegatedFlowEventKind,
     DelegatedFlowHistoryEntry,
     DelegatedFlowHistoryReport,
-    DelegatedFlowDecisionHistory,
-    record_delegated_flow_event,
+    HistoryEvidenceStatus,
     evaluate_delegated_flow_history,
     get_decision_history,
+    record_delegated_flow_event,
     reset_decision_history,
 )
-
 
 # ===========================================================================
 # Fixtures
@@ -507,30 +506,22 @@ class TestInsufficientEvidence:
 
 class TestObservedButIncomplete:
     def test_Y_trigger_plus_readiness_decision(self):
-        h = _make_history_with_entries(
-            [DelegatedFlowEventKind.triggered, DelegatedFlowEventKind.readiness_decision]
-        )
+        h = _make_history_with_entries([DelegatedFlowEventKind.triggered, DelegatedFlowEventKind.readiness_decision])
         report = h.evaluate()
         assert report.evidence_status == HistoryEvidenceStatus.observed_but_incomplete
 
     def test_Z_trigger_plus_acceptance_decision(self):
-        h = _make_history_with_entries(
-            [DelegatedFlowEventKind.triggered, DelegatedFlowEventKind.acceptance_decision]
-        )
+        h = _make_history_with_entries([DelegatedFlowEventKind.triggered, DelegatedFlowEventKind.acceptance_decision])
         report = h.evaluate()
         assert report.evidence_status == HistoryEvidenceStatus.observed_but_incomplete
 
     def test_AU_observed_but_incomplete_gap_non_empty(self):
-        h = _make_history_with_entries(
-            [DelegatedFlowEventKind.triggered, DelegatedFlowEventKind.readiness_decision]
-        )
+        h = _make_history_with_entries([DelegatedFlowEventKind.triggered, DelegatedFlowEventKind.readiness_decision])
         report = h.evaluate()
         assert report.gap_description, "gap_description must be non-empty for observed_but_incomplete"
 
     def test_observed_but_incomplete_runtime_closure_false(self):
-        h = _make_history_with_entries(
-            [DelegatedFlowEventKind.triggered, DelegatedFlowEventKind.readiness_decision]
-        )
+        h = _make_history_with_entries([DelegatedFlowEventKind.triggered, DelegatedFlowEventKind.readiness_decision])
         report = h.evaluate()
         assert report.runtime_closure_established is False
 
@@ -604,9 +595,9 @@ class TestObservedAndClosed:
     def test_AG_observed_and_closed_gap_description_empty(self):
         h = _make_closed_history()
         report = h.evaluate()
-        assert report.gap_description == "", (
-            f"gap_description should be empty for observed_and_closed, got: {report.gap_description!r}"
-        )
+        assert (
+            report.gap_description == ""
+        ), f"gap_description should be empty for observed_and_closed, got: {report.gap_description!r}"
 
     def test_AW_observed_kinds_includes_all_categories(self):
         h = _make_history_with_entries(
@@ -793,8 +784,7 @@ class TestSystemFinalAcceptanceVerdictIntegration:
 
         linkage = item.evidence_linkage
         assert "history_evidence_status" in linkage, (
-            "evidence_linkage must include history_evidence_status; "
-            f"got: {list(linkage.keys())}"
+            "evidence_linkage must include history_evidence_status; " f"got: {list(linkage.keys())}"
         )
         assert linkage["history_evidence_status"] == "no_history_yet"
         assert "structure_present" in linkage
@@ -826,8 +816,8 @@ class TestSystemFinalAcceptanceVerdictIntegration:
         should be pending (not unresolved)."""
         try:
             from core.system_final_acceptance_verdict import (
-                SystemFinalAcceptanceEvaluator,
                 DimensionStatus,
+                SystemFinalAcceptanceEvaluator,
                 reset_system_acceptance_evaluator,
             )
         except ImportError:
@@ -851,9 +841,9 @@ class TestSystemFinalAcceptanceVerdictIntegration:
         linkage = item.evidence_linkage
         assert linkage.get("history_evidence_status") == "observed_but_incomplete"
         # observed_but_incomplete should map to pending, not unresolved
-        assert item.status == DimensionStatus.pending, (
-            f"Expected pending for observed_but_incomplete; got {item.status}"
-        )
+        assert (
+            item.status == DimensionStatus.pending
+        ), f"Expected pending for observed_but_incomplete; got {item.status}"
 
     def test_AZ_history_module_unavailable_falls_back_gracefully(self):
         """When the decision history module cannot be imported, the evaluator
@@ -872,12 +862,14 @@ class TestSystemFinalAcceptanceVerdictIntegration:
 
         # Patch out the history availability flag for this test
         import core.system_final_acceptance_verdict as sfav_mod
+
         original = sfav_mod._DECISION_HISTORY_AVAILABLE
         try:
             sfav_mod._DECISION_HISTORY_AVAILABLE = False
             item = evaluator._evaluate_delegated_flow()
             # Must not raise; must return an AcceptanceChecklistItem
             from core.system_final_acceptance_verdict import AcceptanceChecklistItem
+
             assert isinstance(item, AcceptanceChecklistItem)
             assert item.evidence_summary  # non-empty
         finally:

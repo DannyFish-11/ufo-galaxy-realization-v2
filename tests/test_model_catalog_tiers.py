@@ -8,6 +8,7 @@
     统一派生自 core.model_catalog —— 证明不再各存一份会漂移的硬编码。
   - 能力驱动：A 档说走 TTS 桥、B 档全原生；服务门控关时不自欺（声明原生也走桥）。
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -57,7 +58,7 @@ class TestCapabilityDrivenIO:
     def test_A_listens_native_speaks_via_bridge(self):
         io = mc.tier_effective_io("A")
         assert io.vision == "native"
-        assert io.audio_in == "native"     # Gemma 原生听
+        assert io.audio_in == "native"  # Gemma 原生听
         assert io.audio_out == "tts_bridge"  # 但不原生说 → TTS 桥
 
     def test_B_all_native(self):
@@ -67,7 +68,7 @@ class TestCapabilityDrivenIO:
     def test_effective_io_takes_union_of_models(self):
         # 多模型集合：任一模型有该能力即 native
         io = mc.effective_io(["gemma4:e2b", "openbmb/minicpm-o4.5"])
-        assert io.audio_out == "native"   # 来自 minicpm（gemma 不原生说）
+        assert io.audio_out == "native"  # 来自 minicpm（gemma 不原生说）
         # 仅 Gemma（不原生说）→ 说要走桥
         io2 = mc.effective_io(["gemma4:e2b"])
         assert io2.audio_out == "tts_bridge"
@@ -76,13 +77,16 @@ class TestCapabilityDrivenIO:
 class TestUnifiedNoHardcode:
     def test_model_selection_derives_from_catalog(self):
         from core.model_selection import list_models
+
         tags = [t for t, _ in list_models()]
         assert tags == mc.choice_order()
 
     def test_config_options_derive_from_catalog(self):
         from core.model_catalog import local_choice_options
+
         # config.py 的 OLLAMA_MODEL.options 现在是空占位，运行时由此填充
         from core.routes.config import CONFIG_SCHEMA
+
         assert CONFIG_SCHEMA["OLLAMA_MODEL"]["options"] == []
         assert local_choice_options() == mc.choice_order()
 
@@ -119,30 +123,35 @@ class TestModalityBridge:
         # 状态文件已由 autouse fixture 隔离补丁,这里直接用。
         mc.save_tier("A")
         from core.modality_bridge import resolve_audio_in, resolve_audio_out
-        assert resolve_audio_in() == "asr_bridge"   # Ollama 不管原生音频 → 桥
+
+        assert resolve_audio_in() == "asr_bridge"  # Ollama 不管原生音频 → 桥
         assert resolve_audio_out() == "tts_bridge"
 
     def test_native_audio_gate_off_stays_bridge_even_for_B(self, monkeypatch):
         mc.save_tier("B")
         monkeypatch.setenv("GALAXY_NATIVE_AUDIO", "0")
         from core.modality_bridge import resolve_audio_in
+
         assert resolve_audio_in() == "asr_bridge"  # 不自欺：服务层没接就走桥
 
     def test_native_audio_gate_on_enables_native_for_B(self, monkeypatch):
         mc.save_tier("B")
         monkeypatch.setenv("GALAXY_NATIVE_AUDIO", "1")
         from core.modality_bridge import resolve_audio_in, resolve_audio_out
+
         assert resolve_audio_in() == "native"
         assert resolve_audio_out() == "native"
 
     def test_transcribe_empty_returns_none(self):
         from core.modality_bridge import transcribe_b64
+
         assert transcribe_b64("") is None
 
 
 class TestModelsAPI:
     def test_catalog_endpoint_shape(self):
         from core.routes.models import get_catalog
+
         snap = asyncio.run(get_catalog())
         assert snap["current_tier"] in ("A", "B")
         assert len(snap["tiers"]) == 2
@@ -151,14 +160,16 @@ class TestModelsAPI:
 
     def test_status_endpoint_shape(self):
         from core.routes.models import get_status
+
         st = asyncio.run(get_status())
         # 本地候选都在（状态可能是 absent，因为测试环境没有 Ollama）
         assert set(st["models"].keys()) == set(mc.choice_order())
 
     def test_select_tier_endpoint(self, monkeypatch):
-        from core.routes.models import select_tier, TierSelectRequest
         # 屏蔽真实后台拉取与路由刷新
         import core.model_selection as ms
+        from core.routes.models import TierSelectRequest, select_tier
+
         monkeypatch.setattr(ms, "background_pull", lambda tag: None)
         out = asyncio.run(select_tier(TierSelectRequest(tier="B")))
         assert out["success"] is True
@@ -166,6 +177,7 @@ class TestModelsAPI:
         assert out["main_brain"] == "openbmb/minicpm-o4.5"
 
     def test_select_unknown_tier_fails_cleanly(self):
-        from core.routes.models import select_tier, TierSelectRequest
+        from core.routes.models import TierSelectRequest, select_tier
+
         out = asyncio.run(select_tier(TierSelectRequest(tier="Z")))
         assert out["success"] is False

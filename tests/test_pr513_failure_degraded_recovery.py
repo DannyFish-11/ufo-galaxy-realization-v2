@@ -74,24 +74,29 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Helper: reset singleton between tests
 # ---------------------------------------------------------------------------
 
+
 def _reset():
     from core.failure_degraded_recovery_policy import (
         reset_failure_degraded_recovery_runtime,
     )
+
     reset_failure_degraded_recovery_runtime()
     # Also reset replay + audit + task graph runtimes to avoid state bleed
     try:
         from core.replay_foundation import reset_replay_foundation
+
         reset_replay_foundation()
     except Exception:
         pass
     try:
         from core.audit_event_semantics import reset_audit_event_semantics
+
         reset_audit_event_semantics()
     except Exception:
         pass
     try:
         from core.task_graph_runtime import reset_task_graph_runtime
+
         reset_task_graph_runtime()
     except Exception:
         pass
@@ -107,10 +112,12 @@ class TestA_ModuleStructure(unittest.TestCase):
 
     def test_A01_module_importable(self) -> None:
         import core.failure_degraded_recovery_policy as mod  # noqa: F401
+
         self.assertIsNotNone(mod)
 
     def test_A02_all_symbols_importable(self) -> None:
         from core import failure_degraded_recovery_policy as mod
+
         for name in mod.__all__:
             self.assertTrue(
                 hasattr(mod, name),
@@ -119,6 +126,7 @@ class TestA_ModuleStructure(unittest.TestCase):
 
     def test_A03_all_is_nonempty(self) -> None:
         from core.failure_degraded_recovery_policy import __all__
+
         self.assertGreater(len(__all__), 0)
 
 
@@ -132,37 +140,45 @@ class TestB_AuthoritySentinels(unittest.TestCase):
 
     def test_B01_authority_is_string(self) -> None:
         from core.failure_degraded_recovery_policy import FAILURE_DEGRADED_RECOVERY_AUTHORITY
+
         self.assertIsInstance(FAILURE_DEGRADED_RECOVERY_AUTHORITY, str)
         self.assertGreater(len(FAILURE_DEGRADED_RECOVERY_AUTHORITY), 0)
 
     def test_B02_layer_position_is_int(self) -> None:
         from core.failure_degraded_recovery_policy import FAILURE_DEGRADED_RECOVERY_LAYER_POSITION
+
         self.assertIsInstance(FAILURE_DEGRADED_RECOVERY_LAYER_POSITION, int)
         self.assertEqual(FAILURE_DEGRADED_RECOVERY_LAYER_POSITION, 13)
 
     def test_B03_integrated_sentinel_is_string(self) -> None:
         from core.failure_degraded_recovery_policy import FAILURE_DEGRADED_RECOVERY_INTEGRATED
+
         self.assertIsInstance(FAILURE_DEGRADED_RECOVERY_INTEGRATED, str)
         self.assertGreater(len(FAILURE_DEGRADED_RECOVERY_INTEGRATED), 0)
 
     def test_B04_integrated_sentinel_mentions_gap_001(self) -> None:
         from core.failure_degraded_recovery_policy import FAILURE_DEGRADED_RECOVERY_INTEGRATED
+
         self.assertIn("GAP-512-001", FAILURE_DEGRADED_RECOVERY_INTEGRATED)
 
     def test_B05_integrated_sentinel_mentions_gap_002(self) -> None:
         from core.failure_degraded_recovery_policy import FAILURE_DEGRADED_RECOVERY_INTEGRATED
+
         self.assertIn("GAP-512-002", FAILURE_DEGRADED_RECOVERY_INTEGRATED)
 
     def test_B06_integrated_sentinel_mentions_gap_004(self) -> None:
         from core.failure_degraded_recovery_policy import FAILURE_DEGRADED_RECOVERY_INTEGRATED
+
         self.assertIn("GAP-512-004", FAILURE_DEGRADED_RECOVERY_INTEGRATED)
 
     def test_B07_integrated_sentinel_mentions_gap_006(self) -> None:
         from core.failure_degraded_recovery_policy import FAILURE_DEGRADED_RECOVERY_INTEGRATED
+
         self.assertIn("GAP-512-006", FAILURE_DEGRADED_RECOVERY_INTEGRATED)
 
     def test_B08_integrated_sentinel_mentions_gap_007(self) -> None:
         from core.failure_degraded_recovery_policy import FAILURE_DEGRADED_RECOVERY_INTEGRATED
+
         self.assertIn("GAP-512-007", FAILURE_DEGRADED_RECOVERY_INTEGRATED)
 
 
@@ -176,12 +192,13 @@ class TestC_PolicySentinels(unittest.TestCase):
 
     def _get_all_policies(self):
         from core.failure_degraded_recovery_policy import (
+            AUTHORITY_DISCIPLINE_POLICY,
             FAILURE_AS_RUNTIME_TRUTH_POLICY,
             NO_PARALLEL_AUTHORITY_POLICY,
-            RECOVERY_AS_FIRST_CLASS_EVENT_POLICY,
             NON_BLOCKING_PROPAGATION_POLICY,
-            AUTHORITY_DISCIPLINE_POLICY,
+            RECOVERY_AS_FIRST_CLASS_EVENT_POLICY,
         )
+
         return [
             FAILURE_AS_RUNTIME_TRUTH_POLICY,
             NO_PARALLEL_AUTHORITY_POLICY,
@@ -201,10 +218,12 @@ class TestC_PolicySentinels(unittest.TestCase):
 
     def test_C03_failure_runtime_truth_policy_vocabulary(self) -> None:
         from core.failure_degraded_recovery_policy import FAILURE_AS_RUNTIME_TRUTH_POLICY
+
         self.assertIn("runtime", FAILURE_AS_RUNTIME_TRUTH_POLICY.lower())
 
     def test_C04_no_parallel_authority_policy_vocabulary(self) -> None:
         from core.failure_degraded_recovery_policy import NO_PARALLEL_AUTHORITY_POLICY
+
         self.assertIn("canonical", NO_PARALLEL_AUTHORITY_POLICY.lower())
 
 
@@ -218,42 +237,52 @@ class TestD_FailureRuntimeState(unittest.TestCase):
 
     def test_D01_enum_importable(self) -> None:
         from core.failure_degraded_recovery_policy import FailureRuntimeState
+
         self.assertIsNotNone(FailureRuntimeState)
 
     def test_D02_healthy_state(self) -> None:
         from core.failure_degraded_recovery_policy import FailureRuntimeState
+
         self.assertEqual(FailureRuntimeState.HEALTHY.value, "healthy")
 
     def test_D03_degraded_state(self) -> None:
         from core.failure_degraded_recovery_policy import FailureRuntimeState
+
         self.assertEqual(FailureRuntimeState.DEGRADED.value, "degraded")
 
     def test_D04_failed_state(self) -> None:
         from core.failure_degraded_recovery_policy import FailureRuntimeState
+
         self.assertEqual(FailureRuntimeState.FAILED.value, "failed")
 
     def test_D05_fallback_active_state(self) -> None:
         from core.failure_degraded_recovery_policy import FailureRuntimeState
+
         self.assertEqual(FailureRuntimeState.FALLBACK_ACTIVE.value, "fallback_active")
 
     def test_D06_retry_pending_state(self) -> None:
         from core.failure_degraded_recovery_policy import FailureRuntimeState
+
         self.assertEqual(FailureRuntimeState.RETRY_PENDING.value, "retry_pending")
 
     def test_D07_aborted_state(self) -> None:
         from core.failure_degraded_recovery_policy import FailureRuntimeState
+
         self.assertEqual(FailureRuntimeState.ABORTED.value, "aborted")
 
     def test_D08_recovering_state(self) -> None:
         from core.failure_degraded_recovery_policy import FailureRuntimeState
+
         self.assertEqual(FailureRuntimeState.RECOVERING.value, "recovering")
 
     def test_D09_recovered_state(self) -> None:
         from core.failure_degraded_recovery_policy import FailureRuntimeState
+
         self.assertEqual(FailureRuntimeState.RECOVERED.value, "recovered")
 
     def test_D10_partial_state(self) -> None:
         from core.failure_degraded_recovery_policy import FailureRuntimeState
+
         self.assertEqual(FailureRuntimeState.PARTIAL.value, "partial")
 
 
@@ -273,6 +302,7 @@ class TestE_DegradedTruthRecord(unittest.TestCase):
             DegradedTruthRecord,
             FailureRuntimeState,
         )
+
         defaults = {
             "task_id": "task_e01",
             "trace_id": "trace_e01",
@@ -293,6 +323,7 @@ class TestE_DegradedTruthRecord(unittest.TestCase):
 
     def test_E03_failure_state_field(self) -> None:
         from core.failure_degraded_recovery_policy import FailureRuntimeState
+
         rec = self._make_record()
         self.assertEqual(rec.failure_state, FailureRuntimeState.FAILED)
 
@@ -338,9 +369,10 @@ class TestF_RecoveryTransitionRecord(unittest.TestCase):
 
     def _make_record(self, **kwargs):
         from core.failure_degraded_recovery_policy import (
-            RecoveryTransitionRecord,
             FailureRuntimeState,
+            RecoveryTransitionRecord,
         )
+
         defaults = {
             "task_id": "task_f01",
             "trace_id": "trace_f01",
@@ -358,11 +390,13 @@ class TestF_RecoveryTransitionRecord(unittest.TestCase):
 
     def test_F02_prior_state_field(self) -> None:
         from core.failure_degraded_recovery_policy import FailureRuntimeState
+
         rec = self._make_record()
         self.assertEqual(rec.prior_state, FailureRuntimeState.FAILED)
 
     def test_F03_recovered_state_field(self) -> None:
         from core.failure_degraded_recovery_policy import FailureRuntimeState
+
         rec = self._make_record()
         self.assertEqual(rec.recovered_state, FailureRuntimeState.RECOVERED)
 
@@ -402,31 +436,37 @@ class TestG_FailureRecoverySnapshot(unittest.TestCase):
 
     def test_G01_summary_returns_dict(self) -> None:
         from core.failure_degraded_recovery_policy import FailureRecoverySnapshot
+
         snap = FailureRecoverySnapshot()
         self.assertIsInstance(snap.summary(), dict)
 
     def test_G02_summary_has_degraded_records_count(self) -> None:
         from core.failure_degraded_recovery_policy import FailureRecoverySnapshot
+
         snap = FailureRecoverySnapshot()
         self.assertIn("degraded_records_count", snap.summary())
 
     def test_G03_summary_has_recovery_records_count(self) -> None:
         from core.failure_degraded_recovery_policy import FailureRecoverySnapshot
+
         snap = FailureRecoverySnapshot()
         self.assertIn("recovery_records_count", snap.summary())
 
     def test_G04_summary_has_total_failures_recorded(self) -> None:
         from core.failure_degraded_recovery_policy import FailureRecoverySnapshot
+
         snap = FailureRecoverySnapshot()
         self.assertIn("total_failures_recorded", snap.summary())
 
     def test_G05_summary_has_total_recoveries_recorded(self) -> None:
         from core.failure_degraded_recovery_policy import FailureRecoverySnapshot
+
         snap = FailureRecoverySnapshot()
         self.assertIn("total_recoveries_recorded", snap.summary())
 
     def test_G06_summary_has_snapshot_at(self) -> None:
         from core.failure_degraded_recovery_policy import FailureRecoverySnapshot
+
         snap = FailureRecoverySnapshot()
         self.assertIn("snapshot_at", snap.summary())
 
@@ -444,14 +484,16 @@ class TestH_SingletonManagement(unittest.TestCase):
 
     def test_H01_get_returns_instance(self) -> None:
         from core.failure_degraded_recovery_policy import (
-            get_failure_degraded_recovery_runtime,
             FailureDegradedRecoveryRuntime,
+            get_failure_degraded_recovery_runtime,
         )
+
         rt = get_failure_degraded_recovery_runtime()
         self.assertIsInstance(rt, FailureDegradedRecoveryRuntime)
 
     def test_H02_get_returns_same_instance(self) -> None:
         from core.failure_degraded_recovery_policy import get_failure_degraded_recovery_runtime
+
         rt1 = get_failure_degraded_recovery_runtime()
         rt2 = get_failure_degraded_recovery_runtime()
         self.assertIs(rt1, rt2)
@@ -461,6 +503,7 @@ class TestH_SingletonManagement(unittest.TestCase):
             get_failure_degraded_recovery_runtime,
             reset_failure_degraded_recovery_runtime,
         )
+
         rt1 = get_failure_degraded_recovery_runtime()
         reset_failure_degraded_recovery_runtime()
         rt2 = get_failure_degraded_recovery_runtime()
@@ -468,9 +511,10 @@ class TestH_SingletonManagement(unittest.TestCase):
 
     def test_H04_snapshot_returns_snapshot_object(self) -> None:
         from core.failure_degraded_recovery_policy import (
-            get_failure_degraded_recovery_runtime,
             FailureRecoverySnapshot,
+            get_failure_degraded_recovery_runtime,
         )
+
         snap = get_failure_degraded_recovery_runtime().snapshot()
         self.assertIsInstance(snap, FailureRecoverySnapshot)
 
@@ -488,10 +532,11 @@ class TestI_RingBufferWrites(unittest.TestCase):
 
     def test_I01_record_failure_appends(self) -> None:
         from core.failure_degraded_recovery_policy import (
-            get_failure_degraded_recovery_runtime,
             DegradedTruthRecord,
             FailureRuntimeState,
+            get_failure_degraded_recovery_runtime,
         )
+
         rt = get_failure_degraded_recovery_runtime()
         rec = DegradedTruthRecord(
             task_id="task_i01",
@@ -503,10 +548,11 @@ class TestI_RingBufferWrites(unittest.TestCase):
 
     def test_I02_record_recovery_appends(self) -> None:
         from core.failure_degraded_recovery_policy import (
-            get_failure_degraded_recovery_runtime,
-            RecoveryTransitionRecord,
             FailureRuntimeState,
+            RecoveryTransitionRecord,
+            get_failure_degraded_recovery_runtime,
         )
+
         rt = get_failure_degraded_recovery_runtime()
         rec = RecoveryTransitionRecord(
             task_id="task_i02",
@@ -518,28 +564,34 @@ class TestI_RingBufferWrites(unittest.TestCase):
 
     def test_I03_total_failures_incremented(self) -> None:
         from core.failure_degraded_recovery_policy import (
-            get_failure_degraded_recovery_runtime,
             DegradedTruthRecord,
             FailureRuntimeState,
+            get_failure_degraded_recovery_runtime,
         )
+
         rt = get_failure_degraded_recovery_runtime()
         for i in range(3):
-            rt.record_failure(DegradedTruthRecord(
-                task_id=f"task_i03_{i}",
-                failure_state=FailureRuntimeState.FAILED,
-            ))
+            rt.record_failure(
+                DegradedTruthRecord(
+                    task_id=f"task_i03_{i}",
+                    failure_state=FailureRuntimeState.FAILED,
+                )
+            )
         self.assertEqual(rt.snapshot().total_failures_recorded, 3)
 
     def test_I04_total_recoveries_incremented(self) -> None:
         from core.failure_degraded_recovery_policy import (
-            get_failure_degraded_recovery_runtime,
             RecoveryTransitionRecord,
+            get_failure_degraded_recovery_runtime,
         )
+
         rt = get_failure_degraded_recovery_runtime()
         for i in range(2):
-            rt.record_recovery(RecoveryTransitionRecord(
-                task_id=f"task_i04_{i}",
-            ))
+            rt.record_recovery(
+                RecoveryTransitionRecord(
+                    task_id=f"task_i04_{i}",
+                )
+            )
         self.assertEqual(rt.snapshot().total_recoveries_recorded, 2)
 
 
@@ -556,22 +608,25 @@ class TestJ_PropagateFailureRingBuffer(unittest.TestCase):
 
     def test_J01_returns_degraded_truth_record(self) -> None:
         from core.failure_degraded_recovery_policy import (
-            propagate_failure_to_canonical,
             DegradedTruthRecord,
+            propagate_failure_to_canonical,
         )
+
         rec = propagate_failure_to_canonical("task_j01", trace_id="trace_j01")
         self.assertIsInstance(rec, DegradedTruthRecord)
 
     def test_J02_task_id_preserved(self) -> None:
         from core.failure_degraded_recovery_policy import propagate_failure_to_canonical
+
         rec = propagate_failure_to_canonical("task_j02")
         self.assertEqual(rec.task_id, "task_j02")
 
     def test_J03_appended_to_ring_buffer(self) -> None:
         from core.failure_degraded_recovery_policy import (
-            propagate_failure_to_canonical,
             get_failure_degraded_recovery_runtime,
+            propagate_failure_to_canonical,
         )
+
         propagate_failure_to_canonical("task_j03", error_code="ERR_J03")
         rt = get_failure_degraded_recovery_runtime()
         records = rt.list_failure_records()
@@ -580,9 +635,10 @@ class TestJ_PropagateFailureRingBuffer(unittest.TestCase):
 
     def test_J04_error_code_preserved(self) -> None:
         from core.failure_degraded_recovery_policy import (
-            propagate_failure_to_canonical,
             get_failure_degraded_recovery_runtime,
+            propagate_failure_to_canonical,
         )
+
         propagate_failure_to_canonical("task_j04", error_code="ERR_J04")
         records = get_failure_degraded_recovery_runtime().list_failure_records()
         matching = [r for r in records if r.task_id == "task_j04"]
@@ -591,9 +647,10 @@ class TestJ_PropagateFailureRingBuffer(unittest.TestCase):
 
     def test_J05_multiple_failures_recorded(self) -> None:
         from core.failure_degraded_recovery_policy import (
-            propagate_failure_to_canonical,
             get_failure_degraded_recovery_runtime,
+            propagate_failure_to_canonical,
         )
+
         for i in range(5):
             propagate_failure_to_canonical(f"task_j05_{i}")
         snap = get_failure_degraded_recovery_runtime().snapshot()
@@ -613,6 +670,7 @@ class TestK_PropagateFailureTaskGraph(unittest.TestCase):
 
     def test_K01_task_graph_transition_does_not_raise(self) -> None:
         from core.failure_degraded_recovery_policy import propagate_failure_to_canonical
+
         # Should not raise even if TaskGraphRuntime has no node registered yet
         try:
             propagate_failure_to_canonical("task_k01_unregistered")
@@ -621,13 +679,13 @@ class TestK_PropagateFailureTaskGraph(unittest.TestCase):
 
     def test_K02_task_graph_failure_recorded_for_known_task(self) -> None:
         """If a task is registered in TaskGraphRuntime, its failure propagates."""
+        from core.failure_degraded_recovery_policy import propagate_failure_to_canonical
         from core.task_graph_runtime import (
-            get_task_graph_runtime,
+            GraphNode,
             GraphNodeState,
             WorkflowContributorKind,
-            GraphNode,
+            get_task_graph_runtime,
         )
-        from core.failure_degraded_recovery_policy import propagate_failure_to_canonical
 
         tgr = get_task_graph_runtime()
         # Register a node directly to avoid TaskEnvelope/CanonicalTask wrapping issues
@@ -662,26 +720,28 @@ class TestL_PropagateFailureAudit(unittest.TestCase):
 
     def test_L01_audit_event_does_not_raise(self) -> None:
         from core.failure_degraded_recovery_policy import propagate_failure_to_canonical
+
         try:
             propagate_failure_to_canonical("task_l01")
         except Exception as e:
             self.fail(f"Raised unexpectedly: {e}")
 
     def test_L02_audit_task_failed_event_emitted(self) -> None:
-        from core.failure_degraded_recovery_policy import propagate_failure_to_canonical
         from core.audit_event_semantics import (
-            get_audit_event_semantics,
             AuditEventKind,
+            get_audit_event_semantics,
         )
+        from core.failure_degraded_recovery_policy import propagate_failure_to_canonical
+
         propagate_failure_to_canonical("task_l02", error_code="ERR_L02")
         audit = get_audit_event_semantics()
         events = audit.all_events()
         task_failed_events = [
-            e for e in events
-            if e.task_id == "task_l02" and e.kind == AuditEventKind.TASK_FAILED.value
+            e for e in events if e.task_id == "task_l02" and e.kind == AuditEventKind.TASK_FAILED.value
         ]
         self.assertGreater(
-            len(task_failed_events), 0,
+            len(task_failed_events),
+            0,
             "No TASK_FAILED audit event found for task_l02",
         )
 
@@ -699,6 +759,7 @@ class TestM_PropagateFailureReplay(unittest.TestCase):
 
     def test_M01_replay_write_does_not_raise(self) -> None:
         from core.failure_degraded_recovery_policy import propagate_failure_to_canonical
+
         try:
             propagate_failure_to_canonical("task_m01")
         except Exception as e:
@@ -707,6 +768,7 @@ class TestM_PropagateFailureReplay(unittest.TestCase):
     def test_M02_replay_foundation_has_execution_record(self) -> None:
         from core.failure_degraded_recovery_policy import propagate_failure_to_canonical
         from core.replay_foundation import get_replay_foundation
+
         propagate_failure_to_canonical("task_m02", error_code="ERR_M02")
         rf = get_replay_foundation()
         exec_rec = rf.get_execution_record("task_m02")
@@ -729,22 +791,25 @@ class TestN_PropagateRecoveryRingBuffer(unittest.TestCase):
 
     def test_N01_returns_recovery_transition_record(self) -> None:
         from core.failure_degraded_recovery_policy import (
-            propagate_recovery_to_canonical,
             RecoveryTransitionRecord,
+            propagate_recovery_to_canonical,
         )
+
         rec = propagate_recovery_to_canonical("task_n01")
         self.assertIsInstance(rec, RecoveryTransitionRecord)
 
     def test_N02_task_id_preserved(self) -> None:
         from core.failure_degraded_recovery_policy import propagate_recovery_to_canonical
+
         rec = propagate_recovery_to_canonical("task_n02")
         self.assertEqual(rec.task_id, "task_n02")
 
     def test_N03_appended_to_ring_buffer(self) -> None:
         from core.failure_degraded_recovery_policy import (
-            propagate_recovery_to_canonical,
             get_failure_degraded_recovery_runtime,
+            propagate_recovery_to_canonical,
         )
+
         propagate_recovery_to_canonical("task_n03", recovery_method="retry_success")
         rt = get_failure_degraded_recovery_runtime()
         records = rt.list_recovery_records()
@@ -753,9 +818,10 @@ class TestN_PropagateRecoveryRingBuffer(unittest.TestCase):
 
     def test_N04_recovery_method_preserved(self) -> None:
         from core.failure_degraded_recovery_policy import (
-            propagate_recovery_to_canonical,
             get_failure_degraded_recovery_runtime,
+            propagate_recovery_to_canonical,
         )
+
         propagate_recovery_to_canonical("task_n04", recovery_method="fallback_success")
         records = get_failure_degraded_recovery_runtime().list_recovery_records()
         matching = [r for r in records if r.task_id == "task_n04"]
@@ -776,26 +842,26 @@ class TestO_PropagateRecoveryCanonical(unittest.TestCase):
 
     def test_O01_does_not_raise(self) -> None:
         from core.failure_degraded_recovery_policy import propagate_recovery_to_canonical
+
         try:
             propagate_recovery_to_canonical("task_o01")
         except Exception as e:
             self.fail(f"Raised unexpectedly: {e}")
 
     def test_O02_audit_completed_event_emitted(self) -> None:
-        from core.failure_degraded_recovery_policy import propagate_recovery_to_canonical
         from core.audit_event_semantics import (
-            get_audit_event_semantics,
             AuditEventKind,
+            get_audit_event_semantics,
         )
+        from core.failure_degraded_recovery_policy import propagate_recovery_to_canonical
+
         propagate_recovery_to_canonical("task_o02")
         audit = get_audit_event_semantics()
         events = audit.all_events()
-        completed = [
-            e for e in events
-            if e.task_id == "task_o02" and e.kind == AuditEventKind.TASK_COMPLETED.value
-        ]
+        completed = [e for e in events if e.task_id == "task_o02" and e.kind == AuditEventKind.TASK_COMPLETED.value]
         self.assertGreater(
-            len(completed), 0,
+            len(completed),
+            0,
             "No TASK_COMPLETED audit event found after recovery propagation",
         )
 
@@ -813,25 +879,28 @@ class TestP_RecordDegradedTransition(unittest.TestCase):
 
     def test_P01_returns_degraded_truth_record(self) -> None:
         from core.failure_degraded_recovery_policy import (
-            record_degraded_transition,
             DegradedTruthRecord,
+            record_degraded_transition,
         )
+
         rec = record_degraded_transition("task_p01")
         self.assertIsInstance(rec, DegradedTruthRecord)
 
     def test_P02_failure_state_is_degraded(self) -> None:
         from core.failure_degraded_recovery_policy import (
-            record_degraded_transition,
             FailureRuntimeState,
+            record_degraded_transition,
         )
+
         rec = record_degraded_transition("task_p02")
         self.assertEqual(rec.failure_state, FailureRuntimeState.DEGRADED)
 
     def test_P03_appended_to_ring_buffer(self) -> None:
         from core.failure_degraded_recovery_policy import (
-            record_degraded_transition,
             get_failure_degraded_recovery_runtime,
+            record_degraded_transition,
         )
+
         record_degraded_transition("task_p03", degraded_capabilities=["vision"])
         records = get_failure_degraded_recovery_runtime().list_failure_records()
         task_ids = [r.task_id for r in records]
@@ -839,9 +908,10 @@ class TestP_RecordDegradedTransition(unittest.TestCase):
 
     def test_P04_degraded_capabilities_preserved(self) -> None:
         from core.failure_degraded_recovery_policy import (
-            record_degraded_transition,
             get_failure_degraded_recovery_runtime,
+            record_degraded_transition,
         )
+
         record_degraded_transition("task_p04", degraded_capabilities=["audio", "vision"])
         records = get_failure_degraded_recovery_runtime().list_failure_records()
         matching = [r for r in records if r.task_id == "task_p04"]
@@ -850,22 +920,22 @@ class TestP_RecordDegradedTransition(unittest.TestCase):
         self.assertIn("vision", matching[0].degraded_capabilities)
 
     def test_P05_audit_degraded_event_emitted(self) -> None:
-        from core.failure_degraded_recovery_policy import record_degraded_transition
         from core.audit_event_semantics import get_audit_event_semantics
+        from core.failure_degraded_recovery_policy import record_degraded_transition
+
         record_degraded_transition("task_p05", degraded_capabilities=["speech"])
         audit = get_audit_event_semantics()
         events = audit.all_events()
-        degraded_events = [
-            e for e in events
-            if e.task_id == "task_p05" and e.kind == "task_degraded"
-        ]
+        degraded_events = [e for e in events if e.task_id == "task_p05" and e.kind == "task_degraded"]
         self.assertGreater(
-            len(degraded_events), 0,
+            len(degraded_events),
+            0,
             "No task_degraded audit event found for task_p05",
         )
 
     def test_P06_does_not_raise(self) -> None:
         from core.failure_degraded_recovery_policy import record_degraded_transition
+
         try:
             record_degraded_transition("task_p06")
         except Exception as e:
@@ -882,36 +952,43 @@ class TestQ_QueryDegradedState(unittest.TestCase):
 
     def test_Q01_returns_dict(self) -> None:
         from core.failure_degraded_recovery_policy import query_degraded_state
+
         result = query_degraded_state()
         self.assertIsInstance(result, dict)
 
     def test_Q02_has_degraded_executors_key(self) -> None:
         from core.failure_degraded_recovery_policy import query_degraded_state
+
         result = query_degraded_state()
         self.assertIn("degraded_executors", result)
 
     def test_Q03_has_total_online_key(self) -> None:
         from core.failure_degraded_recovery_policy import query_degraded_state
+
         result = query_degraded_state()
         self.assertIn("total_online", result)
 
     def test_Q04_has_total_degraded_key(self) -> None:
         from core.failure_degraded_recovery_policy import query_degraded_state
+
         result = query_degraded_state()
         self.assertIn("total_degraded", result)
 
     def test_Q05_has_snapshot_at_key(self) -> None:
         from core.failure_degraded_recovery_policy import query_degraded_state
+
         result = query_degraded_state()
         self.assertIn("snapshot_at", result)
 
     def test_Q06_degraded_executors_is_list(self) -> None:
         from core.failure_degraded_recovery_policy import query_degraded_state
+
         result = query_degraded_state()
         self.assertIsInstance(result["degraded_executors"], list)
 
     def test_Q07_total_degraded_is_int(self) -> None:
         from core.failure_degraded_recovery_policy import query_degraded_state
+
         result = query_degraded_state()
         self.assertIsInstance(result["total_degraded"], int)
 
@@ -929,26 +1006,31 @@ class TestR_SnapshotFailureRecoveryState(unittest.TestCase):
 
     def test_R01_returns_dict(self) -> None:
         from core.failure_degraded_recovery_policy import snapshot_failure_recovery_state
+
         result = snapshot_failure_recovery_state()
         self.assertIsInstance(result, dict)
 
     def test_R02_has_degraded_records_count(self) -> None:
         from core.failure_degraded_recovery_policy import snapshot_failure_recovery_state
+
         result = snapshot_failure_recovery_state()
         self.assertIn("degraded_records_count", result)
 
     def test_R03_has_recovery_records_count(self) -> None:
         from core.failure_degraded_recovery_policy import snapshot_failure_recovery_state
+
         result = snapshot_failure_recovery_state()
         self.assertIn("recovery_records_count", result)
 
     def test_R04_has_total_failures_recorded(self) -> None:
         from core.failure_degraded_recovery_policy import snapshot_failure_recovery_state
+
         result = snapshot_failure_recovery_state()
         self.assertIn("total_failures_recorded", result)
 
     def test_R05_has_degraded_executors(self) -> None:
         from core.failure_degraded_recovery_policy import snapshot_failure_recovery_state
+
         result = snapshot_failure_recovery_state()
         self.assertIn("degraded_executors", result)
 
@@ -957,6 +1039,7 @@ class TestR_SnapshotFailureRecoveryState(unittest.TestCase):
             propagate_failure_to_canonical,
             snapshot_failure_recovery_state,
         )
+
         propagate_failure_to_canonical("task_r06")
         result = snapshot_failure_recovery_state()
         self.assertGreaterEqual(result["total_failures_recorded"], 1)
@@ -1072,9 +1155,7 @@ class TestV_Gap512006Closure(unittest.TestCase):
 
     def _orchestrator_path(self):
         repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        return os.path.join(
-            repo_root, "galaxy_gateway", "orchestrator", "task_orchestrator.py"
-        )
+        return os.path.join(repo_root, "galaxy_gateway", "orchestrator", "task_orchestrator.py")
 
     def test_V01_sentinel_present_in_source(self) -> None:
         with open(self._orchestrator_path(), "r", encoding="utf-8") as f:
@@ -1140,10 +1221,12 @@ class TestX_NoParallelAuthority(unittest.TestCase):
 
     def test_X01_no_parallel_authority_policy_importable(self) -> None:
         from core.failure_degraded_recovery_policy import NO_PARALLEL_AUTHORITY_POLICY
+
         self.assertIsInstance(NO_PARALLEL_AUTHORITY_POLICY, str)
 
     def test_X02_module_does_not_define_new_task_store(self) -> None:
         import core.failure_degraded_recovery_policy as mod
+
         # The module MUST NOT define a new task identity store
         self.assertFalse(hasattr(mod, "task_queue"))
         self.assertFalse(hasattr(mod, "task_store"))
@@ -1151,8 +1234,9 @@ class TestX_NoParallelAuthority(unittest.TestCase):
 
     def test_X03_failure_module_does_not_replace_audit_event_semantics(self) -> None:
         """propagate_failure_to_canonical uses the existing AuditEventSemantics singleton."""
-        from core.failure_degraded_recovery_policy import propagate_failure_to_canonical
         from core.audit_event_semantics import get_audit_event_semantics
+        from core.failure_degraded_recovery_policy import propagate_failure_to_canonical
+
         # Record baseline event count
         baseline = len(get_audit_event_semantics().all_events())
         propagate_failure_to_canonical("task_x03")
@@ -1163,6 +1247,7 @@ class TestX_NoParallelAuthority(unittest.TestCase):
     def test_X04_no_parallel_authority_mentions_task_graph_runtime(self) -> None:
         """The ring buffer is a supplemental view, not a new truth source."""
         from core.failure_degraded_recovery_policy import NO_PARALLEL_AUTHORITY_POLICY
+
         self.assertIn("TaskGraphRuntime", NO_PARALLEL_AUTHORITY_POLICY)
 
 
@@ -1179,10 +1264,11 @@ class TestY_FailureRecoveryArc(unittest.TestCase):
 
     def test_Y01_failure_then_recovery_both_recorded(self) -> None:
         from core.failure_degraded_recovery_policy import (
+            get_failure_degraded_recovery_runtime,
             propagate_failure_to_canonical,
             propagate_recovery_to_canonical,
-            get_failure_degraded_recovery_runtime,
         )
+
         propagate_failure_to_canonical("task_y01", error_code="ERR_Y01")
         propagate_recovery_to_canonical("task_y01", recovery_method="retry_success")
 
@@ -1195,10 +1281,11 @@ class TestY_FailureRecoveryArc(unittest.TestCase):
 
     def test_Y02_snapshot_shows_both_counts(self) -> None:
         from core.failure_degraded_recovery_policy import (
+            get_failure_degraded_recovery_runtime,
             propagate_failure_to_canonical,
             propagate_recovery_to_canonical,
-            get_failure_degraded_recovery_runtime,
         )
+
         propagate_failure_to_canonical("task_y02a")
         propagate_failure_to_canonical("task_y02b")
         propagate_recovery_to_canonical("task_y02a")
@@ -1208,14 +1295,15 @@ class TestY_FailureRecoveryArc(unittest.TestCase):
         self.assertEqual(snap.total_recoveries_recorded, 1)
 
     def test_Y03_failure_and_recovery_are_audit_visible(self) -> None:
+        from core.audit_event_semantics import (
+            AuditEventKind,
+            get_audit_event_semantics,
+        )
         from core.failure_degraded_recovery_policy import (
             propagate_failure_to_canonical,
             propagate_recovery_to_canonical,
         )
-        from core.audit_event_semantics import (
-            get_audit_event_semantics,
-            AuditEventKind,
-        )
+
         propagate_failure_to_canonical("task_y03")
         propagate_recovery_to_canonical("task_y03")
 
@@ -1240,10 +1328,11 @@ class TestZ_RetryFallbackFlows(unittest.TestCase):
 
     def test_Z01_retry_pending_state_recordable(self) -> None:
         from core.failure_degraded_recovery_policy import (
-            record_failure_truth,
             FailureRuntimeState,
             get_failure_degraded_recovery_runtime,
+            record_failure_truth,
         )
+
         record_failure_truth(
             "task_z01",
             failure_state=FailureRuntimeState.RETRY_PENDING,
@@ -1257,10 +1346,11 @@ class TestZ_RetryFallbackFlows(unittest.TestCase):
 
     def test_Z02_fallback_active_state_recordable(self) -> None:
         from core.failure_degraded_recovery_policy import (
-            record_failure_truth,
             FailureRuntimeState,
             get_failure_degraded_recovery_runtime,
+            record_failure_truth,
         )
+
         record_failure_truth(
             "task_z02",
             failure_state=FailureRuntimeState.FALLBACK_ACTIVE,
@@ -1272,10 +1362,11 @@ class TestZ_RetryFallbackFlows(unittest.TestCase):
 
     def test_Z03_retry_success_recovery_recordable(self) -> None:
         from core.failure_degraded_recovery_policy import (
-            record_recovery_transition,
             FailureRuntimeState,
             get_failure_degraded_recovery_runtime,
+            record_recovery_transition,
         )
+
         record_recovery_transition(
             "task_z03",
             prior_state=FailureRuntimeState.RETRY_PENDING,
@@ -1289,10 +1380,11 @@ class TestZ_RetryFallbackFlows(unittest.TestCase):
 
     def test_Z04_fallback_success_recovery_recordable(self) -> None:
         from core.failure_degraded_recovery_policy import (
-            record_recovery_transition,
             FailureRuntimeState,
             get_failure_degraded_recovery_runtime,
+            record_recovery_transition,
         )
+
         record_recovery_transition(
             "task_z04",
             prior_state=FailureRuntimeState.FALLBACK_ACTIVE,
@@ -1315,47 +1407,56 @@ class TestAA_ClosureAuditPR513(unittest.TestCase):
 
     def test_AA01_pr513_in_layer_specs(self) -> None:
         from core.runtime_closure_audit import RuntimeClosureAudit
+
         pr_refs = [spec[0] for spec in RuntimeClosureAudit._LAYER_SPECS]
         self.assertIn("PR-513", pr_refs)
 
     def test_AA02_failure_degraded_recovery_authority_sentinel_covered(self) -> None:
         from core.runtime_closure_audit import RuntimeClosureAudit
+
         sentinels = [spec[2] for spec in RuntimeClosureAudit._LAYER_SPECS]
         self.assertIn("FAILURE_DEGRADED_RECOVERY_AUTHORITY", sentinels)
 
     def test_AA03_gap_001_sentinel_covered(self) -> None:
         from core.runtime_closure_audit import RuntimeClosureAudit
+
         sentinels = [spec[2] for spec in RuntimeClosureAudit._LAYER_SPECS]
         self.assertIn("TASK_INGRESS_REPLAY_FOUNDATION_INTEGRATED", sentinels)
 
     def test_AA04_gap_002_sentinel_covered(self) -> None:
         from core.runtime_closure_audit import RuntimeClosureAudit
+
         sentinels = [spec[2] for spec in RuntimeClosureAudit._LAYER_SPECS]
         self.assertIn("SCHEDULER_TASK_GRAPH_RELAY_MESH_INTEGRATED", sentinels)
 
     def test_AA05_gap_004_sentinel_covered(self) -> None:
         from core.runtime_closure_audit import RuntimeClosureAudit
+
         sentinels = [spec[2] for spec in RuntimeClosureAudit._LAYER_SPECS]
         self.assertIn("CAPABILITY_NETWORK_CANONICAL_QUERY_INTEGRATED", sentinels)
 
     def test_AA06_gap_006_sentinel_covered(self) -> None:
         from core.runtime_closure_audit import RuntimeClosureAudit
+
         sentinels = [spec[2] for spec in RuntimeClosureAudit._LAYER_SPECS]
         self.assertIn("TASK_ORCHESTRATOR_AUDIT_DISPATCH_INTEGRATED", sentinels)
 
     def test_AA07_gap_007_sentinel_covered(self) -> None:
         from core.runtime_closure_audit import RuntimeClosureAudit
+
         sentinels = [spec[2] for spec in RuntimeClosureAudit._LAYER_SPECS]
         self.assertIn("AGENT_KERNEL_AUDIT_ADMITTED_INTEGRATED", sentinels)
 
     def test_AA08_verify_all_layers_covers_pr513(self) -> None:
         from core.runtime_closure_audit import RuntimeClosureAudit
+
         audit = RuntimeClosureAudit()
         pr_refs = [s.pr_ref for s in audit.verify_all_layers()]
         self.assertIn("PR-513", pr_refs)
 
     def test_AA09_pr513_layer_count_matches_specs(self) -> None:
         from core.runtime_closure_audit import RuntimeClosureAudit
+
         audit = RuntimeClosureAudit()
         result = audit.verify_all_layers()
         self.assertEqual(len(result), len(RuntimeClosureAudit._LAYER_SPECS))
@@ -1371,10 +1472,12 @@ class TestBB_FailureDegradedRecoveryIntegrated(unittest.TestCase):
 
     def test_BB01_sentinel_importable(self) -> None:
         from core.failure_degraded_recovery_policy import FAILURE_DEGRADED_RECOVERY_INTEGRATED
+
         self.assertIsInstance(FAILURE_DEGRADED_RECOVERY_INTEGRATED, str)
 
     def test_BB02_sentinel_mentions_all_five_gaps(self) -> None:
         from core.failure_degraded_recovery_policy import FAILURE_DEGRADED_RECOVERY_INTEGRATED
+
         for gap_id in ["GAP-512-001", "GAP-512-002", "GAP-512-004", "GAP-512-006", "GAP-512-007"]:
             self.assertIn(
                 gap_id,
@@ -1384,6 +1487,7 @@ class TestBB_FailureDegradedRecoveryIntegrated(unittest.TestCase):
 
     def test_BB03_sentinel_covers_all_modules(self) -> None:
         from core.failure_degraded_recovery_policy import FAILURE_DEGRADED_RECOVERY_INTEGRATED
+
         for module in [
             "core/routes/tasks.py",
             "core/scheduler.py",

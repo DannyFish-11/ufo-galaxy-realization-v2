@@ -29,6 +29,8 @@ import json
 import pytest
 
 from core.pr993_dual_repo_reevaluation import (
+    PR993_REEVALUATION_AUTHORITY,
+    PR993_REEVALUATION_METHODOLOGY,
     CanonicalPathId,
     CanonicalPathStatus,
     ClaimValidation,
@@ -37,14 +39,11 @@ from core.pr993_dual_repo_reevaluation import (
     EvidenceStrength,
     PR993ClaimId,
     PR993ReevaluationReport,
-    PR993_REEVALUATION_AUTHORITY,
-    PR993_REEVALUATION_METHODOLOGY,
     assert_pr993_reevaluation_invariants,
     build_pr993_reevaluation,
     get_pr993_reevaluation,
     reset_pr993_reevaluation,
 )
-
 
 # =============================================================================
 # SECTION 1 — Module import and sentinel sanity
@@ -65,16 +64,12 @@ class TestModuleImport:
     def test_claim_id_enum_coverage(self) -> None:
         """PR993ClaimId must cover all 7 PR #993 claim families."""
         claim_ids = list(PR993ClaimId)
-        assert len(claim_ids) == 7, (
-            f"Expected 7 claim IDs; got {len(claim_ids)}: {[c.value for c in claim_ids]}"
-        )
+        assert len(claim_ids) == 7, f"Expected 7 claim IDs; got {len(claim_ids)}: {[c.value for c in claim_ids]}"
 
     def test_canonical_path_id_enum_coverage(self) -> None:
         """CanonicalPathId must cover all 6 canonical paths."""
         path_ids = list(CanonicalPathId)
-        assert len(path_ids) == 6, (
-            f"Expected 6 canonical path IDs; got {len(path_ids)}"
-        )
+        assert len(path_ids) == 6, f"Expected 6 canonical path IDs; got {len(path_ids)}"
 
     def test_evidence_strength_enum_values(self) -> None:
         """EvidenceStrength must have 4 tiers."""
@@ -119,28 +114,18 @@ class TestBuildReport:
         """Every PR993ClaimId must appear exactly once in claim_validations."""
         seen = {c.claim_id for c in report.claim_validations}
         for claim_id in PR993ClaimId:
-            assert claim_id in seen, (
-                f"Missing ClaimValidation for PR993ClaimId.{claim_id.name}."
-            )
+            assert claim_id in seen, f"Missing ClaimValidation for PR993ClaimId.{claim_id.name}."
 
-    def test_all_canonical_path_ids_present(
-        self, report: PR993ReevaluationReport
-    ) -> None:
+    def test_all_canonical_path_ids_present(self, report: PR993ReevaluationReport) -> None:
         """Every CanonicalPathId must appear exactly once in canonical_path_statuses."""
         seen = {p.path_id for p in report.canonical_path_statuses}
         for path_id in CanonicalPathId:
-            assert path_id in seen, (
-                f"Missing CanonicalPathStatus for CanonicalPathId.{path_id.name}."
-            )
+            assert path_id in seen, f"Missing CanonicalPathStatus for CanonicalPathId.{path_id.name}."
 
-    def test_closure_priorities_non_empty(
-        self, report: PR993ReevaluationReport
-    ) -> None:
+    def test_closure_priorities_non_empty(self, report: PR993ReevaluationReport) -> None:
         assert len(report.closure_priorities) > 0
 
-    def test_claim_count_sum_equals_total(
-        self, report: PR993ReevaluationReport
-    ) -> None:
+    def test_claim_count_sum_equals_total(self, report: PR993ReevaluationReport) -> None:
         total = (
             report.strongly_established_count
             + report.partially_established_count
@@ -149,13 +134,8 @@ class TestBuildReport:
         )
         assert total == len(report.claim_validations)
 
-    def test_path_count_sum_equals_total(
-        self, report: PR993ReevaluationReport
-    ) -> None:
-        assert (
-            report.canonical_paths_closed + report.canonical_paths_open
-            == len(report.canonical_path_statuses)
-        )
+    def test_path_count_sum_equals_total(self, report: PR993ReevaluationReport) -> None:
+        assert report.canonical_paths_closed + report.canonical_paths_open == len(report.canonical_path_statuses)
 
 
 # =============================================================================
@@ -178,8 +158,7 @@ class TestClaimValidations:
         """
         for claim_id, claim in claim_validations_by_id.items():
             assert claim.evidence_strength != EvidenceStrength.MISSING_RUNTIME_EVIDENCE, (
-                f"Claim {claim_id.value} unexpectedly has MISSING_RUNTIME_EVIDENCE. "
-                f"Gap note: {claim.gap_note}"
+                f"Claim {claim_id.value} unexpectedly has MISSING_RUNTIME_EVIDENCE. " f"Gap note: {claim.gap_note}"
             )
 
     def test_system_identity_is_strongly_or_partially(self, claim_validations_by_id: dict) -> None:
@@ -202,16 +181,14 @@ class TestClaimValidations:
         """Android runtime carrier claim must have real code anchors."""
         claim = claim_validations_by_id[PR993ClaimId.ANDROID_IS_RUNTIME_CARRIER_NOT_CLIENT]
         assert len(claim.code_anchors) >= 3, (
-            f"Android runtime carrier claim should have at least 3 code anchors; "
-            f"got {len(claim.code_anchors)}"
+            f"Android runtime carrier claim should have at least 3 code anchors; " f"got {len(claim.code_anchors)}"
         )
 
     def test_network_is_body_has_multiple_proofs(self, claim_validations_by_id: dict) -> None:
         """Network-is-body claim must have at least 3 of the 5 structural proofs."""
         claim = claim_validations_by_id[PR993ClaimId.NETWORK_IS_THE_BODY]
         assert len(claim.code_anchors) >= 3, (
-            f"Network-is-body claim should have at least 3 proof anchors; "
-            f"got {len(claim.code_anchors)}"
+            f"Network-is-body claim should have at least 3 proof anchors; " f"got {len(claim.code_anchors)}"
         )
 
     def test_beyond_poc_has_four_chain_anchors(self, claim_validations_by_id: dict) -> None:
@@ -219,13 +196,10 @@ class TestClaimValidations:
         claim = claim_validations_by_id[PR993ClaimId.SYSTEM_BEYOND_POC]
         # Should have registration, capability_report, delegated_signal, handoff_v2_result
         assert len(claim.code_anchors) >= 4, (
-            f"Beyond-PoC claim should have at least 4 chain anchors; "
-            f"got {len(claim.code_anchors)}"
+            f"Beyond-PoC claim should have at least 4 chain anchors; " f"got {len(claim.code_anchors)}"
         )
 
-    def test_remaining_work_closure_is_partially_established(
-        self, claim_validations_by_id: dict
-    ) -> None:
+    def test_remaining_work_closure_is_partially_established(self, claim_validations_by_id: dict) -> None:
         """Remaining-work-is-closure claim should be PARTIALLY_ESTABLISHED.
 
         PR #993 itself acknowledged Axis 2 wire path as incomplete.
@@ -239,9 +213,7 @@ class TestClaimValidations:
             "transparency axis still has a CI evidence gap."
         )
 
-    def test_all_claims_have_android_side_evidence_string(
-        self, claim_validations_by_id: dict
-    ) -> None:
+    def test_all_claims_have_android_side_evidence_string(self, claim_validations_by_id: dict) -> None:
         """All claims must have a non-empty android_side_evidence string."""
         for claim_id, claim in claim_validations_by_id.items():
             assert claim.android_side_evidence, (
@@ -266,9 +238,7 @@ class TestCanonicalPathStatuses:
     def test_android_registration_is_v2_implemented(self, path_statuses_by_id: dict) -> None:
         """Android registration V2 side must be implemented."""
         path = path_statuses_by_id[CanonicalPathId.ANDROID_REGISTRATION]
-        assert path.v2_side_implemented, (
-            "galaxy_gateway.android.handlers.registration should be importable."
-        )
+        assert path.v2_side_implemented, "galaxy_gateway.android.handlers.registration should be importable."
 
     def test_android_registration_is_android_implemented(self, path_statuses_by_id: dict) -> None:
         """Android registration Android side must be implemented."""
@@ -282,16 +252,15 @@ class TestCanonicalPathStatuses:
         """
         path = path_statuses_by_id[CanonicalPathId.RUNTIME_SNAPSHOT_UPLINK]
         assert not path.runtime_closed, (
-            "runtime_snapshot_uplink should not be runtime_closed — "
-            "no CI emulator-backed cross-repo proof exists."
+            "runtime_snapshot_uplink should not be runtime_closed — " "no CI emulator-backed cross-repo proof exists."
         )
 
     def test_runtime_snapshot_closure_label(self, path_statuses_by_id: dict) -> None:
         """Runtime snapshot uplink should be surface_alignment_only."""
         path = path_statuses_by_id[CanonicalPathId.RUNTIME_SNAPSHOT_UPLINK]
-        assert path.closure_label == "surface_alignment_only", (
-            f"Expected 'surface_alignment_only'; got {path.closure_label!r}."
-        )
+        assert (
+            path.closure_label == "surface_alignment_only"
+        ), f"Expected 'surface_alignment_only'; got {path.closure_label!r}."
 
     def test_execution_event_is_not_runtime_closed(self, path_statuses_by_id: dict) -> None:
         """Execution event uplink should not be runtime_closed."""
@@ -301,13 +270,9 @@ class TestCanonicalPathStatuses:
     def test_task_dispatch_result_is_v2_implemented(self, path_statuses_by_id: dict) -> None:
         """Task dispatch/execute/result path V2 side must be implemented."""
         path = path_statuses_by_id[CanonicalPathId.TASK_DISPATCH_EXECUTE_RESULT]
-        assert path.v2_side_implemented, (
-            "DeviceRouter, task_lifecycle handler, handoff_v2_result should be importable."
-        )
+        assert path.v2_side_implemented, "DeviceRouter, task_lifecycle handler, handoff_v2_result should be importable."
 
-    def test_orchestration_consumes_android_truth_is_not_runtime_closed(
-        self, path_statuses_by_id: dict
-    ) -> None:
+    def test_orchestration_consumes_android_truth_is_not_runtime_closed(self, path_statuses_by_id: dict) -> None:
         """Orchestration-consumes-Android-truth should not be runtime_closed.
 
         The store is never filled in CI so the consume path has no real input.
@@ -318,17 +283,14 @@ class TestCanonicalPathStatuses:
     def test_all_paths_have_description(self, path_statuses_by_id: dict) -> None:
         """All canonical path statuses must have a non-empty description."""
         for path_id, path in path_statuses_by_id.items():
-            assert path.description, (
-                f"CanonicalPathId.{path_id.name} has empty description."
-            )
+            assert path.description, f"CanonicalPathId.{path_id.name} has empty description."
 
     def test_open_paths_have_gap_description(self, path_statuses_by_id: dict) -> None:
         """All non-closed paths must have a non-empty gap_description."""
         for path_id, path in path_statuses_by_id.items():
             if not path.runtime_closed:
                 assert path.gap_description, (
-                    f"CanonicalPathId.{path_id.name} is not runtime_closed but "
-                    "has empty gap_description."
+                    f"CanonicalPathId.{path_id.name} is not runtime_closed but " "has empty gap_description."
                 )
 
 
@@ -348,10 +310,7 @@ class TestClosurePriorities:
     def test_at_least_two_p0_priorities(self, priorities: list) -> None:
         """At least 2 P0 priorities must be defined (PR-A and PR-B)."""
         p0 = [p for p in priorities if p.level == ClosurePriorityLevel.P0_RUNTIME_EVIDENCE_BLOCKER]
-        assert len(p0) >= 2, (
-            f"Expected at least 2 P0 priorities; got {len(p0)}: "
-            f"{[p.priority_id for p in p0]}"
-        )
+        assert len(p0) >= 2, f"Expected at least 2 P0 priorities; got {len(p0)}: " f"{[p.priority_id for p in p0]}"
 
     def test_at_least_one_p1_priority(self, priorities: list) -> None:
         """At least 1 P1 priority must be defined."""
@@ -362,44 +321,36 @@ class TestClosurePriorities:
         """P0 priorities must target both repositories."""
         p0 = [p for p in priorities if p.level == ClosurePriorityLevel.P0_RUNTIME_EVIDENCE_BLOCKER]
         for p in p0:
-            assert "DannyFish-11/ufo-galaxy-realization-v2" in p.target_repos, (
-                f"P0 priority {p.priority_id} must target V2 repo."
-            )
-            assert "DannyFish-11/ufo-galaxy-android" in p.target_repos, (
-                f"P0 priority {p.priority_id} must target Android repo."
-            )
+            assert (
+                "DannyFish-11/ufo-galaxy-realization-v2" in p.target_repos
+            ), f"P0 priority {p.priority_id} must target V2 repo."
+            assert (
+                "DannyFish-11/ufo-galaxy-android" in p.target_repos
+            ), f"P0 priority {p.priority_id} must target Android repo."
 
     def test_all_priorities_have_rationale(self, priorities: list) -> None:
         """Every priority must have a non-empty rationale."""
         for p in priorities:
-            assert p.rationale, (
-                f"Priority {p.priority_id} has empty rationale."
-            )
+            assert p.rationale, f"Priority {p.priority_id} has empty rationale."
 
     def test_priority_ids_are_unique(self, priorities: list) -> None:
         """Priority IDs must be unique."""
         ids = [p.priority_id for p in priorities]
-        assert len(ids) == len(set(ids)), (
-            f"Duplicate priority IDs: {ids}"
-        )
+        assert len(ids) == len(set(ids)), f"Duplicate priority IDs: {ids}"
 
-    def test_android_runtime_ci_evidence_priority_exists(
-        self, priorities: list
-    ) -> None:
+    def test_android_runtime_ci_evidence_priority_exists(self, priorities: list) -> None:
         """The PR-A runtime evidence P0 priority must be present."""
         ids = [p.priority_id for p in priorities]
-        assert "P0-ANDROID-RUNTIME-CI-EVIDENCE" in ids, (
-            f"Expected P0-ANDROID-RUNTIME-CI-EVIDENCE in priorities; got {ids}."
-        )
+        assert (
+            "P0-ANDROID-RUNTIME-CI-EVIDENCE" in ids
+        ), f"Expected P0-ANDROID-RUNTIME-CI-EVIDENCE in priorities; got {ids}."
 
-    def test_delegated_exec_closure_priority_exists(
-        self, priorities: list
-    ) -> None:
+    def test_delegated_exec_closure_priority_exists(self, priorities: list) -> None:
         """The PR-B delegated execution P0 priority must be present."""
         ids = [p.priority_id for p in priorities]
-        assert "P0-DELEGATED-EXEC-RUNTIME-CLOSURE" in ids, (
-            f"Expected P0-DELEGATED-EXEC-RUNTIME-CLOSURE in priorities; got {ids}."
-        )
+        assert (
+            "P0-DELEGATED-EXEC-RUNTIME-CLOSURE" in ids
+        ), f"Expected P0-DELEGATED-EXEC-RUNTIME-CLOSURE in priorities; got {ids}."
 
 
 # =============================================================================
@@ -418,9 +369,7 @@ class TestSerialisation:
         d = report.to_dict()
         assert isinstance(d, dict)
 
-    def test_to_dict_contains_required_keys(
-        self, report: PR993ReevaluationReport
-    ) -> None:
+    def test_to_dict_contains_required_keys(self, report: PR993ReevaluationReport) -> None:
         d = report.to_dict()
         for key in (
             "report_id",
@@ -454,9 +403,7 @@ class TestSerialisation:
             assert "evidence_strength" in d
             assert "code_anchors" in d
 
-    def test_canonical_path_status_to_dict(
-        self, report: PR993ReevaluationReport
-    ) -> None:
+    def test_canonical_path_status_to_dict(self, report: PR993ReevaluationReport) -> None:
         for path in report.canonical_path_statuses:
             d = path.to_dict()
             assert isinstance(d, dict)
@@ -464,9 +411,7 @@ class TestSerialisation:
             assert "runtime_closed" in d
             assert "closure_label" in d
 
-    def test_closure_priority_to_dict(
-        self, report: PR993ReevaluationReport
-    ) -> None:
+    def test_closure_priority_to_dict(self, report: PR993ReevaluationReport) -> None:
         for p in report.closure_priorities:
             d = p.to_dict()
             assert isinstance(d, dict)
@@ -529,9 +474,7 @@ class TestValidationMatrix:
         reset_pr993_reevaluation()
         return build_pr993_reevaluation()
 
-    def test_system_has_at_least_one_strongly_established_claim(
-        self, report: PR993ReevaluationReport
-    ) -> None:
+    def test_system_has_at_least_one_strongly_established_claim(self, report: PR993ReevaluationReport) -> None:
         """The system must have at least one strongly-established PR #993 claim."""
         assert report.strongly_established_count >= 1, (
             "Expected at least 1 STRONGLY_ESTABLISHED claim. "
@@ -539,9 +482,7 @@ class TestValidationMatrix:
             "should produce at least one strong claim."
         )
 
-    def test_system_has_at_least_one_partially_established_claim(
-        self, report: PR993ReevaluationReport
-    ) -> None:
+    def test_system_has_at_least_one_partially_established_claim(self, report: PR993ReevaluationReport) -> None:
         """At least 1 claim should be PARTIALLY_ESTABLISHED.
 
         Claim 6 (remaining work is closure) must be PARTIALLY_ESTABLISHED
@@ -554,15 +495,11 @@ class TestValidationMatrix:
             "The remaining_work_is_closure claim should be PARTIALLY_ESTABLISHED."
         )
 
-    def test_system_has_no_missing_runtime_evidence_claims(
-        self, report: PR993ReevaluationReport
-    ) -> None:
+    def test_system_has_no_missing_runtime_evidence_claims(self, report: PR993ReevaluationReport) -> None:
         """No claim should be MISSING_RUNTIME_EVIDENCE."""
         assert report.missing_runtime_evidence_count == 0
 
-    def test_majority_of_canonical_paths_are_open(
-        self, report: PR993ReevaluationReport
-    ) -> None:
+    def test_majority_of_canonical_paths_are_open(self, report: PR993ReevaluationReport) -> None:
         """Most canonical paths should still be open (no CI emulator evidence).
 
         The honest characterization is that the system architecture is complete
@@ -573,9 +510,7 @@ class TestValidationMatrix:
             "Without CI cross-repo emulator tests, most paths cannot be runtime_closed."
         )
 
-    def test_android_registration_path_is_best_evidenced(
-        self, report: PR993ReevaluationReport
-    ) -> None:
+    def test_android_registration_path_is_best_evidenced(self, report: PR993ReevaluationReport) -> None:
         """Android registration should be among the most evidenced paths.
 
         Unit tests exist (test_android_capability_assimilation_ingress.py).
@@ -588,28 +523,20 @@ class TestValidationMatrix:
             "galaxy_gateway.android.handlers.registration should be importable."
         )
 
-    def test_verdict_contains_structurally_complete(
-        self, report: PR993ReevaluationReport
-    ) -> None:
+    def test_verdict_contains_structurally_complete(self, report: PR993ReevaluationReport) -> None:
         """The dual_repo_verdict must acknowledge structural completeness."""
         assert "STRUCTURALLY_COMPLETE" in report.dual_repo_verdict, (
             "dual_repo_verdict should contain 'STRUCTURALLY_COMPLETE' — "
             "the system architecture is structurally complete even if CI evidence is partial."
         )
 
-    def test_p0_snapshot_evidence_gap_is_documented(
-        self, report: PR993ReevaluationReport
-    ) -> None:
+    def test_p0_snapshot_evidence_gap_is_documented(self, report: PR993ReevaluationReport) -> None:
         """The P0 snapshot evidence gap (PR-A) must be documented in priorities."""
         p0_snapshot = next(
-            (
-                p
-                for p in report.closure_priorities
-                if p.priority_id == "P0-ANDROID-RUNTIME-CI-EVIDENCE"
-            ),
+            (p for p in report.closure_priorities if p.priority_id == "P0-ANDROID-RUNTIME-CI-EVIDENCE"),
             None,
         )
         assert p0_snapshot is not None, "P0-ANDROID-RUNTIME-CI-EVIDENCE must be in priorities."
-        assert "snapshot" in p0_snapshot.rationale.lower() or "store" in p0_snapshot.rationale.lower(), (
-            "P0 snapshot priority rationale must mention 'snapshot' or 'store'."
-        )
+        assert (
+            "snapshot" in p0_snapshot.rationale.lower() or "store" in p0_snapshot.rationale.lower()
+        ), "P0 snapshot priority rationale must mention 'snapshot' or 'store'."

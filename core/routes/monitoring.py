@@ -45,16 +45,20 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     monitoring = get_monitoring_manager()
 
     monitoring.health.register_check("api", lambda: {"status": "healthy"})
-    monitoring.health.register_check("cache", lambda: {
-        "status": "healthy",
-        "backend": "memory",
-    })
+    monitoring.health.register_check(
+        "cache",
+        lambda: {
+            "status": "healthy",
+            "backend": "memory",
+        },
+    )
 
     @router.get("/api/v1/monitoring/dashboard")
     async def monitoring_dashboard():
         """完整监控仪表盘"""
-        from core.performance import PerformanceMonitor
         from core.command_router import get_command_router
+        from core.performance import PerformanceMonitor
+
         perf = PerformanceMonitor.instance()
 
         dashboard = monitoring.get_full_dashboard()
@@ -70,10 +74,12 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     @router.get("/api/v1/monitoring/alerts")
     async def monitoring_alerts():
         """告警列表"""
-        return JSONResponse({
-            "active": monitoring.alerts.get_active_alerts(),
-            "history": monitoring.alerts.get_history(50),
-        })
+        return JSONResponse(
+            {
+                "active": monitoring.alerts.get_active_alerts(),
+                "history": monitoring.alerts.get_history(50),
+            }
+        )
 
     @router.get("/api/v1/monitoring/metrics")
     async def monitoring_metrics():
@@ -102,6 +108,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
         try:
             import resource
+
             usage = resource.getrusage(resource.RUSAGE_SELF)
             rss = usage.ru_maxrss * 1024  # KB → bytes
             lines.append("# HELP process_resident_memory_bytes Resident memory size in bytes")
@@ -116,6 +123,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         # PR-G2: SLO metrics (startup, heartbeat, reconnect, command latency)
         try:
             from core.slo_metrics import get_slo_metrics
+
             lines.append(get_slo_metrics().prometheus_text().rstrip("\n"))
         except Exception as exc:
             logger.warning("Exception suppressed: %s", exc)
@@ -123,6 +131,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         # PR-I: Operational SLO metrics (dispatch, recovery, fallback, audit persistence)
         try:
             from core.operational_slo_metrics import get_operational_slo_metrics
+
             lines.append(get_operational_slo_metrics().prometheus_text().rstrip("\n"))
         except Exception as exc:
             logger.warning("Exception suppressed: %s", exc)
@@ -133,6 +142,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     async def monitoring_performance():
         """性能指标仪表盘"""
         from core.performance import PerformanceMonitor
+
         perf = PerformanceMonitor.instance()
         return JSONResponse(perf.get_dashboard())
 
@@ -146,6 +156,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         command latency percentiles.
         """
         from core.slo_metrics import get_slo_metrics
+
         return JSONResponse(get_slo_metrics().snapshot())
 
     # PR-I: Operational SLO metrics JSON endpoint
@@ -159,15 +170,14 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         outcomes without ad-hoc log inspection.
         """
         from core.operational_slo_metrics import get_operational_slo_metrics  # noqa: PLC0415
+
         try:
             from core.operational_readiness_surface import (  # noqa: PLC0415
                 build_operational_readiness_report,
                 collect_app_route_paths,
             )
 
-            report = build_operational_readiness_report(
-                route_paths=collect_app_route_paths(request.app)
-            )
+            report = build_operational_readiness_report(route_paths=collect_app_route_paths(request.app))
             ops = get_operational_slo_metrics()
             ops.ingest_unified_state_contract(report.state_contract)
             return JSONResponse(ops.snapshot())

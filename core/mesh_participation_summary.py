@@ -90,9 +90,8 @@ __all__ = [
 
 def resolve_formation_summary(**kwargs: Any) -> Any:  # type: ignore[return]
     """Lazy proxy for :func:`core.device_formation.formation_summary.resolve_formation_summary`."""
-    from core.device_formation.formation_summary import (
-        resolve_formation_summary as _real,
-    )
+    from core.device_formation.formation_summary import resolve_formation_summary as _real
+
     return _real(**kwargs)
 
 
@@ -105,9 +104,7 @@ def get_body_mesh_registry() -> Any:  # type: ignore[return]
 
 #: Module-level authority sentinel — identifies this module unambiguously in
 #: diagnostic / registry surfaces.
-MESH_PARTICIPATION_SUMMARY_AUTHORITY = (
-    "core.mesh_participation_summary:MESH_PARTICIPATION_SUMMARY_AUTHORITY"
-)
+MESH_PARTICIPATION_SUMMARY_AUTHORITY = "core.mesh_participation_summary:MESH_PARTICIPATION_SUMMARY_AUTHORITY"
 
 #: Affirms that mesh/session summaries are *subordinate* to Layer-1 canonical
 #: readiness (``core.device_readiness``) and Layer-2 participation
@@ -223,10 +220,7 @@ class MeshParticipationSummary:
             device_ids=list(data.get("device_ids") or []),
             primary_device_id=data.get("primary_device_id"),
             source_device_id=data.get("source_device_id"),
-            roles_by_device={
-                k: list(v)
-                for k, v in (data.get("roles_by_device") or {}).items()
-            },
+            roles_by_device={k: list(v) for k, v in (data.get("roles_by_device") or {}).items()},
             merge_policy=data.get("merge_policy"),
             barrier_posture=data.get("barrier_posture"),
             routing_intents=dict(data.get("routing_intents") or {}),
@@ -342,9 +336,7 @@ def _aggregate_from_mesh_session(
             return
 
         summary.sources["mesh_session"] = (
-            mesh_session.to_dict()
-            if hasattr(mesh_session, "to_dict")
-            else str(mesh_session)
+            mesh_session.to_dict() if hasattr(mesh_session, "to_dict") else str(mesh_session)
         )
 
         # Session ID
@@ -422,10 +414,7 @@ def _aggregate_from_mesh_membership(
                 {
                     "member_device_id": did,
                     "mesh_id": getattr(m, "mesh_id", None),
-                    "roles": [
-                        r.value if hasattr(r, "value") else str(r)
-                        for r in (getattr(m, "roles", []) or [])
-                    ],
+                    "roles": [r.value if hasattr(r, "value") else str(r) for r in (getattr(m, "roles", []) or [])],
                     "routing_intent": summary.routing_intents.get(did),
                 }
             )
@@ -452,9 +441,7 @@ def _aggregate_from_mesh_session_coordinator(
             return
 
         summary.sources["mesh_session_coordinator"] = (
-            coordinator_state.to_dict()
-            if hasattr(coordinator_state, "to_dict")
-            else str(coordinator_state)
+            coordinator_state.to_dict() if hasattr(coordinator_state, "to_dict") else str(coordinator_state)
         )
 
         # Session ID from coordinator
@@ -488,9 +475,7 @@ def _aggregate_from_cross_device_policy(
             return
 
         summary.sources["cross_device_policy"] = (
-            routing_summary.to_dict()
-            if hasattr(routing_summary, "to_dict")
-            else {}
+            routing_summary.to_dict() if hasattr(routing_summary, "to_dict") else {}
         )
 
         # Device IDs

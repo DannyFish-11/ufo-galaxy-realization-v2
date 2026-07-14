@@ -57,14 +57,24 @@ async def test_transcribe_runs_off_the_event_loop_thread():
     asr_callback = svc._asr_callbacks[-1]
 
     speaking_state = AudioState(
-        energy=0.5, speaking_ratio=0.6, pause_density=0.1, noise_level=0.2,
-        audio_freshness_ms=50.0, is_speaking=True,
-        samples=np.zeros(16000, dtype=np.float32), sample_rate=16000,
+        energy=0.5,
+        speaking_ratio=0.6,
+        pause_density=0.1,
+        noise_level=0.2,
+        audio_freshness_ms=50.0,
+        is_speaking=True,
+        samples=np.zeros(16000, dtype=np.float32),
+        sample_rate=16000,
     )
     silence_state = AudioState(
-        energy=0.0, speaking_ratio=0.0, pause_density=0.0, noise_level=0.0,
-        audio_freshness_ms=50.0, is_speaking=False,
-        samples=np.zeros(1, dtype=np.float32), sample_rate=16000,
+        energy=0.0,
+        speaking_ratio=0.0,
+        pause_density=0.0,
+        noise_level=0.0,
+        audio_freshness_ms=50.0,
+        is_speaking=False,
+        samples=np.zeros(1, dtype=np.float32),
+        sample_rate=16000,
     )
     fake_quality = SignalQuality.ok(freshness_ms=10.0)
 
@@ -76,16 +86,14 @@ async def test_transcribe_runs_off_the_event_loop_thread():
     asr_callback(silence_state, fake_quality)  # 说话结束(buffer_duration=1.0s > 0.5 阈值)→触发转写
     elapsed = time.monotonic() - start
 
-    assert elapsed < 0.1, (
-        f"回调本身必须立即返回，不能同步等待 0.3s 的转写完成；实际耗时 {elapsed:.3f}s"
-    )
+    assert elapsed < 0.1, f"回调本身必须立即返回，不能同步等待 0.3s 的转写完成；实际耗时 {elapsed:.3f}s"
 
     # 等转写在后台线程真正跑完。
     await asyncio.sleep(0.5)
     assert fake_whisper.call_thread_names, "transcribe() 应该已经被调用过"
-    assert fake_whisper.call_thread_names[0] != main_thread_name, (
-        "transcribe() 必须跑在非主线程(线程池 worker)上，不能占用事件循环所在线程"
-    )
+    assert (
+        fake_whisper.call_thread_names[0] != main_thread_name
+    ), "transcribe() 必须跑在非主线程(线程池 worker)上，不能占用事件循环所在线程"
 
 
 @pytest.mark.asyncio
@@ -108,19 +116,29 @@ async def test_voice_input_delivered_when_transcribe_runs_in_worker_thread():
     asr_callback = svc._asr_callbacks[-1]
 
     speaking_state = AudioState(
-        energy=0.5, speaking_ratio=0.6, pause_density=0.1, noise_level=0.2,
-        audio_freshness_ms=50.0, is_speaking=True,
-        samples=np.zeros(16000, dtype=np.float32), sample_rate=16000,
+        energy=0.5,
+        speaking_ratio=0.6,
+        pause_density=0.1,
+        noise_level=0.2,
+        audio_freshness_ms=50.0,
+        is_speaking=True,
+        samples=np.zeros(16000, dtype=np.float32),
+        sample_rate=16000,
     )
     silence_state = AudioState(
-        energy=0.0, speaking_ratio=0.0, pause_density=0.0, noise_level=0.0,
-        audio_freshness_ms=50.0, is_speaking=False,
-        samples=np.zeros(1, dtype=np.float32), sample_rate=16000,
+        energy=0.0,
+        speaking_ratio=0.0,
+        pause_density=0.0,
+        noise_level=0.0,
+        audio_freshness_ms=50.0,
+        is_speaking=False,
+        samples=np.zeros(1, dtype=np.float32),
+        sample_rate=16000,
     )
     fake_quality = SignalQuality.ok(freshness_ms=10.0)
 
     asr_callback(speaking_state, fake_quality)  # 积累 1.0s 语音到 buffer
-    asr_callback(silence_state, fake_quality)   # 说话结束 → 触发转写
+    asr_callback(silence_state, fake_quality)  # 说话结束 → 触发转写
 
     # 给线程池 worker + run_coroutine_threadsafe 调度留足时间。
     for _ in range(20):

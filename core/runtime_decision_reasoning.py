@@ -107,9 +107,7 @@ def _build_android_truth_basis(block: Any) -> Dict[str, Any]:
         "local_mode_gate_deferred": _truth_get(block, "local_mode_gate_deferred"),
         "pending_first_download": _truth_get(block, "pending_first_download"),
         "degraded_reasons": list(_truth_get(block, "degraded_reasons", []) or []),
-        "participation_blocking_reasons": list(
-            _truth_get(block, "participation_blocking_reasons", []) or []
-        ),
+        "participation_blocking_reasons": list(_truth_get(block, "participation_blocking_reasons", []) or []),
         "tier_notes": list(_truth_get(block, "participation_tier_notes", []) or []),
         "source_of_truth_ref": V2_ANDROID_TRUTH_BLOCK_REF,
     }
@@ -129,21 +127,13 @@ def _build_causal_explanation_zh(
 ) -> str:
     mode_state = str(mode_basis.get("mode_state") or "unknown")
     readiness_state = str(
-        readiness_basis.get("readiness_state")
-        or readiness_basis.get("runtime_readiness_verdict")
-        or "unknown"
+        readiness_basis.get("readiness_state") or readiness_basis.get("runtime_readiness_verdict") or "unknown"
     )
     closed = closure_basis.get("is_fully_closed")
     unified_mode_model = dict(unified_mode_model or {})
-    execution_location = str(
-        unified_mode_model.get("execution_location") or selected_runtime or "unknown"
-    )
-    participation_layer = str(
-        unified_mode_model.get("participation_layer") or participation_tier or "unknown"
-    )
-    governance_state = str(
-        unified_mode_model.get("governance_state") or "delegated_execution"
-    )
+    execution_location = str(unified_mode_model.get("execution_location") or selected_runtime or "unknown")
+    participation_layer = str(unified_mode_model.get("participation_layer") or participation_tier or "unknown")
+    governance_state = str(unified_mode_model.get("governance_state") or "delegated_execution")
 
     if acceptance_verdict in {"quarantine", "reject"}:
         return (
@@ -209,9 +199,7 @@ class RuntimeDecisionReasoningBlock:
                 payload.get("device_id"),
             ),
             participation_tier=str(
-                payload.get("participation_tier")
-                or payload.get("android_participation_tier")
-                or "unknown"
+                payload.get("participation_tier") or payload.get("android_participation_tier") or "unknown"
             ),
             mode_basis=dict(payload.get("mode_basis") or {}),
             readiness_basis=dict(payload.get("readiness_basis") or {}),
@@ -223,9 +211,7 @@ class RuntimeDecisionReasoningBlock:
             unified_mode_model=dict(payload.get("unified_mode_model") or {}),
             generated_at=float(payload.get("generated_at") or time.time()),
             authority=str(payload.get("_source") or payload.get("authority") or cls.authority),
-            contract_version=str(
-                payload.get("contract_version") or cls.contract_version
-            ),
+            contract_version=str(payload.get("contract_version") or cls.contract_version),
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -361,11 +347,7 @@ def overlay_runtime_decision_reasoning_block(
     readiness_basis = dict(current.readiness_basis)
     readiness_basis.update(
         {
-            "ready_to_route": (
-                ready_to_route
-                if ready_to_route is not None
-                else readiness_basis.get("ready_to_route")
-            ),
+            "ready_to_route": (ready_to_route if ready_to_route is not None else readiness_basis.get("ready_to_route")),
             "readiness_state": _coalesce(
                 readiness_summary.get("verdict"),
                 readiness_summary.get("state"),
@@ -375,9 +357,7 @@ def overlay_runtime_decision_reasoning_block(
                 readiness_summary.get("verdict"),
                 readiness_basis.get("runtime_readiness_verdict"),
             ),
-            "notes": _dedupe_strings(
-                list(readiness_basis.get("notes") or []) + list(readiness_notes or [])
-            ),
+            "notes": _dedupe_strings(list(readiness_basis.get("notes") or []) + list(readiness_notes or [])),
             "android_truth_basis": truth_basis,
         }
     )

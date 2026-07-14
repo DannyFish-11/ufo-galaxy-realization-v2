@@ -125,8 +125,7 @@ from typing import Any, Dict, List, Optional, Tuple
 # ---------------------------------------------------------------------------
 
 ATTACHED_RUNTIME_RECOVERY_READINESS_AUTHORITY: str = (
-    "core.attached_runtime_recovery_readiness::PR15::recovery-readiness-"
-    "and-inbound-signal-guard"
+    "core.attached_runtime_recovery_readiness::PR15::recovery-readiness-" "and-inbound-signal-guard"
 )
 
 # ---------------------------------------------------------------------------
@@ -336,6 +335,7 @@ class RecoveryReadinessStatus(str, Enum):
     ready = "ready"
     recovering = "recovering"
     degraded = "degraded"
+
 
 # ---------------------------------------------------------------------------
 # Dataclasses
@@ -605,9 +605,7 @@ class RecoveryReadinessRuntime:
     def record_rejection(self, decision: SignalGuardDecision) -> None:
         """Increment rejection counters for *decision*."""
         self._total_rejected += 1
-        self._reject_counts[decision.value] = (
-            self._reject_counts.get(decision.value, 0) + 1
-        )
+        self._reject_counts[decision.value] = self._reject_counts.get(decision.value, 0) + 1
 
     def clear_seq_context(self, context_key: str) -> None:
         """Remove the seq_index entry for *context_key*.
@@ -896,10 +894,7 @@ def guard_inbound_signal(
     rt.record_rejection(decision)
 
     if decision is SignalGuardDecision.duplicate:
-        reason = (
-            f"guard:duplicate signal_id={key.signal_id!r} already seen "
-            f"(context_key={key.context_key!r})"
-        )
+        reason = f"guard:duplicate signal_id={key.signal_id!r} already seen " f"(context_key={key.context_key!r})"
     elif decision is SignalGuardDecision.replay:
         reason = (
             f"guard:replay emission_seq={emission_seq} == max_seen={max_seen_seq} "

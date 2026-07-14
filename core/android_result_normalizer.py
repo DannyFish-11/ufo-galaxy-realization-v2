@@ -95,6 +95,7 @@ Design principles
 from __future__ import annotations
 
 import logging  # auto: ensure module _logger is defined
+
 _logger = logging.getLogger(__name__)
 
 
@@ -130,9 +131,7 @@ except ImportError:  # pragma: no cover
     _PARTICIPANT_TRUTH_AVAILABLE = False
 
 try:
-    from core.android_delegated_signal_ingress import (
-        ingest_delegated_execution_signal as _ingest_delegated_signal,
-    )
+    from core.android_delegated_signal_ingress import ingest_delegated_execution_signal as _ingest_delegated_signal
 
     _DELEGATED_SIGNAL_AVAILABLE: bool = True
 except ImportError:  # pragma: no cover
@@ -140,9 +139,7 @@ except ImportError:  # pragma: no cover
     _DELEGATED_SIGNAL_AVAILABLE = False
 
 try:
-    from core.android_handoff_v2_response_ingress import (
-        ingest_android_handoff_response as _ingest_handoff_response,
-    )
+    from core.android_handoff_v2_response_ingress import ingest_android_handoff_response as _ingest_handoff_response
 
     _HANDOFF_RESPONSE_AVAILABLE: bool = True
 except ImportError:  # pragma: no cover
@@ -154,8 +151,7 @@ except ImportError:  # pragma: no cover
 # ---------------------------------------------------------------------------
 
 ANDROID_RESULT_NORMALIZER_AUTHORITY: str = (
-    "core.android_result_normalizer::PR8V2::"
-    "unified-android-result-normalization-and-canonical-reconciliation-entry"
+    "core.android_result_normalizer::PR8V2::" "unified-android-result-normalization-and-canonical-reconciliation-entry"
 )
 
 # ---------------------------------------------------------------------------
@@ -347,20 +343,17 @@ class AndroidResultNormalizerOutcome:
     def to_dict(self) -> Dict[str, Any]:
         pt_dict = (
             self.participant_truth_outcome.to_dict()
-            if self.participant_truth_outcome is not None
-            and hasattr(self.participant_truth_outcome, "to_dict")
+            if self.participant_truth_outcome is not None and hasattr(self.participant_truth_outcome, "to_dict")
             else None
         )
         sr_dict = (
             self.signal_reconcile_outcome.to_dict()
-            if self.signal_reconcile_outcome is not None
-            and hasattr(self.signal_reconcile_outcome, "to_dict")
+            if self.signal_reconcile_outcome is not None and hasattr(self.signal_reconcile_outcome, "to_dict")
             else None
         )
         hr_dict = (
             self.handoff_response_outcome.to_dict()
-            if self.handoff_response_outcome is not None
-            and hasattr(self.handoff_response_outcome, "to_dict")
+            if self.handoff_response_outcome is not None and hasattr(self.handoff_response_outcome, "to_dict")
             else None
         )
         return {
@@ -394,9 +387,7 @@ _DEDUP_CAPACITY: int = 1024
 _committed_terminal_identities: OrderedDict = OrderedDict()
 
 # Terminal truth kinds that trigger dedup recording
-_TERMINAL_TRUTH_KINDS: frozenset = frozenset(
-    {"result", "failure", "cancel", "reconciliation_signal"}
-)
+_TERMINAL_TRUTH_KINDS: frozenset = frozenset({"result", "failure", "cancel", "reconciliation_signal"})
 
 # Terminal handoff response kinds that trigger dedup recording
 _TERMINAL_HANDOFF_KINDS: frozenset = frozenset({"result", "failure"})
@@ -410,20 +401,16 @@ def _extract_identity_key(message: Dict[str, Any]) -> str:
     Returns empty string when no suitable key is found.
     """
     payload: Dict[str, Any] = message.get("payload", {}) or {}
-    contract_id = (
-        str(message.get("contract_id") or payload.get("contract_id") or "").strip()
-    )
+    contract_id = str(message.get("contract_id") or payload.get("contract_id") or "").strip()
     if contract_id:
         return f"contract:{contract_id}"
-    session_id = (
-        str(
-            message.get("session_id")
-            or payload.get("session_id")
-            or message.get("runtime_session_id")
-            or payload.get("runtime_session_id")
-            or ""
-        ).strip()
-    )
+    session_id = str(
+        message.get("session_id")
+        or payload.get("session_id")
+        or message.get("runtime_session_id")
+        or payload.get("runtime_session_id")
+        or ""
+    ).strip()
     if session_id:
         return f"session:{session_id}"
     return ""
@@ -632,8 +619,7 @@ def normalize_android_result(
     identity_key = _extract_identity_key(message)
     if identity_key and _dedup_is_committed(identity_key):
         _log_debug(
-            "normalize_android_result: terminal dedup guard hit "
-            "type=%r identity=%r — skipping",
+            "normalize_android_result: terminal dedup guard hit " "type=%r identity=%r — skipping",
             msg_type,
             identity_key,
         )
@@ -658,30 +644,22 @@ def normalize_android_result(
 
     try:
         if category == AndroidResultCategory.user_visible_business_result:
-            participant_truth_outcome = _route_business_result(
-                message, runtime=runtime, registry=registry
-            )
+            participant_truth_outcome = _route_business_result(message, runtime=runtime, registry=registry)
             if participant_truth_outcome is not None:
                 was_normalized = True
                 # Commit terminal identity if applicable
-                if identity_key and _is_terminal_participant_truth_outcome(
-                    participant_truth_outcome
-                ):
+                if identity_key and _is_terminal_participant_truth_outcome(participant_truth_outcome):
                     _dedup_commit(identity_key, msg_type)
                     committed_terminal_identity = identity_key
             else:
                 reject_reason = "participant_truth_ingress_unavailable"
 
         elif category == AndroidResultCategory.runtime_lifecycle_signal:
-            signal_reconcile_outcome = _route_delegated_signal(
-                message, runtime=runtime
-            )
+            signal_reconcile_outcome = _route_delegated_signal(message, runtime=runtime)
             if signal_reconcile_outcome is not None:
                 was_normalized = True
                 # Commit terminal identity if applicable
-                if identity_key and _is_terminal_signal_reconcile_outcome(
-                    signal_reconcile_outcome
-                ):
+                if identity_key and _is_terminal_signal_reconcile_outcome(signal_reconcile_outcome):
                     _dedup_commit(identity_key, msg_type)
                     committed_terminal_identity = identity_key
             else:
@@ -690,14 +668,10 @@ def normalize_android_result(
         elif category == AndroidResultCategory.reconciliation_authoritative_update:
             msg_type_lower = msg_type.lower()
             if msg_type_lower == "reconciliation_signal":
-                participant_truth_outcome = _route_reconciliation_signal(
-                    message, runtime=runtime, registry=registry
-                )
+                participant_truth_outcome = _route_reconciliation_signal(message, runtime=runtime, registry=registry)
                 if participant_truth_outcome is not None:
                     was_normalized = True
-                    if identity_key and _is_terminal_participant_truth_outcome(
-                        participant_truth_outcome
-                    ):
+                    if identity_key and _is_terminal_participant_truth_outcome(participant_truth_outcome):
                         _dedup_commit(identity_key, msg_type)
                         committed_terminal_identity = identity_key
                 else:
@@ -708,9 +682,7 @@ def normalize_android_result(
                 handoff_response_outcome = _route_handoff_response(message)
                 if handoff_response_outcome is not None:
                     was_normalized = True
-                    if identity_key and _is_terminal_handoff_outcome(
-                        handoff_response_outcome
-                    ):
+                    if identity_key and _is_terminal_handoff_outcome(handoff_response_outcome):
                         _dedup_commit(identity_key, msg_type)
                         committed_terminal_identity = identity_key
                 else:

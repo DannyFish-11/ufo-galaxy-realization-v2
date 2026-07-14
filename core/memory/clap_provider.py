@@ -40,8 +40,9 @@ class ClapMemoryProvider(MemoryProvider):
     def available(self) -> bool:
         if self._available is None:
             try:
-                import transformers  # noqa: F401
                 import chromadb  # noqa: F401
+                import transformers  # noqa: F401
+
                 # 音频解码后端(librosa 或 soundfile)二选一即可
                 try:
                     import librosa  # noqa: F401
@@ -57,6 +58,7 @@ class ClapMemoryProvider(MemoryProvider):
     def _get_model(self):
         if self._model is None:
             from transformers import ClapModel, ClapProcessor
+
             name = os.getenv("GALAXY_CLAP_MODEL", "laion/clap-htsat-unfused")
             logger.info("Loading CLAP model %s (first run downloads weights)…", name)
             self._model = ClapModel.from_pretrained(name)
@@ -66,25 +68,26 @@ class ClapMemoryProvider(MemoryProvider):
     def _get_col(self):
         if self._col is None:
             import chromadb
+
             persist = os.getenv("GALAXY_CLAP_DIR", "./data/clap_memory")
             try:
                 os.makedirs(persist, exist_ok=True)
             except Exception:  # noqa: BLE001
                 pass
             client = chromadb.PersistentClient(path=persist)
-            self._col = client.get_or_create_collection(
-                _COLLECTION, metadata={"hnsw:space": "cosine"}
-            )
+            self._col = client.get_or_create_collection(_COLLECTION, metadata={"hnsw:space": "cosine"})
         return self._col
 
     @staticmethod
     def _load_wave(path: str):
         try:
             import librosa
+
             wav, _ = librosa.load(path, sr=_SR, mono=True)
             return wav
         except Exception:  # noqa: BLE001
             import soundfile as sf
+
             wav, sr = sf.read(path)
             if getattr(wav, "ndim", 1) > 1:
                 wav = wav.mean(axis=1)
@@ -92,6 +95,7 @@ class ClapMemoryProvider(MemoryProvider):
 
     def _embed_text(self, text: str):
         import torch
+
         m = self._get_model()
         inputs = self._proc(text=[text], return_tensors="pt", padding=True)
         with torch.no_grad():
@@ -101,6 +105,7 @@ class ClapMemoryProvider(MemoryProvider):
 
     def _embed_audio(self, path: str):
         import torch
+
         m = self._get_model()
         wav = self._load_wave(path)
         inputs = self._proc(audios=wav, sampling_rate=_SR, return_tensors="pt")
@@ -134,7 +139,9 @@ class ClapMemoryProvider(MemoryProvider):
                 store_md["tags"] = ",".join(tags)
             self._get_col().add(
                 ids=[str(md.get("id") or f"aud_{uuid.uuid4().hex[:12]}")],
-                embeddings=[vec], documents=[doc], metadatas=[store_md],
+                embeddings=[vec],
+                documents=[doc],
+                metadatas=[store_md],
             )
         except Exception as exc:  # noqa: BLE001
             logger.debug("clap remember failed: %s", exc)
@@ -157,9 +164,13 @@ class ClapMemoryProvider(MemoryProvider):
         metas = (res.get("metadatas") or [[]])[0]
         for i, doc in enumerate(docs):
             dist = dists[i] if i < len(dists) else 1.0
-            hits.append(MemoryHit(
-                content=str(doc), score=round(1.0 - float(dist), 4),
-                source=self.backend_name, modality="audio",
-                metadata=metas[i] if i < len(metas) else {},
-            ))
+            hits.append(
+                MemoryHit(
+                    content=str(doc),
+                    score=round(1.0 - float(dist), 4),
+                    source=self.backend_name,
+                    modality="audio",
+                    metadata=metas[i] if i < len(metas) else {},
+                )
+            )
         return hits

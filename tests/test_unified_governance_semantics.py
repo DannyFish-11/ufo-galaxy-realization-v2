@@ -4,10 +4,10 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from core.unified_governance_semantics import (
-    GovernancePath,
-    UNIFIED_GOVERNANCE_POLICY_LAYER_CONTRACT_VERSION,
     MESH_RUNTIME_STATUS_PARTIAL,
     MESH_RUNTIME_STATUS_RUNTIME_PROVEN,
+    UNIFIED_GOVERNANCE_POLICY_LAYER_CONTRACT_VERSION,
+    GovernancePath,
     build_mesh_runtime_state,
     build_unified_governance_state,
     resolve_governance_path_decision,
@@ -213,21 +213,28 @@ def test_build_unified_governance_state_projects_mode_scope_and_precedence() -> 
         ],
     }
 
-    with patch("core.attached_runtime_session_registry.list_active_sessions", return_value=active_sessions), patch(
-        "core.android_mode_gate_policy.build_mode_state_for_device",
-        side_effect=lambda device_id: mode_map[device_id],
-    ), patch(
-        "core.android_mode_gate_policy.evaluate_android_mode_readiness",
-        side_effect=lambda device_id: readiness_map[device_id],
-    ), patch(
-        "core.unified_execution_governance.is_takeover_active",
-        side_effect=lambda device_id: device_id == "dev_cross",
-    ), patch(
-        "core.unified_execution_governance.get_execution_runtime_snapshot",
-        return_value=runtime_snapshot,
-    ), patch(
-        "core.canonical_cross_repo_evidence_pipeline.get_canonical_cross_repo_evidence_report",
-        return_value=cross_repo_truth_report,
+    with (
+        patch("core.attached_runtime_session_registry.list_active_sessions", return_value=active_sessions),
+        patch(
+            "core.android_mode_gate_policy.build_mode_state_for_device",
+            side_effect=lambda device_id: mode_map[device_id],
+        ),
+        patch(
+            "core.android_mode_gate_policy.evaluate_android_mode_readiness",
+            side_effect=lambda device_id: readiness_map[device_id],
+        ),
+        patch(
+            "core.unified_execution_governance.is_takeover_active",
+            side_effect=lambda device_id: device_id == "dev_cross",
+        ),
+        patch(
+            "core.unified_execution_governance.get_execution_runtime_snapshot",
+            return_value=runtime_snapshot,
+        ),
+        patch(
+            "core.canonical_cross_repo_evidence_pipeline.get_canonical_cross_repo_evidence_report",
+            return_value=cross_repo_truth_report,
+        ),
     ):
         state = build_unified_governance_state()
 
@@ -290,9 +297,7 @@ def test_build_unified_governance_state_projects_mode_scope_and_precedence() -> 
     assert state["execution_runtime_state"]["active_execution_total_count"] == 1
     assert "mesh_runtime_state" in state
     assert state["mesh_runtime_state"]["status"] == MESH_RUNTIME_STATUS_PARTIAL
-    relationship_links = {
-        link["link"] for link in state["mesh_runtime_state"]["runtime_relationships"]
-    }
+    relationship_links = {link["link"] for link in state["mesh_runtime_state"]["runtime_relationships"]}
     assert "parallel_subtask_to_local_collaboration_agent" in relationship_links
 
 
@@ -321,36 +326,48 @@ def test_build_unified_governance_state_local_inference_changes_canonical_gate_d
         "active_execution_total_count": 0,
     }
 
-    with patch("core.attached_runtime_session_registry.list_active_sessions", return_value=active_sessions), patch(
-        "core.android_mode_gate_policy.build_mode_state_for_device",
-        side_effect=lambda device_id: mode_map[device_id],
-    ), patch(
-        "core.android_mode_gate_policy.evaluate_android_mode_readiness",
-        side_effect=lambda device_id: readiness_map[device_id],
-    ), patch(
-        "core.unified_execution_governance.is_takeover_active",
-        return_value=False,
-    ), patch(
-        "core.unified_execution_governance.get_execution_runtime_snapshot",
-        return_value=runtime_snapshot_base,
+    with (
+        patch("core.attached_runtime_session_registry.list_active_sessions", return_value=active_sessions),
+        patch(
+            "core.android_mode_gate_policy.build_mode_state_for_device",
+            side_effect=lambda device_id: mode_map[device_id],
+        ),
+        patch(
+            "core.android_mode_gate_policy.evaluate_android_mode_readiness",
+            side_effect=lambda device_id: readiness_map[device_id],
+        ),
+        patch(
+            "core.unified_execution_governance.is_takeover_active",
+            return_value=False,
+        ),
+        patch(
+            "core.unified_execution_governance.get_execution_runtime_snapshot",
+            return_value=runtime_snapshot_base,
+        ),
     ):
         denied_state = build_unified_governance_state()
 
-    with patch("core.attached_runtime_session_registry.list_active_sessions", return_value=active_sessions), patch(
-        "core.android_mode_gate_policy.build_mode_state_for_device",
-        side_effect=lambda device_id: mode_map[device_id],
-    ), patch(
-        "core.android_mode_gate_policy.evaluate_android_mode_readiness",
-        side_effect=lambda device_id: readiness_map[device_id],
-    ), patch(
-        "core.unified_execution_governance.is_takeover_active",
-        return_value=False,
-    ), patch(
-        "core.unified_execution_governance.get_execution_runtime_snapshot",
-        return_value={
-            **runtime_snapshot_base,
-            "devices": [{**runtime_snapshot_base["devices"][0], "local_inference_available": True}],
-        },
+    with (
+        patch("core.attached_runtime_session_registry.list_active_sessions", return_value=active_sessions),
+        patch(
+            "core.android_mode_gate_policy.build_mode_state_for_device",
+            side_effect=lambda device_id: mode_map[device_id],
+        ),
+        patch(
+            "core.android_mode_gate_policy.evaluate_android_mode_readiness",
+            side_effect=lambda device_id: readiness_map[device_id],
+        ),
+        patch(
+            "core.unified_execution_governance.is_takeover_active",
+            return_value=False,
+        ),
+        patch(
+            "core.unified_execution_governance.get_execution_runtime_snapshot",
+            return_value={
+                **runtime_snapshot_base,
+                "devices": [{**runtime_snapshot_base["devices"][0], "local_inference_available": True}],
+            },
+        ),
     ):
         allowed_state = build_unified_governance_state()
 
@@ -420,18 +437,24 @@ def test_build_unified_governance_state_stale_android_truth_downgrades_canonical
         "active_execution_total_count": 0,
     }
 
-    with patch("core.attached_runtime_session_registry.list_active_sessions", return_value=active_sessions), patch(
-        "core.android_mode_gate_policy.build_mode_state_for_device",
-        side_effect=lambda device_id: mode_map[device_id],
-    ), patch(
-        "core.android_mode_gate_policy.evaluate_android_mode_readiness",
-        side_effect=lambda device_id: readiness_map[device_id],
-    ), patch(
-        "core.unified_execution_governance.is_takeover_active",
-        return_value=False,
-    ), patch(
-        "core.unified_execution_governance.get_execution_runtime_snapshot",
-        return_value=runtime_snapshot,
+    with (
+        patch("core.attached_runtime_session_registry.list_active_sessions", return_value=active_sessions),
+        patch(
+            "core.android_mode_gate_policy.build_mode_state_for_device",
+            side_effect=lambda device_id: mode_map[device_id],
+        ),
+        patch(
+            "core.android_mode_gate_policy.evaluate_android_mode_readiness",
+            side_effect=lambda device_id: readiness_map[device_id],
+        ),
+        patch(
+            "core.unified_execution_governance.is_takeover_active",
+            return_value=False,
+        ),
+        patch(
+            "core.unified_execution_governance.get_execution_runtime_snapshot",
+            return_value=runtime_snapshot,
+        ),
     ):
         state = build_unified_governance_state()
 
@@ -499,27 +522,32 @@ def test_build_unified_governance_state_surfaces_recovery_truth_diagnostics() ->
         "recovery_truth_diagnosis": "recovery_truth_quality_assessed",
     }
 
-    with patch("core.attached_runtime_session_registry.list_active_sessions", return_value=active_sessions), patch(
-        "core.android_mode_gate_policy.build_mode_state_for_device",
-        side_effect=lambda device_id: mode_map[device_id],
-    ), patch(
-        "core.android_mode_gate_policy.evaluate_android_mode_readiness",
-        side_effect=lambda device_id: readiness_map[device_id],
-    ), patch(
-        "core.unified_execution_governance.is_takeover_active",
-        return_value=False,
-    ), patch(
-        "core.unified_execution_governance.get_execution_runtime_snapshot",
-        return_value=runtime_snapshot,
-    ), patch(
-        "core.android_evidence_integration_pipeline.get_android_evidence_integration_summary",
-        return_value=recovery_integration,
+    with (
+        patch("core.attached_runtime_session_registry.list_active_sessions", return_value=active_sessions),
+        patch(
+            "core.android_mode_gate_policy.build_mode_state_for_device",
+            side_effect=lambda device_id: mode_map[device_id],
+        ),
+        patch(
+            "core.android_mode_gate_policy.evaluate_android_mode_readiness",
+            side_effect=lambda device_id: readiness_map[device_id],
+        ),
+        patch(
+            "core.unified_execution_governance.is_takeover_active",
+            return_value=False,
+        ),
+        patch(
+            "core.unified_execution_governance.get_execution_runtime_snapshot",
+            return_value=runtime_snapshot,
+        ),
+        patch(
+            "core.android_evidence_integration_pipeline.get_android_evidence_integration_summary",
+            return_value=recovery_integration,
+        ),
     ):
         state = build_unified_governance_state()
 
-    causality = state["devices"][0]["governance_precedence"]["delegated_execution"][
-        "decision_causality"
-    ]
+    causality = state["devices"][0]["governance_precedence"]["delegated_execution"]["decision_causality"]
     assert causality["android_evidence_recovery_truth_quality"] == "adequate"
     assert causality["android_evidence_recovery_truth_degraded"] is False
     assert causality["android_evidence_recovery_truth_gap_types"] == [
@@ -608,18 +636,24 @@ def test_governance_policy_layer_hard_block_and_summary() -> None:
         "active_execution_total_count": 0,
     }
 
-    with patch("core.attached_runtime_session_registry.list_active_sessions", return_value=active_sessions), patch(
-        "core.android_mode_gate_policy.build_mode_state_for_device",
-        side_effect=lambda device_id: mode_map[device_id],
-    ), patch(
-        "core.android_mode_gate_policy.evaluate_android_mode_readiness",
-        side_effect=lambda device_id: readiness_map[device_id],
-    ), patch(
-        "core.unified_execution_governance.is_takeover_active",
-        return_value=False,
-    ), patch(
-        "core.unified_execution_governance.get_execution_runtime_snapshot",
-        return_value=runtime_snapshot,
+    with (
+        patch("core.attached_runtime_session_registry.list_active_sessions", return_value=active_sessions),
+        patch(
+            "core.android_mode_gate_policy.build_mode_state_for_device",
+            side_effect=lambda device_id: mode_map[device_id],
+        ),
+        patch(
+            "core.android_mode_gate_policy.evaluate_android_mode_readiness",
+            side_effect=lambda device_id: readiness_map[device_id],
+        ),
+        patch(
+            "core.unified_execution_governance.is_takeover_active",
+            return_value=False,
+        ),
+        patch(
+            "core.unified_execution_governance.get_execution_runtime_snapshot",
+            return_value=runtime_snapshot,
+        ),
     ):
         state = build_unified_governance_state()
 
@@ -667,21 +701,28 @@ def test_governance_policy_layer_defer_requires_manual_review() -> None:
         android_capability_truth_degraded=False,
     )
 
-    with patch("core.attached_runtime_session_registry.list_active_sessions", return_value=active_sessions), patch(
-        "core.android_mode_gate_policy.build_mode_state_for_device",
-        side_effect=lambda device_id: mode_map[device_id],
-    ), patch(
-        "core.android_mode_gate_policy.evaluate_android_mode_readiness",
-        side_effect=lambda device_id: readiness_map[device_id],
-    ), patch(
-        "core.android_mode_gate_policy.resolve_android_execution_gate_decision",
-        return_value=defer_gate,
-    ), patch(
-        "core.unified_execution_governance.is_takeover_active",
-        return_value=False,
-    ), patch(
-        "core.unified_execution_governance.get_execution_runtime_snapshot",
-        return_value=runtime_snapshot,
+    with (
+        patch("core.attached_runtime_session_registry.list_active_sessions", return_value=active_sessions),
+        patch(
+            "core.android_mode_gate_policy.build_mode_state_for_device",
+            side_effect=lambda device_id: mode_map[device_id],
+        ),
+        patch(
+            "core.android_mode_gate_policy.evaluate_android_mode_readiness",
+            side_effect=lambda device_id: readiness_map[device_id],
+        ),
+        patch(
+            "core.android_mode_gate_policy.resolve_android_execution_gate_decision",
+            return_value=defer_gate,
+        ),
+        patch(
+            "core.unified_execution_governance.is_takeover_active",
+            return_value=False,
+        ),
+        patch(
+            "core.unified_execution_governance.get_execution_runtime_snapshot",
+            return_value=runtime_snapshot,
+        ),
     ):
         state = build_unified_governance_state()
 
@@ -721,21 +762,28 @@ def test_governance_policy_layer_handles_sparse_runtime_snapshot() -> None:
         android_capability_truth_degraded=False,
     )
 
-    with patch("core.attached_runtime_session_registry.list_active_sessions", return_value=active_sessions), patch(
-        "core.android_mode_gate_policy.build_mode_state_for_device",
-        side_effect=lambda device_id: mode_map[device_id],
-    ), patch(
-        "core.android_mode_gate_policy.evaluate_android_mode_readiness",
-        side_effect=lambda device_id: readiness_map[device_id],
-    ), patch(
-        "core.android_mode_gate_policy.resolve_android_execution_gate_decision",
-        return_value=allow_gate,
-    ), patch(
-        "core.unified_execution_governance.is_takeover_active",
-        return_value=False,
-    ), patch(
-        "core.unified_execution_governance.get_execution_runtime_snapshot",
-        return_value=runtime_snapshot,
+    with (
+        patch("core.attached_runtime_session_registry.list_active_sessions", return_value=active_sessions),
+        patch(
+            "core.android_mode_gate_policy.build_mode_state_for_device",
+            side_effect=lambda device_id: mode_map[device_id],
+        ),
+        patch(
+            "core.android_mode_gate_policy.evaluate_android_mode_readiness",
+            side_effect=lambda device_id: readiness_map[device_id],
+        ),
+        patch(
+            "core.android_mode_gate_policy.resolve_android_execution_gate_decision",
+            return_value=allow_gate,
+        ),
+        patch(
+            "core.unified_execution_governance.is_takeover_active",
+            return_value=False,
+        ),
+        patch(
+            "core.unified_execution_governance.get_execution_runtime_snapshot",
+            return_value=runtime_snapshot,
+        ),
     ):
         state = build_unified_governance_state()
 

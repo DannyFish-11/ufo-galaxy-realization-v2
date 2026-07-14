@@ -15,7 +15,6 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
-
 # Surfaces that render markdown properly
 _MARKDOWN_SURFACES = frozenset(
     {

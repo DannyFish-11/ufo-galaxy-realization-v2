@@ -275,9 +275,7 @@ class NativeMultimodalCapabilityRegistry:
                 capability.provider_id,
             )
         self._records[capability.provider_id] = capability
-        logger.debug(
-            "NativeMultimodalCapabilityRegistry: registered %r", capability
-        )
+        logger.debug("NativeMultimodalCapabilityRegistry: registered %r", capability)
 
     def register_many(self, capabilities: List[NativeMultimodalCapability]) -> None:
         """Register multiple capability records."""
@@ -333,10 +331,7 @@ class NativeMultimodalCapabilityRegistry:
             return None
 
         if required:
-            full_match = [
-                c for c in candidates
-                if all(m in c.active_modalities for m in required)
-            ]
+            full_match = [c for c in candidates if all(m in c.active_modalities for m in required)]
             if full_match:
                 return full_match[0]
 
@@ -348,9 +343,7 @@ class NativeMultimodalCapabilityRegistry:
 
     def to_dict(self) -> dict:
         return {
-            "records": {
-                pid: cap.to_dict() for pid, cap in self._records.items()
-            },
+            "records": {pid: cap.to_dict() for pid, cap in self._records.items()},
             "stats": {
                 "total": len(self._records),
                 "natively_multimodal": len(self.natively_multimodal_providers()),
@@ -372,10 +365,7 @@ class NativeMultimodalCapabilityRegistry:
 
     def __repr__(self) -> str:
         mm_count = len(self.natively_multimodal_providers())
-        return (
-            f"<NativeMultimodalCapabilityRegistry total={len(self)} "
-            f"multimodal={mm_count}>"
-        )
+        return f"<NativeMultimodalCapabilityRegistry total={len(self)} " f"multimodal={mm_count}>"
 
 
 # ---------------------------------------------------------------------------
@@ -385,6 +375,7 @@ class NativeMultimodalCapabilityRegistry:
 
 class ProviderHealthStatus(str, Enum):
     """Health/availability status of a provider in the canonical supply state."""
+
     HEALTHY = "healthy"
     DEGRADED = "degraded"
     DOWN = "down"
@@ -393,6 +384,7 @@ class ProviderHealthStatus(str, Enum):
 
 class ProviderLocalityClass(str, Enum):
     """Local vs cloud classification."""
+
     LOCAL = "local"
     CLOUD = "cloud"
     HYBRID = "hybrid"
@@ -529,9 +521,7 @@ class CanonicalModelSupplyState:
     providers: Dict[str, ProviderSupplyRecord] = field(default_factory=dict)
 
     # Native multimodal capability registry
-    multimodal_registry: NativeMultimodalCapabilityRegistry = field(
-        default_factory=NativeMultimodalCapabilityRegistry
-    )
+    multimodal_registry: NativeMultimodalCapabilityRegistry = field(default_factory=NativeMultimodalCapabilityRegistry)
 
     # Derived routing hints (populated by builder)
     primary_provider_id: Optional[str] = None
@@ -559,14 +549,9 @@ class CanonicalModelSupplyState:
 
     def natively_multimodal_providers(self) -> List[ProviderSupplyRecord]:
         """Supply records for providers that are natively multimodal."""
-        return [
-            r for r in self.providers.values()
-            if r.capability and r.capability.is_natively_multimodal
-        ]
+        return [r for r in self.providers.values() if r.capability and r.capability.is_natively_multimodal]
 
-    def preferred_multimodal_provider_id(
-        self, required_modalities: Optional[List[str]] = None
-    ) -> Optional[str]:
+    def preferred_multimodal_provider_id(self, required_modalities: Optional[List[str]] = None) -> Optional[str]:
         """Return the preferred provider_id for native multimodal routing.
 
         Delegates to the capability registry for modality matching, then
@@ -593,9 +578,7 @@ class CanonicalModelSupplyState:
         """
         return {
             "snapshot_id": self.snapshot_id,
-            "providers": {
-                pid: record.to_dict() for pid, record in self.providers.items()
-            },
+            "providers": {pid: record.to_dict() for pid, record in self.providers.items()},
             "multimodal_registry": self.multimodal_registry.to_dict(),
             "primary_provider_id": self.primary_provider_id,
             "fallback_candidates": list(self.fallback_candidates),
@@ -688,6 +671,7 @@ def build_canonical_model_supply_state(
 
         # Locality classification
         from .topology_types import ProviderCategory
+
         _locality_map = {
             ProviderCategory.LOCAL: ProviderLocalityClass.LOCAL,
             ProviderCategory.ONEAPI: ProviderLocalityClass.CLOUD,
@@ -745,28 +729,18 @@ def build_canonical_model_supply_state(
         if primary is not None:
             state.primary_provider_id = primary.provider.provider_id
         support = getattr(topology_route_plan, "support_models", [])
-        state.support_model_candidates = [
-            n.provider.provider_id for n in support
-        ]
-        state.topology_route_reason = getattr(
-            topology_route_plan, "route_reason", ""
-        )
+        state.support_model_candidates = [n.provider.provider_id for n in support]
+        state.topology_route_reason = getattr(topology_route_plan, "route_reason", "")
     elif available_ids:
         # No topology plan: prefer first available natively multimodal provider,
         # then first available provider.
-        state.primary_provider_id = (
-            mm_ids[0] if mm_ids and mm_ids[0] in available_ids
-            else available_ids[0]
-        )
+        state.primary_provider_id = mm_ids[0] if mm_ids and mm_ids[0] in available_ids else available_ids[0]
 
     # ------------------------------------------------------------------
     # Fallback candidates
     # ------------------------------------------------------------------
     # All available providers except the primary are fallback candidates.
-    fallback: List[str] = [
-        pid for pid in available_ids
-        if pid != state.primary_provider_id
-    ]
+    fallback: List[str] = [pid for pid in available_ids if pid != state.primary_provider_id]
     state.fallback_candidates = fallback
 
     # ------------------------------------------------------------------
@@ -846,10 +820,9 @@ def build_canonical_model_supply_state_from_router(
 
         # Status normalisation
         from enum import Enum as _Enum
+
         status_raw = getattr(prov_config, "status", None)
-        status_val = (
-            status_raw.value if isinstance(status_raw, _Enum) else str(status_raw or "unknown")
-        )
+        status_val = status_raw.value if isinstance(status_raw, _Enum) else str(status_raw or "unknown")
         _health_map = {
             "healthy": ProviderHealthStatus.HEALTHY,
             "degraded": ProviderHealthStatus.DEGRADED,
@@ -886,10 +859,7 @@ def build_canonical_model_supply_state_from_router(
 
     # Primary: prefer first available natively multimodal, else first available
     if available_ids:
-        state.primary_provider_id = (
-            mm_ids[0] if mm_ids and mm_ids[0] in available_ids
-            else available_ids[0]
-        )
+        state.primary_provider_id = mm_ids[0] if mm_ids and mm_ids[0] in available_ids else available_ids[0]
 
     # Fallback candidates
     fallback = [pid for pid in available_ids if pid != state.primary_provider_id]

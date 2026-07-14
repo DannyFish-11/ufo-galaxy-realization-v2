@@ -51,6 +51,7 @@ Usage::
     summary = build_operator_safety_summary(snap)
     import json; json.dumps(snap.to_dict())  # always safe
 """
+
 from __future__ import annotations
 
 import logging
@@ -283,14 +284,10 @@ class ModalityPermissionRecord:
             permission_status=PermissionStatus.from_string(
                 str(data.get("permission_status", PermissionStatus.UNKNOWN.value))
             ),
-            trust_label=TrustLabel.from_string(
-                str(data.get("trust_label", TrustLabel.UNKNOWN.value))
-            ),
+            trust_label=TrustLabel.from_string(str(data.get("trust_label", TrustLabel.UNKNOWN.value))),
             is_active=bool(data.get("is_active", False)),
             is_sensitive=bool(data.get("is_sensitive", False)),
-            gating_reason=SafetyGatingReason.from_string(
-                str(data.get("gating_reason", SafetyGatingReason.NONE.value))
-            ),
+            gating_reason=SafetyGatingReason.from_string(str(data.get("gating_reason", SafetyGatingReason.NONE.value))),
             gating_reasons=list(data.get("gating_reasons") or []),
             assessed_at=float(data.get("assessed_at", time.time())),
         )
@@ -362,20 +359,14 @@ class ExecutionTrustAnnotation:
     def from_dict(cls, data: Dict[str, Any]) -> "ExecutionTrustAnnotation":
         return cls(
             execution_id=data.get("execution_id"),
-            risk_tier=ExecutionRiskTier.from_string(
-                str(data.get("risk_tier", ExecutionRiskTier.UNKNOWN.value))
-            ),
-            trust_label=TrustLabel.from_string(
-                str(data.get("trust_label", TrustLabel.UNKNOWN.value))
-            ),
+            risk_tier=ExecutionRiskTier.from_string(str(data.get("risk_tier", ExecutionRiskTier.UNKNOWN.value))),
+            trust_label=TrustLabel.from_string(str(data.get("trust_label", TrustLabel.UNKNOWN.value))),
             is_remote=bool(data.get("is_remote", False)),
             is_elevated=bool(data.get("is_elevated", False)),
             requires_confirmation=bool(data.get("requires_confirmation", False)),
             remote_execution_mode=data.get("remote_execution_mode"),
             eligibility_confirmed=bool(data.get("eligibility_confirmed", False)),
-            gating_reason=SafetyGatingReason.from_string(
-                str(data.get("gating_reason", SafetyGatingReason.NONE.value))
-            ),
+            gating_reason=SafetyGatingReason.from_string(str(data.get("gating_reason", SafetyGatingReason.NONE.value))),
             gating_reasons=list(data.get("gating_reasons") or []),
             annotation_id=str(data.get("annotation_id") or str(uuid.uuid4())),
             annotated_at=float(data.get("annotated_at", time.time())),
@@ -452,9 +443,7 @@ class PermissionSafetySnapshot:
             "any_permission_denied": self.any_permission_denied,
             "any_permission_missing": self.any_permission_missing,
             "execution_trust_annotation": (
-                self.execution_trust_annotation.to_dict()
-                if self.execution_trust_annotation is not None
-                else None
+                self.execution_trust_annotation.to_dict() if self.execution_trust_annotation is not None else None
             ),
             "overall_trust_label": self.overall_trust_label.value,
             "safety_gating_reasons": list(self.safety_gating_reasons),
@@ -471,22 +460,15 @@ class PermissionSafetySnapshot:
             trace_id=data.get("trace_id"),
             runtime_session_id=data.get("runtime_session_id"),
             modality_permissions=[
-                ModalityPermissionRecord.from_dict(r)
-                for r in (data.get("modality_permissions") or [])
+                ModalityPermissionRecord.from_dict(r) for r in (data.get("modality_permissions") or [])
             ],
-            active_sensitive_modalities=list(
-                data.get("active_sensitive_modalities") or []
-            ),
+            active_sensitive_modalities=list(data.get("active_sensitive_modalities") or []),
             any_permission_denied=bool(data.get("any_permission_denied", False)),
             any_permission_missing=bool(data.get("any_permission_missing", False)),
             execution_trust_annotation=(
-                ExecutionTrustAnnotation.from_dict(eta_raw)
-                if isinstance(eta_raw, dict)
-                else None
+                ExecutionTrustAnnotation.from_dict(eta_raw) if isinstance(eta_raw, dict) else None
             ),
-            overall_trust_label=TrustLabel.from_string(
-                str(data.get("overall_trust_label", TrustLabel.UNKNOWN.value))
-            ),
+            overall_trust_label=TrustLabel.from_string(str(data.get("overall_trust_label", TrustLabel.UNKNOWN.value))),
             safety_gating_reasons=list(data.get("safety_gating_reasons") or []),
             is_gated=bool(data.get("is_gated", False)),
             degradation_reasons=list(data.get("degradation_reasons") or []),
@@ -551,17 +533,11 @@ class OperatorSafetySummary:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "OperatorSafetySummary":
         return cls(
-            overall_trust_label=TrustLabel.from_string(
-                str(data.get("overall_trust_label", TrustLabel.UNKNOWN.value))
-            ),
-            active_sensitive_modalities=list(
-                data.get("active_sensitive_modalities") or []
-            ),
+            overall_trust_label=TrustLabel.from_string(str(data.get("overall_trust_label", TrustLabel.UNKNOWN.value))),
+            active_sensitive_modalities=list(data.get("active_sensitive_modalities") or []),
             any_permission_missing=bool(data.get("any_permission_missing", False)),
             is_gated=bool(data.get("is_gated", False)),
-            primary_gating_reason=str(
-                data.get("primary_gating_reason", SafetyGatingReason.NONE.value)
-            ),
+            primary_gating_reason=str(data.get("primary_gating_reason", SafetyGatingReason.NONE.value)),
             remote_execution_pending=bool(data.get("remote_execution_pending", False)),
             operator_message=str(data.get("operator_message", "")),
             derived_from_snapshot_id=data.get("derived_from_snapshot_id"),
@@ -577,9 +553,7 @@ class OperatorSafetySummary:
 #: because they involve active capture of audio, visual, or screen content that
 #: may contain private information.  Any modality in this set that is active and
 #: has granted permission is assigned :attr:`TrustLabel.SENSITIVE`.
-_SENSITIVE_MODALITIES: frozenset = frozenset(
-    {"microphone", "audio", "camera", "video", "screen", "screen_capture"}
-)
+_SENSITIVE_MODALITIES: frozenset = frozenset({"microphone", "audio", "camera", "video", "screen", "screen_capture"})
 
 #: SourceHealthStatus values that indicate degradation (string comparison to
 #: avoid a hard import dependency on perception_source_registry).
@@ -703,9 +677,7 @@ def _assess_execution_trust(
             is_elevated = True
 
     if isinstance(degraded_operation_envelope, dict):
-        severity = str(
-            degraded_operation_envelope.get("operator_severity", "")
-        ).lower()
+        severity = str(degraded_operation_envelope.get("operator_severity", "")).lower()
         if severity in ("critical", "high"):
             is_elevated = True
             gating_reasons.append(SafetyGatingReason.ELEVATED_RISK_UNREVIEWED.value)
@@ -728,11 +700,7 @@ def _assess_execution_trust(
     else:
         trust = TrustLabel.TRUSTED
 
-    primary_gating = (
-        SafetyGatingReason.from_string(gating_reasons[0])
-        if gating_reasons
-        else SafetyGatingReason.NONE
-    )
+    primary_gating = SafetyGatingReason.from_string(gating_reasons[0]) if gating_reasons else SafetyGatingReason.NONE
 
     requires_confirmation = is_elevated and is_remote
 
@@ -832,13 +800,9 @@ def build_permission_safety_snapshot(
 
         # Build per-source modality permission records from the source registry
         if isinstance(source_registry_snapshot, dict):
-            sources: List[Dict[str, Any]] = list(
-                source_registry_snapshot.get("sources") or []
-            )
+            sources: List[Dict[str, Any]] = list(source_registry_snapshot.get("sources") or [])
             for src in sources:
-                modality_name = str(
-                    src.get("modality") or src.get("source_type") or "unknown"
-                ).lower()
+                modality_name = str(src.get("modality") or src.get("source_type") or "unknown").lower()
                 health = str(src.get("health", "unknown")).lower()
                 is_active = bool(src.get("is_active", False))
                 source_id = src.get("source_id") or src.get("id")
@@ -853,9 +817,7 @@ def build_permission_safety_snapshot(
         # Supplement with active modalities from canonical perception if not
         # already covered by source registry records.
         if isinstance(canonical_perception, dict):
-            active_mods: List[str] = list(
-                canonical_perception.get("active_modalities") or []
-            )
+            active_mods: List[str] = list(canonical_perception.get("active_modalities") or [])
             covered = {r.modality for r in modality_records}
             for mod in active_mods:
                 mod_lower = mod.lower()
@@ -868,27 +830,17 @@ def build_permission_safety_snapshot(
                     modality_records.append(record)
 
             # Propagate perception degradation reasons
-            snap.degradation_reasons = list(
-                canonical_perception.get("degradation_reasons") or []
-            )
+            snap.degradation_reasons = list(canonical_perception.get("degradation_reasons") or [])
 
         snap.modality_permissions = modality_records
 
         # Active sensitive modalities
-        snap.active_sensitive_modalities = [
-            r.modality
-            for r in modality_records
-            if r.is_sensitive and r.is_active
-        ]
+        snap.active_sensitive_modalities = [r.modality for r in modality_records if r.is_sensitive and r.is_active]
 
         # Aggregate permission flags
-        snap.any_permission_denied = any(
-            r.permission_status == PermissionStatus.DENIED for r in modality_records
-        )
+        snap.any_permission_denied = any(r.permission_status == PermissionStatus.DENIED for r in modality_records)
         snap.any_permission_missing = any(
-            r.permission_status
-            in (PermissionStatus.DENIED, PermissionStatus.UNAVAILABLE)
-            for r in modality_records
+            r.permission_status in (PermissionStatus.DENIED, PermissionStatus.UNAVAILABLE) for r in modality_records
         )
 
         # Build execution trust annotation
@@ -950,9 +902,7 @@ def build_operator_safety_summary(
         Presentation-ready summary for the runtime shell.
     """
     primary_gating = (
-        snapshot.safety_gating_reasons[0]
-        if snapshot.safety_gating_reasons
-        else SafetyGatingReason.NONE.value
+        snapshot.safety_gating_reasons[0] if snapshot.safety_gating_reasons else SafetyGatingReason.NONE.value
     )
 
     remote_pending = (

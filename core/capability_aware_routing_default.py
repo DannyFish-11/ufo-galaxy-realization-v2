@@ -353,9 +353,7 @@ def apply_capability_aware_default(
     explicit_target_list = list(explicit_targets)
     routable_list: List[Any] = routable_executors or []
     routable_ids = {
-        (getattr(e, "node_id", None) if getattr(e, "node_id", None) else str(e))
-        for e in routable_list
-        if e is not None
+        (getattr(e, "node_id", None) if getattr(e, "node_id", None) else str(e)) for e in routable_list if e is not None
     }
     # Remove empty strings that may result from missing node_id
     routable_ids.discard("")
@@ -423,10 +421,7 @@ def apply_capability_aware_default(
                 inferred_capabilities=inferred,
                 applied_capabilities=applied_caps,
                 original_explicit_targets=explicit_target_list,
-                reason=(
-                    f"Explicit target(s) {confirmed} confirmed in capability "
-                    f"graph for caps={applied_caps}"
-                ),
+                reason=(f"Explicit target(s) {confirmed} confirmed in capability " f"graph for caps={applied_caps}"),
                 is_explicit_override=False,
             )
 
@@ -434,9 +429,7 @@ def apply_capability_aware_default(
         # Capability mismatch — this is a routing constraint, not a warning.
         # Try to find alternative capable devices in the graph.
         _explicit_set = set(explicit_target_list)
-        fallback_targets = sorted(
-            r for r in routable_ids if r not in _explicit_set
-        )
+        fallback_targets = sorted(r for r in routable_ids if r not in _explicit_set)
         if fallback_targets:
             logger.warning(
                 "[%s] capability-aware routing [REROUTE]: explicit target(s) %s "
@@ -522,8 +515,6 @@ def apply_capability_aware_default(
         inferred_capabilities=inferred,
         applied_capabilities=applied_caps,
         original_explicit_targets=[],
-        reason=(
-            f"Capability graph has no executors for caps={applied_caps}"
-        ),
+        reason=(f"Capability graph has no executors for caps={applied_caps}"),
         is_explicit_override=False,
     )

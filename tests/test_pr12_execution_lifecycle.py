@@ -136,10 +136,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-# ---------------------------------------------------------------------------
-# Import subjects
-# ---------------------------------------------------------------------------
-
 from core.schemas.execution_lifecycle import (
     ExecutionLifecycleState,
     LifecycleTransition,
@@ -158,6 +154,10 @@ from core.schemas.execution_plan import (
     plan_from_orchestration_decisions,
     plan_summary,
 )
+
+# ---------------------------------------------------------------------------
+# Import subjects
+# ---------------------------------------------------------------------------
 
 
 # ---------------------------------------------------------------------------
@@ -777,6 +777,7 @@ class TestOpenClawdFinalise:
         """Return a minimal OpenClawd instance for helper testing."""
         try:
             from core.openclawd import OpenClawd
+
             oc = object.__new__(OpenClawd)
             return oc
         except Exception:
@@ -847,11 +848,23 @@ class TestCommandRouterLifecycleStamps:
         """Return a CommandRouter instance with mocked executor."""
         try:
             from core.command_router import CommandRouter
+
             async def _mock_exec(*args, **kwargs):
-                return {"success": True, "result": "ok", "request_id": "r1",
-                        "task_id": "t1", "trace_id": "tr1", "command_id": "c1",
-                        "device_id": "dev1", "command": "test", "via": "mock",
-                        "error_code": None, "error_message": None, "latency_ms": 0.0}
+                return {
+                    "success": True,
+                    "result": "ok",
+                    "request_id": "r1",
+                    "task_id": "t1",
+                    "trace_id": "tr1",
+                    "command_id": "c1",
+                    "device_id": "dev1",
+                    "command": "test",
+                    "via": "mock",
+                    "error_code": None,
+                    "error_message": None,
+                    "latency_ms": 0.0,
+                }
+
             router = CommandRouter(executor=_mock_exec)
             return router
         except Exception:
@@ -864,6 +877,7 @@ class TestCommandRouterLifecycleStamps:
             pytest.skip("CommandRouter not available")
         try:
             from core.schemas.task_envelope import TaskEnvelope
+
             env = TaskEnvelope(
                 task_id="t1",
                 trace_id="tr1",
@@ -898,6 +912,7 @@ class TestNATSBusLifecyclePropagation:
     def _get_nats_bus(self):
         try:
             from core.nats_bus import NATSBus
+
             bus = object.__new__(NATSBus)
             return bus
         except Exception:
@@ -1018,9 +1033,16 @@ class TestBackwardCompatibility:
         )
         d = step.to_dict()
         for key in (
-            "step_id", "step_type", "target_devices", "remote_execution_mode",
-            "required_capabilities", "authority_origin", "timeout_ms", "depends_on",
-            "orchestration_plan_id", "metadata",
+            "step_id",
+            "step_type",
+            "target_devices",
+            "remote_execution_mode",
+            "required_capabilities",
+            "authority_origin",
+            "timeout_ms",
+            "depends_on",
+            "orchestration_plan_id",
+            "metadata",
         ):
             assert key in d, f"Missing classic key: {key}"
 
@@ -1029,8 +1051,14 @@ class TestBackwardCompatibility:
         plan = build_execution_plan(execution_path="local", delegation_point="local")
         d = plan.to_dict()
         for key in (
-            "plan_id", "trace_id", "session_id", "execution_path",
-            "delegation_point", "steps", "created_at", "metadata",
+            "plan_id",
+            "trace_id",
+            "session_id",
+            "execution_path",
+            "delegation_point",
+            "steps",
+            "created_at",
+            "metadata",
         ):
             assert key in d, f"Missing classic key: {key}"
 
@@ -1039,18 +1067,34 @@ class TestBackwardCompatibility:
         plan = build_execution_plan(execution_path="local", delegation_point="local")
         s = plan_summary(plan)
         for key in (
-            "plan_id", "execution_path", "delegation_point", "step_count",
-            "primary_step_type", "is_local_only", "is_remote",
-            "is_orchestration", "is_observe", "trace_id", "session_id",
+            "plan_id",
+            "execution_path",
+            "delegation_point",
+            "step_count",
+            "primary_step_type",
+            "is_local_only",
+            "is_remote",
+            "is_orchestration",
+            "is_observe",
+            "trace_id",
+            "session_id",
         ):
             assert key in s, f"Missing classic summary key: {key}"
 
     def test_plan_summary_none_classic_keys_present(self):
         s = plan_summary(None)
         for key in (
-            "plan_id", "execution_path", "delegation_point", "step_count",
-            "primary_step_type", "is_local_only", "is_remote",
-            "is_orchestration", "is_observe", "trace_id", "session_id",
+            "plan_id",
+            "execution_path",
+            "delegation_point",
+            "step_count",
+            "primary_step_type",
+            "is_local_only",
+            "is_remote",
+            "is_orchestration",
+            "is_observe",
+            "trace_id",
+            "session_id",
         ):
             assert key in s
 
@@ -1144,10 +1188,12 @@ class TestDiagnosticsInspectability:
             if next_state == current:
                 # Arrived at terminal or unknown
                 next_state = advance_lifecycle(current, success=True)
-            trail.append(LifecycleTransition.make(
-                to_state=next_state,
-                from_state=current,
-            ))
+            trail.append(
+                LifecycleTransition.make(
+                    to_state=next_state,
+                    from_state=current,
+                )
+            )
             states.append(next_state)
             current = next_state
 

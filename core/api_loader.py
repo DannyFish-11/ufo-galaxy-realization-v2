@@ -18,7 +18,8 @@ API 端点:
 """
 
 import logging
-from typing import Dict, List, Optional, Any
+from typing import Any, Dict, List, Optional
+
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
@@ -32,8 +33,10 @@ router = APIRouter()
 # MCP API
 # ============================================================================
 
+
 class MCPLoadRequest(BaseModel):
     """MCP 加载请求"""
+
     name: str = Field(..., description="服务器名称 (用户自定义)")
     command: str = Field(..., description="启动命令")
     args: List[str] = Field(default=[], description="命令行参数")
@@ -44,11 +47,13 @@ class MCPLoadRequest(BaseModel):
 
 class MCPUnloadRequest(BaseModel):
     """MCP 卸载请求"""
+
     server_id: str
 
 
 class MCPCallRequest(BaseModel):
     """MCP 工具调用请求"""
+
     tool_name: str
     arguments: Dict[str, Any] = {}
 
@@ -114,11 +119,13 @@ async def mcp_list():
 
         servers = mcp_loader.list_servers()
 
-        return JSONResponse({
-            "success": True,
-            "servers": servers,
-            "count": len(servers),
-        })
+        return JSONResponse(
+            {
+                "success": True,
+                "servers": servers,
+                "count": len(servers),
+            }
+        )
 
     except Exception as e:
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
@@ -135,10 +142,12 @@ async def mcp_get(server_id: str):
         if not server:
             return JSONResponse({"success": False, "error": "服务器不存在"}, status_code=404)
 
-        return JSONResponse({
-            "success": True,
-            "server": server,
-        })
+        return JSONResponse(
+            {
+                "success": True,
+                "server": server,
+            }
+        )
 
     except Exception as e:
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
@@ -152,12 +161,14 @@ async def mcp_tools(server_id: str):
 
         tools = await mcp_loader.list_tools(server_id)
 
-        return JSONResponse({
-            "success": True,
-            "server_id": server_id,
-            "tools": tools,
-            "count": len(tools),
-        })
+        return JSONResponse(
+            {
+                "success": True,
+                "server_id": server_id,
+                "tools": tools,
+                "count": len(tools),
+            }
+        )
 
     except Exception as e:
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
@@ -186,19 +197,23 @@ async def mcp_call(server_id: str, req: MCPCallRequest):
 # Skill API
 # ============================================================================
 
+
 class SkillLoadRequest(BaseModel):
     """技能加载请求"""
+
     path: str = Field(..., description="技能路径 (包含 skill.json 的目录)")
     skill_id: Optional[str] = Field(default=None, description="自定义技能 ID")
 
 
 class SkillUnloadRequest(BaseModel):
     """技能卸载请求"""
+
     skill_id: str
 
 
 class SkillExecuteRequest(BaseModel):
     """技能执行请求"""
+
     params: Dict[str, Any] = {}
 
 
@@ -290,11 +305,13 @@ async def skill_list(tag: str = None):
 
         skills = skill_loader.list_skills(tag=tag)
 
-        return JSONResponse({
-            "success": True,
-            "skills": skills,
-            "count": len(skills),
-        })
+        return JSONResponse(
+            {
+                "success": True,
+                "skills": skills,
+                "count": len(skills),
+            }
+        )
 
     except Exception as e:
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
@@ -311,10 +328,12 @@ async def skill_get(skill_id: str):
         if not skill:
             return JSONResponse({"success": False, "error": "技能不存在"}, status_code=404)
 
-        return JSONResponse({
-            "success": True,
-            "skill": skill,
-        })
+        return JSONResponse(
+            {
+                "success": True,
+                "skill": skill,
+            }
+        )
 
     except Exception as e:
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
@@ -343,12 +362,14 @@ async def skill_search(query: str):
 
         results = skill_loader.search(query)
 
-        return JSONResponse({
-            "success": True,
-            "query": query,
-            "results": results,
-            "count": len(results),
-        })
+        return JSONResponse(
+            {
+                "success": True,
+                "query": query,
+                "results": results,
+                "count": len(results),
+            }
+        )
 
     except Exception as e:
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
@@ -362,10 +383,12 @@ async def skill_stats():
 
         stats = skill_loader.get_stats()
 
-        return JSONResponse({
-            "success": True,
-            "stats": stats,
-        })
+        return JSONResponse(
+            {
+                "success": True,
+                "stats": stats,
+            }
+        )
 
     except Exception as e:
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)

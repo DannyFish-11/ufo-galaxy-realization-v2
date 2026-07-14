@@ -60,8 +60,8 @@ AT. Policy sentinel count is at least 7.
 from __future__ import annotations
 
 import json
-import sys
 import os
+import sys
 from typing import Any, Dict
 
 import pytest
@@ -72,26 +72,25 @@ if _PROJECT_ROOT not in sys.path:
 
 import core.delegated_flow_readiness_gate as _gate_mod
 from core.delegated_flow_readiness_gate import (
-    DELEGATED_FLOW_READINESS_GATE_AUTHORITY,
-    DELEGATED_FLOW_READINESS_GATE_PR9V2_SENTINEL,
-    READINESS_GATE_IS_UNIFIED_JUDGMENT_ENTRY_POINT_POLICY,
-    READINESS_GATE_IS_PROJECTION_ONLY_POLICY,
-    READINESS_GATE_FAIL_CONSERVATIVE_ON_MISSING_SIGNAL_POLICY,
-    READINESS_GAP_MUST_BE_OPERATOR_VISIBLE_POLICY,
-    RELEASE_VERDICT_IS_STABLE_ARTIFACT_POLICY,
     ALL_FIVE_DIMENSIONS_REQUIRED_FOR_RELEASE_POLICY,
     ANDROID_V2_CONTRACT_SIGNAL_ABSENCE_IS_READINESS_GAP_POLICY,
-    ReadinessDimension,
-    DimensionReadinessStatus,
+    DELEGATED_FLOW_READINESS_GATE_AUTHORITY,
+    DELEGATED_FLOW_READINESS_GATE_PR9V2_SENTINEL,
+    READINESS_GAP_MUST_BE_OPERATOR_VISIBLE_POLICY,
+    READINESS_GATE_FAIL_CONSERVATIVE_ON_MISSING_SIGNAL_POLICY,
+    READINESS_GATE_IS_PROJECTION_ONLY_POLICY,
+    READINESS_GATE_IS_UNIFIED_JUDGMENT_ENTRY_POINT_POLICY,
+    RELEASE_VERDICT_IS_STABLE_ARTIFACT_POLICY,
+    DelegatedFlowReadinessGate,
+    DelegatedFlowReadinessReport,
     DelegatedFlowReadinessVerdict,
     DimensionReadinessResult,
-    DelegatedFlowReadinessReport,
-    DelegatedFlowReadinessGate,
+    DimensionReadinessStatus,
+    ReadinessDimension,
     evaluate_delegated_flow_readiness,
     get_readiness_gate,
     reset_readiness_gate,
 )
-
 
 # ===========================================================================
 # Fixtures
@@ -279,9 +278,7 @@ class TestDelegatedFlowReadinessVerdict:
 
     def test_from_string_missing_truth(self):
         assert (
-            DelegatedFlowReadinessVerdict.from_string(
-                "not_ready_due_to_missing_truth_alignment"
-            )
+            DelegatedFlowReadinessVerdict.from_string("not_ready_due_to_missing_truth_alignment")
             == DelegatedFlowReadinessVerdict.not_ready_due_to_missing_truth_alignment
         )
 
@@ -733,9 +730,7 @@ class TestCollectGaps:
 
 class TestBuildSummary:
     def test_ready_summary_contains_ready_for_release(self):
-        summary = DelegatedFlowReadinessGate._build_summary(
-            DelegatedFlowReadinessVerdict.ready_for_release, []
-        )
+        summary = DelegatedFlowReadinessGate._build_summary(DelegatedFlowReadinessVerdict.ready_for_release, [])
         assert "READY FOR RELEASE" in summary.upper()
 
     def test_not_ready_summary_contains_not_ready(self):
@@ -858,10 +853,8 @@ class TestPolicySentinelCount:
     def test_at_least_7_policy_sentinels(self):
         """The module defines at least 7 policy sentinels."""
         sentinel_names = [
-            name for name in dir(_gate_mod)
-            if name.endswith("_POLICY") and isinstance(getattr(_gate_mod, name), str)
+            name for name in dir(_gate_mod) if name.endswith("_POLICY") and isinstance(getattr(_gate_mod, name), str)
         ]
         assert len(sentinel_names) >= 7, (
-            f"Expected at least 7 policy sentinels, found {len(sentinel_names)}: "
-            f"{sentinel_names}"
+            f"Expected at least 7 policy sentinels, found {len(sentinel_names)}: " f"{sentinel_names}"
         )

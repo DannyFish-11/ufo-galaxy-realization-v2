@@ -130,9 +130,7 @@ ONEAPI_PROVIDER_CATEGORY_VALUE: str = "oneapi"
 #: Cross-reference: the canonical routing authority module.
 #: OneAPI participates in routing via ``TopologyRouter``; it is *not* a
 #: separate routing authority.
-_ROUTING_AUTHORITY_REF: str = (
-    "core.model_topology.topology_router.TopologyRouter"
-)
+_ROUTING_AUTHORITY_REF: str = "core.model_topology.topology_router.TopologyRouter"
 
 
 # ---------------------------------------------------------------------------
@@ -221,9 +219,7 @@ class OneAPIIntegrationEntry:
 #: Semantics").  Guardrail tests iterate over this registry to ensure that
 #: all required dimensions are documented and that the sentinel/description
 #: strings are internally consistent.
-ONEAPI_INTEGRATION_REGISTRY: Dict[
-    OneAPIIntegrationDimension, OneAPIIntegrationEntry
-] = {
+ONEAPI_INTEGRATION_REGISTRY: Dict[OneAPIIntegrationDimension, OneAPIIntegrationEntry] = {
     OneAPIIntegrationDimension.PROVIDER_SOURCE_AVAILABILITY: OneAPIIntegrationEntry(
         dimension=OneAPIIntegrationDimension.PROVIDER_SOURCE_AVAILABILITY,
         description=(
@@ -406,9 +402,7 @@ def build_oneapi_integration_summary() -> OneAPIIntegrationSnapshot:
         system_layer=ONEAPI_SYSTEM_LAYER,
         node_path=ONEAPI_NODE_PATH,
         provider_category_value=ONEAPI_PROVIDER_CATEGORY_VALUE,
-        registered_dimensions=frozenset(
-            dim.value for dim in ONEAPI_INTEGRATION_REGISTRY
-        ),
+        registered_dimensions=frozenset(dim.value for dim in ONEAPI_INTEGRATION_REGISTRY),
         routing_authority_ref=_ROUTING_AUTHORITY_REF,
     )
 
@@ -466,14 +460,10 @@ def build_oneapi_status_summary(
 # Singleton accessor / test helpers
 # ---------------------------------------------------------------------------
 
-_REGISTRY_INSTANCE: Optional[
-    Dict[OneAPIIntegrationDimension, OneAPIIntegrationEntry]
-] = None
+_REGISTRY_INSTANCE: Optional[Dict[OneAPIIntegrationDimension, OneAPIIntegrationEntry]] = None
 
 
-def get_oneapi_integration_registry() -> (
-    Dict[OneAPIIntegrationDimension, OneAPIIntegrationEntry]
-):
+def get_oneapi_integration_registry() -> Dict[OneAPIIntegrationDimension, OneAPIIntegrationEntry]:
     """Return the singleton integration registry.
 
     The first call returns a reference to :data:`ONEAPI_INTEGRATION_REGISTRY`.

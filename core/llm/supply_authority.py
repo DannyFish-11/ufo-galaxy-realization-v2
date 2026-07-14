@@ -461,9 +461,7 @@ class LLMSupplyAuthority:
             provider_records=provider_records,
         )
 
-        result.ordering_basis = self._describe_ordering_basis(
-            requested_provider, supply_dict
-        )
+        result.ordering_basis = self._describe_ordering_basis(requested_provider, supply_dict)
 
         # Walk the ordered candidate list; try primary then fallbacks
         self._walk_candidates(
@@ -475,8 +473,7 @@ class LLMSupplyAuthority:
         )
 
         logger.debug(
-            "LLMSupplyAuthority.resolve_supply: requested=%s/%s → supplied=%s/%s "
-            "fallback=%s satisfied=%s",
+            "LLMSupplyAuthority.resolve_supply: requested=%s/%s → supplied=%s/%s " "fallback=%s satisfied=%s",
             requested_provider,
             requested_model,
             result.supplied_provider,
@@ -515,15 +512,9 @@ class LLMSupplyAuthority:
                     providers_dict[pid] = {"provider_id": pid}
         return {
             "providers": providers_dict,
-            "available_provider_ids": list(
-                getattr(supply_state, "available_provider_ids", [])
-            ),
-            "unavailable_provider_ids": list(
-                getattr(supply_state, "unavailable_provider_ids", [])
-            ),
-            "fallback_candidates": list(
-                getattr(supply_state, "fallback_candidates", [])
-            ),
+            "available_provider_ids": list(getattr(supply_state, "available_provider_ids", [])),
+            "unavailable_provider_ids": list(getattr(supply_state, "unavailable_provider_ids", [])),
+            "fallback_candidates": list(getattr(supply_state, "fallback_candidates", [])),
             "primary_provider_id": getattr(supply_state, "primary_provider_id", None),
         }
 
@@ -565,7 +556,8 @@ class LLMSupplyAuthority:
         # 4. Any providers from the records that are not DOWN (final safety net)
         for pid, rec in provider_records.items():
             health = str(
-                rec.get("health_status", "unknown") if isinstance(rec, dict)
+                rec.get("health_status", "unknown")
+                if isinstance(rec, dict)
                 else getattr(rec, "health_status", "unknown")
             ).lower()
             if health not in ("down", "unavailable"):
@@ -609,11 +601,7 @@ class LLMSupplyAuthority:
             # it cannot be canonically supplied — skip it.
             if rec is None:
                 skip_reason = "not_in_supply_records"
-                legality = (
-                    FallbackLegality.PRIMARY_UNAVAILABLE
-                    if is_primary
-                    else FallbackLegality.NO_SUPPLY_AVAILABLE
-                )
+                legality = FallbackLegality.PRIMARY_UNAVAILABLE if is_primary else FallbackLegality.NO_SUPPLY_AVAILABLE
                 result.resolution_trace.append(
                     SupplyResolutionStep(
                         provider=pid,
@@ -631,11 +619,7 @@ class LLMSupplyAuthority:
 
             if health == "down":
                 skip_reason = "provider_down"
-                legality = (
-                    FallbackLegality.PRIMARY_UNAVAILABLE
-                    if is_primary
-                    else FallbackLegality.NO_SUPPLY_AVAILABLE
-                )
+                legality = FallbackLegality.PRIMARY_UNAVAILABLE if is_primary else FallbackLegality.NO_SUPPLY_AVAILABLE
                 result.resolution_trace.append(
                     SupplyResolutionStep(
                         provider=pid,
@@ -736,9 +720,7 @@ class LLMSupplyAuthority:
         if rec is None:
             return "unknown"
         health_raw = (
-            rec.get("health_status", "unknown")
-            if isinstance(rec, dict)
-            else getattr(rec, "health_status", "unknown")
+            rec.get("health_status", "unknown") if isinstance(rec, dict) else getattr(rec, "health_status", "unknown")
         )
         if hasattr(health_raw, "value"):
             return health_raw.value.lower()
@@ -761,18 +743,14 @@ class LLMSupplyAuthority:
             return True
         if rec is None:
             return False
-        cap = (
-            rec.get("capability") if isinstance(rec, dict)
-            else getattr(rec, "capability", None)
-        )
+        cap = rec.get("capability") if isinstance(rec, dict) else getattr(rec, "capability", None)
         if cap is None:
             # No capability record — can't verify; reject if capabilities required
             return False
         # Check tool_use
         if "tool_use" in self._policy.required_capabilities:
             supports_tools = (
-                cap.get("supports_tools", False) if isinstance(cap, dict)
-                else getattr(cap, "supports_tools", False)
+                cap.get("supports_tools", False) if isinstance(cap, dict) else getattr(cap, "supports_tools", False)
             )
             if not supports_tools:
                 return False
@@ -781,7 +759,8 @@ class LLMSupplyAuthority:
         required_mm = set(self._policy.required_capabilities) & multimodal_caps
         if required_mm:
             is_mm = (
-                cap.get("is_natively_multimodal", False) if isinstance(cap, dict)
+                cap.get("is_natively_multimodal", False)
+                if isinstance(cap, dict)
                 else getattr(cap, "is_natively_multimodal", False)
             )
             if not is_mm:
@@ -804,9 +783,7 @@ class LLMSupplyAuthority:
             return FallbackLegality.NONE
 
         # Check whether the primary was ever tried and skipped
-        primary_steps = [
-            s for s in result.resolution_trace if s.provider == requested_provider
-        ]
+        primary_steps = [s for s in result.resolution_trace if s.provider == requested_provider]
         if primary_steps:
             for step in primary_steps:
                 if step.skipped:

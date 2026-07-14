@@ -380,9 +380,7 @@ class CompatLegacyBlockingRecord:
     """
 
     record_id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
-    decision: CompatLegacyBlockingDecision = (
-        CompatLegacyBlockingDecision.canonical_path_confirmed
-    )
+    decision: CompatLegacyBlockingDecision = CompatLegacyBlockingDecision.canonical_path_confirmed
     outcome: CompatLegacyBlockingOutcome = CompatLegacyBlockingOutcome.allowed
     path_kind: CompatLegacyPathKind = CompatLegacyPathKind.observation_candidate
     calling_site: str = ""
@@ -493,6 +491,7 @@ class CompatLegacyBlockingSnapshot:
 # ===========================================================================
 # Observation whitelist
 # ===========================================================================
+
 
 @dataclass
 class _ObservationWhitelistEntry:
@@ -675,10 +674,7 @@ class CompatLegacyPathBlockingEnforcer:
                 calling_site=calling_site,
                 compat_path=compat_path,
                 canonical_path=canonical_path,
-                rationale=(
-                    "No compat/legacy influence detected.  "
-                    "Canonical path is the sole active authority."
-                ),
+                rationale=("No compat/legacy influence detected.  " "Canonical path is the sole active authority."),
                 influence_id=influence_id,
                 operator_note=operator_note,
             )
@@ -724,9 +720,7 @@ class CompatLegacyPathBlockingEnforcer:
 
         if path_kind == CompatLegacyPathKind.compat_truth:
             return CompatLegacyBlockingRecord(
-                decision=(
-                    CompatLegacyBlockingDecision.block_due_to_compat_truth_influence
-                ),
+                decision=(CompatLegacyBlockingDecision.block_due_to_compat_truth_influence),
                 outcome=CompatLegacyBlockingOutcome.blocked,
                 path_kind=path_kind,
                 calling_site=calling_site,
@@ -770,9 +764,7 @@ class CompatLegacyPathBlockingEnforcer:
 
         # ── observation_candidate — ambiguous; quarantine ───────────────
         return CompatLegacyBlockingRecord(
-            decision=(
-                CompatLegacyBlockingDecision.quarantine_due_to_ambiguous_contract
-            ),
+            decision=(CompatLegacyBlockingDecision.quarantine_due_to_ambiguous_contract),
             outcome=CompatLegacyBlockingOutcome.quarantined,
             path_kind=path_kind,
             calling_site=calling_site,
@@ -802,24 +794,21 @@ class CompatLegacyPathBlockingEnforcer:
         if record.outcome == CompatLegacyBlockingOutcome.allowed:
             if record.decision == CompatLegacyBlockingDecision.canonical_path_confirmed:
                 logger.debug(
-                    "COMPAT_BLOCKING_GATE [%s] canonical_path_confirmed | "
-                    "site=%s canonical=%s",
+                    "COMPAT_BLOCKING_GATE [%s] canonical_path_confirmed | " "site=%s canonical=%s",
                     record.record_id,
                     record.calling_site,
                     record.canonical_path,
                 )
             else:
                 logger.info(
-                    "COMPAT_BLOCKING_GATE [%s] allow_for_observation_only | "
-                    "site=%s compat=%s",
+                    "COMPAT_BLOCKING_GATE [%s] allow_for_observation_only | " "site=%s compat=%s",
                     record.record_id,
                     record.calling_site,
                     record.compat_path,
                 )
         elif record.outcome == CompatLegacyBlockingOutcome.blocked:
             logger.error(
-                "COMPAT_BLOCKING_GATE [%s] BLOCKED decision=%s | "
-                "site=%s compat=%s canonical=%s | %s",
+                "COMPAT_BLOCKING_GATE [%s] BLOCKED decision=%s | " "site=%s compat=%s canonical=%s | %s",
                 record.record_id,
                 record.decision.value,
                 record.calling_site,
@@ -829,8 +818,7 @@ class CompatLegacyPathBlockingEnforcer:
             )
         else:
             logger.warning(
-                "COMPAT_BLOCKING_GATE [%s] QUARANTINED | "
-                "site=%s compat=%s | %s",
+                "COMPAT_BLOCKING_GATE [%s] QUARANTINED | " "site=%s compat=%s | %s",
                 record.record_id,
                 record.calling_site,
                 record.compat_path,
@@ -844,41 +832,22 @@ class CompatLegacyPathBlockingEnforcer:
     def snapshot(self, recent_n: int = 20) -> CompatLegacyBlockingSnapshot:
         """Build a :class:`CompatLegacyBlockingSnapshot` from current history."""
         history = self._decision_history
-        canonical_count = sum(
-            1 for r in history
-            if r.decision == CompatLegacyBlockingDecision.canonical_path_confirmed
-        )
-        obs_count = sum(
-            1 for r in history
-            if r.decision == CompatLegacyBlockingDecision.allow_for_observation_only
-        )
+        canonical_count = sum(1 for r in history if r.decision == CompatLegacyBlockingDecision.canonical_path_confirmed)
+        obs_count = sum(1 for r in history if r.decision == CompatLegacyBlockingDecision.allow_for_observation_only)
         block_dispatch_count = sum(
-            1 for r in history
-            if r.decision == CompatLegacyBlockingDecision.block_due_to_legacy_dispatch
+            1 for r in history if r.decision == CompatLegacyBlockingDecision.block_due_to_legacy_dispatch
         )
         block_truth_count = sum(
-            1 for r in history
-            if r.decision
-            == CompatLegacyBlockingDecision.block_due_to_compat_truth_influence
+            1 for r in history if r.decision == CompatLegacyBlockingDecision.block_due_to_compat_truth_influence
         )
         quarantine_count = sum(
-            1 for r in history
-            if r.decision
-            == CompatLegacyBlockingDecision.quarantine_due_to_ambiguous_contract
+            1 for r in history if r.decision == CompatLegacyBlockingDecision.quarantine_due_to_ambiguous_contract
         )
         total = len(history)
-        accounted = (
-            canonical_count
-            + obs_count
-            + block_dispatch_count
-            + block_truth_count
-            + quarantine_count
-        )
+        accounted = canonical_count + obs_count + block_dispatch_count + block_truth_count + quarantine_count
         invisible = total - accounted  # should always be 0
         healthy = quarantine_count == 0 and invisible == 0
-        recent = [
-            r.to_dict() for r in history[-recent_n:]
-        ]
+        recent = [r.to_dict() for r in history[-recent_n:]]
         return CompatLegacyBlockingSnapshot(
             total_evaluations=total,
             canonical_confirmed_count=canonical_count,

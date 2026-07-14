@@ -101,21 +101,15 @@ PR_NEXT_CONVERGENCE_ANCHOR: str = "993P2"
 ANDROID_AUDITED_REF: str = "478e3f8f3cd3cb85b5a20999c9fca22a0f44ef8d"
 
 # Android 代码锚点
-ANDROID_ANCHOR_WS_CLIENT = (
-    "ufo-galaxy-android/app/src/main/java/com/ufo/galaxy/network/GalaxyWebSocketClient.kt"
-)
+ANDROID_ANCHOR_WS_CLIENT = "ufo-galaxy-android/app/src/main/java/com/ufo/galaxy/network/GalaxyWebSocketClient.kt"
 ANDROID_ANCHOR_AUTONOMOUS_PIPELINE = (
     "ufo-galaxy-android/app/src/main/java/com/ufo/galaxy/agent/AutonomousExecutionPipeline.kt"
 )
 ANDROID_ANCHOR_MESH_CONTRACT = (
     "ufo-galaxy-android/app/src/main/java/com/ufo/galaxy/runtime/AndroidMeshParticipationContract.kt"
 )
-ANDROID_ANCHOR_CONTINUITY = (
-    "ufo-galaxy-android/app/src/main/java/com/ufo/galaxy/session/DurableParticipantIdentity.kt"
-)
-ANDROID_ANCHOR_MODE_GATE = (
-    "ufo-galaxy-android/app/src/main/java/com/ufo/galaxy/runtime/LocalExecutionModeGate.kt"
-)
+ANDROID_ANCHOR_CONTINUITY = "ufo-galaxy-android/app/src/main/java/com/ufo/galaxy/session/DurableParticipantIdentity.kt"
+ANDROID_ANCHOR_MODE_GATE = "ufo-galaxy-android/app/src/main/java/com/ufo/galaxy/runtime/LocalExecutionModeGate.kt"
 
 # ---------------------------------------------------------------------------
 # 枚举
@@ -294,9 +288,7 @@ class ClosureGovernancePropagationAudit:
     - operator board reasoning 能否追溯到具体的 Android 参与证据？
     """
 
-    propagation_tier: ClosureGovernancePropagationTier = (
-        ClosureGovernancePropagationTier.PARTIALLY_PROPAGATED
-    )
+    propagation_tier: ClosureGovernancePropagationTier = ClosureGovernancePropagationTier.PARTIALLY_PROPAGATED
 
     # result acceptance 层
     android_truth_in_result_acceptance: bool = False
@@ -418,20 +410,12 @@ class ConvergenceClosureAuditRecord:
             "convergence_anchor": self.convergence_anchor,
             "android_audited_ref": self.android_audited_ref,
             "generated_at": self.generated_at,
-            "operability_audit": (
-                self.operability_audit.to_dict() if self.operability_audit else None
-            ),
-            "three_state_audit": (
-                self.three_state_audit.to_dict() if self.three_state_audit else None
-            ),
+            "operability_audit": (self.operability_audit.to_dict() if self.operability_audit else None),
+            "three_state_audit": (self.three_state_audit.to_dict() if self.three_state_audit else None),
             "closure_governance_audit": (
-                self.closure_governance_audit.to_dict()
-                if self.closure_governance_audit
-                else None
+                self.closure_governance_audit.to_dict() if self.closure_governance_audit else None
             ),
-            "operator_board_audit": (
-                self.operator_board_audit.to_dict() if self.operator_board_audit else None
-            ),
+            "operator_board_audit": (self.operator_board_audit.to_dict() if self.operator_board_audit else None),
             "what_is_already_working_zh": list(self.what_is_already_working_zh),
             "what_this_pr_fixes_zh": list(self.what_this_pr_fixes_zh),
             "what_still_needs_android_side_zh": list(self.what_still_needs_android_side_zh),
@@ -454,9 +438,7 @@ def _module_exists(module_path: str) -> bool:
     rel = module_path.replace(".", os.sep) + ".py"
     rel_pkg = module_path.replace(".", os.sep) + os.sep + "__init__.py"
     return any(
-        os.path.isfile(os.path.join(base, rel))
-        or os.path.isfile(os.path.join(base, rel_pkg))
-        for base in sys.path
+        os.path.isfile(os.path.join(base, rel)) or os.path.isfile(os.path.join(base, rel_pkg)) for base in sys.path
     )
 
 
@@ -490,66 +472,42 @@ def _collect_probes() -> Dict[str, bool]:
     p: Dict[str, bool] = {}
 
     # -- 可运行性：入口模块 --
-    p["main_entry"] = (
-        os.path.isfile(
-            os.path.join(
-                os.path.dirname(os.path.dirname(__file__)), "main.py"
-            )
-        )
-        or _module_exists("main")
-    )
+    p["main_entry"] = os.path.isfile(
+        os.path.join(os.path.dirname(os.path.dirname(__file__)), "main.py")
+    ) or _module_exists("main")
     p["openclawd"] = _module_exists("core.openclawd")
     p["unified_launcher"] = os.path.isfile(
         os.path.join(os.path.dirname(os.path.dirname(__file__)), "unified_launcher.py")
     )
-    p["requirements_txt"] = os.path.isfile(
-        os.path.join(os.path.dirname(os.path.dirname(__file__)), "requirements.txt")
-    )
-    p["env_example"] = (
-        os.path.isfile(
-            os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env.example")
-        )
-        or os.path.isfile(
-            os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env")
-        )
-    )
+    p["requirements_txt"] = os.path.isfile(os.path.join(os.path.dirname(os.path.dirname(__file__)), "requirements.txt"))
+    p["env_example"] = os.path.isfile(
+        os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env.example")
+    ) or os.path.isfile(os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env"))
     p["health_route"] = _source_contains("core.api_routes", "/api/v1/health")
     p["chat_route"] = _module_exists("core.routes.chat")
 
     # -- 三态显化层 --
     p["unified_panel_aggregation"] = _module_exists("core.unified_panel_aggregation")
-    p["panel_has_tri_state_phase"] = _source_contains(
-        "core.unified_panel_aggregation", "tri_state_phase"
-    )
-    p["panel_has_presence_tristate"] = _source_contains(
-        "core.unified_panel_aggregation", "presence_tristate"
-    )
-    p["continuum_state"] = _module_exists("core.continuum.types") or _module_exists(
-        "core.continuum"
-    )
+    p["panel_has_tri_state_phase"] = _source_contains("core.unified_panel_aggregation", "tri_state_phase")
+    p["panel_has_presence_tristate"] = _source_contains("core.unified_panel_aggregation", "presence_tristate")
+    p["continuum_state"] = _module_exists("core.continuum.types") or _module_exists("core.continuum")
     p["desktop_presence_runtime"] = _module_exists("core.desktop_presence_runtime")
 
     # -- Android 参与三态（通过 participation tier） --
     p["android_network_participation"] = _module_exists("core.android_network_participation")
-    p["participation_has_7_tiers"] = _source_contains(
-        "core.android_network_participation", "distributed_participant"
-    )
+    p["participation_has_7_tiers"] = _source_contains("core.android_network_participation", "distributed_participant")
     p["panel_has_android_participation_verdict"] = _source_contains(
         "core.unified_panel_aggregation", "android_participation_verdict"
     )
 
     # -- result acceptance 层 --
     p["result_truth_acceptance_gate"] = _module_exists("core.result_truth_acceptance_gate")
-    p["acceptance_gate_has_quarantine"] = _source_contains(
-        "core.result_truth_acceptance_gate", "quarantine"
-    )
+    p["acceptance_gate_has_quarantine"] = _source_contains("core.result_truth_acceptance_gate", "quarantine")
     p["acceptance_gate_has_android_proof_class"] = _source_contains(
         "core.result_truth_acceptance_gate", "android_proof_class"
     )
     p["unified_result_ingress"] = _module_exists("core.unified_result_ingress")
-    p["result_ingress_blocks_closed_on_quarantine"] = _source_contains(
-        "core.unified_result_ingress", "is_fully_closed"
-    )
+    p["result_ingress_blocks_closed_on_quarantine"] = _source_contains("core.unified_result_ingress", "is_fully_closed")
 
     # -- closure 层 --
     p["canonical_completion_ingress"] = _module_exists("core.canonical_completion_ingress")
@@ -559,9 +517,7 @@ def _collect_probes() -> Dict[str, bool]:
 
     # -- operator board 层 --
     p["operator_surface"] = _module_exists("core.operator_surface")
-    p["operator_execution_observability"] = _module_exists(
-        "core.operator_execution_observability_surface"
-    )
+    p["operator_execution_observability"] = _module_exists("core.operator_execution_observability_surface")
     p["observability_records_evidence"] = _source_contains(
         "core.operator_execution_observability_surface", "record_operator_evidence_entry"
     )
@@ -586,9 +542,7 @@ def _collect_probes() -> Dict[str, bool]:
     p["operational_readiness_surface"] = _module_exists("core.operational_readiness_surface")
     p["readiness_consumes_participation_evidence"] = _source_contains(
         "core.operational_readiness_surface", "get_android_participation_evidence"
-    ) or _source_contains(
-        "core.operational_readiness_surface", "get_participation_state_for_device"
-    )
+    ) or _source_contains("core.operational_readiness_surface", "get_participation_state_for_device")
     p["v2_unified_state_contract"] = _module_exists("core.v2_unified_state_contract")
     p["state_contract_has_participation"] = _source_contains(
         "core.v2_unified_state_contract", "android_network_participation"
@@ -629,9 +583,11 @@ def build_clone_to_run_audit() -> CloneToRunAudit:
             "CK1_ENTRY_POINT",
             "系统有明确的启动入口（main.py 或 unified_launcher.py）",
             p.get("main_entry", False) or p.get("unified_launcher", False),
-            "main.py 和/或 unified_launcher.py 存在于仓库根目录，具有明确启动入口。"
-            if (p.get("main_entry", False) or p.get("unified_launcher", False))
-            else "未发现明确启动入口文件，clone 后无法直接定位运行命令。",
+            (
+                "main.py 和/或 unified_launcher.py 存在于仓库根目录，具有明确启动入口。"
+                if (p.get("main_entry", False) or p.get("unified_launcher", False))
+                else "未发现明确启动入口文件，clone 后无法直接定位运行命令。"
+            ),
             ["main.py", "unified_launcher.py"],
             [],
             blocking=not (p.get("main_entry", False) or p.get("unified_launcher", False)),
@@ -640,9 +596,11 @@ def build_clone_to_run_audit() -> CloneToRunAudit:
             "CK2_DEPENDENCIES",
             "依赖清单（requirements.txt）存在",
             p.get("requirements_txt", False),
-            "requirements.txt 存在，用户可通过 pip install -r requirements.txt 安装 Python 依赖。"
-            if p.get("requirements_txt", False)
-            else "未发现 requirements.txt，依赖安装方式不明确。",
+            (
+                "requirements.txt 存在，用户可通过 pip install -r requirements.txt 安装 Python 依赖。"
+                if p.get("requirements_txt", False)
+                else "未发现 requirements.txt，依赖安装方式不明确。"
+            ),
             ["requirements.txt"],
             [],
             blocking=not p.get("requirements_txt", False),
@@ -651,9 +609,11 @@ def build_clone_to_run_audit() -> CloneToRunAudit:
             "CK3_ENV_CONFIG",
             "环境配置样例（.env.example）存在",
             p.get("env_example", False),
-            ".env 或 .env.example 存在，用户可获取 API Key 配置格式。"
-            if p.get("env_example", False)
-            else ".env.example 未找到。API Key 等配置可能需要用户自行获取，构成轻微阻塞。",
+            (
+                ".env 或 .env.example 存在，用户可获取 API Key 配置格式。"
+                if p.get("env_example", False)
+                else ".env.example 未找到。API Key 等配置可能需要用户自行获取，构成轻微阻塞。"
+            ),
             [],
             [],
             blocking=False,
@@ -662,9 +622,11 @@ def build_clone_to_run_audit() -> CloneToRunAudit:
             "CK4_HEALTH_ROUTE",
             "/api/v1/health 路由存在，可验证服务是否运行",
             p.get("health_route", False),
-            "/api/v1/health 端点已定义，clone 后可通过该端点快速验证 V2 服务已启动。"
-            if p.get("health_route", False)
-            else "/api/v1/health 路由未发现，无法快速验证服务是否正常运行。",
+            (
+                "/api/v1/health 端点已定义，clone 后可通过该端点快速验证 V2 服务已启动。"
+                if p.get("health_route", False)
+                else "/api/v1/health 路由未发现，无法快速验证服务是否正常运行。"
+            ),
             ["core/api_routes.py"],
             [],
             blocking=False,
@@ -696,12 +658,14 @@ def build_clone_to_run_audit() -> CloneToRunAudit:
             "CK7_MULTI_DEVICE",
             "多设备注册/加入/能力宣告/参与 readiness 体系实现程度",
             p.get("android_network_participation", False),
-            "AndroidNetworkParticipationTier（7 个层级）已实现，设备可注册并声明参与能力。"
-            "android_mode_gate_policy 含 evaluate_android_mode_readiness。"
-            "但当前多设备协作不是 P2P mesh，而是中心控制型：V2 统一编排，Android 作为参与节点。"
-            "因此'多设备分布式体系'语义成立，但不能说成 peer-to-peer mesh fully closed。"
-            if p.get("android_network_participation", False)
-            else "AndroidNetworkParticipation 模块未发现，多设备参与体系可能未实现。",
+            (
+                "AndroidNetworkParticipationTier（7 个层级）已实现，设备可注册并声明参与能力。"
+                "android_mode_gate_policy 含 evaluate_android_mode_readiness。"
+                "但当前多设备协作不是 P2P mesh，而是中心控制型：V2 统一编排，Android 作为参与节点。"
+                "因此'多设备分布式体系'语义成立，但不能说成 peer-to-peer mesh fully closed。"
+                if p.get("android_network_participation", False)
+                else "AndroidNetworkParticipation 模块未发现，多设备参与体系可能未实现。"
+            ),
             [
                 "core/android_network_participation.py",
                 "core/android_mode_gate_policy.py",
@@ -734,16 +698,11 @@ def build_clone_to_run_audit() -> CloneToRunAudit:
     blocking_gaps = []
     if not p.get("env_example", False):
         blocking_gaps.append("API Key / .env 配置样例不完整，新用户需要自行配置密钥才能运行")
+    blocking_gaps.append("Android App 需要单独构建（Gradle 构建 + APK 安装），不在 V2 clone-to-run 自动路径内")
     blocking_gaps.append(
-        "Android App 需要单独构建（Gradle 构建 + APK 安装），不在 V2 clone-to-run 自动路径内"
+        "Android 本地 NL 模式（AutonomousExecutionPipeline 全链）依赖本地 LLM 权重 + " "accessibility 权限，非开箱即用"
     )
-    blocking_gaps.append(
-        "Android 本地 NL 模式（AutonomousExecutionPipeline 全链）依赖本地 LLM 权重 + "
-        "accessibility 权限，非开箱即用"
-    )
-    blocking_gaps.append(
-        "多设备 mesh 是中心控制型，不是对等网络；'分布式体系'语义成立但 full mesh runtime 未闭合"
-    )
+    blocking_gaps.append("多设备 mesh 是中心控制型，不是对等网络；'分布式体系'语义成立但 full mesh runtime 未闭合")
 
     return CloneToRunAudit(
         operability_verdict=verdict,
@@ -783,9 +742,7 @@ def build_three_state_runtime_audit() -> ThreeStateRuntimeAudit:
     """构建三态运行呈现在代码中的真实性审查。"""
     p = _collect_probes()
 
-    display_exists = bool(
-        p.get("panel_has_tri_state_phase") and p.get("panel_has_presence_tristate")
-    )
+    display_exists = bool(p.get("panel_has_tri_state_phase") and p.get("panel_has_presence_tristate"))
     display_projected = bool(p.get("panel_has_tri_state_phase"))
     participation_exists = bool(p.get("participation_has_7_tiers"))
     participation_projected = bool(p.get("panel_has_android_participation_verdict"))
@@ -854,14 +811,12 @@ def build_closure_governance_propagation_audit() -> ClosureGovernancePropagation
 
     # operator board 层
     board_has_reasoning = bool(
-        p.get("observability_has_android_device_id")
-        and p.get("pr4_has_android_directed_action")
+        p.get("observability_has_android_device_id") and p.get("pr4_has_android_directed_action")
     )
 
     # readiness 层
     readiness_has_android = bool(
-        p.get("readiness_consumes_participation_evidence")
-        or p.get("state_contract_has_participation")
+        p.get("readiness_consumes_participation_evidence") or p.get("state_contract_has_participation")
     )
 
     # completion ingress android context
@@ -1122,8 +1077,7 @@ def build_convergence_closure_audit() -> ConvergenceClosureAuditRecord:
         "UnifiedResultIngress：quarantine/reject 阻断 is_fully_closed（防伪闭环）",
         "编排选路（source_dispatch_orchestrator + device_selection）已消费 "
         "get_android_participation_evidence（PR 1142）",
-        "operational_readiness_surface + v2_unified_state_contract 含 "
-        "android_network_participation 投影路径",
+        "operational_readiness_surface + v2_unified_state_contract 含 " "android_network_participation 投影路径",
         "operator_execution_observability_surface 记录 android_device_id + evidence_state",
         "pr4_operator_action_governance 提供 build_android_directed_action_spec",
     ]
@@ -1142,8 +1096,7 @@ def build_convergence_closure_audit() -> ConvergenceClosureAuditRecord:
     what_android = [
         "Android 侧需在 delegated result 中稳定提供 participation_tier 字段，"
         "才能让 notify_with_android_context 收到高置信度的 tier 信息",
-        "Android LocalExecutionModeGate tier 评估需要在连接时稳定上送，"
-        "才能让 readiness degradation 门控更准确",
+        "Android LocalExecutionModeGate tier 评估需要在连接时稳定上送，" "才能让 readiness degradation 门控更准确",
         "Android mesh participation contract 的 constrained/deferred 语义"
         "需要在 WS 报文中显式上送，才能让 V2 board 准确解释参与约束原因",
         "board 路由（/api/v1/operator/board/operable-truth）消费 android_participation_verdict"

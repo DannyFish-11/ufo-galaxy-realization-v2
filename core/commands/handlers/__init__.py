@@ -35,6 +35,7 @@ Handlers are registered via ``CommandRegistry``:
     registry = get_command_registry()
     registry.register_handler("screenshot", ScreenshotHandler())
 """
+
 from __future__ import annotations
 
 import abc

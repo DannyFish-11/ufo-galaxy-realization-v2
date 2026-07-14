@@ -105,7 +105,7 @@ class DecisionOutcome(str, Enum):
     ADMITTED = "admitted"
     REJECTED_QUOTA = "rejected_quota"
     REJECTED_NO_SLOT = "rejected_no_slot"
-    PREEMPTED_OTHER = "preempted_other"   # admitted by preempting another task
+    PREEMPTED_OTHER = "preempted_other"  # admitted by preempting another task
 
 
 @dataclass
@@ -177,9 +177,7 @@ class GlobalArbiter:
         self._running: Dict[str, RunningTask] = {}
         self._decision_log: List[SchedulingDecision] = []
         self._max_log: int = 1000
-        self._stats: Dict[str, int] = {
-            "admitted": 0, "rejected": 0, "preemptions": 0
-        }
+        self._stats: Dict[str, int] = {"admitted": 0, "rejected": 0, "preemptions": 0}
         self._enabled: bool = True
 
     # ------------------------------------------------------------------
@@ -230,12 +228,14 @@ class GlobalArbiter:
             A :class:`SchedulingDecision` (always; never raises).
         """
         if not self._enabled:
-            rt = RunningTask(task_id, priority, origin, preemptable,
-                             metadata=metadata or {})
+            rt = RunningTask(task_id, priority, origin, preemptable, metadata=metadata or {})
             self._running[task_id] = rt
             decision = SchedulingDecision(
-                task_id=task_id, outcome=DecisionOutcome.ADMITTED,
-                admitted=True, priority=priority, origin=origin,
+                task_id=task_id,
+                outcome=DecisionOutcome.ADMITTED,
+                admitted=True,
+                priority=priority,
+                origin=origin,
                 reason="arbiter_disabled",
             )
             self._record(decision)
@@ -245,8 +245,11 @@ class GlobalArbiter:
         origin_count = sum(1 for t in self._running.values() if t.origin == origin)
         if origin_count >= self._per_origin_quota:
             decision = SchedulingDecision(
-                task_id=task_id, outcome=DecisionOutcome.REJECTED_QUOTA,
-                admitted=False, priority=priority, origin=origin,
+                task_id=task_id,
+                outcome=DecisionOutcome.REJECTED_QUOTA,
+                admitted=False,
+                priority=priority,
+                origin=origin,
                 reason=f"per_origin_quota={self._per_origin_quota} exceeded for '{origin}'",
             )
             self._stats["rejected"] += 1
@@ -256,12 +259,14 @@ class GlobalArbiter:
 
         # Global limit — try to admit directly
         if len(self._running) < self._global_limit:
-            rt = RunningTask(task_id, priority, origin, preemptable,
-                             metadata=metadata or {})
+            rt = RunningTask(task_id, priority, origin, preemptable, metadata=metadata or {})
             self._running[task_id] = rt
             decision = SchedulingDecision(
-                task_id=task_id, outcome=DecisionOutcome.ADMITTED,
-                admitted=True, priority=priority, origin=origin,
+                task_id=task_id,
+                outcome=DecisionOutcome.ADMITTED,
+                admitted=True,
+                priority=priority,
+                origin=origin,
                 reason="slot_available",
             )
             self._stats["admitted"] += 1
@@ -273,27 +278,30 @@ class GlobalArbiter:
         victim = self._find_preemption_victim(priority)
         if victim is not None:
             del self._running[victim.task_id]
-            rt = RunningTask(task_id, priority, origin, preemptable,
-                             metadata=metadata or {})
+            rt = RunningTask(task_id, priority, origin, preemptable, metadata=metadata or {})
             self._running[task_id] = rt
             decision = SchedulingDecision(
-                task_id=task_id, outcome=DecisionOutcome.PREEMPTED_OTHER,
-                admitted=True, priority=priority, origin=origin,
+                task_id=task_id,
+                outcome=DecisionOutcome.PREEMPTED_OTHER,
+                admitted=True,
+                priority=priority,
+                origin=origin,
                 preempted_task_id=victim.task_id,
                 reason=f"preempted task_id={victim.task_id} priority={victim.priority}",
             )
             self._stats["admitted"] += 1
             self._stats["preemptions"] += 1
             self._record(decision)
-            logger.info(
-                "Arbiter PREEMPT task=%s preempted=%s", task_id, victim.task_id
-            )
+            logger.info("Arbiter PREEMPT task=%s preempted=%s", task_id, victim.task_id)
             return decision
 
         # Cannot admit
         decision = SchedulingDecision(
-            task_id=task_id, outcome=DecisionOutcome.REJECTED_NO_SLOT,
-            admitted=False, priority=priority, origin=origin,
+            task_id=task_id,
+            outcome=DecisionOutcome.REJECTED_NO_SLOT,
+            admitted=False,
+            priority=priority,
+            origin=origin,
             reason="global_limit_reached_no_preemption_target",
         )
         self._stats["rejected"] += 1
@@ -363,10 +371,7 @@ class GlobalArbiter:
     def _find_preemption_victim(self, incoming_priority: int) -> Optional[RunningTask]:
         """Find the lowest-priority preemptable running task whose priority is
         strictly less than *incoming_priority*."""
-        candidates = [
-            rt for rt in self._running.values()
-            if rt.preemptable and rt.priority < incoming_priority
-        ]
+        candidates = [rt for rt in self._running.values() if rt.preemptable and rt.priority < incoming_priority]
         if not candidates:
             return None
         return min(candidates, key=lambda rt: rt.priority)
@@ -374,7 +379,7 @@ class GlobalArbiter:
     def _record(self, decision: SchedulingDecision) -> None:
         self._decision_log.append(decision)
         if len(self._decision_log) > self._max_log:
-            self._decision_log = self._decision_log[-self._max_log:]
+            self._decision_log = self._decision_log[-self._max_log :]
 
 
 # ---------------------------------------------------------------------------

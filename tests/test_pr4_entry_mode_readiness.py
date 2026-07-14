@@ -23,10 +23,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _mock_udm(count: int) -> MagicMock:
     m = MagicMock()
@@ -45,36 +45,46 @@ def _make_ready_summary(device_id: str) -> MagicMock:
 # 1. Explicit entry_mode wins regardless of rollout flag
 # ---------------------------------------------------------------------------
 
+
 class TestExplicitEntryModeWins:
     """Explicit caller-supplied entry_mode must bypass all automatic logic."""
 
     def test_explicit_local_readiness_flag_on(self):
         from core.unified.entrypoint_router import resolve_entry_mode
 
-        with patch.dict(os.environ, {
-            "GALAXY_CROSS_DEVICE_ENABLED": "1",
-            "GALAXY_ENTRYMODE_USE_READINESS": "1",
-        }):
+        with patch.dict(
+            os.environ,
+            {
+                "GALAXY_CROSS_DEVICE_ENABLED": "1",
+                "GALAXY_ENTRYMODE_USE_READINESS": "1",
+            },
+        ):
             result = resolve_entry_mode(explicit_entry_mode="local")
         assert result == "local"
 
     def test_explicit_cross_device_readiness_flag_on(self):
         from core.unified.entrypoint_router import resolve_entry_mode
 
-        with patch.dict(os.environ, {
-            "GALAXY_CROSS_DEVICE_ENABLED": "0",
-            "GALAXY_ENTRYMODE_USE_READINESS": "1",
-        }):
+        with patch.dict(
+            os.environ,
+            {
+                "GALAXY_CROSS_DEVICE_ENABLED": "0",
+                "GALAXY_ENTRYMODE_USE_READINESS": "1",
+            },
+        ):
             result = resolve_entry_mode(explicit_entry_mode="cross_device")
         assert result == "cross_device"
 
     def test_explicit_hybrid_readiness_flag_on(self):
         from core.unified.entrypoint_router import resolve_entry_mode
 
-        with patch.dict(os.environ, {
-            "GALAXY_CROSS_DEVICE_ENABLED": "1",
-            "GALAXY_ENTRYMODE_USE_READINESS": "1",
-        }):
+        with patch.dict(
+            os.environ,
+            {
+                "GALAXY_CROSS_DEVICE_ENABLED": "1",
+                "GALAXY_ENTRYMODE_USE_READINESS": "1",
+            },
+        ):
             result = resolve_entry_mode(explicit_entry_mode="hybrid")
         assert result == "hybrid"
 
@@ -83,10 +93,13 @@ class TestExplicitEntryModeWins:
         from core.unified.entrypoint_router import resolve_entry_mode
 
         ready = [_make_ready_summary("d1"), _make_ready_summary("d2")]
-        with patch.dict(os.environ, {
-            "GALAXY_CROSS_DEVICE_ENABLED": "1",
-            "GALAXY_ENTRYMODE_USE_READINESS": "1",
-        }):
+        with patch.dict(
+            os.environ,
+            {
+                "GALAXY_CROSS_DEVICE_ENABLED": "1",
+                "GALAXY_ENTRYMODE_USE_READINESS": "1",
+            },
+        ):
             with patch(
                 "core.device_readiness.get_cross_device_ready_devices",
                 return_value=ready,
@@ -99,36 +112,46 @@ class TestExplicitEntryModeWins:
 # 2. Cross-device disabled → always "local" regardless of readiness flag
 # ---------------------------------------------------------------------------
 
+
 class TestCrossDeviceDisabledAlwaysLocal:
     """When cross-device master switch is off, readiness flag is irrelevant."""
 
     def test_disabled_readiness_flag_off(self):
         from core.unified.entrypoint_router import resolve_entry_mode
 
-        with patch.dict(os.environ, {
-            "GALAXY_CROSS_DEVICE_ENABLED": "0",
-            "GALAXY_ENTRYMODE_USE_READINESS": "0",
-        }):
+        with patch.dict(
+            os.environ,
+            {
+                "GALAXY_CROSS_DEVICE_ENABLED": "0",
+                "GALAXY_ENTRYMODE_USE_READINESS": "0",
+            },
+        ):
             result = resolve_entry_mode()
         assert result == "local"
 
     def test_disabled_readiness_flag_on(self):
         from core.unified.entrypoint_router import resolve_entry_mode
 
-        with patch.dict(os.environ, {
-            "GALAXY_CROSS_DEVICE_ENABLED": "0",
-            "GALAXY_ENTRYMODE_USE_READINESS": "1",
-        }):
+        with patch.dict(
+            os.environ,
+            {
+                "GALAXY_CROSS_DEVICE_ENABLED": "0",
+                "GALAXY_ENTRYMODE_USE_READINESS": "1",
+            },
+        ):
             result = resolve_entry_mode()
         assert result == "local"
 
     def test_disabled_with_target_device_readiness_flag_on(self):
         from core.unified.entrypoint_router import resolve_entry_mode
 
-        with patch.dict(os.environ, {
-            "GALAXY_CROSS_DEVICE_ENABLED": "0",
-            "GALAXY_ENTRYMODE_USE_READINESS": "1",
-        }):
+        with patch.dict(
+            os.environ,
+            {
+                "GALAXY_CROSS_DEVICE_ENABLED": "0",
+                "GALAXY_ENTRYMODE_USE_READINESS": "1",
+            },
+        ):
             with patch(
                 "core.device_readiness.is_device_cross_device_ready",
                 return_value=True,
@@ -141,16 +164,20 @@ class TestCrossDeviceDisabledAlwaysLocal:
 # 3. Readiness flag on + target device ready → "cross_device"
 # ---------------------------------------------------------------------------
 
+
 class TestReadinessFlagTargetDeviceReady:
     """When readiness flag is on and the named target device is ready."""
 
     def test_target_ready_returns_cross_device(self):
         from core.unified.entrypoint_router import resolve_entry_mode
 
-        with patch.dict(os.environ, {
-            "GALAXY_CROSS_DEVICE_ENABLED": "1",
-            "GALAXY_ENTRYMODE_USE_READINESS": "1",
-        }):
+        with patch.dict(
+            os.environ,
+            {
+                "GALAXY_CROSS_DEVICE_ENABLED": "1",
+                "GALAXY_ENTRYMODE_USE_READINESS": "1",
+            },
+        ):
             with patch(
                 "core.device_readiness.is_device_cross_device_ready",
                 return_value=True,
@@ -162,10 +189,13 @@ class TestReadinessFlagTargetDeviceReady:
         """Resolution should succeed and not raise when trace_id is supplied."""
         from core.unified.entrypoint_router import resolve_entry_mode
 
-        with patch.dict(os.environ, {
-            "GALAXY_CROSS_DEVICE_ENABLED": "1",
-            "GALAXY_ENTRYMODE_USE_READINESS": "1",
-        }):
+        with patch.dict(
+            os.environ,
+            {
+                "GALAXY_CROSS_DEVICE_ENABLED": "1",
+                "GALAXY_ENTRYMODE_USE_READINESS": "1",
+            },
+        ):
             with patch(
                 "core.device_readiness.is_device_cross_device_ready",
                 return_value=True,
@@ -180,10 +210,13 @@ class TestReadinessFlagTargetDeviceReady:
     def test_calls_is_device_cross_device_ready_with_correct_id(self):
         from core.unified.entrypoint_router import resolve_entry_mode
 
-        with patch.dict(os.environ, {
-            "GALAXY_CROSS_DEVICE_ENABLED": "1",
-            "GALAXY_ENTRYMODE_USE_READINESS": "1",
-        }):
+        with patch.dict(
+            os.environ,
+            {
+                "GALAXY_CROSS_DEVICE_ENABLED": "1",
+                "GALAXY_ENTRYMODE_USE_READINESS": "1",
+            },
+        ):
             with patch(
                 "core.device_readiness.is_device_cross_device_ready",
                 return_value=True,
@@ -196,16 +229,20 @@ class TestReadinessFlagTargetDeviceReady:
 # 4. Readiness flag on + target device NOT ready → "local"
 # ---------------------------------------------------------------------------
 
+
 class TestReadinessFlagTargetDeviceNotReady:
     """When readiness flag is on but the target device fails readiness."""
 
     def test_target_not_ready_returns_local(self):
         from core.unified.entrypoint_router import resolve_entry_mode
 
-        with patch.dict(os.environ, {
-            "GALAXY_CROSS_DEVICE_ENABLED": "1",
-            "GALAXY_ENTRYMODE_USE_READINESS": "1",
-        }):
+        with patch.dict(
+            os.environ,
+            {
+                "GALAXY_CROSS_DEVICE_ENABLED": "1",
+                "GALAXY_ENTRYMODE_USE_READINESS": "1",
+            },
+        ):
             with patch(
                 "core.device_readiness.is_device_cross_device_ready",
                 return_value=False,
@@ -217,10 +254,13 @@ class TestReadinessFlagTargetDeviceNotReady:
         """If readiness check raises unexpectedly, fall back gracefully to local."""
         from core.unified.entrypoint_router import resolve_entry_mode
 
-        with patch.dict(os.environ, {
-            "GALAXY_CROSS_DEVICE_ENABLED": "1",
-            "GALAXY_ENTRYMODE_USE_READINESS": "1",
-        }):
+        with patch.dict(
+            os.environ,
+            {
+                "GALAXY_CROSS_DEVICE_ENABLED": "1",
+                "GALAXY_ENTRYMODE_USE_READINESS": "1",
+            },
+        ):
             with patch(
                 "core.device_readiness.is_device_cross_device_ready",
                 side_effect=RuntimeError("boom"),
@@ -231,10 +271,13 @@ class TestReadinessFlagTargetDeviceNotReady:
     def test_target_not_ready_with_trace_id(self):
         from core.unified.entrypoint_router import resolve_entry_mode
 
-        with patch.dict(os.environ, {
-            "GALAXY_CROSS_DEVICE_ENABLED": "1",
-            "GALAXY_ENTRYMODE_USE_READINESS": "1",
-        }):
+        with patch.dict(
+            os.environ,
+            {
+                "GALAXY_CROSS_DEVICE_ENABLED": "1",
+                "GALAXY_ENTRYMODE_USE_READINESS": "1",
+            },
+        ):
             with patch(
                 "core.device_readiness.is_device_cross_device_ready",
                 return_value=False,
@@ -250,6 +293,7 @@ class TestReadinessFlagTargetDeviceNotReady:
 # 5. Readiness flag on + no target + >=2 ready devices → "cross_device"
 # ---------------------------------------------------------------------------
 
+
 class TestReadinessFlagNoTargetTwoReadyDevices:
     """When readiness flag is on, no target, and >=2 ready devices."""
 
@@ -257,10 +301,13 @@ class TestReadinessFlagNoTargetTwoReadyDevices:
         from core.unified.entrypoint_router import resolve_entry_mode
 
         ready = [_make_ready_summary("d1"), _make_ready_summary("d2")]
-        with patch.dict(os.environ, {
-            "GALAXY_CROSS_DEVICE_ENABLED": "1",
-            "GALAXY_ENTRYMODE_USE_READINESS": "1",
-        }):
+        with patch.dict(
+            os.environ,
+            {
+                "GALAXY_CROSS_DEVICE_ENABLED": "1",
+                "GALAXY_ENTRYMODE_USE_READINESS": "1",
+            },
+        ):
             with patch(
                 "core.device_readiness.get_cross_device_ready_devices",
                 return_value=ready,
@@ -272,10 +319,13 @@ class TestReadinessFlagNoTargetTwoReadyDevices:
         from core.unified.entrypoint_router import resolve_entry_mode
 
         ready = [_make_ready_summary(f"d{i}") for i in range(5)]
-        with patch.dict(os.environ, {
-            "GALAXY_CROSS_DEVICE_ENABLED": "1",
-            "GALAXY_ENTRYMODE_USE_READINESS": "1",
-        }):
+        with patch.dict(
+            os.environ,
+            {
+                "GALAXY_CROSS_DEVICE_ENABLED": "1",
+                "GALAXY_ENTRYMODE_USE_READINESS": "1",
+            },
+        ):
             with patch(
                 "core.device_readiness.get_cross_device_ready_devices",
                 return_value=ready,
@@ -287,10 +337,13 @@ class TestReadinessFlagNoTargetTwoReadyDevices:
         from core.unified.entrypoint_router import resolve_entry_mode
 
         ready = [_make_ready_summary("d1"), _make_ready_summary("d2")]
-        with patch.dict(os.environ, {
-            "GALAXY_CROSS_DEVICE_ENABLED": "1",
-            "GALAXY_ENTRYMODE_USE_READINESS": "1",
-        }):
+        with patch.dict(
+            os.environ,
+            {
+                "GALAXY_CROSS_DEVICE_ENABLED": "1",
+                "GALAXY_ENTRYMODE_USE_READINESS": "1",
+            },
+        ):
             with patch(
                 "core.device_readiness.get_cross_device_ready_devices",
                 return_value=ready,
@@ -303,6 +356,7 @@ class TestReadinessFlagNoTargetTwoReadyDevices:
 # 6. Readiness flag on + no target + <2 ready devices → "local"
 # ---------------------------------------------------------------------------
 
+
 class TestReadinessFlagNoTargetFewerThanTwoReady:
     """When readiness flag is on, no target, but fewer than 2 devices ready."""
 
@@ -310,10 +364,13 @@ class TestReadinessFlagNoTargetFewerThanTwoReady:
         from core.unified.entrypoint_router import resolve_entry_mode
 
         ready = [_make_ready_summary("d1")]
-        with patch.dict(os.environ, {
-            "GALAXY_CROSS_DEVICE_ENABLED": "1",
-            "GALAXY_ENTRYMODE_USE_READINESS": "1",
-        }):
+        with patch.dict(
+            os.environ,
+            {
+                "GALAXY_CROSS_DEVICE_ENABLED": "1",
+                "GALAXY_ENTRYMODE_USE_READINESS": "1",
+            },
+        ):
             with patch(
                 "core.device_readiness.get_cross_device_ready_devices",
                 return_value=ready,
@@ -324,10 +381,13 @@ class TestReadinessFlagNoTargetFewerThanTwoReady:
     def test_zero_ready_devices_returns_local(self):
         from core.unified.entrypoint_router import resolve_entry_mode
 
-        with patch.dict(os.environ, {
-            "GALAXY_CROSS_DEVICE_ENABLED": "1",
-            "GALAXY_ENTRYMODE_USE_READINESS": "1",
-        }):
+        with patch.dict(
+            os.environ,
+            {
+                "GALAXY_CROSS_DEVICE_ENABLED": "1",
+                "GALAXY_ENTRYMODE_USE_READINESS": "1",
+            },
+        ):
             with patch(
                 "core.device_readiness.get_cross_device_ready_devices",
                 return_value=[],
@@ -339,10 +399,13 @@ class TestReadinessFlagNoTargetFewerThanTwoReady:
         """If get_cross_device_ready_devices raises, fall back gracefully."""
         from core.unified.entrypoint_router import resolve_entry_mode
 
-        with patch.dict(os.environ, {
-            "GALAXY_CROSS_DEVICE_ENABLED": "1",
-            "GALAXY_ENTRYMODE_USE_READINESS": "1",
-        }):
+        with patch.dict(
+            os.environ,
+            {
+                "GALAXY_CROSS_DEVICE_ENABLED": "1",
+                "GALAXY_ENTRYMODE_USE_READINESS": "1",
+            },
+        ):
             with patch(
                 "core.device_readiness.get_cross_device_ready_devices",
                 side_effect=RuntimeError("udm down"),
@@ -355,16 +418,20 @@ class TestReadinessFlagNoTargetFewerThanTwoReady:
 # 7. Readiness flag disabled → legacy behavior still works
 # ---------------------------------------------------------------------------
 
+
 class TestLegacyBehaviorWhenFlagDisabled:
     """When GALAXY_ENTRYMODE_USE_READINESS is off (default), legacy logic applies."""
 
     def test_two_online_devices_returns_cross_device(self):
         from core.unified.entrypoint_router import resolve_entry_mode
 
-        with patch.dict(os.environ, {
-            "GALAXY_CROSS_DEVICE_ENABLED": "1",
-            "GALAXY_ENTRYMODE_USE_READINESS": "0",
-        }):
+        with patch.dict(
+            os.environ,
+            {
+                "GALAXY_CROSS_DEVICE_ENABLED": "1",
+                "GALAXY_ENTRYMODE_USE_READINESS": "0",
+            },
+        ):
             with patch(
                 "core.unified.device_manager.get_unified_device_manager",
                 return_value=_mock_udm(2),
@@ -375,10 +442,13 @@ class TestLegacyBehaviorWhenFlagDisabled:
     def test_one_online_device_returns_local(self):
         from core.unified.entrypoint_router import resolve_entry_mode
 
-        with patch.dict(os.environ, {
-            "GALAXY_CROSS_DEVICE_ENABLED": "1",
-            "GALAXY_ENTRYMODE_USE_READINESS": "0",
-        }):
+        with patch.dict(
+            os.environ,
+            {
+                "GALAXY_CROSS_DEVICE_ENABLED": "1",
+                "GALAXY_ENTRYMODE_USE_READINESS": "0",
+            },
+        ):
             with patch(
                 "core.unified.device_manager.get_unified_device_manager",
                 return_value=_mock_udm(1),
@@ -390,10 +460,13 @@ class TestLegacyBehaviorWhenFlagDisabled:
         """Legacy: explicit target_device + cross-device on → cross_device."""
         from core.unified.entrypoint_router import resolve_entry_mode
 
-        with patch.dict(os.environ, {
-            "GALAXY_CROSS_DEVICE_ENABLED": "1",
-            "GALAXY_ENTRYMODE_USE_READINESS": "0",
-        }):
+        with patch.dict(
+            os.environ,
+            {
+                "GALAXY_CROSS_DEVICE_ENABLED": "1",
+                "GALAXY_ENTRYMODE_USE_READINESS": "0",
+            },
+        ):
             with patch(
                 "core.unified.device_manager.get_unified_device_manager",
                 return_value=_mock_udm(0),
@@ -405,10 +478,13 @@ class TestLegacyBehaviorWhenFlagDisabled:
         """Legacy path must not call readiness helpers."""
         from core.unified.entrypoint_router import resolve_entry_mode
 
-        with patch.dict(os.environ, {
-            "GALAXY_CROSS_DEVICE_ENABLED": "1",
-            "GALAXY_ENTRYMODE_USE_READINESS": "0",
-        }):
+        with patch.dict(
+            os.environ,
+            {
+                "GALAXY_CROSS_DEVICE_ENABLED": "1",
+                "GALAXY_ENTRYMODE_USE_READINESS": "0",
+            },
+        ):
             with patch(
                 "core.unified.device_manager.get_unified_device_manager",
                 return_value=_mock_udm(2),
@@ -438,6 +514,7 @@ class TestLegacyBehaviorWhenFlagDisabled:
 # 8. Observability event payload includes readiness-related fields
 # ---------------------------------------------------------------------------
 
+
 class TestObservabilityEventWithReadiness:
     """Verify that the SEB event payload carries correct fields in readiness path."""
 
@@ -449,10 +526,13 @@ class TestObservabilityEventWithReadiness:
         def fake_emit(event_type, *, source, payload, trace_id=""):
             captured.append(payload)
 
-        with patch.dict(os.environ, {
-            "GALAXY_CROSS_DEVICE_ENABLED": "1",
-            "GALAXY_ENTRYMODE_USE_READINESS": "1",
-        }):
+        with patch.dict(
+            os.environ,
+            {
+                "GALAXY_CROSS_DEVICE_ENABLED": "1",
+                "GALAXY_ENTRYMODE_USE_READINESS": "1",
+            },
+        ):
             with patch(
                 "core.device_readiness.is_device_cross_device_ready",
                 return_value=True,
@@ -477,10 +557,13 @@ class TestObservabilityEventWithReadiness:
         def fake_emit(event_type, *, source, payload, trace_id=""):
             captured.append(payload)
 
-        with patch.dict(os.environ, {
-            "GALAXY_CROSS_DEVICE_ENABLED": "1",
-            "GALAXY_ENTRYMODE_USE_READINESS": "1",
-        }):
+        with patch.dict(
+            os.environ,
+            {
+                "GALAXY_CROSS_DEVICE_ENABLED": "1",
+                "GALAXY_ENTRYMODE_USE_READINESS": "1",
+            },
+        ):
             with patch(
                 "core.device_readiness.is_device_cross_device_ready",
                 return_value=False,
@@ -505,10 +588,13 @@ class TestObservabilityEventWithReadiness:
             captured.append(payload)
 
         ready = [_make_ready_summary("d1"), _make_ready_summary("d2")]
-        with patch.dict(os.environ, {
-            "GALAXY_CROSS_DEVICE_ENABLED": "1",
-            "GALAXY_ENTRYMODE_USE_READINESS": "1",
-        }):
+        with patch.dict(
+            os.environ,
+            {
+                "GALAXY_CROSS_DEVICE_ENABLED": "1",
+                "GALAXY_ENTRYMODE_USE_READINESS": "1",
+            },
+        ):
             with patch(
                 "core.device_readiness.get_cross_device_ready_devices",
                 return_value=ready,

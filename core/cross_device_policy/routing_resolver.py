@@ -66,9 +66,9 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Optional
 
-from .device_role import DeviceRole, DeviceRoleAssignment
-from .routing_policy import RoutingPolicy, RoutingPosture, DEFAULT_LOCAL_ROUTING_POLICY
 from .assignment_summary import CrossDeviceAssignmentSummary, build_assignment_summary
+from .device_role import DeviceRole, DeviceRoleAssignment
+from .routing_policy import DEFAULT_LOCAL_ROUTING_POLICY, RoutingPolicy, RoutingPosture
 
 logger = logging.getLogger("Galaxy.CrossDevicePolicy.Resolver")
 
@@ -329,9 +329,7 @@ def _resolve_routing_impl(
         return RoutingPolicy(
             posture=RoutingPosture.LOCAL_PREFERRED,
             source_device_id=source_device_id,
-            assigned_devices=_build_assignments(
-                source_device_id, [], RoutingPosture.LOCAL_PREFERRED
-            ),
+            assigned_devices=_build_assignments(source_device_id, [], RoutingPosture.LOCAL_PREFERRED),
             runtime_domain_intent=domain_str or "local",
             policy_reason="runtime domain is not cross_device; local execution preferred",
             expansion_allowed_by_execution_policy=False,
@@ -343,9 +341,7 @@ def _resolve_routing_impl(
     # ------------------------------------------------------------------
     # 2. Cross-device domain: extract execution policy gates
     # ------------------------------------------------------------------
-    cross_device_allowed, requires_confirmation = _extract_execution_policy_flags(
-        execution_policy
-    )
+    cross_device_allowed, requires_confirmation = _extract_execution_policy_flags(execution_policy)
 
     # Legacy authority roles downgrade cross-device permission
     if _is_legacy_authority(authority_role):
@@ -363,13 +359,10 @@ def _resolve_routing_impl(
         return RoutingPolicy(
             posture=RoutingPosture.LOCAL_PREFERRED,
             source_device_id=source_device_id,
-            assigned_devices=_build_assignments(
-                source_device_id, [], RoutingPosture.LOCAL_PREFERRED
-            ),
+            assigned_devices=_build_assignments(source_device_id, [], RoutingPosture.LOCAL_PREFERRED),
             runtime_domain_intent="cross_device",
             policy_reason=(
-                "cross_device domain requested but execution policy does not "
-                "allow cross-device expansion"
+                "cross_device domain requested but execution policy does not " "allow cross-device expansion"
             ),
             expansion_allowed_by_execution_policy=False,
             confirmation_required_before_expansion=requires_confirmation,

@@ -21,6 +21,7 @@ When aiortc is not installed the manager returns ``None`` from :meth:`connect`
 and emits a :class:`WebRTCSessionErrorEvent` with ``recoverable=False``.
 Existing non-streaming flows are never affected.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -31,18 +32,18 @@ from typing import Callable, List, Optional
 
 import numpy as np
 
+from .multimodal_events import (
+    MultimodalEvent,
+    WebRTCQualityMetricsEvent,
+    WebRTCReconnectingEvent,
+    WebRTCSessionErrorEvent,
+    WebRTCSessionStartedEvent,
+    WebRTCSessionStoppedEvent,
+)
 from .webrtc_session import (
     WebRTCCameraSession,
     WebRTCSessionConfig,
     WebRTCSessionState,
-)
-from .multimodal_events import (
-    MultimodalEvent,
-    WebRTCSessionStartedEvent,
-    WebRTCSessionStoppedEvent,
-    WebRTCSessionErrorEvent,
-    WebRTCReconnectingEvent,
-    WebRTCQualityMetricsEvent,
 )
 
 logger = logging.getLogger(__name__)
@@ -127,9 +128,7 @@ class WebRTCSessionManager:
         """Current session connection state."""
         return self._session.state
 
-    def add_event_listener(
-        self, listener: Callable[[MultimodalEvent], None]
-    ) -> None:
+    def add_event_listener(self, listener: Callable[[MultimodalEvent], None]) -> None:
         """Register a listener for :class:`MultimodalEvent` objects."""
         self._event_listeners.append(listener)
 
@@ -146,9 +145,7 @@ class WebRTCSessionManager:
     # Lifecycle
     # ------------------------------------------------------------------
 
-    async def connect(
-        self, offer_sdp: str, offer_type: str = "offer"
-    ) -> Optional[str]:
+    async def connect(self, offer_sdp: str, offer_type: str = "offer") -> Optional[str]:
         """Establish a WebRTC session.
 
         Parameters
@@ -176,9 +173,7 @@ class WebRTCSessionManager:
         self._last_offer_sdp = offer_sdp
         self._last_offer_type = offer_type
 
-        answer_sdp = await self._session.connect(
-            offer_sdp=offer_sdp, offer_type=offer_type
-        )
+        answer_sdp = await self._session.connect(offer_sdp=offer_sdp, offer_type=offer_type)
         if answer_sdp is not None:
             self._on_connected()
         else:
@@ -209,9 +204,7 @@ class WebRTCSessionManager:
         )
         # PR-6: notify task-lifecycle integration layer of session close
         self._notify_transport_state("closed")
-        logger.info(
-            "WebRTCSessionManager closed (reconnects=%d)", self._reconnect_attempts
-        )
+        logger.info("WebRTCSessionManager closed (reconnects=%d)", self._reconnect_attempts)
 
     # ------------------------------------------------------------------
     # Reconnect
@@ -365,9 +358,9 @@ class WebRTCSessionManager:
             return
         try:
             from core.webrtc_task_lifecycle import (
+                WebRTCTransportState,
                 apply_transport_state_to_task_lifecycle,
                 get_webrtc_task_binding,
-                WebRTCTransportState,
             )
 
             binding = get_webrtc_task_binding(self.config.task_id)
@@ -385,9 +378,7 @@ class WebRTCSessionManager:
                 WebRTCTransportState.from_string(transport_state),
             )
         except Exception as exc:
-            logger.debug(
-                "_notify_transport_state: task-lifecycle update skipped: %s", exc
-            )
+            logger.debug("_notify_transport_state: task-lifecycle update skipped: %s", exc)
 
     def _emit_event(self, event: MultimodalEvent) -> None:
         """Dispatch a :class:`MultimodalEvent` to registered listeners."""

@@ -243,9 +243,7 @@ def validate_skill_package_contract(
         When *raw* is not a dict.
     """
     if not isinstance(raw, dict):
-        raise TypeError(
-            f"skill.json must be a JSON object (dict), got {type(raw).__name__}"
-        )
+        raise TypeError(f"skill.json must be a JSON object (dict), got {type(raw).__name__}")
 
     violations: List[str] = []
     skill_id: str = raw.get("id", "")
@@ -254,9 +252,7 @@ def validate_skill_package_contract(
     if not skill_id or not isinstance(skill_id, str):
         violations.append("'id' is required and must be a non-empty string")
     elif not _ID_RE.match(skill_id):
-        violations.append(
-            f"'id' must match [A-Za-z0-9_-]+, got {skill_id!r}"
-        )
+        violations.append(f"'id' must match [A-Za-z0-9_-]+, got {skill_id!r}")
 
     # ── Required: name ───────────────────────────────────────────────────────
     name = raw.get("name", "")
@@ -276,14 +272,9 @@ def validate_skill_package_contract(
     # ── Optional: schema_version ─────────────────────────────────────────────
     schema_version = str(raw.get("schema_version", CURRENT_SCHEMA_VERSION))
     if schema_version != CURRENT_SCHEMA_VERSION:
-        msg = (
-            f"'schema_version' {schema_version!r} is not supported; "
-            f"expected {CURRENT_SCHEMA_VERSION!r}"
-        )
+        msg = f"'schema_version' {schema_version!r} is not supported; " f"expected {CURRENT_SCHEMA_VERSION!r}"
         if allow_future_schema:
-            logger.warning(
-                "SkillPackageContract: %s (accepted via allow_future_schema)", msg
-            )
+            logger.warning("SkillPackageContract: %s (accepted via allow_future_schema)", msg)
         else:
             violations.append(msg)
 
@@ -295,13 +286,9 @@ def validate_skill_package_contract(
         else:
             for i, p in enumerate(params):
                 if not isinstance(p, dict):
-                    violations.append(
-                        f"'parameters[{i}]' must be a dict, got {type(p).__name__}"
-                    )
+                    violations.append(f"'parameters[{i}]' must be a dict, got {type(p).__name__}")
                 elif not p.get("name"):
-                    violations.append(
-                        f"'parameters[{i}].name' is required and must be non-empty"
-                    )
+                    violations.append(f"'parameters[{i}].name' is required and must be non-empty")
 
     # ── Optional: dependencies ───────────────────────────────────────────────
     deps = raw.get("dependencies")

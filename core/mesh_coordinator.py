@@ -19,9 +19,9 @@ MeshCoordinator — 设备协同网络层
 import asyncio
 import logging
 import time
-from typing import Dict, Any, Optional, Callable, Awaitable, List
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 logger = logging.getLogger("Galaxy.MeshCoordinator")
 
@@ -36,25 +36,26 @@ MESH_ORCHESTRATION_EXCLUDED: bool = False
 
 
 class ConnectionType(str, Enum):
-    DIRECT = "direct"       # LAN TCP 直连
-    RELAY = "relay"         # 服务端中继
+    DIRECT = "direct"  # LAN TCP 直连
+    RELAY = "relay"  # 服务端中继
     UNKNOWN = "unknown"
 
 
 @dataclass
 class PeerEntry:
     """Peer 表条目"""
+
     device_id: str
     local_ip: str = ""
     local_port: int = 0
     public_ip: str = ""
     public_port: int = 0
     # PR-28: Tailscale support
-    tailscale_ip: str = ""           # Tailscale 100.x.x.x IP
+    tailscale_ip: str = ""  # Tailscale 100.x.x.x IP
     tailscale_reachable: bool = False  # Can reach via Tailscale P2P
     reachable_direct: bool = False
     connection_type: ConnectionType = ConnectionType.UNKNOWN
-    latency_ms: float = -1          # -1 = 未探测
+    latency_ms: float = -1  # -1 = 未探测
     last_seen: float = field(default_factory=time.time)
     last_probe: float = 0
     probe_failures: int = 0
@@ -81,6 +82,7 @@ class PeerEntry:
 @dataclass
 class MeshSendResult:
     """DEPRECATED: mesh.send() 已删除，此类保留用于向后兼容"""
+
     success: bool
     via: ConnectionType
     target_device: str = ""
@@ -124,10 +126,10 @@ class MeshCoordinator:
     4. 提供拓扑查询 API
     """
 
-    PROBE_INTERVAL = 60        # 秒: 重探测间隔
-    PROBE_TIMEOUT = 3          # 秒: 单次探测超时
-    MAX_PROBE_FAILURES = 3     # 连续失败 N 次后标记不可达
-    PEER_EXPIRE = 300          # 秒: peer 过期时间 (无心跳)
+    PROBE_INTERVAL = 60  # 秒: 重探测间隔
+    PROBE_TIMEOUT = 3  # 秒: 单次探测超时
+    MAX_PROBE_FAILURES = 3  # 连续失败 N 次后标记不可达
+    PEER_EXPIRE = 300  # 秒: peer 过期时间 (无心跳)
 
     def __init__(
         self,
@@ -138,7 +140,7 @@ class MeshCoordinator:
     ):
         self._local_id = local_device_id
         # DEPRECATED: senders 已移至 AIPTransport，保留兼容
-        self._p2p_send = p2p_sender   # legacy, do not use
+        self._p2p_send = p2p_sender  # legacy, do not use
         self._relay_send = relay_sender  # legacy, do not use
         self._ws_send = ws_sender  # legacy, do not use
         self._peers: Dict[str, PeerEntry] = {}
@@ -166,6 +168,7 @@ class MeshCoordinator:
             return
         try:
             from core.aip_transport import get_aip_transport
+
             adapter = get_aip_transport().get_adapter("tailscale_p2p")
             if adapter is not None and hasattr(adapter, "register_device"):
                 adapter.register_device(device_id, tailscale_ip)
@@ -211,10 +214,7 @@ class MeshCoordinator:
                 metadata=metadata or {},
             )
             self._peers[device_id] = peer
-            logger.info(
-                f"Peer registered: {device_id} (lan={local_ip}:{local_port}, "
-                f"ts={tailscale_ip or 'none'})"
-            )
+            logger.info(f"Peer registered: {device_id} (lan={local_ip}:{local_port}, " f"ts={tailscale_ip or 'none'})")
         # PR-28: Sync tailscale_ip to TailscaleP2PAdapter
         if tailscale_ip:
             self._sync_tailscale_registry(device_id, tailscale_ip)
@@ -352,14 +352,16 @@ class MeshCoordinator:
                 continue
             if (now - peer.last_seen) > self.PEER_EXPIRE:
                 continue
-            peers.append({
-                "device_id": peer.device_id,
-                "local_ip": peer.local_ip,
-                "local_port": peer.local_port,
-                "public_ip": peer.public_ip,
-                "public_port": peer.public_port,
-                "tailscale_ip": peer.tailscale_ip,
-            })
+            peers.append(
+                {
+                    "device_id": peer.device_id,
+                    "local_ip": peer.local_ip,
+                    "local_port": peer.local_port,
+                    "public_ip": peer.public_ip,
+                    "public_port": peer.public_port,
+                    "tailscale_ip": peer.tailscale_ip,
+                }
+            )
         return peers
 
     async def broadcast_peer_exchange(self):
@@ -375,7 +377,7 @@ class MeshCoordinator:
         server_ts_ip = ""
         try:
             ts_adapter = aip_transport.get_adapter("tailscale_p2p")
-            if ts_adapter and hasattr(ts_adapter, '_my_ts_ip'):
+            if ts_adapter and hasattr(ts_adapter, "_my_ts_ip"):
                 server_ts_ip = ts_adapter._my_ts_ip or ""
         except Exception:
             pass
@@ -384,18 +386,24 @@ class MeshCoordinator:
             peer_list = self.build_peer_exchange(exclude_device=device_id)
             # PR-28: Add server itself to peer list with tailscale_ip
             if server_ts_ip:
-                peer_list.insert(0, {
-                    "device_id": "server",
-                    "tailscale_ip": server_ts_ip,
-                    "role": "gateway",
-                })
+                peer_list.insert(
+                    0,
+                    {
+                        "device_id": "server",
+                        "tailscale_ip": server_ts_ip,
+                        "role": "gateway",
+                    },
+                )
             if peer_list:
-                await aip_transport.send({
-                    "type": "peer_exchange",
-                    "_transport": "auto",
-                    "peers": peer_list,
-                    "timestamp": time.time(),
-                }, device_id)
+                await aip_transport.send(
+                    {
+                        "type": "peer_exchange",
+                        "_transport": "auto",
+                        "peers": peer_list,
+                        "timestamp": time.time(),
+                    },
+                    device_id,
+                )
 
     def handle_peer_announce(self, device_id: str, data: Dict) -> PeerEntry:
         """
@@ -424,29 +432,35 @@ class MeshCoordinator:
         edges = []
 
         # 服务端节点
-        nodes.append({
-            "id": self._local_id,
-            "type": "server",
-            "role": "hub",
-        })
+        nodes.append(
+            {
+                "id": self._local_id,
+                "type": "server",
+                "role": "hub",
+            }
+        )
 
         for device_id, peer in self._peers.items():
             alive = (now - peer.last_seen) < self.PEER_EXPIRE
-            nodes.append({
-                "id": device_id,
-                "type": "device",
-                "local_ip": peer.local_ip,
-                "alive": alive,
-                "connection_type": peer.connection_type.value,
-            })
+            nodes.append(
+                {
+                    "id": device_id,
+                    "type": "device",
+                    "local_ip": peer.local_ip,
+                    "alive": alive,
+                    "connection_type": peer.connection_type.value,
+                }
+            )
 
             # 服务端 ↔ 设备 (WS)
-            edges.append({
-                "source": self._local_id,
-                "target": device_id,
-                "type": "websocket",
-                "active": alive,
-            })
+            edges.append(
+                {
+                    "source": self._local_id,
+                    "target": device_id,
+                    "type": "websocket",
+                    "active": alive,
+                }
+            )
 
             # P2P 直连边
             if peer.reachable_direct:
@@ -455,8 +469,7 @@ class MeshCoordinator:
                     if other_id != device_id and other_peer.reachable_direct:
                         if peer.local_ip and other_peer.local_ip:
                             # 同网段检测 (简化: 取前三段)
-                            if (peer.local_ip.rsplit(".", 1)[0] ==
-                                    other_peer.local_ip.rsplit(".", 1)[0]):
+                            if peer.local_ip.rsplit(".", 1)[0] == other_peer.local_ip.rsplit(".", 1)[0]:
                                 edge_id = tuple(sorted([device_id, other_id]))
                                 edge = {
                                     "source": edge_id[0],
@@ -487,9 +500,9 @@ class MeshCoordinator:
         if canonical_closure.get("available"):
             try:
                 from contracts.cross_runtime_result_merge import (
+                    build_result_merge_summary,
                     from_execution_output,
                     merge_runtime_results,
-                    build_result_merge_summary,
                 )
 
                 task_id = str(canonical_closure.get("task_id") or "")
@@ -558,10 +571,7 @@ class MeshCoordinator:
     def cleanup_expired(self):
         """清理过期 peer"""
         now = time.time()
-        expired = [
-            did for did, p in self._peers.items()
-            if (now - p.last_seen) > self.PEER_EXPIRE
-        ]
+        expired = [did for did, p in self._peers.items() if (now - p.last_seen) > self.PEER_EXPIRE]
         for did in expired:
             del self._peers[did]
             logger.info(f"Peer expired: {did}")

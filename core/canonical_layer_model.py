@@ -338,13 +338,10 @@ CANONICAL_LAYER_REGISTRY: Dict[CanonicalLayer, LayerDeclaration] = {
             "core.canonical_group_completion_closure",
             "core.durable_truth_authority_chain",
         ),
-        not_policies=(
-            COMPLETION_TRUTH_IS_ENFORCED_NOT_OPTIONAL,
-        ),
+        not_policies=(COMPLETION_TRUTH_IS_ENFORCED_NOT_OPTIONAL,),
         is_hot_path=False,
         is_startup_only=False,
     ),
-
     CanonicalLayer.ROUTER_COGNITIVE_AUTHORITY: LayerDeclaration(
         layer=CanonicalLayer.ROUTER_COGNITIVE_AUTHORITY,
         label="Router-Level Cognitive Authority (L1/L2/L3)",
@@ -360,13 +357,10 @@ CANONICAL_LAYER_REGISTRY: Dict[CanonicalLayer, LayerDeclaration] = {
             "core.llm.context_authority",
             "core.unified.llm_router",
         ),
-        not_policies=(
-            L1_L2_L3_BELONGS_TO_ROUTER_LAYER_NOT_SHADOW_STACK,
-        ),
+        not_policies=(L1_L2_L3_BELONGS_TO_ROUTER_LAYER_NOT_SHADOW_STACK,),
         is_hot_path=True,
         is_startup_only=False,
     ),
-
     CanonicalLayer.PER_REQUEST_HOT_PATH: LayerDeclaration(
         layer=CanonicalLayer.PER_REQUEST_HOT_PATH,
         label="Per-Request Hot Path",
@@ -386,7 +380,6 @@ CANONICAL_LAYER_REGISTRY: Dict[CanonicalLayer, LayerDeclaration] = {
         is_hot_path=True,
         is_startup_only=False,
     ),
-
     CanonicalLayer.MULTI_STEP_ORCHESTRATION_SPINE: LayerDeclaration(
         layer=CanonicalLayer.MULTI_STEP_ORCHESTRATION_SPINE,
         label="Multi-Step Orchestration Spine",
@@ -397,16 +390,11 @@ CANONICAL_LAYER_REGISTRY: Dict[CanonicalLayer, LayerDeclaration] = {
             "handoff/takeover, cross-device, and hybrid.  "
             "NOT the universal synchronous per-request gate."
         ),
-        canonical_modules=(
-            "core.unified_orchestration_spine",
-        ),
-        not_policies=(
-            V4_IS_NOT_PER_REQUEST_GATE,
-        ),
+        canonical_modules=("core.unified_orchestration_spine",),
+        not_policies=(V4_IS_NOT_PER_REQUEST_GATE,),
         is_hot_path=False,
         is_startup_only=False,
     ),
-
     CanonicalLayer.STARTUP_RELEASE_INTEGRITY: LayerDeclaration(
         layer=CanonicalLayer.STARTUP_RELEASE_INTEGRITY,
         label="Startup / Readiness / Health / Release Integrity Boundary",
@@ -416,21 +404,15 @@ CANONICAL_LAYER_REGISTRY: Dict[CanonicalLayer, LayerDeclaration] = {
             "readiness checks fail.  Evaluated at CI time and system startup.  "
             "NOT a per-request runtime gate."
         ),
-        canonical_modules=(
-            "core.release_blocking_gate",
-        ),
-        not_policies=(
-            V6_IS_NOT_PER_REQUEST_GATE,
-        ),
+        canonical_modules=("core.release_blocking_gate",),
+        not_policies=(V6_IS_NOT_PER_REQUEST_GATE,),
         is_hot_path=False,
         is_startup_only=True,
     ),
 }
 
 #: Frozenset of all valid :class:`CanonicalLayer` string values.
-CANONICAL_LAYER_KEYS: FrozenSet[str] = frozenset(
-    layer.value for layer in CanonicalLayer
-)
+CANONICAL_LAYER_KEYS: FrozenSet[str] = frozenset(layer.value for layer in CanonicalLayer)
 
 # ---------------------------------------------------------------------------
 # Finding data types
@@ -568,8 +550,7 @@ def check_layer_model_consistent(
         findings.append(
             _lf_error(
                 check,
-                f"Unknown layer_key '{layer_key}'. "
-                f"Expected one of: {sorted(CANONICAL_LAYER_KEYS)}.",
+                f"Unknown layer_key '{layer_key}'. " f"Expected one of: {sorted(CANONICAL_LAYER_KEYS)}.",
                 {"layer_key": layer_key},
             )
         )
@@ -579,8 +560,7 @@ def check_layer_model_consistent(
         layer = CanonicalLayer(layer_key)
     except ValueError:
         findings.append(
-            _lf_error(check, f"layer_key '{layer_key}' is not a valid CanonicalLayer value.",
-                      {"layer_key": layer_key})
+            _lf_error(check, f"layer_key '{layer_key}' is not a valid CanonicalLayer value.", {"layer_key": layer_key})
         )
         return findings
 
@@ -594,8 +574,7 @@ def check_layer_model_consistent(
                 check,
                 f"Layer '{layer_key}' declares is_hot_path={observed_hot_path} but "
                 f"the canonical model requires is_hot_path={declaration.is_hot_path}.",
-                {"layer_key": layer_key, "observed": observed_hot_path,
-                 "expected": declaration.is_hot_path},
+                {"layer_key": layer_key, "observed": observed_hot_path, "expected": declaration.is_hot_path},
             )
         )
 
@@ -607,8 +586,7 @@ def check_layer_model_consistent(
                 check,
                 f"Layer '{layer_key}' declares is_startup_only={observed_startup_only} but "
                 f"the canonical model requires is_startup_only={declaration.is_startup_only}.",
-                {"layer_key": layer_key, "observed": observed_startup_only,
-                 "expected": declaration.is_startup_only},
+                {"layer_key": layer_key, "observed": observed_startup_only, "expected": declaration.is_startup_only},
             )
         )
 
@@ -645,8 +623,7 @@ def check_layer_model_consistent(
                     "L1/L2/L3 router cognitive authority is declared as is_shadow_stack=True, "
                     "which violates the L1_L2_L3_BELONGS_TO_ROUTER_LAYER_NOT_SHADOW_STACK "
                     "boundary invariant.",
-                    {"layer_key": layer_key,
-                     "violation": "L1_L2_L3_BELONGS_TO_ROUTER_LAYER_NOT_SHADOW_STACK"},
+                    {"layer_key": layer_key, "violation": "L1_L2_L3_BELONGS_TO_ROUTER_LAYER_NOT_SHADOW_STACK"},
                 )
             )
 
@@ -659,8 +636,7 @@ def check_layer_model_consistent(
                     "Completion truth backbone is declared as is_optional_signaling=True, "
                     "which violates the COMPLETION_TRUTH_IS_ENFORCED_NOT_OPTIONAL "
                     "boundary invariant.",
-                    {"layer_key": layer_key,
-                     "violation": "COMPLETION_TRUTH_IS_ENFORCED_NOT_OPTIONAL"},
+                    {"layer_key": layer_key, "violation": "COMPLETION_TRUTH_IS_ENFORCED_NOT_OPTIONAL"},
                 )
             )
 
@@ -668,8 +644,7 @@ def check_layer_model_consistent(
         findings.append(
             _lf_info(
                 check,
-                f"Layer '{layer_key}' ({declaration.label}) is consistent with "
-                "the canonical layer model.",
+                f"Layer '{layer_key}' ({declaration.label}) is consistent with " "the canonical layer model.",
                 {"layer_key": layer_key, "label": declaration.label},
             )
         )
@@ -713,14 +688,12 @@ def run_layer_model_invariants(
 
     if report.overall_consistent:
         logger.debug(
-            "Canonical layer model invariants: all checks passed "
-            "(errors=0, warnings=%d)",
+            "Canonical layer model invariants: all checks passed " "(errors=0, warnings=%d)",
             report.warning_count,
         )
     else:
         logger.warning(
-            "Canonical layer model invariants: %d error(s) found — "
-            "overall_consistent=False",
+            "Canonical layer model invariants: %d error(s) found — " "overall_consistent=False",
             report.error_count,
         )
 

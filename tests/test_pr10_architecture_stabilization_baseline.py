@@ -258,8 +258,15 @@ def test_e02_surface_record_to_dict_shape() -> None:
     )
     d = record.to_dict()
     expected_keys = {
-        "surface_id", "surface_name", "module_path", "tier", "category",
-        "is_extension_ready", "pr_introduced", "rationale", "canonical_replacement",
+        "surface_id",
+        "surface_name",
+        "module_path",
+        "tier",
+        "category",
+        "is_extension_ready",
+        "pr_introduced",
+        "rationale",
+        "canonical_replacement",
     }
     assert expected_keys.issubset(d.keys())
 
@@ -321,10 +328,15 @@ def test_f02_snapshot_to_dict_shape() -> None:
     )
     d = snap.to_dict()
     expected_keys = {
-        "snapshotted_at", "total_surface_count", "canonical_stable_count",
-        "transitional_converging_count", "extension_surface_count",
-        "compat_bridge_count", "extension_ready_count",
-        "policy_sentinels", "surfaces",
+        "snapshotted_at",
+        "total_surface_count",
+        "canonical_stable_count",
+        "transitional_converging_count",
+        "extension_surface_count",
+        "compat_bridge_count",
+        "extension_ready_count",
+        "policy_sentinels",
+        "surfaces",
     }
     assert expected_keys.issubset(d.keys())
 
@@ -382,9 +394,7 @@ def test_h02_canonical_stable_is_non_empty() -> None:
 def test_h03_canonical_stable_all_are_extension_ready() -> None:
     surfaces = get_canonical_stable_surfaces()
     for s in surfaces:
-        assert s.is_extension_ready is True, (
-            f"CANONICAL_STABLE surface {s.surface_id!r} has is_extension_ready=False"
-        )
+        assert s.is_extension_ready is True, f"CANONICAL_STABLE surface {s.surface_id!r} has is_extension_ready=False"
 
 
 # ---------------------------------------------------------------------------
@@ -401,17 +411,15 @@ def test_i01_transitional_returns_only_transitional_converging() -> None:
 def test_i02_transitional_all_not_extension_ready() -> None:
     surfaces = get_transitional_surfaces()
     for s in surfaces:
-        assert s.is_extension_ready is False, (
-            f"TRANSITIONAL_CONVERGING surface {s.surface_id!r} has is_extension_ready=True"
-        )
+        assert (
+            s.is_extension_ready is False
+        ), f"TRANSITIONAL_CONVERGING surface {s.surface_id!r} has is_extension_ready=True"
 
 
 def test_i03_transitional_all_have_canonical_replacement() -> None:
     surfaces = get_transitional_surfaces()
     for s in surfaces:
-        assert s.canonical_replacement, (
-            f"TRANSITIONAL_CONVERGING surface {s.surface_id!r} has no canonical_replacement"
-        )
+        assert s.canonical_replacement, f"TRANSITIONAL_CONVERGING surface {s.surface_id!r} has no canonical_replacement"
 
 
 # ---------------------------------------------------------------------------
@@ -428,9 +436,7 @@ def test_j01_extension_surfaces_returns_only_extension_surface_tier() -> None:
 def test_j02_extension_surfaces_all_extension_ready() -> None:
     surfaces = get_extension_surfaces()
     for s in surfaces:
-        assert s.is_extension_ready is True, (
-            f"EXTENSION_SURFACE {s.surface_id!r} has is_extension_ready=False"
-        )
+        assert s.is_extension_ready is True, f"EXTENSION_SURFACE {s.surface_id!r} has is_extension_ready=False"
 
 
 # ---------------------------------------------------------------------------
@@ -447,17 +453,15 @@ def test_k01_compat_bridge_returns_only_compat_bridge_tier() -> None:
 def test_k02_compat_bridge_all_not_extension_ready() -> None:
     surfaces = get_compat_bridge_surfaces()
     for s in surfaces:
-        assert s.is_extension_ready is False, (
-            f"COMPATIBILITY_BRIDGE surface {s.surface_id!r} has is_extension_ready=True"
-        )
+        assert (
+            s.is_extension_ready is False
+        ), f"COMPATIBILITY_BRIDGE surface {s.surface_id!r} has is_extension_ready=True"
 
 
 def test_k03_compat_bridge_all_have_canonical_replacement() -> None:
     surfaces = get_compat_bridge_surfaces()
     for s in surfaces:
-        assert s.canonical_replacement, (
-            f"COMPATIBILITY_BRIDGE surface {s.surface_id!r} has no canonical_replacement"
-        )
+        assert s.canonical_replacement, f"COMPATIBILITY_BRIDGE surface {s.surface_id!r} has no canonical_replacement"
 
 
 # ---------------------------------------------------------------------------
@@ -564,8 +568,7 @@ def test_o01_total_count_equals_tier_count_sum() -> None:
         + snap.compat_bridge_count
     )
     assert snap.total_surface_count == tier_sum, (
-        f"total_surface_count={snap.total_surface_count} != "
-        f"sum of tier counts={tier_sum}"
+        f"total_surface_count={snap.total_surface_count} != " f"sum of tier counts={tier_sum}"
     )
 
 
@@ -587,34 +590,22 @@ def test_p01_extension_ready_count_consistent_with_catalog() -> None:
 
 def test_q01_policy_sentinels_contains_canonical_stable_policy() -> None:
     snap = build_stabilization_baseline_snapshot()
-    assert any(
-        "CANONICAL_SURFACES_ARE_STABLE_EXTENSION_POINTS" in p
-        for p in snap.policy_sentinels
-    )
+    assert any("CANONICAL_SURFACES_ARE_STABLE_EXTENSION_POINTS" in p for p in snap.policy_sentinels)
 
 
 def test_q02_policy_sentinels_contains_transitional_policy() -> None:
     snap = build_stabilization_baseline_snapshot()
-    assert any(
-        "TRANSITIONAL_SURFACES_MUST_CONVERGE_NOT_EXTEND" in p
-        for p in snap.policy_sentinels
-    )
+    assert any("TRANSITIONAL_SURFACES_MUST_CONVERGE_NOT_EXTEND" in p for p in snap.policy_sentinels)
 
 
 def test_q03_policy_sentinels_contains_extension_path_policy() -> None:
     snap = build_stabilization_baseline_snapshot()
-    assert any(
-        "EXTENSION_MUST_USE_CANONICAL_PATHS_ONLY" in p
-        for p in snap.policy_sentinels
-    )
+    assert any("EXTENSION_MUST_USE_CANONICAL_PATHS_ONLY" in p for p in snap.policy_sentinels)
 
 
 def test_q04_policy_sentinels_contains_compat_bridge_policy() -> None:
     snap = build_stabilization_baseline_snapshot()
-    assert any(
-        "COMPAT_BRIDGES_MUST_NOT_GROW" in p
-        for p in snap.policy_sentinels
-    )
+    assert any("COMPAT_BRIDGES_MUST_NOT_GROW" in p for p in snap.policy_sentinels)
 
 
 # ---------------------------------------------------------------------------
@@ -671,15 +662,20 @@ def test_t01_snapshot_to_dict_surfaces_length_matches() -> None:
 def test_u01_each_surface_to_dict_has_required_keys() -> None:
     snap = build_stabilization_baseline_snapshot()
     required_keys = {
-        "surface_id", "surface_name", "module_path", "tier",
-        "category", "is_extension_ready", "pr_introduced", "rationale",
+        "surface_id",
+        "surface_name",
+        "module_path",
+        "tier",
+        "category",
+        "is_extension_ready",
+        "pr_introduced",
+        "rationale",
         "canonical_replacement",
     }
     for surface_dict in snap.to_dict()["surfaces"]:
         for key in required_keys:
             assert key in surface_dict, (
-                f"Key {key!r} missing from surface record: "
-                f"{surface_dict.get('surface_id', '<unknown>')}"
+                f"Key {key!r} missing from surface record: " f"{surface_dict.get('surface_id', '<unknown>')}"
             )
 
 
@@ -691,6 +687,7 @@ def test_u01_each_surface_to_dict_has_required_keys() -> None:
 @pytest.mark.skipif(not _HAS_FASTAPI, reason="fastapi not installed")
 def test_v01_projection_alignment_sentinel_present() -> None:
     import core.routes.projection as proj_mod
+
     assert hasattr(proj_mod, "ARCHITECTURE_STABILIZATION_BASELINE_ALIGNED_PR10")
     val = proj_mod.ARCHITECTURE_STABILIZATION_BASELINE_ALIGNED_PR10
     assert isinstance(val, str)
@@ -700,10 +697,9 @@ def test_v01_projection_alignment_sentinel_present() -> None:
 @pytest.mark.skipif(not _HAS_FASTAPI, reason="fastapi not installed")
 def test_v02_projection_alignment_sentinel_not_unavailable() -> None:
     import core.routes.projection as proj_mod
+
     val = proj_mod.ARCHITECTURE_STABILIZATION_BASELINE_ALIGNED_PR10
-    assert "UNAVAILABLE" not in val, (
-        f"Projection alignment sentinel is UNAVAILABLE: {val!r}"
-    )
+    assert "UNAVAILABLE" not in val, f"Projection alignment sentinel is UNAVAILABLE: {val!r}"
 
 
 # ---------------------------------------------------------------------------
@@ -830,8 +826,7 @@ def test_aa01_no_transitional_surface_is_extension_ready() -> None:
             StabilizationTier.COMPATIBILITY_BRIDGE,
         ):
             assert record.is_extension_ready is False, (
-                f"Surface {record.surface_id!r} has tier={record.tier.value} "
-                f"but is_extension_ready=True"
+                f"Surface {record.surface_id!r} has tier={record.tier.value} " f"but is_extension_ready=True"
             )
 
 

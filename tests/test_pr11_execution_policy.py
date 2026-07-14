@@ -105,42 +105,41 @@ from typing import Any, Dict, Optional
 
 import pytest
 
+from core.execution_policy import DEFAULT_CONSERVATIVE_POLICY as CONSERVATIVE_PUBLIC
+from core.execution_policy import ExecutionPolicy as ExecutionPolicyPublic
+from core.execution_policy import PolicyBand as PolicyBandPublic
+from core.execution_policy import attach_policy_to_projection as attach_public
+from core.execution_policy import build_policy_for_projection as build_public
+from core.execution_policy import get_policy_hints as hints_public
+from core.execution_policy import resolve_policy as resolve_policy_public
+from core.execution_policy.execution_policy import (
+    DEFAULT_CONSERVATIVE_POLICY,
+    ExecutionPolicy,
+)
+from core.execution_policy.policy_band import (
+    BAND_ORDER,
+    PolicyBand,
+    band_allows_cross_device,
+    band_allows_execution,
+    band_rank,
+    band_requires_confirmation,
+)
+from core.execution_policy.policy_resolver import (
+    RETURN_PRESSURE_FORCE_OBSERVE,
+    RETURN_PRESSURE_RESTRICT,
+    resolve_policy,
+)
+from core.execution_policy.policy_summary import (
+    attach_policy_to_projection,
+    build_policy_for_projection,
+    get_policy_hints,
+    summarise_policy,
+)
+
 # ---------------------------------------------------------------------------
 # Import subjects
 # ---------------------------------------------------------------------------
 
-from core.execution_policy.policy_band import (
-    PolicyBand,
-    BAND_ORDER,
-    band_allows_execution,
-    band_allows_cross_device,
-    band_requires_confirmation,
-    band_rank,
-)
-from core.execution_policy.execution_policy import (
-    ExecutionPolicy,
-    DEFAULT_CONSERVATIVE_POLICY,
-)
-from core.execution_policy.policy_resolver import (
-    resolve_policy,
-    RETURN_PRESSURE_FORCE_OBSERVE,
-    RETURN_PRESSURE_RESTRICT,
-)
-from core.execution_policy.policy_summary import (
-    summarise_policy,
-    get_policy_hints,
-    attach_policy_to_projection,
-    build_policy_for_projection,
-)
-from core.execution_policy import (
-    PolicyBand as PolicyBandPublic,
-    ExecutionPolicy as ExecutionPolicyPublic,
-    resolve_policy as resolve_policy_public,
-    DEFAULT_CONSERVATIVE_POLICY as CONSERVATIVE_PUBLIC,
-    get_policy_hints as hints_public,
-    attach_policy_to_projection as attach_public,
-    build_policy_for_projection as build_public,
-)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -222,6 +221,7 @@ _SOFT_DECAY_RETURN_DICT: Dict[str, Any] = {
 # A) PolicyBand enum
 # ===========================================================================
 
+
 class TestPolicyBandEnum:
     def test_all_bands_present(self):
         values = {b.value for b in PolicyBand}
@@ -279,6 +279,7 @@ class TestPolicyBandEnum:
 # B) ExecutionPolicy dataclass
 # ===========================================================================
 
+
 class TestExecutionPolicy:
     def test_default_construction(self):
         p = ExecutionPolicy()
@@ -303,11 +304,22 @@ class TestExecutionPolicy:
         )
         d = p.to_dict()
         required_keys = {
-            "policy_band", "risk_budget", "action_budget", "fallback_budget",
-            "allowed_executor_levels", "cross_device_allowed", "requires_confirmation",
-            "reason", "source_phase", "source_domain", "source_authority_role",
-            "return_pressure", "can_execute", "can_expand_cross_device",
-            "should_require_confirmation", "max_executor_level",
+            "policy_band",
+            "risk_budget",
+            "action_budget",
+            "fallback_budget",
+            "allowed_executor_levels",
+            "cross_device_allowed",
+            "requires_confirmation",
+            "reason",
+            "source_phase",
+            "source_domain",
+            "source_authority_role",
+            "return_pressure",
+            "can_execute",
+            "can_expand_cross_device",
+            "should_require_confirmation",
+            "max_executor_level",
         }
         assert required_keys.issubset(d.keys())
 
@@ -386,6 +398,7 @@ class TestExecutionPolicy:
 # C) resolve_policy — phase-primary resolution
 # ===========================================================================
 
+
 class TestResolvePolicyPhase:
     def test_no_phase_defaults_observe_only(self):
         p = resolve_policy()
@@ -435,6 +448,7 @@ class TestResolvePolicyPhase:
 # D) resolve_policy — authority interactions
 # ===========================================================================
 
+
 class TestResolvePolicyAuthority:
     def test_legacy_authority_downgrades_manifest_cross_device(self):
         p = resolve_policy(
@@ -482,6 +496,7 @@ class TestResolvePolicyAuthority:
 # ===========================================================================
 # E) resolve_policy — return-pressure interactions
 # ===========================================================================
+
 
 class TestResolvePolicyReturnPressure:
     def test_return_to_formless_forces_observe_only(self):
@@ -534,6 +549,7 @@ class TestResolvePolicyReturnPressure:
 # F) resolve_policy — retreat_tendency interactions
 # ===========================================================================
 
+
 class TestResolvePolicyRetreat:
     def test_high_retreat_triggers_restriction(self):
         p = resolve_policy(phase="manifest", retreat_tendency=0.75)
@@ -555,6 +571,7 @@ class TestResolvePolicyRetreat:
 # G) resolve_policy — graceful partial inputs
 # ===========================================================================
 
+
 class TestResolvePolicyPartialInputs:
     def test_only_phase(self):
         p = resolve_policy(phase="liminal")
@@ -567,16 +584,19 @@ class TestResolvePolicyPartialInputs:
 
     def test_tristatephase_enum_accepted(self):
         from core.continuum.types import TriStatePhase
+
         p = resolve_policy(phase=TriStatePhase.MANIFEST)
         assert p.policy_band is PolicyBand.BOUNDED_EXECUTE
 
     def test_runtimedomain_enum_accepted(self):
-        from core.continuum.types import TriStatePhase, RuntimeDomain
+        from core.continuum.types import RuntimeDomain, TriStatePhase
+
         p = resolve_policy(phase=TriStatePhase.MANIFEST, domain=RuntimeDomain.CROSS_DEVICE)
         assert p.policy_band is PolicyBand.FULL_EXECUTE
 
     def test_authority_role_enum_accepted(self):
         from core.orchestration_authority import AuthorityRole
+
         p = resolve_policy(
             phase="manifest",
             domain="cross_device",
@@ -586,6 +606,7 @@ class TestResolvePolicyPartialInputs:
 
     def test_return_summary_object_accepted(self):
         from core.return_intelligence import IDLE_RETURN_SUMMARY
+
         p = resolve_policy(phase="manifest", return_summary=IDLE_RETURN_SUMMARY)
         assert p.policy_band is PolicyBand.BOUNDED_EXECUTE
 
@@ -601,6 +622,7 @@ class TestResolvePolicyPartialInputs:
 # ===========================================================================
 # H) summarise_policy
 # ===========================================================================
+
 
 class TestSummarisePolicy:
     def test_none_returns_conservative_summary(self):
@@ -627,10 +649,18 @@ class TestSummarisePolicy:
     def test_all_keys_present(self):
         d = summarise_policy(DEFAULT_CONSERVATIVE_POLICY)
         required = {
-            "policy_band", "risk_budget", "action_budget", "fallback_budget",
-            "allowed_executor_levels", "cross_device_allowed", "requires_confirmation",
-            "reason", "can_execute", "can_expand_cross_device",
-            "should_require_confirmation", "max_executor_level",
+            "policy_band",
+            "risk_budget",
+            "action_budget",
+            "fallback_budget",
+            "allowed_executor_levels",
+            "cross_device_allowed",
+            "requires_confirmation",
+            "reason",
+            "can_execute",
+            "can_expand_cross_device",
+            "should_require_confirmation",
+            "max_executor_level",
         }
         assert required.issubset(d.keys())
 
@@ -646,6 +676,7 @@ class TestSummarisePolicy:
 # ===========================================================================
 # I) get_policy_hints
 # ===========================================================================
+
 
 class TestGetPolicyHints:
     def test_none_returns_conservative(self):
@@ -691,9 +722,14 @@ class TestGetPolicyHints:
     def test_hints_keys_present(self):
         hints = get_policy_hints(None)
         required = {
-            "policy_band", "can_execute", "can_expand_cross_device",
-            "should_require_confirmation", "max_executor_level",
-            "risk_budget", "action_budget", "return_pressure",
+            "policy_band",
+            "can_execute",
+            "can_expand_cross_device",
+            "should_require_confirmation",
+            "max_executor_level",
+            "risk_budget",
+            "action_budget",
+            "return_pressure",
         }
         assert required.issubset(hints.keys())
 
@@ -701,6 +737,7 @@ class TestGetPolicyHints:
 # ===========================================================================
 # J) attach_policy_to_projection
 # ===========================================================================
+
 
 class TestAttachPolicyToProjection:
     def test_original_not_mutated(self):
@@ -737,6 +774,7 @@ class TestAttachPolicyToProjection:
 # K) build_policy_for_projection
 # ===========================================================================
 
+
 class TestBuildPolicyForProjection:
     def test_manifest_projection_returns_execution_hints(self):
         hints = build_policy_for_projection(_MANIFEST_PROJECTION)
@@ -769,9 +807,11 @@ class TestBuildPolicyForProjection:
 # L) Integration with actual AuthorityRole enum
 # ===========================================================================
 
+
 class TestIntegrationWithAuthorityRole:
     def test_authoritative_entrypoint_manifest_cross_device(self):
         from core.orchestration_authority import AuthorityRole
+
         p = resolve_policy(
             phase="manifest",
             domain="cross_device",
@@ -782,6 +822,7 @@ class TestIntegrationWithAuthorityRole:
 
     def test_execution_runtime_delegate_manifest_cross_device(self):
         from core.orchestration_authority import AuthorityRole
+
         p = resolve_policy(
             phase="manifest",
             domain="cross_device",
@@ -791,6 +832,7 @@ class TestIntegrationWithAuthorityRole:
 
     def test_legacy_compatibility_downgrades(self):
         from core.orchestration_authority import AuthorityRole
+
         p = resolve_policy(
             phase="manifest",
             domain="cross_device",
@@ -801,6 +843,7 @@ class TestIntegrationWithAuthorityRole:
 
     def test_deprecated_downgrades(self):
         from core.orchestration_authority import AuthorityRole
+
         p = resolve_policy(
             phase="manifest",
             domain="cross_device",
@@ -812,6 +855,7 @@ class TestIntegrationWithAuthorityRole:
 # ===========================================================================
 # M) Budget table consistency
 # ===========================================================================
+
 
 class TestBudgetConsistency:
     def test_observe_only_zero_budgets(self):
@@ -842,6 +886,7 @@ class TestBudgetConsistency:
 # ===========================================================================
 # N) Public __init__ surface
 # ===========================================================================
+
 
 class TestPublicAPI:
     def test_public_band_same_as_internal(self):

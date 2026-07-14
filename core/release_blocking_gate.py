@@ -80,11 +80,10 @@ logger = logging.getLogger("Galaxy.ReleaseBlockingGate")
 # Unified taxonomy alignment
 # ---------------------------------------------------------------------------
 try:
-    from core.release_governance_taxonomy import (  # noqa: F401
-        TAXONOMY_AUTHORITY as _TAXONOMY_AUTHORITY,
-        IssueClassification as _IssueClassification,
-        verdict_to_classification as _verdict_to_classification,
-    )
+    from core.release_governance_taxonomy import TAXONOMY_AUTHORITY as _TAXONOMY_AUTHORITY  # noqa: F401
+    from core.release_governance_taxonomy import IssueClassification as _IssueClassification
+    from core.release_governance_taxonomy import verdict_to_classification as _verdict_to_classification
+
     _TAXONOMY_AVAILABLE = True
 except ImportError:  # pragma: no cover
     _TAXONOMY_AVAILABLE = False
@@ -245,9 +244,7 @@ class GateCriterionResult:
             "is_blocking": self.is_blocking,
         }
         if _TAXONOMY_AVAILABLE:
-            result["taxonomy_classification"] = _verdict_to_classification(
-                status_str
-            ).value
+            result["taxonomy_classification"] = _verdict_to_classification(status_str).value
         return result
 
 
@@ -292,18 +289,16 @@ class ReleaseGateDecision:
         return result
 
     def summary_lines(self) -> List[str]:
-        lines = [
-            f"ReleaseGateDecision [{self.decision_id}] "
-            f"{'APPROVED ✅' if self.approved else 'BLOCKED ❌'}"
-        ]
+        lines = [f"ReleaseGateDecision [{self.decision_id}] " f"{'APPROVED ✅' if self.approved else 'BLOCKED ❌'}"]
         for crit in self.criteria:
-            icon = "✅" if crit.status == CriterionStatus.PASSED else (
-                "❌" if crit.status == CriterionStatus.FAILED else "⚠️"
+            icon = (
+                "✅"
+                if crit.status == CriterionStatus.PASSED
+                else ("❌" if crit.status == CriterionStatus.FAILED else "⚠️")
             )
             lines.append(
                 f"  {icon} [{('BLOCKING' if crit.is_blocking else 'advisory')}] "
-                f"{crit.display_name}: {crit.status.value}"
-                + (f" — {crit.detail}" if crit.detail else "")
+                f"{crit.display_name}: {crit.status.value}" + (f" — {crit.detail}" if crit.detail else "")
             )
         if self.failed_criteria:
             lines.append(f"  BLOCKED on: {self.failed_criteria}")
@@ -340,18 +335,19 @@ def _crit_capability_enforcement() -> Tuple[CriterionStatus, str]:
         mre = importlib.import_module("core.mainline_routing_enforcement")
         ceh = importlib.import_module("core.capability_enforcement_hardener")
 
-        assert callable(getattr(mre, "enforce_explicit_route_capability_gate", None)), (
-            "enforce_explicit_route_capability_gate not callable in mainline_routing_enforcement"
-        )
-        assert callable(getattr(ceh, "enforce_mainline_capability_gate", None)), (
-            "enforce_mainline_capability_gate not callable in capability_enforcement_hardener"
-        )
-        assert callable(getattr(ceh, "audit_capability_override", None)), (
-            "audit_capability_override not callable in capability_enforcement_hardener"
-        )
+        assert callable(
+            getattr(mre, "enforce_explicit_route_capability_gate", None)
+        ), "enforce_explicit_route_capability_gate not callable in mainline_routing_enforcement"
+        assert callable(
+            getattr(ceh, "enforce_mainline_capability_gate", None)
+        ), "enforce_mainline_capability_gate not callable in capability_enforcement_hardener"
+        assert callable(
+            getattr(ceh, "audit_capability_override", None)
+        ), "audit_capability_override not callable in capability_enforcement_hardener"
 
         # Smoke: STRICT gate with empty requirements → no-op
-        from core.capability_enforcement_hardener import enforce_mainline_capability_gate, EnforcementMode
+        from core.capability_enforcement_hardener import EnforcementMode, enforce_mainline_capability_gate
+
         rec = enforce_mainline_capability_gate(
             "gate-smoke", [], [], mode=EnforcementMode.STRICT, calling_site="release_gate"
         )
@@ -361,6 +357,7 @@ def _crit_capability_enforcement() -> Tuple[CriterionStatus, str]:
         # Use non-empty device_capabilities (["tap"]) missing the required "screenshot",
         # so the gate reaches the mismatch branch (empty device_caps yields INSUFFICIENT_DATA).
         from core.capability_enforcement_hardener import CapabilityHardRejectError
+
         raised = False
         try:
             enforce_mainline_capability_gate(
@@ -374,9 +371,7 @@ def _crit_capability_enforcement() -> Tuple[CriterionStatus, str]:
             raised = True
         assert raised, "STRICT mode did not raise CapabilityHardRejectError on missing capability"
 
-        return CriterionStatus.PASSED, (
-            "Capability enforcement gate functional; STRICT mode raises on mismatch."
-        )
+        return CriterionStatus.PASSED, ("Capability enforcement gate functional; STRICT mode raises on mismatch.")
     except AssertionError as ae:
         return CriterionStatus.FAILED, f"Capability enforcement assertion failed: {ae}"
     except Exception as exc:
@@ -390,6 +385,7 @@ def _crit_protocol_drift() -> Tuple[CriterionStatus, str]:
     # AIP v3 version string
     try:
         from galaxy_gateway.android.message_builder import MessageBuilder
+
         ack = MessageBuilder.device_register_ack("smoke", True, "ok")
         version = ack.get("version")
         if version != "3.0":
@@ -400,6 +396,7 @@ def _crit_protocol_drift() -> Tuple[CriterionStatus, str]:
     # Handler coverage
     try:
         from galaxy_gateway.android_bridge import AndroidBridge
+
         bridge = AndroidBridge()
         registered = {mt.value for mt in bridge._message_handlers}
         required = {"device_register", "capability_report", "heartbeat", "task_result", "task_end"}
@@ -411,8 +408,10 @@ def _crit_protocol_drift() -> Tuple[CriterionStatus, str]:
 
     # Dispatch module
     try:
-        from galaxy_gateway.routing.dispatch import build_aip_message
         import uuid as _uuid
+
+        from galaxy_gateway.routing.dispatch import build_aip_message
+
         msg = build_aip_message(
             device_id="smoke",
             task_id=str(_uuid.uuid4()),
@@ -432,15 +431,12 @@ def _crit_protocol_drift() -> Tuple[CriterionStatus, str]:
 def _crit_readiness_matrix_not_blocked() -> Tuple[CriterionStatus, str]:
     """Release posture: runtime readiness matrix must not be BLOCKED."""
     try:
-        from core.runtime_readiness_matrix import evaluate_readiness_matrix, MatrixVerdict
+        from core.runtime_readiness_matrix import MatrixVerdict, evaluate_readiness_matrix
+
         matrix = evaluate_readiness_matrix()
         if matrix.verdict == MatrixVerdict.BLOCKED:
-            return CriterionStatus.FAILED, (
-                f"Runtime readiness matrix BLOCKED on: {matrix.blocked_dimensions}"
-            )
-        return CriterionStatus.PASSED, (
-            f"Runtime readiness matrix verdict: {matrix.verdict.value}."
-        )
+            return CriterionStatus.FAILED, (f"Runtime readiness matrix BLOCKED on: {matrix.blocked_dimensions}")
+        return CriterionStatus.PASSED, (f"Runtime readiness matrix verdict: {matrix.verdict.value}.")
     except Exception as exc:
         return CriterionStatus.UNKNOWN, f"Readiness matrix evaluation error: {exc}"
 
@@ -448,6 +444,7 @@ def _crit_readiness_matrix_not_blocked() -> Tuple[CriterionStatus, str]:
 def _crit_mainline_enforcement_callsite() -> Tuple[CriterionStatus, str]:
     """Canonical path regression: enforcement call site present in openclawd.py."""
     import pathlib
+
     openclawd_path = pathlib.Path(__file__).resolve().parent / "openclawd.py"
     if not openclawd_path.exists():
         return CriterionStatus.UNKNOWN, "core/openclawd.py not found."
@@ -569,11 +566,7 @@ def evaluate_release_gate(raise_on_failure: bool = False) -> ReleaseGateDecision
             )
         )
 
-    failed = [
-        r.criterion_id
-        for r in results
-        if r.is_blocking and r.status == CriterionStatus.FAILED
-    ]
+    failed = [r.criterion_id for r in results if r.is_blocking and r.status == CriterionStatus.FAILED]
 
     decision = ReleaseGateDecision(
         approved=len(failed) == 0,
@@ -614,8 +607,9 @@ def run_release_blocking_gate() -> int:
 
 
 if __name__ == "__main__":
-    import sys as _sys
     import pathlib as _pathlib
+    import sys as _sys
+
     _repo_root = str(_pathlib.Path(__file__).resolve().parent.parent)
     if _repo_root not in _sys.path:
         _sys.path.insert(0, _repo_root)

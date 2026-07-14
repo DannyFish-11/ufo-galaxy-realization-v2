@@ -572,15 +572,9 @@ class SelectionDecision:
         return {
             "decision_id": self.decision_id,
             "outcome": self.outcome.value,
-            "selected_candidate": (
-                self.selected_candidate.to_dict()
-                if self.selected_candidate is not None
-                else None
-            ),
+            "selected_candidate": (self.selected_candidate.to_dict() if self.selected_candidate is not None else None),
             "selected_evaluation": (
-                self.selected_evaluation.to_dict()
-                if self.selected_evaluation is not None
-                else None
+                self.selected_evaluation.to_dict() if self.selected_evaluation is not None else None
             ),
             "rejected_evaluations": [e.to_dict() for e in self.rejected_evaluations],
             "fallback_reason": self.fallback_reason,
@@ -638,10 +632,7 @@ def evaluate_candidate(ctx: SelectionCandidateContext) -> CandidateEvaluation:
     # ------------------------------------------------------------------
 
     if ctx.attachment_state != RegistryEntryState.active:
-        fragments.append(
-            f"REJECTED::not_active: attachment_state={ctx.attachment_state.value!r} "
-            "is not 'active'."
-        )
+        fragments.append(f"REJECTED::not_active: attachment_state={ctx.attachment_state.value!r} " "is not 'active'.")
         return CandidateEvaluation(
             candidate=ctx,
             score=0,
@@ -651,9 +642,7 @@ def evaluate_candidate(ctx: SelectionCandidateContext) -> CandidateEvaluation:
         )
 
     if ctx.posture != _POSTURE_JOIN_RUNTIME:
-        fragments.append(
-            f"REJECTED::bad_posture: posture={ctx.posture!r} is not 'join_runtime'."
-        )
+        fragments.append(f"REJECTED::bad_posture: posture={ctx.posture!r} is not 'join_runtime'.")
         return CandidateEvaluation(
             candidate=ctx,
             score=0,
@@ -664,8 +653,7 @@ def evaluate_candidate(ctx: SelectionCandidateContext) -> CandidateEvaluation:
 
     if ctx.invalidation_reason != InvalidationReason.none:
         fragments.append(
-            f"REJECTED::explicit_invalidation: invalidation_reason="
-            f"{ctx.invalidation_reason.value!r} is not 'none'."
+            f"REJECTED::explicit_invalidation: invalidation_reason=" f"{ctx.invalidation_reason.value!r} is not 'none'."
         )
         return CandidateEvaluation(
             candidate=ctx,
@@ -694,9 +682,7 @@ def evaluate_candidate(ctx: SelectionCandidateContext) -> CandidateEvaluation:
     )
     if failure_penalty > 0:
         score -= failure_penalty
-        fragments.append(
-            f"-{failure_penalty} recent_failure_count={ctx.recent_failure_count}"
-        )
+        fragments.append(f"-{failure_penalty} recent_failure_count={ctx.recent_failure_count}")
 
     detach_penalty = min(
         ctx.recent_detach_count * DETACH_COUNT_PENALTY_PER_UNIT,
@@ -704,9 +690,7 @@ def evaluate_candidate(ctx: SelectionCandidateContext) -> CandidateEvaluation:
     )
     if detach_penalty > 0:
         score -= detach_penalty
-        fragments.append(
-            f"-{detach_penalty} recent_detach_count={ctx.recent_detach_count}"
-        )
+        fragments.append(f"-{detach_penalty} recent_detach_count={ctx.recent_detach_count}")
 
     load_penalty = min(
         (ctx.delegated_execution_count // 10) * LOAD_PENALTY_PER_10_EXECUTIONS,
@@ -714,9 +698,7 @@ def evaluate_candidate(ctx: SelectionCandidateContext) -> CandidateEvaluation:
     )
     if load_penalty > 0:
         score -= load_penalty
-        fragments.append(
-            f"-{load_penalty} load(delegated_execution_count={ctx.delegated_execution_count})"
-        )
+        fragments.append(f"-{load_penalty} load(delegated_execution_count={ctx.delegated_execution_count})")
 
     fragments.append(f"FINAL_SCORE={score}")
 
@@ -844,10 +826,7 @@ def select_delegated_target(
                     is_accepted=False,
                     rejection_reason=CandidateRejectionReason.high_risk_score,
                     explanation_fragments=ev.explanation_fragments
-                    + [
-                        f"DEMOTED::high_risk_score: score={ev.score} < "
-                        f"threshold={DEGRADATION_SCORE_THRESHOLD}"
-                    ],
+                    + [f"DEMOTED::high_risk_score: score={ev.score} < " f"threshold={DEGRADATION_SCORE_THRESHOLD}"],
                 )
             )
         decision = SelectionDecision(

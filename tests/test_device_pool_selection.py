@@ -15,24 +15,27 @@ Covers:
 
 from __future__ import annotations
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 
 # ===========================================================================
 # A) DevicePoolManager.select_device() returns a valid device
 # ===========================================================================
+
 
 class TestDevicePoolSelectDevice:
     """Basic select_device behaviour."""
 
     def _fresh_pool(self, strategy="round_robin"):
         from core.device_pool_manager import DevicePoolManager, SchedulingStrategy
+
         DevicePoolManager._reset_singleton()
         return DevicePoolManager(strategy=SchedulingStrategy(strategy))
 
     def test_returns_registered_device(self):
         from core.device_pool_manager import DevicePoolManager
+
         pool = self._fresh_pool()
         pool.register_device("dev_A", capabilities=["screen"])
         result = pool.select_device()
@@ -41,6 +44,7 @@ class TestDevicePoolSelectDevice:
 
     def test_returns_none_when_pool_empty(self):
         from core.device_pool_manager import DevicePoolManager
+
         pool = self._fresh_pool()
         result = pool.select_device()
         assert result is None
@@ -48,6 +52,7 @@ class TestDevicePoolSelectDevice:
 
     def test_returns_none_for_unregistered_capability(self):
         from core.device_pool_manager import DevicePoolManager
+
         pool = self._fresh_pool()
         pool.register_device("dev_B", capabilities=["screen"])
         result = pool.select_device(required_capabilities=["camera"])
@@ -56,6 +61,7 @@ class TestDevicePoolSelectDevice:
 
     def test_selects_device_with_matching_capability(self):
         from core.device_pool_manager import DevicePoolManager
+
         pool = self._fresh_pool()
         pool.register_device("dev_cam", capabilities=["camera", "screen"])
         pool.register_device("dev_screen", capabilities=["screen"])
@@ -68,19 +74,20 @@ class TestDevicePoolSelectDevice:
 # B) DeviceOrchestrator.select_device() delegates to DevicePoolManager
 # ===========================================================================
 
+
 class TestDeviceOrchestratorDelegatesToPool:
     """DeviceOrchestrator must not perform its own scheduling; it must delegate."""
 
     def test_delegates_to_pool(self):
         from core.device_pool_manager import DevicePoolManager, SchedulingStrategy
+
         DevicePoolManager._reset_singleton()
         pool = DevicePoolManager(strategy=SchedulingStrategy.ADAPTIVE)
         pool.register_device("orch_dev_1", capabilities=["screen"])
 
-        with patch(
-            "core.device_pool_manager.get_device_pool_manager", return_value=pool
-        ):
+        with patch("core.device_pool_manager.get_device_pool_manager", return_value=pool):
             from core.device_orchestrator import DeviceOrchestrator
+
             orch = DeviceOrchestrator()
             result = orch.select_device(required_capabilities=["screen"])
 
@@ -89,13 +96,13 @@ class TestDeviceOrchestratorDelegatesToPool:
 
     def test_returns_none_when_pool_empty(self):
         from core.device_pool_manager import DevicePoolManager, SchedulingStrategy
+
         DevicePoolManager._reset_singleton()
         pool = DevicePoolManager(strategy=SchedulingStrategy.ADAPTIVE)
 
-        with patch(
-            "core.device_pool_manager.get_device_pool_manager", return_value=pool
-        ):
+        with patch("core.device_pool_manager.get_device_pool_manager", return_value=pool):
             from core.device_orchestrator import DeviceOrchestrator
+
             orch = DeviceOrchestrator()
             result = orch.select_device(required_capabilities=["camera"])
 
@@ -109,6 +116,7 @@ class TestDeviceOrchestratorDelegatesToPool:
             side_effect=RuntimeError("pool unavailable"),
         ):
             from core.device_orchestrator import DeviceOrchestrator
+
             orch = DeviceOrchestrator()
             result = orch.select_device(required_capabilities=["screen"])
 
@@ -119,16 +127,19 @@ class TestDeviceOrchestratorDelegatesToPool:
 # C) DevicePoolManager honours required_capabilities filter
 # ===========================================================================
 
+
 class TestDevicePoolCapabilityFilter:
     """Capability filtering must be strict: all required caps must be present."""
 
     def setup_method(self):
         from core.device_pool_manager import DevicePoolManager, SchedulingStrategy
+
         DevicePoolManager._reset_singleton()
         self.pool = DevicePoolManager(strategy=SchedulingStrategy.ROUND_ROBIN)
 
     def teardown_method(self):
         from core.device_pool_manager import DevicePoolManager
+
         DevicePoolManager._reset_singleton()
 
     def test_multi_cap_match(self):
@@ -151,12 +162,14 @@ class TestDevicePoolCapabilityFilter:
 # D) DevicePoolManager strategies are functional
 # ===========================================================================
 
+
 class TestDevicePoolStrategies:
     """Verify each scheduling strategy selects a valid registered device."""
 
     def _pool_with_devices(self, strategy: str):
         """Return a fresh DevicePoolManager with two screen-capable devices."""
         from core.device_pool_manager import DevicePoolManager, SchedulingStrategy
+
         DevicePoolManager._reset_singleton()
         pool = DevicePoolManager(strategy=SchedulingStrategy(strategy))
         pool.register_device("s_dev_1", capabilities=["screen"])
@@ -165,6 +178,7 @@ class TestDevicePoolStrategies:
 
     def test_round_robin_cycles_devices(self):
         from core.device_pool_manager import DevicePoolManager
+
         pool = self._pool_with_devices("round_robin")
         first = pool.select_device()
         second = pool.select_device()
@@ -174,6 +188,7 @@ class TestDevicePoolStrategies:
 
     def test_least_conn_selects_idle_device(self):
         from core.device_pool_manager import DevicePoolManager
+
         pool = self._pool_with_devices("least_conn")
         # Mark s_dev_1 as having more connections
         pool._devices["s_dev_1"].active_connections = 5
@@ -184,6 +199,7 @@ class TestDevicePoolStrategies:
 
     def test_adaptive_selects_available_device(self):
         from core.device_pool_manager import DevicePoolManager
+
         pool = self._pool_with_devices("adaptive")
         result = pool.select_device()
         assert result in {"s_dev_1", "s_dev_2"}
@@ -194,11 +210,13 @@ class TestDevicePoolStrategies:
 # E) Pool returns None gracefully when no device is eligible
 # ===========================================================================
 
+
 class TestDevicePoolNoEligibleDevice:
     """Pool must return None without raising when no device matches."""
 
     def test_no_devices_no_raise(self):
         from core.device_pool_manager import DevicePoolManager
+
         DevicePoolManager._reset_singleton()
         pool = DevicePoolManager()
         result = pool.select_device(required_capabilities=["screen"])
@@ -208,6 +226,7 @@ class TestDevicePoolNoEligibleDevice:
     def test_all_full_returns_none(self):
         """When every device is at capacity, select_device() returns None."""
         from core.device_pool_manager import DevicePoolManager
+
         DevicePoolManager._reset_singleton()
         pool = DevicePoolManager()
         pool.register_device("full_dev", capabilities=["screen"], capacity=1)
@@ -221,6 +240,7 @@ class TestDevicePoolNoEligibleDevice:
 # F) ConstellationRuntime consults DevicePoolManager during scheduling
 # ===========================================================================
 
+
 class TestConstellationRuntimeUsesPool:
     """ConstellationRuntime must use DevicePoolManager for device assignment."""
 
@@ -229,7 +249,7 @@ class TestConstellationRuntimeUsesPool:
         """select_device() must be called at least once per DAG execution."""
         from core.constellation_runtime import ConstellationRuntime
         from core.device_pool_manager import DevicePoolManager, SchedulingStrategy
-        from core.schemas.orchestration import TaskDecomposition, SubTask, SubTaskStatus
+        from core.schemas.orchestration import SubTask, SubTaskStatus, TaskDecomposition
 
         DevicePoolManager._reset_singleton()
         pool = DevicePoolManager(strategy=SchedulingStrategy.ADAPTIVE)
@@ -237,19 +257,13 @@ class TestConstellationRuntimeUsesPool:
 
         rt = ConstellationRuntime(enable_dag_evolution=False)
         mock_orch = MagicMock()
-        subtask = SubTask(
-            task_id="cr_t1", name="step1", description="step", status=SubTaskStatus.PENDING
-        )
+        subtask = SubTask(task_id="cr_t1", name="step1", description="step", status=SubTaskStatus.PENDING)
         decomp = TaskDecomposition(goal="test", subtasks=[subtask])
         mock_orch._decompose_task = AsyncMock(return_value=decomp)
-        mock_orch._execute_subtask = AsyncMock(
-            return_value={"success": True, "result": "ok", "tool": "noop"}
-        )
+        mock_orch._execute_subtask = AsyncMock(return_value={"success": True, "result": "ok", "tool": "noop"})
         rt._smart_orchestrator = mock_orch
 
-        with patch(
-            "core.device_pool_manager.get_device_pool_manager", return_value=pool
-        ):
+        with patch("core.device_pool_manager.get_device_pool_manager", return_value=pool):
             original_select = pool.select_device
             select_calls = []
 
@@ -263,7 +277,6 @@ class TestConstellationRuntimeUsesPool:
             await rt.run("device pool cr test", device_id="")
 
         assert len(select_calls) >= 1, (
-            "ConstellationRuntime must call DevicePoolManager.select_device() "
-            "at least once per execution"
+            "ConstellationRuntime must call DevicePoolManager.select_device() " "at least once per execution"
         )
         DevicePoolManager._reset_singleton()

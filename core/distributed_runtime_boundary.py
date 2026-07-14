@@ -186,16 +186,12 @@ __all__ = [
 # Module-level authority sentinels
 # ---------------------------------------------------------------------------
 
-DISTRIBUTED_RUNTIME_BOUNDARY_AUTHORITY: str = (
-    "core.distributed_runtime_boundary"
-)
+DISTRIBUTED_RUNTIME_BOUNDARY_AUTHORITY: str = "core.distributed_runtime_boundary"
 """Sentinel: identifies this module as the authoritative distributed runtime
 boundary declaration for PR-8.  Import this symbol to assert that a call site
 is operating within the declared distributed runtime boundary model."""
 
-DISTRIBUTED_RUNTIME_BOUNDARY_PR8_SENTINEL: str = (
-    "distributed_runtime_boundary_pr8_convergence"
-)
+DISTRIBUTED_RUNTIME_BOUNDARY_PR8_SENTINEL: str = "distributed_runtime_boundary_pr8_convergence"
 """PR-8 sentinel value.  All tests and CI gates that lock the PR-8
 boundary declaration should assert the presence of this sentinel."""
 
@@ -279,6 +275,7 @@ The existing four-module chain is canonical."""
 # Distributed runtime layer role taxonomy
 # ---------------------------------------------------------------------------
 
+
 class DistributedRuntimeLayerRole(str, Enum):
     """Taxonomy of roles within the distributed runtime boundary.
 
@@ -315,6 +312,7 @@ class DistributedRuntimeLayerRole(str, Enum):
 # ---------------------------------------------------------------------------
 # Surface data class
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class DistributedRuntimeSurface:
@@ -355,9 +353,7 @@ class DistributedRuntimeSurface:
             "surface_name": self.surface_name,
             "distributed_role": self.distributed_role.value,
             "is_distributed_runtime_main_chain": self.is_distributed_runtime_main_chain,
-            "may_not_claim_distributed_control_plane": (
-                self.may_not_claim_distributed_control_plane
-            ),
+            "may_not_claim_distributed_control_plane": (self.may_not_claim_distributed_control_plane),
             "notes": self.notes,
         }
 
@@ -365,6 +361,7 @@ class DistributedRuntimeSurface:
 # ---------------------------------------------------------------------------
 # Boundary report data class
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class DistributedRuntimeBoundaryReport:
@@ -386,9 +383,7 @@ class DistributedRuntimeBoundaryReport:
             "total_surfaces": self.total_surfaces,
             "main_chain_count": self.main_chain_count,
             "transport_relay_count": self.transport_relay_count,
-            "handoff_takeover_prototype_count": (
-                self.handoff_takeover_prototype_count
-            ),
+            "handoff_takeover_prototype_count": (self.handoff_takeover_prototype_count),
             "projection_diagnostics_count": self.projection_diagnostics_count,
             "android_participation_count": self.android_participation_count,
             "constrained_surfaces": self.constrained_surfaces,
@@ -402,11 +397,9 @@ class DistributedRuntimeBoundaryReport:
 
 #: All surfaces classified within the distributed runtime boundary.
 DISTRIBUTED_RUNTIME_SURFACE_REGISTRY: List[DistributedRuntimeSurface] = [
-
     # =========================================================================
     # Distributed runtime main chain
     # =========================================================================
-
     DistributedRuntimeSurface(
         surface_id="desktop_presence_runtime_shell",
         module_path="core.desktop_presence_runtime.DesktopPresenceRuntime",
@@ -485,11 +478,9 @@ DISTRIBUTED_RUNTIME_SURFACE_REGISTRY: List[DistributedRuntimeSurface] = [
             "not a passive relay."
         ),
     ),
-
     # =========================================================================
     # Transport / relay / dispatch / forwarding layer
     # =========================================================================
-
     DistributedRuntimeSurface(
         surface_id="agent_bridge_handoff_relay",
         module_path="galaxy_gateway.agent_bridge.AgentBridge",
@@ -566,11 +557,9 @@ DISTRIBUTED_RUNTIME_SURFACE_REGISTRY: List[DistributedRuntimeSurface] = [
             "a runtime authority."
         ),
     ),
-
     # =========================================================================
     # Handoff / takeover prototypes
     # =========================================================================
-
     DistributedRuntimeSurface(
         surface_id="canonical_handoff_path",
         module_path="core.canonical_handoff_path",
@@ -627,10 +616,7 @@ DISTRIBUTED_RUNTIME_SURFACE_REGISTRY: List[DistributedRuntimeSurface] = [
     DistributedRuntimeSurface(
         surface_id="android_delegated_runtime_lifecycle_coordinator",
         module_path="core.android_delegated_runtime_lifecycle_coordinator",
-        surface_name=(
-            "AndroidDelegatedRuntimeLifecycleCoordinator "
-            "(delegated lifecycle event facade)"
-        ),
+        surface_name=("AndroidDelegatedRuntimeLifecycleCoordinator " "(delegated lifecycle event facade)"),
         distributed_role=DistributedRuntimeLayerRole.handoff_takeover_prototype,
         is_distributed_runtime_main_chain=False,
         may_not_claim_distributed_control_plane=True,
@@ -666,11 +652,9 @@ DISTRIBUTED_RUNTIME_SURFACE_REGISTRY: List[DistributedRuntimeSurface] = [
             "completed bidirectional mesh protocol."
         ),
     ),
-
     # =========================================================================
     # Projection / diagnostics / operator layer
     # =========================================================================
-
     DistributedRuntimeSurface(
         surface_id="android_delegated_runtime_audit",
         module_path="core.android_delegated_runtime_audit",
@@ -688,9 +672,7 @@ DISTRIBUTED_RUNTIME_SURFACE_REGISTRY: List[DistributedRuntimeSurface] = [
     DistributedRuntimeSurface(
         surface_id="distributed_release_gate_skeleton",
         module_path="core.distributed_release_gate_skeleton",
-        surface_name=(
-            "distributed_release_gate_skeleton (diagnostic gate scaffold)"
-        ),
+        surface_name=("distributed_release_gate_skeleton (diagnostic gate scaffold)"),
         distributed_role=DistributedRuntimeLayerRole.projection_diagnostics_operator,
         is_distributed_runtime_main_chain=False,
         may_not_claim_distributed_control_plane=True,
@@ -706,9 +688,7 @@ DISTRIBUTED_RUNTIME_SURFACE_REGISTRY: List[DistributedRuntimeSurface] = [
     DistributedRuntimeSurface(
         surface_id="center_distributed_agent_system_review",
         module_path="core.center_distributed_agent_system_review",
-        surface_name=(
-            "center_distributed_agent_system_review (operator audit surface)"
-        ),
+        surface_name=("center_distributed_agent_system_review (operator audit surface)"),
         distributed_role=DistributedRuntimeLayerRole.projection_diagnostics_operator,
         is_distributed_runtime_main_chain=False,
         may_not_claim_distributed_control_plane=True,
@@ -750,11 +730,9 @@ DISTRIBUTED_RUNTIME_SURFACE_REGISTRY: List[DistributedRuntimeSurface] = [
             "ownership.  MUST NOT be treated as a runtime authority."
         ),
     ),
-
     # =========================================================================
     # Android participation runtime node
     # =========================================================================
-
     DistributedRuntimeSurface(
         surface_id="android_runtime_host_classification",
         module_path="core.android_runtime_host",
@@ -793,10 +771,7 @@ DISTRIBUTED_RUNTIME_SURFACE_REGISTRY: List[DistributedRuntimeSurface] = [
     DistributedRuntimeSurface(
         surface_id="android_originated_authority_boundary",
         module_path="core.android_originated_authority_boundary",
-        surface_name=(
-            "android_originated_authority_boundary "
-            "(Android origin authority boundary)"
-        ),
+        surface_name=("android_originated_authority_boundary " "(Android origin authority boundary)"),
         distributed_role=DistributedRuntimeLayerRole.android_participation_runtime_node,
         is_distributed_runtime_main_chain=False,
         may_not_claim_distributed_control_plane=False,
@@ -836,44 +811,39 @@ def get_surfaces_by_distributed_role(
     role: DistributedRuntimeLayerRole,
 ) -> List[DistributedRuntimeSurface]:
     """Return all surfaces classified with *role*."""
-    return [
-        s for s in DISTRIBUTED_RUNTIME_SURFACE_REGISTRY
-        if s.distributed_role == role
-    ]
+    return [s for s in DISTRIBUTED_RUNTIME_SURFACE_REGISTRY if s.distributed_role == role]
 
 
 def build_distributed_runtime_boundary_report() -> DistributedRuntimeBoundaryReport:
     """Build and return a :class:`DistributedRuntimeBoundaryReport`."""
     total = len(DISTRIBUTED_RUNTIME_SURFACE_REGISTRY)
     main_chain = sum(
-        1 for s in DISTRIBUTED_RUNTIME_SURFACE_REGISTRY
-        if s.distributed_role
-        == DistributedRuntimeLayerRole.distributed_runtime_main_chain
+        1
+        for s in DISTRIBUTED_RUNTIME_SURFACE_REGISTRY
+        if s.distributed_role == DistributedRuntimeLayerRole.distributed_runtime_main_chain
     )
     transport = sum(
-        1 for s in DISTRIBUTED_RUNTIME_SURFACE_REGISTRY
-        if s.distributed_role
-        == DistributedRuntimeLayerRole.transport_relay_dispatch_layer
+        1
+        for s in DISTRIBUTED_RUNTIME_SURFACE_REGISTRY
+        if s.distributed_role == DistributedRuntimeLayerRole.transport_relay_dispatch_layer
     )
     handoff = sum(
-        1 for s in DISTRIBUTED_RUNTIME_SURFACE_REGISTRY
-        if s.distributed_role
-        == DistributedRuntimeLayerRole.handoff_takeover_prototype
+        1
+        for s in DISTRIBUTED_RUNTIME_SURFACE_REGISTRY
+        if s.distributed_role == DistributedRuntimeLayerRole.handoff_takeover_prototype
     )
     projection = sum(
-        1 for s in DISTRIBUTED_RUNTIME_SURFACE_REGISTRY
-        if s.distributed_role
-        == DistributedRuntimeLayerRole.projection_diagnostics_operator
+        1
+        for s in DISTRIBUTED_RUNTIME_SURFACE_REGISTRY
+        if s.distributed_role == DistributedRuntimeLayerRole.projection_diagnostics_operator
     )
     android = sum(
-        1 for s in DISTRIBUTED_RUNTIME_SURFACE_REGISTRY
-        if s.distributed_role
-        == DistributedRuntimeLayerRole.android_participation_runtime_node
+        1
+        for s in DISTRIBUTED_RUNTIME_SURFACE_REGISTRY
+        if s.distributed_role == DistributedRuntimeLayerRole.android_participation_runtime_node
     )
     constrained = [
-        s.surface_id
-        for s in DISTRIBUTED_RUNTIME_SURFACE_REGISTRY
-        if s.may_not_claim_distributed_control_plane
+        s.surface_id for s in DISTRIBUTED_RUNTIME_SURFACE_REGISTRY if s.may_not_claim_distributed_control_plane
     ]
     return DistributedRuntimeBoundaryReport(
         total_surfaces=total,

@@ -53,21 +53,20 @@ Test classes
 
 from __future__ import annotations
 
-import sys
 import os
+import sys
 import unittest
 from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from core.admissibility_policy_convergence import (
-    PolicyConvergenceOutput,
-    evaluate_policy_convergence,
     ADMISSIBILITY_POLICY_CONVERGENCE_AUTHORITY,
     POLICY_CONVERGENCE_LAYER_POSITION,
     POLICY_OUTPUT_CONTRACT_VERSION,
+    PolicyConvergenceOutput,
+    evaluate_policy_convergence,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -150,6 +149,7 @@ class TestPolicyConvergenceSentinels(unittest.TestCase):
 
     def test_sentinels_in_exports(self):
         from core.admissibility_policy_convergence import __all__ as exports
+
         self.assertIn("ADMISSIBILITY_POLICY_CONVERGENCE_AUTHORITY", exports)
         self.assertIn("POLICY_OUTPUT_CONTRACT_VERSION", exports)
         self.assertIn("PolicyConvergenceOutput", exports)
@@ -181,9 +181,17 @@ class TestPolicyConvergenceOutputModel(unittest.TestCase):
         out = PolicyConvergenceOutput(device_id="dev1")
         d = out.to_dict()
         for key in (
-            "device_id", "eligibility", "capability_fit", "policy_score",
-            "route_preference", "transport_present", "transport_usable",
-            "device_routable", "effective_path", "reasons", "sources",
+            "device_id",
+            "eligibility",
+            "capability_fit",
+            "policy_score",
+            "route_preference",
+            "transport_present",
+            "transport_usable",
+            "device_routable",
+            "effective_path",
+            "reasons",
+            "sources",
             "contract_version",
         ):
             self.assertIn(key, d, f"Missing key: {key}")
@@ -225,33 +233,41 @@ class TestEvaluatePolicyConvergenceEligible(unittest.TestCase):
 
     def test_eligible_device_produces_eligibility_true(self):
         rs, ps, vr = self._mock_all_layers()
-        with patch("core.admissibility_policy_convergence._get_readiness", return_value=rs), \
-             patch("core.admissibility_policy_convergence._get_participation", return_value=ps), \
-             patch("core.admissibility_policy_convergence._get_validation", return_value=vr):
+        with (
+            patch("core.admissibility_policy_convergence._get_readiness", return_value=rs),
+            patch("core.admissibility_policy_convergence._get_participation", return_value=ps),
+            patch("core.admissibility_policy_convergence._get_validation", return_value=vr),
+        ):
             out = evaluate_policy_convergence("dev1")
         self.assertTrue(out.eligibility)
 
     def test_eligible_device_has_positive_policy_score(self):
         rs, ps, vr = self._mock_all_layers()
-        with patch("core.admissibility_policy_convergence._get_readiness", return_value=rs), \
-             patch("core.admissibility_policy_convergence._get_participation", return_value=ps), \
-             patch("core.admissibility_policy_convergence._get_validation", return_value=vr):
+        with (
+            patch("core.admissibility_policy_convergence._get_readiness", return_value=rs),
+            patch("core.admissibility_policy_convergence._get_participation", return_value=ps),
+            patch("core.admissibility_policy_convergence._get_validation", return_value=vr),
+        ):
             out = evaluate_policy_convergence("dev1")
         self.assertGreater(out.policy_score, 0.0)
 
     def test_eligible_device_route_preference_is_direct_ws(self):
         rs, ps, vr = self._mock_all_layers()
-        with patch("core.admissibility_policy_convergence._get_readiness", return_value=rs), \
-             patch("core.admissibility_policy_convergence._get_participation", return_value=ps), \
-             patch("core.admissibility_policy_convergence._get_validation", return_value=vr):
+        with (
+            patch("core.admissibility_policy_convergence._get_readiness", return_value=rs),
+            patch("core.admissibility_policy_convergence._get_participation", return_value=ps),
+            patch("core.admissibility_policy_convergence._get_validation", return_value=vr),
+        ):
             out = evaluate_policy_convergence("dev1")
         self.assertEqual(out.route_preference, "direct_ws")
 
     def test_eligible_device_capability_fit_true(self):
         rs, ps, vr = self._mock_all_layers()
-        with patch("core.admissibility_policy_convergence._get_readiness", return_value=rs), \
-             patch("core.admissibility_policy_convergence._get_participation", return_value=ps), \
-             patch("core.admissibility_policy_convergence._get_validation", return_value=vr):
+        with (
+            patch("core.admissibility_policy_convergence._get_readiness", return_value=rs),
+            patch("core.admissibility_policy_convergence._get_participation", return_value=ps),
+            patch("core.admissibility_policy_convergence._get_validation", return_value=vr),
+        ):
             out = evaluate_policy_convergence("dev1")
         self.assertTrue(out.capability_fit)
 
@@ -265,18 +281,22 @@ class TestEvaluatePolicyConvergenceIneligible(unittest.TestCase):
     def test_not_valid_device_produces_eligibility_false(self):
         rs = _make_readiness(registered=False)
         vr = _make_validation(valid=False, capability_match=False, reasons=["not-registered"])
-        with patch("core.admissibility_policy_convergence._get_readiness", return_value=rs), \
-             patch("core.admissibility_policy_convergence._get_participation", return_value=None), \
-             patch("core.admissibility_policy_convergence._get_validation", return_value=vr):
+        with (
+            patch("core.admissibility_policy_convergence._get_readiness", return_value=rs),
+            patch("core.admissibility_policy_convergence._get_participation", return_value=None),
+            patch("core.admissibility_policy_convergence._get_validation", return_value=vr),
+        ):
             out = evaluate_policy_convergence("dev1")
         self.assertFalse(out.eligibility)
 
     def test_ineligible_device_has_zero_policy_score(self):
         rs = _make_readiness(registered=False)
         vr = _make_validation(valid=False)
-        with patch("core.admissibility_policy_convergence._get_readiness", return_value=rs), \
-             patch("core.admissibility_policy_convergence._get_participation", return_value=None), \
-             patch("core.admissibility_policy_convergence._get_validation", return_value=vr):
+        with (
+            patch("core.admissibility_policy_convergence._get_readiness", return_value=rs),
+            patch("core.admissibility_policy_convergence._get_participation", return_value=None),
+            patch("core.admissibility_policy_convergence._get_validation", return_value=vr),
+        ):
             out = evaluate_policy_convergence("dev1")
         self.assertEqual(out.policy_score, 0.0)
 
@@ -290,9 +310,11 @@ class TestPolicyScoreRange(unittest.TestCase):
     def _eval(self, eligible=True):
         rs = _make_readiness()
         vr = _make_validation(valid=eligible)
-        with patch("core.admissibility_policy_convergence._get_readiness", return_value=rs), \
-             patch("core.admissibility_policy_convergence._get_participation", return_value=None), \
-             patch("core.admissibility_policy_convergence._get_validation", return_value=vr):
+        with (
+            patch("core.admissibility_policy_convergence._get_readiness", return_value=rs),
+            patch("core.admissibility_policy_convergence._get_participation", return_value=None),
+            patch("core.admissibility_policy_convergence._get_validation", return_value=vr),
+        ):
             return evaluate_policy_convergence("dev1")
 
     def test_score_in_range_for_eligible(self):
@@ -318,28 +340,35 @@ class TestRoutePreferenceField(unittest.TestCase):
     def test_direct_ws_route_preference(self):
         rs = _make_readiness(effective_path="direct_ws")
         vr = _make_validation()
-        with patch("core.admissibility_policy_convergence._get_readiness", return_value=rs), \
-             patch("core.admissibility_policy_convergence._get_participation", return_value=None), \
-             patch("core.admissibility_policy_convergence._get_validation", return_value=vr):
+        with (
+            patch("core.admissibility_policy_convergence._get_readiness", return_value=rs),
+            patch("core.admissibility_policy_convergence._get_participation", return_value=None),
+            patch("core.admissibility_policy_convergence._get_validation", return_value=vr),
+        ):
             out = evaluate_policy_convergence("dev1")
         self.assertEqual(out.route_preference, "direct_ws")
 
     def test_relay_route_preference(self):
         rs = _make_readiness(effective_path="relay")
         vr = _make_validation()
-        with patch("core.admissibility_policy_convergence._get_readiness", return_value=rs), \
-             patch("core.admissibility_policy_convergence._get_participation", return_value=None), \
-             patch("core.admissibility_policy_convergence._get_validation", return_value=vr):
+        with (
+            patch("core.admissibility_policy_convergence._get_readiness", return_value=rs),
+            patch("core.admissibility_policy_convergence._get_participation", return_value=None),
+            patch("core.admissibility_policy_convergence._get_validation", return_value=vr),
+        ):
             out = evaluate_policy_convergence("dev1")
         self.assertEqual(out.route_preference, "relay")
 
     def test_no_transport_route_preference_none(self):
-        rs = _make_readiness(effective_path="none", transport_present=False,
-                              transport_usable=False, device_routable=False)
+        rs = _make_readiness(
+            effective_path="none", transport_present=False, transport_usable=False, device_routable=False
+        )
         vr = _make_validation(valid=False)
-        with patch("core.admissibility_policy_convergence._get_readiness", return_value=rs), \
-             patch("core.admissibility_policy_convergence._get_participation", return_value=None), \
-             patch("core.admissibility_policy_convergence._get_validation", return_value=vr):
+        with (
+            patch("core.admissibility_policy_convergence._get_readiness", return_value=rs),
+            patch("core.admissibility_policy_convergence._get_participation", return_value=None),
+            patch("core.admissibility_policy_convergence._get_validation", return_value=vr),
+        ):
             out = evaluate_policy_convergence("dev1")
         self.assertEqual(out.route_preference, "none")
 
@@ -353,36 +382,44 @@ class TestLiveRouteTruthInOutput(unittest.TestCase):
     def test_transport_present_propagated(self):
         rs = _make_readiness(transport_present=True)
         vr = _make_validation()
-        with patch("core.admissibility_policy_convergence._get_readiness", return_value=rs), \
-             patch("core.admissibility_policy_convergence._get_participation", return_value=None), \
-             patch("core.admissibility_policy_convergence._get_validation", return_value=vr):
+        with (
+            patch("core.admissibility_policy_convergence._get_readiness", return_value=rs),
+            patch("core.admissibility_policy_convergence._get_participation", return_value=None),
+            patch("core.admissibility_policy_convergence._get_validation", return_value=vr),
+        ):
             out = evaluate_policy_convergence("dev1")
         self.assertTrue(out.transport_present)
 
     def test_transport_usable_propagated(self):
         rs = _make_readiness(transport_usable=True)
         vr = _make_validation()
-        with patch("core.admissibility_policy_convergence._get_readiness", return_value=rs), \
-             patch("core.admissibility_policy_convergence._get_participation", return_value=None), \
-             patch("core.admissibility_policy_convergence._get_validation", return_value=vr):
+        with (
+            patch("core.admissibility_policy_convergence._get_readiness", return_value=rs),
+            patch("core.admissibility_policy_convergence._get_participation", return_value=None),
+            patch("core.admissibility_policy_convergence._get_validation", return_value=vr),
+        ):
             out = evaluate_policy_convergence("dev1")
         self.assertTrue(out.transport_usable)
 
     def test_device_routable_propagated(self):
         rs = _make_readiness(device_routable=True)
         vr = _make_validation()
-        with patch("core.admissibility_policy_convergence._get_readiness", return_value=rs), \
-             patch("core.admissibility_policy_convergence._get_participation", return_value=None), \
-             patch("core.admissibility_policy_convergence._get_validation", return_value=vr):
+        with (
+            patch("core.admissibility_policy_convergence._get_readiness", return_value=rs),
+            patch("core.admissibility_policy_convergence._get_participation", return_value=None),
+            patch("core.admissibility_policy_convergence._get_validation", return_value=vr),
+        ):
             out = evaluate_policy_convergence("dev1")
         self.assertTrue(out.device_routable)
 
     def test_effective_path_propagated(self):
         rs = _make_readiness(effective_path="ucm")
         vr = _make_validation()
-        with patch("core.admissibility_policy_convergence._get_readiness", return_value=rs), \
-             patch("core.admissibility_policy_convergence._get_participation", return_value=None), \
-             patch("core.admissibility_policy_convergence._get_validation", return_value=vr):
+        with (
+            patch("core.admissibility_policy_convergence._get_readiness", return_value=rs),
+            patch("core.admissibility_policy_convergence._get_participation", return_value=None),
+            patch("core.admissibility_policy_convergence._get_validation", return_value=vr),
+        ):
             out = evaluate_policy_convergence("dev1")
         self.assertEqual(out.effective_path, "ucm")
 
@@ -394,13 +431,16 @@ class TestLiveRouteTruthInOutput(unittest.TestCase):
 
 class TestParticipationEnrichDoesNotOverride(unittest.TestCase):
     def test_participation_in_sources_but_not_overriding_transport(self):
-        rs = _make_readiness(transport_present=False, transport_usable=False,
-                              device_routable=False, effective_path="none")
+        rs = _make_readiness(
+            transport_present=False, transport_usable=False, device_routable=False, effective_path="none"
+        )
         ps = _make_participation(orchestration_eligible=True)
         vr = _make_validation(valid=False)
-        with patch("core.admissibility_policy_convergence._get_readiness", return_value=rs), \
-             patch("core.admissibility_policy_convergence._get_participation", return_value=ps), \
-             patch("core.admissibility_policy_convergence._get_validation", return_value=vr):
+        with (
+            patch("core.admissibility_policy_convergence._get_readiness", return_value=rs),
+            patch("core.admissibility_policy_convergence._get_participation", return_value=ps),
+            patch("core.admissibility_policy_convergence._get_validation", return_value=vr),
+        ):
             out = evaluate_policy_convergence("dev1")
         # participation present in sources
         self.assertIn("participation", out.sources)
@@ -439,34 +479,42 @@ class TestEmptyDeviceId(unittest.TestCase):
 class TestLayerDegradation(unittest.TestCase):
     def test_readiness_unavailable_degrades_gracefully(self):
         vr = _make_validation(valid=False)
-        with patch("core.admissibility_policy_convergence._get_readiness", return_value=None), \
-             patch("core.admissibility_policy_convergence._get_participation", return_value=None), \
-             patch("core.admissibility_policy_convergence._get_validation", return_value=vr):
+        with (
+            patch("core.admissibility_policy_convergence._get_readiness", return_value=None),
+            patch("core.admissibility_policy_convergence._get_participation", return_value=None),
+            patch("core.admissibility_policy_convergence._get_validation", return_value=vr),
+        ):
             out = evaluate_policy_convergence("dev1")
         self.assertFalse(out.eligibility)
         self.assertIn("readiness-unavailable", out.reasons)
 
     def test_validation_unavailable_degrades_gracefully(self):
         rs = _make_readiness()
-        with patch("core.admissibility_policy_convergence._get_readiness", return_value=rs), \
-             patch("core.admissibility_policy_convergence._get_participation", return_value=None), \
-             patch("core.admissibility_policy_convergence._get_validation", return_value=None):
+        with (
+            patch("core.admissibility_policy_convergence._get_readiness", return_value=rs),
+            patch("core.admissibility_policy_convergence._get_participation", return_value=None),
+            patch("core.admissibility_policy_convergence._get_validation", return_value=None),
+        ):
             out = evaluate_policy_convergence("dev1")
         self.assertFalse(out.eligibility)
         self.assertIn("validation-unavailable", out.reasons)
 
     def test_all_layers_unavailable_returns_ineligible(self):
-        with patch("core.admissibility_policy_convergence._get_readiness", return_value=None), \
-             patch("core.admissibility_policy_convergence._get_participation", return_value=None), \
-             patch("core.admissibility_policy_convergence._get_validation", return_value=None):
+        with (
+            patch("core.admissibility_policy_convergence._get_readiness", return_value=None),
+            patch("core.admissibility_policy_convergence._get_participation", return_value=None),
+            patch("core.admissibility_policy_convergence._get_validation", return_value=None),
+        ):
             out = evaluate_policy_convergence("dev1")
         self.assertFalse(out.eligibility)
         self.assertEqual(out.policy_score, 0.0)
 
     def test_output_always_has_contract_version(self):
-        with patch("core.admissibility_policy_convergence._get_readiness", return_value=None), \
-             patch("core.admissibility_policy_convergence._get_participation", return_value=None), \
-             patch("core.admissibility_policy_convergence._get_validation", return_value=None):
+        with (
+            patch("core.admissibility_policy_convergence._get_readiness", return_value=None),
+            patch("core.admissibility_policy_convergence._get_participation", return_value=None),
+            patch("core.admissibility_policy_convergence._get_validation", return_value=None),
+        ):
             out = evaluate_policy_convergence("dev1")
         self.assertEqual(out.contract_version, POLICY_OUTPUT_CONTRACT_VERSION)
 

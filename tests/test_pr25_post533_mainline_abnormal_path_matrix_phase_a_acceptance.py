@@ -63,18 +63,18 @@ import pytest
 
 try:
     from core.runtime.source_dispatch_orchestrator import (
-        MAINLINE_ABNORMAL_PATH_MATRIX_CLOSED_PR25_SENTINEL,
-        REMOTE_TASK_BLOCKS_LOCAL_LOOP_ABNORMAL_PATH_PR25_POLICY,
-        LOCAL_FALLBACK_AFTER_REMOTE_FAILURE_ABNORMAL_PATH_PR25_POLICY,
         DELEGATED_EXECUTION_FAILURE_SESSION_TRUTH_IS_PRESERVED_PR25_POLICY,
-        SELECTION_FALLBACK_UNDER_DEGRADED_CONDITIONS_IS_STABLE_PR25_POLICY,
+        LOCAL_FALLBACK_AFTER_REMOTE_FAILURE_ABNORMAL_PATH_PR25_POLICY,
+        MAINLINE_ABNORMAL_PATH_MATRIX_CLOSED_PR25_SENTINEL,
         PHASE_A_ACCEPTANCE_ABNORMAL_PATH_PR25_POLICY,
-        select_dispatch_mode,
-        select_dispatch_target,
+        REMOTE_TASK_BLOCKS_LOCAL_LOOP_ABNORMAL_PATH_PR25_POLICY,
+        SELECTION_FALLBACK_UNDER_DEGRADED_CONDITIONS_IS_STABLE_PR25_POLICY,
+        _score_candidate,
+        _select_target_from_candidates,
         build_source_dispatch_plan,
         orchestrate_source_runtime_dispatch,
-        _select_target_from_candidates,
-        _score_candidate,
+        select_dispatch_mode,
+        select_dispatch_target,
     )
 
     _ORCHESTRATOR_AVAILABLE = True
@@ -84,12 +84,14 @@ except ImportError:
 try:
     from core.attached_runtime_session_registry import (
         AttachedSessionRegistry,
+        InvalidationReason,
         RegistryEntryState,
-        register_session,
         detach_session,
         invalidate_session,
-        InvalidationReason,
-        list_active_sessions as _list_active_sessions,
+    )
+    from core.attached_runtime_session_registry import list_active_sessions as _list_active_sessions
+    from core.attached_runtime_session_registry import (
+        register_session,
     )
 
     _REGISTRY_AVAILABLE = True
@@ -212,15 +214,11 @@ class TestGroupA_PR25SentinelsPresent:
         assert LOCAL_FALLBACK_AFTER_REMOTE_FAILURE_ABNORMAL_PATH_PR25_POLICY
 
     def test_a4_session_truth_policy_is_string(self):
-        assert isinstance(
-            DELEGATED_EXECUTION_FAILURE_SESSION_TRUTH_IS_PRESERVED_PR25_POLICY, str
-        )
+        assert isinstance(DELEGATED_EXECUTION_FAILURE_SESSION_TRUTH_IS_PRESERVED_PR25_POLICY, str)
         assert DELEGATED_EXECUTION_FAILURE_SESSION_TRUTH_IS_PRESERVED_PR25_POLICY
 
     def test_a5_degraded_fallback_policy_is_string(self):
-        assert isinstance(
-            SELECTION_FALLBACK_UNDER_DEGRADED_CONDITIONS_IS_STABLE_PR25_POLICY, str
-        )
+        assert isinstance(SELECTION_FALLBACK_UNDER_DEGRADED_CONDITIONS_IS_STABLE_PR25_POLICY, str)
         assert SELECTION_FALLBACK_UNDER_DEGRADED_CONDITIONS_IS_STABLE_PR25_POLICY
 
     def test_a6_phase_a_acceptance_policy_is_string(self):
@@ -270,14 +268,10 @@ class TestGroupC_CoreRuntimeReexports:
         assert _core_runtime.MAINLINE_ABNORMAL_PATH_MATRIX_CLOSED_PR25_SENTINEL
 
     def test_c2_remote_blocks_local_policy(self):
-        assert hasattr(
-            _core_runtime, "REMOTE_TASK_BLOCKS_LOCAL_LOOP_ABNORMAL_PATH_PR25_POLICY"
-        )
+        assert hasattr(_core_runtime, "REMOTE_TASK_BLOCKS_LOCAL_LOOP_ABNORMAL_PATH_PR25_POLICY")
 
     def test_c3_local_fallback_policy(self):
-        assert hasattr(
-            _core_runtime, "LOCAL_FALLBACK_AFTER_REMOTE_FAILURE_ABNORMAL_PATH_PR25_POLICY"
-        )
+        assert hasattr(_core_runtime, "LOCAL_FALLBACK_AFTER_REMOTE_FAILURE_ABNORMAL_PATH_PR25_POLICY")
 
     def test_c4_session_truth_policy(self):
         assert hasattr(
@@ -346,9 +340,7 @@ class TestGroupD_RemoteTaskBlocksLocalLoop:
             # effective_mode should be fallback_local
             result_dict = result.to_dict() if hasattr(result, "to_dict") else {}
             mode_val = result_dict.get("mode", "")
-            assert mode_val in ("fallback_local", "local", "unknown"), (
-                f"Expected fallback path, got mode={mode_val}"
-            )
+            assert mode_val in ("fallback_local", "local", "unknown"), f"Expected fallback path, got mode={mode_val}"
 
 
 # ---------------------------------------------------------------------------
@@ -387,12 +379,10 @@ class TestGroupE_LocalFallbackAfterRemoteFailure:
             mode_val = result_dict.get("mode", "")
             errors = result_dict.get("errors", [])
 
-            assert mode_val == "fallback_local", (
-                f"Expected fallback_local, got {mode_val}"
-            )
-            assert any("remote_handoff_failed" in str(e) for e in errors), (
-                f"Expected remote_handoff_failed in errors, got {errors}"
-            )
+            assert mode_val == "fallback_local", f"Expected fallback_local, got {mode_val}"
+            assert any(
+                "remote_handoff_failed" in str(e) for e in errors
+            ), f"Expected remote_handoff_failed in errors, got {errors}"
 
     def test_e2_remote_failure_errors_list_is_non_empty(self):
         """Fallback result must carry at least one error entry recording the failure."""
@@ -434,9 +424,9 @@ class TestGroupE_LocalFallbackAfterRemoteFailure:
             result = orchestrate_source_runtime_dispatch(trace_id="trace-e3")
             result_dict = result.to_dict() if hasattr(result, "to_dict") else {}
             reason = result_dict.get("decision_reason", "") or ""
-            assert "remote_handoff_failed" in reason or "fallback_local" in reason, (
-                f"decision_reason must identify remote failure: {reason}"
-            )
+            assert (
+                "remote_handoff_failed" in reason or "fallback_local" in reason
+            ), f"decision_reason must identify remote failure: {reason}"
 
 
 # ---------------------------------------------------------------------------
@@ -470,9 +460,9 @@ class TestGroupF_LocalFallbackAfterRemoteException:
             mode_val = result_dict.get("mode", "")
             errors = result_dict.get("errors", [])
             assert mode_val == "fallback_local", f"Expected fallback_local, got {mode_val}"
-            assert any("remote_handoff_error" in str(e) for e in errors), (
-                f"Expected remote_handoff_error in errors: {errors}"
-            )
+            assert any(
+                "remote_handoff_error" in str(e) for e in errors
+            ), f"Expected remote_handoff_error in errors: {errors}"
 
 
 # ---------------------------------------------------------------------------
@@ -502,12 +492,10 @@ class TestGroupG_NoTargetOrEnvelope:
             mode_val = result_dict.get("mode", "")
             errors = result_dict.get("errors", [])
 
-            assert mode_val in ("fallback_local", "local"), (
-                f"Expected fallback, got {mode_val}"
-            )
-            assert any("no_target_or_envelope" in str(e) for e in errors), (
-                f"Expected no_target_or_envelope in errors: {errors}"
-            )
+            assert mode_val in ("fallback_local", "local"), f"Expected fallback, got {mode_val}"
+            assert any(
+                "no_target_or_envelope" in str(e) for e in errors
+            ), f"Expected no_target_or_envelope in errors: {errors}"
 
 
 # ---------------------------------------------------------------------------
@@ -530,9 +518,7 @@ class TestGroupH_BlockedMode:
             mock_plan.return_value.readiness_notes = ["policy_alignment:blocked"]
             result = orchestrate_source_runtime_dispatch(trace_id="trace-h1")
             result_dict = result.to_dict() if hasattr(result, "to_dict") else {}
-            assert result_dict.get("success") is False, (
-                f"Blocked mode must produce success=False: {result_dict}"
-            )
+            assert result_dict.get("success") is False, f"Blocked mode must produce success=False: {result_dict}"
 
     def test_h2_blocked_mode_does_not_run_local_execution(self):
         """Blocked mode must short-circuit before reaching local execution."""
@@ -849,9 +835,7 @@ class TestGroupO_TargetSelected:
             reuse_inputs={"dev-o3a": True, "dev-o3b": False},
         )
         assert result is not None
-        assert result.target_device_id == "dev-o3a", (
-            "Reuse-eligible candidate must win over non-reuse equal candidate"
-        )
+        assert result.target_device_id == "dev-o3a", "Reuse-eligible candidate must win over non-reuse equal candidate"
 
 
 # ---------------------------------------------------------------------------
@@ -894,9 +878,7 @@ class TestGroupP_SessionTruthPreserved:
             orchestrate_source_runtime_dispatch(trace_id="trace-p1")
 
         sessions_after = _list_active_sessions(registry=reg)
-        assert len(sessions_after) == 1, (
-            "Registry active sessions must be unchanged after remote failure"
-        )
+        assert len(sessions_after) == 1, "Registry active sessions must be unchanged after remote failure"
         assert sessions_after[0].session_id == "sess-p1"
 
     def test_p2_registry_state_stable_after_blocked_dispatch(self):
@@ -917,9 +899,7 @@ class TestGroupP_SessionTruthPreserved:
             orchestrate_source_runtime_dispatch(trace_id="trace-p2")
 
         sessions_after = _list_active_sessions(registry=reg)
-        assert len(sessions_after) == len(sessions_before), (
-            "Registry must not change after blocked dispatch"
-        )
+        assert len(sessions_after) == len(sessions_before), "Registry must not change after blocked dispatch"
 
 
 # ---------------------------------------------------------------------------
@@ -935,7 +915,8 @@ class TestGroupQ_FallbackReasonStability:
     def test_q1_score_candidate_readiness_unavailable_stable_reason(self):
         """_score_candidate: None readiness → score=0, stable rejection reason."""
         score, reason = _score_candidate(
-            "sess-q1", "dev-q1",
+            "sess-q1",
+            "dev-q1",
             readiness=None,
             participation=_make_participation(),
             reuse_eligible=False,
@@ -946,7 +927,8 @@ class TestGroupQ_FallbackReasonStability:
     def test_q2_score_candidate_participation_unavailable_stable_reason(self):
         """_score_candidate: None participation → score=0, stable rejection reason."""
         score, reason = _score_candidate(
-            "sess-q2", "dev-q2",
+            "sess-q2",
+            "dev-q2",
             readiness=_make_readiness(),
             participation=None,
             reuse_eligible=False,
@@ -957,7 +939,8 @@ class TestGroupQ_FallbackReasonStability:
     def test_q3_score_candidate_not_registered_stable_reason(self):
         """_score_candidate: registered=False → score=0, stable reason."""
         score, reason = _score_candidate(
-            "sess-q3", "dev-q3",
+            "sess-q3",
+            "dev-q3",
             readiness=_make_readiness(registered=False),
             participation=_make_participation(),
             reuse_eligible=False,
@@ -968,7 +951,8 @@ class TestGroupQ_FallbackReasonStability:
     def test_q4_score_candidate_not_routable_stable_reason(self):
         """_score_candidate: routable=False → score=0, stable reason."""
         score, reason = _score_candidate(
-            "sess-q4", "dev-q4",
+            "sess-q4",
+            "dev-q4",
             readiness=_make_readiness(routable=False),
             participation=_make_participation(),
             reuse_eligible=False,
@@ -979,7 +963,8 @@ class TestGroupQ_FallbackReasonStability:
     def test_q5_score_candidate_not_eligible_stable_reason(self):
         """_score_candidate: orchestration_eligible=False → stable reason."""
         score, reason = _score_candidate(
-            "sess-q5", "dev-q5",
+            "sess-q5",
+            "dev-q5",
             readiness=_make_readiness(),
             participation=_make_participation(orchestration_eligible=False),
             reuse_eligible=False,
@@ -990,7 +975,8 @@ class TestGroupQ_FallbackReasonStability:
     def test_q6_score_candidate_all_pass_empty_reason(self):
         """_score_candidate: all pass → non-zero score, empty reason."""
         score, reason = _score_candidate(
-            "sess-q6", "dev-q6",
+            "sess-q6",
+            "dev-q6",
             readiness=_make_readiness(),
             participation=_make_participation(),
             reuse_eligible=False,
@@ -1001,13 +987,15 @@ class TestGroupQ_FallbackReasonStability:
     def test_q7_score_candidate_reuse_eligible_increases_score(self):
         """_score_candidate: reuse_eligible=True → higher score than without."""
         score_no_reuse, _ = _score_candidate(
-            "sess-q7a", "dev-q7",
+            "sess-q7a",
+            "dev-q7",
             readiness=_make_readiness(),
             participation=_make_participation(),
             reuse_eligible=False,
         )
         score_with_reuse, _ = _score_candidate(
-            "sess-q7b", "dev-q7",
+            "sess-q7b",
+            "dev-q7",
             readiness=_make_readiness(),
             participation=_make_participation(),
             reuse_eligible=True,

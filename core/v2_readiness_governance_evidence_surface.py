@@ -387,10 +387,7 @@ class EvidenceSurfaceReport:
 
     @classmethod
     def from_dict(cls, d: Dict[str, Any]) -> "EvidenceSurfaceReport":
-        dims = [
-            EvidenceDimensionEntry.from_dict(entry)
-            for entry in d.get("dimensions", [])
-        ]
+        dims = [EvidenceDimensionEntry.from_dict(entry) for entry in d.get("dimensions", [])]
         return cls(
             report_id=d.get("report_id", ""),
             generated_at=float(d.get("generated_at", 0.0)),
@@ -421,6 +418,7 @@ def _probe_delegated_flow_readiness() -> EvidenceDimensionEntry:
         from core.delegated_flow_readiness_gate import (
             evaluate_delegated_flow_readiness,
         )
+
         report = evaluate_delegated_flow_readiness()
         verdict = getattr(report, "verdict", "")
         dimensions_raw: Dict[str, Any] = {}
@@ -466,6 +464,7 @@ def _probe_delegated_flow_acceptance() -> EvidenceDimensionEntry:
         from core.delegated_flow_acceptance_gate import (
             evaluate_delegated_flow_acceptance,
         )
+
         report = evaluate_delegated_flow_acceptance()
         verdict = getattr(report, "verdict", "")
         dimensions_raw: Dict[str, Any] = {}
@@ -510,6 +509,7 @@ def _probe_post_graduation_governance() -> EvidenceDimensionEntry:
         from core.delegated_flow_post_graduation_governance import (
             evaluate_post_graduation_governance,
         )
+
         report = evaluate_post_graduation_governance()
         verdict = getattr(report, "verdict", "")
         dimensions_raw: Dict[str, Any] = {}
@@ -554,6 +554,7 @@ def _probe_android_evaluator_artifacts() -> EvidenceDimensionEntry:
         from core.android_evaluator_artifact_ingress import (
             get_android_evaluator_artifact_registry,
         )
+
         registry = get_android_evaluator_artifact_registry()
         snapshot = registry.snapshot() if hasattr(registry, "snapshot") else []
         kind_counts: Dict[str, int] = {}
@@ -602,15 +603,13 @@ def _probe_takeover_tracking() -> EvidenceDimensionEntry:
     test_ref = "tests/test_android_takeover_protocol.py, tests/test_android_delegated_runtime_audit.py"
     try:
         from core.takeover_tracking import get_takeover_tracking_runtime
+
         runtime = get_takeover_tracking_runtime()
         snap = runtime.snapshot() if hasattr(runtime, "snapshot") else []
         total = len(snap)
         accepted = sum(1 for r in snap if getattr(r, "was_accepted", False))
         rejected = total - accepted
-        summary = (
-            f"TakeoverTrackingRuntime: {total} record(s); "
-            f"{accepted} accepted, {rejected} rejected/unknown"
-        )
+        summary = f"TakeoverTrackingRuntime: {total} record(s); " f"{accepted} accepted, {rejected} rejected/unknown"
         return EvidenceDimensionEntry(
             dimension_id=dim_id,
             display_name="Takeover Request/Response Tracking",
@@ -645,11 +644,10 @@ def _probe_android_delegated_audit() -> EvidenceDimensionEntry:
     test_ref = "tests/test_android_delegated_runtime_audit.py"
     try:
         from core.android_delegated_runtime_audit import android_audit_snapshot
+
         snap = android_audit_snapshot()
         total = len(snap)
-        summary = (
-            f"AndroidDelegatedRuntimeAuditRecorder: {total} record(s) in ring buffer"
-        )
+        summary = f"AndroidDelegatedRuntimeAuditRecorder: {total} record(s) in ring buffer"
         return EvidenceDimensionEntry(
             dimension_id=dim_id,
             display_name="Android Delegated Runtime Audit Records",
@@ -685,18 +683,21 @@ def _probe_continuity_recovery_closure() -> EvidenceDimensionEntry:
     test_ref = "tests/test_pr534_continuity_recovery_durability_closure.py"
     try:
         from core.recovery_durability_closure_validator import (
-            build_recovery_closure_report,
             RecoveryScenarioStatus,
+            build_recovery_closure_report,
         )
+
         closure_report = build_recovery_closure_report()
         all_closed = getattr(closure_report, "all_closed", False)
         total_scenarios = len(getattr(closure_report, "scenarios", []))
         fail_closed_count = sum(
-            1 for s in getattr(closure_report, "scenarios", [])
+            1
+            for s in getattr(closure_report, "scenarios", [])
             if getattr(s, "status", None) == RecoveryScenarioStatus.fail_closed
         )
         deferred_count = sum(
-            1 for s in getattr(closure_report, "scenarios", [])
+            1
+            for s in getattr(closure_report, "scenarios", [])
             if getattr(s, "status", None) == RecoveryScenarioStatus.deferred
         )
         summary = (
@@ -720,9 +721,13 @@ def _probe_continuity_recovery_closure() -> EvidenceDimensionEntry:
                 "deferred_count": deferred_count,
             },
             notes=(
-                "Deferred scenarios (offline queue ordering) are documented "
-                "explicitly in the closure report with deferral reason."
-            ) if deferred_count > 0 else "",
+                (
+                    "Deferred scenarios (offline queue ordering) are documented "
+                    "explicitly in the closure report with deferral reason."
+                )
+                if deferred_count > 0
+                else ""
+            ),
         )
     except Exception as exc:  # noqa: BLE001
         return EvidenceDimensionEntry(
@@ -745,6 +750,7 @@ def _probe_compat_legacy_blocking() -> EvidenceDimensionEntry:
         from core.compat_legacy_path_blocking_canonicalization import (
             get_compat_blocking_snapshot,
         )
+
         snap = get_compat_blocking_snapshot()
         has_active_bypass = getattr(snap, "has_active_bypass", None)
         total_vectors = getattr(snap, "total_vectors_evaluated", 0)
@@ -788,6 +794,7 @@ def _probe_participant_session_truth() -> EvidenceDimensionEntry:
         from core.android_participant_session_state import (
             get_participant_session_registry,
         )
+
         registry = get_participant_session_registry()
         snap = registry.snapshot() if hasattr(registry, "snapshot") else []
         total = len(snap)
@@ -829,6 +836,7 @@ def _probe_delegated_flow_decision_history() -> "EvidenceDimensionEntry":
         from core.delegated_flow_decision_history import (
             evaluate_delegated_flow_history,
         )
+
         h_report = evaluate_delegated_flow_history()
         evidence_status_val = h_report.evidence_status.value
         summary = (
@@ -875,6 +883,7 @@ def _probe_recovery_truth_surface() -> "EvidenceDimensionEntry":
         from core.recovery_truth_surface import (
             build_recovery_truth_report,
         )
+
         report = build_recovery_truth_report()
         report_dict = report.to_dict()
         open_dims = report_dict.get("open_dimensions", [])
@@ -897,8 +906,7 @@ def _probe_recovery_truth_surface() -> "EvidenceDimensionEntry":
         return EvidenceDimensionEntry(
             dimension_id=dim_id,
             display_name=(
-                "Recovery Truth Surface — reconnect / redispatch / "
-                "continuity structured evidence (PR-5-TRUTH)"
+                "Recovery Truth Surface — reconnect / redispatch / " "continuity structured evidence (PR-5-TRUTH)"
             ),
             classification=EvidenceClassification.canonical.value,
             evidence_status="present",
@@ -931,8 +939,7 @@ def _probe_recovery_truth_surface() -> "EvidenceDimensionEntry":
         return EvidenceDimensionEntry(
             dimension_id=dim_id,
             display_name=(
-                "Recovery Truth Surface — reconnect / redispatch / "
-                "continuity structured evidence (PR-5-TRUTH)"
+                "Recovery Truth Surface — reconnect / redispatch / " "continuity structured evidence (PR-5-TRUTH)"
             ),
             classification=EvidenceClassification.canonical.value,
             evidence_status="unavailable",
@@ -946,20 +953,16 @@ def _probe_recovery_truth_surface() -> "EvidenceDimensionEntry":
 def _probe_canonical_cross_repo_pipeline() -> "EvidenceDimensionEntry":
     """Probe the canonical cross-repo evidence ingestion pipeline (PR-05)."""
     dim_id = "canonical_cross_repo_evidence_pipeline"
-    code_ref = (
-        "core.canonical_cross_repo_evidence_pipeline."
-        "CanonicalCrossRepoEvidencePipeline"
-    )
+    code_ref = "core.canonical_cross_repo_evidence_pipeline." "CanonicalCrossRepoEvidencePipeline"
     test_ref = "tests/test_canonical_cross_repo_evidence_pipeline.py"
     try:
         from core.canonical_cross_repo_evidence_pipeline import (
             build_canonical_cross_repo_evidence_report,
         )
+
         report = build_canonical_cross_repo_evidence_report()
         verdict_val = report.pipeline_verdict.value
-        source_statuses = {
-            s.source_id.value: s.status.value for s in report.sources
-        }
+        source_statuses = {s.source_id.value: s.status.value for s in report.sources}
         summary = (
             f"CanonicalCrossRepoEvidencePipeline: verdict={verdict_val}; "
             f"is_complete={report.is_complete}; "
@@ -969,9 +972,7 @@ def _probe_canonical_cross_repo_pipeline() -> "EvidenceDimensionEntry":
         )
         return EvidenceDimensionEntry(
             dimension_id=dim_id,
-            display_name=(
-                "Canonical Cross-Repo Evidence Ingestion Pipeline (PR-05)"
-            ),
+            display_name=("Canonical Cross-Repo Evidence Ingestion Pipeline (PR-05)"),
             classification=EvidenceClassification.canonical.value,
             evidence_status="present",
             evidence_summary=summary,
@@ -990,8 +991,8 @@ def _probe_canonical_cross_repo_pipeline() -> "EvidenceDimensionEntry":
                 + (
                     "Pipeline not fully closed — verdict=" + verdict_val + ".  "
                     "Downgrade reasons: " + "; ".join(report.downgrade_reasons) + ".  "
-                    if report.downgrade_reasons else
-                    "Pipeline verdict: " + verdict_val + ".  "
+                    if report.downgrade_reasons
+                    else "Pipeline verdict: " + verdict_val + ".  "
                 )
             ),
         )
@@ -1001,15 +1002,10 @@ def _probe_canonical_cross_repo_pipeline() -> "EvidenceDimensionEntry":
             display_name="Canonical Cross-Repo Evidence Ingestion Pipeline (PR-05)",
             classification=EvidenceClassification.canonical.value,
             evidence_status="unavailable",
-            evidence_summary=(
-                f"CanonicalCrossRepoEvidencePipeline unavailable: {exc}"
-            ),
+            evidence_summary=(f"CanonicalCrossRepoEvidencePipeline unavailable: {exc}"),
             code_reference=code_ref,
             test_reference=test_ref,
-            notes=(
-                "Module import failed; ensure "
-                "core/canonical_cross_repo_evidence_pipeline.py is present."
-            ),
+            notes=("Module import failed; ensure " "core/canonical_cross_repo_evidence_pipeline.py is present."),
         )
 
 
@@ -1083,26 +1079,14 @@ class V2ReadinessGovernanceEvidenceSurface:
                 continue
             dimensions.append(entry)
 
-        canonical_count = sum(
-            1 for d in dimensions if d.classification == EvidenceClassification.canonical.value
-        )
-        advisory_count = sum(
-            1 for d in dimensions if d.classification == EvidenceClassification.advisory.value
-        )
-        companion_count = sum(
-            1 for d in dimensions if d.classification == EvidenceClassification.companion_repo.value
-        )
+        canonical_count = sum(1 for d in dimensions if d.classification == EvidenceClassification.canonical.value)
+        advisory_count = sum(1 for d in dimensions if d.classification == EvidenceClassification.advisory.value)
+        companion_count = sum(1 for d in dimensions if d.classification == EvidenceClassification.companion_repo.value)
         present_count = sum(1 for d in dimensions if d.evidence_status == "present")
         absent_count = sum(1 for d in dimensions if d.evidence_status == "absent")
-        unavailable_count = sum(
-            1 for d in dimensions if d.evidence_status in ("unavailable", "unknown")
-        )
-        canonical_dims = [
-            d for d in dimensions if d.classification == EvidenceClassification.canonical.value
-        ]
-        all_canonical_present = all(
-            d.evidence_status == "present" for d in canonical_dims
-        ) if canonical_dims else False
+        unavailable_count = sum(1 for d in dimensions if d.evidence_status in ("unavailable", "unknown"))
+        canonical_dims = [d for d in dimensions if d.classification == EvidenceClassification.canonical.value]
+        all_canonical_present = all(d.evidence_status == "present" for d in canonical_dims) if canonical_dims else False
 
         return EvidenceSurfaceReport(
             report_id=str(uuid.uuid4()),

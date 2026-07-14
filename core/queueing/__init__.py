@@ -1,6 +1,6 @@
 """Galaxy – Async task queue package (Phase 5.3)."""
 
-from .async_queue import AsyncTaskQueue, QueueFullError, QueueTask, QueueStats
+from .async_queue import AsyncTaskQueue, QueueFullError, QueueStats, QueueTask
 
 __all__ = [
     "AsyncTaskQueue",

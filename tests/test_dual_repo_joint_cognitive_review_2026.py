@@ -21,11 +21,6 @@ import json
 
 import pytest
 
-
-# ---------------------------------------------------------------------------
-# Import guard
-# ---------------------------------------------------------------------------
-
 from core.dual_repo_joint_cognitive_review_2026 import (
     ANDROID_HEAD_AT_REVIEW,
     JOINT_COGNITIVE_REVIEW_AUTHORITY,
@@ -34,9 +29,13 @@ from core.dual_repo_joint_cognitive_review_2026 import (
     JointCognitiveAreaResult,
     JointCognitiveReport,
     JointCognitiveVerdict,
-    build_strict_dual_repo_total_review,
     build_joint_cognitive_review,
+    build_strict_dual_repo_total_review,
 )
+
+# ---------------------------------------------------------------------------
+# Import guard
+# ---------------------------------------------------------------------------
 
 
 # ---------------------------------------------------------------------------
@@ -72,8 +71,7 @@ class TestModuleConstants:
         valid = {v.value for v in JointCognitiveVerdict}
         for area_id, verdict_val in JOINT_COGNITIVE_VERDICTS.items():
             assert verdict_val in valid, (
-                f"Area {area_id!r} has invalid verdict {verdict_val!r}; "
-                f"expected one of {sorted(valid)}"
+                f"Area {area_id!r} has invalid verdict {verdict_val!r}; " f"expected one of {sorted(valid)}"
             )
 
     def test_v2_main_path_verdict_is_fully_real(self) -> None:
@@ -85,25 +83,25 @@ class TestModuleConstants:
         """Temporal must be declared conditionally_real (not nominal_only)."""
         key = JointCognitiveAreaId.temporal_conditional_real.value
         verdict = JOINT_COGNITIVE_VERDICTS[key]
-        assert verdict == JointCognitiveVerdict.conditionally_real.value, (
-            f"Temporal should be conditionally_real, got {verdict!r}"
-        )
+        assert (
+            verdict == JointCognitiveVerdict.conditionally_real.value
+        ), f"Temporal should be conditionally_real, got {verdict!r}"
 
     def test_stage10_verdict_is_structural_authority(self) -> None:
         """Stage 10 scheduling convergence must be declared structural_authority."""
         key = JointCognitiveAreaId.stage10_scheduling_convergence.value
         verdict = JOINT_COGNITIVE_VERDICTS[key]
-        assert verdict == JointCognitiveVerdict.structural_authority.value, (
-            f"Stage 10 should be structural_authority, got {verdict!r}"
-        )
+        assert (
+            verdict == JointCognitiveVerdict.structural_authority.value
+        ), f"Stage 10 should be structural_authority, got {verdict!r}"
 
     def test_android_role_is_partially_wired(self) -> None:
         """Android role must be declared partially_wired (not fully_real)."""
         key = JointCognitiveAreaId.android_real_role.value
         verdict = JOINT_COGNITIVE_VERDICTS[key]
-        assert verdict == JointCognitiveVerdict.partially_wired.value, (
-            f"Android role should be partially_wired, got {verdict!r}"
-        )
+        assert (
+            verdict == JointCognitiveVerdict.partially_wired.value
+        ), f"Android role should be partially_wired, got {verdict!r}"
 
 
 # ---------------------------------------------------------------------------
@@ -128,9 +126,7 @@ class TestBuildJointCognitiveReview:
         report = build_joint_cognitive_review()
         valid = {v.value for v in JointCognitiveVerdict}
         for area in report.areas:
-            assert area.verdict.value in valid, (
-                f"Area {area.area_id!r} has invalid verdict {area.verdict!r}"
-            )
+            assert area.verdict.value in valid, f"Area {area.area_id!r} has invalid verdict {area.verdict!r}"
 
     def test_metadata_preserved(self) -> None:
         report = build_joint_cognitive_review()
@@ -164,9 +160,7 @@ class TestBuildJointCognitiveReview:
     def test_evidence_strings_non_empty(self) -> None:
         report = build_joint_cognitive_review()
         for area in report.areas:
-            assert area.evidence_zh, (
-                f"Area {area.area_id!r} must have non-empty evidence_zh"
-            )
+            assert area.evidence_zh, f"Area {area.area_id!r} must have non-empty evidence_zh"
 
     def test_honest_gap_strings_present(self) -> None:
         """Every area result must have a non-empty honest_gap_zh."""
@@ -199,64 +193,50 @@ class TestPerAreaProbeResults:
     def test_v2_main_path_probe_passes(self) -> None:
         report = build_joint_cognitive_review()
         area = self._get_area(report, JointCognitiveAreaId.v2_real_main_path.value)
-        assert area.probe_passed, (
-            f"V2 main path probe must pass. Detail: {area.probe_detail}"
-        )
+        assert area.probe_passed, f"V2 main path probe must pass. Detail: {area.probe_detail}"
         assert area.verdict == JointCognitiveVerdict.fully_real
 
     def test_nats_probe_passes(self) -> None:
         report = build_joint_cognitive_review()
         area = self._get_area(report, JointCognitiveAreaId.nats_distributed_activation.value)
-        assert area.probe_passed, (
-            f"NATS distributed activation probe must pass. Detail: {area.probe_detail}"
-        )
+        assert area.probe_passed, f"NATS distributed activation probe must pass. Detail: {area.probe_detail}"
 
     def test_temporal_probe_passes(self) -> None:
         report = build_joint_cognitive_review()
         area = self._get_area(report, JointCognitiveAreaId.temporal_conditional_real.value)
-        assert area.probe_passed, (
-            f"Temporal probe must pass. Detail: {area.probe_detail}"
-        )
-        assert area.verdict != JointCognitiveVerdict.nominal_only, (
-            "Temporal must not be nominal_only — it is real SDK code, even if conditionally active"
-        )
+        assert area.probe_passed, f"Temporal probe must pass. Detail: {area.probe_detail}"
+        assert (
+            area.verdict != JointCognitiveVerdict.nominal_only
+        ), "Temporal must not be nominal_only — it is real SDK code, even if conditionally active"
 
     def test_android_role_probe_passes(self) -> None:
         report = build_joint_cognitive_review()
         area = self._get_area(report, JointCognitiveAreaId.android_real_role.value)
-        assert area.probe_passed, (
-            f"Android role probe must pass. Detail: {area.probe_detail}"
-        )
-        assert area.verdict == JointCognitiveVerdict.partially_wired, (
-            "Android role must be partially_wired — not fully_real (needs live device)"
-        )
+        assert area.probe_passed, f"Android role probe must pass. Detail: {area.probe_detail}"
+        assert (
+            area.verdict == JointCognitiveVerdict.partially_wired
+        ), "Android role must be partially_wired — not fully_real (needs live device)"
 
     def test_dual_repo_coupling_probe_passes(self) -> None:
         report = build_joint_cognitive_review()
         area = self._get_area(report, JointCognitiveAreaId.dual_repo_coupling_boundary.value)
-        assert area.probe_passed, (
-            f"Dual-repo coupling probe must pass. Detail: {area.probe_detail}"
-        )
+        assert area.probe_passed, f"Dual-repo coupling probe must pass. Detail: {area.probe_detail}"
 
     def test_stage6_to_9_hardening_probe_passes(self) -> None:
         report = build_joint_cognitive_review()
         area = self._get_area(report, JointCognitiveAreaId.stage6_to_9_hardening.value)
-        assert area.probe_passed, (
-            f"Stage 6-9 hardening probe must pass. Detail: {area.probe_detail}"
-        )
-        assert area.verdict != JointCognitiveVerdict.nominal_only, (
-            "Stage 6-9 hardening must not be nominal_only — it is real code"
-        )
+        assert area.probe_passed, f"Stage 6-9 hardening probe must pass. Detail: {area.probe_detail}"
+        assert (
+            area.verdict != JointCognitiveVerdict.nominal_only
+        ), "Stage 6-9 hardening must not be nominal_only — it is real code"
 
     def test_stage10_scheduling_probe_passes(self) -> None:
         report = build_joint_cognitive_review()
         area = self._get_area(report, JointCognitiveAreaId.stage10_scheduling_convergence.value)
-        assert area.probe_passed, (
-            f"Stage 10 scheduling convergence probe must pass. Detail: {area.probe_detail}"
-        )
-        assert area.verdict == JointCognitiveVerdict.structural_authority, (
-            "Stage 10 must be structural_authority (harness exists, not all callers route through it)"
-        )
+        assert area.probe_passed, f"Stage 10 scheduling convergence probe must pass. Detail: {area.probe_detail}"
+        assert (
+            area.verdict == JointCognitiveVerdict.structural_authority
+        ), "Stage 10 must be structural_authority (harness exists, not all callers route through it)"
 
 
 # ---------------------------------------------------------------------------
@@ -269,6 +249,7 @@ class TestDeepestCognitionAuditStage6to10:
 
     def test_stage6_check_importable(self) -> None:
         from core.deepest_dual_repo_cognition_audit import check_stage6_master_brain_nats_lifecycle
+
         result = check_stage6_master_brain_nats_lifecycle()
         assert result.passed, f"Stage 6 check failed: {result.failure_detail}"
 
@@ -276,21 +257,25 @@ class TestDeepestCognitionAuditStage6to10:
         from core.deepest_dual_repo_cognition_audit import (
             check_stage7_distributed_execution_result_correlation,
         )
+
         result = check_stage7_distributed_execution_result_correlation()
         assert result.passed, f"Stage 7 check failed: {result.failure_detail}"
 
     def test_stage8_check_importable(self) -> None:
         from core.deepest_dual_repo_cognition_audit import check_stage8_master_brain_state_persistence
+
         result = check_stage8_master_brain_state_persistence()
         assert result.passed, f"Stage 8 check failed: {result.failure_detail}"
 
     def test_stage9_check_importable(self) -> None:
         from core.deepest_dual_repo_cognition_audit import check_stage9_temporal_conditional_real
+
         result = check_stage9_temporal_conditional_real()
         assert result.passed, f"Stage 9 check failed: {result.failure_detail}"
 
     def test_stage10_check_importable(self) -> None:
         from core.deepest_dual_repo_cognition_audit import check_stage10_scheduling_truth_harness
+
         result = check_stage10_scheduling_truth_harness()
         assert result.passed, f"Stage 10 check failed: {result.failure_detail}"
 
@@ -314,9 +299,7 @@ class TestDeepestCognitionAuditStage6to10:
         """SYSTEM_VERDICT must reference Stage 6-10 hardening."""
         from core.deepest_dual_repo_cognition_audit import SYSTEM_VERDICT
 
-        assert "STAGE6_TO_10" in SYSTEM_VERDICT, (
-            f"SYSTEM_VERDICT must reflect Stage 6-10 hardening: {SYSTEM_VERDICT!r}"
-        )
+        assert "STAGE6_TO_10" in SYSTEM_VERDICT, f"SYSTEM_VERDICT must reflect Stage 6-10 hardening: {SYSTEM_VERDICT!r}"
 
 
 # ---------------------------------------------------------------------------

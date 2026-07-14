@@ -107,12 +107,12 @@ Functions
 from __future__ import annotations
 
 import json
+import logging
 import time
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional
-import logging
 
 logger = logging.getLogger("Galaxy.AndroidV2ContinuityContract")
 
@@ -559,20 +559,14 @@ def classify_reconnect_continuity_outcome(
             return ContinuityScenarioOutcome(
                 scenario=ContinuityScenario.reconnect,
                 result=ContinuityVerificationResult.fail,
-                detail=(
-                    "continuity_resume classified but "
-                    "runtime_attachment_session_id was not preserved"
-                ),
+                detail=("continuity_resume classified but " "runtime_attachment_session_id was not preserved"),
                 policy_reference="RECONNECT_CONTINUITY_RESUME_PRESERVES_ATTACHMENT_ID_POLICY",
             )
         if not reconnect_count_incremented:
             return ContinuityScenarioOutcome(
                 scenario=ContinuityScenario.reconnect,
                 result=ContinuityVerificationResult.advisory,
-                detail=(
-                    "continuity_resume classified but reconnect_count "
-                    "was not incremented"
-                ),
+                detail=("continuity_resume classified but reconnect_count " "was not incremented"),
                 policy_reference="RECONNECT_CONTINUITY_RESUME_PRESERVES_ATTACHMENT_ID_POLICY",
             )
         return ContinuityScenarioOutcome(
@@ -586,9 +580,7 @@ def classify_reconnect_continuity_outcome(
             scenario=ContinuityScenario.reconnect,
             result=ContinuityVerificationResult.pass_,
             detail="new_attachment: fresh registration, no prior context inherited",
-            policy_reference=(
-                "RECONNECT_NEW_ATTACHMENT_DOES_NOT_INHERIT_PRIOR_CONTEXT_POLICY"
-            ),
+            policy_reference=("RECONNECT_NEW_ATTACHMENT_DOES_NOT_INHERIT_PRIOR_CONTEXT_POLICY"),
         )
     else:
         return ContinuityScenarioOutcome(
@@ -632,9 +624,7 @@ def classify_reattach_process_recreation_outcome(
                     "process-recreation re-attach correctly classified as "
                     "continuity_resume; no duplicate participant entry created"
                 ),
-                policy_reference=(
-                    "REATTACH_AFTER_PROCESS_RECREATION_MUST_NOT_DUPLICATE_PARTICIPANT_POLICY"
-                ),
+                policy_reference=("REATTACH_AFTER_PROCESS_RECREATION_MUST_NOT_DUPLICATE_PARTICIPANT_POLICY"),
             )
         else:
             return ContinuityScenarioOutcome(
@@ -644,9 +634,7 @@ def classify_reattach_process_recreation_outcome(
                     f"process-recreation re-attach with matching ID should be "
                     f"continuity_resume but got {reconnect_outcome!r}"
                 ),
-                policy_reference=(
-                    "REATTACH_AFTER_PROCESS_RECREATION_MUST_NOT_DUPLICATE_PARTICIPANT_POLICY"
-                ),
+                policy_reference=("REATTACH_AFTER_PROCESS_RECREATION_MUST_NOT_DUPLICATE_PARTICIPANT_POLICY"),
             )
     else:
         # No match — new_attachment is expected
@@ -655,12 +643,9 @@ def classify_reattach_process_recreation_outcome(
                 scenario=ContinuityScenario.reattach_process_recreation,
                 result=ContinuityVerificationResult.pass_,
                 detail=(
-                    "process-recreation re-attach with absent/mismatched ID "
-                    "correctly classified as new_attachment"
+                    "process-recreation re-attach with absent/mismatched ID " "correctly classified as new_attachment"
                 ),
-                policy_reference=(
-                    "PROCESS_RECREATION_CONTINUITY_RESUME_REQUIRES_MATCHING_ID_POLICY"
-                ),
+                policy_reference=("PROCESS_RECREATION_CONTINUITY_RESUME_REQUIRES_MATCHING_ID_POLICY"),
             )
         else:
             return ContinuityScenarioOutcome(
@@ -670,9 +655,7 @@ def classify_reattach_process_recreation_outcome(
                     f"process-recreation re-attach without matching ID produced "
                     f"{reconnect_outcome!r} (expected new_attachment)"
                 ),
-                policy_reference=(
-                    "PROCESS_RECREATION_CONTINUITY_RESUME_REQUIRES_MATCHING_ID_POLICY"
-                ),
+                policy_reference=("PROCESS_RECREATION_CONTINUITY_RESUME_REQUIRES_MATCHING_ID_POLICY"),
             )
 
 
@@ -765,17 +748,14 @@ def verify_duplicate_signal_suppression(
             scenario=ContinuityScenario.duplicate_signal,
             result=ContinuityVerificationResult.fail,
             detail=(
-                f"reconciler was called {reconciler_called_count} times "
-                f"for a duplicate signal (should be ≤ 1)"
+                f"reconciler was called {reconciler_called_count} times " f"for a duplicate signal (should be ≤ 1)"
             ),
             policy_reference="DUPLICATE_SIGNAL_MUST_BE_SUPPRESSED_POLICY",
         )
     return ContinuityScenarioOutcome(
         scenario=ContinuityScenario.duplicate_signal,
         result=ContinuityVerificationResult.pass_,
-        detail=(
-            f"duplicate signal suppressed; reconciler_called_count={reconciler_called_count}"
-        ),
+        detail=(f"duplicate signal suppressed; reconciler_called_count={reconciler_called_count}"),
         policy_reference="DUPLICATE_SIGNAL_MUST_BE_SUPPRESSED_POLICY",
     )
 
@@ -821,14 +801,11 @@ def build_joint_continuity_contract_snapshot(
     JointContinuityContractSnapshot
     """
     verified = scenarios or []
-    fail_count = sum(
-        1 for s in verified if s.result == ContinuityVerificationResult.fail
-    )
-    advisory_count = sum(
-        1 for s in verified if s.result == ContinuityVerificationResult.advisory
-    )
+    fail_count = sum(1 for s in verified if s.result == ContinuityVerificationResult.fail)
+    advisory_count = sum(1 for s in verified if s.result == ContinuityVerificationResult.advisory)
     all_pass = fail_count == 0 and all(
-        s.result in (
+        s.result
+        in (
             ContinuityVerificationResult.pass_,
             ContinuityVerificationResult.advisory,
             ContinuityVerificationResult.not_applicable,

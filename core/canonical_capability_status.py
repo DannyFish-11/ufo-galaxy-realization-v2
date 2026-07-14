@@ -92,7 +92,7 @@ __all__ = [
     "CAPABILITY_STATUS_REGISTRY_AUTHORITY",
     "STRUCTURAL_CAPABILITY_IS_NOT_OPERATIONAL_POLICY",
     "DISPATCH_ONLY_TO_ACTIVE_MAINLINE_CAPABILITIES_POLICY",
-    "LOCAL_AI_IS_STRUCTURAL_ONLY_STATUS",   # backward-compat alias
+    "LOCAL_AI_IS_STRUCTURAL_ONLY_STATUS",  # backward-compat alias
     "LOCAL_AI_IS_DEGRADED_STATUS",
     "WEBRTC_IS_EXPERIMENTAL_STATUS",
     "MESH_FEDERATION_IS_STRUCTURAL_ONLY_STATUS",
@@ -305,42 +305,39 @@ def _build_registry() -> Dict[str, CapabilityStatusRecord]:
             status=CapabilityRuntimeStatus.ACTIVE_MAINLINE,
             display_name="Device Registration",
             rationale="device_register → device_register_ack is the canonical "
-                      "connection establishment step, verified by transport harness.",
+            "connection establishment step, verified by transport harness.",
         ),
         CapabilityStatusRecord(
             capability_id="capability_report",
             status=CapabilityRuntimeStatus.ACTIVE_MAINLINE,
             display_name="Capability Report",
             rationale="capability_report → capability_report_ack is verified by "
-                      "transport harness and persisted to the bridge.",
+            "transport harness and persisted to the bridge.",
         ),
         CapabilityStatusRecord(
             capability_id="task_assign",
             status=CapabilityRuntimeStatus.ACTIVE_MAINLINE,
             display_name="Task Assignment",
             rationale="task_assign is the canonical V2→Android dispatch message, "
-                      "verified by the full roundtrip E2E test.",
+            "verified by the full roundtrip E2E test.",
         ),
         CapabilityStatusRecord(
             capability_id="task_result",
             status=CapabilityRuntimeStatus.ACTIVE_MAINLINE,
             display_name="Task Result",
-            rationale="task_result is the canonical Android→V2 result delivery, "
-                      "verified by waiter-unblock tests.",
+            rationale="task_result is the canonical Android→V2 result delivery, " "verified by waiter-unblock tests.",
         ),
         CapabilityStatusRecord(
             capability_id="heartbeat",
             status=CapabilityRuntimeStatus.ACTIVE_MAINLINE,
             display_name="Heartbeat",
-            rationale="heartbeat → heartbeat_ack keepalive is part of the "
-                      "canonical connection lifecycle.",
+            rationale="heartbeat → heartbeat_ack keepalive is part of the " "canonical connection lifecycle.",
         ),
         CapabilityStatusRecord(
             capability_id="tap",
             status=CapabilityRuntimeStatus.ACTIVE_MAINLINE,
             display_name="Touch: Tap",
-            rationale="Canonical Android accessibility action; registered via "
-                      "capability_report.",
+            rationale="Canonical Android accessibility action; registered via " "capability_report.",
         ),
         CapabilityStatusRecord(
             capability_id="swipe",
@@ -365,7 +362,7 @@ def _build_registry() -> Dict[str, CapabilityStatusRecord]:
             status=CapabilityRuntimeStatus.ACTIVE_MAINLINE,
             display_name="Cross-Device Dispatch",
             rationale="V2→Android task dispatch over WebSocket is the core "
-                      "cross-device capability; verified by transport harness.",
+            "cross-device capability; verified by transport harness.",
         ),
         CapabilityStatusRecord(
             capability_id="reconnect",
@@ -385,21 +382,21 @@ def _build_registry() -> Dict[str, CapabilityStatusRecord]:
             status=CapabilityRuntimeStatus.ACTIVE_MAINLINE,
             display_name="Continuous Host Perception / Multimodal Ingest",
             rationale="enable_multimodal_ingest now defaults to True in the canonical "
-                      "configuration (config.json).  MultimodalIngressBus provides "
-                      "continuous host perception as the canonical default runtime path. "
-                      "Gracefully degrades when audio/video hardware is absent; "
-                      "text-only deployments are unaffected.",
+            "configuration (config.json).  MultimodalIngressBus provides "
+            "continuous host perception as the canonical default runtime path. "
+            "Gracefully degrades when audio/video hardware is absent; "
+            "text-only deployments are unaffected.",
         ),
         CapabilityStatusRecord(
             capability_id="continuous_host_perception",
             status=CapabilityRuntimeStatus.ACTIVE_MAINLINE,
             display_name="Continuous Host Perception Bus",
             rationale="MultimodalIngressBus (PerceptionFrame stream) is now started "
-                      "by default in DesktopPresenceRuntime and classified as "
-                      "ACTIVE_MAINLINE.  The canonical default path sentinel "
-                      "MULTIMODAL_INGEST_CANONICAL_DEFAULT_PATH in "
-                      "core/multimodal/ingest_runtime.py records this promotion. "
-                      "Hardware-absent graceful degradation is built-in.",
+            "by default in DesktopPresenceRuntime and classified as "
+            "ACTIVE_MAINLINE.  The canonical default path sentinel "
+            "MULTIMODAL_INGEST_CANONICAL_DEFAULT_PATH in "
+            "core/multimodal/ingest_runtime.py records this promotion. "
+            "Hardware-absent graceful degradation is built-in.",
         ),
         # --- Experimental ---
         CapabilityStatusRecord(
@@ -407,8 +404,8 @@ def _build_registry() -> Dict[str, CapabilityStatusRecord]:
             status=CapabilityRuntimeStatus.EXPERIMENTAL,
             display_name="WebRTC",
             rationale="WebRTC session establishment exists as structural scaffolding "
-                      "but is not part of the canonical mainline dispatch path.  "
-                      "Not verified as operational in the current runtime.",
+            "but is not part of the canonical mainline dispatch path.  "
+            "Not verified as operational in the current runtime.",
             source_sentinel=WEBRTC_IS_EXPERIMENTAL_STATUS,
         ),
         CapabilityStatusRecord(
@@ -416,7 +413,7 @@ def _build_registry() -> Dict[str, CapabilityStatusRecord]:
             status=CapabilityRuntimeStatus.EXPERIMENTAL,
             display_name="WebRTC Task Lifecycle",
             rationale="Structural scaffolding for WebRTC-backed task lifecycle. "
-                      "Not operational on canonical mainline path.",
+            "Not operational on canonical mainline path.",
             source_sentinel=WEBRTC_IS_EXPERIMENTAL_STATUS,
         ),
         CapabilityStatusRecord(
@@ -424,7 +421,7 @@ def _build_registry() -> Dict[str, CapabilityStatusRecord]:
             status=CapabilityRuntimeStatus.EXPERIMENTAL,
             display_name="Advanced Handoff",
             rationale="Advanced cross-device handoff (beyond canonical task_assign "
-                      "path) is structural/experimental.  Not mainline.",
+            "path) is structural/experimental.  Not mainline.",
         ),
         # --- Degraded (runtime bundled; requires operator setup + model download) ---
         CapabilityStatusRecord(
@@ -432,11 +429,11 @@ def _build_registry() -> Dict[str, CapabilityStatusRecord]:
             status=CapabilityRuntimeStatus.DEGRADED,
             display_name="Android Local AI / On-Device Inference",
             rationale="llama.cpp and NCNN runtimes are now bundled in the APK "
-                      "(com.github.ggerganov:llama.cpp:b4833, ncnn-android-vulkan:20240410). "
-                      "Real JNI implementations (LlamaCppPlannerService, NcnnGroundingService) "
-                      "exist and are wired at startup. Classified DEGRADED (not STRUCTURAL_ONLY) "
-                      "because first-run model download (~1.65 GB) is required and "
-                      "inference_mode defaults to 'center'. Not active mainline by default.",
+            "(com.github.ggerganov:llama.cpp:b4833, ncnn-android-vulkan:20240410). "
+            "Real JNI implementations (LlamaCppPlannerService, NcnnGroundingService) "
+            "exist and are wired at startup. Classified DEGRADED (not STRUCTURAL_ONLY) "
+            "because first-run model download (~1.65 GB) is required and "
+            "inference_mode defaults to 'center'. Not active mainline by default.",
             source_sentinel=LOCAL_AI_IS_DEGRADED_STATUS,
         ),
         CapabilityStatusRecord(
@@ -444,9 +441,9 @@ def _build_registry() -> Dict[str, CapabilityStatusRecord]:
             status=CapabilityRuntimeStatus.DEGRADED,
             display_name="Android Local Grounding",
             rationale="NcnnGroundingService (real JNI, external fun to libncnn.so) is "
-                      "now the default when NCNN library loads successfully. "
-                      "SeeClick model download required at first run. "
-                      "Classified DEGRADED; not active mainline by default.",
+            "now the default when NCNN library loads successfully. "
+            "SeeClick model download required at first run. "
+            "Classified DEGRADED; not active mainline by default.",
             source_sentinel=LOCAL_AI_IS_DEGRADED_STATUS,
         ),
         CapabilityStatusRecord(
@@ -454,9 +451,9 @@ def _build_registry() -> Dict[str, CapabilityStatusRecord]:
             status=CapabilityRuntimeStatus.DEGRADED,
             display_name="Android Local Planner",
             rationale="LlamaCppPlannerService (real JNI, external fun to libllama.so) is "
-                      "now the default when llama.cpp library loads successfully. "
-                      "MobileVLM model download required at first run. "
-                      "Classified DEGRADED; not active mainline by default.",
+            "now the default when llama.cpp library loads successfully. "
+            "MobileVLM model download required at first run. "
+            "Classified DEGRADED; not active mainline by default.",
             source_sentinel=LOCAL_AI_IS_DEGRADED_STATUS,
         ),
         CapabilityStatusRecord(
@@ -464,8 +461,8 @@ def _build_registry() -> Dict[str, CapabilityStatusRecord]:
             status=CapabilityRuntimeStatus.DEGRADED,
             display_name="On-Device Inference",
             rationale="LocalInferenceRuntimeManager is wired to real inference services "
-                      "(LlamaCppPlannerService, NcnnGroundingService). "
-                      "Classified DEGRADED; requires operator setup and model download.",
+            "(LlamaCppPlannerService, NcnnGroundingService). "
+            "Classified DEGRADED; requires operator setup and model download.",
             source_sentinel=LOCAL_AI_IS_DEGRADED_STATUS,
         ),
         CapabilityStatusRecord(
@@ -473,8 +470,8 @@ def _build_registry() -> Dict[str, CapabilityStatusRecord]:
             status=CapabilityRuntimeStatus.STRUCTURAL_ONLY,
             display_name="Mesh Networking",
             rationale="Mesh networking (mesh_coordinator) exists as structural "
-                      "scaffolding for future distributed architecture.  "
-                      "Not activated in the current runtime.",
+            "scaffolding for future distributed architecture.  "
+            "Not activated in the current runtime.",
             source_sentinel=MESH_FEDERATION_IS_STRUCTURAL_ONLY_STATUS,
         ),
         CapabilityStatusRecord(
@@ -482,7 +479,7 @@ def _build_registry() -> Dict[str, CapabilityStatusRecord]:
             status=CapabilityRuntimeStatus.STRUCTURAL_ONLY,
             display_name="Galaxy Federation",
             rationale="Galaxy federation (galaxy_federation) is structural "
-                      "scaffolding.  Not activated in the current runtime.",
+            "scaffolding.  Not activated in the current runtime.",
             source_sentinel=MESH_FEDERATION_IS_STRUCTURAL_ONLY_STATUS,
         ),
         CapabilityStatusRecord(

@@ -21,6 +21,7 @@ D.  Non-ingress write attempts surface high-severity telemetry
 E.  Canonical ingress is the single import entry for participant truth
     in handler modules
 """
+
 from __future__ import annotations
 
 import os
@@ -30,10 +31,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_message(msg_type: str = "task_result", device_id: str = "dev-test-001") -> Dict[str, Any]:
     return {
@@ -52,6 +53,7 @@ def _make_message(msg_type: str = "task_result", device_id: str = "dev-test-001"
 
 try:
     import galaxy_gateway.android.handlers.task_lifecycle as _tl
+
     _TL_AVAILABLE = True
 except Exception:
     _tl = None  # type: ignore[assignment]
@@ -59,6 +61,7 @@ except Exception:
 
 try:
     import galaxy_gateway.android.handlers.goal_execution as _ge
+
     _GE_AVAILABLE = True
 except Exception:
     _ge = None  # type: ignore[assignment]
@@ -72,12 +75,8 @@ _SKIP_GE = pytest.mark.skipif(not _GE_AVAILABLE, reason="goal_execution handler 
 # ---------------------------------------------------------------------------
 
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-_TASK_LIFECYCLE_SRC = os.path.join(
-    _REPO_ROOT, "galaxy_gateway", "android", "handlers", "task_lifecycle.py"
-)
-_GOAL_EXECUTION_SRC = os.path.join(
-    _REPO_ROOT, "galaxy_gateway", "android", "handlers", "goal_execution.py"
-)
+_TASK_LIFECYCLE_SRC = os.path.join(_REPO_ROOT, "galaxy_gateway", "android", "handlers", "task_lifecycle.py")
+_GOAL_EXECUTION_SRC = os.path.join(_REPO_ROOT, "galaxy_gateway", "android", "handlers", "goal_execution.py")
 
 
 def _read_source(path: str) -> str:
@@ -89,55 +88,62 @@ def _read_source(path: str) -> str:
 # A.  Bypass guard constants and telemetry
 # ============================================================================
 
+
 class TestBypassGuardConstants:
 
     def test_A01_single_ingress_bypass_guard_policy_importable(self):
         from core.unified_runtime_truth_ingress import SINGLE_INGRESS_BYPASS_GUARD_POLICY
+
         assert SINGLE_INGRESS_BYPASS_GUARD_POLICY
 
     def test_A02_bypass_guard_policy_non_empty(self):
         from core.unified_runtime_truth_ingress import SINGLE_INGRESS_BYPASS_GUARD_POLICY
+
         assert len(SINGLE_INGRESS_BYPASS_GUARD_POLICY.strip()) > 10
 
     def test_A03_bypass_guard_policy_mentions_ingest_function(self):
         from core.unified_runtime_truth_ingress import SINGLE_INGRESS_BYPASS_GUARD_POLICY
+
         assert "ingest_android_runtime_state_update" in SINGLE_INGRESS_BYPASS_GUARD_POLICY
 
     def test_A04_record_non_ingress_write_importable(self):
         from core.unified_runtime_truth_ingress import record_non_ingress_participant_truth_write
+
         assert callable(record_non_ingress_participant_truth_write)
 
     def test_A05_get_bypass_attempt_count_importable(self):
         from core.unified_runtime_truth_ingress import get_bypass_attempt_count
+
         assert callable(get_bypass_attempt_count)
 
     def test_A06_get_bypass_attempt_count_returns_int(self):
         from core.unified_runtime_truth_ingress import get_bypass_attempt_count
+
         assert isinstance(get_bypass_attempt_count(), int)
 
     def test_A07_record_bypass_increments_counter(self):
         from core.unified_runtime_truth_ingress import (
-            record_non_ingress_participant_truth_write,
             get_bypass_attempt_count,
+            record_non_ingress_participant_truth_write,
         )
+
         before = get_bypass_attempt_count()
         record_non_ingress_participant_truth_write("task_result", "test_caller")
         assert get_bypass_attempt_count() == before + 1
 
     def test_A08_record_bypass_emits_warning_log(self):
         from core.unified_runtime_truth_ingress import record_non_ingress_participant_truth_write
+
         with patch("core.unified_runtime_truth_ingress.logger") as mock_logger:
             record_non_ingress_participant_truth_write("task_result", "test_caller")
             mock_logger.warning.assert_called_once()
             call_args = str(mock_logger.warning.call_args)
             # The warning must reference the bypass / non-canonical nature
-            assert any(
-                kw in call_args.lower()
-                for kw in ("bypass", "non-canonical", "guard", "violation")
-            )
+            assert any(kw in call_args.lower() for kw in ("bypass", "non-canonical", "guard", "violation"))
 
     def test_A09_record_bypass_includes_message_type_in_log(self):
         from core.unified_runtime_truth_ingress import record_non_ingress_participant_truth_write
+
         with patch("core.unified_runtime_truth_ingress.logger") as mock_logger:
             record_non_ingress_participant_truth_write("goal_execution_result", "some_handler")
             call_args = mock_logger.warning.call_args
@@ -147,20 +153,24 @@ class TestBypassGuardConstants:
 
     def test_A10_bypass_guard_policy_in_all(self):
         import core.unified_runtime_truth_ingress as mod
+
         assert "SINGLE_INGRESS_BYPASS_GUARD_POLICY" in mod.__all__
 
     def test_A11_record_bypass_function_in_all(self):
         import core.unified_runtime_truth_ingress as mod
+
         assert "record_non_ingress_participant_truth_write" in mod.__all__
 
     def test_A12_get_bypass_count_in_all(self):
         import core.unified_runtime_truth_ingress as mod
+
         assert "get_bypass_attempt_count" in mod.__all__
 
 
 # ============================================================================
 # B.  task_lifecycle routes through canonical ingress — source inspection
 # ============================================================================
+
 
 class TestTaskLifecycleSourceUsesCanonicalIngress:
     """Source-level checks that do not require pydantic."""
@@ -173,10 +183,7 @@ class TestTaskLifecycleSourceUsesCanonicalIngress:
     def test_B02_task_lifecycle_does_not_directly_import_participant_truth_sub_ingress(self):
         """The old direct bypass import line must no longer be present."""
         source = _read_source(_TASK_LIFECYCLE_SRC)
-        assert (
-            "ingest_android_participant_truth_message as _ingest_participant_truth"
-            not in source
-        ), (
+        assert "ingest_android_participant_truth_message as _ingest_participant_truth" not in source, (
             "task_lifecycle.py still directly imports android_participant_truth_ingress "
             "via _ingest_participant_truth — this is the bypass path that must be removed."
         )
@@ -203,6 +210,7 @@ class TestTaskLifecycleSourceUsesCanonicalIngress:
 # B-func.  task_lifecycle function-level tests (skipped without pydantic)
 # ============================================================================
 
+
 @_SKIP_TL
 class TestTaskLifecycleFunctionUsesCanonicalIngress:
 
@@ -212,12 +220,8 @@ class TestTaskLifecycleFunctionUsesCanonicalIngress:
         mock_outcome.reject_reason = ""
         mock_outcome.routed_path = "participant_truth"
 
-        with patch.object(
-            _tl, "_ingest_via_canonical_ingress", return_value=mock_outcome
-        ) as mock_ingress:
-            _tl._try_ingest_participant_truth(
-                {"type": "task_result", "task_id": "t1"}, "result"
-            )
+        with patch.object(_tl, "_ingest_via_canonical_ingress", return_value=mock_outcome) as mock_ingress:
+            _tl._try_ingest_participant_truth({"type": "task_result", "task_id": "t1"}, "result")
             mock_ingress.assert_called_once()
 
     def test_BF02_try_ingest_participant_truth_injects_truth_kind(self):
@@ -255,15 +259,14 @@ class TestTaskLifecycleFunctionUsesCanonicalIngress:
             return mock_outcome
 
         with patch.object(_tl, "_ingest_via_canonical_ingress", side_effect=capture):
-            _tl._try_ingest_participant_truth(
-                {"type": "task_result", "truth_kind": "result"}, "cancel"
-            )
+            _tl._try_ingest_participant_truth({"type": "task_result", "truth_kind": "result"}, "cancel")
         assert captured.get("truth_kind") == "result"
 
 
 # ============================================================================
 # C.  goal_execution routes through canonical ingress — source inspection
 # ============================================================================
+
 
 class TestGoalExecutionSourceUsesCanonicalIngress:
     """Source-level checks that do not require pydantic."""
@@ -274,10 +277,7 @@ class TestGoalExecutionSourceUsesCanonicalIngress:
 
     def test_C02_goal_execution_does_not_directly_import_sub_ingress(self):
         source = _read_source(_GOAL_EXECUTION_SRC)
-        assert (
-            "ingest_android_participant_truth_message as _ingest_goal_result_truth"
-            not in source
-        ), (
+        assert "ingest_android_participant_truth_message as _ingest_goal_result_truth" not in source, (
             "goal_execution.py still directly imports android_participant_truth_ingress "
             "via _ingest_goal_result_truth — this is the bypass path that must be removed."
         )
@@ -295,6 +295,7 @@ class TestGoalExecutionSourceUsesCanonicalIngress:
 # C-func.  goal_execution function-level tests (skipped without pydantic)
 # ============================================================================
 
+
 @_SKIP_GE
 class TestGoalExecutionFunctionUsesCanonicalIngress:
 
@@ -304,12 +305,8 @@ class TestGoalExecutionFunctionUsesCanonicalIngress:
         mock_outcome.reject_reason = ""
         mock_outcome.routed_path = "participant_truth"
 
-        with patch.object(
-            _ge, "_ingest_goal_result_via_canonical_ingress", return_value=mock_outcome
-        ) as mock_ingress:
-            _ge._try_ingest_goal_result_truth(
-                {"type": "goal_execution_result", "task_id": "t2"}
-            )
+        with patch.object(_ge, "_ingest_goal_result_via_canonical_ingress", return_value=mock_outcome) as mock_ingress:
+            _ge._try_ingest_goal_result_truth({"type": "goal_execution_result", "task_id": "t2"})
             mock_ingress.assert_called_once()
 
     def test_CF02_try_ingest_goal_result_truth_injects_result_kind(self):
@@ -322,12 +319,8 @@ class TestGoalExecutionFunctionUsesCanonicalIngress:
             captured.update(msg)
             return mock_outcome
 
-        with patch.object(
-            _ge, "_ingest_goal_result_via_canonical_ingress", side_effect=capture
-        ):
-            _ge._try_ingest_goal_result_truth(
-                {"type": "goal_execution_result", "task_id": "t2"}
-            )
+        with patch.object(_ge, "_ingest_goal_result_via_canonical_ingress", side_effect=capture):
+            _ge._try_ingest_goal_result_truth({"type": "goal_execution_result", "task_id": "t2"})
         assert captured.get("truth_kind") == "result"
 
     def test_CF03_try_ingest_goal_result_no_op_when_ingress_unavailable(self):
@@ -339,29 +332,31 @@ class TestGoalExecutionFunctionUsesCanonicalIngress:
 # D.  Non-ingress write attempts surface high-severity telemetry
 # ============================================================================
 
+
 class TestNonIngressBypassTelemetry:
 
     def test_D01_bypass_attempt_is_not_silent(self):
         """record_non_ingress_participant_truth_write must emit a WARNING log."""
         from core.unified_runtime_truth_ingress import record_non_ingress_participant_truth_write
+
         with patch("core.unified_runtime_truth_ingress.logger") as mock_logger:
             record_non_ingress_participant_truth_write("fake_type", "fake_handler")
-            assert mock_logger.warning.called, (
-                "Non-ingress write must emit a warning log — bypass must not be silent."
-            )
+            assert mock_logger.warning.called, "Non-ingress write must emit a warning log — bypass must not be silent."
 
     def test_D02_bypass_attempt_does_not_raise(self):
         """record_non_ingress_participant_truth_write must not raise."""
         from core.unified_runtime_truth_ingress import record_non_ingress_participant_truth_write
+
         record_non_ingress_participant_truth_write()
         record_non_ingress_participant_truth_write("", "")
         record_non_ingress_participant_truth_write("task_result", "some_handler")
 
     def test_D03_multiple_bypass_attempts_are_counted_cumulatively(self):
         from core.unified_runtime_truth_ingress import (
-            record_non_ingress_participant_truth_write,
             get_bypass_attempt_count,
+            record_non_ingress_participant_truth_write,
         )
+
         before = get_bypass_attempt_count()
         record_non_ingress_participant_truth_write("t1", "c1")
         record_non_ingress_participant_truth_write("t2", "c2")
@@ -371,21 +366,21 @@ class TestNonIngressBypassTelemetry:
         """Routing through ingest_android_runtime_state_update must NOT increment the
         bypass counter."""
         from core.unified_runtime_truth_ingress import (
-            ingest_android_runtime_state_update,
             get_bypass_attempt_count,
+            ingest_android_runtime_state_update,
         )
+
         before = get_bypass_attempt_count()
         ingest_android_runtime_state_update(
             {"type": "session_snapshot", "device_id": "dev-test"},
         )
-        assert get_bypass_attempt_count() == before, (
-            "Canonical ingress must not increment the bypass counter."
-        )
+        assert get_bypass_attempt_count() == before, "Canonical ingress must not increment the bypass counter."
 
 
 # ============================================================================
 # E.  Canonical ingress is the single entry point — functional checks
 # ============================================================================
+
 
 class TestSingleIngressIsOnlyEntryPoint:
 
@@ -393,19 +388,23 @@ class TestSingleIngressIsOnlyEntryPoint:
         from core.unified_runtime_truth_ingress import (
             ANDROID_RUNTIME_STATE_MUST_FLOW_THROUGH_INGRESS_POLICY,
         )
+
         assert "ingest_android_runtime_state_update" in ANDROID_RUNTIME_STATE_MUST_FLOW_THROUGH_INGRESS_POLICY
 
     def test_E02_no_parallel_write_policy_exists(self):
         from core.unified_runtime_truth_ingress import NO_PARALLEL_WRITE_TO_CANONICAL_STATE_POLICY
+
         assert NO_PARALLEL_WRITE_TO_CANONICAL_STATE_POLICY
 
     def test_E03_ingest_android_runtime_state_update_is_callable(self):
         from core.unified_runtime_truth_ingress import ingest_android_runtime_state_update
+
         assert callable(ingest_android_runtime_state_update)
 
     def test_E04_task_result_message_routes_via_canonical_with_outcome(self):
         """task_result messages must produce an observable outcome via canonical ingress."""
         from core.unified_runtime_truth_ingress import ingest_android_runtime_state_update
+
         msg = _make_message("task_result")
         outcome = ingest_android_runtime_state_update(msg)
         assert outcome is not None
@@ -413,6 +412,7 @@ class TestSingleIngressIsOnlyEntryPoint:
 
     def test_E05_goal_execution_result_message_routes_via_canonical(self):
         from core.unified_runtime_truth_ingress import ingest_android_runtime_state_update
+
         msg = _make_message("goal_execution_result")
         outcome = ingest_android_runtime_state_update(msg)
         assert outcome is not None
@@ -421,6 +421,7 @@ class TestSingleIngressIsOnlyEntryPoint:
     def test_E06_ambiguous_message_type_produces_observable_outcome(self):
         """Unknown message type must produce a non-empty routed_path outcome."""
         from core.unified_runtime_truth_ingress import ingest_android_runtime_state_update
+
         msg = _make_message("unknown_ambiguous_type_xyz")
         outcome = ingest_android_runtime_state_update(msg)
         assert outcome is not None
@@ -432,6 +433,7 @@ class TestSingleIngressIsOnlyEntryPoint:
     def test_E07_continuity_mode_propagated_to_outcome(self):
         """continuity_legality_mode from message must appear in the outcome."""
         from core.unified_runtime_truth_ingress import ingest_android_runtime_state_update
+
         msg = _make_message("session_snapshot")
         msg["continuity_legality_mode"] = "compat"
         outcome = ingest_android_runtime_state_update(msg)
@@ -440,10 +442,10 @@ class TestSingleIngressIsOnlyEntryPoint:
 
     def test_E08_ingest_returns_runtime_truth_ingress_outcome_type(self):
         from core.unified_runtime_truth_ingress import (
-            ingest_android_runtime_state_update,
             RuntimeTruthIngressOutcome,
+            ingest_android_runtime_state_update,
         )
+
         msg = _make_message("runtime_state")
         outcome = ingest_android_runtime_state_update(msg)
         assert isinstance(outcome, RuntimeTruthIngressOutcome)
-

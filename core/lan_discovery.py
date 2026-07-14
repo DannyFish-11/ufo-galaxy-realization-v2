@@ -22,6 +22,7 @@ Matter 设备。本模块是它的"接线落地版"：多服务类型浏览 + UD
 启用条件：zeroconf 可导入 且 GALAXY_LAN_DISCOVERY != "0"。zeroconf 缺失
 时优雅降级为 disabled，零影响。
 """
+
 from __future__ import annotations
 
 import logging
@@ -60,6 +61,7 @@ def lan_discovery_enabled() -> bool:
         return False
     try:
         import zeroconf  # noqa: F401
+
         return True
     except ImportError:
         return False
@@ -81,7 +83,7 @@ class LanDiscovery:
 
     def start(self) -> Dict[str, Any]:
         """开始浏览。zeroconf 的回调跑在它自己的线程里,handler 只做轻量镜像。"""
-        from zeroconf import Zeroconf, ServiceBrowser
+        from zeroconf import ServiceBrowser, Zeroconf
 
         self._zc = Zeroconf()
         types = _service_types()
@@ -116,9 +118,14 @@ class LanDiscovery:
     def _device_id(name: str) -> str:
         return "mdns_" + name.rstrip(".").replace(" ", "_")
 
-    def ingest_service(self, service_type: str, name: str,
-                       address: str = "", port: int = 0,
-                       properties: Optional[Dict[str, str]] = None) -> bool:
+    def ingest_service(
+        self,
+        service_type: str,
+        name: str,
+        address: str = "",
+        port: int = 0,
+        properties: Optional[Dict[str, str]] = None,
+    ) -> bool:
         """一个 mDNS 服务出现/更新 → 注册/刷新进 UDM + 发事件。"""
         if not name:
             return False
@@ -126,6 +133,7 @@ class LanDiscovery:
         device_id = self._device_id(name)
         try:
             from core.unified.device_manager import get_unified_device_manager
+
             dm = get_unified_device_manager()
             patch = {
                 "device_name": name.split(".")[0] or name,
@@ -145,9 +153,13 @@ class LanDiscovery:
             if dm.get_device(device_id) is None:
                 # 注册只立最小身份;完整状态走 SSOT upsert(register_device_from_dict
                 # 会把"多余键"整体当 metadata,嵌套错位)。
-                dm.register_device_from_dict(device_id, {
-                    "device_type": "iot", "device_name": patch["device_name"],
-                })
+                dm.register_device_from_dict(
+                    device_id,
+                    {
+                        "device_type": "iot",
+                        "device_name": patch["device_name"],
+                    },
+                )
             dm.upsert_device_state(device_id, patch, source="lan_discovery")
             self.discovered_count += 1
             self.last_seen_ts = time.time()
@@ -155,15 +167,20 @@ class LanDiscovery:
             logger.debug("LAN 发现:镜像 %s 失败: %s", name, exc)
             return False
         try:
-            from core.state_event_bus import emit, StateEventType
-            emit(StateEventType.DEVICE_UPDATED, "lan_discovery", {
-                "device_id": device_id,
-                "service_type": service_type,
-                "address": address,
-                "port": port,
-                "matter": is_matter,
-                "event": "discovered",
-            })
+            from core.state_event_bus import StateEventType, emit
+
+            emit(
+                StateEventType.DEVICE_UPDATED,
+                "lan_discovery",
+                {
+                    "device_id": device_id,
+                    "service_type": service_type,
+                    "address": address,
+                    "port": port,
+                    "matter": is_matter,
+                    "event": "discovered",
+                },
+            )
         except Exception:  # noqa: BLE001
             pass
         return True
@@ -173,6 +190,7 @@ class LanDiscovery:
         device_id = self._device_id(name)
         try:
             from core.unified.device_manager import get_unified_device_manager
+
             dm = get_unified_device_manager()
             if dm.get_device(device_id) is not None:
                 dm.upsert_device_state(device_id, {"status": "offline"}, source="lan_discovery")

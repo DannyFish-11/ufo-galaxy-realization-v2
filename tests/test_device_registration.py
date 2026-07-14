@@ -17,15 +17,16 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-
 # =============================================================================
 # Fixtures
 # =============================================================================
+
 
 @pytest.fixture(scope="module")
 def devices_client():
     """TestClient backed by the devices sub-router."""
     from core.routes.devices import create_router
+
     app = FastAPI()
     router = create_router()
     app.include_router(router)
@@ -37,13 +38,14 @@ def devices_client():
 # a) normalise_legacy_payload: message_type → type mapping
 # =============================================================================
 
+
 class TestNormaliseLegacyPayload:
     """Unit tests for the ``normalise_legacy_payload`` helper."""
 
     def test_message_type_promoted_to_type(self):
         """A payload with only ``message_type`` gets ``type`` set correctly."""
-        from galaxy_gateway.protocol.compat import normalise_legacy_payload
         from galaxy_gateway.protocol.aip_v3 import MessageType
+        from galaxy_gateway.protocol.compat import normalise_legacy_payload
 
         raw = {
             "message_type": MessageType.DEVICE_REGISTER,
@@ -57,8 +59,8 @@ class TestNormaliseLegacyPayload:
 
     def test_type_not_overwritten_when_already_present(self):
         """Existing ``type`` must not be overwritten."""
-        from galaxy_gateway.protocol.compat import normalise_legacy_payload
         from galaxy_gateway.protocol.aip_v3 import MessageType
+        from galaxy_gateway.protocol.compat import normalise_legacy_payload
 
         raw = {
             "type": MessageType.DEVICE_HEARTBEAT.value,
@@ -70,8 +72,8 @@ class TestNormaliseLegacyPayload:
 
     def test_device_id_promoted_from_payload(self):
         """When top-level ``device_id`` is absent, it is pulled from ``payload``."""
-        from galaxy_gateway.protocol.compat import normalise_legacy_payload
         from galaxy_gateway.protocol.aip_v3 import MessageType
+        from galaxy_gateway.protocol.compat import normalise_legacy_payload
 
         raw = {
             "type": MessageType.DEVICE_REGISTER.value,
@@ -82,8 +84,8 @@ class TestNormaliseLegacyPayload:
 
     def test_device_id_not_overwritten_when_already_present(self):
         """Existing top-level ``device_id`` must not be overwritten."""
-        from galaxy_gateway.protocol.compat import normalise_legacy_payload
         from galaxy_gateway.protocol.aip_v3 import MessageType
+        from galaxy_gateway.protocol.compat import normalise_legacy_payload
 
         raw = {
             "type": MessageType.DEVICE_REGISTER.value,
@@ -95,8 +97,8 @@ class TestNormaliseLegacyPayload:
 
     def test_full_legacy_dict_parsed_to_aip_message(self):
         """After normalisation a legacy dict should be parseable as AIPMessage."""
-        from galaxy_gateway.protocol.compat import normalise_legacy_payload
         from galaxy_gateway.protocol.aip_v3 import AIPMessage, MessageType
+        from galaxy_gateway.protocol.compat import normalise_legacy_payload
 
         raw = {
             "message_type": MessageType.DEVICE_REGISTER,
@@ -111,6 +113,7 @@ class TestNormaliseLegacyPayload:
 # =============================================================================
 # b) API validation: missing / empty device_id returns 4xx
 # =============================================================================
+
 
 class TestAPIDeviceRegistrationValidation:
     """REST API-level validation for device registration."""
@@ -146,6 +149,7 @@ class TestAPIDeviceRegistrationValidation:
 # c) GalaxyCore.register_device succeeds with a full payload
 # =============================================================================
 
+
 class TestGalaxyCoreRegisterDevice:
     """Integration tests for GalaxyCore.register_device."""
 
@@ -153,6 +157,7 @@ class TestGalaxyCoreRegisterDevice:
         """register_device with a full payload must not raise and must return
         success=True."""
         import asyncio
+
         from core.galaxy_core import GalaxyCore
 
         core = GalaxyCore()
@@ -171,6 +176,7 @@ class TestGalaxyCoreRegisterDevice:
     def test_register_device_stored_in_devices(self):
         """After registration the device should appear in core.devices."""
         import asyncio
+
         from core.galaxy_core import GalaxyCore
 
         core = GalaxyCore()

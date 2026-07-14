@@ -276,9 +276,7 @@ class ResultEnvelope:
         Additional metadata from the executing device/worker.
     """
 
-    result_id: str = dataclasses.field(
-        default_factory=lambda: str(uuid.uuid4())
-    )
+    result_id: str = dataclasses.field(default_factory=lambda: str(uuid.uuid4()))
     task_id: str = ""
     device_id: str = ""
     chain_step: CanonicalChainStep = CanonicalChainStep.result_envelope
@@ -388,16 +386,12 @@ class ChainExecutionRecord:
         Additional metadata (authority_role, session_id, etc.).
     """
 
-    record_id: str = dataclasses.field(
-        default_factory=lambda: str(uuid.uuid4())
-    )
+    record_id: str = dataclasses.field(default_factory=lambda: str(uuid.uuid4()))
     task_id: str = ""
     trace_id: Optional[str] = None
     device_id: str = ""
     route_mode: str = "cross_device"
-    steps_completed: List[CanonicalChainStep] = dataclasses.field(
-        default_factory=list
-    )
+    steps_completed: List[CanonicalChainStep] = dataclasses.field(default_factory=list)
     is_canonical: bool = False
     legacy_path_used: Optional[str] = None
     result_envelope: Optional[ResultEnvelope] = None
@@ -427,11 +421,7 @@ class ChainExecutionRecord:
             "steps_completed": [s.value for s in self.steps_completed],
             "is_canonical": self.is_canonical,
             "legacy_path_used": self.legacy_path_used,
-            "result_envelope": (
-                self.result_envelope.to_dict()
-                if self.result_envelope is not None
-                else None
-            ),
+            "result_envelope": (self.result_envelope.to_dict() if self.result_envelope is not None else None),
             "dispatched_at": self.dispatched_at,
             "completed_at": self.completed_at,
             "extra": self.extra,
@@ -501,18 +491,12 @@ class CrossDeviceChainSnapshot:
         UNIX timestamp when this snapshot was produced.
     """
 
-    snapshot_id: str = dataclasses.field(
-        default_factory=lambda: str(uuid.uuid4())
-    )
+    snapshot_id: str = dataclasses.field(default_factory=lambda: str(uuid.uuid4()))
     total_executions: int = 0
     canonical_executions: int = 0
     legacy_executions: int = 0
-    recent_records: List[ChainExecutionRecord] = dataclasses.field(
-        default_factory=list
-    )
-    chain_authority_map: Dict[str, str] = dataclasses.field(
-        default_factory=dict
-    )
+    recent_records: List[ChainExecutionRecord] = dataclasses.field(default_factory=list)
+    chain_authority_map: Dict[str, str] = dataclasses.field(default_factory=dict)
     canonical_chain_order: List[str] = dataclasses.field(default_factory=list)
     timestamp: float = dataclasses.field(default_factory=time.time)
 
@@ -568,10 +552,7 @@ class CrossDeviceChainSingleton:
             canonical_executions=self._canonical,
             legacy_executions=self._legacy,
             recent_records=list(self._records[-max_recent:]),
-            chain_authority_map={
-                step.value: authority
-                for step, authority in CHAIN_STEP_AUTHORITIES.items()
-            },
+            chain_authority_map={step.value: authority for step, authority in CHAIN_STEP_AUTHORITIES.items()},
             canonical_chain_order=[s.value for s in CANONICAL_CHAIN_ORDER],
         )
 
@@ -651,11 +632,7 @@ def build_result_envelope(
     if isinstance(payload_raw, dict):
         payload = payload_raw
     else:
-        payload = {
-            k: v
-            for k, v in raw_result.items()
-            if k not in ("image_base64", "screenshot_base64", "raw_bytes")
-        }
+        payload = {k: v for k, v in raw_result.items() if k not in ("image_base64", "screenshot_base64", "raw_bytes")}
 
     return ResultEnvelope(
         task_id=task_id or raw_result.get("task_id", ""),
@@ -671,10 +648,22 @@ def build_result_envelope(
         extra={
             k: v
             for k, v in raw_result.items()
-            if k not in ("status", "success", "result", "data", "error",
-                         "error_message", "task_id", "device_id",
-                         "trace_id", "session_id", "image_base64",
-                         "screenshot_base64", "raw_bytes")
+            if k
+            not in (
+                "status",
+                "success",
+                "result",
+                "data",
+                "error",
+                "error_message",
+                "task_id",
+                "device_id",
+                "trace_id",
+                "session_id",
+                "image_base64",
+                "screenshot_base64",
+                "raw_bytes",
+            )
         },
     )
 
@@ -722,10 +711,7 @@ def build_chain_execution_record(
         else:
             steps_completed = list(CANONICAL_CHAIN_ORDER)
 
-    is_canonical = (
-        legacy_path_used is None
-        and steps_completed == list(CANONICAL_CHAIN_ORDER)
-    )
+    is_canonical = legacy_path_used is None and steps_completed == list(CANONICAL_CHAIN_ORDER)
 
     return ChainExecutionRecord(
         task_id=task_id,
@@ -778,8 +764,7 @@ def record_chain_execution(
     get_cross_device_chain().append(record)
 
     logger.debug(
-        "chain_execution_record: task_id=%s device_id=%s is_canonical=%s "
-        "legacy_path=%s route_mode=%s",
+        "chain_execution_record: task_id=%s device_id=%s is_canonical=%s " "legacy_path=%s route_mode=%s",
         task_id,
         device_id,
         record.is_canonical,

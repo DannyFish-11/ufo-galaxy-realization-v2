@@ -272,9 +272,9 @@ class DegradedTruthRecord:
         return {
             "task_id": self.task_id,
             "trace_id": self.trace_id,
-            "failure_state": self.failure_state.value
-            if hasattr(self.failure_state, "value")
-            else str(self.failure_state),
+            "failure_state": (
+                self.failure_state.value if hasattr(self.failure_state, "value") else str(self.failure_state)
+            ),
             "failure_domain": self.failure_domain,
             "error_code": self.error_code,
             "source": self.source,
@@ -326,12 +326,10 @@ class RecoveryTransitionRecord:
         return {
             "task_id": self.task_id,
             "trace_id": self.trace_id,
-            "prior_state": self.prior_state.value
-            if hasattr(self.prior_state, "value")
-            else str(self.prior_state),
-            "recovered_state": self.recovered_state.value
-            if hasattr(self.recovered_state, "value")
-            else str(self.recovered_state),
+            "prior_state": self.prior_state.value if hasattr(self.prior_state, "value") else str(self.prior_state),
+            "recovered_state": (
+                self.recovered_state.value if hasattr(self.recovered_state, "value") else str(self.recovered_state)
+            ),
             "recovery_method": self.recovery_method,
             "source": self.source,
             "restored_capabilities": self.restored_capabilities,
@@ -392,12 +390,8 @@ class FailureDegradedRecoveryRuntime:
     """
 
     def __init__(self) -> None:
-        self._degraded_log: Deque[DegradedTruthRecord] = deque(
-            maxlen=_RING_BUFFER_SIZE
-        )
-        self._recovery_log: Deque[RecoveryTransitionRecord] = deque(
-            maxlen=_RING_BUFFER_SIZE
-        )
+        self._degraded_log: Deque[DegradedTruthRecord] = deque(maxlen=_RING_BUFFER_SIZE)
+        self._recovery_log: Deque[RecoveryTransitionRecord] = deque(maxlen=_RING_BUFFER_SIZE)
         self._total_failures: int = 0
         self._total_recoveries: int = 0
         self._lock = threading.Lock()
@@ -418,9 +412,7 @@ class FailureDegradedRecoveryRuntime:
             self._total_failures += 1
         return record
 
-    def record_recovery(
-        self, record: RecoveryTransitionRecord
-    ) -> RecoveryTransitionRecord:
+    def record_recovery(self, record: RecoveryTransitionRecord) -> RecoveryTransitionRecord:
         """Append a recovery transition record to the ring buffer."""
         with self._lock:
             self._recovery_log.append(record)
@@ -532,10 +524,11 @@ def propagate_failure_to_canonical(
 
     # ── Write to TaskGraphRuntime ────────────────────────────────────────────
     try:
+        from core.task_graph_runtime import GraphNodeState as _GNS
         from core.task_graph_runtime import (
             get_task_graph_runtime,
-            GraphNodeState as _GNS,
         )
+
         _tgr = get_task_graph_runtime()
         _tgr.transition(task_id, _GNS.FAILED)
     except Exception as _tgr_exc:
@@ -547,6 +540,7 @@ def propagate_failure_to_canonical(
     # ── Emit audit TASK_FAILED ───────────────────────────────────────────────
     try:
         from core.audit_event_semantics import audit_task_failed
+
         audit_task_failed(
             task_id,
             trace_id=trace_id,
@@ -561,8 +555,9 @@ def propagate_failure_to_canonical(
 
     # ── Record TaskExecutionRecord in ReplayFoundation ───────────────────────
     try:
+        from core.canonical_task import TaskLifecycle, TaskOrigin, build_canonical_task
         from core.replay_foundation import record_task_execution
-        from core.canonical_task import build_canonical_task, TaskOrigin, TaskLifecycle
+
         _task = build_canonical_task(
             task_id=task_id,
             trace_id=trace_id,
@@ -630,10 +625,11 @@ def propagate_recovery_to_canonical(
 
     # ── Transition TaskGraphRuntime to COMPLETED (recovered) ────────────────
     try:
+        from core.task_graph_runtime import GraphNodeState as _GNS
         from core.task_graph_runtime import (
             get_task_graph_runtime,
-            GraphNodeState as _GNS,
         )
+
         _tgr = get_task_graph_runtime()
         _tgr.transition(task_id, _GNS.COMPLETED)
     except Exception as _tgr_exc:
@@ -645,6 +641,7 @@ def propagate_recovery_to_canonical(
     # ── Emit audit repair / completed event ─────────────────────────────────
     try:
         from core.audit_event_semantics import audit_task_completed
+
         audit_task_completed(
             task_id,
             trace_id=trace_id,
@@ -726,10 +723,11 @@ def record_degraded_transition(
     # ── Emit degraded audit event ────────────────────────────────────────────
     try:
         from core.audit_event_semantics import (
-            AuditEventRecord,
             AuditEventKind,
+            AuditEventRecord,
             get_audit_event_semantics,
         )
+
         _rec = AuditEventRecord(
             kind=AuditEventKind.TASK_DEGRADED.value,
             task_id=task_id,
@@ -794,13 +792,10 @@ def query_degraded_state() -> Dict[str, Any]:
     }
     try:
         from core.capability_network_runtime_policy import query_routable_executors
+
         executors = query_routable_executors()
         result["total_online"] = len(executors)
-        degraded = [
-            e.node_id
-            for e in executors
-            if e.presence_state == "degraded"
-        ]
+        degraded = [e.node_id for e in executors if e.presence_state == "degraded"]
         result["degraded_executors"] = degraded
         result["total_degraded"] = len(degraded)
     except Exception as _exc:

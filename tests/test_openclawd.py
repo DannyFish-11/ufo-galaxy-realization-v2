@@ -2,8 +2,9 @@
 OpenClawd 核心智能体单元测试
 """
 
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
 
 from core.openclawd import OpenClawd, get_openclawd
 
@@ -34,10 +35,18 @@ class TestOpenClawdHandlerFallback:
     def test_intent_handler_map_keys(self):
         oc = OpenClawd()
         expected_intents = {
-            "chat", "device_control", "task_manage", "file_operation",
-            "search", "ocr", "system_status", "network", "code",
+            "chat",
+            "device_control",
+            "task_manage",
+            "file_operation",
+            "search",
+            "ocr",
+            "system_status",
+            "network",
+            "code",
             # Priority D+E: high-level autonomous execution
-            "goal_execution", "parallel_goal",
+            "goal_execution",
+            "parallel_goal",
         }
         assert set(oc._INTENT_HANDLER_MAP.keys()) == expected_intents
 
@@ -52,9 +61,7 @@ class TestOpenClawdHandlerFallback:
         """所有映射的 handler 方法必须存在"""
         oc = OpenClawd()
         for intent, handler_name in oc._INTENT_HANDLER_MAP.items():
-            assert hasattr(oc, handler_name), (
-                f"Intent '{intent}' maps to '{handler_name}' which does not exist"
-            )
+            assert hasattr(oc, handler_name), f"Intent '{intent}' maps to '{handler_name}' which does not exist"
 
 
 class TestOpenClawdSessionMemory:

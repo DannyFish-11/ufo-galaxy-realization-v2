@@ -42,14 +42,14 @@ from __future__ import annotations
 import pytest
 
 from core.network_topology_runtime import (
-    TopologyNodeKind,
-    TopologyEdgeKind,
     TopologyConnectionState,
-    TopologyNode,
     TopologyEdge,
-    assimilate_nats_state,
-    assimilate_gateway_state,
+    TopologyEdgeKind,
+    TopologyNode,
+    TopologyNodeKind,
     assimilate_device_connectivity,
+    assimilate_gateway_state,
+    assimilate_nats_state,
     get_network_topology_runtime,
     reset_network_topology_runtime,
 )
@@ -154,10 +154,8 @@ def test_09_device_no_path_is_unavailable():
 
 def test_10_multiple_devices_tracked_independently():
     rt = get_network_topology_runtime()
-    rt.absorb_device_connectivity(
-        device_id="devA", preferred_path="direct_ws", effective_routable=True)
-    rt.absorb_device_connectivity(
-        device_id="devB", preferred_path="relay", effective_routable=True)
+    rt.absorb_device_connectivity(device_id="devA", preferred_path="direct_ws", effective_routable=True)
+    rt.absorb_device_connectivity(device_id="devB", preferred_path="relay", effective_routable=True)
     assert rt.get_node("devA") is not None
     assert rt.get_node("devB") is not None
 
@@ -178,8 +176,7 @@ def test_12_gateway_node_tagged():
 
 def test_13_device_metadata_contains_preferred_path():
     rt = get_network_topology_runtime()
-    node = rt.absorb_device_connectivity(
-        device_id="dev6", preferred_path="direct_ws", effective_routable=True)
+    node = rt.absorb_device_connectivity(device_id="dev6", preferred_path="direct_ws", effective_routable=True)
     assert node.metadata.get("preferred_path") == "direct_ws"
 
 
@@ -189,22 +186,20 @@ def test_14_assimilate_nats_state_wrapper_works():
 
 
 def test_15_assimilate_gateway_state_wrapper_works():
-    node = assimilate_gateway_state("gw-wrap", host="gw.local", port=8080,
-                                    is_connected=True)
+    node = assimilate_gateway_state("gw-wrap", host="gw.local", port=8080, is_connected=True)
     assert node.kind == TopologyNodeKind.GATEWAY
 
 
 def test_16_assimilate_device_connectivity_wrapper_works():
-    node = assimilate_device_connectivity(
-        "dev-wrap", preferred_path="direct_ws", effective_routable=True)
+    node = assimilate_device_connectivity("dev-wrap", preferred_path="direct_ws", effective_routable=True)
     assert node.kind == TopologyNodeKind.DEVICE
 
 
 def test_17_removing_device_cascades_to_edges():
     rt = get_network_topology_runtime()
     rt.absorb_device_connectivity(
-        device_id="dev7", preferred_path="direct_ws", effective_routable=True,
-        fallback_available=True)
+        device_id="dev7", preferred_path="direct_ws", effective_routable=True, fallback_available=True
+    )
     before = len(rt.edges_to("dev7"))
     assert before > 0
     rt.remove_node("dev7")
@@ -227,8 +222,7 @@ def test_19_gateway_assimilated_event_in_log():
 
 def test_20_device_assimilated_event_in_log():
     rt = get_network_topology_runtime()
-    rt.absorb_device_connectivity(
-        device_id="dev8", preferred_path="direct_ws", effective_routable=True)
+    rt.absorb_device_connectivity(device_id="dev8", preferred_path="direct_ws", effective_routable=True)
     log = list(rt.get_topology_log())
     assert any(r.event_kind == "device_assimilated" for r in log)
 
@@ -237,8 +231,7 @@ def test_21_snapshot_reflects_all_absorbed_nodes():
     rt = get_network_topology_runtime()
     rt.absorb_nats_state(is_connected=True)
     rt.absorb_gateway_state(gateway_id="gw-snap", is_connected=True)
-    rt.absorb_device_connectivity(
-        device_id="dev-snap", preferred_path="direct_ws", effective_routable=True)
+    rt.absorb_device_connectivity(device_id="dev-snap", preferred_path="direct_ws", effective_routable=True)
     s = rt.snapshot()
     assert s.total_nodes >= 3
     assert "nats_fabric_endpoint" in s.nodes_by_kind
@@ -255,16 +248,14 @@ def test_22_absorb_nats_preserves_host_port():
 
 def test_23_absorb_gateway_preserves_host_port():
     rt = get_network_topology_runtime()
-    node = rt.absorb_gateway_state(
-        gateway_id="gw-hp", host="gwhost", port=7777, is_connected=True)
+    node = rt.absorb_gateway_state(gateway_id="gw-hp", host="gwhost", port=7777, is_connected=True)
     assert rt.get_node("gw-hp").host == "gwhost"
     assert rt.get_node("gw-hp").port == 7777
 
 
 def test_24_absorb_device_preserves_host_port():
     rt = get_network_topology_runtime()
-    node = rt.absorb_device_connectivity(
-        device_id="dev-hp", effective_routable=True, host="devhost", port=5555)
+    node = rt.absorb_device_connectivity(device_id="dev-hp", effective_routable=True, host="devhost", port=5555)
     assert rt.get_node("dev-hp").host == "devhost"
     assert rt.get_node("dev-hp").port == 5555
 

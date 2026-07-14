@@ -20,9 +20,9 @@ Validates the implementation hardening delivered by Stage 10:
 from __future__ import annotations
 
 import asyncio
-import sys
-import os
 import json
+import os
+import sys
 import time
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -100,6 +100,7 @@ class TestTaskGraphRuntimeRegisterNodeRaw(unittest.TestCase):
         # Newly registered nodes should start in QUEUED state
         try:
             from core.task_graph_runtime import GraphNodeState
+
             self.assertEqual(node.state, GraphNodeState.QUEUED)
         except ImportError:
             pass
@@ -151,6 +152,7 @@ class TestWakeRouterCanonicalScoring(unittest.TestCase):
         except ImportError as e:
             self.skipTest(f"wake_router unavailable: {e}")
         import uuid
+
         return WakeEvent(
             event_id=f"evt_{uuid.uuid4().hex[:8]}",
             source_device_id="dev_source",
@@ -165,25 +167,32 @@ class TestWakeRouterCanonicalScoring(unittest.TestCase):
 
         # Inject two devices: dev_a is more active, dev_b is stale
         now = time.time()
-        router.inject_device_info("dev_a", {
-            "capabilities": ["screen", "speaker"],
-            "last_heartbeat": now - 1,
-            "last_message": now - 1,
-            "screen_on": True,
-            "last_interaction": now - 2,
-        })
-        router.inject_device_info("dev_b", {
-            "capabilities": ["touch"],
-            "last_heartbeat": now - 120,
-            "last_message": now - 120,
-            "screen_on": False,
-            "last_interaction": 0,
-        })
+        router.inject_device_info(
+            "dev_a",
+            {
+                "capabilities": ["screen", "speaker"],
+                "last_heartbeat": now - 1,
+                "last_message": now - 1,
+                "screen_on": True,
+                "last_interaction": now - 2,
+            },
+        )
+        router.inject_device_info(
+            "dev_b",
+            {
+                "capabilities": ["touch"],
+                "last_heartbeat": now - 120,
+                "last_message": now - 120,
+                "screen_on": False,
+                "last_interaction": 0,
+            },
+        )
 
         # Track whether DeviceScoringEngine.select_best_device was called
         _called = {}
         try:
             from core.control_plane.smart_scheduler import DeviceScoringEngine as _Engine
+
             original_select = _Engine.select_best_device
 
             def _patched_select(self_inner, candidates, required_caps=None):
@@ -206,13 +215,16 @@ class TestWakeRouterCanonicalScoring(unittest.TestCase):
         event = self._make_wake_event()
 
         now = time.time()
-        router.inject_device_info("dev_fallback", {
-            "capabilities": ["screen"],
-            "last_heartbeat": now - 5,
-            "last_message": now - 5,
-            "screen_on": True,
-            "last_interaction": now - 3,
-        })
+        router.inject_device_info(
+            "dev_fallback",
+            {
+                "capabilities": ["screen"],
+                "last_heartbeat": now - 5,
+                "last_message": now - 5,
+                "screen_on": True,
+                "last_interaction": now - 3,
+            },
+        )
 
         # Simulate engine import failure
         with patch.dict("sys.modules", {"core.control_plane.smart_scheduler": None}):
@@ -232,20 +244,26 @@ class TestWakeRouterCanonicalScoring(unittest.TestCase):
         event = self._make_wake_event(task_type=WakeTaskType.VISUAL)
 
         now = time.time()
-        router.inject_device_info("dev_screen", {
-            "capabilities": ["screen", "keyboard"],
-            "last_heartbeat": now - 5,
-            "last_message": now - 5,
-            "screen_on": True,
-            "last_interaction": now - 3,
-        })
-        router.inject_device_info("dev_no_screen", {
-            "capabilities": ["touch"],
-            "last_heartbeat": now - 5,
-            "last_message": now - 5,
-            "screen_on": False,
-            "last_interaction": now - 3,
-        })
+        router.inject_device_info(
+            "dev_screen",
+            {
+                "capabilities": ["screen", "keyboard"],
+                "last_heartbeat": now - 5,
+                "last_message": now - 5,
+                "screen_on": True,
+                "last_interaction": now - 3,
+            },
+        )
+        router.inject_device_info(
+            "dev_no_screen",
+            {
+                "capabilities": ["touch"],
+                "last_heartbeat": now - 5,
+                "last_message": now - 5,
+                "screen_on": False,
+                "last_interaction": now - 3,
+            },
+        )
 
         decision = _run(router.route(event))
         self.assertIsNotNone(decision)
@@ -263,8 +281,8 @@ class TestWakeRouterTaskGraphRegistration(unittest.TestCase):
     def test_wake_route_registers_in_task_graph_runtime(self):
         """After route(), TaskGraphRuntime should contain a wake_route node."""
         try:
-            from galaxy_gateway.wake_router import WakeRouter, WakeEvent, WakeTaskType
             from core.task_graph_runtime import TaskGraphRuntime
+            from galaxy_gateway.wake_router import WakeEvent, WakeRouter, WakeTaskType
         except ImportError as e:
             self.skipTest(f"dependency unavailable: {e}")
 
@@ -274,13 +292,16 @@ class TestWakeRouterTaskGraphRegistration(unittest.TestCase):
         fresh_rt = TaskGraphRuntime()
         router = WakeRouter()
         now = time.time()
-        router.inject_device_info("dev_tgr", {
-            "capabilities": ["screen"],
-            "last_heartbeat": now - 1,
-            "last_message": now - 1,
-            "screen_on": True,
-            "last_interaction": now - 1,
-        })
+        router.inject_device_info(
+            "dev_tgr",
+            {
+                "capabilities": ["screen"],
+                "last_heartbeat": now - 1,
+                "last_message": now - 1,
+                "screen_on": True,
+                "last_interaction": now - 1,
+            },
+        )
 
         event = WakeEvent(
             event_id=f"evt_tgr_{uuid.uuid4().hex[:8]}",
@@ -292,9 +313,7 @@ class TestWakeRouterTaskGraphRegistration(unittest.TestCase):
             _run(router.route(event))
 
         # Runtime should have at least one node with tool_name == "wake_route"
-        wake_nodes = [
-            n for n in fresh_rt.all_nodes() if n.tool_name == "wake_route"
-        ]
+        wake_nodes = [n for n in fresh_rt.all_nodes() if n.tool_name == "wake_route"]
         self.assertTrue(len(wake_nodes) >= 1, "No wake_route node found in TaskGraphRuntime")
         wake_node = wake_nodes[0]
         self.assertEqual(wake_node.trace_id, event.event_id)
@@ -303,20 +322,23 @@ class TestWakeRouterTaskGraphRegistration(unittest.TestCase):
     def test_wake_route_task_graph_failure_is_non_fatal(self):
         """TaskGraphRuntime registration failure must not block routing."""
         try:
-            from galaxy_gateway.wake_router import WakeRouter, WakeEvent
+            from galaxy_gateway.wake_router import WakeEvent, WakeRouter
         except ImportError as e:
             self.skipTest(f"wake_router unavailable: {e}")
         import uuid
 
         router = WakeRouter()
         now = time.time()
-        router.inject_device_info("dev_safe", {
-            "capabilities": ["screen"],
-            "last_heartbeat": now - 1,
-            "last_message": now - 1,
-            "screen_on": True,
-            "last_interaction": now - 1,
-        })
+        router.inject_device_info(
+            "dev_safe",
+            {
+                "capabilities": ["screen"],
+                "last_heartbeat": now - 1,
+                "last_message": now - 1,
+                "screen_on": True,
+                "last_interaction": now - 1,
+            },
+        )
         event = WakeEvent(
             event_id=f"evt_safe_{uuid.uuid4().hex[:8]}",
             source_device_id="dev_src",
@@ -367,12 +389,16 @@ class TestSchedulerBroadcastTaskGraph(unittest.TestCase):
         async def _fake_send(args, ctx):
             return json.dumps({"status": "queued", "device_id": args.get("device_id")})
 
-        with patch.object(sched, "_exec_send_to_device", side_effect=_fake_send), \
-             patch("core.task_graph_runtime.get_task_graph_runtime", return_value=fresh_rt):
-            result_str = _run(sched._exec_broadcast(
-                {"task_type": "screenshot", "task_id": "bc_test_001"},
-                context,
-            ))
+        with (
+            patch.object(sched, "_exec_send_to_device", side_effect=_fake_send),
+            patch("core.task_graph_runtime.get_task_graph_runtime", return_value=fresh_rt),
+        ):
+            result_str = _run(
+                sched._exec_broadcast(
+                    {"task_type": "screenshot", "task_id": "bc_test_001"},
+                    context,
+                )
+            )
 
         result = json.loads(result_str)
         self.assertIn("broadcast_results", result)
@@ -380,7 +406,9 @@ class TestSchedulerBroadcastTaskGraph(unittest.TestCase):
 
         # TaskGraphRuntime should have a node for the broadcast task
         all_nodes = fresh_rt.all_nodes()
-        broadcast_nodes = [n for n in all_nodes if "broadcast" in n.task_id or n.tool_name in ("screenshot", "broadcast")]
+        broadcast_nodes = [
+            n for n in all_nodes if "broadcast" in n.task_id or n.tool_name in ("screenshot", "broadcast")
+        ]
         self.assertTrue(len(broadcast_nodes) >= 1, "No broadcast task node in TaskGraphRuntime")
 
     def test_broadcast_sentinel_present(self):
@@ -407,10 +435,12 @@ class TestSchedulerBroadcastTaskGraph(unittest.TestCase):
             return json.dumps({"status": "queued"})
 
         with patch.object(sched, "_exec_send_to_device", side_effect=_fake_send):
-            _run(sched._exec_broadcast(
-                {"task_type": "screenshot"},
-                context,
-            ))
+            _run(
+                sched._exec_broadcast(
+                    {"task_type": "screenshot"},
+                    context,
+                )
+            )
 
         log = get_ingress_log()
         self.assertGreater(len(log), 0)
@@ -456,8 +486,10 @@ class TestSchedulerLegacyFallbackGate(unittest.TestCase):
             "payload": {"k": "v"},
         }
         graph = MagicMock()
-        with patch("core.command_router.get_command_router", side_effect=RuntimeError("router unavailable")), \
-             patch("core.task_graph_runtime.get_task_graph_runtime", return_value=graph):
+        with (
+            patch("core.command_router.get_command_router", side_effect=RuntimeError("router unavailable")),
+            patch("core.task_graph_runtime.get_task_graph_runtime", return_value=graph),
+        ):
             result = json.loads(_run(sched._exec_relay(args, context={})))
         self.assertFalse(result.get("success"))
         self.assertTrue(result.get("legacy_fallback_blocked"))
@@ -477,8 +509,10 @@ class TestSchedulerLegacyFallbackGate(unittest.TestCase):
             "payload": {"k": "v"},
         }
         graph = MagicMock()
-        with patch("core.command_router.get_command_router", side_effect=RuntimeError("router unavailable")), \
-             patch("core.task_graph_runtime.get_task_graph_runtime", return_value=graph):
+        with (
+            patch("core.command_router.get_command_router", side_effect=RuntimeError("router unavailable")),
+            patch("core.task_graph_runtime.get_task_graph_runtime", return_value=graph),
+        ):
             result = json.loads(_run(sched._exec_mesh_send(args)))
         # PR-MESH-COLLAB 重设计后:Mesh 是路由顾问、WebSocket 是执行传输,
         # 不再是 fallback 链——"阻断 legacy fallback"语义随之退役(CANONICAL_

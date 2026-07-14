@@ -14,12 +14,13 @@ Covers:
 from __future__ import annotations
 
 import asyncio
-import pytest
 
+import pytest
 
 # ===========================================================================
 # A) Audit ledger – event sourcing
 # ===========================================================================
+
 
 class TestAuditLedgerIntegration:
     """Verify that audit events flow into the shared ledger and export works."""
@@ -33,16 +34,22 @@ class TestAuditLedgerIntegration:
 
         eid1 = ledger.append(
             EventType.TASK_CREATED,
-            trace_id=trace_id, task_id="task_1", source="test",
+            trace_id=trace_id,
+            task_id="task_1",
+            source="test",
         )
         eid2 = ledger.append(
             EventType.TASK_STARTED,
-            trace_id=trace_id, task_id="task_1", source="test",
+            trace_id=trace_id,
+            task_id="task_1",
+            source="test",
             parent_ids=[eid1],
         )
         eid3 = ledger.append(
             EventType.TASK_COMPLETED,
-            trace_id=trace_id, task_id="task_1", source="test",
+            trace_id=trace_id,
+            task_id="task_1",
+            source="test",
             parent_ids=[eid2],
         )
 
@@ -59,11 +66,11 @@ class TestAuditLedgerIntegration:
         tid = "trace_chain"
 
         chain_types = [
-            EventType.TASK_CREATED,       # Intent
-            EventType.TASK_STARTED,       # Plan
-            EventType.TASK_DISPATCHED,    # Dispatch / Tool Call
-            EventType.AGENT_DISPATCHED,   # Device Exec
-            EventType.TASK_COMPLETED,     # Result
+            EventType.TASK_CREATED,  # Intent
+            EventType.TASK_STARTED,  # Plan
+            EventType.TASK_DISPATCHED,  # Dispatch / Tool Call
+            EventType.AGENT_DISPATCHED,  # Device Exec
+            EventType.TASK_COMPLETED,  # Result
         ]
         prev_id = None
         for et in chain_types:
@@ -84,6 +91,7 @@ class TestAuditLedgerIntegration:
     def test_export_as_json(self):
         """events_to_json produces a valid JSON array."""
         import json
+
         from core.control_plane.audit_ledger import AuditLedger, EventType, events_to_json
 
         ledger = AuditLedger()
@@ -109,8 +117,8 @@ class TestAuditLedgerIntegration:
         dag = events_to_dag(events)
         assert eid1 in dag
         assert eid2 in dag
-        assert dag[eid1] == []           # root event has no parents
-        assert dag[eid2] == [eid1]       # second event points to root
+        assert dag[eid1] == []  # root event has no parents
+        assert dag[eid2] == [eid1]  # second event points to root
 
     def test_snapshot(self):
         """Ledger snapshot captures all events."""
@@ -129,15 +137,18 @@ class TestAuditLedgerIntegration:
 # B) Smart scheduler – device selection
 # ===========================================================================
 
+
 class TestSmartSchedulerIntegration:
     """Verify that DeviceScoringEngine selects the expected device."""
 
     def _make_engine(self):
         from core.control_plane.smart_scheduler import DeviceScoringEngine
+
         return DeviceScoringEngine()
 
     def _make_device(self, device_id, *, status="online", ping=50.0, load=10.0, caps=None):
         from core.control_plane.smart_scheduler import DeviceScoreInput, SandboxLevel
+
         return DeviceScoreInput(
             device_id=device_id,
             status=status,
@@ -194,7 +205,7 @@ class TestSmartSchedulerIntegration:
             self._make_device("d3", ping=100.0, load=20.0),
         ]
         ranked = engine.rank_devices(devices)
-        assert ranked[0].device_id == "d2"   # best score
+        assert ranked[0].device_id == "d2"  # best score
 
     def test_multiple_candidates_all_eligible(self):
         """When all devices are eligible, the best-scored one is returned."""
@@ -213,6 +224,7 @@ class TestSmartSchedulerIntegration:
 # C) Security Interceptor – HITL gate
 # ===========================================================================
 
+
 class TestSecurityInterceptorIntegration:
     """Verify async suspend/resume and timeout/deny behaviour."""
 
@@ -220,7 +232,9 @@ class TestSecurityInterceptorIntegration:
     async def test_approval_resumes_on_ack(self):
         """require_approval() resumes once the operator ACKs."""
         from core.control_plane.security_interceptor import (
-            ApprovalRegistry, SecurityInterceptor, RiskLevel,
+            ApprovalRegistry,
+            RiskLevel,
+            SecurityInterceptor,
         )
 
         registry = ApprovalRegistry()
@@ -238,7 +252,7 @@ class TestSecurityInterceptorIntegration:
             result_holder.append(token)
 
         task_coro = asyncio.create_task(_task())
-        await asyncio.sleep(0.05)   # let require_approval register
+        await asyncio.sleep(0.05)  # let require_approval register
 
         pending = registry.list_pending()
         assert len(pending) == 1
@@ -255,7 +269,10 @@ class TestSecurityInterceptorIntegration:
     async def test_approval_denied_raises_error(self):
         """require_approval() raises ApprovalDeniedError when denied."""
         from core.control_plane.security_interceptor import (
-            ApprovalRegistry, SecurityInterceptor, RiskLevel, ApprovalDeniedError,
+            ApprovalDeniedError,
+            ApprovalRegistry,
+            RiskLevel,
+            SecurityInterceptor,
         )
 
         registry = ApprovalRegistry()
@@ -288,7 +305,10 @@ class TestSecurityInterceptorIntegration:
     async def test_approval_timeout_raises_error(self):
         """require_approval() raises ApprovalTimeoutError after timeout."""
         from core.control_plane.security_interceptor import (
-            ApprovalRegistry, SecurityInterceptor, RiskLevel, ApprovalTimeoutError,
+            ApprovalRegistry,
+            ApprovalTimeoutError,
+            RiskLevel,
+            SecurityInterceptor,
         )
 
         registry = ApprovalRegistry()
@@ -314,7 +334,9 @@ class TestSecurityInterceptorIntegration:
     async def test_bypass_auto_approves(self):
         """bypass() auto-approves without waiting."""
         from core.control_plane.security_interceptor import (
-            ApprovalRegistry, SecurityInterceptor, RiskLevel,
+            ApprovalRegistry,
+            RiskLevel,
+            SecurityInterceptor,
         )
 
         registry = ApprovalRegistry()
@@ -333,13 +355,16 @@ class TestSecurityInterceptorIntegration:
 # D) Route smoke tests
 # ===========================================================================
 
+
 class TestAuditRoutes:
     """Smoke tests for /api/v1/audit/* using TestClient."""
 
     def _get_app(self):
         """Build a minimal FastAPI app with only the audit router."""
         from fastapi import FastAPI
+
         from core.routes.audit import create_router
+
         app = FastAPI()
         app.include_router(create_router())
         return app
@@ -347,8 +372,10 @@ class TestAuditRoutes:
     def test_list_events_empty(self):
         """GET /api/v1/audit/traces returns 200 with empty list when ledger is empty."""
         from fastapi.testclient import TestClient
+
         # Use a fresh ledger for this test
         import core.control_plane._globals as g
+
         orig = g._audit_ledger
         g._audit_ledger = None  # reset singleton
         try:
@@ -365,6 +392,7 @@ class TestAuditRoutes:
     def test_get_trace_json(self):
         """GET /api/v1/audit/traces/{trace_id} returns events for that trace."""
         from fastapi.testclient import TestClient
+
         import core.control_plane._globals as g
         from core.control_plane.audit_ledger import AuditLedger, EventType
 
@@ -386,6 +414,7 @@ class TestAuditRoutes:
     def test_get_trace_dag(self):
         """GET /api/v1/audit/traces/{trace_id}/dag returns adjacency list."""
         from fastapi.testclient import TestClient
+
         import core.control_plane._globals as g
         from core.control_plane.audit_ledger import AuditLedger, EventType
 
@@ -409,6 +438,7 @@ class TestAuditRoutes:
     def test_trace_not_found(self):
         """GET /api/v1/audit/traces/nonexistent returns 404."""
         from fastapi.testclient import TestClient
+
         import core.control_plane._globals as g
         from core.control_plane.audit_ledger import AuditLedger
 
@@ -429,9 +459,10 @@ class TestApprovalRoutes:
     def _setup(self):
         """Build a minimal FastAPI app with approvals router and a fresh registry."""
         from fastapi import FastAPI
-        from core.routes.approvals import create_router
+
         import core.control_plane._globals as g
         from core.control_plane.security_interceptor import ApprovalRegistry
+        from core.routes.approvals import create_router
 
         registry = ApprovalRegistry()
         orig_registry = g._approval_registry
@@ -445,6 +476,7 @@ class TestApprovalRoutes:
 
     def _teardown(self, orig):
         import core.control_plane._globals as g
+
         g._approval_registry, g._security_interceptor = orig
 
     def test_list_approvals_empty(self):
@@ -465,6 +497,7 @@ class TestApprovalRoutes:
     def test_approve_via_api(self):
         """POST /api/v1/approvals/{id} with valid token returns approved."""
         from fastapi.testclient import TestClient
+
         from core.control_plane.security_interceptor import ApprovalRequest, RiskLevel
 
         app, registry, orig = self._setup()
@@ -495,6 +528,7 @@ class TestApprovalRoutes:
     def test_deny_via_api(self):
         """POST /api/v1/approvals/{id} with action=deny returns denied."""
         from fastapi.testclient import TestClient
+
         from core.control_plane.security_interceptor import ApprovalRequest, RiskLevel
 
         app, registry, orig = self._setup()
@@ -522,6 +556,7 @@ class TestApprovalRoutes:
     def test_approve_invalid_token_rejected(self):
         """POST with wrong token returns 400."""
         from fastapi.testclient import TestClient
+
         from core.control_plane.security_interceptor import ApprovalRequest, RiskLevel
 
         app, registry, orig = self._setup()

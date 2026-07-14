@@ -120,79 +120,79 @@ core/contract_map/ — PR-16 cross-plane contract map (upstream signal).
 
 from __future__ import annotations
 
-from .formation_role import (
-    FormationRole,
-    FORMATION_ROLE_PRECEDENCE,
-    formation_role_description,
-    FormationMember,
-)
-from .formation_group import (
-    DeviceFormationGroup,
-    EMPTY_FORMATION_GROUP,
-    BARRIER_POSTURES,
-)
-from .formation_policy import (
-    BarrierPosture,
-    BARRIER_POSTURE_DESCRIPTIONS,
-    FormationPolicy,
-    DEFAULT_LOCAL_FORMATION_POLICY,
-)
-from .formation_resolver import resolve_formation
-from .formation_rebalance_engine import (
-    FormationHealthSignal,
-    MemberRebalanceAction,
-    RebalanceDecision,
-    FormationRebalanceEngine,
-    evaluate_formation_health,
-    apply_rebalance,
-    maybe_promote_fallback,
-    maybe_remove_unhealthy,
-    FORMATION_REBALANCE_ENGINE_IS_AUTHORITY,
-    FORMATION_REBALANCE_GAP_CLOSURE_SENTINEL,
-    REBALANCE_MUST_PRESERVE_SOURCE_POLICY,
-    REBALANCE_MUST_MAINTAIN_PRIMARY_POLICY,
-    HEALTH_THRESHOLD_GOVERNS_REMOVAL_POLICY,
-)
-from .formation_summary import (
-    FormationSummary,
-    IDLE_FORMATION_SUMMARY,
-    build_formation_summary,
-    attach_formation_to_projection,
-    get_formation_hints,
-    resolve_formation_summary,
-)
-from .formation_runtime_coordinator import (
-    FormationParticipantState,
-    FormationRuntimeState,
-    RecoveryActionType,
-    FormationParticipantStatus,
-    FormationRecoveryAction,
-    FormationRuntimeDecision,
-    FormationRuntimeSnapshot,
-    FormationRuntimeCoordinator,
-    make_formation_runtime_coordinator,
-    FORMATION_RUNTIME_COORDINATOR_IS_AUTHORITY,
-    FORMATION_RECOVERY_HOOKS_GAP_CLOSURE_SENTINEL,
-    DEGRADED_CONTINUATION_REQUIRES_PRIMARY_POLICY,
-    RECOVERY_PRESERVES_SOURCE_POLICY,
-)
 from .formation_auto_enrollment import (
-    FormationParticipantEntry,
+    FORMATION_AUTO_ENROLLMENT_IS_IDEMPOTENT_POLICY,
+    FORMATION_AUTO_ENROLLMENT_MANAGER_IS_AUTHORITY,
     FormationAutoEnrollmentManager,
+    FormationParticipantEntry,
     get_formation_auto_enrollment_manager,
     reset_formation_auto_enrollment_manager,
-    FORMATION_AUTO_ENROLLMENT_MANAGER_IS_AUTHORITY,
-    FORMATION_AUTO_ENROLLMENT_IS_IDEMPOTENT_POLICY,
+)
+from .formation_group import (
+    BARRIER_POSTURES,
+    EMPTY_FORMATION_GROUP,
+    DeviceFormationGroup,
+)
+from .formation_policy import (
+    BARRIER_POSTURE_DESCRIPTIONS,
+    DEFAULT_LOCAL_FORMATION_POLICY,
+    BarrierPosture,
+    FormationPolicy,
+)
+from .formation_rebalance_engine import (
+    FORMATION_REBALANCE_ENGINE_IS_AUTHORITY,
+    FORMATION_REBALANCE_GAP_CLOSURE_SENTINEL,
+    HEALTH_THRESHOLD_GOVERNS_REMOVAL_POLICY,
+    REBALANCE_MUST_MAINTAIN_PRIMARY_POLICY,
+    REBALANCE_MUST_PRESERVE_SOURCE_POLICY,
+    FormationHealthSignal,
+    FormationRebalanceEngine,
+    MemberRebalanceAction,
+    RebalanceDecision,
+    apply_rebalance,
+    evaluate_formation_health,
+    maybe_promote_fallback,
+    maybe_remove_unhealthy,
 )
 from .formation_rebalance_trigger import (
-    FormationRuntimeEventType,
-    FormationRuntimeEvent,
+    FORMATION_REBALANCE_TRIGGER_IS_AUTHORITY,
+    FORMATION_TRIGGER_DOES_NOT_OWN_STATE_POLICY,
+    FORMATION_TRIGGER_WIRES_COORDINATOR_TO_ENGINE_POLICY,
     FormationRebuildResult,
+    FormationRuntimeEvent,
+    FormationRuntimeEventType,
     on_runtime_event,
     trigger_rebalance_if_needed,
-    FORMATION_REBALANCE_TRIGGER_IS_AUTHORITY,
-    FORMATION_TRIGGER_WIRES_COORDINATOR_TO_ENGINE_POLICY,
-    FORMATION_TRIGGER_DOES_NOT_OWN_STATE_POLICY,
+)
+from .formation_resolver import resolve_formation
+from .formation_role import (
+    FORMATION_ROLE_PRECEDENCE,
+    FormationMember,
+    FormationRole,
+    formation_role_description,
+)
+from .formation_runtime_coordinator import (
+    DEGRADED_CONTINUATION_REQUIRES_PRIMARY_POLICY,
+    FORMATION_RECOVERY_HOOKS_GAP_CLOSURE_SENTINEL,
+    FORMATION_RUNTIME_COORDINATOR_IS_AUTHORITY,
+    RECOVERY_PRESERVES_SOURCE_POLICY,
+    FormationParticipantState,
+    FormationParticipantStatus,
+    FormationRecoveryAction,
+    FormationRuntimeCoordinator,
+    FormationRuntimeDecision,
+    FormationRuntimeSnapshot,
+    FormationRuntimeState,
+    RecoveryActionType,
+    make_formation_runtime_coordinator,
+)
+from .formation_summary import (
+    IDLE_FORMATION_SUMMARY,
+    FormationSummary,
+    attach_formation_to_projection,
+    build_formation_summary,
+    get_formation_hints,
+    resolve_formation_summary,
 )
 
 __all__ = [

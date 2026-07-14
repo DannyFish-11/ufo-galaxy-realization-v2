@@ -17,6 +17,7 @@
 
 全部用注入的假引擎/假 HTTP 客户端,离线可跑。
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -35,13 +36,15 @@ sys.path.insert(0, str(PROJECT_ROOT))
 # 1. TokenStream + contextvars
 # ---------------------------------------------------------------------------
 
+
 class TestTokenStream:
     def test_feed_and_reset_counters(self):
         from core.llm_stream import TokenStream
+
         got, resets = [], []
         s = TokenStream(on_delta=got.append, on_reset=lambda: resets.append(1))
         s.feed("你好")
-        s.feed("")          # 空串跳过
+        s.feed("")  # 空串跳过
         s.feed("世界")
         assert got == ["你好", "世界"]
         assert s.chars == 4 and s.total_chars == 4
@@ -58,12 +61,13 @@ class TestTokenStream:
             raise RuntimeError("boom")
 
         s = TokenStream(on_delta=_boom, on_reset=None)
-        s.feed("x")   # 不抛
-        s.reset()     # on_reset None 也不抛
+        s.feed("x")  # 不抛
+        s.reset()  # on_reset None 也不抛
         assert s.total_chars == 1
 
     def test_use_stream_context_isolation(self):
         from core.llm_stream import TokenStream, current_stream, use_stream
+
         assert current_stream() is None
         sink = TokenStream(on_delta=lambda t: None)
         with use_stream(sink):
@@ -97,9 +101,11 @@ class TestTokenStream:
 # 2. extract_speakable_prefix
 # ---------------------------------------------------------------------------
 
+
 class TestExtractSpeakablePrefix:
     def test_cjk_boundary_immediate(self):
         from core.streaming_speech import extract_speakable_prefix
+
         chunks, rest = extract_speakable_prefix("今天天气不错。明天呢")
         assert chunks == ["今天天气不错。"]
         assert rest == "明天呢"
@@ -107,24 +113,28 @@ class TestExtractSpeakablePrefix:
     def test_ascii_period_at_tail_is_held(self):
         """句点在缓冲末尾时下一字符未知(可能是 3.14),必须继续等。"""
         from core.streaming_speech import extract_speakable_prefix
+
         chunks, rest = extract_speakable_prefix("The value is 3.")
         assert chunks == []
         assert rest == "The value is 3."
 
     def test_ascii_period_followed_by_space_is_boundary(self):
         from core.streaming_speech import extract_speakable_prefix
+
         chunks, rest = extract_speakable_prefix("It works fine. And then")
         assert chunks == ["It works fine."]
         assert rest == " And then"
 
     def test_short_prefix_keeps_accumulating(self):
         from core.streaming_speech import extract_speakable_prefix
+
         chunks, rest = extract_speakable_prefix("好。", min_chars=6)
         assert chunks == []
         assert rest == "好。"
 
     def test_no_boundary_returns_everything_as_remainder(self):
         from core.streaming_speech import extract_speakable_prefix
+
         chunks, rest = extract_speakable_prefix("还没说完呢")
         assert chunks == [] and rest == "还没说完呢"
 
@@ -132,6 +142,7 @@ class TestExtractSpeakablePrefix:
 # ---------------------------------------------------------------------------
 # 3. IncrementalSpeaker
 # ---------------------------------------------------------------------------
+
 
 def _mk_speaker(played, discarded=None, speaking_events=None, min_chars=1):
     from core.streaming_speech import IncrementalSpeaker
@@ -148,7 +159,9 @@ def _mk_speaker(played, discarded=None, speaking_events=None, min_chars=1):
         pass
 
     return IncrementalSpeaker(
-        _synth, _play, stop=_stop,
+        _synth,
+        _play,
+        stop=_stop,
         on_speaking=(speaking_events.append if speaking_events is not None else None),
         discard=(discarded.append if discarded is not None else None),
         min_chars=min_chars,
@@ -214,6 +227,7 @@ class TestIncrementalSpeaker:
 # 4. 适配器真流式
 # ---------------------------------------------------------------------------
 
+
 class _FakeStreamResp:
     def __init__(self, lines):
         self._lines = lines
@@ -249,6 +263,7 @@ class _FakeClient:
 
 def _mk_sink(collected, resets=None):
     from core.llm_stream import TokenStream
+
     return TokenStream(
         on_delta=collected.append,
         on_reset=(lambda: resets.append(1)) if resets is not None else None,
@@ -260,16 +275,15 @@ class TestOllamaStreaming:
     async def test_ndjson_deltas_feed_sink_and_final_counts(self):
         from core.multi_llm_router import OllamaAdapter, ProviderConfig
 
-        cfg = ProviderConfig(name="ollama", api_key="",
-                             base_url="http://localhost:11434", models=["m"],
-                             default_model="m")
+        cfg = ProviderConfig(
+            name="ollama", api_key="", base_url="http://localhost:11434", models=["m"], default_model="m"
+        )
         ad = OllamaAdapter(cfg)
         lines = [
             json.dumps({"message": {"content": "你"}, "done": False}),
             json.dumps({"message": {"content": "好"}, "done": False}),
             "",  # 空行容忍
-            json.dumps({"message": {"content": ""}, "done": True,
-                        "prompt_eval_count": 7, "eval_count": 2}),
+            json.dumps({"message": {"content": ""}, "done": True, "prompt_eval_count": 7, "eval_count": 2}),
         ]
         ad._client = _FakeClient(lines)
         got = []
@@ -284,14 +298,24 @@ class TestOllamaStreaming:
 class TestOpenAIStreaming:
     def test_merge_tool_call_delta_assembles_fragments(self):
         from core.multi_llm_router import OpenAIAdapter
+
         acc = {}
-        OpenAIAdapter._merge_tool_call_delta(acc, {
-            "index": 0, "id": "call_1", "type": "function",
-            "function": {"name": "get_weather", "arguments": "{\"ci"},
-        })
-        OpenAIAdapter._merge_tool_call_delta(acc, {
-            "index": 0, "function": {"arguments": "ty\": \"北京\"}"},
-        })
+        OpenAIAdapter._merge_tool_call_delta(
+            acc,
+            {
+                "index": 0,
+                "id": "call_1",
+                "type": "function",
+                "function": {"name": "get_weather", "arguments": '{"ci'},
+            },
+        )
+        OpenAIAdapter._merge_tool_call_delta(
+            acc,
+            {
+                "index": 0,
+                "function": {"arguments": 'ty": "北京"}'},
+            },
+        )
         assert acc[0]["id"] == "call_1"
         assert acc[0]["function"]["name"] == "get_weather"
         assert json.loads(acc[0]["function"]["arguments"]) == {"city": "北京"}
@@ -300,26 +324,39 @@ class TestOpenAIStreaming:
     async def test_sse_content_streams_and_tool_calls_never_leak_to_sink(self):
         from core.multi_llm_router import OpenAIAdapter, ProviderConfig
 
-        cfg = ProviderConfig(name="deepseek", api_key="k",
-                             base_url="https://api.deepseek.com/v1",
-                             models=["m"], default_model="m")
+        cfg = ProviderConfig(
+            name="deepseek", api_key="k", base_url="https://api.deepseek.com/v1", models=["m"], default_model="m"
+        )
         ad = OpenAIAdapter(cfg)
         lines = [
-            'data: ' + json.dumps({"choices": [{"delta": {"content": "答"}}]}),
-            'data: ' + json.dumps({"choices": [{"delta": {"content": "案"}}]}),
-            'data: ' + json.dumps({"choices": [{"delta": {"tool_calls": [{
-                "index": 0, "id": "c1",
-                "function": {"name": "t", "arguments": "{}"},
-            }]}}]}),
-            'data: ' + json.dumps({"choices": [], "usage": {
-                "prompt_tokens": 5, "completion_tokens": 2}}),
-            'data: [DONE]',
+            "data: " + json.dumps({"choices": [{"delta": {"content": "答"}}]}),
+            "data: " + json.dumps({"choices": [{"delta": {"content": "案"}}]}),
+            "data: "
+            + json.dumps(
+                {
+                    "choices": [
+                        {
+                            "delta": {
+                                "tool_calls": [
+                                    {
+                                        "index": 0,
+                                        "id": "c1",
+                                        "function": {"name": "t", "arguments": "{}"},
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                }
+            ),
+            "data: " + json.dumps({"choices": [], "usage": {"prompt_tokens": 5, "completion_tokens": 2}}),
+            "data: [DONE]",
         ]
         ad._client = _FakeClient(lines)
         got = []
         sink = _mk_sink(got)
         resp = await ad.chat([{"role": "user", "content": "hi"}], "m", stream=sink)
-        assert got == ["答", "案"]          # 工具调用片段绝不进 sink
+        assert got == ["答", "案"]  # 工具调用片段绝不进 sink
         assert resp.content == "答案"
         assert resp.tool_calls and resp.tool_calls[0]["function"]["name"] == "t"
         assert resp.input_tokens == 5 and resp.output_tokens == 2
@@ -329,6 +366,7 @@ class TestOpenAIStreaming:
 # 5. 编排层 reset 语义
 # ---------------------------------------------------------------------------
 
+
 class _StageAdapter:
     """假适配器:流出指定文本并返回该文本的 LLMResponse。"""
 
@@ -336,15 +374,20 @@ class _StageAdapter:
         self._name = name
         self._text = text
 
-    async def chat(self, messages, model, tools=None, temperature=0.7,
-                   max_tokens=4096, **kwargs):
+    async def chat(self, messages, model, tools=None, temperature=0.7, max_tokens=4096, **kwargs):
         from core.multi_llm_router import LLMResponse
+
         sink = kwargs.get("stream")
         if sink is not None:
             sink.feed(self._text)
-        return LLMResponse(content=self._text, provider=self._name, model=model,
-                           input_tokens=1, output_tokens=len(self._text),
-                           latency_ms=1.0)
+        return LLMResponse(
+            content=self._text,
+            provider=self._name,
+            model=model,
+            input_tokens=1,
+            output_tokens=len(self._text),
+            latency_ms=1.0,
+        )
 
 
 class TestCascadeResetSemantics:
@@ -366,12 +409,14 @@ class TestCascadeResetSemantics:
         got, resets = [], []
         sink = _mk_sink(got, resets)
         resp = await r.chat_cascade(
-            [{"role": "user", "content": "q"}], TaskType.GENERAL,
+            [{"role": "user", "content": "q"}],
+            TaskType.GENERAL,
             judge=lambda resp_: len(resp_.content) > 5,
-            complexity=0.1, stream=sink,
+            complexity=0.1,
+            stream=sink,
         )
         assert resp.provider == "strong"
-        assert len(resets) == 1                      # 换档前作废了便宜档草稿
+        assert len(resets) == 1  # 换档前作废了便宜档草稿
         assert got == ["短", "这是一个足够长的合格答案。"]  # 两代内容都流过
 
     @pytest.mark.asyncio
@@ -385,23 +430,26 @@ class TestCascadeResetSemantics:
         calls = []
 
         class _FakeRouter:
-            async def chat_with_tools(self, messages, tools=None, task_type=None,
-                                      max_tokens=4096, **kwargs):
+            async def chat_with_tools(self, messages, tools=None, task_type=None, max_tokens=4096, **kwargs):
                 sink = kwargs.get("stream")
                 calls.append(sink)
                 if len(calls) == 1:
                     if sink is not None:
                         sink.feed("我查一下…")  # 过场话
                     return LLMResponse(
-                        content="", provider="p", model="m",
-                        input_tokens=1, output_tokens=1, latency_ms=1.0,
-                        tool_calls=[{"id": "c1", "type": "function",
-                                     "function": {"name": "t", "arguments": "{}"}}],
+                        content="",
+                        provider="p",
+                        model="m",
+                        input_tokens=1,
+                        output_tokens=1,
+                        latency_ms=1.0,
+                        tool_calls=[{"id": "c1", "type": "function", "function": {"name": "t", "arguments": "{}"}}],
                     )
                 if sink is not None:
                     sink.feed("最终答案。")
-                return LLMResponse(content="最终答案。", provider="p", model="m",
-                                   input_tokens=1, output_tokens=1, latency_ms=1.0)
+                return LLMResponse(
+                    content="最终答案。", provider="p", model="m", input_tokens=1, output_tokens=1, latency_ms=1.0
+                )
 
         clawd = OpenClawd.__new__(OpenClawd)
         clawd._get_router = lambda: _FakeRouter()
@@ -423,14 +471,15 @@ class TestCascadeResetSemantics:
 
         result = await _run()
         assert result["response"] == "最终答案。"
-        assert calls == [sink, sink]        # 两轮都拿到了上下文里的 sink
-        assert len(resets) == 1             # 工具轮过场话被作废了一次
+        assert calls == [sink, sink]  # 两轮都拿到了上下文里的 sink
+        assert len(resets) == 1  # 工具轮过场话被作废了一次
         assert got == ["我查一下…", "最终答案。"]
 
 
 # ---------------------------------------------------------------------------
 # 6. /api/v1/chat/stream 真流式表面
 # ---------------------------------------------------------------------------
+
 
 def _collect_frames(resp_iter):
     frames = []
@@ -442,7 +491,9 @@ def _collect_frames(resp_iter):
 
 def _mk_app():
     from fastapi import FastAPI
+
     import core.routes.chat as chat_mod
+
     app = FastAPI()
     app.include_router(chat_mod.create_router(service_manager=None, config=None))
     return app
@@ -453,24 +504,28 @@ class TestChatStreamTrueStreaming:
         """runtime 边生成边 feed → SSE 真增量帧;done.response 为权威全文。"""
         monkeypatch.setenv("GALAXY_SPEAK", "0")  # 测试环境不发声
         from fastapi.testclient import TestClient
+
         import core.desktop_presence_runtime as dpr
 
         class _StreamingRuntime:
             async def handle_request(self, *a, **k):
                 from core.llm_stream import current_stream
+
                 sink = current_stream()
                 assert sink is not None, "chat_stream 必须在请求上下文里挂 sink"
                 sink.feed("你")
                 await asyncio.sleep(0)
                 sink.feed("好。")
-                return {"success": True, "response": "你好。", "intent": "chat",
-                        "metadata": {"session_id": "s1", "model": "m1"}}
+                return {
+                    "success": True,
+                    "response": "你好。",
+                    "intent": "chat",
+                    "metadata": {"session_id": "s1", "model": "m1"},
+                }
 
-        with patch.object(dpr, "get_desktop_presence_runtime",
-                          lambda: _StreamingRuntime()):
+        with patch.object(dpr, "get_desktop_presence_runtime", lambda: _StreamingRuntime()):
             client = TestClient(_mk_app())
-            with client.stream("POST", "/api/v1/chat/stream",
-                               json={"message": "hi", "session_id": "s1"}) as r:
+            with client.stream("POST", "/api/v1/chat/stream", json={"message": "hi", "session_id": "s1"}) as r:
                 frames = _collect_frames(r.iter_lines())
 
         deltas = [f["text"] for f in frames if f["type"] == "delta"]
@@ -483,23 +538,27 @@ class TestChatStreamTrueStreaming:
     def test_reset_frame_emitted_on_sink_reset(self, monkeypatch):
         monkeypatch.setenv("GALAXY_SPEAK", "0")
         from fastapi.testclient import TestClient
+
         import core.desktop_presence_runtime as dpr
 
         class _ResettingRuntime:
             async def handle_request(self, *a, **k):
                 from core.llm_stream import current_stream
+
                 sink = current_stream()
                 sink.feed("便宜档草稿")
                 sink.reset()
                 sink.feed("升级后的答案。")
-                return {"success": True, "response": "升级后的答案。",
-                        "intent": "chat", "metadata": {"session_id": "s"}}
+                return {
+                    "success": True,
+                    "response": "升级后的答案。",
+                    "intent": "chat",
+                    "metadata": {"session_id": "s"},
+                }
 
-        with patch.object(dpr, "get_desktop_presence_runtime",
-                          lambda: _ResettingRuntime()):
+        with patch.object(dpr, "get_desktop_presence_runtime", lambda: _ResettingRuntime()):
             client = TestClient(_mk_app())
-            with client.stream("POST", "/api/v1/chat/stream",
-                               json={"message": "hi"}) as r:
+            with client.stream("POST", "/api/v1/chat/stream", json={"message": "hi"}) as r:
                 frames = _collect_frames(r.iter_lines())
 
         types = [f["type"] for f in frames]
@@ -512,18 +571,21 @@ class TestChatStreamTrueStreaming:
         """一个增量都没流出(非流式适配器)→ 退回逐字假流式,前端观感不变。"""
         monkeypatch.setenv("GALAXY_SPEAK", "0")
         from fastapi.testclient import TestClient
+
         import core.desktop_presence_runtime as dpr
 
         class _AtomicRuntime:
             async def handle_request(self, *a, **k):
-                return {"success": True, "response": "整段一次到的答案",
-                        "intent": "chat", "metadata": {"session_id": "s"}}
+                return {
+                    "success": True,
+                    "response": "整段一次到的答案",
+                    "intent": "chat",
+                    "metadata": {"session_id": "s"},
+                }
 
-        with patch.object(dpr, "get_desktop_presence_runtime",
-                          lambda: _AtomicRuntime()):
+        with patch.object(dpr, "get_desktop_presence_runtime", lambda: _AtomicRuntime()):
             client = TestClient(_mk_app())
-            with client.stream("POST", "/api/v1/chat/stream",
-                               json={"message": "hi"}) as r:
+            with client.stream("POST", "/api/v1/chat/stream", json={"message": "hi"}) as r:
                 frames = _collect_frames(r.iter_lines())
 
         deltas = [f["text"] for f in frames if f["type"] == "delta"]
@@ -536,6 +598,7 @@ class TestChatStreamTrueStreaming:
 # ---------------------------------------------------------------------------
 # 7. 防双读:增量朗读接管后,集中式 speak_response 必须闭嘴
 # ---------------------------------------------------------------------------
+
 
 class TestNoDoubleSpeak:
     @pytest.mark.asyncio

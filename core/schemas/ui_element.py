@@ -28,6 +28,7 @@ Android 无障碍(AccessibilityNodeInfo)树 / 视觉(VLM/OCR)推断出的控件�
 :meth:`UIElementNode.to_prompt` 把这棵树渲染成紧凑的结构化文本,**取代**过去喂给模型
 的自由提示词——同样一屏,信息更准、状态更明确、token 更省。
 """
+
 from __future__ import annotations
 
 import time
@@ -39,13 +40,14 @@ from pydantic import BaseModel, Field
 
 class UISource(str, Enum):
     """一个控件的来源(证据链)。混合图里不同节点可有不同来源。"""
-    UIA = "uia"                 # Windows UI Automation
-    ATSPI = "atspi"             # Linux AT-SPI
-    AX = "ax"                   # macOS Accessibility
+
+    UIA = "uia"  # Windows UI Automation
+    ATSPI = "atspi"  # Linux AT-SPI
+    AX = "ax"  # macOS Accessibility
     ANDROID_A11Y = "android_a11y"  # Android AccessibilityNodeInfo
-    VISION = "vision"           # VLM 视觉推断(SeeClick / MobileVLM)
-    OCR = "ocr"                 # OCR 文本框
-    HYBRID = "hybrid"           # 结构 + 视觉融合后的节点
+    VISION = "vision"  # VLM 视觉推断(SeeClick / MobileVLM)
+    OCR = "ocr"  # OCR 文本框
+    HYBRID = "hybrid"  # 结构 + 视觉融合后的节点
 
 
 class UIActionKind(str, Enum):
@@ -53,11 +55,12 @@ class UIActionKind(str, Enum):
 
     上层 Agent 只用这些语义动词;各端执行器(UIAWindows / AccessibilityActionExecutor /
     DesktopAuto)再把动词落到各自的物理 API。"""
-    TAP = "tap"                 # 单击/轻触
+
+    TAP = "tap"  # 单击/轻触
     DOUBLE_TAP = "double_tap"
     LONG_PRESS = "long_press"
     RIGHT_CLICK = "right_click"
-    SET_TEXT = "set_text"       # 写入文本(优先控件级 SET_TEXT,而非逐键)
+    SET_TEXT = "set_text"  # 写入文本(优先控件级 SET_TEXT,而非逐键)
     CLEAR = "clear"
     SCROLL = "scroll"
     SWIPE = "swipe"
@@ -65,11 +68,12 @@ class UIActionKind(str, Enum):
     OPEN_APP = "open_app"
     BACK = "back"
     HOME = "home"
-    KEY = "key"                 # 物理/虚拟按键
+    KEY = "key"  # 物理/虚拟按键
 
 
 class UIBounds(BaseModel):
     """控件在屏幕上的矩形(左上角 + 宽高,像素)。"""
+
     x: int = 0
     y: int = 0
     width: int = 0
@@ -100,10 +104,11 @@ class UIElementNode(BaseModel):
 
     role/label/bounds 是模型 grounding 的三要素;states 让"能不能点、是否选中、
     是否可编辑"显式可读(取代过去要模型从截图里猜)。"""
-    node_id: str = ""                       # 端内稳定标识(路径/自动化ID派生)
-    role: str = ""                          # 规范化控件角色: button/edit/text/list/checkbox...
-    label: str = ""                         # 可见名/文本/contentDescription
-    value: str = ""                         # 当前值(输入框内容、开关态文本等)
+
+    node_id: str = ""  # 端内稳定标识(路径/自动化ID派生)
+    role: str = ""  # 规范化控件角色: button/edit/text/list/checkbox...
+    label: str = ""  # 可见名/文本/contentDescription
+    value: str = ""  # 当前值(输入框内容、开关态文本等)
 
     bounds: Optional[UIBounds] = None
 
@@ -115,17 +120,17 @@ class UIElementNode(BaseModel):
     visible: bool = True
     selected: bool = False
     scrollable: bool = False
-    checked: Optional[bool] = None          # 三态: True/False/None(不适用)
+    checked: Optional[bool] = None  # 三态: True/False/None(不适用)
 
     actions: List[UIActionKind] = Field(default_factory=list)
 
     source: UISource = UISource.UIA
-    confidence: float = 1.0                 # 视觉节点 <1;结构节点通常 =1
+    confidence: float = 1.0  # 视觉节点 <1;结构节点通常 =1
 
     # ── 端特有原始属性(保留证据,不丢信息)──
-    automation_id: str = ""                 # UIA AutomationId
-    class_name: str = ""                    # 控件类名
-    package: str = ""                       # Android 包名 / 桌面进程名
+    automation_id: str = ""  # UIA AutomationId
+    class_name: str = ""  # 控件类名
+    package: str = ""  # Android 包名 / 桌面进程名
 
     children: List["UIElementNode"] = Field(default_factory=list)
 
@@ -150,8 +155,7 @@ class UIElementNode(BaseModel):
 
     def is_interactive(self) -> bool:
         return bool(
-            self.enabled and self.visible
-            and (self.clickable or self.editable or self.scrollable or self.actions)
+            self.enabled and self.visible and (self.clickable or self.editable or self.scrollable or self.actions)
         )
 
     def interactive(self) -> List["UIElementNode"]:
@@ -194,12 +198,19 @@ class UIElementNode(BaseModel):
         if self.bounds is not None:
             b = self.bounds
             parts.append(f"@({b.x},{b.y}·{b.width}x{b.height})")
-        flags = [f for f, on in (
-            ("clickable", self.clickable), ("editable", self.editable),
-            ("focused", self.focused), ("selected", self.selected),
-            ("scrollable", self.scrollable), ("disabled", not self.enabled),
-            ("hidden", not self.visible),
-        ) if on]
+        flags = [
+            f
+            for f, on in (
+                ("clickable", self.clickable),
+                ("editable", self.editable),
+                ("focused", self.focused),
+                ("selected", self.selected),
+                ("scrollable", self.scrollable),
+                ("disabled", not self.enabled),
+                ("hidden", not self.visible),
+            )
+            if on
+        ]
         if self.checked is not None:
             flags.append("checked" if self.checked else "unchecked")
         if self.source is UISource.VISION:
@@ -221,15 +232,16 @@ UIElementNode.model_rebuild()  # 解析自引用 children 前向声明
 
 class UIGraph(BaseModel):
     """一屏界面的结构化快照——DAG 任务节点携带的界面态。"""
+
     root: Optional[UIElementNode] = None
     source: UISource = UISource.UIA
     device_id: str = ""
-    app: str = ""                           # 前台窗口标题 / Android 前台包名
+    app: str = ""  # 前台窗口标题 / Android 前台包名
     screen_width: int = 0
     screen_height: int = 0
     captured_at_ms: int = 0
     merged_from: List[UISource] = Field(default_factory=list)  # 混合图: 参与融合的来源
-    vision_added: int = 0                   # 融合时视觉兜底新增的控件数(可观测)
+    vision_added: int = 0  # 融合时视觉兜底新增的控件数(可观测)
 
     def flatten(self) -> List[UIElementNode]:
         return self.root.flatten() if self.root else []
@@ -286,7 +298,8 @@ class UIGraph(BaseModel):
 
         _ = len(struct_nodes)  # (结构控件数,便于将来记账/可观测)
         return UIGraph(
-            root=new_root, source=UISource.HYBRID,
+            root=new_root,
+            source=UISource.HYBRID,
             device_id=self.device_id or vision.device_id,
             app=self.app or vision.app,
             screen_width=self.screen_width or vision.screen_width,

@@ -17,6 +17,7 @@
 与既有防线的关系:能力门 + V3 槽权威管的是【设备/执行体级】准入,本模块管的
 是【工具参数级】合法性——互补,不重叠。
 """
+
 from __future__ import annotations
 
 import logging
@@ -29,17 +30,54 @@ logger = logging.getLogger("Galaxy.ToolCallValidator")
 # (信息一致性),写状态工具走模拟(安全可控)。按【动作语义前缀/关键词】分类;
 # 判不准时保守视为"写状态"(宁可多模拟,不可漏真实副作用)。
 _READONLY_MARKERS = (
-    "get", "list", "read", "search", "query", "recall", "status", "fetch",
-    "show", "describe", "lookup", "find", "check", "info", "stat", "peek",
-    "watch", "view", "count", "ping", "health",
+    "get",
+    "list",
+    "read",
+    "search",
+    "query",
+    "recall",
+    "status",
+    "fetch",
+    "show",
+    "describe",
+    "lookup",
+    "find",
+    "check",
+    "info",
+    "stat",
+    "peek",
+    "watch",
+    "view",
+    "count",
+    "ping",
+    "health",
 )
 
 # 高风险动作关键词——与 command_router._HIGH_RISK_COMMANDS(HITL 审批门)同一
 # 语义家族;此处独立维护一份工具级超集,避免依赖私有属性。
 _HIGH_RISK_MARKERS = (
-    "delete", "remove", "rm", "format", "wipe", "purge", "shutdown", "reboot",
-    "factory_reset", "kill", "drop", "truncate", "uninstall", "pay", "payment",
-    "transfer", "send", "publish", "post", "cancel", "overwrite", "reset",
+    "delete",
+    "remove",
+    "rm",
+    "format",
+    "wipe",
+    "purge",
+    "shutdown",
+    "reboot",
+    "factory_reset",
+    "kill",
+    "drop",
+    "truncate",
+    "uninstall",
+    "pay",
+    "payment",
+    "transfer",
+    "send",
+    "publish",
+    "post",
+    "cancel",
+    "overwrite",
+    "reset",
 )
 
 
@@ -63,6 +101,7 @@ def is_high_risk_tool(tool_name: str) -> bool:
 @dataclass
 class ToolCallValidation:
     """一次工具调用的校验结论(结构化,可直接回喂模型)。"""
+
     valid: bool
     tool_name: str
     errors: List[str] = field(default_factory=list)
@@ -141,24 +180,28 @@ async def semantic_check(
     try:
         if router is None:
             from core.multi_llm_router import get_llm_router
+
             router = get_llm_router()
         prompt = (
             "你是工具调用参数审查员。判断下面的参数在语义上是否适合该工具与任务,"
-            "只回 JSON: {\"ok\": true} 或 {\"ok\": false, \"reason\": \"...\"}\n"
+            '只回 JSON: {"ok": true} 或 {"ok": false, "reason": "..."}\n'
             f"任务: {task_context[:400]}\n工具: {tool_name}\n参数: {args}"
         )
         resp = await router.chat(
             [{"role": "user", "content": prompt}],
-            temperature=0.0, max_tokens=120,
+            temperature=0.0,
+            max_tokens=120,
         )
         import json as _json
+
         text = (getattr(resp, "content", "") or "").strip()
         start, end = text.find("{"), text.rfind("}")
-        verdict = _json.loads(text[start:end + 1]) if start >= 0 <= end else {"ok": True}
+        verdict = _json.loads(text[start : end + 1]) if start >= 0 <= end else {"ok": True}
         if verdict.get("ok", True):
             return ToolCallValidation(valid=True, tool_name=tool_name)
         return ToolCallValidation(
-            valid=False, tool_name=tool_name,
+            valid=False,
+            tool_name=tool_name,
             errors=[f"语义不合适: {str(verdict.get('reason', ''))[:200]}"],
         )
     except Exception as exc:  # noqa: BLE001

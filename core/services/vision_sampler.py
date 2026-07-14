@@ -60,14 +60,14 @@ def _node_95_url() -> str:
     raw = os.environ.get("NODE_95_URL", _DEFAULT_NODE_95_URL).rstrip("/")
     try:
         from urllib.parse import urlparse
+
         scheme = urlparse(raw).scheme.lower()
     except Exception as exc:
         logger.debug("Fallback triggered: %s", exc)
         scheme = ""
     if scheme not in _ALLOWED_SCHEMES:
         logger.warning(
-            "VisionSampler: NODE_95_URL scheme '%s' is not allowed; "
-            "falling back to default URL.",
+            "VisionSampler: NODE_95_URL scheme '%s' is not allowed; " "falling back to default URL.",
             scheme,
         )
         return _DEFAULT_NODE_95_URL
@@ -77,6 +77,7 @@ def _node_95_url() -> str:
 # ---------------------------------------------------------------------------
 # Frame fetching
 # ---------------------------------------------------------------------------
+
 
 async def _fetch_frame(
     session: Any,  # aiohttp.ClientSession
@@ -110,6 +111,7 @@ async def _fetch_frame(
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 async def run_sampling_session(
     device_id: str,
@@ -158,7 +160,7 @@ async def run_sampling_session(
 
     # ── Import schemas lazily to avoid circular imports at module load time ──
     try:
-        from core.schemas.multimodal import MultiModalImage, MultiModalContext
+        from core.schemas.multimodal import MultiModalContext, MultiModalImage
     except ImportError as exc:
         logger.error("VisionSampler: cannot import multimodal schemas — %s", exc)
         return {
@@ -199,9 +201,7 @@ async def run_sampling_session(
                     await asyncio.sleep(sleep_for)
 
     except ImportError:
-        logger.warning(
-            "VisionSampler: aiohttp not available — attempting fallback with urllib"
-        )
+        logger.warning("VisionSampler: aiohttp not available — attempting fallback with urllib")
         # ── urllib fallback for environments without aiohttp ─────────────────
         import urllib.request
 
@@ -212,7 +212,10 @@ async def run_sampling_session(
             url = f"{node_url}/frame/{device_id}"
             try:
                 raw = await loop.run_in_executor(
-                    None, lambda u=url: urllib.request.urlopen(u, timeout=5).read()  # noqa: S310 – URL validated by _node_95_url()
+                    None,
+                    lambda u=url: urllib.request.urlopen(
+                        u, timeout=5
+                    ).read(),  # noqa: S310 – URL validated by _node_95_url()
                 )
                 b64 = base64.b64encode(raw).decode("utf-8")
                 images.append(
@@ -297,10 +300,7 @@ async def run_sampling_session(
     command_result: Optional[Dict[str, Any]] = None
     action = None
     if runtime_response:
-        action = (
-            runtime_response.get("action")
-            or runtime_response.get("metadata", {}).get("action")
-        )
+        action = runtime_response.get("action") or runtime_response.get("metadata", {}).get("action")
 
     if action and isinstance(action, dict):
         action_device = action.get("device_id") or device_id
@@ -334,9 +334,7 @@ async def run_sampling_session(
                     command_result.get("success"),
                 )
             except Exception as exc:
-                logger.error(
-                    "VisionSampler: route_envelope failed — %s", exc
-                )
+                logger.error("VisionSampler: route_envelope failed — %s", exc)
                 command_result = {"success": False, "error": str(exc)}
 
     return {

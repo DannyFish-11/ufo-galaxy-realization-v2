@@ -56,13 +56,13 @@ import pytest
 try:
     from core.runtime.source_dispatch_orchestrator import (
         CLIENT_FACING_RESULT_SURFACING_NORMALIZED_PR26_SENTINEL,
-        RESULT_CONTRACT_IS_INVARIANT_ACROSS_DISPATCH_PATHS_PR26_POLICY,
-        RESULT_SEMANTICS_ARE_COHERENT_REGARDLESS_OF_PATH_PR26_POLICY,
-        RESULT_IDENTITY_IS_STABLE_ACROSS_EXECUTION_PATHS_PR26_POLICY,
         NO_PATH_SPECIFIC_RESULT_CONTRACT_DRIFT_PR26_POLICY,
+        RESULT_CONTRACT_IS_INVARIANT_ACROSS_DISPATCH_PATHS_PR26_POLICY,
+        RESULT_IDENTITY_IS_STABLE_ACROSS_EXECUTION_PATHS_PR26_POLICY,
+        RESULT_SEMANTICS_ARE_COHERENT_REGARDLESS_OF_PATH_PR26_POLICY,
+        build_source_dispatch_plan,
         orchestrate_source_runtime_dispatch,
         select_dispatch_mode,
-        build_source_dispatch_plan,
     )
 
     _ORCHESTRATOR_AVAILABLE = True
@@ -89,13 +89,11 @@ except ImportError:
     _PROJECTION_AVAILABLE = False
 
 try:
-    from core.runtime import (
-        CLIENT_FACING_RESULT_SURFACING_NORMALIZED_PR26_SENTINEL as _rt_sentinel,
-        RESULT_CONTRACT_IS_INVARIANT_ACROSS_DISPATCH_PATHS_PR26_POLICY as _rt_contract,
-        RESULT_SEMANTICS_ARE_COHERENT_REGARDLESS_OF_PATH_PR26_POLICY as _rt_semantics,
-        RESULT_IDENTITY_IS_STABLE_ACROSS_EXECUTION_PATHS_PR26_POLICY as _rt_identity,
-        NO_PATH_SPECIFIC_RESULT_CONTRACT_DRIFT_PR26_POLICY as _rt_no_drift,
-    )
+    from core.runtime import CLIENT_FACING_RESULT_SURFACING_NORMALIZED_PR26_SENTINEL as _rt_sentinel
+    from core.runtime import NO_PATH_SPECIFIC_RESULT_CONTRACT_DRIFT_PR26_POLICY as _rt_no_drift
+    from core.runtime import RESULT_CONTRACT_IS_INVARIANT_ACROSS_DISPATCH_PATHS_PR26_POLICY as _rt_contract
+    from core.runtime import RESULT_IDENTITY_IS_STABLE_ACROSS_EXECUTION_PATHS_PR26_POLICY as _rt_identity
+    from core.runtime import RESULT_SEMANTICS_ARE_COHERENT_REGARDLESS_OF_PATH_PR26_POLICY as _rt_semantics
 
     _RUNTIME_EXPORTS_AVAILABLE = True
 except ImportError:
@@ -493,9 +491,9 @@ class TestNoDriftAcrossPaths:
     def test_local_and_remote_have_same_keys(self):
         local_keys = self._result_keys(SourceDispatchMode.local)
         remote_keys = self._result_keys(SourceDispatchMode.remote_handoff)
-        assert local_keys == remote_keys, (
-            f"Key drift: local={local_keys - remote_keys} remote={remote_keys - local_keys}"
-        )
+        assert (
+            local_keys == remote_keys
+        ), f"Key drift: local={local_keys - remote_keys} remote={remote_keys - local_keys}"
 
     def test_local_and_fallback_local_have_same_keys(self):
         local_keys = self._result_keys(SourceDispatchMode.local)
@@ -723,23 +721,29 @@ class TestOrchestrateResultContract:
         )
 
     def test_local_path_result_type(self):
-        with patch(
-            "core.runtime.source_dispatch_orchestrator._try_run_local_execution",
-            return_value={"success": True, "output": "ok"},
-        ), patch(
-            "core.runtime.source_dispatch_orchestrator.select_dispatch_mode",
-            return_value=SourceDispatchMode.local,
+        with (
+            patch(
+                "core.runtime.source_dispatch_orchestrator._try_run_local_execution",
+                return_value={"success": True, "output": "ok"},
+            ),
+            patch(
+                "core.runtime.source_dispatch_orchestrator.select_dispatch_mode",
+                return_value=SourceDispatchMode.local,
+            ),
         ):
             r = self._run(force_local=True)
         assert isinstance(r, SourceDispatchResult)
 
     def test_local_path_has_required_fields(self):
-        with patch(
-            "core.runtime.source_dispatch_orchestrator._try_run_local_execution",
-            return_value={"success": True, "output": "ok"},
-        ), patch(
-            "core.runtime.source_dispatch_orchestrator.select_dispatch_mode",
-            return_value=SourceDispatchMode.local,
+        with (
+            patch(
+                "core.runtime.source_dispatch_orchestrator._try_run_local_execution",
+                return_value={"success": True, "output": "ok"},
+            ),
+            patch(
+                "core.runtime.source_dispatch_orchestrator.select_dispatch_mode",
+                return_value=SourceDispatchMode.local,
+            ),
         ):
             r = self._run(force_local=True)
         d = r.to_dict()
@@ -747,12 +751,15 @@ class TestOrchestrateResultContract:
             assert field in d, f"Missing field '{field}' in local orchestration result"
 
     def test_local_path_result_json_serialisable(self):
-        with patch(
-            "core.runtime.source_dispatch_orchestrator._try_run_local_execution",
-            return_value={"success": False, "skipped_reason": "openclawd_unavailable"},
-        ), patch(
-            "core.runtime.source_dispatch_orchestrator.select_dispatch_mode",
-            return_value=SourceDispatchMode.local,
+        with (
+            patch(
+                "core.runtime.source_dispatch_orchestrator._try_run_local_execution",
+                return_value={"success": False, "skipped_reason": "openclawd_unavailable"},
+            ),
+            patch(
+                "core.runtime.source_dispatch_orchestrator.select_dispatch_mode",
+                return_value=SourceDispatchMode.local,
+            ),
         ):
             r = self._run(force_local=True)
         json_str = r.to_json()
@@ -781,12 +788,15 @@ class TestOrchestrateResultContract:
 
     def test_all_paths_have_same_to_dict_keys(self):
         """Local and blocked paths must produce identical top-level field sets."""
-        with patch(
-            "core.runtime.source_dispatch_orchestrator._try_run_local_execution",
-            return_value={"success": True},
-        ), patch(
-            "core.runtime.source_dispatch_orchestrator.select_dispatch_mode",
-            return_value=SourceDispatchMode.local,
+        with (
+            patch(
+                "core.runtime.source_dispatch_orchestrator._try_run_local_execution",
+                return_value={"success": True},
+            ),
+            patch(
+                "core.runtime.source_dispatch_orchestrator.select_dispatch_mode",
+                return_value=SourceDispatchMode.local,
+            ),
         ):
             local_r = self._run(force_local=True)
 
@@ -798,6 +808,6 @@ class TestOrchestrateResultContract:
 
         local_keys = frozenset(local_r.to_dict().keys())
         blocked_keys = frozenset(blocked_r.to_dict().keys())
-        assert local_keys == blocked_keys, (
-            f"Key drift: local={local_keys - blocked_keys} blocked={blocked_keys - local_keys}"
-        )
+        assert (
+            local_keys == blocked_keys
+        ), f"Key drift: local={local_keys - blocked_keys} blocked={blocked_keys - local_keys}"

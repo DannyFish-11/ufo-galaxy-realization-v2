@@ -38,9 +38,7 @@ EXTENSION_MODALITIES = (
 )
 DEGRADABLE_MODALITIES = ("audio_speech", "camera_sensor", "continuous_stream")
 CONTINUOUS_MAINLINE_MODALITIES = ("continuous_stream",)
-CANONICAL_CONTINUOUS_INGRESS_AUTHORITY = (
-    "CANONICAL_CONTINUOUS_INGRESS::DESKTOP_ANDROID_STREAM_CONVERGENCE_V1"
-)
+CANONICAL_CONTINUOUS_INGRESS_AUTHORITY = "CANONICAL_CONTINUOUS_INGRESS::DESKTOP_ANDROID_STREAM_CONVERGENCE_V1"
 CANONICAL_CONTINUOUS_INGRESS_SENTINEL = "CANONICAL_CONTINUOUS_INGRESS::MAINLINE_BACKBONE_V1"
 # File-input compatibility keys observed across request/context carriers:
 # - files / uploaded_files: explicit upload bundles
@@ -222,9 +220,7 @@ def _build_android_nl_ingress_snapshot(
 
     text = (message or "").strip()
     metadata = _as_mapping(mm_dict.get("metadata"))
-    android_state_snapshot = _as_mapping(
-        kwargs.get("android_state_snapshot") or metadata.get("android_state_snapshot")
-    )
+    android_state_snapshot = _as_mapping(kwargs.get("android_state_snapshot") or metadata.get("android_state_snapshot"))
     android_device_context = {
         "device_id": str(kwargs.get("device_id") or ""),
         "session_id": str(kwargs.get("session_id") or ""),

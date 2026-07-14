@@ -41,8 +41,7 @@ class TestInputValidationLoopbackExemption:
         # 或备注字段里恰好带了这类字符。
         resp = client.post("/api/config", json={"config": {"LOCAL_VLLM_URL": "http://x/`whoami`"}})
         assert resp.status_code == 200, (
-            "本机回环地址的请求不该被输入校验误伤——这类字段允许任意字符串，"
-            "命中检测规则不代表真的是攻击"
+            "本机回环地址的请求不该被输入校验误伤——这类字段允许任意字符串，" "命中检测规则不代表真的是攻击"
         )
 
     def test_loopback_path_traversal_pattern_not_blocked(self, monkeypatch):

@@ -15,19 +15,21 @@ import json
 import logging
 import os
 import time
-from copy import deepcopy
-from typing import Any, Callable, Dict, List, Optional
-from dataclasses import dataclass, field
 from collections import deque
+from copy import deepcopy
+from dataclasses import dataclass, field
+from typing import Any, Callable, Dict, List, Optional
 
 logger = logging.getLogger("Galaxy.ConfigHotReload")
 
 
 # ───────────────────── 配置版本记录 ─────────────────────
 
+
 @dataclass
 class ConfigVersion:
     """配置版本快照"""
+
     version: int
     timestamp: float
     config_hash: str
@@ -79,6 +81,7 @@ class ConfigVersionStore:
 
 # ───────────────────── 配置验证器 ─────────────────────
 
+
 class ConfigValidator:
     """
     轻量级配置验证器
@@ -89,9 +92,16 @@ class ConfigValidator:
     def __init__(self):
         self._rules: Dict[str, Dict] = {}
 
-    def add_rule(self, key: str, type_: type = None, required: bool = False,
-                 min_val: Any = None, max_val: Any = None,
-                 choices: List = None, validator: Callable = None):
+    def add_rule(
+        self,
+        key: str,
+        type_: type = None,
+        required: bool = False,
+        min_val: Any = None,
+        max_val: Any = None,
+        choices: List = None,
+        validator: Callable = None,
+    ):
         """添加字段验证规则"""
         self._rules[key] = {
             "type": type_,
@@ -158,6 +168,7 @@ class ConfigValidator:
 
 # ───────────────────── 热更新配置管理器 ─────────────────────
 
+
 class HotReloadConfigManager:
     """
     热更新配置管理器
@@ -171,8 +182,7 @@ class HotReloadConfigManager:
     6. 支持运行时动态修改
     """
 
-    def __init__(self, config_path: Optional[str] = None,
-                 check_interval: float = 5.0):
+    def __init__(self, config_path: Optional[str] = None, check_interval: float = 5.0):
         self._config_path = config_path
         self._check_interval = check_interval
         self._config: Dict[str, Any] = {}
@@ -293,9 +303,7 @@ class HotReloadConfigManager:
         try:
             dir_name = os.path.dirname(path) or "."
             # 写入同目录的临时文件（确保同文件系统，rename 才是原子的）
-            fd, tmp_path = tempfile.mkstemp(
-                dir=dir_name, suffix=".tmp", prefix=".config_"
-            )
+            fd, tmp_path = tempfile.mkstemp(dir=dir_name, suffix=".tmp", prefix=".config_")
             try:
                 with os.fdopen(fd, "w", encoding="utf-8") as f:
                     json.dump(self._config, f, indent=2, ensure_ascii=False)
@@ -431,8 +439,7 @@ class HotReloadConfigManager:
 _instance: Optional[HotReloadConfigManager] = None
 
 
-def get_config_manager(config_path: Optional[str] = None,
-                       **kwargs) -> HotReloadConfigManager:
+def get_config_manager(config_path: Optional[str] = None, **kwargs) -> HotReloadConfigManager:
     global _instance
     if _instance is None:
         _instance = HotReloadConfigManager(config_path=config_path, **kwargs)

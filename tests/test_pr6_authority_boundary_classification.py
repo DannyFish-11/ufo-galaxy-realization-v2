@@ -25,9 +25,9 @@ from __future__ import annotations
 import pytest
 
 from core.authority_boundary_classification import (
+    ADAPTER_SURFACES_ARE_ROUTING_ONLY_POLICY,
     AUTHORITY_BOUNDARY_CLASSIFICATION_IS_AUTHORITY,
     AUTHORITY_BOUNDARY_CLASSIFICATION_PR6_SENTINEL,
-    ADAPTER_SURFACES_ARE_ROUTING_ONLY_POLICY,
     CACHE_INDEX_SURFACES_MUST_NOT_WRITE_TRUTH_POLICY,
     COMPAT_SURFACES_ARE_NON_AUTHORITATIVE_POLICY,
     TRANSITIONAL_SURFACES_MUST_NOT_BE_EXTENDED_POLICY,
@@ -42,23 +42,18 @@ from core.authority_boundary_classification import (
     get_transitional_surfaces,
 )
 
-
 # ---------------------------------------------------------------------------
 # Authority and policy sentinel tests
 # ---------------------------------------------------------------------------
 
 
 def test_authority_sentinel_format():
-    assert AUTHORITY_BOUNDARY_CLASSIFICATION_IS_AUTHORITY.startswith(
-        "AUTHORITY_BOUNDARY_CLASSIFICATION_IS_AUTHORITY::"
-    )
+    assert AUTHORITY_BOUNDARY_CLASSIFICATION_IS_AUTHORITY.startswith("AUTHORITY_BOUNDARY_CLASSIFICATION_IS_AUTHORITY::")
     assert "core.authority_boundary_classification" in AUTHORITY_BOUNDARY_CLASSIFICATION_IS_AUTHORITY
 
 
 def test_pr6_sentinel_format():
-    assert AUTHORITY_BOUNDARY_CLASSIFICATION_PR6_SENTINEL.startswith(
-        "AUTHORITY_BOUNDARY_CLASSIFICATION_PR6_SENTINEL::"
-    )
+    assert AUTHORITY_BOUNDARY_CLASSIFICATION_PR6_SENTINEL.startswith("AUTHORITY_BOUNDARY_CLASSIFICATION_PR6_SENTINEL::")
     assert "PR6" in AUTHORITY_BOUNDARY_CLASSIFICATION_PR6_SENTINEL
     assert "authority-boundary-classification-v1" in AUTHORITY_BOUNDARY_CLASSIFICATION_PR6_SENTINEL
     assert "core.authority_boundary_classification" in AUTHORITY_BOUNDARY_CLASSIFICATION_PR6_SENTINEL
@@ -320,9 +315,7 @@ def test_get_surfaces_by_role_ssot_write_not_empty():
 def test_get_surfaces_by_role_ssot_write_all_authoritative():
     surfaces = get_surfaces_by_role(AuthorityRole.ssot_write)
     for s in surfaces:
-        assert s.is_authoritative is True, (
-            f"ssot_write surface {s.surface_id!r} must be authoritative"
-        )
+        assert s.is_authoritative is True, f"ssot_write surface {s.surface_id!r} must be authoritative"
 
 
 def test_get_surfaces_by_role_compat_facade_not_empty():
@@ -333,41 +326,31 @@ def test_get_surfaces_by_role_compat_facade_not_empty():
 def test_get_surfaces_by_role_compat_facade_none_authoritative():
     surfaces = get_surfaces_by_role(AuthorityRole.compat_facade)
     for s in surfaces:
-        assert s.is_authoritative is False, (
-            f"compat_facade surface {s.surface_id!r} must not be authoritative"
-        )
+        assert s.is_authoritative is False, f"compat_facade surface {s.surface_id!r} must not be authoritative"
 
 
 def test_get_surfaces_by_role_projection_none_authoritative():
     surfaces = get_surfaces_by_role(AuthorityRole.projection)
     for s in surfaces:
-        assert s.is_authoritative is False, (
-            f"projection surface {s.surface_id!r} must not be authoritative"
-        )
+        assert s.is_authoritative is False, f"projection surface {s.surface_id!r} must not be authoritative"
 
 
 def test_get_surfaces_by_role_cache_index_none_authoritative():
     surfaces = get_surfaces_by_role(AuthorityRole.cache_index)
     for s in surfaces:
-        assert s.is_authoritative is False, (
-            f"cache_index surface {s.surface_id!r} must not be authoritative"
-        )
+        assert s.is_authoritative is False, f"cache_index surface {s.surface_id!r} must not be authoritative"
 
 
 def test_get_surfaces_by_role_adapter_routing_none_authoritative():
     surfaces = get_surfaces_by_role(AuthorityRole.adapter_routing)
     for s in surfaces:
-        assert s.is_authoritative is False, (
-            f"adapter_routing surface {s.surface_id!r} must not be authoritative"
-        )
+        assert s.is_authoritative is False, f"adapter_routing surface {s.surface_id!r} must not be authoritative"
 
 
 def test_get_surfaces_by_role_transitional_none_authoritative():
     surfaces = get_surfaces_by_role(AuthorityRole.transitional)
     for s in surfaces:
-        assert s.is_authoritative is False, (
-            f"transitional surface {s.surface_id!r} must not be authoritative"
-        )
+        assert s.is_authoritative is False, f"transitional surface {s.surface_id!r} must not be authoritative"
 
 
 # ---------------------------------------------------------------------------
@@ -383,9 +366,9 @@ def test_get_non_authoritative_surfaces_not_empty():
 def test_get_non_authoritative_surfaces_none_is_authoritative():
     surfaces = get_non_authoritative_surfaces()
     for s in surfaces:
-        assert s.is_authoritative is False, (
-            f"get_non_authoritative_surfaces() returned authoritative surface: {s.surface_id!r}"
-        )
+        assert (
+            s.is_authoritative is False
+        ), f"get_non_authoritative_surfaces() returned authoritative surface: {s.surface_id!r}"
 
 
 def test_get_non_authoritative_surfaces_complement_is_authoritative():
@@ -410,17 +393,15 @@ def test_get_transitional_surfaces_not_empty():
 def test_get_transitional_surfaces_all_marked_transitional():
     surfaces = get_transitional_surfaces()
     for s in surfaces:
-        assert s.is_transitional is True, (
-            f"get_transitional_surfaces() returned non-transitional surface: {s.surface_id!r}"
-        )
+        assert (
+            s.is_transitional is True
+        ), f"get_transitional_surfaces() returned non-transitional surface: {s.surface_id!r}"
 
 
 def test_get_transitional_surfaces_none_is_authoritative():
     surfaces = get_transitional_surfaces()
     for s in surfaces:
-        assert s.is_authoritative is False, (
-            f"Transitional surface {s.surface_id!r} must not be authoritative"
-        )
+        assert s.is_authoritative is False, f"Transitional surface {s.surface_id!r} must not be authoritative"
 
 
 # ---------------------------------------------------------------------------
@@ -581,30 +562,26 @@ def test_only_ssot_write_and_canonical_registry_are_authoritative():
 
 def test_projection_surfaces_are_not_authoritative():
     for surface in get_surfaces_by_role(AuthorityRole.projection):
-        assert not surface.is_authoritative, (
-            f"Projection surface {surface.surface_id!r} must not be authoritative"
-        )
+        assert not surface.is_authoritative, f"Projection surface {surface.surface_id!r} must not be authoritative"
 
 
 def test_cache_index_surfaces_have_canonical_replacement_or_notes():
     for surface in get_surfaces_by_role(AuthorityRole.cache_index):
-        assert len(surface.notes) > 0, (
-            f"Cache/index surface {surface.surface_id!r} must have governance notes"
-        )
+        assert len(surface.notes) > 0, f"Cache/index surface {surface.surface_id!r} must have governance notes"
 
 
 def test_compat_facade_surfaces_have_canonical_replacement():
     for surface in get_surfaces_by_role(AuthorityRole.compat_facade):
-        assert surface.canonical_replacement is not None, (
-            f"Compat facade surface {surface.surface_id!r} should specify canonical_replacement"
-        )
+        assert (
+            surface.canonical_replacement is not None
+        ), f"Compat facade surface {surface.surface_id!r} should specify canonical_replacement"
 
 
 def test_transitional_surfaces_have_canonical_replacement():
     for surface in get_transitional_surfaces():
-        assert surface.canonical_replacement is not None, (
-            f"Transitional surface {surface.surface_id!r} should specify canonical_replacement"
-        )
+        assert (
+            surface.canonical_replacement is not None
+        ), f"Transitional surface {surface.surface_id!r} should specify canonical_replacement"
 
 
 def test_udm_notes_mention_ssot():
@@ -640,9 +617,9 @@ def test_projection_alignment_sentinel_not_unavailable():
         from core.routes.projection import AUTHORITY_BOUNDARY_CLASSIFICATION_ALIGNED_PR6
     except ImportError:
         pytest.skip("projection routes module not available")
-    assert "UNAVAILABLE" not in AUTHORITY_BOUNDARY_CLASSIFICATION_ALIGNED_PR6, (
-        "The authority boundary classification module import failed; sentinel shows UNAVAILABLE"
-    )
+    assert (
+        "UNAVAILABLE" not in AUTHORITY_BOUNDARY_CLASSIFICATION_ALIGNED_PR6
+    ), "The authority boundary classification module import failed; sentinel shows UNAVAILABLE"
 
 
 def test_projection_alignment_sentinel_mentions_pr6():
@@ -650,4 +627,7 @@ def test_projection_alignment_sentinel_mentions_pr6():
         from core.routes.projection import AUTHORITY_BOUNDARY_CLASSIFICATION_ALIGNED_PR6
     except ImportError:
         pytest.skip("projection routes module not available")
-    assert "PR6" in AUTHORITY_BOUNDARY_CLASSIFICATION_ALIGNED_PR6 or "PR-6" in AUTHORITY_BOUNDARY_CLASSIFICATION_ALIGNED_PR6
+    assert (
+        "PR6" in AUTHORITY_BOUNDARY_CLASSIFICATION_ALIGNED_PR6
+        or "PR-6" in AUTHORITY_BOUNDARY_CLASSIFICATION_ALIGNED_PR6
+    )

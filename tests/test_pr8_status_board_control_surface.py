@@ -80,10 +80,10 @@ import unittest
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
-
 # ---------------------------------------------------------------------------
 # Minimal mocks
 # ---------------------------------------------------------------------------
+
 
 class _MockConfigService:
     """Minimal ConfigService mock that records call history."""
@@ -127,6 +127,7 @@ class _MockHotReloadManager:
 def _make_surface(hot_reload_manager=None, raise_value=None):
     """Return a ConfigControlSurface backed by a fresh MockConfigService."""
     from windows_client.status_board_v2.config_control import ConfigControlSurface
+
     svc = _MockConfigService()
     if raise_value is not None:
         svc._should_raise_value = raise_value
@@ -139,6 +140,7 @@ def _minimal_projection() -> Dict[str, Any]:
 
 def _make_app(control_surface=None):
     from windows_client.status_board_v2.app import StatusBoardV2App
+
     return StatusBoardV2App(
         file_path="/dev/null",
         control_surface=control_surface,
@@ -149,11 +151,13 @@ def _make_app(control_surface=None):
 # AC1 — Bounded runtime-relevant configuration changes
 # ---------------------------------------------------------------------------
 
+
 class TestAC1BoundedChanges(unittest.TestCase):
     """Tests 1–10: AC1 — bounded, runtime-relevant config changes."""
 
     def test_01_config_control_surface_importable(self):
         from windows_client.status_board_v2.config_control import ConfigControlSurface
+
         self.assertIsNotNone(ConfigControlSurface)
 
     def test_02_apply_toggle_enabled_true_succeeds(self):
@@ -206,6 +210,7 @@ class TestAC1BoundedChanges(unittest.TestCase):
 # AC2 — Writes flow through canonical ConfigService
 # ---------------------------------------------------------------------------
 
+
 class TestAC2CanonicalWrites(unittest.TestCase):
     """Tests 11–16: AC2 — writes via ConfigService only."""
 
@@ -232,6 +237,7 @@ class TestAC2CanonicalWrites(unittest.TestCase):
     def test_15_no_separate_local_config_state_maintained(self):
         """ConfigControlSurface must not have its own config dict."""
         from windows_client.status_board_v2.config_control import ConfigControlSurface
+
         svc = _MockConfigService()
         surface = ConfigControlSurface(service=svc)
         # The surface must not carry any _config, _local_config, or _state attr
@@ -252,6 +258,7 @@ class TestAC2CanonicalWrites(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # AC3 — Apply/reload/result feedback visible in the board
 # ---------------------------------------------------------------------------
+
 
 class TestAC3Feedback(unittest.TestCase):
     """Tests 17–30: AC3 — feedback visible in the board."""
@@ -333,6 +340,7 @@ class TestAC3Feedback(unittest.TestCase):
 
     def test_28_last_result_populated_after_apply(self):
         from windows_client.status_board_v2.config_control import ControlApplyResult
+
         surface, _ = _make_surface()
         surface.apply_toggle("openai", True)
         self.assertIsInstance(surface.last_result, ControlApplyResult)
@@ -354,47 +362,58 @@ class TestAC3Feedback(unittest.TestCase):
 # AC4 — Board is a true desktop control surface, not read-only
 # ---------------------------------------------------------------------------
 
+
 class TestAC4DesktopControlSurface(unittest.TestCase):
     """Tests 31–40: AC4 — board is a true desktop control surface."""
 
     def test_31_package_exports_config_control_surface(self):
         import windows_client.status_board_v2 as pkg
+
         self.assertIn("ConfigControlSurface", pkg.__all__)
 
     def test_32_package_exports_authority_sentinel(self):
         import windows_client.status_board_v2 as pkg
+
         self.assertIn("STATUS_BOARD_CONFIG_CONTROL_AUTHORITY", pkg.__all__)
 
     def test_33_package_exports_control_operation(self):
         import windows_client.status_board_v2 as pkg
+
         self.assertIn("ControlOperation", pkg.__all__)
 
     def test_34_package_exports_control_apply_result(self):
         import windows_client.status_board_v2 as pkg
+
         self.assertIn("ControlApplyResult", pkg.__all__)
 
     def test_35_control_operation_toggle_provider_defined(self):
         from windows_client.status_board_v2.config_control import ControlOperation
+
         self.assertIn("TOGGLE_PROVIDER", [op.name for op in ControlOperation])
 
     def test_36_control_operation_set_routing_policy_defined(self):
         from windows_client.status_board_v2.config_control import ControlOperation
+
         self.assertIn("SET_ROUTING_POLICY", [op.name for op in ControlOperation])
 
     def test_37_status_board_app_accepts_control_surface(self):
-        from windows_client.status_board_v2.app import StatusBoardV2App
         import inspect
+
+        from windows_client.status_board_v2.app import StatusBoardV2App
+
         sig = inspect.signature(StatusBoardV2App.__init__)
         self.assertIn("control_surface", sig.parameters)
 
     def test_38_cli_parser_has_apply_toggle(self):
         from windows_client.status_board_v2.app import _build_parser
+
         parser = _build_parser()
         action_dests = {a.dest for a in parser._actions}
         self.assertIn("apply_toggle", action_dests)
 
     def test_39_cli_parser_has_apply_routing_policy(self):
         from windows_client.status_board_v2.app import _build_parser
+
         parser = _build_parser()
         action_dests = {a.dest for a in parser._actions}
         self.assertIn("apply_routing_policy", action_dests)
@@ -404,11 +423,13 @@ class TestAC4DesktopControlSurface(unittest.TestCase):
         surface, _ = _make_surface()
         surface.apply_toggle("openai", True)
         app = _make_app(control_surface=surface)
-        frame = app.render_once({
-            "tri_state_phase": "manifest",
-            "timestamp": 1_700_000_000.0,
-            "runtime_domain": "local",
-        })
+        frame = app.render_once(
+            {
+                "tri_state_phase": "manifest",
+                "timestamp": 1_700_000_000.0,
+                "runtime_domain": "local",
+            }
+        )
         # Board title must always be present
         self.assertIn("Status Board", frame)
         # Both control feedback AND projection surfaces must be rendered

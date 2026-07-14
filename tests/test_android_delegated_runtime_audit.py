@@ -188,10 +188,23 @@ class TestAuditRecord:
         rec = AndroidDelegatedAuditRecord(task_id="t1", session_id="s1")
         d = rec.to_dict()
         for key in (
-            "audit_id", "recorded_at", "kind", "task_id", "session_id",
-            "trace_id", "device_id", "contract_id", "handoff_id",
-            "takeover_id", "participant_role", "state_transition",
-            "was_successful", "reject_reason", "source", "message", "payload",
+            "audit_id",
+            "recorded_at",
+            "kind",
+            "task_id",
+            "session_id",
+            "trace_id",
+            "device_id",
+            "contract_id",
+            "handoff_id",
+            "takeover_id",
+            "participant_role",
+            "state_transition",
+            "was_successful",
+            "reject_reason",
+            "source",
+            "message",
+            "payload",
         ):
             assert key in d, f"key {key!r} missing from to_dict()"
 
@@ -497,9 +510,7 @@ class TestCrossHelperQueries:
         record_takeover_request(task_id=tid, takeover_id="tkv_a")
         record_takeover_response(task_id=tid, takeover_id="tkv_a", accepted=True)
         record_reconciliation_signal(task_id=tid, truth_kind="task_phase", was_reconciled=True)
-        record_participant_truth_terminal_update(
-            task_id=tid, truth_kind="result", terminal_phase="completed"
-        )
+        record_participant_truth_terminal_update(task_id=tid, truth_kind="result", terminal_phase="completed")
         records = get_android_audit_for_task(tid)
         assert len(records) == 6
 
@@ -626,28 +637,20 @@ class TestHandlerImports:
         assert hasattr(m, "_audit_terminal_update")
 
     def test_delegated_signal_handler_has_audit_binding(self):
-        m = _import_handler_module(
-            "galaxy_gateway.android.handlers.delegated_signal"
-        )
+        m = _import_handler_module("galaxy_gateway.android.handlers.delegated_signal")
         # PR-11-V2: 审计收口到生命周期协调器,直挂 _audit_* 钩子退役。
         assert hasattr(m, "_get_lifecycle_coordinator")
 
     def test_handoff_v2_result_handler_has_audit_binding(self):
-        m = _import_handler_module(
-            "galaxy_gateway.android.handlers.handoff_v2_result"
-        )
+        m = _import_handler_module("galaxy_gateway.android.handlers.handoff_v2_result")
         assert hasattr(m, "_audit_handoff_v2_result")
 
     def test_takeover_response_handler_has_audit_binding(self):
-        m = _import_handler_module(
-            "galaxy_gateway.android.handlers.takeover_response"
-        )
+        m = _import_handler_module("galaxy_gateway.android.handlers.takeover_response")
         # PR-11-V2: 审计收口到生命周期协调器,直挂 _audit_* 钩子退役。
         assert hasattr(m, "_get_lifecycle_coordinator")
 
     def test_reconciliation_signal_handler_has_audit_binding(self):
-        m = _import_handler_module(
-            "galaxy_gateway.android.handlers.reconciliation_signal"
-        )
+        m = _import_handler_module("galaxy_gateway.android.handlers.reconciliation_signal")
         # PR-11-V2: 审计收口到生命周期协调器,直挂 _audit_* 钩子退役。
         assert hasattr(m, "get_lifecycle_coordinator") or hasattr(m, "_get_lifecycle_coordinator")

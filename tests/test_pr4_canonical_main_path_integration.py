@@ -101,10 +101,11 @@ if str(PROJECT_ROOT) not in sys.path:
 
 try:
     from core.canonical_completion_ingress import (
+        CANONICAL_COMPLETION_INGRESS_SENTINEL,
         CanonicalCompletionIngress,
         get_canonical_completion_ingress,
-        CANONICAL_COMPLETION_INGRESS_SENTINEL,
     )
+
     _CCI_AVAILABLE = True
 except ImportError as _e:  # pragma: no cover
     _CCI_AVAILABLE = False
@@ -121,6 +122,7 @@ try:
         assert_main_chain_capability,
         get_capability_tier,
     )
+
     _CAP_TIER_AVAILABLE = True
 except ImportError:  # pragma: no cover
     _CAP_TIER_AVAILABLE = False
@@ -131,13 +133,14 @@ except ImportError:  # pragma: no cover
 
 try:
     from core.governance_validation_gate import (
-        GovernanceValidationGate,
-        ValidationOutcome,
-        ValidationFailReason,
         GovernanceValidationError,
+        GovernanceValidationGate,
+        ValidationFailReason,
+        ValidationOutcome,
         evaluate_governance_validation,
         reset_governance_validation_gate,
     )
+
     _GOV_GATE_AVAILABLE = True
 except ImportError:  # pragma: no cover
     _GOV_GATE_AVAILABLE = False
@@ -319,9 +322,7 @@ class TestGroupB_MainPathHarness:
             fut = self._cci.register_pending_dispatch(handoff_id, task_id=task_id)
 
             try:
-                result_envelope = await asyncio.wait_for(
-                    asyncio.shield(fut), timeout=timeout
-                )
+                result_envelope = await asyncio.wait_for(asyncio.shield(fut), timeout=timeout)
                 self.completed = True
                 self.completion_envelope = result_envelope
                 self._on_continuation()
@@ -414,9 +415,7 @@ class TestGroupB_MainPathHarness:
 
         orch = await _run()
 
-        assert orch.continuation_called, (
-            "Continuation callback must be called after successful completion"
-        )
+        assert orch.continuation_called, "Continuation callback must be called after successful completion"
 
     async def test_B06_without_completion_signal_wait_times_out(self):
         """Without a completion signal, the await times out (not falsely resolved)."""
@@ -449,18 +448,16 @@ class TestGroupC_CapabilityAwareDispatch:
         main_chain_caps = ["screen", "touch", "keyboard", "command_routing"]
         for cap in main_chain_caps:
             tier = get_capability_tier(cap)
-            assert tier == CapabilityTier.MAIN_CHAIN, (
-                f"Expected '{cap}' to be MAIN_CHAIN for main path dispatch"
-            )
+            assert tier == CapabilityTier.MAIN_CHAIN, f"Expected '{cap}' to be MAIN_CHAIN for main path dispatch"
 
     def test_C02_dispatching_to_EXPERIMENTAL_surfaces_tier_warning(self):
         """EXPERIMENTAL capability → tier is EXPERIMENTAL (not MAIN_CHAIN)."""
         experimental_caps = ["vlm", "webrtc", "live_mesh_runtime"]
         for cap in experimental_caps:
             tier = get_capability_tier(cap)
-            assert tier == CapabilityTier.EXPERIMENTAL, (
-                f"Expected '{cap}' to be EXPERIMENTAL — it must not masquerade as MAIN_CHAIN"
-            )
+            assert (
+                tier == CapabilityTier.EXPERIMENTAL
+            ), f"Expected '{cap}' to be EXPERIMENTAL — it must not masquerade as MAIN_CHAIN"
 
     def test_C03_assert_main_chain_guards_experimental(self):
         """assert_main_chain_capability raises for EXPERIMENTAL capability."""
@@ -479,9 +476,7 @@ class TestGroupC_CapabilityAwareDispatch:
             try:
                 assert_main_chain_capability(cap)
             except CapabilityTierViolationError as exc:
-                pytest.fail(
-                    f"assert_main_chain_capability('{cap}') raised unexpectedly: {exc}"
-                )
+                pytest.fail(f"assert_main_chain_capability('{cap}') raised unexpectedly: {exc}")
 
 
 # ===========================================================================
@@ -514,13 +509,13 @@ class TestGroupD_GovernanceValidationInMainPath:
         gate_report.report_id = "test-blocked"
         gate_report.category_evaluations = []
 
-        with patch(
-            "core.governance_validation_gate._evaluate_distributed_gate",
-            return_value=gate_report,
-        ), patch(
-            "core.governance_validation_gate._DISTRIBUTED_GATE_AVAILABLE", True
-        ), patch(
-            "core.governance_validation_gate._READINESS_GATE_AVAILABLE", False
+        with (
+            patch(
+                "core.governance_validation_gate._evaluate_distributed_gate",
+                return_value=gate_report,
+            ),
+            patch("core.governance_validation_gate._DISTRIBUTED_GATE_AVAILABLE", True),
+            patch("core.governance_validation_gate._READINESS_GATE_AVAILABLE", False),
         ):
             gate = GovernanceValidationGate()
             with pytest.raises(GovernanceValidationError) as exc_info:
@@ -543,16 +538,17 @@ class TestGroupD_GovernanceValidationInMainPath:
         readiness_result.ready = True
         readiness_result.blocked_by = None
 
-        with patch(
-            "core.governance_validation_gate._evaluate_distributed_gate",
-            return_value=gate_report,
-        ), patch(
-            "core.governance_validation_gate._DISTRIBUTED_GATE_AVAILABLE", True
-        ), patch(
-            "core.governance_validation_gate._evaluate_readiness",
-            return_value=readiness_result,
-        ), patch(
-            "core.governance_validation_gate._READINESS_GATE_AVAILABLE", True
+        with (
+            patch(
+                "core.governance_validation_gate._evaluate_distributed_gate",
+                return_value=gate_report,
+            ),
+            patch("core.governance_validation_gate._DISTRIBUTED_GATE_AVAILABLE", True),
+            patch(
+                "core.governance_validation_gate._evaluate_readiness",
+                return_value=readiness_result,
+            ),
+            patch("core.governance_validation_gate._READINESS_GATE_AVAILABLE", True),
         ):
             gate = GovernanceValidationGate()
             result = gate.validate(check_capability_tier=False)
@@ -612,9 +608,7 @@ class TestGroupE_FullSimulatedMainPath:
 
             async def _await_completion():
                 nonlocal result_envelope
-                result_envelope = await asyncio.wait_for(
-                    asyncio.shield(fut), timeout=2.0
-                )
+                result_envelope = await asyncio.wait_for(asyncio.shield(fut), timeout=2.0)
                 stages_completed.append("completion")
 
             await asyncio.gather(
@@ -679,9 +673,7 @@ class TestGroupE_FullSimulatedMainPath:
             loop.close()
 
         assert all(results), f"Some tasks did not complete: {results}"
-        assert continuation_count["n"] == 3, (
-            f"Expected 3 continuation increments, got {continuation_count['n']}"
-        )
+        assert continuation_count["n"] == 3, f"Expected 3 continuation increments, got {continuation_count['n']}"
 
     def test_E03_simulated_orchestration_loop_processes_completion_events(self):
         """Simulated orchestration loop processes all completion events correctly.
@@ -715,9 +707,7 @@ class TestGroupE_FullSimulatedMainPath:
                 timed_out_tasks.append(hid)
 
         async def _run_all():
-            await asyncio.gather(*[
-                _simulate_task_lifecycle(hid) for hid in handoff_ids
-            ])
+            await asyncio.gather(*[_simulate_task_lifecycle(hid) for hid in handoff_ids])
 
         loop = asyncio.new_event_loop()
         try:
@@ -726,9 +716,5 @@ class TestGroupE_FullSimulatedMainPath:
         finally:
             loop.close()
 
-        assert len(timed_out_tasks) == 0, (
-            f"Some tasks timed out: {timed_out_tasks}"
-        )
-        assert set(completed_tasks) == set(handoff_ids), (
-            f"Not all tasks completed. Completed: {completed_tasks}"
-        )
+        assert len(timed_out_tasks) == 0, f"Some tasks timed out: {timed_out_tasks}"
+        assert set(completed_tasks) == set(handoff_ids), f"Not all tasks completed. Completed: {completed_tasks}"

@@ -61,36 +61,36 @@ emit_legacy_guardrail(caller, trace_id) → None
     Structured WARNING for legacy entrypoint invocations.
 """
 
-from .authority_roles import (
-    AuthorityRole,
-    ROLE_CATALOG,
-    ROLE_DESCRIPTIONS,
-    role_label,
-    is_authoritative,
-    is_legacy_or_deprecated,
-)
-from .legacy_paths import (
-    LegacyPathStatus,
-    LegacyPathEntry,
-    LEGACY_PATH_REGISTRY,
-    LEGACY_ORCHESTRATOR_PATHS,
-    is_legacy_path,
-    get_legacy_entry,
-    emit_legacy_guardrail,
-    classify_path_status,
-)
 from .authority_resolver import (
-    classify_module,
     authority_catalog,
     authority_chain,
+    classify_module,
     resolve_trace_authority,
+)
+from .authority_roles import (
+    ROLE_CATALOG,
+    ROLE_DESCRIPTIONS,
+    AuthorityRole,
+    is_authoritative,
+    is_legacy_or_deprecated,
+    role_label,
 )
 from .authority_summary import (
     AuthoritySummary,
-    summarise_authority,
-    authority_summary_for_projection,
-    attach_authority_to_event,
     attach_authority_to_envelope_summary,
+    attach_authority_to_event,
+    authority_summary_for_projection,
+    summarise_authority,
+)
+from .legacy_paths import (
+    LEGACY_ORCHESTRATOR_PATHS,
+    LEGACY_PATH_REGISTRY,
+    LegacyPathEntry,
+    LegacyPathStatus,
+    classify_path_status,
+    emit_legacy_guardrail,
+    get_legacy_entry,
+    is_legacy_path,
 )
 
 __all__ = [

@@ -66,11 +66,12 @@ from typing import Any
 
 import pytest
 
+import core.canonical_task as _mod
 from core.canonical_task import (
+    CANONICAL_EXECUTION_SPINE_POLICY,
     CANONICAL_TASK_AUTHORITY,
     CANONICAL_TASK_LAYER_POSITION,
     CANONICAL_TASK_ONTOLOGY_VERSION,
-    CANONICAL_EXECUTION_SPINE_POLICY,
     TASK_ALLOCATION_TRUTH_AUTHORITY,
     CanonicalTask,
     CanonicalTaskRecord,
@@ -93,12 +94,11 @@ from core.canonical_task import (
     project_to_task_envelope,
     reset_canonical_task_runtime,
 )
-import core.canonical_task as _mod
-
 
 # ===========================================================================
 # Fixtures
 # ===========================================================================
+
 
 @pytest.fixture(autouse=True)
 def reset_runtime():
@@ -111,6 +111,7 @@ def reset_runtime():
 # ===========================================================================
 # A) Authority sentinels
 # ===========================================================================
+
 
 def test_A1_CANONICAL_TASK_AUTHORITY_importable():
     assert CANONICAL_TASK_AUTHORITY is not None
@@ -138,6 +139,7 @@ def test_A5_CANONICAL_EXECUTION_SPINE_POLICY():
 # ===========================================================================
 # B) TaskLifecycle enum
 # ===========================================================================
+
 
 def test_B1_lifecycle_created():
     assert TaskLifecycle.CREATED.value == "created"
@@ -183,6 +185,7 @@ def test_B10_lifecycle_degraded():
 # C) TaskOrigin enum
 # ===========================================================================
 
+
 def test_C1_origin_api_request():
     assert TaskOrigin.API_REQUEST.value == "api_request"
 
@@ -223,6 +226,7 @@ def test_C9_origin_unknown():
 # D) RemoteExecutionStyle enum
 # ===========================================================================
 
+
 def test_D1_remote_command_only():
     assert RemoteExecutionStyle.COMMAND_ONLY.value == "command_only"
 
@@ -242,6 +246,7 @@ def test_D4_remote_none():
 # ===========================================================================
 # E) FailureDomain enum
 # ===========================================================================
+
 
 def test_E1_failure_routing():
     assert FailureDomain.ROUTING.value == "routing"
@@ -275,6 +280,7 @@ def test_E7_failure_unknown():
 # F) TaskIdentity
 # ===========================================================================
 
+
 def test_F1_task_identity_defaults():
     ti = TaskIdentity()
     assert ti.task_id.startswith("task_")
@@ -297,6 +303,7 @@ def test_F2_task_identity_custom():
 # G) TaskIdentity.to_dict()
 # ===========================================================================
 
+
 def test_G1_task_identity_to_dict_keys():
     d = TaskIdentity().to_dict()
     for k in ("task_id", "trace_id", "session_id", "root_task_id", "parent_task_id"):
@@ -306,6 +313,7 @@ def test_G1_task_identity_to_dict_keys():
 # ===========================================================================
 # H) TaskIntent
 # ===========================================================================
+
 
 def test_H1_task_intent_defaults():
     ti = TaskIntent()
@@ -318,6 +326,7 @@ def test_H1_task_intent_defaults():
 # ===========================================================================
 # I) TaskIntent.to_dict()
 # ===========================================================================
+
 
 def test_I1_task_intent_to_dict_keys():
     d = TaskIntent().to_dict()
@@ -335,6 +344,7 @@ def test_I2_task_intent_origin_serialized_as_value():
 # J) TaskPlanning
 # ===========================================================================
 
+
 def test_J1_task_planning_defaults():
     tp = TaskPlanning()
     assert tp.priority == 5
@@ -348,6 +358,7 @@ def test_J1_task_planning_defaults():
 # K) TaskPlanning.to_dict()
 # ===========================================================================
 
+
 def test_K1_task_planning_to_dict_keys():
     d = TaskPlanning().to_dict()
     for k in ("priority", "constraints", "required_capabilities", "fallback_policy", "remote_execution_mode"):
@@ -357,6 +368,7 @@ def test_K1_task_planning_to_dict_keys():
 # ===========================================================================
 # L) TaskRouting
 # ===========================================================================
+
 
 def test_L1_task_routing_defaults():
     tr = TaskRouting()
@@ -370,6 +382,7 @@ def test_L1_task_routing_defaults():
 # M) TaskRouting.to_dict()
 # ===========================================================================
 
+
 def test_M1_task_routing_to_dict_keys():
     d = TaskRouting().to_dict()
     for k in ("selected_targets", "route_preference", "transport_preference", "effective_path"):
@@ -379,6 +392,7 @@ def test_M1_task_routing_to_dict_keys():
 # ===========================================================================
 # N) TaskExecution
 # ===========================================================================
+
 
 def test_N1_task_execution_defaults():
     te = TaskExecution()
@@ -395,6 +409,7 @@ def test_N1_task_execution_defaults():
 # O) TaskExecution.to_dict()
 # ===========================================================================
 
+
 def test_O1_task_execution_to_dict_keys():
     d = TaskExecution().to_dict()
     for k in ("tool", "skill", "command", "args", "timeout_seconds", "retry_policy", "permission_level"):
@@ -404,6 +419,7 @@ def test_O1_task_execution_to_dict_keys():
 # ===========================================================================
 # P) TaskGraphRelations
 # ===========================================================================
+
 
 def test_P1_task_graph_relations_defaults():
     tg = TaskGraphRelations()
@@ -417,6 +433,7 @@ def test_P1_task_graph_relations_defaults():
 # Q) TaskGraphRelations.to_dict()
 # ===========================================================================
 
+
 def test_Q1_task_graph_relations_to_dict_keys():
     d = TaskGraphRelations().to_dict()
     for k in ("dependencies", "retry_of", "fallback_of", "children"):
@@ -426,6 +443,7 @@ def test_Q1_task_graph_relations_to_dict_keys():
 # ===========================================================================
 # R) TaskResultSummary
 # ===========================================================================
+
 
 def test_R1_task_result_summary_defaults():
     tr = TaskResultSummary()
@@ -445,6 +463,7 @@ def test_R2_task_result_summary_to_dict_keys():
 # S) TaskResultSummary truncation
 # ===========================================================================
 
+
 def test_S1_result_summary_truncated():
     long_str = "x" * 500
     tr = TaskResultSummary(result_summary=long_str)
@@ -460,6 +479,7 @@ def test_S2_result_summary_not_truncated_when_short():
 # ===========================================================================
 # T) CanonicalTask construction
 # ===========================================================================
+
 
 def test_T1_canonical_task_defaults(reset_runtime):
     task = CanonicalTask()
@@ -477,6 +497,7 @@ def test_T1_canonical_task_defaults(reset_runtime):
 # U) CanonicalTask.to_dict()
 # ===========================================================================
 
+
 def test_U1_to_dict_contains_all_groups(reset_runtime):
     task = CanonicalTask()
     d = task.to_dict()
@@ -487,6 +508,7 @@ def test_U1_to_dict_contains_all_groups(reset_runtime):
 # ===========================================================================
 # V) Property accessors
 # ===========================================================================
+
 
 def test_V1_task_id_property(reset_runtime):
     task = CanonicalTask(identity=TaskIdentity(task_id="my_task"))
@@ -506,6 +528,7 @@ def test_V3_session_id_property(reset_runtime):
 # ===========================================================================
 # W) advance_lifecycle()
 # ===========================================================================
+
 
 def test_W1_advance_lifecycle_basic(reset_runtime):
     task = CanonicalTask()
@@ -528,6 +551,7 @@ def test_W3_advance_lifecycle_returns_self(reset_runtime):
 # ===========================================================================
 # X) advance_lifecycle() timestamps
 # ===========================================================================
+
 
 def test_X1_advance_lifecycle_stamps_admitted_at(reset_runtime):
     task = CanonicalTask()
@@ -554,6 +578,7 @@ def test_X3_advance_lifecycle_does_not_overwrite_existing_ts(reset_runtime):
 # Y) build_canonical_task()
 # ===========================================================================
 
+
 def test_Y1_build_canonical_task_basic(reset_runtime):
     task = build_canonical_task(goal="test", register=False)
     assert isinstance(task, CanonicalTask)
@@ -579,6 +604,7 @@ def test_Y4_build_canonical_task_targets(reset_runtime):
 # Z) build_canonical_task() unique IDs
 # ===========================================================================
 
+
 def test_Z1_unique_task_ids(reset_runtime):
     t1 = build_canonical_task(register=False)
     t2 = build_canonical_task(register=False)
@@ -595,6 +621,7 @@ def test_Z2_unique_trace_ids(reset_runtime):
 # AA) build_canonical_task registers by default
 # ===========================================================================
 
+
 def test_AA1_registers_by_default(reset_runtime):
     task = build_canonical_task()
     rt = get_canonical_task_runtime()
@@ -605,6 +632,7 @@ def test_AA1_registers_by_default(reset_runtime):
 # AB) build_canonical_task(register=False) skips registration
 # ===========================================================================
 
+
 def test_AB1_register_false_skips(reset_runtime):
     task = build_canonical_task(register=False)
     rt = get_canonical_task_runtime()
@@ -614,6 +642,7 @@ def test_AB1_register_false_skips(reset_runtime):
 # ===========================================================================
 # AC) CanonicalTaskRuntime.register() idempotent upsert
 # ===========================================================================
+
 
 def test_AC1_register_idempotent(reset_runtime):
     rt = get_canonical_task_runtime()
@@ -627,6 +656,7 @@ def test_AC1_register_idempotent(reset_runtime):
 # AD) CanonicalTaskRuntime.register() empty task_id raises ValueError
 # ===========================================================================
 
+
 def test_AD1_empty_task_id_raises(reset_runtime):
     rt = get_canonical_task_runtime()
     task = CanonicalTask(identity=TaskIdentity(task_id=""))
@@ -637,6 +667,7 @@ def test_AD1_empty_task_id_raises(reset_runtime):
 # ===========================================================================
 # AE) get_by_task_id()
 # ===========================================================================
+
 
 def test_AE1_get_by_task_id_found(reset_runtime):
     rt = get_canonical_task_runtime()
@@ -652,6 +683,7 @@ def test_AE2_get_by_task_id_not_found(reset_runtime):
 # ===========================================================================
 # AF) get_by_trace_id()
 # ===========================================================================
+
 
 def test_AF1_get_by_trace_id_found(reset_runtime):
     rt = get_canonical_task_runtime()
@@ -669,6 +701,7 @@ def test_AF2_get_by_trace_id_not_found(reset_runtime):
 # AG) update_lifecycle()
 # ===========================================================================
 
+
 def test_AG1_update_lifecycle_success(reset_runtime):
     rt = get_canonical_task_runtime()
     task = build_canonical_task()
@@ -681,6 +714,7 @@ def test_AG1_update_lifecycle_success(reset_runtime):
 # AH) update_lifecycle() unknown task_id
 # ===========================================================================
 
+
 def test_AH1_update_lifecycle_unknown_returns_none(reset_runtime):
     rt = get_canonical_task_runtime()
     result = rt.update_lifecycle("ghost_task", TaskLifecycle.RUNNING)
@@ -690,6 +724,7 @@ def test_AH1_update_lifecycle_unknown_returns_none(reset_runtime):
 # ===========================================================================
 # AI) get_observability_log()
 # ===========================================================================
+
 
 def test_AI1_observability_log_is_list(reset_runtime):
     rt = get_canonical_task_runtime()
@@ -707,6 +742,7 @@ def test_AI2_observability_log_contains_record(reset_runtime):
 # ===========================================================================
 # AJ) snapshot()
 # ===========================================================================
+
 
 def test_AJ1_snapshot_structure(reset_runtime):
     rt = get_canonical_task_runtime()
@@ -730,6 +766,7 @@ def test_AJ2_snapshot_to_dict(reset_runtime):
 # AK) get_canonical_task_runtime() singleton
 # ===========================================================================
 
+
 def test_AK1_singleton(reset_runtime):
     rt1 = get_canonical_task_runtime()
     rt2 = get_canonical_task_runtime()
@@ -739,6 +776,7 @@ def test_AK1_singleton(reset_runtime):
 # ===========================================================================
 # AL) reset_canonical_task_runtime()
 # ===========================================================================
+
 
 def test_AL1_reset_changes_singleton(reset_runtime):
     rt1 = get_canonical_task_runtime()
@@ -750,6 +788,7 @@ def test_AL1_reset_changes_singleton(reset_runtime):
 # ===========================================================================
 # AM–AP) project_to_task_envelope()
 # ===========================================================================
+
 
 def test_AM1_project_has_task_id(reset_runtime):
     task = build_canonical_task()
@@ -783,6 +822,7 @@ def test_AP1_project_targets_mapped(reset_runtime):
 # AQ–AT) apply_result_envelope()
 # ===========================================================================
 
+
 def test_AQ1_apply_result_success_lifecycle(reset_runtime):
     task = build_canonical_task()
     task = apply_result_envelope(task, {"success": True})
@@ -815,6 +855,7 @@ def test_AT1_apply_result_none_success_no_lifecycle_change(reset_runtime):
 # AU) CanonicalTaskRecord
 # ===========================================================================
 
+
 def test_AU1_record_to_dict_keys():
     rec = CanonicalTaskRecord(task_id="t1", trace_id="tr1")
     d = rec.to_dict()
@@ -825,6 +866,7 @@ def test_AU1_record_to_dict_keys():
 # ===========================================================================
 # AV) CanonicalTaskSnapshot
 # ===========================================================================
+
 
 def test_AV1_snapshot_to_dict_keys():
     snap = CanonicalTaskSnapshot()
@@ -837,6 +879,7 @@ def test_AV1_snapshot_to_dict_keys():
 # AW) __all__ completeness
 # ===========================================================================
 
+
 def test_AW1_all_exports_importable():
     for name in _mod.__all__:
         assert hasattr(_mod, name), f"{name} missing from module"
@@ -845,6 +888,7 @@ def test_AW1_all_exports_importable():
 # ===========================================================================
 # AX) allocation truth substrate
 # ===========================================================================
+
 
 def test_AX1_allocation_truth_contains_transition_history(reset_runtime):
     rt = get_canonical_task_runtime()

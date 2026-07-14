@@ -19,14 +19,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _reset_udm() -> None:
     """Reset the UnifiedDeviceManager singleton between tests."""
     from core.unified import device_manager as _udm_mod
+
     _udm_mod.UnifiedDeviceManager._instance = None
 
 
@@ -69,6 +70,7 @@ def _make_registration_message(device_id: str = "android_test_01", **overrides: 
 # 1. Registration writes to UDM
 # ---------------------------------------------------------------------------
 
+
 class TestRegistrationWritesToUDM:
     """Android device registration writes canonical state to UDM."""
 
@@ -79,8 +81,8 @@ class TestRegistrationWritesToUDM:
     @pytest.mark.asyncio
     async def test_registration_creates_device_in_udm(self):
         """After registration, UDM contains the device."""
-        from galaxy_gateway.android_bridge import AndroidBridge
         from core.unified.device_manager import UnifiedDeviceManager
+        from galaxy_gateway.android_bridge import AndroidBridge
 
         bridge = AndroidBridge()
         ws = _make_websocket()
@@ -96,8 +98,8 @@ class TestRegistrationWritesToUDM:
     @pytest.mark.asyncio
     async def test_registration_sets_source_android_bridge(self):
         """UDM device entry is tagged with source='android_bridge'."""
-        from galaxy_gateway.android_bridge import AndroidBridge
         from core.unified.device_manager import UnifiedDeviceManager
+        from galaxy_gateway.android_bridge import AndroidBridge
 
         bridge = AndroidBridge()
         ws = _make_websocket()
@@ -113,8 +115,8 @@ class TestRegistrationWritesToUDM:
     @pytest.mark.asyncio
     async def test_registration_persists_device_name(self):
         """UDM stores the human-readable device name from the registration payload."""
-        from galaxy_gateway.android_bridge import AndroidBridge
         from core.unified.device_manager import UnifiedDeviceManager
+        from galaxy_gateway.android_bridge import AndroidBridge
 
         bridge = AndroidBridge()
         ws = _make_websocket()
@@ -161,6 +163,7 @@ class TestRegistrationWritesToUDM:
 # 2. Re-registration preserves identity and updates mutable fields
 # ---------------------------------------------------------------------------
 
+
 class TestReRegistrationPreservesIdentity:
     """Repeated registration with same device_id must not create duplicate UDM entries."""
 
@@ -171,8 +174,8 @@ class TestReRegistrationPreservesIdentity:
     @pytest.mark.asyncio
     async def test_reregistration_does_not_duplicate_udm_entry(self):
         """UDM holds exactly one entry after two registrations with the same device_id."""
-        from galaxy_gateway.android_bridge import AndroidBridge
         from core.unified.device_manager import UnifiedDeviceManager
+        from galaxy_gateway.android_bridge import AndroidBridge
 
         bridge = AndroidBridge()
         ws = _make_websocket()
@@ -188,8 +191,8 @@ class TestReRegistrationPreservesIdentity:
     @pytest.mark.asyncio
     async def test_reregistration_updates_device_name(self):
         """Second registration with updated name is reflected in UDM."""
-        from galaxy_gateway.android_bridge import AndroidBridge
         from core.unified.device_manager import UnifiedDeviceManager
+        from galaxy_gateway.android_bridge import AndroidBridge
 
         bridge = AndroidBridge()
         ws = _make_websocket()
@@ -208,8 +211,8 @@ class TestReRegistrationPreservesIdentity:
     @pytest.mark.asyncio
     async def test_reregistration_preserves_registered_at(self):
         """registered_at timestamp is preserved from first registration (no identity drift)."""
-        from galaxy_gateway.android_bridge import AndroidBridge
         from core.unified.device_manager import UnifiedDeviceManager
+        from galaxy_gateway.android_bridge import AndroidBridge
 
         bridge = AndroidBridge()
         ws = _make_websocket()
@@ -223,6 +226,7 @@ class TestReRegistrationPreservesIdentity:
 
         # Short sleep to ensure timestamps differ if re-created.
         import asyncio
+
         await asyncio.sleep(0.05)
 
         await bridge._handle_device_register(ws, msg)
@@ -230,14 +234,13 @@ class TestReRegistrationPreservesIdentity:
         assert dev_second is not None, "Device must still exist in UDM after re-registration"
         second_registered_at = dev_second.registered_at
 
-        assert first_registered_at == second_registered_at, (
-            "registered_at must not change on re-registration"
-        )
+        assert first_registered_at == second_registered_at, "registered_at must not change on re-registration"
 
 
 # ---------------------------------------------------------------------------
 # 3. Heartbeat updates canonical runtime state / last_seen
 # ---------------------------------------------------------------------------
+
 
 class TestHeartbeatUpdatesUDM:
     """Heartbeat must patch UDM canonical state (last_heartbeat + keep ONLINE)."""
@@ -249,8 +252,8 @@ class TestHeartbeatUpdatesUDM:
     @pytest.mark.asyncio
     async def test_heartbeat_updates_last_heartbeat_in_udm(self):
         """UDM last_heartbeat is updated after heartbeat message."""
-        from galaxy_gateway.android_bridge import AndroidBridge
         from core.unified.device_manager import UnifiedDeviceManager
+        from galaxy_gateway.android_bridge import AndroidBridge
 
         bridge = AndroidBridge()
         ws = _make_websocket()
@@ -264,11 +267,14 @@ class TestHeartbeatUpdatesUDM:
         before = dev_before.last_heartbeat
 
         import asyncio
+
         await asyncio.sleep(0.05)
 
         hb_msg = {
-            "version": "3.0", "type": "device_heartbeat",
-            "message_id": "hb-msg-001", "device_id": "hb_01",
+            "version": "3.0",
+            "type": "device_heartbeat",
+            "message_id": "hb-msg-001",
+            "device_id": "hb_01",
             "timestamp": int(time.time() * 1000),
         }
         await bridge._handle_heartbeat(ws, hb_msg)
@@ -289,8 +295,10 @@ class TestHeartbeatUpdatesUDM:
         bridge = AndroidBridge()
         ws = _make_websocket()
         hb_msg = {
-            "version": "3.0", "type": "device_heartbeat",
-            "message_id": "hb-ack-001", "device_id": "hb_ack_01",
+            "version": "3.0",
+            "type": "device_heartbeat",
+            "message_id": "hb-ack-001",
+            "device_id": "hb_ack_01",
             "timestamp": int(time.time() * 1000),
         }
         response = await bridge._handle_heartbeat(ws, hb_msg)
@@ -300,9 +308,9 @@ class TestHeartbeatUpdatesUDM:
     @pytest.mark.asyncio
     async def test_heartbeat_keeps_device_online_in_udm(self):
         """UDM device status remains ONLINE after heartbeat."""
-        from galaxy_gateway.android_bridge import AndroidBridge
         from core.unified.device_manager import UnifiedDeviceManager
         from core.unified.models import UnifiedDeviceStatus
+        from galaxy_gateway.android_bridge import AndroidBridge
 
         bridge = AndroidBridge()
         ws = _make_websocket()
@@ -310,8 +318,10 @@ class TestHeartbeatUpdatesUDM:
         await bridge._handle_device_register(ws, _make_registration_message("hb_online_01"))
 
         hb_msg = {
-            "version": "3.0", "type": "device_heartbeat",
-            "message_id": "hb-online-001", "device_id": "hb_online_01",
+            "version": "3.0",
+            "type": "device_heartbeat",
+            "message_id": "hb-online-001",
+            "device_id": "hb_online_01",
             "timestamp": int(time.time() * 1000),
         }
         await bridge._handle_heartbeat(ws, hb_msg)
@@ -326,6 +336,7 @@ class TestHeartbeatUpdatesUDM:
 # 4. Disconnect updates canonical runtime state without deleting identity
 # ---------------------------------------------------------------------------
 
+
 class TestDisconnectUpdatesUDM:
     """Disconnect must mark device as DISCONNECTED in UDM without removing it."""
 
@@ -336,9 +347,9 @@ class TestDisconnectUpdatesUDM:
     @pytest.mark.asyncio
     async def test_disconnect_marks_device_disconnected_in_udm(self):
         """UDM device status becomes DISCONNECTED after disconnect_device()."""
-        from galaxy_gateway.android_bridge import AndroidBridge
         from core.unified.device_manager import UnifiedDeviceManager
         from core.unified.models import UnifiedDeviceStatus
+        from galaxy_gateway.android_bridge import AndroidBridge
 
         bridge = AndroidBridge()
         ws = _make_websocket()
@@ -357,8 +368,8 @@ class TestDisconnectUpdatesUDM:
     @pytest.mark.asyncio
     async def test_disconnect_preserves_device_identity_in_udm(self):
         """Canonical UDM entry still exists after disconnect (no identity deletion)."""
-        from galaxy_gateway.android_bridge import AndroidBridge
         from core.unified.device_manager import UnifiedDeviceManager
+        from galaxy_gateway.android_bridge import AndroidBridge
 
         bridge = AndroidBridge()
         ws = _make_websocket()
@@ -391,6 +402,7 @@ class TestDisconnectUpdatesUDM:
 # 5. Reconnect does not create duplicate identities
 # ---------------------------------------------------------------------------
 
+
 class TestReconnectNoDuplicate:
     """Reconnect must restore ONLINE state without creating duplicate UDM entries."""
 
@@ -401,9 +413,9 @@ class TestReconnectNoDuplicate:
     @pytest.mark.asyncio
     async def test_reconnect_after_disconnect_restores_online_status(self):
         """UDM status is ONLINE again after reconnect."""
-        from galaxy_gateway.android_bridge import AndroidBridge
         from core.unified.device_manager import UnifiedDeviceManager
         from core.unified.models import UnifiedDeviceStatus
+        from galaxy_gateway.android_bridge import AndroidBridge
 
         bridge = AndroidBridge()
         ws = _make_websocket()
@@ -416,14 +428,15 @@ class TestReconnectNoDuplicate:
         device = udm.get_device("rc_01")
         assert device is not None
         assert device.status in (
-            UnifiedDeviceStatus.ONLINE, UnifiedDeviceStatus.ONLINE.value,
+            UnifiedDeviceStatus.ONLINE,
+            UnifiedDeviceStatus.ONLINE.value,
         ), f"Expected ONLINE after reconnect, got {device.status}"
 
     @pytest.mark.asyncio
     async def test_reconnect_does_not_duplicate_udm_entry(self):
         """UDM still has exactly one entry after reconnect."""
-        from galaxy_gateway.android_bridge import AndroidBridge
         from core.unified.device_manager import UnifiedDeviceManager
+        from galaxy_gateway.android_bridge import AndroidBridge
 
         bridge = AndroidBridge()
         ws = _make_websocket()
@@ -464,6 +477,7 @@ class TestReconnectNoDuplicate:
 # ---------------------------------------------------------------------------
 # 6. DeviceRouter live session alignment
 # ---------------------------------------------------------------------------
+
 
 class TestAndroidBridgeSyncsDeviceRouter:
     """AndroidBridge lifecycle events must keep DeviceRouter live sessions aligned."""
@@ -551,6 +565,7 @@ class TestAndroidBridgeSyncsDeviceRouter:
 # 7. Android-originated state projects into RegisteredRuntimeDevice
 # ---------------------------------------------------------------------------
 
+
 class TestAndroidToRegisteredRuntimeDevice:
     """Android registration payload can be projected into canonical RegisteredRuntimeDevice."""
 
@@ -561,10 +576,10 @@ class TestAndroidToRegisteredRuntimeDevice:
     def test_from_android_registration_produces_valid_contract(self):
         """from_android_registration builds a valid RegisteredRuntimeDevice."""
         from contracts.registered_runtime_device import (
-            from_android_registration,
             RegisteredRuntimeDevice,
             RuntimeDevicePlatform,
             RuntimeDeviceStatus,
+            from_android_registration,
         )
 
         data = _make_registration_message("proj_01")
@@ -585,6 +600,7 @@ class TestAndroidToRegisteredRuntimeDevice:
     def test_from_android_registration_serialises_to_json(self):
         """Contract produced from Android data is JSON-serialisable."""
         import json
+
         from contracts.registered_runtime_device import from_android_registration
 
         data = _make_registration_message("proj_json_01")
@@ -596,12 +612,12 @@ class TestAndroidToRegisteredRuntimeDevice:
     @pytest.mark.asyncio
     async def test_udm_device_projects_into_registered_runtime_device(self):
         """After registration, UDM device can be projected into RegisteredRuntimeDevice."""
-        from galaxy_gateway.android_bridge import AndroidBridge
-        from core.unified.device_manager import UnifiedDeviceManager
         from contracts.registered_runtime_device import (
-            from_udm_device,
             RegisteredRuntimeDevice,
+            from_udm_device,
         )
+        from core.unified.device_manager import UnifiedDeviceManager
+        from galaxy_gateway.android_bridge import AndroidBridge
 
         bridge = AndroidBridge()
         ws = _make_websocket()
@@ -618,8 +634,8 @@ class TestAndroidToRegisteredRuntimeDevice:
 
     def test_from_android_registration_capabilities_bitmask_decoded(self):
         """Capability bitmask in Android registration is decoded to string list."""
-        from galaxy_gateway.android_bridge import DeviceCapability
         from contracts.registered_runtime_device import from_android_registration
+        from galaxy_gateway.android_bridge import DeviceCapability
 
         # Use a known bitmask
         bitmask = DeviceCapability.NETWORK | DeviceCapability.SENSOR_CAMERA
@@ -643,8 +659,8 @@ class TestAndroidToRegisteredRuntimeDevice:
     def test_from_android_registration_graceful_on_empty_payload(self):
         """from_android_registration degrades gracefully on a minimal payload."""
         from contracts.registered_runtime_device import (
-            from_android_registration,
             RegisteredRuntimeDevice,
+            from_android_registration,
         )
 
         # Only device_id provided — all else defaults.
@@ -657,6 +673,7 @@ class TestAndroidToRegisteredRuntimeDevice:
 # 8. UDM helper isolation tests (internal helpers)
 # ---------------------------------------------------------------------------
 
+
 class TestUDMHelpers:
     """Unit tests for the internal UDM write/patch helpers."""
 
@@ -666,8 +683,8 @@ class TestUDMHelpers:
 
     def test_write_registration_to_udm_creates_device(self):
         """_write_registration_to_udm creates a UDM entry for the device_id."""
-        from galaxy_gateway.android_bridge import AndroidBridge
         from core.unified.device_manager import UnifiedDeviceManager
+        from galaxy_gateway.android_bridge import AndroidBridge
 
         bridge = AndroidBridge()
         msg = _make_registration_message("helper_reg_01")
@@ -696,9 +713,7 @@ class TestUDMHelpers:
         from galaxy_gateway.android_bridge import AndroidBridge
 
         bridge = AndroidBridge()
-        with patch(
-            "core.android_device_state_store.invalidate_device_state_snapshot"
-        ) as invalidate_mock:
+        with patch("core.android_device_state_store.invalidate_device_state_snapshot") as invalidate_mock:
             bridge._patch_disconnect_to_udm("snapshot_dc_01")
         invalidate_mock.assert_called_once_with("snapshot_dc_01")
 
@@ -711,9 +726,9 @@ class TestUDMHelpers:
 
     def test_patch_runtime_state_to_udm_updates_registered_device(self):
         """_patch_runtime_state_to_udm updates state for an already-registered device."""
-        from galaxy_gateway.android_bridge import AndroidBridge
         from core.unified.device_manager import UnifiedDeviceManager
         from core.unified.models import UnifiedDeviceStatus
+        from galaxy_gateway.android_bridge import AndroidBridge
 
         bridge = AndroidBridge()
         msg = _make_registration_message("helper_patch_01")

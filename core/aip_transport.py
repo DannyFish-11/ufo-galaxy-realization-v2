@@ -45,18 +45,40 @@ logger = logging.getLogger("Galaxy.AIPTransport")
 
 # ───────────────────── 需求感知选路(按消息实际需要,而非一律静态优先级) ─────────────────────
 # 小而频、丢一两条无妨的控制/心跳类:低延迟优先,UDP 可以上位。
-_LOSS_TOLERANT_TYPES = frozenset({
-    "heartbeat", "heartbeat_ack", "ack", "state_event", "coord_sync",
-})
+_LOSS_TOLERANT_TYPES = frozenset(
+    {
+        "heartbeat",
+        "heartbeat_ack",
+        "ack",
+        "state_event",
+        "coord_sync",
+    }
+)
 # 必达的执行/生命周期类:只走有连接语义的可靠传输,UDP 不做候选。
-_RELIABLE_TYPES = frozenset({
-    "task_assign", "task_submit", "task_result", "task_cancel", "cancel_result",
-    "goal_execution", "goal_result", "goal_execution_result", "parallel_subtask",
-    "device_register", "device_unregister", "capability_report", "capability_query",
-    "takeover_request", "takeover_response",
-    "operator_action_request", "operator_action_result",
-    "delegated_execution_signal", "reconciliation_signal", "command_result",
-})
+_RELIABLE_TYPES = frozenset(
+    {
+        "task_assign",
+        "task_submit",
+        "task_result",
+        "task_cancel",
+        "cancel_result",
+        "goal_execution",
+        "goal_result",
+        "goal_execution_result",
+        "parallel_subtask",
+        "device_register",
+        "device_unregister",
+        "capability_report",
+        "capability_query",
+        "takeover_request",
+        "takeover_response",
+        "operator_action_request",
+        "operator_action_result",
+        "delegated_execution_signal",
+        "reconciliation_signal",
+        "command_result",
+    }
+)
 # 大载荷阈值:超过后窄带传输(BLE/串口/UDP/CAN/DBus)不做候选(MTU/速率不现实)。
 _NARROWBAND = frozenset({"ble", "serial", "udp", "canbus", "dbus"})
 
@@ -108,13 +130,13 @@ class AIPTransport:
         # 传输优先级（用于自动选择）
         # PR-28: tailscale_p2p 排在首位 — 同 tailnet 设备直接走 WireGuard
         self._transport_priority = [
-            "tailscale_p2p",   # Tailscale WireGuard P2P（最低延迟）
-            "tcp",              # LAN TCP 直连
-            "websocket",        # WebSocket 兜底
-            "mqtt",             # MQTT 广播/订阅
-            "udp",              # UDP 报文
-            "ble",              # 蓝牙 LE
-            "serial",           # 串口
+            "tailscale_p2p",  # Tailscale WireGuard P2P（最低延迟）
+            "tcp",  # LAN TCP 直连
+            "websocket",  # WebSocket 兜底
+            "mqtt",  # MQTT 广播/订阅
+            "udp",  # UDP 报文
+            "ble",  # 蓝牙 LE
+            "serial",  # 串口
         ]
         # 链路历史:(transport, target) → 尝试/成功/EWMA 延迟。由 _send_with_fallback
         # 的真实发送结果喂入,反哺后续候选排序(表现差的链路下沉,好的上浮)。
@@ -143,16 +165,12 @@ class AIPTransport:
         """记一次真实发送结果进链路统计。全程防御,绝不影响发送主流程。"""
         try:
             key = (ttype, target)
-            s = self._link_stats.setdefault(
-                key, {"attempts": 0.0, "successes": 0.0, "ewma_latency_ms": 0.0}
-            )
+            s = self._link_stats.setdefault(key, {"attempts": 0.0, "successes": 0.0, "ewma_latency_ms": 0.0})
             s["attempts"] += 1
             if ok:
                 s["successes"] += 1
                 prev = s["ewma_latency_ms"]
-                s["ewma_latency_ms"] = (
-                    latency_ms if prev <= 0 else (0.7 * prev + 0.3 * latency_ms)
-                )
+                s["ewma_latency_ms"] = latency_ms if prev <= 0 else (0.7 * prev + 0.3 * latency_ms)
             if len(self._link_stats) > 2048:  # 有界,防长期运行膨胀
                 self._link_stats.pop(next(iter(self._link_stats)))
         except Exception:  # noqa: BLE001
@@ -167,9 +185,7 @@ class AIPTransport:
         lat_pen = min(1.0, (s["ewma_latency_ms"] or 0.0) / 2000.0) * 0.2
         return success_rate - lat_pen
 
-    def _candidate_order(
-        self, target: str, needs: Optional[Dict[str, Any]] = None
-    ) -> List[str]:
+    def _candidate_order(self, target: str, needs: Optional[Dict[str, Any]] = None) -> List[str]:
         """按【消息实际需要】过滤 + 按【链路历史】重排候选传输。
 
         - bulk 大载荷:剔除窄带(BLE/串口/UDP/CAN/DBus);
@@ -191,9 +207,11 @@ class AIPTransport:
                 idx = order.index("tcp") + 1 if "tcp" in order else 1
                 order.insert(idx, "udp")
             if needs.get("priority") in ("critical", "high"):
+
                 def _known_bad(t: str) -> bool:
                     sc = self._link_score(t, target)
                     return sc is not None and sc < 0.34
+
                 kept = [t for t in order if not _known_bad(t)]
                 if kept:
                     order = kept
@@ -212,13 +230,16 @@ class AIPTransport:
         out: List[Dict[str, Any]] = []
         for (ttype, target), s in self._link_stats.items():
             n = s["attempts"] or 1
-            out.append({
-                "transport": ttype, "target": target,
-                "attempts": int(s["attempts"]),
-                "success_rate": round(s["successes"] / n, 4),
-                "ewma_latency_ms": round(s["ewma_latency_ms"], 1),
-                "score": self._link_score(ttype, target),
-            })
+            out.append(
+                {
+                    "transport": ttype,
+                    "target": target,
+                    "attempts": int(s["attempts"]),
+                    "success_rate": round(s["successes"] / n, 4),
+                    "ewma_latency_ms": round(s["ewma_latency_ms"], 1),
+                    "score": self._link_score(ttype, target),
+                }
+            )
         out.sort(key=lambda d: (-(d["score"] if d["score"] is not None else 0.5)))
         return out
 
@@ -350,7 +371,8 @@ class AIPTransport:
                 if adapter and await adapter.is_available(target):
                     logger.debug(
                         "Auto-selected '%s' for target '%s' (via topology)",
-                        recommended_transport, target,
+                        recommended_transport,
+                        target,
                     )
                     return adapter
             # Topology 无法推荐或推荐的不通 — 按【需求过滤+历史重排】后的候选逐个探测
@@ -371,7 +393,8 @@ class AIPTransport:
             if ts_adapter is not None and await ts_adapter.is_available(target):
                 logger.debug(
                     "Tailscale P2P available for '%s', overriding preferred '%s'",
-                    target, preferred,
+                    target,
+                    preferred,
                 )
                 return ts_adapter
 
@@ -401,6 +424,7 @@ class AIPTransport:
         """Use NetworkTopologyRuntime to assess best path. Returns transport type."""
         try:
             from core.network_topology_runtime import get_network_topology_runtime
+
             topo = get_network_topology_runtime()
             # Need a source device ID — use my position
             source = topo._my_device_id or "server"
@@ -448,7 +472,10 @@ class AIPTransport:
                     if len(attempted) > 1:
                         logger.info(
                             "PR-28 fallback success: %s → %s for %s (tried: %s)",
-                            first_ttype, ttype, target, attempted,
+                            first_ttype,
+                            ttype,
+                            target,
+                            attempted,
                         )
                     return result
                 # Adapter returned success=False — record reason and try next
@@ -461,7 +488,9 @@ class AIPTransport:
 
         # All failed
         logger.warning(
-            "PR-28 all transports failed for %s: %s", target, errors,
+            "PR-28 all transports failed for %s: %s",
+            target,
+            errors,
         )
         return {
             "success": False,
@@ -486,6 +515,7 @@ class AIPTransport:
             return message.dict()
         if isinstance(message, str):
             import json
+
             return json.loads(message)
         raise ValueError(f"Unsupported message type: {type(message)}")
 

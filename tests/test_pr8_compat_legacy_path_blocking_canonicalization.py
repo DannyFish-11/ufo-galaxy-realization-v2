@@ -56,7 +56,6 @@ import pytest
 
 import core.compat_legacy_path_blocking_canonicalization as _blocking_mod
 
-
 # ===========================================================================
 # Fixtures
 # ===========================================================================
@@ -80,9 +79,7 @@ class TestModuleSentinels:
         import core.compat_legacy_path_blocking_canonicalization  # noqa: F401
 
     def test_authority_sentinel_non_empty(self):
-        assert isinstance(
-            _blocking_mod.COMPAT_LEGACY_BLOCKING_CANONICALIZATION_AUTHORITY, str
-        )
+        assert isinstance(_blocking_mod.COMPAT_LEGACY_BLOCKING_CANONICALIZATION_AUTHORITY, str)
         assert len(_blocking_mod.COMPAT_LEGACY_BLOCKING_CANONICALIZATION_AUTHORITY) > 0
         assert "PR-8" in _blocking_mod.COMPAT_LEGACY_BLOCKING_CANONICALIZATION_AUTHORITY
 
@@ -135,16 +132,27 @@ class TestCompatLegacyBlockingDecision:
         assert d.canonical_path_confirmed.value == "canonical_path_confirmed"
 
     def test_has_allow_for_observation_only(self):
-        assert _blocking_mod.CompatLegacyBlockingDecision.allow_for_observation_only.value == "allow_for_observation_only"
+        assert (
+            _blocking_mod.CompatLegacyBlockingDecision.allow_for_observation_only.value == "allow_for_observation_only"
+        )
 
     def test_has_block_due_to_legacy_dispatch(self):
-        assert _blocking_mod.CompatLegacyBlockingDecision.block_due_to_legacy_dispatch.value == "block_due_to_legacy_dispatch"
+        assert (
+            _blocking_mod.CompatLegacyBlockingDecision.block_due_to_legacy_dispatch.value
+            == "block_due_to_legacy_dispatch"
+        )
 
     def test_has_block_due_to_compat_truth_influence(self):
-        assert _blocking_mod.CompatLegacyBlockingDecision.block_due_to_compat_truth_influence.value == "block_due_to_compat_truth_influence"
+        assert (
+            _blocking_mod.CompatLegacyBlockingDecision.block_due_to_compat_truth_influence.value
+            == "block_due_to_compat_truth_influence"
+        )
 
     def test_has_quarantine_due_to_ambiguous_contract(self):
-        assert _blocking_mod.CompatLegacyBlockingDecision.quarantine_due_to_ambiguous_contract.value == "quarantine_due_to_ambiguous_contract"
+        assert (
+            _blocking_mod.CompatLegacyBlockingDecision.quarantine_due_to_ambiguous_contract.value
+            == "quarantine_due_to_ambiguous_contract"
+        )
 
     def test_five_members(self):
         assert len(_blocking_mod.CompatLegacyBlockingDecision) == 5
@@ -217,9 +225,17 @@ class TestCompatLegacyBlockingRecord:
         )
         d = r.to_dict()
         required_keys = {
-            "record_id", "decision", "outcome", "path_kind",
-            "calling_site", "compat_path", "canonical_path",
-            "rationale", "influence_id", "operator_note", "timestamp",
+            "record_id",
+            "decision",
+            "outcome",
+            "path_kind",
+            "calling_site",
+            "compat_path",
+            "canonical_path",
+            "rationale",
+            "influence_id",
+            "operator_note",
+            "timestamp",
         }
         assert required_keys.issubset(d.keys())
 
@@ -239,25 +255,19 @@ class TestCompatLegacyBlockingRecord:
 
 class TestBlockingRecordProperties:
     def test_is_blocked_true(self):
-        r = _blocking_mod.CompatLegacyBlockingRecord(
-            outcome=_blocking_mod.CompatLegacyBlockingOutcome.blocked
-        )
+        r = _blocking_mod.CompatLegacyBlockingRecord(outcome=_blocking_mod.CompatLegacyBlockingOutcome.blocked)
         assert r.is_blocked is True
         assert r.is_quarantined is False
         assert r.is_allowed is False
 
     def test_is_quarantined_true(self):
-        r = _blocking_mod.CompatLegacyBlockingRecord(
-            outcome=_blocking_mod.CompatLegacyBlockingOutcome.quarantined
-        )
+        r = _blocking_mod.CompatLegacyBlockingRecord(outcome=_blocking_mod.CompatLegacyBlockingOutcome.quarantined)
         assert r.is_quarantined is True
         assert r.is_blocked is False
         assert r.is_allowed is False
 
     def test_is_allowed_true(self):
-        r = _blocking_mod.CompatLegacyBlockingRecord(
-            outcome=_blocking_mod.CompatLegacyBlockingOutcome.allowed
-        )
+        r = _blocking_mod.CompatLegacyBlockingRecord(outcome=_blocking_mod.CompatLegacyBlockingOutcome.allowed)
         assert r.is_allowed is True
         assert r.is_blocked is False
         assert r.is_quarantined is False
@@ -542,27 +552,37 @@ class TestSnapshot:
         e = _blocking_mod.CompatLegacyPathBlockingEnforcer()
         # 1 canonical, 1 observation allow, 1 block_dispatch, 1 block_truth, 1 quarantine
         e.evaluate(
-            calling_site="s1", compat_path="l", canonical_path="c",
+            calling_site="s1",
+            compat_path="l",
+            canonical_path="c",
             path_kind=_blocking_mod.CompatLegacyPathKind.legacy_dispatch,
             compat_influence_active=False,
         )
         e.evaluate(
-            calling_site="s2", compat_path="core.runtime_closure_audit", canonical_path="c",
+            calling_site="s2",
+            compat_path="core.runtime_closure_audit",
+            canonical_path="c",
             path_kind=_blocking_mod.CompatLegacyPathKind.observation_candidate,
             compat_influence_active=True,
         )
         e.evaluate(
-            calling_site="s3", compat_path="l", canonical_path="c",
+            calling_site="s3",
+            compat_path="l",
+            canonical_path="c",
             path_kind=_blocking_mod.CompatLegacyPathKind.legacy_dispatch,
             compat_influence_active=True,
         )
         e.evaluate(
-            calling_site="s4", compat_path="l", canonical_path="c",
+            calling_site="s4",
+            compat_path="l",
+            canonical_path="c",
             path_kind=_blocking_mod.CompatLegacyPathKind.compat_truth,
             compat_influence_active=True,
         )
         e.evaluate(
-            calling_site="s5", compat_path="unlisted.module", canonical_path="c",
+            calling_site="s5",
+            compat_path="unlisted.module",
+            canonical_path="c",
             path_kind=_blocking_mod.CompatLegacyPathKind.observation_candidate,
             compat_influence_active=True,
         )
@@ -581,7 +601,9 @@ class TestSnapshot:
     def test_Y_unhealthy_when_quarantine(self):
         e = _blocking_mod.CompatLegacyPathBlockingEnforcer()
         e.evaluate(
-            calling_site="s1", compat_path="unlisted.module", canonical_path="c",
+            calling_site="s1",
+            compat_path="unlisted.module",
+            canonical_path="c",
             path_kind=_blocking_mod.CompatLegacyPathKind.observation_candidate,
             compat_influence_active=True,
         )
@@ -604,6 +626,7 @@ class TestCompatFallbackAuthorityGuardPr8:
         from core.compat_fallback_authority_guard import (
             COMPAT_FALLBACK_AUTHORITY_GUARD_PR8_SENTINEL,
         )
+
         assert isinstance(COMPAT_FALLBACK_AUTHORITY_GUARD_PR8_SENTINEL, str)
         assert "PR8" in COMPAT_FALLBACK_AUTHORITY_GUARD_PR8_SENTINEL
 
@@ -611,6 +634,7 @@ class TestCompatFallbackAuthorityGuardPr8:
         from core.compat_fallback_authority_guard import (
             BLOCKING_FIRST_ENFORCEMENT_ACTIVE_POLICY,
         )
+
         assert isinstance(BLOCKING_FIRST_ENFORCEMENT_ACTIVE_POLICY, str)
         assert "blocking" in BLOCKING_FIRST_ENFORCEMENT_ACTIVE_POLICY.lower()
 
@@ -618,6 +642,7 @@ class TestCompatFallbackAuthorityGuardPr8:
         from core.compat_fallback_authority_guard import (
             block_compat_influence_at_decision_site,
         )
+
         record = block_compat_influence_at_decision_site(
             "INFL-011",
             calling_site="test.truth_ingress",
@@ -635,6 +660,7 @@ class TestCompatFallbackAuthorityGuardPr8:
         from core.compat_fallback_authority_guard import (
             block_compat_influence_at_decision_site,
         )
+
         record = block_compat_influence_at_decision_site(
             "INFL-011",
             calling_site="test.truth",
@@ -650,6 +676,7 @@ class TestCompatFallbackAuthorityGuardPr8:
         from core.compat_fallback_authority_guard import (
             block_compat_influence_at_decision_site,
         )
+
         record = block_compat_influence_at_decision_site(
             "INFL-001",
             calling_site="test.clean",
@@ -671,6 +698,7 @@ class TestLegacyDispatchRegistryPr8:
     @pytest.fixture(autouse=True)
     def reset_registry(self):
         from core.legacy_dispatch_registry import reset_registry
+
         reset_registry()
         yield
         reset_registry()
@@ -679,6 +707,7 @@ class TestLegacyDispatchRegistryPr8:
         from core.legacy_dispatch_registry import (
             LEGACY_DISPATCH_REGISTRY_PR8_SENTINEL,
         )
+
         assert isinstance(LEGACY_DISPATCH_REGISTRY_PR8_SENTINEL, str)
         assert "PR8" in LEGACY_DISPATCH_REGISTRY_PR8_SENTINEL
 
@@ -686,11 +715,13 @@ class TestLegacyDispatchRegistryPr8:
         from core.legacy_dispatch_registry import (
             LEGACY_DISPATCH_BLOCKING_FIRST_ENFORCEMENT_POLICY,
         )
+
         assert isinstance(LEGACY_DISPATCH_BLOCKING_FIRST_ENFORCEMENT_POLICY, str)
         assert "blocking" in LEGACY_DISPATCH_BLOCKING_FIRST_ENFORCEMENT_POLICY.lower()
 
     def test_AE_check_dispatch_blocked_registered_module(self):
         from core.legacy_dispatch_registry import check_dispatch_blocked
+
         record = check_dispatch_blocked(
             "galaxy_gateway.task_router",
             calling_site="test.dispatch_gate",
@@ -702,6 +733,7 @@ class TestLegacyDispatchRegistryPr8:
 
     def test_AF_check_dispatch_blocked_unregistered_module(self):
         from core.legacy_dispatch_registry import check_dispatch_blocked
+
         record = check_dispatch_blocked(
             "some.completely.unknown.module",
             calling_site="test.unknown_gate",
@@ -712,6 +744,7 @@ class TestLegacyDispatchRegistryPr8:
 
     def test_AG_check_dispatch_blocked_raises_on_block(self):
         from core.legacy_dispatch_registry import check_dispatch_blocked
+
         with pytest.raises(_blocking_mod.CompatLegacyBlockingError):
             check_dispatch_blocked(
                 "galaxy_gateway.task_router",
@@ -760,6 +793,7 @@ class TestAllCompleteness:
 class TestInfluenceRegistryPR8Records:
     def _registry(self):
         from core.compat_fallback_authority_guard import get_influence_registry
+
         return get_influence_registry()
 
     def test_AI_infl_011_present(self):
@@ -776,45 +810,51 @@ class TestInfluenceRegistryPR8Records:
 
     def test_AJ_infl_011_explicitly_bounded(self):
         from core.compat_fallback_authority_guard import (
-            get_influence_record,
             CompatInfluenceBoundingStatus,
+            get_influence_record,
         )
+
         r = get_influence_record("INFL-011")
         assert r is not None
         assert r.bounding_status == CompatInfluenceBoundingStatus.EXPLICITLY_BOUNDED
 
     def test_AJ_infl_012_explicitly_bounded(self):
         from core.compat_fallback_authority_guard import (
-            get_influence_record,
             CompatInfluenceBoundingStatus,
+            get_influence_record,
         )
+
         r = get_influence_record("INFL-012")
         assert r is not None
         assert r.bounding_status == CompatInfluenceBoundingStatus.EXPLICITLY_BOUNDED
 
     def test_AJ_infl_013_explicitly_bounded(self):
         from core.compat_fallback_authority_guard import (
-            get_influence_record,
             CompatInfluenceBoundingStatus,
+            get_influence_record,
         )
+
         r = get_influence_record("INFL-013")
         assert r is not None
         assert r.bounding_status == CompatInfluenceBoundingStatus.EXPLICITLY_BOUNDED
 
     def test_AK_infl_011_pr8(self):
         from core.compat_fallback_authority_guard import get_influence_record
+
         r = get_influence_record("INFL-011")
         assert r is not None
         assert "PR-8" in r.pr_addressed
 
     def test_AK_infl_012_pr8(self):
         from core.compat_fallback_authority_guard import get_influence_record
+
         r = get_influence_record("INFL-012")
         assert r is not None
         assert "PR-8" in r.pr_addressed
 
     def test_AK_infl_013_pr8(self):
         from core.compat_fallback_authority_guard import get_influence_record
+
         r = get_influence_record("INFL-013")
         assert r is not None
         assert "PR-8" in r.pr_addressed

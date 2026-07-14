@@ -38,10 +38,10 @@ from core.unified.capability_resolver import (
     reset_capability_resolver,
 )
 
-
 # ===========================================================================
 # A) CapabilityContract schema validation — required fields
 # ===========================================================================
+
 
 class TestCapabilityContractRequiredFields:
 
@@ -83,6 +83,7 @@ class TestCapabilityContractRequiredFields:
 # ===========================================================================
 # B) CapabilityContract validation — parameters schema
 # ===========================================================================
+
 
 class TestCapabilityContractParameters:
 
@@ -128,15 +129,14 @@ class TestCapabilityContractParameters:
 # C) CapabilityResolver returns only validated contracts
 # ===========================================================================
 
+
 class TestCapabilityResolver:
 
     def _make_resolver(self, items: list) -> CapabilityResolver:
         """Build a resolver backed by a stub registry."""
         registry = MagicMock()
         registry.list_tools.return_value = items
-        registry.get.side_effect = lambda name: next(
-            (i for i in items if getattr(i, "name", None) == name), None
-        )
+        registry.get.side_effect = lambda name: next((i for i in items if getattr(i, "name", None) == name), None)
         resolver = CapabilityResolver(registry=registry, cache_ttl_seconds=0)
         return resolver
 
@@ -196,6 +196,7 @@ class TestCapabilityResolver:
 # D) CapabilityResolver.find() keyword search
 # ===========================================================================
 
+
 class TestCapabilityResolverFind:
 
     def _make_resolver_with_items(self) -> CapabilityResolver:
@@ -230,9 +231,7 @@ class TestCapabilityResolverFind:
         ]
         registry = MagicMock()
         registry.list_tools.return_value = items
-        registry.get.side_effect = lambda name: next(
-            (i for i in items if i.name == name), None
-        )
+        registry.get.side_effect = lambda name: next((i for i in items if i.name == name), None)
         return CapabilityResolver(registry=registry, cache_ttl_seconds=0)
 
     def test_find_by_name_keyword(self):
@@ -260,11 +259,13 @@ class TestCapabilityResolverFind:
 # E) CapabilityRegistry.register() validates via unified contract
 # ===========================================================================
 
+
 class TestCapabilityRegistryRegisterValidation:
 
     def _fresh_registry(self):
         """Return a fresh CapabilityRegistry instance for testing."""
         from core.agent.capability_registry import CapabilityRegistry
+
         reg = CapabilityRegistry.__new__(CapabilityRegistry)
         reg._initialized = False
         reg.__init__()
@@ -272,34 +273,32 @@ class TestCapabilityRegistryRegisterValidation:
 
     def test_valid_item_is_registered(self):
         from core.agent.capability_registry import CapabilityItem
+
         reg = self._fresh_registry()
-        item = CapabilityItem(
-            name="valid_cap", description="A valid capability.", source="mcp", source_id="s1"
-        )
+        item = CapabilityItem(name="valid_cap", description="A valid capability.", source="mcp", source_id="s1")
         reg.register(item)
         assert reg.get("valid_cap") is not None
 
     def test_item_with_empty_name_is_rejected(self):
         from core.agent.capability_registry import CapabilityItem
+
         reg = self._fresh_registry()
-        item = CapabilityItem(
-            name="", description="desc", source="mcp", source_id="s1"
-        )
+        item = CapabilityItem(name="", description="desc", source="mcp", source_id="s1")
         reg.register(item)
         # Should not be registered
         assert reg.get("") is None
 
     def test_item_with_empty_description_is_rejected(self):
         from core.agent.capability_registry import CapabilityItem
+
         reg = self._fresh_registry()
-        item = CapabilityItem(
-            name="some_cap", description="", source="mcp", source_id="s1"
-        )
+        item = CapabilityItem(name="some_cap", description="", source="mcp", source_id="s1")
         reg.register(item)
         assert reg.get("some_cap") is None
 
     def test_validation_error_recorded_on_rejection(self):
         from core.agent.capability_registry import CapabilityItem
+
         reg = self._fresh_registry()
         item = CapabilityItem(name="", description="", source="mcp", source_id="s1")
         reg.register(item)
@@ -311,10 +310,12 @@ class TestCapabilityRegistryRegisterValidation:
 # F) CapabilityRegistry.inject_mcp_tool() validates via unified contract
 # ===========================================================================
 
+
 class TestCapabilityRegistryInjectMCPTool:
 
     def _fresh_registry(self):
         from core.agent.capability_registry import CapabilityRegistry
+
         reg = CapabilityRegistry.__new__(CapabilityRegistry)
         reg._initialized = False
         reg.__init__()
@@ -351,10 +352,12 @@ class TestCapabilityRegistryInjectMCPTool:
 # G) CapabilityRegistry.inject_skill() validates via unified contract
 # ===========================================================================
 
+
 class TestCapabilityRegistryInjectSkill:
 
     def _fresh_registry(self):
         from core.agent.capability_registry import CapabilityRegistry
+
         reg = CapabilityRegistry.__new__(CapabilityRegistry)
         reg._initialized = False
         reg.__init__()
@@ -384,6 +387,7 @@ class TestCapabilityRegistryInjectSkill:
         # The cleanest way to test contract rejection is to register an item
         # directly with an empty description.
         from core.agent.capability_registry import CapabilityItem
+
         item = CapabilityItem(
             name="empty_desc_skill",
             description="",
@@ -397,6 +401,7 @@ class TestCapabilityRegistryInjectSkill:
 # ===========================================================================
 # H) Multi-device tasks route through TaskGraph — no bypass path
 # ===========================================================================
+
 
 class TestMultiDeviceTaskGraphRouting:
 
@@ -415,12 +420,18 @@ class TestMultiDeviceTaskGraphRouting:
 
         dag_calls = []
 
-        async def _mock_dag(subtasks, *, trace_id="", runtime_session_id="",
-                            continue_on_failure=True, context=None):
+        async def _mock_dag(subtasks, *, trace_id="", runtime_session_id="", continue_on_failure=True, context=None):
             dag_calls.append({"subtasks": subtasks, "trace_id": trace_id})
-            return {"success": True, "done": len(subtasks), "failed": 0, "skipped": 0,
-                    "elapsed_ms": 1.0, "graph_id": "g1", "trace_id": trace_id,
-                    "node_statuses": {}}
+            return {
+                "success": True,
+                "done": len(subtasks),
+                "failed": 0,
+                "skipped": 0,
+                "elapsed_ms": 1.0,
+                "graph_id": "g1",
+                "trace_id": trace_id,
+                "node_statuses": {},
+            }
 
         orch.submit_dag_task = _mock_dag
 
@@ -445,9 +456,7 @@ class TestMultiDeviceTaskGraphRouting:
         orch._device_rr_index = -1
         orch._task_envelopes = {}
 
-        result = await orch.submit_multi_device_task(
-            user_request="task", device_ids=[], trace_id="t"
-        )
+        result = await orch.submit_multi_device_task(user_request="task", device_ids=[], trace_id="t")
         assert result["success"] is True
         assert result["done"] == 0
 
@@ -456,11 +465,13 @@ class TestMultiDeviceTaskGraphRouting:
 # I) run_multi_device_via_task_graph returns canonical result dict
 # ===========================================================================
 
+
 class TestRunMultiDeviceViaTaskGraph:
 
     @pytest.mark.asyncio
     async def test_empty_subtasks_returns_success(self):
         from core.e2e_orchestrator import run_multi_device_via_task_graph
+
         result = await run_multi_device_via_task_graph([])
         assert result["success"] is True
         assert result["done"] == 0
@@ -468,14 +479,15 @@ class TestRunMultiDeviceViaTaskGraph:
     @pytest.mark.asyncio
     async def test_result_contains_canonical_fields(self):
         from core.e2e_orchestrator import run_multi_device_via_task_graph
+
         result = await run_multi_device_via_task_graph([])
-        for field in ("success", "done", "failed", "skipped", "elapsed_ms",
-                      "graph_id", "trace_id", "node_statuses"):
+        for field in ("success", "done", "failed", "skipped", "elapsed_ms", "graph_id", "trace_id", "node_statuses"):
             assert field in result, f"result must contain '{field}'"
 
     @pytest.mark.asyncio
     async def test_trace_id_propagated(self):
         from core.e2e_orchestrator import run_multi_device_via_task_graph
+
         result = await run_multi_device_via_task_graph([], trace_id="trace-propagated-01")
         assert result["trace_id"] == "trace-propagated-01"
 
@@ -483,6 +495,7 @@ class TestRunMultiDeviceViaTaskGraph:
 # ===========================================================================
 # J) CapabilityContract to_dict / from_dict round-trip
 # ===========================================================================
+
 
 class TestCapabilityContractSerialisation:
 
@@ -497,8 +510,18 @@ class TestCapabilityContractSerialisation:
             tags=["ui"],
         )
         d = contract.to_dict()
-        for field in ("contract_id", "name", "description", "source", "source_id",
-                      "version", "parameters", "available", "tags", "metadata"):
+        for field in (
+            "contract_id",
+            "name",
+            "description",
+            "source",
+            "source_id",
+            "version",
+            "parameters",
+            "available",
+            "tags",
+            "metadata",
+        ):
             assert field in d
 
     def test_from_dict_round_trip(self):

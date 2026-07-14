@@ -51,7 +51,6 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # AIP v3 helpers
 # ---------------------------------------------------------------------------
@@ -107,9 +106,7 @@ class AndroidRuntimeSimulator:
         supported_actions: Optional[List[str]] = None,
     ) -> None:
         self.device_id = device_id
-        self.supported_actions = supported_actions or [
-            "tap", "swipe", "screenshot", "input_text"
-        ]
+        self.supported_actions = supported_actions or ["tap", "swipe", "screenshot", "input_text"]
         self.ws = _make_ws()
         self._sent_messages: List[Dict[str, Any]] = []
         self._received_messages: List[Dict[str, Any]] = []
@@ -207,6 +204,7 @@ class AndroidRuntimeSimulator:
 @pytest.fixture()
 def bridge():
     from galaxy_gateway.android_bridge import AndroidBridge
+
     return AndroidBridge()
 
 
@@ -215,6 +213,7 @@ def gw_client():
     """Minimal FastAPI app backed by the production Android WS handler."""
     from fastapi import FastAPI, WebSocket
     from fastapi.testclient import TestClient
+
     from galaxy_gateway.routes.websocket import _handle_android_ws
 
     app = FastAPI()
@@ -266,26 +265,24 @@ class TestCanonicalSixStepSequence:
 
         # --- Step 1: register ---
         reg_ack = await simulator.connect_and_register(bridge)
-        assert reg_ack.get("type") == "device_register_ack", (
-            f"Step 1 FAILED: expected device_register_ack, got {reg_ack.get('type')!r}"
-        )
+        assert (
+            reg_ack.get("type") == "device_register_ack"
+        ), f"Step 1 FAILED: expected device_register_ack, got {reg_ack.get('type')!r}"
         assert reg_ack.get("success") is True, "Step 1 FAILED: success should be True"
         assert reg_ack.get("device_id") == device_id, "Step 1 FAILED: device_id mismatch"
         assert reg_ack.get("version") == "3.0", "Step 1 FAILED: AIP v3 version mismatch"
 
         # --- Step 2: capability_report ---
         cap_ack = await simulator.report_capabilities(bridge)
-        assert cap_ack.get("type") == "capability_report_ack", (
-            f"Step 2 FAILED: expected capability_report_ack, got {cap_ack.get('type')!r}"
-        )
+        assert (
+            cap_ack.get("type") == "capability_report_ack"
+        ), f"Step 2 FAILED: expected capability_report_ack, got {cap_ack.get('type')!r}"
         assert cap_ack.get("accepted") is True, "Step 2 FAILED: capabilities not accepted"
         # Verify capabilities persisted
         device = bridge.get_device(device_id)
         assert device is not None, "Step 2 FAILED: device not found in bridge after capability_report"
         for cap in caps:
-            assert cap in device.supported_actions, (
-                f"Step 2 FAILED: capability '{cap}' not persisted"
-            )
+            assert cap in device.supported_actions, f"Step 2 FAILED: capability '{cap}' not persisted"
 
         # --- Step 3 + 4 + 5 + 6: task_assign → execution → task_result → waiter resolution ---
         task_assign_msg = {
@@ -300,9 +297,7 @@ class TestCanonicalSixStepSequence:
         execution_output = {"image_base64": "abc123_real_screenshot"}
 
         async def dispatch_and_wait() -> Optional[Dict[str, Any]]:
-            return await bridge.send_to_device(
-                device_id, task_assign_msg, wait_response=True, timeout=5.0
-            )
+            return await bridge.send_to_device(device_id, task_assign_msg, wait_response=True, timeout=5.0)
 
         # Step 3: V2 dispatches task_assign (installs Future in bridge)
         dispatch_task = asyncio.ensure_future(dispatch_and_wait())
@@ -310,9 +305,7 @@ class TestCanonicalSixStepSequence:
 
         # Step 4: Android "executes" (runtime simulation)
         # Step 5: Android sends task_result → bridge processes → Future resolved
-        await simulator.execute_task(
-            bridge, task_id, command="screenshot", result_data=execution_output
-        )
+        await simulator.execute_task(bridge, task_id, command="screenshot", result_data=execution_output)
 
         # Step 6: Waiter is unblocked — continuation / waiter resolution
         result = await asyncio.wait_for(dispatch_task, timeout=5.0)
@@ -353,18 +346,14 @@ class TestCanonicalSixStepSequence:
             }
 
             async def _dispatch(tid=task_id, msg=task_assign_msg):
-                return await bridge.send_to_device(
-                    device_id, msg, wait_response=True, timeout=5.0
-                )
+                return await bridge.send_to_device(device_id, msg, wait_response=True, timeout=5.0)
 
             dispatch_task = asyncio.ensure_future(_dispatch())
             await asyncio.sleep(0.05)
 
             await simulator.execute_task(bridge, task_id, result_data={"step": i})
             result = await asyncio.wait_for(dispatch_task, timeout=5.0)
-            assert result is not None, (
-                f"Sequential task {i} FAILED: waiter not unblocked"
-            )
+            assert result is not None, f"Sequential task {i} FAILED: waiter not unblocked"
 
 
 # ===========================================================================
@@ -383,9 +372,9 @@ class TestCapabilityEnforcementOnExecutionPath:
     async def test_strict_gate_rejects_on_missing_capability(self) -> None:
         """STRICT mode raises CapabilityHardRejectError when required cap absent."""
         from core.capability_enforcement_hardener import (
-            enforce_mainline_capability_gate,
             CapabilityHardRejectError,
             EnforcementMode,
+            enforce_mainline_capability_gate,
         )
 
         device_caps = ["tap", "swipe"]
@@ -401,9 +390,9 @@ class TestCapabilityEnforcementOnExecutionPath:
             )
 
         err = exc_info.value
-        assert "screenshot" in err.missing_capabilities, (
-            "CapabilityHardRejectError must list 'screenshot' in missing_capabilities"
-        )
+        assert (
+            "screenshot" in err.missing_capabilities
+        ), "CapabilityHardRejectError must list 'screenshot' in missing_capabilities"
         assert err.device_id == "no-screenshot-device"
         assert err.audit_id, "CapabilityHardRejectError must have a non-empty audit_id"
 
@@ -411,9 +400,9 @@ class TestCapabilityEnforcementOnExecutionPath:
     async def test_strict_gate_passes_when_all_caps_present(self) -> None:
         """STRICT mode passes when all required capabilities are present."""
         from core.capability_enforcement_hardener import (
-            enforce_mainline_capability_gate,
             EnforcementMode,
             HardenedVerdict,
+            enforce_mainline_capability_gate,
         )
 
         device_caps = ["tap", "swipe", "screenshot", "input_text"]
@@ -427,9 +416,7 @@ class TestCapabilityEnforcementOnExecutionPath:
             calling_site="test_e2e",
         )
 
-        assert record.verdict == HardenedVerdict.PASSED, (
-            f"Expected PASSED, got {record.verdict!r}"
-        )
+        assert record.verdict == HardenedVerdict.PASSED, f"Expected PASSED, got {record.verdict!r}"
         assert record.missing_capabilities == []
 
     @pytest.mark.asyncio
@@ -450,8 +437,8 @@ class TestCapabilityEnforcementOnExecutionPath:
     async def test_audited_override_records_reason(self) -> None:
         """Explicit override with non-empty reason produces an audit record."""
         from core.capability_enforcement_hardener import (
-            audit_capability_override,
             HardenedVerdict,
+            audit_capability_override,
         )
 
         record = audit_capability_override(
@@ -470,9 +457,9 @@ class TestCapabilityEnforcementOnExecutionPath:
     async def test_audit_mode_does_not_raise_on_mismatch(self) -> None:
         """AUDIT mode records the mismatch but does not raise."""
         from core.capability_enforcement_hardener import (
-            enforce_mainline_capability_gate,
             EnforcementMode,
             HardenedVerdict,
+            enforce_mainline_capability_gate,
         )
 
         record = enforce_mainline_capability_gate(
@@ -483,18 +470,16 @@ class TestCapabilityEnforcementOnExecutionPath:
             calling_site="test_e2e",
         )
 
-        assert record.verdict == HardenedVerdict.REJECTED, (
-            "AUDIT mode should record REJECTED verdict"
-        )
+        assert record.verdict == HardenedVerdict.REJECTED, "AUDIT mode should record REJECTED verdict"
         assert "screenshot" in record.missing_capabilities
 
     @pytest.mark.asyncio
     async def test_no_requirements_is_noop(self) -> None:
         """Empty required_capabilities makes the gate a no-op in all modes."""
         from core.capability_enforcement_hardener import (
-            enforce_mainline_capability_gate,
             EnforcementMode,
             HardenedVerdict,
+            enforce_mainline_capability_gate,
         )
 
         for mode in (EnforcementMode.STRICT, EnforcementMode.AUDIT):
@@ -505,9 +490,9 @@ class TestCapabilityEnforcementOnExecutionPath:
                 mode=mode,
                 calling_site="test_e2e",
             )
-            assert record.verdict == HardenedVerdict.NO_REQUIREMENTS, (
-                f"Empty requirements must yield NO_REQUIREMENTS in mode={mode}"
-            )
+            assert (
+                record.verdict == HardenedVerdict.NO_REQUIREMENTS
+            ), f"Empty requirements must yield NO_REQUIREMENTS in mode={mode}"
 
 
 # ===========================================================================
@@ -532,9 +517,7 @@ class TestProtocolContinuation:
 
         # Heartbeat after task_result proves session is alive
         hb_ack = await simulator.send_heartbeat(bridge)
-        assert hb_ack.get("type") == "heartbeat_ack", (
-            f"Heartbeat after task_result failed: got {hb_ack.get('type')!r}"
-        )
+        assert hb_ack.get("type") == "heartbeat_ack", f"Heartbeat after task_result failed: got {hb_ack.get('type')!r}"
 
     @pytest.mark.asyncio
     async def test_continuation_signal_structure(self, bridge: Any) -> None:
@@ -548,9 +531,7 @@ class TestProtocolContinuation:
 
         signal = simulator.make_continuation_signal(task_id)
         for required_field in ("type", "device_id", "task_id", "status", "timestamp"):
-            assert required_field in signal, (
-                f"Continuation signal missing required field '{required_field}'"
-            )
+            assert required_field in signal, f"Continuation signal missing required field '{required_field}'"
         assert signal["status"] == "ready_for_next"
 
 
@@ -576,9 +557,9 @@ class TestRuntimeRecovery:
 
         # Reconnect — should succeed without error
         reg_ack = await simulator.connect_and_register(bridge)
-        assert reg_ack.get("type") == "device_register_ack", (
-            f"Reconnect registration failed: got {reg_ack.get('type')!r}"
-        )
+        assert (
+            reg_ack.get("type") == "device_register_ack"
+        ), f"Reconnect registration failed: got {reg_ack.get('type')!r}"
         assert reg_ack.get("success") is True
 
     @pytest.mark.asyncio
@@ -607,17 +588,13 @@ class TestRuntimeRecovery:
         }
 
         async def _dispatch():
-            return await bridge.send_to_device(
-                device_id, task_assign_msg, wait_response=True, timeout=5.0
-            )
+            return await bridge.send_to_device(device_id, task_assign_msg, wait_response=True, timeout=5.0)
 
         dispatch_task = asyncio.ensure_future(_dispatch())
         await asyncio.sleep(0.05)
         await simulator.execute_task(bridge, task_id)
         result = await asyncio.wait_for(dispatch_task, timeout=5.0)
-        assert result is not None, (
-            "Task roundtrip after reconnect FAILED: waiter not unblocked"
-        )
+        assert result is not None, "Task roundtrip after reconnect FAILED: waiter not unblocked"
 
 
 # ===========================================================================
@@ -630,17 +607,22 @@ class TestCanonicalCapabilityStatus:
 
     def test_mainline_capabilities_are_active(self) -> None:
         """Tap, screenshot, task_assign, etc. are classified as ACTIVE_MAINLINE."""
-        from core.canonical_capability_status import is_mainline_active, CapabilityRuntimeStatus, get_capability_status
+        from core.canonical_capability_status import CapabilityRuntimeStatus, get_capability_status, is_mainline_active
 
         mainline_caps = [
-            "tap", "swipe", "screenshot", "input_text",
-            "register", "capability_report", "task_assign",
-            "task_result", "heartbeat", "cross_device_dispatch",
+            "tap",
+            "swipe",
+            "screenshot",
+            "input_text",
+            "register",
+            "capability_report",
+            "task_assign",
+            "task_result",
+            "heartbeat",
+            "cross_device_dispatch",
         ]
         for cap in mainline_caps:
-            assert is_mainline_active(cap), (
-                f"Expected '{cap}' to be ACTIVE_MAINLINE"
-            )
+            assert is_mainline_active(cap), f"Expected '{cap}' to be ACTIVE_MAINLINE"
 
     def test_local_ai_capabilities_are_not_mainline(self) -> None:
         """
@@ -649,14 +631,12 @@ class TestCanonicalCapabilityStatus:
         They require operator setup (inference_mode=local + model download) before use.
         mesh and federation remain STRUCTURAL_ONLY.
         """
-        from core.canonical_capability_status import is_mainline_active, CapabilityRuntimeStatus, get_capability_status
+        from core.canonical_capability_status import CapabilityRuntimeStatus, get_capability_status, is_mainline_active
 
         # local_ai capabilities: now DEGRADED, still not mainline
         degraded_caps = ["local_ai", "local_grounding", "local_planner", "on_device_inference"]
         for cap in degraded_caps:
-            assert not is_mainline_active(cap), (
-                f"Expected '{cap}' to NOT be active mainline (requires operator setup)"
-            )
+            assert not is_mainline_active(cap), f"Expected '{cap}' to NOT be active mainline (requires operator setup)"
             rec = get_capability_status(cap)
             assert rec.status == CapabilityRuntimeStatus.DEGRADED, (
                 f"Expected '{cap}' status=DEGRADED (runtimes bundled but model download required), "
@@ -666,34 +646,30 @@ class TestCanonicalCapabilityStatus:
         # mesh and federation: still STRUCTURAL_ONLY
         structural_caps = ["mesh", "federation"]
         for cap in structural_caps:
-            assert not is_mainline_active(cap), (
-                f"Expected '{cap}' to NOT be active mainline (structural only)"
-            )
+            assert not is_mainline_active(cap), f"Expected '{cap}' to NOT be active mainline (structural only)"
             rec = get_capability_status(cap)
-            assert rec.status == CapabilityRuntimeStatus.STRUCTURAL_ONLY, (
-                f"Expected '{cap}' status=STRUCTURAL_ONLY, got {rec.status!r}"
-            )
+            assert (
+                rec.status == CapabilityRuntimeStatus.STRUCTURAL_ONLY
+            ), f"Expected '{cap}' status=STRUCTURAL_ONLY, got {rec.status!r}"
 
     def test_experimental_capabilities_are_not_mainline(self) -> None:
         """webrtc, advanced_handoff are EXPERIMENTAL, not mainline."""
-        from core.canonical_capability_status import is_mainline_active, CapabilityRuntimeStatus, get_capability_status
+        from core.canonical_capability_status import CapabilityRuntimeStatus, get_capability_status, is_mainline_active
 
         experimental_caps = ["webrtc", "webrtc_task_lifecycle", "advanced_handoff"]
         for cap in experimental_caps:
-            assert not is_mainline_active(cap), (
-                f"Expected '{cap}' to NOT be active mainline (it is experimental)"
-            )
+            assert not is_mainline_active(cap), f"Expected '{cap}' to NOT be active mainline (it is experimental)"
             rec = get_capability_status(cap)
-            assert rec.status == CapabilityRuntimeStatus.EXPERIMENTAL, (
-                f"Expected '{cap}' status=EXPERIMENTAL, got {rec.status!r}"
-            )
+            assert (
+                rec.status == CapabilityRuntimeStatus.EXPERIMENTAL
+            ), f"Expected '{cap}' status=EXPERIMENTAL, got {rec.status!r}"
 
     def test_unknown_capability_returns_unknown_status(self) -> None:
         """An unregistered capability returns UNKNOWN status."""
         from core.canonical_capability_status import (
+            CapabilityRuntimeStatus,
             get_capability_status,
             is_mainline_active,
-            CapabilityRuntimeStatus,
         )
 
         rec = get_capability_status("totally_nonexistent_capability_xyz")
@@ -703,6 +679,7 @@ class TestCanonicalCapabilityStatus:
     def test_registry_serializable(self) -> None:
         """Every registry record is JSON-serialisable."""
         import json as _json
+
         from core.canonical_capability_status import get_canonical_capability_status_registry
 
         registry = get_canonical_capability_status_registry()
@@ -724,9 +701,7 @@ class TestTransportRuntimeE2E:
     message routing occurs through the real transport stack, not a mock.
     """
 
-    def test_register_capability_heartbeat_via_transport(
-        self, gw_client: Any
-    ) -> None:
+    def test_register_capability_heartbeat_via_transport(self, gw_client: Any) -> None:
         """Full register → capability_report → heartbeat sequence via real transport."""
         device_id = f"rt-e2e-{uuid.uuid4().hex[:8]}"
         caps = ["tap", "screenshot"]
@@ -739,11 +714,16 @@ class TestTransportRuntimeE2E:
             assert reg_ack["success"] is True
 
             # Capability report
-            ws.send_text(json.dumps(_v3(
-                "capability_report", device_id,
-                platform="android",
-                supported_actions=caps,
-            )))
+            ws.send_text(
+                json.dumps(
+                    _v3(
+                        "capability_report",
+                        device_id,
+                        platform="android",
+                        supported_actions=caps,
+                    )
+                )
+            )
             cap_ack = ws.receive_json()
             assert cap_ack["type"] == "capability_report_ack"
             assert cap_ack.get("accepted") is True
@@ -753,9 +733,7 @@ class TestTransportRuntimeE2E:
             hb_ack = ws.receive_json()
             assert hb_ack["type"] == "heartbeat_ack"
 
-    def test_task_result_then_heartbeat_proves_session_open(
-        self, gw_client: Any
-    ) -> None:
+    def test_task_result_then_heartbeat_proves_session_open(self, gw_client: Any) -> None:
         """task_result followed by heartbeat — session stays open."""
         device_id = f"rt-result-{uuid.uuid4().hex[:8]}"
         task_id = str(uuid.uuid4())
@@ -764,23 +742,32 @@ class TestTransportRuntimeE2E:
             ws.send_text(json.dumps(_v3("device_register", device_id, platform="android")))
             ws.receive_json()  # consume register_ack
 
-            ws.send_text(json.dumps(_v3(
-                "capability_report", device_id,
-                platform="android",
-                supported_actions=["screenshot"],
-            )))
+            ws.send_text(
+                json.dumps(
+                    _v3(
+                        "capability_report",
+                        device_id,
+                        platform="android",
+                        supported_actions=["screenshot"],
+                    )
+                )
+            )
             ws.receive_json()  # consume capability_ack
 
-            ws.send_text(json.dumps(_v3(
-                "task_result", device_id,
-                task_id=task_id,
-                status="completed",
-                result={"output": "done"},
-            )))
+            ws.send_text(
+                json.dumps(
+                    _v3(
+                        "task_result",
+                        device_id,
+                        task_id=task_id,
+                        status="completed",
+                        result={"output": "done"},
+                    )
+                )
+            )
             # task_result does not produce a response — send heartbeat to verify session
             ws.send_text(json.dumps(_v3("heartbeat", device_id)))
             hb_ack = ws.receive_json()
             assert hb_ack["type"] == "heartbeat_ack", (
-                f"Session broke after task_result: expected heartbeat_ack, "
-                f"got {hb_ack.get('type')!r}"
+                f"Session broke after task_result: expected heartbeat_ack, " f"got {hb_ack.get('type')!r}"
             )

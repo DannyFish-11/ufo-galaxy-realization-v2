@@ -86,9 +86,7 @@ logger = logging.getLogger("Galaxy.ModelTopology.InventoryFromConfig")
 # Authority sentinel
 # ---------------------------------------------------------------------------
 
-INVENTORY_CONFIG_AUTHORITY: str = (
-    "core.model_topology.inventory_from_config.InventoryFromConfig"
-)
+INVENTORY_CONFIG_AUTHORITY: str = "core.model_topology.inventory_from_config.InventoryFromConfig"
 
 # ---------------------------------------------------------------------------
 # Provider-level metadata defaults
@@ -97,24 +95,24 @@ INVENTORY_CONFIG_AUTHORITY: str = (
 
 # Default primary model IDs per provider (used when no richer inventory exists).
 _PROVIDER_DEFAULT_MODEL: dict = {
-    "openai":     "gpt-4o",
-    "anthropic":  "claude-3-5-sonnet-20241022",
-    "gemini":     "gemini-1.5-pro",
-    "deepseek":   "deepseek-chat",
-    "groq":       "llama-3.1-70b-versatile",
+    "openai": "gpt-4o",
+    "anthropic": "claude-3-5-sonnet-20241022",
+    "gemini": "gemini-1.5-pro",
+    "deepseek": "deepseek-chat",
+    "groq": "llama-3.1-70b-versatile",
     "openrouter": "openrouter/auto",
-    "oneapi":     "oneapi-aggregated",
+    "oneapi": "oneapi-aggregated",
 }
 
 # Default display names per provider.
 _PROVIDER_DISPLAY_NAME: dict = {
-    "openai":     "OpenAI",
-    "anthropic":  "Anthropic",
-    "gemini":     "Google Gemini",
-    "deepseek":   "DeepSeek",
-    "groq":       "Groq",
+    "openai": "OpenAI",
+    "anthropic": "Anthropic",
+    "gemini": "Google Gemini",
+    "deepseek": "DeepSeek",
+    "groq": "Groq",
     "openrouter": "OpenRouter",
-    "oneapi":     "OneAPI Aggregator",
+    "oneapi": "OneAPI Aggregator",
 }
 
 # Providers that natively support multimodal input.
@@ -122,52 +120,53 @@ _NATIVE_MULTIMODAL_PROVIDERS: frozenset = frozenset({"openai", "anthropic", "gem
 
 # Scoring profiles (speed, quality) per provider — approximate defaults.
 _PROVIDER_SCORING: dict = {
-    "openai":     (8, 10),
-    "anthropic":  (7, 10),
-    "gemini":     (8, 9),
-    "deepseek":   (7, 8),
-    "groq":       (10, 7),
+    "openai": (8, 10),
+    "anthropic": (7, 10),
+    "gemini": (8, 9),
+    "deepseek": (7, 8),
+    "groq": (10, 7),
     "openrouter": (6, 7),
-    "oneapi":     (5, 6),
+    "oneapi": (5, 6),
 }
 
 # Category per provider.
 _PROVIDER_CATEGORY: dict = {
-    "openai":     ProviderCategory.DIRECT,
-    "anthropic":  ProviderCategory.DIRECT,
-    "gemini":     ProviderCategory.DIRECT,
-    "deepseek":   ProviderCategory.DIRECT,
-    "groq":       ProviderCategory.DIRECT,
+    "openai": ProviderCategory.DIRECT,
+    "anthropic": ProviderCategory.DIRECT,
+    "gemini": ProviderCategory.DIRECT,
+    "deepseek": ProviderCategory.DIRECT,
+    "groq": ProviderCategory.DIRECT,
     "openrouter": ProviderCategory.DIRECT,
-    "oneapi":     ProviderCategory.ONEAPI,
+    "oneapi": ProviderCategory.ONEAPI,
 }
 
 # Role hints per provider.
 _PROVIDER_ROLE_HINTS: dict = {
-    "openai":     [TopologyRole.MULTIMODAL_CORE, TopologyRole.GENERAL],
-    "anthropic":  [TopologyRole.MULTIMODAL_CORE, TopologyRole.REASONING],
-    "gemini":     [TopologyRole.MULTIMODAL_CORE, TopologyRole.GENERAL],
-    "deepseek":   [TopologyRole.REASONING, TopologyRole.GENERAL],
-    "groq":       [TopologyRole.EXECUTION, TopologyRole.GENERAL],
+    "openai": [TopologyRole.MULTIMODAL_CORE, TopologyRole.GENERAL],
+    "anthropic": [TopologyRole.MULTIMODAL_CORE, TopologyRole.REASONING],
+    "gemini": [TopologyRole.MULTIMODAL_CORE, TopologyRole.GENERAL],
+    "deepseek": [TopologyRole.REASONING, TopologyRole.GENERAL],
+    "groq": [TopologyRole.EXECUTION, TopologyRole.GENERAL],
     "openrouter": [TopologyRole.GENERAL],
-    "oneapi":     [TopologyRole.ROUTING],
+    "oneapi": [TopologyRole.ROUTING],
 }
 
 # API key env-var name per provider (mirrors config_service._PROVIDER_KEY_MAP).
 _PROVIDER_ENV_KEY: dict = {
-    "openai":     "OPENAI_API_KEY",
-    "anthropic":  "ANTHROPIC_API_KEY",
-    "gemini":     "GEMINI_API_KEY",
-    "deepseek":   "DEEPSEEK_API_KEY",
-    "groq":       "GROQ_API_KEY",
+    "openai": "OPENAI_API_KEY",
+    "anthropic": "ANTHROPIC_API_KEY",
+    "gemini": "GEMINI_API_KEY",
+    "deepseek": "DEEPSEEK_API_KEY",
+    "groq": "GROQ_API_KEY",
     "openrouter": "OPENROUTER_API_KEY",
-    "oneapi":     "ONEAPI_API_KEY",
+    "oneapi": "ONEAPI_API_KEY",
 }
 
 
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_minimal_entry(
     provider_id: str,
@@ -217,6 +216,7 @@ def _make_minimal_entry(
 # Main builder
 # ---------------------------------------------------------------------------
 
+
 def build_inventory_from_config_authority(
     config_service=None,
 ) -> ProviderInventory:
@@ -252,6 +252,7 @@ def build_inventory_from_config_authority(
     """
     if config_service is None:
         from core.config_service import get_config_service
+
         config_service = get_config_service()
 
     validation = config_service.validate()
@@ -338,6 +339,7 @@ def merge_config_authority_into_inventory(
     """
     if config_service is None:
         from core.config_service import get_config_service
+
         config_service = get_config_service()
 
     validation = config_service.validate()
@@ -377,6 +379,7 @@ def merge_config_authority_into_inventory(
 # ---------------------------------------------------------------------------
 # Convenience helpers
 # ---------------------------------------------------------------------------
+
 
 def build_candidate_pool(
     inventory: ProviderInventory,
@@ -422,5 +425,6 @@ def get_oneapi_candidate_state(config_service=None) -> str:
     """
     if config_service is None:
         from core.config_service import get_config_service
+
         config_service = get_config_service()
     return config_service.validate().oneapi_state

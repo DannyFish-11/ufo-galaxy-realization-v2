@@ -136,9 +136,6 @@ Helpers::
 
 from __future__ import annotations
 
-from typing import Tuple  # auto: missing import
-
-
 import importlib
 import json
 import logging
@@ -147,6 +144,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import Tuple  # auto: missing import
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger("Galaxy.CenterDistributedAgentSystemReview")
@@ -310,9 +308,7 @@ class MaturityLayer(str, Enum):
     """Does V2's governance, acceptance, and release-readiness framework
     have actual enforcement power beyond advisory reporting?"""
 
-    real_device_multi_device_operational_closure = (
-        "real_device_multi_device_operational_closure"
-    )
+    real_device_multi_device_operational_closure = "real_device_multi_device_operational_closure"
     """Is there real-device or multi-device operational evidence, CI
     automation, and acceptance closure at the physical-device level?"""
 
@@ -445,10 +441,7 @@ class AndroidLocalCapabilityProfile:
         return self.local_networking_capability
 
     def has_local_execution(self) -> bool:
-        return (
-            self.local_task_execution_capability
-            and self.local_gui_interaction_capability
-        )
+        return self.local_task_execution_capability and self.local_gui_interaction_capability
 
     def has_local_intelligence_architecture(self) -> bool:
         """True when local intelligence architecture exists in code,
@@ -462,11 +455,7 @@ class AndroidLocalCapabilityProfile:
     def is_distributed_runtime_node(self) -> bool:
         """True when Android qualifies as a distributed runtime node
         (has networking + execution + persistence)."""
-        return (
-            self.has_local_networking()
-            and self.has_local_execution()
-            and self.persistent_runtime_host_capability
-        )
+        return self.has_local_networking() and self.has_local_execution() and self.persistent_runtime_host_capability
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -530,9 +519,7 @@ class CenterDistributedAgentSystemReviewReport:
     system_identity: str = CENTER_DISTRIBUTED_AGENT_SYSTEM_IDENTITY_SENTINEL
 
     # Android local capability profile
-    android_capability_profile: AndroidLocalCapabilityProfile = field(
-        default_factory=AndroidLocalCapabilityProfile
-    )
+    android_capability_profile: AndroidLocalCapabilityProfile = field(default_factory=AndroidLocalCapabilityProfile)
 
     # Per-layer assessments (keyed by MaturityLayer value)
     layer_assessments: Dict[str, LayerAssessment] = field(default_factory=dict)
@@ -569,9 +556,7 @@ class CenterDistributedAgentSystemReviewReport:
             "generated_at": self.generated_at,
             "system_identity": self.system_identity,
             "android_capability_profile": self.android_capability_profile.to_dict(),
-            "layer_assessments": {
-                k: v.to_dict() for k, v in self.layer_assessments.items()
-            },
+            "layer_assessments": {k: v.to_dict() for k, v in self.layer_assessments.items()},
             "system_is_center_distributed_agent": self.system_is_center_distributed_agent,
             "android_is_distributed_runtime_node": self.android_is_distributed_runtime_node,
             "delegated_path_is_one_path_not_whole_system": self.delegated_path_is_one_path_not_whole_system,
@@ -667,12 +652,8 @@ class CenterDistributedAgentSystemReviewer:
         gaps = []
 
         # Check primary governance modules
-        importable = [
-            m for m in self._V2_GOVERNANCE_MODULES if self._try_import(m)
-        ]
-        missing = [
-            m for m in self._V2_GOVERNANCE_MODULES if m not in importable
-        ]
+        importable = [m for m in self._V2_GOVERNANCE_MODULES if self._try_import(m)]
+        missing = [m for m in self._V2_GOVERNANCE_MODULES if m not in importable]
 
         for m in importable:
             evidence.append(f"importable:{m}")
@@ -688,14 +669,11 @@ class CenterDistributedAgentSystemReviewer:
 
         # Check this review module itself as an anchor
         evidence.append(
-            "importable:core.center_distributed_agent_system_review "
-            "(center-distributed-agent identity established)"
+            "importable:core.center_distributed_agent_system_review " "(center-distributed-agent identity established)"
         )
 
         # Check system identity sentinel
-        evidence.append(
-            f"sentinel:{CENTER_DISTRIBUTED_AGENT_SYSTEM_IDENTITY_SENTINEL[:80]}..."
-        )
+        evidence.append(f"sentinel:{CENTER_DISTRIBUTED_AGENT_SYSTEM_IDENTITY_SENTINEL[:80]}...")
 
         # Determine status
         if len(importable) >= 6:
@@ -798,10 +776,7 @@ class CenterDistributedAgentSystemReviewer:
                 "SeeClickGroundingEngine require external inference server + model weights. "
                 "NoOpPlannerService is default. Local AI is real architecture but non-default."
             )
-            deferred.append(
-                "DEFERRED: Android local inference server bundling/auto-start "
-                "deferred to future work."
-            )
+            deferred.append("DEFERRED: Android local inference server bundling/auto-start " "deferred to future work.")
 
         # Status determination
         num_evidence = len(evidence)
@@ -839,12 +814,8 @@ class CenterDistributedAgentSystemReviewer:
         gaps = []
         deferred = []
 
-        importable = [
-            m for m in self._V2_DELEGATED_PATH_MODULES if self._try_import(m)
-        ]
-        missing = [
-            m for m in self._V2_DELEGATED_PATH_MODULES if m not in importable
-        ]
+        importable = [m for m in self._V2_DELEGATED_PATH_MODULES if self._try_import(m)]
+        missing = [m for m in self._V2_DELEGATED_PATH_MODULES if m not in importable]
 
         for m in importable:
             evidence.append(f"importable:{m}")
@@ -857,9 +828,7 @@ class CenterDistributedAgentSystemReviewer:
             evidence.append(f"ci_workflow_exists:{ci_workflow}")
 
         # Check protocol regression test
-        protocol_test = (
-            "tests/integration/test_v2_android_protocol_regression.py"
-        )
+        protocol_test = "tests/integration/test_v2_android_protocol_regression.py"
         if self._file_exists(protocol_test):
             evidence.append(f"test_exists:{protocol_test}")
 
@@ -880,9 +849,7 @@ class CenterDistributedAgentSystemReviewer:
                         "class not found — runtime closure evidence incomplete"
                     )
             except Exception as exc:
-                gaps.append(
-                    f"delegated_flow_decision_history probe failed: {exc}"
-                )
+                gaps.append(f"delegated_flow_decision_history probe failed: {exc}")
 
         # Determine status
         if len(importable) >= 6 and self._file_exists(ci_workflow):
@@ -924,15 +891,11 @@ class CenterDistributedAgentSystemReviewer:
         gaps = []
         deferred = []
 
-        importable_ingress = [
-            m for m in self._V2_ANDROID_EVIDENCE_MODULES if self._try_import(m)
-        ]
+        importable_ingress = [m for m in self._V2_ANDROID_EVIDENCE_MODULES if self._try_import(m)]
         for m in importable_ingress:
             evidence.append(f"importable:{m}")
 
-        missing_ingress = [
-            m for m in self._V2_ANDROID_EVIDENCE_MODULES if m not in importable_ingress
-        ]
+        missing_ingress = [m for m in self._V2_ANDROID_EVIDENCE_MODULES if m not in importable_ingress]
         for m in missing_ingress:
             gaps.append(f"ingress_module_not_importable:{m}")
 
@@ -959,13 +922,10 @@ class CenterDistributedAgentSystemReviewer:
         )
 
         # Check V2 evidence surface
-        has_evidence_surface = self._try_import(
-            "core.v2_readiness_governance_evidence_surface"
-        )
+        has_evidence_surface = self._try_import("core.v2_readiness_governance_evidence_surface")
         if has_evidence_surface:
             evidence.append(
-                "importable:core.v2_readiness_governance_evidence_surface "
-                "(V2 evidence aggregation surface present)"
+                "importable:core.v2_readiness_governance_evidence_surface " "(V2 evidence aggregation surface present)"
             )
 
         # Determine status — cross_repo_evidence has known structural gaps
@@ -981,8 +941,7 @@ class CenterDistributedAgentSystemReviewer:
             "registration — Android readiness evidence live-wire delivery to V2."
         )
         deferred.append(
-            "DEFERRED: HandoffEnvelopeV2 response handler completion for "
-            "full handoff result uplink closure."
+            "DEFERRED: HandoffEnvelopeV2 response handler completion for " "full handoff result uplink closure."
         )
 
         return LayerAssessment(
@@ -1113,9 +1072,7 @@ class CenterDistributedAgentSystemReviewer:
         gaps = []
         deferred = []
 
-        importable = [
-            m for m in self._V2_MULTI_DEVICE_MODULES if self._try_import(m)
-        ]
+        importable = [m for m in self._V2_MULTI_DEVICE_MODULES if self._try_import(m)]
         for m in importable:
             evidence.append(f"importable:{m}")
         for m in self._V2_MULTI_DEVICE_MODULES:
@@ -1171,12 +1128,8 @@ class CenterDistributedAgentSystemReviewer:
             "DEFERRED: Real-device CI workflow (Android emulator or physical device "
             "E2E test: task_assign → execute → result roundtrip)."
         )
-        deferred.append(
-            "DEFERRED: Multi-device acceptance matrix closure with real-device evidence."
-        )
-        deferred.append(
-            "DEFERRED: Multi-device simultaneous reconnect ordering enforcement."
-        )
+        deferred.append("DEFERRED: Multi-device acceptance matrix closure with real-device evidence.")
+        deferred.append("DEFERRED: Multi-device simultaneous reconnect ordering enforcement.")
 
         return LayerAssessment(
             layer=MaturityLayer.real_device_multi_device_operational_closure,
@@ -1204,12 +1157,10 @@ class CenterDistributedAgentSystemReviewer:
         statuses = [a.status for a in assessments.values()]
         gap_count = sum(1 for s in statuses if s.is_gap())
         substantially_closed_count = sum(
-            1 for s in statuses
-            if s.ordinal() >= LayerMaturityStatus.substantially_closed.ordinal()
+            1 for s in statuses if s.ordinal() >= LayerMaturityStatus.substantially_closed.ordinal()
         )
         partially_closed_count = sum(
-            1 for s in statuses
-            if s.ordinal() >= LayerMaturityStatus.partially_closed.ordinal()
+            1 for s in statuses if s.ordinal() >= LayerMaturityStatus.partially_closed.ordinal()
         )
 
         if gap_count >= 3:
@@ -1249,26 +1200,20 @@ class CenterDistributedAgentSystemReviewer:
         l1 = self._assess_architecture_system_model()
         report.layer_assessments[MaturityLayer.architecture_system_model.value] = l1
         report.system_is_center_distributed_agent = (
-            l1.status.ordinal()
-            >= LayerMaturityStatus.code_implemented.ordinal()
+            l1.status.ordinal() >= LayerMaturityStatus.code_implemented.ordinal()
         )
 
         # Layer 2: android_local_intelligence_runtime_host
         l2, android_profile = self._assess_android_local_intelligence()
-        report.layer_assessments[
-            MaturityLayer.android_local_intelligence_runtime_host.value
-        ] = l2
+        report.layer_assessments[MaturityLayer.android_local_intelligence_runtime_host.value] = l2
         report.android_capability_profile = android_profile
         report.android_is_distributed_runtime_node = (
-            android_profile.is_distributed_runtime_node()
-            or android_profile.has_local_intelligence_architecture()
+            android_profile.is_distributed_runtime_node() or android_profile.has_local_intelligence_architecture()
         )
 
         # Layer 3: cross_device_delegated_path
         l3 = self._assess_cross_device_delegated_path()
-        report.layer_assessments[
-            MaturityLayer.cross_device_delegated_path.value
-        ] = l3
+        report.layer_assessments[MaturityLayer.cross_device_delegated_path.value] = l3
 
         # Layer 4: cross_repo_evidence
         l4 = self._assess_cross_repo_evidence()
@@ -1277,16 +1222,12 @@ class CenterDistributedAgentSystemReviewer:
 
         # Layer 5: governance_release_readiness
         l5 = self._assess_governance_release_readiness()
-        report.layer_assessments[
-            MaturityLayer.governance_release_readiness.value
-        ] = l5
+        report.layer_assessments[MaturityLayer.governance_release_readiness.value] = l5
         report.governance_enforcement_gaps = l5.gap_items[:]
 
         # Layer 6: real_device_multi_device_operational_closure
         l6 = self._assess_real_device_closure()
-        report.layer_assessments[
-            MaturityLayer.real_device_multi_device_operational_closure.value
-        ] = l6
+        report.layer_assessments[MaturityLayer.real_device_multi_device_operational_closure.value] = l6
         report.real_device_closure_gaps = l6.gap_items[:]
 
         # Collect all deferred items
@@ -1294,9 +1235,7 @@ class CenterDistributedAgentSystemReviewer:
             report.deferred_items.extend(layer_assessment.deferred_items)
 
         # Compute verdict
-        verdict, rationale = self._compute_verdict(
-            report.layer_assessments, android_profile
-        )
+        verdict, rationale = self._compute_verdict(report.layer_assessments, android_profile)
         report.overall_verdict = verdict
         report.verdict_rationale = rationale
 
@@ -1313,16 +1252,12 @@ class CenterDistributedAgentSystemReviewer:
 _SINGLETON: Optional[CenterDistributedAgentSystemReviewReport] = None
 
 
-def build_center_distributed_agent_system_review() -> (
-    CenterDistributedAgentSystemReviewReport
-):
+def build_center_distributed_agent_system_review() -> CenterDistributedAgentSystemReviewReport:
     """Build and return a fresh review report (no caching)."""
     return CenterDistributedAgentSystemReviewer().review()
 
 
-def get_center_distributed_agent_system_review() -> (
-    CenterDistributedAgentSystemReviewReport
-):
+def get_center_distributed_agent_system_review() -> CenterDistributedAgentSystemReviewReport:
     """Return the process-global singleton review report, building it on
     first call."""
     global _SINGLETON

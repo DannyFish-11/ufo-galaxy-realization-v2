@@ -213,9 +213,7 @@ class DurableTruthConvergenceResult:
         Unix epoch seconds when this check was performed.
     """
 
-    check_id: str = dataclasses.field(
-        default_factory=lambda: f"dtc_{uuid.uuid4().hex[:12]}"
-    )
+    check_id: str = dataclasses.field(default_factory=lambda: f"dtc_{uuid.uuid4().hex[:12]}")
     converged: bool = False
     session_truth_leg_healthy: bool = False
     task_lifecycle_leg_healthy: bool = False
@@ -293,52 +291,41 @@ class DurableTruthAuthorityChain:
             store = self._session_truth_store
             if store is None:
                 from core.session_truth_snapshot import get_session_truth_snapshot_store
+
                 store = get_session_truth_snapshot_store()
             records = store.load()
             result.session_truth_records_available = len(records) if records else 0
             result.session_truth_leg_healthy = True
         except Exception as exc:
-            result.degradation_reasons.append(
-                f"session_truth_leg: {exc}"
-            )
-            logger.debug(
-                "DurableTruthAuthorityChain: session truth leg unhealthy: %s", exc
-            )
+            result.degradation_reasons.append(f"session_truth_leg: {exc}")
+            logger.debug("DurableTruthAuthorityChain: session truth leg unhealthy: %s", exc)
 
         # ── Leg 2: Task lifecycle ─────────────────────────────────────────
         try:
             store = self._task_lifecycle_store
             if store is None:
                 from core.task_lifecycle_persistence import get_task_lifecycle_store
+
                 store = get_task_lifecycle_store()
             snapshot = store.load()
-            result.task_lifecycle_records_available = (
-                len(snapshot.records) if snapshot and snapshot.records else 0
-            )
+            result.task_lifecycle_records_available = len(snapshot.records) if snapshot and snapshot.records else 0
             result.task_lifecycle_leg_healthy = True
         except Exception as exc:
-            result.degradation_reasons.append(
-                f"task_lifecycle_leg: {exc}"
-            )
-            logger.debug(
-                "DurableTruthAuthorityChain: task lifecycle leg unhealthy: %s", exc
-            )
+            result.degradation_reasons.append(f"task_lifecycle_leg: {exc}")
+            logger.debug("DurableTruthAuthorityChain: task lifecycle leg unhealthy: %s", exc)
 
         # ── Leg 3: Result continuity ──────────────────────────────────────
         try:
             store = self._result_id_store
             if store is None:
                 from core.durable_result_idempotency import get_durable_result_id_store
+
                 store = get_durable_result_id_store()
             result.result_id_count = store.size()
             result.result_continuity_leg_healthy = True
         except Exception as exc:
-            result.degradation_reasons.append(
-                f"result_continuity_leg: {exc}"
-            )
-            logger.debug(
-                "DurableTruthAuthorityChain: result continuity leg unhealthy: %s", exc
-            )
+            result.degradation_reasons.append(f"result_continuity_leg: {exc}")
+            logger.debug("DurableTruthAuthorityChain: result continuity leg unhealthy: %s", exc)
 
         # ── Convergence ───────────────────────────────────────────────────
         result.converged = (

@@ -71,9 +71,7 @@ class GenerativeUIRuntime:
             A :class:`SurfaceSpec` ready for serialisation.
         """
         try:
-            spec = self.selector.select_surface(
-                interaction_envelope, mode=fallback_mode
-            )
+            spec = self.selector.select_surface(interaction_envelope, mode=fallback_mode)
         except Exception as exc:
             logger.warning("GenerativeUIRuntime.render_surface error: %s", exc)
             spec = SurfaceSpec(surface_type=SurfaceType.CHAT_PANEL)
@@ -95,9 +93,7 @@ class GenerativeUIRuntime:
             A JSON-serialisable dict with ``surface_type``, ``title``,
             ``layout_hints``, and ``fallback_surface`` keys.
         """
-        return self.render_surface(
-            interaction_envelope, fallback_mode=fallback_mode
-        ).to_dict()
+        return self.render_surface(interaction_envelope, fallback_mode=fallback_mode).to_dict()
 
 
 # ---------------------------------------------------------------------------

@@ -140,6 +140,7 @@ LEGACY_DISPATCH_BLOCKING_FIRST_ENFORCEMENT_POLICY: str = (
 # Classification enum
 # ---------------------------------------------------------------------------
 
+
 class LegacyDispatchClassification(str, Enum):
     """Classification of a legacy dispatch entry.
 
@@ -157,6 +158,7 @@ class LegacyDispatchClassification(str, Enum):
 # ---------------------------------------------------------------------------
 # Registry entry dataclass
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class LegacyDispatchEntry:
@@ -197,6 +199,7 @@ class LegacyDispatchEntry:
 # Registry snapshot
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class LegacyRegistrySnapshot:
     """Point-in-time snapshot of the legacy dispatch registry."""
@@ -218,6 +221,7 @@ class LegacyRegistrySnapshot:
 # ---------------------------------------------------------------------------
 # LegacyDispatchRegistry class
 # ---------------------------------------------------------------------------
+
 
 class LegacyDispatchRegistry:
     """Singleton registry of all legacy dispatch paths.
@@ -277,7 +281,8 @@ class LegacyDispatchRegistry:
         self._entries[module] = entry
         logger.debug(
             "LegacyDispatchRegistry.register | module=%s classification=%s",
-            module, classification.value if isinstance(classification, LegacyDispatchClassification) else classification,
+            module,
+            classification.value if isinstance(classification, LegacyDispatchClassification) else classification,
         )
         return entry
 
@@ -289,14 +294,9 @@ class LegacyDispatchRegistry:
         """Return ``True`` when *module* is registered as a legacy path."""
         return module in self._entries
 
-    def get_by_classification(
-        self, classification: LegacyDispatchClassification
-    ) -> List[LegacyDispatchEntry]:
+    def get_by_classification(self, classification: LegacyDispatchClassification) -> List[LegacyDispatchEntry]:
         """Return all entries with the given *classification*."""
-        return [
-            e for e in self._entries.values()
-            if e.classification == classification
-        ]
+        return [e for e in self._entries.values() if e.classification == classification]
 
     def all_entries(self) -> List[LegacyDispatchEntry]:
         """Return all registered entries."""
@@ -345,6 +345,7 @@ def reset_registry() -> None:
 # Module-level convenience function
 # ---------------------------------------------------------------------------
 
+
 def register_legacy_dispatch(
     module: str,
     classification: LegacyDispatchClassification,
@@ -386,6 +387,7 @@ def snapshot_registry() -> LegacyRegistrySnapshot:
 # ---------------------------------------------------------------------------
 # Bootstrap: pre-register all known legacy dispatch paths
 # ---------------------------------------------------------------------------
+
 
 def _bootstrap_known_entries(registry: LegacyDispatchRegistry) -> None:
     """Pre-populate the registry with all known legacy dispatch paths.
@@ -527,10 +529,7 @@ def check_dispatch_blocked(
     module: str,
     *,
     calling_site: str = "",
-    canonical_path: str = (
-        "core.command_router.CommandRouter.route_envelope() "
-        "(canonical dispatch spine)"
-    ),
+    canonical_path: str = ("core.command_router.CommandRouter.route_envelope() " "(canonical dispatch spine)"),
     operator_note: str = "",
     raise_on_block: bool = False,
 ) -> "Any":

@@ -75,20 +75,22 @@ from typing import Any, Dict
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # 1. ExecutionPath enum — values and serialisation stability
 # ---------------------------------------------------------------------------
 
+
 class TestExecutionPathEnum:
     def test_all_values_are_strings(self):
         from core.schemas.unified_control_plan import ExecutionPath
+
         for member in ExecutionPath:
             assert isinstance(member.value, str)
             assert member.value
 
     def test_known_values_stable(self):
         from core.schemas.unified_control_plan import ExecutionPath
+
         assert ExecutionPath.LOCAL.value == "local"
         assert ExecutionPath.CROSS_DEVICE.value == "cross_device"
         assert ExecutionPath.HYBRID.value == "hybrid"
@@ -96,6 +98,7 @@ class TestExecutionPathEnum:
 
     def test_roundtrip_via_value(self):
         from core.schemas.unified_control_plan import ExecutionPath
+
         for member in ExecutionPath:
             assert ExecutionPath(member.value) is member
 
@@ -104,15 +107,18 @@ class TestExecutionPathEnum:
 # 2. FallbackKind enum — values and serialisation stability
 # ---------------------------------------------------------------------------
 
+
 class TestFallbackKindEnum:
     def test_all_values_are_strings(self):
         from core.schemas.unified_control_plan import FallbackKind
+
         for member in FallbackKind:
             assert isinstance(member.value, str)
             assert member.value
 
     def test_known_values_stable(self):
         from core.schemas.unified_control_plan import FallbackKind
+
         assert FallbackKind.MODEL_CAPABILITY_FALLBACK.value == "model_capability_fallback"
         assert FallbackKind.NATIVE_MULTIMODAL_TO_TEXT.value == "native_multimodal_to_text"
         assert FallbackKind.AGENT_RUNTIME_TO_COMMAND_ONLY.value == "agent_runtime_to_command_only"
@@ -123,6 +129,7 @@ class TestFallbackKindEnum:
 
     def test_roundtrip_via_value(self):
         from core.schemas.unified_control_plan import FallbackKind
+
         for member in FallbackKind:
             assert FallbackKind(member.value) is member
 
@@ -131,9 +138,11 @@ class TestFallbackKindEnum:
 # 3–4. UnifiedExecutionDecision — construction and round-trip
 # ---------------------------------------------------------------------------
 
+
 class TestUnifiedExecutionDecisionBasic:
     def test_default_construction(self):
-        from core.schemas.unified_control_plan import UnifiedExecutionDecision, ExecutionPath
+        from core.schemas.unified_control_plan import ExecutionPath, UnifiedExecutionDecision
+
         ued = UnifiedExecutionDecision()
         assert ued.execution_path == ExecutionPath.LOCAL.value
         assert ued.delegation_point is None
@@ -147,17 +156,25 @@ class TestUnifiedExecutionDecisionBasic:
 
     def test_to_dict_has_required_keys(self):
         from core.schemas.unified_control_plan import UnifiedExecutionDecision
+
         ued = UnifiedExecutionDecision()
         d = ued.to_dict()
         required = {
-            "execution_path", "delegation_point", "remote_execution_mode",
-            "target_device_ids", "orchestration_active",
-            "execution_reason", "fallback_intent", "is_downgrade", "preferred_path",
+            "execution_path",
+            "delegation_point",
+            "remote_execution_mode",
+            "target_device_ids",
+            "orchestration_active",
+            "execution_reason",
+            "fallback_intent",
+            "is_downgrade",
+            "preferred_path",
         }
         assert required.issubset(d.keys())
 
     def test_to_dict_from_dict_roundtrip(self):
         from core.schemas.unified_control_plan import UnifiedExecutionDecision
+
         ued = UnifiedExecutionDecision(
             execution_path="cross_device",
             delegation_point="single_remote",
@@ -182,9 +199,11 @@ class TestUnifiedExecutionDecisionBasic:
 # 5. Local execution path represented canonically
 # ---------------------------------------------------------------------------
 
+
 class TestLocalExecutionPath:
     def test_local_path_fields(self):
-        from core.schemas.unified_control_plan import UnifiedExecutionDecision, ExecutionPath
+        from core.schemas.unified_control_plan import ExecutionPath, UnifiedExecutionDecision
+
         ued = UnifiedExecutionDecision(
             execution_path=ExecutionPath.LOCAL.value,
             delegation_point="local",
@@ -198,6 +217,7 @@ class TestLocalExecutionPath:
 
     def test_local_path_serialisable(self):
         from core.schemas.unified_control_plan import UnifiedExecutionDecision
+
         ued = UnifiedExecutionDecision(
             execution_path="local",
             execution_reason="local_only",
@@ -209,9 +229,11 @@ class TestLocalExecutionPath:
 # 6. Cross-device execution path with remote mode
 # ---------------------------------------------------------------------------
 
+
 class TestCrossDeviceExecutionPath:
     def test_cross_device_path_fields(self):
         from core.schemas.unified_control_plan import UnifiedExecutionDecision
+
         ued = UnifiedExecutionDecision(
             execution_path="cross_device",
             delegation_point="single_remote",
@@ -225,6 +247,7 @@ class TestCrossDeviceExecutionPath:
 
     def test_command_only_cross_device(self):
         from core.schemas.unified_control_plan import UnifiedExecutionDecision
+
         ued = UnifiedExecutionDecision(
             execution_path="cross_device",
             delegation_point="single_remote",
@@ -238,9 +261,11 @@ class TestCrossDeviceExecutionPath:
 # 7. Hybrid execution path with orchestration
 # ---------------------------------------------------------------------------
 
+
 class TestHybridExecutionPath:
     def test_hybrid_path_fields(self):
         from core.schemas.unified_control_plan import UnifiedExecutionDecision
+
         ued = UnifiedExecutionDecision(
             execution_path="hybrid",
             delegation_point="multi_device_orchestration",
@@ -254,6 +279,7 @@ class TestHybridExecutionPath:
 
     def test_hybrid_serialisable(self):
         from core.schemas.unified_control_plan import UnifiedExecutionDecision
+
         ued = UnifiedExecutionDecision(
             execution_path="hybrid",
             orchestration_active=True,
@@ -266,9 +292,11 @@ class TestHybridExecutionPath:
 # 8. None / no-op execution path
 # ---------------------------------------------------------------------------
 
+
 class TestNoneExecutionPath:
     def test_none_path_fields(self):
-        from core.schemas.unified_control_plan import UnifiedExecutionDecision, ExecutionPath
+        from core.schemas.unified_control_plan import ExecutionPath, UnifiedExecutionDecision
+
         ued = UnifiedExecutionDecision(
             execution_path=ExecutionPath.NONE.value,
             execution_reason="observe_only action_level=observe",
@@ -282,9 +310,11 @@ class TestNoneExecutionPath:
 # 9. command_only vs agent_runtime mode captured explicitly
 # ---------------------------------------------------------------------------
 
+
 class TestRemoteModeCaptured:
     def test_agent_runtime_mode(self):
         from core.schemas.unified_control_plan import UnifiedExecutionDecision
+
         ued = UnifiedExecutionDecision(
             execution_path="cross_device",
             remote_execution_mode="agent_runtime",
@@ -294,6 +324,7 @@ class TestRemoteModeCaptured:
 
     def test_command_only_mode(self):
         from core.schemas.unified_control_plan import UnifiedExecutionDecision
+
         ued = UnifiedExecutionDecision(
             execution_path="cross_device",
             remote_execution_mode="command_only",
@@ -303,6 +334,7 @@ class TestRemoteModeCaptured:
 
     def test_none_mode_for_local(self):
         from core.schemas.unified_control_plan import UnifiedExecutionDecision
+
         ued = UnifiedExecutionDecision(execution_path="local")
         assert ued.to_dict()["remote_execution_mode"] is None
 
@@ -311,9 +343,11 @@ class TestRemoteModeCaptured:
 # 10. is_downgrade and preferred_path fields
 # ---------------------------------------------------------------------------
 
+
 class TestDowngradeTracking:
     def test_downgrade_fields_present(self):
         from core.schemas.unified_control_plan import UnifiedExecutionDecision
+
         ued = UnifiedExecutionDecision(
             execution_path="cross_device",
             remote_execution_mode="command_only",
@@ -327,6 +361,7 @@ class TestDowngradeTracking:
 
     def test_no_downgrade_default(self):
         from core.schemas.unified_control_plan import UnifiedExecutionDecision
+
         ued = UnifiedExecutionDecision()
         assert ued.is_downgrade is False
         assert ued.preferred_path is None
@@ -336,9 +371,11 @@ class TestDowngradeTracking:
 # 11. execution_reason present
 # ---------------------------------------------------------------------------
 
+
 class TestExecutionReason:
     def test_reason_stored(self):
         from core.schemas.unified_control_plan import UnifiedExecutionDecision
+
         reason = "device_id=tablet-01 → single_remote delegation via agent_runtime"
         ued = UnifiedExecutionDecision(execution_reason=reason)
         assert ued.execution_reason == reason
@@ -346,6 +383,7 @@ class TestExecutionReason:
 
     def test_reason_round_trips(self):
         from core.schemas.unified_control_plan import UnifiedExecutionDecision
+
         reason = "local_only: no device_id, action_level=execute"
         ued = UnifiedExecutionDecision(execution_reason=reason)
         restored = UnifiedExecutionDecision.from_dict(ued.to_dict())
@@ -356,9 +394,11 @@ class TestExecutionReason:
 # 12–13. FallbackDecisionRecord — defaults and round-trip
 # ---------------------------------------------------------------------------
 
+
 class TestFallbackDecisionRecordBasic:
     def test_default_construction_no_fallback(self):
         from core.schemas.unified_control_plan import FallbackDecisionRecord
+
         fdr = FallbackDecisionRecord()
         assert fdr.has_fallback is False
         assert fdr.fallback_kinds == []
@@ -367,19 +407,26 @@ class TestFallbackDecisionRecordBasic:
 
     def test_to_dict_has_required_keys(self):
         from core.schemas.unified_control_plan import FallbackDecisionRecord
+
         fdr = FallbackDecisionRecord()
         d = fdr.to_dict()
         required = {
-            "has_fallback", "fallback_kinds",
-            "model_fallback_reason", "multimodal_downgrade_reason",
-            "agent_to_command_reason", "remote_to_local_reason",
-            "orchestration_downgrade_reason", "blocked_reason",
-            "human_readable_summary", "machine_readable_codes",
+            "has_fallback",
+            "fallback_kinds",
+            "model_fallback_reason",
+            "multimodal_downgrade_reason",
+            "agent_to_command_reason",
+            "remote_to_local_reason",
+            "orchestration_downgrade_reason",
+            "blocked_reason",
+            "human_readable_summary",
+            "machine_readable_codes",
         }
         assert required.issubset(d.keys())
 
     def test_to_dict_from_dict_roundtrip(self):
         from core.schemas.unified_control_plan import FallbackDecisionRecord, FallbackKind
+
         fdr = FallbackDecisionRecord(
             fallback_kinds=[FallbackKind.REMOTE_TO_LOCAL.value],
             remote_to_local_reason="remote device unavailable",
@@ -394,9 +441,11 @@ class TestFallbackDecisionRecordBasic:
 # 14–16. FallbackDecisionRecord auto-derivation
 # ---------------------------------------------------------------------------
 
+
 class TestFallbackAutoDerivation:
     def test_has_fallback_auto_derived_from_kinds(self):
         from core.schemas.unified_control_plan import FallbackDecisionRecord, FallbackKind
+
         fdr = FallbackDecisionRecord(
             fallback_kinds=[FallbackKind.REMOTE_TO_LOCAL.value],
         )
@@ -404,12 +453,14 @@ class TestFallbackAutoDerivation:
 
     def test_machine_readable_codes_auto_derived(self):
         from core.schemas.unified_control_plan import FallbackDecisionRecord, FallbackKind
+
         kinds = [FallbackKind.AGENT_RUNTIME_TO_COMMAND_ONLY.value]
         fdr = FallbackDecisionRecord(fallback_kinds=kinds)
         assert fdr.machine_readable_codes == kinds
 
     def test_human_readable_summary_auto_derived(self):
         from core.schemas.unified_control_plan import FallbackDecisionRecord, FallbackKind
+
         fdr = FallbackDecisionRecord(
             fallback_kinds=[FallbackKind.REMOTE_TO_LOCAL.value],
         )
@@ -418,6 +469,7 @@ class TestFallbackAutoDerivation:
 
     def test_explicit_summary_not_overwritten(self):
         from core.schemas.unified_control_plan import FallbackDecisionRecord, FallbackKind
+
         custom = "Custom summary text"
         fdr = FallbackDecisionRecord(
             fallback_kinds=[FallbackKind.OTHER.value],
@@ -430,9 +482,11 @@ class TestFallbackAutoDerivation:
 # 17. agent_runtime → command_only downgrade captured
 # ---------------------------------------------------------------------------
 
+
 class TestAgentToCommandDowngrade:
     def test_agent_to_command_fallback_kind(self):
         from core.schemas.unified_control_plan import FallbackDecisionRecord, FallbackKind
+
         fdr = FallbackDecisionRecord(
             fallback_kinds=[FallbackKind.AGENT_RUNTIME_TO_COMMAND_ONLY.value],
             agent_to_command_reason="target does not support agent_runtime",
@@ -443,6 +497,7 @@ class TestAgentToCommandDowngrade:
 
     def test_serialisable(self):
         from core.schemas.unified_control_plan import FallbackDecisionRecord, FallbackKind
+
         fdr = FallbackDecisionRecord(
             fallback_kinds=[FallbackKind.AGENT_RUNTIME_TO_COMMAND_ONLY.value],
             agent_to_command_reason="capability mismatch",
@@ -454,9 +509,11 @@ class TestAgentToCommandDowngrade:
 # 18. remote → local fallback captured
 # ---------------------------------------------------------------------------
 
+
 class TestRemoteToLocalFallback:
     def test_remote_to_local_kind(self):
         from core.schemas.unified_control_plan import FallbackDecisionRecord, FallbackKind
+
         fdr = FallbackDecisionRecord(
             fallback_kinds=[FallbackKind.REMOTE_TO_LOCAL.value],
             remote_to_local_reason="all remote targets unavailable",
@@ -470,9 +527,11 @@ class TestRemoteToLocalFallback:
 # 19. native_multimodal → text downgrade captured
 # ---------------------------------------------------------------------------
 
+
 class TestMultimodalToTextDowngrade:
     def test_multimodal_to_text_kind(self):
         from core.schemas.unified_control_plan import FallbackDecisionRecord, FallbackKind
+
         fdr = FallbackDecisionRecord(
             fallback_kinds=[FallbackKind.NATIVE_MULTIMODAL_TO_TEXT.value],
             multimodal_downgrade_reason="no native multimodal provider available",
@@ -486,9 +545,11 @@ class TestMultimodalToTextDowngrade:
 # 20. Orchestration downgrade captured
 # ---------------------------------------------------------------------------
 
+
 class TestOrchestrationDowngrade:
     def test_orchestration_downgrade_kind(self):
         from core.schemas.unified_control_plan import FallbackDecisionRecord, FallbackKind
+
         fdr = FallbackDecisionRecord(
             fallback_kinds=[FallbackKind.ORCHESTRATION_DOWNGRADE.value],
             orchestration_downgrade_reason="only one device reachable, orchestration simplified",
@@ -502,9 +563,11 @@ class TestOrchestrationDowngrade:
 # 21. Blocked / no-op governance result captured
 # ---------------------------------------------------------------------------
 
+
 class TestBlockedNoOpGovernance:
     def test_blocked_no_op_kind(self):
         from core.schemas.unified_control_plan import FallbackDecisionRecord, FallbackKind
+
         fdr = FallbackDecisionRecord(
             fallback_kinds=[FallbackKind.BLOCKED_NO_OP.value],
             blocked_reason="action_level=observe governance blocked execution",
@@ -518,9 +581,11 @@ class TestBlockedNoOpGovernance:
 # 22. Model fallback reason captured
 # ---------------------------------------------------------------------------
 
+
 class TestModelFallbackReason:
     def test_model_fallback_kind(self):
         from core.schemas.unified_control_plan import FallbackDecisionRecord, FallbackKind
+
         fdr = FallbackDecisionRecord(
             fallback_kinds=[FallbackKind.MODEL_CAPABILITY_FALLBACK.value],
             model_fallback_reason="primary model quota exceeded, using fallback model",
@@ -534,9 +599,11 @@ class TestModelFallbackReason:
 # 23. Multiple fallback kinds in one record
 # ---------------------------------------------------------------------------
 
+
 class TestMultipleFallbackKinds:
     def test_multiple_kinds(self):
         from core.schemas.unified_control_plan import FallbackDecisionRecord, FallbackKind
+
         kinds = [
             FallbackKind.NATIVE_MULTIMODAL_TO_TEXT.value,
             FallbackKind.AGENT_RUNTIME_TO_COMMAND_ONLY.value,
@@ -552,6 +619,7 @@ class TestMultipleFallbackKinds:
 
     def test_multiple_kinds_serialisable(self):
         from core.schemas.unified_control_plan import FallbackDecisionRecord, FallbackKind
+
         fdr = FallbackDecisionRecord(
             fallback_kinds=[
                 FallbackKind.REMOTE_TO_LOCAL.value,
@@ -565,9 +633,11 @@ class TestMultipleFallbackKinds:
 # 24–25. UnifiedControlPlan — new PR-21 fields populated by builder
 # ---------------------------------------------------------------------------
 
+
 class TestUnifiedControlPlanWithPR21:
     def test_unified_execution_decision_field_present(self):
         from core.schemas.unified_control_plan import build_unified_control_plan
+
         plan = build_unified_control_plan(
             execution_path="local",
             execution_reason="local_only request",
@@ -577,7 +647,8 @@ class TestUnifiedControlPlanWithPR21:
         assert plan.unified_execution_decision.execution_reason == "local_only request"
 
     def test_fallback_decision_record_field_present_when_fallback(self):
-        from core.schemas.unified_control_plan import build_unified_control_plan, FallbackKind
+        from core.schemas.unified_control_plan import FallbackKind, build_unified_control_plan
+
         plan = build_unified_control_plan(
             execution_path="local",
             fallback_kinds=[FallbackKind.REMOTE_TO_LOCAL.value],
@@ -588,6 +659,7 @@ class TestUnifiedControlPlanWithPR21:
 
     def test_fallback_decision_record_none_when_no_fallback(self):
         from core.schemas.unified_control_plan import build_unified_control_plan
+
         plan = build_unified_control_plan(execution_path="local")
         assert plan.fallback_decision_record is None
 
@@ -596,9 +668,11 @@ class TestUnifiedControlPlanWithPR21:
 # 26–27. to_dict / from_dict with new fields
 # ---------------------------------------------------------------------------
 
+
 class TestUnifiedControlPlanRoundTrip:
     def test_to_dict_includes_unified_execution_decision(self):
         from core.schemas.unified_control_plan import build_unified_control_plan
+
         plan = build_unified_control_plan(
             execution_path="cross_device",
             remote_execution_mode="agent_runtime",
@@ -610,7 +684,8 @@ class TestUnifiedControlPlanRoundTrip:
         assert d["unified_execution_decision"]["execution_path"] == "cross_device"
 
     def test_to_dict_includes_fallback_decision_record(self):
-        from core.schemas.unified_control_plan import build_unified_control_plan, FallbackKind
+        from core.schemas.unified_control_plan import FallbackKind, build_unified_control_plan
+
         plan = build_unified_control_plan(
             fallback_kinds=[FallbackKind.AGENT_RUNTIME_TO_COMMAND_ONLY.value],
             agent_to_command_reason="thin client target",
@@ -621,7 +696,8 @@ class TestUnifiedControlPlanRoundTrip:
         assert d["fallback_decision_record"]["has_fallback"] is True
 
     def test_from_dict_round_trip_preserves_ued(self):
-        from core.schemas.unified_control_plan import build_unified_control_plan, UnifiedControlPlan
+        from core.schemas.unified_control_plan import UnifiedControlPlan, build_unified_control_plan
+
         plan = build_unified_control_plan(
             execution_path="hybrid",
             orchestration_active=True,
@@ -633,7 +709,8 @@ class TestUnifiedControlPlanRoundTrip:
         assert restored.unified_execution_decision.orchestration_active is True
 
     def test_from_dict_round_trip_preserves_fdr(self):
-        from core.schemas.unified_control_plan import build_unified_control_plan, UnifiedControlPlan, FallbackKind
+        from core.schemas.unified_control_plan import FallbackKind, UnifiedControlPlan, build_unified_control_plan
+
         plan = build_unified_control_plan(
             fallback_kinds=[FallbackKind.REMOTE_TO_LOCAL.value],
             remote_to_local_reason="device offline",
@@ -647,9 +724,11 @@ class TestUnifiedControlPlanRoundTrip:
 # 28. unified_control_plan_summary — exposes execution_reason and fallback
 # ---------------------------------------------------------------------------
 
+
 class TestUnifiedControlPlanSummary:
     def test_summary_has_execution_reason(self):
         from core.schemas.unified_control_plan import build_unified_control_plan, unified_control_plan_summary
+
         plan = build_unified_control_plan(
             execution_path="cross_device",
             execution_reason="device_id=phone-01",
@@ -659,7 +738,12 @@ class TestUnifiedControlPlanSummary:
         assert summary["execution_reason"] == "device_id=phone-01"
 
     def test_summary_has_fallback_fields(self):
-        from core.schemas.unified_control_plan import build_unified_control_plan, unified_control_plan_summary, FallbackKind
+        from core.schemas.unified_control_plan import (
+            FallbackKind,
+            build_unified_control_plan,
+            unified_control_plan_summary,
+        )
+
         plan = build_unified_control_plan(
             fallback_kinds=[FallbackKind.AGENT_RUNTIME_TO_COMMAND_ONLY.value],
         )
@@ -670,6 +754,7 @@ class TestUnifiedControlPlanSummary:
 
     def test_summary_no_fallback_defaults(self):
         from core.schemas.unified_control_plan import build_unified_control_plan, unified_control_plan_summary
+
         plan = build_unified_control_plan(execution_path="local")
         summary = unified_control_plan_summary(plan)
         assert summary is not None
@@ -678,6 +763,7 @@ class TestUnifiedControlPlanSummary:
 
     def test_summary_has_remote_mode(self):
         from core.schemas.unified_control_plan import build_unified_control_plan, unified_control_plan_summary
+
         plan = build_unified_control_plan(
             execution_path="cross_device",
             remote_execution_mode="command_only",
@@ -687,6 +773,7 @@ class TestUnifiedControlPlanSummary:
 
     def test_summary_is_execution_downgrade(self):
         from core.schemas.unified_control_plan import build_unified_control_plan, unified_control_plan_summary
+
         plan = build_unified_control_plan(
             execution_path="cross_device",
             remote_execution_mode="command_only",
@@ -698,6 +785,7 @@ class TestUnifiedControlPlanSummary:
 
     def test_summary_none_plan_returns_none(self):
         from core.schemas.unified_control_plan import unified_control_plan_summary
+
         assert unified_control_plan_summary(None) is None
 
 
@@ -705,9 +793,11 @@ class TestUnifiedControlPlanSummary:
 # 29. build_unified_control_plan — minimal call (no PR-21 kwargs) still works
 # ---------------------------------------------------------------------------
 
+
 class TestBackwardCompatibleBuilder:
     def test_minimal_call_succeeds(self):
         from core.schemas.unified_control_plan import build_unified_control_plan
+
         plan = build_unified_control_plan()
         assert plan is not None
         assert plan.unified_execution_decision is not None
@@ -715,6 +805,7 @@ class TestBackwardCompatibleBuilder:
 
     def test_existing_kwargs_still_accepted(self):
         from core.schemas.unified_control_plan import build_unified_control_plan
+
         plan = build_unified_control_plan(
             execution_path="cross_device",
             delegation_point="single_remote",
@@ -732,9 +823,11 @@ class TestBackwardCompatibleBuilder:
 # 30. OpenClawd._build_unified_control_plan — accepts PR-21 kwargs
 # ---------------------------------------------------------------------------
 
+
 class TestOpenClawdBuildUCP:
     def test_accepts_pr21_kwargs_without_error(self):
         from core.openclawd import OpenClawd
+
         oc = OpenClawd.__new__(OpenClawd)
         result = oc._build_unified_control_plan(
             execution_path="cross_device",
@@ -751,6 +844,7 @@ class TestOpenClawdBuildUCP:
 
     def test_pr21_fields_in_output(self):
         from core.openclawd import OpenClawd
+
         oc = OpenClawd.__new__(OpenClawd)
         result = oc._build_unified_control_plan(
             execution_path="local",
@@ -762,6 +856,7 @@ class TestOpenClawdBuildUCP:
 
     def test_fallback_record_in_output_when_kinds_given(self):
         from core.openclawd import OpenClawd
+
         oc = OpenClawd.__new__(OpenClawd)
         result = oc._build_unified_control_plan(
             execution_path="local",
@@ -777,15 +872,18 @@ class TestOpenClawdBuildUCP:
 # 31. Authority invariant — decision_authority always subject_decision_authority
 # ---------------------------------------------------------------------------
 
+
 class TestAuthorityInvariant:
     def test_authority_role_is_subject_decision_authority(self):
-        from core.schemas.unified_control_plan import build_unified_control_plan, AUTHORITY_ROLE
+        from core.schemas.unified_control_plan import AUTHORITY_ROLE, build_unified_control_plan
+
         plan = build_unified_control_plan(execution_path="local")
         assert plan.authority_chain.decision_authority == AUTHORITY_ROLE
         assert plan.authority_chain.decision_authority == "subject_decision_authority"
 
     def test_authority_role_in_to_dict(self):
         from core.schemas.unified_control_plan import build_unified_control_plan
+
         plan = build_unified_control_plan()
         d = plan.to_dict()
         assert d["authority_chain"]["decision_authority"] == "subject_decision_authority"
@@ -795,13 +893,15 @@ class TestAuthorityInvariant:
 # 32. Orchestration/substrate boundary — roles distinct
 # ---------------------------------------------------------------------------
 
+
 class TestOrchestrationSubstrateBoundary:
     def test_substrate_role_distinct_from_orchestration(self):
         from core.schemas.unified_control_plan import (
-            build_unified_control_plan,
-            SUBSTRATE_ROLE,
             ORCHESTRATION_ROLE,
+            SUBSTRATE_ROLE,
+            build_unified_control_plan,
         )
+
         plan = build_unified_control_plan()
         chain = plan.authority_chain
         assert chain.substrate_role != chain.orchestration_role
@@ -809,7 +909,8 @@ class TestOrchestrationSubstrateBoundary:
         assert chain.orchestration_role == ORCHESTRATION_ROLE
 
     def test_orchestration_active_does_not_change_authority(self):
-        from core.schemas.unified_control_plan import build_unified_control_plan, AUTHORITY_ROLE
+        from core.schemas.unified_control_plan import AUTHORITY_ROLE, build_unified_control_plan
+
         plan = build_unified_control_plan(
             execution_path="hybrid",
             orchestration_active=True,
@@ -818,6 +919,7 @@ class TestOrchestrationSubstrateBoundary:
 
     def test_orchestration_active_reflected_in_ued(self):
         from core.schemas.unified_control_plan import build_unified_control_plan
+
         plan = build_unified_control_plan(
             execution_path="hybrid",
             orchestration_active=True,
@@ -830,9 +932,11 @@ class TestOrchestrationSubstrateBoundary:
 # 33. Serialisation safety — all new structures JSON-serialisable
 # ---------------------------------------------------------------------------
 
+
 class TestSerialisationSafety:
     def test_unified_execution_decision_json_safe(self):
         from core.schemas.unified_control_plan import UnifiedExecutionDecision
+
         ued = UnifiedExecutionDecision(
             execution_path="cross_device",
             remote_execution_mode="agent_runtime",
@@ -845,6 +949,7 @@ class TestSerialisationSafety:
 
     def test_fallback_decision_record_json_safe(self):
         from core.schemas.unified_control_plan import FallbackDecisionRecord, FallbackKind
+
         fdr = FallbackDecisionRecord(
             fallback_kinds=[
                 FallbackKind.NATIVE_MULTIMODAL_TO_TEXT.value,
@@ -856,7 +961,8 @@ class TestSerialisationSafety:
         assert json.dumps(fdr.to_dict()) is not None
 
     def test_full_plan_json_safe(self):
-        from core.schemas.unified_control_plan import build_unified_control_plan, FallbackKind
+        from core.schemas.unified_control_plan import FallbackKind, build_unified_control_plan
+
         plan = build_unified_control_plan(
             execution_path="cross_device",
             remote_execution_mode="command_only",
@@ -873,9 +979,11 @@ class TestSerialisationSafety:
 # 34. Backward compatibility — ChosenExecutionDecision unaffected
 # ---------------------------------------------------------------------------
 
+
 class TestBackwardCompatibility:
     def test_chosen_execution_decision_still_present(self):
         from core.schemas.unified_control_plan import build_unified_control_plan
+
         plan = build_unified_control_plan(
             execution_path="cross_device",
             delegation_point="single_remote",
@@ -886,6 +994,7 @@ class TestBackwardCompatibility:
 
     def test_chosen_execution_decision_in_to_dict(self):
         from core.schemas.unified_control_plan import build_unified_control_plan
+
         plan = build_unified_control_plan(execution_path="local")
         d = plan.to_dict()
         assert "chosen_execution_decision" in d
@@ -893,6 +1002,7 @@ class TestBackwardCompatibility:
 
     def test_existing_fallback_level_unaffected(self):
         from core.schemas.unified_control_plan import build_unified_control_plan
+
         plan = build_unified_control_plan(
             fallback_level="local_fallback",
             fallback_reason="device unavailable",
@@ -905,25 +1015,31 @@ class TestBackwardCompatibility:
 # 35. FallbackDecisionRecord — from_dict with partial/missing data degrades
 # ---------------------------------------------------------------------------
 
+
 class TestFallbackDecisionRecordDegradation:
     def test_empty_dict_returns_defaults(self):
         from core.schemas.unified_control_plan import FallbackDecisionRecord
+
         fdr = FallbackDecisionRecord.from_dict({})
         assert fdr.has_fallback is False
         assert fdr.fallback_kinds == []
 
     def test_unknown_keys_ignored(self):
         from core.schemas.unified_control_plan import FallbackDecisionRecord
-        fdr = FallbackDecisionRecord.from_dict({
-            "has_fallback": True,
-            "fallback_kinds": ["remote_to_local"],
-            "unknown_future_key": "should_be_ignored",
-        })
+
+        fdr = FallbackDecisionRecord.from_dict(
+            {
+                "has_fallback": True,
+                "fallback_kinds": ["remote_to_local"],
+                "unknown_future_key": "should_be_ignored",
+            }
+        )
         assert fdr.has_fallback is True
         assert fdr.fallback_kinds == ["remote_to_local"]
 
     def test_missing_reasons_default_to_none(self):
         from core.schemas.unified_control_plan import FallbackDecisionRecord
+
         fdr = FallbackDecisionRecord.from_dict({"has_fallback": False})
         assert fdr.model_fallback_reason is None
         assert fdr.agent_to_command_reason is None

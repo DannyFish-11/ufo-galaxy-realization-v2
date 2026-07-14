@@ -19,6 +19,7 @@ Test groups
   L) GitHubInstaller._register_skill() accepts valid manifest and calls SkillLoader
   M) Successful install registers Skill into SkillLoader and refreshes capability registry
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -97,7 +98,7 @@ class TestSkillPackageContractError:
 
 class TestValidateSkillPackageContractValid:
     def test_minimal_valid(self):
-        from core.skill_package_contract import validate_skill_package_contract, SkillPackageContract
+        from core.skill_package_contract import SkillPackageContract, validate_skill_package_contract
 
         contract = validate_skill_package_contract(_valid_manifest())
         assert isinstance(contract, SkillPackageContract)
@@ -146,17 +147,13 @@ class TestValidateSkillPackageContractValid:
     def test_id_with_underscores_and_hyphens(self):
         from core.skill_package_contract import validate_skill_package_contract
 
-        contract = validate_skill_package_contract(
-            _valid_manifest(id="my_cool-skill123")
-        )
+        contract = validate_skill_package_contract(_valid_manifest(id="my_cool-skill123"))
         assert contract.id == "my_cool-skill123"
 
     def test_nested_handler_file_path(self):
         from core.skill_package_contract import validate_skill_package_contract
 
-        contract = validate_skill_package_contract(
-            _valid_manifest(handler_file="src/handlers/main.py")
-        )
+        contract = validate_skill_package_contract(_valid_manifest(handler_file="src/handlers/main.py"))
         assert contract.handler_file == "src/handlers/main.py"
 
 
@@ -167,7 +164,7 @@ class TestValidateSkillPackageContractValid:
 
 class TestValidateSkillPackageContractRequiredViolations:
     def test_missing_id(self):
-        from core.skill_package_contract import validate_skill_package_contract, SkillPackageContractError
+        from core.skill_package_contract import SkillPackageContractError, validate_skill_package_contract
 
         m = _valid_manifest()
         del m["id"]
@@ -176,28 +173,28 @@ class TestValidateSkillPackageContractRequiredViolations:
         assert any("'id'" in v for v in exc_info.value.violations)
 
     def test_empty_id(self):
-        from core.skill_package_contract import validate_skill_package_contract, SkillPackageContractError
+        from core.skill_package_contract import SkillPackageContractError, validate_skill_package_contract
 
         with pytest.raises(SkillPackageContractError) as exc_info:
             validate_skill_package_contract(_valid_manifest(id=""))
         assert any("'id'" in v for v in exc_info.value.violations)
 
     def test_id_with_spaces_rejected(self):
-        from core.skill_package_contract import validate_skill_package_contract, SkillPackageContractError
+        from core.skill_package_contract import SkillPackageContractError, validate_skill_package_contract
 
         with pytest.raises(SkillPackageContractError) as exc_info:
             validate_skill_package_contract(_valid_manifest(id="my skill"))
         assert any("'id'" in v for v in exc_info.value.violations)
 
     def test_id_with_dots_rejected(self):
-        from core.skill_package_contract import validate_skill_package_contract, SkillPackageContractError
+        from core.skill_package_contract import SkillPackageContractError, validate_skill_package_contract
 
         with pytest.raises(SkillPackageContractError) as exc_info:
             validate_skill_package_contract(_valid_manifest(id="my.skill"))
         assert any("'id'" in v for v in exc_info.value.violations)
 
     def test_missing_name(self):
-        from core.skill_package_contract import validate_skill_package_contract, SkillPackageContractError
+        from core.skill_package_contract import SkillPackageContractError, validate_skill_package_contract
 
         m = _valid_manifest()
         del m["name"]
@@ -206,14 +203,14 @@ class TestValidateSkillPackageContractRequiredViolations:
         assert any("'name'" in v for v in exc_info.value.violations)
 
     def test_empty_name(self):
-        from core.skill_package_contract import validate_skill_package_contract, SkillPackageContractError
+        from core.skill_package_contract import SkillPackageContractError, validate_skill_package_contract
 
         with pytest.raises(SkillPackageContractError) as exc_info:
             validate_skill_package_contract(_valid_manifest(name=""))
         assert any("'name'" in v for v in exc_info.value.violations)
 
     def test_missing_handler_file(self):
-        from core.skill_package_contract import validate_skill_package_contract, SkillPackageContractError
+        from core.skill_package_contract import SkillPackageContractError, validate_skill_package_contract
 
         m = _valid_manifest()
         del m["handler_file"]
@@ -222,14 +219,14 @@ class TestValidateSkillPackageContractRequiredViolations:
         assert any("'handler_file'" in v for v in exc_info.value.violations)
 
     def test_empty_handler_file(self):
-        from core.skill_package_contract import validate_skill_package_contract, SkillPackageContractError
+        from core.skill_package_contract import SkillPackageContractError, validate_skill_package_contract
 
         with pytest.raises(SkillPackageContractError) as exc_info:
             validate_skill_package_contract(_valid_manifest(handler_file=""))
         assert any("'handler_file'" in v for v in exc_info.value.violations)
 
     def test_missing_handler_function(self):
-        from core.skill_package_contract import validate_skill_package_contract, SkillPackageContractError
+        from core.skill_package_contract import SkillPackageContractError, validate_skill_package_contract
 
         m = _valid_manifest()
         del m["handler_function"]
@@ -238,14 +235,14 @@ class TestValidateSkillPackageContractRequiredViolations:
         assert any("'handler_function'" in v for v in exc_info.value.violations)
 
     def test_empty_handler_function(self):
-        from core.skill_package_contract import validate_skill_package_contract, SkillPackageContractError
+        from core.skill_package_contract import SkillPackageContractError, validate_skill_package_contract
 
         with pytest.raises(SkillPackageContractError) as exc_info:
             validate_skill_package_contract(_valid_manifest(handler_function=""))
         assert any("'handler_function'" in v for v in exc_info.value.violations)
 
     def test_multiple_violations_collected(self):
-        from core.skill_package_contract import validate_skill_package_contract, SkillPackageContractError
+        from core.skill_package_contract import SkillPackageContractError, validate_skill_package_contract
 
         with pytest.raises(SkillPackageContractError) as exc_info:
             validate_skill_package_contract({})
@@ -272,68 +269,66 @@ class TestValidateSkillPackageContractRequiredViolations:
 
 class TestValidateSkillPackageContractOptionalViolations:
     def test_dependencies_not_list(self):
-        from core.skill_package_contract import validate_skill_package_contract, SkillPackageContractError
+        from core.skill_package_contract import SkillPackageContractError, validate_skill_package_contract
 
         with pytest.raises(SkillPackageContractError) as exc_info:
             validate_skill_package_contract(_valid_manifest(dependencies="httpx"))
         assert any("'dependencies'" in v for v in exc_info.value.violations)
 
     def test_dependencies_non_string_entry(self):
-        from core.skill_package_contract import validate_skill_package_contract, SkillPackageContractError
+        from core.skill_package_contract import SkillPackageContractError, validate_skill_package_contract
 
         with pytest.raises(SkillPackageContractError) as exc_info:
             validate_skill_package_contract(_valid_manifest(dependencies=[1, 2]))
         assert any("'dependencies'" in v for v in exc_info.value.violations)
 
     def test_permissions_not_list(self):
-        from core.skill_package_contract import validate_skill_package_contract, SkillPackageContractError
+        from core.skill_package_contract import SkillPackageContractError, validate_skill_package_contract
 
         with pytest.raises(SkillPackageContractError) as exc_info:
             validate_skill_package_contract(_valid_manifest(permissions="internet"))
         assert any("'permissions'" in v for v in exc_info.value.violations)
 
     def test_permissions_non_string_entry(self):
-        from core.skill_package_contract import validate_skill_package_contract, SkillPackageContractError
+        from core.skill_package_contract import SkillPackageContractError, validate_skill_package_contract
 
         with pytest.raises(SkillPackageContractError) as exc_info:
             validate_skill_package_contract(_valid_manifest(permissions=[42]))
         assert any("'permissions'" in v for v in exc_info.value.violations)
 
     def test_tags_not_list(self):
-        from core.skill_package_contract import validate_skill_package_contract, SkillPackageContractError
+        from core.skill_package_contract import SkillPackageContractError, validate_skill_package_contract
 
         with pytest.raises(SkillPackageContractError) as exc_info:
             validate_skill_package_contract(_valid_manifest(tags="web"))
         assert any("'tags'" in v for v in exc_info.value.violations)
 
     def test_tags_non_string_entry(self):
-        from core.skill_package_contract import validate_skill_package_contract, SkillPackageContractError
+        from core.skill_package_contract import SkillPackageContractError, validate_skill_package_contract
 
         with pytest.raises(SkillPackageContractError) as exc_info:
             validate_skill_package_contract(_valid_manifest(tags=[1, "web"]))
         assert any("'tags'" in v for v in exc_info.value.violations)
 
     def test_parameters_not_list(self):
-        from core.skill_package_contract import validate_skill_package_contract, SkillPackageContractError
+        from core.skill_package_contract import SkillPackageContractError, validate_skill_package_contract
 
         with pytest.raises(SkillPackageContractError) as exc_info:
             validate_skill_package_contract(_valid_manifest(parameters="query"))
         assert any("'parameters'" in v for v in exc_info.value.violations)
 
     def test_parameter_entry_not_dict(self):
-        from core.skill_package_contract import validate_skill_package_contract, SkillPackageContractError
+        from core.skill_package_contract import SkillPackageContractError, validate_skill_package_contract
 
         with pytest.raises(SkillPackageContractError) as exc_info:
             validate_skill_package_contract(_valid_manifest(parameters=["bad"]))
         assert any("parameters[0]" in v for v in exc_info.value.violations)
 
     def test_parameter_entry_missing_name(self):
-        from core.skill_package_contract import validate_skill_package_contract, SkillPackageContractError
+        from core.skill_package_contract import SkillPackageContractError, validate_skill_package_contract
 
         with pytest.raises(SkillPackageContractError) as exc_info:
-            validate_skill_package_contract(
-                _valid_manifest(parameters=[{"type": "string"}])
-            )
+            validate_skill_package_contract(_valid_manifest(parameters=[{"type": "string"}]))
         assert any("parameters[0].name" in v for v in exc_info.value.violations)
 
 
@@ -344,7 +339,7 @@ class TestValidateSkillPackageContractOptionalViolations:
 
 class TestValidateSkillPackageContractSchemaVersion:
     def test_unsupported_schema_version_raises(self):
-        from core.skill_package_contract import validate_skill_package_contract, SkillPackageContractError
+        from core.skill_package_contract import SkillPackageContractError, validate_skill_package_contract
 
         with pytest.raises(SkillPackageContractError) as exc_info:
             validate_skill_package_contract(_valid_manifest(schema_version="99"))
@@ -375,7 +370,7 @@ class TestValidateSkillPackageContractAllowFutureSchema:
         assert contract.schema_version == "2"
 
     def test_future_schema_rejected_without_flag(self):
-        from core.skill_package_contract import validate_skill_package_contract, SkillPackageContractError
+        from core.skill_package_contract import SkillPackageContractError, validate_skill_package_contract
 
         with pytest.raises(SkillPackageContractError):
             validate_skill_package_contract(_valid_manifest(schema_version="2"))
@@ -412,8 +407,8 @@ class TestIsValidSkillPackageContract:
 class TestBuildSkillPackageContractSummary:
     def test_summary_has_expected_keys(self):
         from core.skill_package_contract import (
-            validate_skill_package_contract,
             build_skill_package_contract_summary,
+            validate_skill_package_contract,
         )
 
         contract = validate_skill_package_contract(
@@ -437,8 +432,8 @@ class TestBuildSkillPackageContractSummary:
 
     def test_summary_no_dependencies(self):
         from core.skill_package_contract import (
-            validate_skill_package_contract,
             build_skill_package_contract_summary,
+            validate_skill_package_contract,
         )
 
         contract = validate_skill_package_contract(_valid_manifest())
@@ -460,9 +455,19 @@ class TestSkillPackageContractRoundTrip:
         d = contract.to_dict()
 
         required_keys = {
-            "schema_version", "id", "name", "description", "version",
-            "handler_file", "handler_function", "parameters",
-            "dependencies", "permissions", "tags", "repository", "author",
+            "schema_version",
+            "id",
+            "name",
+            "description",
+            "version",
+            "handler_file",
+            "handler_function",
+            "parameters",
+            "dependencies",
+            "permissions",
+            "tags",
+            "repository",
+            "author",
         }
         assert required_keys.issubset(set(d.keys()))
 
@@ -500,9 +505,7 @@ class TestSkillLoaderContractEnforcement:
         skill_dir = tmp_path / "bad-skill"
         skill_dir.mkdir()
         # Write a skill.json that is missing required fields
-        (skill_dir / "skill.json").write_text(
-            json.dumps({"name": "incomplete"}), encoding="utf-8"
-        )
+        (skill_dir / "skill.json").write_text(json.dumps({"name": "incomplete"}), encoding="utf-8")
 
         from core.skill_loader import SkillLoader
 
@@ -675,9 +678,7 @@ class TestRegisterSkillValidManifest:
         manifest = _valid_manifest()
 
         loader = MagicMock()
-        loader.load = AsyncMock(
-            return_value={"success": True, "skill_id": "my-skill", "name": "My Skill"}
-        )
+        loader.load = AsyncMock(return_value={"success": True, "skill_id": "my-skill", "name": "My Skill"})
 
         with patch("core.skill_loader.skill_loader", loader):
             result = _register_skill(tmp_path, manifest)

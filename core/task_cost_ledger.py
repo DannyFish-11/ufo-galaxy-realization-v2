@@ -20,6 +20,7 @@ LLM 调用、ToolCallRecord 记单次工具调用、runtime_session_id 串生命
 将来微调专属小模型的原料)、INFO 一行日志(真机肉眼可读)。
 全程 try/except,账本任何故障绝不影响主流程。
 """
+
 from __future__ import annotations
 
 import contextvars
@@ -40,6 +41,7 @@ _LEDGER_PATH_DEFAULT = "data/task_cost_ledger.jsonl"
 @dataclass
 class TaskBill:
     """一个任务(一次 runtime 请求)的成本账单。"""
+
     trace_id: str
     source: str = "unknown"
     started_monotonic: float = field(default_factory=time.monotonic)
@@ -54,8 +56,7 @@ class TaskBill:
     success: Optional[bool] = None
     wall_ms: float = 0.0
 
-    def add_llm(self, provider: str, input_tokens: int, output_tokens: int,
-                cost: float = 0.0) -> None:
+    def add_llm(self, provider: str, input_tokens: int, output_tokens: int, cost: float = 0.0) -> None:
         self.llm_calls += 1
         self.input_tokens += max(0, int(input_tokens or 0))
         self.output_tokens += max(0, int(output_tokens or 0))
@@ -83,7 +84,8 @@ class TaskBill:
 
 # 请求级上下文:runtime 开账,深链各层记账,互不串扰(同 llm_stream 模式)。
 _current_bill: contextvars.ContextVar[Optional[TaskBill]] = contextvars.ContextVar(
-    "galaxy_task_bill", default=None,
+    "galaxy_task_bill",
+    default=None,
 )
 
 
@@ -109,8 +111,12 @@ class TaskCostLedger:
         # 真机一行可读:这就是"任务总消耗"北极星的日常观测面
         logger.info(
             "任务账单 | %s | LLM×%d tokens(in %d/out %d) 工具×%d 轮×%d %.1fs%s",
-            bill.trace_id[:12], bill.llm_calls, bill.input_tokens,
-            bill.output_tokens, bill.tool_calls, bill.react_rounds,
+            bill.trace_id[:12],
+            bill.llm_calls,
+            bill.input_tokens,
+            bill.output_tokens,
+            bill.tool_calls,
+            bill.react_rounds,
             bill.wall_ms / 1000.0,
             "" if bill.success is None else (" ✓" if bill.success else " ✗"),
         )
@@ -139,8 +145,7 @@ class TaskCostLedger:
             "avg_llm_calls": round(sum(b["llm_calls"] for b in bills) / n, 2),
             "avg_tool_calls": round(sum(b["tool_calls"] for b in bills) / n, 2),
             "avg_wall_ms": round(sum(b["wall_ms"] for b in bills) / n, 1),
-            "success_rate": round(
-                sum(1 for b in bills if b.get("success")) / n, 3),
+            "success_rate": round(sum(1 for b in bills if b.get("success")) / n, 3),
         }
 
 
@@ -152,14 +157,14 @@ def get_task_cost_ledger() -> TaskCostLedger:
 # 深链记账入口(任何层都可安全调用;无在途账单时静默无操作)
 # ---------------------------------------------------------------------------
 
+
 def open_task_bill(trace_id: str, source: str = "unknown") -> contextvars.Token:
     """开账并挂到当前上下文;返回 token 供 close 时复位。"""
     bill = TaskBill(trace_id=trace_id, source=source)
     return _current_bill.set(bill)
 
 
-def close_task_bill(token: contextvars.Token,
-                    success: Optional[bool] = None) -> Optional[Dict[str, Any]]:
+def close_task_bill(token: contextvars.Token, success: Optional[bool] = None) -> Optional[Dict[str, Any]]:
     """结账:定格墙钟、落账、复位上下文;返回账单 dict(供挂进响应 metadata)。"""
     bill = _current_bill.get()
     _current_bill.reset(token)
@@ -174,8 +179,7 @@ def close_task_bill(token: contextvars.Token,
     return bill.to_dict()
 
 
-def add_llm_usage(provider: str, input_tokens: int, output_tokens: int,
-                  cost: float = 0.0) -> None:
+def add_llm_usage(provider: str, input_tokens: int, output_tokens: int, cost: float = 0.0) -> None:
     bill = _current_bill.get()
     if bill is not None:
         bill.add_llm(provider, input_tokens, output_tokens, cost)

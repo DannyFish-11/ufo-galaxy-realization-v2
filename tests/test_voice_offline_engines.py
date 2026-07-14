@@ -4,6 +4,7 @@
 A 档离线语音对(听/说)引擎:SenseVoice ASR + MeloTTS。
 覆盖优雅降级(缺包不抛)+ 引擎选择器(GALAXY_ASR_ENGINE / GALAXY_TTS_ENGINE)。
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -14,8 +15,8 @@ import pytest
 from core.asr.sensevoice_asr import SenseVoiceASR
 from core.tts.melo_engine import MeloTTSEngine
 
-
 # ── SenseVoice ASR 降级 ──
+
 
 class TestSenseVoiceDegrade:
     def test_unavailable_without_funasr(self):
@@ -40,6 +41,7 @@ class TestSenseVoiceDegrade:
 
 # ── MeloTTS 降级 ──
 
+
 class TestMeloDegrade:
     def test_unavailable_without_pkg(self):
         e = MeloTTSEngine()
@@ -62,10 +64,12 @@ class TestMeloDegrade:
 
 # ── ASR 引擎选择器(modality_bridge._get_asr)──
 
+
 class TestAsrSelection:
     @pytest.fixture(autouse=True)
     def _reset(self, monkeypatch):
         import core.modality_bridge as mb
+
         mb._asr_singleton = None
         mb._asr_failed = False
         monkeypatch.delenv("GALAXY_ASR_ENGINE", raising=False)
@@ -75,6 +79,7 @@ class TestAsrSelection:
 
     def test_auto_prefers_sensevoice(self, monkeypatch):
         import core.modality_bridge as mb
+
         monkeypatch.setattr(mb, "_try_sensevoice", lambda: "SV")
         monkeypatch.setattr(mb, "_try_whisper", lambda: "WH")
         monkeypatch.setenv("GALAXY_ASR_ENGINE", "auto")
@@ -82,6 +87,7 @@ class TestAsrSelection:
 
     def test_auto_falls_back_to_whisper(self, monkeypatch):
         import core.modality_bridge as mb
+
         monkeypatch.setattr(mb, "_try_sensevoice", lambda: None)
         monkeypatch.setattr(mb, "_try_whisper", lambda: "WH")
         monkeypatch.setenv("GALAXY_ASR_ENGINE", "auto")
@@ -89,6 +95,7 @@ class TestAsrSelection:
 
     def test_whisper_forced_skips_sensevoice(self, monkeypatch):
         import core.modality_bridge as mb
+
         monkeypatch.setattr(mb, "_try_sensevoice", lambda: "SV")
         monkeypatch.setattr(mb, "_try_whisper", lambda: "WH")
         monkeypatch.setenv("GALAXY_ASR_ENGINE", "whisper")
@@ -96,6 +103,7 @@ class TestAsrSelection:
 
     def test_sensevoice_forced_falls_back(self, monkeypatch):
         import core.modality_bridge as mb
+
         monkeypatch.setattr(mb, "_try_sensevoice", lambda: None)
         monkeypatch.setattr(mb, "_try_whisper", lambda: "WH")
         monkeypatch.setenv("GALAXY_ASR_ENGINE", "sensevoice")
@@ -103,6 +111,7 @@ class TestAsrSelection:
 
     def test_all_none_sets_failed(self, monkeypatch):
         import core.modality_bridge as mb
+
         monkeypatch.setattr(mb, "_try_sensevoice", lambda: None)
         monkeypatch.setattr(mb, "_try_whisper", lambda: None)
         monkeypatch.setenv("GALAXY_ASR_ENGINE", "auto")
@@ -112,10 +121,12 @@ class TestAsrSelection:
 
 # ── TTS 引擎选择器含 melo(speech_output._get_engine)──
 
+
 class TestTtsMeloSelection:
     @pytest.fixture(autouse=True)
     def _reset(self, monkeypatch):
         import core.speech_output as so
+
         so._engine = None
         so._engine_failed = False
         monkeypatch.delenv("GALAXY_TTS_ENGINE", raising=False)
@@ -125,6 +136,7 @@ class TestTtsMeloSelection:
 
     def test_melo_choice_degrades_gracefully(self, monkeypatch):
         import core.speech_output as so
+
         monkeypatch.setenv("GALAXY_TTS_ENGINE", "melo")
         eng = so._get_engine()
         # 无 melo/piper 模型 → 退 edge(或 None),绝不崩。
@@ -132,6 +144,7 @@ class TestTtsMeloSelection:
 
     def test_melo_preferred_when_available(self, monkeypatch):
         import core.speech_output as so
+
         # 用哨兵替换内部 _try_*:验证 melo 档优先选 melo。
         # (通过环境驱动真实选择路径,melo 优先于 piper/edge。)
         monkeypatch.setenv("GALAXY_TTS_ENGINE", "melo")
@@ -139,8 +152,7 @@ class TestTtsMeloSelection:
         class _FakeMelo:
             def available(self):
                 return True
-        monkeypatch.setattr(
-            "core.tts.melo_engine.MeloTTSEngine", lambda *a, **k: _FakeMelo()
-        )
+
+        monkeypatch.setattr("core.tts.melo_engine.MeloTTSEngine", lambda *a, **k: _FakeMelo())
         eng = so._get_engine()
         assert isinstance(eng, _FakeMelo)

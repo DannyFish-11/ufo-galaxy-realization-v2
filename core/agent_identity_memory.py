@@ -26,6 +26,7 @@ Usage::
     self_desc = identity.get_self_description()
     # "I am Galaxy, a distributed AI coordinator..."
 """
+
 from __future__ import annotations
 
 import json
@@ -59,11 +60,11 @@ class AgentIdentity:
 
     values: List[str] = field(
         default_factory=lambda: [
-            "user_sovereignty",      # User always has final say
-            "privacy_first",          # Local processing preferred
-            "transparency",           # Explain what I'm doing
-            "graceful_degradation",   # Work even when some parts fail
-            "continuous_learning",    # Improve from every interaction
+            "user_sovereignty",  # User always has final say
+            "privacy_first",  # Local processing preferred
+            "transparency",  # Explain what I'm doing
+            "graceful_degradation",  # Work even when some parts fail
+            "continuous_learning",  # Improve from every interaction
         ]
     )
 
@@ -104,12 +105,14 @@ class AgentIdentity:
 
     def evolve(self, change_description: str, changed_by: str = "system") -> None:
         """Record an evolution in the identity."""
-        self.evolution_log.append({
-            "timestamp": time.time(),
-            "change": change_description,
-            "changed_by": changed_by,
-            "version": self.version,
-        })
+        self.evolution_log.append(
+            {
+                "timestamp": time.time(),
+                "change": change_description,
+                "changed_by": changed_by,
+                "version": self.version,
+            }
+        )
         # PR-STABILITY: Cap evolution log at 100 entries
         if len(self.evolution_log) > 100:
             self.evolution_log = self.evolution_log[-100:]

@@ -12,10 +12,10 @@ Agent 迁移闭环测试 — Phase 1 Matrix OS
 6. 日志回传验证
 """
 
+import asyncio
+import json
 import os
 import sys
-import json
-import asyncio
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -25,7 +25,7 @@ def test_1_manifest_serialization():
     """测试 AgentManifest 序列化/反序列化"""
     print("\n[测试 1] AgentManifest 序列化/反序列化")
 
-    from core.agent_manifest import AgentManifest, ToolDeclaration, TaskItem
+    from core.agent_manifest import AgentManifest, TaskItem, ToolDeclaration
 
     # 创建 Manifest
     manifest = AgentManifest.create_device_control_agent(
@@ -97,8 +97,8 @@ def test_3_sequential_execution():
     print("\n[测试 3] LocalAgentRuntime 顺序执行")
 
     async def _test():
-        from core.local_agent_runtime import LocalAgentRuntime
         from core.agent_manifest import AgentManifest, TaskItem
+        from core.local_agent_runtime import LocalAgentRuntime
 
         # 记录执行的工具调用
         executed_tools = []
@@ -153,8 +153,8 @@ def test_4_react_execution():
     print("\n[测试 4] LocalAgentRuntime ReAct 执行")
 
     async def _test():
-        from core.local_agent_runtime import LocalAgentRuntime
         from core.agent_manifest import AgentManifest
+        from core.local_agent_runtime import LocalAgentRuntime
 
         executed_tools = []
         reported_steps = []
@@ -275,11 +275,13 @@ def test_5_full_migration_e2e():
         status_reports = []
 
         async def report_back(manifest_id, step):
-            status_reports.append({
-                "type": "agent_status",
-                "manifest_id": manifest_id,
-                "step": step,
-            })
+            status_reports.append(
+                {
+                    "type": "agent_status",
+                    "manifest_id": manifest_id,
+                    "step": step,
+                }
+            )
 
         llm_turn = 0
 
@@ -383,6 +385,7 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"  ❌ FAILED: {e}")
             import traceback
+
             traceback.print_exc()
             results["failed"] += 1
 

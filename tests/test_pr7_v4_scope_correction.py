@@ -73,6 +73,7 @@ try:
         OrchestrationRequest,
         evaluate_orchestration_request,
     )
+
     _SPINE_AVAILABLE = True
 except ImportError:
     _SPINE_AVAILABLE = False
@@ -80,9 +81,10 @@ except ImportError:
 try:
     from core.canonical_dispatch_slot_authority import (
         CanonicalDispatchSlot,
-        CanonicalDispatchSlotStatus,
         CanonicalDispatchSlotsResult,
+        CanonicalDispatchSlotStatus,
     )
+
     _AUTHORITY_AVAILABLE = True
 except ImportError:
     _AUTHORITY_AVAILABLE = False
@@ -91,6 +93,7 @@ except ImportError:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _device_id() -> str:
     return f"dev_{uuid.uuid4().hex[:8]}"
@@ -183,6 +186,7 @@ class TestScopeSentinels:
 
     def test_scope_sentinel_in_module_all(self) -> None:
         import core.unified_orchestration_spine as spine_mod
+
         assert "ORCHESTRATION_SPINE_MULTI_STEP_SESSION_SCOPE_POLICY" in spine_mod.__all__
         assert "V4_IS_NOT_PER_REQUEST_GATE_POLICY" in spine_mod.__all__
 
@@ -201,8 +205,7 @@ class TestUnifiedAuthorityCorrectScope:
         assert len(UNIFIED_ORCHESTRATION_SPINE_AUTHORITY) > 0
 
     def test_authority_still_mentions_v4(self) -> None:
-        assert "V4" in UNIFIED_ORCHESTRATION_SPINE_AUTHORITY or \
-               "v4" in UNIFIED_ORCHESTRATION_SPINE_AUTHORITY.lower()
+        assert "V4" in UNIFIED_ORCHESTRATION_SPINE_AUTHORITY or "v4" in UNIFIED_ORCHESTRATION_SPINE_AUTHORITY.lower()
 
     def test_authority_does_not_claim_all_dispatch_paths_must_pass_through(self) -> None:
         # The old incorrect claim: "All dispatch paths ... MUST pass through
@@ -456,8 +459,10 @@ class TestArchitectureConsistency:
         # V4_IS_NOT_PER_REQUEST_GATE_POLICY should mention "per-request".
         assert "per-request" in V4_IS_NOT_PER_REQUEST_GATE_POLICY.lower()
         # The scope policy should NOT describe V4 as a per-request gate.
-        assert "per-request gate" not in ORCHESTRATION_SPINE_MULTI_STEP_SESSION_SCOPE_POLICY.lower() or \
-               "not" in ORCHESTRATION_SPINE_MULTI_STEP_SESSION_SCOPE_POLICY.lower()
+        assert (
+            "per-request gate" not in ORCHESTRATION_SPINE_MULTI_STEP_SESSION_SCOPE_POLICY.lower()
+            or "not" in ORCHESTRATION_SPINE_MULTI_STEP_SESSION_SCOPE_POLICY.lower()
+        )
 
     def test_spine_completion_contract_policy_still_present(self) -> None:
         assert isinstance(SPINE_COMPLETION_CONTRACT_IS_UNIFIED_POLICY, str)
@@ -487,6 +492,7 @@ class TestGoalExecutionV4Usage:
 
     def test_goal_execution_file_exists(self) -> None:
         import os
+
         assert os.path.exists(self._GOAL_EXECUTION_PATH), (
             f"{self._GOAL_EXECUTION_PATH} must exist — it is the legitimate "
             "caller of V4 for multi-step PARALLEL_FANOUT orchestration sessions."
@@ -520,32 +526,19 @@ class TestGoalExecutionV4Usage:
         # of PARALLEL_FANOUT (multi-step), not as a blanket wrapper around all
         # request handling in goal_execution.py.
         import re
+
         source = self._read_source()
         if not source:
             return
         # Find the line number(s) where evaluate_orchestration_request is called.
-        call_lines = [
-            i for i, line in enumerate(source.splitlines(), 1)
-            if "evaluate_orchestration_request" in line
-        ]
+        call_lines = [i for i, line in enumerate(source.splitlines(), 1) if "evaluate_orchestration_request" in line]
         # Find the line number(s) where PARALLEL_FANOUT appears.
-        fanout_lines = [
-            i for i, line in enumerate(source.splitlines(), 1)
-            if "PARALLEL_FANOUT" in line
-        ]
-        assert call_lines, (
-            "evaluate_orchestration_request must be called in goal_execution.py"
-        )
-        assert fanout_lines, (
-            "PARALLEL_FANOUT must appear in goal_execution.py alongside V4 usage"
-        )
+        fanout_lines = [i for i, line in enumerate(source.splitlines(), 1) if "PARALLEL_FANOUT" in line]
+        assert call_lines, "evaluate_orchestration_request must be called in goal_execution.py"
+        assert fanout_lines, "PARALLEL_FANOUT must appear in goal_execution.py alongside V4 usage"
         # The V4 call must be within 30 lines of a PARALLEL_FANOUT reference,
         # confirming the two are in the same handler block.
-        close_enough = any(
-            abs(call_ln - fanout_ln) <= 30
-            for call_ln in call_lines
-            for fanout_ln in fanout_lines
-        )
+        close_enough = any(abs(call_ln - fanout_ln) <= 30 for call_ln in call_lines for fanout_ln in fanout_lines)
         assert close_enough, (
             "evaluate_orchestration_request() in goal_execution.py must appear "
             "within 30 lines of a PARALLEL_FANOUT reference, confirming V4 usage "
@@ -567,16 +560,12 @@ class TestRepositoryArchitectureInvariants:
         # Both the main authority sentinel and the scope policy must agree.
         authority_lower = UNIFIED_ORCHESTRATION_SPINE_AUTHORITY.lower()
         scope_lower = ORCHESTRATION_SPINE_MULTI_STEP_SESSION_SCOPE_POLICY.lower()
-        assert "not" in authority_lower, (
-            "UNIFIED_ORCHESTRATION_SPINE_AUTHORITY must state V4 is NOT the universal gate"
-        )
+        assert "not" in authority_lower, "UNIFIED_ORCHESTRATION_SPINE_AUTHORITY must state V4 is NOT the universal gate"
         assert "multi-step" in scope_lower or "session" in scope_lower, (
-            "ORCHESTRATION_SPINE_MULTI_STEP_SESSION_SCOPE_POLICY must reference "
-            "multi-step orchestration sessions"
+            "ORCHESTRATION_SPINE_MULTI_STEP_SESSION_SCOPE_POLICY must reference " "multi-step orchestration sessions"
         )
         assert "all dispatch paths" not in authority_lower, (
-            "UNIFIED_ORCHESTRATION_SPINE_AUTHORITY must not claim all dispatch paths "
-            "must pass through V4"
+            "UNIFIED_ORCHESTRATION_SPINE_AUTHORITY must not claim all dispatch paths " "must pass through V4"
         )
 
     def test_per_request_path_is_openclawd_commandrouter(self) -> None:
@@ -584,12 +573,12 @@ class TestRepositoryArchitectureInvariants:
         assert _SPINE_AVAILABLE, "core.unified_orchestration_spine must be importable"
         gate_policy = V4_IS_NOT_PER_REQUEST_GATE_POLICY.lower()
         # The policy must name the actual per-request path components.
-        assert "openclawd" in gate_policy, (
-            "V4_IS_NOT_PER_REQUEST_GATE_POLICY must name OpenClawd as the per-request spine"
-        )
-        assert "commandrouter" in gate_policy, (
-            "V4_IS_NOT_PER_REQUEST_GATE_POLICY must name CommandRouter as the per-request router"
-        )
+        assert (
+            "openclawd" in gate_policy
+        ), "V4_IS_NOT_PER_REQUEST_GATE_POLICY must name OpenClawd as the per-request spine"
+        assert (
+            "commandrouter" in gate_policy
+        ), "V4_IS_NOT_PER_REQUEST_GATE_POLICY must name CommandRouter as the per-request router"
 
     def test_no_false_split_brain_narrative(self) -> None:
         """No sentinel claims V4 is the universal gate while another denies it."""
@@ -601,12 +590,6 @@ class TestRepositoryArchitectureInvariants:
             "not" in ORCHESTRATION_SPINE_MULTI_STEP_SESSION_SCOPE_POLICY.lower()
             or "multi-step" in ORCHESTRATION_SPINE_MULTI_STEP_SESSION_SCOPE_POLICY.lower()
         )
-        gate_denies_per_request = (
-            "not" in V4_IS_NOT_PER_REQUEST_GATE_POLICY.lower()
-        )
-        assert scope_denies_universal, (
-            "Scope policy must not claim V4 governs all execution universally"
-        )
-        assert gate_denies_per_request, (
-            "Gate policy must explicitly state V4 is NOT a per-request gate"
-        )
+        gate_denies_per_request = "not" in V4_IS_NOT_PER_REQUEST_GATE_POLICY.lower()
+        assert scope_denies_universal, "Scope policy must not claim V4 governs all execution universally"
+        assert gate_denies_per_request, "Gate policy must explicitly state V4 is NOT a per-request gate"

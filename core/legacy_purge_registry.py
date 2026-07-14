@@ -138,7 +138,6 @@ class PurgeDecision:
 #: Complete ordered registry of all legacy purge / isolation decisions.
 PURGE_REGISTRY: Tuple[PurgeDecision, ...] = (
     # ── PR-3: Legacy Windows client stack retired ──────────────────────────
-
     PurgeDecision(
         asset_path="windows_client/client.py",
         status=PurgeStatus.HARD_DISABLED,
@@ -164,20 +163,14 @@ PURGE_REGISTRY: Tuple[PurgeDecision, ...] = (
         asset_path="windows_client/desktop_automation.py",
         status=PurgeStatus.HARD_DISABLED,
         pr="PR-3",
-        rationale=(
-            "Legacy pyautogui automation path.  The active automation layer "
-            "is windows_client/autonomy/."
-        ),
+        rationale=("Legacy pyautogui automation path.  The active automation layer " "is windows_client/autonomy/."),
         canonical_replacement="windows_client/autonomy/",
     ),
     PurgeDecision(
         asset_path="windows_client/windows_mcp_server.py",
         status=PurgeStatus.HARD_DISABLED,
         pr="PR-3",
-        rationale=(
-            "Legacy MCP stdio execution path.  MCP serving is handled by "
-            "the galaxy_gateway substrate."
-        ),
+        rationale=("Legacy MCP stdio execution path.  MCP serving is handled by " "the galaxy_gateway substrate."),
         canonical_replacement="galaxy_gateway/",
     ),
     PurgeDecision(
@@ -202,10 +195,7 @@ PURGE_REGISTRY: Tuple[PurgeDecision, ...] = (
         asset_path="windows_client/key_listener.py",
         status=PurgeStatus.HARD_DISABLED,
         pr="PR-3",
-        rationale=(
-            "Legacy F12 hotkey listener.  No canonical hotkey path in the "
-            "active architecture."
-        ),
+        rationale=("Legacy F12 hotkey listener.  No canonical hotkey path in the " "active architecture."),
     ),
     PurgeDecision(
         asset_path="enhancements/clients/windows_client/run_ui.py",
@@ -218,8 +208,7 @@ PURGE_REGISTRY: Tuple[PurgeDecision, ...] = (
             "path."
         ),
         canonical_replacement=(
-            "python main.py  "
-            "(or start.bat on Windows; direct advanced invocation: python unified_launcher.py)"
+            "python main.py  " "(or start.bat on Windows; direct advanced invocation: python unified_launcher.py)"
         ),
     ),
     PurgeDecision(
@@ -231,9 +220,7 @@ PURGE_REGISTRY: Tuple[PurgeDecision, ...] = (
             "to make the isolation boundary explicit and filesystem-visible."
         ),
     ),
-
     # ── PR-4: dashboard/frontend demoted ─────────────────────────────────
-
     PurgeDecision(
         asset_path="dashboard/",
         status=PurgeStatus.LEGACY_MARKER_ADDED,
@@ -246,9 +233,7 @@ PURGE_REGISTRY: Tuple[PurgeDecision, ...] = (
         ),
         canonical_replacement="core/api_routes.py",
     ),
-
     # ── PR-10: Final legacy purge — dead reference in start_galaxy.py ─────
-
     PurgeDecision(
         asset_path="start_galaxy.py::_start_desktop()",
         status=PurgeStatus.DEAD_REFERENCE_REMOVED,
@@ -262,8 +247,7 @@ PURGE_REGISTRY: Tuple[PurgeDecision, ...] = (
             "DeprecationWarning and do NOT start any UI."
         ),
         canonical_replacement=(
-            "windows_client/status_board_v2/  "
-            "(canonical read-only desktop status board, projection-driven)"
+            "windows_client/status_board_v2/  " "(canonical read-only desktop status board, projection-driven)"
         ),
     ),
     PurgeDecision(
@@ -295,9 +279,7 @@ PURGE_REGISTRY: Tuple[PurgeDecision, ...] = (
         ),
         canonical_replacement="python main.py  (or python unified_launcher.py for direct subordinate invocation)",
     ),
-
     # ── PR-S6: Final server-side legacy demotion ──────────────────────────
-
     PurgeDecision(
         asset_path="galaxy_gateway/task_router.py::TaskScheduler",
         status=PurgeStatus.WRAPPER_HARDENED,
@@ -340,13 +322,9 @@ PURGE_REGISTRY: Tuple[PurgeDecision, ...] = (
             "retained so existing chain-B integrations do not immediately break; "
             "new routing must use websocket_handler (chain A) only."
         ),
-        canonical_replacement=(
-            "galaxy_gateway/websocket_handler.py  (chain A: websocket_handler → DeviceRouter)"
-        ),
+        canonical_replacement=("galaxy_gateway/websocket_handler.py  (chain A: websocket_handler → DeviceRouter)"),
     ),
-
     # ── PR-S7: Final compatibility demotion — last remaining legacy control surfaces
-
     PurgeDecision(
         asset_path="galaxy_gateway/task_decomposer.py::TaskDecomposer",
         status=PurgeStatus.WRAPPER_HARDENED,
@@ -373,9 +351,7 @@ PURGE_REGISTRY: Tuple[PurgeDecision, ...] = (
             "LEGACY_PATH_REGISTRY entry.  Retained for backward compatibility; "
             "new planning must use core.e2e_orchestrator.process_user_input()."
         ),
-        canonical_replacement=(
-            "core/e2e_orchestrator.py  (core.e2e_orchestrator.process_user_input)"
-        ),
+        canonical_replacement=("core/e2e_orchestrator.py  (core.e2e_orchestrator.process_user_input)"),
     ),
     PurgeDecision(
         asset_path="galaxy_gateway/capability_registry.py::GatewayCapabilityRegistry",
@@ -392,9 +368,7 @@ PURGE_REGISTRY: Tuple[PurgeDecision, ...] = (
             "must converge on CapabilityRegistry / CapabilityResolver "
             "(CapabilityBus remains a compat bridge)."
         ),
-        canonical_replacement=(
-            "core/agent/capability_registry.py + core/unified/capability_resolver.py"
-        ),
+        canonical_replacement=("core/agent/capability_registry.py + core/unified/capability_resolver.py"),
     ),
     PurgeDecision(
         asset_path="galaxy_gateway/aip_protocol_v2.py",
@@ -409,13 +383,10 @@ PURGE_REGISTRY: Tuple[PurgeDecision, ...] = (
             "complete and tooling can verify the hard-disable is still in effect."
         ),
         canonical_replacement=(
-            "galaxy_gateway/protocol/aip_v3.py  "
-            "and  galaxy_gateway/protocol/compat.py::parse_message_compat"
+            "galaxy_gateway/protocol/aip_v3.py  " "and  galaxy_gateway/protocol/compat.py::parse_message_compat"
         ),
     ),
-
     # ── Phase-A consolidation: capability naming ambiguity removed ────────
-
     PurgeDecision(
         asset_path="core/hybrid_executor.py::CapabilityRegistry",
         status=PurgeStatus.DEAD_REFERENCE_REMOVED,
@@ -437,9 +408,7 @@ PURGE_REGISTRY: Tuple[PurgeDecision, ...] = (
             "(system-wide canonical capability truth source)"
         ),
     ),
-
     # ── Phase-A consolidation: scheduler legacy tool naming demoted ───────
-
     PurgeDecision(
         asset_path="core/scheduler.py::inject_mcp_tools (mcp_ prefix)",
         status=PurgeStatus.WRAPPER_HARDENED,
@@ -453,9 +422,7 @@ PURGE_REGISTRY: Tuple[PurgeDecision, ...] = (
             "compatibility branch for the legacy ``mcp_`` prefix so existing "
             "integrations are not broken, but new tools MUST use the canonical form."
         ),
-        canonical_replacement=(
-            "core/scheduler.py::inject_mcp_tools — now emits mcp__<server>__<tool>"
-        ),
+        canonical_replacement=("core/scheduler.py::inject_mcp_tools — now emits mcp__<server>__<tool>"),
     ),
     PurgeDecision(
         asset_path="core/scheduler.py::inject_skill_tools (skill_ prefix)",
@@ -468,9 +435,7 @@ PURGE_REGISTRY: Tuple[PurgeDecision, ...] = (
             "as the primary exposed name.  The dispatch path retains a compat "
             "branch for ``skill_`` so existing callers are not immediately broken."
         ),
-        canonical_replacement=(
-            "core/scheduler.py::inject_skill_tools — now emits skill__<id>"
-        ),
+        canonical_replacement=("core/scheduler.py::inject_skill_tools — now emits skill__<id>"),
     ),
     PurgeDecision(
         asset_path="core/scheduler.py::_dispatch_tool_call (call_ prefix)",
@@ -484,13 +449,9 @@ PURGE_REGISTRY: Tuple[PurgeDecision, ...] = (
             "informed to migrate.  The canonical ``node__`` path is now checked "
             "first."
         ),
-        canonical_replacement=(
-            "node__<node_id>__<action>  (canonical node tool naming)"
-        ),
+        canonical_replacement=("node__<node_id>__<action>  (canonical node tool naming)"),
     ),
-
     # ── Phase-B consolidation: callable-node baseline startup integration ──
-
     PurgeDecision(
         asset_path="launcher/node_startup.py::no callable-node classification",
         status=PurgeStatus.WRAPPER_HARDENED,
@@ -506,10 +467,7 @@ PURGE_REGISTRY: Tuple[PurgeDecision, ...] = (
             "legacy_nodes (LEGACY_ORCHESTRATOR_NODE), non_callable_nodes "
             "(EXPERIMENTAL/ARCHIVED), and unregistered_startup_nodes."
         ),
-        canonical_replacement=(
-            "launcher/node_startup.py::"
-            "NodeSystemLauncher.get_callable_node_classification()"
-        ),
+        canonical_replacement=("launcher/node_startup.py::" "NodeSystemLauncher.get_callable_node_classification()"),
     ),
     PurgeDecision(
         asset_path="scripts/validate_runtime.py::no callable-startup check",
@@ -522,13 +480,9 @@ PURGE_REGISTRY: Tuple[PurgeDecision, ...] = (
             "verifies the CALLABLE_BASELINE_STARTUP_INTEGRATION sentinel and "
             "the presence of NodeSystemLauncher.get_callable_node_classification."
         ),
-        canonical_replacement=(
-            "scripts/validate_runtime.py::check_callable_startup_integration()"
-        ),
+        canonical_replacement=("scripts/validate_runtime.py::check_callable_startup_integration()"),
     ),
-
     # ── PR-M: Legacy path retirement and canonical-only enforcement pass ──
-
     PurgeDecision(
         asset_path="galaxy_gateway/smart_transport_router.py::SmartTransportRouter",
         status=PurgeStatus.WRAPPER_HARDENED,
@@ -561,9 +515,7 @@ PURGE_REGISTRY: Tuple[PurgeDecision, ...] = (
             "for backward compatibility; new intent processing must use "
             "core.e2e_orchestrator.process_user_input()."
         ),
-        canonical_replacement=(
-            "core/e2e_orchestrator.py  (core.e2e_orchestrator.process_user_input)"
-        ),
+        canonical_replacement=("core/e2e_orchestrator.py  (core.e2e_orchestrator.process_user_input)"),
     ),
     PurgeDecision(
         asset_path="galaxy_gateway/session_roaming.py::SessionRoamingManager",
@@ -580,9 +532,7 @@ PURGE_REGISTRY: Tuple[PurgeDecision, ...] = (
             "handoff must use the canonical session axis and attached-runtime "
             "session layer."
         ),
-        canonical_replacement=(
-            "core/canonical_session_axis.py  +  core/attached_runtime_session.py"
-        ),
+        canonical_replacement=("core/canonical_session_axis.py  +  core/attached_runtime_session.py"),
     ),
 )
 
@@ -590,10 +540,7 @@ PURGE_REGISTRY: Tuple[PurgeDecision, ...] = (
 
 PURGE_REGISTRY = PURGE_REGISTRY + (
     PurgeDecision(
-        asset_path=(
-            "core/canonical_authoritative_path_convergence.py"
-            "::CANONICAL_PATH_INVENTORY"
-        ),
+        asset_path=("core/canonical_authoritative_path_convergence.py" "::CANONICAL_PATH_INVENTORY"),
         status=PurgeStatus.WRAPPER_HARDENED,
         pr="PR-convergence",
         rationale=(
@@ -613,10 +560,7 @@ PURGE_REGISTRY = PURGE_REGISTRY + (
         ),
     ),
     PurgeDecision(
-        asset_path=(
-            "core/canonical_authoritative_path_convergence.py"
-            "::DEFAULT_OFF_LEGACY_BEHAVIOR_POLICY"
-        ),
+        asset_path=("core/canonical_authoritative_path_convergence.py" "::DEFAULT_OFF_LEGACY_BEHAVIOR_POLICY"),
         status=PurgeStatus.WRAPPER_HARDENED,
         pr="PR-convergence",
         rationale=(
@@ -627,9 +571,7 @@ PURGE_REGISTRY = PURGE_REGISTRY + (
             "CANONICAL_PATH_INVENTORY return True from is_legacy_default_off(), "
             "proving they are not the default runtime choice."
         ),
-        canonical_replacement=(
-            "core/canonical_authoritative_path_convergence.py::is_legacy_default_off()"
-        ),
+        canonical_replacement=("core/canonical_authoritative_path_convergence.py::is_legacy_default_off()"),
     ),
     PurgeDecision(
         asset_path=(
@@ -649,15 +591,11 @@ PURGE_REGISTRY = PURGE_REGISTRY + (
             "and verifiable in tests."
         ),
         canonical_replacement=(
-            "core/android_participant_truth_ingress.py"
-            "::ingest_android_participant_truth_message()"
+            "core/android_participant_truth_ingress.py" "::ingest_android_participant_truth_message()"
         ),
     ),
     PurgeDecision(
-        asset_path=(
-            "core/orchestration_authority/legacy_paths.py"
-            "::PR-convergence entries"
-        ),
+        asset_path=("core/orchestration_authority/legacy_paths.py" "::PR-convergence entries"),
         status=PurgeStatus.WRAPPER_HARDENED,
         pr="PR-convergence",
         rationale=(

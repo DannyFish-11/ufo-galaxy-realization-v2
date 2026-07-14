@@ -18,9 +18,9 @@ import pytest
 
 
 def _reset() -> None:
+    from core.orchestration.global_arbiter import reset_global_arbiter
     from core.unified.idempotency import reset_idempotency_store
     from core.unified.release_gate import reset_release_gate
-    from core.orchestration.global_arbiter import reset_global_arbiter
 
     reset_idempotency_store()
     reset_release_gate()
@@ -96,7 +96,7 @@ class TestPartialPipelineFailure:
     @pytest.mark.asyncio
     async def test_task_graph_continues_after_one_node_fails(self):
         """Independent branches continue even when one node fails."""
-        from core.task_graph import TaskGraph, TaskNode, NodeStatus
+        from core.task_graph import NodeStatus, TaskGraph, TaskNode
 
         results: Dict[str, str] = {}
 
@@ -122,9 +122,9 @@ class TestPartialPipelineFailure:
 
     @pytest.mark.asyncio
     async def test_failed_node_produces_error_payload(self):
-        from core.task_graph import TaskGraph, TaskNode, NodeStatus
-        from core.unified.error_mapper import ErrorMapper
+        from core.task_graph import NodeStatus, TaskGraph, TaskNode
         from core.unified.error_codes import GalaxyErrorCode
+        from core.unified.error_mapper import ErrorMapper
 
         async def fail_handler(node: TaskNode, ctx: Dict) -> Dict:
             raise TimeoutError("step timed out")
@@ -167,10 +167,7 @@ class TestArbiterPartialRejection:
         arbiter = get_global_arbiter()
         arbiter.configure(global_limit=3, per_origin_quota=10)
 
-        ds = [
-            arbiter.admit(f"t{i}", priority=1, origin=f"user:{i}")
-            for i in range(5)
-        ]
+        ds = [arbiter.admit(f"t{i}", priority=1, origin=f"user:{i}") for i in range(5)]
         admitted = [d for d in ds if d.admitted]
         rejected = [d for d in ds if not d.admitted]
         # First 3 admitted; last 2 need preemption or are rejected
@@ -202,7 +199,7 @@ class TestReleaseGateRollback:
         _reset()
 
     def test_rollback_disables_arbiter(self):
-        from core.unified.release_gate import get_release_gate, reset_release_gate, FeatureDisabledError
+        from core.unified.release_gate import FeatureDisabledError, get_release_gate, reset_release_gate
 
         reset_release_gate()
         gate = get_release_gate()
@@ -212,7 +209,7 @@ class TestReleaseGateRollback:
             gate.require_enabled("global_arbiter")
 
     def test_rollback_disables_idempotency(self):
-        from core.unified.release_gate import get_release_gate, reset_release_gate, FeatureDisabledError
+        from core.unified.release_gate import FeatureDisabledError, get_release_gate, reset_release_gate
 
         reset_release_gate()
         gate = get_release_gate()

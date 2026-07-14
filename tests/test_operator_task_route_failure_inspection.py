@@ -39,8 +39,8 @@ Coverage:
 from __future__ import annotations
 
 import json
-import sys
 import os
+import sys
 import time
 
 import pytest
@@ -49,26 +49,26 @@ _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
-from core.operator_surface import (
-    get_operator_surface,
-    reset_operator_surface,
-    TaskInspection,
-    RouteInspection,
-    FailureDomainInspection,
-    LineageInspection,
-)
-from core.replay_foundation import (
-    get_replay_foundation,
-    reset_replay_foundation,
-    record_task_execution,
-    record_route_decision,
-)
 from core.audit_event_semantics import (
-    get_audit_event_semantics,
-    reset_audit_event_semantics,
     audit_task_accepted,
     audit_task_completed,
     audit_task_failed,
+    get_audit_event_semantics,
+    reset_audit_event_semantics,
+)
+from core.operator_surface import (
+    FailureDomainInspection,
+    LineageInspection,
+    RouteInspection,
+    TaskInspection,
+    get_operator_surface,
+    reset_operator_surface,
+)
+from core.replay_foundation import (
+    get_replay_foundation,
+    record_route_decision,
+    record_task_execution,
+    reset_replay_foundation,
 )
 
 # ---------------------------------------------------------------------------
@@ -96,10 +96,10 @@ def reset_all():
 
 def _make_completed_task(goal: str = "do work", targets=None):
     from core.canonical_task import (
-        build_canonical_task,
-        get_canonical_task_runtime,
         TaskLifecycle,
         TaskOrigin,
+        build_canonical_task,
+        get_canonical_task_runtime,
     )
 
     task = build_canonical_task(
@@ -117,11 +117,11 @@ def _make_completed_task(goal: str = "do work", targets=None):
 
 def _make_failed_task(goal: str = "failed task", failure_domain: str = "routing"):
     from core.canonical_task import (
-        build_canonical_task,
-        get_canonical_task_runtime,
+        FailureDomain,
         TaskLifecycle,
         TaskOrigin,
-        FailureDomain,
+        build_canonical_task,
+        get_canonical_task_runtime,
     )
 
     task = build_canonical_task(
@@ -188,10 +188,10 @@ class TestRouteInspection:
 
     def test_06_route_inspection_effective_path(self):
         from core.canonical_task import (
-            build_canonical_task,
-            get_canonical_task_runtime,
             TaskLifecycle,
             TaskOrigin,
+            build_canonical_task,
+            get_canonical_task_runtime,
         )
 
         task = build_canonical_task(goal="route test", origin=TaskOrigin.API_REQUEST)
@@ -233,10 +233,10 @@ class TestFailureDomainInspection:
 class TestLineageInspection:
     def test_09_lineage_includes_children(self):
         from core.canonical_task import (
-            build_canonical_task,
-            get_canonical_task_runtime,
             TaskLifecycle,
             TaskOrigin,
+            build_canonical_task,
+            get_canonical_task_runtime,
         )
 
         parent = build_canonical_task(goal="parent", origin=TaskOrigin.API_REQUEST)
@@ -343,10 +343,10 @@ class TestSerialisation:
 class TestReplayAuditIntegration:
     def test_17_two_tasks_same_trace_share_trace_id(self):
         from core.canonical_task import (
+            TaskLifecycle,
+            TaskOrigin,
             build_canonical_task,
             get_canonical_task_runtime,
-            TaskOrigin,
-            TaskLifecycle,
         )
 
         trace = "trace_shared_001"

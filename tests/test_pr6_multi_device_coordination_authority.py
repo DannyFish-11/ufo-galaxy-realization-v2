@@ -45,7 +45,6 @@ from unittest.mock import patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -82,31 +81,37 @@ class TestSentinelPresence:
 
     def test_A01_authority_sentinel(self):
         from core.multi_device_coordination_authority import MULTI_DEVICE_COORDINATION_AUTHORITY
+
         assert isinstance(MULTI_DEVICE_COORDINATION_AUTHORITY, str)
         assert len(MULTI_DEVICE_COORDINATION_AUTHORITY) > 20
 
     def test_A02_pr6_integrated_sentinel(self):
         from core.multi_device_coordination_authority import MULTI_DEVICE_COORDINATION_AUTHORITY_PR6_SENTINEL
+
         assert isinstance(MULTI_DEVICE_COORDINATION_AUTHORITY_PR6_SENTINEL, str)
         assert "PR-6" in MULTI_DEVICE_COORDINATION_AUTHORITY_PR6_SENTINEL
 
     def test_A03_source_controller_owns_runtime_authority_policy(self):
         from core.multi_device_coordination_authority import SOURCE_CONTROLLER_OWNS_RUNTIME_AUTHORITY_POLICY
+
         assert isinstance(SOURCE_CONTROLLER_OWNS_RUNTIME_AUTHORITY_POLICY, str)
         assert "source_controller" in SOURCE_CONTROLLER_OWNS_RUNTIME_AUTHORITY_POLICY.lower()
 
     def test_A04_target_only_executor_no_control_policy(self):
         from core.multi_device_coordination_authority import TARGET_ONLY_EXECUTOR_HAS_NO_CONTROL_AUTHORITY_POLICY
+
         assert isinstance(TARGET_ONLY_EXECUTOR_HAS_NO_CONTROL_AUTHORITY_POLICY, str)
         assert "target_only_executor" in TARGET_ONLY_EXECUTOR_HAS_NO_CONTROL_AUTHORITY_POLICY.lower()
 
     def test_A05_observer_only_no_execution_policy(self):
         from core.multi_device_coordination_authority import OBSERVER_ONLY_HAS_NO_EXECUTION_AUTHORITY_POLICY
+
         assert isinstance(OBSERVER_ONLY_HAS_NO_EXECUTION_AUTHORITY_POLICY, str)
         assert "observer_only" in OBSERVER_ONLY_HAS_NO_EXECUTION_AUTHORITY_POLICY.lower()
 
     def test_A06_coordination_role_derivation_is_posture_driven_policy(self):
         from core.multi_device_coordination_authority import COORDINATION_ROLE_DERIVATION_IS_POSTURE_DRIVEN_POLICY
+
         assert isinstance(COORDINATION_ROLE_DERIVATION_IS_POSTURE_DRIVEN_POLICY, str)
         assert "posture" in COORDINATION_ROLE_DERIVATION_IS_POSTURE_DRIVEN_POLICY.lower()
 
@@ -121,26 +126,32 @@ class TestCoordinationRoleEnum:
 
     def test_B01_source_controller_value(self):
         from core.multi_device_coordination_authority import CoordinationRole
+
         assert CoordinationRole.SOURCE_CONTROLLER.value == "source_controller"
 
     def test_B02_joined_runtime_participant_value(self):
         from core.multi_device_coordination_authority import CoordinationRole
+
         assert CoordinationRole.JOINED_RUNTIME_PARTICIPANT.value == "joined_runtime_participant"
 
     def test_B03_target_only_executor_value(self):
         from core.multi_device_coordination_authority import CoordinationRole
+
         assert CoordinationRole.TARGET_ONLY_EXECUTOR.value == "target_only_executor"
 
     def test_B04_observer_only_value(self):
         from core.multi_device_coordination_authority import CoordinationRole
+
         assert CoordinationRole.OBSERVER_ONLY.value == "observer_only"
 
     def test_B05_unresolved_value(self):
         from core.multi_device_coordination_authority import CoordinationRole
+
         assert CoordinationRole.UNRESOLVED.value == "unresolved"
 
     def test_B06_all_roles_are_str_subclass(self):
         from core.multi_device_coordination_authority import CoordinationRole
+
         for role in CoordinationRole:
             assert isinstance(role, str)
             assert isinstance(role.value, str)
@@ -156,6 +167,7 @@ class TestDeriveRoleSourceController:
 
     def test_C01_source_device_control_only(self):
         from core.multi_device_coordination_authority import CoordinationRole, derive_coordination_role
+
         role = derive_coordination_role(
             source_runtime_posture="control_only",
             is_source_device=True,
@@ -164,6 +176,7 @@ class TestDeriveRoleSourceController:
 
     def test_C02_source_formation_role_control_only(self):
         from core.multi_device_coordination_authority import CoordinationRole, derive_coordination_role
+
         role = derive_coordination_role(
             source_runtime_posture="control_only",
             formation_role="source_device",
@@ -172,6 +185,7 @@ class TestDeriveRoleSourceController:
 
     def test_C03_primary_execution_formation_role(self):
         from core.multi_device_coordination_authority import CoordinationRole, derive_coordination_role
+
         role = derive_coordination_role(
             source_runtime_posture="control_only",
             formation_role="primary_execution_device",
@@ -180,6 +194,7 @@ class TestDeriveRoleSourceController:
 
     def test_C04_source_device_no_posture_defaults_to_source_controller(self):
         from core.multi_device_coordination_authority import CoordinationRole, derive_coordination_role
+
         # No posture → control_only semantics → source_controller for source device
         role = derive_coordination_role(is_source_device=True)
         assert role == CoordinationRole.SOURCE_CONTROLLER
@@ -195,6 +210,7 @@ class TestDeriveRoleJoinedRuntimeParticipant:
 
     def test_D01_source_device_join_runtime(self):
         from core.multi_device_coordination_authority import CoordinationRole, derive_coordination_role
+
         role = derive_coordination_role(
             source_runtime_posture="join_runtime",
             is_source_device=True,
@@ -203,6 +219,7 @@ class TestDeriveRoleJoinedRuntimeParticipant:
 
     def test_D02_source_formation_role_join_runtime(self):
         from core.multi_device_coordination_authority import CoordinationRole, derive_coordination_role
+
         role = derive_coordination_role(
             source_runtime_posture="join_runtime",
             formation_role="source_device",
@@ -211,6 +228,7 @@ class TestDeriveRoleJoinedRuntimeParticipant:
 
     def test_D03_primary_execution_join_runtime(self):
         from core.multi_device_coordination_authority import CoordinationRole, derive_coordination_role
+
         role = derive_coordination_role(
             source_runtime_posture="join_runtime",
             formation_role="primary_execution_device",
@@ -228,11 +246,13 @@ class TestDeriveRoleObserverOnly:
 
     def test_E01_observer_formation_role(self):
         from core.multi_device_coordination_authority import CoordinationRole, derive_coordination_role
+
         role = derive_coordination_role(formation_role="observer_device")
         assert role == CoordinationRole.OBSERVER_ONLY
 
     def test_E02_observer_with_join_runtime_posture(self):
         from core.multi_device_coordination_authority import CoordinationRole, derive_coordination_role
+
         # Observer role is definitive: even join_runtime posture doesn't override it.
         role = derive_coordination_role(
             source_runtime_posture="join_runtime",
@@ -242,6 +262,7 @@ class TestDeriveRoleObserverOnly:
 
     def test_E03_observer_with_is_target_true(self):
         from core.multi_device_coordination_authority import CoordinationRole, derive_coordination_role
+
         role = derive_coordination_role(
             formation_role="observer_device",
             is_target_device=True,
@@ -259,11 +280,13 @@ class TestDeriveRoleTargetOnlyExecutor:
 
     def test_F01_target_device_no_source_flag(self):
         from core.multi_device_coordination_authority import CoordinationRole, derive_coordination_role
+
         role = derive_coordination_role(is_target_device=True)
         assert role == CoordinationRole.TARGET_ONLY_EXECUTOR
 
     def test_F02_target_device_control_only_posture(self):
         from core.multi_device_coordination_authority import CoordinationRole, derive_coordination_role
+
         role = derive_coordination_role(
             source_runtime_posture="control_only",
             is_target_device=True,
@@ -272,6 +295,7 @@ class TestDeriveRoleTargetOnlyExecutor:
 
     def test_F03_target_device_join_runtime_posture(self):
         from core.multi_device_coordination_authority import CoordinationRole, derive_coordination_role
+
         role = derive_coordination_role(
             source_runtime_posture="join_runtime",
             is_target_device=True,
@@ -289,16 +313,19 @@ class TestPostureFallback:
 
     def test_G01_none_posture_source_device(self):
         from core.multi_device_coordination_authority import CoordinationRole, derive_coordination_role
+
         role = derive_coordination_role(source_runtime_posture=None, is_source_device=True)
         assert role == CoordinationRole.SOURCE_CONTROLLER
 
     def test_G02_empty_string_posture(self):
         from core.multi_device_coordination_authority import CoordinationRole, derive_coordination_role
+
         role = derive_coordination_role(source_runtime_posture="", is_source_device=True)
         assert role == CoordinationRole.SOURCE_CONTROLLER
 
     def test_G03_unknown_posture_string(self):
         from core.multi_device_coordination_authority import CoordinationRole, derive_coordination_role
+
         role = derive_coordination_role(
             source_runtime_posture="unknown_posture_value",
             is_source_device=True,
@@ -316,16 +343,19 @@ class TestDeriveRoleUnresolved:
 
     def test_H01_no_signals_returns_unresolved(self):
         from core.multi_device_coordination_authority import CoordinationRole, derive_coordination_role
+
         role = derive_coordination_role()
         assert role == CoordinationRole.UNRESOLVED
 
     def test_H02_posture_only_no_role_or_flags(self):
         from core.multi_device_coordination_authority import CoordinationRole, derive_coordination_role
+
         role = derive_coordination_role(source_runtime_posture="control_only")
         assert role == CoordinationRole.UNRESOLVED
 
     def test_H03_unknown_formation_role_not_source_not_target(self):
         from core.multi_device_coordination_authority import CoordinationRole, derive_coordination_role
+
         role = derive_coordination_role(formation_role="relay_device")
         assert role == CoordinationRole.UNRESOLVED
 
@@ -341,6 +371,7 @@ class TestCoordinationRoleRecord:
     def test_I01_source_controller_has_control_authority(self):
         rec = _make_record(is_source_device=True, source_runtime_posture="control_only")
         from core.multi_device_coordination_authority import CoordinationRole
+
         assert rec.coordination_role == CoordinationRole.SOURCE_CONTROLLER
         assert rec.has_control_authority is True
 
@@ -351,6 +382,7 @@ class TestCoordinationRoleRecord:
     def test_I03_observer_only_no_control_authority(self):
         rec = _make_record(formation_role="observer_device")
         from core.multi_device_coordination_authority import CoordinationRole
+
         assert rec.coordination_role == CoordinationRole.OBSERVER_ONLY
         assert rec.has_control_authority is False
 
@@ -369,12 +401,14 @@ class TestCoordinationRoleRecord:
     def test_I07_joined_participant_has_control_authority(self):
         rec = _make_record(is_source_device=True, source_runtime_posture="join_runtime")
         from core.multi_device_coordination_authority import CoordinationRole
+
         assert rec.coordination_role == CoordinationRole.JOINED_RUNTIME_PARTICIPANT
         assert rec.has_control_authority is True
 
     def test_I08_unresolved_no_execution_responsibility(self):
         rec = _make_record()  # no signals
         from core.multi_device_coordination_authority import CoordinationRole
+
         assert rec.coordination_role == CoordinationRole.UNRESOLVED
         assert rec.has_execution_responsibility is False
 
@@ -426,6 +460,7 @@ class TestBuildCoordinationRoleRecord:
 
     def test_K01_source_controller_built(self):
         from core.multi_device_coordination_authority import CoordinationRole, build_coordination_role_record
+
         rec = build_coordination_role_record(
             device_id="dev_source",
             task_id="task_k01",
@@ -438,6 +473,7 @@ class TestBuildCoordinationRoleRecord:
 
     def test_K02_observer_only_built(self):
         from core.multi_device_coordination_authority import CoordinationRole, build_coordination_role_record
+
         rec = build_coordination_role_record(
             device_id="dev_observer",
             formation_role="observer_device",
@@ -446,6 +482,7 @@ class TestBuildCoordinationRoleRecord:
 
     def test_K03_posture_normalised_in_record(self):
         from core.multi_device_coordination_authority import build_coordination_role_record
+
         rec = build_coordination_role_record(
             device_id="dev_x",
             source_runtime_posture=None,  # should normalise to control_only
@@ -463,6 +500,7 @@ class TestBuildSnapshotSourceController:
 
     def test_L01_source_controller_identified(self):
         from core.multi_device_coordination_authority import build_coordination_role_snapshot
+
         records = [
             _make_record(device_id="dev_src", is_source_device=True),
             _make_record(device_id="dev_tgt", is_target_device=True),
@@ -472,6 +510,7 @@ class TestBuildSnapshotSourceController:
 
     def test_L02_no_source_controller_when_no_source_record(self):
         from core.multi_device_coordination_authority import build_coordination_role_snapshot
+
         records = [
             _make_record(device_id="dev_tgt", is_target_device=True),
         ]
@@ -480,6 +519,7 @@ class TestBuildSnapshotSourceController:
 
     def test_L03_task_id_carried_into_snapshot(self):
         from core.multi_device_coordination_authority import build_coordination_role_snapshot
+
         records = [_make_record(device_id="dev_a", is_source_device=True, task_id="task_l03")]
         snap = build_coordination_role_snapshot(records)
         assert snap.task_id == "task_l03"
@@ -495,6 +535,7 @@ class TestBuildSnapshotJoinedParticipant:
 
     def test_M01_true_when_joined_participant_present(self):
         from core.multi_device_coordination_authority import build_coordination_role_snapshot
+
         records = [
             _make_record(device_id="dev_joined", is_source_device=True, source_runtime_posture="join_runtime"),
         ]
@@ -503,6 +544,7 @@ class TestBuildSnapshotJoinedParticipant:
 
     def test_M02_false_when_no_joined_participant(self):
         from core.multi_device_coordination_authority import build_coordination_role_snapshot
+
         records = [
             _make_record(device_id="dev_src", is_source_device=True, source_runtime_posture="control_only"),
         ]
@@ -520,6 +562,7 @@ class TestBuildSnapshotTargetAndObserver:
 
     def test_N01_target_only_executor_list(self):
         from core.multi_device_coordination_authority import build_coordination_role_snapshot
+
         records = [
             _make_record(device_id="dev_tgt1", is_target_device=True),
             _make_record(device_id="dev_tgt2", is_target_device=True),
@@ -530,6 +573,7 @@ class TestBuildSnapshotTargetAndObserver:
 
     def test_N02_observer_only_list(self):
         from core.multi_device_coordination_authority import build_coordination_role_snapshot
+
         records = [
             _make_record(device_id="dev_obs", formation_role="observer_device"),
         ]
@@ -538,6 +582,7 @@ class TestBuildSnapshotTargetAndObserver:
 
     def test_N03_mixed_roles(self):
         from core.multi_device_coordination_authority import build_coordination_role_snapshot
+
         records = [
             _make_record(device_id="src", is_source_device=True),
             _make_record(device_id="tgt", is_target_device=True),
@@ -559,6 +604,7 @@ class TestAuthorityClarity:
 
     def test_O01_authority_clear_one_source_no_unresolved(self):
         from core.multi_device_coordination_authority import build_coordination_role_snapshot
+
         records = [
             _make_record(device_id="src", is_source_device=True),
             _make_record(device_id="tgt", is_target_device=True),
@@ -568,6 +614,7 @@ class TestAuthorityClarity:
 
     def test_P01_authority_not_clear_when_unresolved_present(self):
         from core.multi_device_coordination_authority import build_coordination_role_snapshot
+
         records = [
             _make_record(device_id="src", is_source_device=True),
             _make_record(device_id="unresolved_dev"),  # no signals → unresolved
@@ -578,6 +625,7 @@ class TestAuthorityClarity:
 
     def test_P02_authority_not_clear_when_no_source_controller(self):
         from core.multi_device_coordination_authority import build_coordination_role_snapshot
+
         records = [
             _make_record(device_id="tgt", is_target_device=True),
         ]
@@ -595,6 +643,7 @@ class TestCoordinationRoleSnapshotToDict:
 
     def test_Q01_to_dict_has_required_keys(self):
         from core.multi_device_coordination_authority import build_coordination_role_snapshot
+
         records = [_make_record(device_id="src", is_source_device=True)]
         snap = build_coordination_role_snapshot(records)
         d = snap.to_dict()
@@ -618,12 +667,14 @@ class TestCoordinationRoleSnapshotToDict:
 
     def test_Q02_pr6_sentinel_non_empty(self):
         from core.multi_device_coordination_authority import build_coordination_role_snapshot
+
         snap = build_coordination_role_snapshot([])
         d = snap.to_dict()
         assert "PR-6" in d["pr6_sentinel"] or "PR6" in d["pr6_sentinel"]
 
     def test_Q03_records_serialised_as_list_of_dicts(self):
         from core.multi_device_coordination_authority import build_coordination_role_snapshot
+
         records = [_make_record(device_id="src", is_source_device=True)]
         snap = build_coordination_role_snapshot(records)
         d = snap.to_dict()
@@ -644,6 +695,7 @@ class TestGetSourceControllerDeviceId:
             build_coordination_role_snapshot,
             get_source_controller_device_id,
         )
+
         records = [
             _make_record(device_id="dev_ctrl", is_source_device=True),
         ]
@@ -655,6 +707,7 @@ class TestGetSourceControllerDeviceId:
             build_coordination_role_snapshot,
             get_source_controller_device_id,
         )
+
         records = [_make_record(device_id="tgt", is_target_device=True)]
         snap = build_coordination_role_snapshot(records)
         assert get_source_controller_device_id(snap) is None
@@ -670,6 +723,7 @@ class TestCoordinationRoleRuntime:
 
     def test_S01_record_and_retrieve(self):
         from core.multi_device_coordination_authority import CoordinationRoleRuntime
+
         rt = CoordinationRoleRuntime(max_size=10)
         rec = _make_record(device_id="dev_s01", is_source_device=True)
         rt.record(rec)
@@ -679,6 +733,7 @@ class TestCoordinationRoleRuntime:
 
     def test_S02_ring_eviction(self):
         from core.multi_device_coordination_authority import CoordinationRoleRuntime
+
         rt = CoordinationRoleRuntime(max_size=3)
         for i in range(5):
             rt.record(_make_record(device_id=f"dev_{i}"))
@@ -691,6 +746,7 @@ class TestCoordinationRoleRuntime:
 
     def test_S03_snapshot_max_recent_respected(self):
         from core.multi_device_coordination_authority import CoordinationRoleRuntime
+
         rt = CoordinationRoleRuntime(max_size=50)
         for i in range(30):
             rt.record(_make_record())
@@ -699,6 +755,7 @@ class TestCoordinationRoleRuntime:
 
     def test_S04_empty_runtime_snapshot_is_empty(self):
         from core.multi_device_coordination_authority import CoordinationRoleRuntime
+
         rt = CoordinationRoleRuntime()
         assert rt.snapshot() == []
         assert len(rt) == 0
@@ -717,6 +774,7 @@ class TestSingletonGetReset:
             get_coordination_role_runtime,
             reset_coordination_role_runtime,
         )
+
         reset_coordination_role_runtime()
         rt1 = get_coordination_role_runtime()
         rt2 = get_coordination_role_runtime()
@@ -727,6 +785,7 @@ class TestSingletonGetReset:
             get_coordination_role_runtime,
             reset_coordination_role_runtime,
         )
+
         rt1 = get_coordination_role_runtime()
         reset_coordination_role_runtime()
         rt2 = get_coordination_role_runtime()
@@ -735,9 +794,10 @@ class TestSingletonGetReset:
     def test_T03_records_cleared_after_reset(self):
         from core.multi_device_coordination_authority import (
             get_coordination_role_runtime,
-            reset_coordination_role_runtime,
             record_coordination_role,
+            reset_coordination_role_runtime,
         )
+
         reset_coordination_role_runtime()
         record_coordination_role(_make_record(device_id="before_reset"))
         reset_coordination_role_runtime()
@@ -759,6 +819,7 @@ class TestRecordCoordinationRole:
             record_coordination_role,
             reset_coordination_role_runtime,
         )
+
         reset_coordination_role_runtime()
         rec = _make_record(device_id="dev_u01", is_source_device=True)
         record_coordination_role(rec)
@@ -770,6 +831,7 @@ class TestRecordCoordinationRole:
             record_coordination_role,
             reset_coordination_role_runtime,
         )
+
         reset_coordination_role_runtime()
         # record_coordination_role is fire-and-forget: passing a non-record
         # value (None) should be silently ignored, never raising.
@@ -793,6 +855,7 @@ class TestCoreRuntimeReExports:
     def _import_runtime():
         pytest.importorskip("pydantic", reason="pydantic required for core.runtime")
         import core.runtime as runtime
+
         return runtime
 
     def test_V01_coordination_role_enum(self):
@@ -847,15 +910,18 @@ class TestIntegrityPR6Sentinel:
 
     def test_W01_sentinel_present(self):
         from core.multi_device_control_integrity import MULTI_DEVICE_COORDINATION_AUTHORITY_ALIGNED_PR6
+
         assert isinstance(MULTI_DEVICE_COORDINATION_AUTHORITY_ALIGNED_PR6, str)
         assert len(MULTI_DEVICE_COORDINATION_AUTHORITY_ALIGNED_PR6) > 30
 
     def test_W02_sentinel_references_pr6(self):
         from core.multi_device_control_integrity import MULTI_DEVICE_COORDINATION_AUTHORITY_ALIGNED_PR6
+
         assert "PR6" in MULTI_DEVICE_COORDINATION_AUTHORITY_ALIGNED_PR6
 
     def test_W03_sentinel_mentions_coordination_roles(self):
         from core.multi_device_control_integrity import MULTI_DEVICE_COORDINATION_AUTHORITY_ALIGNED_PR6
+
         text = MULTI_DEVICE_COORDINATION_AUTHORITY_ALIGNED_PR6.lower()
         assert "source_controller" in text or "coordination" in text
 
@@ -870,14 +936,20 @@ class TestProjectionCanonicalizationPR6Sentinel:
 
     def test_X01_sentinel_present(self):
         from core.multi_device_projection_canonicalization import MULTI_DEVICE_PROJECTION_COORDINATION_ROLE_INTEGRATED
+
         assert isinstance(MULTI_DEVICE_PROJECTION_COORDINATION_ROLE_INTEGRATED, str)
 
     def test_X02_sentinel_mentions_pr6(self):
         from core.multi_device_projection_canonicalization import MULTI_DEVICE_PROJECTION_COORDINATION_ROLE_INTEGRATED
-        assert "PR-6" in MULTI_DEVICE_PROJECTION_COORDINATION_ROLE_INTEGRATED or "PR6" in MULTI_DEVICE_PROJECTION_COORDINATION_ROLE_INTEGRATED
+
+        assert (
+            "PR-6" in MULTI_DEVICE_PROJECTION_COORDINATION_ROLE_INTEGRATED
+            or "PR6" in MULTI_DEVICE_PROJECTION_COORDINATION_ROLE_INTEGRATED
+        )
 
     def test_X03_coordination_role_in_all_exports(self):
         import core.multi_device_projection_canonicalization as mod
+
         assert "MULTI_DEVICE_PROJECTION_COORDINATION_ROLE_INTEGRATED" in mod.__all__
 
 
@@ -891,16 +963,19 @@ class TestEnrichProjectionCoordinationRole:
 
     def test_Y01_coordination_role_available(self):
         from core.multi_device_projection_canonicalization import enrich_multi_device_projection
+
         enrichment = enrich_multi_device_projection()
         assert enrichment.coordination_role_available is True
 
     def test_Y02_coordination_role_snapshot_is_dict(self):
         from core.multi_device_projection_canonicalization import enrich_multi_device_projection
+
         enrichment = enrich_multi_device_projection()
         assert isinstance(enrichment.coordination_role_snapshot, dict)
 
     def test_Y03_to_dict_includes_coordination_fields(self):
         from core.multi_device_projection_canonicalization import enrich_multi_device_projection
+
         enrichment = enrich_multi_device_projection()
         d = enrichment.to_dict()
         assert "coordination_role_snapshot" in d
@@ -908,6 +983,7 @@ class TestEnrichProjectionCoordinationRole:
 
     def test_Y04_coordination_snapshot_has_pr6_sentinel_key(self):
         from core.multi_device_projection_canonicalization import enrich_multi_device_projection
+
         enrichment = enrich_multi_device_projection()
         snap = enrichment.coordination_role_snapshot
         assert snap is not None
@@ -924,10 +1000,12 @@ class TestBackwardsSafety:
 
     def test_Z01_no_args_returns_unresolved(self):
         from core.multi_device_coordination_authority import CoordinationRole, derive_coordination_role
+
         assert derive_coordination_role() == CoordinationRole.UNRESOLVED
 
     def test_Z02_build_snapshot_empty_list_ok(self):
         from core.multi_device_coordination_authority import build_coordination_role_snapshot
+
         snap = build_coordination_role_snapshot([])
         assert snap.source_controller_device_id is None
         assert snap.is_authority_clear is False
@@ -939,6 +1017,7 @@ class TestBackwardsSafety:
             record_coordination_role,
             reset_coordination_role_runtime,
         )
+
         reset_coordination_role_runtime()
         rec1 = _make_record(device_id="existing_dev")
         record_coordination_role(rec1)
@@ -961,9 +1040,10 @@ class TestMixedFormation:
 
     def test_AA01_full_formation_authority_clear(self):
         from core.multi_device_coordination_authority import (
-            build_coordination_role_snapshot,
             CoordinationRole,
+            build_coordination_role_snapshot,
         )
+
         records = [
             _make_record(device_id="ctrl_dev", is_source_device=True, source_runtime_posture="control_only"),
             _make_record(device_id="joined_dev", is_source_device=True, source_runtime_posture="join_runtime"),
@@ -979,6 +1059,7 @@ class TestMixedFormation:
 
     def test_AA02_role_counts_match(self):
         from core.multi_device_coordination_authority import build_coordination_role_snapshot
+
         records = [
             _make_record(device_id="c", is_source_device=True),
             _make_record(device_id="t1", is_target_device=True),
@@ -1008,6 +1089,7 @@ class TestObserverOnlyAuthority:
 
     def test_AB03_role_value(self):
         from core.multi_device_coordination_authority import CoordinationRole
+
         rec = _make_record(formation_role="observer_device")
         assert rec.coordination_role == CoordinationRole.OBSERVER_ONLY
 
@@ -1030,6 +1112,7 @@ class TestTargetOnlyExecutorAuthority:
 
     def test_AC03_role_value(self):
         from core.multi_device_coordination_authority import CoordinationRole
+
         rec = _make_record(is_target_device=True)
         assert rec.coordination_role == CoordinationRole.TARGET_ONLY_EXECUTOR
 
@@ -1052,5 +1135,6 @@ class TestJoinedRuntimeParticipantAuthority:
 
     def test_AD03_role_value(self):
         from core.multi_device_coordination_authority import CoordinationRole
+
         rec = _make_record(is_source_device=True, source_runtime_posture="join_runtime")
         assert rec.coordination_role == CoordinationRole.JOINED_RUNTIME_PARTICIPANT

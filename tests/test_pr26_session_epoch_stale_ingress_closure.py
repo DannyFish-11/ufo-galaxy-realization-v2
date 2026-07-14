@@ -60,7 +60,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ===========================================================================
 # Helpers
 # ===========================================================================
@@ -376,10 +375,7 @@ class TestStaleEvidenceDiagnostics:
         assert ev.get("task_id") == "task-e01"
         assert ev.get("device_id") == "dev-e01"
         assert "source_channel" in ev
-        assert (
-            outcome.continuity_adjudication_evidence.get("classification")
-            == "stale-rejected"
-        )
+        assert outcome.continuity_adjudication_evidence.get("classification") == "stale-rejected"
 
     def test_E02_evidence_contains_stale_trigger(self):
         ingress = self._ingress()
@@ -409,9 +405,7 @@ class TestStaleEvidenceDiagnostics:
         evt = _make_event(is_stale=True)
         ingress.process(evt)
 
-        assert evt.idempotency_key not in recorded_keys, (
-            "Stale result idempotency key must not be recorded"
-        )
+        assert evt.idempotency_key not in recorded_keys, "Stale result idempotency key must not be recorded"
 
 
 # ===========================================================================
@@ -512,9 +506,7 @@ class TestLateCompletionAndReconnectScenarios:
 
         assert outcome.stale_epoch_rejected is True
         assert outcome.is_fully_closed is False
-        assert "reconnect_late_result" in outcome.stale_epoch_evidence.get(
-            "stale_reason", ""
-        )
+        assert "reconnect_late_result" in outcome.stale_epoch_evidence.get("stale_reason", "")
 
     def test_G03_replay_derived_stale_result_blocked(self):
         """An offline-replay result arriving with a mismatched session epoch

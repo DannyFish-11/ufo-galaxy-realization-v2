@@ -49,9 +49,8 @@ import time
 from collections import deque
 from typing import Deque, Dict
 
-from core.continuum.config import ContinuumConfig, DEFAULT_CONTINUUM_CONFIG
+from core.continuum.config import DEFAULT_CONTINUUM_CONFIG, ContinuumConfig
 from core.continuum.types import ContinuumPhase, ContinuumState, UnifiedState
-
 
 # ---------------------------------------------------------------------------
 # Module-level constants
@@ -181,8 +180,7 @@ class HysteresisGate:
         """
         if enter <= exit_:
             raise ValueError(
-                f"HysteresisGate requires enter ({enter}) > exit_ ({exit_}); "
-                "the hysteresis gap must be positive."
+                f"HysteresisGate requires enter ({enter}) > exit_ ({exit_}); " "the hysteresis gap must be positive."
             )
         self.enter: float = enter
         self.exit_: float = exit_
@@ -456,9 +454,7 @@ class TemporalEngine:
 
         # 3. Decay presence_intensity when in the receding phase.
         if self._phase == ContinuumPhase.RECEDING:
-            self._smoothed["presence_intensity"] = apply_decay(
-                self._smoothed["presence_intensity"], self.decay_rate
-            )
+            self._smoothed["presence_intensity"] = apply_decay(self._smoothed["presence_intensity"], self.decay_rate)
 
         # 4. Evaluate candidate phase transition.
         new_phase = self._evaluate_phase()
@@ -558,11 +554,7 @@ class TemporalEngine:
         human = unified.human
 
         # Presence intensity: weighted blend of intent, attention, context utility.
-        presence = (
-            human.intent_probability * 0.5
-            + human.attention * 0.3
-            + unified.context_utility * 0.2
-        )
+        presence = human.intent_probability * 0.5 + human.attention * 0.3 + unified.context_utility * 0.2
 
         # Coherence: candidate confidence scaled by confidence in low uncertainty.
         coherence = unified.candidate_confidence * (1.0 - unified.uncertainty * 0.5)
@@ -580,11 +572,7 @@ class TemporalEngine:
             collapse = 0.0
 
         # Retreat tendency: risk, uncertainty, and low attention pressure.
-        retreat = (
-            unified.action_risk * 0.5
-            + unified.uncertainty * 0.3
-            + (1.0 - human.attention) * 0.2
-        )
+        retreat = unified.action_risk * 0.5 + unified.uncertainty * 0.3 + (1.0 - human.attention) * 0.2
 
         return {
             "presence_intensity": _clamp(presence),

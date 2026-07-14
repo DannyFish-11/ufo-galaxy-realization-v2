@@ -22,6 +22,7 @@ if they need to propagate additional state.
 The context deliberately does NOT hold a reference to the router or
 dispatcher — those are injection concerns handled at the call site.
 """
+
 from __future__ import annotations
 
 import time
@@ -77,12 +78,14 @@ class CommandContext:
     def with_metadata(self, **extra: Any) -> "CommandContext":
         """Return a new ``CommandContext`` with *extra* merged into metadata."""
         import dataclasses
+
         merged = {**self.metadata, **extra}
         return dataclasses.replace(self, metadata=merged)
 
     def with_device(self, device_id: str) -> "CommandContext":
         """Return a new ``CommandContext`` scoped to *device_id*."""
         import dataclasses
+
         return dataclasses.replace(self, device_id=device_id)
 
     def to_dict(self) -> Dict[str, Any]:

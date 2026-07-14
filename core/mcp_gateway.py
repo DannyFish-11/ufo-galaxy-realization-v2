@@ -48,14 +48,15 @@ from core.schemas.contracts import (
 # Generated tools directory
 _TOOLS_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "data", "generated_tools",
+    "data",
+    "generated_tools",
 )
 
 
 def _try_emit_event(event_type_name: str, data: dict) -> None:
     """Best-effort emit to EventBus.  Never raises."""
     try:
-        from integration.event_bus import event_bus, EventType
+        from integration.event_bus import EventType, event_bus
 
         et = getattr(EventType, event_type_name, None)
         if et is not None:
@@ -93,9 +94,7 @@ class MCPDynamicGateway:
 
     # ── Self-Tool-Making ────────────────────────────────────────────────────
 
-    async def handle_capability_gap(
-        self, missing_tool: str, context: dict
-    ) -> dict:
+    async def handle_capability_gap(self, missing_tool: str, context: dict) -> dict:
         """Handle a missing tool report by generating, testing, and registering it.
 
         Returns ``{"success": True, "tool_name": ..., "server_id": ...}``
@@ -109,21 +108,26 @@ class MCPDynamicGateway:
             return gen_result
 
         code = gen_result["code"]
-        _try_emit_event("MCP_TOOL_GENERATED", {
-            "tool_name": missing_tool,
-            "language": "python",
-            "code_length": len(code),
-        })
+        _try_emit_event(
+            "MCP_TOOL_GENERATED",
+            {
+                "tool_name": missing_tool,
+                "language": "python",
+                "code_length": len(code),
+            },
+        )
 
         # Step 2: ACL validate the generated code
-        acl_result = await self._acl.validate_mcp_registration({
-            "action": "register",
-            "tool": {"name": missing_tool, "description": context.get("description", "")},
-            "script_content": code,
-            "script_language": "python",
-            "generated_by": "mcp_gateway",
-            "generation_prompt": json.dumps(context, default=str)[:500],
-        })
+        acl_result = await self._acl.validate_mcp_registration(
+            {
+                "action": "register",
+                "tool": {"name": missing_tool, "description": context.get("description", "")},
+                "script_content": code,
+                "script_language": "python",
+                "generated_by": "mcp_gateway",
+                "generation_prompt": json.dumps(context, default=str)[:500],
+            }
+        )
         if not acl_result["success"]:
             return acl_result
 
@@ -145,11 +149,14 @@ class MCPDynamicGateway:
         # Step 5: Broadcast new capability via NATS
         await self._broadcast_tool_registration(missing_tool, register_result.get("server_id", ""))
 
-        _try_emit_event("MCP_TOOL_REGISTERED", {
-            "tool_name": missing_tool,
-            "server_id": register_result.get("server_id", ""),
-            "script_path": str(script_path),
-        })
+        _try_emit_event(
+            "MCP_TOOL_REGISTERED",
+            {
+                "tool_name": missing_tool,
+                "server_id": register_result.get("server_id", ""),
+                "script_path": str(script_path),
+            },
+        )
 
         return {
             "success": True,
@@ -220,9 +227,7 @@ class MCPDynamicGateway:
         logger.info(f"MCPGateway: synced {len(tools)} tools to workers")
         return {"success": True, "synced": len(tools), "nats_result": result}
 
-    async def list_all_tools(
-        self, filter_tags: list[str] | None = None
-    ) -> list[MCPToolDescriptorModel]:
+    async def list_all_tools(self, filter_tags: list[str] | None = None) -> list[MCPToolDescriptorModel]:
         """List all available tools from MCPLoader + generated tools."""
         tools: list[MCPToolDescriptorModel] = []
 
@@ -246,10 +251,7 @@ class MCPDynamicGateway:
                             tags=t.get("tags", []),
                         )
                         if filter_tags:
-                            if any(
-                                any(fnmatch.fnmatch(tag, ft) for tag in descriptor.tags)
-                                for ft in filter_tags
-                            ):
+                            if any(any(fnmatch.fnmatch(tag, ft) for tag in descriptor.tags) for ft in filter_tags):
                                 tools.append(descriptor)
                         else:
                             tools.append(descriptor)
@@ -336,9 +338,7 @@ class MCPDynamicGateway:
         except Exception as exc:
             return {"success": False, "error": str(exc)}
 
-    async def _broadcast_tool_registration(
-        self, tool_name: str, server_id: str
-    ) -> None:
+    async def _broadcast_tool_registration(self, tool_name: str, server_id: str) -> None:
         """Broadcast new tool capability via NATS."""
         event = AgentEventModel(
             domain=EventDomain.MCP,
@@ -372,8 +372,9 @@ class MCPDynamicGateway:
             ``{"success": bool, "name": str, ...}``
         """
         try:
-            from core.mcp_loader import mcp_loader
             import asyncio
+
+            from core.mcp_loader import mcp_loader
 
             async def _load():
                 return await mcp_loader.load(name=name, command=command)
@@ -434,10 +435,7 @@ class MCPDynamicGateway:
 
     def list_github_tools(self) -> list:
         """Return tools registered via GitHub (source == 'github')."""
-        return [
-            v for v in self._generated_tools.values()
-            if v.get("source") == "github"
-        ]
+        return [v for v in self._generated_tools.values() if v.get("source") == "github"]
 
     # ── Status ──────────────────────────────────────────────────────────────
 

@@ -28,34 +28,49 @@ from core.device_policy import (  # noqa: E402
     requires_agent_deploy,
 )
 
-
 # ---------------------------------------------------------------------------
 # is_physical_device
 # ---------------------------------------------------------------------------
 
+
 class TestIsPhysicalDevice:
-    @pytest.mark.parametrize("device_type", [
-        "android", "ANDROID", "Android",
-        "ios", "IOS",
-        "windows", "WINDOWS",
-        "macos", "MACOS",
-        "linux", "LINUX",
-        "iot", "IOT",
-        "robot", "ROBOT",
-        "drone", "DRONE",
-    ])
+    @pytest.mark.parametrize(
+        "device_type",
+        [
+            "android",
+            "ANDROID",
+            "Android",
+            "ios",
+            "IOS",
+            "windows",
+            "WINDOWS",
+            "macos",
+            "MACOS",
+            "linux",
+            "LINUX",
+            "iot",
+            "IOT",
+            "robot",
+            "ROBOT",
+            "drone",
+            "DRONE",
+        ],
+    )
     def test_physical_types_return_true(self, device_type: str):
         assert is_physical_device(device_type) is True
 
-    @pytest.mark.parametrize("device_type", [
-        "cloud",
-        "browser",
-        "unknown",
-        "custom",
-        "virtual",
-        "server",
-        "quantum",
-    ])
+    @pytest.mark.parametrize(
+        "device_type",
+        [
+            "cloud",
+            "browser",
+            "unknown",
+            "custom",
+            "virtual",
+            "server",
+            "quantum",
+        ],
+    )
     def test_non_physical_types_return_false(self, device_type: str):
         assert is_physical_device(device_type) is False
 
@@ -78,25 +93,45 @@ class TestIsPhysicalDevice:
 # requires_agent_deploy — must mirror is_physical_device
 # ---------------------------------------------------------------------------
 
+
 class TestRequiresAgentDeploy:
-    @pytest.mark.parametrize("device_type", [
-        "android", "ios", "windows", "macos", "linux", "iot", "robot", "drone",
-    ])
+    @pytest.mark.parametrize(
+        "device_type",
+        [
+            "android",
+            "ios",
+            "windows",
+            "macos",
+            "linux",
+            "iot",
+            "robot",
+            "drone",
+        ],
+    )
     def test_physical_types_require_deploy(self, device_type: str):
         assert requires_agent_deploy(device_type) is True
 
-    @pytest.mark.parametrize("device_type", [
-        "cloud", "browser", "unknown", "",
-    ])
+    @pytest.mark.parametrize(
+        "device_type",
+        [
+            "cloud",
+            "browser",
+            "unknown",
+            "",
+        ],
+    )
     def test_non_physical_types_do_not_require_deploy(self, device_type: str):
         assert requires_agent_deploy(device_type) is False
 
     def test_requires_matches_is_physical(self):
         """requires_agent_deploy must be consistent with is_physical_device."""
         test_values = list(PHYSICAL_DEVICE_TYPES) + [
-            "cloud", "browser", "unknown", "custom", "", "  ",
+            "cloud",
+            "browser",
+            "unknown",
+            "custom",
+            "",
+            "  ",
         ]
         for val in test_values:
-            assert requires_agent_deploy(val) == is_physical_device(val), (
-                f"Mismatch for device_type={val!r}"
-            )
+            assert requires_agent_deploy(val) == is_physical_device(val), f"Mismatch for device_type={val!r}"

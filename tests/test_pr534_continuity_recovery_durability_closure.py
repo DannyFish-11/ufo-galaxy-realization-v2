@@ -136,7 +136,6 @@ from typing import Any, Dict, List
 
 import pytest
 
-
 # ===========================================================================
 # Helpers
 # ===========================================================================
@@ -144,6 +143,7 @@ import pytest
 
 def _fresh_continuity_coordinator():
     from core.flow_continuity_coordinator import FlowContinuityCoordinator
+
     return FlowContinuityCoordinator(capacity=32)
 
 
@@ -151,11 +151,13 @@ def _fresh_recovery_coordinator():
     from core.delegated_flow_recovery_coordinator import (
         DelegatedFlowRecoveryCoordinator,
     )
+
     return DelegatedFlowRecoveryCoordinator(capacity=32)
 
 
 def _fresh_guard_runtime():
     from core.attached_runtime_recovery_readiness import RecoveryReadinessRuntime
+
     return RecoveryReadinessRuntime()
 
 
@@ -164,6 +166,7 @@ def _continuity_ctx(**kwargs):
         ContinuityEventContext,
         ContinuityEventKind,
     )
+
     kind_str = kwargs.pop("event_kind", "unknown")
     return ContinuityEventContext(
         event_kind=ContinuityEventKind.from_string(kind_str),
@@ -173,9 +176,10 @@ def _continuity_ctx(**kwargs):
 
 def _recovery_ctx(**kwargs):
     from core.delegated_flow_recovery_coordinator import (
-        RecoveryTriggerContext,
         RecoveryTrigger,
+        RecoveryTriggerContext,
     )
+
     trigger_str = kwargs.pop("trigger", "unknown")
     return RecoveryTriggerContext(
         trigger=RecoveryTrigger.from_string(trigger_str),
@@ -185,27 +189,24 @@ def _recovery_ctx(**kwargs):
 
 def _make_restart_coordinator(tmp_path, records: List[Dict[str, Any]]):
     """Build a RuntimeRestartRecoveryCoordinator with task records."""
-    from core.mesh.mesh_session_persistence import MeshSessionPersistenceStore
     from core.mesh.body_mesh_persistence import BodyMeshPersistenceStore
+    from core.mesh.mesh_session_persistence import MeshSessionPersistenceStore
+    from core.runtime_restart_recovery import RuntimeRestartRecoveryCoordinator
     from core.task_lifecycle_persistence import (
         TaskLifecyclePersistenceStore,
         save_task_lifecycle_snapshot,
     )
-    from core.runtime_restart_recovery import RuntimeRestartRecoveryCoordinator
 
     ms_store = MeshSessionPersistenceStore(store_dir=str(tmp_path))
-    bm_store = BodyMeshPersistenceStore(
-        store_path=os.path.join(str(tmp_path), "bm.json")
-    )
-    tl_store = TaskLifecyclePersistenceStore(
-        store_path=os.path.join(str(tmp_path), "tl.json")
-    )
+    bm_store = BodyMeshPersistenceStore(store_path=os.path.join(str(tmp_path), "bm.json"))
+    tl_store = TaskLifecyclePersistenceStore(store_path=os.path.join(str(tmp_path), "tl.json"))
     if records:
         save_task_lifecycle_snapshot(records, store=tl_store)
 
     class _FakeBodyRegistry:
         def register(self, device_id, roles=None, session_id=None, metadata=None):
             return {}
+
         def list_entries(self):
             return []
 
@@ -240,6 +241,7 @@ def test_A01_module_importable_sentinels_present():
         RECOVERY_DURABILITY_CLOSURE_AUTHORITY,
         RECOVERY_DURABILITY_CLOSURE_PR5_SENTINEL,
     )
+
     assert RECOVERY_DURABILITY_CLOSURE_AUTHORITY
     assert "package=5" in RECOVERY_DURABILITY_CLOSURE_PR5_SENTINEL
     assert "continuity-recovery" in RECOVERY_DURABILITY_CLOSURE_PR5_SENTINEL
@@ -247,15 +249,16 @@ def test_A01_module_importable_sentinels_present():
 
 def test_A02_all_policy_sentinels_non_empty():
     from core.recovery_durability_closure_validator import (
+        CONTINUITY_COORDINATOR_IS_SINGLE_RECOVERY_ENTRY_POINT_POLICY,
+        INFLIGHT_DELEGATED_WORK_RECOVERY_IS_DISPOSITION_DRIVEN_POLICY,
+        OFFLINE_QUEUE_ORDERING_CONTRACT_NOW_DEFINED_POLICY,
+        OFFLINE_QUEUE_ORDERING_IS_DEFERRED_POLICY,
         RECOVERY_DURABILITY_CLOSURE_AUTHORITY,
         RECOVERY_DURABILITY_CLOSURE_PR5_SENTINEL,
-        V2_RESTART_RECOVERY_IS_DETERMINISTIC_POLICY,
-        INFLIGHT_DELEGATED_WORK_RECOVERY_IS_DISPOSITION_DRIVEN_POLICY,
         SIGNAL_GUARD_PRECEDES_RECONCILIATION_POLICY,
-        CONTINUITY_COORDINATOR_IS_SINGLE_RECOVERY_ENTRY_POINT_POLICY,
-        OFFLINE_QUEUE_ORDERING_IS_DEFERRED_POLICY,
-        OFFLINE_QUEUE_ORDERING_CONTRACT_NOW_DEFINED_POLICY,
+        V2_RESTART_RECOVERY_IS_DETERMINISTIC_POLICY,
     )
+
     for sentinel in [
         RECOVERY_DURABILITY_CLOSURE_AUTHORITY,
         RECOVERY_DURABILITY_CLOSURE_PR5_SENTINEL,
@@ -271,6 +274,7 @@ def test_A02_all_policy_sentinels_non_empty():
 
 def test_A03_recovery_scenario_status_enum_values():
     from core.recovery_durability_closure_validator import RecoveryScenarioStatus
+
     assert RecoveryScenarioStatus.closed.value == "closed"
     assert RecoveryScenarioStatus.advisory.value == "advisory"
     assert RecoveryScenarioStatus.deferred.value == "deferred"
@@ -282,6 +286,7 @@ def test_A04_recovery_scenario_entry_fields_and_to_dict():
         RecoveryScenarioEntry,
         RecoveryScenarioStatus,
     )
+
     entry = RecoveryScenarioEntry(
         scenario_id="RS-X",
         scenario_name="test",
@@ -306,6 +311,7 @@ def test_A05_recovery_scenario_entry_round_trip():
         RecoveryScenarioEntry,
         RecoveryScenarioStatus,
     )
+
     entry = RecoveryScenarioEntry(
         scenario_id="RS-Y",
         scenario_name="round-trip",
@@ -320,6 +326,7 @@ def test_A05_recovery_scenario_entry_round_trip():
 
 def test_A06_recovery_closure_report_fields_and_to_dict():
     from core.recovery_durability_closure_validator import RecoveryClosureReport
+
     report = RecoveryClosureReport(closed_count=5, deferred_count=1)
     d = report.to_dict()
     assert "report_id" in d
@@ -331,6 +338,7 @@ def test_A06_recovery_closure_report_fields_and_to_dict():
 
 def test_A07_recovery_closure_report_to_json_valid():
     from core.recovery_durability_closure_validator import RecoveryClosureReport
+
     report = RecoveryClosureReport()
     payload = json.loads(report.to_json())
     assert isinstance(payload, dict)
@@ -342,6 +350,7 @@ def test_A08_get_report_singleton_and_reset():
         get_recovery_closure_report,
         reset_recovery_closure_report,
     )
+
     reset_recovery_closure_report()
     r1 = get_recovery_closure_report()
     r2 = get_recovery_closure_report()
@@ -359,11 +368,13 @@ def test_A08_get_report_singleton_and_reset():
 @pytest.fixture(scope="module")
 def closure_report():
     from core.recovery_durability_closure_validator import build_recovery_closure_report
+
     return build_recovery_closure_report()
 
 
 def test_B01_build_report_returns_correct_type(closure_report):
     from core.recovery_durability_closure_validator import RecoveryClosureReport
+
     assert isinstance(closure_report, RecoveryClosureReport)
 
 
@@ -372,18 +383,16 @@ def test_B02_report_has_17_scenarios(closure_report):
 
 
 def test_B03_report_all_closed_is_true(closure_report):
-    assert closure_report.all_closed is True, (
-        f"all_closed is False; fail_closed_count={closure_report.fail_closed_count}; "
-        f"fail_closed scenarios: "
-        + str([s.scenario_id for s in closure_report.scenarios if s.status.value == "fail_closed"])
+    assert (
+        closure_report.all_closed is True
+    ), f"all_closed is False; fail_closed_count={closure_report.fail_closed_count}; " f"fail_closed scenarios: " + str(
+        [s.scenario_id for s in closure_report.scenarios if s.status.value == "fail_closed"]
     )
 
 
 def test_B04_report_no_fail_closed_scenarios(closure_report):
     fails = [s for s in closure_report.scenarios if s.status.value == "fail_closed"]
-    assert fails == [], (
-        f"Found fail_closed scenarios: {[(s.scenario_id, s.observed_decision) for s in fails]}"
-    )
+    assert fails == [], f"Found fail_closed scenarios: {[(s.scenario_id, s.observed_decision) for s in fails]}"
 
 
 def test_B05_report_has_zero_deferred_scenarios(closure_report):
@@ -403,9 +412,9 @@ def test_B05_report_has_zero_deferred_scenarios(closure_report):
 def test_B06_non_deferred_scenarios_have_real_observed_decisions(closure_report):
     for entry in closure_report.scenarios:
         if entry.status.value != "deferred":
-            assert entry.observed_decision != "(deferred)", (
-                f"{entry.scenario_id} is not deferred but has placeholder decision"
-            )
+            assert (
+                entry.observed_decision != "(deferred)"
+            ), f"{entry.scenario_id} is not deferred but has placeholder decision"
 
 
 def test_B07_every_scenario_has_non_empty_scenario_id(closure_report):
@@ -415,9 +424,7 @@ def test_B07_every_scenario_has_non_empty_scenario_id(closure_report):
 
 def test_B08_every_scenario_has_non_empty_policy_reference(closure_report):
     for entry in closure_report.scenarios:
-        assert entry.policy_reference, (
-            f"empty policy_reference in {entry.scenario_id}"
-        )
+        assert entry.policy_reference, f"empty policy_reference in {entry.scenario_id}"
 
 
 def test_B09_rs16_is_advisory_and_references_contract(closure_report):
@@ -431,17 +438,14 @@ def test_B09_rs16_is_advisory_and_references_contract(closure_report):
     """
     rs16 = next(s for s in closure_report.scenarios if s.scenario_id == "RS-16")
     # RS-16 must be advisory (contract defined, not deferred)
-    assert rs16.status.value == "advisory", (
-        f"Expected RS-16 status=advisory after PR-P0-3; got {rs16.status.value!r}"
-    )
+    assert rs16.status.value == "advisory", f"Expected RS-16 status=advisory after PR-P0-3; got {rs16.status.value!r}"
     # Must reference the new contract
     note_lower = rs16.note.lower()
     assert (
         "offline" in note_lower or "queue" in note_lower or "replay" in note_lower
     ), f"RS-16 note does not mention offline/queue/replay: {rs16.note!r}"
     assert (
-        "contract" in note_lower or "pr-p0-3" in note_lower
-        or "offline_replay_ordering_contract" in note_lower
+        "contract" in note_lower or "pr-p0-3" in note_lower or "offline_replay_ordering_contract" in note_lower
     ), f"RS-16 note does not reference the ordering contract: {rs16.note!r}"
 
 
@@ -466,6 +470,7 @@ def test_B11_report_pr5_sentinel_matches_module_constant(closure_report):
     from core.recovery_durability_closure_validator import (
         RECOVERY_DURABILITY_CLOSURE_PR5_SENTINEL,
     )
+
     assert closure_report.pr5_sentinel == RECOVERY_DURABILITY_CLOSURE_PR5_SENTINEL
 
 
@@ -483,6 +488,7 @@ def test_C01_v2_restart_recovery_not_completed_gives_require_review():
     )
     artifact = c.decide_v2_restart_recovery(ctx)
     from core.flow_continuity_coordinator import ContinuityDecision
+
     assert artifact.decision == ContinuityDecision.require_review
     assert artifact.artifact_id
 
@@ -496,15 +502,17 @@ def test_C02_v2_restart_recovery_completed_no_durable_flow_gives_new_attachment(
     )
     artifact = c.decide_v2_restart_recovery(ctx)
     from core.flow_continuity_coordinator import ContinuityDecision
+
     assert artifact.decision == ContinuityDecision.new_attachment
 
 
 def test_C03_coordinate_v2_restart_recovery_returns_artifact():
     from core.flow_continuity_coordinator import (
-        coordinate_v2_restart_recovery,
-        FlowContinuityCoordinator,
         ContinuityDecisionArtifact,
+        FlowContinuityCoordinator,
+        coordinate_v2_restart_recovery,
     )
+
     c = FlowContinuityCoordinator(capacity=16)
     artifact = coordinate_v2_restart_recovery(
         flow_lineage_id="lin-c03",
@@ -528,9 +536,11 @@ def test_C04_v2_restart_artifact_carries_policy_reference():
 def test_C05_unknown_event_kind_gives_fail_closed():
     c = _fresh_continuity_coordinator()
     from core.flow_continuity_coordinator import ContinuityEventContext, ContinuityEventKind
+
     ctx = ContinuityEventContext(event_kind=ContinuityEventKind.unknown)
     artifact = c.decide(ctx)
     from core.flow_continuity_coordinator import ContinuityDecision
+
     assert artifact.decision == ContinuityDecision.fail_closed
 
 
@@ -548,6 +558,7 @@ def test_D01_reconnect_attachment_id_present_gives_bounded_decision():
     )
     artifact = c.decide_reconnect(ctx)
     from core.flow_continuity_coordinator import ContinuityDecision
+
     valid = {
         ContinuityDecision.continuity_resume,
         ContinuityDecision.new_attachment,
@@ -567,18 +578,20 @@ def test_D02_reconnect_no_attachment_id_never_silently_resumes():
     )
     artifact = c.decide_reconnect(ctx)
     from core.flow_continuity_coordinator import ContinuityDecision
+
     # Must NOT silently resume when attachment ID is absent
-    assert artifact.decision != ContinuityDecision.continuity_resume, (
-        "Coordinator MUST NOT emit continuity_resume without attachment ID"
-    )
+    assert (
+        artifact.decision != ContinuityDecision.continuity_resume
+    ), "Coordinator MUST NOT emit continuity_resume without attachment ID"
 
 
 def test_D03_coordinate_reconnect_returns_artifact():
     from core.flow_continuity_coordinator import (
-        coordinate_reconnect,
-        FlowContinuityCoordinator,
         ContinuityDecisionArtifact,
+        FlowContinuityCoordinator,
+        coordinate_reconnect,
     )
+
     c = FlowContinuityCoordinator(capacity=16)
     artifact = coordinate_reconnect(
         device_id="dev-d03",
@@ -591,10 +604,11 @@ def test_D03_coordinate_reconnect_returns_artifact():
 
 def test_D04_reconnect_artifact_event_kind_is_transport_reconnect():
     from core.flow_continuity_coordinator import (
-        coordinate_reconnect,
-        FlowContinuityCoordinator,
         ContinuityEventKind,
+        FlowContinuityCoordinator,
+        coordinate_reconnect,
     )
+
     c = FlowContinuityCoordinator(capacity=16)
     artifact = coordinate_reconnect(
         device_id="dev-d04",
@@ -617,6 +631,7 @@ def test_E01_stale_identity_gives_reject_non_destructive():
     )
     artifact = c.decide_stale_identity(ctx)
     from core.flow_continuity_coordinator import ContinuityDecision
+
     assert artifact.decision == ContinuityDecision.reject_stale_identity
     # The policy reference must affirm non-destructive behaviour
     assert "NON_DESTRUCTIVE" in artifact.policy_reference or "STALE" in artifact.policy_reference
@@ -624,10 +639,11 @@ def test_E01_stale_identity_gives_reject_non_destructive():
 
 def test_E02_coordinate_stale_identity_returns_correct_decision():
     from core.flow_continuity_coordinator import (
-        coordinate_stale_identity,
-        FlowContinuityCoordinator,
         ContinuityDecision,
+        FlowContinuityCoordinator,
+        coordinate_stale_identity,
     )
+
     c = FlowContinuityCoordinator(capacity=16)
     artifact = coordinate_stale_identity(
         device_id="dev-e02",
@@ -647,16 +663,18 @@ def test_E03_duplicate_signal_novel_key_gives_continuity_resume():
     )
     artifact = c.decide_duplicate_signal(ctx)
     from core.flow_continuity_coordinator import ContinuityDecision
+
     # Novel signal (not yet in tracker ack history) → continuity_resume (pass through)
     assert artifact.decision == ContinuityDecision.continuity_resume
 
 
 def test_E04_coordinate_duplicate_signal_returns_artifact():
     from core.flow_continuity_coordinator import (
-        coordinate_duplicate_signal,
-        FlowContinuityCoordinator,
         ContinuityDecisionArtifact,
+        FlowContinuityCoordinator,
+        coordinate_duplicate_signal,
     )
+
     c = FlowContinuityCoordinator(capacity=16)
     artifact = coordinate_duplicate_signal(
         device_id="dev-e04",
@@ -678,15 +696,17 @@ def test_E05_partial_result_gives_preserve_partial_and_wait():
     )
     artifact = c.decide_partial_result(ctx)
     from core.flow_continuity_coordinator import ContinuityDecision
+
     assert artifact.decision == ContinuityDecision.preserve_partial_and_wait
 
 
 def test_E06_coordinate_partial_result_returns_correct_decision():
     from core.flow_continuity_coordinator import (
-        coordinate_partial_result,
-        FlowContinuityCoordinator,
         ContinuityDecision,
+        FlowContinuityCoordinator,
+        coordinate_partial_result,
     )
+
     c = FlowContinuityCoordinator(capacity=16)
     artifact = coordinate_partial_result(
         device_id="dev-e06",
@@ -713,6 +733,7 @@ def test_F01_resume_in_place_for_continuity_resume_active_flow():
     )
     artifact = c.decide(ctx)
     from core.delegated_flow_recovery_coordinator import RecoveryAction
+
     assert artifact.action == RecoveryAction.resume_in_place
 
 
@@ -729,6 +750,7 @@ def test_F02_replay_from_checkpoint_when_checkpoint_available():
     )
     artifact = c.decide(ctx)
     from core.delegated_flow_recovery_coordinator import RecoveryAction
+
     assert artifact.action == RecoveryAction.replay_from_checkpoint
 
 
@@ -744,6 +766,7 @@ def test_F03_redispatch_runtime_when_binding_released_no_checkpoint():
     )
     artifact = c.decide(ctx)
     from core.delegated_flow_recovery_coordinator import RecoveryAction
+
     assert artifact.action == RecoveryAction.redispatch_runtime
 
 
@@ -758,6 +781,7 @@ def test_F04_preserve_partial_then_resume_when_partial_result_detected():
     )
     artifact = c.decide(ctx)
     from core.delegated_flow_recovery_coordinator import RecoveryAction
+
     assert artifact.action == RecoveryAction.preserve_partial_then_resume
 
 
@@ -769,6 +793,7 @@ def test_F05_fail_closed_when_flow_id_missing():
     )
     artifact = c.decide(ctx)
     from core.delegated_flow_recovery_coordinator import RecoveryAction
+
     assert artifact.action == RecoveryAction.fail_closed
 
 
@@ -793,16 +818,18 @@ def test_F06_duplicate_attempt_suppressed_after_begin_attempt():
     )
     artifact2 = c.decide(ctx2)
     from core.delegated_flow_recovery_coordinator import RecoveryAction
+
     assert artifact2.action == RecoveryAction.suppress_duplicate_recovery
 
 
 def test_F07_decide_from_continuity_artifact_enriches_context():
     from core.delegated_flow_recovery_coordinator import (
         DelegatedFlowRecoveryCoordinator,
-        RecoveryTriggerContext,
         RecoveryTrigger,
+        RecoveryTriggerContext,
         decide_recovery_from_continuity_artifact,
     )
+
     c = DelegatedFlowRecoveryCoordinator(capacity=16)
     flow_id = f"flow-f07-{uuid.uuid4().hex[:8]}"
     continuity_artifact_dict = {
@@ -835,10 +862,11 @@ def test_F07_decide_from_continuity_artifact_enriches_context():
 
 def test_G01_fresh_runtime_novel_signal_accepted():
     from core.attached_runtime_recovery_readiness import (
+        SignalGuardDecision,
         build_idempotency_key,
         check_signal_guard,
-        SignalGuardDecision,
     )
+
     rt = _fresh_guard_runtime()
     key = build_idempotency_key(signal_id="sig-g01", contract_id="ctr-g01")
     decision = check_signal_guard(key, emission_seq=0, runtime=rt)
@@ -847,11 +875,12 @@ def test_G01_fresh_runtime_novel_signal_accepted():
 
 def test_G02_duplicate_signal_id_rejected_as_duplicate():
     from core.attached_runtime_recovery_readiness import (
+        SignalGuardDecision,
         build_idempotency_key,
         check_signal_guard,
         record_seen_signal,
-        SignalGuardDecision,
     )
+
     rt = _fresh_guard_runtime()
     key = build_idempotency_key(signal_id="sig-g02", contract_id="ctr-g02")
     record_seen_signal(key, emission_seq=3, runtime=rt)
@@ -861,11 +890,12 @@ def test_G02_duplicate_signal_id_rejected_as_duplicate():
 
 def test_G03_same_seq_different_signal_id_is_replay():
     from core.attached_runtime_recovery_readiness import (
+        SignalGuardDecision,
         build_idempotency_key,
         check_signal_guard,
         record_seen_signal,
-        SignalGuardDecision,
     )
+
     rt = _fresh_guard_runtime()
     key_orig = build_idempotency_key(signal_id="sig-g03-orig", contract_id="ctr-g03")
     record_seen_signal(key_orig, emission_seq=5, runtime=rt)
@@ -878,11 +908,12 @@ def test_G03_same_seq_different_signal_id_is_replay():
 def test_G04_far_behind_seq_is_stale():
     from core.attached_runtime_recovery_readiness import (
         STALE_EMISSION_SEQ_THRESHOLD,
+        SignalGuardDecision,
         build_idempotency_key,
         check_signal_guard,
         record_seen_signal,
-        SignalGuardDecision,
     )
+
     rt = _fresh_guard_runtime()
     key_high = build_idempotency_key(signal_id="sig-g04-high", contract_id="ctr-g04")
     high_seq = 200
@@ -896,11 +927,12 @@ def test_G04_far_behind_seq_is_stale():
 
 def test_G05_slightly_behind_seq_is_out_of_order():
     from core.attached_runtime_recovery_readiness import (
+        SignalGuardDecision,
         build_idempotency_key,
         check_signal_guard,
         record_seen_signal,
-        SignalGuardDecision,
     )
+
     rt = _fresh_guard_runtime()
     key_high = build_idempotency_key(signal_id="sig-g05-high", contract_id="ctr-g05")
     record_seen_signal(key_high, emission_seq=10, runtime=rt)
@@ -915,6 +947,7 @@ def test_G06_check_signal_guard_is_pure_does_not_mutate():
         build_idempotency_key,
         check_signal_guard,
     )
+
     rt = _fresh_guard_runtime()
     key = build_idempotency_key(signal_id="sig-g06", contract_id="ctr-g06")
     # Calling check_signal_guard twice should give the same result
@@ -925,11 +958,12 @@ def test_G06_check_signal_guard_is_pure_does_not_mutate():
 
 def test_G07_record_seen_signal_updates_ring_buffer():
     from core.attached_runtime_recovery_readiness import (
+        SignalGuardDecision,
         build_idempotency_key,
         check_signal_guard,
         record_seen_signal,
-        SignalGuardDecision,
     )
+
     rt = _fresh_guard_runtime()
     key = build_idempotency_key(signal_id="sig-g07", contract_id="ctr-g07")
     # Before recording: accept
@@ -951,11 +985,12 @@ def test_G08_two_contracts_are_guard_isolated():
     """
     from core.attached_runtime_recovery_readiness import (
         STALE_EMISSION_SEQ_THRESHOLD,
+        SignalGuardDecision,
         build_idempotency_key,
         check_signal_guard,
         record_seen_signal,
-        SignalGuardDecision,
     )
+
     rt = _fresh_guard_runtime()
     # Record seq=100 for contract A only
     k_a = build_idempotency_key(signal_id="sig-g08-a", contract_id="ctr-g08-A")
@@ -1074,6 +1109,7 @@ def test_I01_chain_v2_restart_continuity_resume_gives_resume_in_place():
     recovery_artifact = rc.decide(ctx_rc)
 
     from core.delegated_flow_recovery_coordinator import RecoveryAction
+
     assert recovery_artifact.action == RecoveryAction.resume_in_place
     # The chain produced two linked artifacts
     assert continuity_artifact.artifact_id
@@ -1095,10 +1131,11 @@ def test_I02_chain_v2_restart_new_attachment_gives_redispatch_or_review():
     )
     recovery_artifact = rc.decide(ctx_rc)
     from core.delegated_flow_recovery_coordinator import RecoveryAction
+
     expected = {RecoveryAction.redispatch_runtime, RecoveryAction.require_review}
-    assert recovery_artifact.action in expected, (
-        f"unexpected action for new_attachment chain: {recovery_artifact.action!r}"
-    )
+    assert (
+        recovery_artifact.action in expected
+    ), f"unexpected action for new_attachment chain: {recovery_artifact.action!r}"
 
 
 def test_I03_chain_stale_identity_continuity_reject_is_terminal_at_coordinator():
@@ -1116,6 +1153,7 @@ def test_I03_chain_stale_identity_continuity_reject_is_terminal_at_coordinator()
         ContinuityDecision,
         ContinuityEventKind,
     )
+
     cc = _fresh_continuity_coordinator()
     ctx_cc = _continuity_ctx(
         event_kind="stale_identity",
@@ -1138,11 +1176,12 @@ def test_I03_chain_stale_identity_continuity_reject_is_terminal_at_coordinator()
 
 def test_J01_signal_guard_decisions_independent_per_contract():
     from core.attached_runtime_recovery_readiness import (
+        SignalGuardDecision,
         build_idempotency_key,
         check_signal_guard,
         record_seen_signal,
-        SignalGuardDecision,
     )
+
     rt = _fresh_guard_runtime()
     # Record seq=10 for contract A
     k_a10 = build_idempotency_key(signal_id="sig-j01-a", contract_id="ctr-j01-A")
@@ -1169,6 +1208,7 @@ def test_J02_completing_attempt_deregisters_flow_allowing_next_decide():
     )
     artifact2 = c.decide(ctx2)
     from core.delegated_flow_recovery_coordinator import RecoveryAction
+
     assert artifact2.action != RecoveryAction.suppress_duplicate_recovery
 
 
@@ -1186,23 +1226,22 @@ def test_J03_intra_snapshot_duplicate_task_ids_deduped(tmp_path):
 
 def test_J04_in_process_task_not_overwritten_by_snapshot(tmp_path):
     """Tasks already registered in the lifecycle registry are not overwritten."""
+    from core.mesh.body_mesh_persistence import BodyMeshPersistenceStore
+    from core.mesh.mesh_session_persistence import MeshSessionPersistenceStore
+    from core.runtime_restart_recovery import RuntimeRestartRecoveryCoordinator
     from core.task_lifecycle_persistence import (
         TaskLifecyclePersistenceStore,
         save_task_lifecycle_snapshot,
     )
-    from core.mesh.mesh_session_persistence import MeshSessionPersistenceStore
-    from core.mesh.body_mesh_persistence import BodyMeshPersistenceStore
-    from core.runtime_restart_recovery import RuntimeRestartRecoveryCoordinator
 
     class _FakeBodyRegistry:
         def register(self, device_id, roles=None, session_id=None, metadata=None):
             return {}
+
         def list_entries(self):
             return []
 
-    tl_store = TaskLifecyclePersistenceStore(
-        store_path=os.path.join(str(tmp_path), "tl_j04.json")
-    )
+    tl_store = TaskLifecyclePersistenceStore(store_path=os.path.join(str(tmp_path), "tl_j04.json"))
     # Save two resumable records
     records = [
         _task_record("task-j04a", "device_dispatch"),
@@ -1210,9 +1249,7 @@ def test_J04_in_process_task_not_overwritten_by_snapshot(tmp_path):
     ]
     save_task_lifecycle_snapshot(records, store=tl_store)
     ms_store = MeshSessionPersistenceStore(store_dir=str(tmp_path))
-    bm_store = BodyMeshPersistenceStore(
-        store_path=os.path.join(str(tmp_path), "bm_j04.json")
-    )
+    bm_store = BodyMeshPersistenceStore(store_path=os.path.join(str(tmp_path), "bm_j04.json"))
     coord = RuntimeRestartRecoveryCoordinator(
         mesh_session_store=ms_store,
         body_mesh_store=bm_store,
@@ -1224,9 +1261,7 @@ def test_J04_in_process_task_not_overwritten_by_snapshot(tmp_path):
     assert report1.inflight_tasks_resumable == 2
     # Second recovery: tasks already present → skipped
     report2 = coord.run_recovery()
-    assert report2.inflight_tasks_already_pending_skipped >= 1 or (
-        report2.inflight_tasks_dispatch_actions_taken == 0
-    )
+    assert report2.inflight_tasks_already_pending_skipped >= 1 or (report2.inflight_tasks_dispatch_actions_taken == 0)
 
 
 # ===========================================================================
@@ -1244,6 +1279,7 @@ def test_K01_continuity_decision_artifact_round_trip():
     artifact = c.decide(ctx)
     d = artifact.to_dict()
     from core.flow_continuity_coordinator import ContinuityDecisionArtifact
+
     restored = ContinuityDecisionArtifact.from_dict(d)
     assert restored.artifact_id == artifact.artifact_id
     assert restored.decision == artifact.decision
@@ -1259,6 +1295,7 @@ def test_K02_recovery_decision_artifact_round_trip():
     artifact = c.decide(ctx)
     d = artifact.to_dict()
     from core.delegated_flow_recovery_coordinator import RecoveryDecisionArtifact
+
     restored = RecoveryDecisionArtifact.from_dict(d)
     assert restored.artifact_id == artifact.artifact_id
     assert restored.action == artifact.action
@@ -1266,6 +1303,7 @@ def test_K02_recovery_decision_artifact_round_trip():
 
 def test_K03_closure_report_to_json_and_back():
     from core.recovery_durability_closure_validator import build_recovery_closure_report
+
     report = build_recovery_closure_report()
     payload = json.loads(report.to_json())
     assert isinstance(payload, dict)

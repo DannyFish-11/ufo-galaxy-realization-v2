@@ -69,43 +69,38 @@ import uuid
 
 import pytest
 
-from core.webrtc_task_lifecycle import (
-    # Sentinels
-    WEBRTC_TASK_LIFECYCLE_AUTHORITY,
-    WEBRTC_SESSION_MUST_BE_TASK_SCOPED_POLICY,
-    TRANSPORT_STATE_DRIVES_LIFECYCLE_ACTION_POLICY,
-    TERMINAL_TASK_TRIGGERS_SESSION_TEARDOWN_POLICY,
+from core.webrtc_task_lifecycle import (  # Sentinels; Enums; Dataclasses; Class; Functions
+    BINDING_IS_TASK_SCOPED_SINGLE_SESSION_POLICY,
     DEGRADED_TRANSPORT_YIELDS_DEGRADED_TASK_POLICY,
     FAILED_TRANSPORT_YIELDS_FAILED_TASK_POLICY,
     RECONNECTED_TRANSPORT_RESUMES_RUNNING_TASK_POLICY,
-    BINDING_IS_TASK_SCOPED_SINGLE_SESSION_POLICY,
-    TEARDOWN_IS_IDEMPOTENT_POLICY,
     SESSION_BINDING_RECORD_IS_IMMUTABLE_POLICY,
+    TEARDOWN_IS_IDEMPOTENT_POLICY,
+    TERMINAL_TASK_TRIGGERS_SESSION_TEARDOWN_POLICY,
+    TRANSPORT_STATE_DRIVES_LIFECYCLE_ACTION_POLICY,
+    WEBRTC_SESSION_MUST_BE_TASK_SCOPED_POLICY,
+    WEBRTC_TASK_LIFECYCLE_AUTHORITY,
     WEBRTC_TASK_LIFECYCLE_PR6_SENTINEL,
-    # Enums
-    WebRTCTransportState,
-    WebRTCTaskLifecycleAction,
-    # Dataclasses
     WebRTCTaskBinding,
     WebRTCTaskBindingSnapshot,
-    # Class
+    WebRTCTaskLifecycleAction,
     WebRTCTaskSessionRegistry,
-    # Functions
-    bind_webrtc_session_to_task,
-    classify_transport_lifecycle_action,
+    WebRTCTransportState,
     apply_transport_state_to_task_lifecycle,
-    teardown_binding_on_task_terminal,
-    get_webrtc_task_binding,
-    list_active_webrtc_task_bindings,
+    bind_webrtc_session_to_task,
     build_webrtc_task_binding_snapshot,
+    classify_transport_lifecycle_action,
+    get_webrtc_task_binding,
     get_webrtc_task_session_registry,
+    list_active_webrtc_task_bindings,
     reset_webrtc_task_session_registry,
+    teardown_binding_on_task_terminal,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _fresh_registry() -> WebRTCTaskSessionRegistry:
     """Return a fresh, isolated registry (not the module singleton)."""
@@ -134,6 +129,7 @@ def _bind(task_id: str = None, session_id: str = None, device_id: str = "dev-1",
 # ---------------------------------------------------------------------------
 # Group A — Sentinel presence and correctness
 # ---------------------------------------------------------------------------
+
 
 def test_a1_authority_sentinel_non_empty():
     assert isinstance(WEBRTC_TASK_LIFECYCLE_AUTHORITY, str)
@@ -184,6 +180,7 @@ def test_a11_record_immutable_policy():
 # ---------------------------------------------------------------------------
 # Group B — WebRTCTransportState enum
 # ---------------------------------------------------------------------------
+
 
 def test_b1_all_transport_states_present():
     states = {s.value for s in WebRTCTransportState}
@@ -239,6 +236,7 @@ def test_b12_is_usable_reconnecting_false():
 # Group C — WebRTCTaskLifecycleAction enum
 # ---------------------------------------------------------------------------
 
+
 def test_c1_all_actions_present():
     actions = {a.value for a in WebRTCTaskLifecycleAction}
     assert actions == {
@@ -254,6 +252,7 @@ def test_c1_all_actions_present():
 # ---------------------------------------------------------------------------
 # Group D — WebRTCTaskBinding dataclass
 # ---------------------------------------------------------------------------
+
 
 def test_d1_binding_default_construction():
     b = WebRTCTaskBinding()
@@ -326,6 +325,7 @@ def test_d8_binding_from_dict_malformed_transport_state_defaults():
 # Group E — WebRTCTaskBindingSnapshot
 # ---------------------------------------------------------------------------
 
+
 def test_e1_snapshot_defaults():
     s = WebRTCTaskBindingSnapshot()
     assert s.total_bindings == 0
@@ -356,6 +356,7 @@ def test_e3_snapshot_to_json_valid_json():
 # ---------------------------------------------------------------------------
 # Group F — WebRTCTaskSessionRegistry
 # ---------------------------------------------------------------------------
+
 
 def test_f1_push_increases_size():
     reg = _fresh_registry()
@@ -432,6 +433,7 @@ def test_f9_replace_latest_for_task_appends_if_not_present():
 # Group G-H — bind_webrtc_session_to_task
 # ---------------------------------------------------------------------------
 
+
 def test_g1_bind_creates_binding():
     reg = _fresh_registry()
     b = bind_webrtc_session_to_task("t1", "s1", "d1", registry=reg)
@@ -471,6 +473,7 @@ def test_h1_rebind_same_task_replaces_binding():
 # ---------------------------------------------------------------------------
 # Group I-P — classify_transport_lifecycle_action
 # ---------------------------------------------------------------------------
+
 
 def test_i1_connected_non_terminal_task_returns_continue():
     action = classify_transport_lifecycle_action("running", WebRTCTransportState.connected)
@@ -526,6 +529,7 @@ def test_p1_connected_transport_degraded_task_returns_recover():
 # Group Q-T — apply_transport_state_to_task_lifecycle
 # ---------------------------------------------------------------------------
 
+
 def test_q1_apply_updates_transport_state():
     reg = _fresh_registry()
     b = bind_webrtc_session_to_task("t1", "s1", "d1", registry=reg)
@@ -552,11 +556,12 @@ def test_s1_apply_updates_last_transition_at():
 def test_t1_apply_with_runtime_advances_task_to_degraded():
     """When a runtime is provided, DEGRADED transport should advance the task lifecycle."""
     from core.canonical_task import (
-        build_canonical_task,
         TaskLifecycle,
+        build_canonical_task,
         get_canonical_task_runtime,
         reset_canonical_task_runtime,
     )
+
     reset_canonical_task_runtime()
     rt = get_canonical_task_runtime()
 
@@ -566,13 +571,13 @@ def test_t1_apply_with_runtime_advances_task_to_degraded():
 
     reg = _fresh_registry()
     b = bind_webrtc_session_to_task(
-        task.task_id, "s1", "d1",
+        task.task_id,
+        "s1",
+        "d1",
         task_lifecycle="running",
         registry=reg,
     )
-    updated = apply_transport_state_to_task_lifecycle(
-        b, WebRTCTransportState.degraded, runtime=rt, registry=reg
-    )
+    updated = apply_transport_state_to_task_lifecycle(b, WebRTCTransportState.degraded, runtime=rt, registry=reg)
     # Task should now be DEGRADED
     stored = rt.get_by_task_id(task.task_id)
     assert stored.lifecycle == TaskLifecycle.DEGRADED
@@ -583,11 +588,12 @@ def test_t1_apply_with_runtime_advances_task_to_degraded():
 
 def test_t2_apply_with_runtime_advances_task_to_failed():
     from core.canonical_task import (
-        build_canonical_task,
         TaskLifecycle,
+        build_canonical_task,
         get_canonical_task_runtime,
         reset_canonical_task_runtime,
     )
+
     reset_canonical_task_runtime()
     rt = get_canonical_task_runtime()
 
@@ -608,6 +614,7 @@ def test_t2_apply_with_runtime_advances_task_to_failed():
 # ---------------------------------------------------------------------------
 # Group U-Y — teardown_binding_on_task_terminal
 # ---------------------------------------------------------------------------
+
 
 def test_u1_teardown_marks_binding_torn_down():
     reg = _fresh_registry()
@@ -654,6 +661,7 @@ def test_y1_teardown_sets_torn_down_at():
 # Group Z-AA — get_webrtc_task_binding
 # ---------------------------------------------------------------------------
 
+
 def test_z1_get_binding_returns_latest():
     reg = _fresh_registry()
     bind_webrtc_session_to_task("t1", "s1", "d1", registry=reg)
@@ -670,6 +678,7 @@ def test_aa1_get_binding_unknown_returns_none():
 # ---------------------------------------------------------------------------
 # Group AB-AC — list_active_webrtc_task_bindings
 # ---------------------------------------------------------------------------
+
 
 def test_ab1_list_active_excludes_torn_down():
     reg = _fresh_registry()
@@ -690,6 +699,7 @@ def test_ac1_list_active_empty_when_no_bindings():
 # ---------------------------------------------------------------------------
 # Group AD-AF — build_webrtc_task_binding_snapshot
 # ---------------------------------------------------------------------------
+
 
 def test_ad1_snapshot_counts_match():
     reg = _fresh_registry()
@@ -720,26 +730,28 @@ def test_af1_empty_registry_snapshot_zero_counts():
 # Group AG — core.runtime re-exports
 # ---------------------------------------------------------------------------
 
+
 def test_ag1_core_runtime_exports_pr6_symbols():
     pytest.importorskip("pydantic", reason="pydantic required for core.runtime import")
     from core.runtime import (
         WEBRTC_TASK_LIFECYCLE_AUTHORITY,
         WEBRTC_TASK_LIFECYCLE_PR6_SENTINEL,
-        WebRTCTransportState,
-        WebRTCTaskLifecycleAction,
         WebRTCTaskBinding,
         WebRTCTaskBindingSnapshot,
+        WebRTCTaskLifecycleAction,
         WebRTCTaskSessionRegistry,
-        bind_webrtc_session_to_task,
-        classify_transport_lifecycle_action,
+        WebRTCTransportState,
         apply_transport_state_to_task_lifecycle,
-        teardown_binding_on_task_terminal,
-        get_webrtc_task_binding,
-        list_active_webrtc_task_bindings,
+        bind_webrtc_session_to_task,
         build_webrtc_task_binding_snapshot,
+        classify_transport_lifecycle_action,
+        get_webrtc_task_binding,
         get_webrtc_task_session_registry,
+        list_active_webrtc_task_bindings,
         reset_webrtc_task_session_registry,
+        teardown_binding_on_task_terminal,
     )
+
     assert WEBRTC_TASK_LIFECYCLE_AUTHORITY
     assert WEBRTC_TASK_LIFECYCLE_PR6_SENTINEL
 
@@ -747,6 +759,7 @@ def test_ag1_core_runtime_exports_pr6_symbols():
 # ---------------------------------------------------------------------------
 # Group AH — from_string edge cases
 # ---------------------------------------------------------------------------
+
 
 def test_ah1_from_string_unknown():
     assert WebRTCTransportState.from_string("totally_invalid") == WebRTCTransportState.unknown
@@ -759,6 +772,7 @@ def test_ah2_from_string_reconnecting():
 # ---------------------------------------------------------------------------
 # Group AI-AJ — from_dict edge cases
 # ---------------------------------------------------------------------------
+
 
 def test_ai1_from_dict_malformed_transport_state():
     b = WebRTCTaskBinding.from_dict({"transport_state": "GARBAGE"})
@@ -774,6 +788,7 @@ def test_aj1_from_dict_non_dict_raises():
 # Group AK — Ring buffer capacity
 # ---------------------------------------------------------------------------
 
+
 def test_ak1_default_capacity_is_128():
     reg = _fresh_registry()
     assert reg.capacity() == 128
@@ -782,6 +797,7 @@ def test_ak1_default_capacity_is_128():
 # ---------------------------------------------------------------------------
 # Group AL-AU — Additional integration / multi-task scenarios
 # ---------------------------------------------------------------------------
+
 
 def test_al1_multiple_tasks_independent_bindings():
     reg = _fresh_registry()
@@ -798,9 +814,14 @@ def test_am1_snapshot_to_dict_has_required_keys():
     snap = build_webrtc_task_binding_snapshot(registry=reg)
     d = snap.to_dict()
     required = {
-        "total_bindings", "active_bindings", "torn_down_bindings",
-        "bindings_by_transport_state", "records", "snapshot_id",
-        "snapshotted_at", "policy_sentinels",
+        "total_bindings",
+        "active_bindings",
+        "torn_down_bindings",
+        "bindings_by_transport_state",
+        "records",
+        "snapshot_id",
+        "snapshotted_at",
+        "policy_sentinels",
     }
     assert required <= set(d.keys())
 
@@ -927,9 +948,11 @@ def test_ay1_snapshot_records_newest_first():
 # Group AZ — WebRTC session manager config extensions (PR-6)
 # ---------------------------------------------------------------------------
 
+
 def test_az1_manager_config_accepts_task_id():
     pytest.importorskip("numpy", reason="numpy required for WebRTCManagerConfig tests")
     from core.multimodal.webrtc_session_manager import WebRTCManagerConfig
+
     cfg = WebRTCManagerConfig(task_id="my_task")
     assert cfg.task_id == "my_task"
 
@@ -937,6 +960,7 @@ def test_az1_manager_config_accepts_task_id():
 def test_az2_manager_config_accepts_device_id():
     pytest.importorskip("numpy", reason="numpy required for WebRTCManagerConfig tests")
     from core.multimodal.webrtc_session_manager import WebRTCManagerConfig
+
     cfg = WebRTCManagerConfig(device_id="my_device")
     assert cfg.device_id == "my_device"
 
@@ -944,6 +968,7 @@ def test_az2_manager_config_accepts_device_id():
 def test_az3_manager_config_task_id_defaults_none():
     pytest.importorskip("numpy", reason="numpy required for WebRTCManagerConfig tests")
     from core.multimodal.webrtc_session_manager import WebRTCManagerConfig
+
     cfg = WebRTCManagerConfig()
     assert cfg.task_id is None
 
@@ -951,6 +976,7 @@ def test_az3_manager_config_task_id_defaults_none():
 def test_az4_manager_config_device_id_defaults_none():
     pytest.importorskip("numpy", reason="numpy required for WebRTCManagerConfig tests")
     from core.multimodal.webrtc_session_manager import WebRTCManagerConfig
+
     cfg = WebRTCManagerConfig()
     assert cfg.device_id is None
 
@@ -959,9 +985,11 @@ def test_az4_manager_config_device_id_defaults_none():
 # Group — multimodal event types (PR-6 additions)
 # ---------------------------------------------------------------------------
 
+
 def test_multimodal_event_pr6_types_present():
     pytest.importorskip("numpy", reason="numpy required for multimodal events tests")
     from core.multimodal.multimodal_events import MultimodalEventType
+
     assert MultimodalEventType.WEBRTC_TASK_BOUND.value == "webrtc.task.bound"
     assert MultimodalEventType.WEBRTC_TASK_LIFECYCLE_CHANGED.value == "webrtc.task.lifecycle_changed"
     assert MultimodalEventType.WEBRTC_TASK_TORN_DOWN.value == "webrtc.task.torn_down"
@@ -974,6 +1002,7 @@ def test_multimodal_event_pr6_dataclasses_constructible():
         WebRTCTaskLifecycleChangedEvent,
         WebRTCTaskTornDownEvent,
     )
+
     e1 = WebRTCTaskBoundEvent(task_id="t1", webrtc_session_id="s1", device_id="d1")
     assert e1.task_id == "t1"
 

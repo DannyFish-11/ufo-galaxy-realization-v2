@@ -39,7 +39,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # 1. CANONICAL_DISPATCH_AUTHORITY sentinel
 # ---------------------------------------------------------------------------
@@ -50,14 +49,17 @@ class TestCanonicalDispatchAuthoritySentinel:
 
     def test_sentinel_importable(self):
         from galaxy_gateway.device_router import CANONICAL_DISPATCH_AUTHORITY
+
         assert CANONICAL_DISPATCH_AUTHORITY is not None
 
     def test_sentinel_value(self):
         from galaxy_gateway.device_router import CANONICAL_DISPATCH_AUTHORITY
+
         assert CANONICAL_DISPATCH_AUTHORITY == "galaxy_gateway.device_router.DeviceRouter"
 
     def test_sentinel_is_string(self):
         from galaxy_gateway.device_router import CANONICAL_DISPATCH_AUTHORITY
+
         assert isinstance(CANONICAL_DISPATCH_AUTHORITY, str)
 
 
@@ -71,29 +73,29 @@ class TestDeviceRouterDocstring:
 
     def test_docstring_references_prs3(self):
         from galaxy_gateway.device_router import DeviceRouter
+
         doc = DeviceRouter.__doc__ or ""
         assert "PR-S3" in doc, "DeviceRouter docstring must reference PR-S3"
 
     def test_docstring_references_single_dispatch(self):
         from galaxy_gateway.device_router import DeviceRouter
+
         doc = DeviceRouter.__doc__ or ""
-        assert "single" in doc.lower() and "dispatch" in doc.lower(), (
-            "DeviceRouter docstring must describe single dispatch authority"
-        )
+        assert (
+            "single" in doc.lower() and "dispatch" in doc.lower()
+        ), "DeviceRouter docstring must describe single dispatch authority"
 
     def test_docstring_references_android_bridge(self):
         from galaxy_gateway.device_router import DeviceRouter
+
         doc = DeviceRouter.__doc__ or ""
-        assert "AndroidBridge" in doc, (
-            "DeviceRouter docstring should name AndroidBridge as a delegator"
-        )
+        assert "AndroidBridge" in doc, "DeviceRouter docstring should name AndroidBridge as a delegator"
 
     def test_docstring_references_repo_coordinator(self):
         from galaxy_gateway.device_router import DeviceRouter
+
         doc = DeviceRouter.__doc__ or ""
-        assert "RepoCoordinator" in doc, (
-            "DeviceRouter docstring should name RepoCoordinator as a delegator"
-        )
+        assert "RepoCoordinator" in doc, "DeviceRouter docstring should name RepoCoordinator as a delegator"
 
 
 # ---------------------------------------------------------------------------
@@ -122,9 +124,7 @@ class TestAndroidBridgeAssignTaskDelegatesToRouter:
         # Patch the module-level singleton in galaxy_gateway.device_router so the
         # lazy import inside assign_task picks up the mock.
         with patch("galaxy_gateway.device_router.device_router", mock_router):
-            result = await bridge.assign_task(
-                "android_001", "task_001", "screenshot", {}, priority=5, timeout=30
-            )
+            result = await bridge.assign_task("android_001", "task_001", "screenshot", {}, priority=5, timeout=30)
 
         mock_router.dispatch_task.assert_called_once()
         assert result == expected_result
@@ -149,9 +149,7 @@ class TestAndroidBridgeAssignTaskDelegatesToRouter:
 
         bridge = AndroidBridge()
         with patch("galaxy_gateway.device_router.device_router", mock_router):
-            await bridge.assign_task(
-                "android_002", "my_task_id", "some_type", {"key": "val"}
-            )
+            await bridge.assign_task("android_002", "my_task_id", "some_type", {"key": "val"})
 
         assert len(dispatched_tasks) == 1
         assert dispatched_tasks[0]["task_id"] == "my_task_id"
@@ -191,9 +189,7 @@ class TestAndroidBridgeAssignTaskFallback:
         bridge.send_to_device = _fake_send  # type: ignore[method-assign]
 
         with patch("galaxy_gateway.device_router.device_router", mock_router):
-            result = await bridge.assign_task(
-                "android_fallback", "task_fb", "generic", {}
-            )
+            result = await bridge.assign_task("android_fallback", "task_fb", "generic", {})
 
         # Should have fallen back to send_to_device
         assert len(sent_messages) == 1
@@ -211,32 +207,38 @@ class TestAndroidBridgeGUIAdapters:
 
     def test_click_docstring_mentions_adapter(self):
         from galaxy_gateway.android_bridge import AndroidBridge
+
         doc = AndroidBridge.click.__doc__ or ""
         assert "adapter" in doc.lower(), "click() must document itself as adapter"
 
     def test_swipe_docstring_mentions_adapter(self):
         from galaxy_gateway.android_bridge import AndroidBridge
+
         doc = AndroidBridge.swipe.__doc__ or ""
         assert "adapter" in doc.lower()
 
     def test_input_text_docstring_mentions_adapter(self):
         from galaxy_gateway.android_bridge import AndroidBridge
+
         doc = AndroidBridge.input_text.__doc__ or ""
         assert "adapter" in doc.lower()
 
     def test_screenshot_docstring_mentions_adapter(self):
         from galaxy_gateway.android_bridge import AndroidBridge
+
         doc = AndroidBridge.screenshot.__doc__ or ""
         assert "adapter" in doc.lower()
 
     def test_query_elements_docstring_mentions_adapter(self):
         from galaxy_gateway.android_bridge import AndroidBridge
+
         doc = AndroidBridge.query_elements.__doc__ or ""
         assert "adapter" in doc.lower()
 
     def test_gui_action_adapters_reference_prs3(self):
         """At least click and swipe reference PR-S3."""
         from galaxy_gateway.android_bridge import AndroidBridge
+
         for method_name in ("click", "swipe"):
             doc = getattr(AndroidBridge, method_name).__doc__ or ""
             assert "PR-S3" in doc, f"{method_name}() docstring must reference PR-S3"
@@ -275,9 +277,7 @@ class TestRepoCoordinatorDelegatesToRouter:
         mock_router.route_task = _fake_route_task
 
         with patch("galaxy_gateway.device_router.device_router", mock_router):
-            result = await coordinator.dispatch_agent_to_android(
-                "dev_rc_01", "screenshot", {"quality": 80}
-            )
+            result = await coordinator.dispatch_agent_to_android("dev_rc_01", "screenshot", {"quality": 80})
 
         assert len(route_task_calls) == 1
         assert route_task_calls[0][1]["device_id"] == "dev_rc_01"
@@ -307,9 +307,7 @@ class TestRepoCoordinatorDelegatesToRouter:
         mock_router.route_task = _capture_context
 
         with patch("galaxy_gateway.device_router.device_router", mock_router):
-            await coordinator.dispatch_agent_to_android(
-                "dev_rc_02", "take_screenshot", {"resolution": "1080p"}
-            )
+            await coordinator.dispatch_agent_to_android("dev_rc_02", "take_screenshot", {"resolution": "1080p"})
 
         assert captured_context.get("device_id") == "dev_rc_02"
         assert captured_context.get("source") == "repo_coordinator"
@@ -320,9 +318,7 @@ class TestRepoCoordinatorDelegatesToRouter:
         from core.repo_coordinator import RepoCoordinator
 
         coordinator = RepoCoordinator()
-        result = await coordinator.dispatch_agent_to_android(
-            "nonexistent_device", "screenshot", {}
-        )
+        result = await coordinator.dispatch_agent_to_android("nonexistent_device", "screenshot", {})
         assert result["success"] is False
         assert "not found" in result.get("error", "").lower()
 
@@ -362,9 +358,7 @@ class TestRepoCoordinatorFallback:
         coordinator._send_via_http = _fake_http  # type: ignore[method-assign]
 
         with patch("galaxy_gateway.device_router.device_router", mock_router):
-            result = await coordinator.dispatch_agent_to_android(
-                "dev_rc_fb", "generic", {}
-            )
+            result = await coordinator.dispatch_agent_to_android("dev_rc_fb", "generic", {})
 
         # Should have fallen through to HTTP fallback
         assert result.get("via") == "http_fallback"
@@ -380,16 +374,19 @@ class TestCrossDeviceCoordinatorDocstring:
 
     def test_class_docstring_references_prs3(self):
         from galaxy_gateway.cross_device_coordinator import CrossDeviceCoordinator
+
         doc = CrossDeviceCoordinator.__doc__ or ""
         assert "PR-S3" in doc
 
     def test_class_docstring_says_internal(self):
         from galaxy_gateway.cross_device_coordinator import CrossDeviceCoordinator
+
         doc = CrossDeviceCoordinator.__doc__ or ""
         assert "internal" in doc.lower()
 
     def test_class_docstring_references_device_router(self):
         from galaxy_gateway.cross_device_coordinator import CrossDeviceCoordinator
+
         doc = CrossDeviceCoordinator.__doc__ or ""
         assert "DeviceRouter" in doc
 
@@ -404,11 +401,13 @@ class TestExecuteCrossDeviceTaskDocstring:
 
     def test_method_docstring_says_called_by_device_router(self):
         from galaxy_gateway.cross_device_coordinator import CrossDeviceCoordinator
+
         doc = CrossDeviceCoordinator.execute_cross_device_task.__doc__ or ""
         assert "DeviceRouter" in doc
 
     def test_method_docstring_discourages_direct_call(self):
         from galaxy_gateway.cross_device_coordinator import CrossDeviceCoordinator
+
         doc = CrossDeviceCoordinator.execute_cross_device_task.__doc__ or ""
         assert "only" in doc.lower() or "external" in doc.lower()
 
@@ -426,40 +425,34 @@ class TestLegacyPathsRegistry:
             LEGACY_PATH_REGISTRY,
             LegacyPathStatus,
         )
-        entry = LEGACY_PATH_REGISTRY.get(
-            "galaxy_gateway.device_router.DeviceRouter.route_task"
-        )
+
+        entry = LEGACY_PATH_REGISTRY.get("galaxy_gateway.device_router.DeviceRouter.route_task")
         assert entry is not None, "DeviceRouter.route_task must be in registry"
-        assert entry.status == LegacyPathStatus.ACTIVE, (
-            f"Expected ACTIVE, got {entry.status}"
-        )
+        assert entry.status == LegacyPathStatus.ACTIVE, f"Expected ACTIVE, got {entry.status}"
 
     def test_device_router_route_task_pr_guardrail_updated(self):
         from core.orchestration_authority.legacy_paths import LEGACY_PATH_REGISTRY
-        entry = LEGACY_PATH_REGISTRY.get(
-            "galaxy_gateway.device_router.DeviceRouter.route_task"
-        )
+
+        entry = LEGACY_PATH_REGISTRY.get("galaxy_gateway.device_router.DeviceRouter.route_task")
         assert entry is not None
-        assert "PR-S3" in (entry.pr_guardrail_added or "") or "PR-S3" in (entry.notes or ""), (
-            "DeviceRouter.route_task entry must reference PR-S3"
-        )
+        assert "PR-S3" in (entry.pr_guardrail_added or "") or "PR-S3" in (
+            entry.notes or ""
+        ), "DeviceRouter.route_task entry must reference PR-S3"
 
     def test_android_bridge_assign_task_is_legacy_compatibility(self):
         from core.orchestration_authority.legacy_paths import (
             LEGACY_PATH_REGISTRY,
             LegacyPathStatus,
         )
-        entry = LEGACY_PATH_REGISTRY.get(
-            "galaxy_gateway.android_bridge.AndroidBridge.assign_task"
-        )
+
+        entry = LEGACY_PATH_REGISTRY.get("galaxy_gateway.android_bridge.AndroidBridge.assign_task")
         assert entry is not None, "AndroidBridge.assign_task must be in registry"
         assert entry.status == LegacyPathStatus.LEGACY_COMPATIBILITY
 
     def test_android_bridge_assign_task_guardrail_is_prs3(self):
         from core.orchestration_authority.legacy_paths import LEGACY_PATH_REGISTRY
-        entry = LEGACY_PATH_REGISTRY.get(
-            "galaxy_gateway.android_bridge.AndroidBridge.assign_task"
-        )
+
+        entry = LEGACY_PATH_REGISTRY.get("galaxy_gateway.android_bridge.AndroidBridge.assign_task")
         assert entry is not None
         assert entry.pr_guardrail_added == "PR-S3"
 
@@ -468,19 +461,15 @@ class TestLegacyPathsRegistry:
             LEGACY_PATH_REGISTRY,
             LegacyPathStatus,
         )
-        entry = LEGACY_PATH_REGISTRY.get(
-            "core.repo_coordinator.RepoCoordinator.dispatch_agent_to_android"
-        )
-        assert entry is not None, (
-            "RepoCoordinator.dispatch_agent_to_android must be in registry"
-        )
+
+        entry = LEGACY_PATH_REGISTRY.get("core.repo_coordinator.RepoCoordinator.dispatch_agent_to_android")
+        assert entry is not None, "RepoCoordinator.dispatch_agent_to_android must be in registry"
         assert entry.status == LegacyPathStatus.LEGACY_COMPATIBILITY
 
     def test_repo_coordinator_dispatch_guardrail_is_prs3(self):
         from core.orchestration_authority.legacy_paths import LEGACY_PATH_REGISTRY
-        entry = LEGACY_PATH_REGISTRY.get(
-            "core.repo_coordinator.RepoCoordinator.dispatch_agent_to_android"
-        )
+
+        entry = LEGACY_PATH_REGISTRY.get("core.repo_coordinator.RepoCoordinator.dispatch_agent_to_android")
         assert entry is not None
         assert entry.pr_guardrail_added == "PR-S3"
 
@@ -489,9 +478,8 @@ class TestLegacyPathsRegistry:
             LEGACY_PATH_REGISTRY,
             LegacyPathStatus,
         )
-        entry = LEGACY_PATH_REGISTRY.get(
-            "galaxy_gateway.cross_device_coordinator.CrossDeviceCoordinator"
-        )
+
+        entry = LEGACY_PATH_REGISTRY.get("galaxy_gateway.cross_device_coordinator.CrossDeviceCoordinator")
         assert entry is not None
         assert entry.status == LegacyPathStatus.LEGACY_COMPATIBILITY
 
@@ -506,14 +494,17 @@ class TestDeviceRouterMethodsImportable:
 
     def test_route_task_is_coroutine_function(self):
         from galaxy_gateway.device_router import DeviceRouter
+
         assert asyncio.iscoroutinefunction(DeviceRouter.route_task)
 
     def test_dispatch_task_is_coroutine_function(self):
         from galaxy_gateway.device_router import DeviceRouter
+
         assert asyncio.iscoroutinefunction(DeviceRouter.dispatch_task)
 
     def test_device_router_singleton_importable(self):
-        from galaxy_gateway.device_router import device_router, DeviceRouter
+        from galaxy_gateway.device_router import DeviceRouter, device_router
+
         assert isinstance(device_router, DeviceRouter)
 
 
@@ -547,9 +538,7 @@ class TestAndroidBridgeAssignTaskLocalState:
         bridge.send_to_device = _fake_send  # type: ignore[method-assign]
 
         with patch("galaxy_gateway.device_router.device_router", mock_router):
-            await bridge.assign_task(
-                "state_test_device", "local_state_task_id", "some_type", {}
-            )
+            await bridge.assign_task("state_test_device", "local_state_task_id", "some_type", {})
 
         # current_task_id must have been set in the bridge's local device cache
         assert bridge._devices["state_test_device"].current_task_id == "local_state_task_id"

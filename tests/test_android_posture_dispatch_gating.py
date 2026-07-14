@@ -48,7 +48,6 @@ from core.runtime.source_dispatch_orchestrator import (
     _select_target_from_candidates,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

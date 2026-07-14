@@ -17,6 +17,7 @@ pip install edge-tts
 No external API key required.  Safe to import in any context; TTS is
 only initialised when ``build()`` is called with ``enabled=True``.
 """
+
 from __future__ import annotations
 
 import logging
@@ -31,9 +32,7 @@ _DEFAULT_SPEED = 1.0
 _DEFAULT_PITCH = 1.0
 
 # Interaction modes that enable voice by default
-_VOICE_ENABLED_MODES = frozenset(
-    {"field_assistant", "ambient_companion"}
-)
+_VOICE_ENABLED_MODES = frozenset({"field_assistant", "ambient_companion"})
 
 # Mapping of mood hints to TTS voices
 _MOOD_VOICE_MAP: Dict[str, str] = {
@@ -61,6 +60,7 @@ class VoiceChannel:
         if self._tts_engine is None:
             try:
                 from core.tts import EdgeTTSEngine
+
                 self._tts_engine = EdgeTTSEngine()
             except ImportError as exc:
                 logger.warning("Edge TTS not available: %s", exc)

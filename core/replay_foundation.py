@@ -193,6 +193,7 @@ _NON_CANONICAL_OWNERSHIP_BOUNDARIES: frozenset = frozenset(
 # Enumerations
 # ---------------------------------------------------------------------------
 
+
 class ReplayEventKind(str, Enum):
     """Kind of event recorded in the replay foundation."""
 
@@ -241,6 +242,7 @@ class ReplayEventKind(str, Enum):
 # Record types
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class TaskExecutionRecord:
     """Immutable snapshot of a task execution for replay purposes.
@@ -256,9 +258,7 @@ class TaskExecutionRecord:
     - result lineage
     """
 
-    record_id: str = field(
-        default_factory=lambda: f"exec_{uuid.uuid4().hex[:16]}"
-    )
+    record_id: str = field(default_factory=lambda: f"exec_{uuid.uuid4().hex[:16]}")
     recorded_at: float = field(default_factory=time.time)
 
     # Identity
@@ -375,9 +375,7 @@ class RuntimeEventRecord:
     decisions and transitions for audit and replay.
     """
 
-    event_id: str = field(
-        default_factory=lambda: f"ev_{uuid.uuid4().hex[:16]}"
-    )
+    event_id: str = field(default_factory=lambda: f"ev_{uuid.uuid4().hex[:16]}")
     recorded_at: float = field(default_factory=time.time)
     kind: str = ReplayEventKind.RUNTIME_EVENT
     task_id: str = ""
@@ -424,9 +422,7 @@ class RuntimeEventRecord:
 class RouteDecisionRecord:
     """Immutable snapshot of a routing decision for a task."""
 
-    record_id: str = field(
-        default_factory=lambda: f"route_{uuid.uuid4().hex[:12]}"
-    )
+    record_id: str = field(default_factory=lambda: f"route_{uuid.uuid4().hex[:12]}")
     recorded_at: float = field(default_factory=time.time)
 
     task_id: str = ""
@@ -499,9 +495,7 @@ class RouteDecisionRecord:
 class ReplayFallbackRecord:
     """Immutable record of a fallback trigger in the execution chain."""
 
-    record_id: str = field(
-        default_factory=lambda: f"fallback_{uuid.uuid4().hex[:12]}"
-    )
+    record_id: str = field(default_factory=lambda: f"fallback_{uuid.uuid4().hex[:12]}")
     recorded_at: float = field(default_factory=time.time)
 
     primary_task_id: str = ""
@@ -550,9 +544,7 @@ class ReplayFallbackRecord:
 class ReplayRetryRecord:
     """Immutable record of a retry trigger in the execution chain."""
 
-    record_id: str = field(
-        default_factory=lambda: f"retry_{uuid.uuid4().hex[:12]}"
-    )
+    record_id: str = field(default_factory=lambda: f"retry_{uuid.uuid4().hex[:12]}")
     recorded_at: float = field(default_factory=time.time)
 
     original_task_id: str = ""
@@ -618,10 +610,7 @@ class TaskLineage:
             "task_id": self.task_id,
             "trace_id": self.trace_id,
             "root_task_id": self.root_task_id,
-            "execution_record": (
-                self.execution_record.to_dict()
-                if self.execution_record else None
-            ),
+            "execution_record": (self.execution_record.to_dict() if self.execution_record else None),
             "route_decisions": [r.to_dict() for r in self.route_decisions],
             "fallback_history": [r.to_dict() for r in self.fallback_history],
             "retry_history": [r.to_dict() for r in self.retry_history],
@@ -633,9 +622,7 @@ class TaskLineage:
 class ReplayFoundationSnapshot:
     """Snapshot of the replay foundation ring buffers."""
 
-    snapshot_id: str = field(
-        default_factory=lambda: f"rfsnap_{uuid.uuid4().hex[:12]}"
-    )
+    snapshot_id: str = field(default_factory=lambda: f"rfsnap_{uuid.uuid4().hex[:12]}")
     generated_at: float = field(default_factory=time.time)
 
     execution_record_count: int = 0
@@ -674,6 +661,7 @@ class ReplayFoundationSnapshot:
 # ReplayFoundation — main class
 # ---------------------------------------------------------------------------
 
+
 class ReplayFoundation:
     """Canonical replay and audit foundation for the Galaxy runtime.
 
@@ -701,16 +689,10 @@ class ReplayFoundation:
 
     def __init__(self) -> None:
         self._execution_records: Dict[str, TaskExecutionRecord] = {}
-        self._execution_ring: Deque[TaskExecutionRecord] = deque(
-            maxlen=self._MAX_RING
-        )
-        self._non_canonical_execution_ring: Deque[TaskExecutionRecord] = deque(
-            maxlen=self._MAX_RING
-        )
+        self._execution_ring: Deque[TaskExecutionRecord] = deque(maxlen=self._MAX_RING)
+        self._non_canonical_execution_ring: Deque[TaskExecutionRecord] = deque(maxlen=self._MAX_RING)
         self._non_canonical_rejected_count: int = 0
-        self._event_ring: Deque[RuntimeEventRecord] = deque(
-            maxlen=self._MAX_RING
-        )
+        self._event_ring: Deque[RuntimeEventRecord] = deque(maxlen=self._MAX_RING)
         # Secondary indexes by task_id
         self._events_by_task: Dict[str, List[RuntimeEventRecord]] = {}
         self._routes_by_task: Dict[str, List[RouteDecisionRecord]] = {}
@@ -827,9 +809,7 @@ class ReplayFoundation:
         the store for persistent auditability (PR-B2).
         """
         if record.primary_task_id:
-            self._fallbacks_by_task.setdefault(
-                record.primary_task_id, []
-            ).append(record)
+            self._fallbacks_by_task.setdefault(record.primary_task_id, []).append(record)
         self._durable_append(record.to_dict(), "fallback")
         return record
 
@@ -846,9 +826,7 @@ class ReplayFoundation:
         the store for persistent auditability (PR-B2).
         """
         if record.original_task_id:
-            self._retries_by_task.setdefault(
-                record.original_task_id, []
-            ).append(record)
+            self._retries_by_task.setdefault(record.original_task_id, []).append(record)
         self._durable_append(record.to_dict(), "retry")
         return record
 
@@ -918,15 +896,9 @@ class ReplayFoundation:
             execution_record_count=len(self._execution_ring),
             non_canonical_rejected_count=self._non_canonical_rejected_count,
             runtime_event_count=len(self._event_ring),
-            route_decision_count=sum(
-                len(v) for v in self._routes_by_task.values()
-            ),
-            fallback_record_count=sum(
-                len(v) for v in self._fallbacks_by_task.values()
-            ),
-            retry_record_count=sum(
-                len(v) for v in self._retries_by_task.values()
-            ),
+            route_decision_count=sum(len(v) for v in self._routes_by_task.values()),
+            fallback_record_count=sum(len(v) for v in self._fallbacks_by_task.values()),
+            retry_record_count=sum(len(v) for v in self._retries_by_task.values()),
             recent_execution_records=[r.to_dict() for r in recent_exec],
             recent_non_canonical_execution_records=[r.to_dict() for r in recent_non_canonical_exec],
             recent_runtime_events=[e.to_dict() for e in recent_events],
@@ -957,6 +929,7 @@ def reset_replay_foundation() -> None:
 # ---------------------------------------------------------------------------
 # Module-level helper functions
 # ---------------------------------------------------------------------------
+
 
 def record_task_execution(task: Any) -> TaskExecutionRecord:
     """Build and record a :class:`TaskExecutionRecord` from a ``CanonicalTask``.

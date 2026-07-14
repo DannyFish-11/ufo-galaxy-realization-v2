@@ -66,35 +66,34 @@ from typing import Any, Dict, List, Optional
 import pytest
 
 from core.replay_audit_persistence import (
-    REPLAY_AUDIT_PERSISTENCE_AUTHORITY,
-    REPLAY_AUDIT_PERSISTENCE_DURABILITY_SENTINEL,
     AUDIT_STORE_IS_OBSERVATIONAL_POLICY,
     CONFLICT_ARTIFACTS_DURABLE_POLICY,
+    REPLAY_AUDIT_PERSISTENCE_AUTHORITY,
+    REPLAY_AUDIT_PERSISTENCE_DURABILITY_SENTINEL,
     AuditRecordKind,
-    ReplayAuditRecord,
     ConflictAuditRecord,
     DurableAuditStore,
-    append_replay_audit_record,
+    ReplayAuditRecord,
     append_conflict_audit_record,
-    load_audit_records,
+    append_replay_audit_record,
     get_replay_audit_store,
+    load_audit_records,
     reset_replay_audit_store,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_store(tmp_path: str) -> DurableAuditStore:
-    return DurableAuditStore(
-        store_path=os.path.join(tmp_path, "audit.jsonl")
-    )
+    return DurableAuditStore(store_path=os.path.join(tmp_path, "audit.jsonl"))
 
 
 @dataclass
 class _FakeConflictEntry:
     """Minimal stand-in for AuthorityConflictEntry."""
+
     conflict_id: str = "CONFLICT-TEST"
     runtime_fact: str = "test fact"
     layer_a: str = "layer_a"
@@ -107,6 +106,7 @@ class _FakeConflictEntry:
 # ---------------------------------------------------------------------------
 # A — Sentinels
 # ---------------------------------------------------------------------------
+
 
 class TestA_Sentinels:
     def test_A01_authority_non_empty(self):
@@ -129,6 +129,7 @@ class TestA_Sentinels:
 # ---------------------------------------------------------------------------
 # B — AuditRecordKind
 # ---------------------------------------------------------------------------
+
 
 class TestB_AuditRecordKind:
     def test_B01_task_execution(self):
@@ -159,6 +160,7 @@ class TestB_AuditRecordKind:
 # ---------------------------------------------------------------------------
 # C/D/E — ReplayAuditRecord
 # ---------------------------------------------------------------------------
+
 
 class TestCDE_ReplayAuditRecord:
     def test_C01_default_construction(self):
@@ -195,6 +197,7 @@ class TestCDE_ReplayAuditRecord:
 # ---------------------------------------------------------------------------
 # F/G/H/I/J — ConflictAuditRecord
 # ---------------------------------------------------------------------------
+
 
 class TestFGHIJ_ConflictAuditRecord:
     def test_F01_default_construction(self):
@@ -255,6 +258,7 @@ class TestFGHIJ_ConflictAuditRecord:
 # K–U — DurableAuditStore
 # ---------------------------------------------------------------------------
 
+
 class TestKU_DurableAuditStore:
     def test_K01_append_single_record(self, tmp_path):
         store = _make_store(str(tmp_path))
@@ -266,10 +270,12 @@ class TestKU_DurableAuditStore:
     def test_L01_load_all_returns_records_in_order(self, tmp_path):
         store = _make_store(str(tmp_path))
         for i in range(3):
-            store.append(ReplayAuditRecord(
-                kind=AuditRecordKind.RUNTIME_EVENT.value,
-                payload={"i": i},
-            ))
+            store.append(
+                ReplayAuditRecord(
+                    kind=AuditRecordKind.RUNTIME_EVENT.value,
+                    payload={"i": i},
+                )
+            )
         records = store.load_all()
         assert len(records) == 3
         assert [r.payload["i"] for r in records] == [0, 1, 2]
@@ -344,6 +350,7 @@ class TestKU_DurableAuditStore:
 # V/W — Singleton management
 # ---------------------------------------------------------------------------
 
+
 class TestVW_Singleton:
     def setup_method(self):
         reset_replay_audit_store()
@@ -367,12 +374,11 @@ class TestVW_Singleton:
 # X/Y/Z/AA/AB — Convenience helpers
 # ---------------------------------------------------------------------------
 
+
 class TestXYZAAB_Helpers:
     def test_X01_append_replay_audit_record_helper(self, tmp_path):
         store = _make_store(str(tmp_path))
-        ok = append_replay_audit_record(
-            {"task_id": "t1"}, AuditRecordKind.TASK_EXECUTION.value, store=store
-        )
+        ok = append_replay_audit_record({"task_id": "t1"}, AuditRecordKind.TASK_EXECUTION.value, store=store)
         assert ok is True
         records = store.load_all()
         assert len(records) == 1
@@ -410,9 +416,7 @@ class TestXYZAAB_Helpers:
         store.append(ReplayAuditRecord(kind=AuditRecordKind.FALLBACK.value))
         store.append(ReplayAuditRecord(kind=AuditRecordKind.RETRY.value))
         store.append(ReplayAuditRecord(kind=AuditRecordKind.FALLBACK.value))
-        results = load_audit_records(
-            store=store, kind_filter=AuditRecordKind.FALLBACK.value
-        )
+        results = load_audit_records(store=store, kind_filter=AuditRecordKind.FALLBACK.value)
         assert len(results) == 2
 
 
@@ -420,14 +424,17 @@ class TestXYZAAB_Helpers:
 # AC–AJ — ReplayFoundation durable audit sink
 # ---------------------------------------------------------------------------
 
+
 class TestACJ_ReplayFoundationDurableAudit:
     def test_AJ01_sentinel_importable(self):
         from core.replay_foundation import REPLAY_FOUNDATION_DURABLE_AUDIT_SENTINEL
+
         assert isinstance(REPLAY_FOUNDATION_DURABLE_AUDIT_SENTINEL, str)
         assert len(REPLAY_FOUNDATION_DURABLE_AUDIT_SENTINEL) > 0
 
     def test_AC01_set_audit_store_attaches(self, tmp_path):
         from core.replay_foundation import ReplayFoundation
+
         store = _make_store(str(tmp_path))
         f = ReplayFoundation()
         f.set_audit_store(store)
@@ -435,6 +442,7 @@ class TestACJ_ReplayFoundationDurableAudit:
 
     def test_AD01_record_execution_writes_to_store(self, tmp_path):
         from core.replay_foundation import ReplayFoundation, TaskExecutionRecord
+
         store = _make_store(str(tmp_path))
         f = ReplayFoundation()
         f.set_audit_store(store)
@@ -445,7 +453,8 @@ class TestACJ_ReplayFoundationDurableAudit:
         assert records[0].payload["task_id"] == "t-exec"
 
     def test_AE01_emit_event_writes_to_store(self, tmp_path):
-        from core.replay_foundation import ReplayFoundation, RuntimeEventRecord, ReplayEventKind
+        from core.replay_foundation import ReplayEventKind, ReplayFoundation, RuntimeEventRecord
+
         store = _make_store(str(tmp_path))
         f = ReplayFoundation()
         f.set_audit_store(store)
@@ -457,6 +466,7 @@ class TestACJ_ReplayFoundationDurableAudit:
 
     def test_AF01_record_route_writes_to_store(self, tmp_path):
         from core.replay_foundation import ReplayFoundation, RouteDecisionRecord
+
         store = _make_store(str(tmp_path))
         f = ReplayFoundation()
         f.set_audit_store(store)
@@ -467,7 +477,8 @@ class TestACJ_ReplayFoundationDurableAudit:
         assert records[0].payload["task_id"] == "t-route"
 
     def test_AG01_record_fallback_writes_to_store(self, tmp_path):
-        from core.replay_foundation import ReplayFoundation, ReplayFallbackRecord
+        from core.replay_foundation import ReplayFallbackRecord, ReplayFoundation
+
         store = _make_store(str(tmp_path))
         f = ReplayFoundation()
         f.set_audit_store(store)
@@ -479,6 +490,7 @@ class TestACJ_ReplayFoundationDurableAudit:
 
     def test_AH01_record_retry_writes_to_store(self, tmp_path):
         from core.replay_foundation import ReplayFoundation, ReplayRetryRecord
+
         store = _make_store(str(tmp_path))
         f = ReplayFoundation()
         f.set_audit_store(store)
@@ -490,6 +502,7 @@ class TestACJ_ReplayFoundationDurableAudit:
 
     def test_AI01_no_durable_write_without_store(self, tmp_path):
         from core.replay_foundation import ReplayFoundation, TaskExecutionRecord
+
         f = ReplayFoundation()
         # No store attached — should not raise
         rec = TaskExecutionRecord(task_id="t-no-store")
@@ -504,22 +517,27 @@ class TestACJ_ReplayFoundationDurableAudit:
 # AK–AN — CanonicalSessionTruthRuntime durable audit sink
 # ---------------------------------------------------------------------------
 
+
 class TestAKAN_CanonicalSessionTruthRuntimeDurableAudit:
     def setup_method(self):
         from core.canonical_session_truth import reset_canonical_session_truth_runtime
+
         reset_canonical_session_truth_runtime()
 
     def teardown_method(self):
         from core.canonical_session_truth import reset_canonical_session_truth_runtime
+
         reset_canonical_session_truth_runtime()
 
     def test_AN01_sentinel_importable(self):
         from core.canonical_session_truth import CANONICAL_TRUTH_DURABLE_AUDIT_SENTINEL
+
         assert isinstance(CANONICAL_TRUTH_DURABLE_AUDIT_SENTINEL, str)
         assert len(CANONICAL_TRUTH_DURABLE_AUDIT_SENTINEL) > 0
 
     def test_AK01_set_audit_store_attaches(self, tmp_path):
         from core.canonical_session_truth import CanonicalSessionTruthRuntime
+
         store = _make_store(str(tmp_path))
         rt = CanonicalSessionTruthRuntime()
         rt.set_audit_store(store)
@@ -527,9 +545,10 @@ class TestAKAN_CanonicalSessionTruthRuntimeDurableAudit:
 
     def test_AL01_record_writes_to_durable_store(self, tmp_path):
         from core.canonical_session_truth import (
-            CanonicalSessionTruthRuntime,
             CanonicalSessionTruthRecord,
+            CanonicalSessionTruthRuntime,
         )
+
         store = _make_store(str(tmp_path))
         rt = CanonicalSessionTruthRuntime()
         rt.set_audit_store(store)
@@ -547,25 +566,29 @@ class TestAKAN_CanonicalSessionTruthRuntimeDurableAudit:
 
     def test_AL02_record_multiple_truth_decisions(self, tmp_path):
         from core.canonical_session_truth import (
-            CanonicalSessionTruthRuntime,
             CanonicalSessionTruthRecord,
+            CanonicalSessionTruthRuntime,
         )
+
         store = _make_store(str(tmp_path))
         rt = CanonicalSessionTruthRuntime()
         rt.set_audit_store(store)
         for i in range(5):
-            rt.record(CanonicalSessionTruthRecord(
-                session_id=f"sess-{i}",
-                task_id=f"t-{i}",
-            ))
+            rt.record(
+                CanonicalSessionTruthRecord(
+                    session_id=f"sess-{i}",
+                    task_id=f"t-{i}",
+                )
+            )
         records = store.load_all(kind_filter=AuditRecordKind.CANONICAL_TRUTH_MERGE.value)
         assert len(records) == 5
 
     def test_AM01_no_durable_write_without_store(self):
         from core.canonical_session_truth import (
-            CanonicalSessionTruthRuntime,
             CanonicalSessionTruthRecord,
+            CanonicalSessionTruthRuntime,
         )
+
         rt = CanonicalSessionTruthRuntime()
         # No store attached — must not raise
         rec = CanonicalSessionTruthRecord(session_id="s-no-store")
@@ -578,19 +601,19 @@ class TestAKAN_CanonicalSessionTruthRuntimeDurableAudit:
 # AO–AR — persist_conflict_artifacts
 # ---------------------------------------------------------------------------
 
+
 class TestAOAR_PersistConflictArtifacts:
     def test_AR01_policy_sentinel_importable(self):
         from core.runtime_closure_audit import CONFLICT_ARTIFACTS_PERSISTED_POLICY
+
         assert isinstance(CONFLICT_ARTIFACTS_PERSISTED_POLICY, str)
         assert len(CONFLICT_ARTIFACTS_PERSISTED_POLICY) > 0
 
     def test_AO01_persists_all_conflict_records(self, tmp_path):
         from core.runtime_closure_audit import persist_conflict_artifacts
+
         store = _make_store(str(tmp_path))
-        conflicts = [
-            _FakeConflictEntry(conflict_id=f"C-{i}", is_resolved=(i % 2 == 0))
-            for i in range(4)
-        ]
+        conflicts = [_FakeConflictEntry(conflict_id=f"C-{i}", is_resolved=(i % 2 == 0)) for i in range(4)]
         count = persist_conflict_artifacts(conflicts, store=store)
         assert count == 4
         all_records = store.load_all()
@@ -598,6 +621,7 @@ class TestAOAR_PersistConflictArtifacts:
 
     def test_AP01_uses_detect_when_conflicts_none(self, tmp_path):
         from core.runtime_closure_audit import persist_conflict_artifacts
+
         store = _make_store(str(tmp_path))
         # Pass conflicts=None to trigger detect_parallel_truth_paths()
         count = persist_conflict_artifacts(None, store=store)
@@ -608,6 +632,7 @@ class TestAOAR_PersistConflictArtifacts:
 
     def test_AQ01_returns_persisted_count(self, tmp_path):
         from core.runtime_closure_audit import persist_conflict_artifacts
+
         store = _make_store(str(tmp_path))
         conflicts = [_FakeConflictEntry(conflict_id=f"CX-{i}") for i in range(6)]
         count = persist_conflict_artifacts(conflicts, store=store)
@@ -615,6 +640,7 @@ class TestAOAR_PersistConflictArtifacts:
 
     def test_AO02_resolved_conflicts_use_correct_kind(self, tmp_path):
         from core.runtime_closure_audit import persist_conflict_artifacts
+
         store = _make_store(str(tmp_path))
         resolved = _FakeConflictEntry(conflict_id="C-DONE", is_resolved=True)
         unresolved = _FakeConflictEntry(conflict_id="C-OPEN", is_resolved=False)
@@ -630,6 +656,7 @@ class TestAOAR_PersistConflictArtifacts:
 # ---------------------------------------------------------------------------
 # AS/AT — Additional edge cases
 # ---------------------------------------------------------------------------
+
 
 class TestASAT_EdgeCases:
     def test_AS01_records_readable_by_new_store_instance(self, tmp_path):

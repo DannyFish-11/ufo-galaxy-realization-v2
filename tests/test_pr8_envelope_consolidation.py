@@ -25,10 +25,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # EnvelopeRole tests
 # ---------------------------------------------------------------------------
+
 
 class TestEnvelopeRole:
     def test_role_values(self):
@@ -40,7 +40,7 @@ class TestEnvelopeRole:
         assert EnvelopeRole.RESULT.value == "result"
 
     def test_role_for_class_short_name(self):
-        from core.envelope_consolidation import role_for_class, EnvelopeRole
+        from core.envelope_consolidation import EnvelopeRole, role_for_class
 
         assert role_for_class("InteractionEnvelope") == EnvelopeRole.INTERACTION
         assert role_for_class("TaskEnvelope") == EnvelopeRole.TASK
@@ -48,12 +48,10 @@ class TestEnvelopeRole:
         assert role_for_class("ResultEnvelope") == EnvelopeRole.RESULT
 
     def test_role_for_class_fqn(self):
-        from core.envelope_consolidation import role_for_class, EnvelopeRole
+        from core.envelope_consolidation import EnvelopeRole, role_for_class
 
         assert role_for_class("core.schemas.task_envelope.TaskEnvelope") == EnvelopeRole.TASK
-        assert role_for_class(
-            "core.unified.command_envelope.CommandEnvelope"
-        ) == EnvelopeRole.COMMAND
+        assert role_for_class("core.unified.command_envelope.CommandEnvelope") == EnvelopeRole.COMMAND
 
     def test_role_for_class_unknown_raises(self):
         from core.envelope_consolidation import role_for_class
@@ -62,7 +60,7 @@ class TestEnvelopeRole:
             role_for_class("BogusEnvelope")
 
     def test_layer_for_role(self):
-        from core.envelope_consolidation import layer_for_role, EnvelopeRole
+        from core.envelope_consolidation import EnvelopeRole, layer_for_role
 
         assert "interaction" in layer_for_role(EnvelopeRole.INTERACTION)
         assert "orchestration" in layer_for_role(EnvelopeRole.TASK)
@@ -86,6 +84,7 @@ class TestEnvelopeRole:
 # ---------------------------------------------------------------------------
 # extract_trace_fields tests
 # ---------------------------------------------------------------------------
+
 
 class TestExtractTraceFields:
     def test_from_plain_dict(self):
@@ -188,6 +187,7 @@ class TestExtractTraceFields:
 # propagate_trace tests
 # ---------------------------------------------------------------------------
 
+
 class TestPropagateTrace:
     def test_copies_trace_fields(self):
         from core.envelope_consolidation import propagate_trace
@@ -230,6 +230,7 @@ class TestPropagateTrace:
 # ---------------------------------------------------------------------------
 # task_to_command_summary tests
 # ---------------------------------------------------------------------------
+
 
 class TestTaskToCommandSummary:
     def test_from_task_envelope(self):
@@ -299,6 +300,7 @@ class TestTaskToCommandSummary:
 # result_to_observation tests
 # ---------------------------------------------------------------------------
 
+
 class TestResultToObservation:
     def test_success_result(self):
         from core.envelope_consolidation import result_to_observation
@@ -359,6 +361,7 @@ class TestResultToObservation:
 # interaction_trace_fields tests
 # ---------------------------------------------------------------------------
 
+
 class TestInteractionTraceFields:
     def test_from_interaction_envelope(self):
         from core.envelope_consolidation import interaction_trace_fields
@@ -398,9 +401,10 @@ class TestInteractionTraceFields:
 # EnvelopeSummary serialisation tests
 # ---------------------------------------------------------------------------
 
+
 class TestEnvelopeSummary:
     def test_to_dict_keys(self):
-        from core.envelope_consolidation import EnvelopeSummary, EnvelopeRole
+        from core.envelope_consolidation import EnvelopeRole, EnvelopeSummary
 
         summary = EnvelopeSummary(
             role=EnvelopeRole.TASK,
@@ -419,7 +423,7 @@ class TestEnvelopeSummary:
         assert "captured_at" in d
 
     def test_from_dict_round_trip(self):
-        from core.envelope_consolidation import EnvelopeSummary, EnvelopeRole
+        from core.envelope_consolidation import EnvelopeRole, EnvelopeSummary
 
         summary = EnvelopeSummary(
             role=EnvelopeRole.COMMAND,
@@ -437,7 +441,7 @@ class TestEnvelopeSummary:
         assert restored.metadata["verb"] == "execute"
 
     def test_projection_summary_compact(self):
-        from core.envelope_consolidation import EnvelopeSummary, EnvelopeRole
+        from core.envelope_consolidation import EnvelopeRole, EnvelopeSummary
 
         summary = EnvelopeSummary(
             role=EnvelopeRole.RESULT,
@@ -457,7 +461,7 @@ class TestEnvelopeSummary:
         assert "runtime_session_id" not in proj
 
     def test_from_dict_invalid_role_falls_back_to_task(self):
-        from core.envelope_consolidation import EnvelopeSummary, EnvelopeRole
+        from core.envelope_consolidation import EnvelopeRole, EnvelopeSummary
 
         restored = EnvelopeSummary.from_dict({"role": "bogus_role", "trace_id": "t"})
         assert restored.role == EnvelopeRole.TASK
@@ -474,9 +478,10 @@ class TestEnvelopeSummary:
 # summarise_envelope role-inference tests
 # ---------------------------------------------------------------------------
 
+
 class TestSummariseEnvelope:
     def test_interaction_envelope_inferred(self):
-        from core.envelope_consolidation import summarise_envelope, EnvelopeRole
+        from core.envelope_consolidation import EnvelopeRole, summarise_envelope
         from core.schemas.interaction_envelope import InteractionEnvelope
 
         ie = InteractionEnvelope(trace_id="trace_ix2", session_id="sess_ix2", mode="chat")
@@ -486,7 +491,7 @@ class TestSummariseEnvelope:
         assert summary.metadata.get("mode") == "chat"
 
     def test_task_envelope_inferred(self):
-        from core.envelope_consolidation import summarise_envelope, EnvelopeRole
+        from core.envelope_consolidation import EnvelopeRole, summarise_envelope
         from core.schemas.task_envelope import TaskEnvelope
 
         te = TaskEnvelope(
@@ -501,7 +506,7 @@ class TestSummariseEnvelope:
         assert summary.metadata.get("tool_name") == "run_script"
 
     def test_command_envelope_inferred(self):
-        from core.envelope_consolidation import summarise_envelope, EnvelopeRole
+        from core.envelope_consolidation import EnvelopeRole, summarise_envelope
         from core.unified.command_envelope import CommandEnvelope
 
         cmd = CommandEnvelope(
@@ -515,7 +520,7 @@ class TestSummariseEnvelope:
         assert summary.trace_id == "trace_cmd2"
 
     def test_result_envelope_inferred(self):
-        from core.envelope_consolidation import summarise_envelope, EnvelopeRole
+        from core.envelope_consolidation import EnvelopeRole, summarise_envelope
         from core.unified.command_envelope import ResultEnvelope
 
         re = ResultEnvelope(
@@ -531,7 +536,7 @@ class TestSummariseEnvelope:
         assert summary.metadata.get("elapsed_ms") == 7.5
 
     def test_explicit_role_override(self):
-        from core.envelope_consolidation import summarise_envelope, EnvelopeRole
+        from core.envelope_consolidation import EnvelopeRole, summarise_envelope
 
         # Pass a plain dict that would infer as TASK but force COMMAND
         d = {
@@ -555,6 +560,7 @@ class TestSummariseEnvelope:
 # envelope_role_catalog tests
 # ---------------------------------------------------------------------------
 
+
 class TestEnvelopeRoleCatalog:
     def test_catalog_has_four_entries(self):
         from core.envelope_consolidation import envelope_role_catalog
@@ -569,12 +575,11 @@ class TestEnvelopeRoleCatalog:
         required_keys = {"role", "label", "canonical_class", "layer", "key_fields", "summary", "trace_field"}
         for entry in catalog:
             assert required_keys.issubset(entry.keys()), (
-                f"Missing keys in catalog entry for role {entry.get('role')}: "
-                f"{required_keys - entry.keys()}"
+                f"Missing keys in catalog entry for role {entry.get('role')}: " f"{required_keys - entry.keys()}"
             )
 
     def test_catalog_roles_match_enum(self):
-        from core.envelope_consolidation import envelope_role_catalog, EnvelopeRole
+        from core.envelope_consolidation import EnvelopeRole, envelope_role_catalog
 
         catalog = envelope_role_catalog()
         role_values = {e.value for e in EnvelopeRole}
@@ -583,6 +588,7 @@ class TestEnvelopeRoleCatalog:
 
     def test_catalog_serialisable(self):
         import json
+
         from core.envelope_consolidation import envelope_role_catalog
 
         catalog = envelope_role_catalog()
@@ -593,6 +599,7 @@ class TestEnvelopeRoleCatalog:
 # ---------------------------------------------------------------------------
 # summarise_result_for_projection tests
 # ---------------------------------------------------------------------------
+
 
 class TestSummariseResultForProjection:
     def test_returns_flat_dict(self):
@@ -625,6 +632,7 @@ class TestSummariseResultForProjection:
 # ---------------------------------------------------------------------------
 # Edge cases
 # ---------------------------------------------------------------------------
+
 
 class TestEdgeCases:
     def test_summarise_empty_dict(self):
@@ -687,7 +695,7 @@ class TestEdgeCases:
         assert obs["metadata"]["error_code"] == "TR_001"
 
     def test_envelope_summary_no_metadata(self):
-        from core.envelope_consolidation import EnvelopeSummary, EnvelopeRole
+        from core.envelope_consolidation import EnvelopeRole, EnvelopeSummary
 
         summary = EnvelopeSummary(
             role=EnvelopeRole.INTERACTION,

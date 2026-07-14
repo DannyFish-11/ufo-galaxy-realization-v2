@@ -26,10 +26,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helper: build a patched UDM returning a given device count
 # ---------------------------------------------------------------------------
+
 
 def _mock_udm(count: int) -> MagicMock:
     m = MagicMock()
@@ -40,6 +40,7 @@ def _mock_udm(count: int) -> MagicMock:
 # ---------------------------------------------------------------------------
 # 1. Explicit override wins
 # ---------------------------------------------------------------------------
+
 
 class TestExplicitOverrideWins:
     """Explicit entry_mode must always be returned unchanged."""
@@ -82,6 +83,7 @@ class TestExplicitOverrideWins:
 # 2. Cross-device disabled → "local"
 # ---------------------------------------------------------------------------
 
+
 class TestCrossDeviceDisabledToLocal:
 
     def test_disabled_flag_returns_local(self):
@@ -115,6 +117,7 @@ class TestCrossDeviceDisabledToLocal:
 # ---------------------------------------------------------------------------
 # 3. >=2 devices and enabled → "cross_device"
 # ---------------------------------------------------------------------------
+
 
 class TestAutoResolutionTwoDevices:
 
@@ -167,6 +170,7 @@ class TestAutoResolutionTwoDevices:
 # ---------------------------------------------------------------------------
 # 4. Explicit target_device → "cross_device" (when enabled)
 # ---------------------------------------------------------------------------
+
 
 class TestTargetDeviceForcesCrossDevice:
 
@@ -231,11 +235,12 @@ class TestTargetDeviceForcesCrossDevice:
 # 5. Observability: event payload includes device_count and trace_id
 # ---------------------------------------------------------------------------
 
+
 class TestObservabilityEventPayload:
 
     def test_event_payload_has_device_count(self):
+        from core.state_event_bus import StateEventType, get_state_event_bus, reset_state_event_bus
         from core.unified.entrypoint_router import resolve_entry_mode
-        from core.state_event_bus import get_state_event_bus, StateEventType, reset_state_event_bus
 
         reset_state_event_bus()
         bus = get_state_event_bus()
@@ -263,8 +268,8 @@ class TestObservabilityEventPayload:
         assert payload["entry_mode"] == "cross_device"
 
     def test_event_payload_has_target_device(self):
+        from core.state_event_bus import StateEventType, get_state_event_bus, reset_state_event_bus
         from core.unified.entrypoint_router import resolve_entry_mode
-        from core.state_event_bus import get_state_event_bus, StateEventType, reset_state_event_bus
 
         reset_state_event_bus()
         bus = get_state_event_bus()
@@ -295,8 +300,8 @@ class TestObservabilityEventPayload:
 
     def test_event_payload_local_has_zero_device_count(self):
         """In local mode the device_count in the event should still be present."""
+        from core.state_event_bus import StateEventType, get_state_event_bus, reset_state_event_bus
         from core.unified.entrypoint_router import resolve_entry_mode
-        from core.state_event_bus import get_state_event_bus, StateEventType, reset_state_event_bus
 
         reset_state_event_bus()
         bus = get_state_event_bus()
@@ -322,6 +327,7 @@ class TestObservabilityEventPayload:
 # 6. process_user_input accepts target_device
 # ---------------------------------------------------------------------------
 
+
 class TestE2EOrchestratorTargetDevice:
 
     @pytest.mark.asyncio
@@ -331,20 +337,15 @@ class TestE2EOrchestratorTargetDevice:
 
         captured_kwargs: Dict[str, Any] = {}
 
-        def _fake_resolve(explicit_entry_mode=None, *, target_device=None,
-                          trace_id="", source=""):
+        def _fake_resolve(explicit_entry_mode=None, *, target_device=None, trace_id="", source=""):
             captured_kwargs["explicit_entry_mode"] = explicit_entry_mode
             captured_kwargs["target_device"] = target_device
             return "cross_device"
 
-        with patch(
-            "core.unified.entrypoint_router.resolve_entry_mode", side_effect=_fake_resolve
-        ):
+        with patch("core.unified.entrypoint_router.resolve_entry_mode", side_effect=_fake_resolve):
             # Mock DesktopPresenceRuntime so we don't need the full stack
             mock_runtime = MagicMock()
-            mock_runtime.handle_request = MagicMock(
-                return_value={"success": True, "response": "ok", "metadata": {}}
-            )
+            mock_runtime.handle_request = MagicMock(return_value={"success": True, "response": "ok", "metadata": {}})
 
             async def _fake_handle(**kw):
                 return {"success": True, "response": "ok", "metadata": {}}
@@ -360,9 +361,9 @@ class TestE2EOrchestratorTargetDevice:
                     target_device="tablet-001",
                 )
 
-        assert captured_kwargs.get("target_device") == "tablet-001", (
-            f"target_device not forwarded; captured={captured_kwargs}"
-        )
+        assert (
+            captured_kwargs.get("target_device") == "tablet-001"
+        ), f"target_device not forwarded; captured={captured_kwargs}"
 
     @pytest.mark.asyncio
     async def test_no_target_device_does_not_break(self):
@@ -388,21 +389,25 @@ class TestE2EOrchestratorTargetDevice:
 # 7. ChatRequest model accepts target_device
 # ---------------------------------------------------------------------------
 
+
 class TestChatRequestTargetDevice:
 
     def test_core_chat_request_has_target_device(self):
         from core.routes._models import ChatRequest
+
         req = ChatRequest(message="test", target_device="phone-001")
         assert req.target_device == "phone-001"
 
     def test_core_chat_request_target_device_defaults_none(self):
         from core.routes._models import ChatRequest
+
         req = ChatRequest(message="test")
         assert req.target_device is None
 
     def test_core_chat_request_backward_compat(self):
         """Existing callers without target_device must still work."""
         from core.routes._models import ChatRequest
+
         req = ChatRequest(message="hello", session_id="sess1", entry_mode="local")
         assert req.target_device is None
         assert req.entry_mode == "local"

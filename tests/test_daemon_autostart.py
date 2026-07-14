@@ -4,6 +4,7 @@
 开机自启(daemon/autostart.py,基于现有守护进程)+ 守护进程 Windows 兼容修复。
 系统调用经 _run 抽象,测试全部 mock,不碰真实 systemctl/schtasks/launchctl。
 """
+
 from __future__ import annotations
 
 import signal
@@ -21,23 +22,25 @@ def calls(monkeypatch):
     def _fake_run(cmd):
         recorded.append(cmd)
         return 0, "ok"
+
     monkeypatch.setattr(au, "_run", _fake_run)
     return recorded
 
 
 # ── 内容生成(纯函数)──
 
+
 class TestContent:
     def test_daemon_command_uses_existing_daemon(self):
         cmd = au.daemon_command()
-        assert cmd[1].endswith("galaxy_daemon.py")          # 基于现有守护进程
+        assert cmd[1].endswith("galaxy_daemon.py")  # 基于现有守护进程
         assert "--config" in cmd and cmd[-1].endswith("config.json")
 
     def test_systemd_unit_shape(self):
         unit = au.systemd_unit_content()
         assert "galaxy_daemon.py" in unit
         assert f"WorkingDirectory={au.REPO_ROOT}" in unit
-        assert "Restart=on-failure" in unit                 # 只兜守护进程本体
+        assert "Restart=on-failure" in unit  # 只兜守护进程本体
         assert "WantedBy=default.target" in unit
 
     def test_launchd_plist_shape(self):
@@ -51,11 +54,12 @@ class TestContent:
         assert cmd[:2] == ["schtasks", "/Create"]
         assert "/SC" in cmd and cmd[cmd.index("/SC") + 1] == "ONLOGON"
         tr = cmd[cmd.index("/TR") + 1]
-        assert "galaxy_daemon.py" in tr and "cd /d" in tr    # 工作目录经 cmd /c cd 保证
-        assert "/F" in cmd                                    # 幂等覆盖
+        assert "galaxy_daemon.py" in tr and "cd /d" in tr  # 工作目录经 cmd /c cd 保证
+        assert "/F" in cmd  # 幂等覆盖
 
 
 # ── 平台分派 + 安装/卸载/状态(mock 落地)──
+
 
 class TestLinux:
     @pytest.fixture(autouse=True)
@@ -133,11 +137,13 @@ class TestWindows:
 
 # ── 守护进程 Windows 兼容(SIGHUP 守卫)──
 
+
 class TestDaemonWindowsCompat:
     def test_daemon_init_survives_missing_sighup(self, monkeypatch):
         """Windows 无 SIGHUP/siginterrupt——守卫后 __init__ 不再崩。"""
         monkeypatch.delattr(signal, "SIGHUP", raising=False)
         monkeypatch.delattr(signal, "siginterrupt", raising=False)
         from daemon.galaxy_daemon import GalaxyDaemon
+
         d = GalaxyDaemon()  # 此前在这里 AttributeError
         assert d.state is not None

@@ -82,22 +82,24 @@ from __future__ import annotations
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(autouse=True)
 def _reset_topology_runtime():
     """Reset the NetworkTopologyRuntime singleton before each test."""
     try:
         from core.network_topology_runtime import reset_network_topology_runtime
+
         reset_network_topology_runtime()
     except Exception:
         pass
     yield
     try:
         from core.network_topology_runtime import reset_network_topology_runtime
+
         reset_network_topology_runtime()
     except Exception:
         pass
@@ -108,12 +110,14 @@ def _reset_capability_assimilation():
     """Reset the CapabilityAssimilationLayer singleton before each test."""
     try:
         from core.capability_assimilation import reset_capability_assimilation_layer
+
         reset_capability_assimilation_layer()
     except Exception:
         pass
     yield
     try:
         from core.capability_assimilation import reset_capability_assimilation_layer
+
         reset_capability_assimilation_layer()
     except Exception:
         pass
@@ -123,18 +127,22 @@ def _reset_capability_assimilation():
 # A) Authority sentinels
 # ---------------------------------------------------------------------------
 
+
 class TestAuthoritySecrtinels:
     def test_network_topology_runtime_authority_importable(self):
         from core.network_topology_runtime import NETWORK_TOPOLOGY_RUNTIME_AUTHORITY
+
         assert isinstance(NETWORK_TOPOLOGY_RUNTIME_AUTHORITY, str)
         assert len(NETWORK_TOPOLOGY_RUNTIME_AUTHORITY) > 0
 
     def test_topology_consumer_policy_importable(self):
         from core.network_topology_runtime import TOPOLOGY_CONSUMER_POLICY
+
         assert isinstance(TOPOLOGY_CONSUMER_POLICY, str)
 
     def test_transport_hierarchy_assimilation_policy_importable(self):
         from core.network_topology_runtime import TRANSPORT_HIERARCHY_ASSIMILATION_POLICY
+
         assert isinstance(TRANSPORT_HIERARCHY_ASSIMILATION_POLICY, str)
 
 
@@ -142,33 +150,41 @@ class TestAuthoritySecrtinels:
 # B) TopologyNodeKind completeness
 # ---------------------------------------------------------------------------
 
+
 class TestTopologyNodeKind:
     def test_device_kind(self):
         from core.network_topology_runtime import TopologyNodeKind
+
         assert TopologyNodeKind.DEVICE is not None
 
     def test_gateway_kind(self):
         from core.network_topology_runtime import TopologyNodeKind
+
         assert TopologyNodeKind.GATEWAY is not None
 
     def test_relay_kind(self):
         from core.network_topology_runtime import TopologyNodeKind
+
         assert TopologyNodeKind.RELAY is not None
 
     def test_mesh_participant_kind(self):
         from core.network_topology_runtime import TopologyNodeKind
+
         assert TopologyNodeKind.MESH_PARTICIPANT is not None
 
     def test_nats_fabric_endpoint_kind(self):
         from core.network_topology_runtime import TopologyNodeKind
+
         assert TopologyNodeKind.NATS_FABRIC_ENDPOINT is not None
 
     def test_runtime_provider_node_kind(self):
         from core.network_topology_runtime import TopologyNodeKind
+
         assert TopologyNodeKind.RUNTIME_PROVIDER_NODE is not None
 
     def test_unknown_kind(self):
         from core.network_topology_runtime import TopologyNodeKind
+
         assert TopologyNodeKind.UNKNOWN is not None
 
 
@@ -176,29 +192,36 @@ class TestTopologyNodeKind:
 # C) TopologyEdgeKind completeness
 # ---------------------------------------------------------------------------
 
+
 class TestTopologyEdgeKind:
     def test_direct_edge_kind(self):
         from core.network_topology_runtime import TopologyEdgeKind
+
         assert TopologyEdgeKind.DIRECT is not None
 
     def test_gateway_edge_kind(self):
         from core.network_topology_runtime import TopologyEdgeKind
+
         assert TopologyEdgeKind.GATEWAY is not None
 
     def test_relay_edge_kind(self):
         from core.network_topology_runtime import TopologyEdgeKind
+
         assert TopologyEdgeKind.RELAY is not None
 
     def test_mesh_edge_kind(self):
         from core.network_topology_runtime import TopologyEdgeKind
+
         assert TopologyEdgeKind.MESH is not None
 
     def test_fabric_edge_kind(self):
         from core.network_topology_runtime import TopologyEdgeKind
+
         assert TopologyEdgeKind.FABRIC is not None
 
     def test_projected_semantic_edge_kind(self):
         from core.network_topology_runtime import TopologyEdgeKind
+
         assert TopologyEdgeKind.PROJECTED_SEMANTIC is not None
 
 
@@ -206,33 +229,41 @@ class TestTopologyEdgeKind:
 # D) TopologyConnectionState completeness
 # ---------------------------------------------------------------------------
 
+
 class TestTopologyConnectionState:
     def test_reachable(self):
         from core.network_topology_runtime import TopologyConnectionState
+
         assert TopologyConnectionState.REACHABLE is not None
 
     def test_connected(self):
         from core.network_topology_runtime import TopologyConnectionState
+
         assert TopologyConnectionState.CONNECTED is not None
 
     def test_degraded(self):
         from core.network_topology_runtime import TopologyConnectionState
+
         assert TopologyConnectionState.DEGRADED is not None
 
     def test_preferred(self):
         from core.network_topology_runtime import TopologyConnectionState
+
         assert TopologyConnectionState.PREFERRED is not None
 
     def test_fallback(self):
         from core.network_topology_runtime import TopologyConnectionState
+
         assert TopologyConnectionState.FALLBACK is not None
 
     def test_latent(self):
         from core.network_topology_runtime import TopologyConnectionState
+
         assert TopologyConnectionState.LATENT is not None
 
     def test_unavailable(self):
         from core.network_topology_runtime import TopologyConnectionState
+
         assert TopologyConnectionState.UNAVAILABLE is not None
 
 
@@ -240,9 +271,11 @@ class TestTopologyConnectionState:
 # E) Device node absorption
 # ---------------------------------------------------------------------------
 
+
 class TestDeviceAbsorption:
     def test_assimilate_device_connectivity_returns_topology_node(self):
         from core.network_topology_runtime import assimilate_device_connectivity
+
         node = assimilate_device_connectivity(
             "dev-001",
             preferred_path="direct_ws",
@@ -254,7 +287,8 @@ class TestDeviceAbsorption:
         assert node.node_id == "dev-001"
 
     def test_device_node_kind_is_device(self):
-        from core.network_topology_runtime import assimilate_device_connectivity, TopologyNodeKind
+        from core.network_topology_runtime import TopologyNodeKind, assimilate_device_connectivity
+
         node = assimilate_device_connectivity(
             "dev-kind-check",
             preferred_path="direct_ws",
@@ -266,10 +300,11 @@ class TestDeviceAbsorption:
 
     def test_device_direct_path_produces_direct_edge(self):
         from core.network_topology_runtime import (
+            TopologyEdgeKind,
             assimilate_device_connectivity,
             get_network_topology_runtime,
-            TopologyEdgeKind,
         )
+
         assimilate_device_connectivity(
             "dev-direct",
             preferred_path="direct_ws",
@@ -280,16 +315,16 @@ class TestDeviceAbsorption:
         runtime = get_network_topology_runtime()
         edges = runtime.edges_to("dev-direct")
         assert any(
-            e.kind == TopologyEdgeKind.DIRECT
-            for e in edges
+            e.kind == TopologyEdgeKind.DIRECT for e in edges
         ), f"Expected DIRECT edge, found: {[e.kind for e in edges]}"
 
     def test_device_relay_path_produces_relay_edge(self):
         from core.network_topology_runtime import (
+            TopologyEdgeKind,
             assimilate_device_connectivity,
             get_network_topology_runtime,
-            TopologyEdgeKind,
         )
+
         assimilate_device_connectivity(
             "dev-relay",
             preferred_path="relay",
@@ -300,16 +335,16 @@ class TestDeviceAbsorption:
         runtime = get_network_topology_runtime()
         edges = runtime.edges_to("dev-relay")
         assert any(
-            e.kind == TopologyEdgeKind.RELAY
-            for e in edges
+            e.kind == TopologyEdgeKind.RELAY for e in edges
         ), f"Expected RELAY edge, found: {[e.kind for e in edges]}"
 
     def test_device_gateway_path_produces_gateway_edge(self):
         from core.network_topology_runtime import (
+            TopologyEdgeKind,
             assimilate_device_connectivity,
             get_network_topology_runtime,
-            TopologyEdgeKind,
         )
+
         assimilate_device_connectivity(
             "dev-gw",
             preferred_path="gateway",
@@ -320,8 +355,7 @@ class TestDeviceAbsorption:
         runtime = get_network_topology_runtime()
         edges = runtime.edges_to("dev-gw")
         assert any(
-            e.kind == TopologyEdgeKind.GATEWAY
-            for e in edges
+            e.kind == TopologyEdgeKind.GATEWAY for e in edges
         ), f"Expected GATEWAY edge, found: {[e.kind for e in edges]}"
 
 
@@ -329,28 +363,32 @@ class TestDeviceAbsorption:
 # F) NATS/gateway absorption
 # ---------------------------------------------------------------------------
 
+
 class TestNatsGatewayAbsorption:
     def test_absorb_nats_state_registers_nats_node(self):
         from core.network_topology_runtime import (
-            assimilate_nats_state,
             TopologyNodeKind,
+            assimilate_nats_state,
         )
+
         node = assimilate_nats_state(True, "nats.local", 4222)
         assert node.kind == TopologyNodeKind.NATS_FABRIC_ENDPOINT
 
     def test_absorb_gateway_state_registers_gateway_node(self):
         from core.network_topology_runtime import (
-            assimilate_gateway_state,
             TopologyNodeKind,
+            assimilate_gateway_state,
         )
+
         node = assimilate_gateway_state("gw-001", "gateway.local", 8080, True)
         assert node.kind == TopologyNodeKind.GATEWAY
 
     def test_nats_connected_state(self):
         from core.network_topology_runtime import (
-            assimilate_nats_state,
             TopologyConnectionState,
+            assimilate_nats_state,
         )
+
         node = assimilate_nats_state(True, "nats.local", 4222)
         assert node.state in (
             TopologyConnectionState.CONNECTED,
@@ -359,9 +397,10 @@ class TestNatsGatewayAbsorption:
 
     def test_nats_disconnected_state(self):
         from core.network_topology_runtime import (
-            assimilate_nats_state,
             TopologyConnectionState,
+            assimilate_nats_state,
         )
+
         node = assimilate_nats_state(False, "nats.local", 4222)
         assert node.state in (
             TopologyConnectionState.UNAVAILABLE,
@@ -374,25 +413,29 @@ class TestNatsGatewayAbsorption:
 # G) Transport path projection
 # ---------------------------------------------------------------------------
 
+
 class TestTransportPathProjection:
     def test_project_transport_path_returns_transport_path_info(self):
         from core.network_topology_runtime import project_transport_path
+
         info = project_transport_path("source-1", "target-1", transport_strategy="direct")
         assert info is not None
 
     def test_direct_strategy_maps_to_direct_edge(self):
         from core.network_topology_runtime import (
-            project_transport_path,
             TopologyEdgeKind,
+            project_transport_path,
         )
+
         info = project_transport_path("s1", "t1", transport_strategy="direct")
         assert info.transport_strategy == "direct"
 
     def test_nats_strategy_maps_to_fabric_edge(self):
         from core.network_topology_runtime import (
-            project_transport_path,
             TopologyEdgeKind,
+            project_transport_path,
         )
+
         info = project_transport_path("s2", "t2", transport_strategy="nats")
         assert info.transport_strategy == "nats"
 
@@ -401,12 +444,14 @@ class TestTransportPathProjection:
 # H) NodeKind ↔ CapabilityAssimilation bridge
 # ---------------------------------------------------------------------------
 
+
 class TestNodeKindCapabilityBridge:
     def test_worker_arch_class_maps_to_worker(self):
         from core.capability_assimilation import (
             NodeParticipantKind,
             assimilate_node,
         )
+
         rec = assimilate_node({"node_id": "worker-001", "architectural_class": "worker"})
         kind = rec.execution_profile.participant_kind
         kind_str = kind.value if hasattr(kind, "value") else str(kind)
@@ -417,6 +462,7 @@ class TestNodeKindCapabilityBridge:
             NodeParticipantKind,
             assimilate_node,
         )
+
         rec = assimilate_node({"node_id": "device-001", "architectural_class": "device"})
         kind = rec.execution_profile.participant_kind
         kind_str = kind.value if hasattr(kind, "value") else str(kind)
@@ -427,6 +473,7 @@ class TestNodeKindCapabilityBridge:
             NodeParticipantKind,
             assimilate_node,
         )
+
         rec = assimilate_node({"node_id": "mcp-001", "architectural_class": "mcp_provider"})
         kind = rec.execution_profile.participant_kind
         kind_str = kind.value if hasattr(kind, "value") else str(kind)
@@ -437,6 +484,7 @@ class TestNodeKindCapabilityBridge:
             NodeParticipantKind,
             assimilate_node,
         )
+
         rec = assimilate_node({"node_id": "skill-001", "architectural_class": "skill"})
         kind = rec.execution_profile.participant_kind
         kind_str = kind.value if hasattr(kind, "value") else str(kind)
@@ -447,6 +495,7 @@ class TestNodeKindCapabilityBridge:
             NodeParticipantKind,
             assimilate_node,
         )
+
         rec = assimilate_node({"node_id": "wep-001", "architectural_class": "worker_endpoint"})
         kind = rec.execution_profile.participant_kind
         kind_str = kind.value if hasattr(kind, "value") else str(kind)
@@ -457,11 +506,13 @@ class TestNodeKindCapabilityBridge:
 # I) Snapshot
 # ---------------------------------------------------------------------------
 
+
 class TestSnapshot:
     def test_snapshot_returns_topology_snapshot(self):
         from core.network_topology_runtime import (
             get_network_topology_runtime,
         )
+
         runtime = get_network_topology_runtime()
         snap = runtime.snapshot()
         assert snap is not None
@@ -471,9 +522,12 @@ class TestSnapshot:
             assimilate_device_connectivity,
             get_network_topology_runtime,
         )
+
         assimilate_device_connectivity(
-            "snap-dev-01", preferred_path="direct_ws",
-            effective_routable=True, fallback_available=False,
+            "snap-dev-01",
+            preferred_path="direct_ws",
+            effective_routable=True,
+            fallback_available=False,
             mesh_overlay_available=False,
         )
         runtime = get_network_topology_runtime()
@@ -483,6 +537,7 @@ class TestSnapshot:
 
     def test_snapshot_topology_log_length_bounded(self):
         from core.network_topology_runtime import get_network_topology_runtime
+
         runtime = get_network_topology_runtime()
         log = runtime.get_topology_log()
         assert len(log) <= 256
@@ -492,9 +547,11 @@ class TestSnapshot:
 # J) Ring buffer
 # ---------------------------------------------------------------------------
 
+
 class TestRingBuffer:
     def test_topology_log_is_bounded(self):
         from core.network_topology_runtime import get_network_topology_runtime
+
         runtime = get_network_topology_runtime()
         log = runtime.get_topology_log()
         assert len(log) <= 256
@@ -504,6 +561,7 @@ class TestRingBuffer:
             assimilate_nats_state,
             get_network_topology_runtime,
         )
+
         runtime = get_network_topology_runtime()
         initial_len = len(runtime.get_topology_log())
         assimilate_nats_state(True, "nats.local", 4222)
@@ -514,9 +572,11 @@ class TestRingBuffer:
 # K) Singleton
 # ---------------------------------------------------------------------------
 
+
 class TestSingleton:
     def test_get_returns_same_instance(self):
         from core.network_topology_runtime import get_network_topology_runtime
+
         a = get_network_topology_runtime()
         b = get_network_topology_runtime()
         assert a is b
@@ -526,6 +586,7 @@ class TestSingleton:
             get_network_topology_runtime,
             reset_network_topology_runtime,
         )
+
         a = get_network_topology_runtime()
         reset_network_topology_runtime()
         b = get_network_topology_runtime()

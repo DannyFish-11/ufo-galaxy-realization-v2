@@ -21,7 +21,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 # ──────────────────────────────────────────────────────────────────────────────
 # 辅助
 # ──────────────────────────────────────────────────────────────────────────────
@@ -29,8 +28,9 @@ import pytest
 
 def _make_kernel_response(mode="chat_only", reply="OK", model="gpt-4o"):
     """构建一个最小化的 KernelResponse mock。"""
-    from core.agent.kernel import KernelResponse
     from core.agent.intent_router import IntentResult
+    from core.agent.kernel import KernelResponse
+
     return KernelResponse(
         success=True,
         mode=mode,
@@ -60,8 +60,7 @@ class TestOpenClawdSoleEntrypoint:
         # chat 函数内不应该有直接导入 kernel 的语句
         # 整个 chat.py 中不允许出现 "from core.agent.kernel import" 这种直接导入
         assert "from core.agent.kernel import" not in source, (
-            "core/routes/chat.py 不应直接导入 AgentKernel — "
-            "Kernel 必须通过 OpenClawd 内部调用，不在路由层直接使用"
+            "core/routes/chat.py 不应直接导入 AgentKernel — " "Kernel 必须通过 OpenClawd 内部调用，不在路由层直接使用"
         )
 
     def test_chat_route_calls_openclawd(self):
@@ -79,13 +78,13 @@ class TestOpenClawdSoleEntrypoint:
         chat_file = pathlib.Path(__file__).parent.parent / "core" / "routes" / "chat.py"
         source = chat_file.read_text(encoding="utf-8")
 
-        assert "get_openclawd" in source or "OpenClawd" in source or "desktop_presence_runtime" in source, (
-            "chat.py 必须调用 OpenClawd 或通过 DesktopPresenceRuntime 路由到 OpenClawd"
-        )
+        assert (
+            "get_openclawd" in source or "OpenClawd" in source or "desktop_presence_runtime" in source
+        ), "chat.py 必须调用 OpenClawd 或通过 DesktopPresenceRuntime 路由到 OpenClawd"
         # Either the direct call OR the runtime.handle_request call must be present
-        assert "clawd.process" in source or "runtime.handle_request" in source, (
-            "chat.py 必须调用 clawd.process() 或 runtime.handle_request()"
-        )
+        assert (
+            "clawd.process" in source or "runtime.handle_request" in source
+        ), "chat.py 必须调用 clawd.process() 或 runtime.handle_request()"
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -98,11 +97,13 @@ class TestAgentKernelEmbedded:
 
     def test_openclawd_has_kernel_attribute(self):
         from core.openclawd import OpenClawd
+
         oc = OpenClawd()
         assert hasattr(oc, "_kernel"), "OpenClawd 必须有 _kernel 属性（内嵌 AgentKernel）"
 
     def test_openclawd_has_get_kernel_method(self):
         from core.openclawd import OpenClawd
+
         oc = OpenClawd()
         assert hasattr(oc, "_get_kernel"), "OpenClawd 必须有 _get_kernel() 方法"
         assert callable(oc._get_kernel)
@@ -110,16 +111,17 @@ class TestAgentKernelEmbedded:
     def test_openclawd_process_accepts_context(self):
         """process() 必须接受 context 参数（传递对话历史给 Kernel）。"""
         import inspect
+
         from core.openclawd import OpenClawd
+
         sig = inspect.signature(OpenClawd.process)
-        assert "context" in sig.parameters, (
-            "OpenClawd.process() 必须接受 context 参数"
-        )
+        assert "context" in sig.parameters, "OpenClawd.process() 必须接受 context 参数"
 
     @pytest.mark.asyncio
     async def test_openclawd_process_uses_kernel(self):
         """process() 内部应调用 _get_kernel() 并通过 kernel.handle_message() 处理。"""
         from core.openclawd import OpenClawd
+
         oc = OpenClawd()
         oc._initialized = False
 
@@ -148,9 +150,11 @@ class TestMCPSkillHotReload:
         from core.mcp_skill_reload import reload_mcp
 
         mock_loader = MagicMock()
-        mock_loader.list_tools = AsyncMock(return_value=[
-            {"name": "test_tool", "description": "Test tool", "input_schema": {}},
-        ])
+        mock_loader.list_tools = AsyncMock(
+            return_value=[
+                {"name": "test_tool", "description": "Test tool", "input_schema": {}},
+            ]
+        )
         mock_loader.list_servers = MagicMock(return_value={})
 
         mock_mcp_cls = MagicMock()
@@ -160,8 +164,7 @@ class TestMCPSkillHotReload:
         mock_cap_reg.refresh = AsyncMock()
 
         with patch("core.mcp_loader.MCPLoader", mock_mcp_cls):
-            with patch("core.agent.capability_registry.get_capability_registry",
-                       return_value=mock_cap_reg):
+            with patch("core.agent.capability_registry.get_capability_registry", return_value=mock_cap_reg):
                 result = await reload_mcp("test_server")
 
         assert "loaded" in result
@@ -189,8 +192,7 @@ class TestMCPSkillHotReload:
         mock_cap_reg.refresh = AsyncMock()
 
         with patch("core.skill_loader.SkillLoader", mock_skill_cls):
-            with patch("core.agent.capability_registry.get_capability_registry",
-                       return_value=mock_cap_reg):
+            with patch("core.agent.capability_registry.get_capability_registry", return_value=mock_cap_reg):
                 result = await reload_skill("test_skill_id")
 
         assert "loaded" in result
@@ -201,13 +203,9 @@ class TestMCPSkillHotReload:
         from core.mcp_skill_reload import get_load_status
 
         mock_mcp_loader = MagicMock()
-        mock_mcp_loader.get_instance.return_value = MagicMock(
-            list_servers=MagicMock(return_value={})
-        )
+        mock_mcp_loader.get_instance.return_value = MagicMock(list_servers=MagicMock(return_value={}))
         mock_skill_loader = MagicMock()
-        mock_skill_loader.get_instance.return_value = MagicMock(
-            list_skills=MagicMock(return_value=[])
-        )
+        mock_skill_loader.get_instance.return_value = MagicMock(list_skills=MagicMock(return_value=[]))
 
         with patch("core.mcp_loader.MCPLoader", mock_mcp_loader):
             with patch("core.skill_loader.SkillLoader", mock_skill_loader):
@@ -227,16 +225,15 @@ class TestDeviceRegistrationVisible:
 
     def test_openclawd_has_sync_device_capabilities(self):
         from core.openclawd import OpenClawd
+
         oc = OpenClawd()
-        assert hasattr(oc, "sync_device_capabilities"), (
-            "OpenClawd 必须有 sync_device_capabilities() 方法"
-        )
+        assert hasattr(oc, "sync_device_capabilities"), "OpenClawd 必须有 sync_device_capabilities() 方法"
         assert callable(oc.sync_device_capabilities)
 
     def test_sync_device_capabilities_registers_to_capability_bus(self):
         """新设备的能力应被注册到 CapabilityRegistry。"""
+        from core.agent.capability_registry import CapabilityItem, CapabilityRegistry
         from core.openclawd import OpenClawd
-        from core.agent.capability_registry import CapabilityRegistry, CapabilityItem
 
         oc = OpenClawd()
 
@@ -273,9 +270,10 @@ class TestDeviceRegistrationVisible:
         def _udm_unavailable():
             raise RuntimeError("UDM disabled for this test")
 
-        with patch("core.unified.device_manager.get_unified_device_manager",
-                   _udm_unavailable), \
-             patch("core.device_registry.DeviceRegistry", mock_device_registry_cls):
+        with (
+            patch("core.unified.device_manager.get_unified_device_manager", _udm_unavailable),
+            patch("core.device_registry.DeviceRegistry", mock_device_registry_cls),
+        ):
             with patch("core.agent.capability_registry.CapabilityRegistry", mock_cap_reg_cls):
                 with patch.object(cap_reg, "register", side_effect=_capture_register):
                     count = oc.sync_device_capabilities()
@@ -295,7 +293,7 @@ class TestModelFallback:
     @pytest.mark.asyncio
     async def test_router_fallback_on_primary_failure(self):
         """当主提供商抛出异常时，Router 应切换到备用提供商。"""
-        from core.multi_llm_router import MultiLLMRouter, ProviderConfig, LLMResponse
+        from core.multi_llm_router import LLMResponse, MultiLLMRouter, ProviderConfig
 
         router = MultiLLMRouter.__new__(MultiLLMRouter)
         router.providers = {}
@@ -308,23 +306,29 @@ class TestModelFallback:
 
         # 主提供商（失败）
         primary_cfg = ProviderConfig(
-            name="primary", api_key="test-key",
+            name="primary",
+            api_key="test-key",
             base_url="https://example.com",
-            models=["model-a"], default_model="model-a",
+            models=["model-a"],
+            default_model="model-a",
         )
         primary_adapter = MagicMock()
         primary_adapter.chat = AsyncMock(side_effect=Exception("primary down"))
 
         # 备用提供商（成功）
         fallback_cfg = ProviderConfig(
-            name="fallback", api_key="fallback-key",
+            name="fallback",
+            api_key="fallback-key",
             base_url="https://fallback.com",
-            models=["model-b"], default_model="model-b",
+            models=["model-b"],
+            default_model="model-b",
         )
         fallback_response = LLMResponse(
             content="fallback response",
-            provider="fallback", model="model-b",
-            input_tokens=10, output_tokens=20,
+            provider="fallback",
+            model="model-b",
+            input_tokens=10,
+            output_tokens=20,
         )
         fallback_adapter = MagicMock()
         fallback_adapter.chat = AsyncMock(return_value=fallback_response)
@@ -335,22 +339,27 @@ class TestModelFallback:
         router.adapters["fallback"] = fallback_adapter
 
         from core.multi_llm_router import ProviderCircuitBreaker
+
         router.circuit_breakers["primary"] = ProviderCircuitBreaker("primary")
         router.circuit_breakers["fallback"] = ProviderCircuitBreaker("fallback")
 
         # 构造 RoutingDecision，包含 fallback 候选
         from core.multi_llm_router import RoutingDecision
+
         with patch.object(router, "route") as mock_route:
             from core.multi_llm_router import TaskType
+
             mock_route.return_value = RoutingDecision(
-                provider="primary", model="model-a",
+                provider="primary",
+                model="model-a",
                 reason="test",
                 alternatives=["fallback:model-b"],
             )
             with patch.object(router, "classify_task", return_value=TaskType.GENERAL):
                 with patch.object(router, "_compute_complexity_vector") as mock_cv:
                     mock_cv.return_value = MagicMock(
-                        weighted_score=0.3, tier=MagicMock(value="lite"),
+                        weighted_score=0.3,
+                        tier=MagicMock(value="lite"),
                         model_dump=lambda: {},
                     )
                     response = await router.chat([{"role": "user", "content": "test"}])
@@ -373,16 +382,12 @@ class TestModelFallback:
 
         # 构建一个 mock config 对象，使 `config.get("llm.providers.openai.api_key")` 返回值
         mock_cfg = MagicMock()
-        mock_cfg.get = MagicMock(side_effect=lambda k, default="": (
-            "dashboard-key" if "openai" in k else ""
-        ))
+        mock_cfg.get = MagicMock(side_effect=lambda k, default="": ("dashboard-key" if "openai" in k else ""))
 
         with patch("core.unified_config.config", mock_cfg):
             key = router._get_key("openai")
 
-        assert key == "dashboard-key", (
-            "_get_key() 应从 Dashboard 配置优先读取 API key"
-        )
+        assert key == "dashboard-key", "_get_key() 应从 Dashboard 配置优先读取 API key"
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -396,8 +401,8 @@ class TestSOULInjectionRules:
     @pytest.mark.asyncio
     async def test_chat_only_no_soul_injection(self):
         """chat_only 模式的 Kernel 处理不应注入 SOUL 策略。"""
-        from core.agent.kernel import AgentKernel
         from core.agent.intent_router import IntentMode
+        from core.agent.kernel import AgentKernel
 
         kernel = AgentKernel()
         kernel._initialized = True
@@ -405,11 +410,14 @@ class TestSOULInjectionRules:
         # Mock IntentRouter 返回 chat_only
         mock_intent_router = MagicMock()
         from core.agent.intent_router import IntentResult
-        mock_intent_router.route = AsyncMock(return_value=IntentResult(
-            mode=IntentMode.CHAT_ONLY,
-            raw_intent="chat_only",
-            confidence=0.95,
-        ))
+
+        mock_intent_router.route = AsyncMock(
+            return_value=IntentResult(
+                mode=IntentMode.CHAT_ONLY,
+                raw_intent="chat_only",
+                confidence=0.95,
+            )
+        )
         kernel._intent_router = mock_intent_router
 
         # Mock LLM router
@@ -439,28 +447,33 @@ class TestSOULInjectionRules:
     @pytest.mark.asyncio
     async def test_task_execute_injects_soul(self):
         """task_execute 模式下必须注入 SOUL 策略。"""
-        from core.agent.kernel import AgentKernel
         from core.agent.intent_router import IntentMode, IntentResult
+        from core.agent.kernel import AgentKernel
 
         kernel = AgentKernel()
         kernel._initialized = True
 
         mock_intent_router = MagicMock()
-        mock_intent_router.route = AsyncMock(return_value=IntentResult(
-            mode=IntentMode.TASK_EXECUTE,
-            raw_intent="task_execute",
-            confidence=0.9,
-            task_hint="do something",
-        ))
+        mock_intent_router.route = AsyncMock(
+            return_value=IntentResult(
+                mode=IntentMode.TASK_EXECUTE,
+                raw_intent="task_execute",
+                confidence=0.9,
+                task_hint="do something",
+            )
+        )
         kernel._intent_router = mock_intent_router
 
         mock_planner = MagicMock()
         from core.agent.execution_planner import ExecutionResult
-        mock_planner.execute = AsyncMock(return_value=ExecutionResult(
-            success=True,
-            mode="task_execute",
-            reply="任务完成",
-        ))
+
+        mock_planner.execute = AsyncMock(
+            return_value=ExecutionResult(
+                success=True,
+                mode="task_execute",
+                reply="任务完成",
+            )
+        )
         kernel._planner = mock_planner
 
         with patch("core.agent.kernel.get_soul", return_value="SOUL") as mock_soul:
@@ -490,6 +503,7 @@ class TestGatewayTraceID:
     async def test_send_gateway_command_has_trace_ids(self):
         """send_gateway_command() 返回的结果必须包含 command_id 和 task_id。"""
         from core.openclawd import OpenClawd
+
         oc = OpenClawd()
 
         # 当所有连接路径都失败时，command_id/task_id 仍应存在于返回值中
@@ -510,8 +524,10 @@ class TestGatewayTraceID:
     @pytest.mark.asyncio
     async def test_send_gateway_command_logs_trace(self):
         """send_gateway_command() 必须记录包含 trace 字段的日志。"""
-        from core.openclawd import OpenClawd
         import logging
+
+        from core.openclawd import OpenClawd
+
         oc = OpenClawd()
 
         log_records = []
@@ -532,9 +548,9 @@ class TestGatewayTraceID:
             galaxy_logger.removeHandler(handler)
             galaxy_logger.setLevel(old_level)
 
-        assert any("command_id" in msg for msg in log_records), (
-            f"send_gateway_command 日志必须包含 command_id，实际日志: {log_records[:5]}"
-        )
+        assert any(
+            "command_id" in msg for msg in log_records
+        ), f"send_gateway_command 日志必须包含 command_id，实际日志: {log_records[:5]}"
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -548,8 +564,8 @@ class TestCapabilityRegistryMandatory:
     @pytest.mark.asyncio
     async def test_execution_planner_calls_capability_registry(self):
         """ExecutionPlanner.execute() 必须调用 CapabilityRegistry.refresh()。"""
-        from core.agent.execution_planner import ExecutionPlanner, ExecutionPlan
-        from core.agent.intent_router import IntentResult, IntentMode
+        from core.agent.execution_planner import ExecutionPlan, ExecutionPlanner
+        from core.agent.intent_router import IntentMode, IntentResult
 
         planner = ExecutionPlanner(llm_router=None)
 
@@ -571,14 +587,11 @@ class TestCapabilityRegistryMandatory:
         with patch("core.agent.capability_registry.get_capability_registry", return_value=mock_reg):
             with patch.object(planner, "_dispatch") as mock_dispatch:
                 from core.agent.execution_planner import ExecutionResult
-                mock_dispatch.return_value = ExecutionResult(
-                    success=True, mode="single_agent", reply="done"
-                )
+
+                mock_dispatch.return_value = ExecutionResult(success=True, mode="single_agent", reply="done")
                 result = await planner.execute(plan)
 
-        mock_reg.refresh.assert_called_once(), (
-            "ExecutionPlanner 必须在执行前调用 CapabilityRegistry.refresh()"
-        )
+        mock_reg.refresh.assert_called_once(), ("ExecutionPlanner 必须在执行前调用 CapabilityRegistry.refresh()")
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -591,6 +604,7 @@ class TestOpenClawdRouterAndTracing:
 
     def test_openclawd_has_router_attribute(self):
         from core.openclawd import OpenClawd
+
         oc = OpenClawd()
         assert hasattr(oc, "_router"), "OpenClawd 必须有 _router 属性（持有 Router）"
         assert hasattr(oc, "_get_router"), "OpenClawd 必须有 _get_router() 方法"
@@ -599,6 +613,7 @@ class TestOpenClawdRouterAndTracing:
     async def test_process_returns_request_id(self):
         """process() 返回的 metadata 必须包含 request_id（trace ID）。"""
         from core.openclawd import OpenClawd
+
         oc = OpenClawd()
         oc._initialized = False
 
@@ -609,7 +624,5 @@ class TestOpenClawdRouterAndTracing:
             with patch.object(oc, "sync_device_capabilities", return_value=0):
                 result = await oc.process("test", session_id="sess_abc")
 
-        assert "request_id" in result["metadata"], (
-            "process() 返回的 metadata 必须包含 request_id (trace ID)"
-        )
+        assert "request_id" in result["metadata"], "process() 返回的 metadata 必须包含 request_id (trace ID)"
         assert result["metadata"]["request_id"], "request_id 不能为空"

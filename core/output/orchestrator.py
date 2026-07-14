@@ -22,10 +22,10 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Optional
 
-from core.output.text_channel import TextChannel
-from core.output.voice_channel import VoiceChannel
 from core.output.avatar_channel import AvatarChannel
 from core.output.overlay_channel import OverlayChannel
+from core.output.text_channel import TextChannel
+from core.output.voice_channel import VoiceChannel
 
 logger = logging.getLogger(__name__)
 
@@ -37,19 +37,16 @@ def _extract_output_plan(interaction_envelope: Any) -> Dict[str, Any]:
     """
     try:
         if interaction_envelope is None:
-            return {"text": True, "voice": False, "avatar": False,
-                    "overlay": False, "ui_surface": "chat_panel"}
+            return {"text": True, "voice": False, "avatar": False, "overlay": False, "ui_surface": "chat_panel"}
         if isinstance(interaction_envelope, dict):
             return interaction_envelope.get(
                 "output_plan",
-                {"text": True, "voice": False, "avatar": False,
-                 "overlay": False, "ui_surface": "chat_panel"},
+                {"text": True, "voice": False, "avatar": False, "overlay": False, "ui_surface": "chat_panel"},
             )
         # dataclass / Pydantic object
         op = getattr(interaction_envelope, "output_plan", None)
         if op is None:
-            return {"text": True, "voice": False, "avatar": False,
-                    "overlay": False, "ui_surface": "chat_panel"}
+            return {"text": True, "voice": False, "avatar": False, "overlay": False, "ui_surface": "chat_panel"}
         if isinstance(op, dict):
             return op
         # OutputPlan dataclass
@@ -62,8 +59,7 @@ def _extract_output_plan(interaction_envelope: Any) -> Dict[str, Any]:
         }
     except Exception as exc:  # pragma: no cover
         logger.debug("_extract_output_plan fallback: %s", exc)
-        return {"text": True, "voice": False, "avatar": False,
-                "overlay": False, "ui_surface": "chat_panel"}
+        return {"text": True, "voice": False, "avatar": False, "overlay": False, "ui_surface": "chat_panel"}
 
 
 def _extract_mode(interaction_envelope: Any) -> str:

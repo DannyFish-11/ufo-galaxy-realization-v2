@@ -97,8 +97,7 @@ MESSAGE_INTEROP_AUTHORITY: str = "MESSAGE_INTEROP_V1"
 #: Policy: every cross-device/cross-node message MUST carry task_id + trace_id.
 #: session_id is forwarded when available in the source payload.
 MESSAGE_INTEROP_CORRELATION_POLICY: str = (
-    "REQUIRED: task_id + trace_id on every cross-device message; "
-    "session_id forwarded when available"
+    "REQUIRED: task_id + trace_id on every cross-device message; " "session_id forwarded when available"
 )
 
 # ---------------------------------------------------------------------------
@@ -110,21 +109,21 @@ MESSAGE_INTEROP_CORRELATION_POLICY: str = (
 
 try:
     from core.admissibility_chain import (  # type: ignore
-        REASON_NOT_REGISTERED,
-        REASON_NOT_READY,
+        REASON_CAPABILITY_MISMATCH,
         REASON_NO_ROUTE,
         REASON_NOT_ELIGIBLE,
-        REASON_CAPABILITY_MISMATCH,
-        REASON_READINESS_UNAVAILABLE,
+        REASON_NOT_READY,
+        REASON_NOT_REGISTERED,
         REASON_PARTICIPATION_UNAVAILABLE,
+        REASON_READINESS_UNAVAILABLE,
     )
 except ImportError:
     # Fallback literals — should never happen in a correctly installed runtime,
     # but guarantees this module is importable in isolation for testing.
-    REASON_NOT_REGISTERED: str = "not-registered"          # type: ignore[assignment]
-    REASON_NOT_READY: str = "not-ready"                    # type: ignore[assignment]
-    REASON_NO_ROUTE: str = "no-route"                      # type: ignore[assignment]
-    REASON_NOT_ELIGIBLE: str = "not-eligible"              # type: ignore[assignment]
+    REASON_NOT_REGISTERED: str = "not-registered"  # type: ignore[assignment]
+    REASON_NOT_READY: str = "not-ready"  # type: ignore[assignment]
+    REASON_NO_ROUTE: str = "no-route"  # type: ignore[assignment]
+    REASON_NOT_ELIGIBLE: str = "not-eligible"  # type: ignore[assignment]
     REASON_CAPABILITY_MISMATCH: str = "capability-mismatch"  # type: ignore[assignment]
     REASON_READINESS_UNAVAILABLE: str = "readiness-unavailable"  # type: ignore[assignment]
     REASON_PARTICIPATION_UNAVAILABLE: str = "participation-unavailable"  # type: ignore[assignment]
@@ -193,21 +192,14 @@ def extract_correlation(payload: Dict[str, Any]) -> CorrelationFields:
     ctx = payload.get("context") or {}
 
     task_id = (
-        payload.get("task_id")
-        or payload.get("request_id")
-        or payload.get("id")
-        or f"task_{uuid.uuid4().hex[:16]}"
+        payload.get("task_id") or payload.get("request_id") or payload.get("id") or f"task_{uuid.uuid4().hex[:16]}"
     )
     trace_id = (
         payload.get("trace_id")
         or (ctx.get("trace_id") if isinstance(ctx, dict) else None)
         or f"trace_{uuid.uuid4().hex[:12]}"
     )
-    session_id = (
-        payload.get("session_id")
-        or (ctx.get("session_id") if isinstance(ctx, dict) else None)
-        or None
-    )
+    session_id = payload.get("session_id") or (ctx.get("session_id") if isinstance(ctx, dict) else None) or None
 
     return CorrelationFields(
         task_id=str(task_id),
@@ -321,21 +313,11 @@ def normalize_to_task_envelope(
     else:
         targets = []
 
-    args = (
-        payload.get("args")
-        or payload.get("payload")
-        or payload.get("params")
-        or payload.get("parameters")
-        or {}
-    )
+    args = payload.get("args") or payload.get("payload") or payload.get("params") or payload.get("parameters") or {}
     if not isinstance(args, dict):
         args = {}
 
-    effective_source = (
-        payload.get("source")
-        or payload.get("source_device")
-        or source
-    )
+    effective_source = payload.get("source") or payload.get("source_device") or source
 
     meta: Dict[str, Any] = dict(payload.get("metadata") or {})
     for k in ("route_mode", "remote_execution_mode", "notify_ws", "mode", "request_id"):

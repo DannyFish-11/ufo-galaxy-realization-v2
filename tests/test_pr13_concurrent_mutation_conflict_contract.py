@@ -90,43 +90,38 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 _MODULE_AVAILABLE = False
 try:
-    from core.concurrent_mutation_conflict_contract import (
-        # Authority / policy sentinels
+    from core.concurrent_mutation_conflict_contract import (  # Authority / policy sentinels; Enumerations; Data classes; Functions
         CONCURRENT_MUTATION_CONFLICT_CONTRACT_AUTHORITY,
         CONCURRENT_MUTATION_CONFLICT_CONTRACT_PR13_SENTINEL,
-        MUTATION_CONFLICT_TAXONOMY_IS_FIRST_CLASS_DIMENSION_POLICY,
-        LAST_WRITER_WINS_MUST_NOT_CLAIM_AUTHORITATIVE_POLICY,
-        RECONCILIATION_INCOMPLETE_BLOCKS_AUTHORITATIVE_MUTATION_POLICY,
         DUPLICATE_WRITE_MUST_NOT_CLAIM_CONFLICT_FREE_POLICY,
-        OUT_OF_ORDER_WRITE_MUST_NOT_CLAIM_CONFLICT_FREE_POLICY,
+        LAST_WRITER_WINS_MUST_NOT_CLAIM_AUTHORITATIVE_POLICY,
         MUTATION_ABSENCE_DEFAULTS_TO_CONFLICT_UNRESOLVED_POLICY,
+        MUTATION_CONFLICT_TAXONOMY_IS_FIRST_CLASS_DIMENSION_POLICY,
+        OUT_OF_ORDER_WRITE_MUST_NOT_CLAIM_CONFLICT_FREE_POLICY,
+        RECONCILIATION_INCOMPLETE_BLOCKS_AUTHORITATIVE_MUTATION_POLICY,
         WRITE_SUCCESS_MUST_NOT_IMPLY_CONCURRENT_SEMANTICS_POLICY,
-        # Enumerations
         MutationConflictClass,
-        WriterConcurrencyMode,
-        # Data classes
         MutationConflictEvidence,
         MutationConflictVerdict,
-        # Functions
-        classify_mutation_conflict,
-        build_mutation_conflict_verdict,
+        WriterConcurrencyMode,
         build_baseline_mutation_conflict_verdict,
+        build_mutation_conflict_verdict,
+        classify_mutation_conflict,
     )
+
     _MODULE_AVAILABLE = True
 except ImportError as _imp_err:
-    print(
-        f"SKIP: core.concurrent_mutation_conflict_contract unavailable: {_imp_err}"
-    )
+    print(f"SKIP: core.concurrent_mutation_conflict_contract unavailable: {_imp_err}")
 
 
 def _skip_if_unavailable(test_fn):
     """Decorator: skip test if the module is not available."""
+
     def wrapper(self):
         if not _MODULE_AVAILABLE:
-            self.skipTest(
-                "core.concurrent_mutation_conflict_contract not available"
-            )
+            self.skipTest("core.concurrent_mutation_conflict_contract not available")
         return test_fn(self)
+
     wrapper.__name__ = test_fn.__name__
     return wrapper
 
@@ -134,6 +129,7 @@ def _skip_if_unavailable(test_fn):
 # ---------------------------------------------------------------------------
 # Helper: build evidence with named overrides
 # ---------------------------------------------------------------------------
+
 
 def _ev(**kwargs) -> "MutationConflictEvidence":
     """Build a MutationConflictEvidence with default-conservative values."""
@@ -219,21 +215,13 @@ class TestConcurrentMutationConflictContract(unittest.TestCase):
 
     @_skip_if_unavailable
     def test_A01_authority_sentinel_importable_and_nonempty(self):
-        self.assertIsInstance(
-            CONCURRENT_MUTATION_CONFLICT_CONTRACT_AUTHORITY, str
-        )
-        self.assertGreater(
-            len(CONCURRENT_MUTATION_CONFLICT_CONTRACT_AUTHORITY), 0
-        )
+        self.assertIsInstance(CONCURRENT_MUTATION_CONFLICT_CONTRACT_AUTHORITY, str)
+        self.assertGreater(len(CONCURRENT_MUTATION_CONFLICT_CONTRACT_AUTHORITY), 0)
 
     @_skip_if_unavailable
     def test_A02_pr13_sentinel_importable_and_nonempty(self):
-        self.assertIsInstance(
-            CONCURRENT_MUTATION_CONFLICT_CONTRACT_PR13_SENTINEL, str
-        )
-        self.assertIn(
-            "PR13", CONCURRENT_MUTATION_CONFLICT_CONTRACT_PR13_SENTINEL
-        )
+        self.assertIsInstance(CONCURRENT_MUTATION_CONFLICT_CONTRACT_PR13_SENTINEL, str)
+        self.assertIn("PR13", CONCURRENT_MUTATION_CONFLICT_CONTRACT_PR13_SENTINEL)
 
     @_skip_if_unavailable
     def test_A03_policy_sentinels_are_nonempty_strings(self):
@@ -839,19 +827,11 @@ class TestConcurrentMutationConflictContract(unittest.TestCase):
         d = evidence.to_dict()
         self.assertIsInstance(d, dict)
         restored = MutationConflictEvidence.from_dict(d)
-        self.assertEqual(
-            restored.single_writer_confirmed, evidence.single_writer_confirmed
-        )
-        self.assertEqual(
-            restored.no_concurrent_mutations, evidence.no_concurrent_mutations
-        )
-        self.assertEqual(
-            restored.write_order_deterministic, evidence.write_order_deterministic
-        )
+        self.assertEqual(restored.single_writer_confirmed, evidence.single_writer_confirmed)
+        self.assertEqual(restored.no_concurrent_mutations, evidence.no_concurrent_mutations)
+        self.assertEqual(restored.write_order_deterministic, evidence.write_order_deterministic)
         self.assertEqual(restored.replay_safe, evidence.replay_safe)
-        self.assertEqual(
-            restored.last_writer_wins_applied, evidence.last_writer_wins_applied
-        )
+        self.assertEqual(restored.last_writer_wins_applied, evidence.last_writer_wins_applied)
 
     @_skip_if_unavailable
     def test_AC02_evidence_to_dict_contains_all_keys(self):
@@ -970,9 +950,7 @@ class TestConcurrentMutationConflictContract(unittest.TestCase):
 
     @_skip_if_unavailable
     def test_AH01_is_reconciliation_required_only_for_that_class(self):
-        v = classify_mutation_conflict(
-            _ev(reconciliation_initiated=True, reconciliation_complete=False)
-        )
+        v = classify_mutation_conflict(_ev(reconciliation_initiated=True, reconciliation_complete=False))
         self.assertTrue(v.is_reconciliation_required)
         v2 = classify_mutation_conflict(_ev_conflict_free())
         self.assertFalse(v2.is_reconciliation_required)
@@ -999,9 +977,7 @@ class TestConcurrentMutationConflictContract(unittest.TestCase):
 
     @_skip_if_unavailable
     def test_AJ02_downgrade_reasons_nonempty_for_reconciliation_required(self):
-        v = classify_mutation_conflict(
-            _ev(reconciliation_initiated=True, reconciliation_complete=False)
-        )
+        v = classify_mutation_conflict(_ev(reconciliation_initiated=True, reconciliation_complete=False))
         self.assertGreater(len(v.downgrade_reasons), 0)
 
     @_skip_if_unavailable
@@ -1044,8 +1020,8 @@ class TestConcurrentMutationConflictContract(unittest.TestCase):
     def test_AL01_system_final_acceptance_evaluator_includes_concurrent_mutation(self):
         try:
             from core.system_final_acceptance_verdict import (
-                SystemFinalAcceptanceEvaluator,
                 AcceptanceDimensionId,
+                SystemFinalAcceptanceEvaluator,
             )
         except ImportError:
             self.skipTest("core.system_final_acceptance_verdict not available")
@@ -1062,8 +1038,8 @@ class TestConcurrentMutationConflictContract(unittest.TestCase):
     def test_AL02_concurrent_mutation_dimension_is_not_unresolved_when_contract_deployed(self):
         try:
             from core.system_final_acceptance_verdict import (
-                SystemFinalAcceptanceEvaluator,
                 DimensionStatus,
+                SystemFinalAcceptanceEvaluator,
             )
         except ImportError:
             self.skipTest("core.system_final_acceptance_verdict not available")
@@ -1076,8 +1052,7 @@ class TestConcurrentMutationConflictContract(unittest.TestCase):
         self.assertNotEqual(
             item.status,
             DimensionStatus.unresolved,
-            "concurrent_mutation_conflict dimension is unresolved when contract "
-            "should be deployable",
+            "concurrent_mutation_conflict dimension is unresolved when contract " "should be deployable",
         )
 
     # -----------------------------------------------------------------------
@@ -1106,8 +1081,7 @@ class TestConcurrentMutationConflictContract(unittest.TestCase):
         self.assertEqual(
             len(all_dims),
             16,
-            f"Expected 16 dimensions, got {len(all_dims)}: "
-            f"{[d.value for d in all_dims]}",
+            f"Expected 16 dimensions, got {len(all_dims)}: " f"{[d.value for d in all_dims]}",
         )
 
     # -----------------------------------------------------------------------
@@ -1118,8 +1092,8 @@ class TestConcurrentMutationConflictContract(unittest.TestCase):
     def test_AN01_probe_returns_pending_for_zero_evidence_conflict_unresolved(self):
         try:
             from core.system_final_acceptance_verdict import (
-                SystemFinalAcceptanceEvaluator,
                 DimensionStatus,
+                SystemFinalAcceptanceEvaluator,
             )
         except ImportError:
             self.skipTest("core.system_final_acceptance_verdict not available")

@@ -438,12 +438,8 @@ _INFLUENCE_REGISTRY: List[CompatInfluenceRecord] = [
     CompatInfluenceRecord(
         influence_id="INFL-001",
         decision_site="Model/provider routing decision at task dispatch",
-        canonical_path=(
-            "core.model_topology.topology_router.TopologyRouter.route()"
-        ),
-        compat_path=(
-            "core.multi_llm_router.MultiLLMRouter (legacy routing helper)"
-        ),
+        canonical_path=("core.model_topology.topology_router.TopologyRouter.route()"),
+        compat_path=("core.multi_llm_router.MultiLLMRouter (legacy routing helper)"),
         influence_role=CompatInfluenceRole.degraded_fallback,
         bounding_status=CompatInfluenceBoundingStatus.EXPLICITLY_BOUNDED,
         bounding_evidence=(
@@ -470,17 +466,12 @@ _INFLUENCE_REGISTRY: List[CompatInfluenceRecord] = [
     # -------------------------------------------------------------------------
     CompatInfluenceRecord(
         influence_id="INFL-002",
-        decision_site=(
-            "Provider/model selection data exposed via legacy dashboard endpoint"
-        ),
+        decision_site=("Provider/model selection data exposed via legacy dashboard endpoint"),
         canonical_path=(
             "core.model_topology.topology_router.TopologyRouter via "
             "GET /api/v1/projection/runtime (RuntimeProjection)"
         ),
-        compat_path=(
-            "dashboard.backend.main llm_providers endpoint "
-            "(GET /api/v1/llm-providers)"
-        ),
+        compat_path=("dashboard.backend.main llm_providers endpoint " "(GET /api/v1/llm-providers)"),
         influence_role=CompatInfluenceRole.bounded_assist,
         bounding_status=CompatInfluenceBoundingStatus.EXPLICITLY_BOUNDED,
         bounding_evidence=(
@@ -504,17 +495,9 @@ _INFLUENCE_REGISTRY: List[CompatInfluenceRecord] = [
     # -------------------------------------------------------------------------
     CompatInfluenceRecord(
         influence_id="INFL-003",
-        decision_site=(
-            "Executor readiness / capability-based routing decision"
-        ),
-        canonical_path=(
-            "core.capability_assimilation.CapabilityAssimilationLayer "
-            "(canonical capability truth)"
-        ),
-        compat_path=(
-            "core.capability_registry.CapabilityRegistry "
-            "(legacy device-local bookkeeping)"
-        ),
+        decision_site=("Executor readiness / capability-based routing decision"),
+        canonical_path=("core.capability_assimilation.CapabilityAssimilationLayer " "(canonical capability truth)"),
+        compat_path=("core.capability_registry.CapabilityRegistry " "(legacy device-local bookkeeping)"),
         influence_role=CompatInfluenceRole.bounded_assist,
         bounding_status=CompatInfluenceBoundingStatus.EXPLICITLY_BOUNDED,
         bounding_evidence=(
@@ -546,8 +529,7 @@ _INFLUENCE_REGISTRY: List[CompatInfluenceRecord] = [
             "via core.command_router.CommandRouter.route_envelope()"
         ),
         compat_path=(
-            "galaxy_gateway.cross_device_coordinator.CrossDeviceCoordinator "
-            "(substrate-only legacy coordinator)"
+            "galaxy_gateway.cross_device_coordinator.CrossDeviceCoordinator " "(substrate-only legacy coordinator)"
         ),
         influence_role=CompatInfluenceRole.degraded_fallback,
         bounding_status=CompatInfluenceBoundingStatus.EXPLICITLY_BOUNDED,
@@ -573,17 +555,9 @@ _INFLUENCE_REGISTRY: List[CompatInfluenceRecord] = [
     # -------------------------------------------------------------------------
     CompatInfluenceRecord(
         influence_id="INFL-005",
-        decision_site=(
-            "Desktop/operator projection assembly (runtime status truth)"
-        ),
-        canonical_path=(
-            "core.projection_surface_bridge.ProjectionSurfaceBridge."
-            "enrich_runtime_projection()"
-        ),
-        compat_path=(
-            "desktop_projection.projection_engine.ProjectionEngine "
-            "(must delegate to bridge)"
-        ),
+        decision_site=("Desktop/operator projection assembly (runtime status truth)"),
+        canonical_path=("core.projection_surface_bridge.ProjectionSurfaceBridge." "enrich_runtime_projection()"),
+        compat_path=("desktop_projection.projection_engine.ProjectionEngine " "(must delegate to bridge)"),
         influence_role=CompatInfluenceRole.bounded_assist,
         bounding_status=CompatInfluenceBoundingStatus.EXPLICITLY_BOUNDED,
         bounding_evidence=(
@@ -610,16 +584,12 @@ _INFLUENCE_REGISTRY: List[CompatInfluenceRecord] = [
     # -------------------------------------------------------------------------
     CompatInfluenceRecord(
         influence_id="INFL-006",
-        decision_site=(
-            "Task status truth / task routing at API ingress"
-        ),
+        decision_site=("Task status truth / task routing at API ingress"),
         canonical_path=(
-            "core.canonical_task.CanonicalTask / "
-            "core.canonical_task_dispatch_chain.CanonicalTaskDispatchChain"
+            "core.canonical_task.CanonicalTask / " "core.canonical_task_dispatch_chain.CanonicalTaskDispatchChain"
         ),
         compat_path=(
-            "legacy task_queue path (compat routing only — must not be used "
-            "as a truth source for task status)"
+            "legacy task_queue path (compat routing only — must not be used " "as a truth source for task status)"
         ),
         influence_role=CompatInfluenceRole.bounded_assist,
         bounding_status=CompatInfluenceBoundingStatus.EXPLICITLY_BOUNDED,
@@ -644,16 +614,13 @@ _INFLUENCE_REGISTRY: List[CompatInfluenceRecord] = [
     # -------------------------------------------------------------------------
     CompatInfluenceRecord(
         influence_id="INFL-007",
-        decision_site=(
-            "Attached-runtime takeover vs delegated-fallback routing gate"
-        ),
+        decision_site=("Attached-runtime takeover vs delegated-fallback routing gate"),
         canonical_path=(
             "core.attached_runtime_reuse_dispatch.resolve_takeover_or_fallback_route() "
             "(PR-23 canonical takeover/fallback routing gate)"
         ),
         compat_path=(
-            "Stale session context or external caller bypassing the PR-22 "
-            "registry gate (AttachedSessionRegistry)"
+            "Stale session context or external caller bypassing the PR-22 " "registry gate (AttachedSessionRegistry)"
         ),
         influence_role=CompatInfluenceRole.degraded_fallback,
         bounding_status=CompatInfluenceBoundingStatus.EXPLICITLY_BOUNDED,
@@ -680,17 +647,9 @@ _INFLUENCE_REGISTRY: List[CompatInfluenceRecord] = [
     # -------------------------------------------------------------------------
     CompatInfluenceRecord(
         influence_id="INFL-008",
-        decision_site=(
-            "Node tool exposure to OpenClawd (capability discovery)"
-        ),
-        canonical_path=(
-            "NodeFabricRegistry → CapabilityRegistry → "
-            "CapabilityResolver(CapabilitySource.NODE)"
-        ),
-        compat_path=(
-            "Legacy Layer 3 node scan path "
-            "(enabled via OPENCLAWD_LEGACY_NODE_SCAN_COMPAT env var)"
-        ),
+        decision_site=("Node tool exposure to OpenClawd (capability discovery)"),
+        canonical_path=("NodeFabricRegistry → CapabilityRegistry → " "CapabilityResolver(CapabilitySource.NODE)"),
+        compat_path=("Legacy Layer 3 node scan path " "(enabled via OPENCLAWD_LEGACY_NODE_SCAN_COMPAT env var)"),
         influence_role=CompatInfluenceRole.degraded_fallback,
         bounding_status=CompatInfluenceBoundingStatus.EXPLICITLY_BOUNDED,
         bounding_evidence=(
@@ -725,8 +684,7 @@ _INFLUENCE_REGISTRY: List[CompatInfluenceRecord] = [
             "compat cache (registered_devices) mirror write path"
         ),
         canonical_path=(
-            "core.unified.device_manager.UnifiedDeviceManager (UDM) — "
-            "sole canonical device truth write authority"
+            "core.unified.device_manager.UnifiedDeviceManager (UDM) — " "sole canonical device truth write authority"
         ),
         compat_path=(
             "core.routes._shared.registered_devices dict — "
@@ -773,8 +731,7 @@ _INFLUENCE_REGISTRY: List[CompatInfluenceRecord] = [
     CompatInfluenceRecord(
         influence_id="INFL-010",
         decision_site=(
-            "Session truth write (session state, continuity, result merge) — "
-            "legacy/stale session context write path"
+            "Session truth write (session state, continuity, result merge) — " "legacy/stale session context write path"
         ),
         canonical_path=(
             "core.canonical_session_truth.CanonicalSessionTruthRuntime."
@@ -1201,8 +1158,7 @@ def assert_canonical_is_decision_authority(
     )
     if context and result.verdict != CompatInfluenceVerdict.CANONICAL_AUTHORITY:
         logger.warning(
-            "COMPAT_FALLBACK_AUTHORITY_GUARD assert_canonical_is_decision_authority "
-            "[%s] context=%r verdict=%s",
+            "COMPAT_FALLBACK_AUTHORITY_GUARD assert_canonical_is_decision_authority " "[%s] context=%r verdict=%s",
             influence_id,
             context,
             result.verdict.value,
@@ -1226,22 +1182,10 @@ def build_authority_hardening_snapshot() -> AuthorityHardeningSnapshot:
     AuthorityHardeningSnapshot
     """
     registry = _INFLUENCE_REGISTRY
-    explicitly_bounded = [
-        r for r in registry
-        if r.bounding_status == CompatInfluenceBoundingStatus.EXPLICITLY_BOUNDED
-    ]
-    scope_limited = [
-        r for r in registry
-        if r.bounding_status == CompatInfluenceBoundingStatus.SCOPE_LIMITED
-    ]
-    unbounded = [
-        r for r in registry
-        if r.bounding_status == CompatInfluenceBoundingStatus.UNBOUNDED
-    ]
-    retired = [
-        r for r in registry
-        if r.bounding_status == CompatInfluenceBoundingStatus.RETIRED
-    ]
+    explicitly_bounded = [r for r in registry if r.bounding_status == CompatInfluenceBoundingStatus.EXPLICITLY_BOUNDED]
+    scope_limited = [r for r in registry if r.bounding_status == CompatInfluenceBoundingStatus.SCOPE_LIMITED]
+    unbounded = [r for r in registry if r.bounding_status == CompatInfluenceBoundingStatus.UNBOUNDED]
+    retired = [r for r in registry if r.bounding_status == CompatInfluenceBoundingStatus.RETIRED]
 
     hardening_complete = len(unbounded) == 0 and len(scope_limited) == 0
 

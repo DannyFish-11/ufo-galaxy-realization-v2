@@ -68,7 +68,6 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any, Dict
 
-
 # ---------------------------------------------------------------------------
 # EnvelopeRole
 # ---------------------------------------------------------------------------
@@ -153,8 +152,7 @@ ROLE_DESCRIPTIONS: Dict[EnvelopeRole, Dict[str, Any]] = {
         "class_name": "InteractionEnvelope",
         "layer": "interaction/rendering/persona",
         "trace_field": "trace_id",
-        "key_fields": ["interaction_id", "trace_id", "session_id", "mode",
-                       "relationship_mode", "output_plan"],
+        "key_fields": ["interaction_id", "trace_id", "session_id", "mode", "relationship_mode", "output_plan"],
         "summary": (
             "Governs interaction mode selection, persona state snapshot, "
             "multimodal context, and per-channel rendering flags (OutputPlan). "
@@ -168,9 +166,17 @@ ROLE_DESCRIPTIONS: Dict[EnvelopeRole, Dict[str, Any]] = {
         "class_name": "TaskEnvelope",
         "layer": "orchestration/routing/scheduling",
         "trace_field": "trace_id",
-        "key_fields": ["task_id", "trace_id", "session_id", "source", "targets",
-                       "tool_name", "priority", "lifecycle_status",
-                       "required_capabilities"],
+        "key_fields": [
+            "task_id",
+            "trace_id",
+            "session_id",
+            "source",
+            "targets",
+            "tool_name",
+            "priority",
+            "lifecycle_status",
+            "required_capabilities",
+        ],
         "summary": (
             "Canonical internal task representation.  Used across all routing "
             "paths (gateway, relay, MCP, skill).  Carries lifecycle state "
@@ -184,8 +190,7 @@ ROLE_DESCRIPTIONS: Dict[EnvelopeRole, Dict[str, Any]] = {
         "class_name": "CommandEnvelope",
         "layer": "executor/dispatch",
         "trace_field": "trace_id",
-        "key_fields": ["task_id", "trace_id", "runtime_session_id", "device_id",
-                       "verb", "idempotency_key", "payload"],
+        "key_fields": ["task_id", "trace_id", "runtime_session_id", "device_id", "verb", "idempotency_key", "payload"],
         "summary": (
             "Executor-facing command contract.  Adds idempotency key and "
             "command verb (EXECUTE/CANCEL/INTERRUPT/QUERY) to the task context. "
@@ -199,8 +204,7 @@ ROLE_DESCRIPTIONS: Dict[EnvelopeRole, Dict[str, Any]] = {
         "class_name": "ResultEnvelope",
         "layer": "result/observability",
         "trace_field": "trace_id",
-        "key_fields": ["task_id", "trace_id", "success", "elapsed_ms",
-                       "error_code", "result"],
+        "key_fields": ["task_id", "trace_id", "success", "elapsed_ms", "error_code", "result"],
         "summary": (
             "Executor return contract.  Correlated back to CommandEnvelope via "
             "task_id+trace_id.  Carries success flag, output data, elapsed time, "

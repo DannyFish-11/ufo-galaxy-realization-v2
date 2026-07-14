@@ -57,9 +57,8 @@ from __future__ import annotations
 import time
 from typing import Optional
 
-from core.continuum.config import ContinuumConfig, DEFAULT_CONTINUUM_CONFIG
+from core.continuum.config import DEFAULT_CONTINUUM_CONFIG, ContinuumConfig
 from core.continuum.types import ActionLevel, DecisionState, UnifiedState
-
 
 # ---------------------------------------------------------------------------
 # Default action-level thresholds
@@ -203,9 +202,7 @@ class DecisionGate:
 
         action_level = _action_level_from_score(should_act_score)
         decision_confidence = _confidence_from_score(should_act_score)
-        decision_reason = _build_reason(
-            action_level, should_act_score, value, interruption_cost, risk_cost
-        )
+        decision_reason = _build_reason(action_level, should_act_score, value, interruption_cost, risk_cost)
 
         return DecisionState(
             should_act_score=should_act_score,
@@ -235,9 +232,7 @@ class DecisionGate:
         raw = h.intent_probability * state.context_utility * _clamp(state.urgency + 0.05)
         return _clamp(raw)
 
-    def _compute_interruption_cost(
-        self, state: UnifiedState, timing_penalty: float
-    ) -> float:
+    def _compute_interruption_cost(self, state: UnifiedState, timing_penalty: float) -> float:
         """Compute the *interruption_cost* component.
 
         ``interruption_cost = interruption_sensitivity × focus_level × timing_penalty``

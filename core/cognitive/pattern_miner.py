@@ -62,24 +62,25 @@ _PATTERN_EVENT_CONFIRMED = "cognitive.pattern.confirmed"
 _PATTERN_EVENT_ABSTRACTED = "cognitive.pattern.abstracted"
 
 # Mining parameters
-_MIN_RECORDS_FOR_MINING = 5       # min TaskMemory records to start mining
-_MIN_PATTERN_SUPPORT = 3          # min occurrences for a pattern to survive
-_CONFIRMATION_THRESHOLD = 0.75     # success rate to confirm a strategy pattern
-_TEMPORAL_BIN_MINUTES = 60        # time bucketing granularity
-_ABSTRACTION_MERGE_THRESHOLD = 5   # min similar low-level patterns to abstract
+_MIN_RECORDS_FOR_MINING = 5  # min TaskMemory records to start mining
+_MIN_PATTERN_SUPPORT = 3  # min occurrences for a pattern to survive
+_CONFIRMATION_THRESHOLD = 0.75  # success rate to confirm a strategy pattern
+_TEMPORAL_BIN_MINUTES = 60  # time bucketing granularity
+_ABSTRACTION_MERGE_THRESHOLD = 5  # min similar low-level patterns to abstract
 _ACTIVATION_DECAY_PER_DAY = 0.92  # Soar-style base-level decay
-_ACTIVATION_BOOST_ON_HIT = 0.15   # activation increase when pattern is validated
+_ACTIVATION_BOOST_ON_HIT = 0.15  # activation increase when pattern is validated
 _ACTIVATION_BOOST_ON_ACCESS = 0.05  # activation increase when pattern is queried
-_MAX_PATTERNS = 200               # cap to prevent unbounded growth
+_MAX_PATTERNS = 200  # cap to prevent unbounded growth
 
 
 # Recursive abstraction levels
 class AbstractionLevel(int, Enum):
     """Hierarchy of pattern abstraction."""
-    RAW = 0         # Direct observation (e.g., "checked weather at 9am")
-    TASK_TYPE = 1   # Task-type generalization (e.g., "weather queries")
+
+    RAW = 0  # Direct observation (e.g., "checked weather at 9am")
+    TASK_TYPE = 1  # Task-type generalization (e.g., "weather queries")
     USER_HABIT = 2  # User habit inference (e.g., "morning information routine")
-    DOMAIN = 3      # Cross-domain pattern (e.g., "time-sensitive info gathering")
+    DOMAIN = 3  # Cross-domain pattern (e.g., "time-sensitive info gathering")
 
 
 # ── Data model ────────────────────────────────────────────────────────────
@@ -141,7 +142,7 @@ class BehaviorPattern:
 
     def decay(self, days: float = 1.0) -> None:
         """Decay activation score (Soar-style base-level activation)."""
-        self.activation_score *= _ACTIVATION_DECAY_PER_DAY ** days
+        self.activation_score *= _ACTIVATION_DECAY_PER_DAY**days
         self.activation_score = max(0.0, min(1.0, self.activation_score))
 
     def boost(self, amount: float = _ACTIVATION_BOOST_ON_HIT) -> None:
@@ -188,7 +189,7 @@ class PatternMiner:
         if self._subscribed:
             return
         try:
-            from core.state_event_bus import get_state_event_bus, StateEventType
+            from core.state_event_bus import StateEventType, get_state_event_bus
 
             bus = get_state_event_bus()
             bus.subscribe(StateEventType.TASK_DONE, self._on_task_done)
@@ -209,7 +210,8 @@ class PatternMiner:
             if len(records) < _MIN_RECORDS_FOR_MINING:
                 logger.debug(
                     "PatternMiner: insufficient records (%d < %d)",
-                    len(records), _MIN_RECORDS_FOR_MINING,
+                    len(records),
+                    _MIN_RECORDS_FOR_MINING,
                 )
                 return 0
             new_count = self._mine_all(records)
@@ -265,15 +267,13 @@ class PatternMiner:
         matches.sort(key=lambda x: x[0], reverse=True)
         return [p for _, p in matches[:limit]]
 
-    def get_patterns_by_type(
-        self, pattern_type: str, min_activation: float = 0.1
-    ) -> List[BehaviorPattern]:
+    def get_patterns_by_type(self, pattern_type: str, min_activation: float = 0.1) -> List[BehaviorPattern]:
         """Get all patterns of a specific type above activation threshold."""
         with self._lock:
             results = [
-                p for p in self._patterns.values()
-                if p.pattern_type == pattern_type
-                and p.activation_score >= min_activation
+                p
+                for p in self._patterns.values()
+                if p.pattern_type == pattern_type and p.activation_score >= min_activation
             ]
             results.sort(key=lambda p: p.activation_score, reverse=True)
             return results
@@ -288,10 +288,7 @@ class PatternMiner:
                 p.decay(days)
 
             before = len(self._patterns)
-            dead = [
-                pid for pid, p in self._patterns.items()
-                if p.activation_score < 0.01
-            ]
+            dead = [pid for pid, p in self._patterns.items() if p.activation_score < 0.01]
             for pid in dead:
                 del self._patterns[pid]
 
@@ -314,7 +311,8 @@ class PatternMiner:
         if new_total > 0:
             logger.info(
                 "PatternMiner: discovered %d new patterns (total stored: %d)",
-                new_total, len(self._patterns),
+                new_total,
+                len(self._patterns),
             )
         return new_total
 
@@ -330,9 +328,11 @@ class PatternMiner:
             ts = r.get("timestamp", 0)
             if ts > 0:
                 hour = time.localtime(ts).tm_hour
-                bin_hour = (hour // (_TEMPORAL_BIN_MINUTES // 60)) * (
-                    _TEMPORAL_BIN_MINUTES // 60
-                ) if _TEMPORAL_BIN_MINUTES >= 60 else hour
+                bin_hour = (
+                    (hour // (_TEMPORAL_BIN_MINUTES // 60)) * (_TEMPORAL_BIN_MINUTES // 60)
+                    if _TEMPORAL_BIN_MINUTES >= 60
+                    else hour
+                )
                 tt = r.get("task_type", "") or self._infer_task_type(r.get("task", ""))
                 hourly[(tt, bin_hour)].append(r)
 
@@ -407,8 +407,7 @@ class PatternMiner:
 
             # Find best and worst strategies
             strat_rates = {
-                s: stats["success"] / max(stats["success"] + stats["fail"], 1)
-                for s, stats in strategies.items()
+                s: stats["success"] / max(stats["success"] + stats["fail"], 1) for s, stats in strategies.items()
             }
             best_strat = max(strat_rates, key=strat_rates.get)
             worst_strat = min(strat_rates, key=strat_rates.get)
@@ -419,9 +418,7 @@ class PatternMiner:
             if best_rate < _CONFIRMATION_THRESHOLD:
                 continue  # no strategy is reliably good enough
 
-            total_support = sum(
-                s["success"] + s["fail"] for s in strategies.values()
-            )
+            total_support = sum(s["success"] + s["fail"] for s in strategies.values())
             if total_support < _MIN_PATTERN_SUPPORT:
                 continue
 
@@ -480,13 +477,9 @@ class PatternMiner:
         task_type_counts: Dict[str, int] = Counter()
 
         for i in range(len(sorted_records) - 1):
-            tt1 = (
-                sorted_records[i].get("task_type", "")
-                or self._infer_task_type(sorted_records[i].get("task", ""))
-            )
-            tt2 = (
-                sorted_records[i + 1].get("task_type", "")
-                or self._infer_task_type(sorted_records[i + 1].get("task", ""))
+            tt1 = sorted_records[i].get("task_type", "") or self._infer_task_type(sorted_records[i].get("task", ""))
+            tt2 = sorted_records[i + 1].get("task_type", "") or self._infer_task_type(
+                sorted_records[i + 1].get("task", "")
             )
             if tt1 and tt2 and tt1 != tt2:
                 transitions[(tt1, tt2)] += 1
@@ -672,10 +665,7 @@ class PatternMiner:
             "summarize": ["summarize", "summary", "总结", "摘要"],
             "weather_query": ["天气", "气温", "下雨"],
         }
-        scores = {
-            tt: sum(1 for kw in keywords if kw in text)
-            for tt, keywords in type_keywords.items()
-        }
+        scores = {tt: sum(1 for kw in keywords if kw in text) for tt, keywords in type_keywords.items()}
         best = max(scores, key=scores.get)
         return best if scores[best] > 0 else "general"
 

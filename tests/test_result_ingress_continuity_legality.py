@@ -76,6 +76,7 @@ def _force_legacy_truth_chain(monkeypatch):
     # 本地重复跑测试时同名 id 被静默抑制,legacy 链根本走不到。测试内中和;
     # 幂等语义由 durable_result_idempotency 自己的套件钉。
     import core.durable_result_idempotency as dri
+
     monkeypatch.setattr(dri, "check_result_idempotency", lambda tid: False)
     monkeypatch.setattr(dri, "record_result_idempotency", lambda tid: None)
 
@@ -166,20 +167,14 @@ class TestGroupB_CheckHelper:
     def test_b2_unavailable_authority_returns_allow(self) -> None:
         """AC8: authority absent → ("allow", False)."""
         with patch.object(_tl, "_evaluate_continuity_legality", None):
-            verdict, rejected = _tl._check_result_ingress_continuity_legality(
-                _make_message()
-            )
+            verdict, rejected = _tl._check_result_ingress_continuity_legality(_make_message())
         assert verdict == "allow"
         assert rejected is False
 
     def test_b3_reject_verdict_returns_rejected_true(self) -> None:
         """AC9: REJECT verdict → ("reject", True)."""
-        with patch.object(
-            _tl, "_evaluate_continuity_legality", return_value=_make_report("reject")
-        ):
-            verdict, rejected = _tl._check_result_ingress_continuity_legality(
-                _make_message()
-            )
+        with patch.object(_tl, "_evaluate_continuity_legality", return_value=_make_report("reject")):
+            verdict, rejected = _tl._check_result_ingress_continuity_legality(_make_message())
         assert verdict == "reject"
         assert rejected is True
 
@@ -190,20 +185,14 @@ class TestGroupB_CheckHelper:
             "_evaluate_continuity_legality",
             return_value=_make_report("require_review"),
         ):
-            verdict, rejected = _tl._check_result_ingress_continuity_legality(
-                _make_message()
-            )
+            verdict, rejected = _tl._check_result_ingress_continuity_legality(_make_message())
         assert verdict == "require_review"
         assert rejected is True
 
     def test_b5_allow_verdict_returns_rejected_false(self) -> None:
         """AC11: ALLOW verdict → ("allow", False)."""
-        with patch.object(
-            _tl, "_evaluate_continuity_legality", return_value=_make_report("allow")
-        ):
-            verdict, rejected = _tl._check_result_ingress_continuity_legality(
-                _make_message()
-            )
+        with patch.object(_tl, "_evaluate_continuity_legality", return_value=_make_report("allow")):
+            verdict, rejected = _tl._check_result_ingress_continuity_legality(_make_message())
         assert verdict == "allow"
         assert rejected is False
 
@@ -214,9 +203,7 @@ class TestGroupB_CheckHelper:
             raise RuntimeError("simulated authority crash")
 
         with patch.object(_tl, "_evaluate_continuity_legality", _raise):
-            verdict, rejected = _tl._check_result_ingress_continuity_legality(
-                _make_message()
-            )
+            verdict, rejected = _tl._check_result_ingress_continuity_legality(_make_message())
         assert verdict == "allow"
         assert rejected is False
 
@@ -288,11 +275,7 @@ class TestGroupB_CheckHelper:
 
         assert captured_path
         # Accept both the enum member and its string value for robustness.
-        path_val = (
-            captured_path[0].value
-            if hasattr(captured_path[0], "value")
-            else str(captured_path[0])
-        )
+        path_val = captured_path[0].value if hasattr(captured_path[0], "value") else str(captured_path[0])
         assert path_val == "terminal_result_ingestion"
 
 
@@ -313,9 +296,7 @@ class TestGroupC_ValidContinuityTruthChainRuns:
             ttc_calls.append(task_id)
             return MagicMock(is_truth_chain_complete=True, incomplete_reason="")
 
-        with patch.object(
-            _tl, "_evaluate_continuity_legality", return_value=_make_report("allow")
-        ):
+        with patch.object(_tl, "_evaluate_continuity_legality", return_value=_make_report("allow")):
             with patch.object(_tl, "_run_task_result_truth_chain", _fake_ttc):
                 with patch.object(_tl, "store_task_result", None):
                     _run(_tl.handle_task_result(bridge, None, msg))
@@ -327,9 +308,7 @@ class TestGroupC_ValidContinuityTruthChainRuns:
         bridge = _make_bridge()
         msg = _make_message(task_id="t-c2")
 
-        with patch.object(
-            _tl, "_evaluate_continuity_legality", return_value=_make_report("allow")
-        ):
+        with patch.object(_tl, "_evaluate_continuity_legality", return_value=_make_report("allow")):
             with patch.object(_tl, "_run_task_result_truth_chain", None):
                 with patch.object(_tl, "store_task_result", None):
                     _run(_tl.handle_task_result(bridge, None, msg))  # must not raise
@@ -345,9 +324,7 @@ class TestGroupC_ValidContinuityTruthChainRuns:
             bridge._pending_responses["t-c3"] = fut
             msg = _make_message(task_id="t-c3", device_id="dev-c3")
 
-            with patch.object(
-                _tl, "_evaluate_continuity_legality", return_value=_make_report("allow")
-            ):
+            with patch.object(_tl, "_evaluate_continuity_legality", return_value=_make_report("allow")):
                 with patch.object(_tl, "_run_task_result_truth_chain", None):
                     with patch.object(_tl, "store_task_result", None):
                         await _tl.handle_task_result(bridge, None, msg)
@@ -398,9 +375,7 @@ class TestGroupD_RejectedContinuityTruthChainSkipped:
             ttc_calls.append(task_id)
             return MagicMock(is_truth_chain_complete=True, incomplete_reason="")
 
-        with patch.object(
-            _tl, "_evaluate_continuity_legality", return_value=_make_report("reject")
-        ):
+        with patch.object(_tl, "_evaluate_continuity_legality", return_value=_make_report("reject")):
             with patch.object(_tl, "_run_task_result_truth_chain", _fake_ttc):
                 with patch.object(_tl, "store_task_result", None):
                     _run(_tl.handle_task_result(bridge, None, msg))
@@ -410,18 +385,14 @@ class TestGroupD_RejectedContinuityTruthChainSkipped:
     def test_d2_reconcile_skipped_on_reject(self) -> None:
         """AC2/AC3: reconciler must NOT run when V1 returns REJECT."""
         bridge = _make_bridge()
-        msg = _make_message(
-            task_id="t-d2", device_id="dev-d2", session_id="s-d2"
-        )
+        msg = _make_message(task_id="t-d2", device_id="dev-d2", session_id="s-d2")
         reconcile_calls: list = []
 
         def _fake_reconcile(m: Any) -> Any:
             reconcile_calls.append(True)
             return MagicMock(was_updated=False, reject_reason="", envelope=None, record=None)
 
-        with patch.object(
-            _tl, "_evaluate_continuity_legality", return_value=_make_report("reject")
-        ):
+        with patch.object(_tl, "_evaluate_continuity_legality", return_value=_make_report("reject")):
             with patch.object(_tl, "_reconcile_inbound_message", _fake_reconcile):
                 with patch.object(_tl, "_run_task_result_truth_chain", None):
                     with patch.object(_tl, "store_task_result", None):
@@ -439,9 +410,7 @@ class TestGroupD_RejectedContinuityTruthChainSkipped:
             ingest_calls.append(True)
             return MagicMock(was_reconciled=False, reject_reason="", envelope=None)
 
-        with patch.object(
-            _tl, "_evaluate_continuity_legality", return_value=_make_report("reject")
-        ):
+        with patch.object(_tl, "_evaluate_continuity_legality", return_value=_make_report("reject")):
             with patch.object(_tl, "_ingest_via_canonical_ingress", _fake_ingest):
                 with patch.object(_tl, "_run_task_result_truth_chain", None):
                     with patch.object(_tl, "store_task_result", None):
@@ -458,9 +427,7 @@ class TestGroupD_RejectedContinuityTruthChainSkipped:
         async def _fake_backflow(**_kw: Any) -> None:
             backflow_calls.append(True)
 
-        with patch.object(
-            _tl, "_evaluate_continuity_legality", return_value=_make_report("reject")
-        ):
+        with patch.object(_tl, "_evaluate_continuity_legality", return_value=_make_report("reject")):
             with patch.object(_tl, "_run_task_result_truth_chain", None):
                 with patch.object(_tl, "store_task_result", _fake_backflow):
                     _run(_tl.handle_task_result(bridge, None, msg))
@@ -472,9 +439,7 @@ class TestGroupD_RejectedContinuityTruthChainSkipped:
         bridge = _make_bridge()
         msg = _make_message(task_id="t-d5")
 
-        with patch.object(
-            _tl, "_evaluate_continuity_legality", return_value=_make_report("reject")
-        ):
+        with patch.object(_tl, "_evaluate_continuity_legality", return_value=_make_report("reject")):
             with patch.object(_tl, "_run_task_result_truth_chain", None):
                 with patch.object(_tl, "store_task_result", None):
                     _run(_tl.handle_task_result(bridge, None, msg))  # must not raise
@@ -601,9 +566,7 @@ class TestGroupG_DelegatedHandoffFlowsCompatible:
             ttc_calls.append(task_id)
             return MagicMock(is_truth_chain_complete=True, incomplete_reason="")
 
-        with patch.object(
-            _tl, "_evaluate_continuity_legality", return_value=_make_report("allow")
-        ):
+        with patch.object(_tl, "_evaluate_continuity_legality", return_value=_make_report("allow")):
             with patch.object(_tl, "_run_task_result_truth_chain", _fake_ttc):
                 with patch.object(_tl, "store_task_result", None):
                     _run(_tl.handle_task_result(bridge, None, msg))
@@ -624,9 +587,7 @@ class TestGroupG_DelegatedHandoffFlowsCompatible:
             ttc_calls.append(task_id)
             return MagicMock(is_truth_chain_complete=True, incomplete_reason="")
 
-        with patch.object(
-            _tl, "_evaluate_continuity_legality", return_value=_make_report("allow")
-        ):
+        with patch.object(_tl, "_evaluate_continuity_legality", return_value=_make_report("allow")):
             with patch.object(_tl, "_run_task_result_truth_chain", _fake_ttc):
                 with patch.object(_tl, "store_task_result", None):
                     _run(_tl.handle_task_result(bridge, None, msg))
@@ -647,9 +608,7 @@ class TestGroupG_DelegatedHandoffFlowsCompatible:
             ttc_calls.append(task_id)
             return MagicMock(is_truth_chain_complete=True, incomplete_reason="")
 
-        with patch.object(
-            _tl, "_evaluate_continuity_legality", return_value=_make_report("allow")
-        ):
+        with patch.object(_tl, "_evaluate_continuity_legality", return_value=_make_report("allow")):
             with patch.object(_tl, "_run_task_result_truth_chain", _fake_ttc):
                 with patch.object(_tl, "store_task_result", None):
                     _run(_tl.handle_task_result(bridge, None, msg))
@@ -668,9 +627,7 @@ class TestGroupG_DelegatedHandoffFlowsCompatible:
             return MagicMock(is_truth_chain_complete=True, incomplete_reason="")
 
         # Authority returns ALLOW for empty identity context (no evidence to reject on).
-        with patch.object(
-            _tl, "_evaluate_continuity_legality", return_value=_make_report("allow")
-        ):
+        with patch.object(_tl, "_evaluate_continuity_legality", return_value=_make_report("allow")):
             with patch.object(_tl, "_run_task_result_truth_chain", _fake_ttc):
                 with patch.object(_tl, "store_task_result", None):
                     _run(_tl.handle_task_result(bridge, None, msg))
@@ -731,6 +688,4 @@ class TestGroupH_FutureNotResolvedOnRejection:
             return fut.done()
 
         resolved = _run(_inner())
-        assert not resolved, (
-            "future must NOT be resolved when require_review rejects result ingress"
-        )
+        assert not resolved, "future must NOT be resolved when require_review rejects result ingress"

@@ -217,7 +217,8 @@ class SwarmAgentManifest(BaseModel):
         return cls(
             agent_id=member.agent_id,
             template=member.template or "research",
-            system_prompt=system_prompt or (
+            system_prompt=system_prompt
+            or (
                 f"You are {member.agent_name}, a specialised {member.role_in_team} agent. "
                 f"Execute your assigned task carefully and return a structured result."
             ),

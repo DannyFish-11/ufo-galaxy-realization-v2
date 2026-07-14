@@ -134,97 +134,82 @@ class TestBoundaryDeclarations:
     def test_liminal_surface_docstring_mentions_spatial_field(self) -> None:
         """LiminalSurface module docstring must identify it as a spatial field."""
         from windows_client.status_board_v2 import liminal_surface
+
         doc = liminal_surface.__doc__ or ""
-        assert "spatial" in doc.lower(), (
-            "liminal_surface module docstring must identify it as a spatial execution field"
-        )
+        assert (
+            "spatial" in doc.lower()
+        ), "liminal_surface module docstring must identify it as a spatial execution field"
 
     def test_liminal_surface_docstring_mentions_boundary(self) -> None:
         """LiminalSurface module docstring must reference the display boundary."""
         from windows_client.status_board_v2 import liminal_surface
+
         doc = liminal_surface.__doc__ or ""
         # The docstring must mention what is prohibited or mention the boundary doc
         assert (
             "DESKTOP_DISPLAY_BOUNDARIES" in doc
             or "not a second status board" in doc.lower()
             or "must not" in doc.lower()
-        ), (
-            "liminal_surface module docstring must reference display boundary constraints"
-        )
+        ), "liminal_surface module docstring must reference display boundary constraints"
 
     def test_liminal_surface_docstring_prohibits_provider_panels(self) -> None:
         """LiminalSurface module docstring must explicitly prohibit provider/metrics panels."""
         from windows_client.status_board_v2 import liminal_surface
+
         doc = liminal_surface.__doc__ or ""
         assert any(
-            kw in doc.lower()
-            for kw in ("provider", "metrics", "dashboard", "not carry", "must not")
-        ), (
-            "liminal_surface module docstring must prohibit provider/metrics/dashboard content"
-        )
+            kw in doc.lower() for kw in ("provider", "metrics", "dashboard", "not carry", "must not")
+        ), "liminal_surface module docstring must prohibit provider/metrics/dashboard content"
 
     def test_manifest_surface_docstring_mentions_boundary(self) -> None:
         """ManifestSurface module docstring must reference the display boundary."""
         from windows_client.status_board_v2 import manifest_surface
+
         doc = manifest_surface.__doc__ or ""
         assert (
             "DESKTOP_DISPLAY_BOUNDARIES" in doc
             or "not a second status board" in doc.lower()
             or "prohibited" in doc.lower()
-        ), (
-            "manifest_surface module docstring must reference display boundary constraints"
-        )
+        ), "manifest_surface module docstring must reference display boundary constraints"
 
     def test_manifest_surface_docstring_prohibits_provider_panels(self) -> None:
         """ManifestSurface module docstring must explicitly prohibit provider/metrics panels."""
         from windows_client.status_board_v2 import manifest_surface
+
         doc = manifest_surface.__doc__ or ""
         assert any(
-            kw in doc.lower()
-            for kw in ("provider", "metrics", "dashboard", "not carry", "must not", "prohibited")
-        ), (
-            "manifest_surface module docstring must prohibit provider/metrics/dashboard content"
-        )
+            kw in doc.lower() for kw in ("provider", "metrics", "dashboard", "not carry", "must not", "prohibited")
+        ), "manifest_surface module docstring must prohibit provider/metrics/dashboard content"
 
     def test_active_surface_md_contains_boundary_section(self) -> None:
         """ACTIVE_SURFACE.md must contain a display boundary section."""
         md_path = _repo_file("windows_client/status_board_v2/ACTIVE_SURFACE.md")
         assert md_path.exists(), "ACTIVE_SURFACE.md must exist"
         content = md_path.read_text()
-        assert "boundary" in content.lower(), (
-            "ACTIVE_SURFACE.md must contain a display boundary section"
-        )
+        assert "boundary" in content.lower(), "ACTIVE_SURFACE.md must contain a display boundary section"
 
     def test_canonical_boundary_doc_exists(self) -> None:
         """docs/DESKTOP_DISPLAY_BOUNDARIES.md must exist as the canonical boundary doc."""
         doc_path = _repo_file("docs/DESKTOP_DISPLAY_BOUNDARIES.md")
-        assert doc_path.exists(), (
-            "docs/DESKTOP_DISPLAY_BOUNDARIES.md must exist as the canonical boundary contract"
-        )
+        assert doc_path.exists(), "docs/DESKTOP_DISPLAY_BOUNDARIES.md must exist as the canonical boundary contract"
 
     def test_canonical_boundary_doc_is_non_empty(self) -> None:
         """docs/DESKTOP_DISPLAY_BOUNDARIES.md must contain meaningful content."""
         doc_path = _repo_file("docs/DESKTOP_DISPLAY_BOUNDARIES.md")
         content = doc_path.read_text()
-        assert len(content) > 500, (
-            "docs/DESKTOP_DISPLAY_BOUNDARIES.md must contain substantial boundary definitions"
-        )
+        assert len(content) > 500, "docs/DESKTOP_DISPLAY_BOUNDARIES.md must contain substantial boundary definitions"
 
     def test_canonical_boundary_doc_defines_status_board(self) -> None:
         """Boundary doc must define what the right-side status board is."""
         doc_path = _repo_file("docs/DESKTOP_DISPLAY_BOUNDARIES.md")
         content = doc_path.read_text()
-        assert "status board" in content.lower(), (
-            "Boundary doc must define the right-side desktop status board"
-        )
+        assert "status board" in content.lower(), "Boundary doc must define the right-side desktop status board"
 
     def test_canonical_boundary_doc_defines_liminal_space(self) -> None:
         """Boundary doc must define what the liminal space is."""
         doc_path = _repo_file("docs/DESKTOP_DISPLAY_BOUNDARIES.md")
         content = doc_path.read_text()
-        assert "liminal" in content.lower(), (
-            "Boundary doc must define the liminal space"
-        )
+        assert "liminal" in content.lower(), "Boundary doc must define the liminal space"
 
     def test_canonical_boundary_doc_defines_prohibited_crossovers(self) -> None:
         """Boundary doc must define prohibited crossovers."""
@@ -246,9 +231,9 @@ class TestBoundaryDeclarations:
         """STATUS_BOARD_V2.md must reference the canonical boundary doc."""
         doc_path = _repo_file("docs/STATUS_BOARD_V2.md")
         content = doc_path.read_text()
-        assert "DESKTOP_DISPLAY_BOUNDARIES" in content, (
-            "STATUS_BOARD_V2.md must reference DESKTOP_DISPLAY_BOUNDARIES.md"
-        )
+        assert (
+            "DESKTOP_DISPLAY_BOUNDARIES" in content
+        ), "STATUS_BOARD_V2.md must reference DESKTOP_DISPLAY_BOUNDARIES.md"
 
 
 # ---------------------------------------------------------------------------
@@ -280,6 +265,7 @@ class TestLiminalSurfaceRendering:
 
     def _render(self, projection: Dict[str, Any]) -> str:
         from windows_client.status_board_v2.liminal_surface import LiminalSurface
+
         surf = LiminalSurface()
         return surf.render(projection)
 
@@ -290,46 +276,42 @@ class TestLiminalSurfaceRendering:
     def test_render_contains_canonical_label_local_chain(self) -> None:
         """Liminal surface canonical rendering must show Local Execution Chain panel."""
         rendered = self._render(_SAMPLE_PROJECTION)
-        assert "Local Execution Chain" in rendered, (
-            "Liminal surface canonical rendering must show Local Execution Chain"
-        )
+        assert (
+            "Local Execution Chain" in rendered
+        ), "Liminal surface canonical rendering must show Local Execution Chain"
 
     def test_render_contains_canonical_label_cross_device_chain(self) -> None:
         """Liminal surface canonical rendering must show Cross-Device Execution Chain panel."""
         rendered = self._render(_SAMPLE_PROJECTION)
-        assert "Cross-Device Execution Chain" in rendered, (
-            "Liminal surface canonical rendering must show Cross-Device Execution Chain"
-        )
+        assert (
+            "Cross-Device Execution Chain" in rendered
+        ), "Liminal surface canonical rendering must show Cross-Device Execution Chain"
 
     def test_render_contains_canonical_label_sandbox(self) -> None:
         """Liminal surface canonical rendering must show Sandbox / Speculative panel."""
         rendered = self._render(_SAMPLE_PROJECTION)
-        assert "Sandbox" in rendered, (
-            "Liminal surface canonical rendering must show Sandbox / Speculative panel"
-        )
+        assert "Sandbox" in rendered, "Liminal surface canonical rendering must show Sandbox / Speculative panel"
 
     def test_render_does_not_contain_provider_list_header(self) -> None:
         """Liminal surface must not render provider-list-style headers."""
         rendered = self._render(_SAMPLE_PROJECTION)
         # Strip ANSI codes for plain-text matching
         import re
+
         plain = re.sub(r"\x1b\[[0-9;]*m", "", rendered)
         forbidden = ["Provider List", "Provider Cards", "Model Panel", "OneAPI Status"]
         for kw in forbidden:
-            assert kw not in plain, (
-                f"Liminal surface must not contain '{kw}' — that belongs to the status board"
-            )
+            assert kw not in plain, f"Liminal surface must not contain '{kw}' — that belongs to the status board"
 
     def test_render_does_not_contain_dashboard_keywords(self) -> None:
         """Liminal surface must not render dashboard-style content."""
         rendered = self._render(_SAMPLE_PROJECTION)
         import re
+
         plain = re.sub(r"\x1b\[[0-9;]*m", "", rendered)
         forbidden = ["Dashboard", "Metrics Board", "Status Panel"]
         for kw in forbidden:
-            assert kw not in plain, (
-                f"Liminal surface must not contain '{kw}' — that belongs to the status board"
-            )
+            assert kw not in plain, f"Liminal surface must not contain '{kw}' — that belongs to the status board"
 
     def test_render_handles_minimal_projection(self) -> None:
         """Liminal surface must degrade gracefully with a minimal (silent) projection."""
@@ -344,6 +326,7 @@ class TestLiminalSurfaceRendering:
     def test_liminal_surface_class_docstring_mentions_spatial(self) -> None:
         """LiminalSurface class docstring must mention spatial or execution field."""
         from windows_client.status_board_v2.liminal_surface import LiminalSurface
+
         doc = LiminalSurface.__doc__ or ""
         assert any(
             kw in doc.lower() for kw in ("spatial", "field", "execution")
@@ -369,6 +352,7 @@ class TestManifestSurfaceRendering:
 
     def _render(self, projection: Dict[str, Any]) -> str:
         from windows_client.status_board_v2.manifest_surface import ManifestSurface
+
         surf = ManifestSurface()
         return surf.render(projection)
 
@@ -379,12 +363,14 @@ class TestManifestSurfaceRendering:
     def test_render_contains_execution_label_phase(self) -> None:
         rendered = self._render(_SAMPLE_PROJECTION)
         import re
+
         plain = re.sub(r"\x1b\[[0-9;]*m", "", rendered)
         assert "Phase" in plain, "Manifest surface must show execution phase label"
 
     def test_render_contains_execution_label_focus(self) -> None:
         rendered = self._render(_MANIFEST_PROJECTION)
         import re
+
         plain = re.sub(r"\x1b\[[0-9;]*m", "", rendered)
         assert "Focus" in plain, "Manifest surface must show focus intensity label"
 
@@ -392,11 +378,10 @@ class TestManifestSurfaceRendering:
         """ManifestSurface must not render provider-list-style content."""
         rendered = self._render(_MANIFEST_PROJECTION)
         import re
+
         plain = re.sub(r"\x1b\[[0-9;]*m", "", rendered)
         for kw in _MANIFEST_FORBIDDEN_KEYWORDS:
-            assert kw not in plain, (
-                f"Manifest surface must not contain '{kw}' — that belongs to the status board"
-            )
+            assert kw not in plain, f"Manifest surface must not contain '{kw}' — that belongs to the status board"
 
     def test_render_handles_minimal_projection(self) -> None:
         rendered = self._render(_MINIMAL_PROJECTION)
@@ -404,6 +389,7 @@ class TestManifestSurfaceRendering:
 
     def test_manifest_surface_class_docstring_mentions_execution_context(self) -> None:
         from windows_client.status_board_v2.manifest_surface import ManifestSurface
+
         doc = ManifestSurface.__doc__ or ""
         assert any(
             kw in doc.lower() for kw in ("execution", "manifest", "field")
@@ -423,39 +409,39 @@ class TestDesktopStatusProjectionContract:
 
     def test_contract_has_model_routing_projection(self) -> None:
         mod = self._get_projection_module()
-        assert hasattr(mod, "ModelRoutingProjection"), (
-            "DesktopStatusProjection contract must have ModelRoutingProjection sub-contract"
-        )
+        assert hasattr(
+            mod, "ModelRoutingProjection"
+        ), "DesktopStatusProjection contract must have ModelRoutingProjection sub-contract"
 
     def test_contract_has_execution_projection(self) -> None:
         mod = self._get_projection_module()
-        assert hasattr(mod, "ExecutionProjection"), (
-            "DesktopStatusProjection contract must have ExecutionProjection sub-contract"
-        )
+        assert hasattr(
+            mod, "ExecutionProjection"
+        ), "DesktopStatusProjection contract must have ExecutionProjection sub-contract"
 
     def test_contract_has_lifecycle_projection(self) -> None:
         mod = self._get_projection_module()
-        assert hasattr(mod, "LifecycleProjection"), (
-            "DesktopStatusProjection contract must have LifecycleProjection sub-contract"
-        )
+        assert hasattr(
+            mod, "LifecycleProjection"
+        ), "DesktopStatusProjection contract must have LifecycleProjection sub-contract"
 
     def test_contract_has_perception_projection(self) -> None:
         mod = self._get_projection_module()
-        assert hasattr(mod, "PerceptionProjection"), (
-            "DesktopStatusProjection contract must have PerceptionProjection sub-contract"
-        )
+        assert hasattr(
+            mod, "PerceptionProjection"
+        ), "DesktopStatusProjection contract must have PerceptionProjection sub-contract"
 
     def test_contract_has_explainability_projection(self) -> None:
         mod = self._get_projection_module()
-        assert hasattr(mod, "ExplainabilityProjection"), (
-            "DesktopStatusProjection contract must have ExplainabilityProjection sub-contract"
-        )
+        assert hasattr(
+            mod, "ExplainabilityProjection"
+        ), "DesktopStatusProjection contract must have ExplainabilityProjection sub-contract"
 
     def test_contract_has_build_function(self) -> None:
         mod = self._get_projection_module()
-        assert hasattr(mod, "build_desktop_status_projection"), (
-            "DesktopStatusProjection contract must expose build_desktop_status_projection()"
-        )
+        assert hasattr(
+            mod, "build_desktop_status_projection"
+        ), "DesktopStatusProjection contract must expose build_desktop_status_projection()"
 
     def test_model_routing_projection_has_provider_field(self) -> None:
         mod = self._get_projection_module()
@@ -465,15 +451,11 @@ class TestDesktopStatusProjectionContract:
         field_names = set(fields.keys())
         assert any(
             kw in " ".join(field_names) for kw in ("provider", "primary", "model", "route")
-        ), (
-            "ModelRoutingProjection must have provider/model routing fields for the status board"
-        )
+        ), "ModelRoutingProjection must have provider/model routing fields for the status board"
 
     def test_desktop_status_projection_class_exists(self) -> None:
         mod = self._get_projection_module()
-        assert hasattr(mod, "DesktopStatusProjection"), (
-            "contracts module must export DesktopStatusProjection"
-        )
+        assert hasattr(mod, "DesktopStatusProjection"), "contracts module must export DesktopStatusProjection"
 
     def test_desktop_status_projection_is_serialisable(self) -> None:
         """DesktopStatusProjection must produce a to_dict / to_json callable."""
@@ -485,9 +467,9 @@ class TestDesktopStatusProjectionContract:
             tristate=None,
             runtime_session_id="test-guardrail",
         )
-        assert hasattr(instance, "to_dict") or hasattr(instance, "dict"), (
-            "DesktopStatusProjection must be serialisable (to_dict or .dict)"
-        )
+        assert hasattr(instance, "to_dict") or hasattr(
+            instance, "dict"
+        ), "DesktopStatusProjection must be serialisable (to_dict or .dict)"
 
 
 # ---------------------------------------------------------------------------
@@ -504,6 +486,7 @@ class TestSpatialFieldSeparation:
     def test_liminal_space_state_has_spatial_dims(self) -> None:
         """LiminalSpaceState must expose the four canonical spatial dimensions."""
         from desktop_projection import StateSpaceMapper
+
         mapper = StateSpaceMapper()
         sample = {
             "tri_state_phase": "liminal",
@@ -516,13 +499,12 @@ class TestSpatialFieldSeparation:
         }
         state = mapper.map(sample)
         for dim in self._SPATIAL_DIMS:
-            assert hasattr(state, dim), (
-                f"LiminalSpaceState must expose spatial dimension '{dim}'"
-            )
+            assert hasattr(state, dim), f"LiminalSpaceState must expose spatial dimension '{dim}'"
 
     def test_spatial_dims_are_floats_in_0_1(self) -> None:
         """Spatial dimensions must be floats in [0, 1]."""
         from desktop_projection import StateSpaceMapper
+
         mapper = StateSpaceMapper()
         sample = {
             "tri_state_phase": "liminal",
@@ -537,9 +519,7 @@ class TestSpatialFieldSeparation:
         for dim in self._SPATIAL_DIMS:
             val = getattr(state, dim)
             assert isinstance(val, float), f"Spatial dimension '{dim}' must be a float"
-            assert 0.0 <= val <= 1.0, (
-                f"Spatial dimension '{dim}' must be in [0, 1], got {val}"
-            )
+            assert 0.0 <= val <= 1.0, f"Spatial dimension '{dim}' must be in [0, 1], got {val}"
 
     def test_desktop_status_projection_fields_do_not_include_spatial_dims(self) -> None:
         """DesktopStatusProjection must not have spatial dimension fields at the top level."""
@@ -548,20 +528,18 @@ class TestSpatialFieldSeparation:
         fields = cls.model_fields if hasattr(cls, "model_fields") else {}
         top_level_names = set(fields.keys())
         overlap = top_level_names & self._SPATIAL_DIMS
-        assert not overlap, (
-            f"DesktopStatusProjection must not have spatial field names at the top level: {overlap}"
-        )
+        assert not overlap, f"DesktopStatusProjection must not have spatial field names at the top level: {overlap}"
 
     def test_boundary_doc_mentions_both_projection_contracts(self) -> None:
         """Boundary doc must describe both DesktopStatusProjection and StateSpaceMapper."""
         doc_path = _repo_file("docs/DESKTOP_DISPLAY_BOUNDARIES.md")
         content = doc_path.read_text()
-        assert "StateSpaceMapper" in content, (
-            "Boundary doc must mention StateSpaceMapper as the liminal layer's contract"
-        )
-        assert "DesktopStatusProjection" in content, (
-            "Boundary doc must mention DesktopStatusProjection as the status board's contract"
-        )
+        assert (
+            "StateSpaceMapper" in content
+        ), "Boundary doc must mention StateSpaceMapper as the liminal layer's contract"
+        assert (
+            "DesktopStatusProjection" in content
+        ), "Boundary doc must mention DesktopStatusProjection as the status board's contract"
 
 
 # ---------------------------------------------------------------------------
@@ -583,9 +561,7 @@ class TestStatusBoardSurfacesDoNotImportSpatialModules:
     """Right-side board surfaces must not import spatial-field-only modules at module level."""
 
     @pytest.mark.parametrize("surface_rel_path", _STATUS_BOARD_SURFACES)
-    def test_surface_does_not_import_state_space_mapper_at_module_level(
-        self, surface_rel_path: str
-    ) -> None:
+    def test_surface_does_not_import_state_space_mapper_at_module_level(self, surface_rel_path: str) -> None:
         """Status board surface source must not import StateSpaceMapper at module level."""
         path = _repo_file(surface_rel_path)
         if not path.exists():
@@ -595,13 +571,9 @@ class TestStatusBoardSurfacesDoNotImportSpatialModules:
         # Deferred/local imports inside render() are acceptable as a compatibility
         # pattern, but module-level imports would blur the boundary.
         lines = source.splitlines()
-        top_level_import_lines = [
-            ln for ln in lines
-            if ln.startswith("import ") or ln.startswith("from ")
-        ]
+        top_level_import_lines = [ln for ln in lines if ln.startswith("import ") or ln.startswith("from ")]
         for imp_line in top_level_import_lines:
             for kw in _SPATIAL_ONLY_IMPORTS:
                 assert kw not in imp_line, (
-                    f"{surface_rel_path} must not import {kw} at module level — "
-                    f"that is a liminal-space concern"
+                    f"{surface_rel_path} must not import {kw} at module level — " f"that is a liminal-space concern"
                 )

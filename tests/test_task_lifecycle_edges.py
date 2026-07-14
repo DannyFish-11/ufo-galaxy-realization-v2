@@ -57,7 +57,6 @@ from core.task_graph_runtime import (
     reset_task_graph_runtime,
 )
 
-
 # ===========================================================================
 # Helpers
 # ===========================================================================
@@ -365,7 +364,8 @@ def test_L01_contributor_set_via_transition() -> None:
     rt = _fresh()
     rt.register_node(GraphNode(task_id="contrib1"))
     rt.transition(
-        "contrib1", GraphNodeState.RUNNING,
+        "contrib1",
+        GraphNodeState.RUNNING,
         contributor=WorkflowContributorKind.OPENCLAWD,
     )
     node = rt.get_node_by_task_id("contrib1")

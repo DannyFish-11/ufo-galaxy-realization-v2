@@ -112,8 +112,8 @@ Coverage
 from __future__ import annotations
 
 import json
-import sys
 import os
+import sys
 import uuid
 
 import pytest
@@ -126,6 +126,7 @@ if _PROJECT_ROOT not in sys.path:
 # ===========================================================================
 # 1. ScenarioStepKind enum
 # ===========================================================================
+
 
 class TestScenarioStepKind:
     def test_all_expected_values_present(self):
@@ -172,6 +173,7 @@ class TestScenarioStepKind:
 # ===========================================================================
 # 2. ScenarioState dataclass
 # ===========================================================================
+
 
 class TestScenarioState:
     def test_construction_with_defaults(self):
@@ -252,6 +254,7 @@ class TestScenarioState:
 # 3. ScenarioStep dataclass
 # ===========================================================================
 
+
 class TestScenarioStep:
     def test_construction_with_required_fields(self):
         from core.scenario_harness import ScenarioStep, ScenarioStepKind
@@ -289,6 +292,7 @@ class TestScenarioStep:
 # ===========================================================================
 # 4. ScenarioResult dataclass
 # ===========================================================================
+
 
 class TestScenarioResult:
     def test_construction_with_defaults(self):
@@ -348,6 +352,7 @@ class TestScenarioResult:
 # ===========================================================================
 # 5. ScenarioFixture helpers
 # ===========================================================================
+
 
 class TestScenarioFixture:
     def test_healthy_native_multimodal_step(self):
@@ -467,6 +472,7 @@ class TestScenarioFixture:
 # 6. Scenario 1 — Healthy native multimodal → provider degradation → fallback
 # ===========================================================================
 
+
 class TestScenario1MultimodalToFallback:
     """
     End-to-end multimodal selection to degraded fallback transition.
@@ -501,9 +507,7 @@ class TestScenario1MultimodalToFallback:
         result = self._run_scenario()
         step2 = result.steps[2]
         env = step2.degraded_operation_envelope or {}
-        assert env.get("is_degraded") is False, (
-            f"Expected not degraded initially; envelope={env}"
-        )
+        assert env.get("is_degraded") is False, f"Expected not degraded initially; envelope={env}"
 
     def test_after_degradation_route_is_text_only(self):
         result = self._run_scenario()
@@ -515,17 +519,13 @@ class TestScenario1MultimodalToFallback:
         result = self._run_scenario()
         last_step = result.steps[-1]
         env = last_step.degraded_operation_envelope or {}
-        assert env.get("is_degraded") is True, (
-            f"Expected is_degraded=True after provider outage; envelope={env}"
-        )
+        assert env.get("is_degraded") is True, f"Expected is_degraded=True after provider outage; envelope={env}"
 
     def test_transition_occurred_flag_is_true(self):
         result = self._run_scenario()
         last_step = result.steps[-1]
         env = last_step.degraded_operation_envelope or {}
-        assert env.get("transition_occurred") is True, (
-            f"Expected transition_occurred=True; envelope={env}"
-        )
+        assert env.get("transition_occurred") is True, f"Expected transition_occurred=True; envelope={env}"
 
     def test_result_degradation_occurred_flag(self):
         result = self._run_scenario()
@@ -536,15 +536,11 @@ class TestScenario1MultimodalToFallback:
         # After two route steps the timeline must have >= 2 events
         last = result.steps[-1]
         tl = last.decision_timeline_snapshot or {}
-        assert tl.get("total_events", 0) >= 2, (
-            f"Expected >= 2 timeline events; got {tl.get('total_events')}"
-        )
+        assert tl.get("total_events", 0) >= 2, f"Expected >= 2 timeline events; got {tl.get('total_events')}"
 
     def test_all_declarative_assertions_passed(self):
         result = self._run_scenario()
-        assert result.all_assertions_passed, (
-            f"Failed assertions: {result.failed_assertions}"
-        )
+        assert result.all_assertions_passed, f"Failed assertions: {result.failed_assertions}"
 
     def test_result_is_serialisable(self):
         from core.scenario_harness import ScenarioAssertions
@@ -563,6 +559,7 @@ class TestScenario1MultimodalToFallback:
 # ===========================================================================
 # 7. Scenario 2 — Primary-source failure → recovery → re-election
 # ===========================================================================
+
 
 class TestScenario2SourceFailureRecovery:
     """
@@ -620,9 +617,9 @@ class TestScenario2SourceFailureRecovery:
         result = self._run_scenario()
         # Step 3 is the first recovery cycle
         recovery_state = result.steps[3]
-        assert recovery_state.source_recovery_snapshot is not None, (
-            "Expected source_recovery_snapshot after recovery cycle"
-        )
+        assert (
+            recovery_state.source_recovery_snapshot is not None
+        ), "Expected source_recovery_snapshot after recovery cycle"
 
     def test_result_recovery_flag_after_reelection(self):
         result = self._run_scenario()
@@ -645,14 +642,13 @@ class TestScenario2SourceFailureRecovery:
 
     def test_all_declarative_assertions_passed(self):
         result = self._run_scenario()
-        assert result.all_assertions_passed, (
-            f"Failed assertions: {result.failed_assertions}"
-        )
+        assert result.all_assertions_passed, f"Failed assertions: {result.failed_assertions}"
 
 
 # ===========================================================================
 # 8. Scenario 3 — Denied/unavailable permission → safety-aware degradation
 # ===========================================================================
+
 
 class TestScenario3PermissionGating:
     """
@@ -700,9 +696,7 @@ class TestScenario3PermissionGating:
         perm = grant_state.permission_safety_snapshot or {}
         # If snapshot was built, it should NOT be gated
         if perm:
-            assert perm.get("is_gated") is not True, (
-                f"Expected not gated after permission granted; snapshot={perm}"
-            )
+            assert perm.get("is_gated") is not True, f"Expected not gated after permission granted; snapshot={perm}"
 
     def test_permission_snapshot_present_after_denial(self):
         result = self._run_scenario()
@@ -719,17 +713,15 @@ class TestScenario3PermissionGating:
         # any_permission_missing or any_permission_denied should be True
         missing = perm.get("any_permission_missing", False)
         denied = perm.get("any_permission_denied", False)
-        assert missing or denied, (
-            f"Expected permission missing/denied after denial; snapshot={perm}"
-        )
+        assert missing or denied, f"Expected permission missing/denied after denial; snapshot={perm}"
 
     def test_route_degrades_to_text_only_after_permission_denial(self):
         result = self._run_scenario()
         last_state = result.steps[-1]
         route = last_state.route_dict or {}
-        assert route.get("route_type") == "text_only", (
-            f"Expected text_only fallback after permission denial; route={route}"
-        )
+        assert (
+            route.get("route_type") == "text_only"
+        ), f"Expected text_only fallback after permission denial; route={route}"
 
     def test_permission_snapshot_is_serialisable(self):
         result = self._run_scenario()
@@ -739,14 +731,13 @@ class TestScenario3PermissionGating:
 
     def test_all_declarative_assertions_passed(self):
         result = self._run_scenario()
-        assert result.all_assertions_passed, (
-            f"Failed assertions: {result.failed_assertions}"
-        )
+        assert result.all_assertions_passed, f"Failed assertions: {result.failed_assertions}"
 
 
 # ===========================================================================
 # 9. Scenario 4 — Operator override interacting with degraded runtime state
 # ===========================================================================
+
 
 class TestScenario4OperatorOverrideDegradedState:
     """
@@ -820,14 +811,13 @@ class TestScenario4OperatorOverrideDegradedState:
 
     def test_all_declarative_assertions_passed(self):
         result = self._run_scenario()
-        assert result.all_assertions_passed, (
-            f"Failed assertions: {result.failed_assertions}"
-        )
+        assert result.all_assertions_passed, f"Failed assertions: {result.failed_assertions}"
 
 
 # ===========================================================================
 # 10. Scenario 5 — Explainability timeline coherence across multi-step sequence
 # ===========================================================================
+
 
 class TestScenario5ExplainabilityTimelineCoherence:
     """
@@ -893,26 +883,20 @@ class TestScenario5ExplainabilityTimelineCoherence:
 
         result = self._run_scenario()
         last_state = result.steps[-1]
-        ScenarioAssertions.assert_timeline_has_event_kind(
-            last_state, "route_selection", min_count=1
-        )
+        ScenarioAssertions.assert_timeline_has_event_kind(last_state, "route_selection", min_count=1)
 
     def test_timeline_has_fallback_transition_event(self):
         from core.scenario_harness import ScenarioAssertions
 
         result = self._run_scenario()
         last_state = result.steps[-1]
-        ScenarioAssertions.assert_timeline_has_event_kind(
-            last_state, "fallback_transition", min_count=1
-        )
+        ScenarioAssertions.assert_timeline_has_event_kind(last_state, "fallback_transition", min_count=1)
 
     def test_timeline_event_count_at_least_three(self):
         result = self._run_scenario()
         last_state = result.steps[-1]
         tl = last_state.decision_timeline_snapshot or {}
-        assert tl.get("total_events", 0) >= 3, (
-            f"Expected >= 3 timeline events; got {tl.get('total_events')}"
-        )
+        assert tl.get("total_events", 0) >= 3, f"Expected >= 3 timeline events; got {tl.get('total_events')}"
 
     def test_explainability_snapshot_serialisable(self):
         result = self._run_scenario()
@@ -923,14 +907,13 @@ class TestScenario5ExplainabilityTimelineCoherence:
 
     def test_all_declarative_assertions_passed(self):
         result = self._run_scenario()
-        assert result.all_assertions_passed, (
-            f"Failed assertions: {result.failed_assertions}"
-        )
+        assert result.all_assertions_passed, f"Failed assertions: {result.failed_assertions}"
 
 
 # ===========================================================================
 # 11. Scenario 6 — Harness outputs stable enough for regression detection
 # ===========================================================================
+
 
 class TestScenario6RegressionStability:
     """
@@ -1013,9 +996,7 @@ class TestScenario6RegressionStability:
 
     def test_all_declarative_assertions_passed(self):
         result = self._build_full_scenario()
-        assert result.all_assertions_passed, (
-            f"Failed assertions: {result.failed_assertions}"
-        )
+        assert result.all_assertions_passed, f"Failed assertions: {result.failed_assertions}"
 
     def test_scenario_id_is_unique_per_run(self):
         from core.scenario_harness import ScenarioResult
@@ -1027,14 +1008,13 @@ class TestScenario6RegressionStability:
     def test_step_index_is_sequential(self):
         result = self._build_full_scenario()
         for idx, step_state in enumerate(result.steps):
-            assert step_state.step_index == idx, (
-                f"Expected step_index={idx}, got {step_state.step_index}"
-            )
+            assert step_state.step_index == idx, f"Expected step_index={idx}, got {step_state.step_index}"
 
 
 # ===========================================================================
 # 12. ScenarioAssertions helpers
 # ===========================================================================
+
 
 class TestScenarioAssertions:
     def _make_text_only_state(self):
@@ -1180,18 +1160,14 @@ class TestScenarioAssertions:
         from core.scenario_harness import ScenarioAssertions, ScenarioState
 
         state = ScenarioState()
-        state.source_registry_snapshot = {
-            "sources": [{"modality": "audio", "source_id": "mic_1"}]
-        }
+        state.source_registry_snapshot = {"sources": [{"modality": "audio", "source_id": "mic_1"}]}
         ScenarioAssertions.assert_source_registry_has_source(state, "audio")
 
     def test_assert_source_registry_has_source_fails_when_absent(self):
         from core.scenario_harness import ScenarioAssertions, ScenarioState
 
         state = ScenarioState()
-        state.source_registry_snapshot = {
-            "sources": [{"modality": "audio", "source_id": "mic_1"}]
-        }
+        state.source_registry_snapshot = {"sources": [{"modality": "audio", "source_id": "mic_1"}]}
         with pytest.raises(AssertionError):
             ScenarioAssertions.assert_source_registry_has_source(state, "video")
 

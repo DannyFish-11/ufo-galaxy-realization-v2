@@ -27,7 +27,6 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -58,6 +57,7 @@ def _did(prefix: str = "e2e") -> str:
 @pytest.fixture()
 def bridge():
     from galaxy_gateway.android_bridge import AndroidBridge
+
     return AndroidBridge()
 
 
@@ -74,18 +74,15 @@ class TestRegisterHeartbeatTaskResultChain:
         """CLOSED: device_register returns device_register_ack with success=True."""
         did = _did("reg")
         ws = _make_ws()
-        msg = _v3("device_register", did, platform="android", name="Test Phone",
-                   model="Pixel 7")
+        msg = _v3("device_register", did, platform="android", name="Test Phone", model="Pixel 7")
 
         ack = await bridge.handle_message(ws, msg)
 
         assert ack is not None, "CLOSED: device_register must return a response"
-        assert ack.get("type") == "device_register_ack", (
-            f"CLOSED: device_register must return device_register_ack; got {ack.get('type')!r}"
-        )
-        assert ack.get("success") is True, (
-            f"CLOSED: device_register_ack must carry success=True; got {ack!r}"
-        )
+        assert (
+            ack.get("type") == "device_register_ack"
+        ), f"CLOSED: device_register must return device_register_ack; got {ack.get('type')!r}"
+        assert ack.get("success") is True, f"CLOSED: device_register_ack must carry success=True; got {ack!r}"
         assert ack.get("device_id") == did
 
     @pytest.mark.asyncio
@@ -101,9 +98,9 @@ class TestRegisterHeartbeatTaskResultChain:
         hb_ack = await bridge.handle_message(ws, _v3("heartbeat", did))
 
         assert hb_ack is not None, "CLOSED: heartbeat must return a response"
-        assert hb_ack.get("type") == "heartbeat_ack", (
-            f"CLOSED: heartbeat must return heartbeat_ack; got {hb_ack.get('type')!r}"
-        )
+        assert (
+            hb_ack.get("type") == "heartbeat_ack"
+        ), f"CLOSED: heartbeat must return heartbeat_ack; got {hb_ack.get('type')!r}"
 
     @pytest.mark.asyncio
     async def test_task_result_dispatched_to_handler(self, bridge: Any) -> None:
@@ -118,6 +115,7 @@ class TestRegisterHeartbeatTaskResultChain:
         Note: downstream truth-chain steps (reconcile, memory backflow) are best-effort.
         """
         import json as _json
+
         did = _did("tr")
         task_id = f"task-{uuid.uuid4().hex[:8]}"
         ws = _make_ws()
@@ -128,18 +126,22 @@ class TestRegisterHeartbeatTaskResultChain:
         # continuity gate will accept the subsequent task_result.
         runtime_session_id = reg_ack.get("runtime_attachment_session_id", "")
 
-        tr_ack = await bridge.handle_message(ws, _v3(
-            "task_result", did,
-            task_id=task_id,
-            status="completed",
-            payload={"output": "hello"},
-            runtime_session_id=runtime_session_id,
-        ))
+        tr_ack = await bridge.handle_message(
+            ws,
+            _v3(
+                "task_result",
+                did,
+                task_id=task_id,
+                status="completed",
+                payload={"output": "hello"},
+                runtime_session_id=runtime_session_id,
+            ),
+        )
 
         # Must NOT be UNKNOWN_MESSAGE_TYPE regardless of continuity gate outcome.
-        assert "UNKNOWN_MESSAGE_TYPE" not in _json.dumps(tr_ack or {}), (
-            f"PARTIAL: task_result must not trigger UNKNOWN_MESSAGE_TYPE; got {tr_ack!r}"
-        )
+        assert "UNKNOWN_MESSAGE_TYPE" not in _json.dumps(
+            tr_ack or {}
+        ), f"PARTIAL: task_result must not trigger UNKNOWN_MESSAGE_TYPE; got {tr_ack!r}"
         # If the continuity gate allowed (tr_ack is not None), check the ACK type.
         if tr_ack is not None:
             assert tr_ack.get("type") == "task_result_ack", (
@@ -161,18 +163,18 @@ class TestRegisterHeartbeatTaskResultChain:
 
         await bridge.handle_message(ws, _v3("device_register", did))
 
-        gr_ack = await bridge.handle_message(ws, _v3("goal_result", did, task_id=task_id,
-                                                      status="failed"))
+        gr_ack = await bridge.handle_message(ws, _v3("goal_result", did, task_id=task_id, status="failed"))
 
         # goal_result should NOT return an error-type response
-        assert gr_ack is None or gr_ack.get("type") != "error", (
-            f"CLOSED: goal_result must not return an error response; got {gr_ack!r}"
-        )
+        assert (
+            gr_ack is None or gr_ack.get("type") != "error"
+        ), f"CLOSED: goal_result must not return an error response; got {gr_ack!r}"
         # Specifically must NOT be UNKNOWN_MESSAGE_TYPE
         import json
-        assert "UNKNOWN_MESSAGE_TYPE" not in json.dumps(gr_ack or {}), (
-            f"CLOSED: goal_result must not trigger UNKNOWN_MESSAGE_TYPE; got {gr_ack!r}"
-        )
+
+        assert "UNKNOWN_MESSAGE_TYPE" not in json.dumps(
+            gr_ack or {}
+        ), f"CLOSED: goal_result must not trigger UNKNOWN_MESSAGE_TYPE; got {gr_ack!r}"
 
 
 # ===========================================================================
@@ -190,16 +192,17 @@ class TestAndroidReportTypesNowHandled:
     """
 
     @pytest.mark.asyncio
-    @pytest.mark.parametrize("android_type", [
-        "cancel_result",
-        "device_readiness_report",
-        "device_governance_report",
-        "device_acceptance_report",
-        "device_strategy_report",
-    ])
-    async def test_android_report_type_not_unknown(
-        self, bridge: Any, android_type: str
-    ) -> None:
+    @pytest.mark.parametrize(
+        "android_type",
+        [
+            "cancel_result",
+            "device_readiness_report",
+            "device_governance_report",
+            "device_acceptance_report",
+            "device_strategy_report",
+        ],
+    )
+    async def test_android_report_type_not_unknown(self, bridge: Any, android_type: str) -> None:
         """CLOSED: Android report type must not return UNKNOWN_MESSAGE_TYPE."""
         did = _did("rpt")
         ws = _make_ws()
@@ -210,25 +213,27 @@ class TestAndroidReportTypesNowHandled:
         rpt_ack = await bridge.handle_message(ws, _v3(android_type, did, payload={}))
 
         import json
+
         assert "UNKNOWN_MESSAGE_TYPE" not in json.dumps(rpt_ack or {}), (
             f"CLOSED: Android type '{android_type}' must not trigger UNKNOWN_MESSAGE_TYPE; "
             f"got {rpt_ack!r}.  This was fixed in the joint audit PR."
         )
-        assert rpt_ack is None or rpt_ack.get("type") != "error", (
-            f"CLOSED: Android type '{android_type}' must not return error; got {rpt_ack!r}"
-        )
+        assert (
+            rpt_ack is None or rpt_ack.get("type") != "error"
+        ), f"CLOSED: Android type '{android_type}' must not return error; got {rpt_ack!r}"
 
     @pytest.mark.asyncio
-    @pytest.mark.parametrize("android_type", [
-        "cancel_result",
-        "device_readiness_report",
-        "device_governance_report",
-        "device_acceptance_report",
-        "device_strategy_report",
-    ])
-    async def test_android_report_type_returns_generic_ack(
-        self, bridge: Any, android_type: str
-    ) -> None:
+    @pytest.mark.parametrize(
+        "android_type",
+        [
+            "cancel_result",
+            "device_readiness_report",
+            "device_governance_report",
+            "device_acceptance_report",
+            "device_strategy_report",
+        ],
+    )
+    async def test_android_report_type_returns_generic_ack(self, bridge: Any, android_type: str) -> None:
         """CLOSED: Android report type returns a structured generic ACK."""
         did = _did("rpt-ack")
         ws = _make_ws()
@@ -237,20 +242,15 @@ class TestAndroidReportTypesNowHandled:
 
         rpt_ack = await bridge.handle_message(ws, _v3(android_type, did, payload={}))
 
-        assert rpt_ack is not None, (
-            f"CLOSED: Android type '{android_type}' must return a response (got None)"
-        )
+        assert rpt_ack is not None, f"CLOSED: Android type '{android_type}' must return a response (got None)"
         expected_ack_type = f"{android_type}_ack"
         assert rpt_ack.get("type") == expected_ack_type, (
-            f"CLOSED: Android type '{android_type}' must return '{expected_ack_type}'; "
-            f"got {rpt_ack.get('type')!r}"
+            f"CLOSED: Android type '{android_type}' must return '{expected_ack_type}'; " f"got {rpt_ack.get('type')!r}"
         )
         assert rpt_ack.get("status") == "received"
 
     @pytest.mark.asyncio
-    async def test_device_acceptance_report_ingested_into_v2_evidence_store(
-        self, bridge: Any
-    ) -> None:
+    async def test_device_acceptance_report_ingested_into_v2_evidence_store(self, bridge: Any) -> None:
         from core.android_acceptance_evidence_store import (
             clear_device_acceptance_evidence,
             get_latest_device_acceptance_evidence_dict,

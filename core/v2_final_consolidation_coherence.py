@@ -204,6 +204,7 @@ def _probe_ingress_continuity_coherence() -> CoherenceDimensionResult:
     if _try_import("core.desktop_presence_runtime"):
         try:
             import importlib as _il
+
             _mod = _il.import_module("core.desktop_presence_runtime")
             src_path = getattr(_mod, "__file__", "") or ""
             if src_path:
@@ -230,10 +231,11 @@ def _probe_ingress_continuity_coherence() -> CoherenceDimensionResult:
     if _try_import("core.unified_continuity_legality_authority"):
         try:
             from core.unified_continuity_legality_authority import (  # type: ignore[import]
-                evaluate_continuity_legality,
                 ContinuityLegalityContext,
                 ContinuityLegalityPath,
+                evaluate_continuity_legality,
             )
+
             ctx = ContinuityLegalityContext(
                 device_id="probe_device",
                 runtime_session_id="probe_rsess",
@@ -247,11 +249,7 @@ def _probe_ingress_continuity_coherence() -> CoherenceDimensionResult:
                 else next(iter(ContinuityLegalityPath))
             )
             report = evaluate_continuity_legality(_path, ctx)
-            verdict_str = (
-                report.verdict.value
-                if hasattr(report.verdict, "value")
-                else str(report.verdict)
-            )
+            verdict_str = report.verdict.value if hasattr(report.verdict, "value") else str(report.verdict)
             evidence.append(
                 "core.unified_continuity_legality_authority: "
                 "evaluate_continuity_legality() callable and returns a report "
@@ -259,9 +257,7 @@ def _probe_ingress_continuity_coherence() -> CoherenceDimensionResult:
             )
             modules.append("core.unified_continuity_legality_authority")
         except Exception as exc:
-            gaps.append(
-                f"core.unified_continuity_legality_authority probe failed: {exc}"
-            )
+            gaps.append(f"core.unified_continuity_legality_authority probe failed: {exc}")
     else:
         gaps.append("core.unified_continuity_legality_authority not importable")
 
@@ -269,6 +265,7 @@ def _probe_ingress_continuity_coherence() -> CoherenceDimensionResult:
     if _try_import("core.canonical_dispatch_slot_authority"):
         try:
             import importlib as _il
+
             _mod = _il.import_module("core.canonical_dispatch_slot_authority")
             src_path = getattr(_mod, "__file__", "") or ""
             if src_path:
@@ -287,9 +284,7 @@ def _probe_ingress_continuity_coherence() -> CoherenceDimensionResult:
                         "evaluate_continuity_legality — continuity gate not consulted"
                     )
         except Exception as exc:
-            gaps.append(
-                f"core.canonical_dispatch_slot_authority source probe failed: {exc}"
-            )
+            gaps.append(f"core.canonical_dispatch_slot_authority source probe failed: {exc}")
     else:
         gaps.append("core.canonical_dispatch_slot_authority not importable")
 
@@ -322,9 +317,7 @@ def _probe_orchestration_runtime_truth_coherence() -> CoherenceDimensionResult:
             )
             modules.append("core.unified_orchestration_spine")
         except Exception as exc:
-            gaps.append(
-                f"core.unified_orchestration_spine probe failed: {exc}"
-            )
+            gaps.append(f"core.unified_orchestration_spine probe failed: {exc}")
     else:
         gaps.append("core.unified_orchestration_spine not importable")
 
@@ -334,6 +327,7 @@ def _probe_orchestration_runtime_truth_coherence() -> CoherenceDimensionResult:
             from core.orchestration_review_surface import (  # type: ignore[import]
                 build_orchestration_review_snapshot,
             )
+
             snap = build_orchestration_review_snapshot()
             evidence.append(
                 "core.orchestration_review_surface: build_orchestration_review_snapshot() "
@@ -342,9 +336,7 @@ def _probe_orchestration_runtime_truth_coherence() -> CoherenceDimensionResult:
             )
             modules.append("core.orchestration_review_surface")
         except Exception as exc:
-            gaps.append(
-                f"core.orchestration_review_surface probe failed: {exc}"
-            )
+            gaps.append(f"core.orchestration_review_surface probe failed: {exc}")
     else:
         gaps.append("core.orchestration_review_surface not importable")
 
@@ -359,9 +351,7 @@ def _probe_orchestration_runtime_truth_coherence() -> CoherenceDimensionResult:
             )
             modules.append("core.routing_explanation.live_decision")
         except Exception as exc:
-            gaps.append(
-                f"core.routing_explanation.live_decision probe failed: {exc}"
-            )
+            gaps.append(f"core.routing_explanation.live_decision probe failed: {exc}")
     else:
         gaps.append("core.routing_explanation.live_decision not importable")
 
@@ -371,6 +361,7 @@ def _probe_orchestration_runtime_truth_coherence() -> CoherenceDimensionResult:
             from core.routing_observability import (  # type: ignore[import]
                 get_control_loop_metrics,
             )
+
             metrics = get_control_loop_metrics()
             evidence.append(
                 "core.routing_observability: routing decision analytics available; "
@@ -388,6 +379,7 @@ def _probe_orchestration_runtime_truth_coherence() -> CoherenceDimensionResult:
             from core.hybrid_orchestration_continuity import (  # type: ignore[import]
                 get_continuity_registry,
             )
+
             reg = get_continuity_registry()
             evidence.append(
                 "core.hybrid_orchestration_continuity: hybrid execution lifecycle "
@@ -423,6 +415,7 @@ def _probe_manifestation_operator_coherence() -> CoherenceDimensionResult:
             from core.operator_surface import (  # type: ignore[import]
                 OperatorSnapshot,
             )
+
             snap = OperatorSnapshot()
             has_shell = hasattr(snap, "desktop_shell_state")
             has_tristate = hasattr(snap, "presence_tristate")
@@ -443,9 +436,7 @@ def _probe_manifestation_operator_coherence() -> CoherenceDimensionResult:
                     missing.append("presence_tristate")
                 if not has_msum:
                     missing.append("manifestation_summary")
-                gaps.append(
-                    f"OperatorSnapshot missing PR-8 V2 fields: {', '.join(missing)}"
-                )
+                gaps.append(f"OperatorSnapshot missing PR-8 V2 fields: {', '.join(missing)}")
 
             # to_dict() includes manifestation fields
             snap_dict = snap.to_dict()
@@ -456,9 +447,7 @@ def _probe_manifestation_operator_coherence() -> CoherenceDimensionResult:
                     "manifestation state)"
                 )
             else:
-                gaps.append(
-                    "OperatorSnapshot.to_dict() does not include manifestation fields"
-                )
+                gaps.append("OperatorSnapshot.to_dict() does not include manifestation fields")
         except Exception as exc:
             gaps.append(f"core.operator_surface probe failed: {exc}")
     else:
@@ -470,6 +459,7 @@ def _probe_manifestation_operator_coherence() -> CoherenceDimensionResult:
             from core.presence.presence_director import (  # type: ignore[import]
                 get_presence_director,
             )
+
             director = get_presence_director()
             evidence.append(
                 "core.presence.presence_director: presence director singleton "
@@ -518,6 +508,7 @@ def _probe_android_truth_path_coherence() -> CoherenceDimensionResult:
             from core.android_device_state_store import (  # type: ignore[import]
                 get_android_device_state_store,
             )
+
             store = get_android_device_state_store()
             evidence.append(
                 "core.android_device_state_store: canonical V2 truth store for "
@@ -548,15 +539,13 @@ def _probe_android_truth_path_coherence() -> CoherenceDimensionResult:
     if _try_import("core.operator_surface"):
         try:
             import importlib as _il
+
             _mod = _il.import_module("core.operator_surface")
             src_path = getattr(_mod, "__file__", "") or ""
             if src_path:
                 with open(src_path, encoding="utf-8") as _fh:
                     _src = _fh.read()
-                if (
-                    "android_ecosystem" in _src
-                    and "get_device_ecosystem_summary" in _src
-                ):
+                if "android_ecosystem" in _src and "get_device_ecosystem_summary" in _src:
                     evidence.append(
                         "core.operator_surface: OperatorSnapshot.android_ecosystem "
                         "is populated from get_device_ecosystem_summary() via the "
@@ -565,13 +554,10 @@ def _probe_android_truth_path_coherence() -> CoherenceDimensionResult:
                     modules.append("core.operator_surface (android_ecosystem)")
                 else:
                     gaps.append(
-                        "core.operator_surface: android_ecosystem not populated "
-                        "from get_device_ecosystem_summary()"
+                        "core.operator_surface: android_ecosystem not populated " "from get_device_ecosystem_summary()"
                     )
         except Exception as exc:
-            gaps.append(
-                f"core.operator_surface android_ecosystem probe failed: {exc}"
-            )
+            gaps.append(f"core.operator_surface android_ecosystem probe failed: {exc}")
     else:
         gaps.append("core.operator_surface not importable (android_ecosystem check)")
 
@@ -596,10 +582,11 @@ def _probe_completion_status_coherence() -> CoherenceDimensionResult:
     if _try_import("core.system_completion_status"):
         try:
             from core.system_completion_status import (  # type: ignore[import]
-                SystemCompletionStatus,
-                SYSTEM_COMPLETION_STATUS_PR10_V2_SENTINEL,
                 MAX_CLOSURE_PCT_WITHOUT_FULL_VERDICT,
+                SYSTEM_COMPLETION_STATUS_PR10_V2_SENTINEL,
+                SystemCompletionStatus,
             )
+
             # Verify key attributes without calling the heavy build function
             # (build_system_completion_status calls this module → circular import guard)
             s = SystemCompletionStatus()
@@ -622,9 +609,7 @@ def _probe_completion_status_coherence() -> CoherenceDimensionResult:
                     missing.append("status_alignment")
                 if not has_is_fully_closed:
                     missing.append("is_fully_closed")
-                gaps.append(
-                    f"SystemCompletionStatus missing PR-10 V2 fields: {', '.join(missing)}"
-                )
+                gaps.append(f"SystemCompletionStatus missing PR-10 V2 fields: {', '.join(missing)}")
 
             if has_pr10_sentinel:
                 evidence.append(
@@ -632,9 +617,7 @@ def _probe_completion_status_coherence() -> CoherenceDimensionResult:
                     "(records that module includes V2 consolidation coherence check)"
                 )
             else:
-                gaps.append(
-                    "SYSTEM_COMPLETION_STATUS_PR10_V2_SENTINEL missing or empty"
-                )
+                gaps.append("SYSTEM_COMPLETION_STATUS_PR10_V2_SENTINEL missing or empty")
 
             # Verify the closure cap guard against false 100% reporting
             if MAX_CLOSURE_PCT_WITHOUT_FULL_VERDICT <= 99.0:
@@ -656,6 +639,7 @@ def _probe_completion_status_coherence() -> CoherenceDimensionResult:
             from core.system_final_acceptance_verdict import (  # type: ignore[import]
                 SystemAcceptanceReport,
             )
+
             # Check structure without triggering heavy build
             r = SystemAcceptanceReport()
             if hasattr(r, "is_fully_operational") and hasattr(r, "verdict"):
@@ -676,7 +660,10 @@ def _probe_completion_status_coherence() -> CoherenceDimensionResult:
             from core.dual_repo_system_completeness_review import (  # type: ignore[import]
                 CompletenessVerdict,
             )
-            if hasattr(CompletenessVerdict, "fully_closed") and hasattr(CompletenessVerdict, "partial_closure_gaps_present"):
+
+            if hasattr(CompletenessVerdict, "fully_closed") and hasattr(
+                CompletenessVerdict, "partial_closure_gaps_present"
+            ):
                 evidence.append(
                     "core.dual_repo_system_completeness_review: "
                     "CompletenessVerdict enum has fully_closed and "
@@ -685,9 +672,7 @@ def _probe_completion_status_coherence() -> CoherenceDimensionResult:
                 )
             modules.append("core.dual_repo_system_completeness_review")
         except Exception as exc:
-            gaps.append(
-                f"core.dual_repo_system_completeness_review probe failed: {exc}"
-            )
+            gaps.append(f"core.dual_repo_system_completeness_review probe failed: {exc}")
     else:
         gaps.append("core.dual_repo_system_completeness_review not importable")
 
@@ -747,10 +732,7 @@ def assess_v2_consolidation_coherence() -> V2ConsolidationCoherenceReport:
     if overall_coherent:
         lines.append("结论: 所有维度一致 — V2 body network 体验已收口")
     else:
-        lines.append(
-            f"结论: {incoherent_count} 个维度存在待解决差距; "
-            "其余维度已一致"
-        )
+        lines.append(f"结论: {incoherent_count} 个维度存在待解决差距; " "其余维度已一致")
     summary = "\n".join(lines)
 
     return V2ConsolidationCoherenceReport(
@@ -768,9 +750,7 @@ def assess_v2_consolidation_coherence() -> V2ConsolidationCoherenceReport:
 _CACHED_REPORT: Optional[V2ConsolidationCoherenceReport] = None
 
 
-def get_v2_consolidation_coherence_report(
-    *, force_rebuild: bool = False
-) -> V2ConsolidationCoherenceReport:
+def get_v2_consolidation_coherence_report(*, force_rebuild: bool = False) -> V2ConsolidationCoherenceReport:
     """Return the process-global consolidation coherence report.
 
     Parameters

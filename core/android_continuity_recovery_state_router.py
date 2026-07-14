@@ -348,12 +348,8 @@ _PHASE_TO_POLICY: Dict[AndroidRecoveryPhase, str] = {
     AndroidRecoveryPhase.recovery_in_progress: RECOVERY_IN_PROGRESS_IS_TRANSIENT_POLICY,
     AndroidRecoveryPhase.recovered_inflight: RECOVERED_INFLIGHT_IS_ADVISORY_ONLY_POLICY,
     AndroidRecoveryPhase.stale_recovery_artifact: STALE_RECOVERY_ARTIFACT_MUST_BE_REJECTED_POLICY,
-    AndroidRecoveryPhase.reconciliation_required: (
-        RECONCILIATION_REQUIRED_MUST_TRIGGER_RECONCILIATION_PATH_POLICY
-    ),
-    AndroidRecoveryPhase.lost_inflight: (
-        LOST_INFLIGHT_REQUIRES_RECONCILIATION_OR_CLOSURE_REVIEW_POLICY
-    ),
+    AndroidRecoveryPhase.reconciliation_required: (RECONCILIATION_REQUIRED_MUST_TRIGGER_RECONCILIATION_PATH_POLICY),
+    AndroidRecoveryPhase.lost_inflight: (LOST_INFLIGHT_REQUIRES_RECONCILIATION_OR_CLOSURE_REVIEW_POLICY),
     AndroidRecoveryPhase.unknown: UNKNOWN_RECOVERY_PHASE_MUST_BE_HANDLED_CONSERVATIVELY_POLICY,
 }
 
@@ -439,16 +435,20 @@ class RecoveryStateRoutingDecision:
 # ---------------------------------------------------------------------------
 
 # Routes where canonical closure is explicitly blocked
-_CLOSURE_BLOCKED_ROUTES = frozenset({
-    V2RecoveryRoute.reject_stale_artifact,
-    V2RecoveryRoute.trigger_reconciliation,
-    V2RecoveryRoute.require_closure_review,
-})
+_CLOSURE_BLOCKED_ROUTES = frozenset(
+    {
+        V2RecoveryRoute.reject_stale_artifact,
+        V2RecoveryRoute.trigger_reconciliation,
+        V2RecoveryRoute.require_closure_review,
+    }
+)
 
 # Routes where evidence is strictly advisory
-_ADVISORY_ONLY_ROUTES = frozenset({
-    V2RecoveryRoute.accept_advisory_evidence,
-})
+_ADVISORY_ONLY_ROUTES = frozenset(
+    {
+        V2RecoveryRoute.accept_advisory_evidence,
+    }
+)
 
 
 def route_android_recovery_state(
@@ -484,9 +484,7 @@ def route_android_recovery_state(
         Typed, serialisable routing decision.
     """
     route = _PHASE_TO_ROUTE.get(phase, V2RecoveryRoute.accept_advisory_evidence)
-    policy = _PHASE_TO_POLICY.get(
-        phase, UNKNOWN_RECOVERY_PHASE_MUST_BE_HANDLED_CONSERVATIVELY_POLICY
-    )
+    policy = _PHASE_TO_POLICY.get(phase, UNKNOWN_RECOVERY_PHASE_MUST_BE_HANDLED_CONSERVATIVELY_POLICY)
     is_blocked = route in _CLOSURE_BLOCKED_ROUTES
     is_advisory = route in _ADVISORY_ONLY_ROUTES
     is_degraded = phase == AndroidRecoveryPhase.unknown

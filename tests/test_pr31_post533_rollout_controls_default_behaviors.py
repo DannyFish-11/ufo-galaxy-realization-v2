@@ -59,11 +59,11 @@ import pytest
 
 try:
     from core.runtime.source_dispatch_orchestrator import (
-        ROLLOUT_CONTROLS_DEFAULT_BEHAVIORS_SAFE_RELEASE_PR31_SENTINEL,
+        DELEGATED_FALLBACK_RELEASE_OPERATION_CONSISTENCY_PR31_POLICY,
         FEATURE_TOGGLE_DEFAULT_BEHAVIOR_ROLLOUT_CONTROL_PR31_POLICY,
         KILL_SWITCH_SAFE_DISABLE_ROLLBACK_BEHAVIOR_PR31_POLICY,
+        ROLLOUT_CONTROLS_DEFAULT_BEHAVIORS_SAFE_RELEASE_PR31_SENTINEL,
         SELECTION_REGISTRATION_READINESS_CAPABILITY_SAFE_DEFAULTS_PR31_POLICY,
-        DELEGATED_FALLBACK_RELEASE_OPERATION_CONSISTENCY_PR31_POLICY,
     )
 
     _ORCHESTRATOR_AVAILABLE = True
@@ -80,13 +80,11 @@ except ImportError:
     _PROJECTION_AVAILABLE = False
 
 try:
-    from core.runtime import (
-        ROLLOUT_CONTROLS_DEFAULT_BEHAVIORS_SAFE_RELEASE_PR31_SENTINEL as _rt_sentinel,
-        FEATURE_TOGGLE_DEFAULT_BEHAVIOR_ROLLOUT_CONTROL_PR31_POLICY as _rt_toggle,
-        KILL_SWITCH_SAFE_DISABLE_ROLLBACK_BEHAVIOR_PR31_POLICY as _rt_kill_switch,
-        SELECTION_REGISTRATION_READINESS_CAPABILITY_SAFE_DEFAULTS_PR31_POLICY as _rt_safe_defaults,
-        DELEGATED_FALLBACK_RELEASE_OPERATION_CONSISTENCY_PR31_POLICY as _rt_delegated,
-    )
+    from core.runtime import DELEGATED_FALLBACK_RELEASE_OPERATION_CONSISTENCY_PR31_POLICY as _rt_delegated
+    from core.runtime import FEATURE_TOGGLE_DEFAULT_BEHAVIOR_ROLLOUT_CONTROL_PR31_POLICY as _rt_toggle
+    from core.runtime import KILL_SWITCH_SAFE_DISABLE_ROLLBACK_BEHAVIOR_PR31_POLICY as _rt_kill_switch
+    from core.runtime import ROLLOUT_CONTROLS_DEFAULT_BEHAVIORS_SAFE_RELEASE_PR31_SENTINEL as _rt_sentinel
+    from core.runtime import SELECTION_REGISTRATION_READINESS_CAPABILITY_SAFE_DEFAULTS_PR31_POLICY as _rt_safe_defaults
 
     _RUNTIME_EXPORTS_AVAILABLE = True
 except ImportError:
@@ -114,9 +112,7 @@ _KNOWN_FAILURE_KINDS = frozenset(
 
 _KNOWN_READINESS_VALUES = frozenset({"ready", "recovering", "degraded"})
 
-_KNOWN_REJECTION_STAGES = frozenset(
-    {"validation", "deduplication", "capacity", "posture_check", "capability_check"}
-)
+_KNOWN_REJECTION_STAGES = frozenset({"validation", "deduplication", "capacity", "posture_check", "capability_check"})
 
 _KNOWN_TOGGLE_STATES = frozenset({"on", "off", "kill_switched", "rollout_limited"})
 
@@ -249,9 +245,7 @@ def _make_fallback_result(
 class TestOrchestratorPR31Sentinels:
     def test_main_sentinel_present(self) -> None:
         assert ROLLOUT_CONTROLS_DEFAULT_BEHAVIORS_SAFE_RELEASE_PR31_SENTINEL
-        assert isinstance(
-            ROLLOUT_CONTROLS_DEFAULT_BEHAVIORS_SAFE_RELEASE_PR31_SENTINEL, str
-        )
+        assert isinstance(ROLLOUT_CONTROLS_DEFAULT_BEHAVIORS_SAFE_RELEASE_PR31_SENTINEL, str)
 
     def test_toggle_policy_present(self) -> None:
         assert FEATURE_TOGGLE_DEFAULT_BEHAVIOR_ROLLOUT_CONTROL_PR31_POLICY
@@ -263,9 +257,7 @@ class TestOrchestratorPR31Sentinels:
 
     def test_safe_defaults_policy_present(self) -> None:
         assert SELECTION_REGISTRATION_READINESS_CAPABILITY_SAFE_DEFAULTS_PR31_POLICY
-        assert isinstance(
-            SELECTION_REGISTRATION_READINESS_CAPABILITY_SAFE_DEFAULTS_PR31_POLICY, str
-        )
+        assert isinstance(SELECTION_REGISTRATION_READINESS_CAPABILITY_SAFE_DEFAULTS_PR31_POLICY, str)
 
     def test_delegated_fallback_policy_present(self) -> None:
         assert DELEGATED_FALLBACK_RELEASE_OPERATION_CONSISTENCY_PR31_POLICY
@@ -631,9 +623,7 @@ class TestRegistrationSafeDefaults:
         )
         assert isinstance(record["rejection_stage"], str)
 
-    @pytest.mark.parametrize(
-        "stage", sorted(_KNOWN_REJECTION_STAGES)
-    )
+    @pytest.mark.parametrize("stage", sorted(_KNOWN_REJECTION_STAGES))
     def test_all_rejection_stages_are_strings(self, stage: str) -> None:
         assert isinstance(stage, str)
 
@@ -792,9 +782,7 @@ class TestDelegatedReleaseFallbackDeterminism:
             assert result["fallback_path"] in _KNOWN_FALLBACK_PATHS
 
     def test_rollout_limited_trigger_uses_existing_fallback_semantics(self) -> None:
-        result = _make_fallback_result(
-            fallback_path="local", trigger="rollout_limited"
-        )
+        result = _make_fallback_result(fallback_path="local", trigger="rollout_limited")
         assert result["fallback_path"] in _KNOWN_FALLBACK_PATHS
 
     def test_fallback_result_does_not_introduce_new_path_authority(self) -> None:
@@ -831,9 +819,7 @@ class TestDelegatedReleaseGatewayNoLeakage:
             kill_switch_active=True,
         )
         for key in result:
-            assert key in self._ALLOWED_OBSERVABLE_FIELDS, (
-                f"Unexpected field in gateway result: {key!r}"
-            )
+            assert key in self._ALLOWED_OBSERVABLE_FIELDS, f"Unexpected field in gateway result: {key!r}"
 
     def test_observability_context_does_not_expose_flag_config(self) -> None:
         """observability_context MUST NOT contain raw flag configuration data."""
@@ -1060,6 +1046,6 @@ class TestNoParallelReleaseAuthority:
         for p in policies:
             p_lower = p.lower()
             if "duplicate" in p_lower:
-                assert "not" in p_lower or "no duplicate" in p_lower or "without" in p_lower, (
-                    f"Policy may introduce duplicate subsystem: {p[:80]!r}"
-                )
+                assert (
+                    "not" in p_lower or "no duplicate" in p_lower or "without" in p_lower
+                ), f"Policy may introduce duplicate subsystem: {p[:80]!r}"

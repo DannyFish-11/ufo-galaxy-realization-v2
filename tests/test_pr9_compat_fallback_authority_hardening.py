@@ -55,7 +55,6 @@ from typing import Any, Dict, List
 
 import pytest
 
-
 # ===========================================================================
 # A. Module importable; authority and PR-9 sentinel present
 # ===========================================================================
@@ -69,6 +68,7 @@ class TestModuleSentinels:
         from core.compat_fallback_authority_guard import (
             COMPAT_FALLBACK_AUTHORITY_GUARD_IS_AUTHORITY,
         )
+
         assert isinstance(COMPAT_FALLBACK_AUTHORITY_GUARD_IS_AUTHORITY, str)
         assert len(COMPAT_FALLBACK_AUTHORITY_GUARD_IS_AUTHORITY) > 0
         assert "PR-9" in COMPAT_FALLBACK_AUTHORITY_GUARD_IS_AUTHORITY
@@ -77,6 +77,7 @@ class TestModuleSentinels:
         from core.compat_fallback_authority_guard import (
             COMPAT_FALLBACK_AUTHORITY_GUARD_PR9_SENTINEL,
         )
+
         assert isinstance(COMPAT_FALLBACK_AUTHORITY_GUARD_PR9_SENTINEL, str)
         assert "PR9" in COMPAT_FALLBACK_AUTHORITY_GUARD_PR9_SENTINEL
         assert "authority-hardening" in COMPAT_FALLBACK_AUTHORITY_GUARD_PR9_SENTINEL
@@ -92,6 +93,7 @@ class TestPolicySentinels:
         from core.compat_fallback_authority_guard import (
             CANONICAL_AUTHORITY_MUST_BE_PRIMARY_DECISION_MAKER_POLICY,
         )
+
         assert isinstance(CANONICAL_AUTHORITY_MUST_BE_PRIMARY_DECISION_MAKER_POLICY, str)
         assert "canonical" in CANONICAL_AUTHORITY_MUST_BE_PRIMARY_DECISION_MAKER_POLICY.lower()
         assert "primary" in CANONICAL_AUTHORITY_MUST_BE_PRIMARY_DECISION_MAKER_POLICY.lower()
@@ -100,6 +102,7 @@ class TestPolicySentinels:
         from core.compat_fallback_authority_guard import (
             COMPAT_FALLBACK_MAY_ONLY_OBSERVE_OR_ASSIST_WITHIN_EXPLICIT_SCOPE_POLICY,
         )
+
         assert isinstance(
             COMPAT_FALLBACK_MAY_ONLY_OBSERVE_OR_ASSIST_WITHIN_EXPLICIT_SCOPE_POLICY,
             str,
@@ -110,6 +113,7 @@ class TestPolicySentinels:
         from core.compat_fallback_authority_guard import (
             UNBOUND_COMPAT_INFLUENCE_IS_POLICY_VIOLATION_POLICY,
         )
+
         assert isinstance(UNBOUND_COMPAT_INFLUENCE_IS_POLICY_VIOLATION_POLICY, str)
         assert "violation" in UNBOUND_COMPAT_INFLUENCE_IS_POLICY_VIOLATION_POLICY.lower()
 
@@ -117,6 +121,7 @@ class TestPolicySentinels:
         from core.compat_fallback_authority_guard import (
             FALLBACK_MUST_NOT_SILENTLY_BECOME_CANONICAL_POLICY,
         )
+
         assert isinstance(FALLBACK_MUST_NOT_SILENTLY_BECOME_CANONICAL_POLICY, str)
         assert "fallback" in FALLBACK_MUST_NOT_SILENTLY_BECOME_CANONICAL_POLICY.lower()
         assert "canonical" in FALLBACK_MUST_NOT_SILENTLY_BECOME_CANONICAL_POLICY.lower()
@@ -130,22 +135,27 @@ class TestPolicySentinels:
 class TestCompatInfluenceRole:
     def test_observer_value(self):
         from core.compat_fallback_authority_guard import CompatInfluenceRole
+
         assert CompatInfluenceRole.observer.value == "observer"
 
     def test_bounded_assist_value(self):
         from core.compat_fallback_authority_guard import CompatInfluenceRole
+
         assert CompatInfluenceRole.bounded_assist.value == "bounded_assist"
 
     def test_degraded_fallback_value(self):
         from core.compat_fallback_authority_guard import CompatInfluenceRole
+
         assert CompatInfluenceRole.degraded_fallback.value == "degraded_fallback"
 
     def test_unbound_influence_value(self):
         from core.compat_fallback_authority_guard import CompatInfluenceRole
+
         assert CompatInfluenceRole.unbound_influence.value == "unbound_influence"
 
     def test_all_four_roles_present(self):
         from core.compat_fallback_authority_guard import CompatInfluenceRole
+
         expected = {"observer", "bounded_assist", "degraded_fallback", "unbound_influence"}
         actual = {r.value for r in CompatInfluenceRole}
         assert expected == actual
@@ -159,22 +169,27 @@ class TestCompatInfluenceRole:
 class TestCompatInfluenceBoundingStatus:
     def test_explicitly_bounded_value(self):
         from core.compat_fallback_authority_guard import CompatInfluenceBoundingStatus
+
         assert CompatInfluenceBoundingStatus.EXPLICITLY_BOUNDED.value == "explicitly_bounded"
 
     def test_scope_limited_value(self):
         from core.compat_fallback_authority_guard import CompatInfluenceBoundingStatus
+
         assert CompatInfluenceBoundingStatus.SCOPE_LIMITED.value == "scope_limited"
 
     def test_unbounded_value(self):
         from core.compat_fallback_authority_guard import CompatInfluenceBoundingStatus
+
         assert CompatInfluenceBoundingStatus.UNBOUNDED.value == "unbounded"
 
     def test_retired_value(self):
         from core.compat_fallback_authority_guard import CompatInfluenceBoundingStatus
+
         assert CompatInfluenceBoundingStatus.RETIRED.value == "retired"
 
     def test_all_four_statuses_present(self):
         from core.compat_fallback_authority_guard import CompatInfluenceBoundingStatus
+
         expected = {"explicitly_bounded", "scope_limited", "unbounded", "retired"}
         actual = {s.value for s in CompatInfluenceBoundingStatus}
         assert expected == actual
@@ -188,26 +203,32 @@ class TestCompatInfluenceBoundingStatus:
 class TestCompatInfluenceVerdict:
     def test_canonical_authority_value(self):
         from core.compat_fallback_authority_guard import CompatInfluenceVerdict
+
         assert CompatInfluenceVerdict.CANONICAL_AUTHORITY.value == "canonical_authority"
 
     def test_bounded_assist_active_value(self):
         from core.compat_fallback_authority_guard import CompatInfluenceVerdict
+
         assert CompatInfluenceVerdict.BOUNDED_ASSIST_ACTIVE.value == "bounded_assist_active"
 
     def test_degraded_fallback_active_value(self):
         from core.compat_fallback_authority_guard import CompatInfluenceVerdict
+
         assert CompatInfluenceVerdict.DEGRADED_FALLBACK_ACTIVE.value == "degraded_fallback_active"
 
     def test_unbound_influence_detected_value(self):
         from core.compat_fallback_authority_guard import CompatInfluenceVerdict
+
         assert CompatInfluenceVerdict.UNBOUND_INFLUENCE_DETECTED.value == "unbound_influence_detected"
 
     def test_unknown_value(self):
         from core.compat_fallback_authority_guard import CompatInfluenceVerdict
+
         assert CompatInfluenceVerdict.UNKNOWN.value == "unknown"
 
     def test_all_five_verdicts_present(self):
         from core.compat_fallback_authority_guard import CompatInfluenceVerdict
+
         expected = {
             "canonical_authority",
             "bounded_assist_active",
@@ -227,9 +248,10 @@ class TestCompatInfluenceVerdict:
 class TestInfluenceRegistry:
     def test_get_influence_registry_returns_nonempty_list(self):
         from core.compat_fallback_authority_guard import (
-            get_influence_registry,
             CompatInfluenceRecord,
+            get_influence_registry,
         )
+
         registry = get_influence_registry()
         assert isinstance(registry, list)
         assert len(registry) > 0
@@ -237,6 +259,7 @@ class TestInfluenceRegistry:
 
     def test_get_influence_registry_returns_copy(self):
         from core.compat_fallback_authority_guard import get_influence_registry
+
         r1 = get_influence_registry()
         r2 = get_influence_registry()
         assert r1 is not r2  # new list each time
@@ -250,14 +273,13 @@ class TestInfluenceRegistry:
 class TestInfluenceRecordFields:
     def test_all_records_have_non_empty_required_fields(self):
         from core.compat_fallback_authority_guard import get_influence_registry
+
         for record in get_influence_registry():
             assert record.influence_id, f"Empty influence_id in {record}"
             assert record.decision_site, f"Empty decision_site in {record.influence_id}"
             assert record.canonical_path, f"Empty canonical_path in {record.influence_id}"
             assert record.compat_path, f"Empty compat_path in {record.influence_id}"
-            assert record.bounding_evidence, (
-                f"Empty bounding_evidence in {record.influence_id}"
-            )
+            assert record.bounding_evidence, f"Empty bounding_evidence in {record.influence_id}"
             assert record.reviewer_note, f"Empty reviewer_note in {record.influence_id}"
 
 
@@ -269,6 +291,7 @@ class TestInfluenceRecordFields:
 class TestInfluenceRegistryUniqueness:
     def test_all_influence_ids_are_unique(self):
         from core.compat_fallback_authority_guard import get_influence_registry
+
         ids = [r.influence_id for r in get_influence_registry()]
         assert len(ids) == len(set(ids)), "Duplicate influence_id found in registry"
 
@@ -281,25 +304,27 @@ class TestInfluenceRegistryUniqueness:
 class TestInfluenceRecordEnumValues:
     def test_all_records_have_valid_influence_role(self):
         from core.compat_fallback_authority_guard import (
-            get_influence_registry,
             CompatInfluenceRole,
+            get_influence_registry,
         )
+
         valid_roles = set(CompatInfluenceRole)
         for record in get_influence_registry():
-            assert record.influence_role in valid_roles, (
-                f"{record.influence_id} has invalid influence_role={record.influence_role!r}"
-            )
+            assert (
+                record.influence_role in valid_roles
+            ), f"{record.influence_id} has invalid influence_role={record.influence_role!r}"
 
     def test_all_records_have_valid_bounding_status(self):
         from core.compat_fallback_authority_guard import (
-            get_influence_registry,
             CompatInfluenceBoundingStatus,
+            get_influence_registry,
         )
+
         valid_statuses = set(CompatInfluenceBoundingStatus)
         for record in get_influence_registry():
-            assert record.bounding_status in valid_statuses, (
-                f"{record.influence_id} has invalid bounding_status={record.bounding_status!r}"
-            )
+            assert (
+                record.bounding_status in valid_statuses
+            ), f"{record.influence_id} has invalid bounding_status={record.bounding_status!r}"
 
 
 # ===========================================================================
@@ -310,6 +335,7 @@ class TestInfluenceRecordEnumValues:
 class TestExpectedInfluenceIds:
     def test_all_expected_influence_ids_present(self):
         from core.compat_fallback_authority_guard import get_influence_registry
+
         ids = {r.influence_id for r in get_influence_registry()}
         expected = {
             "INFL-001",
@@ -333,16 +359,15 @@ class TestExpectedInfluenceIds:
 class TestNoUnboundedInfluence:
     def test_no_unbounded_influence_points_in_registry(self):
         from core.compat_fallback_authority_guard import (
-            get_influence_registry,
             CompatInfluenceBoundingStatus,
+            get_influence_registry,
         )
+
         unbounded = [
-            r for r in get_influence_registry()
-            if r.bounding_status == CompatInfluenceBoundingStatus.UNBOUNDED
+            r for r in get_influence_registry() if r.bounding_status == CompatInfluenceBoundingStatus.UNBOUNDED
         ]
-        assert unbounded == [], (
-            f"POLICY VIOLATION: unbounded influence points found: "
-            + ", ".join(r.influence_id for r in unbounded)
+        assert unbounded == [], f"POLICY VIOLATION: unbounded influence points found: " + ", ".join(
+            r.influence_id for r in unbounded
         )
 
 
@@ -354,6 +379,7 @@ class TestNoUnboundedInfluence:
 class TestInfluenceRecordToDict:
     def test_to_dict_contains_required_keys(self):
         from core.compat_fallback_authority_guard import get_influence_registry
+
         required_keys = {
             "influence_id",
             "decision_site",
@@ -368,12 +394,11 @@ class TestInfluenceRecordToDict:
         for record in get_influence_registry():
             d = record.to_dict()
             for key in required_keys:
-                assert key in d, (
-                    f"to_dict() for {record.influence_id} missing key {key!r}"
-                )
+                assert key in d, f"to_dict() for {record.influence_id} missing key {key!r}"
 
     def test_to_dict_role_and_status_are_strings(self):
         from core.compat_fallback_authority_guard import get_influence_registry
+
         for record in get_influence_registry():
             d = record.to_dict()
             assert isinstance(d["influence_role"], str)
@@ -388,9 +413,10 @@ class TestInfluenceRecordToDict:
 class TestCheckCanonicalAuthorityClean:
     def test_canonical_authority_verdict_when_no_compat_invoked(self):
         from core.compat_fallback_authority_guard import (
-            check_canonical_authority_at_decision_site,
             CompatInfluenceVerdict,
+            check_canonical_authority_at_decision_site,
         )
+
         result = check_canonical_authority_at_decision_site(
             "INFL-001",
             canonical_is_active=True,
@@ -403,6 +429,7 @@ class TestCheckCanonicalAuthorityClean:
             check_canonical_authority_at_decision_site,
             get_influence_record,
         )
+
         record = get_influence_record("INFL-003")
         result = check_canonical_authority_at_decision_site(
             "INFL-003",
@@ -421,9 +448,10 @@ class TestCheckCanonicalAuthorityClean:
 class TestCheckDegradedFallbackActive:
     def test_degraded_fallback_verdict_when_fallback_invoked(self):
         from core.compat_fallback_authority_guard import (
-            check_canonical_authority_at_decision_site,
             CompatInfluenceVerdict,
+            check_canonical_authority_at_decision_site,
         )
+
         # INFL-001 has influence_role=degraded_fallback
         result = check_canonical_authority_at_decision_site(
             "INFL-001",
@@ -436,6 +464,7 @@ class TestCheckDegradedFallbackActive:
         from core.compat_fallback_authority_guard import (
             check_canonical_authority_at_decision_site,
         )
+
         result = check_canonical_authority_at_decision_site(
             "INFL-004",
             canonical_is_active=False,
@@ -452,9 +481,10 @@ class TestCheckDegradedFallbackActive:
 class TestCheckBoundedAssistActive:
     def test_bounded_assist_verdict_when_compat_invoked(self):
         from core.compat_fallback_authority_guard import (
-            check_canonical_authority_at_decision_site,
             CompatInfluenceVerdict,
+            check_canonical_authority_at_decision_site,
         )
+
         # INFL-002 has influence_role=bounded_assist
         result = check_canonical_authority_at_decision_site(
             "INFL-002",
@@ -472,9 +502,10 @@ class TestCheckBoundedAssistActive:
 class TestCheckUnknownInfluenceId:
     def test_unknown_verdict_for_unregistered_id(self):
         from core.compat_fallback_authority_guard import (
-            check_canonical_authority_at_decision_site,
             CompatInfluenceVerdict,
+            check_canonical_authority_at_decision_site,
         )
+
         result = check_canonical_authority_at_decision_site(
             "INFL-UNKNOWN-99999",
             canonical_is_active=True,
@@ -494,10 +525,11 @@ class TestStrictModeRaisesForUnbounded:
     def test_strict_raises_runtime_error_for_unbounded_influence(self):
         """Construct an ad-hoc unbounded record via module-level patching."""
         from core.compat_fallback_authority_guard import (
+            CompatInfluenceBoundingStatus,
             CompatInfluenceRecord,
             CompatInfluenceRole,
-            CompatInfluenceBoundingStatus,
         )
+
         # Build a fake unbounded record and inject it temporarily.
         fake_record = CompatInfluenceRecord(
             influence_id="INFL-TEST-UNBOUNDED",
@@ -510,6 +542,7 @@ class TestStrictModeRaisesForUnbounded:
             reviewer_note="test record",
         )
         import core.compat_fallback_authority_guard as _mod
+
         original = list(_mod._INFLUENCE_REGISTRY)
         _mod._INFLUENCE_REGISTRY.append(fake_record)
         try:
@@ -532,20 +565,20 @@ class TestStrictModeRaisesForUnbounded:
 class TestAssertCanonicalIsDecisionAuthority:
     def test_returns_canonical_authority_verdict(self):
         from core.compat_fallback_authority_guard import (
-            assert_canonical_is_decision_authority,
             CompatInfluenceVerdict,
+            assert_canonical_is_decision_authority,
         )
+
         result = assert_canonical_is_decision_authority("INFL-006")
         assert result.verdict == CompatInfluenceVerdict.CANONICAL_AUTHORITY
 
     def test_accepts_context_string(self):
         from core.compat_fallback_authority_guard import (
-            assert_canonical_is_decision_authority,
             CompatInfluenceVerdict,
+            assert_canonical_is_decision_authority,
         )
-        result = assert_canonical_is_decision_authority(
-            "INFL-007", context="test_pr9_suite"
-        )
+
+        result = assert_canonical_is_decision_authority("INFL-007", context="test_pr9_suite")
         assert result.verdict == CompatInfluenceVerdict.CANONICAL_AUTHORITY
 
 
@@ -559,6 +592,7 @@ class TestCompatInfluenceCheckResultToDict:
         from core.compat_fallback_authority_guard import (
             check_canonical_authority_at_decision_site,
         )
+
         result = check_canonical_authority_at_decision_site(
             "INFL-005",
             canonical_is_active=True,
@@ -580,6 +614,7 @@ class TestCompatInfluenceCheckResultToDict:
         from core.compat_fallback_authority_guard import (
             check_canonical_authority_at_decision_site,
         )
+
         result = check_canonical_authority_at_decision_site(
             "INFL-008",
             canonical_is_active=True,
@@ -596,14 +631,16 @@ class TestCompatInfluenceCheckResultToDict:
 class TestBuildAuthorityHardeningSnapshot:
     def test_returns_correct_type(self):
         from core.compat_fallback_authority_guard import (
-            build_authority_hardening_snapshot,
             AuthorityHardeningSnapshot,
+            build_authority_hardening_snapshot,
         )
+
         snapshot = build_authority_hardening_snapshot()
         assert isinstance(snapshot, AuthorityHardeningSnapshot)
 
     def test_snapshot_has_positive_total(self):
         from core.compat_fallback_authority_guard import build_authority_hardening_snapshot
+
         snapshot = build_authority_hardening_snapshot()
         assert snapshot.total_influence_points > 0
 
@@ -616,12 +653,10 @@ class TestBuildAuthorityHardeningSnapshot:
 class TestSnapshotCountsConsistent:
     def test_total_equals_sum_of_status_counts(self):
         from core.compat_fallback_authority_guard import build_authority_hardening_snapshot
+
         snap = build_authority_hardening_snapshot()
         expected_total = (
-            snap.explicitly_bounded_count
-            + snap.scope_limited_count
-            + snap.unbounded_count
-            + snap.retired_count
+            snap.explicitly_bounded_count + snap.scope_limited_count + snap.unbounded_count + snap.retired_count
         )
         assert snap.total_influence_points == expected_total
 
@@ -634,6 +669,7 @@ class TestSnapshotCountsConsistent:
 class TestHardeningComplete:
     def test_hardening_complete_is_true(self):
         from core.compat_fallback_authority_guard import build_authority_hardening_snapshot
+
         snap = build_authority_hardening_snapshot()
         assert snap.hardening_complete is True, (
             f"hardening_complete is False: "
@@ -642,6 +678,7 @@ class TestHardeningComplete:
 
     def test_unbound_violation_count_is_zero(self):
         from core.compat_fallback_authority_guard import build_authority_hardening_snapshot
+
         snap = build_authority_hardening_snapshot()
         assert snap.unbound_violation_count == 0
 
@@ -654,11 +691,13 @@ class TestHardeningComplete:
 class TestSnapshotPolicySentinels:
     def test_policy_sentinels_has_four_entries(self):
         from core.compat_fallback_authority_guard import build_authority_hardening_snapshot
+
         snap = build_authority_hardening_snapshot()
         assert len(snap.policy_sentinels) == 4
 
     def test_all_policy_sentinels_are_non_empty_strings(self):
         from core.compat_fallback_authority_guard import build_authority_hardening_snapshot
+
         snap = build_authority_hardening_snapshot()
         for sentinel in snap.policy_sentinels:
             assert isinstance(sentinel, str) and len(sentinel) > 0
@@ -672,6 +711,7 @@ class TestSnapshotPolicySentinels:
 class TestSnapshotToDict:
     def test_to_dict_contains_expected_keys(self):
         from core.compat_fallback_authority_guard import build_authority_hardening_snapshot
+
         snap = build_authority_hardening_snapshot()
         d = snap.to_dict()
         expected_keys = {
@@ -688,6 +728,7 @@ class TestSnapshotToDict:
 
     def test_by_bounding_status_has_four_keys(self):
         from core.compat_fallback_authority_guard import build_authority_hardening_snapshot
+
         snap = build_authority_hardening_snapshot()
         by_status = snap.to_dict()["by_bounding_status"]
         expected = {"explicitly_bounded", "scope_limited", "unbounded", "retired"}
@@ -702,22 +743,16 @@ class TestSnapshotToDict:
 class TestDegradedFallbacksMustBeExplicitlyBounded:
     def test_all_degraded_fallback_records_are_explicitly_bounded(self):
         from core.compat_fallback_authority_guard import (
-            get_influence_registry,
-            CompatInfluenceRole,
             CompatInfluenceBoundingStatus,
+            CompatInfluenceRole,
+            get_influence_registry,
         )
-        fallbacks = [
-            r for r in get_influence_registry()
-            if r.influence_role == CompatInfluenceRole.degraded_fallback
-        ]
+
+        fallbacks = [r for r in get_influence_registry() if r.influence_role == CompatInfluenceRole.degraded_fallback]
         assert fallbacks, "No degraded_fallback records found — registry may be empty"
-        not_bounded = [
-            r for r in fallbacks
-            if r.bounding_status != CompatInfluenceBoundingStatus.EXPLICITLY_BOUNDED
-        ]
-        assert not_bounded == [], (
-            "degraded_fallback records without EXPLICITLY_BOUNDED status: "
-            + ", ".join(r.influence_id for r in not_bounded)
+        not_bounded = [r for r in fallbacks if r.bounding_status != CompatInfluenceBoundingStatus.EXPLICITLY_BOUNDED]
+        assert not_bounded == [], "degraded_fallback records without EXPLICITLY_BOUNDED status: " + ", ".join(
+            r.influence_id for r in not_bounded
         )
 
 
@@ -729,16 +764,19 @@ class TestDegradedFallbacksMustBeExplicitlyBounded:
 class TestGetInfluenceRecord:
     def test_returns_correct_record_for_known_id(self):
         from core.compat_fallback_authority_guard import get_influence_record
+
         record = get_influence_record("INFL-001")
         assert record is not None
         assert record.influence_id == "INFL-001"
 
     def test_returns_none_for_unknown_id(self):
         from core.compat_fallback_authority_guard import get_influence_record
+
         assert get_influence_record("INFL-DOES-NOT-EXIST") is None
 
     def test_all_expected_ids_resolvable(self):
         from core.compat_fallback_authority_guard import get_influence_record
+
         for i in range(1, 9):
             influence_id = f"INFL-00{i}"
             record = get_influence_record(influence_id)
@@ -754,6 +792,7 @@ class TestReviewerNoteQuality:
     def test_reviewer_notes_reference_canonical_path_or_signal(self):
         """Each reviewer_note should contain at least one actionable keyword."""
         from core.compat_fallback_authority_guard import get_influence_registry
+
         actionable_keywords = {"canonical", "reviewer", "check", "confirm", "path"}
         for record in get_influence_registry():
             lower_note = record.reviewer_note.lower()

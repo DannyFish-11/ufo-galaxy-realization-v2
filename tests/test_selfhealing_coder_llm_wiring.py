@@ -13,6 +13,7 @@ real closed loop if an LLM client is wired in. The single production call site
 The iteration loop still spun 3 times, but nothing ever learned from the
 captured stderr. These tests prove the wiring end-to-end.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -95,14 +96,15 @@ class TestSelfHealingCoderLLMWiring:
             affected_components=[],
             recommendation="写一个修复脚本 print hello",
         )
-        with patch.object(AutonomousCoder, "__init__", spy_init), \
-             patch.object(AutonomousCoder, "generate_and_execute",
-                          return_value=None):
+        with (
+            patch.object(AutonomousCoder, "__init__", spy_init),
+            patch.object(AutonomousCoder, "generate_and_execute", return_value=None),
+        ):
             fixer._code_fix(diagnosis)
 
-        assert captured.get("llm_client") is not None, (
-            "Node_112 _code_fix 仍在裸构造 AutonomousCoder()——自愈闭环的 LLM 修复步会静默失效"
-        )
+        assert (
+            captured.get("llm_client") is not None
+        ), "Node_112 _code_fix 仍在裸构造 AutonomousCoder()——自愈闭环的 LLM 修复步会静默失效"
         assert isinstance(captured["llm_client"], GalaxyRouterClient)
 
     def test_router_client_bridges_async_router_sync(self):

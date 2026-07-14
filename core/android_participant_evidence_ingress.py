@@ -281,8 +281,7 @@ class AndroidParticipantStatus(str, Enum):
 # ---------------------------------------------------------------------------
 
 _REQUIRED_EVIDENCE_FIELDS = frozenset(
-    {"schema_version", "authority", "generated_at", "participant_status",
-     "is_operational", "audit_event_count"}
+    {"schema_version", "authority", "generated_at", "participant_status", "is_operational", "audit_event_count"}
 )
 
 
@@ -322,9 +321,7 @@ class AndroidParticipantEvidenceResult:
         ``"json_parse_error"``, ``"schema_version_mismatch"``).
     """
 
-    result_id: str = field(
-        default_factory=lambda: f"aper_{uuid.uuid4().hex[:12]}"
-    )
+    result_id: str = field(default_factory=lambda: f"aper_{uuid.uuid4().hex[:12]}")
     status: AndroidParticipantStatus = AndroidParticipantStatus.missing_evidence
     evidence_summary: str = ""
     gap_description: str = ""
@@ -362,6 +359,7 @@ class AndroidParticipantEvidenceResult:
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
 
 def _get_evidence_path() -> str:
     """Return the configured Android participant evidence file path.
@@ -463,9 +461,13 @@ def _derive_status(
                 f"audit_events={count} age={age_seconds:.1f}s."
             ),
             (
-                "Android participant reports recovered status. "
-                "Operational continuity should be verified if recovery was recent."
-            ) if not is_op else "",
+                (
+                    "Android participant reports recovered status. "
+                    "Operational continuity should be verified if recovery was recent."
+                )
+                if not is_op
+                else ""
+            ),
         )
 
     # --- unavailable (explicit) ---
@@ -530,10 +532,7 @@ def _derive_status(
                 f"session={session_id} is_operational=False "
                 f"audit_events=0 age={age_seconds:.1f}s."
             ),
-            (
-                "Android participant is not operational and has no audit events. "
-                "Treated as unavailable."
-            ),
+            ("Android participant is not operational and has no audit events. " "Treated as unavailable."),
         )
 
     # --- inferred degraded (is_operational=false but has events) ---
@@ -545,10 +544,7 @@ def _derive_status(
                 f"session={session_id} is_operational=False "
                 f"audit_events={count} age={age_seconds:.1f}s."
             ),
-            (
-                "Android participant has audit events but is not operational. "
-                "Treated as degraded."
-            ),
+            ("Android participant has audit events but is not operational. " "Treated as degraded."),
         )
 
     # --- fallback: unverified ---
@@ -626,9 +622,7 @@ def ingest_android_participant_evidence(
         )
         return AndroidParticipantEvidenceResult(
             status=AndroidParticipantStatus.missing_evidence,
-            evidence_summary=(
-                f"Android participant evidence file not found: {resolved_path}"
-            ),
+            evidence_summary=(f"Android participant evidence file not found: {resolved_path}"),
             gap_description=(
                 "No Android participant evidence artifact was found at the "
                 f"configured path ({resolved_path}).  The Android participant "
@@ -643,12 +637,8 @@ def ingest_android_participant_evidence(
     except OSError as exc:
         return AndroidParticipantEvidenceResult(
             status=AndroidParticipantStatus.missing_evidence,
-            evidence_summary=(
-                f"Android participant evidence file unreadable: {exc}"
-            ),
-            gap_description=(
-                f"Evidence file at {resolved_path!r} could not be read: {exc}"
-            ),
+            evidence_summary=(f"Android participant evidence file unreadable: {exc}"),
+            gap_description=(f"Evidence file at {resolved_path!r} could not be read: {exc}"),
             evidence_path=resolved_path,
             ingested_at=ingested_at,
             reject_reason=f"file_read_error:{type(exc).__name__}",
@@ -660,14 +650,10 @@ def ingest_android_participant_evidence(
     try:
         data: Dict[str, Any] = json.loads(raw_text)
     except json.JSONDecodeError as exc:
-        logger.debug(
-            "AndroidParticipantEvidenceIngress: JSON parse error: %s", exc
-        )
+        logger.debug("AndroidParticipantEvidenceIngress: JSON parse error: %s", exc)
         return AndroidParticipantEvidenceResult(
             status=AndroidParticipantStatus.malformed_evidence,
-            evidence_summary=(
-                f"Android participant evidence file is not valid JSON: {exc}"
-            ),
+            evidence_summary=(f"Android participant evidence file is not valid JSON: {exc}"),
             gap_description=(
                 f"Evidence file at {resolved_path!r} failed JSON parsing: {exc}.  "
                 "Malformed evidence cannot be used to assess Android participant "
@@ -681,12 +667,8 @@ def ingest_android_participant_evidence(
     if not isinstance(data, dict):
         return AndroidParticipantEvidenceResult(
             status=AndroidParticipantStatus.malformed_evidence,
-            evidence_summary=(
-                "Android participant evidence is not a JSON object."
-            ),
-            gap_description=(
-                "Evidence file must contain a JSON object (dict) at the top level."
-            ),
+            evidence_summary=("Android participant evidence is not a JSON object."),
+            gap_description=("Evidence file must contain a JSON object (dict) at the top level."),
             evidence_path=resolved_path,
             ingested_at=ingested_at,
             reject_reason="not_a_dict",
@@ -703,10 +685,7 @@ def ingest_android_participant_evidence(
         )
         return AndroidParticipantEvidenceResult(
             status=AndroidParticipantStatus.malformed_evidence,
-            evidence_summary=(
-                f"Android participant evidence failed schema validation: "
-                f"{validation_error}"
-            ),
+            evidence_summary=(f"Android participant evidence failed schema validation: " f"{validation_error}"),
             gap_description=(
                 f"Evidence schema validation failed ({validation_error}).  "
                 "Malformed evidence is treated as non-ready.  Ensure the "
@@ -730,8 +709,7 @@ def ingest_android_participant_evidence(
         return AndroidParticipantEvidenceResult(
             status=AndroidParticipantStatus.stale_evidence,
             evidence_summary=(
-                f"Android participant evidence is stale: age={age_seconds:.1f}s "
-                f"(max={resolved_max_age:.0f}s)."
+                f"Android participant evidence is stale: age={age_seconds:.1f}s " f"(max={resolved_max_age:.0f}s)."
             ),
             gap_description=(
                 f"Evidence generated_at={generated_at} is "
@@ -753,9 +731,7 @@ def ingest_android_participant_evidence(
     # ------------------------------------------------------------------
     # Step 5: Derive status
     # ------------------------------------------------------------------
-    status, evidence_summary, gap_description = _derive_status(
-        data, age_seconds, resolved_max_age
-    )
+    status, evidence_summary, gap_description = _derive_status(data, age_seconds, resolved_max_age)
 
     return AndroidParticipantEvidenceResult(
         status=status,

@@ -57,9 +57,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional
 
-from core.continuum.config import ContinuumConfig, DEFAULT_CONTINUUM_CONFIG
+from core.continuum.config import DEFAULT_CONTINUUM_CONFIG, ContinuumConfig
 from core.continuum.types import ContinuumPhase, ContinuumState
-
 
 # ---------------------------------------------------------------------------
 # Enumerations
@@ -336,8 +335,7 @@ class ReturnEngine:
                 trigger=ReturnTrigger.LOW_VALUE,
                 return_action=ReturnAction.SOFT_DECAY,
                 reason=(
-                    f"low_value: decision_score={decision_score:.3f} "
-                    f"< threshold={self._low_value_threshold:.3f}"
+                    f"low_value: decision_score={decision_score:.3f} " f"< threshold={self._low_value_threshold:.3f}"
                 ),
                 next_phase=None,
                 decay_amount=self._soft_decay_amount,

@@ -18,7 +18,6 @@ import warnings
 
 import pytest
 
-
 # ===========================================================================
 # Step 3 — Hard-fail stubs raise RuntimeError on import
 # ===========================================================================
@@ -47,9 +46,9 @@ class TestLegacyHardFail:
 
         # The error message must guide the user to the replacement.
         msg = str(exc_info.value).lower()
-        assert "windows_aip_client" in msg or "arbiter" in msg or "execution" in msg, (
-            f"{module_name}: RuntimeError message should mention the replacement path"
-        )
+        assert (
+            "windows_aip_client" in msg or "arbiter" in msg or "execution" in msg
+        ), f"{module_name}: RuntimeError message should mention the replacement path"
 
     @pytest.mark.parametrize("module_name", _LEGACY_MODULES)
     def test_deprecation_warning_still_emitted(self, module_name: str):
@@ -63,17 +62,11 @@ class TestLegacyHardFail:
                 importlib.import_module(module_name)
 
         dep_warns = [x for x in w if issubclass(x.category, DeprecationWarning)]
-        assert len(dep_warns) >= 1, (
-            f"{module_name}: expected DeprecationWarning before RuntimeError"
-        )
+        assert len(dep_warns) >= 1, f"{module_name}: expected DeprecationWarning before RuntimeError"
 
     def test_client_source_contains_deprecation_warning(self):
         """Sanity-check: client.py source still contains warnings.warn."""
-        src = (
-            pathlib.Path(__file__).parent.parent
-            / "windows_client"
-            / "client.py"
-        ).read_text()
+        src = (pathlib.Path(__file__).parent.parent / "windows_client" / "client.py").read_text()
         assert "DeprecationWarning" in src
         assert "warnings.warn" in src
 
@@ -82,13 +75,13 @@ class TestLegacyHardFail:
 # Step 5 — RuntimeDomain enum and ContinuumState.runtime_domain
 # ===========================================================================
 
+from core.continuum import RuntimeDomain as RuntimeDomainFromInit
 from core.continuum.types import (
     ContinuumPhase,
     ContinuumState,
     RuntimeDomain,
     TriStatePhase,
 )
-from core.continuum import RuntimeDomain as RuntimeDomainFromInit
 
 
 class TestRuntimeDomainEnum:
@@ -114,6 +107,7 @@ class TestRuntimeDomainEnum:
 
     def test_in_all(self):
         import core.continuum as cc
+
         assert "RuntimeDomain" in cc.__all__
 
 
@@ -196,8 +190,8 @@ class TestStatusBoard:
 
     def test_status_board_module_fully_decommissioned(self):
         import pathlib
-        repo = pathlib.Path(__file__).parent.parent
-        assert not (repo / "windows_client" / "status_board.py").exists(), (
-            "windows_client/status_board.py 已退役拆除,不应被重新引入"
-        )
 
+        repo = pathlib.Path(__file__).parent.parent
+        assert not (
+            repo / "windows_client" / "status_board.py"
+        ).exists(), "windows_client/status_board.py 已退役拆除,不应被重新引入"

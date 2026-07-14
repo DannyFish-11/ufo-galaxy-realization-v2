@@ -238,22 +238,14 @@ class ModalityConfidencePolicy:
             presence=ModalityPresence(d.get("presence", ModalityPresence.ABSENT.value)),
             confidence_score=float(d.get("confidence_score", 0.0)),
             source_quality_score=(
-                float(d["source_quality_score"])
-                if d.get("source_quality_score") is not None
-                else None
+                float(d["source_quality_score"]) if d.get("source_quality_score") is not None else None
             ),
             degradation_severity=SourceDegradationSeverity(
                 d.get("degradation_severity", SourceDegradationSeverity.NONE.value)
             ),
             is_stale=bool(d.get("is_stale", False)),
-            staleness_age_s=(
-                float(d["staleness_age_s"])
-                if d.get("staleness_age_s") is not None
-                else None
-            ),
-            semantics=ModalitySemantics(
-                d.get("semantics", ModalitySemantics.OPTIONAL.value)
-            ),
+            staleness_age_s=(float(d["staleness_age_s"]) if d.get("staleness_age_s") is not None else None),
+            semantics=ModalitySemantics(d.get("semantics", ModalitySemantics.OPTIONAL.value)),
             contributing_source_ids=list(d.get("contributing_source_ids", [])),
             degradation_reasons=list(d.get("degradation_reasons", [])),
         )
@@ -321,24 +313,14 @@ class RoutingEligibilityAssessment:
     @classmethod
     def from_dict(cls, d: Dict[str, Any]) -> "RoutingEligibilityAssessment":
         return cls(
-            is_native_multimodal_eligible=bool(
-                d.get("is_native_multimodal_eligible", False)
-            ),
+            is_native_multimodal_eligible=bool(d.get("is_native_multimodal_eligible", False)),
             aggregate_confidence=float(d.get("aggregate_confidence", 0.0)),
             primary_reason=RoutingEligibilityReason(
                 d.get("primary_reason", RoutingEligibilityReason.NO_MULTIMODAL_INPUT.value)
             ),
-            all_reasons=[
-                RoutingEligibilityReason(r)
-                for r in d.get("all_reasons", [])
-            ],
-            modality_policies=[
-                ModalityConfidencePolicy.from_dict(p)
-                for p in d.get("modality_policies", [])
-            ],
-            has_required_modality_absent=bool(
-                d.get("has_required_modality_absent", False)
-            ),
+            all_reasons=[RoutingEligibilityReason(r) for r in d.get("all_reasons", [])],
+            modality_policies=[ModalityConfidencePolicy.from_dict(p) for p in d.get("modality_policies", [])],
+            has_required_modality_absent=bool(d.get("has_required_modality_absent", False)),
             is_degraded=bool(d.get("is_degraded", False)),
             degradation_severity=SourceDegradationSeverity(
                 d.get("degradation_severity", SourceDegradationSeverity.NONE.value)
@@ -391,9 +373,7 @@ class PerceptionRoutingReadiness:
         Wall-clock timestamp when this readiness was assessed (``time.time()``).
     """
 
-    eligibility: RoutingEligibilityAssessment = field(
-        default_factory=RoutingEligibilityAssessment
-    )
+    eligibility: RoutingEligibilityAssessment = field(default_factory=RoutingEligibilityAssessment)
     has_request_multimodal: bool = False
     has_continuous_perception: bool = False
     request_bound_modalities: List[str] = field(default_factory=list)
@@ -420,24 +400,20 @@ class PerceptionRoutingReadiness:
     def from_dict(cls, d: Dict[str, Any]) -> "PerceptionRoutingReadiness":
         eligibility_data = d.get("eligibility", {})
         return cls(
-            eligibility=RoutingEligibilityAssessment.from_dict(eligibility_data)
-            if eligibility_data
-            else RoutingEligibilityAssessment(),
+            eligibility=(
+                RoutingEligibilityAssessment.from_dict(eligibility_data)
+                if eligibility_data
+                else RoutingEligibilityAssessment()
+            ),
             has_request_multimodal=bool(d.get("has_request_multimodal", False)),
             has_continuous_perception=bool(d.get("has_continuous_perception", False)),
             request_bound_modalities=list(d.get("request_bound_modalities", [])),
             continuous_modalities=list(d.get("continuous_modalities", [])),
             continuous_perception_age_s=(
-                float(d["continuous_perception_age_s"])
-                if d.get("continuous_perception_age_s") is not None
-                else None
+                float(d["continuous_perception_age_s"]) if d.get("continuous_perception_age_s") is not None else None
             ),
-            is_continuous_perception_stale=bool(
-                d.get("is_continuous_perception_stale", False)
-            ),
-            request_overrides_continuous=bool(
-                d.get("request_overrides_continuous", False)
-            ),
+            is_continuous_perception_stale=bool(d.get("is_continuous_perception_stale", False)),
+            request_overrides_continuous=bool(d.get("request_overrides_continuous", False)),
             assessed_at=float(d.get("assessed_at", time.time())),
         )
 
@@ -598,11 +574,7 @@ def assess_modality_confidence(
     # Aggregate: use best-source score when multiple sources exist
     aggregate_score = max(scores) if scores else 0.0
     worst_sev = _worst_severity(severities)
-    avg_quality = (
-        sum(source_quality_scores) / len(source_quality_scores)
-        if source_quality_scores
-        else None
-    )
+    avg_quality = sum(source_quality_scores) / len(source_quality_scores) if source_quality_scores else None
 
     # Recompute staleness for summary (use first record for simplicity)
     first_rec = source_records[0]
@@ -678,10 +650,7 @@ def assess_routing_eligibility(
     active_scores: List[float] = []
 
     for policy in modality_policies:
-        if (
-            policy.semantics == ModalitySemantics.REQUIRED
-            and policy.presence == ModalityPresence.ABSENT
-        ):
+        if policy.semantics == ModalitySemantics.REQUIRED and policy.presence == ModalityPresence.ABSENT:
             has_required_absent = True
             reasons.append(RoutingEligibilityReason.MODALITY_REQUIRED_BUT_ABSENT)
             continue
@@ -730,8 +699,7 @@ def assess_routing_eligibility(
             primary = RoutingEligibilityReason.WEAK_SIGNAL_DEGRADED_ELIGIBILITY
         eligible = False
         summary = (
-            f"confidence={aggregate:.3f} below threshold={confidence_threshold:.3f} "
-            "— native MM eligibility reduced"
+            f"confidence={aggregate:.3f} below threshold={confidence_threshold:.3f} " "— native MM eligibility reduced"
         )
     else:
         # Eligible
@@ -740,10 +708,7 @@ def assess_routing_eligibility(
         else:
             primary = RoutingEligibilityReason.ADEQUATE_MULTIMODAL_SIGNAL
         eligible = True
-        summary = (
-            f"confidence={aggregate:.3f} >= threshold={confidence_threshold:.3f} "
-            "— native MM eligible"
-        )
+        summary = f"confidence={aggregate:.3f} >= threshold={confidence_threshold:.3f} " "— native MM eligible"
 
     # Deduplicate reasons, keep primary first
     seen: set = set()
@@ -823,29 +788,21 @@ def build_perception_routing_readiness(
 
     has_request_mm = bool(canonical_perception.get("has_request_multimodal", False))
     has_continuous = bool(canonical_perception.get("has_continuous_perception", False))
-    active_modalities: List[str] = list(
-        canonical_perception.get("active_modalities") or []
-    )
+    active_modalities: List[str] = list(canonical_perception.get("active_modalities") or [])
     requires_native = bool(canonical_perception.get("requires_native_multimodal", False))
-    continuous_wall_clock: Optional[float] = canonical_perception.get(
-        "continuous_wall_clock"
-    )
+    continuous_wall_clock: Optional[float] = canonical_perception.get("continuous_wall_clock")
 
     # When requires_native_multimodal=True but has_request_multimodal is not
     # explicitly set (e.g. minimal/legacy perception dicts), treat the native-
     # multimodal requirement as evidence of request-bound content.
-    has_any_multimodal = has_request_mm or has_continuous or (
-        requires_native and bool(active_modalities)
-    )
+    has_any_multimodal = has_request_mm or has_continuous or (requires_native and bool(active_modalities))
 
     # Staleness of continuous perception
     continuous_age_s: Optional[float] = None
     is_continuous_stale = False
     if continuous_wall_clock is not None:
         continuous_age_s = _now - float(continuous_wall_clock)
-        is_continuous_stale = (
-            continuous_age_s > CONTINUOUS_PERCEPTION_STALENESS_THRESHOLD_S
-        )
+        is_continuous_stale = continuous_age_s > CONTINUOUS_PERCEPTION_STALENESS_THRESHOLD_S
 
     # Separate request-bound vs continuous modalities
     request_bound_modalities = list(active_modalities) if has_request_mm else []
@@ -853,9 +810,7 @@ def build_perception_routing_readiness(
 
     # Request-bound override: request multimodal input can compensate for
     # missing or stale continuous perception.
-    request_overrides_continuous = has_request_mm and (
-        not has_continuous or is_continuous_stale
-    )
+    request_overrides_continuous = has_request_mm and (not has_continuous or is_continuous_stale)
 
     # Build per-modality confidence policies
     modality_policies: List[ModalityConfidencePolicy] = []
@@ -872,16 +827,11 @@ def build_perception_routing_readiness(
     # When requires_native_multimodal=True, the perception state has already
     # determined that native MM is needed; use REQUIRED semantics so the
     # eligibility assessment correctly blocks routing if the modality is absent.
-    modality_semantics = (
-        ModalitySemantics.REQUIRED if requires_native else ModalitySemantics.PREFERRED
-    )
+    modality_semantics = ModalitySemantics.REQUIRED if requires_native else ModalitySemantics.PREFERRED
 
     for mod in active_modalities:
         # Find registry records for this modality (also check "multi")
-        rec_list = (
-            registry_sources_by_modality.get(mod, [])
-            + registry_sources_by_modality.get("multi", [])
-        )
+        rec_list = registry_sources_by_modality.get(mod, []) + registry_sources_by_modality.get("multi", [])
 
         # If no registry data but there is multimodal context (request-bound,
         # continuous, or implied by requires_native_multimodal), synthesise a
@@ -926,9 +876,7 @@ def build_perception_routing_readiness(
     # Add request_bound_override reason if applicable
     if request_overrides_continuous and eligibility.is_native_multimodal_eligible:
         if RoutingEligibilityReason.REQUEST_BOUND_OVERRIDE not in eligibility.all_reasons:
-            eligibility.all_reasons.append(
-                RoutingEligibilityReason.REQUEST_BOUND_OVERRIDE
-            )
+            eligibility.all_reasons.append(RoutingEligibilityReason.REQUEST_BOUND_OVERRIDE)
 
     return PerceptionRoutingReadiness(
         eligibility=eligibility,
@@ -936,9 +884,7 @@ def build_perception_routing_readiness(
         has_continuous_perception=has_continuous,
         request_bound_modalities=request_bound_modalities,
         continuous_modalities=continuous_modalities,
-        continuous_perception_age_s=(
-            round(continuous_age_s, 2) if continuous_age_s is not None else None
-        ),
+        continuous_perception_age_s=(round(continuous_age_s, 2) if continuous_age_s is not None else None),
         is_continuous_perception_stale=is_continuous_stale,
         request_overrides_continuous=request_overrides_continuous,
         assessed_at=_now,

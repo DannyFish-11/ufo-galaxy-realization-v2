@@ -118,6 +118,7 @@ def _make_ws() -> MagicMock:
 @pytest.fixture()
 def bridge():
     from galaxy_gateway.android_bridge import AndroidBridge
+
     return AndroidBridge()
 
 
@@ -126,6 +127,7 @@ def gw_client():
     """Minimal FastAPI app backed by the real _handle_android_ws handler."""
     from fastapi import FastAPI, WebSocket
     from fastapi.testclient import TestClient
+
     from galaxy_gateway.routes.websocket import _handle_android_ws
 
     app = FastAPI()
@@ -182,8 +184,7 @@ class TestCanonicalIngressBinding:
             hb_ack = ws.receive_json()
 
         assert hb_ack.get("type") == "heartbeat_ack", (
-            f"CLOSED — heartbeat via canonical ingress must return heartbeat_ack; "
-            f"got {hb_ack.get('type')!r}"
+            f"CLOSED — heartbeat via canonical ingress must return heartbeat_ack; " f"got {hb_ack.get('type')!r}"
         )
 
 
@@ -209,12 +210,8 @@ class TestDisconnectStateTransition:
 
         # Verify device is registered and connected
         device = bridge.get_device(device_id)
-        assert device is not None, (
-            "Precondition: device must be present in bridge after registration"
-        )
-        assert device.connected is True, (
-            "Precondition: device.connected must be True after registration"
-        )
+        assert device is not None, "Precondition: device must be present in bridge after registration"
+        assert device.connected is True, "Precondition: device.connected must be True after registration"
 
         # Disconnect
         await bridge.disconnect_device(device_id)
@@ -263,9 +260,7 @@ class TestReconnectUnknownDevice:
     """
 
     @pytest.mark.asyncio
-    async def test_reconnect_returns_false_for_unknown_device(
-        self, bridge: Any
-    ) -> None:
+    async def test_reconnect_returns_false_for_unknown_device(self, bridge: Any) -> None:
         """GAP_EXPOSED: reconnect_device returns False when device was never registered.
 
         This is a production-path gap: if Android sends a reconnect message
@@ -301,9 +296,7 @@ class TestReconnectKnownDevice:
     """reconnect_device() restores connected=True for a previously registered device."""
 
     @pytest.mark.asyncio
-    async def test_reconnect_restores_connection_after_disconnect(
-        self, bridge: Any
-    ) -> None:
+    async def test_reconnect_restores_connection_after_disconnect(self, bridge: Any) -> None:
         """CLOSED: register → disconnect → reconnect restores connected=True.
 
         If reconnect does not restore connected=True, the device is permanently
@@ -327,10 +320,7 @@ class TestReconnectKnownDevice:
         # Reconnect with new WS handle
         result = await bridge.reconnect_device(device_id, ws2)
 
-        assert result is True, (
-            "CLOSED: reconnect_device must return True for a known device. "
-            f"Got {result!r}."
-        )
+        assert result is True, "CLOSED: reconnect_device must return True for a known device. " f"Got {result!r}."
         device_after = bridge.get_device(device_id)
         assert device_after is not None
         assert device_after.connected is True, (
@@ -361,9 +351,7 @@ class TestTaskResultFailureStatus:
     """
 
     @pytest.mark.asyncio
-    async def test_task_result_failed_status_resolves_future_with_failed_status(
-        self, bridge: Any
-    ) -> None:
+    async def test_task_result_failed_status_resolves_future_with_failed_status(self, bridge: Any) -> None:
         """CLOSED: task_result with status=failed must resolve the Future with status=failed.
 
         The Future resolved by handle_task_result carries the raw message dict.
@@ -382,13 +370,10 @@ class TestTaskResultFailureStatus:
 
         await bridge.handle_message(
             ws,
-            _v3("task_result", device_id, task_id=task_id, status="failed",
-                result={"error": "permission_denied"}),
+            _v3("task_result", device_id, task_id=task_id, status="failed", result={"error": "permission_denied"}),
         )
 
-        assert future.done(), (
-            "CLOSED: Future must be resolved even when status=failed"
-        )
+        assert future.done(), "CLOSED: Future must be resolved even when status=failed"
         resolved = future.result()
         assert resolved is not None
 
@@ -402,9 +387,7 @@ class TestTaskResultFailureStatus:
         )
 
     @pytest.mark.asyncio
-    async def test_task_result_error_status_resolves_future_with_error_status(
-        self, bridge: Any
-    ) -> None:
+    async def test_task_result_error_status_resolves_future_with_error_status(self, bridge: Any) -> None:
         """CLOSED: task_result with status=error must resolve Future with status=error."""
         device_id = f"insp-err-{uuid.uuid4().hex[:8]}"
         task_id = str(uuid.uuid4())
@@ -418,8 +401,7 @@ class TestTaskResultFailureStatus:
 
         await bridge.handle_message(
             ws,
-            _v3("task_result", device_id, task_id=task_id, status="error",
-                result={"error": "crash"}),
+            _v3("task_result", device_id, task_id=task_id, status="error", result={"error": "crash"}),
         )
 
         assert future.done()
@@ -432,9 +414,7 @@ class TestTaskResultFailureStatus:
         )
 
     @pytest.mark.asyncio
-    async def test_task_result_cancelled_status_resolves_future_with_cancelled_status(
-        self, bridge: Any
-    ) -> None:
+    async def test_task_result_cancelled_status_resolves_future_with_cancelled_status(self, bridge: Any) -> None:
         """CLOSED: task_result with status=cancelled must resolve Future with status=cancelled."""
         device_id = f"insp-cancel-{uuid.uuid4().hex[:8]}"
         task_id = str(uuid.uuid4())
@@ -460,9 +440,7 @@ class TestTaskResultFailureStatus:
         )
 
     @pytest.mark.asyncio
-    async def test_task_result_failed_via_ws_transport_does_not_raise(
-        self, gw_client: Any
-    ) -> None:
+    async def test_task_result_failed_via_ws_transport_does_not_raise(self, gw_client: Any) -> None:
         """CLOSED: task_result with status=failed via real WS transport must not crash."""
         device_id = f"insp-fail-tr-{uuid.uuid4().hex[:8]}"
         task_id = str(uuid.uuid4())
@@ -474,8 +452,13 @@ class TestTaskResultFailureStatus:
             # Send failed task_result via real transport
             ws.send_text(
                 json.dumps(
-                    _v3("task_result", device_id, task_id=task_id, status="failed",
-                        result={"error": "execution_timeout"})
+                    _v3(
+                        "task_result",
+                        device_id,
+                        task_id=task_id,
+                        status="failed",
+                        result={"error": "execution_timeout"},
+                    )
                 )
             )
             # task_result has no synchronous response; just verify no crash
@@ -570,16 +553,13 @@ class TestDispatchToWebsocketEventPath:
         )
         await result_sim
 
-        assert result is not None, (
-            "CLOSED: dispatch_to_websocket must return a result when the event fires"
-        )
+        assert result is not None, "CLOSED: dispatch_to_websocket must return a result when the event fires"
         assert result.get("task_id") == task_id, (
-            f"CLOSED: result task_id must match dispatched task_id. "
-            f"Got {result.get('task_id')!r}"
+            f"CLOSED: result task_id must match dispatched task_id. " f"Got {result.get('task_id')!r}"
         )
-        assert result.get("status") == "completed", (
-            f"CLOSED: result status must be 'completed'. Got {result.get('status')!r}"
-        )
+        assert (
+            result.get("status") == "completed"
+        ), f"CLOSED: result status must be 'completed'. Got {result.get('status')!r}"
 
     @pytest.mark.asyncio
     async def test_dispatch_to_websocket_returns_error_on_timeout(self) -> None:
@@ -624,15 +604,9 @@ class TestDispatchToWebsocketEventPath:
             timeout=0.1,  # very short timeout
         )
 
-        assert result is not None, (
-            "CLOSED: dispatch_to_websocket must return a dict (not None) on timeout"
-        )
-        assert result.get("success") is False, (
-            f"CLOSED: timeout result must have success=False. Got {result!r}"
-        )
-        assert result.get("error"), (
-            "CLOSED: timeout result must include a non-empty 'error' field"
-        )
+        assert result is not None, "CLOSED: dispatch_to_websocket must return a dict (not None) on timeout"
+        assert result.get("success") is False, f"CLOSED: timeout result must have success=False. Got {result!r}"
+        assert result.get("error"), "CLOSED: timeout result must include a non-empty 'error' field"
 
 
 # ===========================================================================
@@ -650,9 +624,7 @@ class TestHeartbeatTimeoutCleanup:
     """
 
     @pytest.mark.asyncio
-    async def test_stale_device_is_disconnected_on_cleanup(
-        self, bridge: Any
-    ) -> None:
+    async def test_stale_device_is_disconnected_on_cleanup(self, bridge: Any) -> None:
         """CLOSED: cleanup_stale_devices disconnects device with stale heartbeat.
 
         If this path does not work, stale devices are never cleaned up.
@@ -675,18 +647,14 @@ class TestHeartbeatTimeoutCleanup:
         await bridge.cleanup_stale_devices(timeout_seconds=60.0)
 
         device_after = bridge.get_device(device_id)
-        assert device_after is not None, (
-            "cleanup_stale_devices must retain the device identity entry"
-        )
+        assert device_after is not None, "cleanup_stale_devices must retain the device identity entry"
         assert device_after.connected is False, (
             "CLOSED: cleanup_stale_devices must set connected=False for stale device. "
             "If connected is still True, the bridge never cleans up ghost connections."
         )
 
     @pytest.mark.asyncio
-    async def test_fresh_device_is_not_disconnected_on_cleanup(
-        self, bridge: Any
-    ) -> None:
+    async def test_fresh_device_is_not_disconnected_on_cleanup(self, bridge: Any) -> None:
         """CLOSED: cleanup_stale_devices must not disconnect a device with a recent heartbeat."""
         device_id = f"insp-fresh-{uuid.uuid4().hex[:8]}"
         ws = _make_ws()
@@ -732,27 +700,27 @@ class TestEntryPointChain:
         """
         import main as _main
 
-        assert hasattr(_main, "SYSTEM_ORCHESTRATOR_AUTHORITY"), (
-            "CLOSED: main.py must export SYSTEM_ORCHESTRATOR_AUTHORITY sentinel"
-        )
-        assert _main.SYSTEM_ORCHESTRATOR_AUTHORITY, (
-            "CLOSED: SYSTEM_ORCHESTRATOR_AUTHORITY must be a non-empty string"
-        )
+        assert hasattr(
+            _main, "SYSTEM_ORCHESTRATOR_AUTHORITY"
+        ), "CLOSED: main.py must export SYSTEM_ORCHESTRATOR_AUTHORITY sentinel"
+        assert _main.SYSTEM_ORCHESTRATOR_AUTHORITY, "CLOSED: SYSTEM_ORCHESTRATOR_AUTHORITY must be a non-empty string"
 
     def test_galaxy_gateway_app_importable(self) -> None:
         """CLOSED: galaxy_gateway.app is importable without starting the server."""
         import galaxy_gateway.app as _gw_app
+
         assert _gw_app is not None
 
     def test_canonical_ingress_authority_sentinel_present(self) -> None:
         """CLOSED: galaxy_gateway.routes.websocket declares canonical ingress authority."""
         from galaxy_gateway.routes.websocket import CANONICAL_DEVICE_INGRESS_AUTHORITY
-        assert CANONICAL_DEVICE_INGRESS_AUTHORITY, (
-            "CLOSED: CANONICAL_DEVICE_INGRESS_AUTHORITY must be a non-empty sentinel string"
-        )
-        assert "/ws/device/{device_id}" in CANONICAL_DEVICE_INGRESS_AUTHORITY, (
-            "CLOSED: canonical ingress authority must reference /ws/device/{device_id}"
-        )
+
+        assert (
+            CANONICAL_DEVICE_INGRESS_AUTHORITY
+        ), "CLOSED: CANONICAL_DEVICE_INGRESS_AUTHORITY must be a non-empty sentinel string"
+        assert (
+            "/ws/device/{device_id}" in CANONICAL_DEVICE_INGRESS_AUTHORITY
+        ), "CLOSED: canonical ingress authority must reference /ws/device/{device_id}"
 
 
 # ===========================================================================
@@ -784,8 +752,9 @@ class TestDualRepoGapExposure:
         This test does not assert a fix — it asserts that the gap is
         machine-observable from the code structure.
         """
-        from galaxy_gateway.routing.dispatch import dispatch_to_websocket
         import inspect
+
+        from galaxy_gateway.routing.dispatch import dispatch_to_websocket
 
         src = inspect.getsource(dispatch_to_websocket)
 
@@ -820,12 +789,11 @@ class TestDualRepoGapExposure:
                 check_result_idempotency,
                 record_result_idempotency,
             )
+
             # Module available — test basic function signature
             record_result_idempotency("insp-idem-probe-001")
             result = check_result_idempotency("insp-idem-probe-001")
-            assert result is True, (
-                "CLOSED: after recording task_id, check must return True"
-            )
+            assert result is True, "CLOSED: after recording task_id, check must return True"
         except ImportError:
             pytest.fail(
                 "GAP_EXPOSED: core.durable_result_idempotency is NOT importable. "
@@ -850,8 +818,9 @@ class TestDualRepoGapExposure:
         """
         # The gap is structural; we verify it by checking that disconnect_device
         # does not attempt any outbound WebSocket send.
-        from galaxy_gateway.android_bridge import AndroidBridge
         import inspect
+
+        from galaxy_gateway.android_bridge import AndroidBridge
 
         src = inspect.getsource(AndroidBridge.disconnect_device)
 

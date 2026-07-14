@@ -83,9 +83,7 @@ class OrchestrationHelpers:
         try:
             return method(**kwargs)
         except Exception as exc:
-            logger.warning(
-                "OrchestrationHelpers: build_degraded_operation_envelope failed: %s", exc
-            )
+            logger.warning("OrchestrationHelpers: build_degraded_operation_envelope failed: %s", exc)
             return None
 
     @staticmethod
@@ -115,9 +113,7 @@ class OrchestrationHelpers:
         try:
             return method(**kwargs)
         except Exception as exc:
-            logger.warning(
-                "OrchestrationHelpers: build_permission_safety_state failed: %s", exc
-            )
+            logger.warning("OrchestrationHelpers: build_permission_safety_state failed: %s", exc)
             return None
 
     @staticmethod

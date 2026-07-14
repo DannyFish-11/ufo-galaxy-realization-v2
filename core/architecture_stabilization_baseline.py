@@ -256,10 +256,7 @@ class StabilizationTier(str, Enum):
         try:
             return cls(value)
         except ValueError:
-            raise ValueError(
-                f"Unknown StabilizationTier: {value!r}.  "
-                f"Valid values: {[t.value for t in cls]}"
-            )
+            raise ValueError(f"Unknown StabilizationTier: {value!r}.  " f"Valid values: {[t.value for t in cls]}")
 
 
 class SurfaceCategory(str, Enum):

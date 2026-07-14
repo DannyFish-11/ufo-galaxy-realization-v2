@@ -237,9 +237,7 @@ class ReplayAuditRecord:
         Module authority sentinel for provenance.
     """
 
-    audit_id: str = field(
-        default_factory=lambda: f"aud_{uuid.uuid4().hex[:16]}"
-    )
+    audit_id: str = field(default_factory=lambda: f"aud_{uuid.uuid4().hex[:16]}")
     kind: str = AuditRecordKind.RUNTIME_EVENT.value
     recorded_at: float = field(default_factory=time.time)
     payload: Dict[str, Any] = field(default_factory=dict)
@@ -413,9 +411,7 @@ class DurableAuditStore:
                 exist_ok=True,
             )
         except Exception as exc:  # noqa: BLE001
-            logger.warning(
-                "DurableAuditStore: could not create store directory: %s", exc
-            )
+            logger.warning("DurableAuditStore: could not create store directory: %s", exc)
 
     # ── Write ─────────────────────────────────────────────────────────────
 
@@ -493,9 +489,7 @@ class DurableAuditStore:
                                 parse_exc,
                             )
             except Exception as exc:  # noqa: BLE001
-                logger.warning(
-                    "DurableAuditStore: failed to load records: %s", exc
-                )
+                logger.warning("DurableAuditStore: failed to load records: %s", exc)
         return results
 
     # ── Inspect ───────────────────────────────────────────────────────────
@@ -525,9 +519,7 @@ class DurableAuditStore:
                 logger.debug("DurableAuditStore: audit file cleared")
                 return True
             except Exception as exc:  # noqa: BLE001
-                logger.warning(
-                    "DurableAuditStore: failed to clear store: %s", exc
-                )
+                logger.warning("DurableAuditStore: failed to clear store: %s", exc)
                 return False
 
     @property
@@ -633,14 +625,8 @@ def append_conflict_audit_record(
         ``True`` on success; ``False`` on write failure.
     """
     _store = store or get_replay_audit_store()
-    artifact = ConflictAuditRecord.from_authority_conflict_entry(
-        conflict, audit_run_id=audit_run_id
-    )
-    kind = (
-        AuditRecordKind.CONFLICT_RESOLVED.value
-        if artifact.is_resolved
-        else AuditRecordKind.CONFLICT_DETECTED.value
-    )
+    artifact = ConflictAuditRecord.from_authority_conflict_entry(conflict, audit_run_id=audit_run_id)
+    kind = AuditRecordKind.CONFLICT_RESOLVED.value if artifact.is_resolved else AuditRecordKind.CONFLICT_DETECTED.value
     envelope = ReplayAuditRecord(kind=kind, payload=artifact.to_dict())
     return _store.append(envelope)
 

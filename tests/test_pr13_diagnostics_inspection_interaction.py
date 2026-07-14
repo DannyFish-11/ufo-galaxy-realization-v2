@@ -128,8 +128,8 @@ Test index:
 from __future__ import annotations
 
 import json
-import pytest
 
+import pytest
 
 # ---------------------------------------------------------------------------
 # Shared test helpers
@@ -159,9 +159,7 @@ class _MockProviderRouting:
         self.provider_available = available
         self.route_reason = reason
         self.primary_model_id = selected
-        self.routing_authority_source = (
-            "TopologyRoutePlan" if not legacy else "LegacyRouter"
-        )
+        self.routing_authority_source = "TopologyRoutePlan" if not legacy else "LegacyRouter"
 
     def to_dict(self):
         return {

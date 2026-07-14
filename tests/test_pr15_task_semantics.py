@@ -129,50 +129,49 @@ O) Public API surface (__init__ re-exports)
 from __future__ import annotations
 
 import dataclasses
+
 import pytest
+
+from core.task_semantics import StepKind as _StepKindPublic
+from core.task_semantics import StepSemanticPolicy as _PolicyPublic
+from core.task_semantics import TaskSemanticSummary as _SummaryPublic
+from core.task_semantics import build_semantic_summary_from_graph as _graph_public
+from core.task_semantics.step_kind import (
+    READONLY_KINDS,
+    SIDE_EFFECTFUL_KINDS,
+    STEP_KIND_ORDER,
+    StepKind,
+    coerce_step_kind,
+    is_readonly_kind,
+    is_side_effectful_kind,
+    step_kind_description,
+)
+from core.task_semantics.step_policy import (
+    DEFAULT_EXECUTE_STEP_POLICY,
+    DEFAULT_SAFE_STEP_POLICY,
+    StepSemanticPolicy,
+    build_policy_for_kind,
+)
+from core.task_semantics.step_resolver import (
+    build_semantic_summary_from_dicts,
+    build_semantic_summary_from_envelopes,
+    build_semantic_summary_from_graph,
+    classify_task_envelope,
+    classify_task_node,
+    resolve_step_kind,
+    resolve_step_policy,
+)
+from core.task_semantics.task_semantic_summary import (
+    EMPTY_SEMANTIC_SUMMARY,
+    ClassifiedStep,
+    TaskSemanticSummary,
+    attach_semantic_summary_to_projection,
+    get_semantic_hints,
+)
 
 # ---------------------------------------------------------------------------
 # Module-level imports
 # ---------------------------------------------------------------------------
-
-from core.task_semantics.step_kind import (
-    StepKind,
-    STEP_KIND_ORDER,
-    SIDE_EFFECTFUL_KINDS,
-    READONLY_KINDS,
-    step_kind_description,
-    is_side_effectful_kind,
-    is_readonly_kind,
-    coerce_step_kind,
-)
-from core.task_semantics.step_policy import (
-    StepSemanticPolicy,
-    DEFAULT_SAFE_STEP_POLICY,
-    DEFAULT_EXECUTE_STEP_POLICY,
-    build_policy_for_kind,
-)
-from core.task_semantics.task_semantic_summary import (
-    ClassifiedStep,
-    TaskSemanticSummary,
-    EMPTY_SEMANTIC_SUMMARY,
-    attach_semantic_summary_to_projection,
-    get_semantic_hints,
-)
-from core.task_semantics.step_resolver import (
-    resolve_step_kind,
-    resolve_step_policy,
-    classify_task_node,
-    classify_task_envelope,
-    build_semantic_summary_from_graph,
-    build_semantic_summary_from_envelopes,
-    build_semantic_summary_from_dicts,
-)
-from core.task_semantics import (
-    StepKind as _StepKindPublic,
-    StepSemanticPolicy as _PolicyPublic,
-    TaskSemanticSummary as _SummaryPublic,
-    build_semantic_summary_from_graph as _graph_public,
-)
 
 
 # ---------------------------------------------------------------------------
@@ -194,12 +193,20 @@ class _FakeNode:
 # A) StepKind enum
 # ===========================================================================
 
+
 class TestStepKind:
 
     def test_all_expected_values_present(self):
         expected = {
-            "perceive", "analyze", "decide", "execute",
-            "confirm", "notify", "rollback", "observe_remote", "unknown",
+            "perceive",
+            "analyze",
+            "decide",
+            "execute",
+            "confirm",
+            "notify",
+            "rollback",
+            "observe_remote",
+            "unknown",
         }
         actual = {k.value for k in StepKind}
         assert expected == actual
@@ -261,6 +268,7 @@ class TestStepKind:
 # ===========================================================================
 # B) StepSemanticPolicy
 # ===========================================================================
+
 
 class TestStepSemanticPolicy:
 
@@ -333,6 +341,7 @@ class TestStepSemanticPolicy:
 # C) build_policy_for_kind factory
 # ===========================================================================
 
+
 class TestBuildPolicyForKind:
 
     def test_perceive_defaults(self):
@@ -404,6 +413,7 @@ class TestBuildPolicyForKind:
 # D) ClassifiedStep
 # ===========================================================================
 
+
 class TestClassifiedStep:
 
     def _make_step(self) -> ClassifiedStep:
@@ -452,6 +462,7 @@ class TestClassifiedStep:
 # ===========================================================================
 # E) TaskSemanticSummary
 # ===========================================================================
+
 
 class TestTaskSemanticSummary:
 
@@ -547,6 +558,7 @@ class TestTaskSemanticSummary:
 # F) attach_semantic_summary_to_projection
 # ===========================================================================
 
+
 class TestAttachSemanticSummaryToProjection:
 
     def test_adds_task_semantics_key(self):
@@ -574,6 +586,7 @@ class TestAttachSemanticSummaryToProjection:
 # G) get_semantic_hints
 # ===========================================================================
 
+
 class TestGetSemanticHints:
 
     def test_empty_summary_hints(self):
@@ -586,11 +599,17 @@ class TestGetSemanticHints:
     def test_all_hint_keys_present(self):
         hints = get_semantic_hints(EMPTY_SEMANTIC_SUMMARY)
         expected_keys = {
-            "total_steps", "unresolved_count", "is_fully_resolved",
-            "has_side_effectful_steps", "has_cross_device_steps",
-            "has_confirmation_required_steps", "has_rollback_steps",
-            "primary_visible_step_count", "observability_highlight_count",
-            "task_id", "trace_id",
+            "total_steps",
+            "unresolved_count",
+            "is_fully_resolved",
+            "has_side_effectful_steps",
+            "has_cross_device_steps",
+            "has_confirmation_required_steps",
+            "has_rollback_steps",
+            "primary_visible_step_count",
+            "observability_highlight_count",
+            "task_id",
+            "trace_id",
         }
         assert expected_keys.issubset(set(hints.keys()))
 
@@ -614,6 +633,7 @@ class TestGetSemanticHints:
 # ===========================================================================
 # H) resolve_step_kind resolver
 # ===========================================================================
+
 
 class TestResolveStepKind:
 
@@ -696,6 +716,7 @@ class TestResolveStepKind:
 # I) resolve_step_policy resolver
 # ===========================================================================
 
+
 class TestResolveStepPolicy:
 
     def test_returns_step_semantic_policy(self):
@@ -727,6 +748,7 @@ class TestResolveStepPolicy:
 # ===========================================================================
 # J) classify_task_node
 # ===========================================================================
+
 
 class TestClassifyTaskNode:
 
@@ -763,6 +785,7 @@ class TestClassifyTaskNode:
 # K) classify_task_envelope
 # ===========================================================================
 
+
 class TestClassifyTaskEnvelope:
 
     def test_dict_envelope_with_tool_name(self):
@@ -795,9 +818,11 @@ class TestClassifyTaskEnvelope:
         assert step.step_id == "t3"
         assert step.step_kind == StepKind.NOTIFY
 
+
 # ===========================================================================
 # L) build_semantic_summary_from_graph
 # ===========================================================================
+
 
 class TestBuildSemanticSummaryFromGraph:
 
@@ -849,6 +874,7 @@ class TestBuildSemanticSummaryFromGraph:
 # M) build_semantic_summary_from_envelopes
 # ===========================================================================
 
+
 class TestBuildSemanticSummaryFromEnvelopes:
 
     def test_empty_list(self):
@@ -883,6 +909,7 @@ class TestBuildSemanticSummaryFromEnvelopes:
 # ===========================================================================
 # N) build_semantic_summary_from_dicts
 # ===========================================================================
+
 
 class TestBuildSemanticSummaryFromDicts:
 
@@ -924,6 +951,7 @@ class TestBuildSemanticSummaryFromDicts:
 # ===========================================================================
 # O) Public API surface
 # ===========================================================================
+
 
 class TestPublicAPISurface:
 

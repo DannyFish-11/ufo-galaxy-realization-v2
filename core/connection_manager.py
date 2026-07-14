@@ -19,14 +19,15 @@
 """
 
 import asyncio
-import httpx
+import json
 import logging
-from pathlib import Path
-from typing import Dict, List, Optional, Any, Callable
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-import json
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional
+
+import httpx
 
 logger = logging.getLogger("ConnectionManager")
 
@@ -35,8 +36,10 @@ logger = logging.getLogger("ConnectionManager")
 # 连接状态定义
 # ============================================================================
 
+
 class ConnectionState(Enum):
     """连接状态"""
+
     DISCONNECTED = "disconnected"
     CONNECTING = "connecting"
     CONNECTED = "connected"
@@ -49,9 +52,11 @@ class ConnectionState(Enum):
 # 连接配置和数据模型
 # ============================================================================
 
+
 @dataclass
 class ConnectionConfig:
     """连接配置"""
+
     url: str
     timeout: float = 5.0
     heartbeat_interval: float = 30.0  # 心跳间隔（秒）
@@ -65,6 +70,7 @@ class ConnectionConfig:
 @dataclass
 class ConnectionInfo:
     """连接信息"""
+
     connection_id: str
     url: str
     state: ConnectionState = ConnectionState.DISCONNECTED
@@ -84,13 +90,14 @@ class ConnectionInfo:
             "last_heartbeat": self.last_heartbeat.isoformat() if self.last_heartbeat else None,
             "retry_count": self.retry_count,
             "last_error": self.last_error,
-            "total_reconnects": self.total_reconnects
+            "total_reconnects": self.total_reconnects,
         }
 
 
 # ============================================================================
 # 连接管理器
 # ============================================================================
+
 
 class ConnectionManager:
     """
@@ -137,10 +144,7 @@ class ConnectionManager:
     # ========================================================================
 
     async def register_connection(
-        self,
-        connection_id: str,
-        url: str,
-        config: Optional[ConnectionConfig] = None
+        self, connection_id: str, url: str, config: Optional[ConnectionConfig] = None
     ) -> bool:
         """
         注册连接
@@ -158,18 +162,13 @@ class ConnectionManager:
                 logger.warning(f"连接已存在，将覆盖: {connection_id}")
 
             # 创建连接信息
-            self.connections[connection_id] = ConnectionInfo(
-                connection_id=connection_id,
-                url=url
-            )
+            self.connections[connection_id] = ConnectionInfo(connection_id=connection_id, url=url)
 
             # 保存配置
             self.configs[connection_id] = config or ConnectionConfig(url=url)
 
             # 创建 HTTP 客户端
-            self.clients[connection_id] = httpx.AsyncClient(
-                timeout=self.configs[connection_id].timeout
-            )
+            self.clients[connection_id] = httpx.AsyncClient(timeout=self.configs[connection_id].timeout)
 
             logger.info(f"连接已注册: {connection_id} -> {url}")
 
@@ -280,13 +279,12 @@ class ConnectionManager:
         while conn_info.retry_count < config.max_retries:
             # 计算退避延迟
             delay = min(
-                config.initial_retry_delay * (config.retry_backoff_factor ** conn_info.retry_count),
-                config.max_retry_delay
+                config.initial_retry_delay * (config.retry_backoff_factor**conn_info.retry_count),
+                config.max_retry_delay,
             )
 
             logger.info(
-                f"重连尝试 {conn_info.retry_count + 1}/{config.max_retries} "
-                f"for {connection_id}，延迟 {delay:.1f}s"
+                f"重连尝试 {conn_info.retry_count + 1}/{config.max_retries} " f"for {connection_id}，延迟 {delay:.1f}s"
             )
 
             await asyncio.sleep(delay)
@@ -413,10 +411,7 @@ class ConnectionManager:
 
     def get_connected_connections(self) -> List[ConnectionInfo]:
         """获取所有已连接的连接"""
-        return [
-            conn for conn in self.connections.values()
-            if conn.state == ConnectionState.CONNECTED
-        ]
+        return [conn for conn in self.connections.values() if conn.state == ConnectionState.CONNECTED]
 
     def get_stats(self) -> Dict[str, Any]:
         """获取连接统计"""
@@ -430,16 +425,12 @@ class ConnectionManager:
             "connected": connected,
             "disconnected": disconnected,
             "error": error,
-            "reconnecting": total - connected - disconnected - error
+            "reconnecting": total - connected - disconnected - error,
         }
 
     def get_health_report(self) -> Dict[str, Any]:
         """获取健康报告"""
-        report = {
-            "timestamp": datetime.now().isoformat(),
-            "stats": self.get_stats(),
-            "connections": []
-        }
+        report = {"timestamp": datetime.now().isoformat(), "stats": self.get_stats(), "connections": []}
 
         for conn in self.connections.values():
             report["connections"].append(conn.to_dict())
@@ -457,10 +448,10 @@ class ConnectionManager:
 
             state = {
                 "timestamp": datetime.now().isoformat(),
-                "connections": [conn.to_dict() for conn in self.connections.values()]
+                "connections": [conn.to_dict() for conn in self.connections.values()],
             }
 
-            with open(self.state_file, 'w', encoding='utf-8') as f:
+            with open(self.state_file, "w", encoding="utf-8") as f:
                 json.dump(state, f, indent=2, ensure_ascii=False)
 
             logger.debug("连接状态已保存")
@@ -518,6 +509,7 @@ def get_connection_manager() -> ConnectionManager:
 # core/unified/connection_manager.py 管理设备 WebSocket 连接。
 # 两者通过以下便捷函数协同工作，外部代码无需感知差异。
 
+
 def get_unified_ws_manager():
     """
     返回统一设备 WebSocket 连接管理器单例。
@@ -525,6 +517,7 @@ def get_unified_ws_manager():
     封装导入，避免循环引用。用于需要向设备发送消息的旧代码调用。
     """
     from core.unified.connection_manager import get_unified_connection_manager
+
     return get_unified_connection_manager()
 
 

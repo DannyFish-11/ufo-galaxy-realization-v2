@@ -97,9 +97,10 @@ async def test_skill_md_execute_checks_runtime_command_capability():
         description="d",
         commands=[{"language": "bash", "command": "curl https://example.com"}],
     )
-    with patch("shutil.which", return_value=None), patch(
-        "asyncio.create_subprocess_exec", new=AsyncMock()
-    ) as mock_exec:
+    with (
+        patch("shutil.which", return_value=None),
+        patch("asyncio.create_subprocess_exec", new=AsyncMock()) as mock_exec,
+    ):
         result = await loader.execute("s")
     assert result["success"] is False
     assert result["runtime_semantics"] == "shell_command_skill"

@@ -49,7 +49,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 # ============================================================================
 # Helpers
 # ============================================================================
@@ -63,6 +62,7 @@ def _make_envelope(
 ) -> Any:
     """Return a real HandoffEnvelopeV2."""
     from contracts.handoff_envelope_v2 import build_handoff_envelope_v2
+
     return build_handoff_envelope_v2(
         trace_id=trace_id,
         task={"tool_name": "screenshot", "args": {}},
@@ -91,6 +91,7 @@ class TestAdoptHandoffSessionDelegationContinuity:
     def test_extracts_delegation_transfer_session_id_from_envelope(self):
         """A1: session_id in envelope becomes delegation_transfer_session_id."""
         from core.runtime.target_takeover import adopt_handoff_session
+
         envelope = _make_envelope(session_id="deleg_sess_001")
         ctx = adopt_handoff_session(envelope)
         assert ctx is not None
@@ -99,6 +100,7 @@ class TestAdoptHandoffSessionDelegationContinuity:
     def test_delegation_transfer_session_id_falls_back_to_session_id(self):
         """A2: When no explicit field, delegation_transfer_session_id == session_id."""
         from core.runtime.target_takeover import adopt_handoff_session
+
         envelope = _make_envelope(session_id="fallback_sess")
         ctx = adopt_handoff_session(envelope)
         assert ctx.delegation_transfer_session_id == ctx.session_id
@@ -106,6 +108,7 @@ class TestAdoptHandoffSessionDelegationContinuity:
     def test_delegation_transfer_session_id_not_empty_when_envelope_none(self):
         """A3: Even with None envelope, delegation_transfer_session_id is set."""
         from core.runtime.target_takeover import adopt_handoff_session
+
         ctx = adopt_handoff_session(None)
         assert ctx is not None
         # Should be set to the generated session_id
@@ -115,6 +118,7 @@ class TestAdoptHandoffSessionDelegationContinuity:
     def test_delegation_transfer_session_id_in_context_object(self):
         """A4: delegation_transfer_session_id is a real attribute of the context."""
         from core.runtime.target_takeover import adopt_handoff_session
+
         envelope = _make_envelope(session_id="ctx_field_test")
         ctx = adopt_handoff_session(envelope)
         assert hasattr(ctx, "delegation_transfer_session_id")
@@ -127,6 +131,7 @@ class TestLocalTakeoverSessionContextDelegationField:
     def test_field_exists_on_model(self):
         """A5: LocalTakeoverSessionContext has delegation_transfer_session_id field."""
         from contracts.local_takeover_result import LocalTakeoverSessionContext
+
         ctx = LocalTakeoverSessionContext(
             session_id="s1",
             delegation_transfer_session_id="d1",
@@ -136,6 +141,7 @@ class TestLocalTakeoverSessionContextDelegationField:
     def test_to_dict_includes_delegation_transfer_session_id(self):
         """A6: to_dict() includes delegation_transfer_session_id."""
         from contracts.local_takeover_result import LocalTakeoverSessionContext
+
         ctx = LocalTakeoverSessionContext(
             session_id="s1",
             delegation_transfer_session_id="d1",
@@ -147,6 +153,7 @@ class TestLocalTakeoverSessionContextDelegationField:
     def test_field_defaults_to_none(self):
         """delegation_transfer_session_id defaults to None when not provided."""
         from contracts.local_takeover_result import LocalTakeoverSessionContext
+
         ctx = LocalTakeoverSessionContext(session_id="s2")
         assert ctx.delegation_transfer_session_id is None
 
@@ -157,9 +164,10 @@ class TestBuildLocalTakeoverContextDelegationContinuity:
     def test_metadata_includes_delegation_transfer_session_id(self):
         """A7: state-continuum metadata includes delegation_transfer_session_id."""
         from core.runtime.target_takeover import (
-            build_local_takeover_context,
             adopt_handoff_session,
+            build_local_takeover_context,
         )
+
         envelope = _make_envelope(session_id="deleg_ctx_001")
         session_ctx = adopt_handoff_session(envelope)
         ctx = build_local_takeover_context(envelope, session_context=session_ctx)
@@ -169,9 +177,10 @@ class TestBuildLocalTakeoverContextDelegationContinuity:
     def test_delegation_transfer_session_id_none_safe(self):
         """A8: delegation_transfer_session_id handled gracefully with None envelope."""
         from core.runtime.target_takeover import (
-            build_local_takeover_context,
             adopt_handoff_session,
+            build_local_takeover_context,
         )
+
         session_ctx = adopt_handoff_session(None)
         ctx = build_local_takeover_context(None, session_context=session_ctx)
         # Should not raise; delegation_transfer_session_id may be None or set
@@ -185,6 +194,7 @@ class TestTargetTakeoverHandlerResultMetadata:
     def test_result_metadata_has_delegation_transfer_session_id(self):
         """A9: result metadata includes delegation_transfer_session_id."""
         from core.runtime.target_takeover import TargetTakeoverHandler
+
         handler = TargetTakeoverHandler()
         envelope = _make_envelope(session_id="deleg_result_001")
         result = handler.handle(envelope)
@@ -197,6 +207,7 @@ class TestTargetTakeoverHandlerResultMetadata:
     def test_delegation_transfer_session_id_stable_with_existing_session(self):
         """A10: execute_local_takeover preserves delegation_transfer_session_id."""
         from core.runtime.target_takeover import execute_local_takeover
+
         envelope = _make_envelope(session_id="deleg_e2e_001")
         result = execute_local_takeover(envelope, existing_runtime_session_id="rt_001")
         d = result.to_dict()
@@ -205,6 +216,7 @@ class TestTargetTakeoverHandlerResultMetadata:
     def test_adopted_session_preserved_in_result(self):
         """A11: adopted flag and session_id flow through to result."""
         from core.runtime.target_takeover import TargetTakeoverHandler
+
         handler = TargetTakeoverHandler()
         envelope = _make_envelope(session_id="adopted_sess_001")
         result = handler.handle(
@@ -219,6 +231,7 @@ class TestTargetTakeoverHandlerResultMetadata:
     def test_trace_id_and_task_id_still_propagated_regression(self):
         """A12: trace_id and task_id are not lost (regression check)."""
         from core.runtime.target_takeover import TargetTakeoverHandler
+
         handler = TargetTakeoverHandler()
         envelope = _make_envelope(
             trace_id="trace_regression",
@@ -242,21 +255,27 @@ class TestE2EPathSessionIdentity:
     def test_handle_via_e2e_accepts_control_session_id(self):
         """B1a: _handle_via_e2e signature accepts control_session_id."""
         import inspect
+
         from core.desktop_presence_runtime import DesktopPresenceRuntime
+
         sig = inspect.signature(DesktopPresenceRuntime._handle_via_e2e)
         assert "control_session_id" in sig.parameters
 
     def test_handle_via_e2e_accepts_runtime_attachment_session_id(self):
         """B1b: _handle_via_e2e signature accepts runtime_attachment_session_id."""
         import inspect
+
         from core.desktop_presence_runtime import DesktopPresenceRuntime
+
         sig = inspect.signature(DesktopPresenceRuntime._handle_via_e2e)
         assert "runtime_attachment_session_id" in sig.parameters
 
     def test_dispatch_forwards_control_session_id_via_kwargs(self):
         """B2: _dispatch forwards control_session_id from kwargs to _handle_via_e2e."""
         import inspect
+
         from core.desktop_presence_runtime import DesktopPresenceRuntime
+
         # Verify by checking that _dispatch's source references control_session_id
         # in the e2e branch via kwargs.get
         source = inspect.getsource(DesktopPresenceRuntime._dispatch)
@@ -266,14 +285,18 @@ class TestE2EPathSessionIdentity:
     def test_dispatch_forwards_runtime_attachment_session_id_via_kwargs(self):
         """B3: _dispatch forwards runtime_attachment_session_id from kwargs."""
         import inspect
+
         from core.desktop_presence_runtime import DesktopPresenceRuntime
+
         source = inspect.getsource(DesktopPresenceRuntime._dispatch)
         assert "runtime_attachment_session_id" in source
 
     def test_augmented_context_includes_control_session_id(self):
         """B4/B5: augmented_context dict in _handle_via_e2e contains both IDs."""
         import inspect
+
         from core.desktop_presence_runtime import DesktopPresenceRuntime
+
         source = inspect.getsource(DesktopPresenceRuntime._handle_via_e2e)
         assert "control_session_id" in source
         assert "runtime_attachment_session_id" in source
@@ -281,7 +304,9 @@ class TestE2EPathSessionIdentity:
     def test_constellation_context_includes_control_session_id(self):
         """B6/B7: constellation ctx_dict includes both session IDs."""
         import inspect
+
         from core.desktop_presence_runtime import DesktopPresenceRuntime
+
         source = inspect.getsource(DesktopPresenceRuntime._handle_via_e2e)
         # Both should be present in the ctx_dict passed to constellation.run
         assert '"control_session_id"' in source or "'control_session_id'" in source
@@ -359,14 +384,18 @@ class TestIngressCarrierContextInvocationIdentity:
     def test_handle_request_result_has_invocation_id_field(self):
         """C1 (source check): handle_request stamps invocation_id in ingress_carrier_context."""
         import inspect
+
         from core.desktop_presence_runtime import DesktopPresenceRuntime
+
         source = inspect.getsource(DesktopPresenceRuntime.handle_request)
         assert "invocation_id" in source
 
     def test_handle_request_control_session_id_in_ingress_context(self):
         """C2 (source check): ingress_carrier_context includes control_session_id."""
         import inspect
+
         from core.desktop_presence_runtime import DesktopPresenceRuntime
+
         source = inspect.getsource(DesktopPresenceRuntime.handle_request)
         # ingress_carrier_context block should include control_session_id
         assert "control_session_id" in source
@@ -383,14 +412,17 @@ class TestReconnectRecoveryContinuity:
     def test_run_recovery_calls_recover_session_truth(self):
         """D1: run_recovery includes _recover_session_truth step."""
         import inspect
+
         from core.runtime_restart_recovery import RuntimeRestartRecoveryCoordinator
+
         source = inspect.getsource(RuntimeRestartRecoveryCoordinator.run_recovery)
         assert "_recover_session_truth" in source
 
     def test_session_truth_recovery_graceful_when_store_empty(self):
         """D2: Session truth recovery completes without errors when store is empty."""
-        from core.runtime_restart_recovery import RuntimeRestartRecoveryCoordinator, RuntimeRecoveryReport
         import time
+
+        from core.runtime_restart_recovery import RuntimeRecoveryReport, RuntimeRestartRecoveryCoordinator
 
         report = RuntimeRecoveryReport(
             recovery_id=str(uuid.uuid4()),
@@ -403,8 +435,10 @@ class TestReconnectRecoveryContinuity:
 
     def test_recovery_report_has_session_truth_records_restored(self):
         """D3: RuntimeRecoveryReport has session_truth_records_restored attribute."""
-        from core.runtime_restart_recovery import RuntimeRecoveryReport
         import time
+
+        from core.runtime_restart_recovery import RuntimeRecoveryReport
+
         report = RuntimeRecoveryReport(
             recovery_id=str(uuid.uuid4()),
             started_at=time.time(),
@@ -415,6 +449,7 @@ class TestReconnectRecoveryContinuity:
     def test_body_mesh_entries_restored_after_recovery(self, tmp_path):
         """D4: BodyMeshRegistry entries survive a restart cycle via recovery."""
         import os
+
         from core.mesh.body_mesh_persistence import (
             BodyMeshPersistenceStore,
             save_body_mesh_snapshot,
@@ -454,8 +489,10 @@ class TestReconnectRecoveryContinuity:
 
         fake_registry = FakeRegistry()
         coord = RuntimeRestartRecoveryCoordinator(body_mesh_store=bm_store, body_mesh_registry=fake_registry)
-        from core.runtime_restart_recovery import RuntimeRecoveryReport
         import time
+
+        from core.runtime_restart_recovery import RuntimeRecoveryReport
+
         report = RuntimeRecoveryReport(recovery_id=str(uuid.uuid4()), started_at=time.time())
         coord._recover_body_mesh(report)
         assert report.body_mesh_entries_restored == 2
@@ -463,7 +500,9 @@ class TestReconnectRecoveryContinuity:
     def test_session_truth_recovery_runs_after_inflight_task_recovery(self):
         """D5: _recover_session_truth runs after _recover_inflight_tasks in run_recovery."""
         import inspect
+
         from core.runtime_restart_recovery import RuntimeRestartRecoveryCoordinator
+
         source = inspect.getsource(RuntimeRestartRecoveryCoordinator.run_recovery)
         pos_inflight = source.find("_recover_inflight_tasks")
         pos_truth = source.find("_recover_session_truth")
@@ -482,10 +521,11 @@ class TestSessionIdentityCoherence:
     def test_delegation_transfer_session_id_stable_across_handle(self):
         """Delegation session ID is stable from envelope → context → result."""
         from core.runtime.target_takeover import (
+            TargetTakeoverHandler,
             adopt_handoff_session,
             build_local_takeover_context,
-            TargetTakeoverHandler,
         )
+
         sess_id = "stable_deleg_sess"
         envelope = _make_envelope(session_id=sess_id)
 
@@ -505,6 +545,7 @@ class TestSessionIdentityCoherence:
     def test_trace_id_and_delegation_session_both_propagate(self):
         """Both trace_id and delegation_transfer_session_id flow through takeover."""
         from core.runtime.target_takeover import TargetTakeoverHandler
+
         trace = "trace_coherence_001"
         sess = "sess_coherence_001"
         envelope = _make_envelope(trace_id=trace, session_id=sess)
@@ -516,6 +557,7 @@ class TestSessionIdentityCoherence:
     def test_adopted_existing_session_preserves_delegation_id(self):
         """When reusing an existing session, delegation_transfer_session_id is still set."""
         from core.runtime.target_takeover import adopt_handoff_session
+
         envelope = _make_envelope(session_id="existing_deleg")
         ctx = adopt_handoff_session(envelope, existing_runtime_session_id="rt_existing")
         assert ctx.adopted is True

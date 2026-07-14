@@ -30,30 +30,33 @@ _REG_HANDLER_AVAILABLE = False
 
 try:
     from core.device_dispatch_readiness_surface import (
+        DEVICE_DISPATCH_READINESS_SURFACE_AUTHORITY,
         get_device_dispatch_readiness,
         get_dispatch_readiness_panel,
-        DEVICE_DISPATCH_READINESS_SURFACE_AUTHORITY,
     )
+
     _SURFACE_AVAILABLE = True
 except ImportError:
     pass
 
 try:
     from core.unified_dispatch_readiness_gate import (
-        evaluate_dispatch_readiness,
         DispatchReadinessStatus,
+        evaluate_dispatch_readiness,
         reset_dispatch_readiness_gate,
     )
+
     _GATE_AVAILABLE = True
 except ImportError:
     pass
 
 try:
     from galaxy_gateway.android.handlers.registration import (
-        record_registration_gap,
         clear_registration_gaps,
         get_all_devices_with_registration_gaps,
+        record_registration_gap,
     )
+
     _REG_HANDLER_AVAILABLE = True
 except ImportError:
     pass
@@ -63,14 +66,17 @@ except ImportError:
 # 工具函数
 # ---------------------------------------------------------------------------
 
+
 def _did(suffix: str = "") -> str:
     import uuid
+
     return f"test-dispatch-surface-{uuid.uuid4().hex[:8]}{suffix}"
 
 
 # ===========================================================================
 # A. get_all_devices_with_registration_gaps — 新函数
 # ===========================================================================
+
 
 @pytest.mark.skipif(
     not _REG_HANDLER_AVAILABLE,
@@ -132,6 +138,7 @@ class TestGetAllDevicesWithRegistrationGaps:
 # B. get_device_dispatch_readiness — 单设备查询
 # ===========================================================================
 
+
 @pytest.mark.skipif(
     not _SURFACE_AVAILABLE,
     reason="device_dispatch_readiness_surface not available",
@@ -147,9 +154,17 @@ class TestGetDeviceDispatchReadiness:
     def test_has_required_fields(self) -> None:
         """返回 dict 必须包含所有必需字段。"""
         result = get_device_dispatch_readiness("nonexistent-device-xyz")
-        for field in ("device_id", "dispatch_ready", "registered", "status",
-                      "reason", "registration_gaps", "blocking_notes",
-                      "surface_authority", "evaluated_at"):
+        for field in (
+            "device_id",
+            "dispatch_ready",
+            "registered",
+            "status",
+            "reason",
+            "registration_gaps",
+            "blocking_notes",
+            "surface_authority",
+            "evaluated_at",
+        ):
             assert field in result, f"缺失字段: {field}"
 
     def test_device_id_matches_input(self) -> None:
@@ -190,15 +205,10 @@ class TestGetDeviceDispatchReadiness:
             result = get_device_dispatch_readiness(did)
             # gap 应出现在 registration_gaps 或 blocking_notes 中
             gaps_present = "attach_runtime_session" in result.get("registration_gaps", [])
-            notes_present = any(
-                "attach_runtime_session" in note
-                for note in result.get("blocking_notes", [])
-            )
+            notes_present = any("attach_runtime_session" in note for note in result.get("blocking_notes", []))
             # status 或 reason 也可能包含 gap 信息
             reason_present = "attach_runtime_session" in result.get("reason", "")
-            assert gaps_present or notes_present or reason_present, (
-                f"gap 步骤名称在结果中不可见: {result}"
-            )
+            assert gaps_present or notes_present or reason_present, f"gap 步骤名称在结果中不可见: {result}"
         finally:
             clear_registration_gaps(did)
 
@@ -206,6 +216,7 @@ class TestGetDeviceDispatchReadiness:
 # ===========================================================================
 # C. get_dispatch_readiness_panel — 全设备面板
 # ===========================================================================
+
 
 @pytest.mark.skipif(
     not _SURFACE_AVAILABLE,
@@ -252,11 +263,19 @@ class TestGetDispatchReadinessPanel:
         panel = get_dispatch_readiness_panel(device_ids=[])
         summary = panel["summary"]
         expected_keys = {
-            "total", "dispatch_ready", "blocked_registration_gap",
-            "blocked_stale_attachment", "blocked_transport", "blocked_capability",
-            "blocked_session_validity", "blocked_cross_device_eligibility",
-            "blocked_operational_support", "blocked_other", "not_registered",
-            "gate_error", "total_blocked",
+            "total",
+            "dispatch_ready",
+            "blocked_registration_gap",
+            "blocked_stale_attachment",
+            "blocked_transport",
+            "blocked_capability",
+            "blocked_session_validity",
+            "blocked_cross_device_eligibility",
+            "blocked_operational_support",
+            "blocked_other",
+            "not_registered",
+            "gate_error",
+            "total_blocked",
         }
         for key in expected_keys:
             assert key in summary, f"summary 缺少键: {key}"
@@ -285,9 +304,7 @@ class TestGetDispatchReadinessPanel:
             assert entry.get("status", "") != "", "status 不应为空"
             has_reason = bool(entry.get("reason"))
             has_gaps = bool(entry.get("registration_gaps"))
-            assert has_reason or has_gaps, (
-                f"有注册 gap 的设备应有具体原因: {entry}"
-            )
+            assert has_reason or has_gaps, f"有注册 gap 的设备应有具体原因: {entry}"
         finally:
             clear_registration_gaps(did)
 
@@ -296,11 +313,13 @@ class TestGetDispatchReadinessPanel:
 # D. DeviceSurface 渲染 — dispatch readiness blocker 显示
 # ===========================================================================
 
+
 class TestDeviceSurfaceDispatchReadinessRendering:
     """windows_client.status_board_v2.device_surface.DeviceSurface"""
 
     def _surface(self):
         from windows_client.status_board_v2.device_surface import DeviceSurface
+
         return DeviceSurface()
 
     def _base_projection(self) -> Dict[str, Any]:
@@ -426,6 +445,7 @@ class TestDeviceSurfaceDispatchReadinessRendering:
 # E. 端点级集成测试（不启动真实 HTTP 服务器）
 # ===========================================================================
 
+
 @pytest.mark.skipif(
     not _SURFACE_AVAILABLE,
     reason="device_dispatch_readiness_surface not available",
@@ -436,6 +456,7 @@ class TestOperatorRouteDispatchReadinessEndpoints:
     def _get_router(self):
         try:
             from core.routes.operator import create_router
+
             return create_router()
         except Exception:
             return None
@@ -444,6 +465,7 @@ class TestOperatorRouteDispatchReadinessEndpoints:
         """operator 路由模块应可导入。"""
         try:
             from core.routes import operator as op_mod
+
             assert hasattr(op_mod, "create_router")
         except ImportError:
             pytest.skip("fastapi not available")
@@ -460,11 +482,7 @@ class TestOperatorRouteDispatchReadinessEndpoints:
         # 找到目标路由处理函数
         target_func = None
         for route in router.routes:
-            if (
-                hasattr(route, "path")
-                and "dispatch-readiness" in route.path
-                and "{device_id}" in route.path
-            ):
+            if hasattr(route, "path") and "dispatch-readiness" in route.path and "{device_id}" in route.path:
                 target_func = route.endpoint
                 break
         if target_func is None:
@@ -473,6 +491,7 @@ class TestOperatorRouteDispatchReadinessEndpoints:
         result = await target_func("test-device-id-e2e")
         # JSONResponse.body 是 bytes；解析后验证结构
         import json
+
         body = json.loads(result.body)
         assert "device_id" in body
         assert "dispatch_ready" in body
@@ -490,10 +509,7 @@ class TestOperatorRouteDispatchReadinessEndpoints:
         router = create_router()
         target_func = None
         for route in router.routes:
-            if (
-                hasattr(route, "path")
-                and route.path == "/api/v1/operator/devices/dispatch-readiness"
-            ):
+            if hasattr(route, "path") and route.path == "/api/v1/operator/devices/dispatch-readiness":
                 target_func = route.endpoint
                 break
         if target_func is None:
@@ -501,6 +517,7 @@ class TestOperatorRouteDispatchReadinessEndpoints:
 
         result = await target_func(device_ids=None)
         import json
+
         body = json.loads(result.body)
         assert "devices" in body
         assert "summary" in body
@@ -517,10 +534,7 @@ class TestOperatorRouteDispatchReadinessEndpoints:
         router = create_router()
         target_func = None
         for route in router.routes:
-            if (
-                hasattr(route, "path")
-                and route.path == "/api/v1/operator/devices/dispatch-readiness"
-            ):
+            if hasattr(route, "path") and route.path == "/api/v1/operator/devices/dispatch-readiness":
                 target_func = route.endpoint
                 break
         if target_func is None:
@@ -528,6 +542,7 @@ class TestOperatorRouteDispatchReadinessEndpoints:
 
         result = await target_func(device_ids="device-a,device-b")
         import json
+
         body = json.loads(result.body)
         assert "devices" in body
         returned_ids = {d["device_id"] for d in body["devices"]}

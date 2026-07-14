@@ -33,10 +33,10 @@ Groups:
   E – UnifiedResultIngress.process() closure-grade enforcement
   F – Last closure outcome snapshot includes closure-grade fields
 """
+
 from __future__ import annotations
 
 from typing import Any
-
 
 # ---------------------------------------------------------------------------
 # Helpers

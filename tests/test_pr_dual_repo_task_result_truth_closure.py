@@ -71,6 +71,7 @@ import pytest
 # Helper: _map_android_task_result_status logic extracted for direct testing
 # ---------------------------------------------------------------------------
 
+
 def _map_status(raw_status: str) -> str:
     """Replicate the status-mapping logic added to api_routes.py."""
     s = str(raw_status).lower().strip()
@@ -262,12 +263,12 @@ class TestTruthChainInvocation:
 
     def test_C03_import_failure_of_truth_chain_handled_gracefully(self):
         """If truth chain module is unavailable, handler must not raise."""
+
         # Simulate the try/except block in the compat handler
         def _invoke_truth_chain_safe(message: Dict[str, Any], task_id: str, mapped_status: str) -> None:
             try:
-                from core.task_result_canonical_truth_chain import (
-                    run_task_result_truth_chain as _run_ttc,
-                )
+                from core.task_result_canonical_truth_chain import run_task_result_truth_chain as _run_ttc
+
                 _run_ttc(message, task_id=task_id, result_status=mapped_status)
             except ImportError:
                 pass  # non-fatal — compat path continues without truth chain
@@ -286,9 +287,7 @@ class TestTruthChainInvocation:
 class TestTaskQueueEntryCorrectness:
     """D01–D03: task_queue entries are populated correctly after the fix."""
 
-    def _run_update(
-        self, task_queue: Dict[str, Any], message: Dict[str, Any]
-    ) -> str:
+    def _run_update(self, task_queue: Dict[str, Any], message: Dict[str, Any]) -> str:
         """Run the status-mapping + task_queue update logic from the fixed handler."""
         task_id = message.get("task_id", "")
         raw = str(message.get("status", "")).lower().strip()
@@ -336,6 +335,7 @@ def test_truth_chain_module_importable():
     """Smoke test: core.task_result_canonical_truth_chain is importable."""
     try:
         import core.task_result_canonical_truth_chain as _ttc  # noqa: F401
+
         assert hasattr(_ttc, "run_task_result_truth_chain")
         assert hasattr(_ttc, "TASK_RESULT_TRUTH_CHAIN_MUST_RUN_POLICY")
     except ImportError:
@@ -346,6 +346,7 @@ def test_api_routes_compat_ws_module_importable():
     """Smoke test: core.api_routes module is importable."""
     try:
         import core.api_routes  # noqa: F401
+
         assert hasattr(core.api_routes, "create_websocket_routes")
     except ImportError:
         pytest.skip("core.api_routes not available in this env")

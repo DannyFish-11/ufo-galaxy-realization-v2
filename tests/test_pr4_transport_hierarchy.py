@@ -102,51 +102,63 @@ class TestTransportHierarchyModule(unittest.TestCase):
 
     def test_01_authority_importable(self):
         from core.transport_hierarchy import TRANSPORT_HIERARCHY_AUTHORITY
+
         self.assertIsInstance(TRANSPORT_HIERARCHY_AUTHORITY, str)
         self.assertIn("TRANSPORT_HIERARCHY", TRANSPORT_HIERARCHY_AUTHORITY)
 
     def test_02_role_direct_ws_is_primary(self):
         from core.transport_hierarchy import TRANSPORT_ROLE_DIRECT_WS
+
         self.assertEqual(TRANSPORT_ROLE_DIRECT_WS, "primary")
 
     def test_03_role_relay_is_fallback(self):
         from core.transport_hierarchy import TRANSPORT_ROLE_RELAY
+
         self.assertEqual(TRANSPORT_ROLE_RELAY, "fallback")
 
     def test_04_role_mesh_is_overlay(self):
         from core.transport_hierarchy import TRANSPORT_ROLE_MESH
+
         self.assertEqual(TRANSPORT_ROLE_MESH, "overlay")
 
     def test_05_mesh_orchestration_excluded(self):
         from core.transport_hierarchy import MESH_ORCHESTRATION_AUTHORITY_EXCLUDED
+
         self.assertIs(MESH_ORCHESTRATION_AUTHORITY_EXCLUDED, True)
 
     def test_06_role_for_path_direct_ws(self):
         from core.transport_hierarchy import transport_role_for_path
+
         self.assertEqual(transport_role_for_path("direct_ws"), "primary")
 
     def test_07_role_for_path_ucm(self):
         from core.transport_hierarchy import transport_role_for_path
+
         self.assertEqual(transport_role_for_path("ucm"), "primary")
 
     def test_08_role_for_path_relay(self):
         from core.transport_hierarchy import transport_role_for_path
+
         self.assertEqual(transport_role_for_path("relay"), "fallback")
 
     def test_09_role_for_path_mesh_direct(self):
         from core.transport_hierarchy import transport_role_for_path
+
         self.assertEqual(transport_role_for_path("mesh_direct"), "overlay")
 
     def test_10_role_for_path_mesh_relay(self):
         from core.transport_hierarchy import transport_role_for_path
+
         self.assertEqual(transport_role_for_path("mesh_relay"), "overlay")
 
     def test_11_role_for_path_none(self):
         from core.transport_hierarchy import transport_role_for_path
+
         self.assertEqual(transport_role_for_path("none"), "none")
 
     def test_12_role_for_path_unknown(self):
         from core.transport_hierarchy import transport_role_for_path
+
         self.assertEqual(transport_role_for_path("totally_unknown_path"), "unknown")
 
 
@@ -155,11 +167,13 @@ class TestProxyRelaySentinel(unittest.TestCase):
 
     def test_13_relay_transport_role_importable(self):
         from core.proxy_relay import RELAY_TRANSPORT_ROLE
+
         self.assertIsInstance(RELAY_TRANSPORT_ROLE, str)
         self.assertTrue(len(RELAY_TRANSPORT_ROLE) > 0)
 
     def test_14_relay_transport_role_prefix(self):
         from core.proxy_relay import RELAY_TRANSPORT_ROLE
+
         self.assertTrue(
             RELAY_TRANSPORT_ROLE.startswith("RELAY::"),
             f"Expected RELAY:: prefix, got: {RELAY_TRANSPORT_ROLE!r}",
@@ -171,11 +185,13 @@ class TestMeshCoordinatorSentinels(unittest.TestCase):
 
     def test_15_mesh_transport_role_importable(self):
         from core.mesh_coordinator import MESH_TRANSPORT_ROLE
+
         self.assertIsInstance(MESH_TRANSPORT_ROLE, str)
         self.assertTrue(len(MESH_TRANSPORT_ROLE) > 0)
 
     def test_16_mesh_transport_role_prefix(self):
         from core.mesh_coordinator import MESH_TRANSPORT_ROLE
+
         self.assertTrue(
             MESH_TRANSPORT_ROLE.startswith("MESH::"),
             f"Expected MESH:: prefix, got: {MESH_TRANSPORT_ROLE!r}",
@@ -183,6 +199,7 @@ class TestMeshCoordinatorSentinels(unittest.TestCase):
 
     def test_17_mesh_orchestration_excluded(self):
         from core.mesh_coordinator import MESH_ORCHESTRATION_EXCLUDED
+
         self.assertIs(MESH_ORCHESTRATION_EXCLUDED, True)
 
 
@@ -191,10 +208,12 @@ class TestDeviceReadinessHierarchySentinel(unittest.TestCase):
 
     def test_18_transport_hierarchy_enforced_in_all(self):
         import core.device_readiness as dr
+
         self.assertIn("TRANSPORT_HIERARCHY_ENFORCED", dr.__all__)
 
     def test_19_transport_hierarchy_enforced_is_true(self):
         from core.device_readiness import TRANSPORT_HIERARCHY_ENFORCED
+
         self.assertIs(TRANSPORT_HIERARCHY_ENFORCED, True)
 
 
@@ -203,6 +222,7 @@ class TestRoutabilitySummaryFields(unittest.TestCase):
 
     def setUp(self):
         from core.device_readiness import RoutabilitySummary
+
         self.RS = RoutabilitySummary
 
     def test_20_has_primary_transport(self):
@@ -271,24 +291,16 @@ class TestRoutabilitySummaryHierarchyLogic(unittest.TestCase):
         if relay_present:
             # Make relay module importable
             fake_relay = MagicMock()
-            patches.append(
-                patch.dict(sys.modules, {"core.proxy_relay": fake_relay})
-            )
+            patches.append(patch.dict(sys.modules, {"core.proxy_relay": fake_relay}))
         else:
             # Make relay module absent
-            patches.append(
-                patch.dict(sys.modules, {"core.proxy_relay": None})
-            )
+            patches.append(patch.dict(sys.modules, {"core.proxy_relay": None}))
 
         if mesh_present:
             fake_mesh = MagicMock()
-            patches.append(
-                patch.dict(sys.modules, {"core.mesh_coordinator": fake_mesh})
-            )
+            patches.append(patch.dict(sys.modules, {"core.mesh_coordinator": fake_mesh}))
         else:
-            patches.append(
-                patch.dict(sys.modules, {"core.mesh_coordinator": None})
-            )
+            patches.append(patch.dict(sys.modules, {"core.mesh_coordinator": None}))
 
         with patches[0], patches[1], patches[2], patches[3]:
             return get_routability_summary("dev1")
@@ -377,6 +389,7 @@ class TestRoutabilitySummaryHierarchyLogic(unittest.TestCase):
 
     def test_40_default_summary_fields(self):
         from core.device_readiness import RoutabilitySummary
+
         rs = RoutabilitySummary(device_id="default_test")
         self.assertFalse(rs.direct_ws_available)
         self.assertFalse(rs.ucm_send_available)

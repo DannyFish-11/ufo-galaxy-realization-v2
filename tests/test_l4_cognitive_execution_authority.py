@@ -122,21 +122,21 @@ if _REPO_ROOT not in sys.path:
 # Helpers — canonical stub objects for L3 context assembly & L2 supply
 # ---------------------------------------------------------------------------
 
+
 def _make_canonical_context(message_count: int = 2, with_tools: bool = False):
     """Return a minimal CognitiveContextAssembly with the correct L3 sentinel."""
     from core.llm.context_authority import (
+        LLM_CONTEXT_AUTHORITY,
         CognitiveContextAuthority,
         CognitiveContextRequest,
-        LLM_CONTEXT_AUTHORITY,
     )
+
     auth = CognitiveContextAuthority()
     req = CognitiveContextRequest(
         system_prefix="You are a test assistant.",
         user_message="Hello",
         task_type="general",
-        tool_manifest=[{"type": "function", "function": {"name": "noop"}}]
-        if with_tools
-        else None,
+        tool_manifest=[{"type": "function", "function": {"name": "noop"}}] if with_tools else None,
     )
     assembly = auth.assemble(req)
     assert assembly.authority == LLM_CONTEXT_AUTHORITY
@@ -150,12 +150,13 @@ def _make_canonical_supply(
 ):
     """Return a minimal SupplyResolutionResult with the correct L2 sentinel."""
     from core.llm.supply_authority import (
-        FallbackLegality,
         LLM_SUPPLY_AUTHORITY,
+        FallbackLegality,
         ProviderOrderingPolicy,
         SupplyResolutionResult,
         SupplyResolutionStep,
     )
+
     step = SupplyResolutionStep(
         provider=provider,
         model=model,
@@ -216,17 +217,20 @@ def _make_patched_exec_auth(
 
 def test_01_llm_execution_authority_sentinel_importable():
     from core.llm.execution_authority import LLM_EXECUTION_AUTHORITY
+
     assert LLM_EXECUTION_AUTHORITY is not None
 
 
 def test_02_llm_execution_authority_sentinel_non_empty():
     from core.llm.execution_authority import LLM_EXECUTION_AUTHORITY
+
     assert isinstance(LLM_EXECUTION_AUTHORITY, str)
     assert len(LLM_EXECUTION_AUTHORITY) > 0
 
 
 def test_03_llm_execution_authority_sentinel_identifies_class():
     from core.llm.execution_authority import LLM_EXECUTION_AUTHORITY
+
     assert "CognitiveExecutionAuthority" in LLM_EXECUTION_AUTHORITY
 
 
@@ -237,21 +241,25 @@ def test_03_llm_execution_authority_sentinel_identifies_class():
 
 def test_04_cognitive_execution_authority_class_importable():
     from core.llm.execution_authority import CognitiveExecutionAuthority
+
     assert CognitiveExecutionAuthority is not None
 
 
 def test_05_cognitive_execution_request_class_importable():
     from core.llm.execution_authority import CognitiveExecutionRequest
+
     assert CognitiveExecutionRequest is not None
 
 
 def test_06_cognitive_execution_result_class_importable():
     from core.llm.execution_authority import CognitiveExecutionResult
+
     assert CognitiveExecutionResult is not None
 
 
 def test_07_get_cognitive_execution_authority_importable():
     from core.llm.execution_authority import get_cognitive_execution_authority
+
     assert callable(get_cognitive_execution_authority)
 
 
@@ -265,12 +273,14 @@ def test_08_get_cognitive_execution_authority_returns_instance():
         CognitiveExecutionAuthority,
         get_cognitive_execution_authority,
     )
+
     auth = get_cognitive_execution_authority()
     assert isinstance(auth, CognitiveExecutionAuthority)
 
 
 def test_09_get_cognitive_execution_authority_singleton():
     from core.llm.execution_authority import get_cognitive_execution_authority
+
     a1 = get_cognitive_execution_authority()
     a2 = get_cognitive_execution_authority()
     assert a1 is a2
@@ -282,6 +292,7 @@ def test_10_refresh_cognitive_execution_authority_returns_fresh_instance():
         get_cognitive_execution_authority,
         refresh_cognitive_execution_authority,
     )
+
     original = get_cognitive_execution_authority()
     fresh = refresh_cognitive_execution_authority()
     assert isinstance(fresh, CognitiveExecutionAuthority)
@@ -295,6 +306,7 @@ def test_10_refresh_cognitive_execution_authority_returns_fresh_instance():
 
 def test_11_cognitive_execution_request_default_temperature():
     from core.llm.execution_authority import CognitiveExecutionRequest
+
     ctx = _make_canonical_context()
     sup = _make_canonical_supply()
     req = CognitiveExecutionRequest(context_assembly=ctx, supply_resolution=sup)
@@ -303,6 +315,7 @@ def test_11_cognitive_execution_request_default_temperature():
 
 def test_12_cognitive_execution_request_default_max_tokens():
     from core.llm.execution_authority import CognitiveExecutionRequest
+
     ctx = _make_canonical_context()
     sup = _make_canonical_supply()
     req = CognitiveExecutionRequest(context_assembly=ctx, supply_resolution=sup)
@@ -311,6 +324,7 @@ def test_12_cognitive_execution_request_default_max_tokens():
 
 def test_13_cognitive_execution_request_accepts_feature_context():
     from core.llm.execution_authority import CognitiveExecutionRequest
+
     ctx = _make_canonical_context()
     sup = _make_canonical_supply()
     req = CognitiveExecutionRequest(
@@ -323,6 +337,7 @@ def test_13_cognitive_execution_request_accepts_feature_context():
 
 def test_14_cognitive_execution_request_accepts_execution_metadata():
     from core.llm.execution_authority import CognitiveExecutionRequest
+
     ctx = _make_canonical_context()
     sup = _make_canonical_supply()
     meta = {"retry_count": 1, "recovery_reason": "timeout"}
@@ -341,9 +356,10 @@ def test_14_cognitive_execution_request_accepts_execution_metadata():
 
 def test_15_cognitive_execution_result_authority_default():
     from core.llm.execution_authority import (
-        CognitiveExecutionResult,
         LLM_EXECUTION_AUTHORITY,
+        CognitiveExecutionResult,
     )
+
     res = CognitiveExecutionResult(
         content="hello",
         tool_calls=None,
@@ -355,6 +371,7 @@ def test_15_cognitive_execution_result_authority_default():
 
 def test_16_cognitive_execution_result_is_canonical_default():
     from core.llm.execution_authority import CognitiveExecutionResult
+
     res = CognitiveExecutionResult(
         content="hello",
         tool_calls=None,
@@ -366,84 +383,98 @@ def test_16_cognitive_execution_result_is_canonical_default():
 
 def test_17_cognitive_execution_result_to_dict_content_key():
     from core.llm.execution_authority import CognitiveExecutionResult
+
     res = CognitiveExecutionResult(content="hi", tool_calls=None, provider="openai", model="gpt-5.5")
     assert "content" in res.to_dict()
 
 
 def test_18_cognitive_execution_result_to_dict_tool_calls_key():
     from core.llm.execution_authority import CognitiveExecutionResult
+
     res = CognitiveExecutionResult(content="hi", tool_calls=None, provider="openai", model="gpt-5.5")
     assert "tool_calls" in res.to_dict()
 
 
 def test_19_cognitive_execution_result_to_dict_provider_key():
     from core.llm.execution_authority import CognitiveExecutionResult
+
     res = CognitiveExecutionResult(content="hi", tool_calls=None, provider="openai", model="gpt-5.5")
     assert "provider" in res.to_dict()
 
 
 def test_20_cognitive_execution_result_to_dict_model_key():
     from core.llm.execution_authority import CognitiveExecutionResult
+
     res = CognitiveExecutionResult(content="hi", tool_calls=None, provider="openai", model="gpt-5.5")
     assert "model" in res.to_dict()
 
 
 def test_21_cognitive_execution_result_to_dict_is_canonical_key():
     from core.llm.execution_authority import CognitiveExecutionResult
+
     res = CognitiveExecutionResult(content="hi", tool_calls=None, provider="openai", model="gpt-5.5")
     assert "is_canonical" in res.to_dict()
 
 
 def test_22_cognitive_execution_result_to_dict_authority_key():
     from core.llm.execution_authority import CognitiveExecutionResult
+
     res = CognitiveExecutionResult(content="hi", tool_calls=None, provider="openai", model="gpt-5.5")
     assert "authority" in res.to_dict()
 
 
 def test_23_cognitive_execution_result_to_dict_authority_value():
-    from core.llm.execution_authority import CognitiveExecutionResult, LLM_EXECUTION_AUTHORITY
+    from core.llm.execution_authority import LLM_EXECUTION_AUTHORITY, CognitiveExecutionResult
+
     res = CognitiveExecutionResult(content="hi", tool_calls=None, provider="openai", model="gpt-5.5")
     assert res.to_dict()["authority"] == LLM_EXECUTION_AUTHORITY
 
 
 def test_24_cognitive_execution_result_to_dict_execution_trace_key():
     from core.llm.execution_authority import CognitiveExecutionResult
+
     res = CognitiveExecutionResult(content="hi", tool_calls=None, provider="openai", model="gpt-5.5")
     assert "execution_trace" in res.to_dict()
 
 
 def test_25_cognitive_execution_result_to_dict_source_context_key():
     from core.llm.execution_authority import CognitiveExecutionResult
+
     res = CognitiveExecutionResult(content="hi", tool_calls=None, provider="openai", model="gpt-5.5")
     assert "source_context" in res.to_dict()
 
 
 def test_26_cognitive_execution_result_to_dict_source_supply_key():
     from core.llm.execution_authority import CognitiveExecutionResult
+
     res = CognitiveExecutionResult(content="hi", tool_calls=None, provider="openai", model="gpt-5.5")
     assert "source_supply" in res.to_dict()
 
 
 def test_27_cognitive_execution_result_to_dict_input_tokens_key():
     from core.llm.execution_authority import CognitiveExecutionResult
+
     res = CognitiveExecutionResult(content="hi", tool_calls=None, provider="openai", model="gpt-5.5")
     assert "input_tokens" in res.to_dict()
 
 
 def test_28_cognitive_execution_result_to_dict_output_tokens_key():
     from core.llm.execution_authority import CognitiveExecutionResult
+
     res = CognitiveExecutionResult(content="hi", tool_calls=None, provider="openai", model="gpt-5.5")
     assert "output_tokens" in res.to_dict()
 
 
 def test_29_cognitive_execution_result_to_dict_latency_ms_key():
     from core.llm.execution_authority import CognitiveExecutionResult
+
     res = CognitiveExecutionResult(content="hi", tool_calls=None, provider="openai", model="gpt-5.5")
     assert "latency_ms" in res.to_dict()
 
 
 def test_30_cognitive_execution_result_to_dict_json_serialisable():
     from core.llm.execution_authority import CognitiveExecutionResult
+
     res = CognitiveExecutionResult(
         content="hello world",
         tool_calls=None,
@@ -462,27 +493,32 @@ def test_30_cognitive_execution_result_to_dict_json_serialisable():
 
 def test_31_cognitive_execution_authority_has_execute_method():
     from core.llm.execution_authority import CognitiveExecutionAuthority
+
     assert hasattr(CognitiveExecutionAuthority, "execute")
     assert callable(CognitiveExecutionAuthority.execute)
 
 
 def test_32_cognitive_execution_authority_has_execution_router_property():
     from core.llm.execution_authority import CognitiveExecutionAuthority
+
     assert hasattr(CognitiveExecutionAuthority, "execution_router")
 
 
 def test_33_cognitive_execution_authority_has_verify_context_authority():
     from core.llm.execution_authority import CognitiveExecutionAuthority
+
     assert hasattr(CognitiveExecutionAuthority, "_verify_context_authority")
 
 
 def test_34_cognitive_execution_authority_has_verify_supply_authority():
     from core.llm.execution_authority import CognitiveExecutionAuthority
+
     assert hasattr(CognitiveExecutionAuthority, "_verify_supply_authority")
 
 
 def test_35_cognitive_execution_authority_has_normalize_response():
     from core.llm.execution_authority import CognitiveExecutionAuthority
+
     assert hasattr(CognitiveExecutionAuthority, "_normalize_response")
 
 
@@ -628,8 +664,8 @@ def test_46_normalize_response_returns_empty_content_for_none():
     from core.llm.execution_authority import CognitiveExecutionAuthority
 
     trace: list = []
-    content, tool_calls, raw_dict, in_tok, out_tok, latency = (
-        CognitiveExecutionAuthority._normalize_response(None, trace)
+    content, tool_calls, raw_dict, in_tok, out_tok, latency = CognitiveExecutionAuthority._normalize_response(
+        None, trace
     )
     assert content == ""
     assert tool_calls is None
@@ -682,7 +718,11 @@ def test_50_normalize_response_preserves_non_empty_tool_calls():
 
 
 def test_51_execute_returns_cognitive_execution_result():
-    from core.llm.execution_authority import CognitiveExecutionAuthority, CognitiveExecutionRequest, CognitiveExecutionResult
+    from core.llm.execution_authority import (
+        CognitiveExecutionAuthority,
+        CognitiveExecutionRequest,
+        CognitiveExecutionResult,
+    )
 
     auth = _make_patched_exec_auth(response=_make_mock_llm_response(content="test response"))
     ctx = _make_canonical_context()
@@ -694,7 +734,7 @@ def test_51_execute_returns_cognitive_execution_result():
 
 
 def test_52_execute_result_has_execution_authority_sentinel():
-    from core.llm.execution_authority import CognitiveExecutionRequest, LLM_EXECUTION_AUTHORITY
+    from core.llm.execution_authority import LLM_EXECUTION_AUTHORITY, CognitiveExecutionRequest
 
     auth = _make_patched_exec_auth()
     ctx = _make_canonical_context()
@@ -826,8 +866,8 @@ def test_62_execute_result_source_supply_is_provided_supply():
 
 
 def test_63_execute_result_to_dict_source_context_carries_l3_authority():
-    from core.llm.execution_authority import CognitiveExecutionRequest, LLM_EXECUTION_AUTHORITY
     from core.llm.context_authority import LLM_CONTEXT_AUTHORITY
+    from core.llm.execution_authority import LLM_EXECUTION_AUTHORITY, CognitiveExecutionRequest
 
     auth = _make_patched_exec_auth()
     ctx = _make_canonical_context()
@@ -860,26 +900,31 @@ def test_64_execute_result_to_dict_source_supply_carries_l2_authority():
 
 def test_65_llm_execution_authority_re_exported_from_core_llm():
     from core.llm import LLM_EXECUTION_AUTHORITY
+
     assert LLM_EXECUTION_AUTHORITY is not None
 
 
 def test_66_cognitive_execution_request_re_exported_from_core_llm():
     from core.llm import CognitiveExecutionRequest
+
     assert CognitiveExecutionRequest is not None
 
 
 def test_67_cognitive_execution_result_re_exported_from_core_llm():
     from core.llm import CognitiveExecutionResult
+
     assert CognitiveExecutionResult is not None
 
 
 def test_68_cognitive_execution_authority_re_exported_from_core_llm():
     from core.llm import CognitiveExecutionAuthority
+
     assert CognitiveExecutionAuthority is not None
 
 
 def test_69_get_cognitive_execution_authority_re_exported_from_core_llm():
     from core.llm import get_cognitive_execution_authority
+
     assert callable(get_cognitive_execution_authority)
 
 
@@ -891,18 +936,21 @@ def test_69_get_cognitive_execution_authority_re_exported_from_core_llm():
 def test_70_llm_execution_authority_differs_from_route_authority():
     from core.llm.execution_authority import LLM_EXECUTION_AUTHORITY
     from core.llm.route_authority import LLM_ROUTE_AUTHORITY
+
     assert LLM_EXECUTION_AUTHORITY != LLM_ROUTE_AUTHORITY
 
 
 def test_71_llm_execution_authority_differs_from_supply_authority():
     from core.llm.execution_authority import LLM_EXECUTION_AUTHORITY
     from core.llm.supply_authority import LLM_SUPPLY_AUTHORITY
+
     assert LLM_EXECUTION_AUTHORITY != LLM_SUPPLY_AUTHORITY
 
 
 def test_72_llm_execution_authority_differs_from_context_authority():
-    from core.llm.execution_authority import LLM_EXECUTION_AUTHORITY
     from core.llm.context_authority import LLM_CONTEXT_AUTHORITY
+    from core.llm.execution_authority import LLM_EXECUTION_AUTHORITY
+
     assert LLM_EXECUTION_AUTHORITY != LLM_CONTEXT_AUTHORITY
 
 
@@ -910,9 +958,7 @@ def test_72_llm_execution_authority_differs_from_context_authority():
 # 73-78: Documentation checks
 # ---------------------------------------------------------------------------
 
-_DOC_PATH = os.path.join(
-    _REPO_ROOT, "docs", "MODEL_ROUTING_AUTHORITY.md"
-)
+_DOC_PATH = os.path.join(_REPO_ROOT, "docs", "MODEL_ROUTING_AUTHORITY.md")
 
 
 def test_73_docs_contain_llm_execution_authority():
@@ -959,12 +1005,14 @@ def test_78_docs_section_12_exists():
 
 def test_79_execution_authority_module_importable_without_errors():
     import importlib
+
     mod = importlib.import_module("core.llm.execution_authority")
     assert mod is not None
 
 
 def test_80_core_llm_init_exports_llm_execution_authority_without_error():
     import importlib
+
     mod = importlib.import_module("core.llm")
     assert hasattr(mod, "LLM_EXECUTION_AUTHORITY")
 

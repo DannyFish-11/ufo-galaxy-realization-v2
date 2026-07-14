@@ -24,19 +24,18 @@ from __future__ import annotations
 
 import pytest
 
-from core.continuum.config import ContinuumConfig, DEFAULT_CONTINUUM_CONFIG
+from core.continuum.config import DEFAULT_CONTINUUM_CONFIG, ContinuumConfig
 from core.continuum.decision_gate import (
+    _THRESHOLD_ASSIST,
+    _THRESHOLD_EXECUTE,
+    _THRESHOLD_HINT,
     DecisionGate,
     _action_level_from_score,
     _clamp,
     _confidence_from_score,
-    _THRESHOLD_HINT,
-    _THRESHOLD_ASSIST,
-    _THRESHOLD_EXECUTE,
 )
 from core.continuum.state_fusion import StateFusion
 from core.continuum.types import ActionLevel, DecisionState, HumanFieldState, UnifiedState
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -424,9 +423,7 @@ class TestOutputBounds:
             (0.0, 0.9, 0.0, 0.9, 0.9, 0.9, 0.9),
         ],
     )
-    def test_all_outputs_bounded(
-        self, intent, utility, urgency, sensitivity, focus, risk, uncertainty
-    ):
+    def test_all_outputs_bounded(self, intent, utility, urgency, sensitivity, focus, risk, uncertainty):
         gate = DecisionGate()
         state = _unified(
             intent=intent,

@@ -248,8 +248,7 @@ class HumanFieldState(BaseModel):
         ge=0.0,
         le=1.0,
         description=(
-            "Depth of cognitive focus on the current task context. "
-            "Higher values increase interruption cost."
+            "Depth of cognitive focus on the current task context. " "Higher values increase interruption cost."
         ),
     )
     fatigue: float = Field(
@@ -391,10 +390,7 @@ class ExpressionState(BaseModel):
     )
     texture_hint: str = Field(
         default="",
-        description=(
-            "Optional freeform texture descriptor "
-            "(e.g. 'soft_granular', 'crisp_edge').  Empty = no hint."
-        ),
+        description=("Optional freeform texture descriptor " "(e.g. 'soft_granular', 'crisp_edge').  Empty = no hint."),
     )
     phase_signature: ContinuumPhase = Field(
         default=ContinuumPhase.FORMLESS,
@@ -562,8 +558,8 @@ class ContinuumState(BaseModel):
     wallclock_timestamp: float = Field(
         default_factory=time.time,
         description="Wall-clock Unix epoch seconds for cross-system temporal alignment. "
-                    "Populated explicitly in the orchestrator pipeline to ensure "
-                    "all downstream consumers see a consistent wall-clock reference.",
+        "Populated explicitly in the orchestrator pipeline to ensure "
+        "all downstream consumers see a consistent wall-clock reference.",
     )
     metadata: Dict[str, Any] = Field(
         default_factory=dict,

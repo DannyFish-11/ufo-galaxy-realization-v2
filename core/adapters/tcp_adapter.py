@@ -24,6 +24,7 @@ logger = logging.getLogger("Galaxy.Adapter.TCP")
 # mDNS 可选依赖
 try:
     import zeroconf
+
     ZEROCONF_AVAILABLE = True
 except ImportError:
     ZEROCONF_AVAILABLE = False
@@ -49,7 +50,7 @@ class TCPAdapter(TransportAdapter):
 
     def __init__(self, local_port: int = DEFAULT_PORT) -> None:
         self._local_port = local_port
-        self._peers: Dict[str, "PeerConnection"] = {}   # device_id → PeerConnection
+        self._peers: Dict[str, "PeerConnection"] = {}  # device_id → PeerConnection
         self._server: Optional[asyncio.Server] = None
         self._heartbeat_task: Optional[asyncio.Task] = None
         self._running = False
@@ -117,17 +118,13 @@ class TCPAdapter(TransportAdapter):
     async def start_server(self) -> None:
         """启动 TCP 监听，等待其他设备连接。"""
         self._running = True
-        self._server = await asyncio.start_server(
-            self._handle_incoming, "0.0.0.0", self._local_port
-        )
+        self._server = await asyncio.start_server(self._handle_incoming, "0.0.0.0", self._local_port)
         logger.info("TCP P2P server listening on port %d", self._local_port)
 
         # 启动心跳
         self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
 
-    async def _handle_incoming(
-        self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
-    ) -> None:
+    async def _handle_incoming(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         """处理 incoming TCP 连接。"""
         addr = writer.get_extra_info("peername")
         logger.debug("TCP incoming connection from %s", addr)
@@ -174,10 +171,7 @@ class TCPAdapter(TransportAdapter):
     async def connect_to_peer(self, host: str, port: int, device_id: str) -> Dict[str, Any]:
         """主动连接到 P2P 对等端。"""
         try:
-            reader, writer = await asyncio.wait_for(
-                asyncio.open_connection(host, port),
-                timeout=10.0
-            )
+            reader, writer = await asyncio.wait_for(asyncio.open_connection(host, port), timeout=10.0)
 
             peer = PeerConnection(device_id, reader, writer)
             peer.connected = True
@@ -190,15 +184,10 @@ class TCPAdapter(TransportAdapter):
             logger.warning("TCP P2P connect to %s:%d failed: %s", host, port, e)
             return {"success": False, "error": str(e)}
 
-    async def _connect_and_send(
-        self, host: str, port: int, message: Dict[str, Any], device_id: str
-    ) -> Dict[str, Any]:
+    async def _connect_and_send(self, host: str, port: int, message: Dict[str, Any], device_id: str) -> Dict[str, Any]:
         """临时连接到目标发送消息。"""
         try:
-            reader, writer = await asyncio.wait_for(
-                asyncio.open_connection(host, port),
-                timeout=5.0
-            )
+            reader, writer = await asyncio.wait_for(asyncio.open_connection(host, port), timeout=5.0)
 
             payload = json.dumps(message, ensure_ascii=False).encode("utf-8")
             writer.write(len(payload).to_bytes(4, "big"))
@@ -230,13 +219,15 @@ class TCPAdapter(TransportAdapter):
         try:
             # 浏览器方式发现
             browser = zeroconf.ServiceBrowser(
-                zc, GALAXY_SERVICE_TYPE,
+                zc,
+                GALAXY_SERVICE_TYPE,
                 handlers=[
                     lambda zc, type, name, state: (
                         found.update({name: state.addresses[0] if hasattr(state, "addresses") else ""})
-                        if state else None
+                        if state
+                        else None
                     )
-                ]
+                ],
             )
             await asyncio.sleep(timeout)
             browser.cancel()

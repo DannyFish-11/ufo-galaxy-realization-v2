@@ -100,40 +100,35 @@ from unittest.mock import MagicMock  # noqa: F401  # reserved for future mock-ba
 
 import pytest
 
-from core.attached_runtime_session import (
-    # Sentinels
-    ATTACHED_RUNTIME_SESSION_AUTHORITY,
-    ATTACHED_SESSION_PERSISTS_ACROSS_REQUESTS_POLICY,
-    TRANSIENT_PRESENCE_DISTINCT_FROM_ATTACHED_SESSION_POLICY,
-    DETACH_SIGNAL_REQUIRED_FOR_SESSION_TERMINATION_POLICY,
+from core.attached_runtime_session import (  # Sentinels; Enums; Dataclasses / classes; Functions
     ATTACH_IS_IDEMPOTENT_POLICY,
+    ATTACHED_RUNTIME_SESSION_AUTHORITY,
+    ATTACHED_RUNTIME_SESSION_PR7_SENTINEL,
+    ATTACHED_SESSION_PERSISTS_ACROSS_REQUESTS_POLICY,
+    ATTACHED_SESSION_REQUIRES_JOIN_RUNTIME_POSTURE_POLICY,
+    ATTACHMENT_LIFECYCLE_ACTION_GOVERNANCE_POLICY,
+    ATTACHMENT_LIFECYCLE_IS_POSTURE_AWARE_POLICY,
+    DETACH_SIGNAL_REQUIRED_FOR_SESSION_TERMINATION_POLICY,
+    DISABLED_SESSION_NOT_ELIGIBLE_FOR_EXECUTION_POLICY,
     DISCONNECTED_DOES_NOT_INVALIDATE_SESSION_POLICY,
     INVALIDATED_SESSION_IS_TERMINAL_POLICY,
-    DISABLED_SESSION_NOT_ELIGIBLE_FOR_EXECUTION_POLICY,
-    ATTACHED_SESSION_REQUIRES_JOIN_RUNTIME_POSTURE_POLICY,
-    ATTACHMENT_LIFECYCLE_IS_POSTURE_AWARE_POLICY,
-    ATTACHMENT_LIFECYCLE_ACTION_GOVERNANCE_POLICY,
-    ATTACHED_RUNTIME_SESSION_PR7_SENTINEL,
-    # Enums
-    AttachmentState,
-    AttachmentLifecycleSignal,
-    AttachmentLifecycleAction,
-    # Dataclasses / classes
+    TRANSIENT_PRESENCE_DISTINCT_FROM_ATTACHED_SESSION_POLICY,
     AttachedRuntimeSessionRecord,
-    AttachedRuntimeSessionSnapshot,
     AttachedRuntimeSessionRuntime,
-    # Functions
-    attach_runtime_session,
+    AttachedRuntimeSessionSnapshot,
+    AttachmentLifecycleAction,
+    AttachmentLifecycleSignal,
+    AttachmentState,
     apply_lifecycle_signal,
+    attach_runtime_session,
+    build_attached_runtime_session_snapshot,
     classify_attach_lifecycle_action,
     classify_signal_lifecycle_action,
     get_attached_runtime_session,
-    list_active_attached_sessions,
-    build_attached_runtime_session_snapshot,
     get_attached_runtime_session_runtime,
+    list_active_attached_sessions,
     reset_attached_runtime_session_runtime,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -242,9 +237,13 @@ def test_b6_is_active_attached():
 
 
 def test_b7_is_active_non_attached():
-    for s in [AttachmentState.detaching, AttachmentState.detached,
-              AttachmentState.disconnected, AttachmentState.disabled,
-              AttachmentState.invalidated]:
+    for s in [
+        AttachmentState.detaching,
+        AttachmentState.detached,
+        AttachmentState.disconnected,
+        AttachmentState.disabled,
+        AttachmentState.invalidated,
+    ]:
         assert s.is_active() is False
 
 
@@ -349,10 +348,22 @@ def test_d5_is_eligible_for_execution_attached_control_only():
 def test_d6_to_dict_keys():
     r = AttachedRuntimeSessionRecord(device_id="d")
     d = r.to_dict()
-    for key in ("record_id", "device_id", "session_id", "source_runtime_posture",
-                "coordination_role", "android_host_role", "capability_tier",
-                "attachment_state", "previous_state", "attach_reason",
-                "last_signal", "attached_at", "last_transition_at", "metadata"):
+    for key in (
+        "record_id",
+        "device_id",
+        "session_id",
+        "source_runtime_posture",
+        "coordination_role",
+        "android_host_role",
+        "capability_tier",
+        "attachment_state",
+        "previous_state",
+        "attach_reason",
+        "last_signal",
+        "attached_at",
+        "last_transition_at",
+        "metadata",
+    ):
         assert key in d
 
 
@@ -423,8 +434,7 @@ def test_e1_construction_defaults():
 def test_e2_to_dict_keys():
     s = AttachedRuntimeSessionSnapshot()
     d = s.to_dict()
-    for k in ("snapshot_id", "records", "active_count", "total_count",
-               "snapshotted_at", "policy_sentinels"):
+    for k in ("snapshot_id", "records", "active_count", "total_count", "snapshotted_at", "policy_sentinels"):
         assert k in d
 
 
@@ -498,9 +508,7 @@ def test_f8_replace_latest_for_device_success():
     rt = AttachedRuntimeSessionRuntime()
     r = AttachedRuntimeSessionRecord(device_id="d", session_id="old")
     rt.push(r)
-    updated = AttachedRuntimeSessionRecord(
-        device_id="d", session_id="new", record_id=r.record_id
-    )
+    updated = AttachedRuntimeSessionRecord(device_id="d", session_id="new", record_id=r.record_id)
     replaced = rt.replace_latest_for_device(updated)
     assert replaced is True
     assert rt.get_latest_for_device("d").session_id == "new"
@@ -628,10 +636,8 @@ def test_k1_reattach_from_detached():
 
 def test_l1_metadata_merged_on_reattach():
     rt = _fresh_runtime()
-    attach_runtime_session("dev-1", source_runtime_posture="join_runtime",
-                           metadata={"key1": "val1"}, runtime=rt)
-    r2 = attach_runtime_session("dev-1", source_runtime_posture="join_runtime",
-                                metadata={"key2": "val2"}, runtime=rt)
+    attach_runtime_session("dev-1", source_runtime_posture="join_runtime", metadata={"key1": "val1"}, runtime=rt)
+    r2 = attach_runtime_session("dev-1", source_runtime_posture="join_runtime", metadata={"key2": "val2"}, runtime=rt)
     assert r2.metadata.get("key1") == "val1"
     assert r2.metadata.get("key2") == "val2"
 
@@ -643,15 +649,17 @@ def test_l1_metadata_merged_on_reattach():
 
 def test_m1_android_host_role_stored():
     rt = _fresh_runtime()
-    r = attach_runtime_session("dev-1", source_runtime_posture="join_runtime",
-                               android_host_role="FULL_RUNTIME_HOST", runtime=rt)
+    r = attach_runtime_session(
+        "dev-1", source_runtime_posture="join_runtime", android_host_role="FULL_RUNTIME_HOST", runtime=rt
+    )
     assert r.android_host_role == "FULL_RUNTIME_HOST"
 
 
 def test_m2_capability_tier_stored():
     rt = _fresh_runtime()
-    r = attach_runtime_session("dev-1", source_runtime_posture="join_runtime",
-                               capability_tier="full_runtime", runtime=rt)
+    r = attach_runtime_session(
+        "dev-1", source_runtime_posture="join_runtime", capability_tier="full_runtime", runtime=rt
+    )
     assert r.capability_tier == "full_runtime"
 
 
@@ -662,8 +670,7 @@ def test_m2_capability_tier_stored():
 
 def test_n1_session_id_propagated():
     rt = _fresh_runtime()
-    r = attach_runtime_session("dev-1", source_runtime_posture="join_runtime",
-                               session_id="sess-abc", runtime=rt)
+    r = attach_runtime_session("dev-1", source_runtime_posture="join_runtime", session_id="sess-abc", runtime=rt)
     assert r.session_id == "sess-abc"
 
 
@@ -728,8 +735,12 @@ def test_v1_invalidated_signal_no_change():
     rt = _fresh_runtime()
     r = _attach(runtime=rt)
     r = apply_lifecycle_signal(r, AttachmentLifecycleSignal.invalidate, runtime=rt)
-    for sig in [AttachmentLifecycleSignal.detach, AttachmentLifecycleSignal.disconnect,
-                AttachmentLifecycleSignal.disable, AttachmentLifecycleSignal.reconnect]:
+    for sig in [
+        AttachmentLifecycleSignal.detach,
+        AttachmentLifecycleSignal.disconnect,
+        AttachmentLifecycleSignal.disable,
+        AttachmentLifecycleSignal.reconnect,
+    ]:
         result = apply_lifecycle_signal(r, sig, runtime=rt)
         assert result.attachment_state == AttachmentState.invalidated
 
@@ -762,8 +773,7 @@ def test_y1_previous_state_recorded():
 def test_z1_reason_propagated():
     rt = _fresh_runtime()
     r = _attach(runtime=rt)
-    updated = apply_lifecycle_signal(r, AttachmentLifecycleSignal.disconnect,
-                                     reason="network lost", runtime=rt)
+    updated = apply_lifecycle_signal(r, AttachmentLifecycleSignal.disconnect, reason="network lost", runtime=rt)
     assert updated.attach_reason == "network lost"
 
 
@@ -820,10 +830,8 @@ def test_ae1_detached_attach_to_attached():
 
 def test_af1_get_returns_latest():
     rt = _fresh_runtime()
-    attach_runtime_session("dev-1", source_runtime_posture="join_runtime",
-                           session_id="s1", runtime=rt)
-    attach_runtime_session("dev-1", source_runtime_posture="join_runtime",
-                           session_id="s2", runtime=rt)
+    attach_runtime_session("dev-1", source_runtime_posture="join_runtime", session_id="s1", runtime=rt)
+    attach_runtime_session("dev-1", source_runtime_posture="join_runtime", session_id="s2", runtime=rt)
     r = get_attached_runtime_session("dev-1", runtime=rt)
     assert r.session_id == "s2"
 
@@ -886,6 +894,7 @@ def test_al1_empty_snapshot():
 
 def test_am1_core_runtime_reexports_all_pr7_symbols():
     import core.runtime as cr
+
     symbols = [
         "ATTACHED_RUNTIME_SESSION_AUTHORITY",
         "ATTACHED_SESSION_PERSISTS_ACROSS_REQUESTS_POLICY",
@@ -927,6 +936,7 @@ def test_am1_core_runtime_reexports_all_pr7_symbols():
 def test_an1_projection_sentinel_not_unavailable():
     try:
         from core.routes.projection import ATTACHED_RUNTIME_SESSION_ALIGNED_PR7
+
         assert "UNAVAILABLE" not in ATTACHED_RUNTIME_SESSION_ALIGNED_PR7
         assert "PR7" in ATTACHED_RUNTIME_SESSION_ALIGNED_PR7
     except ImportError:
@@ -1296,8 +1306,9 @@ def test_bt1_multiple_transitions_tracked():
 
 def test_bu1_attach_reason_stored():
     rt = _fresh_runtime()
-    r = attach_runtime_session("dev-1", source_runtime_posture="join_runtime",
-                               attach_reason="initial device join", runtime=rt)
+    r = attach_runtime_session(
+        "dev-1", source_runtime_posture="join_runtime", attach_reason="initial device join", runtime=rt
+    )
     assert r.attach_reason == "initial device join"
 
 

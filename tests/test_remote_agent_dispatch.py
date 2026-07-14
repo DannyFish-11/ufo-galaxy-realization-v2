@@ -26,7 +26,7 @@ import asyncio
 import sys
 import uuid
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch, call
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
 
@@ -66,6 +66,7 @@ def _make_cr_result(success: bool = True, error_code: str = None, result=None):
 # ============================================================================
 # Gate A — Remote dispatch end-to-end
 # ============================================================================
+
 
 class TestRemoteDispatchEndToEnd:
     """Acceptance Gate A: successful remote dispatch preserves correlation IDs."""
@@ -114,10 +115,8 @@ class TestRemoteDispatchEndToEnd:
 
         # route_envelope 必须携带 agent_execute 信封
         mock_rc.assert_called_once()
-        _env = mock_rc.call_args.args[0] if mock_rc.call_args.args \
-            else mock_rc.call_args.kwargs.get("envelope")
-        assert getattr(_env, "tool_name", None) == "agent_execute", \
-               f"Expected tool_name='agent_execute', got: {_env!r}"
+        _env = mock_rc.call_args.args[0] if mock_rc.call_args.args else mock_rc.call_args.kwargs.get("envelope")
+        assert getattr(_env, "tool_name", None) == "agent_execute", f"Expected tool_name='agent_execute', got: {_env!r}"
 
         # Correlation IDs must be preserved
         assert result["agent_id"] == agent_id
@@ -157,8 +156,7 @@ class TestRemoteDispatchEndToEnd:
         )
 
         # All required fields per PR155 contract
-        for field in ("agent_id", "agent_template", "task", "session_id",
-                      "trace_id", "task_id", "context"):
+        for field in ("agent_id", "agent_template", "task", "session_id", "trace_id", "task_id", "context"):
             assert field in captured_payload, f"Payload missing field: {field}"
 
         assert captured_payload["agent_id"] == agent_id
@@ -186,19 +184,25 @@ class TestRemoteDispatchEndToEnd:
         trace_id = f"trace_{uuid.uuid4().hex[:8]}"
 
         mock_cr = MagicMock()
-        mock_cr.dispatch_agent_remote = AsyncMock(return_value=_make_cr_result(
-            success=True,
-            result={"output": "remote done", "response": "Completed on remote device"},
-        ))
-        mock_cr.dispatch_agent_remote.return_value.update({
-            "trace_id": trace_id,
-            "task_id": "task_remote_001",
-            "agent_id": "agent_remote_001",
-            "session_id": "sess_001",
-        })
+        mock_cr.dispatch_agent_remote = AsyncMock(
+            return_value=_make_cr_result(
+                success=True,
+                result={"output": "remote done", "response": "Completed on remote device"},
+            )
+        )
+        mock_cr.dispatch_agent_remote.return_value.update(
+            {
+                "trace_id": trace_id,
+                "task_id": "task_remote_001",
+                "agent_id": "agent_remote_001",
+                "session_id": "sess_001",
+            }
+        )
 
-        with patch("core.command_router.get_command_router", return_value=mock_cr), \
-             patch("core.openclawd_memory_backflow.store_task_result", new_callable=AsyncMock):
+        with (
+            patch("core.command_router.get_command_router", return_value=mock_cr),
+            patch("core.openclawd_memory_backflow.store_task_result", new_callable=AsyncMock),
+        ):
 
             result = await clawd._dispatch_remote_agent(
                 message="run analysis on remote device",
@@ -232,16 +236,22 @@ class TestRemoteDispatchEndToEnd:
         dispatched_remote = []
 
         async def capture_remote(message, intent, device_id, session_id, trace_id):
-            dispatched_remote.append({
-                "device_id": device_id,
-                "trace_id": trace_id,
-            })
+            dispatched_remote.append(
+                {
+                    "device_id": device_id,
+                    "trace_id": trace_id,
+                }
+            )
             return {
                 "success": True,
                 "response": "remote ok",
-                "metadata": {"remote_dispatch": True, "task_id": "t1",
-                             "trace_id": trace_id, "device_id": device_id,
-                             "agent_id": "a1"},
+                "metadata": {
+                    "remote_dispatch": True,
+                    "task_id": "t1",
+                    "trace_id": trace_id,
+                    "device_id": device_id,
+                    "agent_id": "a1",
+                },
             }
 
         clawd._dispatch_remote_agent = capture_remote
@@ -271,6 +281,7 @@ class TestRemoteDispatchEndToEnd:
 # Gate B — Fallback behaviour
 # ============================================================================
 
+
 class TestFallbackBehaviour:
     """Acceptance Gate B: structured error or local fallback on remote failure."""
 
@@ -288,9 +299,9 @@ class TestFallbackBehaviour:
         clawd._cancel_registry = set()
 
         mock_cr = MagicMock()
-        mock_cr.dispatch_agent_remote = AsyncMock(return_value=_make_cr_result(
-            success=False, error_code="DEVICE_OFFLINE"
-        ))
+        mock_cr.dispatch_agent_remote = AsyncMock(
+            return_value=_make_cr_result(success=False, error_code="DEVICE_OFFLINE")
+        )
 
         local_called = []
 
@@ -299,14 +310,20 @@ class TestFallbackBehaviour:
             return {
                 "success": True,
                 "response": "local fallback result",
-                "metadata": {"task_id": "task_local", "trace_id": kwargs.get("trace_id", ""),
-                             "device_id": kwargs.get("device_id", ""), "session_id": ""},
+                "metadata": {
+                    "task_id": "task_local",
+                    "trace_id": kwargs.get("trace_id", ""),
+                    "device_id": kwargs.get("device_id", ""),
+                    "session_id": "",
+                },
             }
 
         clawd.handle_agent_task = fake_handle_agent_task
 
-        with patch("core.command_router.get_command_router", return_value=mock_cr), \
-             patch("core.openclawd_memory_backflow.store_task_result", new_callable=AsyncMock):
+        with (
+            patch("core.command_router.get_command_router", return_value=mock_cr),
+            patch("core.openclawd_memory_backflow.store_task_result", new_callable=AsyncMock),
+        ):
 
             result = await clawd._dispatch_remote_agent(
                 message="some task",
@@ -336,9 +353,9 @@ class TestFallbackBehaviour:
         clawd._cancel_registry = set()
 
         mock_cr = MagicMock()
-        mock_cr.dispatch_agent_remote = AsyncMock(return_value=_make_cr_result(
-            success=False, error_code="COMMAND_TIMEOUT"
-        ))
+        mock_cr.dispatch_agent_remote = AsyncMock(
+            return_value=_make_cr_result(success=False, error_code="COMMAND_TIMEOUT")
+        )
 
         async def fake_handle_agent_task(message, intent, **kwargs):
             return {
@@ -349,8 +366,10 @@ class TestFallbackBehaviour:
 
         clawd.handle_agent_task = fake_handle_agent_task
 
-        with patch("core.command_router.get_command_router", return_value=mock_cr), \
-             patch("core.openclawd_memory_backflow.store_task_result", new_callable=AsyncMock):
+        with (
+            patch("core.command_router.get_command_router", return_value=mock_cr),
+            patch("core.openclawd_memory_backflow.store_task_result", new_callable=AsyncMock),
+        ):
 
             result = await clawd._dispatch_remote_agent(
                 message="task",
@@ -447,6 +466,7 @@ class TestFallbackBehaviour:
 # Gate C — Result persistence (backflow)
 # ============================================================================
 
+
 class TestResultPersistence:
     """Acceptance Gate C: remote result is persisted via memory backflow."""
 
@@ -468,31 +488,35 @@ class TestResultPersistence:
         device_id = REMOTE_DEVICE_ID
 
         mock_cr = MagicMock()
-        mock_cr.dispatch_agent_remote = AsyncMock(return_value={
-            "success": True,
-            "result": {"output": "done remotely", "response": "Completed"},
-            "error_code": None,
-            "error_message": None,
-            "latency_ms": 20.0,
-            "task_id": "task_bf_001",
-            "trace_id": trace_id,
-            "agent_id": "agent_bf_001",
-            "session_id": session_id,
-            "device_id": device_id,
-            "command": "agent_execute",
-            "via": "command_router",
-        })
+        mock_cr.dispatch_agent_remote = AsyncMock(
+            return_value={
+                "success": True,
+                "result": {"output": "done remotely", "response": "Completed"},
+                "error_code": None,
+                "error_message": None,
+                "latency_ms": 20.0,
+                "task_id": "task_bf_001",
+                "trace_id": trace_id,
+                "agent_id": "agent_bf_001",
+                "session_id": session_id,
+                "device_id": device_id,
+                "command": "agent_execute",
+                "via": "command_router",
+            }
+        )
 
         backflow_calls = []
 
         async def mock_store_task_result(**kwargs):
             backflow_calls.append(kwargs)
 
-        with patch("core.command_router.get_command_router", return_value=mock_cr), \
-             patch(
-                 "core.openclawd_memory_backflow.store_task_result",
-                 side_effect=mock_store_task_result,
-             ):
+        with (
+            patch("core.command_router.get_command_router", return_value=mock_cr),
+            patch(
+                "core.openclawd_memory_backflow.store_task_result",
+                side_effect=mock_store_task_result,
+            ),
+        ):
             result = await clawd._dispatch_remote_agent(
                 message="remote task for backflow",
                 intent=None,
@@ -529,9 +553,9 @@ class TestResultPersistence:
         clawd._cancel_registry = set()
 
         mock_cr = MagicMock()
-        mock_cr.dispatch_agent_remote = AsyncMock(return_value=_make_cr_result(
-            success=False, error_code="DEVICE_NOT_FOUND"
-        ))
+        mock_cr.dispatch_agent_remote = AsyncMock(
+            return_value=_make_cr_result(success=False, error_code="DEVICE_NOT_FOUND")
+        )
 
         async def fake_handle_agent_task(message, intent, **kwargs):
             return {
@@ -547,11 +571,13 @@ class TestResultPersistence:
         async def capture_backflow(**kwargs):
             remote_backflow_calls.append(kwargs)
 
-        with patch("core.command_router.get_command_router", return_value=mock_cr), \
-             patch(
-                 "core.openclawd_memory_backflow.store_task_result",
-                 side_effect=capture_backflow,
-             ):
+        with (
+            patch("core.command_router.get_command_router", return_value=mock_cr),
+            patch(
+                "core.openclawd_memory_backflow.store_task_result",
+                side_effect=capture_backflow,
+            ),
+        ):
             result = await clawd._dispatch_remote_agent(
                 message="test",
                 intent=None,
@@ -561,8 +587,9 @@ class TestResultPersistence:
             )
 
         # Fallback path — remote backflow should NOT be called
-        assert len(remote_backflow_calls) == 0, \
-            "store_task_result must not be called in the remote path when falling back"
+        assert (
+            len(remote_backflow_calls) == 0
+        ), "store_task_result must not be called in the remote path when falling back"
         assert result["metadata"].get("remote_fallback") is True
 
     @pytest.mark.asyncio
@@ -600,6 +627,7 @@ class TestResultPersistence:
 # ============================================================================
 # Gate A (device side) — WindowsAIPClient agent_execute handler
 # ============================================================================
+
 
 class TestWindowsAIPClientAgentExecute:
     """Acceptance Gate A (device side): agent_execute handled with IDs preserved."""
@@ -656,6 +684,7 @@ class TestWindowsAIPClientAgentExecute:
     async def test_handle_message_routes_agent_execute_command(self):
         """_handle_message must route command='agent_execute' to _execute_agent_task."""
         import socket
+
         from windows_client.windows_aip_client import WindowsAIPClient
 
         client = WindowsAIPClient(host="127.0.0.1", port=9999)
@@ -705,6 +734,7 @@ class TestWindowsAIPClientAgentExecute:
     def test_agent_execute_result_msg_contains_all_fields(self):
         """_agent_execute_result_msg must include all required correlation fields."""
         import socket
+
         from windows_client.windows_aip_client import WindowsAIPClient
 
         client = WindowsAIPClient(host="127.0.0.1", port=9999)
@@ -738,22 +768,26 @@ class TestWindowsAIPClientAgentExecute:
 # _is_local_device helper
 # ============================================================================
 
+
 class TestIsLocalDevice:
     """Unit tests for the _is_local_device helper."""
 
     def test_empty_device_id_is_local(self):
         from core.openclawd import _is_local_device
+
         assert _is_local_device("") is True
         assert _is_local_device(None) is True
 
     def test_local_prefix_is_local(self):
         from core.openclawd import _is_local_device
+
         assert _is_local_device("local_openclawd") is True
         assert _is_local_device("openclawd") is True
         assert _is_local_device("server_main") is True
 
     def test_remote_device_is_not_local(self):
         from core.openclawd import _is_local_device
+
         assert _is_local_device("windows_remotehost_abc") is False
         assert _is_local_device("android_phone_123") is False
         assert _is_local_device("tablet_device_xyz") is False

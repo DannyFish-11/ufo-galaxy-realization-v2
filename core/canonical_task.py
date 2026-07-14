@@ -84,8 +84,8 @@ Helpers::
 
 from __future__ import annotations
 
-import logging
 import json
+import logging
 import os
 import threading
 import time
@@ -166,6 +166,7 @@ TASK_ALLOCATION_TRUTH_AUTHORITY: str = (
 # ---------------------------------------------------------------------------
 # Enumerations
 # ---------------------------------------------------------------------------
+
 
 class TaskLifecycle(str, Enum):
     """Canonical lifecycle states for a CanonicalTask.
@@ -279,6 +280,7 @@ class FailureDomain(str, Enum):
 # ---------------------------------------------------------------------------
 # Sub-dataclasses (grouped fields)
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class TaskIdentity:
@@ -493,6 +495,7 @@ class TaskResultSummary:
 # CanonicalTask — main entity
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class CanonicalTask:
     """The unified task ontology object for the Galaxy runtime.
@@ -583,7 +586,8 @@ class CanonicalTask:
             setattr(self, attr, now)
         logger.debug(
             "CanonicalTask.advance_lifecycle | task_id=%s lifecycle=%s",
-            self.task_id, new_state.value,
+            self.task_id,
+            new_state.value,
         )
         return self
 
@@ -639,6 +643,7 @@ class CanonicalTask:
 # ---------------------------------------------------------------------------
 # Observability dataclasses
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class CanonicalTaskRecord:
@@ -736,6 +741,7 @@ class TaskAllocationRecord:
 # CanonicalTaskRuntime — singleton registry
 # ---------------------------------------------------------------------------
 
+
 class CanonicalTaskRuntime:
     """Singleton runtime that indexes all CanonicalTask instances.
 
@@ -778,9 +784,7 @@ class CanonicalTaskRuntime:
             trace_id=task.identity.trace_id,
             lifecycle=task.lifecycle.value if isinstance(task.lifecycle, TaskLifecycle) else str(task.lifecycle),
             origin=(
-                task.intent.origin.value
-                if isinstance(task.intent.origin, TaskOrigin)
-                else str(task.intent.origin)
+                task.intent.origin.value if isinstance(task.intent.origin, TaskOrigin) else str(task.intent.origin)
             ),
             tool=task.execution.tool or task.intent.requested_action,
             targets=list(task.routing.selected_targets),
@@ -789,7 +793,9 @@ class CanonicalTaskRuntime:
         self._upsert_allocation_truth(task)
         logger.debug(
             "CanonicalTaskRuntime.register | task_id=%s lifecycle=%s origin=%s",
-            task.task_id, task.lifecycle.value, rec.origin,
+            task.task_id,
+            task.lifecycle.value,
+            rec.origin,
         )
         return task
 
@@ -828,11 +834,7 @@ class CanonicalTaskRuntime:
         for task in self._tasks.values():
             lc = task.lifecycle.value if isinstance(task.lifecycle, TaskLifecycle) else str(task.lifecycle)
             by_lifecycle[lc] = by_lifecycle.get(lc, 0) + 1
-            orig = (
-                task.intent.origin.value
-                if isinstance(task.intent.origin, TaskOrigin)
-                else str(task.intent.origin)
-            )
+            orig = task.intent.origin.value if isinstance(task.intent.origin, TaskOrigin) else str(task.intent.origin)
             by_origin[orig] = by_origin.get(orig, 0) + 1
         return CanonicalTaskSnapshot(
             total_tasks=len(self._tasks),
@@ -964,16 +966,8 @@ class CanonicalTaskRuntime:
                     trace_id=str(item.get("trace_id") or ""),
                     updated_at=float(item.get("updated_at") or 0.0),
                     selected_executor=str(item.get("selected_executor") or "unknown"),
-                    accepted_at=(
-                        float(item["accepted_at"])
-                        if item.get("accepted_at") is not None
-                        else None
-                    ),
-                    closed_at=(
-                        float(item["closed_at"])
-                        if item.get("closed_at") is not None
-                        else None
-                    ),
+                    accepted_at=(float(item["accepted_at"]) if item.get("accepted_at") is not None else None),
+                    closed_at=(float(item["closed_at"]) if item.get("closed_at") is not None else None),
                     runtime_host=str(item.get("runtime_host") or "v2_control_plane"),
                     session_owner=str(item.get("session_owner") or ""),
                     execution_owner=str(item.get("execution_owner") or item.get("selected_executor") or "unknown"),
@@ -1007,6 +1001,7 @@ def reset_canonical_task_runtime() -> None:
 # ---------------------------------------------------------------------------
 # Builder helper
 # ---------------------------------------------------------------------------
+
 
 def build_canonical_task(
     *,
@@ -1106,6 +1101,7 @@ def build_canonical_task(
 # Projection: CanonicalTask → TaskEnvelope
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class _FallbackEnvelope:
     """Minimal envelope for environments where pydantic / TaskEnvelope
@@ -1163,14 +1159,10 @@ def project_to_task_envelope(task: CanonicalTask) -> Any:
     meta: Dict[str, Any] = {
         "canonical_task_id": task.identity.task_id,
         "canonical_task_lifecycle": (
-            task.lifecycle.value
-            if isinstance(task.lifecycle, TaskLifecycle)
-            else str(task.lifecycle)
+            task.lifecycle.value if isinstance(task.lifecycle, TaskLifecycle) else str(task.lifecycle)
         ),
         "canonical_task_origin": (
-            task.intent.origin.value
-            if isinstance(task.intent.origin, TaskOrigin)
-            else str(task.intent.origin)
+            task.intent.origin.value if isinstance(task.intent.origin, TaskOrigin) else str(task.intent.origin)
         ),
         "canonical_task_authority": CANONICAL_TASK_AUTHORITY,
         **task.metadata,
@@ -1178,6 +1170,7 @@ def project_to_task_envelope(task: CanonicalTask) -> Any:
 
     try:
         from core.schemas.task_envelope import TaskEnvelope as _TE  # type: ignore
+
         env = _TE(
             task_id=task.identity.task_id,
             trace_id=task.identity.trace_id,
@@ -1193,11 +1186,10 @@ def project_to_task_envelope(task: CanonicalTask) -> Any:
         if rem not in (RemoteExecutionStyle.NONE, RemoteExecutionStyle.LOCAL):
             try:
                 from core.schemas.remote_execution import RemoteExecutionMode  # type: ignore
+
                 mode_val = rem.value
                 if hasattr(_TE, "model_fields") and "remote_execution_mode" in _TE.model_fields:
-                    env = env.model_copy(
-                        update={"remote_execution_mode": RemoteExecutionMode(mode_val)}
-                    )
+                    env = env.model_copy(update={"remote_execution_mode": RemoteExecutionMode(mode_val)})
             except Exception as exc:
                 logger.warning("Exception suppressed: %s", exc)
         return env
@@ -1218,6 +1210,7 @@ def project_to_task_envelope(task: CanonicalTask) -> Any:
 # ---------------------------------------------------------------------------
 # Result update: ResultEnvelope → CanonicalTask
 # ---------------------------------------------------------------------------
+
 
 def apply_result_envelope(task: CanonicalTask, result: Any) -> CanonicalTask:
     """Apply a result (``ResultEnvelope`` or dict) back to *task*.

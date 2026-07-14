@@ -40,23 +40,28 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_store(tmp_dir: str):
     from core.replay_audit_persistence import DurableAuditStore
+
     return DurableAuditStore(store_path=os.path.join(tmp_dir, "audit.jsonl"))
 
 
 def _fresh_audit_semantics():
     from core.audit_event_semantics import reset_audit_event_semantics
+
     reset_audit_event_semantics()
 
 
 def _fresh_replay_foundation():
     from core.replay_foundation import reset_replay_foundation
+
     reset_replay_foundation()
 
 
 def _fresh_audit_store():
     from core.replay_audit_persistence import reset_replay_audit_store
+
     reset_replay_audit_store()
 
 
@@ -70,20 +75,24 @@ def _fresh_all():
 # Group A — Sentinel
 # ---------------------------------------------------------------------------
 
+
 class TestGroupA_Sentinel(unittest.TestCase):
     def test_A01_sentinel_importable_and_nonempty(self):
         from core.audit_event_semantics import AUDIT_EVENT_SEMANTICS_DURABLE_AUDIT_SENTINEL
+
         self.assertIsInstance(AUDIT_EVENT_SEMANTICS_DURABLE_AUDIT_SENTINEL, str)
         self.assertGreater(len(AUDIT_EVENT_SEMANTICS_DURABLE_AUDIT_SENTINEL), 0)
 
     def test_A02_sentinel_mentions_dispatch_spine(self):
         from core.audit_event_semantics import AUDIT_EVENT_SEMANTICS_DURABLE_AUDIT_SENTINEL
+
         self.assertIn("dispatch", AUDIT_EVENT_SEMANTICS_DURABLE_AUDIT_SENTINEL.lower())
 
 
 # ---------------------------------------------------------------------------
 # Group B — set_audit_store attaches
 # ---------------------------------------------------------------------------
+
 
 class TestGroupB_SetAuditStore(unittest.TestCase):
     def setUp(self):
@@ -94,6 +103,7 @@ class TestGroupB_SetAuditStore(unittest.TestCase):
 
     def test_B01_set_audit_store_attaches(self):
         from core.audit_event_semantics import AuditEventSemantics
+
         with tempfile.TemporaryDirectory() as tmp:
             store = _make_store(tmp)
             sem = AuditEventSemantics()
@@ -102,6 +112,7 @@ class TestGroupB_SetAuditStore(unittest.TestCase):
 
     def test_B02_set_audit_store_none_detaches(self):
         from core.audit_event_semantics import AuditEventSemantics
+
         with tempfile.TemporaryDirectory() as tmp:
             store = _make_store(tmp)
             sem = AuditEventSemantics()
@@ -114,6 +125,7 @@ class TestGroupB_SetAuditStore(unittest.TestCase):
 # Group C — Durable write when store attached
 # ---------------------------------------------------------------------------
 
+
 class TestGroupC_DurableWrite(unittest.TestCase):
     def setUp(self):
         _fresh_audit_semantics()
@@ -122,7 +134,8 @@ class TestGroupC_DurableWrite(unittest.TestCase):
         _fresh_audit_semantics()
 
     def test_C01_record_writes_to_durable_store(self):
-        from core.audit_event_semantics import AuditEventSemantics, AuditEventRecord, AuditEventKind
+        from core.audit_event_semantics import AuditEventKind, AuditEventRecord, AuditEventSemantics
+
         with tempfile.TemporaryDirectory() as tmp:
             store = _make_store(tmp)
             sem = AuditEventSemantics()
@@ -134,7 +147,8 @@ class TestGroupC_DurableWrite(unittest.TestCase):
             self.assertEqual(records[0].payload["task_id"], "t1")
 
     def test_C02_multiple_records_all_written(self):
-        from core.audit_event_semantics import AuditEventSemantics, AuditEventRecord, AuditEventKind
+        from core.audit_event_semantics import AuditEventKind, AuditEventRecord, AuditEventSemantics
+
         with tempfile.TemporaryDirectory() as tmp:
             store = _make_store(tmp)
             sem = AuditEventSemantics()
@@ -149,7 +163,8 @@ class TestGroupC_DurableWrite(unittest.TestCase):
             self.assertEqual(len(records), 3)
 
     def test_C03_ring_buffer_also_populated(self):
-        from core.audit_event_semantics import AuditEventSemantics, AuditEventRecord, AuditEventKind
+        from core.audit_event_semantics import AuditEventKind, AuditEventRecord, AuditEventSemantics
+
         with tempfile.TemporaryDirectory() as tmp:
             store = _make_store(tmp)
             sem = AuditEventSemantics()
@@ -165,6 +180,7 @@ class TestGroupC_DurableWrite(unittest.TestCase):
 # Group D — No durable write when no store
 # ---------------------------------------------------------------------------
 
+
 class TestGroupD_NoDurableWriteWithoutStore(unittest.TestCase):
     def setUp(self):
         _fresh_audit_semantics()
@@ -173,7 +189,8 @@ class TestGroupD_NoDurableWriteWithoutStore(unittest.TestCase):
         _fresh_audit_semantics()
 
     def test_D01_no_store_no_write(self):
-        from core.audit_event_semantics import AuditEventSemantics, AuditEventRecord, AuditEventKind
+        from core.audit_event_semantics import AuditEventKind, AuditEventRecord, AuditEventSemantics
+
         sem = AuditEventSemantics()
         rec = AuditEventRecord(kind=AuditEventKind.TASK_DISPATCHED, task_id="t-nostore")
         sem.record(rec)
@@ -184,6 +201,7 @@ class TestGroupD_NoDurableWriteWithoutStore(unittest.TestCase):
 # Group E — Graceful degradation when durable write fails
 # ---------------------------------------------------------------------------
 
+
 class TestGroupE_GracefulDegradation(unittest.TestCase):
     def setUp(self):
         _fresh_audit_semantics()
@@ -192,7 +210,7 @@ class TestGroupE_GracefulDegradation(unittest.TestCase):
         _fresh_audit_semantics()
 
     def test_E01_record_continues_when_store_fails(self):
-        from core.audit_event_semantics import AuditEventSemantics, AuditEventRecord, AuditEventKind
+        from core.audit_event_semantics import AuditEventKind, AuditEventRecord, AuditEventSemantics
 
         class _BrokenStore:
             def append(self, *a, **kw):
@@ -209,6 +227,7 @@ class TestGroupE_GracefulDegradation(unittest.TestCase):
 # Group F — wire_durable_audit_store() result
 # ---------------------------------------------------------------------------
 
+
 class TestGroupF_WireDurableAuditStore(unittest.TestCase):
     def setUp(self):
         _fresh_all()
@@ -218,22 +237,26 @@ class TestGroupF_WireDurableAuditStore(unittest.TestCase):
 
     def test_F01_returns_dict_with_status(self):
         from core.startup import wire_durable_audit_store
+
         result = wire_durable_audit_store()
         self.assertIn("status", result)
 
     def test_F02_status_is_ok_or_degraded(self):
         from core.startup import wire_durable_audit_store
+
         result = wire_durable_audit_store()
         self.assertIn(result["status"], ("ok", "degraded"))
 
     def test_F03_ok_result_has_store_path(self):
         from core.startup import wire_durable_audit_store
+
         result = wire_durable_audit_store()
         if result["status"] == "ok":
             self.assertIn("store_path", result)
 
     def test_F04_ok_result_has_wiring_flags(self):
         from core.startup import wire_durable_audit_store
+
         result = wire_durable_audit_store()
         if result["status"] == "ok":
             self.assertIn("replay_foundation_wired", result)
@@ -242,12 +265,14 @@ class TestGroupF_WireDurableAuditStore(unittest.TestCase):
 
     def test_F05_replay_foundation_wired_true(self):
         from core.startup import wire_durable_audit_store
+
         result = wire_durable_audit_store()
         if result["status"] == "ok":
             self.assertTrue(result["replay_foundation_wired"])
 
     def test_F06_audit_event_semantics_wired_true(self):
         from core.startup import wire_durable_audit_store
+
         result = wire_durable_audit_store()
         if result["status"] == "ok":
             self.assertTrue(result["audit_event_semantics_wired"])
@@ -257,6 +282,7 @@ class TestGroupF_WireDurableAuditStore(unittest.TestCase):
 # Group G — ReplayFoundation wired after wire_durable_audit_store()
 # ---------------------------------------------------------------------------
 
+
 class TestGroupG_ReplayFoundationWired(unittest.TestCase):
     def setUp(self):
         _fresh_all()
@@ -265,17 +291,19 @@ class TestGroupG_ReplayFoundationWired(unittest.TestCase):
         _fresh_all()
 
     def test_G01_replay_foundation_has_audit_store_after_wiring(self):
-        from core.startup import wire_durable_audit_store
         from core.replay_foundation import get_replay_foundation
+        from core.startup import wire_durable_audit_store
+
         result = wire_durable_audit_store()
         if result["status"] == "ok":
             rf = get_replay_foundation()
             self.assertIsNotNone(rf._audit_store)
 
     def test_G02_replay_foundation_audit_store_is_durable_store_singleton(self):
-        from core.startup import wire_durable_audit_store
-        from core.replay_foundation import get_replay_foundation
         from core.replay_audit_persistence import get_replay_audit_store
+        from core.replay_foundation import get_replay_foundation
+        from core.startup import wire_durable_audit_store
+
         result = wire_durable_audit_store()
         if result["status"] == "ok":
             rf = get_replay_foundation()
@@ -286,6 +314,7 @@ class TestGroupG_ReplayFoundationWired(unittest.TestCase):
 # Group H — AuditEventSemantics wired after wire_durable_audit_store()
 # ---------------------------------------------------------------------------
 
+
 class TestGroupH_AuditEventSemanticsWired(unittest.TestCase):
     def setUp(self):
         _fresh_all()
@@ -294,8 +323,9 @@ class TestGroupH_AuditEventSemanticsWired(unittest.TestCase):
         _fresh_all()
 
     def test_H01_audit_event_semantics_has_audit_store_after_wiring(self):
-        from core.startup import wire_durable_audit_store
         from core.audit_event_semantics import get_audit_event_semantics
+        from core.startup import wire_durable_audit_store
+
         result = wire_durable_audit_store()
         if result["status"] == "ok":
             aes = get_audit_event_semantics()
@@ -303,6 +333,7 @@ class TestGroupH_AuditEventSemanticsWired(unittest.TestCase):
 
     def test_H02_audit_event_semantics_wired_flag_true(self):
         from core.startup import wire_durable_audit_store
+
         result = wire_durable_audit_store()
         if result["status"] == "ok":
             self.assertTrue(result["audit_event_semantics_wired"])
@@ -311,6 +342,7 @@ class TestGroupH_AuditEventSemanticsWired(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # Group I — CanonicalSessionTruthRuntime wired (best-effort)
 # ---------------------------------------------------------------------------
+
 
 class TestGroupI_CanonicalTruthWired(unittest.TestCase):
     def setUp(self):
@@ -321,6 +353,7 @@ class TestGroupI_CanonicalTruthWired(unittest.TestCase):
 
     def test_I01_canonical_truth_wired_flag_present(self):
         from core.startup import wire_durable_audit_store
+
         result = wire_durable_audit_store()
         if result["status"] == "ok":
             self.assertIn("canonical_truth_wired", result)
@@ -330,6 +363,7 @@ class TestGroupI_CanonicalTruthWired(unittest.TestCase):
 # Group J — Replay records reach durable store after wiring
 # ---------------------------------------------------------------------------
 
+
 class TestGroupJ_ReplayRecordsDurable(unittest.TestCase):
     def setUp(self):
         _fresh_all()
@@ -338,9 +372,10 @@ class TestGroupJ_ReplayRecordsDurable(unittest.TestCase):
         _fresh_all()
 
     def test_J01_replay_execution_record_written_to_store(self):
-        from core.startup import wire_durable_audit_store
-        from core.replay_foundation import get_replay_foundation, TaskExecutionRecord
         from core.replay_audit_persistence import get_replay_audit_store
+        from core.replay_foundation import TaskExecutionRecord, get_replay_foundation
+        from core.startup import wire_durable_audit_store
+
         result = wire_durable_audit_store()
         if result["status"] != "ok":
             self.skipTest("wire_durable_audit_store not ok")
@@ -357,6 +392,7 @@ class TestGroupJ_ReplayRecordsDurable(unittest.TestCase):
 # Group K — Dispatch-spine audit events reach durable store after wiring
 # ---------------------------------------------------------------------------
 
+
 class TestGroupK_DispatchSpineAuditDurable(unittest.TestCase):
     def setUp(self):
         _fresh_all()
@@ -365,9 +401,10 @@ class TestGroupK_DispatchSpineAuditDurable(unittest.TestCase):
         _fresh_all()
 
     def test_K01_audit_task_dispatched_reaches_durable_store(self):
-        from core.startup import wire_durable_audit_store
         from core.audit_event_semantics import audit_task_dispatched
         from core.replay_audit_persistence import get_replay_audit_store
+        from core.startup import wire_durable_audit_store
+
         result = wire_durable_audit_store()
         if result["status"] != "ok":
             self.skipTest("wire_durable_audit_store not ok")
@@ -384,9 +421,10 @@ class TestGroupK_DispatchSpineAuditDurable(unittest.TestCase):
         self.assertIn("k-task-01", task_ids)
 
     def test_K02_audit_task_completed_reaches_durable_store(self):
-        from core.startup import wire_durable_audit_store
         from core.audit_event_semantics import audit_task_completed
         from core.replay_audit_persistence import get_replay_audit_store
+        from core.startup import wire_durable_audit_store
+
         result = wire_durable_audit_store()
         if result["status"] != "ok":
             self.skipTest("wire_durable_audit_store not ok")
@@ -402,9 +440,10 @@ class TestGroupK_DispatchSpineAuditDurable(unittest.TestCase):
         self.assertIn("k-task-02", task_ids)
 
     def test_K03_audit_task_failed_reaches_durable_store(self):
-        from core.startup import wire_durable_audit_store
         from core.audit_event_semantics import audit_task_failed
         from core.replay_audit_persistence import get_replay_audit_store
+        from core.startup import wire_durable_audit_store
+
         result = wire_durable_audit_store()
         if result["status"] != "ok":
             self.skipTest("wire_durable_audit_store not ok")

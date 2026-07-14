@@ -38,7 +38,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 # ===========================================================================
 # A.  MessageType enum — GOAL_RESULT
 # ===========================================================================
@@ -49,6 +48,7 @@ class TestMessageTypeGoalResult:
     def test_A01_goal_result_present_in_enum(self):
         """MessageType.GOAL_RESULT must exist with the correct wire value."""
         from galaxy_gateway.protocol.aip_v3 import MessageType
+
         assert hasattr(MessageType, "GOAL_RESULT"), (
             "MessageType.GOAL_RESULT is missing — goal_result messages from "
             "Android error paths will raise ValueError in handle_message and "
@@ -58,6 +58,7 @@ class TestMessageTypeGoalResult:
 
     def test_A02_goal_execution_result_still_present(self):
         from galaxy_gateway.protocol.aip_v3 import MessageType
+
         assert MessageType.GOAL_EXECUTION_RESULT.value == "goal_execution_result"
 
 
@@ -70,11 +71,13 @@ class TestIngressKindGoalResult:
 
     def test_B01_goal_result_in_ingress_event_kind(self):
         from galaxy_gateway.protocol.normalized_ingress_event import IngressEventKind
+
         assert hasattr(IngressEventKind, "GOAL_RESULT")
         assert IngressEventKind.GOAL_RESULT == "goal_result"
 
     def test_B02_goal_result_in_all_set(self):
         from galaxy_gateway.protocol.normalized_ingress_event import IngressEventKind
+
         assert "goal_result" in IngressEventKind._ALL
 
     def test_B03_goal_result_classified_as_execution(self):
@@ -82,6 +85,7 @@ class TestIngressKindGoalResult:
             IngressMessageClass,
             classify_ingress_kind,
         )
+
         result = classify_ingress_kind("goal_result")
         assert result == IngressMessageClass.EXECUTION, (
             "goal_result must classify as EXECUTION — it carries a user-visible "
@@ -93,6 +97,7 @@ class TestIngressKindGoalResult:
             IngressMessageClass,
             classify_ingress_kind,
         )
+
         assert classify_ingress_kind("goal_execution_result") == IngressMessageClass.EXECUTION
 
 
@@ -105,10 +110,12 @@ class TestAndroidBridgeGoalResultRegistration:
 
     def _make_bridge(self):
         from galaxy_gateway.android_bridge import AndroidBridge
+
         return AndroidBridge()
 
     def test_C01_goal_result_registered_in_handler_table(self):
         from galaxy_gateway.protocol.aip_v3 import MessageType
+
         bridge = self._make_bridge()
         assert MessageType.GOAL_RESULT in bridge._message_handlers, (
             "MessageType.GOAL_RESULT must be registered in AndroidBridge._message_handlers. "
@@ -118,6 +125,7 @@ class TestAndroidBridgeGoalResultRegistration:
     def test_C02_goal_result_and_goal_execution_result_use_same_handler(self):
         """Both types must map to the same underlying handler function."""
         from galaxy_gateway.protocol.aip_v3 import MessageType
+
         bridge = self._make_bridge()
         assert MessageType.GOAL_RESULT in bridge._message_handlers
         assert MessageType.GOAL_EXECUTION_RESULT in bridge._message_handlers
@@ -162,15 +170,19 @@ class TestCanonicalGoalResultPath:
         After the fix it must be accepted and routed.
         """
         from galaxy_gateway.android_bridge import AndroidBridge
+
         bridge = AndroidBridge()
         device_id = f"test-device-{uuid.uuid4().hex[:8]}"
         ws = _make_ws()
 
-        await bridge.handle_message(ws, {
-            "type": "device_register",
-            "device_id": device_id,
-            "payload": {"platform": "android"},
-        })
+        await bridge.handle_message(
+            ws,
+            {
+                "type": "device_register",
+                "device_id": device_id,
+                "payload": {"platform": "android"},
+            },
+        )
 
         msg = _v3_goal_result(device_id, str(uuid.uuid4()), status="failed")
         response = await bridge.handle_message(ws, msg)
@@ -187,15 +199,19 @@ class TestCanonicalGoalResultPath:
     async def test_D02_goal_result_and_goal_execution_result_both_accepted(self):
         """Both goal_result and goal_execution_result must be accepted."""
         from galaxy_gateway.android_bridge import AndroidBridge
+
         bridge = AndroidBridge()
         device_id = f"test-device-{uuid.uuid4().hex[:8]}"
         ws = _make_ws()
 
-        await bridge.handle_message(ws, {
-            "type": "device_register",
-            "device_id": device_id,
-            "payload": {"platform": "android"},
-        })
+        await bridge.handle_message(
+            ws,
+            {
+                "type": "device_register",
+                "device_id": device_id,
+                "payload": {"platform": "android"},
+            },
+        )
 
         for msg_type in ("goal_result", "goal_execution_result"):
             msg = {
@@ -210,25 +226,26 @@ class TestCanonicalGoalResultPath:
             response = await bridge.handle_message(ws, msg)
             if isinstance(response, dict):
                 error_code = response.get("payload", {}).get("error_code", "")
-                assert error_code != "UNKNOWN_MESSAGE_TYPE", (
-                    f"{msg_type} was rejected as UNKNOWN_MESSAGE_TYPE"
-                )
+                assert error_code != "UNKNOWN_MESSAGE_TYPE", f"{msg_type} was rejected as UNKNOWN_MESSAGE_TYPE"
 
     @pytest.mark.asyncio
     async def test_D03_goal_result_routes_to_goal_execution_result_handler(self):
         """goal_result must invoke handle_goal_execution_result, not handle_unregistered."""
-        from galaxy_gateway.android_bridge import AndroidBridge
         from galaxy_gateway.android.handlers.goal_execution import handle_goal_execution_result
+        from galaxy_gateway.android_bridge import AndroidBridge
 
         bridge = AndroidBridge()
         device_id = f"test-device-{uuid.uuid4().hex[:8]}"
         ws = _make_ws()
 
-        await bridge.handle_message(ws, {
-            "type": "device_register",
-            "device_id": device_id,
-            "payload": {"platform": "android"},
-        })
+        await bridge.handle_message(
+            ws,
+            {
+                "type": "device_register",
+                "device_id": device_id,
+                "payload": {"platform": "android"},
+            },
+        )
 
         called_with: list = []
 
@@ -241,6 +258,7 @@ class TestCanonicalGoalResultPath:
         def _wrap(fn):
             async def _wrapped(websocket, message):
                 return await fn(bridge, websocket, message)
+
             return _wrapped
 
         bridge._message_handlers[MessageType.GOAL_RESULT] = _wrap(_spy_handler)
@@ -249,8 +267,7 @@ class TestCanonicalGoalResultPath:
         await bridge.handle_message(ws, msg)
 
         assert called_with == ["goal_result"], (
-            "goal_result was not routed to the expected handler — "
-            "it likely hit handle_unregistered instead."
+            "goal_result was not routed to the expected handler — " "it likely hit handle_unregistered instead."
         )
 
 
@@ -263,27 +280,23 @@ class TestAndroidResultNormalizerGoalResult:
 
     def test_E01_goal_result_categorised_as_user_visible_business_result(self):
         from core.android_result_normalizer import (
-            AndroidResultCategory,
             _MESSAGE_TYPE_TO_CATEGORY,
+            AndroidResultCategory,
         )
+
         assert "goal_result" in _MESSAGE_TYPE_TO_CATEGORY, (
             "goal_result must be in _MESSAGE_TYPE_TO_CATEGORY — without this "
             "the normalizer silently treats it as 'unknown' and skips normalization."
         )
-        assert (
-            _MESSAGE_TYPE_TO_CATEGORY["goal_result"]
-            == AndroidResultCategory.user_visible_business_result
-        )
+        assert _MESSAGE_TYPE_TO_CATEGORY["goal_result"] == AndroidResultCategory.user_visible_business_result
 
     def test_E02_goal_execution_result_category_unchanged(self):
         from core.android_result_normalizer import (
-            AndroidResultCategory,
             _MESSAGE_TYPE_TO_CATEGORY,
+            AndroidResultCategory,
         )
-        assert (
-            _MESSAGE_TYPE_TO_CATEGORY["goal_execution_result"]
-            == AndroidResultCategory.user_visible_business_result
-        )
+
+        assert _MESSAGE_TYPE_TO_CATEGORY["goal_execution_result"] == AndroidResultCategory.user_visible_business_result
 
 
 # ===========================================================================
@@ -296,6 +309,7 @@ class TestRestTaskResultStatusMapping:
 
     def _normalize(self, raw: str | None) -> str:
         from core.routes.tasks import _map_result_status
+
         return _map_result_status(raw)
 
     def test_F01_failed_maps_to_failed(self):
@@ -345,8 +359,8 @@ class TestRestTaskResultEndpoint:
 
     def _call_result(self, task_id: str, payload_dict: dict | None = None):
         """Invoke submit_task_result synchronously via the module-level helper."""
-        from core.routes.tasks import TaskResultPayload, _map_result_status, create_router
         from core.routes._shared import task_queue
+        from core.routes.tasks import TaskResultPayload, _map_result_status, create_router
 
         task_queue[task_id] = {"status": "pending", "task_id": task_id}
 
@@ -358,6 +372,7 @@ class TestRestTaskResultEndpoint:
         raw_status = payload.status
         canonical_status = _map_result_status(raw_status)
         from datetime import datetime
+
         task_queue[task_id]["status"] = canonical_status
         task_queue[task_id]["completed_at"] = datetime.now().isoformat()
         return {"success": True, "status": canonical_status}
@@ -375,9 +390,7 @@ class TestRestTaskResultEndpoint:
     def test_H01_failed_result_recorded_as_failed(self):
         tid = f"t-{uuid.uuid4().hex[:8]}"
         result = self._call_result(tid, {"status": "failed"})
-        assert result["status"] == "failed", (
-            "A failed Android result must be recorded as 'failed', not 'completed'."
-        )
+        assert result["status"] == "failed", "A failed Android result must be recorded as 'failed', not 'completed'."
 
     def test_H02_error_result_recorded_as_failed(self):
         tid = f"t-{uuid.uuid4().hex[:8]}"
@@ -400,9 +413,10 @@ class TestRestTaskResultEndpoint:
         assert result["status"] == "completed"
 
     def test_H06_task_queue_written_with_correct_status(self):
+        from datetime import datetime
+
         from core.routes._shared import task_queue
         from core.routes.tasks import _map_result_status
-        from datetime import datetime
 
         tid = f"t-{uuid.uuid4().hex[:8]}"
         task_queue[tid] = {"status": "pending", "task_id": tid}
@@ -412,6 +426,5 @@ class TestRestTaskResultEndpoint:
         task_queue[tid]["completed_at"] = datetime.now().isoformat()
 
         assert task_queue[tid]["status"] == "failed", (
-            "task_queue must reflect 'failed' when Android reports status='error', "
-            "not 'completed'."
+            "task_queue must reflect 'failed' when Android reports status='error', " "not 'completed'."
         )

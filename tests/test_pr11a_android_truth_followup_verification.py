@@ -82,9 +82,7 @@ def test_protocol_only_fails_without_capability_truth() -> None:
 
     assert verdict.integration_decision == IntegrationDecision.deny
     assert verdict.integration_allowed is False
-    capability = next(
-        r for r in verdict.dimension_results if r.dimension == AndroidEvidenceDimension.capability_truth
-    )
+    capability = next(r for r in verdict.dimension_results if r.dimension == AndroidEvidenceDimension.capability_truth)
     assert capability.passed is False
     assert capability.grade == AndroidEvidenceGrade.absent
     assert any(c.startswith("capability_truth:") for c in verdict.degradation_causes)
@@ -123,15 +121,11 @@ def test_unrecognized_capability_class_fails() -> None:
     ):
         verdict = evaluate_android_evidence_integration("dev_future_proof", "exec_future_proof")
 
-    capability = next(
-        r for r in verdict.dimension_results if r.dimension == AndroidEvidenceDimension.capability_truth
-    )
+    capability = next(r for r in verdict.dimension_results if r.dimension == AndroidEvidenceDimension.capability_truth)
     assert verdict.integration_allowed is False
     assert capability.passed is False
     assert capability.grade == AndroidEvidenceGrade.degraded
-    assert "unrecognized_proof_input_class:future_contract_variant" in str(
-        capability.detail.get("degradation_causes")
-    )
+    assert "unrecognized_proof_input_class:future_contract_variant" in str(capability.detail.get("degradation_causes"))
 
 
 def test_missing_remote_quality_value_fails_even_with_false_degraded_flag() -> None:
@@ -174,9 +168,7 @@ def test_missing_remote_quality_value_fails_even_with_false_degraded_flag() -> N
     ):
         verdict = evaluate_android_evidence_integration("dev_missing_remote", "exec_missing_remote")
 
-    lifecycle = next(
-        r for r in verdict.dimension_results if r.dimension == AndroidEvidenceDimension.lifecycle_truth
-    )
+    lifecycle = next(r for r in verdict.dimension_results if r.dimension == AndroidEvidenceDimension.lifecycle_truth)
     assert verdict.integration_allowed is False
     assert lifecycle.passed is False
     assert lifecycle.grade == AndroidEvidenceGrade.degraded
@@ -222,9 +214,7 @@ def test_explicit_lifecycle_degraded_flag_fails_closed_even_with_confirmed_quali
     ):
         verdict = evaluate_android_evidence_integration("dev_explicit_degraded", "exec_explicit_degraded")
 
-    lifecycle = next(
-        r for r in verdict.dimension_results if r.dimension == AndroidEvidenceDimension.lifecycle_truth
-    )
+    lifecycle = next(r for r in verdict.dimension_results if r.dimension == AndroidEvidenceDimension.lifecycle_truth)
     assert verdict.integration_allowed is False
     assert lifecycle.passed is False
     assert lifecycle.grade == AndroidEvidenceGrade.degraded

@@ -47,17 +47,15 @@ from __future__ import annotations
 
 import asyncio
 import json
-import sys
 import os
+import sys
 import uuid
 from typing import Any, Dict, List, Optional
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-_PROJECT_ROOT = os.path.dirname(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-)
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
@@ -84,8 +82,8 @@ class TestSchemaInterop:
 
     def test_plan_plus_lifecycle_state_dict_merge(self):
         """An execution plan dict and a lifecycle summary can be merged cleanly."""
+        from core.schemas.execution_lifecycle import ExecutionLifecycleState, lifecycle_summary
         from core.schemas.execution_plan import build_execution_plan
-        from core.schemas.execution_lifecycle import lifecycle_summary, ExecutionLifecycleState
 
         plan = build_execution_plan(
             execution_path="local",
@@ -106,8 +104,8 @@ class TestSchemaInterop:
 
     def test_plan_plus_failure_record_merge(self):
         """An execution plan dict and a failure record summary can be merged cleanly."""
-        from core.schemas.execution_plan import build_execution_plan
         from core.schemas.execution_failure import build_failure_record, failure_record_summary
+        from core.schemas.execution_plan import build_execution_plan
 
         plan = build_execution_plan(
             execution_path="cross_device",
@@ -129,8 +127,8 @@ class TestSchemaInterop:
     def test_authority_metadata_plus_plan_plus_lifecycle(self):
         """Authority metadata, plan, and lifecycle all coexist in the same result dict."""
         from core.schemas.execution_authority import ExecutionLayerRole, build_authority_metadata
+        from core.schemas.execution_lifecycle import ExecutionLifecycleState, lifecycle_summary
         from core.schemas.execution_plan import build_execution_plan
-        from core.schemas.execution_lifecycle import lifecycle_summary, ExecutionLifecycleState
 
         meta = build_authority_metadata(
             ExecutionLayerRole.SUBJECT_DECISION_AUTHORITY,
@@ -155,9 +153,9 @@ class TestSchemaInterop:
 
     def test_failure_record_integrates_with_lifecycle_failed_state(self):
         """FAILED lifecycle state and a failure record reference the same domain."""
-        from core.schemas.execution_lifecycle import ExecutionLifecycleState, is_terminal
-        from core.schemas.execution_failure import build_failure_record
         from core.failure_domains import FailureDomain
+        from core.schemas.execution_failure import build_failure_record
+        from core.schemas.execution_lifecycle import ExecutionLifecycleState, is_terminal
 
         state = ExecutionLifecycleState.FAILED
         assert is_terminal(state)
@@ -225,8 +223,8 @@ class TestModeResolverToEnvelopeWiring:
 
     def test_rich_profile_produces_agent_runtime_envelope(self):
         """Resolver result for a rich profile produces an agent_runtime TaskEnvelope."""
-        from core.remote_execution_mode_resolver import resolve_mode
         from core.device_execution_profile import build_rich_profile
+        from core.remote_execution_mode_resolver import resolve_mode
         from core.schemas.task_envelope import TaskEnvelope
 
         profile = build_rich_profile(device_id="rich_01")
@@ -248,8 +246,8 @@ class TestModeResolverToEnvelopeWiring:
 
     def test_thin_profile_produces_command_only_envelope(self):
         """Resolver result for a thin profile produces a command_only TaskEnvelope."""
-        from core.remote_execution_mode_resolver import resolve_mode
         from core.device_execution_profile import build_thin_profile
+        from core.remote_execution_mode_resolver import resolve_mode
         from core.schemas.task_envelope import TaskEnvelope
 
         profile = build_thin_profile(device_id="thin_01")
@@ -270,8 +268,8 @@ class TestModeResolverToEnvelopeWiring:
 
     def test_forced_mode_overrides_profile_in_envelope(self):
         """Forced mode override from resolver propagates into envelope."""
-        from core.remote_execution_mode_resolver import resolve_mode
         from core.device_execution_profile import build_rich_profile
+        from core.remote_execution_mode_resolver import resolve_mode
         from core.schemas.task_envelope import TaskEnvelope
 
         profile = build_rich_profile(device_id="rich_02")
@@ -294,10 +292,10 @@ class TestModeResolverToEnvelopeWiring:
 
     def test_resolver_to_envelope_to_route_envelope_pipeline(self):
         """Full pipeline: resolver → envelope → route_envelope stamps mode."""
-        from core.remote_execution_mode_resolver import resolve_mode
-        from core.device_execution_profile import build_rich_profile
-        from core.schemas.task_envelope import TaskEnvelope
         from core.command_router import CommandRouter
+        from core.device_execution_profile import build_rich_profile
+        from core.remote_execution_mode_resolver import resolve_mode
+        from core.schemas.task_envelope import TaskEnvelope
 
         profile = build_rich_profile(device_id="rich_03")
         resolution = resolve_mode(profile=profile)
@@ -317,10 +315,15 @@ class TestModeResolverToEnvelopeWiring:
         router._config = {}
 
         base_result = {
-            "success": True, "result": "ok", "device_id": "rich_03",
-            "request_id": env.task_id, "task_id": env.task_id,
-            "command_id": env.task_id, "command": "agent_execute",
-            "via": "command_router", "latency_ms": 3.0,
+            "success": True,
+            "result": "ok",
+            "device_id": "rich_03",
+            "request_id": env.task_id,
+            "task_id": env.task_id,
+            "command_id": env.task_id,
+            "command": "agent_execute",
+            "via": "command_router",
+            "latency_ms": 3.0,
         }
         with patch.object(router, "_execute_command", new=AsyncMock(return_value=base_result)):
             result = asyncio.run(router.route_envelope(env))
@@ -355,12 +358,12 @@ class TestSubstrateAuthorityStamping:
         }
 
     def _run_envelope(self, mode: str, success: bool = True) -> Dict[str, Any]:
-        from core.schemas.task_envelope import TaskEnvelope
-        from core.command_router import CommandRouter
         from core.canonical_dispatch_slot_authority import (
             CanonicalDispatchSlot,
             CanonicalDispatchSlotsResult,
         )
+        from core.command_router import CommandRouter
+        from core.schemas.task_envelope import TaskEnvelope
 
         tid = _tid()
         env = TaskEnvelope(
@@ -442,17 +445,22 @@ class TestSubstrateAuthorityStamping:
 
     def test_failure_domain_stamped_on_failure_result(self):
         """Failed results carry failure_domain from the error code."""
-        from core.schemas.task_envelope import TaskEnvelope
-        from core.command_router import CommandRouter
         from core.canonical_dispatch_slot_authority import (
             CanonicalDispatchSlot,
             CanonicalDispatchSlotsResult,
         )
+        from core.command_router import CommandRouter
+        from core.schemas.task_envelope import TaskEnvelope
 
         tid = _tid()
         env = TaskEnvelope(
-            task_id=tid, trace_id=_tid(), session_id=_sid(),
-            source="test", targets=["dev_x"], tool_name="cmd", args={},
+            task_id=tid,
+            trace_id=_tid(),
+            session_id=_sid(),
+            source="test",
+            targets=["dev_x"],
+            tool_name="cmd",
+            args={},
         )
         router = CommandRouter.__new__(CommandRouter)
         router._config = {}
@@ -504,8 +512,8 @@ class TestFailureRecordPropagation:
 
     def test_failure_domain_appears_in_lifecycle_summary(self):
         """Lifecycle summary can carry failure_domain when provided."""
-        from core.schemas.execution_lifecycle import lifecycle_summary, ExecutionLifecycleState
         from core.failure_domains import FailureDomain
+        from core.schemas.execution_lifecycle import ExecutionLifecycleState, lifecycle_summary
 
         summary = lifecycle_summary(
             ExecutionLifecycleState.FAILED,
@@ -516,8 +524,8 @@ class TestFailureRecordPropagation:
 
     def test_retryable_failure_and_failed_lifecycle(self):
         """A retryable failure co-exists with FAILED lifecycle state."""
-        from core.schemas.execution_lifecycle import ExecutionLifecycleState
         from core.schemas.execution_failure import build_failure_record
+        from core.schemas.execution_lifecycle import ExecutionLifecycleState
 
         rec = build_failure_record(error_code="COMMAND_TIMEOUT")
         assert rec.is_retryable
@@ -527,10 +535,16 @@ class TestFailureRecordPropagation:
     def test_failure_summary_completes_to_dict(self):
         """All known error codes produce valid failure record dicts."""
         from core.schemas.execution_failure import build_failure_record, failure_record_summary
+
         codes = [
-            "COMMAND_TIMEOUT", "DISCONNECT", "EXECUTOR_ERROR",
-            "DEVICE_NOT_FOUND", "DEVICE_OFFLINE", "INVALID_ENVELOPE",
-            "INTERNAL_ERROR", "ACL_DENIED",
+            "COMMAND_TIMEOUT",
+            "DISCONNECT",
+            "EXECUTOR_ERROR",
+            "DEVICE_NOT_FOUND",
+            "DEVICE_OFFLINE",
+            "INVALID_ENVELOPE",
+            "INTERNAL_ERROR",
+            "ACL_DENIED",
         ]
         for code in codes:
             rec = build_failure_record(error_code=code)
@@ -540,7 +554,7 @@ class TestFailureRecordPropagation:
             json.dumps(summary)
 
     def test_failure_domain_from_exception_matches_lifecycle_timed_out(self):
-        from core.failure_domains import classify_from_exception, FailureDomain
+        from core.failure_domains import FailureDomain, classify_from_exception
         from core.schemas.execution_lifecycle import ExecutionLifecycleState
 
         c = classify_from_exception(TimeoutError("expired"))
@@ -553,6 +567,7 @@ class TestFailureRecordPropagation:
     def test_orchestration_partial_failure_domain(self):
         """ORCHESTRATION_PARTIAL_FAILURE is the correct domain for mixed outcomes."""
         from core.failure_domains import FailureDomain, downgrade_hint_for_domain
+
         domain = FailureDomain.ORCHESTRATION_PARTIAL_FAILURE
         hint = downgrade_hint_for_domain(domain)
         # Partial failure has no simple mode downgrade
@@ -590,6 +605,11 @@ class TestOrchestrationToSubstrateBoundary:
 
     def test_substrate_dispatch_per_decision(self):
         """Each OrchestrationDecision maps to one substrate call."""
+        from core.canonical_dispatch_slot_authority import (
+            CanonicalDispatchSlot,
+            CanonicalDispatchSlotsResult,
+        )
+        from core.command_router import CommandRouter
         from core.orchestration.multi_device_plan import (
             OrchestrationDecision,
             OrchestrationMemberResult,
@@ -597,15 +617,11 @@ class TestOrchestrationToSubstrateBoundary:
             build_orchestration_result,
         )
         from core.schemas.task_envelope import TaskEnvelope
-        from core.command_router import CommandRouter
-        from core.canonical_dispatch_slot_authority import (
-            CanonicalDispatchSlot,
-            CanonicalDispatchSlotsResult,
-        )
 
         decisions = [
-            OrchestrationDecision(agent_id=f"ag{i}", target_device_id=f"dev_{i}",
-                                  resolved_execution_mode="command_only")
+            OrchestrationDecision(
+                agent_id=f"ag{i}", target_device_id=f"dev_{i}", resolved_execution_mode="command_only"
+            )
             for i in range(3)
         ]
         plan = build_orchestration_plan(task="fan-out", decisions=decisions, trace_id=_tid())
@@ -618,9 +634,15 @@ class TestOrchestrationToSubstrateBoundary:
         async def _fake_execute(*args, **kwargs) -> Dict[str, Any]:
             call_count[0] += 1
             return {
-                "success": True, "result": "ok", "device_id": "dev",
-                "request_id": "r", "task_id": "t", "command_id": "c",
-                "command": "cmd", "via": "command_router", "latency_ms": 1.0,
+                "success": True,
+                "result": "ok",
+                "device_id": "dev",
+                "request_id": "r",
+                "task_id": "t",
+                "command_id": "c",
+                "command": "cmd",
+                "via": "command_router",
+                "latency_ms": 1.0,
             }
 
         def _make_approved_result(device_id: str) -> CanonicalDispatchSlotsResult:
@@ -681,6 +703,7 @@ class TestOrchestrationToSubstrateBoundary:
             build_orchestration_plan,
             build_orchestration_result,
         )
+
         d1 = OrchestrationDecision(agent_id="ag1", target_device_id="dev_a")
         d2 = OrchestrationDecision(agent_id="ag2", target_device_id="dev_b")
         plan = build_orchestration_plan(task="test", decisions=[d1, d2])
@@ -743,6 +766,7 @@ class TestDiagnosticsIntegration:
             build_diagnostics_snapshot_from_layers,
             run_architecture_diagnostics,
         )
+
         results = self._make_layer_results()
         snapshot = build_diagnostics_snapshot_from_layers(*results)
 
@@ -757,6 +781,7 @@ class TestDiagnosticsIntegration:
             build_diagnostics_snapshot_from_layers,
             run_architecture_diagnostics,
         )
+
         results = self._make_layer_results()
         snapshot = build_diagnostics_snapshot_from_layers(*results)
         report = run_architecture_diagnostics(snapshot)
@@ -769,6 +794,7 @@ class TestDiagnosticsIntegration:
             build_diagnostics_snapshot_from_layers,
             run_architecture_diagnostics,
         )
+
         results = self._make_layer_results()
         # Add remote mode to substrate result
         results[-1]["remote_execution_mode"] = "agent_runtime"
@@ -782,6 +808,7 @@ class TestDiagnosticsIntegration:
             build_diagnostics_snapshot_from_layers,
             run_architecture_diagnostics,
         )
+
         results = [r for r in self._make_layer_results() if r["arch_layer_id"] != "cognition_layer"]
         snapshot = build_diagnostics_snapshot_from_layers(*results)
         report = run_architecture_diagnostics(snapshot)
@@ -803,11 +830,12 @@ class TestLifecycleStateIntegration:
 
     def test_local_lifecycle_flow(self):
         """Local execution: PLANNED → (advance) → SUCCEEDED."""
+        from core.schemas.execution_lifecycle import ExecutionLifecycleState as LC
         from core.schemas.execution_lifecycle import (
-            ExecutionLifecycleState as LC,
             advance_lifecycle,
             is_terminal,
         )
+
         state = LC.PLANNED
         assert not is_terminal(state)
 
@@ -822,11 +850,12 @@ class TestLifecycleStateIntegration:
 
     def test_remote_lifecycle_flow_success(self):
         """Remote execution with success=True advances lifecycle from PLANNED."""
+        from core.schemas.execution_lifecycle import ExecutionLifecycleState as LC
         from core.schemas.execution_lifecycle import (
-            ExecutionLifecycleState as LC,
             advance_lifecycle,
             is_terminal,
         )
+
         state = LC.PLANNED
         # Advance: success=True, is_remote=True should advance forward
         next_state = advance_lifecycle(state, success=True, is_remote=True)
@@ -837,11 +866,12 @@ class TestLifecycleStateIntegration:
 
     def test_remote_lifecycle_flow_timeout(self):
         """Remote execution that times out reaches TIMED_OUT terminal state."""
+        from core.schemas.execution_lifecycle import ExecutionLifecycleState as LC
         from core.schemas.execution_lifecycle import (
-            ExecutionLifecycleState as LC,
             advance_lifecycle,
             is_terminal,
         )
+
         state = LC.WAITING_REMOTE
         state = advance_lifecycle(state, success=False, timed_out=True)
         assert state == LC.TIMED_OUT
@@ -850,32 +880,37 @@ class TestLifecycleStateIntegration:
     def test_degraded_lifecycle_state(self):
         """Degraded state is terminal and represents a partial but usable result."""
         from core.schemas.execution_lifecycle import ExecutionLifecycleState, is_terminal
+
         state = ExecutionLifecycleState.DEGRADED
         assert is_terminal(state)
 
     def test_partially_succeeded_state_is_non_terminal(self):
         """PARTIALLY_SUCCEEDED is a non-terminal state (execution may still continue)."""
         from core.schemas.execution_lifecycle import ExecutionLifecycleState, is_terminal
+
         # PARTIALLY_SUCCEEDED is not in the terminal set — it's a degraded-progress state
         assert not is_terminal(ExecutionLifecycleState.PARTIALLY_SUCCEEDED)
 
     def test_lifecycle_initial_state_for_local_step(self):
         """initial_state_for_step_type maps LOCAL_MANIFESTATION correctly."""
         from core.schemas.execution_lifecycle import (
-            initial_state_for_step_type,
             ExecutionLifecycleState,
+            initial_state_for_step_type,
         )
+
         state = initial_state_for_step_type("local_manifestation")
         # Should be a non-terminal state at the start of a step
         assert not ExecutionLifecycleState(state).value == "succeeded"
 
     def test_lifecycle_initial_state_for_remote_command(self):
         from core.schemas.execution_lifecycle import initial_state_for_step_type
+
         state = initial_state_for_step_type("remote_command")
         assert state is not None
 
     def test_lifecycle_initial_state_for_remote_agent(self):
         from core.schemas.execution_lifecycle import initial_state_for_step_type
+
         state = initial_state_for_step_type("remote_agent")
         assert state is not None
 
@@ -886,6 +921,7 @@ class TestLifecycleStateIntegration:
             lifecycle_summary,
             terminal_states,
         )
+
         for state in terminal_states():
             summary = lifecycle_summary(state)
             assert summary["is_terminal"] is True
@@ -895,6 +931,7 @@ class TestLifecycleStateIntegration:
     def test_lifecycle_summary_non_terminal_state(self):
         """Non-terminal states report is_terminal=False."""
         from core.schemas.execution_lifecycle import ExecutionLifecycleState, lifecycle_summary
+
         summary = lifecycle_summary(ExecutionLifecycleState.RUNNING)
         assert summary["is_terminal"] is False
         assert summary["lifecycle_state"] == "running"

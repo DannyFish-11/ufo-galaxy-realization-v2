@@ -13,14 +13,14 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from enum import Enum
 import importlib
 import importlib.util
 import logging
 import os
 import sys
 import time
+from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any, Dict, List
 
 logger = logging.getLogger(__name__)
@@ -53,25 +53,16 @@ _EXECUTION_CHAIN_SIGNAL_INCREMENT = 12.0
 _OBSERVABILITY_BASE_SCORE = 56.0
 _OBSERVABILITY_SIGNAL_INCREMENT = 13.0
 _ANDROID_MESH_CONTRACT = (
-    "ufo-galaxy-android/app/src/main/java/com/ufo/galaxy/runtime/"
-    "AndroidMeshParticipationContract.kt"
+    "ufo-galaxy-android/app/src/main/java/com/ufo/galaxy/runtime/" "AndroidMeshParticipationContract.kt"
 )
-_ANDROID_LOCAL_COLLAB = (
-    "ufo-galaxy-android/app/src/main/java/com/ufo/galaxy/agent/"
-    "LocalCollaborationAgent.kt"
-)
+_ANDROID_LOCAL_COLLAB = "ufo-galaxy-android/app/src/main/java/com/ufo/galaxy/agent/" "LocalCollaborationAgent.kt"
 _ANDROID_MESH_TEST = (
-    "ufo-galaxy-android/app/src/test/java/com/ufo/galaxy/runtime/"
-    "Pr8AndroidMeshParticipationContractTest.kt"
+    "ufo-galaxy-android/app/src/test/java/com/ufo/galaxy/runtime/" "Pr8AndroidMeshParticipationContractTest.kt"
 )
 _ANDROID_AUTONOMOUS_PIPELINE = (
-    "ufo-galaxy-android/app/src/main/java/com/ufo/galaxy/agent/"
-    "AutonomousExecutionPipeline.kt"
+    "ufo-galaxy-android/app/src/main/java/com/ufo/galaxy/agent/" "AutonomousExecutionPipeline.kt"
 )
-_ANDROID_WS_CLIENT = (
-    "ufo-galaxy-android/app/src/main/java/com/ufo/galaxy/network/"
-    "GalaxyWebSocketClient.kt"
-)
+_ANDROID_WS_CLIENT = "ufo-galaxy-android/app/src/main/java/com/ufo/galaxy/network/" "GalaxyWebSocketClient.kt"
 
 
 class PropositionVerdict(str, Enum):
@@ -255,11 +246,7 @@ def _classify_stage(
     overall_completion_pct: float,
     has_runtime_or_proof_gap: bool,
 ) -> SystemStage:
-    if not (
-        _POC_STAGE_THRESHOLD_PCT
-        < _EARLY_RUNTIME_STAGE_THRESHOLD_PCT
-        < _MID_STAGE_CONSOLIDATION_THRESHOLD_PCT
-    ):
+    if not (_POC_STAGE_THRESHOLD_PCT < _EARLY_RUNTIME_STAGE_THRESHOLD_PCT < _MID_STAGE_CONSOLIDATION_THRESHOLD_PCT):
         raise ValueError("Stage thresholds must be strictly ascending.")
     # 说明：低分段（PoC/Early/Mid）由整体完成度主导；高分段（Late/Near）再由关键运行/证明缺口区分。
     if overall_completion_pct < _POC_STAGE_THRESHOLD_PCT:
@@ -277,8 +264,7 @@ def _has_critical_runtime_gaps(remaining_work: List[RemainingWorkItem]) -> bool:
     """关键阶段判定只考虑非增强类且会阻塞运行/证明闭环的缺口。"""
     critical_gap_types = {GapType.RUNTIME_GAP, GapType.PROOF_GAP, GapType.CORE_GAP}
     return any(
-        item.gap_type in critical_gap_types and item.priority != WorkPriority.ENHANCEMENT
-        for item in remaining_work
+        item.gap_type in critical_gap_types and item.priority != WorkPriority.ENHANCEMENT for item in remaining_work
     )
 
 
@@ -478,13 +464,10 @@ def build_joint_dual_repo_cognition_closure_review() -> JointCognitionClosureRep
             weight_pct=16.0,
             completion_pct=_clamp_and_round_percentage(
                 _GOVERNANCE_BASE_SCORE
-                + _GOVERNANCE_SIGNAL_INCREMENT
-                * sum([execution_governance, governance_semantics, mode_gate_policy])
+                + _GOVERNANCE_SIGNAL_INCREMENT * sum([execution_governance, governance_semantics, mode_gate_policy])
             ),
             evidence_status="runtime_governance_structure_verified",
-            rationale_zh=(
-                "统一执行治理、统一治理语义、Android 模式门均可在 V2 真实代码中定位。"
-            ),
+            rationale_zh=("统一执行治理、统一治理语义、Android 模式门均可在 V2 真实代码中定位。"),
         ),
         DomainCompletionScore(
             domain_id="D2_execution_runtime_chain",
@@ -542,8 +525,7 @@ def build_joint_dual_repo_cognition_closure_review() -> JointCognitionClosureRep
             weight_pct=12.0,
             completion_pct=_clamp_and_round_percentage(
                 _OBSERVABILITY_BASE_SCORE
-                + _OBSERVABILITY_SIGNAL_INCREMENT
-                * sum([operator_action_surface, panel_unified, mesh_state_surface])
+                + _OBSERVABILITY_SIGNAL_INCREMENT * sum([operator_action_surface, panel_unified, mesh_state_surface])
             ),
             evidence_status="operator_and_panel_surface_verified",
             rationale_zh="operator action 与 unified panel 及 mesh_runtime_state 透明面均可由真实代码定位。",

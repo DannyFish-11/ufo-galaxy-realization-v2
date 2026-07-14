@@ -20,6 +20,7 @@ Usage::
     suggested = prefs.suggest_device_for_task("screenshot")
     # Returns "phone_01" based on historical usage
 """
+
 from __future__ import annotations
 
 import json
@@ -105,9 +106,7 @@ class UserPreferenceMemory:
                     data = json.load(f)
                 # Reconstruct DeviceUsage objects
                 du_raw = data.get("device_usage", {})
-                data["device_usage"] = {
-                    k: DeviceUsage(**v) for k, v in du_raw.items()
-                }
+                data["device_usage"] = {k: DeviceUsage(**v) for k, v in du_raw.items()}
                 self._prefs = UserPreferences(**data)
                 logger.info("User preferences loaded from %s", self._path)
                 return
@@ -137,9 +136,7 @@ class UserPreferenceMemory:
     ) -> None:
         """Record that a device was used for an action."""
         if device_id not in self._prefs.device_usage:
-            self._prefs.device_usage[device_id] = DeviceUsage(
-                device_id=device_id, device_type=device_type
-            )
+            self._prefs.device_usage[device_id] = DeviceUsage(device_id=device_id, device_type=device_type)
         self._prefs.device_usage[device_id].record(action, success)
         self._prefs.total_interactions += 1
         self._prefs.last_updated = time.time()
@@ -150,7 +147,11 @@ class UserPreferenceMemory:
             task_type = self._infer_task_type(action)
             if task_type:
                 current = self._prefs.device_preferences.get(task_type)
-                if current is None or self._prefs.device_usage[current].success_count < self._prefs.device_usage[device_id].success_count:
+                if (
+                    current is None
+                    or self._prefs.device_usage[current].success_count
+                    < self._prefs.device_usage[device_id].success_count
+                ):
                     self._prefs.device_preferences[task_type] = device_id
 
         self._save()
@@ -224,9 +225,7 @@ class UserPreferenceMemory:
             "device_type": du.device_type,
             "total_uses": total,
             "success_rate": du.success_count / total if total > 0 else 0,
-            "most_used_actions": sorted(
-                du.actions_used.items(), key=lambda x: x[1], reverse=True
-            )[:5],
+            "most_used_actions": sorted(du.actions_used.items(), key=lambda x: x[1], reverse=True)[:5],
             "last_used": du.last_used,
         }
 

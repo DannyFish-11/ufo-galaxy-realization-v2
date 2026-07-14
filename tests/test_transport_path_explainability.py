@@ -73,12 +73,13 @@ K) Dual-graph sentinel
 from __future__ import annotations
 
 import json
-import pytest
 
+import pytest
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(autouse=True)
 def _reset_all():
@@ -93,6 +94,7 @@ def _reset_all():
 def _try_reset_assimilation():
     try:
         from core.capability_assimilation import reset_capability_assimilation_layer
+
         reset_capability_assimilation_layer()
     except Exception:
         pass
@@ -101,6 +103,7 @@ def _try_reset_assimilation():
 def _try_reset_bridge_log():
     try:
         from core.capability_network_bridge import reset_bridge_log
+
         reset_bridge_log()
     except Exception:
         pass
@@ -108,9 +111,10 @@ def _try_reset_bridge_log():
 
 def _register(node_id, caps=None, kind="capability_provider", transport_hints=None, online=True):
     from core.capability_assimilation import (
-        get_capability_assimilation_layer,
         NodeParticipantKind,
+        get_capability_assimilation_layer,
     )
+
     layer = get_capability_assimilation_layer()
     rec = layer.assimilate(
         node_id,
@@ -127,22 +131,27 @@ def _register(node_id, caps=None, kind="capability_provider", transport_hints=No
 # A) Module structure
 # ---------------------------------------------------------------------------
 
+
 class TestModuleStructure:
     def test_authority_sentinel_importable(self):
         from core.capability_network_bridge import CAPABILITY_NETWORK_BRIDGE_AUTHORITY
+
         assert "PR-D" in CAPABILITY_NETWORK_BRIDGE_AUTHORITY
 
     def test_layer_position_is_11(self):
         from core.capability_network_bridge import CAPABILITY_NETWORK_BRIDGE_LAYER_POSITION
+
         assert CAPABILITY_NETWORK_BRIDGE_LAYER_POSITION == 11
 
     def test_dual_graph_policy_importable(self):
         from core.capability_network_bridge import DUAL_GRAPH_SELECTION_POLICY
+
         assert isinstance(DUAL_GRAPH_SELECTION_POLICY, str)
         assert len(DUAL_GRAPH_SELECTION_POLICY) > 0
 
     def test_all_public_names_importable(self):
         import core.capability_network_bridge as m
+
         for name in m.__all__:
             assert hasattr(m, name), f"Missing: {name}"
 
@@ -151,32 +160,45 @@ class TestModuleStructure:
 # B) PathAvailability dataclass
 # ---------------------------------------------------------------------------
 
+
 class TestPathAvailability:
     def test_construction_with_only_node_id(self):
         from core.capability_network_bridge import PathAvailability
+
         pa = PathAvailability(node_id="n1")
         assert pa.node_id == "n1"
 
     def test_is_reachable_defaults_false(self):
         from core.capability_network_bridge import PathAvailability
+
         pa = PathAvailability(node_id="n1")
         assert pa.is_reachable is False
 
     def test_effective_path_defaults_unknown(self):
         from core.capability_network_bridge import PathAvailability
+
         pa = PathAvailability(node_id="n1")
         assert pa.effective_path == "unknown"
 
     def test_to_dict_contains_keys(self):
         from core.capability_network_bridge import PathAvailability
+
         pa = PathAvailability(node_id="n1", effective_path="direct", path_score=0.9)
         d = pa.to_dict()
-        for key in ("node_id", "effective_path", "path_state", "path_score",
-                    "is_reachable", "transport_hints", "topology_notes"):
+        for key in (
+            "node_id",
+            "effective_path",
+            "path_state",
+            "path_score",
+            "is_reachable",
+            "transport_hints",
+            "topology_notes",
+        ):
             assert key in d
 
     def test_to_dict_json_serialisable(self):
         from core.capability_network_bridge import PathAvailability
+
         pa = PathAvailability(node_id="n1", effective_path="direct")
         json.dumps(pa.to_dict())
 
@@ -185,9 +207,11 @@ class TestPathAvailability:
 # C) JointSelectionResult dataclass
 # ---------------------------------------------------------------------------
 
+
 class TestJointSelectionResult:
     def test_construction(self):
         from core.capability_network_bridge import JointSelectionResult, PathAvailability
+
         result = JointSelectionResult(
             selected_provider_id="p1",
             capability_fit_score=None,
@@ -198,6 +222,7 @@ class TestJointSelectionResult:
 
     def test_to_dict_contains_keys(self):
         from core.capability_network_bridge import JointSelectionResult, PathAvailability
+
         result = JointSelectionResult(
             selected_provider_id="p1",
             capability_fit_score=None,
@@ -205,12 +230,19 @@ class TestJointSelectionResult:
             joint_score=5.0,
         )
         d = result.to_dict()
-        for key in ("selected_provider_id", "capability_fit_score", "path_availability",
-                    "joint_score", "is_degraded", "degraded_reason"):
+        for key in (
+            "selected_provider_id",
+            "capability_fit_score",
+            "path_availability",
+            "joint_score",
+            "is_degraded",
+            "degraded_reason",
+        ):
             assert key in d
 
     def test_to_dict_json_serialisable(self):
         from core.capability_network_bridge import JointSelectionResult, PathAvailability
+
         result = JointSelectionResult(
             selected_provider_id="p1",
             capability_fit_score=None,
@@ -224,9 +256,11 @@ class TestJointSelectionResult:
 # D) JointSelectionExplanation dataclass
 # ---------------------------------------------------------------------------
 
+
 class TestJointSelectionExplanation:
     def _make_result(self):
         from core.capability_network_bridge import JointSelectionResult, PathAvailability
+
         return JointSelectionResult(
             selected_provider_id="p1",
             capability_fit_score=None,
@@ -236,6 +270,7 @@ class TestJointSelectionExplanation:
 
     def test_construction(self):
         from core.capability_network_bridge import JointSelectionExplanation
+
         expl = JointSelectionExplanation(
             provider_reason="Provider selected.",
             path_reason="Direct path.",
@@ -247,6 +282,7 @@ class TestJointSelectionExplanation:
 
     def test_to_dict_contains_keys(self):
         from core.capability_network_bridge import JointSelectionExplanation
+
         expl = JointSelectionExplanation(
             provider_reason="p",
             path_reason="q",
@@ -255,12 +291,12 @@ class TestJointSelectionExplanation:
             joint_result=self._make_result(),
         )
         d = expl.to_dict()
-        for key in ("provider_reason", "path_reason", "fallback_reason",
-                    "degraded_explanation", "joint_result"):
+        for key in ("provider_reason", "path_reason", "fallback_reason", "degraded_explanation", "joint_result"):
             assert key in d
 
     def test_provider_reason_non_empty(self):
         from core.capability_network_bridge import JointSelectionExplanation
+
         expl = JointSelectionExplanation(
             provider_reason="Provider selected.",
             path_reason="Path chosen.",
@@ -272,6 +308,7 @@ class TestJointSelectionExplanation:
 
     def test_path_reason_non_empty(self):
         from core.capability_network_bridge import JointSelectionExplanation
+
         expl = JointSelectionExplanation(
             provider_reason="p",
             path_reason="Direct path selected.",
@@ -286,9 +323,11 @@ class TestJointSelectionExplanation:
 # E) BridgeRecord dataclass
 # ---------------------------------------------------------------------------
 
+
 class TestBridgeRecord:
     def test_construction(self):
         from core.capability_network_bridge import BridgeRecord
+
         rec = BridgeRecord(
             record_id=1,
             operation="joint_select",
@@ -302,6 +341,7 @@ class TestBridgeRecord:
 
     def test_to_dict_contains_keys(self):
         from core.capability_network_bridge import BridgeRecord
+
         rec = BridgeRecord(
             record_id=1,
             operation="joint_select",
@@ -312,8 +352,7 @@ class TestBridgeRecord:
             is_degraded=True,
         )
         d = rec.to_dict()
-        for key in ("record_id", "operation", "selected_provider_id",
-                    "effective_path", "joint_score", "is_degraded"):
+        for key in ("record_id", "operation", "selected_provider_id", "effective_path", "joint_score", "is_degraded"):
             assert key in d
 
 
@@ -321,19 +360,23 @@ class TestBridgeRecord:
 # F) joint_select — empty layer
 # ---------------------------------------------------------------------------
 
+
 class TestJointSelectEmpty:
     def test_returns_joint_selection_result(self):
         from core.capability_network_bridge import joint_select
+
         result = joint_select(["cap_x"])
         assert result is not None
 
     def test_selected_provider_id_is_none(self):
         from core.capability_network_bridge import joint_select
+
         result = joint_select(["cap_x"])
         assert result.selected_provider_id is None
 
     def test_is_degraded_true_when_empty(self):
         from core.capability_network_bridge import joint_select
+
         result = joint_select(["cap_x"])
         assert result.is_degraded is True
 
@@ -342,16 +385,19 @@ class TestJointSelectEmpty:
 # G) joint_select — basic capability + path selection
 # ---------------------------------------------------------------------------
 
+
 class TestJointSelectBasic:
     def test_selects_provider_with_matching_capability(self):
         _register("node-joint-1", caps=["cap_a", "cap_b"])
         from core.capability_network_bridge import joint_select
+
         result = joint_select(["cap_a"])
         assert result.selected_provider_id is not None
 
     def test_result_has_capability_fit_score(self):
         _register("node-joint-2", caps=["cap_a"])
         from core.capability_network_bridge import joint_select
+
         result = joint_select(["cap_a"])
         if result.selected_provider_id is not None:
             assert result.capability_fit_score is not None
@@ -359,6 +405,7 @@ class TestJointSelectBasic:
     def test_path_availability_node_id_matches_selected(self):
         _register("node-joint-3", caps=["cap_a"])
         from core.capability_network_bridge import joint_select
+
         result = joint_select(["cap_a"])
         if result.selected_provider_id is not None:
             assert result.path_availability.node_id == result.selected_provider_id
@@ -368,16 +415,19 @@ class TestJointSelectBasic:
 # H) joint_select — target_id override
 # ---------------------------------------------------------------------------
 
+
 class TestJointSelectTargetId:
     def test_target_id_selects_specific_provider(self):
         _register("target-provider", caps=["cap_a"])
         _register("other-provider", caps=["cap_a"])
         from core.capability_network_bridge import joint_select
+
         result = joint_select(["cap_a"], target_id="target-provider")
         assert result.selected_provider_id == "target-provider"
 
     def test_target_id_not_in_layer_returns_none(self):
         from core.capability_network_bridge import joint_select
+
         result = joint_select([], target_id="nonexistent-provider")
         assert result.selected_provider_id is None
 
@@ -386,21 +436,25 @@ class TestJointSelectTargetId:
 # I) explain_joint_selection
 # ---------------------------------------------------------------------------
 
+
 class TestExplainJointSelection:
     def _select(self, caps=None, node_id="explain-node"):
         _register(node_id, caps=caps or ["cap_a"])
         from core.capability_network_bridge import joint_select
+
         return joint_select(caps or ["cap_a"])
 
     def test_returns_explanation(self):
         result = self._select()
         from core.capability_network_bridge import explain_joint_selection
+
         expl = explain_joint_selection(result)
         assert expl is not None
 
     def test_provider_reason_contains_provider_id(self):
         result = self._select(node_id="exp-p")
         from core.capability_network_bridge import explain_joint_selection
+
         expl = explain_joint_selection(result)
         if result.selected_provider_id:
             assert result.selected_provider_id in expl.provider_reason
@@ -408,6 +462,7 @@ class TestExplainJointSelection:
     def test_path_reason_contains_effective_path(self):
         result = self._select()
         from core.capability_network_bridge import explain_joint_selection
+
         expl = explain_joint_selection(result)
         # Should mention the path in some form
         assert len(expl.path_reason) > 0
@@ -415,14 +470,19 @@ class TestExplainJointSelection:
     def test_degraded_explanation_normal_when_not_degraded(self):
         result = self._select()
         from core.capability_network_bridge import explain_joint_selection
+
         expl = explain_joint_selection(result)
         if not result.is_degraded:
             assert "normal" in expl.degraded_explanation.lower()
 
     def test_degraded_explanation_mentions_degraded_when_is_degraded(self):
         from core.capability_network_bridge import (
-            joint_select, explain_joint_selection, JointSelectionResult, PathAvailability,
+            JointSelectionResult,
+            PathAvailability,
+            explain_joint_selection,
+            joint_select,
         )
+
         # Build a manually degraded result
         degraded = JointSelectionResult(
             selected_provider_id="dg-node",
@@ -440,15 +500,18 @@ class TestExplainJointSelection:
 # J) Ring buffer / observability
 # ---------------------------------------------------------------------------
 
+
 class TestRingBuffer:
     def test_get_bridge_log_returns_deque(self):
         from core.capability_network_bridge import get_bridge_log
+
         log = get_bridge_log()
         assert hasattr(log, "__iter__")
 
     def test_joint_select_emits_bridge_record(self):
         _register("rb-node", caps=["cap_a"])
-        from core.capability_network_bridge import joint_select, get_bridge_log
+        from core.capability_network_bridge import get_bridge_log, joint_select
+
         initial = len(get_bridge_log())
         joint_select(["cap_a"])
         assert len(get_bridge_log()) > initial
@@ -456,12 +519,14 @@ class TestRingBuffer:
     def test_fallback_select_emits_bridge_record(self):
         _register("rb-fb", caps=["cap_a"])
         from core.capability_network_bridge import fallback_joint_select, get_bridge_log
+
         initial = len(get_bridge_log())
         fallback_joint_select(["cap_a"])
         assert len(get_bridge_log()) > initial
 
     def test_ring_buffer_bounded_256(self):
         from core.capability_network_bridge import get_bridge_log
+
         log = get_bridge_log()
         assert log.maxlen == 256
 
@@ -470,15 +535,19 @@ class TestRingBuffer:
 # K) Dual-graph sentinel
 # ---------------------------------------------------------------------------
 
+
 class TestDualGraphSentinel:
     def test_dual_graph_sentinel_importable(self):
         from core.command_router import COMMAND_ROUTER_DUAL_GRAPH_INTEGRATED
+
         assert isinstance(COMMAND_ROUTER_DUAL_GRAPH_INTEGRATED, str)
 
     def test_sentinel_references_capability_graph_selection(self):
         from core.command_router import COMMAND_ROUTER_DUAL_GRAPH_INTEGRATED
+
         assert "capability_graph_selection" in COMMAND_ROUTER_DUAL_GRAPH_INTEGRATED
 
     def test_sentinel_references_capability_network_bridge(self):
         from core.command_router import COMMAND_ROUTER_DUAL_GRAPH_INTEGRATED
+
         assert "capability_network_bridge" in COMMAND_ROUTER_DUAL_GRAPH_INTEGRATED

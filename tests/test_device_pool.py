@@ -15,14 +15,15 @@ from __future__ import annotations
 
 import pytest
 
-
 # ===========================================================================
 # Helpers
 # ===========================================================================
 
+
 def _make_pool():
     """Return a fresh (non-singleton) DevicePoolManager for testing."""
     from core.device_pool_manager import DevicePoolManager, SchedulingStrategy
+
     DevicePoolManager._reset_singleton()
     pool = DevicePoolManager(strategy=SchedulingStrategy.ADAPTIVE)
     return pool
@@ -31,6 +32,7 @@ def _make_pool():
 # ===========================================================================
 # A) Registration and listing
 # ===========================================================================
+
 
 class TestDeviceRegistration:
     def test_register_new_device(self):
@@ -78,6 +80,7 @@ class TestDeviceRegistration:
 # B) Scheduling strategies
 # ===========================================================================
 
+
 class TestDeviceSelection:
     def test_select_returns_registered_device(self):
         pool = _make_pool()
@@ -98,6 +101,7 @@ class TestDeviceSelection:
 
     def test_select_round_robin_cycles(self):
         from core.device_pool_manager import SchedulingStrategy
+
         pool = _make_pool()
         pool.register_device("dev1")
         pool.register_device("dev2")
@@ -108,8 +112,10 @@ class TestDeviceSelection:
                 pool.mark_success(d)
                 seen.add(d)
         assert "dev1" in seen or "dev2" in seen
+
     def test_least_conn_picks_less_loaded(self):
         from core.device_pool_manager import SchedulingStrategy
+
         pool = _make_pool()
         pool.register_device("dev1")
         pool.register_device("dev2")
@@ -120,6 +126,7 @@ class TestDeviceSelection:
 
     def test_adaptive_respects_health(self):
         from core.device_pool_manager import SchedulingStrategy
+
         pool = _make_pool()
         pool.register_device("dev1")
         pool.register_device("dev2")
@@ -143,6 +150,7 @@ class TestDeviceSelection:
 # C) Quarantine / cooldown
 # ===========================================================================
 
+
 class TestQuarantine:
     def test_quarantine_excludes_device_from_selection(self):
         pool = _make_pool()
@@ -164,6 +172,7 @@ class TestQuarantine:
 
     def test_repeated_failures_trigger_quarantine(self):
         from core.device_pool_manager import DevicePoolManager, SchedulingStrategy
+
         DevicePoolManager._reset_singleton()
         pool = DevicePoolManager(
             strategy=SchedulingStrategy.ADAPTIVE,
@@ -182,6 +191,7 @@ class TestQuarantine:
 # ===========================================================================
 # D) Connection tracking
 # ===========================================================================
+
 
 class TestConnectionTracking:
     def test_select_increments_connections(self):

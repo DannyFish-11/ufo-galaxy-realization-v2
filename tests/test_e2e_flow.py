@@ -11,32 +11,37 @@ Validates that all newly wired modules work together:
 """
 
 import asyncio
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 
 # ══════════════════════ MessageType extensions ══════════════════════
+
 
 class TestMessageTypeExtensions:
     """Verify WAKE_EVENT and SESSION_MIGRATE are in the AIP v3 enum."""
 
     def test_wake_event_in_enum(self):
         from galaxy_gateway.protocol.aip_v3 import MessageType
+
         assert hasattr(MessageType, "WAKE_EVENT")
         assert MessageType.WAKE_EVENT.value == "wake_event"
 
     def test_session_migrate_in_enum(self):
         from galaxy_gateway.protocol.aip_v3 import MessageType
+
         assert hasattr(MessageType, "SESSION_MIGRATE")
         assert MessageType.SESSION_MIGRATE.value == "session_migrate"
 
     def test_session_migrate_ack_in_enum(self):
         from galaxy_gateway.protocol.aip_v3 import MessageType
+
         assert hasattr(MessageType, "SESSION_MIGRATE_ACK")
         assert MessageType.SESSION_MIGRATE_ACK.value == "session_migrate_ack"
 
 
 # ══════════════════════ E2E Orchestrator ══════════════════════
+
 
 class TestE2EOrchestrator:
     """Test the orchestrator convenience functions."""
@@ -45,14 +50,16 @@ class TestE2EOrchestrator:
     async def test_process_user_input_delegates_to_pipeline(self):
         """process_user_input with use_constellation=False should call pipeline.execute()."""
         mock_pipeline = MagicMock()
-        mock_pipeline.execute = AsyncMock(return_value={
-            "success": True,
-            "reply": "Hello!",
-            "session_id": "test-session",
-            "mode": "chat",
-            "data": {},
-            "devices_notified": [],
-        })
+        mock_pipeline.execute = AsyncMock(
+            return_value={
+                "success": True,
+                "reply": "Hello!",
+                "session_id": "test-session",
+                "mode": "chat",
+                "data": {},
+                "devices_notified": [],
+            }
+        )
 
         with patch("core.e2e_pipeline.get_pipeline", return_value=mock_pipeline):
             from core.e2e_orchestrator import process_user_input
@@ -83,14 +90,16 @@ class TestE2EOrchestrator:
     async def test_process_user_input_default_uses_constellation(self):
         """process_user_input default (no use_constellation arg) should prefer ConstellationRuntime."""
         mock_runtime = MagicMock()
-        mock_runtime.run = AsyncMock(return_value={
-            "success": True,
-            "reply": "constellation reply",
-            "session_id": "cr-session",
-            "mode": "dag",
-            "data": {},
-            "trace_id": "tr-001",
-        })
+        mock_runtime.run = AsyncMock(
+            return_value={
+                "success": True,
+                "reply": "constellation reply",
+                "session_id": "cr-session",
+                "mode": "dag",
+                "data": {},
+                "trace_id": "tr-001",
+            }
+        )
 
         with patch(
             "core.constellation_runtime.get_constellation_runtime",
@@ -119,19 +128,20 @@ class TestE2EOrchestrator:
         mock_roaming.create_session.return_value = mock_session
 
         with patch(
-            "core.e2e_orchestrator.session_roaming", mock_roaming,
+            "core.e2e_orchestrator.session_roaming",
+            mock_roaming,
             create=True,
         ):
             # Re-import to apply the patch
             import importlib
+
             import core.e2e_orchestrator as mod
+
             importlib.reload(mod)
 
             with patch.object(mod, "__import__", create=True):
                 # Direct patch on the function's import
-                with patch(
-                    "galaxy_gateway.session_roaming.session_roaming", mock_roaming
-                ):
+                with patch("galaxy_gateway.session_roaming.session_roaming", mock_roaming):
                     result = await mod.process_wake_event(
                         device_id="phone_01",
                         wake_word="hey galaxy",
@@ -143,6 +153,7 @@ class TestE2EOrchestrator:
 
 
 # ══════════════════════ SessionRoaming ══════════════════════
+
 
 class TestSessionRoaming:
     """Test session roaming lifecycle."""
@@ -171,9 +182,7 @@ class TestSessionRoaming:
         session_id = session.session_id
 
         # Patch out the device push (it tries to import device_comm)
-        with patch.object(
-            mgr, "_push_context_to_device", new_callable=AsyncMock, return_value=True
-        ):
+        with patch.object(mgr, "_push_context_to_device", new_callable=AsyncMock, return_value=True):
             success = await mgr.migrate_session(session_id, "device_B")
 
         assert success is True
@@ -184,6 +193,7 @@ class TestSessionRoaming:
     def test_list_sessions(self, tmp_path, monkeypatch):
         import importlib
         import sys
+
         from galaxy_gateway.session_roaming import SessionRoamingManager
 
         # 管理器构造时会从 PERSISTENCE_FILE 载入历史会话(跨进程持久化是
@@ -214,12 +224,13 @@ class TestSessionRoaming:
 
 # ══════════════════════ WakeEventBus ══════════════════════
 
+
 class TestWakeEventBus:
     """Test wake event bus dedup and dispatch."""
 
     @pytest.mark.asyncio
     async def test_publish_deduplicates(self):
-        from galaxy_gateway.wake_event_bus import WakeEventBus, RawWakeEvent
+        from galaxy_gateway.wake_event_bus import RawWakeEvent, WakeEventBus
 
         bus = WakeEventBus()
 
@@ -268,6 +279,7 @@ class TestWakeEventBus:
 
 # ══════════════════════ WebSocket Handler Wiring ══════════════════════
 
+
 class TestWebSocketHandlerWiring:
     """Verify that handle_message routes WAKE_EVENT and SESSION_MIGRATE."""
 
@@ -275,9 +287,10 @@ class TestWebSocketHandlerWiring:
         """The new handler functions should be importable."""
         try:
             from galaxy_gateway.websocket_handler import (
-                handle_wake_event,
                 handle_session_migrate,
+                handle_wake_event,
             )
+
             assert callable(handle_wake_event)
             assert callable(handle_session_migrate)
         except ImportError as e:
@@ -288,6 +301,7 @@ class TestWebSocketHandlerWiring:
 
 
 # ══════════════════════ SessionManager ══════════════════════
+
 
 class TestSessionManager:
     """Test the unified session manager."""

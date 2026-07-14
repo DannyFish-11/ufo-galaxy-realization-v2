@@ -381,9 +381,7 @@ class OwnershipTruthSurface:
             "module_path": self.module_path,
             "surface_name": self.surface_name,
             "truth_domain": self.truth_domain.value,
-            "may_not_redefine_authority_truth": (
-                self.may_not_redefine_authority_truth
-            ),
+            "may_not_redefine_authority_truth": (self.may_not_redefine_authority_truth),
             "android_uplink_canonical_entry": self.android_uplink_canonical_entry,
             "notes": self.notes,
         }
@@ -421,9 +419,7 @@ class OwnershipTruthConvergenceSnapshot:
             "acceptance_closure_count": self.acceptance_closure_count,
             "outward_projection_count": self.outward_projection_count,
             "diagnostics_audit_count": self.diagnostics_audit_count,
-            "android_uplink_canonical_entries": (
-                self.android_uplink_canonical_entries
-            ),
+            "android_uplink_canonical_entries": (self.android_uplink_canonical_entries),
             "generated_at": self.generated_at,
         }
 
@@ -434,18 +430,13 @@ class OwnershipTruthConvergenceSnapshot:
 
 #: All surfaces classified within the distributed truth ownership boundary.
 OWNERSHIP_TRUTH_SURFACE_REGISTRY: List[OwnershipTruthSurface] = [
-
     # =========================================================================
     # AUTHORITY_TRUTH — runtime / device / session / ownership authority
     # =========================================================================
-
     OwnershipTruthSurface(
         surface_id="canonical_session_truth_authority",
         module_path="core.canonical_session_truth.CanonicalSessionTruthRuntime",
-        surface_name=(
-            "CanonicalSessionTruthRuntime "
-            "(canonical session truth authority — PR-4)"
-        ),
+        surface_name=("CanonicalSessionTruthRuntime " "(canonical session truth authority — PR-4)"),
         truth_domain=OwnershipTruthDomainKind.authority_truth,
         may_not_redefine_authority_truth=False,
         android_uplink_canonical_entry=False,
@@ -461,10 +452,7 @@ OWNERSHIP_TRUTH_SURFACE_REGISTRY: List[OwnershipTruthSurface] = [
     OwnershipTruthSurface(
         surface_id="attached_runtime_session_authority",
         module_path="core.attached_runtime_session.AttachedRuntimeSession",
-        surface_name=(
-            "AttachedRuntimeSession "
-            "(canonical session lifecycle authority — PR-4/8)"
-        ),
+        surface_name=("AttachedRuntimeSession " "(canonical session lifecycle authority — PR-4/8)"),
         truth_domain=OwnershipTruthDomainKind.authority_truth,
         may_not_redefine_authority_truth=False,
         android_uplink_canonical_entry=False,
@@ -478,10 +466,7 @@ OWNERSHIP_TRUTH_SURFACE_REGISTRY: List[OwnershipTruthSurface] = [
     OwnershipTruthSurface(
         surface_id="flow_level_truth_ownership_authority",
         module_path="core.flow_level_truth_ownership.FlowTruthOwnerKind",
-        surface_name=(
-            "FlowLevelTruthOwnership "
-            "(flow-level V2-canonical vs Android-execution authority — PR-5V2)"
-        ),
+        surface_name=("FlowLevelTruthOwnership " "(flow-level V2-canonical vs Android-execution authority — PR-5V2)"),
         truth_domain=OwnershipTruthDomainKind.authority_truth,
         may_not_redefine_authority_truth=False,
         android_uplink_canonical_entry=False,
@@ -498,10 +483,7 @@ OWNERSHIP_TRUTH_SURFACE_REGISTRY: List[OwnershipTruthSurface] = [
     OwnershipTruthSurface(
         surface_id="device_router_dispatch_authority",
         module_path="galaxy_gateway.device_router.DeviceRouter",
-        surface_name=(
-            "DeviceRouter "
-            "(device dispatch authority, transport session manager — PR-8)"
-        ),
+        surface_name=("DeviceRouter " "(device dispatch authority, transport session manager — PR-8)"),
         truth_domain=OwnershipTruthDomainKind.authority_truth,
         may_not_redefine_authority_truth=False,
         android_uplink_canonical_entry=False,
@@ -515,10 +497,7 @@ OWNERSHIP_TRUTH_SURFACE_REGISTRY: List[OwnershipTruthSurface] = [
     OwnershipTruthSurface(
         surface_id="command_router_orchestration_authority",
         module_path="core.command_router.CommandRouter",
-        surface_name=(
-            "CommandRouter "
-            "(cross-device orchestration authority, ACL / HITL gate — PR-8)"
-        ),
+        surface_name=("CommandRouter " "(cross-device orchestration authority, ACL / HITL gate — PR-8)"),
         truth_domain=OwnershipTruthDomainKind.authority_truth,
         may_not_redefine_authority_truth=False,
         android_uplink_canonical_entry=False,
@@ -531,12 +510,9 @@ OWNERSHIP_TRUTH_SURFACE_REGISTRY: List[OwnershipTruthSurface] = [
     ),
     OwnershipTruthSurface(
         surface_id="v2_android_truth_ssot_canonical_build",
-        module_path=(
-            "core.v2_android_truth_ssot.build_v2_android_truth_block"
-        ),
+        module_path=("core.v2_android_truth_ssot.build_v2_android_truth_block"),
         surface_name=(
-            "V2AndroidTruthSSOT.build_v2_android_truth_block "
-            "(canonical Android truth block builder — V2 SSOT)"
+            "V2AndroidTruthSSOT.build_v2_android_truth_block " "(canonical Android truth block builder — V2 SSOT)"
         ),
         truth_domain=OwnershipTruthDomainKind.authority_truth,
         may_not_redefine_authority_truth=False,
@@ -556,10 +532,7 @@ OWNERSHIP_TRUTH_SURFACE_REGISTRY: List[OwnershipTruthSurface] = [
     OwnershipTruthSurface(
         surface_id="android_participant_truth_ingress_authority",
         module_path="core.android_participant_truth_ingress",
-        surface_name=(
-            "android_participant_truth_ingress "
-            "(Android truth ingress gateway — V2 authority surface)"
-        ),
+        surface_name=("android_participant_truth_ingress " "(Android truth ingress gateway — V2 authority surface)"),
         truth_domain=OwnershipTruthDomainKind.authority_truth,
         may_not_redefine_authority_truth=False,
         android_uplink_canonical_entry=True,
@@ -574,18 +547,13 @@ OWNERSHIP_TRUTH_SURFACE_REGISTRY: List[OwnershipTruthSurface] = [
             "→ v2_android_truth_ssot → canonical_session_truth."
         ),
     ),
-
     # =========================================================================
     # ACCEPTANCE_CLOSURE_READINESS_TRUTH — evidence / gate / prototype modules
     # =========================================================================
-
     OwnershipTruthSurface(
         surface_id="takeover_tracking_evidence",
         module_path="core.takeover_tracking",
-        surface_name=(
-            "takeover_tracking "
-            "(accept/reject tracking evidence store — handoff prototype)"
-        ),
+        surface_name=("takeover_tracking " "(accept/reject tracking evidence store — handoff prototype)"),
         truth_domain=OwnershipTruthDomainKind.acceptance_closure_readiness_truth,
         may_not_redefine_authority_truth=True,
         android_uplink_canonical_entry=False,
@@ -602,10 +570,7 @@ OWNERSHIP_TRUTH_SURFACE_REGISTRY: List[OwnershipTruthSurface] = [
     OwnershipTruthSurface(
         surface_id="canonical_handoff_path_evidence",
         module_path="core.canonical_handoff_path",
-        surface_name=(
-            "canonical_handoff_path "
-            "(handoff path anchor and closure evidence — PR-3)"
-        ),
+        surface_name=("canonical_handoff_path " "(handoff path anchor and closure evidence — PR-3)"),
         truth_domain=OwnershipTruthDomainKind.acceptance_closure_readiness_truth,
         may_not_redefine_authority_truth=True,
         android_uplink_canonical_entry=False,
@@ -623,10 +588,7 @@ OWNERSHIP_TRUTH_SURFACE_REGISTRY: List[OwnershipTruthSurface] = [
     OwnershipTruthSurface(
         surface_id="pr3_session_continuity_authority_evidence",
         module_path="core.pr3_session_continuity_authority",
-        surface_name=(
-            "pr3_session_continuity_authority "
-            "(session reconnect / continuity evidence — PR-3)"
-        ),
+        surface_name=("pr3_session_continuity_authority " "(session reconnect / continuity evidence — PR-3)"),
         truth_domain=OwnershipTruthDomainKind.acceptance_closure_readiness_truth,
         may_not_redefine_authority_truth=True,
         android_uplink_canonical_entry=False,
@@ -643,10 +605,7 @@ OWNERSHIP_TRUTH_SURFACE_REGISTRY: List[OwnershipTruthSurface] = [
     OwnershipTruthSurface(
         surface_id="durable_truth_authority_chain_convergence",
         module_path="core.durable_truth_authority_chain.DurableTruthAuthorityChain",
-        surface_name=(
-            "DurableTruthAuthorityChain "
-            "(durable session/task/result convergence evidence — PR-2)"
-        ),
+        surface_name=("DurableTruthAuthorityChain " "(durable session/task/result convergence evidence — PR-2)"),
         truth_domain=OwnershipTruthDomainKind.acceptance_closure_readiness_truth,
         may_not_redefine_authority_truth=True,
         android_uplink_canonical_entry=False,
@@ -662,10 +621,7 @@ OWNERSHIP_TRUTH_SURFACE_REGISTRY: List[OwnershipTruthSurface] = [
     OwnershipTruthSurface(
         surface_id="attached_runtime_reuse_binding_evidence",
         module_path="core.attached_runtime_reuse_binding",
-        surface_name=(
-            "attached_runtime_reuse_binding "
-            "(session reuse binding evidence)"
-        ),
+        surface_name=("attached_runtime_reuse_binding " "(session reuse binding evidence)"),
         truth_domain=OwnershipTruthDomainKind.acceptance_closure_readiness_truth,
         may_not_redefine_authority_truth=True,
         android_uplink_canonical_entry=False,
@@ -680,10 +636,7 @@ OWNERSHIP_TRUTH_SURFACE_REGISTRY: List[OwnershipTruthSurface] = [
     OwnershipTruthSurface(
         surface_id="android_handoff_v2_response_ingress_evidence",
         module_path="core.android_handoff_v2_response_ingress",
-        surface_name=(
-            "android_handoff_v2_response_ingress "
-            "(handoff v2 response ingress — prototype evidence)"
-        ),
+        surface_name=("android_handoff_v2_response_ingress " "(handoff v2 response ingress — prototype evidence)"),
         truth_domain=OwnershipTruthDomainKind.acceptance_closure_readiness_truth,
         may_not_redefine_authority_truth=True,
         android_uplink_canonical_entry=False,
@@ -700,8 +653,7 @@ OWNERSHIP_TRUTH_SURFACE_REGISTRY: List[OwnershipTruthSurface] = [
         surface_id="android_delegated_lifecycle_coordinator_evidence",
         module_path="core.android_delegated_runtime_lifecycle_coordinator",
         surface_name=(
-            "AndroidDelegatedRuntimeLifecycleCoordinator "
-            "(delegated lifecycle event facade — prototype evidence)"
+            "AndroidDelegatedRuntimeLifecycleCoordinator " "(delegated lifecycle event facade — prototype evidence)"
         ),
         truth_domain=OwnershipTruthDomainKind.acceptance_closure_readiness_truth,
         may_not_redefine_authority_truth=True,
@@ -716,18 +668,13 @@ OWNERSHIP_TRUTH_SURFACE_REGISTRY: List[OwnershipTruthSurface] = [
             "it is a per-event facade only."
         ),
     ),
-
     # =========================================================================
     # OUTWARD_PROJECTION_OPERATOR_TRUTH — read-only projection surfaces
     # =========================================================================
-
     OwnershipTruthSurface(
         surface_id="runtime_truth_projection_route",
         module_path="core.routes.projection",
-        surface_name=(
-            "core.routes.projection "
-            "(runtime-truth projection endpoint — Stage 3)"
-        ),
+        surface_name=("core.routes.projection " "(runtime-truth projection endpoint — Stage 3)"),
         truth_domain=OwnershipTruthDomainKind.outward_projection_operator_truth,
         may_not_redefine_authority_truth=True,
         android_uplink_canonical_entry=False,
@@ -743,10 +690,7 @@ OWNERSHIP_TRUTH_SURFACE_REGISTRY: List[OwnershipTruthSurface] = [
     OwnershipTruthSurface(
         surface_id="outward_runtime_truth_assembler",
         module_path="core.outward_runtime_truth.compile_outward_truth",
-        surface_name=(
-            "outward_runtime_truth.compile_outward_truth "
-            "(outward truth assembler — Stage 2)"
-        ),
+        surface_name=("outward_runtime_truth.compile_outward_truth " "(outward truth assembler — Stage 2)"),
         truth_domain=OwnershipTruthDomainKind.outward_projection_operator_truth,
         may_not_redefine_authority_truth=True,
         android_uplink_canonical_entry=False,
@@ -761,10 +705,7 @@ OWNERSHIP_TRUTH_SURFACE_REGISTRY: List[OwnershipTruthSurface] = [
     OwnershipTruthSurface(
         surface_id="truth_projection_boundary_classifier",
         module_path="core.truth_projection_boundary",
-        surface_name=(
-            "truth_projection_boundary "
-            "(truth vs projection boundary classifier — PR-7)"
-        ),
+        surface_name=("truth_projection_boundary " "(truth vs projection boundary classifier — PR-7)"),
         truth_domain=OwnershipTruthDomainKind.outward_projection_operator_truth,
         may_not_redefine_authority_truth=True,
         android_uplink_canonical_entry=False,
@@ -779,10 +720,7 @@ OWNERSHIP_TRUTH_SURFACE_REGISTRY: List[OwnershipTruthSurface] = [
     OwnershipTruthSurface(
         surface_id="runtime_truth_output_chain_catalog",
         module_path="core.runtime_truth_output_chain",
-        surface_name=(
-            "runtime_truth_output_chain "
-            "(Stage 1/2/3 chain catalog and governance — PR-9)"
-        ),
+        surface_name=("runtime_truth_output_chain " "(Stage 1/2/3 chain catalog and governance — PR-9)"),
         truth_domain=OwnershipTruthDomainKind.outward_projection_operator_truth,
         may_not_redefine_authority_truth=True,
         android_uplink_canonical_entry=False,
@@ -793,18 +731,13 @@ OWNERSHIP_TRUTH_SURFACE_REGISTRY: List[OwnershipTruthSurface] = [
             "chain stages."
         ),
     ),
-
     # =========================================================================
     # DIAGNOSTICS_AUDIT_ARTIFACT — forensic records and gate scaffolds
     # =========================================================================
-
     OwnershipTruthSurface(
         surface_id="android_delegated_runtime_audit_diagnostics",
         module_path="core.android_delegated_runtime_audit",
-        surface_name=(
-            "android_delegated_runtime_audit "
-            "(delegated runtime diagnostics surface)"
-        ),
+        surface_name=("android_delegated_runtime_audit " "(delegated runtime diagnostics surface)"),
         truth_domain=OwnershipTruthDomainKind.diagnostics_audit_artifact,
         may_not_redefine_authority_truth=True,
         android_uplink_canonical_entry=False,
@@ -818,10 +751,7 @@ OWNERSHIP_TRUTH_SURFACE_REGISTRY: List[OwnershipTruthSurface] = [
     OwnershipTruthSurface(
         surface_id="distributed_release_gate_scaffold_diagnostics",
         module_path="core.distributed_release_gate_skeleton",
-        surface_name=(
-            "distributed_release_gate_skeleton "
-            "(diagnostic gate scaffold)"
-        ),
+        surface_name=("distributed_release_gate_skeleton " "(diagnostic gate scaffold)"),
         truth_domain=OwnershipTruthDomainKind.diagnostics_audit_artifact,
         may_not_redefine_authority_truth=True,
         android_uplink_canonical_entry=False,
@@ -836,10 +766,7 @@ OWNERSHIP_TRUTH_SURFACE_REGISTRY: List[OwnershipTruthSurface] = [
     OwnershipTruthSurface(
         surface_id="architecture_diagnostics_snapshot",
         module_path="core.architecture_diagnostics",
-        surface_name=(
-            "architecture_diagnostics "
-            "(architecture health diagnostics snapshot)"
-        ),
+        surface_name=("architecture_diagnostics " "(architecture health diagnostics snapshot)"),
         truth_domain=OwnershipTruthDomainKind.diagnostics_audit_artifact,
         may_not_redefine_authority_truth=True,
         android_uplink_canonical_entry=False,
@@ -852,10 +779,7 @@ OWNERSHIP_TRUTH_SURFACE_REGISTRY: List[OwnershipTruthSurface] = [
     OwnershipTruthSurface(
         surface_id="center_distributed_review_audit",
         module_path="core.center_distributed_agent_system_review",
-        surface_name=(
-            "center_distributed_agent_system_review "
-            "(agent system classification audit surface)"
-        ),
+        surface_name=("center_distributed_agent_system_review " "(agent system classification audit surface)"),
         truth_domain=OwnershipTruthDomainKind.diagnostics_audit_artifact,
         may_not_redefine_authority_truth=True,
         android_uplink_canonical_entry=False,
@@ -869,10 +793,7 @@ OWNERSHIP_TRUTH_SURFACE_REGISTRY: List[OwnershipTruthSurface] = [
     OwnershipTruthSurface(
         surface_id="distributed_runtime_boundary_declaration",
         module_path="core.distributed_runtime_boundary",
-        surface_name=(
-            "distributed_runtime_boundary "
-            "(distributed runtime boundary declaration — PR-8)"
-        ),
+        surface_name=("distributed_runtime_boundary " "(distributed runtime boundary declaration — PR-8)"),
         truth_domain=OwnershipTruthDomainKind.diagnostics_audit_artifact,
         may_not_redefine_authority_truth=True,
         android_uplink_canonical_entry=False,
@@ -989,11 +910,7 @@ def build_ownership_truth_convergence_snapshot() -> OwnershipTruthConvergenceSna
         uplink canonical entries list.
     """
     registry = OWNERSHIP_TRUTH_SURFACE_REGISTRY
-    authority_entries = [
-        s.surface_id
-        for s in registry
-        if s.android_uplink_canonical_entry
-    ]
+    authority_entries = [s.surface_id for s in registry if s.android_uplink_canonical_entry]
     return OwnershipTruthConvergenceSnapshot(
         authority=DISTRIBUTED_TRUTH_OWNERSHIP_CONVERGENCE_AUTHORITY,
         sentinel=DISTRIBUTED_TRUTH_OWNERSHIP_CONVERGENCE_PR9V2_SENTINEL,
@@ -1005,21 +922,15 @@ def build_ownership_truth_convergence_snapshot() -> OwnershipTruthConvergenceSna
             DIAGNOSTICS_MUST_NOT_BE_READ_BACK_AS_AUTHORITY_POLICY,
         ),
         total_surfaces=len(registry),
-        authority_truth_count=sum(
-            1 for s in registry
-            if s.truth_domain is OwnershipTruthDomainKind.authority_truth
-        ),
+        authority_truth_count=sum(1 for s in registry if s.truth_domain is OwnershipTruthDomainKind.authority_truth),
         acceptance_closure_count=sum(
-            1 for s in registry
-            if s.truth_domain is OwnershipTruthDomainKind.acceptance_closure_readiness_truth
+            1 for s in registry if s.truth_domain is OwnershipTruthDomainKind.acceptance_closure_readiness_truth
         ),
         outward_projection_count=sum(
-            1 for s in registry
-            if s.truth_domain is OwnershipTruthDomainKind.outward_projection_operator_truth
+            1 for s in registry if s.truth_domain is OwnershipTruthDomainKind.outward_projection_operator_truth
         ),
         diagnostics_audit_count=sum(
-            1 for s in registry
-            if s.truth_domain is OwnershipTruthDomainKind.diagnostics_audit_artifact
+            1 for s in registry if s.truth_domain is OwnershipTruthDomainKind.diagnostics_audit_artifact
         ),
         android_uplink_canonical_entries=authority_entries,
     )

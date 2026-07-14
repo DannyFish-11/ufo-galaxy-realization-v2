@@ -9,16 +9,17 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-
 # ---------------------------------------------------------------------------
 # Helper: build an app with all routes attached
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(scope="module")
 def full_app():
     """Build FastAPI app with all routes included."""
     app = FastAPI()
     from core.api_routes import create_api_routes
+
     router = create_api_routes()
     app.include_router(router)
     return app
@@ -34,60 +35,79 @@ def client(full_app):
 # 1. Module-level import checks
 # ---------------------------------------------------------------------------
 
+
 class TestModuleImports:
     """All route sub-modules must be importable without error."""
 
     def test_shared_imports(self):
         from core.routes._shared import (
-            ConnectionManager, connection_manager,
-            registered_devices, task_queue, node_status_cache, command_results,
+            ConnectionManager,
+            command_results,
+            connection_manager,
+            node_status_cache,
+            registered_devices,
+            task_queue,
         )
+
         assert connection_manager is not None
 
     def test_models_imports(self):
         from core.routes._models import (
-            DeviceRegisterRequest, ChatRequest, CommandStatus,
-            UnifiedCommandRequest, TargetResult,
+            ChatRequest,
+            CommandStatus,
+            DeviceRegisterRequest,
+            TargetResult,
+            UnifiedCommandRequest,
         )
+
         assert ChatRequest is not None
 
     def test_helpers_imports(self):
-        from core.routes._helpers import nodes_root, _load_node, _execute_node
         import os
+
+        from core.routes._helpers import _execute_node, _load_node, nodes_root
+
         assert os.path.isdir(nodes_root)
 
     def test_system_module(self):
         from core.routes.system import create_router
+
         router = create_router()
         assert router is not None
 
     def test_devices_module(self):
         from core.routes.devices import create_router
+
         router = create_router()
         assert router is not None
 
     def test_nodes_module(self):
         from core.routes.nodes import create_router
+
         router = create_router()
         assert router is not None
 
     def test_vision_module(self):
         from core.routes.vision import create_router
+
         router = create_router()
         assert router is not None
 
     def test_tasks_module(self):
         from core.routes.tasks import create_router
+
         router = create_router()
         assert router is not None
 
     def test_command_module(self):
         from core.routes.command import create_router
+
         router = create_router()
         assert router is not None
 
     def test_chat_module(self):
-        from core.routes.chat import create_router, _is_action_intent
+        from core.routes.chat import _is_action_intent, create_router
+
         router = create_router()
         assert router is not None
         assert _is_action_intent("帮我打开微信") is True
@@ -95,41 +115,49 @@ class TestModuleImports:
 
     def test_ai_module(self):
         from core.routes.ai import create_router
+
         router = create_router()
         assert router is not None
 
     def test_monitoring_module(self):
         from core.routes.monitoring import create_router
+
         router = create_router()
         assert router is not None
 
     def test_relay_module(self):
         from core.routes.relay import create_router
+
         router = create_router()
         assert router is not None
 
     def test_hybrid_module(self):
         from core.routes.hybrid import create_router
+
         router = create_router()
         assert router is not None
 
     def test_vault_module(self):
         from core.routes.vault import create_router
+
         router = create_router()
         assert router is not None
 
     def test_cost_module(self):
         from core.routes.cost import create_router
+
         router = create_router()
         assert router is not None
 
     def test_channels_module(self):
         from core.routes.channels import create_router
+
         router = create_router()
         assert router is not None
 
     def test_federation_module(self):
         from core.routes.federation import create_router
+
         router = create_router()
         assert router is not None
 
@@ -137,6 +165,7 @@ class TestModuleImports:
 # ---------------------------------------------------------------------------
 # 2. Route presence checks (key endpoints must exist in the assembled app)
 # ---------------------------------------------------------------------------
+
 
 class TestRoutePresence:
     """Key routes from all sub-modules must be reachable."""
@@ -209,18 +238,25 @@ class TestRoutePresence:
 # 3. Backward-compatibility: models still importable from api_routes
 # ---------------------------------------------------------------------------
 
+
 class TestBackwardCompatibility:
     """Pydantic models and singletons must still be importable from api_routes."""
 
     def test_models_from_api_routes(self):
         from core.api_routes import (
-            ChatRequest, DeviceRegisterRequest, CommandStatus,
-            connection_manager, registered_devices, task_queue,
+            ChatRequest,
+            CommandStatus,
+            DeviceRegisterRequest,
+            connection_manager,
+            registered_devices,
+            task_queue,
         )
+
         assert ChatRequest is not None
         assert connection_manager is not None
 
     def test_create_api_routes_callable(self):
         from core.api_routes import create_api_routes
+
         router = create_api_routes()
         assert router is not None

@@ -35,30 +35,34 @@ from typing import Any, Dict, List, Optional
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_mesh_session_store(tmp_dir: str):
     from core.mesh.mesh_session_persistence import MeshSessionPersistenceStore
+
     return MeshSessionPersistenceStore(store_dir=tmp_dir)
 
 
 def _make_body_mesh_store(tmp_dir: str):
     from core.mesh.body_mesh_persistence import BodyMeshPersistenceStore
+
     path = os.path.join(tmp_dir, "bm_snap.json")
     return BodyMeshPersistenceStore(store_path=path)
 
 
 def _make_task_lifecycle_store(tmp_dir: str):
     from core.task_lifecycle_persistence import TaskLifecyclePersistenceStore
+
     path = os.path.join(tmp_dir, "tl.json")
     return TaskLifecyclePersistenceStore(store_path=path)
 
 
 def _save_snapshot(store, records: List[Dict[str, Any]]) -> None:
     from core.task_lifecycle_persistence import save_task_lifecycle_snapshot
+
     save_task_lifecycle_snapshot(records, store=store)
 
 
@@ -98,24 +102,33 @@ class FakeBodyMeshRegistry:
 # A — Sentinel
 # ---------------------------------------------------------------------------
 
+
 class TestSentinel:
     def test_policy_sentinel_importable(self):
         from core.runtime_restart_recovery import RECOVERED_LIFECYCLE_DISPATCH_POLICY
+
         assert isinstance(RECOVERED_LIFECYCLE_DISPATCH_POLICY, str)
         assert RECOVERED_LIFECYCLE_DISPATCH_POLICY
 
     def test_policy_mentions_resumable(self):
         from core.runtime_restart_recovery import RECOVERED_LIFECYCLE_DISPATCH_POLICY
-        assert "RESUMABLE" in RECOVERED_LIFECYCLE_DISPATCH_POLICY or \
-               "resumable" in RECOVERED_LIFECYCLE_DISPATCH_POLICY.lower()
+
+        assert (
+            "RESUMABLE" in RECOVERED_LIFECYCLE_DISPATCH_POLICY
+            or "resumable" in RECOVERED_LIFECYCLE_DISPATCH_POLICY.lower()
+        )
 
     def test_policy_mentions_terminal(self):
         from core.runtime_restart_recovery import RECOVERED_LIFECYCLE_DISPATCH_POLICY
-        assert "TERMINAL" in RECOVERED_LIFECYCLE_DISPATCH_POLICY or \
-               "terminal" in RECOVERED_LIFECYCLE_DISPATCH_POLICY.lower()
+
+        assert (
+            "TERMINAL" in RECOVERED_LIFECYCLE_DISPATCH_POLICY
+            or "terminal" in RECOVERED_LIFECYCLE_DISPATCH_POLICY.lower()
+        )
 
     def test_policy_mentions_not_registered(self):
         from core.runtime_restart_recovery import RECOVERED_LIFECYCLE_DISPATCH_POLICY
+
         lower = RECOVERED_LIFECYCLE_DISPATCH_POLICY.lower()
         assert "not registered" in lower or "NOT registered" in RECOVERED_LIFECYCLE_DISPATCH_POLICY
 
@@ -124,15 +137,18 @@ class TestSentinel:
 # B — RuntimeRecoveryReport field
 # ---------------------------------------------------------------------------
 
+
 class TestReportField:
     def test_dispatch_actions_field_exists(self):
         from core.runtime_restart_recovery import RuntimeRecoveryReport
+
         r = RuntimeRecoveryReport()
         assert hasattr(r, "inflight_tasks_dispatch_actions_taken")
         assert r.inflight_tasks_dispatch_actions_taken == 0
 
     def test_to_dict_includes_dispatch_actions(self):
         from core.runtime_restart_recovery import RuntimeRecoveryReport
+
         r = RuntimeRecoveryReport()
         d = r.to_dict()
         assert "inflight_tasks_dispatch_actions_taken" in d
@@ -141,6 +157,7 @@ class TestReportField:
 # ---------------------------------------------------------------------------
 # C–H — Coordinator dispatch behaviour
 # ---------------------------------------------------------------------------
+
 
 class TestCoordinatorDispatch:
     """Tests C through H: coordinator correctly registers recovered tasks."""
@@ -151,6 +168,7 @@ class TestCoordinatorDispatch:
         tl_store = _make_task_lifecycle_store(tmp_dir)
         _save_snapshot(tl_store, records)
         from core.runtime_restart_recovery import RuntimeRestartRecoveryCoordinator
+
         return RuntimeRestartRecoveryCoordinator(
             mesh_session_store=ms_store,
             body_mesh_store=bm_store,
@@ -160,10 +178,11 @@ class TestCoordinatorDispatch:
 
     def test_C_resumable_task_gets_device_dispatch_ownership(self, tmp_path):
         from core.task_envelope_lifecycle_registry import (
+            LifecycleOwner,
             get_lifecycle_registry,
             reset_lifecycle_registry,
-            LifecycleOwner,
         )
+
         reset_lifecycle_registry()
         try:
             coord = self._coord(
@@ -180,10 +199,11 @@ class TestCoordinatorDispatch:
 
     def test_D_replay_only_task_gets_routing_ownership(self, tmp_path):
         from core.task_envelope_lifecycle_registry import (
+            LifecycleOwner,
             get_lifecycle_registry,
             reset_lifecycle_registry,
-            LifecycleOwner,
         )
+
         reset_lifecycle_registry()
         try:
             coord = self._coord(
@@ -200,10 +220,11 @@ class TestCoordinatorDispatch:
 
     def test_E_reissuable_task_gets_gateway_ingress_ownership(self, tmp_path):
         from core.task_envelope_lifecycle_registry import (
+            LifecycleOwner,
             get_lifecycle_registry,
             reset_lifecycle_registry,
-            LifecycleOwner,
         )
+
         reset_lifecycle_registry()
         try:
             coord = self._coord(
@@ -223,6 +244,7 @@ class TestCoordinatorDispatch:
             get_lifecycle_registry,
             reset_lifecycle_registry,
         )
+
         reset_lifecycle_registry()
         try:
             coord = self._coord(
@@ -231,23 +253,27 @@ class TestCoordinatorDispatch:
             )
             coord.run_recovery()
             registry = get_lifecycle_registry()
-            assert not registry.is_pending("task-terminal-1"), \
-                "TERMINAL_ON_INTERRUPT task must NOT be added to pending registry"
+            assert not registry.is_pending(
+                "task-terminal-1"
+            ), "TERMINAL_ON_INTERRUPT task must NOT be added to pending registry"
         finally:
             reset_lifecycle_registry()
 
     def test_G_duplicate_guard_does_not_overwrite_live_record(self, tmp_path):
         from core.task_envelope_lifecycle_registry import (
+            LifecycleOwner,
             get_lifecycle_registry,
             reset_lifecycle_registry,
-            LifecycleOwner,
         )
+
         reset_lifecycle_registry()
         try:
             registry = get_lifecycle_registry()
             # Pre-populate the registry with the same task_id
             import dataclasses as _dc
+
             from core.task_envelope_lifecycle_registry import PendingEnvelopeRecord
+
             live_record = PendingEnvelopeRecord(
                 task_id="task-dup-1",
                 trace_id="live-trace",
@@ -277,12 +303,13 @@ class TestCoordinatorDispatch:
 
     def test_H_dispatch_actions_count_excludes_terminal(self, tmp_path):
         from core.task_envelope_lifecycle_registry import reset_lifecycle_registry
+
         reset_lifecycle_registry()
         try:
             records = [
-                _record("t-res", "device_dispatch"),   # RESUMABLE
-                _record("t-rep", "routing"),            # REPLAY_ONLY
-                _record("t-rei", "gateway_ingress"),    # REISSUABLE
+                _record("t-res", "device_dispatch"),  # RESUMABLE
+                _record("t-rep", "routing"),  # REPLAY_ONLY
+                _record("t-rei", "gateway_ingress"),  # REISSUABLE
                 _record("t-ter", "result_completion"),  # TERMINAL
             ]
             coord = self._coord(str(tmp_path), records)
@@ -298,12 +325,14 @@ class TestCoordinatorDispatch:
 # I — Recovered metadata stamping
 # ---------------------------------------------------------------------------
 
+
 class TestRecoveredMetadata:
     def test_I_recovered_metadata_stamped(self, tmp_path):
         from core.task_envelope_lifecycle_registry import (
             get_lifecycle_registry,
             reset_lifecycle_registry,
         )
+
         reset_lifecycle_registry()
         try:
             ms_store = _make_mesh_session_store(str(tmp_path))
@@ -311,6 +340,7 @@ class TestRecoveredMetadata:
             tl_store = _make_task_lifecycle_store(str(tmp_path))
             _save_snapshot(tl_store, [_record("task-meta-1", "device_dispatch")])
             from core.runtime_restart_recovery import RuntimeRestartRecoveryCoordinator
+
             coord = RuntimeRestartRecoveryCoordinator(
                 mesh_session_store=ms_store,
                 body_mesh_store=bm_store,
@@ -333,15 +363,16 @@ class TestRecoveredMetadata:
 # J–N — Registry restore_from_snapshot disposition-aware behaviour
 # ---------------------------------------------------------------------------
 
+
 class TestRegistryRestoreFromSnapshot:
     """Tests J through N: registry restore is disposition-aware."""
 
     def _make_snapshot_store(self, tmp_dir: str, records: List[Dict[str, Any]]):
         from core.task_lifecycle_persistence import TaskLifecyclePersistenceStore
-        store = TaskLifecyclePersistenceStore(
-            store_path=os.path.join(tmp_dir, "reg_tl.json")
-        )
+
+        store = TaskLifecyclePersistenceStore(store_path=os.path.join(tmp_dir, "reg_tl.json"))
         from core.task_lifecycle_persistence import save_task_lifecycle_snapshot
+
         save_task_lifecycle_snapshot(records, store=store)
         return store
 
@@ -349,6 +380,7 @@ class TestRegistryRestoreFromSnapshot:
         from core.task_envelope_lifecycle_registry import (
             TaskEnvelopeLifecycleRegistry,
         )
+
         store = self._make_snapshot_store(
             str(tmp_path),
             [_record("treg-terminal", "result_completion")],
@@ -360,9 +392,10 @@ class TestRegistryRestoreFromSnapshot:
 
     def test_K_resumable_gets_device_dispatch(self, tmp_path):
         from core.task_envelope_lifecycle_registry import (
-            TaskEnvelopeLifecycleRegistry,
             LifecycleOwner,
+            TaskEnvelopeLifecycleRegistry,
         )
+
         store = self._make_snapshot_store(
             str(tmp_path),
             [_record("treg-res", "device_dispatch")],
@@ -375,9 +408,10 @@ class TestRegistryRestoreFromSnapshot:
 
     def test_L_replay_only_gets_routing(self, tmp_path):
         from core.task_envelope_lifecycle_registry import (
-            TaskEnvelopeLifecycleRegistry,
             LifecycleOwner,
+            TaskEnvelopeLifecycleRegistry,
         )
+
         store = self._make_snapshot_store(
             str(tmp_path),
             [_record("treg-rep", "routing")],
@@ -390,9 +424,10 @@ class TestRegistryRestoreFromSnapshot:
 
     def test_M_reissuable_gets_gateway_ingress(self, tmp_path):
         from core.task_envelope_lifecycle_registry import (
-            TaskEnvelopeLifecycleRegistry,
             LifecycleOwner,
+            TaskEnvelopeLifecycleRegistry,
         )
+
         store = self._make_snapshot_store(
             str(tmp_path),
             [_record("treg-rei", "gateway_ingress")],
@@ -405,10 +440,11 @@ class TestRegistryRestoreFromSnapshot:
 
     def test_N_already_pending_not_overwritten(self, tmp_path):
         from core.task_envelope_lifecycle_registry import (
-            TaskEnvelopeLifecycleRegistry,
             LifecycleOwner,
             PendingEnvelopeRecord,
+            TaskEnvelopeLifecycleRegistry,
         )
+
         store = self._make_snapshot_store(
             str(tmp_path),
             [_record("treg-dup", "routing")],
@@ -437,9 +473,11 @@ class TestRegistryRestoreFromSnapshot:
 # O — to_dict includes new field
 # ---------------------------------------------------------------------------
 
+
 class TestToDict:
     def test_O_to_dict_includes_dispatch_actions_taken(self):
         from core.runtime_restart_recovery import RuntimeRecoveryReport
+
         r = RuntimeRecoveryReport()
         r.inflight_tasks_dispatch_actions_taken = 3
         d = r.to_dict()
@@ -450,13 +488,15 @@ class TestToDict:
 # P — Mixed dispositions end-to-end
 # ---------------------------------------------------------------------------
 
+
 class TestMixedDispositions:
     def test_P_mixed_dispositions_all_correct(self, tmp_path):
         from core.task_envelope_lifecycle_registry import (
+            LifecycleOwner,
             get_lifecycle_registry,
             reset_lifecycle_registry,
-            LifecycleOwner,
         )
+
         reset_lifecycle_registry()
         try:
             ms_store = _make_mesh_session_store(str(tmp_path))
@@ -472,6 +512,7 @@ class TestMixedDispositions:
             _save_snapshot(tl_store, records)
 
             from core.runtime_restart_recovery import RuntimeRestartRecoveryCoordinator
+
             coord = RuntimeRestartRecoveryCoordinator(
                 mesh_session_store=ms_store,
                 body_mesh_store=bm_store,
@@ -482,7 +523,7 @@ class TestMixedDispositions:
 
             # Counts
             assert report.inflight_tasks_recovered == 5
-            assert report.inflight_tasks_resumable == 2   # device_dispatch + cross_device
+            assert report.inflight_tasks_resumable == 2  # device_dispatch + cross_device
             assert report.inflight_tasks_replay_only == 1
             assert report.inflight_tasks_reissuable == 1
             assert report.inflight_tasks_terminal == 1

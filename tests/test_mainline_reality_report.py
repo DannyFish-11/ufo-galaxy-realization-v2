@@ -12,7 +12,6 @@ from pathlib import Path
 from tools.architecture.architecture_completion import get_architecture_completion_scorecard
 from tools.architecture.architecture_live_status import get_architecture_live_status
 
-
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SCRIPT_PATH = REPO_ROOT / "scripts" / "generate_mainline_reality_report.py"
 
@@ -56,11 +55,7 @@ def test_report_describes_canonical_mainline_chain_and_projection_surfaces():
 
 def test_report_node_count_matches_real_node_directory_count():
     report = _build_report()
-    expected = sum(
-        1
-        for path in (REPO_ROOT / "nodes").iterdir()
-        if path.is_dir() and path.name.startswith("Node_")
-    )
+    expected = sum(1 for path in (REPO_ROOT / "nodes").iterdir() if path.is_dir() and path.name.startswith("Node_"))
     assert report.node_count == expected
 
 

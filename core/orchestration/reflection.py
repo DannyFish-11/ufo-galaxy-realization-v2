@@ -67,9 +67,7 @@ class ReflectionPipeline:
         try:
             return method()
         except Exception as exc:
-            logger.warning(
-                "ReflectionPipeline: build_production_baseline_summary failed: %s", exc
-            )
+            logger.warning("ReflectionPipeline: build_production_baseline_summary failed: %s", exc)
             return None
 
     @staticmethod
@@ -84,7 +82,5 @@ class ReflectionPipeline:
         try:
             return method(**kwargs)
         except Exception as exc:
-            logger.warning(
-                "ReflectionPipeline: build_decision_timeline_snapshot failed: %s", exc
-            )
+            logger.warning("ReflectionPipeline: build_decision_timeline_snapshot failed: %s", exc)
             return None

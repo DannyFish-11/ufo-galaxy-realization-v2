@@ -166,12 +166,11 @@ logger = logging.getLogger("Galaxy.SystemFinalAcceptanceVerdict")
 # Unified taxonomy alignment
 # ---------------------------------------------------------------------------
 try:
-    from core.release_governance_taxonomy import (  # noqa: F401
-        TAXONOMY_AUTHORITY as _TAXONOMY_AUTHORITY,
-        IssueClassification as _IssueClassification,
-        verdict_to_classification as _verdict_to_classification,
-        operational_from_verdict as _operational_from_verdict,
-    )
+    from core.release_governance_taxonomy import TAXONOMY_AUTHORITY as _TAXONOMY_AUTHORITY  # noqa: F401
+    from core.release_governance_taxonomy import IssueClassification as _IssueClassification
+    from core.release_governance_taxonomy import operational_from_verdict as _operational_from_verdict
+    from core.release_governance_taxonomy import verdict_to_classification as _verdict_to_classification
+
     _TAXONOMY_AVAILABLE = True
 except ImportError:  # pragma: no cover
     _TAXONOMY_AVAILABLE = False
@@ -649,13 +648,9 @@ class SystemAcceptanceVerdict(str, Enum):
     """
 
     fully_operational = "fully_operational"
-    not_fully_operational_pending_dimensions = (
-        "not_fully_operational_pending_dimensions"
-    )
+    not_fully_operational_pending_dimensions = "not_fully_operational_pending_dimensions"
     not_fully_operational_critical_risk = "not_fully_operational_critical_risk"
-    acceptance_unknown_insufficient_evidence = (
-        "acceptance_unknown_insufficient_evidence"
-    )
+    acceptance_unknown_insufficient_evidence = "acceptance_unknown_insufficient_evidence"
 
     @classmethod
     def from_string(cls, value: str) -> "SystemAcceptanceVerdict":
@@ -745,9 +740,7 @@ class AcceptanceChecklistItem:
     def from_dict(cls, data: Dict[str, Any]) -> "AcceptanceChecklistItem":
         """Construct from a dict (round-trip complement of ``to_dict``)."""
         return cls(
-            dimension=AcceptanceDimensionId.from_string(
-                data.get("dimension", "")
-            ),
+            dimension=AcceptanceDimensionId.from_string(data.get("dimension", "")),
             status=DimensionStatus.from_string(data.get("status", "")),
             evidence_summary=data.get("evidence_summary", ""),
             evidence_linkage=data.get("evidence_linkage", {}),
@@ -804,9 +797,7 @@ class SystemAcceptanceReport:
     """
 
     report_id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
-    verdict: SystemAcceptanceVerdict = (
-        SystemAcceptanceVerdict.acceptance_unknown_insufficient_evidence
-    )
+    verdict: SystemAcceptanceVerdict = SystemAcceptanceVerdict.acceptance_unknown_insufficient_evidence
     checklist: Dict[str, AcceptanceChecklistItem] = field(default_factory=dict)
     unresolved_risk_summary: List[Dict[str, str]] = field(default_factory=list)
     evidence_linkage: Dict[str, Any] = field(default_factory=dict)
@@ -820,10 +811,7 @@ class SystemAcceptanceReport:
         result: Dict[str, Any] = {
             "report_id": self.report_id,
             "verdict": self.verdict.value,
-            "checklist": {
-                dim_key: item.to_dict()
-                for dim_key, item in self.checklist.items()
-            },
+            "checklist": {dim_key: item.to_dict() for dim_key, item in self.checklist.items()},
             "unresolved_risk_summary": self.unresolved_risk_summary,
             "evidence_linkage": self.evidence_linkage,
             "summary": self.summary,
@@ -832,12 +820,8 @@ class SystemAcceptanceReport:
             "generated_at": self.generated_at,
         }
         if _TAXONOMY_AVAILABLE:
-            result["taxonomy_classification"] = _verdict_to_classification(
-                self.verdict.value
-            ).value
-            result["taxonomy_operational_status"] = _operational_from_verdict(
-                self.verdict.value
-            ).value
+            result["taxonomy_classification"] = _verdict_to_classification(self.verdict.value).value
+            result["taxonomy_operational_status"] = _operational_from_verdict(self.verdict.value).value
             result["taxonomy_alignment"] = "core.release_governance_taxonomy::PR8"
         return result
 
@@ -853,9 +837,7 @@ class SystemAcceptanceReport:
             checklist[dim_key] = AcceptanceChecklistItem.from_dict(item_data)
         return cls(
             report_id=data.get("report_id", uuid.uuid4().hex[:12]),
-            verdict=SystemAcceptanceVerdict.from_string(
-                data.get("verdict", "")
-            ),
+            verdict=SystemAcceptanceVerdict.from_string(data.get("verdict", "")),
             checklist=checklist,
             unresolved_risk_summary=data.get("unresolved_risk_summary", []),
             evidence_linkage=data.get("evidence_linkage", {}),
@@ -865,9 +847,7 @@ class SystemAcceptanceReport:
             generated_at=data.get("generated_at", time.time()),
         )
 
-    def get_checklist_item(
-        self, dim: AcceptanceDimensionId
-    ) -> Optional[AcceptanceChecklistItem]:
+    def get_checklist_item(self, dim: AcceptanceDimensionId) -> Optional[AcceptanceChecklistItem]:
         """Return the :class:`AcceptanceChecklistItem` for *dim*, or ``None``."""
         return self.checklist.get(dim.value)
 
@@ -878,10 +858,9 @@ class SystemAcceptanceReport:
 
 # DelegatedFlowReadinessGate (PR-9V2) — runtime_readiness dimension
 try:
-    from core.delegated_flow_readiness_gate import (  # type: ignore[import]
-        get_readiness_gate as _get_readiness_gate,
-        DelegatedFlowReadinessVerdict as _ReadinessVerdict,
-    )
+    from core.delegated_flow_readiness_gate import DelegatedFlowReadinessVerdict as _ReadinessVerdict
+    from core.delegated_flow_readiness_gate import get_readiness_gate as _get_readiness_gate  # type: ignore[import]
+
     _READINESS_GATE_AVAILABLE = True
 except Exception as exc:
     logger.debug("Fallback triggered: %s", exc)
@@ -891,10 +870,9 @@ except Exception as exc:
 
 # DelegatedFlowAcceptanceGate (PR-10V2) — delegated_flow dimension
 try:
-    from core.delegated_flow_acceptance_gate import (  # type: ignore[import]
-        get_acceptance_gate as _get_acceptance_gate,
-        DelegatedFlowAcceptanceVerdict as _AcceptanceVerdict,
-    )
+    from core.delegated_flow_acceptance_gate import DelegatedFlowAcceptanceVerdict as _AcceptanceVerdict
+    from core.delegated_flow_acceptance_gate import get_acceptance_gate as _get_acceptance_gate  # type: ignore[import]
+
     _ACCEPTANCE_GATE_AVAILABLE = True
 except Exception as exc:
     logger.debug("Fallback triggered: %s", exc)
@@ -904,10 +882,11 @@ except Exception as exc:
 
 # DelegatedFlowPostGraduationGovernance (PR-11V2) — governance dimension
 try:
-    from core.delegated_flow_post_graduation_governance import (  # type: ignore[import]
-        get_governance_evaluator as _get_governance_evaluator,
-        GovernanceVerdict as _GovernanceVerdict,
+    from core.delegated_flow_post_graduation_governance import GovernanceVerdict as _GovernanceVerdict
+    from core.delegated_flow_post_graduation_governance import (
+        get_governance_evaluator as _get_governance_evaluator,  # type: ignore[import]
     )
+
     _GOVERNANCE_AVAILABLE = True
 except Exception as exc:
     logger.debug("Fallback triggered: %s", exc)
@@ -917,9 +896,10 @@ except Exception as exc:
 
 # AttachedRuntimeRecoveryReadiness — multi_device_recovery dimension
 try:
-    from core.attached_runtime_recovery_readiness import (  # type: ignore[import]
-        build_recovery_readiness_snapshot as _build_recovery_snapshot,
+    from core.attached_runtime_recovery_readiness import (
+        build_recovery_readiness_snapshot as _build_recovery_snapshot,  # type: ignore[import]
     )
+
     _RECOVERY_AVAILABLE = True
 except Exception as exc:
     logger.debug("Fallback triggered: %s", exc)
@@ -931,10 +911,11 @@ except Exception as exc:
 # of the Android-side audit module, allowing evidence to be ingested from
 # JSON artifacts produced by the Android participant.
 try:
-    from core.android_participant_evidence_ingress import (  # type: ignore[import]
-        ingest_android_participant_evidence as _ingest_android_evidence,
-        AndroidParticipantStatus as _AndroidParticipantStatus,
+    from core.android_participant_evidence_ingress import AndroidParticipantStatus as _AndroidParticipantStatus
+    from core.android_participant_evidence_ingress import (
+        ingest_android_participant_evidence as _ingest_android_evidence,  # type: ignore[import]
     )
+
     _ANDROID_EVIDENCE_INGRESS_AVAILABLE = True
 except Exception as exc:
     logger.debug("Fallback triggered: %s", exc)
@@ -946,9 +927,10 @@ except Exception as exc:
 # available in the same process — e.g. when running with the full dual-repo
 # environment).  Not required; the evidence ingress layer is authoritative.
 try:
-    from core.android_delegated_runtime_audit import (  # type: ignore[import]
-        get_android_delegated_audit_recorder as _get_android_delegated_audit_recorder,
+    from core.android_delegated_runtime_audit import (
+        get_android_delegated_audit_recorder as _get_android_delegated_audit_recorder,  # type: ignore[import]
     )
+
     _ANDROID_AUDIT_AVAILABLE = True
 except Exception as exc:
     logger.debug("Fallback triggered: %s", exc)
@@ -959,10 +941,11 @@ except Exception as exc:
 # the delegated_flow dimension.  Enables fine-grained distinction between
 # "structure present" and "runtime closure established".
 try:
-    from core.delegated_flow_decision_history import (  # type: ignore[import]
-        get_decision_history as _get_decision_history,
-        HistoryEvidenceStatus as _HistoryEvidenceStatus,
+    from core.delegated_flow_decision_history import HistoryEvidenceStatus as _HistoryEvidenceStatus
+    from core.delegated_flow_decision_history import (
+        get_decision_history as _get_decision_history,  # type: ignore[import]
     )
+
     _DECISION_HISTORY_AVAILABLE = True
 except Exception as exc:
     logger.debug("Fallback triggered: %s", exc)
@@ -973,10 +956,11 @@ except Exception as exc:
 # RecoveryTruthSurface (PR-5-TRUTH) — structured multi-layer recovery truth
 # surface for the recovery_truth_surface dimension.
 try:
-    from core.recovery_truth_surface import (  # type: ignore[import]
-        build_recovery_truth_report as _build_recovery_truth_report,
-        RecoveryTruthStatus as _RecoveryTruthStatus,
+    from core.recovery_truth_surface import RecoveryTruthStatus as _RecoveryTruthStatus
+    from core.recovery_truth_surface import (
+        build_recovery_truth_report as _build_recovery_truth_report,  # type: ignore[import]
     )
+
     _RECOVERY_TRUTH_SURFACE_AVAILABLE = True
 except Exception as exc:
     logger.debug("Fallback triggered: %s", exc)
@@ -987,11 +971,14 @@ except Exception as exc:
 # CanonicalCrossRepoEvidencePipeline (PR-05) — unified canonical cross-repo
 # evidence ingestion pipeline for the cross_repo_evidence_pipeline dimension.
 try:
-    from core.canonical_cross_repo_evidence_pipeline import (  # type: ignore[import]
-        build_canonical_cross_repo_evidence_report as _build_cross_repo_report,
-        PipelineVerdict as _PipelineVerdict,
+    from core.canonical_cross_repo_evidence_pipeline import (
         CANONICAL_CROSS_REPO_EVIDENCE_PIPELINE_AUTHORITY as _CROSS_REPO_AUTHORITY,
     )
+    from core.canonical_cross_repo_evidence_pipeline import PipelineVerdict as _PipelineVerdict
+    from core.canonical_cross_repo_evidence_pipeline import (
+        build_canonical_cross_repo_evidence_report as _build_cross_repo_report,  # type: ignore[import]
+    )
+
     _CROSS_REPO_PIPELINE_AVAILABLE = True
 except Exception as exc:
     logger.debug("Fallback triggered: %s", exc)
@@ -1004,10 +991,11 @@ except Exception as exc:
 # dimension.  Probes whether multi-device / delegated runtime has been
 # formally classified with correct tiers and evidence-honest verdicts.
 try:
-    from core.multi_device_canonical_governance import (  # type: ignore[import]
-        build_multi_device_governance_report as _build_md_governance_report,
-        MultiDeviceGovernanceVerdict as _MDGovernanceVerdict,
+    from core.multi_device_canonical_governance import MultiDeviceGovernanceVerdict as _MDGovernanceVerdict
+    from core.multi_device_canonical_governance import (
+        build_multi_device_governance_report as _build_md_governance_report,  # type: ignore[import]
     )
+
     _MD_GOVERNANCE_AVAILABLE = True
 except Exception as exc:
     logger.debug("Fallback triggered: %s", exc)
@@ -1019,12 +1007,13 @@ except Exception as exc:
 # dimension.  Probes whether post-crash / post-restart conversation continuity
 # has been formally evaluated and classified rather than optimistically assumed.
 try:
-    from core.conversation_continuity_truth import (  # type: ignore[import]
-        build_conversation_continuity_verdict as _build_conversation_continuity_verdict,
-        ConversationContinuityClass as _ConversationContinuityClass,
-        ConversationContinuityEvidence as _ConversationContinuityEvidence,
-        CONVERSATION_CONTINUITY_TRUTH_AUTHORITY as _CONV_CONTINUITY_AUTHORITY,
+    from core.conversation_continuity_truth import CONVERSATION_CONTINUITY_TRUTH_AUTHORITY as _CONV_CONTINUITY_AUTHORITY
+    from core.conversation_continuity_truth import ConversationContinuityClass as _ConversationContinuityClass
+    from core.conversation_continuity_truth import ConversationContinuityEvidence as _ConversationContinuityEvidence
+    from core.conversation_continuity_truth import (
+        build_conversation_continuity_verdict as _build_conversation_continuity_verdict,  # type: ignore[import]
     )
+
     _CONVERSATION_CONTINUITY_AVAILABLE = True
 except Exception as exc:
     logger.debug("Fallback triggered: %s", exc)
@@ -1039,12 +1028,15 @@ except Exception as exc:
 # continuity has been formally evaluated and classified rather than
 # optimistically assumed from snapshot/state presence.
 try:
-    from core.inflight_task_continuity_taxonomy import (  # type: ignore[import]
-        build_task_continuity_verdict as _build_task_continuity_verdict,
-        InFlightTaskContinuityClass as _InFlightTaskContinuityClass,
-        InFlightTaskContinuityEvidence as _InFlightTaskContinuityEvidence,
+    from core.inflight_task_continuity_taxonomy import (
         INFLIGHT_TASK_CONTINUITY_TAXONOMY_IS_AUTHORITY as _TASK_CONTINUITY_AUTHORITY,
     )
+    from core.inflight_task_continuity_taxonomy import InFlightTaskContinuityClass as _InFlightTaskContinuityClass
+    from core.inflight_task_continuity_taxonomy import InFlightTaskContinuityEvidence as _InFlightTaskContinuityEvidence
+    from core.inflight_task_continuity_taxonomy import (
+        build_task_continuity_verdict as _build_task_continuity_verdict,  # type: ignore[import]
+    )
+
     _TASK_CONTINUITY_TAXONOMY_AVAILABLE = True
 except Exception as exc:
     logger.debug("Fallback triggered: %s", exc)
@@ -1059,12 +1051,13 @@ except Exception as exc:
 # intervention taxonomy is available and correctly produces conservative
 # (non-autonomous) verdicts when no explicit autonomous evidence is present.
 try:
-    from core.human_intervention_taxonomy import (  # type: ignore[import]
-        build_human_intervention_verdict as _build_human_intervention_verdict,
-        HumanInterventionClass as _HumanInterventionClass,
-        HumanInterventionEvidence as _HumanInterventionEvidence,
-        HUMAN_INTERVENTION_TAXONOMY_AUTHORITY as _HUMAN_INTERVENTION_AUTHORITY,
+    from core.human_intervention_taxonomy import HUMAN_INTERVENTION_TAXONOMY_AUTHORITY as _HUMAN_INTERVENTION_AUTHORITY
+    from core.human_intervention_taxonomy import HumanInterventionClass as _HumanInterventionClass
+    from core.human_intervention_taxonomy import HumanInterventionEvidence as _HumanInterventionEvidence
+    from core.human_intervention_taxonomy import (
+        build_human_intervention_verdict as _build_human_intervention_verdict,  # type: ignore[import]
     )
+
     _HUMAN_INTERVENTION_TAXONOMY_AVAILABLE = True
 except Exception as exc:
     logger.debug("Fallback triggered: %s", exc)
@@ -1079,13 +1072,18 @@ except Exception as exc:
 # taxonomy is available and correctly produces conservative (unavailable)
 # verdicts when no connectivity or evidence is present.
 try:
-    from core.offline_operational_contract import (  # type: ignore[import]
-        build_offline_operational_verdict as _build_offline_operational_verdict,
-        build_baseline_offline_operational_verdict as _build_baseline_offline_verdict,
-        OfflineOperationalClass as _OfflineOperationalClass,
-        OfflineOperationalEvidence as _OfflineOperationalEvidence,
+    from core.offline_operational_contract import (
         OFFLINE_OPERATIONAL_CONTRACT_AUTHORITY as _OFFLINE_OPERATIONAL_AUTHORITY,
     )
+    from core.offline_operational_contract import OfflineOperationalClass as _OfflineOperationalClass
+    from core.offline_operational_contract import OfflineOperationalEvidence as _OfflineOperationalEvidence
+    from core.offline_operational_contract import (
+        build_baseline_offline_operational_verdict as _build_baseline_offline_verdict,
+    )
+    from core.offline_operational_contract import (
+        build_offline_operational_verdict as _build_offline_operational_verdict,  # type: ignore[import]
+    )
+
     _OFFLINE_OPERATIONAL_CONTRACT_AVAILABLE = True
 except Exception as exc:
     logger.debug("Fallback triggered: %s", exc)
@@ -1101,13 +1099,18 @@ except Exception as exc:
 # available and correctly produces conservative (unverified) verdicts when no
 # evidence or verification checks are present.
 try:
-    from core.verification_evidence_closure_contract import (  # type: ignore[import]
-        build_verification_closure_verdict as _build_verification_closure_verdict,
-        build_baseline_verification_closure_verdict as _build_baseline_verification_closure_verdict,
-        VerificationClosureClass as _VerificationClosureClass,
-        VerificationClosureEvidence as _VerificationClosureEvidence,
+    from core.verification_evidence_closure_contract import (
         VERIFICATION_EVIDENCE_CLOSURE_CONTRACT_AUTHORITY as _VERIFICATION_CLOSURE_AUTHORITY,
     )
+    from core.verification_evidence_closure_contract import VerificationClosureClass as _VerificationClosureClass
+    from core.verification_evidence_closure_contract import VerificationClosureEvidence as _VerificationClosureEvidence
+    from core.verification_evidence_closure_contract import (
+        build_baseline_verification_closure_verdict as _build_baseline_verification_closure_verdict,
+    )
+    from core.verification_evidence_closure_contract import (
+        build_verification_closure_verdict as _build_verification_closure_verdict,  # type: ignore[import]
+    )
+
     _VERIFICATION_EVIDENCE_CLOSURE_AVAILABLE = True
 except Exception as exc:
     logger.debug("Fallback triggered: %s", exc)
@@ -1123,13 +1126,18 @@ except Exception as exc:
 # is available and correctly produces conservative (telemetry_unreliable)
 # verdicts when no positive telemetry evidence is present.
 try:
-    from core.telemetry_freshness_contract import (  # type: ignore[import]
-        build_telemetry_freshness_verdict as _build_telemetry_freshness_verdict,
-        build_baseline_telemetry_freshness_verdict as _build_baseline_telemetry_freshness_verdict,
-        TelemetryFreshnessClass as _TelemetryFreshnessClass,
-        TelemetryFreshnessEvidence as _TelemetryFreshnessEvidence,
+    from core.telemetry_freshness_contract import (
         TELEMETRY_FRESHNESS_CONTRACT_AUTHORITY as _TELEMETRY_FRESHNESS_AUTHORITY,
     )
+    from core.telemetry_freshness_contract import TelemetryFreshnessClass as _TelemetryFreshnessClass
+    from core.telemetry_freshness_contract import TelemetryFreshnessEvidence as _TelemetryFreshnessEvidence
+    from core.telemetry_freshness_contract import (
+        build_baseline_telemetry_freshness_verdict as _build_baseline_telemetry_freshness_verdict,
+    )
+    from core.telemetry_freshness_contract import (
+        build_telemetry_freshness_verdict as _build_telemetry_freshness_verdict,  # type: ignore[import]
+    )
+
     _TELEMETRY_FRESHNESS_CONTRACT_AVAILABLE = True
 except Exception as exc:
     logger.debug("Fallback triggered: %s", exc)
@@ -1145,13 +1153,18 @@ except Exception as exc:
 # the formal capacity taxonomy is available and correctly produces conservative
 # (unavailable) verdicts when no positive capacity evidence is present.
 try:
-    from core.resource_pressure_capacity_contract import (  # type: ignore[import]
-        build_capacity_verdict as _build_capacity_verdict,
-        build_baseline_capacity_verdict as _build_baseline_capacity_verdict,
-        CapacityClass as _CapacityClass,
-        CapacityEvidence as _CapacityEvidence,
+    from core.resource_pressure_capacity_contract import (
         RESOURCE_PRESSURE_CAPACITY_CONTRACT_AUTHORITY as _CAPACITY_CONTRACT_AUTHORITY,
     )
+    from core.resource_pressure_capacity_contract import CapacityClass as _CapacityClass
+    from core.resource_pressure_capacity_contract import CapacityEvidence as _CapacityEvidence
+    from core.resource_pressure_capacity_contract import (
+        build_baseline_capacity_verdict as _build_baseline_capacity_verdict,
+    )
+    from core.resource_pressure_capacity_contract import (
+        build_capacity_verdict as _build_capacity_verdict,  # type: ignore[import]
+    )
+
     _RESOURCE_PRESSURE_CAPACITY_CONTRACT_AVAILABLE = True
 except Exception as exc:
     logger.debug("Fallback triggered: %s", exc)
@@ -1168,13 +1181,18 @@ except Exception as exc:
 # conservative (conflict_unresolved) verdicts when no mutation evidence is
 # present.
 try:
-    from core.concurrent_mutation_conflict_contract import (  # type: ignore[import]
-        build_mutation_conflict_verdict as _build_mutation_conflict_verdict,
-        build_baseline_mutation_conflict_verdict as _build_baseline_mutation_conflict_verdict,
-        MutationConflictClass as _MutationConflictClass,
-        MutationConflictEvidence as _MutationConflictEvidence,
+    from core.concurrent_mutation_conflict_contract import (
         CONCURRENT_MUTATION_CONFLICT_CONTRACT_AUTHORITY as _MUTATION_CONFLICT_CONTRACT_AUTHORITY,
     )
+    from core.concurrent_mutation_conflict_contract import MutationConflictClass as _MutationConflictClass
+    from core.concurrent_mutation_conflict_contract import MutationConflictEvidence as _MutationConflictEvidence
+    from core.concurrent_mutation_conflict_contract import (
+        build_baseline_mutation_conflict_verdict as _build_baseline_mutation_conflict_verdict,
+    )
+    from core.concurrent_mutation_conflict_contract import (
+        build_mutation_conflict_verdict as _build_mutation_conflict_verdict,  # type: ignore[import]
+    )
+
     _CONCURRENT_MUTATION_CONFLICT_CONTRACT_AVAILABLE = True
 except Exception as exc:
     logger.debug("Fallback triggered: %s", exc)
@@ -1190,13 +1208,14 @@ except Exception as exc:
 # taxonomy is available and correctly produces conservative
 # (temporally_unreliable) verdicts when no temporal evidence is present.
 try:
-    from core.temporal_semantics_contract import (  # type: ignore[import]
-        build_temporal_verdict as _build_temporal_verdict,
-        build_baseline_temporal_verdict as _build_baseline_temporal_verdict,
-        TemporalClass as _TemporalClass,
-        TemporalEvidence as _TemporalEvidence,
-        TEMPORAL_SEMANTICS_CONTRACT_AUTHORITY as _TEMPORAL_SEMANTICS_AUTHORITY,
+    from core.temporal_semantics_contract import TEMPORAL_SEMANTICS_CONTRACT_AUTHORITY as _TEMPORAL_SEMANTICS_AUTHORITY
+    from core.temporal_semantics_contract import TemporalClass as _TemporalClass
+    from core.temporal_semantics_contract import TemporalEvidence as _TemporalEvidence
+    from core.temporal_semantics_contract import build_baseline_temporal_verdict as _build_baseline_temporal_verdict
+    from core.temporal_semantics_contract import (
+        build_temporal_verdict as _build_temporal_verdict,  # type: ignore[import]
     )
+
     _TEMPORAL_SEMANTICS_CONTRACT_AVAILABLE = True
 except Exception as exc:
     logger.debug("Fallback triggered: %s", exc)
@@ -1213,13 +1232,18 @@ except Exception as exc:
 # (identity_or_provenance_uncertain) verdicts when no identity evidence is
 # present.
 try:
-    from core.identity_authorship_actor_binding_contract import (  # type: ignore[import]
-        build_identity_binding_verdict as _build_identity_binding_verdict,
-        build_baseline_identity_binding_verdict as _build_baseline_identity_binding_verdict,
-        IdentityBindingClass as _IdentityBindingClass,
-        IdentityBindingEvidence as _IdentityBindingEvidence,
+    from core.identity_authorship_actor_binding_contract import (
         IDENTITY_AUTHORSHIP_BINDING_CONTRACT_AUTHORITY as _IDENTITY_BINDING_AUTHORITY,
     )
+    from core.identity_authorship_actor_binding_contract import IdentityBindingClass as _IdentityBindingClass
+    from core.identity_authorship_actor_binding_contract import IdentityBindingEvidence as _IdentityBindingEvidence
+    from core.identity_authorship_actor_binding_contract import (
+        build_baseline_identity_binding_verdict as _build_baseline_identity_binding_verdict,
+    )
+    from core.identity_authorship_actor_binding_contract import (
+        build_identity_binding_verdict as _build_identity_binding_verdict,  # type: ignore[import]
+    )
+
     _IDENTITY_AUTHORSHIP_BINDING_CONTRACT_AVAILABLE = True
 except Exception as exc:
     logger.debug("Fallback triggered: %s", exc)
@@ -1408,9 +1432,7 @@ class SystemFinalAcceptanceEvaluator:
                     },
                     gap_description=(
                         f"Runtime readiness gate produced {len(gaps)} gap(s): "
-                        + "; ".join(
-                            g.get("gap_description", str(g)) for g in gaps[:3]
-                        )
+                        + "; ".join(g.get("gap_description", str(g)) for g in gaps[:3])
                     ),
                     signal_source=signal_source,
                 )
@@ -1419,8 +1441,7 @@ class SystemFinalAcceptanceEvaluator:
                     dimension=dimension,
                     status=DimensionStatus.unresolved,
                     evidence_summary=(
-                        f"DelegatedFlowReadinessGate verdict: {verdict_value}.  "
-                        "Not ready and no gap list available."
+                        f"DelegatedFlowReadinessGate verdict: {verdict_value}.  " "Not ready and no gap list available."
                     ),
                     evidence_linkage={"readiness_gate_verdict": verdict_value},
                     gap_description=(
@@ -1436,10 +1457,7 @@ class SystemFinalAcceptanceEvaluator:
                 dimension=dimension,
                 status=DimensionStatus.unresolved,
                 evidence_summary="DelegatedFlowReadinessGate probe raised an exception.",
-                gap_description=(
-                    f"DelegatedFlowReadinessGate raised: {exc!r}.  "
-                    "Cannot assess runtime readiness."
-                ),
+                gap_description=(f"DelegatedFlowReadinessGate raised: {exc!r}.  " "Cannot assess runtime readiness."),
                 signal_source=signal_source,
             )
 
@@ -1648,8 +1666,7 @@ class SystemFinalAcceptanceEvaluator:
                 status=DimensionStatus.unresolved,
                 evidence_summary="DelegatedFlowAcceptanceGate probe raised an exception.",
                 gap_description=(
-                    f"DelegatedFlowAcceptanceGate raised: {exc!r}.  "
-                    "Cannot assess delegated-flow acceptance."
+                    f"DelegatedFlowAcceptanceGate raised: {exc!r}.  " "Cannot assess delegated-flow acceptance."
                 ),
                 signal_source=signal_source,
             )
@@ -1663,9 +1680,7 @@ class SystemFinalAcceptanceEvaluator:
             return AcceptanceChecklistItem(
                 dimension=dimension,
                 status=DimensionStatus.unresolved,
-                evidence_summary=(
-                    "DelegatedFlowPostGraduationGovernance (PR-11V2) unavailable."
-                ),
+                evidence_summary=("DelegatedFlowPostGraduationGovernance (PR-11V2) unavailable."),
                 gap_description=(
                     "core.delegated_flow_post_graduation_governance is not "
                     "importable.  Cannot assess post-graduation governance.  "
@@ -1686,8 +1701,7 @@ class SystemFinalAcceptanceEvaluator:
                     dimension=dimension,
                     status=DimensionStatus.accepted,
                     evidence_summary=(
-                        f"GovernanceEvaluator verdict: {verdict_value}.  "
-                        "Post-graduation governance compliant."
+                        f"GovernanceEvaluator verdict: {verdict_value}.  " "Post-graduation governance compliant."
                     ),
                     evidence_linkage={
                         "governance_verdict": verdict_value,
@@ -1701,8 +1715,7 @@ class SystemFinalAcceptanceEvaluator:
                     dimension=dimension,
                     status=DimensionStatus.pending,
                     evidence_summary=(
-                        f"GovernanceEvaluator verdict: {verdict_value}.  "
-                        f"{len(violations)} violation(s) recorded."
+                        f"GovernanceEvaluator verdict: {verdict_value}.  " f"{len(violations)} violation(s) recorded."
                     ),
                     evidence_linkage={
                         "governance_verdict": verdict_value,
@@ -1718,9 +1731,7 @@ class SystemFinalAcceptanceEvaluator:
                 return AcceptanceChecklistItem(
                     dimension=dimension,
                     status=DimensionStatus.unresolved,
-                    evidence_summary=(
-                        f"GovernanceEvaluator verdict: {verdict_value}."
-                    ),
+                    evidence_summary=(f"GovernanceEvaluator verdict: {verdict_value}."),
                     evidence_linkage={"governance_verdict": verdict_value},
                     gap_description=(
                         f"Governance verdict '{verdict_value}' is not "
@@ -1735,10 +1746,7 @@ class SystemFinalAcceptanceEvaluator:
                 dimension=dimension,
                 status=DimensionStatus.unresolved,
                 evidence_summary="GovernanceEvaluator probe raised an exception.",
-                gap_description=(
-                    f"GovernanceEvaluator raised: {exc!r}.  "
-                    "Cannot assess post-graduation governance."
-                ),
+                gap_description=(f"GovernanceEvaluator raised: {exc!r}.  " "Cannot assess post-graduation governance."),
                 signal_source=signal_source,
             )
 
@@ -1751,9 +1759,7 @@ class SystemFinalAcceptanceEvaluator:
             return AcceptanceChecklistItem(
                 dimension=dimension,
                 status=DimensionStatus.unresolved,
-                evidence_summary=(
-                    "AttachedRuntimeRecoveryReadiness module unavailable."
-                ),
+                evidence_summary=("AttachedRuntimeRecoveryReadiness module unavailable."),
                 gap_description=(
                     "core.attached_runtime_recovery_readiness is not importable.  "
                     "Cannot assess multi-device recovery readiness.  "
@@ -1784,9 +1790,7 @@ class SystemFinalAcceptanceEvaluator:
                 return AcceptanceChecklistItem(
                     dimension=dimension,
                     status=DimensionStatus.pending,
-                    evidence_summary=(
-                        f"Multi-device recovery readiness: {gap_count} gap(s)."
-                    ),
+                    evidence_summary=(f"Multi-device recovery readiness: {gap_count} gap(s)."),
                     evidence_linkage=evidence,
                     gap_description=(
                         f"Recovery readiness snapshot reports {gap_count} "
@@ -1798,10 +1802,7 @@ class SystemFinalAcceptanceEvaluator:
                 return AcceptanceChecklistItem(
                     dimension=dimension,
                     status=DimensionStatus.unresolved,
-                    evidence_summary=(
-                        "Multi-device recovery readiness snapshot produced "
-                        "inconclusive evidence."
-                    ),
+                    evidence_summary=("Multi-device recovery readiness snapshot produced " "inconclusive evidence."),
                     evidence_linkage=evidence,
                     gap_description=(
                         "Recovery readiness snapshot does not indicate ready "
@@ -1815,9 +1816,7 @@ class SystemFinalAcceptanceEvaluator:
             return AcceptanceChecklistItem(
                 dimension=dimension,
                 status=DimensionStatus.unresolved,
-                evidence_summary=(
-                    "AttachedRuntimeRecoveryReadiness probe raised an exception."
-                ),
+                evidence_summary=("AttachedRuntimeRecoveryReadiness probe raised an exception."),
                 gap_description=(
                     f"AttachedRuntimeRecoveryReadiness raised: {exc!r}.  "
                     "Cannot assess multi-device recovery readiness."
@@ -1887,9 +1886,7 @@ class SystemFinalAcceptanceEvaluator:
                 return AcceptanceChecklistItem(
                     dimension=dimension,
                     status=DimensionStatus.unresolved,
-                    evidence_summary=(
-                        "Android participant evidence ingress raised an exception."
-                    ),
+                    evidence_summary=("Android participant evidence ingress raised an exception."),
                     gap_description=(
                         f"android_participant_evidence_ingress raised: {exc!r}.  "
                         "Cannot assess Android participant operational evidence."
@@ -1922,11 +1919,7 @@ class SystemFinalAcceptanceEvaluator:
                     evidence = recorder.to_dict()
 
                 # AndroidDelegatedAuditSnapshot.to_dict() uses "event_count"
-                audit_event_count = (
-                    evidence.get("event_count")
-                    or evidence.get("audit_event_count")
-                    or 0
-                )
+                audit_event_count = evidence.get("event_count") or evidence.get("audit_event_count") or 0
 
                 if audit_event_count > 0:
                     return AcceptanceChecklistItem(
@@ -1944,9 +1937,7 @@ class SystemFinalAcceptanceEvaluator:
                     return AcceptanceChecklistItem(
                         dimension=dimension,
                         status=DimensionStatus.unresolved,
-                        evidence_summary=(
-                            "Android participant: no audit events in in-process recorder."
-                        ),
+                        evidence_summary=("Android participant: no audit events in in-process recorder."),
                         evidence_linkage=evidence,
                         gap_description=(
                             "AndroidDelegatedRuntimeAuditRecorder has no audit events.  "
@@ -1959,9 +1950,7 @@ class SystemFinalAcceptanceEvaluator:
                 return AcceptanceChecklistItem(
                     dimension=dimension,
                     status=DimensionStatus.unresolved,
-                    evidence_summary=(
-                        "AndroidDelegatedRuntimeAuditRecorder probe raised an exception."
-                    ),
+                    evidence_summary=("AndroidDelegatedRuntimeAuditRecorder probe raised an exception."),
                     gap_description=(
                         f"AndroidDelegatedRuntimeAuditRecorder raised: {exc!r}.  "
                         "Cannot assess Android participant operational evidence."
@@ -1975,9 +1964,7 @@ class SystemFinalAcceptanceEvaluator:
         return AcceptanceChecklistItem(
             dimension=dimension,
             status=DimensionStatus.unresolved,
-            evidence_summary=(
-                "Android participant evidence ingress layer unavailable."
-            ),
+            evidence_summary=("Android participant evidence ingress layer unavailable."),
             gap_description=(
                 "core.android_participant_evidence_ingress is not importable and "
                 "core.android_delegated_runtime_audit is also unavailable.  "
@@ -2019,9 +2006,7 @@ class SystemFinalAcceptanceEvaluator:
             return AcceptanceChecklistItem(
                 dimension=dimension,
                 status=DimensionStatus.unresolved,
-                evidence_summary=(
-                    "RecoveryTruthSurface module unavailable."
-                ),
+                evidence_summary=("RecoveryTruthSurface module unavailable."),
                 gap_description=(
                     "core.recovery_truth_surface is not importable.  "
                     "Cannot assess structured recovery truth surface.  "
@@ -2050,8 +2035,7 @@ class SystemFinalAcceptanceEvaluator:
                     dimension=dimension,
                     status=DimensionStatus.accepted,
                     evidence_summary=(
-                        "RecoveryTruthSurface: all six dimensions closed; "
-                        "all four recovery levels successful."
+                        "RecoveryTruthSurface: all six dimensions closed; " "all four recovery levels successful."
                     ),
                     evidence_linkage=report_dict,
                     gap_description="",
@@ -2077,9 +2061,7 @@ class SystemFinalAcceptanceEvaluator:
 
             all_notes = layer_notes + dim_notes
             gap_desc = (
-                "RecoveryTruthSurface has open or deferred dimensions: "
-                + "; ".join(all_notes)
-                + ".  "
+                "RecoveryTruthSurface has open or deferred dimensions: " + "; ".join(all_notes) + ".  "
                 "Note: 'partial' status indicates structural wiring is present "
                 "but no live event was recorded in this process instance.  "
                 "Deferred boundaries (offline queue replay ordering, ephemeral "
@@ -2103,12 +2085,9 @@ class SystemFinalAcceptanceEvaluator:
             return AcceptanceChecklistItem(
                 dimension=dimension,
                 status=DimensionStatus.unresolved,
-                evidence_summary=(
-                    "RecoveryTruthSurface probe raised an exception."
-                ),
+                evidence_summary=("RecoveryTruthSurface probe raised an exception."),
                 gap_description=(
-                    f"build_recovery_truth_report raised: {exc!r}.  "
-                    "Cannot assess structured recovery truth surface."
+                    f"build_recovery_truth_report raised: {exc!r}.  " "Cannot assess structured recovery truth surface."
                 ),
                 signal_source=signal_source,
             )
@@ -2147,9 +2126,7 @@ class SystemFinalAcceptanceEvaluator:
             return AcceptanceChecklistItem(
                 dimension=dimension,
                 status=DimensionStatus.unresolved,
-                evidence_summary=(
-                    "CanonicalCrossRepoEvidencePipeline (PR-05) unavailable."
-                ),
+                evidence_summary=("CanonicalCrossRepoEvidencePipeline (PR-05) unavailable."),
                 gap_description=(
                     "core.canonical_cross_repo_evidence_pipeline is not importable.  "
                     "Cannot assess canonical cross-repo evidence closure.  "
@@ -2191,12 +2168,8 @@ class SystemFinalAcceptanceEvaluator:
                     evidence_linkage=report_dict,
                     gap_description=(
                         "Cross-repo evidence chain is partial.  "
-                        "Missing sources: "
-                        + str(report.missing_sources)
-                        + ".  "
-                        "Downgrade reasons: "
-                        + "; ".join(report.downgrade_reasons or ["none"])
-                        + ".  "
+                        "Missing sources: " + str(report.missing_sources) + ".  "
+                        "Downgrade reasons: " + "; ".join(report.downgrade_reasons or ["none"]) + ".  "
                         "MISSING_PRIMARY_SOURCE_DOWNGRADES_TO_PARTIAL_POLICY applied."
                     ),
                     signal_source=signal_source,
@@ -2240,9 +2213,7 @@ class SystemFinalAcceptanceEvaluator:
             return AcceptanceChecklistItem(
                 dimension=dimension,
                 status=DimensionStatus.unresolved,
-                evidence_summary=(
-                    "CanonicalCrossRepoEvidencePipeline probe raised an exception."
-                ),
+                evidence_summary=("CanonicalCrossRepoEvidencePipeline probe raised an exception."),
                 gap_description=(
                     f"build_canonical_cross_repo_evidence_report raised: {exc!r}.  "
                     "Cannot assess canonical cross-repo evidence pipeline."
@@ -2286,9 +2257,7 @@ class SystemFinalAcceptanceEvaluator:
             return AcceptanceChecklistItem(
                 dimension=dimension,
                 status=DimensionStatus.unresolved,
-                evidence_summary=(
-                    "MultiDeviceCanonicalGovernance (PR-09) unavailable."
-                ),
+                evidence_summary=("MultiDeviceCanonicalGovernance (PR-09) unavailable."),
                 gap_description=(
                     "core.multi_device_canonical_governance is not importable.  "
                     "Cannot assess multi-device canonical governance tier.  "
@@ -2326,9 +2295,7 @@ class SystemFinalAcceptanceEvaluator:
                 _MDGovernanceVerdict.single_device_baseline,
             ):
                 downgrade_note = (
-                    "; ".join(report.downgrade_reasons[:3])
-                    if report.downgrade_reasons
-                    else "see report for details"
+                    "; ".join(report.downgrade_reasons[:3]) if report.downgrade_reasons else "see report for details"
                 )
                 return AcceptanceChecklistItem(
                     dimension=dimension,
@@ -2363,9 +2330,7 @@ class SystemFinalAcceptanceEvaluator:
                 gap_description=(
                     f"Multi-device governance verdict is {verdict_val!r}.  "
                     "Cannot classify system tier without evidence.  "
-                    "Downgrade reasons: "
-                    + ("; ".join(report.downgrade_reasons) or "none")
-                    + ".  "
+                    "Downgrade reasons: " + ("; ".join(report.downgrade_reasons) or "none") + ".  "
                     "NO_DELEGATED_PARTICIPANT_NO_MULTI_DEVICE_OPERATIONAL_POLICY applied."
                 ),
                 signal_source=signal_source,
@@ -2375,9 +2340,7 @@ class SystemFinalAcceptanceEvaluator:
             return AcceptanceChecklistItem(
                 dimension=dimension,
                 status=DimensionStatus.unresolved,
-                evidence_summary=(
-                    "MultiDeviceCanonicalGovernance probe raised an exception."
-                ),
+                evidence_summary=("MultiDeviceCanonicalGovernance probe raised an exception."),
                 gap_description=(
                     f"build_multi_device_governance_report raised: {exc!r}.  "
                     "Cannot assess multi-device canonical governance."
@@ -2426,9 +2389,7 @@ class SystemFinalAcceptanceEvaluator:
             return AcceptanceChecklistItem(
                 dimension=dimension,
                 status=DimensionStatus.unresolved,
-                evidence_summary=(
-                    "ConversationContinuityTruth (PR-12) module unavailable."
-                ),
+                evidence_summary=("ConversationContinuityTruth (PR-12) module unavailable."),
                 gap_description=(
                     "core.conversation_continuity_truth is not importable.  "
                     "Cannot assess conversation continuity truth contract.  "
@@ -2504,9 +2465,7 @@ class SystemFinalAcceptanceEvaluator:
             return AcceptanceChecklistItem(
                 dimension=dimension,
                 status=DimensionStatus.unresolved,
-                evidence_summary=(
-                    "ConversationContinuityTruth probe raised an exception."
-                ),
+                evidence_summary=("ConversationContinuityTruth probe raised an exception."),
                 gap_description=(
                     f"build_conversation_continuity_verdict raised: {exc!r}.  "
                     "Cannot assess conversation continuity truth dimension."
@@ -2557,9 +2516,7 @@ class SystemFinalAcceptanceEvaluator:
             return AcceptanceChecklistItem(
                 dimension=dimension,
                 status=DimensionStatus.unresolved,
-                evidence_summary=(
-                    "InFlightTaskContinuityTaxonomy (PR-06) module unavailable."
-                ),
+                evidence_summary=("InFlightTaskContinuityTaxonomy (PR-06) module unavailable."),
                 gap_description=(
                     "core.inflight_task_continuity_taxonomy is not importable.  "
                     "Cannot assess in-flight task continuity taxonomy contract.  "
@@ -2582,8 +2539,7 @@ class SystemFinalAcceptanceEvaluator:
             # taxonomy contract is misconfigured.
             if (
                 _InFlightTaskContinuityClass is not None
-                and verdict.continuity_class
-                == _InFlightTaskContinuityClass.authoritative_task_continuity_restored
+                and verdict.continuity_class == _InFlightTaskContinuityClass.authoritative_task_continuity_restored
             ):
                 return AcceptanceChecklistItem(
                     dimension=dimension,
@@ -2642,9 +2598,7 @@ class SystemFinalAcceptanceEvaluator:
             return AcceptanceChecklistItem(
                 dimension=dimension,
                 status=DimensionStatus.unresolved,
-                evidence_summary=(
-                    "InFlightTaskContinuityTaxonomy probe raised an exception."
-                ),
+                evidence_summary=("InFlightTaskContinuityTaxonomy probe raised an exception."),
                 gap_description=(
                     f"build_task_continuity_verdict raised: {exc!r}.  "
                     "Cannot assess in-flight task continuity taxonomy dimension."
@@ -2692,9 +2646,7 @@ class SystemFinalAcceptanceEvaluator:
             return AcceptanceChecklistItem(
                 dimension=dimension,
                 status=DimensionStatus.unresolved,
-                evidence_summary=(
-                    "HumanInterventionTaxonomy (PR-08) module unavailable."
-                ),
+                evidence_summary=("HumanInterventionTaxonomy (PR-08) module unavailable."),
                 gap_description=(
                     "core.human_intervention_taxonomy is not importable.  "
                     "Cannot assess human intervention taxonomy contract.  "
@@ -2716,8 +2668,7 @@ class SystemFinalAcceptanceEvaluator:
             # If it does, the contract is misconfigured.
             if (
                 _HumanInterventionClass is not None
-                and verdict.intervention_class
-                == _HumanInterventionClass.autonomous_closure
+                and verdict.intervention_class == _HumanInterventionClass.autonomous_closure
             ):
                 return AcceptanceChecklistItem(
                     dimension=dimension,
@@ -2758,9 +2709,7 @@ class SystemFinalAcceptanceEvaluator:
                     "taxonomy_sentinel": _HUMAN_INTERVENTION_AUTHORITY,
                     "zero_evidence_probe_class": intervention_class,
                     "zero_evidence_probe_is_autonomous": verdict.is_autonomous,
-                    "zero_evidence_probe_is_positive_closure": (
-                        verdict.is_positive_closure
-                    ),
+                    "zero_evidence_probe_is_positive_closure": (verdict.is_positive_closure),
                 },
                 gap_description=(
                     "Human intervention taxonomy is formally available (PR-08), "
@@ -2778,9 +2727,7 @@ class SystemFinalAcceptanceEvaluator:
             return AcceptanceChecklistItem(
                 dimension=dimension,
                 status=DimensionStatus.unresolved,
-                evidence_summary=(
-                    "HumanInterventionTaxonomy probe raised an exception."
-                ),
+                evidence_summary=("HumanInterventionTaxonomy probe raised an exception."),
                 gap_description=(
                     f"build_human_intervention_verdict raised: {exc!r}.  "
                     "Cannot assess human intervention taxonomy dimension."
@@ -2829,9 +2776,7 @@ class SystemFinalAcceptanceEvaluator:
             return AcceptanceChecklistItem(
                 dimension=dimension,
                 status=DimensionStatus.unresolved,
-                evidence_summary=(
-                    "OfflineOperationalContract (PR-10) module unavailable."
-                ),
+                evidence_summary=("OfflineOperationalContract (PR-10) module unavailable."),
                 gap_description=(
                     "core.offline_operational_contract is not importable.  "
                     "Cannot assess offline / disconnected / delayed-sync "
@@ -2853,8 +2798,7 @@ class SystemFinalAcceptanceEvaluator:
             # If it does, the contract is misconfigured.
             if (
                 _OfflineOperationalClass is not None
-                and verdict.operational_class
-                == _OfflineOperationalClass.online_operational
+                and verdict.operational_class == _OfflineOperationalClass.online_operational
             ):
                 return AcceptanceChecklistItem(
                     dimension=dimension,
@@ -2896,9 +2840,7 @@ class SystemFinalAcceptanceEvaluator:
                     "module": signal_source,
                     "contract_sentinel": _OFFLINE_OPERATIONAL_AUTHORITY,
                     "zero_evidence_probe_class": operational_class,
-                    "zero_evidence_probe_is_online_operational": (
-                        verdict.is_online_operational
-                    ),
+                    "zero_evidence_probe_is_online_operational": (verdict.is_online_operational),
                     "zero_evidence_probe_is_resumable": verdict.is_resumable,
                     "zero_evidence_probe_is_deferred": verdict.is_deferred,
                 },
@@ -2918,9 +2860,7 @@ class SystemFinalAcceptanceEvaluator:
             return AcceptanceChecklistItem(
                 dimension=dimension,
                 status=DimensionStatus.unresolved,
-                evidence_summary=(
-                    "OfflineOperationalContract probe raised an exception."
-                ),
+                evidence_summary=("OfflineOperationalContract probe raised an exception."),
                 gap_description=(
                     f"build_baseline_offline_operational_verdict raised: {exc!r}.  "
                     "Cannot assess offline operational taxonomy dimension."
@@ -2968,9 +2908,7 @@ class SystemFinalAcceptanceEvaluator:
             return AcceptanceChecklistItem(
                 dimension=dimension,
                 status=DimensionStatus.unresolved,
-                evidence_summary=(
-                    "VerificationEvidureClosureContract (PR-12) module unavailable."
-                ),
+                evidence_summary=("VerificationEvidureClosureContract (PR-12) module unavailable."),
                 gap_description=(
                     "core.verification_evidence_closure_contract is not importable.  "
                     "Cannot assess verification / evidence closure taxonomy contract.  "
@@ -2991,8 +2929,7 @@ class SystemFinalAcceptanceEvaluator:
             # If it does, the contract is misconfigured.
             if (
                 _VerificationClosureClass is not None
-                and verdict.closure_class
-                == _VerificationClosureClass.fully_closed
+                and verdict.closure_class == _VerificationClosureClass.fully_closed
             ):
                 return AcceptanceChecklistItem(
                     dimension=dimension,
@@ -3034,13 +2971,9 @@ class SystemFinalAcceptanceEvaluator:
                     "module": signal_source,
                     "contract_sentinel": _VERIFICATION_CLOSURE_AUTHORITY,
                     "zero_evidence_probe_class": closure_class,
-                    "zero_evidence_probe_is_fully_closed": (
-                        verdict.is_fully_closed
-                    ),
+                    "zero_evidence_probe_is_fully_closed": (verdict.is_fully_closed),
                     "zero_evidence_probe_is_closed": verdict.is_closed,
-                    "zero_evidence_probe_is_evidence_present": (
-                        verdict.is_evidence_present
-                    ),
+                    "zero_evidence_probe_is_evidence_present": (verdict.is_evidence_present),
                 },
                 gap_description=(
                     "Verification evidence closure taxonomy is formally available "
@@ -3059,9 +2992,7 @@ class SystemFinalAcceptanceEvaluator:
             return AcceptanceChecklistItem(
                 dimension=dimension,
                 status=DimensionStatus.unresolved,
-                evidence_summary=(
-                    "VerificationEvidureClosureContract probe raised an exception."
-                ),
+                evidence_summary=("VerificationEvidureClosureContract probe raised an exception."),
                 gap_description=(
                     f"build_baseline_verification_closure_verdict raised: {exc!r}.  "
                     "Cannot assess verification evidence closure taxonomy dimension."
@@ -3110,9 +3041,7 @@ class SystemFinalAcceptanceEvaluator:
             return AcceptanceChecklistItem(
                 dimension=dimension,
                 status=DimensionStatus.unresolved,
-                evidence_summary=(
-                    "TelemetryFreshnessContract (PR-15) module unavailable."
-                ),
+                evidence_summary=("TelemetryFreshnessContract (PR-15) module unavailable."),
                 gap_description=(
                     "core.telemetry_freshness_contract is not importable.  "
                     "Cannot assess real-time observability / telemetry freshness "
@@ -3135,8 +3064,7 @@ class SystemFinalAcceptanceEvaluator:
             # If it does, the contract is misconfigured.
             if (
                 _TelemetryFreshnessClass is not None
-                and verdict.freshness_class
-                == _TelemetryFreshnessClass.realtime_authoritative
+                and verdict.freshness_class == _TelemetryFreshnessClass.realtime_authoritative
             ):
                 return AcceptanceChecklistItem(
                     dimension=dimension,
@@ -3177,9 +3105,7 @@ class SystemFinalAcceptanceEvaluator:
                     "module": signal_source,
                     "contract_sentinel": _TELEMETRY_FRESHNESS_AUTHORITY,
                     "zero_evidence_probe_class": freshness_class,
-                    "zero_evidence_probe_is_realtime_authoritative": (
-                        verdict.is_realtime_authoritative
-                    ),
+                    "zero_evidence_probe_is_realtime_authoritative": (verdict.is_realtime_authoritative),
                     "zero_evidence_probe_is_fresh": verdict.is_fresh,
                     "zero_evidence_probe_is_unreliable": verdict.is_unreliable,
                 },
@@ -3200,9 +3126,7 @@ class SystemFinalAcceptanceEvaluator:
             return AcceptanceChecklistItem(
                 dimension=dimension,
                 status=DimensionStatus.unresolved,
-                evidence_summary=(
-                    "TelemetryFreshnessContract probe raised an exception."
-                ),
+                evidence_summary=("TelemetryFreshnessContract probe raised an exception."),
                 gap_description=(
                     f"build_baseline_telemetry_freshness_verdict raised: {exc!r}.  "
                     "Cannot assess telemetry freshness taxonomy dimension."
@@ -3244,9 +3168,7 @@ class SystemFinalAcceptanceEvaluator:
             return AcceptanceChecklistItem(
                 dimension=dimension,
                 status=DimensionStatus.unresolved,
-                evidence_summary=(
-                    "ResourcePressureCapacityContract (PR-17) module unavailable."
-                ),
+                evidence_summary=("ResourcePressureCapacityContract (PR-17) module unavailable."),
                 gap_description=(
                     "core.resource_pressure_capacity_contract is not importable.  "
                     "Cannot assess resource pressure / degraded-capacity / "
@@ -3266,10 +3188,7 @@ class SystemFinalAcceptanceEvaluator:
 
             # The zero-evidence probe MUST NOT produce normal_capacity.
             # If it does, the contract is misconfigured.
-            if (
-                _CapacityClass is not None
-                and verdict.capacity_class == _CapacityClass.normal_capacity
-            ):
+            if _CapacityClass is not None and verdict.capacity_class == _CapacityClass.normal_capacity:
                 return AcceptanceChecklistItem(
                     dimension=dimension,
                     status=DimensionStatus.unresolved,
@@ -3329,9 +3248,7 @@ class SystemFinalAcceptanceEvaluator:
             return AcceptanceChecklistItem(
                 dimension=dimension,
                 status=DimensionStatus.unresolved,
-                evidence_summary=(
-                    "ResourcePressureCapacityContract probe raised an exception."
-                ),
+                evidence_summary=("ResourcePressureCapacityContract probe raised an exception."),
                 gap_description=(
                     f"build_baseline_capacity_verdict raised: {exc!r}.  "
                     "Cannot assess resource pressure capacity taxonomy dimension."
@@ -3374,10 +3291,7 @@ class SystemFinalAcceptanceEvaluator:
             return AcceptanceChecklistItem(
                 dimension=dimension,
                 status=DimensionStatus.unresolved,
-                evidence_summary=(
-                    "ConcurrentMutationConflictContract (PR-13) module "
-                    "unavailable."
-                ),
+                evidence_summary=("ConcurrentMutationConflictContract (PR-13) module " "unavailable."),
                 gap_description=(
                     "core.concurrent_mutation_conflict_contract is not "
                     "importable.  Cannot assess multi-writer / concurrent "
@@ -3402,8 +3316,7 @@ class SystemFinalAcceptanceEvaluator:
             # misconfigured.
             if (
                 _MutationConflictClass is not None
-                and verdict.mutation_class
-                == _MutationConflictClass.conflict_free_authoritative
+                and verdict.mutation_class == _MutationConflictClass.conflict_free_authoritative
             ):
                 return AcceptanceChecklistItem(
                     dimension=dimension,
@@ -3445,12 +3358,8 @@ class SystemFinalAcceptanceEvaluator:
                     "module": signal_source,
                     "contract_sentinel": _MUTATION_CONFLICT_CONTRACT_AUTHORITY,
                     "zero_evidence_probe_class": mutation_class,
-                    "zero_evidence_probe_is_conflict_free": (
-                        verdict.is_conflict_free_authoritative
-                    ),
-                    "zero_evidence_probe_is_unresolved": (
-                        verdict.is_conflict_unresolved
-                    ),
+                    "zero_evidence_probe_is_conflict_free": (verdict.is_conflict_free_authoritative),
+                    "zero_evidence_probe_is_unresolved": (verdict.is_conflict_unresolved),
                 },
                 gap_description=(
                     "Concurrent mutation / conflict taxonomy is formally "
@@ -3469,10 +3378,7 @@ class SystemFinalAcceptanceEvaluator:
             return AcceptanceChecklistItem(
                 dimension=dimension,
                 status=DimensionStatus.unresolved,
-                evidence_summary=(
-                    "ConcurrentMutationConflictContract probe raised an "
-                    "exception."
-                ),
+                evidence_summary=("ConcurrentMutationConflictContract probe raised an " "exception."),
                 gap_description=(
                     f"build_baseline_mutation_conflict_verdict raised: "
                     f"{exc!r}.  Cannot assess concurrent mutation conflict "
@@ -3516,9 +3422,7 @@ class SystemFinalAcceptanceEvaluator:
             return AcceptanceChecklistItem(
                 dimension=dimension,
                 status=DimensionStatus.unresolved,
-                evidence_summary=(
-                    "TemporalSemanticsContract (PR-14) module unavailable."
-                ),
+                evidence_summary=("TemporalSemanticsContract (PR-14) module unavailable."),
                 gap_description=(
                     "core.temporal_semantics_contract is not importable.  "
                     "Cannot assess time semantics / freshness / staleness / "
@@ -3539,11 +3443,7 @@ class SystemFinalAcceptanceEvaluator:
 
             # The zero-evidence probe MUST NOT produce timely_authoritative.
             # If it does, the contract is misconfigured.
-            if (
-                _TemporalClass is not None
-                and verdict.temporal_class
-                == _TemporalClass.timely_authoritative
-            ):
+            if _TemporalClass is not None and verdict.temporal_class == _TemporalClass.timely_authoritative:
                 return AcceptanceChecklistItem(
                     dimension=dimension,
                     status=DimensionStatus.unresolved,
@@ -3582,12 +3482,8 @@ class SystemFinalAcceptanceEvaluator:
                     "module": signal_source,
                     "contract_sentinel": _TEMPORAL_SEMANTICS_AUTHORITY,
                     "zero_evidence_probe_class": temporal_class,
-                    "zero_evidence_probe_is_timely_authoritative": (
-                        verdict.is_timely_authoritative
-                    ),
-                    "zero_evidence_probe_is_temporally_unreliable": (
-                        verdict.is_temporally_unreliable
-                    ),
+                    "zero_evidence_probe_is_timely_authoritative": (verdict.is_timely_authoritative),
+                    "zero_evidence_probe_is_temporally_unreliable": (verdict.is_temporally_unreliable),
                 },
                 gap_description=(
                     "Temporal semantics taxonomy is formally available "
@@ -3606,9 +3502,7 @@ class SystemFinalAcceptanceEvaluator:
             return AcceptanceChecklistItem(
                 dimension=dimension,
                 status=DimensionStatus.unresolved,
-                evidence_summary=(
-                    "TemporalSemanticsContract probe raised an exception."
-                ),
+                evidence_summary=("TemporalSemanticsContract probe raised an exception."),
                 gap_description=(
                     f"build_baseline_temporal_verdict raised: {exc!r}.  "
                     "Cannot assess temporal semantics taxonomy dimension."
@@ -3651,10 +3545,7 @@ class SystemFinalAcceptanceEvaluator:
             return AcceptanceChecklistItem(
                 dimension=dimension,
                 status=DimensionStatus.unresolved,
-                evidence_summary=(
-                    "IdentityAuthorshipActorBindingContract module "
-                    "unavailable."
-                ),
+                evidence_summary=("IdentityAuthorshipActorBindingContract module " "unavailable."),
                 gap_description=(
                     "core.identity_authorship_actor_binding_contract is not "
                     "importable.  Cannot assess identity / authorship / "
@@ -3679,8 +3570,7 @@ class SystemFinalAcceptanceEvaluator:
             # misconfigured.
             if (
                 _IdentityBindingClass is not None
-                and verdict.binding_class
-                == _IdentityBindingClass.identity_authoritatively_bound
+                and verdict.binding_class == _IdentityBindingClass.identity_authoritatively_bound
             ):
                 return AcceptanceChecklistItem(
                     dimension=dimension,
@@ -3722,12 +3612,8 @@ class SystemFinalAcceptanceEvaluator:
                     "module": signal_source,
                     "contract_sentinel": _IDENTITY_BINDING_AUTHORITY,
                     "zero_evidence_probe_class": binding_class,
-                    "zero_evidence_probe_is_authoritatively_bound": (
-                        verdict.is_authoritatively_bound
-                    ),
-                    "zero_evidence_probe_is_uncertain": (
-                        verdict.is_uncertain
-                    ),
+                    "zero_evidence_probe_is_authoritatively_bound": (verdict.is_authoritatively_bound),
+                    "zero_evidence_probe_is_uncertain": (verdict.is_uncertain),
                 },
                 gap_description=(
                     "Identity / authorship / actor-binding taxonomy is "
@@ -3746,10 +3632,7 @@ class SystemFinalAcceptanceEvaluator:
             return AcceptanceChecklistItem(
                 dimension=dimension,
                 status=DimensionStatus.unresolved,
-                evidence_summary=(
-                    "IdentityAuthorshipActorBindingContract probe raised an "
-                    "exception."
-                ),
+                evidence_summary=("IdentityAuthorshipActorBindingContract probe raised an " "exception."),
                 gap_description=(
                     f"build_baseline_identity_binding_verdict raised: "
                     f"{exc!r}.  Cannot assess identity / authorship / "
@@ -3806,8 +3689,7 @@ class SystemFinalAcceptanceEvaluator:
                     {
                         "dimension": dim_id.value,
                         "risk_description": (
-                            f"Dimension '{dim_id.value}' is missing from the "
-                            "checklist.  Evidence was not collected."
+                            f"Dimension '{dim_id.value}' is missing from the " "checklist.  Evidence was not collected."
                         ),
                     }
                 )
@@ -3871,10 +3753,7 @@ class SystemFinalAcceptanceEvaluator:
             lines.append("")
 
         if verdict.is_fully_operational:
-            lines.append(
-                "CONCLUSION: Galaxy V2 platform is FORMALLY ACCEPTED as "
-                "fully-operational."
-            )
+            lines.append("CONCLUSION: Galaxy V2 platform is FORMALLY ACCEPTED as " "fully-operational.")
             lines.append(
                 "All five system acceptance dimensions are ACCEPTED.  "
                 "Release and external integration (e.g. HA/Matter) may "
@@ -3882,8 +3761,7 @@ class SystemFinalAcceptanceEvaluator:
             )
         elif verdict.is_pending:
             lines.append(
-                "CONCLUSION: Galaxy V2 platform is NOT YET fully-operational.  "
-                "One or more dimensions are pending."
+                "CONCLUSION: Galaxy V2 platform is NOT YET fully-operational.  " "One or more dimensions are pending."
             )
         else:
             lines.append(

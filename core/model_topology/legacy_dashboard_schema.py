@@ -38,7 +38,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-
 # ---------------------------------------------------------------------------
 # LLM provider snapshot (mirrors dashboard backend llm_provider_defs output)
 # ---------------------------------------------------------------------------
@@ -51,12 +50,13 @@ class LegacyLLMProviderSnapshot:
     Field names are kept *identical* to the dashboard API response so that
     the bridge can accept raw JSON dicts without name-mangling.
     """
-    provider: str                  # e.g. "openai"
-    model: str                     # default model ID
-    models: List[str]              # all supported model IDs
-    speed_score: int               # 1-10
-    quality_score: int             # 1-10
-    available: bool                # True if env key is present
+
+    provider: str  # e.g. "openai"
+    model: str  # default model ID
+    models: List[str]  # all supported model IDs
+    speed_score: int  # 1-10
+    quality_score: int  # 1-10
+    available: bool  # True if env key is present
     multimodal: bool = False
     missing_env_key: Optional[str] = None  # first required env-var if unavailable
     # Internal detail: all env vars the provider accepts (not always present
@@ -103,6 +103,7 @@ class LegacyLLMProviderSnapshot:
 @dataclass
 class LegacyNodeAPIKeySpec:
     """One key requirement within a node-API entry."""
+
     env_var: str
     label: str
     configured: bool = False
@@ -114,9 +115,10 @@ class LegacyNodeAPIEntry:
 
     Fields correspond 1-to-1 with the dashboard backend output.
     """
-    node_id: str          # e.g. "01", "15", "79"
-    name: str             # e.g. "OneAPI 聚合器"
-    category: str         # e.g. "llm", "vision", "local_llm"
+
+    node_id: str  # e.g. "01", "15", "79"
+    name: str  # e.g. "OneAPI 聚合器"
+    category: str  # e.g. "llm", "vision", "local_llm"
     keys: List[LegacyNodeAPIKeySpec] = field(default_factory=list)
     all_configured: bool = False
 
@@ -153,8 +155,9 @@ class LegacyProviderHealthDetail:
     The bridge accepts it as optional input; if absent it defaults to
     "unknown" health.
     """
+
     provider: str
-    status: str = "unknown"       # "healthy" | "degraded" | "down" | "unknown"
+    status: str = "unknown"  # "healthy" | "degraded" | "down" | "unknown"
     latency_avg_ms: float = 0.0
     error_rate: float = 0.0
     circuit_breaker_state: str = "closed"
@@ -200,6 +203,7 @@ class LegacyRouterSemantics:
     This descriptor is used by ``ConfigBridge.extract_aggregator_hints()`` to
     generate ``AggregatorRouterHint`` objects for the normalized topology.
     """
+
     intent_router_providers: List[str] = field(default_factory=list)
     execution_planner_providers: List[str] = field(default_factory=list)
     agent_factory_providers: List[str] = field(default_factory=list)

@@ -19,9 +19,9 @@ Sub-modules
 * :mod:`core.generative_ui.runtime` — :class:`GenerativeUIRuntime` façade.
 """
 
-from core.generative_ui.widget_schema import SurfaceType, SurfaceSpec
-from core.generative_ui.surface_selector import SurfaceSelector
 from core.generative_ui.runtime import GenerativeUIRuntime
+from core.generative_ui.surface_selector import SurfaceSelector
+from core.generative_ui.widget_schema import SurfaceSpec, SurfaceType
 
 __all__ = [
     "SurfaceType",

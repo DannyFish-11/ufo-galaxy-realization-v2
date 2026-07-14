@@ -132,9 +132,7 @@ logger = logging.getLogger("Galaxy.LLM.ContextAuthority")
 #: or provider-specific builder.
 #:
 #: See ``docs/MODEL_ROUTING_AUTHORITY.md`` §11 for the full assembly policy.
-LLM_CONTEXT_AUTHORITY: str = (
-    "core.llm.context_authority.CognitiveContextAuthority"
-)
+LLM_CONTEXT_AUTHORITY: str = "core.llm.context_authority.CognitiveContextAuthority"
 
 
 # ---------------------------------------------------------------------------
@@ -298,27 +296,25 @@ class CognitiveContextAssembly:
             "assembly_trace": list(self.assembly_trace),
             "authority": self.authority,
             "is_canonical": self.is_canonical,
-            "source_request": {
-                "task_type": self.source_request.task_type,
-                "feature_context": self.source_request.feature_context,
-                "execution_mode": self.source_request.execution_mode,
-                "session_id": self.source_request.session_id,
-                "has_soul_policy": bool(self.source_request.soul_policy),
-                "has_user_policy": bool(self.source_request.user_policy),
-                "has_agents_policy": bool(self.source_request.agents_policy),
-                "has_memory_context": bool(self.source_request.memory_context),
-                "has_continuity_context": bool(
-                    self.source_request.continuity_context
-                ),
-                "has_tool_manifest": bool(self.source_request.tool_manifest),
-                "has_user_message": bool(self.source_request.user_message),
-                "history_turns": len(
-                    self.source_request.conversation_history or []
-                ),
-                "max_history_turns": self.source_request.max_history_turns,
-            }
-            if self.source_request
-            else None,
+            "source_request": (
+                {
+                    "task_type": self.source_request.task_type,
+                    "feature_context": self.source_request.feature_context,
+                    "execution_mode": self.source_request.execution_mode,
+                    "session_id": self.source_request.session_id,
+                    "has_soul_policy": bool(self.source_request.soul_policy),
+                    "has_user_policy": bool(self.source_request.user_policy),
+                    "has_agents_policy": bool(self.source_request.agents_policy),
+                    "has_memory_context": bool(self.source_request.memory_context),
+                    "has_continuity_context": bool(self.source_request.continuity_context),
+                    "has_tool_manifest": bool(self.source_request.tool_manifest),
+                    "has_user_message": bool(self.source_request.user_message),
+                    "history_turns": len(self.source_request.conversation_history or []),
+                    "max_history_turns": self.source_request.max_history_turns,
+                }
+                if self.source_request
+                else None
+            ),
         }
 
 
@@ -328,9 +324,7 @@ class CognitiveContextAssembly:
 
 #: Default system identity used when ``CognitiveContextRequest.system_prefix``
 #: is not provided.
-_DEFAULT_SYSTEM_PREFIX: str = (
-    "You are Galaxy, an intelligent AI assistant."
-)
+_DEFAULT_SYSTEM_PREFIX: str = "You are Galaxy, an intelligent AI assistant."
 
 
 class CognitiveContextAuthority:
@@ -430,9 +424,7 @@ class CognitiveContextAuthority:
         # 1a. Base system prefix
         prefix = (request.system_prefix or _DEFAULT_SYSTEM_PREFIX).strip()
         system_parts.append(prefix)
-        trace.append(
-            f"system_prefix: {'custom' if request.system_prefix else 'default'}"
-        )
+        trace.append(f"system_prefix: {'custom' if request.system_prefix else 'default'}")
 
         # 1b. Soul policy (task_execute / hybrid paths only)
         # Note: Section labels are intentionally in Chinese to match the
@@ -445,18 +437,14 @@ class CognitiveContextAuthority:
 
         # 1c. Agents policy
         if request.agents_policy:
-            system_parts.append(
-                f"\nAgents 策略：\n{request.agents_policy.strip()}"
-            )
+            system_parts.append(f"\nAgents 策略：\n{request.agents_policy.strip()}")
             trace.append("agents_policy: injected")
         else:
             trace.append("agents_policy: absent")
 
         # 1d. User policy
         if request.user_policy:
-            system_parts.append(
-                f"\n用户偏好：\n{request.user_policy.strip()}"
-            )
+            system_parts.append(f"\n用户偏好：\n{request.user_policy.strip()}")
             trace.append("user_policy: injected")
         else:
             trace.append("user_policy: absent")
@@ -466,26 +454,20 @@ class CognitiveContextAuthority:
             for constraint in request.policy_constraints:
                 if constraint and constraint.strip():
                     system_parts.append(f"\n{constraint.strip()}")
-            trace.append(
-                f"policy_constraints: {len(request.policy_constraints)} injected"
-            )
+            trace.append(f"policy_constraints: {len(request.policy_constraints)} injected")
         else:
             trace.append("policy_constraints: absent")
 
         # 1f. Memory context
         if request.memory_context:
-            system_parts.append(
-                f"\n记忆上下文：\n{request.memory_context.strip()}"
-            )
+            system_parts.append(f"\n记忆上下文：\n{request.memory_context.strip()}")
             trace.append("memory_context: injected")
         else:
             trace.append("memory_context: absent")
 
         # 1g. Continuity context
         if request.continuity_context:
-            system_parts.append(
-                f"\n连续性上下文：\n{request.continuity_context.strip()}"
-            )
+            system_parts.append(f"\n连续性上下文：\n{request.continuity_context.strip()}")
             trace.append("continuity_context: injected")
         else:
             trace.append("continuity_context: absent")
@@ -496,12 +478,8 @@ class CognitiveContextAuthority:
             for k, v in request.execution_metadata.items():
                 meta_parts.append(f"{k}={v}")
             if meta_parts:
-                system_parts.append(
-                    f"\n执行上下文：{', '.join(meta_parts)}"
-                )
-                trace.append(
-                    f"execution_metadata: {len(meta_parts)} entries injected"
-                )
+                system_parts.append(f"\n执行上下文：{', '.join(meta_parts)}")
+                trace.append(f"execution_metadata: {len(meta_parts)} entries injected")
         else:
             trace.append("execution_metadata: absent")
 
@@ -519,18 +497,13 @@ class CognitiveContextAuthority:
                 f" (max={request.max_history_turns})"
             )
         elif history and request.max_history_turns == 0:
-            trace.append(
-                f"conversation_history: 0/{len(history)} turns included"
-                f" (max=0, all history suppressed)"
-            )
+            trace.append(f"conversation_history: 0/{len(history)} turns included" f" (max=0, all history suppressed)")
         else:
             trace.append("conversation_history: absent")
 
         # ── 3. Current user message ────────────────────────────────────
         if request.user_message is not None:
-            messages.append(
-                {"role": "user", "content": request.user_message}
-            )
+            messages.append({"role": "user", "content": request.user_message})
             trace.append("user_message: appended")
         else:
             trace.append("user_message: absent")
@@ -543,8 +516,7 @@ class CognitiveContextAuthority:
             trace.append("tool_manifest: absent")
 
         logger.debug(
-            "CognitiveContextAuthority.assemble: task=%s feature=%s "
-            "execution_mode=%s messages=%d trace=%s",
+            "CognitiveContextAuthority.assemble: task=%s feature=%s " "execution_mode=%s messages=%d trace=%s",
             request.task_type,
             request.feature_context or "unset",
             request.execution_mode or "unset",

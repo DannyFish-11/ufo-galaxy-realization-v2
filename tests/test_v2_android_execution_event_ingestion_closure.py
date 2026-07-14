@@ -70,7 +70,6 @@ from core.flow_level_operator_surface import (
     reset_flow_level_operator_surface,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -209,21 +208,15 @@ class TestStepIndexNoneSafety:
 
 class TestEventTsCapture:
     def test_C01_event_ts_snake(self):
-        evt = absorb_device_execution_event(
-            "dev_c01", {"phase": "execution", "event_ts": 1234567.8}
-        )
+        evt = absorb_device_execution_event("dev_c01", {"phase": "execution", "event_ts": 1234567.8})
         assert evt.event_ts == pytest.approx(1234567.8)
 
     def test_C02_event_ts_camel(self):
-        evt = absorb_device_execution_event(
-            "dev_c02", {"phase": "execution", "eventTs": 9876543.21}
-        )
+        evt = absorb_device_execution_event("dev_c02", {"phase": "execution", "eventTs": 9876543.21})
         assert evt.event_ts == pytest.approx(9876543.21)
 
     def test_C03_timestamp_key_fallback(self):
-        evt = absorb_device_execution_event(
-            "dev_c03", {"phase": "planning", "timestamp": 1111111.0}
-        )
+        evt = absorb_device_execution_event("dev_c03", {"phase": "planning", "timestamp": 1111111.0})
         assert evt.event_ts == pytest.approx(1111111.0)
 
     def test_C04_no_ts_key_gives_none(self):
@@ -231,9 +224,7 @@ class TestEventTsCapture:
         assert evt.event_ts is None
 
     def test_C05_invalid_ts_gives_none(self):
-        evt = absorb_device_execution_event(
-            "dev_c05", {"phase": "planning", "event_ts": "not_a_float"}
-        )
+        evt = absorb_device_execution_event("dev_c05", {"phase": "planning", "event_ts": "not_a_float"})
         assert evt.event_ts is None
 
 
@@ -244,9 +235,7 @@ class TestEventTsCapture:
 
 class TestEventTsInToDict:
     def test_D01_to_dict_has_event_ts_when_set(self):
-        evt = absorb_device_execution_event(
-            "dev_d01", {"phase": "grounding", "event_ts": 5000.0}
-        )
+        evt = absorb_device_execution_event("dev_d01", {"phase": "grounding", "event_ts": 5000.0})
         d = evt.to_dict()
         assert "event_ts" in d
         assert d["event_ts"] == pytest.approx(5000.0)
@@ -261,9 +250,17 @@ class TestEventTsInToDict:
         evt = absorb_device_execution_event("dev_d03", _REALISTIC_CAMEL_CASE_PAYLOAD)
         d = evt.to_dict()
         for key in (
-            "device_id", "absorbed_at", "flow_id", "task_id", "phase",
-            "step_index", "is_blocking", "blocking_reason",
-            "stagnation_detected", "fallback_tier", "event_ts",
+            "device_id",
+            "absorbed_at",
+            "flow_id",
+            "task_id",
+            "phase",
+            "step_index",
+            "is_blocking",
+            "blocking_reason",
+            "stagnation_detected",
+            "fallback_tier",
+            "event_ts",
         ):
             assert key in d, f"Missing key in to_dict(): {key!r}"
 
@@ -278,9 +275,7 @@ class TestForwardWritesEntityMetadata:
         """_forward_execution_event_to_flow_surface must write metadata keys."""
         fake_entity = _make_fake_entity("flow_meta_001")
 
-        with patch(
-            "core.delegated_flow_entity.get_delegated_flow_entity_runtime"
-        ) as mock_rt:
+        with patch("core.delegated_flow_entity.get_delegated_flow_entity_runtime") as mock_rt:
             mock_rt.return_value.get.return_value = fake_entity
             absorb_device_execution_event(
                 "dev_e01",
@@ -299,9 +294,7 @@ class TestForwardWritesEntityMetadata:
 
     def test_E02_metadata_not_written_when_entity_unknown(self):
         """No crash and no metadata when flow entity is not registered."""
-        with patch(
-            "core.delegated_flow_entity.get_delegated_flow_entity_runtime"
-        ) as mock_rt:
+        with patch("core.delegated_flow_entity.get_delegated_flow_entity_runtime") as mock_rt:
             mock_rt.return_value.get.return_value = None
             # Must not raise
             absorb_device_execution_event(
@@ -321,9 +314,7 @@ class TestForwardWritesEntityMetadata:
     def test_E04_ace_dict_has_correct_phase_and_step_index(self):
         fake_entity = _make_fake_entity("flow_meta_004")
 
-        with patch(
-            "core.delegated_flow_entity.get_delegated_flow_entity_runtime"
-        ) as mock_rt:
+        with patch("core.delegated_flow_entity.get_delegated_flow_entity_runtime") as mock_rt:
             mock_rt.return_value.get.return_value = fake_entity
             absorb_device_execution_event(
                 "dev_e04",
@@ -349,9 +340,7 @@ class TestForwardUsesEventTs:
     def test_F01_android_ts_matches_event_ts_when_provided(self):
         fake_entity = _make_fake_entity("flow_f01")
 
-        with patch(
-            "core.delegated_flow_entity.get_delegated_flow_entity_runtime"
-        ) as mock_rt:
+        with patch("core.delegated_flow_entity.get_delegated_flow_entity_runtime") as mock_rt:
             mock_rt.return_value.get.return_value = fake_entity
             absorb_device_execution_event(
                 "dev_f01",
@@ -364,9 +353,7 @@ class TestForwardUsesEventTs:
     def test_F02_android_ts_is_none_when_event_ts_absent(self):
         fake_entity = _make_fake_entity("flow_f02")
 
-        with patch(
-            "core.delegated_flow_entity.get_delegated_flow_entity_runtime"
-        ) as mock_rt:
+        with patch("core.delegated_flow_entity.get_delegated_flow_entity_runtime") as mock_rt:
             mock_rt.return_value.get.return_value = fake_entity
             absorb_device_execution_event(
                 "dev_f02",
@@ -403,13 +390,9 @@ class TestDerivePhaseReadsEntityMetadata:
         fake_entity.metadata["_last_android_execution_event"] = ace.to_dict()
         fake_entity.metadata["_last_android_phase"] = "grounding"
 
-        with patch(
-            "core.delegated_flow_entity.get_delegated_flow_entity_runtime"
-        ) as mock_rt:
+        with patch("core.delegated_flow_entity.get_delegated_flow_entity_runtime") as mock_rt:
             mock_rt.return_value.get.return_value = fake_entity
-            last_event, phase_str = FlowLevelOperatorSurface._derive_android_execution_phase(
-                "flow_g01"
-            )
+            last_event, phase_str = FlowLevelOperatorSurface._derive_android_execution_phase("flow_g01")
 
         assert phase_str == AndroidExecutionPhase.grounding.value
         assert last_event is not None
@@ -434,13 +417,9 @@ class TestDerivePhaseReadsEntityMetadata:
         fake_entity.metadata["_last_android_execution_event"] = ace.to_dict()
         fake_entity.metadata["_last_android_phase"] = "stagnation"
 
-        with patch(
-            "core.delegated_flow_entity.get_delegated_flow_entity_runtime"
-        ) as mock_rt:
+        with patch("core.delegated_flow_entity.get_delegated_flow_entity_runtime") as mock_rt:
             mock_rt.return_value.get.return_value = fake_entity
-            last_event, phase_str = FlowLevelOperatorSurface._derive_android_execution_phase(
-                "flow_g02"
-            )
+            last_event, phase_str = FlowLevelOperatorSurface._derive_android_execution_phase("flow_g02")
 
         assert phase_str == AndroidExecutionPhase.stagnation.value
         assert last_event is not None
@@ -454,16 +433,13 @@ class TestDerivePhaseReadsEntityMetadata:
         fake_entity = _make_fake_entity("flow_g03")
         # No _last_android_execution_event in metadata
 
-        with patch(
-            "core.delegated_flow_entity.get_delegated_flow_entity_runtime"
-        ) as mock_rt, patch(
-            "core.flow_level_truth_ownership.get_flow_truth_alignment_runtime"
-        ) as mock_tar:
+        with (
+            patch("core.delegated_flow_entity.get_delegated_flow_entity_runtime") as mock_rt,
+            patch("core.flow_level_truth_ownership.get_flow_truth_alignment_runtime") as mock_tar,
+        ):
             mock_rt.return_value.get.return_value = fake_entity
             mock_tar.return_value.get_by_flow_id.return_value = []
-            last_event, phase_str = FlowLevelOperatorSurface._derive_android_execution_phase(
-                "flow_g03"
-            )
+            last_event, phase_str = FlowLevelOperatorSurface._derive_android_execution_phase("flow_g03")
 
         assert phase_str == AndroidExecutionPhase.unknown.value
         assert last_event is None
@@ -481,15 +457,11 @@ class TestDerivePhaseReadsEntityMetadata:
             fake_entity = _make_fake_entity(fid)
             fake_entity.metadata["_last_android_execution_event"] = ace.to_dict()
 
-            with patch(
-                "core.delegated_flow_entity.get_delegated_flow_entity_runtime"
-            ) as mock_rt:
+            with patch("core.delegated_flow_entity.get_delegated_flow_entity_runtime") as mock_rt:
                 mock_rt.return_value.get.return_value = fake_entity
                 _, phase_str = FlowLevelOperatorSurface._derive_android_execution_phase(fid)
 
-            assert phase_str == phase.value, (
-                f"Phase {phase.value!r} did not roundtrip through entity metadata"
-            )
+            assert phase_str == phase.value, f"Phase {phase.value!r} did not roundtrip through entity metadata"
 
 
 # ---------------------------------------------------------------------------
@@ -500,6 +472,7 @@ class TestDerivePhaseReadsEntityMetadata:
 class TestInspectFlowReflectsExecutionPhase:
     def _make_full_entity(self, flow_id: str) -> MagicMock:
         from unittest.mock import MagicMock
+
         entity = MagicMock()
         entity.identity.delegated_flow_id = flow_id
         entity.identity.flow_lineage_id = "lin_001"
@@ -540,9 +513,7 @@ class TestInspectFlowReflectsExecutionPhase:
 
         surface = FlowLevelOperatorSurface()
 
-        with patch(
-            "core.delegated_flow_entity.get_delegated_flow_entity_runtime"
-        ) as mock_rt:
+        with patch("core.delegated_flow_entity.get_delegated_flow_entity_runtime") as mock_rt:
             mock_rt.return_value.get.return_value = entity
             with patch.object(surface, "_load_flow_entity", return_value=entity):
                 proj = surface.inspect_flow(flow_id)
@@ -573,9 +544,7 @@ class TestInspectFlowReflectsExecutionPhase:
 
         surface = FlowLevelOperatorSurface()
 
-        with patch(
-            "core.delegated_flow_entity.get_delegated_flow_entity_runtime"
-        ) as mock_rt:
+        with patch("core.delegated_flow_entity.get_delegated_flow_entity_runtime") as mock_rt:
             mock_rt.return_value.get.return_value = entity
             with patch.object(surface, "_load_flow_entity", return_value=entity):
                 proj = surface.inspect_flow(flow_id)
@@ -614,9 +583,7 @@ class TestHandlerAck:
             }
             bridge = MagicMock()
             ws = MagicMock()
-            response = asyncio.run(
-                handle_device_execution_event(bridge, ws, message)
-            )
+            response = asyncio.run(handle_device_execution_event(bridge, ws, message))
             assert response is not None
             assert response["type"] == "device_execution_event_ack"
             assert response["status"] == "absorbed"
@@ -655,9 +622,7 @@ class TestHandlerAck:
             }
             bridge = MagicMock()
             ws = MagicMock()
-            response = asyncio.run(
-                handle_device_execution_event(bridge, ws, message)
-            )
+            response = asyncio.run(handle_device_execution_event(bridge, ws, message))
             assert response["status"] == "absorbed"
 
             store = get_android_device_state_store()
@@ -691,9 +656,7 @@ class TestHandlerAck:
             }
             bridge = MagicMock()
             ws = MagicMock()
-            response = asyncio.run(
-                handle_device_execution_event(bridge, ws, message)
-            )
+            response = asyncio.run(handle_device_execution_event(bridge, ws, message))
             assert response["status"] == "absorbed"
             store = get_android_device_state_store()
             events = store.list_recent_execution_events(device_id="dev_i03")
@@ -712,6 +675,7 @@ class TestExecutionEventsRouteFiltering:
     def _client(self):
         """Build a minimal FastAPI app with the operator router mounted."""
         from core.routes.operator import create_router
+
         app = FastAPI()
         app.include_router(create_router())
         return TestClient(app)
@@ -750,9 +714,7 @@ class TestExecutionEventsRouteFiltering:
         assert data["total_events"] <= 3
 
     def test_J05_unknown_flow_id_returns_empty_events(self, _client):
-        r = _client.get(
-            "/api/v1/operator/devices/execution-events?flow_id=flow_does_not_exist_xyz"
-        )
+        r = _client.get("/api/v1/operator/devices/execution-events?flow_id=flow_does_not_exist_xyz")
         assert r.status_code == 200
         assert r.json()["total_events"] == 0
 
@@ -766,6 +728,7 @@ class TestExecutionEventsRouteEventTs:
     @pytest.fixture
     def _client(self):
         from core.routes.operator import create_router
+
         app = FastAPI()
         app.include_router(create_router())
         return TestClient(app)
@@ -797,10 +760,10 @@ class TestExecutionEventsRouteEventTs:
 class TestEndToEndBridgeToPhaseProjection:
     def test_L01_full_path_execution_event_projects_to_phase(self):
         """Bridge → store → entity metadata → _derive_android_execution_phase."""
+        from core.flow_level_operator_surface import FlowLevelOperatorSurface
         from galaxy_gateway.android.handlers.device_state_snapshot import (
             handle_device_execution_event,
         )
-        from core.flow_level_operator_surface import FlowLevelOperatorSurface
 
         flow_id = "flow_l01"
         fake_entity = _make_fake_entity(flow_id)
@@ -823,9 +786,7 @@ class TestEndToEndBridgeToPhaseProjection:
             bridge = MagicMock()
             ws = MagicMock()
 
-            with patch(
-                "core.delegated_flow_entity.get_delegated_flow_entity_runtime"
-            ) as mock_rt:
+            with patch("core.delegated_flow_entity.get_delegated_flow_entity_runtime") as mock_rt:
                 mock_rt.return_value.get.return_value = fake_entity
                 asyncio.run(handle_device_execution_event(bridge, ws, message))
 
@@ -833,9 +794,7 @@ class TestEndToEndBridgeToPhaseProjection:
             assert fake_entity.metadata.get("_last_android_phase") == "replan"
 
             # _derive_android_execution_phase must return "replan"
-            with patch(
-                "core.delegated_flow_entity.get_delegated_flow_entity_runtime"
-            ) as mock_flos_rt:
+            with patch("core.delegated_flow_entity.get_delegated_flow_entity_runtime") as mock_flos_rt:
                 mock_flos_rt.return_value.get.return_value = fake_entity
                 _, phase_str = FlowLevelOperatorSurface._derive_android_execution_phase(flow_id)
 
@@ -846,10 +805,10 @@ class TestEndToEndBridgeToPhaseProjection:
 
     def test_L02_completed_phase_projects_correctly(self):
         """Completed events must project correctly — terminal phase check."""
+        from core.flow_level_operator_surface import FlowLevelOperatorSurface
         from galaxy_gateway.android.handlers.device_state_snapshot import (
             handle_device_execution_event,
         )
-        from core.flow_level_operator_surface import FlowLevelOperatorSurface
 
         flow_id = "flow_l02"
         fake_entity = _make_fake_entity(flow_id)
@@ -869,19 +828,13 @@ class TestEndToEndBridgeToPhaseProjection:
             bridge = MagicMock()
             ws = MagicMock()
 
-            with patch(
-                "core.delegated_flow_entity.get_delegated_flow_entity_runtime"
-            ) as mock_rt:
+            with patch("core.delegated_flow_entity.get_delegated_flow_entity_runtime") as mock_rt:
                 mock_rt.return_value.get.return_value = fake_entity
                 asyncio.run(handle_device_execution_event(bridge, ws, message))
 
-            with patch(
-                "core.delegated_flow_entity.get_delegated_flow_entity_runtime"
-            ) as mock_flos_rt:
+            with patch("core.delegated_flow_entity.get_delegated_flow_entity_runtime") as mock_flos_rt:
                 mock_flos_rt.return_value.get.return_value = fake_entity
-                last_event, phase_str = FlowLevelOperatorSurface._derive_android_execution_phase(
-                    flow_id
-                )
+                last_event, phase_str = FlowLevelOperatorSurface._derive_android_execution_phase(flow_id)
 
             assert phase_str == AndroidExecutionPhase.completed.value
             assert last_event is not None

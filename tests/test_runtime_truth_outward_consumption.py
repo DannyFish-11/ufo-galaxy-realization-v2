@@ -2,14 +2,15 @@ from __future__ import annotations
 
 
 def test_runtime_truth_payload_includes_outward_task_and_startup_readiness(monkeypatch):
-    import types
     import sys
+    import types
+
+    import core.runtime.source_dispatch_orchestrator as orchestrator
     from contracts.cross_repo_schema_version_gate import (
         CROSS_REPO_SCHEMA_GATE_VERSION,
         verify_cross_repo_schema_gate,
     )
     from core.routes import projection as projection_routes
-    import core.runtime.source_dispatch_orchestrator as orchestrator
 
     class _FakeOutwardSnapshot:
         def to_dict(self):
@@ -76,9 +77,10 @@ def test_runtime_truth_payload_includes_outward_task_and_startup_readiness(monke
     assert payload["runtime_decision_reasoning"]["mode_basis"]["mode_state"] == "local"
     assert payload["shared_execution_visibility"]["completion_state"] == "not_started"
     assert "participation_truth_consumption" in payload
-    assert payload["participation_truth_consumption"]["participation_tier"] == payload[
-        "runtime_decision_reasoning"
-    ]["participation_tier"]
+    assert (
+        payload["participation_truth_consumption"]["participation_tier"]
+        == payload["runtime_decision_reasoning"]["participation_tier"]
+    )
     assert "device_lifecycle_stage" in payload["participation_truth_consumption"]
     assert "all_device_participation_matrix" in payload["participation_truth_consumption"]
     assert "devices" in payload["participation_truth_consumption"]["all_device_participation_matrix"]

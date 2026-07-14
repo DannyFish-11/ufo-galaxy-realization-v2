@@ -67,14 +67,8 @@ def test_mesh_proposition_explicitly_constrained() -> None:
     assert mesh is not None
     assert mesh.boundary == ClosureBoundary.CONSTRAINED
     assert mesh.verdict == PropositionVerdict.PARTIAL
-    assert (
-        "full_mesh_runtime_execution_deferred_until_hybrid_execute_full_is_available"
-        in mesh.constrained_or_deferred
-    )
-    assert (
-        "barrier_coordination_deferred_until_cross_repo_runtime_contract_is_closed"
-        in mesh.constrained_or_deferred
-    )
+    assert "full_mesh_runtime_execution_deferred_until_hybrid_execute_full_is_available" in mesh.constrained_or_deferred
+    assert "barrier_coordination_deferred_until_cross_repo_runtime_contract_is_closed" in mesh.constrained_or_deferred
 
 
 def test_to_dict_is_json_ready() -> None:

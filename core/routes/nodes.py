@@ -36,19 +36,18 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-
-from core.auth import require_auth
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from core.auth import require_auth
+from core.node_invocation import InvocationSource, invoke_node
+from core.routes._helpers import nodes_root
+from core.routes._models import NodeCallRequest
 from core.routes._shared import (
     connection_manager,
     registered_devices,
     task_queue,
 )
-from core.routes._helpers import nodes_root
-from core.routes._models import NodeCallRequest
-from core.node_invocation import invoke_node, InvocationSource
 
 logger = logging.getLogger("Galaxy.API")
 
@@ -58,9 +57,10 @@ logger = logging.getLogger("Galaxy.API")
 try:
     from core.nodes.node_fabric_registry import (  # noqa: F401
         CANONICAL_NODE_LIST_SURFACE_READS_FROM_REGISTRY_POLICY as _POLICY_LIST,
-        FILESYSTEM_SCAN_IS_NOT_NODE_MEMBERSHIP_AUTHORITY_POLICY as _POLICY_FS,
-        NODE_STATUS_CACHE_IS_NOT_CANONICAL_STATUS_SOURCE_POLICY as _POLICY_CACHE,
     )
+    from core.nodes.node_fabric_registry import FILESYSTEM_SCAN_IS_NOT_NODE_MEMBERSHIP_AUTHORITY_POLICY as _POLICY_FS
+    from core.nodes.node_fabric_registry import NODE_STATUS_CACHE_IS_NOT_CANONICAL_STATUS_SOURCE_POLICY as _POLICY_CACHE
+
     _CANONICAL_NODE_LIST_SURFACE_PR3_ALIGNED = True
 except ImportError:  # pragma: no cover
     _CANONICAL_NODE_LIST_SURFACE_PR3_ALIGNED = False
@@ -70,8 +70,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     """Create node and agent routes router."""
     router = APIRouter()
 
-    from core.scheduler import AutonomousScheduler
     from core.llm.route_authority import get_llm_route_authority
+    from core.scheduler import AutonomousScheduler
 
     scheduler = AutonomousScheduler(nodes_root)
     llm_router = get_llm_route_authority().execution_router
@@ -83,9 +83,10 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
     class AgentDeployRequest(BaseModel):
         """Agent 部署请求"""
-        target_device: str               # 目标设备 ID
-        instruction: str                  # 自然语言指令
-        execution_mode: str = "react"     # react / sequential / autonomous
+
+        target_device: str  # 目标设备 ID
+        instruction: str  # 自然语言指令
+        execution_mode: str = "react"  # react / sequential / autonomous
         tools: List[Dict[str, Any]] = []  # 工具声明 (可选, 默认使用设备标准工具)
         priority: str = "normal"
         timeout_seconds: int = 300
@@ -104,6 +105,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         nodes = []
         try:
             from core.nodes.node_fabric_registry import get_node_fabric_registry
+
             fab = get_node_fabric_registry()
             for node_info in sorted(fab.list_nodes(), key=lambda n: n.node_id):
                 # Supplement with static filesystem metadata (config.json) if present.
@@ -118,40 +120,31 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                         logger.debug(f"加载节点配置失败 {config_file}: {e}")
 
                 # Merge: registry metadata takes precedence; config.json fills gaps.
-                reg_meta: Dict[str, Any] = (
-                    node_info.metadata if isinstance(node_info.metadata, dict) else {}
+                reg_meta: Dict[str, Any] = node_info.metadata if isinstance(node_info.metadata, dict) else {}
+                nodes.append(
+                    {
+                        "name": node_info.node_id,
+                        "description": reg_meta.get("description", node_config.get("description", "")),
+                        "group": reg_meta.get("group", node_config.get("group", "")),
+                        "status": (
+                            node_info.status.value if hasattr(node_info.status, "value") else str(node_info.status)
+                        ),
+                        "capabilities": (node_info.capability_names() or node_config.get("capabilities", [])),
+                        "role": (node_info.role.value if hasattr(node_info.role, "value") else str(node_info.role)),
+                        "health_score": round(node_info.health_score(), 4),
+                        "registry_source": "canonical",
+                    }
                 )
-                nodes.append({
-                    "name": node_info.node_id,
-                    "description": reg_meta.get(
-                        "description", node_config.get("description", "")
-                    ),
-                    "group": reg_meta.get("group", node_config.get("group", "")),
-                    "status": (
-                        node_info.status.value
-                        if hasattr(node_info.status, "value")
-                        else str(node_info.status)
-                    ),
-                    "capabilities": (
-                        node_info.capability_names()
-                        or node_config.get("capabilities", [])
-                    ),
-                    "role": (
-                        node_info.role.value
-                        if hasattr(node_info.role, "value")
-                        else str(node_info.role)
-                    ),
-                    "health_score": round(node_info.health_score(), 4),
-                    "registry_source": "canonical",
-                })
         except Exception as e:
             logger.warning(f"list_nodes: NodeFabricRegistry unavailable: {e}")
 
-        return JSONResponse({
-            "nodes": nodes,
-            "total": len(nodes),
-            "registry_authority": "canonical:NodeFabricRegistry",
-        })
+        return JSONResponse(
+            {
+                "nodes": nodes,
+                "total": len(nodes),
+                "registry_authority": "canonical:NodeFabricRegistry",
+            }
+        )
 
     @router.get("/api/v1/nodes/roster")
     async def nodes_roster():
@@ -164,6 +157,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """
         try:
             from core.node_catalog import get_node_roster
+
             return JSONResponse(get_node_roster())
         except Exception as e:  # noqa: BLE001
             logger.warning("nodes_roster 失败: %s", e)
@@ -176,8 +170,10 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         try:
             if mode == "container":
                 from core.node_lifecycle import container_start_node
+
                 return JSONResponse(container_start_node(node))
             from core.node_lifecycle import start_node
+
             return JSONResponse(start_node(node))
         except Exception as e:  # noqa: BLE001
             return JSONResponse({"ok": False, "error": str(e)}, status_code=200)
@@ -188,8 +184,10 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         try:
             if mode == "container":
                 from core.node_lifecycle import container_stop_node
+
                 return JSONResponse(container_stop_node(node))
             from core.node_lifecycle import stop_node
+
             return JSONResponse(stop_node(node))
         except Exception as e:  # noqa: BLE001
             return JSONResponse({"ok": False, "error": str(e)}, status_code=200)
@@ -200,6 +198,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """列出连接器 + 状态(needs_config / disconnected / connected)+ 各自 redirect_uri。"""
         try:
             from core.oauth_connectors import list_connectors
+
             return JSONResponse(list_connectors())
         except Exception as e:  # noqa: BLE001
             return JSONResponse({"connectors": [], "error": str(e)}, status_code=200)
@@ -210,8 +209,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         try:
             body = await request.json()
             from core.oauth_connectors import set_credentials
-            return JSONResponse(set_credentials(
-                service, body.get("client_id", ""), body.get("client_secret", "")))
+
+            return JSONResponse(set_credentials(service, body.get("client_id", ""), body.get("client_secret", "")))
         except Exception as e:  # noqa: BLE001
             return JSONResponse({"ok": False, "error": str(e)}, status_code=200)
 
@@ -219,8 +218,10 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     async def connector_authorize(service: str):
         """一键授权:302 跳到服务的 OAuth 授权页(带 redirect_uri + state)。"""
         from fastapi.responses import RedirectResponse
+
         try:
             from core.oauth_connectors import build_authorize_url
+
             url, err = build_authorize_url(service)
             if err == "needs_config":
                 return JSONResponse({"ok": False, "error": "needs_config"}, status_code=200)
@@ -234,7 +235,9 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     async def connector_callback(service: str, code: str = "", state: str = ""):
         """OAuth 回调:用 code 换 token 存本机,返回一个可自动关闭的提示页。"""
         from fastapi.responses import HTMLResponse
+
         from core.oauth_connectors import handle_callback
+
         res = await handle_callback(service, code, state)
         ok = bool(res.get("ok"))
         account = res.get("account")
@@ -257,6 +260,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """断开连接(删本机 token)。"""
         try:
             from core.oauth_connectors import disconnect
+
             return JSONResponse(disconnect(service))
         except Exception as e:  # noqa: BLE001
             return JSONResponse({"ok": False, "error": str(e)}, status_code=200)
@@ -276,9 +280,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         if os.path.isdir(nodes_dir):
             for name in sorted(os.listdir(nodes_dir)):
                 node_dir = os.path.join(nodes_dir, name)
-                if os.path.isdir(node_dir) and os.path.exists(
-                    os.path.join(node_dir, "main.py")
-                ):
+                if os.path.isdir(node_dir) and os.path.exists(os.path.join(node_dir, "main.py")):
                     config_file = os.path.join(node_dir, "config.json")
                     node_config: Dict[str, Any] = {}
                     if os.path.exists(config_file):
@@ -287,27 +289,29 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                                 node_config = json.load(f)
                         except Exception as e:
                             logger.warning(f"加载节点配置失败 {config_file}: {e}")
-                    nodes.append({
-                        "name": name,
-                        "description": node_config.get("description", ""),
-                        "group": node_config.get("group", ""),
-                        "has_main": True,
-                        "has_fusion_entry": os.path.exists(
-                            os.path.join(node_dir, "fusion_entry.py")
-                        ),
-                        "capabilities": node_config.get("capabilities", []),
-                        "registry_source": "legacy_filesystem",
-                    })
+                    nodes.append(
+                        {
+                            "name": name,
+                            "description": node_config.get("description", ""),
+                            "group": node_config.get("group", ""),
+                            "has_main": True,
+                            "has_fusion_entry": os.path.exists(os.path.join(node_dir, "fusion_entry.py")),
+                            "capabilities": node_config.get("capabilities", []),
+                            "registry_source": "legacy_filesystem",
+                        }
+                    )
 
-        return JSONResponse({
-            "nodes": nodes,
-            "total": len(nodes),
-            "_compat_warning": (
-                "This endpoint lists nodes by filesystem presence only.  "
-                "It is NOT canonical runtime authority.  "
-                "Use /api/v1/nodes for canonical node list."
-            ),
-        })
+        return JSONResponse(
+            {
+                "nodes": nodes,
+                "total": len(nodes),
+                "_compat_warning": (
+                    "This endpoint lists nodes by filesystem presence only.  "
+                    "It is NOT canonical runtime authority.  "
+                    "Use /api/v1/nodes for canonical node list."
+                ),
+            }
+        )
 
     @router.get("/api/v1/nodes/{node_name}")
     async def get_node(node_name: str):
@@ -319,6 +323,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """
         try:
             from core.nodes.node_fabric_registry import get_node_fabric_registry
+
             fab = get_node_fabric_registry()
             node_info = fab.get(node_name)
         except Exception as e:
@@ -342,28 +347,22 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             except Exception as e:
                 logger.debug(f"加载节点配置失败 {config_file}: {e}")
 
-        return JSONResponse({
-            "name": node_info.node_id,
-            "status": (
-                node_info.status.value
-                if hasattr(node_info.status, "value")
-                else str(node_info.status)
-            ),
-            "role": (
-                node_info.role.value
-                if hasattr(node_info.role, "value")
-                else str(node_info.role)
-            ),
-            "health_score": round(node_info.health_score(), 4),
-            "capabilities": node_info.capability_names(),
-            "host": node_info.host,
-            "port": node_info.port,
-            "metadata": node_info.metadata if isinstance(node_info.metadata, dict) else {},
-            "config": node_config,
-            "has_fusion_entry": os.path.exists(os.path.join(node_dir, "fusion_entry.py")),
-            "has_dockerfile": os.path.exists(os.path.join(node_dir, "Dockerfile")),
-            "registry_source": "canonical",
-        })
+        return JSONResponse(
+            {
+                "name": node_info.node_id,
+                "status": (node_info.status.value if hasattr(node_info.status, "value") else str(node_info.status)),
+                "role": (node_info.role.value if hasattr(node_info.role, "value") else str(node_info.role)),
+                "health_score": round(node_info.health_score(), 4),
+                "capabilities": node_info.capability_names(),
+                "host": node_info.host,
+                "port": node_info.port,
+                "metadata": node_info.metadata if isinstance(node_info.metadata, dict) else {},
+                "config": node_config,
+                "has_fusion_entry": os.path.exists(os.path.join(node_dir, "fusion_entry.py")),
+                "has_dockerfile": os.path.exists(os.path.join(node_dir, "Dockerfile")),
+                "registry_source": "canonical",
+            }
+        )
 
     @router.post("/api/v1/agent/deploy")
     async def deploy_agent(req: AgentDeployRequest, auth: dict = Depends(require_auth)):
@@ -424,6 +423,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     async def autonomous_execute(req: AutonomousRequest, auth: dict = Depends(require_auth)):
         """自主调度接口：接收自然语言指令，自动规划并执行节点任务 (ReAct Loop)"""
         try:
+
             async def node_executor(node_id: str, action: str, params: dict):
                 # Route through the unified executor (PR-4 / PR-5) instead of
                 # calling _load_node / _execute_node directly.
@@ -442,11 +442,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             execution_context["executor"] = node_executor
 
             try:
-                plan_result = await scheduler.plan_and_execute(
-                    req.instruction,
-                    llm_router,
-                    execution_context
-                )
+                plan_result = await scheduler.plan_and_execute(req.instruction, llm_router, execution_context)
                 return plan_result
             except ValueError as ve:
                 logger.warning(f"LLM not configured, falling back to rule-based: {ve}")
@@ -461,7 +457,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                     return {
                         "success": True,
                         "reply": "已通过规则引擎唤醒所有设备 (请配置 LLM 以启用智能调度)",
-                        "steps": [{"action": "wake_up", "result": "success"}]
+                        "steps": [{"action": "wake_up", "result": "success"}],
                     }
                 raise HTTPException(status_code=500, detail="LLM not configured and no rule matched")
 
@@ -472,7 +468,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     # ─────── Agent Factory Unified API ─────────
 
     class AgentCreateRequest(BaseModel):
-        agent_type: str = "task"           # task / device / twin / fractal
+        agent_type: str = "task"  # task / device / twin / fractal
         task_description: str = ""
         template_name: str = ""
         device_id: str = ""
@@ -483,16 +479,20 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     async def list_agent_templates():
         """列出所有可用 Agent 模板"""
         from core.agent_factory import get_agent_factory
+
         factory = get_agent_factory(llm_router)
-        return JSONResponse({
-            "templates": factory.list_templates(),
-            "agent_types": ["task", "device", "twin", "fractal"],
-        })
+        return JSONResponse(
+            {
+                "templates": factory.list_templates(),
+                "agent_types": ["task", "device", "twin", "fractal"],
+            }
+        )
 
     @router.get("/api/v1/agent/status")
     async def agent_factory_status():
         """Agent 工厂状态"""
         from core.agent_factory import get_agent_factory
+
         factory = get_agent_factory(llm_router)
         return JSONResponse(factory.get_status())
 
@@ -500,6 +500,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     async def create_agent_unified(req: AgentCreateRequest, auth: dict = Depends(require_auth)):
         """统一 Agent 创建接口"""
         from core.agent_factory import get_agent_factory
+
         factory = get_agent_factory(llm_router)
         try:
             result = factory.create_unified(
@@ -525,7 +526,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             "action": req.action,
             "params": req.params,
             "status": "pending",
-            "created_at": datetime.now().isoformat()
+            "created_at": datetime.now().isoformat(),
         }
 
         task_queue[task_id]["status"] = "running"
@@ -540,25 +541,30 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         if invocation_result.success:
             task_queue[task_id]["status"] = "completed"
             task_queue[task_id]["result"] = invocation_result.result
-            return JSONResponse({
-                "success": True,
-                "task_id": task_id,
-                "request_id": invocation_result.request_id,
-                "trace_id": invocation_result.trace_id,
-                "result": invocation_result.result,
-                "duration_ms": invocation_result.duration_ms,
-            })
+            return JSONResponse(
+                {
+                    "success": True,
+                    "task_id": task_id,
+                    "request_id": invocation_result.request_id,
+                    "trace_id": invocation_result.trace_id,
+                    "result": invocation_result.result,
+                    "duration_ms": invocation_result.duration_ms,
+                }
+            )
         else:
             task_queue[task_id]["status"] = "failed"
             task_queue[task_id]["error"] = invocation_result.error
             logger.error(f"节点调用失败: {req.node_id}.{req.action}: {invocation_result.error}")
             status_code = 404 if "目录未找到" in (invocation_result.error or "") else 500
-            return JSONResponse({
-                "success": False,
-                "task_id": task_id,
-                "request_id": invocation_result.request_id,
-                "trace_id": invocation_result.trace_id,
-                "error": invocation_result.error,
-            }, status_code=status_code)
+            return JSONResponse(
+                {
+                    "success": False,
+                    "task_id": task_id,
+                    "request_id": invocation_result.request_id,
+                    "trace_id": invocation_result.trace_id,
+                    "error": invocation_result.error,
+                },
+                status_code=status_code,
+            )
 
     return router

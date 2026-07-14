@@ -558,8 +558,7 @@ def evaluate_canonical_dispatch_slot(
         )
     except Exception as exc:
         logger.warning(
-            "CanonicalDispatchSlotAuthority: evaluation error device_id=%r "
-            "mode=%r: %s",
+            "CanonicalDispatchSlotAuthority: evaluation error device_id=%r " "mode=%r: %s",
             device_id,
             execution_mode,
             exc,
@@ -675,7 +674,10 @@ def _evaluate_slot_impl(
     # validity, capability fit, and cross-device reachability.
     # ----------------------------------------------------------------
     require_cd = execution_mode in (
-        "cross_device", "handoff", "takeover", "wake_routed",
+        "cross_device",
+        "handoff",
+        "takeover",
+        "wake_routed",
     )
     gate_result = _eval_base_readiness_gate(
         device_id=device_id,
@@ -702,19 +704,15 @@ def _evaluate_slot_impl(
     dimensions["transport_readiness"] = gate_result.transport_alive
     dimensions["registration_validity"] = gate_result.registered and not gate_result.registration_gaps
     dimensions["attachment_validity"] = gate_result.attachment_state not in (
-        "detached", "replaced", "invalidated",
+        "detached",
+        "replaced",
+        "invalidated",
     )
-    dimensions["capability_fit"] = gate_result.status not in (
-        "blocked_capability",
-    )
-    dimensions["cross_device_reachability"] = gate_result.status not in (
-        "blocked_cross_device_eligibility",
-    )
+    dimensions["capability_fit"] = gate_result.status not in ("blocked_capability",)
+    dimensions["cross_device_reachability"] = gate_result.status not in ("blocked_cross_device_eligibility",)
 
     if not gate_result.dispatch_ready:
-        slot_status = _gate_status_map.get(
-            gate_result.status, CanonicalDispatchSlotStatus.SLOT_AUTHORITY_ERROR.value
-        )
+        slot_status = _gate_status_map.get(gate_result.status, CanonicalDispatchSlotStatus.SLOT_AUTHORITY_ERROR.value)
         # Identify which dimension blocked first
         blocking_dim = _infer_blocking_dimension_from_gate_status(gate_result.status)
         dimensions[blocking_dim] = False
@@ -747,10 +745,9 @@ def _evaluate_slot_impl(
         extra_context=continuity_context,
         authority_mode=authority_mode,
     )
-    dimensions["continuity_legality"] = (continuity_verdict == "allow")
+    dimensions["continuity_legality"] = continuity_verdict == "allow"
     if continuity_verdict in {"reject", "hard_reject"} or (
-        continuity_verdict == "require_review"
-        and _is_strict_authority_mode(authority_mode)
+        continuity_verdict == "require_review" and _is_strict_authority_mode(authority_mode)
     ):
         notes.extend(continuity_notes)
         return CanonicalDispatchSlot(
@@ -971,10 +968,7 @@ def _get_slots_impl(
             approved.append(slot)
         else:
             blocked.append(slot)
-            auth_notes.append(
-                f"device_id={device_id!r} blocked: "
-                f"status={slot.status!r} reason={slot.reason!r}"
-            )
+            auth_notes.append(f"device_id={device_id!r} blocked: " f"status={slot.status!r} reason={slot.reason!r}")
 
     can_proceed = len(approved) > 0
     block_reason = ""
@@ -985,10 +979,7 @@ def _get_slots_impl(
         )
         if blocked:
             first = blocked[0]
-            block_reason += (
-                f" First blocked device={first.device_id!r}: "
-                f"{first.reason!r}"
-            )
+            block_reason += f" First blocked device={first.device_id!r}: " f"{first.reason!r}"
 
     return CanonicalDispatchSlotsResult(
         execution_mode=execution_mode,
@@ -1017,6 +1008,7 @@ def _eval_base_readiness_gate(
     """Delegate to unified_dispatch_readiness_gate for dimensions 1–3, 5, 9."""
     try:
         from core.unified_dispatch_readiness_gate import evaluate_dispatch_readiness
+
         return evaluate_dispatch_readiness(
             device_id,
             required_capabilities=required_capabilities,
@@ -1027,8 +1019,7 @@ def _eval_base_readiness_gate(
         )
     except Exception as exc:
         logger.debug(
-            "CanonicalDispatchSlotAuthority: base gate unavailable for "
-            "device_id=%r: %s",
+            "CanonicalDispatchSlotAuthority: base gate unavailable for " "device_id=%r: %s",
             device_id,
             exc,
         )
@@ -1037,6 +1028,7 @@ def _eval_base_readiness_gate(
             DispatchReadinessResult,
             DispatchReadinessStatus,
         )
+
         return DispatchReadinessResult(
             device_id=device_id,
             dispatch_ready=False,
@@ -1086,11 +1078,7 @@ def _eval_continuity_legality(
 
         path = ContinuityLegalityPath.ONLINE_DISPATCH_ACCEPTANCE
 
-        _attach_id = (
-            runtime_attachment_session_id
-            or extra_context.get("runtime_attachment_session_id")
-            or ""
-        )
+        _attach_id = runtime_attachment_session_id or extra_context.get("runtime_attachment_session_id") or ""
         _durable_session_id = session_id or extra_context.get("session_id") or ""
         _runtime_sess_id = extra_context.get("runtime_session_id", "")
         _continuity_epoch = int(extra_context.get("continuity_epoch") or 0)
@@ -1113,13 +1101,14 @@ def _eval_continuity_legality(
         if hasattr(report, "dimension_outcomes"):
             for _dim, _outcome in (report.dimension_outcomes or {}).items():
                 if hasattr(_outcome, "is_rejected") and _outcome.is_rejected():
-                    notes.append(f"continuity_dim={_dim}: {_outcome.reason if hasattr(_outcome, 'reason') else 'rejected'}")
+                    notes.append(
+                        f"continuity_dim={_dim}: {_outcome.reason if hasattr(_outcome, 'reason') else 'rejected'}"
+                    )
         return verdict_str, notes
 
     except Exception as exc:
         logger.debug(
-            "CanonicalDispatchSlotAuthority: continuity legality check "
-            "unavailable for device_id=%r: %s",
+            "CanonicalDispatchSlotAuthority: continuity legality check " "unavailable for device_id=%r: %s",
             device_id,
             exc,
         )
@@ -1145,6 +1134,7 @@ def _eval_execution_mode_eligibility(
     notes: List[str] = []
     try:
         from core.device_readiness import get_device_readiness
+
         summary = get_device_readiness(device_id)
 
         # Mode-specific eligibility rules
@@ -1205,6 +1195,7 @@ def _eval_occupancy(
     notes: List[str] = []
     try:
         from core.device_pool_manager import get_device_pool_manager
+
         pool = get_device_pool_manager()
         if hasattr(pool, "is_device_occupied"):
             occupied = pool.is_device_occupied(device_id)
@@ -1214,8 +1205,7 @@ def _eval_occupancy(
         return True, notes
     except Exception as exc:
         logger.debug(
-            "CanonicalDispatchSlotAuthority: occupancy check unavailable for "
-            "device_id=%r: %s",
+            "CanonicalDispatchSlotAuthority: occupancy check unavailable for " "device_id=%r: %s",
             device_id,
             exc,
         )
@@ -1237,29 +1227,23 @@ def _eval_policy_allowance(
     notes: List[str] = []
     try:
         from core.device_policy import get_device_policy
+
         policy = get_device_policy(device_id)
         if policy is not None:
             if hasattr(policy, "dispatch_allowed"):
                 if not policy.dispatch_allowed:
-                    notes.append(
-                        f"device_policy: dispatch_allowed=False for "
-                        f"device_id={device_id!r}"
-                    )
+                    notes.append(f"device_policy: dispatch_allowed=False for " f"device_id={device_id!r}")
                     return False, notes
             if hasattr(policy, "disabled") and policy.disabled:
                 notes.append(f"device_policy: device is disabled device_id={device_id!r}")
                 return False, notes
             if hasattr(policy, "maintenance_mode") and policy.maintenance_mode:
-                notes.append(
-                    f"device_policy: device is in maintenance mode "
-                    f"device_id={device_id!r}"
-                )
+                notes.append(f"device_policy: device is in maintenance mode " f"device_id={device_id!r}")
                 return False, notes
         return True, notes
     except Exception as exc:
         logger.debug(
-            "CanonicalDispatchSlotAuthority: policy allowance check "
-            "unavailable for device_id=%r: %s",
+            "CanonicalDispatchSlotAuthority: policy allowance check " "unavailable for device_id=%r: %s",
             device_id,
             exc,
         )
@@ -1284,6 +1268,7 @@ def _eval_delegated_handoff_acceptability(
         from core.delegated_flow_acceptance_gate import (
             get_acceptance_gate,
         )
+
         gate = get_acceptance_gate()
         if hasattr(gate, "can_accept_delegated_dispatch"):
             can_accept = gate.can_accept_delegated_dispatch(device_id, execution_mode)

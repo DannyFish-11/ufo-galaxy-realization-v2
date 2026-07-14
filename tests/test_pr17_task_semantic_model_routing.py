@@ -43,7 +43,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 # ─────────────────────────── Group A — Sentinels ────────────────────────────
 
 
@@ -53,6 +52,7 @@ class TestSentinels:
     def test_a01_agent_kernel_task_hint_sentinel(self):
         """A01. AGENT_KERNEL_TASK_HINT_THREADED_PR17 sentinel exists in kernel.py."""
         from core.agent import kernel as kernel_mod
+
         assert hasattr(kernel_mod, "AGENT_KERNEL_TASK_HINT_THREADED_PR17"), (
             "AGENT_KERNEL_TASK_HINT_THREADED_PR17 sentinel must be present in "
             "core/agent/kernel.py to assert the PR-17 wiring is committed."
@@ -63,6 +63,7 @@ class TestSentinels:
     def test_a02_openclawd_multimodal_route_sentinel(self):
         """A02. TASK_SEMANTIC_MULTIMODAL_ROUTE_WIRED_PR17 sentinel exists in openclawd.py."""
         import core.openclawd as oc_mod
+
         assert hasattr(oc_mod, "TASK_SEMANTIC_MULTIMODAL_ROUTE_WIRED_PR17"), (
             "TASK_SEMANTIC_MULTIMODAL_ROUTE_WIRED_PR17 sentinel must be present "
             "in core/openclawd.py to assert the PR-17 multimodal wiring is committed."
@@ -99,6 +100,7 @@ def _make_mock_router(reply_content: str = "ok") -> MagicMock:
 def _make_kernel_with_router(router: Any):
     """Create an AgentKernel instance with a pre-set mock LLM router."""
     from core.agent.kernel import AgentKernel
+
     AgentKernel._instance = None
     kernel = AgentKernel()
     kernel._ensure_components()
@@ -128,9 +130,7 @@ class TestTextPathTaskHintThreading:
         call_kwargs = router.chat.call_args
         # chat() may be called positionally or by keyword
         all_kwargs: Dict[str, Any] = call_kwargs.kwargs
-        assert "task_type" in all_kwargs, (
-            "task_type must be forwarded to llm_router.chat() when task_hint is non-empty"
-        )
+        assert "task_type" in all_kwargs, "task_type must be forwarded to llm_router.chat() when task_hint is non-empty"
         assert all_kwargs["task_type"] == "CODING"
 
     @pytest.mark.asyncio
@@ -149,9 +149,7 @@ class TestTextPathTaskHintThreading:
 
         router.chat.assert_called_once()
         all_kwargs: Dict[str, Any] = router.chat.call_args.kwargs
-        assert "task_type" not in all_kwargs, (
-            "task_type must NOT be added to chat() kwargs when task_hint is empty"
-        )
+        assert "task_type" not in all_kwargs, "task_type must NOT be added to chat() kwargs when task_hint is empty"
 
     @pytest.mark.asyncio
     async def test_b03_default_task_hint_none_not_forwarded(self):
@@ -183,9 +181,7 @@ class TestTextPathTaskHintThreading:
 
         async def capturing_fallback(message, session_id, context, user_policy, task_hint="", **_kw):
             captured.append({"task_hint": task_hint})
-            return await original_fallback(
-                message, session_id, context, user_policy, task_hint=task_hint
-            )
+            return await original_fallback(message, session_id, context, user_policy, task_hint=task_hint)
 
         kernel._fallback_chat = capturing_fallback  # type: ignore[method-assign]
 
@@ -203,7 +199,7 @@ class TestTextPathTaskHintThreading:
     @pytest.mark.asyncio
     async def test_b05_process_passes_task_hint_to_handle_chat(self):
         """B05. _process passes intent.task_hint to _handle_chat in chat_only mode."""
-        from core.agent.intent_router import IntentResult, IntentMode
+        from core.agent.intent_router import IntentMode, IntentResult
 
         router = _make_mock_router()
         kernel = _make_kernel_with_router(router)
@@ -219,24 +215,24 @@ class TestTextPathTaskHintThreading:
         async def spy_handle_chat(message, session_id, context, user_policy, task_hint="", **_kw):
             captured_hint.append(task_hint)
             from core.agent.kernel import KernelResponse
+
             return KernelResponse(success=True, mode=IntentMode.CHAT_ONLY, reply="ok")
 
-        with patch.object(kernel._intent_router, "route",
-                          new_callable=AsyncMock, return_value=chat_intent), \
-             patch.object(kernel, "_handle_chat", side_effect=spy_handle_chat), \
-             patch("core.agent.kernel.get_agents", return_value=""), \
-             patch("core.agent.kernel.get_user", return_value=""):
+        with (
+            patch.object(kernel._intent_router, "route", new_callable=AsyncMock, return_value=chat_intent),
+            patch.object(kernel, "_handle_chat", side_effect=spy_handle_chat),
+            patch("core.agent.kernel.get_agents", return_value=""),
+            patch("core.agent.kernel.get_user", return_value=""),
+        ):
             await kernel._process("解释一下这个现象", "s1", "", "", "", [])
 
         assert len(captured_hint) == 1, "_handle_chat should be called once"
-        assert captured_hint[0] == "REASONING", (
-            "task_hint from IntentResult must be forwarded to _handle_chat"
-        )
+        assert captured_hint[0] == "REASONING", "task_hint from IntentResult must be forwarded to _handle_chat"
 
     @pytest.mark.asyncio
     async def test_b06_process_handles_empty_task_hint(self):
         """B06. _process does not crash when task_hint is empty string."""
-        from core.agent.intent_router import IntentResult, IntentMode
+        from core.agent.intent_router import IntentMode, IntentResult
 
         router = _make_mock_router()
         kernel = _make_kernel_with_router(router)
@@ -247,10 +243,11 @@ class TestTextPathTaskHintThreading:
             task_hint="",  # empty — typical chat_only case
         )
 
-        with patch.object(kernel._intent_router, "route",
-                          new_callable=AsyncMock, return_value=chat_intent), \
-             patch("core.agent.kernel.get_agents", return_value=""), \
-             patch("core.agent.kernel.get_user", return_value=""):
+        with (
+            patch.object(kernel._intent_router, "route", new_callable=AsyncMock, return_value=chat_intent),
+            patch("core.agent.kernel.get_agents", return_value=""),
+            patch("core.agent.kernel.get_user", return_value=""),
+        ):
             result = await kernel._process("你好", "s1", "", "", "", [])
 
         assert result.success is True
@@ -258,7 +255,7 @@ class TestTextPathTaskHintThreading:
     @pytest.mark.asyncio
     async def test_b07_task_hint_end_to_end(self):
         """B07. task_hint threading works end-to-end with a mock LLM router."""
-        from core.agent.intent_router import IntentResult, IntentMode
+        from core.agent.intent_router import IntentMode, IntentResult
 
         router = _make_mock_router(reply_content="分析结果")
         kernel = _make_kernel_with_router(router)
@@ -269,10 +266,11 @@ class TestTextPathTaskHintThreading:
             task_hint="ANALYSIS",
         )
 
-        with patch.object(kernel._intent_router, "route",
-                          new_callable=AsyncMock, return_value=chat_intent), \
-             patch("core.agent.kernel.get_agents", return_value=""), \
-             patch("core.agent.kernel.get_user", return_value=""):
+        with (
+            patch.object(kernel._intent_router, "route", new_callable=AsyncMock, return_value=chat_intent),
+            patch("core.agent.kernel.get_agents", return_value=""),
+            patch("core.agent.kernel.get_user", return_value=""),
+        ):
             result = await kernel._process("分析这份数据", "s1", "", "", "", [])
 
         assert result.success is True
@@ -289,6 +287,7 @@ class TestTextPathTaskHintThreading:
 def _make_openclawd_no_router() -> Any:
     """Build an OpenClawd instance whose _get_router() returns None."""
     from core.openclawd import OpenClawd
+
     oc = OpenClawd.__new__(OpenClawd)
     oc._initialized = True
     oc._get_router = MagicMock(return_value=None)
@@ -298,6 +297,7 @@ def _make_openclawd_no_router() -> Any:
 def _make_openclawd_with_router(route_decision: Any) -> Any:
     """Build an OpenClawd instance with a mock router that returns route_decision."""
     from core.openclawd import OpenClawd
+
     oc = OpenClawd.__new__(OpenClawd)
     oc._initialized = True
     mock_router = MagicMock()
@@ -306,9 +306,9 @@ def _make_openclawd_with_router(route_decision: Any) -> Any:
     return oc, mock_router
 
 
-def _make_routing_decision(provider: str = "test", model: str = "test-model",
-                            reason: str = "tier=1 test") -> Any:
+def _make_routing_decision(provider: str = "test", model: str = "test-model", reason: str = "tier=1 test") -> Any:
     from core.multi_llm_router import RoutingDecision
+
     return RoutingDecision(
         provider=provider,
         model=model,
@@ -323,15 +323,16 @@ class TestMultimodalRouteTaskType:
     def test_c01_method_accepts_task_type_parameter(self):
         """C01. _select_multimodal_route accepts task_type parameter without error."""
         import inspect
+
         from core.openclawd import OpenClawd
+
         sig = inspect.signature(OpenClawd._select_multimodal_route)
-        assert "task_type" in sig.parameters, (
-            "_select_multimodal_route must accept a task_type parameter (PR-17)"
-        )
+        assert "task_type" in sig.parameters, "_select_multimodal_route must accept a task_type parameter (PR-17)"
 
     def test_c02_valid_task_type_forwarded_to_router(self):
         """C02. When task_type is a valid TaskType value, it is forwarded to router."""
         from core.multi_llm_router import TaskType
+
         decision = _make_routing_decision()
         oc, mock_router = _make_openclawd_with_router(decision)
 
@@ -357,6 +358,7 @@ class TestMultimodalRouteTaskType:
     def test_c03_none_task_type_uses_general(self):
         """C03. When task_type is None, GENERAL is used as fallback."""
         from core.multi_llm_router import TaskType
+
         decision = _make_routing_decision()
         oc, mock_router = _make_openclawd_with_router(decision)
 
@@ -379,6 +381,7 @@ class TestMultimodalRouteTaskType:
     def test_c04_empty_string_task_type_uses_general(self):
         """C04. When task_type is empty string, GENERAL is used as fallback."""
         from core.multi_llm_router import TaskType
+
         decision = _make_routing_decision()
         oc, mock_router = _make_openclawd_with_router(decision)
 
@@ -401,6 +404,7 @@ class TestMultimodalRouteTaskType:
     def test_c05_unrecognised_task_type_uses_general(self):
         """C05. When task_type is unrecognised, GENERAL is used as fallback."""
         from core.multi_llm_router import TaskType
+
         decision = _make_routing_decision()
         oc, mock_router = _make_openclawd_with_router(decision)
 
@@ -455,17 +459,14 @@ class TestProcessTaskDerivation:
         into the _select_multimodal_route call site.
         """
         import pathlib
-        src = (
-            pathlib.Path(__file__).resolve().parent.parent / "core" / "openclawd.py"
-        ).read_text()
+
+        src = (pathlib.Path(__file__).resolve().parent.parent / "core" / "openclawd.py").read_text()
 
         # The PR-17 derivation block must be present
-        assert "_pr17_router.classify_task" in src or "classify_task(" in src, (
-            "process() must contain a classify_task() call for PR-17 task derivation"
-        )
-        assert "_pr17_task_type" in src, (
-            "process() must track the derived task type in _pr17_task_type"
-        )
+        assert (
+            "_pr17_router.classify_task" in src or "classify_task(" in src
+        ), "process() must contain a classify_task() call for PR-17 task derivation"
+        assert "_pr17_task_type" in src, "process() must track the derived task type in _pr17_task_type"
 
     def test_d02_classify_task_result_used_as_task_type(self):
         """D02. When classify_task succeeds, its .value is passed to _select_multimodal_route.
@@ -474,14 +475,12 @@ class TestProcessTaskDerivation:
         using the canonical pattern established by PR-17.
         """
         import pathlib
-        src = (
-            pathlib.Path(__file__).resolve().parent.parent / "core" / "openclawd.py"
-        ).read_text()
+
+        src = (pathlib.Path(__file__).resolve().parent.parent / "core" / "openclawd.py").read_text()
 
         # classify_task result .value is captured as _pr17_task_type
         assert "_pr17_task_type = _pr17_classified.value" in src, (
-            "process() must extract .value from classify_task() result "
-            "as _pr17_task_type for routing wiring (PR-17)"
+            "process() must extract .value from classify_task() result " "as _pr17_task_type for routing wiring (PR-17)"
         )
 
     def test_d03_select_multimodal_route_passes_task_type(self):
@@ -489,15 +488,13 @@ class TestProcessTaskDerivation:
         # This is a structural test ensuring the call from process() includes task_type.
         import pathlib
 
-        src = (
-            pathlib.Path(__file__).resolve().parent.parent / "core" / "openclawd.py"
-        ).read_text()
+        src = (pathlib.Path(__file__).resolve().parent.parent / "core" / "openclawd.py").read_text()
 
         # Verify that the call to _select_multimodal_route in process() now
         # includes task_type (present after PR-17 wiring).
-        assert "task_type=_pr17_task_type" in src, (
-            "process() must pass task_type=_pr17_task_type to _select_multimodal_route (PR-17)"
-        )
+        assert (
+            "task_type=_pr17_task_type" in src
+        ), "process() must pass task_type=_pr17_task_type to _select_multimodal_route (PR-17)"
 
 
 # ──────────────────────── Group E — Backward compat ─────────────────────────
@@ -544,8 +541,15 @@ class TestBackwardCompatibility:
 
     def test_e03_route_keys_present_regardless_of_task_type(self):
         """E03. route_type/provider/model keys present in result regardless of task_type."""
-        required_keys = {"route_type", "is_native_multimodal", "provider", "model",
-                         "route_reason", "fallback_reason", "active_modalities"}
+        required_keys = {
+            "route_type",
+            "is_native_multimodal",
+            "provider",
+            "model",
+            "route_reason",
+            "fallback_reason",
+            "active_modalities",
+        }
         oc = _make_openclawd_no_router()
 
         for task_type_val in [None, "", "CODING", "NOT_VALID_999"]:
@@ -559,6 +563,5 @@ class TestBackwardCompatibility:
                 )
             for key in required_keys:
                 assert key in result, (
-                    f"key '{key}' missing from _select_multimodal_route result "
-                    f"when task_type={task_type_val!r}"
+                    f"key '{key}' missing from _select_multimodal_route result " f"when task_type={task_type_val!r}"
                 )

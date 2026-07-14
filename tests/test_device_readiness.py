@@ -19,26 +19,25 @@ Coverage:
 
 from __future__ import annotations
 
-import sys
 import os
+import sys
 import unittest
 from dataclasses import asdict
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, PropertyMock, patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from core.device_readiness import (
-    ConnectionSummary,
-    RoutabilitySummary,
-    DeviceReadinessSummary,
     DEVICE_READINESS_AUTHORITY,
+    ConnectionSummary,
+    DeviceReadinessSummary,
+    RoutabilitySummary,
     get_connection_summary,
-    get_routability_summary,
-    get_device_readiness,
     get_cross_device_ready_devices,
+    get_device_readiness,
+    get_routability_summary,
     is_device_cross_device_ready,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -75,9 +74,15 @@ class TestConnectionSummaryModel(unittest.TestCase):
         cs = ConnectionSummary(device_id="dev1")
         d = cs.to_dict()
         for key in (
-            "device_id", "websocket_connected", "ucm_connected",
-            "router_present", "connection_state", "local_connection_id",
-            "last_heartbeat_at", "reasons", "sources",
+            "device_id",
+            "websocket_connected",
+            "ucm_connected",
+            "router_present",
+            "connection_state",
+            "local_connection_id",
+            "last_heartbeat_at",
+            "reasons",
+            "sources",
         ):
             self.assertIn(key, d, f"Missing key: {key}")
 
@@ -101,9 +106,16 @@ class TestRoutabilitySummaryModel(unittest.TestCase):
         rs = RoutabilitySummary(device_id="dev1")
         d = rs.to_dict()
         for key in (
-            "device_id", "direct_ws_available", "ucm_send_available",
-            "relay_available", "mesh_direct_available", "mesh_relay_available",
-            "effective_routable", "preferred_path", "reasons", "sources",
+            "device_id",
+            "direct_ws_available",
+            "ucm_send_available",
+            "relay_available",
+            "mesh_direct_available",
+            "mesh_relay_available",
+            "effective_routable",
+            "preferred_path",
+            "reasons",
+            "sources",
         ):
             self.assertIn(key, d, f"Missing key: {key}")
 
@@ -122,8 +134,16 @@ class TestDeviceReadinessSummaryModel(unittest.TestCase):
         drs.routability = RoutabilitySummary(device_id="dev1")
         d = drs.to_dict()
         for key in (
-            "device_id", "registered", "online", "connected", "routable",
-            "capability_ready", "connection", "routability", "reasons", "sources",
+            "device_id",
+            "registered",
+            "online",
+            "connected",
+            "routable",
+            "capability_ready",
+            "connection",
+            "routability",
+            "reasons",
+            "sources",
         ):
             self.assertIn(key, d, f"Missing key: {key}")
 
@@ -158,10 +178,12 @@ class TestGetDeviceReadinessRegisteredOnline(unittest.TestCase):
         mock_ucm.get_connection.return_value = conn_info
         mock_ucm.is_device_connected.return_value = True
 
-        with patch("core.device_readiness._get_udm", return_value=mock_udm), \
-             patch("core.device_readiness._get_ucm", return_value=mock_ucm), \
-             patch("core.device_readiness._get_gateway_ws_manager", return_value=None), \
-             patch("core.device_readiness._get_device_router", return_value=None):
+        with (
+            patch("core.device_readiness._get_udm", return_value=mock_udm),
+            patch("core.device_readiness._get_ucm", return_value=mock_ucm),
+            patch("core.device_readiness._get_gateway_ws_manager", return_value=None),
+            patch("core.device_readiness._get_device_router", return_value=None),
+        ):
             rs = get_device_readiness("dev-online")
 
         self.assertTrue(rs.registered, "Should be registered")
@@ -185,10 +207,12 @@ class TestGetDeviceReadinessRegisteredOnline(unittest.TestCase):
         mock_ucm.get_connection.return_value = None
         mock_ucm.is_device_connected.return_value = False
 
-        with patch("core.device_readiness._get_udm", return_value=mock_udm), \
-             patch("core.device_readiness._get_ucm", return_value=mock_ucm), \
-             patch("core.device_readiness._get_gateway_ws_manager", return_value=None), \
-             patch("core.device_readiness._get_device_router", return_value=None):
+        with (
+            patch("core.device_readiness._get_udm", return_value=mock_udm),
+            patch("core.device_readiness._get_ucm", return_value=mock_ucm),
+            patch("core.device_readiness._get_gateway_ws_manager", return_value=None),
+            patch("core.device_readiness._get_device_router", return_value=None),
+        ):
             rs = get_device_readiness("dev-caps")
 
         self.assertTrue(rs.capability_ready)
@@ -201,10 +225,12 @@ class TestGetDeviceReadinessRegisteredOnline(unittest.TestCase):
         mock_ucm.get_connection.return_value = None
         mock_ucm.is_device_connected.return_value = False
 
-        with patch("core.device_readiness._get_udm", return_value=mock_udm), \
-             patch("core.device_readiness._get_ucm", return_value=mock_ucm), \
-             patch("core.device_readiness._get_gateway_ws_manager", return_value=None), \
-             patch("core.device_readiness._get_device_router", return_value=None):
+        with (
+            patch("core.device_readiness._get_udm", return_value=mock_udm),
+            patch("core.device_readiness._get_ucm", return_value=mock_ucm),
+            patch("core.device_readiness._get_gateway_ws_manager", return_value=None),
+            patch("core.device_readiness._get_device_router", return_value=None),
+        ):
             rs = get_device_readiness("dev-nocaps")
 
         self.assertFalse(rs.capability_ready)
@@ -217,10 +243,12 @@ class TestGetDeviceReadinessRegisteredOnline(unittest.TestCase):
         mock_ucm.get_connection.return_value = None
         mock_ucm.is_device_connected.return_value = False
 
-        with patch("core.device_readiness._get_udm", return_value=mock_udm), \
-             patch("core.device_readiness._get_ucm", return_value=mock_ucm), \
-             patch("core.device_readiness._get_gateway_ws_manager", return_value=None), \
-             patch("core.device_readiness._get_device_router", return_value=None):
+        with (
+            patch("core.device_readiness._get_udm", return_value=mock_udm),
+            patch("core.device_readiness._get_ucm", return_value=mock_ucm),
+            patch("core.device_readiness._get_gateway_ws_manager", return_value=None),
+            patch("core.device_readiness._get_device_router", return_value=None),
+        ):
             rs = get_device_readiness("dev-src")
 
         self.assertIn("udm", rs.sources)
@@ -238,10 +266,12 @@ class TestGetDeviceReadinessMissingDevice(unittest.TestCase):
         mock_udm = MagicMock()
         mock_udm.get_device.return_value = None
 
-        with patch("core.device_readiness._get_udm", return_value=mock_udm), \
-             patch("core.device_readiness._get_ucm", return_value=None), \
-             patch("core.device_readiness._get_gateway_ws_manager", return_value=None), \
-             patch("core.device_readiness._get_device_router", return_value=None):
+        with (
+            patch("core.device_readiness._get_udm", return_value=mock_udm),
+            patch("core.device_readiness._get_ucm", return_value=None),
+            patch("core.device_readiness._get_gateway_ws_manager", return_value=None),
+            patch("core.device_readiness._get_device_router", return_value=None),
+        ):
             rs = get_device_readiness("nonexistent-device")
 
         self.assertFalse(rs.registered)
@@ -255,19 +285,23 @@ class TestGetDeviceReadinessMissingDevice(unittest.TestCase):
         mock_ucm.get_connection.return_value = None
         mock_ucm.is_device_connected.return_value = False
 
-        with patch("core.device_readiness._get_udm", return_value=mock_udm), \
-             patch("core.device_readiness._get_ucm", return_value=mock_ucm), \
-             patch("core.device_readiness._get_gateway_ws_manager", return_value=None), \
-             patch("core.device_readiness._get_device_router", return_value=None):
+        with (
+            patch("core.device_readiness._get_udm", return_value=mock_udm),
+            patch("core.device_readiness._get_ucm", return_value=mock_ucm),
+            patch("core.device_readiness._get_gateway_ws_manager", return_value=None),
+            patch("core.device_readiness._get_device_router", return_value=None),
+        ):
             rs = get_device_readiness("ghost-device")
 
         self.assertFalse(rs.connected)
 
     def test_udm_unavailable_returns_not_registered(self):
-        with patch("core.device_readiness._get_udm", return_value=None), \
-             patch("core.device_readiness._get_ucm", return_value=None), \
-             patch("core.device_readiness._get_gateway_ws_manager", return_value=None), \
-             patch("core.device_readiness._get_device_router", return_value=None):
+        with (
+            patch("core.device_readiness._get_udm", return_value=None),
+            patch("core.device_readiness._get_ucm", return_value=None),
+            patch("core.device_readiness._get_gateway_ws_manager", return_value=None),
+            patch("core.device_readiness._get_device_router", return_value=None),
+        ):
             rs = get_device_readiness("any-device")
 
         self.assertFalse(rs.registered)
@@ -283,9 +317,11 @@ class TestConnectionSummaryDegradation(unittest.TestCase):
     """Connection sub-summary degrades gracefully when subsystems unavailable."""
 
     def test_ucm_unavailable_records_reason(self):
-        with patch("core.device_readiness._get_ucm", return_value=None), \
-             patch("core.device_readiness._get_gateway_ws_manager", return_value=None), \
-             patch("core.device_readiness._get_device_router", return_value=None):
+        with (
+            patch("core.device_readiness._get_ucm", return_value=None),
+            patch("core.device_readiness._get_gateway_ws_manager", return_value=None),
+            patch("core.device_readiness._get_device_router", return_value=None),
+        ):
             cs = get_connection_summary("dev-x")
 
         self.assertFalse(cs.ucm_connected)
@@ -295,9 +331,11 @@ class TestConnectionSummaryDegradation(unittest.TestCase):
         mock_ucm = MagicMock()
         mock_ucm.get_connection.side_effect = RuntimeError("db error")
 
-        with patch("core.device_readiness._get_ucm", return_value=mock_ucm), \
-             patch("core.device_readiness._get_gateway_ws_manager", return_value=None), \
-             patch("core.device_readiness._get_device_router", return_value=None):
+        with (
+            patch("core.device_readiness._get_ucm", return_value=mock_ucm),
+            patch("core.device_readiness._get_gateway_ws_manager", return_value=None),
+            patch("core.device_readiness._get_device_router", return_value=None),
+        ):
             cs = get_connection_summary("dev-err")
 
         self.assertFalse(cs.ucm_connected)
@@ -305,10 +343,12 @@ class TestConnectionSummaryDegradation(unittest.TestCase):
 
     def test_no_ucm_no_crash(self):
         """Full get_device_readiness must not raise even when all subsystems absent."""
-        with patch("core.device_readiness._get_udm", return_value=None), \
-             patch("core.device_readiness._get_ucm", return_value=None), \
-             patch("core.device_readiness._get_gateway_ws_manager", return_value=None), \
-             patch("core.device_readiness._get_device_router", return_value=None):
+        with (
+            patch("core.device_readiness._get_udm", return_value=None),
+            patch("core.device_readiness._get_ucm", return_value=None),
+            patch("core.device_readiness._get_gateway_ws_manager", return_value=None),
+            patch("core.device_readiness._get_device_router", return_value=None),
+        ):
             rs = get_device_readiness("isolated-device")
 
         self.assertIsInstance(rs, DeviceReadinessSummary)
@@ -317,9 +357,11 @@ class TestConnectionSummaryDegradation(unittest.TestCase):
         mock_gw = MagicMock()
         mock_gw.get_connected_devices.side_effect = RuntimeError("gw crash")
 
-        with patch("core.device_readiness._get_ucm", return_value=None), \
-             patch("core.device_readiness._get_gateway_ws_manager", return_value=mock_gw), \
-             patch("core.device_readiness._get_device_router", return_value=None):
+        with (
+            patch("core.device_readiness._get_ucm", return_value=None),
+            patch("core.device_readiness._get_gateway_ws_manager", return_value=mock_gw),
+            patch("core.device_readiness._get_device_router", return_value=None),
+        ):
             cs = get_connection_summary("gw-err-device")
 
         self.assertIsInstance(cs, ConnectionSummary)
@@ -329,16 +371,20 @@ class TestRoutabilitySummaryDegradation(unittest.TestCase):
     """Routability sub-summary degrades gracefully."""
 
     def test_ucm_unavailable_records_reason(self):
-        with patch("core.device_readiness._get_ucm", return_value=None), \
-             patch("core.device_readiness._get_gateway_ws_manager", return_value=None):
+        with (
+            patch("core.device_readiness._get_ucm", return_value=None),
+            patch("core.device_readiness._get_gateway_ws_manager", return_value=None),
+        ):
             rs = get_routability_summary("dev-r")
 
         self.assertIn("ucm_unavailable", rs.reasons)
 
     def test_relay_present_makes_routable(self):
         """When proxy_relay module is importable, relay path is available."""
-        with patch("core.device_readiness._get_ucm", return_value=None), \
-             patch("core.device_readiness._get_gateway_ws_manager", return_value=None):
+        with (
+            patch("core.device_readiness._get_ucm", return_value=None),
+            patch("core.device_readiness._get_gateway_ws_manager", return_value=None),
+        ):
             rs = get_routability_summary("dev-relay")
 
         # proxy_relay exists in this codebase
@@ -351,12 +397,17 @@ class TestRoutabilitySummaryDegradation(unittest.TestCase):
         mock_ucm = MagicMock()
         mock_ucm.get_connection.return_value = None
 
-        with patch("core.device_readiness._get_ucm", return_value=mock_ucm), \
-             patch("core.device_readiness._get_gateway_ws_manager", return_value=None), \
-             patch.dict("sys.modules", {
-                 "core.proxy_relay": None,
-                 "core.mesh_coordinator": None,
-             }):
+        with (
+            patch("core.device_readiness._get_ucm", return_value=mock_ucm),
+            patch("core.device_readiness._get_gateway_ws_manager", return_value=None),
+            patch.dict(
+                "sys.modules",
+                {
+                    "core.proxy_relay": None,
+                    "core.mesh_coordinator": None,
+                },
+            ),
+        ):
             rs = get_routability_summary("dev-no-path")
 
         self.assertFalse(rs.direct_ws_available)
@@ -399,8 +450,10 @@ class TestGetCrossDeviceReadyDevices(unittest.TestCase):
             mock_udm.list_devices.return_value = [device]
 
             not_ready_rs = self._build_not_ready_rs(dev_id, **{missing_flag: False})
-            with patch("core.device_readiness._get_udm", return_value=mock_udm), \
-                 patch("core.device_readiness.get_device_readiness", return_value=not_ready_rs):
+            with (
+                patch("core.device_readiness._get_udm", return_value=mock_udm),
+                patch("core.device_readiness.get_device_readiness", return_value=not_ready_rs),
+            ):
                 result = get_cross_device_ready_devices()
             self.assertEqual(result, [], f"Should be empty when {missing_flag}=False")
 
@@ -416,8 +469,10 @@ class TestGetCrossDeviceReadyDevices(unittest.TestCase):
         def _fake_readiness(device_id):
             return ready_a if device_id == "dev-a" else not_ready_b
 
-        with patch("core.device_readiness._get_udm", return_value=mock_udm), \
-             patch("core.device_readiness.get_device_readiness", side_effect=_fake_readiness):
+        with (
+            patch("core.device_readiness._get_udm", return_value=mock_udm),
+            patch("core.device_readiness.get_device_readiness", side_effect=_fake_readiness),
+        ):
             result = get_cross_device_ready_devices()
 
         device_ids = [rs.device_id for rs in result]
@@ -450,8 +505,10 @@ class TestGetCrossDeviceReadyDevices(unittest.TestCase):
                 raise RuntimeError("per-device crash")
             return ready_a
 
-        with patch("core.device_readiness._get_udm", return_value=mock_udm), \
-             patch("core.device_readiness.get_device_readiness", side_effect=_fake_readiness):
+        with (
+            patch("core.device_readiness._get_udm", return_value=mock_udm),
+            patch("core.device_readiness.get_device_readiness", side_effect=_fake_readiness),
+        ):
             result = get_cross_device_ready_devices()
 
         self.assertEqual(len(result), 1)

@@ -68,43 +68,43 @@ Public surface:
   - get_continuum_metrics    (singleton accessor)
 """
 
+from core.continuum.config import (
+    DEFAULT_CONTINUUM_CONFIG,
+    ContinuumConfig,
+    DwellConfig,
+    FeatureFlags,
+    HysteresisConfig,
+)
+from core.continuum.decision_gate import DecisionGate
+from core.continuum.expression_engine import ExpressionEngine
+from core.continuum.human_field import HumanFieldInferrer, InteractionRhythm
+from core.continuum.liminal_field import LiminalFieldEngine, LiminalMetrics
+from core.continuum.metrics import ContinuumMetrics, get_continuum_metrics
+from core.continuum.orchestrator import ContinuumOrchestrator
+from core.continuum.return_engine import ReturnAction, ReturnEngine, ReturnResult, ReturnTrigger
+from core.continuum.state_fusion import StateFusion
+from core.continuum.temporal_engine import (
+    DwellGuard,
+    HysteresisGate,
+    TemporalEngine,
+    apply_decay,
+    apply_ema,
+    apply_rate_limit,
+)
 from core.continuum.types import (
-    TriStatePhase,
+    ActionLevel,
     ContinuumPhase,
-    RuntimeDomain,
-    continuum_to_tri_state,
-    HumanFieldState,
-    UnifiedState,
     ContinuumState,
     DecisionState,
     ExpressionState,
-    ActionLevel,
     FormSignature,
+    HumanFieldState,
+    RuntimeDomain,
     SpatialPresence,
+    TriStatePhase,
+    UnifiedState,
+    continuum_to_tri_state,
 )
-from core.continuum.config import (
-    ContinuumConfig,
-    HysteresisConfig,
-    DwellConfig,
-    FeatureFlags,
-    DEFAULT_CONTINUUM_CONFIG,
-)
-from core.continuum.temporal_engine import (
-    TemporalEngine,
-    HysteresisGate,
-    DwellGuard,
-    apply_ema,
-    apply_rate_limit,
-    apply_decay,
-)
-from core.continuum.human_field import HumanFieldInferrer, InteractionRhythm
-from core.continuum.state_fusion import StateFusion
-from core.continuum.liminal_field import LiminalFieldEngine, LiminalMetrics
-from core.continuum.decision_gate import DecisionGate
-from core.continuum.return_engine import ReturnEngine, ReturnTrigger, ReturnAction, ReturnResult
-from core.continuum.expression_engine import ExpressionEngine
-from core.continuum.orchestrator import ContinuumOrchestrator
-from core.continuum.metrics import ContinuumMetrics, get_continuum_metrics
 
 __all__ = [
     # Public tri-state (use for external APIs/docs)

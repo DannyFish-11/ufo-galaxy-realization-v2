@@ -32,6 +32,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """统一记忆层状态：启用了哪些后端(vector/clip/clap/omni)、是否在线。"""
         try:
             from core.memory import get_unified_memory
+
             um = get_unified_memory()
             return {
                 "success": True,
@@ -54,7 +55,9 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """
         try:
             import asyncio
+
             from core.memory.android_backflow import get_android_backflow
+
             # store() 含落盘 + 汇入统一记忆(首次可能触发嵌入模型加载)，放线程池避免阻塞事件循环
             saved = await asyncio.to_thread(get_android_backflow().store, body or {})
             return JSONResponse({"success": True, "task_id": saved.get("task_id")})
@@ -70,6 +73,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """
         try:
             from core.memory.android_backflow import get_android_backflow
+
             entry = get_android_backflow().get(task_id)
             if entry is None:
                 return JSONResponse(
@@ -92,17 +96,20 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """
         try:
             from core.task_memory import get_task_memory
+
             mem = get_task_memory()
             summaries = mem.get_recent_summaries(
                 n=min(n, 100),
                 task_type=task_type or None,
             )
-            return JSONResponse({
-                "success": True,
-                "count": len(summaries),
-                "task_type_filter": task_type,
-                "summaries": [s.to_dict() for s in summaries],
-            })
+            return JSONResponse(
+                {
+                    "success": True,
+                    "count": len(summaries),
+                    "task_type_filter": task_type,
+                    "summaries": [s.to_dict() for s in summaries],
+                }
+            )
         except Exception as e:
             logger.warning("memory_get_recent_tasks error: %s", e)
             return JSONResponse({"success": False, "error": str(e)}, status_code=500)
@@ -112,6 +119,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """获取任务记忆统计信息（C阶段 4B）。"""
         try:
             from core.task_memory import get_task_memory
+
             mem = get_task_memory()
             return JSONResponse({"success": True, **mem.get_stats()})
         except Exception as e:
@@ -129,17 +137,20 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """
         try:
             from core.task_memory import get_task_memory
+
             mem = get_task_memory()
             records = mem.query_cold_storage(
                 n=min(n, 500),
                 task_type=task_type or None,
             )
-            return JSONResponse({
-                "success": True,
-                "count": len(records),
-                "task_type_filter": task_type,
-                "records": [r.to_dict() for r in records],
-            })
+            return JSONResponse(
+                {
+                    "success": True,
+                    "count": len(records),
+                    "task_type_filter": task_type,
+                    "records": [r.to_dict() for r in records],
+                }
+            )
         except Exception as e:
             logger.warning("memory_query_cold error: %s", e)
             return JSONResponse({"success": False, "error": str(e)}, status_code=500)
@@ -151,6 +162,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """获取当前漂移检测配置（G6）。"""
         try:
             from core.task_memory import get_task_memory
+
             mem = get_task_memory()
             cfg = mem.get_drift_config()
             return JSONResponse({"success": True, **cfg})
@@ -168,6 +180,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """
         try:
             from core.task_memory import get_task_memory
+
             mem = get_task_memory()
             threshold = body.get("threshold", mem.get_drift_config()["threshold"])
             action = body.get("action", mem.get_drift_config()["action"])
@@ -202,6 +215,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """
         try:
             from core.task_memory import get_task_memory
+
             mem = get_task_memory()
 
             task_key = body.get("task_key", "")
@@ -231,12 +245,15 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """获取最近 N 条工具调用守护审计日志（C阶段 2C）。"""
         try:
             from core.tool_guardian import get_guardian_audit_log
+
             entries = get_guardian_audit_log(n=min(n, 200))
-            return JSONResponse({
-                "success": True,
-                "count": len(entries),
-                "entries": entries,
-            })
+            return JSONResponse(
+                {
+                    "success": True,
+                    "count": len(entries),
+                    "entries": entries,
+                }
+            )
         except Exception as e:
             logger.warning("guardian_get_audit_log error: %s", e)
             return JSONResponse({"success": False, "error": str(e)}, status_code=500)
@@ -248,11 +265,14 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """获取任务类型 → 执行策略映射表（C阶段 3B）。"""
         try:
             from core.agent.execution_planner import TASK_TYPE_STRATEGY_MAP
-            return JSONResponse({
-                "success": True,
-                "mappings": TASK_TYPE_STRATEGY_MAP,
-                "available_strategies": ["single", "specialized", "swarm", "fractal"],
-            })
+
+            return JSONResponse(
+                {
+                    "success": True,
+                    "mappings": TASK_TYPE_STRATEGY_MAP,
+                    "available_strategies": ["single", "specialized", "swarm", "fractal"],
+                }
+            )
         except Exception as e:
             logger.warning("strategy_get_mappings error: %s", e)
             return JSONResponse({"success": False, "error": str(e)}, status_code=500)

@@ -100,7 +100,6 @@ from typing import Any, Dict, Optional
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -110,6 +109,7 @@ def _import_ui_surface_authority():
     """Import core.ui_surface_authority, skipping if unavailable."""
     try:
         import core.ui_surface_authority as m
+
         return m
     except ImportError as exc:
         pytest.skip(f"core.ui_surface_authority not importable: {exc}")
@@ -119,6 +119,7 @@ def _import_legacy_paths():
     """Import core.orchestration_authority.legacy_paths, skipping if unavailable."""
     try:
         import core.orchestration_authority.legacy_paths as m
+
         return m
     except ImportError as exc:
         pytest.skip(f"core.orchestration_authority.legacy_paths not importable: {exc}")
@@ -128,6 +129,7 @@ def _import_projection_reader():
     """Import windows_client.status_board_v2.projection_reader."""
     try:
         import windows_client.status_board_v2.projection_reader as m
+
         return m
     except ImportError as exc:
         pytest.skip(f"windows_client.status_board_v2.projection_reader not importable: {exc}")
@@ -137,6 +139,7 @@ def _import_status_board_v2_init():
     """Import windows_client.status_board_v2 package."""
     try:
         import windows_client.status_board_v2 as m
+
         return m
     except ImportError as exc:
         pytest.skip(f"windows_client.status_board_v2 not importable: {exc}")
@@ -184,6 +187,7 @@ class TestUISurfaceRoleEnum:
 class TestUISurfaceEntryDataclass:
     def test_05_entry_is_dataclass(self):
         import dataclasses
+
         m = _import_ui_surface_authority()
         assert dataclasses.is_dataclass(m.UISurfaceEntry)
 
@@ -205,8 +209,15 @@ class TestUISurfaceEntryDataclass:
             description="test",
         )
         result = entry.to_dict()
-        for key in ("surface_path", "role", "description", "canonical_contract",
-                    "superseded_by", "pr_demoted", "notes"):
+        for key in (
+            "surface_path",
+            "role",
+            "description",
+            "canonical_contract",
+            "superseded_by",
+            "pr_demoted",
+            "notes",
+        ):
             assert key in result, f"Missing key: {key}"
 
     def test_66_dashboard_entry_to_dict_role(self):
@@ -488,14 +499,18 @@ class TestLegacyPathsPR8Entries:
 
     def test_73_pr8_entries_have_correct_guardrail_pr(self):
         m = _import_legacy_paths()
-        for path in ("dashboard.backend.main", "dashboard",
-                     "windows_client.main", "windows_client.status_board",
-                     "windows_client"):
+        for path in (
+            "dashboard.backend.main",
+            "dashboard",
+            "windows_client.main",
+            "windows_client.status_board",
+            "windows_client",
+        ):
             entry = m.get_legacy_entry(path)
             assert entry is not None, f"Missing entry for {path}"
-            assert entry.pr_guardrail_added == "PR-mainline-closure", (
-                f"{path} pr_guardrail_added={entry.pr_guardrail_added}"
-            )
+            assert (
+                entry.pr_guardrail_added == "PR-mainline-closure"
+            ), f"{path} pr_guardrail_added={entry.pr_guardrail_added}"
 
     def test_74_legacy_orchestrator_paths_updated(self):
         m = _import_legacy_paths()
@@ -510,6 +525,7 @@ class TestLegacyGuardrailEmitter:
     # 跟踪,控制台不再刷屏);且 trace_id 必须出现在日志里(可回溯具体请求)。
     def test_51_guardrail_emitter_dashboard(self, caplog):
         import logging
+
         m = _import_legacy_paths()
         with caplog.at_level(logging.DEBUG, logger="Galaxy.OrchestrationAuthority"):
             m.emit_legacy_guardrail("dashboard.backend.main", trace_id="test-trace-001")
@@ -519,6 +535,7 @@ class TestLegacyGuardrailEmitter:
 
     def test_52_guardrail_emitter_windows_client(self, caplog):
         import logging
+
         m = _import_legacy_paths()
         with caplog.at_level(logging.DEBUG, logger="Galaxy.OrchestrationAuthority"):
             m.emit_legacy_guardrail("windows_client.main", trace_id="test-trace-002")
@@ -550,31 +567,33 @@ class TestPR7EntriesUnchanged:
 class TestModuleDocstrings:
     def test_54_dashboard_package_deleted(self):
         import pathlib
+
         path = pathlib.Path(__file__).parent.parent / "dashboard"
         assert not path.exists()
 
     def test_55_windows_client_init_docstring_contains_legacy(self):
         import pathlib
+
         path = pathlib.Path(__file__).parent.parent / "windows_client" / "__init__.py"
         text = path.read_text(encoding="utf-8")
         assert "HOST-SPECIFIC LEGACY SHELL" in text
 
     def test_56_status_board_file_deleted(self):
         import pathlib
-        path = (pathlib.Path(__file__).parent.parent
-                / "windows_client" / "status_board.py")
+
+        path = pathlib.Path(__file__).parent.parent / "windows_client" / "status_board.py"
         assert not path.exists()
 
     def test_56b_status_board_v2_package_remains(self):
         import pathlib
-        path = (pathlib.Path(__file__).parent.parent
-                / "windows_client" / "status_board_v2" / "__init__.py")
+
+        path = pathlib.Path(__file__).parent.parent / "windows_client" / "status_board_v2" / "__init__.py"
         assert path.exists()
 
     def test_56c_dashboard_backend_main_deleted(self):
         import pathlib
-        path = (pathlib.Path(__file__).parent.parent
-                / "dashboard" / "backend" / "main.py")
+
+        path = pathlib.Path(__file__).parent.parent / "dashboard" / "backend" / "main.py"
         assert not path.exists()
 
 
@@ -589,6 +608,7 @@ class TestStatusBoardV2ProjectionDriven:
         """status_board.py uses /api/v1/continuum/state; status_board_v2 must not."""
         m = _import_projection_reader()
         import inspect
+
         src = inspect.getsource(m)
         # The reader should reference projection/runtime, not continuum/state
         assert "/api/v1/continuum/state" not in src
@@ -596,8 +616,10 @@ class TestStatusBoardV2ProjectionDriven:
     def test_59_status_board_v2_init_documents_read_only(self):
         m = _import_status_board_v2_init()
         import inspect
+
         src = inspect.getfile(m)
         import pathlib
+
         init_path = pathlib.Path(src).parent / "__init__.py"
         text = init_path.read_text(encoding="utf-8")
         assert "READ-ONLY" in text or "read-only" in text.lower()
@@ -634,33 +656,25 @@ class TestAdditionalInvariants:
         m = _import_ui_surface_authority()
         reg = m.get_ui_surface_authority()
         for entry in reg.projection_driven_surfaces():
-            assert entry.canonical_contract, (
-                f"Missing canonical_contract for {entry.surface_path}"
-            )
+            assert entry.canonical_contract, f"Missing canonical_contract for {entry.surface_path}"
 
     def test_72_legacy_surfaces_have_superseded_by(self):
         m = _import_ui_surface_authority()
         reg = m.get_ui_surface_authority()
         for entry in reg.legacy_surfaces():
-            assert entry.superseded_by, (
-                f"Missing superseded_by for legacy {entry.surface_path}"
-            )
+            assert entry.superseded_by, f"Missing superseded_by for legacy {entry.surface_path}"
 
     def test_33_pr8_entries_have_pr_demoted(self):
         m = _import_ui_surface_authority()
         reg = m.get_ui_surface_authority()
         for entry in reg.legacy_surfaces():
-            assert entry.pr_demoted == "PR-8", (
-                f"Wrong pr_demoted for {entry.surface_path}: {entry.pr_demoted}"
-            )
+            assert entry.pr_demoted == "PR-8", f"Wrong pr_demoted for {entry.surface_path}: {entry.pr_demoted}"
 
     def test_34_projection_driven_has_no_pr_demoted(self):
         m = _import_ui_surface_authority()
         reg = m.get_ui_surface_authority()
         for entry in reg.projection_driven_surfaces():
-            assert entry.pr_demoted is None, (
-                f"Unexpected pr_demoted on {entry.surface_path}: {entry.pr_demoted}"
-            )
+            assert entry.pr_demoted is None, f"Unexpected pr_demoted on {entry.surface_path}: {entry.pr_demoted}"
 
     def test_35_public_registry_dict_matches_registry(self):
         m = _import_ui_surface_authority()

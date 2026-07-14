@@ -729,9 +729,7 @@ PARTICIPANT_CONCRETE_IMPLEMENTATION_REGISTRY: Dict[str, Dict[str, Any]] = {
         ),
     },
     "dispatch_binding": {
-        "generic_interface": (
-            "ParticipantDispatchBindingState + ParticipantDispatchBindingSignal"
-        ),
+        "generic_interface": ("ParticipantDispatchBindingState + ParticipantDispatchBindingSignal"),
         "concrete_module": "core.android_runtime_dispatch_binding",
         "concrete_state_class": "AndroidRuntimeBindingState",
         "concrete_signal_class": "AndroidRuntimeBindingSignal",

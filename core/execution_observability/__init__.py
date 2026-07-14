@@ -38,10 +38,10 @@ Normalizers (``core.execution_observability.normalizers``)
     unified schemas above.
 """
 
+from .event_schema import ExecutionEvent
 from .executor_level import ExecutorLevel
 from .fallback_schema import FallbackContext, FallbackReason
 from .trace_schema import TraceCorrelation
-from .event_schema import ExecutionEvent
 
 __all__ = [
     "ExecutorLevel",

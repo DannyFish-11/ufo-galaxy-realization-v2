@@ -23,8 +23,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import List, Optional
 
-from .plane_kind import PlaneKind
 from .message_kind import MessageKind
+from .plane_kind import PlaneKind
 
 
 @dataclass(frozen=True)

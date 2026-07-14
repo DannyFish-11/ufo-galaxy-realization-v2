@@ -30,11 +30,13 @@ sys.path.insert(0, PROJECT_ROOT)
 # 1. UnifiedChatResponse 格式测试
 # ============================================================================
 
+
 class TestUnifiedChatResponse:
     """验证统一响应模型的字段和序列化"""
 
     def test_default_fields(self):
         from core.unified_response import UnifiedChatResponse
+
         resp = UnifiedChatResponse(success=True, response="hello")
         d = resp.to_json_response()
         assert d["success"] is True
@@ -51,6 +53,7 @@ class TestUnifiedChatResponse:
 
     def test_full_fields(self):
         from core.unified_response import UnifiedChatResponse
+
         resp = UnifiedChatResponse(
             success=False,
             response="操作失败",
@@ -74,6 +77,7 @@ class TestUnifiedChatResponse:
 
     def test_timestamp_auto_generated(self):
         from core.unified_response import UnifiedChatResponse
+
         resp = UnifiedChatResponse(success=True, response="test")
         d = resp.to_json_response()
         # 应该是 ISO 格式的时间字符串
@@ -87,50 +91,48 @@ class TestUnifiedChatResponse:
 # 2. 意图解析器测试
 # ============================================================================
 
+
 class TestIntentParser:
     """测试 core.ai_intent.IntentParser"""
 
     def test_rule_based_device_control(self):
         from core.ai_intent import IntentParser
+
         parser = IntentParser()
-        result = asyncio.run(
-            parser.parse("帮我打开手机截图")
-        )
+        result = asyncio.run(parser.parse("帮我打开手机截图"))
         assert result.intent == "device_control"
         assert result.confidence >= 0.3
 
     def test_rule_based_task_manage(self):
         from core.ai_intent import IntentParser
+
         parser = IntentParser()
-        result = asyncio.run(
-            parser.parse("查看我的任务列表")
-        )
+        result = asyncio.run(parser.parse("查看我的任务列表"))
         assert result.intent == "task_manage"
 
     def test_rule_based_chat_fallback(self):
         from core.ai_intent import IntentParser
+
         parser = IntentParser()
-        result = asyncio.run(
-            parser.parse("今天天气怎么样？")
-        )
+        result = asyncio.run(parser.parse("今天天气怎么样？"))
         # 没有匹配到关键词，应该 fallback 到 chat
         assert result.confidence <= 0.5
 
     def test_llm_skipped_without_api_key(self):
         """没有 API Key 时 LLM 解析应跳过"""
         from core.ai_intent import IntentParser
+
         parser = IntentParser()
         with patch.dict(os.environ, {}, clear=False):
             # 移除可能存在的 API Key
             os.environ.pop("OPENAI_API_KEY", None)
             os.environ.pop("DEEPSEEK_API_KEY", None)
-            result = asyncio.run(
-                parser._parse_by_llm("test message", None)
-            )
+            result = asyncio.run(parser._parse_by_llm("test message", None))
             assert result is None
 
     def test_parsed_intent_to_dict(self):
         from core.ai_intent import ParsedIntent
+
         intent = ParsedIntent(
             intent="device_control",
             command="screenshot",
@@ -151,6 +153,7 @@ class TestIntentParser:
 # 3. 对话记忆测试
 # ============================================================================
 
+
 class TestConversationMemory:
     """测试对话记忆系统"""
 
@@ -159,12 +162,14 @@ class TestConversationMemory:
         # 融合(域3)后 CM 直写/透读唯一属主 SessionManager —— 隔离其单例与状态文件,
         # 避免测试轮次写进全局 data/sessions.json 并与其它测试的同名会话交叉污染。
         import core.session_manager as smmod
+
         monkeypatch.setattr(smmod, "_SESSION_FILE", str(tmp_path / "sessions.json"))
         monkeypatch.setattr(smmod, "_session_manager", smmod.SessionManager())
         yield
 
     def test_add_and_get_context(self):
         from core.ai_intent import ConversationMemory
+
         memory = ConversationMemory()
 
         asyncio.run(memory.add_turn("s1", "user", "你好"))
@@ -179,6 +184,7 @@ class TestConversationMemory:
 
     def test_max_turns_truncation(self):
         from core.ai_intent import ConversationMemory
+
         memory = ConversationMemory(max_turns=3)
 
         for i in range(5):
@@ -190,6 +196,7 @@ class TestConversationMemory:
 
     def test_user_profile_learning(self):
         from core.ai_intent import ConversationMemory
+
         memory = ConversationMemory()
 
         asyncio.run(memory.add_turn("s3", "user", "帮我管理任务"))
@@ -201,6 +208,7 @@ class TestConversationMemory:
 
     def test_session_isolation(self):
         from core.ai_intent import ConversationMemory
+
         memory = ConversationMemory()
 
         asyncio.run(memory.add_turn("s4", "user", "hello"))
@@ -215,6 +223,7 @@ class TestConversationMemory:
 
     def test_clear_session(self):
         from core.ai_intent import ConversationMemory
+
         memory = ConversationMemory()
 
         asyncio.run(memory.add_turn("s6", "user", "test"))
@@ -228,6 +237,7 @@ class TestConversationMemory:
 # 4. Dashboard parse_intent (fallback) 测试
 # ============================================================================
 
+
 class TestDashboardParseIntent:
     """测试 dashboard 的简单 fallback 意图解析"""
 
@@ -236,6 +246,7 @@ class TestDashboardParseIntent:
         """尝试导入 dashboard parse_intent，导入失败则跳过"""
         try:
             from dashboard.backend.main import parse_intent
+
             self.parse_intent = parse_intent
         except (ImportError, SyntaxError, NameError) as e:
             pytest.skip(f"Dashboard import failed (expected in CI): {e}")
@@ -265,6 +276,7 @@ class TestDashboardParseIntent:
 # 5. call_node 错误处理测试
 # ============================================================================
 
+
 class TestCallNodeErrorHandling:
     """测试 galaxy_core.call_node() 的超时和错误处理"""
 
@@ -272,15 +284,14 @@ class TestCallNodeErrorHandling:
     def _import_galaxy_core(self):
         try:
             from core.galaxy_core import GalaxyCore
+
             self.GalaxyCore = GalaxyCore
         except (ImportError, ModuleNotFoundError) as e:
             pytest.skip(f"GalaxyCore import failed: {e}")
 
     def test_node_not_found(self):
         core = self.GalaxyCore()
-        result = asyncio.run(
-            core.call_node("nonexistent_node", "test", {})
-        )
+        result = asyncio.run(core.call_node("nonexistent_node", "test", {}))
         assert result["success"] is False
         assert "not found" in result["error"]
 
@@ -295,9 +306,7 @@ class TestCallNodeErrorHandling:
             core = self.GalaxyCore()
             core.nodes["test_node"] = {"port": 9999}
 
-            result = asyncio.run(
-                core.call_node("test_node", "test_action", {})
-            )
+            result = asyncio.run(core.call_node("test_node", "test_action", {}))
             assert result["success"] is False
             assert "error" in result
 
@@ -305,6 +314,7 @@ class TestCallNodeErrorHandling:
 # ============================================================================
 # 6. 路由分离测试
 # ============================================================================
+
 
 class TestRouteSeparation:
     """验证 dashboard 和 core 的 chat 端点使用不同路由"""
@@ -326,12 +336,14 @@ class TestRouteSeparation:
 # 7. 降级场景测试
 # ============================================================================
 
+
 class TestDegradation:
     """测试无 LLM / 无 galaxy_core 时的降级行为"""
 
     def test_no_llm_returns_friendly_error(self):
         """无 LLM 配置时应返回友好提示"""
         from core.unified_response import UnifiedChatResponse
+
         # 模拟降级响应
         resp = UnifiedChatResponse(
             success=False,
@@ -349,11 +361,13 @@ class TestDegradation:
 # 8. Smart Recommender 测试
 # ============================================================================
 
+
 class TestSmartRecommender:
     """测试智能推荐引擎"""
 
     def test_recommendations_with_history(self):
         from core.ai_intent import ConversationMemory, SmartRecommender
+
         memory = ConversationMemory()
         recommender = SmartRecommender(memory=memory)
 
@@ -369,6 +383,7 @@ class TestSmartRecommender:
 
     def test_recommendations_without_history(self):
         from core.ai_intent import SmartRecommender
+
         recommender = SmartRecommender()
         recs = asyncio.run(recommender.get_recommendations("new_user"))
         # 至少有快捷操作

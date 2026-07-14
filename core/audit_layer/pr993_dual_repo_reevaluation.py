@@ -565,11 +565,7 @@ def _validate_system_identity() -> ClaimValidation:
     else:
         gaps.append("galaxy_gateway.websocket_handler not importable")
 
-    strength = (
-        EvidenceStrength.STRONGLY_ESTABLISHED
-        if len(gaps) == 0
-        else EvidenceStrength.PARTIALLY_ESTABLISHED
-    )
+    strength = EvidenceStrength.STRONGLY_ESTABLISHED if len(gaps) == 0 else EvidenceStrength.PARTIALLY_ESTABLISHED
 
     return ClaimValidation(
         claim_id=PR993ClaimId.SYSTEM_IDENTITY_DISTRIBUTED_AI_BODY,
@@ -650,9 +646,7 @@ def _validate_v2_sole_governance() -> ClaimValidation:
 
     # 7. Device admission (UDM / registration handler)
     if _try_import("galaxy_gateway.android.handlers.registration"):
-        anchors.append(
-            "galaxy_gateway.android.handlers.registration [device admission]"
-        )
+        anchors.append("galaxy_gateway.android.handlers.registration [device admission]")
     else:
         gaps.append("device admission handler not found")
 
@@ -664,16 +658,9 @@ def _validate_v2_sole_governance() -> ClaimValidation:
 
     # V2 authority contract
     if _try_import("core.android_v2_continuity_contract"):
-        anchors.append(
-            "core.android_v2_continuity_contract "
-            "[V2_IS_CANONICAL_ORCHESTRATION_AUTHORITY_POLICY]"
-        )
+        anchors.append("core.android_v2_continuity_contract " "[V2_IS_CANONICAL_ORCHESTRATION_AUTHORITY_POLICY]")
 
-    strength = (
-        EvidenceStrength.STRONGLY_ESTABLISHED
-        if len(gaps) == 0
-        else EvidenceStrength.PARTIALLY_ESTABLISHED
-    )
+    strength = EvidenceStrength.STRONGLY_ESTABLISHED if len(gaps) == 0 else EvidenceStrength.PARTIALLY_ESTABLISHED
 
     return ClaimValidation(
         claim_id=PR993ClaimId.V2_SOLE_GOVERNANCE_AUTHORITY,
@@ -743,11 +730,7 @@ def _validate_android_runtime_carrier() -> ClaimValidation:
     if _try_import("core.android_participant_session_state"):
         anchors.append("core.android_participant_session_state")
 
-    strength = (
-        EvidenceStrength.STRONGLY_ESTABLISHED
-        if len(gaps) == 0
-        else EvidenceStrength.PARTIALLY_ESTABLISHED
-    )
+    strength = EvidenceStrength.STRONGLY_ESTABLISHED if len(gaps) == 0 else EvidenceStrength.PARTIALLY_ESTABLISHED
 
     return ClaimValidation(
         claim_id=PR993ClaimId.ANDROID_IS_RUNTIME_CARRIER_NOT_CLIENT,
@@ -793,8 +776,7 @@ def _validate_network_is_body() -> ClaimValidation:
     # Proof 1: Registration = network admission
     if _try_import("galaxy_gateway.android.handlers.registration"):
         anchors.append(
-            "galaxy_gateway.android.handlers.registration "
-            "[network admission: device registers into the body mesh]"
+            "galaxy_gateway.android.handlers.registration " "[network admission: device registers into the body mesh]"
         )
     else:
         gaps.append("registration handler not found")
@@ -810,40 +792,25 @@ def _validate_network_is_body() -> ClaimValidation:
     if _try_import("core.hybrid_executor"):
         anchors.append("core.hybrid_executor [hybrid execution spanning physical endpoints]")
     elif _try_import("core.hybrid_execution_policy"):
-        anchors.append(
-            "core.hybrid_execution_policy [hybrid execution policy]"
-        )
+        anchors.append("core.hybrid_execution_policy [hybrid execution policy]")
     else:
         gaps.append("hybrid_executor / hybrid_execution_policy not found")
 
     # Proof 4: HybridOrchestrationContinuityRegistry
     if _try_import("core.hybrid_orchestration_continuity"):
-        anchors.append(
-            "core.hybrid_orchestration_continuity "
-            "[HybridOrchestrationContinuityRegistry]"
-        )
+        anchors.append("core.hybrid_orchestration_continuity " "[HybridOrchestrationContinuityRegistry]")
     else:
         gaps.append("core.hybrid_orchestration_continuity not found")
 
     # Proof 5: Capability queries spanning all nodes
     if _try_import_with_attr("core.unified.capability_resolver", "CapabilityResolver"):
-        anchors.append(
-            "core.unified.capability_resolver.CapabilityResolver "
-            "[cross-node capability query]"
-        )
+        anchors.append("core.unified.capability_resolver.CapabilityResolver " "[cross-node capability query]")
     elif _try_import_with_attr("core.capability_registry", "CapabilityRegistry"):
-        anchors.append(
-            "core.capability_registry.CapabilityRegistry "
-            "[cross-node capability registry]"
-        )
+        anchors.append("core.capability_registry.CapabilityRegistry " "[cross-node capability registry]")
     else:
         gaps.append("cross-node capability resolver not found")
 
-    strength = (
-        EvidenceStrength.STRONGLY_ESTABLISHED
-        if len(gaps) == 0
-        else EvidenceStrength.PARTIALLY_ESTABLISHED
-    )
+    strength = EvidenceStrength.STRONGLY_ESTABLISHED if len(gaps) == 0 else EvidenceStrength.PARTIALLY_ESTABLISHED
 
     return ClaimValidation(
         claim_id=PR993ClaimId.NETWORK_IS_THE_BODY,
@@ -889,25 +856,19 @@ def _validate_beyond_poc() -> ClaimValidation:
 
     # Chain 2: Capability report
     if _try_import("galaxy_gateway.android.handlers.capability_report"):
-        anchors.append(
-            "galaxy_gateway.android.handlers.capability_report [chain 2: capability report]"
-        )
+        anchors.append("galaxy_gateway.android.handlers.capability_report [chain 2: capability report]")
     else:
         gaps.append("capability_report chain not found")
 
     # Chain 3: Delegated execution signal
     if _try_import("galaxy_gateway.android.handlers.delegated_signal"):
-        anchors.append(
-            "galaxy_gateway.android.handlers.delegated_signal [chain 3: delegated exec signal]"
-        )
+        anchors.append("galaxy_gateway.android.handlers.delegated_signal [chain 3: delegated exec signal]")
     else:
         gaps.append("delegated_signal chain not found")
 
     # Chain 4: HandoffV2 result uplink
     if _try_import("galaxy_gateway.android.handlers.handoff_v2_result"):
-        anchors.append(
-            "galaxy_gateway.android.handlers.handoff_v2_result [chain 4: HandoffV2 uplink]"
-        )
+        anchors.append("galaxy_gateway.android.handlers.handoff_v2_result [chain 4: HandoffV2 uplink]")
     else:
         gaps.append("handoff_v2_result chain not found")
 
@@ -934,11 +895,7 @@ def _validate_beyond_poc() -> ClaimValidation:
     if _try_import("core.system_final_acceptance_verdict"):
         anchors.append("core.system_final_acceptance_verdict [acceptance verdict]")
 
-    strength = (
-        EvidenceStrength.STRONGLY_ESTABLISHED
-        if len(gaps) == 0
-        else EvidenceStrength.PARTIALLY_ESTABLISHED
-    )
+    strength = EvidenceStrength.STRONGLY_ESTABLISHED if len(gaps) == 0 else EvidenceStrength.PARTIALLY_ESTABLISHED
 
     return ClaimValidation(
         claim_id=PR993ClaimId.SYSTEM_BEYOND_POC,
@@ -999,10 +956,7 @@ def _validate_remaining_work_closure() -> ClaimValidation:
         gaps.append("android_device_state_store missing — Axis 2 store absent")
 
     if _try_import("galaxy_gateway.android.handlers.device_state_snapshot"):
-        anchors.append(
-            "galaxy_gateway.android.handlers.device_state_snapshot "
-            "[Axis 2: snapshot handler EXISTS]"
-        )
+        anchors.append("galaxy_gateway.android.handlers.device_state_snapshot " "[Axis 2: snapshot handler EXISTS]")
     else:
         gaps.append("device_state_snapshot handler missing")
 
@@ -1016,13 +970,9 @@ def _validate_remaining_work_closure() -> ClaimValidation:
 
     # Axis 3: Unified multi-device orchestration
     if _try_import("core.multi_device_canonical_governance"):
-        anchors.append(
-            "core.multi_device_canonical_governance [Axis 3: multi-device structure]"
-        )
+        anchors.append("core.multi_device_canonical_governance [Axis 3: multi-device structure]")
     elif _try_import("core.multi_device_coordination_authority"):
-        anchors.append(
-            "core.multi_device_coordination_authority [Axis 3: multi-device authority]"
-        )
+        anchors.append("core.multi_device_coordination_authority [Axis 3: multi-device authority]")
     else:
         gaps.append("multi-device orchestration module not found")
 
@@ -1077,10 +1027,7 @@ def _validate_direction_unified_ai_body() -> ClaimValidation:
 
     # Governance CI gate
     if _try_import("core.distributed_release_gate_skeleton"):
-        anchors.append(
-            "core.distributed_release_gate_skeleton "
-            "[CI gate: is_enforcing=True, blocks regressions]"
-        )
+        anchors.append("core.distributed_release_gate_skeleton " "[CI gate: is_enforcing=True, blocks regressions]")
     else:
         gaps.append("distributed_release_gate_skeleton not found")
 
@@ -1099,16 +1046,9 @@ def _validate_direction_unified_ai_body() -> ClaimValidation:
 
     # Cross-repo consistency gates
     if _try_import("core.cross_repo_consistency_gates"):
-        anchors.append(
-            "core.cross_repo_consistency_gates "
-            "[prevents protocol drift between repos]"
-        )
+        anchors.append("core.cross_repo_consistency_gates " "[prevents protocol drift between repos]")
 
-    strength = (
-        EvidenceStrength.STRONGLY_ESTABLISHED
-        if len(gaps) == 0
-        else EvidenceStrength.PARTIALLY_ESTABLISHED
-    )
+    strength = EvidenceStrength.STRONGLY_ESTABLISHED if len(gaps) == 0 else EvidenceStrength.PARTIALLY_ESTABLISHED
 
     return ClaimValidation(
         claim_id=PR993ClaimId.DIRECTION_TOWARD_UNIFIED_AI_BODY,
@@ -1142,9 +1082,8 @@ def _validate_direction_unified_ai_body() -> ClaimValidation:
 
 
 def _build_android_registration_status() -> CanonicalPathStatus:
-    v2_impl = (
-        _try_import("galaxy_gateway.android.handlers.registration")
-        and _try_import_with_attr("galaxy_gateway.android.handlers.registration", "handle_device_register")
+    v2_impl = _try_import("galaxy_gateway.android.handlers.registration") and _try_import_with_attr(
+        "galaxy_gateway.android.handlers.registration", "handle_device_register"
     )
     anchors = []
     if v2_impl:
@@ -1177,9 +1116,7 @@ def _build_android_registration_status() -> CanonicalPathStatus:
         v2_side_implemented=v2_impl,
         android_side_implemented=android_impl,
         runtime_closed=runtime_closed,
-        closure_label=(
-            "strongly_established" if runtime_closed else "partially_established"
-        ),
+        closure_label=("strongly_established" if runtime_closed else "partially_established"),
         v2_code_anchors=anchors,
         gap_description=(
             ""
@@ -1238,26 +1175,18 @@ def _build_runtime_snapshot_status() -> CanonicalPathStatus:
 
 def _build_execution_event_status() -> CanonicalPathStatus:
     handler_ok = _try_import("galaxy_gateway.android.handlers.device_state_snapshot")
-    store_ok = _try_import_with_attr(
-        "core.android_device_state_store", "absorb_device_execution_event"
-    )
+    store_ok = _try_import_with_attr("core.android_device_state_store", "absorb_device_execution_event")
     flow_surface_ok = _try_import("core.flow_level_operator_surface")
 
     anchors = []
     if handler_ok:
-        anchors.append(
-            "galaxy_gateway.android.handlers.device_state_snapshot "
-            "[handle_device_execution_event]"
-        )
+        anchors.append("galaxy_gateway.android.handlers.device_state_snapshot " "[handle_device_execution_event]")
     if store_ok:
         anchors.append("core.android_device_state_store.absorb_device_execution_event")
     if flow_surface_ok:
         anchors.append("core.flow_level_operator_surface [flow projection]")
     if _try_import("core.routes.operator"):
-        anchors.append(
-            "core.routes.operator "
-            "[GET /api/v1/operator/devices/execution-events]"
-        )
+        anchors.append("core.routes.operator " "[GET /api/v1/operator/devices/execution-events]")
 
     v2_impl = handler_ok and store_ok and flow_surface_ok
 
@@ -1294,16 +1223,12 @@ def _build_task_dispatch_result_status() -> CanonicalPathStatus:
         anchors.append("galaxy_gateway.android.handlers.task_lifecycle [result ingestion]")
     if handoff_ok:
         anchors.append(
-            "galaxy_gateway.android.handlers.handoff_v2_result "
-            "[handoff_result / handoff_failure / handoff_ack]"
+            "galaxy_gateway.android.handlers.handoff_v2_result " "[handoff_result / handoff_failure / handoff_ack]"
         )
     if truth_chain_ok:
         anchors.append("core.task_result_canonical_truth_chain")
     if _try_import("galaxy_gateway.pending_delivery_buffer"):
-        anchors.append(
-            "galaxy_gateway.pending_delivery_buffer "
-            "[TTL=60s durable buffer + flush on reconnect]"
-        )
+        anchors.append("galaxy_gateway.pending_delivery_buffer " "[TTL=60s durable buffer + flush on reconnect]")
     if _try_import("core.durable_result_idempotency"):
         anchors.append("core.durable_result_idempotency [idempotency guard]")
 
@@ -1322,11 +1247,7 @@ def _build_task_dispatch_result_status() -> CanonicalPathStatus:
         v2_side_implemented=v2_impl,
         android_side_implemented=True,  # task_submit.py, task_lifecycle.py, OfflineTaskQueue.kt
         runtime_closed=runtime_closed_conditional,
-        closure_label=(
-            "partially_established"
-            if runtime_closed_conditional
-            else "surface_alignment_only"
-        ),
+        closure_label=("partially_established" if runtime_closed_conditional else "surface_alignment_only"),
         v2_code_anchors=anchors,
         gap_description=(
             ""
@@ -1351,10 +1272,7 @@ def _build_continuity_reconnect_status() -> CanonicalPathStatus:
 
     anchors = []
     if android_v2_contract_ok:
-        anchors.append(
-            "core.android_v2_continuity_contract "
-            "[7 reconnect/reattach scenario policies]"
-        )
+        anchors.append("core.android_v2_continuity_contract " "[7 reconnect/reattach scenario policies]")
     if flow_continuity_ok:
         anchors.append("core.flow_continuity_coordinator.FlowContinuityCoordinator")
     if session_axis_ok:
@@ -1409,8 +1327,7 @@ def _build_orchestration_android_truth_status() -> CanonicalPathStatus:
         anchors.append("galaxy_gateway.routing.device_selection [exec-mode filtering]")
     if _try_import("galaxy_gateway.capability_registry"):
         anchors.append(
-            "galaxy_gateway.capability_registry "
-            "[GatewayCapabilityRegistry → canonical projection helpers]"
+            "galaxy_gateway.capability_registry " "[GatewayCapabilityRegistry → canonical projection helpers]"
         )
     if _try_import("core.unified.gateway_capability_projection"):
         anchors.append("core.unified.gateway_capability_projection [canonical read path]")
@@ -1451,10 +1368,7 @@ def _build_closure_priorities() -> List[ClosurePriority]:
         ClosurePriority(
             priority_id="P0-ANDROID-RUNTIME-CI-EVIDENCE",
             level=ClosurePriorityLevel.P0_RUNTIME_EVIDENCE_BLOCKER,
-            title=(
-                "Establish real Android→V2 runtime evidence in CI "
-                "(emulator-backed snapshot verification)"
-            ),
+            title=("Establish real Android→V2 runtime evidence in CI " "(emulator-backed snapshot verification)"),
             rationale=(
                 "The android_device_state_store and snapshot handler exist (importable). "
                 "The operator/ecosystem surface reads from that store. "
@@ -1474,10 +1388,7 @@ def _build_closure_priorities() -> List[ClosurePriority]:
         ClosurePriority(
             priority_id="P0-DELEGATED-EXEC-RUNTIME-CLOSURE",
             level=ClosurePriorityLevel.P0_RUNTIME_EVIDENCE_BLOCKER,
-            title=(
-                "Verify delegated Android execution runtime closure "
-                "on the canonical V2 truth chain"
-            ),
+            title=("Verify delegated Android execution runtime closure " "on the canonical V2 truth chain"),
             rationale=(
                 "DeviceRouter, task_lifecycle handler, handoff_v2_result handler, and "
                 "task_result_canonical_truth_chain all exist. "
@@ -1498,8 +1409,7 @@ def _build_closure_priorities() -> List[ClosurePriority]:
             priority_id="P1-CONTINUITY-BRIDGE",
             level=ClosurePriorityLevel.P1_CANONICAL_CLOSURE_GAP,
             title=(
-                "Bridge Android durable continuity identity into V2 "
-                "continuity coordination (PR-C V2 + PR-C Android)"
+                "Bridge Android durable continuity identity into V2 " "continuity coordination (PR-C V2 + PR-C Android)"
             ),
             rationale=(
                 "android_v2_continuity_contract.py declares all 7 reconnect/reattach "
@@ -1524,10 +1434,7 @@ def _build_closure_priorities() -> List[ClosurePriority]:
         ClosurePriority(
             priority_id="P1-LEGALITY-GATE-ENFORCEMENT",
             level=ClosurePriorityLevel.P1_CANONICAL_CLOSURE_GAP,
-            title=(
-                "Promote delegated flow legality gates from ADVISORY to "
-                "BLOCKING on the canonical dispatch path"
-            ),
+            title=("Promote delegated flow legality gates from ADVISORY to " "BLOCKING on the canonical dispatch path"),
             rationale=(
                 "DelegatedFlowReadinessGate, DelegatedFlowAcceptanceGate, and "
                 "CapabilityRoutingGate are importable and evaluable. "
@@ -1544,10 +1451,7 @@ def _build_closure_priorities() -> List[ClosurePriority]:
         ClosurePriority(
             priority_id="P2-MULTI-DEVICE-ORCHESTRATION-E2E",
             level=ClosurePriorityLevel.P2_SURFACE_ALIGNMENT_UPGRADE,
-            title=(
-                "Establish e2e CI evidence for multi-device hybrid orchestration "
-                "(at minimum 2-device scenario)"
-            ),
+            title=("Establish e2e CI evidence for multi-device hybrid orchestration " "(at minimum 2-device scenario)"),
             rationale=(
                 "multi_device_canonical_governance, hybrid_executor, and "
                 "HybridOrchestrationContinuityRegistry are importable. "
@@ -1587,10 +1491,7 @@ def _build_closure_priorities() -> List[ClosurePriority]:
         ClosurePriority(
             priority_id="P3-UNIFIED-MANIFESTATION-SURFACE",
             level=ClosurePriorityLevel.P3_DEPLOYMENT_HARDENING,
-            title=(
-                "Unify Android + desktop manifestation/presence surface into a "
-                "single operator-observable truth"
-            ),
+            title=("Unify Android + desktop manifestation/presence surface into a " "single operator-observable truth"),
             rationale=(
                 "TriState lifecycle (SILENT/LIMINAL/MANIFEST) exists in DesktopPresenceRuntime. "
                 "Android presence is expressed through runtime snapshots. "
@@ -1748,28 +1649,21 @@ def assert_pr993_reevaluation_invariants() -> None:
     report = get_pr993_reevaluation()
 
     # ---------- structure invariants ----------
-    assert len(report.claim_validations) == len(PR993ClaimId), (
-        f"Expected {len(PR993ClaimId)} claim validations; got {len(report.claim_validations)}."
-    )
+    assert len(report.claim_validations) == len(
+        PR993ClaimId
+    ), f"Expected {len(PR993ClaimId)} claim validations; got {len(report.claim_validations)}."
     claim_ids_seen = {c.claim_id for c in report.claim_validations}
     for cid in PR993ClaimId:
-        assert cid in claim_ids_seen, (
-            f"Missing claim validation for PR993ClaimId.{cid.name}."
-        )
+        assert cid in claim_ids_seen, f"Missing claim validation for PR993ClaimId.{cid.name}."
 
     assert len(report.canonical_path_statuses) == len(CanonicalPathId), (
-        f"Expected {len(CanonicalPathId)} canonical path statuses; "
-        f"got {len(report.canonical_path_statuses)}."
+        f"Expected {len(CanonicalPathId)} canonical path statuses; " f"got {len(report.canonical_path_statuses)}."
     )
     path_ids_seen = {p.path_id for p in report.canonical_path_statuses}
     for pid in CanonicalPathId:
-        assert pid in path_ids_seen, (
-            f"Missing canonical path status for CanonicalPathId.{pid.name}."
-        )
+        assert pid in path_ids_seen, f"Missing canonical path status for CanonicalPathId.{pid.name}."
 
-    assert len(report.closure_priorities) > 0, (
-        "At least one closure priority must be defined."
-    )
+    assert len(report.closure_priorities) > 0, "At least one closure priority must be defined."
 
     # ---------- verdict invariants ----------
     assert report.dual_repo_verdict, "dual_repo_verdict must be non-empty."
@@ -1808,9 +1702,7 @@ def assert_pr993_reevaluation_invariants() -> None:
 
     # ---------- P0 priorities must be present ----------
     p0_ids = [
-        p.priority_id
-        for p in report.closure_priorities
-        if p.level == ClosurePriorityLevel.P0_RUNTIME_EVIDENCE_BLOCKER
+        p.priority_id for p in report.closure_priorities if p.level == ClosurePriorityLevel.P0_RUNTIME_EVIDENCE_BLOCKER
     ]
     assert len(p0_ids) >= 2, (
         f"Expected at least 2 P0 closure priorities; got {p0_ids}. "

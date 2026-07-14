@@ -24,58 +24,58 @@ from __future__ import annotations
 import pytest
 
 from core.operational_enablement_audit import (
-    OPERATIONAL_ENABLEMENT_AUDIT_AUTHORITY,
-    AUDIT_SCOPE,
-    V2ConfigSource,
-    V2_CONFIG_SOURCE_PRECEDENCE,
-    V2_REQUIRED_API_KEY_ENV_VARS,
-    V2_VALID_PROVIDERS,
-    V2_NON_SECRET_CONFIG_KEYS,
-    V2_STARTUP_ONLY_CONFIG,
-    V2_RUNTIME_HOT_RELOADABLE_CONFIG,
-    V2_CONFIG_SETUP_PATHS,
-    AndroidConfigLayer,
-    ANDROID_CONFIG_PRECEDENCE,
-    ANDROID_SERVER_URL_DEFAULT_DEBUG,
-    ANDROID_SERVER_URL_DEFAULT_RELEASE,
     ANDROID_ASSET_GATEWAY_URL_PLACEHOLDER,
+    ANDROID_CONFIG_PRECEDENCE,
     ANDROID_CROSS_DEVICE_DEFAULT,
-    ANDROID_SERVER_URL_RUNTIME_EDITABLE,
     ANDROID_CROSS_DEVICE_RUNTIME_EDITABLE,
-    ANDROID_SETTINGS_UI_EXISTS,
-    ANDROID_REMOTE_CONFIG_FETCH,
-    DESKTOP_BOARD_IS_CONTROL_SURFACE,
-    DESKTOP_BOARD_WRITE_OPERATIONS,
-    DESKTOP_BOARD_READ_SURFACES,
-    DESKTOP_BOARD_WRITE_PERSISTENCE,
-    DESKTOP_BOARD_AFFECTS_RUNTIME,
-    DESKTOP_BOARD_VERDICT,
-    TriStateMode,
-    TRI_STATE_IS_REAL_RUNTIME_MODE,
-    TRI_STATE_BEHAVIORAL_CONSEQUENCES,
-    UIShellMode,
-    FabricMode,
-    THREE_STATE_DISAMBIGUATION,
-    ANDROID_MODELS,
     ANDROID_MODEL_DOWNLOAD_MECHANISM,
-    ANDROID_MODEL_PROVISIONING_PIPELINE_STAGES,
     ANDROID_MODEL_PROVISIONING_AUTO_ON_STARTUP,
     ANDROID_MODEL_PROVISIONING_LIMITATIONS,
+    ANDROID_MODEL_PROVISIONING_PIPELINE_STAGES,
     ANDROID_MODEL_PROVISIONING_VERDICT,
-    RunbookStep,
-    V2_RUNBOOK,
+    ANDROID_MODELS,
+    ANDROID_REMOTE_CONFIG_FETCH,
     ANDROID_RUNBOOK,
-    OperabilityTier,
+    ANDROID_SERVER_URL_DEFAULT_DEBUG,
+    ANDROID_SERVER_URL_DEFAULT_RELEASE,
+    ANDROID_SERVER_URL_RUNTIME_EDITABLE,
+    ANDROID_SETTINGS_UI_EXISTS,
+    AUDIT_SCOPE,
+    CHINESE_SUMMARY,
+    DESKTOP_BOARD_AFFECTS_RUNTIME,
+    DESKTOP_BOARD_IS_CONTROL_SURFACE,
+    DESKTOP_BOARD_READ_SURFACES,
+    DESKTOP_BOARD_VERDICT,
+    DESKTOP_BOARD_WRITE_OPERATIONS,
+    DESKTOP_BOARD_WRITE_PERSISTENCE,
     FINAL_VERDICT,
     FINAL_VERDICT_QUALIFICATIONS,
-    CHINESE_SUMMARY,
+    OPERATIONAL_ENABLEMENT_AUDIT_AUTHORITY,
+    THREE_STATE_DISAMBIGUATION,
+    TRI_STATE_BEHAVIORAL_CONSEQUENCES,
+    TRI_STATE_IS_REAL_RUNTIME_MODE,
+    V2_CONFIG_SETUP_PATHS,
+    V2_CONFIG_SOURCE_PRECEDENCE,
+    V2_NON_SECRET_CONFIG_KEYS,
+    V2_REQUIRED_API_KEY_ENV_VARS,
+    V2_RUNBOOK,
+    V2_RUNTIME_HOT_RELOADABLE_CONFIG,
+    V2_STARTUP_ONLY_CONFIG,
+    V2_VALID_PROVIDERS,
+    AndroidConfigLayer,
+    FabricMode,
+    OperabilityTier,
+    RunbookStep,
+    TriStateMode,
+    UIShellMode,
+    V2ConfigSource,
     get_audit_summary,
 )
-
 
 # ===========================================================================
 # Module integrity
 # ===========================================================================
+
 
 class TestModuleIntegrity:
     def test_authority_sentinel_is_canonical_module_path(self):
@@ -90,6 +90,7 @@ class TestModuleIntegrity:
 # ===========================================================================
 # V2-side config
 # ===========================================================================
+
 
 class TestV2Config:
     def test_five_config_source_layers(self):
@@ -170,6 +171,7 @@ class TestV2Config:
 # Android-side config
 # ===========================================================================
 
+
 class TestAndroidConfig:
     def test_three_config_layers(self):
         """
@@ -249,6 +251,7 @@ class TestAndroidConfig:
 # Desktop state board / control surface
 # ===========================================================================
 
+
 class TestDesktopBoard:
     def test_board_is_control_surface(self):
         """
@@ -265,12 +268,10 @@ class TestDesktopBoard:
         assert len(DESKTOP_BOARD_WRITE_OPERATIONS) == 2
 
     def test_write_operations_include_provider_toggle(self):
-        assert any("toggle_provider" in op or "provider" in op.lower()
-                   for op in DESKTOP_BOARD_WRITE_OPERATIONS)
+        assert any("toggle_provider" in op or "provider" in op.lower() for op in DESKTOP_BOARD_WRITE_OPERATIONS)
 
     def test_write_operations_include_routing_policy(self):
-        assert any("routing" in op.lower() or "policy" in op.lower()
-                   for op in DESKTOP_BOARD_WRITE_OPERATIONS)
+        assert any("routing" in op.lower() or "policy" in op.lower() for op in DESKTOP_BOARD_WRITE_OPERATIONS)
 
     def test_board_has_multiple_read_surfaces(self):
         """
@@ -301,6 +302,7 @@ class TestDesktopBoard:
 # Agent tri-state / UI shell / fabric mode
 # ===========================================================================
 
+
 class TestAgentStates:
     def test_three_tri_state_modes(self):
         """
@@ -324,9 +326,7 @@ class TestAgentStates:
 
     def test_behavioral_consequences_cover_all_states(self):
         for mode in TriStateMode:
-            assert mode in TRI_STATE_BEHAVIORAL_CONSEQUENCES, (
-                f"Missing behavioral consequence for state: {mode}"
-            )
+            assert mode in TRI_STATE_BEHAVIORAL_CONSEQUENCES, f"Missing behavioral consequence for state: {mode}"
 
     def test_four_ui_shell_modes(self):
         """
@@ -370,6 +370,7 @@ class TestAgentStates:
 # Android model provisioning
 # ===========================================================================
 
+
 class TestAndroidModelProvisioning:
     def test_three_model_assets(self):
         """
@@ -386,9 +387,9 @@ class TestAndroidModelProvisioning:
 
     def test_huggingface_urls_present_for_all_models(self):
         for model in ANDROID_MODELS:
-            assert "huggingface.co" in model["huggingface_url"], (
-                f"Expected HuggingFace URL for model {model['model_id']}"
-            )
+            assert (
+                "huggingface.co" in model["huggingface_url"]
+            ), f"Expected HuggingFace URL for model {model['model_id']}"
 
     def test_mobilevlm_uses_ziangwu_repo(self):
         """
@@ -410,12 +411,8 @@ class TestAndroidModelProvisioning:
         Source: ModelAssetManager.kt MOBILEVLM_SHA256 (2026-05-02 update).
         """
         mobilevlm = next(m for m in ANDROID_MODELS if m["model_id"] == "mobilevlm")
-        assert mobilevlm["sha256"] is not None, (
-            "MobileVLM SHA-256 should be a real hash, not null"
-        )
-        assert len(mobilevlm["sha256"]) == 64, (
-            f"Expected 64-char SHA-256 hex string, got {len(mobilevlm['sha256'])}"
-        )
+        assert mobilevlm["sha256"] is not None, "MobileVLM SHA-256 should be a real hash, not null"
+        assert len(mobilevlm["sha256"]) == 64, f"Expected 64-char SHA-256 hex string, got {len(mobilevlm['sha256'])}"
 
     def test_seeclick_sha256_still_null(self):
         """
@@ -424,9 +421,7 @@ class TestAndroidModelProvisioning:
         """
         for model_id in ("seeclick", "seeclick_bin"):
             model = next(m for m in ANDROID_MODELS if m["model_id"] == model_id)
-            assert model["sha256"] is None, (
-                f"Expected null SHA-256 for {model_id} (computed post-download)"
-            )
+            assert model["sha256"] is None, f"Expected null SHA-256 for {model_id} (computed post-download)"
 
     def test_eight_provisioning_pipeline_stages(self):
         """
@@ -481,14 +476,13 @@ class TestAndroidModelProvisioning:
 
     def test_total_model_size_over_1gb(self):
         total_bytes = sum(m["size_bytes_approx"] for m in ANDROID_MODELS)
-        assert total_bytes > 1_000_000_000, (
-            f"Expected total model size > 1 GB, got {total_bytes / 1e9:.2f} GB"
-        )
+        assert total_bytes > 1_000_000_000, f"Expected total model size > 1 GB, got {total_bytes / 1e9:.2f} GB"
 
 
 # ===========================================================================
 # Runbook completeness
 # ===========================================================================
+
 
 class TestRunbook:
     def test_v2_runbook_minimum_steps(self):
@@ -541,6 +535,7 @@ class TestRunbook:
 # Final verdict
 # ===========================================================================
 
+
 class TestFinalVerdict:
     def test_verdict_is_impl_complete_not_partial(self):
         """
@@ -591,6 +586,7 @@ class TestFinalVerdict:
 # get_audit_summary() shape
 # ===========================================================================
 
+
 class TestAuditSummary:
     def test_returns_dict(self):
         summary = get_audit_summary()
@@ -628,4 +624,3 @@ class TestAuditSummary:
     def test_tri_state_modes_contains_three_values(self):
         summary = get_audit_summary()
         assert len(summary["tri_state_modes"]) == 3
-

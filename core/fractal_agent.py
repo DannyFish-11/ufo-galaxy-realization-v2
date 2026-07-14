@@ -16,9 +16,9 @@ import json
 import logging
 import time
 import uuid
-from typing import List, Dict, Any, Optional
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger("Galaxy.FractalAgent")
 
@@ -30,18 +30,21 @@ def _soul_prefix(soul: str) -> str:
 
 # ───────────────────── 数据模型 ─────────────────────
 
+
 class Complexity(Enum):
     """任务复杂度"""
-    ATOMIC = "atomic"        # 原子任务，不可分解
-    SIMPLE = "simple"        # 简单，2-3 步
-    MODERATE = "moderate"    # 中等，需要分解
-    COMPLEX = "complex"      # 复杂，需要多层分解
-    EPIC = "epic"            # 史诗级，需要大规模协作
+
+    ATOMIC = "atomic"  # 原子任务，不可分解
+    SIMPLE = "simple"  # 简单，2-3 步
+    MODERATE = "moderate"  # 中等，需要分解
+    COMPLEX = "complex"  # 复杂，需要多层分解
+    EPIC = "epic"  # 史诗级，需要大规模协作
 
 
 @dataclass
 class FractalTask:
     """分形任务"""
+
     id: str
     description: str
     context: Dict = field(default_factory=dict)
@@ -57,17 +60,19 @@ class FractalTask:
 @dataclass
 class FractalResult:
     """分形执行结果"""
+
     task_id: str
     success: bool
     output: Any
     depth: int
-    subtask_results: List['FractalResult'] = field(default_factory=list)
+    subtask_results: List["FractalResult"] = field(default_factory=list)
     agent_id: str = ""
     latency_ms: float = 0
     decomposition_used: bool = False
 
 
 # ───────────────────── 分形 Agent ─────────────────────
+
 
 class FractalAgent:
     """
@@ -84,16 +89,22 @@ class FractalAgent:
     MAX_DEPTH = 4
     MAX_SUBTASKS = 6
 
-    def __init__(self, agent_id: str = None, llm_router=None,
-                 agent_factory=None, depth: int = 0,
-                 role: str = "general", parent_id: str = None):
+    def __init__(
+        self,
+        agent_id: str = None,
+        llm_router=None,
+        agent_factory=None,
+        depth: int = 0,
+        role: str = "general",
+        parent_id: str = None,
+    ):
         self.id = agent_id or f"fractal_{uuid.uuid4().hex[:8]}"
         self.llm_router = llm_router
         self.agent_factory = agent_factory
         self.depth = depth
         self.role = role
         self.parent_id = parent_id
-        self.children: Dict[str, 'FractalAgent'] = {}
+        self.children: Dict[str, "FractalAgent"] = {}
         self.tasks_executed: int = 0
         self.total_latency: float = 0
 
@@ -106,10 +117,7 @@ class FractalAgent:
         t0 = time.monotonic()
         task.depth = self.depth
 
-        logger.info(
-            f"{'  ' * self.depth}[深度{self.depth}] Agent {self.id} 接收任务: "
-            f"{task.description[:60]}..."
-        )
+        logger.info(f"{'  ' * self.depth}[深度{self.depth}] Agent {self.id} 接收任务: " f"{task.description[:60]}...")
 
         # 1. 评估复杂度
         complexity = await self._assess_complexity(task)
@@ -148,16 +156,22 @@ class FractalAgent:
         try:
             result = await self.llm_router.chat_json(
                 messages=[
-                    {"role": "system", "content": (
-                        "你是一个任务复杂度评估器。评估给定任务的复杂度。\n"
-                        "返回 JSON: {\"complexity\": \"atomic|simple|moderate|complex|epic\", "
-                        "\"reason\": \"原因\", \"estimated_subtasks\": 数字}"
-                    )},
-                    {"role": "user", "content": (
-                        f"任务: {task.description}\n"
-                        f"上下文: {json.dumps(task.context, ensure_ascii=False)}\n"
-                        f"当前递归深度: {self.depth}/{self.MAX_DEPTH}"
-                    )},
+                    {
+                        "role": "system",
+                        "content": (
+                            "你是一个任务复杂度评估器。评估给定任务的复杂度。\n"
+                            '返回 JSON: {"complexity": "atomic|simple|moderate|complex|epic", '
+                            '"reason": "原因", "estimated_subtasks": 数字}'
+                        ),
+                    },
+                    {
+                        "role": "user",
+                        "content": (
+                            f"任务: {task.description}\n"
+                            f"上下文: {json.dumps(task.context, ensure_ascii=False)}\n"
+                            f"当前递归深度: {self.depth}/{self.MAX_DEPTH}"
+                        ),
+                    },
                 ],
                 task_type="reasoning",
             )
@@ -173,9 +187,23 @@ class FractalAgent:
 
         # 关键词检测
         complex_indicators = [
-            "并且", "同时", "首先", "然后", "最后", "以及", "还需要",
-            "and", "then", "also", "first", "second", "finally",
-            "多个", "所有", "每个", "批量",
+            "并且",
+            "同时",
+            "首先",
+            "然后",
+            "最后",
+            "以及",
+            "还需要",
+            "and",
+            "then",
+            "also",
+            "first",
+            "second",
+            "finally",
+            "多个",
+            "所有",
+            "每个",
+            "批量",
         ]
         indicator_count = sum(1 for kw in complex_indicators if kw in desc)
 
@@ -201,15 +229,20 @@ class FractalAgent:
             if self.llm_router:
                 resp = await self.llm_router.chat(
                     messages=[
-                        {"role": "system", "content": (
-                            soul_section +
-                            f"你是一个任务执行 Agent（角色: {self.role}）。\n"
-                            "直接执行给定的任务并返回结果。"
-                        )},
-                        {"role": "user", "content": (
-                            f"执行任务: {task.description}\n"
-                            f"上下文: {json.dumps(task.context, ensure_ascii=False)}"
-                        )},
+                        {
+                            "role": "system",
+                            "content": (
+                                soul_section + f"你是一个任务执行 Agent（角色: {self.role}）。\n"
+                                "直接执行给定的任务并返回结果。"
+                            ),
+                        },
+                        {
+                            "role": "user",
+                            "content": (
+                                f"执行任务: {task.description}\n"
+                                f"上下文: {json.dumps(task.context, ensure_ascii=False)}"
+                            ),
+                        },
                     ],
                     task_type="agent_control",
                 )
@@ -220,15 +253,21 @@ class FractalAgent:
 
             task.result = output
             return FractalResult(
-                task_id=task.id, success=True, output=output,
-                depth=self.depth, decomposition_used=False,
+                task_id=task.id,
+                success=True,
+                output=output,
+                depth=self.depth,
+                decomposition_used=False,
             )
         except Exception as e:
             logger.debug("Fallback triggered: %s", e)
             task.error = str(e)
             return FractalResult(
-                task_id=task.id, success=False, output=str(e),
-                depth=self.depth, decomposition_used=False,
+                task_id=task.id,
+                success=False,
+                output=str(e),
+                depth=self.depth,
+                decomposition_used=False,
             )
 
     # ─────── 递归分解执行 ─────────
@@ -245,8 +284,7 @@ class FractalAgent:
         task.subtask_ids = [st.id for st in subtasks]
 
         logger.info(
-            f"{'  ' * self.depth}  分解为 {len(subtasks)} 个子任务: "
-            f"{[st.description[:30] for st in subtasks]}"
+            f"{'  ' * self.depth}  分解为 {len(subtasks)} 个子任务: " f"{[st.description[:30] for st in subtasks]}"
         )
 
         # 2. 为每个子任务创建子 Agent
@@ -274,8 +312,7 @@ class FractalAgent:
         for r in sub_results:
             if isinstance(r, Exception):
                 collected_results.append(
-                    FractalResult(task_id="error", success=False,
-                                  output=str(r), depth=self.depth + 1)
+                    FractalResult(task_id="error", success=False, output=str(r), depth=self.depth + 1)
                 )
                 all_success = False
             else:
@@ -307,30 +344,37 @@ class FractalAgent:
         try:
             result = await self.llm_router.chat_json(
                 messages=[
-                    {"role": "system", "content": (
-                        soul_section +
-                        "你是一个任务分解专家。将复杂任务分解为可独立执行的子任务。\n"
-                        f"最多分解为 {self.MAX_SUBTASKS} 个子任务。\n"
-                        "每个子任务应该足够具体，可以独立执行。\n\n"
-                        "返回 JSON: {\"subtasks\": [{\"description\": \"子任务描述\", "
-                        "\"role\": \"执行角色\", \"context\": {}}]}"
-                    )},
-                    {"role": "user", "content": (
-                        f"请分解以下任务:\n{task.description}\n\n"
-                        f"上下文: {json.dumps(task.context, ensure_ascii=False)}"
-                    )},
+                    {
+                        "role": "system",
+                        "content": (
+                            soul_section + "你是一个任务分解专家。将复杂任务分解为可独立执行的子任务。\n"
+                            f"最多分解为 {self.MAX_SUBTASKS} 个子任务。\n"
+                            "每个子任务应该足够具体，可以独立执行。\n\n"
+                            '返回 JSON: {"subtasks": [{"description": "子任务描述", '
+                            '"role": "执行角色", "context": {}}]}'
+                        ),
+                    },
+                    {
+                        "role": "user",
+                        "content": (
+                            f"请分解以下任务:\n{task.description}\n\n"
+                            f"上下文: {json.dumps(task.context, ensure_ascii=False)}"
+                        ),
+                    },
                 ],
                 task_type="planning",
             )
 
             subtasks = []
-            for i, st_data in enumerate(result.get("subtasks", [])[:self.MAX_SUBTASKS]):
-                subtasks.append(FractalTask(
-                    id=f"{task.id}_sub{i}",
-                    description=st_data.get("description", ""),
-                    context={**task.context, **st_data.get("context", {})},
-                    parent_task_id=task.id,
-                ))
+            for i, st_data in enumerate(result.get("subtasks", [])[: self.MAX_SUBTASKS]):
+                subtasks.append(
+                    FractalTask(
+                        id=f"{task.id}_sub{i}",
+                        description=st_data.get("description", ""),
+                        context={**task.context, **st_data.get("context", {})},
+                        parent_task_id=task.id,
+                    )
+                )
             return subtasks
 
         except Exception as e:
@@ -342,8 +386,7 @@ class FractalAgent:
         desc = task.description
 
         # 按连接词分割
-        separators = ["并且", "同时", "然后", "以及", "还需要",
-                       " and ", " then ", " also "]
+        separators = ["并且", "同时", "然后", "以及", "还需要", " and ", " then ", " also "]
         parts = [desc]
         for sep in separators:
             new_parts = []
@@ -358,13 +401,15 @@ class FractalAgent:
             return []
 
         subtasks = []
-        for i, part in enumerate(parts[:self.MAX_SUBTASKS]):
-            subtasks.append(FractalTask(
-                id=f"{task.id}_sub{i}",
-                description=part,
-                context=task.context,
-                parent_task_id=task.id,
-            ))
+        for i, part in enumerate(parts[: self.MAX_SUBTASKS]):
+            subtasks.append(
+                FractalTask(
+                    id=f"{task.id}_sub{i}",
+                    description=part,
+                    context=task.context,
+                    parent_task_id=task.id,
+                )
+            )
         return subtasks
 
     def _choose_role_for_subtask(self, subtask: FractalTask) -> str:
@@ -380,8 +425,7 @@ class FractalAgent:
             return "controller"
         return "executor"
 
-    async def _synthesize(self, task: FractalTask,
-                          sub_results: List[FractalResult]) -> str:
+    async def _synthesize(self, task: FractalTask, sub_results: List[FractalResult]) -> str:
         """合成子任务结果"""
         if self.llm_router:
             try:
@@ -394,13 +438,14 @@ class FractalAgent:
 
                 resp = await self.llm_router.chat(
                     messages=[
-                        {"role": "system", "content": (
-                            "你是一个结果合成专家。将多个子任务的结果合成为一个完整的回答。"
-                        )},
-                        {"role": "user", "content": (
-                            f"原始任务: {task.description}\n\n"
-                            f"子任务结果:\n" + "\n".join(result_texts)
-                        )},
+                        {
+                            "role": "system",
+                            "content": ("你是一个结果合成专家。将多个子任务的结果合成为一个完整的回答。"),
+                        },
+                        {
+                            "role": "user",
+                            "content": (f"原始任务: {task.description}\n\n" f"子任务结果:\n" + "\n".join(result_texts)),
+                        },
                     ],
                     task_type="analysis",
                 )
@@ -409,10 +454,7 @@ class FractalAgent:
                 logger.warning(f"LLM 合成失败: {e}")
 
         # 降级：简单拼接
-        outputs = [
-            r.output if isinstance(r.output, str) else str(r.output)
-            for r in sub_results if r.success
-        ]
+        outputs = [r.output if isinstance(r.output, str) else str(r.output) for r in sub_results if r.success]
         return "\n---\n".join(outputs)
 
     # ─────── 状态查询 ─────────
@@ -437,6 +479,7 @@ class FractalAgent:
 
 # ───────────────────── 分形执行器（顶层入口）─────────────────────
 
+
 class FractalExecutor:
     """
     分形执行器 - 系统级入口
@@ -444,16 +487,14 @@ class FractalExecutor:
     接收用户任务，创建根 FractalAgent，启动分形执行流程。
     """
 
-    def __init__(self, llm_router=None, agent_factory=None,
-                 max_depth: int = 3, max_subtasks: int = 20):
+    def __init__(self, llm_router=None, agent_factory=None, max_depth: int = 3, max_subtasks: int = 20):
         self.llm_router = llm_router
         self.agent_factory = agent_factory
         self.max_depth = max_depth
         self.max_subtasks = max_subtasks
         self.executions: Dict[str, Dict] = {}
 
-    async def run(self, task_description: str,
-                  context: Optional[Dict] = None) -> FractalResult:
+    async def run(self, task_description: str, context: Optional[Dict] = None) -> FractalResult:
         """
         执行分形任务
 
@@ -477,7 +518,9 @@ class FractalExecutor:
         root_agent.MAX_DEPTH = self.max_depth
         root_agent.MAX_SUBTASKS = self.max_subtasks
 
-        logger.info(f"开始分形执行: {task_description[:60]}... (max_depth={self.max_depth}, max_subtasks={self.max_subtasks})")
+        logger.info(
+            f"开始分形执行: {task_description[:60]}... (max_depth={self.max_depth}, max_subtasks={self.max_subtasks})"
+        )
 
         result = await root_agent.execute(task)
 

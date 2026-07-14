@@ -16,6 +16,7 @@ logger = logging.getLogger("Galaxy.Adapter.MQTT")
 # 尝试导入 paho-mqtt
 try:
     import paho.mqtt.client as mqtt
+
     MQTT_AVAILABLE = True
 except ImportError:
     MQTT_AVAILABLE = False

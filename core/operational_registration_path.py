@@ -447,6 +447,7 @@ class OperationalRegistrationPath:
 # Registration kind catalog
 # ---------------------------------------------------------------------------
 
+
 def _build_registration_kinds() -> List[RegistrationKindInfo]:
     """Build the complete ordered registration kind catalog."""
     return [
@@ -769,6 +770,7 @@ def _build_registration_kinds() -> List[RegistrationKindInfo]:
 # Onboarding step catalog
 # ---------------------------------------------------------------------------
 
+
 def _build_onboarding_steps() -> List[OnboardingStep]:
     """Build the complete ordered onboarding step catalog."""
     return [
@@ -820,8 +822,7 @@ def _build_onboarding_steps() -> List[OnboardingStep]:
                 "# (other provider keys are optional)"
             ),
             verification=(
-                "runtime/secrets.env exists and OPENAI_API_KEY "
-                "(or an alternate provider key) is non-empty."
+                "runtime/secrets.env exists and OPENAI_API_KEY " "(or an alternate provider key) is non-empty."
             ),
             blocking=False,
         ),
@@ -844,13 +845,13 @@ def _build_onboarding_steps() -> List[OnboardingStep]:
             display_name="Verify Registration Prerequisites",
             path_tier=PathTier.MAIN_CHAIN,
             instructions=(
-                "python -c \"\n"
+                'python -c "\n'
                 "from core.operational_registration_path import validate_registration_prerequisites\n"
                 "v = validate_registration_prerequisites()\n"
                 "print(v.summary)\n"
                 "if v.failed_checks:\n"
                 "    raise SystemExit(1)\n"
-                "\""
+                '"'
             ),
             verification="Exits 0 with 'PASSED' summary.",
             blocking=False,
@@ -865,10 +866,7 @@ def _build_onboarding_steps() -> List[OnboardingStep]:
                 "# Runs staged bring-up Phases 1-7 then delegates to\n"
                 "# unified_launcher.py for full async bring-up."
             ),
-            verification=(
-                "Logs show 'Orchestrator bring-up complete'. "
-                "Backend accepts connections on port 9000."
-            ),
+            verification=("Logs show 'Orchestrator bring-up complete'. " "Backend accepts connections on port 9000."),
             blocking=True,
         ),
         OnboardingStep(
@@ -877,11 +875,11 @@ def _build_onboarding_steps() -> List[OnboardingStep]:
             path_tier=PathTier.MAIN_CHAIN,
             instructions=(
                 "curl -sS http://127.0.0.1:9000/health\n"
-                "# Expected: HTTP 200, {\"status\": \"ok\"} or similar.\n\n"
+                '# Expected: HTTP 200, {"status": "ok"} or similar.\n\n'
                 "# Minimal chat verification:\n"
                 "curl -sS -X POST http://127.0.0.1:9000/api/v1/chat \\\n"
                 "  -H 'Content-Type: application/json' \\\n"
-                "  -d '{\"message\":\"hello\",\"device_id\":\"local_cli\"}'"
+                '  -d \'{"message":"hello","device_id":"local_cli"}\''
             ),
             verification="GET /health → 200. POST /api/v1/chat returns a response.",
             blocking=True,
@@ -916,8 +914,7 @@ def _build_onboarding_steps() -> List[OnboardingStep]:
                 "curl -sS http://127.0.0.1:9000/api/v1/projection/runtime"
             ),
             verification=(
-                "Android device appears with status=online. "
-                "Runtime projection includes device capabilities."
+                "Android device appears with status=online. " "Runtime projection includes device capabilities."
             ),
             blocking=False,
         ),
@@ -929,7 +926,7 @@ def _build_onboarding_steps() -> List[OnboardingStep]:
                 "# Local natural language request (main chain):\n"
                 "curl -sS -X POST http://127.0.0.1:9000/api/v1/chat \\\n"
                 "  -H 'Content-Type: application/json' \\\n"
-                "  -d '{\"message\":\"请帮我查一下当前时间\",\"device_id\":\"local_cli\"}'\n\n"
+                '  -d \'{"message":"请帮我查一下当前时间","device_id":"local_cli"}\'\n\n'
                 "# Cross-device NL initiation (from Android app):\n"
                 "# Type or speak a command in the Galaxy Android app."
             ),
@@ -948,10 +945,7 @@ def _build_onboarding_steps() -> List[OnboardingStep]:
                 "curl -sS http://127.0.0.1:9000/api/v1/projection/runtime-truth\n"
                 "# Confirm task result is present and reconciliation is complete."
             ),
-            verification=(
-                "Runtime truth projection shows the task as completed. "
-                "No open reconciliation entries."
-            ),
+            verification=("Runtime truth projection shows the task as completed. " "No open reconciliation entries."),
             blocking=False,
         ),
     ]
@@ -960,6 +954,7 @@ def _build_onboarding_steps() -> List[OnboardingStep]:
 # ---------------------------------------------------------------------------
 # Prerequisite validation
 # ---------------------------------------------------------------------------
+
 
 def _check_module(
     name: str,
@@ -1032,18 +1027,22 @@ def validate_registration_prerequisites() -> OnboardingValidation:
     checks: List[PrerequisiteCheck] = []
 
     # ---- Core system orchestrator ----
-    checks.append(_check_module(
-        "system-orchestrator",
-        "core.system_orchestrator",
-        "core.system_orchestrator not found — staged bring-up contract missing.",
-    ))
+    checks.append(
+        _check_module(
+            "system-orchestrator",
+            "core.system_orchestrator",
+            "core.system_orchestrator not found — staged bring-up contract missing.",
+        )
+    )
 
     # ---- Canonical device management (UDM) ----
-    checks.append(_check_module(
-        "unified-device-manager",
-        "core.unified.device_manager",
-        "core.unified.device_manager (UDM) not found — canonical device SSOT missing.",
-    ))
+    checks.append(
+        _check_module(
+            "unified-device-manager",
+            "core.unified.device_manager",
+            "core.unified.device_manager (UDM) not found — canonical device SSOT missing.",
+        )
+    )
 
     # ---- Capability registry (try both known locations) ----
     cap_reg_spec = None
@@ -1069,97 +1068,111 @@ def validate_registration_prerequisites() -> OnboardingValidation:
             break
 
     if cap_reg_spec is not None:
-        checks.append(PrerequisiteCheck(
-            name="capability-registry",
-            status=ValidationStatus.PASS,
-            message=f"CapabilityRegistry module locatable at '{cap_reg_module}'.",
-            module_checked=cap_reg_module,
-        ))
+        checks.append(
+            PrerequisiteCheck(
+                name="capability-registry",
+                status=ValidationStatus.PASS,
+                message=f"CapabilityRegistry module locatable at '{cap_reg_module}'.",
+                module_checked=cap_reg_module,
+            )
+        )
     else:
-        checks.append(PrerequisiteCheck(
-            name="capability-registry",
-            status=ValidationStatus.FAIL,
-            message=(
-                "Neither core.agent.capability_registry nor core.capability_registry "
-                "is locatable — capability network missing."
-            ),
-            module_checked="core.capability_registry",
-        ))
+        checks.append(
+            PrerequisiteCheck(
+                name="capability-registry",
+                status=ValidationStatus.FAIL,
+                message=(
+                    "Neither core.agent.capability_registry nor core.capability_registry "
+                    "is locatable — capability network missing."
+                ),
+                module_checked="core.capability_registry",
+            )
+        )
 
     # ---- Gateway WebSocket transport ----
-    checks.append(_check_module(
-        "gateway-websocket",
-        "galaxy_gateway.routes.websocket",
-        (
-            "galaxy_gateway.routes.websocket not found — "
-            "WebSocket transport missing; Android registration will fail."
-        ),
-    ))
+    checks.append(
+        _check_module(
+            "gateway-websocket",
+            "galaxy_gateway.routes.websocket",
+            (
+                "galaxy_gateway.routes.websocket not found — "
+                "WebSocket transport missing; Android registration will fail."
+            ),
+        )
+    )
 
     # ---- Android device state store ----
-    checks.append(_check_module(
-        "android-device-state-store",
-        "core.android_device_state_store",
-        (
-            "core.android_device_state_store not found — "
-            "Android runtime state mirror missing; cross-device truth incomplete."
-        ),
-    ))
+    checks.append(
+        _check_module(
+            "android-device-state-store",
+            "core.android_device_state_store",
+            (
+                "core.android_device_state_store not found — "
+                "Android runtime state mirror missing; cross-device truth incomplete."
+            ),
+        )
+    )
 
     # ---- Android gateway registration handler ----
-    checks.append(_check_module(
-        "android-gateway-registration",
-        "galaxy_gateway.android.handlers.registration",
-        (
-            "galaxy_gateway.android.handlers.registration not found — "
-            "Android device admission handler missing."
-        ),
-    ))
+    checks.append(
+        _check_module(
+            "android-gateway-registration",
+            "galaxy_gateway.android.handlers.registration",
+            ("galaxy_gateway.android.handlers.registration not found — " "Android device admission handler missing."),
+        )
+    )
 
     # ---- Attached runtime session registry ----
-    checks.append(_check_module(
-        "attached-runtime-session-registry",
-        "core.attached_runtime_session_registry",
-        (
-            "core.attached_runtime_session_registry not found — "
-            "session truth SSOT missing; dispatch/reuse/reconciliation affected."
-        ),
-    ))
+    checks.append(
+        _check_module(
+            "attached-runtime-session-registry",
+            "core.attached_runtime_session_registry",
+            (
+                "core.attached_runtime_session_registry not found — "
+                "session truth SSOT missing; dispatch/reuse/reconciliation affected."
+            ),
+        )
+    )
 
     # ---- Unified execution governance ----
-    checks.append(_check_module(
-        "unified-execution-governance",
-        "core.unified_execution_governance",
-        (
-            "core.unified_execution_governance not found — "
-            "8-dimension V2 governance authority missing."
-        ),
-    ))
+    checks.append(
+        _check_module(
+            "unified-execution-governance",
+            "core.unified_execution_governance",
+            ("core.unified_execution_governance not found — " "8-dimension V2 governance authority missing."),
+        )
+    )
 
     # ---- Desktop presence runtime (subject shell) ----
-    checks.append(_check_module(
-        "desktop-presence-runtime",
-        "core.desktop_presence_runtime",
-        "core.desktop_presence_runtime not found — runtime subject shell missing.",
-    ))
+    checks.append(
+        _check_module(
+            "desktop-presence-runtime",
+            "core.desktop_presence_runtime",
+            "core.desktop_presence_runtime not found — runtime subject shell missing.",
+        )
+    )
 
     # ---- OpenClawd (subject core) ----
-    checks.append(_check_module(
-        "openclawd-core",
-        "core.openclawd",
-        "core.openclawd not found — cognitive subject core missing.",
-    ))
+    checks.append(
+        _check_module(
+            "openclawd-core",
+            "core.openclawd",
+            "core.openclawd not found — cognitive subject core missing.",
+        )
+    )
 
     # ---- PR993 reevaluation (optional but recommended) ----
-    checks.append(_check_module(
-        "pr993-reevaluation",
-        "core.pr993_dual_repo_reevaluation",
-        (
-            "core.pr993_dual_repo_reevaluation not found — "
-            "PR993 machine-checkable reevaluation module missing (recommended)."
-        ),
-        warn_only=True,
-    ))
+    checks.append(
+        _check_module(
+            "pr993-reevaluation",
+            "core.pr993_dual_repo_reevaluation",
+            (
+                "core.pr993_dual_repo_reevaluation not found — "
+                "PR993 machine-checkable reevaluation module missing (recommended)."
+            ),
+            warn_only=True,
+        )
+    )
 
     # ---- Aggregate ----
     failed = [c for c in checks if c.status == ValidationStatus.FAIL]
@@ -1183,10 +1196,7 @@ def validate_registration_prerequisites() -> OnboardingValidation:
         )
     else:
         overall = ValidationStatus.PASS
-        summary = (
-            f"Registration prerequisite validation PASSED: "
-            f"all {len(checks)} checks passed."
-        )
+        summary = f"Registration prerequisite validation PASSED: " f"all {len(checks)} checks passed."
 
     return OnboardingValidation(
         checks=checks,
@@ -1199,6 +1209,7 @@ def validate_registration_prerequisites() -> OnboardingValidation:
 # Tier classification helper
 # ---------------------------------------------------------------------------
 
+
 def _classify_by_tier(
     kinds: List[RegistrationKindInfo],
     tier: PathTier,
@@ -1209,6 +1220,7 @@ def _classify_by_tier(
 # ---------------------------------------------------------------------------
 # Root builder
 # ---------------------------------------------------------------------------
+
 
 def build_operational_registration_path() -> OperationalRegistrationPath:
     """Build and return the complete OperationalRegistrationPath.
@@ -1233,10 +1245,7 @@ def build_operational_registration_path() -> OperationalRegistrationPath:
     # bucket because they share the same operational meaning to consumers of this
     # path: they are non-canonical supporting paths that extend or degrade
     # gracefully rather than being required for baseline system operation.
-    compat = [
-        rk.kind for rk in kinds
-        if rk.path_tier in (PathTier.COMPAT, PathTier.FALLBACK, PathTier.RECOVERY)
-    ]
+    compat = [rk.kind for rk in kinds if rk.path_tier in (PathTier.COMPAT, PathTier.FALLBACK, PathTier.RECOVERY)]
 
     system_identity = (
         "Galaxy is a center-governed distributed intelligent agent system "
@@ -1296,6 +1305,7 @@ def reset_operational_registration_path() -> None:
 # Test-helper invariant suite
 # ---------------------------------------------------------------------------
 
+
 def assert_operational_registration_path_invariants() -> None:
     """Assert that the operational registration path is internally consistent.
 
@@ -1308,27 +1318,17 @@ def assert_operational_registration_path_invariants() -> None:
     # ---- All RegistrationKind values covered ----
     kind_ids_seen = {rk.kind for rk in path.registration_kinds}
     for kind in RegistrationKind:
-        assert kind in kind_ids_seen, (
-            f"Missing RegistrationKindInfo for RegistrationKind.{kind.name}."
-        )
+        assert kind in kind_ids_seen, f"Missing RegistrationKindInfo for RegistrationKind.{kind.name}."
 
     # ---- All OnboardingStepId values covered ----
     step_ids_seen = {s.step_id for s in path.onboarding_steps}
     for step in OnboardingStepId:
-        assert step in step_ids_seen, (
-            f"Missing OnboardingStep for OnboardingStepId.{step.name}."
-        )
+        assert step in step_ids_seen, f"Missing OnboardingStep for OnboardingStepId.{step.name}."
 
     # ---- Every kind is in exactly one tier bucket ----
-    all_tiered = (
-        set(path.main_chain_kinds)
-        | set(path.cross_device_kinds)
-        | set(path.compat_kinds)
-    )
+    all_tiered = set(path.main_chain_kinds) | set(path.cross_device_kinds) | set(path.compat_kinds)
     for rk in path.registration_kinds:
-        assert rk.kind in all_tiered, (
-            f"RegistrationKind.{rk.kind.name} is not classified into any tier bucket."
-        )
+        assert rk.kind in all_tiered, f"RegistrationKind.{rk.kind.name} is not classified into any tier bucket."
 
     # ---- Validation must have been run ----
     assert path.validation is not None, "Validation must be present."
@@ -1346,9 +1346,7 @@ def assert_operational_registration_path_invariants() -> None:
         RegistrationKind.RUNTIME_SUBJECT,
     }
     for k in required_main:
-        assert k in path.main_chain_kinds, (
-            f"RegistrationKind.{k.name} must be classified as MAIN_CHAIN."
-        )
+        assert k in path.main_chain_kinds, f"RegistrationKind.{k.name} must be classified as MAIN_CHAIN."
 
     # ---- Key cross-device kinds must be present ----
     required_cross = {
@@ -1358,9 +1356,7 @@ def assert_operational_registration_path_invariants() -> None:
         RegistrationKind.RUNTIME_ANDROID_HOST,
     }
     for k in required_cross:
-        assert k in path.cross_device_kinds, (
-            f"RegistrationKind.{k.name} must be classified as CROSS_DEVICE."
-        )
+        assert k in path.cross_device_kinds, f"RegistrationKind.{k.name} must be classified as CROSS_DEVICE."
 
     # ---- Serialisation round-trip ----
     d = path.to_dict()
@@ -1372,12 +1368,10 @@ def assert_operational_registration_path_invariants() -> None:
     assert isinstance(j, str) and len(j) > 0, "to_json() must return a non-empty string."
 
     # ---- System identity must reference PR993 ----
-    assert "PR993" in path.system_identity or "center-governed" in path.system_identity, (
-        "system_identity must reference the PR993 center-governed system definition."
-    )
+    assert (
+        "PR993" in path.system_identity or "center-governed" in path.system_identity
+    ), "system_identity must reference the PR993 center-governed system definition."
 
     # ---- Contract version must contain alignment tag ----
     assert path.contract_version, "contract_version must be non-empty."
-    assert "pr993_ops" in path.contract_version, (
-        "contract_version must contain 'pr993_ops' alignment tag."
-    )
+    assert "pr993_ops" in path.contract_version, "contract_version must contain 'pr993_ops' alignment tag."

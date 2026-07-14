@@ -23,7 +23,6 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from core.unified_governance_semantics import (
-    GovernancePath,
     MESH_RUNTIME_PROOF_QUALITY_LIVE,
     MESH_RUNTIME_PROOF_QUALITY_MISSING,
     MESH_RUNTIME_PROOF_QUALITY_PARTIAL,
@@ -33,6 +32,7 @@ from core.unified_governance_semantics import (
     MESH_RUNTIME_STATUS_CONTRACT_ONLY,
     MESH_RUNTIME_STATUS_PARTIAL,
     MESH_RUNTIME_STATUS_RUNTIME_PROVEN,
+    GovernancePath,
     build_mesh_runtime_state,
     build_unified_governance_state,
     resolve_governance_path_decision,
@@ -82,12 +82,15 @@ class TestGroupA_MeshRuntimeStateProofQuality:
 
     def test_a1_no_sentinels_no_runs_proof_quality_is_missing(self) -> None:
         """When no sentinels and no live runs exist, proof_quality is missing."""
-        with patch(
-            "core.unified_governance_semantics._has_sentinel",
-            return_value=False,
-        ), patch(
-            "core.runtime.source_dispatch_orchestrator.get_live_mesh_runtime_proof_snapshot",
-            return_value=_EMPTY_PROOF_SNAPSHOT,
+        with (
+            patch(
+                "core.unified_governance_semantics._has_sentinel",
+                return_value=False,
+            ),
+            patch(
+                "core.runtime.source_dispatch_orchestrator.get_live_mesh_runtime_proof_snapshot",
+                return_value=_EMPTY_PROOF_SNAPSHOT,
+            ),
         ):
             state = build_mesh_runtime_state()
 
@@ -98,16 +101,20 @@ class TestGroupA_MeshRuntimeStateProofQuality:
     def test_a2_sentinel_only_proof_quality_is_structurally_inferred(self) -> None:
         """Sentinel proofs with no live run yield structurally_inferred quality."""
         from core.runtime.source_dispatch_orchestrator import reset_live_mesh_runtime_proof_snapshot
+
         reset_live_mesh_runtime_proof_snapshot()
 
         # Explicitly provide empty proof snapshot and at least one sentinel so that
         # runtime_proof_count > 0 and has_live_runtime_path_execution == False.
-        with patch(
-            "core.runtime.source_dispatch_orchestrator.get_live_mesh_runtime_proof_snapshot",
-            return_value=_EMPTY_PROOF_SNAPSHOT,
-        ), patch(
-            "core.unified_governance_semantics._has_sentinel",
-            return_value=True,  # all sentinels present → runtime_proof_count > 0
+        with (
+            patch(
+                "core.runtime.source_dispatch_orchestrator.get_live_mesh_runtime_proof_snapshot",
+                return_value=_EMPTY_PROOF_SNAPSHOT,
+            ),
+            patch(
+                "core.unified_governance_semantics._has_sentinel",
+                return_value=True,  # all sentinels present → runtime_proof_count > 0
+            ),
         ):
             state = build_mesh_runtime_state()
 
@@ -117,9 +124,7 @@ class TestGroupA_MeshRuntimeStateProofQuality:
 
     def test_a3_live_run_fresh_proof_quality_is_live(self) -> None:
         """A recent live run yields proof_quality=live and impact=none."""
-        fresh_snapshot = _make_live_proof_snapshot(
-            last_live_run_at=time.time() - 10.0  # 10 seconds ago
-        )
+        fresh_snapshot = _make_live_proof_snapshot(last_live_run_at=time.time() - 10.0)  # 10 seconds ago
         with patch(
             "core.runtime.source_dispatch_orchestrator.get_live_mesh_runtime_proof_snapshot",
             return_value=fresh_snapshot,
@@ -160,6 +165,7 @@ class TestGroupA_MeshRuntimeStateProofQuality:
     def test_a6_proof_quality_reason_is_present(self) -> None:
         """proof_quality_reason is always a non-empty string."""
         from core.runtime.source_dispatch_orchestrator import reset_live_mesh_runtime_proof_snapshot
+
         reset_live_mesh_runtime_proof_snapshot()
         state = build_mesh_runtime_state()
         assert isinstance(state.get("proof_quality_reason"), str)
@@ -224,9 +230,7 @@ class TestGroupB_GovernancePathDecisionMeshProofQuality:
         self,
     ) -> None:
         decision = resolve_governance_path_decision(
-            **self._make_cross_device_kwargs(
-                mesh_proof_quality=MESH_RUNTIME_PROOF_QUALITY_STRUCTURALLY_INFERRED
-            )
+            **self._make_cross_device_kwargs(mesh_proof_quality=MESH_RUNTIME_PROOF_QUALITY_STRUCTURALLY_INFERRED)
         )
         assert decision.eligible is False
         assert "structurally_inferred" in (decision.blocked_by or "")
@@ -242,9 +246,7 @@ class TestGroupB_GovernancePathDecisionMeshProofQuality:
         self,
     ) -> None:
         """When no mesh_proof_quality is given, path remains eligible (backward compat)."""
-        decision = resolve_governance_path_decision(
-            **self._make_cross_device_kwargs()  # no mesh_proof_quality
-        )
+        decision = resolve_governance_path_decision(**self._make_cross_device_kwargs())  # no mesh_proof_quality
         assert decision.eligible is True
 
     def test_b7_delegated_execution_not_blocked_by_mesh_proof_alone(self) -> None:
@@ -337,24 +339,31 @@ class TestGroupC_UnifiedGovernanceStateMeshProofCausality:
         }
         fresh_mesh = _make_live_proof_snapshot(last_live_run_at=time.time() - 5.0)
 
-        with patch(
-            "core.attached_runtime_session_registry.list_active_sessions",
-            return_value=active_sessions,
-        ), patch(
-            "core.android_mode_gate_policy.build_mode_state_for_device",
-            side_effect=lambda device_id: mode_map[device_id],
-        ), patch(
-            "core.android_mode_gate_policy.evaluate_android_mode_readiness",
-            side_effect=lambda device_id: readiness_map[device_id],
-        ), patch(
-            "core.unified_execution_governance.is_takeover_active",
-            return_value=False,
-        ), patch(
-            "core.unified_execution_governance.get_execution_runtime_snapshot",
-            return_value=self._base_runtime_snapshot(),
-        ), patch(
-            "core.runtime.source_dispatch_orchestrator.get_live_mesh_runtime_proof_snapshot",
-            return_value=fresh_mesh,
+        with (
+            patch(
+                "core.attached_runtime_session_registry.list_active_sessions",
+                return_value=active_sessions,
+            ),
+            patch(
+                "core.android_mode_gate_policy.build_mode_state_for_device",
+                side_effect=lambda device_id: mode_map[device_id],
+            ),
+            patch(
+                "core.android_mode_gate_policy.evaluate_android_mode_readiness",
+                side_effect=lambda device_id: readiness_map[device_id],
+            ),
+            patch(
+                "core.unified_execution_governance.is_takeover_active",
+                return_value=False,
+            ),
+            patch(
+                "core.unified_execution_governance.get_execution_runtime_snapshot",
+                return_value=self._base_runtime_snapshot(),
+            ),
+            patch(
+                "core.runtime.source_dispatch_orchestrator.get_live_mesh_runtime_proof_snapshot",
+                return_value=fresh_mesh,
+            ),
         ):
             state = build_unified_governance_state()
 
@@ -362,9 +371,9 @@ class TestGroupC_UnifiedGovernanceStateMeshProofCausality:
         for path_name, path_decision in device["governance_precedence"].items():
             causality = path_decision.get("decision_causality", {})
             assert "mesh_proof_quality" in causality, f"missing mesh_proof_quality on path {path_name}"
-            assert "mesh_governance_readiness_impact" in causality, (
-                f"missing mesh_governance_readiness_impact on path {path_name}"
-            )
+            assert (
+                "mesh_governance_readiness_impact" in causality
+            ), f"missing mesh_governance_readiness_impact on path {path_name}"
 
     def test_c2_multimodal_participation_blocked_by_stale_proof_in_state(self) -> None:
         """When mesh proof is stale, multimodal_participation is blocked in governance state."""
@@ -380,24 +389,31 @@ class TestGroupC_UnifiedGovernanceStateMeshProofCausality:
         stale_run_at = time.time() - MESH_RUNTIME_PROOF_STALE_AFTER_SECONDS - 120.0
         stale_mesh = _make_live_proof_snapshot(last_live_run_at=stale_run_at)
 
-        with patch(
-            "core.attached_runtime_session_registry.list_active_sessions",
-            return_value=active_sessions,
-        ), patch(
-            "core.android_mode_gate_policy.build_mode_state_for_device",
-            side_effect=lambda device_id: mode_map[device_id],
-        ), patch(
-            "core.android_mode_gate_policy.evaluate_android_mode_readiness",
-            side_effect=lambda device_id: readiness_map[device_id],
-        ), patch(
-            "core.unified_execution_governance.is_takeover_active",
-            return_value=False,
-        ), patch(
-            "core.unified_execution_governance.get_execution_runtime_snapshot",
-            return_value=self._base_runtime_snapshot(),
-        ), patch(
-            "core.runtime.source_dispatch_orchestrator.get_live_mesh_runtime_proof_snapshot",
-            return_value=stale_mesh,
+        with (
+            patch(
+                "core.attached_runtime_session_registry.list_active_sessions",
+                return_value=active_sessions,
+            ),
+            patch(
+                "core.android_mode_gate_policy.build_mode_state_for_device",
+                side_effect=lambda device_id: mode_map[device_id],
+            ),
+            patch(
+                "core.android_mode_gate_policy.evaluate_android_mode_readiness",
+                side_effect=lambda device_id: readiness_map[device_id],
+            ),
+            patch(
+                "core.unified_execution_governance.is_takeover_active",
+                return_value=False,
+            ),
+            patch(
+                "core.unified_execution_governance.get_execution_runtime_snapshot",
+                return_value=self._base_runtime_snapshot(),
+            ),
+            patch(
+                "core.runtime.source_dispatch_orchestrator.get_live_mesh_runtime_proof_snapshot",
+                return_value=stale_mesh,
+            ),
         ):
             state = build_unified_governance_state()
 
@@ -421,24 +437,31 @@ class TestGroupC_UnifiedGovernanceStateMeshProofCausality:
         }
         fresh_mesh = _make_live_proof_snapshot(last_live_run_at=time.time() - 5.0)
 
-        with patch(
-            "core.attached_runtime_session_registry.list_active_sessions",
-            return_value=active_sessions,
-        ), patch(
-            "core.android_mode_gate_policy.build_mode_state_for_device",
-            side_effect=lambda device_id: mode_map[device_id],
-        ), patch(
-            "core.android_mode_gate_policy.evaluate_android_mode_readiness",
-            side_effect=lambda device_id: readiness_map[device_id],
-        ), patch(
-            "core.unified_execution_governance.is_takeover_active",
-            return_value=False,
-        ), patch(
-            "core.unified_execution_governance.get_execution_runtime_snapshot",
-            return_value=self._base_runtime_snapshot(),
-        ), patch(
-            "core.runtime.source_dispatch_orchestrator.get_live_mesh_runtime_proof_snapshot",
-            return_value=fresh_mesh,
+        with (
+            patch(
+                "core.attached_runtime_session_registry.list_active_sessions",
+                return_value=active_sessions,
+            ),
+            patch(
+                "core.android_mode_gate_policy.build_mode_state_for_device",
+                side_effect=lambda device_id: mode_map[device_id],
+            ),
+            patch(
+                "core.android_mode_gate_policy.evaluate_android_mode_readiness",
+                side_effect=lambda device_id: readiness_map[device_id],
+            ),
+            patch(
+                "core.unified_execution_governance.is_takeover_active",
+                return_value=False,
+            ),
+            patch(
+                "core.unified_execution_governance.get_execution_runtime_snapshot",
+                return_value=self._base_runtime_snapshot(),
+            ),
+            patch(
+                "core.runtime.source_dispatch_orchestrator.get_live_mesh_runtime_proof_snapshot",
+                return_value=fresh_mesh,
+            ),
         ):
             state = build_unified_governance_state()
 
@@ -462,27 +485,35 @@ class TestGroupC_UnifiedGovernanceStateMeshProofCausality:
             )
         }
         # No live runs but all sentinels present → structurally_inferred (explicit mocks)
-        with patch(
-            "core.attached_runtime_session_registry.list_active_sessions",
-            return_value=active_sessions,
-        ), patch(
-            "core.android_mode_gate_policy.build_mode_state_for_device",
-            side_effect=lambda device_id: mode_map[device_id],
-        ), patch(
-            "core.android_mode_gate_policy.evaluate_android_mode_readiness",
-            side_effect=lambda device_id: readiness_map[device_id],
-        ), patch(
-            "core.unified_execution_governance.is_takeover_active",
-            return_value=False,
-        ), patch(
-            "core.unified_execution_governance.get_execution_runtime_snapshot",
-            return_value=self._base_runtime_snapshot(),
-        ), patch(
-            "core.runtime.source_dispatch_orchestrator.get_live_mesh_runtime_proof_snapshot",
-            return_value=_EMPTY_PROOF_SNAPSHOT,
-        ), patch(
-            "core.unified_governance_semantics._has_sentinel",
-            return_value=True,  # all sentinels present → structurally_inferred
+        with (
+            patch(
+                "core.attached_runtime_session_registry.list_active_sessions",
+                return_value=active_sessions,
+            ),
+            patch(
+                "core.android_mode_gate_policy.build_mode_state_for_device",
+                side_effect=lambda device_id: mode_map[device_id],
+            ),
+            patch(
+                "core.android_mode_gate_policy.evaluate_android_mode_readiness",
+                side_effect=lambda device_id: readiness_map[device_id],
+            ),
+            patch(
+                "core.unified_execution_governance.is_takeover_active",
+                return_value=False,
+            ),
+            patch(
+                "core.unified_execution_governance.get_execution_runtime_snapshot",
+                return_value=self._base_runtime_snapshot(),
+            ),
+            patch(
+                "core.runtime.source_dispatch_orchestrator.get_live_mesh_runtime_proof_snapshot",
+                return_value=_EMPTY_PROOF_SNAPSHOT,
+            ),
+            patch(
+                "core.unified_governance_semantics._has_sentinel",
+                return_value=True,  # all sentinels present → structurally_inferred
+            ),
         ):
             state = build_unified_governance_state()
 
@@ -500,12 +531,15 @@ class TestGroupC_UnifiedGovernanceStateMeshProofCausality:
     def test_c5_mesh_runtime_state_in_governance_output_has_proof_quality(self) -> None:
         """mesh_runtime_state in build_unified_governance_state output includes proof_quality."""
         active_sessions: list = []
-        with patch(
-            "core.attached_runtime_session_registry.list_active_sessions",
-            return_value=active_sessions,
-        ), patch(
-            "core.unified_execution_governance.get_execution_runtime_snapshot",
-            return_value={"devices": [], "active_device_count": 0, "active_execution_total_count": 0},
+        with (
+            patch(
+                "core.attached_runtime_session_registry.list_active_sessions",
+                return_value=active_sessions,
+            ),
+            patch(
+                "core.unified_execution_governance.get_execution_runtime_snapshot",
+                return_value={"devices": [], "active_device_count": 0, "active_execution_total_count": 0},
+            ),
         ):
             state = build_unified_governance_state()
 
@@ -525,6 +559,7 @@ class TestGroupD_ComputeMeshProofQualityBoundary:
 
     def _call(self, **kwargs: object) -> tuple[str, str]:
         from core.unified_governance_semantics import _compute_mesh_proof_quality
+
         return _compute_mesh_proof_quality(**kwargs)  # type: ignore[arg-type]
 
     def test_d1_no_execution_no_sentinels_returns_missing(self) -> None:
@@ -599,6 +634,7 @@ class TestGroupE_GovernanceReadinessImpactMapping:
 
     def _call(self, quality: str) -> str:
         from core.unified_governance_semantics import _mesh_proof_quality_to_governance_readiness_impact
+
         return _mesh_proof_quality_to_governance_readiness_impact(quality)
 
     def test_e1_live_maps_to_none(self) -> None:

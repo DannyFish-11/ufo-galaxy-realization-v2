@@ -42,8 +42,8 @@ Validates:
 from __future__ import annotations
 
 import json
-import sys
 import os
+import sys
 import uuid
 from typing import Any, Dict
 
@@ -53,22 +53,22 @@ _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
+import core.flow_level_operator_surface as _flos_mod
 from core.flow_level_operator_surface import (
     FLOW_LEVEL_OPERATOR_SURFACE_AUTHORITY,
     FLOW_LEVEL_OPERATOR_SURFACE_POLICY,
-    AndroidExecutionPhase,
     AndroidCanonicalExecutionEvent,
-    FlowOperatorProjection,
+    AndroidExecutionPhase,
     FlowLevelOperatorSurface,
+    FlowOperatorProjection,
     get_flow_level_operator_surface,
     reset_flow_level_operator_surface,
 )
-import core.flow_level_operator_surface as _flos_mod
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(autouse=True)
 def _reset_all():
@@ -76,11 +76,13 @@ def _reset_all():
     reset_flow_level_operator_surface()
     try:
         from core.delegated_flow_entity import reset_delegated_flow_entity_runtime
+
         reset_delegated_flow_entity_runtime()
     except Exception:
         pass
     try:
         from core.operator_surface import reset_operator_surface
+
         reset_operator_surface()
     except Exception:
         pass
@@ -88,11 +90,13 @@ def _reset_all():
     reset_flow_level_operator_surface()
     try:
         from core.delegated_flow_entity import reset_delegated_flow_entity_runtime
+
         reset_delegated_flow_entity_runtime()
     except Exception:
         pass
     try:
         from core.operator_surface import reset_operator_surface
+
         reset_operator_surface()
     except Exception:
         pass
@@ -106,10 +110,11 @@ def _register_flow(
 ) -> "Any":
     """Create and register a DelegatedFlowEntity in the runtime."""
     from core.delegated_flow_entity import (
+        DelegatedFlowKind,
         create_delegated_flow_entity,
         record_delegated_flow,
-        DelegatedFlowKind,
     )
+
     entity = create_delegated_flow_entity(
         flow_kind=DelegatedFlowKind.from_string(flow_kind),
         canonical_task_id=canonical_task_id,
@@ -122,6 +127,7 @@ def _register_flow(
 # ===========================================================================
 # 1–2: Authority sentinels
 # ===========================================================================
+
 
 class TestAuthoritySentinels:
     def test_01_authority_importable(self):
@@ -136,6 +142,7 @@ class TestAuthoritySentinels:
 # ===========================================================================
 # 3–6: AndroidExecutionPhase
 # ===========================================================================
+
 
 class TestAndroidExecutionPhase:
     def test_03_phase_members_are_strings(self):
@@ -169,6 +176,7 @@ class TestAndroidExecutionPhase:
 # 7–8: AndroidCanonicalExecutionEvent
 # ===========================================================================
 
+
 class TestAndroidCanonicalExecutionEvent:
     def test_07_dataclass_fields(self):
         ev = AndroidCanonicalExecutionEvent(
@@ -200,6 +208,7 @@ class TestAndroidCanonicalExecutionEvent:
 # ===========================================================================
 # 9–11: FlowOperatorProjection
 # ===========================================================================
+
 
 class TestFlowOperatorProjection:
     _REQUIRED_KEYS = [
@@ -252,6 +261,7 @@ class TestFlowOperatorProjection:
 # 12–15: Singleton and graceful degradation
 # ===========================================================================
 
+
 class TestSingletonAndGraceful:
     def test_12_get_returns_instance(self):
         surface = get_flow_level_operator_surface()
@@ -276,6 +286,7 @@ class TestSingletonAndGraceful:
 # ===========================================================================
 # 16–21: Live flow inspection
 # ===========================================================================
+
 
 class TestLiveFlowInspection:
     def test_16_inspect_flow_known_returns_projection(self):
@@ -326,9 +337,11 @@ class TestLiveFlowInspection:
 # 22–23: OperatorSurface.inspect_flow delegation
 # ===========================================================================
 
+
 class TestOperatorSurfaceDelegation:
     def test_22_operator_surface_inspect_flow_known(self):
         from core.operator_surface import get_operator_surface
+
         entity = _register_flow(canonical_task_id="t99")
         surface = get_operator_surface()
         proj = surface.inspect_flow(entity.delegated_flow_id)
@@ -337,6 +350,7 @@ class TestOperatorSurfaceDelegation:
 
     def test_23_operator_surface_inspect_flow_unknown(self):
         from core.operator_surface import get_operator_surface
+
         surface = get_operator_surface()
         assert surface.inspect_flow("nonexistent") is None
 
@@ -345,13 +359,16 @@ class TestOperatorSurfaceDelegation:
 # 24–26: Re-exports and serialisation
 # ===========================================================================
 
+
 class TestReExportsAndSerialisation:
     def test_24_android_execution_phase_re_exported(self):
         from core.operator_surface import AndroidExecutionPhase as AP
+
         assert AP.planning == AndroidExecutionPhase.planning
 
     def test_25_flow_operator_projection_re_exported(self):
         from core.operator_surface import FlowOperatorProjection as FOP
+
         assert FOP is FlowOperatorProjection
 
     def test_26_inspect_flow_result_json_serialisable(self):
@@ -365,6 +382,7 @@ class TestReExportsAndSerialisation:
 # ===========================================================================
 # 27–30: Edge cases and defaults
 # ===========================================================================
+
 
 class TestEdgeCasesAndDefaults:
     def test_27_blocking_event_has_is_blocking_true(self):

@@ -53,8 +53,8 @@ from .model_supply_graph import ModelSupplyGraph
 from .model_weight_field import ModelWeightField, compute_weight_field
 from .provider_inventory import ProviderInventory
 from .routing_policy import (
-    PolicyConfig,
     _DEFAULT_POLICY_CONFIG,
+    PolicyConfig,
     _build_route_reason,
     _select_primary_node,
     _select_support_nodes,
@@ -200,6 +200,7 @@ class TopologyRoutePlan:
                                 which nodes were evaluated and at what weight
         graph_stats           — summary statistics from the supply graph
         """
+
         def _wf_for(node: ModelNode) -> ModelWeightField:
             return self.active_weights.get(
                 node.node_id,
@@ -210,14 +211,9 @@ class TopologyRoutePlan:
             "phase": self.phase.value,
             "domain": self.domain.value,
             "primary_model": (
-                self._node_to_dict(self.primary_model, _wf_for(self.primary_model))
-                if self.primary_model
-                else None
+                self._node_to_dict(self.primary_model, _wf_for(self.primary_model)) if self.primary_model else None
             ),
-            "support_models": [
-                self._node_to_dict(n, _wf_for(n))
-                for n in self.support_models
-            ],
+            "support_models": [self._node_to_dict(n, _wf_for(n)) for n in self.support_models],
             "route_reason": self.route_reason,
             "authority": CANONICAL_ROUTING_AUTHORITY,
             "active_weights": {
@@ -266,9 +262,7 @@ class TopologyRouter:
         self._inventory = inventory
         self._policy_config = policy_config or _DEFAULT_POLICY_CONFIG
         self._graph = ModelSupplyGraph.from_inventory(inventory)
-        logger.info(
-            "TopologyRouter initialised: %r", self._graph
-        )
+        logger.info("TopologyRouter initialised: %r", self._graph)
 
     # ------------------------------------------------------------------
     # Public API
@@ -335,9 +329,7 @@ class TopologyRouter:
     # Convenience
     # ------------------------------------------------------------------
 
-    def route_all_phases(
-        self, domain: RuntimeDomain = RuntimeDomain.LOCAL
-    ) -> Dict[str, TopologyRoutePlan]:
+    def route_all_phases(self, domain: RuntimeDomain = RuntimeDomain.LOCAL) -> Dict[str, TopologyRoutePlan]:
         """Produce plans for all three public tri-state phases.
 
         Returns a mapping of ``phase.value → TopologyRoutePlan``.

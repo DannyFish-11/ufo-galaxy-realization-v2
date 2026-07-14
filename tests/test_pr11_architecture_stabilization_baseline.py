@@ -233,18 +233,16 @@ def test_f01_all_pr11_surfaces_are_canonical_stable() -> None:
     for sid in _PR11_NEW_SURFACE_IDS:
         record = _get_surface(sid)
         assert record is not None, f"Surface {sid!r} not in catalog"
-        assert record.tier == StabilizationTier.CANONICAL_STABLE, (
-            f"Surface {sid!r} expected CANONICAL_STABLE, got {record.tier.value!r}"
-        )
+        assert (
+            record.tier == StabilizationTier.CANONICAL_STABLE
+        ), f"Surface {sid!r} expected CANONICAL_STABLE, got {record.tier.value!r}"
 
 
 def test_f02_all_pr11_surfaces_are_extension_ready() -> None:
     for sid in _PR11_NEW_SURFACE_IDS:
         record = _get_surface(sid)
         assert record is not None, f"Surface {sid!r} not in catalog"
-        assert record.is_extension_ready is True, (
-            f"Surface {sid!r} is not extension_ready"
-        )
+        assert record.is_extension_ready is True, f"Surface {sid!r} is not extension_ready"
 
 
 # ---------------------------------------------------------------------------
@@ -307,8 +305,7 @@ _PR11_MINIMUM_SURFACE_COUNT = 25
 def test_j01_snapshot_total_surface_count_at_least_pr11_floor() -> None:
     snap = build_stabilization_baseline_snapshot()
     assert snap.total_surface_count >= _PR11_MINIMUM_SURFACE_COUNT, (
-        f"Expected at least {_PR11_MINIMUM_SURFACE_COUNT} surfaces after PR-11, "
-        f"got {snap.total_surface_count}"
+        f"Expected at least {_PR11_MINIMUM_SURFACE_COUNT} surfaces after PR-11, " f"got {snap.total_surface_count}"
     )
 
 
@@ -335,6 +332,7 @@ def test_k01_snapshot_canonical_stable_count_at_least_pr11_floor() -> None:
 
 def test_l01_pr11_sentinel_in_module_all() -> None:
     import core.architecture_stabilization_baseline as mod
+
     assert "ARCHITECTURE_STABILIZATION_BASELINE_PR11_SENTINEL" in mod.__all__
 
 

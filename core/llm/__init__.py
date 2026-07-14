@@ -109,6 +109,7 @@ For new code, prefer the canonical authority entry points:
     from core.llm import get_cognitive_context_authority, CognitiveContextRequest
     from core.llm import get_cognitive_execution_authority, CognitiveExecutionRequest
 """
+
 from __future__ import annotations
 
 # ── package authority sentinel ────────────────────────────────────────────
@@ -119,12 +120,32 @@ Import to assert that a call site is using the decomposed LLM routing
 package rather than reaching directly into core.multi_llm_router internals.
 """
 
+# ── L3 canonical cognitive input assembly authority ───────────────────────
+from core.llm.context_authority import (  # noqa: F401
+    LLM_CONTEXT_AUTHORITY,
+    CognitiveContextAssembly,
+    CognitiveContextAuthority,
+    CognitiveContextRequest,
+    get_cognitive_context_authority,
+    refresh_cognitive_context_authority,
+)
+
+# ── L4 canonical cognitive execution semantics authority ──────────────────
+from core.llm.execution_authority import (  # noqa: F401
+    LLM_EXECUTION_AUTHORITY,
+    CognitiveExecutionAuthority,
+    CognitiveExecutionRequest,
+    CognitiveExecutionResult,
+    get_cognitive_execution_authority,
+    refresh_cognitive_execution_authority,
+)
+
 # ── L1 canonical routing authority (primary entry point) ─────────────────
 from core.llm.route_authority import (  # noqa: F401
     LLM_ROUTE_AUTHORITY,
-    LLMRouteRequest,
-    LLMRouteDecision,
     LLMRouteAuthority,
+    LLMRouteDecision,
+    LLMRouteRequest,
     get_llm_route_authority,
     refresh_llm_route_authority,
 )
@@ -133,46 +154,26 @@ from core.llm.route_authority import (  # noqa: F401
 from core.llm.supply_authority import (  # noqa: F401
     LLM_SUPPLY_AUTHORITY,
     FallbackLegality,
-    ProviderOrderingPolicy,
-    SupplyResolutionStep,
-    SupplyResolutionResult,
     LLMSupplyAuthority,
+    ProviderOrderingPolicy,
+    SupplyResolutionResult,
+    SupplyResolutionStep,
     get_llm_supply_authority,
     refresh_llm_supply_authority,
 )
 
-# ── L3 canonical cognitive input assembly authority ───────────────────────
-from core.llm.context_authority import (  # noqa: F401
-    LLM_CONTEXT_AUTHORITY,
-    CognitiveContextRequest,
-    CognitiveContextAssembly,
-    CognitiveContextAuthority,
-    get_cognitive_context_authority,
-    refresh_cognitive_context_authority,
-)
-
-# ── L4 canonical cognitive execution semantics authority ──────────────────
-from core.llm.execution_authority import (  # noqa: F401
-    LLM_EXECUTION_AUTHORITY,
-    CognitiveExecutionRequest,
-    CognitiveExecutionResult,
-    CognitiveExecutionAuthority,
-    get_cognitive_execution_authority,
-    refresh_cognitive_execution_authority,
-)
-
 # ── backward-compat re-exports from canonical implementation ─────────────
 from core.multi_llm_router import (  # noqa: F401
-    MultiLLMRouter,
-    TaskType,
-    ProviderStatus,
-    ProviderConfig,
-    RoutingDecision,
+    PROVIDER_MODEL_MAP,
+    TASK_ROUTING_PREFERENCES,
     LLMResponse,
+    MultiLLMRouter,
+    ProviderConfig,
+    ProviderStatus,
+    RoutingDecision,
+    TaskType,
     get_llm_router,
     refresh_llm_router,
-    TASK_ROUTING_PREFERENCES,
-    PROVIDER_MODEL_MAP,
 )
 
 __all__ = [

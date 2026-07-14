@@ -122,13 +122,13 @@ import pytest
 
 try:
     from core.canonical_group_completion_closure import (
-        ALL_ADVANCED_MODES_USE_CANONICAL_CLOSURE_POLICY,
         AGGREGATE_FAILURE_HAS_CANONICAL_DEFINITION_POLICY,
         AGGREGATE_TIMEOUT_PRODUCES_CANONICAL_TERMINAL_POLICY,
+        ALL_ADVANCED_MODES_USE_CANONICAL_CLOSURE_POLICY,
         BLOCKED_DEVICE_EXCLUSION_SEMANTIC_IS_EXPLICIT_POLICY,
         CANONICAL_GROUP_COMPLETION_CLOSURE_AUTHORITY,
-        DELEGATED_ACK_DISTINCT_FROM_DELEGATED_TERMINAL_POLICY,
         DEGRADED_SUCCESS_REQUIRES_EXPLICIT_ALLOWANCE_POLICY,
+        DELEGATED_ACK_DISTINCT_FROM_DELEGATED_TERMINAL_POLICY,
         HANDOFF_TERMINAL_ALIGNS_WITH_CANONICAL_CLOSURE_POLICY,
         PARTIAL_FAILURE_HAS_CANONICAL_DEFINITION_POLICY,
         SUBTASK_SUCCESS_DOES_NOT_CONSTITUTE_GROUP_COMPLETION_POLICY,
@@ -140,6 +140,7 @@ try:
         apply_completion_closure,
         get_completion_closure_coordinator,
     )
+
     _CLOSURE_AVAILABLE = True
 except ImportError:
     _CLOSURE_AVAILABLE = False
@@ -153,6 +154,7 @@ try:
         CompletionContract,
         ExecutionMode,
     )
+
     _SPINE_AVAILABLE = True
 except ImportError:
     _SPINE_AVAILABLE = False
@@ -450,6 +452,7 @@ class TestDeriveCompletionContractV5:
             DeviceOrchestrationSlot,
             _derive_completion_contract,
         )
+
         slots = [DeviceOrchestrationSlot(device_id=f"d{i}", dispatch_ready=True) for i in range(count)]
         return _derive_completion_contract(mode, slots)
 
@@ -634,8 +637,11 @@ class TestBlockedDeviceExclusion:
     def test_exclude_from_contract_shrinks_expected(self) -> None:
         # expected=2, one blocked → effective=1, one success → complete
         contract = _make_contract(
-            expected=2, policy="best_effort", agg_mode="all_required",
-            exclusion="exclude_from_contract", degraded=False,
+            expected=2,
+            policy="best_effort",
+            agg_mode="all_required",
+            exclusion="exclude_from_contract",
+            degraded=False,
         )
         ctx = _ctx(
             signals=[
@@ -650,7 +656,9 @@ class TestBlockedDeviceExclusion:
     def test_promote_to_partial_failure_counts_blocked_as_failure(self) -> None:
         # expected=2, one blocked (counts as failure) + one success → fail_all → partial_failure
         contract = _make_contract(
-            expected=2, policy="fail_all", agg_mode="all_required",
+            expected=2,
+            policy="fail_all",
+            agg_mode="all_required",
             exclusion="promote_to_partial_failure",
         )
         ctx = _ctx(
@@ -664,7 +672,9 @@ class TestBlockedDeviceExclusion:
 
     def test_abort_on_any_blocked_returns_aborted(self) -> None:
         contract = _make_contract(
-            expected=2, policy="best_effort", agg_mode="all_required",
+            expected=2,
+            policy="best_effort",
+            agg_mode="all_required",
             exclusion="abort_on_any_blocked",
         )
         ctx = _ctx(
@@ -688,8 +698,11 @@ class TestDegradedSuccess:
     def test_degraded_success_when_allowed(self) -> None:
         # expected=2, one blocked (excluded), one success → degraded_success
         contract = _make_contract(
-            expected=2, policy="best_effort", agg_mode="all_required",
-            exclusion="exclude_from_contract", degraded=True,
+            expected=2,
+            policy="best_effort",
+            agg_mode="all_required",
+            exclusion="exclude_from_contract",
+            degraded=True,
         )
         ctx = _ctx(
             signals=[
@@ -704,8 +717,11 @@ class TestDegradedSuccess:
         # Same scenario but degraded_success_allowed=False → complete
         # (since no failures among received results, just one excluded)
         contract = _make_contract(
-            expected=2, policy="best_effort", agg_mode="all_required",
-            exclusion="exclude_from_contract", degraded=False,
+            expected=2,
+            policy="best_effort",
+            agg_mode="all_required",
+            exclusion="exclude_from_contract",
+            degraded=False,
         )
         ctx = _ctx(
             signals=[
@@ -720,8 +736,11 @@ class TestDegradedSuccess:
     def test_no_excluded_devices_no_degraded_success(self) -> None:
         # No blocked devices → no degraded_success even when allowed
         contract = _make_contract(
-            expected=2, policy="best_effort", agg_mode="all_required",
-            exclusion="exclude_from_contract", degraded=True,
+            expected=2,
+            policy="best_effort",
+            agg_mode="all_required",
+            exclusion="exclude_from_contract",
+            degraded=True,
         )
         ctx = _ctx(
             signals=[
@@ -754,9 +773,7 @@ class TestAggregateTimeout:
 
     def test_wall_clock_timeout_exceeded(self) -> None:
         # started_at = far in the past, timeout = 1 second
-        contract = _make_contract(
-            expected=2, policy="best_effort", agg_mode="all_required", timeout=1.0
-        )
+        contract = _make_contract(expected=2, policy="best_effort", agg_mode="all_required", timeout=1.0)
         ctx = _ctx(
             signals=[_sig("d1", SignalKind.subtask_result.value, success=True)],
             started_at=time.time() - 100.0,  # started 100s ago
@@ -765,9 +782,7 @@ class TestAggregateTimeout:
         assert outcome.terminal_kind == CanonicalTerminalKind.aggregate_timeout.value
 
     def test_no_timeout_when_results_arrive_in_time(self) -> None:
-        contract = _make_contract(
-            expected=2, policy="best_effort", agg_mode="all_required", timeout=9999.0
-        )
+        contract = _make_contract(expected=2, policy="best_effort", agg_mode="all_required", timeout=9999.0)
         ctx = _ctx(
             signals=[
                 _sig("d1", SignalKind.subtask_result.value, success=True),
@@ -934,6 +949,7 @@ class TestCompletionClosureCoordinator:
 
     def test_record_stores_outcome(self) -> None:
         from core.canonical_group_completion_closure import CanonicalCompletionOutcome
+
         coord = self._fresh_coordinator()
         outcome = CanonicalCompletionOutcome(
             terminal_kind=CanonicalTerminalKind.complete.value,
@@ -948,6 +964,7 @@ class TestCompletionClosureCoordinator:
 
     def test_clear_empties_buffer(self) -> None:
         from core.canonical_group_completion_closure import CanonicalCompletionOutcome
+
         coord = self._fresh_coordinator()
         coord.record(CanonicalCompletionOutcome(terminal_kind="complete", is_terminal=True))
         coord.clear()
@@ -1003,6 +1020,7 @@ class TestErrorSafety:
 
     def test_outcome_has_required_keys_in_to_dict(self) -> None:
         from core.canonical_group_completion_closure import CanonicalCompletionOutcome
+
         outcome = CanonicalCompletionOutcome(
             terminal_kind=CanonicalTerminalKind.in_progress.value,
             is_terminal=False,
@@ -1013,7 +1031,9 @@ class TestErrorSafety:
 
     def test_outcome_to_json_is_valid(self) -> None:
         import json
+
         from core.canonical_group_completion_closure import CanonicalCompletionOutcome
+
         outcome = CanonicalCompletionOutcome(
             terminal_kind=CanonicalTerminalKind.complete.value,
             is_terminal=True,

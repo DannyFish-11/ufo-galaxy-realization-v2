@@ -88,9 +88,7 @@ def test_subject_lineage_unifies_foreground_android_presence_lifecycle_and_strea
     assert "cognition_carrier" in lineage["subject_identity"]["android_roles"]
     assert "foreground_presence_surface" in lineage["subject_identity"]["android_roles"]
     assert lineage["authority_boundary"]["orchestration_authority"] == "v2_center"
-    assert lineage["authority_boundary"]["participant_autonomy"] == (
-        "bounded_android_participation"
-    )
+    assert lineage["authority_boundary"]["participant_autonomy"] == ("bounded_android_participation")
     assert lineage["temporal_alignment"]["foreground_event"] == "active"
     assert lineage["temporal_alignment"]["continuous_ingress_active"] is True
     assert lineage["failure_discipline"]["canonical_default_visible"] is True
@@ -117,9 +115,7 @@ def test_subject_lineage_makes_fallback_visible_in_default_behavior():
 
     assert lineage["failure_discipline"]["canonical_default_visible"] is False
     assert lineage["failure_discipline"]["degraded"] is True
-    assert "android_presence_runtime_path=fallback" in (
-        lineage["failure_discipline"]["degraded_reasons"]
-    )
+    assert "android_presence_runtime_path=fallback" in (lineage["failure_discipline"]["degraded_reasons"])
     assert lineage["authority_boundary"]["path_kind"] == "fallback"
 
 
@@ -155,9 +151,7 @@ def test_presence_system_panel_consumes_subject_foreground_lineage_and_stream():
     assert panel["subject_state"] == subject_fg["subject_state"]
     assert panel["foreground_event"] == subject_fg["foreground_event"]
     assert panel["continuous_ingress_participation"]["is_present"] is True
-    assert "android_device_continuous_stream" in (
-        panel["continuous_ingress_participation"]["active_families"]
-    )
+    assert "android_device_continuous_stream" in (panel["continuous_ingress_participation"]["active_families"])
     assert panel["continuity_trace"]["replay_provenance_anchor"] == "runtime-panel"
     assert view["foreground_hierarchy"]["panel_subject_source"] == "subject_foreground"
 
@@ -202,9 +196,7 @@ def test_presence_summary_reuses_latest_subject_projection_for_panel_lineage():
     assert "android_device_continuous_stream" in (
         system_view["subject_panel"]["continuous_ingress_participation"]["active_families"]
     )
-    assert system_view["subject_panel"]["continuity_trace"]["replay_provenance_anchor"] == (
-        "runtime-summary"
-    )
+    assert system_view["subject_panel"]["continuity_trace"]["replay_provenance_anchor"] == ("runtime-summary")
 
 
 def test_operator_snapshot_shares_panel_lineage_and_fallback_truth():
@@ -247,6 +239,4 @@ def test_operator_snapshot_shares_panel_lineage_and_fallback_truth():
     assert "android_presence_runtime_path=fallback" in (
         snapshot.shared_subject_lineage["failure_discipline"]["degraded_reasons"]
     )
-    assert snapshot.shared_subject_lineage["continuity_trace"]["replay_provenance_anchor"] == (
-        "runtime-operator"
-    )
+    assert snapshot.shared_subject_lineage["continuity_trace"]["replay_provenance_anchor"] == ("runtime-operator")

@@ -21,6 +21,7 @@ Tests covering:
 14. TaskOrchestrator.submit_task() — accepts openclawd_decision metadata.
 15. TaskOrchestrator._decompose_task() docstring asserts no re-evaluation.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -39,7 +40,6 @@ from core.model_role_policy import (
     get_policy,
     reset_policy,
 )
-
 
 # ===========================================================================
 # Helpers
@@ -308,13 +308,15 @@ class TestOpenClawdDecisionAuthorityLog:
         oc = OpenClawd()
 
         # Disable kernel path so we exercise the direct handler path
-        with patch.object(oc, "_get_kernel", return_value=None), \
-             patch.object(oc, "sync_device_capabilities", return_value=0), \
-             patch.object(oc, "_parse_intent", new_callable=AsyncMock,
-                          return_value=None), \
-             patch.object(oc, "_dispatch_chat", new_callable=AsyncMock,
-                          return_value={"success": True, "response": "hi"}), \
-             caplog.at_level(logging.INFO, logger="Galaxy.ModelRolePolicy"):
+        with (
+            patch.object(oc, "_get_kernel", return_value=None),
+            patch.object(oc, "sync_device_capabilities", return_value=0),
+            patch.object(oc, "_parse_intent", new_callable=AsyncMock, return_value=None),
+            patch.object(
+                oc, "_dispatch_chat", new_callable=AsyncMock, return_value={"success": True, "response": "hi"}
+            ),
+            caplog.at_level(logging.INFO, logger="Galaxy.ModelRolePolicy"),
+        ):
             await oc.process("hello")
 
         assert "primary_decision" in caplog.text
@@ -325,13 +327,15 @@ class TestOpenClawdDecisionAuthorityLog:
 
         oc = OpenClawd()
 
-        with patch.object(oc, "_get_kernel", return_value=None), \
-             patch.object(oc, "sync_device_capabilities", return_value=0), \
-             patch.object(oc, "_parse_intent", new_callable=AsyncMock,
-                          return_value=None), \
-             patch.object(oc, "_dispatch_chat", new_callable=AsyncMock,
-                          return_value={"success": True, "response": "ok"}), \
-             caplog.at_level(logging.INFO, logger="Galaxy.ModelRolePolicy"):
+        with (
+            patch.object(oc, "_get_kernel", return_value=None),
+            patch.object(oc, "sync_device_capabilities", return_value=0),
+            patch.object(oc, "_parse_intent", new_callable=AsyncMock, return_value=None),
+            patch.object(
+                oc, "_dispatch_chat", new_callable=AsyncMock, return_value={"success": True, "response": "ok"}
+            ),
+            caplog.at_level(logging.INFO, logger="Galaxy.ModelRolePolicy"),
+        ):
             await oc.process("hello")
 
         assert "openclawd" in caplog.text
@@ -345,7 +349,7 @@ class TestOpenClawdDecisionAuthorityLog:
 class TestHybridExecutorDecisionAuthorityParam:
     @pytest.mark.asyncio
     async def test_decision_authority_kwarg_accepted(self):
-        from core.hybrid_executor import HybridExecutionArbiter, ExecutionLevel
+        from core.hybrid_executor import ExecutionLevel, HybridExecutionArbiter
 
         arbiter = HybridExecutionArbiter()
 
@@ -415,9 +419,11 @@ class TestHybridExecutorDecisionAuthorityParam:
 class TestTaskOrchestratorOpenClawdDecision:
     @pytest.mark.asyncio
     async def test_submit_task_accepts_openclawd_decision(self):
-        from unittest.mock import MagicMock, AsyncMock
+        from unittest.mock import AsyncMock, MagicMock
+
         from galaxy_gateway.orchestrator.task_orchestrator import (
-            TaskOrchestrator, TaskPriority,
+            TaskOrchestrator,
+            TaskPriority,
         )
 
         dm = MagicMock()
@@ -445,7 +451,8 @@ class TestTaskOrchestratorOpenClawdDecision:
 
     @pytest.mark.asyncio
     async def test_submit_task_without_openclawd_decision_backward_compat(self):
-        from unittest.mock import MagicMock, AsyncMock
+        from unittest.mock import AsyncMock, MagicMock
+
         from galaxy_gateway.orchestrator.task_orchestrator import TaskOrchestrator
 
         dm = MagicMock()
@@ -467,8 +474,9 @@ class TestTaskOrchestratorOpenClawdDecision:
 
 class TestDecomposeTaskDocstring:
     def test_docstring_mentions_no_re_evaluation(self):
-        from galaxy_gateway.orchestrator.task_orchestrator import TaskOrchestrator
         import inspect
+
+        from galaxy_gateway.orchestrator.task_orchestrator import TaskOrchestrator
 
         doc = inspect.getdoc(TaskOrchestrator._decompose_task)
         assert doc is not None
@@ -476,5 +484,11 @@ class TestDecomposeTaskDocstring:
         doc_lower = doc.lower()
         assert any(
             phrase in doc_lower
-            for phrase in ("re-evaluat", "no re-eval", "not re-evaluat", "does not re-evaluat", "structural decomposition")
+            for phrase in (
+                "re-evaluat",
+                "no re-eval",
+                "not re-evaluat",
+                "does not re-evaluat",
+                "structural decomposition",
+            )
         ), f"Docstring must mention structural decomposition / no re-evaluation. Got: {doc}"

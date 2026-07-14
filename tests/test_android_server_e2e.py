@@ -36,6 +36,7 @@ if str(PROJECT_ROOT) not in sys.path:
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_ws() -> MagicMock:
     """Minimal mock WebSocket."""
     ws = MagicMock()
@@ -60,10 +61,12 @@ def _v3_msg(msg_type: str, device_id: str, **extra) -> Dict[str, Any]:
 # Fixture: fresh CapabilityRegistry and AndroidBridge for each test
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture()
 def fresh_registry():
     """Return a CapabilityRegistry instance with a clean slate."""
     from core.agent.capability_registry import CapabilityRegistry
+
     reg = CapabilityRegistry.get_instance()
     # Clear existing items so tests are isolated.
     reg._items.clear()
@@ -73,6 +76,7 @@ def fresh_registry():
 @pytest.fixture()
 def bridge():
     from galaxy_gateway.android_bridge import AndroidBridge
+
     return AndroidBridge()
 
 
@@ -80,14 +84,14 @@ def bridge():
 # 1. device_register → device stored in AndroidBridge
 # ===========================================================================
 
+
 class TestDeviceRegister:
     """Step 1: Android device registration via AndroidBridge."""
 
     @pytest.mark.asyncio
     async def test_register_stores_device(self, bridge):
         ws = _make_ws()
-        msg = _v3_msg("device_register", "e2e-device-001",
-                      platform="android", model="Pixel 8")
+        msg = _v3_msg("device_register", "e2e-device-001", platform="android", model="Pixel 8")
         response = await bridge.handle_message(ws, msg)
 
         assert response is not None
@@ -143,6 +147,7 @@ class TestDeviceRegister:
 # 2. Legacy AIP/1.0 compatibility — type alias mapping
 # ===========================================================================
 
+
 class TestLegacyCompatibility:
     """Backward-compat: AIP/1.0 alias types are normalised to v3 equivalents."""
 
@@ -158,20 +163,23 @@ class TestLegacyCompatibility:
         }
         response = await bridge.handle_message(ws, msg)
         assert response is not None
-        assert response["type"] == "device_register_ack", (
-            f"Expected device_register_ack but got {response.get('type')}: {response}"
-        )
+        assert (
+            response["type"] == "device_register_ack"
+        ), f"Expected device_register_ack but got {response.get('type')}: {response}"
 
     @pytest.mark.asyncio
     async def test_legacy_heartbeat_alias(self, bridge):
         """AIP/1.0 type='agent_heartbeat' should be normalised to 'heartbeat'."""
         ws = _make_ws()
         # Register first so the device is known
-        await bridge.handle_message(ws, {
-            "type": "register",
-            "device_id": "legacy-hb-001",
-            "platform": "android",
-        })
+        await bridge.handle_message(
+            ws,
+            {
+                "type": "register",
+                "device_id": "legacy-hb-001",
+                "platform": "android",
+            },
+        )
         hb = {
             "type": "agent_heartbeat",
             "device_id": "legacy-hb-001",
@@ -201,6 +209,7 @@ class TestLegacyCompatibility:
 # 3. capability_report → CapabilityRegistry
 # ===========================================================================
 
+
 class TestCapabilityReportSync:
     """Step 2: capability_report syncs supported_actions to CapabilityRegistry."""
 
@@ -210,13 +219,12 @@ class TestCapabilityReportSync:
         device_id = "cap-device-001"
 
         # Register first
-        await bridge.handle_message(ws, _v3_msg(
-            "device_register", device_id, platform="android"
-        ))
+        await bridge.handle_message(ws, _v3_msg("device_register", device_id, platform="android"))
 
         # Report capabilities
         cap_msg = _v3_msg(
-            "capability_report", device_id,
+            "capability_report",
+            device_id,
             platform="android",
             supported_actions=["screenshot", "tap", "swipe", "input_text"],
         )
@@ -232,9 +240,7 @@ class TestCapabilityReportSync:
 
         for action in ["screenshot", "tap", "swipe", "input_text"]:
             expected = f"gateway__{device_id}__{action}"
-            assert expected in tool_names, (
-                f"Expected '{expected}' in CapabilityRegistry tool names: {tool_names}"
-            )
+            assert expected in tool_names, f"Expected '{expected}' in CapabilityRegistry tool names: {tool_names}"
 
     @pytest.mark.asyncio
     async def test_capability_names_are_stable_and_predictable(self, bridge, fresh_registry):
@@ -243,10 +249,14 @@ class TestCapabilityReportSync:
         device_id = "stable-device-001"
 
         await bridge.handle_message(ws, _v3_msg("device_register", device_id))
-        await bridge.handle_message(ws, _v3_msg(
-            "capability_report", device_id,
-            supported_actions=["click"],
-        ))
+        await bridge.handle_message(
+            ws,
+            _v3_msg(
+                "capability_report",
+                device_id,
+                supported_actions=["click"],
+            ),
+        )
 
         cap = fresh_registry.get(f"gateway__{device_id}__click")
         assert cap is not None
@@ -261,10 +271,14 @@ class TestCapabilityReportSync:
         device_id = "schema-device-001"
 
         await bridge.handle_message(ws, _v3_msg("device_register", device_id))
-        await bridge.handle_message(ws, _v3_msg(
-            "capability_report", device_id,
-            supported_actions=["screenshot"],
-        ))
+        await bridge.handle_message(
+            ws,
+            _v3_msg(
+                "capability_report",
+                device_id,
+                supported_actions=["screenshot"],
+            ),
+        )
 
         schemas = fresh_registry.to_tool_schemas()
         schema_names = {s["function"]["name"] for s in schemas}
@@ -315,6 +329,7 @@ class TestCapabilityReportSync:
 # 4. Full E2E: register → capability_report → mock LLM tool_call → task_assign
 # ===========================================================================
 
+
 class TestFullE2EPipeline:
     """Full E2E pipeline: registration → capability sync → NL dispatch → device."""
 
@@ -332,27 +347,33 @@ class TestFullE2EPipeline:
         device_id = "e2e-full-001"
 
         # ── Step 1: Register ──
-        reg_response = await bridge.handle_message(ws, _v3_msg(
-            "device_register", device_id,
-            platform="android",
-            model="Pixel 9",
-        ))
+        reg_response = await bridge.handle_message(
+            ws,
+            _v3_msg(
+                "device_register",
+                device_id,
+                platform="android",
+                model="Pixel 9",
+            ),
+        )
         assert reg_response["type"] == "device_register_ack"
 
         # ── Step 2: Report capabilities ──
-        cap_response = await bridge.handle_message(ws, _v3_msg(
-            "capability_report", device_id,
-            supported_actions=["screenshot", "tap"],
-        ))
+        cap_response = await bridge.handle_message(
+            ws,
+            _v3_msg(
+                "capability_report",
+                device_id,
+                supported_actions=["screenshot", "tap"],
+            ),
+        )
         assert cap_response["type"] == "capability_report_ack"
 
         # ── Step 3: Verify tool schemas ──
         schemas = fresh_registry.to_tool_schemas()
         schema_names = {s["function"]["name"] for s in schemas}
         screenshot_tool = f"gateway__{device_id}__screenshot"
-        assert screenshot_tool in schema_names, (
-            f"Expected '{screenshot_tool}' in tool schemas: {schema_names}"
-        )
+        assert screenshot_tool in schema_names, f"Expected '{screenshot_tool}' in tool schemas: {schema_names}"
 
         # ── Step 4: Mock LLM produces a tool_call for the device capability ──
         mock_tool_call = {
@@ -385,9 +406,7 @@ class TestFullE2EPipeline:
         assert sent.get("task_type") == "screenshot"
 
     @pytest.mark.asyncio
-    async def test_capability_report_without_prior_register_still_syncs(
-        self, bridge, fresh_registry
-    ):
+    async def test_capability_report_without_prior_register_still_syncs(self, bridge, fresh_registry):
         """
         capability_report should sync capabilities to CapabilityRegistry even
         when the device has not previously registered (graceful handling).
@@ -396,7 +415,8 @@ class TestFullE2EPipeline:
         device_id = "unreg-device-001"
 
         cap_msg = _v3_msg(
-            "capability_report", device_id,
+            "capability_report",
+            device_id,
             supported_actions=["tap"],
         )
         response = await bridge.handle_message(ws, cap_msg)
@@ -412,6 +432,7 @@ class TestFullE2EPipeline:
 # ===========================================================================
 # 5. PR-S2: WS handler v3-only parsing via compat normalisation
 # ===========================================================================
+
 
 class TestPRS2WSv3Parsing:
     """
@@ -437,9 +458,14 @@ class TestPRS2WSv3Parsing:
     async def test_pure_v3_device_register_accepted(self, bridge):
         """Native AIP/3.0 device_register is processed without normalisation."""
         ws = _make_ws()
-        response = await bridge.handle_message(ws, _v3_msg(
-            "device_register", "prs2-v3-001", platform="android",
-        ))
+        response = await bridge.handle_message(
+            ws,
+            _v3_msg(
+                "device_register",
+                "prs2-v3-001",
+                platform="android",
+            ),
+        )
         assert response is not None
         assert response["type"] == "device_register_ack"
         assert response.get("success") is True
@@ -460,10 +486,14 @@ class TestPRS2WSv3Parsing:
         ws = _make_ws()
         device_id = "prs2-v3-cap-001"
         await bridge.handle_message(ws, _v3_msg("device_register", device_id))
-        response = await bridge.handle_message(ws, _v3_msg(
-            "capability_report", device_id,
-            supported_actions=["tap", "screenshot"],
-        ))
+        response = await bridge.handle_message(
+            ws,
+            _v3_msg(
+                "capability_report",
+                device_id,
+                supported_actions=["tap", "screenshot"],
+            ),
+        )
         assert response is not None
         assert response["type"] == "capability_report_ack"
         assert fresh_registry.get(f"gateway__{device_id}__tap") is not None
@@ -486,23 +516,27 @@ class TestPRS2WSv3Parsing:
         }
         response = await bridge.handle_message(ws, legacy_msg)
         assert response is not None
-        assert response["type"] == "device_register_ack", (
-            f"Expected device_register_ack, got: {response}"
-        )
+        assert response["type"] == "device_register_ack", f"Expected device_register_ack, got: {response}"
 
     @pytest.mark.asyncio
     async def test_legacy_v1_heartbeat_alias_normalised_via_compat(self, bridge):
         """AIP/1.0 'agent_heartbeat' is normalised to 'heartbeat' via compat."""
         ws = _make_ws()
         # Register with legacy alias first
-        await bridge.handle_message(ws, {
-            "type": "registration",
-            "device_id": "prs2-legacy-hb",
-        })
-        response = await bridge.handle_message(ws, {
-            "type": "agent_heartbeat",
-            "device_id": "prs2-legacy-hb",
-        })
+        await bridge.handle_message(
+            ws,
+            {
+                "type": "registration",
+                "device_id": "prs2-legacy-hb",
+            },
+        )
+        response = await bridge.handle_message(
+            ws,
+            {
+                "type": "agent_heartbeat",
+                "device_id": "prs2-legacy-hb",
+            },
+        )
         assert response is not None
         assert response["type"] == "heartbeat_ack"
 
@@ -518,9 +552,7 @@ class TestPRS2WSv3Parsing:
         normalised = normalise_to_v3_dict(legacy_input)
 
         assert normalised["version"] == "3.0"
-        assert normalised["type"] == "device_register", (
-            f"Expected 'device_register', got: {normalised['type']}"
-        )
+        assert normalised["type"] == "device_register", f"Expected 'device_register', got: {normalised['type']}"
 
     # --- 5.3  AIP/2.0 — normalised via compat ---
 
@@ -600,14 +632,15 @@ class TestPRS2WSv3Parsing:
     # --- 5.5  v3 schema enforcement: all 5 canonical type names ---
 
     @pytest.mark.asyncio
-    @pytest.mark.parametrize("msg_type,expected_response_type", [
-        ("device_register", "device_register_ack"),
-        ("heartbeat", "heartbeat_ack"),
-        ("capability_report", "capability_report_ack"),
-    ])
-    async def test_v3_canonical_types_processed(
-        self, bridge, fresh_registry, msg_type, expected_response_type
-    ):
+    @pytest.mark.parametrize(
+        "msg_type,expected_response_type",
+        [
+            ("device_register", "device_register_ack"),
+            ("heartbeat", "heartbeat_ack"),
+            ("capability_report", "capability_report_ack"),
+        ],
+    )
+    async def test_v3_canonical_types_processed(self, bridge, fresh_registry, msg_type, expected_response_type):
         """Downstream handlers expect canonical v3 type names."""
         ws = _make_ws()
         device_id = f"prs2-canon-{msg_type.replace('_', '-')}"

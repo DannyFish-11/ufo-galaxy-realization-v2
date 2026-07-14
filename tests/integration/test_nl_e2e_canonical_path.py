@@ -114,6 +114,7 @@ def _reset_openclawd_singleton() -> None:
     that will pick up the patched LLM router."""
     try:
         import core.openclawd as _oc_mod
+
         _oc_mod._openclawd_instance = None
     except Exception:
         pass
@@ -121,6 +122,7 @@ def _reset_openclawd_singleton() -> None:
     # creates a new one (and picks up the stub if patched).
     try:
         from core.unified.llm_router import reset_unified_llm_router
+
         reset_unified_llm_router()
     except Exception:
         pass
@@ -129,6 +131,7 @@ def _reset_openclawd_singleton() -> None:
     # multiple asyncio.run() calls are made in the same test process).
     try:
         from core.session_execution_lane import reset_session_execution_lane_manager
+
         reset_session_execution_lane_manager()
     except Exception:
         pass
@@ -138,6 +141,7 @@ def _reset_dpr_singleton() -> None:
     """Reset the DesktopPresenceRuntime singleton."""
     try:
         import core.desktop_presence_runtime as _dpr_mod
+
         _dpr_mod._desktop_presence_runtime = None
     except Exception:
         pass
@@ -146,6 +150,7 @@ def _reset_dpr_singleton() -> None:
 def _make_stub():
     """Return a fresh LLMContractStub."""
     from tests.integration.stubs.llm_contract_stub import LLMContractStub
+
     return LLMContractStub()
 
 
@@ -168,10 +173,10 @@ def _inject_stub_into_openclawd(stub) -> None:
     caching that could prevent the patch from reaching the kernel's _llm_router.
     """
     try:
-        from core.openclawd import get_openclawd
-        from core.agent.kernel import AgentKernel
-        from core.agent.intent_router import IntentRouter
         from core.agent.execution_planner import ExecutionPlanner
+        from core.agent.intent_router import IntentRouter
+        from core.agent.kernel import AgentKernel
+        from core.openclawd import get_openclawd
 
         clawd = get_openclawd()
         # Inject at the OpenClawd router level
@@ -195,6 +200,7 @@ async def _run_handle_request(message: str, source: str = "chat", **kw) -> Dict[
     Callers may override session_id and user_id via kwargs.
     """
     from core.desktop_presence_runtime import DesktopPresenceRuntime
+
     runtime = DesktopPresenceRuntime()
     # Provide default session/user values but let callers override them.
     kw.setdefault("session_id", "nl-proof-session")
@@ -226,9 +232,7 @@ class TestNLIngressEntersCanonicalPath:
         _reset_openclawd_singleton()
 
         with _patch_llm_router(stub):
-            result = asyncio.run(
-                _run_handle_request("你好，Galaxy", source="chat")
-            )
+            result = asyncio.run(_run_handle_request("你好，Galaxy", source="chat"))
 
         assert isinstance(result, dict), "handle_request must return a dict"
         for field in CANONICAL_DPR_FIELDS:
@@ -240,13 +244,9 @@ class TestNLIngressEntersCanonicalPath:
         _reset_openclawd_singleton()
 
         with _patch_llm_router(stub):
-            result = asyncio.run(
-                _run_handle_request("test NL message", source="chat")
-            )
+            result = asyncio.run(_run_handle_request("test NL message", source="chat"))
 
-        assert result["entrypoint_source"] == "chat", (
-            "entrypoint_source must be 'chat' for the HTTP NL adapter path"
-        )
+        assert result["entrypoint_source"] == "chat", "entrypoint_source must be 'chat' for the HTTP NL adapter path"
 
     def test_http_chat_route_delegates_to_dpr(self):
         """POST /api/v1/chat must delegate to DesktopPresenceRuntime.handle_request().
@@ -257,13 +257,10 @@ class TestNLIngressEntersCanonicalPath:
         from core.routes.chat import create_router
 
         router = create_router()
-        endpoint = next(
-            r.endpoint
-            for r in router.routes
-            if hasattr(r, "path") and r.path == "/api/v1/chat"
-        )
+        endpoint = next(r.endpoint for r in router.routes if hasattr(r, "path") and r.path == "/api/v1/chat")
 
         import json
+
         mock_runtime = MagicMock()
         mock_runtime.handle_request = AsyncMock(
             return_value={
@@ -296,13 +293,13 @@ class TestNLIngressEntersCanonicalPath:
         # DPR must have been called
         mock_runtime.handle_request.assert_called_once()
         # Response must carry runtime_session_id from DPR result
-        assert data.get("runtime_session_id") == "rsid-nl-proof-001", (
-            "runtime_session_id from DPR result must appear in /api/v1/chat response"
-        )
+        assert (
+            data.get("runtime_session_id") == "rsid-nl-proof-001"
+        ), "runtime_session_id from DPR result must appear in /api/v1/chat response"
         # Adapter surface must stamp entry_surface
-        assert data.get("entry_surface") == "chat_adapter", (
-            "entry_surface='chat_adapter' must be stamped by the /api/v1/chat adapter"
-        )
+        assert (
+            data.get("entry_surface") == "chat_adapter"
+        ), "entry_surface='chat_adapter' must be stamped by the /api/v1/chat adapter"
 
     def test_direct_dpr_call_produces_response(self):
         """DPR.handle_request() must produce a non-empty response string."""
@@ -310,13 +307,9 @@ class TestNLIngressEntersCanonicalPath:
         _reset_openclawd_singleton()
 
         with _patch_llm_router(stub):
-            result = asyncio.run(
-                _run_handle_request("你好", source="chat")
-            )
+            result = asyncio.run(_run_handle_request("你好", source="chat"))
 
-        assert result.get("response"), (
-            "DPR must produce a non-empty response string for a NL chat input"
-        )
+        assert result.get("response"), "DPR must produce a non-empty response string for a NL chat input"
 
     def test_no_bypass_of_dpr(self):
         """The canonical NL path must NOT bypass DesktopPresenceRuntime.
@@ -354,9 +347,7 @@ class TestDPRTriStateLifecycle:
         _reset_openclawd_singleton()
 
         with _patch_llm_router(stub):
-            result = asyncio.run(
-                _run_handle_request("lifecycle test", source="chat")
-            )
+            result = asyncio.run(_run_handle_request("lifecycle test", source="chat"))
 
         assert result.get("tristate") == "silent", (
             "tristate must be 'silent' after handle_request completes — "
@@ -371,13 +362,10 @@ class TestDPRTriStateLifecycle:
 
         # Simulate a processing error by patching OpenClawd to raise
         with patch("core.openclawd.get_openclawd", side_effect=RuntimeError("simulated")):
-            result = asyncio.run(
-                runtime.handle_request(message="error path test", source="chat")
-            )
+            result = asyncio.run(runtime.handle_request(message="error path test", source="chat"))
 
         assert result.get("tristate") == "silent", (
-            "tristate must be 'silent' even when an error occurs — "
-            "MANIFEST→SILENT must happen in the finally block"
+            "tristate must be 'silent' even when an error occurs — " "MANIFEST→SILENT must happen in the finally block"
         )
 
     def test_runtime_session_id_is_set(self):
@@ -386,9 +374,7 @@ class TestDPRTriStateLifecycle:
         _reset_openclawd_singleton()
 
         with _patch_llm_router(stub):
-            result = asyncio.run(
-                _run_handle_request("session id test", source="chat")
-            )
+            result = asyncio.run(_run_handle_request("session id test", source="chat"))
 
         rsid = result.get("runtime_session_id", "")
         assert rsid, "runtime_session_id must be a non-empty string"
@@ -400,9 +386,7 @@ class TestDPRTriStateLifecycle:
         _reset_openclawd_singleton()
 
         with _patch_llm_router(stub):
-            result = asyncio.run(
-                _run_handle_request("trace test", source="chat")
-            )
+            result = asyncio.run(_run_handle_request("trace test", source="chat"))
 
         rsid = result.get("runtime_session_id", "")
         tid = result.get("trace_id", "")
@@ -442,20 +426,14 @@ class TestOpenClawdInvokedWithRuntimeSessionId:
 
             with patch.object(clawd, "process", side_effect=_capturing_process):
                 runtime = DesktopPresenceRuntime()
-                result = asyncio.run(
-                    runtime.handle_request(message="hello openclawd", source="chat")
-                )
+                result = asyncio.run(runtime.handle_request(message="hello openclawd", source="chat"))
 
-        assert "runtime_session_id" in captured_kwargs, (
-            "DPR must forward runtime_session_id to OpenClawd.process()"
-        )
-        assert captured_kwargs["runtime_session_id"], (
-            "runtime_session_id forwarded to OpenClawd must be non-empty"
-        )
+        assert "runtime_session_id" in captured_kwargs, "DPR must forward runtime_session_id to OpenClawd.process()"
+        assert captured_kwargs["runtime_session_id"], "runtime_session_id forwarded to OpenClawd must be non-empty"
         # Cross-check: the value in the result must match what was forwarded
-        assert result.get("runtime_session_id") == captured_kwargs["runtime_session_id"], (
-            "runtime_session_id in result must match what was forwarded to OpenClawd"
-        )
+        assert (
+            result.get("runtime_session_id") == captured_kwargs["runtime_session_id"]
+        ), "runtime_session_id in result must match what was forwarded to OpenClawd"
 
     def test_openclawd_result_contains_execution_metadata(self):
         """OpenClawd.process() result must contain execution metadata keys."""
@@ -463,9 +441,7 @@ class TestOpenClawdInvokedWithRuntimeSessionId:
         _reset_openclawd_singleton()
 
         with _patch_llm_router(stub):
-            result = asyncio.run(
-                _run_handle_request("metadata test", source="chat")
-            )
+            result = asyncio.run(_run_handle_request("metadata test", source="chat"))
 
         # Check that metadata is present (from OpenClawd)
         metadata = result.get("metadata", {})
@@ -478,9 +454,7 @@ class TestOpenClawdInvokedWithRuntimeSessionId:
         _reset_openclawd_singleton()
 
         with _patch_llm_router(stub):
-            result = asyncio.run(
-                _run_handle_request("kernel handler test", source="chat")
-            )
+            result = asyncio.run(_run_handle_request("kernel handler test", source="chat"))
 
         metadata = result.get("metadata", {})
         handler = metadata.get("handler", "")
@@ -511,13 +485,9 @@ class TestIngressCarrierContextStamp:
         _reset_openclawd_singleton()
 
         with _patch_llm_router(stub):
-            result = asyncio.run(
-                _run_handle_request("carrier context test", source="chat")
-            )
+            result = asyncio.run(_run_handle_request("carrier context test", source="chat"))
 
-        assert "ingress_carrier_context" in result, (
-            "ingress_carrier_context stamp must be present in every DPR result"
-        )
+        assert "ingress_carrier_context" in result, "ingress_carrier_context stamp must be present in every DPR result"
 
     def test_ingress_carrier_context_fields(self):
         """ingress_carrier_context must carry carrier, authority_chain, session_id."""
@@ -526,20 +496,19 @@ class TestIngressCarrierContextStamp:
 
         with _patch_llm_router(stub):
             result = asyncio.run(
-                _run_handle_request("carrier fields test", source="chat",
-                                    session_id="icc-test-session", user_id="icc-test-user")
+                _run_handle_request(
+                    "carrier fields test", source="chat", session_id="icc-test-session", user_id="icc-test-user"
+                )
             )
 
         ctx = result.get("ingress_carrier_context", {})
-        assert ctx.get("carrier") == "chat", (
-            "ingress_carrier_context.carrier must match the source passed to handle_request"
-        )
-        assert ctx.get("authority_chain") == "DesktopPresenceRuntime.handle_request", (
-            "ingress_carrier_context.authority_chain must name the DPR entry point"
-        )
-        assert ctx.get("invocation_id"), (
-            "ingress_carrier_context.invocation_id must be set to the runtime_session_id"
-        )
+        assert (
+            ctx.get("carrier") == "chat"
+        ), "ingress_carrier_context.carrier must match the source passed to handle_request"
+        assert (
+            ctx.get("authority_chain") == "DesktopPresenceRuntime.handle_request"
+        ), "ingress_carrier_context.authority_chain must name the DPR entry point"
+        assert ctx.get("invocation_id"), "ingress_carrier_context.invocation_id must be set to the runtime_session_id"
 
     def test_ingress_carrier_invocation_id_matches_rsid(self):
         """invocation_id in ingress_carrier_context must equal runtime_session_id."""
@@ -547,9 +516,7 @@ class TestIngressCarrierContextStamp:
         _reset_openclawd_singleton()
 
         with _patch_llm_router(stub):
-            result = asyncio.run(
-                _run_handle_request("invocation id test", source="chat")
-            )
+            result = asyncio.run(_run_handle_request("invocation id test", source="chat"))
 
         ctx = result.get("ingress_carrier_context", {})
         assert ctx.get("invocation_id") == result.get("runtime_session_id"), (
@@ -564,19 +531,13 @@ class TestIngressCarrierContextStamp:
         runtime = DesktopPresenceRuntime()
 
         with patch("core.openclawd.get_openclawd", side_effect=RuntimeError("err")):
-            result = asyncio.run(
-                runtime.handle_request(message="error carrier test", source="chat")
-            )
+            result = asyncio.run(runtime.handle_request(message="error carrier test", source="chat"))
 
         # On error the result may not have ingress_carrier_context (DPR stamps it
         # only in the success path at the end), so we verify the error path at
         # minimum carries runtime_session_id and tristate.
-        assert result.get("runtime_session_id"), (
-            "runtime_session_id must be present even on the error path"
-        )
-        assert result.get("tristate") == "silent", (
-            "tristate must be 'silent' on the error path"
-        )
+        assert result.get("runtime_session_id"), "runtime_session_id must be present even on the error path"
+        assert result.get("tristate") == "silent", "tristate must be 'silent' on the error path"
 
 
 # ---------------------------------------------------------------------------
@@ -597,9 +558,7 @@ class TestExecutionPathDetermination:
         _reset_openclawd_singleton()
 
         with _patch_llm_router(stub):
-            result = asyncio.run(
-                _run_handle_request("execution path test", source="chat")
-            )
+            result = asyncio.run(_run_handle_request("execution path test", source="chat"))
 
         metadata = result.get("metadata", {})
         path_top = result.get("execution_path")
@@ -616,17 +575,13 @@ class TestExecutionPathDetermination:
         _reset_openclawd_singleton()
 
         with _patch_llm_router(stub):
-            result = asyncio.run(
-                _run_handle_request("valid execution path test", source="chat")
-            )
+            result = asyncio.run(_run_handle_request("valid execution path test", source="chat"))
 
         metadata = result.get("metadata", {})
         path = result.get("execution_path") or metadata.get("execution_path")
         valid_paths = {"local", "cross_device", "hybrid", "none"}
         if path is not None:
-            assert path in valid_paths, (
-                f"execution_path must be one of {valid_paths}, got {path!r}"
-            )
+            assert path in valid_paths, f"execution_path must be one of {valid_paths}, got {path!r}"
 
     def test_authority_metadata_present(self):
         """authority_metadata must be present and name the runtime shell."""
@@ -634,9 +589,7 @@ class TestExecutionPathDetermination:
         _reset_openclawd_singleton()
 
         with _patch_llm_router(stub):
-            result = asyncio.run(
-                _run_handle_request("authority metadata test", source="chat")
-            )
+            result = asyncio.run(_run_handle_request("authority metadata test", source="chat"))
 
         auth = result.get("authority_metadata", {})
         assert auth.get("layer_role") == "runtime_shell_authority", (
@@ -655,9 +608,7 @@ class TestExecutionPathDetermination:
         _reset_openclawd_singleton()
 
         with _patch_llm_router(stub):
-            result = asyncio.run(
-                _run_handle_request("arch layer test", source="chat")
-            )
+            result = asyncio.run(_run_handle_request("arch layer test", source="chat"))
 
         arch_id = result.get("arch_layer_id", "")
         assert arch_id, (
@@ -665,9 +616,7 @@ class TestExecutionPathDetermination:
             "it confirms the result passed through the canonical DPR/OpenClawd chain"
         )
         valid_arch_ids = {"runtime_shell", "subject_core"}
-        assert arch_id in valid_arch_ids, (
-            f"arch_layer_id must be one of {valid_arch_ids}, got {arch_id!r}"
-        )
+        assert arch_id in valid_arch_ids, f"arch_layer_id must be one of {valid_arch_ids}, got {arch_id!r}"
 
 
 # ---------------------------------------------------------------------------
@@ -696,11 +645,8 @@ class TestMultiCarrierNLIngress:
         """'chat' carrier must produce canonical result with mandatory fields."""
         stub = _make_stub()
         result = self._run_carrier("chat", stub)
-        for field in ("runtime_session_id", "tristate", "entrypoint_source",
-                      "ingress_carrier_context"):
-            assert field in result, (
-                f"chat carrier result missing canonical field '{field}'"
-            )
+        for field in ("runtime_session_id", "tristate", "entrypoint_source", "ingress_carrier_context"):
+            assert field in result, f"chat carrier result missing canonical field '{field}'"
         assert result["entrypoint_source"] == "chat"
 
     def test_android_vision_carrier_produces_canonical_result(self):
@@ -708,9 +654,7 @@ class TestMultiCarrierNLIngress:
         stub = _make_stub()
         result = self._run_carrier("android_vision", stub)
         for field in ("runtime_session_id", "tristate", "entrypoint_source"):
-            assert field in result, (
-                f"android_vision carrier result missing canonical field '{field}'"
-            )
+            assert field in result, f"android_vision carrier result missing canonical field '{field}'"
         assert result["entrypoint_source"] == "android_vision"
 
     def test_both_carriers_produce_runtime_session_id(self):
@@ -721,31 +665,21 @@ class TestMultiCarrierNLIngress:
         result_chat = self._run_carrier("chat", stub_chat)
         result_av = self._run_carrier("android_vision", stub_av)
 
-        assert result_chat.get("runtime_session_id"), (
-            "chat carrier must produce non-empty runtime_session_id"
-        )
-        assert result_av.get("runtime_session_id"), (
-            "android_vision carrier must produce non-empty runtime_session_id"
-        )
+        assert result_chat.get("runtime_session_id"), "chat carrier must produce non-empty runtime_session_id"
+        assert result_av.get("runtime_session_id"), "android_vision carrier must produce non-empty runtime_session_id"
 
     def test_carriers_produce_distinct_runtime_session_ids(self):
         """Each DPR invocation must produce a unique runtime_session_id."""
         stub = _make_stub()
         _reset_openclawd_singleton()
         with _patch_llm_router(stub):
-            r1 = asyncio.run(
-                _run_handle_request("first request", source="chat")
-            )
-            r2 = asyncio.run(
-                _run_handle_request("second request", source="chat")
-            )
+            r1 = asyncio.run(_run_handle_request("first request", source="chat"))
+            r2 = asyncio.run(_run_handle_request("second request", source="chat"))
 
         rsid1 = r1.get("runtime_session_id", "")
         rsid2 = r2.get("runtime_session_id", "")
         assert rsid1 and rsid2, "Both requests must produce runtime_session_ids"
-        assert rsid1 != rsid2, (
-            "Each DPR.handle_request() call must produce a unique runtime_session_id"
-        )
+        assert rsid1 != rsid2, "Each DPR.handle_request() call must produce a unique runtime_session_id"
 
     def test_android_vision_carrier_source_in_gateway_handler(self):
         """galaxy_gateway android vision handler must route through DPR.
@@ -753,16 +687,12 @@ class TestMultiCarrierNLIngress:
         Structural check: the real vision handler imports and calls
         DesktopPresenceRuntime.handle_request with source='android_vision'.
         """
-        vision_src = (
-            REPO_ROOT / "galaxy_gateway" / "android" / "handlers" / "vision.py"
-        ).read_text(encoding="utf-8")
+        vision_src = (REPO_ROOT / "galaxy_gateway" / "android" / "handlers" / "vision.py").read_text(encoding="utf-8")
         assert "get_desktop_presence_runtime" in vision_src, (
             "galaxy_gateway vision handler must use get_desktop_presence_runtime — "
             "Android NL ingress must route through DPR, not bypass it"
         )
-        assert "android_vision" in vision_src, (
-            "vision handler must pass source='android_vision' to DPR"
-        )
+        assert "android_vision" in vision_src, "vision handler must pass source='android_vision' to DPR"
 
 
 # ---------------------------------------------------------------------------
@@ -790,6 +720,7 @@ class TestUnifiedPanelReflectsNLExecution:
 
         # Step 2: Build the unified panel — must not raise.
         from core.unified_panel_aggregation import UnifiedPanelAggregationService
+
         service = UnifiedPanelAggregationService()
         payload = service.build_payload(mode="chat")
         assert payload is not None, "UnifiedPanelAggregationService must return a payload"
@@ -797,16 +728,16 @@ class TestUnifiedPanelReflectsNLExecution:
     def test_unified_panel_payload_has_schema_version(self):
         """Unified panel payload must carry schema_version for forward-compat."""
         from core.unified_panel_aggregation import UnifiedPanelAggregationService
+
         service = UnifiedPanelAggregationService()
         payload = service.build_payload(mode="chat")
         d = payload.to_dict()
-        assert d.get("schema_version") == "1.0", (
-            "Unified panel payload must carry schema_version='1.0'"
-        )
+        assert d.get("schema_version") == "1.0", "Unified panel payload must carry schema_version='1.0'"
 
     def test_unified_panel_to_dict_is_json_serialisable(self):
         """Unified panel to_dict() must produce a JSON-serialisable structure."""
         import json
+
         from core.unified_panel_aggregation import UnifiedPanelAggregationService
 
         service = UnifiedPanelAggregationService()
@@ -819,15 +750,16 @@ class TestUnifiedPanelReflectsNLExecution:
     def test_unified_panel_source_annotation(self):
         """Unified panel must carry _source annotation from the aggregation module."""
         from core.unified_panel_aggregation import (
-            UnifiedPanelAggregationService,
             UNIFIED_PANEL_AGGREGATION_AUTHORITY,
+            UnifiedPanelAggregationService,
         )
+
         service = UnifiedPanelAggregationService()
         payload = service.build_payload(mode="chat")
         d = payload.to_dict()
-        assert d.get("_source") == UNIFIED_PANEL_AGGREGATION_AUTHORITY, (
-            "Unified panel must carry _source annotation identifying the builder module"
-        )
+        assert (
+            d.get("_source") == UNIFIED_PANEL_AGGREGATION_AUTHORITY
+        ), "Unified panel must carry _source annotation identifying the builder module"
 
     def test_nl_result_fields_compatible_with_panel_readiness(self):
         """NL execution result must be compatible with panel readiness verdicts.
@@ -845,9 +777,7 @@ class TestUnifiedPanelReflectsNLExecution:
         d = payload.to_dict()
         verdict = d.get("readiness_verdict", "")
         valid_verdicts = {"READY", "BLOCKED", "DEGRADED", "UNKNOWN"}
-        assert verdict in valid_verdicts, (
-            f"readiness_verdict must be one of {valid_verdicts}, got {verdict!r}"
-        )
+        assert verdict in valid_verdicts, f"readiness_verdict must be one of {valid_verdicts}, got {verdict!r}"
 
 
 # ---------------------------------------------------------------------------
@@ -868,6 +798,7 @@ class TestFiveDomainReviewUpgrade:
     def test_nl_e2e_canonical_path_module_importable(self):
         """tests.integration.test_nl_e2e_canonical_path must be importable."""
         import importlib
+
         mod = importlib.import_module("tests.integration.test_nl_e2e_canonical_path")
         assert mod is not None, (
             "tests.integration.test_nl_e2e_canonical_path must be importable so "
@@ -878,6 +809,7 @@ class TestFiveDomainReviewUpgrade:
         """five_domain_implementation_review._test_file_exists must return True for
         the NL e2e module path once this file exists."""
         from core.five_domain_implementation_review import _test_file_exists
+
         result = _test_file_exists("tests.integration.test_nl_e2e_canonical_path")
         assert result is True, (
             "five_domain_implementation_review._test_file_exists must return True "
@@ -889,6 +821,7 @@ class TestFiveDomainReviewUpgrade:
         """After this test file is added, the NL domain review must NOT report
         the 'NL END-TO-END CI PROOF MISSING' gap (since nl_e2e_found becomes True)."""
         from core.five_domain_implementation_review import _review_natural_language_canonical_path
+
         entry = _review_natural_language_canonical_path()
         # The gap must no longer be listed since nl_e2e_found is now True
         gap_texts = " ".join(entry.gap_items).lower()
@@ -900,6 +833,7 @@ class TestFiveDomainReviewUpgrade:
     def test_llm_contract_stub_importable(self):
         """The LLM contract stub must be importable."""
         from tests.integration.stubs.llm_contract_stub import LLMContractStub
+
         stub = LLMContractStub()
         assert stub.is_available() is True
         assert stub.get_default_model() == "contract-stub-v1"
@@ -920,33 +854,35 @@ class TestLLMContractStubContract:
     def test_stub_chat_returns_response_with_content(self):
         """stub.chat() must return an object with a .content attribute."""
         from tests.integration.stubs.llm_contract_stub import LLMContractStub
+
         stub = LLMContractStub()
-        resp = asyncio.run(
-            stub.chat([{"role": "user", "content": "hello"}])
-        )
+        resp = asyncio.run(stub.chat([{"role": "user", "content": "hello"}]))
         assert hasattr(resp, "content"), "stub response must have .content attribute"
         assert resp.content, "stub response.content must be non-empty"
 
     def test_stub_chat_returns_model_name(self):
         """stub response must carry a non-empty model name."""
         from tests.integration.stubs.llm_contract_stub import LLMContractStub
+
         stub = LLMContractStub()
-        resp = asyncio.run(
-            stub.chat([{"role": "user", "content": "hello"}])
-        )
+        resp = asyncio.run(stub.chat([{"role": "user", "content": "hello"}]))
         assert resp.model, "stub response must carry a non-empty model name"
 
     def test_stub_chat_classification_returns_valid_json(self):
         """For intent classification prompts, stub must return parseable JSON."""
         import json
+
         from tests.integration.stubs.llm_contract_stub import LLMContractStub
+
         stub = LLMContractStub()
         # Classification-style prompt
         resp = asyncio.run(
-            stub.chat([
-                {"role": "system", "content": "你是意图分类助手，只输出 JSON。"},
-                {"role": "user", "content": "分类: mode confidence JSON 是否执行?"},
-            ])
+            stub.chat(
+                [
+                    {"role": "system", "content": "你是意图分类助手，只输出 JSON。"},
+                    {"role": "user", "content": "分类: mode confidence JSON 是否执行?"},
+                ]
+            )
         )
         data = json.loads(resp.content)
         assert "mode" in data, "Classification response must have 'mode'"
@@ -955,12 +891,14 @@ class TestLLMContractStubContract:
     def test_stub_is_available(self):
         """stub.is_available() must return True."""
         from tests.integration.stubs.llm_contract_stub import LLMContractStub
+
         stub = LLMContractStub()
         assert stub.is_available() is True
 
     def test_stub_call_count_increments(self):
         """stub.call_count must increment with each chat() call."""
         from tests.integration.stubs.llm_contract_stub import LLMContractStub
+
         stub = LLMContractStub()
         assert stub.call_count == 0
         asyncio.run(stub.chat([{"role": "user", "content": "test 1"}]))
@@ -988,9 +926,7 @@ class TestLLMContractStubContract:
 
         with _patch_llm_router(stub):
             _inject_stub_into_openclawd(stub)
-            result = asyncio.run(
-                _run_handle_request("NL canonical proof", source="chat")
-            )
+            result = asyncio.run(_run_handle_request("NL canonical proof", source="chat"))
 
         # Proof 1: handler is agent_kernel → kernel ran
         metadata = result.get("metadata", {})
@@ -1005,6 +941,7 @@ class TestLLMContractStubContract:
         # classifies short messages with high confidence (≥0.6) and skips the
         # LLM classification call.  Structural identity (is stub) is the reliable proof.
         import core.openclawd as _oc_mod
+
         clawd = _oc_mod._openclawd_instance
         assert clawd is not None, "OpenClawd singleton must exist after request"
         kernel = clawd._kernel

@@ -678,9 +678,7 @@ class MultiDeviceGovernanceReport:
     report_id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
     verdict: MultiDeviceGovernanceVerdict = MultiDeviceGovernanceVerdict.no_evidence
     system_tier: MultiDeviceSystemTier = MultiDeviceSystemTier.no_evidence
-    participant_classifications: List[ParticipantClassification] = field(
-        default_factory=list
-    )
+    participant_classifications: List[ParticipantClassification] = field(default_factory=list)
     capability_map: Dict[str, CapabilityGovernanceEntry] = field(default_factory=dict)
     delegated_participant_count: int = 0
     secondary_device_count: int = 0
@@ -703,12 +701,8 @@ class MultiDeviceGovernanceReport:
             "report_id": self.report_id,
             "verdict": self.verdict.value,
             "system_tier": self.system_tier.value,
-            "participant_classifications": [
-                p.to_dict() for p in self.participant_classifications
-            ],
-            "capability_map": {
-                k: v.to_dict() for k, v in self.capability_map.items()
-            },
+            "participant_classifications": [p.to_dict() for p in self.participant_classifications],
+            "capability_map": {k: v.to_dict() for k, v in self.capability_map.items()},
             "delegated_participant_count": self.delegated_participant_count,
             "secondary_device_count": self.secondary_device_count,
             "has_delegated_participant_evidence": self.has_delegated_participant_evidence,
@@ -732,32 +726,18 @@ class MultiDeviceGovernanceReport:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "MultiDeviceGovernanceReport":
         """Construct from a dict (round-trip complement of ``to_dict``)."""
-        participants = [
-            ParticipantClassification.from_dict(p)
-            for p in data.get("participant_classifications", [])
-        ]
-        capability_map = {
-            k: CapabilityGovernanceEntry.from_dict(v)
-            for k, v in data.get("capability_map", {}).items()
-        }
+        participants = [ParticipantClassification.from_dict(p) for p in data.get("participant_classifications", [])]
+        capability_map = {k: CapabilityGovernanceEntry.from_dict(v) for k, v in data.get("capability_map", {}).items()}
         return cls(
             report_id=data.get("report_id", uuid.uuid4().hex[:12]),
-            verdict=MultiDeviceGovernanceVerdict.from_string(
-                data.get("verdict", "")
-            ),
-            system_tier=MultiDeviceSystemTier.from_string(
-                data.get("system_tier", "")
-            ),
+            verdict=MultiDeviceGovernanceVerdict.from_string(data.get("verdict", "")),
+            system_tier=MultiDeviceSystemTier.from_string(data.get("system_tier", "")),
             participant_classifications=participants,
             capability_map=capability_map,
             delegated_participant_count=data.get("delegated_participant_count", 0),
             secondary_device_count=data.get("secondary_device_count", 0),
-            has_delegated_participant_evidence=data.get(
-                "has_delegated_participant_evidence", False
-            ),
-            secondary_device_evidence_present=data.get(
-                "secondary_device_evidence_present", False
-            ),
+            has_delegated_participant_evidence=data.get("has_delegated_participant_evidence", False),
+            secondary_device_evidence_present=data.get("secondary_device_evidence_present", False),
             default_mainline_capabilities=data.get("default_mainline_capabilities", []),
             conditional_capabilities=data.get("conditional_capabilities", []),
             guarded_capabilities=data.get("guarded_capabilities", []),
@@ -777,10 +757,11 @@ class MultiDeviceGovernanceReport:
 
 # MultiDeviceCoordinationAuthority (PR-6) — coordination roles
 try:
-    from core.multi_device_coordination_authority import (  # type: ignore[import]
-        get_coordination_role_runtime as _get_coordination_runtime,
-        CoordinationRole as _CoordinationRole,
+    from core.multi_device_coordination_authority import CoordinationRole as _CoordinationRole
+    from core.multi_device_coordination_authority import (
+        get_coordination_role_runtime as _get_coordination_runtime,  # type: ignore[import]
     )
+
     _COORDINATION_AVAILABLE = True
 except Exception as exc:
     logger.debug("Fallback triggered: %s", exc)
@@ -790,9 +771,10 @@ except Exception as exc:
 
 # AndroidDelegatedRuntimeAudit — audit events
 try:
-    from core.android_delegated_runtime_audit import (  # type: ignore[import]
-        get_android_delegated_audit_recorder as _get_audit_recorder,
+    from core.android_delegated_runtime_audit import (
+        get_android_delegated_audit_recorder as _get_audit_recorder,  # type: ignore[import]
     )
+
     _AUDIT_AVAILABLE = True
 except Exception as exc:
     logger.debug("Fallback triggered: %s", exc)
@@ -801,10 +783,11 @@ except Exception as exc:
 
 # AndroidParticipantEvidenceIngress — participant evidence
 try:
-    from core.android_participant_evidence_ingress import (  # type: ignore[import]
-        ingest_android_participant_evidence as _ingest_participant_evidence,
-        AndroidParticipantStatus as _AndroidParticipantStatus,
+    from core.android_participant_evidence_ingress import AndroidParticipantStatus as _AndroidParticipantStatus
+    from core.android_participant_evidence_ingress import (
+        ingest_android_participant_evidence as _ingest_participant_evidence,  # type: ignore[import]
     )
+
     _PARTICIPANT_EVIDENCE_AVAILABLE = True
 except Exception as exc:
     logger.debug("Fallback triggered: %s", exc)
@@ -814,9 +797,10 @@ except Exception as exc:
 
 # AttachedRuntimeSessionRegistry — live attached sessions
 try:
-    from core.attached_runtime_session_registry import (  # type: ignore[import]
-        list_attached_sessions as _list_attached_sessions,
+    from core.attached_runtime_session_registry import (
+        list_attached_sessions as _list_attached_sessions,  # type: ignore[import]
     )
+
     _SESSION_REGISTRY_AVAILABLE = True
 except Exception as exc:
     logger.debug("Fallback triggered: %s", exc)
@@ -825,9 +809,10 @@ except Exception as exc:
 
 # MultiDeviceTruthConvergence — formation / participation
 try:
-    from core.multi_device_truth_convergence import (  # type: ignore[import]
-        converge_multi_device_truth as _converge_truth,
+    from core.multi_device_truth_convergence import (
+        converge_multi_device_truth as _converge_truth,  # type: ignore[import]
     )
+
     _TRUTH_CONVERGENCE_AVAILABLE = True
 except Exception as exc:
     logger.debug("Fallback triggered: %s", exc)
@@ -881,18 +866,12 @@ class MultiDeviceGovernanceEvaluator:
         # ------------------------------------------------------------------
         # Step 1: Probe for delegated participants
         # ------------------------------------------------------------------
-        delegated_count, secondary_count, participant_classifications = (
-            self._probe_participants(downgrade_reasons)
-        )
+        delegated_count, secondary_count, participant_classifications = self._probe_participants(downgrade_reasons)
 
         # ------------------------------------------------------------------
         # Step 2: Probe for delegated participant evidence
         # ------------------------------------------------------------------
-        has_delegated_evidence, secondary_evidence = (
-            self._probe_delegated_evidence(
-                delegated_count, downgrade_reasons
-            )
-        )
+        has_delegated_evidence, secondary_evidence = self._probe_delegated_evidence(delegated_count, downgrade_reasons)
 
         # ------------------------------------------------------------------
         # Step 3: Build capability map
@@ -964,8 +943,7 @@ class MultiDeviceGovernanceEvaluator:
             summary=summary,
         )
         logger.debug(
-            "MultiDeviceGovernanceEvaluator.evaluate() → verdict=%s "
-            "delegated=%d secondary=%d downgrades=%d",
+            "MultiDeviceGovernanceEvaluator.evaluate() → verdict=%s " "delegated=%d secondary=%d downgrades=%d",
             verdict.value,
             delegated_count,
             secondary_count,
@@ -1035,9 +1013,7 @@ class MultiDeviceGovernanceEvaluator:
                 # Only count as a new delegated participant if not already in list.
                 existing_ids = {p.device_id for p in participant_classifications}
                 for session in sessions:
-                    session_device_id = getattr(session, "device_id", None) or getattr(
-                        session, "participant_id", None
-                    )
+                    session_device_id = getattr(session, "device_id", None) or getattr(session, "participant_id", None)
                     if session_device_id and session_device_id not in existing_ids:
                         delegated_count += 1
                         participant_classifications.append(
@@ -1052,8 +1028,7 @@ class MultiDeviceGovernanceEvaluator:
                         existing_ids.add(session_device_id)
             except Exception as exc:
                 downgrade_reasons.append(
-                    f"SESSION_REGISTRY_PROBE_FAILED: {exc!r}.  "
-                    "Attached session count unavailable."
+                    f"SESSION_REGISTRY_PROBE_FAILED: {exc!r}.  " "Attached session count unavailable."
                 )
 
         return delegated_count, secondary_count, participant_classifications
@@ -1087,8 +1062,7 @@ class MultiDeviceGovernanceEvaluator:
                     has_delegated_evidence = True
             except Exception as exc:
                 downgrade_reasons.append(
-                    f"AUDIT_PROBE_FAILED: {exc!r}.  "
-                    "Delegated runtime audit evidence unavailable."
+                    f"AUDIT_PROBE_FAILED: {exc!r}.  " "Delegated runtime audit evidence unavailable."
                 )
 
         # Probe participant evidence ingress
@@ -1098,11 +1072,7 @@ class MultiDeviceGovernanceEvaluator:
                 if evidence is not None:
                     status_val = getattr(evidence, "status", None)
                     if status_val is not None:
-                        status_str = (
-                            status_val.value
-                            if hasattr(status_val, "value")
-                            else str(status_val)
-                        )
+                        status_str = status_val.value if hasattr(status_val, "value") else str(status_val)
                         if status_str not in ("no_artifact", "unavailable", ""):
                             has_delegated_evidence = True
                             # If we have participant evidence but no delegated
@@ -1117,8 +1087,7 @@ class MultiDeviceGovernanceEvaluator:
                                 )
             except Exception as exc:
                 downgrade_reasons.append(
-                    f"PARTICIPANT_EVIDENCE_PROBE_FAILED: {exc!r}.  "
-                    "Android participant evidence ingress unavailable."
+                    f"PARTICIPANT_EVIDENCE_PROBE_FAILED: {exc!r}.  " "Android participant evidence ingress unavailable."
                 )
 
         # If delegated_count > 0 but no evidence found → downgrade
@@ -1173,10 +1142,7 @@ class MultiDeviceGovernanceEvaluator:
                 if delegated_count > 0 and has_delegated_evidence:
                     entry.tier = MultiDeviceSystemTier.conditional
                     entry.evidence_present = True
-                    entry.notes = (
-                        "Delegated participant present with evidence.  "
-                        "Capability is conditionally active."
-                    )
+                    entry.notes = "Delegated participant present with evidence.  " "Capability is conditionally active."
                 elif delegated_count > 0:
                     entry.tier = MultiDeviceSystemTier.partial
                     entry.evidence_present = False
@@ -1191,10 +1157,7 @@ class MultiDeviceGovernanceEvaluator:
                 else:
                     entry.tier = MultiDeviceSystemTier.single_device_baseline
                     entry.evidence_present = False
-                    entry.notes = (
-                        "No delegated participant present.  "
-                        "Capability is inactive in single-device mode."
-                    )
+                    entry.notes = "No delegated participant present.  " "Capability is inactive in single-device mode."
 
             elif base_tier in (
                 MultiDeviceSystemTier.guarded,
@@ -1325,12 +1288,8 @@ class MultiDeviceGovernanceEvaluator:
         lines.append("-" * 40)
         lines.append(f"  Delegated participants : {delegated_count}")
         lines.append(f"  Secondary devices      : {secondary_count}")
-        lines.append(
-            f"  Delegated evidence     : {'YES' if has_delegated_evidence else 'NO'}"
-        )
-        lines.append(
-            f"  Secondary evidence     : {'YES' if secondary_evidence else 'NO'}"
-        )
+        lines.append(f"  Delegated evidence     : {'YES' if has_delegated_evidence else 'NO'}")
+        lines.append(f"  Secondary evidence     : {'YES' if secondary_evidence else 'NO'}")
         lines.append("")
 
         lines.append("CAPABILITY GOVERNANCE SUMMARY")

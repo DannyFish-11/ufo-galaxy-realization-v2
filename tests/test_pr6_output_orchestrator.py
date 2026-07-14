@@ -24,14 +24,15 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # TextChannel
 # ---------------------------------------------------------------------------
 
+
 class TestTextChannel:
     def _channel(self):
         from core.output.text_channel import TextChannel
+
         return TextChannel()
 
     def test_always_enabled(self):
@@ -81,9 +82,11 @@ class TestTextChannel:
 # VoiceChannel
 # ---------------------------------------------------------------------------
 
+
 class TestVoiceChannel:
     def _channel(self):
         from core.output.voice_channel import VoiceChannel
+
         return VoiceChannel()
 
     def test_disabled_by_default(self):
@@ -128,9 +131,11 @@ class TestVoiceChannel:
 # AvatarChannel
 # ---------------------------------------------------------------------------
 
+
 class TestAvatarChannel:
     def _channel(self):
         from core.output.avatar_channel import AvatarChannel
+
         return AvatarChannel()
 
     def test_disabled_by_default(self):
@@ -180,9 +185,11 @@ class TestAvatarChannel:
 # OverlayChannel
 # ---------------------------------------------------------------------------
 
+
 class TestOverlayChannel:
     def _channel(self):
         from core.output.overlay_channel import OverlayChannel
+
         return OverlayChannel()
 
     def test_disabled_by_default(self):
@@ -202,8 +209,7 @@ class TestOverlayChannel:
     def test_overlay_plan_keys(self):
         plan = self._channel().build(enabled=True)
         op = plan["overlay_plan"]
-        for key in ("type", "position", "content_snippet", "highlight_targets",
-                    "steps", "opacity"):
+        for key in ("type", "position", "content_snippet", "highlight_targets", "steps", "opacity"):
             assert key in op, f"Key {key!r} missing from overlay_plan"
 
     def test_content_snippet_from_response(self):
@@ -235,9 +241,11 @@ class TestOverlayChannel:
 # OutputOrchestrator
 # ---------------------------------------------------------------------------
 
+
 class TestOutputOrchestrator:
     def _orch(self):
         from core.output.orchestrator import OutputOrchestrator
+
         return OutputOrchestrator()
 
     def test_output_keys_present(self):
@@ -312,8 +320,11 @@ class TestOutputOrchestrator:
         envelope = {
             "mode": "field_assistant",
             "output_plan": {
-                "text": True, "voice": True, "avatar": True,
-                "overlay": True, "ui_surface": "field_overlay",
+                "text": True,
+                "voice": True,
+                "avatar": True,
+                "overlay": True,
+                "ui_surface": "field_overlay",
             },
         }
         plan = self._orch().orchestrate(
@@ -329,8 +340,11 @@ class TestOutputOrchestrator:
         envelope = {
             "mode": "deep_thinking",
             "output_plan": {
-                "text": True, "voice": False, "avatar": True,
-                "overlay": False, "ui_surface": "infinite_canvas",
+                "text": True,
+                "voice": False,
+                "avatar": True,
+                "overlay": False,
+                "ui_surface": "infinite_canvas",
             },
         }
         plan = self._orch().orchestrate(
@@ -344,8 +358,11 @@ class TestOutputOrchestrator:
         envelope = {
             "mode": "chat",
             "output_plan": {
-                "text": True, "voice": False, "avatar": False,
-                "overlay": False, "ui_surface": "chat_panel",
+                "text": True,
+                "voice": False,
+                "avatar": False,
+                "overlay": False,
+                "ui_surface": "chat_panel",
             },
         }
         plan = self._orch().orchestrate(
@@ -357,11 +374,15 @@ class TestOutputOrchestrator:
 
     def test_with_interaction_envelope_object(self):
         from core.schemas.interaction_envelope import InteractionEnvelope, OutputPlan
+
         envelope = InteractionEnvelope(
             mode="ambient_companion",
             output_plan=OutputPlan(
-                text=True, voice=True, avatar=True,
-                overlay=False, ui_surface="ambient",
+                text=True,
+                voice=True,
+                avatar=True,
+                overlay=False,
+                ui_surface="ambient",
             ),
         )
         plan = self._orch().orchestrate(
@@ -383,9 +404,10 @@ class TestOutputOrchestrator:
         assert plan["text"]["expression_hint"] == "luminous"
 
     def test_persona_state_propagated_to_avatar(self):
-        envelope = {"mode": "chat",
-                    "output_plan": {"text": True, "voice": False, "avatar": True,
-                                    "overlay": False, "ui_surface": "chat_panel"}}
+        envelope = {
+            "mode": "chat",
+            "output_plan": {"text": True, "voice": False, "avatar": True, "overlay": False, "ui_surface": "chat_panel"},
+        }
         ps = {"mood": "joyful", "energy": 0.9}
         plan = self._orch().orchestrate(
             interaction_envelope=envelope,
@@ -396,6 +418,7 @@ class TestOutputOrchestrator:
 
     def test_result_is_json_serialisable(self):
         import json
+
         plan = self._orch().orchestrate(
             interaction_envelope=None,
             persona_state={"mood": "calm", "energy": 0.7, "expression_mode": "quiet"},
@@ -410,6 +433,7 @@ class TestOutputOrchestrator:
 # OpenClawd integration (non-regression + output_plan injection)
 # ---------------------------------------------------------------------------
 
+
 class TestOpenClawdOutputPlan:
     """Verify that OpenClawd.process() now includes ``output_plan``."""
 
@@ -418,8 +442,7 @@ class TestOpenClawdOutputPlan:
 
         oc = OpenClawd()
 
-        async def _mock_chat(message, intent=None, device_id=None,
-                              session_id=None, trace_id=None):
+        async def _mock_chat(message, intent=None, device_id=None, session_id=None, trace_id=None):
             return {"success": True, "response": "ok", "metadata": {}}
 
         with patch.object(oc, "_get_kernel", return_value=None):
@@ -468,6 +491,7 @@ class TestOpenClawdOutputPlan:
 # 三态/语音链路稳定性排查回归:OutputOrchestrator 不该自己触发 TTS 播放
 # ---------------------------------------------------------------------------
 
+
 class TestOutputOrchestratorDoesNotDoubleSpeak:
     """真实故障:core/desktop_presence_runtime.py::handle_request() 收尾已经
     无条件调用 core.speech_output.speak_response() 做集中式 TTS("任何渠道的
@@ -481,6 +505,7 @@ class TestOutputOrchestratorDoesNotDoubleSpeak:
 
     def _orch(self):
         from core.output.orchestrator import OutputOrchestrator
+
         return OutputOrchestrator()
 
     def test_voice_enabled_does_not_trigger_synthesize_and_play(self):
@@ -489,8 +514,11 @@ class TestOutputOrchestratorDoesNotDoubleSpeak:
         envelope = {
             "mode": "field_assistant",
             "output_plan": {
-                "text": True, "voice": True, "avatar": False,
-                "overlay": False, "ui_surface": "field_overlay",
+                "text": True,
+                "voice": True,
+                "avatar": False,
+                "overlay": False,
+                "ui_surface": "field_overlay",
             },
         }
         with patch.object(VoiceChannel, "synthesize_and_play") as mock_play:

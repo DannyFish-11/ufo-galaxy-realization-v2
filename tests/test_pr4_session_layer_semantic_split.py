@@ -1,11 +1,11 @@
-from core.attached_runtime_session import AttachedRuntimeSessionRecord, attach_runtime_session
-from core.canonical_session_truth import CanonicalSessionTruthRecord, record_session_truth
-from core.delegated_runtime_handoff_contract import DelegatedHandoffContractIdentity
-from core.session_manager import Session
 from contracts.runtime_session_snapshot import (
     build_runtime_session_snapshot,
     from_target_takeover_result,
 )
+from core.attached_runtime_session import AttachedRuntimeSessionRecord, attach_runtime_session
+from core.canonical_session_truth import CanonicalSessionTruthRecord, record_session_truth
+from core.delegated_runtime_handoff_contract import DelegatedHandoffContractIdentity
+from core.session_manager import Session
 
 
 def test_conversation_session_alias_maps_to_session_manager_identity() -> None:

@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+from unittest.mock import MagicMock, patch
+
 from core.realtime_streaming_backbone import (
     REALTIME_STREAMING_BACKBONE_AUTHORITY,
     REALTIME_STREAMING_BACKBONE_SENTINEL,
     build_realtime_stream_runtime_status,
     build_realtime_streaming_backbone_contract,
 )
-from unittest.mock import MagicMock, patch
 
 
 def test_backbone_contract_exposes_formal_roles_and_convergence():
@@ -42,10 +43,13 @@ def test_runtime_initializes_webrtc_session_manager_when_enabled():
     runtime = DesktopPresenceRuntime.__new__(DesktopPresenceRuntime)
     runtime._webrtc_session_manager = None
 
-    with patch("core.unified_config.config", {"enable_webrtc_session_manager": True}), patch(
-        "core.multimodal.webrtc_session_manager.WebRTCSessionManager",
-        return_value=MagicMock(name="webrtc_manager"),
-    ) as mock_manager:
+    with (
+        patch("core.unified_config.config", {"enable_webrtc_session_manager": True}),
+        patch(
+            "core.multimodal.webrtc_session_manager.WebRTCSessionManager",
+            return_value=MagicMock(name="webrtc_manager"),
+        ) as mock_manager,
+    ):
         runtime._try_init_webrtc_session_manager()
 
     assert mock_manager.called
@@ -64,23 +68,19 @@ def test_stream_active_status_produces_routing_signals():
         source_registry_snapshot={"total_count": 1, "active_count": 1, "degraded_count": 0},
         enable_webrtc_session_manager=True,
     )
-    assert active_status["stream_active_for_routing"] is True, (
-        "active stream must set stream_active_for_routing=True"
-    )
-    assert active_status["stream_fallback_required"] is False, (
-        "active stream must set stream_fallback_required=False"
-    )
+    assert active_status["stream_active_for_routing"] is True, "active stream must set stream_active_for_routing=True"
+    assert active_status["stream_fallback_required"] is False, "active stream must set stream_fallback_required=False"
 
     unavailable_status = build_realtime_stream_runtime_status(
         source_registry_snapshot={"total_count": 1, "active_count": 0, "degraded_count": 0},
         enable_webrtc_session_manager=False,
     )
-    assert unavailable_status["stream_active_for_routing"] is False, (
-        "unavailable stream must set stream_active_for_routing=False"
-    )
-    assert unavailable_status["stream_fallback_required"] is True, (
-        "unavailable stream must set stream_fallback_required=True"
-    )
+    assert (
+        unavailable_status["stream_active_for_routing"] is False
+    ), "unavailable stream must set stream_active_for_routing=False"
+    assert (
+        unavailable_status["stream_fallback_required"] is True
+    ), "unavailable stream must set stream_fallback_required=True"
 
 
 def test_stream_degraded_state_produces_routing_signals():
@@ -90,12 +90,12 @@ def test_stream_degraded_state_produces_routing_signals():
         enable_webrtc_session_manager=True,
     )
     assert degraded_status["stream_state"] == "degraded"
-    assert degraded_status["stream_active_for_routing"] is True, (
-        "degraded stream still has live sources: routing should remain active"
-    )
-    assert degraded_status["stream_fallback_required"] is False, (
-        "degraded stream should not force fallback; fallback happens on unavailable/reconnecting/discrete"
-    )
+    assert (
+        degraded_status["stream_active_for_routing"] is True
+    ), "degraded stream still has live sources: routing should remain active"
+    assert (
+        degraded_status["stream_fallback_required"] is False
+    ), "degraded stream should not force fallback; fallback happens on unavailable/reconnecting/discrete"
 
 
 def test_reconnecting_state_requires_fallback():
@@ -105,12 +105,12 @@ def test_reconnecting_state_requires_fallback():
         enable_webrtc_session_manager=True,
     )
     assert reconnecting_status["stream_state"] == "reconnecting"
-    assert reconnecting_status["stream_fallback_required"] is True, (
-        "reconnecting state must set stream_fallback_required=True"
-    )
-    assert reconnecting_status["stream_active_for_routing"] is False, (
-        "reconnecting state must not show stream as active for routing"
-    )
+    assert (
+        reconnecting_status["stream_fallback_required"] is True
+    ), "reconnecting state must set stream_fallback_required=True"
+    assert (
+        reconnecting_status["stream_active_for_routing"] is False
+    ), "reconnecting state must not show stream as active for routing"
 
 
 def test_manager_initialization_sets_stream_runtime_ready():
@@ -121,16 +121,16 @@ def test_manager_initialization_sets_stream_runtime_ready():
     # No manager — stream_runtime_ready should be False
     runtime_no_mgr = DesktopPresenceRuntime.__new__(DesktopPresenceRuntime)
     runtime_no_mgr._webrtc_session_manager = None
-    assert runtime_no_mgr.stream_runtime_ready is False, (
-        "stream_runtime_ready must be False when no manager is initialized"
-    )
+    assert (
+        runtime_no_mgr.stream_runtime_ready is False
+    ), "stream_runtime_ready must be False when no manager is initialized"
 
     # Manager initialized — stream_runtime_ready should be True
     runtime_with_mgr = DesktopPresenceRuntime.__new__(DesktopPresenceRuntime)
     runtime_with_mgr._webrtc_session_manager = MagicMock(name="webrtc_manager")
-    assert runtime_with_mgr.stream_runtime_ready is True, (
-        "stream_runtime_ready must be True once a manager has been initialized"
-    )
+    assert (
+        runtime_with_mgr.stream_runtime_ready is True
+    ), "stream_runtime_ready must be True once a manager has been initialized"
 
 
 def test_continuous_stream_enters_canonical_perception_when_stream_active():
@@ -151,12 +151,12 @@ def test_continuous_stream_enters_canonical_perception_when_stream_active():
         stream_runtime_status=stream_active_status,
     )
     assert perception is not None
-    assert "continuous_stream" in perception.get("active_modalities", []), (
-        "continuous_stream must appear in active_modalities when stream_active_for_routing=True"
-    )
-    assert perception.get("stream_active_for_routing") is True, (
-        "stream_active_for_routing flag must be surfaced in canonical perception"
-    )
+    assert "continuous_stream" in perception.get(
+        "active_modalities", []
+    ), "continuous_stream must appear in active_modalities when stream_active_for_routing=True"
+    assert (
+        perception.get("stream_active_for_routing") is True
+    ), "stream_active_for_routing flag must be surfaced in canonical perception"
 
     # With no active stream — continuous_stream must NOT be injected
     stream_fallback_status = {
@@ -170,9 +170,9 @@ def test_continuous_stream_enters_canonical_perception_when_stream_active():
         stream_runtime_status=stream_fallback_status,
     )
     assert perception_no_stream is not None
-    assert "continuous_stream" not in perception_no_stream.get("active_modalities", []), (
-        "continuous_stream must NOT be in active_modalities when stream is not active for routing"
-    )
+    assert "continuous_stream" not in perception_no_stream.get(
+        "active_modalities", []
+    ), "continuous_stream must NOT be in active_modalities when stream is not active for routing"
 
 
 def test_stream_fallback_required_signal_changes_route_decision():
@@ -206,12 +206,12 @@ def test_stream_fallback_required_signal_changes_route_decision():
         stream_runtime_status=stream_unavailable_status,
         desktop_native_ingress_backbone=ingress_with_stream,
     )
-    assert route_fallback["route_type"] == "text_only", (
-        "route must be text_only when stream is unavailable (stream_fallback_required=True)"
-    )
-    assert route_fallback.get("stream_fallback_required") is True, (
-        "stream_fallback_required signal must appear in the returned route decision"
-    )
+    assert (
+        route_fallback["route_type"] == "text_only"
+    ), "route must be text_only when stream is unavailable (stream_fallback_required=True)"
+    assert (
+        route_fallback.get("stream_fallback_required") is True
+    ), "stream_fallback_required signal must appear in the returned route decision"
 
     # Case 2: stream active -> ingress guidance promotes continuous_stream signal
     # (no forced fallback; route_bias reflects stream awareness).
@@ -225,13 +225,11 @@ def test_stream_fallback_required_signal_changes_route_decision():
         stream_runtime_status=stream_active_status,
     )
     # Active stream must not signal fallback and must set continuous_stream signals
-    assert ingress_guidance["continuous_stream_present"] is True, (
-        "active stream ingress must be detected as present"
-    )
+    assert ingress_guidance["continuous_stream_present"] is True, "active stream ingress must be detected as present"
     assert ingress_guidance["stream_state"] == "active"
-    assert ingress_guidance["route_bias"] == "continuous_stream_aware", (
-        "active stream must set continuous_stream_aware route bias"
-    )
-    assert ingress_guidance["context_strategy_hint"]["continuous_stream_assisted"] is True, (
-        "active stream must set continuous_stream_assisted=True in context strategy"
-    )
+    assert (
+        ingress_guidance["route_bias"] == "continuous_stream_aware"
+    ), "active stream must set continuous_stream_aware route bias"
+    assert (
+        ingress_guidance["context_strategy_hint"]["continuous_stream_assisted"] is True
+    ), "active stream must set continuous_stream_assisted=True in context strategy"

@@ -59,6 +59,7 @@ async def _check_gpu_temperature() -> bool:
     except Exception:
         return True
 
+
 # ---------------------------------------------------------------------------
 # Data classes
 # ---------------------------------------------------------------------------
@@ -102,22 +103,22 @@ class SchedulerConfig:
     """Configurable thresholds for the compute scheduler."""
 
     # VRAM thresholds (ratio of total VRAM used)
-    vram_critical: float = 0.92     # Critical -- must release immediately
-    vram_warning: float = 0.85      # Warning -- suggest degradation
-    vram_optimal: float = 0.70      # Optimal -- can load new models
+    vram_critical: float = 0.92  # Critical -- must release immediately
+    vram_warning: float = 0.85  # Warning -- suggest degradation
+    vram_optimal: float = 0.70  # Optimal -- can load new models
 
     # Safety margins (multiply required size by this factor)
-    margin_full: float = 1.3        # Full precision margin
-    margin_quantized: float = 0.8   # Quantized margin
-    margin_hybrid: float = 0.5      # Hybrid offload margin
+    margin_full: float = 1.3  # Full precision margin
+    margin_quantized: float = 0.8  # Quantized margin
+    margin_hybrid: float = 0.5  # Hybrid offload margin
 
     # Default layer count estimate
     default_layer_count: int = 32
 
     # Quantization size reduction factors
-    q4_factor: float = 0.25         # Q4 is ~1/4 of fp16
-    q5_factor: float = 0.3125       # Q5 is ~5/16 of fp16
-    q8_factor: float = 0.5          # Q8 is ~1/2 of fp16
+    q4_factor: float = 0.25  # Q4 is ~1/4 of fp16
+    q5_factor: float = 0.3125  # Q5 is ~5/16 of fp16
+    q8_factor: float = 0.5  # Q8 is ~1/2 of fp16
 
     # Monitoring interval
     monitor_interval_sec: float = 30.0
@@ -203,9 +204,7 @@ class ComputeScheduler:
 
         # Start our own periodic check for release-if-needed
         self._monitoring = True
-        self._monitor_task = asyncio.create_task(
-            self._monitor_loop(interval), name="ComputeSchedulerMonitor"
-        )
+        self._monitor_task = asyncio.create_task(self._monitor_loop(interval), name="ComputeSchedulerMonitor")
         logger.info("Compute scheduler monitoring started (interval=%.0fs)", interval)
 
     async def stop_monitoring(self) -> None:
@@ -253,9 +252,7 @@ class ComputeScheduler:
             ModelAllocation with the decision
         """
         async with self._lock:
-            return await self._schedule_model_locked(
-                model_id, model_size_mb, requires_multimodal, preferred_backend
-            )
+            return await self._schedule_model_locked(model_id, model_size_mb, requires_multimodal, preferred_backend)
 
     async def _schedule_model_locked(
         self,
@@ -459,11 +456,7 @@ class ComputeScheduler:
         Must be called with _lock held.
         """
         # Find GPU models, sorted by last_accessed (oldest first)
-        gpu_models = [
-            (mid, alloc)
-            for mid, alloc in self._models.items()
-            if alloc.is_gpu
-        ]
+        gpu_models = [(mid, alloc) for mid, alloc in self._models.items() if alloc.is_gpu]
 
         if not gpu_models:
             logger.warning("No GPU models to release; trying cache clear")
@@ -495,6 +488,7 @@ class ComputeScheduler:
         """Attempt to clear GPU memory cache via PyTorch."""
         try:
             import torch
+
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
                 logger.info("GPU cache cleared (torch.cuda.empty_cache)")

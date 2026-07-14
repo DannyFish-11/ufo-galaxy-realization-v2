@@ -16,6 +16,7 @@ def _read_doc() -> str:
 
 # ── 文档完整性约束 ─────────────────────────────────────────────────────────────
 
+
 class TestDocumentCompleteness:
     """文档必须覆盖六大主题，且使用真实代码锚点。"""
 
@@ -135,24 +136,28 @@ class TestBackboneAuditNewFunctions:
         from core.current_state_backbone_audit import (  # noqa: PLC0415
             _build_native_three_state_closeout,
         )
+
         assert callable(_build_native_three_state_closeout)
 
     def test_central_agent_body_classification_function_exists(self) -> None:
         from core.current_state_backbone_audit import (  # noqa: PLC0415
             _build_central_agent_body_classification,
         )
+
         assert callable(_build_central_agent_body_classification)
 
     def test_remaining_work_split_function_exists(self) -> None:
         from core.current_state_backbone_audit import (  # noqa: PLC0415
             _build_remaining_work_split,
         )
+
         assert callable(_build_remaining_work_split)
 
     def test_native_three_state_closeout_output_structure(self) -> None:
         from core.current_state_backbone_audit import (  # noqa: PLC0415
             _build_native_three_state_closeout,
         )
+
         result = _build_native_three_state_closeout(mode_summary={}, layered_mode_model={})
         assert isinstance(result, dict)
         assert "closure_push_zh" in result
@@ -167,6 +172,7 @@ class TestBackboneAuditNewFunctions:
         from core.current_state_backbone_audit import (  # noqa: PLC0415
             _build_native_three_state_closeout,
         )
+
         result = _build_native_three_state_closeout(mode_summary={}, layered_mode_model={})
         # 当 TriState 存在时，应指出唯一权威源
         if result.get("canonical_source"):
@@ -176,6 +182,7 @@ class TestBackboneAuditNewFunctions:
         from core.current_state_backbone_audit import (  # noqa: PLC0415
             _build_native_three_state_closeout,
         )
+
         result = _build_native_three_state_closeout(mode_summary={}, layered_mode_model={})
         mapping = result.get("zh_to_code_mapping", [])
         zh_terms = {item.get("zh_term") for item in mapping if isinstance(item, dict)}
@@ -189,6 +196,7 @@ class TestBackboneAuditNewFunctions:
         from core.current_state_backbone_audit import (  # noqa: PLC0415
             _build_central_agent_body_classification,
         )
+
         result = _build_central_agent_body_classification()
         assert isinstance(result, dict)
         assert "verdict_zh" in result
@@ -201,6 +209,7 @@ class TestBackboneAuditNewFunctions:
         from core.current_state_backbone_audit import (  # noqa: PLC0415
             _build_central_agent_body_classification,
         )
+
         result = _build_central_agent_body_classification()
         missing = result.get("still_missing_capabilities", [])
         assert len(missing) > 0, "must list at least one missing capability"
@@ -212,6 +221,7 @@ class TestBackboneAuditNewFunctions:
         from core.current_state_backbone_audit import (  # noqa: PLC0415
             _build_central_agent_body_classification,
         )
+
         result = _build_central_agent_body_classification()
         summary = result.get("classification_summary", {})
         # 系统诚实：完整中心智能体当前不存在
@@ -221,6 +231,7 @@ class TestBackboneAuditNewFunctions:
         from core.current_state_backbone_audit import (  # noqa: PLC0415
             _build_remaining_work_split,
         )
+
         result = _build_remaining_work_split()
         assert isinstance(result, dict)
         # 六大分层必须都在

@@ -70,7 +70,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Shared AIP v3 helpers
 # ---------------------------------------------------------------------------
@@ -203,9 +202,7 @@ class TestDisconnectReconnectSessionContinuity:
     """Multi-step: disconnect → reconnect → snapshot state survives."""
 
     @pytest.mark.asyncio
-    async def test_reconnect_snapshot_overwrites_stale_state(
-        self, bridge: Any
-    ) -> None:
+    async def test_reconnect_snapshot_overwrites_stale_state(self, bridge: Any) -> None:
         """After disconnect and reconnect, a fresh snapshot replaces the stale one.
 
         Sequence:
@@ -223,9 +220,9 @@ class TestDisconnectReconnectSessionContinuity:
         reg1 = await _register_device(bridge, device_id)
         ws1 = reg1["ws"]
         snap1_ack = await _send_snapshot(bridge, ws1, device_id, _HEALTHY_SNAPSHOT)
-        assert snap1_ack.get("status") == "absorbed", (
-            f"First snapshot must be absorbed; got status={snap1_ack.get('status')!r}"
-        )
+        assert (
+            snap1_ack.get("status") == "absorbed"
+        ), f"First snapshot must be absorbed; got status={snap1_ack.get('status')!r}"
         stored_before_disconnect = get_device_state_snapshot(device_id)
         assert stored_before_disconnect is not None
         assert stored_before_disconnect.model_ready is True
@@ -238,9 +235,7 @@ class TestDisconnectReconnectSessionContinuity:
             ws2,
             _v3("device_register", device_id, platform="android", model="StubPhone"),
         )
-        assert (reg2_ack or {}).get("success") is True, (
-            "Reconnect registration must succeed"
-        )
+        assert (reg2_ack or {}).get("success") is True, "Reconnect registration must succeed"
 
         # Step 4: send updated snapshot marking degradation
         degraded_payload = {
@@ -251,9 +246,7 @@ class TestDisconnectReconnectSessionContinuity:
             "snapshot_ts": _HEALTHY_SNAPSHOT["snapshot_ts"] + 5000,
         }
         snap2_ack = await _send_snapshot(bridge, ws2, device_id, degraded_payload)
-        assert snap2_ack.get("status") == "absorbed", (
-            "Post-reconnect snapshot must be absorbed"
-        )
+        assert snap2_ack.get("status") == "absorbed", "Post-reconnect snapshot must be absorbed"
 
         # Step 5: store must reflect latest (degraded) state
         stored_after_reconnect = get_device_state_snapshot(device_id)
@@ -262,14 +255,12 @@ class TestDisconnectReconnectSessionContinuity:
             "android_device_state_store must reflect post-reconnect snapshot update; "
             "model_ready should be False after degraded snapshot was absorbed."
         )
-        assert "model_checksum_failed" in (stored_after_reconnect.degraded_reasons or []), (
-            "degraded_reasons must be updated from the post-reconnect snapshot"
-        )
+        assert "model_checksum_failed" in (
+            stored_after_reconnect.degraded_reasons or []
+        ), "degraded_reasons must be updated from the post-reconnect snapshot"
 
     @pytest.mark.asyncio
-    async def test_reconnect_preserves_device_entry_in_store(
-        self, bridge: Any
-    ) -> None:
+    async def test_reconnect_preserves_device_entry_in_store(self, bridge: Any) -> None:
         """After reconnect the device entry remains present in the snapshot store.
 
         Verifies that a disconnect (no explicit deregister) + reconnect does
@@ -300,13 +291,11 @@ class TestDisconnectReconnectSessionContinuity:
         await _send_snapshot(bridge, ws2, device_id, fresh_payload)
 
         stored = get_device_state_snapshot(device_id)
-        assert stored is not None, (
-            "Device entry must survive disconnect + reconnect cycle"
-        )
+        assert stored is not None, "Device entry must survive disconnect + reconnect cycle"
         all_snaps = list_device_state_snapshots()
-        assert any(s.device_id == device_id for s in all_snaps), (
-            "list_device_state_snapshots must include device after reconnect"
-        )
+        assert any(
+            s.device_id == device_id for s in all_snaps
+        ), "list_device_state_snapshots must include device after reconnect"
 
 
 # ===========================================================================
@@ -364,13 +353,9 @@ class TestReplayRejectionAfterTerminalSignal:
             payload={"result": {"ok": True}},
         )
         outcome_ok = reconcile_android_execution_signal(envelope_ok, runtime=rt)
-        assert outcome_ok.was_updated is True, (
-            "First final_result must update the record"
-        )
+        assert outcome_ok.was_updated is True, "First final_result must update the record"
         assert outcome_ok.record is not None
-        assert outcome_ok.record.phase.is_terminal(), (
-            "Record must be terminal after final_result"
-        )
+        assert outcome_ok.record.phase.is_terminal(), "Record must be terminal after final_result"
 
         # Step 2: replay same final_result
         envelope_replay = AndroidExecutionSignalEnvelope(
@@ -388,9 +373,7 @@ class TestReplayRejectionAfterTerminalSignal:
             "Replayed final_result after terminal must be rejected (was_updated=False). "
             "Terminal phase must block further signal mutations."
         )
-        assert outcome_replay.reject_reason, (
-            "reject_reason must be non-empty for a blocked replay attempt"
-        )
+        assert outcome_replay.reject_reason, "reject_reason must be non-empty for a blocked replay attempt"
 
     def test_terminal_record_blocks_progress_after_error(self) -> None:
         """Progress signal arriving after error (terminal) must be blocked.
@@ -428,9 +411,7 @@ class TestReplayRejectionAfterTerminalSignal:
             session_id=session_id,
         )
         outcome_progress = reconcile_android_execution_signal(env_progress, runtime=rt)
-        assert outcome_progress.was_updated is False, (
-            "Progress signal must not mutate a terminal (failed) record"
-        )
+        assert outcome_progress.was_updated is False, "Progress signal must not mutate a terminal (failed) record"
 
     def test_cancelled_signal_produces_terminal_and_blocks_further_signals(
         self,
@@ -467,9 +448,7 @@ class TestReplayRejectionAfterTerminalSignal:
                 session_id=session_id,
             )
             outcome_after = reconcile_android_execution_signal(env_after, runtime=rt)
-            assert outcome_after.was_updated is False, (
-                f"{signal_kind.value} after cancelled terminal must be blocked"
-            )
+            assert outcome_after.was_updated is False, f"{signal_kind.value} after cancelled terminal must be blocked"
 
 
 # ===========================================================================
@@ -481,9 +460,7 @@ class TestDegradationFallbackChain:
     """Multi-step: degraded device penalised; fallback-tier device wins selection."""
 
     @pytest.mark.asyncio
-    async def test_degraded_device_loses_to_healthy_device_in_scoring(
-        self, bridge: Any
-    ) -> None:
+    async def test_degraded_device_loses_to_healthy_device_in_scoring(self, bridge: Any) -> None:
         """Degraded model_ready=False device is scored lower than healthy one.
 
         Sequence:
@@ -518,7 +495,8 @@ class TestDegradationFallbackChain:
         participation.participant_tier = "joined_runtime"
 
         score_a, _ = _score_candidate(
-            "sess_a", dev_a,
+            "sess_a",
+            dev_a,
             readiness=readiness,
             participation=participation,
             reuse_eligible=False,
@@ -526,7 +504,8 @@ class TestDegradationFallbackChain:
             execution_busy=False,
         )
         score_b, _ = _score_candidate(
-            "sess_b", dev_b,
+            "sess_b",
+            dev_b,
             readiness=readiness,
             participation=participation,
             reuse_eligible=False,
@@ -540,9 +519,7 @@ class TestDegradationFallbackChain:
         )
 
     @pytest.mark.asyncio
-    async def test_fallback_tier_center_delegated_penalised_less_than_no_fallback(
-        self, bridge: Any
-    ) -> None:
+    async def test_fallback_tier_center_delegated_penalised_less_than_no_fallback(self, bridge: Any) -> None:
         """model_ready=False with fallback_tier is penalised less than no fallback.
 
         Sequence:
@@ -578,14 +555,22 @@ class TestDegradationFallbackChain:
         participation.participant_tier = "joined_runtime"
 
         score_a, _ = _score_candidate(
-            "sess_a", dev_a,
-            readiness=readiness, participation=participation,
-            reuse_eligible=False, android_snapshot=snap_a, execution_busy=False,
+            "sess_a",
+            dev_a,
+            readiness=readiness,
+            participation=participation,
+            reuse_eligible=False,
+            android_snapshot=snap_a,
+            execution_busy=False,
         )
         score_b, _ = _score_candidate(
-            "sess_b", dev_b,
-            readiness=readiness, participation=participation,
-            reuse_eligible=False, android_snapshot=snap_b, execution_busy=False,
+            "sess_b",
+            dev_b,
+            readiness=readiness,
+            participation=participation,
+            reuse_eligible=False,
+            android_snapshot=snap_b,
+            execution_busy=False,
         )
 
         assert score_b >= score_a, (
@@ -664,9 +649,7 @@ class TestTakeoverAfterPrimaryDisconnect:
         )
         outcome_error = reconcile_android_execution_signal(env_error, runtime=rt)
         assert outcome_error.was_updated is True
-        assert outcome_error.record.phase.is_terminal(), (
-            "Primary device error must advance record to terminal phase"
-        )
+        assert outcome_error.record.phase.is_terminal(), "Primary device error must advance record to terminal phase"
 
         # Step 4: create backup record (new session, same contract)
         backup_record = create_execution_tracking_record(
@@ -688,15 +671,11 @@ class TestTakeoverAfterPrimaryDisconnect:
             payload={"result": {"ok": True, "takeover": True}},
         )
         outcome_takeover = reconcile_android_execution_signal(env_takeover, runtime=rt)
-        assert outcome_takeover.was_updated is True, (
-            "Backup device takeover final_result must update the backup record"
-        )
-        assert outcome_takeover.record.phase.is_terminal(), (
-            "Backup record must be terminal after takeover final_result"
-        )
-        assert outcome_takeover.record.phase.value == "completed", (
-            "Backup record phase must be 'completed' after successful takeover"
-        )
+        assert outcome_takeover.was_updated is True, "Backup device takeover final_result must update the backup record"
+        assert outcome_takeover.record.phase.is_terminal(), "Backup record must be terminal after takeover final_result"
+        assert (
+            outcome_takeover.record.phase.value == "completed"
+        ), "Backup record phase must be 'completed' after successful takeover"
 
     def test_timeout_signal_blocks_subsequent_ack(self) -> None:
         """Timeout (terminal) must block a late-arriving ack from the same device.
@@ -743,9 +722,9 @@ class TestTakeoverAfterPrimaryDisconnect:
             session_id=session_id,
         )
         outcome_late = reconcile_android_execution_signal(env_late_ack, runtime=rt)
-        assert outcome_late.was_updated is False, (
-            "Late ack arriving after timeout must be blocked by terminal-phase gate"
-        )
+        assert (
+            outcome_late.was_updated is False
+        ), "Late ack arriving after timeout must be blocked by terminal-phase gate"
 
 
 # ===========================================================================
@@ -824,6 +803,7 @@ class TestDelegatedExecutionSignalMultiStep:
         # Verify no phase regression occurred in the sequence using the
         # canonical DelegatedExecutionPhase.can_advance_to() ordering
         from core.delegated_runtime_execution_tracker import DelegatedExecutionPhase
+
         for i in range(1, len(phases_seen)):
             prev = DelegatedExecutionPhase.from_string(phases_seen[i - 1])
             curr = DelegatedExecutionPhase.from_string(phases_seen[i])
@@ -867,8 +847,7 @@ class TestDelegatedExecutionSignalMultiStep:
         outcome = reconcile_android_execution_signal(env_partial, runtime=rt)
         assert outcome.was_updated is True
         assert not outcome.record.phase.is_terminal(), (
-            "partial_result must not advance record to terminal phase — "
-            "execution is still in progress"
+            "partial_result must not advance record to terminal phase — " "execution is still in progress"
         )
 
 
@@ -921,6 +900,7 @@ class TestStaleSessionBlockedBeforeTrackerMutation:
 
         # Confirm session_A is active
         from core.attached_runtime_session_registry import lookup_active_session
+
         entry_a = lookup_active_session(session_id_a, active_only=True, registry=registry)
         assert entry_a is not None, "session_A must be active after registration"
         assert entry_a.is_active()
@@ -941,9 +921,7 @@ class TestStaleSessionBlockedBeforeTrackerMutation:
             session_id=session_id_a,
         )
         outcome_ack = reconcile_android_execution_signal(env_ack, runtime=rt, registry=registry)
-        assert outcome_ack.was_updated is True, (
-            "Ack must update the record while session_A is active"
-        )
+        assert outcome_ack.was_updated is True, "Ack must update the record while session_A is active"
 
         # Step 3: register session_B for same device → session_A is now 'replaced'
         session_id_b = f"sid-pr22-b-{uuid.uuid4().hex[:8]}"
@@ -952,9 +930,7 @@ class TestStaleSessionBlockedBeforeTrackerMutation:
         # Confirm session_A is now non-active (replaced)
         entry_a_after = lookup_active_session(session_id_a, active_only=False, registry=registry)
         assert entry_a_after is not None
-        assert not entry_a_after.is_active(), (
-            "session_A must be non-active (replaced) after session_B registration"
-        )
+        assert not entry_a_after.is_active(), "session_A must be non-active (replaced) after session_B registration"
 
         # Step 4: progress with session_A must be blocked by PR-22 registry gate
         env_progress = AndroidExecutionSignalEnvelope(
@@ -962,19 +938,14 @@ class TestStaleSessionBlockedBeforeTrackerMutation:
             contract_id=contract_id,
             session_id=session_id_a,
         )
-        outcome_blocked = reconcile_android_execution_signal(
-            env_progress, runtime=rt, registry=registry
-        )
+        outcome_blocked = reconcile_android_execution_signal(env_progress, runtime=rt, registry=registry)
         assert outcome_blocked.was_updated is False, (
             "PR-22 registry gate must block reconciliation for a 'replaced' session. "
             "was_updated should be False when the registry reports a non-active state."
         )
-        assert outcome_blocked.reject_reason, (
-            "reject_reason must describe the PR-22 registry block"
-        )
+        assert outcome_blocked.reject_reason, "reject_reason must describe the PR-22 registry block"
         assert "registry" in outcome_blocked.reject_reason.lower() or (
-            "replaced" in outcome_blocked.reject_reason.lower()
-            or "non-active" in outcome_blocked.reject_reason.lower()
+            "replaced" in outcome_blocked.reject_reason.lower() or "non-active" in outcome_blocked.reject_reason.lower()
         ), f"reject_reason should mention registry or non-active: {outcome_blocked.reject_reason!r}"
 
 
@@ -988,10 +959,10 @@ class TestSignalSequenceWithOutOfOrderRejection:
 
     def test_out_of_order_snapshot_rejected_and_causality_updated(self) -> None:
         """Sequence:
-          1. Absorb snapshot seq=10 (newer, model_ready=True)
-          2. Absorb snapshot seq=9  (older, model_ready=False) → rejected
-          3. Stored snapshot still reflects seq=10 / model_ready=True
-          4. Reconciliation dict reports out_of_order_rejected
+        1. Absorb snapshot seq=10 (newer, model_ready=True)
+        2. Absorb snapshot seq=9  (older, model_ready=False) → rejected
+        3. Stored snapshot still reflects seq=10 / model_ready=True
+        4. Reconciliation dict reports out_of_order_rejected
         """
         from core.android_device_state_store import (
             absorb_device_state_snapshot,
@@ -1015,15 +986,13 @@ class TestSignalSequenceWithOutOfOrderRejection:
 
         stored = get_device_state_snapshot(device_id)
         assert stored is not None
-        assert stored.model_ready is True, (
-            "Out-of-order snapshot must not overwrite newer snapshot"
-        )
+        assert stored.model_ready is True, "Out-of-order snapshot must not overwrite newer snapshot"
         assert stored.snapshot_seq == 10
 
         reconciliation = get_device_snapshot_reconciliation(device_id)
-        assert reconciliation.get("status") == "out_of_order_rejected", (
-            "Reconciliation status must be 'out_of_order_rejected' for out-of-order snapshot"
-        )
+        assert (
+            reconciliation.get("status") == "out_of_order_rejected"
+        ), "Reconciliation status must be 'out_of_order_rejected' for out-of-order snapshot"
         assert reconciliation.get("applied") is False
         assert reconciliation.get("ordering_basis") == "snapshot_seq"
 
@@ -1053,9 +1022,9 @@ class TestSignalSequenceWithOutOfOrderRejection:
         stored = get_device_state_snapshot(device_id)
         assert stored is not None
         # The first write must be retained (center-truth-stable semantics)
-        assert stored.model_ready is True, (
-            "Conflict resolution must be deterministic and retain the first (center) truth"
-        )
+        assert (
+            stored.model_ready is True
+        ), "Conflict resolution must be deterministic and retain the first (center) truth"
 
         reconciliation = get_device_snapshot_reconciliation(device_id)
         assert reconciliation.get("conflict") is True
@@ -1096,12 +1065,8 @@ class TestDelegatedFallbackDeterminism:
                 payload={"result": {"ok": True}},
             )
             outcome = reconcile_android_execution_signal(env, runtime=rt)
-            assert outcome.was_updated is False, (
-                f"Attempt {_attempt}: unknown contract must always reject"
-            )
-            assert outcome.reject_reason, (
-                f"Attempt {_attempt}: reject_reason must be set for unknown contract"
-            )
+            assert outcome.was_updated is False, f"Attempt {_attempt}: unknown contract must always reject"
+            assert outcome.reject_reason, f"Attempt {_attempt}: reject_reason must be set for unknown contract"
 
     def test_empty_lookup_key_always_rejects_deterministically(self) -> None:
         """An envelope with no contract_id and no session_id must always reject."""
@@ -1125,8 +1090,7 @@ class TestDelegatedFallbackDeterminism:
             outcome = reconcile_android_execution_signal(env, runtime=rt)
             assert outcome.was_updated is False
             assert "lookup" in outcome.reject_reason.lower() or (
-                "contract_id" in outcome.reject_reason.lower()
-                or "session_id" in outcome.reject_reason.lower()
+                "contract_id" in outcome.reject_reason.lower() or "session_id" in outcome.reject_reason.lower()
             ), f"reject_reason should describe missing lookup key: {outcome.reject_reason!r}"
 
 
@@ -1139,12 +1103,10 @@ class TestMeshParticipationRecoveryAfterDegradation:
     """mesh participation: degraded → fresh snapshot → re-eligibility restored."""
 
     @pytest.mark.asyncio
-    async def test_degraded_snapshot_then_healthy_snapshot_restores_score(
-        self, bridge: Any
-    ) -> None:
+    async def test_degraded_snapshot_then_healthy_snapshot_restores_score(self, bridge: Any) -> None:
         """Sequence:
-          1. Register + degraded snapshot → low score
-          2. Register + healthy snapshot (later seq) → score restored to full
+        1. Register + degraded snapshot → low score
+        2. Register + healthy snapshot (later seq) → score restored to full
         """
         from core.android_device_state_store import get_device_state_snapshot
         from core.runtime.source_dispatch_orchestrator import _score_candidate
@@ -1172,9 +1134,13 @@ class TestMeshParticipationRecoveryAfterDegradation:
         participation.participant_tier = "joined_runtime"
 
         score_degraded, _ = _score_candidate(
-            "sess_mesh", device_id,
-            readiness=readiness, participation=participation,
-            reuse_eligible=False, android_snapshot=snap_degraded, execution_busy=False,
+            "sess_mesh",
+            device_id,
+            readiness=readiness,
+            participation=participation,
+            reuse_eligible=False,
+            android_snapshot=snap_degraded,
+            execution_busy=False,
         )
 
         # Step 2: send healthy snapshot (higher seq/ts = newer)
@@ -1192,14 +1158,16 @@ class TestMeshParticipationRecoveryAfterDegradation:
 
         snap_healthy = get_device_state_snapshot(device_id)
         assert snap_healthy is not None
-        assert snap_healthy.model_ready is True, (
-            "After healthy snapshot (higher seq), model_ready must be True"
-        )
+        assert snap_healthy.model_ready is True, "After healthy snapshot (higher seq), model_ready must be True"
 
         score_recovered, _ = _score_candidate(
-            "sess_mesh", device_id,
-            readiness=readiness, participation=participation,
-            reuse_eligible=False, android_snapshot=snap_healthy, execution_busy=False,
+            "sess_mesh",
+            device_id,
+            readiness=readiness,
+            participation=participation,
+            reuse_eligible=False,
+            android_snapshot=snap_healthy,
+            execution_busy=False,
         )
 
         assert score_recovered > score_degraded, (
@@ -1217,15 +1185,13 @@ class TestMultiStepHybridRecovery:
     """Full hybrid recovery arc: error → snapshot recovery → re-dispatch → completed."""
 
     @pytest.mark.asyncio
-    async def test_hybrid_recovery_arc_error_to_completed(
-        self, bridge: Any
-    ) -> None:
+    async def test_hybrid_recovery_arc_error_to_completed(self, bridge: Any) -> None:
         """Full multi-step recovery:
-          1. Device registers + degraded snapshot
-          2. Execution record created → ack → error (terminal)
-          3. Device sends healthy snapshot (recovery)
-          4. New execution record created → ack → final_result → completed
-          5. Final store state reflects healthy device + completed execution
+        1. Device registers + degraded snapshot
+        2. Execution record created → ack → error (terminal)
+        3. Device sends healthy snapshot (recovery)
+        4. New execution record created → ack → final_result → completed
+        5. Final store state reflects healthy device + completed execution
         """
         from core.android_device_state_store import get_device_state_snapshot
         from core.android_execution_signal_reconciler import (
@@ -1300,9 +1266,7 @@ class TestMultiStepHybridRecovery:
 
         snap_post_recovery = get_device_state_snapshot(device_id)
         assert snap_post_recovery is not None
-        assert snap_post_recovery.model_ready is True, (
-            "Post-recovery snapshot must show model_ready=True"
-        )
+        assert snap_post_recovery.model_ready is True, "Post-recovery snapshot must show model_ready=True"
 
         # Step 4: new execution record → ack → final_result
         contract_id_2 = f"cid-hybrid-2-{uuid.uuid4().hex[:8]}"
@@ -1331,13 +1295,11 @@ class TestMultiStepHybridRecovery:
         )
         o_final = reconcile_android_execution_signal(env_final, runtime=rt)
         assert o_final.was_updated is True
-        assert o_final.record.phase.value == "completed", (
-            "Step 4 final_result must advance record to 'completed'"
-        )
+        assert o_final.record.phase.value == "completed", "Step 4 final_result must advance record to 'completed'"
 
         # Step 5: store still reflects healthy device state
         final_snap = get_device_state_snapshot(device_id)
         assert final_snap is not None
-        assert final_snap.model_ready is True, (
-            "After full hybrid recovery arc, device state store must reflect healthy device"
-        )
+        assert (
+            final_snap.model_ready is True
+        ), "After full hybrid recovery arc, device state store must reflect healthy device"

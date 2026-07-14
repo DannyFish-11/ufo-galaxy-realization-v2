@@ -26,7 +26,6 @@ from unittest.mock import MagicMock
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -141,8 +140,7 @@ class TestSentinelsExported:
         )
 
         assert (
-            "ANDROID_RUNTIME_TRUTH_ROUTING_WEIGHT_IN_SELECTION_V1"
-            in ANDROID_RUNTIME_TRUTH_ROUTING_WEIGHT_IN_SELECTION
+            "ANDROID_RUNTIME_TRUTH_ROUTING_WEIGHT_IN_SELECTION_V1" in ANDROID_RUNTIME_TRUTH_ROUTING_WEIGHT_IN_SELECTION
         )
         assert "model_ready" in ANDROID_RUNTIME_TRUTH_ROUTING_WEIGHT_IN_SELECTION
 
@@ -337,9 +335,7 @@ class TestSelectTargetAndroidTruth:
         assert result.metadata.get("canonical_execution_gate_decision") == "allow"
         assert result.metadata.get("canonical_execution_gate_reasons")
 
-    def test_canonical_gate_decision_surfaces_deny_without_local_inference_or_fallback(
-        self, monkeypatch
-    ):
+    def test_canonical_gate_decision_surfaces_deny_without_local_inference_or_fallback(self, monkeypatch):
         from core.runtime.source_dispatch_orchestrator import (
             _select_target_from_candidates,
         )
@@ -806,9 +802,7 @@ class TestSelectDevicesAndroidRoutingWeight:
         assert len(result) == 1
         assert result[0].device_id == "dev_light_queue"
 
-    def test_select_devices_prefers_higher_participation_tier_when_runtime_signals_equal(
-        self, monkeypatch
-    ):
+    def test_select_devices_prefers_higher_participation_tier_when_runtime_signals_equal(self, monkeypatch):
         from galaxy_gateway.routing.device_selection import select_devices
 
         device_attached = _make_device("dev_attach_tier")
@@ -822,9 +816,7 @@ class TestSelectDevicesAndroidRoutingWeight:
         monkeypatch.setattr(
             "galaxy_gateway.routing.device_selection.get_android_participation_evidence",
             lambda device_id: (
-                {"tier": "distributed_participant"}
-                if device_id == "dev_dist_tier"
-                else {"tier": "fully_attached"}
+                {"tier": "distributed_participant"} if device_id == "dev_dist_tier" else {"tier": "fully_attached"}
             ),
         )
         monkeypatch.setattr(
@@ -857,8 +849,10 @@ class TestSelectDevicesAndroidRoutingWeight:
             ANDROID_RUNTIME_TRUTH_ROUTING_WEIGHT_IN_SELECTION,
         )
 
-        assert "step 0c" in ANDROID_RUNTIME_TRUTH_ROUTING_WEIGHT_IN_SELECTION.lower() or \
-               "0c" in ANDROID_RUNTIME_TRUTH_ROUTING_WEIGHT_IN_SELECTION
+        assert (
+            "step 0c" in ANDROID_RUNTIME_TRUTH_ROUTING_WEIGHT_IN_SELECTION.lower()
+            or "0c" in ANDROID_RUNTIME_TRUTH_ROUTING_WEIGHT_IN_SELECTION
+        )
 
     def test_select_devices_module_importable(self):
         import galaxy_gateway.routing.device_selection as _m
@@ -888,11 +882,7 @@ class TestPostClosureReassessmentP0Closed:
         report = build_post_closure_reassessment()
 
         truth_path = next(
-            (
-                p
-                for p in report.path_statuses
-                if p.path_id == PostClosurePathId.ORCHESTRATION_CONSUMES_ANDROID_TRUTH
-            ),
+            (p for p in report.path_statuses if p.path_id == PostClosurePathId.ORCHESTRATION_CONSUMES_ANDROID_TRUTH),
             None,
         )
 
@@ -911,11 +901,7 @@ class TestPostClosureReassessmentP0Closed:
         report = build_post_closure_reassessment()
 
         truth_path = next(
-            (
-                p
-                for p in report.path_statuses
-                if p.path_id == PostClosurePathId.ORCHESTRATION_CONSUMES_ANDROID_TRUTH
-            ),
+            (p for p in report.path_statuses if p.path_id == PostClosurePathId.ORCHESTRATION_CONSUMES_ANDROID_TRUTH),
             None,
         )
 
@@ -933,11 +919,7 @@ class TestPostClosureReassessmentP0Closed:
         report = build_post_closure_reassessment()
 
         truth_path = next(
-            (
-                p
-                for p in report.path_statuses
-                if p.path_id == PostClosurePathId.ORCHESTRATION_CONSUMES_ANDROID_TRUTH
-            ),
+            (p for p in report.path_statuses if p.path_id == PostClosurePathId.ORCHESTRATION_CONSUMES_ANDROID_TRUTH),
             None,
         )
 

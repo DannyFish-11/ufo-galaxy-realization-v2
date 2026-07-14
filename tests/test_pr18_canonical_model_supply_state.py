@@ -27,7 +27,6 @@ from unittest.mock import MagicMock
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Shared test fixtures
 # ---------------------------------------------------------------------------
@@ -81,16 +80,15 @@ DEEPSEEK_DICT = {
 @pytest.fixture
 def bridge():
     from core.model_topology import ConfigBridge
+
     return ConfigBridge()
 
 
 @pytest.fixture
 def full_inventory(bridge):
     from core.model_topology import LegacyLLMProviderSnapshot
-    snaps = [
-        LegacyLLMProviderSnapshot.from_dict(d)
-        for d in [OPENAI_DICT, ANTHROPIC_DICT, GROQ_DICT, DEEPSEEK_DICT]
-    ]
+
+    snaps = [LegacyLLMProviderSnapshot.from_dict(d) for d in [OPENAI_DICT, ANTHROPIC_DICT, GROQ_DICT, DEEPSEEK_DICT]]
     return bridge.build_inventory(snaps)
 
 
@@ -98,10 +96,8 @@ def full_inventory(bridge):
 def mm_only_inventory(bridge):
     """Inventory with only natively multimodal providers."""
     from core.model_topology import LegacyLLMProviderSnapshot
-    snaps = [
-        LegacyLLMProviderSnapshot.from_dict(d)
-        for d in [OPENAI_DICT, ANTHROPIC_DICT]
-    ]
+
+    snaps = [LegacyLLMProviderSnapshot.from_dict(d) for d in [OPENAI_DICT, ANTHROPIC_DICT]]
     return bridge.build_inventory(snaps)
 
 
@@ -109,6 +105,7 @@ def mm_only_inventory(bridge):
 def non_mm_inventory(bridge):
     """Inventory with no natively multimodal providers."""
     from core.model_topology import LegacyLLMProviderSnapshot
+
     snaps = [LegacyLLMProviderSnapshot.from_dict(GROQ_DICT)]
     return bridge.build_inventory(snaps)
 
@@ -117,6 +114,7 @@ def non_mm_inventory(bridge):
 def unavailable_inventory(bridge):
     """Inventory where all providers are unavailable."""
     from core.model_topology import LegacyLLMProviderSnapshot
+
     snaps = [LegacyLLMProviderSnapshot.from_dict(DEEPSEEK_DICT)]
     return bridge.build_inventory(snaps)
 
@@ -231,7 +229,8 @@ class TestNativeMultimodalCapability:
         from core.model_topology import NativeMultimodalCapability
 
         cap = NativeMultimodalCapability(
-            provider_id="p", model_id="m",
+            provider_id="p",
+            model_id="m",
             supports_image_input=True,
             supports_audio_input=False,
             supports_video_frame_input=False,
@@ -244,7 +243,8 @@ class TestNativeMultimodalCapability:
         from core.model_topology import NativeMultimodalCapability
 
         cap = NativeMultimodalCapability(
-            provider_id="p", model_id="m",
+            provider_id="p",
+            model_id="m",
             supports_image_input=True,
             supports_audio_input=True,
             supports_video_frame_input=True,
@@ -261,7 +261,8 @@ class TestNativeMultimodalCapability:
         from core.model_topology import NativeMultimodalCapability
 
         cap = NativeMultimodalCapability(
-            provider_id="openai", model_id="gpt-4o",
+            provider_id="openai",
+            model_id="gpt-4o",
             is_natively_multimodal=True,
             supports_image_input=True,
         )
@@ -277,7 +278,8 @@ class TestNativeMultimodalCapability:
         from core.model_topology import NativeMultimodalCapability
 
         cap = NativeMultimodalCapability(
-            provider_id="openai", model_id="gpt-4o",
+            provider_id="openai",
+            model_id="gpt-4o",
             is_natively_multimodal=True,
             supports_image_input=True,
         )
@@ -288,9 +290,7 @@ class TestNativeMultimodalCapability:
     def test_from_multimodal_flag_true_implies_image(self) -> None:
         from core.model_topology import NativeMultimodalCapability
 
-        cap = NativeMultimodalCapability.from_multimodal_flag(
-            provider_id="openai", model_id="gpt-4o", multimodal=True
-        )
+        cap = NativeMultimodalCapability.from_multimodal_flag(provider_id="openai", model_id="gpt-4o", multimodal=True)
         assert cap.is_natively_multimodal is True
         assert cap.supports_image_input is True
 
@@ -342,8 +342,7 @@ class TestNativeMultimodalCapability:
         from core.model_topology import NativeMultimodalCapability
 
         cap = NativeMultimodalCapability(
-            provider_id="openai", model_id="gpt-4o",
-            is_natively_multimodal=True, supports_image_input=True
+            provider_id="openai", model_id="gpt-4o", is_natively_multimodal=True, supports_image_input=True
         )
         r = repr(cap)
         assert "openai" in r
@@ -360,10 +359,12 @@ class TestNativeMultimodalCapabilityRegistry:
 
     def _make_registry(self) -> Any:
         from core.model_topology import NativeMultimodalCapabilityRegistry
+
         return NativeMultimodalCapabilityRegistry()
 
     def _make_cap(self, provider_id: str, multimodal: bool = True) -> Any:
         from core.model_topology import NativeMultimodalCapability
+
         return NativeMultimodalCapability.from_multimodal_flag(
             provider_id=provider_id, model_id=f"{provider_id}-model", multimodal=multimodal
         )
@@ -396,17 +397,19 @@ class TestNativeMultimodalCapabilityRegistry:
 
     def test_providers_supporting_modality_image(self) -> None:
         reg = self._make_registry()
-        reg.register(self._make_cap("openai", multimodal=True))   # has image
-        reg.register(self._make_cap("groq", multimodal=False))    # no image
+        reg.register(self._make_cap("openai", multimodal=True))  # has image
+        reg.register(self._make_cap("groq", multimodal=False))  # no image
         img_capable = reg.providers_supporting_modality("image")
         assert any(c.provider_id == "openai" for c in img_capable)
         assert not any(c.provider_id == "groq" for c in img_capable)
 
     def test_providers_supporting_modality_audio(self) -> None:
         from core.model_topology import NativeMultimodalCapability
+
         reg = self._make_registry()
         cap = NativeMultimodalCapability(
-            provider_id="google", model_id="gemini-3.5-flash",
+            provider_id="google",
+            model_id="gemini-3.5-flash",
             is_natively_multimodal=True,
             supports_audio_input=True,
         )
@@ -430,17 +433,27 @@ class TestNativeMultimodalCapabilityRegistry:
 
     def test_preferred_multimodal_provider_required_modality(self) -> None:
         from core.model_topology import NativeMultimodalCapability
+
         reg = self._make_registry()
         # openai: image only
-        reg.register(NativeMultimodalCapability(
-            provider_id="openai", model_id="gpt-4o",
-            is_natively_multimodal=True, supports_image_input=True,
-        ))
+        reg.register(
+            NativeMultimodalCapability(
+                provider_id="openai",
+                model_id="gpt-4o",
+                is_natively_multimodal=True,
+                supports_image_input=True,
+            )
+        )
         # google: image + audio
-        reg.register(NativeMultimodalCapability(
-            provider_id="google", model_id="gemini-3.5-flash",
-            is_natively_multimodal=True, supports_image_input=True, supports_audio_input=True,
-        ))
+        reg.register(
+            NativeMultimodalCapability(
+                provider_id="google",
+                model_id="gemini-3.5-flash",
+                is_natively_multimodal=True,
+                supports_image_input=True,
+                supports_audio_input=True,
+            )
+        )
         # When audio is required, google should be preferred
         preferred_audio = reg.preferred_multimodal_provider(required_modalities=["audio"])
         assert preferred_audio is not None
@@ -479,6 +492,7 @@ class TestNativeMultimodalCapabilityRegistry:
 
     def test_register_empty_provider_id_raises(self) -> None:
         from core.model_topology import NativeMultimodalCapability
+
         reg = self._make_registry()
         with pytest.raises(ValueError):
             reg.register(NativeMultimodalCapability(provider_id="", model_id="m"))
@@ -493,7 +507,7 @@ class TestProviderSupplyRecord:
     """Unit tests for ProviderSupplyRecord."""
 
     def test_basic_construction(self) -> None:
-        from core.model_topology import ProviderSupplyRecord, ProviderHealthStatus, ProviderLocalityClass
+        from core.model_topology import ProviderHealthStatus, ProviderLocalityClass, ProviderSupplyRecord
 
         record = ProviderSupplyRecord(
             provider_id="openai",
@@ -508,7 +522,7 @@ class TestProviderSupplyRecord:
         assert record.health_status == ProviderHealthStatus.HEALTHY
 
     def test_to_dict_structure(self) -> None:
-        from core.model_topology import ProviderSupplyRecord, ProviderHealthStatus, ProviderLocalityClass
+        from core.model_topology import ProviderHealthStatus, ProviderLocalityClass, ProviderSupplyRecord
 
         record = ProviderSupplyRecord(
             provider_id="openai",
@@ -527,7 +541,7 @@ class TestProviderSupplyRecord:
         assert "capability" in d
 
     def test_to_dict_is_json_serialisable(self) -> None:
-        from core.model_topology import ProviderSupplyRecord, ProviderHealthStatus, ProviderLocalityClass
+        from core.model_topology import ProviderHealthStatus, ProviderLocalityClass, ProviderSupplyRecord
 
         record = ProviderSupplyRecord(
             provider_id="openai",
@@ -727,8 +741,8 @@ class TestBuildCanonicalModelSupplyStateFromInventory:
         assert state.to_dict()["snapshot_id"] == "snap-xyz"
 
     def test_topology_route_plan_enrichment(self, full_inventory) -> None:
-        from core.model_topology import build_canonical_model_supply_state, TopologyRouter
-        from core.continuum.types import TriStatePhase, RuntimeDomain
+        from core.continuum.types import RuntimeDomain, TriStatePhase
+        from core.model_topology import TopologyRouter, build_canonical_model_supply_state
 
         router = TopologyRouter(full_inventory)
         plan = router.route(TriStatePhase.MANIFEST, RuntimeDomain.LOCAL)
@@ -893,38 +907,47 @@ class TestModuleExports:
 
     def test_canonical_model_supply_state_importable(self) -> None:
         from core.model_topology import CanonicalModelSupplyState
+
         assert CanonicalModelSupplyState is not None
 
     def test_native_multimodal_capability_importable(self) -> None:
         from core.model_topology import NativeMultimodalCapability
+
         assert NativeMultimodalCapability is not None
 
     def test_native_multimodal_capability_registry_importable(self) -> None:
         from core.model_topology import NativeMultimodalCapabilityRegistry
+
         assert NativeMultimodalCapabilityRegistry is not None
 
     def test_provider_supply_record_importable(self) -> None:
         from core.model_topology import ProviderSupplyRecord
+
         assert ProviderSupplyRecord is not None
 
     def test_provider_health_status_importable(self) -> None:
         from core.model_topology import ProviderHealthStatus
+
         assert ProviderHealthStatus is not None
 
     def test_provider_locality_class_importable(self) -> None:
         from core.model_topology import ProviderLocalityClass
+
         assert ProviderLocalityClass is not None
 
     def test_build_canonical_model_supply_state_importable(self) -> None:
         from core.model_topology import build_canonical_model_supply_state
+
         assert callable(build_canonical_model_supply_state)
 
     def test_build_canonical_model_supply_state_from_router_importable(self) -> None:
         from core.model_topology import build_canonical_model_supply_state_from_router
+
         assert callable(build_canonical_model_supply_state_from_router)
 
     def test_all_new_symbols_in___all__(self) -> None:
         import core.model_topology as mt
+
         expected = {
             "CanonicalModelSupplyState",
             "NativeMultimodalCapability",
@@ -1041,9 +1064,13 @@ class TestEdgeCases:
     def test_preferred_multimodal_provider_respects_availability(self) -> None:
         """preferred_multimodal_provider_id must only return available providers."""
         from core.model_topology import (
+            ConfigBridge,
+            LegacyLLMProviderSnapshot,
+            ProviderInventory,
+            ProviderInventoryEntry,
             build_canonical_model_supply_state,
-            ProviderInventory, ProviderInventoryEntry, LegacyLLMProviderSnapshot, ConfigBridge
         )
+
         bridge = ConfigBridge()
         # Make an inventory with a multimodal but unavailable provider, and an available non-mm one
         mm_unavail_dict = {
@@ -1052,7 +1079,7 @@ class TestEdgeCases:
             "models": ["gpt-4o"],
             "speed_score": 8,
             "quality_score": 9,
-            "available": False,   # NOT available
+            "available": False,  # NOT available
             "multimodal": True,
             "missing_env_key": "OPENAI_API_KEY",
             "env_keys": ["OPENAI_API_KEY"],

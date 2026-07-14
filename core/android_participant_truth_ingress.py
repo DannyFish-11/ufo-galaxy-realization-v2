@@ -108,6 +108,7 @@ reconciliation gaps``.
 from __future__ import annotations
 
 import logging  # auto: ensure module _logger is defined
+
 _logger = logging.getLogger(__name__)
 
 
@@ -179,9 +180,7 @@ except ImportError:  # pragma: no cover
 
 # PR-10-V2: unified Android delegated runtime audit recorder.
 try:
-    from core.android_delegated_runtime_audit import (
-        record_participant_truth_terminal_update as _audit_terminal_update,
-    )
+    from core.android_delegated_runtime_audit import record_participant_truth_terminal_update as _audit_terminal_update
 
     _DELEGATED_AUDIT_AVAILABLE: bool = True
 except ImportError:  # pragma: no cover
@@ -194,10 +193,8 @@ except ImportError:  # pragma: no cover
 # Android governance/readiness/acceptance/strategy evaluator outputs visible to
 # DelegatedFlowReadinessGate._evaluate_truth_ownership() as canonical gate inputs.
 try:
-    from core.flow_level_truth_ownership import (
-        FlowTruthAlignmentContext as _FlowTruthAlignmentContext,
-        align_and_record as _align_and_record,
-    )
+    from core.flow_level_truth_ownership import FlowTruthAlignmentContext as _FlowTruthAlignmentContext
+    from core.flow_level_truth_ownership import align_and_record as _align_and_record
 
     _FLOW_TRUTH_ALIGNMENT_AVAILABLE: bool = True
 except ImportError:  # pragma: no cover
@@ -211,6 +208,8 @@ except ImportError:  # pragma: no cover
 try:
     from core.android_continuity_recovery_state_router import (
         RecoveryStateRoutingDecision as _RecoveryStateRoutingDecision,
+    )
+    from core.android_continuity_recovery_state_router import (
         route_recovery_state_from_payload as _route_recovery_state_from_payload,
     )
 
@@ -728,9 +727,7 @@ def extract_participant_truth_envelope(
     trace_id = str(payload.get("trace_id") or message.get("trace_id") or "")
 
     # task_phase_value
-    task_phase_value = str(
-        payload.get("task_phase") or payload.get("phase") or payload.get("status") or ""
-    )
+    task_phase_value = str(payload.get("task_phase") or payload.get("phase") or payload.get("status") or "")
 
     # result_success
     result_success: Optional[bool] = None
@@ -1067,33 +1064,33 @@ def reconcile_android_participant_truth(
         AndroidParticipantTruthKind.failure,
         AndroidParticipantTruthKind.result,
     ):
-        was_reconciled, canonical_update, reject_reason, tracking_record_phase = (
-            _reconcile_terminal_signal(envelope, _runtime, kind)
+        was_reconciled, canonical_update, reject_reason, tracking_record_phase = _reconcile_terminal_signal(
+            envelope, _runtime, kind
         )
 
     elif kind == AndroidParticipantTruthKind.status:
-        was_reconciled, canonical_update, reject_reason, tracking_record_phase = (
-            _reconcile_status_signal(envelope, _runtime)
+        was_reconciled, canonical_update, reject_reason, tracking_record_phase = _reconcile_status_signal(
+            envelope, _runtime
         )
 
     elif kind == AndroidParticipantTruthKind.task_phase:
-        was_reconciled, canonical_update, reject_reason, tracking_record_phase = (
-            _reconcile_task_phase(envelope, _runtime)
+        was_reconciled, canonical_update, reject_reason, tracking_record_phase = _reconcile_task_phase(
+            envelope, _runtime
         )
 
     elif kind == AndroidParticipantTruthKind.session_snapshot:
-        was_reconciled, canonical_update, reject_reason, tracking_record_phase = (
-            _reconcile_session_snapshot(envelope, _registry)
+        was_reconciled, canonical_update, reject_reason, tracking_record_phase = _reconcile_session_snapshot(
+            envelope, _registry
         )
 
     elif kind == AndroidParticipantTruthKind.reconciliation_signal:
-        was_reconciled, canonical_update, reject_reason, tracking_record_phase = (
-            _reconcile_reconciliation_signal(envelope, _runtime)
+        was_reconciled, canonical_update, reject_reason, tracking_record_phase = _reconcile_reconciliation_signal(
+            envelope, _runtime
         )
 
     elif kind == AndroidParticipantTruthKind.governance_artifact:
-        was_reconciled, canonical_update, reject_reason, tracking_record_phase = (
-            _reconcile_governance_artifact(envelope)
+        was_reconciled, canonical_update, reject_reason, tracking_record_phase = _reconcile_governance_artifact(
+            envelope
         )
 
     elif kind == AndroidParticipantTruthKind.recovery_state:
@@ -1103,9 +1100,7 @@ def reconcile_android_participant_truth(
             reject_reason,
             tracking_record_phase,
             recovery_state_routing,
-        ) = (
-            _reconcile_recovery_state(envelope)
-        )
+        ) = _reconcile_recovery_state(envelope)
         # Advisory and pending routes are local-only (no canonical state mutation).
         # Rejected and reconciliation-required routes are NOT local_only — they
         # surface as explicit reject_reason for the caller to act on.
@@ -1272,18 +1267,11 @@ def _reconcile_terminal_signal(
         else:
             if apply_result is None or DelegatedExecutionResult is None:
                 return False, "", "tracker_unavailable", ""
-            is_success = (
-                kind != AndroidParticipantTruthKind.failure
-                and envelope.result_success is not False
-            )
+            is_success = kind != AndroidParticipantTruthKind.failure and envelope.result_success is not False
             result_obj = DelegatedExecutionResult(
                 success=is_success,
                 result_payload=copy.deepcopy(envelope.result_payload),
-                error_detail=(
-                    _extract_terminal_error_detail(envelope.payload)
-                    if not is_success
-                    else ""
-                ),
+                error_detail=(_extract_terminal_error_detail(envelope.payload) if not is_success else ""),
                 completed_at=time.time(),
             )
             updated = apply_result(record, result_obj, runtime=runtime)
@@ -1458,10 +1446,9 @@ def _build_ownership_context(
     canonical_update: str,
 ) -> Dict[str, Any]:
     participant_identity = (envelope.device_id or "").strip()
-    fallback_non_canonical = (
-        "compat_fallback_non_canonical" in (reject_reason or "")
-        or "compat_fallback_non_canonical" in (canonical_update or "")
-    )
+    fallback_non_canonical = "compat_fallback_non_canonical" in (
+        reject_reason or ""
+    ) or "compat_fallback_non_canonical" in (canonical_update or "")
     participant_divergence = "participant_divergence" in (reject_reason or "")
     if was_reconciled:
         ownership_status = "canonicalized"
@@ -1473,9 +1460,7 @@ def _build_ownership_context(
         ownership_status = "rejected_non_canonical"
 
     authority_scope = (
-        "v2_canonical_orchestration"
-        if ownership_status == "canonicalized"
-        else "android_participant_local"
+        "v2_canonical_orchestration" if ownership_status == "canonicalized" else "android_participant_local"
     )
 
     canonical_session_identity: Dict[str, str] = {
@@ -1504,9 +1489,7 @@ def _build_ownership_context(
             _logger.warning("Exception suppressed: %s", exc)
 
     canonical_session_identity["runtime_attachment_session_id"] = (
-        canonical_session_identity.get("runtime_attachment_session_id")
-        or envelope.session_id
-        or ""
+        canonical_session_identity.get("runtime_attachment_session_id") or envelope.session_id or ""
     )
 
     return {
@@ -1570,11 +1553,7 @@ def _reconcile_reconciliation_signal(
 
     if ack_signal is None and envelope.result_success is not None:
         # Infer from result_success when no explicit phase was provided
-        ack_signal = (
-            AcknowledgmentSignal.final_result
-            if envelope.result_success
-            else AcknowledgmentSignal.error
-        )
+        ack_signal = AcknowledgmentSignal.final_result if envelope.result_success else AcknowledgmentSignal.error
         normalised_phase = "success" if envelope.result_success else "failure"
 
     if ack_signal is None:
@@ -1734,8 +1713,7 @@ def _reconcile_recovery_state(
         return (
             False,
             "",
-            f"recovery_state_rejected:stale_recovery_artifact:"
-            f"phase={decision.recovery_phase.value}",
+            f"recovery_state_rejected:stale_recovery_artifact:" f"phase={decision.recovery_phase.value}",
             "",
             routing_decision,
         )
@@ -1744,8 +1722,7 @@ def _reconcile_recovery_state(
         return (
             False,
             "",
-            f"recovery_state_reconciliation_path_required:"
-            f"phase={decision.recovery_phase.value}",
+            f"recovery_state_reconciliation_path_required:" f"phase={decision.recovery_phase.value}",
             "",
             routing_decision,
         )
@@ -1754,8 +1731,7 @@ def _reconcile_recovery_state(
         return (
             False,
             "",
-            f"recovery_state_closure_review_required:"
-            f"phase={decision.recovery_phase.value}:lost_inflight",
+            f"recovery_state_closure_review_required:" f"phase={decision.recovery_phase.value}:lost_inflight",
             "",
             routing_decision,
         )
@@ -1825,12 +1801,8 @@ def _record_last_reconciliation_outcome(outcome: AndroidParticipantReconcileOutc
         envelope = outcome.envelope
         snapshot: Dict[str, Any] = {
             "was_reconciled": outcome.was_reconciled,
-            "v2_terminal_state_blocked": bool(
-                outcome.reject_reason and "terminal" in outcome.reject_reason.lower()
-            ),
-            "advisory_only_fields_skipped": list(_ADVISORY_ONLY_RECONCILE_FIELDS)
-            if outcome.local_only
-            else [],
+            "v2_terminal_state_blocked": bool(outcome.reject_reason and "terminal" in outcome.reject_reason.lower()),
+            "advisory_only_fields_skipped": list(_ADVISORY_ONLY_RECONCILE_FIELDS) if outcome.local_only else [],
             "applied_signal_types": [outcome.canonical_update] if outcome.was_reconciled else [],
             "device_id": envelope.device_id if envelope else None,
             "task_id": envelope.task_id if envelope else None,

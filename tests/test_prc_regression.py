@@ -26,17 +26,18 @@ def _neutralize_capability_inference(monkeypatch):
     (本文件此前常年基线红的根因)。把推断中和为"无能力要求",让
     信封→执行器链路按本套件的本意跑通;能力门语义不受影响,仍由其专门套件钉。"""
     import core.capability_aware_routing_default as card
+
     monkeypatch.setattr(card, "infer_dispatch_capabilities", lambda tool: [])
     # 第二道门:V3 canonical slot authority(注册有效性/传输存活等多维评估)。
     # 单测无真实 WebSocket 传输,按 test_pr2_task_envelope_pipeline 的既定钉法
     # 放行槽评估——本套件钉的是槽门【之后】的执行器错误语义,槽门语义由
     # test_pr2_task_envelope_pipeline / pr13_failure_domains 等专门套件钉。
+    import core.canonical_dispatch_slot_authority as _slot_mod
     from core.canonical_dispatch_slot_authority import (
         CanonicalDispatchSlot,
-        CanonicalDispatchSlotStatus,
         CanonicalDispatchSlotsResult,
+        CanonicalDispatchSlotStatus,
     )
-    import core.canonical_dispatch_slot_authority as _slot_mod
 
     def _approve_all(device_ids, execution_mode, **_kw):
         slots = [
@@ -58,7 +59,6 @@ def _neutralize_capability_inference(monkeypatch):
         )
 
     monkeypatch.setattr(_slot_mod, "get_canonical_dispatch_slots", _approve_all)
-
 
 
 # ============================================================================
@@ -102,8 +102,11 @@ class TestGatewayRouteCommandTraceIDs:
 
         cr = CommandRouter(executor=mock_executor)
         result = await cr.route_command(
-            device_id="d1", command="tap", payload={"x": 10},
-            command_id="c1", task_id="t1",
+            device_id="d1",
+            command="tap",
+            payload={"x": 10},
+            command_id="c1",
+            task_id="t1",
         )
         assert result["success"] is True
         assert result["error_code"] is None
@@ -122,8 +125,11 @@ class TestGatewayRouteCommandTraceIDs:
         cr = CommandRouter(executor=mock_executor)
         # 信封不合法（空 command）
         result = await cr.route_command(
-            device_id="d1", command="",  # 无效
-            payload={}, command_id="c1", task_id="t1",
+            device_id="d1",
+            command="",  # 无效
+            payload={},
+            command_id="c1",
+            task_id="t1",
         )
 
         assert result["success"] is False
@@ -140,7 +146,8 @@ class TestProtocolEnvelopeValidation:
     """validate_command_envelope 对各类缺失字段抛出 INVALID_ENVELOPE。"""
 
     def _validate(self, **kwargs):
-        from core.command_router import validate_command_envelope, GatewayError
+        from core.command_router import GatewayError, validate_command_envelope
+
         try:
             validate_command_envelope(**kwargs)
             return None
@@ -164,30 +171,35 @@ class TestProtocolEnvelopeValidation:
 
     def test_empty_device_id_raises(self):
         from core.command_router import GatewayErrorCode
+
         err = self._validate(**self._default_kwargs(device_id=""))
         assert err is not None
         assert err.code == GatewayErrorCode.INVALID_ENVELOPE
 
     def test_empty_command_raises(self):
         from core.command_router import GatewayErrorCode
+
         err = self._validate(**self._default_kwargs(command=""))
         assert err is not None
         assert err.code == GatewayErrorCode.INVALID_ENVELOPE
 
     def test_empty_command_id_raises(self):
         from core.command_router import GatewayErrorCode
+
         err = self._validate(**self._default_kwargs(command_id=""))
         assert err is not None
         assert err.code == GatewayErrorCode.INVALID_ENVELOPE
 
     def test_empty_task_id_raises(self):
         from core.command_router import GatewayErrorCode
+
         err = self._validate(**self._default_kwargs(task_id=""))
         assert err is not None
         assert err.code == GatewayErrorCode.INVALID_ENVELOPE
 
     def test_non_dict_payload_raises(self):
         from core.command_router import GatewayErrorCode
+
         err = self._validate(**self._default_kwargs(payload="bad"))
         assert err is not None
         assert err.code == GatewayErrorCode.INVALID_ENVELOPE
@@ -306,8 +318,11 @@ class TestDisconnectErrorPropagation:
 
         cr = CommandRouter(executor=os_error_executor)
         result = await cr.route_command(
-            device_id="os_err_dev", command="cmd", payload={},
-            command_id="c2", task_id="t2",
+            device_id="os_err_dev",
+            command="cmd",
+            payload={},
+            command_id="c2",
+            task_id="t2",
         )
 
         assert result["error_code"] == GatewayErrorCode.DISCONNECT.value
@@ -322,8 +337,11 @@ class TestDisconnectErrorPropagation:
 
         cr = CommandRouter(executor=broken_executor)
         result = await cr.route_command(
-            device_id="d", command="c", payload={},
-            command_id="cx", task_id="tx",
+            device_id="d",
+            command="c",
+            payload={},
+            command_id="cx",
+            task_id="tx",
         )
 
         assert result["success"] is False
@@ -361,6 +379,7 @@ class TestGatewayTraceStore:
 
     def _make_store(self):
         from core.command_router import GatewayTraceStore
+
         return GatewayTraceStore()
 
     def test_record_and_lookup_by_command_id(self):
@@ -385,13 +404,15 @@ class TestGatewayTraceStore:
     def test_record_and_lookup_by_task_id(self):
         store = self._make_store()
         for i in range(3):
-            store.record({
-                "command_id": f"cid_{i}",
-                "task_id": "shared_task",
-                "device_id": "dev",
-                "command": f"cmd_{i}",
-                "success": True,
-            })
+            store.record(
+                {
+                    "command_id": f"cid_{i}",
+                    "task_id": "shared_task",
+                    "device_id": "dev",
+                    "command": f"cmd_{i}",
+                    "success": True,
+                }
+            )
         results = store.lookup_by_task_id("shared_task")
         assert len(results) == 3
         assert all(r["task_id"] == "shared_task" for r in results)
@@ -422,6 +443,7 @@ class TestGatewayTraceStore:
     def test_max_entries_eviction(self):
         """超出 MAX_ENTRIES 后应淘汰最旧条目。"""
         from core.command_router import GatewayTraceStore
+
         store = GatewayTraceStore()
         store._MAX_ENTRIES = 5
         for i in range(7):
@@ -466,7 +488,9 @@ class TestObservabilityEndpointSchemas:
     def _make_client(self):
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
+
         from core.routes.observability import create_router
+
         app = FastAPI()
         app.include_router(create_router())
         return TestClient(app)
@@ -528,14 +552,17 @@ class TestObservabilityEndpointSchemas:
     def test_trace_lookup_by_command_id_returns_schema(self):
         """先写入 trace，再按 command_id 查询，验证返回 schema。"""
         from core.command_router import get_gateway_trace_store
+
         store = get_gateway_trace_store()
-        store.record({
-            "command_id": "test_schema_cmd",
-            "task_id": "test_schema_task",
-            "device_id": "dev",
-            "command": "tap",
-            "success": True,
-        })
+        store.record(
+            {
+                "command_id": "test_schema_cmd",
+                "task_id": "test_schema_task",
+                "device_id": "dev",
+                "command": "tap",
+                "success": True,
+            }
+        )
 
         client = self._make_client()
         resp = client.get(
@@ -551,15 +578,18 @@ class TestObservabilityEndpointSchemas:
     def test_trace_lookup_by_task_id_returns_schema(self):
         """先写入多条 trace，再按 task_id 查询，验证返回 schema。"""
         from core.command_router import get_gateway_trace_store
+
         store = get_gateway_trace_store()
         for i in range(2):
-            store.record({
-                "command_id": f"schema_task_cmd_{i}",
-                "task_id": "schema_task_xxx",
-                "device_id": "dev",
-                "command": "tap",
-                "success": True,
-            })
+            store.record(
+                {
+                    "command_id": f"schema_task_cmd_{i}",
+                    "task_id": "schema_task_xxx",
+                    "device_id": "dev",
+                    "command": "tap",
+                    "success": True,
+                }
+            )
 
         client = self._make_client()
         resp = client.get(
@@ -578,8 +608,7 @@ class TestObservabilityEndpointSchemas:
         resp = client.get("/api/v1/observability/stats")
         assert resp.status_code == 200
         data = resp.json()
-        for key in ("total_recorded", "total_success", "total_failed",
-                    "unique_command_ids", "unique_task_ids"):
+        for key in ("total_recorded", "total_success", "total_failed", "unique_command_ids", "unique_task_ids"):
             assert key in data, f"stats 必须包含字段: {key}"
         assert isinstance(data["total_recorded"], int)
 
@@ -595,8 +624,8 @@ class TestOpenClawdErrorPropagation:
     @pytest.mark.asyncio
     async def test_openclawd_propagates_timeout_from_command_router(self):
         """command_router.route_command 超时时 send_gateway_command 仍含 trace IDs。"""
-        from core.openclawd import OpenClawd
         from core.command_router import GatewayErrorCode
+        from core.openclawd import OpenClawd
 
         async def timeout_route_command(**kwargs):
             return {
@@ -631,8 +660,8 @@ class TestOpenClawdErrorPropagation:
     @pytest.mark.asyncio
     async def test_openclawd_propagates_disconnect_from_command_router(self):
         """command_router 断连错误时 send_gateway_command 成功返回（含 trace）。"""
-        from core.openclawd import OpenClawd
         from core.command_router import GatewayErrorCode
+        from core.openclawd import OpenClawd
 
         async def dc_route_command(**kwargs):
             return {

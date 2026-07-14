@@ -94,31 +94,31 @@ import pytest
 
 try:
     from core.flow_aware_result_convergence import (
+        CROSS_DEVICE_RESULT_SURFACE_IS_TRANSPORT_BOUNDARY_POLICY,
+        DUPLICATE_RESULT_SUPPRESSED_FIRST_WRITE_WINS_POLICY,
+        FINAL_PROMOTES_AS_CANONICAL_AND_CLOSES_PARTIALS_POLICY,
         FLOW_AWARE_CONVERGENCE_AUTHORITY,
         FLOW_AWARE_CONVERGENCE_PR6V2_SENTINEL,
-        PARTIAL_ACCEPTED_INTO_FLOW_PENDING_FINAL_POLICY,
-        FINAL_PROMOTES_AS_CANONICAL_AND_CLOSES_PARTIALS_POLICY,
-        PARALLEL_RESULTS_AGGREGATE_TO_PARENT_FLOW_VIA_GROUP_ID_POLICY,
-        DUPLICATE_RESULT_SUPPRESSED_FIRST_WRITE_WINS_POLICY,
-        LATE_PARTIAL_AFTER_FINAL_IS_SUPPRESSED_POLICY,
-        RECONNECT_REPLAY_RESULT_ABSORBED_IDEMPOTENTLY_POLICY,
         FLOW_MISMATCH_QUARANTINES_RESULT_POLICY,
-        CROSS_DEVICE_RESULT_SURFACE_IS_TRANSPORT_BOUNDARY_POLICY,
         GOAL_RESULT_AGGREGATOR_IS_GROUP_COMPLETION_SIGNAL_POLICY,
+        LATE_PARTIAL_AFTER_FINAL_IS_SUPPRESSED_POLICY,
+        PARALLEL_RESULTS_AGGREGATE_TO_PARENT_FLOW_VIA_GROUP_ID_POLICY,
+        PARTIAL_ACCEPTED_INTO_FLOW_PENDING_FINAL_POLICY,
+        RECONNECT_REPLAY_RESULT_ABSORBED_IDEMPOTENTLY_POLICY,
         ConvergenceDecisionKind,
-        ResultSemanticKind,
         ConvergenceFlowLineage,
-        ResultConvergenceContext,
-        ResultConvergenceArtifact,
-        ParallelFlowAggregationRecord,
-        FlowConvergenceSnapshot,
-        classify_result_semantic_kind,
-        decide_convergence,
         FlowAwareConvergenceCoordinator,
-        get_flow_aware_convergence_coordinator,
-        reset_flow_aware_convergence_coordinator,
+        FlowConvergenceSnapshot,
+        ParallelFlowAggregationRecord,
+        ResultConvergenceArtifact,
+        ResultConvergenceContext,
+        ResultSemanticKind,
         absorb_result,
         build_flow_convergence_snapshot,
+        classify_result_semantic_kind,
+        decide_convergence,
+        get_flow_aware_convergence_coordinator,
+        reset_flow_aware_convergence_coordinator,
     )
 
     _MODULE_AVAILABLE = True
@@ -126,9 +126,7 @@ except ImportError as _exc:  # pragma: no cover
     _MODULE_AVAILABLE = False
     _exc_detail = str(_exc)
 
-_SKIP_MODULE = pytest.mark.skipif(
-    not _MODULE_AVAILABLE, reason="flow_aware_result_convergence unavailable"
-)
+_SKIP_MODULE = pytest.mark.skipif(not _MODULE_AVAILABLE, reason="flow_aware_result_convergence unavailable")
 
 
 # ===========================================================================
@@ -628,8 +626,12 @@ class TestGroupP_ParallelGroupCompletion:
         fid = _new_flow_id()
         gid = f"grp-{uuid.uuid4().hex[:6]}"
         coord.register_parallel_group(gid, fid, expected_count=2)
-        coord.absorb(_ctx(flow_id=fid, result_id="r0", semantic_kind="parallel_subtask_result", group_id=gid, subtask_index=0))
-        art = coord.absorb(_ctx(flow_id=fid, result_id="r1", semantic_kind="parallel_subtask_result", group_id=gid, subtask_index=1))
+        coord.absorb(
+            _ctx(flow_id=fid, result_id="r0", semantic_kind="parallel_subtask_result", group_id=gid, subtask_index=0)
+        )
+        art = coord.absorb(
+            _ctx(flow_id=fid, result_id="r1", semantic_kind="parallel_subtask_result", group_id=gid, subtask_index=1)
+        )
         assert art.group_complete is True
         record = coord.get_parallel_group(gid)
         assert record.all_complete is True
@@ -639,8 +641,12 @@ class TestGroupP_ParallelGroupCompletion:
         fid = _new_flow_id()
         gid = f"grp-{uuid.uuid4().hex[:6]}"
         coord.register_parallel_group(gid, fid, expected_count=2)
-        coord.absorb(_ctx(flow_id=fid, result_id="r0", semantic_kind="parallel_subtask_result", group_id=gid, subtask_index=0))
-        coord.absorb(_ctx(flow_id=fid, result_id="r1", semantic_kind="parallel_subtask_result", group_id=gid, subtask_index=1))
+        coord.absorb(
+            _ctx(flow_id=fid, result_id="r0", semantic_kind="parallel_subtask_result", group_id=gid, subtask_index=0)
+        )
+        coord.absorb(
+            _ctx(flow_id=fid, result_id="r1", semantic_kind="parallel_subtask_result", group_id=gid, subtask_index=1)
+        )
         record = coord.get_parallel_group(gid)
         assert record.aggregate_artifact is not None
         assert record.aggregate_artifact.group_complete is True
@@ -650,7 +656,9 @@ class TestGroupP_ParallelGroupCompletion:
         fid = _new_flow_id()
         gid = f"grp-{uuid.uuid4().hex[:6]}"
         coord.register_parallel_group(gid, fid, expected_count=3)
-        art = coord.absorb(_ctx(flow_id=fid, result_id="r0", semantic_kind="parallel_subtask_result", group_id=gid, subtask_index=0))
+        art = coord.absorb(
+            _ctx(flow_id=fid, result_id="r0", semantic_kind="parallel_subtask_result", group_id=gid, subtask_index=0)
+        )
         assert art.group_complete is False
         record = coord.get_parallel_group(gid)
         assert record.all_complete is False
@@ -660,7 +668,9 @@ class TestGroupP_ParallelGroupCompletion:
         fid = _new_flow_id()
         gid = f"grp-{uuid.uuid4().hex[:6]}"
         # No prior register_parallel_group call
-        coord.absorb(_ctx(flow_id=fid, result_id="r0", semantic_kind="parallel_subtask_result", group_id=gid, subtask_index=0))
+        coord.absorb(
+            _ctx(flow_id=fid, result_id="r0", semantic_kind="parallel_subtask_result", group_id=gid, subtask_index=0)
+        )
         record = coord.get_parallel_group(gid)
         assert record is not None
         assert record.absorbed_count == 1
@@ -740,11 +750,14 @@ class TestGroupS_ReconnectReplayIdempotent:
         fid = _new_flow_id()
         rid = _new_result_id()
         coord.absorb(_ctx(flow_id=fid, result_id=rid, semantic_kind="final_result"))
-        art = coord.absorb(_ctx(
-            flow_id=fid, result_id=rid,
-            semantic_kind="final_result",
-            is_reconnect_replay=True,
-        ))
+        art = coord.absorb(
+            _ctx(
+                flow_id=fid,
+                result_id=rid,
+                semantic_kind="final_result",
+                is_reconnect_replay=True,
+            )
+        )
         assert art.decision is ConvergenceDecisionKind.absorb_replay_result_idempotently
 
     def test_s2_replay_of_new_result_id_promoted(self):
@@ -753,11 +766,14 @@ class TestGroupS_ReconnectReplayIdempotent:
         # First result
         coord.absorb(_ctx(flow_id=fid, result_id="r1", semantic_kind="partial_result"))
         # Reconnect replay of unseen result_id → treated as new final
-        art = coord.absorb(_ctx(
-            flow_id=fid, result_id="r2",
-            is_reconnect_replay=True,
-            is_duplicate=False,
-        ))
+        art = coord.absorb(
+            _ctx(
+                flow_id=fid,
+                result_id="r2",
+                is_reconnect_replay=True,
+                is_duplicate=False,
+            )
+        )
         assert art.decision is ConvergenceDecisionKind.promote_final_as_canonical
 
 
@@ -855,11 +871,26 @@ class TestGroupV_ArtifactToDict:
         )
         d = art.to_dict()
         for key in (
-            "artifact_id", "decision", "semantic_kind", "lineage",
-            "policy_reference", "reason", "flow_id", "result_id",
-            "group_id", "subtask_index", "parent_flow_id",
-            "session_id", "device_id", "trace_id", "contract_id", "task_id",
-            "partial_count_merged", "group_complete", "timestamp", "evidence",
+            "artifact_id",
+            "decision",
+            "semantic_kind",
+            "lineage",
+            "policy_reference",
+            "reason",
+            "flow_id",
+            "result_id",
+            "group_id",
+            "subtask_index",
+            "parent_flow_id",
+            "session_id",
+            "device_id",
+            "trace_id",
+            "contract_id",
+            "task_id",
+            "partial_count_merged",
+            "group_complete",
+            "timestamp",
+            "evidence",
         ):
             assert key in d, f"Missing key: {key}"
 
@@ -898,10 +929,21 @@ class TestGroupW_ContextToDict:
         c = ResultConvergenceContext(flow_id="f", result_id="r")
         d = c.to_dict()
         for key in (
-            "flow_id", "result_id", "semantic_kind", "lineage",
-            "group_id", "subtask_index", "parent_flow_id",
-            "final_already_absorbed", "is_duplicate", "is_reconnect_replay",
-            "session_id", "device_id", "trace_id", "contract_id", "task_id",
+            "flow_id",
+            "result_id",
+            "semantic_kind",
+            "lineage",
+            "group_id",
+            "subtask_index",
+            "parent_flow_id",
+            "final_already_absorbed",
+            "is_duplicate",
+            "is_reconnect_replay",
+            "session_id",
+            "device_id",
+            "trace_id",
+            "contract_id",
+            "task_id",
             "timestamp",
         ):
             assert key in d, f"Missing key: {key}"
@@ -932,10 +974,17 @@ class TestGroupX_ParallelAggregationRecord:
         )
         d = rec.to_dict()
         for key in (
-            "group_id", "parent_flow_id", "expected_count",
-            "absorbed_count", "all_complete", "session_id",
-            "trace_id", "created_at", "completed_at",
-            "absorbed_subtasks", "aggregate_artifact",
+            "group_id",
+            "parent_flow_id",
+            "expected_count",
+            "absorbed_count",
+            "all_complete",
+            "session_id",
+            "trace_id",
+            "created_at",
+            "completed_at",
+            "absorbed_subtasks",
+            "aggregate_artifact",
         ):
             assert key in d, f"Missing key: {key}"
 
@@ -976,31 +1025,31 @@ class TestGroupZ_RuntimeReexports:
     def test_z1_all_pr6v2_symbols_importable_from_core_runtime(self):
         try:
             from core.runtime import (  # noqa: F401
+                CROSS_DEVICE_RESULT_SURFACE_IS_TRANSPORT_BOUNDARY_POLICY,
+                DUPLICATE_RESULT_SUPPRESSED_FIRST_WRITE_WINS_POLICY,
+                FINAL_PROMOTES_AS_CANONICAL_AND_CLOSES_PARTIALS_POLICY,
                 FLOW_AWARE_CONVERGENCE_AUTHORITY,
                 FLOW_AWARE_CONVERGENCE_PR6V2_SENTINEL,
-                PARTIAL_ACCEPTED_INTO_FLOW_PENDING_FINAL_POLICY,
-                FINAL_PROMOTES_AS_CANONICAL_AND_CLOSES_PARTIALS_POLICY,
-                PARALLEL_RESULTS_AGGREGATE_TO_PARENT_FLOW_VIA_GROUP_ID_POLICY,
-                DUPLICATE_RESULT_SUPPRESSED_FIRST_WRITE_WINS_POLICY,
-                LATE_PARTIAL_AFTER_FINAL_IS_SUPPRESSED_POLICY,
-                RECONNECT_REPLAY_RESULT_ABSORBED_IDEMPOTENTLY_POLICY,
                 FLOW_MISMATCH_QUARANTINES_RESULT_POLICY,
-                CROSS_DEVICE_RESULT_SURFACE_IS_TRANSPORT_BOUNDARY_POLICY,
                 GOAL_RESULT_AGGREGATOR_IS_GROUP_COMPLETION_SIGNAL_POLICY,
+                LATE_PARTIAL_AFTER_FINAL_IS_SUPPRESSED_POLICY,
+                PARALLEL_RESULTS_AGGREGATE_TO_PARENT_FLOW_VIA_GROUP_ID_POLICY,
+                PARTIAL_ACCEPTED_INTO_FLOW_PENDING_FINAL_POLICY,
+                RECONNECT_REPLAY_RESULT_ABSORBED_IDEMPOTENTLY_POLICY,
                 ConvergenceDecisionKind,
-                ResultSemanticKind,
                 ConvergenceFlowLineage,
-                ResultConvergenceContext,
-                ResultConvergenceArtifact,
-                ParallelFlowAggregationRecord,
-                FlowConvergenceSnapshot,
-                classify_result_semantic_kind,
-                decide_convergence,
                 FlowAwareConvergenceCoordinator,
-                get_flow_aware_convergence_coordinator,
-                reset_flow_aware_convergence_coordinator,
+                FlowConvergenceSnapshot,
+                ParallelFlowAggregationRecord,
+                ResultConvergenceArtifact,
+                ResultConvergenceContext,
+                ResultSemanticKind,
                 absorb_result,
                 build_flow_convergence_snapshot,
+                classify_result_semantic_kind,
+                decide_convergence,
+                get_flow_aware_convergence_coordinator,
+                reset_flow_aware_convergence_coordinator,
             )
         except ImportError as exc:
             # Skip if a transitive dependency (e.g. pydantic) is missing in

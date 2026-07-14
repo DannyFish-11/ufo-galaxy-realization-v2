@@ -588,9 +588,7 @@ def _build_closure_pr_catalog() -> List[ClosurePRRecord]:
     return [
         ClosurePRRecord(
             pr_ref="V2#1011",
-            title=(
-                "PR-A: Add Android→V2 runtime state canonical-path e2e CI evidence"
-            ),
+            title=("PR-A: Add Android→V2 runtime state canonical-path e2e CI evidence"),
             paths_closed=[
                 PostClosurePathId.RUNTIME_SNAPSHOT_UPLINK,
                 PostClosurePathId.EXECUTION_EVENT_UPLINK,
@@ -610,9 +608,7 @@ def _build_closure_pr_catalog() -> List[ClosurePRRecord]:
         ),
         ClosurePRRecord(
             pr_ref="V2#1013",
-            title=(
-                "PR-B: Add verification for delegated Android execution runtime closure"
-            ),
+            title=("PR-B: Add verification for delegated Android execution runtime closure"),
             paths_closed=[
                 PostClosurePathId.TASK_DISPATCH_EXECUTE_RESULT,
             ],
@@ -631,9 +627,7 @@ def _build_closure_pr_catalog() -> List[ClosurePRRecord]:
         ),
         ClosurePRRecord(
             pr_ref="V2#1015",
-            title=(
-                "PR-C V2: Integrate Android durable continuity identity into V2 coordination"
-            ),
+            title=("PR-C V2: Integrate Android durable continuity identity into V2 coordination"),
             paths_closed=[
                 PostClosurePathId.CONTINUITY_RECONNECT_RESUME,
             ],
@@ -654,10 +648,7 @@ def _build_closure_pr_catalog() -> List[ClosurePRRecord]:
         ),
         ClosurePRRecord(
             pr_ref="Android#335",
-            title=(
-                "PR-C Android: Prove durable continuity identity propagates to "
-                "WS handshake across reconnects"
-            ),
+            title=("PR-C Android: Prove durable continuity identity propagates to " "WS handshake across reconnects"),
             paths_closed=[
                 PostClosurePathId.CONTINUITY_RECONNECT_RESUME,
             ],
@@ -704,13 +695,11 @@ def _assess_system_identity() -> PostClosureClaimStatus:
     # PR-A / PR-B CI test evidence — proves the "beyond PoC" sub-claim
     if _try_import("tests.integration.test_android_runtime_state_snapshot_e2e"):
         anchors.append(
-            "tests.integration.test_android_runtime_state_snapshot_e2e "
-            "[PR-A: e2e CI evidence for Android→V2 path]"
+            "tests.integration.test_android_runtime_state_snapshot_e2e " "[PR-A: e2e CI evidence for Android→V2 path]"
         )
     if _try_import("tests.test_delegated_execution_runtime_closure"):
         anchors.append(
-            "tests.test_delegated_execution_runtime_closure "
-            "[PR-B: delegated execution runtime closure CI evidence]"
+            "tests.test_delegated_execution_runtime_closure " "[PR-B: delegated execution runtime closure CI evidence]"
         )
 
     return PostClosureClaimStatus(
@@ -918,17 +907,11 @@ def _assess_beyond_poc() -> PostClosureClaimStatus:
 
     # CI test modules for each chain
     if _try_import("tests.integration.test_android_runtime_state_snapshot_e2e"):
-        anchors.append(
-            "tests.integration.test_android_runtime_state_snapshot_e2e [CI chain 1+2]"
-        )
+        anchors.append("tests.integration.test_android_runtime_state_snapshot_e2e [CI chain 1+2]")
     if _try_import("tests.test_delegated_execution_runtime_closure"):
-        anchors.append(
-            "tests.test_delegated_execution_runtime_closure [CI chain 3+4]"
-        )
+        anchors.append("tests.test_delegated_execution_runtime_closure [CI chain 3+4]")
     if _try_import("tests.test_prc_android_durable_continuity_bridge"):
-        anchors.append(
-            "tests.test_prc_android_durable_continuity_bridge [CI continuity: 37 tests]"
-        )
+        anchors.append("tests.test_prc_android_durable_continuity_bridge [CI continuity: 37 tests]")
 
     return PostClosureClaimStatus(
         claim_id=PostClosureClaimId.SYSTEM_BEYOND_POC,
@@ -1037,8 +1020,7 @@ def _assess_direction_unified_ai_body() -> PostClosureClaimStatus:
     return PostClosureClaimStatus(
         claim_id=PostClosureClaimId.DIRECTION_TOWARD_UNIFIED_AI_BODY,
         claim_summary=(
-            "Future evolution toward unified AI-body network enforced by CI gates "
-            "and authority boundary contracts."
+            "Future evolution toward unified AI-body network enforced by CI gates " "and authority boundary contracts."
         ),
         prior_label="PARTIALLY_ESTABLISHED",
         updated_label=ClosureStatus.STRONGLY_ESTABLISHED,
@@ -1136,16 +1118,13 @@ def _build_runtime_snapshot_path() -> PostClosurePathStatus:
         prior_label="surface_alignment_only",
         prior_runtime_closed=False,
         updated_label=(
-            ClosureStatus.RUNTIME_EVIDENCED_CLOSED
-            if runtime_closed
-            else ClosureStatus.PARTIALLY_ESTABLISHED
+            ClosureStatus.RUNTIME_EVIDENCED_CLOSED if runtime_closed else ClosureStatus.PARTIALLY_ESTABLISHED
         ),
         runtime_closed=runtime_closed,
         closure_pr_refs=["V2#1011"],
         v2_evidence_modules=mods,
         gap_description=(
-            "" if runtime_closed else
-            "CI test modules not found — check that PR-A has been properly merged."
+            "" if runtime_closed else "CI test modules not found — check that PR-A has been properly merged."
         ),
     )
 
@@ -1188,16 +1167,13 @@ def _build_execution_event_path() -> PostClosurePathStatus:
         prior_label="surface_alignment_only",
         prior_runtime_closed=False,
         updated_label=(
-            ClosureStatus.RUNTIME_EVIDENCED_CLOSED
-            if runtime_closed
-            else ClosureStatus.PARTIALLY_ESTABLISHED
+            ClosureStatus.RUNTIME_EVIDENCED_CLOSED if runtime_closed else ClosureStatus.PARTIALLY_ESTABLISHED
         ),
         runtime_closed=runtime_closed,
         closure_pr_refs=["V2#1011", "V2#1013"],
         v2_evidence_modules=mods,
         gap_description=(
-            "" if runtime_closed else
-            "CI test modules not found — check PR-A and PR-B are properly merged."
+            "" if runtime_closed else "CI test modules not found — check PR-A and PR-B are properly merged."
         ),
     )
 
@@ -1233,13 +1209,12 @@ def _build_task_dispatch_result_path() -> PostClosurePathStatus:
     pr_b_test = "tests.test_delegated_execution_runtime_closure"
     pr_b_ok = _try_import(pr_b_test)
     if pr_b_ok:
-        mods.append(
-            f"{pr_b_test} [CI: 31 tests covering dispatch→signal→truth_chain roundtrip]"
-        )
+        mods.append(f"{pr_b_test} [CI: 31 tests covering dispatch→signal→truth_chain roundtrip]")
 
     # Also check for runtime_closure_established attribute in decision history
     try:
         from core.delegated_flow_decision_history import DelegatedFlowDecisionHistory
+
         src = inspect.getsource(DelegatedFlowDecisionHistory)
         if "runtime_closure_established" in src:
             mods.append(
@@ -1260,17 +1235,12 @@ def _build_task_dispatch_result_path() -> PostClosurePathStatus:
         prior_label="partially_established",
         prior_runtime_closed=False,
         updated_label=(
-            ClosureStatus.RUNTIME_EVIDENCED_CLOSED
-            if runtime_closed
-            else ClosureStatus.PARTIALLY_ESTABLISHED
+            ClosureStatus.RUNTIME_EVIDENCED_CLOSED if runtime_closed else ClosureStatus.PARTIALLY_ESTABLISHED
         ),
         runtime_closed=runtime_closed,
         closure_pr_refs=["V2#1013"],
         v2_evidence_modules=mods,
-        gap_description=(
-            "" if runtime_closed else
-            "CI test module not found — check PR-B is properly merged."
-        ),
+        gap_description=("" if runtime_closed else "CI test module not found — check PR-B is properly merged."),
     )
 
 
@@ -1306,6 +1276,7 @@ def _build_continuity_reconnect_path() -> PostClosurePathStatus:
     # Check durable fields are in registry
     try:
         from core.attached_runtime_session_registry import AttachedSessionRegistryEntry
+
         e = AttachedSessionRegistryEntry(device_id="probe")
         if hasattr(e, "durable_session_id") and hasattr(e, "continuity_epoch"):
             mods.append(
@@ -1318,6 +1289,7 @@ def _build_continuity_reconnect_path() -> PostClosurePathStatus:
     # Check ContinuityDecisionArtifact has durable fields
     try:
         from core.flow_continuity_coordinator import ContinuityDecisionArtifact
+
         src = inspect.getsource(ContinuityDecisionArtifact)
         if "durable_session_id" in src:
             mods.append(
@@ -1330,9 +1302,7 @@ def _build_continuity_reconnect_path() -> PostClosurePathStatus:
     pr_c_test = "tests.test_prc_android_durable_continuity_bridge"
     pr_c_ok = _try_import(pr_c_test)
     if pr_c_ok:
-        mods.append(
-            f"{pr_c_test} [CI: 37 tests for durable continuity bridge]"
-        )
+        mods.append(f"{pr_c_test} [CI: 37 tests for durable continuity bridge]")
 
     return PostClosurePathStatus(
         path_id=PostClosurePathId.CONTINUITY_RECONNECT_RESUME,
@@ -1403,9 +1373,10 @@ def _build_orchestration_consumes_android_truth_path() -> PostClosurePathStatus:
     # Check that the new sentinel is present in source_dispatch_orchestrator.
     try:
         from core.runtime.source_dispatch_orchestrator import (
-            ORCHESTRATION_CONSUMES_ANDROID_TRUTH_SENTINEL,
             ANDROID_RUNTIME_TRUTH_SCORES_DISPATCH_CANDIDATES_POLICY,
+            ORCHESTRATION_CONSUMES_ANDROID_TRUTH_SENTINEL,
         )
+
         if (
             "ORCHESTRATION_CONSUMES_ANDROID_TRUTH" in ORCHESTRATION_CONSUMES_ANDROID_TRUTH_SENTINEL
             and "model_ready" in ANDROID_RUNTIME_TRUTH_SCORES_DISPATCH_CANDIDATES_POLICY
@@ -1424,6 +1395,7 @@ def _build_orchestration_consumes_android_truth_path() -> PostClosurePathStatus:
         from galaxy_gateway.routing.device_selection import (
             ANDROID_RUNTIME_TRUTH_ROUTING_WEIGHT_IN_SELECTION,
         )
+
         if "ANDROID_RUNTIME_TRUTH_ROUTING_WEIGHT_IN_SELECTION_V1" in ANDROID_RUNTIME_TRUTH_ROUTING_WEIGHT_IN_SELECTION:
             mods.append(
                 "galaxy_gateway.routing.device_selection."
@@ -1455,9 +1427,7 @@ def _build_orchestration_consumes_android_truth_path() -> PostClosurePathStatus:
         prior_label="surface_alignment_only",
         prior_runtime_closed=False,
         updated_label=(
-            ClosureStatus.RUNTIME_EVIDENCED_CLOSED
-            if _runtime_closed
-            else ClosureStatus.PARTIALLY_ESTABLISHED
+            ClosureStatus.RUNTIME_EVIDENCED_CLOSED if _runtime_closed else ClosureStatus.PARTIALLY_ESTABLISHED
         ),
         runtime_closed=_runtime_closed,
         closure_pr_refs=["V2#1016"],
@@ -1489,9 +1459,7 @@ def _build_next_pr_items() -> List[NextPRItem]:
         NextPRItem(
             item_id="P0-ORCHESTRATION-DECISION-PATH-CONSUMPTION",
             priority=NextPRPriority.P0_DECISION_PATH_CLOSURE,
-            title=(
-                "Wire Android runtime truth into V2 orchestration dispatch decisions"
-            ),
+            title=("Wire Android runtime truth into V2 orchestration dispatch decisions"),
             rationale=(
                 "PR-A proved the android_device_state_store CAN be filled with real "
                 "Android runtime truth (readiness, model_id, fallback_tier, model_ready, "
@@ -1519,9 +1487,7 @@ def _build_next_pr_items() -> List[NextPRItem]:
         NextPRItem(
             item_id="P1-CONTINUITY-RECONNECT-E2E-ROUNDTRIP",
             priority=NextPRPriority.P1_CANONICAL_CLOSURE_GAP,
-            title=(
-                "Add end-to-end WS reconnect continuity test spanning Android stub → V2"
-            ),
+            title=("Add end-to-end WS reconnect continuity test spanning Android stub → V2"),
             rationale=(
                 "PR-C V2 (V2#1015) proved the V2 components (registry, classifier, "
                 "coordinator) consume durable_session_id / continuity_epoch correctly "
@@ -1541,9 +1507,7 @@ def _build_next_pr_items() -> List[NextPRItem]:
         NextPRItem(
             item_id="P1-LEGALITY-GATE-PROMOTION",
             priority=NextPRPriority.P1_CANONICAL_CLOSURE_GAP,
-            title=(
-                "Promote delegated flow legality gates from ADVISORY to BLOCKING"
-            ),
+            title=("Promote delegated flow legality gates from ADVISORY to BLOCKING"),
             rationale=(
                 "DelegatedFlowReadinessGate, DelegatedFlowAcceptanceGate, and "
                 "CapabilityRoutingGate are importable and evaluable. "
@@ -1563,9 +1527,7 @@ def _build_next_pr_items() -> List[NextPRItem]:
         NextPRItem(
             item_id="P2-MULTI-DEVICE-HYBRID-ORCHESTRATION",
             priority=NextPRPriority.P2_HARDENING,
-            title=(
-                "Establish e2e CI evidence for multi-device hybrid orchestration"
-            ),
+            title=("Establish e2e CI evidence for multi-device hybrid orchestration"),
             rationale=(
                 "multi_device_canonical_governance, hybrid_executor / hybrid_execution_policy, "
                 "and HybridOrchestrationContinuityRegistry are importable. "
@@ -1584,9 +1546,7 @@ def _build_next_pr_items() -> List[NextPRItem]:
         NextPRItem(
             item_id="P3-ZERO-CONFIG-PROVISIONING",
             priority=NextPRPriority.P3_DEPLOYMENT_OPERABILITY,
-            title=(
-                "Add zero-config provisioning / QR-code pairing for fresh Android installs"
-            ),
+            title=("Add zero-config provisioning / QR-code pairing for fresh Android installs"),
             rationale=(
                 "cross_device_enabled=false is the build-time default. "
                 "Default gateway URL is a Tailscale placeholder. "
@@ -1699,9 +1659,7 @@ def build_post_closure_reassessment() -> PostClosureReport:
         runtime_evidenced_closed_count=status_counts[ClosureStatus.RUNTIME_EVIDENCED_CLOSED],
         partially_established_count=status_counts[ClosureStatus.PARTIALLY_ESTABLISHED],
         surface_alignment_only_count=status_counts[ClosureStatus.SURFACE_ALIGNMENT_ONLY],
-        still_missing_decision_path_count=status_counts[
-            ClosureStatus.STILL_MISSING_DECISION_PATH_CLOSURE
-        ],
+        still_missing_decision_path_count=status_counts[ClosureStatus.STILL_MISSING_DECISION_PATH_CLOSURE],
         paths_runtime_closed=paths_closed,
         paths_still_open=paths_open,
         claims_upgraded=claims_upgraded,
@@ -1753,31 +1711,22 @@ def assert_post_closure_invariants() -> None:
 
     # Structure: all claim IDs covered
     assert len(report.claim_statuses) == len(PostClosureClaimId), (
-        f"Expected {len(PostClosureClaimId)} claim statuses; "
-        f"got {len(report.claim_statuses)}."
+        f"Expected {len(PostClosureClaimId)} claim statuses; " f"got {len(report.claim_statuses)}."
     )
     seen_claim_ids = {c.claim_id for c in report.claim_statuses}
     for cid in PostClosureClaimId:
-        assert cid in seen_claim_ids, (
-            f"Missing claim status for PostClosureClaimId.{cid.name}."
-        )
+        assert cid in seen_claim_ids, f"Missing claim status for PostClosureClaimId.{cid.name}."
 
     # Structure: all path IDs covered
     assert len(report.path_statuses) == len(PostClosurePathId), (
-        f"Expected {len(PostClosurePathId)} path statuses; "
-        f"got {len(report.path_statuses)}."
+        f"Expected {len(PostClosurePathId)} path statuses; " f"got {len(report.path_statuses)}."
     )
     seen_path_ids = {p.path_id for p in report.path_statuses}
     for pid in PostClosurePathId:
-        assert pid in seen_path_ids, (
-            f"Missing path status for PostClosurePathId.{pid.name}."
-        )
+        assert pid in seen_path_ids, f"Missing path status for PostClosurePathId.{pid.name}."
 
     # At least one P0 item
-    p0_items = [
-        n for n in report.next_pr_items
-        if n.priority == NextPRPriority.P0_DECISION_PATH_CLOSURE
-    ]
+    p0_items = [n for n in report.next_pr_items if n.priority == NextPRPriority.P0_DECISION_PATH_CLOSURE]
     assert len(p0_items) >= 1, (
         f"Expected at least 1 P0 next-PR item; got {len(p0_items)}. "
         "P0-ORCHESTRATION-DECISION-PATH-CONSUMPTION must be tracked."
@@ -1798,21 +1747,20 @@ def assert_post_closure_invariants() -> None:
         + report.still_missing_decision_path_count
     )
     assert total_claim_count == len(report.claim_statuses), (
-        f"Claim count mismatch: bucket sum {total_claim_count} != "
-        f"len(claim_statuses) {len(report.claim_statuses)}."
+        f"Claim count mismatch: bucket sum {total_claim_count} != " f"len(claim_statuses) {len(report.claim_statuses)}."
     )
 
     total_path_count = report.paths_runtime_closed + report.paths_still_open
     assert total_path_count == len(report.path_statuses), (
-        f"Path count mismatch: closed+open {total_path_count} != "
-        f"len(path_statuses) {len(report.path_statuses)}."
+        f"Path count mismatch: closed+open {total_path_count} != " f"len(path_statuses) {len(report.path_statuses)}."
     )
 
     # No claim should be MISSING or OBSOLETE (system has enough code)
     bad_claims = [
         c.claim_id.value
         for c in report.claim_statuses
-        if c.updated_label in (
+        if c.updated_label
+        in (
             ClosureStatus.SURFACE_ALIGNMENT_ONLY,
             ClosureStatus.OBSOLETE_DRAFT_NOISE,
         )
@@ -1823,11 +1771,7 @@ def assert_post_closure_invariants() -> None:
     )
 
     # ORCHESTRATION path should be the only one not runtime_closed
-    open_paths = [
-        p.path_id.value
-        for p in report.path_statuses
-        if not p.runtime_closed
-    ]
+    open_paths = [p.path_id.value for p in report.path_statuses if not p.runtime_closed]
     # Continuity reconnect and orchestration are the expected open paths
     for oid in open_paths:
         assert oid in (

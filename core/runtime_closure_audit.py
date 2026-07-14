@@ -186,9 +186,7 @@ __all__ = [
 # Authority sentinels
 # ===========================================================================
 
-RUNTIME_CLOSURE_AUDIT_AUTHORITY: str = (
-    "core.runtime_closure_audit.RuntimeClosureAudit"
-)
+RUNTIME_CLOSURE_AUDIT_AUTHORITY: str = "core.runtime_closure_audit.RuntimeClosureAudit"
 
 RUNTIME_CLOSURE_AUDIT_LAYER_POSITION: int = 12
 
@@ -560,9 +558,7 @@ class ClosureAuditSnapshot:
             "total_gaps": len(self.gaps),
             "critical_high_gap_count": self.critical_high_gap_count,
             "total_conflicts": len(self.conflicts),
-            "unresolved_conflicts": sum(
-                1 for c in self.conflicts if not c.is_resolved
-            ),
+            "unresolved_conflicts": sum(1 for c in self.conflicts if not c.is_resolved),
             "residual_gaps": sum(1 for g in self.gaps if g.is_residual),
             "snapshot_ts": self.snapshot_ts,
         }
@@ -571,6 +567,7 @@ class ClosureAuditSnapshot:
 # ===========================================================================
 # RuntimeClosureAudit class
 # ===========================================================================
+
 
 class RuntimeClosureAudit:
     """
@@ -762,6 +759,7 @@ class RuntimeClosureAudit:
         """Attempt to import a layer sentinel and return a :class:`LayerClosureStatus`."""
         try:
             import importlib
+
             mod = importlib.import_module(sentinel_module)
             value = getattr(mod, sentinel_name, None)
             if value is None:
@@ -846,280 +844,300 @@ class RuntimeClosureAudit:
 
         # CONFLICT-001: Task status truth — CanonicalTaskRuntime vs legacy task queue
         # RESOLVED in PR-507: adapt_to_canonical_task() front-loads every ingress point.
-        conflicts.append(AuthorityConflictEntry(
-            conflict_id="CONFLICT-001",
-            runtime_fact="task_status / task_identity",
-            layer_a="core.canonical_task.CanonicalTaskRuntime",
-            layer_b="core.routes._shared.task_queue (legacy dict store)",
-            description=(
-                "Two parallel stores exist for task identity: CanonicalTaskRuntime "
-                "(ring buffer of CanonicalTask) and the legacy task_queue dict in "
-                "core/routes/_shared.py.  Both are written at API ingress."
-            ),
-            is_resolved=True,
-            resolution_note=(
-                "PR-507 front-loads adapt_to_canonical_task() at API ingress so "
-                "CanonicalTask is always the primary object.  The legacy task_queue "
-                "is kept for compat routing only and MUST NOT be used as a truth "
-                "source for task status.  Authority is narrowed to CanonicalTaskRuntime."
-            ),
-        ))
+        conflicts.append(
+            AuthorityConflictEntry(
+                conflict_id="CONFLICT-001",
+                runtime_fact="task_status / task_identity",
+                layer_a="core.canonical_task.CanonicalTaskRuntime",
+                layer_b="core.routes._shared.task_queue (legacy dict store)",
+                description=(
+                    "Two parallel stores exist for task identity: CanonicalTaskRuntime "
+                    "(ring buffer of CanonicalTask) and the legacy task_queue dict in "
+                    "core/routes/_shared.py.  Both are written at API ingress."
+                ),
+                is_resolved=True,
+                resolution_note=(
+                    "PR-507 front-loads adapt_to_canonical_task() at API ingress so "
+                    "CanonicalTask is always the primary object.  The legacy task_queue "
+                    "is kept for compat routing only and MUST NOT be used as a truth "
+                    "source for task status.  Authority is narrowed to CanonicalTaskRuntime."
+                ),
+            )
+        )
 
         # CONFLICT-002: Network topology truth — NetworkTopologyRuntime vs projection TopologyRoutePlan
         # RESOLVED in PR-514: enrich_runtime_projection() wired into status board assembly paths.
-        conflicts.append(AuthorityConflictEntry(
-            conflict_id="CONFLICT-002",
-            runtime_fact="network topology / device reachability",
-            layer_a="core.network_topology_runtime.NetworkTopologyRuntime",
-            layer_b="ContinuumState / TopologyRoutePlan (projection stack)",
-            description=(
-                "NetworkTopologyRuntime (Layer 8) holds canonical device/network "
-                "reachability truth, but ContinuumState and TopologyRoutePlan in "
-                "the projection stack maintain their own topology representations "
-                "without reading from NetworkTopologyRuntime.  Status board surfaces "
-                "may display stale or projection-only topology."
-            ),
-            is_resolved=True,
-            resolution_note=(
-                "PR-514 wires enrich_runtime_projection() from ProjectionSurfaceBridge "
-                "into _assemble_projection() and _assemble_desktop_status_board_payload() "
-                "in core/routes/projection.py.  The bridge reads OperatorSurface (which "
-                "reads NetworkTopologyRuntime), adding network_reachable_node_count and "
-                "operator_snapshot_dict to projection payloads without overwriting "
-                "projection-derived fields.  Boundary sentinels "
-                "PROJECTION_ADAPTS_BUT_DOES_NOT_REDEFINE_BOUNDARY and "
-                "NO_COMPETING_TOPOLOGY_TRUTH_POLICY prevent reintroduction.  "
-                "Resolves GAP-512-003."
-            ),
-        ))
+        conflicts.append(
+            AuthorityConflictEntry(
+                conflict_id="CONFLICT-002",
+                runtime_fact="network topology / device reachability",
+                layer_a="core.network_topology_runtime.NetworkTopologyRuntime",
+                layer_b="ContinuumState / TopologyRoutePlan (projection stack)",
+                description=(
+                    "NetworkTopologyRuntime (Layer 8) holds canonical device/network "
+                    "reachability truth, but ContinuumState and TopologyRoutePlan in "
+                    "the projection stack maintain their own topology representations "
+                    "without reading from NetworkTopologyRuntime.  Status board surfaces "
+                    "may display stale or projection-only topology."
+                ),
+                is_resolved=True,
+                resolution_note=(
+                    "PR-514 wires enrich_runtime_projection() from ProjectionSurfaceBridge "
+                    "into _assemble_projection() and _assemble_desktop_status_board_payload() "
+                    "in core/routes/projection.py.  The bridge reads OperatorSurface (which "
+                    "reads NetworkTopologyRuntime), adding network_reachable_node_count and "
+                    "operator_snapshot_dict to projection payloads without overwriting "
+                    "projection-derived fields.  Boundary sentinels "
+                    "PROJECTION_ADAPTS_BUT_DOES_NOT_REDEFINE_BOUNDARY and "
+                    "NO_COMPETING_TOPOLOGY_TRUTH_POLICY prevent reintroduction.  "
+                    "Resolves GAP-512-003."
+                ),
+            )
+        )
 
         # CONFLICT-003: Executor readiness — CapabilityAssimilationLayer vs legacy registry
         # RESOLVED in PR-516: LegacySystemDecommission formally retires
         # GatewayCapabilityRegistry and gates core.capability_registry as parallel authorities.
-        conflicts.append(AuthorityConflictEntry(
-            conflict_id="CONFLICT-003",
-            runtime_fact="executor readiness / capability set",
-            layer_a="core.capability_assimilation.CapabilityAssimilationLayer",
-            layer_b="galaxy_gateway.capability_registry.CapabilityRegistry (legacy)",
-            description=(
-                "CapabilityAssimilationLayer (PR-507/509) is the canonical authority "
-                "for executor presence and capability sets.  The legacy gateway "
-                "CapabilityRegistry may still be used by some routing paths, "
-                "creating a competing truth source for executor readiness."
-            ),
-            is_resolved=True,
-            resolution_note=(
-                "PR-509 adds query_routable_executors() and query_network_path() "
-                "helpers that read from canonical layers.  PR-513 wires "
-                "CommandRouter.route_envelope() to call these helpers before "
-                "dispatch selection (GAP-512-004) via the "
-                "CAPABILITY_NETWORK_CANONICAL_QUERY_INTEGRATED sentinel.  "
-                "PR-516 formally retires galaxy_gateway.capability_registry."
-                "GatewayCapabilityRegistry and gates core.capability_registry "
-                "as parallel capability authorities via the decommission catalog "
-                "(CANONICAL_CAPABILITY_SOURCE_POLICY).  "
-                "Resolves CONFLICT-003."
-            ),
-        ))
+        conflicts.append(
+            AuthorityConflictEntry(
+                conflict_id="CONFLICT-003",
+                runtime_fact="executor readiness / capability set",
+                layer_a="core.capability_assimilation.CapabilityAssimilationLayer",
+                layer_b="galaxy_gateway.capability_registry.CapabilityRegistry (legacy)",
+                description=(
+                    "CapabilityAssimilationLayer (PR-507/509) is the canonical authority "
+                    "for executor presence and capability sets.  The legacy gateway "
+                    "CapabilityRegistry may still be used by some routing paths, "
+                    "creating a competing truth source for executor readiness."
+                ),
+                is_resolved=True,
+                resolution_note=(
+                    "PR-509 adds query_routable_executors() and query_network_path() "
+                    "helpers that read from canonical layers.  PR-513 wires "
+                    "CommandRouter.route_envelope() to call these helpers before "
+                    "dispatch selection (GAP-512-004) via the "
+                    "CAPABILITY_NETWORK_CANONICAL_QUERY_INTEGRATED sentinel.  "
+                    "PR-516 formally retires galaxy_gateway.capability_registry."
+                    "GatewayCapabilityRegistry and gates core.capability_registry "
+                    "as parallel capability authorities via the decommission catalog "
+                    "(CANONICAL_CAPABILITY_SOURCE_POLICY).  "
+                    "Resolves CONFLICT-003."
+                ),
+            )
+        )
 
         # CONFLICT-004: Operator inspection truth — OperatorSurface vs raw runtime reads
         # RESOLVED in PR-510: routes/operator.py reads only OperatorSurface.
-        conflicts.append(AuthorityConflictEntry(
-            conflict_id="CONFLICT-004",
-            runtime_fact="operator inspection / runtime snapshot",
-            layer_a="core.operator_surface.OperatorSurface",
-            layer_b="direct reads of CanonicalTaskRuntime / ReplayFoundation / etc.",
-            description=(
-                "Operator console and status board surfaces might read raw runtime "
-                "subsystems directly instead of routing through OperatorSurface.  "
-                "This creates competing inspection paths."
-            ),
-            is_resolved=True,
-            resolution_note=(
-                "PR-510 core/routes/operator.py enforces that all operator "
-                "inspection endpoints read exclusively from OperatorSurface. "
-                "Direct raw subsystem reads in operator routes are prohibited "
-                "by the TestI_ProjectionOnlyDiscipline test group."
-            ),
-        ))
+        conflicts.append(
+            AuthorityConflictEntry(
+                conflict_id="CONFLICT-004",
+                runtime_fact="operator inspection / runtime snapshot",
+                layer_a="core.operator_surface.OperatorSurface",
+                layer_b="direct reads of CanonicalTaskRuntime / ReplayFoundation / etc.",
+                description=(
+                    "Operator console and status board surfaces might read raw runtime "
+                    "subsystems directly instead of routing through OperatorSurface.  "
+                    "This creates competing inspection paths."
+                ),
+                is_resolved=True,
+                resolution_note=(
+                    "PR-510 core/routes/operator.py enforces that all operator "
+                    "inspection endpoints read exclusively from OperatorSurface. "
+                    "Direct raw subsystem reads in operator routes are prohibited "
+                    "by the TestI_ProjectionOnlyDiscipline test group."
+                ),
+            )
+        )
 
         # CONFLICT-005: Replay/audit truth — ReplayFoundation vs AuditEventSemantics
         # RESOLVED in PR-506: both layers are written by command_router.route_envelope().
-        conflicts.append(AuthorityConflictEntry(
-            conflict_id="CONFLICT-005",
-            runtime_fact="task execution record / audit event",
-            layer_a="core.replay_foundation.ReplayFoundation",
-            layer_b="core.audit_event_semantics.AuditEventSemantics",
-            description=(
-                "ReplayFoundation records immutable execution records while "
-                "AuditEventSemantics records semantic audit events.  If they "
-                "are written by different code paths, their records may diverge "
-                "for the same task execution."
-            ),
-            is_resolved=True,
-            resolution_note=(
-                "PR-506 routes both writes through CommandRouter.route_envelope() "
-                "as the single production write path, ensuring ReplayFoundation "
-                "and AuditEventSemantics are always written together for the same "
-                "task execution event."
-            ),
-        ))
+        conflicts.append(
+            AuthorityConflictEntry(
+                conflict_id="CONFLICT-005",
+                runtime_fact="task execution record / audit event",
+                layer_a="core.replay_foundation.ReplayFoundation",
+                layer_b="core.audit_event_semantics.AuditEventSemantics",
+                description=(
+                    "ReplayFoundation records immutable execution records while "
+                    "AuditEventSemantics records semantic audit events.  If they "
+                    "are written by different code paths, their records may diverge "
+                    "for the same task execution."
+                ),
+                is_resolved=True,
+                resolution_note=(
+                    "PR-506 routes both writes through CommandRouter.route_envelope() "
+                    "as the single production write path, ensuring ReplayFoundation "
+                    "and AuditEventSemantics are always written together for the same "
+                    "task execution event."
+                ),
+            )
+        )
 
         # CONFLICT-006: Status board operator snapshot — OperatorSurface vs independent assembly
         # RESOLVED in PR-514: status board now consumes enrich_runtime_projection() which
         # carries operator_snapshot_dict from OperatorSurface.  Resolves GAP-512-005.
-        conflicts.append(AuthorityConflictEntry(
-            conflict_id="CONFLICT-006",
-            runtime_fact="operator runtime snapshot / executor health in status board",
-            layer_a="core.operator_surface.OperatorSurface",
-            layer_b=(
-                "desktop_projection / status_board_v2 independent assembly paths "
-                "that build runtime view without consuming OperatorSurface"
-            ),
-            description=(
-                "OperatorSurface.operator_snapshot() is exposed via the REST API "
-                "(GET /api/v1/operator/snapshot) but the status board / desktop "
-                "projection assembly did not consume the operator snapshot.  "
-                "The status board assembled its own runtime view without reading "
-                "from the canonical operator surface."
-            ),
-            is_resolved=True,
-            resolution_note=(
-                "PR-514 wires enrich_runtime_projection() from ProjectionSurfaceBridge "
-                "into _assemble_projection() and _assemble_desktop_status_board_payload(). "
-                "ProjectionSurfaceBridge.get_runtime_augmentation() reads OperatorSurface, "
-                "and the resulting operator_snapshot_dict is added to every projection "
-                "payload.  Boundary sentinel OPERATOR_INSPECTION_BEGINS_AT_BOUNDARY and "
-                "drift policy NO_COMPETING_OPERATOR_INSPECTION_POLICY prevent reintroduction. "
-                "Resolves GAP-512-005."
-            ),
-        ))
+        conflicts.append(
+            AuthorityConflictEntry(
+                conflict_id="CONFLICT-006",
+                runtime_fact="operator runtime snapshot / executor health in status board",
+                layer_a="core.operator_surface.OperatorSurface",
+                layer_b=(
+                    "desktop_projection / status_board_v2 independent assembly paths "
+                    "that build runtime view without consuming OperatorSurface"
+                ),
+                description=(
+                    "OperatorSurface.operator_snapshot() is exposed via the REST API "
+                    "(GET /api/v1/operator/snapshot) but the status board / desktop "
+                    "projection assembly did not consume the operator snapshot.  "
+                    "The status board assembled its own runtime view without reading "
+                    "from the canonical operator surface."
+                ),
+                is_resolved=True,
+                resolution_note=(
+                    "PR-514 wires enrich_runtime_projection() from ProjectionSurfaceBridge "
+                    "into _assemble_projection() and _assemble_desktop_status_board_payload(). "
+                    "ProjectionSurfaceBridge.get_runtime_augmentation() reads OperatorSurface, "
+                    "and the resulting operator_snapshot_dict is added to every projection "
+                    "payload.  Boundary sentinel OPERATOR_INSPECTION_BEGINS_AT_BOUNDARY and "
+                    "drift policy NO_COMPETING_OPERATOR_INSPECTION_POLICY prevent reintroduction. "
+                    "Resolves GAP-512-005."
+                ),
+            )
+        )
 
         # CONFLICT-007: Desktop topology semantics — NetworkTopologyRuntime vs ContinuumState
         # ANNOTATED in PR-514: boundary sentinels document distinct semantic domains.
         # Resolves GAP-512-008 semantics boundary.
-        conflicts.append(AuthorityConflictEntry(
-            conflict_id="CONFLICT-007",
-            runtime_fact="desktop projection topology representation",
-            layer_a="core.network_topology_runtime.NetworkTopologyRuntime",
-            layer_b=(
-                "ContinuumState / DesktopStatusProjection topology representations "
-                "in desktop_projection / status_board_v2"
-            ),
-            description=(
-                "Desktop projection surfaces (ContinuumState, DesktopStatusProjection) "
-                "maintain their own topology/route representations independently of "
-                "NetworkTopologyRuntime.  The two serve different semantic domains "
-                "(model-provider routing vs device/network topology) but the boundary "
-                "was not explicitly documented, creating a risk of silent authority drift."
-            ),
-            is_resolved=True,
-            resolution_note=(
-                "PR-514 documents that ContinuumState/TopologyRoutePlan are "
-                "model-provider routing projections (a genuinely distinct semantic "
-                "domain) and MUST NOT be used as device reachability oracles.  "
-                "Boundary sentinel NO_COMPETING_TOPOLOGY_TRUTH_POLICY and the "
-                "STATUS_SURFACE_DISPLAYS_BUT_DOES_NOT_INVENT_BOUNDARY sentinel "
-                "make future authority drift detectable.  Full decommission of "
-                "competing paths deferred to PR-515 per GAP-512-009.  "
-                "Resolves GAP-512-008 semantics boundary."
-            ),
-        ))
+        conflicts.append(
+            AuthorityConflictEntry(
+                conflict_id="CONFLICT-007",
+                runtime_fact="desktop projection topology representation",
+                layer_a="core.network_topology_runtime.NetworkTopologyRuntime",
+                layer_b=(
+                    "ContinuumState / DesktopStatusProjection topology representations "
+                    "in desktop_projection / status_board_v2"
+                ),
+                description=(
+                    "Desktop projection surfaces (ContinuumState, DesktopStatusProjection) "
+                    "maintain their own topology/route representations independently of "
+                    "NetworkTopologyRuntime.  The two serve different semantic domains "
+                    "(model-provider routing vs device/network topology) but the boundary "
+                    "was not explicitly documented, creating a risk of silent authority drift."
+                ),
+                is_resolved=True,
+                resolution_note=(
+                    "PR-514 documents that ContinuumState/TopologyRoutePlan are "
+                    "model-provider routing projections (a genuinely distinct semantic "
+                    "domain) and MUST NOT be used as device reachability oracles.  "
+                    "Boundary sentinel NO_COMPETING_TOPOLOGY_TRUTH_POLICY and the "
+                    "STATUS_SURFACE_DISPLAYS_BUT_DOES_NOT_INVENT_BOUNDARY sentinel "
+                    "make future authority drift detectable.  Full decommission of "
+                    "competing paths deferred to PR-515 per GAP-512-009.  "
+                    "Resolves GAP-512-008 semantics boundary."
+                ),
+            )
+        )
 
         # CONFLICT-008: Model routing path authority — ContinuumState/TopologyRoutePlan
         # vs CriticalPathHarness canonical routing records.
         # RESOLVED in PR-515: CriticalPathHarness (Layer 15) is the canonical runtime
         # authority for multi-model routing decisions.  ContinuumState remains a
         # model-provider routing projection but is NOT the sole runtime authority.
-        conflicts.append(AuthorityConflictEntry(
-            conflict_id="CONFLICT-008",
-            runtime_fact="multi-model routing path / provider selection",
-            layer_a="core.critical_path_harness.CriticalPathHarnessRuntime",
-            layer_b=(
-                "ContinuumState / TopologyRoutePlan projection representations "
-                "in desktop_projection (the only previous path for routing evidence)"
-            ),
-            description=(
-                "Multi-model routing decisions (provider selection, fallback switches, "
-                "tier-1/tier-2 routing) were previously recorded only in "
-                "ContinuumState / TopologyRoutePlan projections, with no canonical "
-                "runtime authority equivalent to NetworkTopologyRuntime for the "
-                "model-routing domain.  This meant routing decisions could not be "
-                "inspected through OperatorSurface or canonical runtime layers."
-            ),
-            is_resolved=True,
-            resolution_note=(
-                "PR-515 adds CriticalPathHarness (Layer 15) as the canonical runtime "
-                "authority for multi-model routing path records.  OpenClawd writes "
-                "IngressHarnessRecord, RouteSelectionRecord, and ProviderSwitchRecord "
-                "to the harness ring buffer at _select_multimodal_route() so routing "
-                "decisions are canonical-runtime-inspectable.  ContinuumState remains "
-                "a model-provider routing projection but is NOT the sole path for "
-                "routing evidence.  NO_COMPETING_ROUTING_AUTHORITY_POLICY prevents "
-                "the harness from becoming a competing router.  Resolves GAP-512-009."
-            ),
-        ))
+        conflicts.append(
+            AuthorityConflictEntry(
+                conflict_id="CONFLICT-008",
+                runtime_fact="multi-model routing path / provider selection",
+                layer_a="core.critical_path_harness.CriticalPathHarnessRuntime",
+                layer_b=(
+                    "ContinuumState / TopologyRoutePlan projection representations "
+                    "in desktop_projection (the only previous path for routing evidence)"
+                ),
+                description=(
+                    "Multi-model routing decisions (provider selection, fallback switches, "
+                    "tier-1/tier-2 routing) were previously recorded only in "
+                    "ContinuumState / TopologyRoutePlan projections, with no canonical "
+                    "runtime authority equivalent to NetworkTopologyRuntime for the "
+                    "model-routing domain.  This meant routing decisions could not be "
+                    "inspected through OperatorSurface or canonical runtime layers."
+                ),
+                is_resolved=True,
+                resolution_note=(
+                    "PR-515 adds CriticalPathHarness (Layer 15) as the canonical runtime "
+                    "authority for multi-model routing path records.  OpenClawd writes "
+                    "IngressHarnessRecord, RouteSelectionRecord, and ProviderSwitchRecord "
+                    "to the harness ring buffer at _select_multimodal_route() so routing "
+                    "decisions are canonical-runtime-inspectable.  ContinuumState remains "
+                    "a model-provider routing projection but is NOT the sole path for "
+                    "routing evidence.  NO_COMPETING_ROUTING_AUTHORITY_POLICY prevents "
+                    "the harness from becoming a competing router.  Resolves GAP-512-009."
+                ),
+            )
+        )
 
         # CONFLICT-009: Task decomposition authority — canonical TaskGraph
         # vs legacy TaskDecomposer / IntelligentTaskPlanner.
         # RESOLVED in PR-516: LegacySystemDecommission formally retires both
         # legacy paths via CANONICAL_DECOMPOSITION_PATH_POLICY.
-        conflicts.append(AuthorityConflictEntry(
-            conflict_id="CONFLICT-009",
-            runtime_fact="task decomposition / sub-task graph creation",
-            layer_a="core.task_graph.TaskGraph",
-            layer_b=(
-                "galaxy_gateway.task_decomposer.TaskDecomposer and "
-                "IntelligentTaskPlanner (legacy parallel decomposition paths)"
-            ),
-            description=(
-                "TaskDecomposer and IntelligentTaskPlanner create sub-tasks "
-                "independently of the canonical TaskGraph (core.task_graph), "
-                "producing sub-task graphs that are not tracked by "
-                "TaskGraphRuntime.  They represent parallel task-graph "
-                "authorities that can silently bypass the canonical pipeline."
-            ),
-            is_resolved=True,
-            resolution_note=(
-                "PR-516 formally retires TaskDecomposer and IntelligentTaskPlanner "
-                "as primary task-decomposition authorities via the decommission "
-                "catalog.  CANONICAL_DECOMPOSITION_PATH_POLICY sentinel documents "
-                "that all new task splitting must use core.task_graph.TaskGraph.  "
-                "Both paths are retained as compatibility shims only; "
-                "no new primary invocations are permitted."
-            ),
-        ))
+        conflicts.append(
+            AuthorityConflictEntry(
+                conflict_id="CONFLICT-009",
+                runtime_fact="task decomposition / sub-task graph creation",
+                layer_a="core.task_graph.TaskGraph",
+                layer_b=(
+                    "galaxy_gateway.task_decomposer.TaskDecomposer and "
+                    "IntelligentTaskPlanner (legacy parallel decomposition paths)"
+                ),
+                description=(
+                    "TaskDecomposer and IntelligentTaskPlanner create sub-tasks "
+                    "independently of the canonical TaskGraph (core.task_graph), "
+                    "producing sub-task graphs that are not tracked by "
+                    "TaskGraphRuntime.  They represent parallel task-graph "
+                    "authorities that can silently bypass the canonical pipeline."
+                ),
+                is_resolved=True,
+                resolution_note=(
+                    "PR-516 formally retires TaskDecomposer and IntelligentTaskPlanner "
+                    "as primary task-decomposition authorities via the decommission "
+                    "catalog.  CANONICAL_DECOMPOSITION_PATH_POLICY sentinel documents "
+                    "that all new task splitting must use core.task_graph.TaskGraph.  "
+                    "Both paths are retained as compatibility shims only; "
+                    "no new primary invocations are permitted."
+                ),
+            )
+        )
 
         # CONFLICT-010: Projection contract — canonical ProjectionSurfaceBridge
         # vs legacy dashboard-era direct payload contracts.
         # RESOLVED in PR-516: LegacySystemDecommission gates ProjectionEngine
         # and retires dashboard-era direct projection contracts.
-        conflicts.append(AuthorityConflictEntry(
-            conflict_id="CONFLICT-010",
-            runtime_fact="projection payload assembly / runtime snapshot in status board",
-            layer_a="core.projection_surface_bridge.ProjectionSurfaceBridge",
-            layer_b=(
-                "desktop_projection.projection_engine.ProjectionEngine and "
-                "dashboard.backend legacy direct projection contracts"
-            ),
-            description=(
-                "ProjectionEngine and dashboard-era direct projection contracts "
-                "assembled runtime snapshots independently of ProjectionSurfaceBridge, "
-                "creating legacy parallel projection authorities.  "
-                "They could produce runtime views that diverge from the canonical "
-                "bridge-enriched projection, introducing silent stale-state risk."
-            ),
-            is_resolved=True,
-            resolution_note=(
-                "PR-514 wired enrich_runtime_projection() into the main projection "
-                "assembly paths in core/routes/projection.py.  "
-                "PR-516 formally gates ProjectionEngine as a GATED compat adapter "
-                "and retires dashboard-era direct projection contracts via the "
-                "decommission catalog.  CANONICAL_PROJECTION_CONTRACT_POLICY sentinel "
-                "documents that all projection enrichment must flow through "
-                "ProjectionSurfaceBridge."
-            ),
-        ))
+        conflicts.append(
+            AuthorityConflictEntry(
+                conflict_id="CONFLICT-010",
+                runtime_fact="projection payload assembly / runtime snapshot in status board",
+                layer_a="core.projection_surface_bridge.ProjectionSurfaceBridge",
+                layer_b=(
+                    "desktop_projection.projection_engine.ProjectionEngine and "
+                    "dashboard.backend legacy direct projection contracts"
+                ),
+                description=(
+                    "ProjectionEngine and dashboard-era direct projection contracts "
+                    "assembled runtime snapshots independently of ProjectionSurfaceBridge, "
+                    "creating legacy parallel projection authorities.  "
+                    "They could produce runtime views that diverge from the canonical "
+                    "bridge-enriched projection, introducing silent stale-state risk."
+                ),
+                is_resolved=True,
+                resolution_note=(
+                    "PR-514 wired enrich_runtime_projection() into the main projection "
+                    "assembly paths in core/routes/projection.py.  "
+                    "PR-516 formally gates ProjectionEngine as a GATED compat adapter "
+                    "and retires dashboard-era direct projection contracts via the "
+                    "decommission catalog.  CANONICAL_PROJECTION_CONTRACT_POLICY sentinel "
+                    "documents that all projection enrichment must flow through "
+                    "ProjectionSurfaceBridge."
+                ),
+            )
+        )
 
         return conflicts
 
@@ -1174,15 +1192,9 @@ class RuntimeClosureAudit:
         conflicts = self.detect_parallel_truth_paths()
         gaps = self.get_residual_gap_map()
 
-        verified_count = sum(
-            1 for s in layer_statuses if s.status == CLOSURE_STATUS_VERIFIED
-        )
-        missing_count = sum(
-            1 for s in layer_statuses if s.status == CLOSURE_STATUS_MISSING
-        )
-        critical_high_gap_count = sum(
-            1 for g in gaps if g.is_critical_or_high()
-        )
+        verified_count = sum(1 for s in layer_statuses if s.status == CLOSURE_STATUS_VERIFIED)
+        missing_count = sum(1 for s in layer_statuses if s.status == CLOSURE_STATUS_MISSING)
+        critical_high_gap_count = sum(1 for g in gaps if g.is_critical_or_high())
         all_layers_closed = (
             len(layer_statuses) > 0
             and missing_count == 0
@@ -1200,8 +1212,7 @@ class RuntimeClosureAudit:
         )
 
         self._logger.debug(
-            "RuntimeClosureAudit: audit complete — verified=%d missing=%d "
-            "gaps=%d conflicts=%d all_closed=%s",
+            "RuntimeClosureAudit: audit complete — verified=%d missing=%d " "gaps=%d conflicts=%d all_closed=%s",
             verified_count,
             missing_count,
             len(gaps),
@@ -1236,6 +1247,7 @@ def reset_runtime_closure_audit() -> None:
 # ===========================================================================
 # Module-level convenience helpers
 # ===========================================================================
+
 
 def run_closure_audit() -> ClosureAuditSnapshot:
     """Run the full closure audit and return a snapshot.
@@ -1303,12 +1315,11 @@ def persist_conflict_artifacts(
             append_conflict_audit_record,
             get_replay_audit_store,
         )
+
         _store = store or get_replay_audit_store()
         count = 0
         for conflict in conflicts:
-            if append_conflict_audit_record(
-                conflict, audit_run_id=audit_run_id, store=_store
-            ):
+            if append_conflict_audit_record(conflict, audit_run_id=audit_run_id, store=_store):
                 count += 1
         logger.debug(
             "RuntimeClosureAudit: persisted %d/%d conflict artifacts (run=%s)",
@@ -1318,7 +1329,5 @@ def persist_conflict_artifacts(
         )
         return count
     except Exception as exc:  # noqa: BLE001
-        logger.warning(
-            "RuntimeClosureAudit: failed to persist conflict artifacts: %s", exc
-        )
+        logger.warning("RuntimeClosureAudit: failed to persist conflict artifacts: %s", exc)
         return 0

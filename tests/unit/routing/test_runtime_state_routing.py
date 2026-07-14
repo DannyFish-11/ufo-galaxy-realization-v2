@@ -49,10 +49,10 @@ import unittest
 from typing import Any, Dict, Optional
 from unittest.mock import MagicMock, patch
 
-
 # ---------------------------------------------------------------------------
 # Helpers — lightweight DeviceStateSnapshot stand-in
 # ---------------------------------------------------------------------------
+
 
 def _make_snap(
     device_id: str = "dev_test",
@@ -85,6 +85,7 @@ def _make_snap(
 def _make_pool_device(device_id: str):
     """Return a minimal PoolDevice for scheduling tests."""
     from core.device_pool_manager import PoolDevice
+
     return PoolDevice(device_id=device_id, capabilities=[], weight=1.0, capacity=10)
 
 
@@ -212,7 +213,7 @@ class TestAdaptiveSelectionUsesRuntimeState(unittest.TestCase):
         dev_b = _make_pool_device("dev_b")
 
         snap_a = _make_snap("dev_a", offline_queue_depth=15)  # heavily loaded
-        snap_b = _make_snap("dev_b", offline_queue_depth=0)   # idle
+        snap_b = _make_snap("dev_b", offline_queue_depth=0)  # idle
 
         snap_map = {"dev_a": snap_a, "dev_b": snap_b}
 
@@ -231,9 +232,7 @@ class TestAdaptiveSelectionUsesRuntimeState(unittest.TestCase):
         dev_a = _make_pool_device("dev_a")
         dev_b = _make_pool_device("dev_b")
 
-        snap_a = _make_snap(
-            "dev_a", model_ready=True, local_loop_ready=True, llama_cpp_available=True
-        )
+        snap_a = _make_snap("dev_a", model_ready=True, local_loop_ready=True, llama_cpp_available=True)
         snap_b = _make_snap("dev_b")  # no local AI
 
         snap_map = {"dev_a": snap_a, "dev_b": snap_b}
@@ -335,9 +334,7 @@ class TestRuntimeStatePreFilterInSelection(unittest.TestCase):
         dev_blocked = _make_gateway_device("dev_blocked")
         dev_ok = _make_gateway_device("dev_ok")
 
-        snap_blocked = _make_snap(
-            "dev_blocked", pending_first_download=True, current_fallback_tier=None
-        )
+        snap_blocked = _make_snap("dev_blocked", pending_first_download=True, current_fallback_tier=None)
         snap_ok = _make_snap("dev_ok", pending_first_download=False)
 
         result = self._run_select(

@@ -64,21 +64,21 @@ import pytest
 
 try:
     from core.attached_runtime_session_registry import (
+        ATTACHED_RUNTIME_REGISTRY_CONSOLIDATION_PR22_SENTINEL,
+        REGISTRY_ABSENT_ENTRY_PASSES_THROUGH_PR22_POLICY,
+        REGISTRY_IS_AUTHORITATIVE_DISPATCH_GATE_PR22_POLICY,
+        REGISTRY_IS_AUTHORITATIVE_RECONCILIATION_GATE_PR22_POLICY,
+        REGISTRY_IS_AUTHORITATIVE_REUSE_GATE_PR22_POLICY,
+        REGISTRY_KNOWN_NON_ACTIVE_BLOCKS_EXECUTION_PR22_POLICY,
         AttachedSessionRegistry,
+        InvalidationReason,
         RegistryEntryState,
         RegistryTransition,
-        InvalidationReason,
-        register_session,
-        reconnect_session,
         detach_session,
         invalidate_session,
         lookup_active_session,
-        ATTACHED_RUNTIME_REGISTRY_CONSOLIDATION_PR22_SENTINEL,
-        REGISTRY_IS_AUTHORITATIVE_DISPATCH_GATE_PR22_POLICY,
-        REGISTRY_IS_AUTHORITATIVE_REUSE_GATE_PR22_POLICY,
-        REGISTRY_IS_AUTHORITATIVE_RECONCILIATION_GATE_PR22_POLICY,
-        REGISTRY_KNOWN_NON_ACTIVE_BLOCKS_EXECUTION_PR22_POLICY,
-        REGISTRY_ABSENT_ENTRY_PASSES_THROUGH_PR22_POLICY,
+        reconnect_session,
+        register_session,
     )
 
     _REGISTRY_AVAILABLE = True
@@ -87,13 +87,13 @@ except ImportError:
 
 try:
     from core.attached_runtime_reuse_dispatch import (
-        ReuseDispatchResolutionKind,
-        ReuseDispatchResolution,
-        resolve_reuse_dispatch_surface,
-        dispatch_with_reuse_binding,
         REUSE_DISPATCH_PR22_SENTINEL,
-        REUSE_DISPATCH_REGISTRY_GATE_IS_AUTHORITATIVE_PR22_POLICY,
         REUSE_DISPATCH_REGISTRY_BLOCKS_NON_ACTIVE_SESSION_PR22_POLICY,
+        REUSE_DISPATCH_REGISTRY_GATE_IS_AUTHORITATIVE_PR22_POLICY,
+        ReuseDispatchResolution,
+        ReuseDispatchResolutionKind,
+        dispatch_with_reuse_binding,
+        resolve_reuse_dispatch_surface,
     )
 
     _REUSE_DISPATCH_AVAILABLE = True
@@ -102,14 +102,14 @@ except ImportError:
 
 try:
     from core.android_execution_signal_reconciler import (
+        RECONCILER_PR22_SENTINEL,
+        RECONCILER_REGISTRY_BLOCKS_NON_ACTIVE_SESSION_PR22_POLICY,
+        RECONCILER_REGISTRY_GATE_IS_AUTHORITATIVE_PR22_POLICY,
         AndroidExecutionSignalEnvelope,
         AndroidSignalKind,
         AndroidSignalReconcileOutcome,
         reconcile_android_execution_signal,
         reconcile_inbound_message,
-        RECONCILER_PR22_SENTINEL,
-        RECONCILER_REGISTRY_GATE_IS_AUTHORITATIVE_PR22_POLICY,
-        RECONCILER_REGISTRY_BLOCKS_NON_ACTIVE_SESSION_PR22_POLICY,
     )
 
     _RECONCILER_AVAILABLE = True
@@ -118,10 +118,10 @@ except ImportError:
 
 try:
     from core.android_delegated_signal_ingress import (
-        ingest_delegated_execution_signal,
+        INGRESS_REGISTRY_BLOCKS_NON_ACTIVE_SESSION_PR22_POLICY,
         INGRESS_REGISTRY_CONSOLIDATION_PR22_SENTINEL,
         INGRESS_REGISTRY_GATE_IS_AUTHORITATIVE_PR22_POLICY,
-        INGRESS_REGISTRY_BLOCKS_NON_ACTIVE_SESSION_PR22_POLICY,
+        ingest_delegated_execution_signal,
     )
 
     _INGRESS_AVAILABLE = True
@@ -132,25 +132,14 @@ except ImportError:
 # Helpers
 # ---------------------------------------------------------------------------
 
-_SKIP_REGISTRY = pytest.mark.skipif(
-    not _REGISTRY_AVAILABLE, reason="attached_runtime_session_registry unavailable"
-)
-_SKIP_REUSE = pytest.mark.skipif(
-    not _REUSE_DISPATCH_AVAILABLE, reason="attached_runtime_reuse_dispatch unavailable"
-)
+_SKIP_REGISTRY = pytest.mark.skipif(not _REGISTRY_AVAILABLE, reason="attached_runtime_session_registry unavailable")
+_SKIP_REUSE = pytest.mark.skipif(not _REUSE_DISPATCH_AVAILABLE, reason="attached_runtime_reuse_dispatch unavailable")
 _SKIP_RECONCILER = pytest.mark.skipif(
     not _RECONCILER_AVAILABLE, reason="android_execution_signal_reconciler unavailable"
 )
-_SKIP_INGRESS = pytest.mark.skipif(
-    not _INGRESS_AVAILABLE, reason="android_delegated_signal_ingress unavailable"
-)
+_SKIP_INGRESS = pytest.mark.skipif(not _INGRESS_AVAILABLE, reason="android_delegated_signal_ingress unavailable")
 _SKIP_ALL = pytest.mark.skipif(
-    not (
-        _REGISTRY_AVAILABLE
-        and _REUSE_DISPATCH_AVAILABLE
-        and _RECONCILER_AVAILABLE
-        and _INGRESS_AVAILABLE
-    ),
+    not (_REGISTRY_AVAILABLE and _REUSE_DISPATCH_AVAILABLE and _RECONCILER_AVAILABLE and _INGRESS_AVAILABLE),
     reason="one or more PR-22 modules unavailable",
 )
 
@@ -530,8 +519,7 @@ class TestGroupL_DispatchAbsentEntryPasses:
         if result.resolution_kind == ReuseDispatchResolutionKind.rejected:
             # If rejected, it must not be because of the registry gate
             assert "registry gate" not in (result.reject_reason or "").lower(), (
-                f"Registry gate should not have blocked absent session, "
-                f"but got: {result.reject_reason!r}"
+                f"Registry gate should not have blocked absent session, " f"but got: {result.reject_reason!r}"
             )
         # Gate passed through — either no_binding or new_binding or non-registry rejected
 
@@ -828,25 +816,19 @@ class TestGroupY_SupersededSessionConsistency:
         reg_r = self._setup()
         reg_i = self._setup()
 
-        dispatch_result = resolve_reuse_dispatch_surface(
-            "sess-super", "dev-1", registry=reg_d
-        )
+        dispatch_result = resolve_reuse_dispatch_surface("sess-super", "dev-1", registry=reg_d)
         assert dispatch_result.resolution_kind == ReuseDispatchResolutionKind.rejected
 
         envelope = _make_signal_envelope(session_id="sess-super")
         from core.delegated_runtime_execution_tracker import DelegatedExecutionTrackingRuntime
 
         rt = DelegatedExecutionTrackingRuntime()
-        rec_result = reconcile_android_execution_signal(
-            envelope, runtime=rt, registry=reg_r
-        )
+        rec_result = reconcile_android_execution_signal(envelope, runtime=rt, registry=reg_r)
         assert rec_result.was_updated is False
 
         msg = _make_inbound_message(session_id="sess-super")
         rt2 = DelegatedExecutionTrackingRuntime()
-        ing_result = ingest_delegated_execution_signal(
-            msg, runtime=rt2, registry=reg_i
-        )
+        ing_result = ingest_delegated_execution_signal(msg, runtime=rt2, registry=reg_i)
         assert ing_result.was_updated is False
 
 

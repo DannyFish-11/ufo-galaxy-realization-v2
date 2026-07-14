@@ -3,11 +3,11 @@
 import pytest
 
 from core.device_types import (
-    DeviceType,
-    DeviceStatus,
-    resolve_device_type,
-    device_type_to_platform,
     DEVICE_TYPE_TO_AIP,
+    DeviceStatus,
+    DeviceType,
+    device_type_to_platform,
+    resolve_device_type,
 )
 
 
@@ -56,8 +56,15 @@ class TestMappingCompleteness:
     """DEVICE_TYPE_TO_AIP 映射表应覆盖所有主要设备类型"""
 
     def test_major_types_mapped(self):
-        for dt in [DeviceType.ANDROID, DeviceType.IOS, DeviceType.WINDOWS,
-                   DeviceType.MACOS, DeviceType.LINUX, DeviceType.IOT, DeviceType.CLOUD]:
+        for dt in [
+            DeviceType.ANDROID,
+            DeviceType.IOS,
+            DeviceType.WINDOWS,
+            DeviceType.MACOS,
+            DeviceType.LINUX,
+            DeviceType.IOT,
+            DeviceType.CLOUD,
+        ]:
             assert dt in DEVICE_TYPE_TO_AIP, f"{dt} missing from DEVICE_TYPE_TO_AIP"
             assert len(DEVICE_TYPE_TO_AIP[dt]) > 0
 
@@ -66,9 +73,7 @@ class TestMappingCompleteness:
         for dt, aip_types in DEVICE_TYPE_TO_AIP.items():
             for aip_type in aip_types:
                 resolved = resolve_device_type(aip_type.value)
-                assert resolved == dt, (
-                    f"{aip_type.value} resolved to {resolved}, expected {dt}"
-                )
+                assert resolved == dt, f"{aip_type.value} resolved to {resolved}, expected {dt}"
 
 
 class TestDeviceTypeToPlatform:
@@ -76,6 +81,7 @@ class TestDeviceTypeToPlatform:
 
     def test_known_platforms(self):
         from galaxy_gateway.protocol.aip_v3 import DevicePlatform
+
         assert device_type_to_platform(DeviceType.ANDROID) == DevicePlatform.ANDROID
         assert device_type_to_platform(DeviceType.WINDOWS) == DevicePlatform.WINDOWS
         assert device_type_to_platform(DeviceType.IOS) == DevicePlatform.IOS
@@ -83,6 +89,7 @@ class TestDeviceTypeToPlatform:
 
     def test_unknown_returns_unknown_platform(self):
         from galaxy_gateway.protocol.aip_v3 import DevicePlatform
+
         assert device_type_to_platform(DeviceType.BROWSER) == DevicePlatform.UNKNOWN
 
 

@@ -111,30 +111,30 @@ core/task_graph.py — existing DAG engine (not modified).
 from __future__ import annotations
 
 from .merge_status import (
-    MergeStatus,
     MERGE_STATUS_ORDER,
+    MergeStatus,
+    is_successful_outcome,
+    is_terminal_failure,
     merge_status_severity,
     worst_of,
-    is_terminal_failure,
-    is_successful_outcome,
-)
-from .recovery_policy import (
-    RecoveryPosture,
-    POSTURE_DESCRIPTIONS,
-    RecoveryRecommendation,
-    recommend_recovery,
 )
 from .merge_summary import (
-    MergeSummary,
     EMPTY_MERGE_SUMMARY,
+    MergeSummary,
     attach_merge_summary_to_projection,
     get_merge_hints,
 )
+from .recovery_policy import (
+    POSTURE_DESCRIPTIONS,
+    RecoveryPosture,
+    RecoveryRecommendation,
+    recommend_recovery,
+)
 from .result_merge import (
-    merge_result_envelopes,
-    merge_graph_result,
-    merge_dict_results,
     merge_any,
+    merge_dict_results,
+    merge_graph_result,
+    merge_result_envelopes,
 )
 
 __all__ = [

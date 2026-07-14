@@ -149,7 +149,6 @@ from core.delegated_runtime_execution_tracker import (
     reset_execution_tracking_runtime,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -274,33 +273,23 @@ def test_C03_terminal_blocks_can_advance_to():
 
 
 def test_C04_pending_ack_can_advance_to_acknowledged():
-    assert DelegatedExecutionPhase.pending_ack.can_advance_to(
-        DelegatedExecutionPhase.acknowledged
-    )
+    assert DelegatedExecutionPhase.pending_ack.can_advance_to(DelegatedExecutionPhase.acknowledged)
 
 
 def test_C05_acknowledged_can_advance_to_in_progress():
-    assert DelegatedExecutionPhase.acknowledged.can_advance_to(
-        DelegatedExecutionPhase.in_progress
-    )
+    assert DelegatedExecutionPhase.acknowledged.can_advance_to(DelegatedExecutionPhase.in_progress)
 
 
 def test_C06_in_progress_can_advance_to_completed():
-    assert DelegatedExecutionPhase.in_progress.can_advance_to(
-        DelegatedExecutionPhase.completed
-    )
+    assert DelegatedExecutionPhase.in_progress.can_advance_to(DelegatedExecutionPhase.completed)
 
 
 def test_C07_pending_ack_can_advance_to_cancelled():
-    assert DelegatedExecutionPhase.pending_ack.can_advance_to(
-        DelegatedExecutionPhase.cancelled
-    )
+    assert DelegatedExecutionPhase.pending_ack.can_advance_to(DelegatedExecutionPhase.cancelled)
 
 
 def test_C08_in_progress_cannot_regress_to_pending_ack():
-    assert not DelegatedExecutionPhase.in_progress.can_advance_to(
-        DelegatedExecutionPhase.pending_ack
-    )
+    assert not DelegatedExecutionPhase.in_progress.can_advance_to(DelegatedExecutionPhase.pending_ack)
 
 
 # ---------------------------------------------------------------------------
@@ -400,9 +389,7 @@ def test_F02_identity_construction():
 
 
 def test_F03_identity_to_dict():
-    identity = DelegatedExecutionIdentity(
-        tracker_id="t1", session_id="s1", contract_id="c1"
-    )
+    identity = DelegatedExecutionIdentity(tracker_id="t1", session_id="s1", contract_id="c1")
     d = identity.to_dict()
     assert d["tracker_id"] == "t1"
     assert d["session_id"] == "s1"
@@ -467,9 +454,7 @@ def test_G04_ack_to_json():
 
 
 def test_G05_ack_from_dict_roundtrip():
-    ack = DelegatedExecutionAcknowledgment(
-        signal=AcknowledgmentSignal.progress, sequence=2, payload={"x": 1}
-    )
+    ack = DelegatedExecutionAcknowledgment(signal=AcknowledgmentSignal.progress, sequence=2, payload={"x": 1})
     recovered = DelegatedExecutionAcknowledgment.from_dict(ack.to_dict())
     assert recovered.signal == AcknowledgmentSignal.progress
     assert recovered.sequence == 2
@@ -495,9 +480,7 @@ def test_H01_result_defaults():
 
 
 def test_H02_result_construction():
-    result = DelegatedExecutionResult(
-        success=True, result_payload={"answer": 42}, error_detail=""
-    )
+    result = DelegatedExecutionResult(success=True, result_payload={"answer": 42}, error_detail="")
     assert result.success is True
     assert result.result_payload == {"answer": 42}
 
@@ -516,9 +499,7 @@ def test_H04_result_to_json():
 
 
 def test_H05_result_from_dict_roundtrip():
-    result = DelegatedExecutionResult(
-        success=True, result_payload={"k": "v"}, error_detail="", metadata={"m": 1}
-    )
+    result = DelegatedExecutionResult(success=True, result_payload={"k": "v"}, error_detail="", metadata={"m": 1})
     recovered = DelegatedExecutionResult.from_dict(result.to_dict())
     assert recovered.success is True
     assert recovered.result_payload == {"k": "v"}
@@ -747,9 +728,7 @@ def test_K09_runtime_list_all_newest_first():
 
 def test_L01_valid_inputs_phase_pending_ack():
     rt = _fresh_runtime()
-    record = create_execution_tracking_record(
-        session_id="s1", contract_id="c1", runtime=rt
-    )
+    record = create_execution_tracking_record(session_id="s1", contract_id="c1", runtime=rt)
     assert record.phase == DelegatedExecutionPhase.pending_ack
     assert record.is_accepted()
     assert not record.reject_reason
@@ -757,9 +736,7 @@ def test_L01_valid_inputs_phase_pending_ack():
 
 def test_L02_valid_inputs_identity_set():
     rt = _fresh_runtime()
-    record = create_execution_tracking_record(
-        session_id="s1", contract_id="c1", device_id="d1", runtime=rt
-    )
+    record = create_execution_tracking_record(session_id="s1", contract_id="c1", device_id="d1", runtime=rt)
     assert record.identity.session_id == "s1"
     assert record.identity.contract_id == "c1"
     assert record.identity.device_id == "d1"
@@ -767,17 +744,13 @@ def test_L02_valid_inputs_identity_set():
 
 def test_L03_valid_inputs_acks_empty():
     rt = _fresh_runtime()
-    record = create_execution_tracking_record(
-        session_id="s1", contract_id="c1", runtime=rt
-    )
+    record = create_execution_tracking_record(session_id="s1", contract_id="c1", runtime=rt)
     assert record.acknowledgments == []
 
 
 def test_L04_valid_inputs_result_none():
     rt = _fresh_runtime()
-    record = create_execution_tracking_record(
-        session_id="s1", contract_id="c1", runtime=rt
-    )
+    record = create_execution_tracking_record(session_id="s1", contract_id="c1", runtime=rt)
     assert record.result is None
 
 
@@ -788,9 +761,7 @@ def test_L04_valid_inputs_result_none():
 
 def test_M01_empty_session_id_rejected():
     rt = _fresh_runtime()
-    record = create_execution_tracking_record(
-        session_id="", contract_id="c1", runtime=rt
-    )
+    record = create_execution_tracking_record(session_id="", contract_id="c1", runtime=rt)
     assert record.is_rejected()
     assert record.phase == DelegatedExecutionPhase.cancelled
     assert "session_id" in record.reject_reason.lower()
@@ -809,9 +780,7 @@ def test_M02_empty_session_id_persisted():
 
 def test_N01_empty_contract_id_rejected():
     rt = _fresh_runtime()
-    record = create_execution_tracking_record(
-        session_id="s1", contract_id="", runtime=rt
-    )
+    record = create_execution_tracking_record(session_id="s1", contract_id="", runtime=rt)
     assert record.is_rejected()
     assert record.phase == DelegatedExecutionPhase.cancelled
     assert "contract_id" in record.reject_reason.lower()
@@ -830,17 +799,13 @@ def test_N02_empty_contract_id_persisted():
 
 def test_O01_trace_id_auto_generated():
     rt = _fresh_runtime()
-    record = create_execution_tracking_record(
-        session_id="s1", contract_id="c1", trace_id="", runtime=rt
-    )
+    record = create_execution_tracking_record(session_id="s1", contract_id="c1", trace_id="", runtime=rt)
     assert record.identity.trace_id  # non-empty auto-generated UUID
 
 
 def test_O02_trace_id_propagated_when_provided():
     rt = _fresh_runtime()
-    record = create_execution_tracking_record(
-        session_id="s1", contract_id="c1", trace_id="my-trace-id", runtime=rt
-    )
+    record = create_execution_tracking_record(session_id="s1", contract_id="c1", trace_id="my-trace-id", runtime=rt)
     assert record.identity.trace_id == "my-trace-id"
 
 
@@ -851,17 +816,13 @@ def test_O02_trace_id_propagated_when_provided():
 
 def test_P01_tracker_id_override_honoured():
     rt = _fresh_runtime()
-    record = create_execution_tracking_record(
-        session_id="s1", contract_id="c1", tracker_id="fixed-id", runtime=rt
-    )
+    record = create_execution_tracking_record(session_id="s1", contract_id="c1", tracker_id="fixed-id", runtime=rt)
     assert record.identity.tracker_id == "fixed-id"
 
 
 def test_P02_tracker_id_auto_generated_when_absent():
     rt = _fresh_runtime()
-    record = create_execution_tracking_record(
-        session_id="s1", contract_id="c1", runtime=rt
-    )
+    record = create_execution_tracking_record(session_id="s1", contract_id="c1", runtime=rt)
     assert record.identity.tracker_id
 
 
@@ -961,9 +922,7 @@ def test_V01_progress_signal_advances_to_in_progress():
 def test_W01_partial_result_advances_to_in_progress():
     rt = _fresh_runtime()
     record = _make_record(runtime=rt)
-    updated = apply_acknowledgment_signal(
-        record, AcknowledgmentSignal.partial_result, runtime=rt
-    )
+    updated = apply_acknowledgment_signal(record, AcknowledgmentSignal.partial_result, runtime=rt)
     assert updated.phase == DelegatedExecutionPhase.in_progress
     assert not updated.phase.is_terminal()
 
@@ -971,9 +930,7 @@ def test_W01_partial_result_advances_to_in_progress():
 def test_X01_final_result_signal_advances_to_completed():
     rt = _fresh_runtime()
     record = _make_record(runtime=rt)
-    updated = apply_acknowledgment_signal(
-        record, AcknowledgmentSignal.final_result, runtime=rt
-    )
+    updated = apply_acknowledgment_signal(record, AcknowledgmentSignal.final_result, runtime=rt)
     assert updated.phase == DelegatedExecutionPhase.completed
 
 
@@ -994,9 +951,7 @@ def test_Z01_timeout_signal_advances_to_timed_out():
 def test_AA01_cancelled_signal_advances_to_cancelled():
     rt = _fresh_runtime()
     record = _make_record(runtime=rt)
-    updated = apply_acknowledgment_signal(
-        record, AcknowledgmentSignal.cancelled, runtime=rt
-    )
+    updated = apply_acknowledgment_signal(record, AcknowledgmentSignal.cancelled, runtime=rt)
     assert updated.phase == DelegatedExecutionPhase.cancelled
 
 
@@ -1037,9 +992,7 @@ def test_AC01_sequence_increments_monotonically():
 def test_AD01_payload_stored_in_ack():
     rt = _fresh_runtime()
     record = _make_record(runtime=rt)
-    updated = apply_acknowledgment_signal(
-        record, AcknowledgmentSignal.progress, payload={"pct": 75}, runtime=rt
-    )
+    updated = apply_acknowledgment_signal(record, AcknowledgmentSignal.progress, payload={"pct": 75}, runtime=rt)
     assert updated.acknowledgments[-1].payload == {"pct": 75}
 
 
@@ -1117,9 +1070,7 @@ def test_AJ01_apply_result_persists_to_runtime():
 
 def test_AK01_record_persists():
     rt = _fresh_runtime()
-    record = DelegatedExecutionTrackingRecord(
-        identity=DelegatedExecutionIdentity(session_id="s1", contract_id="c1")
-    )
+    record = DelegatedExecutionTrackingRecord(identity=DelegatedExecutionIdentity(session_id="s1", contract_id="c1"))
     record_execution_tracking(record, runtime=rt)
     assert rt.size == 1
 
@@ -1165,9 +1116,7 @@ def test_AO01_list_active_empty_when_all_terminal():
     for i in range(3):
         rt.push(
             DelegatedExecutionTrackingRecord(
-                identity=DelegatedExecutionIdentity(
-                    session_id=f"s{i}", contract_id=f"c{i}"
-                ),
+                identity=DelegatedExecutionIdentity(session_id=f"s{i}", contract_id=f"c{i}"),
                 phase=DelegatedExecutionPhase.failed,
             )
         )
@@ -1290,9 +1239,7 @@ def test_AV01_ring_buffer_evicts_oldest():
     for i in range(129):
         rt.push(
             DelegatedExecutionTrackingRecord(
-                identity=DelegatedExecutionIdentity(
-                    tracker_id=f"t{i}", session_id=f"s{i}", contract_id=f"c{i}"
-                )
+                identity=DelegatedExecutionIdentity(tracker_id=f"t{i}", session_id=f"s{i}", contract_id=f"c{i}")
             )
         )
     assert rt.size == 128
@@ -1383,36 +1330,24 @@ def test_BB01_terminal_cannot_advance():
 
 
 def test_BC01_pending_ack_to_acknowledged():
-    assert DelegatedExecutionPhase.pending_ack.can_advance_to(
-        DelegatedExecutionPhase.acknowledged
-    )
+    assert DelegatedExecutionPhase.pending_ack.can_advance_to(DelegatedExecutionPhase.acknowledged)
 
 
 def test_BD01_acknowledged_to_in_progress():
-    assert DelegatedExecutionPhase.acknowledged.can_advance_to(
-        DelegatedExecutionPhase.in_progress
-    )
+    assert DelegatedExecutionPhase.acknowledged.can_advance_to(DelegatedExecutionPhase.in_progress)
 
 
 def test_BE01_in_progress_to_completed():
-    assert DelegatedExecutionPhase.in_progress.can_advance_to(
-        DelegatedExecutionPhase.completed
-    )
+    assert DelegatedExecutionPhase.in_progress.can_advance_to(DelegatedExecutionPhase.completed)
 
 
 def test_BF01_pending_ack_to_cancelled():
-    assert DelegatedExecutionPhase.pending_ack.can_advance_to(
-        DelegatedExecutionPhase.cancelled
-    )
+    assert DelegatedExecutionPhase.pending_ack.can_advance_to(DelegatedExecutionPhase.cancelled)
 
 
 def test_BG01_in_progress_cannot_regress():
-    assert not DelegatedExecutionPhase.in_progress.can_advance_to(
-        DelegatedExecutionPhase.pending_ack
-    )
-    assert not DelegatedExecutionPhase.in_progress.can_advance_to(
-        DelegatedExecutionPhase.acknowledged
-    )
+    assert not DelegatedExecutionPhase.in_progress.can_advance_to(DelegatedExecutionPhase.pending_ack)
+    assert not DelegatedExecutionPhase.in_progress.can_advance_to(DelegatedExecutionPhase.acknowledged)
 
 
 # ---------------------------------------------------------------------------
@@ -1429,9 +1364,7 @@ def test_BH01_is_accepted_true_when_anchored_no_reject():
 
 
 def test_BI01_is_accepted_false_with_empty_session():
-    record = DelegatedExecutionTrackingRecord(
-        identity=DelegatedExecutionIdentity(session_id="", contract_id="c1")
-    )
+    record = DelegatedExecutionTrackingRecord(identity=DelegatedExecutionIdentity(session_id="", contract_id="c1"))
     assert not record.is_accepted()
 
 
@@ -1557,9 +1490,7 @@ def test_BV01_end_to_end_lifecycle():
     record = apply_acknowledgment_signal(record, AcknowledgmentSignal.ack, runtime=rt)
     assert record.phase == DelegatedExecutionPhase.acknowledged
 
-    record = apply_acknowledgment_signal(
-        record, AcknowledgmentSignal.progress, payload={"pct": 50}, runtime=rt
-    )
+    record = apply_acknowledgment_signal(record, AcknowledgmentSignal.progress, payload={"pct": 50}, runtime=rt)
     assert record.phase == DelegatedExecutionPhase.in_progress
 
     result = DelegatedExecutionResult(success=True, result_payload={"output": "done"})
@@ -1702,9 +1633,7 @@ def test_CH01_list_active_excludes_all_terminal_phases():
     ):
         rt.push(
             DelegatedExecutionTrackingRecord(
-                identity=DelegatedExecutionIdentity(
-                    session_id=f"s-{phase.value}", contract_id=f"c-{phase.value}"
-                ),
+                identity=DelegatedExecutionIdentity(session_id=f"s-{phase.value}", contract_id=f"c-{phase.value}"),
                 phase=phase,
             )
         )
@@ -1736,10 +1665,7 @@ def test_CJ01_ack_signal_from_string_unknown():
 
 
 def test_CK01_phase_from_string_unknown():
-    assert (
-        DelegatedExecutionPhase.from_string("does_not_exist")
-        == DelegatedExecutionPhase.pending_ack
-    )
+    assert DelegatedExecutionPhase.from_string("does_not_exist") == DelegatedExecutionPhase.pending_ack
 
 
 # ---------------------------------------------------------------------------
@@ -1749,12 +1675,8 @@ def test_CK01_phase_from_string_unknown():
 
 def test_CL01_get_latest_for_contract():
     rt = _fresh_runtime()
-    create_execution_tracking_record(
-        session_id="s1", contract_id="c-target", runtime=rt
-    )
-    create_execution_tracking_record(
-        session_id="s2", contract_id="c-other", runtime=rt
-    )
+    create_execution_tracking_record(session_id="s1", contract_id="c-target", runtime=rt)
+    create_execution_tracking_record(session_id="s2", contract_id="c-other", runtime=rt)
     found = rt.get_latest_for_contract("c-target")
     assert found is not None
     assert found.identity.contract_id == "c-target"
@@ -1799,9 +1721,7 @@ def test_CO01_multiple_signals_accumulate():
     record = _make_record(runtime=rt)
     r1 = apply_acknowledgment_signal(record, AcknowledgmentSignal.ack, runtime=rt)
     r2 = apply_acknowledgment_signal(r1, AcknowledgmentSignal.progress, runtime=rt)
-    r3 = apply_acknowledgment_signal(
-        r2, AcknowledgmentSignal.partial_result, payload={"part": 1}, runtime=rt
-    )
+    r3 = apply_acknowledgment_signal(r2, AcknowledgmentSignal.partial_result, payload={"part": 1}, runtime=rt)
     assert len(r3.acknowledgments) == 3
     assert r3.acknowledgments[0].signal == AcknowledgmentSignal.ack
     assert r3.acknowledgments[1].signal == AcknowledgmentSignal.progress

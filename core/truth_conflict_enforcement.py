@@ -417,12 +417,8 @@ class TruthConflictEnforcementSnapshot:
             "generated_at": self.generated_at,
             "total_surfaces": self.total_surfaces,
             "surfaces_with_declared_authority": self.surfaces_with_declared_authority,
-            "parallel_authority_violations_detected": (
-                self.parallel_authority_violations_detected
-            ),
-            "compat_write_ordering_violations_detected": (
-                self.compat_write_ordering_violations_detected
-            ),
+            "parallel_authority_violations_detected": (self.parallel_authority_violations_detected),
+            "compat_write_ordering_violations_detected": (self.compat_write_ordering_violations_detected),
             "truth_regression_events_detected": self.truth_regression_events_detected,
             "convergence_healthy": self.convergence_healthy,
             "policy_sentinels": list(self.policy_sentinels),
@@ -440,18 +436,14 @@ _TRUTH_OWNERSHIP_REGISTRY: List[TruthOwnershipRecord] = [
     # -------------------------------------------------------------------------
     TruthOwnershipRecord(
         surface=TruthSurface.device,
-        canonical_write_authority=(
-            "core.unified.device_manager.UnifiedDeviceManager"
-        ),
+        canonical_write_authority=("core.unified.device_manager.UnifiedDeviceManager"),
         allowed_compat_mirror_paths=[
             "core.routes.devices (COMPAT_MIRROR_WRITE after UDM write)",
             "core.routes.compat (COMPAT_MIRROR_WRITE after UDM write)",
-            "core.repo_coordinator.RepoCoordinator.register_android_device "
-            "(delegates canonical write to UDM first)",
+            "core.repo_coordinator.RepoCoordinator.register_android_device " "(delegates canonical write to UDM first)",
         ],
         prohibited_write_paths=[
-            "core.routes._shared.registered_devices (compat cache — mirror-only, "
-            "must not be primary write source)",
+            "core.routes._shared.registered_devices (compat cache — mirror-only, " "must not be primary write source)",
             "galaxy_gateway.orchestrator.task_orchestrator (legacy orchestrator — "
             "must not write device truth directly)",
             "core.device_participation (enrichment-only — must not write "
@@ -475,20 +467,17 @@ _TRUTH_OWNERSHIP_REGISTRY: List[TruthOwnershipRecord] = [
     TruthOwnershipRecord(
         surface=TruthSurface.task,
         canonical_write_authority=(
-            "core.canonical_task.CanonicalTask / "
-            "core.task_graph_runtime.CanonicalTaskRuntime"
+            "core.canonical_task.CanonicalTask / " "core.task_graph_runtime.CanonicalTaskRuntime"
         ),
         allowed_compat_mirror_paths=[
-            "core.canonical_task_dispatch_chain.CanonicalTaskDispatchChain "
-            "(dispatches through CanonicalTask)",
+            "core.canonical_task_dispatch_chain.CanonicalTaskDispatchChain " "(dispatches through CanonicalTask)",
             "core.command_router.CommandRouter.route_envelope() "
             "(canonical task ingress — creates CanonicalTask at boundary)",
         ],
         prohibited_write_paths=[
             "core.routes._shared.task_queue (compat routing only — must not "
             "be used as a truth source for task state)",
-            "galaxy_gateway.task_router.TaskRouter (retired — must not write "
-            "task truth; INV-001 enforcement)",
+            "galaxy_gateway.task_router.TaskRouter (retired — must not write " "task truth; INV-001 enforcement)",
             "legacy task status mutation outside CanonicalTaskRuntime",
         ],
         reviewer_verification=(
@@ -506,21 +495,17 @@ _TRUTH_OWNERSHIP_REGISTRY: List[TruthOwnershipRecord] = [
     # -------------------------------------------------------------------------
     TruthOwnershipRecord(
         surface=TruthSurface.session,
-        canonical_write_authority=(
-            "core.canonical_session_truth.CanonicalSessionTruthRuntime"
-        ),
+        canonical_write_authority=("core.canonical_session_truth.CanonicalSessionTruthRuntime"),
         allowed_compat_mirror_paths=[
             "core.attached_runtime_session.AttachedRuntimeSession "
             "(canonical session lifecycle — write-through to CanonicalSessionTruthRuntime)",
-            "core.hybrid_orchestration_continuity "
-            "(continuity writes go through CanonicalSessionTruthRuntime)",
+            "core.hybrid_orchestration_continuity " "(continuity writes go through CanonicalSessionTruthRuntime)",
         ],
         prohibited_write_paths=[
             "Stale session context writes that bypass AttachedSessionRegistry "
             "(INFL-007 / INV-003 enforcement — stale context must not alter "
             "session state transitions)",
-            "Legacy session store writes that do not route through "
-            "CanonicalSessionTruthRuntime",
+            "Legacy session store writes that do not route through " "CanonicalSessionTruthRuntime",
         ],
         reviewer_verification=(
             "Verify that record_session_truth() is the only path for writing "
@@ -638,9 +623,7 @@ def assert_canonical_write_precedes_compat_write(
         Only when ``strict=True`` and ``canonical_write_confirmed=False``.
     """
     ownership = get_write_authority_for_surface(surface)
-    canonical_authority = (
-        ownership.canonical_write_authority if ownership else "<unknown>"
-    )
+    canonical_authority = ownership.canonical_write_authority if ownership else "<unknown>"
 
     if canonical_write_confirmed:
         msg = (
@@ -746,8 +729,7 @@ def assert_no_parallel_write_authority(
     # Check if writer is canonical authority.
     if writer_module in ownership.canonical_write_authority:
         msg = (
-            f"TRUTH_CONFLICT_ENFORCEMENT [{surface.value}]: "
-            f"canonical write authority confirmed: {writer_module!r}."
+            f"TRUTH_CONFLICT_ENFORCEMENT [{surface.value}]: " f"canonical write authority confirmed: {writer_module!r}."
         )
         logger.debug(msg)
         record = TruthConflictRecord(
@@ -761,10 +743,7 @@ def assert_no_parallel_write_authority(
         return record
 
     # Check if writer is an explicitly allowed compat mirror path.
-    is_allowed_compat = any(
-        writer_module in allowed_path
-        for allowed_path in ownership.allowed_compat_mirror_paths
-    )
+    is_allowed_compat = any(writer_module in allowed_path for allowed_path in ownership.allowed_compat_mirror_paths)
     if is_allowed_compat:
         msg = (
             f"TRUTH_CONFLICT_ENFORCEMENT [{surface.value}]: "
@@ -782,10 +761,7 @@ def assert_no_parallel_write_authority(
         return record
 
     # Check if writer is in the prohibited paths list.
-    is_prohibited = any(
-        writer_module in prohibited_path
-        for prohibited_path in ownership.prohibited_write_paths
-    )
+    is_prohibited = any(writer_module in prohibited_path for prohibited_path in ownership.prohibited_write_paths)
     if is_prohibited:
         msg = (
             f"TRUTH_CONFLICT_ENFORCEMENT [{surface.value}] "
@@ -897,14 +873,10 @@ def check_compat_write_is_mirror_only(
         _record_conflict(record)
         return record
 
-    is_allowed = any(
-        compat_path in allowed_path
-        for allowed_path in ownership.allowed_compat_mirror_paths
-    )
+    is_allowed = any(compat_path in allowed_path for allowed_path in ownership.allowed_compat_mirror_paths)
     if is_allowed:
         msg = (
-            f"TRUTH_CONFLICT_ENFORCEMENT [{surface.value}]: "
-            f"compat write confirmed as mirror-only: {compat_path!r}."
+            f"TRUTH_CONFLICT_ENFORCEMENT [{surface.value}]: " f"compat write confirmed as mirror-only: {compat_path!r}."
         )
         logger.debug(msg)
         record = TruthConflictRecord(
@@ -930,8 +902,7 @@ def check_compat_write_is_mirror_only(
         "Violates COMPAT_TRUTH_WRITE_MUST_BE_MIRROR_ONLY_POLICY."
     )
     logger.warning(
-        "TRUTH_CONFLICT_RELAPSE::%s::COMPAT_WRITE_NOT_MIRROR_ONLY "
-        "compat_path=%r context=%r",
+        "TRUTH_CONFLICT_RELAPSE::%s::COMPAT_WRITE_NOT_MIRROR_ONLY " "compat_path=%r context=%r",
         surface.value,
         compat_path,
         context,
@@ -967,33 +938,16 @@ def build_truth_conflict_enforcement_snapshot() -> TruthConflictEnforcementSnaps
     registry = _TRUTH_OWNERSHIP_REGISTRY
     recent = _get_recent_conflicts()
 
-    parallel_violations = sum(
-        1 for r in recent
-        if r.verdict in (
-            TruthConflictVerdict.PARALLEL_AUTHORITY_DETECTED,
-        )
-    )
-    ordering_violations = sum(
-        1 for r in recent
-        if r.verdict == TruthConflictVerdict.CANONICAL_WRITE_MISSING
-    )
-    regression_events = sum(
-        1 for r in recent
-        if r.verdict == TruthConflictVerdict.TRUTH_REGRESSION_DETECTED
-    )
+    parallel_violations = sum(1 for r in recent if r.verdict in (TruthConflictVerdict.PARALLEL_AUTHORITY_DETECTED,))
+    ordering_violations = sum(1 for r in recent if r.verdict == TruthConflictVerdict.CANONICAL_WRITE_MISSING)
+    regression_events = sum(1 for r in recent if r.verdict == TruthConflictVerdict.TRUTH_REGRESSION_DETECTED)
 
-    convergence_healthy = (
-        parallel_violations == 0
-        and ordering_violations == 0
-        and regression_events == 0
-    )
+    convergence_healthy = parallel_violations == 0 and ordering_violations == 0 and regression_events == 0
 
     return TruthConflictEnforcementSnapshot(
         generated_at=time.time(),
         total_surfaces=len(registry),
-        surfaces_with_declared_authority=sum(
-            1 for r in registry if r.canonical_write_authority
-        ),
+        surfaces_with_declared_authority=sum(1 for r in registry if r.canonical_write_authority),
         parallel_authority_violations_detected=parallel_violations,
         compat_write_ordering_violations_detected=ordering_violations,
         truth_regression_events_detected=regression_events,

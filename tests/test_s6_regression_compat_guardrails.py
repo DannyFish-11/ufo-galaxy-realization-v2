@@ -88,17 +88,13 @@ class TestLegacyV1ToV3Contract:
 
     def test_v1_agent_register_alias_becomes_device_register(self):
         """v1 'agent_register' alias → MessageType.DEVICE_REGISTER."""
-        msg = parse_message_compat(
-            copy.deepcopy(LEGACY_V1["device_register_alias_agent_register"])
-        )
+        msg = parse_message_compat(copy.deepcopy(LEGACY_V1["device_register_alias_agent_register"]))
         assert msg.type == MessageType.DEVICE_REGISTER
         assert msg.version.startswith("3")
 
     def test_v1_registration_alias_becomes_device_register(self):
         """v1 'registration' alias → MessageType.DEVICE_REGISTER."""
-        msg = parse_message_compat(
-            copy.deepcopy(LEGACY_V1["device_register_alias_registration"])
-        )
+        msg = parse_message_compat(copy.deepcopy(LEGACY_V1["device_register_alias_registration"]))
         assert msg.type == MessageType.DEVICE_REGISTER
 
     # --- heartbeat ---------------------------------------------------------
@@ -113,9 +109,7 @@ class TestLegacyV1ToV3Contract:
 
     def test_v1_device_heartbeat_alias_normalised(self):
         """v1 'device_heartbeat' alias → MessageType.DEVICE_HEARTBEAT."""
-        msg = parse_message_compat(
-            copy.deepcopy(LEGACY_V1["heartbeat_alias_device_heartbeat"])
-        )
+        msg = parse_message_compat(copy.deepcopy(LEGACY_V1["heartbeat_alias_device_heartbeat"]))
         assert msg.type == MessageType.DEVICE_HEARTBEAT
 
     # --- capability_report -------------------------------------------------
@@ -142,9 +136,7 @@ class TestLegacyV1ToV3Contract:
 
     def test_v1_task_execute_maps_to_task_submit(self):
         """v1 'task_execute' → MessageType.TASK_SUBMIT after compat."""
-        msg = parse_message_compat(
-            copy.deepcopy(LEGACY_V1["task_assign_via_task_execute"])
-        )
+        msg = parse_message_compat(copy.deepcopy(LEGACY_V1["task_assign_via_task_execute"]))
         assert msg.version.startswith("3")
         assert msg.type == MessageType.TASK_SUBMIT
         assert msg.device_id == "v1-dev-030"
@@ -167,9 +159,7 @@ class TestLegacyV1ToV3Contract:
 
     def test_v1_response_alias_maps_to_command_result_type(self):
         """v1 'response' alias → MessageType.COMMAND_RESULT after compat."""
-        msg = parse_message_compat(
-            copy.deepcopy(LEGACY_V1["command_result_alias_response"])
-        )
+        msg = parse_message_compat(copy.deepcopy(LEGACY_V1["command_result_alias_response"]))
         assert msg.version.startswith("3")
         assert msg.type == MessageType.COMMAND_RESULT
 
@@ -177,7 +167,7 @@ class TestLegacyV1ToV3Contract:
 
     def test_v1_device_id_defaults_to_unknown_when_absent(self):
         """compat injects device_id='unknown' when it is missing from a v1 message."""
-        raw = {"type": "register"}   # no device_id
+        raw = {"type": "register"}  # no device_id
         msg = parse_message_compat(raw)
         assert msg.device_id == "unknown"
 
@@ -192,6 +182,7 @@ class TestLegacyV1ToV3Contract:
     def test_v1_json_string_accepted(self):
         """parse_message_compat accepts a raw JSON string as well as a dict."""
         import json
+
         raw_str = json.dumps({"type": "heartbeat", "device_id": "v1-str-001"})
         msg = parse_message_compat(raw_str)
         assert msg.type == MessageType.DEVICE_HEARTBEAT
@@ -330,9 +321,7 @@ class TestNativeV3Regression:
         """All native v3 fixtures produce msg.version == '3.0'."""
         for key, raw in NATIVE_V3.items():
             msg = parse_message_compat(copy.deepcopy(raw))
-            assert msg.version == "3.0", (
-                f"fixture '{key}': expected version='3.0', got {msg.version!r}"
-            )
+            assert msg.version == "3.0", f"fixture '{key}': expected version='3.0', got {msg.version!r}"
 
     def test_v3_device_register_produces_stable_type_value(self):
         """v3 device_register type value is the stable string 'device_register'."""
@@ -449,6 +438,7 @@ class TestNegativeAdapterDirectLegacy:
     @pytest.fixture()
     def adapter(self):
         from unittest.mock import AsyncMock, MagicMock
+
         adb = MagicMock()
         adb.shell = AsyncMock(return_value="ok")
         adb.pull = AsyncMock(return_value="ok")
@@ -577,6 +567,7 @@ class TestNormaliseLegacyPayloadHelper:
     def test_american_spelling_alias_works(self):
         """normalize_legacy_payload (American spelling) is identical in behaviour."""
         from galaxy_gateway.protocol.compat import normalize_legacy_payload
+
         raw = {"message_type": "heartbeat", "device_id": "alias-dev"}
         out = normalize_legacy_payload(raw)
         assert out["type"] == "heartbeat"
@@ -599,6 +590,7 @@ class TestE2ESmokeAllPayloadTypes:
     @pytest.fixture()
     def adapter(self):
         from unittest.mock import AsyncMock, MagicMock
+
         adb = MagicMock()
         adb.shell = AsyncMock(return_value="ok")
         adb.pull = AsyncMock(return_value="ok")

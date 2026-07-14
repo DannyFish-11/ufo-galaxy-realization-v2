@@ -44,9 +44,7 @@ def test_role_registry_covers_all_declared_roles() -> None:
 
 
 def test_mainline_surfaces_remain_authorities() -> None:
-    mainline = get_surfaces_by_peripheral_role(
-        PeripheralCapabilityRole.runtime_mainline_authority
-    )
+    mainline = get_surfaces_by_peripheral_role(PeripheralCapabilityRole.runtime_mainline_authority)
     module_paths = {surface.module_path for surface in mainline}
     assert "core.desktop_presence_runtime" in module_paths
     assert "core.openclawd" in module_paths
@@ -56,12 +54,8 @@ def test_mainline_surfaces_remain_authorities() -> None:
 
 
 def test_specialists_as_tools_and_peripheral_ingress_are_not_parallel_control() -> None:
-    specialists = get_surfaces_by_peripheral_role(
-        PeripheralCapabilityRole.specialists_as_tools_sublayer
-    )
-    ingress = get_surfaces_by_peripheral_role(
-        PeripheralCapabilityRole.peripheral_capability_ingress
-    )
+    specialists = get_surfaces_by_peripheral_role(PeripheralCapabilityRole.specialists_as_tools_sublayer)
+    ingress = get_surfaces_by_peripheral_role(PeripheralCapabilityRole.peripheral_capability_ingress)
     assert any(surface.module_path == "core.agent.kernel" for surface in specialists)
     assert any(surface.module_path == "core.multimodal.ingest_runtime" for surface in ingress)
     assert any(surface.module_path == "core.continuation_rebind_registry" for surface in ingress)
@@ -70,9 +64,7 @@ def test_specialists_as_tools_and_peripheral_ingress_are_not_parallel_control() 
 
 
 def test_projection_operator_surfaces_remain_consumers() -> None:
-    projection = get_surfaces_by_peripheral_role(
-        PeripheralCapabilityRole.outward_projection_operator_surface
-    )
+    projection = get_surfaces_by_peripheral_role(PeripheralCapabilityRole.outward_projection_operator_surface)
     module_paths = {surface.module_path for surface in projection}
     assert "core.routes.projection" in module_paths
     assert "core.pr4_operator_action_governance" in module_paths
@@ -110,22 +102,10 @@ def test_snapshot_exposes_role_counts_and_android_link_surfaces() -> None:
 def test_canonical_execution_chain_marks_peripheral_ingress_side_paths() -> None:
     from core.canonical_execution_chain import SIDE_PATH_MODULE_REGISTRY
 
-    assert (
-        SIDE_PATH_MODULE_REGISTRY["core.multimodal.ingest_runtime"]
-        == "peripheral_multimodal_ingress_shell_adapter"
-    )
-    assert (
-        SIDE_PATH_MODULE_REGISTRY["core.multimodal.ingress_bus"]
-        == "peripheral_multimodal_ingress_transport"
-    )
-    assert (
-        SIDE_PATH_MODULE_REGISTRY["core.continuation_rebind_registry"]
-        == "continuation_rebind_ingress_adapter"
-    )
-    assert (
-        SIDE_PATH_MODULE_REGISTRY["galaxy_gateway.android_bridge"]
-        == "android_protocol_handoff_ingress_adapter"
-    )
+    assert SIDE_PATH_MODULE_REGISTRY["core.multimodal.ingest_runtime"] == "peripheral_multimodal_ingress_shell_adapter"
+    assert SIDE_PATH_MODULE_REGISTRY["core.multimodal.ingress_bus"] == "peripheral_multimodal_ingress_transport"
+    assert SIDE_PATH_MODULE_REGISTRY["core.continuation_rebind_registry"] == "continuation_rebind_ingress_adapter"
+    assert SIDE_PATH_MODULE_REGISTRY["galaxy_gateway.android_bridge"] == "android_protocol_handoff_ingress_adapter"
 
 
 def test_capability_registry_annotations_include_ingress_boundary_contract() -> None:
@@ -148,9 +128,7 @@ def test_capability_registry_annotations_include_ingress_boundary_contract() -> 
     contract = stored.metadata.get("ingress_boundary_contract", {}) if stored.metadata else {}
     assert contract.get("role") == "capability_ingress_surface"
     assert contract.get("may_not_claim_runtime_authority") is True
-    assert "galaxy_gateway.device_router.DeviceRouter" in contract.get(
-        "runtime_mainline_authority", []
-    )
+    assert "galaxy_gateway.device_router.DeviceRouter" in contract.get("runtime_mainline_authority", [])
     registry.eject(item_name)
 
 

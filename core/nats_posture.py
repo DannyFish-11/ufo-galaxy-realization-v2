@@ -7,6 +7,7 @@ Canonical runtime posture policy for NATS.
 from __future__ import annotations
 
 import logging  # auto: ensure module logger is defined
+
 logger = logging.getLogger(__name__)
 
 
@@ -41,11 +42,7 @@ def evaluate_nats_posture() -> Dict[str, Any]:
 
     fabric = resolve_fabric_config()
     required = bool(fabric.nats_required)
-    posture = (
-        NATS_POSTURE_PRODUCTION_REQUIRED
-        if required
-        else NATS_POSTURE_DEVELOPMENT_ALLOWED_DEGRADED
-    )
+    posture = NATS_POSTURE_PRODUCTION_REQUIRED if required else NATS_POSTURE_DEVELOPMENT_ALLOWED_DEGRADED
 
     bus_stats: Dict[str, Any] = {}
     connected = False
@@ -68,16 +65,18 @@ def evaluate_nats_posture() -> Dict[str, Any]:
     violation_reason = "" if assertion_ok else "required_nats_unreachable"
 
     result = build_default_posture_snapshot()
-    result.update({
-        "posture": posture,
-        "required": required,
-        "system_mode": fabric.mode.value,
-        "nats_url": fabric.nats_url,
-        "connected": connected,
-        "noop_mode": noop_mode,
-        "assertion_ok": assertion_ok,
-        "violation_reason": violation_reason,
-        "bus": bus_stats,
-        "bus_error": bus_error,
-    })
+    result.update(
+        {
+            "posture": posture,
+            "required": required,
+            "system_mode": fabric.mode.value,
+            "nats_url": fabric.nats_url,
+            "connected": connected,
+            "noop_mode": noop_mode,
+            "assertion_ok": assertion_ok,
+            "violation_reason": violation_reason,
+            "bus": bus_stats,
+            "bus_error": bus_error,
+        }
+    )
     return result

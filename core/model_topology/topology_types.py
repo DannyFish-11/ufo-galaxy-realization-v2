@@ -29,7 +29,6 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import List, Optional
 
-
 # ---------------------------------------------------------------------------
 # Enumerations
 # ---------------------------------------------------------------------------
@@ -40,13 +39,14 @@ class ProviderCategory(str, Enum):
     categories (``direct_models``, ``oneapi``, ``tools``) and adding new ones
     needed for topology reasoning.
     """
-    DIRECT = "direct_models"    # API key → provider's own endpoint
-    ONEAPI = "oneapi"           # Routed through a OneAPI aggregator node
-    TOOLS = "tools"             # Tool/service nodes (OCR, search, DB, …)
+
+    DIRECT = "direct_models"  # API key → provider's own endpoint
+    ONEAPI = "oneapi"  # Routed through a OneAPI aggregator node
+    TOOLS = "tools"  # Tool/service nodes (OCR, search, DB, …)
     NODE_BACKED = "node_backed"  # Galaxy node that wraps an LLM service
-    LOCAL = "local"             # Locally-running model (Ollama, vLLM, …)
-    REMOTE = "remote"           # Remote/third-party endpoint not in the above
-    UNKNOWN = "unknown"         # Fallback when category cannot be determined
+    LOCAL = "local"  # Locally-running model (Ollama, vLLM, …)
+    REMOTE = "remote"  # Remote/third-party endpoint not in the above
+    UNKNOWN = "unknown"  # Fallback when category cannot be determined
 
 
 class TopologyRole(str, Enum):
@@ -54,13 +54,14 @@ class TopologyRole(str, Enum):
     provider/model in the V2 supply graph.  These are hints only; the runtime
     routing layer will weight them against live telemetry and tri-state phase.
     """
-    MULTIMODAL_CORE = "multimodal_core"   # Preferred primary supply; native multi-modal
-    REASONING = "reasoning"               # Slow, deep-reasoning tasks
-    EXECUTION = "execution"               # Fast, action-oriented tasks
-    MEMORY = "memory"                     # Context compression / long-term memory
-    ROUTING = "routing"                   # Meta-routing / arbiter models
-    CROSS_DEVICE = "cross_device"         # Cross-device coordination
-    GENERAL = "general"                   # No strong role preference
+
+    MULTIMODAL_CORE = "multimodal_core"  # Preferred primary supply; native multi-modal
+    REASONING = "reasoning"  # Slow, deep-reasoning tasks
+    EXECUTION = "execution"  # Fast, action-oriented tasks
+    MEMORY = "memory"  # Context compression / long-term memory
+    ROUTING = "routing"  # Meta-routing / arbiter models
+    CROSS_DEVICE = "cross_device"  # Cross-device coordination
+    GENERAL = "general"  # No strong role preference
     UNKNOWN = "unknown"
 
 
@@ -71,6 +72,7 @@ class AggregatorKind(str, Enum):
     These are *not* tied to the old dashboard UI; they represent logical roles
     that can be mapped onto the new routing graph in later PRs.
     """
+
     MULTIMODAL_CORE_AGGREGATOR = "multimodal_core_aggregator"
     REASONING_AGGREGATOR = "reasoning_aggregator"
     EXECUTION_AGGREGATOR = "execution_aggregator"
@@ -87,6 +89,7 @@ class AggregatorKind(str, Enum):
 @dataclass(frozen=True)
 class ProviderIdentity:
     """Immutable identity record for a single LLM provider."""
+
     provider_id: str
     display_name: str = ""
 
@@ -98,6 +101,7 @@ class ProviderIdentity:
 @dataclass(frozen=True)
 class ModelIdentity:
     """Immutable identity record for a single model within a provider."""
+
     model_id: str
     provider_id: str
     alternatives: List[str] = field(default_factory=list)
@@ -112,7 +116,8 @@ class ModelIdentity:
 @dataclass(frozen=True)
 class ModalityCapability:
     """Describes the multimodal capabilities of a model/provider."""
-    native_multimodal: bool = False   # True ↔ provider natively handles images/audio/video
+
+    native_multimodal: bool = False  # True ↔ provider natively handles images/audio/video
     supports_vision: bool = False
     supports_audio: bool = False
     supports_video: bool = False
@@ -133,6 +138,7 @@ class ModalityCapability:
 @dataclass(frozen=True)
 class ScoringProfile:
     """Speed/quality scoring profile (1–10 scale, matching dashboard semantics)."""
+
     speed_score: int = 5
     quality_score: int = 5
 
@@ -150,8 +156,9 @@ class ScoringProfile:
 @dataclass(frozen=True)
 class AvailabilityStatus:
     """Captures whether a provider is currently usable and, if not, why."""
+
     available: bool = False
-    missing_env_key: Optional[str] = None   # First required env-var if unavailable
+    missing_env_key: Optional[str] = None  # First required env-var if unavailable
     all_env_keys: List[str] = field(default_factory=list)  # All required env-vars
 
     @classmethod
@@ -181,6 +188,7 @@ class NormalizedTopologyEntry:
     This is the canonical output type of ``ConfigBridge``; downstream V2 PRs
     (topology core, routing policy, projection surface) consume this type.
     """
+
     provider: ProviderIdentity
     model: ModelIdentity
     modality: ModalityCapability
@@ -223,13 +231,11 @@ class AggregatorRouterHint:
     *not* wired into runtime routing yet; they give the topology core PR a
     stable, representable concept to build on.
     """
+
     kind: AggregatorKind
     label: str
     candidate_provider_ids: List[str] = field(default_factory=list)
     notes: str = ""
 
     def __repr__(self) -> str:
-        return (
-            f"<AggregatorHint kind={self.kind.value} "
-            f"candidates={self.candidate_provider_ids}>"
-        )
+        return f"<AggregatorHint kind={self.kind.value} " f"candidates={self.candidate_provider_ids}>"

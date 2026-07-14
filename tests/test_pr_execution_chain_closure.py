@@ -89,16 +89,19 @@ class TestLocalSourceChannel:
     def test_local_source_channel_exists(self):
         """ResultSourceChannel 新增 LOCAL 源通道。"""
         from core.unified_result_ingress import ResultSourceChannel
+
         assert hasattr(ResultSourceChannel, "LOCAL")
 
     def test_local_source_channel_value(self):
         """LOCAL 源通道值为 'local'。"""
         from core.unified_result_ingress import ResultSourceChannel
+
         assert ResultSourceChannel.LOCAL.value == "local"
 
     def test_local_source_channel_str_value(self):
         """LOCAL 源通道的值等于 'local'（str Enum 值比较）。"""
         from core.unified_result_ingress import ResultSourceChannel
+
         assert ResultSourceChannel.LOCAL == "local"
 
 
@@ -106,18 +109,21 @@ class TestLocalExecutionRecordAcceptanceFields:
     def test_acceptance_state_default_empty(self):
         """LocalExecutionRecord 的 acceptance_state 默认为空字符串。"""
         from core.local_execution_chain import LocalExecutionRecord
+
         r = LocalExecutionRecord()
         assert r.acceptance_state == ""
 
     def test_acceptance_closed_default_false(self):
         """LocalExecutionRecord 的 acceptance_closed 默认为 False。"""
         from core.local_execution_chain import LocalExecutionRecord
+
         r = LocalExecutionRecord()
         assert r.acceptance_closed is False
 
     def test_to_dict_includes_acceptance_state(self):
         """to_dict() 包含 acceptance_state 字段。"""
         from core.local_execution_chain import LocalExecutionRecord
+
         r = LocalExecutionRecord(task_id="t1", acceptance_state="accepted")
         d = r.to_dict()
         assert "acceptance_state" in d
@@ -126,6 +132,7 @@ class TestLocalExecutionRecordAcceptanceFields:
     def test_to_dict_includes_acceptance_closed(self):
         """to_dict() 包含 acceptance_closed 字段。"""
         from core.local_execution_chain import LocalExecutionRecord
+
         r = LocalExecutionRecord(task_id="t1", acceptance_closed=True)
         d = r.to_dict()
         assert "acceptance_closed" in d
@@ -134,6 +141,7 @@ class TestLocalExecutionRecordAcceptanceFields:
     def test_from_dict_restores_acceptance_state(self):
         """from_dict() 正确还原 acceptance_state。"""
         from core.local_execution_chain import LocalExecutionRecord
+
         r = LocalExecutionRecord(task_id="t1", acceptance_state="quarantine")
         r2 = LocalExecutionRecord.from_dict(r.to_dict())
         assert r2.acceptance_state == "quarantine"
@@ -141,6 +149,7 @@ class TestLocalExecutionRecordAcceptanceFields:
     def test_from_dict_restores_acceptance_closed(self):
         """from_dict() 正确还原 acceptance_closed。"""
         from core.local_execution_chain import LocalExecutionRecord
+
         r = LocalExecutionRecord(task_id="t1", acceptance_closed=True)
         r2 = LocalExecutionRecord.from_dict(r.to_dict())
         assert r2.acceptance_closed is True
@@ -148,6 +157,7 @@ class TestLocalExecutionRecordAcceptanceFields:
     def test_from_dict_missing_acceptance_fields_defaults(self):
         """from_dict() 处理缺少验收字段的旧格式（向后兼容）。"""
         from core.local_execution_chain import LocalExecutionRecord
+
         old_dict = {
             "task_id": "old-task",
             "session_id": None,
@@ -307,8 +317,8 @@ class TestRecordLocalExecutionAcceptance:
         """record_local_execution: 有 result 时更新 acceptance_state。"""
         from core.local_execution_chain import (
             LocalExecutionResult,
-            reset_local_execution_chain,
             record_local_execution,
+            reset_local_execution_chain,
         )
 
         class _FakeOutcome:
@@ -341,8 +351,8 @@ class TestRecordLocalExecutionAcceptance:
         """record_local_execution: ingress 完全闭环时 acceptance_closed=True。"""
         from core.local_execution_chain import (
             LocalExecutionResult,
-            reset_local_execution_chain,
             record_local_execution,
+            reset_local_execution_chain,
         )
 
         class _FakeOutcomeClosed:
@@ -370,8 +380,8 @@ class TestRecordLocalExecutionAcceptance:
         """record_local_execution: ingress 不可用时 acceptance_state='ingress_skipped'。"""
         from core.local_execution_chain import (
             LocalExecutionResult,
-            reset_local_execution_chain,
             record_local_execution,
+            reset_local_execution_chain,
         )
 
         reset_local_execution_chain()
@@ -388,8 +398,8 @@ class TestRecordLocalExecutionAcceptance:
     def test_record_no_acceptance_when_no_result(self):
         """record_local_execution: 无 result 时 acceptance_state 保持为空字符串。"""
         from core.local_execution_chain import (
-            reset_local_execution_chain,
             record_local_execution,
+            reset_local_execution_chain,
         )
 
         reset_local_execution_chain()
@@ -399,12 +409,12 @@ class TestRecordLocalExecutionAcceptance:
 
     def test_record_writes_to_closure_registry(self):
         """record_local_execution: 写入 execution_chain_closure 注册表。"""
+        from core.execution_chain_closure import get_chain_closure_record, reset_closure_registry
         from core.local_execution_chain import (
             LocalExecutionResult,
-            reset_local_execution_chain,
             record_local_execution,
+            reset_local_execution_chain,
         )
-        from core.execution_chain_closure import reset_closure_registry, get_chain_closure_record
 
         class _FakeOutcome:
             is_fully_closed = True
@@ -438,18 +448,21 @@ class TestCrossDeviceChainRecordAcceptanceFields:
     def test_acceptance_state_default_empty(self):
         """ChainExecutionRecord 的 acceptance_state 默认为空字符串。"""
         from core.cross_device_execution_chain import ChainExecutionRecord
+
         r = ChainExecutionRecord()
         assert r.acceptance_state == ""
 
     def test_acceptance_closed_default_false(self):
         """ChainExecutionRecord 的 acceptance_closed 默认为 False。"""
         from core.cross_device_execution_chain import ChainExecutionRecord
+
         r = ChainExecutionRecord()
         assert r.acceptance_closed is False
 
     def test_to_dict_includes_acceptance_state(self):
         """to_dict() 包含 acceptance_state 字段。"""
         from core.cross_device_execution_chain import ChainExecutionRecord
+
         r = ChainExecutionRecord(task_id="t-cd", acceptance_state="accepted")
         d = r.to_dict()
         assert "acceptance_state" in d
@@ -458,6 +471,7 @@ class TestCrossDeviceChainRecordAcceptanceFields:
     def test_to_dict_includes_acceptance_closed(self):
         """to_dict() 包含 acceptance_closed 字段。"""
         from core.cross_device_execution_chain import ChainExecutionRecord
+
         r = ChainExecutionRecord(task_id="t-cd2", acceptance_closed=True)
         d = r.to_dict()
         assert "acceptance_closed" in d
@@ -466,6 +480,7 @@ class TestCrossDeviceChainRecordAcceptanceFields:
     def test_from_dict_restores_acceptance_state(self):
         """from_dict() 正确还原 acceptance_state。"""
         from core.cross_device_execution_chain import ChainExecutionRecord
+
         r = ChainExecutionRecord(task_id="t-cd3", acceptance_state="reject")
         r2 = ChainExecutionRecord.from_dict(r.to_dict())
         assert r2.acceptance_state == "reject"
@@ -473,6 +488,7 @@ class TestCrossDeviceChainRecordAcceptanceFields:
     def test_from_dict_missing_acceptance_fields_defaults(self):
         """from_dict() 处理缺少验收字段的旧格式（向后兼容）。"""
         from core.cross_device_execution_chain import ChainExecutionRecord
+
         old_dict = {
             "record_id": "abc",
             "task_id": "old",
@@ -531,11 +547,15 @@ class TestHandleGoalExecutionResultClosure:
             patch("core.unified_result_ingress.ingest_result_async", side_effect=_fake_ingest),
             patch("core.execution_chain_closure.record_cross_device_chain_closure"),
         ):
-            await handle_goal_execution_result(bridge, ws, {
-                "type": "goal_execution_result",
-                "device_id": "dev-1",
-                "payload": {"task_id": tid, "status": "success", "result": "ok"},
-            })
+            await handle_goal_execution_result(
+                bridge,
+                ws,
+                {
+                    "type": "goal_execution_result",
+                    "device_id": "dev-1",
+                    "payload": {"task_id": tid, "status": "success", "result": "ok"},
+                },
+            )
 
         assert len(ingress_calls) == 1
         assert ingress_calls[0] == tid
@@ -577,22 +597,24 @@ class TestHandleGoalExecutionResultClosure:
             patch("core.unified_result_ingress.ingest_result_async", side_effect=_fake_ingest),
             patch("core.execution_chain_closure.record_cross_device_chain_closure"),
         ):
-            await handle_goal_execution_result(bridge, ws, {
-                "type": "goal_execution_result",
-                "device_id": "dev-1",
-                "payload": {"task_id": tid, "status": "success", "result": "ok"},
-            })
+            await handle_goal_execution_result(
+                bridge,
+                ws,
+                {
+                    "type": "goal_execution_result",
+                    "device_id": "dev-1",
+                    "payload": {"task_id": tid, "status": "success", "result": "ok"},
+                },
+            )
 
         # 外层不应调用 record_result_idempotency（由 ingress 内部负责）
-        assert outer_record_calls == [], (
-            f"外层不应调用 record_result_idempotency，但收到了调用: {outer_record_calls}"
-        )
+        assert outer_record_calls == [], f"外层不应调用 record_result_idempotency，但收到了调用: {outer_record_calls}"
 
     @pytest.mark.asyncio
     async def test_writes_to_closure_registry(self):
         """handle_goal_execution_result: 写入 execution_chain_closure 注册表。"""
+        from core.execution_chain_closure import get_chain_closure_record, reset_closure_registry
         from galaxy_gateway.android.handlers.goal_execution import handle_goal_execution_result
-        from core.execution_chain_closure import reset_closure_registry, get_chain_closure_record
 
         class _FakeOutcome:
             is_fully_closed = True
@@ -620,11 +642,15 @@ class TestHandleGoalExecutionResultClosure:
             patch("core.durable_result_idempotency.check_result_idempotency", return_value=False),
             patch("core.unified_result_ingress.ingest_result_async", side_effect=_fake_ingest),
         ):
-            await handle_goal_execution_result(bridge, ws, {
-                "type": "goal_execution_result",
-                "device_id": "dev-1",
-                "payload": {"task_id": tid, "status": "success", "result": "ok"},
-            })
+            await handle_goal_execution_result(
+                bridge,
+                ws,
+                {
+                    "type": "goal_execution_result",
+                    "device_id": "dev-1",
+                    "payload": {"task_id": tid, "status": "success", "result": "ok"},
+                },
+            )
 
         rec = get_chain_closure_record(tid)
         assert rec is not None
@@ -663,11 +689,15 @@ class TestHandleGoalExecutionResultClosure:
             ),
             patch("core.execution_chain_closure.record_cross_device_chain_closure"),
         ):
-            await handle_goal_execution_result(bridge, ws, {
-                "type": "goal_execution_result",
-                "device_id": "dev-1",
-                "payload": {"task_id": tid, "status": "failed", "result": ""},
-            })
+            await handle_goal_execution_result(
+                bridge,
+                ws,
+                {
+                    "type": "goal_execution_result",
+                    "device_id": "dev-1",
+                    "payload": {"task_id": tid, "status": "failed", "result": ""},
+                },
+            )
 
         # 回退路径必须调用 truth chain
         assert len(truth_chain_calls) == 1
@@ -704,11 +734,15 @@ class TestHandleGoalExecutionResultClosure:
             patch("core.unified_result_ingress.ingest_result_async", side_effect=_fake_ingest),
             patch("core.execution_chain_closure.record_cross_device_chain_closure"),
         ):
-            await handle_goal_execution_result(bridge, ws, {
-                "type": "goal_execution_result",
-                "device_id": "dev-1",
-                "payload": {"task_id": tid, "status": "failed", "result": ""},
-            })
+            await handle_goal_execution_result(
+                bridge,
+                ws,
+                {
+                    "type": "goal_execution_result",
+                    "device_id": "dev-1",
+                    "payload": {"task_id": tid, "status": "failed", "result": ""},
+                },
+            )
 
         # 测试只验证代码不崩溃，并且能处理部分闭环（不抛出异常）
 
@@ -722,23 +756,27 @@ class TestExecutionChainClosureModule:
     def setup_method(self):
         """每个测试前重置注册表。"""
         from core.execution_chain_closure import reset_closure_registry
+
         reset_closure_registry()
 
     def test_authority_sentinel_exists(self):
         """EXECUTION_CHAIN_CLOSURE_AUTHORITY 常量存在且非空。"""
         from core.execution_chain_closure import EXECUTION_CHAIN_CLOSURE_AUTHORITY
+
         assert EXECUTION_CHAIN_CLOSURE_AUTHORITY
         assert len(EXECUTION_CHAIN_CLOSURE_AUTHORITY) > 10
 
     def test_chain_kind_local_and_cross_device(self):
         """ChainKind 枚举包含 LOCAL 和 CROSS_DEVICE。"""
         from core.execution_chain_closure import ChainKind
+
         assert ChainKind.LOCAL.value == "local"
         assert ChainKind.CROSS_DEVICE.value == "cross_device"
 
     def test_closure_state_all_required_states(self):
         """ClosureState 枚举包含所有必需状态。"""
         from core.execution_chain_closure import ClosureState
+
         required = {
             ClosureState.PENDING,
             ClosureState.ACCEPTED,
@@ -752,7 +790,8 @@ class TestExecutionChainClosureModule:
 
     def test_chain_closure_record_default_construction(self):
         """ChainClosureRecord 默认构建成功。"""
-        from core.execution_chain_closure import ChainClosureRecord, ClosureState, ChainKind
+        from core.execution_chain_closure import ChainClosureRecord, ChainKind, ClosureState
+
         r = ChainClosureRecord()
         assert r.closure_state == ClosureState.PENDING
         assert r.chain_kind == ChainKind.LOCAL
@@ -761,27 +800,42 @@ class TestExecutionChainClosureModule:
     def test_chain_closure_record_to_dict_keys(self):
         """ChainClosureRecord.to_dict() 包含所有必需字段。"""
         from core.execution_chain_closure import ChainClosureRecord
+
         r = ChainClosureRecord(task_id="t1")
         d = r.to_dict()
-        for key in ("record_id", "task_id", "chain_kind", "closure_state",
-                    "acceptance_verdict", "truth_chain_complete", "is_fully_closed",
-                    "canonical_truth_completed", "mature_closure_achieved",
-                    "normalized_status", "device_id", "executor_module",
-                    "incomplete_reason", "extra", "recorded_at"):
+        for key in (
+            "record_id",
+            "task_id",
+            "chain_kind",
+            "closure_state",
+            "acceptance_verdict",
+            "truth_chain_complete",
+            "is_fully_closed",
+            "canonical_truth_completed",
+            "mature_closure_achieved",
+            "normalized_status",
+            "device_id",
+            "executor_module",
+            "incomplete_reason",
+            "extra",
+            "recorded_at",
+        ):
             assert key in d, f"to_dict() missing key: {key}"
 
     def test_dual_chain_summary_default_construction(self):
         """DualChainClosureSummary 默认构建成功。"""
         from core.execution_chain_closure import DualChainClosureSummary
+
         s = DualChainClosureSummary()
         assert s.total_records == 0
 
     def test_dual_chain_summary_includes_contract_version(self):
         """DualChainClosureSummary.to_dict() 包含 contract_version。"""
         from core.execution_chain_closure import (
-            DualChainClosureSummary,
             EXECUTION_CHAIN_CLOSURE_CONTRACT_VERSION,
+            DualChainClosureSummary,
         )
+
         s = DualChainClosureSummary()
         d = s.to_dict()
         assert "contract_version" in d
@@ -790,10 +844,11 @@ class TestExecutionChainClosureModule:
     def test_record_local_chain_closure_accepted(self):
         """record_local_chain_closure: ACCEPTED 状态写入注册表。"""
         from core.execution_chain_closure import (
-            record_local_chain_closure,
-            get_chain_closure_record,
             ClosureState,
+            get_chain_closure_record,
+            record_local_chain_closure,
         )
+
         tid = _make_task_id()
         ingress = {
             "is_fully_closed": True,
@@ -811,11 +866,12 @@ class TestExecutionChainClosureModule:
     def test_record_cross_device_chain_closure_accepted(self):
         """record_cross_device_chain_closure: ACCEPTED 状态写入注册表。"""
         from core.execution_chain_closure import (
-            record_cross_device_chain_closure,
-            get_chain_closure_record,
-            ClosureState,
             ChainKind,
+            ClosureState,
+            get_chain_closure_record,
+            record_cross_device_chain_closure,
         )
+
         tid = _make_task_id()
         ingress = {
             "is_fully_closed": True,
@@ -832,9 +888,10 @@ class TestExecutionChainClosureModule:
     def test_record_local_failed_status_maps_to_failed(self):
         """record_local_chain_closure: 失败状态映射为 FAILED。"""
         from core.execution_chain_closure import (
-            record_local_chain_closure,
             ClosureState,
+            record_local_chain_closure,
         )
+
         tid = _make_task_id()
         ingress = {
             "is_fully_closed": False,
@@ -849,9 +906,10 @@ class TestExecutionChainClosureModule:
     def test_record_cross_device_cancelled_maps_to_interrupted(self):
         """record_cross_device_chain_closure: 取消状态映射为 INTERRUPTED。"""
         from core.execution_chain_closure import (
-            record_cross_device_chain_closure,
             ClosureState,
+            record_cross_device_chain_closure,
         )
+
         tid = _make_task_id()
         ingress = {
             "is_fully_closed": False,
@@ -866,15 +924,17 @@ class TestExecutionChainClosureModule:
     def test_get_chain_closure_record_returns_none_for_unknown(self):
         """get_chain_closure_record: task_id 不存在时返回 None。"""
         from core.execution_chain_closure import get_chain_closure_record
+
         assert get_chain_closure_record("nonexistent-task-xyz") is None
 
     def test_dual_summary_local_and_cross_device_counts_independent(self):
         """get_dual_chain_closure_summary: local 和 cross_device 统计分离。"""
         from core.execution_chain_closure import (
-            record_local_chain_closure,
-            record_cross_device_chain_closure,
             get_dual_chain_closure_summary,
+            record_cross_device_chain_closure,
+            record_local_chain_closure,
         )
+
         ingress_ok = {
             "is_fully_closed": True,
             "was_deduplicated": False,
@@ -903,10 +963,11 @@ class TestExecutionChainClosureModule:
     def test_reset_closure_registry_clears_records(self):
         """reset_closure_registry: 清空注册表。"""
         from core.execution_chain_closure import (
+            get_dual_chain_closure_summary,
             record_local_chain_closure,
             reset_closure_registry,
-            get_dual_chain_closure_summary,
         )
+
         record_local_chain_closure(_make_task_id(), ingress_outcome=None)
         reset_closure_registry()
         s = get_dual_chain_closure_summary()
@@ -915,9 +976,10 @@ class TestExecutionChainClosureModule:
     def test_summary_includes_recent_records(self):
         """DualChainClosureSummary.to_dict() 包含 recent_records 列表。"""
         from core.execution_chain_closure import (
-            record_local_chain_closure,
             get_dual_chain_closure_summary,
+            record_local_chain_closure,
         )
+
         record_local_chain_closure(_make_task_id(), ingress_outcome=None)
         s = get_dual_chain_closure_summary(max_recent=5)
         d = s.to_dict()
@@ -926,7 +988,8 @@ class TestExecutionChainClosureModule:
 
     def test_record_ingress_none_graceful_degradation_local(self):
         """record_local_chain_closure: ingress_outcome=None 时优雅降级（不崩溃）。"""
-        from core.execution_chain_closure import record_local_chain_closure, ClosureState
+        from core.execution_chain_closure import ClosureState, record_local_chain_closure
+
         tid = _make_task_id()
         # 应不抛出异常
         rec = record_local_chain_closure(tid, ingress_outcome=None, normalized_status="completed")
@@ -936,16 +999,18 @@ class TestExecutionChainClosureModule:
     def test_record_ingress_none_failed_status_graceful(self):
         """record_cross_device_chain_closure: ingress=None 且 failed 时返回 FAILED。"""
         from core.execution_chain_closure import (
-            record_cross_device_chain_closure,
             ClosureState,
+            record_cross_device_chain_closure,
         )
+
         tid = _make_task_id()
         rec = record_cross_device_chain_closure(tid, ingress_outcome=None, normalized_status="failed")
         assert rec.closure_state == ClosureState.FAILED
 
     def test_chain_closure_record_json_serialisable(self):
         """ChainClosureRecord JSON 可序列化。"""
-        from core.execution_chain_closure import ChainClosureRecord, ClosureState, ChainKind
+        from core.execution_chain_closure import ChainClosureRecord, ChainKind, ClosureState
+
         r = ChainClosureRecord(
             task_id="t-json",
             chain_kind=ChainKind.LOCAL,
@@ -960,13 +1025,15 @@ class TestExecutionChainClosureModule:
     def test_dual_chain_summary_json_serialisable(self):
         """DualChainClosureSummary JSON 可序列化。"""
         from core.execution_chain_closure import get_dual_chain_closure_summary
+
         s = get_dual_chain_closure_summary()
         json_str = json.dumps(s.to_dict())
         assert json_str
 
     def test_summary_max_recent_respected(self):
         """get_dual_chain_closure_summary max_recent 参数有效。"""
-        from core.execution_chain_closure import record_local_chain_closure, get_dual_chain_closure_summary
+        from core.execution_chain_closure import get_dual_chain_closure_summary, record_local_chain_closure
+
         ingress = {
             "is_fully_closed": True,
             "was_deduplicated": False,

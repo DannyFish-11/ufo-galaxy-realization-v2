@@ -93,7 +93,6 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, Optional
 
-
 # ---------------------------------------------------------------------------
 # PR sentinel
 # ---------------------------------------------------------------------------
@@ -240,9 +239,7 @@ class UnifiedActionLifecycleSurface:
     #: its canonical phase name.  Populated by ``build_from_handoff_response``
     #: and ``build_from_normalizer_outcome`` so the surface carries its own
     #: provenance.
-    cross_repo_lifecycle_map: Dict[str, str] = field(
-        default_factory=lambda: dict(CROSS_REPO_LIFECYCLE_MAP)
-    )
+    cross_repo_lifecycle_map: Dict[str, str] = field(default_factory=lambda: dict(CROSS_REPO_LIFECYCLE_MAP))
     #: The specific Android message type that produced the current phase.
     last_android_event: str = ""
 

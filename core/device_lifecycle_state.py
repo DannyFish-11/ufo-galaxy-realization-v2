@@ -220,7 +220,7 @@ class DeviceLifecycleStage(str, Enum):
             "connected": 2,
             "ready": 3,
             "participating": 4,
-            "takeover_eligible": 4,   # 与 participating 同级
+            "takeover_eligible": 4,  # 与 participating 同级
         }
         return _ord.get(self.value, 0)
 
@@ -468,16 +468,12 @@ def derive_device_lifecycle_stage(
 
     # --- 阶段 2: connected ---
     if gaps:
-        blocking.append(
-            f"registration_gaps={gaps}: 注册有未完成的下游步骤"
-        )
+        blocking.append(f"registration_gaps={gaps}: 注册有未完成的下游步骤")
         notes.append(f"已注册但有 {len(gaps)} 个 gap(s) → registered（非 connected）。")
         return (DeviceLifecycleStage.registered, blocking, notes)
 
     if not capability_visible:
-        blocking.append(
-            "capability_visible=False: 设备能力尚未在 V2 上可见"
-        )
+        blocking.append("capability_visible=False: 设备能力尚未在 V2 上可见")
         notes.append("完全附加但 capability_visible=False → registered。")
         return (DeviceLifecycleStage.registered, blocking, notes)
 
@@ -485,13 +481,9 @@ def derive_device_lifecycle_stage(
 
     # --- 阶段 3: ready ---
     if not readiness_satisfied:
-        blocking.append(
-            "readiness_satisfied=False: model/accessibility/local_loop 就绪条件未满足"
-        )
+        blocking.append("readiness_satisfied=False: model/accessibility/local_loop 就绪条件未满足")
     if not dispatch_gate_passed:
-        blocking.append(
-            "dispatch_gate_passed=False: 模式门或 V2 cross-device 开关检查失败"
-        )
+        blocking.append("dispatch_gate_passed=False: 模式门或 V2 cross-device 开关检查失败")
 
     if not readiness_satisfied or not dispatch_gate_passed:
         notes.append(
@@ -513,13 +505,9 @@ def derive_device_lifecycle_stage(
         notes.append("takeover_eligible=True → takeover_eligible")
         return (DeviceLifecycleStage.takeover_eligible, [], notes)
 
-    blocking.append(
-        "execution_active=False: 无活跃分布式执行会话"
-    )
+    blocking.append("execution_active=False: 无活跃分布式执行会话")
     if not takeover_eligible:
-        blocking.append(
-            "takeover_eligible=False: 接管条件不成立"
-        )
+        blocking.append("takeover_eligible=False: 接管条件不成立")
     notes.append("ready 但 execution_active=False，takeover_eligible=False → ready 阶段。")
     return (DeviceLifecycleStage.ready, blocking, notes)
 
@@ -645,6 +633,7 @@ def evaluate_device_lifecycle_stage(device_id: str) -> DeviceLifecycleRecord:
     # 1. 从 attached_runtime_session_registry 读取
     try:
         from core.attached_runtime_session_registry import get_registry  # noqa: PLC0415
+
         registry = get_registry()
         entry = registry.lookup_session_by_device(device_id)
         if entry is not None:
@@ -656,12 +645,14 @@ def evaluate_device_lifecycle_stage(device_id: str) -> DeviceLifecycleRecord:
     except Exception as exc:
         logger.debug(
             "evaluate_device_lifecycle_stage: session_registry 读取失败 device_id=%r: %s",
-            device_id, exc,
+            device_id,
+            exc,
         )
 
     # 2. 从 android_device_state_store 读取就绪条件
     try:
         from core.android_device_state_store import get_device_state_snapshot  # noqa: PLC0415
+
         snapshot = get_device_state_snapshot(device_id)
         if snapshot is not None:
             model_ready = bool(getattr(snapshot, "model_ready", False))
@@ -671,7 +662,8 @@ def evaluate_device_lifecycle_stage(device_id: str) -> DeviceLifecycleRecord:
     except Exception as exc:
         logger.debug(
             "evaluate_device_lifecycle_stage: 快照读取失败 device_id=%r: %s",
-            device_id, exc,
+            device_id,
+            exc,
         )
 
     # 3. 从 android_mode_gate_policy 读取能力可见性、调度门、接管资格
@@ -680,6 +672,7 @@ def evaluate_device_lifecycle_stage(device_id: str) -> DeviceLifecycleRecord:
             build_mode_state_for_device,
             evaluate_android_mode_readiness,
         )
+
         mode_state = build_mode_state_for_device(device_id)
         if mode_state is not None:
             capability_visible = bool(mode_state.cross_device_enabled)
@@ -693,22 +686,24 @@ def evaluate_device_lifecycle_stage(device_id: str) -> DeviceLifecycleRecord:
     except Exception as exc:
         logger.debug(
             "evaluate_device_lifecycle_stage: mode_gate 读取失败 device_id=%r: %s",
-            device_id, exc,
+            device_id,
+            exc,
         )
 
     # 4. 检测活跃执行会话
     try:
         from core.android_participant_session_state import list_active_participant_sessions  # noqa: PLC0415
+
         active_sessions = list_active_participant_sessions()
         execution_active = any(
-            getattr(s, "device_id", "") == device_id
-            and getattr(s, "phase", "").startswith("execution")
+            getattr(s, "device_id", "") == device_id and getattr(s, "phase", "").startswith("execution")
             for s in active_sessions
         )
     except Exception as exc:
         logger.debug(
             "evaluate_device_lifecycle_stage: 参与会话读取失败 device_id=%r: %s",
-            device_id, exc,
+            device_id,
+            exc,
         )
 
     stage, blocking, notes = derive_device_lifecycle_stage(
@@ -793,7 +788,9 @@ def transition_device_lifecycle(
     # 用调用方提供的值覆盖条件
     new_ws = websocket_connected if websocket_connected is not None else current.websocket_connected
     new_ack = registration_ack_success if registration_ack_success is not None else current.registration_ack_success
-    new_fully = registration_fully_attached if registration_fully_attached is not None else current.registration_fully_attached
+    new_fully = (
+        registration_fully_attached if registration_fully_attached is not None else current.registration_fully_attached
+    )
     new_gaps = list(registration_gaps) if registration_gaps is not None else list(current.registration_gaps)
     new_cap = capability_visible if capability_visible is not None else current.capability_visible
     new_ready = readiness_satisfied if readiness_satisfied is not None else current.readiness_satisfied

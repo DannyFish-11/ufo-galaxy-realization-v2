@@ -120,6 +120,7 @@ TASK_ADAPTER_NORMALIZATION_POLICY: str = (
 # Adaptation record (observability ring-buffer entry)
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class AdaptationRecord:
     """A single entry in the task adaptation observability log."""
@@ -170,6 +171,7 @@ def _append_record(rec: AdaptationRecord) -> None:
 # ---------------------------------------------------------------------------
 # Internal extraction helpers
 # ---------------------------------------------------------------------------
+
 
 def _extract_dict(payload: Any) -> Dict[str, Any]:
     """Extract a raw dict from any payload type."""
@@ -223,6 +225,7 @@ def _pick_args(raw: Dict[str, Any]) -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 # TaskAdapterLayer
 # ---------------------------------------------------------------------------
+
 
 class TaskAdapterLayer:
     """Stateless adapter that normalizes heterogeneous inputs to CanonicalTask.
@@ -279,21 +282,30 @@ class TaskAdapterLayer:
 
         # ── Passthrough: already a CanonicalTask ─────────────────────────
         if isinstance(payload, CanonicalTask):
-            _append_record(AdaptationRecord(
-                task_id=payload.task_id,
-                trace_id=payload.trace_id,
-                origin=payload.intent.origin.value if hasattr(payload.intent.origin, "value") else str(payload.intent.origin),
-                tool=payload.execution.tool,
-                targets=list(payload.routing.selected_targets),
-                was_passthrough=True,
-            ))
+            _append_record(
+                AdaptationRecord(
+                    task_id=payload.task_id,
+                    trace_id=payload.trace_id,
+                    origin=(
+                        payload.intent.origin.value
+                        if hasattr(payload.intent.origin, "value")
+                        else str(payload.intent.origin)
+                    ),
+                    tool=payload.execution.tool,
+                    targets=list(payload.routing.selected_targets),
+                    was_passthrough=True,
+                )
+            )
             return payload
 
         # ── Fast path: TaskEnvelope → CanonicalTask ──────────────────────
         try:
             from core.schemas.task_envelope import TaskEnvelope as _TE  # type: ignore
+
             if isinstance(payload, _TE):
-                return self._from_task_envelope(payload, origin=origin, TaskOrigin=TaskOrigin, build=build_canonical_task)
+                return self._from_task_envelope(
+                    payload, origin=origin, TaskOrigin=TaskOrigin, build=build_canonical_task
+                )
         except Exception as exc:
             logger.warning("Exception suppressed: %s", exc)
 
@@ -336,14 +348,16 @@ class TaskAdapterLayer:
             selected_targets=list(getattr(envelope, "targets", []) or []),
             metadata={"adapted_from": "task_envelope"},
         )
-        _append_record(AdaptationRecord(
-            task_id=task.task_id,
-            trace_id=task.trace_id,
-            origin=resolved_origin.value if hasattr(resolved_origin, "value") else str(resolved_origin),
-            tool=task.execution.tool,
-            targets=list(task.routing.selected_targets),
-            was_passthrough=True,
-        ))
+        _append_record(
+            AdaptationRecord(
+                task_id=task.task_id,
+                trace_id=task.trace_id,
+                origin=resolved_origin.value if hasattr(resolved_origin, "value") else str(resolved_origin),
+                tool=task.execution.tool,
+                targets=list(task.routing.selected_targets),
+                was_passthrough=True,
+            )
+        )
         return task
 
     def _build_from_raw(
@@ -382,14 +396,16 @@ class TaskAdapterLayer:
             selected_targets=targets,
             metadata={"adapted_from": origin.value if hasattr(origin, "value") else str(origin)},
         )
-        _append_record(AdaptationRecord(
-            task_id=task.task_id,
-            trace_id=task.trace_id,
-            origin=origin.value if hasattr(origin, "value") else str(origin),
-            tool=task.execution.tool,
-            targets=list(task.routing.selected_targets),
-            was_passthrough=False,
-        ))
+        _append_record(
+            AdaptationRecord(
+                task_id=task.task_id,
+                trace_id=task.trace_id,
+                origin=origin.value if hasattr(origin, "value") else str(origin),
+                tool=task.execution.tool,
+                targets=list(task.routing.selected_targets),
+                was_passthrough=False,
+            )
+        )
         return task
 
     # ── Origin resolution ─────────────────────────────────────────────────
@@ -443,6 +459,7 @@ def _get_adapter() -> TaskAdapterLayer:
 # ---------------------------------------------------------------------------
 # Top-level helper
 # ---------------------------------------------------------------------------
+
 
 def adapt_to_canonical_task(
     payload: Any,

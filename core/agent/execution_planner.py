@@ -31,6 +31,7 @@ from core.agent.intent_router import IntentResult
 # C阶段 4B: 任务记忆（可选依赖）
 try:
     from core.task_memory import get_task_memory as _get_task_memory
+
     _TASK_MEMORY_AVAILABLE = True
 except ImportError:
     _TASK_MEMORY_AVAILABLE = False
@@ -43,6 +44,7 @@ logger = logging.getLogger("Galaxy.Agent.ExecutionPlanner")
 # TaskDecomposer helper for multi-device task paths
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 async def _try_decompose_task(message: str, targets: list, context: dict) -> list:
     """Attempt to decompose a multi-target task into subtasks via TaskDecomposer.
     Falls back to broadcasting the original message to all targets."""
@@ -50,17 +52,14 @@ async def _try_decompose_task(message: str, targets: list, context: dict) -> lis
         return [{"target": targets[0] if targets else None, "message": message}]
     try:
         from galaxy_gateway.task_decomposer import TaskDecomposer
+
         decomposer = TaskDecomposer(device_registry=None)
         # Use decompose_multi_device_command for multi-target tasks
-        commands = [
-            {"device_id": t, "action": "execute", "target": message}
-            for t in targets
-        ]
+        commands = [{"device_id": t, "action": "execute", "target": message} for t in targets]
         tasks, _data_flows = decomposer.decompose_multi_device_command(commands)
         if tasks:
             return [
-                {"target": task.device_id, "message": getattr(task, "target", message) or message}
-                for task in tasks
+                {"target": task.device_id, "message": getattr(task, "target", message) or message} for task in tasks
             ]
     except Exception as e:
         logging.getLogger("Galaxy.ExecutionPlanner").debug(f"TaskDecomposer unavailable: {e}")
@@ -167,7 +166,7 @@ def _collect_team_providers(team_result: Any) -> Optional[List[str]]:
     """从 TeamResult 中提取使用的 provider:model 列表（可选）。"""
     try:
         providers: List[str] = []
-        for member_res in (team_result.member_results or []):
+        for member_res in team_result.member_results or []:
             # MemberResult.provider/model 实际挂在 .member 上；两处都兼容读取
             _m = getattr(member_res, "member", None)
             prov = getattr(member_res, "provider", None) or getattr(_m, "provider", None)
@@ -187,8 +186,17 @@ def _collect_team_providers(team_result: Any) -> Optional[List[str]]:
 
 # 任务复杂度阈值（决定 agent 策略）
 _COMPLEXITY_KEYWORDS_HIGH = [
-    "team", "swarm", "并行", "多个", "同时", "分别",
-    "全部", "所有设备", "批量", "大量", "复杂",
+    "team",
+    "swarm",
+    "并行",
+    "多个",
+    "同时",
+    "分别",
+    "全部",
+    "所有设备",
+    "批量",
+    "大量",
+    "复杂",
 ]
 
 # PR154: 自动 Agent 创建触发关键词（明确文档化，供测试验证）
@@ -198,12 +206,25 @@ _COMPLEXITY_KEYWORDS_HIGH = [
 #   - 无论策略如何，AgentFactory 始终被调用（单 Agent / Team / Swarm）
 AUTO_AGENT_TRIGGER_KEYWORDS: tuple = (
     # 并行 / 多任务信号
-    "team", "swarm", "并行", "多个", "同时", "分别",
-    "全部", "所有设备", "批量", "大量",
+    "team",
+    "swarm",
+    "并行",
+    "多个",
+    "同时",
+    "分别",
+    "全部",
+    "所有设备",
+    "批量",
+    "大量",
     # 高复杂度信号
     "复杂",
     # 分形 / 多层递归信号
-    "fractal", "分型", "递归", "分形", "多层", "深度拆解",
+    "fractal",
+    "分型",
+    "递归",
+    "分形",
+    "多层",
+    "深度拆解",
 )
 
 
@@ -229,28 +250,28 @@ def _estimate_complexity(message: str) -> float:
 
 TASK_TYPE_STRATEGY_MAP: Dict[str, str] = {
     # 单步快速任务 → 单 Agent
-    "fast_response":  "single",
-    "chat":           "single",
-    "question":       "single",
-    "translation":    "single",
-    "summary":        "single",
+    "fast_response": "single",
+    "chat": "single",
+    "question": "single",
+    "translation": "single",
+    "summary": "single",
     # 推理/规划 → Team 专项
-    "reasoning":      "specialized",
-    "planning":       "specialized",
-    "analysis":       "specialized",
+    "reasoning": "specialized",
+    "planning": "specialized",
+    "analysis": "specialized",
     # 编码 → 单 Agent（多数编码任务不需要多 Agent 协作）
-    "coding":         "single",
+    "coding": "single",
     # 研究/信息聚合 → Team 并行
-    "research":       "specialized",
+    "research": "specialized",
     # 大量同类任务 → Swarm
-    "swarm":          "swarm",
-    "batch":          "swarm",
+    "swarm": "swarm",
+    "batch": "swarm",
     # 复杂多层分解 → Fractal
-    "fractal":        "fractal",
-    "deep_planning":  "fractal",
+    "fractal": "fractal",
+    "deep_planning": "fractal",
     # 设备控制 → 单 Agent
     "device_control": "single",
-    "agent_control":  "single",
+    "agent_control": "single",
 }
 
 # PR-18: sentinel confirming activation budget is wired into ExecutionPlanner.
@@ -278,6 +299,7 @@ MEMORY_BIAS_PLANNER_GUIDANCE_WIRED_PR19: str = (
 
 class ExecutionPlanner:
     """执行规划器（无状态，每次调用独立）。"""
+
     _DEFAULT_STRATEGY_NAME = "single"
 
     # PR86: 工具摘要中展示的最大工具数（避免 prompt 过长）
@@ -288,16 +310,63 @@ class ExecutionPlanner:
     # Auto-agent template selection mapping: (keywords, template_name)
     # Type: List[Tuple[List[str], str]]
     _TEMPLATE_MAP: List[tuple] = [
-        (["设备", "控制", "device", "hardware", "phone", "手机", "电脑", "平板",
-          "screenshot", "截图", "截屏", "click", "点击", "swipe", "滑动"], "device_controller"),
-        (["代码", "编程", "code", "script", "program", "写代码", "写脚本",
-          "python", "javascript", "java", "function", "函数", "调试"], "code_executor"),
-        (["分析", "数据", "统计", "analyze", "analyse", "data", "stat",
-          "报告", "report", "insight", "chart", "图表"], "data_analyst"),
-        (["搜索", "调研", "research", "search", "查找", "find",
-          "信息", "news", "latest", "最新"], "research"),
-        (["计划", "规划", "plan", "strategy", "策略", "步骤", "steps",
-          "schedule", "路线图", "roadmap"], "planner"),
+        (
+            [
+                "设备",
+                "控制",
+                "device",
+                "hardware",
+                "phone",
+                "手机",
+                "电脑",
+                "平板",
+                "screenshot",
+                "截图",
+                "截屏",
+                "click",
+                "点击",
+                "swipe",
+                "滑动",
+            ],
+            "device_controller",
+        ),
+        (
+            [
+                "代码",
+                "编程",
+                "code",
+                "script",
+                "program",
+                "写代码",
+                "写脚本",
+                "python",
+                "javascript",
+                "java",
+                "function",
+                "函数",
+                "调试",
+            ],
+            "code_executor",
+        ),
+        (
+            [
+                "分析",
+                "数据",
+                "统计",
+                "analyze",
+                "analyse",
+                "data",
+                "stat",
+                "报告",
+                "report",
+                "insight",
+                "chart",
+                "图表",
+            ],
+            "data_analyst",
+        ),
+        (["搜索", "调研", "research", "search", "查找", "find", "信息", "news", "latest", "最新"], "research"),
+        (["计划", "规划", "plan", "strategy", "策略", "步骤", "steps", "schedule", "路线图", "roadmap"], "planner"),
         (["协调", "team", "并行", "parallel", "分工", "多个", "组织"], "coordinator"),
     ]
 
@@ -392,7 +461,9 @@ class ExecutionPlanner:
         # Default: coordinator handles general/complex tasks
         return "coordinator"
 
-    async def execute(self, plan: ExecutionPlan, *, activation_budget: Optional[Any] = None, memory_bias: Optional[Any] = None) -> ExecutionResult:
+    async def execute(
+        self, plan: ExecutionPlan, *, activation_budget: Optional[Any] = None, memory_bias: Optional[Any] = None
+    ) -> ExecutionResult:
         """
         执行计划入口。（PR86）
 
@@ -432,9 +503,8 @@ class ExecutionPlanner:
         _budget_influenced_strategy = False
         try:
             if activation_budget is not None and getattr(activation_budget, "influenced_by_budget", False):
-                from core.cognitive.cognitive_activation_budget import (
-                    get_planner_breadth_guidance as _get_breadth,
-                )
+                from core.cognitive.cognitive_activation_budget import get_planner_breadth_guidance as _get_breadth
+
                 _breadth_guidance = _get_breadth(activation_budget)
                 logger.debug(
                     "PR-18 ExecutionPlanner: breadth_guidance=%s max_agents=%d adj=%.2f",
@@ -453,9 +523,8 @@ class ExecutionPlanner:
         _memory_influenced_strategy = False
         try:
             if memory_bias is not None and getattr(memory_bias, "influenced_by_memory", False):
-                from core.cognitive.memory_bias_layer import (
-                    get_memory_planner_guidance as _get_mem_guidance,
-                )
+                from core.cognitive.memory_bias_layer import get_memory_planner_guidance as _get_mem_guidance
+
                 _memory_guidance = _get_mem_guidance(memory_bias)
                 logger.debug(
                     "PR-19 ExecutionPlanner: memory_guidance posture=%s decomp=%s prefer_single=%s adj=%.2f",
@@ -494,13 +563,18 @@ class ExecutionPlanner:
         if strategy in ("specialized", "parallel", "swarm"):
             try:
                 from core.collaboration_mode_policy import select_collaboration_mode
+
                 _collab = select_collaboration_mode(
-                    plan.message, complexity_score=complexity, intent=plan.intent,
+                    plan.message,
+                    complexity_score=complexity,
+                    intent=plan.intent,
                 )
                 if _collab["mode"] != strategy:
                     logger.info(
                         "协作模式细化: %s → %s (%s)",
-                        strategy, _collab["mode"], _collab["reason"],
+                        strategy,
+                        _collab["mode"],
+                        _collab["reason"],
                     )
                     strategy = _collab["mode"]
             except Exception as _collab_err:
@@ -521,14 +595,14 @@ class ExecutionPlanner:
         cap_stats: Dict[str, Any] = {}
         try:
             from core.agent.capability_registry import get_capability_registry
+
             registry = get_capability_registry()
             await registry.refresh()  # 确保最新
             available_tools = registry.list_tools()
             cap_stats = registry.stats()
             tool_schemas = registry.to_tool_schemas()
             logger.info(
-                "ExecutionPlanner: CapabilityRegistry 已刷新 | "
-                "total=%d available=%d (mcp=%d skill=%d gateway=%d)",
+                "ExecutionPlanner: CapabilityRegistry 已刷新 | " "total=%d available=%d (mcp=%d skill=%d gateway=%d)",
                 cap_stats.get("total", 0),
                 cap_stats.get("available", 0),
                 cap_stats.get("by_source", {}).get("mcp", 0),
@@ -541,20 +615,21 @@ class ExecutionPlanner:
             if available_tools and not plan.context:
                 plan.context = []
             # 提供工具信息给 plan（通过 context 传递工具摘要）
-            tool_summary = ", ".join(t.name for t in available_tools[:self._MAX_TOOL_SUMMARY_COUNT])
+            tool_summary = ", ".join(t.name for t in available_tools[: self._MAX_TOOL_SUMMARY_COUNT])
             if available_tools:
                 plan.context = plan.context or []
                 # 在上下文中注入工具列表提示（不覆盖已有对话历史）
                 _tool_hint = {
                     "role": "system",
                     "content": f"{self._CAPABILITY_HINT_MARKER} 可用工具: {tool_summary}"
-                    + (f"... 共 {len(available_tools)} 项"
-                       if len(available_tools) > self._MAX_TOOL_SUMMARY_COUNT else ""),
+                    + (
+                        f"... 共 {len(available_tools)} 项"
+                        if len(available_tools) > self._MAX_TOOL_SUMMARY_COUNT
+                        else ""
+                    ),
                 }
                 # 只在没有同类 hint 时才插入
-                if not any(
-                    self._CAPABILITY_HINT_MARKER in c.get("content", "") for c in plan.context
-                ):
+                if not any(self._CAPABILITY_HINT_MARKER in c.get("content", "") for c in plan.context):
                     plan.context = [_tool_hint] + plan.context
         except Exception as e:
             logger.warning("ExecutionPlanner: CapabilityRegistry 刷新失败（继续执行）: %s", e)
@@ -571,7 +646,9 @@ class ExecutionPlanner:
         # 与 ReAct 反思形成闭环：做→反思→沉淀(见下方 WRITE)→下次规划时召回。失败即跳过。
         try:
             import asyncio as _aio
+
             from core.memory import get_unified_memory
+
             _um = get_unified_memory()
             if _um.enabled and plan.message:
                 # _um.recall 对 Chroma 后端要先把 query 编码成向量(CPU 密集的同步
@@ -579,14 +656,17 @@ class ExecutionPlanner:
                 # offload 到线程。
                 _exp_hits = await _aio.to_thread(_um.recall, plan.message, top_k=3)
                 _exp_lines = [
-                    f"- {h.content[:240]}" for h in _exp_hits
+                    f"- {h.content[:240]}"
+                    for h in _exp_hits
                     if h.content and "experience" in (h.metadata.get("tags") or [])
                 ]
                 if _exp_lines:
-                    plan.context = (plan.context or []) + [{
-                        "role": "system",
-                        "content": "[相关历史经验 — 供参考，避免重蹈覆辙]\n" + "\n".join(_exp_lines),
-                    }]
+                    plan.context = (plan.context or []) + [
+                        {
+                            "role": "system",
+                            "content": "[相关历史经验 — 供参考，避免重蹈覆辙]\n" + "\n".join(_exp_lines),
+                        }
+                    ]
         except Exception as _exp_err:  # noqa: BLE001
             logger.debug("ExecutionPlanner: 经验召回跳过: %s", _exp_err)
 
@@ -596,6 +676,7 @@ class ExecutionPlanner:
             # dispatch 以 success=False 软失败返回时，退到最稳妥的 single 路径并把
             # 失败原因回灌上下文重试。默认最多 1 次；GALAXY_PLANNER_MAX_REPLANS 调整。
             import os as _os
+
             try:
                 _max_replans = max(0, int(_os.getenv("GALAXY_PLANNER_MAX_REPLANS", "1")))
             except ValueError:
@@ -613,17 +694,21 @@ class ExecutionPlanner:
                 strategy = "single"  # 重规划：退到最稳妥的单 Agent 路径
                 logger.info(
                     "ExecutionPlanner: 重规划 #%d | prev_strategy=%s → single | reason=%s",
-                    _replans, _prev_strategy, (result.error or result.reply or "")[:120],
+                    _replans,
+                    _prev_strategy,
+                    (result.error or result.reply or "")[:120],
                 )
                 # 失败原因回灌上下文，供下一次执行参考
-                plan.context = (plan.context or []) + [{
-                    "role": "system",
-                    "content": (
-                        f"[重规划] 上一次以「{_prev_strategy}」执行未成功："
-                        f"{(result.error or result.reply or '')[:200]}。"
-                        "请用更稳妥的方式重试并修正问题。"
-                    ),
-                }]
+                plan.context = (plan.context or []) + [
+                    {
+                        "role": "system",
+                        "content": (
+                            f"[重规划] 上一次以「{_prev_strategy}」执行未成功："
+                            f"{(result.error or result.reply or '')[:200]}。"
+                            "请用更稳妥的方式重试并修正问题。"
+                        ),
+                    }
+                ]
             duration_ms = (time.monotonic() - t0) * 1000
             if _replans:
                 result.task_result = result.task_result or {}
@@ -649,15 +734,14 @@ class ExecutionPlanner:
             result.total_latency_ms = duration_ms
             try:
                 from core.cost_tracker import get_cost_tracker
+
                 _ct = get_cost_tracker()
                 _recent = _ct.get_recent(10)
                 # NOTE (C阶段 5C 简化): 取最后 1 条 cost 记录近似本次调用开销。
                 # 在高并发场景可能与其他并发请求混淆；后续可通过 correlation_id 精确关联。
                 if _recent:
                     _last = _recent[-1]
-                    result.total_tokens = (
-                        _last.get("input_tokens", 0) + _last.get("output_tokens", 0)
-                    )
+                    result.total_tokens = _last.get("input_tokens", 0) + _last.get("output_tokens", 0)
                     result.total_cost_usd = _last.get("estimated_cost_usd", 0.0)
             except Exception as _ct_err:
                 logger.debug("ExecutionPlanner: 获取 cost 信息失败（跳过）: %s", _ct_err)
@@ -679,6 +763,7 @@ class ExecutionPlanner:
             # 供未来语义召回（见上方 READ）。tags 含 "experience" 以便召回时筛选。
             try:
                 from core.memory import get_unified_memory
+
                 _um_w = get_unified_memory()
                 if _um_w.enabled and plan.message:
                     _outcome = "成功" if result.success else "失败"
@@ -758,9 +843,11 @@ class ExecutionPlanner:
         try:
             import os
             import re
+
             if os.getenv("GALAXY_EXPERIENCE_STRATEGY", "1").strip().lower() in ("0", "false", "no"):
                 return current
             from core.memory import get_unified_memory
+
             um = get_unified_memory()
             if not um.enabled or not message:
                 return current
@@ -786,14 +873,24 @@ class ExecutionPlanner:
             if best_st != current and (cur is None or best_rate > cur + 0.34):
                 logger.info(
                     "ExecutionPlanner: 经验学习改策略 %s -> %s (历史成功率 %.2f, n=%d)",
-                    current, best_st, best_rate, stats[best_st][1],
+                    current,
+                    best_st,
+                    best_rate,
+                    stats[best_st][1],
                 )
                 return best_st
         except Exception as exc:  # noqa: BLE001 — 经验调整失败不影响主流程
             logger.debug("experience strategy adjust skipped: %s", exc)
         return current
 
-    def _pick_strategy(self, message: str, complexity: float, task_type: str = "", breadth_guidance: Optional[Any] = None, memory_guidance: Optional[Any] = None) -> str:
+    def _pick_strategy(
+        self,
+        message: str,
+        complexity: float,
+        task_type: str = "",
+        breadth_guidance: Optional[Any] = None,
+        memory_guidance: Optional[Any] = None,
+    ) -> str:
         """选择执行策略：fractal / swarm / specialized / single。
 
         优先级（C阶段 3B + PR-18 + PR-19 后）：
@@ -856,12 +953,8 @@ class ExecutionPlanner:
             # breadth guidance has not already set a strategy preference.
             and _strategy_pref is None
         ):
-            _mem_adj = float(
-                getattr(memory_guidance, "complexity_threshold_adjustment", 0.0)
-            )
-            _mem_prefer_single = bool(
-                getattr(memory_guidance, "prefer_single_agent", False)
-            )
+            _mem_adj = float(getattr(memory_guidance, "complexity_threshold_adjustment", 0.0))
+            _mem_prefer_single = bool(getattr(memory_guidance, "prefer_single_agent", False))
             if _mem_adj != 0.0 or _mem_prefer_single:
                 logger.debug(
                     "PR-19 _pick_strategy: memory posture=%s adj=%.2f prefer_single=%s",
@@ -876,13 +969,29 @@ class ExecutionPlanner:
         fractal_threshold = 0.75 + total_adj
         specialized_threshold = 0.65 + total_adj
 
-        if complexity >= fractal_threshold or any(k in m for k in [
-            "fractal", "分型", "递归", "分形", "多层", "深度拆解",
-        ]):
+        if complexity >= fractal_threshold or any(
+            k in m
+            for k in [
+                "fractal",
+                "分型",
+                "递归",
+                "分形",
+                "多层",
+                "深度拆解",
+            ]
+        ):
             return "fractal"
-        if complexity >= specialized_threshold or any(k in m for k in [
-            "team", "团队", "并行", "多个", "分工", "异构",
-        ]):
+        if complexity >= specialized_threshold or any(
+            k in m
+            for k in [
+                "team",
+                "团队",
+                "并行",
+                "多个",
+                "分工",
+                "异构",
+            ]
+        ):
             return "specialized"
         # PR-18: if budget is narrow (passive), prefer single even if near threshold
         if _strategy_pref == "single":
@@ -890,9 +999,7 @@ class ExecutionPlanner:
             return "single"
         # PR-19: if memory posture is continuity-seeking, prefer single for coherence
         if _mem_prefer_single:
-            logger.debug(
-                "PR-19 _pick_strategy: continuity posture — returning 'single' per memory guidance"
-            )
+            logger.debug("PR-19 _pick_strategy: continuity posture — returning 'single' per memory guidance")
             return "single"
         return "single"
 
@@ -910,13 +1017,15 @@ class ExecutionPlanner:
         # ── Phase B（灰度，默认关闭）：统一 Workflow 层接入 ──
         # 开关 GALAXY_UNIFIED_WORKFLOW=1 时，经 core.agentic 的统一 forward(session)->session
         # 层运行该策略；任何异常都回退到下面的 legacy 路径。默认关闭 → 零默认行为变化。
-        if os.environ.get("GALAXY_UNIFIED_WORKFLOW", "").strip().lower() in (
-                "1", "true", "yes", "on"):
+        if os.environ.get("GALAXY_UNIFIED_WORKFLOW", "").strip().lower() in ("1", "true", "yes", "on"):
             try:
                 from core.agentic.strategy import run_strategy_workflow
+
                 _wf = await run_strategy_workflow(
-                    message=plan.message, strategy=strategy,
-                    session_id=plan.session_id, device_id=plan.device_id,
+                    message=plan.message,
+                    strategy=strategy,
+                    session_id=plan.session_id,
+                    device_id=plan.device_id,
                     llm_router=self._llm_router,
                 )
                 return ExecutionResult(
@@ -928,8 +1037,7 @@ class ExecutionPlanner:
                     tool_calls=tool_calls,
                 )
             except Exception as _wf_exc:  # noqa: BLE001 —— 实验路径失败即回退 legacy
-                logger.warning(
-                    "统一 Workflow 路径失败，回退 legacy 执行: %s", _wf_exc)
+                logger.warning("统一 Workflow 路径失败，回退 legacy 执行: %s", _wf_exc)
 
         if strategy == "fractal":
             return await self._run_fractal(plan, steps, tool_calls)
@@ -961,6 +1069,7 @@ class ExecutionPlanner:
 
         try:
             from core.agent_factory import get_agent_factory
+
             factory = get_agent_factory(self._llm_router)
 
             # 构建带策略注入的任务描述
@@ -996,7 +1105,8 @@ class ExecutionPlanner:
                     agent = factory.create_from_template(selected_template)
                     logger.info(
                         "ExecutionPlanner: 模板兜底 '%s' → Agent %s",
-                        selected_template, agent.id,
+                        selected_template,
+                        agent.id,
                     )
                 except Exception as tmpl_err:
                     logger.warning("模板创建失败 (%s): %s，使用 coordinator 兜底", selected_template, tmpl_err)
@@ -1014,9 +1124,9 @@ class ExecutionPlanner:
             twin_id: Optional[str] = None
             twin_coupling: Optional[str] = None
             try:
-                from enhancements.agent_factory.twin_model import (
-                    twin_manager as _tm, CouplingMode as _CM
-                )
+                from enhancements.agent_factory.twin_model import CouplingMode as _CM
+                from enhancements.agent_factory.twin_model import twin_manager as _tm
+
                 if _tm is not None:
                     twin = _tm.create_twin(
                         source_id=agent.id,
@@ -1027,7 +1137,8 @@ class ExecutionPlanner:
                     twin_coupling = twin.coupling_mode.value
                     logger.info(
                         "ExecutionPlanner: 孪生 Agent 已创建 twin_id=%s coupling=%s",
-                        twin_id, twin_coupling,
+                        twin_id,
+                        twin_coupling,
                     )
             except Exception as twin_err:
                 logger.debug("孪生 Agent 创建失败（非致命）: %s", twin_err)
@@ -1049,13 +1160,15 @@ class ExecutionPlanner:
 
             # 收集工具调用记录
             for tc in exec_result.get("tool_calls", []):
-                tool_calls.append(ToolCallRecord(
-                    tool=tc.get("tool", ""),
-                    arguments=tc.get("arguments", {}),
-                    result=tc.get("result", {}),
-                    success=tc.get("success", True),
-                    error=tc.get("error", ""),
-                ))
+                tool_calls.append(
+                    ToolCallRecord(
+                        tool=tc.get("tool", ""),
+                        arguments=tc.get("arguments", {}),
+                        result=tc.get("result", {}),
+                        success=tc.get("success", True),
+                        error=tc.get("error", ""),
+                    )
+                )
 
             step.duration_ms = (time.monotonic() - t0) * 1000
 
@@ -1105,8 +1218,8 @@ class ExecutionPlanner:
         t0 = time.monotonic()
 
         try:
-            from core.agent_team import TeamManager
             from core.agent_factory import get_agent_factory
+            from core.agent_team import TeamManager
 
             factory = get_agent_factory(self._llm_router)
             manager = TeamManager(
@@ -1118,20 +1231,19 @@ class ExecutionPlanner:
             _plan_targets = getattr(plan, "device_id", None)
             if isinstance(_plan_targets, list) and len(_plan_targets) > 1:
                 try:
-                    decomposed = await _try_decompose_task(
-                        plan.message, _plan_targets, {"session_id": plan.session_id}
-                    )
+                    decomposed = await _try_decompose_task(plan.message, _plan_targets, {"session_id": plan.session_id})
                     logger.info(
                         "TaskDecomposer: decomposed into %d subtasks for %d targets",
-                        len(decomposed), len(_plan_targets),
+                        len(decomposed),
+                        len(_plan_targets),
                     )
                 except Exception as _dec_err:
                     logger.debug("TaskDecomposer decomposition skipped: %s", _dec_err)
 
             # Map strategy: swarm/parallel/specialized + critic(做审分离)/pipeline(流水线)
-            team_strategy = strategy if strategy in (
-                "swarm", "parallel", "specialized", "critic", "pipeline"
-            ) else "specialized"
+            team_strategy = (
+                strategy if strategy in ("swarm", "parallel", "specialized", "critic", "pipeline") else "specialized"
+            )
             complexity = _estimate_complexity(plan.message)
             team = await manager.create_team(
                 strategy=team_strategy,
@@ -1158,12 +1270,14 @@ class ExecutionPlanner:
             steps.append(exec_step)
 
             # 收集 member 结果中的工具调用（MemberResult 不一定带 tool_calls，安全读取）
-            for member_res in (team_result.member_results or []):
-                for tc in (getattr(member_res, "tool_calls", None) or []):
-                    tool_calls.append(ToolCallRecord(
-                        tool=tc if isinstance(tc, str) else tc.get("tool", ""),
-                        result={},
-                    ))
+            for member_res in team_result.member_results or []:
+                for tc in getattr(member_res, "tool_calls", None) or []:
+                    tool_calls.append(
+                        ToolCallRecord(
+                            tool=tc if isinstance(tc, str) else tc.get("tool", ""),
+                            result={},
+                        )
+                    )
 
             step.duration_ms = (time.monotonic() - t0) * 1000
             return ExecutionResult(
@@ -1207,15 +1321,15 @@ class ExecutionPlanner:
         t0 = time.monotonic()
 
         try:
-            from core.fractal_agent import FractalExecutor
             from core.agent_factory import get_agent_factory
+            from core.fractal_agent import FractalExecutor
 
             factory = get_agent_factory(self._llm_router)
             executor = FractalExecutor(
                 llm_router=self._llm_router,
                 agent_factory=factory,
-                max_depth=3,          # 硬编码上限
-                max_subtasks=20,      # 硬编码上限
+                max_depth=3,  # 硬编码上限
+                max_subtasks=20,  # 硬编码上限
             )
 
             step.output = {"strategy": "fractal", "max_depth": 3, "max_subtasks": 20}

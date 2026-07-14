@@ -8,19 +8,20 @@ Covers: SessionManager, EndToEndPipeline, Session API routes.
 import json
 import os
 import time
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
+from core.e2e_pipeline import EndToEndPipeline
 from core.session_manager import (
-    SessionManager,
     Session,
+    SessionManager,
     SessionMessage,
     get_session_manager,
 )
-from core.e2e_pipeline import EndToEndPipeline
-
 
 # ══════════════════════ Fixtures ══════════════════════
+
 
 @pytest.fixture
 def session_manager(tmp_path):
@@ -39,10 +40,12 @@ def mock_llm_router():
     router = MagicMock()
     router.is_available = MagicMock(return_value=True)
     router.get_default_model = MagicMock(return_value="mock-model")
-    router.chat_completion = AsyncMock(return_value=MagicMock(
-        choices=[MagicMock(message=MagicMock(content="Hello from Galaxy!"))],
-        model="mock-model",
-    ))
+    router.chat_completion = AsyncMock(
+        return_value=MagicMock(
+            choices=[MagicMock(message=MagicMock(content="Hello from Galaxy!"))],
+            model="mock-model",
+        )
+    )
     return router
 
 
@@ -106,9 +109,7 @@ class TestSessionManager:
 
     async def test_add_message(self, session_manager):
         session = await session_manager.create_session("user_001", "phone_01")
-        ok = await session_manager.add_message(
-            session.id, "user", "Hello", "phone_01"
-        )
+        ok = await session_manager.add_message(session.id, "user", "Hello", "phone_01")
         assert ok is True
         assert len(session.history) == 1
         assert session.history[0].content == "Hello"
@@ -167,9 +168,7 @@ class TestSessionManager:
 
     async def test_get_full_history(self, session_manager):
         session = await session_manager.create_session("user_001", "phone_01")
-        await session_manager.add_message(
-            session.id, "user", "Hello", "phone_01", {"source": "voice"}
-        )
+        await session_manager.add_message(session.id, "user", "Hello", "phone_01", {"source": "voice"})
 
         full = session_manager.get_full_history(session.id)
         assert len(full) == 1
@@ -197,9 +196,7 @@ class TestSessionManager:
 
     async def test_update_callback(self, session_manager):
         called = []
-        session_manager.set_update_callback(
-            lambda sid, msg, devices: called.append((sid, msg, devices))
-        )
+        session_manager.set_update_callback(lambda sid, msg, devices: called.append((sid, msg, devices)))
         session = await session_manager.create_session("user_001", "phone_01")
         await session_manager.add_message(session.id, "user", "test", "phone_01")
 
@@ -256,23 +253,15 @@ class TestEndToEndPipeline:
 
     @pytest.mark.asyncio
     async def test_session_created_and_reused(self, pipeline):
-        r1 = await pipeline.execute(
-            message="Hello", user_id="user_001", source_device_id="phone_01"
-        )
-        r2 = await pipeline.execute(
-            message="World", user_id="user_001", source_device_id="pc_01"
-        )
+        r1 = await pipeline.execute(message="Hello", user_id="user_001", source_device_id="phone_01")
+        r2 = await pipeline.execute(message="World", user_id="user_001", source_device_id="pc_01")
         # Same user should use same session
         assert r1["session_id"] == r2["session_id"]
 
     @pytest.mark.asyncio
     async def test_session_history_accumulated(self, pipeline, session_manager):
-        await pipeline.execute(
-            message="msg1", user_id="user_001", source_device_id="phone_01"
-        )
-        await pipeline.execute(
-            message="msg2", user_id="user_001", source_device_id="phone_01"
-        )
+        await pipeline.execute(message="msg1", user_id="user_001", source_device_id="phone_01")
+        await pipeline.execute(message="msg2", user_id="user_001", source_device_id="phone_01")
 
         sessions = session_manager.list_sessions("user_001")
         assert len(sessions) == 1
@@ -285,13 +274,9 @@ class TestEndToEndPipeline:
     @pytest.mark.asyncio
     async def test_cross_device_broadcast(self, pipeline, mock_connection_manager):
         # First message from phone
-        await pipeline.execute(
-            message="Hello", user_id="user_001", source_device_id="phone_01"
-        )
+        await pipeline.execute(message="Hello", user_id="user_001", source_device_id="phone_01")
         # Second message from PC (should broadcast back to phone)
-        result = await pipeline.execute(
-            message="World", user_id="user_001", source_device_id="pc_01"
-        )
+        result = await pipeline.execute(message="World", user_id="user_001", source_device_id="pc_01")
         # phone_01 should have been notified
         assert "phone_01" in result["devices_notified"]
 
@@ -318,9 +303,7 @@ class TestEndToEndPipeline:
 
     @pytest.mark.asyncio
     async def test_latency_tracking(self, pipeline):
-        result = await pipeline.execute(
-            message="test", user_id="user_001"
-        )
+        result = await pipeline.execute(message="test", user_id="user_001")
         assert "latency_ms" in result["data"]
         assert result["data"]["latency_ms"] >= 0
 
@@ -348,6 +331,7 @@ class TestChatRequestModel:
 
     def test_chat_request_new_fields(self):
         from core.routes._models import ChatRequest
+
         req = ChatRequest(
             message="test",
             device_id="phone_01",
@@ -359,6 +343,7 @@ class TestChatRequestModel:
 
     def test_chat_request_backward_compatible(self):
         from core.routes._models import ChatRequest
+
         # Old-style request without new fields should still work
         req = ChatRequest(message="test", device_id="phone_01")
         assert req.user_id == ""

@@ -868,9 +868,7 @@ _INVARIANT_REGISTRY: List[RuntimeInvariantRecord] = [
             "enforcement.  TruthOwnershipRecord for TruthSurface.device "
             "catalogs prohibited write paths."
         ),
-        prior_pr_reference=(
-            "PR-1 truth_source_lock, PR-3 compat_cache_demotion, PR-J truth_conflict_enforcement"
-        ),
+        prior_pr_reference=("PR-1 truth_source_lock, PR-3 compat_cache_demotion, PR-J truth_conflict_enforcement"),
         violation_log_prefix="INVARIANT_VIOLATION::INV-011",
         notes=(
             "ENFORCED.  Compat cache writes are annotated with COMPAT_MIRROR_WRITE "
@@ -912,9 +910,7 @@ _INVARIANT_REGISTRY: List[RuntimeInvariantRecord] = [
             "core.truth_conflict_enforcement.TruthOwnershipRecord for "
             "TruthSurface.session catalogs prohibited write paths."
         ),
-        prior_pr_reference=(
-            "PR-4 canonical_session_truth, PR-8 INV-003, PR-J truth_conflict_enforcement"
-        ),
+        prior_pr_reference=("PR-4 canonical_session_truth, PR-8 INV-003, PR-J truth_conflict_enforcement"),
         violation_log_prefix="INVARIANT_VIOLATION::INV-012",
         notes=(
             "ENFORCED.  CanonicalSessionTruthRuntime is the authoritative session "
@@ -954,9 +950,7 @@ _INVARIANT_REGISTRY: List[RuntimeInvariantRecord] = [
             "TruthSurface.task catalogs the canonical authority and "
             "prohibited write paths."
         ),
-        prior_pr_reference=(
-            "PR-507 canonical_task, PR-8 INV-001, PR-J truth_conflict_enforcement"
-        ),
+        prior_pr_reference=("PR-507 canonical_task, PR-8 INV-001, PR-J truth_conflict_enforcement"),
         violation_log_prefix="INVARIANT_VIOLATION::INV-013",
         notes=(
             "ENFORCED.  CanonicalTask/CanonicalTaskRuntime are the authoritative "
@@ -1308,8 +1302,7 @@ def check_invariant(
         )
         if strict:
             raise ValueError(
-                f"Invariant {invariant_id} is in REGRESSION_RISK status: "
-                f"{record.regression_risk_detail}"
+                f"Invariant {invariant_id} is in REGRESSION_RISK status: " f"{record.regression_risk_detail}"
             )
     elif record.status == InvariantStatus.DOCUMENTED_ONLY:
         logger.info(
@@ -1367,10 +1360,7 @@ def check_cross_repo_assumption(
             record.drift_consequence[:80],
         )
         if strict:
-            raise ValueError(
-                f"Cross-repo assumption {assumption_id} is not validated: "
-                f"{record.description}"
-            )
+            raise ValueError(f"Cross-repo assumption {assumption_id} is not validated: " f"{record.description}")
 
     return record
 
@@ -1402,28 +1392,21 @@ def run_invariant_gate(
     documented_only = [r for r in invariants if r.status == InvariantStatus.DOCUMENTED_ONLY]
 
     # Unvalidated cross-repo assumptions for this domain
-    domain_assumptions = [
-        a for a in _CROSS_REPO_ASSUMPTION_REGISTRY
-        if a.domain == domain and not a.validated
-    ]
+    domain_assumptions = [a for a in _CROSS_REPO_ASSUMPTION_REGISTRY if a.domain == domain and not a.validated]
 
     issues: List[str] = []
     if regression_risk:
         for r in regression_risk:
             issues.append(
-                f"REGRESSION_RISK invariant {r.invariant_id} ({r.severity.value}): "
-                f"{r.description[:80]}..."
+                f"REGRESSION_RISK invariant {r.invariant_id} ({r.severity.value}): " f"{r.description[:80]}..."
             )
     if documented_only:
         for r in documented_only:
             issues.append(
-                f"DOCUMENTED_ONLY invariant {r.invariant_id} ({r.severity.value}): "
-                f"no active enforcement mechanism."
+                f"DOCUMENTED_ONLY invariant {r.invariant_id} ({r.severity.value}): " f"no active enforcement mechanism."
             )
     for a in domain_assumptions:
-        issues.append(
-            f"Unvalidated assumption {a.assumption_id}: {a.description[:80]}..."
-        )
+        issues.append(f"Unvalidated assumption {a.assumption_id}: {a.description[:80]}...")
 
     if regression_risk:
         verdict = ValidationGateVerdict.fail
@@ -1484,10 +1467,7 @@ def run_cross_repo_validation_gate() -> ValidationGateResult:
 
     issues: List[str] = []
     for a in unvalidated:
-        issues.append(
-            f"Unvalidated assumption {a.assumption_id} ({a.domain.value}): "
-            f"{a.description[:80]}..."
-        )
+        issues.append(f"Unvalidated assumption {a.assumption_id} ({a.domain.value}): " f"{a.description[:80]}...")
 
     if len(unvalidated) > len(all_assumptions) * CROSS_REPO_VALIDATION_FAILURE_THRESHOLD:
         # More than half unvalidated is a failure condition
@@ -1519,9 +1499,7 @@ def run_cross_repo_validation_gate() -> ValidationGateResult:
             f"Cross-repo validation gate: all {len(all_assumptions)} assumptions "
             "validated.  No unvalidated cross-repo assumptions detected."
         )
-        logger.debug(
-            "CROSS_REPO_VALIDATION_GATE_PASS total=%d", len(all_assumptions)
-        )
+        logger.debug("CROSS_REPO_VALIDATION_GATE_PASS total=%d", len(all_assumptions))
 
     return ValidationGateResult(
         gate_id="aggregate_cross_repo_validation",
@@ -1628,8 +1606,6 @@ def is_enforcement_posture_acceptable() -> bool:
     -------
     bool
     """
-    has_regression = any(
-        r.status == InvariantStatus.REGRESSION_RISK for r in _INVARIANT_REGISTRY
-    )
+    has_regression = any(r.status == InvariantStatus.REGRESSION_RISK for r in _INVARIANT_REGISTRY)
     has_unvalidated = any(not a.validated for a in _CROSS_REPO_ASSUMPTION_REGISTRY)
     return not has_regression and not has_unvalidated

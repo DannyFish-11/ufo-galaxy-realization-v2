@@ -51,32 +51,30 @@ from typing import Any, Dict, List, Optional
 import pytest
 
 from core.task_lifecycle_persistence import (
-    TASK_LIFECYCLE_PERSISTENCE_IS_AUTHORITY,
-    TASK_LIFECYCLE_PERSISTENCE_GAP_CLOSURE_SENTINEL,
+    DISPOSITION_BY_OWNER,
     DISPOSITION_POLICY_IS_EXPLICIT,
     RECOVERY_RESTORES_INTERRUPTED_RECORDS_POLICY,
+    TASK_LIFECYCLE_PERSISTENCE_GAP_CLOSURE_SENTINEL,
+    TASK_LIFECYCLE_PERSISTENCE_IS_AUTHORITY,
     InFlightTaskDisposition,
-    DISPOSITION_BY_OWNER,
-    TaskLifecycleSnapshotRecord,
     RestoredTaskRecord,
     TaskLifecyclePersistenceStore,
+    TaskLifecycleSnapshotRecord,
     classify_disposition,
-    save_task_lifecycle_snapshot,
-    load_task_lifecycle_snapshot,
-    restore_inflight_tasks_from_snapshot,
     get_task_lifecycle_store,
+    load_task_lifecycle_snapshot,
     reset_task_lifecycle_store,
+    restore_inflight_tasks_from_snapshot,
+    save_task_lifecycle_snapshot,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_store(tmp_path) -> TaskLifecyclePersistenceStore:
-    return TaskLifecyclePersistenceStore(
-        store_path=os.path.join(str(tmp_path), "task_lc.json")
-    )
+    return TaskLifecyclePersistenceStore(store_path=os.path.join(str(tmp_path), "task_lc.json"))
 
 
 def _record_dict(
@@ -101,6 +99,7 @@ def _record_dict(
 # A — Sentinels
 # ---------------------------------------------------------------------------
 
+
 class TestSentinels:
     def test_authority_sentinel(self):
         assert isinstance(TASK_LIFECYCLE_PERSISTENCE_IS_AUTHORITY, str)
@@ -123,6 +122,7 @@ class TestSentinels:
 # B — InFlightTaskDisposition values
 # ---------------------------------------------------------------------------
 
+
 class TestInFlightTaskDisposition:
     def test_four_values(self):
         values = {d.value for d in InFlightTaskDisposition}
@@ -141,6 +141,7 @@ class TestInFlightTaskDisposition:
 # ---------------------------------------------------------------------------
 # C — DISPOSITION_BY_OWNER mapping
 # ---------------------------------------------------------------------------
+
 
 class TestDispositionByOwner:
     def test_all_five_owners_covered(self):
@@ -173,14 +174,18 @@ class TestDispositionByOwner:
 # D / E — classify_disposition
 # ---------------------------------------------------------------------------
 
+
 class TestClassifyDisposition:
-    @pytest.mark.parametrize("owner,expected", [
-        ("gateway_ingress", InFlightTaskDisposition.REISSUABLE),
-        ("routing", InFlightTaskDisposition.REPLAY_ONLY),
-        ("device_dispatch", InFlightTaskDisposition.RESUMABLE),
-        ("cross_device", InFlightTaskDisposition.RESUMABLE),
-        ("result_completion", InFlightTaskDisposition.TERMINAL_ON_INTERRUPT),
-    ])
+    @pytest.mark.parametrize(
+        "owner,expected",
+        [
+            ("gateway_ingress", InFlightTaskDisposition.REISSUABLE),
+            ("routing", InFlightTaskDisposition.REPLAY_ONLY),
+            ("device_dispatch", InFlightTaskDisposition.RESUMABLE),
+            ("cross_device", InFlightTaskDisposition.RESUMABLE),
+            ("result_completion", InFlightTaskDisposition.TERMINAL_ON_INTERRUPT),
+        ],
+    )
     def test_known_owners(self, owner, expected):
         assert classify_disposition(owner) == expected
 
@@ -194,6 +199,7 @@ class TestClassifyDisposition:
 # ---------------------------------------------------------------------------
 # F / G — TaskLifecycleSnapshotRecord
 # ---------------------------------------------------------------------------
+
 
 class TestTaskLifecycleSnapshotRecord:
     def test_construction_defaults(self):
@@ -229,12 +235,11 @@ class TestTaskLifecycleSnapshotRecord:
 # H / I — RestoredTaskRecord
 # ---------------------------------------------------------------------------
 
+
 class TestRestoredTaskRecord:
     def test_from_record_dict_assigns_disposition(self):
         raw = _record_dict(owner="device_dispatch")
-        rec = RestoredTaskRecord.from_record_dict(
-            raw, interrupted_at=1000.0, snapshot_id="tls_test"
-        )
+        rec = RestoredTaskRecord.from_record_dict(raw, interrupted_at=1000.0, snapshot_id="tls_test")
         assert rec.disposition == InFlightTaskDisposition.RESUMABLE
         assert rec.interrupted_at == 1000.0
         assert rec.snapshot_id == "tls_test"
@@ -250,9 +255,17 @@ class TestRestoredTaskRecord:
         rec = RestoredTaskRecord.from_record_dict(raw, interrupted_at=time.time())
         d = rec.to_dict()
         for key in (
-            "task_id", "trace_id", "target_device_id", "tool_name",
-            "owner", "timeout", "registered_at", "interrupted_at",
-            "disposition", "metadata", "snapshot_id",
+            "task_id",
+            "trace_id",
+            "target_device_id",
+            "tool_name",
+            "owner",
+            "timeout",
+            "registered_at",
+            "interrupted_at",
+            "disposition",
+            "metadata",
+            "snapshot_id",
         ):
             assert key in d, f"Missing key: {key}"
 
@@ -265,6 +278,7 @@ class TestRestoredTaskRecord:
 # ---------------------------------------------------------------------------
 # J — Save + load round-trip
 # ---------------------------------------------------------------------------
+
 
 class TestPersistenceStoreRoundTrip:
     def test_save_and_load(self, tmp_path):
@@ -296,6 +310,7 @@ class TestPersistenceStoreRoundTrip:
 # K — Atomicity (no temp file remains on success)
 # ---------------------------------------------------------------------------
 
+
 class TestAtomicWrite:
     def test_no_tmp_file_after_save(self, tmp_path):
         store = _make_store(tmp_path)
@@ -307,6 +322,7 @@ class TestAtomicWrite:
 # ---------------------------------------------------------------------------
 # L / M — Load edge cases
 # ---------------------------------------------------------------------------
+
 
 class TestLoadEdgeCases:
     def test_load_returns_none_when_no_file(self, tmp_path):
@@ -325,6 +341,7 @@ class TestLoadEdgeCases:
 # N / O — Clear
 # ---------------------------------------------------------------------------
 
+
 class TestClear:
     def test_clear_removes_file(self, tmp_path):
         store = _make_store(tmp_path)
@@ -342,6 +359,7 @@ class TestClear:
 # ---------------------------------------------------------------------------
 # P / Q — Convenience wrappers
 # ---------------------------------------------------------------------------
+
 
 class TestConvenienceWrappers:
     def test_save_task_lifecycle_snapshot(self, tmp_path):
@@ -365,6 +383,7 @@ class TestConvenienceWrappers:
 # ---------------------------------------------------------------------------
 # R–V — restore_inflight_tasks_from_snapshot
 # ---------------------------------------------------------------------------
+
 
 class TestRestoreInflightTasks:
     def test_empty_store_returns_empty_list(self, tmp_path):
@@ -421,6 +440,7 @@ class TestRestoreInflightTasks:
 # W / X — Singleton management
 # ---------------------------------------------------------------------------
 
+
 class TestSingletonManagement:
     def test_get_store_returns_singleton(self, tmp_path):
         reset_task_lifecycle_store()
@@ -445,12 +465,14 @@ class TestSingletonManagement:
 # Y / Z / AA — TaskEnvelopeLifecycleRegistry persistence integration
 # ---------------------------------------------------------------------------
 
+
 class TestRegistryPersistenceIntegration:
     def _make_registry(self):
         from core.task_envelope_lifecycle_registry import (
-            TaskEnvelopeLifecycleRegistry,
             LifecycleOwner,
+            TaskEnvelopeLifecycleRegistry,
         )
+
         return TaskEnvelopeLifecycleRegistry(), LifecycleOwner
 
     def _make_envelope(self, task_id: str = "env-1", tool: str = "test_tool"):
@@ -461,6 +483,7 @@ class TestRegistryPersistenceIntegration:
                 self.target = "dev-x"
                 self.tool_name = tl
                 self.timeout = 30.0
+
         return FakeEnvelope(task_id, tool)
 
     def test_persist_snapshot_writes_pending(self, tmp_path):
@@ -532,22 +555,29 @@ class TestRegistryPersistenceIntegration:
 # AB–AE — RuntimeRecoveryReport / run_recovery integration
 # ---------------------------------------------------------------------------
 
+
 class TestRuntimeRecoveryIntegration:
     def _make_mesh_store(self, tmp_path):
         from core.mesh.mesh_session_persistence import MeshSessionPersistenceStore
+
         return MeshSessionPersistenceStore(store_dir=str(tmp_path))
 
     def _make_body_store(self, tmp_path):
         from core.mesh.body_mesh_persistence import BodyMeshPersistenceStore
+
         path = os.path.join(str(tmp_path), "bm.json")
         return BodyMeshPersistenceStore(store_path=path)
 
     class FakeBodyRegistry:
-        def __init__(self): self._entries = []
-        def register(self, device_id, **_): self._entries.append(device_id)
+        def __init__(self):
+            self._entries = []
+
+        def register(self, device_id, **_):
+            self._entries.append(device_id)
 
     def test_report_has_inflight_fields(self, tmp_path):
         from core.runtime_restart_recovery import RuntimeRecoveryReport
+
         r = RuntimeRecoveryReport()
         assert hasattr(r, "inflight_tasks_recovered")
         assert hasattr(r, "inflight_tasks_resumable")
@@ -557,6 +587,7 @@ class TestRuntimeRecoveryIntegration:
 
     def test_report_to_dict_has_inflight_keys(self, tmp_path):
         from core.runtime_restart_recovery import RuntimeRecoveryReport
+
         d = RuntimeRecoveryReport().to_dict()
         for key in (
             "inflight_tasks_recovered",
@@ -632,12 +663,14 @@ class TestRuntimeRecoveryIntegration:
 # AF — Disposition classification aligns with policy sentinel
 # ---------------------------------------------------------------------------
 
+
 class TestDispositionPolicyAlignment:
     def test_all_lifecycle_owners_have_disposition(self):
         """Every LifecycleOwner value must be covered by DISPOSITION_BY_OWNER."""
         from core.task_envelope_lifecycle_registry import LifecycleOwner
+
         for owner in LifecycleOwner:
             disposition = classify_disposition(owner.value)
-            assert isinstance(disposition, InFlightTaskDisposition), (
-                f"LifecycleOwner.{owner.name} ('{owner.value}') has no disposition"
-            )
+            assert isinstance(
+                disposition, InFlightTaskDisposition
+            ), f"LifecycleOwner.{owner.name} ('{owner.value}') has no disposition"

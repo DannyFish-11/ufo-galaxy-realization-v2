@@ -345,7 +345,7 @@ class TestTruthChainIntegration:
 
     def test_D01_ingest_result_calls_truth_chain(self):
         """ingest_result must invoke run_task_result_truth_chain when available."""
-        from core.unified_result_ingress import UnifiedResultIngress, NormalizedResultEvent, ResultSourceChannel
+        from core.unified_result_ingress import NormalizedResultEvent, ResultSourceChannel, UnifiedResultIngress
 
         called = []
 
@@ -382,7 +382,7 @@ class TestTruthChainIntegration:
 
     def test_D02_truth_chain_receives_normalized_status(self):
         """The truth chain must receive the V2 canonical status, not raw Android."""
-        from core.unified_result_ingress import UnifiedResultIngress, NormalizedResultEvent, ResultSourceChannel
+        from core.unified_result_ingress import NormalizedResultEvent, ResultSourceChannel, UnifiedResultIngress
 
         received_status = []
 
@@ -1241,7 +1241,7 @@ class TestSourceChannelCoverage:
         ],
     )
     def test_G_channel_produces_closure_attempt(self, channel: str):
-        from core.unified_result_ingress import UnifiedResultIngress, ResultSourceChannel
+        from core.unified_result_ingress import ResultSourceChannel, UnifiedResultIngress
 
         closure_attempted = []
 
@@ -1270,10 +1270,11 @@ class TestRestEndpointIntegration:
 
     def test_H01_submit_task_result_calls_truth_chain(self):
         """POST /api/v1/tasks/{task_id}/result must invoke truth chain."""
-        from fastapi.testclient import TestClient
         from fastapi import FastAPI
-        from core.routes.tasks import create_router
+        from fastapi.testclient import TestClient
+
         from core.routes._shared import task_queue
+        from core.routes.tasks import create_router
 
         app = FastAPI()
         app.include_router(create_router())
@@ -1314,10 +1315,11 @@ class TestRestEndpointIntegration:
 
     def test_H02_submit_task_result_calls_completion_notify(self):
         """POST /api/v1/tasks/{task_id}/result must notify CanonicalCompletionIngress."""
-        from fastapi.testclient import TestClient
         from fastapi import FastAPI
-        from core.routes.tasks import create_router
+        from fastapi.testclient import TestClient
+
         from core.routes._shared import task_queue
+        from core.routes.tasks import create_router
 
         app = FastAPI()
         app.include_router(create_router())
@@ -1599,8 +1601,8 @@ class TestCanonicalGoalExecutionResultCompletion:
 
     @pytest.mark.asyncio
     async def test_J04_handle_goal_execution_result_forwards_replay_and_continuity_metadata(self):
-        from galaxy_gateway.android.handlers.goal_execution import handle_goal_execution_result
         from core.unified_result_ingress import ResultSourceChannel
+        from galaxy_gateway.android.handlers.goal_execution import handle_goal_execution_result
 
         received = {}
 

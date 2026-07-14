@@ -8,8 +8,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from core.operational_readiness_surface import (
-    DUAL_REPO_INTEGRATED_SYSTEM_CONTRACT_ROUTE,
     _MINIMAL_HAPPY_PATH_CONTRACT_VERSION,
+    DUAL_REPO_INTEGRATED_SYSTEM_CONTRACT_ROUTE,
     SurfaceStatus,
     build_operational_readiness_report,
 )
@@ -618,12 +618,8 @@ def test_dual_repo_integrated_system_contract_endpoint_returns_integrated_contra
     assert trace_evidence["trace_nodes"]["mode_execution_truth_acceptance_trace"]["status"] == "partial"
     assert trace_evidence["trace_nodes"]["result_uplink_and_closure_acceptance_trace"]["status"] == "partial"
     assert trace_evidence["trace_nodes"]["shared_protocol_and_state_semantics_trace"]["status"] == "partial"
-    assert (
-        trace_evidence["surface_truth_mapping"]["mobile_surface"]["mapping_type"] == "direct_truth_participant"
-    )
-    assert (
-        trace_evidence["surface_truth_mapping"]["desktop_surface"]["mapping_type"] == "derived_projection_surface"
-    )
+    assert trace_evidence["surface_truth_mapping"]["mobile_surface"]["mapping_type"] == "direct_truth_participant"
+    assert trace_evidence["surface_truth_mapping"]["desktop_surface"]["mapping_type"] == "derived_projection_surface"
     assert trace_evidence["source_of_truth_vs_projection_surfaces"]["status"] == "established"
     assert trace_evidence["trace_gaps_to_maturity"]["status"] == "open"
     assert len(trace_evidence["next_trace_closing_priorities_zh"]["items"]) >= 3

@@ -56,7 +56,6 @@ from core.task_graph import (
     compile_subtasks_to_graph,
 )
 
-
 # ===========================================================================
 # Helpers
 # ===========================================================================
@@ -93,6 +92,7 @@ async def _record_handler(node: TaskNode, ctx: Dict[str, Any]) -> Dict[str, Any]
 # A) NodeStatus
 # ===========================================================================
 
+
 class TestNodeStatus:
     def test_pending(self):
         assert NodeStatus.PENDING == "pending"
@@ -114,6 +114,7 @@ class TestNodeStatus:
 # B) RetryPolicy
 # ===========================================================================
 
+
 class TestRetryPolicy:
     def test_defaults(self):
         p = RetryPolicy()
@@ -131,6 +132,7 @@ class TestRetryPolicy:
 # ===========================================================================
 # C) TaskNode
 # ===========================================================================
+
 
 class TestTaskNode:
     def test_auto_id(self):
@@ -158,6 +160,7 @@ class TestTaskNode:
 # D) TaskEdge
 # ===========================================================================
 
+
 class TestTaskEdge:
     def test_fields(self):
         e = TaskEdge(from_node="a", to_node="b")
@@ -168,6 +171,7 @@ class TestTaskEdge:
     def test_with_condition(self):
         def cond(n: TaskNode) -> bool:
             return True
+
         e = TaskEdge(from_node="a", to_node="b", condition=cond)
         assert e.condition is cond
 
@@ -175,6 +179,7 @@ class TestTaskEdge:
 # ===========================================================================
 # E) TaskGraph.add_node()
 # ===========================================================================
+
 
 class TestAddNode:
     def test_returns_task_node(self):
@@ -204,6 +209,7 @@ class TestAddNode:
 # F) TaskGraph.add_edge() validation
 # ===========================================================================
 
+
 class TestAddEdge:
     def test_unknown_from_node_raises(self):
         g = TaskGraph()
@@ -231,6 +237,7 @@ class TestAddEdge:
 # G) topological_layers — linear chain
 # ===========================================================================
 
+
 class TestTopologicalLayersLinear:
     def test_linear_chain_three_nodes(self):
         g = TaskGraph()
@@ -244,6 +251,7 @@ class TestTopologicalLayersLinear:
 # ===========================================================================
 # H) topological_layers — independent nodes in single layer
 # ===========================================================================
+
 
 class TestTopologicalLayersParallel:
     def test_three_independent_nodes(self):
@@ -260,13 +268,14 @@ class TestTopologicalLayersParallel:
 # I) topological_layers — diamond
 # ===========================================================================
 
+
 class TestTopologicalLayersDiamond:
     def test_diamond_two_middle_layers(self):
         g = TaskGraph()
-        g.add_node("top",   node_id="top")
-        g.add_node("left",  node_id="left",   depends_on=["top"])
-        g.add_node("right", node_id="right",  depends_on=["top"])
-        g.add_node("bot",   node_id="bot",    depends_on=["left", "right"])
+        g.add_node("top", node_id="top")
+        g.add_node("left", node_id="left", depends_on=["top"])
+        g.add_node("right", node_id="right", depends_on=["top"])
+        g.add_node("bot", node_id="bot", depends_on=["left", "right"])
         layers = g.topological_layers()
         assert layers[0] == ["top"]
         assert set(layers[1]) == {"left", "right"}
@@ -276,6 +285,7 @@ class TestTopologicalLayersDiamond:
 # ===========================================================================
 # J) topological_layers — cycle detection
 # ===========================================================================
+
 
 class TestTopologicalLayersCycle:
     def test_cycle_raises_value_error(self):
@@ -290,6 +300,7 @@ class TestTopologicalLayersCycle:
 # K) execute() — empty graph
 # ===========================================================================
 
+
 class TestExecuteEmpty:
     async def test_empty_graph_succeeds(self):
         g = TaskGraph()
@@ -302,6 +313,7 @@ class TestExecuteEmpty:
 # ===========================================================================
 # L) execute() — single node success
 # ===========================================================================
+
 
 class TestExecuteSingleSuccess:
     async def test_single_node_done(self):
@@ -318,6 +330,7 @@ class TestExecuteSingleSuccess:
 # M) execute() — single node failure
 # ===========================================================================
 
+
 class TestExecuteSingleFailure:
     async def test_single_node_failed(self):
         g = TaskGraph()
@@ -332,6 +345,7 @@ class TestExecuteSingleFailure:
 # ===========================================================================
 # N) execute() — retry on failure (succeeds on retry)
 # ===========================================================================
+
 
 class TestExecuteRetrySuccess:
     async def test_succeeds_on_second_attempt(self):
@@ -352,6 +366,7 @@ class TestExecuteRetrySuccess:
 # O) execute() — retry exhausted → FAILED
 # ===========================================================================
 
+
 class TestExecuteRetryExhausted:
     async def test_exhausted_retries_failed(self):
         g = TaskGraph()
@@ -370,6 +385,7 @@ class TestExecuteRetryExhausted:
 # P) execute() — parallel nodes run concurrently
 # ===========================================================================
 
+
 class TestExecuteParallel:
     async def test_parallel_nodes_all_done(self):
         g = TaskGraph()
@@ -384,6 +400,7 @@ class TestExecuteParallel:
 # ===========================================================================
 # Q) execute() — dependency ordering
 # ===========================================================================
+
 
 class TestExecuteDependencyOrdering:
     async def test_second_node_uses_first_result(self):
@@ -410,11 +427,12 @@ class TestExecuteDependencyOrdering:
 # R) execute() — failed node causes dependent to be SKIPPED
 # ===========================================================================
 
+
 class TestExecuteSkipOnDependencyFailure:
     async def test_dependent_skipped_when_predecessor_fails(self):
         g = TaskGraph()
         g.add_node("fail_node", node_id="f", handler=_always_fail)
-        g.add_node("dep_node",  node_id="d", handler=_ok_handler, depends_on=["f"])
+        g.add_node("dep_node", node_id="d", handler=_ok_handler, depends_on=["f"])
         r = await g.execute()
         assert g._nodes["f"].status == NodeStatus.FAILED
         assert g._nodes["d"].status == NodeStatus.SKIPPED
@@ -425,11 +443,12 @@ class TestExecuteSkipOnDependencyFailure:
 # S) execute() — continue_on_failure=True keeps independent branches running
 # ===========================================================================
 
+
 class TestExecuteContinueOnFailure:
     async def test_independent_branch_still_runs(self):
         g = TaskGraph()
-        g.add_node("bad",  node_id="bad",  handler=_always_fail)
-        g.add_node("dep",  node_id="dep",  handler=_ok_handler, depends_on=["bad"])
+        g.add_node("bad", node_id="bad", handler=_always_fail)
+        g.add_node("dep", node_id="dep", handler=_ok_handler, depends_on=["bad"])
         g.add_node("good", node_id="good", handler=_ok_handler)  # independent
         r = await g.execute(continue_on_failure=True)
         assert g._nodes["bad"].status == NodeStatus.FAILED
@@ -441,14 +460,15 @@ class TestExecuteContinueOnFailure:
 # T) execute() — continue_on_failure=False halts after failure
 # ===========================================================================
 
+
 class TestExecuteHaltOnFailure:
     async def test_halts_on_first_failure(self):
         # "a" is the root (layer 0), "b" and "c" both depend on "a" (layer 1).
         # With continue_on_failure=False, after layer 0 fails, layer 1 is halted.
         g = TaskGraph()
-        g.add_node("a",   node_id="a",   handler=_always_fail)
-        g.add_node("b",   node_id="b",   handler=_ok_handler,  depends_on=["a"])
-        g.add_node("c",   node_id="c",   handler=_ok_handler,  depends_on=["a"])
+        g.add_node("a", node_id="a", handler=_always_fail)
+        g.add_node("b", node_id="b", handler=_ok_handler, depends_on=["a"])
+        g.add_node("c", node_id="c", handler=_ok_handler, depends_on=["a"])
         r = await g.execute(continue_on_failure=False)
         assert r.failed_nodes == 1
         # Both "b" and "c" depend on "a" (layer 1 after the failed layer 0)
@@ -460,11 +480,12 @@ class TestExecuteHaltOnFailure:
 # U) execute() — edge condition False → skip
 # ===========================================================================
 
+
 class TestExecuteEdgeCondition:
     async def test_false_condition_skips_successor(self):
         g = TaskGraph()
-        g.add_node("src",  node_id="src",  handler=_ok_handler)
-        g.add_node("tgt",  node_id="tgt",  handler=_ok_handler, depends_on=["src"])
+        g.add_node("src", node_id="src", handler=_ok_handler)
+        g.add_node("tgt", node_id="tgt", handler=_ok_handler, depends_on=["src"])
         g.add_edge("src", "tgt", condition=lambda n: False)
         r = await g.execute()
         assert g._nodes["src"].status == NodeStatus.DONE
@@ -474,6 +495,7 @@ class TestExecuteEdgeCondition:
 # ===========================================================================
 # V) execute() — rollback is called on failure
 # ===========================================================================
+
 
 class TestExecuteRollback:
     async def test_rollback_called_on_failure(self):
@@ -498,9 +520,11 @@ class TestExecuteRollback:
 # W) snapshot()
 # ===========================================================================
 
+
 class TestSnapshot:
     async def test_snapshot_is_serialisable(self):
         import json
+
         g = TaskGraph(trace_id="snap_trace", runtime_session_id="sess1")
         g.add_node("n1", node_id="n1", handler=_ok_handler)
         g.add_node("n2", node_id="n2", handler=_ok_handler, depends_on=["n1"])
@@ -517,6 +541,7 @@ class TestSnapshot:
 # ===========================================================================
 # X) ready_nodes()
 # ===========================================================================
+
 
 class TestReadyNodes:
     def test_no_deps_all_ready(self):
@@ -537,6 +562,7 @@ class TestReadyNodes:
 # ===========================================================================
 # Y) compile_subtasks_to_graph() basic
 # ===========================================================================
+
 
 class TestCompileSubtasks:
     def _make_subtask(self, task_id: str, name: str, depends_on=None):
@@ -583,6 +609,7 @@ class TestCompileSubtasks:
 # Z) compile_subtasks_to_graph() — resolve depends_on by name
 # ===========================================================================
 
+
 class TestCompileSubtasksByName:
     def _make_subtask(self, task_id: str, name: str, depends_on=None):
         obj = MagicMock()
@@ -608,6 +635,7 @@ class TestCompileSubtasksByName:
 # AA) trace_id / runtime_session_id propagation
 # ===========================================================================
 
+
 class TestTraceIdPropagation:
     async def test_trace_id_in_handler_context(self):
         received: Dict[str, Any] = {}
@@ -632,6 +660,7 @@ class TestTraceIdPropagation:
 # AB) GraphExecutionResult fields
 # ===========================================================================
 
+
 class TestGraphExecutionResult:
     async def test_result_fields_populated(self):
         g = TaskGraph(trace_id="abc")
@@ -652,6 +681,7 @@ class TestGraphExecutionResult:
 # AC) compile_and_run_dag() — e2e_orchestrator public API
 # ===========================================================================
 
+
 class TestCompileAndRunDag:
     def _make_subtask(self, task_id: str, name: str, depends_on=None):
         obj = MagicMock()
@@ -665,6 +695,7 @@ class TestCompileAndRunDag:
 
     async def test_basic_success(self):
         from core.e2e_orchestrator import compile_and_run_dag
+
         sts = [self._make_subtask("a", "step_a"), self._make_subtask("b", "step_b")]
         # Nodes have no handler, so they succeed by default (empty result)
         result = await compile_and_run_dag(
@@ -678,6 +709,7 @@ class TestCompileAndRunDag:
 
     async def test_returns_error_on_cycle(self):
         from core.e2e_orchestrator import compile_and_run_dag
+
         # cyclic dependency: compile_subtasks_to_graph succeeds but execute() fails
         sts = [
             self._make_subtask("x", "x", depends_on=["y"]),
@@ -693,6 +725,7 @@ class TestCompileAndRunDag:
 # ===========================================================================
 # AD) compile_and_run_dag() — cycle via compile_subtasks_to_graph
 # ===========================================================================
+
 
 class TestCompileAndRunDagCycle:
     def _make_subtask(self, task_id: str, name: str, depends_on=None):

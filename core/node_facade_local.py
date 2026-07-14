@@ -20,18 +20,16 @@ This is the **strangler fig** layer: old nodes continue to work via
 direct fusion_entry.py loading, but new nodes go through the unified
 contract. Over time, all nodes migrate to the unified path.
 """
+
 from __future__ import annotations
 
 import asyncio  # auto: missing import
-
-
 import importlib.util
 import logging
 import sys
 import time
 from pathlib import Path
 from typing import Any, Dict, Optional
-
 
 logger = logging.getLogger("Galaxy.NodeFacadeLocal")
 
@@ -41,6 +39,7 @@ NODES_ROOT = Path(__file__).resolve().parent.parent / "nodes"
 # PR-AIPV3
 try:
     from core.schemas.aip_v3 import MsgType  # noqa: F401
+
     _AIPV3_AVAILABLE = True
 except ImportError:
     _AIPV3_AVAILABLE = False
@@ -64,9 +63,7 @@ def _load_fusion_entry(node_id: str) -> Optional[Any]:
         return None
 
     try:
-        spec = importlib.util.spec_from_file_location(
-            f"nodes.{node_id}.fusion_entry", str(fusion_path)
-        )
+        spec = importlib.util.spec_from_file_location(f"nodes.{node_id}.fusion_entry", str(fusion_path))
         if spec is None or spec.loader is None:
             return None
         mod = importlib.util.module_from_spec(spec)
@@ -179,9 +176,7 @@ class LocalNodeFacade:
         except Exception as exc:
             logger.debug("Fallback triggered: %s", exc)
             duration_ms = int((time.time() - started) * 1000)
-            logger.warning(
-                "LocalFacade: %s.%s failed: %s", mapped_node_id, action, exc
-            )
+            logger.warning("LocalFacade: %s.%s failed: %s", mapped_node_id, action, exc)
             return {
                 "success": False,
                 "result": None,

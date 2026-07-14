@@ -157,9 +157,7 @@ _REGISTRY: Dict[str, TruthSourceEntry] = {
         is_durable=True,
         is_projection=False,
         requires_revalidation_after_restart=True,
-        evidence_chain=(
-            "core.canonical_task.CanonicalTaskRuntime.list_allocation_records",
-        ),
+        evidence_chain=("core.canonical_task.CanonicalTaskRuntime.list_allocation_records",),
         explanation=(
             "Task allocation ownership is tracked by CanonicalTaskRuntime. "
             "Accepted allocations are durable but must be revalidated after restart "
@@ -343,9 +341,7 @@ _REGISTRY: Dict[str, TruthSourceEntry] = {
         is_durable=False,
         is_projection=False,
         requires_revalidation_after_restart=False,
-        evidence_chain=(
-            "core.runtime_readiness_matrix.ReadinessMatrix",
-        ),
+        evidence_chain=("core.runtime_readiness_matrix.ReadinessMatrix",),
         explanation=(
             "The readiness verdict (READY/BLOCKED/DEGRADED/UNKNOWN) is produced "
             "by ReadinessMatrix by evaluating all registered readiness dimensions. "
@@ -388,9 +384,7 @@ _REGISTRY: Dict[str, TruthSourceEntry] = {
         is_durable=True,
         is_projection=False,
         requires_revalidation_after_restart=True,
-        evidence_chain=(
-            "core.android_device_state_store.DeviceStateStore",
-        ),
+        evidence_chain=("core.android_device_state_store.DeviceStateStore",),
         explanation=(
             "Android device state snapshots are the authoritative record of "
             "per-device model readiness, accessibility state, and runtime mode. "
@@ -408,9 +402,7 @@ _REGISTRY: Dict[str, TruthSourceEntry] = {
         is_durable=False,
         is_projection=False,
         requires_revalidation_after_restart=False,
-        evidence_chain=(
-            "core.delegated_runtime_execution_tracker.DelegatedRuntimeExecutionTracker",
-        ),
+        evidence_chain=("core.delegated_runtime_execution_tracker.DelegatedRuntimeExecutionTracker",),
         explanation=(
             "Android execution phase tracking is produced by "
             "DelegatedRuntimeExecutionTracker. It tracks accepted handoff, "
@@ -452,9 +444,7 @@ _REGISTRY: Dict[str, TruthSourceEntry] = {
         is_durable=False,
         is_projection=False,
         requires_revalidation_after_restart=True,
-        evidence_chain=(
-            "core.android_continuity_recovery_state_router.get_recovery_state_router",
-        ),
+        evidence_chain=("core.android_continuity_recovery_state_router.get_recovery_state_router",),
         explanation=(
             "Android continuity recovery state tracks whether the Android session "
             "is in a live, recovering, or degraded state. Recovery is partial when "
@@ -679,19 +669,13 @@ def enforce_surface_contract(
     """Raise when a surface violates registry governance constraints."""
     report = validate_surface_contract(surface_name, observed_registry_fields)
     if not report["is_valid"]:
-        raise AssertionError(
-            f"Truth-source registry contract violation for {surface_name}: "
-            f"{report['violations']}"
-        )
+        raise AssertionError(f"Truth-source registry contract violation for {surface_name}: " f"{report['violations']}")
 
 
 def build_registry_snapshot() -> Dict[str, Any]:
     """Return a full JSON-serialisable snapshot of the registry for operator surfaces."""
     governance = validate_registry_governance()
-    contracts = {
-        name: validate_surface_contract(name)
-        for name in sorted(_REQUIRED_SURFACE_CONTRACT_FIELDS.keys())
-    }
+    contracts = {name: validate_surface_contract(name) for name in sorted(_REQUIRED_SURFACE_CONTRACT_FIELDS.keys())}
     return {
         "authority": OUTWARD_TRUTH_SOURCE_REGISTRY_AUTHORITY,
         "entry_count": len(_REGISTRY),

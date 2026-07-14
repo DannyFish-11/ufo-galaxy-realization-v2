@@ -59,7 +59,6 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any, Dict, List
 
-
 # ---------------------------------------------------------------------------
 # Verdict taxonomy
 # ---------------------------------------------------------------------------
@@ -456,17 +455,14 @@ FRESH_AUDIT_UPGRADES_FROM_PRIOR: List[str] = [
     "UPGRADE-1: Android perpetual reconnect — PR-Block1 implemented watchdog recovery. "
     "Prior audit: MISSING. Fresh code inspection: RUNNABLE_BUT_CONDITIONAL "
     "(confirmed by PrBlock1PerpetualReconnectTest.kt).",
-
     "UPGRADE-2: ReconciliationSignal wire layer — PR-51 added ReconciliationSignal.kt to Android. "
     "GalaxyConnectionService.kt sends reconciliation_signal. "
     "V2 handle_reconciliation_signal() handler registered. "
     "Prior audit: MISSING. Fresh code inspection: COMPLETE/CONDITIONAL wire on both sides.",
-
     "UPGRADE-3: HandoffEnvelopeV2 response handling — galaxy_gateway/android/handlers/"
     "handoff_v2_result.py handles handoff_ack/handoff_result/handoff_failure. "
     "PR-1 P0 Completion Closure drives dispatch_to_websocket completion. "
     "Prior audit: GAP. Fresh code inspection: COMPLETE.",
-
     "UPGRADE-4: Governance CI enforcement — governance_gate_enforcement.yml is a "
     "hard-blocking CI workflow (not advisory). distributed_release_gate_skeleton.py "
     "is_enforcing=True verified in CI. Prior audit: ADVISORY. Fresh: COMPLETE.",
@@ -477,13 +473,10 @@ FRESH_AUDIT_UPGRADES_FROM_PRIOR: List[str] = [
 REMAINING_ACTIVATION_BARRIERS: List[str] = [
     "BARRIER-1: cross_device_enabled=false default in Android config.properties. "
     "ALL cross-device functionality is disabled until this flag is explicitly set to true.",
-
     "BARRIER-2: Default Android gateway URL is a Tailscale placeholder. "
     "Every device deployment requires a manually-configured correct server address.",
-
     "BARRIER-3: Remote access (arbitrary internet location) requires Tailscale VPN or "
     "equivalent. V2 has no STUN/TURN/relay code. This is an infrastructure precondition.",
-
     "BARRIER-4: No zero-config provisioning, auto-discovery, or QR code pairing. "
     "Every deployment requires operator-level setup.",
 ]
@@ -555,9 +548,9 @@ def assert_fresh_audit_invariants() -> None:
     s = FRESH_AUDIT_SUMMARY
 
     # Transport must be COMPLETE
-    assert s["transport_overall"] == CodeVerdictLevel.COMPLETE, (
-        "FRESH_AUDIT: transport_overall must be COMPLETE — all wire paths confirmed on both sides."
-    )
+    assert (
+        s["transport_overall"] == CodeVerdictLevel.COMPLETE
+    ), "FRESH_AUDIT: transport_overall must be COMPLETE — all wire paths confirmed on both sides."
     assert s["transport_reconciliation_signal_wire"] == CodeVerdictLevel.COMPLETE, (
         "FRESH_AUDIT: transport_reconciliation_signal_wire must be COMPLETE — "
         "ReconciliationSignal.kt (Android PR-51) and reconciliation_signal.py (V2) both exist."

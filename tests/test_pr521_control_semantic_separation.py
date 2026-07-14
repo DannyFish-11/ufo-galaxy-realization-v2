@@ -671,8 +671,8 @@ class TestControlSemanticRecordEmitted(unittest.IsolatedAsyncioTestCase):
             )
 
         from core.multi_device_control_integrity import (
-            get_multi_device_integrity_runtime,
             ControlSemanticKind,
+            get_multi_device_integrity_runtime,
         )
 
         runtime = get_multi_device_integrity_runtime()
@@ -720,8 +720,8 @@ class TestControlSemanticRecordEmitted(unittest.IsolatedAsyncioTestCase):
             )
 
         from core.multi_device_control_integrity import (
-            get_multi_device_integrity_runtime,
             ControlSemanticKind,
+            get_multi_device_integrity_runtime,
         )
 
         runtime = get_multi_device_integrity_runtime()
@@ -773,8 +773,8 @@ class TestControlSemanticRecordEmitted(unittest.IsolatedAsyncioTestCase):
             )
 
         from core.multi_device_control_integrity import (
-            get_multi_device_integrity_runtime,
             ControlSemanticKind,
+            get_multi_device_integrity_runtime,
         )
 
         runtime = get_multi_device_integrity_runtime()
@@ -830,8 +830,8 @@ class TestControlSemanticRecordEmitted(unittest.IsolatedAsyncioTestCase):
             )
 
         from core.multi_device_control_integrity import (
-            get_multi_device_integrity_runtime,
             ControlSemanticKind,
+            get_multi_device_integrity_runtime,
         )
 
         runtime = get_multi_device_integrity_runtime()
@@ -926,8 +926,8 @@ class TestControlSemanticRecordRoundTrip(unittest.TestCase):
 
     def test_round_trip_remote_dispatch(self):
         from core.multi_device_control_integrity import (
-            ControlSemanticRecord,
             ControlSemanticKind,
+            ControlSemanticRecord,
             build_control_semantic_record,
         )
 
@@ -947,8 +947,8 @@ class TestControlSemanticRecordRoundTrip(unittest.TestCase):
 
     def test_round_trip_local_execution(self):
         from core.multi_device_control_integrity import (
-            ControlSemanticRecord,
             ControlSemanticKind,
+            ControlSemanticRecord,
             build_control_semantic_record,
         )
 
@@ -964,8 +964,8 @@ class TestControlSemanticRecordRoundTrip(unittest.TestCase):
 
     def test_round_trip_takeover(self):
         from core.multi_device_control_integrity import (
-            ControlSemanticRecord,
             ControlSemanticKind,
+            ControlSemanticRecord,
             build_control_semantic_record,
         )
 

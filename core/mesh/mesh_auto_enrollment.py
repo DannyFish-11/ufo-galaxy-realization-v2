@@ -179,9 +179,7 @@ class MeshEnrollmentRecord:
             "capabilities_reported": self.capabilities_reported,
             "readiness_confirmed": self.readiness_confirmed,
             "enrolled": self.enrolled,
-            "roles": [
-                r.value if hasattr(r, "value") else str(r) for r in (self.roles or [])
-            ],
+            "roles": [r.value if hasattr(r, "value") else str(r) for r in (self.roles or [])],
             "session_id": self.session_id,
             "metadata": dict(self.metadata),
             "enrolled_at": self.enrolled_at,
@@ -442,13 +440,13 @@ class MeshAutoEnrollmentService:
             from core.device_formation.formation_auto_enrollment import (
                 get_formation_auto_enrollment_manager,
             )
-            get_formation_auto_enrollment_manager().remove_device(
-                device_id, reason=reason or "device_lost"
-            )
+
+            get_formation_auto_enrollment_manager().remove_device(device_id, reason=reason or "device_lost")
         except Exception as exc:
             logger.debug(
                 "on_device_lost: formation remove non-fatal: device_id=%s error=%s",
-                device_id, exc,
+                device_id,
+                exc,
             )
 
         return self.get_record(device_id)
@@ -461,9 +459,7 @@ class MeshAutoEnrollmentService:
     def list_enrolled_device_ids(self) -> List[str]:
         """Return device IDs that are currently enrolled."""
         with self._lock:
-            return [
-                did for did, rec in self._records.items() if rec.enrolled
-            ]
+            return [did for did, rec in self._records.items() if rec.enrolled]
 
     def summary(self) -> Dict[str, Any]:
         """Return a lightweight diagnostic summary dict."""
@@ -489,13 +485,9 @@ class MeshAutoEnrollmentService:
             self._records[device_id] = MeshEnrollmentRecord(device_id=device_id)
         return self._records[device_id]
 
-    def _merge_roles(
-        self, record: MeshEnrollmentRecord, new_roles: List[Any]
-    ) -> MeshEnrollmentRecord:
+    def _merge_roles(self, record: MeshEnrollmentRecord, new_roles: List[Any]) -> MeshEnrollmentRecord:
         """Merge *new_roles* into *record.roles* without duplicates."""
-        existing_values = {
-            r.value if hasattr(r, "value") else str(r) for r in record.roles
-        }
+        existing_values = {r.value if hasattr(r, "value") else str(r) for r in record.roles}
         for role in new_roles:
             val = role.value if hasattr(role, "value") else str(role)
             if val not in existing_values:
@@ -536,7 +528,8 @@ class MeshAutoEnrollmentService:
                 record.skip_reason = ";".join(reason_parts)
                 logger.debug(
                     "auto_enrollment: deferred: device_id=%s reason=%s",
-                    device_id, record.skip_reason,
+                    device_id,
+                    record.skip_reason,
                 )
                 return record
             # Take a snapshot of roles/session to use outside the lock
@@ -544,9 +537,7 @@ class MeshAutoEnrollmentService:
             session_id_snapshot = record.session_id
             metadata_snapshot = dict(record.metadata)
 
-        self._run_enrollment(
-            device_id, roles_snapshot, session_id_snapshot, metadata_snapshot
-        )
+        self._run_enrollment(device_id, roles_snapshot, session_id_snapshot, metadata_snapshot)
 
         with self._lock:
             record = self._records.get(device_id)
@@ -565,6 +556,7 @@ class MeshAutoEnrollmentService:
         body_entry = None
         try:
             from core.mesh.body_mesh_registry import get_body_mesh_registry
+
             registry = get_body_mesh_registry()
             registry.register(
                 device_id,
@@ -581,31 +573,27 @@ class MeshAutoEnrollmentService:
         except Exception as exc:
             logger.warning(
                 "auto_enrollment: BodyMeshRegistry write failed: device_id=%s error=%s",
-                device_id, exc,
+                device_id,
+                exc,
             )
 
         # Step 2 — MeshMembership derivation / observability log
         if body_entry is not None:
             try:
                 from contracts.mesh_membership import from_body_mesh_entry
-                membership = from_body_mesh_entry(
-                    body_entry, mesh_id=session_id or "default_mesh"
-                )
+
+                membership = from_body_mesh_entry(body_entry, mesh_id=session_id or "default_mesh")
                 logger.info(
-                    "auto_enrollment: MeshMembership derived: device_id=%s "
-                    "member_device_id=%s roles=%s",
+                    "auto_enrollment: MeshMembership derived: device_id=%s " "member_device_id=%s roles=%s",
                     device_id,
                     getattr(membership, "member_device_id", device_id),
-                    [
-                        r.value if hasattr(r, "value") else str(r)
-                        for r in (getattr(membership, "roles", []) or [])
-                    ],
+                    [r.value if hasattr(r, "value") else str(r) for r in (getattr(membership, "roles", []) or [])],
                 )
             except Exception as exc:
                 logger.debug(
-                    "auto_enrollment: MeshMembership derivation non-fatal: "
-                    "device_id=%s error=%s",
-                    device_id, exc,
+                    "auto_enrollment: MeshMembership derivation non-fatal: " "device_id=%s error=%s",
+                    device_id,
+                    exc,
                 )
 
         # Step 3 — Formation auto-enrollment
@@ -613,16 +601,14 @@ class MeshAutoEnrollmentService:
             from core.device_formation.formation_auto_enrollment import (
                 get_formation_auto_enrollment_manager,
             )
-            get_formation_auto_enrollment_manager().enroll_device(
-                device_id, roles=roles, session_id=session_id
-            )
-            logger.info(
-                "auto_enrollment: Formation enrolled: device_id=%s", device_id
-            )
+
+            get_formation_auto_enrollment_manager().enroll_device(device_id, roles=roles, session_id=session_id)
+            logger.info("auto_enrollment: Formation enrolled: device_id=%s", device_id)
         except Exception as exc:
             logger.debug(
                 "auto_enrollment: Formation enrollment non-fatal: device_id=%s error=%s",
-                device_id, exc,
+                device_id,
+                exc,
             )
 
         # Mark enrolled in the record
@@ -734,9 +720,7 @@ def notify_readiness_confirmed(
     Returns the updated :class:`MeshEnrollmentRecord`, or ``None`` on error.
     """
     try:
-        return get_auto_enrollment_service().on_readiness_confirmed(
-            device_id, session_id=session_id, metadata=metadata
-        )
+        return get_auto_enrollment_service().on_readiness_confirmed(device_id, session_id=session_id, metadata=metadata)
     except Exception as exc:
         logger.warning("notify_readiness_confirmed: error: %s", exc)
         return None

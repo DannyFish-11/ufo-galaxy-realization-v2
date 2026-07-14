@@ -22,6 +22,7 @@ Canvas/游戏/自绘控件) + ②结构化控件清单 ``to_prompt()``(精确锚
 2. :func:`parse_model_action` —— 模型回复 → 控件:模型(看着截图+结构清单)回
    "[3]" 或 "tap 发送",本函数把它解析回具体节点+动作,闭环执行。
 """
+
 from __future__ import annotations
 
 import re
@@ -34,17 +35,17 @@ from core.schemas.ui_element import UIActionKind, UIElementNode, UIGraph
 
 
 class GroundingStrategy(str, Enum):
-    LABEL_EXACT = "label_exact"        # 结构确定性快路径:精确名匹配
+    LABEL_EXACT = "label_exact"  # 结构确定性快路径:精确名匹配
     LABEL_SUBSTRING = "label_substring"  # 结构确定性快路径:子串名匹配
-    INDEX_REF = "index_ref"            # 模型(看着截图+结构)回了 [n] 序号
+    INDEX_REF = "index_ref"  # 模型(看着截图+结构)回了 [n] 序号
     DEFER_TO_MODEL = "defer_to_model"  # 结构点不准 → 交多模态模型(视觉一直在看)判断
-    NONE = "none"                      # 完全无法定位
+    NONE = "none"  # 完全无法定位
 
 
 class GroundingResult(BaseModel):
     node: Optional[UIElementNode] = None
     action: UIActionKind = UIActionKind.TAP
-    text: str = ""                     # SET_TEXT 时要输入的文字
+    text: str = ""  # SET_TEXT 时要输入的文字
     strategy: GroundingStrategy = GroundingStrategy.NONE
     confidence: float = 0.0
     reason: str = ""
@@ -97,7 +98,7 @@ def extract_target(instruction: str) -> str:
     for keys, _ in _VERB_ACTION:
         for k in keys:
             if s.startswith(k):
-                s = s[len(k):]
+                s = s[len(k) :]
                 break
     for stop in ("按钮", "输入框", "里", "中", "上", "的", "一下", "框", "，", ",", "。"):
         s = s.replace(stop, " ")
@@ -115,20 +116,19 @@ _TYPE_BARE = re.compile(rf"(?:{_TYPE_VERBS})\s*[:：=]\s*(.+)$", re.I)
 
 def extract_text_to_type(instruction: str) -> str:
     s = instruction or ""
-    m = _TYPE_QUOTED.search(s)          # 1) 动词后引号(即便前面还有别的引号目标)
+    m = _TYPE_QUOTED.search(s)  # 1) 动词后引号(即便前面还有别的引号目标)
     if m:
         return m.group(1).strip()
-    m = _TYPE_BARE.search(s)            # 2) 动词后裸文本
+    m = _TYPE_BARE.search(s)  # 2) 动词后裸文本
     if m:
         return m.group(1).strip().strip("「』\"'“‘’”")
-    quotes = _QUOTE.findall(s)          # 3) 全句唯一引号
+    quotes = _QUOTE.findall(s)  # 3) 全句唯一引号
     if len(quotes) == 1:
         return quotes[0].strip()
     return ""
 
 
-def resolve_target(graph: UIGraph, instruction: str,
-                   *, action: Optional[UIActionKind] = None) -> GroundingResult:
+def resolve_target(graph: UIGraph, instruction: str, *, action: Optional[UIActionKind] = None) -> GroundingResult:
     """意图 → 控件的确定性快路径。点不准返回 defer_to_model(交给同时看着截图+结构的
     多模态模型;视觉一直在看,不是降级)。"""
     act = action or infer_action(instruction)
@@ -136,9 +136,12 @@ def resolve_target(graph: UIGraph, instruction: str,
     text = extract_text_to_type(instruction) if act is UIActionKind.SET_TEXT else ""
 
     if graph.root is None or not target:
-        return GroundingResult(action=act, text=text,
-                               strategy=GroundingStrategy.DEFER_TO_MODEL,
-                               reason="无结构树或未抽到目标短语 → 交多模态模型(视觉在看)")
+        return GroundingResult(
+            action=act,
+            text=text,
+            strategy=GroundingStrategy.DEFER_TO_MODEL,
+            reason="无结构树或未抽到目标短语 → 交多模态模型(视觉在看)",
+        )
 
     tl = target.lower()
     interactive = graph.interactive()
@@ -146,36 +149,52 @@ def resolve_target(graph: UIGraph, instruction: str,
     # 1) 精确名
     for n in interactive:
         if f"{n.label} {n.value}".strip().lower() == tl:
-            return GroundingResult(node=n, action=act, text=text,
-                                   strategy=GroundingStrategy.LABEL_EXACT,
-                                   confidence=0.98, reason=f"精确匹配控件『{n.label}』")
+            return GroundingResult(
+                node=n,
+                action=act,
+                text=text,
+                strategy=GroundingStrategy.LABEL_EXACT,
+                confidence=0.98,
+                reason=f"精确匹配控件『{n.label}』",
+            )
     # 2) 子串名(可交互优先,已在 interactive())
     subs = [n for n in interactive if tl in f"{n.label} {n.value}".strip().lower()]
     if len(subs) == 1:
         n = subs[0]
-        return GroundingResult(node=n, action=act, text=text,
-                               strategy=GroundingStrategy.LABEL_SUBSTRING,
-                               confidence=0.85, reason=f"子串匹配控件『{n.label}』")
+        return GroundingResult(
+            node=n,
+            action=act,
+            text=text,
+            strategy=GroundingStrategy.LABEL_SUBSTRING,
+            confidence=0.85,
+            reason=f"子串匹配控件『{n.label}』",
+        )
     if len(subs) > 1:
         # 多个候选:取名字最短的(最贴合),但置信度降一档,提示可能歧义
         n = min(subs, key=lambda x: len(x.label or x.value or ""))
-        return GroundingResult(node=n, action=act, text=text,
-                               strategy=GroundingStrategy.LABEL_SUBSTRING,
-                               confidence=0.6,
-                               reason=f"{len(subs)} 个候选,取最贴合『{n.label}』(可能歧义)")
+        return GroundingResult(
+            node=n,
+            action=act,
+            text=text,
+            strategy=GroundingStrategy.LABEL_SUBSTRING,
+            confidence=0.6,
+            reason=f"{len(subs)} 个候选,取最贴合『{n.label}』(可能歧义)",
+        )
     # 3) 结构点不准 → 交多模态模型(它一直看着截图;结构里没有可能是第三方封锁 a11y
     #    或 Canvas/自绘,但模型仍能靠视觉操作)
-    return GroundingResult(action=act, text=text,
-                           strategy=GroundingStrategy.DEFER_TO_MODEL,
-                           reason=f"结构树里无『{target}』→ 交多模态模型判断(视觉在看)")
+    return GroundingResult(
+        action=act,
+        text=text,
+        strategy=GroundingStrategy.DEFER_TO_MODEL,
+        reason=f"结构树里无『{target}』→ 交多模态模型判断(视觉在看)",
+    )
 
 
 # 模型回复里的 [n] 序号引用(to_prompt 的 DFS 序 == graph.flatten() 序)
 _INDEX_REF = re.compile(r"\[(\d+)\]")
 
 
-def parse_model_action(reply: str, graph: UIGraph,
-                       *, action: Optional[UIActionKind] = None) -> GroundingResult:
+def parse_model_action(reply: str, graph: UIGraph, *, action: Optional[UIActionKind] = None) -> GroundingResult:
     """模型回复 → 控件。优先解析 [n] 序号引用;否则回退到按名解析(resolve_target)。"""
     flat: List[UIElementNode] = graph.flatten()
     m = _INDEX_REF.search(reply or "")
@@ -191,10 +210,14 @@ def parse_model_action(reply: str, graph: UIGraph,
                 act = UIActionKind.SET_TEXT
             else:
                 act = infer_action(reply)
-            return GroundingResult(node=n, action=act,
-                                   text=txt if act is UIActionKind.SET_TEXT else "",
-                                   strategy=GroundingStrategy.INDEX_REF, confidence=0.95,
-                                   reason=f"模型引用 [{idx}] → 控件『{n.label}』")
+            return GroundingResult(
+                node=n,
+                action=act,
+                text=txt if act is UIActionKind.SET_TEXT else "",
+                strategy=GroundingStrategy.INDEX_REF,
+                confidence=0.95,
+                reason=f"模型引用 [{idx}] → 控件『{n.label}』",
+            )
     # 无序号 / 越界 → 剥掉方括号引用,当自然语言意图解析
     cleaned = _INDEX_REF.sub(" ", reply or "").strip()
     return resolve_target(graph, cleaned, action=action)
@@ -210,6 +233,6 @@ def build_grounding_prompt(graph: UIGraph, instruction: str) -> str:
         "画面里可能还有未被结构识别到的控件,以你所见为准。\n"
         f"{graph.to_prompt()}\n\n"
         f"用户意图:{instruction}\n"
-        "优先回复要操作控件的序号 [n](精确);若需输入文字,追加 文本=\"...\"。"
+        '优先回复要操作控件的序号 [n](精确);若需输入文字,追加 文本="..."。'
         "若目标控件在清单里没有、但画面上有,直接描述其位置。"
     )

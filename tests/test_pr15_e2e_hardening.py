@@ -135,10 +135,10 @@ Test index:
 
 from __future__ import annotations
 
+import importlib
 import json
 import sys
 import types
-import importlib
 
 import pytest
 
@@ -248,9 +248,7 @@ def _make_partial_vm():
         topology_route_reason = None
         routing_authority_source = None
         integration_health = "partial"
-        provider_routing = _MockProviderRouting(
-            selected=None, vendor=None, legacy=False, available=False
-        )
+        provider_routing = _MockProviderRouting(selected=None, vendor=None, legacy=False, available=False)
         oneapi_horizon = _MockOneAPIHorizon()
         oneapi_summary = types.SimpleNamespace(is_lower_horizon_only=True)
 
@@ -272,9 +270,7 @@ def _make_unavailable_vm():
         topology_route_reason = None
         routing_authority_source = None
         integration_health = "unavailable"
-        provider_routing = _MockProviderRouting(
-            selected=None, vendor=None, legacy=False, available=False
-        )
+        provider_routing = _MockProviderRouting(selected=None, vendor=None, legacy=False, available=False)
         oneapi_horizon = None
         oneapi_summary = None
 
@@ -283,11 +279,13 @@ def _make_unavailable_vm():
 
 def _build_layout(vm):
     from windows_client.status_board_v2.topology_layout import build_constellation_layout
+
     return build_constellation_layout(vm)
 
 
 def _build_report(vm):
     from windows_client.status_board_v2.topology_inspector import TopologyInspector
+
     layout = _build_layout(vm)
     return TopologyInspector().inspect_layout(layout)
 
@@ -296,62 +294,73 @@ def _build_report(vm):
 # A) Package surface completeness (tests 1–10)
 # ---------------------------------------------------------------------------
 
+
 def test_01_package_exports_build_constellation_layout():
     import windows_client.status_board_v2 as pkg
+
     assert "build_constellation_layout" in pkg.__all__
     assert hasattr(pkg, "build_constellation_layout")
 
 
 def test_02_package_exports_topology_renderer():
     import windows_client.status_board_v2 as pkg
+
     assert "TopologyRenderer" in pkg.__all__
     assert hasattr(pkg, "TopologyRenderer")
 
 
 def test_03_package_exports_topology_inspector():
     import windows_client.status_board_v2 as pkg
+
     assert "TopologyInspector" in pkg.__all__
     assert hasattr(pkg, "TopologyInspector")
 
 
 def test_04_package_exports_topology_history_recorder():
     import windows_client.status_board_v2 as pkg
+
     assert "TopologyHistoryRecorder" in pkg.__all__
     assert hasattr(pkg, "TopologyHistoryRecorder")
 
 
 def test_05_package_exports_layout_authority():
     import windows_client.status_board_v2 as pkg
+
     assert "TOPOLOGY_LAYOUT_AUTHORITY" in pkg.__all__
     assert hasattr(pkg, "TOPOLOGY_LAYOUT_AUTHORITY")
 
 
 def test_06_package_exports_renderer_authority():
     import windows_client.status_board_v2 as pkg
+
     assert "TOPOLOGY_RENDERER_AUTHORITY" in pkg.__all__
     assert hasattr(pkg, "TOPOLOGY_RENDERER_AUTHORITY")
 
 
 def test_07_package_exports_inspector_authority():
     import windows_client.status_board_v2 as pkg
+
     assert "TOPOLOGY_INSPECTOR_AUTHORITY" in pkg.__all__
     assert hasattr(pkg, "TOPOLOGY_INSPECTOR_AUTHORITY")
 
 
 def test_08_package_exports_history_authority():
     import windows_client.status_board_v2 as pkg
+
     assert "TOPOLOGY_HISTORY_AUTHORITY" in pkg.__all__
     assert hasattr(pkg, "TOPOLOGY_HISTORY_AUTHORITY")
 
 
 def test_09_adapter_exports_adapt_integration_payload():
     import core.desktop_consumption_adapter as m
+
     assert hasattr(m, "adapt_integration_payload")
     assert callable(m.adapt_integration_payload)
 
 
 def test_10_adapter_exports_authority_sentinel():
     from core.desktop_consumption_adapter import DESKTOP_CONSUMPTION_ADAPTER_AUTHORITY
+
     assert isinstance(DESKTOP_CONSUMPTION_ADAPTER_AUTHORITY, str)
     assert len(DESKTOP_CONSUMPTION_ADAPTER_AUTHORITY) > 0
 
@@ -360,29 +369,36 @@ def test_10_adapter_exports_authority_sentinel():
 # G) Authority sentinel non-regression (tests 11–14)
 # ---------------------------------------------------------------------------
 
+
 def test_11_layout_authority_names_layout_class():
     from windows_client.status_board_v2 import TOPOLOGY_LAYOUT_AUTHORITY
+
     assert isinstance(TOPOLOGY_LAYOUT_AUTHORITY, str)
     assert len(TOPOLOGY_LAYOUT_AUTHORITY) > 0
-    assert "topology_layout" in TOPOLOGY_LAYOUT_AUTHORITY.lower() or \
-           "TopologyLayout" in TOPOLOGY_LAYOUT_AUTHORITY or \
-           "build_constellation" in TOPOLOGY_LAYOUT_AUTHORITY.lower()
+    assert (
+        "topology_layout" in TOPOLOGY_LAYOUT_AUTHORITY.lower()
+        or "TopologyLayout" in TOPOLOGY_LAYOUT_AUTHORITY
+        or "build_constellation" in TOPOLOGY_LAYOUT_AUTHORITY.lower()
+    )
 
 
 def test_12_renderer_authority_names_renderer_class():
     from windows_client.status_board_v2 import TOPOLOGY_RENDERER_AUTHORITY
+
     assert isinstance(TOPOLOGY_RENDERER_AUTHORITY, str)
     assert "TopologyRenderer" in TOPOLOGY_RENDERER_AUTHORITY
 
 
 def test_13_inspector_authority_names_inspector_class():
     from windows_client.status_board_v2 import TOPOLOGY_INSPECTOR_AUTHORITY
+
     assert isinstance(TOPOLOGY_INSPECTOR_AUTHORITY, str)
     assert "TopologyInspector" in TOPOLOGY_INSPECTOR_AUTHORITY
 
 
 def test_14_history_authority_names_history_class():
     from windows_client.status_board_v2 import TOPOLOGY_HISTORY_AUTHORITY
+
     assert isinstance(TOPOLOGY_HISTORY_AUTHORITY, str)
     assert "TopologyHistoryRecorder" in TOPOLOGY_HISTORY_AUTHORITY
 
@@ -391,32 +407,38 @@ def test_14_history_authority_names_history_class():
 # E) None / empty / unavailable paths (tests 15–28)
 # ---------------------------------------------------------------------------
 
+
 def test_15_build_constellation_layout_none_does_not_raise():
     from windows_client.status_board_v2.topology_layout import build_constellation_layout
+
     layout = build_constellation_layout(None)
     assert layout is not None
 
 
 def test_16_none_layout_is_unavailable():
     from windows_client.status_board_v2.topology_layout import build_constellation_layout
+
     layout = build_constellation_layout(None)
     assert layout.is_unavailable is True
 
 
 def test_17_none_layout_readiness_label_unavailable():
     from windows_client.status_board_v2.topology_layout import build_constellation_layout
+
     layout = build_constellation_layout(None)
     assert layout.readiness_label == "unavailable"
 
 
 def test_18_none_layout_primary_layer_empty():
     from windows_client.status_board_v2.topology_layout import build_constellation_layout
+
     layout = build_constellation_layout(None)
     assert len(layout.primary_layer.nodes) == 0
 
 
 def test_19_none_layout_lower_horizon_layer_is_not_primary():
     from windows_client.status_board_v2.topology_layout import build_constellation_layout
+
     layout = build_constellation_layout(None)
     # The lower_horizon_layer may contain a placeholder OneAPI node even for
     # unavailable layouts — what matters is that the primary_layer is empty.
@@ -425,56 +447,66 @@ def test_19_none_layout_lower_horizon_layer_is_not_primary():
 
 def test_20_render_layout_none_does_not_raise():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     result = TopologyRenderer().render_layout(None)
     assert isinstance(result, str)
 
 
 def test_21_render_layout_none_mentions_unavailable():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     result = TopologyRenderer().render_layout(None)
     assert "unavailable" in result.lower()
 
 
 def test_22_inspect_layout_none_does_not_raise():
-    from windows_client.status_board_v2.topology_inspector import TopologyInspector, InspectionReport
+    from windows_client.status_board_v2.topology_inspector import InspectionReport, TopologyInspector
+
     report = TopologyInspector().inspect_layout(None)
     assert isinstance(report, InspectionReport)
 
 
 def test_23_inspect_layout_none_readiness_unavailable():
     from windows_client.status_board_v2.topology_inspector import TopologyInspector
+
     report = TopologyInspector().inspect_layout(None)
     assert report.readiness.readiness_label == "unavailable"
 
 
 def test_24_inspect_layout_none_oneapi_lower_horizon():
     from windows_client.status_board_v2.topology_inspector import TopologyInspector
+
     report = TopologyInspector().inspect_layout(None)
     assert report.oneapi.is_lower_horizon_only is True
 
 
 def test_25_history_snapshot_none_does_not_raise():
     from windows_client.status_board_v2.topology_history import (
-        TopologyHistoryRecorder, TopologySnapshot,
+        TopologyHistoryRecorder,
+        TopologySnapshot,
     )
+
     snap = TopologyHistoryRecorder().snapshot_from_inspection_report(None)
     assert isinstance(snap, TopologySnapshot)
 
 
 def test_26_history_snapshot_none_readiness_unavailable():
     from windows_client.status_board_v2.topology_history import TopologyHistoryRecorder
+
     snap = TopologyHistoryRecorder().snapshot_from_inspection_report(None)
     assert snap.readiness_label == "unavailable"
 
 
 def test_27_history_snapshot_none_is_unavailable():
     from windows_client.status_board_v2.topology_history import TopologyHistoryRecorder
+
     snap = TopologyHistoryRecorder().snapshot_from_inspection_report(None)
     assert snap.is_unavailable is True
 
 
 def test_28_history_snapshot_none_oneapi_lower_horizon():
     from windows_client.status_board_v2.topology_history import TopologyHistoryRecorder
+
     snap = TopologyHistoryRecorder().snapshot_from_inspection_report(None)
     assert snap.oneapi_is_lower_horizon_only is True
 
@@ -482,6 +514,7 @@ def test_28_history_snapshot_none_oneapi_lower_horizon():
 # ---------------------------------------------------------------------------
 # B) Canonical semantic invariants (tests 29–43)
 # ---------------------------------------------------------------------------
+
 
 def test_29_canonical_vm_layout_is_authoritative():
     layout = _build_layout(_make_canonical_vm())
@@ -508,6 +541,7 @@ def test_32_canonical_vm_layout_primary_node_is_authoritative():
 
 def test_33_canonical_vm_renderer_contains_canonical_indicator():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(_make_canonical_vm())
     output = TopologyRenderer().render_layout(layout)
     # canonical output should NOT prominently say "degraded"
@@ -516,6 +550,7 @@ def test_33_canonical_vm_renderer_contains_canonical_indicator():
 
 def test_34_canonical_vm_renderer_does_not_contain_degraded():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(_make_canonical_vm())
     output = TopologyRenderer().render_layout(layout)
     assert "degraded" not in output.lower()
@@ -523,6 +558,7 @@ def test_34_canonical_vm_renderer_does_not_contain_degraded():
 
 def test_35_canonical_vm_renderer_oneapi_in_lower_horizon_section():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(_make_canonical_vm())
     output = TopologyRenderer().render_layout(layout)
     # OneAPI should appear after a lower-horizon section header
@@ -555,6 +591,7 @@ def test_39_canonical_vm_inspector_primary_nodes_not_empty():
 
 def test_40_canonical_vm_history_entry_is_authoritative():
     from windows_client.status_board_v2.topology_history import TopologyHistoryRecorder
+
     report = _build_report(_make_canonical_vm())
     entry = TopologyHistoryRecorder().record_from_inspection_report(report)
     assert entry is not None
@@ -563,6 +600,7 @@ def test_40_canonical_vm_history_entry_is_authoritative():
 
 def test_41_canonical_vm_history_entry_readiness_canonical():
     from windows_client.status_board_v2.topology_history import TopologyHistoryRecorder
+
     report = _build_report(_make_canonical_vm())
     entry = TopologyHistoryRecorder().record_from_inspection_report(report)
     assert entry.readiness_label == "canonical"
@@ -570,6 +608,7 @@ def test_41_canonical_vm_history_entry_readiness_canonical():
 
 def test_42_canonical_vm_history_entry_oneapi_lower_horizon():
     from windows_client.status_board_v2.topology_history import TopologyHistoryRecorder
+
     report = _build_report(_make_canonical_vm())
     entry = TopologyHistoryRecorder().record_from_inspection_report(report)
     assert entry.oneapi_summary.is_lower_horizon_only is True
@@ -577,6 +616,7 @@ def test_42_canonical_vm_history_entry_oneapi_lower_horizon():
 
 def test_43_canonical_vm_history_snapshot_stable():
     from windows_client.status_board_v2.topology_history import TopologyHistoryRecorder
+
     report = _build_report(_make_canonical_vm())
     snap = TopologyHistoryRecorder().snapshot_from_inspection_report(report)
     assert snap.stability_indicator == "stable"
@@ -585,6 +625,7 @@ def test_43_canonical_vm_history_snapshot_stable():
 # ---------------------------------------------------------------------------
 # B) Degraded semantic invariants (tests 44–53)
 # ---------------------------------------------------------------------------
+
 
 def test_44_degraded_vm_layout_not_authoritative():
     layout = _build_layout(_make_degraded_vm())
@@ -598,6 +639,7 @@ def test_45_degraded_vm_layout_is_degraded():
 
 def test_46_degraded_vm_renderer_contains_degraded_indicator():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(_make_degraded_vm())
     output = TopologyRenderer().render_layout(layout)
     assert (
@@ -611,6 +653,7 @@ def test_46_degraded_vm_renderer_contains_degraded_indicator():
 
 def test_47_degraded_vm_renderer_no_canonical_authority_claim():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(_make_degraded_vm())
     output = TopologyRenderer().render_layout(layout)
     # "canonical" should NOT appear as a positive authority claim for degraded layout
@@ -636,6 +679,7 @@ def test_50_degraded_vm_inspector_degraded_reason_not_none():
 
 def test_51_degraded_vm_history_entry_not_authoritative():
     from windows_client.status_board_v2.topology_history import TopologyHistoryRecorder
+
     report = _build_report(_make_degraded_vm())
     entry = TopologyHistoryRecorder().record_from_inspection_report(report)
     assert entry is not None
@@ -644,6 +688,7 @@ def test_51_degraded_vm_history_entry_not_authoritative():
 
 def test_52_degraded_vm_history_entry_is_degraded():
     from windows_client.status_board_v2.topology_history import TopologyHistoryRecorder
+
     report = _build_report(_make_degraded_vm())
     entry = TopologyHistoryRecorder().record_from_inspection_report(report)
     assert entry.is_degraded is True
@@ -651,6 +696,7 @@ def test_52_degraded_vm_history_entry_is_degraded():
 
 def test_53_degraded_vm_history_snapshot_stability_degraded():
     from windows_client.status_board_v2.topology_history import TopologyHistoryRecorder
+
     report = _build_report(_make_degraded_vm())
     snap = TopologyHistoryRecorder().snapshot_from_inspection_report(report)
     assert snap.stability_indicator == "degraded"
@@ -659,6 +705,7 @@ def test_53_degraded_vm_history_snapshot_stability_degraded():
 # ---------------------------------------------------------------------------
 # B) Partial / unavailable semantic invariants (tests 54–60)
 # ---------------------------------------------------------------------------
+
 
 def test_54_partial_vm_layout_is_partial():
     layout = _build_layout(_make_partial_vm())
@@ -692,6 +739,7 @@ def test_59_unavailable_vm_inspector_readiness_unavailable():
 
 def test_60_unavailable_vm_history_snapshot_is_unavailable():
     from windows_client.status_board_v2.topology_history import TopologyHistoryRecorder
+
     report = _build_report(_make_unavailable_vm())
     snap = TopologyHistoryRecorder().snapshot_from_inspection_report(report)
     assert snap.is_unavailable is True
@@ -700,6 +748,7 @@ def test_60_unavailable_vm_history_snapshot_is_unavailable():
 # ---------------------------------------------------------------------------
 # D) OneAPI lower-horizon invariant across all layers (tests 61–70)
 # ---------------------------------------------------------------------------
+
 
 def test_61_oneapi_never_in_primary_layer_canonical():
     layout = _build_layout(_make_canonical_vm())
@@ -718,10 +767,7 @@ def test_62_oneapi_never_in_support_layer_canonical():
 def test_63_oneapi_is_in_lower_horizon_or_absent():
     layout = _build_layout(_make_canonical_vm())
     # Any OneAPI node must be in the lower_horizon_layer, not primary or support
-    all_non_lower_nodes = (
-        list(layout.primary_layer.nodes)
-        + list(layout.support_layer.nodes)
-    )
+    all_non_lower_nodes = list(layout.primary_layer.nodes) + list(layout.support_layer.nodes)
     for node in all_non_lower_nodes:
         kind_val = node.kind.value if hasattr(node.kind, "value") else str(node.kind)
         assert "oneapi" not in kind_val.lower()
@@ -744,6 +790,7 @@ def test_66_inspector_oneapi_lower_horizon_unavailable():
 
 def test_67_history_entry_oneapi_lower_horizon_canonical():
     from windows_client.status_board_v2.topology_history import TopologyHistoryRecorder
+
     report = _build_report(_make_canonical_vm())
     entry = TopologyHistoryRecorder().record_from_inspection_report(report)
     assert entry.oneapi_summary.is_lower_horizon_only is True
@@ -751,6 +798,7 @@ def test_67_history_entry_oneapi_lower_horizon_canonical():
 
 def test_68_history_entry_oneapi_lower_horizon_degraded():
     from windows_client.status_board_v2.topology_history import TopologyHistoryRecorder
+
     report = _build_report(_make_degraded_vm())
     entry = TopologyHistoryRecorder().record_from_inspection_report(report)
     assert entry.oneapi_summary.is_lower_horizon_only is True
@@ -758,6 +806,7 @@ def test_68_history_entry_oneapi_lower_horizon_degraded():
 
 def test_69_renderer_oneapi_not_canonical_peer_canonical():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(_make_canonical_vm())
     output = TopologyRenderer().render_layout(layout)
     # The renderer should never present OneAPI as a canonical routing peer.
@@ -772,6 +821,7 @@ def test_69_renderer_oneapi_not_canonical_peer_canonical():
 
 def test_70_renderer_oneapi_not_canonical_peer_degraded():
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
+
     layout = _build_layout(_make_degraded_vm())
     output = TopologyRenderer().render_layout(layout)
     assert "canonical routing peer: oneapi" not in output.lower()
@@ -780,6 +830,7 @@ def test_70_renderer_oneapi_not_canonical_peer_degraded():
 # ---------------------------------------------------------------------------
 # H) Cross-layer serialisation (tests 71–78)
 # ---------------------------------------------------------------------------
+
 
 def test_71_inspection_report_to_dict_json_serialisable():
     report = _build_report(_make_canonical_vm())
@@ -805,6 +856,7 @@ def test_73_inspection_report_to_dict_oneapi_lower_horizon():
 
 def test_74_history_entry_to_dict_json_serialisable():
     from windows_client.status_board_v2.topology_history import TopologyHistoryRecorder
+
     report = _build_report(_make_canonical_vm())
     entry = TopologyHistoryRecorder().record_from_inspection_report(report)
     d = entry.to_dict()
@@ -814,6 +866,7 @@ def test_74_history_entry_to_dict_json_serialisable():
 
 def test_75_history_entry_to_json_valid():
     from windows_client.status_board_v2.topology_history import TopologyHistoryRecorder
+
     report = _build_report(_make_canonical_vm())
     entry = TopologyHistoryRecorder().record_from_inspection_report(report)
     j = entry.to_json()
@@ -824,6 +877,7 @@ def test_75_history_entry_to_json_valid():
 
 def test_76_snapshot_to_dict_json_serialisable():
     from windows_client.status_board_v2.topology_history import TopologyHistoryRecorder
+
     report = _build_report(_make_canonical_vm())
     snap = TopologyHistoryRecorder().snapshot_from_inspection_report(report)
     d = snap.to_dict()
@@ -833,6 +887,7 @@ def test_76_snapshot_to_dict_json_serialisable():
 
 def test_77_snapshot_to_dict_oneapi_lower_horizon():
     from windows_client.status_board_v2.topology_history import TopologyHistoryRecorder
+
     report = _build_report(_make_canonical_vm())
     snap = TopologyHistoryRecorder().snapshot_from_inspection_report(report)
     d = snap.to_dict()
@@ -841,6 +896,7 @@ def test_77_snapshot_to_dict_oneapi_lower_horizon():
 
 def test_78_snapshot_to_json_valid():
     from windows_client.status_board_v2.topology_history import TopologyHistoryRecorder
+
     report = _build_report(_make_canonical_vm())
     snap = TopologyHistoryRecorder().snapshot_from_inspection_report(report)
     j = snap.to_json()
@@ -853,10 +909,13 @@ def test_78_snapshot_to_json_valid():
 # I) History stability summary (tests 79–82)
 # ---------------------------------------------------------------------------
 
+
 def test_79_stability_summary_all_canonical_stable():
     from windows_client.status_board_v2.topology_history import (
-        TopologyHistoryRecorder, TopologyHistoryBuffer,
+        TopologyHistoryBuffer,
+        TopologyHistoryRecorder,
     )
+
     buf = TopologyHistoryBuffer()
     recorder = TopologyHistoryRecorder()
     report = _build_report(_make_canonical_vm())
@@ -870,8 +929,10 @@ def test_79_stability_summary_all_canonical_stable():
 
 def test_80_stability_summary_mixed_ratio_below_one():
     from windows_client.status_board_v2.topology_history import (
-        TopologyHistoryRecorder, TopologyHistoryBuffer,
+        TopologyHistoryBuffer,
+        TopologyHistoryRecorder,
     )
+
     buf = TopologyHistoryBuffer()
     recorder = TopologyHistoryRecorder()
     canonical_report = _build_report(_make_canonical_vm())
@@ -884,8 +945,10 @@ def test_80_stability_summary_mixed_ratio_below_one():
 
 def test_81_stability_summary_non_authoritative_count_correct():
     from windows_client.status_board_v2.topology_history import (
-        TopologyHistoryRecorder, TopologyHistoryBuffer,
+        TopologyHistoryBuffer,
+        TopologyHistoryRecorder,
     )
+
     buf = TopologyHistoryBuffer()
     recorder = TopologyHistoryRecorder()
     canonical_report = _build_report(_make_canonical_vm())
@@ -899,8 +962,11 @@ def test_81_stability_summary_non_authoritative_count_correct():
 
 def test_82_stability_summary_source_authority_correct():
     from windows_client.status_board_v2.topology_history import (
-        TopologyHistoryRecorder, TopologyHistoryBuffer, TOPOLOGY_HISTORY_AUTHORITY,
+        TOPOLOGY_HISTORY_AUTHORITY,
+        TopologyHistoryBuffer,
+        TopologyHistoryRecorder,
     )
+
     buf = TopologyHistoryBuffer()
     summary = TopologyHistoryRecorder().stability_summary(buf)
     assert summary["source_authority"] == TOPOLOGY_HISTORY_AUTHORITY
@@ -910,8 +976,10 @@ def test_82_stability_summary_source_authority_correct():
 # Snapshot comparison (tests 83–89)
 # ---------------------------------------------------------------------------
 
+
 def test_83_compare_snapshots_readiness_changed_true():
     from windows_client.status_board_v2.topology_history import TopologyHistoryRecorder
+
     recorder = TopologyHistoryRecorder()
     snap_a = recorder.snapshot_from_inspection_report(_build_report(_make_canonical_vm()))
     snap_b = recorder.snapshot_from_inspection_report(_build_report(_make_degraded_vm()))
@@ -921,6 +989,7 @@ def test_83_compare_snapshots_readiness_changed_true():
 
 def test_84_compare_snapshots_readiness_changed_false():
     from windows_client.status_board_v2.topology_history import TopologyHistoryRecorder
+
     recorder = TopologyHistoryRecorder()
     snap_a = recorder.snapshot_from_inspection_report(_build_report(_make_canonical_vm()))
     snap_b = recorder.snapshot_from_inspection_report(_build_report(_make_canonical_vm()))
@@ -930,6 +999,7 @@ def test_84_compare_snapshots_readiness_changed_false():
 
 def test_85_compare_snapshots_authority_changed_true():
     from windows_client.status_board_v2.topology_history import TopologyHistoryRecorder
+
     recorder = TopologyHistoryRecorder()
     snap_a = recorder.snapshot_from_inspection_report(_build_report(_make_canonical_vm()))
     snap_b = recorder.snapshot_from_inspection_report(_build_report(_make_degraded_vm()))
@@ -938,8 +1008,9 @@ def test_85_compare_snapshots_authority_changed_true():
 
 
 def test_86_compare_snapshots_provider_changed():
-    from windows_client.status_board_v2.topology_history import TopologyHistoryRecorder
     import types as _t
+
+    from windows_client.status_board_v2.topology_history import TopologyHistoryRecorder
 
     recorder = TopologyHistoryRecorder()
 
@@ -995,6 +1066,7 @@ def test_86_compare_snapshots_provider_changed():
 
 def test_87_readiness_transition_became_authoritative_false_on_degraded():
     from windows_client.status_board_v2.topology_history import TopologyHistoryRecorder
+
     recorder = TopologyHistoryRecorder()
     snap_a = recorder.snapshot_from_inspection_report(_build_report(_make_canonical_vm()))
     snap_b = recorder.snapshot_from_inspection_report(_build_report(_make_degraded_vm()))
@@ -1006,6 +1078,7 @@ def test_87_readiness_transition_became_authoritative_false_on_degraded():
 
 def test_88_readiness_transition_from_canonical():
     from windows_client.status_board_v2.topology_history import TopologyHistoryRecorder
+
     recorder = TopologyHistoryRecorder()
     snap_a = recorder.snapshot_from_inspection_report(_build_report(_make_canonical_vm()))
     snap_b = recorder.snapshot_from_inspection_report(_build_report(_make_degraded_vm()))
@@ -1016,6 +1089,7 @@ def test_88_readiness_transition_from_canonical():
 
 def test_89_readiness_transition_to_degraded():
     from windows_client.status_board_v2.topology_history import TopologyHistoryRecorder
+
     recorder = TopologyHistoryRecorder()
     snap_a = recorder.snapshot_from_inspection_report(_build_report(_make_canonical_vm()))
     snap_b = recorder.snapshot_from_inspection_report(_build_report(_make_degraded_vm()))
@@ -1028,12 +1102,13 @@ def test_89_readiness_transition_to_degraded():
 # J) Full end-to-end integration tests (tests 90–100)
 # ---------------------------------------------------------------------------
 
+
 def test_90_full_pipeline_none_vm_all_layers_safe():
     """None VM through all layers must not raise."""
+    from windows_client.status_board_v2.topology_history import TopologyHistoryRecorder
+    from windows_client.status_board_v2.topology_inspector import TopologyInspector
     from windows_client.status_board_v2.topology_layout import build_constellation_layout
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
-    from windows_client.status_board_v2.topology_inspector import TopologyInspector
-    from windows_client.status_board_v2.topology_history import TopologyHistoryRecorder
 
     layout = build_constellation_layout(None)
     render_out = TopologyRenderer().render_layout(None)
@@ -1048,12 +1123,13 @@ def test_90_full_pipeline_none_vm_all_layers_safe():
 
 def test_91_full_pipeline_canonical_all_layers_coherent():
     """Canonical VM → layout → renderer → inspector → history all coherent."""
+    from windows_client.status_board_v2.topology_history import (
+        TopologyHistoryBuffer,
+        TopologyHistoryRecorder,
+    )
+    from windows_client.status_board_v2.topology_inspector import TopologyInspector
     from windows_client.status_board_v2.topology_layout import build_constellation_layout
     from windows_client.status_board_v2.topology_renderer import TopologyRenderer
-    from windows_client.status_board_v2.topology_inspector import TopologyInspector
-    from windows_client.status_board_v2.topology_history import (
-        TopologyHistoryRecorder, TopologyHistoryBuffer,
-    )
 
     vm = _make_canonical_vm()
     layout = build_constellation_layout(vm)
@@ -1076,9 +1152,9 @@ def test_91_full_pipeline_canonical_all_layers_coherent():
 
 def test_92_full_pipeline_degraded_all_layers_coherent():
     """Degraded VM → all layers reflect degraded semantics."""
-    from windows_client.status_board_v2.topology_layout import build_constellation_layout
-    from windows_client.status_board_v2.topology_inspector import TopologyInspector
     from windows_client.status_board_v2.topology_history import TopologyHistoryRecorder
+    from windows_client.status_board_v2.topology_inspector import TopologyInspector
+    from windows_client.status_board_v2.topology_layout import build_constellation_layout
 
     vm = _make_degraded_vm()
     layout = build_constellation_layout(vm)
@@ -1096,9 +1172,9 @@ def test_92_full_pipeline_degraded_all_layers_coherent():
 
 def test_93_full_pipeline_oneapi_lower_horizon_invariant_canonical():
     """OneAPI lower-horizon invariant across all layers, canonical state."""
-    from windows_client.status_board_v2.topology_layout import build_constellation_layout
-    from windows_client.status_board_v2.topology_inspector import TopologyInspector
     from windows_client.status_board_v2.topology_history import TopologyHistoryRecorder
+    from windows_client.status_board_v2.topology_inspector import TopologyInspector
+    from windows_client.status_board_v2.topology_layout import build_constellation_layout
 
     vm = _make_canonical_vm()
     layout = build_constellation_layout(vm)
@@ -1123,9 +1199,9 @@ def test_93_full_pipeline_oneapi_lower_horizon_invariant_canonical():
 
 def test_94_full_pipeline_oneapi_lower_horizon_invariant_degraded():
     """OneAPI lower-horizon invariant across all layers, degraded state."""
-    from windows_client.status_board_v2.topology_layout import build_constellation_layout
-    from windows_client.status_board_v2.topology_inspector import TopologyInspector
     from windows_client.status_board_v2.topology_history import TopologyHistoryRecorder
+    from windows_client.status_board_v2.topology_inspector import TopologyInspector
+    from windows_client.status_board_v2.topology_layout import build_constellation_layout
 
     vm = _make_degraded_vm()
     layout = build_constellation_layout(vm)
@@ -1141,7 +1217,8 @@ def test_94_full_pipeline_oneapi_lower_horizon_invariant_degraded():
 def test_95_full_pipeline_history_buffer_accumulates():
     """History buffer accumulates entries correctly across semantic states."""
     from windows_client.status_board_v2.topology_history import (
-        TopologyHistoryRecorder, TopologyHistoryBuffer,
+        TopologyHistoryBuffer,
+        TopologyHistoryRecorder,
     )
     from windows_client.status_board_v2.topology_inspector import TopologyInspector
     from windows_client.status_board_v2.topology_layout import build_constellation_layout
@@ -1164,7 +1241,8 @@ def test_95_full_pipeline_history_buffer_accumulates():
 def test_96_full_pipeline_stability_summary_after_canonical_run():
     """After all-canonical entries, stability == stable, ratio == 1.0."""
     from windows_client.status_board_v2.topology_history import (
-        TopologyHistoryRecorder, TopologyHistoryBuffer,
+        TopologyHistoryBuffer,
+        TopologyHistoryRecorder,
     )
     from windows_client.status_board_v2.topology_inspector import TopologyInspector
     from windows_client.status_board_v2.topology_layout import build_constellation_layout
@@ -1188,7 +1266,8 @@ def test_96_full_pipeline_stability_summary_after_canonical_run():
 def test_97_full_pipeline_stability_summary_after_mixed_run():
     """After mixed canonical+degraded run, stability_ratio < 1.0."""
     from windows_client.status_board_v2.topology_history import (
-        TopologyHistoryRecorder, TopologyHistoryBuffer,
+        TopologyHistoryBuffer,
+        TopologyHistoryRecorder,
     )
     from windows_client.status_board_v2.topology_inspector import TopologyInspector
     from windows_client.status_board_v2.topology_layout import build_constellation_layout
@@ -1211,8 +1290,8 @@ def test_97_full_pipeline_stability_summary_after_mixed_run():
 
 def test_98_full_pipeline_all_to_dict_json_serialisable():
     """to_dict() outputs from all layers are JSON-serialisable."""
-    from windows_client.status_board_v2.topology_inspector import TopologyInspector
     from windows_client.status_board_v2.topology_history import TopologyHistoryRecorder
+    from windows_client.status_board_v2.topology_inspector import TopologyInspector
     from windows_client.status_board_v2.topology_layout import build_constellation_layout
 
     vm = _make_canonical_vm()
@@ -1232,17 +1311,19 @@ def test_98_full_pipeline_all_to_dict_json_serialisable():
 
 def test_99_full_pipeline_authority_sentinels_name_classes():
     """Each layer's authority sentinel names its canonical class."""
+    from core.desktop_consumption_adapter import DESKTOP_CONSUMPTION_ADAPTER_AUTHORITY
     from windows_client.status_board_v2 import (
+        TOPOLOGY_HISTORY_AUTHORITY,
+        TOPOLOGY_INSPECTOR_AUTHORITY,
         TOPOLOGY_LAYOUT_AUTHORITY,
         TOPOLOGY_RENDERER_AUTHORITY,
-        TOPOLOGY_INSPECTOR_AUTHORITY,
-        TOPOLOGY_HISTORY_AUTHORITY,
     )
-    from core.desktop_consumption_adapter import DESKTOP_CONSUMPTION_ADAPTER_AUTHORITY
 
-    assert "layout" in TOPOLOGY_LAYOUT_AUTHORITY.lower() or \
-           "TopologyLayout" in TOPOLOGY_LAYOUT_AUTHORITY or \
-           "build_constellation" in TOPOLOGY_LAYOUT_AUTHORITY.lower()
+    assert (
+        "layout" in TOPOLOGY_LAYOUT_AUTHORITY.lower()
+        or "TopologyLayout" in TOPOLOGY_LAYOUT_AUTHORITY
+        or "build_constellation" in TOPOLOGY_LAYOUT_AUTHORITY.lower()
+    )
     assert "TopologyRenderer" in TOPOLOGY_RENDERER_AUTHORITY
     assert "TopologyInspector" in TOPOLOGY_INSPECTOR_AUTHORITY
     assert "TopologyHistoryRecorder" in TOPOLOGY_HISTORY_AUTHORITY

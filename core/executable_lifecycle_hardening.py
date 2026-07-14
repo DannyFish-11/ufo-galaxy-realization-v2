@@ -717,10 +717,9 @@ def _build_transition_lineage(
                 )
 
             if previous["admission_outcome"] != current_snapshot["admission_outcome"]:
-                if (
-                    previous["admission_outcome"] in {"admitted", "admitted_degraded"}
-                    and current_snapshot["admission_outcome"] not in {"admitted", "admitted_degraded"}
-                ):
+                if previous["admission_outcome"] in {"admitted", "admitted_degraded"} and current_snapshot[
+                    "admission_outcome"
+                ] not in {"admitted", "admitted_degraded"}:
                     transition = "admission_revoked"
                 elif current_snapshot["admission_outcome"] in {"admitted", "admitted_degraded"}:
                     transition = "admission_granted"
@@ -765,9 +764,7 @@ def _build_transition_lineage(
                     _event(
                         event_type="recovery_transition",
                         transition=(
-                            "recovery_started"
-                            if current_snapshot["recovery_transition"]
-                            else "recovery_completed"
+                            "recovery_started" if current_snapshot["recovery_transition"] else "recovery_completed"
                         ),
                         cause="session_recovery_state_changed",
                     )
@@ -837,9 +834,7 @@ def _build_transition_lineage(
                     _event(
                         event_type="dependency_event",
                         transition=(
-                            "blocker_escalated"
-                            if current_snapshot["lifecycle_blocked"]
-                            else "blocker_cleared"
+                            "blocker_escalated" if current_snapshot["lifecycle_blocked"] else "blocker_cleared"
                         ),
                         cause="lifecycle_blocking_changed",
                         reason=lifecycle_blocked_reason,
@@ -882,12 +877,9 @@ def _build_transition_lineage(
                         to_state=current_snapshot["active_path"],
                     )
                 )
-            elif (
-                previous["active_path"] == current_snapshot["active_path"]
-                and (
-                    previous["readiness_state"] != current_snapshot["readiness_state"]
-                    or previous["admission_outcome"] != current_snapshot["admission_outcome"]
-                )
+            elif previous["active_path"] == current_snapshot["active_path"] and (
+                previous["readiness_state"] != current_snapshot["readiness_state"]
+                or previous["admission_outcome"] != current_snapshot["admission_outcome"]
             ):
                 new_events.append(
                     _event(
@@ -1207,11 +1199,7 @@ def _evaluate_task_initiation_gate(
         passed=gate_passed,
         blocked=not gate_passed,
         degraded=gate_degraded,
-        blocked_reason=(
-            f"Task initiation blocked: gates not met: {blocking_gates}."
-            if blocking_gates
-            else ""
-        ),
+        blocked_reason=(f"Task initiation blocked: gates not met: {blocking_gates}." if blocking_gates else ""),
         degraded_reasons=["degraded_initiation"] if gate_degraded else [],
         evidence=gate_result_obj.evidence,
     )
@@ -1232,11 +1220,7 @@ def _evaluate_task_execution_gate(
         passed=task_initiated or result_closure_established,
         blocked=blocked,
         degraded=False,
-        blocked_reason=(
-            "Task execution blocked: task initiation gate has not passed."
-            if blocked
-            else ""
-        ),
+        blocked_reason=("Task execution blocked: task initiation gate has not passed." if blocked else ""),
         evidence={
             "task_initiated": task_initiated,
             "result_closure_established": result_closure_established,
@@ -1282,11 +1266,7 @@ def _evaluate_result_closure(
     else:
         session_continuity_state = "not_applicable"
     task_continuity_confirmed = task_initiated and task_closed
-    session_continuity_confirmed = (
-        (not android_attached)
-        or session_closed
-        or participant_terminal_success_count > 0
-    )
+    session_continuity_confirmed = (not android_attached) or session_closed or participant_terminal_success_count > 0
 
     if not android_attached and not task_initiated:
         outcome = ClosureOutcome.NOT_APPLICABLE
@@ -1440,13 +1420,15 @@ def build_executable_lifecycle_state(
     validation_status = _str(getattr(validation, "overall_status", "PASS"))
 
     # --- Derived signals (mirrors v2_unified_state_contract logic) ---
-    _REQUIRED_ROUTES: frozenset = frozenset({
-        "/api/v1/health",
-        "/api/v1/chat",
-        "/api/v1/projection/runtime",
-        "/api/v1/projection/operational-readiness",
-        "/api/v1/projection/clone-to-use-acceptance",
-    })
+    _REQUIRED_ROUTES: frozenset = frozenset(
+        {
+            "/api/v1/health",
+            "/api/v1/chat",
+            "/api/v1/projection/runtime",
+            "/api/v1/projection/operational-readiness",
+            "/api/v1/projection/clone-to-use-acceptance",
+        }
+    )
     api_missing = sorted(r for r in _REQUIRED_ROUTES if r not in route_paths_set)
 
     def _status_val(item: Any) -> str:
@@ -1473,10 +1455,7 @@ def build_executable_lifecycle_state(
     capability_degraded = android_evidence.get("degraded_capability_device_count", 0) > 0
     runtime_verdict = str(runtime_readiness.get("verdict", "unknown"))
     main_chain_available = (
-        validation_status != "FAIL"
-        and not main_chain_blocked
-        and runtime_verdict != "blocked"
-        and not api_missing
+        validation_status != "FAIL" and not main_chain_blocked and runtime_verdict != "blocked" and not api_missing
     )
     recovery_active = bool(session_evidence.get("recovery_active"))
     degraded = (
@@ -1596,17 +1575,11 @@ def build_executable_lifecycle_state(
             break
     lifecycle_blocked = first_blocking_gate is not None
     lifecycle_blocked_reason = (
-        f"Stage {first_blocking_gate.stage.value}: {first_blocking_gate.blocked_reason}"
-        if first_blocking_gate
-        else ""
+        f"Stage {first_blocking_gate.stage.value}: {first_blocking_gate.blocked_reason}" if first_blocking_gate else ""
     )
 
     # --- Degraded stages ---
-    degraded_stages: List[str] = [
-        stage.value
-        for stage in _stage_order
-        if stage_gates[stage.value].degraded
-    ]
+    degraded_stages: List[str] = [stage.value for stage in _stage_order if stage_gates[stage.value].degraded]
 
     transition_lineage = _build_transition_lineage(
         subject_id=_derive_transition_subject_id(

@@ -12,21 +12,13 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
-ANDROID_PERCEPTION_INGRESS_CONTRACT_SENTINEL: str = (
-    "ANDROID_PERCEPTION_INGRESS_CONTRACT::v1 present"
-)
+ANDROID_PERCEPTION_INGRESS_CONTRACT_SENTINEL: str = "ANDROID_PERCEPTION_INGRESS_CONTRACT::v1 present"
 ANDROID_PERCEPTION_INGRESS_PROTOCOL: str = "ANDROID_PERCEPTION_INGRESS_PROTOCOL_V1"
 # Backward-compatible alias.
 ANDROID_PERCEPTION_CANONICAL_PROTOCOL: str = ANDROID_PERCEPTION_INGRESS_PROTOCOL
-ANDROID_PERCEPTION_CANONICAL_HANDLER: str = (
-    "galaxy_gateway.android.handlers.vision.handle_vision_request"
-)
-ANDROID_PERCEPTION_CANONICAL_RUNTIME_ENTRY: str = (
-    "core.desktop_presence_runtime.DesktopPresenceRuntime.handle_request"
-)
-ANDROID_PERCEPTION_TRUTH_CLOSURE_FIELD: str = (
-    "ingress_carrier_context.android_perception_ingress_route"
-)
+ANDROID_PERCEPTION_CANONICAL_HANDLER: str = "galaxy_gateway.android.handlers.vision.handle_vision_request"
+ANDROID_PERCEPTION_CANONICAL_RUNTIME_ENTRY: str = "core.desktop_presence_runtime.DesktopPresenceRuntime.handle_request"
+ANDROID_PERCEPTION_TRUTH_CLOSURE_FIELD: str = "ingress_carrier_context.android_perception_ingress_route"
 
 V2_MULTIMODAL_AUTHORITY: str = "v2_multimodal_main_host"
 ANDROID_VISION_CARRIER_SOURCE: str = "android_vision"
@@ -104,22 +96,13 @@ def build_android_perception_ingress_context(
     metadata = _extract_mm_metadata(multimodal_context)
     participation = metadata.get(ANDROID_PERCEPTION_PARTICIPATION_KEY, "")
     canonical_requested = (
-        participation == ANDROID_PERCEPTION_CANONICAL
-        or metadata.get(ANDROID_CANONICAL_OPT_IN_KEY) is True
+        participation == ANDROID_PERCEPTION_CANONICAL or metadata.get(ANDROID_CANONICAL_OPT_IN_KEY) is True
     )
-    effective_participation = (
-        ANDROID_PERCEPTION_CANONICAL
-        if canonical_requested
-        else ANDROID_PERCEPTION_ONE_SHOT
-    )
+    effective_participation = ANDROID_PERCEPTION_CANONICAL if canonical_requested else ANDROID_PERCEPTION_ONE_SHOT
 
     ingest_enabled = _is_multimodal_ingest_enabled()
     can_enter_ingress_bus = canonical_requested and ingest_enabled
-    route = (
-        ANDROID_PERCEPTION_ROUTE_INGRESS_BUS
-        if can_enter_ingress_bus
-        else ANDROID_PERCEPTION_ROUTE_REQUEST_BOUND
-    )
+    route = ANDROID_PERCEPTION_ROUTE_INGRESS_BUS if can_enter_ingress_bus else ANDROID_PERCEPTION_ROUTE_REQUEST_BOUND
 
     if canonical_requested and ingest_enabled:
         condition = "canonical_requested_and_ingest_enabled"

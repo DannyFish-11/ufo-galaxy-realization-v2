@@ -32,4 +32,3 @@ def test_dual_repo_progress_report_is_json_serialisable():
     payload = build_dual_repo_progress_report(force_rebuild=False)
     dumped = json.dumps(payload, ensure_ascii=False, sort_keys=True)
     assert isinstance(dumped, str)
-

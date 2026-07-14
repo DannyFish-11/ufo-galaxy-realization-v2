@@ -104,12 +104,10 @@ class LongTermMemory:
         enabled: Optional[bool] = None,
     ) -> None:
         cfg = self._read_config()
-        self._max_entries = max_entries if max_entries is not None else int(
-            cfg.get("long_term_memory_max_entries", 500)
+        self._max_entries = (
+            max_entries if max_entries is not None else int(cfg.get("long_term_memory_max_entries", 500))
         )
-        self._enabled = enabled if enabled is not None else bool(
-            cfg.get("enable_cognitive_memory_split", True)
-        )
+        self._enabled = enabled if enabled is not None else bool(cfg.get("enable_cognitive_memory_split", True))
         # namespace → {key → LongTermMemoryEntry}
         self._store: Dict[str, Dict[str, LongTermMemoryEntry]] = {}
         # Flat list for eviction ordering
@@ -159,13 +157,9 @@ class LongTermMemory:
             self._store[namespace][key] = entry
             self._insertion_order.append((entry.timestamp, namespace, key))
             self._evict_if_needed()
-        logger.debug(
-            "LongTermMemory.store ns=%s key=%s trace=%s", namespace, key, trace_id
-        )
+        logger.debug("LongTermMemory.store ns=%s key=%s trace=%s", namespace, key, trace_id)
 
-    def retrieve(
-        self, *, key: str, namespace: str = "global", default: Any = None
-    ) -> Any:
+    def retrieve(self, *, key: str, namespace: str = "global", default: Any = None) -> Any:
         """Retrieve the value stored under *key* in *namespace*.
 
         Returns *default* when disabled or key not found.
@@ -178,9 +172,7 @@ class LongTermMemory:
             return default
         return entry.value
 
-    def retrieve_entry(
-        self, *, key: str, namespace: str = "global"
-    ) -> Optional[Dict[str, Any]]:
+    def retrieve_entry(self, *, key: str, namespace: str = "global") -> Optional[Dict[str, Any]]:
         """Retrieve the full :class:`LongTermMemoryEntry` dict or *None*."""
         if not self._enabled:
             return None
@@ -199,9 +191,7 @@ class LongTermMemory:
             entries = sorted(ns_store.values(), key=lambda e: e.timestamp)
         return [e.to_dict() for e in entries]
 
-    def search(
-        self, *, query: str, namespace: str = "global", top_k: int = 5
-    ) -> List[Dict[str, Any]]:
+    def search(self, *, query: str, namespace: str = "global", top_k: int = 5) -> List[Dict[str, Any]]:
         """按相关度检索条目（零依赖 BM25 词法检索，无需 embedding 服务）。
 
         在 ``key + value`` 文本上做 BM25 排序，返回最相关的若干条目（每条附 ``_score``）。
@@ -215,6 +205,7 @@ class LongTermMemory:
             return []
         try:
             from core.cognitive.bm25_index import bm25_rank
+
             docs = [(str(i), f"{e.key} {e.value}") for i, e in enumerate(entries)]
             ranked = bm25_rank(query, docs, top_k=top_k)
             out: List[Dict[str, Any]] = []
@@ -277,9 +268,7 @@ class LongTermMemory:
             import json
             import pathlib
 
-            return json.loads(
-                (pathlib.Path(__file__).parents[2] / "config.json").read_text()
-            )
+            return json.loads((pathlib.Path(__file__).parents[2] / "config.json").read_text())
         except Exception:
             return {}
 

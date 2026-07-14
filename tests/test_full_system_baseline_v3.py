@@ -51,10 +51,11 @@ Group F — Singleton behaviour
 
 from __future__ import annotations
 
-import json
 import importlib
-import pytest
+import json
 from typing import List
+
+import pytest
 
 # ---------------------------------------------------------------------------
 # Skip guard — skip all tests if the module cannot be imported (should not
@@ -84,18 +85,18 @@ pytestmark = pytest.mark.skipif(
 # ---------------------------------------------------------------------------
 
 from core.full_system_baseline_v3 import (  # noqa: E402
-    FULL_SYSTEM_BASELINE_V3_AUTHORITY,
-    FULL_SYSTEM_BASELINE_V3_SENTINEL,
     ANDROID_EVIDENCE_ABSENCE_DOWNGRADES_VERDICT_POLICY,
     DECLARED_NOT_PROVEN_BLOCKS_CLOSED_VERDICT_POLICY,
-    SubsystemState,
-    V3SubsystemId,
-    V3BaselineVerdict,
-    SubsystemEntry,
+    FULL_SYSTEM_BASELINE_V3_AUTHORITY,
+    FULL_SYSTEM_BASELINE_V3_SENTINEL,
     BlockingGap,
-    OpenQuestion,
-    V3BaselineReport,
     FullSystemBaselineV3Evaluator,
+    OpenQuestion,
+    SubsystemEntry,
+    SubsystemState,
+    V3BaselineReport,
+    V3BaselineVerdict,
+    V3SubsystemId,
     build_v3_baseline_report,
     get_v3_baseline_report,
     reset_v3_baseline_report,
@@ -389,9 +390,9 @@ class TestGroupD_BaselineReport:
 class TestGroupE_EvidenceClosureGate:
     def test_E01_evaluate_returns_closure_gate_result(self) -> None:
         from core.full_system_evidence_closure_gate import (
-            evaluate_evidence_closure_gate,
             ClosureGateResult,
             ClosureLevel,
+            evaluate_evidence_closure_gate,
         )
 
         result = evaluate_evidence_closure_gate(ClosureLevel.standard)
@@ -399,8 +400,8 @@ class TestGroupE_EvidenceClosureGate:
 
     def test_E02_standard_gate_fails_when_android_absent(self) -> None:
         from core.full_system_evidence_closure_gate import (
-            evaluate_evidence_closure_gate,
             ClosureLevel,
+            evaluate_evidence_closure_gate,
         )
 
         report = build_v3_baseline_report()
@@ -414,8 +415,8 @@ class TestGroupE_EvidenceClosureGate:
         """minimum level: android evidence absence alone should not be a fail reason.
         The minimum gate only fails if subsystems are below implemented_but_not_closed."""
         from core.full_system_evidence_closure_gate import (
-            evaluate_evidence_closure_gate,
             ClosureLevel,
+            evaluate_evidence_closure_gate,
         )
 
         report = build_v3_baseline_report()
@@ -426,8 +427,8 @@ class TestGroupE_EvidenceClosureGate:
 
     def test_E04_strict_gate_fails_when_verdict_not_closed(self) -> None:
         from core.full_system_evidence_closure_gate import (
-            evaluate_evidence_closure_gate,
             ClosureLevel,
+            evaluate_evidence_closure_gate,
         )
 
         report = build_v3_baseline_report()
@@ -437,8 +438,8 @@ class TestGroupE_EvidenceClosureGate:
 
     def test_E05_closure_gate_result_json_roundtrip(self) -> None:
         from core.full_system_evidence_closure_gate import (
-            evaluate_evidence_closure_gate,
             ClosureLevel,
+            evaluate_evidence_closure_gate,
         )
 
         result = evaluate_evidence_closure_gate(ClosureLevel.standard)
@@ -453,11 +454,11 @@ class TestGroupE_EvidenceClosureGate:
         self,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        from core.full_system_evidence_closure_gate import (
-            evaluate_evidence_closure_gate,
-            ClosureLevel,
-        )
         import core.full_system_baseline_v3 as baseline_mod
+        from core.full_system_evidence_closure_gate import (
+            ClosureLevel,
+            evaluate_evidence_closure_gate,
+        )
 
         synthetic = V3BaselineReport(
             overall_verdict=V3BaselineVerdict.partially_closed_blocking_gaps,
@@ -482,11 +483,11 @@ class TestGroupE_EvidenceClosureGate:
         self,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        from core.full_system_evidence_closure_gate import (
-            evaluate_evidence_closure_gate,
-            ClosureLevel,
-        )
         import core.full_system_baseline_v3 as baseline_mod
+        from core.full_system_evidence_closure_gate import (
+            ClosureLevel,
+            evaluate_evidence_closure_gate,
+        )
 
         synthetic = V3BaselineReport(
             overall_verdict=V3BaselineVerdict.partially_closed_blocking_gaps,

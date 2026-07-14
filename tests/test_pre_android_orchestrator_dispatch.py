@@ -40,7 +40,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -155,9 +154,7 @@ class TestTryAndroidBridgeDispatchSuccess:
         android_device = MagicMock()
         device_id = "android_dev_001"
         fake_bridge._devices = {device_id: android_device}
-        fake_bridge.assign_task = MagicMock(
-            return_value={"success": True, "task_id": "task_001", "result": "ok"}
-        )
+        fake_bridge.assign_task = MagicMock(return_value={"success": True, "task_id": "task_001", "result": "ok"})
 
         fake_bridge_mod = MagicMock()
         fake_bridge_mod.android_bridge = fake_bridge
@@ -262,12 +259,11 @@ class TestTryAndroidBridgeDispatchAsync:
 class TestTryAndroidBridgeDispatchImportError:
     def test_returns_android_bridge_unavailable(self, monkeypatch):
         import sys
+
         import core.runtime.source_dispatch_orchestrator as mod
 
         # Remove the module from sys.modules to force ImportError
-        monkeypatch.setitem(
-            sys.modules, "galaxy_gateway.android_bridge", None  # type: ignore[arg-type]
-        )
+        monkeypatch.setitem(sys.modules, "galaxy_gateway.android_bridge", None)  # type: ignore[arg-type]
 
         result = mod._try_android_bridge_dispatch(
             "some_device",
@@ -345,10 +341,10 @@ class TestOrchestrateAndroidBridgeDispatch:
     when the target device is registered in the Android bridge."""
 
     def test_android_bridge_dispatch_path_taken(self, monkeypatch):
+        from contracts.source_dispatch import SourceDispatchMode
         from core.runtime.source_dispatch_orchestrator import (
             orchestrate_source_runtime_dispatch,
         )
-        from contracts.source_dispatch import SourceDispatchMode
 
         device_id = "android_dev_orch_001"
 
@@ -425,10 +421,10 @@ class TestOrchestrateAndroidBridgeFallthrough:
     HandoffEnvelopeV2 remote handoff path."""
 
     def test_falls_through_to_remote_handoff(self, monkeypatch):
+        from contracts.source_dispatch import SourceDispatchMode
         from core.runtime.source_dispatch_orchestrator import (
             orchestrate_source_runtime_dispatch,
         )
-        from contracts.source_dispatch import SourceDispatchMode
 
         device_id = "non_android_dev_001"
 
@@ -498,10 +494,10 @@ class TestOrchestrateAndroidBridgeError:
     to local execution."""
 
     def test_fallback_local_on_android_bridge_error(self, monkeypatch):
+        from contracts.source_dispatch import SourceDispatchMode
         from core.runtime.source_dispatch_orchestrator import (
             orchestrate_source_runtime_dispatch,
         )
-        from contracts.source_dispatch import SourceDispatchMode
 
         device_id = "android_dev_error"
 
@@ -552,9 +548,7 @@ class TestTargetDiscoveryAndroidDevice:
         entry = _make_registry_entry(android_device_id)
 
         readiness = _make_readiness(registered=True, routable=True)
-        participation = _make_participation(
-            orchestration_eligible=True, participant_tier="joined_runtime"
-        )
+        participation = _make_participation(orchestration_eligible=True, participant_tier="joined_runtime")
 
         monkeypatch.setattr(
             "core.attached_runtime_session_registry.list_active_sessions",
@@ -627,10 +621,10 @@ class TestConsumeAndroidBehavioralResultNotDegraded:
     result backflow path."""
 
     def test_consume_result_returns_consumed_true_on_update(self):
+        from core.android_execution_signal_reconciler import AndroidSignalKind
         from core.runtime.source_dispatch_orchestrator import (
             SourceDispatchOrchestrator,
         )
-        from core.android_execution_signal_reconciler import AndroidSignalKind
 
         orchestrator = SourceDispatchOrchestrator()
 
@@ -689,10 +683,10 @@ class TestConsumeAndroidBehavioralResultNotDegraded:
 
 class TestSourceDispatchOrchestratorAndroidDispatch:
     def test_dispatch_returns_success_when_bridge_succeeds(self, monkeypatch):
+        from contracts.source_dispatch import SourceDispatchMode
         from core.runtime.source_dispatch_orchestrator import (
             SourceDispatchOrchestrator,
         )
-        from contracts.source_dispatch import SourceDispatchMode
 
         device_id = "android_dev_class_001"
 

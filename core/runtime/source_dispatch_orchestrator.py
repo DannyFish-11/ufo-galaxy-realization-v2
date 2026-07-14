@@ -930,10 +930,7 @@ def _build_mesh_participant_lineage(
     return {
         "participant_id": participant_id,
         "mesh_session_id": str(
-            mesh_session_id
-            or payload_dict.get("session_id")
-            or payload_dict.get("mesh_session_id")
-            or ""
+            mesh_session_id or payload_dict.get("session_id") or payload_dict.get("mesh_session_id") or ""
         ),
         "task_id": str(payload_dict.get("task_id") or payload_dict.get("envelope_task_id") or ""),
         "session_epoch": _coerce_mesh_session_epoch(payload_dict),
@@ -1079,8 +1076,7 @@ def _wait_for_staged_mesh_participant_results(
                 selected_lineage = accepted_lineage.get(did)
                 selected_epoch = (
                     int(selected_lineage["session_epoch"])
-                    if selected_lineage is not None
-                    and selected_lineage.get("session_epoch") is not None
+                    if selected_lineage is not None and selected_lineage.get("session_epoch") is not None
                     else None
                 )
                 current_epoch = int(session_epoch) if session_epoch is not None else None
@@ -1121,9 +1117,8 @@ def _wait_for_staged_mesh_participant_results(
                         continue
 
                     if (
-                        (current_epoch is not None and selected_epoch is not None and current_epoch > selected_epoch)
-                        or (current_epoch is not None and selected_epoch is None)
-                    ):
+                        current_epoch is not None and selected_epoch is not None and current_epoch > selected_epoch
+                    ) or (current_epoch is not None and selected_epoch is None):
                         participant_result_summary["rejected"] += 1
                         participant_result_summary["abandoned_or_superseded"] += 1
                         participant_result_summary["superseded_by_newer_epoch_session"] += 1
@@ -1227,9 +1222,7 @@ def _wait_for_staged_mesh_participant_results(
             final_accepted_participant_count=len(received_ids),
         ),
         "participant_result_adjudication": participant_result_adjudication,
-        "accepted_participant_lineage": {
-            did: dict(accepted_lineage.get(did) or {}) for did in received_ids
-        },
+        "accepted_participant_lineage": {did: dict(accepted_lineage.get(did) or {}) for did in received_ids},
     }
 
 
@@ -1681,9 +1674,7 @@ ANDROID_TERMINAL_SIGNAL_RECORDS_TO_REPLAY_FOUNDATION_POLICY: str = (
     "orchestration-truth events."
 )
 
-_ANDROID_TERMINAL_SIGNAL_KINDS: frozenset = frozenset(
-    {"cancelled", "error", "final_result", "timeout"}
-)
+_ANDROID_TERMINAL_SIGNAL_KINDS: frozenset = frozenset({"cancelled", "error", "final_result", "timeout"})
 
 
 def _try_governance_snapshot() -> Optional[Dict[str, Any]]:
@@ -1738,10 +1729,7 @@ def _try_mesh_memberships(mesh_id: Optional[str] = None) -> Optional[List[Dict[s
         registry = get_body_mesh_registry()
         memberships = registry.get_mesh_memberships(mesh_id=mesh_id or "default_mesh")
         if memberships:
-            return [
-                m.to_dict() if hasattr(m, "to_dict") else dict(m)
-                for m in memberships
-            ]
+            return [m.to_dict() if hasattr(m, "to_dict") else dict(m) for m in memberships]
     except Exception as exc:
         logger.debug("Suppressed: %s", exc)
     return None
@@ -1774,9 +1762,7 @@ def _try_run_local_execution(
                 entry_mode=entry_mode,
             )
 
-        logger.debug(
-            "_try_run_local_execution: OpenClawd unavailable; returning skipped result"
-        )
+        logger.debug("_try_run_local_execution: OpenClawd unavailable; returning skipped result")
         return {
             "action_taken": "none",
             "success": False,
@@ -1908,11 +1894,7 @@ def _try_android_bridge_dispatch(
 
         task_payload: Dict[str, Any] = dict(task or {})
         # Derive task_type from the task dict; fall back to "generic".
-        task_type: str = str(
-            task_payload.pop("task_type", None)
-            or task_payload.get("tool_name")
-            or "generic"
-        )
+        task_type: str = str(task_payload.pop("task_type", None) or task_payload.get("tool_name") or "generic")
 
         # Embed orchestrator context into the task payload for observability.
         assign_payload: Dict[str, Any] = {
@@ -1945,6 +1927,7 @@ def _try_android_bridge_dispatch(
                 # a shared executor would require lifecycle management that is
                 # disproportionate for this call site.
                 import concurrent.futures
+
                 with concurrent.futures.ThreadPoolExecutor(max_workers=1) as _pool:
                     _fut = _pool.submit(asyncio.run, coro)
                     result = _fut.result(timeout=30)
@@ -1970,11 +1953,7 @@ def _try_android_bridge_dispatch(
                 "action_taken": "none",
             }
 
-        bridge_response: Dict[str, Any] = (
-            result
-            if isinstance(result, dict)
-            else {"raw": str(result)}
-        )
+        bridge_response: Dict[str, Any] = result if isinstance(result, dict) else {"raw": str(result)}
         return {
             "success": bridge_response.get("success", True),
             "action_taken": "android_bridge_dispatch",
@@ -2124,25 +2103,20 @@ def select_dispatch_mode(
                 from core.source_execution_eligibility import (
                     check_source_eligibility_with_coordination_role as _role_check,
                 )
+
                 _result = _role_check(source_runtime_posture, coordination_role)
                 _eligible = _result.eligible
-                _eligibility_reason = (
-                    f"posture:{_result.posture}:role:{coordination_role}"
-                )
+                _eligibility_reason = f"posture:{_result.posture}:role:{coordination_role}"
             except Exception as exc:
                 # Fallback: treat observer_only as ineligible, others by posture.
-                _eligible = (
-                    coordination_role != "observer_only"
-                    and source_runtime_posture != "control_only"
-                )
-                _eligibility_reason = (
-                    f"posture_role_fallback:{source_runtime_posture}:{coordination_role}"
-                )
+                _eligible = coordination_role != "observer_only" and source_runtime_posture != "control_only"
+                _eligibility_reason = f"posture_role_fallback:{source_runtime_posture}:{coordination_role}"
         else:
             try:
                 from core.source_execution_eligibility import (
                     is_source_eligible_for_local_execution as _posture_eligible,
                 )
+
                 _eligible = _posture_eligible(source_runtime_posture)
             except Exception as exc:
                 logger.debug("Fallback triggered: %s", exc)
@@ -2166,9 +2140,7 @@ def select_dispatch_mode(
         participants = mesh_session.get("participants") or []
         # If there are 2+ active participants and no explicit target, suggest staged
         active_count = sum(
-            1
-            for p in participants
-            if isinstance(p, dict) and p.get("status") in ("active", "ready", "joined")
+            1 for p in participants if isinstance(p, dict) and p.get("status") in ("active", "ready", "joined")
         )
         if active_count >= 2:
             return SourceDispatchMode.staged_mesh, "mesh_session:multi_device_active"
@@ -2195,9 +2167,7 @@ def _derive_dispatch_candidate_lifecycle(
     execution_runtime_state: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Derive explicit participant lifecycle projection for dispatch arbitration."""
-    participant_tier = str(
-        getattr(participation, "participant_tier", "") or ""
-    ).strip().lower()
+    participant_tier = str(getattr(participation, "participant_tier", "") or "").strip().lower()
     role = "assistant"
     role_display = role
     if participant_tier == "fallback_runtime_host":
@@ -2218,9 +2188,7 @@ def _derive_dispatch_candidate_lifecycle(
         trigger = "suspension_ordered"
         dispatch_eligible = False
         dispatch_implication = "participant_suspended"
-    elif not bool(getattr(readiness, "registered", False)) or not bool(
-        getattr(readiness, "routable", False)
-    ):
+    elif not bool(getattr(readiness, "registered", False)) or not bool(getattr(readiness, "routable", False)):
         state = "detached"
         trigger = "transport_disconnected"
         dispatch_eligible = False
@@ -2230,9 +2198,10 @@ def _derive_dispatch_candidate_lifecycle(
         trigger = "suspension_ordered"
         dispatch_eligible = False
         dispatch_implication = "posture_control_only"
-    elif execution_runtime_state and str(
-        execution_runtime_state.get("highest_priority_execution_type") or ""
-    ).strip() == "takeover_request":
+    elif (
+        execution_runtime_state
+        and str(execution_runtime_state.get("highest_priority_execution_type") or "").strip() == "takeover_request"
+    ):
         state = "taking_over"
         trigger = "takeover_initiated"
         dispatch_eligible = False
@@ -2243,9 +2212,7 @@ def _derive_dispatch_candidate_lifecycle(
         state = "executing"
         trigger = "execution_started"
         dispatch_implication = "participant_busy_executing"
-    elif execution_runtime_state and int(
-        execution_runtime_state.get("active_execution_count", 0) or 0
-    ) > 0:
+    elif execution_runtime_state and int(execution_runtime_state.get("active_execution_count", 0) or 0) > 0:
         state = "degraded_state"
         trigger = "capability_degraded"
         role = "degraded"
@@ -2421,12 +2388,16 @@ def _score_candidate(
         if isinstance(_offline_queue_depth, int) and _offline_queue_depth > 0:
             score -= min(_offline_queue_depth, MAX_QUEUE_DEPTH_PENALTY)
         if isinstance(_runtime_health_snapshot, dict):
-            _health_status = str(
-                _runtime_health_snapshot.get("status")
-                or _runtime_health_snapshot.get("state")
-                or _runtime_health_snapshot.get("health")
-                or ""
-            ).strip().lower()
+            _health_status = (
+                str(
+                    _runtime_health_snapshot.get("status")
+                    or _runtime_health_snapshot.get("state")
+                    or _runtime_health_snapshot.get("health")
+                    or ""
+                )
+                .strip()
+                .lower()
+            )
             _is_degraded = bool(_runtime_health_snapshot.get("is_degraded", False))
             if _health_status in {"degraded", "unhealthy", "error", "failed"} or _is_degraded:
                 score -= 10
@@ -2463,21 +2434,15 @@ def _score_candidate(
     # --- Unified execution-runtime pressure / conflict truth ---
     if execution_runtime_state:
         _blocked_types = {
-            str(v).strip()
-            for v in (execution_runtime_state.get("blocked_execution_types") or [])
-            if str(v).strip()
+            str(v).strip() for v in (execution_runtime_state.get("blocked_execution_types") or []) if str(v).strip()
         }
-        _incoming_execution_type = str(
-            execution_runtime_state.get("incoming_execution_type", "goal_execution")
-        ).strip()
+        _incoming_execution_type = str(execution_runtime_state.get("incoming_execution_type", "goal_execution")).strip()
         if _incoming_execution_type in _blocked_types:
             return 0, f"execution_runtime:blocked_execution_type:{_incoming_execution_type}"
         _active_count = int(execution_runtime_state.get("active_execution_count", 0) or 0)
         if _active_count > 0:
             score -= min(_active_count * 5, 20)
-        _highest_priority = str(
-            execution_runtime_state.get("highest_priority_execution_type") or ""
-        ).strip()
+        _highest_priority = str(execution_runtime_state.get("highest_priority_execution_type") or "").strip()
         if _highest_priority == "takeover_request":
             score -= 25
 
@@ -2651,9 +2616,7 @@ def _select_target_from_candidates(
                     device_id,
                     registry=registry,
                 )
-                reuse_eligible = (
-                    resolution.resolution_kind == ReuseDispatchResolutionKind.reused
-                )
+                reuse_eligible = resolution.resolution_kind == ReuseDispatchResolutionKind.reused
             except Exception as exc:  # noqa: BLE001
                 logger.debug(
                     "_select_target_from_candidates: reuse unavailable for %s: %s",
@@ -2674,9 +2637,7 @@ def _select_target_from_candidates(
             android_snapshot = android_snapshot_inputs[device_id]
         else:
             try:
-                from core.android_device_state_store import (
-                    get_device_state_snapshot as _get_android_snap,
-                )
+                from core.android_device_state_store import get_device_state_snapshot as _get_android_snap
 
                 android_snapshot = _get_android_snap(device_id)
             except Exception as exc:  # noqa: BLE001
@@ -2707,10 +2668,9 @@ def _select_target_from_candidates(
         # Per ANDROID_EXECUTION_BUSY_DEPRIORITISED_IN_SELECTION_POLICY.
         _execution_busy: bool = False
         try:
-            from core.android_device_state_store import (
-                list_recent_execution_events as _list_events,
-            )
             import time as _time
+
+            from core.android_device_state_store import list_recent_execution_events as _list_events
 
             _recent = _list_events(flow_id=None, device_id=device_id, limit=1)
             if _recent:
@@ -2740,14 +2700,10 @@ def _select_target_from_candidates(
             from core.android_mode_gate_policy import resolve_android_execution_gate_decision
 
             _model_ready_for_gate = (
-                getattr(android_snapshot, "model_ready", None)
-                if android_snapshot is not None
-                else None
+                getattr(android_snapshot, "model_ready", None) if android_snapshot is not None else None
             )
             _fallback_tier_for_gate = (
-                getattr(android_snapshot, "current_fallback_tier", None)
-                if android_snapshot is not None
-                else None
+                getattr(android_snapshot, "current_fallback_tier", None) if android_snapshot is not None else None
             )
             _local_inference_available_for_gate = False
             if android_snapshot is not None:
@@ -2812,9 +2768,7 @@ def _select_target_from_candidates(
                 execution_busy=_execution_busy,
                 execution_runtime_state=execution_runtime_by_device.get(device_id),
             )
-            _android_participation_tier = normalize_android_participation_tier(
-                android_participation_evidence
-            )
+            _android_participation_tier = normalize_android_participation_tier(android_participation_evidence)
             reuse_tag = ":reuse_eligible" if reuse_eligible else ""
             android_tag = ":android_truth" if android_snapshot is not None else ""
             best_target = SourceDispatchTarget(
@@ -2822,9 +2776,7 @@ def _select_target_from_candidates(
                 target_runtime_id=str(runtime_id) if runtime_id else None,
                 target_session_id=session_id or None,
                 mesh_session_id=mesh_session_id,
-                selection_reason=(
-                    f"registry:readiness:participation{reuse_tag}{android_tag}:score={score}"
-                ),
+                selection_reason=(f"registry:readiness:participation{reuse_tag}{android_tag}:score={score}"),
                 metadata={
                     "pr24_selection": True,
                     "score": score,
@@ -2836,12 +2788,8 @@ def _select_target_from_candidates(
                     ),
                     "android_participation_tier": _android_participation_tier,
                     "android_dispatch_field_status": {
-                        "authoritative_scoring_fields": list(
-                            ANDROID_DISPATCH_AUTHORITATIVE_SNAPSHOT_FIELDS
-                        ),
-                        "capability_presence_only_fields": list(
-                            ANDROID_DISPATCH_CAPABILITY_ONLY_SNAPSHOT_FIELDS
-                        ),
+                        "authoritative_scoring_fields": list(ANDROID_DISPATCH_AUTHORITATIVE_SNAPSHOT_FIELDS),
+                        "capability_presence_only_fields": list(ANDROID_DISPATCH_CAPABILITY_ONLY_SNAPSHOT_FIELDS),
                     },
                     "execution_busy": _execution_busy,
                     "canonical_execution_gate_decision": _canonical_gate_decision,
@@ -2855,15 +2803,9 @@ def _select_target_from_candidates(
                         mode_state="remote_handoff",
                         ready_to_route=bool(getattr(readiness, "ready", False)),
                         readiness_summary={
-                            "verdict": (
-                                "ready"
-                                if bool(getattr(readiness, "ready", False))
-                                else "blocked"
-                            ),
+                            "verdict": ("ready" if bool(getattr(readiness, "ready", False)) else "blocked"),
                             "registered": bool(getattr(readiness, "registered", False)),
-                            "orchestration_eligible": bool(
-                                getattr(participation, "orchestration_eligible", False)
-                            ),
+                            "orchestration_eligible": bool(getattr(participation, "orchestration_eligible", False)),
                         },
                         readiness_notes=list(getattr(readiness, "reasons", []) or []),
                         blocking_reasons=list(_canonical_gate_reasons),
@@ -2964,9 +2906,8 @@ def select_dispatch_target(
             target_device_id=target_device_id,
             target_runtime_id=target_runtime_id,
             handoff_envelope_id=handoff_envelope_id,
-            mesh_session_id=mesh_session_id or (
-                mesh_session.get("session_id") if (mesh_session and isinstance(mesh_session, dict)) else None
-            ),
+            mesh_session_id=mesh_session_id
+            or (mesh_session.get("session_id") if (mesh_session and isinstance(mesh_session, dict)) else None),
             selection_reason="explicit_target_device_id",
             metadata={
                 "runtime_decision_reasoning": build_runtime_decision_reasoning_block(
@@ -2984,9 +2925,7 @@ def select_dispatch_target(
 
     # PR-24: consolidated truth-driven selection
     _effective_mesh_session_id = mesh_session_id or (
-        mesh_session.get("session_id")
-        if (mesh_session and isinstance(mesh_session, dict))
-        else None
+        mesh_session.get("session_id") if (mesh_session and isinstance(mesh_session, dict)) else None
     )
     candidate_target = _select_target_from_candidates(
         registry=registry,
@@ -3005,12 +2944,12 @@ def select_dispatch_target(
         # the policy module is unavailable, the PR-24 candidate is returned
         # unchanged (graceful degradation).
         try:
+            from core.attached_runtime_session_registry import list_active_sessions
             from core.delegated_target_selection_policy import (
-                select_delegated_target as _select_delegated,
                 SelectionCandidateContext,
                 SelectionOutcome,
             )
-            from core.attached_runtime_session_registry import list_active_sessions
+            from core.delegated_target_selection_policy import select_delegated_target as _select_delegated
 
             _active_entries = list_active_sessions(registry=registry) or []
             _ctx_list = []
@@ -3034,8 +2973,7 @@ def select_dispatch_target(
                 _outcome = getattr(_delegated_decision, "outcome", None)
                 if _outcome == SelectionOutcome.local_fallback:
                     logger.debug(
-                        "select_dispatch_target: delegated policy → local_fallback; "
-                        "fallback_reason=%r",
+                        "select_dispatch_target: delegated policy → local_fallback; " "fallback_reason=%r",
                         getattr(_delegated_decision, "fallback_reason", None),
                     )
                     # Return the PR-24 candidate with policy outcome annotated
@@ -3049,8 +2987,7 @@ def select_dispatch_target(
                         handoff_envelope_id=candidate_target.handoff_envelope_id,
                         mesh_session_id=candidate_target.mesh_session_id,
                         selection_reason=(
-                            candidate_target.selection_reason
-                            + ":delegated_policy=local_fallback_recommended"
+                            candidate_target.selection_reason + ":delegated_policy=local_fallback_recommended"
                         ),
                         metadata={
                             **(candidate_target.metadata or {}),
@@ -3062,8 +2999,7 @@ def select_dispatch_target(
                     )
                 elif _outcome == SelectionOutcome.degrade:
                     logger.debug(
-                        "select_dispatch_target: delegated policy → degrade; "
-                        "fallback_reason=%r",
+                        "select_dispatch_target: delegated policy → degrade; " "fallback_reason=%r",
                         getattr(_delegated_decision, "fallback_reason", None),
                     )
                     from contracts.source_dispatch import SourceDispatchTarget as _SDT3
@@ -3074,10 +3010,7 @@ def select_dispatch_target(
                         target_session_id=candidate_target.target_session_id,
                         handoff_envelope_id=candidate_target.handoff_envelope_id,
                         mesh_session_id=candidate_target.mesh_session_id,
-                        selection_reason=(
-                            candidate_target.selection_reason
-                            + ":delegated_policy=degrade_recommended"
-                        ),
+                        selection_reason=(candidate_target.selection_reason + ":delegated_policy=degrade_recommended"),
                         metadata={
                             **(candidate_target.metadata or {}),
                             "delegated_policy_outcome": "degrade",
@@ -3230,9 +3163,9 @@ def build_source_dispatch_plan(
     """
     from contracts.source_dispatch import (
         SourceDispatchMode,
-        build_source_dispatch_plan as _contract_build_plan,
         build_source_dispatch_decision,
     )
+    from contracts.source_dispatch import build_source_dispatch_plan as _contract_build_plan
     from core.runtime_decision_reasoning import (
         overlay_runtime_decision_reasoning_block,
     )
@@ -3302,6 +3235,7 @@ def build_source_dispatch_plan(
                 # Propagate the envelope ID back onto the target record
                 if handoff_envelope_dict and handoff_envelope_dict.get("envelope_id"):
                     from contracts.source_dispatch import SourceDispatchTarget as _Target
+
                     selected_target = _Target(
                         target_device_id=selected_target.target_device_id,
                         target_runtime_id=selected_target.target_runtime_id,
@@ -3312,9 +3246,7 @@ def build_source_dispatch_plan(
                         metadata=selected_target.metadata,
                     )
             except Exception as exc:  # noqa: BLE001
-                logger.debug(
-                    "build_source_dispatch_plan: failed to pre-build HandoffEnvelopeV2: %s", exc
-                )
+                logger.debug("build_source_dispatch_plan: failed to pre-build HandoffEnvelopeV2: %s", exc)
 
         # Assess plan readiness
         ready = True
@@ -3342,14 +3274,10 @@ def build_source_dispatch_plan(
             selected_runtime=(
                 "v2_local"
                 if mode in (SourceDispatchMode.local, SourceDispatchMode.fallback_local)
-                else "android_delegated"
-                if selected_target is not None
-                else "v2_local"
+                else "android_delegated" if selected_target is not None else "v2_local"
             ),
             selected_device=(
-                getattr(selected_target, "target_device_id", None)
-                if selected_target is not None
-                else None
+                getattr(selected_target, "target_device_id", None) if selected_target is not None else None
             ),
             mode_state=getattr(mode, "value", str(mode)),
             source_runtime_posture=source_runtime_posture,
@@ -3393,10 +3321,9 @@ def build_source_dispatch_plan(
         )
 
     except Exception as exc:  # noqa: BLE001
-        logger.warning(
-            "build_source_dispatch_plan: unexpected error: %s", exc
-        )
-        from contracts.source_dispatch import SourceDispatchPlan as _Plan, SourceDispatchMode as _Mode
+        logger.warning("build_source_dispatch_plan: unexpected error: %s", exc)
+        from contracts.source_dispatch import SourceDispatchMode as _Mode
+        from contracts.source_dispatch import SourceDispatchPlan as _Plan
 
         return _Plan(
             trace_id=trace_id,
@@ -3568,9 +3495,7 @@ def orchestrate_source_runtime_dispatch(
         try:
             from contracts.dispatch_contract_metadata import build_dispatch_contract_metadata
 
-            _target_device_id = (
-                selected_target.target_device_id if selected_target is not None else None
-            )
+            _target_device_id = selected_target.target_device_id if selected_target is not None else None
             _dcm = build_dispatch_contract_metadata(
                 dispatch_plan_id=plan.plan_id if hasattr(plan, "plan_id") else None,
                 dispatch_decision_id=plan.dispatch_id,
@@ -3585,8 +3510,7 @@ def orchestrate_source_runtime_dispatch(
             _dispatch_contract_metadata_dict = _dcm.to_dict()
         except Exception as _dcm_exc:  # noqa: BLE001
             logger.debug(
-                "orchestrate_source_runtime_dispatch: "
-                "failed to build DispatchContractMetadata: %s",
+                "orchestrate_source_runtime_dispatch: " "failed to build DispatchContractMetadata: %s",
                 _dcm_exc,
             )
 
@@ -3645,9 +3569,7 @@ def orchestrate_source_runtime_dispatch(
                     if _android_resp.get("success"):
                         exec_result = _android_resp
                         success = True
-                        decision_reason = (
-                            decision_reason or "android_bridge_dispatch:success"
-                        )
+                        decision_reason = decision_reason or "android_bridge_dispatch:success"
                         logger.debug(
                             "orchestrate_source_runtime_dispatch: "
                             "android_bridge_dispatch succeeded for device_id=%s",
@@ -3657,9 +3579,7 @@ def orchestrate_source_runtime_dispatch(
                         # Android bridge failed for a structural reason (not merely
                         # "this device is not an Android device") — fall back to
                         # local with the failure recorded.
-                        errors.append(
-                            f"android_bridge_dispatch_failed:{_android_skipped}"
-                        )
+                        errors.append(f"android_bridge_dispatch_failed:{_android_skipped}")
                         effective_mode = SourceDispatchMode.fallback_local
                         decision_reason = "android_bridge_dispatch_failed:fallback_local"
                         logger.debug(
@@ -3683,34 +3603,25 @@ def orchestrate_source_runtime_dispatch(
                         if _dispatch_contract_metadata_dict is not None:
                             try:
                                 handoff_env_dict = dict(handoff_env_dict)
-                                handoff_env_dict["dispatch_contract_metadata"] = (
-                                    _dispatch_contract_metadata_dict
-                                )
+                                handoff_env_dict["dispatch_contract_metadata"] = _dispatch_contract_metadata_dict
                             except Exception as exc:
                                 logger.debug("Suppressed: %s", exc)
                         # Attempt remote handoff
                         try:
                             from contracts.handoff_envelope_v2 import HandoffEnvelopeV2
 
-                            envelope_obj = HandoffEnvelopeV2.model_validate(
-                                handoff_env_dict
-                            )
+                            envelope_obj = HandoffEnvelopeV2.model_validate(handoff_env_dict)
                             bridge_resp = _try_remote_handoff(envelope_obj)
                             if bridge_resp.get("success"):
                                 exec_result = bridge_resp
                                 success = True
-                                decision_reason = (
-                                    decision_reason or "remote_handoff:success"
-                                )
+                                decision_reason = decision_reason or "remote_handoff:success"
                                 # Extract takeover result if present
                                 if "takeover_result" in bridge_resp:
                                     takeover_result_dict = bridge_resp["takeover_result"]
                             else:
                                 # Remote failed — fall back to local
-                                errors.append(
-                                    "remote_handoff_failed:"
-                                    + bridge_resp.get("skipped_reason", "unknown")
-                                )
+                                errors.append("remote_handoff_failed:" + bridge_resp.get("skipped_reason", "unknown"))
                                 effective_mode = SourceDispatchMode.fallback_local
                                 decision_reason = "remote_handoff_failed:fallback_local"
                                 logger.debug(
@@ -3725,9 +3636,7 @@ def orchestrate_source_runtime_dispatch(
                     else:
                         errors.append("remote_handoff:no_target_or_envelope")
                         effective_mode = SourceDispatchMode.fallback_local
-                        decision_reason = (
-                            "remote_handoff:no_target_or_envelope:fallback_local"
-                        )
+                        decision_reason = "remote_handoff:no_target_or_envelope:fallback_local"
             else:
                 errors.append("remote_handoff:no_target_or_envelope")
                 effective_mode = SourceDispatchMode.fallback_local
@@ -3756,11 +3665,7 @@ def orchestrate_source_runtime_dispatch(
                     trace_id=trace_id,
                     task_id=task_id,
                     session_id=session_id,
-                    mesh_id=(
-                        mesh_session_dict.get("mesh_id")
-                        if isinstance(mesh_session_dict, dict)
-                        else None
-                    ),
+                    mesh_id=(mesh_session_dict.get("mesh_id") if isinstance(mesh_session_dict, dict) else None),
                 )
                 coordinator_summary = get_coordinator_summary(coordinator_state)
 
@@ -3790,12 +3695,11 @@ def orchestrate_source_runtime_dispatch(
                 )
                 timed_out_device_ids = participant_wait.get("timed_out_device_ids") or []
                 if timed_out_device_ids:
-                    errors.append(
-                        f"staged_mesh_participant_timeout devices={list(timed_out_device_ids)}"
-                    )
+                    errors.append(f"staged_mesh_participant_timeout devices={list(timed_out_device_ids)}")
 
                 # PR-J: Drive the coordinator state to live completion with collected participant results.
                 from core.mesh.live_mesh_runtime_engine import run_live_mesh_session
+
                 live_run_result = run_live_mesh_session(
                     coordinator_state,
                     participant_results=participant_results,
@@ -3866,9 +3770,7 @@ def orchestrate_source_runtime_dispatch(
                 "action_taken": "staged_mesh_coordinated",
                 "success": success,
                 "mesh_session_id": (
-                    plan.mesh_session.get("session_id")
-                    if isinstance(plan.mesh_session, dict)
-                    else None
+                    plan.mesh_session.get("session_id") if isinstance(plan.mesh_session, dict) else None
                 ),
                 "coordinator_status": coordinator_status_val,
                 "coordinator_summary": coordinator_summary_dict,
@@ -3882,9 +3784,7 @@ def orchestrate_source_runtime_dispatch(
                 "canonical_result_visible": live_merged_result is not None,
             }
             decision_reason = decision_reason or (
-                "staged_mesh:coordinated"
-                if success
-                else "staged_mesh:coordinator_error"
+                "staged_mesh:coordinated" if success else "staged_mesh:coordinator_error"
             )
             return build_source_dispatch_result(
                 dispatch_id=plan.dispatch_id,
@@ -3923,12 +3823,8 @@ def orchestrate_source_runtime_dispatch(
             exec_result = exec_output
             success = bool(exec_output.get("success", False))
             if not success and not errors:
-                errors.append(
-                    exec_output.get("skipped_reason", "local_execution_failed")
-                )
-            decision_reason = decision_reason or (
-                "local_execution:success" if success else "local_execution:failed"
-            )
+                errors.append(exec_output.get("skipped_reason", "local_execution_failed"))
+            decision_reason = decision_reason or ("local_execution:success" if success else "local_execution:failed")
 
         # ---- Step 3: Build result -------------------------------------------
         return build_source_dispatch_result(
@@ -3955,9 +3851,7 @@ def orchestrate_source_runtime_dispatch(
         )
 
     except Exception as exc:  # noqa: BLE001
-        logger.warning(
-            "orchestrate_source_runtime_dispatch: unexpected error: %s", exc
-        )
+        logger.warning("orchestrate_source_runtime_dispatch: unexpected error: %s", exc)
         return failure_dispatch_result(
             trace_id=trace_id,
             task_id=task_id,
@@ -4405,8 +4299,7 @@ class SourceDispatchOrchestrator:
                         terminal_signal_recorded = True
                     except Exception as _replay_exc:  # noqa: BLE001
                         logger.debug(
-                            "consume_android_behavioral_result: "
-                            "replay_foundation terminal signal emit skipped: %s",
+                            "consume_android_behavioral_result: " "replay_foundation terminal signal emit skipped: %s",
                             _replay_exc,
                         )
 

@@ -32,8 +32,8 @@ class _FakeCommandRouter:
 
 
 def _make_client(monkeypatch):
-    from core.routes import command as command_routes
     import core.command_router as command_router_mod
+    from core.routes import command as command_routes
 
     fake_router = _FakeCommandRouter()
     monkeypatch.setattr(command_router_mod, "get_command_router", lambda **_: fake_router)

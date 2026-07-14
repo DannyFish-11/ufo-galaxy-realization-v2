@@ -77,10 +77,10 @@ from typing import Any, Dict, List, Optional
 
 import pytest
 
-
 # ============================================================================
 # A. Sentinel / policy importability
 # ============================================================================
+
 
 class TestSentinels:
 
@@ -88,22 +88,25 @@ class TestSentinels:
         from contracts.android_handoff_response import (
             ANDROID_HANDOFF_RESPONSE_CONTRACT_PR_H_SENTINEL,
         )
+
         assert ANDROID_HANDOFF_RESPONSE_CONTRACT_PR_H_SENTINEL != ""
 
     def test_A02_ingress_sentinel_importable(self):
         from core.android_handoff_v2_response_ingress import (
             ANDROID_HANDOFF_V2_RESPONSE_INGRESS_PR_H_SENTINEL,
         )
+
         assert ANDROID_HANDOFF_V2_RESPONSE_INGRESS_PR_H_SENTINEL != ""
 
     def test_A03_policy_sentinels_importable(self):
         from contracts.android_handoff_response import (
-            HANDOFF_ID_IS_PRIMARY_CORRELATION_KEY_POLICY,
-            RESPONSE_KIND_MUST_BE_EXPLICIT_POLICY,
             ACK_DOES_NOT_REQUIRE_RESULT_PAYLOAD_POLICY,
             FAILURE_MUST_CARRY_ERROR_DETAIL_POLICY,
+            HANDOFF_ID_IS_PRIMARY_CORRELATION_KEY_POLICY,
             HANDOFF_RESPONSE_IS_CORRELATED_BY_HANDOFF_ID_THEN_TASK_ID_POLICY,
+            RESPONSE_KIND_MUST_BE_EXPLICIT_POLICY,
         )
+
         for s in [
             HANDOFF_ID_IS_PRIMARY_CORRELATION_KEY_POLICY,
             RESPONSE_KIND_MUST_BE_EXPLICIT_POLICY,
@@ -115,12 +118,13 @@ class TestSentinels:
 
     def test_A04_ingress_policy_sentinels_importable(self):
         from core.android_handoff_v2_response_ingress import (
-            HANDOFF_ID_CORRELATION_IS_PRIMARY_POLICY,
-            SINGLE_INGRESS_PATH_POLICY,
-            NON_DESTRUCTIVE_ON_MISS_POLICY,
-            TERMINAL_RESPONSE_CLEARS_PENDING_POLICY,
             ACK_DOES_NOT_CLEAR_PENDING_POLICY,
+            HANDOFF_ID_CORRELATION_IS_PRIMARY_POLICY,
+            NON_DESTRUCTIVE_ON_MISS_POLICY,
+            SINGLE_INGRESS_PATH_POLICY,
+            TERMINAL_RESPONSE_CLEARS_PENDING_POLICY,
         )
+
         for s in [
             HANDOFF_ID_CORRELATION_IS_PRIMARY_POLICY,
             SINGLE_INGRESS_PATH_POLICY,
@@ -135,27 +139,33 @@ class TestSentinels:
 # B. MessageType enum
 # ============================================================================
 
+
 class TestMessageTypeEnum:
 
     def test_B01_handoff_dispatch_present(self):
         from galaxy_gateway.protocol.aip_v3 import MessageType
+
         assert MessageType.HANDOFF_DISPATCH.value == "handoff_dispatch"
 
     def test_B02_handoff_ack_present(self):
         from galaxy_gateway.protocol.aip_v3 import MessageType
+
         assert MessageType.HANDOFF_ACK.value == "handoff_ack"
 
     def test_B03_handoff_result_present(self):
         from galaxy_gateway.protocol.aip_v3 import MessageType
+
         assert MessageType.HANDOFF_RESULT.value == "handoff_result"
 
     def test_B04_handoff_failure_present(self):
         from galaxy_gateway.protocol.aip_v3 import MessageType
+
         assert MessageType.HANDOFF_FAILURE.value == "handoff_failure"
 
     def test_B05_handoff_envelope_v2_present(self):
         """Canonical downlink wire type must be present in the protocol enum."""
         from galaxy_gateway.protocol.aip_v3 import MessageType
+
         assert MessageType.HANDOFF_ENVELOPE_V2.value == "handoff_envelope_v2"
 
 
@@ -163,10 +173,12 @@ class TestMessageTypeEnum:
 # C–J. HandoffEnvelopeV2.to_android_native_payload
 # ============================================================================
 
+
 class TestToAndroidNativePayload:
 
     def _make_envelope(self, **kwargs):
         from contracts.handoff_envelope_v2 import build_handoff_envelope_v2
+
         defaults = dict(
             trace_id="trace_001",
             task={
@@ -207,6 +219,7 @@ class TestToAndroidNativePayload:
 
     def test_D04_task_id_preserved_when_set(self):
         from contracts.handoff_envelope_v2 import build_handoff_envelope_v2
+
         env = build_handoff_envelope_v2(
             trace_id="t",
             task={},
@@ -227,6 +240,7 @@ class TestToAndroidNativePayload:
 
     def test_E03_source_runtime_posture_preserved(self):
         from contracts.handoff_envelope_v2 import build_handoff_envelope_v2
+
         env = build_handoff_envelope_v2(
             trace_id="t",
             task={},
@@ -237,6 +251,7 @@ class TestToAndroidNativePayload:
 
     def test_E04_coordination_role_preserved(self):
         from contracts.handoff_envelope_v2 import build_handoff_envelope_v2
+
         env = build_handoff_envelope_v2(
             trace_id="t",
             task={},
@@ -252,18 +267,21 @@ class TestToAndroidNativePayload:
 
     def test_F02_exec_mode_preserved(self):
         from contracts.handoff_envelope_v2 import build_handoff_envelope_v2
+
         env = build_handoff_envelope_v2(trace_id="t", task={}, exec_mode="remote")
         payload = env.to_android_native_payload()
         assert payload["exec_mode"] == "remote"
 
     def test_F03_route_mode_preserved(self):
         from contracts.handoff_envelope_v2 import build_handoff_envelope_v2
+
         env = build_handoff_envelope_v2(trace_id="t", task={}, route_mode="broadcast")
         payload = env.to_android_native_payload()
         assert payload["route_mode"] == "broadcast"
 
     def test_F04_callback_channel_preserved(self):
         from contracts.handoff_envelope_v2 import build_handoff_envelope_v2
+
         env = build_handoff_envelope_v2(trace_id="t", task={}, callback_channel="http")
         payload = env.to_android_native_payload()
         assert payload["callback_channel"] == "http"
@@ -302,10 +320,12 @@ class TestToAndroidNativePayload:
 # K–M. HandoffEnvelopeV2.to_android_task_assign_payload
 # ============================================================================
 
+
 class TestToAndroidTaskAssignPayload:
 
     def _make_envelope(self):
         from contracts.handoff_envelope_v2 import build_handoff_envelope_v2
+
         return build_handoff_envelope_v2(
             trace_id="trace_k",
             task={"tool_name": "open_app"},
@@ -376,10 +396,12 @@ class TestToAndroidTaskAssignPayload:
 # N–O. MessageBuilder.handoff_dispatch
 # ============================================================================
 
+
 class TestMessageBuilderHandoffDispatch:
 
     def _make_envelope(self):
         from contracts.handoff_envelope_v2 import build_handoff_envelope_v2
+
         return build_handoff_envelope_v2(
             trace_id="trace_n",
             task={"tool_name": "screenshot"},
@@ -389,10 +411,12 @@ class TestMessageBuilderHandoffDispatch:
 
     def test_N01_method_exists(self):
         from galaxy_gateway.android.message_builder import MessageBuilder
+
         assert hasattr(MessageBuilder, "handoff_dispatch")
 
     def test_N02_delegates_to_envelope(self):
         from galaxy_gateway.android.message_builder import MessageBuilder
+
         env = self._make_envelope()
         msg = MessageBuilder.handoff_dispatch("tablet_n", env)
         assert msg["handoff_id"] == env.handoff_id
@@ -400,18 +424,21 @@ class TestMessageBuilderHandoffDispatch:
     def test_O01_message_type_is_handoff_envelope_v2(self):
         """handoff_dispatch compat alias must now emit canonical handoff_envelope_v2 wire type."""
         from galaxy_gateway.android.message_builder import MessageBuilder
+
         env = self._make_envelope()
         msg = MessageBuilder.handoff_dispatch("tablet_n", env)
         assert msg["type"] == "handoff_envelope_v2"
 
     def test_O02_default_priority_5(self):
         from galaxy_gateway.android.message_builder import MessageBuilder
+
         env = self._make_envelope()
         msg = MessageBuilder.handoff_dispatch("tablet_n", env)
         assert msg["priority"] == 5
 
     def test_O03_priority_override(self):
         from galaxy_gateway.android.message_builder import MessageBuilder
+
         env = self._make_envelope()
         msg = MessageBuilder.handoff_dispatch("tablet_n", env, priority=9)
         assert msg["priority"] == 9
@@ -421,11 +448,13 @@ class TestMessageBuilderHandoffDispatch:
 # O2. MessageBuilder.handoff_envelope_v2 — canonical builder
 # ============================================================================
 
+
 class TestMessageBuilderHandoffEnvelopeV2:
     """Validate the canonical handoff_envelope_v2 builder method."""
 
     def _make_envelope(self):
         from contracts.handoff_envelope_v2 import build_handoff_envelope_v2
+
         return build_handoff_envelope_v2(
             trace_id="trace_o2",
             task={"tool_name": "screenshot"},
@@ -435,18 +464,21 @@ class TestMessageBuilderHandoffEnvelopeV2:
 
     def test_O2_01_method_exists(self):
         from galaxy_gateway.android.message_builder import MessageBuilder
+
         assert hasattr(MessageBuilder, "handoff_envelope_v2")
 
     def test_O2_02_returns_dict(self):
         from galaxy_gateway.android.message_builder import MessageBuilder
+
         env = self._make_envelope()
         msg = MessageBuilder.handoff_envelope_v2("tablet_o2", env)
         assert isinstance(msg, dict)
 
     def test_O2_03_canonical_wire_type(self):
         """Canonical builder must emit handoff_envelope_v2 wire type."""
-        from galaxy_gateway.protocol.aip_v3 import MessageType
         from galaxy_gateway.android.message_builder import MessageBuilder
+        from galaxy_gateway.protocol.aip_v3 import MessageType
+
         env = self._make_envelope()
         msg = MessageBuilder.handoff_envelope_v2("tablet_o2", env)
         assert msg["type"] == MessageType.HANDOFF_ENVELOPE_V2.value
@@ -454,24 +486,28 @@ class TestMessageBuilderHandoffEnvelopeV2:
 
     def test_O2_04_handoff_id_at_top_level(self):
         from galaxy_gateway.android.message_builder import MessageBuilder
+
         env = self._make_envelope()
         msg = MessageBuilder.handoff_envelope_v2("tablet_o2", env)
         assert msg["handoff_id"] == env.handoff_id
 
     def test_O2_05_device_id_set(self):
         from galaxy_gateway.android.message_builder import MessageBuilder
+
         env = self._make_envelope()
         msg = MessageBuilder.handoff_envelope_v2("tablet_o2", env)
         assert msg["device_id"] == "tablet_o2"
 
     def test_O2_06_default_priority_5(self):
         from galaxy_gateway.android.message_builder import MessageBuilder
+
         env = self._make_envelope()
         msg = MessageBuilder.handoff_envelope_v2("tablet_o2", env)
         assert msg["priority"] == 5
 
     def test_O2_07_priority_override(self):
         from galaxy_gateway.android.message_builder import MessageBuilder
+
         env = self._make_envelope()
         msg = MessageBuilder.handoff_envelope_v2("tablet_o2", env, priority=8)
         assert msg["priority"] == 8
@@ -479,6 +515,7 @@ class TestMessageBuilderHandoffEnvelopeV2:
     def test_O2_08_canonical_and_compat_alias_produce_same_output(self):
         """handoff_dispatch (compat) and handoff_envelope_v2 (canonical) must be equivalent."""
         from galaxy_gateway.android.message_builder import MessageBuilder
+
         env = self._make_envelope()
         canonical = MessageBuilder.handoff_envelope_v2("tablet_o2", env)
         compat = MessageBuilder.handoff_dispatch("tablet_o2", env)
@@ -503,50 +540,62 @@ class TestMessageBuilderHandoffEnvelopeV2:
 # P–R. HandoffResponseKind
 # ============================================================================
 
+
 class TestHandoffResponseKind:
 
     def test_P01_ack_present(self):
         from contracts.android_handoff_response import HandoffResponseKind
+
         assert HandoffResponseKind.ack.value == "ack"
 
     def test_P02_result_present(self):
         from contracts.android_handoff_response import HandoffResponseKind
+
         assert HandoffResponseKind.result.value == "result"
 
     def test_P03_failure_present(self):
         from contracts.android_handoff_response import HandoffResponseKind
+
         assert HandoffResponseKind.failure.value == "failure"
 
     def test_P04_timeout_present(self):
         from contracts.android_handoff_response import HandoffResponseKind
+
         assert HandoffResponseKind.timeout.value == "timeout"
 
     def test_P05_cancelled_present(self):
         from contracts.android_handoff_response import HandoffResponseKind
+
         assert HandoffResponseKind.cancelled.value == "cancelled"
 
     def test_P06_unknown_present(self):
         from contracts.android_handoff_response import HandoffResponseKind
+
         assert HandoffResponseKind.unknown.value == "unknown"
 
     def test_Q01_from_string_ack(self):
         from contracts.android_handoff_response import HandoffResponseKind
+
         assert HandoffResponseKind.from_string("ack") == HandoffResponseKind.ack
 
     def test_Q02_from_string_result(self):
         from contracts.android_handoff_response import HandoffResponseKind
+
         assert HandoffResponseKind.from_string("result") == HandoffResponseKind.result
 
     def test_Q03_from_string_failure(self):
         from contracts.android_handoff_response import HandoffResponseKind
+
         assert HandoffResponseKind.from_string("failure") == HandoffResponseKind.failure
 
     def test_R01_from_string_unknown_value(self):
         from contracts.android_handoff_response import HandoffResponseKind
+
         assert HandoffResponseKind.from_string("bogus") == HandoffResponseKind.unknown
 
     def test_R02_from_string_empty_string(self):
         from contracts.android_handoff_response import HandoffResponseKind
+
         assert HandoffResponseKind.from_string("") == HandoffResponseKind.unknown
 
 
@@ -554,34 +603,42 @@ class TestHandoffResponseKind:
 # S–W. AndroidHandoffResponseEnvelope
 # ============================================================================
 
+
 class TestAndroidHandoffResponseEnvelope:
 
     def test_S01_default_response_id_generated(self):
         from contracts.android_handoff_response import AndroidHandoffResponseEnvelope
+
         env = AndroidHandoffResponseEnvelope()
         assert env.response_id.startswith("ahr_")
 
     def test_S02_default_handoff_id_empty(self):
         from contracts.android_handoff_response import AndroidHandoffResponseEnvelope
+
         env = AndroidHandoffResponseEnvelope()
         assert env.handoff_id == ""
 
     def test_S03_default_response_kind_unknown(self):
         from contracts.android_handoff_response import (
-            AndroidHandoffResponseEnvelope, HandoffResponseKind,
+            AndroidHandoffResponseEnvelope,
+            HandoffResponseKind,
         )
+
         env = AndroidHandoffResponseEnvelope()
         assert env.response_kind == HandoffResponseKind.unknown
 
     def test_S04_default_success_none(self):
         from contracts.android_handoff_response import AndroidHandoffResponseEnvelope
+
         env = AndroidHandoffResponseEnvelope()
         assert env.success is None
 
     def test_T01_to_dict_from_dict_round_trip(self):
         from contracts.android_handoff_response import (
-            AndroidHandoffResponseEnvelope, HandoffResponseKind,
+            AndroidHandoffResponseEnvelope,
+            HandoffResponseKind,
         )
+
         env = AndroidHandoffResponseEnvelope(
             handoff_id="hev2_abc",
             trace_id="trace_t",
@@ -599,8 +656,10 @@ class TestAndroidHandoffResponseEnvelope:
 
     def test_U01_to_json_from_dict_round_trip(self):
         from contracts.android_handoff_response import (
-            AndroidHandoffResponseEnvelope, HandoffResponseKind,
+            AndroidHandoffResponseEnvelope,
+            HandoffResponseKind,
         )
+
         env = AndroidHandoffResponseEnvelope(
             handoff_id="hev2_u",
             response_kind=HandoffResponseKind.ack,
@@ -610,36 +669,46 @@ class TestAndroidHandoffResponseEnvelope:
 
     def test_V01_ack_is_not_terminal(self):
         from contracts.android_handoff_response import (
-            AndroidHandoffResponseEnvelope, HandoffResponseKind,
+            AndroidHandoffResponseEnvelope,
+            HandoffResponseKind,
         )
+
         env = AndroidHandoffResponseEnvelope(response_kind=HandoffResponseKind.ack)
         assert env.is_terminal is False
 
     def test_W01_result_is_terminal(self):
         from contracts.android_handoff_response import (
-            AndroidHandoffResponseEnvelope, HandoffResponseKind,
+            AndroidHandoffResponseEnvelope,
+            HandoffResponseKind,
         )
+
         env = AndroidHandoffResponseEnvelope(response_kind=HandoffResponseKind.result)
         assert env.is_terminal is True
 
     def test_W02_failure_is_terminal(self):
         from contracts.android_handoff_response import (
-            AndroidHandoffResponseEnvelope, HandoffResponseKind,
+            AndroidHandoffResponseEnvelope,
+            HandoffResponseKind,
         )
+
         env = AndroidHandoffResponseEnvelope(response_kind=HandoffResponseKind.failure)
         assert env.is_terminal is True
 
     def test_W03_timeout_is_terminal(self):
         from contracts.android_handoff_response import (
-            AndroidHandoffResponseEnvelope, HandoffResponseKind,
+            AndroidHandoffResponseEnvelope,
+            HandoffResponseKind,
         )
+
         env = AndroidHandoffResponseEnvelope(response_kind=HandoffResponseKind.timeout)
         assert env.is_terminal is True
 
     def test_W04_cancelled_is_terminal(self):
         from contracts.android_handoff_response import (
-            AndroidHandoffResponseEnvelope, HandoffResponseKind,
+            AndroidHandoffResponseEnvelope,
+            HandoffResponseKind,
         )
+
         env = AndroidHandoffResponseEnvelope(response_kind=HandoffResponseKind.cancelled)
         assert env.is_terminal is True
 
@@ -647,6 +716,7 @@ class TestAndroidHandoffResponseEnvelope:
 # ============================================================================
 # X–AD. Builder helpers
 # ============================================================================
+
 
 class TestBuilderHelpers:
 
@@ -693,70 +763,86 @@ class TestBuilderHelpers:
 
     def test_X01_from_ack_response_kind(self):
         from contracts.android_handoff_response import (
-            from_android_ack_message, HandoffResponseKind,
+            HandoffResponseKind,
+            from_android_ack_message,
         )
+
         env = from_android_ack_message(self._ack_message())
         assert env.response_kind == HandoffResponseKind.ack
 
     def test_X02_from_ack_success_none(self):
         from contracts.android_handoff_response import from_android_ack_message
+
         env = from_android_ack_message(self._ack_message())
         assert env.success is None
 
     def test_X03_from_ack_handoff_id_extracted(self):
         from contracts.android_handoff_response import from_android_ack_message
+
         env = from_android_ack_message(self._ack_message(handoff_id="hev2_xyz"))
         assert env.handoff_id == "hev2_xyz"
 
     def test_X04_from_ack_device_id_extracted(self):
         from contracts.android_handoff_response import from_android_ack_message
+
         env = from_android_ack_message(self._ack_message())
         assert env.device_id == "device_x"
 
     def test_Y01_from_result_response_kind(self):
         from contracts.android_handoff_response import (
-            from_android_result_message, HandoffResponseKind,
+            HandoffResponseKind,
+            from_android_result_message,
         )
+
         env = from_android_result_message(self._result_message())
         assert env.response_kind == HandoffResponseKind.result
 
     def test_Y02_from_result_success_true(self):
         from contracts.android_handoff_response import from_android_result_message
+
         env = from_android_result_message(self._result_message())
         assert env.success is True
 
     def test_Y03_from_result_payload_extracted(self):
         from contracts.android_handoff_response import from_android_result_message
+
         env = from_android_result_message(self._result_message())
         assert env.result_payload is not None
         assert env.result_payload.get("screenshot") == "base64data"
 
     def test_Z01_from_failure_response_kind(self):
         from contracts.android_handoff_response import (
-            from_android_failure_message, HandoffResponseKind,
+            HandoffResponseKind,
+            from_android_failure_message,
         )
+
         env = from_android_failure_message(self._failure_message())
         assert env.response_kind == HandoffResponseKind.failure
 
     def test_Z02_from_failure_success_false(self):
         from contracts.android_handoff_response import from_android_failure_message
+
         env = from_android_failure_message(self._failure_message())
         assert env.success is False
 
     def test_Z03_from_failure_error_code(self):
         from contracts.android_handoff_response import from_android_failure_message
+
         env = from_android_failure_message(self._failure_message())
         assert env.error_code == "EXEC_FAILED"
 
     def test_Z04_from_failure_error_detail(self):
         from contracts.android_handoff_response import from_android_failure_message
+
         env = from_android_failure_message(self._failure_message())
         assert env.error_detail == "OOM"
 
     def test_AA01_failure_message_type_maps_correctly(self):
         from contracts.android_handoff_response import (
-            from_android_failure_message, HandoffResponseKind,
+            HandoffResponseKind,
+            from_android_failure_message,
         )
+
         msg = {
             "type": "handoff_failure",
             "device_id": "d",
@@ -767,29 +853,37 @@ class TestBuilderHelpers:
 
     def test_AB01_extract_dispatches_ack(self):
         from contracts.android_handoff_response import (
-            extract_handoff_response_envelope, HandoffResponseKind,
+            HandoffResponseKind,
+            extract_handoff_response_envelope,
         )
+
         env = extract_handoff_response_envelope(self._ack_message())
         assert env.response_kind == HandoffResponseKind.ack
 
     def test_AB02_extract_dispatches_result(self):
         from contracts.android_handoff_response import (
-            extract_handoff_response_envelope, HandoffResponseKind,
+            HandoffResponseKind,
+            extract_handoff_response_envelope,
         )
+
         env = extract_handoff_response_envelope(self._result_message())
         assert env.response_kind == HandoffResponseKind.result
 
     def test_AB03_extract_dispatches_failure(self):
         from contracts.android_handoff_response import (
-            extract_handoff_response_envelope, HandoffResponseKind,
+            HandoffResponseKind,
+            extract_handoff_response_envelope,
         )
+
         env = extract_handoff_response_envelope(self._failure_message())
         assert env.response_kind == HandoffResponseKind.failure
 
     def test_AC01_extract_dispatches_by_response_kind_in_payload(self):
         from contracts.android_handoff_response import (
-            extract_handoff_response_envelope, HandoffResponseKind,
+            HandoffResponseKind,
+            extract_handoff_response_envelope,
         )
+
         msg = {
             "type": "task_result",
             "device_id": "d",
@@ -803,14 +897,17 @@ class TestBuilderHelpers:
 
     def test_AD01_extract_unknown_type(self):
         from contracts.android_handoff_response import (
-            extract_handoff_response_envelope, HandoffResponseKind,
+            HandoffResponseKind,
+            extract_handoff_response_envelope,
         )
+
         msg = {"type": "unrelated_message", "device_id": "d"}
         env = extract_handoff_response_envelope(msg)
         assert env.response_kind == HandoffResponseKind.unknown
 
     def test_AE01_identity_from_nested_payload(self):
         from contracts.android_handoff_response import from_android_ack_message
+
         msg = {
             "type": "handoff_ack",
             "device_id": "device_outer",
@@ -832,16 +929,20 @@ class TestBuilderHelpers:
 # AF–AK. HandoffV2ResponseRuntime
 # ============================================================================
 
+
 class TestHandoffV2ResponseRuntime:
 
     def _fresh_runtime(self):
         from core.android_handoff_v2_response_ingress import HandoffV2ResponseRuntime
+
         return HandoffV2ResponseRuntime()
 
     def _ack_env(self, handoff_id="h1", task_id="t1"):
         from contracts.android_handoff_response import (
-            AndroidHandoffResponseEnvelope, HandoffResponseKind,
+            AndroidHandoffResponseEnvelope,
+            HandoffResponseKind,
         )
+
         return AndroidHandoffResponseEnvelope(
             handoff_id=handoff_id,
             task_id=task_id,
@@ -850,8 +951,10 @@ class TestHandoffV2ResponseRuntime:
 
     def _result_env(self, handoff_id="h1", task_id="t1"):
         from contracts.android_handoff_response import (
-            AndroidHandoffResponseEnvelope, HandoffResponseKind,
+            AndroidHandoffResponseEnvelope,
+            HandoffResponseKind,
         )
+
         return AndroidHandoffResponseEnvelope(
             handoff_id=handoff_id,
             task_id=task_id,
@@ -872,8 +975,10 @@ class TestHandoffV2ResponseRuntime:
         rt.register("h_ag01", lambda env: called.append(env), task_id="t_ag01")
         # resolve with empty handoff_id → should fall back to task_id
         from contracts.android_handoff_response import (
-            AndroidHandoffResponseEnvelope, HandoffResponseKind,
+            AndroidHandoffResponseEnvelope,
+            HandoffResponseKind,
         )
+
         env = AndroidHandoffResponseEnvelope(
             handoff_id="",
             task_id="t_ag01",
@@ -903,8 +1008,9 @@ class TestHandoffV2ResponseRuntime:
         assert cb is None
 
     def test_AK01_outcome_fields(self):
-        from core.android_handoff_v2_response_ingress import HandoffV2ResponseOutcome
         from contracts.android_handoff_response import AndroidHandoffResponseEnvelope
+        from core.android_handoff_v2_response_ingress import HandoffV2ResponseOutcome
+
         outcome = HandoffV2ResponseOutcome(
             envelope=AndroidHandoffResponseEnvelope(),
             was_correlated=True,
@@ -919,10 +1025,12 @@ class TestHandoffV2ResponseRuntime:
 # AL–AR. ingest_android_handoff_response
 # ============================================================================
 
+
 class TestIngestAndroidHandoffResponse:
 
     def _fresh_runtime(self):
         from core.android_handoff_v2_response_ingress import HandoffV2ResponseRuntime
+
         return HandoffV2ResponseRuntime()
 
     def _ack_message(self, handoff_id):
@@ -956,59 +1064,55 @@ class TestIngestAndroidHandoffResponse:
 
     def test_AL01_ack_correlated_callback_invoked(self):
         from core.android_handoff_v2_response_ingress import ingest_android_handoff_response
+
         rt = self._fresh_runtime()
         received: List[Any] = []
         rt.register("h_al01", lambda e: received.append(e))
-        outcome = ingest_android_handoff_response(
-            self._ack_message("h_al01"), runtime=rt
-        )
+        outcome = ingest_android_handoff_response(self._ack_message("h_al01"), runtime=rt)
         assert outcome.was_correlated is True
         assert outcome.callback_invoked is True
         assert len(received) == 1
 
     def test_AM01_result_is_terminal_clears_entry(self):
         from core.android_handoff_v2_response_ingress import ingest_android_handoff_response
+
         rt = self._fresh_runtime()
         rt.register("h_am01", lambda e: None)
-        outcome = ingest_android_handoff_response(
-            self._result_message("h_am01"), runtime=rt
-        )
+        outcome = ingest_android_handoff_response(self._result_message("h_am01"), runtime=rt)
         assert outcome.was_correlated is True
         assert "h_am01" not in rt.pending_by_handoff_id
 
     def test_AM02_result_envelope_in_outcome(self):
-        from core.android_handoff_v2_response_ingress import ingest_android_handoff_response
         from contracts.android_handoff_response import HandoffResponseKind
+        from core.android_handoff_v2_response_ingress import ingest_android_handoff_response
+
         rt = self._fresh_runtime()
         rt.register("h_am02", lambda e: None)
-        outcome = ingest_android_handoff_response(
-            self._result_message("h_am02"), runtime=rt
-        )
+        outcome = ingest_android_handoff_response(self._result_message("h_am02"), runtime=rt)
         assert outcome.envelope.response_kind == HandoffResponseKind.result
 
     def test_AN01_failure_is_correlated_terminal(self):
         from core.android_handoff_v2_response_ingress import ingest_android_handoff_response
+
         rt = self._fresh_runtime()
         received: List[Any] = []
         rt.register("h_an01", lambda e: received.append(e))
-        outcome = ingest_android_handoff_response(
-            self._failure_message("h_an01"), runtime=rt
-        )
+        outcome = ingest_android_handoff_response(self._failure_message("h_an01"), runtime=rt)
         assert outcome.was_correlated is True
         assert outcome.envelope.success is False
         assert len(received) == 1
 
     def test_AO01_no_pending_entry_was_correlated_false(self):
         from core.android_handoff_v2_response_ingress import ingest_android_handoff_response
+
         rt = self._fresh_runtime()
-        outcome = ingest_android_handoff_response(
-            self._result_message("no_such_handoff"), runtime=rt
-        )
+        outcome = ingest_android_handoff_response(self._result_message("no_such_handoff"), runtime=rt)
         assert outcome.was_correlated is False
         assert outcome.reject_reason != ""
 
     def test_AP01_unknown_kind_was_correlated_false(self):
         from core.android_handoff_v2_response_ingress import ingest_android_handoff_response
+
         rt = self._fresh_runtime()
         msg = {"type": "unrelated", "device_id": "d", "payload": {}}
         outcome = ingest_android_handoff_response(msg, runtime=rt)
@@ -1016,20 +1120,20 @@ class TestIngestAndroidHandoffResponse:
 
     def test_AQ01_callback_exception_is_non_fatal(self):
         from core.android_handoff_v2_response_ingress import ingest_android_handoff_response
+
         rt = self._fresh_runtime()
 
         def exploding_callback(env):
             raise RuntimeError("intentional error")
 
         rt.register("h_aq01", exploding_callback)
-        outcome = ingest_android_handoff_response(
-            self._ack_message("h_aq01"), runtime=rt
-        )
+        outcome = ingest_android_handoff_response(self._ack_message("h_aq01"), runtime=rt)
         assert outcome.was_correlated is True
         assert outcome.callback_invoked is False
 
     def test_AR01_broken_message_not_fatal(self):
         from core.android_handoff_v2_response_ingress import ingest_android_handoff_response
+
         rt = self._fresh_runtime()
         # None instead of a dict will cause extraction to raise internally
         outcome = ingest_android_handoff_response(None, runtime=rt)  # type: ignore[arg-type]
@@ -1040,15 +1144,17 @@ class TestIngestAndroidHandoffResponse:
 # AS. Full correlation round-trip
 # ============================================================================
 
+
 class TestFullRoundTrip:
 
     def test_AS01_build_dispatch_ack_result(self):
         """Build envelope → dispatch message → ack → result full round-trip."""
+        from contracts.android_handoff_response import HandoffResponseKind
         from contracts.handoff_envelope_v2 import build_handoff_envelope_v2
         from core.android_handoff_v2_response_ingress import (
-            HandoffV2ResponseRuntime, ingest_android_handoff_response,
+            HandoffV2ResponseRuntime,
+            ingest_android_handoff_response,
         )
-        from contracts.android_handoff_response import HandoffResponseKind
 
         # 1. V2 builds envelope
         envelope = build_handoff_envelope_v2(
@@ -1111,10 +1217,12 @@ class TestFullRoundTrip:
 # AT–AX. Backward compat and contract mapping
 # ============================================================================
 
+
 class TestBackwardCompat:
 
     def test_AT01_build_helper_produces_android_payload(self):
         from contracts.handoff_envelope_v2 import build_handoff_envelope_v2
+
         env = build_handoff_envelope_v2(
             trace_id="at_trace",
             task={"tool_name": "app"},
@@ -1145,20 +1253,23 @@ class TestBackwardCompat:
 
     def test_AV01_handoff_id_unique_per_envelope(self):
         from contracts.handoff_envelope_v2 import build_handoff_envelope_v2
+
         e1 = build_handoff_envelope_v2(trace_id="t1", task={})
         e2 = build_handoff_envelope_v2(trace_id="t2", task={})
         assert e1.handoff_id != e2.handoff_id
 
     def test_AW01_task_id_none_valid_android_payload(self):
         from contracts.handoff_envelope_v2 import build_handoff_envelope_v2
+
         env = build_handoff_envelope_v2(trace_id="t", task={})
         # task_id is None by default — payload should still be valid
         payload = env.to_android_native_payload()
         assert payload["task_id"] is None or payload["task_id"] == ""
 
     def test_AX01_handoff_id_survives_dispatch_to_extract(self):
-        from contracts.handoff_envelope_v2 import build_handoff_envelope_v2
         from contracts.android_handoff_response import extract_handoff_response_envelope
+        from contracts.handoff_envelope_v2 import build_handoff_envelope_v2
+
         env = build_handoff_envelope_v2(
             trace_id="ax_trace",
             task={"tool_name": "screenshot"},

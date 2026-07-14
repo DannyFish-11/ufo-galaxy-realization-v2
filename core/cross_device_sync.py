@@ -9,6 +9,7 @@ Replaces the legacy serial for-loop with an adaptive concurrent engine:
 - Per-device latency tracking enables dynamic prioritization
 - Adaptive timeout based on observed device RTT
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -21,6 +22,7 @@ logger = logging.getLogger("Galaxy.CrossDeviceSync")
 
 try:
     from core.schemas.aip_v3 import StateEventMsg  # noqa: F401
+
     _AIPV3_AVAILABLE = True
 except ImportError:
     _AIPV3_AVAILABLE = False
@@ -33,6 +35,7 @@ except ImportError:
 @dataclass
 class DeviceLatencyProfile:
     """Observed latency profile for a single device."""
+
     device_id: str
     samples: List[float] = field(default_factory=list)  # ms
     max_samples: int = 10
@@ -107,8 +110,10 @@ class _LatencyTracker:
 
     def sorted_devices(self, device_ids: List[str]) -> List[str]:
         """Return device_ids sorted by priority (fastest first)."""
+
         def sort_key(did: str) -> float:
             return self.get(did).priority_score()
+
         return sorted(device_ids, key=sort_key)
 
     def all_profiles(self) -> Dict[str, Dict[str, Any]]:
@@ -175,9 +180,7 @@ async def _async_push_phase_to_all_devices(
     5. Latency is recorded for future prioritization
     """
     try:
-        from galaxy_gateway.android_bridge import (  # noqa: PLC0415
-            android_bridge as _bridge,
-        )
+        from galaxy_gateway.android_bridge import android_bridge as _bridge  # noqa: PLC0415
     except Exception as exc:
         logger.debug("CrossDeviceSync: bridge not available: %s", exc)
         return
@@ -228,10 +231,7 @@ async def _async_push_phase_to_all_devices(
 
     # Concurrent push with per-device adaptive timeout
     push_start = time.time()
-    tasks = [
-        _push_to_one_device(did, dev, msg)
-        for did, dev in sorted_devices
-    ]
+    tasks = [_push_to_one_device(did, dev, msg) for did, dev in sorted_devices]
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
     # Collect results
@@ -247,9 +247,12 @@ async def _async_push_phase_to_all_devices(
 
     total_ms = (time.time() - push_start) * 1000
     logger.info(
-        "CrossDeviceSync: phase %s→%s pushed to %d/%d device(s) "
-        "in %.1fms (adaptive concurrent)",
-        old_phase, new_phase, sent, len(connected), total_ms,
+        "CrossDeviceSync: phase %s→%s pushed to %d/%d device(s) " "in %.1fms (adaptive concurrent)",
+        old_phase,
+        new_phase,
+        sent,
+        len(connected),
+        total_ms,
     )
 
 
@@ -262,8 +265,8 @@ async def _push_phase_to_wearos_devices(msg: Dict[str, Any]) -> None:
     deliver via ``connection_manager.send_to_device`` (which has its own UCM
     fallback).  Reuses the same ``state_event`` message Android receives.
     """
-    from galaxy_gateway.websocket_handler import connection_manager  # noqa: PLC0415
     from galaxy_gateway.android.handlers.wearos_sync import is_wearos_device  # noqa: PLC0415
+    from galaxy_gateway.websocket_handler import connection_manager  # noqa: PLC0415
 
     try:
         from core.routes._shared import registered_devices  # noqa: PLC0415
@@ -272,8 +275,7 @@ async def _push_phase_to_wearos_devices(msg: Dict[str, Any]) -> None:
 
     device_ids = await connection_manager.get_connected_devices()
     wear_ids = [
-        did for did in device_ids
-        if is_wearos_device(str((registered_devices.get(did) or {}).get("device_type", "")))
+        did for did in device_ids if is_wearos_device(str((registered_devices.get(did) or {}).get("device_type", "")))
     ]
     if not wear_ids:
         return
@@ -287,7 +289,9 @@ async def _push_phase_to_wearos_devices(msg: Dict[str, Any]) -> None:
             logger.debug("CrossDeviceSync: wear push to %s failed: %s", did, exc)
     logger.info(
         "CrossDeviceSync: phase %s pushed to %d/%d WearOS device(s)",
-        msg.get("event_action", ""), sent, len(wear_ids),
+        msg.get("event_action", ""),
+        sent,
+        len(wear_ids),
     )
 
 
@@ -315,7 +319,9 @@ async def _push_to_one_device(
             profile.record(latency_ms, success=True)
             logger.debug(
                 "CrossDeviceSync: push to %s OK (%.1fms, timeout=%.2fs)",
-                device_id, latency_ms, timeout,
+                device_id,
+                latency_ms,
+                timeout,
             )
             return True
         except asyncio.TimeoutError:
@@ -343,9 +349,7 @@ async def push_task_state_to_device(
 ) -> bool:
     """Push task state update to a specific Android device."""
     try:
-        from galaxy_gateway.android_bridge import (  # noqa: PLC0415
-            android_bridge as _bridge,
-        )
+        from galaxy_gateway.android_bridge import android_bridge as _bridge  # noqa: PLC0415
 
         device = _bridge._devices.get(device_id)
         if device is None or device.websocket is None:
@@ -377,6 +381,7 @@ async def push_task_state_to_device(
 # ---------------------------------------------------------------------------
 # Diagnostics
 # ---------------------------------------------------------------------------
+
 
 def get_sync_diagnostics() -> Dict[str, Any]:
     """Return current sync engine diagnostics for /status endpoint."""

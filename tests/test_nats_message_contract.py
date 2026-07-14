@@ -76,23 +76,27 @@ class TestNATSFabricCarrierAuthority(unittest.TestCase):
 
     def test_01_nats_fabric_carrier_authority_exists(self):
         from core.nats_bus import NATS_FABRIC_CARRIER_AUTHORITY
+
         self.assertIsInstance(NATS_FABRIC_CARRIER_AUTHORITY, str)
         self.assertIn("NATS", NATS_FABRIC_CARRIER_AUTHORITY)
 
     def test_02_wrap_for_nats_adds_fabric_layer(self):
-        from core.agent_bus_fabric import wrap_for_nats, NATS_CARRIER_LAYER
+        from core.agent_bus_fabric import NATS_CARRIER_LAYER, wrap_for_nats
+
         payload = {"task_id": "t-1", "trace_id": "tr-1"}
         result = wrap_for_nats(payload)
         self.assertEqual(result["_fabric_layer"], NATS_CARRIER_LAYER)
 
     def test_03_wrap_for_nats_adds_default_nats_schema(self):
         from core.agent_bus_fabric import wrap_for_nats
+
         payload = {"task_id": "t-1", "trace_id": "tr-1"}
         result = wrap_for_nats(payload)
         self.assertEqual(result["_nats_schema"], "TaskEnvelope")
 
     def test_04_wrap_for_nats_does_not_overwrite_existing_nats_schema(self):
         from core.agent_bus_fabric import wrap_for_nats
+
         payload = {
             "task_id": "t-1",
             "trace_id": "tr-1",
@@ -103,12 +107,14 @@ class TestNATSFabricCarrierAuthority(unittest.TestCase):
 
     def test_05_wrap_for_nats_returns_same_dict(self):
         from core.agent_bus_fabric import wrap_for_nats
+
         payload = {"task_id": "t-1", "trace_id": "tr-1"}
         result = wrap_for_nats(payload)
         self.assertIs(result, payload)
 
     def test_06_wrap_for_nats_result_satisfies_canonical_contract(self):
-        from core.agent_bus_fabric import wrap_for_nats, is_canonical_contract
+        from core.agent_bus_fabric import is_canonical_contract, wrap_for_nats
+
         payload = {"task_id": "t-1", "trace_id": "tr-1"}
         result = wrap_for_nats(payload)
         self.assertTrue(is_canonical_contract(result))
@@ -119,22 +125,27 @@ class TestIsCanonicalContract(unittest.TestCase):
 
     def test_07_dict_with_both_fields_true(self):
         from core.agent_bus_fabric import is_canonical_contract
+
         self.assertTrue(is_canonical_contract({"task_id": "t", "trace_id": "tr"}))
 
     def test_08_dict_missing_trace_id_false(self):
         from core.agent_bus_fabric import is_canonical_contract
+
         self.assertFalse(is_canonical_contract({"task_id": "t"}))
 
     def test_09_dict_missing_task_id_false(self):
         from core.agent_bus_fabric import is_canonical_contract
+
         self.assertFalse(is_canonical_contract({"trace_id": "tr"}))
 
     def test_10_empty_dict_false(self):
         from core.agent_bus_fabric import is_canonical_contract
+
         self.assertFalse(is_canonical_contract({}))
 
     def test_11_non_dict_false(self):
         from core.agent_bus_fabric import is_canonical_contract
+
         self.assertFalse(is_canonical_contract("not a dict"))
         self.assertFalse(is_canonical_contract(42))
         self.assertFalse(is_canonical_contract(None))
@@ -154,27 +165,32 @@ class TestNATSTopics(unittest.TestCase):
 
     def test_13_task_dispatch_constant(self):
         from core.nats_bus import NATSTopics
+
         self.assertTrue(hasattr(NATSTopics, "TASK_DISPATCH"))
         self.assertIsInstance(NATSTopics.TASK_DISPATCH, str)
 
     def test_14_task_result_constant(self):
         from core.nats_bus import NATSTopics
+
         self.assertTrue(hasattr(NATSTopics, "TASK_RESULT"))
         self.assertIsInstance(NATSTopics.TASK_RESULT, str)
 
     def test_15_device_heartbeat_constant(self):
         from core.nats_bus import NATSTopics
+
         self.assertTrue(hasattr(NATSTopics, "DEVICE_HEARTBEAT"))
         self.assertIsInstance(NATSTopics.DEVICE_HEARTBEAT, str)
 
     def test_16_task_dispatch_method(self):
         from core.nats_bus import NATSTopics
+
         subject = NATSTopics.task_dispatch("device-01")
         self.assertIn("device-01", subject)
         self.assertIn("dispatch", subject.lower())
 
     def test_17_task_result_method(self):
         from core.nats_bus import NATSTopics
+
         subject = NATSTopics.task_result("task-abc")
         self.assertIn("task-abc", subject)
         self.assertIn("result", subject.lower())
@@ -184,7 +200,8 @@ class TestNATSFabricObservability(unittest.TestCase):
     """Validate fabric observability records for the NATS layer."""
 
     def test_18_record_fabric_event_nats_layer_recorded(self):
-        from core.agent_bus_fabric import record_fabric_event, NATS_CARRIER_LAYER, get_fabric_event_log
+        from core.agent_bus_fabric import NATS_CARRIER_LAYER, get_fabric_event_log, record_fabric_event
+
         log = get_fabric_event_log()
         initial_count = len(log)
         record_fabric_event(
@@ -202,10 +219,11 @@ class TestNATSFabricObservability(unittest.TestCase):
 
     def test_19_record_fabric_event_nats_failure(self):
         from core.agent_bus_fabric import (
-            record_fabric_event,
-            NATS_CARRIER_LAYER,
             FABRIC_REASON_NATS_UNAVAILABLE,
+            NATS_CARRIER_LAYER,
+            record_fabric_event,
         )
+
         rec = record_fabric_event(
             task_id="t-fail",
             strategy="nats",
@@ -218,10 +236,11 @@ class TestNATSFabricObservability(unittest.TestCase):
 
     def test_20_record_fabric_event_nats_fallback_flag(self):
         from core.agent_bus_fabric import (
-            record_fabric_event,
-            NATS_CARRIER_LAYER,
             FABRIC_REASON_STRATEGY_FALLBACK,
+            NATS_CARRIER_LAYER,
+            record_fabric_event,
         )
+
         rec = record_fabric_event(
             task_id="t-fb",
             strategy="relay",
@@ -232,7 +251,8 @@ class TestNATSFabricObservability(unittest.TestCase):
         self.assertTrue(rec.fallback_triggered)
 
     def test_21_fabric_event_log_updated_after_record(self):
-        from core.agent_bus_fabric import record_fabric_event, NATS_CARRIER_LAYER, get_fabric_event_log
+        from core.agent_bus_fabric import NATS_CARRIER_LAYER, get_fabric_event_log, record_fabric_event
+
         log = get_fabric_event_log()
         marker = f"t-log-{id(self)}"
         record_fabric_event(task_id=marker, layer=NATS_CARRIER_LAYER)
@@ -240,7 +260,8 @@ class TestNATSFabricObservability(unittest.TestCase):
         self.assertEqual(log[-1].task_id, marker)
 
     def test_22_record_fabric_event_layer_is_nats(self):
-        from core.agent_bus_fabric import record_fabric_event, NATS_CARRIER_LAYER
+        from core.agent_bus_fabric import NATS_CARRIER_LAYER, record_fabric_event
+
         rec = record_fabric_event(
             task_id="t-layer",
             layer=NATS_CARRIER_LAYER,
@@ -252,12 +273,14 @@ class TestNATSTransportStrategy(unittest.TestCase):
     """Validate transport strategy selection for NATS paths."""
 
     def test_23_only_nats_available_selects_nats(self):
-        from core.agent_bus_fabric import select_transport_strategy, TRANSPORT_STRATEGY_NATS
+        from core.agent_bus_fabric import TRANSPORT_STRATEGY_NATS, select_transport_strategy
+
         rec = select_transport_strategy(nats_available=True)
         self.assertEqual(rec.strategy, TRANSPORT_STRATEGY_NATS)
 
     def test_24_nats_preferred_and_available_no_fallback(self):
-        from core.agent_bus_fabric import select_transport_strategy, TRANSPORT_STRATEGY_NATS
+        from core.agent_bus_fabric import TRANSPORT_STRATEGY_NATS, select_transport_strategy
+
         rec = select_transport_strategy(
             nats_available=True,
             preferred=TRANSPORT_STRATEGY_NATS,
@@ -267,10 +290,11 @@ class TestNATSTransportStrategy(unittest.TestCase):
 
     def test_25_nats_preferred_but_unavailable_triggers_fallback(self):
         from core.agent_bus_fabric import (
-            select_transport_strategy,
-            TRANSPORT_STRATEGY_NATS,
             TRANSPORT_STRATEGY_GATEWAY,
+            TRANSPORT_STRATEGY_NATS,
+            select_transport_strategy,
         )
+
         rec = select_transport_strategy(
             nats_available=False,
             gateway_available=True,

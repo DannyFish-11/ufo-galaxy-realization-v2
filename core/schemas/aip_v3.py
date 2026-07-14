@@ -20,6 +20,7 @@ Usage::
         AIPMessage, MsgType,
     )
 """
+
 from __future__ import annotations
 
 import time
@@ -27,7 +28,7 @@ import uuid
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field, field_validator, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 # ---------------------------------------------------------------------------
 # MsgType enum — mirrors AipModels.kt MsgType exactly
@@ -236,7 +237,9 @@ class TaskResultMsg(AIPMessage):
     result: Any = Field(default=None, description="Execution result (any JSON-serializable value)")
     error: str = Field(default="", description="Error message if status is failed/timeout/cancelled")
     duration_ms: int = Field(default=0, description="Execution duration in milliseconds")
-    partial_results: List[Dict[str, Any]] = Field(default_factory=list, description="Partial results from multi-step execution")
+    partial_results: List[Dict[str, Any]] = Field(
+        default_factory=list, description="Partial results from multi-step execution"
+    )
 
     @field_validator("duration_ms", mode="before")
     @classmethod
@@ -245,6 +248,7 @@ class TaskResultMsg(AIPMessage):
         # 否则 pydantic int_from_float 校验会在结果封装处抛错并被上游 try/except
         # 静默吞掉,导致 TASK_RESULT 无法正常构造/上报。
         return int(round(v)) if isinstance(v, float) else v
+
     ui_graph: Optional[Dict[str, Any]] = Field(
         default=None,
         description="动作后的结构化界面态(AG-UI): 序列化的 UIGraph。与 TASK_ASSIGN 的 "
@@ -433,9 +437,14 @@ class ReconciliationSignalMsg(AIPMessage):
     """
 
     type: MsgType = Field(default=MsgType.RECONCILIATION_SIGNAL)
-    signal_kind: str = Field(default="", description="TASK_RESULT | TASK_CANCELLED | TASK_FAILED | PARTICIPANT_STATE | RUNTIME_TRUTH_SNAPSHOT")
+    signal_kind: str = Field(
+        default="",
+        description="TASK_RESULT | TASK_CANCELLED | TASK_FAILED | PARTICIPANT_STATE | RUNTIME_TRUTH_SNAPSHOT",
+    )
     payload: Dict[str, Any] = Field(default_factory=dict, description="Signal payload")
-    source_runtime_truth: Dict[str, Any] = Field(default_factory=dict, description="Source device's runtime truth snapshot")
+    source_runtime_truth: Dict[str, Any] = Field(
+        default_factory=dict, description="Source device's runtime truth snapshot"
+    )
 
 
 # ---------------------------------------------------------------------------

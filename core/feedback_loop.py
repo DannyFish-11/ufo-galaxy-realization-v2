@@ -27,6 +27,7 @@ Usage::
         user_input="截图",
     )
 """
+
 from __future__ import annotations
 
 import json
@@ -131,9 +132,7 @@ class FeedbackLoop:
             self._path.parent.mkdir(parents=True, exist_ok=True)
             data = {
                 "history": [e.to_dict() for e in self._history[-self.MAX_HISTORY :]],
-                "action_quality": {
-                    k: asdict(v) for k, v in self._action_quality.items()
-                },
+                "action_quality": {k: asdict(v) for k, v in self._action_quality.items()},
             }
             with open(self._path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
@@ -223,7 +222,8 @@ class FeedbackLoop:
     def _emit_feedback_event(self, entry: FeedbackEntry) -> None:
         """Emit feedback event on state event bus."""
         try:
-            from core.state_event_bus import emit as _emit, StateEventType  # noqa: PLC0415
+            from core.state_event_bus import StateEventType
+            from core.state_event_bus import emit as _emit  # noqa: PLC0415
 
             event_type = StateEventType.TASK_SUCCEEDED if entry.success else StateEventType.TASK_FAILED
             _emit(
@@ -254,9 +254,7 @@ class FeedbackLoop:
             "success_rate": aq.success_count / total if total > 0 else 0,
             "avg_duration_ms": round(aq.avg_duration_ms, 1),
             "trend": aq.trend,
-            "top_failure_reasons": sorted(
-                aq.failure_reasons.items(), key=lambda x: x[1], reverse=True
-            )[:3],
+            "top_failure_reasons": sorted(aq.failure_reasons.items(), key=lambda x: x[1], reverse=True)[:3],
         }
 
     def get_recent_failures(self, n: int = 10) -> List[Dict[str, Any]]:
@@ -313,8 +311,7 @@ class FeedbackLoop:
 
             if aq.trend == "degrading":
                 suggestions.append(
-                    f"Action '{action}' reliability is declining. "
-                    f"Top failure: {aq.failure_reasons.most_common(1)}"
+                    f"Action '{action}' reliability is declining. " f"Top failure: {aq.failure_reasons.most_common(1)}"
                 )
 
         return suggestions
@@ -330,15 +327,11 @@ class FeedbackLoop:
             "total_executions": total,
             "overall_success_rate": successes / total,
             "unique_actions": len(self._action_quality),
-            "avg_duration_ms": round(
-                sum(e.duration_ms for e in self._history) / total, 1
-            ),
+            "avg_duration_ms": round(sum(e.duration_ms for e in self._history) / total, 1),
             "action_breakdown": {
                 action: {
                     "total": aq.total_executions,
-                    "success_rate": (
-                        aq.success_count / aq.total_executions if aq.total_executions > 0 else 0
-                    ),
+                    "success_rate": (aq.success_count / aq.total_executions if aq.total_executions > 0 else 0),
                 }
                 for action, aq in self._action_quality.items()
             },

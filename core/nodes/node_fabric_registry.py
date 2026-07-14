@@ -48,8 +48,8 @@ logger = logging.getLogger("Galaxy.Nodes.NodeFabricRegistry")
 # 枚举 / 常量
 # ─────────────────────────────────────────────────────────────────────────────
 
-_DEFAULT_HEARTBEAT_TTL: float = 60.0      # 节点心跳超时（秒）
-_DEFAULT_STALE_CAP_TTL: float = 300.0     # 能力条目过期（秒）；0 = 永不过期
+_DEFAULT_HEARTBEAT_TTL: float = 60.0  # 节点心跳超时（秒）
+_DEFAULT_STALE_CAP_TTL: float = 300.0  # 能力条目过期（秒）；0 = 永不过期
 _NODE_FABRIC_STATE_PATH_ENV: str = "GALAXY_NODE_FABRIC_REGISTRY_STATE_PATH"
 _DEFAULT_NODE_FABRIC_STATE_PATH: str = os.getenv(
     _NODE_FABRIC_STATE_PATH_ENV,
@@ -71,14 +71,14 @@ class NodeStatus(str, Enum):
 class NodeRole(str, Enum):
     """节点角色分类。"""
 
-    WORKER = "worker"          # 通用工作节点
-    AGENT = "agent"            # Agent 推理节点
-    GATEWAY = "gateway"        # 网关节点
-    SCHEDULER = "scheduler"    # 调度节点
-    STORAGE = "storage"        # 存储/向量节点
-    TOOL = "tool"              # MCP/Tool 服务节点
-    MONITOR = "monitor"        # 监控/告警节点
-    CUSTOM = "custom"          # 自定义角色
+    WORKER = "worker"  # 通用工作节点
+    AGENT = "agent"  # Agent 推理节点
+    GATEWAY = "gateway"  # 网关节点
+    SCHEDULER = "scheduler"  # 调度节点
+    STORAGE = "storage"  # 存储/向量节点
+    TOOL = "tool"  # MCP/Tool 服务节点
+    MONITOR = "monitor"  # 监控/告警节点
+    CUSTOM = "custom"  # 自定义角色
 
 
 class NodeArchitecturalClass(str, Enum):
@@ -129,9 +129,11 @@ class NodeArchitecturalClass(str, Enum):
 #: into the CapabilityRegistry (OpenClawd capability bus).
 #: Only CAPABILITY_NODE nodes are surfaced as capabilities.
 #: Public alias: ``CAPABILITY_SYNC_ELIGIBLE`` (preferred for external consumers).
-CAPABILITY_SYNC_ELIGIBLE: frozenset = frozenset({
-    NodeArchitecturalClass.CAPABILITY_NODE,
-})
+CAPABILITY_SYNC_ELIGIBLE: frozenset = frozenset(
+    {
+        NodeArchitecturalClass.CAPABILITY_NODE,
+    }
+)
 
 # Backward-compatible private alias (retained for code that already imports it).
 _CAPABILITY_SYNC_ELIGIBLE: frozenset = CAPABILITY_SYNC_ELIGIBLE
@@ -378,7 +380,8 @@ class NodeFabricRegistry:
             self._revalidation_pending.discard(node_id)
             if removed:
                 logger.info(
-                    "Node unregistered: %s", node_id,
+                    "Node unregistered: %s",
+                    node_id,
                     extra={"event": "node_unregister", "node_id": node_id},
                 )
                 self.persist_durable_state()
@@ -457,7 +460,9 @@ class NodeFabricRegistry:
                     stale.append(node_id)
         if stale:
             logger.warning(
-                "Marked %d stale node(s) as OFFLINE: %s", len(stale), stale,
+                "Marked %d stale node(s) as OFFLINE: %s",
+                len(stale),
+                stale,
                 extra={"event": "nodes_offline", "node_ids": stale},
             )
             self.persist_durable_state()
@@ -485,22 +490,14 @@ class NodeFabricRegistry:
     def list_by_capability(self, capability: str) -> List[NodeInfo]:
         """返回具有指定能力的节点列表。"""
         with self._rw_lock:
-            return [
-                n for n in self._nodes.values()
-                if any(c.name == capability for c in n.capabilities)
-            ]
+            return [n for n in self._nodes.values() if any(c.name == capability for c in n.capabilities)]
 
     def list_healthy(self) -> List[NodeInfo]:
         """返回所有健康节点（health_score >= 0.5）。"""
         with self._rw_lock:
-            return [
-                n for n in self._nodes.values()
-                if n.is_healthy(self._heartbeat_ttl)
-            ]
+            return [n for n in self._nodes.values() if n.is_healthy(self._heartbeat_ttl)]
 
-    def list_by_architectural_class(
-        self, architectural_class: NodeArchitecturalClass
-    ) -> List[NodeInfo]:
+    def list_by_architectural_class(self, architectural_class: NodeArchitecturalClass) -> List[NodeInfo]:
         """Return all nodes with the given :class:`NodeArchitecturalClass`.
 
         Use this to find, for example, all CAPABILITY_NODE nodes that are
@@ -508,10 +505,7 @@ class NodeFabricRegistry:
         nodes that need guardrail enforcement.
         """
         with self._rw_lock:
-            return [
-                n for n in self._nodes.values()
-                if n.architectural_class == architectural_class
-            ]
+            return [n for n in self._nodes.values() if n.architectural_class == architectural_class]
 
     def count(self) -> int:
         """返回当前注册节点总数。"""
@@ -535,10 +529,7 @@ class NodeFabricRegistry:
     def get_dependents(self, node_id: str) -> List[str]:
         """返回所有依赖 node_id 的节点（反向依赖）。"""
         with self._rw_lock:
-            return [
-                n.node_id for n in self._nodes.values()
-                if node_id in n.dependencies
-            ]
+            return [n.node_id for n in self._nodes.values() if node_id in n.dependencies]
 
     # ──────────────────────────────────────────────────────────────────
     # 能力同步
@@ -566,7 +557,7 @@ class NodeFabricRegistry:
             注入的能力条目数量。
         """
         try:
-            from core.agent.capability_registry import CapabilityRegistry, CapabilityItem  # noqa: PLC0415
+            from core.agent.capability_registry import CapabilityItem, CapabilityRegistry  # noqa: PLC0415
         except ImportError:
             logger.warning("CapabilityRegistry not available; skipping capability sync")
             return 0
@@ -576,9 +567,11 @@ class NodeFabricRegistry:
         _governor = None
         try:
             from core.node_governance_runtime import evaluate_node_governance_eligibility  # noqa: PLC0415
+
             _governance_evaluate = evaluate_node_governance_eligibility
             try:
                 from core.node_lifecycle_governor import get_node_lifecycle_governor  # noqa: PLC0415
+
                 _governor = get_node_lifecycle_governor()
             except Exception as exc:
                 logger.warning("Exception suppressed: %s", exc)
@@ -620,8 +613,7 @@ class NodeFabricRegistry:
                         else:
                             skipped_governance += 1
                         logger.debug(
-                            "Governance-excluded node %s from capability sync: "
-                            "reasons=%s (governor_consulted=%s)",
+                            "Governance-excluded node %s from capability sync: " "reasons=%s (governor_consulted=%s)",
                             node.node_id,
                             decision.exclusion_reasons,
                             decision.governor_consulted,
@@ -632,12 +624,13 @@ class NodeFabricRegistry:
                     if node.architectural_class not in _CAPABILITY_SYNC_ELIGIBLE:
                         skipped_non_capability += 1
                         logger.debug(
-                            "Skipping capability sync for node %s "
-                            "(architectural_class=%s; not a CAPABILITY_NODE)",
+                            "Skipping capability sync for node %s " "(architectural_class=%s; not a CAPABILITY_NODE)",
                             node.node_id,
-                            node.architectural_class.value
-                            if isinstance(node.architectural_class, NodeArchitecturalClass)
-                            else node.architectural_class,
+                            (
+                                node.architectural_class.value
+                                if isinstance(node.architectural_class, NodeArchitecturalClass)
+                                else node.architectural_class
+                            ),
                         )
                         continue
                     if not node.is_healthy(self._heartbeat_ttl):
@@ -648,10 +641,7 @@ class NodeFabricRegistry:
                     key = f"node__{node.node_id}__{cap.name}"
                     item = CapabilityItem(
                         name=key,
-                        description=(
-                            f"[Node:{node.node_id}:{node.role}] "
-                            f"{cap.description or cap.name}"
-                        ),
+                        description=(f"[Node:{node.node_id}:{node.role}] " f"{cap.description or cap.name}"),
                         source="node",
                         source_id=node.node_id,
                         parameters=cap.parameters,
@@ -727,7 +717,8 @@ class NodeFabricRegistry:
         if expired_keys:
             logger.info(
                 "Expired %d stale node capability items (ttl=%.0fs)",
-                len(expired_keys), effective_ttl,
+                len(expired_keys),
+                effective_ttl,
                 extra={"event": "capability_expire", "count": len(expired_keys)},
             )
         return len(expired_keys)
@@ -774,19 +765,13 @@ class NodeFabricRegistry:
                 recovery_status=(
                     RECOVERY_STATUS_REVALIDATED
                     if self._last_recovered_at and not self._revalidation_pending
-                    else RECOVERY_STATUS_RECOVERED_UNREVALIDATED
-                    if self._last_recovered_at
-                    else RECOVERY_STATUS_LIVE
+                    else RECOVERY_STATUS_RECOVERED_UNREVALIDATED if self._last_recovered_at else RECOVERY_STATUS_LIVE
                 ),
                 revalidation_required=bool(self._revalidation_pending),
                 degraded=bool(self._revalidation_pending),
                 field_truth_grades={
-                    "node_membership": (
-                        TRUTH_GRADE_RECOVERABLE if self._last_recovered_at else TRUTH_GRADE_DURABLE
-                    ),
-                    "node_liveness": (
-                        TRUTH_GRADE_REVALIDATED if self._last_recovered_at else TRUTH_GRADE_RUNTIME_ONLY
-                    ),
+                    "node_membership": (TRUTH_GRADE_RECOVERABLE if self._last_recovered_at else TRUTH_GRADE_DURABLE),
+                    "node_liveness": (TRUTH_GRADE_REVALIDATED if self._last_recovered_at else TRUTH_GRADE_RUNTIME_ONLY),
                 },
                 notes=[
                     "Node registry membership and ownership facts are durably persisted.",

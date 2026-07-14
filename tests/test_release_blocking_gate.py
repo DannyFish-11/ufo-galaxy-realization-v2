@@ -53,10 +53,10 @@ Group D — evaluate_release_gate / ReleaseGateDecision
 
 from __future__ import annotations
 
-import sys
 import os
+import sys
 from typing import Any
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -75,20 +75,21 @@ if _PROJECT_ROOT not in sys.path:
 
 try:
     from core.release_blocking_gate import (
+        CAPABILITY_STATE_MISMATCH_IS_BLOCKING_POLICY,
+        CRITICAL_SMOKE_FAIL_IS_BLOCKING_POLICY,
+        PROTECTED_COMPAT_INGRESS_IS_BLOCKING_POLICY,
+        PROTOCOL_DRIFT_IS_BLOCKING_POLICY,
         RELEASE_BLOCKING_GATE_AUTHORITY,
         RELEASE_BLOCKING_GATE_PR_SENTINEL,
-        CRITICAL_SMOKE_FAIL_IS_BLOCKING_POLICY,
-        CAPABILITY_STATE_MISMATCH_IS_BLOCKING_POLICY,
-        PROTOCOL_DRIFT_IS_BLOCKING_POLICY,
         RELEASE_POSTURE_INSUFFICIENT_IS_BLOCKING_POLICY,
-        PROTECTED_COMPAT_INGRESS_IS_BLOCKING_POLICY,
-        ReleaseBlockingGateError,
-        GateCriterionResult,
-        ReleaseGateDecision,
         CriterionStatus,
+        GateCriterionResult,
+        ReleaseBlockingGateError,
+        ReleaseGateDecision,
         evaluate_release_gate,
         run_release_blocking_gate,
     )
+
     _MODULE_AVAILABLE = True
 except ImportError as _e:
     _MODULE_AVAILABLE = False
@@ -96,10 +97,7 @@ except ImportError as _e:
 
 _skip_if_unavailable = pytest.mark.skipif(
     not _MODULE_AVAILABLE,
-    reason=(
-        f"core.release_blocking_gate not importable: "
-        f"{locals().get('_import_err_msg', '')}"
-    ),
+    reason=(f"core.release_blocking_gate not importable: " f"{locals().get('_import_err_msg', '')}"),
 )
 
 # ---------------------------------------------------------------------------
@@ -177,12 +175,11 @@ class TestGroupA_Sentinels:
             RELEASE_POSTURE_INSUFFICIENT_IS_BLOCKING_POLICY,
             PROTECTED_COMPAT_INGRESS_IS_BLOCKING_POLICY,
         ):
-            assert isinstance(policy, str) and len(policy) > 10, (
-                f"Policy string too short or not a string: {policy!r}"
-            )
+            assert isinstance(policy, str) and len(policy) > 10, f"Policy string too short or not a string: {policy!r}"
 
     def test_A04_public_api_in_all(self):
         from core import release_blocking_gate as _rbg
+
         for symbol in ("evaluate_release_gate", "run_release_blocking_gate"):
             assert symbol in _rbg.__all__, f"'{symbol}' missing from __all__"
 
@@ -224,28 +221,20 @@ class TestGroupB_DataClassSchema:
         for cr in decision.criteria:
             d = cr.to_dict()
             missing = [k for k in _REQUIRED_CRITERION_DICT_KEYS if k not in d]
-            assert not missing, (
-                f"GateCriterionResult.to_dict() missing keys: {missing}"
-            )
+            assert not missing, f"GateCriterionResult.to_dict() missing keys: {missing}"
 
     def test_B06_all_criteria_are_blocking(self):
         """All gate criteria must be blocking (is_blocking=True)."""
         decision = evaluate_release_gate(raise_on_failure=False)
-        non_blocking = [
-            cr.criterion_id for cr in decision.criteria if not cr.is_blocking
-        ]
-        assert not non_blocking, (
-            f"These criteria are non-blocking but should be blocking: {non_blocking}"
-        )
+        non_blocking = [cr.criterion_id for cr in decision.criteria if not cr.is_blocking]
+        assert not non_blocking, f"These criteria are non-blocking but should be blocking: {non_blocking}"
 
     def test_B07_all_expected_criterion_ids_present(self):
         """All canonical criterion IDs must be present in the evaluation."""
         decision = evaluate_release_gate(raise_on_failure=False)
         found = {cr.criterion_id for cr in decision.criteria}
         missing = _EXPECTED_CRITERION_IDS - found
-        assert not missing, (
-            f"Expected criterion IDs missing from evaluation: {missing}"
-        )
+        assert not missing, f"Expected criterion IDs missing from evaluation: {missing}"
 
 
 # ===========================================================================
@@ -332,9 +321,7 @@ class TestGroupD_EvaluateGate:
         try:
             evaluate_release_gate(raise_on_failure=False)
         except Exception as exc:
-            pytest.fail(
-                f"evaluate_release_gate raised unexpectedly: {exc}"
-            )
+            pytest.fail(f"evaluate_release_gate raised unexpectedly: {exc}")
 
     def test_D02_approved_is_bool(self):
         decision = evaluate_release_gate(raise_on_failure=False)
@@ -348,30 +335,22 @@ class TestGroupD_EvaluateGate:
         decision = evaluate_release_gate(raise_on_failure=False)
         lines = decision.summary_lines()
         assert isinstance(lines, list)
-        assert all(isinstance(line, str) for line in lines), (
-            "summary_lines() must return a list of strings"
-        )
+        assert all(isinstance(line, str) for line in lines), "summary_lines() must return a list of strings"
 
     def test_D05_failed_criteria_subset_of_criterion_ids(self):
         """failed_criteria values must match actual criterion IDs."""
         decision = evaluate_release_gate(raise_on_failure=False)
         criterion_ids = {cr.criterion_id for cr in decision.criteria}
         for fc in decision.failed_criteria:
-            assert fc in criterion_ids, (
-                f"failed_criteria contains '{fc}' which is not a known criterion ID"
-            )
+            assert fc in criterion_ids, f"failed_criteria contains '{fc}' which is not a known criterion ID"
 
     def test_D06_approved_consistent_with_failed_criteria(self):
         """approved must be True iff failed_criteria is empty."""
         decision = evaluate_release_gate(raise_on_failure=False)
         if decision.approved:
-            assert len(decision.failed_criteria) == 0, (
-                "approved=True but failed_criteria is non-empty"
-            )
+            assert len(decision.failed_criteria) == 0, "approved=True but failed_criteria is non-empty"
         else:
-            assert len(decision.failed_criteria) > 0, (
-                "approved=False but failed_criteria is empty"
-            )
+            assert len(decision.failed_criteria) > 0, "approved=False but failed_criteria is empty"
 
     def test_D07_criterion_status_values_are_valid(self):
         """All criterion status values must be valid CriterionStatus members."""
@@ -379,9 +358,7 @@ class TestGroupD_EvaluateGate:
         decision = evaluate_release_gate(raise_on_failure=False)
         for cr in decision.criteria:
             status_val = cr.status.value if isinstance(cr.status, CriterionStatus) else cr.status
-            assert status_val in valid, (
-                f"Criterion '{cr.criterion_id}' has invalid status: {status_val!r}"
-            )
+            assert status_val in valid, f"Criterion '{cr.criterion_id}' has invalid status: {status_val!r}"
 
     def test_D08_protected_compat_ingress_policy_blocks_requested_cross_device_compat(self):
         from core.release_blocking_gate import _crit_protected_compat_ingress_policy

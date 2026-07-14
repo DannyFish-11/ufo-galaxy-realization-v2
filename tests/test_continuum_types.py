@@ -18,8 +18,16 @@ Covers:
 from __future__ import annotations
 
 import json
+
 import pytest
 
+from core.continuum.config import (
+    DEFAULT_CONTINUUM_CONFIG,
+    ContinuumConfig,
+    DwellConfig,
+    FeatureFlags,
+    HysteresisConfig,
+)
 from core.continuum.types import (
     ActionLevel,
     ContinuumPhase,
@@ -31,14 +39,6 @@ from core.continuum.types import (
     SpatialPresence,
     UnifiedState,
 )
-from core.continuum.config import (
-    ContinuumConfig,
-    DEFAULT_CONTINUUM_CONFIG,
-    DwellConfig,
-    FeatureFlags,
-    HysteresisConfig,
-)
-
 
 # ===========================================================================
 # A) ContinuumPhase enum

@@ -146,17 +146,17 @@ import pytest
 
 try:
     from core.execution_evidence_model import (
-        ExecutionEvidenceState,
-        EvidenceTrustLevel,
-        ExecutionEvidenceRecord,
-        classify_execution_evidence,
-        infer_execution_evidence_state,
-        build_execution_evidence_record,
-        EXECUTION_EVIDENCE_MODEL_POLICY,
-        EXECUTION_EVIDENCE_MODEL_CONTRACT_VERSION,
         DELEGATED_RESULT_PROOF_CLASS_POLICY,
         DUPLICATE_EVIDENCE_REJECTION_POLICY,
+        EXECUTION_EVIDENCE_MODEL_CONTRACT_VERSION,
+        EXECUTION_EVIDENCE_MODEL_POLICY,
         STALE_RESULT_THRESHOLD_SECONDS,
+        EvidenceTrustLevel,
+        ExecutionEvidenceRecord,
+        ExecutionEvidenceState,
+        build_execution_evidence_record,
+        classify_execution_evidence,
+        infer_execution_evidence_state,
     )
 
     _EEM_OK = True
@@ -165,13 +165,13 @@ except ImportError:
 
 try:
     from core.result_truth_acceptance_gate import (
+        ACCEPTANCE_REQUIRES_TRUSTED_EVIDENCE_POLICY,
+        QUARANTINE_BLOCKS_USER_CLOSURE_POLICY,
+        RESULT_TRUTH_ACCEPTANCE_GATE_POLICY,
         ResultAcceptanceVerdict,
         ResultTrustAcceptanceRecord,
-        evaluate_result_truth_acceptance,
         apply_acceptance_gate,
-        RESULT_TRUTH_ACCEPTANCE_GATE_POLICY,
-        QUARANTINE_BLOCKS_USER_CLOSURE_POLICY,
-        ACCEPTANCE_REQUIRES_TRUSTED_EVIDENCE_POLICY,
+        evaluate_result_truth_acceptance,
     )
 
     _RTAG_OK = True
@@ -180,11 +180,11 @@ except ImportError:
 
 try:
     from core.unified_result_ingress import (
-        UnifiedResultIngressOutcome,
         NormalizedResultEvent,
         ResultSourceChannel,
-        ingest_result,
+        UnifiedResultIngressOutcome,
         get_unified_result_ingress,
+        ingest_result,
     )
 
     _URI_OK = True
@@ -193,13 +193,13 @@ except ImportError:
 
 try:
     from core.operator_execution_observability_surface import (
+        OPERATOR_EXECUTION_OBSERVABILITY_CONTRACT_VERSION,
+        OPERATOR_EXECUTION_OBSERVABILITY_SENTINEL,
         OperatorExecutionEvidenceEntry,
         OperatorExecutionObservabilitySnapshot,
         build_operator_execution_observability_snapshot,
         get_latest_operator_evidence_entry_for_task,
         record_operator_evidence_entry,
-        OPERATOR_EXECUTION_OBSERVABILITY_SENTINEL,
-        OPERATOR_EXECUTION_OBSERVABILITY_CONTRACT_VERSION,
     )
 
     _OEOS_OK = True

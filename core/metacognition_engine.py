@@ -82,9 +82,7 @@ class MetaCognitionEngine:
         self.decision_history: List[Decision] = []
         logger.info("元认知引擎已初始化")
 
-    def track_thought(
-        self, thought_type: str, content: str, context: Optional[Dict] = None
-    ) -> Thought:
+    def track_thought(self, thought_type: str, content: str, context: Optional[Dict] = None) -> Thought:
         t_type = ThoughtType(thought_type) if isinstance(thought_type, str) else thought_type
         thought = Thought(
             thought_id=f"thought_{uuid.uuid4().hex[:12]}",
@@ -130,10 +128,7 @@ class MetaCognitionEngine:
         cutoff = time.time() - time_window if time_window else 0
         recent_thoughts = [t for t in self.thought_history if t.timestamp >= cutoff]
         recent_decisions = [d for d in self.decision_history if d.timestamp >= cutoff]
-        avg_quality = (
-            sum(t.quality_score for t in recent_thoughts) / len(recent_thoughts)
-            if recent_thoughts else 0.0
-        )
+        avg_quality = sum(t.quality_score for t in recent_thoughts) / len(recent_thoughts) if recent_thoughts else 0.0
         return {
             "thought_count": len(recent_thoughts),
             "decision_count": len(recent_decisions),

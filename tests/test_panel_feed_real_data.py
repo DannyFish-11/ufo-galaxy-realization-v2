@@ -23,8 +23,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 class TestPanelFeedOpenClawdStatus(unittest.IsolatedAsyncioTestCase):
     async def _get_feed(self):
-        from httpx import AsyncClient, ASGITransport
         from fastapi import FastAPI
+        from httpx import ASGITransport, AsyncClient
+
         from core.routes.panel import create_router
 
         app = FastAPI()
@@ -87,8 +88,9 @@ class TestPanelFeedOpenClawdStatus(unittest.IsolatedAsyncioTestCase):
 
 class TestPanelFeedMeshParticipants(unittest.IsolatedAsyncioTestCase):
     async def _get_feed(self):
-        from httpx import AsyncClient, ASGITransport
         from fastapi import FastAPI
+        from httpx import ASGITransport, AsyncClient
+
         from core.routes.panel import create_router
 
         app = FastAPI()

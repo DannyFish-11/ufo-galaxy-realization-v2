@@ -114,20 +114,14 @@ class CommandEnvelope:
     """
 
     # ── Identity ────────────────────────────────────────────────────────────
-    trace_id: str = field(
-        default_factory=lambda: f"trace_{uuid.uuid4().hex[:12]}"
-    )
+    trace_id: str = field(default_factory=lambda: f"trace_{uuid.uuid4().hex[:12]}")
     """Distributed trace identifier.  Set by the originating component and
     propagated unchanged through the entire call chain."""
 
-    runtime_session_id: str = field(
-        default_factory=lambda: f"session_{uuid.uuid4().hex[:12]}"
-    )
+    runtime_session_id: str = field(default_factory=lambda: f"session_{uuid.uuid4().hex[:12]}")
     """Session identifier tying commands to a single user/agent interaction."""
 
-    task_id: str = field(
-        default_factory=lambda: f"task_{uuid.uuid4().hex[:16]}"
-    )
+    task_id: str = field(default_factory=lambda: f"task_{uuid.uuid4().hex[:16]}")
     """Globally unique task identifier."""
 
     device_id: str = ""
@@ -188,9 +182,7 @@ class CommandEnvelope:
             "version": self.version,
             "verb": self.verb.value if isinstance(self.verb, CommandVerb) else self.verb,
             "cancel_reason": (
-                self.cancel_reason.value
-                if isinstance(self.cancel_reason, CancelReason)
-                else self.cancel_reason
+                self.cancel_reason.value if isinstance(self.cancel_reason, CancelReason) else self.cancel_reason
             ),
             "cancel_target_task_ids": list(self.cancel_target_task_ids),
             "idempotency_key": self.idempotency_key,
@@ -208,10 +200,19 @@ class CommandEnvelope:
         is preserved.
         """
         known = {
-            "trace_id", "runtime_session_id", "task_id", "device_id",
-            "version", "verb", "cancel_reason", "cancel_target_task_ids",
-            "idempotency_key", "payload", "response_metadata",
-            "created_at", "extra",
+            "trace_id",
+            "runtime_session_id",
+            "task_id",
+            "device_id",
+            "version",
+            "verb",
+            "cancel_reason",
+            "cancel_target_task_ids",
+            "idempotency_key",
+            "payload",
+            "response_metadata",
+            "created_at",
+            "extra",
         }
         kwargs: Dict[str, Any] = {}
         extra: Dict[str, Any] = {}
@@ -259,9 +260,11 @@ class CommandEnvelope:
         Uses the AIP message's existing trace / session / task fields so no new
         IDs are generated unnecessarily.
         """
-        trace_id = getattr(msg, "trace_id", None) or getattr(
-            msg.payload, "get", lambda k, d: d
-        )("trace_id", "") if hasattr(msg, "payload") and isinstance(msg.payload, dict) else ""
+        trace_id = (
+            getattr(msg, "trace_id", None) or getattr(msg.payload, "get", lambda k, d: d)("trace_id", "")
+            if hasattr(msg, "payload") and isinstance(msg.payload, dict)
+            else ""
+        )
         trace_id = trace_id or f"trace_{uuid.uuid4().hex[:12]}"
 
         runtime_session_id = ""
@@ -445,9 +448,7 @@ class EnvelopeValidationError(ValueError):
     def __init__(self, missing_fields: list, envelope_type: str = "command") -> None:
         self.missing_fields = missing_fields
         self.envelope_type = envelope_type
-        super().__init__(
-            f"{envelope_type} envelope missing required fields: {missing_fields}"
-        )
+        super().__init__(f"{envelope_type} envelope missing required fields: {missing_fields}")
 
 
 def validate_command_envelope(envelope: CommandEnvelope) -> None:

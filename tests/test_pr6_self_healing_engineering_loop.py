@@ -23,7 +23,7 @@ import asyncio
 import os
 import sys
 from typing import Any, Dict
-from unittest.mock import AsyncMock, MagicMock, patch, call
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
 
@@ -33,6 +33,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _run(coro):
     """Run a coroutine synchronously in an isolated event loop."""
@@ -46,6 +47,7 @@ def _run(coro):
 def _make_openclawd():
     """Return a minimally configured OpenClawd instance."""
     from core.openclawd import OpenClawd
+
     oc = OpenClawd.__new__(OpenClawd)
     oc._node_registry = {}
     oc._node_cache = {}
@@ -64,16 +66,19 @@ def _make_openclawd():
 # 1. EngineeringStage enum — correct values and ordering
 # ===========================================================================
 
+
 class TestEngineeringStageEnum:
     """EngineeringStage has all required values in the correct order."""
 
     def test_all_stages_exist(self):
         from core.self_improvement import EngineeringStage
+
         for name in ("DIAGNOSE", "GATHER_CONTEXT", "PLAN_PATCH", "APPLY", "VALIDATE", "RECORD_OUTCOME"):
             assert hasattr(EngineeringStage, name), f"Missing stage: {name}"
 
     def test_stage_values(self):
         from core.self_improvement import EngineeringStage
+
         assert EngineeringStage.DIAGNOSE.value == "diagnose"
         assert EngineeringStage.GATHER_CONTEXT.value == "gather_context"
         assert EngineeringStage.PLAN_PATCH.value == "plan_patch"
@@ -82,13 +87,15 @@ class TestEngineeringStageEnum:
         assert EngineeringStage.RECORD_OUTCOME.value == "record_outcome"
 
     def test_stage_order_list_is_correct(self):
-        from core.self_improvement import EngineeringStage, _STAGE_ORDER
+        from core.self_improvement import _STAGE_ORDER, EngineeringStage
+
         assert _STAGE_ORDER[0] == EngineeringStage.DIAGNOSE
         assert _STAGE_ORDER[-1] == EngineeringStage.RECORD_OUTCOME
         assert len(_STAGE_ORDER) == 6
 
     def test_stage_authorities_cover_all_stages(self):
-        from core.self_improvement import ENGINEERING_STAGE_AUTHORITIES, _STAGE_ORDER
+        from core.self_improvement import _STAGE_ORDER, ENGINEERING_STAGE_AUTHORITIES
+
         for stage in _STAGE_ORDER:
             assert stage in ENGINEERING_STAGE_AUTHORITIES, f"Missing authority for {stage}"
 
@@ -97,10 +104,12 @@ class TestEngineeringStageEnum:
 # 2. PatchProposal dataclass — creation and serialisation
 # ===========================================================================
 
+
 class TestPatchProposal:
 
     def test_create_defaults(self):
-        from core.self_improvement import PatchProposal, EngineeringStage
+        from core.self_improvement import EngineeringStage, PatchProposal
+
         p = PatchProposal()
         assert p.proposal_id
         assert p.stage == EngineeringStage.DIAGNOSE
@@ -109,20 +118,35 @@ class TestPatchProposal:
 
     def test_to_dict_contains_required_keys(self):
         from core.self_improvement import PatchProposal
+
         p = PatchProposal(issue_summary="High CPU", source="Node_112")
         d = p.to_dict()
-        for key in ("proposal_id", "issue_summary", "source", "stage", "context",
-                    "patch_content", "target_files", "apply_result", "validation_passed",
-                    "knowledge_entry_id", "created_at", "updated_at", "metadata"):
+        for key in (
+            "proposal_id",
+            "issue_summary",
+            "source",
+            "stage",
+            "context",
+            "patch_content",
+            "target_files",
+            "apply_result",
+            "validation_passed",
+            "knowledge_entry_id",
+            "created_at",
+            "updated_at",
+            "metadata",
+        ):
             assert key in d, f"Missing key in to_dict: {key}"
 
     def test_to_dict_stage_is_string(self):
         from core.self_improvement import PatchProposal
+
         p = PatchProposal()
         assert isinstance(p.to_dict()["stage"], str)
 
     def test_from_dict_roundtrip(self):
-        from core.self_improvement import PatchProposal, EngineeringStage
+        from core.self_improvement import EngineeringStage, PatchProposal
+
         p = PatchProposal(issue_summary="test issue", source="ci")
         d = p.to_dict()
         p2 = PatchProposal.from_dict(d)
@@ -132,7 +156,8 @@ class TestPatchProposal:
         assert p2.source == p.source
 
     def test_from_dict_invalid_stage_defaults_to_diagnose(self):
-        from core.self_improvement import PatchProposal, EngineeringStage
+        from core.self_improvement import EngineeringStage, PatchProposal
+
         p = PatchProposal.from_dict({"stage": "nonexistent_stage"})
         assert p.stage == EngineeringStage.DIAGNOSE
 
@@ -141,26 +166,40 @@ class TestPatchProposal:
 # 3. EngineeringRecord dataclass — creation and serialisation
 # ===========================================================================
 
+
 class TestEngineeringRecord:
 
     def test_create_defaults(self):
         from core.self_improvement import EngineeringRecord
+
         r = EngineeringRecord()
         assert r.record_id
         assert isinstance(r.stages_completed, list)
 
     def test_to_dict_contains_required_keys(self):
         from core.self_improvement import EngineeringRecord
+
         r = EngineeringRecord(proposal_id="p1", issue_summary="bug", source="test")
         d = r.to_dict()
-        for key in ("record_id", "proposal_id", "issue_summary", "source",
-                    "stages_completed", "patch_content", "target_files",
-                    "apply_result", "validation_passed", "knowledge_entry_id",
-                    "completed_at", "metadata"):
+        for key in (
+            "record_id",
+            "proposal_id",
+            "issue_summary",
+            "source",
+            "stages_completed",
+            "patch_content",
+            "target_files",
+            "apply_result",
+            "validation_passed",
+            "knowledge_entry_id",
+            "completed_at",
+            "metadata",
+        ):
             assert key in d
 
     def test_from_dict_roundtrip(self):
         from core.self_improvement import EngineeringRecord
+
         r = EngineeringRecord(proposal_id="x", issue_summary="i", validation_passed=True)
         r2 = EngineeringRecord.from_dict(r.to_dict())
         assert r2.record_id == r.record_id
@@ -171,10 +210,12 @@ class TestEngineeringRecord:
 # 4. EngineeringLoopSnapshot — to_dict
 # ===========================================================================
 
+
 class TestEngineeringLoopSnapshot:
 
     def test_to_dict_keys(self):
         from core.self_improvement import EngineeringLoopSnapshot
+
         snap = EngineeringLoopSnapshot(pending_count=2, recent_record_count=5)
         d = snap.to_dict()
         assert d["pending_count"] == 2
@@ -188,15 +229,18 @@ class TestEngineeringLoopSnapshot:
 # 5. SelfHealingLoop staged workflow (acceptance criteria b)
 # ===========================================================================
 
+
 class TestSelfHealingLoopStagedWorkflow:
     """The loop enforces forward-only stage progression."""
 
     def _fresh(self):
         from core.self_improvement import SelfHealingLoop
+
         return SelfHealingLoop()
 
     def test_submit_diagnosis_creates_proposal_at_diagnose(self):
         from core.self_improvement import EngineeringStage
+
         loop = self._fresh()
         p = loop.submit_diagnosis("High CPU usage detected", source="Node_112")
         assert p.stage == EngineeringStage.DIAGNOSE
@@ -223,6 +267,7 @@ class TestSelfHealingLoopStagedWorkflow:
 
     def test_attach_context_advances_to_gather_context(self):
         from core.self_improvement import EngineeringStage
+
         loop = self._fresh()
         p = loop.submit_diagnosis("issue")
         result = loop.attach_context(p.proposal_id, {"files": ["main.py"]})
@@ -237,10 +282,15 @@ class TestSelfHealingLoopStagedWorkflow:
         # Already at GATHER_CONTEXT — attach_context again should fail
         result = loop.attach_context(p.proposal_id, {})
         assert result["success"] is False
-        assert "DIAGNOSE" in result["error"] or "gather_context" in result["error"].lower() or "stage" in result["error"].lower()
+        assert (
+            "DIAGNOSE" in result["error"]
+            or "gather_context" in result["error"].lower()
+            or "stage" in result["error"].lower()
+        )
 
     def test_plan_patch_advances_to_plan_patch(self):
         from core.self_improvement import EngineeringStage
+
         loop = self._fresh()
         p = loop.submit_diagnosis("issue")
         loop.attach_context(p.proposal_id, {})
@@ -260,6 +310,7 @@ class TestSelfHealingLoopStagedWorkflow:
 
     def test_apply_patch_advances_to_apply(self):
         from core.self_improvement import EngineeringStage
+
         loop = self._fresh()
         p = loop.submit_diagnosis("issue")
         loop.attach_context(p.proposal_id, {})
@@ -286,6 +337,7 @@ class TestSelfHealingLoopStagedWorkflow:
 
     def test_validate_advances_to_validate(self):
         from core.self_improvement import EngineeringStage
+
         loop = self._fresh()
         p = loop.submit_diagnosis("issue")
         loop.attach_context(p.proposal_id, {})
@@ -370,6 +422,7 @@ class TestSelfHealingLoopStagedWorkflow:
     def test_full_staged_flow(self):
         """Happy-path: all six stages in order."""
         from core.self_improvement import EngineeringStage
+
         loop = self._fresh()
         mock_rag = MagicMock()
         mock_rag.ingest_knowledge.return_value = "kc_entry_full"
@@ -404,10 +457,12 @@ class TestSelfHealingLoopStagedWorkflow:
 # 6. Snapshot
 # ===========================================================================
 
+
 class TestSelfHealingLoopSnapshot:
 
     def test_snapshot_empty_loop(self):
         from core.self_improvement import SelfHealingLoop
+
         loop = SelfHealingLoop()
         snap = loop.snapshot()
         assert snap.pending_count == 0
@@ -416,6 +471,7 @@ class TestSelfHealingLoopSnapshot:
 
     def test_snapshot_reflects_pending_proposal(self):
         from core.self_improvement import SelfHealingLoop
+
         loop = SelfHealingLoop()
         loop.submit_diagnosis("issue A")
         loop.submit_diagnosis("issue B")
@@ -425,7 +481,9 @@ class TestSelfHealingLoopSnapshot:
 
     def test_snapshot_to_dict_is_json_serialisable(self):
         import json
+
         from core.self_improvement import SelfHealingLoop
+
         loop = SelfHealingLoop()
         loop.submit_diagnosis("test")
         d = loop.snapshot().to_dict()
@@ -436,10 +494,12 @@ class TestSelfHealingLoopSnapshot:
 # 7. Module-level singleton (acceptance criteria a — single authority)
 # ===========================================================================
 
+
 class TestModuleLevelSingleton:
 
     def test_get_self_healing_loop_returns_singleton(self):
-        from core.self_improvement import get_self_healing_loop, reset_self_healing_loop, SelfHealingLoop
+        from core.self_improvement import SelfHealingLoop, get_self_healing_loop, reset_self_healing_loop
+
         reset_self_healing_loop()
         a = get_self_healing_loop()
         b = get_self_healing_loop()
@@ -448,6 +508,7 @@ class TestModuleLevelSingleton:
 
     def test_reset_creates_fresh_instance(self):
         from core.self_improvement import get_self_healing_loop, reset_self_healing_loop
+
         reset_self_healing_loop()
         a = get_self_healing_loop()
         a.submit_diagnosis("old issue")
@@ -458,6 +519,7 @@ class TestModuleLevelSingleton:
 
     def test_module_exposes_self_healing_loop_singleton(self):
         import core.self_improvement as mod
+
         assert hasattr(mod, "self_healing_loop")
         assert hasattr(mod, "get_self_healing_loop")
         assert hasattr(mod, "reset_self_healing_loop")
@@ -467,34 +529,41 @@ class TestModuleLevelSingleton:
 # 8. Capability Bus — ENGINEERING role (acceptance criteria a)
 # ===========================================================================
 
+
 class TestCapabilityBusEngineeringRole:
 
     def test_engineering_role_exists_in_enum(self):
         from core.capability_bus import CapabilityBusRole
+
         assert hasattr(CapabilityBusRole, "ENGINEERING")
         assert CapabilityBusRole.ENGINEERING.value == "engineering"
 
     def test_from_tool_name_engineer_diagnose(self):
         from core.capability_bus import CapabilityBusRole
+
         role = CapabilityBusRole.from_tool_name("engineer__diagnose")
         assert role == CapabilityBusRole.ENGINEERING
 
     def test_from_tool_name_engineer_apply(self):
         from core.capability_bus import CapabilityBusRole
+
         role = CapabilityBusRole.from_tool_name("engineer__apply")
         assert role == CapabilityBusRole.ENGINEERING
 
     def test_from_tool_name_engineer_status(self):
         from core.capability_bus import CapabilityBusRole
+
         role = CapabilityBusRole.from_tool_name("engineer__status")
         assert role == CapabilityBusRole.ENGINEERING
 
     def test_register_engineering_capability_method_exists(self):
         from core.capability_bus import CapabilityBus
+
         assert hasattr(CapabilityBus, "register_engineering_capability")
 
     def test_register_engineering_capability_creates_entry(self):
-        from core.capability_bus import get_capability_bus, reset_capability_bus, CapabilityBusRole
+        from core.capability_bus import CapabilityBusRole, get_capability_bus, reset_capability_bus
+
         reset_capability_bus()
         bus = get_capability_bus()
         entry = bus.register_engineering_capability(
@@ -506,7 +575,8 @@ class TestCapabilityBusEngineeringRole:
         assert "engineering" in entry.tags
 
     def test_register_multiple_engineering_capabilities(self):
-        from core.capability_bus import get_capability_bus, reset_capability_bus, CapabilityBusRole
+        from core.capability_bus import CapabilityBusRole, get_capability_bus, reset_capability_bus
+
         reset_capability_bus()
         bus = get_capability_bus()
         for action in ("diagnose", "context", "plan", "apply", "validate", "record", "status"):
@@ -518,6 +588,7 @@ class TestCapabilityBusEngineeringRole:
 
     def test_lookup_engineering_capability_after_registration(self):
         from core.capability_bus import get_capability_bus, reset_capability_bus
+
         reset_capability_bus()
         bus = get_capability_bus()
         bus.register_engineering_capability("apply", description="Apply the patch")
@@ -530,28 +601,39 @@ class TestCapabilityBusEngineeringRole:
 # 9. OpenClawd engineer__ built-in tools (acceptance criteria a)
 # ===========================================================================
 
+
 class TestOpenClawdEngineerBuiltinTools:
 
     def test_engineer_builtin_tools_defined(self):
         from core.openclawd import _ENGINEER_BUILTIN_TOOLS
+
         assert isinstance(_ENGINEER_BUILTIN_TOOLS, list)
         assert len(_ENGINEER_BUILTIN_TOOLS) >= 6
 
     def test_engineer_builtin_tool_names(self):
         from core.openclawd import _ENGINEER_BUILTIN_TOOLS
+
         names = [t["function"]["name"] for t in _ENGINEER_BUILTIN_TOOLS]
-        for expected in ("engineer__diagnose", "engineer__plan", "engineer__apply",
-                         "engineer__validate", "engineer__record", "engineer__status"):
+        for expected in (
+            "engineer__diagnose",
+            "engineer__plan",
+            "engineer__apply",
+            "engineer__validate",
+            "engineer__record",
+            "engineer__status",
+        ):
             assert expected in names, f"Missing tool: {expected}"
 
     def test_engineer_diagnose_has_required_parameter(self):
         from core.openclawd import _ENGINEER_BUILTIN_TOOLS
+
         tool = next(t for t in _ENGINEER_BUILTIN_TOOLS if t["function"]["name"] == "engineer__diagnose")
         required = tool["function"]["parameters"].get("required", [])
         assert "issue_summary" in required
 
     def test_engineer_apply_has_required_parameter(self):
         from core.openclawd import _ENGINEER_BUILTIN_TOOLS
+
         tool = next(t for t in _ENGINEER_BUILTIN_TOOLS if t["function"]["name"] == "engineer__apply")
         required = tool["function"]["parameters"].get("required", [])
         assert "proposal_id" in required
@@ -559,6 +641,7 @@ class TestOpenClawdEngineerBuiltinTools:
     def test_collect_tools_includes_engineer_tools(self):
         """_collect_tools must include all engineer__ built-in tools."""
         from core.openclawd import _ENGINEER_BUILTIN_TOOLS
+
         oc = _make_openclawd()
         # _collect_tools may raise if node registry is missing — guard it
         try:
@@ -576,20 +659,28 @@ class TestOpenClawdEngineerBuiltinTools:
 # 10. OpenClawd _dispatch_engineer_tool (acceptance criteria a, b)
 # ===========================================================================
 
+
 class TestOpenClawdDispatchEngineerTool:
 
     def test_dispatch_engineer_method_exists(self):
         from core.openclawd import OpenClawd
+
         assert hasattr(OpenClawd, "_dispatch_engineer_tool")
 
     def test_dispatch_diagnose_creates_proposal(self):
         oc = _make_openclawd()
         from core.self_improvement import reset_self_healing_loop
+
         reset_self_healing_loop()
-        result = _run(oc._dispatch_engineer_tool("diagnose", {
-            "issue_summary": "High CPU",
-            "source": "test",
-        }))
+        result = _run(
+            oc._dispatch_engineer_tool(
+                "diagnose",
+                {
+                    "issue_summary": "High CPU",
+                    "source": "test",
+                },
+            )
+        )
         assert result["success"] is True
         assert "proposal_id" in result
         assert result["stage"] == "diagnose"
@@ -645,15 +736,21 @@ class TestOpenClawdDispatchEngineerTool:
 
     def test_dispatch_context_action(self):
         oc = _make_openclawd()
-        from core.self_improvement import reset_self_healing_loop, get_self_healing_loop
+        from core.self_improvement import get_self_healing_loop, reset_self_healing_loop
+
         reset_self_healing_loop()
         # Submit a proposal first
         loop = get_self_healing_loop()
         p = loop.submit_diagnosis("test issue", source="test")
-        result = _run(oc._dispatch_engineer_tool("context", {
-            "proposal_id": p.proposal_id,
-            "context": {"file": "foo.py"},
-        }))
+        result = _run(
+            oc._dispatch_engineer_tool(
+                "context",
+                {
+                    "proposal_id": p.proposal_id,
+                    "context": {"file": "foo.py"},
+                },
+            )
+        )
         assert result["success"] is True
         assert result["stage"] == "gather_context"
 
@@ -661,6 +758,7 @@ class TestOpenClawdDispatchEngineerTool:
         """Exercise all six engineer__ actions through dispatch."""
         oc = _make_openclawd()
         from core.self_improvement import reset_self_healing_loop
+
         reset_self_healing_loop()
         mock_rag = MagicMock()
         mock_rag.ingest_knowledge.return_value = "kc_dispatch_001"
@@ -691,12 +789,14 @@ class TestOpenClawdDispatchEngineerTool:
 # 11. Knowledge Core integration (acceptance criteria c)
 # ===========================================================================
 
+
 class TestKnowledgeCoreIntegration:
     """Fix outcomes must be recorded via RAGMemory.ingest_knowledge, not a
     separate fixer-only silo."""
 
     def test_record_outcome_calls_ingest_knowledge(self):
         from core.self_improvement import SelfHealingLoop
+
         loop = SelfHealingLoop()
         mock_rag = MagicMock()
         mock_rag.ingest_knowledge.return_value = "kc_01"
@@ -716,6 +816,7 @@ class TestKnowledgeCoreIntegration:
 
     def test_record_outcome_source_uri_contains_proposal_id(self):
         from core.self_improvement import SelfHealingLoop
+
         loop = SelfHealingLoop()
         mock_rag = MagicMock()
         mock_rag.ingest_knowledge.return_value = "kc_02"
@@ -733,6 +834,7 @@ class TestKnowledgeCoreIntegration:
 
     def test_record_outcome_stores_entry_id_in_record(self):
         from core.self_improvement import SelfHealingLoop
+
         loop = SelfHealingLoop()
         mock_rag = MagicMock()
         mock_rag.ingest_knowledge.return_value = "kc_03"
@@ -752,6 +854,7 @@ class TestKnowledgeCoreIntegration:
     def test_record_outcome_graceful_when_rag_unavailable(self):
         """Loop must complete even if RAGMemory.ingest_knowledge raises."""
         from core.self_improvement import SelfHealingLoop
+
         loop = SelfHealingLoop()
 
         def _raise():
@@ -771,14 +874,15 @@ class TestKnowledgeCoreIntegration:
 
     def test_engineering_source_type_constant(self):
         from core.self_improvement import _ENGINEERING_SOURCE_TYPE
+
         assert _ENGINEERING_SOURCE_TYPE == "engineering"
 
     def test_ingest_uses_rag_memory_not_private_store(self):
         """self_improvement module must not have a private knowledge store."""
         from core.self_improvement import SelfHealingLoop
+
         loop = SelfHealingLoop()
-        for bad in ("_knowledge_store", "_paper_db", "_fix_db", "_private_store",
-                    "_memo_store", "_fixer_store"):
+        for bad in ("_knowledge_store", "_paper_db", "_fix_db", "_private_store", "_memo_store", "_fixer_store"):
             assert not hasattr(loop, bad), f"SelfHealingLoop must not have: {bad}"
 
 
@@ -786,11 +890,13 @@ class TestKnowledgeCoreIntegration:
 # 12. Safety boundaries — no parallel mutation authority (acceptance criteria d)
 # ===========================================================================
 
+
 class TestSafetyBoundaries:
 
     def test_apply_gate_prevents_skipping_plan_stage(self):
         """apply_patch must be guarded: PLAN_PATCH stage required."""
-        from core.self_improvement import SelfHealingLoop, EngineeringStage
+        from core.self_improvement import EngineeringStage, SelfHealingLoop
+
         loop = SelfHealingLoop()
         p = loop.submit_diagnosis("issue")
         # Only at DIAGNOSE — cannot apply
@@ -800,6 +906,7 @@ class TestSafetyBoundaries:
 
     def test_apply_gate_prevents_skipping_gather_context(self):
         from core.self_improvement import SelfHealingLoop
+
         loop = SelfHealingLoop()
         p = loop.submit_diagnosis("issue")
         loop.attach_context(p.proposal_id, {})
@@ -811,7 +918,9 @@ class TestSafetyBoundaries:
         """SelfHealingLoop must not write any files to disk itself;
         persistence goes through RAGMemory.ingest_knowledge only."""
         import inspect
+
         import core.self_improvement as mod
+
         src = inspect.getsource(mod.SelfHealingLoop)
         # The loop class must not call open() or os.makedirs() — those are
         # RAGMemory's responsibility.
@@ -820,15 +929,16 @@ class TestSafetyBoundaries:
 
     def test_stage_authorities_all_reference_openclawd(self):
         from core.self_improvement import ENGINEERING_STAGE_AUTHORITIES
+
         for stage, authority in ENGINEERING_STAGE_AUTHORITIES.items():
-            assert "OpenClawd" in authority, (
-                f"Stage {stage} authority '{authority}' must reference OpenClawd"
-            )
+            assert "OpenClawd" in authority, f"Stage {stage} authority '{authority}' must reference OpenClawd"
 
     def test_no_direct_code_execution_in_self_improvement(self):
         """self_improvement.py must not call subprocess or exec directly."""
         import inspect
+
         import core.self_improvement as mod
+
         src = inspect.getsource(mod)
         for dangerous in ("subprocess.run", "subprocess.Popen", "os.system", "exec(", "eval("):
             assert dangerous not in src, f"self_improvement.py must not call: {dangerous}"
@@ -836,6 +946,7 @@ class TestSafetyBoundaries:
     def test_max_records_limit_enforced(self):
         """Recent records list must not grow beyond max_records."""
         from core.self_improvement import SelfHealingLoop
+
         loop = SelfHealingLoop(max_records=3)
         mock_rag = MagicMock()
         mock_rag.ingest_knowledge.return_value = "eid"
@@ -856,6 +967,7 @@ class TestSafetyBoundaries:
 # 13. Node_112_SelfHealing — mediated loop delegation (acceptance criteria a)
 # ===========================================================================
 
+
 class TestNode112MediatedDelegation:
     """Node_112 must route CODE_FIX proposals through SelfHealingLoop, not
     apply them directly."""
@@ -864,7 +976,7 @@ class TestNode112MediatedDelegation:
         """When AutoFixer produces a CODE_FIX result, run_once must call
         SelfHealingLoop.submit_diagnosis (at minimum)."""
         pytest.importorskip("fastapi", reason="fastapi not installed in this environment")
-        from nodes.Node_112_SelfHealing.main import SelfHealingEngine, FixResult, FixAction
+        from nodes.Node_112_SelfHealing.main import FixAction, FixResult, SelfHealingEngine
 
         engine = SelfHealingEngine.__new__(SelfHealingEngine)
         engine.auto_commit = False
@@ -892,10 +1004,13 @@ class TestNode112MediatedDelegation:
             if fix_result.action == FixAction.CODE_FIX:
                 loop = mock_loop
                 from unittest.mock import MagicMock as MM
+
                 from nodes.Node_112_SelfHealing.main import IssueType
+
                 class _MockDiag:
                     recommendation = "fix code error"
                     issue_type = IssueType.UNKNOWN
+
                 class _MockMetrics:
                     cpu_percent = 95.0
                     memory_percent = 60.0
@@ -922,16 +1037,21 @@ class TestNode112MediatedDelegation:
         """The run_once method must contain a reference to SelfHealingLoop."""
         pytest.importorskip("fastapi", reason="fastapi not installed in this environment")
         import inspect
+
         from nodes.Node_112_SelfHealing.main import SelfHealingEngine
+
         src = inspect.getsource(SelfHealingEngine.run_once)
         assert "SelfHealingLoop" in src or "self_improvement" in src or "submit_diagnosis" in src
 
     def test_node112_source_contains_mediated_delegation(self):
         """Node_112 source must reference the mediated loop (without importing)."""
         import os
+
         node_path = os.path.join(
             os.path.dirname(os.path.dirname(__file__)),
-            "nodes", "Node_112_SelfHealing", "main.py",
+            "nodes",
+            "Node_112_SelfHealing",
+            "main.py",
         )
         with open(node_path, "r", encoding="utf-8") as f:
             src = f.read()
@@ -942,43 +1062,54 @@ class TestNode112MediatedDelegation:
 # 14. Regression — existing academic/github tools still present
 # ===========================================================================
 
+
 class TestRegressionExistingTools:
     """PR-6 changes must not remove or break existing built-in tools."""
 
     def test_github_builtin_tools_still_present(self):
         from core.openclawd import _GITHUB_BUILTIN_TOOLS
+
         names = [t["function"]["name"] for t in _GITHUB_BUILTIN_TOOLS]
         for expected in ("github__install", "github__ingest", "github__context"):
             assert expected in names
 
     def test_academic_builtin_tools_still_present(self):
         from core.openclawd import _ACADEMIC_BUILTIN_TOOLS
+
         names = [t["function"]["name"] for t in _ACADEMIC_BUILTIN_TOOLS]
         for expected in ("academic__search", "academic__ingest", "academic__recall"):
             assert expected in names
 
     def test_capability_bus_academic_role_still_present(self):
         from core.capability_bus import CapabilityBusRole
+
         assert hasattr(CapabilityBusRole, "ACADEMIC")
 
     def test_capability_bus_github_role_still_present(self):
         from core.capability_bus import CapabilityBusRole
+
         assert hasattr(CapabilityBusRole, "GITHUB")
 
     def test_dispatch_tool_call_still_routes_github(self):
         import inspect
+
         from core.openclawd import OpenClawd
+
         src = inspect.getsource(OpenClawd._dispatch_tool_call)
         assert "_dispatch_github_tool" in src
 
     def test_dispatch_tool_call_still_routes_academic(self):
         import inspect
+
         from core.openclawd import OpenClawd
+
         src = inspect.getsource(OpenClawd._dispatch_tool_call)
         assert "_dispatch_academic_tool" in src
 
     def test_dispatch_tool_call_routes_engineer(self):
         import inspect
+
         from core.openclawd import OpenClawd
+
         src = inspect.getsource(OpenClawd._dispatch_tool_call)
         assert "_dispatch_engineer_tool" in src

@@ -20,8 +20,8 @@ architecture is correctly described in code and docs without running
 full integration tests.
 """
 
-import pathlib
 import inspect
+import pathlib
 
 REPO_ROOT = pathlib.Path(__file__).parent.parent
 
@@ -29,6 +29,7 @@ REPO_ROOT = pathlib.Path(__file__).parent.parent
 # ─────────────────────────────────────────────────────────────────────────────
 # 1. Unified subject: DesktopPresenceRuntime wraps OpenClawd
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class TestUnifiedSubjectStructure:
     """DesktopPresenceRuntime + OpenClawd = single subject, two layers."""
@@ -45,15 +46,17 @@ class TestUnifiedSubjectStructure:
 
     def test_dpr_class_docstring_mentions_openclawd(self):
         from core.desktop_presence_runtime import DesktopPresenceRuntime
+
         doc = DesktopPresenceRuntime.__doc__ or ""
         assert "OpenClawd" in doc, "DesktopPresenceRuntime class doc must mention OpenClawd"
 
     def test_openclawd_class_docstring_mentions_dpr(self):
         from core.openclawd import OpenClawd
+
         doc = OpenClawd.__doc__ or ""
-        assert "DesktopPresenceRuntime" in doc or "runtime shell" in doc.lower(), (
-            "OpenClawd class doc must mention DesktopPresenceRuntime or runtime shell"
-        )
+        assert (
+            "DesktopPresenceRuntime" in doc or "runtime shell" in doc.lower()
+        ), "OpenClawd class doc must mention DesktopPresenceRuntime or runtime shell"
 
     def test_dpr_invokes_openclawd_in_handle_via_openclawd(self):
         src = (REPO_ROOT / "core" / "desktop_presence_runtime.py").read_text()
@@ -63,25 +66,27 @@ class TestUnifiedSubjectStructure:
 
     def test_runtime_session_id_is_propagated_to_openclawd(self):
         src = (REPO_ROOT / "core" / "desktop_presence_runtime.py").read_text()
-        assert "runtime_session_id=rsession.runtime_session_id" in src or \
-               "runtime_session_id" in src
+        assert "runtime_session_id=rsession.runtime_session_id" in src or "runtime_session_id" in src
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 2. Canonical tri-state lifecycle
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class TestCanonicalTriStateLifecycle:
     """Tri-state is the subject lifecycle, owned by DesktopPresenceRuntime."""
 
     def test_tristate_enum_exists_with_correct_values(self):
         from core.desktop_presence_runtime import TriState
+
         assert TriState.SILENT.value == "silent"
         assert TriState.LIMINAL.value == "liminal"
         assert TriState.MANIFEST.value == "manifest"
 
     def test_tristate_has_exactly_three_values(self):
         from core.desktop_presence_runtime import TriState
+
         assert len(list(TriState)) == 3
 
     def test_handle_request_drives_tristate_full_cycle(self):
@@ -93,17 +98,17 @@ class TestCanonicalTriStateLifecycle:
 
     def test_runtime_session_starts_in_silent(self):
         from core.desktop_presence_runtime import RuntimeSession, TriState
+
         s = RuntimeSession(source="test")
         assert s.tristate == TriState.SILENT
 
     def test_tristate_not_dormant_island_etc(self):
         """UI shell states must not appear in TriState."""
         from core.desktop_presence_runtime import TriState
+
         values = {s.value for s in TriState}
         for ui_state in ("dormant", "island", "sidesheet", "fullagent"):
-            assert ui_state not in values, (
-                f"'{ui_state}' is a UI shell state and must not be in TriState"
-            )
+            assert ui_state not in values, f"'{ui_state}' is a UI shell state and must not be in TriState"
 
     def test_dpr_source_param_is_observability_only(self):
         """source parameter must be documented as observability tag only."""
@@ -115,6 +120,7 @@ class TestCanonicalTriStateLifecycle:
 # 3. Three state systems are distinct
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class TestThreeStateSystemsDistinct:
     """Tri-state / continuum posture / UI shell states must not be conflated."""
 
@@ -125,8 +131,7 @@ class TestThreeStateSystemsDistinct:
     def test_hardware_trigger_system_state_doc_is_clothing_layer(self):
         src = (REPO_ROOT / "system_integration" / "hardware_trigger.py").read_text()
         # Should mention clothing or presentation or "not tri-state"
-        assert "clothing" in src.lower() or "presentation" in src.lower() or \
-               "not" in src.lower()
+        assert "clothing" in src.lower() or "presentation" in src.lower() or "not" in src.lower()
 
     def test_state_machine_ui_integration_has_clothing_doc(self):
         src = (REPO_ROOT / "system_integration" / "state_machine_ui_integration.py").read_text()
@@ -145,6 +150,7 @@ class TestThreeStateSystemsDistinct:
 # ─────────────────────────────────────────────────────────────────────────────
 # 4. Multimodal ingress: two distinct paths
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class TestMultimodalIngress:
     """Runtime shell owns continuous host ingress; OpenClawd fuses request-bound."""
@@ -185,11 +191,13 @@ class TestMultimodalIngress:
 # 5. Liminal execution branching
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class TestLiminalExecutionBranching:
     """OpenClawd determines execution path: local/cross_device/hybrid/none."""
 
     def test_determine_execution_path_returns_local(self):
         from core.openclawd import OpenClawd
+
         result = OpenClawd._determine_execution_path(
             entry_mode="local",
             execution_result={"action_taken": "focus_window"},
@@ -199,6 +207,7 @@ class TestLiminalExecutionBranching:
 
     def test_determine_execution_path_returns_cross_device(self):
         from core.openclawd import OpenClawd
+
         result = OpenClawd._determine_execution_path(
             entry_mode="local",
             execution_result={"action_taken": "none"},
@@ -208,6 +217,7 @@ class TestLiminalExecutionBranching:
 
     def test_determine_execution_path_returns_hybrid(self):
         from core.openclawd import OpenClawd
+
         result = OpenClawd._determine_execution_path(
             entry_mode="local",
             execution_result={"action_taken": "launch_app"},
@@ -217,6 +227,7 @@ class TestLiminalExecutionBranching:
 
     def test_determine_execution_path_returns_none(self):
         from core.openclawd import OpenClawd
+
         result = OpenClawd._determine_execution_path(
             entry_mode="local",
             execution_result={"action_taken": "none"},
@@ -226,11 +237,13 @@ class TestLiminalExecutionBranching:
 
     def test_openclawd_process_accepts_entry_mode(self):
         from core.openclawd import OpenClawd
+
         sig = inspect.signature(OpenClawd.process)
         assert "entry_mode" in sig.parameters
 
     def test_openclawd_process_accepts_runtime_session_id(self):
         from core.openclawd import OpenClawd
+
         sig = inspect.signature(OpenClawd.process)
         assert "runtime_session_id" in sig.parameters
 
@@ -247,6 +260,7 @@ class TestLiminalExecutionBranching:
 # ─────────────────────────────────────────────────────────────────────────────
 # 6. Gateway is internal substrate, not primary entrypoint
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class TestGatewayInternalSubstrate:
     """galaxy_gateway must be described as internal cross-device substrate."""
@@ -276,6 +290,7 @@ class TestGatewayInternalSubstrate:
 # ─────────────────────────────────────────────────────────────────────────────
 # 7. Adapter surfaces are demoted
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class TestAdapterSurfacesDemoted:
     """Chat route, launchers, gateway are demoted from subject-core authority."""
@@ -307,6 +322,7 @@ class TestAdapterSurfacesDemoted:
 # ─────────────────────────────────────────────────────────────────────────────
 # 8. Documentation files exist and have correct framing
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class TestDocumentationFiles:
     """Required documentation files must exist and contain key architecture framing."""

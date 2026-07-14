@@ -101,17 +101,15 @@ class NodeHeartbeatSender:
                 )
                 return {"success": False, "reason": "nats_not_connected"}
 
-            from core.schemas.contracts import (
-                WorkerCapabilityModel,
-                WorkerRegistrationModel,
-                TimestampModel,
-            )
             from datetime import datetime, timezone
 
-            caps = [
-                WorkerCapabilityModel(name=c, version=self._worker_version)
-                for c in self._capabilities
-            ]
+            from core.schemas.contracts import (
+                TimestampModel,
+                WorkerCapabilityModel,
+                WorkerRegistrationModel,
+            )
+
+            caps = [WorkerCapabilityModel(name=c, version=self._worker_version) for c in self._capabilities]
             reg = WorkerRegistrationModel(
                 worker_id=self._worker_id,
                 hostname=socket.gethostname(),
@@ -120,9 +118,7 @@ class NodeHeartbeatSender:
                 os_version=platform.version(),
                 worker_version=self._worker_version,
                 capabilities=caps,
-                registered_at=TimestampModel(
-                    seconds=int(datetime.now(timezone.utc).timestamp())
-                ),
+                registered_at=TimestampModel(seconds=int(datetime.now(timezone.utc).timestamp())),
             )
             result = await nats_bus.publish_worker_registration(reg)
             if result.get("success"):
@@ -133,9 +129,7 @@ class NodeHeartbeatSender:
                 )
             return result
         except Exception as exc:
-            logger.error(
-                "NodeHeartbeatSender[%s]: registration error — %s", self._worker_id, exc
-            )
+            logger.error("NodeHeartbeatSender[%s]: registration error — %s", self._worker_id, exc)
             return {"success": False, "error": str(exc)}
 
     async def start(self) -> asyncio.Task:
@@ -178,9 +172,7 @@ class NodeHeartbeatSender:
             try:
                 await self._send_heartbeat()
             except Exception as exc:
-                logger.debug(
-                    "NodeHeartbeatSender[%s]: heartbeat error — %s", self._worker_id, exc
-                )
+                logger.debug("NodeHeartbeatSender[%s]: heartbeat error — %s", self._worker_id, exc)
             await asyncio.sleep(self._interval_s)
 
     async def _send_heartbeat(self) -> None:
@@ -189,17 +181,16 @@ class NodeHeartbeatSender:
         if not nats_bus.is_connected():
             return
 
-        from core.schemas.contracts import WorkerHeartbeatModel, TimestampModel
         from datetime import datetime, timezone
+
+        from core.schemas.contracts import TimestampModel, WorkerHeartbeatModel
 
         stats = self._stats_fn() if self._stats_fn else {}
 
         hb = WorkerHeartbeatModel(
             worker_id=self._worker_id,
             status="idle",
-            timestamp=TimestampModel(
-                seconds=int(datetime.now(timezone.utc).timestamp())
-            ),
+            timestamp=TimestampModel(seconds=int(datetime.now(timezone.utc).timestamp())),
             trace_id=self._trace_id,
             cpu_usage_percent=float(stats.get("cpu_usage_percent", 0.0)),
             memory_usage_percent=float(stats.get("memory_usage_percent", 0.0)),

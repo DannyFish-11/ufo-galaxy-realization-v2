@@ -16,6 +16,12 @@ swarm_scaler
     Dynamic worker scaler for Swarm-mode Agent teams (Phase 4).
 """
 
+from core.control_plane._globals import (
+    get_approval_registry,
+    get_audit_ledger,
+    get_scoring_engine,
+    get_security_interceptor,
+)
 from core.control_plane.audit_ledger import (
     AuditLedger,
     EventType,
@@ -24,16 +30,6 @@ from core.control_plane.audit_ledger import (
     TraceEvent,
     events_to_dag,
     events_to_json,
-)
-from core.control_plane.swarm_manifest import SwarmAgentManifest
-from core.control_plane.smart_scheduler import (
-    CapabilityDescriptor,
-    DeviceScore,
-    DeviceScoreInput,
-    DeviceScoringEngine,
-    DeviceStatus,
-    SandboxLevel,
-    ScoringWeights,
 )
 from core.control_plane.security_interceptor import (
     ApprovalAuditEntry,
@@ -45,16 +41,20 @@ from core.control_plane.security_interceptor import (
     RiskLevel,
     SecurityInterceptor,
 )
+from core.control_plane.smart_scheduler import (
+    CapabilityDescriptor,
+    DeviceScore,
+    DeviceScoreInput,
+    DeviceScoringEngine,
+    DeviceStatus,
+    SandboxLevel,
+    ScoringWeights,
+)
+from core.control_plane.swarm_manifest import SwarmAgentManifest
 from core.control_plane.swarm_scaler import (
     ScalingAction,
     ScalingPolicy,
     SwarmScaler,
-)
-from core.control_plane._globals import (
-    get_audit_ledger,
-    get_approval_registry,
-    get_scoring_engine,
-    get_security_interceptor,
 )
 
 __all__ = [

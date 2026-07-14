@@ -143,9 +143,7 @@ class FormationParticipantEntry:
             "device_id": self.device_id,
             "role": self.role,
             "health_score": self.health_score,
-            "roles": [
-                r.value if hasattr(r, "value") else str(r) for r in (self.roles or [])
-            ],
+            "roles": [r.value if hasattr(r, "value") else str(r) for r in (self.roles or [])],
             "session_id": self.session_id,
             "enrolled_at": self.enrolled_at,
             "last_updated_at": self.last_updated_at,
@@ -232,15 +230,11 @@ class FormationAutoEnrollmentManager:
                 existing.is_active = True
                 existing.last_updated_at = time.time()
                 entry = existing
-                logger.debug(
-                    "enroll_device: updated: device_id=%s role=%s", device_id, entry.role
-                )
+                logger.debug("enroll_device: updated: device_id=%s role=%s", device_id, entry.role)
             else:
                 # Derive formation_role from participant count when not explicit
                 if formation_role is None:
-                    active_count = sum(
-                        1 for p in self._participants.values() if p.is_active
-                    )
+                    active_count = sum(1 for p in self._participants.values() if p.is_active)
                     formation_role = self._derive_formation_role(active_count)
                 entry = FormationParticipantEntry(
                     device_id=device_id,
@@ -305,15 +299,15 @@ class FormationAutoEnrollmentManager:
                         device_id, reason=reason or "auto_enrollment_remove"
                     )
                     logger.info(
-                        "formation_auto_enrollment: participant_lost device_id=%s "
-                        "formation_state=%s",
+                        "formation_auto_enrollment: participant_lost device_id=%s " "formation_state=%s",
                         device_id,
                         decision.runtime_state.value,
                     )
                 except Exception as exc:
                     logger.debug(
                         "remove_device: coordinator notify non-fatal: device_id=%s error=%s",
-                        device_id, exc,
+                        device_id,
+                        exc,
                     )
 
         logger.info(
@@ -348,9 +342,7 @@ class FormationAutoEnrollmentManager:
         with self._lock:
             entry = self._participants.get(device_id)
             if entry is None:
-                logger.debug(
-                    "update_device_readiness: unknown device_id=%s — skipping", device_id
-                )
+                logger.debug("update_device_readiness: unknown device_id=%s — skipping", device_id)
                 return
 
             if health_score is not None:
@@ -362,11 +354,8 @@ class FormationAutoEnrollmentManager:
 
             try:
                 from .formation_runtime_coordinator import FormationParticipantState
-                new_state = (
-                    FormationParticipantState.READY
-                    if is_ready
-                    else FormationParticipantState.DEGRADED
-                )
+
+                new_state = FormationParticipantState.READY if is_ready else FormationParticipantState.DEGRADED
                 effective_score = health_score if health_score is not None else entry.health_score
                 decision = self._coordinator.on_participant_readiness_changed(
                     device_id,
@@ -375,17 +364,16 @@ class FormationAutoEnrollmentManager:
                     reason=reason or ("ready" if is_ready else "not_ready"),
                 )
                 logger.info(
-                    "formation_auto_enrollment: readiness_changed device_id=%s "
-                    "is_ready=%s formation_state=%s",
+                    "formation_auto_enrollment: readiness_changed device_id=%s " "is_ready=%s formation_state=%s",
                     device_id,
                     is_ready,
                     decision.runtime_state.value,
                 )
             except Exception as exc:
                 logger.debug(
-                    "update_device_readiness: coordinator notify non-fatal: "
-                    "device_id=%s error=%s",
-                    device_id, exc,
+                    "update_device_readiness: coordinator notify non-fatal: " "device_id=%s error=%s",
+                    device_id,
+                    exc,
                 )
 
     def get_coordinator(self) -> Optional[Any]:
@@ -401,9 +389,7 @@ class FormationAutoEnrollmentManager:
     def list_active_device_ids(self) -> List[str]:
         """Return the IDs of all active (enrolled) participants."""
         with self._lock:
-            return [
-                did for did, e in self._participants.items() if e.is_active
-            ]
+            return [did for did, e in self._participants.items() if e.is_active]
 
     def snapshot(self) -> Dict[str, Any]:
         """Return a JSON-serialisable snapshot of the manager state."""
@@ -416,9 +402,7 @@ class FormationAutoEnrollmentManager:
                     logger.warning("Exception suppressed: %s", exc)
             return {
                 "formation_id": self._formation_id,
-                "participants": {
-                    did: e.to_dict() for did, e in self._participants.items()
-                },
+                "participants": {did: e.to_dict() for did, e in self._participants.items()},
                 "coordinator_snapshot": coord_snap,
             }
 
@@ -430,6 +414,7 @@ class FormationAutoEnrollmentManager:
         """Derive a conservative formation role from participant count."""
         try:
             from .formation_role import FormationRole
+
             if existing_active_count == 0:
                 return FormationRole.PRIMARY_EXECUTION.value
             return FormationRole.SUPPORT.value
@@ -439,9 +424,7 @@ class FormationAutoEnrollmentManager:
     @staticmethod
     def _merge_roles(existing: List[Any], new_roles: List[Any]) -> List[Any]:
         """Merge *new_roles* into *existing* without duplicates."""
-        existing_values = {
-            r.value if hasattr(r, "value") else str(r) for r in existing
-        }
+        existing_values = {r.value if hasattr(r, "value") else str(r) for r in existing}
         result = list(existing)
         for role in new_roles:
             val = role.value if hasattr(role, "value") else str(role)
@@ -457,8 +440,8 @@ class FormationAutoEnrollmentManager:
         Must be called under ``self._lock``.
         """
         try:
-            from .formation_group import DeviceFormationGroup, EMPTY_FORMATION_GROUP
-            from .formation_role import FormationRole, FormationMember
+            from .formation_group import EMPTY_FORMATION_GROUP, DeviceFormationGroup
+            from .formation_role import FormationMember, FormationRole
             from .formation_runtime_coordinator import (
                 FormationRuntimeCoordinator,
             )
@@ -527,9 +510,7 @@ def get_formation_auto_enrollment_manager(
     if _manager_singleton is None:
         with _manager_lock:
             if _manager_singleton is None:
-                _manager_singleton = FormationAutoEnrollmentManager(
-                    formation_id=formation_id
-                )
+                _manager_singleton = FormationAutoEnrollmentManager(formation_id=formation_id)
     return _manager_singleton
 
 

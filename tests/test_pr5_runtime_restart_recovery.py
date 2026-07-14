@@ -47,31 +47,33 @@ from typing import Any, Dict, List, Optional
 import pytest
 
 from core.runtime_restart_recovery import (
-    RUNTIME_RESTART_RECOVERY_IS_AUTHORITY,
-    MESH_SESSION_RECOVERY_IS_DURABLE_POLICY,
     BODY_MESH_RECOVERY_IS_DURABLE_POLICY,
-    WEBRTC_BINDINGS_ARE_EPHEMERAL_POLICY,
-    RUNTIME_RESTART_RECOVERY_PR5_SENTINEL,
     INFLIGHT_TASK_LIFECYCLE_RECOVERY_POLICY,
+    MESH_SESSION_RECOVERY_IS_DURABLE_POLICY,
+    RUNTIME_RESTART_RECOVERY_IS_AUTHORITY,
+    RUNTIME_RESTART_RECOVERY_PR5_SENTINEL,
+    WEBRTC_BINDINGS_ARE_EPHEMERAL_POLICY,
     RuntimeRecoveryReport,
     RuntimeRestartRecoveryCoordinator,
-    run_startup_recovery,
     get_recovery_coordinator,
     reset_recovery_coordinator,
+    run_startup_recovery,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_mesh_session_store(tmp_dir: Optional[str] = None):
     from core.mesh.mesh_session_persistence import MeshSessionPersistenceStore
+
     return MeshSessionPersistenceStore(store_dir=tmp_dir or tempfile.mkdtemp())
 
 
 def _make_body_mesh_store(tmp_dir: Optional[str] = None):
     from core.mesh.body_mesh_persistence import BodyMeshPersistenceStore
+
     path = os.path.join(tmp_dir or tempfile.mkdtemp(), "bm_snap.json")
     return BodyMeshPersistenceStore(store_path=path)
 
@@ -114,6 +116,7 @@ class FakeRegistry:
 # A — Sentinels
 # ---------------------------------------------------------------------------
 
+
 class TestSentinels:
     def test_authority_sentinel(self):
         assert isinstance(RUNTIME_RESTART_RECOVERY_IS_AUTHORITY, str)
@@ -127,8 +130,10 @@ class TestSentinels:
 
     def test_webrtc_ephemeral_policy(self):
         assert isinstance(WEBRTC_BINDINGS_ARE_EPHEMERAL_POLICY, str)
-        assert "ephemeral" in WEBRTC_BINDINGS_ARE_EPHEMERAL_POLICY.lower() \
+        assert (
+            "ephemeral" in WEBRTC_BINDINGS_ARE_EPHEMERAL_POLICY.lower()
             or "EPHEMERAL" in WEBRTC_BINDINGS_ARE_EPHEMERAL_POLICY
+        )
 
     def test_pr5_sentinel(self):
         assert isinstance(RUNTIME_RESTART_RECOVERY_PR5_SENTINEL, str)
@@ -136,13 +141,16 @@ class TestSentinels:
 
     def test_inflight_task_lifecycle_recovery_policy(self):
         assert isinstance(INFLIGHT_TASK_LIFECYCLE_RECOVERY_POLICY, str)
-        assert "RESUMABLE" in INFLIGHT_TASK_LIFECYCLE_RECOVERY_POLICY or \
-               "resumable" in INFLIGHT_TASK_LIFECYCLE_RECOVERY_POLICY.lower()
+        assert (
+            "RESUMABLE" in INFLIGHT_TASK_LIFECYCLE_RECOVERY_POLICY
+            or "resumable" in INFLIGHT_TASK_LIFECYCLE_RECOVERY_POLICY.lower()
+        )
 
 
 # ---------------------------------------------------------------------------
 # B–J — RuntimeRecoveryReport
 # ---------------------------------------------------------------------------
+
 
 class TestRuntimeRecoveryReport:
     def test_construction(self):
@@ -156,14 +164,23 @@ class TestRuntimeRecoveryReport:
     def test_to_dict_keys(self):
         r = RuntimeRecoveryReport()
         d = r.to_dict()
-        for key in ("recovery_id", "started_at", "completed_at",
-                    "mesh_sessions_recovered", "mesh_sessions_skipped",
-                    "body_mesh_entries_restored", "webrtc_bindings_cleared",
-                    "hybrid_executions_interrupted",
-                    "inflight_tasks_recovered", "inflight_tasks_resumable",
-                    "inflight_tasks_replay_only", "inflight_tasks_reissuable",
-                    "inflight_tasks_terminal",
-                    "errors", "non_goals"):
+        for key in (
+            "recovery_id",
+            "started_at",
+            "completed_at",
+            "mesh_sessions_recovered",
+            "mesh_sessions_skipped",
+            "body_mesh_entries_restored",
+            "webrtc_bindings_cleared",
+            "hybrid_executions_interrupted",
+            "inflight_tasks_recovered",
+            "inflight_tasks_resumable",
+            "inflight_tasks_replay_only",
+            "inflight_tasks_reissuable",
+            "inflight_tasks_terminal",
+            "errors",
+            "non_goals",
+        ):
             assert key in d, f"Missing key: {key}"
 
     def test_duration_before_completion(self):
@@ -207,6 +224,7 @@ class TestRuntimeRecoveryReport:
 # ---------------------------------------------------------------------------
 # K–Q — RuntimeRestartRecoveryCoordinator basics
 # ---------------------------------------------------------------------------
+
 
 class TestCoordinatorBasics:
     def test_run_recovery_returns_report(self, tmp_path):
@@ -273,6 +291,7 @@ class TestCoordinatorBasics:
         # Must not raise; may fail gracefully with errors logged
         from core.mesh.body_mesh_persistence import reset_body_mesh_persistence_store
         from core.mesh.mesh_session_persistence import reset_persistence_store
+
         reset_body_mesh_persistence_store()
         reset_persistence_store()
         try:
@@ -284,6 +303,7 @@ class TestCoordinatorBasics:
         finally:
             from core.mesh.body_mesh_persistence import reset_body_mesh_persistence_store
             from core.mesh.mesh_session_persistence import reset_persistence_store
+
             reset_body_mesh_persistence_store()
             reset_persistence_store()
 
@@ -291,6 +311,7 @@ class TestCoordinatorBasics:
 # ---------------------------------------------------------------------------
 # R–U — Recovery with data
 # ---------------------------------------------------------------------------
+
 
 class TestRecoveryWithData:
     def test_empty_mesh_session_store_gives_zero_sessions(self, tmp_path):
@@ -348,6 +369,7 @@ class TestRecoveryWithData:
 # V–X — Module-level helpers and singleton
 # ---------------------------------------------------------------------------
 
+
 class TestModuleLevelHelpers:
     def test_run_startup_recovery_returns_report(self, tmp_path):
         ms_store = _make_mesh_session_store(str(tmp_path))
@@ -378,10 +400,13 @@ class TestModuleLevelHelpers:
 # Y — WebRTC ephemeral policy and non-goals
 # ---------------------------------------------------------------------------
 
+
 class TestWebRTCEphemeralPolicy:
     def test_webrtc_bindings_are_ephemeral_policy_explicit(self):
-        assert "not recovered" in WEBRTC_BINDINGS_ARE_EPHEMERAL_POLICY.lower() \
+        assert (
+            "not recovered" in WEBRTC_BINDINGS_ARE_EPHEMERAL_POLICY.lower()
             or "NOT" in WEBRTC_BINDINGS_ARE_EPHEMERAL_POLICY
+        )
 
     def test_non_goals_mention_webrtc(self, tmp_path):
         coord = RuntimeRestartRecoveryCoordinator(
@@ -397,6 +422,7 @@ class TestWebRTCEphemeralPolicy:
 # ---------------------------------------------------------------------------
 # Z — Full round-trip
 # ---------------------------------------------------------------------------
+
 
 class TestFullRoundTrip:
     def test_save_then_recover_body_mesh(self, tmp_path):
@@ -423,6 +449,7 @@ class TestFullRoundTrip:
 # AC — PR-D1: inflight_tasks_* defaults are 0 on fresh report
 # ---------------------------------------------------------------------------
 
+
 class TestInflightTaskDefaults:
     def test_inflight_fields_default_to_zero(self):
         r = RuntimeRecoveryReport()
@@ -434,9 +461,8 @@ class TestInflightTaskDefaults:
 
     def test_run_recovery_inflight_tasks_non_negative(self, tmp_path):
         from core.task_lifecycle_persistence import TaskLifecyclePersistenceStore
-        tl_store = TaskLifecyclePersistenceStore(
-            store_path=os.path.join(str(tmp_path), "tl.json")
-        )
+
+        tl_store = TaskLifecyclePersistenceStore(store_path=os.path.join(str(tmp_path), "tl.json"))
         coord = RuntimeRestartRecoveryCoordinator(
             mesh_session_store=_make_mesh_session_store(str(tmp_path)),
             body_mesh_store=_make_body_mesh_store(str(tmp_path)),

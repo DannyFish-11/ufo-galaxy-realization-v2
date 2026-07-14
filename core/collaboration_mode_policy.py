@@ -34,26 +34,86 @@ VALID_TEAM_MODES = {"parallel", "specialized", "swarm", "critic", "pipeline"}
 # 关键词 → 模式（按优先级顺序判定，命中即返回）
 # 质量敏感 → critic（做/审分离）
 _CRITIC_KW = [
-    "审核", "审查", "review", "检查", "校对", "把关", "质量", "正确性",
-    "找bug", "找 bug", "查错", "挑错", "fact check", "事实核查",
-    "合同", "风险", "安全审计", "code review", "代码审查", "评审", "复核",
+    "审核",
+    "审查",
+    "review",
+    "检查",
+    "校对",
+    "把关",
+    "质量",
+    "正确性",
+    "找bug",
+    "找 bug",
+    "查错",
+    "挑错",
+    "fact check",
+    "事实核查",
+    "合同",
+    "风险",
+    "安全审计",
+    "code review",
+    "代码审查",
+    "评审",
+    "复核",
 ]
 # 多步顺序 → pipeline（流水线）
 _PIPELINE_KW = [
-    "先", "再", "然后", "接着", "之后", "step by step", "逐步", "依次",
-    "流水线", "pipeline", "调研后", "分析再", "先调研", "再写",
-    "第一步", "第二步", "workflow", "工作流", "按顺序",
+    "先",
+    "再",
+    "然后",
+    "接着",
+    "之后",
+    "step by step",
+    "逐步",
+    "依次",
+    "流水线",
+    "pipeline",
+    "调研后",
+    "分析再",
+    "先调研",
+    "再写",
+    "第一步",
+    "第二步",
+    "workflow",
+    "工作流",
+    "按顺序",
 ]
 # 创意择优 → swarm
 _SWARM_KW = [
-    "创意", "命名", "取名", "起名", "起几个", "名字", "标题", "slogan", "口号", "文案",
-    "brainstorm", "头脑风暴", "多个方案", "几个方案", "想几个", "选一个最好",
-    "活动策划", "视觉概念", "naming",
+    "创意",
+    "命名",
+    "取名",
+    "起名",
+    "起几个",
+    "名字",
+    "标题",
+    "slogan",
+    "口号",
+    "文案",
+    "brainstorm",
+    "头脑风暴",
+    "多个方案",
+    "几个方案",
+    "想几个",
+    "选一个最好",
+    "活动策划",
+    "视觉概念",
+    "naming",
 ]
 # 大而可拆 → specialized（分头干）
 _SPLIT_KW = [
-    "分别", "各自", "多个公司", "多家", "拆成", "分头", "并行处理",
-    "batch", "批量", "分模块", "几个部分", "分工",
+    "分别",
+    "各自",
+    "多个公司",
+    "多家",
+    "拆成",
+    "分头",
+    "并行处理",
+    "batch",
+    "批量",
+    "分模块",
+    "几个部分",
+    "分工",
 ]
 
 
@@ -81,9 +141,7 @@ def select_collaboration_mode(
     context = context or {}
 
     # ── 1. 显式覆盖 ──────────────────────────────────────────────────────
-    override = _norm_mode(context.get("collaboration_mode")) or _norm_mode(
-        os.environ.get("GALAXY_FORCE_COLLAB_MODE")
-    )
+    override = _norm_mode(context.get("collaboration_mode")) or _norm_mode(os.environ.get("GALAXY_FORCE_COLLAB_MODE"))
     if override:
         return {"mode": override, "reason": f"显式指定模式={override}", "source": "override"}
 

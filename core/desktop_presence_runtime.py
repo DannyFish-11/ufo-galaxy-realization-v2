@@ -210,7 +210,8 @@ class RuntimeSession:
         _emission_err = None
         for _attempt in range(3):
             try:
-                from core.state_event_bus import emit as _seb_emit, StateEventType
+                from core.state_event_bus import StateEventType
+                from core.state_event_bus import emit as _seb_emit
 
                 _phase_map = {
                     TriState.SILENT: StateEventType.PHASE_SILENT,
@@ -234,7 +235,7 @@ class RuntimeSession:
             except Exception as exc:
                 _emission_err = exc
                 if _attempt < 2:
-                    time.sleep(0.05 * (2 ** _attempt))  # 50ms / 100ms backoff
+                    time.sleep(0.05 * (2**_attempt))  # 50ms / 100ms backoff
         else:
             # all 3 attempts exhausted
             logger.warning("Phase change notification failed after 3 retries: %s", _emission_err)
@@ -271,6 +272,7 @@ class RuntimeSession:
         self._tick_running = True
         try:
             import asyncio
+
             self._tick_task = asyncio.create_task(self._continuum_tick_loop())
         except Exception:
             self._tick_running = False
@@ -292,6 +294,7 @@ class RuntimeSession:
         GalaxyWebSocketBridge → 前端渲染，实现 AI 状态驱动外壳。
         """
         import asyncio
+
         try:
             from core.state_event_bus import emit as _emit
         except Exception:
@@ -307,6 +310,7 @@ class RuntimeSession:
                 if intensity <= 0.0:
                     try:
                         from core.cognitive.continuous_state import get_cognitive_state
+
                         _snap = get_cognitive_state().snapshot()
                         intensity = float(_snap.get("activation", 0.0) or 0.0)
                         cs = {**cs, "intent_strength": _snap.get("intent_strength", 0.0)}
@@ -333,9 +337,7 @@ class RuntimeSession:
                         "intent.update",
                         source="desktop_presence_runtime",
                         payload={
-                            "intent_strength": round(
-                                max(intensity,
-                                    float(cs.get("intent_strength", 0.0) or 0.0)), 4),
+                            "intent_strength": round(max(intensity, float(cs.get("intent_strength", 0.0) or 0.0)), 4),
                         },
                         runtime_session_id=self.runtime_session_id,
                     )
@@ -485,11 +487,15 @@ class DesktopPresenceRuntime:
 
         # Detection logic
         _env_enabled = os.environ.get("GALAXY_CROSS_DEVICE_ENABLED", "").strip().lower() in {
-            "1", "true", "yes", "on",
+            "1",
+            "true",
+            "yes",
+            "on",
         }
         _config_enabled = False
         try:
             import tomllib
+
             _config_path = os.path.join(os.path.dirname(__file__), "..", "config", "settings.toml")
             if os.path.exists(_config_path):
                 with open(_config_path, "rb") as _f:
@@ -512,7 +518,7 @@ class DesktopPresenceRuntime:
         # Register to UDM (Unified Device Manager)
         try:
             from core.unified.device_manager import UnifiedDeviceManager
-            from core.unified.models import UnifiedDevice, UnifiedDeviceType, UnifiedDeviceStatus
+            from core.unified.models import UnifiedDevice, UnifiedDeviceStatus, UnifiedDeviceType
 
             _udm = UnifiedDeviceManager()
             _udm.register_device(
@@ -556,7 +562,7 @@ class DesktopPresenceRuntime:
 
         # Register capabilities to CapabilityRegistry (canonical truth source)
         try:
-            from core.agent.capability_registry import CapabilityRegistry, CapabilityItem
+            from core.agent.capability_registry import CapabilityItem, CapabilityRegistry
 
             _registry = CapabilityRegistry.get_instance()
             _registry.inject_item(
@@ -707,9 +713,7 @@ class DesktopPresenceRuntime:
         )
         conversation_session_id = session_identity.conversation_session_id
         control_session_id = session_identity.control_session_id
-        runtime_attachment_session_id = (
-            session_identity.runtime_attachment_session_id
-        )
+        runtime_attachment_session_id = session_identity.runtime_attachment_session_id
         desktop_native_ingress_backbone: Optional[Dict[str, Any]] = None
         try:
             from core.desktop_native_multimodal_ingress_contract import (
@@ -761,6 +765,7 @@ class DesktopPresenceRuntime:
         _bill_token = None
         try:
             from core.task_cost_ledger import open_task_bill
+
             _bill_token = open_task_bill(rsession.runtime_session_id, source=source)
         except Exception as _tcl_err:  # noqa: BLE001
             logger.debug("task_cost_ledger open failed (non-fatal): %s", _tcl_err)
@@ -772,8 +777,8 @@ class DesktopPresenceRuntime:
         _cog_hint_obj = None
         try:
             from core.cognitive.cognitive_execution_policy import (
-                derive_cognitive_execution_hint,
                 build_cognitive_hint_metadata,
+                derive_cognitive_execution_hint,
             )
 
             _cog_hint_obj = derive_cognitive_execution_hint(
@@ -817,7 +822,7 @@ class DesktopPresenceRuntime:
         # request path.
         _policy_hint: Optional[Dict[str, Any]] = None
         try:
-            from core.execution_policy import resolve_policy, get_policy_hints
+            from core.execution_policy import get_policy_hints, resolve_policy
 
             _policy_hint = get_policy_hints(resolve_policy(phase=rsession.tristate.value))
         except Exception as _ph_err:
@@ -846,10 +851,14 @@ class DesktopPresenceRuntime:
         _manifest_sink = None
         _manifest_orig_on_delta = None
         if os.environ.get("GALAXY_MANIFEST_ON_FIRST_TOKEN", "1").strip().lower() not in (
-            "0", "false", "no", "off",
+            "0",
+            "false",
+            "no",
+            "off",
         ):
             try:
                 from core.llm_stream import current_stream as _current_token_stream
+
                 _manifest_sink = _current_token_stream()
             except Exception:  # noqa: BLE001
                 _manifest_sink = None
@@ -876,9 +885,7 @@ class DesktopPresenceRuntime:
                     _enter_manifest()
                 _dispatch_presence_runtime_hint = self._current_presence_runtime_hint()
                 _presence_mode = _dispatch_presence_runtime_hint["presence_mode"]
-                _stream_runtime_status = (
-                    self.realtime_streaming_backbone_summary().get("runtime_status") or {}
-                )
+                _stream_runtime_status = self.realtime_streaming_backbone_summary().get("runtime_status") or {}
 
                 result = await self._dispatch(
                     rsession=rsession,
@@ -955,8 +962,10 @@ class DesktopPresenceRuntime:
             if _bill_token is not None:
                 try:
                     from core.task_cost_ledger import close_task_bill
+
                     _task_bill = close_task_bill(
-                        _bill_token, success=bool(result.get("success", True)),
+                        _bill_token,
+                        success=bool(result.get("success", True)),
                     )
                     if _task_bill:
                         result["task_cost"] = _task_bill
@@ -997,6 +1006,7 @@ class DesktopPresenceRuntime:
         # 冗余 TTS,违背 DELEGATE"闭嘴干活"的语义。故对 ambient 抑制自动朗读。
         try:
             from core.speech_output import speak_response
+
             if source != "ambient":
                 speak_response(result.get("response", ""), source=source)
         except Exception:  # noqa: BLE001
@@ -1116,10 +1126,10 @@ class DesktopPresenceRuntime:
         try:
             from core.android_nl_semantic_chain_contract import (
                 ANDROID_PARTICIPATION_UNDER_V2_AUTHORITY_BOUNDARY as _android_authority_boundary,
-                CENTER_AUTHORITY_BOUNDARY as _center_authority_boundary,
-                V2_AUTHORITY as _v2_authority,
-                V2_SEMANTIC_AUTHORITY as _v2_semantic_authority,
             )
+            from core.android_nl_semantic_chain_contract import CENTER_AUTHORITY_BOUNDARY as _center_authority_boundary
+            from core.android_nl_semantic_chain_contract import V2_AUTHORITY as _v2_authority
+            from core.android_nl_semantic_chain_contract import V2_SEMANTIC_AUTHORITY as _v2_semantic_authority
         except Exception as exc:
             logger.warning("Authority boundary import failed (%s), using defaults", exc)
             _v2_semantic_authority = "v2_openclawd"
@@ -1127,9 +1137,9 @@ class DesktopPresenceRuntime:
             _android_authority_boundary = "android_participation_under_v2_authority"
             _center_authority_boundary = "center_authority"
         _nl_path_type = (
-            "android_cross_device_nl" if source == "android_goal_execution"
-            else "android_vision_nl" if source == "android_vision"
-            else "desktop_direct_nl"
+            "android_cross_device_nl"
+            if source == "android_goal_execution"
+            else "android_vision_nl" if source == "android_vision" else "desktop_direct_nl"
         )
         _ingress_carrier_context: Dict[str, Any] = {
             "carrier": source,
@@ -1140,9 +1150,9 @@ class DesktopPresenceRuntime:
             "control_session_id": control_session_id,
             "origin": "android" if source in _android_carriers else "center",
             "authority": _v2_authority,
-            "authority_boundary": _android_authority_boundary
-            if source in _android_carriers
-            else _center_authority_boundary,
+            "authority_boundary": (
+                _android_authority_boundary if source in _android_carriers else _center_authority_boundary
+            ),
             # semantic_authority is always V2 — the LLM semantic reasoning chain
             # (OpenClawd + AgentKernel + MultiLLMRouter) lives here regardless of
             # which device or adapter surface originated the NL request.
@@ -1222,12 +1232,13 @@ class DesktopPresenceRuntime:
                 _raw_blocker = _exec_result.get("blocker") or _exec_result.get("blocked_reason")
                 if _raw_blocker:
                     _blocker = {"reason": str(_raw_blocker)} if not isinstance(_raw_blocker, dict) else _raw_blocker
-                    _blocker_reason = str(_raw_blocker) if not isinstance(_raw_blocker, dict) else _raw_blocker.get("reason", "")
+                    _blocker_reason = (
+                        str(_raw_blocker) if not isinstance(_raw_blocker, dict) else _raw_blocker.get("reason", "")
+                    )
                     _blocker_kind = "execution_blocker"
                     _action_phase = "blocked"
                 _confirmation_needed = bool(
-                    _exec_result.get("confirmation_needed")
-                    or _exec_result.get("requires_confirmation")
+                    _exec_result.get("confirmation_needed") or _exec_result.get("requires_confirmation")
                 )
                 if _confirmation_needed:
                     _action_phase = "confirmation_needed"
@@ -1287,24 +1298,19 @@ class DesktopPresenceRuntime:
             from core.android_v2_canonical_default_runtime_path import (
                 build_android_presence_runtime_field as _build_apr_field,
             )
+
             _android_presence_rt = _build_apr_field()
             result["android_presence_runtime"] = _android_presence_rt.to_dict()
-            metadata["android_presence_runtime_path_kind"] = (
-                _android_presence_rt.path_kind.value
-            )
+            metadata["android_presence_runtime_path_kind"] = _android_presence_rt.path_kind.value
         except Exception as _apr_err:
-            logger.debug(
-                "android_presence_runtime build failed (non-fatal): %s", _apr_err
-            )
+            logger.debug("android_presence_runtime build failed (non-fatal): %s", _apr_err)
 
         # Build subject-facing foreground on the runtime default path (not only chat).
         # This keeps runtime-visible outputs aligned with the subject_foreground
         # object family consumed by the chat adapter.
         try:
-            from core.subject_facing_foreground import (
-                build_subject_facing_foreground as _build_subject_fg,
-                build_subject_unified_lineage as _build_subject_lineage,
-            )
+            from core.subject_facing_foreground import build_subject_facing_foreground as _build_subject_fg
+            from core.subject_facing_foreground import build_subject_unified_lineage as _build_subject_lineage
 
             _lifecycle_surface = (
                 result.get("action_lifecycle_surface")
@@ -1314,21 +1320,15 @@ class DesktopPresenceRuntime:
             _runtime_visible_surface = {
                 "current_presence_mode": str(metadata.get("presence_mode") or "unknown"),
                 "current_action_state": str(
-                    (result.get("visible_action") or {}).get("state")
-                    or _lifecycle_surface.get("phase")
-                    or "unknown"
+                    (result.get("visible_action") or {}).get("state") or _lifecycle_surface.get("phase") or "unknown"
                 ),
                 "lifecycle_phase": str(_lifecycle_surface.get("phase") or "unknown"),
                 "lifecycle_origin": str(_lifecycle_surface.get("origin") or ""),
                 "lifecycle_status_feedback": str(result.get("status_feedback") or ""),
                 "action_trace_summary": "",
                 "result_artifacts_summary": "",
-                "blocker_summary": str(
-                    _lifecycle_surface.get("blocker_reason") or ""
-                ),
-                "confirmation_needed": bool(
-                    _lifecycle_surface.get("confirmation_needed")
-                ),
+                "blocker_summary": str(_lifecycle_surface.get("blocker_reason") or ""),
+                "confirmation_needed": bool(_lifecycle_surface.get("confirmation_needed")),
                 "lightweight_status_feedback": str(result.get("status_feedback") or ""),
             }
             _subject_fg_runtime = _build_subject_fg(
@@ -1358,9 +1358,7 @@ class DesktopPresenceRuntime:
                     str(metadata.get("presence_mode") or rsession.tristate.value): 1,
                 },
                 active_session_count=1,
-                stream_runtime_status=(
-                    self.realtime_streaming_backbone_summary().get("runtime_status") or {}
-                ),
+                stream_runtime_status=(self.realtime_streaming_backbone_summary().get("runtime_status") or {}),
                 android_presence_participation=_android_presence_rt,
                 subject_foreground=_subject_fg_runtime_dict,
                 subject_unified_lineage=_subject_lineage,
@@ -1370,9 +1368,7 @@ class DesktopPresenceRuntime:
             self._latest_subject_projection = {
                 "subject_foreground": dict(_subject_fg_runtime_dict),
                 "subject_unified_lineage": dict(_subject_lineage),
-                "canonical_continuous_ingress": dict(
-                    result.get("canonical_continuous_ingress") or {}
-                ),
+                "canonical_continuous_ingress": dict(result.get("canonical_continuous_ingress") or {}),
             }
         except Exception as _sfg_runtime_err:
             logger.debug(
@@ -1423,8 +1419,15 @@ class DesktopPresenceRuntime:
         Unknown sources fall back to OpenClawd with a warning so requests are
         never silently dropped.
         """
-        if source in ("chat", "voice", "openclawd", "android_vision", "vision_sampler", "operator",
-                      "android_goal_execution"):
+        if source in (
+            "chat",
+            "voice",
+            "openclawd",
+            "android_vision",
+            "vision_sampler",
+            "operator",
+            "android_goal_execution",
+        ):
             return await self._handle_via_openclawd(
                 rsession=rsession,
                 message=message,
@@ -1517,6 +1520,7 @@ class DesktopPresenceRuntime:
         try:
             # Prospective reflection — predict risks before execution
             from core.cognitive.reflection_engine import get_reflection_engine
+
             reflection_engine = get_reflection_engine()
             _prospective_reflection = reflection_engine.reflect_prospective(
                 task=message,
@@ -1526,6 +1530,7 @@ class DesktopPresenceRuntime:
 
             # Adaptive prediction — get strategy recommendation
             from core.cognitive.adaptive_predictor import get_adaptive_predictor
+
             predictor = get_adaptive_predictor()
             _adaptive_rec = predictor.recommend(
                 task=message,
@@ -1556,10 +1561,7 @@ class DesktopPresenceRuntime:
                 )
 
             # Include prospective reflection caution in hint
-            if (
-                _prospective_reflection
-                and "CAUTION" in _prospective_reflection.reflection_text
-            ):
+            if _prospective_reflection and "CAUTION" in _prospective_reflection.reflection_text:
                 if cognitive_execution_hint is None:
                     cognitive_execution_hint = {}
                 cognitive_execution_hint.setdefault("cautions", []).append(
@@ -1602,6 +1604,7 @@ class DesktopPresenceRuntime:
 
             # Retrospective reflection
             from core.cognitive.reflection_engine import get_reflection_engine
+
             reflection_engine = get_reflection_engine()
             reflection_engine.reflect_retrospective(
                 task=message,
@@ -1615,6 +1618,7 @@ class DesktopPresenceRuntime:
             # Record prediction accuracy for calibration
             if _adaptive_rec is not None:
                 from core.cognitive.adaptive_predictor import get_adaptive_predictor
+
                 predictor = get_adaptive_predictor()
                 predictor.record_outcome(
                     recommendation=_adaptive_rec,
@@ -1735,6 +1739,7 @@ class DesktopPresenceRuntime:
         （避免未经预期的自动操作）。无运行事件循环时安全丢弃。
         """
         import os
+
         if os.getenv("GALAXY_ACTIVE_PERCEPTION", "").strip().lower() not in ("1", "true", "yes", "on"):
             logger.info(
                 "主动感知目标（已就绪，未自动执行；设 GALAXY_ACTIVE_PERCEPTION=1 开启自主行动）：%s",
@@ -1743,6 +1748,7 @@ class DesktopPresenceRuntime:
             return
         try:
             import asyncio as _a
+
             loop = _a.get_running_loop()
         except RuntimeError:
             logger.debug("主动感知目标丢弃（无事件循环）：%s", goal)
@@ -1779,9 +1785,7 @@ class DesktopPresenceRuntime:
                 WebRTCSessionManager,
             )
 
-            self._webrtc_session_manager = WebRTCSessionManager(
-                WebRTCManagerConfig(runtime_session_id="runtime_shell")
-            )
+            self._webrtc_session_manager = WebRTCSessionManager(WebRTCManagerConfig(runtime_session_id="runtime_shell"))
             logger.info("DesktopPresenceRuntime: WebRTC session manager initialized")
         except Exception as _err:
             logger.debug(
@@ -1997,10 +2001,10 @@ class DesktopPresenceRuntime:
         """
         try:
             from core.multimodal.permission_safety_state import (  # noqa: PLC0415
+                PermissionSafetySnapshot,
                 build_operator_safety_summary,
                 build_permission_safety_snapshot,
                 get_permission_safety_state,
-                PermissionSafetySnapshot,
             )
 
             # Prefer snapshot embedded in the OpenClawd response
@@ -2063,8 +2067,8 @@ class DesktopPresenceRuntime:
         """
         try:
             from core.operator_override import (  # noqa: PLC0415
-                get_operator_override_state,
                 build_override_summary,
+                get_operator_override_state,
             )
 
             state = get_operator_override_state()
@@ -2152,9 +2156,9 @@ class DesktopPresenceRuntime:
         """
         try:
             from core.operator_override import (  # noqa: PLC0415
-                get_operator_override_state,
-                build_override_summary,
                 OperatorOverrideSnapshot,
+                build_override_summary,
+                get_operator_override_state,
             )
 
             snap_dict: Optional[Dict[str, Any]] = None
@@ -2330,9 +2334,7 @@ class DesktopPresenceRuntime:
             Serialisable desktop status projection dict, or ``None`` on failure.
         """
         try:
-            from contracts.desktop_status_projection import (
-                build_desktop_status_projection as _build_dsp,
-            )
+            from contracts.desktop_status_projection import build_desktop_status_projection as _build_dsp
 
             # Extract unified control plan from result metadata.
             unified_control_plan: Optional[Dict[str, Any]] = None
@@ -2400,8 +2402,7 @@ class DesktopPresenceRuntime:
         _success = _status_lower in ("completed", "success", "done", "true")
 
         logger.info(
-            "GoalExecutionResult received | task_id=%s device_id=%s status=%s "
-            "result=%r trace_id=%s group_id=%s",
+            "GoalExecutionResult received | task_id=%s device_id=%s status=%s " "result=%r trace_id=%s group_id=%s",
             task_id,
             device_id,
             status,
@@ -2413,21 +2414,18 @@ class DesktopPresenceRuntime:
         # ── 1. Write to CanonicalTaskRuntime ─────────────────────────────
         try:
             from core.canonical_task import (
-                get_canonical_task_runtime,
                 TaskLifecycle,
-                build_canonical_task,
                 TaskOrigin,
+                build_canonical_task,
+                get_canonical_task_runtime,
             )
+
             ctr = get_canonical_task_runtime()
             canonical_task = ctr.get_by_task_id(task_id)
             if canonical_task is not None:
-                new_lifecycle = (
-                    TaskLifecycle.COMPLETED if _success else TaskLifecycle.FAILED
-                )
+                new_lifecycle = TaskLifecycle.COMPLETED if _success else TaskLifecycle.FAILED
                 canonical_task.result.success = _success
-                canonical_task.result.result_summary = (
-                    str(result)[:400] if result else f"status={status}"
-                )
+                canonical_task.result.result_summary = str(result)[:400] if result else f"status={status}"
                 ctr.update_lifecycle(task_id, new_lifecycle)
                 logger.debug(
                     "GoalExecutionResult: CanonicalTask updated | task_id=%s lifecycle=%s",
@@ -2446,19 +2444,14 @@ class DesktopPresenceRuntime:
                         selected_targets=[device_id],
                     )
                     new_task.result.success = _success
-                    new_task.result.result_summary = (
-                        str(result)[:400] if result else f"status={status}"
-                    )
-                    new_lifecycle = (
-                        TaskLifecycle.COMPLETED if _success else TaskLifecycle.FAILED
-                    )
+                    new_task.result.result_summary = str(result)[:400] if result else f"status={status}"
+                    new_lifecycle = TaskLifecycle.COMPLETED if _success else TaskLifecycle.FAILED
                     new_task.advance_lifecycle(TaskLifecycle.ADMITTED)
                     new_task.advance_lifecycle(TaskLifecycle.RUNNING)
                     new_task.advance_lifecycle(new_lifecycle)
                     ctr.register(new_task)
                     logger.debug(
-                        "GoalExecutionResult: new CanonicalTask registered (result-first) | "
-                        "task_id=%s lifecycle=%s",
+                        "GoalExecutionResult: new CanonicalTask registered (result-first) | " "task_id=%s lifecycle=%s",
                         task_id,
                         new_lifecycle.value,
                     )
@@ -2505,6 +2498,7 @@ class DesktopPresenceRuntime:
         # ── 3. Canonical TaskMemory backflow ─────────────────────────────
         try:
             from core.openclawd_memory_backflow import store_task_result as _store_task_result_fn
+
             await _store_task_result_fn(
                 task_id=task_id,
                 device_id=device_id,
@@ -2605,10 +2599,7 @@ class DesktopPresenceRuntime:
                 mode_value = "static"
         self._latest_presence_runtime_hint = {
             "presence_mode": mode_value,
-            "previous_presence_mode": (
-                (transition or {}).get("from_mode")
-                or mode_value
-            ),
+            "previous_presence_mode": ((transition or {}).get("from_mode") or mode_value),
             "presence_mode_changed": bool(transition),
             "presence_transition_reason": self._derive_presence_transition_reason(transition),
             "presence_transition": dict(transition) if isinstance(transition, dict) else None,
@@ -2704,11 +2695,11 @@ class DesktopPresenceRuntime:
                 from core.android_v2_canonical_default_runtime_path import (
                     build_android_presence_participation_for_default_path as _build_app,
                 )
+
                 _android_presence_summary = _build_app()
             except Exception as _app_err:
                 logger.debug(
-                    "presence_summary: android presence participation build failed "
-                    "(non-fatal): %s",
+                    "presence_summary: android presence participation build failed " "(non-fatal): %s",
                     _app_err,
                 )
             _latest_subject_projection = dict(self._latest_subject_projection or {})
@@ -2720,12 +2711,8 @@ class DesktopPresenceRuntime:
                 stream_runtime_status=stream_backbone.get("runtime_status"),
                 android_presence_participation=_android_presence_summary,
                 subject_foreground=_latest_subject_projection.get("subject_foreground"),
-                subject_unified_lineage=_latest_subject_projection.get(
-                    "subject_unified_lineage"
-                ),
-                canonical_continuous_ingress=_latest_subject_projection.get(
-                    "canonical_continuous_ingress"
-                ),
+                subject_unified_lineage=_latest_subject_projection.get("subject_unified_lineage"),
+                canonical_continuous_ingress=_latest_subject_projection.get("canonical_continuous_ingress"),
             )
 
             return {
@@ -2736,9 +2723,7 @@ class DesktopPresenceRuntime:
                 "realtime_streaming_backbone": stream_backbone,
             }
         except Exception as _err:
-            logger.debug(
-                "DesktopPresenceRuntime.presence_summary failed (non-fatal): %s", _err
-            )
+            logger.debug("DesktopPresenceRuntime.presence_summary failed (non-fatal): %s", _err)
             return {
                 "active_session_count": 0,
                 "tristate_distribution": {},

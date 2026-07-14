@@ -76,9 +76,7 @@ class NodeFactoryEngine:
         self.generation_history: List[GenerationResult] = []
         logger.info("节点工厂引擎已初始化")
 
-    def generate_node(
-        self, node_spec: NodeSpecification, auto_deploy: bool = False
-    ) -> GenerationResult:
+    def generate_node(self, node_spec: NodeSpecification, auto_deploy: bool = False) -> GenerationResult:
         result = GenerationResult(
             generation_id=f"gen_{uuid.uuid4().hex[:12]}",
             spec=node_spec.to_dict(),
@@ -112,6 +110,4 @@ class NodeFactoryEngine:
         return self.generate_node(spec, auto_deploy=auto_deploy)
 
     def get_generation_history(self, limit: int = 20) -> List[GenerationResult]:
-        return sorted(
-            self.generation_history, key=lambda g: g.timestamp, reverse=True
-        )[:limit]
+        return sorted(self.generation_history, key=lambda g: g.timestamp, reverse=True)[:limit]

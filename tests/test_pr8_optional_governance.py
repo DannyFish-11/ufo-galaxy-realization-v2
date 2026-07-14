@@ -70,12 +70,12 @@ import pytest
 # ── Constants ─────────────────────────────────────────────────────────────────
 
 PROJECT_ROOT = Path(__file__).parent.parent
-NDJ_PATH     = PROJECT_ROOT / "node_dependencies.json"
-AUDIT_PATH   = PROJECT_ROOT / "docs" / "node_audit_report.json"
+NDJ_PATH = PROJECT_ROOT / "node_dependencies.json"
+AUDIT_PATH = PROJECT_ROOT / "docs" / "node_audit_report.json"
 MANIFEST_PATH = PROJECT_ROOT / "docs" / "NODE_ACTIVE_MANIFEST.md"
-RUNBOOK_PATH  = PROJECT_ROOT / "docs" / "MAINTAINER_RUNBOOK.md"
-NODES_DIR     = PROJECT_ROOT / "nodes"
-AUDIT_SCRIPT  = PROJECT_ROOT / "scripts" / "node_audit.py"
+RUNBOOK_PATH = PROJECT_ROOT / "docs" / "MAINTAINER_RUNBOOK.md"
+NODES_DIR = PROJECT_ROOT / "nodes"
+AUDIT_SCRIPT = PROJECT_ROOT / "scripts" / "node_audit.py"
 
 # The 29 optional nodes expected after PR-7 + PR-8
 OPTIONAL_NODES: List[str] = [
@@ -122,6 +122,7 @@ PR8_README_NODES: List[str] = [
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
+
 @pytest.fixture(scope="module")
 def ndj() -> Dict[str, Any]:
     with open(NDJ_PATH, encoding="utf-8") as fh:
@@ -158,6 +159,7 @@ def runbook_text() -> str:
 def node_audit_module():
     """Import scripts/node_audit.py as a module."""
     import importlib.util
+
     spec = importlib.util.spec_from_file_location("node_audit", AUDIT_SCRIPT)
     mod = importlib.util.module_from_spec(spec)
     # Add to sys.modules before exec so relative imports / __spec__ work correctly
@@ -167,6 +169,7 @@ def node_audit_module():
 
 
 # ── Registry tests ────────────────────────────────────────────────────────────
+
 
 @pytest.mark.parametrize("name", OPTIONAL_NODES)
 def test_optional_node_in_registry(ndj_nodes, name):
@@ -183,6 +186,7 @@ def test_optional_node_policy_is_optional(ndj_nodes, name):
 
 # ── Filesystem baseline tests ─────────────────────────────────────────────────
 
+
 @pytest.mark.parametrize("name", OPTIONAL_NODES)
 def test_optional_node_has_main_py(name):
     """Test 2: Every optional node has main.py."""
@@ -192,29 +196,25 @@ def test_optional_node_has_main_py(name):
 @pytest.mark.parametrize("name", OPTIONAL_NODES)
 def test_optional_node_has_fusion_entry(name):
     """Test 3: Every optional node has fusion_entry.py."""
-    assert (NODES_DIR / name / "fusion_entry.py").exists(), \
-        f"{name} missing fusion_entry.py"
+    assert (NODES_DIR / name / "fusion_entry.py").exists(), f"{name} missing fusion_entry.py"
 
 
 @pytest.mark.parametrize("name", OPTIONAL_NODES)
 def test_optional_node_has_readme(name):
     """Test 4: Every optional node has README.md (optional-baseline describability)."""
-    assert (NODES_DIR / name / "README.md").exists(), \
-        f"{name} missing README.md"
+    assert (NODES_DIR / name / "README.md").exists(), f"{name} missing README.md"
 
 
 @pytest.mark.parametrize("name", OPTIONAL_NODES)
 def test_optional_node_has_dockerfile(name):
     """Test 5: Every optional node has Dockerfile."""
-    assert (NODES_DIR / name / "Dockerfile").exists(), \
-        f"{name} missing Dockerfile"
+    assert (NODES_DIR / name / "Dockerfile").exists(), f"{name} missing Dockerfile"
 
 
 @pytest.mark.parametrize("name", OPTIONAL_NODES)
 def test_optional_node_has_requirements(name):
     """Test 6: Every optional node has requirements.txt."""
-    assert (NODES_DIR / name / "requirements.txt").exists(), \
-        f"{name} missing requirements.txt"
+    assert (NODES_DIR / name / "requirements.txt").exists(), f"{name} missing requirements.txt"
 
 
 @pytest.mark.parametrize("name", OPTIONAL_NODES)
@@ -253,12 +253,12 @@ def test_optional_node_no_hygiene_violations(name):
     try:
         tracked = subprocess.run(
             ["git", "ls-files", "--", str(node_dir)],
-            capture_output=True, text=True, timeout=30, cwd=str(PROJECT_ROOT),
+            capture_output=True,
+            text=True,
+            timeout=30,
+            cwd=str(PROJECT_ROOT),
         )
-        candidates = (
-            [Path(line) for line in tracked.stdout.splitlines()]
-            if tracked.returncode == 0 else None
-        )
+        candidates = [Path(line) for line in tracked.stdout.splitlines()] if tracked.returncode == 0 else None
     except (OSError, subprocess.SubprocessError):
         candidates = None
     if candidates is None:  # git 不可用(如源码包解开)→ 退回磁盘检查
@@ -273,10 +273,10 @@ def test_optional_node_no_hygiene_violations(name):
 
 # ── Audit report tests ────────────────────────────────────────────────────────
 
+
 def test_audit_optional_count(audit_report):
     """Test 9: audit report optional_count equals 29."""
-    assert audit_report.get("optional_count") == 29, \
-        f"optional_count={audit_report.get('optional_count')}, expected 29"
+    assert audit_report.get("optional_count") == 29, f"optional_count={audit_report.get('optional_count')}, expected 29"
 
 
 def test_audit_optional_baseline_pass_complete(audit_report):
@@ -325,6 +325,7 @@ def test_audit_node_has_promotion_gap_checks(audit_nodes, name):
 
 # ── Documentation tests ────────────────────────────────────────────────────────
 
+
 def test_manifest_has_optional_governance_section(manifest_text):
     """Test 16: NODE_ACTIVE_MANIFEST.md contains optional governance section."""
     assert "Optional-Node Governance" in manifest_text
@@ -342,17 +343,16 @@ def test_manifest_has_optional_baseline_table(manifest_text):
 
 def test_runbook_has_optional_governance(runbook_text):
     """Test 19: MAINTAINER_RUNBOOK.md contains optional-node governance section."""
-    assert "Optional-node governance" in runbook_text or \
-           "optional-node governance" in runbook_text.lower()
+    assert "Optional-node governance" in runbook_text or "optional-node governance" in runbook_text.lower()
 
 
 def test_runbook_has_promotion_gap_checks(runbook_text):
     """Test 20: MAINTAINER_RUNBOOK.md contains promotion-gap checks table."""
-    assert "Promotion-gap checks" in runbook_text or \
-           "promotion-gap checks" in runbook_text.lower()
+    assert "Promotion-gap checks" in runbook_text or "promotion-gap checks" in runbook_text.lower()
 
 
 # ── Audit module constant tests ────────────────────────────────────────────────
+
 
 def test_node_audit_defines_opt_baseline_pass(node_audit_module):
     """Test 21: node_audit.py defines OPT_BASELINE_PASS constant."""
@@ -373,6 +373,7 @@ def test_node_audit_exposes_build_optional_governance(node_audit_module):
 
 
 # ── _build_optional_governance unit tests ────────────────────────────────────
+
 
 def _make_entry(mod, **kwargs) -> Any:
     """Create a minimal NodeAuditEntry with optional kwargs overrides."""
@@ -408,8 +409,7 @@ def test_build_optional_governance_skips_active(node_audit_module):
     """Test 25: _build_optional_governance leaves checks empty for active nodes."""
     entry = _make_entry(node_audit_module, config_startup_policy="active")
     node_audit_module._build_optional_governance(entry)
-    assert not entry.optional_baseline_checks, \
-        "optional_baseline_checks should be empty for active nodes"
+    assert not entry.optional_baseline_checks, "optional_baseline_checks should be empty for active nodes"
 
 
 def test_build_optional_governance_pass_when_all_green(node_audit_module):
@@ -449,6 +449,7 @@ def test_build_optional_governance_not_ready_with_two_gaps(node_audit_module):
 
 # ── README content tests ───────────────────────────────────────────────────────
 
+
 @pytest.mark.parametrize("name", OPTIONAL_NODES)
 def test_optional_node_readme_has_port(name):
     """Test 31: Each optional node README.md contains port information."""
@@ -457,12 +458,8 @@ def test_optional_node_readme_has_port(name):
     text = readme.read_text(encoding="utf-8")
     # Accept English "Port", Chinese "端口", or an 8xxx port number
     import re
-    has_port = (
-        "Port" in text
-        or "port" in text.lower()
-        or "端口" in text
-        or bool(re.search(r"8\d{3}", text))
-    )
+
+    has_port = "Port" in text or "port" in text.lower() or "端口" in text or bool(re.search(r"8\d{3}", text))
     assert has_port, f"{name}/README.md missing port information"
 
 
@@ -472,6 +469,7 @@ def test_optional_node_readme_has_endpoint(name):
     readme = NODES_DIR / name / "README.md"
     text = readme.read_text(encoding="utf-8")
     import re
+
     # Check for any endpoint path (starting with /)
     has_endpoint = bool(re.search(r"[`\s]/[a-zA-Z_]", text))
     assert has_endpoint, f"{name}/README.md missing endpoint paths"
@@ -488,11 +486,11 @@ def test_optional_node_readme_non_trivial(name):
 @pytest.mark.parametrize("name", PR8_README_NODES)
 def test_pr8_readme_nodes_now_have_readme(name):
     """Test 34: Nodes missing README before PR-8 now have it."""
-    assert (NODES_DIR / name / "README.md").exists(), \
-        f"{name} still missing README.md (PR-8 should have added it)"
+    assert (NODES_DIR / name / "README.md").exists(), f"{name} still missing README.md (PR-8 should have added it)"
 
 
 # ── Aggregate structure tests ─────────────────────────────────────────────────
+
 
 def test_audit_report_has_optional_aggregate_fields(audit_report):
     """Test 35: audit report has PR-8 optional-governance aggregate fields."""
@@ -520,16 +518,14 @@ def test_optional_baseline_pass_only_optional_nodes(audit_report, ndj_nodes):
     """Test 37: optional_baseline_pass contains only optional-policy node names."""
     for name in audit_report.get("optional_baseline_pass", []):
         policy = ndj_nodes.get(name, {}).get("startup_policy")
-        assert policy == "optional", \
-            f"{name} in optional_baseline_pass but has policy={policy!r}"
+        assert policy == "optional", f"{name} in optional_baseline_pass but has policy={policy!r}"
 
 
 def test_optional_promotion_ready_only_optional_nodes(audit_report, ndj_nodes):
     """Test 38: optional_promotion_ready contains only optional-policy node names."""
     for name in audit_report.get("optional_promotion_ready", []):
         policy = ndj_nodes.get(name, {}).get("startup_policy")
-        assert policy == "optional", \
-            f"{name} in optional_promotion_ready but has policy={policy!r}"
+        assert policy == "optional", f"{name} in optional_promotion_ready but has policy={policy!r}"
 
 
 def test_no_active_node_in_optional_baseline_pass(audit_report, ndj_nodes):
@@ -547,6 +543,7 @@ def test_no_active_node_in_optional_promotion_ready(audit_report, ndj_nodes):
 
 
 # ── Documentation content tests ───────────────────────────────────────────────
+
 
 def test_runbook_promote_references_validate_runtime(runbook_text):
     """Test 41: MAINTAINER_RUNBOOK.md promote-to-active steps reference validate_runtime."""
@@ -568,8 +565,7 @@ def test_pr8_readme_has_governance_section(name):
     """Test 44: New README files added by PR-8 contain 'Governance' section."""
     readme = NODES_DIR / name / "README.md"
     content = readme.read_text(encoding="utf-8")
-    assert "Governance" in content, \
-        f"{name}/README.md missing 'Governance' section"
+    assert "Governance" in content, f"{name}/README.md missing 'Governance' section"
 
 
 def test_manifest_references_node_audit_script(manifest_text):

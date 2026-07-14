@@ -91,6 +91,7 @@ def test_01_topology_delivery_authority_importable_from_contracts():
 
 def test_02_topology_delivery_authority_is_non_empty_string():
     from contracts.desktop_status_projection import TOPOLOGY_PROJECTION_DELIVERY_AUTHORITY
+
     assert isinstance(TOPOLOGY_PROJECTION_DELIVERY_AUTHORITY, str)
     assert len(TOPOLOGY_PROJECTION_DELIVERY_AUTHORITY) > 0
 
@@ -100,12 +101,9 @@ def test_03_topology_delivery_authority_importable_from_compiler():
 
 
 def test_04_topology_delivery_authority_consistent_across_modules():
-    from contracts.desktop_status_projection import (
-        TOPOLOGY_PROJECTION_DELIVERY_AUTHORITY as contracts_auth,
-    )
-    from core.projection.projection_compiler import (
-        TOPOLOGY_PROJECTION_DELIVERY_AUTHORITY as compiler_auth,
-    )
+    from contracts.desktop_status_projection import TOPOLOGY_PROJECTION_DELIVERY_AUTHORITY as contracts_auth
+    from core.projection.projection_compiler import TOPOLOGY_PROJECTION_DELIVERY_AUTHORITY as compiler_auth
+
     assert contracts_auth == compiler_auth
 
 
@@ -120,77 +118,92 @@ def test_05_desktop_topology_projection_importable():
 
 def test_06_has_primary_model_id():
     from contracts.desktop_status_projection import DesktopTopologyProjection
+
     assert hasattr(DesktopTopologyProjection, "model_fields")
     assert "primary_model_id" in DesktopTopologyProjection.model_fields
 
 
 def test_07_has_primary_provider_id():
     from contracts.desktop_status_projection import DesktopTopologyProjection
+
     assert "primary_provider_id" in DesktopTopologyProjection.model_fields
 
 
 def test_08_has_primary_vendor_source():
     from contracts.desktop_status_projection import DesktopTopologyProjection
+
     assert "primary_vendor_source" in DesktopTopologyProjection.model_fields
 
 
 def test_09_has_primary_is_native_multimodal():
     from contracts.desktop_status_projection import DesktopTopologyProjection
+
     assert "primary_is_native_multimodal" in DesktopTopologyProjection.model_fields
 
 
 def test_10_has_support_model_ids():
     from contracts.desktop_status_projection import DesktopTopologyProjection
+
     assert "support_model_ids" in DesktopTopologyProjection.model_fields
 
 
 def test_11_has_route_reason():
     from contracts.desktop_status_projection import DesktopTopologyProjection
+
     assert "route_reason" in DesktopTopologyProjection.model_fields
 
 
 def test_12_has_route_phase():
     from contracts.desktop_status_projection import DesktopTopologyProjection
+
     assert "route_phase" in DesktopTopologyProjection.model_fields
 
 
 def test_13_has_route_domain():
     from contracts.desktop_status_projection import DesktopTopologyProjection
+
     assert "route_domain" in DesktopTopologyProjection.model_fields
 
 
 def test_14_has_primary_provider_available():
     from contracts.desktop_status_projection import DesktopTopologyProjection
+
     assert "primary_provider_available" in DesktopTopologyProjection.model_fields
 
 
 def test_15_has_routing_authority_source():
     from contracts.desktop_status_projection import DesktopTopologyProjection
+
     assert "routing_authority_source" in DesktopTopologyProjection.model_fields
 
 
 def test_16_has_canonical_source_present():
     from contracts.desktop_status_projection import DesktopTopologyProjection
+
     assert "canonical_source_present" in DesktopTopologyProjection.model_fields
 
 
 def test_17_has_legacy_fallback_active():
     from contracts.desktop_status_projection import DesktopTopologyProjection
+
     assert "legacy_fallback_active" in DesktopTopologyProjection.model_fields
 
 
 def test_18_has_oneapi_integration():
     from contracts.desktop_status_projection import DesktopTopologyProjection
+
     assert "oneapi_integration" in DesktopTopologyProjection.model_fields
 
 
 def test_19_has_health_severity():
     from contracts.desktop_status_projection import DesktopTopologyProjection
+
     assert "health_severity" in DesktopTopologyProjection.model_fields
 
 
 def test_20_has_contract_authority():
     from contracts.desktop_status_projection import DesktopTopologyProjection
+
     assert "contract_authority" in DesktopTopologyProjection.model_fields
 
 
@@ -201,11 +214,13 @@ def test_20_has_contract_authority():
 
 def test_21_desktop_status_projection_has_topology_ready():
     from contracts.desktop_status_projection import DesktopStatusProjection
+
     assert "topology_ready" in DesktopStatusProjection.model_fields
 
 
 def test_22_topology_ready_defaults_to_none():
     from contracts.desktop_status_projection import DesktopStatusProjection
+
     proj = DesktopStatusProjection()
     assert proj.topology_ready is None
 
@@ -235,66 +250,77 @@ _CANONICAL_UCP = {
 
 def test_23_build_with_topology_route_plan_populates_topology_ready():
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     proj = build_desktop_status_projection(unified_control_plan=_CANONICAL_UCP)
     assert proj.topology_ready is not None
 
 
 def test_24_primary_model_id_from_canonical():
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     proj = build_desktop_status_projection(unified_control_plan=_CANONICAL_UCP)
     assert proj.topology_ready.primary_model_id == "gpt-4o"
 
 
 def test_25_primary_provider_id_from_canonical():
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     proj = build_desktop_status_projection(unified_control_plan=_CANONICAL_UCP)
     assert proj.topology_ready.primary_provider_id == "openai"
 
 
 def test_26_primary_vendor_source_from_canonical():
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     proj = build_desktop_status_projection(unified_control_plan=_CANONICAL_UCP)
     assert proj.topology_ready.primary_vendor_source == "direct"
 
 
 def test_27_route_phase_from_canonical():
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     proj = build_desktop_status_projection(unified_control_plan=_CANONICAL_UCP)
     assert proj.topology_ready.route_phase == "manifest"
 
 
 def test_28_route_domain_from_canonical():
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     proj = build_desktop_status_projection(unified_control_plan=_CANONICAL_UCP)
     assert proj.topology_ready.route_domain == "local"
 
 
 def test_29_route_reason_from_canonical():
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     proj = build_desktop_status_projection(unified_control_plan=_CANONICAL_UCP)
     assert proj.topology_ready.route_reason == "canonical routing test"
 
 
 def test_30_support_model_ids_from_canonical():
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     proj = build_desktop_status_projection(unified_control_plan=_CANONICAL_UCP)
     assert "claude-3-5-sonnet" in proj.topology_ready.support_model_ids
 
 
 def test_31_canonical_source_present_true_on_canonical_path():
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     proj = build_desktop_status_projection(unified_control_plan=_CANONICAL_UCP)
     assert proj.topology_ready.canonical_source_present is True
 
 
 def test_32_legacy_fallback_active_false_on_canonical_path():
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     proj = build_desktop_status_projection(unified_control_plan=_CANONICAL_UCP)
     assert proj.topology_ready.legacy_fallback_active is False
 
 
 def test_33_routing_authority_source_topology_router_on_canonical_path():
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     proj = build_desktop_status_projection(unified_control_plan=_CANONICAL_UCP)
     assert proj.topology_ready.routing_authority_source == "topology_router"
 
@@ -312,24 +338,28 @@ _LEGACY_UCP = {
 
 def test_34_legacy_ucp_sets_legacy_fallback_active_true():
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     proj = build_desktop_status_projection(unified_control_plan=_LEGACY_UCP)
     assert proj.topology_ready.legacy_fallback_active is True
 
 
 def test_35_legacy_ucp_sets_canonical_source_present_false():
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     proj = build_desktop_status_projection(unified_control_plan=_LEGACY_UCP)
     assert proj.topology_ready.canonical_source_present is False
 
 
 def test_36_legacy_ucp_sets_routing_authority_legacy_ucp_keys():
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     proj = build_desktop_status_projection(unified_control_plan=_LEGACY_UCP)
     assert proj.topology_ready.routing_authority_source == "legacy_ucp_keys"
 
 
 def test_37_empty_ucp_sets_routing_authority_none():
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     proj = build_desktop_status_projection(unified_control_plan={})
     assert proj.topology_ready.routing_authority_source == "none"
 
@@ -341,12 +371,14 @@ def test_37_empty_ucp_sets_routing_authority_none():
 
 def test_38_topology_ready_oneapi_integration_always_present():
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     proj = build_desktop_status_projection(unified_control_plan=_CANONICAL_UCP)
     assert proj.topology_ready.oneapi_integration is not None
 
 
 def test_39_topology_ready_oneapi_system_layer_is_aggregator_integration():
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     proj = build_desktop_status_projection(unified_control_plan=_CANONICAL_UCP)
     oi = proj.topology_ready.oneapi_integration
     assert oi.get("system_layer") == "aggregator_integration"
@@ -354,6 +386,7 @@ def test_39_topology_ready_oneapi_system_layer_is_aggregator_integration():
 
 def test_40_oneapi_integration_separate_from_primary_route_fields():
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     proj = build_desktop_status_projection(unified_control_plan=_CANONICAL_UCP)
     topo = proj.topology_ready
     # OneAPI must not be in primary_model_id or support_model_ids
@@ -369,15 +402,17 @@ def test_40_oneapi_integration_separate_from_primary_route_fields():
 
 def test_41_contract_authority_equals_delivery_sentinel():
     from contracts.desktop_status_projection import (
-        build_desktop_status_projection,
         TOPOLOGY_PROJECTION_DELIVERY_AUTHORITY,
+        build_desktop_status_projection,
     )
+
     proj = build_desktop_status_projection(unified_control_plan=_CANONICAL_UCP)
     assert proj.topology_ready.contract_authority == TOPOLOGY_PROJECTION_DELIVERY_AUTHORITY
 
 
 def test_42_to_dict_includes_primary_model_id():
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     proj = build_desktop_status_projection(unified_control_plan=_CANONICAL_UCP)
     d = proj.topology_ready.to_dict()
     assert "primary_model_id" in d
@@ -385,6 +420,7 @@ def test_42_to_dict_includes_primary_model_id():
 
 def test_43_to_dict_includes_canonical_source_present():
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     proj = build_desktop_status_projection(unified_control_plan=_CANONICAL_UCP)
     d = proj.topology_ready.to_dict()
     assert "canonical_source_present" in d
@@ -392,6 +428,7 @@ def test_43_to_dict_includes_canonical_source_present():
 
 def test_44_to_dict_includes_legacy_fallback_active():
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     proj = build_desktop_status_projection(unified_control_plan=_CANONICAL_UCP)
     d = proj.topology_ready.to_dict()
     assert "legacy_fallback_active" in d
@@ -399,6 +436,7 @@ def test_44_to_dict_includes_legacy_fallback_active():
 
 def test_45_to_dict_includes_oneapi_integration():
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     proj = build_desktop_status_projection(unified_control_plan=_CANONICAL_UCP)
     d = proj.topology_ready.to_dict()
     assert "oneapi_integration" in d
@@ -406,6 +444,7 @@ def test_45_to_dict_includes_oneapi_integration():
 
 def test_46_to_dict_includes_contract_authority():
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     proj = build_desktop_status_projection(unified_control_plan=_CANONICAL_UCP)
     d = proj.topology_ready.to_dict()
     assert "contract_authority" in d
@@ -438,11 +477,12 @@ _UI_HINT_FIELDS = {
 
 def test_47_no_ui_specific_rendering_fields_in_topology_ready():
     from contracts.desktop_status_projection import DesktopTopologyProjection
+
     field_names = set(DesktopTopologyProjection.model_fields.keys())
     ui_fields_found = field_names & _UI_HINT_FIELDS
-    assert ui_fields_found == set(), (
-        f"UI-specific rendering fields found in DesktopTopologyProjection: {ui_fields_found}"
-    )
+    assert (
+        ui_fields_found == set()
+    ), f"UI-specific rendering fields found in DesktopTopologyProjection: {ui_fields_found}"
 
 
 # ===========================================================================
@@ -453,6 +493,7 @@ def test_47_no_ui_specific_rendering_fields_in_topology_ready():
 def test_48_pr5_legacy_routing_fallback_active_intact_in_model_routing():
     """PR-5 guarantee: legacy_routing_fallback_active still present in model_routing."""
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     proj = build_desktop_status_projection(unified_control_plan=_CANONICAL_UCP)
     assert hasattr(proj.model_routing, "legacy_routing_fallback_active")
     assert proj.model_routing.legacy_routing_fallback_active is False
@@ -461,6 +502,7 @@ def test_48_pr5_legacy_routing_fallback_active_intact_in_model_routing():
 def test_49_pr4_oneapi_integration_intact_in_desktop_status_projection():
     """PR-4 guarantee: top-level oneapi_integration still present in DesktopStatusProjection."""
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     proj = build_desktop_status_projection(unified_control_plan=_CANONICAL_UCP)
     assert proj.oneapi_integration is not None
     assert proj.oneapi_integration.get("system_layer") == "aggregator_integration"

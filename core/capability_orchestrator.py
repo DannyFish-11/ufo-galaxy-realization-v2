@@ -61,9 +61,9 @@ governance constraint is present and active.
 import json
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
-from pathlib import Path
 from enum import Enum
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger("Galaxy.Capability")
 
@@ -76,8 +76,7 @@ logger = logging.getLogger("Galaxy.Capability")
 #: or the system execution spine.  The canonical capability authority is
 #: ``core.capability_bus.CapabilityBus``.
 CAPABILITY_ORCHESTRATOR_FACADE_ONLY: str = (
-    "CAPABILITY_ORCHESTRATOR_FACADE_ONLY_V1"
-    " — compatibility facade; no canonical capability authority"
+    "CAPABILITY_ORCHESTRATOR_FACADE_ONLY_V1" " — compatibility facade; no canonical capability authority"
 )
 
 
@@ -85,25 +84,28 @@ CAPABILITY_ORCHESTRATOR_FACADE_ONLY: str = (
 # 数据模型
 # ============================================================================
 
+
 class CapabilityType(str, Enum):
     """能力类型"""
-    MCP_TOOL = "mcp_tool"      # MCP 工具
-    SKILL = "skill"            # 技能
-    NODE = "node"              # 节点
-    BUILTIN = "builtin"        # 内置
+
+    MCP_TOOL = "mcp_tool"  # MCP 工具
+    SKILL = "skill"  # 技能
+    NODE = "node"  # 节点
+    BUILTIN = "builtin"  # 内置
 
 
 @dataclass
 class Capability:
     """能力定义"""
+
     id: str
     name: str
     description: str
     type: CapabilityType
-    source: str = ""           # 来源 (mcp_server_name / skill_id / node_id)
+    source: str = ""  # 来源 (mcp_server_name / skill_id / node_id)
     parameters: Dict = field(default_factory=dict)
     tags: List[str] = field(default_factory=list)
-    priority: int = 5          # 优先级 (1-10)
+    priority: int = 5  # 优先级 (1-10)
     enabled: bool = True
 
     def to_dict(self) -> Dict:
@@ -123,6 +125,7 @@ class Capability:
 # ============================================================================
 # 能力编排器
 # ============================================================================
+
 
 class CapabilityOrchestrator:
     """
@@ -162,8 +165,8 @@ class CapabilityOrchestrator:
         tags: Optional[List[str]] = None,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> None:
-        from core.unified.capability_contract import CapabilityContract, CapabilitySource
         from core.unified.capability_authority import CapabilityAuthority
+        from core.unified.capability_contract import CapabilityContract, CapabilitySource
 
         try:
             source_enum = CapabilitySource(source)
@@ -226,7 +229,7 @@ class CapabilityOrchestrator:
                 )
 
             try:
-                from core.node_discovery import get_node_discovery, DiscoveredNode, NodeRole
+                from core.node_discovery import DiscoveredNode, NodeRole, get_node_discovery
 
                 discovery = get_node_discovery()
                 for node_key, node_info in config.get("nodes", {}).items():
@@ -535,12 +538,14 @@ class CapabilityOrchestrator:
     async def _execute_skill(self, cap: Capability, params: Dict) -> Any:
         """执行技能"""
         from core.skill_loader import skill_loader
+
         skill_id = cap.source
         return await skill_loader.execute(skill_id, **params)
 
     async def _execute_node(self, cap: Capability, params: Dict) -> Any:
         """执行节点 — 优先走 NodeRegistry in-process 调用，降级到 HTTP"""
         import httpx
+
         from core.port_config import get_node_port
 
         node_name = cap.source  # e.g. "Node_50_Transformer"
@@ -548,11 +553,11 @@ class CapabilityOrchestrator:
         # 1. 尝试通过 NodeRegistry in-process 调用
         try:
             from core.node_registry import get_registry
+
             registry = get_registry()
             action = params.get("action", "execute")
             node_params = {k: v for k, v in params.items() if k != "action"}
-            result = await registry.call_node(node_name, action, node_params,
-                                              allow_failover=False)
+            result = await registry.call_node(node_name, action, node_params, allow_failover=False)
             if result.get("success") is not False or "error" not in result:
                 return result
         except Exception as exc:
@@ -597,12 +602,8 @@ class CapabilityOrchestrator:
         if cap is None:
             # Last resort: treat as chat and log a warning so operators know
             # the requested capability was not found.
-            logger.warning(
-                f"dispatch(): 未找到能力 '{capability}'，降级到 builtin_chat"
-            )
-            return await self._execute_builtin(
-                self.capabilities["builtin_chat"], {"message": capability, **params}
-            )
+            logger.warning(f"dispatch(): 未找到能力 '{capability}'，降级到 builtin_chat")
+            return await self._execute_builtin(self.capabilities["builtin_chat"], {"message": capability, **params})
 
         return await self.execute(cap.id, **params)
 
@@ -611,12 +612,14 @@ class CapabilityOrchestrator:
         if cap.id == "builtin_chat":
             # 对话
             from core.multi_llm_router import get_llm_router
+
             router = get_llm_router()
             return await router.chat([{"role": "user", "content": params.get("message", "")}])
 
         elif cap.id == "builtin_device_control":
             # 设备控制
             from core.device_control_service import device_control
+
             device_id = params.get("device_id")
             action = params.get("action")
             return await device_control.execute_action(device_id, action)
@@ -624,6 +627,7 @@ class CapabilityOrchestrator:
         elif cap.id == "builtin_simulate":
             # 数字孪生模拟 — 选择指定设备的孪生体或第一个可用孪生体
             from core.digital_twin_engine import get_digital_twin_engine
+
             engine = get_digital_twin_engine()
             action = params.get("action", params.get("message", ""))
             device_id = params.get("device_id", "")
@@ -648,14 +652,15 @@ class CapabilityOrchestrator:
         elif cap.id == "builtin_cross_device":
             # 跨设备协同：优先走 canonical DeviceRouter 路径，
             # 仅在 router 异常时才显式退回 compatibility fallback。
-            from galaxy_gateway.device_router import device_router as canonical_device_router
             from core.cross_device_dispatch_boundary import (
                 DISPATCH_PATH_CANONICAL,
                 DISPATCH_PATH_COMPAT_FALLBACK,
-                ROUTE_MODE_CROSS_DEVICE,
                 ROUTE_MODE_COMPAT_FALLBACK,
+                ROUTE_MODE_CROSS_DEVICE,
                 SUBSTRATE_CALLER_COMPAT,
             )
+            from galaxy_gateway.device_router import device_router as canonical_device_router
+
             command = params.get("message", params.get("command", ""))
             context = {k: v for k, v in params.items() if k not in ("message", "command")}
             context = dict(context)
@@ -678,9 +683,7 @@ class CapabilityOrchestrator:
                 fallback_context["dispatch_path"] = DISPATCH_PATH_COMPAT_FALLBACK
                 fallback_context["compat_path_used"] = "cross_device_coordinator"
                 fallback_context["fallback_reason"] = "device_router_exception"
-                fallback_context["_compat_legacy_bypass"] = (
-                    "capability_orchestrator.builtin_cross_device"
-                )
+                fallback_context["_compat_legacy_bypass"] = "capability_orchestrator.builtin_cross_device"
                 result = await cross_device_coordinator.execute_cross_device_task(
                     command,
                     fallback_context,
@@ -762,6 +765,7 @@ capability_orchestrator = CapabilityOrchestrator.get_instance()
 # ============================================================================
 # 便捷函数
 # ============================================================================
+
 
 async def discover_capability(query: str, limit: int = 5) -> List[Dict]:
     """发现能力"""

@@ -26,12 +26,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from core.nats_bus import NATSTopics, NATSBus
-
+from core.nats_bus import NATSBus, NATSTopics
 
 # ===========================================================================
 # A) NATSTopics canonical topic constants
 # ===========================================================================
+
 
 class TestNATSTopicsConstants:
 
@@ -85,6 +85,7 @@ class TestNATSTopicsConstants:
 # B) NATSTopics helper methods
 # ===========================================================================
 
+
 class TestNATSTopicsHelpers:
 
     def test_task_dispatch_with_target(self):
@@ -110,28 +111,23 @@ class TestNATSTopicsHelpers:
     def test_all_task_topics_start_with_galaxy_task(self):
         for attr in ("TASK_DISPATCH", "TASK_RESULT", "TASK_CANCEL", "TASK_STATUS"):
             value = getattr(NATSTopics, attr)
-            assert value.startswith("galaxy.task."), (
-                f"NATSTopics.{attr} must start with 'galaxy.task.'"
-            )
+            assert value.startswith("galaxy.task."), f"NATSTopics.{attr} must start with 'galaxy.task.'"
 
     def test_all_device_topics_start_with_galaxy_device(self):
         for attr in ("DEVICE_REGISTER", "DEVICE_HEARTBEAT", "DEVICE_STATUS", "DEVICE_PRESENCE"):
             value = getattr(NATSTopics, attr)
-            assert value.startswith("galaxy.device."), (
-                f"NATSTopics.{attr} must start with 'galaxy.device.'"
-            )
+            assert value.startswith("galaxy.device."), f"NATSTopics.{attr} must start with 'galaxy.device.'"
 
     def test_all_audit_topics_start_with_galaxy_audit(self):
         for attr in ("AUDIT_COMMAND", "AUDIT_RESULT", "AUDIT_VIOLATION"):
             value = getattr(NATSTopics, attr)
-            assert value.startswith("galaxy.audit."), (
-                f"NATSTopics.{attr} must start with 'galaxy.audit.'"
-            )
+            assert value.startswith("galaxy.audit."), f"NATSTopics.{attr} must start with 'galaxy.audit.'"
 
 
 # ===========================================================================
 # C) NATSBus._ensure_trace_fields injects when absent
 # ===========================================================================
+
 
 class TestEnsureTraceFieldsInjection:
 
@@ -188,6 +184,7 @@ class TestEnsureTraceFieldsInjection:
 # D) NATSBus._ensure_trace_fields preserves existing values
 # ===========================================================================
 
+
 class TestEnsureTraceFieldsPreservation:
 
     def _make_noop_bus(self) -> NATSBus:
@@ -224,6 +221,7 @@ class TestEnsureTraceFieldsPreservation:
 # ===========================================================================
 # E–I) Canonical publish methods include trace fields and schema discriminator
 # ===========================================================================
+
 
 class TestCanonicalPublishMethods:
 
@@ -342,6 +340,7 @@ class TestCanonicalPublishMethods:
 # J) All canonical publish methods inject trace when not provided
 # ===========================================================================
 
+
 class TestAutoTraceInjection:
 
     def _make_capture_bus(self):
@@ -399,6 +398,7 @@ class TestAutoTraceInjection:
 # K) Topic namespace contract — no legacy galaxy.tasks prefix in new API
 # ===========================================================================
 
+
 class TestTopicNamespaceContract:
 
     def test_canonical_task_topic_uses_singular(self):
@@ -422,6 +422,7 @@ class TestTopicNamespaceContract:
 # L) Legacy publish methods remain backward-compatible
 # ===========================================================================
 
+
 class TestLegacyPublishBackwardCompat:
 
     def _make_noop_bus(self) -> NATSBus:
@@ -440,6 +441,7 @@ class TestLegacyPublishBackwardCompat:
     @pytest.mark.asyncio
     async def test_publish_heartbeat_still_works(self):
         from core.schemas.contracts import WorkerHeartbeatModel
+
         bus = self._make_noop_bus()
         hb = WorkerHeartbeatModel(worker_id="w1", status="idle", capabilities=[])
         result = await bus.publish_heartbeat(hb)

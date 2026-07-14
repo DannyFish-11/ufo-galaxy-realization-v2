@@ -18,8 +18,8 @@ Coverage
 
 from __future__ import annotations
 
-import sys
 import os
+import sys
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -29,10 +29,9 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from core.routes.device_readiness import (
-    create_router,
     DEVICE_READINESS_ROUTES_AUTHORITY,
+    create_router,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -49,13 +48,13 @@ def _make_udm_device(device_id: str, status: str = "online"):
     return d
 
 
-def _make_readiness_summary(device_id: str, registered=True, online=True,
-                             connected=True, routable=True):
+def _make_readiness_summary(device_id: str, registered=True, online=True, connected=True, routable=True):
     from core.device_readiness import (
-        DeviceReadinessSummary,
         ConnectionSummary,
+        DeviceReadinessSummary,
         RoutabilitySummary,
     )
+
     rs = DeviceReadinessSummary(device_id=device_id)
     rs.registered = registered
     rs.online = online
@@ -94,6 +93,7 @@ class TestAuthoritySentinel(unittest.TestCase):
 class TestRouterStructure(unittest.TestCase):
     def test_create_router_returns_apirouter(self):
         from fastapi import APIRouter
+
         r = create_router()
         self.assertIsInstance(r, APIRouter)
 
@@ -146,13 +146,10 @@ class TestListDeviceReadiness(unittest.TestCase):
     def test_returns_summaries_for_known_devices(self):
         rs1 = _make_readiness_summary("dev-01")
         rs2 = _make_readiness_summary("dev-02")
-        with patch("core.routes.device_readiness._list_all_device_ids",
-                   return_value=["dev-01", "dev-02"]):
+        with patch("core.routes.device_readiness._list_all_device_ids", return_value=["dev-01", "dev-02"]):
             with patch("core.routes.device_readiness._get_readiness_module") as mock_mod:
                 mod = MagicMock()
-                mod.get_device_readiness.side_effect = lambda did: (
-                    rs1 if did == "dev-01" else rs2
-                )
+                mod.get_device_readiness.side_effect = lambda did: (rs1 if did == "dev-01" else rs2)
                 mock_mod.return_value = mod
                 resp = self.client.get("/api/v1/devices/readiness")
         data = resp.json()
@@ -161,17 +158,12 @@ class TestListDeviceReadiness(unittest.TestCase):
         self.assertEqual(ids, {"dev-01", "dev-02"})
 
     def test_only_ready_filter(self):
-        rs_ready = _make_readiness_summary("dev-ready", registered=True, online=True,
-                                            connected=True, routable=True)
-        rs_not = _make_readiness_summary("dev-not", registered=True, online=False,
-                                          connected=False, routable=False)
-        with patch("core.routes.device_readiness._list_all_device_ids",
-                   return_value=["dev-ready", "dev-not"]):
+        rs_ready = _make_readiness_summary("dev-ready", registered=True, online=True, connected=True, routable=True)
+        rs_not = _make_readiness_summary("dev-not", registered=True, online=False, connected=False, routable=False)
+        with patch("core.routes.device_readiness._list_all_device_ids", return_value=["dev-ready", "dev-not"]):
             with patch("core.routes.device_readiness._get_readiness_module") as mock_mod:
                 mod = MagicMock()
-                mod.get_device_readiness.side_effect = lambda did: (
-                    rs_ready if did == "dev-ready" else rs_not
-                )
+                mod.get_device_readiness.side_effect = lambda did: (rs_ready if did == "dev-ready" else rs_not)
                 mock_mod.return_value = mod
                 resp = self.client.get("/api/v1/devices/readiness?only_ready=true")
         data = resp.json()
@@ -181,13 +173,10 @@ class TestListDeviceReadiness(unittest.TestCase):
     def test_only_connected_filter(self):
         rs_conn = _make_readiness_summary("dev-conn", connected=True)
         rs_disc = _make_readiness_summary("dev-disc", connected=False, routable=False)
-        with patch("core.routes.device_readiness._list_all_device_ids",
-                   return_value=["dev-conn", "dev-disc"]):
+        with patch("core.routes.device_readiness._list_all_device_ids", return_value=["dev-conn", "dev-disc"]):
             with patch("core.routes.device_readiness._get_readiness_module") as mock_mod:
                 mod = MagicMock()
-                mod.get_device_readiness.side_effect = lambda did: (
-                    rs_conn if did == "dev-conn" else rs_disc
-                )
+                mod.get_device_readiness.side_effect = lambda did: (rs_conn if did == "dev-conn" else rs_disc)
                 mock_mod.return_value = mod
                 resp = self.client.get("/api/v1/devices/readiness?only_connected=true")
         data = resp.json()
@@ -197,13 +186,10 @@ class TestListDeviceReadiness(unittest.TestCase):
     def test_only_routable_filter(self):
         rs_route = _make_readiness_summary("dev-r", routable=True)
         rs_no = _make_readiness_summary("dev-no", routable=False)
-        with patch("core.routes.device_readiness._list_all_device_ids",
-                   return_value=["dev-r", "dev-no"]):
+        with patch("core.routes.device_readiness._list_all_device_ids", return_value=["dev-r", "dev-no"]):
             with patch("core.routes.device_readiness._get_readiness_module") as mock_mod:
                 mod = MagicMock()
-                mod.get_device_readiness.side_effect = lambda did: (
-                    rs_route if did == "dev-r" else rs_no
-                )
+                mod.get_device_readiness.side_effect = lambda did: (rs_route if did == "dev-r" else rs_no)
                 mock_mod.return_value = mod
                 resp = self.client.get("/api/v1/devices/readiness?only_routable=true")
         data = resp.json()
@@ -219,8 +205,7 @@ class TestListDeviceReadiness(unittest.TestCase):
         self.assertEqual(data["summaries"], [])
 
     def test_per_device_exception_returns_partial(self):
-        with patch("core.routes.device_readiness._list_all_device_ids",
-                   return_value=["bad-dev"]):
+        with patch("core.routes.device_readiness._list_all_device_ids", return_value=["bad-dev"]):
             with patch("core.routes.device_readiness._get_readiness_module") as mock_mod:
                 mod = MagicMock()
                 mod.get_device_readiness.side_effect = RuntimeError("boom")
@@ -268,8 +253,7 @@ class TestGetDeviceReadiness(unittest.TestCase):
         self.assertEqual(data["authority"], DEVICE_READINESS_ROUTES_AUTHORITY)
 
     def test_unknown_device_registered_false(self):
-        rs = _make_readiness_summary("unknown", registered=False, online=False,
-                                      connected=False, routable=False)
+        rs = _make_readiness_summary("unknown", registered=False, online=False, connected=False, routable=False)
         with patch("core.routes.device_readiness._get_readiness_module") as mock_mod:
             mod = MagicMock()
             mod.get_device_readiness.return_value = rs
@@ -334,13 +318,11 @@ class TestListDeviceParticipation(unittest.TestCase):
         dev2 = _make_udm_device("dev-02")
 
         mock_udm = MagicMock()
-        mock_udm.get_device.side_effect = lambda did: (
-            dev1 if did == "dev-01" else dev2
-        )
-        with patch("core.routes.device_readiness._list_all_device_ids",
-                   return_value=["dev-01", "dev-02"]):
+        mock_udm.get_device.side_effect = lambda did: (dev1 if did == "dev-01" else dev2)
+        with patch("core.routes.device_readiness._list_all_device_ids", return_value=["dev-01", "dev-02"]):
             with patch("core.routes.device_readiness._get_udm", return_value=mock_udm):
                 from core.device_selection import DeviceParticipationStatus
+
                 mock_status = DeviceParticipationStatus(
                     registered=True,
                     runtime_present=True,
@@ -349,8 +331,9 @@ class TestListDeviceParticipation(unittest.TestCase):
                     orchestration_eligible=True,
                     participation_reason="all-eligible",
                 )
-                with patch("core.routes.device_readiness.assess_device_participation",
-                           return_value=mock_status, create=True):
+                with patch(
+                    "core.routes.device_readiness.assess_device_participation", return_value=mock_status, create=True
+                ):
                     # Use _get_participation_for_device directly via route
                     resp = self.client.get("/api/v1/devices/participation")
         data = resp.json()
@@ -358,6 +341,7 @@ class TestListDeviceParticipation(unittest.TestCase):
 
     def test_only_ready_filter(self):
         """only_ready=true should exclude non-orchestration-eligible devices."""
+
         def mock_participation(device_id: str):
             if device_id == "dev-ready":
                 return {
@@ -377,10 +361,8 @@ class TestListDeviceParticipation(unittest.TestCase):
                 "sources": [],
             }
 
-        with patch("core.routes.device_readiness._list_all_device_ids",
-                   return_value=["dev-ready", "dev-not"]):
-            with patch("core.routes.device_readiness._get_participation_for_device",
-                       side_effect=mock_participation):
+        with patch("core.routes.device_readiness._list_all_device_ids", return_value=["dev-ready", "dev-not"]):
+            with patch("core.routes.device_readiness._get_participation_for_device", side_effect=mock_participation):
                 resp = self.client.get("/api/v1/devices/participation?only_ready=true")
         data = resp.json()
         self.assertEqual(data["total"], 1)
@@ -413,6 +395,7 @@ class TestGetDeviceParticipation(unittest.TestCase):
         mock_udm.get_device.return_value = dev
         with patch("core.routes.device_readiness._get_udm", return_value=mock_udm):
             from core.device_selection import DeviceParticipationStatus
+
             mock_status = DeviceParticipationStatus(
                 registered=True,
                 runtime_present=True,
@@ -421,8 +404,7 @@ class TestGetDeviceParticipation(unittest.TestCase):
                 orchestration_eligible=True,
                 participation_reason="all-eligible",
             )
-            with patch("core.device_selection.assess_device_participation",
-                       return_value=mock_status):
+            with patch("core.device_selection.assess_device_participation", return_value=mock_status):
                 resp = self.client.get("/api/v1/devices/dev-01/participation")
         self.assertEqual(resp.status_code, 200)
 
@@ -432,6 +414,7 @@ class TestGetDeviceParticipation(unittest.TestCase):
         mock_udm.get_device.return_value = dev
         with patch("core.routes.device_readiness._get_udm", return_value=mock_udm):
             from core.device_selection import DeviceParticipationStatus
+
             mock_status = DeviceParticipationStatus(
                 registered=True,
                 runtime_present=True,
@@ -440,8 +423,7 @@ class TestGetDeviceParticipation(unittest.TestCase):
                 orchestration_eligible=True,
                 participation_reason="all-eligible",
             )
-            with patch("core.device_selection.assess_device_participation",
-                       return_value=mock_status):
+            with patch("core.device_selection.assess_device_participation", return_value=mock_status):
                 resp = self.client.get("/api/v1/devices/dev-01/participation")
         data = resp.json()
         self.assertEqual(data["device_id"], "dev-01")
@@ -475,8 +457,7 @@ class TestGetDeviceParticipation(unittest.TestCase):
         mock_udm = MagicMock()
         mock_udm.get_device.return_value = dev
         with patch("core.routes.device_readiness._get_udm", return_value=mock_udm):
-            with patch("core.device_selection.assess_device_participation",
-                       side_effect=RuntimeError("assess failed")):
+            with patch("core.device_selection.assess_device_participation", side_effect=RuntimeError("assess failed")):
                 resp = self.client.get("/api/v1/devices/dev-01/participation")
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
@@ -488,6 +469,7 @@ class TestGetDeviceParticipation(unittest.TestCase):
         mock_udm.get_device.return_value = dev
         with patch("core.routes.device_readiness._get_udm", return_value=mock_udm):
             from core.device_selection import DeviceParticipationStatus
+
             mock_status = DeviceParticipationStatus(
                 registered=True,
                 runtime_present=False,
@@ -496,8 +478,7 @@ class TestGetDeviceParticipation(unittest.TestCase):
                 orchestration_eligible=False,
                 participation_reason="not-runtime-present; not-routable(canonical-connection)",
             )
-            with patch("core.device_selection.assess_device_participation",
-                       return_value=mock_status):
+            with patch("core.device_selection.assess_device_participation", return_value=mock_status):
                 resp = self.client.get("/api/v1/devices/dev-01/participation")
         data = resp.json()
         self.assertTrue(data["registered"])
@@ -506,7 +487,6 @@ class TestGetDeviceParticipation(unittest.TestCase):
         self.assertFalse(data["cross_device_eligible"])
         self.assertFalse(data["orchestration_eligible"])
         self.assertIn("not-runtime-present", data["participation_reason"])
-
 
 
 # ---------------------------------------------------------------------------

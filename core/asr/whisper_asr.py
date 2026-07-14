@@ -14,6 +14,7 @@ core.asr.whisper_asr — 本地语音识别（faster-whisper）
     - medium (769M): ~5GB VRAM, 较准
     - large (1550M): ~10GB VRAM, 最准
 """
+
 from __future__ import annotations
 
 import logging
@@ -79,8 +80,7 @@ class WhisperASR:
             from faster_whisper import WhisperModel
         except ImportError as exc:
             raise ImportError(
-                "faster-whisper is not installed. "
-                "Install it with: pip install faster-whisper"
+                "faster-whisper is not installed. " "Install it with: pip install faster-whisper"
             ) from exc
 
         if not self.model_size:
@@ -89,13 +89,12 @@ class WhisperASR:
         # 国内镜像：HF_ENDPOINT 未设时默认用 hf-mirror.com（无需科学上网）
         # 用户可在 .env 中覆盖: HF_ENDPOINT=https://huggingface.co
         if not os.environ.get("HF_ENDPOINT"):
-            os.environ["HF_ENDPOINT"] = os.environ.get(
-                "GALAXY_HF_ENDPOINT", "https://hf-mirror.com"
-            )
+            os.environ["HF_ENDPOINT"] = os.environ.get("GALAXY_HF_ENDPOINT", "https://hf-mirror.com")
 
         # 固定缓存到项目 runtime/whisper_models/，避免重复下载
         if not self.model_dir:
             import pathlib
+
             _proj = pathlib.Path(__file__).parent.parent.parent
             self.model_dir = str(_proj / "runtime" / "whisper_models")
             pathlib.Path(self.model_dir).mkdir(parents=True, exist_ok=True)
@@ -107,6 +106,7 @@ class WhisperASR:
         if device is None:
             try:
                 import torch
+
                 device = "cuda" if torch.cuda.is_available() else "cpu"
             except ImportError:
                 device = "cpu"
@@ -141,6 +141,7 @@ class WhisperASR:
         """
         try:
             import torch
+
             if torch.cuda.is_available():
                 vram_mb = torch.cuda.get_device_properties(0).total_memory // (1024 * 1024)
                 logger.debug("Detected VRAM: %d MB", vram_mb)
@@ -228,12 +229,14 @@ class WhisperASR:
             model_size: 新的模型大小，None则保持当前大小。
         """
         import gc  # M9 fixed
+
         if model_size:
             self.model_size = model_size
         self.model = None
         gc.collect()  # M9 fixed: force Python GC
         try:
             import torch  # M9 fixed
+
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()  # M9 fixed: clear GPU memory cache
                 logger.info("GPU cache cleared after model unload")
@@ -242,7 +245,4 @@ class WhisperASR:
         self._load_model()
 
     def __repr__(self) -> str:
-        return (
-            f"WhisperASR(model_size={self.model_size}, "
-            f"device={self.device}, compute_type={self.compute_type})"
-        )
+        return f"WhisperASR(model_size={self.model_size}, " f"device={self.device}, compute_type={self.compute_type})"

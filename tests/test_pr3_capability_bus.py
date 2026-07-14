@@ -35,6 +35,7 @@ Validates that:
  19. BusSnapshot.to_dict is JSON-serialisable.
  20. Duplicate registration replaces entry (last-writer-wins).
 """
+
 from __future__ import annotations
 
 import json
@@ -54,9 +55,11 @@ sys.path.insert(0, str(PROJECT_ROOT))
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _fresh_bus():
     """Return a fresh CapabilityBus instance (not the singleton)."""
     from core.capability_bus import CapabilityBus
+
     return CapabilityBus()
 
 
@@ -68,6 +71,7 @@ def _fresh_entry(
     tags: Optional[List[str]] = None,
 ) -> "CapabilityBusEntry":
     from core.capability_bus import CapabilityBusEntry, CapabilityBusRole, CapabilityHealthStatus
+
     return CapabilityBusEntry(
         name=name,
         display_name=f"Node 01 (node {source_id})",
@@ -83,49 +87,72 @@ def _fresh_entry(
 # Section 1 — Enum correctness
 # ===========================================================================
 
+
 class TestCapabilityBusRoleEnum:
     """CapabilityBusRole values and from_tool_name() classification."""
 
     def test_all_expected_roles_present(self):
         from core.capability_bus import CapabilityBusRole
-        expected = {"node", "device", "skill", "mcp", "mcp_gw", "github", "academic", "engineering", "resource", "builtin", "unknown"}
+
+        expected = {
+            "node",
+            "device",
+            "skill",
+            "mcp",
+            "mcp_gw",
+            "github",
+            "academic",
+            "engineering",
+            "resource",
+            "builtin",
+            "unknown",
+        }
         actual = {r.value for r in CapabilityBusRole}
         assert expected == actual
 
     def test_from_tool_name_node(self):
         from core.capability_bus import CapabilityBusRole
+
         assert CapabilityBusRole.from_tool_name("node__08__execute") == CapabilityBusRole.NODE
 
     def test_from_tool_name_device(self):
         from core.capability_bus import CapabilityBusRole
+
         assert CapabilityBusRole.from_tool_name("device__android_01__tap") == CapabilityBusRole.DEVICE
 
     def test_from_tool_name_skill(self):
         from core.capability_bus import CapabilityBusRole
+
         assert CapabilityBusRole.from_tool_name("skill__hello") == CapabilityBusRole.SKILL
 
     def test_from_tool_name_mcp(self):
         from core.capability_bus import CapabilityBusRole
+
         assert CapabilityBusRole.from_tool_name("mcp__weather__get_forecast") == CapabilityBusRole.MCP
 
     def test_from_tool_name_mcp_gw(self):
         from core.capability_bus import CapabilityBusRole
+
         assert CapabilityBusRole.from_tool_name("mcp__gateway__search") == CapabilityBusRole.MCP_GW
 
     def test_from_tool_name_github(self):
         from core.capability_bus import CapabilityBusRole
+
         assert CapabilityBusRole.from_tool_name("github__install") == CapabilityBusRole.GITHUB
 
     def test_from_tool_name_builtin(self):
         from core.capability_bus import CapabilityBusRole
+
         assert CapabilityBusRole.from_tool_name("builtin__chat") == CapabilityBusRole.BUILTIN
 
     def test_from_tool_name_unknown_prefix(self):
         from core.capability_bus import CapabilityBusRole
+
         assert CapabilityBusRole.from_tool_name("legacy__something") == CapabilityBusRole.UNKNOWN
 
     def test_from_tool_name_empty_string(self):
         from core.capability_bus import CapabilityBusRole
+
         assert CapabilityBusRole.from_tool_name("") == CapabilityBusRole.UNKNOWN
 
 
@@ -134,6 +161,7 @@ class TestCapabilityHealthStatusEnum:
 
     def test_all_expected_values_present(self):
         from core.capability_bus import CapabilityHealthStatus
+
         expected = {"healthy", "degraded", "unavailable", "unknown"}
         assert expected == {h.value for h in CapabilityHealthStatus}
 
@@ -142,14 +170,26 @@ class TestCapabilityHealthStatusEnum:
 # Section 2 — CapabilityBusEntry serialisation
 # ===========================================================================
 
+
 class TestCapabilityBusEntrySerialisation:
     """to_dict / from_dict round-trip."""
 
     def test_to_dict_has_required_keys(self):
         entry = _fresh_entry()
         d = entry.to_dict()
-        for key in ("name", "display_name", "description", "role", "source_id",
-                    "health", "tags", "metadata", "schema", "node_key", "registered_at"):
+        for key in (
+            "name",
+            "display_name",
+            "description",
+            "role",
+            "source_id",
+            "health",
+            "tags",
+            "metadata",
+            "schema",
+            "node_key",
+            "registered_at",
+        ):
             assert key in d, f"Missing key: {key}"
 
     def test_to_dict_role_is_string(self):
@@ -166,6 +206,7 @@ class TestCapabilityBusEntrySerialisation:
         entry = _fresh_entry(name="skill__test_skill", role_str="skill", source_id="test_skill")
         d = entry.to_dict()
         from core.capability_bus import CapabilityBusEntry
+
         restored = CapabilityBusEntry.from_dict(d)
         assert restored.name == entry.name
         assert restored.role == entry.role
@@ -174,12 +215,14 @@ class TestCapabilityBusEntrySerialisation:
 
     def test_from_dict_unknown_role_defaults(self):
         from core.capability_bus import CapabilityBusEntry, CapabilityBusRole
+
         d = {"name": "x", "display_name": "x", "description": "x", "role": "nonexistent_role"}
         e = CapabilityBusEntry.from_dict(d)
         assert e.role == CapabilityBusRole.UNKNOWN
 
     def test_from_dict_unknown_health_defaults(self):
         from core.capability_bus import CapabilityBusEntry, CapabilityHealthStatus
+
         d = {"name": "x", "display_name": "x", "description": "x", "health": "bad_value"}
         e = CapabilityBusEntry.from_dict(d)
         assert e.health == CapabilityHealthStatus.UNKNOWN
@@ -194,6 +237,7 @@ class TestCapabilityBusEntrySerialisation:
 # ===========================================================================
 # Section 3 — CapabilityBus register / unregister / lookup / contains
 # ===========================================================================
+
 
 class TestCapabilityBusRegistration:
     """Basic register / lookup / unregister behaviour."""
@@ -234,19 +278,22 @@ class TestCapabilityBusRegistration:
 
     def test_register_empty_name_raises(self):
         from core.capability_bus import CapabilityBusEntry, CapabilityBusRole, CapabilityHealthStatus
+
         bus = _fresh_bus()
-        bad = CapabilityBusEntry(name="", display_name="x", description="x",
-                                 role=CapabilityBusRole.NODE)
+        bad = CapabilityBusEntry(name="", display_name="x", description="x", role=CapabilityBusRole.NODE)
         with pytest.raises(ValueError):
             bus.register(bad)
 
     def test_duplicate_register_replaces_entry(self):
         from core.capability_bus import CapabilityBusEntry, CapabilityBusRole, CapabilityHealthStatus
+
         bus = _fresh_bus()
-        e1 = CapabilityBusEntry(name="node__01__execute", display_name="v1",
-                                description="v1", role=CapabilityBusRole.NODE)
-        e2 = CapabilityBusEntry(name="node__01__execute", display_name="v2",
-                                description="v2", role=CapabilityBusRole.NODE)
+        e1 = CapabilityBusEntry(
+            name="node__01__execute", display_name="v1", description="v1", role=CapabilityBusRole.NODE
+        )
+        e2 = CapabilityBusEntry(
+            name="node__01__execute", display_name="v2", description="v2", role=CapabilityBusRole.NODE
+        )
         bus.register(e1)
         bus.register(e2)
         assert bus.lookup("node__01__execute").display_name == "v2"
@@ -268,11 +315,13 @@ class TestCapabilityBusRegistration:
 # Section 4 — list_by_role
 # ===========================================================================
 
+
 class TestListByRole:
     """list_by_role filtering."""
 
     def test_filter_nodes_only(self):
         from core.capability_bus import CapabilityBusRole
+
         bus = _fresh_bus()
         bus.register(_fresh_entry(name="node__01__execute", role_str="node"))
         bus.register(_fresh_entry(name="skill__hello", role_str="skill", source_id="hello"))
@@ -282,6 +331,7 @@ class TestListByRole:
 
     def test_filter_skills_only(self):
         from core.capability_bus import CapabilityBusRole
+
         bus = _fresh_bus()
         bus.register(_fresh_entry(name="node__01__execute", role_str="node"))
         bus.register(_fresh_entry(name="skill__hello", role_str="skill", source_id="hello"))
@@ -291,6 +341,7 @@ class TestListByRole:
 
     def test_filter_returns_empty_for_missing_role(self):
         from core.capability_bus import CapabilityBusRole
+
         bus = _fresh_bus()
         bus.register(_fresh_entry(name="node__01__execute", role_str="node"))
         assert bus.list_by_role(CapabilityBusRole.DEVICE) == []
@@ -300,11 +351,13 @@ class TestListByRole:
 # Section 5 — set_health
 # ===========================================================================
 
+
 class TestSetHealth:
     """set_health updates health, other fields unchanged."""
 
     def test_set_health_healthy(self):
         from core.capability_bus import CapabilityHealthStatus
+
         bus = _fresh_bus()
         entry = _fresh_entry(health_str="unknown")
         bus.register(entry)
@@ -315,6 +368,7 @@ class TestSetHealth:
 
     def test_set_health_preserves_display_name(self):
         from core.capability_bus import CapabilityHealthStatus
+
         bus = _fresh_bus()
         entry = _fresh_entry()
         bus.register(entry)
@@ -324,6 +378,7 @@ class TestSetHealth:
 
     def test_set_health_missing_returns_false(self):
         from core.capability_bus import CapabilityHealthStatus
+
         bus = _fresh_bus()
         assert bus.set_health("nonexistent", CapabilityHealthStatus.HEALTHY) is False
 
@@ -331,6 +386,7 @@ class TestSetHealth:
 # ===========================================================================
 # Section 6 — BusSnapshot
 # ===========================================================================
+
 
 class TestBusSnapshot:
     """bus_snapshot returns correct state."""
@@ -344,6 +400,7 @@ class TestBusSnapshot:
 
     def test_by_role_counts(self):
         from core.capability_bus import CapabilityBusRole
+
         bus = _fresh_bus()
         bus.register(_fresh_entry(name="node__01__execute", role_str="node"))
         bus.register(_fresh_entry(name="skill__hello", role_str="skill", source_id="hello"))
@@ -353,6 +410,7 @@ class TestBusSnapshot:
 
     def test_healthy_count(self):
         from core.capability_bus import CapabilityHealthStatus
+
         bus = _fresh_bus()
         bus.register(_fresh_entry(name="node__01__execute", health_str="healthy"))
         bus.register(_fresh_entry(name="node__02__execute", source_id="02", health_str="unknown"))
@@ -376,6 +434,7 @@ class TestBusSnapshot:
 # Section 7 — seed_from_node_registry
 # ===========================================================================
 
+
 class TestSeedFromNodeRegistry:
     """Acceptance criterion: node-registry-derived nodes in capability universe."""
 
@@ -392,6 +451,7 @@ class TestSeedFromNodeRegistry:
 
     def test_all_seeded_entries_have_node_role(self):
         from core.capability_bus import CapabilityBusRole
+
         bus = _fresh_bus()
         bus.seed_from_node_registry()
         nodes = bus.list_by_role(CapabilityBusRole.NODE)
@@ -408,19 +468,17 @@ class TestSeedFromNodeRegistry:
     def test_no_hardcoded_node_names(self):
         """Seeded entries names come from the registry file, not from a hardcoded list."""
         import os
+
         reg_path = str(PROJECT_ROOT / "config" / "node_registry.json")
         with open(reg_path) as fh:
             raw = json.load(fh)
         nodes_dict = raw.get("nodes", raw)
-        registry_ids = {str(info.get("id", "")) for info in nodes_dict.values()
-                        if isinstance(info, dict)}
+        registry_ids = {str(info.get("id", "")) for info in nodes_dict.values() if isinstance(info, dict)}
 
         bus = _fresh_bus()
         bus.seed_from_node_registry()
         seeded_ids = {e.source_id for e in bus.list_by_role_str("node")}
-        assert seeded_ids == registry_ids, (
-            "Seeded source_ids should match registry IDs exactly — no hardcoding"
-        )
+        assert seeded_ids == registry_ids, "Seeded source_ids should match registry IDs exactly — no hardcoding"
 
     def test_seeded_entries_have_node_key(self):
         bus = _fresh_bus()
@@ -430,6 +488,7 @@ class TestSeedFromNodeRegistry:
 
     def test_active_production_ready_nodes_are_healthy(self):
         from core.capability_bus import CapabilityHealthStatus
+
         reg_path = str(PROJECT_ROOT / "config" / "node_registry.json")
         with open(reg_path) as fh:
             raw = json.load(fh)
@@ -445,9 +504,9 @@ class TestSeedFromNodeRegistry:
                 node_id = str(info.get("id", ""))
                 entry = bus.lookup(f"node__{node_id}__execute")
                 assert entry is not None
-                assert entry.health == CapabilityHealthStatus.HEALTHY, (
-                    f"Expected HEALTHY for {node_key} but got {entry.health}"
-                )
+                assert (
+                    entry.health == CapabilityHealthStatus.HEALTHY
+                ), f"Expected HEALTHY for {node_key} but got {entry.health}"
 
     def test_seed_is_idempotent(self):
         bus = _fresh_bus()
@@ -476,6 +535,7 @@ from core.capability_bus import CapabilityBus as _CapabilityBus
 
 def _list_by_role_str(self, role_str: str):
     from core.capability_bus import CapabilityBusRole
+
     try:
         role = CapabilityBusRole(role_str)
     except ValueError:
@@ -490,11 +550,13 @@ _CapabilityBus.list_by_role_str = _list_by_role_str  # type: ignore[attr-defined
 # Section 8 — Device capability registration
 # ===========================================================================
 
+
 class TestDeviceCapabilityRegistration:
     """register_device_capability creates correct DEVICE entries."""
 
     def test_registers_device_entry(self):
         from core.capability_bus import CapabilityBusRole
+
         bus = _fresh_bus()
         entry = bus.register_device_capability(
             device_id="android_001",
@@ -521,9 +583,7 @@ class TestDeviceCapabilityRegistration:
 
     def test_device_entry_custom_tags(self):
         bus = _fresh_bus()
-        entry = bus.register_device_capability(
-            "android_001", "type_text", "Type text", tags=["input", "keyboard"]
-        )
+        entry = bus.register_device_capability("android_001", "type_text", "Type text", tags=["input", "keyboard"])
         assert "input" in entry.tags
         assert "keyboard" in entry.tags
         assert "device" in entry.tags
@@ -535,13 +595,12 @@ class TestDeviceCapabilityRegistration:
 
     def test_device_entry_display_name_custom(self):
         bus = _fresh_bus()
-        entry = bus.register_device_capability(
-            "dev1", "lock", "Lock device", display_name="Lock Screen"
-        )
+        entry = bus.register_device_capability("dev1", "lock", "Lock device", display_name="Lock Screen")
         assert entry.display_name == "Lock Screen"
 
     def test_multiple_device_actions(self):
         from core.capability_bus import CapabilityBusRole
+
         bus = _fresh_bus()
         for action in ("tap", "swipe", "take_screenshot"):
             bus.register_device_capability("android_001", action, f"Device {action}")
@@ -550,6 +609,7 @@ class TestDeviceCapabilityRegistration:
 
     def test_list_by_role_device(self):
         from core.capability_bus import CapabilityBusRole
+
         bus = _fresh_bus()
         bus.register_device_capability("phone_a", "tap", "Tap")
         bus.register(_fresh_entry(name="node__01__execute", role_str="node"))
@@ -562,11 +622,13 @@ class TestDeviceCapabilityRegistration:
 # Section 9 — MCP and Skill registration helpers
 # ===========================================================================
 
+
 class TestMcpAndSkillRegistration:
     """register_mcp_tool and register_skill helpers."""
 
     def test_register_mcp_tool(self):
         from core.capability_bus import CapabilityBusRole
+
         bus = _fresh_bus()
         entry = bus.register_mcp_tool("weather_api", "get_forecast", "Get weather forecast")
         assert entry.name == "mcp__weather_api__get_forecast"
@@ -574,6 +636,7 @@ class TestMcpAndSkillRegistration:
 
     def test_register_mcp_gateway_tool(self):
         from core.capability_bus import CapabilityBusRole
+
         bus = _fresh_bus()
         entry = bus.register_mcp_tool("gateway", "search_web", "Search the web")
         assert entry.name == "mcp__gateway__search_web"
@@ -581,6 +644,7 @@ class TestMcpAndSkillRegistration:
 
     def test_register_skill(self):
         from core.capability_bus import CapabilityBusRole
+
         bus = _fresh_bus()
         entry = bus.register_skill("hello_world", "Say hello")
         assert entry.name == "skill__hello_world"
@@ -601,17 +665,20 @@ class TestMcpAndSkillRegistration:
 # Section 10 — Singleton behaviour
 # ===========================================================================
 
+
 class TestSingleton:
     """get_capability_bus / reset_capability_bus singleton semantics."""
 
     def test_get_returns_same_instance(self):
         from core.capability_bus import get_capability_bus
+
         bus1 = get_capability_bus()
         bus2 = get_capability_bus()
         assert bus1 is bus2
 
     def test_reset_returns_fresh_instance(self):
         from core.capability_bus import get_capability_bus, reset_capability_bus
+
         bus_before = get_capability_bus()
         bus_before.register(_fresh_entry())
         reset = reset_capability_bus()
@@ -621,6 +688,7 @@ class TestSingleton:
 
     def test_reset_updates_singleton(self):
         from core.capability_bus import get_capability_bus, reset_capability_bus
+
         reset_capability_bus()
         bus = get_capability_bus()
         assert bus.list_all() == []
@@ -630,11 +698,13 @@ class TestSingleton:
 # Section 11 — Thread safety
 # ===========================================================================
 
+
 class TestThreadSafety:
     """Concurrent registrations do not corrupt bus state."""
 
     def test_concurrent_registrations(self):
         from core.capability_bus import CapabilityBusEntry, CapabilityBusRole, CapabilityHealthStatus
+
         bus = _fresh_bus()
         errors: List[Exception] = []
 
@@ -652,10 +722,7 @@ class TestThreadSafety:
             except Exception as exc:
                 errors.append(exc)
 
-        threads = [
-            threading.Thread(target=register_batch, args=(i * 10, 10))
-            for i in range(5)
-        ]
+        threads = [threading.Thread(target=register_batch, args=(i * 10, 10)) for i in range(5)]
         for t in threads:
             t.start()
         for t in threads:
@@ -669,37 +736,45 @@ class TestThreadSafety:
 # Section 12 — CapabilityLayer.DEVICE in canonical_dispatcher
 # ===========================================================================
 
+
 class TestCanonicalDispatcherDeviceLayer:
     """CapabilityLayer.DEVICE is present and classifies device__ prefixes."""
 
     def test_device_layer_enum_member_exists(self):
         from core.capabilities.canonical_dispatcher import CapabilityLayer
+
         assert hasattr(CapabilityLayer, "DEVICE")
         assert CapabilityLayer.DEVICE.value == "device"
 
     def test_classify_device_prefix(self):
         from core.capabilities.canonical_dispatcher import CapabilityLayer
+
         layer = CapabilityLayer.classify("device__android_001__tap")
         assert layer == CapabilityLayer.DEVICE
 
     def test_classify_node_still_works(self):
         from core.capabilities.canonical_dispatcher import CapabilityLayer
+
         assert CapabilityLayer.classify("node__08__execute") == CapabilityLayer.NODE
 
     def test_classify_mcp_still_works(self):
         from core.capabilities.canonical_dispatcher import CapabilityLayer
+
         assert CapabilityLayer.classify("mcp__weather__forecast") == CapabilityLayer.MCP
 
     def test_classify_skill_still_works(self):
         from core.capabilities.canonical_dispatcher import CapabilityLayer
+
         assert CapabilityLayer.classify("skill__hello") == CapabilityLayer.SKILL
 
     def test_classify_github_still_works(self):
         from core.capabilities.canonical_dispatcher import CapabilityLayer
+
         assert CapabilityLayer.classify("github__install") == CapabilityLayer.GITHUB
 
     def test_classify_unknown_still_works(self):
         from core.capabilities.canonical_dispatcher import CapabilityLayer
+
         assert CapabilityLayer.classify("mystery__thing") == CapabilityLayer.UNKNOWN
 
 
@@ -707,11 +782,13 @@ class TestCanonicalDispatcherDeviceLayer:
 # Section 13 — bus_catalog() on CanonicalDispatcher
 # ===========================================================================
 
+
 class TestDispatcherBusCatalog:
     """CanonicalDispatcher.bus_catalog() returns a snapshot dict."""
 
     def test_bus_catalog_returns_dict(self):
         from core.capabilities.canonical_dispatcher import CanonicalDispatcher
+
         d = CanonicalDispatcher()
         result = d.bus_catalog()
         assert isinstance(result, dict)
@@ -719,6 +796,7 @@ class TestDispatcherBusCatalog:
     def test_bus_catalog_has_total_count(self):
         from core.capabilities.canonical_dispatcher import CanonicalDispatcher
         from core.capability_bus import reset_capability_bus
+
         reset_capability_bus()
         d = CanonicalDispatcher()
         result = d.bus_catalog()
@@ -727,6 +805,7 @@ class TestDispatcherBusCatalog:
     def test_bus_catalog_reflects_registered_entries(self):
         from core.capabilities.canonical_dispatcher import CanonicalDispatcher
         from core.capability_bus import reset_capability_bus
+
         bus = reset_capability_bus()
         bus.register(_fresh_entry())
         d = CanonicalDispatcher()
@@ -738,37 +817,45 @@ class TestDispatcherBusCatalog:
 # Section 14 — capabilities/__init__.py exports
 # ===========================================================================
 
+
 class TestCapabilitiesPackageExports:
     """core.capabilities re-exports CapabilityBus symbols."""
 
     def test_get_capability_bus_importable_from_capabilities(self):
         from core.capabilities import get_capability_bus
+
         assert callable(get_capability_bus)
 
     def test_reset_capability_bus_importable_from_capabilities(self):
         from core.capabilities import reset_capability_bus
+
         assert callable(reset_capability_bus)
 
     def test_capability_bus_class_importable(self):
         from core.capabilities import CapabilityBus
+
         assert CapabilityBus is not None
 
     def test_capability_bus_entry_importable(self):
         from core.capabilities import CapabilityBusEntry
+
         assert CapabilityBusEntry is not None
 
     def test_capability_bus_role_importable(self):
         from core.capabilities import CapabilityBusRole
+
         assert CapabilityBusRole is not None
 
     def test_bus_snapshot_importable(self):
         from core.capabilities import BusSnapshot
+
         assert BusSnapshot is not None
 
 
 # ===========================================================================
 # Section 15 — No parallel capability table
 # ===========================================================================
+
 
 class TestNoParallelCapabilityTable:
     """Acceptance criterion: CapabilityBus is the single canonical registry.
@@ -797,14 +884,13 @@ class TestNoParallelCapabilityTable:
         """seed_from_node_registry must read from the JSON file, not a hardcoded list."""
         bus = _fresh_bus()
         # Seed with a temporary file containing 2 custom nodes
-        import tempfile
         import os
+        import tempfile
+
         custom_registry = {
             "nodes": {
-                "Custom_Node_A": {"id": "A1", "name": "NodeA", "status": "active",
-                                  "production_ready": True},
-                "Custom_Node_B": {"id": "B2", "name": "NodeB", "status": "inactive",
-                                  "production_ready": False},
+                "Custom_Node_A": {"id": "A1", "name": "NodeA", "status": "active", "production_ready": True},
+                "Custom_Node_B": {"id": "B2", "name": "NodeB", "status": "inactive", "production_ready": False},
             }
         }
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as fh:

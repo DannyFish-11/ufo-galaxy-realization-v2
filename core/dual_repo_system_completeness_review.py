@@ -478,9 +478,7 @@ class CompletenessEntry:
     def from_dict(cls, data: Dict[str, Any]) -> "CompletenessEntry":
         """Construct from a dict (round-trip complement of ``to_dict``)."""
         return cls(
-            dimension=CompletenessDimension.from_string(
-                data.get("dimension", "")
-            ),
+            dimension=CompletenessDimension.from_string(data.get("dimension", "")),
             label=CompletenessLabel.from_string(data.get("label", "")),
             summary=data.get("summary", ""),
             completed_items=list(data.get("completed_items", [])),
@@ -562,9 +560,7 @@ class CompletenessReviewReport:
         """Construct from a dict (round-trip complement of ``to_dict``)."""
         return cls(
             report_id=data.get("report_id", ""),
-            dimensions=[
-                CompletenessEntry.from_dict(e) for e in data.get("dimensions", [])
-            ],
+            dimensions=[CompletenessEntry.from_dict(e) for e in data.get("dimensions", [])],
             verdict=CompletenessVerdict.from_string(data.get("verdict", "")),
             blocking_gaps=list(data.get("blocking_gaps", [])),
             deferred_acknowledged=list(data.get("deferred_acknowledged", [])),
@@ -573,9 +569,7 @@ class CompletenessReviewReport:
             reviewer_version=data.get("reviewer_version", "1.0"),
         )
 
-    def get_dimension(
-        self, dim: CompletenessDimension
-    ) -> Optional[CompletenessEntry]:
+    def get_dimension(self, dim: CompletenessDimension) -> Optional[CompletenessEntry]:
         """Return the :class:`CompletenessEntry` for a given dimension."""
         for entry in self.dimensions:
             if entry.dimension == dim:
@@ -734,14 +728,8 @@ class DualRepoSystemCompletenessReviewer:
             "galaxy_gateway.device_router",
             "galaxy_gateway.websocket_handler",
         ]
-        gateway_available = sum(
-            1 for m in gateway_modules
-            if _try_import(m) or _module_file_exists(m)
-        )
-        gateway_env_constrained = [
-            m for m in gateway_modules
-            if not _try_import(m) and _module_file_exists(m)
-        ]
+        gateway_available = sum(1 for m in gateway_modules if _try_import(m) or _module_file_exists(m))
+        gateway_env_constrained = [m for m in gateway_modules if not _try_import(m) and _module_file_exists(m)]
 
         # Dispatch chain — same file-existence fallback for modules that depend
         # on optional runtime deps (pydantic, fastapi) but are structurally present.
@@ -751,14 +739,8 @@ class DualRepoSystemCompletenessReviewer:
             "core.delegated_flow_acceptance_gate",
             "core.delegated_flow_readiness_gate",
         ]
-        dispatch_available = sum(
-            1 for m in dispatch_modules
-            if _try_import(m) or _module_file_exists(m)
-        )
-        dispatch_env_constrained = [
-            m for m in dispatch_modules
-            if not _try_import(m) and _module_file_exists(m)
-        ]
+        dispatch_available = sum(1 for m in dispatch_modules if _try_import(m) or _module_file_exists(m))
+        dispatch_env_constrained = [m for m in dispatch_modules if not _try_import(m) and _module_file_exists(m)]
 
         # Check documentation anchors
         doc_files = [
@@ -786,7 +768,8 @@ class DualRepoSystemCompletenessReviewer:
                 + (
                     f" (file-confirmed, runtime import requires optional deps: "
                     f"{', '.join(gateway_env_constrained)})"
-                    if gateway_env_constrained else ""
+                    if gateway_env_constrained
+                    else ""
                 )
             )
         if dispatch_available > 0:
@@ -795,13 +778,12 @@ class DualRepoSystemCompletenessReviewer:
                 + (
                     f" (file-confirmed, runtime import requires optional deps: "
                     f"{', '.join(dispatch_env_constrained)})"
-                    if dispatch_env_constrained else ""
+                    if dispatch_env_constrained
+                    else ""
                 )
             )
         if docs_present > 0:
-            completed.append(
-                f"Joint system review docs: {docs_present}/{len(doc_files)} present"
-            )
+            completed.append(f"Joint system review docs: {docs_present}/{len(doc_files)} present")
         # PR-7/8/9 V2 consolidation modules + PR-10 V2 coherence assessment:
         # 结构收敛(ingress/continuity/orchestration/manifestation/operator truth)
         # 已由 core.v2_final_consolidation_coherence 做五维一致性评估。
@@ -819,20 +801,13 @@ class DualRepoSystemCompletenessReviewer:
             )
 
         if missing:
-            gaps.append(
-                f"Missing structural modules: {', '.join(m.split()[0] for m in missing)}"
-            )
+            gaps.append(f"Missing structural modules: {', '.join(m.split()[0] for m in missing)}")
         # A gateway module is only a structural gap when the source file itself
         # is absent — not when it merely fails to import due to missing optional
         # runtime dependencies (fastapi, pydantic, etc.).
-        truly_missing_gateway = [
-            m for m in gateway_modules
-            if not _try_import(m) and not _module_file_exists(m)
-        ]
+        truly_missing_gateway = [m for m in gateway_modules if not _try_import(m) and not _module_file_exists(m)]
         if truly_missing_gateway:
-            gaps.append(
-                f"Gateway modules truly absent: {', '.join(truly_missing_gateway)}"
-            )
+            gaps.append(f"Gateway modules truly absent: {', '.join(truly_missing_gateway)}")
 
         # Label assignment
         # Note: label is only 'complete' when ALL structural sub-areas are gap-free,
@@ -890,14 +865,8 @@ class DualRepoSystemCompletenessReviewer:
             "core.recovery_durability_closure_validator",
             "core.attached_runtime_recovery_readiness",
         ]
-        runtime_available = [
-            m for m in runtime_modules
-            if _try_import(m) or _module_file_exists(m)
-        ]
-        runtime_env_constrained = [
-            m for m in runtime_modules
-            if not _try_import(m) and _module_file_exists(m)
-        ]
+        runtime_available = [m for m in runtime_modules if _try_import(m) or _module_file_exists(m)]
+        runtime_env_constrained = [m for m in runtime_modules if not _try_import(m) and _module_file_exists(m)]
 
         # Decision history: was the delegated path actually exercised?
         decision_history_available = _try_import("core.delegated_flow_decision_history")
@@ -907,14 +876,15 @@ class DualRepoSystemCompletenessReviewer:
                 from core.delegated_flow_decision_history import (  # type: ignore[import]
                     get_decision_history,
                 )
+
                 history = get_decision_history()
                 report = history.evaluate()
                 from core.delegated_flow_decision_history import (  # type: ignore[import]
                     HistoryEvidenceStatus,
                 )
+
                 decision_history_has_runtime_events = (
-                    report.evidence_status
-                    == HistoryEvidenceStatus.observed_and_closed
+                    report.evidence_status == HistoryEvidenceStatus.observed_and_closed
                 )
             except Exception as exc:
                 logger.warning("Exception suppressed: %s", exc)
@@ -923,9 +893,7 @@ class DualRepoSystemCompletenessReviewer:
         recovery_surface_available = _try_import("core.recovery_truth_surface")
 
         # Gateway capability enforcement
-        enforcement_available = _try_import(
-            "core.gateway_capability_default_enforcement"
-        )
+        enforcement_available = _try_import("core.gateway_capability_default_enforcement")
 
         # Acceptance evaluator can run
         acceptance_runnable = False
@@ -935,6 +903,7 @@ class DualRepoSystemCompletenessReviewer:
                     evaluate_system_acceptance,
                     reset_system_acceptance_evaluator,
                 )
+
                 reset_system_acceptance_evaluator()
                 _rpt = evaluate_system_acceptance()
                 acceptance_runnable = True
@@ -953,19 +922,14 @@ class DualRepoSystemCompletenessReviewer:
                 + (
                     f" (file-confirmed but runtime import requires optional deps: "
                     f"{', '.join(runtime_env_constrained)})"
-                    if runtime_env_constrained else ""
+                    if runtime_env_constrained
+                    else ""
                 )
             )
         if decision_history_available:
-            completed.append(
-                "core.delegated_flow_decision_history importable: "
-                "structure_present can be evaluated"
-            )
+            completed.append("core.delegated_flow_decision_history importable: " "structure_present can be evaluated")
         if recovery_surface_available:
-            completed.append(
-                "core.recovery_truth_surface importable: "
-                "structured recovery truth atoms available"
-            )
+            completed.append("core.recovery_truth_surface importable: " "structured recovery truth atoms available")
         if enforcement_available:
             completed.append(
                 "core.gateway_capability_default_enforcement importable: "
@@ -973,8 +937,7 @@ class DualRepoSystemCompletenessReviewer:
             )
         if acceptance_runnable:
             completed.append(
-                "core.system_final_acceptance_verdict.evaluate_system_acceptance() "
-                "callable and returns a report"
+                "core.system_final_acceptance_verdict.evaluate_system_acceptance() " "callable and returns a report"
             )
         if runtime_env_constrained:
             deferred.append(
@@ -991,14 +954,9 @@ class DualRepoSystemCompletenessReviewer:
             )
 
         # Only report modules as truly missing when the source file is also absent.
-        truly_missing_runtime = [
-            m for m in runtime_modules
-            if not _try_import(m) and not _module_file_exists(m)
-        ]
+        truly_missing_runtime = [m for m in runtime_modules if not _try_import(m) and not _module_file_exists(m)]
         if truly_missing_runtime:
-            gaps.append(
-                f"Missing runtime modules (file absent): {', '.join(truly_missing_runtime)}"
-            )
+            gaps.append(f"Missing runtime modules (file absent): {', '.join(truly_missing_runtime)}")
 
         deferred.append(
             "Android offline queue replay ordering authority: explicitly deferred "
@@ -1070,16 +1028,8 @@ class DualRepoSystemCompletenessReviewer:
             ("core.android_handoff_v2_response_ingress", "Handoff V2 response ingress"),
             ("core.android_delegated_runtime_lifecycle_coordinator", "Lifecycle coordinator"),
         ]
-        ingress_available = [
-            (m, label)
-            for m, label in ingress_modules
-            if _try_import(m) or _module_file_exists(m)
-        ]
-        ingress_missing = [
-            (m, label)
-            for m, label in ingress_modules
-            if not (_try_import(m) or _module_file_exists(m))
-        ]
+        ingress_available = [(m, label) for m, label in ingress_modules if _try_import(m) or _module_file_exists(m)]
+        ingress_missing = [(m, label) for m, label in ingress_modules if not (_try_import(m) or _module_file_exists(m))]
 
         # Cross-repo contract documents
         contract_docs = [
@@ -1095,16 +1045,8 @@ class DualRepoSystemCompletenessReviewer:
             ("galaxy_gateway.android.handlers.handoff_v2_result", "HandoffEnvelopeV2 result handler"),
             ("galaxy_gateway.android_bridge", "AndroidBridge handler table"),
         ]
-        wire_available = [
-            (m, label)
-            for m, label in wire_modules
-            if _try_import(m) or _module_file_exists(m)
-        ]
-        wire_missing = [
-            (m, label)
-            for m, label in wire_modules
-            if not (_try_import(m) or _module_file_exists(m))
-        ]
+        wire_available = [(m, label) for m, label in wire_modules if _try_import(m) or _module_file_exists(m)]
+        wire_missing = [(m, label) for m, label in wire_modules if not (_try_import(m) or _module_file_exists(m))]
         reconciliation_signal_value = "reconciliation_signal"
         handoff_message_type_names = (
             "HANDOFF_ACK",
@@ -1141,20 +1083,14 @@ class DualRepoSystemCompletenessReviewer:
             reconciliation_type_runtime_verified = (
                 MessageType.RECONCILIATION_SIGNAL.value == reconciliation_signal_value
             )
-            handoff_types_runtime_verified = all(
-                hasattr(MessageType, name)
-                for name in handoff_message_type_names
-            )
+            handoff_types_runtime_verified = all(hasattr(MessageType, name) for name in handoff_message_type_names)
         except Exception as exc:
             logger.warning("Exception suppressed: %s", exc)
 
         try:
             import galaxy_gateway.android_bridge as android_bridge  # type: ignore[import]
 
-            bridge_handlers_runtime_verified = all(
-                hasattr(android_bridge, name)
-                for name in gateway_handler_names
-            )
+            bridge_handlers_runtime_verified = all(hasattr(android_bridge, name) for name in gateway_handler_names)
         except Exception as exc:
             logger.warning("Exception suppressed: %s", exc)
 
@@ -1178,9 +1114,10 @@ class DualRepoSystemCompletenessReviewer:
         runtime_cross_repo_activated = False
         runtime_activation_check_available = False
         try:
-            from core.android_device_state_store import (  # type: ignore[import]
-                get_device_ecosystem_summary as _get_eco_summary,
+            from core.android_device_state_store import (
+                get_device_ecosystem_summary as _get_eco_summary,  # type: ignore[import]
             )
+
             runtime_activation_check_available = True
             eco = _get_eco_summary()
             devices_with_snapshot = eco.get("total_devices_with_snapshot", 0)
@@ -1193,28 +1130,18 @@ class DualRepoSystemCompletenessReviewer:
         deferred: List[str] = []
 
         if ingress_available:
-            completed.append(
-                "V2-side ingress modules present: "
-                + ", ".join(m for m, _ in ingress_available)
-            )
+            completed.append("V2-side ingress modules present: " + ", ".join(m for m, _ in ingress_available))
         if contract_docs_present:
-            completed.append(
-                "Cross-repo contract documentation: "
-                + ", ".join(contract_docs_present)
-            )
+            completed.append("Cross-repo contract documentation: " + ", ".join(contract_docs_present))
         completed.append(
             "core.android_participant_evidence_ingress: "
             "file-based evidence contract mechanism present for JSON artifact ingestion"
         )
         if wire_available:
-            completed.append(
-                "V2 live wire modules present: "
-                + ", ".join(m for m, _ in wire_available)
-            )
+            completed.append("V2 live wire modules present: " + ", ".join(m for m, _ in wire_available))
         if reconciliation_type_registered:
             completed.append(
-                "galaxy_gateway.protocol.aip_v3.MessageType includes "
-                "RECONCILIATION_SIGNAL ('reconciliation_signal')"
+                "galaxy_gateway.protocol.aip_v3.MessageType includes " "RECONCILIATION_SIGNAL ('reconciliation_signal')"
             )
         if handoff_types_registered and bridge_handlers_registered:
             completed.append(
@@ -1229,19 +1156,12 @@ class DualRepoSystemCompletenessReviewer:
             )
 
         if ingress_missing:
-            gaps.append(
-                "Missing V2-side ingress modules: "
-                + ", ".join(m for m, _ in ingress_missing)
-            )
+            gaps.append("Missing V2-side ingress modules: " + ", ".join(m for m, _ in ingress_missing))
         if wire_missing:
-            gaps.append(
-                "Missing V2 live wire modules: "
-                + ", ".join(m for m, _ in wire_missing)
-            )
+            gaps.append("Missing V2 live wire modules: " + ", ".join(m for m, _ in wire_missing))
         if not reconciliation_type_registered:
             gaps.append(
-                "ReconciliationSignal AIP wire regression: "
-                "MessageType.RECONCILIATION_SIGNAL is not registered"
+                "ReconciliationSignal AIP wire regression: " "MessageType.RECONCILIATION_SIGNAL is not registered"
             )
         if not handoff_types_registered or not bridge_handlers_registered:
             gaps.append(
@@ -1268,11 +1188,7 @@ class DualRepoSystemCompletenessReviewer:
         # the dimension is 'evidence_gap' — the code is present but the flow has
         # not been observed.  This aligns with the final audit surface which
         # reports MULTI_DEVICE_CROSS_REPO_EVIDENCE_FLOW as MISSING/evidence_gap.
-        label = (
-            CompletenessLabel.complete
-            if not gaps
-            else CompletenessLabel.evidence_gap
-        )
+        label = CompletenessLabel.complete if not gaps else CompletenessLabel.evidence_gap
 
         return CompletenessEntry(
             dimension=dim,
@@ -1325,18 +1241,15 @@ class DualRepoSystemCompletenessReviewer:
                     GATE_IS_NOW_CI_ENFORCING_AUTHORITY,
                     evaluate_distributed_release_gate,
                 )
+
                 r = evaluate_distributed_release_gate()
                 skeleton_enforcing = getattr(r, "is_enforcing", None)
                 enforcement_authority_present = bool(GATE_IS_NOW_CI_ENFORCING_AUTHORITY)
             except Exception as exc:
                 logger.debug("Fallback triggered: %s", exc)
                 skeleton_enforcing = None
-        governance_ci_workflow_present = _file_exists(
-            ".github/workflows/governance_gate_enforcement.yml"
-        )
-        reality_audit_ci_workflow_present = _file_exists(
-            ".github/workflows/dual_repo_reality_audit.yml"
-        )
+        governance_ci_workflow_present = _file_exists(".github/workflows/governance_gate_enforcement.yml")
+        reality_audit_ci_workflow_present = _file_exists(".github/workflows/dual_repo_reality_audit.yml")
 
         # Taxonomy available and register-able?
         taxonomy_functional = False
@@ -1345,6 +1258,7 @@ class DualRepoSystemCompletenessReviewer:
                 from core.release_governance_taxonomy import (  # type: ignore[import]
                     get_terminology_registry,
                 )
+
                 reg = get_terminology_registry()
                 taxonomy_functional = len(reg.entries) > 0
             except Exception as exc:
@@ -1387,8 +1301,7 @@ class DualRepoSystemCompletenessReviewer:
             )
         if reality_audit_ci_workflow_present:
             completed.append(
-                ".github/workflows/dual_repo_reality_audit.yml: "
-                "dual-repo reality audit is wired as a CI gate"
+                ".github/workflows/dual_repo_reality_audit.yml: " "dual-repo reality audit is wired as a CI gate"
             )
 
         if skeleton_enforcing is False:
@@ -1410,22 +1323,18 @@ class DualRepoSystemCompletenessReviewer:
             )
         if not reality_audit_ci_workflow_present:
             gaps.append(
-                "Dual-repo reality audit CI workflow missing: critical audit gaps "
-                "would not automatically fail CI"
+                "Dual-repo reality audit CI workflow missing: critical audit gaps " "would not automatically fail CI"
             )
 
         if missing_gov:
-            gaps.append(
-                f"Missing governance modules: {', '.join(missing_gov)}"
-            )
+            gaps.append(f"Missing governance modules: {', '.join(missing_gov)}")
 
         deferred.append(
             "Legacy path default-off enforcement: depends on "
             "readiness/governance gate signals being fully wired; deferred"
         )
         deferred.append(
-            "Automatic rollback on governance violation: framework exists, "
-            "automatic trigger not yet connected"
+            "Automatic rollback on governance violation: framework exists, " "automatic trigger not yet connected"
         )
 
         if (
@@ -1492,12 +1401,8 @@ class DualRepoSystemCompletenessReviewer:
         recovery_available = [m for m in recovery_modules if _try_import(m)]
 
         # Real-device evidence: check for evidence file path
-        evidence_env = os.environ.get(
-            "ANDROID_PARTICIPANT_EVIDENCE_PATH", ""
-        )
-        real_device_evidence_present = bool(
-            evidence_env and os.path.isfile(evidence_env)
-        )
+        evidence_env = os.environ.get("ANDROID_PARTICIPANT_EVIDENCE_PATH", "")
+        real_device_evidence_present = bool(evidence_env and os.path.isfile(evidence_env))
 
         # Check multi-device acceptance doc
         md_acceptance_doc = "docs/MULTI_DEVICE_E2E_ACCEPTANCE_MATRIX.md"
@@ -1518,12 +1423,9 @@ class DualRepoSystemCompletenessReviewer:
                 + ", ".join(recovery_available)
             )
         if md_acceptance_present:
-            completed.append(
-                f"Multi-device e2e acceptance matrix document: {md_acceptance_doc}"
-            )
+            completed.append(f"Multi-device e2e acceptance matrix document: {md_acceptance_doc}")
         completed.append(
-            "core.android_participant_evidence_ingress: "
-            "provides structured path for real-device evidence ingestion"
+            "core.android_participant_evidence_ingress: " "provides structured path for real-device evidence ingestion"
         )
 
         if not real_device_evidence_present:
@@ -1546,9 +1448,7 @@ class DualRepoSystemCompletenessReviewer:
 
         missing_md = [m for m in multi_device_modules if m not in md_available]
         if missing_md:
-            gaps.append(
-                f"Missing multi-device modules: {', '.join(missing_md)}"
-            )
+            gaps.append(f"Missing multi-device modules: {', '.join(missing_md)}")
 
         deferred.append(
             "Real-device CI automation: acknowledged as deferred; "
@@ -1599,27 +1499,17 @@ class DualRepoSystemCompletenessReviewer:
     # Verdict computation
     # ------------------------------------------------------------------
 
-    def _compute_verdict(
-        self, entries: List[CompletenessEntry]
-    ) -> CompletenessVerdict:
+    def _compute_verdict(self, entries: List[CompletenessEntry]) -> CompletenessVerdict:
         """Compute the system-level completeness verdict from dimension entries."""
         if not entries:
             return CompletenessVerdict.insufficient_evidence
 
         labels = [e.label for e in entries]
 
-        not_present_count = sum(
-            1 for l in labels if l == CompletenessLabel.not_present
-        )
-        evidence_gap_count = sum(
-            1 for l in labels if l == CompletenessLabel.evidence_gap
-        )
-        nominally_present_count = sum(
-            1 for l in labels if l == CompletenessLabel.nominally_present
-        )
-        structure_only_count = sum(
-            1 for l in labels if l == CompletenessLabel.structure_only
-        )
+        not_present_count = sum(1 for l in labels if l == CompletenessLabel.not_present)
+        evidence_gap_count = sum(1 for l in labels if l == CompletenessLabel.evidence_gap)
+        nominally_present_count = sum(1 for l in labels if l == CompletenessLabel.nominally_present)
+        structure_only_count = sum(1 for l in labels if l == CompletenessLabel.structure_only)
 
         if not_present_count >= 2:
             return CompletenessVerdict.insufficient_evidence
@@ -1630,20 +1520,13 @@ class DualRepoSystemCompletenessReviewer:
         if structure_only_count >= 3:
             return CompletenessVerdict.structural_only_runtime_not_closed
 
-        all_complete = all(
-            l in (CompletenessLabel.complete, CompletenessLabel.deferred)
-            for l in labels
-        )
-        if all_complete and not any(
-            l.is_blocking() for l in labels
-        ):
+        all_complete = all(l in (CompletenessLabel.complete, CompletenessLabel.deferred) for l in labels)
+        if all_complete and not any(l.is_blocking() for l in labels):
             return CompletenessVerdict.fully_closed
 
         return CompletenessVerdict.partial_closure_gaps_present
 
-    def _collect_blocking_gaps(
-        self, entries: List[CompletenessEntry]
-    ) -> List[str]:
+    def _collect_blocking_gaps(self, entries: List[CompletenessEntry]) -> List[str]:
         """Collect all blocking gaps from all entries."""
         result: List[str] = []
         for entry in entries:
@@ -1652,9 +1535,7 @@ class DualRepoSystemCompletenessReviewer:
                     result.append(f"[{entry.dimension.value}] {gap}")
         return result
 
-    def _collect_deferred(
-        self, entries: List[CompletenessEntry]
-    ) -> List[str]:
+    def _collect_deferred(self, entries: List[CompletenessEntry]) -> List[str]:
         """Collect all deferred items from all entries."""
         result: List[str] = []
         for entry in entries:
@@ -1693,9 +1574,7 @@ class DualRepoSystemCompletenessReviewer:
 
         for entry in entries:
             icon = label_icon.get(entry.label, "?")
-            lines.append(
-                f"  {icon} {entry.dimension.value:<38} {entry.label.value}"
-            )
+            lines.append(f"  {icon} {entry.dimension.value:<38} {entry.label.value}")
 
         lines += [
             "",

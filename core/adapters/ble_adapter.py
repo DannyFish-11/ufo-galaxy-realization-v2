@@ -16,11 +16,9 @@ UUID 定义 (Galaxy BLE Service):
 - CCCD:             00002902-0000-1000-8000-00805f9b34fb
 """
 
-from typing import List  # auto: missing import
-
-
 import json
 import logging
+from typing import List  # auto: missing import
 from typing import Any, Dict, Optional
 
 from core.aip_transport import TransportAdapter
@@ -31,6 +29,7 @@ logger = logging.getLogger("Galaxy.Adapter.BLE")
 try:
     from bleak import BleakClient, BleakScanner
     from bleak.backends.characteristic import BleakGATTCharacteristic
+
     BLE_AVAILABLE = True
 except ImportError:
     BLE_AVAILABLE = False
@@ -59,8 +58,8 @@ class BLEAdapter(TransportAdapter):
 
     def __init__(self) -> None:
         self._scanner: Optional[Any] = None
-        self._clients: Dict[str, Any] = {}          # device_id → BleakClient
-        self._discovered: Dict[str, str] = {}       # address → name
+        self._clients: Dict[str, Any] = {}  # device_id → BleakClient
+        self._discovered: Dict[str, str] = {}  # address → name
         self._mtu: int = BLE_MTU
         if BLE_AVAILABLE:
             self._scanner = BleakScanner()
@@ -173,10 +172,7 @@ class BLEAdapter(TransportAdapter):
 
     def list_connected(self) -> List[str]:
         """返回已连接的设备地址列表。"""
-        return [
-            addr for addr, client in self._clients.items()
-            if client.is_connected
-        ]
+        return [addr for addr, client in self._clients.items() if client.is_connected]
 
     # -- 内部 --------------------------------------------------------------
 

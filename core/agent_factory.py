@@ -13,9 +13,9 @@ import json
 import logging
 import time
 import uuid
-from typing import List, Dict, Any, Optional, Callable
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import Any, Callable, Dict, List, Optional
 
 try:
     from core.monitoring import CircuitBreaker
@@ -31,9 +31,11 @@ class SecurityPolicyViolation(Exception):
 
 # ───────────────────── Agent 消息通信 ─────────────────────
 
+
 @dataclass
 class AgentMessage:
     """Agent 间通信消息"""
+
     id: str
     sender_id: str
     receiver_id: str
@@ -138,23 +140,26 @@ def get_message_bus() -> AgentMessageBus:
 
 # ───────────────────── 数据模型 ─────────────────────
 
+
 class AgentRole(Enum):
     """Agent 角色"""
-    COORDINATOR = "coordinator"      # 协调者 - 分配任务给子 Agent
-    EXECUTOR = "executor"            # 执行者 - 执行具体任务
-    ANALYST = "analyst"              # 分析者 - 分析数据和信息
-    PLANNER = "planner"              # 规划者 - 制定计划
-    MONITOR = "monitor"              # 监控者 - 监控执行过程
-    COMMUNICATOR = "communicator"    # 通信者 - 处理外部通信
-    SPECIALIST = "specialist"        # 专家 - 特定领域专家
+
+    COORDINATOR = "coordinator"  # 协调者 - 分配任务给子 Agent
+    EXECUTOR = "executor"  # 执行者 - 执行具体任务
+    ANALYST = "analyst"  # 分析者 - 分析数据和信息
+    PLANNER = "planner"  # 规划者 - 制定计划
+    MONITOR = "monitor"  # 监控者 - 监控执行过程
+    COMMUNICATOR = "communicator"  # 通信者 - 处理外部通信
+    SPECIALIST = "specialist"  # 专家 - 特定领域专家
 
 
 class AgentState(Enum):
     """Agent 状态"""
+
     IDLE = "idle"
     WORKING = "working"
-    WAITING = "waiting"       # 等待子任务完成
-    SPLITTING = "splitting"   # 正在分裂
+    WAITING = "waiting"  # 等待子任务完成
+    SPLITTING = "splitting"  # 正在分裂
     COMPLETED = "completed"
     ERROR = "error"
     TERMINATED = "terminated"
@@ -162,6 +167,7 @@ class AgentState(Enum):
 
 class CreationMode(Enum):
     """创建模式"""
+
     TEMPLATE = "template"
     LLM_GENERATED = "llm_generated"
     SPLIT = "split"
@@ -170,6 +176,7 @@ class CreationMode(Enum):
 @dataclass
 class AgentCapability:
     """Agent 能力"""
+
     name: str
     description: str
     strength: float = 1.0  # 0-1 能力强度
@@ -178,22 +185,25 @@ class AgentCapability:
 @dataclass
 class AgentConfig:
     """Agent 配置"""
+
     role: AgentRole
     name: str
     description: str
     capabilities: List[AgentCapability]
     system_prompt: str
     max_subtasks: int = 5
-    max_depth: int = 3        # 最大递归深度
+    max_depth: int = 3  # 最大递归深度
     split_threshold: int = 3  # 积压任务超过此数触发分裂
-    ttl: int = 3600           # 生存时间（秒）
+    ttl: int = 3600  # 生存时间（秒）
     metadata: Dict = field(default_factory=dict)
-    permissions: Dict = field(default_factory=lambda: {
-        "filesystem": False,
-        "terminal": False,
-        "network": False,
-        "browser": False,
-    })
+    permissions: Dict = field(
+        default_factory=lambda: {
+            "filesystem": False,
+            "terminal": False,
+            "network": False,
+            "browser": False,
+        }
+    )
     # C阶段 1A: SOUL 人格继承 — 继承主控 SOUL；子 Agent 可追加自己的 soul_supplement
     inherited_soul: str = ""
     """从主控 Agent 继承的 SOUL 约束（只读，不可被子代覆盖）"""
@@ -204,23 +214,26 @@ class AgentConfig:
 @dataclass
 class TaskAgent:
     """运行时 Agent 实例"""
+
     id: str
     config: AgentConfig
     state: AgentState = AgentState.IDLE
     parent_id: Optional[str] = None
     children_ids: List[str] = field(default_factory=list)
     creation_mode: CreationMode = CreationMode.TEMPLATE
-    depth: int = 0            # 当前递归深度
+    depth: int = 0  # 当前递归深度
     task_queue: List[Dict] = field(default_factory=list)
     completed_tasks: List[Dict] = field(default_factory=list)
     created_at: float = field(default_factory=time.time)
     last_active: float = field(default_factory=time.time)
-    metrics: Dict = field(default_factory=lambda: {
-        "tasks_completed": 0,
-        "tasks_failed": 0,
-        "total_latency_ms": 0,
-        "splits": 0,
-    })
+    metrics: Dict = field(
+        default_factory=lambda: {
+            "tasks_completed": 0,
+            "tasks_failed": 0,
+            "total_latency_ms": 0,
+            "splits": 0,
+        }
+    )
 
     def to_dict(self) -> Dict:
         return {
@@ -273,7 +286,7 @@ AGENT_TEMPLATES: Dict[str, AgentConfig] = {
         ],
         system_prompt=(
             "你是一个数据分析 Agent。分析给定的数据并提供洞察。\n"
-            "输出格式为 JSON: {\"analysis\": ..., \"insights\": [...], \"recommendations\": [...]}"
+            '输出格式为 JSON: {"analysis": ..., "insights": [...], "recommendations": [...]}'
         ),
     ),
     "code_executor": AgentConfig(
@@ -287,7 +300,7 @@ AGENT_TEMPLATES: Dict[str, AgentConfig] = {
         ],
         system_prompt=(
             "你是一个代码执行 Agent。根据需求生成代码并执行。\n"
-            "返回 JSON: {\"code\": ..., \"language\": ..., \"explanation\": ...}"
+            '返回 JSON: {"code": ..., "language": ..., "explanation": ...}'
         ),
     ),
     "research": AgentConfig(
@@ -301,7 +314,7 @@ AGENT_TEMPLATES: Dict[str, AgentConfig] = {
         ],
         system_prompt=(
             "你是一个调研 Agent。负责收集和整理信息。\n"
-            "返回 JSON: {\"findings\": [...], \"sources\": [...], \"summary\": ...}"
+            '返回 JSON: {"findings": [...], "sources": [...], "summary": ...}'
         ),
     ),
     "device_controller": AgentConfig(
@@ -316,7 +329,7 @@ AGENT_TEMPLATES: Dict[str, AgentConfig] = {
         system_prompt=(
             "你是一个设备控制 Agent。负责安全地控制物理设备。\n"
             "在执行任何操作前，先进行安全检查。\n"
-            "返回 JSON: {\"action\": ..., \"device\": ..., \"safety_check\": ..., \"result\": ...}"
+            '返回 JSON: {"action": ..., "device": ..., "safety_check": ..., "result": ...}'
         ),
     ),
     "planner": AgentConfig(
@@ -330,7 +343,7 @@ AGENT_TEMPLATES: Dict[str, AgentConfig] = {
         ],
         system_prompt=(
             "你是一个规划 Agent。根据目标制定详细的执行计划。\n"
-            "返回 JSON: {\"plan\": {\"steps\": [...], \"resources\": [...], \"risks\": [...]}}"
+            '返回 JSON: {"plan": {"steps": [...], "resources": [...], "risks": [...]}}'
         ),
     ),
 }
@@ -344,8 +357,13 @@ AGENT_CONFIG_SCHEMA: Dict[str, Any] = {
         "role": {
             "type": "string",
             "enum": [
-                "coordinator", "executor", "analyst",
-                "planner", "monitor", "communicator", "specialist",
+                "coordinator",
+                "executor",
+                "analyst",
+                "planner",
+                "monitor",
+                "communicator",
+                "specialist",
             ],
         },
         "name": {"type": "string", "minLength": 1},
@@ -384,6 +402,7 @@ def get_effective_soul(config: "AgentConfig") -> str:
 
 # ───────────────────── Agent 工厂 ─────────────────────
 
+
 class AgentFactory:
     """
     动态 Agent 工厂
@@ -395,9 +414,9 @@ class AgentFactory:
     """
 
     # 生产可用性配置
-    MAX_AGENTS = 500              # 最大 Agent 数
-    CLEANUP_INTERVAL = 60         # TTL 清理间隔（秒）
-    MAX_CREATES_PER_MINUTE = 50   # 每分钟最大创建数
+    MAX_AGENTS = 500  # 最大 Agent 数
+    CLEANUP_INTERVAL = 60  # TTL 清理间隔（秒）
+    MAX_CREATES_PER_MINUTE = 50  # 每分钟最大创建数
     STATE_FILE = "data/agent_state.json"
 
     def __init__(self, llm_router=None):
@@ -410,8 +429,7 @@ class AgentFactory:
         self._creation_timestamps: List[float] = []  # 速率限制追踪
         # LLM 调用熔断器
         self._llm_circuit_breaker = (
-            CircuitBreaker(name="agent_llm", failure_threshold=5, recovery_timeout=30.0)
-            if CircuitBreaker else None
+            CircuitBreaker(name="agent_llm", failure_threshold=5, recovery_timeout=30.0) if CircuitBreaker else None
         )
         try:
             self._load_state()
@@ -422,7 +440,8 @@ class AgentFactory:
     # ─────── 模式 1: 模板创建 ─────────
 
     def create_from_template(
-        self, template_name: str,
+        self,
+        template_name: str,
         parent_id: Optional[str] = None,
         overrides: Optional[Dict] = None,
         inherited_soul: str = "",
@@ -463,7 +482,8 @@ class AgentFactory:
     # ─────── 模式 2: LLM 生成 ─────────
 
     async def create_from_llm(
-        self, task_description: str,
+        self,
+        task_description: str,
         parent_id: Optional[str] = None,
         context: Optional[Dict] = None,
         soul_policy: str = "",
@@ -483,7 +503,10 @@ class AgentFactory:
         try:
             result = await self.llm_router.chat_json(
                 messages=[
-                    {"role": "system", "content": "你是一个 Agent 配置生成器。根据任务描述生成最优的 Agent 配置。严格遵守 SOUL 约束和 schema 规则。"},
+                    {
+                        "role": "system",
+                        "content": "你是一个 Agent 配置生成器。根据任务描述生成最优的 Agent 配置。严格遵守 SOUL 约束和 schema 规则。",
+                    },
                     {"role": "user", "content": prompt},
                 ],
                 task_type="planning",
@@ -540,15 +563,12 @@ class AgentFactory:
             template = self._match_template(task_description)
             return self.create_from_template(template, parent_id)
 
-    def _build_agent_generation_prompt(self, task_description: str,
-                                       context: Optional[Dict] = None,
-                                       soul_policy: str = "") -> str:
+    def _build_agent_generation_prompt(
+        self, task_description: str, context: Optional[Dict] = None, soul_policy: str = ""
+    ) -> str:
         """构建注入了 SOUL 约束 + 模板 schema 的 Agent 生成 prompt（双层约束 2C 前置层）。"""
         ctx_str = json.dumps(context, ensure_ascii=False, indent=2) if context else "无"
-        soul_section = (
-            f"\n\n【SOUL 约束（必须严格遵守，不可违背）】\n{soul_policy}"
-            if soul_policy else ""
-        )
+        soul_section = f"\n\n【SOUL 约束（必须严格遵守，不可违背）】\n{soul_policy}" if soul_policy else ""
         schema_hint = (
             "【模板 Schema 硬规则（生成必须符合）】\n"
             "- role 必须是以下之一: coordinator, executor, analyst, planner, monitor, communicator, specialist\n"
@@ -685,8 +705,7 @@ class AgentFactory:
 
     # ─────── 模式 3: 分裂繁殖 ─────────
 
-    async def split_agent(self, agent_id: str,
-                          num_children: int = 2) -> List[TaskAgent]:
+    async def split_agent(self, agent_id: str, num_children: int = 2) -> List[TaskAgent]:
         """
         将一个 Agent 分裂为多个子 Agent
 
@@ -700,6 +719,7 @@ class AgentFactory:
         # 之前误传 AuthorityDomain 参数导致每次 TypeError → 分裂恒被误判为安全违规。
         try:
             from core.center_authority_boundary import assert_center_authority_intact
+
             assert_center_authority_intact()
         except Exception as exc:
             logger.error("Security policy check failed", exc_info=True)
@@ -722,9 +742,7 @@ class AgentFactory:
 
         for i in range(num_children):
             # 子 Agent 继承父代的部分能力
-            child_capabilities = self._distribute_capabilities(
-                parent.config.capabilities, i, num_children
-            )
+            child_capabilities = self._distribute_capabilities(parent.config.capabilities, i, num_children)
 
             # C阶段 1A: 继承主控 SOUL（只读），子 Agent 可追加 soul_supplement
             parent_soul = parent.config.inherited_soul or parent.config.metadata.get("soul_policy", "")
@@ -763,23 +781,25 @@ class AgentFactory:
         parent.state = AgentState.WAITING
 
         logger.info(
-            f"[分裂繁殖] {parent.config.name} ({agent_id}) → "
-            f"{num_children} 个子 Agent: {[c.id for c in children]}"
+            f"[分裂繁殖] {parent.config.name} ({agent_id}) → " f"{num_children} 个子 Agent: {[c.id for c in children]}"
         )
         return children
 
-    def _distribute_capabilities(self, capabilities: List[AgentCapability],
-                                 index: int, total: int) -> List[AgentCapability]:
+    def _distribute_capabilities(
+        self, capabilities: List[AgentCapability], index: int, total: int
+    ) -> List[AgentCapability]:
         """分配能力给子 Agent（每个子代获得所有能力，但强度分化）"""
         result = []
         for cap in capabilities:
             # 子代在不同能力上有不同的强度分化
             variation = 0.8 + (0.4 * ((index + hash(cap.name)) % total) / total)
-            result.append(AgentCapability(
-                name=cap.name,
-                description=cap.description,
-                strength=min(1.0, cap.strength * variation),
-            ))
+            result.append(
+                AgentCapability(
+                    name=cap.name,
+                    description=cap.description,
+                    strength=min(1.0, cap.strength * variation),
+                )
+            )
         return result
 
     # ─────── Agent 执行 ─────────
@@ -800,8 +820,7 @@ class AgentFactory:
         agent.last_active = time.time()
 
         # 检查是否需要分裂
-        if len(agent.task_queue) > agent.config.split_threshold and \
-           agent.depth < agent.config.max_depth:
+        if len(agent.task_queue) > agent.config.split_threshold and agent.depth < agent.config.max_depth:
             children = await self.split_agent(agent_id)
             if children:
                 # 通过消息总线向子 Agent 分发任务
@@ -861,9 +880,7 @@ class AgentFactory:
 
                 # 如果所有子 Agent 都失败，回退到父 Agent 串行执行
                 if fail_count == len(children) and agent.task_queue:
-                    logger.warning(
-                        f"所有子 Agent 均失败，回退到父 Agent {agent_id} 串行执行"
-                    )
+                    logger.warning(f"所有子 Agent 均失败，回退到父 Agent {agent_id} 串行执行")
                     agent.state = AgentState.WORKING
                     fallback_result = await self._run_agent(agent_id)
                     return {
@@ -915,19 +932,20 @@ class AgentFactory:
 
                 if result.get("simulated"):
                     logger.warning(
-                        f"Agent {agent_id} task was SIMULATED (no LLM): "
-                        f"{task.get('description', str(task)[:80])}"
+                        f"Agent {agent_id} task was SIMULATED (no LLM): " f"{task.get('description', str(task)[:80])}"
                     )
 
             except asyncio.TimeoutError:
                 latency = (time.monotonic() - t0) * 1000
                 agent.metrics["tasks_failed"] += 1
-                results.append({
-                    "task": task,
-                    "error": f"Task timed out after {self.TASK_TIMEOUT_SECONDS}s",
-                    "error_type": "TimeoutError",
-                    "latency_ms": latency,
-                })
+                results.append(
+                    {
+                        "task": task,
+                        "error": f"Task timed out after {self.TASK_TIMEOUT_SECONDS}s",
+                        "error_type": "TimeoutError",
+                        "latency_ms": latency,
+                    }
+                )
                 logger.error(
                     f"Agent {agent_id} task timed out after {self.TASK_TIMEOUT_SECONDS}s: "
                     f"{task.get('description', str(task)[:80])}"
@@ -966,6 +984,7 @@ class AgentFactory:
             tools = []
             try:
                 from core.openclawd import get_openclawd
+
                 clawd = get_openclawd()
                 tools = clawd._collect_tools()
             except Exception as e:
@@ -974,8 +993,9 @@ class AgentFactory:
             # ReAct 循环 —— 复用统一执行器 core.agent.react_loop（与团队成员同构）。
             # 反思自检 + 环路检测 + 上限/预算均由 ReactConfig 集中配置（环境变量可覆盖）。
             import time as _time
-            from core.schemas.tool_call import ToolCallRecord, ToolCallStatus
+
             from core.agent.react_loop import ReactConfig, run_react_tool_loop
+            from core.schemas.tool_call import ToolCallRecord, ToolCallStatus
 
             cfg = ReactConfig.from_env()
             tool_records: list = []
@@ -986,11 +1006,16 @@ class AgentFactory:
                     # 确保统一策略层生效，无论持有哪种 router。
                     if hasattr(self.llm_router, "chat_with_tools"):
                         return await self.llm_router.chat_with_tools(
-                            messages=msgs, tools=tools if tools else None, task_type="agent_control",
+                            messages=msgs,
+                            tools=tools if tools else None,
+                            task_type="agent_control",
                         )
                     return await self.llm_router.chat(
-                        messages=msgs, tools=tools if tools else None, task_type="agent_control",
+                        messages=msgs,
+                        tools=tools if tools else None,
+                        task_type="agent_control",
                     )
+
                 if self._llm_circuit_breaker:
                     return await self._llm_circuit_breaker.execute(_call)
                 return await _call()
@@ -1011,16 +1036,18 @@ class AgentFactory:
                 layer = ToolCallRecord.classify_layer(name)
                 status = ToolCallStatus.SUCCESS if result.get("success", True) else ToolCallStatus.ERROR
                 result_str = str(result.get("result", result.get("error", "")))
-                tool_records.append(ToolCallRecord(
-                    tool_name=name,
-                    layer=layer,
-                    arguments=args,
-                    result=result_str[:2000],
-                    status=status,
-                    error=result.get("error") if not result.get("success", True) else None,
-                    latency_ms=result.get("_latency_ms", 0.0),
-                    iteration=it_index,
-                ))
+                tool_records.append(
+                    ToolCallRecord(
+                        tool_name=name,
+                        layer=layer,
+                        arguments=args,
+                        result=result_str[:2000],
+                        status=status,
+                        error=result.get("error") if not result.get("success", True) else None,
+                        latency_ms=result.get("_latency_ms", 0.0),
+                        iteration=it_index,
+                    )
+                )
 
             async def _reflect_cb(content):
                 return await self._reflect_on_result(task, content, tool_records)
@@ -1055,9 +1082,7 @@ class AgentFactory:
                 "status": "simulated",
             }
 
-    async def _reflect_on_result(
-        self, task: Dict, answer: str, tool_records: list
-    ) -> Optional[Dict[str, Any]]:
+    async def _reflect_on_result(self, task: Dict, answer: str, tool_records: list) -> Optional[Dict[str, Any]]:
         """对 ReAct 候选最终答案做一次 LLM 自检（Reflexion 式）。
 
         返回 ``{"sufficient": bool, "critique": str}``；任何失败/无法解析时返回
@@ -1116,7 +1141,8 @@ class AgentFactory:
 
             # 最佳努力记录到元认知引擎（让反思轨迹真正在线、可观测）
             try:
-                from core.metacognition_engine import get_metacognition_engine, ThoughtType
+                from core.metacognition_engine import ThoughtType, get_metacognition_engine
+
                 get_metacognition_engine().track_thought(
                     ThoughtType.REFLECTION,
                     result["critique"] or "result judged sufficient",
@@ -1143,7 +1169,7 @@ class AgentFactory:
         end = text.rfind("}")
         if start != -1 and end != -1 and end > start:
             try:
-                return json.loads(text[start:end + 1])
+                return json.loads(text[start : end + 1])
             except (ValueError, TypeError):
                 return None
         return None
@@ -1200,10 +1226,7 @@ class AgentFactory:
         node = agent.to_dict()
         children_ids = self.agent_tree.get(agent_id, [])
         if children_ids:
-            node["children_detail"] = [
-                self._build_tree_node(cid)
-                for cid in children_ids if cid in self.agents
-            ]
+            node["children_detail"] = [self._build_tree_node(cid) for cid in children_ids if cid in self.agents]
         return node
 
     def terminate_agent(self, agent_id: str, recursive: bool = True):
@@ -1224,7 +1247,8 @@ class AgentFactory:
         """清理过期 Agent"""
         now = time.time()
         expired = [
-            aid for aid, a in self.agents.items()
+            aid
+            for aid, a in self.agents.items()
             if a.state in (AgentState.COMPLETED, AgentState.TERMINATED, AgentState.IDLE)
             and now - a.created_at > a.config.ttl
         ]
@@ -1273,6 +1297,7 @@ class AgentFactory:
     def _persist_state(self):
         """持久化 Agent 状态到磁盘"""
         import os as _os
+
         state_dir = _os.path.dirname(self.STATE_FILE)
         if state_dir:
             _os.makedirs(state_dir, exist_ok=True)
@@ -1314,6 +1339,7 @@ class AgentFactory:
     def _load_state(self):
         """从磁盘恢复 Agent 状态"""
         import os as _os
+
         if not _os.path.exists(self.STATE_FILE):
             return
         try:
@@ -1374,9 +1400,7 @@ class AgentFactory:
 
     # ─────── 分形任务 ─────────
 
-    async def create_fractal_task(
-        self, task_description: str, context: Optional[Dict] = None
-    ) -> Dict:
+    async def create_fractal_task(self, task_description: str, context: Optional[Dict] = None) -> Dict:
         """
         通过 FractalExecutor 执行分形递归任务分解。
 
@@ -1412,14 +1436,16 @@ class AgentFactory:
         """列出所有可用模板（含内置 + 动态注册）"""
         result = []
         for name, cfg in AGENT_TEMPLATES.items():
-            result.append({
-                "name": name,
-                "role": cfg.role.value,
-                "description": cfg.description,
-                "capabilities": [c.name for c in cfg.capabilities],
-                "max_subtasks": cfg.max_subtasks,
-                "max_depth": cfg.max_depth,
-            })
+            result.append(
+                {
+                    "name": name,
+                    "role": cfg.role.value,
+                    "description": cfg.description,
+                    "capabilities": [c.name for c in cfg.capabilities],
+                    "max_subtasks": cfg.max_subtasks,
+                    "max_depth": cfg.max_depth,
+                }
+            )
         return result
 
     def create_unified(
@@ -1457,6 +1483,7 @@ class AgentFactory:
         elif agent_type == "device":
             try:
                 from core.device_agent_manager import DeviceAgentManager
+
                 manager = DeviceAgentManager()
                 # DeviceAgentManager.register_device is async and requires DeviceInfo
                 # For sync unified creation, return a placeholder with info
@@ -1473,6 +1500,7 @@ class AgentFactory:
         elif agent_type == "twin":
             try:
                 from core.digital_twin_engine import get_digital_twin_engine
+
                 engine = get_digital_twin_engine()
                 twin = engine.create_twin(
                     device_id=device_id or f"virtual_{uuid.uuid4().hex[:8]}",

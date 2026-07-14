@@ -29,22 +29,22 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from core.continuum import TriStatePhase as TriStatePhaseFromInit
+from core.continuum import continuum_to_tri_state as c2ts_from_init
 from core.continuum.types import (
     ContinuumPhase,
     ContinuumState,
     TriStatePhase,
     continuum_to_tri_state,
 )
-from core.continuum import TriStatePhase as TriStatePhaseFromInit, continuum_to_tri_state as c2ts_from_init
 from core.windows_execution_arbiter import (
+    WindowsExecutionArbiter,
     WinExecLevel,
     WinExecResult,
     WinExecStatus,
-    WindowsExecutionArbiter,
     get_windows_arbiter,
     reset_windows_arbiter,
 )
-
 
 # ===========================================================================
 # A) TriStatePhase enum
@@ -158,7 +158,9 @@ class TestRecessingDocstring:
     def test_receding_maps_to_silent_in_module_source(self):
         """The source of types.py must document that RECEDING maps to SILENT."""
         import inspect
+
         import core.continuum.types as types_module
+
         src = inspect.getsource(types_module)
         # continuum_to_tri_state must map RECEDING → SILENT
         assert "RECEDING" in src and "SILENT" in src
@@ -203,6 +205,7 @@ class TestRouteCommand:
     def test_route_command_no_manager_import(self):
         """route_command must not directly import WindowsAutonomyManager."""
         import inspect
+
         src = inspect.getsource(WindowsExecutionArbiter.route_command)
         assert "WindowsAutonomyManager" not in src
         assert "autonomy_manager" not in src
@@ -217,6 +220,7 @@ class TestAIPClientUsesArbiter:
     def test_execute_command_calls_arbiter_not_manager(self):
         """_execute_command must use get_windows_arbiter(), not _get_manager()."""
         import inspect
+
         import windows_client.windows_aip_client as aip_module
 
         src = inspect.getsource(aip_module._execute_command)
@@ -317,6 +321,7 @@ class TestLegacyDeprecationWarnings:
     def test_client_emits_deprecation(self):
         """client.py must call warnings.warn with DeprecationWarning at module level."""
         import pathlib
+
         src_path = pathlib.Path(__file__).parent.parent / "windows_client" / "client.py"
         content = src_path.read_text()
         assert "DeprecationWarning" in content
@@ -337,8 +342,10 @@ class TestContinuumInitExports:
 
     def test_tri_state_phase_in_all(self):
         import core.continuum as cc
+
         assert "TriStatePhase" in cc.__all__
 
     def test_continuum_to_tri_state_in_all(self):
         import core.continuum as cc
+
         assert "continuum_to_tri_state" in cc.__all__

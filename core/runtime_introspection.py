@@ -287,8 +287,7 @@ def _extract_runtime_shell(result: Dict[str, Any]) -> Dict[str, Any]:
         "entry_surface": _safe_get(result, "entry_surface"),
         "entry_source": _safe_get(result, "entrypoint_source"),
         "runtime_shell_authority": _safe_get(authority_meta, "layer_role"),
-        "trace_id": _safe_get(result, "trace_id")
-            or _safe_get(result, "runtime_session_id"),
+        "trace_id": _safe_get(result, "trace_id") or _safe_get(result, "runtime_session_id"),
     }
 
 
@@ -315,9 +314,7 @@ def _extract_subject_core(result: Dict[str, Any]) -> Dict[str, Any]:
         remote_mode = _safe_get(result, "remote_execution_mode")
 
     target_device_id = _safe_get(meta, "device_id")
-    device_ids: Optional[List[str]] = (
-        [target_device_id] if target_device_id else None
-    )
+    device_ids: Optional[List[str]] = [target_device_id] if target_device_id else None
 
     # Kernel / cognition-layer role (may be embedded in metadata)
     cognition_role = _safe_get(meta, "kernel_cognition_role")
@@ -330,8 +327,7 @@ def _extract_subject_core(result: Dict[str, Any]) -> Dict[str, Any]:
         "delegation_point": delegation_point,
         "execution_mode": remote_mode,
         "target_devices": device_ids,
-        "trace_id": _safe_get(meta, "trace_id")
-            or _safe_get(result, "trace_id"),
+        "trace_id": _safe_get(meta, "trace_id") or _safe_get(result, "trace_id"),
         "request_success": result.get("success"),
     }
 
@@ -382,12 +378,17 @@ def _run_diagnostics(
             build_diagnostics_snapshot_from_layers,
             run_architecture_diagnostics,
         )
-        layers = [r for r in [
-            runtime_shell_result,
-            subject_core_result,
-            substrate_result,
-            orchestration_meta,
-        ] if r is not None]
+
+        layers = [
+            r
+            for r in [
+                runtime_shell_result,
+                subject_core_result,
+                substrate_result,
+                orchestration_meta,
+            ]
+            if r is not None
+        ]
         snap = build_diagnostics_snapshot_from_layers(*layers)
         if not snap:
             return None
@@ -505,9 +506,7 @@ def build_introspection_snapshot(
 
     # ── Diagnostics / validation ──────────────────────────────────────────────
     if run_diagnostics:
-        diag_dict = _run_diagnostics(
-            runtime_shell_result, subject_core_result, substrate_result, orchestration_meta
-        )
+        diag_dict = _run_diagnostics(runtime_shell_result, subject_core_result, substrate_result, orchestration_meta)
         if diag_dict:
             snap.diagnostics_report = diag_dict
             snap.authority_chain_valid = diag_dict.get("overall_valid")

@@ -17,10 +17,10 @@ Enforces:
 from __future__ import annotations
 
 import ast
+import json
 import os
 import struct
 import zlib
-import json
 from pathlib import Path
 
 import pytest
@@ -30,6 +30,7 @@ import pytest
 # ---------------------------------------------------------------------------
 
 REPO_ROOT = Path(__file__).parent.parent
+
 
 # The AIP v2.0 binary magic must match AIPMessage._V2_MAGIC in device_protocol.py.
 # It is read dynamically from the source to avoid silent drift.
@@ -55,7 +56,7 @@ def _imports_from(source: str, module_prefix: str) -> list[str]:
     tree = ast.parse(source)
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom):
-            full = (node.module or "")
+            full = node.module or ""
             if full.startswith(module_prefix):
                 matches.append(full)
     return matches
@@ -65,25 +66,31 @@ def _imports_from(source: str, module_prefix: str) -> list[str]:
 # A. core/* must not import from enhancements.multidevice.device_protocol
 # ---------------------------------------------------------------------------
 
+
 class TestCoreNoV2Imports:
     """core/ files must obtain AIPMessage/MessageType from aip_v3, not enhancements."""
 
-    @pytest.mark.parametrize("rel_path", [
-        "core/galaxy_core.py",
-        "core/repo_coordinator.py",
-    ])
+    @pytest.mark.parametrize(
+        "rel_path",
+        [
+            "core/galaxy_core.py",
+            "core/repo_coordinator.py",
+        ],
+    )
     def test_no_enhancements_multidevice_import(self, rel_path: str):
         source = _source(rel_path)
         bad_imports = _imports_from(source, "enhancements.multidevice.device_protocol")
         assert bad_imports == [], (
-            f"{rel_path} must not import from enhancements.multidevice.device_protocol; "
-            f"found: {bad_imports}"
+            f"{rel_path} must not import from enhancements.multidevice.device_protocol; " f"found: {bad_imports}"
         )
 
-    @pytest.mark.parametrize("rel_path", [
-        "core/galaxy_core.py",
-        "core/repo_coordinator.py",
-    ])
+    @pytest.mark.parametrize(
+        "rel_path",
+        [
+            "core/galaxy_core.py",
+            "core/repo_coordinator.py",
+        ],
+    )
     def test_uses_aip_v3_for_protocol_types(self, rel_path: str):
         """AIPMessage and MessageType must come from galaxy_gateway.protocol.aip_v3."""
         source = _source(rel_path)
@@ -92,15 +99,14 @@ class TestCoreNoV2Imports:
         # them from the enhancements.multidevice layer.
         v3_imports = _imports_from(source, "galaxy_gateway.protocol.aip_v3")
         enhancements_imports = _imports_from(source, "enhancements.multidevice")
-        assert enhancements_imports == [], (
-            f"{rel_path} still imports from enhancements.multidevice: {enhancements_imports}"
-        )
+        assert (
+            enhancements_imports == []
+        ), f"{rel_path} still imports from enhancements.multidevice: {enhancements_imports}"
         # If the file references AIPMessage/AIPMessageType at all they should
         # come from the v3 canonical source.
         if "AIPMessage" in source or "AIPMessageType" in source:
             assert v3_imports, (
-                f"{rel_path} uses AIPMessage/AIPMessageType but does not import "
-                "from galaxy_gateway.protocol.aip_v3"
+                f"{rel_path} uses AIPMessage/AIPMessageType but does not import " "from galaxy_gateway.protocol.aip_v3"
             )
 
 
@@ -108,13 +114,15 @@ class TestCoreNoV2Imports:
 # B. compat layer: parse_message_compat always returns AIPMessage v3
 # ---------------------------------------------------------------------------
 
+
 class TestCompatIngressAlwaysV3:
     """parse_message_compat must produce AIPMessage v3 for all legacy inputs."""
 
     @pytest.fixture(autouse=True)
     def _setup(self):
-        from galaxy_gateway.protocol.compat import parse_message_compat
         from galaxy_gateway.protocol.aip_v3 import AIPMessage, MessageType
+        from galaxy_gateway.protocol.compat import parse_message_compat
+
         self.parse = parse_message_compat
         self.AIPMessage = AIPMessage
         self.MessageType = MessageType
@@ -141,8 +149,10 @@ class TestCompatIngressAlwaysV3:
         assert msg.version.startswith("3")
 
     def test_trace_id_injected_when_absent(self):
-        from galaxy_gateway.protocol.compat import inject_trace_metadata
         import uuid as _uuid_mod
+
+        from galaxy_gateway.protocol.compat import inject_trace_metadata
+
         out = inject_trace_metadata({"type": "heartbeat", "device_id": "d5"})
         assert "trace_id" in out, "trace_id must be injected when absent"
         # Must be a valid UUID
@@ -157,9 +167,10 @@ class TestCompatIngressAlwaysV3:
 # C. binary v2 frames flow through compat adapter → produce v3 AIPMessage
 # ---------------------------------------------------------------------------
 
+
 def _build_v2_binary(msg_type_val: int, payload: dict) -> bytes:
     """Build a minimal AIP v2.0 binary frame matching device_protocol format."""
-    _V2_MAGIC = _get_v2_magic()   # read from source — never stale
+    _V2_MAGIC = _get_v2_magic()  # read from source — never stale
     _V2_VERSION = 0x0200
     payload_bytes = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     header = struct.pack(
@@ -178,6 +189,7 @@ def _build_v2_binary(msg_type_val: int, payload: dict) -> bytes:
 def _is_legacy_multidevice_enabled() -> bool:
     """Return True when the legacy multi-device layer is enabled via env var."""
     import os
+
     return os.environ.get("GALAXY_ENABLE_LEGACY_MULTIDEVICE", "").lower() in ("1", "true", "yes")
 
 
@@ -207,8 +219,8 @@ class TestBinaryV2ThroughCompatAdapter:
         if not _is_legacy_multidevice_enabled():
             pytest.skip(_LEGACY_SKIP_REASON)
 
-        from galaxy_gateway.protocol.compat import aip_v2_binary_to_v3, parse_message_compat
         from galaxy_gateway.protocol.aip_v3 import AIPMessage
+        from galaxy_gateway.protocol.compat import aip_v2_binary_to_v3, parse_message_compat
 
         raw = _build_v2_binary(0x01, {"source_device": "devY", "payload": {"name": "Test"}})
         v3_dict = aip_v2_binary_to_v3(raw)
@@ -229,6 +241,7 @@ class TestBinaryV2ThroughCompatAdapter:
 # D. device_coordinator uses compat adapter (no direct from_bytes in gateway layer)
 # ---------------------------------------------------------------------------
 
+
 class TestCoordinatorNoBytesInGateway:
     """device_coordinator must NOT call AIPMessage.from_bytes() directly in
     handle_websocket; it must route through galaxy_gateway.protocol.compat."""
@@ -240,9 +253,9 @@ class TestCoordinatorNoBytesInGateway:
             "device_coordinator.py must import aip_v2_binary_to_v3 from "
             "galaxy_gateway.protocol.compat for binary ingress"
         )
-        assert "parse_message_compat" in source, (
-            "device_coordinator.py must use parse_message_compat for binary→v3 conversion"
-        )
+        assert (
+            "parse_message_compat" in source
+        ), "device_coordinator.py must use parse_message_compat for binary→v3 conversion"
 
         # Use AST to extract the body of handle_websocket and verify it does
         # not contain any direct `.from_bytes(` call.
@@ -255,9 +268,7 @@ class TestCoordinatorNoBytesInGateway:
                     handle_ws_body = ast.get_source_segment(source, node)
                     break
 
-        assert handle_ws_body is not None, (
-            "handle_websocket method not found in device_coordinator.py"
-        )
+        assert handle_ws_body is not None, "handle_websocket method not found in device_coordinator.py"
         assert "from_bytes" not in handle_ws_body, (
             "handle_websocket must not call AIPMessage.from_bytes() directly; "
             "binary frames must go through aip_v2_binary_to_v3 + parse_message_compat"
@@ -268,24 +279,25 @@ class TestCoordinatorNoBytesInGateway:
 # E. Strict mode raises AIPVersionError for sub-v3 ingress
 # ---------------------------------------------------------------------------
 
+
 class TestStrictIngress:
     """parse_message_strict must reject v1/v2 inputs."""
 
     def test_strict_rejects_v1(self):
-        from galaxy_gateway.protocol.compat import parse_message_strict, AIPVersionError
+        from galaxy_gateway.protocol.compat import AIPVersionError, parse_message_strict
 
         with pytest.raises(AIPVersionError):
             parse_message_strict({"type": "heartbeat", "device_id": "d1"})
 
     def test_strict_rejects_v2(self):
-        from galaxy_gateway.protocol.compat import parse_message_strict, AIPVersionError
+        from galaxy_gateway.protocol.compat import AIPVersionError, parse_message_strict
 
         with pytest.raises(AIPVersionError):
             parse_message_strict({"version": "2.0", "type": "heartbeat", "device_id": "d2"})
 
     def test_strict_accepts_v3(self):
-        from galaxy_gateway.protocol.compat import parse_message_strict
         from galaxy_gateway.protocol.aip_v3 import AIPMessage
+        from galaxy_gateway.protocol.compat import parse_message_strict
 
         msg = parse_message_strict({"version": "3.0", "type": "heartbeat", "device_id": "d3"})
         assert isinstance(msg, AIPMessage)

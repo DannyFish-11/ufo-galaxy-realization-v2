@@ -41,10 +41,12 @@ class _FakeProc:
 
 
 def _run_background_pull_and_wait(tag: str, fake_subprocess_run, fake_get, fake_post):
-    with patch("subprocess.run", side_effect=fake_subprocess_run), \
-         patch("shutil.which", return_value="/usr/bin/ollama"), \
-         patch("httpx.get", side_effect=fake_get), \
-         patch("httpx.post", side_effect=fake_post):
+    with (
+        patch("subprocess.run", side_effect=fake_subprocess_run),
+        patch("shutil.which", return_value="/usr/bin/ollama"),
+        patch("httpx.get", side_effect=fake_get),
+        patch("httpx.post", side_effect=fake_post),
+    ):
         ms.background_pull(tag)
         for t in threading.enumerate():
             if t.name == "GalaxyModelPull":
@@ -150,19 +152,21 @@ def test_broken_manifest_then_pull_fails_still_reaches_hf_fallback():
         hf_fallback_called.append(tag)
         return None
 
-    with patch("subprocess.run", side_effect=fake_run), \
-         patch("shutil.which", return_value="/usr/bin/ollama"), \
-         patch("httpx.get", side_effect=fake_get), \
-         patch("httpx.post", side_effect=fake_post), \
-         patch("core.hf_ollama_import_fallback.download_and_import_to_ollama", side_effect=fake_hf_fallback):
+    with (
+        patch("subprocess.run", side_effect=fake_run),
+        patch("shutil.which", return_value="/usr/bin/ollama"),
+        patch("httpx.get", side_effect=fake_get),
+        patch("httpx.post", side_effect=fake_post),
+        patch("core.hf_ollama_import_fallback.download_and_import_to_ollama", side_effect=fake_hf_fallback),
+    ):
         ms.background_pull("gemma4:e2b")
         for t in threading.enumerate():
             if t.name == "GalaxyModelPull":
                 t.join(timeout=5)
 
-    assert hf_fallback_called == ["gemma4:e2b"], (
-        "残缺条目被正确识别为未安装、重新拉取又失败后，必须真正走到 HF 回退这一步"
-    )
+    assert hf_fallback_called == [
+        "gemma4:e2b"
+    ], "残缺条目被正确识别为未安装、重新拉取又失败后，必须真正走到 HF 回退这一步"
 
 
 def test_ollama_not_on_path_prints_reason_instead_of_silent_skip(capsys):
@@ -179,16 +183,13 @@ def test_ollama_not_on_path_prints_reason_instead_of_silent_skip(capsys):
                 t.join(timeout=5)
 
     out = capsys.readouterr().out
-    assert "未检测到 ollama 命令" in out, (
-        f"找不到 ollama 命令时必须打印清楚的原因，不能彻底沉默。实际输出: {out!r}"
-    )
+    assert "未检测到 ollama 命令" in out, f"找不到 ollama 命令时必须打印清楚的原因，不能彻底沉默。实际输出: {out!r}"
 
 
 def test_empty_tag_still_silently_returns():
     """tag 为空是正常的"没有主脑模型可拉"状态(比如用户还没选主脑)，不算故障，
     维持静默返回，不应该被上面的修复误伤成也打印一堆东西。"""
-    with patch("shutil.which", return_value="/usr/bin/ollama"), \
-         patch("subprocess.run") as mock_run:
+    with patch("shutil.which", return_value="/usr/bin/ollama"), patch("subprocess.run") as mock_run:
         ms.background_pull("")
         for t in threading.enumerate():
             if t.name == "GalaxyModelPull":

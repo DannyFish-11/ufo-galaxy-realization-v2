@@ -437,8 +437,7 @@ def _build_summary(
     stage_names = ",".join(stage.get("stage", "unknown") for stage in blocking_stages)
     count_summary = ", ".join(f"{name}:{value}" for name, value in classification_counts.items())
     return (
-        f"双仓完整性基线未通过，阻断阶段={stage_names}；"
-        f"分类统计={count_summary}；显式缺口数={len(explicit_gaps)}。"
+        f"双仓完整性基线未通过，阻断阶段={stage_names}；" f"分类统计={count_summary}；显式缺口数={len(explicit_gaps)}。"
     )
 
 

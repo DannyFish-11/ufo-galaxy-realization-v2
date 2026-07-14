@@ -61,7 +61,6 @@ from typing import Any, Dict
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -71,11 +70,13 @@ def _fresh_coordinator():
     from core.delegated_flow_recovery_coordinator import (
         DelegatedFlowRecoveryCoordinator,
     )
+
     return DelegatedFlowRecoveryCoordinator(capacity=16)
 
 
 def _ctx(**kwargs):
     from core.delegated_flow_recovery_coordinator import RecoveryTriggerContext
+
     return RecoveryTriggerContext(**kwargs)
 
 
@@ -92,6 +93,7 @@ class TestModuleSentinels:
         from core.delegated_flow_recovery_coordinator import (
             DELEGATED_FLOW_RECOVERY_COORDINATOR_AUTHORITY,
         )
+
         assert isinstance(DELEGATED_FLOW_RECOVERY_COORDINATOR_AUTHORITY, str)
         assert len(DELEGATED_FLOW_RECOVERY_COORDINATOR_AUTHORITY) > 0
         assert "DelegatedFlowRecoveryCoordinator" in DELEGATED_FLOW_RECOVERY_COORDINATOR_AUTHORITY
@@ -100,6 +102,7 @@ class TestModuleSentinels:
         from core.delegated_flow_recovery_coordinator import (
             DELEGATED_FLOW_RECOVERY_COORDINATOR_PR4_SENTINEL,
         )
+
         assert isinstance(DELEGATED_FLOW_RECOVERY_COORDINATOR_PR4_SENTINEL, str)
         assert "package=4" in DELEGATED_FLOW_RECOVERY_COORDINATOR_PR4_SENTINEL
 
@@ -114,14 +117,15 @@ class TestPolicySentinels:
         from core.delegated_flow_recovery_coordinator import (
             DELEGATED_FLOW_RECOVERY_COORDINATOR_AUTHORITY,
             DELEGATED_FLOW_RECOVERY_COORDINATOR_PR4_SENTINEL,
-            RECOVERY_COORDINATOR_IS_UNIFIED_ORCHESTRATION_OWNER_POLICY,
+            DUPLICATE_RECOVERY_SUPPRESSION_IS_COORDINATOR_OWNED_POLICY,
+            FAIL_CLOSED_ON_AMBIGUOUS_RECOVERY_CONTEXT_POLICY,
             IDEMPOTENT_RECOVERY_GUARD_IS_PER_FLOW_POLICY,
             PARTIAL_RESULT_CONVERGENCE_PRECEDES_RESUME_POLICY,
-            DUPLICATE_RECOVERY_SUPPRESSION_IS_COORDINATOR_OWNED_POLICY,
-            REDISPATCH_REQUIRES_BINDING_INVALIDATION_POLICY,
             RECOVERY_ARTIFACTS_MUST_BE_AUDITABLE_POLICY,
-            FAIL_CLOSED_ON_AMBIGUOUS_RECOVERY_CONTEXT_POLICY,
+            RECOVERY_COORDINATOR_IS_UNIFIED_ORCHESTRATION_OWNER_POLICY,
+            REDISPATCH_REQUIRES_BINDING_INVALIDATION_POLICY,
         )
+
         sentinels = [
             DELEGATED_FLOW_RECOVERY_COORDINATOR_AUTHORITY,
             DELEGATED_FLOW_RECOVERY_COORDINATOR_PR4_SENTINEL,
@@ -147,6 +151,7 @@ class TestPolicySentinels:
 class TestRecoveryActionEnum:
     def test_all_7_values_present(self):
         from core.delegated_flow_recovery_coordinator import RecoveryAction
+
         expected = {
             "resume_in_place",
             "replay_from_checkpoint",
@@ -168,6 +173,7 @@ class TestRecoveryActionEnum:
 class TestRecoveryTriggerEnum:
     def test_all_8_values_present(self):
         from core.delegated_flow_recovery_coordinator import RecoveryTrigger
+
         expected = {
             "v2_restart",
             "android_binding_lost",
@@ -190,9 +196,10 @@ class TestRecoveryTriggerEnum:
 class TestRecoveryTriggerContext:
     def test_default_construction(self):
         from core.delegated_flow_recovery_coordinator import (
-            RecoveryTriggerContext,
             RecoveryTrigger,
+            RecoveryTriggerContext,
         )
+
         ctx = RecoveryTriggerContext()
         assert ctx.trigger == RecoveryTrigger.unknown
         assert ctx.flow_id == ""
@@ -200,20 +207,33 @@ class TestRecoveryTriggerContext:
 
     def test_to_dict_has_required_keys(self):
         from core.delegated_flow_recovery_coordinator import RecoveryTriggerContext
+
         ctx = RecoveryTriggerContext(flow_id="flow-1", session_id="sess-1")
         d = ctx.to_dict()
         for key in (
-            "trigger", "flow_id", "flow_lineage_id", "session_id",
-            "contract_id", "tracker_id", "device_id", "binding_id",
-            "continuity_artifact_id", "continuity_decision",
-            "has_partial_result", "partial_result_payload",
-            "checkpoint_available", "checkpoint_boundary_phase",
-            "binding_state", "recovery_attempt_id", "metadata",
+            "trigger",
+            "flow_id",
+            "flow_lineage_id",
+            "session_id",
+            "contract_id",
+            "tracker_id",
+            "device_id",
+            "binding_id",
+            "continuity_artifact_id",
+            "continuity_decision",
+            "has_partial_result",
+            "partial_result_payload",
+            "checkpoint_available",
+            "checkpoint_boundary_phase",
+            "binding_state",
+            "recovery_attempt_id",
+            "metadata",
         ):
             assert key in d, f"missing key: {key}"
 
     def test_to_json_is_valid_json(self):
         from core.delegated_flow_recovery_coordinator import RecoveryTriggerContext
+
         ctx = RecoveryTriggerContext(flow_id="flow-1")
         j = ctx.to_json()
         parsed = json.loads(j)
@@ -228,9 +248,10 @@ class TestRecoveryTriggerContext:
 class TestRecoveryDecisionArtifact:
     def test_default_construction(self):
         from core.delegated_flow_recovery_coordinator import (
-            RecoveryDecisionArtifact,
             RecoveryAction,
+            RecoveryDecisionArtifact,
         )
+
         art = RecoveryDecisionArtifact()
         assert art.action == RecoveryAction.fail_closed
         assert isinstance(art.artifact_id, str)
@@ -238,22 +259,39 @@ class TestRecoveryDecisionArtifact:
 
     def test_to_dict_has_required_keys(self):
         from core.delegated_flow_recovery_coordinator import RecoveryDecisionArtifact
+
         art = RecoveryDecisionArtifact(flow_id="flow-1")
         d = art.to_dict()
         for key in (
-            "artifact_id", "recovery_attempt_id", "trigger", "action",
-            "policy_reference", "detail", "flow_id", "flow_lineage_id",
-            "session_id", "contract_id", "tracker_id", "device_id",
-            "binding_id", "continuity_artifact_id", "continuity_decision",
-            "flow_entity_phase", "binding_state_at_decision",
-            "tracker_phase_at_decision", "checkpoint_boundary_phase",
-            "has_partial_result", "is_executable", "extension_payload",
+            "artifact_id",
+            "recovery_attempt_id",
+            "trigger",
+            "action",
+            "policy_reference",
+            "detail",
+            "flow_id",
+            "flow_lineage_id",
+            "session_id",
+            "contract_id",
+            "tracker_id",
+            "device_id",
+            "binding_id",
+            "continuity_artifact_id",
+            "continuity_decision",
+            "flow_entity_phase",
+            "binding_state_at_decision",
+            "tracker_phase_at_decision",
+            "checkpoint_boundary_phase",
+            "has_partial_result",
+            "is_executable",
+            "extension_payload",
             "timestamp",
         ):
             assert key in d, f"missing key: {key}"
 
     def test_to_json_is_valid_json(self):
         from core.delegated_flow_recovery_coordinator import RecoveryDecisionArtifact
+
         art = RecoveryDecisionArtifact(flow_id="flow-1")
         j = art.to_json()
         parsed = json.loads(j)
@@ -268,10 +306,11 @@ class TestRecoveryDecisionArtifact:
 class TestRecoveryDecisionArtifactRoundTrip:
     def test_round_trip(self):
         from core.delegated_flow_recovery_coordinator import (
-            RecoveryDecisionArtifact,
             RecoveryAction,
+            RecoveryDecisionArtifact,
             RecoveryTrigger,
         )
+
         orig = RecoveryDecisionArtifact(
             flow_id="flow-42",
             flow_lineage_id="lin-42",
@@ -305,6 +344,7 @@ class TestRecoveryAttemptRecord:
             RecoveryAttemptRecord,
             RecoveryAttemptState,
         )
+
         rec = RecoveryAttemptRecord()
         assert rec.state == RecoveryAttemptState.in_progress
         assert isinstance(rec.attempt_id, str)
@@ -312,17 +352,26 @@ class TestRecoveryAttemptRecord:
 
     def test_to_dict_has_required_keys(self):
         from core.delegated_flow_recovery_coordinator import RecoveryAttemptRecord
+
         rec = RecoveryAttemptRecord(flow_id="flow-1")
         d = rec.to_dict()
         for key in (
-            "attempt_id", "flow_id", "flow_lineage_id", "trigger",
-            "state", "action_decided", "artifact_id",
-            "started_at", "completed_at", "metadata",
+            "attempt_id",
+            "flow_id",
+            "flow_lineage_id",
+            "trigger",
+            "state",
+            "action_decided",
+            "artifact_id",
+            "started_at",
+            "completed_at",
+            "metadata",
         ):
             assert key in d, f"missing key: {key}"
 
     def test_to_json_is_valid_json(self):
         from core.delegated_flow_recovery_coordinator import RecoveryAttemptRecord
+
         rec = RecoveryAttemptRecord(flow_id="flow-1")
         j = rec.to_json()
         parsed = json.loads(j)
@@ -337,11 +386,12 @@ class TestRecoveryAttemptRecord:
 class TestRecoveryAttemptRecordRoundTrip:
     def test_round_trip(self):
         from core.delegated_flow_recovery_coordinator import (
+            RecoveryAction,
             RecoveryAttemptRecord,
             RecoveryAttemptState,
-            RecoveryAction,
             RecoveryTrigger,
         )
+
         orig = RecoveryAttemptRecord(
             flow_id="flow-1",
             trigger=RecoveryTrigger.v2_restart,
@@ -365,17 +415,24 @@ class TestRecoveryAttemptRecordRoundTrip:
 class TestRecoveryCoordinatorSnapshot:
     def test_to_dict_has_required_keys(self):
         from core.delegated_flow_recovery_coordinator import RecoveryCoordinatorSnapshot
+
         snap = RecoveryCoordinatorSnapshot()
         d = snap.to_dict()
         for key in (
-            "snapshot_id", "total_decisions", "action_counts",
-            "active_attempt_count", "recent_artifacts", "recent_attempts",
-            "policy_sentinels", "timestamp",
+            "snapshot_id",
+            "total_decisions",
+            "action_counts",
+            "active_attempt_count",
+            "recent_artifacts",
+            "recent_attempts",
+            "policy_sentinels",
+            "timestamp",
         ):
             assert key in d, f"missing key: {key}"
 
     def test_to_json_is_valid_json(self):
         from core.delegated_flow_recovery_coordinator import RecoveryCoordinatorSnapshot
+
         snap = RecoveryCoordinatorSnapshot()
         j = snap.to_json()
         parsed = json.loads(j)
@@ -392,6 +449,7 @@ class TestCoordinatorInstantiation:
         from core.delegated_flow_recovery_coordinator import (
             DelegatedFlowRecoveryCoordinator,
         )
+
         c = DelegatedFlowRecoveryCoordinator()
         assert c is not None
 
@@ -399,6 +457,7 @@ class TestCoordinatorInstantiation:
         from core.delegated_flow_recovery_coordinator import (
             DelegatedFlowRecoveryCoordinator,
         )
+
         c = DelegatedFlowRecoveryCoordinator(capacity=8)
         assert c is not None
 
@@ -414,6 +473,7 @@ class TestSingletonManagement:
             get_delegated_flow_recovery_coordinator,
             reset_delegated_flow_recovery_coordinator,
         )
+
         reset_delegated_flow_recovery_coordinator()
         a = get_delegated_flow_recovery_coordinator()
         b = get_delegated_flow_recovery_coordinator()
@@ -424,6 +484,7 @@ class TestSingletonManagement:
             get_delegated_flow_recovery_coordinator,
             reset_delegated_flow_recovery_coordinator,
         )
+
         a = get_delegated_flow_recovery_coordinator()
         reset_delegated_flow_recovery_coordinator()
         b = get_delegated_flow_recovery_coordinator()
@@ -438,6 +499,7 @@ class TestSingletonManagement:
 class TestDecideMissingFlowId:
     def test_missing_flow_id_returns_fail_closed(self):
         from core.delegated_flow_recovery_coordinator import RecoveryAction
+
         c = _fresh_coordinator()
         ctx = _ctx()  # flow_id=""
         art = c.decide(ctx)
@@ -457,6 +519,7 @@ class TestDecideMissingFlowId:
 class TestDecidePartialResult:
     def test_partial_result_flag_returns_preserve(self):
         from core.delegated_flow_recovery_coordinator import RecoveryAction
+
         c = _fresh_coordinator()
         ctx = _ctx(flow_id="flow-1", has_partial_result=True)
         art = c.decide(ctx)
@@ -464,6 +527,7 @@ class TestDecidePartialResult:
 
     def test_preserve_has_partial_result_true(self):
         from core.delegated_flow_recovery_coordinator import RecoveryAction
+
         c = _fresh_coordinator()
         ctx = _ctx(flow_id="flow-1", has_partial_result=True)
         art = c.decide(ctx)
@@ -478,6 +542,7 @@ class TestDecidePartialResult:
 class TestDecideCheckpoint:
     def test_checkpoint_returns_replay(self):
         from core.delegated_flow_recovery_coordinator import RecoveryAction
+
         c = _fresh_coordinator()
         ctx = _ctx(
             flow_id="flow-1",
@@ -489,6 +554,7 @@ class TestDecideCheckpoint:
 
     def test_checkpoint_boundary_phase_preserved_in_artifact(self):
         from core.delegated_flow_recovery_coordinator import RecoveryAction
+
         c = _fresh_coordinator()
         ctx = _ctx(
             flow_id="flow-1",
@@ -510,6 +576,7 @@ class TestDecideRedispatch:
             RecoveryAction,
             RecoveryTrigger,
         )
+
         c = _fresh_coordinator()
         ctx = _ctx(
             flow_id="flow-1",
@@ -521,6 +588,7 @@ class TestDecideRedispatch:
 
     def test_invalidated_binding_returns_redispatch(self):
         from core.delegated_flow_recovery_coordinator import RecoveryAction
+
         c = _fresh_coordinator()
         ctx = _ctx(
             flow_id="flow-1",
@@ -531,6 +599,7 @@ class TestDecideRedispatch:
 
     def test_bound_binding_does_not_trigger_redispatch(self):
         from core.delegated_flow_recovery_coordinator import RecoveryAction
+
         c = _fresh_coordinator()
         ctx = _ctx(
             flow_id="flow-1",
@@ -549,6 +618,7 @@ class TestDecideRedispatch:
 class TestDecideResumeInPlace:
     def test_continuity_resume_returns_resume_in_place(self):
         from core.delegated_flow_recovery_coordinator import RecoveryAction
+
         c = _fresh_coordinator()
         ctx = _ctx(
             flow_id="flow-1",
@@ -559,6 +629,7 @@ class TestDecideResumeInPlace:
 
     def test_resume_in_place_is_executable(self):
         from core.delegated_flow_recovery_coordinator import RecoveryAction
+
         c = _fresh_coordinator()
         ctx = _ctx(
             flow_id="flow-1",
@@ -576,6 +647,7 @@ class TestDecideResumeInPlace:
 class TestDecideDuplicateSuppression:
     def test_duplicate_returns_suppress(self):
         from core.delegated_flow_recovery_coordinator import RecoveryAction
+
         c = _fresh_coordinator()
         flow_id = "flow-dup"
         # Register first attempt manually
@@ -594,6 +666,7 @@ class TestDecideDuplicateSuppression:
 
     def test_after_deregister_no_longer_suppressed(self):
         from core.delegated_flow_recovery_coordinator import RecoveryAction
+
         c = _fresh_coordinator()
         flow_id = "flow-dup3"
         c._register_attempt(flow_id, "attempt-aaa")
@@ -611,6 +684,7 @@ class TestDecideDuplicateSuppression:
 class TestDecideMinimalContext:
     def test_flow_id_only_no_crash(self):
         from core.delegated_flow_recovery_coordinator import RecoveryAction
+
         c = _fresh_coordinator()
         ctx = _ctx(flow_id="flow-minimal")
         art = c.decide(ctx)
@@ -630,6 +704,7 @@ class TestDecideMinimalContext:
 class TestDecidePartialOverridesCheckpoint:
     def test_partial_result_takes_priority_over_checkpoint(self):
         from core.delegated_flow_recovery_coordinator import RecoveryAction
+
         c = _fresh_coordinator()
         ctx = _ctx(
             flow_id="flow-1",
@@ -648,9 +723,10 @@ class TestDecidePartialOverridesCheckpoint:
 class TestDecideFromContinuityArtifact:
     def test_enriches_flow_id_from_artifact(self):
         from core.delegated_flow_recovery_coordinator import (
-            RecoveryTriggerContext,
             RecoveryTrigger,
+            RecoveryTriggerContext,
         )
+
         c = _fresh_coordinator()
         ctx = RecoveryTriggerContext(
             trigger=RecoveryTrigger.continuity_decision,
@@ -669,6 +745,7 @@ class TestDecideFromContinuityArtifact:
 
     def test_ctx_flow_id_overrides_artifact_flow_id(self):
         from core.delegated_flow_recovery_coordinator import RecoveryTriggerContext
+
         c = _fresh_coordinator()
         ctx = RecoveryTriggerContext(flow_id="ctx-flow")
         artifact_dict = {"artifact_id": "cda-2", "flow_id": "art-flow", "decision": "continuity_resume"}
@@ -687,6 +764,7 @@ class TestBeginAttempt:
             RecoveryAttemptRecord,
             RecoveryDecisionArtifact,
         )
+
         c = _fresh_coordinator()
         ctx = _ctx(flow_id="flow-v", continuity_decision="continuity_resume")
         attempt, artifact = c.begin_attempt(ctx)
@@ -714,6 +792,7 @@ class TestBeginAttempt:
 class TestBeginAttemptDuplicate:
     def test_duplicate_begin_returns_suppressed_attempt(self):
         from core.delegated_flow_recovery_coordinator import RecoveryAttemptState
+
         c = _fresh_coordinator()
         ctx = _ctx(flow_id="flow-dup-begin", continuity_decision="continuity_resume")
         attempt1, _ = c.begin_attempt(ctx)
@@ -722,6 +801,7 @@ class TestBeginAttemptDuplicate:
 
     def test_duplicate_action_is_suppress(self):
         from core.delegated_flow_recovery_coordinator import RecoveryAction
+
         c = _fresh_coordinator()
         ctx = _ctx(flow_id="flow-dup-begin2")
         c.begin_attempt(ctx)
@@ -737,6 +817,7 @@ class TestBeginAttemptDuplicate:
 class TestCompleteAttempt:
     def test_complete_returns_completed_state(self):
         from core.delegated_flow_recovery_coordinator import RecoveryAttemptState
+
         c = _fresh_coordinator()
         ctx = _ctx(flow_id="flow-x", continuity_decision="continuity_resume")
         attempt, _ = c.begin_attempt(ctx)
@@ -753,6 +834,7 @@ class TestCompleteAttempt:
 
     def test_complete_sets_completed_at(self):
         import time
+
         c = _fresh_coordinator()
         ctx = _ctx(flow_id="flow-x3", continuity_decision="continuity_resume")
         attempt, _ = c.begin_attempt(ctx)
@@ -769,6 +851,7 @@ class TestCompleteAttempt:
 class TestCompleteAttemptFailed:
     def test_success_false_returns_failed(self):
         from core.delegated_flow_recovery_coordinator import RecoveryAttemptState
+
         c = _fresh_coordinator()
         ctx = _ctx(flow_id="flow-y", continuity_decision="continuity_resume")
         attempt, _ = c.begin_attempt(ctx)
@@ -784,6 +867,7 @@ class TestCompleteAttemptFailed:
 class TestSuppressAttempt:
     def test_suppress_returns_suppressed_state(self):
         from core.delegated_flow_recovery_coordinator import RecoveryAttemptState
+
         c = _fresh_coordinator()
         ctx = _ctx(flow_id="flow-z", continuity_decision="continuity_resume")
         attempt, _ = c.begin_attempt(ctx)
@@ -819,6 +903,7 @@ class TestBuildSnapshotEmpty:
 class TestBuildSnapshotAfterDecisions:
     def test_snapshot_counts_actions(self):
         from core.delegated_flow_recovery_coordinator import RecoveryAction
+
         c = _fresh_coordinator()
         for i in range(3):
             c.decide(_ctx(flow_id=f"flow-{i}", continuity_decision="continuity_resume"))
@@ -895,9 +980,10 @@ class TestListRecentAttempts:
 class TestConvenienceDecideRecovery:
     def test_decide_recovery_returns_artifact(self):
         from core.delegated_flow_recovery_coordinator import (
-            decide_recovery,
             RecoveryDecisionArtifact,
+            decide_recovery,
         )
+
         c = _fresh_coordinator()
         art = decide_recovery(
             "flow-af",
@@ -908,9 +994,10 @@ class TestConvenienceDecideRecovery:
 
     def test_decide_recovery_missing_flow_returns_fail_closed(self):
         from core.delegated_flow_recovery_coordinator import (
-            decide_recovery,
             RecoveryAction,
+            decide_recovery,
         )
+
         c = _fresh_coordinator()
         art = decide_recovery("", coordinator=c)
         assert art.action == RecoveryAction.fail_closed
@@ -924,10 +1011,11 @@ class TestConvenienceDecideRecovery:
 class TestConvenienceDecideFromContinuity:
     def test_returns_artifact(self):
         from core.delegated_flow_recovery_coordinator import (
-            decide_recovery_from_continuity_artifact,
-            RecoveryTriggerContext,
             RecoveryDecisionArtifact,
+            RecoveryTriggerContext,
+            decide_recovery_from_continuity_artifact,
         )
+
         c = _fresh_coordinator()
         ctx = RecoveryTriggerContext()
         cad = {
@@ -948,10 +1036,11 @@ class TestConvenienceDecideFromContinuity:
 class TestConvenienceBeginRecoveryAttempt:
     def test_returns_attempt_and_artifact(self):
         from core.delegated_flow_recovery_coordinator import (
-            begin_recovery_attempt,
             RecoveryAttemptRecord,
             RecoveryDecisionArtifact,
+            begin_recovery_attempt,
         )
+
         c = _fresh_coordinator()
         attempt, artifact = begin_recovery_attempt(
             "flow-ah",
@@ -970,19 +1059,18 @@ class TestConvenienceBeginRecoveryAttempt:
 class TestConvenienceCompleteRecoveryAttempt:
     def test_returns_completed_record(self):
         from core.delegated_flow_recovery_coordinator import (
+            RecoveryAttemptState,
             begin_recovery_attempt,
             complete_recovery_attempt,
-            RecoveryAttemptState,
         )
+
         c = _fresh_coordinator()
         attempt, _ = begin_recovery_attempt(
             "flow-ai",
             continuity_decision="continuity_resume",
             coordinator=c,
         )
-        updated = complete_recovery_attempt(
-            attempt.attempt_id, "flow-ai", coordinator=c
-        )
+        updated = complete_recovery_attempt(attempt.attempt_id, "flow-ai", coordinator=c)
         assert updated.state == RecoveryAttemptState.completed
 
 
@@ -994,19 +1082,18 @@ class TestConvenienceCompleteRecoveryAttempt:
 class TestConvenienceSuppressRecoveryAttempt:
     def test_returns_suppressed_record(self):
         from core.delegated_flow_recovery_coordinator import (
+            RecoveryAttemptState,
             begin_recovery_attempt,
             suppress_recovery_attempt,
-            RecoveryAttemptState,
         )
+
         c = _fresh_coordinator()
         attempt, _ = begin_recovery_attempt(
             "flow-aj",
             continuity_decision="continuity_resume",
             coordinator=c,
         )
-        updated = suppress_recovery_attempt(
-            attempt.attempt_id, "flow-aj", coordinator=c
-        )
+        updated = suppress_recovery_attempt(attempt.attempt_id, "flow-aj", coordinator=c)
         assert updated.state == RecoveryAttemptState.suppressed
 
 
@@ -1018,18 +1105,22 @@ class TestConvenienceSuppressRecoveryAttempt:
 class TestRecoveryActionFromString:
     def test_known_value(self):
         from core.delegated_flow_recovery_coordinator import RecoveryAction
+
         assert RecoveryAction.from_string("resume_in_place") == RecoveryAction.resume_in_place
 
     def test_unknown_value_defaults_to_fail_closed(self):
         from core.delegated_flow_recovery_coordinator import RecoveryAction
+
         assert RecoveryAction.from_string("nonexistent_value") == RecoveryAction.fail_closed
 
     def test_non_string_defaults_to_fail_closed(self):
         from core.delegated_flow_recovery_coordinator import RecoveryAction
+
         assert RecoveryAction.from_string(None) == RecoveryAction.fail_closed  # type: ignore
 
     def test_custom_default(self):
         from core.delegated_flow_recovery_coordinator import RecoveryAction
+
         result = RecoveryAction.from_string("bad_value", RecoveryAction.require_review)
         assert result == RecoveryAction.require_review
 
@@ -1042,14 +1133,17 @@ class TestRecoveryActionFromString:
 class TestRecoveryTriggerFromString:
     def test_known_value(self):
         from core.delegated_flow_recovery_coordinator import RecoveryTrigger
+
         assert RecoveryTrigger.from_string("v2_restart") == RecoveryTrigger.v2_restart
 
     def test_unknown_value_defaults_to_unknown(self):
         from core.delegated_flow_recovery_coordinator import RecoveryTrigger
+
         assert RecoveryTrigger.from_string("nonexistent") == RecoveryTrigger.unknown
 
     def test_non_string_defaults_to_unknown(self):
         from core.delegated_flow_recovery_coordinator import RecoveryTrigger
+
         assert RecoveryTrigger.from_string(123) == RecoveryTrigger.unknown  # type: ignore
 
 
@@ -1061,6 +1155,7 @@ class TestRecoveryTriggerFromString:
 class TestRecoveryActionIsExecutable:
     def test_executable_actions(self):
         from core.delegated_flow_recovery_coordinator import RecoveryAction
+
         for action in (
             RecoveryAction.resume_in_place,
             RecoveryAction.replay_from_checkpoint,
@@ -1071,6 +1166,7 @@ class TestRecoveryActionIsExecutable:
 
     def test_non_executable_actions(self):
         from core.delegated_flow_recovery_coordinator import RecoveryAction
+
         for action in (
             RecoveryAction.suppress_duplicate_recovery,
             RecoveryAction.fail_closed,
@@ -1089,6 +1185,7 @@ class TestRingBufferCapacity:
         from core.delegated_flow_recovery_coordinator import (
             DelegatedFlowRecoveryCoordinator,
         )
+
         c = DelegatedFlowRecoveryCoordinator(capacity=3)
         artifacts = []
         for i in range(4):
@@ -1110,10 +1207,11 @@ class TestRingBufferCapacity:
 class TestArtifactRoundTripFull:
     def test_full_round_trip_preserves_all_standard_fields(self):
         from core.delegated_flow_recovery_coordinator import (
-            RecoveryDecisionArtifact,
             RecoveryAction,
+            RecoveryDecisionArtifact,
             RecoveryTrigger,
         )
+
         orig = RecoveryDecisionArtifact(
             recovery_attempt_id="att-rt",
             trigger=RecoveryTrigger.android_binding_lost,
@@ -1193,6 +1291,7 @@ class TestActiveAttemptCountInSnapshot:
 class TestRecoveryAttemptStateEnum:
     def test_all_4_values_present(self):
         from core.delegated_flow_recovery_coordinator import RecoveryAttemptState
+
         expected = {"in_progress", "completed", "suppressed", "failed"}
         actual = {v.value for v in RecoveryAttemptState}
         assert expected == actual

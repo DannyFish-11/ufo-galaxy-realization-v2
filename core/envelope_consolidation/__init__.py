@@ -36,23 +36,23 @@ This package does **not** replace any existing canonical model.  It provides:
 * :func:`~.envelope_summary.summarise_result_for_projection` — projection helper
 """
 
-from .envelope_roles import (
-    EnvelopeRole,
-    ROLE_DESCRIPTIONS,
-    role_for_class,
-    layer_for_role,
-)
 from .envelope_adapters import (
     extract_trace_fields,
-    propagate_trace,
-    task_to_command_summary,
-    result_to_observation,
     interaction_trace_fields,
+    propagate_trace,
+    result_to_observation,
+    task_to_command_summary,
+)
+from .envelope_roles import (
+    ROLE_DESCRIPTIONS,
+    EnvelopeRole,
+    layer_for_role,
+    role_for_class,
 )
 from .envelope_summary import (
     EnvelopeSummary,
-    summarise_envelope,
     envelope_role_catalog,
+    summarise_envelope,
     summarise_result_for_projection,
 )
 

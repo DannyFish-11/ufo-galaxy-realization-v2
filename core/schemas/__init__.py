@@ -10,78 +10,90 @@ platform.  Import from this package for convenience::
     from core.schemas import DeviceRegisterSchema, AgentCreateSchema
 """
 
-# -- Multi-modal input schemas (PR 1) ----------------------------------------
-from core.schemas.multimodal import (
-    MultiModalImage,
-    MultiModalAudio,
-    MultiModalContext,
-    MultiModalInput,
+# -- Agent schemas -----------------------------------------------------------
+from core.schemas.agent import (  # Phase 2: Team Manifest
+    AgentCreateSchema,
+    AgentResponseSchema,
+    AgentTaskSchema,
+    SwarmCreateSchema,
+    TeamManifestSchema,
+    TeamMemberResultSchema,
+    TeamMemberSchema,
+    TeamResultSchema,
+    TeamStrategyEnum,
+    TwinCreateSchema,
 )
 
-# -- TaskEnvelope (canonical Agent-Bus schema) --------------------------------
-from core.schemas.task_envelope import (
-    TaskEnvelope,
-    envelope_from_command_request,
-    envelope_from_relay_request,
-    envelope_from_mcp_call,
+# -- Contract models (Agentic OS) -------------------------------------------
+from core.schemas.contracts import (  # Enums; Common; Task payloads; Task dispatch/result; LSP; Execution; MCP; Worker; Events; Envelope
+    AgentEventModel,
+    AgentMessageModel,
+    AgentMessageType,
+    ArtifactModel,
+    CodeLanguage,
+    CodePayloadModel,
+    DeviceCommandPayloadModel,
+    DiagnosticSeverity,
+    ErrorInfoModel,
+    EventDomain,
+    EventSeverity,
+    ExecutionOutputModel,
+    FileOperation,
+    FilePayloadModel,
+    LSPCheckResultModel,
+    LSPDiagnosticModel,
+    MCPCallPayloadModel,
+    MCPCallRequestModel,
+    MCPCallResponseModel,
+    MCPDiscoveryRequestModel,
+    MCPDiscoveryResponseModel,
+    MCPRegistrationAction,
+    MCPToolDescriptorModel,
+    MCPToolRegistrationModel,
+    MCPToolRegistrationResultModel,
+    Priority,
+    ResourceUsageModel,
+    SandboxConfigModel,
+    ShellPayloadModel,
+    TaskDispatchModel,
+    TaskResultModel,
+    TaskStatus,
+    TaskType,
+    TimestampModel,
+    WorkerCapabilityModel,
+    WorkerHeartbeatModel,
+    WorkerRegistrationModel,
+    WorkerShutdownModel,
+    WorkerStatus,
 )
-
-# -- Executor target type (PR-E) -----------------------------------------------
-from core.schemas.remote_execution import ExecutorTargetType, RemoteExecutionMode
 
 # -- Device schemas ----------------------------------------------------------
 from core.schemas.device import (
-    DeviceModel,
     DeviceCapabilityModel,
+    DeviceCapabilitySchema,
+    DeviceCommandResultSchema,
+    DeviceCommandSchema,
+    DeviceModel,
     DeviceRegisterSchema,
     DeviceStatusSchema,
-    DeviceCapabilitySchema,
-    DeviceCommandSchema,
-    DeviceCommandResultSchema,
+)
+
+# -- Multi-modal input schemas (PR 1) ----------------------------------------
+from core.schemas.multimodal import (
+    MultiModalAudio,
+    MultiModalContext,
+    MultiModalImage,
+    MultiModalInput,
 )
 
 # -- Orchestration schemas ---------------------------------------------------
 from core.schemas.orchestration import (
-    SubTask,
-    SubTaskStatus,
-    TaskDecomposition,
     OrchestrationRequest,
     OrchestrationResult,
     OrchestrationStatus,
-)
-
-# -- Agent schemas -----------------------------------------------------------
-from core.schemas.agent import (
-    AgentCreateSchema,
-    AgentTaskSchema,
-    AgentResponseSchema,
-    TwinCreateSchema,
-    SwarmCreateSchema,
-    # Phase 2: Team Manifest
-    TeamStrategyEnum,
-    TeamMemberSchema,
-    TeamManifestSchema,
-    TeamMemberResultSchema,
-    TeamResultSchema,
-)
-
-# -- Routing schemas ---------------------------------------------------------
-from core.schemas.routing import (
-    RoutingRequestSchema,
-    RoutingDecisionSchema,
-    ProviderStatusSchema,
-    # Phase 2: Complexity & Response
-    ModelTier,
-    ComplexityVector,
-    RouterResponseSchema,
-)
-
-# -- Tool call schemas -------------------------------------------------------
-from core.schemas.tool_call import (
-    ToolLayer,
-    ToolCallStatus,
-    ToolCallRecord,
-    ReactLoopResult,
+    SubTask,
+    SubTaskStatus,
+    TaskDecomposition,
 )
 
 # -- Protocol schemas --------------------------------------------------------
@@ -92,63 +104,39 @@ from core.schemas.protocol import (
     SkillSchema,
 )
 
-# -- Session schemas ---------------------------------------------------------
-from core.schemas.session import (
-    SessionSchema,
-    SessionMigrateSchema,
+# -- Executor target type (PR-E) -----------------------------------------------
+from core.schemas.remote_execution import ExecutorTargetType, RemoteExecutionMode
+
+# -- Routing schemas ---------------------------------------------------------
+from core.schemas.routing import (  # Phase 2: Complexity & Response
+    ComplexityVector,
+    ModelTier,
+    ProviderStatusSchema,
+    RouterResponseSchema,
+    RoutingDecisionSchema,
+    RoutingRequestSchema,
 )
 
-# -- Contract models (Agentic OS) -------------------------------------------
-from core.schemas.contracts import (
-    # Enums
-    Priority,
-    TaskStatus,
-    WorkerStatus,
-    TaskType,
-    CodeLanguage,
-    FileOperation,
-    DiagnosticSeverity,
-    MCPRegistrationAction,
-    AgentMessageType,
-    EventDomain,
-    EventSeverity,
-    # Common
-    TimestampModel,
-    ErrorInfoModel,
-    ResourceUsageModel,
-    # Task payloads
-    CodePayloadModel,
-    SandboxConfigModel,
-    FilePayloadModel,
-    DeviceCommandPayloadModel,
-    ShellPayloadModel,
-    MCPCallPayloadModel,
-    # Task dispatch/result
-    TaskDispatchModel,
-    TaskResultModel,
-    # LSP
-    LSPDiagnosticModel,
-    LSPCheckResultModel,
-    # Execution
-    ExecutionOutputModel,
-    ArtifactModel,
-    # MCP
-    MCPToolDescriptorModel,
-    MCPCallRequestModel,
-    MCPCallResponseModel,
-    MCPDiscoveryRequestModel,
-    MCPDiscoveryResponseModel,
-    MCPToolRegistrationModel,
-    MCPToolRegistrationResultModel,
-    # Worker
-    WorkerCapabilityModel,
-    WorkerRegistrationModel,
-    WorkerHeartbeatModel,
-    WorkerShutdownModel,
-    # Events
-    AgentEventModel,
-    # Envelope
-    AgentMessageModel,
+# -- Session schemas ---------------------------------------------------------
+from core.schemas.session import (
+    SessionMigrateSchema,
+    SessionSchema,
+)
+
+# -- TaskEnvelope (canonical Agent-Bus schema) --------------------------------
+from core.schemas.task_envelope import (
+    TaskEnvelope,
+    envelope_from_command_request,
+    envelope_from_mcp_call,
+    envelope_from_relay_request,
+)
+
+# -- Tool call schemas -------------------------------------------------------
+from core.schemas.tool_call import (
+    ReactLoopResult,
+    ToolCallRecord,
+    ToolCallStatus,
+    ToolLayer,
 )
 
 __all__ = [

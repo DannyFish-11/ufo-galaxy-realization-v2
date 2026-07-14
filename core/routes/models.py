@@ -12,6 +12,7 @@
   POST /api/v1/models/tier     —— 选定档位（+可选档内主脑）；写 OLLAMA_MODEL、
                                   持久化档位、并对未安装的本地模型触发后台拉取。
 """
+
 from __future__ import annotations
 
 import logging
@@ -48,6 +49,7 @@ _refresh_task: Any = None  # 在飞的后台刷新任务(同一时刻至多一�
 def _ollama_base() -> str:
     # ollama 地址解析收口到 core.ollama_endpoint 唯一属主(空值/缺协议头都兜底)。
     from core.ollama_endpoint import resolve_ollama_base_url
+
     return resolve_ollama_base_url()
 
 
@@ -55,6 +57,7 @@ def _ollama_base() -> str:
 async def get_catalog() -> Dict[str, Any]:
     """完整模型目录（档位 + 模型 + 能力 + 有效 IO + 当前档位）。"""
     from core.model_catalog import catalog_snapshot
+
     snap = catalog_snapshot()
     # 当前主脑（供面板高亮）
     snap["current_main_brain"] = os.environ.get("OLLAMA_MODEL", "")
@@ -65,6 +68,7 @@ def _catalog_placeholder(status: str = "unknown") -> Dict[str, Dict[str, Any]]:
     """全目录占位结果(探测超预算/彻底失败时用):键集恒等于目录本地模型集,
     形状不破(面板与测试都依赖 models 键集 == choice_order 本地项)。"""
     from core.model_catalog import choice_order, get_model
+
     out: Dict[str, Dict[str, Any]] = {}
     for tag in choice_order():
         spec = get_model(tag)
@@ -82,6 +86,7 @@ async def _probe_installed_async() -> Dict[str, Dict[str, Any]]:
     Ollama 冷加载时每个调用都在超时线下爬行,串行会把延迟累加成 10s+。
     """
     import httpx
+
     from core.model_catalog import choice_order, get_model
 
     base = _ollama_base()
@@ -104,8 +109,7 @@ async def _probe_installed_async() -> Dict[str, Dict[str, Any]]:
                 continue
             root = tag.split(":")[0]
             matched = next(
-                (h for h in installed_names
-                 if h == tag or h.startswith(tag + ":") or h.split(":")[0] == root),
+                (h for h in installed_names if h == tag or h.startswith(tag + ":") or h.split(":")[0] == root),
                 None,
             )
             out[tag] = {
@@ -118,9 +122,7 @@ async def _probe_installed_async() -> Dict[str, Dict[str, Any]]:
 
         async def _verify(tag: str, matched: str) -> None:
             try:
-                sr = await client.post(
-                    f"{base}/api/show", json={"name": matched}, timeout=2.0
-                )
+                sr = await client.post(f"{base}/api/show", json={"name": matched}, timeout=2.0)
                 if sr.status_code != 200:
                     out[tag]["status"] = "broken"  # 列名在、打不开 → 当未装
             except Exception:  # noqa: BLE001
@@ -149,15 +151,14 @@ def _kick_refresh() -> None:
             # (真机:每个调用都在超时线下爬),前台预算内探不完,后台得能兜住,
             # 否则缓存永远填不上、面板一直显示占位态。探测自身有单调用超时,
             # 天然有界(tags 3s + show 2s 并行 ≈ 最坏 5-6s)。
-            data = await _asyncio.wait_for(
-                _probe_installed_async(), timeout=_PROBE_BUDGET * 3
-            )
+            data = await _asyncio.wait_for(_probe_installed_async(), timeout=_PROBE_BUDGET * 3)
             _status_cache["data"] = data
             _status_cache["ts"] = _time.monotonic()
         except Exception as exc:  # noqa: BLE001
             logger.debug("models/status 后台刷新失败/超预算(下次请求再试): %s", exc)
         finally:
             _refresh_task = None
+
     try:
         _refresh_task = _asyncio.get_running_loop().create_task(_refresh())
     except RuntimeError:  # 无运行中事件循环(同步测试环境)则跳过后台刷新
@@ -185,9 +186,7 @@ async def get_status() -> Dict[str, Any]:
         if cached is not None:  # 等锁期间别的请求已填上
             return {"models": cached, "cached": True}
         try:
-            installed = await _asyncio.wait_for(
-                _probe_installed_async(), timeout=_PROBE_BUDGET
-            )
+            installed = await _asyncio.wait_for(_probe_installed_async(), timeout=_PROBE_BUDGET)
         except Exception as exc:  # noqa: BLE001
             logger.debug("models/status 首次探测超预算(%s),返回占位并后台续探", exc)
             _kick_refresh()
@@ -198,8 +197,8 @@ async def get_status() -> Dict[str, Any]:
 
 
 class ProviderVerifyRequest(BaseModel):
-    provider: Optional[str] = None   # 提供商名(如 "deepseek");与 env_key 二选一
-    env_key: Optional[str] = None    # 或环境变量键(如 "DEEPSEEK_API_KEY"),后端反查
+    provider: Optional[str] = None  # 提供商名(如 "deepseek");与 env_key 二选一
+    env_key: Optional[str] = None  # 或环境变量键(如 "DEEPSEEK_API_KEY"),后端反查
 
 
 @router.post("/verify-provider")
@@ -211,6 +210,7 @@ async def verify_provider(req: ProviderVerifyRequest) -> Dict[str, Any]:
     用户没法判断"到底好了没有"。试调成本≈零(max_tokens=1),15s 封顶。
     """
     from core.multi_llm_router import PROVIDER_REGISTRY, get_llm_router
+
     router_ = get_llm_router()
 
     name = (req.provider or "").strip().lower()
@@ -224,49 +224,54 @@ async def verify_provider(req: ProviderVerifyRequest) -> Dict[str, Any]:
                     name = entry["name"]
                     break
     if not name:
-        return {"ok": False,
-                "error": f"无法识别提供商(provider={req.provider!r}, env_key={req.env_key!r})"}
+        return {"ok": False, "error": f"无法识别提供商(provider={req.provider!r}, env_key={req.env_key!r})"}
 
     adapter = router_.adapters.get(name)
     cfg = router_.providers.get(name)
     if adapter is None or cfg is None:
-        return {"ok": False, "provider": name,
-                "error": "提供商未启用——Key 可能没保存成功或路由未刷新"}
+        return {"ok": False, "provider": name, "error": "提供商未启用——Key 可能没保存成功或路由未刷新"}
     try:
         resp = await _asyncio.wait_for(
             adapter.chat(
-                [{"role": "user", "content": "ping"}], cfg.default_model,
-                max_tokens=1, temperature=0.0,
+                [{"role": "user", "content": "ping"}],
+                cfg.default_model,
+                max_tokens=1,
+                temperature=0.0,
             ),
             timeout=15.0,
         )
-        return {"ok": True, "provider": name, "model": resp.model,
-                "latency_ms": round(float(resp.latency_ms or 0.0), 1)}
+        return {
+            "ok": True,
+            "provider": name,
+            "model": resp.model,
+            "latency_ms": round(float(resp.latency_ms or 0.0), 1),
+        }
     except _asyncio.TimeoutError:
-        return {"ok": False, "provider": name,
-                "error": "验证超时(15s)——服务不可达或网络阻断"}
+        return {"ok": False, "provider": name, "error": "验证超时(15s)——服务不可达或网络阻断"}
     except Exception as exc:  # noqa: BLE001
         # 不把原始异常串直接回给调用方(CodeQL: 异常可能携带栈/内部信息)。
         # 分类成用户能行动的脱敏文案;完整异常只进服务端日志。
         logger.info("verify-provider %s 试调失败: %s", name, exc)
         try:
             import httpx
+
             if isinstance(exc, httpx.HTTPStatusError):
                 code = exc.response.status_code
                 hint = {
-                    401: "密钥无效(401)", 403: "无权限(403)",
-                    404: "接口或模型不存在(404)", 429: "限流(429)",
+                    401: "密钥无效(401)",
+                    403: "无权限(403)",
+                    404: "接口或模型不存在(404)",
+                    429: "限流(429)",
                 }.get(code, f"HTTP {code}")
                 return {"ok": False, "provider": name, "error": hint}
         except Exception:  # noqa: BLE001
             pass
-        return {"ok": False, "provider": name,
-                "error": f"连接失败({type(exc).__name__})——检查网络/Key/服务地址"}
+        return {"ok": False, "provider": name, "error": f"连接失败({type(exc).__name__})——检查网络/Key/服务地址"}
 
 
 class ModelSyncRequest(BaseModel):
-    apply: bool = False                     # False=只出对账报告；True=就地剪失效/补新发现
-    only: Optional[List[str]] = None        # 限定 provider（不给则全部可用 provider）
+    apply: bool = False  # False=只出对账报告；True=就地剪失效/补新发现
+    only: Optional[List[str]] = None  # 限定 provider（不给则全部可用 provider）
     max_add: int = 20
 
 
@@ -277,9 +282,12 @@ async def sync_models(req: ModelSyncRequest) -> Dict[str, Any]:
     修复失效 default_model；不可达的 provider 跳过，不误删其配置）。
     """
     from core.multi_llm_router import get_llm_router
+
     router_ = get_llm_router()
     return await router_.sync_model_lists(
-        apply=req.apply, only=req.only, max_add=req.max_add,
+        apply=req.apply,
+        only=req.only,
+        max_add=req.max_add,
     )
 
 
@@ -287,6 +295,7 @@ async def sync_models(req: ModelSyncRequest) -> Dict[str, Any]:
 async def routing_stats() -> Dict[str, Any]:
     """L3 可观测:导出每个 provider 的历史表现 + 当前 bandit 分（反哺决策的实际依据）。"""
     from core.multi_llm_router import get_llm_router
+
     router_ = get_llm_router()
     return {"stats": router_.routing_stats()}
 
@@ -299,7 +308,7 @@ class TierSelectRequest(BaseModel):
 @router.post("/tier")
 async def select_tier(req: TierSelectRequest) -> Dict[str, Any]:
     """选定档位：持久化 + 写 OLLAMA_MODEL + 对未安装的本地模型后台拉取。"""
-    from core.model_catalog import save_tier, tier_models, get_tier
+    from core.model_catalog import get_tier, save_tier, tier_models
 
     tier = get_tier(req.tier)
     if tier is None:
@@ -311,6 +320,7 @@ async def select_tier(req: TierSelectRequest) -> Dict[str, Any]:
     pulled: List[str] = []
     try:
         from core.model_selection import background_pull
+
         for spec in tier_models(req.tier):
             if spec.source == "local":
                 background_pull(spec.tag)
@@ -321,6 +331,7 @@ async def select_tier(req: TierSelectRequest) -> Dict[str, Any]:
     # 热刷新 LLM 路由，让新主脑即时生效（无需重启）。
     try:
         from core.multi_llm_router import refresh_llm_router
+
         await refresh_llm_router()
     except Exception:  # noqa: BLE001
         pass

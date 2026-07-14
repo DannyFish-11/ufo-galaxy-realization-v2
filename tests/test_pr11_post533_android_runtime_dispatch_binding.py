@@ -148,7 +148,6 @@ from core.android_runtime_dispatch_binding import (
     resolve_dispatch_binding,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers / minimal stub objects for resolve_dispatch_binding tests
 # ---------------------------------------------------------------------------
@@ -224,7 +223,11 @@ def test_A02_authority_sentinel_contains_module_name():
 
 
 def test_A03_authority_sentinel_contains_pr11():
-    assert "PR-11" in ANDROID_RUNTIME_DISPATCH_BINDING_AUTHORITY or "PR package 11" in ANDROID_RUNTIME_DISPATCH_BINDING_AUTHORITY or "dispatch binding" in ANDROID_RUNTIME_DISPATCH_BINDING_AUTHORITY.lower()
+    assert (
+        "PR-11" in ANDROID_RUNTIME_DISPATCH_BINDING_AUTHORITY
+        or "PR package 11" in ANDROID_RUNTIME_DISPATCH_BINDING_AUTHORITY
+        or "dispatch binding" in ANDROID_RUNTIME_DISPATCH_BINDING_AUTHORITY.lower()
+    )
 
 
 def test_A04_pr11_sentinel_non_empty():
@@ -381,9 +384,7 @@ def test_E03_identity_to_json_valid_json():
 
 
 def test_E04_identity_from_dict_round_trip():
-    identity = AndroidRuntimeDispatchBindingIdentity(
-        session_id="s1", device_id="d1", contract_id="c1", tracker_id="t1"
-    )
+    identity = AndroidRuntimeDispatchBindingIdentity(session_id="s1", device_id="d1", contract_id="c1", tracker_id="t1")
     restored = AndroidRuntimeDispatchBindingIdentity.from_dict(identity.to_dict())
     assert restored.session_id == "s1"
     assert restored.device_id == "d1"
@@ -461,20 +462,14 @@ def test_F05_record_is_terminal_when_released():
 
 
 def test_F06_record_is_dispatch_ready_requires_bound_and_contract_id():
-    identity = AndroidRuntimeDispatchBindingIdentity(
-        session_id="s1", device_id="d1", contract_id="c1"
-    )
-    record = AndroidRuntimeDispatchBindingRecord(
-        identity=identity, binding_state=AndroidRuntimeBindingState.bound
-    )
+    identity = AndroidRuntimeDispatchBindingIdentity(session_id="s1", device_id="d1", contract_id="c1")
+    record = AndroidRuntimeDispatchBindingRecord(identity=identity, binding_state=AndroidRuntimeBindingState.bound)
     assert record.is_dispatch_ready()
 
 
 def test_F07_record_is_not_dispatch_ready_without_contract_id():
     identity = AndroidRuntimeDispatchBindingIdentity(session_id="s1", device_id="d1")
-    record = AndroidRuntimeDispatchBindingRecord(
-        identity=identity, binding_state=AndroidRuntimeBindingState.bound
-    )
+    record = AndroidRuntimeDispatchBindingRecord(identity=identity, binding_state=AndroidRuntimeBindingState.bound)
     assert not record.is_dispatch_ready()
 
 
@@ -483,9 +478,18 @@ def test_F08_record_to_dict_has_all_keys():
     record = AndroidRuntimeDispatchBindingRecord(identity=identity)
     d = record.to_dict()
     for key in (
-        "identity", "binding_state", "source_runtime_posture", "coordination_role",
-        "android_host_role", "capability_tier", "is_session_anchored", "is_device_bound",
-        "reject_reason", "created_at", "updated_at", "metadata",
+        "identity",
+        "binding_state",
+        "source_runtime_posture",
+        "coordination_role",
+        "android_host_role",
+        "capability_tier",
+        "is_session_anchored",
+        "is_device_bound",
+        "reject_reason",
+        "created_at",
+        "updated_at",
+        "metadata",
     ):
         assert key in d, f"Missing key: {key}"
 
@@ -498,9 +502,7 @@ def test_F09_record_to_json_valid_json():
 
 
 def test_F10_record_from_dict_round_trip():
-    identity = AndroidRuntimeDispatchBindingIdentity(
-        session_id="s1", device_id="d1", contract_id="c1", tracker_id="t1"
-    )
+    identity = AndroidRuntimeDispatchBindingIdentity(session_id="s1", device_id="d1", contract_id="c1", tracker_id="t1")
     record = AndroidRuntimeDispatchBindingRecord(
         identity=identity,
         binding_state=AndroidRuntimeBindingState.bound,
@@ -583,9 +585,7 @@ def test_H03_runtime_list_all_newest_first():
 def test_H04_runtime_list_active_excludes_released():
     rt = _fresh_rt()
     r1 = _make_binding(session_id="s1", device_id="d1", runtime=rt)
-    rejected = create_android_dispatch_binding(
-        session_id="", device_id="d2", runtime=rt
-    )
+    rejected = create_android_dispatch_binding(session_id="", device_id="d2", runtime=rt)
     active = rt.list_active()
     session_ids = {r.identity.session_id for r in active}
     assert "s1" in session_ids
@@ -638,9 +638,7 @@ def test_H11_runtime_eviction_when_full():
     capacity = 4
     rt = AndroidRuntimeDispatchBindingRuntime(capacity=capacity)
     for i in range(capacity + 1):
-        create_android_dispatch_binding(
-            session_id=f"s{i}", device_id=f"d{i}", runtime=rt
-        )
+        create_android_dispatch_binding(session_id=f"s{i}", device_id=f"d{i}", runtime=rt)
     assert rt.size() == capacity
     all_sessions = {r.identity.session_id for r in rt.list_all()}
     assert "s0" not in all_sessions  # oldest evicted
@@ -665,17 +663,13 @@ def test_I01_valid_inputs_returns_unbound_record():
 
 def test_I02_valid_inputs_session_id_preserved():
     rt = _fresh_rt()
-    rec = create_android_dispatch_binding(
-        session_id="sess-xyz", device_id="dev-xyz", runtime=rt
-    )
+    rec = create_android_dispatch_binding(session_id="sess-xyz", device_id="dev-xyz", runtime=rt)
     assert rec.identity.session_id == "sess-xyz"
 
 
 def test_I03_valid_inputs_device_id_preserved():
     rt = _fresh_rt()
-    rec = create_android_dispatch_binding(
-        session_id="sess-1", device_id="dev-777", runtime=rt
-    )
+    rec = create_android_dispatch_binding(session_id="sess-1", device_id="dev-777", runtime=rt)
     assert rec.identity.device_id == "dev-777"
 
 
@@ -686,9 +680,7 @@ def test_I03_valid_inputs_device_id_preserved():
 
 def test_J01_empty_session_id_rejected():
     rt = _fresh_rt()
-    rec = create_android_dispatch_binding(
-        session_id="", device_id="dev-1", runtime=rt
-    )
+    rec = create_android_dispatch_binding(session_id="", device_id="dev-1", runtime=rt)
     assert rec.is_rejected()
     assert rec.binding_state == AndroidRuntimeBindingState.released
     assert "session_id" in rec.reject_reason.lower() or "attached_session" in rec.reject_reason
@@ -707,9 +699,7 @@ def test_J02_rejected_record_persisted_to_runtime():
 
 def test_K01_empty_device_id_rejected():
     rt = _fresh_rt()
-    rec = create_android_dispatch_binding(
-        session_id="sess-1", device_id="", runtime=rt
-    )
+    rec = create_android_dispatch_binding(session_id="sess-1", device_id="", runtime=rt)
     assert rec.is_rejected()
     assert rec.binding_state == AndroidRuntimeBindingState.released
     assert "device_id" in rec.reject_reason.lower()
@@ -735,9 +725,7 @@ def test_L01_control_only_posture_rejected():
 
 def test_L02_empty_posture_rejected():
     rt = _fresh_rt()
-    rec = create_android_dispatch_binding(
-        session_id="sess-1", device_id="dev-1", source_runtime_posture="", runtime=rt
-    )
+    rec = create_android_dispatch_binding(session_id="sess-1", device_id="dev-1", source_runtime_posture="", runtime=rt)
     assert rec.is_rejected()
 
 
@@ -759,9 +747,7 @@ def test_L03_unknown_posture_rejected():
 
 def test_M01_trace_id_auto_generated_when_absent():
     rt = _fresh_rt()
-    rec = create_android_dispatch_binding(
-        session_id="sess-1", device_id="dev-1", runtime=rt
-    )
+    rec = create_android_dispatch_binding(session_id="sess-1", device_id="dev-1", runtime=rt)
     assert rec.identity.trace_id
     # Should be a valid UUID-ish string
     assert len(rec.identity.trace_id) > 0
@@ -785,9 +771,7 @@ def test_M02_trace_id_override_honoured():
 
 def test_N01_binding_id_auto_generated_when_absent():
     rt = _fresh_rt()
-    rec = create_android_dispatch_binding(
-        session_id="sess-1", device_id="dev-1", runtime=rt
-    )
+    rec = create_android_dispatch_binding(session_id="sess-1", device_id="dev-1", runtime=rt)
     assert rec.identity.binding_id
 
 
@@ -809,9 +793,7 @@ def test_N02_binding_id_override_honoured():
 
 def test_O01_accepted_binding_posture_is_join_runtime():
     rt = _fresh_rt()
-    rec = create_android_dispatch_binding(
-        session_id="sess-1", device_id="dev-1", runtime=rt
-    )
+    rec = create_android_dispatch_binding(session_id="sess-1", device_id="dev-1", runtime=rt)
     assert rec.source_runtime_posture == "join_runtime"
 
 
@@ -838,9 +820,7 @@ def test_P01_coordination_role_forwarded():
 
 def test_Q01_contract_id_and_tracker_id_optional_at_creation():
     rt = _fresh_rt()
-    rec = create_android_dispatch_binding(
-        session_id="sess-1", device_id="dev-1", runtime=rt
-    )
+    rec = create_android_dispatch_binding(session_id="sess-1", device_id="dev-1", runtime=rt)
     assert rec.identity.contract_id == ""
     assert rec.identity.tracker_id == ""
     assert rec.is_accepted()
@@ -875,9 +855,7 @@ def test_Q03_tracker_id_forwarded_when_provided():
 
 def test_R01_record_persisted_to_runtime():
     rt = _fresh_rt()
-    rec = create_android_dispatch_binding(
-        session_id="sess-r1", device_id="dev-r1", runtime=rt
-    )
+    rec = create_android_dispatch_binding(session_id="sess-r1", device_id="dev-r1", runtime=rt)
     found = rt.get_latest_for_session("sess-r1")
     assert found is not None
     assert found.identity.binding_id == rec.identity.binding_id
@@ -1149,9 +1127,7 @@ def test_AH01_resolve_dispatch_binding_valid_records():
 
 def test_AH02_resolve_binding_state_is_unbound_initially():
     rt = _fresh_rt()
-    rec = resolve_dispatch_binding(
-        _StubSession(), _StubContract(), _StubTracker(), runtime=rt
-    )
+    rec = resolve_dispatch_binding(_StubSession(), _StubContract(), _StubTracker(), runtime=rt)
     assert rec.binding_state == AndroidRuntimeBindingState.unbound
 
 
@@ -1203,9 +1179,7 @@ def test_AK01_empty_device_id_rejected_via_resolve():
 def test_AL01_tracker_id_forwarded_from_tracker_record():
     rt = _fresh_rt()
     tracker = _StubTracker(identity=_StubTrackerIdentity(tracker_id="my-tracker"))
-    rec = resolve_dispatch_binding(
-        _StubSession(), _StubContract(), tracker, runtime=rt
-    )
+    rec = resolve_dispatch_binding(_StubSession(), _StubContract(), tracker, runtime=rt)
     assert rec.identity.tracker_id == "my-tracker"
 
 
@@ -1216,12 +1190,8 @@ def test_AL01_tracker_id_forwarded_from_tracker_record():
 
 def test_AM01_contract_id_forwarded_from_contract_record():
     rt = _fresh_rt()
-    contract = _StubContract(
-        identity=_StubContractIdentity(contract_id="my-contract", session_id="sess-1")
-    )
-    rec = resolve_dispatch_binding(
-        _StubSession(), contract, _StubTracker(), runtime=rt
-    )
+    contract = _StubContract(identity=_StubContractIdentity(contract_id="my-contract", session_id="sess-1"))
+    rec = resolve_dispatch_binding(_StubSession(), contract, _StubTracker(), runtime=rt)
     assert rec.identity.contract_id == "my-contract"
 
 
@@ -1232,12 +1202,8 @@ def test_AM01_contract_id_forwarded_from_contract_record():
 
 def test_AN01_trace_id_forwarded_from_contract():
     rt = _fresh_rt()
-    contract = _StubContract(
-        identity=_StubContractIdentity(trace_id="my-trace", session_id="sess-1")
-    )
-    rec = resolve_dispatch_binding(
-        _StubSession(), contract, _StubTracker(), runtime=rt
-    )
+    contract = _StubContract(identity=_StubContractIdentity(trace_id="my-trace", session_id="sess-1"))
+    rec = resolve_dispatch_binding(_StubSession(), contract, _StubTracker(), runtime=rt)
     assert rec.identity.trace_id == "my-trace"
 
 
@@ -1365,9 +1331,7 @@ def test_AV01_empty_when_all_released():
     # Let's use a cleaner approach: only released records
     rt2 = _fresh_rt()
     identity = AndroidRuntimeDispatchBindingIdentity(session_id="s-rel", device_id="d-rel")
-    released = AndroidRuntimeDispatchBindingRecord(
-        identity=identity, binding_state=AndroidRuntimeBindingState.released
-    )
+    released = AndroidRuntimeDispatchBindingRecord(identity=identity, binding_state=AndroidRuntimeBindingState.released)
     record_dispatch_binding(released, runtime=rt2)
     active2 = list_bound_dispatch_bindings(runtime=rt2)
     assert len(active2) == 0
@@ -1496,9 +1460,7 @@ def test_BC01_oldest_evicted_when_full():
     capacity = 5
     rt = AndroidRuntimeDispatchBindingRuntime(capacity=capacity)
     for i in range(capacity + 2):
-        create_android_dispatch_binding(
-            session_id=f"evict-{i}", device_id=f"dev-{i}", runtime=rt
-        )
+        create_android_dispatch_binding(session_id=f"evict-{i}", device_id=f"dev-{i}", runtime=rt)
     all_sessions = {r.identity.session_id for r in rt.list_all()}
     assert "evict-0" not in all_sessions
     assert "evict-1" not in all_sessions
@@ -1634,9 +1596,7 @@ def test_BL01_is_active_true_when_not_released():
 
 def test_BM01_is_terminal_true_when_released():
     identity = AndroidRuntimeDispatchBindingIdentity(session_id="s1", device_id="d1")
-    rec = AndroidRuntimeDispatchBindingRecord(
-        identity=identity, binding_state=AndroidRuntimeBindingState.released
-    )
+    rec = AndroidRuntimeDispatchBindingRecord(identity=identity, binding_state=AndroidRuntimeBindingState.released)
     assert rec.is_terminal()
 
 
@@ -1867,14 +1827,10 @@ def test_CC01_binding_id_stable_across_round_trip():
 def test_CD01_list_active_excludes_released():
     rt = _fresh_rt()
     identity = AndroidRuntimeDispatchBindingIdentity(session_id="s-rel2", device_id="d-rel2")
-    released = AndroidRuntimeDispatchBindingRecord(
-        identity=identity, binding_state=AndroidRuntimeBindingState.released
-    )
+    released = AndroidRuntimeDispatchBindingRecord(identity=identity, binding_state=AndroidRuntimeBindingState.released)
     rt.push(released)
     active = rt.list_active()
-    assert not any(
-        r.identity.session_id == "s-rel2" for r in active
-    )
+    assert not any(r.identity.session_id == "s-rel2" for r in active)
 
 
 # ---------------------------------------------------------------------------
@@ -1951,9 +1907,7 @@ def test_CI01_metadata_preserved_across_transitions():
 def test_CJ01_metadata_stored_in_record():
     rt = _fresh_rt()
     meta = {"foo": "bar"}
-    rec = create_android_dispatch_binding(
-        session_id="s1", device_id="d1", metadata=meta, runtime=rt
-    )
+    rec = create_android_dispatch_binding(session_id="s1", device_id="d1", metadata=meta, runtime=rt)
     assert rec.metadata == {"foo": "bar"}
 
 
@@ -1965,9 +1919,7 @@ def test_CJ01_metadata_stored_in_record():
 def test_CK01_coordination_role_from_attached_session_forwarded():
     rt = _fresh_rt()
     session = _StubSession(coordination_role="source_controller")
-    rec = resolve_dispatch_binding(
-        session, _StubContract(), _StubTracker(), runtime=rt
-    )
+    rec = resolve_dispatch_binding(session, _StubContract(), _StubTracker(), runtime=rt)
     assert rec.coordination_role == "source_controller"
 
 

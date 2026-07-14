@@ -16,8 +16,8 @@ unified_launcher._emit() 相应新增 hint 参数，Docker/AI 大脑各自传入
 
 from __future__ import annotations
 
-import io
 import contextlib
+import io
 
 from core.cli_render import summary_card
 
@@ -36,10 +36,12 @@ def _render(degraded):
 
 
 def test_each_degraded_item_shows_its_own_hint():
-    out = _render([
-        ("基础设施 · Docker", "装后重跑即恢复"),
-        ("AI 大脑", "请去「模型」tab 配置"),
-    ])
+    out = _render(
+        [
+            ("基础设施 · Docker", "装后重跑即恢复"),
+            ("AI 大脑", "请去「模型」tab 配置"),
+        ]
+    )
     assert "基础设施 · Docker → 装后重跑即恢复" in out
     assert "AI 大脑 → 请去「模型」tab 配置" in out
     # 关键:Docker 的建议不能跑到 AI 大脑名下,反之亦然。

@@ -17,13 +17,13 @@ Manifest 可以:
 3. 作为 Agent 迁移的最小单元
 """
 
+import hashlib
 import json
 import time
 import uuid
-import hashlib
-from typing import List, Dict, Any, Optional
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from enum import Enum
+from typing import Any, Dict, List, Optional
 
 
 class ManifestVersion(str, Enum):
@@ -32,7 +32,8 @@ class ManifestVersion(str, Enum):
 
 class ExecutionMode(str, Enum):
     """执行模式"""
-    REACT = "react"          # ReAct Loop (Thought → Action → Observation)
+
+    REACT = "react"  # ReAct Loop (Thought → Action → Observation)
     SEQUENTIAL = "sequential"  # 顺序执行预定义动作列表
     AUTONOMOUS = "autonomous"  # 完全自主 (自行发现工具 + 决策)
 
@@ -47,10 +48,11 @@ class AgentPriority(str, Enum):
 @dataclass
 class ToolDeclaration:
     """工具声明 — Agent 被授权使用的工具"""
-    name: str                          # 工具名 (e.g. "click", "screenshot", "open_app")
-    description: str                   # 工具功能描述
-    parameters: Dict[str, Any] = field(default_factory=dict)   # JSON Schema
-    required_capability: str = ""      # 需要的设备能力 (e.g. "ui_automation")
+
+    name: str  # 工具名 (e.g. "click", "screenshot", "open_app")
+    description: str  # 工具功能描述
+    parameters: Dict[str, Any] = field(default_factory=dict)  # JSON Schema
+    required_capability: str = ""  # 需要的设备能力 (e.g. "ui_automation")
 
     def to_dict(self) -> Dict:
         return asdict(self)
@@ -59,11 +61,12 @@ class ToolDeclaration:
 @dataclass
 class TaskItem:
     """任务项 — Agent 需要执行的具体任务"""
+
     id: str = field(default_factory=lambda: str(uuid.uuid4())[:8])
-    instruction: str = ""              # 自然语言指令
-    action: str = ""                   # 具体动作 (可选, 用于 SEQUENTIAL 模式)
+    instruction: str = ""  # 自然语言指令
+    action: str = ""  # 具体动作 (可选, 用于 SEQUENTIAL 模式)
     params: Dict[str, Any] = field(default_factory=dict)
-    priority: int = 5                  # 1-10, 越高越优先
+    priority: int = 5  # 1-10, 越高越优先
     depends_on: List[str] = field(default_factory=list)  # 依赖的任务 ID
 
     def to_dict(self) -> Dict:
@@ -83,40 +86,40 @@ class AgentManifest:
     # ── 身份信息 ──
     manifest_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     agent_name: str = "unnamed_agent"
-    agent_role: str = "executor"       # coordinator / executor / analyst / planner
+    agent_role: str = "executor"  # coordinator / executor / analyst / planner
     description: str = ""
 
     # ── 思考引擎 ──
-    system_prompt: str = ""            # Agent 的 "灵魂" — 决定它如何思考和行动
-    execution_mode: str = "react"      # react / sequential / autonomous
+    system_prompt: str = ""  # Agent 的 "灵魂" — 决定它如何思考和行动
+    execution_mode: str = "react"  # react / sequential / autonomous
 
     # ── 工具声明 ──
     tools: List[Dict] = field(default_factory=list)  # List[ToolDeclaration.to_dict()]
 
     # ── 任务队列 ──
-    tasks: List[Dict] = field(default_factory=list)   # List[TaskItem.to_dict()]
+    tasks: List[Dict] = field(default_factory=list)  # List[TaskItem.to_dict()]
 
     # ── 执行配置 ──
-    max_react_turns: int = 10          # ReAct 最大推理轮次
-    timeout_seconds: int = 300         # 总超时
-    retry_on_error: bool = True        # 出错时是否重试
+    max_react_turns: int = 10  # ReAct 最大推理轮次
+    timeout_seconds: int = 300  # 总超时
+    retry_on_error: bool = True  # 出错时是否重试
     max_retries: int = 2
 
     # ── 上下文 ──
     context: Dict[str, Any] = field(default_factory=dict)  # 任意附加上下文
     parent_manifest_id: Optional[str] = None  # 父 Manifest ID (用于分裂追踪)
-    source_device: str = ""            # 来源设备 ID
-    target_device: str = ""            # 目标设备 ID
+    source_device: str = ""  # 来源设备 ID
+    target_device: str = ""  # 目标设备 ID
 
     # ── 元数据 ──
     version: str = ManifestVersion.V1.value
     created_at: float = field(default_factory=time.time)
     priority: str = AgentPriority.NORMAL.value
-    ttl_seconds: int = 3600            # 存活时间
+    ttl_seconds: int = 3600  # 存活时间
 
     # ── MCP 工具发现 ──
     discover_local_tools: bool = True  # 是否在端侧自动发现 MCP 工具
-    mcp_endpoint: str = ""             # 如果指定, 从此端点加载工具 Schema
+    mcp_endpoint: str = ""  # 如果指定, 从此端点加载工具 Schema
 
     # ================================================================
     # 序列化 / 反序列化
@@ -207,7 +210,16 @@ class AgentManifest:
         default_tools = tools or [
             ToolDeclaration("open_app", "Open an application", {"app_name": {"type": "string"}}),
             ToolDeclaration("click", "Click at coordinates", {"x": {"type": "integer"}, "y": {"type": "integer"}}),
-            ToolDeclaration("swipe", "Swipe gesture", {"x1": {"type": "integer"}, "y1": {"type": "integer"}, "x2": {"type": "integer"}, "y2": {"type": "integer"}}),
+            ToolDeclaration(
+                "swipe",
+                "Swipe gesture",
+                {
+                    "x1": {"type": "integer"},
+                    "y1": {"type": "integer"},
+                    "x2": {"type": "integer"},
+                    "y2": {"type": "integer"},
+                },
+            ),
             ToolDeclaration("type_text", "Type text", {"text": {"type": "string"}}),
             ToolDeclaration("screenshot", "Capture screenshot"),
             ToolDeclaration("key_event", "Send key event", {"key": {"type": "string"}}),

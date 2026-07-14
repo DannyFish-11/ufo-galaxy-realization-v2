@@ -26,10 +26,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _android_payload(**kw: Any) -> dict:
     """Standard Android registration payload dict."""
@@ -102,24 +102,28 @@ def _mock_registered_device(
 # 1. AndroidRuntimeHostRole classification
 # ---------------------------------------------------------------------------
 
+
 class TestClassifyAndroidRuntimeHostRole:
     """classify_android_runtime_host() returns the correct role."""
 
     def test_join_runtime_posture_yields_full_host(self):
-        from core.android_runtime_host import classify_android_runtime_host, AndroidRuntimeHostRole
+        from core.android_runtime_host import AndroidRuntimeHostRole, classify_android_runtime_host
+
         device = _mock_registered_device(source_runtime_posture="join_runtime", is_runtime_host=True)
         role = classify_android_runtime_host(device)
         assert role == AndroidRuntimeHostRole.FULL_RUNTIME_HOST
 
     def test_join_runtime_posture_alone_yields_full_host(self):
         """join_runtime posture is sufficient even without is_runtime_host flag."""
-        from core.android_runtime_host import classify_android_runtime_host, AndroidRuntimeHostRole
+        from core.android_runtime_host import AndroidRuntimeHostRole, classify_android_runtime_host
+
         device = _mock_registered_device(source_runtime_posture="join_runtime", is_runtime_host=False)
         role = classify_android_runtime_host(device)
         assert role == AndroidRuntimeHostRole.FULL_RUNTIME_HOST
 
     def test_is_runtime_host_without_join_posture_yields_partial(self):
-        from core.android_runtime_host import classify_android_runtime_host, AndroidRuntimeHostRole
+        from core.android_runtime_host import AndroidRuntimeHostRole, classify_android_runtime_host
+
         device = _mock_registered_device(
             source_runtime_posture="control_only",
             is_runtime_host=True,
@@ -130,7 +134,8 @@ class TestClassifyAndroidRuntimeHostRole:
         assert role == AndroidRuntimeHostRole.PARTIAL_RUNTIME_HOST
 
     def test_autonomy_flags_without_posture_yields_partial(self):
-        from core.android_runtime_host import classify_android_runtime_host, AndroidRuntimeHostRole
+        from core.android_runtime_host import AndroidRuntimeHostRole, classify_android_runtime_host
+
         device = _mock_registered_device(
             source_runtime_posture="control_only",
             is_runtime_host=False,
@@ -141,7 +146,8 @@ class TestClassifyAndroidRuntimeHostRole:
         assert role == AndroidRuntimeHostRole.PARTIAL_RUNTIME_HOST
 
     def test_online_no_runtime_yields_connected_device_only(self):
-        from core.android_runtime_host import classify_android_runtime_host, AndroidRuntimeHostRole
+        from core.android_runtime_host import AndroidRuntimeHostRole, classify_android_runtime_host
+
         device = _mock_registered_device(
             source_runtime_posture="control_only",
             is_runtime_host=False,
@@ -153,7 +159,8 @@ class TestClassifyAndroidRuntimeHostRole:
         assert role == AndroidRuntimeHostRole.CONNECTED_DEVICE_ONLY
 
     def test_offline_no_signals_yields_unclassified(self):
-        from core.android_runtime_host import classify_android_runtime_host, AndroidRuntimeHostRole
+        from core.android_runtime_host import AndroidRuntimeHostRole, classify_android_runtime_host
+
         device = _mock_registered_device(
             source_runtime_posture="control_only",
             is_runtime_host=False,
@@ -166,7 +173,8 @@ class TestClassifyAndroidRuntimeHostRole:
 
     def test_dict_input_join_runtime(self):
         """classify_android_runtime_host() works with a plain dict."""
-        from core.android_runtime_host import classify_android_runtime_host, AndroidRuntimeHostRole
+        from core.android_runtime_host import AndroidRuntimeHostRole, classify_android_runtime_host
+
         d = {
             "device_id": "ph_dict",
             "source_runtime_posture": "join_runtime",
@@ -178,7 +186,8 @@ class TestClassifyAndroidRuntimeHostRole:
         assert role == AndroidRuntimeHostRole.FULL_RUNTIME_HOST
 
     def test_dict_input_control_only_online(self):
-        from core.android_runtime_host import classify_android_runtime_host, AndroidRuntimeHostRole
+        from core.android_runtime_host import AndroidRuntimeHostRole, classify_android_runtime_host
+
         d = {
             "device_id": "ph_dict_ctrl",
             "source_runtime_posture": "control_only",
@@ -190,11 +199,13 @@ class TestClassifyAndroidRuntimeHostRole:
         assert role == AndroidRuntimeHostRole.CONNECTED_DEVICE_ONLY
 
     def test_broken_object_returns_unclassified(self):
-        from core.android_runtime_host import classify_android_runtime_host, AndroidRuntimeHostRole
+        from core.android_runtime_host import AndroidRuntimeHostRole, classify_android_runtime_host
+
         class Broken:
             @property
             def source_runtime_posture(self):
                 raise RuntimeError("broken")
+
         role = classify_android_runtime_host(Broken())
         assert role == AndroidRuntimeHostRole.UNCLASSIFIED
 
@@ -203,14 +214,16 @@ class TestClassifyAndroidRuntimeHostRole:
 # 2. AndroidRuntimeHostIdentity construction and serialisation
 # ---------------------------------------------------------------------------
 
+
 class TestAndroidRuntimeHostIdentity:
     """AndroidRuntimeHostIdentity is constructed and serialises correctly."""
 
     def test_build_from_join_runtime_device(self):
         from core.android_runtime_host import (
-            build_android_runtime_host_identity,
             AndroidRuntimeHostRole,
+            build_android_runtime_host_identity,
         )
+
         device = _mock_registered_device(source_runtime_posture="join_runtime", is_runtime_host=True)
         identity = build_android_runtime_host_identity(device)
         assert identity.device_id == "android_001"
@@ -221,9 +234,10 @@ class TestAndroidRuntimeHostIdentity:
 
     def test_build_from_connected_device_only(self):
         from core.android_runtime_host import (
-            build_android_runtime_host_identity,
             AndroidRuntimeHostRole,
+            build_android_runtime_host_identity,
         )
+
         device = _mock_registered_device(
             source_runtime_posture="control_only",
             is_runtime_host=False,
@@ -237,21 +251,29 @@ class TestAndroidRuntimeHostIdentity:
 
     def test_to_dict_stable_keys(self):
         from core.android_runtime_host import build_android_runtime_host_identity
+
         device = _mock_registered_device()
         d = build_android_runtime_host_identity(device).to_dict()
         required = {
-            "snapshot_id", "device_id", "device_name", "role",
-            "source_runtime_posture", "is_runtime_host",
-            "runtime_enabled", "supports_remote_handoff",
-            "runtime_version", "formation_eligible",
+            "snapshot_id",
+            "device_id",
+            "device_name",
+            "role",
+            "source_runtime_posture",
+            "is_runtime_host",
+            "runtime_enabled",
+            "supports_remote_handoff",
+            "runtime_version",
+            "formation_eligible",
         }
         assert required <= set(d.keys()), f"Missing keys: {required - set(d.keys())}"
 
     def test_to_json_round_trip(self):
         from core.android_runtime_host import (
-            build_android_runtime_host_identity,
             AndroidRuntimeHostIdentity,
+            build_android_runtime_host_identity,
         )
+
         device = _mock_registered_device()
         identity = build_android_runtime_host_identity(device)
         raw = identity.to_json()
@@ -264,15 +286,17 @@ class TestAndroidRuntimeHostIdentity:
 
     def test_snapshot_id_is_stable_string(self):
         from core.android_runtime_host import build_android_runtime_host_identity
+
         device = _mock_registered_device()
         identity = build_android_runtime_host_identity(device)
         assert identity.snapshot_id.startswith("arhi_")
 
     def test_build_from_dict(self):
         from core.android_runtime_host import (
-            build_android_runtime_host_identity,
             AndroidRuntimeHostRole,
+            build_android_runtime_host_identity,
         )
+
         d = {
             "device_id": "ph_direct",
             "device_name": "Direct Phone",
@@ -292,10 +316,12 @@ class TestAndroidRuntimeHostIdentity:
 
     def test_broken_device_returns_fallback(self):
         from core.android_runtime_host import build_android_runtime_host_identity
+
         class Broken:
             @property
             def device_id(self):
                 raise RuntimeError("broken")
+
         identity = build_android_runtime_host_identity(Broken())
         assert identity.device_id.startswith("android_")
 
@@ -304,17 +330,20 @@ class TestAndroidRuntimeHostIdentity:
 # 3. RegisteredRuntimeDevice carries source_runtime_posture + is_runtime_host
 # ---------------------------------------------------------------------------
 
+
 class TestRegisteredRuntimeDevicePostureFields:
     """RegisteredRuntimeDevice carries the new PR-5 posture fields."""
 
     def test_default_posture_is_control_only(self):
         from contracts.registered_runtime_device import RegisteredRuntimeDevice
+
         d = RegisteredRuntimeDevice(device_id="default_01")
         assert d.source_runtime_posture == "control_only"
         assert d.is_runtime_host is False
 
     def test_explicit_join_runtime_posture(self):
         from contracts.registered_runtime_device import RegisteredRuntimeDevice
+
         d = RegisteredRuntimeDevice(
             device_id="join_01",
             source_runtime_posture="join_runtime",
@@ -325,6 +354,7 @@ class TestRegisteredRuntimeDevicePostureFields:
 
     def test_serialised_dict_carries_posture(self):
         from contracts.registered_runtime_device import RegisteredRuntimeDevice
+
         d = RegisteredRuntimeDevice(
             device_id="ser_01",
             source_runtime_posture="join_runtime",
@@ -335,6 +365,7 @@ class TestRegisteredRuntimeDevicePostureFields:
 
     def test_round_trip_preserves_posture(self):
         from contracts.registered_runtime_device import RegisteredRuntimeDevice
+
         orig = RegisteredRuntimeDevice(
             device_id="rt_01",
             source_runtime_posture="join_runtime",
@@ -346,6 +377,7 @@ class TestRegisteredRuntimeDevicePostureFields:
 
     def test_build_builder_accepts_posture(self):
         from contracts.registered_runtime_device import build_registered_runtime_device
+
         d = build_registered_runtime_device(
             device_id="builder_01",
             source_runtime_posture="join_runtime",
@@ -356,6 +388,7 @@ class TestRegisteredRuntimeDevicePostureFields:
 
     def test_build_builder_defaults_safe(self):
         from contracts.registered_runtime_device import build_registered_runtime_device
+
         d = build_registered_runtime_device(device_id="builder_safe")
         assert d.source_runtime_posture == "control_only"
         assert d.is_runtime_host is False
@@ -365,17 +398,20 @@ class TestRegisteredRuntimeDevicePostureFields:
 # 4. from_android_registration() populates posture and is_runtime_host
 # ---------------------------------------------------------------------------
 
+
 class TestAndroidRegistrationPosturePopulation:
     """from_android_registration() sets posture and runtime-host flag."""
 
     def test_join_runtime_posture_in_payload(self):
         from contracts.registered_runtime_device import from_android_registration
+
         c = from_android_registration(_android_payload(source_runtime_posture="join_runtime"))
         assert c.source_runtime_posture == "join_runtime"
         assert c.is_runtime_host is True
 
     def test_control_only_posture_in_payload(self):
         from contracts.registered_runtime_device import from_android_registration
+
         c = from_android_registration(_android_payload_control_only())
         assert c.source_runtime_posture == "control_only"
         # still is_runtime_host=True because app_version is set (Galaxy app present)
@@ -383,12 +419,14 @@ class TestAndroidRegistrationPosturePopulation:
 
     def test_no_posture_field_defaults_to_control_only(self):
         from contracts.registered_runtime_device import from_android_registration
+
         c = from_android_registration(_android_payload_no_posture())
         assert c.source_runtime_posture == "control_only"
 
     def test_no_app_version_and_no_join_posture_not_runtime_host(self):
         """Without app_version AND without join posture → not a runtime host."""
         from contracts.registered_runtime_device import from_android_registration
+
         payload = {
             "device_id": "bare_android",
             "name": "Bare Android",
@@ -401,23 +439,28 @@ class TestAndroidRegistrationPosturePopulation:
 
     def test_unknown_posture_value_falls_back_to_control_only(self):
         from contracts.registered_runtime_device import from_android_registration
+
         payload = _android_payload(source_runtime_posture="some_future_value")
         c = from_android_registration(payload)
         assert c.source_runtime_posture == "control_only"
 
     def test_platform_is_android(self):
-        from contracts.registered_runtime_device import from_android_registration, RuntimeDevicePlatform
+        from contracts.registered_runtime_device import RuntimeDevicePlatform, from_android_registration
+
         c = from_android_registration(_android_payload())
         assert c.platform in (RuntimeDevicePlatform.ANDROID, "android")
 
     def test_existing_fields_unaffected(self):
         """Existing contract fields (device_name, capabilities, etc.) still populate."""
         from contracts.registered_runtime_device import from_android_registration
-        c = from_android_registration(_android_payload(
-            name="My Pixel",
-            capabilities=["screen", "gps"],
-            app_version="3.5.0",
-        ))
+
+        c = from_android_registration(
+            _android_payload(
+                name="My Pixel",
+                capabilities=["screen", "gps"],
+                app_version="3.5.0",
+            )
+        )
         assert c.device_name == "My Pixel"
         assert "screen" in c.capabilities.capabilities
         assert c.autonomy.runtime_version == "3.5.0"
@@ -427,33 +470,39 @@ class TestAndroidRegistrationPosturePopulation:
 # 5. LocalRuntimeHost carries source_runtime_posture
 # ---------------------------------------------------------------------------
 
+
 class TestLocalRuntimeHostPosturePropagation:
     """LocalRuntimeHost.source_runtime_posture is propagated from device."""
 
     def test_default_posture_is_control_only(self):
         from contracts.local_runtime_host import LocalRuntimeHost
+
         h = LocalRuntimeHost(device_id="lrh_default")
         assert h.source_runtime_posture == "control_only"
 
     def test_explicit_join_runtime_posture(self):
         from contracts.local_runtime_host import LocalRuntimeHost
+
         h = LocalRuntimeHost(device_id="lrh_join", source_runtime_posture="join_runtime")
         assert h.source_runtime_posture == "join_runtime"
 
     def test_from_registered_device_propagates_posture(self):
         from contracts.local_runtime_host import from_registered_runtime_device
+
         device = _mock_registered_device(source_runtime_posture="join_runtime")
         host = from_registered_runtime_device(device)
         assert host.source_runtime_posture == "join_runtime"
 
     def test_from_registered_device_control_only_preserves(self):
         from contracts.local_runtime_host import from_registered_runtime_device
+
         device = _mock_registered_device(source_runtime_posture="control_only")
         host = from_registered_runtime_device(device)
         assert host.source_runtime_posture == "control_only"
 
     def test_serialised_dict_carries_posture(self):
         from contracts.local_runtime_host import from_registered_runtime_device
+
         device = _mock_registered_device(source_runtime_posture="join_runtime")
         host = from_registered_runtime_device(device)
         d = host.to_dict()
@@ -461,6 +510,7 @@ class TestLocalRuntimeHostPosturePropagation:
 
     def test_sentinel_present(self):
         from contracts.local_runtime_host import LOCAL_RUNTIME_HOST_POSTURE_AWARE_PR5
+
         assert LOCAL_RUNTIME_HOST_POSTURE_AWARE_PR5 == "LOCAL_RUNTIME_HOST_POSTURE_AWARE_PR5"
 
 
@@ -468,17 +518,20 @@ class TestLocalRuntimeHostPosturePropagation:
 # 6. RuntimeProjectionDeviceEntry carries posture + is_runtime_host
 # ---------------------------------------------------------------------------
 
+
 class TestRuntimeProjectionDeviceEntryPosture:
     """RuntimeProjectionDeviceEntry carries source_runtime_posture and is_runtime_host."""
 
     def test_default_values(self):
         from contracts.multi_device_runtime_projection import RuntimeProjectionDeviceEntry
+
         e = RuntimeProjectionDeviceEntry(device_id="entry_default")
         assert e.source_runtime_posture == "control_only"
         assert e.is_runtime_host is False
 
     def test_explicit_posture_and_host_flag(self):
         from contracts.multi_device_runtime_projection import RuntimeProjectionDeviceEntry
+
         e = RuntimeProjectionDeviceEntry(
             device_id="entry_join",
             source_runtime_posture="join_runtime",
@@ -489,6 +542,7 @@ class TestRuntimeProjectionDeviceEntryPosture:
 
     def test_to_dict_carries_fields(self):
         from contracts.multi_device_runtime_projection import RuntimeProjectionDeviceEntry
+
         d = RuntimeProjectionDeviceEntry(
             device_id="entry_ser",
             source_runtime_posture="join_runtime",
@@ -500,6 +554,7 @@ class TestRuntimeProjectionDeviceEntryPosture:
     def test_from_registered_runtime_device_carries_posture(self):
         from contracts.multi_device_runtime_projection import from_registered_runtime_device
         from contracts.registered_runtime_device import from_android_registration
+
         device = from_android_registration(_android_payload(source_runtime_posture="join_runtime"))
         entry = from_registered_runtime_device(device)
         assert entry.source_runtime_posture == "join_runtime"
@@ -508,6 +563,7 @@ class TestRuntimeProjectionDeviceEntryPosture:
     def test_from_registered_runtime_device_control_only_default(self):
         from contracts.multi_device_runtime_projection import from_registered_runtime_device
         from contracts.registered_runtime_device import RegisteredRuntimeDevice
+
         device = RegisteredRuntimeDevice(device_id="plain_01")
         entry = from_registered_runtime_device(device)
         assert entry.source_runtime_posture == "control_only"
@@ -518,24 +574,26 @@ class TestRuntimeProjectionDeviceEntryPosture:
 # 7. RuntimeProjectionHostEntry carries source_runtime_posture
 # ---------------------------------------------------------------------------
 
+
 class TestRuntimeProjectionHostEntryPosture:
     """RuntimeProjectionHostEntry carries source_runtime_posture."""
 
     def test_default_posture_is_control_only(self):
         from contracts.multi_device_runtime_projection import RuntimeProjectionHostEntry
+
         e = RuntimeProjectionHostEntry(host_id="h_default")
         assert e.source_runtime_posture == "control_only"
 
     def test_explicit_posture(self):
         from contracts.multi_device_runtime_projection import RuntimeProjectionHostEntry
+
         e = RuntimeProjectionHostEntry(host_id="h_join", source_runtime_posture="join_runtime")
         assert e.source_runtime_posture == "join_runtime"
 
     def test_to_dict_carries_posture(self):
         from contracts.multi_device_runtime_projection import RuntimeProjectionHostEntry
-        d = RuntimeProjectionHostEntry(
-            host_id="h_ser", source_runtime_posture="join_runtime"
-        ).to_dict()
+
+        d = RuntimeProjectionHostEntry(host_id="h_ser", source_runtime_posture="join_runtime").to_dict()
         assert d["source_runtime_posture"] == "join_runtime"
 
 
@@ -543,11 +601,13 @@ class TestRuntimeProjectionHostEntryPosture:
 # 8. project_runtime_devices() propagates posture
 # ---------------------------------------------------------------------------
 
+
 class TestProjectRuntimeDevicesPosture:
     """project_runtime_devices() propagates posture fields from device dicts."""
 
     def test_posture_propagated_from_dict(self):
         from contracts.multi_device_runtime_projection import project_runtime_devices
+
         devices = [
             {
                 "device_id": "ph_proj_1",
@@ -564,6 +624,7 @@ class TestProjectRuntimeDevicesPosture:
 
     def test_missing_posture_defaults_to_control_only(self):
         from contracts.multi_device_runtime_projection import project_runtime_devices
+
         devices = [{"device_id": "ph_proj_2", "platform": "android"}]
         entries = project_runtime_devices(devices)
         assert entries[0].source_runtime_posture == "control_only"
@@ -573,6 +634,7 @@ class TestProjectRuntimeDevicesPosture:
         """project_runtime_devices() picks up posture from RegisteredRuntimeDevice.to_dict()."""
         from contracts.multi_device_runtime_projection import project_runtime_devices
         from contracts.registered_runtime_device import from_android_registration
+
         device = from_android_registration(_android_payload(source_runtime_posture="join_runtime"))
         entries = project_runtime_devices([device.to_dict()])
         assert entries[0].source_runtime_posture == "join_runtime"
@@ -583,11 +645,13 @@ class TestProjectRuntimeDevicesPosture:
 # 9. project_runtime_hosts() propagates posture
 # ---------------------------------------------------------------------------
 
+
 class TestProjectRuntimeHostsPosture:
     """project_runtime_hosts() propagates source_runtime_posture from host dicts."""
 
     def test_posture_propagated_from_host_dict(self):
         from contracts.multi_device_runtime_projection import project_runtime_hosts
+
         hosts = [
             {
                 "host_id": "h_proj_1",
@@ -602,6 +666,7 @@ class TestProjectRuntimeHostsPosture:
 
     def test_missing_posture_defaults_control_only(self):
         from contracts.multi_device_runtime_projection import project_runtime_hosts
+
         hosts = [{"host_id": "h_proj_2", "device_id": "ph_002", "capabilities": {}}]
         entries = project_runtime_hosts(hosts)
         assert entries[0].source_runtime_posture == "control_only"
@@ -609,9 +674,9 @@ class TestProjectRuntimeHostsPosture:
     def test_from_registered_device_to_host_posture_chain(self):
         """full chain: from_android_registration → from_registered_runtime_device (LRH)
         → project_runtime_hosts() preserves posture end-to-end."""
-        from contracts.registered_runtime_device import from_android_registration
         from contracts.local_runtime_host import from_registered_runtime_device
         from contracts.multi_device_runtime_projection import project_runtime_hosts
+        from contracts.registered_runtime_device import from_android_registration
 
         device = from_android_registration(_android_payload(source_runtime_posture="join_runtime"))
         host = from_registered_runtime_device(device)
@@ -624,6 +689,7 @@ class TestProjectRuntimeHostsPosture:
 # 10. Policy sentinels
 # ---------------------------------------------------------------------------
 
+
 class TestPolicySentinels:
     """PR-5 policy sentinels are present and non-empty."""
 
@@ -633,6 +699,7 @@ class TestPolicySentinels:
             ANDROID_RUNTIME_HOST_DISTINCT_FROM_CONNECTED_DEVICE_PR5,
             ANDROID_RUNTIME_HOST_POSTURE_PRESERVED_PR5,
         )
+
         assert ANDROID_FIRST_CLASS_RUNTIME_HOST_PR5_SENTINEL
         assert ANDROID_RUNTIME_HOST_DISTINCT_FROM_CONNECTED_DEVICE_PR5
         assert ANDROID_RUNTIME_HOST_POSTURE_PRESERVED_PR5
@@ -642,11 +709,13 @@ class TestPolicySentinels:
             ANDROID_FIRST_CLASS_RUNTIME_HOST_REGISTRATION_PR5,
             ANDROID_REGISTRATION_POSTURE_AWARE_PR5,
         )
+
         assert ANDROID_FIRST_CLASS_RUNTIME_HOST_REGISTRATION_PR5
         assert ANDROID_REGISTRATION_POSTURE_AWARE_PR5
 
     def test_local_runtime_host_sentinel(self):
         from contracts.local_runtime_host import LOCAL_RUNTIME_HOST_POSTURE_AWARE_PR5
+
         assert LOCAL_RUNTIME_HOST_POSTURE_AWARE_PR5
 
 
@@ -654,11 +723,13 @@ class TestPolicySentinels:
 # 11. Backwards-compatibility: existing fields/defaults unaffected
 # ---------------------------------------------------------------------------
 
+
 class TestBackwardsCompatibility:
     """New PR-5 fields do not break existing contract consumers."""
 
     def test_registered_runtime_device_existing_fields_unchanged(self):
         from contracts.registered_runtime_device import from_android_registration
+
         c = from_android_registration(_android_payload())
         # Existing fields still present
         assert c.device_id == "android_ph_001"
@@ -670,19 +741,32 @@ class TestBackwardsCompatibility:
     def test_six_information_domains_still_complete(self):
         """All six information domain keys are still present in to_dict()."""
         from contracts.registered_runtime_device import RegisteredRuntimeDevice
+
         d = RegisteredRuntimeDevice(device_id="compat_01").to_dict()
         required = {
-            "device_id", "device_name", "owner_id",
-            "platform", "form_factor", "device_type",
-            "status", "online", "last_seen",
-            "connection", "capabilities", "autonomy",
-            "session_presence", "participation_hints", "metadata",
-            "source_runtime_posture", "is_runtime_host",
+            "device_id",
+            "device_name",
+            "owner_id",
+            "platform",
+            "form_factor",
+            "device_type",
+            "status",
+            "online",
+            "last_seen",
+            "connection",
+            "capabilities",
+            "autonomy",
+            "session_presence",
+            "participation_hints",
+            "metadata",
+            "source_runtime_posture",
+            "is_runtime_host",
         }
         assert required <= set(d.keys()), f"Missing keys: {required - set(d.keys())}"
 
     def test_local_runtime_host_existing_fields_unchanged(self):
         from contracts.local_runtime_host import from_registered_runtime_device
+
         device = _mock_registered_device()
         host = from_registered_runtime_device(device)
         # Existing fields still work
@@ -692,6 +776,7 @@ class TestBackwardsCompatibility:
 
     def test_projection_device_entry_existing_fields_unchanged(self):
         from contracts.multi_device_runtime_projection import RuntimeProjectionDeviceEntry
+
         e = RuntimeProjectionDeviceEntry(
             device_id="compat_entry",
             platform="android",
@@ -705,6 +790,7 @@ class TestBackwardsCompatibility:
 
     def test_projection_host_entry_existing_fields_unchanged(self):
         from contracts.multi_device_runtime_projection import RuntimeProjectionHostEntry
+
         e = RuntimeProjectionHostEntry(
             host_id="compat_host",
             device_id="ph_001",
@@ -715,12 +801,14 @@ class TestBackwardsCompatibility:
 
     def test_android_role_enum_from_string_unknown_safe(self):
         from core.android_runtime_host import AndroidRuntimeHostRole
+
         role = AndroidRuntimeHostRole.from_string("totally_unknown_value")
         assert role == AndroidRuntimeHostRole.UNCLASSIFIED
 
     def test_android_role_enum_from_string_valid_values(self):
         """All canonical string values map to their correct enum members."""
         from core.android_runtime_host import AndroidRuntimeHostRole
+
         cases = [
             ("full_runtime_host", AndroidRuntimeHostRole.FULL_RUNTIME_HOST),
             ("partial_runtime_host", AndroidRuntimeHostRole.PARTIAL_RUNTIME_HOST),
@@ -728,9 +816,9 @@ class TestBackwardsCompatibility:
             ("unclassified", AndroidRuntimeHostRole.UNCLASSIFIED),
         ]
         for raw, expected in cases:
-            assert AndroidRuntimeHostRole.from_string(raw) == expected, (
-                f"from_string({raw!r}) should return {expected!r}"
-            )
+            assert (
+                AndroidRuntimeHostRole.from_string(raw) == expected
+            ), f"from_string({raw!r}) should return {expected!r}"
 
 
 class TestCoreRuntimeModuleExportsPR5:
@@ -738,6 +826,7 @@ class TestCoreRuntimeModuleExportsPR5:
 
     def test_android_runtime_host_role_importable_from_core_runtime(self):
         from core.runtime import AndroidRuntimeHostRole
+
         assert AndroidRuntimeHostRole.FULL_RUNTIME_HOST.value == "full_runtime_host"
         assert AndroidRuntimeHostRole.PARTIAL_RUNTIME_HOST.value == "partial_runtime_host"
         assert AndroidRuntimeHostRole.CONNECTED_DEVICE_ONLY.value == "connected_device_only"
@@ -745,19 +834,20 @@ class TestCoreRuntimeModuleExportsPR5:
 
     def test_android_runtime_host_identity_importable_from_core_runtime(self):
         from core.runtime import AndroidRuntimeHostIdentity
+
         identity = AndroidRuntimeHostIdentity(device_id="test_001")
         assert identity.device_id == "test_001"
         assert identity.source_runtime_posture == "control_only"
 
     def test_classify_android_runtime_host_importable_from_core_runtime(self):
-        from core.runtime import classify_android_runtime_host, AndroidRuntimeHostRole
-        role = classify_android_runtime_host(
-            {"source_runtime_posture": "join_runtime", "online": True}
-        )
+        from core.runtime import AndroidRuntimeHostRole, classify_android_runtime_host
+
+        role = classify_android_runtime_host({"source_runtime_posture": "join_runtime", "online": True})
         assert role == AndroidRuntimeHostRole.FULL_RUNTIME_HOST
 
     def test_build_android_runtime_host_identity_importable_from_core_runtime(self):
-        from core.runtime import build_android_runtime_host_identity, AndroidRuntimeHostRole
+        from core.runtime import AndroidRuntimeHostRole, build_android_runtime_host_identity
+
         identity = build_android_runtime_host_identity(
             {"device_id": "ph_999", "source_runtime_posture": "join_runtime", "online": True}
         )
@@ -771,12 +861,14 @@ class TestCoreRuntimeModuleExportsPR5:
             ANDROID_RUNTIME_HOST_DISTINCT_FROM_CONNECTED_DEVICE_PR5,
             ANDROID_RUNTIME_HOST_POSTURE_PRESERVED_PR5,
         )
+
         assert ANDROID_FIRST_CLASS_RUNTIME_HOST_PR5_SENTINEL
         assert ANDROID_RUNTIME_HOST_DISTINCT_FROM_CONNECTED_DEVICE_PR5
         assert ANDROID_RUNTIME_HOST_POSTURE_PRESERVED_PR5
 
     def test_pr5_symbols_in_all_list(self):
         import core.runtime as cr
+
         for sym in (
             "AndroidRuntimeHostRole",
             "AndroidRuntimeHostIdentity",
@@ -792,17 +884,20 @@ class TestProjectionRoutesPR5Sentinel:
 
     def test_android_runtime_host_aligned_pr5_sentinel_present(self):
         from core.routes.projection import ANDROID_RUNTIME_HOST_ALIGNED_PR5
+
         assert ANDROID_RUNTIME_HOST_ALIGNED_PR5
         assert "PR5" in ANDROID_RUNTIME_HOST_ALIGNED_PR5
 
     def test_sentinel_indicates_availability(self):
         from core.routes.projection import ANDROID_RUNTIME_HOST_ALIGNED_PR5
+
         # Must be the "V1" form (available) rather than the fallback UNAVAILABLE form.
         assert "UNAVAILABLE" not in ANDROID_RUNTIME_HOST_ALIGNED_PR5
 
     def test_pr4_sentinel_still_present(self):
         """Confirm PR-4 sentinel is not disturbed by PR-5 changes."""
         from core.routes.projection import CANONICAL_SESSION_TRUTH_ALIGNED_PR4
+
         assert CANONICAL_SESSION_TRUTH_ALIGNED_PR4
         assert "UNAVAILABLE" not in CANONICAL_SESSION_TRUTH_ALIGNED_PR4
 
@@ -814,9 +909,10 @@ class TestProjectionRoutesPR5Sentinel:
         apart.
         """
         from core.routes.projection import (
-            CANONICAL_SESSION_TRUTH_ALIGNED_PR4,
             ANDROID_RUNTIME_HOST_ALIGNED_PR5,
+            CANONICAL_SESSION_TRUTH_ALIGNED_PR4,
         )
+
         # Both must be non-empty and available.
         assert CANONICAL_SESSION_TRUTH_ALIGNED_PR4
         assert ANDROID_RUNTIME_HOST_ALIGNED_PR5

@@ -72,9 +72,7 @@ logger = logging.getLogger("Galaxy.Agent.CapabilityRegistry")
 # also projects the entry into the CapabilityAssimilationLayer so that the
 # capability graph, task graph, and network graph runtimes see the node.
 # This closes the legacy bypass where entries were written to _items only.
-CAPABILITY_REGISTRY_ASSIMILATION_LAYER_INTEGRATION: str = (
-    "CAPABILITY_REGISTRY_ASSIMILATION_LAYER_INTEGRATION_V1"
-)
+CAPABILITY_REGISTRY_ASSIMILATION_LAYER_INTEGRATION: str = "CAPABILITY_REGISTRY_ASSIMILATION_LAYER_INTEGRATION_V1"
 
 # ---------------------------------------------------------------------------
 # Governance sentinel
@@ -121,7 +119,8 @@ class CapabilityItem:
             "function": {
                 "name": self.name,
                 "description": self.description,
-                "parameters": self.parameters or {
+                "parameters": self.parameters
+                or {
                     "type": "object",
                     "properties": {},
                 },
@@ -181,10 +180,7 @@ class CapabilityRegistry:
     def find(self, query: str) -> List[CapabilityItem]:
         """关键词搜索能力（名称 + 描述匹配）。"""
         q = query.lower()
-        return [
-            i for i in self._items.values()
-            if i.available and (q in i.name.lower() or q in i.description.lower())
-        ]
+        return [i for i in self._items.values() if i.available and (q in i.name.lower() or q in i.description.lower())]
 
     def find_by_system_integration_id(self, integration_id: str) -> Optional[CapabilityItem]:
         """Return the registered item associated with a SystemIntegration ID."""
@@ -311,11 +307,11 @@ class CapabilityRegistry:
         """
         try:
             from core.capability_assimilation import (
-                get_capability_assimilation_layer,
                 NodeParticipantKind,
                 assimilate_device,
                 assimilate_mcp_provider,
                 assimilate_skill,
+                get_capability_assimilation_layer,
             )
 
             source = getattr(item, "source", "") or "unknown"
@@ -423,6 +419,7 @@ class CapabilityRegistry:
                 CapabilitySource,
                 validate_capability_contract,
             )
+
             src_val = getattr(item, "source", "unknown") or "unknown"
             try:
                 src = CapabilitySource(src_val)
@@ -444,12 +441,14 @@ class CapabilityRegistry:
             violations = getattr(exc, "violations", [str(exc)])
             msg = f"capability_contract validation failed for '{item.name}': {violations}"
             logger.warning(msg)
-            self._validation_errors.append({
-                "source": getattr(item, "source", "?"),
-                "id": item.name,
-                "error": msg,
-                "violations": violations,
-            })
+            self._validation_errors.append(
+                {
+                    "source": getattr(item, "source", "?"),
+                    "id": item.name,
+                    "error": msg,
+                    "violations": violations,
+                }
+            )
             return False
 
     def to_tool_schemas(self) -> List[Dict[str, Any]]:
@@ -642,6 +641,7 @@ class CapabilityRegistry:
         """从 MCPLoader 加载工具列表。"""
         try:
             from core.mcp_loader import MCPLoader, MCPServerStatus
+
             loader = MCPLoader.get_instance()
             # 直接访问 servers 字典（MCPServerInstance 对象）
             servers: Dict = getattr(loader, "servers", {})
@@ -679,6 +679,7 @@ class CapabilityRegistry:
         """从 SkillLoader 加载技能列表。"""
         try:
             from core.skill_loader import SkillLoader, SkillStatus
+
             loader = SkillLoader.get_instance()
             # 直接访问 skills 字典（SkillInstance 对象）
             skills: Dict = getattr(loader, "skills", {})
@@ -710,6 +711,7 @@ class CapabilityRegistry:
         """从 UnifiedDeviceManager 加载 Gateway 设备能力（Priority A: SSOT）。"""
         try:
             from core.unified.device_manager import get_unified_device_manager
+
             udm = get_unified_device_manager()
             devices = udm.list_devices()
             if not devices:
@@ -718,7 +720,7 @@ class CapabilityRegistry:
             for device in devices:
                 device_id = device.device_id
                 d_name = device.device_name or device_id
-                for cap in (device.capabilities or []):
+                for cap in device.capabilities or []:
                     key = f"gateway__{device_id}__{cap}"
                     target[key] = CapabilityItem(
                         name=key,
@@ -766,6 +768,7 @@ class CapabilityRegistry:
         }
         try:
             from core.unified.device_manager import get_unified_device_manager
+
             udm = get_unified_device_manager()
             devices = udm.list_devices()
 

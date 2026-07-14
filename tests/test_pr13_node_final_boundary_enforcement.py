@@ -97,10 +97,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_stub_node(node_id: str, status_value: str = "running") -> Any:
     """Return a minimal stub NodeInfo-like object."""
@@ -115,6 +115,7 @@ def _make_stub_node(node_id: str, status_value: str = "running") -> Any:
 def _try_import():
     try:
         import core.node_final_boundary_enforcement as m
+
         return m, None
     except ImportError as exc:
         return None, str(exc)
@@ -123,6 +124,7 @@ def _try_import():
 # ===========================================================================
 # A) Sentinel / policy strings
 # ===========================================================================
+
 
 class TestSentinels:
     """Authority and PR sentinels must be importable and meaningful."""
@@ -177,6 +179,7 @@ class TestSentinels:
 # B) NodeSurfaceBoundaryCategory enum
 # ===========================================================================
 
+
 class TestNodeSurfaceBoundaryCategory:
     """Enum must have all four required values."""
 
@@ -213,6 +216,7 @@ class TestNodeSurfaceBoundaryCategory:
 # ===========================================================================
 # C) NodeSurfaceBoundaryEntry dataclass
 # ===========================================================================
+
 
 class TestNodeSurfaceBoundaryEntry:
     """NodeSurfaceBoundaryEntry must be constructable and serialisable."""
@@ -266,6 +270,7 @@ class TestNodeSurfaceBoundaryEntry:
 # D) NodeFinalBoundarySnapshot dataclass
 # ===========================================================================
 
+
 class TestNodeFinalBoundarySnapshot:
     """Snapshot must be constructable and serialisable."""
 
@@ -289,9 +294,15 @@ class TestNodeFinalBoundarySnapshot:
         )
         d = snap.to_dict()
         for key in (
-            "total_surfaces", "canonical_count", "compat_only_count",
-            "internal_only_count", "deprecated_count", "canonical_node_count",
-            "node_count_source", "entries", "authority",
+            "total_surfaces",
+            "canonical_count",
+            "compat_only_count",
+            "internal_only_count",
+            "deprecated_count",
+            "canonical_node_count",
+            "node_count_source",
+            "entries",
+            "authority",
         ):
             assert key in d, f"Missing key: {key}"
 
@@ -305,6 +316,7 @@ class TestNodeFinalBoundarySnapshot:
 # ===========================================================================
 # E) build_node_surface_classification_registry
 # ===========================================================================
+
 
 class TestBuildNodeSurfaceClassificationRegistry:
     """Classification registry must enumerate all expected surfaces."""
@@ -342,9 +354,7 @@ class TestBuildNodeSurfaceClassificationRegistry:
     def test_all_entries_have_surface_id(self):
         _, entries = self._get_registry()
         for e in entries:
-            assert isinstance(e.surface_id, str) and len(e.surface_id) > 0, (
-                f"Entry with empty surface_id: {e}"
-            )
+            assert isinstance(e.surface_id, str) and len(e.surface_id) > 0, f"Entry with empty surface_id: {e}"
 
     def test_all_entries_have_display_name(self):
         _, entries = self._get_registry()
@@ -376,6 +386,7 @@ class TestBuildNodeSurfaceClassificationRegistry:
 # F) get_compat_only_surfaces
 # ===========================================================================
 
+
 class TestGetCompatOnlySurfaces:
     """get_compat_only_surfaces must return only COMPAT_ONLY entries."""
 
@@ -393,9 +404,9 @@ class TestGetCompatOnlySurfaces:
     def test_all_compat_have_canonical_replacement(self):
         m, _ = _try_import()
         for e in m.get_compat_only_surfaces():
-            assert e.canonical_replacement is not None, (
-                f"COMPAT_ONLY surface '{e.surface_id}' has no canonical_replacement"
-            )
+            assert (
+                e.canonical_replacement is not None
+            ), f"COMPAT_ONLY surface '{e.surface_id}' has no canonical_replacement"
 
     def test_node_status_cache_in_compat(self):
         m, _ = _try_import()
@@ -411,6 +422,7 @@ class TestGetCompatOnlySurfaces:
 # ===========================================================================
 # G) get_deprecated_surfaces
 # ===========================================================================
+
 
 class TestGetDeprecatedSurfaces:
     """get_deprecated_surfaces must return only DEPRECATED entries."""
@@ -429,9 +441,9 @@ class TestGetDeprecatedSurfaces:
     def test_all_deprecated_have_canonical_replacement(self):
         m, _ = _try_import()
         for e in m.get_deprecated_surfaces():
-            assert e.canonical_replacement is not None, (
-                f"DEPRECATED surface '{e.surface_id}' has no canonical_replacement"
-            )
+            assert (
+                e.canonical_replacement is not None
+            ), f"DEPRECATED surface '{e.surface_id}' has no canonical_replacement"
 
     def test_at_least_one_deprecated(self):
         m, _ = _try_import()
@@ -441,6 +453,7 @@ class TestGetDeprecatedSurfaces:
 # ===========================================================================
 # H) get_node_count_from_canonical_source
 # ===========================================================================
+
 
 class TestGetNodeCountFromCanonicalSource:
     """get_node_count_from_canonical_source must prefer canonical registry."""
@@ -496,6 +509,7 @@ class TestGetNodeCountFromCanonicalSource:
         # Pass None registry; the module will attempt import which may fail.
         # Patch the internal import to raise ImportError.
         import unittest.mock as mock
+
         with mock.patch.dict("sys.modules", {"core.nodes.node_fabric_registry": None}):
             # Also patch the compat cache import to be unavailable
             with mock.patch.dict("sys.modules", {"core.routes._shared": None}):
@@ -524,6 +538,7 @@ class TestGetNodeCountFromCanonicalSource:
 # I) build_final_boundary_snapshot
 # ===========================================================================
 
+
 class TestBuildFinalBoundarySnapshot:
     """Snapshot must accurately reflect total surface counts."""
 
@@ -542,12 +557,7 @@ class TestBuildFinalBoundarySnapshot:
     def test_category_counts_sum_to_total(self):
         m, _ = _try_import()
         snap = m.build_final_boundary_snapshot()
-        expected = (
-            snap.canonical_count
-            + snap.compat_only_count
-            + snap.internal_only_count
-            + snap.deprecated_count
-        )
+        expected = snap.canonical_count + snap.compat_only_count + snap.internal_only_count + snap.deprecated_count
         assert expected == snap.total_surfaces
 
     def test_node_count_source_non_empty(self):
@@ -576,7 +586,8 @@ class TestBuildFinalBoundarySnapshot:
         m, _ = _try_import()
         stub_registry = MagicMock()
         stub_registry.list_nodes.return_value = [
-            _make_stub_node("n1"), _make_stub_node("n2"),
+            _make_stub_node("n1"),
+            _make_stub_node("n2"),
         ]
         stub_registry.list_healthy.return_value = [_make_stub_node("n1")]
         snap = m.build_final_boundary_snapshot(registry=stub_registry)
@@ -587,6 +598,7 @@ class TestBuildFinalBoundarySnapshot:
 # ===========================================================================
 # J) get_final_boundary_summary
 # ===========================================================================
+
 
 class TestGetFinalBoundarySummary:
     """Summary dict must have all required keys."""
@@ -601,9 +613,14 @@ class TestGetFinalBoundarySummary:
         m, _ = _try_import()
         summary = m.get_final_boundary_summary()
         for key in (
-            "total_surfaces", "canonical_count", "compat_only_count",
-            "internal_only_count", "deprecated_count", "canonical_node_count",
-            "node_count_source", "authority",
+            "total_surfaces",
+            "canonical_count",
+            "compat_only_count",
+            "internal_only_count",
+            "deprecated_count",
+            "canonical_node_count",
+            "node_count_source",
+            "authority",
         ):
             assert key in summary, f"Missing key: {key}"
 
@@ -627,6 +644,7 @@ class TestGetFinalBoundarySummary:
 # K) COMPAT surfaces must NOT be canonical
 # ===========================================================================
 
+
 class TestCompatSurfacesNotCanonical:
     """COMPAT_ONLY surfaces must not be classified as canonical."""
 
@@ -639,9 +657,9 @@ class TestCompatSurfacesNotCanonical:
         m, entries = self._all_entries()
         for e in entries:
             if e.category == m.NodeSurfaceBoundaryCategory.COMPAT_ONLY:
-                assert e.canonical_replacement is not None, (
-                    f"COMPAT_ONLY entry '{e.surface_id}' missing canonical_replacement"
-                )
+                assert (
+                    e.canonical_replacement is not None
+                ), f"COMPAT_ONLY entry '{e.surface_id}' missing canonical_replacement"
 
     def test_node_status_cache_is_compat_not_canonical(self):
         m, entries = self._all_entries()
@@ -671,6 +689,7 @@ class TestCompatSurfacesNotCanonical:
 # ===========================================================================
 # L) CANONICAL surfaces consistency
 # ===========================================================================
+
 
 class TestCanonicalSurfaces:
     """CANONICAL surfaces must be self-consistent."""
@@ -709,6 +728,7 @@ class TestCanonicalSurfaces:
 # M) system.py uses canonical source
 # ===========================================================================
 
+
 class TestSystemRouteUsesCanonicalSource:
     """core.routes.system must import the canonical node-count helper."""
 
@@ -718,6 +738,7 @@ class TestSystemRouteUsesCanonicalSource:
     )
     def test_system_imports_canonical_count_helper(self):
         import core.routes.system as sys_module
+
         assert hasattr(sys_module, "_CANONICAL_NODE_COUNT_AVAILABLE")
         assert sys_module._CANONICAL_NODE_COUNT_AVAILABLE is True
 
@@ -733,6 +754,7 @@ class TestSystemRouteUsesCanonicalSource:
 # N) projection.py sentinel
 # ===========================================================================
 
+
 class TestProjectionSentinel:
     """projection.py must expose the PR-13 node alignment sentinel."""
 
@@ -742,6 +764,7 @@ class TestProjectionSentinel:
     )
     def test_projection_sentinel_importable(self):
         from core.routes.projection import NODE_FINAL_BOUNDARY_ENFORCEMENT_ALIGNED_PR13
+
         assert isinstance(NODE_FINAL_BOUNDARY_ENFORCEMENT_ALIGNED_PR13, str)
         assert len(NODE_FINAL_BOUNDARY_ENFORCEMENT_ALIGNED_PR13) > 20
 
@@ -751,6 +774,7 @@ class TestProjectionSentinel:
     )
     def test_projection_sentinel_contains_key_terms(self):
         from core.routes.projection import NODE_FINAL_BOUNDARY_ENFORCEMENT_ALIGNED_PR13
+
         s = NODE_FINAL_BOUNDARY_ENFORCEMENT_ALIGNED_PR13
         assert "UNAVAILABLE" not in s
         assert "canonical" in s.lower() or "CANONICAL" in s
@@ -760,9 +784,13 @@ class TestProjectionSentinel:
         """Verify the sentinel is at least defined in projection.py source."""
         import ast
         import os
+
         proj_path = os.path.join(
             os.path.dirname(__file__),
-            "..", "core", "routes", "projection.py",
+            "..",
+            "core",
+            "routes",
+            "projection.py",
         )
         with open(proj_path, "r") as f:
             source = f.read()

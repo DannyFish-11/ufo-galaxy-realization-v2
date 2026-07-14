@@ -37,6 +37,7 @@ logger = logging.getLogger("Galaxy.HardwareProfiler")
 # Compute Tier — 计算层级（借鉴 llama.cpp 的 offload 策略）
 # ---------------------------------------------------------------------------
 
+
 class ComputeTier(str, Enum):
     """硬件计算层级，从高到低排列。
 
@@ -48,13 +49,14 @@ class ComputeTier(str, Enum):
     - CPU_AVX2: CPU AVX2 加速（主流消费级）
     - REMOTE_API: 远程 API，不消耗本地资源
     """
-    GPU_FULL = "gpu_full"                  # 全精度 GPU
-    GPU_QUANTIZED = "gpu_quantized"        # 量化 GPU（Q4/Q5/Q8）
-    GPU_CPU_HYBRID = "gpu_cpu_hybrid"      # 层卸载混合
-    CPU_AVX512 = "cpu_avx512"              # AVX512 CPU
-    CPU_AVX2 = "cpu_avx2"                  # AVX2 CPU
-    CPU_BASELINE = "cpu_baseline"          # 基础 CPU
-    REMOTE_API = "remote_api"              # 远程 API
+
+    GPU_FULL = "gpu_full"  # 全精度 GPU
+    GPU_QUANTIZED = "gpu_quantized"  # 量化 GPU（Q4/Q5/Q8）
+    GPU_CPU_HYBRID = "gpu_cpu_hybrid"  # 层卸载混合
+    CPU_AVX512 = "cpu_avx512"  # AVX512 CPU
+    CPU_AVX2 = "cpu_avx2"  # AVX2 CPU
+    CPU_BASELINE = "cpu_baseline"  # 基础 CPU
+    REMOTE_API = "remote_api"  # 远程 API
 
 
 class GPUVendor(str, Enum):
@@ -68,9 +70,11 @@ class GPUVendor(str, Enum):
 # Dataclasses
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class GPUProfile:
     """单个 GPU 的画像"""
+
     index: int
     vendor: GPUVendor
     name: str
@@ -98,6 +102,7 @@ class GPUProfile:
 @dataclass
 class CPUProfile:
     """CPU 画像"""
+
     brand: str
     physical_cores: int
     logical_cores: int
@@ -119,6 +124,7 @@ class CPUProfile:
 @dataclass
 class ComputeProfile:
     """全局计算画像 — 路由器用此做动态决策"""
+
     timestamp: float
     gpus: List[GPUProfile]
     cpu: CPUProfile
@@ -138,6 +144,7 @@ class ComputeProfile:
 # Hardware Compute Profiler
 # ---------------------------------------------------------------------------
 
+
 class HardwareComputeProfiler:
     """硬件计算画像器 — 单例模式
 
@@ -146,13 +153,14 @@ class HardwareComputeProfiler:
     - vLLM 的 GPU memory profiling
     - SGLang 的 Scheduler resource awareness
     """
+
     _instance: Optional[HardwareComputeProfiler] = None
     _lock = threading.Lock()
 
     # 显存阈值策略（借鉴 vLLM 内存管理）
     VRAM_CRITICAL_THRESHOLD = 0.90  # >90% 严重，必须释放
-    VRAM_WARNING_THRESHOLD = 0.85   # >85% 警告，建议降级
-    VRAM_OPTIMAL_THRESHOLD = 0.70   # <70% 最优，可加载新模型
+    VRAM_WARNING_THRESHOLD = 0.85  # >85% 警告，建议降级
+    VRAM_OPTIMAL_THRESHOLD = 0.70  # <70% 最优，可加载新模型
 
     def __new__(cls):
         if cls._instance is None:
@@ -185,6 +193,7 @@ class HardwareComputeProfiler:
         """检测 CPU AVX 指令集支持"""
         try:
             import cpuinfo
+
             info = cpuinfo.get_cpu_info()
             flags = info.get("flags", [])
             if "avx512f" in flags or "avx512" in str(flags):
@@ -216,6 +225,7 @@ class HardwareComputeProfiler:
     def _cuda_available() -> bool:
         try:
             import torch
+
             return torch.cuda.is_available()
         except ImportError:
             return False
@@ -229,6 +239,7 @@ class HardwareComputeProfiler:
         # NVIDIA via PyTorch
         try:
             import torch
+
             if torch.cuda.is_available():
                 for i in range(torch.cuda.device_count()):
                     props = torch.cuda.get_device_properties(i)
@@ -237,17 +248,19 @@ class HardwareComputeProfiler:
                     reserved = torch.cuda.memory_reserved(i) // (1024 * 1024)
                     used = max(allocated, reserved)
 
-                    gpus.append(GPUProfile(
-                        index=i,
-                        vendor=GPUVendor.NVIDIA,
-                        name=torch.cuda.get_device_name(i),
-                        total_vram_mb=total,
-                        free_vram_mb=total - used,
-                        used_vram_mb=used,
-                        utilization_percent=0.0,  # 需要 nvidia-ml-py
-                        temperature_c=0.0,
-                        compute_capability=f"{props.major}.{props.minor}",
-                    ))
+                    gpus.append(
+                        GPUProfile(
+                            index=i,
+                            vendor=GPUVendor.NVIDIA,
+                            name=torch.cuda.get_device_name(i),
+                            total_vram_mb=total,
+                            free_vram_mb=total - used,
+                            used_vram_mb=used,
+                            utilization_percent=0.0,  # 需要 nvidia-ml-py
+                            temperature_c=0.0,
+                            compute_capability=f"{props.major}.{props.minor}",
+                        )
+                    )
         except ImportError:
             pass
 
@@ -255,6 +268,7 @@ class HardwareComputeProfiler:
         if not gpus:
             try:
                 import pynvml
+
                 pynvml.nvmlInit()
                 for i in range(pynvml.nvmlDeviceGetCount()):
                     handle = pynvml.nvmlDeviceGetHandleByIndex(i)
@@ -266,16 +280,18 @@ class HardwareComputeProfiler:
                         logger.debug("Fallback triggered: %s", exc)
                         temp = 0
 
-                    gpus.append(GPUProfile(
-                        index=i,
-                        vendor=GPUVendor.NVIDIA,
-                        name=pynvml.nvmlDeviceGetName(handle).decode("utf-8"),
-                        total_vram_mb=mem.total // (1024 * 1024),
-                        free_vram_mb=mem.free // (1024 * 1024),
-                        used_vram_mb=mem.used // (1024 * 1024),
-                        utilization_percent=util.gpu,
-                        temperature_c=temp,
-                    ))
+                    gpus.append(
+                        GPUProfile(
+                            index=i,
+                            vendor=GPUVendor.NVIDIA,
+                            name=pynvml.nvmlDeviceGetName(handle).decode("utf-8"),
+                            total_vram_mb=mem.total // (1024 * 1024),
+                            free_vram_mb=mem.free // (1024 * 1024),
+                            used_vram_mb=mem.used // (1024 * 1024),
+                            utilization_percent=util.gpu,
+                            temperature_c=temp,
+                        )
+                    )
             except Exception as exc:
                 # pynvml 缺失 / 无 NVIDIA GPU 属预期(桌面无独显机器很常见),
                 # 不是故障——降到 debug,不刷 WARNING。
@@ -286,17 +302,26 @@ class HardwareComputeProfiler:
             try:
                 result = subprocess.run(
                     ["rocm-smi", "--showmeminfo", "VRAM", "--json"],
-                    capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=5
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                    timeout=5,
                 )
                 if result.returncode == 0:
                     # 简化处理
-                    gpus.append(GPUProfile(
-                        index=0,
-                        vendor=GPUVendor.AMD,
-                        name="AMD GPU (rocm)",
-                        total_vram_mb=0, free_vram_mb=0, used_vram_mb=0,
-                        utilization_percent=0.0, temperature_c=0.0,
-                    ))
+                    gpus.append(
+                        GPUProfile(
+                            index=0,
+                            vendor=GPUVendor.AMD,
+                            name="AMD GPU (rocm)",
+                            total_vram_mb=0,
+                            free_vram_mb=0,
+                            used_vram_mb=0,
+                            utilization_percent=0.0,
+                            temperature_c=0.0,
+                        )
+                    )
             except Exception as exc:
                 # rocm-smi 不存在(非 AMD/无 ROCm,Windows 上必 FileNotFoundError
                 # [WinError 2])属预期,不是故障——降到 debug。
@@ -306,14 +331,20 @@ class HardwareComputeProfiler:
         if not gpus:
             try:
                 import intel_extension_for_pytorch as ipex
+
                 if hasattr(ipex, "xpu") and ipex.xpu.is_available():
-                    gpus.append(GPUProfile(
-                        index=0,
-                        vendor=GPUVendor.INTEL,
-                        name="Intel XPU",
-                        total_vram_mb=0, free_vram_mb=0, used_vram_mb=0,
-                        utilization_percent=0.0, temperature_c=0.0,
-                    ))
+                    gpus.append(
+                        GPUProfile(
+                            index=0,
+                            vendor=GPUVendor.INTEL,
+                            name="Intel XPU",
+                            total_vram_mb=0,
+                            free_vram_mb=0,
+                            used_vram_mb=0,
+                            utilization_percent=0.0,
+                            temperature_c=0.0,
+                        )
+                    )
             except ImportError:
                 pass
 
@@ -325,6 +356,7 @@ class HardwareComputeProfiler:
         """检测 CPU 状态"""
         try:
             import psutil
+
             cpu_freq = psutil.cpu_freq()
             mem = psutil.virtual_memory()
             return CPUProfile(
@@ -339,22 +371,30 @@ class HardwareComputeProfiler:
             )
         except ImportError:
             return CPUProfile(
-                brand="unknown", physical_cores=1, logical_cores=1,
-                frequency_mhz=0.0, avx_support=self._avx_support,
-                usage_percent=0.0, available_ram_mb=0, total_ram_mb=0,
+                brand="unknown",
+                physical_cores=1,
+                logical_cores=1,
+                frequency_mhz=0.0,
+                avx_support=self._avx_support,
+                usage_percent=0.0,
+                available_ram_mb=0,
+                total_ram_mb=0,
             )
 
     @staticmethod
     def _get_cpu_brand() -> str:
         try:
             import cpuinfo
+
             return cpuinfo.get_cpu_info().get("brand_raw", "unknown")
         except Exception as exc:
             return "unknown"
 
     # ── 策略决策（核心） ──
 
-    def _decide_strategy(self, gpus: List[GPUProfile], cpu: CPUProfile) -> Tuple[ComputeTier, str, bool, bool, bool, List[str], int]:
+    def _decide_strategy(
+        self, gpus: List[GPUProfile], cpu: CPUProfile
+    ) -> Tuple[ComputeTier, str, bool, bool, bool, List[str], int]:
         """根据硬件状态决定计算策略
 
         返回: (tier, quantization, can_multimodal, can_llm, degrade, steps, max_model_mb)
@@ -390,15 +430,25 @@ class HardwareComputeProfiler:
         elif vram_ratio < self.VRAM_CRITICAL_THRESHOLD:
             # 显存紧张，需要层卸载
             return (
-                ComputeTier.GPU_CPU_HYBRID, "q4", False, True, True,
-                ["offload_layers_to_cpu", "reduce_batch_size"], 1500
+                ComputeTier.GPU_CPU_HYBRID,
+                "q4",
+                False,
+                True,
+                True,
+                ["offload_layers_to_cpu", "reduce_batch_size"],
+                1500,
             )
 
         else:
             # 显存临界，必须降级到 CPU 或 API
             return (
-                cpu.tier, "q4", False, cpu.tier != ComputeTier.CPU_BASELINE, True,
-                ["offload_all_to_cpu", "fallback_to_api_if_too_slow"], 1000
+                cpu.tier,
+                "q4",
+                False,
+                cpu.tier != ComputeTier.CPU_BASELINE,
+                True,
+                ["offload_all_to_cpu", "fallback_to_api_if_too_slow"],
+                1000,
             )
 
     # ── 公共 API ──
@@ -433,10 +483,15 @@ class HardwareComputeProfiler:
         cpu = self._profile_cpu()
         tier, quant, can_mm, can_llm, degrade, steps, max_model = self._decide_strategy(gpus, cpu)
         self._latest_profile = ComputeProfile(
-            timestamp=time.time(), gpus=gpus, cpu=cpu,
-            recommended_tier=tier, recommended_quantization=quant,
-            can_run_local_multimodal=can_mm, can_run_local_llm=can_llm,
-            degradation_needed=degrade, degradation_steps=steps,
+            timestamp=time.time(),
+            gpus=gpus,
+            cpu=cpu,
+            recommended_tier=tier,
+            recommended_quantization=quant,
+            can_run_local_multimodal=can_mm,
+            can_run_local_llm=can_llm,
+            degradation_needed=degrade,
+            degradation_steps=steps,
             max_model_size_mb=max_model,
         )
         return self._latest_profile
@@ -461,7 +516,8 @@ class HardwareComputeProfiler:
                     if prof and prof.degradation_needed:
                         logger.warning(
                             "Hardware degradation detected | tier=%s steps=%s",
-                            prof.recommended_tier.value, prof.degradation_steps
+                            prof.recommended_tier.value,
+                            prof.degradation_steps,
                         )
                 except Exception as exc:
                     logger.debug("Hardware monitoring tick failed: %s", exc)

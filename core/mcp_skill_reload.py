@@ -84,10 +84,7 @@ async def _validate_mcp_server(server_id: str, loader: Any) -> Dict[str, Any]:
             continue
         tool_count += 1
         # schema 检查（input_schema 必须是 dict 或 None）
-        schema = (
-            tool.get("input_schema") if isinstance(tool, dict)
-            else getattr(tool, "input_schema", None)
-        )
+        schema = tool.get("input_schema") if isinstance(tool, dict) else getattr(tool, "input_schema", None)
         if schema is not None and not isinstance(schema, dict):
             errors.append(f"工具 {name} 的 input_schema 类型非法: {type(schema)}")
 
@@ -153,6 +150,7 @@ async def reload_mcp(server_id: str) -> Dict[str, Any]:
 
     try:
         from core.mcp_loader import MCPLoader
+
         loader = MCPLoader.get_instance()
     except Exception as e:
         logger.debug("Fallback triggered: %s", e)
@@ -197,6 +195,7 @@ async def reload_mcp(server_id: str) -> Dict[str, Any]:
     # 触发 CapabilityRegistry 刷新，使新工具立即可用
     try:
         from core.agent.capability_registry import get_capability_registry
+
         reg = get_capability_registry()
         await reg.refresh(force=True)
         logger.info("MCP 热重载后 CapabilityRegistry 已刷新")
@@ -223,6 +222,7 @@ async def reload_skill(skill_id: str) -> Dict[str, Any]:
 
     try:
         from core.skill_loader import SkillLoader
+
         loader = SkillLoader.get_instance()
     except Exception as e:
         logger.debug("Fallback triggered: %s", e)
@@ -255,9 +255,11 @@ async def reload_skill(skill_id: str) -> Dict[str, Any]:
         try:
             skills = loader.list_skills() if hasattr(loader, "list_skills") else []
             matched = next(
-                (s for s in skills if (
-                    (s.get("skill_id") if isinstance(s, dict) else getattr(s, "skill_id", "")) == skill_id
-                )),
+                (
+                    s
+                    for s in skills
+                    if ((s.get("skill_id") if isinstance(s, dict) else getattr(s, "skill_id", "")) == skill_id)
+                ),
                 None,
             )
             validation = _validate_skill(matched) if matched else {"valid": True, "errors": []}
@@ -284,6 +286,7 @@ async def reload_skill(skill_id: str) -> Dict[str, Any]:
     # 触发 CapabilityRegistry 刷新
     try:
         from core.agent.capability_registry import get_capability_registry
+
         reg = get_capability_registry()
         await reg.refresh(force=True)
         logger.info("Skill 热重载后 CapabilityRegistry 已刷新")
@@ -312,10 +315,12 @@ async def reload_all() -> Dict[str, Any]:
     # 重载 MCP
     try:
         from core.mcp_loader import MCPLoader
+
         loader = MCPLoader.get_instance()
         servers = loader.list_servers() if hasattr(loader, "list_servers") else {}
         server_ids = (
-            list(servers.keys()) if isinstance(servers, dict)
+            list(servers.keys())
+            if isinstance(servers, dict)
             else [s.get("id") or s.get("server_id") for s in servers if isinstance(s, dict)]
         )
         for sid in server_ids:
@@ -330,13 +335,11 @@ async def reload_all() -> Dict[str, Any]:
     # 重载 Skill
     try:
         from core.skill_loader import SkillLoader
+
         loader = SkillLoader.get_instance()
         skills = loader.list_skills() if hasattr(loader, "list_skills") else []
         for skill in skills:
-            sid = (
-                skill.get("skill_id") if isinstance(skill, dict)
-                else getattr(skill, "skill_id", None)
-            )
+            sid = skill.get("skill_id") if isinstance(skill, dict) else getattr(skill, "skill_id", None)
             if sid:
                 r = await reload_skill(sid)
                 skill_results[sid] = r
@@ -347,7 +350,9 @@ async def reload_all() -> Dict[str, Any]:
 
     logger.info(
         "全量热重载完成: mcp=%d skill=%d total_errors=%d",
-        len(mcp_results), len(skill_results), total_errors,
+        len(mcp_results),
+        len(skill_results),
+        total_errors,
     )
     return {
         "mcp": mcp_results,
@@ -377,6 +382,7 @@ def get_load_status() -> Dict[str, Any]:
     # 补充 MCPLoader 实时状态
     try:
         from core.mcp_loader import MCPLoader
+
         loader = MCPLoader.get_instance()
         servers = loader.list_servers() if hasattr(loader, "list_servers") else {}
         items = servers.items() if isinstance(servers, dict) else [(s.get("id", ""), s) for s in servers]
@@ -396,13 +402,11 @@ def get_load_status() -> Dict[str, Any]:
     # 补充 SkillLoader 实时状态
     try:
         from core.skill_loader import SkillLoader
+
         loader = SkillLoader.get_instance()
         skill_list = loader.list_skills() if hasattr(loader, "list_skills") else []
         for skill in skill_list:
-            sid = (
-                skill.get("skill_id") if isinstance(skill, dict)
-                else getattr(skill, "skill_id", None)
-            )
+            sid = skill.get("skill_id") if isinstance(skill, dict) else getattr(skill, "skill_id", None)
             if sid and sid not in skills:
                 skills[sid] = {
                     "loaded": True,

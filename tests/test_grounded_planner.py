@@ -3,6 +3,7 @@
 
 一步规划器:结构确定命中→直接动作;点不准→needs_model+提示;落成 TASK_ASSIGN。
 """
+
 from __future__ import annotations
 
 from core.grounded_planner import PlannedAction, plan, to_task_assign
@@ -18,14 +19,33 @@ from core.ui_grounding import GroundingStrategy
 
 
 def _wechat() -> UIGraph:
-    return UIGraph(root=UIElementNode(role="window", label="微信", children=[
-        UIElementNode(role="edit", label="输入消息", editable=True, clickable=True,
-                      node_id="0.0", bounds=UIBounds(x=60, y=2010, width=1000, height=80),
-                      actions=[UIActionKind.SET_TEXT]),
-        UIElementNode(role="button", label="发送", clickable=True, node_id="0.1",
-                      bounds=UIBounds(x=1180, y=2020, width=120, height=80),
-                      actions=[UIActionKind.TAP]),
-    ]), source=UISource.ANDROID_A11Y, app="com.tencent.mm")
+    return UIGraph(
+        root=UIElementNode(
+            role="window",
+            label="微信",
+            children=[
+                UIElementNode(
+                    role="edit",
+                    label="输入消息",
+                    editable=True,
+                    clickable=True,
+                    node_id="0.0",
+                    bounds=UIBounds(x=60, y=2010, width=1000, height=80),
+                    actions=[UIActionKind.SET_TEXT],
+                ),
+                UIElementNode(
+                    role="button",
+                    label="发送",
+                    clickable=True,
+                    node_id="0.1",
+                    bounds=UIBounds(x=1180, y=2020, width=120, height=80),
+                    actions=[UIActionKind.TAP],
+                ),
+            ],
+        ),
+        source=UISource.ANDROID_A11Y,
+        app="com.tencent.mm",
+    )
 
 
 class TestPlanStructuralHit:
@@ -38,7 +58,7 @@ class TestPlanStructuralHit:
         assert p.strategy is GroundingStrategy.LABEL_EXACT
 
     def test_set_text_carries_text_and_target(self):
-        p = plan(_wechat(), '在「输入消息」输入「你好」')
+        p = plan(_wechat(), "在「输入消息」输入「你好」")
         assert p.action is UIActionKind.SET_TEXT and p.text == "你好"
         assert p.node_id == "0.0" and not p.needs_model
 
@@ -75,6 +95,6 @@ class TestToTaskAssign:
 
     def test_set_text_params(self):
         g = _wechat()
-        p = plan(g, '在「输入消息」输入「你好」')
+        p = plan(g, "在「输入消息」输入「你好」")
         msg = to_task_assign(p, g)
         assert msg.action == "set_text" and msg.params["text"] == "你好"

@@ -337,29 +337,19 @@ class MultiDeviceTruthConvergenceSnapshot:
     authority: str = MULTI_DEVICE_TRUTH_CONVERGENCE_AUTHORITY
 
     formation: MultiDeviceTruthDomainFacet = field(
-        default_factory=lambda: MultiDeviceTruthDomainFacet(
-            domain=MultiDeviceTruthDomain.FORMATION
-        )
+        default_factory=lambda: MultiDeviceTruthDomainFacet(domain=MultiDeviceTruthDomain.FORMATION)
     )
     readiness: MultiDeviceTruthDomainFacet = field(
-        default_factory=lambda: MultiDeviceTruthDomainFacet(
-            domain=MultiDeviceTruthDomain.READINESS
-        )
+        default_factory=lambda: MultiDeviceTruthDomainFacet(domain=MultiDeviceTruthDomain.READINESS)
     )
     participation: MultiDeviceTruthDomainFacet = field(
-        default_factory=lambda: MultiDeviceTruthDomainFacet(
-            domain=MultiDeviceTruthDomain.PARTICIPATION
-        )
+        default_factory=lambda: MultiDeviceTruthDomainFacet(domain=MultiDeviceTruthDomain.PARTICIPATION)
     )
     topology: MultiDeviceTruthDomainFacet = field(
-        default_factory=lambda: MultiDeviceTruthDomainFacet(
-            domain=MultiDeviceTruthDomain.TOPOLOGY
-        )
+        default_factory=lambda: MultiDeviceTruthDomainFacet(domain=MultiDeviceTruthDomain.TOPOLOGY)
     )
     session_context: MultiDeviceTruthDomainFacet = field(
-        default_factory=lambda: MultiDeviceTruthDomainFacet(
-            domain=MultiDeviceTruthDomain.SESSION_CONTEXT
-        )
+        default_factory=lambda: MultiDeviceTruthDomainFacet(domain=MultiDeviceTruthDomain.SESSION_CONTEXT)
     )
 
     fully_canonical: bool = False
@@ -507,9 +497,7 @@ def _assemble_readiness_facet() -> MultiDeviceTruthDomainFacet:
             authority_tier="secondary",
             data={
                 "ready_device_count": len(ready_devices),
-                "device_ids": [
-                    getattr(d, "device_id", str(d)) for d in ready_devices
-                ],
+                "device_ids": [getattr(d, "device_id", str(d)) for d in ready_devices],
                 "authority_source": "device_readiness.get_cross_device_ready_devices",
             },
             gap_reasons=gap_reasons,
@@ -550,9 +538,7 @@ def _assemble_participation_facet() -> MultiDeviceTruthDomainFacet:
                 summaries.append(
                     {
                         "device_id": getattr(p, "device_id", "unknown"),
-                        "orchestration_eligible": getattr(
-                            p, "orchestration_eligible", False
-                        ),
+                        "orchestration_eligible": getattr(p, "orchestration_eligible", False),
                     }
                 )
 
@@ -669,9 +655,7 @@ def _assemble_session_context_facet() -> MultiDeviceTruthDomainFacet:
 
         registry = AttachedSessionRegistry()
         active = registry.list_active() if hasattr(registry, "list_active") else []
-        session_ids = [
-            getattr(s, "session_id", str(s)) for s in active
-        ]
+        session_ids = [getattr(s, "session_id", str(s)) for s in active]
         session_data["active_session_count"] = len(session_ids)
         session_data["active_session_ids"] = session_ids
         sources_hit.append("AttachedSessionRegistry")
@@ -693,9 +677,7 @@ def _assemble_session_context_facet() -> MultiDeviceTruthDomainFacet:
         recoverable_ids = [r.session_id for r in recoverable]
         session_data["recoverable_session_count"] = len(recoverable_ids)
         session_data["recoverable_session_ids"] = recoverable_ids
-        session_data["status_breakdown"] = {
-            r.session_id: r.overall_status for r in recoverable
-        }
+        session_data["status_breakdown"] = {r.session_id: r.overall_status for r in recoverable}
         sources_hit.append("MeshSessionPersistenceStore")
         if authority_tier == "unavailable":
             authority_tier = "primary"
@@ -764,11 +746,7 @@ def converge_multi_device_truth() -> MultiDeviceTruthConvergenceSnapshot:
     session_context = _assemble_session_context_facet()
 
     all_facets = [formation, readiness, participation, topology, session_context]
-    partial_domains = [
-        f.domain.value
-        for f in all_facets
-        if f.authority_tier != "primary"
-    ]
+    partial_domains = [f.domain.value for f in all_facets if f.authority_tier != "primary"]
     fully_canonical = len(partial_domains) == 0
 
     for facet in all_facets:
@@ -777,14 +755,12 @@ def converge_multi_device_truth() -> MultiDeviceTruthConvergenceSnapshot:
 
     if not fully_canonical:
         notes.append(
-            f"Convergence is partial: {len(partial_domains)} domain(s) "
-            f"below primary authority: {partial_domains}"
+            f"Convergence is partial: {len(partial_domains)} domain(s) " f"below primary authority: {partial_domains}"
         )
 
     total_ms = (time.monotonic() - t_start) * 1000
     logger.debug(
-        "converge_multi_device_truth: assembled in %.1f ms — "
-        "fully_canonical=%s partial_domains=%s",
+        "converge_multi_device_truth: assembled in %.1f ms — " "fully_canonical=%s partial_domains=%s",
         total_ms,
         fully_canonical,
         partial_domains,

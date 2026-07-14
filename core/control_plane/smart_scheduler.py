@@ -80,10 +80,10 @@ from typing import Any, Dict, List, Optional, Sequence
 
 from pydantic import BaseModel, Field, model_validator
 
-
 # ---------------------------------------------------------------------------
 # Enumerations
 # ---------------------------------------------------------------------------
+
 
 class SandboxLevel(IntEnum):
     """Device sandbox / trust level.
@@ -92,11 +92,11 @@ class SandboxLevel(IntEnum):
     Scores are inverted: NONE (0) has the highest sandbox score contribution.
     """
 
-    NONE = 0        # bare-metal or fully trusted host
-    BASIC = 1       # minimal process isolation
-    STANDARD = 2    # standard OS sandbox (e.g. Android work profile)
-    STRICT = 3      # strict policy (SELinux enforcing, restricted APIs)
-    MAXIMUM = 4     # locked-down kiosk / air-gapped device
+    NONE = 0  # bare-metal or fully trusted host
+    BASIC = 1  # minimal process isolation
+    STANDARD = 2  # standard OS sandbox (e.g. Android work profile)
+    STRICT = 3  # strict policy (SELinux enforcing, restricted APIs)
+    MAXIMUM = 4  # locked-down kiosk / air-gapped device
 
 
 class DeviceStatus(str):
@@ -105,7 +105,7 @@ class DeviceStatus(str):
     ONLINE = "online"
     OFFLINE = "offline"
     BUSY = "busy"
-    DRAINING = "draining"    # accepting no new work
+    DRAINING = "draining"  # accepting no new work
     MAINTENANCE = "maintenance"
     QUARANTINED = "quarantined"  # excluded from scheduling until manually reset
     CIRCUIT_OPEN = "circuit_open"  # circuit breaker tripped
@@ -114,6 +114,7 @@ class DeviceStatus(str):
 # ---------------------------------------------------------------------------
 # Pydantic models
 # ---------------------------------------------------------------------------
+
 
 class CapabilityDescriptor(BaseModel):
     """Describes a single device capability with optional metadata."""
@@ -226,6 +227,7 @@ class DeviceScore(BaseModel):
 # Scoring engine
 # ---------------------------------------------------------------------------
 
+
 class DeviceScoringEngine:
     """Deterministic, heuristic-based device scoring engine.
 
@@ -256,9 +258,7 @@ class DeviceScoringEngine:
     # Component score helpers (all return float in [0, 1])
     # ------------------------------------------------------------------
 
-    def _capability_score(
-        self, required: Sequence[str], available: Sequence[str]
-    ) -> float:
+    def _capability_score(self, required: Sequence[str], available: Sequence[str]) -> float:
         """Fraction of required capabilities present on the device.
 
         Returns 1.0 when *required* is empty (no capability constraint).
@@ -343,8 +343,7 @@ class DeviceScoringEngine:
                 total=0.0,
                 eligible=False,
                 disqualify_reason=(
-                    f"Missing required capabilities: "
-                    f"{sorted(set(required) - set(device.capabilities))}"
+                    f"Missing required capabilities: " f"{sorted(set(required) - set(device.capabilities))}"
                 ),
             )
 
@@ -392,9 +391,7 @@ class DeviceScoringEngine:
         if not candidates:
             return None
 
-        scores = [
-            self.score_device(d, required_capabilities) for d in candidates
-        ]
+        scores = [self.score_device(d, required_capabilities) for d in candidates]
         eligible = [s for s in scores if s.eligible]
         if not eligible:
             return None
@@ -412,9 +409,7 @@ class DeviceScoringEngine:
         Ineligible devices are appended at the end (total=0) for
         diagnostic transparency.
         """
-        scores = [
-            self.score_device(d, required_capabilities) for d in candidates
-        ]
+        scores = [self.score_device(d, required_capabilities) for d in candidates]
         eligible = sorted(
             [s for s in scores if s.eligible],
             key=lambda s: (s.total, s.device_id),

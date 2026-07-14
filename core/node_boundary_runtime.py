@@ -149,9 +149,7 @@ NODE_BOUNDARY_IS_CANONICAL_AUTHORITY: str = (
     "single source of runtime truth for node existence and health."
 )
 
-NODE_BOUNDARY_RUNTIME_PR8_SENTINEL: str = (
-    "NODE_BOUNDARY_RUNTIME::PR8_SENTINEL_V1"
-)
+NODE_BOUNDARY_RUNTIME_PR8_SENTINEL: str = "NODE_BOUNDARY_RUNTIME::PR8_SENTINEL_V1"
 
 # ===========================================================================
 # Policy sentinels
@@ -528,6 +526,7 @@ def classify_invocation_pathway(pathway_name: str) -> NodePathwayKind:
 # Boundary compliance evaluation
 # ===========================================================================
 
+
 def evaluate_node_boundary_compliance(node_info: Any) -> NodeBoundaryDecision:
     """Evaluate whether *node_info* complies with canonical boundary rules.
 
@@ -550,11 +549,7 @@ def evaluate_node_boundary_compliance(node_info: Any) -> NodeBoundaryDecision:
     """
     node_id: str = getattr(node_info, "node_id", str(node_info))
     arch_class_raw = getattr(node_info, "architectural_class", "capability_node")
-    arch_class_str: str = (
-        arch_class_raw.value
-        if hasattr(arch_class_raw, "value")
-        else str(arch_class_raw)
-    )
+    arch_class_str: str = arch_class_raw.value if hasattr(arch_class_raw, "value") else str(arch_class_raw)
 
     violations: List[str] = []
     is_canonical = True
@@ -591,6 +586,7 @@ def evaluate_node_boundary_compliance(node_info: Any) -> NodeBoundaryDecision:
 # Canonical node query
 # ===========================================================================
 
+
 def get_canonical_nodes(fabric_registry: Any = None) -> List[Any]:
     """Return only canonical (CAPABILITY_NODE) nodes from *fabric_registry*.
 
@@ -609,18 +605,18 @@ def get_canonical_nodes(fabric_registry: Any = None) -> List[Any]:
     if registry is None:
         try:
             from core.nodes.node_fabric_registry import (
-                get_node_fabric_registry,
                 NodeArchitecturalClass,
+                get_node_fabric_registry,
             )
+
             registry = get_node_fabric_registry()
         except ImportError:
-            logger.warning(
-                "NodeFabricRegistry unavailable — get_canonical_nodes() returning []"
-            )
+            logger.warning("NodeFabricRegistry unavailable — get_canonical_nodes() returning []")
             return []
 
     try:
         from core.nodes.node_fabric_registry import NodeArchitecturalClass
+
         return registry.list_by_architectural_class(NodeArchitecturalClass.CAPABILITY_NODE)
     except Exception as exc:
         logger.warning("get_canonical_nodes() error: %s", exc)
@@ -630,6 +626,7 @@ def get_canonical_nodes(fabric_registry: Any = None) -> List[Any]:
 # ===========================================================================
 # Boundary snapshot
 # ===========================================================================
+
 
 def build_node_boundary_snapshot(fabric_registry: Any = None) -> NodeBoundarySnapshot:
     """Build a diagnostic snapshot of node boundary compliance.
@@ -652,11 +649,10 @@ def build_node_boundary_snapshot(fabric_registry: Any = None) -> NodeBoundarySna
     if registry is None:
         try:
             from core.nodes.node_fabric_registry import get_node_fabric_registry
+
             registry = get_node_fabric_registry()
         except ImportError:
-            logger.warning(
-                "NodeFabricRegistry unavailable — returning empty snapshot"
-            )
+            logger.warning("NodeFabricRegistry unavailable — returning empty snapshot")
             return NodeBoundarySnapshot(
                 legacy_surfaces=build_legacy_surface_registry(),
             )
@@ -696,6 +692,7 @@ def build_node_boundary_snapshot(fabric_registry: Any = None) -> NodeBoundarySna
 # Summary helper (for /health and status surfaces)
 # ===========================================================================
 
+
 def get_boundary_summary(fabric_registry: Any = None) -> Dict[str, Any]:
     """Return a compact boundary compliance summary dict.
 
@@ -718,9 +715,7 @@ def get_boundary_summary(fabric_registry: Any = None) -> Dict[str, Any]:
         - ``pr8_sentinel`` — :data:`NODE_BOUNDARY_RUNTIME_PR8_SENTINEL`
     """
     snapshot = build_node_boundary_snapshot(fabric_registry=fabric_registry)
-    boundary_health = (
-        "violations_detected" if snapshot.violation_nodes > 0 else "clean"
-    )
+    boundary_health = "violations_detected" if snapshot.violation_nodes > 0 else "clean"
     return {
         "total_nodes": snapshot.total_nodes,
         "canonical_nodes": snapshot.canonical_nodes,

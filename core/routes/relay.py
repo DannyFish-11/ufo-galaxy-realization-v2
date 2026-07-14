@@ -34,7 +34,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     """Create device relay routes router."""
     router = APIRouter()
 
-    from core.proxy_relay import get_proxy_relay, RelayRequest as ProxyRelayRequest
+    from core.proxy_relay import RelayRequest as ProxyRelayRequest
+    from core.proxy_relay import get_proxy_relay
 
     proxy_relay = get_proxy_relay()
 
@@ -43,6 +44,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
     class DeviceRelayRequest(BaseModel):
         """设备间中继请求"""
+
         source_device: str
         target_device: str
         payload_type: str = "task"
@@ -71,8 +73,11 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         )
         logger.info(
             "relay_send: trace_id=%s task_id=%s %s → %s [%s]",
-            envelope.trace_id, envelope.task_id,
-            req.source_device, req.target_device, req.payload_type,
+            envelope.trace_id,
+            envelope.task_id,
+            req.source_device,
+            req.target_device,
+            req.payload_type,
         )
 
         relay_req = ProxyRelayRequest(
@@ -88,15 +93,19 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         return JSONResponse(result.to_dict())
 
     @router.post("/api/v1/relay/broadcast")
-    async def relay_broadcast(source_device: str = "", payload_type: str = "task", payload: Optional[Dict[str, Any]] = None):
+    async def relay_broadcast(
+        source_device: str = "", payload_type: str = "task", payload: Optional[Dict[str, Any]] = None
+    ):
         """从一台设备广播到所有其他在线设备"""
         if payload is None:
             payload = {}
         results = await proxy_relay.relay_broadcast(source_device, payload_type, payload)
-        return JSONResponse({
-            "source": source_device,
-            "targets": {k: v.to_dict() for k, v in results.items()},
-        })
+        return JSONResponse(
+            {
+                "source": source_device,
+                "targets": {k: v.to_dict() for k, v in results.items()},
+            }
+        )
 
     @router.get("/api/v1/relay/stats")
     async def relay_stats():

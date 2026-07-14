@@ -539,11 +539,7 @@ class DelegatedRuntimeDispatchRecord:
 
     def is_accepted(self) -> bool:
         """Return True iff the record carries a non-none intent and no reject_reason."""
-        return (
-            self.delegation_intent != DelegationIntent.none
-            and not self.reject_reason
-            and bool(self.session_id)
-        )
+        return self.delegation_intent != DelegationIntent.none and not self.reject_reason and bool(self.session_id)
 
     def is_rejected(self) -> bool:
         """Return True iff the record was explicitly rejected."""
@@ -568,9 +564,7 @@ class DelegatedRuntimeDispatchRecord:
             "delegation_intent": self.delegation_intent.value,
             "preparation_state": self.preparation_state.value,
             "eligibility_outcome": (
-                self.eligibility_outcome.to_dict()
-                if self.eligibility_outcome is not None
-                else None
+                self.eligibility_outcome.to_dict() if self.eligibility_outcome is not None else None
             ),
             "continuation_hint": self.continuation_hint,
             "created_at": self.created_at,
@@ -588,14 +582,9 @@ class DelegatedRuntimeDispatchRecord:
         Unknown or malformed fields fall back to safe defaults.
         """
         if not isinstance(data, dict):
-            raise ValueError(
-                "DelegatedRuntimeDispatchRecord.from_dict: expected dict, "
-                f"got {type(data).__name__!r}"
-            )
+            raise ValueError("DelegatedRuntimeDispatchRecord.from_dict: expected dict, " f"got {type(data).__name__!r}")
         raw_intent = data.get("delegation_intent", DelegationIntent.none.value)
-        raw_prep = data.get(
-            "preparation_state", HandoffPreparationState.not_started.value
-        )
+        raw_prep = data.get("preparation_state", HandoffPreparationState.not_started.value)
         eligibility_raw = data.get("eligibility_outcome")
         eligibility: Optional[DispatchEligibilityOutcome] = None
         if isinstance(eligibility_raw, dict):
@@ -608,21 +597,15 @@ class DelegatedRuntimeDispatchRecord:
                 note=str(eligibility_raw.get("note", "")),
                 device_id=str(eligibility_raw.get("device_id", "")),
                 session_id=str(eligibility_raw.get("session_id", "")),
-                source_runtime_posture=str(
-                    eligibility_raw.get("source_runtime_posture", _POSTURE_CONTROL_ONLY)
-                ),
+                source_runtime_posture=str(eligibility_raw.get("source_runtime_posture", _POSTURE_CONTROL_ONLY)),
                 coordination_role=str(eligibility_raw.get("coordination_role", "")),
-                capability_tier=str(
-                    eligibility_raw.get("capability_tier", _TIER_UNKNOWN)
-                ),
+                capability_tier=str(eligibility_raw.get("capability_tier", _TIER_UNKNOWN)),
             )
         return cls(
             record_id=str(data.get("record_id", str(uuid.uuid4()))),
             device_id=str(data.get("device_id", "")),
             session_id=str(data.get("session_id", "")),
-            source_runtime_posture=str(
-                data.get("source_runtime_posture", _POSTURE_CONTROL_ONLY)
-            ),
+            source_runtime_posture=str(data.get("source_runtime_posture", _POSTURE_CONTROL_ONLY)),
             coordination_role=str(data.get("coordination_role", "")),
             android_host_role=str(data.get("android_host_role", "")),
             capability_tier=str(data.get("capability_tier", _TIER_UNKNOWN)),
@@ -694,9 +677,7 @@ class DelegatedRuntimeDispatchRuntime:
 
     def __init__(self, capacity: int = _RUNTIME_CAPACITY) -> None:
         self._capacity: int = max(1, capacity)
-        self._records: Deque[DelegatedRuntimeDispatchRecord] = deque(
-            maxlen=self._capacity
-        )
+        self._records: Deque[DelegatedRuntimeDispatchRecord] = deque(maxlen=self._capacity)
 
     @property
     def capacity(self) -> int:
@@ -718,9 +699,7 @@ class DelegatedRuntimeDispatchRuntime:
         """Return records in ``preparing`` or ``ready`` state, newest first."""
         return [r for r in reversed(self._records) if r.is_pending()]
 
-    def get_latest_for_session(
-        self, session_id: str
-    ) -> Optional[DelegatedRuntimeDispatchRecord]:
+    def get_latest_for_session(self, session_id: str) -> Optional[DelegatedRuntimeDispatchRecord]:
         """Return the most recent record matching *session_id*, or None."""
         for record in reversed(self._records):
             if record.session_id == session_id:
@@ -801,8 +780,7 @@ def evaluate_dispatch_eligibility(
             is_eligible=False,
             resolved_intent=DelegationIntent.none,
             blocking_reason=(
-                "Delegation blocked: session_id is empty.  "
-                f"Policy: {DELEGATION_REQUIRES_ATTACHED_SESSION_POLICY}"
+                "Delegation blocked: session_id is empty.  " f"Policy: {DELEGATION_REQUIRES_ATTACHED_SESSION_POLICY}"
             ),
             applied_policy=DELEGATION_REQUIRES_ATTACHED_SESSION_POLICY,
             device_id=device_id,

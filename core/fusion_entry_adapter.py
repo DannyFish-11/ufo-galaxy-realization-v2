@@ -82,9 +82,7 @@ FUSION_ENTRY_IS_EXECUTION_ADAPTER_AUTHORITY: str = (
     "discovery authority, and NOT a governance eligibility oracle."
 )
 
-FUSION_ENTRY_ADAPTER_CONTRACT_PR5_SENTINEL: str = (
-    "FUSION_ENTRY_ADAPTER::PR5_SENTINEL_V1"
-)
+FUSION_ENTRY_ADAPTER_CONTRACT_PR5_SENTINEL: str = "FUSION_ENTRY_ADAPTER::PR5_SENTINEL_V1"
 
 FUSION_ENTRY_NOT_A_REGISTRY_AUTHORITY_POLICY: str = (
     "FUSION_ENTRY_ADAPTER::NOT_REGISTRY_AUTHORITY_POLICY_V1: "
@@ -123,6 +121,7 @@ UNIFIED_EXECUTOR_IS_CANONICAL_LOADER_POLICY: str = (
 # ---------------------------------------------------------------------------
 # Adapter contract descriptor
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class FusionEntryAdapterContract:
@@ -172,6 +171,7 @@ class FusionEntryAdapterContract:
 # Contract validator
 # ---------------------------------------------------------------------------
 
+
 def validate_fusion_entry_adapter(module: Any) -> FusionEntryAdapterContract:
     """Validate that *module* satisfies the fusion_entry adapter contract.
 
@@ -218,6 +218,7 @@ def validate_fusion_entry_adapter(module: Any) -> FusionEntryAdapterContract:
 # Adapter compliance helper for loaders
 # ---------------------------------------------------------------------------
 
+
 def check_fusion_entry_compliance(
     module: Any,
     node_id: Optional[str] = None,
@@ -244,8 +245,7 @@ def check_fusion_entry_compliance(
     report = contract.compliance_report()
     missing = [k for k, v in report.items() if k != "is_compliant" and not v]
     logger.warning(
-        "fusion_entry for %s does not fully satisfy adapter contract; "
-        "missing: %s",
+        "fusion_entry for %s does not fully satisfy adapter contract; " "missing: %s",
         label,
         ", ".join(missing),
     )

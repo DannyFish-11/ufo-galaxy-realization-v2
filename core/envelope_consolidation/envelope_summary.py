@@ -44,15 +44,14 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-from .envelope_roles import EnvelopeRole, ROLE_DESCRIPTIONS
 from .envelope_adapters import (
-    extract_trace_fields,
-    task_to_command_summary,
-    result_to_observation,
-    interaction_trace_fields,
     _get,
+    extract_trace_fields,
+    interaction_trace_fields,
+    result_to_observation,
+    task_to_command_summary,
 )
-
+from .envelope_roles import ROLE_DESCRIPTIONS, EnvelopeRole
 
 # ---------------------------------------------------------------------------
 # EnvelopeSummary

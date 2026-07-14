@@ -41,6 +41,7 @@ GALAXY_SLO_HEARTBEAT_WINDOW Max heartbeat results kept for loss-rate calc
 from __future__ import annotations
 
 import logging  # auto: ensure module logger is defined
+
 logger = logging.getLogger(__name__)
 
 
@@ -51,10 +52,10 @@ import time
 from collections import deque
 from typing import Any, Deque, Dict, List, Optional
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _percentile(sorted_samples: List[float], pct: float) -> float:
     """Compute *pct*-th percentile (0-100) from a *sorted* list.
@@ -75,6 +76,7 @@ def _percentile(sorted_samples: List[float], pct: float) -> float:
 # ---------------------------------------------------------------------------
 # SLOMetrics
 # ---------------------------------------------------------------------------
+
 
 class SLOMetrics:
     """Thread-safe in-process SLO metric collector.
@@ -234,19 +236,13 @@ class SLOMetrics:
                 get_control_loop_latency_budget,
             )
 
-            projection_stats = (
-                get_control_loop_latency_budget().snapshot_projection_stats()
-            )
+            projection_stats = get_control_loop_latency_budget().snapshot_projection_stats()
             samples_total = (
                 int(projection_stats.get("total_immediate", 0))
                 + int(projection_stats.get("total_coalesced", 0))
                 + int(projection_stats.get("total_suppressed", 0))
             )
-            stale_rate = (
-                int(projection_stats.get("total_suppressed", 0)) / samples_total
-                if samples_total > 0
-                else 0.0
-            )
+            stale_rate = int(projection_stats.get("total_suppressed", 0)) / samples_total if samples_total > 0 else 0.0
             control_loop_snapshot = {
                 "projection_stale_snapshot_rate": round(stale_rate, 6),
                 "projection_window_samples_total": samples_total,

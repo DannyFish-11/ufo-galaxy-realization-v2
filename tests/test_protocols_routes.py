@@ -8,8 +8,8 @@ from pydantic import ValidationError
 from core.routes.protocols import (
     MCPLoadRequest,
     MCPToolCallRequest,
-    SkillLoadRequest,
     SkillExecuteRequest,
+    SkillLoadRequest,
     create_router,
 )
 
@@ -106,6 +106,7 @@ class TestCreateRouter:
 
     def test_returns_api_router(self):
         from fastapi import APIRouter
+
         router = create_router()
         assert isinstance(router, APIRouter)
 

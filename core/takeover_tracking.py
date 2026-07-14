@@ -192,6 +192,7 @@ def _has_multiple_non_empty_values(
 ) -> bool:
     return len({getattr(record, field_name, "") for record in records if getattr(record, field_name, "")}) > 1
 
+
 # ---------------------------------------------------------------------------
 # TakeoverDecision enum
 # ---------------------------------------------------------------------------
@@ -590,9 +591,7 @@ def list_takeover_records_for_session(
         _rt = runtime if runtime is not None else get_takeover_tracking_runtime()
         return _rt.get_by_session_id(session_id)
     except Exception as exc:  # noqa: BLE001
-        logger.debug(
-            "takeover_tracking: list_takeover_records_for_session failed: %s", exc
-        )
+        logger.debug("takeover_tracking: list_takeover_records_for_session failed: %s", exc)
         return []
 
 
@@ -673,16 +672,10 @@ def adjudicate_takeover_ownership_convergence(
             diagnosis.append("conflicting_takeover_decisions")
 
         has_missing = (
-            has_missing_takeover_id
-            or has_missing_session_id
-            or has_missing_device_id
-            or has_missing_takeover_record
+            has_missing_takeover_id or has_missing_session_id or has_missing_device_id or has_missing_takeover_record
         )
         has_identity_conflict = (
-            has_session_id_conflict
-            or has_device_id_conflict
-            or has_multiple_session_ids
-            or has_multiple_device_ids
+            has_session_id_conflict or has_device_id_conflict or has_multiple_session_ids or has_multiple_device_ids
         )
         if has_conflict or has_identity_conflict:
             return TakeoverOwnershipConvergenceVerdict(
@@ -709,9 +702,7 @@ def adjudicate_takeover_ownership_convergence(
                 device_id=device_id or "",
                 ownership_state=TakeoverOwnershipState.degraded_incomplete_evidence,
                 evidence_quality=(
-                    TakeoverEvidenceQuality.missing
-                    if has_missing_takeover_record
-                    else TakeoverEvidenceQuality.partial
+                    TakeoverEvidenceQuality.missing if has_missing_takeover_record else TakeoverEvidenceQuality.partial
                 ),
                 is_converged=False,
                 degraded=True,
@@ -737,8 +728,7 @@ def adjudicate_takeover_ownership_convergence(
             if is_stale:
                 evidence_age_s = _now - latest_record_at
                 diagnosis.append(
-                    f"stale_takeover_evidence:age_s={evidence_age_s:.1f}"
-                    f":threshold_s={stale_threshold_seconds:.1f}"
+                    f"stale_takeover_evidence:age_s={evidence_age_s:.1f}" f":threshold_s={stale_threshold_seconds:.1f}"
                 )
                 return TakeoverOwnershipConvergenceVerdict(
                     takeover_id=takeover_id,

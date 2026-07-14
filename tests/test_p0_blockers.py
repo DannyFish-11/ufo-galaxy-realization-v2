@@ -10,25 +10,22 @@ Covers all four P0 fixes:
 """
 
 import os
-import pytest
 from unittest.mock import MagicMock, patch
 
+import pytest
 
 # ===========================================================================
 # P0-1: websockets in galaxy_gateway/requirements.txt
 # ===========================================================================
 
+
 class TestWebsocketsDependency:
     def test_websockets_in_gateway_requirements(self):
         """galaxy_gateway/requirements.txt must list websockets>=11."""
-        req_file = os.path.join(
-            os.path.dirname(__file__), "..", "galaxy_gateway", "requirements.txt"
-        )
+        req_file = os.path.join(os.path.dirname(__file__), "..", "galaxy_gateway", "requirements.txt")
         with open(req_file) as f:
             content = f.read()
-        assert "websockets" in content, (
-            "websockets must be listed in galaxy_gateway/requirements.txt for gateway tests"
-        )
+        assert "websockets" in content, "websockets must be listed in galaxy_gateway/requirements.txt for gateway tests"
 
     def test_websockets_importable(self):
         """The websockets package must be importable (installed)."""
@@ -38,6 +35,7 @@ class TestWebsocketsDependency:
 # ===========================================================================
 # P0-2: Gateway sensitive routes protected by Depends(require_auth)
 # ===========================================================================
+
 
 class TestGatewayRouteAuth:
     """Sensitive gateway routes must declare require_auth as a FastAPI dependency."""
@@ -83,48 +81,53 @@ class TestGatewayRouteAuth:
                     # Also check module-level alias
                     try:
                         import core.auth
+
                         if call is getattr(core.auth, "require_auth", None):
                             return True
                     except Exception:
                         pass
         return False
 
-    @pytest.mark.parametrize("path,method", [
-        ("/api/tasks", "POST"),
-        ("/api/tasks/{task_id}", "GET"),
-        ("/api/tasks", "GET"),
-        ("/api/tasks/{task_id}", "DELETE"),
-        ("/api/commands", "POST"),
-        ("/api/v1/sessions", "GET"),
-        ("/api/v1/sessions/{session_id}", "GET"),
-        ("/api/v1/sessions/{session_id}/migrate", "POST"),
-        ("/api/v1/sessions/stats", "GET"),
-        ("/api/v1/chat", "POST"),
-        ("/api/v1/llm/stats", "GET"),
-    ])
+    @pytest.mark.parametrize(
+        "path,method",
+        [
+            ("/api/tasks", "POST"),
+            ("/api/tasks/{task_id}", "GET"),
+            ("/api/tasks", "GET"),
+            ("/api/tasks/{task_id}", "DELETE"),
+            ("/api/commands", "POST"),
+            ("/api/v1/sessions", "GET"),
+            ("/api/v1/sessions/{session_id}", "GET"),
+            ("/api/v1/sessions/{session_id}/migrate", "POST"),
+            ("/api/v1/sessions/stats", "GET"),
+            ("/api/v1/chat", "POST"),
+            ("/api/v1/llm/stats", "GET"),
+        ],
+    )
     def test_sensitive_route_has_auth_dependency(self, path, method):
         """Every sensitive gateway route must carry require_auth as a dependency."""
-        assert self._check_route_has_auth(None, path, method), (
-            f"{method} {path} is missing Depends(require_auth)"
-        )
+        assert self._check_route_has_auth(None, path, method), f"{method} {path} is missing Depends(require_auth)"
 
     @pytest.mark.parametrize("path", ["/health", "/health/nats", "/api/v1/health"])
     def test_health_routes_accessible_without_auth(self, path):
         """Health endpoints must remain public (no auth required)."""
-        from galaxy_gateway.app import app as gateway_app
         from fastapi.testclient import TestClient
+
+        from galaxy_gateway.app import app as gateway_app
 
         with TestClient(gateway_app, raise_server_exceptions=False) as client:
             resp = client.get(path)
         # Health endpoints return 2xx, not 401/403
-        assert resp.status_code not in (401, 403), (
-            f"Health endpoint {path} should be auth-exempt but returned {resp.status_code}"
-        )
+        assert resp.status_code not in (
+            401,
+            403,
+        ), f"Health endpoint {path} should be auth-exempt but returned {resp.status_code}"
 
 
 # ===========================================================================
 # P0-3: Multi-device commands delegate to Node_71 MDCE
 # ===========================================================================
+
 
 class TestMDCEDispatch:
     """core/routes/command.py unified endpoint must delegate to Node_71 for multi-device."""
@@ -132,14 +135,16 @@ class TestMDCEDispatch:
     def test_get_node71_url_default(self):
         """_get_node71_url should return a URL containing port 8071 by default."""
         from core.routes.command import _get_node71_url
+
         url = _get_node71_url()
         assert "8071" in url or "node" in url.lower() or "localhost" in url
 
     def test_delegate_to_mdce_returns_none_on_connection_error(self):
         """_delegate_to_mdce must return None (not raise) when Node_71 is unreachable."""
         import asyncio
-        from core.routes.command import _delegate_to_mdce, CommandStatus
+
         from core.routes._models import UnifiedCommandRequest
+        from core.routes.command import CommandStatus, _delegate_to_mdce
 
         req = UnifiedCommandRequest(
             command="test",
@@ -172,22 +177,26 @@ class TestMDCEDispatch:
             routed["cross_device"] = (getattr(envelope, "metadata", None) or {}).get("cross_device")
             return {"success": True, "result": {"ok": True}}
 
-        from core.routes.command import create_router
-        from core.command_router import get_command_router
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
+
+        from core.command_router import get_command_router
+        from core.routes.command import create_router
 
         app = FastAPI()
         app.include_router(create_router())
         monkeypatch.setattr(get_command_router(), "route_envelope", _mock_route_envelope)
 
         with TestClient(app, raise_server_exceptions=False) as client:
-            resp = client.post("/api/v1/command/unified", json={
-                "command": "screenshot",
-                "targets": ["phone_1", "phone_2"],
-                "mode": "sync",
-                "timeout": 10,
-            })
+            resp = client.post(
+                "/api/v1/command/unified",
+                json={
+                    "command": "screenshot",
+                    "targets": ["phone_1", "phone_2"],
+                    "mode": "sync",
+                    "timeout": 10,
+                },
+            )
 
         assert resp.status_code == 200
         assert set(routed.get("targets", [])) == {"phone_1", "phone_2"}
@@ -205,20 +214,24 @@ class TestMDCEDispatch:
 
         monkeypatch.setattr("core.routes.command._delegate_to_mdce", _mock_delegate)
 
-        from core.routes.command import create_router
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
+
+        from core.routes.command import create_router
 
         app = FastAPI()
         app.include_router(create_router())
 
         with TestClient(app, raise_server_exceptions=False) as client:
-            client.post("/api/v1/command/unified", json={
-                "command": "screenshot",
-                "targets": ["phone_only"],
-                "mode": "sync",
-                "timeout": 5,
-            })
+            client.post(
+                "/api/v1/command/unified",
+                json={
+                    "command": "screenshot",
+                    "targets": ["phone_only"],
+                    "mode": "sync",
+                    "timeout": 5,
+                },
+            )
 
         assert not mdce_called, "_delegate_to_mdce should not be called for single-device commands"
 
@@ -227,13 +240,14 @@ class TestMDCEDispatch:
 # P0-4: OpenClawd.sync_device_capabilities DeviceRegistry fallback
 # ===========================================================================
 
+
 class TestCapabilitySync:
     """OpenClawd.sync_device_capabilities must fall back to DeviceRegistry."""
 
     def test_sync_uses_device_registry_when_udm_unavailable(self):
         """When UnifiedDeviceManager raises, fallback to DeviceRegistry."""
-        from core.openclawd import OpenClawd
         from core.agent.capability_registry import get_capability_registry
+        from core.openclawd import OpenClawd
 
         mock_device = MagicMock()
         mock_device.device_id = "fallback_phone"
@@ -245,12 +259,15 @@ class TestCapabilitySync:
         mock_dr = MagicMock()
         mock_dr.list_devices.return_value = {"fallback_phone": mock_device}
 
-        with patch(
-            "core.unified.device_manager.get_unified_device_manager",
-            side_effect=ImportError("UDM not available"),
-        ), patch(
-            "core.device_registry.DeviceRegistry.get_instance",
-            return_value=mock_dr,
+        with (
+            patch(
+                "core.unified.device_manager.get_unified_device_manager",
+                side_effect=ImportError("UDM not available"),
+            ),
+            patch(
+                "core.device_registry.DeviceRegistry.get_instance",
+                return_value=mock_dr,
+            ),
         ):
             oc = OpenClawd()
             count = oc.sync_device_capabilities()
@@ -271,12 +288,15 @@ class TestCapabilitySync:
         mock_dr = MagicMock()
         mock_dr.list_devices.return_value = {"dr_dict_phone": mock_device}
 
-        with patch(
-            "core.unified.device_manager.get_unified_device_manager",
-            side_effect=RuntimeError("unavailable"),
-        ), patch(
-            "core.device_registry.DeviceRegistry.get_instance",
-            return_value=mock_dr,
+        with (
+            patch(
+                "core.unified.device_manager.get_unified_device_manager",
+                side_effect=RuntimeError("unavailable"),
+            ),
+            patch(
+                "core.device_registry.DeviceRegistry.get_instance",
+                return_value=mock_dr,
+            ),
         ):
             oc = OpenClawd()
             count = oc.sync_device_capabilities()
@@ -285,8 +305,8 @@ class TestCapabilitySync:
 
     def test_sync_via_device_registry_registers_to_capability_registry(self):
         """After DeviceRegistry fallback sync, capabilities appear in CapabilityRegistry."""
-        from core.openclawd import OpenClawd
         from core.agent.capability_registry import get_capability_registry
+        from core.openclawd import OpenClawd
 
         reg = get_capability_registry()
         device_id = "cap_sync_test_device"
@@ -303,12 +323,15 @@ class TestCapabilitySync:
         mock_dr = MagicMock()
         mock_dr.list_devices.return_value = {device_id: mock_device}
 
-        with patch(
-            "core.unified.device_manager.get_unified_device_manager",
-            side_effect=RuntimeError("not available"),
-        ), patch(
-            "core.device_registry.DeviceRegistry.get_instance",
-            return_value=mock_dr,
+        with (
+            patch(
+                "core.unified.device_manager.get_unified_device_manager",
+                side_effect=RuntimeError("not available"),
+            ),
+            patch(
+                "core.device_registry.DeviceRegistry.get_instance",
+                return_value=mock_dr,
+            ),
         ):
             oc = OpenClawd()
             count = oc.sync_device_capabilities()
@@ -335,12 +358,15 @@ class TestCapabilitySync:
         mock_dr = MagicMock()
         mock_dr.list_devices.return_value = {"oc_test_device": mock_device}
 
-        with patch(
-            "core.device_registry.DeviceRegistry.get_instance",
-            return_value=mock_dr,
-        ), patch(
-            "core.unified.device_manager.get_unified_device_manager",
-            side_effect=ImportError("not available"),
+        with (
+            patch(
+                "core.device_registry.DeviceRegistry.get_instance",
+                return_value=mock_dr,
+            ),
+            patch(
+                "core.unified.device_manager.get_unified_device_manager",
+                side_effect=ImportError("not available"),
+            ),
         ):
             oc = OpenClawd()
             count = oc.sync_device_capabilities()

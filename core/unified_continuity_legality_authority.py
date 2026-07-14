@@ -223,9 +223,7 @@ class ContinuityLegalityPath(str, Enum):
     TERMINAL_RESULT_INGESTION = "terminal_result_ingestion"
 
     @classmethod
-    def from_string(
-        cls, value: Any, *, default: "ContinuityLegalityPath" = None
-    ) -> Optional["ContinuityLegalityPath"]:
+    def from_string(cls, value: Any, *, default: "ContinuityLegalityPath" = None) -> Optional["ContinuityLegalityPath"]:
         try:
             return cls(str(value).lower().strip())
         except ValueError:
@@ -466,41 +464,49 @@ class ContinuityLegalityReport:
 # ---------------------------------------------------------------------------
 
 # Paths that evaluate session / attachment identity dimensions (strict)
-_IDENTITY_STRICT_PATHS = frozenset({
-    ContinuityLegalityPath.RECONNECT,
-    ContinuityLegalityPath.RE_REGISTER,
-    ContinuityLegalityPath.ATTACHMENT_RESUME,
-    ContinuityLegalityPath.REPLAY_INGRESS,
-    ContinuityLegalityPath.DELEGATED_RECOVERY,
-    ContinuityLegalityPath.TERMINAL_RESULT_INGESTION,
-    ContinuityLegalityPath.ONLINE_DISPATCH_ACCEPTANCE,
-    ContinuityLegalityPath.ONLINE_SIGNAL_INGESTION,
-})
+_IDENTITY_STRICT_PATHS = frozenset(
+    {
+        ContinuityLegalityPath.RECONNECT,
+        ContinuityLegalityPath.RE_REGISTER,
+        ContinuityLegalityPath.ATTACHMENT_RESUME,
+        ContinuityLegalityPath.REPLAY_INGRESS,
+        ContinuityLegalityPath.DELEGATED_RECOVERY,
+        ContinuityLegalityPath.TERMINAL_RESULT_INGESTION,
+        ContinuityLegalityPath.ONLINE_DISPATCH_ACCEPTANCE,
+        ContinuityLegalityPath.ONLINE_SIGNAL_INGESTION,
+    }
+)
 
 # Paths that evaluate signal guard dimensions
-_SIGNAL_GUARD_PATHS = frozenset({
-    ContinuityLegalityPath.ONLINE_SIGNAL_INGESTION,
-    ContinuityLegalityPath.REPLAY_INGRESS,
-    ContinuityLegalityPath.DELEGATED_RECOVERY,
-})
+_SIGNAL_GUARD_PATHS = frozenset(
+    {
+        ContinuityLegalityPath.ONLINE_SIGNAL_INGESTION,
+        ContinuityLegalityPath.REPLAY_INGRESS,
+        ContinuityLegalityPath.DELEGATED_RECOVERY,
+    }
+)
 
 # Paths that evaluate epoch ordering
-_EPOCH_PATHS = frozenset({
-    ContinuityLegalityPath.RECONNECT,
-    ContinuityLegalityPath.RE_REGISTER,
-    ContinuityLegalityPath.REPLAY_INGRESS,
-    ContinuityLegalityPath.DELEGATED_RECOVERY,
-    ContinuityLegalityPath.TERMINAL_RESULT_INGESTION,
-})
+_EPOCH_PATHS = frozenset(
+    {
+        ContinuityLegalityPath.RECONNECT,
+        ContinuityLegalityPath.RE_REGISTER,
+        ContinuityLegalityPath.REPLAY_INGRESS,
+        ContinuityLegalityPath.DELEGATED_RECOVERY,
+        ContinuityLegalityPath.TERMINAL_RESULT_INGESTION,
+    }
+)
 
 # Paths where 'unknown' on identity dimensions escalates to REQUIRE_REVIEW
-_STRICT_MODE_PATHS = frozenset({
-    ContinuityLegalityPath.RECONNECT,
-    ContinuityLegalityPath.REPLAY_INGRESS,
-    ContinuityLegalityPath.DELEGATED_RECOVERY,
-    ContinuityLegalityPath.TERMINAL_RESULT_INGESTION,
-    ContinuityLegalityPath.ONLINE_DISPATCH_ACCEPTANCE,
-})
+_STRICT_MODE_PATHS = frozenset(
+    {
+        ContinuityLegalityPath.RECONNECT,
+        ContinuityLegalityPath.REPLAY_INGRESS,
+        ContinuityLegalityPath.DELEGATED_RECOVERY,
+        ContinuityLegalityPath.TERMINAL_RESULT_INGESTION,
+        ContinuityLegalityPath.ONLINE_DISPATCH_ACCEPTANCE,
+    }
+)
 
 
 # ---------------------------------------------------------------------------
@@ -668,9 +674,7 @@ class UnifiedContinuityLegalityAuthority:
 
         # ── Aggregate ──────────────────────────────────────────────────────
         resolved_mode = resolve_continuity_legality_mode(path, explicit_mode=mode)
-        overall, reject_reason = self._aggregate(
-            dimension_outcomes, path, resolved_mode
-        )
+        overall, reject_reason = self._aggregate(dimension_outcomes, path, resolved_mode)
 
         return ContinuityLegalityReport(
             path=path,
@@ -684,9 +688,7 @@ class UnifiedContinuityLegalityAuthority:
     # Dimension evaluators
     # ------------------------------------------------------------------
 
-    def _check_session_identity(
-        self, ctx: ContinuityLegalityContext
-    ) -> DimensionLegalityOutcome:
+    def _check_session_identity(self, ctx: ContinuityLegalityContext) -> DimensionLegalityOutcome:
         """Check runtime session + attachment session identity against registry.
 
         Covers dimensions 1 (runtime_session_continuity) and
@@ -701,11 +703,7 @@ class UnifiedContinuityLegalityAuthority:
         }
 
         # When no identity fields are present, cannot assert illegality
-        if (
-            not ctx.runtime_session_id
-            and not ctx.runtime_attachment_session_id
-            and not ctx.device_id
-        ):
+        if not ctx.runtime_session_id and not ctx.runtime_attachment_session_id and not ctx.device_id:
             return DimensionLegalityOutcome(
                 dimension=dim,
                 verdict=ContinuityLegalityVerdict.ALLOW,
@@ -724,10 +722,7 @@ class UnifiedContinuityLegalityAuthority:
             return DimensionLegalityOutcome(
                 dimension=dim,
                 verdict=ContinuityLegalityVerdict.REQUIRE_REVIEW,
-                reason=(
-                    "Session registry unavailable; cannot verify identity legality. "
-                    f"({_import_err})"
-                ),
+                reason=("Session registry unavailable; cannot verify identity legality. " f"({_import_err})"),
                 evidence=evidence,
             )
 
@@ -761,17 +756,14 @@ class UnifiedContinuityLegalityAuthority:
             state = entry.attachment_state
             state_val = state.value if hasattr(state, "value") else str(state)
             evidence["registry_state"] = state_val
-            evidence["registry_runtime_session_id"] = getattr(
-                entry, "runtime_session_id", ""
-            )
-            evidence["registry_attachment_id"] = getattr(
-                entry, "runtime_attachment_session_id", ""
-            )
+            evidence["registry_runtime_session_id"] = getattr(entry, "runtime_session_id", "")
+            evidence["registry_attachment_id"] = getattr(entry, "runtime_attachment_session_id", "")
 
             # Check terminal state → stale identity
-            is_terminal = (
-                hasattr(state, "is_terminal") and state.is_terminal()
-            ) or state_val in ("replaced", "invalidated")
+            is_terminal = (hasattr(state, "is_terminal") and state.is_terminal()) or state_val in (
+                "replaced",
+                "invalidated",
+            )
 
             if is_terminal:
                 return DimensionLegalityOutcome(
@@ -789,8 +781,7 @@ class UnifiedContinuityLegalityAuthority:
             if (
                 ctx.runtime_attachment_session_id
                 and entry.runtime_attachment_session_id
-                and ctx.runtime_attachment_session_id
-                != entry.runtime_attachment_session_id
+                and ctx.runtime_attachment_session_id != entry.runtime_attachment_session_id
             ):
                 return DimensionLegalityOutcome(
                     dimension=dim,
@@ -837,9 +828,7 @@ class UnifiedContinuityLegalityAuthority:
                 evidence=evidence,
             )
 
-    def _check_stale_runtime(
-        self, ctx: ContinuityLegalityContext
-    ) -> Optional[DimensionLegalityOutcome]:
+    def _check_stale_runtime(self, ctx: ContinuityLegalityContext) -> Optional[DimensionLegalityOutcome]:
         """Check stale runtime dimension (5) via FlowContinuityCoordinator."""
         # Only meaningful when a runtime_session_id is present
         if not ctx.runtime_session_id:
@@ -879,11 +868,7 @@ class UnifiedContinuityLegalityAuthority:
                 metadata=dict(ctx.metadata),
             )
             artifact = coordinator.decide_stale_identity(event_ctx)
-            decision_val = (
-                artifact.decision.value
-                if hasattr(artifact.decision, "value")
-                else str(artifact.decision)
-            )
+            decision_val = artifact.decision.value if hasattr(artifact.decision, "value") else str(artifact.decision)
             evidence["coordinator_decision"] = decision_val
             evidence["coordinator_detail"] = artifact.detail
 
@@ -891,18 +876,14 @@ class UnifiedContinuityLegalityAuthority:
                 return DimensionLegalityOutcome(
                     dimension=dim,
                     verdict=ContinuityLegalityVerdict.REJECT,
-                    reason=(
-                        f"Stale runtime identity detected: {artifact.detail}"
-                    ),
+                    reason=(f"Stale runtime identity detected: {artifact.detail}"),
                     evidence=evidence,
                 )
             if decision_val == "fail_closed":
                 return DimensionLegalityOutcome(
                     dimension=dim,
                     verdict=ContinuityLegalityVerdict.REQUIRE_REVIEW,
-                    reason=(
-                        f"Stale runtime check fail_closed: {artifact.detail}"
-                    ),
+                    reason=(f"Stale runtime check fail_closed: {artifact.detail}"),
                     evidence=evidence,
                 )
             return DimensionLegalityOutcome(
@@ -922,9 +903,7 @@ class UnifiedContinuityLegalityAuthority:
                 evidence=evidence,
             )
 
-    def _check_stale_attachment(
-        self, ctx: ContinuityLegalityContext
-    ) -> Optional[DimensionLegalityOutcome]:
+    def _check_stale_attachment(self, ctx: ContinuityLegalityContext) -> Optional[DimensionLegalityOutcome]:
         """Check stale attachment dimension (6) via registry terminal state."""
         if not ctx.runtime_attachment_session_id:
             return None
@@ -975,22 +954,18 @@ class UnifiedContinuityLegalityAuthority:
                 )
 
             # Check the attachment_id matches the registry entry
-            registry_attachment_id = getattr(
-                entry, "runtime_attachment_session_id", ""
-            )
+            registry_attachment_id = getattr(entry, "runtime_attachment_session_id", "")
             evidence["registry_attachment_id"] = registry_attachment_id
             state = entry.attachment_state
             state_val = state.value if hasattr(state, "value") else str(state)
             evidence["registry_state"] = state_val
 
-            is_terminal = (
-                hasattr(state, "is_terminal") and state.is_terminal()
-            ) or state_val in ("replaced", "invalidated")
+            is_terminal = (hasattr(state, "is_terminal") and state.is_terminal()) or state_val in (
+                "replaced",
+                "invalidated",
+            )
 
-            if (
-                registry_attachment_id
-                and ctx.runtime_attachment_session_id != registry_attachment_id
-            ):
+            if registry_attachment_id and ctx.runtime_attachment_session_id != registry_attachment_id:
                 # Attachment ID mismatch with a live registry entry
                 return DimensionLegalityOutcome(
                     dimension=dim,
@@ -1051,12 +1026,11 @@ class UnifiedContinuityLegalityAuthority:
             from core.flow_continuity_coordinator import (
                 get_flow_continuity_coordinator,
             )
+
             coordinator = get_flow_continuity_coordinator()
             snapshot = coordinator.build_snapshot()
             snap_dict = snapshot.to_dict() if hasattr(snapshot, "to_dict") else {}
-            max_epoch_seen: int = int(
-                snap_dict.get("max_continuity_epoch", 0) or 0
-            )
+            max_epoch_seen: int = int(snap_dict.get("max_continuity_epoch", 0) or 0)
             evidence["max_epoch_seen"] = max_epoch_seen
         except Exception as _exc:
             logger.debug("Fallback triggered: %s", _exc)
@@ -1127,9 +1101,7 @@ class UnifiedContinuityLegalityAuthority:
                 session_id=ctx.runtime_session_id or ctx.runtime_attachment_session_id or "",
             )
             decision = check_signal_guard(key, ctx.emission_seq)
-            decision_val = (
-                decision.value if hasattr(decision, "value") else str(decision)
-            )
+            decision_val = decision.value if hasattr(decision, "value") else str(decision)
             evidence["guard_decision"] = decision_val
 
             if decision is SignalGuardDecision.accept:
@@ -1169,8 +1141,7 @@ class UnifiedContinuityLegalityAuthority:
                     dimension=ContinuityLegalityDimension.late_signal_rejection,
                     verdict=ContinuityLegalityVerdict.REJECT,
                     reason=(
-                        f"Late/stale signal: emission_seq={ctx.emission_seq} is far "
-                        "behind the recorded maximum."
+                        f"Late/stale signal: emission_seq={ctx.emission_seq} is far " "behind the recorded maximum."
                     ),
                     evidence=evidence,
                 )
@@ -1178,10 +1149,7 @@ class UnifiedContinuityLegalityAuthority:
                 return DimensionLegalityOutcome(
                     dimension=ContinuityLegalityDimension.out_of_order_signal_rejection,
                     verdict=ContinuityLegalityVerdict.REJECT,
-                    reason=(
-                        f"Out-of-order signal: emission_seq={ctx.emission_seq} is "
-                        "behind the recorded maximum."
-                    ),
+                    reason=(f"Out-of-order signal: emission_seq={ctx.emission_seq} is " "behind the recorded maximum."),
                     evidence=evidence,
                 )
 
@@ -1203,9 +1171,7 @@ class UnifiedContinuityLegalityAuthority:
                 evidence=evidence,
             )
 
-    def _check_delegated_recovery_legality(
-        self, ctx: ContinuityLegalityContext
-    ) -> DimensionLegalityOutcome:
+    def _check_delegated_recovery_legality(self, ctx: ContinuityLegalityContext) -> DimensionLegalityOutcome:
         """Check delegated recovery legality (dimension 11).
 
         Consults the FlowContinuityCoordinator for the stale-identity verdict
@@ -1255,11 +1221,7 @@ class UnifiedContinuityLegalityAuthority:
                 metadata=dict(ctx.metadata),
             )
             artifact = coordinator.decide_stale_identity(event_ctx)
-            decision_val = (
-                artifact.decision.value
-                if hasattr(artifact.decision, "value")
-                else str(artifact.decision)
-            )
+            decision_val = artifact.decision.value if hasattr(artifact.decision, "value") else str(artifact.decision)
             evidence["coordinator_decision"] = decision_val
             evidence["coordinator_detail"] = artifact.detail
 
@@ -1267,10 +1229,7 @@ class UnifiedContinuityLegalityAuthority:
                 return DimensionLegalityOutcome(
                     dimension=dim,
                     verdict=ContinuityLegalityVerdict.REJECT,
-                    reason=(
-                        f"Delegated recovery rejected: stale identity. "
-                        f"{artifact.detail}"
-                    ),
+                    reason=(f"Delegated recovery rejected: stale identity. " f"{artifact.detail}"),
                     evidence=evidence,
                 )
             if decision_val == "fail_closed":
@@ -1330,10 +1289,7 @@ class UnifiedContinuityLegalityAuthority:
         return DimensionLegalityOutcome(
             dimension=dim,
             verdict=identity_outcome.verdict,
-            reason=(
-                f"Online execution legality failed for path={path.value}: "
-                f"{identity_outcome.reason}"
-            ),
+            reason=(f"Online execution legality failed for path={path.value}: " f"{identity_outcome.reason}"),
             evidence={**identity_outcome.evidence, **evidence},
         )
 

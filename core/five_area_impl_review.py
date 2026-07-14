@@ -191,9 +191,7 @@ class AreaMaturityLabel(str, Enum):
     STRONGLY_ESTABLISHED = "STRONGLY_ESTABLISHED"
     RUNTIME_EVIDENCED_CLOSED = "RUNTIME_EVIDENCED_CLOSED"
     PARTIALLY_ESTABLISHED = "PARTIALLY_ESTABLISHED"
-    INFRASTRUCTURE_PRESENT_NOT_YET_E2E_PROVEN = (
-        "INFRASTRUCTURE_PRESENT_NOT_YET_E2E_PROVEN"
-    )
+    INFRASTRUCTURE_PRESENT_NOT_YET_E2E_PROVEN = "INFRASTRUCTURE_PRESENT_NOT_YET_E2E_PROVEN"
     OBSERVATION_ONLY_NO_ACTION_SURFACE = "OBSERVATION_ONLY_NO_ACTION_SURFACE"
     SURFACE_ALIGNMENT_ONLY = "SURFACE_ALIGNMENT_ONLY"
     MISSING_RUNTIME_EVIDENCE = "MISSING_RUNTIME_EVIDENCE"
@@ -410,9 +408,7 @@ class AreaReviewEntry:
             "overclaiming_rationale": self.overclaiming_rationale,
             "impl_cut_points": [c.to_dict() for c in self.impl_cut_points],
             "modification_zones": [m.to_dict() for m in self.modification_zones],
-            "maturity_unlock": (
-                self.maturity_unlock.value if self.maturity_unlock else None
-            ),
+            "maturity_unlock": (self.maturity_unlock.value if self.maturity_unlock else None),
             "maturity_unlock_description": self.maturity_unlock_description,
             "actionability": self.actionability.value,
             "android_evidence_refs": self.android_evidence_refs,
@@ -561,15 +557,9 @@ def _review_unified_panel_aggregation() -> AreaReviewEntry:
         _anchor("core.operator_surface", "v2", "OperatorSurface — projection authority"),
         _anchor("core.routes.operator", "v2", "Operator HTTP routes (/api/v1/operator/*)"),
         _anchor("core.flow_level_operator_surface", "v2", "FlowLevelOperatorSurface"),
-        _anchor(
-            "core.android_device_state_store", "v2",
-            "Android device state store — ecosystem truth store"
-        ),
+        _anchor("core.android_device_state_store", "v2", "Android device state store — ecosystem truth store"),
         _anchor("core.routes.projection", "v2", "Runtime projection routes (/api/v1/projection/*)"),
-        _anchor(
-            "core.presence.presence_projection", "v2",
-            "PresenceProjection — presence state read surface"
-        ),
+        _anchor("core.presence.presence_projection", "v2", "PresenceProjection — presence state read surface"),
     ]
 
     # Individual operator endpoint evidence
@@ -578,24 +568,17 @@ def _review_unified_panel_aggregation() -> AreaReviewEntry:
             "/api/v1/operator/snapshot — OperatorSnapshot: task counts, device presence, "
             "topology, capabilities totals, Android ecosystem count"
         )
+        established.append("/api/v1/operator/flows — All delegated flows as FlowOperatorProjection dicts")
         established.append(
-            "/api/v1/operator/flows — All delegated flows as FlowOperatorProjection dicts"
+            "/api/v1/operator/devices/ecosystem — Android device readiness, model identity, " "runtime health snapshot"
         )
-        established.append(
-            "/api/v1/operator/devices/ecosystem — Android device readiness, model identity, "
-            "runtime health snapshot"
-        )
-        established.append(
-            "/api/v1/operator/devices/execution-events — Recent Android execution phase events"
-        )
+        established.append("/api/v1/operator/devices/execution-events — Recent Android execution phase events")
         android_refs.append("core.routes.operator (/api/v1/operator/devices/ecosystem)")
     else:
         gaps.append("core.routes.operator NOT importable — operator routes absent")
 
     if _try_import("core.routes.projection"):
-        established.append(
-            "/api/v1/projection/runtime — RuntimeProjection from ContinuumState + topology"
-        )
+        established.append("/api/v1/projection/runtime — RuntimeProjection from ContinuumState + topology")
     else:
         partial.append("core.routes.projection not confirmed importable")
 
@@ -615,13 +598,11 @@ def _review_unified_panel_aggregation() -> AreaReviewEntry:
         )
     if _source_contains("core.operator_surface", "presence_tristate"):
         established.append(
-            "OperatorSnapshot.presence_tristate — subject tri-state read from "
-            "DesktopPresenceRuntime into snapshot"
+            "OperatorSnapshot.presence_tristate — subject tri-state read from " "DesktopPresenceRuntime into snapshot"
         )
     if _source_contains("core.operator_surface", "manifestation_summary"):
         established.append(
-            "OperatorSnapshot.manifestation_summary — derived shell+presence summary "
-            "at snapshot level"
+            "OperatorSnapshot.manifestation_summary — derived shell+presence summary " "at snapshot level"
         )
 
     # Check for a *canonical unified operator panel-state* aggregation module (the gap).
@@ -647,9 +628,7 @@ def _review_unified_panel_aggregation() -> AreaReviewEntry:
         )
 
     # UI clothing states not in any operator endpoint
-    if _try_import("system_integration.state_machine_ui_integration") or _try_import(
-        "system_integration"
-    ):
+    if _try_import("system_integration.state_machine_ui_integration") or _try_import("system_integration"):
         partial.append(
             "UI clothing states (DORMANT/ISLAND/SIDESHEET/FULLAGENT) exist in "
             "system_integration/state_machine_ui_integration.py but are NOT exposed "
@@ -662,12 +641,9 @@ def _review_unified_panel_aggregation() -> AreaReviewEntry:
         )
 
     # All surfaces are read-only
-    if _source_contains("core.operator_surface", "read-only") or _source_contains(
-        "core.operator_surface", "read_only"
-    ):
+    if _source_contains("core.operator_surface", "read-only") or _source_contains("core.operator_surface", "read_only"):
         partial.append(
-            "ALL operator endpoints are READ_ONLY_PROJECTION — no panel-level "
-            "action-capable endpoints exist"
+            "ALL operator endpoints are READ_ONLY_PROJECTION — no panel-level " "action-capable endpoints exist"
         )
 
     return AreaReviewEntry(
@@ -790,25 +766,14 @@ def _review_desktop_three_state_existence() -> AreaReviewEntry:
 
     anchors = [
         _anchor(
-            "core.desktop_presence_runtime", "v2",
-            "DesktopPresenceRuntime — tri-state lifecycle shell (SILENT/LIMINAL/MANIFEST)"
+            "core.desktop_presence_runtime",
+            "v2",
+            "DesktopPresenceRuntime — tri-state lifecycle shell (SILENT/LIMINAL/MANIFEST)",
         ),
-        _anchor(
-            "core.presence.presence_director", "v2",
-            "PresenceDirector — presence session management"
-        ),
-        _anchor(
-            "core.presence.presence_projection", "v2",
-            "PresenceProjection — presence state read surface"
-        ),
-        _anchor(
-            "core.openclawd", "v2",
-            "OpenClawd — continuum posture (tri_state_phase + runtime_domain)"
-        ),
-        _anchor(
-            "core.operator_surface", "v2",
-            "OperatorSnapshot — partial shell+presence state aggregation"
-        ),
+        _anchor("core.presence.presence_director", "v2", "PresenceDirector — presence session management"),
+        _anchor("core.presence.presence_projection", "v2", "PresenceProjection — presence state read surface"),
+        _anchor("core.openclawd", "v2", "OpenClawd — continuum posture (tri_state_phase + runtime_domain)"),
+        _anchor("core.operator_surface", "v2", "OperatorSnapshot — partial shell+presence state aggregation"),
     ]
 
     # State system 1: Subject tri-state lifecycle (SILENT/LIMINAL/MANIFEST)
@@ -817,9 +782,8 @@ def _review_desktop_three_state_existence() -> AreaReviewEntry:
             "STATE SYSTEM 1 (SUBJECT LIFECYCLE): DesktopPresenceRuntime importable; "
             "tri-state lifecycle SILENT→LIMINAL→MANIFEST confirmed in source"
         )
-        if (
-            _source_contains("core.desktop_presence_runtime", "SILENT")
-            and _source_contains("core.desktop_presence_runtime", "LIMINAL")
+        if _source_contains("core.desktop_presence_runtime", "SILENT") and _source_contains(
+            "core.desktop_presence_runtime", "LIMINAL"
         ):
             established.append(
                 "DesktopPresenceRuntime: SILENT (subject at rest, background sensing), "
@@ -842,12 +806,9 @@ def _review_desktop_three_state_existence() -> AreaReviewEntry:
     # Test coverage for DPR
     if _test_file_exists("tests.test_pr1_desktop_presence_runtime"):
         established.append("DPR test suite present (test_pr1_desktop_presence_runtime)")
-    if _test_file_exists(
-        "tests.test_pr8v2_manifestation_shell_presence_semantics"
-    ):
+    if _test_file_exists("tests.test_pr8v2_manifestation_shell_presence_semantics"):
         established.append(
-            "Manifestation/shell/presence semantics test present — "
-            "semantic consistency of state vocabularies tested"
+            "Manifestation/shell/presence semantics test present — " "semantic consistency of state vocabularies tested"
         )
 
     # State system 2: UI clothing states (DORMANT/ISLAND/SIDESHEET/FULLAGENT)
@@ -856,9 +817,7 @@ def _review_desktop_three_state_existence() -> AreaReviewEntry:
         "system_integration.state_machine_ui_integration",
         "system_integration",
     ]:
-        if _source_contains(mod_candidate, "DORMANT") and _source_contains(
-            mod_candidate, "FULLAGENT"
-        ):
+        if _source_contains(mod_candidate, "DORMANT") and _source_contains(mod_candidate, "FULLAGENT"):
             established.append(
                 "STATE SYSTEM 2 (UI CLOTHING / SHELL EXPANSION): "
                 "DORMANT/ISLAND/SIDESHEET/FULLAGENT states confirmed in "
@@ -868,9 +827,8 @@ def _review_desktop_three_state_existence() -> AreaReviewEntry:
             break
     if not ui_clothing_confirmed:
         # Try to find in desktop presence runtime docstring
-        if (
-            _source_contains("core.desktop_presence_runtime", "DORMANT")
-            and _source_contains("core.desktop_presence_runtime", "FULLAGENT")
+        if _source_contains("core.desktop_presence_runtime", "DORMANT") and _source_contains(
+            "core.desktop_presence_runtime", "FULLAGENT"
         ):
             partial.append(
                 "UI clothing states (DORMANT/ISLAND/SIDESHEET/FULLAGENT) referenced "
@@ -892,24 +850,18 @@ def _review_desktop_three_state_existence() -> AreaReviewEntry:
                 "inside core cognition layer"
             )
         else:
-            partial.append(
-                "core.openclawd importable but tri_state_phase not confirmed in source"
-            )
+            partial.append("core.openclawd importable but tri_state_phase not confirmed in source")
     else:
         partial.append("core.openclawd not confirmed importable")
 
     # Presence Director and Projection
     if _try_import("core.presence.presence_director"):
-        established.append(
-            "PresenceDirector importable — presence session management layer present"
-        )
+        established.append("PresenceDirector importable — presence session management layer present")
     else:
         partial.append("core.presence.presence_director not confirmed importable")
 
     if _try_import("core.presence.presence_projection"):
-        established.append(
-            "PresenceProjection importable — presence state read projection present"
-        )
+        established.append("PresenceProjection importable — presence state read projection present")
     else:
         partial.append("core.presence.presence_projection not confirmed importable")
 
@@ -933,9 +885,8 @@ def _review_desktop_three_state_existence() -> AreaReviewEntry:
         )
 
     # Operator snapshot partial integration
-    if (
-        _source_contains("core.operator_surface", "desktop_shell_state")
-        and _source_contains("core.operator_surface", "presence_tristate")
+    if _source_contains("core.operator_surface", "desktop_shell_state") and _source_contains(
+        "core.operator_surface", "presence_tristate"
     ):
         partial.append(
             "OperatorSnapshot includes desktop_shell_state and presence_tristate fields "
@@ -1083,13 +1034,11 @@ def _review_operator_actionability() -> AreaReviewEntry:
         _anchor("core.routes.operator", "v2", "Operator HTTP routes (/api/v1/operator/*)"),
         _anchor("core.operator_surface", "v2", "OperatorSurface (read-only projection authority)"),
         _anchor("core.routes.chat", "v2", "Chat route — sole action-capable NL ingress"),
+        _anchor("core.command_router", "v2", "CommandRouter — canonical orchestration/dispatch authority"),
         _anchor(
-            "core.command_router", "v2",
-            "CommandRouter — canonical orchestration/dispatch authority"
-        ),
-        _anchor(
-            "core.runtime.source_dispatch_orchestrator", "v2",
-            "SourceDispatchOrchestrator — dispatch scoring and target selection"
+            "core.runtime.source_dispatch_orchestrator",
+            "v2",
+            "SourceDispatchOrchestrator — dispatch scoring and target selection",
         ),
         _anchor("galaxy_gateway.device_router", "v2", "DeviceRouter — gateway dispatch"),
     ]
@@ -1104,16 +1053,10 @@ def _review_operator_actionability() -> AreaReviewEntry:
             "/api/v1/operator/devices/ecosystem — Android ecosystem read projection "
             "(device readiness, model identity, runtime health)"
         )
-        established.append(
-            "/api/v1/operator/devices/execution-events — Android execution event "
-            "read projection"
-        )
+        established.append("/api/v1/operator/devices/execution-events — Android execution event " "read projection")
 
     # Confirmed read-only policy in source
-    if (
-        _source_contains("core.operator_surface", "read-only")
-        or _source_contains("core.operator_surface", "read_only")
-    ):
+    if _source_contains("core.operator_surface", "read-only") or _source_contains("core.operator_surface", "read_only"):
         established.append(
             "OperatorSurface PROJECTION_POLICY explicitly documented as read-only "
             "in source — confirmed NOT action-capable by design"
@@ -1131,8 +1074,7 @@ def _review_operator_actionability() -> AreaReviewEntry:
     # Dispatch infrastructure exists
     if _try_import("core.command_router"):
         established.append(
-            "CommandRouter importable — canonical dispatch authority for routing "
-            "task envelopes to execution targets"
+            "CommandRouter importable — canonical dispatch authority for routing " "task envelopes to execution targets"
         )
     if _try_import("core.runtime.source_dispatch_orchestrator"):
         established.append(
@@ -1140,9 +1082,7 @@ def _review_operator_actionability() -> AreaReviewEntry:
             "_score_candidate() for routing decisions"
         )
     if _try_import("galaxy_gateway.device_router"):
-        established.append(
-            "DeviceRouter importable — gateway-level device dispatch authority"
-        )
+        established.append("DeviceRouter importable — gateway-level device dispatch authority")
 
     # Decision-consumed surfaces
     if _try_import("core.android_device_state_store"):
@@ -1181,17 +1121,13 @@ def _review_operator_actionability() -> AreaReviewEntry:
         )
 
     # No operator dispatch test
-    if (
-        _test_file_exists("tests.test_operator_action_dispatch")
-        or _test_file_exists("tests.test_operator_actionability")
+    if _test_file_exists("tests.test_operator_action_dispatch") or _test_file_exists(
+        "tests.test_operator_actionability"
     ):
-        partial.append(
-            "Operator action dispatch test found (unexpected — review)"
-        )
+        partial.append("Operator action dispatch test found (unexpected — review)")
     else:
         partial.append(
-            "No test for operator-level action dispatch — consistent with "
-            "the absence of action endpoints"
+            "No test for operator-level action dispatch — consistent with " "the absence of action endpoints"
         )
 
     # Tasks route exists (not operator but action-capable)
@@ -1323,31 +1259,21 @@ def _review_natural_language_canonical_path() -> AreaReviewEntry:
     anchors = [
         _anchor("core.routes.chat", "v2", "Chat route — NL ingress adapter (/api/v1/chat)"),
         _anchor(
-            "core.desktop_presence_runtime", "v2",
-            "DesktopPresenceRuntime — NL lifecycle shell and tri-state driver"
+            "core.desktop_presence_runtime", "v2", "DesktopPresenceRuntime — NL lifecycle shell and tri-state driver"
         ),
         _anchor("core.openclawd", "v2", "OpenClawd — NL interpretation/planning/execution core"),
         _anchor("core.command_router", "v2", "CommandRouter — orchestration/dispatch authority"),
         _anchor("core.llm", "v2", "LLM layer — language model execution"),
-        _anchor(
-            "core.llm.route_authority", "v2",
-            "LLMRouteAuthority — canonical LLM routing decision authority"
-        ),
-        _anchor(
-            "core.canonical_execution_chain", "v2",
-            "CanonicalExecutionChain — canonical stage enumeration"
-        ),
+        _anchor("core.llm.route_authority", "v2", "LLMRouteAuthority — canonical LLM routing decision authority"),
+        _anchor("core.canonical_execution_chain", "v2", "CanonicalExecutionChain — canonical stage enumeration"),
     ]
 
     # NL ingress: chat route
     if _try_import("core.routes.chat"):
-        established.append(
-            "NL INGRESS: /api/v1/chat importable — POST adapter surface for NL input"
-        )
+        established.append("NL INGRESS: /api/v1/chat importable — POST adapter surface for NL input")
         if _source_contains("core.routes.chat", "DesktopPresenceRuntime"):
             established.append(
-                "Chat route delegates to DesktopPresenceRuntime — NL chain entry "
-                "correctly wired to lifecycle shell"
+                "Chat route delegates to DesktopPresenceRuntime — NL chain entry " "correctly wired to lifecycle shell"
             )
     else:
         gaps.append("core.routes.chat NOT importable — NL ingress missing")
@@ -1358,13 +1284,11 @@ def _review_natural_language_canonical_path() -> AreaReviewEntry:
             "LIFECYCLE SHELL: DesktopPresenceRuntime.handle_request() — sole canonical "
             "NL entry point; drives SILENT→LIMINAL→MANIFEST→SILENT lifecycle"
         )
-        if (
-            _source_contains("core.desktop_presence_runtime", "handle_via_e2e")
-            or _source_contains("core.desktop_presence_runtime", "_handle_via_e2e")
+        if _source_contains("core.desktop_presence_runtime", "handle_via_e2e") or _source_contains(
+            "core.desktop_presence_runtime", "_handle_via_e2e"
         ):
             established.append(
-                "_handle_via_e2e() — e2e path present inside DPR for full "
-                "orchestration chain execution"
+                "_handle_via_e2e() — e2e path present inside DPR for full " "orchestration chain execution"
             )
         if _source_contains("core.desktop_presence_runtime", "ingress_carrier_context"):
             established.append(
@@ -1380,10 +1304,7 @@ def _review_natural_language_canonical_path() -> AreaReviewEntry:
             "INTERPRETATION/PLANNING: OpenClawd.process() importable — NL interpretation, "
             "intent resolution, and execution-path branching authority"
         )
-        if (
-            _source_contains("core.openclawd", "function_calling")
-            or _source_contains("core.openclawd", "tool_call")
-        ):
+        if _source_contains("core.openclawd", "function_calling") or _source_contains("core.openclawd", "tool_call"):
             established.append(
                 "OpenClawd: LLM function calling/tool_call dispatch confirmed — "
                 "NL → structured tool dispatch path present in source"
@@ -1427,10 +1348,7 @@ def _review_natural_language_canonical_path() -> AreaReviewEntry:
 
     # Canonical path test evidence
     if _test_file_exists("tests.test_pr1_desktop_presence_runtime"):
-        established.append(
-            "DPR test suite present — tri-state lifecycle and handle_request() "
-            "validated by CI"
-        )
+        established.append("DPR test suite present — tri-state lifecycle and handle_request() " "validated by CI")
     else:
         partial.append("test_pr1_desktop_presence_runtime not found")
 
@@ -1572,26 +1490,15 @@ def _review_multimodal_canonical_path() -> AreaReviewEntry:
     android_refs: List[str] = []
 
     anchors = [
-        _anchor(
-            "core.multimodal", "v2",
-            "Multimodal package — MultimodalIngressBus, PerceptionSourceRegistry"
-        ),
+        _anchor("core.multimodal", "v2", "Multimodal package — MultimodalIngressBus, PerceptionSourceRegistry"),
         _anchor("core.vision_pipeline", "v2", "VisionPipeline — vision processing pipeline"),
+        _anchor("core.openclawd", "v2", "OpenClawd — multimodal_context fusion point in NL processing"),
+        _anchor("galaxy_gateway.android.handlers.vision", "v2", "Android vision uplink handler (galaxy_gateway)"),
         _anchor(
-            "core.openclawd", "v2",
-            "OpenClawd — multimodal_context fusion point in NL processing"
+            "core.android_device_state_store", "v2", "DeviceStateSnapshot — mobilevlm_present / seeclick_present fields"
         ),
         _anchor(
-            "galaxy_gateway.android.handlers.vision", "v2",
-            "Android vision uplink handler (galaxy_gateway)"
-        ),
-        _anchor(
-            "core.android_device_state_store", "v2",
-            "DeviceStateSnapshot — mobilevlm_present / seeclick_present fields"
-        ),
-        _anchor(
-            "core.multi_llm_router", "v2",
-            "MultiLLMRouter.route_multimodal_first() — native-multimodal-first routing"
+            "core.multi_llm_router", "v2", "MultiLLMRouter.route_multimodal_first() — native-multimodal-first routing"
         ),
     ]
 
@@ -1605,9 +1512,7 @@ def _review_multimodal_canonical_path() -> AreaReviewEntry:
         partial.append("core.multimodal package not confirmed importable")
 
     if _try_import("core.vision_pipeline"):
-        established.append(
-            "VisionPipeline importable — vision processing pipeline present"
-        )
+        established.append("VisionPipeline importable — vision processing pipeline present")
     else:
         partial.append("core.vision_pipeline not confirmed importable")
 
@@ -1626,9 +1531,8 @@ def _review_multimodal_canonical_path() -> AreaReviewEntry:
                 "FUSION POINT: OpenClawd accepts multimodal_context kwarg — "
                 "request-bound multimodal payload fusion path present in source"
             )
-        if (
-            _source_contains("core.openclawd", "_select_multimodal_route")
-            or _source_contains("core.openclawd", "route_multimodal_first")
+        if _source_contains("core.openclawd", "_select_multimodal_route") or _source_contains(
+            "core.openclawd", "route_multimodal_first"
         ):
             established.append(
                 "OpenClawd._select_multimodal_route() — native multimodal routing "
@@ -1658,40 +1562,29 @@ def _review_multimodal_canonical_path() -> AreaReviewEntry:
         )
         android_refs.append("galaxy_gateway.android.handlers.vision")
     else:
-        partial.append(
-            "galaxy_gateway.android.handlers.vision not confirmed importable"
-        )
+        partial.append("galaxy_gateway.android.handlers.vision not confirmed importable")
 
     # Mobile VLM presence tracking
     if _source_contains("core.android_device_state_store", "mobilevlm_present"):
         established.append(
-            "DeviceStateSnapshot.mobilevlm_present — Android-side Mobile VLM "
-            "presence tracking in V2 state store"
+            "DeviceStateSnapshot.mobilevlm_present — Android-side Mobile VLM " "presence tracking in V2 state store"
         )
-        android_refs.append(
-            "core.android_device_state_store (mobilevlm_present field)"
-        )
+        android_refs.append("core.android_device_state_store (mobilevlm_present field)")
     if _source_contains("core.android_device_state_store", "seeclick_present"):
         established.append(
             "DeviceStateSnapshot.seeclick_present — Android-side SeeClick grounding "
             "engine presence tracking in V2 state store"
         )
-        android_refs.append(
-            "core.android_device_state_store (seeclick_present field)"
-        )
+        android_refs.append("core.android_device_state_store (seeclick_present field)")
 
     # Disabled by default (the gap)
     disabled_by_default = False
     for mm_mod in ["core.multimodal", "core.multimodal.multimodal_ingest_bus"]:
-        if (
-            _source_contains(mm_mod, "enable_multimodal_ingest")
-            or _source_contains(mm_mod, "SAFE_DEFAULT")
-        ):
+        if _source_contains(mm_mod, "enable_multimodal_ingest") or _source_contains(mm_mod, "SAFE_DEFAULT"):
             disabled_by_default = True
             break
-    if (
-        _source_contains("core.openclawd", "enable_multimodal_ingest")
-        or _source_contains("core.openclawd", "SAFE_DEFAULT")
+    if _source_contains("core.openclawd", "enable_multimodal_ingest") or _source_contains(
+        "core.openclawd", "SAFE_DEFAULT"
     ):
         disabled_by_default = True
 
@@ -1951,15 +1844,11 @@ def assert_five_area_review_invariants(review: FiveAreaImplReview) -> None:
     15. methodology sentinel is non-empty.
     16. Report serialises to valid JSON without error.
     """
-    assert len(review.area_entries) == 5, (
-        f"Expected 5 area entries, got {len(review.area_entries)}"
-    )
+    assert len(review.area_entries) == 5, f"Expected 5 area entries, got {len(review.area_entries)}"
 
     seen_areas = {e.area for e in review.area_entries}
     all_areas = set(ReviewArea)
-    assert seen_areas == all_areas, (
-        f"Missing area entries: {all_areas - seen_areas}"
-    )
+    assert seen_areas == all_areas, f"Missing area entries: {all_areas - seen_areas}"
 
     for entry in review.area_entries:
         # No overclaiming when gaps exist
@@ -1972,15 +1861,9 @@ def assert_five_area_review_invariants(review: FiveAreaImplReview) -> None:
                 f"{entry.maturity_label.value} — overclaiming detected"
             )
 
-        assert len(entry.code_anchors) >= 1, (
-            f"Area {entry.area.value} has no code anchors"
-        )
-        assert len(entry.canonical_path_summary) > 0, (
-            f"Area {entry.area.value} has empty canonical_path_summary"
-        )
-        assert len(entry.established_items) >= 1, (
-            f"Area {entry.area.value} has no established items"
-        )
+        assert len(entry.code_anchors) >= 1, f"Area {entry.area.value} has no code anchors"
+        assert len(entry.canonical_path_summary) > 0, f"Area {entry.area.value} has empty canonical_path_summary"
+        assert len(entry.established_items) >= 1, f"Area {entry.area.value} has no established items"
 
         # Below STRONGLY_ESTABLISHED must have gap items
         if entry.maturity_label not in (
@@ -1988,39 +1871,29 @@ def assert_five_area_review_invariants(review: FiveAreaImplReview) -> None:
             AreaMaturityLabel.RUNTIME_EVIDENCED_CLOSED,
         ):
             assert len(entry.gap_items) >= 1, (
-                f"Area {entry.area.value} is rated {entry.maturity_label.value} "
-                f"but has no gap_items"
+                f"Area {entry.area.value} is rated {entry.maturity_label.value} " f"but has no gap_items"
             )
 
-        assert len(entry.impl_cut_points) >= 1, (
-            f"Area {entry.area.value} has no impl_cut_points"
-        )
-        assert len(entry.modification_zones) >= 1, (
-            f"Area {entry.area.value} has no modification_zones"
-        )
-        assert entry.maturity_unlock is not None, (
-            f"Area {entry.area.value} has None maturity_unlock"
-        )
-        assert len(entry.maturity_unlock_description) > 0, (
-            f"Area {entry.area.value} has empty maturity_unlock_description"
-        )
+        assert len(entry.impl_cut_points) >= 1, f"Area {entry.area.value} has no impl_cut_points"
+        assert len(entry.modification_zones) >= 1, f"Area {entry.area.value} has no modification_zones"
+        assert entry.maturity_unlock is not None, f"Area {entry.area.value} has None maturity_unlock"
+        assert (
+            len(entry.maturity_unlock_description) > 0
+        ), f"Area {entry.area.value} has empty maturity_unlock_description"
 
     assert len(review.overall_summary) > 0, "overall_summary is empty"
 
     assert len(review.next_pr_priority_order) == 5, (
-        f"next_pr_priority_order should have 5 entries, "
-        f"got {len(review.next_pr_priority_order)}"
+        f"next_pr_priority_order should have 5 entries, " f"got {len(review.next_pr_priority_order)}"
     )
     valid_area_values = {a.value for a in ReviewArea}
     for item in review.next_pr_priority_order:
-        assert item in valid_area_values, (
-            f"next_pr_priority_order item {item!r} is not a valid ReviewArea value"
-        )
+        assert item in valid_area_values, f"next_pr_priority_order item {item!r} is not a valid ReviewArea value"
 
     assert len(review.authority) > 0, "authority sentinel is empty"
-    assert review.authority.startswith("FIVE_AREA_IMPL_REVIEW_AUTHORITY"), (
-        "authority sentinel does not start with FIVE_AREA_IMPL_REVIEW_AUTHORITY"
-    )
+    assert review.authority.startswith(
+        "FIVE_AREA_IMPL_REVIEW_AUTHORITY"
+    ), "authority sentinel does not start with FIVE_AREA_IMPL_REVIEW_AUTHORITY"
     assert len(review.methodology) > 0, "methodology sentinel is empty"
 
     # JSON serialisation

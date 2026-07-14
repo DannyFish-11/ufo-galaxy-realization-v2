@@ -28,15 +28,16 @@ import pytest
 from core.execution.decision_executor import DecisionExecutor, ExecutionResult, PolicyGate
 from core.system_api.platform_api import AppLaunchResult, NoOpSystemAPI
 
-
 # ---------------------------------------------------------------------------
 # Minimal OpenClawd fixture
 # ---------------------------------------------------------------------------
+
 
 def _make_openclawd():
     """Return an OpenClawd instance with heavy side-effecting init suppressed."""
     with patch("core.openclawd.OpenClawd.__init__", return_value=None):
         from core.openclawd import OpenClawd
+
         oc = OpenClawd.__new__(OpenClawd)
     # Minimal attribute set needed for the methods under test
     oc._continuum_orchestrator = None
@@ -48,15 +49,18 @@ def _make_openclawd():
 # A) _get_decision_executor
 # ---------------------------------------------------------------------------
 
+
 class TestGetDecisionExecutor:
     def test_returns_executor(self):
         from core.openclawd import OpenClawd
+
         oc = _make_openclawd()
         ex = oc._get_decision_executor()
         assert isinstance(ex, DecisionExecutor)
 
     def test_cached_on_second_call(self):
         from core.openclawd import OpenClawd
+
         oc = _make_openclawd()
         ex1 = oc._get_decision_executor()
         ex2 = oc._get_decision_executor()
@@ -64,6 +68,7 @@ class TestGetDecisionExecutor:
 
     def test_import_failure_returns_none(self):
         from core.openclawd import OpenClawd
+
         oc = _make_openclawd()
         with patch("core.execution.decision_executor.DecisionExecutor", side_effect=ImportError("missing")):
             # Force re-initialise
@@ -81,9 +86,11 @@ class TestGetDecisionExecutor:
 # B) _run_execution — dispatches to executor
 # ---------------------------------------------------------------------------
 
+
 class TestRunExecution:
     def test_calls_executor_execute(self):
         from core.openclawd import OpenClawd
+
         oc = _make_openclawd()
         mock_executor = MagicMock(spec=DecisionExecutor)
         mock_executor.execute.return_value = ExecutionResult(action_taken="noop", success=True)
@@ -95,7 +102,9 @@ class TestRunExecution:
 
     def test_logs_non_noop_action(self, caplog):
         import logging
+
         from core.openclawd import OpenClawd
+
         oc = _make_openclawd()
         mock_executor = MagicMock(spec=DecisionExecutor)
         mock_executor.execute.return_value = ExecutionResult(
@@ -110,6 +119,7 @@ class TestRunExecution:
 
     def test_executor_exception_swallowed(self):
         from core.openclawd import OpenClawd
+
         oc = _make_openclawd()
         mock_executor = MagicMock(spec=DecisionExecutor)
         mock_executor.execute.side_effect = RuntimeError("executor exploded")
@@ -121,6 +131,7 @@ class TestRunExecution:
 
     def test_none_state_handled(self):
         from core.openclawd import OpenClawd
+
         oc = _make_openclawd()
         mock_executor = MagicMock(spec=DecisionExecutor)
         mock_executor.execute.return_value = ExecutionResult(action_taken="noop", success=True)
@@ -138,9 +149,11 @@ class TestRunExecution:
 # C) _run_execution with disabled system actions
 # ---------------------------------------------------------------------------
 
+
 class TestRunExecutionDisabled:
     def test_noop_when_disabled(self):
         from core.openclawd import OpenClawd
+
         oc = _make_openclawd()
         # Real executor with disabled policy
         executor = DecisionExecutor()
@@ -159,6 +172,7 @@ class TestRunExecutionDisabled:
 # D) OpenClawd.process() response structure — executor called
 # ---------------------------------------------------------------------------
 
+
 class TestProcessIntegration:
     """Verify that _run_execution is invoked as part of process() without
     breaking the response fields."""
@@ -166,12 +180,15 @@ class TestProcessIntegration:
     def _make_process_oc(self):
         """Return an OpenClawd wired for a minimal process() run."""
         from core.openclawd import OpenClawd
+
         oc = _make_openclawd()
         # Stub _run_continuum to return a simple dict
-        oc._run_continuum = MagicMock(return_value={  # type: ignore[method-assign]
-            "phase": "formless",
-            "decision": {"action_level": "observe"},
-        })
+        oc._run_continuum = MagicMock(
+            return_value={  # type: ignore[method-assign]
+                "phase": "formless",
+                "decision": {"action_level": "observe"},
+            }
+        )
         # Stub _run_execution to be tracked
         oc._run_execution = MagicMock()  # type: ignore[method-assign]
         return oc
@@ -202,9 +219,11 @@ class TestProcessIntegration:
 # E) Backward compatibility — execution errors never surface
 # ---------------------------------------------------------------------------
 
+
 class TestBackwardCompatibility:
     def test_broken_executor_does_not_raise(self):
         from core.openclawd import OpenClawd
+
         oc = _make_openclawd()
         broken_executor = MagicMock(spec=DecisionExecutor)
         broken_executor.execute.side_effect = Exception("total failure")
@@ -215,6 +234,7 @@ class TestBackwardCompatibility:
 
     def test_missing_executor_does_not_raise(self):
         from core.openclawd import OpenClawd
+
         oc = _make_openclawd()
         oc._decision_executor = None
         with patch("core.execution.decision_executor.DecisionExecutor", side_effect=Exception("import fail")):
@@ -227,9 +247,11 @@ class TestBackwardCompatibility:
 # F) Enabled actions with allowlisted target
 # ---------------------------------------------------------------------------
 
+
 class TestEnabledExecutionFlow:
     def test_launch_triggered_for_execute_level(self):
         from core.openclawd import OpenClawd
+
         oc = _make_openclawd()
         api = MagicMock()
         api.launch_app.return_value = AppLaunchResult(success=True, pid=99)
@@ -250,6 +272,7 @@ class TestEnabledExecutionFlow:
 
     def test_focus_triggered_for_assist_level(self):
         from core.openclawd import OpenClawd
+
         oc = _make_openclawd()
         api = MagicMock()
         api.focus_window.return_value = True
@@ -272,11 +295,13 @@ class TestEnabledExecutionFlow:
 # G) _run_execution entry_mode forwarding (PR-2)
 # ---------------------------------------------------------------------------
 
+
 class TestRunExecutionEntryMode:
     """Verify that _run_execution correctly forwards entry_mode to the executor."""
 
     def test_entry_mode_local_forwarded_to_executor(self):
         from core.openclawd import OpenClawd
+
         oc = _make_openclawd()
         mock_executor = MagicMock(spec=DecisionExecutor)
         mock_executor.execute.return_value = ExecutionResult(action_taken="noop", success=True)
@@ -292,6 +317,7 @@ class TestRunExecutionEntryMode:
     def test_entry_mode_cross_device_blocks_launch(self):
         """When entry_mode=cross_device, executor should skip execution."""
         from core.openclawd import OpenClawd
+
         oc = _make_openclawd()
         api = MagicMock()
         executor = DecisionExecutor()
@@ -311,6 +337,7 @@ class TestRunExecutionEntryMode:
     def test_entry_mode_none_preserves_existing_behavior(self):
         """When entry_mode is not provided, existing behavior is preserved."""
         from core.openclawd import OpenClawd
+
         oc = _make_openclawd()
         mock_executor = MagicMock(spec=DecisionExecutor)
         mock_executor.execute.return_value = ExecutionResult(action_taken="noop", success=True)
@@ -327,6 +354,7 @@ class TestRunExecutionEntryMode:
     def test_force_local_execution_in_metadata_overrides_cross_device(self):
         """force_local_execution=True in state_continuum metadata overrides cross_device block."""
         from core.openclawd import OpenClawd
+
         oc = _make_openclawd()
         api = MagicMock()
         api.launch_app.return_value = AppLaunchResult(success=True, pid=99)

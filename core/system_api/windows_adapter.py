@@ -23,6 +23,7 @@ Supported operations
 This module must only be imported on Windows.  :func:`core.system_api.get_system_api`
 guards the import so non-Windows hosts never load it.
 """
+
 from __future__ import annotations
 
 import ctypes
@@ -71,9 +72,9 @@ _NIF_TIP = 0x00000004
 # ---------------------------------------------------------------------------
 
 try:
-    _user32 = ctypes.windll.user32       # type: ignore[attr-defined]
-    _kernel32 = ctypes.windll.kernel32   # type: ignore[attr-defined]
-    _shell32 = ctypes.windll.shell32     # type: ignore[attr-defined]
+    _user32 = ctypes.windll.user32  # type: ignore[attr-defined]
+    _kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+    _shell32 = ctypes.windll.shell32  # type: ignore[attr-defined]
     _WIN32_AVAILABLE = True
 except AttributeError:
     _WIN32_AVAILABLE = False
@@ -85,6 +86,7 @@ except AttributeError:
 # ---------------------------------------------------------------------------
 # Helper: NOTIFYICONDATA ctypes structure (minimal fields)
 # ---------------------------------------------------------------------------
+
 
 class _NOTIFYICONDATA(ctypes.Structure):
     _fields_ = [
@@ -151,6 +153,7 @@ def _collect_windows(
 # Hotkey message-pump thread
 # ---------------------------------------------------------------------------
 
+
 class _HotkeyPump(threading.Thread):
     """Background thread that drives the Win32 hotkey message pump.
 
@@ -182,9 +185,7 @@ class _HotkeyPump(threading.Thread):
             return
         msg = ctypes.wintypes.MSG()
         while not self._stop_event.is_set():
-            result = u32.PeekMessageW(
-                ctypes.byref(msg), None, 0, 0, 1  # PM_REMOVE
-            )
+            result = u32.PeekMessageW(ctypes.byref(msg), None, 0, 0, 1)  # PM_REMOVE
             if result:
                 if msg.message == _WM_HOTKEY:
                     hid = int(msg.wParam)
@@ -202,6 +203,7 @@ class _HotkeyPump(threading.Thread):
 # ---------------------------------------------------------------------------
 # Windows adapter
 # ---------------------------------------------------------------------------
+
 
 class WindowsAdapter(SystemAPI):
     """Concrete system API adapter for Windows hosts.
@@ -253,7 +255,8 @@ class WindowsAdapter(SystemAPI):
                 return AppLaunchResult(success=True)
             logger.debug(
                 "ShellExecuteW failed for %r (rc=%d); falling back to subprocess",
-                target, rc,
+                target,
+                rc,
             )
 
         # --- subprocess fallback ---
@@ -262,9 +265,11 @@ class WindowsAdapter(SystemAPI):
             proc = subprocess.Popen(
                 cmd,
                 cwd=working_dir,
-                creationflags=subprocess.DETACHED_PROCESS  # type: ignore[attr-defined]
-                if hasattr(subprocess, "DETACHED_PROCESS")
-                else 0,
+                creationflags=(
+                    subprocess.DETACHED_PROCESS  # type: ignore[attr-defined]
+                    if hasattr(subprocess, "DETACHED_PROCESS")
+                    else 0
+                ),
             )
             return AppLaunchResult(success=True, pid=proc.pid)
         except FileNotFoundError:
@@ -278,9 +283,7 @@ class WindowsAdapter(SystemAPI):
     # Window management
     # ------------------------------------------------------------------
 
-    def enumerate_windows(
-        self, filter_title: Optional[str] = None
-    ) -> List[WindowInfo]:
+    def enumerate_windows(self, filter_title: Optional[str] = None) -> List[WindowInfo]:
         try:
             return _collect_windows(filter_title)
         except Exception as exc:
@@ -337,9 +340,7 @@ class WindowsAdapter(SystemAPI):
             return handle
 
         try:
-            success = bool(
-                _user32.RegisterHotKey(None, hotkey_id, modifiers, vk_code)
-            )
+            success = bool(_user32.RegisterHotKey(None, hotkey_id, modifiers, vk_code))
             if success:
                 handle.active = True
                 self._registered_hotkeys[hotkey_id] = handle
@@ -348,13 +349,13 @@ class WindowsAdapter(SystemAPI):
                     pump.add_callback(hotkey_id, callback)
                 logger.debug(
                     "Registered hotkey id=%d mod=0x%x vk=0x%x",
-                    hotkey_id, modifiers, vk_code,
+                    hotkey_id,
+                    modifiers,
+                    vk_code,
                 )
             else:
                 err = _kernel32.GetLastError()
-                logger.debug(
-                    "RegisterHotKey failed id=%d (error %d)", hotkey_id, err
-                )
+                logger.debug("RegisterHotKey failed id=%d (error %d)", hotkey_id, err)
         except Exception as exc:
             logger.debug("register_hotkey error: %s", exc)
 
@@ -411,8 +412,7 @@ class WindowsAdapter(SystemAPI):
                 logger.debug("System tray icon created: %r", tooltip)
             else:
                 logger.debug(
-                    "Shell_NotifyIconW(NIM_ADD) returned 0 "
-                    "(headless or no message loop) — tray stub inactive"
+                    "Shell_NotifyIconW(NIM_ADD) returned 0 " "(headless or no message loop) — tray stub inactive"
                 )
         except Exception as exc:
             logger.debug("create_tray_icon error: %s", exc)
@@ -538,6 +538,7 @@ class WindowsAdapter(SystemAPI):
         """Return a snapshot of running processes using psutil or WMIC fallback."""
         try:
             import psutil  # type: ignore[import]
+
             result: List[ProcessInfo] = []
             for proc in psutil.process_iter(["pid", "name", "status"]):
                 try:
@@ -578,6 +579,7 @@ class WindowsAdapter(SystemAPI):
         """Terminate process *pid* using psutil or os.kill fallback."""
         try:
             import psutil  # type: ignore[import]
+
             try:
                 proc = psutil.Process(pid)
                 proc.terminate()
@@ -681,6 +683,7 @@ class WindowsAdapter(SystemAPI):
         if not _WIN32_AVAILABLE:
             return NotificationResult(success=False, error="Win32 not available")
         try:
+
             class _NOTIFYICONDATAEX(ctypes.Structure):
                 _fields_ = [
                     ("cbSize", ctypes.c_ulong),

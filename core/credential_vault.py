@@ -55,9 +55,10 @@ from typing import Dict, List, Optional, Tuple
 
 # Optional HTTP client — used only when GALAXY_SECRET_BACKEND=vault
 try:
-    import urllib.request
-    import urllib.error
     import json as _json
+    import urllib.error
+    import urllib.request
+
     _HAS_HTTP = True
 except ImportError:  # pragma: no cover
     _HAS_HTTP = False
@@ -113,6 +114,7 @@ _ENV_MAPPING: Dict[str, str] = {
 # ---------------------------------------------------------------------------
 # Optional Node_03 SecretVault HTTP back-end
 # ---------------------------------------------------------------------------
+
 
 class _SecretVaultBackend:
     """
@@ -207,8 +209,7 @@ class CredentialVault:
             ok = self._backend.set(key_name, value)
             if not ok:
                 logger.warning(
-                    "SecretVault backend: failed to persist '%s'; "
-                    "credential retained in memory only.",
+                    "SecretVault backend: failed to persist '%s'; " "credential retained in memory only.",
                     key_name,
                 )
 
@@ -255,8 +256,11 @@ class CredentialVault:
     def list_credential_keys(self) -> List[str]:
         """列出所有已存储的凭证键名（不返回值）"""
         vault_keys = list(self._credentials.keys())
-        env_keys = [k for k, v in _ENV_MAPPING.items()
-                    if os.environ.get(v, "") and not os.environ.get(v, "").lower().startswith(PLACEHOLDER_PREFIXES)]
+        env_keys = [
+            k
+            for k, v in _ENV_MAPPING.items()
+            if os.environ.get(v, "") and not os.environ.get(v, "").lower().startswith(PLACEHOLDER_PREFIXES)
+        ]
         all_keys = sorted(set(vault_keys + env_keys))
         return all_keys
 
@@ -349,9 +353,7 @@ class CredentialVault:
         # 检查 scope
         scopes = info.get("scopes")
         if scopes is not None and key_name not in scopes:
-            logger.warning(
-                f"get_credential_by_token: device '{info['device_id']}' has no scope for '{key_name}'"
-            )
+            logger.warning(f"get_credential_by_token: device '{info['device_id']}' has no scope for '{key_name}'")
             return None
 
         device_id = info["device_id"]
@@ -372,16 +374,14 @@ class CredentialVault:
     # 审计
     # ================================================================
 
-    def _record_audit(
-        self, action: str, resource: str, actor: str, token: Optional[str]
-    ) -> None:
+    def _record_audit(self, action: str, resource: str, actor: str, token: Optional[str]) -> None:
         """记录审计日志"""
         entry = {
             "timestamp": time.time(),
             "action": action,
             "resource": resource,
             "actor": actor,
-            "token_prefix": token[:min(8, len(token))] + "..." if token else None,
+            "token_prefix": token[: min(8, len(token))] + "..." if token else None,
         }
         self._audit_log.append(entry)
         # 只保留最近 1000 条
@@ -459,6 +459,7 @@ def reset_vault() -> None:
 # ============================================================================
 # Migration helper
 # ============================================================================
+
 
 def migrate_env_to_vault(dry_run: bool = False) -> Dict[str, bool]:
     """

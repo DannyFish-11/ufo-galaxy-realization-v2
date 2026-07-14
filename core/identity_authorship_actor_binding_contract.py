@@ -538,15 +538,11 @@ class IdentityBindingEvidence:
             "authorship_validated": self.authorship_validated,
             "binding_confirmed": self.binding_confirmed,
             "is_delegation_or_proxy": self.is_delegation_or_proxy,
-            "delegation_explicitly_documented": (
-                self.delegation_explicitly_documented
-            ),
+            "delegation_explicitly_documented": (self.delegation_explicitly_documented),
             "assertion_only": self.assertion_only,
             "provenance_missing_or_ambiguous": self.provenance_missing_or_ambiguous,
             "identity_explicitly_uncertain": self.identity_explicitly_uncertain,
-            "multiple_authority_sources_agree": (
-                self.multiple_authority_sources_agree
-            ),
+            "multiple_authority_sources_agree": (self.multiple_authority_sources_agree),
         }
 
     @classmethod
@@ -554,27 +550,15 @@ class IdentityBindingEvidence:
         """Deserialise from a plain dictionary."""
         return cls(
             actor_field_present=bool(data.get("actor_field_present", False)),
-            identity_verified_by_authority=bool(
-                data.get("identity_verified_by_authority", False)
-            ),
+            identity_verified_by_authority=bool(data.get("identity_verified_by_authority", False)),
             authorship_validated=bool(data.get("authorship_validated", False)),
             binding_confirmed=bool(data.get("binding_confirmed", False)),
-            is_delegation_or_proxy=bool(
-                data.get("is_delegation_or_proxy", False)
-            ),
-            delegation_explicitly_documented=bool(
-                data.get("delegation_explicitly_documented", False)
-            ),
+            is_delegation_or_proxy=bool(data.get("is_delegation_or_proxy", False)),
+            delegation_explicitly_documented=bool(data.get("delegation_explicitly_documented", False)),
             assertion_only=bool(data.get("assertion_only", False)),
-            provenance_missing_or_ambiguous=bool(
-                data.get("provenance_missing_or_ambiguous", False)
-            ),
-            identity_explicitly_uncertain=bool(
-                data.get("identity_explicitly_uncertain", False)
-            ),
-            multiple_authority_sources_agree=bool(
-                data.get("multiple_authority_sources_agree", False)
-            ),
+            provenance_missing_or_ambiguous=bool(data.get("provenance_missing_or_ambiguous", False)),
+            identity_explicitly_uncertain=bool(data.get("identity_explicitly_uncertain", False)),
+            multiple_authority_sources_agree=bool(data.get("multiple_authority_sources_agree", False)),
         )
 
 
@@ -628,20 +612,12 @@ class IdentityBindingVerdict:
 
     verdict_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     generated_at: float = field(default_factory=time.time)
-    taxonomy_sentinel: str = field(
-        default=IDENTITY_AUTHORSHIP_BINDING_CONTRACT_AUTHORITY
-    )
-    binding_class: IdentityBindingClass = field(
-        default=IdentityBindingClass.identity_or_provenance_uncertain
-    )
-    signal_strength: IdentityBindingSignalStrength = field(
-        default=IdentityBindingSignalStrength.absent_or_uncertain
-    )
+    taxonomy_sentinel: str = field(default=IDENTITY_AUTHORSHIP_BINDING_CONTRACT_AUTHORITY)
+    binding_class: IdentityBindingClass = field(default=IdentityBindingClass.identity_or_provenance_uncertain)
+    signal_strength: IdentityBindingSignalStrength = field(default=IdentityBindingSignalStrength.absent_or_uncertain)
     reason: str = ""
     downgrade_reasons: List[str] = field(default_factory=list)
-    evidence: IdentityBindingEvidence = field(
-        default_factory=IdentityBindingEvidence
-    )
+    evidence: IdentityBindingEvidence = field(default_factory=IdentityBindingEvidence)
     is_authoritatively_bound: bool = False
     is_authorship_verified: bool = False
     is_asserted_unverified: bool = False
@@ -708,15 +684,9 @@ class IdentityBindingVerdict:
             reason=str(data.get("reason", "")),
             downgrade_reasons=list(data.get("downgrade_reasons", [])),
             evidence=evidence,
-            is_authoritatively_bound=bool(
-                data.get("is_authoritatively_bound", False)
-            ),
-            is_authorship_verified=bool(
-                data.get("is_authorship_verified", False)
-            ),
-            is_asserted_unverified=bool(
-                data.get("is_asserted_unverified", False)
-            ),
+            is_authoritatively_bound=bool(data.get("is_authoritatively_bound", False)),
+            is_authorship_verified=bool(data.get("is_authorship_verified", False)),
+            is_asserted_unverified=bool(data.get("is_asserted_unverified", False)),
             is_delegated_or_proxy=bool(data.get("is_delegated_or_proxy", False)),
             is_uncertain=bool(data.get("is_uncertain", True)),
         )
@@ -741,23 +711,11 @@ def _build_verdict(
         reason=reason,
         downgrade_reasons=downgrade_reasons,
         evidence=evidence,
-        is_authoritatively_bound=(
-            binding_class
-            == IdentityBindingClass.identity_authoritatively_bound
-        ),
-        is_authorship_verified=(
-            binding_class == IdentityBindingClass.authorship_verified
-        ),
-        is_asserted_unverified=(
-            binding_class == IdentityBindingClass.asserted_but_unverified
-        ),
-        is_delegated_or_proxy=(
-            binding_class == IdentityBindingClass.delegated_or_proxy_actor
-        ),
-        is_uncertain=(
-            binding_class
-            == IdentityBindingClass.identity_or_provenance_uncertain
-        ),
+        is_authoritatively_bound=(binding_class == IdentityBindingClass.identity_authoritatively_bound),
+        is_authorship_verified=(binding_class == IdentityBindingClass.authorship_verified),
+        is_asserted_unverified=(binding_class == IdentityBindingClass.asserted_but_unverified),
+        is_delegated_or_proxy=(binding_class == IdentityBindingClass.delegated_or_proxy_actor),
+        is_uncertain=(binding_class == IdentityBindingClass.identity_or_provenance_uncertain),
     )
 
 
@@ -835,8 +793,7 @@ def classify_identity_binding(
         return _build_verdict(
             IdentityBindingClass.identity_or_provenance_uncertain,
             IdentityBindingSignalStrength.absent_or_uncertain,
-            "No positive identity evidence present.  Fail-conservative "
-            "default: identity_or_provenance_uncertain.",
+            "No positive identity evidence present.  Fail-conservative " "default: identity_or_provenance_uncertain.",
             downgrade_reasons,
             evidence,
         )
@@ -863,10 +820,7 @@ def classify_identity_binding(
             "no delegation, no bare assertion, no provenance ambiguity."
         )
         if evidence.multiple_authority_sources_agree:
-            reason += (
-                "  Multiple authority sources agree, providing additional "
-                "confidence."
-            )
+            reason += "  Multiple authority sources agree, providing additional " "confidence."
         return _build_verdict(
             IdentityBindingClass.identity_authoritatively_bound,
             IdentityBindingSignalStrength.authoritative,
@@ -878,14 +832,10 @@ def classify_identity_binding(
     # Track what prevented identity_authoritatively_bound
     if evidence.identity_verified_by_authority or evidence.binding_confirmed:
         if evidence.assertion_only:
-            downgrade_reasons.append(
-                "assertion_only=True: bare assertion prevents "
-                "identity_authoritatively_bound."
-            )
+            downgrade_reasons.append("assertion_only=True: bare assertion prevents " "identity_authoritatively_bound.")
         if evidence.is_delegation_or_proxy:
             downgrade_reasons.append(
-                "is_delegation_or_proxy=True: delegation/proxy prevents "
-                "identity_authoritatively_bound."
+                "is_delegation_or_proxy=True: delegation/proxy prevents " "identity_authoritatively_bound."
             )
         if not evidence.binding_confirmed:
             downgrade_reasons.append(
@@ -925,15 +875,9 @@ def classify_identity_binding(
 
     if evidence.authorship_validated:
         if evidence.assertion_only:
-            downgrade_reasons.append(
-                "assertion_only=True: bare assertion prevents "
-                "authorship_verified."
-            )
+            downgrade_reasons.append("assertion_only=True: bare assertion prevents " "authorship_verified.")
         if evidence.is_delegation_or_proxy:
-            downgrade_reasons.append(
-                "is_delegation_or_proxy=True: delegation/proxy prevents "
-                "authorship_verified."
-            )
+            downgrade_reasons.append("is_delegation_or_proxy=True: delegation/proxy prevents " "authorship_verified.")
 
     # ------------------------------------------------------------------
     # Rule 6: delegated_or_proxy_actor — requires:
@@ -987,10 +931,7 @@ def classify_identity_binding(
                 "unconfirmed."
             )
         if evidence.provenance_missing_or_ambiguous:
-            reason += (
-                "  Provenance is also missing or ambiguous, which further "
-                "limits confidence in the assertion."
-            )
+            reason += "  Provenance is also missing or ambiguous, which further " "limits confidence in the assertion."
         return _build_verdict(
             IdentityBindingClass.asserted_but_unverified,
             IdentityBindingSignalStrength.asserted,
@@ -1004,8 +945,7 @@ def classify_identity_binding(
     # ------------------------------------------------------------------
     if not downgrade_reasons:
         downgrade_reasons.append(
-            "No positive identity evidence or assertion meets the minimum "
-            "threshold for any higher class."
+            "No positive identity evidence or assertion meets the minimum " "threshold for any higher class."
         )
     return _build_verdict(
         IdentityBindingClass.identity_or_provenance_uncertain,

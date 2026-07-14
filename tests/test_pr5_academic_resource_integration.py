@@ -20,7 +20,7 @@ import asyncio
 import os
 import sys
 from typing import Any, Dict, List
-from unittest.mock import AsyncMock, MagicMock, patch, call
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
 
@@ -30,6 +30,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _run(coro):
     """Run a coroutine synchronously in an isolated event loop."""
@@ -64,42 +65,51 @@ def _make_paper(
 #    (acceptance criterion a)
 # ===========================================================================
 
+
 class TestCapabilityBusAcademicRole:
     """The CapabilityBus exposes academic__ capabilities as a first-class role."""
 
     def test_academic_role_exists_in_enum(self):
         from core.capability_bus import CapabilityBusRole
+
         assert hasattr(CapabilityBusRole, "ACADEMIC")
         assert CapabilityBusRole.ACADEMIC.value == "academic"
 
     def test_from_tool_name_academic_search(self):
         from core.capability_bus import CapabilityBusRole
+
         role = CapabilityBusRole.from_tool_name("academic__search")
         assert role == CapabilityBusRole.ACADEMIC
 
     def test_from_tool_name_academic_ingest(self):
         from core.capability_bus import CapabilityBusRole
+
         role = CapabilityBusRole.from_tool_name("academic__ingest")
         assert role == CapabilityBusRole.ACADEMIC
 
     def test_from_tool_name_academic_recall(self):
         from core.capability_bus import CapabilityBusRole
+
         role = CapabilityBusRole.from_tool_name("academic__recall")
         assert role == CapabilityBusRole.ACADEMIC
 
     def test_from_tool_name_other_prefixes_unaffected(self):
         from core.capability_bus import CapabilityBusRole
+
         assert CapabilityBusRole.from_tool_name("github__ingest") == CapabilityBusRole.GITHUB
         assert CapabilityBusRole.from_tool_name("node__97__search") == CapabilityBusRole.NODE
 
     def test_register_academic_capability_helper_exists(self):
         from core.capability_bus import CapabilityBus
+
         assert hasattr(CapabilityBus, "register_academic_capability")
 
     def test_register_academic_capability_registers_entry(self):
         from core.capability_bus import CapabilityBus, CapabilityBusRole, reset_capability_bus
+
         reset_capability_bus()
         from core.capability_bus import get_capability_bus
+
         bus = get_capability_bus()
 
         entry = bus.register_academic_capability(
@@ -113,8 +123,10 @@ class TestCapabilityBusAcademicRole:
 
     def test_registered_academic_entry_is_discoverable(self):
         from core.capability_bus import reset_capability_bus
+
         reset_capability_bus()
-        from core.capability_bus import get_capability_bus, CapabilityBusRole
+        from core.capability_bus import CapabilityBusRole, get_capability_bus
+
         bus = get_capability_bus()
         bus.register_academic_capability("recall", description="Recall academic knowledge")
 
@@ -123,9 +135,11 @@ class TestCapabilityBusAcademicRole:
         assert result.role == CapabilityBusRole.ACADEMIC
 
     def test_list_by_role_academic_returns_all_academic_entries(self):
-        from core.capability_bus import reset_capability_bus, CapabilityBusRole
+        from core.capability_bus import CapabilityBusRole, reset_capability_bus
+
         reset_capability_bus()
         from core.capability_bus import get_capability_bus
+
         bus = get_capability_bus()
         bus.register_academic_capability("search")
         bus.register_academic_capability("ingest")
@@ -140,6 +154,7 @@ class TestCapabilityBusAcademicRole:
     def test_github_role_still_works_after_pr5(self):
         """PR-5 must not break GITHUB role routing."""
         from core.capability_bus import CapabilityBusRole
+
         assert CapabilityBusRole.from_tool_name("github__install") == CapabilityBusRole.GITHUB
 
 
@@ -147,23 +162,28 @@ class TestCapabilityBusAcademicRole:
 # 2. AcademicRetriever — module exists and singleton is accessible
 # ===========================================================================
 
+
 class TestAcademicRetrieverAvailability:
 
     def test_module_exists(self):
         import core.academic_retrieval as mod
+
         assert mod is not None
 
     def test_get_academic_retriever_returns_instance(self):
-        from core.academic_retrieval import get_academic_retriever, AcademicRetriever
+        from core.academic_retrieval import AcademicRetriever, get_academic_retriever
+
         r = get_academic_retriever()
         assert isinstance(r, AcademicRetriever)
 
     def test_get_academic_retriever_is_singleton(self):
         from core.academic_retrieval import get_academic_retriever
+
         assert get_academic_retriever() is get_academic_retriever()
 
     def test_reset_academic_retriever_creates_new_instance(self):
         from core.academic_retrieval import get_academic_retriever, reset_academic_retriever
+
         r1 = get_academic_retriever()
         reset_academic_retriever()
         r2 = get_academic_retriever()
@@ -171,14 +191,17 @@ class TestAcademicRetrieverAvailability:
 
     def test_retriever_has_search_method(self):
         from core.academic_retrieval import get_academic_retriever
+
         assert hasattr(get_academic_retriever(), "search")
 
     def test_retriever_has_ingest_paper_method(self):
         from core.academic_retrieval import get_academic_retriever
+
         assert hasattr(get_academic_retriever(), "ingest_paper")
 
     def test_retriever_has_recall_method(self):
         from core.academic_retrieval import get_academic_retriever
+
         assert hasattr(get_academic_retriever(), "recall")
 
 
@@ -186,6 +209,7 @@ class TestAcademicRetrieverAvailability:
 # 3. ingest_paper — routes through RAGMemory, not a competing store
 #    (acceptance criteria b + d)
 # ===========================================================================
+
 
 class TestIngestPaperKnowledgeCore:
 
@@ -222,6 +246,7 @@ class TestIngestPaperKnowledgeCore:
     def test_ingest_paper_does_not_create_private_store(self):
         """The retriever must have no _private_store / _papers / _knowledge_store attr."""
         from core.academic_retrieval import AcademicRetriever
+
         r = AcademicRetriever()
         # These names would signal a competing/private store
         for bad_attr in ("_papers", "_knowledge_store", "_paper_db", "_private_store"):
@@ -240,7 +265,7 @@ class TestIngestPaperKnowledgeCore:
         assert eid == ""
 
     def test_ingest_paper_passes_correct_source_type(self):
-        from core.academic_retrieval import AcademicRetriever, _ACADEMIC_SOURCE_TYPE
+        from core.academic_retrieval import _ACADEMIC_SOURCE_TYPE, AcademicRetriever
 
         retriever = AcademicRetriever()
         mock_rag = MagicMock()
@@ -317,10 +342,12 @@ class TestIngestPaperKnowledgeCore:
 #    (acceptance criterion c)
 # ===========================================================================
 
+
 class TestSourceAttribution:
 
     def test_source_uri_format_arxiv(self):
         from core.academic_retrieval import _build_source_uri
+
         paper = _make_paper(paper_id="2401.12345", source="arXiv")
         uri = _build_source_uri(paper)
         assert uri.startswith("academic://")
@@ -329,6 +356,7 @@ class TestSourceAttribution:
 
     def test_source_uri_format_semantic_scholar(self):
         from core.academic_retrieval import _build_source_uri
+
         paper = _make_paper(paper_id="SS_abc123", source="Semantic Scholar")
         uri = _build_source_uri(paper)
         assert uri.startswith("academic://")
@@ -336,6 +364,7 @@ class TestSourceAttribution:
 
     def test_source_uri_format_pubmed(self):
         from core.academic_retrieval import _build_source_uri
+
         paper = _make_paper(paper_id="PMID:9876543", source="PubMed")
         uri = _build_source_uri(paper)
         assert uri.startswith("academic://")
@@ -343,24 +372,27 @@ class TestSourceAttribution:
 
     def test_build_paper_content_includes_source(self):
         from core.academic_retrieval import _build_paper_content
+
         paper = _make_paper(source="arXiv", paper_id="2401.99")
         content = _build_paper_content(paper)
         assert "arXiv" in content
 
     def test_build_paper_content_includes_paper_id(self):
         from core.academic_retrieval import _build_paper_content
+
         paper = _make_paper(paper_id="2501.00001")
         content = _build_paper_content(paper)
         assert "2501.00001" in content
 
     def test_build_paper_content_includes_title(self):
         from core.academic_retrieval import _build_paper_content
+
         paper = _make_paper(title="Unique Title For Attribution Test")
         content = _build_paper_content(paper)
         assert "Unique Title For Attribution Test" in content
 
     def test_ingest_paper_source_type_is_academic(self):
-        from core.academic_retrieval import AcademicRetriever, _ACADEMIC_SOURCE_TYPE
+        from core.academic_retrieval import _ACADEMIC_SOURCE_TYPE, AcademicRetriever
 
         retriever = AcademicRetriever()
         mock_rag = MagicMock()
@@ -398,10 +430,12 @@ class TestSourceAttribution:
 # 5. AcademicRetriever.search — end-to-end with Node_97 mock
 # ===========================================================================
 
+
 class TestAcademicRetrieverSearch:
 
     def test_search_empty_query_returns_failure(self):
         from core.academic_retrieval import AcademicRetriever
+
         r = AcademicRetriever()
         result = _run(r.search(""))
         assert result["success"] is False
@@ -432,8 +466,10 @@ class TestAcademicRetrieverSearch:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=None)
 
-        with patch("core.academic_retrieval.get_rag_memory", return_value=mock_rag), \
-             patch("httpx.AsyncClient", return_value=mock_client):
+        with (
+            patch("core.academic_retrieval.get_rag_memory", return_value=mock_rag),
+            patch("httpx.AsyncClient", return_value=mock_client),
+        ):
             result = _run(retriever.search("quantum", ingest=True))
 
         assert result["success"] is True
@@ -462,8 +498,10 @@ class TestAcademicRetrieverSearch:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=None)
 
-        with patch("core.academic_retrieval.get_rag_memory", return_value=mock_rag), \
-             patch("httpx.AsyncClient", return_value=mock_client):
+        with (
+            patch("core.academic_retrieval.get_rag_memory", return_value=mock_rag),
+            patch("httpx.AsyncClient", return_value=mock_client),
+        ):
             result = _run(retriever.search("test", ingest=True))
 
         assert result["ingested_count"] == 2
@@ -488,8 +526,10 @@ class TestAcademicRetrieverSearch:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=None)
 
-        with patch("core.academic_retrieval.get_rag_memory", return_value=mock_rag), \
-             patch("httpx.AsyncClient", return_value=mock_client):
+        with (
+            patch("core.academic_retrieval.get_rag_memory", return_value=mock_rag),
+            patch("httpx.AsyncClient", return_value=mock_client),
+        ):
             result = _run(retriever.search("test", ingest=False))
 
         mock_rag.ingest_knowledge.assert_not_called()
@@ -497,8 +537,9 @@ class TestAcademicRetrieverSearch:
 
     def test_search_falls_back_gracefully_when_node97_unavailable(self):
         """When Node_97 is unreachable, search returns success=True (empty papers)."""
-        from core.academic_retrieval import AcademicRetriever
         import httpx as _httpx
+
+        from core.academic_retrieval import AcademicRetriever
 
         retriever = AcademicRetriever()
         mock_rag = MagicMock()
@@ -510,8 +551,10 @@ class TestAcademicRetrieverSearch:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=None)
 
-        with patch("core.academic_retrieval.get_rag_memory", return_value=mock_rag), \
-             patch("httpx.AsyncClient", return_value=mock_client):
+        with (
+            patch("core.academic_retrieval.get_rag_memory", return_value=mock_rag),
+            patch("httpx.AsyncClient", return_value=mock_client),
+        ):
             result = _run(retriever.search("anything", ingest=False))
 
         assert result["success"] is True  # graceful fallback
@@ -534,18 +577,20 @@ class TestAcademicRetrieverSearch:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=None)
 
-        with patch("core.academic_retrieval.get_rag_memory", return_value=mock_rag), \
-             patch("httpx.AsyncClient", return_value=mock_client):
+        with (
+            patch("core.academic_retrieval.get_rag_memory", return_value=mock_rag),
+            patch("httpx.AsyncClient", return_value=mock_client),
+        ):
             result = _run(retriever.search("deep learning"))
 
-        for key in ("success", "query", "source", "total_results", "papers",
-                    "ingested_count", "entry_ids"):
+        for key in ("success", "query", "source", "total_results", "papers", "ingested_count", "entry_ids"):
             assert key in result, f"Missing key in search result: {key}"
 
 
 # ===========================================================================
 # 6. AcademicRetriever.recall — routes through RAGMemory
 # ===========================================================================
+
 
 class TestAcademicRetrieverRecall:
 
@@ -582,18 +627,13 @@ class TestAcademicRetrieverRecall:
         academic_chunk = self._mock_chunk(source_type="academic")
         non_academic_chunk = self._mock_chunk(source_type="node", source="node/105/xyz")
         mock_rag = MagicMock()
-        mock_rag.query_knowledge = AsyncMock(
-            return_value=[academic_chunk, non_academic_chunk]
-        )
+        mock_rag.query_knowledge = AsyncMock(return_value=[academic_chunk, non_academic_chunk])
 
         with patch("core.academic_retrieval.get_rag_memory", return_value=mock_rag):
             result = retriever.recall("quantum", top_k=10)
 
         assert result["total"] == 1
-        assert all(
-            r["source_type"] == "academic" or r["source"].startswith("academic://")
-            for r in result["results"]
-        )
+        assert all(r["source_type"] == "academic" or r["source"].startswith("academic://") for r in result["results"])
 
     def test_recall_result_has_required_keys(self):
         from core.academic_retrieval import AcademicRetriever
@@ -641,11 +681,13 @@ class TestAcademicRetrieverRecall:
 #    (acceptance criterion a)
 # ===========================================================================
 
+
 class TestOpenClawdAcademicTools:
 
     def _get_academic_tools(self):
         """Import and return the _ACADEMIC_BUILTIN_TOOLS list from openclawd."""
         from core.openclawd import _ACADEMIC_BUILTIN_TOOLS
+
         return _ACADEMIC_BUILTIN_TOOLS
 
     def test_academic_builtin_tools_list_exists(self):
@@ -670,39 +712,32 @@ class TestOpenClawdAcademicTools:
 
     def test_academic_search_tool_has_query_parameter(self):
         tools = self._get_academic_tools()
-        search_tool = next(
-            t for t in tools if t["function"]["name"] == "academic__search"
-        )
+        search_tool = next(t for t in tools if t["function"]["name"] == "academic__search")
         params = search_tool["function"]["parameters"]["properties"]
         assert "query" in params
 
     def test_academic_search_tool_has_source_parameter(self):
         tools = self._get_academic_tools()
-        search_tool = next(
-            t for t in tools if t["function"]["name"] == "academic__search"
-        )
+        search_tool = next(t for t in tools if t["function"]["name"] == "academic__search")
         params = search_tool["function"]["parameters"]["properties"]
         assert "source" in params
 
     def test_academic_ingest_tool_has_paper_parameter(self):
         tools = self._get_academic_tools()
-        ingest_tool = next(
-            t for t in tools if t["function"]["name"] == "academic__ingest"
-        )
+        ingest_tool = next(t for t in tools if t["function"]["name"] == "academic__ingest")
         params = ingest_tool["function"]["parameters"]["properties"]
         assert "paper" in params
 
     def test_academic_recall_tool_has_query_parameter(self):
         tools = self._get_academic_tools()
-        recall_tool = next(
-            t for t in tools if t["function"]["name"] == "academic__recall"
-        )
+        recall_tool = next(t for t in tools if t["function"]["name"] == "academic__recall")
         params = recall_tool["function"]["parameters"]["properties"]
         assert "query" in params
 
     def test_github_builtin_tools_still_present(self):
         """PR-5 must not remove the GitHub built-in tools."""
         from core.openclawd import _GITHUB_BUILTIN_TOOLS
+
         names = [t["function"]["name"] for t in _GITHUB_BUILTIN_TOOLS]
         assert "github__install" in names
         assert "github__ingest" in names
@@ -712,11 +747,13 @@ class TestOpenClawdAcademicTools:
 # 8. OpenClawd _dispatch_academic_tool dispatch method
 # ===========================================================================
 
+
 class TestOpenClawdAcademicDispatch:
 
     def _make_openclawd(self):
         """Create an OpenClawd instance with minimal deps patched away."""
         from core.openclawd import OpenClawd
+
         with patch.object(OpenClawd, "__init__", lambda self, *a, **kw: None):
             oc = OpenClawd.__new__(OpenClawd)
         return oc
@@ -748,9 +785,13 @@ class TestOpenClawdAcademicDispatch:
     def test_dispatch_search_delegates_to_retriever(self):
         oc = self._make_openclawd()
         fake_result = {
-            "success": True, "query": "ml", "source": "all",
-            "total_results": 1, "papers": [_make_paper()],
-            "ingested_count": 1, "entry_ids": ["eid1"],
+            "success": True,
+            "query": "ml",
+            "source": "all",
+            "total_results": 1,
+            "papers": [_make_paper()],
+            "ingested_count": 1,
+            "entry_ids": ["eid1"],
         }
         mock_retriever = MagicMock()
         mock_retriever.search = AsyncMock(return_value=fake_result)
@@ -759,9 +800,7 @@ class TestOpenClawdAcademicDispatch:
             result = _run(oc._dispatch_academic_tool("search", {"query": "ml"}))
 
         assert result["success"] is True
-        mock_retriever.search.assert_called_once_with(
-            query="ml", source="all", max_results=10, ingest=True
-        )
+        mock_retriever.search.assert_called_once_with(query="ml", source="all", max_results=10, ingest=True)
 
     def test_dispatch_ingest_delegates_to_retriever(self):
         oc = self._make_openclawd()
@@ -805,19 +844,21 @@ class TestOpenClawdAcademicDispatch:
 # 9. No parallel academic memory silo (acceptance criterion d)
 # ===========================================================================
 
+
 class TestNoParallelAcademicAuthority:
 
     def test_academic_retriever_has_no_private_knowledge_store(self):
         from core.academic_retrieval import AcademicRetriever
+
         r = AcademicRetriever()
-        for bad in ("_papers", "_knowledge_store", "_paper_db", "_private_store",
-                    "_academic_db", "_memo_store"):
+        for bad in ("_papers", "_knowledge_store", "_paper_db", "_private_store", "_academic_db", "_memo_store"):
             assert not hasattr(r, bad), f"AcademicRetriever must not have: {bad}"
 
     def test_ingest_does_not_write_to_local_file(self, tmp_path):
         """ingest_paper must not write any local file as a parallel store."""
-        from core.academic_retrieval import AcademicRetriever
         import os
+
+        from core.academic_retrieval import AcademicRetriever
 
         retriever = AcademicRetriever()
         mock_rag = MagicMock()
@@ -835,14 +876,17 @@ class TestNoParallelAcademicAuthority:
 
     def test_academic_module_uses_rag_memory_for_persistence(self):
         """The module must import and call get_rag_memory, not bypass it."""
-        import core.academic_retrieval as mod
         import inspect
+
+        import core.academic_retrieval as mod
+
         src = inspect.getsource(mod)
         # Must reference RAGMemory's ingest_knowledge
         assert "ingest_knowledge" in src
 
     def test_academic_source_type_constant_is_academic(self):
         from core.academic_retrieval import _ACADEMIC_SOURCE_TYPE
+
         assert _ACADEMIC_SOURCE_TYPE == "academic"
 
 
@@ -850,19 +894,23 @@ class TestNoParallelAcademicAuthority:
 # 10. Node_97 SearchRequest — ingest_to_knowledge_core flag
 # ===========================================================================
 
+
 class TestNode97IngestFlag:
 
     def test_search_request_has_ingest_flag(self):
         from nodes.Node_97_AcademicSearch.main import SearchRequest
+
         sr = SearchRequest(query="test")
         assert hasattr(sr, "ingest_to_knowledge_core")
 
     def test_search_request_ingest_flag_default_false(self):
         from nodes.Node_97_AcademicSearch.main import SearchRequest
+
         sr = SearchRequest(query="test")
         assert sr.ingest_to_knowledge_core is False
 
     def test_search_request_ingest_flag_can_be_set_true(self):
         from nodes.Node_97_AcademicSearch.main import SearchRequest
+
         sr = SearchRequest(query="test", ingest_to_knowledge_core=True)
         assert sr.ingest_to_knowledge_core is True

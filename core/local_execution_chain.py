@@ -411,11 +411,7 @@ class LocalExecutionRecord:
             except ValueError:
                 pass
         result_data = data.get("result")
-        result = (
-            LocalExecutionResult.from_dict(result_data)
-            if isinstance(result_data, dict)
-            else None
-        )
+        result = LocalExecutionResult.from_dict(result_data) if isinstance(result_data, dict) else None
         return cls(
             task_id=data.get("task_id", ""),
             session_id=data.get("session_id"),
@@ -539,10 +535,7 @@ class LocalExecutionChainSingleton:
             canonical_executions=self._canonical,
             legacy_executions=self._legacy,
             recent_records=list(recent),
-            chain_authority_map={
-                step.value: authority
-                for step, authority in LOCAL_CHAIN_STEP_AUTHORITIES.items()
-            },
+            chain_authority_map={step.value: authority for step, authority in LOCAL_CHAIN_STEP_AUTHORITIES.items()},
             canonical_chain_order=[s.value for s in LOCAL_CHAIN_ORDER],
         )
 
@@ -616,11 +609,7 @@ def build_local_execution_result(
     if isinstance(payload_raw, dict):
         payload = payload_raw
     else:
-        payload = {
-            k: v
-            for k, v in raw_result.items()
-            if k not in ("image_base64", "screenshot_base64", "raw_bytes")
-        }
+        payload = {k: v for k, v in raw_result.items() if k not in ("image_base64", "screenshot_base64", "raw_bytes")}
 
     return LocalExecutionResult(
         task_id=task_id or raw_result.get("task_id", ""),
@@ -634,7 +623,8 @@ def build_local_execution_result(
         extra={
             k: v
             for k, v in raw_result.items()
-            if k not in (
+            if k
+            not in (
                 "status",
                 "success",
                 "result",
@@ -692,10 +682,7 @@ def build_local_execution_record(
         else:
             steps_completed = list(LOCAL_CHAIN_ORDER)
 
-    is_canonical = (
-        legacy_path_used is None
-        and steps_completed == list(LOCAL_CHAIN_ORDER)
-    )
+    is_canonical = legacy_path_used is None and steps_completed == list(LOCAL_CHAIN_ORDER)
 
     return LocalExecutionRecord(
         task_id=task_id,
@@ -745,8 +732,7 @@ def record_local_execution(
     get_local_execution_chain().append(record)
 
     logger.debug(
-        "local_execution_record: task_id=%s executor=%s is_canonical=%s "
-        "legacy_path=%s",
+        "local_execution_record: task_id=%s executor=%s is_canonical=%s " "legacy_path=%s",
         task_id,
         executor_module,
         record.is_canonical,
@@ -774,9 +760,8 @@ def record_local_execution(
             session_id=session_id,
         )
         if ingress_outcome is not None:
-            record.acceptance_state = (
-                ingress_outcome.get("evidence_acceptance_verdict")
-                or ("accepted" if ingress_outcome.get("is_fully_closed") else "incomplete")
+            record.acceptance_state = ingress_outcome.get("evidence_acceptance_verdict") or (
+                "accepted" if ingress_outcome.get("is_fully_closed") else "incomplete"
             )
             record.acceptance_closed = bool(ingress_outcome.get("is_fully_closed"))
         else:
@@ -785,6 +770,7 @@ def record_local_execution(
         # 写入双链路闭环注册表（execution_chain_closure）。
         try:
             from core.execution_chain_closure import record_local_chain_closure as _record_lcc
+
             _record_lcc(
                 task_id=task_id,
                 ingress_outcome=ingress_outcome,
@@ -793,8 +779,7 @@ def record_local_execution(
             )
         except Exception as _lcc_err:
             logger.debug(
-                "record_local_execution: execution_chain_closure 写入失败（非致命）"
-                "task_id=%s err=%s",
+                "record_local_execution: execution_chain_closure 写入失败（非致命）" "task_id=%s err=%s",
                 task_id,
                 _lcc_err,
             )
@@ -841,6 +826,7 @@ def submit_local_result_to_ingress(
             ingest_result,
             normalize_status,
         )
+
         # Normalise local executor status to V2 canonical status.
         normalized_status = normalize_status(result.status) if not result.success else "completed"
         if not result.success and result.status in ("failed", "error"):
@@ -863,8 +849,7 @@ def submit_local_result_to_ingress(
         )
         outcome = ingest_result(event)
         logger.debug(
-            "submit_local_result_to_ingress: task_id=%s is_fully_closed=%s "
-            "acceptance_verdict=%s truth_chain=%s",
+            "submit_local_result_to_ingress: task_id=%s is_fully_closed=%s " "acceptance_verdict=%s truth_chain=%s",
             effective_task_id,
             outcome.is_fully_closed,
             outcome.evidence_acceptance_verdict or "n/a",
@@ -883,8 +868,7 @@ def submit_local_result_to_ingress(
         }
     except Exception as _ingress_err:
         logger.warning(
-            "submit_local_result_to_ingress: UnifiedResultIngress 不可用（非致命）"
-            "task_id=%s error=%s",
+            "submit_local_result_to_ingress: UnifiedResultIngress 不可用（非致命）" "task_id=%s error=%s",
             effective_task_id,
             _ingress_err,
         )

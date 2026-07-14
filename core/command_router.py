@@ -811,23 +811,21 @@ class CommandRouter:
         """
         try:
             from core.interaction.pending_decision_registry import (
-                request_human_decision,
-                OnTimeout,
                 DecisionStatus,
+                OnTimeout,
+                request_human_decision,
             )
+
             outcome = await request_human_decision(
                 title="高风险操作确认",
                 summary=f"是否执行高风险命令 '{command}'?（目标设备 {device_id}）",
                 options=[{"id": "approve", "label": "批准"}, {"id": "deny", "label": "拒绝"}],
-                urgency="high",                 # high ⇒ timeout derives CANCEL (no auto-proceed)
+                urgency="high",  # high ⇒ timeout derives CANCEL (no auto-proceed)
                 on_timeout=OnTimeout.CANCEL,
                 timeout_s=float(os.getenv("GALAXY_HITL_CONFIRM_TIMEOUT_S", "60")),
                 session_id=trace_id,
             )
-            proceed = (
-                outcome.status == DecisionStatus.RESOLVED
-                and outcome.selected_option == "approve"
-            )
+            proceed = outcome.status == DecisionStatus.RESOLVED and outcome.selected_option == "approve"
             return {"proceed": bool(proceed), "status": outcome.status.value}
         except Exception as exc:  # noqa: BLE001 — fail-closed: do not execute on gate error
             logger.warning("HITL confirm gate failed (fail-closed, not executing): %s", exc)
@@ -1234,14 +1232,12 @@ class CommandRouter:
         # One builder per route_envelope call.  Signals are recorded at each
         # decision point below and assembled into a RouteExplanation at the end.
         try:
-            from core.routing_explanation.live_decision import (
-                LiveRoutingDecisionBuilder as _LRDBuilder,
-                live_explanation_to_record_str as _expl_to_str,
-                ROUTE_PATH_CROSS_DEVICE as _P_CROSS,
-                ROUTE_PATH_WORKER as _P_WORKER,
-                ROUTE_PATH_LOCAL as _P_LOCAL,
-                ROUTE_PATH_PARALLEL_FANOUT as _P_FANOUT,
-            )
+            from core.routing_explanation.live_decision import ROUTE_PATH_CROSS_DEVICE as _P_CROSS
+            from core.routing_explanation.live_decision import ROUTE_PATH_LOCAL as _P_LOCAL
+            from core.routing_explanation.live_decision import ROUTE_PATH_PARALLEL_FANOUT as _P_FANOUT
+            from core.routing_explanation.live_decision import ROUTE_PATH_WORKER as _P_WORKER
+            from core.routing_explanation.live_decision import LiveRoutingDecisionBuilder as _LRDBuilder
+            from core.routing_explanation.live_decision import live_explanation_to_record_str as _expl_to_str
 
             _live_expl_builder: Optional[object] = _LRDBuilder(
                 task_id=envelope.task_id,
@@ -1256,9 +1252,9 @@ class CommandRouter:
         # observability and tests can verify the canonical chain is traversed.
         try:
             from core.mainline_convergence import (
+                MainlineChainStage,
                 build_mainline_trace,
                 get_mainline_convergence_registry,
-                MainlineChainStage,
             )
 
             _trace = build_mainline_trace(
@@ -1384,10 +1380,8 @@ class CommandRouter:
                     _cap_graph_selected: Optional[str] = None
                     _cap_graph_fallbacks: List[str] = []
                     try:
-                        from core.capability_graph_selection import (
-                            select_best_provider as _cgraph_best,
-                            select_fallback_providers as _cgraph_fallback,
-                        )
+                        from core.capability_graph_selection import select_best_provider as _cgraph_best
+                        from core.capability_graph_selection import select_fallback_providers as _cgraph_fallback
 
                         _cgraph_record = _cgraph_best(required_capabilities=_caps_for_pool)
                         if _cgraph_record is not None:
@@ -1403,9 +1397,7 @@ class CommandRouter:
                             exclude_ids=[_cap_graph_selected] if _cap_graph_selected else [],
                         )
                         _cap_graph_fallbacks = [
-                            getattr(r, "node_id", None)
-                            for r in _cgraph_fb_records
-                            if getattr(r, "node_id", None)
+                            getattr(r, "node_id", None) for r in _cgraph_fb_records if getattr(r, "node_id", None)
                         ]
                     except Exception as _cgraph_exc:
                         logger.debug(
@@ -1457,9 +1449,7 @@ class CommandRouter:
                         # 与其余所有拒绝点一致:回显调用方的 command_id(此前此处
                         # 误用 task_id,导致该路径的命令关联断链——route_command
                         # 兼容层的 command_id 丢失)。
-                        "command_id": (envelope.metadata or {}).get(
-                            "command_id", envelope.task_id
-                        ),
+                        "command_id": (envelope.metadata or {}).get("command_id", envelope.task_id),
                         "device_id": "",
                         "command": envelope.tool_name,
                         "via": "command_router",
@@ -1499,9 +1489,7 @@ class CommandRouter:
         _meta_posture_hint = (envelope.metadata or {}).get("source_runtime_posture")
         if _meta_posture_hint is not None:
             try:
-                from core.source_execution_eligibility import (
-                    check_source_execution_eligibility as _check_src_posture,
-                )
+                from core.source_execution_eligibility import check_source_execution_eligibility as _check_src_posture
 
                 _posture_elig = _check_src_posture(_meta_posture_hint)
                 _constraint_chain_trace["posture_filter_applied"] = True
@@ -1519,13 +1507,9 @@ class CommandRouter:
                 # compat preserved; hard enforcement can be added incrementally).
                 if not _posture_elig.eligible:
                     _meta_pf = envelope.metadata or {}
-                    _is_cross_device_hint = (
-                        _meta_pf.get("cross_device") == "true"
-                        or (
-                            envelope.executor_target_type is not None
-                            and str(envelope.executor_target_type)
-                            in ("android_device", "node_service")
-                        )
+                    _is_cross_device_hint = _meta_pf.get("cross_device") == "true" or (
+                        envelope.executor_target_type is not None
+                        and str(envelope.executor_target_type) in ("android_device", "node_service")
                     )
                     if not _is_cross_device_hint:
                         logger.debug(
@@ -1561,25 +1545,18 @@ class CommandRouter:
         _pre_adm_targets = list(envelope.targets)
         if _pre_adm_targets:
             try:
-                from core.target_device_validator import (
-                    validate_target_device as _vtd_pre,
-                )
+                from core.target_device_validator import validate_target_device as _vtd_pre
 
                 _req_caps_adm: Optional[List[str]] = (
-                    list(envelope.required_capabilities)
-                    if envelope.required_capabilities
-                    else None
+                    list(envelope.required_capabilities) if envelope.required_capabilities else None
                 )
                 _adm_validated: List[str] = []
                 _adm_excluded: List[str] = []
                 for _adm_t in _pre_adm_targets:
                     try:
-                        _adm_vr = _vtd_pre(
-                            _adm_t, required_capabilities=_req_caps_adm
-                        )
+                        _adm_vr = _vtd_pre(_adm_t, required_capabilities=_req_caps_adm)
                         _readiness_was_consulted = not any(
-                            r.startswith("readiness-unavailable")
-                            for r in (_adm_vr.reasons or [])
+                            r.startswith("readiness-unavailable") for r in (_adm_vr.reasons or [])
                         )
                         if _readiness_was_consulted and not _adm_vr.ready:
                             _adm_excluded.append(_adm_t)
@@ -1600,12 +1577,8 @@ class CommandRouter:
                         _adm_validated.append(_adm_t)
 
                 _constraint_chain_trace["admissibility_applied"] = True
-                _constraint_chain_trace["admissibility_validated"] = list(
-                    _adm_validated
-                )
-                _constraint_chain_trace["admissibility_excluded"] = list(
-                    _adm_excluded
-                )
+                _constraint_chain_trace["admissibility_validated"] = list(_adm_validated)
+                _constraint_chain_trace["admissibility_excluded"] = list(_adm_excluded)
 
                 if _adm_validated and len(_adm_validated) < len(_pre_adm_targets):
                     logger.warning(
@@ -1616,9 +1589,7 @@ class CommandRouter:
                         _adm_excluded,
                         envelope.task_id,
                     )
-                    envelope = envelope.model_copy(
-                        update={"targets": _adm_validated}
-                    )
+                    envelope = envelope.model_copy(update={"targets": _adm_validated})
                 elif not _adm_validated and _adm_excluded:
                     # All targets failed — warn but proceed (graceful degradation).
                     logger.warning(
@@ -1711,15 +1682,14 @@ class CommandRouter:
 
             try:
                 from galaxy_gateway.webrtc_proxy import (
-                    is_webrtc_ready_for_device,
                     initiate_webrtc_for_task,
+                    is_webrtc_ready_for_device,
                 )
 
                 # Fast path: already ready
                 if is_webrtc_ready_for_device(_wrtc_device):
                     logger.debug(
-                        "route_envelope [PR-WEBRTC-TASK-LIFECYCLE]: "
-                        "WebRTC already ready for device=%s task_id=%s",
+                        "route_envelope [PR-WEBRTC-TASK-LIFECYCLE]: " "WebRTC already ready for device=%s task_id=%s",
                         _wrtc_device,
                         envelope.task_id,
                     )
@@ -1755,9 +1725,7 @@ class CommandRouter:
                             "request_id": envelope.task_id,
                             "task_id": envelope.task_id,
                             "trace_id": envelope.trace_id,
-                            "command_id": (envelope.metadata or {}).get(
-                                "command_id", envelope.task_id
-                            ),
+                            "command_id": (envelope.metadata or {}).get("command_id", envelope.task_id),
                             "device_id": _wrtc_device,
                             "command": envelope.tool_name,
                             "via": "command_router",
@@ -1794,8 +1762,7 @@ class CommandRouter:
                 logger.debug("Fallback triggered: %s", _wrtc_exc)
                 _wrtc_elapsed = (time.monotonic() - _wrtc_t0) * 1000
                 logger.warning(
-                    "route_envelope [PR-WEBRTC-TASK-LIFECYCLE]: "
-                    "WebRTC integration error task_id=%s error=%s",
+                    "route_envelope [PR-WEBRTC-TASK-LIFECYCLE]: " "WebRTC integration error task_id=%s error=%s",
                     envelope.task_id,
                     _wrtc_exc,
                 )
@@ -1852,9 +1819,7 @@ class CommandRouter:
         # core.capability_aware_routing_default for the policy definition.
         if _cap_query_caps is None and list(envelope.targets):
             try:
-                from core.capability_aware_routing_default import (
-                    infer_dispatch_capabilities as _infer_caps,
-                )
+                from core.capability_aware_routing_default import infer_dispatch_capabilities as _infer_caps
 
                 _inferred_caps = _infer_caps(envelope.tool_name or "")
                 if _inferred_caps:
@@ -1869,8 +1834,7 @@ class CommandRouter:
                     )
             except Exception as _infer_err:
                 logger.debug(
-                    "route_envelope [CAP-DEFAULT]: capability inference skipped "
-                    "for tool_name=%r: %s",
+                    "route_envelope [CAP-DEFAULT]: capability inference skipped " "for tool_name=%r: %s",
                     envelope.tool_name,
                     _infer_err,
                 )
@@ -1881,15 +1845,12 @@ class CommandRouter:
         _cap_confirmed_targets: Optional[List[str]] = None
         _cap_unconfirmed_targets: Optional[List[str]] = None
         try:
-            from core.capability_network_runtime_policy import (
-                query_routable_executors as _query_exec,
-                query_network_path as _query_path,
-            )
+            from core.capability_network_runtime_policy import query_network_path as _query_path
+            from core.capability_network_runtime_policy import query_routable_executors as _query_exec
 
             _routable = _query_exec(_cap_query_caps)
             logger.debug(
-                "route_envelope: capability/network query returned %d routable executor(s) "
-                "(required_caps=%s)",
+                "route_envelope: capability/network query returned %d routable executor(s) " "(required_caps=%s)",
                 len(_routable),
                 _cap_query_caps,
             )
@@ -1914,13 +1875,10 @@ class CommandRouter:
                             _cap_query_caps,
                             _confirmed_targets,
                         )
-                        envelope = envelope.model_copy(
-                            update={"targets": _confirmed_targets}
-                        )
+                        envelope = envelope.model_copy(update={"targets": _confirmed_targets})
                     else:
                         logger.debug(
-                            "route_envelope: all %d target(s) confirmed in capability "
-                            "graph for caps=%s",
+                            "route_envelope: all %d target(s) confirmed in capability " "graph for caps=%s",
                             len(_confirmed_targets),
                             _cap_query_caps,
                         )
@@ -1973,9 +1931,7 @@ class CommandRouter:
                             "request_id": envelope.task_id,
                             "task_id": envelope.task_id,
                             "trace_id": envelope.trace_id,
-                            "command_id": (envelope.metadata or {}).get(
-                                "command_id", envelope.task_id
-                            ),
+                            "command_id": (envelope.metadata or {}).get("command_id", envelope.task_id),
                             "device_id": _current_targets[0] if _current_targets else "",
                             "command": envelope.tool_name,
                             "via": "command_router",
@@ -2014,9 +1970,7 @@ class CommandRouter:
                         "request_id": envelope.task_id,
                         "task_id": envelope.task_id,
                         "trace_id": envelope.trace_id,
-                        "command_id": (envelope.metadata or {}).get(
-                            "command_id", envelope.task_id
-                        ),
+                        "command_id": (envelope.metadata or {}).get("command_id", envelope.task_id),
                         "device_id": _current_targets_for_empty[0] if _current_targets_for_empty else "",
                         "command": envelope.tool_name,
                         "via": "command_router",
@@ -2081,17 +2035,19 @@ class CommandRouter:
         _v3_blocked_targets: List[str] = []
         _v3_block_reason: str = ""
         _v3_slot_result = None
-        _v3_authority_mode = str(
-            (envelope.metadata or {}).get("canonical_dispatch_authority_mode")
-            or (envelope.metadata or {}).get("canonical_governance_mode")
-            or os.environ.get("GALAXY_CANONICAL_DISPATCH_AUTHORITY_MODE", "compat")
-        ).strip().lower()
+        _v3_authority_mode = (
+            str(
+                (envelope.metadata or {}).get("canonical_dispatch_authority_mode")
+                or (envelope.metadata or {}).get("canonical_governance_mode")
+                or os.environ.get("GALAXY_CANONICAL_DISPATCH_AUTHORITY_MODE", "compat")
+            )
+            .strip()
+            .lower()
+        )
         _v3_pre_targets = list(envelope.targets)
         if _v3_pre_targets:
             try:
-                from core.canonical_dispatch_slot_authority import (
-                    get_canonical_dispatch_slots as _get_slots,
-                )
+                from core.canonical_dispatch_slot_authority import get_canonical_dispatch_slots as _get_slots
 
                 _v3_meta = envelope.metadata or {}
                 # Resolve execution mode in priority order: explicit metadata field,
@@ -2107,19 +2063,11 @@ class CommandRouter:
                 else:
                     _v3_exec_mode = "cross_device"
                 _v3_required_caps: Optional[List[str]] = (
-                    list(envelope.required_capabilities)
-                    if envelope.required_capabilities
-                    else None
+                    list(envelope.required_capabilities) if envelope.required_capabilities else None
                 )
                 _v3_session_id = str(_v3_meta.get("session_id", "") or "")
-                _v3_attachment_sid = str(
-                    _v3_meta.get("runtime_attachment_session_id", "") or ""
-                )
-                _v3_continuity_ctx: Dict[str, Any] = {
-                    k: v
-                    for k, v in _v3_meta.items()
-                    if k.startswith("continuity_")
-                }
+                _v3_attachment_sid = str(_v3_meta.get("runtime_attachment_session_id", "") or "")
+                _v3_continuity_ctx: Dict[str, Any] = {k: v for k, v in _v3_meta.items() if k.startswith("continuity_")}
 
                 _v3_slot_result = _get_slots(
                     device_ids=_v3_pre_targets,
@@ -2151,15 +2099,12 @@ class CommandRouter:
                         )
                     else:
                         logger.debug(
-                            "route_envelope [V3-slot-gate]: all %d target(s) SLOT_APPROVED "
-                            "task_id=%s",
+                            "route_envelope [V3-slot-gate]: all %d target(s) SLOT_APPROVED " "task_id=%s",
                             len(_v3_approved_targets),
                             envelope.task_id,
                         )
                     if set(_v3_approved_targets) != set(_v3_pre_targets):
-                        envelope = envelope.model_copy(
-                            update={"targets": _v3_approved_targets}
-                        )
+                        envelope = envelope.model_copy(update={"targets": _v3_approved_targets})
                 else:
                     # All targets blocked — hard reject.
                     _blocked_detail = "; ".join(
@@ -2178,9 +2123,7 @@ class CommandRouter:
                         "request_id": envelope.task_id,
                         "task_id": envelope.task_id,
                         "trace_id": envelope.trace_id,
-                        "command_id": (envelope.metadata or {}).get(
-                            "command_id", envelope.task_id
-                        ),
+                        "command_id": (envelope.metadata or {}).get("command_id", envelope.task_id),
                         "device_id": _v3_pre_targets[0] if _v3_pre_targets else "",
                         "command": envelope.tool_name,
                         "via": "command_router",
@@ -2215,6 +2158,7 @@ class CommandRouter:
                     # Stamp lifecycle state (always "failed" since success=False)
                     try:
                         from core.schemas.execution_lifecycle import ExecutionLifecycleState as _ELS_v3
+
                         _v3_blocked_result["lifecycle_state"] = _ELS_v3.FAILED.value
                         if envelope.remote_execution_mode is not None:
                             _v3_blocked_result["lifecycle_via_waiting_remote"] = True
@@ -2223,6 +2167,7 @@ class CommandRouter:
                     # Stamp failure domain from V3_SLOT_BLOCKED error code
                     try:
                         from core.failure_domains import classify_from_error_code as _cfe_v3
+
                         _fd_v3 = _cfe_v3(GatewayErrorCode.V3_SLOT_BLOCKED.value)
                         _v3_blocked_result["failure_domain"] = _fd_v3.domain.value
                         _v3_blocked_result["failure_is_retryable"] = _fd_v3.is_retryable
@@ -2306,10 +2251,10 @@ class CommandRouter:
 
         # ── PR-506: Register envelope in TaskGraphRuntime ────────────────────
         try:
+            from core.task_graph_runtime import GraphNodeState as _GNS
             from core.task_graph_runtime import (
-                get_task_graph_runtime,
                 WorkflowContributorKind,
-                GraphNodeState as _GNS,
+                get_task_graph_runtime,
             )
 
             _tgr = get_task_graph_runtime()
@@ -2368,10 +2313,10 @@ class CommandRouter:
                 logger.warning("Exception suppressed: %s", exc)
         try:
             from core.replay_foundation import (
-                record_route_decision as _record_route,
-                emit_runtime_event as _emit_ev,
                 ReplayEventKind,
             )
+            from core.replay_foundation import emit_runtime_event as _emit_ev
+            from core.replay_foundation import record_route_decision as _record_route
 
             _record_route(
                 task_id=envelope.task_id,
@@ -2496,10 +2441,7 @@ class CommandRouter:
                         _live_expl_builder.record_route_path_selection(
                             _P_WORKER,
                             selected_target=envelope.target,
-                            reason=(
-                                "explicit executor_target_type='go_worker' "
-                                "→ MasterBrain worker domain"
-                            ),
+                            reason=("explicit executor_target_type='go_worker' " "→ MasterBrain worker domain"),
                         )
                     except Exception as exc:
                         logger.warning("Exception suppressed: %s", exc)
@@ -2517,8 +2459,7 @@ class CommandRouter:
                             _P_LOCAL,
                             selected_target=envelope.target,
                             reason=(
-                                f"explicit executor_target_type='{_explicit_target_type}' "
-                                "→ local runtime execution"
+                                f"explicit executor_target_type='{_explicit_target_type}' " "→ local runtime execution"
                             ),
                         )
                     except Exception as exc:
@@ -2547,9 +2488,7 @@ class CommandRouter:
         elif meta.get("cross_device") == "true":
             # PR-5A: invoke policy engine as an observability side-effect only.
             try:
-                from core.runtime.execution_target_policy_engine import (
-                    apply_target_selection_policy as _apply_tsp_cd,
-                )
+                from core.runtime.execution_target_policy_engine import apply_target_selection_policy as _apply_tsp_cd
 
                 _tsp_cd = _apply_tsp_cd(
                     executor_target_type="android_device",
@@ -2613,9 +2552,7 @@ class CommandRouter:
                         _r = _gdr(_cid)
                         if _r is not None:
                             _ps_readiness_map[_cid] = str(
-                                getattr(_r, "readiness_status", None)
-                                or getattr(_r, "status", None)
-                                or "unknown"
+                                getattr(_r, "readiness_status", None) or getattr(_r, "status", None) or "unknown"
                             )
                     except Exception as exc:
                         logger.debug("Suppressed: %s", exc)
@@ -2635,11 +2572,7 @@ class CommandRouter:
                         getattr(_ps_decision, "decision_reason", None),
                         envelope.task_id,
                     )
-                    _ps_dict = (
-                        _ps_decision.to_dict()
-                        if hasattr(_ps_decision, "to_dict")
-                        else {}
-                    )
+                    _ps_dict = _ps_decision.to_dict() if hasattr(_ps_decision, "to_dict") else {}
                     envelope = envelope.model_copy(
                         update={
                             "metadata": {
@@ -2717,21 +2650,16 @@ class CommandRouter:
 
         # ── PR-506: Close graph / replay / audit from result ─────────────────
         try:
-            from core.task_graph_runtime import (
-                get_task_graph_runtime as _get_tgr,
-                WorkflowContributorKind as _WCK,
-            )
-            from core.replay_foundation import (
-                TaskExecutionRecord as _TER,
-                get_replay_foundation as _get_rf,
-                emit_runtime_event as _emit_ev2,
-                ReplayEventKind as _REK,
-            )
-            from core.audit_event_semantics import (
-                audit_task_completed as _audit_completed,
-                audit_task_failed as _audit_failed,
-            )
             import time as _time_mod
+
+            from core.audit_event_semantics import audit_task_completed as _audit_completed
+            from core.audit_event_semantics import audit_task_failed as _audit_failed
+            from core.replay_foundation import ReplayEventKind as _REK
+            from core.replay_foundation import TaskExecutionRecord as _TER
+            from core.replay_foundation import emit_runtime_event as _emit_ev2
+            from core.replay_foundation import get_replay_foundation as _get_rf
+            from core.task_graph_runtime import WorkflowContributorKind as _WCK
+            from core.task_graph_runtime import get_task_graph_runtime as _get_tgr
 
             _is_success = bool(result.get("success"))
             _err_code = result.get("error_code", "") or ""
@@ -2923,8 +2851,7 @@ class CommandRouter:
                 caller="core.command_router.CommandRouter.route_command",
                 trace_id=trace_id,
                 override_recommendation=(
-                    "Construct TaskEnvelope and call CommandRouter.route_envelope() "
-                    "directly for canonical ingress."
+                    "Construct TaskEnvelope and call CommandRouter.route_envelope() " "directly for canonical ingress."
                 ),
             )
         except Exception as exc:
@@ -2985,11 +2912,7 @@ class CommandRouter:
             _meta = envelope.metadata or {}
             context["task_id"] = envelope.task_id
             context["trace_id"] = envelope.trace_id
-            context["route_mode"] = str(
-                _meta.get("route_mode")
-                or context.get("route_mode")
-                or "cross_device"
-            )
+            context["route_mode"] = str(_meta.get("route_mode") or context.get("route_mode") or "cross_device")
             if _meta.get("source_device_id"):
                 context["source_device_id"] = _meta.get("source_device_id")
             if _meta.get("source_runtime_posture"):
@@ -3011,16 +2934,13 @@ class CommandRouter:
                     from core.target_device_validator import validate_target_device as _vtd
 
                     _req_caps: Optional[List[str]] = (
-                        list(envelope.required_capabilities)
-                        if envelope.required_capabilities
-                        else None
+                        list(envelope.required_capabilities) if envelope.required_capabilities else None
                     )
                     _validated_ready_targets: List[str] = []
                     for _tid in _envelope_targets:
                         _tvr = _vtd(_tid, required_capabilities=_req_caps)
                         _readiness_consulted = not any(
-                            r.startswith("readiness-unavailable")
-                            for r in (_tvr.reasons or [])
+                            r.startswith("readiness-unavailable") for r in (_tvr.reasons or [])
                         )
                         if _readiness_consulted:
                             if _tvr.ready:
@@ -3066,8 +2986,7 @@ class CommandRouter:
                         )
                 except Exception as _adm_exc:
                     logger.debug(
-                        "_route_cross_device_envelope: admissibility validation "
-                        "skipped (graceful degradation): %s",
+                        "_route_cross_device_envelope: admissibility validation " "skipped (graceful degradation): %s",
                         _adm_exc,
                     )
 
@@ -3189,11 +3108,7 @@ class CommandRouter:
             _latency_ms = (_time_m.monotonic() - _t0) * 1000
             selected_worker_raw = raw.get("worker_id")
             selected_worker_str = selected_worker_raw.strip() if isinstance(selected_worker_raw, str) else ""
-            selected_worker = (
-                selected_worker_str
-                if selected_worker_str
-                else (envelope.target or "")
-            )
+            selected_worker = selected_worker_str if selected_worker_str else (envelope.target or "")
             result = {
                 "request_id": request_id,
                 "task_id": envelope.task_id,
@@ -3455,6 +3370,7 @@ class CommandRouter:
         _mesh_advice = None
         try:
             from core.mesh_coordinator import get_mesh_coordinator
+
             mesh = get_mesh_coordinator()
             peer = mesh.get_peer(device_id)
             if peer:
@@ -3500,6 +3416,7 @@ class CommandRouter:
                     # Publish result to NATS for async subscribers
                     try:
                         from core.nats_bus import nats_bus
+
                         if nats_bus.is_connected():
                             await nats_bus._publish(
                                 f"galaxy.tasks.result.{task_id}",
@@ -3615,9 +3532,7 @@ class CommandRouter:
                     trace_id=trace_id,
                     task_id=task_id,
                     device_id=device_id,
-                    message=(
-                        f"HITL pre-approved via payload flag for high-risk command '{command}'"
-                    ),
+                    message=(f"HITL pre-approved via payload flag for high-risk command '{command}'"),
                     payload={"command": command},
                 )
             else:
@@ -3627,9 +3542,7 @@ class CommandRouter:
                     trace_id=trace_id,
                     task_id=task_id,
                     device_id=device_id,
-                    message=(
-                        f"HITL approval required for high-risk command '{command}'"
-                    ),
+                    message=(f"HITL approval required for high-risk command '{command}'"),
                     payload={"command": command},
                 )
                 result = {
@@ -3656,12 +3569,12 @@ class CommandRouter:
         if self._is_high_risk_command(command) and payload.get("_hitl_approved") is True:
             try:
                 from core.control_plane._globals import get_security_interceptor
-                from core.control_plane.security_interceptor import (
-                    RiskLevel,
-                    ApprovalTimeoutError,
-                    ApprovalDeniedError,
-                )
                 from core.control_plane.audit_ledger import EventType as _EvHITL
+                from core.control_plane.security_interceptor import (
+                    ApprovalDeniedError,
+                    ApprovalTimeoutError,
+                    RiskLevel,
+                )
 
                 interceptor = get_security_interceptor()
                 try:
@@ -3795,14 +3708,10 @@ class CommandRouter:
                         logger.warning("Exception suppressed: %s", exc)
                     # ── PR-506: Record fallback event (circuit-breaker bypass) ──
                     try:
-                        from core.replay_foundation import (
-                            record_fallback as _rec_fallback,
-                            emit_runtime_event as _emit_ev_cb,
-                            ReplayEventKind as _REK_cb,
-                        )
-                        from core.audit_event_semantics import (
-                            audit_fallback_triggered as _audit_fb_cb,
-                        )
+                        from core.audit_event_semantics import audit_fallback_triggered as _audit_fb_cb
+                        from core.replay_foundation import ReplayEventKind as _REK_cb
+                        from core.replay_foundation import emit_runtime_event as _emit_ev_cb
+                        from core.replay_foundation import record_fallback as _rec_fallback
 
                         _rec_fallback(
                             primary_task_id=task_id,
@@ -3831,11 +3740,9 @@ class CommandRouter:
                         logger.warning("Exception suppressed: %s", exc)
                     # ── PR-508: Register fallback in TaskGraphRuntime ─────────
                     try:
-                        from core.task_graph_runtime import (
-                            get_task_graph_runtime as _get_tgr_fb,
-                            WorkflowContributorKind as _WCK_fb,
-                            GraphNode as _GN_fb,
-                        )
+                        from core.task_graph_runtime import GraphNode as _GN_fb
+                        from core.task_graph_runtime import WorkflowContributorKind as _WCK_fb
+                        from core.task_graph_runtime import get_task_graph_runtime as _get_tgr_fb
 
                         _fb_task_id = f"{task_id}:cb_fallback:{attempt + 1}"
                         _tgr_fb = _get_tgr_fb()
@@ -3878,10 +3785,8 @@ class CommandRouter:
             attempt_trace = {**trace_base, "device_id": current_device}
             # ── PR-508: Lifecycle transitions: routed → dispatch → running ──
             try:
-                from core.task_graph_runtime import (
-                    get_task_graph_runtime as _get_tgr_exec,
-                    GraphNodeState as _GNS_exec,
-                )
+                from core.task_graph_runtime import GraphNodeState as _GNS_exec
+                from core.task_graph_runtime import get_task_graph_runtime as _get_tgr_exec
 
                 _tgr_exec = _get_tgr_exec()
                 _tgr_exec.transition(task_id, _GNS_exec.DISPATCH)
@@ -4002,14 +3907,10 @@ class CommandRouter:
 
             # ── PR-506: Record retry event in ReplayFoundation + AuditEventSemantics ─
             try:
-                from core.replay_foundation import (
-                    record_retry as _rec_retry,
-                    emit_runtime_event as _emit_ev_rt,
-                    ReplayEventKind as _REK_rt,
-                )
-                from core.audit_event_semantics import (
-                    audit_retry_triggered as _audit_retry,
-                )
+                from core.audit_event_semantics import audit_retry_triggered as _audit_retry
+                from core.replay_foundation import ReplayEventKind as _REK_rt
+                from core.replay_foundation import emit_runtime_event as _emit_ev_rt
+                from core.replay_foundation import record_retry as _rec_retry
 
                 _rec_retry(
                     original_task_id=task_id,
@@ -4048,10 +3949,8 @@ class CommandRouter:
 
             # ── PR-508: Register retry in TaskGraphRuntime ────────────────────
             try:
-                from core.task_graph_runtime import (
-                    get_task_graph_runtime as _get_tgr_retry,
-                    WorkflowContributorKind as _WCK_retry,
-                )
+                from core.task_graph_runtime import WorkflowContributorKind as _WCK_retry
+                from core.task_graph_runtime import get_task_graph_runtime as _get_tgr_retry
 
                 _retry_task_id = f"{task_id}:retry:{attempt + 1}"
                 _tgr_retry = _get_tgr_retry()
@@ -4092,16 +3991,11 @@ class CommandRouter:
             success = bool(raw_result.get("success"))
         else:
             success = not bool(
-                raw_result.get("error")
-                or raw_result.get("error_message")
-                or raw_result.get("error_code")
+                raw_result.get("error") or raw_result.get("error_message") or raw_result.get("error_code")
             )
 
         error_message = str(
-            raw_result.get("error")
-            or raw_result.get("error_message")
-            or raw_result.get("message")
-            or ""
+            raw_result.get("error") or raw_result.get("error_message") or raw_result.get("message") or ""
         )
         return success, error_message
 
@@ -4167,14 +4061,13 @@ class CommandRouter:
                 # GALAXY_HITL_CONFIRM_GATE).  Destructive/high-risk commands must be
                 # confirmed by a human (real blocking decision loop) before reaching
                 # the executor; without an explicit "approve" the action is aborted.
-                if (
-                    os.getenv("GALAXY_HITL_CONFIRM_GATE", "0").strip().lower()
-                    in ("1", "true", "yes", "on")
-                    and self._is_high_risk_command(command)
-                ):
-                    _gate = await self._await_high_risk_confirmation(
-                        command, device_id, task_id, trace_id
-                    )
+                if os.getenv("GALAXY_HITL_CONFIRM_GATE", "0").strip().lower() in (
+                    "1",
+                    "true",
+                    "yes",
+                    "on",
+                ) and self._is_high_risk_command(command):
+                    _gate = await self._await_high_risk_confirmation(command, device_id, task_id, trace_id)
                     if not _gate.get("proceed", False):
                         latency_ms = (time.monotonic() - t0) * 1000
                         _timed_out = _gate.get("status") == "timeout_cancel"
@@ -4183,7 +4076,8 @@ class CommandRouter:
                             "success": False,
                             "result": None,
                             "error_code": (
-                                GatewayErrorCode.HITL_TIMEOUT.value if _timed_out
+                                GatewayErrorCode.HITL_TIMEOUT.value
+                                if _timed_out
                                 else GatewayErrorCode.HITL_DENIED.value
                             ),
                             "error_message": (
@@ -4213,7 +4107,8 @@ class CommandRouter:
                 if raw_success:
                     self._stats["total_success"] = self._stats.get("total_success", 0) + 1
                     logger.info(
-                        "CommandRouter._dispatch_to_device done | " "trace_id=%s command_id=%s device=%s latency=%.1fms",
+                        "CommandRouter._dispatch_to_device done | "
+                        "trace_id=%s command_id=%s device=%s latency=%.1fms",
                         trace_id,
                         command_id,
                         device_id,
@@ -4423,7 +4318,7 @@ class CommandRouter:
         if not candidates:
             return None
         try:
-            from core.control_plane._globals import get_scoring_engine, get_health_registry
+            from core.control_plane._globals import get_health_registry, get_scoring_engine
 
             hreg = get_health_registry()
             remaining = [c for c in candidates if c.device_id not in tried and hreg.is_eligible(c.device_id)]
@@ -4577,8 +4472,8 @@ class CommandRouter:
         # PR-7: route via route_envelope (unified substrate root) with
         # remote_execution_mode=agent_runtime stamped in the envelope so that
         # mode metadata is observable end-to-end without inspecting payload.
-        from core.schemas.task_envelope import TaskEnvelope as _TaskEnvelope
         from core.schemas.remote_execution import RemoteExecutionMode as _REM
+        from core.schemas.task_envelope import TaskEnvelope as _TaskEnvelope
 
         _agent_envelope = _TaskEnvelope(
             task_id=task_id,
@@ -4737,8 +4632,8 @@ class CommandRouter:
         # both command_only and agent_runtime modes traverse the same substrate
         # entry point.  route_command (compat shim) is intentionally bypassed
         # here to avoid the envelope being built without an explicit mode.
-        from core.schemas.task_envelope import TaskEnvelope as _TaskEnvelope
         from core.schemas.remote_execution import RemoteExecutionMode as _REM
+        from core.schemas.task_envelope import TaskEnvelope as _TaskEnvelope
 
         _agent_envelope = _TaskEnvelope(
             task_id=task_id,
@@ -5174,14 +5069,15 @@ class NATSExecutor:
     # ── Internal ─────────────────────────────────────────────────────────────
 
     async def _dispatch_via_nats(self, target: str, command: str, params: dict) -> dict:
+        from datetime import datetime, timezone
+
         from core.nats_bus import nats_bus
         from core.schemas.contracts import (
+            DeviceCommandPayloadModel,
             TaskDispatchModel,
             TaskType,
-            DeviceCommandPayloadModel,
             TimestampModel,
         )
-        from datetime import datetime, timezone
 
         # PR-2: extract envelope identifiers injected by _dispatch_to_device
         # (keys prefixed with "_galaxy_" are internal metadata, not device params).

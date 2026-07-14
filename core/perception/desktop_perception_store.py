@@ -150,11 +150,7 @@ class DesktopPerceptionStore:
         返回 ``(audio_b64, mime)``；没有可用音频则返回 ``(None, None)``。
         """
         with self._lock:
-            if (
-                self._audio_b64
-                and self._fresh(self._audio_ts)
-                and self._audio_ts > self._audio_autoinject_consumed_ts
-            ):
+            if self._audio_b64 and self._fresh(self._audio_ts) and self._audio_ts > self._audio_autoinject_consumed_ts:
                 self._audio_autoinject_consumed_ts = self._audio_ts
                 return self._audio_b64, self._audio_mime
         return None, None
@@ -204,7 +200,9 @@ class DesktopPerceptionStore:
         """
         try:
             from core.schemas.multimodal import (
-                MultiModalContext, MultiModalImage, MultiModalAudio,
+                MultiModalAudio,
+                MultiModalContext,
+                MultiModalImage,
             )
         except Exception as exc:  # noqa: BLE001
             logger.debug("multimodal schema unavailable: %s", exc)
@@ -237,10 +235,13 @@ class DesktopPerceptionStore:
         if aud[0]:
             audio.append(MultiModalAudio(mime=aud[1] or "audio/webm", data=aud[0], source="desktop_microphone"))
 
-        metadata = {"injected_by": "desktop_perception_store", "ambient": True,
-                    "modalities": [m for m, on in
-                                   (("camera", bool(cam[0])), ("screen", bool(scr[0])),
-                                    ("audio", bool(aud[0]))) if on]}
+        metadata = {
+            "injected_by": "desktop_perception_store",
+            "ambient": True,
+            "modalities": [
+                m for m, on in (("camera", bool(cam[0])), ("screen", bool(scr[0])), ("audio", bool(aud[0]))) if on
+            ],
+        }
         screen = screen_meta
         if existing is not None:
             try:

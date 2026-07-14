@@ -5,6 +5,7 @@ Degrades gracefully when the device is missing or permission is denied —
 the pipeline returns immediately without raising, leaving the rest of the
 system unaffected.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -15,9 +16,9 @@ from typing import AsyncIterator, Callable, List, Optional
 
 import numpy as np
 
-from .vad import VoiceActivityDetector, VADConfig
 from .audio_features import AudioState, extract_audio_features
 from .signal_quality import SignalQuality
+from .vad import VADConfig, VoiceActivityDetector
 
 logger = logging.getLogger(__name__)
 
@@ -37,20 +38,22 @@ except Exception as exc:
 # Config
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class AudioIngestConfig:
     """Configuration for the microphone ingest pipeline."""
 
-    sample_rate: int = 16000          # Hz
+    sample_rate: int = 16000  # Hz
     channels: int = 1
-    chunk_duration_ms: int = 100      # Target chunk size (~10 Hz update rate)
-    device: Optional[int] = None      # None → use system default microphone
+    chunk_duration_ms: int = 100  # Target chunk size (~10 Hz update rate)
+    device: Optional[int] = None  # None → use system default microphone
     vad_config: Optional[VADConfig] = None
 
 
 # ---------------------------------------------------------------------------
 # Pipeline
 # ---------------------------------------------------------------------------
+
 
 class AudioIngestPipeline:
     """Microphone capture pipeline with VAD and lightweight audio state.
@@ -88,9 +91,7 @@ class AudioIngestPipeline:
         """True if sounddevice is importable on this host."""
         return _SOUNDDEVICE_AVAILABLE
 
-    def add_callback(
-        self, cb: Callable[[AudioState, SignalQuality], None]
-    ) -> None:
+    def add_callback(self, cb: Callable[[AudioState, SignalQuality], None]) -> None:
         """Register a callback invoked with each new AudioState."""
         self._callbacks.append(cb)
 
@@ -210,8 +211,9 @@ class AudioIngestPipeline:
                 "Audio ingest error: %s%s —— 常见于 Windows MME 后端打不开默认"
                 "录音设备(驱动/独占模式占用);不影响其它功能，语音走独立的 "
                 "Whisper 采集路径。可尝试:Windows 声音设置 → 录制 → 默认设备 "
-                "→ 属性 → 高级 → 取消勾选\"允许应用程序独占控制\"。",
-                exc, _diag,
+                '→ 属性 → 高级 → 取消勾选"允许应用程序独占控制"。',
+                exc,
+                _diag,
             )
         finally:
             self._running = False
@@ -221,14 +223,10 @@ class AudioIngestPipeline:
         """Update VAD + features and invoke registered callbacks."""
         now = time.monotonic()
         vad_state = self._vad.process_frame(chunk)
-        state = extract_audio_features(
-            chunk, vad_state, self._last_update_ts, self.config.sample_rate
-        )
+        state = extract_audio_features(chunk, vad_state, self._last_update_ts, self.config.sample_rate)
         self._last_update_ts = now
         self._latest_state = state
-        self._quality = SignalQuality.ok(
-            freshness_ms=(time.monotonic() - now) * 1000.0
-        )
+        self._quality = SignalQuality.ok(freshness_ms=(time.monotonic() - now) * 1000.0)
         for cb in list(self._callbacks):
             try:
                 cb(state, self._quality)

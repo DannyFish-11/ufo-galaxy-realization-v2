@@ -21,10 +21,10 @@ from core.vector_backend import (
     get_shared_backend,
 )
 
-
 # ---------------------------------------------------------------------------
 # SearchResult
 # ---------------------------------------------------------------------------
+
 
 def test_search_result_to_dict():
     sr = SearchResult(doc_id="d1", content="hello world " * 20, score=0.75, metadata={"k": "v"})
@@ -38,6 +38,7 @@ def test_search_result_to_dict():
 # ---------------------------------------------------------------------------
 # LocalKeywordBackend
 # ---------------------------------------------------------------------------
+
 
 class TestLocalKeywordBackend:
     def setup_method(self):
@@ -88,6 +89,7 @@ class TestLocalKeywordBackend:
 # create_vector_backend — local mode
 # ---------------------------------------------------------------------------
 
+
 def test_create_local_backend(monkeypatch):
     monkeypatch.delenv("KB_VECTOR_BACKEND", raising=False)
     backend = create_vector_backend(backend="local")
@@ -106,6 +108,7 @@ def test_create_chroma_backend_falls_back_when_not_installed(monkeypatch):
     monkeypatch.setenv("KB_VECTOR_BACKEND", "chroma")
     # Ensure chromadb import fails by temporarily hiding the module
     import builtins
+
     original_import = builtins.__import__
 
     def mock_import(name, *args, **kwargs):
@@ -128,6 +131,7 @@ def test_create_qdrant_backend_falls_back_when_url_missing(monkeypatch):
 def test_create_qdrant_backend_falls_back_when_not_installed(monkeypatch):
     """If qdrant-client is not installed and URL is set, fall back to local."""
     import builtins
+
     original_import = builtins.__import__
 
     def mock_import(name, *args, **kwargs):
@@ -144,8 +148,10 @@ def test_create_qdrant_backend_falls_back_when_not_installed(monkeypatch):
 # get_shared_backend — singleton
 # ---------------------------------------------------------------------------
 
+
 def test_get_shared_backend_returns_same_instance():
     import core.vector_backend as vb_module
+
     # Reset singleton for test isolation
     vb_module._shared_backend = None
     b1 = get_shared_backend()
@@ -158,11 +164,13 @@ def test_get_shared_backend_returns_same_instance():
 # Integration: KnowledgeBaseSystem uses vector backend
 # ---------------------------------------------------------------------------
 
+
 def test_knowledge_base_system_local_mode(monkeypatch):
     """Node_72 KnowledgeBaseSystem should work in local mode without vector libs."""
     monkeypatch.setenv("KB_VECTOR_BACKEND", "local")
     # Reset shared backend singleton
     import core.vector_backend as vb_module
+
     vb_module._shared_backend = None
 
     from nodes.Node_72_KnowledgeBase.knowledge_base_system import KnowledgeBaseSystem
@@ -184,6 +192,7 @@ def test_knowledge_base_system_local_mode(monkeypatch):
 def test_knowledge_base_system_delete(monkeypatch):
     monkeypatch.setenv("KB_VECTOR_BACKEND", "local")
     import core.vector_backend as vb_module
+
     vb_module._shared_backend = None
 
     from nodes.Node_72_KnowledgeBase.knowledge_base_system import KnowledgeBaseSystem
@@ -200,10 +209,12 @@ def test_knowledge_base_system_delete(monkeypatch):
 # Integration: SemanticSearch uses vector backend
 # ---------------------------------------------------------------------------
 
+
 def test_semantic_search_index_and_search(monkeypatch):
     """SemanticSearch.index_document / .search should work in local mode."""
     monkeypatch.setenv("KB_VECTOR_BACKEND", "local")
     import core.vector_backend as vb_module
+
     vb_module._shared_backend = None
 
     from core.ai_intent import SemanticSearch
@@ -221,6 +232,7 @@ def test_semantic_search_index_and_search(monkeypatch):
 # ---------------------------------------------------------------------------
 # Integration: MCP/Skill load_from_config creates template
 # ---------------------------------------------------------------------------
+
 
 def test_mcp_loader_singleton():
     """MCPLoader 单例应可用且有 list_servers 方法。"""
@@ -243,6 +255,7 @@ def test_skill_loader_singleton():
 # ---------------------------------------------------------------------------
 # _coerce_chroma_metadata — 回归防护(真机日志实测每轮对话都写失败)
 # ---------------------------------------------------------------------------
+
 
 class TestCoerceChromaMetadata:
     """Chroma 只接受标量 metadata 值；调用方(如统一记忆 provider 把
@@ -272,7 +285,7 @@ class TestCoerceChromaMetadata:
     def test_chroma_upsert_accepts_list_valued_metadata_end_to_end(self, tmp_path):
         """端到端复现真机场景：role 以 list 形式传入仍应写入并检索成功。"""
         pytest.importorskip("chromadb")
-        from core.vector_backend import create_vector_backend, _ChromaBackend
+        from core.vector_backend import _ChromaBackend, create_vector_backend
 
         backend = create_vector_backend(backend="chroma", chroma_persist_dir=str(tmp_path))
         if not isinstance(backend, _ChromaBackend):

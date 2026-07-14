@@ -94,8 +94,8 @@ Group J — Integration: recovery truth surface
 from __future__ import annotations
 
 import json
-import pytest
 
+import pytest
 
 # ---------------------------------------------------------------------------
 # Group A — Contract module structure and sentinels
@@ -108,25 +108,25 @@ class TestContractModuleStructure:
             OFFLINE_REPLAY_ORDERING_CONTRACT_AUTHORITY,
             OFFLINE_REPLAY_ORDERING_CONTRACT_PR_P03_SENTINEL,
         )
+
         assert OFFLINE_REPLAY_ORDERING_CONTRACT_AUTHORITY
         assert OFFLINE_REPLAY_ORDERING_CONTRACT_PR_P03_SENTINEL
         assert "PR-P0-3" in OFFLINE_REPLAY_ORDERING_CONTRACT_PR_P03_SENTINEL
-        assert "offline_replay_ordering_contract" in (
-            OFFLINE_REPLAY_ORDERING_CONTRACT_AUTHORITY
-        )
+        assert "offline_replay_ordering_contract" in (OFFLINE_REPLAY_ORDERING_CONTRACT_AUTHORITY)
 
     def test_A02_all_policy_sentinels_non_empty(self):
         from core.offline_replay_ordering_contract import (
-            V2_IS_REPLAY_ORDERING_AUTHORITY_POLICY,
-            REPLAY_ORDERING_FORMAL_SEMANTICS_POLICY,
-            DUPLICATE_AVOIDANCE_BOUNDARY_IS_V2_SIGNAL_GUARD_POLICY,
-            STALE_REPLAY_MUST_DOWNGRADE_NOT_ACCEPT_POLICY,
-            OUT_OF_ORDER_REPLAY_MUST_NOT_SILENTLY_ACCEPT_POLICY,
             AMBIGUOUS_AUTHORITY_MUST_NOT_OPTIMISTICALLY_UPGRADE_POLICY,
+            DUPLICATE_AVOIDANCE_BOUNDARY_IS_V2_SIGNAL_GUARD_POLICY,
+            OUT_OF_ORDER_REPLAY_MUST_NOT_SILENTLY_ACCEPT_POLICY,
             PARTIAL_REPLAY_STAYS_ADVISORY_NOT_FULLY_CLOSED_POLICY,
             REPLAY_CONTINUITY_REQUIRES_CANONICAL_TASK_IDENTITY_POLICY,
+            REPLAY_ORDERING_FORMAL_SEMANTICS_POLICY,
             REPLAY_TRUTH_CONVERGENCE_REQUIRES_V2_ABSORPTION_POLICY,
+            STALE_REPLAY_MUST_DOWNGRADE_NOT_ACCEPT_POLICY,
+            V2_IS_REPLAY_ORDERING_AUTHORITY_POLICY,
         )
+
         for sentinel in [
             V2_IS_REPLAY_ORDERING_AUTHORITY_POLICY,
             REPLAY_ORDERING_FORMAL_SEMANTICS_POLICY,
@@ -138,29 +138,27 @@ class TestContractModuleStructure:
             REPLAY_CONTINUITY_REQUIRES_CANONICAL_TASK_IDENTITY_POLICY,
             REPLAY_TRUTH_CONVERGENCE_REQUIRES_V2_ABSORPTION_POLICY,
         ]:
-            assert isinstance(sentinel, str) and sentinel, (
-                f"empty policy sentinel: {sentinel!r}"
-            )
+            assert isinstance(sentinel, str) and sentinel, f"empty policy sentinel: {sentinel!r}"
 
     def test_A03_stale_seq_window_is_positive_int(self):
         from core.offline_replay_ordering_contract import STALE_SEQ_WINDOW
+
         assert isinstance(STALE_SEQ_WINDOW, int)
         assert STALE_SEQ_WINDOW > 0
 
     def test_A04_all_enums_importable(self):
         from core.offline_replay_ordering_contract import (
+            DuplicateAvoidanceBoundary,
+            OfflineReplayContractVerdict,
+            OfflineReplayItemDecision,
             ReplayOrderingAuthority,
             ReplayOrderingGuarantee,
-            DuplicateAvoidanceBoundary,
             ReplaySequenceStatus,
-            OfflineReplayItemDecision,
-            OfflineReplayContractVerdict,
         )
+
         assert ReplayOrderingAuthority.v2_side.value == "v2_side"
         assert ReplayOrderingAuthority.ambiguous.value == "ambiguous"
-        assert ReplayOrderingGuarantee.strict_fifo_within_session.value == (
-            "strict_fifo_within_session"
-        )
+        assert ReplayOrderingGuarantee.strict_fifo_within_session.value == ("strict_fifo_within_session")
         assert DuplicateAvoidanceBoundary.v2_signal_guard.value == "v2_signal_guard"
         assert ReplaySequenceStatus.in_order.value == "in_order"
         assert ReplaySequenceStatus.out_of_order.value == "out_of_order"
@@ -169,23 +167,18 @@ class TestContractModuleStructure:
         assert OfflineReplayItemDecision.accept.value == "accept"
         assert OfflineReplayItemDecision.reject_duplicate.value == "reject_duplicate"
         assert OfflineReplayItemDecision.reject_stale.value == "reject_stale"
-        assert OfflineReplayItemDecision.reject_out_of_order.value == (
-            "reject_out_of_order"
-        )
-        assert OfflineReplayContractVerdict.authoritative_contract_defined.value == (
-            "authoritative_contract_defined"
-        )
-        assert OfflineReplayContractVerdict.contract_not_yet_evidenced.value == (
-            "contract_not_yet_evidenced"
-        )
+        assert OfflineReplayItemDecision.reject_out_of_order.value == ("reject_out_of_order")
+        assert OfflineReplayContractVerdict.authoritative_contract_defined.value == ("authoritative_contract_defined")
+        assert OfflineReplayContractVerdict.contract_not_yet_evidenced.value == ("contract_not_yet_evidenced")
         assert OfflineReplayContractVerdict.downgraded.value == "downgraded"
 
     def test_A05_item_evaluation_fields_and_to_dict(self):
         from core.offline_replay_ordering_contract import (
+            OfflineReplayItemDecision,
             OfflineReplayItemEvaluation,
             ReplaySequenceStatus,
-            OfflineReplayItemDecision,
         )
+
         item = OfflineReplayItemEvaluation(
             item_id="item-1",
             seq=1,
@@ -205,10 +198,11 @@ class TestContractModuleStructure:
 
     def test_A06_item_evaluation_round_trip(self):
         from core.offline_replay_ordering_contract import (
+            OfflineReplayItemDecision,
             OfflineReplayItemEvaluation,
             ReplaySequenceStatus,
-            OfflineReplayItemDecision,
         )
+
         original = OfflineReplayItemEvaluation(
             item_id="round-trip",
             seq=5,
@@ -227,25 +221,42 @@ class TestContractModuleStructure:
 
     def test_A07_report_fields_and_to_dict(self):
         from core.offline_replay_ordering_contract import (
-            OfflineReplayOrderingReport,
             OfflineReplayContractVerdict,
+            OfflineReplayOrderingReport,
             ReplayOrderingAuthority,
         )
+
         rpt = OfflineReplayOrderingReport()
         d = rpt.to_dict()
         for key in [
-            "report_id", "generated_at", "authority_sentinel", "pr_sentinel",
-            "ordering_authority", "ordering_guarantee", "duplicate_avoidance_boundary",
-            "verdict", "items", "accepted_count", "rejected_duplicate_count",
-            "rejected_stale_count", "rejected_out_of_order_count",
-            "downgraded_count", "ambiguous_count", "total_items", "partial_drain",
-            "continuity_relation_note", "truth_convergence_note", "summary",
-            "is_contract_active", "is_fully_evidenced",
+            "report_id",
+            "generated_at",
+            "authority_sentinel",
+            "pr_sentinel",
+            "ordering_authority",
+            "ordering_guarantee",
+            "duplicate_avoidance_boundary",
+            "verdict",
+            "items",
+            "accepted_count",
+            "rejected_duplicate_count",
+            "rejected_stale_count",
+            "rejected_out_of_order_count",
+            "downgraded_count",
+            "ambiguous_count",
+            "total_items",
+            "partial_drain",
+            "continuity_relation_note",
+            "truth_convergence_note",
+            "summary",
+            "is_contract_active",
+            "is_fully_evidenced",
         ]:
             assert key in d, f"missing key {key!r} in report dict"
 
     def test_A08_report_to_json_is_valid_json(self):
         from core.offline_replay_ordering_contract import OfflineReplayOrderingReport
+
         rpt = OfflineReplayOrderingReport()
         raw = rpt.to_json()
         parsed = json.loads(raw)
@@ -254,10 +265,11 @@ class TestContractModuleStructure:
 
     def test_A09_report_round_trips(self):
         from core.offline_replay_ordering_contract import (
-            OfflineReplayOrderingReport,
             OfflineReplayContractVerdict,
+            OfflineReplayOrderingReport,
             ReplayOrderingAuthority,
         )
+
         original = OfflineReplayOrderingReport(
             ordering_authority=ReplayOrderingAuthority.v2_side,
             verdict=OfflineReplayContractVerdict.contract_not_yet_evidenced,
@@ -270,6 +282,7 @@ class TestContractModuleStructure:
 
     def test_A10_report_has_continuity_and_truth_convergence_notes(self):
         from core.offline_replay_ordering_contract import OfflineReplayOrderingReport
+
         rpt = OfflineReplayOrderingReport()
         assert rpt.continuity_relation_note
         assert rpt.truth_convergence_note
@@ -295,9 +308,10 @@ class TestContractModuleStructure:
 class TestOrderedReplay:
     def test_B01_empty_sequence_is_not_yet_evidenced(self):
         from core.offline_replay_ordering_contract import (
-            evaluate_replay_sequence,
             OfflineReplayContractVerdict,
+            evaluate_replay_sequence,
         )
+
         rpt = evaluate_replay_sequence([])
         assert rpt.verdict == OfflineReplayContractVerdict.contract_not_yet_evidenced
         assert rpt.total_items == 0
@@ -305,10 +319,11 @@ class TestOrderedReplay:
 
     def test_B02_single_in_order_item_accepted(self):
         from core.offline_replay_ordering_contract import (
-            evaluate_replay_sequence,
             OfflineReplayContractVerdict,
             OfflineReplayItemDecision,
+            evaluate_replay_sequence,
         )
+
         rpt = evaluate_replay_sequence([{"item_id": "item-1", "seq": 1}])
         assert rpt.accepted_count == 1
         assert rpt.total_items == 1
@@ -317,10 +332,11 @@ class TestOrderedReplay:
 
     def test_B03_fully_ordered_sequence_all_accepted(self):
         from core.offline_replay_ordering_contract import (
-            evaluate_replay_sequence,
-            OfflineReplayItemDecision,
             OfflineReplayContractVerdict,
+            OfflineReplayItemDecision,
+            evaluate_replay_sequence,
         )
+
         items = [{"item_id": f"item-{i}", "seq": i} for i in range(1, 6)]
         rpt = evaluate_replay_sequence(items)
         assert rpt.accepted_count == 5
@@ -330,36 +346,40 @@ class TestOrderedReplay:
         assert rpt.rejected_stale_count == 0
         assert rpt.verdict == OfflineReplayContractVerdict.authoritative_contract_defined
         for item_eval in rpt.items:
-            assert item_eval.decision == OfflineReplayItemDecision.accept, (
-                f"Expected accept for {item_eval.item_id}; got {item_eval.decision}"
-            )
+            assert (
+                item_eval.decision == OfflineReplayItemDecision.accept
+            ), f"Expected accept for {item_eval.item_id}; got {item_eval.decision}"
 
     def test_B04_ordering_authority_is_v2_side(self):
         from core.offline_replay_ordering_contract import (
-            evaluate_replay_sequence,
             ReplayOrderingAuthority,
+            evaluate_replay_sequence,
         )
+
         rpt = evaluate_replay_sequence([{"item_id": "x", "seq": 1}])
         assert rpt.ordering_authority == ReplayOrderingAuthority.v2_side
 
     def test_B05_ordering_guarantee_is_strict_fifo(self):
         from core.offline_replay_ordering_contract import (
-            evaluate_replay_sequence,
             ReplayOrderingGuarantee,
+            evaluate_replay_sequence,
         )
+
         rpt = evaluate_replay_sequence([])
         assert rpt.ordering_guarantee == ReplayOrderingGuarantee.strict_fifo_within_session
 
     def test_B06_duplicate_avoidance_boundary_is_v2_signal_guard(self):
         from core.offline_replay_ordering_contract import (
-            evaluate_replay_sequence,
             DuplicateAvoidanceBoundary,
+            evaluate_replay_sequence,
         )
+
         rpt = evaluate_replay_sequence([])
         assert rpt.duplicate_avoidance_boundary == DuplicateAvoidanceBoundary.v2_signal_guard
 
     def test_B07_accepted_count_matches_distinct_in_order_items(self):
         from core.offline_replay_ordering_contract import evaluate_replay_sequence
+
         items = [
             {"item_id": "a", "seq": 1},
             {"item_id": "b", "seq": 2},
@@ -377,10 +397,11 @@ class TestOrderedReplay:
 class TestOutOfOrderReplay:
     def test_C01_item_with_seq_below_session_max_rejected(self):
         from core.offline_replay_ordering_contract import (
-            evaluate_replay_sequence,
-            OfflineReplayItemDecision,
             STALE_SEQ_WINDOW,
+            OfflineReplayItemDecision,
+            evaluate_replay_sequence,
         )
+
         # Establish max=5, then replay seq=4 (below max, within stale window)
         items = [
             {"item_id": "item-5", "seq": 5},
@@ -391,9 +412,10 @@ class TestOutOfOrderReplay:
 
     def test_C02_out_of_order_status_set_correctly(self):
         from core.offline_replay_ordering_contract import (
-            evaluate_replay_sequence,
             ReplaySequenceStatus,
+            evaluate_replay_sequence,
         )
+
         items = [
             {"item_id": "item-5", "seq": 5},
             {"item_id": "item-3", "seq": 3},
@@ -404,6 +426,7 @@ class TestOutOfOrderReplay:
 
     def test_C03_rejected_out_of_order_count_incremented(self):
         from core.offline_replay_ordering_contract import evaluate_replay_sequence
+
         items = [
             {"item_id": "item-10", "seq": 10},
             {"item_id": "item-8", "seq": 8},
@@ -414,13 +437,14 @@ class TestOutOfOrderReplay:
 
     def test_C04_out_of_order_does_not_advance_session_max(self):
         from core.offline_replay_ordering_contract import (
-            evaluate_replay_sequence,
             OfflineReplayItemDecision,
+            evaluate_replay_sequence,
         )
+
         # seq=10 accepted, seq=5 rejected out-of-order, seq=11 accepted
         items = [
             {"item_id": "a", "seq": 10},
-            {"item_id": "b", "seq": 5},   # out-of-order
+            {"item_id": "b", "seq": 5},  # out-of-order
             {"item_id": "c", "seq": 11},  # should still be accepted
         ]
         rpt = evaluate_replay_sequence(items)
@@ -430,9 +454,10 @@ class TestOutOfOrderReplay:
 
     def test_C05_mixed_in_order_and_out_of_order_is_partially_evidenced(self):
         from core.offline_replay_ordering_contract import (
-            evaluate_replay_sequence,
             OfflineReplayContractVerdict,
+            evaluate_replay_sequence,
         )
+
         items = [
             {"item_id": "a", "seq": 5},
             {"item_id": "b", "seq": 3},  # out-of-order
@@ -452,9 +477,10 @@ class TestOutOfOrderReplay:
 class TestDuplicateReplay:
     def test_D01_same_item_id_twice_second_is_reject_duplicate(self):
         from core.offline_replay_ordering_contract import (
-            evaluate_replay_sequence,
             OfflineReplayItemDecision,
+            evaluate_replay_sequence,
         )
+
         items = [
             {"item_id": "dup-item", "seq": 1},
             {"item_id": "dup-item", "seq": 2},  # duplicate
@@ -465,6 +491,7 @@ class TestDuplicateReplay:
 
     def test_D02_is_duplicate_true_on_duplicate_item(self):
         from core.offline_replay_ordering_contract import evaluate_replay_sequence
+
         items = [
             {"item_id": "dup", "seq": 1},
             {"item_id": "dup", "seq": 2},
@@ -474,6 +501,7 @@ class TestDuplicateReplay:
 
     def test_D03_rejected_duplicate_count_incremented(self):
         from core.offline_replay_ordering_contract import evaluate_replay_sequence
+
         items = [
             {"item_id": "a", "seq": 1},
             {"item_id": "a", "seq": 2},
@@ -486,9 +514,10 @@ class TestDuplicateReplay:
 
     def test_D04_duplicate_rejection_independent_of_seq(self):
         from core.offline_replay_ordering_contract import (
-            evaluate_replay_sequence,
             OfflineReplayItemDecision,
+            evaluate_replay_sequence,
         )
+
         # Same item_id at any seq → duplicate
         items = [
             {"item_id": "x", "seq": 100},
@@ -499,6 +528,7 @@ class TestDuplicateReplay:
 
     def test_D05_three_items_one_duplicate(self):
         from core.offline_replay_ordering_contract import evaluate_replay_sequence
+
         items = [
             {"item_id": "a", "seq": 1},
             {"item_id": "b", "seq": 2},
@@ -517,25 +547,27 @@ class TestDuplicateReplay:
 class TestStaleReplay:
     def test_E01_item_beyond_stale_window_is_reject_stale(self):
         from core.offline_replay_ordering_contract import (
-            evaluate_replay_sequence,
-            OfflineReplayItemDecision,
             STALE_SEQ_WINDOW,
+            OfflineReplayItemDecision,
+            evaluate_replay_sequence,
         )
+
         # max=100, stale window=10 → seq < 90 is stale
         max_seq = 100
         stale_seq = max_seq - STALE_SEQ_WINDOW - 1  # one beyond window
         items = [
             {"item_id": "current", "seq": max_seq},
-            {"item_id": "stale",   "seq": stale_seq},
+            {"item_id": "stale", "seq": stale_seq},
         ]
         rpt = evaluate_replay_sequence(items)
         assert rpt.items[1].decision == OfflineReplayItemDecision.reject_stale
 
     def test_E02_is_stale_true_on_stale_item(self):
         from core.offline_replay_ordering_contract import (
-            evaluate_replay_sequence,
             STALE_SEQ_WINDOW,
+            evaluate_replay_sequence,
         )
+
         max_seq = 50
         stale_seq = max_seq - STALE_SEQ_WINDOW - 5
         items = [
@@ -547,23 +579,25 @@ class TestStaleReplay:
 
     def test_E03_rejected_stale_count_incremented(self):
         from core.offline_replay_ordering_contract import (
-            evaluate_replay_sequence,
             STALE_SEQ_WINDOW,
+            evaluate_replay_sequence,
         )
+
         max_seq = 100
         items = [
             {"item_id": "current", "seq": max_seq},
-            {"item_id": "stale1",  "seq": max_seq - STALE_SEQ_WINDOW - 1},
-            {"item_id": "stale2",  "seq": max_seq - STALE_SEQ_WINDOW - 2},
+            {"item_id": "stale1", "seq": max_seq - STALE_SEQ_WINDOW - 1},
+            {"item_id": "stale2", "seq": max_seq - STALE_SEQ_WINDOW - 2},
         ]
         rpt = evaluate_replay_sequence(items)
         assert rpt.rejected_stale_count == 2
 
     def test_E04_stale_item_note_references_policy(self):
         from core.offline_replay_ordering_contract import (
-            evaluate_replay_sequence,
             STALE_SEQ_WINDOW,
+            evaluate_replay_sequence,
         )
+
         max_seq = 50
         stale_seq = max_seq - STALE_SEQ_WINDOW - 1
         items = [
@@ -576,10 +610,11 @@ class TestStaleReplay:
 
     def test_E05_exactly_at_stale_window_is_out_of_order_not_stale(self):
         from core.offline_replay_ordering_contract import (
-            evaluate_replay_sequence,
-            OfflineReplayItemDecision,
             STALE_SEQ_WINDOW,
+            OfflineReplayItemDecision,
+            evaluate_replay_sequence,
         )
+
         # max - STALE_SEQ_WINDOW is exactly at the boundary → out_of_order
         max_seq = 50
         boundary_seq = max_seq - STALE_SEQ_WINDOW  # exactly at boundary
@@ -593,10 +628,11 @@ class TestStaleReplay:
 
     def test_E06_one_beyond_stale_window_is_stale(self):
         from core.offline_replay_ordering_contract import (
-            evaluate_replay_sequence,
-            OfflineReplayItemDecision,
             STALE_SEQ_WINDOW,
+            OfflineReplayItemDecision,
+            evaluate_replay_sequence,
         )
+
         max_seq = 50
         stale_seq = max_seq - STALE_SEQ_WINDOW - 1  # one step beyond window
         items = [
@@ -615,18 +651,20 @@ class TestStaleReplay:
 class TestPartialAndAmbiguous:
     def test_F01_partial_drain_caps_verdict(self):
         from core.offline_replay_ordering_contract import (
-            evaluate_replay_sequence,
             OfflineReplayContractVerdict,
+            evaluate_replay_sequence,
         )
+
         items = [{"item_id": "a", "seq": 1}, {"item_id": "b", "seq": 2}]
         rpt = evaluate_replay_sequence(items, partial_drain=True)
         assert rpt.verdict == OfflineReplayContractVerdict.contract_partially_evidenced
 
     def test_F02_partial_drain_even_for_all_in_order(self):
         from core.offline_replay_ordering_contract import (
-            evaluate_replay_sequence,
             OfflineReplayContractVerdict,
+            evaluate_replay_sequence,
         )
+
         # All items in order, but drain is partial
         items = [{"item_id": f"item-{i}", "seq": i} for i in range(1, 10)]
         rpt = evaluate_replay_sequence(items, partial_drain=True)
@@ -635,39 +673,39 @@ class TestPartialAndAmbiguous:
 
     def test_F03_ambiguous_authority_produces_downgraded(self):
         from core.offline_replay_ordering_contract import (
-            evaluate_replay_sequence,
-            ReplayOrderingAuthority,
             OfflineReplayContractVerdict,
+            ReplayOrderingAuthority,
+            evaluate_replay_sequence,
         )
+
         items = [{"item_id": "a", "seq": 1}]
-        rpt = evaluate_replay_sequence(
-            items, ordering_authority=ReplayOrderingAuthority.ambiguous
-        )
+        rpt = evaluate_replay_sequence(items, ordering_authority=ReplayOrderingAuthority.ambiguous)
         assert rpt.verdict == OfflineReplayContractVerdict.downgraded
 
     def test_F04_ambiguous_authority_not_authoritative_contract_defined(self):
         from core.offline_replay_ordering_contract import (
-            evaluate_replay_sequence,
-            ReplayOrderingAuthority,
             OfflineReplayContractVerdict,
+            ReplayOrderingAuthority,
+            evaluate_replay_sequence,
         )
+
         items = [{"item_id": f"x{i}", "seq": i} for i in range(1, 20)]
-        rpt = evaluate_replay_sequence(
-            items, ordering_authority=ReplayOrderingAuthority.ambiguous
-        )
+        rpt = evaluate_replay_sequence(items, ordering_authority=ReplayOrderingAuthority.ambiguous)
         assert rpt.verdict != OfflineReplayContractVerdict.authoritative_contract_defined
 
     def test_F05_missing_item_id_yields_ambiguous_decision(self):
         from core.offline_replay_ordering_contract import (
-            evaluate_replay_sequence,
             OfflineReplayItemDecision,
+            evaluate_replay_sequence,
         )
+
         items = [{"seq": 1}]  # no item_id
         rpt = evaluate_replay_sequence(items)
         assert rpt.items[0].decision == OfflineReplayItemDecision.ambiguous_authority
 
     def test_F06_ambiguous_count_incremented_for_missing_id(self):
         from core.offline_replay_ordering_contract import evaluate_replay_sequence
+
         items = [{"seq": 1}, {"seq": 2}]  # no item_ids
         rpt = evaluate_replay_sequence(items)
         assert rpt.ambiguous_count == 2
@@ -686,19 +724,19 @@ class TestAuthorityEnforcement:
         produce downgraded — never authoritative_contract_defined.
         """
         from core.offline_replay_ordering_contract import (
-            evaluate_replay_sequence,
-            ReplayOrderingAuthority,
             OfflineReplayContractVerdict,
+            ReplayOrderingAuthority,
+            evaluate_replay_sequence,
         )
+
         items = [{"item_id": f"item-{i}", "seq": i} for i in range(1, 100)]
-        rpt = evaluate_replay_sequence(
-            items, ordering_authority=ReplayOrderingAuthority.ambiguous
-        )
+        rpt = evaluate_replay_sequence(items, ordering_authority=ReplayOrderingAuthority.ambiguous)
         assert rpt.verdict == OfflineReplayContractVerdict.downgraded
         # Verify the policy is referenced in module
         from core.offline_replay_ordering_contract import (
             AMBIGUOUS_AUTHORITY_MUST_NOT_OPTIMISTICALLY_UPGRADE_POLICY,
         )
+
         assert (
             "MUST NOT" in AMBIGUOUS_AUTHORITY_MUST_NOT_OPTIMISTICALLY_UPGRADE_POLICY
             or "must not" in AMBIGUOUS_AUTHORITY_MUST_NOT_OPTIMISTICALLY_UPGRADE_POLICY.lower()
@@ -711,14 +749,13 @@ class TestAuthorityEnforcement:
         and the verdict reflects item quality, not authority ambiguity.
         """
         from core.offline_replay_ordering_contract import (
-            evaluate_replay_sequence,
-            ReplayOrderingAuthority,
             OfflineReplayContractVerdict,
+            ReplayOrderingAuthority,
+            evaluate_replay_sequence,
         )
+
         items = [{"item_id": "a", "seq": 1}, {"item_id": "b", "seq": 2}]
-        rpt = evaluate_replay_sequence(
-            items, ordering_authority=ReplayOrderingAuthority.android_side
-        )
+        rpt = evaluate_replay_sequence(items, ordering_authority=ReplayOrderingAuthority.android_side)
         # android_side is not ambiguous → not downgraded by authority alone
         assert rpt.verdict != OfflineReplayContractVerdict.downgraded
 
@@ -729,6 +766,7 @@ class TestAuthorityEnforcement:
         means that OfflineReplayContractVerdict enum has no 'deferred' value.
         """
         from core.offline_replay_ordering_contract import OfflineReplayContractVerdict
+
         verdict_values = {v.value for v in OfflineReplayContractVerdict}
         assert "deferred" not in verdict_values, (
             "OfflineReplayContractVerdict must not have a 'deferred' value; "
@@ -737,28 +775,23 @@ class TestAuthorityEnforcement:
 
     def test_G04_downgraded_is_contract_active_false(self):
         from core.offline_replay_ordering_contract import OfflineReplayContractVerdict
+
         assert OfflineReplayContractVerdict.downgraded.is_contract_active is False
 
     def test_G05_not_yet_evidenced_is_contract_active_true(self):
         from core.offline_replay_ordering_contract import OfflineReplayContractVerdict
-        assert (
-            OfflineReplayContractVerdict.contract_not_yet_evidenced.is_contract_active
-            is True
-        )
+
+        assert OfflineReplayContractVerdict.contract_not_yet_evidenced.is_contract_active is True
 
     def test_G06_authoritative_contract_defined_is_fully_evidenced(self):
         from core.offline_replay_ordering_contract import OfflineReplayContractVerdict
-        assert (
-            OfflineReplayContractVerdict.authoritative_contract_defined.is_fully_evidenced
-            is True
-        )
+
+        assert OfflineReplayContractVerdict.authoritative_contract_defined.is_fully_evidenced is True
 
     def test_G07_not_yet_evidenced_is_not_fully_evidenced(self):
         from core.offline_replay_ordering_contract import OfflineReplayContractVerdict
-        assert (
-            OfflineReplayContractVerdict.contract_not_yet_evidenced.is_fully_evidenced
-            is False
-        )
+
+        assert OfflineReplayContractVerdict.contract_not_yet_evidenced.is_fully_evidenced is False
 
 
 # ---------------------------------------------------------------------------
@@ -772,25 +805,28 @@ class TestBaselineReport:
         from core.offline_replay_ordering_contract import (
             reset_offline_replay_ordering_report,
         )
+
         reset_offline_replay_ordering_report()
         yield
         reset_offline_replay_ordering_report()
 
     def test_H01_baseline_has_correct_sentinels(self):
         from core.offline_replay_ordering_contract import (
-            build_offline_replay_ordering_report,
             OFFLINE_REPLAY_ORDERING_CONTRACT_AUTHORITY,
             OFFLINE_REPLAY_ORDERING_CONTRACT_PR_P03_SENTINEL,
+            build_offline_replay_ordering_report,
         )
+
         rpt = build_offline_replay_ordering_report()
         assert rpt.authority_sentinel == OFFLINE_REPLAY_ORDERING_CONTRACT_AUTHORITY
         assert rpt.pr_sentinel == OFFLINE_REPLAY_ORDERING_CONTRACT_PR_P03_SENTINEL
 
     def test_H02_baseline_verdict_is_not_yet_evidenced(self):
         from core.offline_replay_ordering_contract import (
-            build_offline_replay_ordering_report,
             OfflineReplayContractVerdict,
+            build_offline_replay_ordering_report,
         )
+
         rpt = build_offline_replay_ordering_report()
         assert rpt.verdict == OfflineReplayContractVerdict.contract_not_yet_evidenced
 
@@ -798,15 +834,17 @@ class TestBaselineReport:
         from core.offline_replay_ordering_contract import (
             build_offline_replay_ordering_report,
         )
+
         rpt = build_offline_replay_ordering_report()
         assert rpt.total_items == 0
         assert len(rpt.items) == 0
 
     def test_H04_baseline_ordering_authority_is_v2_side(self):
         from core.offline_replay_ordering_contract import (
-            build_offline_replay_ordering_report,
             ReplayOrderingAuthority,
+            build_offline_replay_ordering_report,
         )
+
         rpt = build_offline_replay_ordering_report()
         assert rpt.ordering_authority == ReplayOrderingAuthority.v2_side
 
@@ -814,6 +852,7 @@ class TestBaselineReport:
         from core.offline_replay_ordering_contract import (
             build_offline_replay_ordering_report,
         )
+
         rpt = build_offline_replay_ordering_report()
         assert rpt.summary
         assert len(rpt.summary) > 10
@@ -822,6 +861,7 @@ class TestBaselineReport:
         from core.offline_replay_ordering_contract import (
             get_offline_replay_ordering_report,
         )
+
         rpt1 = get_offline_replay_ordering_report()
         rpt2 = get_offline_replay_ordering_report()
         assert rpt1 is rpt2
@@ -831,6 +871,7 @@ class TestBaselineReport:
             get_offline_replay_ordering_report,
             reset_offline_replay_ordering_report,
         )
+
         rpt1 = get_offline_replay_ordering_report()
         reset_offline_replay_ordering_report()
         rpt2 = get_offline_replay_ordering_report()
@@ -846,36 +887,34 @@ class TestIntegrationRecoveryClosureValidator:
     def test_I01_rs16_is_advisory_not_deferred(self):
         """RS-16 must be advisory after PR-P0-3 contract definition."""
         from core.recovery_durability_closure_validator import (
-            build_recovery_closure_report,
             RecoveryScenarioStatus,
+            build_recovery_closure_report,
         )
+
         report = build_recovery_closure_report()
         rs16 = next(s for s in report.scenarios if s.scenario_id == "RS-16")
-        assert rs16.status == RecoveryScenarioStatus.advisory, (
-            f"RS-16 must be advisory after PR-P0-3; got {rs16.status!r}"
-        )
+        assert (
+            rs16.status == RecoveryScenarioStatus.advisory
+        ), f"RS-16 must be advisory after PR-P0-3; got {rs16.status!r}"
 
     def test_I02_rs16_references_offline_replay_ordering_contract(self):
         """RS-16 note or policy_reference must reference the contract."""
         from core.recovery_durability_closure_validator import (
             build_recovery_closure_report,
         )
+
         report = build_recovery_closure_report()
         rs16 = next(s for s in report.scenarios if s.scenario_id == "RS-16")
         combined = (rs16.note + rs16.policy_reference).lower()
-        assert (
-            "offline_replay_ordering_contract" in combined
-            or "pr-p0-3" in combined
-            or "contract" in combined
-        ), (
-            f"RS-16 must reference the ordering contract; "
-            f"note={rs16.note!r}, policy_ref={rs16.policy_reference!r}"
+        assert "offline_replay_ordering_contract" in combined or "pr-p0-3" in combined or "contract" in combined, (
+            f"RS-16 must reference the ordering contract; " f"note={rs16.note!r}, policy_ref={rs16.policy_reference!r}"
         )
 
     def test_I03_new_policy_sentinel_is_non_empty(self):
         from core.recovery_durability_closure_validator import (
             OFFLINE_QUEUE_ORDERING_CONTRACT_NOW_DEFINED_POLICY,
         )
+
         assert OFFLINE_QUEUE_ORDERING_CONTRACT_NOW_DEFINED_POLICY
         assert "PR-P0-3" in OFFLINE_QUEUE_ORDERING_CONTRACT_NOW_DEFINED_POLICY
 
@@ -890,16 +929,16 @@ class TestIntegrationRecoveryTruthSurface:
         from core.recovery_truth_surface import (
             OFFLINE_QUEUE_REPLAY_ORDERING_CONTRACT_IS_DEFINED_TRUTH_POLICY,
         )
+
         assert OFFLINE_QUEUE_REPLAY_ORDERING_CONTRACT_IS_DEFINED_TRUTH_POLICY
-        assert "PR-P0-3" in (
-            OFFLINE_QUEUE_REPLAY_ORDERING_CONTRACT_IS_DEFINED_TRUTH_POLICY
-        )
+        assert "PR-P0-3" in (OFFLINE_QUEUE_REPLAY_ORDERING_CONTRACT_IS_DEFINED_TRUTH_POLICY)
 
     def test_J02_build_recovery_truth_report_runs_without_error(self):
         from core.recovery_truth_surface import (
             build_recovery_truth_report,
             reset_recovery_truth_surface,
         )
+
         reset_recovery_truth_surface()
         rpt = build_recovery_truth_report()
         assert rpt is not None
@@ -917,10 +956,11 @@ class TestIntegrationRecoveryTruthSurface:
         'observed' claims.
         """
         from core.recovery_truth_surface import (
-            build_recovery_truth_report,
             RecoveryTruthStatus,
+            build_recovery_truth_report,
             reset_recovery_truth_surface,
         )
+
         reset_recovery_truth_surface()
         rpt = build_recovery_truth_report()
         for entry in rpt.entries:

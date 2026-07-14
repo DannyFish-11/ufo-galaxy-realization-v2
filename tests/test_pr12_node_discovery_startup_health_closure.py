@@ -62,10 +62,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers / stub implementations
 # ---------------------------------------------------------------------------
+
 
 def _make_stub_discovery_node(node_id: str, state_str: str = "registered"):
     node = MagicMock()
@@ -109,10 +109,7 @@ def _make_stub_fabric(
     fabric.list_nodes.return_value = nodes
     if healthy_nodes is None:
         # Default: nodes with status "healthy" are healthy.
-        healthy_nodes = [
-            n for n in nodes
-            if getattr(n.status, "value", None) == "healthy"
-        ]
+        healthy_nodes = [n for n in nodes if getattr(n.status, "value", None) == "healthy"]
     fabric.list_healthy.return_value = healthy_nodes
     return fabric
 
@@ -130,12 +127,14 @@ def _make_stub_discovery(nodes: Optional[Dict[str, Any]] = None):
 # A) Sentinel / policy strings
 # ---------------------------------------------------------------------------
 
+
 class TestSentinelStrings:
 
     def test_authority_importable(self):
         from core.node_discovery_startup_health_closure import (
             NODE_DISCOVERY_STARTUP_HEALTH_CLOSURE_IS_AUTHORITY,
         )
+
         assert isinstance(NODE_DISCOVERY_STARTUP_HEALTH_CLOSURE_IS_AUTHORITY, str)
         assert len(NODE_DISCOVERY_STARTUP_HEALTH_CLOSURE_IS_AUTHORITY) > 0
         assert "AUTHORITY" in NODE_DISCOVERY_STARTUP_HEALTH_CLOSURE_IS_AUTHORITY
@@ -144,6 +143,7 @@ class TestSentinelStrings:
         from core.node_discovery_startup_health_closure import (
             NODE_DISCOVERY_STARTUP_HEALTH_CLOSURE_PR12_SENTINEL,
         )
+
         assert isinstance(NODE_DISCOVERY_STARTUP_HEALTH_CLOSURE_PR12_SENTINEL, str)
         assert "PR12_SENTINEL" in NODE_DISCOVERY_STARTUP_HEALTH_CLOSURE_PR12_SENTINEL
         assert "startup seeding" in NODE_DISCOVERY_STARTUP_HEALTH_CLOSURE_PR12_SENTINEL
@@ -152,6 +152,7 @@ class TestSentinelStrings:
         from core.node_discovery_startup_health_closure import (
             STARTUP_SEEDING_IS_INVOKED_BY_REAL_ORCHESTRATION_POLICY,
         )
+
         assert isinstance(STARTUP_SEEDING_IS_INVOKED_BY_REAL_ORCHESTRATION_POLICY, str)
         assert len(STARTUP_SEEDING_IS_INVOKED_BY_REAL_ORCHESTRATION_POLICY) > 0
 
@@ -159,6 +160,7 @@ class TestSentinelStrings:
         from core.node_discovery_startup_health_closure import (
             HEALTH_SURFACES_REFLECT_DISCOVERY_PARTICIPATION_POLICY,
         )
+
         assert isinstance(HEALTH_SURFACES_REFLECT_DISCOVERY_PARTICIPATION_POLICY, str)
         assert len(HEALTH_SURFACES_REFLECT_DISCOVERY_PARTICIPATION_POLICY) > 0
 
@@ -166,6 +168,7 @@ class TestSentinelStrings:
         from core.node_discovery_startup_health_closure import (
             UNDISCOVERED_ACTIVE_COUNT_IS_EXPOSED_IN_HEALTH_POLICY,
         )
+
         assert isinstance(UNDISCOVERED_ACTIVE_COUNT_IS_EXPOSED_IN_HEALTH_POLICY, str)
         assert "undiscovered_active" in UNDISCOVERED_ACTIVE_COUNT_IS_EXPOSED_IN_HEALTH_POLICY
 
@@ -173,6 +176,7 @@ class TestSentinelStrings:
         from core.node_discovery_startup_health_closure import (
             DISCOVERY_DIAGNOSTICS_ALIGN_WITH_LAUNCHER_AND_FABRIC_POLICY,
         )
+
         assert isinstance(DISCOVERY_DIAGNOSTICS_ALIGN_WITH_LAUNCHER_AND_FABRIC_POLICY, str)
         assert len(DISCOVERY_DIAGNOSTICS_ALIGN_WITH_LAUNCHER_AND_FABRIC_POLICY) > 0
 
@@ -180,6 +184,7 @@ class TestSentinelStrings:
 # ---------------------------------------------------------------------------
 # B) build_discovery_health_surface
 # ---------------------------------------------------------------------------
+
 
 class TestBuildDiscoveryHealthSurface:
 
@@ -191,15 +196,20 @@ class TestBuildDiscoveryHealthSurface:
         surface = build_discovery_health_surface(discovery, fabric)
 
         required = {
-            "discovery_total", "discovery_healthy", "fabric_total",
-            "fabric_healthy", "undiscovered_active", "discovery_participation",
-            "health_status", "authority",
+            "discovery_total",
+            "discovery_healthy",
+            "fabric_total",
+            "fabric_healthy",
+            "undiscovered_active",
+            "discovery_participation",
+            "health_status",
+            "authority",
         }
         assert required.issubset(set(surface.keys()))
 
     def test_healthy_when_full_participation(self):
-        from core.node_discovery_startup_health_closure import build_discovery_health_surface
         from core.node_discovery_runtime import get_discovery_participation_summary
+        from core.node_discovery_startup_health_closure import build_discovery_health_surface
 
         fabric_node = _make_stub_fabric_node("Node_01")
         disc_node = _make_stub_discovery_node("Node_01")
@@ -251,8 +261,8 @@ class TestBuildDiscoveryHealthSurface:
 
     def test_authority_key_present(self):
         from core.node_discovery_startup_health_closure import (
-            build_discovery_health_surface,
             NODE_DISCOVERY_STARTUP_HEALTH_CLOSURE_IS_AUTHORITY,
+            build_discovery_health_surface,
         )
 
         discovery = _make_stub_discovery()
@@ -269,8 +279,9 @@ class TestBuildDiscoveryHealthSurface:
         not all fabric nodes are discoverable, but undiscovered_active is 0 because
         the only healthy fabric node IS in discovery.
         """
-        from core.node_discovery_startup_health_closure import build_discovery_health_surface
         from unittest.mock import patch as _patch
+
+        from core.node_discovery_startup_health_closure import build_discovery_health_surface
 
         # A scenario where participation is "partial" but no healthy fabric node
         # is missing from discovery: 2 fabric nodes (1 healthy, 1 offline), 1 in
@@ -297,6 +308,7 @@ class TestBuildDiscoveryHealthSurface:
 # ---------------------------------------------------------------------------
 # C) build_startup_seeding_status
 # ---------------------------------------------------------------------------
+
 
 class TestBuildStartupSeedingStatus:
 
@@ -347,6 +359,7 @@ class TestBuildStartupSeedingStatus:
 # D) build_discovery_diagnostic_context
 # ---------------------------------------------------------------------------
 
+
 class TestBuildDiscoveryDiagnosticContext:
 
     def test_returns_required_summary_keys(self):
@@ -358,8 +371,15 @@ class TestBuildDiscoveryDiagnosticContext:
         discovery = _make_stub_discovery({"Node_01": disc_node})
 
         ctx = build_discovery_diagnostic_context(fabric, discovery)
-        for key in ("healthy_count", "undiscovered_active_count", "discovery_orphan_count",
-                    "total_fabric_nodes", "total_discovery_nodes", "per_node", "authority"):
+        for key in (
+            "healthy_count",
+            "undiscovered_active_count",
+            "discovery_orphan_count",
+            "total_fabric_nodes",
+            "total_discovery_nodes",
+            "per_node",
+            "authority",
+        ):
             assert key in ctx, f"missing key: {key}"
 
     def test_per_node_has_alignment_field(self):
@@ -424,28 +444,35 @@ class TestBuildDiscoveryDiagnosticContext:
 # E) launcher/node_startup.py — PR-12 sentinel and start_all wiring
 # ---------------------------------------------------------------------------
 
+
 class TestLauncherPR12Integration:
 
     def test_pr12_seeding_sentinel_importable(self):
         from launcher.node_startup import NODE_DISCOVERY_STARTUP_SEEDING_WIRED_PR12
+
         assert isinstance(NODE_DISCOVERY_STARTUP_SEEDING_WIRED_PR12, str)
         assert "PR12" in NODE_DISCOVERY_STARTUP_SEEDING_WIRED_PR12
         assert "start_all" in NODE_DISCOVERY_STARTUP_SEEDING_WIRED_PR12
 
     def test_start_all_is_coroutine(self):
         import inspect
+
         from launcher.node_startup import NodeSystemLauncher
+
         assert inspect.iscoroutinefunction(NodeSystemLauncher.start_all)
 
     def test_initialize_discovery_after_startup_is_coroutine(self):
         import inspect
+
         from launcher.node_startup import NodeSystemLauncher
+
         assert inspect.iscoroutinefunction(NodeSystemLauncher.initialize_discovery_after_startup)
 
     def test_start_all_calls_initialize_discovery_after_startup(self):
         """start_all() must invoke initialize_discovery_after_startup() after batch."""
         import asyncio
         import inspect
+
         from launcher.node_startup import NodeSystemLauncher
 
         # Read source to confirm the call is present (structural test).
@@ -460,11 +487,13 @@ class TestLauncherPR12Integration:
 # F) projection.py sentinel
 # ---------------------------------------------------------------------------
 
+
 class TestProjectionSentinelPR12:
 
     def test_pr12_sentinel_in_projection(self):
         try:
             from core.routes.projection import NODE_DISCOVERY_STARTUP_HEALTH_CLOSURE_ALIGNED_PR12
+
             assert isinstance(NODE_DISCOVERY_STARTUP_HEALTH_CLOSURE_ALIGNED_PR12, str)
             assert "PR12" in NODE_DISCOVERY_STARTUP_HEALTH_CLOSURE_ALIGNED_PR12
         except ImportError:
@@ -475,6 +504,7 @@ class TestProjectionSentinelPR12:
         from core.node_discovery_startup_health_closure import (
             NODE_DISCOVERY_STARTUP_HEALTH_CLOSURE_PR12_SENTINEL,
         )
+
         assert "PR12" in NODE_DISCOVERY_STARTUP_HEALTH_CLOSURE_PR12_SENTINEL
         assert "startup seeding" in NODE_DISCOVERY_STARTUP_HEALTH_CLOSURE_PR12_SENTINEL
 
@@ -482,6 +512,7 @@ class TestProjectionSentinelPR12:
         """The projection module should expose the PR-12 sentinel regardless of fastapi."""
         try:
             import core.routes.projection as proj
+
             assert hasattr(proj, "NODE_DISCOVERY_STARTUP_HEALTH_CLOSURE_ALIGNED_PR12")
             sentinel = proj.NODE_DISCOVERY_STARTUP_HEALTH_CLOSURE_ALIGNED_PR12
             assert isinstance(sentinel, str)
@@ -493,6 +524,7 @@ class TestProjectionSentinelPR12:
 # ---------------------------------------------------------------------------
 # G) Integration: build_discovery_health_surface with mixed states
 # ---------------------------------------------------------------------------
+
 
 class TestDiscoveryHealthSurfaceIntegration:
 

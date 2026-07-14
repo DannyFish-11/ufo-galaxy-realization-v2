@@ -43,6 +43,7 @@ from __future__ import annotations
 
 import pytest
 
+import core.legacy_dispatch_registry as _mod
 from core.legacy_dispatch_registry import (
     LEGACY_DISPATCH_REGISTRY_AUTHORITY,
     LEGACY_DISPATCH_REGISTRY_POLICY,
@@ -55,12 +56,11 @@ from core.legacy_dispatch_registry import (
     reset_registry,
     snapshot_registry,
 )
-import core.legacy_dispatch_registry as _mod
-
 
 # ===========================================================================
 # Fixtures
 # ===========================================================================
+
 
 @pytest.fixture(autouse=True)
 def fresh_registry():
@@ -72,6 +72,7 @@ def fresh_registry():
 # ===========================================================================
 # A) Authority sentinels
 # ===========================================================================
+
 
 def test_A1_authority_importable():
     assert LEGACY_DISPATCH_REGISTRY_AUTHORITY is not None
@@ -94,6 +95,7 @@ def test_A4_policy_mentions_command_router():
 # B) LegacyDispatchClassification enum
 # ===========================================================================
 
+
 def test_B1_compat_only():
     assert LegacyDispatchClassification.COMPAT_ONLY.value == "compat-only"
 
@@ -109,6 +111,7 @@ def test_B3_facade_only():
 # ===========================================================================
 # C) LegacyDispatchEntry
 # ===========================================================================
+
 
 def test_C1_entry_defaults():
     entry = LegacyDispatchEntry()
@@ -149,6 +152,7 @@ def test_C4_entry_to_dict_classification_is_str():
 # D) LegacyRegistrySnapshot
 # ===========================================================================
 
+
 def test_D1_snapshot_defaults():
     snap = LegacyRegistrySnapshot()
     assert snap.total_entries == 0
@@ -166,6 +170,7 @@ def test_D2_snapshot_to_dict_keys():
 # ===========================================================================
 # E) LegacyDispatchRegistry.register()
 # ===========================================================================
+
 
 def test_E1_register_basic():
     reg = LegacyDispatchRegistry()
@@ -188,6 +193,7 @@ def test_E2_register_returns_entry():
 # F) LegacyDispatchRegistry.register() idempotent
 # ===========================================================================
 
+
 def test_F1_register_idempotent_upsert():
     reg = LegacyDispatchRegistry()
     reg.register("mod.y", LegacyDispatchClassification.DEPRECATED)
@@ -201,6 +207,7 @@ def test_F1_register_idempotent_upsert():
 # G) Empty module raises ValueError
 # ===========================================================================
 
+
 def test_G1_empty_module_raises():
     reg = LegacyDispatchRegistry()
     with pytest.raises(ValueError):
@@ -210,6 +217,7 @@ def test_G1_empty_module_raises():
 # ===========================================================================
 # H) LegacyDispatchRegistry.get()
 # ===========================================================================
+
 
 def test_H1_get_found():
     reg = LegacyDispatchRegistry()
@@ -226,6 +234,7 @@ def test_H2_get_not_found():
 # I) is_registered()
 # ===========================================================================
 
+
 def test_I1_is_registered_true():
     reg = LegacyDispatchRegistry()
     reg.register("mod.z", LegacyDispatchClassification.COMPAT_ONLY)
@@ -241,6 +250,7 @@ def test_I2_is_registered_false():
 # J) get_by_classification()
 # ===========================================================================
 
+
 def test_J1_get_by_classification_facade():
     reg = LegacyDispatchRegistry()
     reg.register("mod.a", LegacyDispatchClassification.FACADE_ONLY)
@@ -254,6 +264,7 @@ def test_J1_get_by_classification_facade():
 # K) all_entries()
 # ===========================================================================
 
+
 def test_K1_all_entries_returns_list():
     reg = LegacyDispatchRegistry()
     reg.register("mod.1", LegacyDispatchClassification.DEPRECATED)
@@ -266,6 +277,7 @@ def test_K1_all_entries_returns_list():
 # ===========================================================================
 # L) snapshot()
 # ===========================================================================
+
 
 def test_L1_snapshot_total_entries():
     reg = LegacyDispatchRegistry()
@@ -288,6 +300,7 @@ def test_L2_snapshot_entries_by_classification():
 # M) Singleton
 # ===========================================================================
 
+
 def test_M1_singleton():
     r1 = get_legacy_dispatch_registry()
     r2 = get_legacy_dispatch_registry()
@@ -297,6 +310,7 @@ def test_M1_singleton():
 # ===========================================================================
 # N) reset_registry()
 # ===========================================================================
+
 
 def test_N1_reset_changes_singleton():
     r1 = get_legacy_dispatch_registry()
@@ -308,6 +322,7 @@ def test_N1_reset_changes_singleton():
 # ===========================================================================
 # O–Z) Bootstrap entries
 # ===========================================================================
+
 
 def test_O1_unified_orchestrator_pre_registered():
     reg = get_legacy_dispatch_registry()
@@ -445,6 +460,7 @@ def test_Z2_execution_spine_is_compat_only():
 # AA) register_legacy_dispatch convenience function
 # ===========================================================================
 
+
 def test_AA1_register_legacy_dispatch_works():
     reset_registry()
     entry = register_legacy_dispatch(
@@ -461,6 +477,7 @@ def test_AA1_register_legacy_dispatch_works():
 # AB) snapshot_registry()
 # ===========================================================================
 
+
 def test_AB1_snapshot_registry_returns_snapshot():
     snap = snapshot_registry()
     assert isinstance(snap, LegacyRegistrySnapshot)
@@ -470,15 +487,16 @@ def test_AB1_snapshot_registry_returns_snapshot():
 # AC) At least 10 bootstrapped entries
 # ===========================================================================
 
+
 def test_AC1_snapshot_has_minimum_bootstrapped_entries():
     snap = snapshot_registry()
-    assert snap.total_entries >= 10, \
-        f"Expected at least 10 bootstrapped entries, got {snap.total_entries}"
+    assert snap.total_entries >= 10, f"Expected at least 10 bootstrapped entries, got {snap.total_entries}"
 
 
 # ===========================================================================
 # AD) __all__ completeness
 # ===========================================================================
+
 
 def test_AD1_all_exports_importable():
     for name in _mod.__all__:

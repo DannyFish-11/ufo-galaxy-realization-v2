@@ -68,10 +68,10 @@ def test_refresh_providers_awaits_to_thread(monkeypatch):
     """静态核实：refresh_providers() 源码里对 _discover_providers 的调用
     确实经由 asyncio.to_thread,而不是裸同步调用(防止未来改动悄悄回退)。"""
     import inspect
+
     import core.multi_llm_router as mod
 
     src = inspect.getsource(mod.MultiLLMRouter.refresh_providers)
     assert "asyncio.to_thread(self._discover_providers)" in src, (
-        "refresh_providers() 应通过 asyncio.to_thread 调用 _discover_providers，"
-        "避免在共享事件循环上做阻塞网络探测"
+        "refresh_providers() 应通过 asyncio.to_thread 调用 _discover_providers，" "避免在共享事件循环上做阻塞网络探测"
     )

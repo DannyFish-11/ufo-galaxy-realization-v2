@@ -461,11 +461,7 @@ class ProviderSwitchRecord:
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialise to a plain dictionary for operator/projection consumption."""
-        kind = (
-            CriticalPathKind.FALLBACK_SWITCH.value
-            if self.is_fallback
-            else CriticalPathKind.PROVIDER_SELECTION.value
-        )
+        kind = CriticalPathKind.FALLBACK_SWITCH.value if self.is_fallback else CriticalPathKind.PROVIDER_SELECTION.value
         return {
             "kind": kind,
             "trace_id": self.trace_id,
@@ -609,18 +605,10 @@ class CriticalPathHarnessRuntime:
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
-        self._ingress: Deque[IngressHarnessRecord] = deque(
-            maxlen=_RING_BUFFER_SIZE
-        )
-        self._route_selections: Deque[RouteSelectionRecord] = deque(
-            maxlen=_RING_BUFFER_SIZE
-        )
-        self._provider_switches: Deque[ProviderSwitchRecord] = deque(
-            maxlen=_RING_BUFFER_SIZE
-        )
-        self._dispatches: Deque[ExecutionDispatchRecord] = deque(
-            maxlen=_RING_BUFFER_SIZE
-        )
+        self._ingress: Deque[IngressHarnessRecord] = deque(maxlen=_RING_BUFFER_SIZE)
+        self._route_selections: Deque[RouteSelectionRecord] = deque(maxlen=_RING_BUFFER_SIZE)
+        self._provider_switches: Deque[ProviderSwitchRecord] = deque(maxlen=_RING_BUFFER_SIZE)
+        self._dispatches: Deque[ExecutionDispatchRecord] = deque(maxlen=_RING_BUFFER_SIZE)
 
     # -----------------------------------------------------------------------
     # Write methods
@@ -650,41 +638,31 @@ class CriticalPathHarnessRuntime:
     # Query methods
     # -----------------------------------------------------------------------
 
-    def get_ingress_records(
-        self, limit: Optional[int] = None
-    ) -> List[IngressHarnessRecord]:
+    def get_ingress_records(self, limit: Optional[int] = None) -> List[IngressHarnessRecord]:
         """Return recent ingress records, newest last."""
         with self._lock:
             records = list(self._ingress)
         return records[-limit:] if limit else records
 
-    def get_route_selection_records(
-        self, limit: Optional[int] = None
-    ) -> List[RouteSelectionRecord]:
+    def get_route_selection_records(self, limit: Optional[int] = None) -> List[RouteSelectionRecord]:
         """Return recent route-selection records, newest last."""
         with self._lock:
             records = list(self._route_selections)
         return records[-limit:] if limit else records
 
-    def get_provider_switch_records(
-        self, limit: Optional[int] = None
-    ) -> List[ProviderSwitchRecord]:
+    def get_provider_switch_records(self, limit: Optional[int] = None) -> List[ProviderSwitchRecord]:
         """Return recent provider-switch records, newest last."""
         with self._lock:
             records = list(self._provider_switches)
         return records[-limit:] if limit else records
 
-    def get_dispatch_records(
-        self, limit: Optional[int] = None
-    ) -> List[ExecutionDispatchRecord]:
+    def get_dispatch_records(self, limit: Optional[int] = None) -> List[ExecutionDispatchRecord]:
         """Return recent dispatch records, newest last."""
         with self._lock:
             records = list(self._dispatches)
         return records[-limit:] if limit else records
 
-    def get_fallback_records(
-        self, limit: Optional[int] = None
-    ) -> List[ProviderSwitchRecord]:
+    def get_fallback_records(self, limit: Optional[int] = None) -> List[ProviderSwitchRecord]:
         """Return provider-switch records where ``is_fallback=True``."""
         with self._lock:
             records = [r for r in self._provider_switches if r.is_fallback]
@@ -703,9 +681,7 @@ class CriticalPathHarnessRuntime:
             dispatch_list = list(self._dispatches)
 
         fallback_count = sum(1 for r in switch_list if r.is_fallback)
-        advisory_count = sum(
-            1 for r in route_list if r.route_type == "advisory"
-        )
+        advisory_count = sum(1 for r in route_list if r.route_type == "advisory")
         recent_route_type = route_list[-1].route_type if route_list else ""
         recent_provider = switch_list[-1].to_provider if switch_list else ""
 
@@ -881,9 +857,7 @@ def record_provider_switch(
     Returns:
         The :class:`ProviderSwitchRecord` that was appended.
     """
-    harness_state = (
-        PathHarnessState.FALLBACK_ACTIVE if is_fallback else PathHarnessState.COMPLETED
-    )
+    harness_state = PathHarnessState.FALLBACK_ACTIVE if is_fallback else PathHarnessState.COMPLETED
     rec = ProviderSwitchRecord(
         trace_id=trace_id,
         from_provider=from_provider,

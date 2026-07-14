@@ -35,14 +35,15 @@ cache is kept as a projection supplement.
 
 import json
 import logging
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
-from typing import Dict, Any, List, Optional, Set
-from dataclasses import dataclass, field, asdict
 from enum import Enum
+from typing import Any, Dict, List, Optional, Set
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+
 from nodes.common.cors_config import get_cors_origins
 
 logging.basicConfig(level=logging.INFO)
@@ -53,19 +54,22 @@ logger = logging.getLogger(__name__)
 # 数据模型
 # ============================================================================
 
+
 class DeviceCategory(str, Enum):
     """设备类别"""
-    MOBILE = "mobile"           # 移动设备（Android、iOS）
-    DESKTOP = "desktop"         # 桌面设备（Windows、macOS、Linux）
-    IOT = "iot"                 # 物联网设备
-    PERIPHERAL = "peripheral"   # 外设（摄像头、串口等）
-    NETWORK = "network"         # 网络设备
-    CUSTOM = "custom"           # 自定义设备
+
+    MOBILE = "mobile"  # 移动设备（Android、iOS）
+    DESKTOP = "desktop"  # 桌面设备（Windows、macOS、Linux）
+    IOT = "iot"  # 物联网设备
+    PERIPHERAL = "peripheral"  # 外设（摄像头、串口等）
+    NETWORK = "network"  # 网络设备
+    CUSTOM = "custom"  # 自定义设备
 
 
 @dataclass
 class HardwareStatus:
     """硬件状态"""
+
     # 摄像头
     camera_available: bool = False
     camera_front: bool = False
@@ -110,6 +114,7 @@ class HardwareStatus:
 @dataclass
 class DeviceState:
     """设备状态"""
+
     device_id: str
     device_name: str
     device_type: str
@@ -138,13 +143,14 @@ class DeviceState:
 
     def to_dict(self) -> Dict[str, Any]:
         result = asdict(self)
-        result['category'] = self.category.value
+        result["category"] = self.category.value
         return result
 
 
 # ============================================================================
 # 设备状态管理器
 # ============================================================================
+
 
 class DeviceStatusManager:
     """设备状态管理器"""
@@ -181,7 +187,10 @@ class DeviceStatusManager:
         self._status_history[device_state.device_id] = []
         logger.info(f"Device registered: {device_state.device_id} ({device_state.device_name})")
         from core.task_utils import create_tracked_task
-        create_tracked_task(self._broadcast_update("device_registered", device_state.to_dict()), name="broadcast_device_registered")
+
+        create_tracked_task(
+            self._broadcast_update("device_registered", device_state.to_dict()), name="broadcast_device_registered"
+        )
         return True
 
     def unregister_device(self, device_id: str) -> bool:
@@ -198,7 +207,11 @@ class DeviceStatusManager:
             self._status_history.pop(device_id, None)
             logger.info(f"Device unregistered: {device_id}")
             from core.task_utils import create_tracked_task
-            create_tracked_task(self._broadcast_update("device_unregistered", {"device_id": device_id}), name="broadcast_device_unregistered")
+
+            create_tracked_task(
+                self._broadcast_update("device_unregistered", {"device_id": device_id}),
+                name="broadcast_device_unregistered",
+            )
             return True
         return False
 
@@ -211,6 +224,7 @@ class DeviceStatusManager:
         """Write device registration to UDM SSOT (best-effort, never raises)."""
         try:
             from galaxy_gateway.ssot import udm_write_register  # noqa: PLC0415
+
             # Extract capability list from hardware fields where available.
             hw = device_state.hardware
             caps: list = []
@@ -233,9 +247,11 @@ class DeviceStatusManager:
                     "ip_address": device_state.ip_address,
                     "os_version": device_state.os_version,
                     "app_version": device_state.app_version,
-                    "category": device_state.category.value
-                    if hasattr(device_state.category, "value")
-                    else str(device_state.category),
+                    "category": (
+                        device_state.category.value
+                        if hasattr(device_state.category, "value")
+                        else str(device_state.category)
+                    ),
                 },
                 source="device_status_api",
             )
@@ -252,6 +268,7 @@ class DeviceStatusManager:
         """Write device offline/unregister to UDM SSOT (best-effort, never raises)."""
         try:
             from galaxy_gateway.ssot import udm_write_unregister  # noqa: PLC0415
+
             udm_write_unregister(device_id)
         except Exception as exc:
             logger.warning(
@@ -276,8 +293,16 @@ class DeviceStatusManager:
                     setattr(device.hardware, key, value)
 
         # 更新其他字段
-        for key in ["is_online", "is_connected_to_server", "active_nodes", "total_nodes",
-                    "node_health", "os_version", "app_version", "ip_address"]:
+        for key in [
+            "is_online",
+            "is_connected_to_server",
+            "active_nodes",
+            "total_nodes",
+            "node_health",
+            "os_version",
+            "app_version",
+            "ip_address",
+        ]:
             if key in status_update:
                 setattr(device, key, status_update[key])
 
@@ -293,7 +318,10 @@ class DeviceStatusManager:
 
         # 广播更新
         from core.task_utils import create_tracked_task
-        create_tracked_task(self._broadcast_update("device_status_updated", device.to_dict()), name="broadcast_device_status")
+
+        create_tracked_task(
+            self._broadcast_update("device_status_updated", device.to_dict()), name="broadcast_device_status"
+        )
 
         return True
 
@@ -309,17 +337,11 @@ class DeviceStatusManager:
 
     def get_devices_by_category(self, category: DeviceCategory) -> List[Dict[str, Any]]:
         """按类别获取设备"""
-        return [
-            device.to_dict() for device in self._devices.values()
-            if device.category == category
-        ]
+        return [device.to_dict() for device in self._devices.values() if device.category == category]
 
     def get_online_devices(self) -> List[Dict[str, Any]]:
         """获取在线设备"""
-        return [
-            device.to_dict() for device in self._devices.values()
-            if device.is_online
-        ]
+        return [device.to_dict() for device in self._devices.values() if device.is_online]
 
     def get_status_summary(self) -> Dict[str, Any]:
         """获取状态摘要"""
@@ -331,17 +353,14 @@ class DeviceStatusManager:
         for cat in DeviceCategory:
             devices = [d for d in self._devices.values() if d.category == cat]
             if devices:
-                by_category[cat.value] = {
-                    "total": len(devices),
-                    "online": sum(1 for d in devices if d.is_online)
-                }
+                by_category[cat.value] = {"total": len(devices), "online": sum(1 for d in devices if d.is_online)}
 
         return {
             "total_devices": total,
             "online_devices": online,
             "connected_devices": connected,
             "by_category": by_category,
-            "last_updated": datetime.now().isoformat()
+            "last_updated": datetime.now().isoformat(),
         }
 
     def _record_history(self, device_id: str, status: Dict[str, Any]):
@@ -350,10 +369,7 @@ class DeviceStatusManager:
             self._status_history[device_id] = []
 
         history = self._status_history[device_id]
-        history.append({
-            "timestamp": datetime.now().isoformat(),
-            "status": status
-        })
+        history.append({"timestamp": datetime.now().isoformat(), "status": status})
 
         # 只保留最近 100 条记录
         if len(history) > 100:
@@ -374,11 +390,7 @@ class DeviceStatusManager:
         if not self._websocket_clients:
             return
 
-        message = json.dumps({
-            "event": event_type,
-            "data": data,
-            "timestamp": datetime.now().isoformat()
-        })
+        message = json.dumps({"event": event_type, "data": data, "timestamp": datetime.now().isoformat()})
 
         disconnected = set()
         for client in self._websocket_clients:
@@ -403,18 +415,10 @@ status_manager = DeviceStatusManager()
 # FastAPI 应用
 # ============================================================================
 
-app = FastAPI(
-    title="Galaxy Device Status API",
-    description="统一设备状态管理 API",
-    version="2.0"
-)
+app = FastAPI(title="Galaxy Device Status API", description="统一设备状态管理 API", version="2.0")
 
 app.add_middleware(
-    CORSMiddleware,
-    allow_origins=get_cors_origins(),
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"]
+    CORSMiddleware, allow_origins=get_cors_origins(), allow_credentials=True, allow_methods=["*"], allow_headers=["*"]
 )
 
 
@@ -487,7 +491,7 @@ async def register_device(request: RegisterDeviceRequest):
         device_type=request.device_type,
         category=category,
         os_version=request.os_version,
-        app_version=request.app_version
+        app_version=request.app_version,
     )
 
     success = status_manager.register_device(device_state)
@@ -516,10 +520,7 @@ async def update_status(device_id: str, request: UpdateStatusRequest):
 @app.post("/devices/{device_id}/heartbeat")
 async def heartbeat(device_id: str):
     """设备心跳"""
-    success = status_manager.update_device_status(device_id, {
-        "is_online": True,
-        "is_connected_to_server": True
-    })
+    success = status_manager.update_device_status(device_id, {"is_online": True, "is_connected_to_server": True})
     if not success:
         raise HTTPException(status_code=404, detail="Device not found")
     return {"success": True, "timestamp": datetime.now().isoformat()}
@@ -534,14 +535,13 @@ async def websocket_status(websocket: WebSocket):
 
     try:
         # 发送当前状态
-        await websocket.send_json({
-            "event": "initial_status",
-            "data": {
-                "summary": status_manager.get_status_summary(),
-                "devices": status_manager.get_all_devices()
-            },
-            "timestamp": datetime.now().isoformat()
-        })
+        await websocket.send_json(
+            {
+                "event": "initial_status",
+                "data": {"summary": status_manager.get_status_summary(), "devices": status_manager.get_all_devices()},
+                "timestamp": datetime.now().isoformat(),
+            }
+        )
 
         # 保持连接并处理消息
         while True:
@@ -554,11 +554,9 @@ async def websocket_status(websocket: WebSocket):
                 device_id = message.get("device_id")
                 if device_id:
                     status = status_manager.get_device_status(device_id)
-                    await websocket.send_json({
-                        "event": "device_status",
-                        "data": status,
-                        "timestamp": datetime.now().isoformat()
-                    })
+                    await websocket.send_json(
+                        {"event": "device_status", "data": status, "timestamp": datetime.now().isoformat()}
+                    )
 
     except WebSocketDisconnect:
         await status_manager.remove_websocket_client(websocket)
@@ -571,9 +569,11 @@ async def websocket_status(websocket: WebSocket):
 # 启动函数
 # ============================================================================
 
+
 def run_server(host: str = "0.0.0.0", port: int = 8766):
     """运行服务器"""
     import uvicorn
+
     uvicorn.run(app, host=host, port=port)
 
 

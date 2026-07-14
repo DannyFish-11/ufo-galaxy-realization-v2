@@ -53,8 +53,8 @@ from typing import Any, Dict, Optional
 from .agent_role import AgentRole
 from .handoff_policy import HandoffPolicy, get_policy_for_role
 from .ownership_summary import (
-    OwnershipSummary,
     IDLE_OWNERSHIP_SUMMARY,
+    OwnershipSummary,
     build_ownership_summary,
 )
 from .responsibility_graph import OwnershipRecord
@@ -109,9 +109,7 @@ class DispatchSummary:
     dispatch_role: str = AgentRole.UNASSIGNED.value
     target_role: str = AgentRole.UNASSIGNED.value
     handoff_valid: bool = False
-    ownership: OwnershipSummary = dataclasses.field(
-        default_factory=lambda: IDLE_OWNERSHIP_SUMMARY
-    )
+    ownership: OwnershipSummary = dataclasses.field(default_factory=lambda: IDLE_OWNERSHIP_SUMMARY)
     trace_id: Optional[str] = None
     task_id: Optional[str] = None
     bridge_source: Optional[str] = None
@@ -266,6 +264,7 @@ def resolve_dispatch_summary(
     DispatchSummary
         Always returns a valid summary.
     """
+
     def _parse(raw: str) -> AgentRole:
         try:
             return AgentRole(raw)
@@ -285,6 +284,7 @@ def resolve_dispatch_summary(
         )
     except Exception:
         import logging as _logging
+
         _logging.getLogger("Galaxy.AgentGovernance.DispatchSummary").warning(
             "resolve_dispatch_summary failed, returning idle summary",
         )
@@ -373,9 +373,7 @@ def attach_dispatch_summary_to_handoff_result(
     bridge_source = handoff_result.get("bridge_source")
     failure_reason = ""
     if not success:
-        failure_reason = str(
-            handoff_result.get("error", handoff_result.get("reason", "handoff failed"))
-        )
+        failure_reason = str(handoff_result.get("error", handoff_result.get("reason", "handoff failed")))
 
     summary = resolve_dispatch_summary(
         dispatch_role_str=dispatch_role_str,

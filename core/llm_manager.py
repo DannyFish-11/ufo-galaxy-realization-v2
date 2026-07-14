@@ -72,6 +72,7 @@ class LLMManager:
     def _get_router() -> Any:
         """返回进程级 UnifiedLLMRouter 单例。"""
         from core.unified.llm_router import get_unified_llm_router  # lazy import
+
         return get_unified_llm_router()
 
     @property
@@ -176,10 +177,18 @@ class LLMManager:
             return [
                 {
                     "provider": name,
-                    "model": info.get("default_model", "unknown") if isinstance(info, dict) else getattr(info, "default_model", "unknown"),
+                    "model": (
+                        info.get("default_model", "unknown")
+                        if isinstance(info, dict)
+                        else getattr(info, "default_model", "unknown")
+                    ),
                     "source": "multi_llm_router",
                     "active": True,
-                    "status": info.get("status", "healthy") if isinstance(info, dict) else getattr(getattr(info, "status", None), "value", "healthy"),
+                    "status": (
+                        info.get("status", "healthy")
+                        if isinstance(info, dict)
+                        else getattr(getattr(info, "status", None), "value", "healthy")
+                    ),
                 }
                 for name, info in raw_providers.items()
             ]

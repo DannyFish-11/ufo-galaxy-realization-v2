@@ -24,7 +24,6 @@ from __future__ import annotations
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # DeviceExecutionProfile
 # ---------------------------------------------------------------------------
@@ -142,7 +141,7 @@ class TestProfileFactories:
     """build_rich_profile / build_thin_profile / build_unknown_profile."""
 
     def test_build_rich_profile(self):
-        from core.device_execution_profile import build_rich_profile, DeviceProfileClass
+        from core.device_execution_profile import DeviceProfileClass, build_rich_profile
 
         p = build_rich_profile(device_id="phone_01", capabilities=["screen", "touch"])
         assert p.profile_class == DeviceProfileClass.rich
@@ -152,7 +151,7 @@ class TestProfileFactories:
         assert "command_only" in p.supported_modes
 
     def test_build_thin_profile(self):
-        from core.device_execution_profile import build_thin_profile, DeviceProfileClass
+        from core.device_execution_profile import DeviceProfileClass, build_thin_profile
 
         p = build_thin_profile(device_id="drone_01", device_type="drone")
         assert p.profile_class == DeviceProfileClass.thin
@@ -162,7 +161,7 @@ class TestProfileFactories:
         assert "agent_runtime" not in p.supported_modes
 
     def test_build_unknown_profile(self):
-        from core.device_execution_profile import build_unknown_profile, DeviceProfileClass
+        from core.device_execution_profile import DeviceProfileClass, build_unknown_profile
 
         p = build_unknown_profile(device_id="mystery_01")
         assert p.profile_class == DeviceProfileClass.unknown
@@ -172,8 +171,8 @@ class TestProfileFactories:
     def test_build_profile_from_device_info_android(self):
         """Android device with screen/touch → rich profile."""
         from core.device_execution_profile import (
-            build_profile_from_device_info,
             DeviceProfileClass,
+            build_profile_from_device_info,
         )
 
         info = {
@@ -189,8 +188,8 @@ class TestProfileFactories:
     def test_build_profile_from_device_info_drone(self):
         """Drone device → thin profile."""
         from core.device_execution_profile import (
-            build_profile_from_device_info,
             DeviceProfileClass,
+            build_profile_from_device_info,
         )
 
         info = {
@@ -206,8 +205,8 @@ class TestProfileFactories:
     def test_build_profile_from_device_info_iot(self):
         """IoT sensor → thin profile."""
         from core.device_execution_profile import (
-            build_profile_from_device_info,
             DeviceProfileClass,
+            build_profile_from_device_info,
         )
 
         info = {"device_type": "iot", "capabilities": ["temperature_sensor"]}
@@ -217,8 +216,8 @@ class TestProfileFactories:
     def test_build_profile_from_device_info_empty(self):
         """No capability info → unknown profile with conservative fallback."""
         from core.device_execution_profile import (
-            build_profile_from_device_info,
             DeviceProfileClass,
+            build_profile_from_device_info,
         )
 
         p = build_profile_from_device_info({})
@@ -228,8 +227,8 @@ class TestProfileFactories:
     def test_build_profile_from_device_info_dict_caps(self):
         """Capabilities as list of dicts (Android bridge format) → normalised."""
         from core.device_execution_profile import (
-            build_profile_from_device_info,
             DeviceProfileClass,
+            build_profile_from_device_info,
         )
 
         info = {
@@ -244,8 +243,8 @@ class TestProfileFactories:
     def test_build_profile_from_device_info_pre_built_dict(self):
         """Pre-built profile dict in device_info is used directly."""
         from core.device_execution_profile import (
-            build_profile_from_device_info,
             DeviceProfileClass,
+            build_profile_from_device_info,
         )
 
         pre = {
@@ -613,7 +612,7 @@ class TestResolveModuleFunction:
         assert result.as_remote_execution_mode() == RemoteExecutionMode.command_only
 
     def test_get_resolver_singleton(self):
-        from core.remote_execution_mode_resolver import get_resolver, RemoteExecutionModeResolver
+        from core.remote_execution_mode_resolver import RemoteExecutionModeResolver, get_resolver
 
         r1 = get_resolver()
         r2 = get_resolver()

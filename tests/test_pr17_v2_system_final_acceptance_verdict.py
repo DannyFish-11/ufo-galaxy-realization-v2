@@ -65,8 +65,8 @@ AZ. Fail-conservative: absent module causes unresolved status, not accepted.
 from __future__ import annotations
 
 import json
-import sys
 import os
+import sys
 from typing import Any, Dict, List
 
 import pytest
@@ -77,26 +77,25 @@ if _PROJECT_ROOT not in sys.path:
 
 import core.system_final_acceptance_verdict as _mod
 from core.system_final_acceptance_verdict import (
-    SYSTEM_FINAL_ACCEPTANCE_VERDICT_AUTHORITY,
-    SYSTEM_FINAL_ACCEPTANCE_VERDICT_PR17V2_SENTINEL,
-    SYSTEM_VERDICT_IS_AUTHORITATIVE_AGGREGATION_POLICY,
-    SYSTEM_VERDICT_IS_PROJECTION_ONLY_POLICY,
-    SYSTEM_VERDICT_FAIL_CONSERVATIVE_ON_MISSING_DIMENSION_POLICY,
-    UNRESOLVED_RISK_MUST_BE_EXPLICIT_POLICY,
-    DUAL_FORMAT_OUTPUT_REQUIRED_POLICY,
     ALL_FIVE_DIMENSIONS_REQUIRED_FOR_FULLY_OPERATIONAL_POLICY,
     CRITICAL_DIMENSION_UNRESOLVED_BLOCKS_FULLY_OPERATIONAL_POLICY,
+    DUAL_FORMAT_OUTPUT_REQUIRED_POLICY,
+    SYSTEM_FINAL_ACCEPTANCE_VERDICT_AUTHORITY,
+    SYSTEM_FINAL_ACCEPTANCE_VERDICT_PR17V2_SENTINEL,
+    SYSTEM_VERDICT_FAIL_CONSERVATIVE_ON_MISSING_DIMENSION_POLICY,
+    SYSTEM_VERDICT_IS_AUTHORITATIVE_AGGREGATION_POLICY,
+    SYSTEM_VERDICT_IS_PROJECTION_ONLY_POLICY,
+    UNRESOLVED_RISK_MUST_BE_EXPLICIT_POLICY,
+    AcceptanceChecklistItem,
     AcceptanceDimensionId,
     DimensionStatus,
-    SystemAcceptanceVerdict,
-    AcceptanceChecklistItem,
     SystemAcceptanceReport,
+    SystemAcceptanceVerdict,
     SystemFinalAcceptanceEvaluator,
     evaluate_system_acceptance,
     get_system_acceptance_evaluator,
     reset_system_acceptance_evaluator,
 )
-
 
 # ===========================================================================
 # Fixtures
@@ -124,9 +123,7 @@ def _make_accepted_item(
     )
 
 
-def _make_pending_item(
-    dim: AcceptanceDimensionId, desc: str = "pending gap"
-) -> AcceptanceChecklistItem:
+def _make_pending_item(dim: AcceptanceDimensionId, desc: str = "pending gap") -> AcceptanceChecklistItem:
     return AcceptanceChecklistItem(
         dimension=dim,
         status=DimensionStatus.pending,
@@ -137,9 +134,7 @@ def _make_pending_item(
     )
 
 
-def _make_unresolved_item(
-    dim: AcceptanceDimensionId, desc: str = "unresolved gap"
-) -> AcceptanceChecklistItem:
+def _make_unresolved_item(dim: AcceptanceDimensionId, desc: str = "unresolved gap") -> AcceptanceChecklistItem:
     return AcceptanceChecklistItem(
         dimension=dim,
         status=DimensionStatus.unresolved,
@@ -151,10 +146,7 @@ def _make_unresolved_item(
 
 
 def _all_accepted_checklist() -> Dict[str, AcceptanceChecklistItem]:
-    return {
-        dim.value: _make_accepted_item(dim)
-        for dim in AcceptanceDimensionId.all_dimensions()
-    }
+    return {dim.value: _make_accepted_item(dim) for dim in AcceptanceDimensionId.all_dimensions()}
 
 
 # ===========================================================================
@@ -683,9 +675,7 @@ class TestSystemAcceptanceReportFromDict:
 class TestGetChecklistItem:
     def test_returns_correct_item(self):
         item = _make_accepted_item(AcceptanceDimensionId.governance)
-        report = SystemAcceptanceReport(
-            checklist={AcceptanceDimensionId.governance.value: item}
-        )
+        report = SystemAcceptanceReport(checklist={AcceptanceDimensionId.governance.value: item})
         retrieved = report.get_checklist_item(AcceptanceDimensionId.governance)
         assert retrieved is item
 
@@ -759,9 +749,7 @@ class TestEvaluateChecklistItemTypes:
     def test_all_items_are_checklist_items(self):
         report = get_system_acceptance_evaluator().evaluate()
         for dim_key, item in report.checklist.items():
-            assert isinstance(item, AcceptanceChecklistItem), (
-                f"Item for '{dim_key}' is not AcceptanceChecklistItem"
-            )
+            assert isinstance(item, AcceptanceChecklistItem), f"Item for '{dim_key}' is not AcceptanceChecklistItem"
 
 
 # ===========================================================================
@@ -855,9 +843,7 @@ class TestComputeVerdict:
 
     def test_any_unresolved_gives_critical_risk(self):  # AJ
         checklist = _all_accepted_checklist()
-        checklist[AcceptanceDimensionId.governance.value] = _make_unresolved_item(
-            AcceptanceDimensionId.governance
-        )
+        checklist[AcceptanceDimensionId.governance.value] = _make_unresolved_item(AcceptanceDimensionId.governance)
         assert self._compute(checklist) == SystemAcceptanceVerdict.not_fully_operational_critical_risk
 
     def test_any_pending_no_unresolved_gives_pending(self):  # AK
@@ -874,9 +860,7 @@ class TestComputeVerdict:
 
     def test_unresolved_takes_priority_over_pending(self):
         checklist = _all_accepted_checklist()
-        checklist[AcceptanceDimensionId.delegated_flow.value] = _make_pending_item(
-            AcceptanceDimensionId.delegated_flow
-        )
+        checklist[AcceptanceDimensionId.delegated_flow.value] = _make_pending_item(AcceptanceDimensionId.delegated_flow)
         checklist[AcceptanceDimensionId.runtime_readiness.value] = _make_unresolved_item(
             AcceptanceDimensionId.runtime_readiness
         )
@@ -889,9 +873,7 @@ class TestComputeVerdict:
 
 
 class TestCollectUnresolvedRisks:
-    def _collect(
-        self, checklist: Dict[str, "AcceptanceChecklistItem"]
-    ) -> List[Dict[str, str]]:
+    def _collect(self, checklist: Dict[str, "AcceptanceChecklistItem"]) -> List[Dict[str, str]]:
         return SystemFinalAcceptanceEvaluator._collect_unresolved_risks(checklist)
 
     def test_non_accepted_dimension_appears_in_risks(self):  # AM
@@ -910,9 +892,7 @@ class TestCollectUnresolvedRisks:
 
     def test_multiple_non_accepted_dimensions_all_appear(self):
         checklist = _all_accepted_checklist()
-        checklist[AcceptanceDimensionId.delegated_flow.value] = _make_pending_item(
-            AcceptanceDimensionId.delegated_flow
-        )
+        checklist[AcceptanceDimensionId.delegated_flow.value] = _make_pending_item(AcceptanceDimensionId.delegated_flow)
         checklist[AcceptanceDimensionId.android_participant.value] = _make_unresolved_item(
             AcceptanceDimensionId.android_participant
         )
@@ -1078,15 +1058,12 @@ class TestFailConservative:
             item = report.get_checklist_item(dim_id)
             assert item is not None, f"Checklist item missing for {dim_id.value}"
             assert item.status != DimensionStatus.accepted, (
-                f"Dimension '{dim_id.value}' was accepted despite absent module — "
-                "fail-conservative policy violated."
+                f"Dimension '{dim_id.value}' was accepted despite absent module — " "fail-conservative policy violated."
             )
 
 
 class TestStructuralProbeDoesNotCountAsRuntimeAcceptance:
-    def test_conversation_continuity_zero_evidence_probe_is_unresolved(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_conversation_continuity_zero_evidence_probe_is_unresolved(self, monkeypatch: pytest.MonkeyPatch) -> None:
         class _FakeClass:
             value = "continuity_lost"
 
@@ -1112,9 +1089,7 @@ class TestStructuralProbeDoesNotCountAsRuntimeAcceptance:
         item = SystemFinalAcceptanceEvaluator()._evaluate_conversation_continuity()
         assert item.status == DimensionStatus.unresolved
 
-    def test_human_intervention_zero_evidence_probe_is_unresolved(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_human_intervention_zero_evidence_probe_is_unresolved(self, monkeypatch: pytest.MonkeyPatch) -> None:
         class _FakeClass:
             value = "escalation_required"
 
@@ -1141,9 +1116,7 @@ class TestStructuralProbeDoesNotCountAsRuntimeAcceptance:
         item = SystemFinalAcceptanceEvaluator()._evaluate_human_intervention()
         assert item.status == DimensionStatus.unresolved
 
-    def test_temporal_semantics_zero_evidence_probe_is_unresolved(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_temporal_semantics_zero_evidence_probe_is_unresolved(self, monkeypatch: pytest.MonkeyPatch) -> None:
         class _FakeClass:
             value = "temporally_unreliable"
 

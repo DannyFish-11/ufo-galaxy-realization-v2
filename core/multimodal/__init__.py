@@ -17,49 +17,49 @@ Modules:
   webrtc_ingress_bridge       — WebRTC → cognition pipeline bridge (C方案)
 """
 
-from .signal_quality import SignalQuality, QualityFlag
-from .perception_frame import PerceptionFrame, SystemSignals
+from .audio_capture_service import AudioCaptureConfig, AudioCaptureService
 from .ingress_bus import MultimodalIngressBus
-from .multimodal_events import (
-    MultimodalEventType,
-    MultimodalEvent,
-    AudioStreamStartedEvent,
-    AudioStreamStoppedEvent,
-    AudioStreamErrorEvent,
-    AudioQualityDegradedEvent,
-    WebRTCSessionStartedEvent,
-    WebRTCSessionStoppedEvent,
-    WebRTCSessionErrorEvent,
-    WebRTCReconnectingEvent,
-    WebRTCQualityMetricsEvent,
-    TransportFallbackEvent,
-)
-from .audio_capture_service import AudioCaptureService, AudioCaptureConfig
-from .webrtc_session_manager import WebRTCSessionManager, WebRTCManagerConfig
-from .perception_source_registry import (
-    PerceptionSourceType,
-    SourceModality,
-    SourceHealthStatus,
-    PerceptionSourceRecord,
-    PerceptionSourceRegistry,
-)
 from .modality_confidence_policy import (
-    ModalityPresence,
-    SourceDegradationSeverity,
-    ModalitySemantics,
-    RoutingEligibilityReason,
     ModalityConfidencePolicy,
-    RoutingEligibilityAssessment,
+    ModalityPresence,
+    ModalitySemantics,
     PerceptionRoutingReadiness,
+    RoutingEligibilityAssessment,
+    RoutingEligibilityReason,
+    SourceDegradationSeverity,
     assess_modality_confidence,
     assess_routing_eligibility,
     build_perception_routing_readiness,
 )
+from .multimodal_events import (
+    AudioQualityDegradedEvent,
+    AudioStreamErrorEvent,
+    AudioStreamStartedEvent,
+    AudioStreamStoppedEvent,
+    MultimodalEvent,
+    MultimodalEventType,
+    TransportFallbackEvent,
+    WebRTCQualityMetricsEvent,
+    WebRTCReconnectingEvent,
+    WebRTCSessionErrorEvent,
+    WebRTCSessionStartedEvent,
+    WebRTCSessionStoppedEvent,
+)
+from .perception_frame import PerceptionFrame, SystemSignals
+from .perception_source_registry import (
+    PerceptionSourceRecord,
+    PerceptionSourceRegistry,
+    PerceptionSourceType,
+    SourceHealthStatus,
+    SourceModality,
+)
+from .signal_quality import QualityFlag, SignalQuality
 from .webrtc_ingress_bridge import (
     WebRTCIngressBridge,
     get_webrtc_ingress_bridge,
     reset_webrtc_ingress_bridge,
 )
+from .webrtc_session_manager import WebRTCManagerConfig, WebRTCSessionManager
 
 __all__ = [
     # Core quality / frame types

@@ -10,6 +10,7 @@
 - ingest_conversation_turns:离线轮次经别名解析后补录进主线。
 - goal_execution 不再落进单一全局 "android_default" 桶。
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -30,6 +31,7 @@ def sm(tmp_path, monkeypatch):
 
 
 # ── 别名注册/解析 ──
+
 
 class TestAlias:
     def test_resolve_no_alias_returns_input(self, sm):
@@ -57,6 +59,7 @@ class TestAlias:
 
     def test_persist_and_reload(self, sm, monkeypatch):
         import core.session_manager as smmod
+
         sm.register_session_alias("local_p", "canon_p")
         # 新实例从同一状态文件恢复
         mgr2 = smmod.SessionManager()
@@ -64,6 +67,7 @@ class TestAlias:
 
 
 # ── canonical 身份经别名折向主线 ──
+
 
 class TestCanonicalIdentityAlias:
     def test_identity_resolves_alias(self, sm):
@@ -73,12 +77,14 @@ class TestCanonicalIdentityAlias:
         # 主线需存在(reconcile 会 ensure;这里直接确保)
         sm.ensure_session_sync("canon_main", user_id="u1")
         ident = build_canonical_session_identity(
-            session_id="phone_local_9", create_session=True,
+            session_id="phone_local_9",
+            create_session=True,
         )
         assert ident.conversation_session_id == "canon_main"
 
 
 # ── reconcile:认领 + 合并历史 + 登记别名 ──
+
 
 class TestReconcile:
     def test_reconcile_creates_alias_and_merges(self, sm):
@@ -93,15 +99,17 @@ class TestReconcile:
         sm.ensure_session_sync("desk_main", user_id="u1", device_id="desk")
         asyncio.run(sm.add_message("desk_main", "user", "开始", device_id="desk"))
 
-        result = asyncio.run(reconcile_session_to_canonical(
-            local_session_id="phone_local",
-            canonical_session_id="desk_main",
-            user_id="u1",
-            device_id="phone",
-            merge_history=True,
-            session_manager=sm,
-            ws_connection_manager=_NullCM(),
-        ))
+        result = asyncio.run(
+            reconcile_session_to_canonical(
+                local_session_id="phone_local",
+                canonical_session_id="desk_main",
+                user_id="u1",
+                device_id="phone",
+                merge_history=True,
+                session_manager=sm,
+                ws_connection_manager=_NullCM(),
+            )
+        )
         assert result["success"] is True
         assert result["canonical_session_id"] == "desk_main"
         assert result["merged_turns"] == 2
@@ -114,14 +122,16 @@ class TestReconcile:
         from core.routes.sessions import reconcile_session_to_canonical
 
         sm.ensure_session_sync("phone_local2", user_id="u2", device_id="phone")
-        result = asyncio.run(reconcile_session_to_canonical(
-            local_session_id="phone_local2",
-            user_id="u2",
-            device_id="phone",
-            merge_history=False,
-            session_manager=sm,
-            ws_connection_manager=_NullCM(),
-        ))
+        result = asyncio.run(
+            reconcile_session_to_canonical(
+                local_session_id="phone_local2",
+                user_id="u2",
+                device_id="phone",
+                merge_history=False,
+                session_manager=sm,
+                ws_connection_manager=_NullCM(),
+            )
+        )
         assert result["success"] is True
         canon = result["canonical_session_id"]
         assert canon
@@ -130,22 +140,25 @@ class TestReconcile:
     def test_reconcile_requires_local_id(self, sm):
         from core.routes.sessions import reconcile_session_to_canonical
 
-        result = asyncio.run(reconcile_session_to_canonical(
-            local_session_id="",
-            session_manager=sm,
-            ws_connection_manager=_NullCM(),
-        ))
+        result = asyncio.run(
+            reconcile_session_to_canonical(
+                local_session_id="",
+                session_manager=sm,
+                ws_connection_manager=_NullCM(),
+            )
+        )
         assert result["success"] is False
         assert result["status_code"] == 422
 
 
 # ── ingest:离线轮次补录经别名解析 ──
 
+
 class TestIngest:
     def test_ingest_routes_through_alias(self, sm):
         from core.routes.sessions import (
-            ingest_conversation_turns,
             IngestTurnModel,
+            ingest_conversation_turns,
         )
 
         sm.register_session_alias("phone_offline", "canon_x")
@@ -156,13 +169,15 @@ class TestIngest:
             IngestTurnModel(role="assistant", content="离线回答一"),
             IngestTurnModel(role="user", content=""),  # 空内容跳过
         ]
-        result = asyncio.run(ingest_conversation_turns(
-            session_id="phone_offline",
-            turns=turns,
-            user_id="u3",
-            device_id="phone",
-            session_manager=sm,
-        ))
+        result = asyncio.run(
+            ingest_conversation_turns(
+                session_id="phone_offline",
+                turns=turns,
+                user_id="u3",
+                device_id="phone",
+                session_manager=sm,
+            )
+        )
         assert result["success"] is True
         assert result["session_id"] == "canon_x"
         assert result["ingested"] == 2
@@ -172,11 +187,13 @@ class TestIngest:
     def test_ingest_requires_session(self, sm):
         from core.routes.sessions import ingest_conversation_turns
 
-        result = asyncio.run(ingest_conversation_turns(
-            session_id="",
-            turns=[],
-            session_manager=sm,
-        ))
+        result = asyncio.run(
+            ingest_conversation_turns(
+                session_id="",
+                turns=[],
+                session_manager=sm,
+            )
+        )
         assert result["success"] is False
         assert result["status_code"] == 422
 

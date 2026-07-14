@@ -36,6 +36,7 @@ router = APIRouter(prefix="/api/v1/devices", tags=["device-health"])
 # Response models
 # ---------------------------------------------------------------------------
 
+
 class DeviceHealthResponse(BaseModel):
     """Serialised view of one device's health state."""
 
@@ -47,12 +48,8 @@ class DeviceHealthResponse(BaseModel):
     recent_error_rate: float = Field(description="EWMA error rate [0, 1].")
     quarantined: bool
     quarantine_reason: str
-    last_failure_time: Optional[float] = Field(
-        None, description="Monotonic timestamp of last failure, or None."
-    )
-    last_success_time: Optional[float] = Field(
-        None, description="Monotonic timestamp of last success, or None."
-    )
+    last_failure_time: Optional[float] = Field(None, description="Monotonic timestamp of last failure, or None.")
+    last_success_time: Optional[float] = Field(None, description="Monotonic timestamp of last success, or None.")
 
 
 class UnquarantineResponse(BaseModel):
@@ -67,13 +64,12 @@ class UnquarantineResponse(BaseModel):
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _state_to_response(state) -> DeviceHealthResponse:
     """Convert a :class:`DeviceHealthState` to a response model."""
     return DeviceHealthResponse(
         device_id=state.device_id,
-        circuit_state=state.circuit_state.value
-        if hasattr(state.circuit_state, "value")
-        else str(state.circuit_state),
+        circuit_state=state.circuit_state.value if hasattr(state.circuit_state, "value") else str(state.circuit_state),
         health_score=state.health_score,
         consecutive_failures=state.consecutive_failures,
         heartbeat_latency_ms=state.heartbeat_latency_ms,
@@ -88,12 +84,14 @@ def _state_to_response(state) -> DeviceHealthResponse:
 def _get_registry():
     """Return the process-level DeviceHealthRegistry singleton."""
     from core.control_plane._globals import get_health_registry
+
     return get_health_registry()
 
 
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
+
 
 @router.get("/health", response_model=List[DeviceHealthResponse])
 async def list_device_health() -> List[DeviceHealthResponse]:
@@ -151,6 +149,7 @@ async def unquarantine_device(device_id: str) -> UnquarantineResponse:
         try:
             from core.control_plane._globals import get_audit_ledger
             from core.control_plane.audit_ledger import EventType, Severity
+
             get_audit_ledger().append(
                 EventType.DEVICE_HEALTH_CHANGED,
                 severity=Severity.INFO,

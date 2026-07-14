@@ -35,22 +35,26 @@ sys.path.insert(0, PROJECT_ROOT)
 # Capability 1: Task Lifecycle
 # ---------------------------------------------------------------------------
 
+
 class TestTaskLifecycle:
     """PR-5 Capability 1 — task.lifecycle state machine."""
 
     def test_envelope_has_lifecycle_status_field(self):
         from core.schemas.task_envelope import TaskEnvelope
+
         env = TaskEnvelope(tool_name="ping", targets=["dev1"])
         assert env.lifecycle_status == "created"
 
     def test_transition_created_to_running(self):
         from core.schemas.task_envelope import TaskEnvelope
+
         env = TaskEnvelope(tool_name="ping", targets=["dev1"])
         running = env.transition("running")
         assert running.lifecycle_status == "running"
 
     def test_transition_running_to_done(self):
         from core.schemas.task_envelope import TaskEnvelope
+
         env = TaskEnvelope(tool_name="ping", targets=["dev1"])
         running = env.transition("running")
         done = running.transition("done")
@@ -58,6 +62,7 @@ class TestTaskLifecycle:
 
     def test_transition_running_to_failed(self):
         from core.schemas.task_envelope import TaskEnvelope
+
         env = TaskEnvelope(tool_name="ping", targets=["dev1"])
         running = env.transition("running")
         failed = running.transition("failed")
@@ -65,12 +70,14 @@ class TestTaskLifecycle:
 
     def test_invalid_transition_created_to_done_raises(self):
         from core.schemas.task_envelope import TaskEnvelope
+
         env = TaskEnvelope(tool_name="ping", targets=["dev1"])
         with pytest.raises(ValueError, match="Invalid lifecycle transition"):
             env.transition("done")
 
     def test_terminal_state_no_further_transitions(self):
         from core.schemas.task_envelope import TaskEnvelope
+
         env = TaskEnvelope(tool_name="ping", targets=["dev1"])
         done = env.transition("running").transition("done")
         with pytest.raises(ValueError):
@@ -79,6 +86,7 @@ class TestTaskLifecycle:
     def test_lifecycle_manager_mark_running(self, caplog):
         from core.schemas.task_envelope import TaskEnvelope
         from core.task_lifecycle import TaskLifecycleManager
+
         mgr = TaskLifecycleManager()
         env = TaskEnvelope(tool_name="test_tool", targets=["dev1"])
         with caplog.at_level(logging.INFO, logger="Galaxy.TaskLifecycle"):
@@ -89,6 +97,7 @@ class TestTaskLifecycle:
     def test_lifecycle_manager_mark_done_writes_memory(self, caplog):
         from core.schemas.task_envelope import TaskEnvelope
         from core.task_lifecycle import TaskLifecycleManager
+
         mgr = TaskLifecycleManager()
         env = TaskEnvelope(tool_name="test_tool", targets=["dev1"])
         running = mgr.mark_running(env)
@@ -101,6 +110,7 @@ class TestTaskLifecycle:
     def test_lifecycle_manager_mark_failed(self, caplog):
         from core.schemas.task_envelope import TaskEnvelope
         from core.task_lifecycle import TaskLifecycleManager
+
         mgr = TaskLifecycleManager()
         env = TaskEnvelope(tool_name="test_tool", targets=["dev1"])
         running = mgr.mark_running(env)
@@ -113,6 +123,7 @@ class TestTaskLifecycle:
     async def test_lifecycle_run_with_lifecycle_success(self):
         from core.schemas.task_envelope import TaskEnvelope
         from core.task_lifecycle import TaskLifecycleManager
+
         mgr = TaskLifecycleManager()
         env = TaskEnvelope(tool_name="async_tool", targets=["dev1"])
 
@@ -127,6 +138,7 @@ class TestTaskLifecycle:
     async def test_lifecycle_run_with_lifecycle_failure(self):
         from core.schemas.task_envelope import TaskEnvelope
         from core.task_lifecycle import TaskLifecycleManager
+
         mgr = TaskLifecycleManager()
         env = TaskEnvelope(tool_name="bad_tool", targets=["dev1"])
 
@@ -138,6 +150,7 @@ class TestTaskLifecycle:
 
     def test_task_id_and_trace_id_are_unique(self):
         from core.schemas.task_envelope import TaskEnvelope
+
         envs = [TaskEnvelope(tool_name="ping") for _ in range(10)]
         task_ids = {e.task_id for e in envs}
         trace_ids = {e.trace_id for e in envs}
@@ -149,12 +162,14 @@ class TestTaskLifecycle:
 # Capability 2: Non-Visual Task Path
 # ---------------------------------------------------------------------------
 
+
 class TestNonVisualTaskPath:
     """PR-5 Capability 2 — execution without vision/UI sampling."""
 
     def test_envelope_allows_no_vision_path(self):
         """A TaskEnvelope can be created and executed with no screen/vision caps."""
         from core.schemas.task_envelope import TaskEnvelope
+
         env = TaskEnvelope(
             tool_name="filesystem_list",
             args={"path": "/tmp"},
@@ -167,9 +182,8 @@ class TestNonVisualTaskPath:
     def test_filesystem_step_no_vision(self):
         """Filesystem operations complete without any UI interaction."""
         import os
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".galaxy_test.txt", delete=False
-        ) as tmp:
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".galaxy_test.txt", delete=False) as tmp:
             tmp.write("capability 2 test\n")
             path = tmp.name
         try:
@@ -183,9 +197,8 @@ class TestNonVisualTaskPath:
     def test_system_cmd_no_vision(self):
         """System command executes without any visual sampling."""
         import subprocess
-        result = subprocess.run(
-            ["echo", "no-vision-ok"], capture_output=True, text=True, timeout=5
-        )
+
+        result = subprocess.run(["echo", "no-vision-ok"], capture_output=True, text=True, timeout=5)
         assert result.returncode == 0
         assert "no-vision-ok" in result.stdout
 
@@ -193,6 +206,7 @@ class TestNonVisualTaskPath:
         """Non-visual task goes through full lifecycle without vision."""
         from core.schemas.task_envelope import TaskEnvelope
         from core.task_lifecycle import TaskLifecycleManager
+
         mgr = TaskLifecycleManager()
         env = TaskEnvelope(
             tool_name="filesystem_list",
@@ -209,6 +223,7 @@ class TestNonVisualTaskPath:
         demo_path = os.path.join(PROJECT_ROOT, "scripts", "non_visual_task_demo.py")
         assert os.path.isfile(demo_path), f"Demo script missing: {demo_path}"
         import py_compile
+
         py_compile.compile(demo_path, doraise=True)
 
 
@@ -216,11 +231,13 @@ class TestNonVisualTaskPath:
 # Capability 3: Task Memory / Context
 # ---------------------------------------------------------------------------
 
+
 class TestTaskMemoryContext:
     """PR-5 Capability 3 — history / context memory."""
 
     def test_envelope_has_session_id_field(self):
         from core.schemas.task_envelope import TaskEnvelope
+
         env = TaskEnvelope(
             tool_name="search",
             targets=["dev1"],
@@ -230,11 +247,13 @@ class TestTaskMemoryContext:
 
     def test_session_id_defaults_to_none(self):
         from core.schemas.task_envelope import TaskEnvelope
+
         env = TaskEnvelope(tool_name="x")
         assert env.session_id is None
 
     def test_log_context_includes_session_id(self):
         from core.schemas.task_envelope import TaskEnvelope
+
         env = TaskEnvelope(tool_name="x", session_id="s1")
         ctx = env.log_context()
         assert "session_id" in ctx
@@ -244,6 +263,7 @@ class TestTaskMemoryContext:
         """TaskMemory.record_task() persists and get_recent_summaries() retrieves."""
         monkeypatch.setenv("GALAXY_DATA_DIR", str(tmp_path))
         from core.task_memory import TaskMemory
+
         mem = TaskMemory(data_dir=str(tmp_path))
         mem.record_task(
             task="search for docs",
@@ -260,13 +280,15 @@ class TestTaskMemoryContext:
         """mark_done() must write to TaskMemory (memory backflow assertion)."""
         monkeypatch.setenv("GALAXY_DATA_DIR", str(tmp_path))
 
+        import core.task_lifecycle as _tlm_mod
         from core.schemas.task_envelope import TaskEnvelope
         from core.task_lifecycle import TaskLifecycleManager
-        import core.task_lifecycle as _tlm_mod
 
         mem_mock = MagicMock()
-        with patch.object(_tlm_mod, "_get_task_memory", return_value=mem_mock), \
-             patch.object(_tlm_mod, "_MEMORY_OK", True):
+        with (
+            patch.object(_tlm_mod, "_get_task_memory", return_value=mem_mock),
+            patch.object(_tlm_mod, "_MEMORY_OK", True),
+        ):
             mgr = TaskLifecycleManager()
             env = TaskEnvelope(
                 tool_name="search_docs",
@@ -283,13 +305,15 @@ class TestTaskMemoryContext:
 
     def test_lifecycle_manager_writes_memory_on_failed(self):
         """mark_failed() must write failure to TaskMemory."""
+        import core.task_lifecycle as _tlm_mod
         from core.schemas.task_envelope import TaskEnvelope
         from core.task_lifecycle import TaskLifecycleManager
-        import core.task_lifecycle as _tlm_mod
 
         mem_mock = MagicMock()
-        with patch.object(_tlm_mod, "_get_task_memory", return_value=mem_mock), \
-             patch.object(_tlm_mod, "_MEMORY_OK", True):
+        with (
+            patch.object(_tlm_mod, "_get_task_memory", return_value=mem_mock),
+            patch.object(_tlm_mod, "_MEMORY_OK", True),
+        ):
             mgr = TaskLifecycleManager()
             env = TaskEnvelope(tool_name="failing_tool", targets=["local"])
             running = mgr.mark_running(env)
@@ -297,13 +321,16 @@ class TestTaskMemoryContext:
 
         mem_mock.record_task.assert_called_once()
         call_kwargs = mem_mock.record_task.call_args
-        assert call_kwargs.kwargs.get("success") is False or (
-            call_kwargs.args and call_kwargs.args[2] is False
-        ) or "FAILED" in str(call_kwargs)
+        assert (
+            call_kwargs.kwargs.get("success") is False
+            or (call_kwargs.args and call_kwargs.args[2] is False)
+            or "FAILED" in str(call_kwargs)
+        )
 
     def test_envelope_preserves_trace_and_task_ids(self):
         """task_id and trace_id must be preserved through lifecycle transitions."""
         from core.schemas.task_envelope import TaskEnvelope
+
         env = TaskEnvelope(
             task_id="task_12345",
             trace_id="trace_abcdef",
@@ -321,11 +348,13 @@ class TestTaskMemoryContext:
 # Capability 4: Cross-Device Orchestration
 # ---------------------------------------------------------------------------
 
+
 class TestCrossDeviceOrch:
     """PR-5 Capability 4 — cross-device / cross-app task coordination."""
 
     def test_envelope_supports_multiple_targets(self):
         from core.schemas.task_envelope import TaskEnvelope
+
         env = TaskEnvelope(
             tool_name="broadcast",
             targets=["device_a", "device_b", "device_c"],
@@ -337,8 +366,10 @@ class TestCrossDeviceOrch:
     async def test_cross_device_pipeline(self):
         """Full device_a → device_b pipeline using TaskLifecycleManager."""
         import os
+
         from core.schemas.task_envelope import TaskEnvelope
         from core.task_lifecycle import TaskLifecycleManager
+
         mgr = TaskLifecycleManager()
 
         # ── Phase 1: device_a generates artifact ────────────────────────────
@@ -386,6 +417,7 @@ class TestCrossDeviceOrch:
         demo_path = os.path.join(PROJECT_ROOT, "scripts", "cross_device_task_demo.py")
         assert os.path.isfile(demo_path), f"Demo script missing: {demo_path}"
         import py_compile
+
         py_compile.compile(demo_path, doraise=True)
 
 
@@ -393,16 +425,19 @@ class TestCrossDeviceOrch:
 # Capability 5: ACL / Permissions
 # ---------------------------------------------------------------------------
 
+
 class TestACLPermissions:
     """PR-5 Capability 5 — permission_level / required_capabilities + audit."""
 
     def test_envelope_has_permission_level_field(self):
         from core.schemas.task_envelope import TaskEnvelope
+
         env = TaskEnvelope(tool_name="safe_action")
         assert env.permission_level == 0
 
     def test_envelope_has_required_capabilities_field(self):
         from core.schemas.task_envelope import TaskEnvelope
+
         env = TaskEnvelope(
             tool_name="write_file",
             required_capabilities=["filesystem", "elevated_io"],
@@ -412,8 +447,10 @@ class TestACLPermissions:
 
     def test_acl_enforcer_allows_low_level_task(self):
         from core.acl_enforcer import ACLEnforcer
+
         enforcer = ACLEnforcer(policy={"strict_above_level": 1})
         from core.schemas.task_envelope import TaskEnvelope
+
         env = TaskEnvelope(
             tool_name="screenshot",
             permission_level=0,
@@ -424,8 +461,10 @@ class TestACLPermissions:
 
     def test_acl_enforcer_denies_high_level_with_low_caller(self):
         from core.acl_enforcer import ACLEnforcer
+
         enforcer = ACLEnforcer(policy={"strict_above_level": 1})
         from core.schemas.task_envelope import TaskEnvelope
+
         env = TaskEnvelope(
             tool_name="system_reboot",
             permission_level=3,
@@ -437,8 +476,10 @@ class TestACLPermissions:
 
     def test_acl_enforcer_denies_missing_capabilities(self):
         from core.acl_enforcer import ACLEnforcer
+
         enforcer = ACLEnforcer(policy={"strict_above_level": 3})
         from core.schemas.task_envelope import TaskEnvelope
+
         env = TaskEnvelope(
             tool_name="camera_stream",
             permission_level=0,
@@ -450,8 +491,10 @@ class TestACLPermissions:
 
     def test_acl_enforcer_emits_audit_log(self, caplog):
         from core.acl_enforcer import ACLEnforcer
+
         enforcer = ACLEnforcer(policy={"strict_above_level": 1})
         from core.schemas.task_envelope import TaskEnvelope
+
         env = TaskEnvelope(tool_name="safe_read", permission_level=0)
         with caplog.at_level(logging.INFO, logger="Galaxy.ACLEnforcer"):
             enforcer.check(env, caller_level=0, agent_capabilities=[])
@@ -459,8 +502,10 @@ class TestACLPermissions:
 
     def test_acl_enforcer_audit_records_task_id(self, caplog):
         from core.acl_enforcer import ACLEnforcer
+
         enforcer = ACLEnforcer(policy={"strict_above_level": 1})
         from core.schemas.task_envelope import TaskEnvelope
+
         env = TaskEnvelope(task_id="task_acl_test", tool_name="get_data", permission_level=0)
         with caplog.at_level(logging.INFO, logger="Galaxy.ACLEnforcer"):
             enforcer.check(env, caller_level=1)
@@ -468,28 +513,32 @@ class TestACLPermissions:
 
     def test_acl_allows_sufficient_caller_level(self):
         from core.acl_enforcer import ACLEnforcer
+
         enforcer = ACLEnforcer(policy={"strict_above_level": 1})
         from core.schemas.task_envelope import TaskEnvelope
+
         env = TaskEnvelope(
             tool_name="admin_action",
             permission_level=2,
             required_capabilities=["admin"],
         )
-        result = enforcer.check(
-            env, caller_level=2, agent_capabilities=["admin", "screen"]
-        )
+        result = enforcer.check(env, caller_level=2, agent_capabilities=["admin", "screen"])
         assert result.allowed is True
 
     def test_envelope_permission_level_bounds(self):
-        from core.schemas.task_envelope import TaskEnvelope
         import pydantic
+
+        from core.schemas.task_envelope import TaskEnvelope
+
         with pytest.raises((ValueError, pydantic.ValidationError)):
             TaskEnvelope(tool_name="x", permission_level=4)  # max is 3
 
     def test_acl_check_result_carries_task_id(self):
         from core.acl_enforcer import ACLEnforcer
+
         enforcer = ACLEnforcer(policy={"strict_above_level": 1})
         from core.schemas.task_envelope import TaskEnvelope
+
         env = TaskEnvelope(task_id="task_xyz", tool_name="x")
         result = enforcer.check(env, caller_level=0)
         assert result.task_id == "task_xyz"
@@ -498,6 +547,7 @@ class TestACLPermissions:
 # ---------------------------------------------------------------------------
 # Integration: all 5 capabilities together
 # ---------------------------------------------------------------------------
+
 
 class TestFullCapabilityChain:
     """End-to-end integration: TaskEnvelope flows through all 5 capability checks."""
@@ -508,12 +558,14 @@ class TestFullCapabilityChain:
         import core.task_lifecycle as _tlm_mod
 
         mem_mock = MagicMock()
-        with patch.object(_tlm_mod, "_get_task_memory", return_value=mem_mock), \
-             patch.object(_tlm_mod, "_MEMORY_OK", True):
+        with (
+            patch.object(_tlm_mod, "_get_task_memory", return_value=mem_mock),
+            patch.object(_tlm_mod, "_MEMORY_OK", True),
+        ):
 
+            from core.acl_enforcer import ACLEnforcer
             from core.schemas.task_envelope import TaskEnvelope
             from core.task_lifecycle import TaskLifecycleManager
-            from core.acl_enforcer import ACLEnforcer
 
             # Build envelope with all PR-5 fields
             env = TaskEnvelope(
@@ -527,9 +579,7 @@ class TestFullCapabilityChain:
 
             # Capability 5: ACL check
             enforcer = ACLEnforcer(policy={"strict_above_level": 1})
-            acl_result = enforcer.check(
-                env, caller_level=1, agent_capabilities=["filesystem", "screen"]
-            )
+            acl_result = enforcer.check(env, caller_level=1, agent_capabilities=["filesystem", "screen"])
             assert acl_result.allowed is True
 
             # Capabilities 1 + 3: lifecycle with memory backflow

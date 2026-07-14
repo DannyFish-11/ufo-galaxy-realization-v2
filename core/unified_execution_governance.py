@@ -139,9 +139,7 @@ CANCELLATION_PROPAGATION_POLICY: str = (
     "cancellation reason and propagates it to blocked executions."
 )
 
-UNIFIED_EXECUTION_GOVERNANCE_SENTINEL: str = (
-    "UNIFIED_EXECUTION_GOVERNANCE_SENTINEL::v1 present"
-)
+UNIFIED_EXECUTION_GOVERNANCE_SENTINEL: str = "UNIFIED_EXECUTION_GOVERNANCE_SENTINEL::v1 present"
 EXECUTION_BUSY_THRESHOLD_SECONDS: float = 60.0
 ANDROID_RUNTIME_SEMANTICS_STALE_AFTER_SECONDS: float = 120.0
 STALE_ANDROID_RUNTIME_TRUTH_DOWNGRADES_AUTHORITY_POLICY: str = (
@@ -178,9 +176,7 @@ CANONICAL_PROOF_INPUT_DIAGNOSIS_POLICY: str = (
 ANDROID_EXECUTION_LIFECYCLE_TRUTH_STALE_AFTER_SECONDS: float = 60.0
 
 #: Sentinel identifying the PR-5 execution lifecycle truth binding module.
-EXECUTION_LIFECYCLE_TRUTH_BINDING_SENTINEL: str = (
-    "EXECUTION_LIFECYCLE_TRUTH_BINDING_SENTINEL::PR5_V2 present"
-)
+EXECUTION_LIFECYCLE_TRUTH_BINDING_SENTINEL: str = "EXECUTION_LIFECYCLE_TRUTH_BINDING_SENTINEL::PR5_V2 present"
 
 #: Contract version for the lifecycle truth binding data model.
 EXECUTION_LIFECYCLE_TRUTH_BINDING_CONTRACT_VERSION: str = "5.0.0"
@@ -511,9 +507,7 @@ class AndroidExecutionLifecycleTruthQuality(str, Enum):
 # Map AndroidExecutionLifecycleTruthQuality → canonical governance impact label.
 # Callers that gate on truth quality MUST consult this mapping rather than
 # hard-coding impact strings.
-_ANDROID_LIFECYCLE_TRUTH_GOVERNANCE_IMPACT: Mapping[
-    AndroidExecutionLifecycleTruthQuality, str
-] = MappingProxyType(
+_ANDROID_LIFECYCLE_TRUTH_GOVERNANCE_IMPACT: Mapping[AndroidExecutionLifecycleTruthQuality, str] = MappingProxyType(
     {
         AndroidExecutionLifecycleTruthQuality.v2_local_only: "none",
         AndroidExecutionLifecycleTruthQuality.android_remote_confirmed: "none",
@@ -525,9 +519,7 @@ _ANDROID_LIFECYCLE_TRUTH_GOVERNANCE_IMPACT: Mapping[
 
 # Set of truth qualities that indicate the runtime snapshot is degraded and
 # that governance decisions should surface a diagnostic reason.
-_ANDROID_LIFECYCLE_TRUTH_DEGRADED_QUALITIES: frozenset[
-    AndroidExecutionLifecycleTruthQuality
-] = frozenset(
+_ANDROID_LIFECYCLE_TRUTH_DEGRADED_QUALITIES: frozenset[AndroidExecutionLifecycleTruthQuality] = frozenset(
     {
         AndroidExecutionLifecycleTruthQuality.stale_remote,
         AndroidExecutionLifecycleTruthQuality.missing_remote,
@@ -762,13 +754,8 @@ class ExecutionGovernanceVerdict:
             "rejection_reason": self.rejection_reason,
             "blocking_gates": list(self.blocking_gates),
             "conflict": self.conflict,
-            "active_conflicting_type": (
-                self.active_conflicting_type.value
-                if self.active_conflicting_type else None
-            ),
-            "failure_semantic": (
-                self.failure_semantic.value if self.failure_semantic else None
-            ),
+            "active_conflicting_type": (self.active_conflicting_type.value if self.active_conflicting_type else None),
+            "failure_semantic": (self.failure_semantic.value if self.failure_semantic else None),
             "policy": self.policy.to_dict() if self.policy else None,
             "evaluated_at": self.evaluated_at,
             "_authority": UNIFIED_EXECUTION_GOVERNANCE_AUTHORITY,
@@ -979,9 +966,7 @@ class ExecutionLifecycleTruthBinding:
             "android_lifecycle_truth_quality": self.android_lifecycle_truth_quality.value,
             "android_lifecycle_truth_reason": self.android_lifecycle_truth_reason,
             "android_lifecycle_truth_degraded": self.android_lifecycle_truth_degraded,
-            "android_lifecycle_truth_governance_impact": (
-                self.android_lifecycle_truth_governance_impact
-            ),
+            "android_lifecycle_truth_governance_impact": (self.android_lifecycle_truth_governance_impact),
             "active_execution_count": self.active_execution_count,
             "latest_android_event_phase": self.latest_android_event_phase,
             "latest_android_event_age_s": self.latest_android_event_age_s,
@@ -1296,9 +1281,7 @@ _TERMINAL_LIFECYCLE_PHASES: frozenset[str] = frozenset(
         ExecutionLifecyclePhase.cancelled.value,
     }
 )
-_SUCCESSFUL_REPORTED_STATUSES: frozenset[str] = frozenset(
-    {"ok", "success", "succeeded", "completed", "done"}
-)
+_SUCCESSFUL_REPORTED_STATUSES: frozenset[str] = frozenset({"ok", "success", "succeeded", "completed", "done"})
 _FAILED_REPORTED_STATUSES: frozenset[str] = frozenset({"failed", "failure", "error"})
 _CANCELLED_REPORTED_STATUSES: frozenset[str] = frozenset({"cancelled", "canceled"})
 _ABORTED_REPORTED_STATUSES: frozenset[str] = frozenset({"aborted", "abort"})
@@ -1459,9 +1442,7 @@ def _classify_uplink_terminal_confirmation(
     if not reported_terminal_outcome or latest_phase:
         return False, "not_applicable"
 
-    has_dual_terminal_uplink_observation = bool(
-        reported_result_terminal_outcome and reported_state_terminal_outcome
-    )
+    has_dual_terminal_uplink_observation = bool(reported_result_terminal_outcome and reported_state_terminal_outcome)
     if not has_dual_terminal_uplink_observation:
         return True, "single_source_terminal_unconfirmed"
 
@@ -1497,11 +1478,7 @@ def get_uplink_truth_state(execution_id: str) -> Dict[str, Any]:
             latest_state_payload = record["payload"]
             latest_state_recorded_at = float(record.get("recorded_at", 0.0) or 0.0)
 
-    latest_lifecycle_event_at = (
-        float(lifecycle_history[-1].get("event_at", 0.0) or 0.0)
-        if lifecycle_history
-        else 0.0
-    )
+    latest_lifecycle_event_at = float(lifecycle_history[-1].get("event_at", 0.0) or 0.0) if lifecycle_history else 0.0
     lifecycle_terminal_outcome = _normalize_terminal_outcome(latest_phase)
     is_terminal = bool(lifecycle_terminal_outcome)
     reported_result_outcome = _normalize_reported_outcome(latest_result_payload)
@@ -1518,12 +1495,8 @@ def get_uplink_truth_state(execution_id: str) -> Dict[str, Any]:
     # (legacy callers may rely on running/admitted/etc). Terminal callers
     # should use *_terminal_outcome fields for canonical completion closure.
     reported_outcome = reported_result_outcome or reported_state_outcome
-    has_incomplete_uplink_data = bool(
-        latest_result_payload is None or latest_state_payload is None
-    )
-    has_partial_authoritative_observation = bool(
-        latest_phase and has_incomplete_uplink_data
-    )
+    has_incomplete_uplink_data = bool(latest_result_payload is None or latest_state_payload is None)
+    has_partial_authoritative_observation = bool(latest_phase and has_incomplete_uplink_data)
     if reported_result_terminal_outcome and reported_state_terminal_outcome:
         if reported_result_terminal_outcome == reported_state_terminal_outcome:
             reported_terminal_outcome_recorded_at = max(
@@ -1556,8 +1529,7 @@ def get_uplink_truth_state(execution_id: str) -> Dict[str, Any]:
         and latest_lifecycle_event_at > 0.0
         and reported_terminal_outcome_recorded_at is not None
         and reported_terminal_outcome_recorded_at > 0.0
-        and reported_terminal_outcome_recorded_at
-        > latest_lifecycle_event_at
+        and reported_terminal_outcome_recorded_at > latest_lifecycle_event_at
     )
     in_progress_terminal_observation = bool(
         latest_phase and not lifecycle_terminal_outcome and reported_terminal_outcome
@@ -1572,18 +1544,12 @@ def get_uplink_truth_state(execution_id: str) -> Dict[str, Any]:
         reported_state_terminal_outcome=reported_state_terminal_outcome,
     )
     uplink_terminal_authoritative = bool(
-        reported_terminal_outcome
-        and not latest_phase
-        and not uplink_terminal_requires_reconciliation
+        reported_terminal_outcome and not latest_phase and not uplink_terminal_requires_reconciliation
     )
     terminal_truth_authoritative_source = (
         "center_lifecycle"
         if lifecycle_terminal_outcome
-        else (
-            "reported_uplink"
-            if uplink_terminal_authoritative
-            else "none"
-        )
+        else ("reported_uplink" if uplink_terminal_authoritative else "none")
     )
     canonical_terminal_outcome = (
         lifecycle_terminal_outcome
@@ -1592,9 +1558,7 @@ def get_uplink_truth_state(execution_id: str) -> Dict[str, Any]:
     )
     if outcome_conflict:
         reconciliation_status = (
-            "delayed_conflict_center_truth_retained"
-            if delayed_observation
-            else "conflict_center_truth_retained"
+            "delayed_conflict_center_truth_retained" if delayed_observation else "conflict_center_truth_retained"
         )
         reconciliation_reason = (
             "reported_terminal_outcome_arrived_after_authoritative_terminal_phase"
@@ -1616,17 +1580,11 @@ def get_uplink_truth_state(execution_id: str) -> Dict[str, Any]:
     elif uplink_terminal_requires_reconciliation:
         reconciliation_status = "uplink_terminal_observation_requires_reconciliation"
         if uplink_terminal_confirmation == "single_source_terminal_unconfirmed":
-            reconciliation_reason = (
-                "single_source_terminal_observation_without_cross_uplink_confirmation"
-            )
+            reconciliation_reason = "single_source_terminal_observation_without_cross_uplink_confirmation"
         elif uplink_terminal_confirmation == "conflicting_terminal_unresolved":
-            reconciliation_reason = (
-                "conflicting_terminal_observations_without_lifecycle_authority"
-            )
+            reconciliation_reason = "conflicting_terminal_observations_without_lifecycle_authority"
         else:
-            reconciliation_reason = (
-                "uplink_terminal_observation_requires_explicit_confirmation"
-            )
+            reconciliation_reason = "uplink_terminal_observation_requires_explicit_confirmation"
     elif reported_terminal_outcome:
         reconciliation_status = "uplink_only_terminal_observation"
         reconciliation_reason = "reported_terminal_outcome_without_lifecycle_authority"
@@ -1637,9 +1595,7 @@ def get_uplink_truth_state(execution_id: str) -> Dict[str, Any]:
         reconciliation_status = "missing"
         reconciliation_reason = "no_lifecycle_or_uplink_observation"
     canonical_runtime_health = (
-        reported_runtime_health
-        if reported_runtime_health in _EXCEPTIONAL_RUNTIME_HEALTH_STATES
-        else "stable"
+        reported_runtime_health if reported_runtime_health in _EXCEPTIONAL_RUNTIME_HEALTH_STATES else "stable"
     )
     canonical_outcome = latest_phase or reported_outcome or reported_terminal_outcome
 
@@ -1649,12 +1605,8 @@ def get_uplink_truth_state(execution_id: str) -> Dict[str, Any]:
         "is_terminal": is_terminal,
         "result_uplink": latest_result_payload,
         "state_uplink": latest_state_payload,
-        "result_uplink_count": sum(
-            1 for record in uplink_records if record["kind"] == UplinkKind.result_uplink.value
-        ),
-        "state_uplink_count": sum(
-            1 for record in uplink_records if record["kind"] == UplinkKind.state_uplink.value
-        ),
+        "result_uplink_count": sum(1 for record in uplink_records if record["kind"] == UplinkKind.result_uplink.value),
+        "state_uplink_count": sum(1 for record in uplink_records if record["kind"] == UplinkKind.state_uplink.value),
         "lifecycle_event_count": len(lifecycle_history),
         "reported_outcome": reported_outcome,
         "canonical_outcome": canonical_outcome,
@@ -1671,9 +1623,7 @@ def get_uplink_truth_state(execution_id: str) -> Dict[str, Any]:
         "reported_runtime_health_reason": reported_runtime_health_reason,
         "canonical_runtime_health": canonical_runtime_health,
         "canonical_runtime_health_reason": (
-            reported_runtime_health_reason
-            if canonical_runtime_health in _EXCEPTIONAL_RUNTIME_HEALTH_STATES
-            else None
+            reported_runtime_health_reason if canonical_runtime_health in _EXCEPTIONAL_RUNTIME_HEALTH_STATES else None
         ),
         "reconciliation_status": reconciliation_status,
         "reconciliation_reason": reconciliation_reason,
@@ -1681,9 +1631,7 @@ def get_uplink_truth_state(execution_id: str) -> Dict[str, Any]:
         "reconciliation_delayed_observation": delayed_observation,
         "reconciliation_partial_observation": has_partial_authoritative_observation,
         "reconciliation_terminal_observation_held": in_progress_terminal_observation,
-        "reconciliation_uplink_terminal_requires_reconciliation": (
-            uplink_terminal_requires_reconciliation
-        ),
+        "reconciliation_uplink_terminal_requires_reconciliation": (uplink_terminal_requires_reconciliation),
         "reconciliation_uplink_terminal_confirmation": uplink_terminal_confirmation,
         "_authority": UNIFIED_EXECUTION_GOVERNANCE_AUTHORITY,
         "_contract_version": UNIFIED_EXECUTION_GOVERNANCE_CONTRACT_VERSION,
@@ -1717,10 +1665,7 @@ def is_takeover_active(device_id: str) -> bool:
     bool
         ``True`` iff at least one active takeover_request is registered.
     """
-    return any(
-        et == ExecutionType.takeover_request
-        for (et, _, _) in _get_active_executions(device_id)
-    )
+    return any(et == ExecutionType.takeover_request for (et, _, _) in _get_active_executions(device_id))
 
 
 def get_active_execution_type(device_id: str) -> Optional[ExecutionType]:
@@ -1800,12 +1745,16 @@ def notify_execution_completed(
             )
         logger.debug(
             "notify_execution_completed: device_id=%r type=%s id=%r removed from registry",
-            device_id, execution_type.value, execution_id,
+            device_id,
+            execution_type.value,
+            execution_id,
         )
     else:
         logger.debug(
             "notify_execution_completed: no entry found for device_id=%r type=%s id=%r",
-            device_id, execution_type.value, execution_id,
+            device_id,
+            execution_type.value,
+            execution_id,
         )
     return removed
 
@@ -1879,9 +1828,7 @@ def _apply_android_runtime_truth_freshness_governance(
     device_snapshot: Any,
 ) -> None:
     """Freshness-gate Android-reported runtime truth before governance consumes it."""
-    snapshot["android_semantics_freshness_threshold_s"] = (
-        ANDROID_RUNTIME_SEMANTICS_STALE_AFTER_SECONDS
-    )
+    snapshot["android_semantics_freshness_threshold_s"] = ANDROID_RUNTIME_SEMANTICS_STALE_AFTER_SECONDS
     snapshot["android_semantics_freshness_state"] = "unknown"
     snapshot["android_semantics_freshness_reason"] = "no_android_runtime_truth"
     snapshot["android_runtime_truth_authority"] = "unknown"
@@ -1900,12 +1847,8 @@ def _apply_android_runtime_truth_freshness_governance(
             report_semantics=None,
             device_snapshot=device_snapshot,
         )
-        contract_state = str(
-            snapshot.get("android_semantics_contract_state") or "incomplete"
-        ).strip().lower()
-        snapshot["android_semantics_freshness_reason"] = (
-            f"android_semantics_contract_{contract_state}"
-        )
+        contract_state = str(snapshot.get("android_semantics_contract_state") or "incomplete").strip().lower()
+        snapshot["android_semantics_freshness_reason"] = f"android_semantics_contract_{contract_state}"
         snapshot["android_runtime_truth_authority"] = "downgraded_to_unknown"
         return
 
@@ -1984,8 +1927,8 @@ def _get_android_runtime_pressure_snapshot(device_id: str) -> Dict[str, Any]:
     try:
         from core.android_device_state_store import (
             get_device_capability_report_semantics,
-            get_device_state_snapshot,
             get_device_snapshot_reconciliation,
+            get_device_state_snapshot,
             list_recent_execution_events,
         )
 
@@ -1993,27 +1936,15 @@ def _get_android_runtime_pressure_snapshot(device_id: str) -> Dict[str, Any]:
         if isinstance(report_semantics, dict) and report_semantics:
             snapshot["android_reported_mode"] = report_semantics.get("canonical_mode")
             snapshot["android_reported_mode_state"] = report_semantics.get("reported_mode_state")
-            snapshot["android_reported_mode_readiness_state"] = report_semantics.get(
-                "mode_readiness_state"
-            )
-            snapshot["android_reported_cross_device_eligibility"] = report_semantics.get(
-                "cross_device_eligibility"
-            )
-            snapshot["android_reported_goal_execution_eligibility"] = report_semantics.get(
-                "goal_execution_eligibility"
-            )
+            snapshot["android_reported_mode_readiness_state"] = report_semantics.get("mode_readiness_state")
+            snapshot["android_reported_cross_device_eligibility"] = report_semantics.get("cross_device_eligibility")
+            snapshot["android_reported_goal_execution_eligibility"] = report_semantics.get("goal_execution_eligibility")
             snapshot["android_reported_parallel_execution_eligibility"] = report_semantics.get(
                 "parallel_execution_eligibility"
             )
-            snapshot["android_reported_local_intelligence_status"] = report_semantics.get(
-                "local_intelligence_status"
-            )
-            snapshot["android_reported_local_inference_ready"] = report_semantics.get(
-                "local_inference_ready"
-            )
-            snapshot["android_reported_local_inference_available"] = report_semantics.get(
-                "local_inference_available"
-            )
+            snapshot["android_reported_local_intelligence_status"] = report_semantics.get("local_intelligence_status")
+            snapshot["android_reported_local_inference_ready"] = report_semantics.get("local_inference_ready")
+            snapshot["android_reported_local_inference_available"] = report_semantics.get("local_inference_available")
             snapshot["android_semantics_contract_state"] = (
                 report_semantics.get("canonical_gate_metadata_state") or "missing"
             )
@@ -2036,12 +1967,9 @@ def _get_android_runtime_pressure_snapshot(device_id: str) -> Dict[str, Any]:
                 report_semantics.get("downgraded_canonical_gate_metadata_reasons") or []
             )
             snapshot["android_semantics_governance_readiness_impact"] = str(
-                report_semantics.get("canonical_gate_governance_readiness_impact")
-                or "block"
+                report_semantics.get("canonical_gate_governance_readiness_impact") or "block"
             )
-            snapshot["android_semantics_contract_diagnosis"] = (
-                report_semantics.get("canonical_gate_contract_diagnosis")
-            )
+            snapshot["android_semantics_contract_diagnosis"] = report_semantics.get("canonical_gate_contract_diagnosis")
             _semantics_absorbed_at = report_semantics.get("absorbed_at")
             try:
                 snapshot["android_semantics_absorbed_at"] = float(_semantics_absorbed_at or 0.0)
@@ -2050,17 +1978,13 @@ def _get_android_runtime_pressure_snapshot(device_id: str) -> Dict[str, Any]:
             _semantics_reported_at = report_semantics.get("reported_at")
             try:
                 snapshot["android_semantics_reported_at"] = (
-                    float(_semantics_reported_at)
-                    if _semantics_reported_at is not None
-                    else None
+                    float(_semantics_reported_at) if _semantics_reported_at is not None else None
                 )
             except (TypeError, ValueError):
                 snapshot["android_semantics_reported_at"] = None
             _semantics_age_s = report_semantics.get("semantics_age_s")
             try:
-                snapshot["android_semantics_age_s"] = (
-                    float(_semantics_age_s) if _semantics_age_s is not None else None
-                )
+                snapshot["android_semantics_age_s"] = float(_semantics_age_s) if _semantics_age_s is not None else None
             except (TypeError, ValueError):
                 snapshot["android_semantics_age_s"] = None
         device_snapshot = get_device_state_snapshot(device_id)
@@ -2068,33 +1992,26 @@ def _get_android_runtime_pressure_snapshot(device_id: str) -> Dict[str, Any]:
             _queue_depth = getattr(device_snapshot, "offline_queue_depth", None)
             if isinstance(_queue_depth, int) and _queue_depth > 0:
                 snapshot["offline_queue_depth"] = int(_queue_depth)
-            snapshot["current_fallback_tier"] = getattr(
-                device_snapshot, "current_fallback_tier", None
-            )
+            snapshot["current_fallback_tier"] = getattr(device_snapshot, "current_fallback_tier", None)
             snapshot["local_inference_available"] = _resolve_local_inference_availability(
                 report_semantics=report_semantics,
                 device_snapshot=device_snapshot,
             )
             _health = getattr(device_snapshot, "runtime_health_snapshot", None)
             if isinstance(_health, dict):
-                snapshot["runtime_health_status"] = str(
-                    _health.get("status") or _health.get("state") or _health.get("health") or "unknown"
-                ).strip().lower() or "unknown"
+                snapshot["runtime_health_status"] = (
+                    str(_health.get("status") or _health.get("state") or _health.get("health") or "unknown")
+                    .strip()
+                    .lower()
+                    or "unknown"
+                )
             reconciliation = get_device_snapshot_reconciliation(device_id)
             if isinstance(reconciliation, dict):
-                snapshot["snapshot_reconciliation_status"] = str(
-                    reconciliation.get("status", "unavailable")
-                )
-                snapshot["snapshot_reconciliation_reason"] = str(
-                    reconciliation.get("reason", "unknown")
-                )
+                snapshot["snapshot_reconciliation_status"] = str(reconciliation.get("status", "unavailable"))
+                snapshot["snapshot_reconciliation_reason"] = str(reconciliation.get("reason", "unknown"))
                 snapshot["snapshot_conflict"] = bool(reconciliation.get("conflict", False))
-                snapshot["snapshot_ordering_basis"] = str(
-                    reconciliation.get("ordering_basis", "none")
-                )
-                snapshot["snapshot_reconciliation_applied"] = bool(
-                    reconciliation.get("applied", False)
-                )
+                snapshot["snapshot_ordering_basis"] = str(reconciliation.get("ordering_basis", "none"))
+                snapshot["snapshot_reconciliation_applied"] = bool(reconciliation.get("applied", False))
                 _updated_at = reconciliation.get("updated_at", 0.0)
                 try:
                     snapshot["snapshot_last_updated_at"] = float(_updated_at or 0.0)
@@ -2123,18 +2040,22 @@ def _get_android_runtime_pressure_snapshot(device_id: str) -> Dict[str, Any]:
             snapshot["latest_execution_event_phase"] = _phase or None
             snapshot["latest_execution_event_absorbed_at"] = _absorbed
             snapshot["latest_execution_event_age_s"] = _age_s
-            if _phase in {
-                "planning",
-                "grounding",
-                "execution",
-                "replan",
-                "running",
-                "admitted",
-                "execution_started",
-                "execution_progress",
-                "active",
-                "activating",
-            } and _age_s < EXECUTION_BUSY_THRESHOLD_SECONDS:
+            if (
+                _phase
+                in {
+                    "planning",
+                    "grounding",
+                    "execution",
+                    "replan",
+                    "running",
+                    "admitted",
+                    "execution_started",
+                    "execution_progress",
+                    "active",
+                    "activating",
+                }
+                and _age_s < EXECUTION_BUSY_THRESHOLD_SECONDS
+            ):
                 snapshot["execution_busy"] = True
     except Exception as exc:
         logger.debug(
@@ -2212,9 +2133,7 @@ def _classify_android_execution_lifecycle_truth_quality(
     v2_has_active = active_execution_count > 0
     android_has_event = latest_execution_event_phase is not None
     # Normalize the phase string once to avoid redundant conversions.
-    normalized_phase: str = (
-        str(latest_execution_event_phase).lower() if android_has_event else ""
-    )
+    normalized_phase: str = str(latest_execution_event_phase).lower() if android_has_event else ""
     android_active = android_has_event and normalized_phase in _ANDROID_ACTIVE_EXECUTION_PHASES
     android_terminal = android_has_event and normalized_phase in _ANDROID_TERMINAL_EXECUTION_PHASES
 
@@ -2263,15 +2182,9 @@ def _classify_android_execution_lifecycle_truth_quality(
         if latest_execution_event_age_s is None:
             return (
                 AndroidExecutionLifecycleTruthQuality.stale_remote.value,
-                (
-                    "android_reports_active_but_event_age_unavailable_"
-                    "treating_as_stale"
-                ),
+                ("android_reports_active_but_event_age_unavailable_" "treating_as_stale"),
             )
-        if (
-            latest_execution_event_age_s
-            > ANDROID_EXECUTION_LIFECYCLE_TRUTH_STALE_AFTER_SECONDS
-        ):
+        if latest_execution_event_age_s > ANDROID_EXECUTION_LIFECYCLE_TRUTH_STALE_AFTER_SECONDS:
             return (
                 AndroidExecutionLifecycleTruthQuality.stale_remote.value,
                 (
@@ -2281,16 +2194,12 @@ def _classify_android_execution_lifecycle_truth_quality(
             )
         return (
             AndroidExecutionLifecycleTruthQuality.android_remote_confirmed.value,
-            (
-                f"android_confirms_active_phase={latest_execution_event_phase!r}"
-                f"_age={_age_str()}_within_threshold"
-            ),
+            (f"android_confirms_active_phase={latest_execution_event_phase!r}" f"_age={_age_str()}_within_threshold"),
         )
 
     # Android has an event with an unknown/unclassified phase while V2 is active.
     if latest_execution_event_age_s is not None and (
-        latest_execution_event_age_s
-        > ANDROID_EXECUTION_LIFECYCLE_TRUTH_STALE_AFTER_SECONDS
+        latest_execution_event_age_s > ANDROID_EXECUTION_LIFECYCLE_TRUTH_STALE_AFTER_SECONDS
     ):
         return (
             AndroidExecutionLifecycleTruthQuality.stale_remote.value,
@@ -2301,10 +2210,7 @@ def _classify_android_execution_lifecycle_truth_quality(
         )
     return (
         AndroidExecutionLifecycleTruthQuality.v2_local_only.value,
-        (
-            f"v2_active_android_has_unclassified_phase="
-            f"{latest_execution_event_phase!r}"
-        ),
+        (f"v2_active_android_has_unclassified_phase=" f"{latest_execution_event_phase!r}"),
     )
 
 
@@ -2351,9 +2257,7 @@ def get_execution_lifecycle_truth_binding(
         )
         quality = AndroidExecutionLifecycleTruthQuality(quality_value)
         degraded = quality in _ANDROID_LIFECYCLE_TRUTH_DEGRADED_QUALITIES
-        impact = str(
-            _ANDROID_LIFECYCLE_TRUTH_GOVERNANCE_IMPACT.get(quality, "none")
-        )
+        impact = str(_ANDROID_LIFECYCLE_TRUTH_GOVERNANCE_IMPACT.get(quality, "none"))
         return ExecutionLifecycleTruthBinding(
             device_id=device_id,
             android_lifecycle_truth_quality=quality,
@@ -2419,21 +2323,13 @@ def get_execution_runtime_snapshot(
                     "started_at": float(started_at),
                     "execution_id": execution_id,
                     "priority": int(_EXECUTION_TYPE_PRIORITY.get(execution_type, 99)),
-                    "blocks_lower_priority": bool(
-                        policy.blocks_lower_priority if policy else False
-                    ),
+                    "blocks_lower_priority": bool(policy.blocks_lower_priority if policy else False),
                 }
             )
 
         highest_priority = get_active_execution_type(device_id)
-        takeover_active = any(
-            item["execution_type"] == ExecutionType.takeover_request.value
-            for item in active_items
-        )
-        active_execution_types = {
-            ExecutionType.from_string(item["execution_type"])
-            for item in active_items
-        }
+        takeover_active = any(item["execution_type"] == ExecutionType.takeover_request.value for item in active_items)
+        active_execution_types = {ExecutionType.from_string(item["execution_type"]) for item in active_items}
         blocked_execution_type_values: set[str] = set()
         for active_execution_type in active_execution_types:
             active_policy = get_execution_type_policy(active_execution_type)
@@ -2455,18 +2351,14 @@ def get_execution_runtime_snapshot(
                 "active_execution_count": active_count,
                 "active_executions": active_items,
                 "takeover_active": takeover_active,
-                "highest_priority_execution_type": (
-                    highest_priority.value if highest_priority else None
-                ),
+                "highest_priority_execution_type": (highest_priority.value if highest_priority else None),
                 "blocked_execution_types": blocked_execution_types,
                 "offline_queue_depth": int(runtime_pressure.get("offline_queue_depth", 0) or 0),
                 "current_fallback_tier": runtime_pressure.get("current_fallback_tier"),
                 "local_inference_available": bool(runtime_pressure.get("local_inference_available", False)),
                 "android_reported_mode": runtime_pressure.get("android_reported_mode"),
                 "android_reported_mode_state": runtime_pressure.get("android_reported_mode_state"),
-                "android_reported_mode_readiness_state": runtime_pressure.get(
-                    "android_reported_mode_readiness_state"
-                ),
+                "android_reported_mode_readiness_state": runtime_pressure.get("android_reported_mode_readiness_state"),
                 "android_reported_cross_device_eligibility": runtime_pressure.get(
                     "android_reported_cross_device_eligibility"
                 ),
@@ -2485,24 +2377,14 @@ def get_execution_runtime_snapshot(
                 "android_reported_local_inference_available": runtime_pressure.get(
                     "android_reported_local_inference_available"
                 ),
-                "android_semantics_contract_state": runtime_pressure.get(
-                    "android_semantics_contract_state"
-                ),
+                "android_semantics_contract_state": runtime_pressure.get("android_semantics_contract_state"),
                 "android_semantics_contract_complete": bool(
                     runtime_pressure.get("android_semantics_contract_complete", False)
                 ),
-                "android_semantics_missing_keys": list(
-                    runtime_pressure.get("android_semantics_missing_keys", [])
-                ),
-                "android_semantics_malformed_keys": list(
-                    runtime_pressure.get("android_semantics_malformed_keys", [])
-                ),
-                "android_semantics_unknown_keys": list(
-                    runtime_pressure.get("android_semantics_unknown_keys", [])
-                ),
-                "android_semantics_conflicts": list(
-                    runtime_pressure.get("android_semantics_conflicts", [])
-                ),
+                "android_semantics_missing_keys": list(runtime_pressure.get("android_semantics_missing_keys", [])),
+                "android_semantics_malformed_keys": list(runtime_pressure.get("android_semantics_malformed_keys", [])),
+                "android_semantics_unknown_keys": list(runtime_pressure.get("android_semantics_unknown_keys", [])),
+                "android_semantics_conflicts": list(runtime_pressure.get("android_semantics_conflicts", [])),
                 "android_semantics_downgraded_reasons": list(
                     runtime_pressure.get("android_semantics_downgraded_reasons", [])
                 ),
@@ -2513,9 +2395,7 @@ def get_execution_runtime_snapshot(
                     )
                     or "block"
                 ),
-                "android_semantics_contract_diagnosis": runtime_pressure.get(
-                    "android_semantics_contract_diagnosis"
-                ),
+                "android_semantics_contract_diagnosis": runtime_pressure.get("android_semantics_contract_diagnosis"),
                 "android_semantics_absorbed_at": float(
                     runtime_pressure.get("android_semantics_absorbed_at", 0.0) or 0.0
                 ),
@@ -2536,18 +2416,10 @@ def get_execution_runtime_snapshot(
                     )
                     or ANDROID_RUNTIME_SEMANTICS_STALE_AFTER_SECONDS
                 ),
-                "android_semantics_freshness_state": runtime_pressure.get(
-                    "android_semantics_freshness_state"
-                ),
-                "android_semantics_freshness_reason": runtime_pressure.get(
-                    "android_semantics_freshness_reason"
-                ),
-                "android_runtime_truth_authority": runtime_pressure.get(
-                    "android_runtime_truth_authority"
-                ),
-                "android_runtime_truth_usable": bool(
-                    runtime_pressure.get("android_runtime_truth_usable", False)
-                ),
+                "android_semantics_freshness_state": runtime_pressure.get("android_semantics_freshness_state"),
+                "android_semantics_freshness_reason": runtime_pressure.get("android_semantics_freshness_reason"),
+                "android_runtime_truth_authority": runtime_pressure.get("android_runtime_truth_authority"),
+                "android_runtime_truth_usable": bool(runtime_pressure.get("android_runtime_truth_usable", False)),
                 "runtime_health_status": str(runtime_pressure.get("runtime_health_status", "unknown") or "unknown"),
                 "execution_busy": bool(runtime_pressure.get("execution_busy", False)),
                 "snapshot_reconciliation_status": str(
@@ -2557,15 +2429,9 @@ def get_execution_runtime_snapshot(
                     runtime_pressure.get("snapshot_reconciliation_reason", "unknown")
                 ),
                 "snapshot_conflict": bool(runtime_pressure.get("snapshot_conflict", False)),
-                "snapshot_ordering_basis": str(
-                    runtime_pressure.get("snapshot_ordering_basis", "none")
-                ),
-                "snapshot_last_updated_at": float(
-                    runtime_pressure.get("snapshot_last_updated_at", 0.0) or 0.0
-                ),
-                "snapshot_reconciliation_applied": bool(
-                    runtime_pressure.get("snapshot_reconciliation_applied", False)
-                ),
+                "snapshot_ordering_basis": str(runtime_pressure.get("snapshot_ordering_basis", "none")),
+                "snapshot_last_updated_at": float(runtime_pressure.get("snapshot_last_updated_at", 0.0) or 0.0),
+                "snapshot_reconciliation_applied": bool(runtime_pressure.get("snapshot_reconciliation_applied", False)),
                 "latest_execution_event_phase": runtime_pressure.get("latest_execution_event_phase"),
                 "latest_execution_event_absorbed_at": float(
                     runtime_pressure.get("latest_execution_event_absorbed_at", 0.0) or 0.0
@@ -2576,18 +2442,14 @@ def get_execution_runtime_snapshot(
                     else None
                 ),
                 "execution_busy_window_seconds": float(
-                    runtime_pressure.get(
-                        "execution_busy_window_seconds", EXECUTION_BUSY_THRESHOLD_SECONDS
-                    )
+                    runtime_pressure.get("execution_busy_window_seconds", EXECUTION_BUSY_THRESHOLD_SECONDS)
                     or EXECUTION_BUSY_THRESHOLD_SECONDS
                 ),
                 # ── PR-5: Android execution lifecycle truth binding ───────────
                 "android_lifecycle_truth_quality": truth_binding.android_lifecycle_truth_quality.value,
                 "android_lifecycle_truth_reason": truth_binding.android_lifecycle_truth_reason,
                 "android_lifecycle_truth_degraded": truth_binding.android_lifecycle_truth_degraded,
-                "android_lifecycle_truth_governance_impact": (
-                    truth_binding.android_lifecycle_truth_governance_impact
-                ),
+                "android_lifecycle_truth_governance_impact": (truth_binding.android_lifecycle_truth_governance_impact),
                 "_source": "unified_execution_governance.active_registry",
             }
         )
@@ -2616,6 +2478,7 @@ def _check_mode_readiness_gate(
     """
     try:
         from core.android_mode_gate_policy import evaluate_android_mode_readiness
+
         verdict = evaluate_android_mode_readiness(
             device_id=device_id,
             require_goal_execution=(execution_type == ExecutionType.goal_execution),
@@ -2642,7 +2505,9 @@ def _check_mode_readiness_gate(
     except Exception as exc:
         logger.debug(
             "_check_mode_readiness_gate: unavailable for device_id=%r type=%s: %s",
-            device_id, execution_type.value, exc,
+            device_id,
+            execution_type.value,
+            exc,
         )
         return False, ["mode_gate_unavailable"], f"Mode readiness gate unavailable: {exc}"
 
@@ -2745,10 +2610,7 @@ def evaluate_execution_governance(
 
     # Step 3: Concurrent execution limit check
     if policy.max_concurrent_per_device > 0:
-        current_count = sum(
-            1 for (et, _, _) in _get_active_executions(device_id)
-            if et == execution_type
-        )
+        current_count = sum(1 for (et, _, _) in _get_active_executions(device_id) if et == execution_type)
         if current_count >= policy.max_concurrent_per_device:
             return ExecutionGovernanceVerdict(
                 execution_type=execution_type,
@@ -2783,7 +2645,9 @@ def evaluate_execution_governance(
         )
         logger.debug(
             "evaluate_execution_governance: ACCEPTED device_id=%r type=%s id=%r",
-            device_id, execution_type.value, execution_id,
+            device_id,
+            execution_type.value,
+            execution_id,
         )
 
     return ExecutionGovernanceVerdict(
@@ -2809,7 +2673,7 @@ def _check_execution_conflict(
 
     incoming_priority = _EXECUTION_TYPE_PRIORITY.get(incoming_type, 99)
 
-    for (active_type, started_at, _eid) in active_executions:
+    for active_type, started_at, _eid in active_executions:
         active_priority = _EXECUTION_TYPE_PRIORITY.get(active_type, 99)
         active_policy = _EXECUTION_TYPE_POLICIES.get(active_type)
 
@@ -2930,13 +2794,15 @@ def resolve_execution_conflict(
 # established, cross-repo meaning (i.e., defined in the Android capability
 # report contract).  Do not add ambiguous or transitional states (e.g.,
 # "initializing") that may temporarily precede availability.
-_LOCAL_INTELLIGENCE_UNAVAILABLE_STATUSES: frozenset = frozenset({
-    "disabled",
-    "unavailable",
-    "not_available",
-    "none",
-    "off",
-})
+_LOCAL_INTELLIGENCE_UNAVAILABLE_STATUSES: frozenset = frozenset(
+    {
+        "disabled",
+        "unavailable",
+        "not_available",
+        "none",
+        "off",
+    }
+)
 
 
 def _detect_android_semantics_conflicts(snapshot: Dict[str, Any]) -> List[str]:
@@ -2983,21 +2849,15 @@ def _detect_android_semantics_conflicts(snapshot: Dict[str, Any]) -> List[str]:
     goal_execution_eligibility = snapshot.get("android_reported_goal_execution_eligibility")
     local_inference_available = snapshot.get("android_reported_local_inference_available")
     local_inference_ready = snapshot.get("android_reported_local_inference_ready")
-    local_intelligence_status = str(
-        snapshot.get("android_reported_local_intelligence_status") or ""
-    ).strip().lower()
+    local_intelligence_status = str(snapshot.get("android_reported_local_intelligence_status") or "").strip().lower()
 
     # Conflict 1: mode=cross_device but cross_device_eligibility=False
     if reported_mode == "cross_device" and cross_device_eligibility is False:
-        conflicts.append(
-            "mode_cross_device_conflicts_with_cross_device_eligibility_false"
-        )
+        conflicts.append("mode_cross_device_conflicts_with_cross_device_eligibility_false")
 
     # Conflict 2: goal_execution_eligibility=True but cross_device_eligibility=False
     if goal_execution_eligibility is True and cross_device_eligibility is False:
-        conflicts.append(
-            "goal_execution_eligibility_true_conflicts_with_cross_device_eligibility_false"
-        )
+        conflicts.append("goal_execution_eligibility_true_conflicts_with_cross_device_eligibility_false")
 
     # Conflict 3: local_inference_available=True but status is a known-unavailable token
     if (
@@ -3011,9 +2871,7 @@ def _detect_android_semantics_conflicts(snapshot: Dict[str, Any]) -> List[str]:
 
     # Conflict 4: local_inference_ready=True but local_inference_available=False
     if local_inference_ready is True and local_inference_available is False:
-        conflicts.append(
-            "local_inference_ready_true_conflicts_with_local_inference_available_false"
-        )
+        conflicts.append("local_inference_ready_true_conflicts_with_local_inference_available_false")
 
     return conflicts
 
@@ -3111,40 +2969,23 @@ def classify_canonical_proof_input_diagnosis(
     # ":" to extract cause_type for programmatic checks.
 
     snapshot_dict: Dict[str, Any] = snapshot if isinstance(snapshot, dict) else {}
-    contract_state = str(
-        snapshot_dict.get("android_semantics_contract_state") or "missing"
-    ).strip().lower()
-    missing_keys: List[str] = _normalize_diagnosis_token_list(
-        snapshot_dict.get("android_semantics_missing_keys")
-    )
-    malformed_keys: List[str] = _normalize_diagnosis_token_list(
-        snapshot_dict.get("android_semantics_malformed_keys")
-    )
-    unknown_keys: List[str] = _normalize_diagnosis_token_list(
-        snapshot_dict.get("android_semantics_unknown_keys")
-    )
+    contract_state = str(snapshot_dict.get("android_semantics_contract_state") or "missing").strip().lower()
+    missing_keys: List[str] = _normalize_diagnosis_token_list(snapshot_dict.get("android_semantics_missing_keys"))
+    malformed_keys: List[str] = _normalize_diagnosis_token_list(snapshot_dict.get("android_semantics_malformed_keys"))
+    unknown_keys: List[str] = _normalize_diagnosis_token_list(snapshot_dict.get("android_semantics_unknown_keys"))
     downgraded_reasons: List[str] = _normalize_diagnosis_token_list(
         snapshot_dict.get("android_semantics_downgraded_reasons")
     )
-    freshness_state = str(
-        snapshot_dict.get("android_semantics_freshness_state") or "unknown"
-    ).strip().lower()
-    freshness_reason = str(
-        snapshot_dict.get("android_semantics_freshness_reason") or ""
-    ).strip()
-    runtime_truth_authority = str(
-        snapshot_dict.get("android_runtime_truth_authority") or "unknown"
-    ).strip().lower()
+    freshness_state = str(snapshot_dict.get("android_semantics_freshness_state") or "unknown").strip().lower()
+    freshness_reason = str(snapshot_dict.get("android_semantics_freshness_reason") or "").strip()
+    runtime_truth_authority = str(snapshot_dict.get("android_runtime_truth_authority") or "unknown").strip().lower()
 
     if contract_state not in _CANONICAL_PROOF_INPUT_CONTRACT_STATES:
-        degradation_causes.append(
-            f"unrecognized_android_semantics_contract_state:{contract_state}"
-        )
+        degradation_causes.append(f"unrecognized_android_semantics_contract_state:{contract_state}")
         return {
             "proof_input_class": "unknown",
             "proof_input_detail": (
-                "Android capability report contains unrecognized "
-                f"contract_state={contract_state!r}"
+                "Android capability report contains unrecognized " f"contract_state={contract_state!r}"
             ),
             "proof_input_conflicts": [],
             "proof_input_degradation_causes": degradation_causes,
@@ -3153,15 +2994,11 @@ def classify_canonical_proof_input_diagnosis(
 
     # --- semantic conflict check (highest priority) ---
     detected_conflicts = _detect_android_semantics_conflicts(snapshot_dict)
-    ingress_conflicts = _normalize_diagnosis_token_list(
-        snapshot_dict.get("android_semantics_conflicts")
-    )
+    ingress_conflicts = _normalize_diagnosis_token_list(snapshot_dict.get("android_semantics_conflicts"))
     if detected_conflicts or contract_state == "incompatible":
         # Merge locally re-derived conflicts with any ingress-side conflicts that
         # survived in the runtime snapshot so diagnosis remains stable end-to-end.
-        all_conflicts = sorted(
-            set(detected_conflicts + ingress_conflicts)
-        )
+        all_conflicts = sorted(set(detected_conflicts + ingress_conflicts))
         if not all_conflicts:
             # Defensive fallback: ingress may have already classified the contract as
             # incompatible even when only the coarse state survived transport.
@@ -3182,14 +3019,11 @@ def classify_canonical_proof_input_diagnosis(
     # --- malformed (next priority) ---
     if malformed_keys or contract_state == "malformed":
         cause_keys = malformed_keys or []
-        degradation_causes.append(
-            f"malformed_canonical_gate_metadata_keys:{cause_keys}"
-        )
+        degradation_causes.append(f"malformed_canonical_gate_metadata_keys:{cause_keys}")
         return {
             "proof_input_class": "malformed",
             "proof_input_detail": (
-                f"Android capability report has malformed canonical gate metadata; "
-                f"malformed_keys={cause_keys}"
+                f"Android capability report has malformed canonical gate metadata; " f"malformed_keys={cause_keys}"
             ),
             "proof_input_conflicts": [],
             "proof_input_degradation_causes": degradation_causes,
@@ -3199,14 +3033,11 @@ def classify_canonical_proof_input_diagnosis(
     # --- unknown contract drift (next priority) ---
     if unknown_keys or contract_state == "unknown":
         cause_keys = unknown_keys or []
-        degradation_causes.append(
-            f"unknown_canonical_gate_metadata_keys:{cause_keys}"
-        )
+        degradation_causes.append(f"unknown_canonical_gate_metadata_keys:{cause_keys}")
         return {
             "proof_input_class": "unknown",
             "proof_input_detail": (
-                "Android capability report contains unknown canonical gate "
-                f"metadata keys: {cause_keys}"
+                "Android capability report contains unknown canonical gate " f"metadata keys: {cause_keys}"
             ),
             "proof_input_conflicts": [],
             "proof_input_degradation_causes": degradation_causes,
@@ -3215,12 +3046,8 @@ def classify_canonical_proof_input_diagnosis(
 
     # --- downgraded but not malformed/drifted ---
     if downgraded_reasons or contract_state == "downgraded":
-        cause_reasons = downgraded_reasons or [
-            "android_capability_contract_downgraded"
-        ]
-        degradation_causes.append(
-            f"android_semantics_downgraded:{cause_reasons}"
-        )
+        cause_reasons = downgraded_reasons or ["android_capability_contract_downgraded"]
+        degradation_causes.append(f"android_semantics_downgraded:{cause_reasons}")
         return {
             "proof_input_class": "downgraded",
             "proof_input_detail": (
@@ -3234,9 +3061,7 @@ def classify_canonical_proof_input_diagnosis(
 
     # --- stale (next priority) ---
     if freshness_state == "stale" or runtime_truth_authority == "downgraded_to_unknown":
-        degradation_causes.append(
-            f"android_semantics_stale:{freshness_reason or 'reason_unavailable'}"
-        )
+        degradation_causes.append(f"android_semantics_stale:{freshness_reason or 'reason_unavailable'}")
         return {
             "proof_input_class": "stale",
             "proof_input_detail": (
@@ -3253,9 +3078,7 @@ def classify_canonical_proof_input_diagnosis(
     # --- partial (missing keys but present) ---
     if missing_keys or contract_state == "partial":
         cause_keys = missing_keys or []
-        degradation_causes.append(
-            f"missing_canonical_gate_metadata_keys:{cause_keys}"
-        )
+        degradation_causes.append(f"missing_canonical_gate_metadata_keys:{cause_keys}")
         return {
             "proof_input_class": "partial",
             "proof_input_detail": (
@@ -3272,9 +3095,7 @@ def classify_canonical_proof_input_diagnosis(
         degradation_causes.append("android_semantics_contract_state:missing")
         return {
             "proof_input_class": "missing",
-            "proof_input_detail": (
-                "No Android capability semantics have been reported for this device."
-            ),
+            "proof_input_detail": ("No Android capability semantics have been reported for this device."),
             "proof_input_conflicts": [],
             "proof_input_degradation_causes": degradation_causes,
             "_policy": CANONICAL_PROOF_INPUT_DIAGNOSIS_POLICY,
@@ -3283,9 +3104,7 @@ def classify_canonical_proof_input_diagnosis(
     # --- complete ---
     return {
         "proof_input_class": "complete",
-        "proof_input_detail": (
-            "Android capability semantics are complete, fresh, and conflict-free."
-        ),
+        "proof_input_detail": ("Android capability semantics are complete, fresh, and conflict-free."),
         "proof_input_conflicts": [],
         "proof_input_degradation_causes": [],
         "_policy": CANONICAL_PROOF_INPUT_DIAGNOSIS_POLICY,

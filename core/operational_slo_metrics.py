@@ -316,9 +316,7 @@ class OperationalSLOMetrics:
                 len(self._dispatch_failure_reasons) < self._failure_reasons_max
                 or reason in self._dispatch_failure_reasons
             ):
-                self._dispatch_failure_reasons[reason] = (
-                    self._dispatch_failure_reasons.get(reason, 0) + 1
-                )
+                self._dispatch_failure_reasons[reason] = self._dispatch_failure_reasons.get(reason, 0) + 1
 
     # ------------------------------------------------------------------
     # Route rejection recording
@@ -342,17 +340,13 @@ class OperationalSLOMetrics:
                 len(self._route_rejection_reasons) < self._rejection_reasons_max
                 or reason in self._route_rejection_reasons
             ):
-                self._route_rejection_reasons[reason] = (
-                    self._route_rejection_reasons.get(reason, 0) + 1
-                )
+                self._route_rejection_reasons[reason] = self._route_rejection_reasons.get(reason, 0) + 1
 
     # ------------------------------------------------------------------
     # Fallback recording
     # ------------------------------------------------------------------
 
-    def record_fallback_triggered(
-        self, task_id: str = "", fallback_kind: str = "other"
-    ) -> None:
+    def record_fallback_triggered(self, task_id: str = "", fallback_kind: str = "other") -> None:
         """Record one fallback trigger.
 
         Parameters
@@ -367,13 +361,8 @@ class OperationalSLOMetrics:
         with self._lock:
             self._fallback_triggers += 1
             kind = fallback_kind or "other"
-            if (
-                len(self._fallback_kind_counts) < self._fallback_kinds_max
-                or kind in self._fallback_kind_counts
-            ):
-                self._fallback_kind_counts[kind] = (
-                    self._fallback_kind_counts.get(kind, 0) + 1
-                )
+            if len(self._fallback_kind_counts) < self._fallback_kinds_max or kind in self._fallback_kind_counts:
+                self._fallback_kind_counts[kind] = self._fallback_kind_counts.get(kind, 0) + 1
 
     # ------------------------------------------------------------------
     # Recovery recording
@@ -414,17 +403,13 @@ class OperationalSLOMetrics:
                 len(self._recovery_failure_reasons) < self._failure_reasons_max
                 or reason in self._recovery_failure_reasons
             ):
-                self._recovery_failure_reasons[reason] = (
-                    self._recovery_failure_reasons.get(reason, 0) + 1
-                )
+                self._recovery_failure_reasons[reason] = self._recovery_failure_reasons.get(reason, 0) + 1
 
     # ------------------------------------------------------------------
     # Startup recovery scan recording
     # ------------------------------------------------------------------
 
-    def record_startup_recovery_scan(
-        self, tasks_scanned: int = 0, actions_taken: int = 0
-    ) -> None:
+    def record_startup_recovery_scan(self, tasks_scanned: int = 0, actions_taken: int = 0) -> None:
         """Record the outcome of a startup recovery scan.
 
         Should be called once per process start after
@@ -467,9 +452,7 @@ class OperationalSLOMetrics:
                 len(self._audit_persist_failure_reasons) < self._audit_failure_reasons_max
                 or reason in self._audit_persist_failure_reasons
             ):
-                self._audit_persist_failure_reasons[reason] = (
-                    self._audit_persist_failure_reasons.get(reason, 0) + 1
-                )
+                self._audit_persist_failure_reasons[reason] = self._audit_persist_failure_reasons.get(reason, 0) + 1
 
     # ------------------------------------------------------------------
     # Unified lifecycle/governance reliability ingestion
@@ -545,9 +528,7 @@ class OperationalSLOMetrics:
             closure_quality_state = state_contract.get("closure_quality_state") or {}
 
             if isinstance(raw_signals, dict) and isinstance(derived_state, dict):
-                participation_tier = str(
-                    raw_signals.get("android_network_participation_tier") or ""
-                )
+                participation_tier = str(raw_signals.get("android_network_participation_tier") or "")
                 if not participation_tier and bool(raw_signals.get("android_attached")):
                     if (
                         raw_signals.get("capability_visible") is True
@@ -576,9 +557,7 @@ class OperationalSLOMetrics:
                     if participation_tier in {"dispatch_eligible", "distributed_participant"}:
                         self._dispatch_eligibility_total += 1
 
-                cross_device_decision = _decision_state(
-                    derived_state, "cross_device_availability"
-                )
+                cross_device_decision = _decision_state(derived_state, "cross_device_availability")
                 expected_cross_device = bool(
                     raw_signals.get("android_attached") is True
                     and raw_signals.get("capability_visible") is True
@@ -621,15 +600,11 @@ class OperationalSLOMetrics:
             task_initiation_gate = lifecycle.get("task_initiation_gate") or {}
             lifecycle_blocked = bool(lifecycle.get("lifecycle_blocked"))
             blocking_gates = (
-                task_initiation_gate.get("blocking_gates")
-                if isinstance(task_initiation_gate, dict)
-                else []
+                task_initiation_gate.get("blocking_gates") if isinstance(task_initiation_gate, dict) else []
             )
             if not isinstance(blocking_gates, list):
                 blocking_gates = []
-            subject_state["unresolved_blocker_volume"] = (
-                len(blocking_gates) if lifecycle_blocked else 0
-            )
+            subject_state["unresolved_blocker_volume"] = len(blocking_gates) if lifecycle_blocked else 0
 
             previous_sequence = int(self._unified_last_sequence_by_subject.get(subject_id, 0))
             new_events = []
@@ -670,9 +645,7 @@ class OperationalSLOMetrics:
 
                 if transition == "task_initiated":
                     self._task_initiation_total += 1
-                    subject_state["pending_initiations"] = (
-                        subject_state.get("pending_initiations", 0) + 1
-                    )
+                    subject_state["pending_initiations"] = subject_state.get("pending_initiations", 0) + 1
                     readiness_ready_at = subject_state.get("readiness_ready_at")
                     if isinstance(readiness_ready_at, (int, float)) and event_at >= readiness_ready_at:
                         self._task_initiation_latency_count += 1
@@ -737,13 +710,10 @@ class OperationalSLOMetrics:
                             self._operator_intervention_success_total += 1
                             subject_state["operator_intervention_pending"] = False
                         if subject_state.get("awaiting_path_switch_outcome"):
-                            quality_state = _decision_state(
-                                closure_quality_state, "success_quality"
-                            )
+                            quality_state = _decision_state(closure_quality_state, "success_quality")
                             quality_key = str(quality_state or to_state)
                             self._path_switch_outcome_quality_distribution[quality_key] = (
-                                self._path_switch_outcome_quality_distribution.get(quality_key, 0)
-                                + 1
+                                self._path_switch_outcome_quality_distribution.get(quality_key, 0) + 1
                             )
                             subject_state["awaiting_path_switch_outcome"] = False
 
@@ -765,9 +735,7 @@ class OperationalSLOMetrics:
                 if stale_flag or (isinstance(stale_rate, (int, float)) and stale_rate > 0.0):
                     self._stale_snapshot_detected_total += 1
 
-            route_type = str(
-                (summary.get("provider_selection_budget") or {}).get("route_type") or ""
-            ).lower()
+            route_type = str((summary.get("provider_selection_budget") or {}).get("route_type") or "").lower()
             if route_type:
                 self._routing_samples_total += 1
                 if any(token in route_type for token in ("cross", "android", "remote", "delegated")):
@@ -818,11 +786,7 @@ class OperationalSLOMetrics:
         with self._lock:
             if self._recovery_attempts == 0:
                 return 0.0
-            succeeded = (
-                self._recovery_resumed
-                + self._recovery_replayed
-                + self._recovery_reissued
-            )
+            succeeded = self._recovery_resumed + self._recovery_replayed + self._recovery_reissued
             return succeeded / self._recovery_attempts
 
     @property
@@ -897,9 +861,7 @@ class OperationalSLOMetrics:
             session_continuity_breaks_total = self._session_continuity_breaks_total
             operator_interventions_total = self._operator_interventions_total
             path_switch_total = self._path_switch_total
-            path_switch_outcome_quality_distribution = dict(
-                self._path_switch_outcome_quality_distribution
-            )
+            path_switch_outcome_quality_distribution = dict(self._path_switch_outcome_quality_distribution)
             quality_distribution = dict(self._quality_distribution)
             verdict_distribution = dict(self._verdict_distribution)
             participation_samples_total = self._participation_samples_total
@@ -917,40 +879,24 @@ class OperationalSLOMetrics:
             stale_snapshot_detected_total = self._stale_snapshot_detected_total
             operator_intervention_success_total = self._operator_intervention_success_total
 
-        dispatch_success_rate = (
-            dispatch_successes / dispatch_attempts if dispatch_attempts > 0 else 0.0
-        )
-        dispatch_failure_rate = (
-            dispatch_failures / dispatch_attempts if dispatch_attempts > 0 else 0.0
-        )
+        dispatch_success_rate = dispatch_successes / dispatch_attempts if dispatch_attempts > 0 else 0.0
+        dispatch_failure_rate = dispatch_failures / dispatch_attempts if dispatch_attempts > 0 else 0.0
         recovery_succeeded = recovery_resumed + recovery_replayed + recovery_reissued
-        recovery_success_rate = (
-            recovery_succeeded / recovery_attempts if recovery_attempts > 0 else 0.0
-        )
+        recovery_success_rate = recovery_succeeded / recovery_attempts if recovery_attempts > 0 else 0.0
         audit_total = audit_persist_successes + audit_persist_failures
-        audit_persist_failure_rate = (
-            audit_persist_failures / audit_total if audit_total > 0 else 0.0
-        )
+        audit_persist_failure_rate = audit_persist_failures / audit_total if audit_total > 0 else 0.0
         unresolved_blocker_volume = sum(
             int((item or {}).get("unresolved_blocker_volume", 0))
             for item in unified_subject_state.values()
             if isinstance(item, dict)
         )
-        admission_success_rate = (
-            admission_success_total / admission_total if admission_total > 0 else 0.0
-        )
-        admission_failure_rate = (
-            admission_failure_total / admission_total if admission_total > 0 else 0.0
-        )
+        admission_success_rate = admission_success_total / admission_total if admission_total > 0 else 0.0
+        admission_failure_rate = admission_failure_total / admission_total if admission_total > 0 else 0.0
         readiness_attainment_rate = (
-            readiness_attainment_total / admission_success_total
-            if admission_success_total > 0
-            else 0.0
+            readiness_attainment_total / admission_success_total if admission_success_total > 0 else 0.0
         )
         readiness_latency_ms = (
-            readiness_latency_sum_ms / readiness_latency_count
-            if readiness_latency_count > 0
-            else None
+            readiness_latency_sum_ms / readiness_latency_count if readiness_latency_count > 0 else None
         )
         task_initiation_latency_ms = (
             task_initiation_latency_sum_ms / task_initiation_latency_count
@@ -958,17 +904,11 @@ class OperationalSLOMetrics:
             else None
         )
         task_initiation_success_rate = (
-            task_initiation_success_total / task_initiation_total
-            if task_initiation_total > 0
-            else 0.0
+            task_initiation_success_total / task_initiation_total if task_initiation_total > 0 else 0.0
         )
-        closure_completion_rate = (
-            closure_completed_total / closure_total if closure_total > 0 else 0.0
-        )
+        closure_completion_rate = closure_completed_total / closure_total if closure_total > 0 else 0.0
         degraded_mode_frequency = (
-            degraded_mode_entries_total / unified_ingest_total
-            if unified_ingest_total > 0
-            else 0.0
+            degraded_mode_entries_total / unified_ingest_total if unified_ingest_total > 0 else 0.0
         )
         unified_recovery_success_rate = (
             unified_recovery_success_total / unified_recovery_attempts_total
@@ -986,57 +926,35 @@ class OperationalSLOMetrics:
             else 0.0
         )
         operator_intervention_frequency = (
-            operator_interventions_total / unified_ingest_total
-            if unified_ingest_total > 0
-            else 0.0
+            operator_interventions_total / unified_ingest_total if unified_ingest_total > 0 else 0.0
         )
-        path_switch_frequency = (
-            path_switch_total / unified_ingest_total if unified_ingest_total > 0 else 0.0
-        )
+        path_switch_frequency = path_switch_total / unified_ingest_total if unified_ingest_total > 0 else 0.0
         participation_enablement_rate = (
-            participation_enabled_total / participation_samples_total
-            if participation_samples_total > 0
-            else 0.0
+            participation_enabled_total / participation_samples_total if participation_samples_total > 0 else 0.0
         )
         full_attachment_rate = (
-            full_attachment_total / participation_samples_total
-            if participation_samples_total > 0
-            else 0.0
+            full_attachment_total / participation_samples_total if participation_samples_total > 0 else 0.0
         )
         dispatch_eligibility_rate = (
-            dispatch_eligibility_total / participation_samples_total
-            if participation_samples_total > 0
-            else 0.0
+            dispatch_eligibility_total / participation_samples_total if participation_samples_total > 0 else 0.0
         )
-        local_routing_rate = (
-            routing_local_total / routing_samples_total if routing_samples_total > 0 else 0.0
-        )
+        local_routing_rate = routing_local_total / routing_samples_total if routing_samples_total > 0 else 0.0
         cross_device_routing_rate = (
-            routing_cross_device_total / routing_samples_total
-            if routing_samples_total > 0
-            else 0.0
+            routing_cross_device_total / routing_samples_total if routing_samples_total > 0 else 0.0
         )
         natural_language_request_solved_rate = (
             problem_solved_total / problem_opened_total if problem_opened_total > 0 else 0.0
         )
-        task_closure_rate = (
-            closure_completed_total / task_initiation_total if task_initiation_total > 0 else 0.0
-        )
-        problem_closure_rate = (
-            closure_completed_total / problem_opened_total if problem_opened_total > 0 else 0.0
-        )
+        task_closure_rate = closure_completed_total / task_initiation_total if task_initiation_total > 0 else 0.0
+        problem_closure_rate = closure_completed_total / problem_opened_total if problem_opened_total > 0 else 0.0
         no_awaiter_forced_closure_rate = (
             forced_or_no_awaiter_closure_total / closure_total if closure_total > 0 else 0.0
         )
         takeover_degraded_evidence_rate = (
-            takeover_degraded_evidence_total / unified_ingest_total
-            if unified_ingest_total > 0
-            else 0.0
+            takeover_degraded_evidence_total / unified_ingest_total if unified_ingest_total > 0 else 0.0
         )
         stale_snapshot_rate = (
-            stale_snapshot_detected_total / stale_snapshot_samples_total
-            if stale_snapshot_samples_total > 0
-            else 0.0
+            stale_snapshot_detected_total / stale_snapshot_samples_total if stale_snapshot_samples_total > 0 else 0.0
         )
         operator_intervention_success_rate = (
             operator_intervention_success_total / operator_interventions_total
@@ -1095,9 +1013,7 @@ class OperationalSLOMetrics:
                     "attainment_rate": round(readiness_attainment_rate, 6),
                     "attained_total": readiness_attainment_total,
                     "latency_avg_ms": (
-                        round(readiness_latency_ms, 3)
-                        if isinstance(readiness_latency_ms, (int, float))
-                        else None
+                        round(readiness_latency_ms, 3) if isinstance(readiness_latency_ms, (int, float)) else None
                     ),
                 },
                 "task_initiation": {
@@ -1147,20 +1063,14 @@ class OperationalSLOMetrics:
                     "cross_device": round(cross_device_routing_rate, 6),
                     "samples_total": routing_samples_total,
                 },
-                "natural_language_request_solved_rate": round(
-                    natural_language_request_solved_rate, 6
-                ),
+                "natural_language_request_solved_rate": round(natural_language_request_solved_rate, 6),
                 "task_closure_rate": round(task_closure_rate, 6),
                 "problem_closure_rate": round(problem_closure_rate, 6),
                 "no_awaiter_forced_closure_rate": round(no_awaiter_forced_closure_rate, 6),
                 "recovery_success_rate": round(unified_recovery_success_rate, 6),
-                "takeover_degraded_evidence_rate": round(
-                    takeover_degraded_evidence_rate, 6
-                ),
+                "takeover_degraded_evidence_rate": round(takeover_degraded_evidence_rate, 6),
                 "stale_snapshot_rate": round(stale_snapshot_rate, 6),
-                "operator_intervention_success_rate": round(
-                    operator_intervention_success_rate, 6
-                ),
+                "operator_intervention_success_rate": round(operator_intervention_success_rate, 6),
                 "totals": {
                     "problem_opened_total": problem_opened_total,
                     "problem_solved_total": problem_solved_total,
@@ -1467,18 +1377,10 @@ def get_operational_slo_metrics() -> OperationalSLOMetrics:
         with _ops_lock:
             if _ops_metrics is None:
                 _ops_metrics = OperationalSLOMetrics(
-                    rejection_reasons_max=int(
-                        os.getenv("GALAXY_OPS_REJECTION_REASONS_MAX", "200")
-                    ),
-                    fallback_kinds_max=int(
-                        os.getenv("GALAXY_OPS_FALLBACK_KINDS_MAX", "50")
-                    ),
-                    failure_reasons_max=int(
-                        os.getenv("GALAXY_OPS_FAILURE_REASONS_MAX", "200")
-                    ),
-                    audit_failure_reasons_max=int(
-                        os.getenv("GALAXY_OPS_AUDIT_FAILURE_REASONS_MAX", "100")
-                    ),
+                    rejection_reasons_max=int(os.getenv("GALAXY_OPS_REJECTION_REASONS_MAX", "200")),
+                    fallback_kinds_max=int(os.getenv("GALAXY_OPS_FALLBACK_KINDS_MAX", "50")),
+                    failure_reasons_max=int(os.getenv("GALAXY_OPS_FAILURE_REASONS_MAX", "200")),
+                    audit_failure_reasons_max=int(os.getenv("GALAXY_OPS_AUDIT_FAILURE_REASONS_MAX", "100")),
                 )
     return _ops_metrics
 

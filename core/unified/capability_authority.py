@@ -16,8 +16,7 @@ from .capability_record import UnifiedCapabilityRecord
 logger = logging.getLogger("Galaxy.Unified.CapabilityAuthority")
 
 UNIFIED_CAPABILITY_PLANE_AUTHORITY = (
-    "UNIFIED_CAPABILITY_PLANE_AUTHORITY::"
-    "CapabilityAuthority::registry+runtime+lifecycle"
+    "UNIFIED_CAPABILITY_PLANE_AUTHORITY::" "CapabilityAuthority::registry+runtime+lifecycle"
 )
 
 
@@ -155,9 +154,7 @@ class CapabilityAuthority:
             if merged_metadata.get("runtime_state")
             else None
         )
-        effective_available = (
-            runtime_state.is_routable() if runtime_state is not None else bool(contract.available)
-        )
+        effective_available = runtime_state.is_routable() if runtime_state is not None else bool(contract.available)
         updated_contract = CapabilityContract(
             name=contract.name,
             description=contract.description,
@@ -251,7 +248,9 @@ class CapabilityAuthority:
                 "record_version": record_version,
                 "lifecycle_event": lifecycle_event,
                 "mutation_source": mutation_source,
-                "publication_source": plane.get("publication_source") or existing_metadata.get("publication_source") or getattr(existing, "source_id", ""),
+                "publication_source": plane.get("publication_source")
+                or existing_metadata.get("publication_source")
+                or getattr(existing, "source_id", ""),
                 "last_updated": runtime_payload["last_updated"],
                 "authority_lineage": list(
                     existing_metadata.get("authority_lineage")

@@ -523,33 +523,17 @@ class DesktopExistenceSurface:
         Authority sentinel.
     """
 
-    surface_id: str = field(
-        default_factory=lambda: f"exist_{uuid.uuid4().hex[:12]}"
-    )
+    surface_id: str = field(default_factory=lambda: f"exist_{uuid.uuid4().hex[:12]}")
     generated_at: float = field(default_factory=time.time)
     schema_version: str = EXISTENCE_SURFACE_SCHEMA_VERSION
 
-    subject_lifecycle: SubjectLifecycleSnapshot = field(
-        default_factory=SubjectLifecycleSnapshot
-    )
-    shell_clothing: ShellClothingSnapshot = field(
-        default_factory=ShellClothingSnapshot
-    )
-    continuum_posture: ContinuumPostureSnapshot = field(
-        default_factory=ContinuumPostureSnapshot
-    )
-    cognitive_field: CognitiveFieldSnapshot = field(
-        default_factory=CognitiveFieldSnapshot
-    )
-    android_signals: AndroidPresenceSignals = field(
-        default_factory=AndroidPresenceSignals
-    )
-    existence_projection: ExistenceProjection = field(
-        default_factory=ExistenceProjection
-    )
-    unified_carrier_surface: UnifiedCarrierSurface = field(
-        default_factory=UnifiedCarrierSurface
-    )
+    subject_lifecycle: SubjectLifecycleSnapshot = field(default_factory=SubjectLifecycleSnapshot)
+    shell_clothing: ShellClothingSnapshot = field(default_factory=ShellClothingSnapshot)
+    continuum_posture: ContinuumPostureSnapshot = field(default_factory=ContinuumPostureSnapshot)
+    cognitive_field: CognitiveFieldSnapshot = field(default_factory=CognitiveFieldSnapshot)
+    android_signals: AndroidPresenceSignals = field(default_factory=AndroidPresenceSignals)
+    existence_projection: ExistenceProjection = field(default_factory=ExistenceProjection)
+    unified_carrier_surface: UnifiedCarrierSurface = field(default_factory=UnifiedCarrierSurface)
     _source: str = DESKTOP_EXISTENCE_SURFACE_AUTHORITY
 
     def to_dict(self) -> Dict[str, Any]:
@@ -665,14 +649,11 @@ class DesktopExistenceSurfaceBuilder:
             return SubjectLifecycleSnapshot(
                 dominant_tristate=summary.get("dominant_tristate", "silent"),
                 active_session_count=summary.get("active_session_count", 0),
-                tristate_distribution=dict(
-                    summary.get("tristate_distribution", {})
-                ),
+                tristate_distribution=dict(summary.get("tristate_distribution", {})),
             )
         except Exception as exc:
             logger.debug(
-                "DesktopExistenceSurfaceBuilder: subject_lifecycle read failed "
-                "(non-fatal): %s",
+                "DesktopExistenceSurfaceBuilder: subject_lifecycle read failed " "(non-fatal): %s",
                 exc,
             )
             return SubjectLifecycleSnapshot()
@@ -693,8 +674,7 @@ class DesktopExistenceSurfaceBuilder:
             return ShellClothingSnapshot(shell_state=state_val)
         except Exception as exc:
             logger.debug(
-                "DesktopExistenceSurfaceBuilder: shell_clothing read failed "
-                "(non-fatal): %s",
+                "DesktopExistenceSurfaceBuilder: shell_clothing read failed " "(non-fatal): %s",
                 exc,
             )
             return ShellClothingSnapshot()
@@ -717,8 +697,7 @@ class DesktopExistenceSurfaceBuilder:
             )
         except Exception as exc:
             logger.debug(
-                "DesktopExistenceSurfaceBuilder: continuum_posture read failed "
-                "(non-fatal): %s",
+                "DesktopExistenceSurfaceBuilder: continuum_posture read failed " "(non-fatal): %s",
                 exc,
             )
             return ContinuumPostureSnapshot()
@@ -730,8 +709,8 @@ class DesktopExistenceSurfaceBuilder:
     def _read_cognitive_field(self) -> CognitiveFieldSnapshot:
         """Read CognitiveState snapshot and CognitiveFieldEngine status."""
         try:
-            from core.cognitive.continuous_state import get_cognitive_state
             from core.cognitive.cognitive_field_engine import get_cognitive_field_engine
+            from core.cognitive.continuous_state import get_cognitive_state
 
             snap = get_cognitive_state().snapshot()
             engine = get_cognitive_field_engine()
@@ -745,8 +724,7 @@ class DesktopExistenceSurfaceBuilder:
             )
         except Exception as exc:
             logger.debug(
-                "DesktopExistenceSurfaceBuilder: cognitive_field read failed "
-                "(non-fatal): %s",
+                "DesktopExistenceSurfaceBuilder: cognitive_field read failed " "(non-fatal): %s",
                 exc,
             )
             return CognitiveFieldSnapshot()
@@ -762,12 +740,8 @@ class DesktopExistenceSurfaceBuilder:
 
             snapshots = list_device_state_snapshots()
             total = len(snapshots)
-            local_loop_ready = sum(
-                1 for s in snapshots if getattr(s, "local_loop_ready", False)
-            )
-            model_ready = sum(
-                1 for s in snapshots if getattr(s, "model_ready", False)
-            )
+            local_loop_ready = sum(1 for s in snapshots if getattr(s, "local_loop_ready", False))
+            model_ready = sum(1 for s in snapshots if getattr(s, "model_ready", False))
             runtime_dist: Dict[str, int] = {}
             for s in snapshots:
                 rt = getattr(s, "active_runtime_type", None) or "unknown"
@@ -781,8 +755,7 @@ class DesktopExistenceSurfaceBuilder:
             )
         except Exception as exc:
             logger.debug(
-                "DesktopExistenceSurfaceBuilder: android_signals read failed "
-                "(non-fatal): %s",
+                "DesktopExistenceSurfaceBuilder: android_signals read failed " "(non-fatal): %s",
                 exc,
             )
             return AndroidPresenceSignals()
@@ -878,9 +851,7 @@ class DesktopExistenceSurfaceBuilder:
             )
 
         # ── Derived summary fields ─────────────────────────────────────
-        active_count = sum(
-            1 for c in carriers if c.execution_surface_state == "active"
-        )
+        active_count = sum(1 for c in carriers if c.execution_surface_state == "active")
         ready_count = sum(1 for c in carriers if c.is_execution_ready)
 
         dominant: str = "none"
@@ -964,15 +935,10 @@ class DesktopExistenceSurfaceBuilder:
         # ── Derive verdict (priority: expressing > active > background > dormant) ─
 
         # expressing: subject actively producing output / controlling devices
-        is_expressing = (
-            fam1.dominant_tristate == "manifest"
-            or fam2.shell_state == "fullagent"
-        )
+        is_expressing = fam1.dominant_tristate == "manifest" or fam2.shell_state == "fullagent"
 
         # active: cognition/execution in progress or shell expanded
-        is_active_continuum_phase = bool(
-            fam3.tri_state_phase and fam3.tri_state_phase not in ("", "passive")
-        )
+        is_active_continuum_phase = bool(fam3.tri_state_phase and fam3.tri_state_phase not in ("", "passive"))
         is_active = (
             fam1.dominant_tristate == "liminal"
             or fam2.shell_state == "sidesheet"
@@ -982,10 +948,7 @@ class DesktopExistenceSurfaceBuilder:
 
         # background: sustained background presence without active request
         is_background = (
-            fam4.is_running
-            or fam5.local_loop_ready_count > 0
-            or fam2.shell_state == "island"
-            or fam4.tick_count > 0
+            fam4.is_running or fam5.local_loop_ready_count > 0 or fam2.shell_state == "island" or fam4.tick_count > 0
         )
 
         if is_expressing:

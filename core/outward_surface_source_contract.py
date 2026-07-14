@@ -39,9 +39,7 @@ OUTWARD_SURFACE_SOURCE_CONTRACTS: Dict[str, OutwardSurfaceSourceContract] = {
         preferred_primary_source_kind=SOURCE_KIND_COMPILED_OUTWARD_TRUTH,
         allowed_fallback_source_kinds=(SOURCE_KIND_RUNTIME_VISIBLE_STATE,),
         mixed_source_allowed=True,
-        mixed_source_allowed_when=(
-            "compile_outward_truth unavailable or compiled truth reports incomplete surfacing"
-        ),
+        mixed_source_allowed_when=("compile_outward_truth unavailable or compiled truth reports incomplete surfacing"),
         required_mixed_evidence_fields=("assembly_mode", "mixed_source", "fallback_used", "fallback_reason"),
         required_mixed_fingerprint_basis_fields=("truth_compilation_primary_path", "mixed_source"),
     ),
@@ -119,7 +117,7 @@ def assert_outward_surface_source_contract(
             assert evidence.get(field) not in (None, "")
 
         if authority_source_fingerprint is not None:
-            basis = (authority_source_fingerprint.get("observation_basis") or {})
+            basis = authority_source_fingerprint.get("observation_basis") or {}
             for field in contract.required_mixed_fingerprint_basis_fields:
                 assert basis.get(field) not in (None, "")
     else:

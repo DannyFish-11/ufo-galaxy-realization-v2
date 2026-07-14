@@ -15,25 +15,26 @@ Covers:
 
 from __future__ import annotations
 
-import pytest
 from unittest.mock import MagicMock, patch
 
+import pytest
 
 # ===========================================================================
 # A) DeviceOrchestrator.select_device → DevicePoolManager
 # ===========================================================================
+
 
 class TestDeviceOrchestratorDelegatesPool:
     """DeviceOrchestrator.select_device must delegate to DevicePoolManager."""
 
     def test_select_device_calls_pool(self):
         """select_device() routes through DevicePoolManager.select_device."""
-        from core.device_orchestrator import DeviceOrchestrator
-        from core.device_pool_manager import DevicePoolManager, SchedulingStrategy
         from core.capability_assimilation import (
             get_capability_assimilation_layer,
             reset_capability_assimilation_layer,
         )
+        from core.device_orchestrator import DeviceOrchestrator
+        from core.device_pool_manager import DevicePoolManager, SchedulingStrategy
 
         DevicePoolManager._reset_singleton()
         reset_capability_assimilation_layer()
@@ -41,14 +42,10 @@ class TestDeviceOrchestratorDelegatesPool:
         pool.register_device("dev_a", capabilities=["screen"])
         # 权威能力网络(assimilation layer)是路由一票门:pool 候选还要和
         # query_routable_executors 求交集,设备必须同时注册进权威层。
-        get_capability_assimilation_layer().assimilate(
-            "dev_a", capabilities=["screen"]
-        )
+        get_capability_assimilation_layer().assimilate("dev_a", capabilities=["screen"])
 
         try:
-            with patch(
-                "core.device_pool_manager.get_device_pool_manager", return_value=pool
-            ):
+            with patch("core.device_pool_manager.get_device_pool_manager", return_value=pool):
                 orch = DeviceOrchestrator()
                 result = orch.select_device(required_capabilities=["screen"])
 
@@ -65,9 +62,7 @@ class TestDeviceOrchestratorDelegatesPool:
         DevicePoolManager._reset_singleton()
         pool = DevicePoolManager(strategy=SchedulingStrategy.ADAPTIVE)
 
-        with patch(
-            "core.device_pool_manager.get_device_pool_manager", return_value=pool
-        ):
+        with patch("core.device_pool_manager.get_device_pool_manager", return_value=pool):
             orch = DeviceOrchestrator()
             result = orch.select_device(required_capabilities=["camera"])
 
@@ -93,20 +88,20 @@ class TestDeviceOrchestratorDelegatesPool:
 # B) CommandRouter.route_envelope uses DevicePoolManager for capability-based routing
 # ===========================================================================
 
+
 class TestCommandRouterPoolSelection:
     """route_envelope must use DevicePoolManager when targets is empty + caps given."""
 
     @pytest.mark.asyncio
     async def test_pool_selected_when_no_target_and_caps_given(self):
         """When envelope has no targets but required_capabilities, pool is queried."""
-        from core.command_router import CommandRouter
-        from core.schemas.task_envelope import TaskEnvelope
-        from core.device_pool_manager import DevicePoolManager, SchedulingStrategy
         from core.capability_assimilation import (
             get_capability_assimilation_layer,
             reset_capability_assimilation_layer,
         )
-
+        from core.command_router import CommandRouter
+        from core.device_pool_manager import DevicePoolManager, SchedulingStrategy
+        from core.schemas.task_envelope import TaskEnvelope
         from core.unified.device_manager import get_unified_device_manager
 
         DevicePoolManager._reset_singleton()
@@ -115,9 +110,7 @@ class TestCommandRouterPoolSelection:
         pool.register_device("pool_dev_1", capabilities=["screen"])
         # PR-1-P0 能力硬门:capability graph 无执行者时整个派发被拒,
         # 设备必须同时注册进权威能力网络。
-        get_capability_assimilation_layer().assimilate(
-            "pool_dev_1", capabilities=["screen"]
-        )
+        get_capability_assimilation_layer().assimilate("pool_dev_1", capabilities=["screen"])
         # V3 槽位权威:设备还必须在 UDM 注册且为可派发类(android/windows)。
         udm = get_unified_device_manager()
         udm.register_device_from_dict(
@@ -128,9 +121,7 @@ class TestCommandRouterPoolSelection:
         # 进能力同化层,必须注册一个(假)连接。
         from core.unified.connection_manager import get_unified_connection_manager
 
-        await get_unified_connection_manager().register_connection(
-            "pool_dev_1", MagicMock()
-        )
+        await get_unified_connection_manager().register_connection("pool_dev_1", MagicMock())
 
         mock_executor = MagicMock(return_value=None)
 
@@ -146,9 +137,7 @@ class TestCommandRouterPoolSelection:
             required_capabilities=["screen"],
         )
 
-        with patch(
-            "core.device_pool_manager.get_device_pool_manager", return_value=pool
-        ):
+        with patch("core.device_pool_manager.get_device_pool_manager", return_value=pool):
             result = await router.route_envelope(envelope)
 
         # The pool should have selected pool_dev_1, so routing must succeed
@@ -184,6 +173,7 @@ class TestCommandRouterPoolSelection:
 # C) Explicit targets bypass DevicePoolManager selection
 # ===========================================================================
 
+
 class TestExplicitTargetBypassesPool:
     """When an explicit target is provided, DevicePoolManager must NOT be called."""
 
@@ -191,8 +181,8 @@ class TestExplicitTargetBypassesPool:
     async def test_explicit_target_does_not_call_pool_select(self):
         """Explicit target in envelope.targets bypasses DevicePoolManager.select_device."""
         from core.command_router import CommandRouter
-        from core.schemas.task_envelope import TaskEnvelope
         from core.device_pool_manager import DevicePoolManager
+        from core.schemas.task_envelope import TaskEnvelope
 
         async def fake_exec(device_id, command, params):
             return {"success": True, "result": "ok", "device_id": device_id}
@@ -223,13 +213,14 @@ class TestExplicitTargetBypassesPool:
 # D) galaxy_gateway DeviceRouter._select_devices delegates to DevicePoolManager
 # ===========================================================================
 
+
 class TestDeviceRouterDelegatesPool:
     """DeviceRouter._select_devices should try DevicePoolManager before falling back."""
 
     def test_select_devices_uses_pool_when_available(self):
         """_select_devices delegates final selection to DevicePoolManager."""
         try:
-            from galaxy_gateway.device_router import DeviceRouter, Device, DeviceType
+            from galaxy_gateway.device_router import Device, DeviceRouter, DeviceType
         except Exception:
             pytest.skip("galaxy_gateway not importable in this test environment")
 
@@ -254,6 +245,7 @@ class TestDeviceRouterDelegatesPool:
         }
 
         from core.device_pool_manager import DevicePoolManager, SchedulingStrategy
+
         DevicePoolManager._reset_singleton()
         pool = DevicePoolManager(strategy=SchedulingStrategy.ROUND_ROBIN)
         pool.register_device("gw_dev_1")
@@ -275,6 +267,7 @@ class TestDeviceRouterDelegatesPool:
 # E) Node_71 strategy-provider guard is present
 # ===========================================================================
 
+
 class TestNode71StrategyProviderGuard:
     """Node_71 task_scheduler module must carry the strategy-provider guard."""
 
@@ -282,6 +275,7 @@ class TestNode71StrategyProviderGuard:
     def _read_scheduler_source() -> str:
         """Read task_scheduler.py source without importing it (avoids missing deps)."""
         import os
+
         path = os.path.join(
             os.path.dirname(__file__),
             "../../..",
@@ -304,13 +298,11 @@ class TestNode71StrategyProviderGuard:
     def test_task_scheduler_docstring_contains_guard(self):
         """TaskScheduler class docstring must contain the strategy-provider guard."""
         src = self._read_scheduler_source()
-        assert "STRATEGY PROVIDER ONLY" in src, (
-            "TaskScheduler docstring must contain the PR-3 strategy-provider guard."
-        )
+        assert "STRATEGY PROVIDER ONLY" in src, "TaskScheduler docstring must contain the PR-3 strategy-provider guard."
 
     def test_device_selector_docstring_contains_guard(self):
         """DeviceSelector class docstring must contain the strategy-provider guard."""
         src = self._read_scheduler_source()
-        assert "STRATEGY PROVIDER ONLY" in src, (
-            "DeviceSelector class docstring must contain the PR-3 strategy-provider guard."
-        )
+        assert (
+            "STRATEGY PROVIDER ONLY" in src
+        ), "DeviceSelector class docstring must contain the PR-3 strategy-provider guard."

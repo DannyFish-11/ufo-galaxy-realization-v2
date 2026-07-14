@@ -17,6 +17,7 @@
 - **永不反噬**:回调异常全部吞掉,流式通道坏了最多退化成"整段一次到"的旧行为,
   绝不影响主调用链的正确性。
 """
+
 from __future__ import annotations
 
 import contextlib
@@ -43,7 +44,7 @@ class TokenStream:
     ) -> None:
         self._on_delta = on_delta
         self._on_reset = on_reset
-        self.chars = 0      # 本段(自上次 reset 起)已流出的字符数
+        self.chars = 0  # 本段(自上次 reset 起)已流出的字符数
         self.total_chars = 0
         self.resets = 0
 
@@ -75,7 +76,8 @@ class TokenStream:
 
 # 请求级上下文:消费端挂 sink,生成点取 sink。默认 None = 无流式消费者。
 _current: contextvars.ContextVar[Optional[TokenStream]] = contextvars.ContextVar(
-    "galaxy_llm_token_stream", default=None,
+    "galaxy_llm_token_stream",
+    default=None,
 )
 
 

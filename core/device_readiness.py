@@ -225,21 +225,21 @@ class RoutabilitySummary:
     ucm_send_available: bool = False
     # --- Fallback transport (relay) ---
     relay_available: bool = False
-    fallback_available: bool = False      # alias: relay_available (PR-4 explicit field)
+    fallback_available: bool = False  # alias: relay_available (PR-4 explicit field)
     # --- Mesh paths (overlay / enrichment only — NOT canonical routability) ---
     mesh_direct_available: bool = False
     mesh_relay_available: bool = False
     mesh_overlay_available: bool = False  # PR-4: consolidates mesh_direct + mesh_relay
     # --- Derived hierarchy fields (PR-4) ---
-    primary_transport: str = "none"       # "direct_ws" | "ucm" | "relay" | "none"
+    primary_transport: str = "none"  # "direct_ws" | "ucm" | "relay" | "none"
     effective_routable: bool = False
     preferred_path: str = "none"
-    transport_role_note: str = ""         # brief hierarchy note for callers
+    transport_role_note: str = ""  # brief hierarchy note for callers
     # --- PR-5 live route truth fields ---
-    transport_present: bool = False       # any transport physically connected
-    transport_usable: bool = False        # transport present AND can deliver
-    device_routable: bool = False         # explicit alias for effective_routable
-    effective_path: str = "none"          # explicit alias for preferred_path
+    transport_present: bool = False  # any transport physically connected
+    transport_usable: bool = False  # transport present AND can deliver
+    device_routable: bool = False  # explicit alias for effective_routable
+    effective_path: str = "none"  # explicit alias for preferred_path
     reasons: List[str] = field(default_factory=list)
     sources: Dict[str, Any] = field(default_factory=dict)
 
@@ -311,6 +311,7 @@ def _get_udm():
     """Return UnifiedDeviceManager singleton, or None on failure."""
     try:
         from core.unified.device_manager import get_unified_device_manager
+
         return get_unified_device_manager()
     except Exception as exc:  # pragma: no cover
         logger.debug("DeviceReadiness: UDM unavailable — %s", exc)
@@ -321,6 +322,7 @@ def _get_ucm():
     """Return UnifiedConnectionManager singleton, or None on failure."""
     try:
         from core.unified.connection_manager import UnifiedConnectionManager
+
         return UnifiedConnectionManager()
     except Exception as exc:  # pragma: no cover
         logger.debug("DeviceReadiness: UCM unavailable — %s", exc)
@@ -331,6 +333,7 @@ def _get_gateway_ws_manager():
     """Return the gateway GatewayWSManager, or None on failure."""
     try:
         from galaxy_gateway.app import websocket_manager  # type: ignore
+
         return websocket_manager
     except Exception:  # pragma: no cover
         return None
@@ -340,6 +343,7 @@ def _get_device_router():
     """Return the gateway DeviceRouter, or None on failure."""
     try:
         from galaxy_gateway.device_router import DeviceRouter  # type: ignore
+
         return DeviceRouter()
     except Exception:  # pragma: no cover
         return None
@@ -369,15 +373,11 @@ def get_connection_summary(device_id: str) -> ConnectionSummary:
             if conn_info is not None:
                 summary.ucm_connected = True
                 state_val = conn_info.state
-                summary.connection_state = (
-                    state_val if isinstance(state_val, str) else state_val.value
-                )
+                summary.connection_state = state_val if isinstance(state_val, str) else state_val.value
                 summary.local_connection_id = getattr(conn_info, "connection_id", None)
                 hb = getattr(conn_info, "last_heartbeat", None)
                 if hb is not None:
-                    summary.last_heartbeat_at = (
-                        hb.isoformat() if hasattr(hb, "isoformat") else str(hb)
-                    )
+                    summary.last_heartbeat_at = hb.isoformat() if hasattr(hb, "isoformat") else str(hb)
                 summary.sources["ucm"] = {
                     "state": summary.connection_state,
                     "routable": conn_info.routable,
@@ -485,6 +485,7 @@ def get_routability_summary(device_id: str) -> RoutabilitySummary:
     # --- Relay availability ---
     try:
         import core.proxy_relay as _pr  # noqa: F401  # presence check only
+
         summary.relay_available = True
         summary.sources["proxy_relay"] = "module_present"
     except Exception:
@@ -495,6 +496,7 @@ def get_routability_summary(device_id: str) -> RoutabilitySummary:
     # mesh_overlay_available is captured for topology enrichment only.
     try:
         import core.mesh_coordinator as _mc  # noqa: F401  # presence check only
+
         summary.mesh_direct_available = True
         summary.mesh_relay_available = True
         summary.sources["mesh_coordinator"] = "module_present"
@@ -502,9 +504,7 @@ def get_routability_summary(device_id: str) -> RoutabilitySummary:
         summary.reasons.append("mesh_unavailable")
 
     # PR-4: consolidate mesh fields into overlay flag
-    summary.mesh_overlay_available = (
-        summary.mesh_direct_available or summary.mesh_relay_available
-    )
+    summary.mesh_overlay_available = summary.mesh_direct_available or summary.mesh_relay_available
 
     # --- Derive effective routable & preferred path (PR-4 hierarchy) ---
     # Only direct WS (primary) and relay (fallback) determine effective_routable.
@@ -513,32 +513,24 @@ def get_routability_summary(device_id: str) -> RoutabilitySummary:
         summary.effective_routable = True
         summary.preferred_path = "direct_ws"
         summary.primary_transport = "direct_ws"
-        summary.transport_role_note = (
-            "direct_ws=primary; relay=fallback_available; mesh=overlay_only"
-        )
+        summary.transport_role_note = "direct_ws=primary; relay=fallback_available; mesh=overlay_only"
     elif summary.ucm_send_available:
         summary.effective_routable = True
         summary.preferred_path = "ucm"
         summary.primary_transport = "ucm"
-        summary.transport_role_note = (
-            "ucm=primary; relay=fallback_available; mesh=overlay_only"
-        )
+        summary.transport_role_note = "ucm=primary; relay=fallback_available; mesh=overlay_only"
     elif summary.relay_available:
         summary.effective_routable = True
         summary.preferred_path = "relay"
         summary.primary_transport = "relay"
-        summary.transport_role_note = (
-            "relay=fallback_transport (no direct_ws); mesh=overlay_only"
-        )
+        summary.transport_role_note = "relay=fallback_transport (no direct_ws); mesh=overlay_only"
     else:
         # No canonical transport available.
         # Mesh overlay may be present but cannot provide canonical routability.
         summary.preferred_path = "none"
         summary.primary_transport = "none"
         if summary.mesh_overlay_available:
-            summary.transport_role_note = (
-                "mesh=overlay_only (not canonical); no direct_ws or relay available"
-            )
+            summary.transport_role_note = "mesh=overlay_only (not canonical); no direct_ws or relay available"
             summary.reasons.append("mesh_overlay_present_but_not_canonical_route")
         else:
             summary.transport_role_note = "no_canonical_transport_available"
@@ -548,11 +540,7 @@ def get_routability_summary(device_id: str) -> RoutabilitySummary:
 
     # --- PR-5 live route truth fields ---
     # transport_present: any transport mechanism physically connected
-    summary.transport_present = (
-        summary.direct_ws_available
-        or summary.ucm_send_available
-        or summary.relay_available
-    )
+    summary.transport_present = summary.direct_ws_available or summary.ucm_send_available or summary.relay_available
     # transport_usable: present AND can actually deliver (= any canonical route)
     summary.transport_usable = summary.effective_routable
     # device_routable: explicit named alias for effective_routable

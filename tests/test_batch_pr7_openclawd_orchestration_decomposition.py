@@ -25,6 +25,7 @@ Covers:
 from __future__ import annotations
 
 import asyncio
+
 import pytest
 
 # ---------------------------------------------------------------------------
@@ -34,42 +35,50 @@ import pytest
 
 def test_openclawd_orchestration_authority_exists():
     from core.orchestration import OPENCLAWD_ORCHESTRATION_AUTHORITY
+
     assert isinstance(OPENCLAWD_ORCHESTRATION_AUTHORITY, str)
     assert OPENCLAWD_ORCHESTRATION_AUTHORITY
 
 
 def test_lifecycle_manager_authority_sentinel():
     from core.orchestration.lifecycle import LIFECYCLE_MANAGER_AUTHORITY
+
     assert LIFECYCLE_MANAGER_AUTHORITY == "LIFECYCLE_MANAGER_AUTHORITY"
 
 
 def test_state_manager_authority_sentinel():
     from core.orchestration.state import STATE_MANAGER_AUTHORITY
+
     assert STATE_MANAGER_AUTHORITY == "STATE_MANAGER_AUTHORITY"
 
 
 def test_perception_pipeline_authority_sentinel():
     from core.orchestration.perception import PERCEPTION_PIPELINE_AUTHORITY
+
     assert PERCEPTION_PIPELINE_AUTHORITY == "PERCEPTION_PIPELINE_AUTHORITY"
 
 
 def test_planning_pipeline_authority_sentinel():
     from core.orchestration.planning import PLANNING_PIPELINE_AUTHORITY
+
     assert PLANNING_PIPELINE_AUTHORITY == "PLANNING_PIPELINE_AUTHORITY"
 
 
 def test_execution_pipeline_authority_sentinel():
     from core.orchestration.execution import EXECUTION_PIPELINE_AUTHORITY
+
     assert EXECUTION_PIPELINE_AUTHORITY == "EXECUTION_PIPELINE_AUTHORITY"
 
 
 def test_reflection_pipeline_authority_sentinel():
     from core.orchestration.reflection import REFLECTION_PIPELINE_AUTHORITY
+
     assert REFLECTION_PIPELINE_AUTHORITY == "REFLECTION_PIPELINE_AUTHORITY"
 
 
 def test_orchestration_helpers_authority_sentinel():
     from core.orchestration.helpers import ORCHESTRATION_HELPERS_AUTHORITY
+
     assert ORCHESTRATION_HELPERS_AUTHORITY == "ORCHESTRATION_HELPERS_AUTHORITY"
 
 
@@ -80,41 +89,49 @@ def test_orchestration_helpers_authority_sentinel():
 
 def test_core_orchestration_package_imports_cleanly():
     import core.orchestration as pkg
+
     assert hasattr(pkg, "OPENCLAWD_ORCHESTRATION_AUTHORITY")
 
 
 def test_lifecycle_submodule_importable():
     import core.orchestration.lifecycle as m
+
     assert m is not None
 
 
 def test_state_submodule_importable():
     import core.orchestration.state as m
+
     assert m is not None
 
 
 def test_perception_submodule_importable():
     import core.orchestration.perception as m
+
     assert m is not None
 
 
 def test_planning_submodule_importable():
     import core.orchestration.planning as m
+
     assert m is not None
 
 
 def test_execution_submodule_importable():
     import core.orchestration.execution as m
+
     assert m is not None
 
 
 def test_reflection_submodule_importable():
     import core.orchestration.reflection as m
+
     assert m is not None
 
 
 def test_helpers_submodule_importable():
     import core.orchestration.helpers as m
+
     assert m is not None
 
 
@@ -125,18 +142,21 @@ def test_helpers_submodule_importable():
 
 def test_lifecycle_manager_instantiates():
     from core.orchestration.lifecycle import LifecycleManager
+
     lm = LifecycleManager()
     assert lm is not None
 
 
 def test_lifecycle_manager_cancel_task_returns_true_first_time():
     from core.orchestration.lifecycle import LifecycleManager
+
     lm = LifecycleManager()
     assert lm.cancel_task("task_abc123") is True
 
 
 def test_lifecycle_manager_cancel_task_idempotent():
     from core.orchestration.lifecycle import LifecycleManager
+
     lm = LifecycleManager()
     lm.cancel_task("task_abc123")
     assert lm.cancel_task("task_abc123") is False
@@ -144,12 +164,14 @@ def test_lifecycle_manager_cancel_task_idempotent():
 
 def test_lifecycle_manager_cancel_group_returns_true_first_time():
     from core.orchestration.lifecycle import LifecycleManager
+
     lm = LifecycleManager()
     assert lm.cancel_group("grp_deadbeef") is True
 
 
 def test_lifecycle_manager_cancel_group_idempotent():
     from core.orchestration.lifecycle import LifecycleManager
+
     lm = LifecycleManager()
     lm.cancel_group("grp_deadbeef")
     assert lm.cancel_group("grp_deadbeef") is False
@@ -157,6 +179,7 @@ def test_lifecycle_manager_cancel_group_idempotent():
 
 def test_lifecycle_manager_is_cancelled_task():
     from core.orchestration.lifecycle import LifecycleManager
+
     lm = LifecycleManager()
     lm.cancel_task("task_x")
     assert lm.is_cancelled("task_x") is True
@@ -164,6 +187,7 @@ def test_lifecycle_manager_is_cancelled_task():
 
 def test_lifecycle_manager_is_cancelled_group():
     from core.orchestration.lifecycle import LifecycleManager
+
     lm = LifecycleManager()
     lm.cancel_group("grp_y")
     assert lm.is_cancelled("other_task", group_id="grp_y") is True
@@ -171,12 +195,14 @@ def test_lifecycle_manager_is_cancelled_group():
 
 def test_lifecycle_manager_is_cancelled_neither():
     from core.orchestration.lifecycle import LifecycleManager
+
     lm = LifecycleManager()
     assert lm.is_cancelled("task_not_cancelled") is False
 
 
 def test_lifecycle_manager_authority_class_attr():
-    from core.orchestration.lifecycle import LifecycleManager, LIFECYCLE_MANAGER_AUTHORITY
+    from core.orchestration.lifecycle import LIFECYCLE_MANAGER_AUTHORITY, LifecycleManager
+
     assert LifecycleManager.LIFECYCLE_MANAGER_AUTHORITY == LIFECYCLE_MANAGER_AUTHORITY
 
 
@@ -209,6 +235,7 @@ def test_lifecycle_manager_finalise_plan_failure():
 
 def _make_entry(group_id, task_id, idx, device="local"):
     from core.orchestration.lifecycle import _SubtaskEntry
+
     return _SubtaskEntry(
         task_id=task_id,
         group_id=group_id,
@@ -220,6 +247,7 @@ def _make_entry(group_id, task_id, idx, device="local"):
 
 def test_parallel_group_tracker_register():
     from core.orchestration.lifecycle import ParallelGroupTracker
+
     tracker = ParallelGroupTracker()
     e = _make_entry("g1", "t1", 0)
     tracker.register_group("g1", [e])
@@ -228,6 +256,7 @@ def test_parallel_group_tracker_register():
 
 def test_parallel_group_tracker_mark_running():
     from core.orchestration.lifecycle import ParallelGroupTracker, _SubtaskStatus
+
     tracker = ParallelGroupTracker()
     tracker.register_group("g1", [_make_entry("g1", "t1", 0)])
     tracker.mark_running("g1", "t1")
@@ -238,6 +267,7 @@ def test_parallel_group_tracker_mark_running():
 
 def test_parallel_group_tracker_mark_done_success():
     from core.orchestration.lifecycle import ParallelGroupTracker, _SubtaskStatus
+
     tracker = ParallelGroupTracker()
     tracker.register_group("g1", [_make_entry("g1", "t1", 0)])
     tracker.mark_running("g1", "t1")
@@ -249,6 +279,7 @@ def test_parallel_group_tracker_mark_done_success():
 
 def test_parallel_group_tracker_mark_done_failure():
     from core.orchestration.lifecycle import ParallelGroupTracker, _SubtaskStatus
+
     tracker = ParallelGroupTracker()
     tracker.register_group("g1", [_make_entry("g1", "t1", 0)])
     tracker.mark_done("g1", "t1", {"error": "boom"}, success=False)
@@ -259,6 +290,7 @@ def test_parallel_group_tracker_mark_done_failure():
 
 def test_parallel_group_tracker_mark_cancelled_idempotent():
     from core.orchestration.lifecycle import ParallelGroupTracker, _SubtaskStatus
+
     tracker = ParallelGroupTracker()
     tracker.register_group("g1", [_make_entry("g1", "t1", 0)])
     tracker.mark_cancelled("g1", "t1")
@@ -269,6 +301,7 @@ def test_parallel_group_tracker_mark_cancelled_idempotent():
 
 def test_parallel_group_tracker_aggregate_all_success():
     from core.orchestration.lifecycle import ParallelGroupTracker
+
     tracker = ParallelGroupTracker()
     entries = [_make_entry("g1", f"t{i}", i) for i in range(3)]
     tracker.register_group("g1", entries)
@@ -285,6 +318,7 @@ def test_parallel_group_tracker_aggregate_all_success():
 
 def test_parallel_group_tracker_aggregate_partial():
     from core.orchestration.lifecycle import ParallelGroupTracker
+
     tracker = ParallelGroupTracker()
     entries = [_make_entry("g1", f"t{i}", i) for i in range(3)]
     tracker.register_group("g1", entries)
@@ -298,6 +332,7 @@ def test_parallel_group_tracker_aggregate_partial():
 
 def test_parallel_group_tracker_aggregate_failed():
     from core.orchestration.lifecycle import ParallelGroupTracker
+
     tracker = ParallelGroupTracker()
     entries = [_make_entry("g1", f"t{i}", i) for i in range(2)]
     tracker.register_group("g1", entries)
@@ -309,6 +344,7 @@ def test_parallel_group_tracker_aggregate_failed():
 
 def test_parallel_group_tracker_aggregate_cancelled():
     from core.orchestration.lifecycle import ParallelGroupTracker
+
     tracker = ParallelGroupTracker()
     entries = [_make_entry("g1", f"t{i}", i) for i in range(2)]
     tracker.register_group("g1", entries)
@@ -326,6 +362,7 @@ def test_parallel_group_tracker_aggregate_cancelled():
 
 def test_subtask_status_values():
     from core.orchestration.lifecycle import _SubtaskStatus
+
     assert _SubtaskStatus.PENDING == "pending"
     assert _SubtaskStatus.RUNNING == "running"
     assert _SubtaskStatus.SUCCESS == "success"
@@ -341,6 +378,7 @@ def test_subtask_status_values():
 
 def test_is_local_device_empty():
     from core.orchestration.lifecycle import _is_local_device
+
     # Empty string is treated as local (no device specified)
     assert _is_local_device("") is True
     # None is explicitly handled by `if not device_id` guard — returns True
@@ -352,27 +390,32 @@ def test_is_local_device_none_is_documented_input():
     The function's docstring states: 'A device is considered local when … is empty / None.'
     """
     from core.orchestration.lifecycle import _is_local_device
+
     assert _is_local_device(None) is True  # type: ignore[arg-type]
     assert _is_local_device("") is True
 
 
 def test_is_local_device_prefix_local():
     from core.orchestration.lifecycle import _is_local_device
+
     assert _is_local_device("local_device") is True
 
 
 def test_is_local_device_prefix_openclawd():
     from core.orchestration.lifecycle import _is_local_device
+
     assert _is_local_device("openclawd") is True
 
 
 def test_is_local_device_prefix_server():
     from core.orchestration.lifecycle import _is_local_device
+
     assert _is_local_device("server_main") is True
 
 
 def test_is_local_device_remote():
-    from core.orchestration.lifecycle import _is_local_device, _LOCAL_HOSTNAME
+    from core.orchestration.lifecycle import _LOCAL_HOSTNAME, _is_local_device
+
     # A device ID that doesn't match any prefix and doesn't contain hostname
     remote_id = "remote_android_device_zzz"
     if _LOCAL_HOSTNAME and _LOCAL_HOSTNAME in remote_id.lower():
@@ -387,12 +430,14 @@ def test_is_local_device_remote():
 
 def test_session_memory_manager_instantiates():
     from core.orchestration.state import SessionMemoryManager
+
     smm = SessionMemoryManager()
     assert smm is not None
 
 
 def test_session_memory_manager_record_and_get():
     from core.orchestration.state import SessionMemoryManager
+
     smm = SessionMemoryManager()
     asyncio.run(smm.record_turn("sess1", "user", "hello"))
     history = smm.get_history("sess1")
@@ -403,6 +448,7 @@ def test_session_memory_manager_record_and_get():
 
 def test_session_memory_manager_clear_session():
     from core.orchestration.state import SessionMemoryManager
+
     smm = SessionMemoryManager()
     asyncio.run(smm.record_turn("sess1", "user", "hi"))
     asyncio.run(smm.clear_session("sess1"))
@@ -411,6 +457,7 @@ def test_session_memory_manager_clear_session():
 
 def test_session_memory_manager_list_sessions():
     from core.orchestration.state import SessionMemoryManager
+
     smm = SessionMemoryManager()
     asyncio.run(smm.record_turn("s1", "user", "hi"))
     asyncio.run(smm.record_turn("s2", "assistant", "hello"))
@@ -456,15 +503,18 @@ def test_session_memory_manager_get_history_max_turns():
 
 def test_openclawd_has_lifecycle_manager():
     from core.openclawd import OpenClawd
+
     oc = OpenClawd()
     assert hasattr(oc, "_lifecycle_manager")
     from core.orchestration.lifecycle import LifecycleManager
+
     assert isinstance(oc._lifecycle_manager, LifecycleManager)
 
 
 def test_openclawd_has_session_manager():
     from core.openclawd import OpenClawd
     from core.orchestration.state import SessionMemoryManager
+
     oc = OpenClawd()
     assert hasattr(oc, "_session_manager")
     assert isinstance(oc._session_manager, SessionMemoryManager)
@@ -472,6 +522,7 @@ def test_openclawd_has_session_manager():
 
 def test_openclawd_still_has_cancel_registry():
     from core.openclawd import OpenClawd
+
     oc = OpenClawd()
     assert hasattr(oc, "_cancel_registry")
     assert isinstance(oc._cancel_registry, set)
@@ -484,51 +535,61 @@ def test_openclawd_still_has_cancel_registry():
 
 def test_import_lifecycle_manager_from_package():
     from core.orchestration import LifecycleManager
+
     assert LifecycleManager is not None
 
 
 def test_import_parallel_group_tracker_from_package():
     from core.orchestration import ParallelGroupTracker
+
     assert ParallelGroupTracker is not None
 
 
 def test_import_parallel_result_from_package():
     from core.orchestration import ParallelResult
+
     assert ParallelResult is not None
 
 
 def test_import_session_memory_manager_from_package():
     from core.orchestration import SessionMemoryManager
+
     assert SessionMemoryManager is not None
 
 
 def test_import_continuum_state_adapter_from_package():
     from core.orchestration import ContinuumStateAdapter
+
     assert ContinuumStateAdapter is not None
 
 
 def test_import_perception_pipeline_from_package():
     from core.orchestration import PerceptionPipeline
+
     assert PerceptionPipeline is not None
 
 
 def test_import_planning_pipeline_from_package():
     from core.orchestration import PlanningPipeline
+
     assert PlanningPipeline is not None
 
 
 def test_import_execution_pipeline_from_package():
     from core.orchestration import ExecutionPipeline
+
     assert ExecutionPipeline is not None
 
 
 def test_import_reflection_pipeline_from_package():
     from core.orchestration import ReflectionPipeline
+
     assert ReflectionPipeline is not None
 
 
 def test_import_orchestration_helpers_from_package():
     from core.orchestration import OrchestrationHelpers
+
     assert OrchestrationHelpers is not None
 
 
@@ -539,13 +600,15 @@ def test_import_orchestration_helpers_from_package():
 
 def test_get_openclawd_importable():
     from core.openclawd import get_openclawd
+
     assert callable(get_openclawd)
 
 
 def test_get_openclawd_returns_instance():
-    from core.openclawd import get_openclawd, OpenClawd
     # Reset the singleton so we get a fresh instance
     import core.openclawd as _m
+    from core.openclawd import OpenClawd, get_openclawd
+
     _m._openclawd_instance = None
     instance = get_openclawd()
     assert isinstance(instance, OpenClawd)
@@ -558,6 +621,7 @@ def test_get_openclawd_returns_instance():
 
 def test_parallel_result_to_dict():
     from core.orchestration.lifecycle import ParallelResult
+
     pr = ParallelResult(
         group_id="g1",
         device_results=[{"task_id": "t1", "status": "success"}],
@@ -581,6 +645,7 @@ def test_parallel_result_to_dict():
 
 def test_openclawd_cancel_registry_is_independent_set():
     from core.openclawd import OpenClawd
+
     oc = OpenClawd()
     # Manually add to the instance's cancel_registry (legacy path)
     oc._cancel_registry.add("legacy_task_id")
@@ -596,6 +661,7 @@ def test_openclawd_cancel_registry_is_independent_set():
 
 def test_subtask_entry_default_status():
     from core.orchestration.lifecycle import _SubtaskEntry, _SubtaskStatus
+
     e = _SubtaskEntry(
         task_id="t1",
         group_id="g1",
@@ -610,6 +676,7 @@ def test_subtask_entry_default_status():
 
 def test_subtask_entry_fields():
     from core.orchestration.lifecycle import _SubtaskEntry
+
     e = _SubtaskEntry(
         task_id="t_abc",
         group_id="g_abc",
@@ -631,6 +698,7 @@ def test_subtask_entry_fields():
 
 def test_needs_retry_failed():
     from core.orchestration.lifecycle import ParallelGroupTracker
+
     tracker = ParallelGroupTracker()
     tracker.register_group("g1", [_make_entry("g1", "t1", 0)])
     tracker.mark_done("g1", "t1", {"error": "x"}, success=False)
@@ -639,6 +707,7 @@ def test_needs_retry_failed():
 
 def test_needs_retry_exhausted():
     from core.orchestration.lifecycle import ParallelGroupTracker
+
     tracker = ParallelGroupTracker()
     tracker.register_group("g1", [_make_entry("g1", "t1", 0)])
     tracker.mark_done("g1", "t1", {"error": "x"}, success=False)
@@ -649,6 +718,7 @@ def test_needs_retry_exhausted():
 
 def test_backoff_delay():
     from core.orchestration.lifecycle import ParallelGroupTracker
+
     tracker = ParallelGroupTracker()
     tracker.register_group("g1", [_make_entry("g1", "t1", 0)])
     delay = tracker.backoff_delay("g1", "t1")
@@ -662,15 +732,16 @@ def test_backoff_delay():
 
 def test_all_authority_sentinels_via_package():
     from core.orchestration import (
-        OPENCLAWD_ORCHESTRATION_AUTHORITY,
+        EXECUTION_PIPELINE_AUTHORITY,
         LIFECYCLE_MANAGER_AUTHORITY,
-        STATE_MANAGER_AUTHORITY,
+        OPENCLAWD_ORCHESTRATION_AUTHORITY,
+        ORCHESTRATION_HELPERS_AUTHORITY,
         PERCEPTION_PIPELINE_AUTHORITY,
         PLANNING_PIPELINE_AUTHORITY,
-        EXECUTION_PIPELINE_AUTHORITY,
         REFLECTION_PIPELINE_AUTHORITY,
-        ORCHESTRATION_HELPERS_AUTHORITY,
+        STATE_MANAGER_AUTHORITY,
     )
+
     sentinels = [
         OPENCLAWD_ORCHESTRATION_AUTHORITY,
         LIFECYCLE_MANAGER_AUTHORITY,
@@ -692,26 +763,31 @@ def test_all_authority_sentinels_via_package():
 
 def test_openclawd_module_reexports_parallel_group_tracker():
     from core.openclawd import ParallelGroupTracker
+
     assert ParallelGroupTracker is not None
 
 
 def test_openclawd_module_reexports_parallel_result():
     from core.openclawd import ParallelResult
+
     assert ParallelResult is not None
 
 
 def test_openclawd_module_reexports_subtask_status():
     from core.openclawd import _SubtaskStatus
+
     assert _SubtaskStatus is not None
 
 
 def test_openclawd_module_reexports_is_local_device():
     from core.openclawd import _is_local_device
+
     assert callable(_is_local_device)
 
 
 def test_openclawd_module_reexports_lifecycle_manager():
     from core.openclawd import LifecycleManager
+
     assert LifecycleManager is not None
 
 
@@ -737,9 +813,7 @@ def test_perception_pipeline_delegates_to_method():
         def _build_canonical_perception_state(self, multimodal_context=None):
             return {"perception": "state", "context": multimodal_context}
 
-    result = PerceptionPipeline.build_canonical_perception_state(
-        FakeOC(), multimodal_context={"image": "data"}
-    )
+    result = PerceptionPipeline.build_canonical_perception_state(FakeOC(), multimodal_context={"image": "data"})
     assert result == {"perception": "state", "context": {"image": "data"}}
 
 
@@ -780,12 +854,14 @@ def test_orchestration_helpers_emit_audit_missing():
 
 def test_openclawd_instantiates_without_error():
     from core.openclawd import OpenClawd
+
     oc = OpenClawd()
     assert oc is not None
 
 
 def test_openclawd_initialized_flag():
     from core.openclawd import OpenClawd
+
     oc = OpenClawd()
     # _initialized starts False (lazy init)
     assert hasattr(oc, "_initialized")

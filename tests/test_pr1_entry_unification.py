@@ -17,6 +17,7 @@ Validates that:
 from __future__ import annotations
 
 import asyncio
+
 import pytest
 
 from core.schemas.task_envelope import (
@@ -24,10 +25,10 @@ from core.schemas.task_envelope import (
     envelope_from_command_request,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(autouse=True)
 def _bypass_dispatch_gates(monkeypatch):
@@ -38,8 +39,8 @@ def _bypass_dispatch_gates(monkeypatch):
     """
     from core.canonical_dispatch_slot_authority import (
         CanonicalDispatchSlot,
-        CanonicalDispatchSlotStatus,
         CanonicalDispatchSlotsResult,
+        CanonicalDispatchSlotStatus,
     )
 
     def _approve_all(device_ids, execution_mode, **kwargs):
@@ -76,6 +77,7 @@ def _make_router(executor=None):
     from core.command_router import CommandRouter
 
     if executor is None:
+
         async def _default_executor(target, command, params):
             return {"executed": True, "command": command}
 
@@ -87,6 +89,7 @@ def _make_router(executor=None):
 # ---------------------------------------------------------------------------
 # 1 + 2. Backward compat: route_command still works; route_envelope is primary
 # ---------------------------------------------------------------------------
+
 
 class TestCommandRouterCompatAndPrimary:
     @pytest.mark.asyncio
@@ -188,6 +191,7 @@ class TestCommandRouterCompatAndPrimary:
 # 3. OpenClawd.send_gateway_command uses route_envelope
 # ---------------------------------------------------------------------------
 
+
 class TestOpenClawdSendGatewayCommand:
     @pytest.mark.asyncio
     async def test_send_gateway_command_calls_route_envelope(self):
@@ -211,8 +215,10 @@ class TestOpenClawdSendGatewayCommand:
         router.route_envelope = tracking_route_envelope
         _cr_mod.get_command_router = lambda: router
         try:
-            from core.openclawd import OpenClawd
             import types
+
+            from core.openclawd import OpenClawd
+
             clawd = object.__new__(OpenClawd)
             result = await clawd.send_gateway_command(
                 device_id="dev_oc",
@@ -236,12 +242,14 @@ class TestOpenClawdSendGatewayCommand:
 # 5. DeviceRouter.route_task constructs a TaskEnvelope at entry
 # ---------------------------------------------------------------------------
 
+
 class TestDeviceRouterTaskEnvelopeEntry:
     def test_route_task_builds_envelope_and_injects_trace_id(self):
         """DeviceRouter.route_task should inject/propagate trace_id via TaskEnvelope."""
         from galaxy_gateway.device_router import DeviceRouter
 
         router = DeviceRouter()
+
         # Patch _analyze_command to avoid external calls
         async def fake_analyze(command, ctx):
             return {
@@ -258,6 +266,7 @@ class TestDeviceRouterTaskEnvelopeEntry:
         ctx = {"route_mode": "direct", "source": "test_suite"}
         # Run the coroutine partially - we just verify no exception thrown constructing envelope
         import asyncio
+
         coro = router.route_task("test command", ctx)
         # We can't fully execute without devices; wrap in try to catch expected failure
         loop = asyncio.new_event_loop()
@@ -276,6 +285,7 @@ class TestDeviceRouterTaskEnvelopeEntry:
 # 6. NATS adapter builds a TaskEnvelope in _handle_task_dispatch
 # ---------------------------------------------------------------------------
 
+
 class TestGatewayNATSAdapterEnvelope:
     @pytest.mark.asyncio
     async def test_handle_task_dispatch_builds_envelope(self):
@@ -283,6 +293,7 @@ class TestGatewayNATSAdapterEnvelope:
         from galaxy_gateway.gateway_nats_adapter import GatewayNATSAdapter
 
         adapter = GatewayNATSAdapter()
+
         # Stub out the forwarding path to avoid actual device calls
         async def _stub_forward(task_id, target, task_type, payload):
             return {"success": True, "task_id": task_id}
@@ -310,6 +321,7 @@ class TestGatewayNATSAdapterEnvelope:
 # ---------------------------------------------------------------------------
 # 7. HandoffContract PR-1 field (task_id)
 # ---------------------------------------------------------------------------
+
 
 class TestHandoffContractTaskId:
     def test_handoff_contract_accepts_task_id(self):
@@ -347,12 +359,13 @@ class TestHandoffContractTaskId:
 # 8. handoff_contract_from_envelope helper
 # ---------------------------------------------------------------------------
 
+
 class TestHandoffContractFromEnvelope:
     def test_builds_contract_from_envelope(self):
         """handoff_contract_from_envelope should populate all expected fields."""
         from galaxy_gateway.agent_bridge import (
-            handoff_contract_from_envelope,
             HandoffContract,
+            handoff_contract_from_envelope,
         )
 
         envelope = TaskEnvelope(

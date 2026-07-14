@@ -19,6 +19,7 @@ import json
 import os
 import sys
 import time
+
 import pytest
 
 # 确保项目根目录在 path 中
@@ -29,9 +30,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 # Test 1: MeshCoordinator — Peer 管理
 # ============================================================================
 
+
 def test_1_mesh_peer_management():
     """测试 peer 注册、更新、注销、列表"""
-    from core.mesh_coordinator import MeshCoordinator, ConnectionType
+    from core.mesh_coordinator import ConnectionType, MeshCoordinator
 
     mesh = MeshCoordinator(local_device_id="server")
 
@@ -70,11 +72,12 @@ def test_1_mesh_peer_management():
 # Test 2: MeshCoordinator — 自动选路 (P2P direct vs Relay)
 # ============================================================================
 
+
 @pytest.mark.skip(reason="mesh.send()/legacy sender 已迁移至 AIPTransport（见 mesh_coordinator 注释）；陈旧 API 测试")
 @pytest.mark.asyncio
 async def test_2_mesh_auto_routing():
     """测试消息发送时自动选择 P2P / Relay"""
-    from core.mesh_coordinator import MeshCoordinator, ConnectionType
+    from core.mesh_coordinator import ConnectionType, MeshCoordinator
 
     p2p_log = []
     relay_log = []
@@ -132,11 +135,12 @@ async def test_2_mesh_auto_routing():
 # Test 3: MeshCoordinator — P2P 失败自动降级到 Relay
 # ============================================================================
 
+
 @pytest.mark.skip(reason="mesh.send()/legacy sender 已迁移至 AIPTransport（见 mesh_coordinator 注释）；陈旧 API 测试")
 @pytest.mark.asyncio
 async def test_3_mesh_p2p_fallback_relay():
     """P2P 发送失败时自动 fallback 到 Relay"""
-    from core.mesh_coordinator import MeshCoordinator, ConnectionType
+    from core.mesh_coordinator import ConnectionType, MeshCoordinator
 
     async def failing_p2p(device_id: str, msg: bytes) -> bool:
         return False  # 模拟 P2P 失败
@@ -176,7 +180,7 @@ async def test_3_mesh_p2p_fallback_relay():
 @pytest.mark.asyncio
 async def test_3b_mesh_direct_health_check_before_send():
     """直连发送前应执行健康检查（需要重探测时）"""
-    from core.mesh_coordinator import MeshCoordinator, ConnectionType
+    from core.mesh_coordinator import ConnectionType, MeshCoordinator
 
     p2p_log = []
     relay_log = []
@@ -224,7 +228,7 @@ async def test_3b_mesh_direct_health_check_before_send():
 @pytest.mark.asyncio
 async def test_3c_mesh_probe_failure_forces_explicit_fallback():
     """健康检查失败时应显式回退到 relay 并携带回退原因"""
-    from core.mesh_coordinator import MeshCoordinator, ConnectionType
+    from core.mesh_coordinator import ConnectionType, MeshCoordinator
 
     p2p_called = False
     relay_log = []
@@ -270,7 +274,7 @@ async def test_3c_mesh_probe_failure_forces_explicit_fallback():
 @pytest.mark.asyncio
 async def test_3d_mesh_unconfigured_direct_sender_fallback_is_explicit():
     """直连 sender 未配置时必须给出明确 fallback 语义"""
-    from core.mesh_coordinator import MeshCoordinator, ConnectionType
+    from core.mesh_coordinator import ConnectionType, MeshCoordinator
 
     relay_log = []
 
@@ -295,6 +299,7 @@ async def test_3d_mesh_unconfigured_direct_sender_fallback_is_explicit():
 # ============================================================================
 # Test 4: MeshCoordinator — peer_exchange 构建 + handle_peer_announce
 # ============================================================================
+
 
 def test_4_peer_exchange_and_announce():
     """测试 peer_exchange 构建和 peer_announce 处理"""
@@ -333,6 +338,7 @@ def test_4_peer_exchange_and_announce():
 # Test 5: MeshCoordinator — 拓扑图
 # ============================================================================
 
+
 def test_5_mesh_topology():
     """测试拓扑图生成"""
     from core.mesh_coordinator import MeshCoordinator
@@ -367,9 +373,10 @@ def test_5_mesh_topology():
 # Test 6: Scheduler — mesh_send 工具注册
 # ============================================================================
 
+
 def test_6_scheduler_mesh_send_tool():
     """确认 Scheduler 包含 mesh_send 内置工具"""
-    from core.scheduler import AutonomousScheduler, _BUILTIN_TOOLS
+    from core.scheduler import _BUILTIN_TOOLS, AutonomousScheduler
 
     # mesh_send 在 _BUILTIN_TOOLS 中
     tool_names = [t["function"]["name"] for t in _BUILTIN_TOOLS]
@@ -387,14 +394,14 @@ def test_6_scheduler_mesh_send_tool():
 # Test 7: Scheduler — mesh_send 执行
 # ============================================================================
 
+
 @pytest.mark.skip(reason="mesh.send()/legacy sender 已迁移至 AIPTransport（见 mesh_coordinator 注释）；陈旧 API 测试")
 @pytest.mark.asyncio
 async def test_7_scheduler_exec_mesh_send():
     """测试 Scheduler._exec_mesh_send 方法"""
-    from core.scheduler import AutonomousScheduler
-
     # 需要先 monkey-patch mesh coordinator
     import core.mesh_coordinator as mc
+    from core.scheduler import AutonomousScheduler
 
     relay_log = []
 
@@ -409,11 +416,13 @@ async def test_7_scheduler_exec_mesh_send():
 
     try:
         scheduler = AutonomousScheduler(nodes_dir="/tmp/nonexistent_nodes_dir")
-        result_str = await scheduler._exec_mesh_send({
-            "target_device": "phone_x",
-            "payload": {"test": 1},
-            "payload_type": "task",
-        })
+        result_str = await scheduler._exec_mesh_send(
+            {
+                "target_device": "phone_x",
+                "payload": {"test": 1},
+                "payload_type": "task",
+            }
+        )
         result = json.loads(result_str)
         assert result["target_device"] == "phone_x"
         assert result["via"] == "relay"  # 无 P2P sender → relay
@@ -425,6 +434,7 @@ async def test_7_scheduler_exec_mesh_send():
 # ============================================================================
 # Test 8: ProxyRelay — mesh-aware P2P 优先路由
 # ============================================================================
+
 
 @pytest.mark.skip(reason="mesh.send()/legacy sender 已迁移至 AIPTransport（见 mesh_coordinator 注释）；陈旧 API 测试")
 @pytest.mark.asyncio
@@ -479,6 +489,7 @@ async def test_8_proxy_relay_mesh_aware():
 # Test 9: AIP v2 — Phase 5 消息类型
 # ============================================================================
 
+
 def test_9_aip_v2_phase5_types():
     """确认 AIP v3 协议包含 Phase 5 消息类型（已从 v2 迁移到 v3 MessageType）"""
     from galaxy_gateway.protocol.aip_v3 import MessageType
@@ -492,6 +503,7 @@ def test_9_aip_v2_phase5_types():
 # ============================================================================
 # Test 10: MeshCoordinator — 过期 peer 清理
 # ============================================================================
+
 
 def test_10_mesh_cleanup_expired():
     """测试过期 peer 自动清理"""
@@ -515,6 +527,7 @@ def test_10_mesh_cleanup_expired():
 # ============================================================================
 # Test 11: MeshCoordinator — broadcast_peer_exchange
 # ============================================================================
+
 
 @pytest.mark.skip(reason="mesh.send()/legacy sender 已迁移至 AIPTransport（见 mesh_coordinator 注释）；陈旧 API 测试")
 @pytest.mark.asyncio
@@ -555,11 +568,12 @@ async def test_11_broadcast_peer_exchange():
 # Test 12: MeshCoordinator — 无 sender 时优雅处理
 # ============================================================================
 
+
 @pytest.mark.skip(reason="mesh.send()/legacy sender 已迁移至 AIPTransport（见 mesh_coordinator 注释）；陈旧 API 测试")
 @pytest.mark.asyncio
 async def test_12_mesh_no_sender():
     """所有 sender 都未配置时返回失败而非抛异常"""
-    from core.mesh_coordinator import MeshCoordinator, ConnectionType
+    from core.mesh_coordinator import ConnectionType, MeshCoordinator
 
     mesh = MeshCoordinator()  # 不配置任何 sender
     mesh.register_peer("phone_a")

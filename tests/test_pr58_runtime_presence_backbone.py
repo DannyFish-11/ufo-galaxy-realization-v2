@@ -85,14 +85,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _reset_ucm() -> None:
     """Reset the UCM singleton between tests."""
     from core.unified import connection_manager as _mod
+
     _mod.UnifiedConnectionManager._instance = None
     _mod._manager = None
 
@@ -107,14 +108,17 @@ def _make_websocket() -> MagicMock:
 # 1–4: UnifiedConnectionInfo model
 # ---------------------------------------------------------------------------
 
+
 class TestUnifiedConnectionInfoPresenceFields:
     def test_01_last_seen_defaults_to_zero(self):
         from core.unified.models import UnifiedConnectionInfo
+
         info = UnifiedConnectionInfo(device_id="d1")
         assert info.last_seen == 0.0
 
     def test_02_routable_defaults_to_false(self):
         from core.unified.models import UnifiedConnectionInfo
+
         info = UnifiedConnectionInfo(device_id="d1")
         assert info.routable is False
 
@@ -122,6 +126,7 @@ class TestUnifiedConnectionInfoPresenceFields:
     async def test_03_last_seen_set_on_register(self):
         _reset_ucm()
         from core.unified.connection_manager import get_unified_connection_manager
+
         ucm = get_unified_connection_manager()
         before = time.time()
         ws = _make_websocket()
@@ -133,6 +138,7 @@ class TestUnifiedConnectionInfoPresenceFields:
     async def test_04_routable_true_after_register(self):
         _reset_ucm()
         from core.unified.connection_manager import get_unified_connection_manager
+
         ucm = get_unified_connection_manager()
         ws = _make_websocket()
         await ucm.register_connection("reg_dev2", ws)
@@ -144,6 +150,7 @@ class TestUnifiedConnectionInfoPresenceFields:
 # 5–9: UCM.update_heartbeat
 # ---------------------------------------------------------------------------
 
+
 class TestUCMUpdateHeartbeat:
     def setup_method(self):
         _reset_ucm()
@@ -151,6 +158,7 @@ class TestUCMUpdateHeartbeat:
     @pytest.mark.asyncio
     async def test_05_returns_true_for_connected_device(self):
         from core.unified.connection_manager import get_unified_connection_manager
+
         ucm = get_unified_connection_manager()
         await ucm.register_connection("hb_dev", _make_websocket())
         result = ucm.update_heartbeat("hb_dev")
@@ -158,12 +166,14 @@ class TestUCMUpdateHeartbeat:
 
     def test_06_returns_false_for_unknown_device(self):
         from core.unified.connection_manager import get_unified_connection_manager
+
         ucm = get_unified_connection_manager()
         assert ucm.update_heartbeat("nonexistent_device") is False
 
     @pytest.mark.asyncio
     async def test_07_updates_last_seen(self):
         from core.unified.connection_manager import get_unified_connection_manager
+
         ucm = get_unified_connection_manager()
         await ucm.register_connection("hb_dev2", _make_websocket())
         before = time.time()
@@ -174,6 +184,7 @@ class TestUCMUpdateHeartbeat:
     @pytest.mark.asyncio
     async def test_08_routable_stays_true_after_heartbeat(self):
         from core.unified.connection_manager import get_unified_connection_manager
+
         ucm = get_unified_connection_manager()
         await ucm.register_connection("hb_dev3", _make_websocket())
         ucm.update_heartbeat("hb_dev3")
@@ -184,6 +195,7 @@ class TestUCMUpdateHeartbeat:
     async def test_09_restores_connected_state(self):
         from core.unified.connection_manager import get_unified_connection_manager
         from core.unified.models import UnifiedConnectionState
+
         ucm = get_unified_connection_manager()
         await ucm.register_connection("hb_dev4", _make_websocket())
         # Manually set state to DISCONNECTED
@@ -198,6 +210,7 @@ class TestUCMUpdateHeartbeat:
 # 10–13: UCM.mark_offline
 # ---------------------------------------------------------------------------
 
+
 class TestUCMMarkOffline:
     def setup_method(self):
         _reset_ucm()
@@ -205,6 +218,7 @@ class TestUCMMarkOffline:
     @pytest.mark.asyncio
     async def test_10_sets_routable_false(self):
         from core.unified.connection_manager import get_unified_connection_manager
+
         ucm = get_unified_connection_manager()
         await ucm.register_connection("off_dev", _make_websocket())
         ucm.mark_offline("off_dev")
@@ -214,6 +228,7 @@ class TestUCMMarkOffline:
     @pytest.mark.asyncio
     async def test_11_removes_from_websockets(self):
         from core.unified.connection_manager import get_unified_connection_manager
+
         ucm = get_unified_connection_manager()
         await ucm.register_connection("off_dev2", _make_websocket())
         ucm.mark_offline("off_dev2")
@@ -222,6 +237,7 @@ class TestUCMMarkOffline:
     @pytest.mark.asyncio
     async def test_12_preserves_connection_record(self):
         from core.unified.connection_manager import get_unified_connection_manager
+
         ucm = get_unified_connection_manager()
         await ucm.register_connection("off_dev3", _make_websocket())
         ucm.mark_offline("off_dev3")
@@ -230,6 +246,7 @@ class TestUCMMarkOffline:
 
     def test_13_no_raise_for_unknown_device(self):
         from core.unified.connection_manager import get_unified_connection_manager
+
         ucm = get_unified_connection_manager()
         # Should not raise for unknown device
         ucm.mark_offline("completely_unknown")
@@ -239,6 +256,7 @@ class TestUCMMarkOffline:
 # 14–20: UCM.reconnect_patch
 # ---------------------------------------------------------------------------
 
+
 class TestUCMReconnectPatch:
     def setup_method(self):
         _reset_ucm()
@@ -246,6 +264,7 @@ class TestUCMReconnectPatch:
     @pytest.mark.asyncio
     async def test_14_updates_websockets(self):
         from core.unified.connection_manager import get_unified_connection_manager
+
         ucm = get_unified_connection_manager()
         ws1 = _make_websocket()
         ws2 = _make_websocket()
@@ -256,6 +275,7 @@ class TestUCMReconnectPatch:
     @pytest.mark.asyncio
     async def test_15_preserves_existing_entry(self):
         from core.unified.connection_manager import get_unified_connection_manager
+
         ucm = get_unified_connection_manager()
         ws1 = _make_websocket()
         await ucm.register_connection("rc_dev2", ws1)
@@ -267,6 +287,7 @@ class TestUCMReconnectPatch:
     @pytest.mark.asyncio
     async def test_16_increments_total_reconnects(self):
         from core.unified.connection_manager import get_unified_connection_manager
+
         ucm = get_unified_connection_manager()
         await ucm.register_connection("rc_dev3", _make_websocket())
         await ucm.reconnect_patch("rc_dev3", _make_websocket())
@@ -276,6 +297,7 @@ class TestUCMReconnectPatch:
     @pytest.mark.asyncio
     async def test_17_sets_routable_true(self):
         from core.unified.connection_manager import get_unified_connection_manager
+
         ucm = get_unified_connection_manager()
         await ucm.register_connection("rc_dev4", _make_websocket())
         ucm.mark_offline("rc_dev4")  # go offline
@@ -286,6 +308,7 @@ class TestUCMReconnectPatch:
     @pytest.mark.asyncio
     async def test_18_updates_last_seen(self):
         from core.unified.connection_manager import get_unified_connection_manager
+
         ucm = get_unified_connection_manager()
         await ucm.register_connection("rc_dev5", _make_websocket())
         before = time.time()
@@ -296,6 +319,7 @@ class TestUCMReconnectPatch:
     @pytest.mark.asyncio
     async def test_19_creates_new_entry_for_unknown(self):
         from core.unified.connection_manager import get_unified_connection_manager
+
         ucm = get_unified_connection_manager()
         await ucm.reconnect_patch("new_rc_dev", _make_websocket())
         assert ucm.get_connection("new_rc_dev") is not None
@@ -303,6 +327,7 @@ class TestUCMReconnectPatch:
     @pytest.mark.asyncio
     async def test_20_broadcasts_reconnected_event(self):
         from core.unified.connection_manager import get_unified_connection_manager
+
         ucm = get_unified_connection_manager()
         await ucm.register_connection("rc_dev6", _make_websocket())
         # Subscribe a status sink to capture events
@@ -319,6 +344,7 @@ class TestUCMReconnectPatch:
 # 21–25: UCM.check_heartbeat_timeouts
 # ---------------------------------------------------------------------------
 
+
 class TestUCMCheckHeartbeatTimeouts:
     def setup_method(self):
         _reset_ucm()
@@ -326,6 +352,7 @@ class TestUCMCheckHeartbeatTimeouts:
     @pytest.mark.asyncio
     async def test_21_returns_empty_when_no_timeout(self):
         from core.unified.connection_manager import get_unified_connection_manager
+
         ucm = get_unified_connection_manager()
         await ucm.register_connection("t_dev1", _make_websocket())
         ucm.update_heartbeat("t_dev1")
@@ -335,6 +362,7 @@ class TestUCMCheckHeartbeatTimeouts:
     @pytest.mark.asyncio
     async def test_22_returns_timed_out_device(self):
         from core.unified.connection_manager import get_unified_connection_manager
+
         ucm = get_unified_connection_manager()
         await ucm.register_connection("t_dev2", _make_websocket())
         # Force last_seen to a very old timestamp
@@ -345,6 +373,7 @@ class TestUCMCheckHeartbeatTimeouts:
     @pytest.mark.asyncio
     async def test_23_marks_timed_out_offline(self):
         from core.unified.connection_manager import get_unified_connection_manager
+
         ucm = get_unified_connection_manager()
         await ucm.register_connection("t_dev3", _make_websocket())
         ucm.get_connection("t_dev3").last_seen = time.time() - 9999.0
@@ -355,6 +384,7 @@ class TestUCMCheckHeartbeatTimeouts:
     @pytest.mark.asyncio
     async def test_24_does_not_mark_zero_last_seen(self):
         from core.unified.connection_manager import get_unified_connection_manager
+
         ucm = get_unified_connection_manager()
         await ucm.register_connection("t_dev4", _make_websocket())
         # last_seen == 0.0 means never heartbeated — should NOT be timed out
@@ -365,6 +395,7 @@ class TestUCMCheckHeartbeatTimeouts:
     @pytest.mark.asyncio
     async def test_25_does_not_mark_recent_device(self):
         from core.unified.connection_manager import get_unified_connection_manager
+
         ucm = get_unified_connection_manager()
         await ucm.register_connection("t_dev5", _make_websocket())
         ucm.update_heartbeat("t_dev5")
@@ -376,6 +407,7 @@ class TestUCMCheckHeartbeatTimeouts:
 # 26–32: UCM.get_presence_view
 # ---------------------------------------------------------------------------
 
+
 class TestUCMGetPresenceView:
     def setup_method(self):
         _reset_ucm()
@@ -383,6 +415,7 @@ class TestUCMGetPresenceView:
     @pytest.mark.asyncio
     async def test_26_returns_device_id_as_key(self):
         from core.unified.connection_manager import get_unified_connection_manager
+
         ucm = get_unified_connection_manager()
         await ucm.register_connection("pv_dev1", _make_websocket())
         view = ucm.get_presence_view()
@@ -391,6 +424,7 @@ class TestUCMGetPresenceView:
     @pytest.mark.asyncio
     async def test_27_online_true_when_connected_and_routable(self):
         from core.unified.connection_manager import get_unified_connection_manager
+
         ucm = get_unified_connection_manager()
         await ucm.register_connection("pv_dev2", _make_websocket())
         ucm.update_heartbeat("pv_dev2")
@@ -400,6 +434,7 @@ class TestUCMGetPresenceView:
     @pytest.mark.asyncio
     async def test_28_online_false_when_ws_removed(self):
         from core.unified.connection_manager import get_unified_connection_manager
+
         ucm = get_unified_connection_manager()
         await ucm.register_connection("pv_dev3", _make_websocket())
         ucm.mark_offline("pv_dev3")
@@ -409,6 +444,7 @@ class TestUCMGetPresenceView:
     @pytest.mark.asyncio
     async def test_29_routable_field_matches_info(self):
         from core.unified.connection_manager import get_unified_connection_manager
+
         ucm = get_unified_connection_manager()
         await ucm.register_connection("pv_dev4", _make_websocket())
         info = ucm.get_connection("pv_dev4")
@@ -419,6 +455,7 @@ class TestUCMGetPresenceView:
     @pytest.mark.asyncio
     async def test_30_last_seen_preserved(self):
         from core.unified.connection_manager import get_unified_connection_manager
+
         ucm = get_unified_connection_manager()
         await ucm.register_connection("pv_dev5", _make_websocket())
         ucm.get_connection("pv_dev5").last_seen = 12345.0
@@ -428,6 +465,7 @@ class TestUCMGetPresenceView:
     @pytest.mark.asyncio
     async def test_31_state_is_string(self):
         from core.unified.connection_manager import get_unified_connection_manager
+
         ucm = get_unified_connection_manager()
         await ucm.register_connection("pv_dev6", _make_websocket())
         view = ucm.get_presence_view()
@@ -435,6 +473,7 @@ class TestUCMGetPresenceView:
 
     def test_32_empty_when_no_connections(self):
         from core.unified.connection_manager import get_unified_connection_manager
+
         ucm = get_unified_connection_manager()
         view = ucm.get_presence_view()
         assert view == {}
@@ -443,6 +482,7 @@ class TestUCMGetPresenceView:
 # ---------------------------------------------------------------------------
 # 33–35: GatewayWSManager presence delegation
 # ---------------------------------------------------------------------------
+
 
 class TestGatewayWSManagerPresenceDelegation:
     @pytest.mark.asyncio
@@ -502,6 +542,7 @@ class TestGatewayWSManagerPresenceDelegation:
 # 36–37: RouteConnectionPool pending-response delegation
 # ---------------------------------------------------------------------------
 
+
 class TestRouteConnectionPoolPendingDelegation:
     def test_36_resolve_delegates_to_ucm(self):
         from core.routes._shared import RouteConnectionPool
@@ -514,8 +555,9 @@ class TestRouteConnectionPoolPendingDelegation:
         mock_ucm.resolve_command_response.assert_called_once_with("cmd_1", {"result": "ok"})
 
     def test_37_local_pending_still_resolved_if_ucm_raises(self):
-        from core.routes._shared import RouteConnectionPool
         import asyncio
+
+        from core.routes._shared import RouteConnectionPool
 
         mock_ucm = MagicMock()
         mock_ucm.resolve_command_response.side_effect = RuntimeError("ucm down")
@@ -538,6 +580,7 @@ class TestRouteConnectionPoolPendingDelegation:
 # 38–40: AndroidBridge UCM routing
 # ---------------------------------------------------------------------------
 
+
 class TestAndroidBridgeUCMRouting:
     def test_38_patch_heartbeat_calls_ucm_update_heartbeat(self):
         mock_ucm = MagicMock()
@@ -547,6 +590,7 @@ class TestAndroidBridgeUCMRouting:
             patch("core.unified.device_manager.UnifiedDeviceManager"),
         ):
             from galaxy_gateway.android_bridge import AndroidBridge
+
             bridge = AndroidBridge()
             bridge._patch_heartbeat_to_udm("ab_dev1")
 
@@ -554,6 +598,7 @@ class TestAndroidBridgeUCMRouting:
 
     def test_39_patch_disconnect_calls_ucm_mark_offline(self):
         from galaxy_gateway.android_bridge import AndroidBridge
+
         mock_ucm = MagicMock()
         with (
             patch("core.unified.connection_manager.get_unified_connection_manager", return_value=mock_ucm),
@@ -566,6 +611,7 @@ class TestAndroidBridgeUCMRouting:
 
     def test_40_patch_reconnect_calls_ucm_update_heartbeat(self):
         from galaxy_gateway.android_bridge import AndroidBridge
+
         mock_ucm = MagicMock()
         with (
             patch("core.unified.connection_manager.get_unified_connection_manager", return_value=mock_ucm),
@@ -581,6 +627,7 @@ class TestAndroidBridgeUCMRouting:
 # 41–42: register/unregister broadcast semantics
 # ---------------------------------------------------------------------------
 
+
 class TestUCMBroadcastSemantics:
     def setup_method(self):
         _reset_ucm()
@@ -588,6 +635,7 @@ class TestUCMBroadcastSemantics:
     @pytest.mark.asyncio
     async def test_41_broadcasts_device_connected_on_register(self):
         from core.unified.connection_manager import get_unified_connection_manager
+
         ucm = get_unified_connection_manager()
         events = []
         sub_ws = MagicMock()
@@ -600,6 +648,7 @@ class TestUCMBroadcastSemantics:
     @pytest.mark.asyncio
     async def test_42_broadcasts_device_disconnected_on_unregister(self):
         from core.unified.connection_manager import get_unified_connection_manager
+
         ucm = get_unified_connection_manager()
         await ucm.register_connection("bc_dev2", _make_websocket())
         events = []
@@ -615,6 +664,7 @@ class TestUCMBroadcastSemantics:
 # 43–44: send_command_and_wait + resolve round-trip
 # ---------------------------------------------------------------------------
 
+
 class TestUCMCommandRoundTrip:
     def setup_method(self):
         _reset_ucm()
@@ -622,14 +672,13 @@ class TestUCMCommandRoundTrip:
     @pytest.mark.asyncio
     async def test_43_future_resolved_on_matching_response(self):
         from core.unified.connection_manager import get_unified_connection_manager
+
         ucm = get_unified_connection_manager()
         ws = _make_websocket()
         await ucm.register_connection("cmd_dev", ws)
 
         # Start the wait in the background
-        wait_task = asyncio.create_task(
-            ucm.send_command_and_wait("cmd_dev", "ping", {}, timeout=2.0)
-        )
+        wait_task = asyncio.create_task(ucm.send_command_and_wait("cmd_dev", "ping", {}, timeout=2.0))
 
         # Give the task a moment to register the future and send
         await asyncio.sleep(0.05)
@@ -645,6 +694,7 @@ class TestUCMCommandRoundTrip:
     @pytest.mark.asyncio
     async def test_44_returns_error_on_timeout(self):
         from core.unified.connection_manager import get_unified_connection_manager
+
         ucm = get_unified_connection_manager()
         ws = _make_websocket()
         await ucm.register_connection("timeout_dev", ws)
@@ -658,6 +708,7 @@ class TestUCMCommandRoundTrip:
 # 45–48: Backward-compatibility
 # ---------------------------------------------------------------------------
 
+
 class TestUCMBackwardCompat:
     def setup_method(self):
         _reset_ucm()
@@ -665,6 +716,7 @@ class TestUCMBackwardCompat:
     @pytest.mark.asyncio
     async def test_45_is_device_connected_still_works(self):
         from core.unified.connection_manager import get_unified_connection_manager
+
         ucm = get_unified_connection_manager()
         ws = _make_websocket()
         await ucm.register_connection("compat_dev", ws)
@@ -674,6 +726,7 @@ class TestUCMBackwardCompat:
     @pytest.mark.asyncio
     async def test_46_get_all_devices_includes_ucm_devices(self):
         from core.unified.connection_manager import get_unified_connection_manager
+
         ucm = get_unified_connection_manager()
         await ucm.register_connection("all_dev", _make_websocket())
         devices = ucm.get_all_devices()
@@ -682,6 +735,7 @@ class TestUCMBackwardCompat:
     @pytest.mark.asyncio
     async def test_47_get_connected_device_ids_reflects_websockets(self):
         from core.unified.connection_manager import get_unified_connection_manager
+
         ucm = get_unified_connection_manager()
         await ucm.register_connection("ids_dev1", _make_websocket())
         await ucm.register_connection("ids_dev2", _make_websocket())
@@ -692,6 +746,7 @@ class TestUCMBackwardCompat:
     @pytest.mark.asyncio
     async def test_48_get_connection_returns_info_with_new_fields(self):
         from core.unified.connection_manager import get_unified_connection_manager
+
         ucm = get_unified_connection_manager()
         await ucm.register_connection("info_dev", _make_websocket())
         info = ucm.get_connection("info_dev")

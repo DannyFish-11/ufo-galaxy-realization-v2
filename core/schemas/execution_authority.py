@@ -254,11 +254,7 @@ class ExecutionAuthorityMetadata(BaseModel):
     def to_dict(self) -> Dict[str, Any]:
         """Return a JSON-serialisable dict (omits ``None`` optional fields)."""
         d: Dict[str, Any] = {
-            "layer_role": (
-                self.layer_role
-                if isinstance(self.layer_role, str)
-                else self.layer_role.value
-            ),
+            "layer_role": (self.layer_role if isinstance(self.layer_role, str) else self.layer_role.value),
             "canonical_module": self.canonical_module,
         }
         if self.canonical_class is not None:

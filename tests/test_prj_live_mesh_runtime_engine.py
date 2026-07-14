@@ -39,18 +39,18 @@ import pytest
 
 try:
     from core.mesh.live_mesh_runtime_engine import (
-        LIVE_MESH_RUNTIME_ENGINE_PR_J_SENTINEL,
-        STAGED_MESH_LIVE_PROMOTION_PR_J_POLICY,
-        PARTICIPANT_TRACKING_PR_J_POLICY,
         BARRIER_COORDINATION_PR_J_POLICY,
+        LIVE_MESH_RUNTIME_ENGINE_PR_J_SENTINEL,
         MERGE_AGGREGATION_PR_J_POLICY,
+        PARTICIPANT_TRACKING_PR_J_POLICY,
         RESULT_HANDLING_PR_J_POLICY,
+        STAGED_MESH_LIVE_PROMOTION_PR_J_POLICY,
         LiveMeshRunResult,
         LiveMeshRuntimeEngine,
-        run_live_mesh_session,
-        register_participant,
-        update_participant_status,
         drop_participant,
+        register_participant,
+        run_live_mesh_session,
+        update_participant_status,
     )
 
     _ENGINE_AVAILABLE = True
@@ -59,14 +59,16 @@ except ImportError:
 
 try:
     from core.mesh.mesh_session_coordinator import (
-        coordinate_mesh_session,
-        get_coordinator_summary,
         MESH_SESSION_COORDINATOR_LIVE_RUNTIME_ENGINE_PR_J_SENTINEL,
-        run_live_mesh_session as coord_run_live,
-        register_participant as coord_register,
-        update_participant_status as coord_update,
-        drop_participant as coord_drop,
+        coordinate_mesh_session,
     )
+    from core.mesh.mesh_session_coordinator import drop_participant as coord_drop
+    from core.mesh.mesh_session_coordinator import (
+        get_coordinator_summary,
+    )
+    from core.mesh.mesh_session_coordinator import register_participant as coord_register
+    from core.mesh.mesh_session_coordinator import run_live_mesh_session as coord_run_live
+    from core.mesh.mesh_session_coordinator import update_participant_status as coord_update
 
     _COORDINATOR_AVAILABLE = True
 except ImportError:
@@ -74,10 +76,10 @@ except ImportError:
 
 try:
     from contracts.mesh_session_coordinator import (
-        MeshSessionCoordinatorState,
+        MeshBarrierStatus,
         MeshCoordinatorStatus,
         MeshParticipantStatus,
-        MeshBarrierStatus,
+        MeshSessionCoordinatorState,
         build_mesh_session_coordinator,
         from_mesh_session,
     )
@@ -88,15 +90,15 @@ except ImportError:
 
 try:
     from core.runtime import (
+        LIVE_MESH_RESULT_CONVERGENCE_PR_J_POLICY,
         LIVE_MESH_RUNTIME_ENGINE_ORCHESTRATOR_PR_J_SENTINEL,
         LIVE_MESH_STAGED_TO_ACTIVE_DISPATCH_PR_J_POLICY,
-        LIVE_MESH_RESULT_CONVERGENCE_PR_J_POLICY,
-        run_live_mesh_session as runtime_run_live,
-        register_participant as runtime_register,
-        update_participant_status as runtime_update,
-        drop_participant as runtime_drop,
-        MESH_SESSION_COORDINATOR_LIVE_RUNTIME_ENGINE_PR_J_SENTINEL as runtime_coord_sentinel,
     )
+    from core.runtime import MESH_SESSION_COORDINATOR_LIVE_RUNTIME_ENGINE_PR_J_SENTINEL as runtime_coord_sentinel
+    from core.runtime import drop_participant as runtime_drop
+    from core.runtime import register_participant as runtime_register
+    from core.runtime import run_live_mesh_session as runtime_run_live
+    from core.runtime import update_participant_status as runtime_update
 
     _RUNTIME_EXPORTS_AVAILABLE = True
 except ImportError:
@@ -104,8 +106,10 @@ except ImportError:
 
 try:
     from core.runtime.source_dispatch_orchestrator import (
-        orchestrate_source_runtime_dispatch,
         LIVE_MESH_RUNTIME_ENGINE_ORCHESTRATOR_PR_J_SENTINEL as orch_sentinel,
+    )
+    from core.runtime.source_dispatch_orchestrator import (
+        orchestrate_source_runtime_dispatch,
     )
 
     _DISPATCH_AVAILABLE = True
@@ -294,9 +298,18 @@ class TestGroupC_LiveMeshRunResult:
         result = LiveMeshRunResult()
         d = result.to_dict()
         required = [
-            "run_id", "session_id", "mesh_id", "trace_id", "outcome",
-            "success", "merged_result", "participant_outcomes",
-            "barrier_released", "coordinator_state", "errors", "metadata",
+            "run_id",
+            "session_id",
+            "mesh_id",
+            "trace_id",
+            "outcome",
+            "success",
+            "merged_result",
+            "participant_outcomes",
+            "barrier_released",
+            "coordinator_state",
+            "errors",
+            "metadata",
         ]
         for field in required:
             assert field in d, f"Missing field: {field}"
@@ -336,9 +349,7 @@ class TestGroupD_EngineBasicRun:
         assert isinstance(result.merged_result, dict)
 
     def test_d4_run_with_all_results_gives_completed(self) -> None:
-        state = _make_coordinator_state(
-            participant_device_ids=["dev_a", "dev_b"]
-        )
+        state = _make_coordinator_state(participant_device_ids=["dev_a", "dev_b"])
         engine = LiveMeshRuntimeEngine()
         result = engine.run(
             state,
@@ -365,9 +376,7 @@ class TestGroupD_EngineBasicRun:
         assert "_participants" in result.merged_result
 
     def test_d6_run_with_partial_results_gives_partial(self) -> None:
-        state = _make_coordinator_state(
-            participant_device_ids=["dev_a", "dev_b"]
-        )
+        state = _make_coordinator_state(participant_device_ids=["dev_a", "dev_b"])
         engine = LiveMeshRuntimeEngine()
         result = engine.run(
             state,
@@ -404,10 +413,7 @@ class TestGroupE_StagedMeshLiveOrchestration:
         engine = LiveMeshRuntimeEngine()
         result = engine.run(
             state,
-            participant_results={
-                p.device_id: {"output": "ok"}
-                for p in state.participants
-            },
+            participant_results={p.device_id: {"output": "ok"} for p in state.participants},
         )
         final_state = result.coordinator_state
         assert final_state is not None
@@ -625,9 +631,8 @@ class TestGroupG_BarrierCoordination:
         state = build_mesh_session_coordinator(session_id="s_nopart")
         # Manually set barrier to open
         from contracts.mesh_session_coordinator import MeshBarrierState, MeshBarrierStatus
-        state = state.model_copy(
-            update={"barrier_state": MeshBarrierState(status=MeshBarrierStatus.open)}
-        )
+
+        state = state.model_copy(update={"barrier_state": MeshBarrierState(status=MeshBarrierStatus.open)})
         engine = LiveMeshRuntimeEngine()
         result = engine.run(state, participant_results={})
         # No participants → barrier failed or promotion failed
@@ -646,9 +651,7 @@ class TestGroupG_BarrierCoordination:
         final_state = result.coordinator_state
         assert final_state is not None
         barrier = final_state.barrier_state
-        assert barrier.status in (
-            MeshBarrierStatus.released, MeshBarrierStatus.not_required
-        )
+        assert barrier.status in (MeshBarrierStatus.released, MeshBarrierStatus.not_required)
 
     def test_g7_barrier_waiting_state_when_partial_arrival(self) -> None:
         state = _make_coordinator_state(
@@ -981,6 +984,7 @@ class TestGroupK_OrchestratorPRJ:
         )
         assert result is not None
         from contracts.source_dispatch import SourceDispatchMode
+
         if result.mode == SourceDispatchMode.staged_mesh:
             assert result.result is not None
             assert "action_taken" in result.result
@@ -998,6 +1002,7 @@ class TestGroupK_OrchestratorPRJ:
             mesh_memberships=None,
         )
         from contracts.source_dispatch import SourceDispatchMode
+
         if result.mode == SourceDispatchMode.staged_mesh:
             assert "live_merged_result" in result.result
 

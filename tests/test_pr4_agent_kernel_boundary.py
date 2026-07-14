@@ -40,7 +40,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -52,6 +51,7 @@ def _make_openclawd():
     """Return a minimal OpenClawd with heavy init suppressed."""
     with patch("core.openclawd.OpenClawd.__init__", return_value=None):
         from core.openclawd import OpenClawd
+
         oc = OpenClawd.__new__(OpenClawd)
     oc._continuum_orchestrator = None
     oc._decision_executor = None
@@ -69,8 +69,9 @@ def _make_openclawd():
 
 
 def _make_kernel_response(*, delegation_hint=None, specialist_boundary=None):
-    from core.agent.kernel import KernelResponse
     from core.agent.intent_router import IntentResult
+    from core.agent.kernel import KernelResponse
+
     return KernelResponse(
         success=True,
         mode="chat_only",
@@ -87,39 +88,39 @@ def _make_kernel_response(*, delegation_hint=None, specialist_boundary=None):
 # 1-4  Architecture / Role
 # ---------------------------------------------------------------------------
 
+
 class TestAgentKernelRole:
     """AgentKernel must be identified as an embedded cognition layer."""
 
     def test_module_docstring_mentions_embedded(self):
         """Module docstring should identify AgentKernel as embedded in OpenClawd."""
         import core.agent.kernel as kernel_mod
+
         doc = kernel_mod.__doc__ or ""
         assert "OpenClawd" in doc, (
-            "core/agent/kernel.py module docstring must mention OpenClawd "
-            "to make the embedded role explicit."
+            "core/agent/kernel.py module docstring must mention OpenClawd " "to make the embedded role explicit."
         )
-        assert "内嵌" in doc or "embedded" in doc.lower() or "Embedded" in doc, (
-            "Module docstring must use '内嵌' or 'embedded'/'Embedded' to state the role."
-        )
+        assert (
+            "内嵌" in doc or "embedded" in doc.lower() or "Embedded" in doc
+        ), "Module docstring must use '内嵌' or 'embedded'/'Embedded' to state the role."
 
     def test_class_docstring_states_not_peer_authority(self):
         """AgentKernel class docstring should state it is NOT a peer authority."""
         from core.agent.kernel import AgentKernel
+
         doc = AgentKernel.__doc__ or ""
         # Must describe its embedded / internal role
-        assert "OpenClawd" in doc, (
-            "AgentKernel class docstring must reference OpenClawd."
-        )
+        assert "OpenClawd" in doc, "AgentKernel class docstring must reference OpenClawd."
         # Must explicitly deny peer/standalone status
         lower = doc.lower()
         assert "不是" in doc or "not" in lower, (
-            "AgentKernel class docstring should explicitly state it is NOT "
-            "a standalone or peer authority."
+            "AgentKernel class docstring should explicitly state it is NOT " "a standalone or peer authority."
         )
 
     def test_kernel_response_has_delegation_hint_field(self):
         """KernelResponse must have a delegation_hint field."""
         from core.agent.kernel import KernelResponse
+
         fields = KernelResponse.model_fields
         assert "delegation_hint" in fields, (
             "KernelResponse must have a 'delegation_hint' field so that "
@@ -130,46 +131,44 @@ class TestAgentKernelRole:
         """delegation_hint should appear in to_api_dict() output."""
         kr = _make_kernel_response(delegation_hint="local")
         api = kr.to_api_dict()
-        assert "delegation_hint" in api, (
-            "KernelResponse.to_api_dict() must include 'delegation_hint'."
-        )
+        assert "delegation_hint" in api, "KernelResponse.to_api_dict() must include 'delegation_hint'."
         assert api["delegation_hint"] == "local"
 
     def test_kernel_response_delegation_hint_default_is_none(self):
         """delegation_hint should default to None (no mandatory hint)."""
         kr = _make_kernel_response()
-        assert kr.delegation_hint is None, (
-            "KernelResponse.delegation_hint should default to None."
-        )
+        assert kr.delegation_hint is None, "KernelResponse.delegation_hint should default to None."
 
 
 # ---------------------------------------------------------------------------
 # 5-9  OpenClawd Ownership of Kernel Lifecycle
 # ---------------------------------------------------------------------------
 
+
 class TestOpenClawdKernelOwnership:
     """OpenClawd must own and manage the AgentKernel lifecycle."""
 
     def test_openclawd_has_kernel_attribute(self):
         from core.openclawd import OpenClawd
+
         oc = OpenClawd()
-        assert hasattr(oc, "_kernel"), (
-            "OpenClawd must have a '_kernel' attribute for the embedded AgentKernel."
-        )
+        assert hasattr(oc, "_kernel"), "OpenClawd must have a '_kernel' attribute for the embedded AgentKernel."
 
     def test_openclawd_has_get_kernel_method(self):
         from core.openclawd import OpenClawd
-        assert hasattr(OpenClawd, "_get_kernel") and callable(OpenClawd._get_kernel), (
-            "OpenClawd must have a _get_kernel() method."
-        )
+
+        assert hasattr(OpenClawd, "_get_kernel") and callable(
+            OpenClawd._get_kernel
+        ), "OpenClawd must have a _get_kernel() method."
 
     def test_get_kernel_docstring_mentions_ownership(self):
         """_get_kernel docstring should describe OpenClawd's ownership."""
         from core.openclawd import OpenClawd
+
         doc = OpenClawd._get_kernel.__doc__ or ""
-        assert "OpenClawd" in doc or "持有" in doc, (
-            "_get_kernel() docstring should make ownership by OpenClawd explicit."
-        )
+        assert (
+            "OpenClawd" in doc or "持有" in doc
+        ), "_get_kernel() docstring should make ownership by OpenClawd explicit."
 
     @pytest.mark.asyncio
     async def test_process_metadata_stamps_kernel_cognition_role(self):
@@ -185,7 +184,9 @@ class TestOpenClawdKernelOwnership:
         oc._record_turn = AsyncMock()
         oc._run_continuum = lambda **kw: {"decision": {"action_level": "observe"}, "metadata": {}}
         oc._run_execution = lambda state, entry_mode=None: {
-            "action_taken": "noop", "success": False, "skipped_reason": "observe"
+            "action_taken": "noop",
+            "success": False,
+            "skipped_reason": "observe",
         }
 
         result = await oc.process(message="hello", session_id="s1")
@@ -201,9 +202,7 @@ class TestOpenClawdKernelOwnership:
         """process() kernel path must stamp kernel_delegation_hint in metadata."""
         oc = _make_openclawd()
         mock_kernel = MagicMock()
-        mock_kernel.handle_message = AsyncMock(
-            return_value=_make_kernel_response(delegation_hint="local")
-        )
+        mock_kernel.handle_message = AsyncMock(return_value=_make_kernel_response(delegation_hint="local"))
         oc._get_kernel = lambda: mock_kernel
         oc._get_router = lambda: None
         oc._ensure_initialized = lambda: None
@@ -212,7 +211,9 @@ class TestOpenClawdKernelOwnership:
         oc._record_turn = AsyncMock()
         oc._run_continuum = lambda **kw: {"decision": {"action_level": "observe"}, "metadata": {}}
         oc._run_execution = lambda state, entry_mode=None: {
-            "action_taken": "noop", "success": False, "skipped_reason": "observe"
+            "action_taken": "noop",
+            "success": False,
+            "skipped_reason": "observe",
         }
 
         result = await oc.process(message="hello", session_id="s2")
@@ -232,9 +233,7 @@ class TestOpenClawdKernelOwnership:
             "specialist_layer_role": "specialists_as_tools",
             "direct_side_effect_authority": "openclawd_mainline_only",
         }
-        mock_kernel.handle_message = AsyncMock(
-            return_value=_make_kernel_response(specialist_boundary=boundary)
-        )
+        mock_kernel.handle_message = AsyncMock(return_value=_make_kernel_response(specialist_boundary=boundary))
         oc._get_kernel = lambda: mock_kernel
         oc._get_router = lambda: None
         oc._ensure_initialized = lambda: None
@@ -243,7 +242,9 @@ class TestOpenClawdKernelOwnership:
         oc._record_turn = AsyncMock()
         oc._run_continuum = lambda **kw: {"decision": {"action_level": "observe"}, "metadata": {}}
         oc._run_execution = lambda state, entry_mode=None: {
-            "action_taken": "noop", "success": False, "skipped_reason": "observe"
+            "action_taken": "noop",
+            "success": False,
+            "skipped_reason": "observe",
         }
 
         result = await oc.process(message="hello", session_id="s3")
@@ -254,6 +255,7 @@ class TestOpenClawdKernelOwnership:
 # ---------------------------------------------------------------------------
 # 10-12  No Circular Dependency / Peer Relationship
 # ---------------------------------------------------------------------------
+
 
 class TestNoPeerRelationship:
     """AgentKernel must not call back to OpenClawd (no circular dependency)."""
@@ -271,16 +273,13 @@ class TestNoPeerRelationship:
                 if node.name == "_handle_chat":
                     # Extract lines for this function
                     lines = source.splitlines()
-                    func_lines = lines[node.lineno - 1: node.end_lineno]
+                    func_lines = lines[node.lineno - 1 : node.end_lineno]
                     handle_chat_source = "\n".join(func_lines)
                     break
 
         assert handle_chat_source, "_handle_chat method must exist in AgentKernel."
         # Must not contain import of openclawd or call to get_openclawd
-        assert (
-            "get_openclawd" not in handle_chat_source
-            and "from core.openclawd" not in handle_chat_source
-        ), (
+        assert "get_openclawd" not in handle_chat_source and "from core.openclawd" not in handle_chat_source, (
             "AgentKernel._handle_chat must NOT import or call get_openclawd(). "
             "This would create a circular dependency and make the two look like peers. "
             "Use _fallback_chat (direct LLM) instead."
@@ -295,8 +294,10 @@ class TestNoPeerRelationship:
         for line in source.splitlines():
             stripped = line.lstrip()
             indent = len(line) - len(stripped)
-            if indent == 0 and ("openclawd" in line.lower()) and (
-                line.strip().startswith("import") or line.strip().startswith("from")
+            if (
+                indent == 0
+                and ("openclawd" in line.lower())
+                and (line.strip().startswith("import") or line.strip().startswith("from"))
             ):
                 pytest.fail(
                     f"AgentKernel module has a top-level import of openclawd: {line!r}. "
@@ -309,8 +310,7 @@ class TestNoPeerRelationship:
         chat_file = _REPO_ROOT / "core" / "routes" / "chat.py"
         source = chat_file.read_text(encoding="utf-8")
         assert "from core.agent.kernel import" not in source, (
-            "core/routes/chat.py must not directly import AgentKernel. "
-            "Kernel access must go through OpenClawd."
+            "core/routes/chat.py must not directly import AgentKernel. " "Kernel access must go through OpenClawd."
         )
         # Check there is no instantiation or direct call to AgentKernel
         # (comments explaining the architecture are OK, but usage is not)
@@ -319,14 +319,14 @@ class TestNoPeerRelationship:
             "Only OpenClawd should create/access the embedded kernel."
         )
         assert "import AgentKernel" not in source, (
-            "core/routes/chat.py must not import AgentKernel. "
-            "Only OpenClawd should access the embedded kernel."
+            "core/routes/chat.py must not import AgentKernel. " "Only OpenClawd should access the embedded kernel."
         )
 
 
 # ---------------------------------------------------------------------------
 # 13-15  Regression Guard — OpenClawd is the Decision Point
 # ---------------------------------------------------------------------------
+
 
 class TestOpenClawdDecisionPoint:
     """OpenClawd must remain the decision point that interprets kernel output."""
@@ -345,14 +345,15 @@ class TestOpenClawdDecisionPoint:
         oc._record_turn = AsyncMock()
         oc._run_continuum = lambda **kw: {"decision": {"action_level": "observe"}, "metadata": {}}
         oc._run_execution = lambda state, entry_mode=None: {
-            "action_taken": "noop", "success": False, "skipped_reason": "observe"
+            "action_taken": "noop",
+            "success": False,
+            "skipped_reason": "observe",
         }
 
         result = await oc.process(message="hello", session_id="s3")
         meta = result.get("metadata", {})
         assert meta.get("handler") == "agent_kernel", (
-            "process() via kernel path must record handler='agent_kernel' "
-            "so the decision path is observable."
+            "process() via kernel path must record handler='agent_kernel' " "so the decision path is observable."
         )
 
     @pytest.mark.asyncio
@@ -365,12 +366,19 @@ class TestOpenClawdDecisionPoint:
         oc._emit_audit = MagicMock()
         oc.sync_device_capabilities = MagicMock()
         oc._record_turn = AsyncMock()
-        oc._parse_intent = AsyncMock(return_value=MagicMock(
-            intent="chat", confidence=0.9, suggestions=[], target_device=None,
-        ))
+        oc._parse_intent = AsyncMock(
+            return_value=MagicMock(
+                intent="chat",
+                confidence=0.9,
+                suggestions=[],
+                target_device=None,
+            )
+        )
         oc._run_continuum = lambda **kw: {"decision": {"action_level": "observe"}, "metadata": {}}
         oc._run_execution = lambda state, entry_mode=None: {
-            "action_taken": "noop", "success": False, "skipped_reason": "observe"
+            "action_taken": "noop",
+            "success": False,
+            "skipped_reason": "observe",
         }
         oc._dispatch_chat = AsyncMock(return_value={"success": True, "response": "ok", "metadata": {}})
 
@@ -387,12 +395,19 @@ class TestOpenClawdDecisionPoint:
         oc._emit_audit = MagicMock()
         oc.sync_device_capabilities = MagicMock()
         oc._record_turn = AsyncMock()
-        oc._parse_intent = AsyncMock(return_value=MagicMock(
-            intent="chat", confidence=0.9, suggestions=[], target_device=None,
-        ))
+        oc._parse_intent = AsyncMock(
+            return_value=MagicMock(
+                intent="chat",
+                confidence=0.9,
+                suggestions=[],
+                target_device=None,
+            )
+        )
         oc._run_continuum = lambda **kw: {"decision": {"action_level": "observe"}, "metadata": {}}
         oc._run_execution = lambda state, entry_mode=None: {
-            "action_taken": "noop", "success": False, "skipped_reason": "observe"
+            "action_taken": "noop",
+            "success": False,
+            "skipped_reason": "observe",
         }
         oc._dispatch_chat = AsyncMock(return_value={"success": True, "response": "ok", "metadata": {}})
 

@@ -108,17 +108,13 @@ SNAPSHOT_RECONCILIATION_OUT_OF_ORDER_REJECTED: str = "out_of_order_rejected"
 SNAPSHOT_RECONCILIATION_RECONNECT_DELAYED_REJECTED: str = "reconnect_delayed_rejected"
 SNAPSHOT_RECONCILIATION_CONFLICT_CENTER_TRUTH_RETAINED: str = "conflict_center_truth_retained"
 SNAPSHOT_RECONCILIATION_DUPLICATE_IGNORED: str = "duplicate_ignored"
-ANDROID_DEVICE_SNAPSHOT_TTL_SECONDS: float = float(
-    os.getenv("ANDROID_DEVICE_SNAPSHOT_TTL_SECONDS", "90")
-)
+ANDROID_DEVICE_SNAPSHOT_TTL_SECONDS: float = float(os.getenv("ANDROID_DEVICE_SNAPSHOT_TTL_SECONDS", "90"))
 
 # PR-4: Terminal Android execution phases that trigger roundtrip notification.
 # When an absorbed DeviceExecutionEvent carries one of these phases, the
 # canonical_roundtrip store is notified so the unified panel surface reflects
 # the Android-side execution outcome.
-_ANDROID_TERMINAL_PHASES: frozenset = frozenset(
-    {"completed", "failed", "stagnation", "gate_decision"}
-)
+_ANDROID_TERMINAL_PHASES: frozenset = frozenset({"completed", "failed", "stagnation", "gate_decision"})
 _EPOCH_MILLISECOND_CONVERSION_THRESHOLD: float = 1_000_000_000_000.0
 _ANDROID_MILLISECONDS_TO_SECONDS: float = 1000.0
 _ANDROID_REPORTED_MODE_ALIASES: Dict[str, str] = {
@@ -128,9 +124,7 @@ _ANDROID_REPORTED_MODE_ALIASES: Dict[str, str] = {
     "delegated": "cross_device",
     "inactive": "unknown",
 }
-_ANDROID_CANONICAL_MODE_VALUES: frozenset[str] = frozenset(
-    {"local", "cross_device", "transitioning", "unknown"}
-)
+_ANDROID_CANONICAL_MODE_VALUES: frozenset[str] = frozenset({"local", "cross_device", "transitioning", "unknown"})
 _ANDROID_CANONICAL_GATE_METADATA_KEYS: tuple[str, ...] = (
     "degraded_mode",
     "mode_state",
@@ -159,9 +153,7 @@ _ANDROID_CANONICAL_MODE_READINESS_VALUES: frozenset[str] = frozenset(
 _ANDROID_CANONICAL_LOCAL_INTELLIGENCE_STATUS_VALUES: frozenset[str] = frozenset(
     {"ready", "enabled", "degraded", "disabled", "unavailable", "unknown"}
 )
-_ANDROID_LOCAL_INTELLIGENCE_UNAVAILABLE_STATUSES: frozenset[str] = frozenset(
-    {"disabled", "unavailable", "unknown"}
-)
+_ANDROID_LOCAL_INTELLIGENCE_UNAVAILABLE_STATUSES: frozenset[str] = frozenset({"disabled", "unavailable", "unknown"})
 
 
 # ---------------------------------------------------------------------------
@@ -349,11 +341,7 @@ class DeviceStateSnapshot:
 
     def is_local_ai_ready(self) -> bool:
         """Return True when local AI inference is available and ready."""
-        return bool(
-            self.local_loop_ready
-            and self.model_ready
-            and (self.llama_cpp_available or self.ncnn_available)
-        )
+        return bool(self.local_loop_ready and self.model_ready and (self.llama_cpp_available or self.ncnn_available))
 
     def readiness_summary(self) -> Dict[str, Any]:
         """Return a compact readiness summary dict."""
@@ -494,9 +482,7 @@ class _AndroidDeviceStateStore:
                 snap.canonical_reconciliation_status = str(
                     reconciliation.get("status", SNAPSHOT_RECONCILIATION_ACCEPTED)
                 )
-                snap.canonical_reconciliation_reason = str(
-                    reconciliation.get("reason", "applied_to_canonical_truth")
-                )
+                snap.canonical_reconciliation_reason = str(reconciliation.get("reason", "applied_to_canonical_truth"))
                 self._snapshots[device_id] = snap
                 canonical = snap
             else:
@@ -558,7 +544,7 @@ class _AndroidDeviceStateStore:
         with self._lock:
             self._execution_events.append(evt)
             if len(self._execution_events) > self._MAX_EVENTS:
-                self._execution_events = self._execution_events[-self._MAX_EVENTS:]
+                self._execution_events = self._execution_events[-self._MAX_EVENTS :]
             self._persist_locked()
 
         # Forward to FlowLevelOperatorSurface
@@ -573,6 +559,7 @@ class _AndroidDeviceStateStore:
         if evt.phase in _ANDROID_TERMINAL_PHASES:
             try:
                 from core.canonical_roundtrip import notify_android_execution_terminal
+
                 notify_android_execution_terminal(
                     flow_id=evt.flow_id,
                     device_id=evt.device_id,
@@ -655,62 +642,60 @@ class _AndroidDeviceStateStore:
         devices: List[Dict[str, Any]] = []
         for snap in snapshots:
             capability_report_semantics = self.get_capability_report_semantics(snap.device_id)
-            devices.append({
-                "device_id": snap.device_id,
-                "absorbed_at": snap.absorbed_at,
-                "snapshot_ts": snap.snapshot_ts,
-                "readiness": snap.readiness_summary(),
-                "model": {
-                    "model_id": snap.model_id,
-                    "runtime_type": snap.runtime_type,
-                    "checksum_ok": snap.checksum_ok,
-                    "compatibility_ok": snap.compatibility_ok,
-                    "quantization": snap.quantization,
-                    "model_version": snap.model_version,
-                    "mobilevlm_present": snap.mobilevlm_present,
-                    "mobilevlm_checksum_ok": snap.mobilevlm_checksum_ok,
-                    "seeclick_present": snap.seeclick_present,
-                },
-                "active_runtime_type": snap.active_runtime_type,
-                "offline_queue_depth": snap.offline_queue_depth,
-                "current_fallback_tier": snap.current_fallback_tier,
-                "planner_fallback_tier": snap.planner_fallback_tier,
-                "grounding_fallback_tier": snap.grounding_fallback_tier,
-                "canonical_reconciliation": dict(
-                    self._snapshot_reconciliation.get(
-                        snap.device_id,
-                        {
-                            "status": snap.canonical_reconciliation_status,
-                            "reason": snap.canonical_reconciliation_reason,
-                            "applied": True,
-                            "conflict": False,
-                        },
-                    )
-                ),
-                "warmup_result": snap.warmup_result,
-                "runtime_health_snapshot": snap.runtime_health_snapshot,
-                "dispatch_capability_status": {
-                    "authoritative_scoring_fields": {
-                        "model_ready": snap.model_ready,
-                        "accessibility_ready": snap.accessibility_ready,
-                        "local_loop_ready": snap.local_loop_ready,
-                        "warmup_result": snap.warmup_result,
-                        "current_fallback_tier": snap.current_fallback_tier,
-                    },
-                    "capability_presence_only_fields": {
+            devices.append(
+                {
+                    "device_id": snap.device_id,
+                    "absorbed_at": snap.absorbed_at,
+                    "snapshot_ts": snap.snapshot_ts,
+                    "readiness": snap.readiness_summary(),
+                    "model": {
+                        "model_id": snap.model_id,
+                        "runtime_type": snap.runtime_type,
+                        "checksum_ok": snap.checksum_ok,
+                        "compatibility_ok": snap.compatibility_ok,
+                        "quantization": snap.quantization,
+                        "model_version": snap.model_version,
                         "mobilevlm_present": snap.mobilevlm_present,
                         "mobilevlm_checksum_ok": snap.mobilevlm_checksum_ok,
                         "seeclick_present": snap.seeclick_present,
                     },
-                    "authoritative_scoring_field_names": list(
-                        ANDROID_DISPATCH_AUTHORITATIVE_SNAPSHOT_FIELDS
+                    "active_runtime_type": snap.active_runtime_type,
+                    "offline_queue_depth": snap.offline_queue_depth,
+                    "current_fallback_tier": snap.current_fallback_tier,
+                    "planner_fallback_tier": snap.planner_fallback_tier,
+                    "grounding_fallback_tier": snap.grounding_fallback_tier,
+                    "canonical_reconciliation": dict(
+                        self._snapshot_reconciliation.get(
+                            snap.device_id,
+                            {
+                                "status": snap.canonical_reconciliation_status,
+                                "reason": snap.canonical_reconciliation_reason,
+                                "applied": True,
+                                "conflict": False,
+                            },
+                        )
                     ),
-                    "capability_presence_only_field_names": list(
-                        ANDROID_DISPATCH_CAPABILITY_ONLY_SNAPSHOT_FIELDS
-                    ),
-                },
-                "android_capability_report_semantics": capability_report_semantics,
-            })
+                    "warmup_result": snap.warmup_result,
+                    "runtime_health_snapshot": snap.runtime_health_snapshot,
+                    "dispatch_capability_status": {
+                        "authoritative_scoring_fields": {
+                            "model_ready": snap.model_ready,
+                            "accessibility_ready": snap.accessibility_ready,
+                            "local_loop_ready": snap.local_loop_ready,
+                            "warmup_result": snap.warmup_result,
+                            "current_fallback_tier": snap.current_fallback_tier,
+                        },
+                        "capability_presence_only_fields": {
+                            "mobilevlm_present": snap.mobilevlm_present,
+                            "mobilevlm_checksum_ok": snap.mobilevlm_checksum_ok,
+                            "seeclick_present": snap.seeclick_present,
+                        },
+                        "authoritative_scoring_field_names": list(ANDROID_DISPATCH_AUTHORITATIVE_SNAPSHOT_FIELDS),
+                        "capability_presence_only_field_names": list(ANDROID_DISPATCH_CAPABILITY_ONLY_SNAPSHOT_FIELDS),
+                    },
+                    "android_capability_report_semantics": capability_report_semantics,
+                }
+            )
 
         return {
             "total_devices_with_snapshot": total,
@@ -790,16 +775,12 @@ class _AndroidDeviceStateStore:
                 continue
             events.append(evt)
         if len(events) > self._MAX_EVENTS:
-            events = events[-self._MAX_EVENTS:]
+            events = events[-self._MAX_EVENTS :]
 
         with self._lock:
             self._snapshots = snapshots
-            self._capability_report_semantics = {
-                str(k): dict(v) for k, v in semantics.items() if isinstance(v, dict)
-            }
-            self._snapshot_reconciliation = {
-                str(k): dict(v) for k, v in reconciliations.items() if isinstance(v, dict)
-            }
+            self._capability_report_semantics = {str(k): dict(v) for k, v in semantics.items() if isinstance(v, dict)}
+            self._snapshot_reconciliation = {str(k): dict(v) for k, v in reconciliations.items() if isinstance(v, dict)}
             self._execution_events = events
             self._last_restored_at = time.time()
             self._restored_counts = {
@@ -818,7 +799,7 @@ class _AndroidDeviceStateStore:
             "snapshots": [s.to_dict() for s in self._snapshots.values()],
             "capability_report_semantics": dict(self._capability_report_semantics),
             "snapshot_reconciliation": dict(self._snapshot_reconciliation),
-            "execution_events": [e.to_dict() for e in self._execution_events[-self._MAX_EVENTS:]],
+            "execution_events": [e.to_dict() for e in self._execution_events[-self._MAX_EVENTS :]],
         }
         try:
             directory = os.path.dirname(path)
@@ -930,11 +911,7 @@ def _parse_state_snapshot(device_id: str, payload: Dict[str, Any]) -> DeviceStat
     return DeviceStateSnapshot(
         device_id=device_id,
         absorbed_at=time.time(),
-        snapshot_ts=(
-            payload.get("snapshot_ts")
-            or payload.get("snapshotTs")
-            or payload.get("timestamp")
-        ),
+        snapshot_ts=(payload.get("snapshot_ts") or payload.get("snapshotTs") or payload.get("timestamp")),
         snapshot_seq=_first_int(
             "snapshot_seq",
             "snapshotSeq",
@@ -965,15 +942,9 @@ def _parse_state_snapshot(device_id: str, payload: Dict[str, Any]) -> DeviceStat
         seeclick_present=_first_bool("seeclick_present", "seeclickPresent"),
         pending_first_download=_first_bool("pending_first_download", "pendingFirstDownload"),
         # Local loop config
-        local_loop_config=(
-            payload.get("local_loop_config")
-            or payload.get("localLoopConfig")
-        ),
+        local_loop_config=(payload.get("local_loop_config") or payload.get("localLoopConfig")),
         # Runtime health
-        runtime_health_snapshot=(
-            payload.get("runtime_health_snapshot")
-            or payload.get("runtimeHealthSnapshot")
-        ),
+        runtime_health_snapshot=(payload.get("runtime_health_snapshot") or payload.get("runtimeHealthSnapshot")),
         warmup_result=_first_str("warmup_result", "warmupResult"),
         # Queue / fallback
         offline_queue_depth=_first_int("offline_queue_depth", "offlineQueueDepth"),
@@ -1048,10 +1019,7 @@ def _normalize_capability_report_semantics(
         metadata.get("mode_readiness_state"),
         lowercase=True,
     )
-    if (
-        mode_readiness_state is not None
-        and mode_readiness_state not in _ANDROID_CANONICAL_MODE_READINESS_VALUES
-    ):
+    if mode_readiness_state is not None and mode_readiness_state not in _ANDROID_CANONICAL_MODE_READINESS_VALUES:
         logger.debug(
             "_normalize_capability_report_semantics: invalid mode_readiness_state=%r for device_id=%r",
             metadata.get("mode_readiness_state"),
@@ -1064,8 +1032,7 @@ def _normalize_capability_report_semantics(
     )
     if (
         local_intelligence_status is not None
-        and local_intelligence_status
-        not in _ANDROID_CANONICAL_LOCAL_INTELLIGENCE_STATUS_VALUES
+        and local_intelligence_status not in _ANDROID_CANONICAL_LOCAL_INTELLIGENCE_STATUS_VALUES
     ):
         logger.debug(
             "_normalize_capability_report_semantics: invalid local_intelligence_status=%r for device_id=%r",
@@ -1074,30 +1041,16 @@ def _normalize_capability_report_semantics(
         )
         local_intelligence_status = None
     degraded_mode = _coerce_optional_bool(metadata.get("degraded_mode"))
-    cross_device_eligibility = _coerce_optional_bool(
-        metadata.get("cross_device_eligibility")
-    )
-    goal_execution_eligibility = _coerce_optional_bool(
-        metadata.get("goal_execution_eligibility")
-    )
-    parallel_execution_eligibility = _coerce_optional_bool(
-        metadata.get("parallel_execution_eligibility")
-    )
-    local_inference_ready = _coerce_optional_bool(
-        metadata.get("local_inference_ready")
-    )
-    local_inference_available = _coerce_optional_bool(
-        metadata.get("local_inference_available")
-    )
+    cross_device_eligibility = _coerce_optional_bool(metadata.get("cross_device_eligibility"))
+    goal_execution_eligibility = _coerce_optional_bool(metadata.get("goal_execution_eligibility"))
+    parallel_execution_eligibility = _coerce_optional_bool(metadata.get("parallel_execution_eligibility"))
+    local_inference_ready = _coerce_optional_bool(metadata.get("local_inference_ready"))
+    local_inference_available = _coerce_optional_bool(metadata.get("local_inference_available"))
     missing_canonical_gate_metadata_keys = sorted(
-        key
-        for key in _ANDROID_CANONICAL_GATE_METADATA_KEYS
-        if key not in metadata
+        key for key in _ANDROID_CANONICAL_GATE_METADATA_KEYS if key not in metadata
     )
     unknown_canonical_gate_metadata_keys = sorted(
-        str(key)
-        for key in metadata
-        if str(key) not in _ANDROID_CANONICAL_GATE_METADATA_KEYS
+        str(key) for key in metadata if str(key) not in _ANDROID_CANONICAL_GATE_METADATA_KEYS
     )
     malformed_canonical_gate_metadata_keys: List[str] = []
     if "mode_state" in metadata and canonical_mode is None:
@@ -1117,58 +1070,39 @@ def _normalize_capability_report_semantics(
     for key in _ANDROID_CANONICAL_GATE_BOOLEAN_FIELDS:
         if key in metadata and _bool_values[key] is None:
             malformed_canonical_gate_metadata_keys.append(key)
-    malformed_canonical_gate_metadata_keys = sorted(
-        set(malformed_canonical_gate_metadata_keys)
-    )
+    malformed_canonical_gate_metadata_keys = sorted(set(malformed_canonical_gate_metadata_keys))
     semantic_conflicts: List[str] = []
     if canonical_mode == "cross_device" and cross_device_eligibility is False:
-        semantic_conflicts.append(
-            "mode_cross_device_conflicts_with_cross_device_eligibility_false"
-        )
+        semantic_conflicts.append("mode_cross_device_conflicts_with_cross_device_eligibility_false")
     if canonical_mode == "local" and cross_device_eligibility is True:
-        semantic_conflicts.append(
-            "mode_local_conflicts_with_cross_device_eligibility_true"
-        )
+        semantic_conflicts.append("mode_local_conflicts_with_cross_device_eligibility_true")
     if goal_execution_eligibility is True and cross_device_eligibility is False:
-        semantic_conflicts.append(
-            "goal_execution_eligibility_true_conflicts_with_cross_device_eligibility_false"
-        )
+        semantic_conflicts.append("goal_execution_eligibility_true_conflicts_with_cross_device_eligibility_false")
     if parallel_execution_eligibility is True and goal_execution_eligibility is False:
-        semantic_conflicts.append(
-            "parallel_execution_eligibility_true_conflicts_with_goal_execution_eligibility_false"
-        )
+        semantic_conflicts.append("parallel_execution_eligibility_true_conflicts_with_goal_execution_eligibility_false")
     if local_inference_ready is True and local_inference_available is False:
-        semantic_conflicts.append(
-            "local_inference_ready_true_conflicts_with_local_inference_available_false"
-        )
+        semantic_conflicts.append("local_inference_ready_true_conflicts_with_local_inference_available_false")
     if (
         local_inference_available is True
         and local_intelligence_status in _ANDROID_LOCAL_INTELLIGENCE_UNAVAILABLE_STATUSES
     ):
         semantic_conflicts.append(
-            "local_inference_available_true_conflicts_with_local_intelligence_status_"
-            f"{local_intelligence_status}"
+            "local_inference_available_true_conflicts_with_local_intelligence_status_" f"{local_intelligence_status}"
         )
     semantic_conflicts = sorted(set(semantic_conflicts))
     downgraded_canonical_gate_metadata_reasons: List[str] = []
     if degraded_mode is True:
         downgraded_canonical_gate_metadata_reasons.append("degraded_mode_true")
     if mode_readiness_state in {"degraded", "blocked", "transitioning", "unknown"}:
-        downgraded_canonical_gate_metadata_reasons.append(
-            f"mode_readiness_state_{mode_readiness_state}"
-        )
+        downgraded_canonical_gate_metadata_reasons.append(f"mode_readiness_state_{mode_readiness_state}")
     if local_intelligence_status in {
         "degraded",
         "disabled",
         "unavailable",
         "unknown",
     }:
-        downgraded_canonical_gate_metadata_reasons.append(
-            f"local_intelligence_status_{local_intelligence_status}"
-        )
-    downgraded_canonical_gate_metadata_reasons = sorted(
-        set(downgraded_canonical_gate_metadata_reasons)
-    )
+        downgraded_canonical_gate_metadata_reasons.append(f"local_intelligence_status_{local_intelligence_status}")
+    downgraded_canonical_gate_metadata_reasons = sorted(set(downgraded_canonical_gate_metadata_reasons))
     if not metadata:
         canonical_gate_metadata_state = "missing"
     elif malformed_canonical_gate_metadata_keys:
@@ -1197,9 +1131,7 @@ def _normalize_capability_report_semantics(
         "block",
     )
     if canonical_gate_metadata_state == "complete":
-        canonical_gate_contract_diagnosis = (
-            "Android capability_report satisfied the canonical capability contract."
-        )
+        canonical_gate_contract_diagnosis = "Android capability_report satisfied the canonical capability contract."
     elif canonical_gate_metadata_state == "unknown":
         canonical_gate_contract_diagnosis = (
             "Android capability_report contains unknown canonical gate metadata keys: "
@@ -1244,20 +1176,12 @@ def _normalize_capability_report_semantics(
         "malformed_canonical_gate_metadata_keys": malformed_canonical_gate_metadata_keys,
         "unknown_canonical_gate_metadata_keys": unknown_canonical_gate_metadata_keys,
         "canonical_gate_semantic_conflicts": semantic_conflicts,
-        "downgraded_canonical_gate_metadata_reasons": (
-            downgraded_canonical_gate_metadata_reasons
-        ),
-        "canonical_gate_governance_readiness_impact": (
-            canonical_gate_governance_readiness_impact
-        ),
+        "downgraded_canonical_gate_metadata_reasons": (downgraded_canonical_gate_metadata_reasons),
+        "canonical_gate_governance_readiness_impact": (canonical_gate_governance_readiness_impact),
         "canonical_gate_contract_version": ANDROID_CAPABILITY_CANONICAL_CONTRACT_VERSION,
         "canonical_gate_contract_diagnosis": canonical_gate_contract_diagnosis,
-        "runtime_attachment_session_id": _coerce_optional_str(
-            message.get("runtime_attachment_session_id")
-        ),
-        "durable_session_id": _coerce_optional_str(
-            message.get("durable_session_id")
-        ),
+        "runtime_attachment_session_id": _coerce_optional_str(message.get("runtime_attachment_session_id")),
+        "durable_session_id": _coerce_optional_str(message.get("durable_session_id")),
         "continuity_epoch": message.get("continuity_epoch"),
         "route_mode": _coerce_optional_str(message.get("route_mode"), lowercase=True),
         "reported_at": reported_at,
@@ -1534,9 +1458,7 @@ def _parse_execution_event(device_id: str, payload: Dict[str, Any]) -> DeviceExe
         step_index=_step_index,
         is_blocking=bool(payload.get("is_blocking") or payload.get("isBlocking")),
         blocking_reason=payload.get("blocking_reason") or payload.get("blockingReason") or "",
-        stagnation_detected=bool(
-            payload.get("stagnation_detected") or payload.get("stagnationDetected")
-        ),
+        stagnation_detected=bool(payload.get("stagnation_detected") or payload.get("stagnationDetected")),
         fallback_tier=payload.get("fallback_tier") or payload.get("fallbackTier"),
         event_ts=_event_ts,
         raw_payload=dict(payload),
@@ -1559,11 +1481,11 @@ def _forward_execution_event_to_flow_surface(evt: DeviceExecutionEvent) -> None:
     Failures are logged and swallowed — this is a best-effort path.
     """
     try:
+        from core.delegated_flow_entity import get_delegated_flow_entity_runtime
         from core.flow_level_operator_surface import (
             AndroidCanonicalExecutionEvent,
             AndroidExecutionPhase,
         )
-        from core.delegated_flow_entity import get_delegated_flow_entity_runtime
 
         runtime = get_delegated_flow_entity_runtime()
         entity = runtime.get(evt.flow_id)

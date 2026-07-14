@@ -42,8 +42,6 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
-from core.agent.intent_router import IntentMode, IntentResult, IntentRouter
-from core.agent.policy_loader import get_agents, get_soul, get_user
 from core.agent.execution_planner import (
     ExecutionPlan,
     ExecutionPlanner,
@@ -51,6 +49,8 @@ from core.agent.execution_planner import (
     StepRecord,
     ToolCallRecord,
 )
+from core.agent.intent_router import IntentMode, IntentResult, IntentRouter
+from core.agent.policy_loader import get_agents, get_soul, get_user
 
 logger = logging.getLogger("Galaxy.Agent.Kernel")
 
@@ -323,11 +323,13 @@ class AgentKernel:
         if self._llm_router is None:
             try:
                 from core.unified import get_unified_llm_router
+
                 self._llm_router = get_unified_llm_router()
             except Exception as exc:
                 logger.warning("AgentKernel: 无法加载 UnifiedLLMRouter: %s", exc)
                 try:
                     from core.multi_llm_router import get_llm_router
+
                     self._llm_router = get_llm_router()
                 except Exception as exc2:
                     logger.warning("AgentKernel: 无法加载 MultiLLMRouter: %s", exc2)
@@ -372,7 +374,9 @@ class AgentKernel:
 
         logger.info(
             "AgentKernel.handle_message | session=%s device=%s len(msg)=%d",
-            sid, device_id, len(message),
+            sid,
+            device_id,
+            len(message),
         )
 
         try:
@@ -441,13 +445,10 @@ class AgentKernel:
         _activation_budget = None
         _activation_budget_hint_dict: Optional[Dict[str, Any]] = None
         try:
-            from core.cognitive.cognitive_execution_policy import (
-                derive_cognitive_execution_hint as _derive_hint,
-            )
-            from core.cognitive.cognitive_activation_budget import (
-                derive_activation_budget as _derive_budget,
-                build_budget_diagnostics as _build_budget_diag,
-            )
+            from core.cognitive.cognitive_activation_budget import build_budget_diagnostics as _build_budget_diag
+            from core.cognitive.cognitive_activation_budget import derive_activation_budget as _derive_budget
+            from core.cognitive.cognitive_execution_policy import derive_cognitive_execution_hint as _derive_hint
+
             _cog_hint = _derive_hint()
             _activation_budget = _derive_budget(_cog_hint)
             _activation_budget_hint_dict = _build_budget_diag(
@@ -456,8 +457,7 @@ class AgentKernel:
                 influence_source="kernel_process",
             )
             logger.debug(
-                "PR-18 AgentKernel._process: activation_budget derived — "
-                "region=%s budget=%.3f breadth=%s",
+                "PR-18 AgentKernel._process: activation_budget derived — " "region=%s budget=%.3f breadth=%s",
                 _activation_budget.cognitive_region,
                 _activation_budget.budget_value,
                 _activation_budget.breadth_mode,
@@ -474,10 +474,9 @@ class AgentKernel:
         _memory_bias = None
         _memory_bias_hint_dict: Optional[Dict[str, Any]] = None
         try:
-            from core.cognitive.memory_bias_layer import (
-                derive_memory_bias as _derive_mem_bias,
-                build_memory_bias_diagnostics as _build_mem_bias_diag,
-            )
+            from core.cognitive.memory_bias_layer import build_memory_bias_diagnostics as _build_mem_bias_diag
+            from core.cognitive.memory_bias_layer import derive_memory_bias as _derive_mem_bias
+
             _memory_bias = _derive_mem_bias(session_id=session_id)
             _memory_bias_hint_dict = _build_mem_bias_diag(
                 _memory_bias,
@@ -485,8 +484,7 @@ class AgentKernel:
                 influence_source="kernel_process",
             )
             logger.debug(
-                "PR-19 AgentKernel._process: memory_bias derived — "
-                "posture=%s continuity=%.3f retrieval=%.3f",
+                "PR-19 AgentKernel._process: memory_bias derived — " "posture=%s continuity=%.3f retrieval=%.3f",
                 _memory_bias.posture,
                 _memory_bias.continuity_score,
                 _memory_bias.retrieval_relevance,
@@ -501,7 +499,9 @@ class AgentKernel:
         intent = await self._intent_router.route(message, context)
         logger.info(
             "意图路由完成: mode=%s confidence=%.2f method=%s",
-            intent.mode, intent.confidence, intent.method,
+            intent.mode,
+            intent.confidence,
+            intent.method,
         )
 
         # ── 步骤 3: 根据意图分流处理 ──
@@ -509,7 +509,10 @@ class AgentKernel:
             # PR-17: thread task_hint into the chat path so model selection
             # receives the intent signal rather than using generic fallback.
             result = await self._handle_chat(
-                message, session_id, context, user_policy,
+                message,
+                session_id,
+                context,
+                user_policy,
                 task_hint=intent.task_hint,
                 multimodal_context=multimodal_context,
             )
@@ -523,9 +526,10 @@ class AgentKernel:
 
         # task_execute 或 hybrid：加载 SOUL（仅此时注入）
         # 显式断言：确保此代码路径只在执行模式下被触发
-        assert intent.mode in (IntentMode.TASK_EXECUTE, IntentMode.HYBRID), (
-            f"SOUL 只能在 task_execute/hybrid 模式加载，当前 mode={intent.mode}"
-        )
+        assert intent.mode in (
+            IntentMode.TASK_EXECUTE,
+            IntentMode.HYBRID,
+        ), f"SOUL 只能在 task_execute/hybrid 模式加载，当前 mode={intent.mode}"
         # PR-006: record the phase at which SOUL is injected so KernelResponse
         # carries an auditable soul_injection_phase field (None for chat_only).
         soul_injection_phase = intent.mode
@@ -535,8 +539,9 @@ class AgentKernel:
         # PR-507: Front-load CanonicalTask — establish task ontology before
         # assembling ExecutionPlan so the canonical layer is always primary.
         try:
-            from core.task_adapter import adapt_to_canonical_task as _adapt_kernel
             from core.canonical_task import TaskOrigin as _KernelTaskOrigin
+            from core.task_adapter import adapt_to_canonical_task as _adapt_kernel
+
             _kernel_canonical = _adapt_kernel(
                 {
                     "goal": message,
@@ -554,19 +559,16 @@ class AgentKernel:
             # is visible in the canonical audit trail.
             try:
                 from core.audit_event_semantics import audit_task_admitted as _aud_admitted
+
                 _aud_admitted(
                     _kernel_canonical.identity.task_id,
                     trace_id=_kernel_canonical.identity.trace_id or "",
                     source="agent_kernel._process",
                 )
             except Exception as _aud_adm_err:
-                logger.debug(
-                    "AgentKernel._process: audit_task_admitted skipped — %s", _aud_adm_err
-                )
+                logger.debug("AgentKernel._process: audit_task_admitted skipped — %s", _aud_adm_err)
         except Exception as _kt_err:
-            logger.debug(
-                "AgentKernel._process: CanonicalTask front-load skipped — %s", _kt_err
-            )
+            logger.debug("AgentKernel._process: CanonicalTask front-load skipped — %s", _kt_err)
 
         plan = ExecutionPlan(
             message=message,
@@ -594,10 +596,9 @@ class AgentKernel:
         # PR-20: assemble unified runtime decision explanation from all influence layers.
         _runtime_decision_explanation: Optional[Dict[str, Any]] = None
         try:
-            from core.runtime_decision_observability import (
-                build_runtime_decision_explanation as _build_rde,
-                build_runtime_decision_diagnostics as _build_rdd,
-            )
+            from core.runtime_decision_observability import build_runtime_decision_diagnostics as _build_rdd
+            from core.runtime_decision_observability import build_runtime_decision_explanation as _build_rde
+
             _task_hint_val = getattr(intent, "task_hint", None) or None
             _planner_strategy = getattr(exec_result, "chosen_strategy", None)
             _rde = _build_rde(
@@ -605,9 +606,7 @@ class AgentKernel:
                 model_selected=exec_result.model,
                 task_hint=_task_hint_val,
                 task_semantic_influenced_routing=bool(_task_hint_val),
-                task_semantic_influenced_planner=bool(
-                    _task_hint_val and _planner_strategy is not None
-                ),
+                task_semantic_influenced_planner=bool(_task_hint_val and _planner_strategy is not None),
                 activation_budget_hint=_activation_budget_hint_dict,
                 memory_bias_hint=_memory_bias_hint_dict,
                 planner_strategy=_planner_strategy,
@@ -685,8 +684,12 @@ class AgentKernel:
         """
         # 直接调用 LLM Router 处理聊天（保持单向依赖，不回调 OpenClawd）
         return await self._fallback_chat(
-            message, session_id, context, user_policy,
-            task_hint=task_hint, multimodal_context=multimodal_context,
+            message,
+            session_id,
+            context,
+            user_policy,
+            task_hint=task_hint,
+            multimodal_context=multimodal_context,
         )
 
     async def _fallback_chat(
@@ -727,6 +730,7 @@ class AgentKernel:
             # 原生多模态：有图像且 GALAXY_NATIVE_MM_CHAT=1 时，user content 用 OpenAI
             # content 数组(text+image_url)，让图像原生送达模型；否则纯文本(默认)。
             from core.agent.multimodal_messages import build_user_message_content
+
             messages.append({"role": "user", "content": build_user_message_content(message, multimodal_context)})
 
             # PR-17: pass task_hint as task_type when available so the router
@@ -833,9 +837,7 @@ class AgentKernel:
         if self._llm_router is not None:
             try:
                 llm_available = bool(
-                    self._llm_router.is_available()
-                    if hasattr(self._llm_router, "is_available")
-                    else True
+                    self._llm_router.is_available() if hasattr(self._llm_router, "is_available") else True
                 )
             except Exception as exc:
                 logger.warning("Exception suppressed: %s", exc)

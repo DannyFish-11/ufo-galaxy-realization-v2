@@ -58,6 +58,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 try:
     import yaml
+
     _YAML_AVAILABLE = True
 except ImportError:
     _YAML_AVAILABLE = False
@@ -202,13 +203,17 @@ class RoutingTelemetry:
         if tel.avg_latency_ms() > max_latency:
             logger.warning(
                 "Provider %s SLO latency violated: %.0f > %.0f ms",
-                provider, tel.avg_latency_ms(), max_latency,
+                provider,
+                tel.avg_latency_ms(),
+                max_latency,
             )
             return True
         if tel.success_rate() < min_success:
             logger.warning(
                 "Provider %s SLO success_rate violated: %.2f < %.2f",
-                provider, tel.success_rate(), min_success,
+                provider,
+                tel.success_rate(),
+                min_success,
             )
             return True
         return False
@@ -245,9 +250,7 @@ def _resolve_provider_order(
     rule: Dict[str, Any] = task_routing.get(task_type, {})
 
     priorities: List[str] = list(rule.get("priorities", []))
-    fallback: List[str] = list(
-        rule.get("fallback_chain", policy.get("global_fallback_chain", []))
-    )
+    fallback: List[str] = list(rule.get("fallback_chain", policy.get("global_fallback_chain", [])))
     slo: Optional[Dict[str, Any]] = rule.get("slo") or policy.get("global_slo")
 
     # 如果有明确偏好提供商，排到首位
@@ -397,6 +400,7 @@ class UnifiedLLMRouter:
         """加载 MultiLLMRouter 后端。"""
         try:
             from core.multi_llm_router import get_llm_router  # type: ignore
+
             router = get_llm_router()
             logger.info(
                 "Using core.multi_llm_router as LLM backend",
@@ -419,6 +423,7 @@ class UnifiedLLMRouter:
         if self._l1_authority is None:
             try:
                 from core.llm.route_authority import get_llm_route_authority
+
                 self._l1_authority = get_llm_route_authority()
             except Exception as exc:  # pragma: no cover
                 logger.debug("L1 route authority unavailable: %s", exc)
@@ -429,6 +434,7 @@ class UnifiedLLMRouter:
         if self._l2_authority is None:
             try:
                 from core.llm.supply_authority import get_llm_supply_authority
+
                 self._l2_authority = get_llm_supply_authority()
             except Exception as exc:  # pragma: no cover
                 logger.debug("L2 supply authority unavailable: %s", exc)
@@ -439,6 +445,7 @@ class UnifiedLLMRouter:
         if self._l3_authority is None:
             try:
                 from core.llm.context_authority import get_cognitive_context_authority
+
                 self._l3_authority = get_cognitive_context_authority()
             except Exception as exc:  # pragma: no cover
                 logger.debug("L3 context authority unavailable: %s", exc)
@@ -461,15 +468,19 @@ class UnifiedLLMRouter:
             return preferred_provider, None, [], None
         try:
             from core.llm.route_authority import LLMRouteRequest as _L1RouteRequest
-            decision = l1.resolve(_L1RouteRequest(
-                task_type=task_type_str,
-                complexity=0.5,
-                preferred_provider=preferred_provider,
-            ))
+
+            decision = l1.resolve(
+                _L1RouteRequest(
+                    task_type=task_type_str,
+                    complexity=0.5,
+                    preferred_provider=preferred_provider,
+                )
+            )
             alternatives: List[str] = list(getattr(decision, "alternatives", []) or [])
             logger.debug(
                 "L1 route authority: provider=%s model=%s",
-                decision.provider, decision.model,
+                decision.provider,
+                decision.model,
             )
             return decision.provider, decision.model, alternatives, decision
         except Exception as exc:
@@ -572,14 +583,8 @@ class UnifiedLLMRouter:
             history: List[Dict[str, Any]] = []
 
             for msg in messages:
-                role = (
-                    msg.get("role", "") if isinstance(msg, dict)
-                    else str(getattr(msg, "role", ""))
-                )
-                content = (
-                    msg.get("content", "") if isinstance(msg, dict)
-                    else str(getattr(msg, "content", ""))
-                )
+                role = msg.get("role", "") if isinstance(msg, dict) else str(getattr(msg, "role", ""))
+                content = msg.get("content", "") if isinstance(msg, dict) else str(getattr(msg, "content", ""))
                 if role == "system" and system_prefix is None:
                     system_prefix = content
                 else:
@@ -590,16 +595,10 @@ class UnifiedLLMRouter:
             user_message: Optional[str] = None
             for i in range(len(history) - 1, -1, -1):
                 msg = history[i]
-                role = (
-                    msg.get("role", "") if isinstance(msg, dict)
-                    else str(getattr(msg, "role", ""))
-                )
+                role = msg.get("role", "") if isinstance(msg, dict) else str(getattr(msg, "role", ""))
                 if role == "user":
-                    user_message = (
-                        msg.get("content", "") if isinstance(msg, dict)
-                        else str(getattr(msg, "content", ""))
-                    )
-                    history = history[:i] + history[i + 1:]
+                    user_message = msg.get("content", "") if isinstance(msg, dict) else str(getattr(msg, "content", ""))
+                    history = history[:i] + history[i + 1 :]
                     break
 
             ctx_request = CognitiveContextRequest(
@@ -613,7 +612,8 @@ class UnifiedLLMRouter:
             if assembly.messages:
                 logger.debug(
                     "L3 context authority enriched messages: %d → %d",
-                    len(messages), len(assembly.messages),
+                    len(messages),
+                    len(assembly.messages),
                 )
                 return list(assembly.messages)
         except Exception as exc:
@@ -684,8 +684,7 @@ class UnifiedLLMRouter:
             request = LLMRequest(
                 messages=list(_messages),
                 task_type=_task_type,
-                preferred_provider=(kwargs.pop("provider", None)
-                                    or kwargs.pop("preferred_provider", None)),
+                preferred_provider=(kwargs.pop("provider", None) or kwargs.pop("preferred_provider", None)),
                 temperature=float(kwargs.pop("temperature", 0.7)),
                 max_tokens=int(kwargs.pop("max_tokens", 2048)),
             )
@@ -694,11 +693,7 @@ class UnifiedLLMRouter:
         if self._backend is None:
             raise NoAvailableProviderError(task_type=request.task_type)
 
-        task_type_str = (
-            request.task_type
-            if isinstance(request.task_type, str)
-            else request.task_type.value
-        )
+        task_type_str = request.task_type if isinstance(request.task_type, str) else request.task_type.value
 
         # ── PR-6 L3: Enrich messages through the canonical context authority ──
         enriched_messages = self._enrich_l3_context(
@@ -717,15 +712,11 @@ class UnifiedLLMRouter:
         # ── Determine effective preferred provider ────────────────────────────
         # Priority: L2 supplied → L1 route → original preferred
         effective_preferred: Optional[str] = (
-            l2_provider if l2_satisfied and l2_provider
-            else l1_provider if l1_provider
-            else request.preferred_provider
+            l2_provider if l2_satisfied and l2_provider else l1_provider if l1_provider else request.preferred_provider
         )
 
         # 策略：获取提供商优先顺序（保留既有 SLO / fallback 语义）
-        provider_order, slo = self._get_provider_order(
-            task_type_str, effective_preferred
-        )
+        provider_order, slo = self._get_provider_order(task_type_str, effective_preferred)
 
         start = time.monotonic()
         result = None
@@ -734,9 +725,7 @@ class UnifiedLLMRouter:
         last_exc: Optional[Exception] = None
 
         # 若策略无可用提供商列表，回退到单次无偏好调用
-        _effective_order: List[Optional[str]] = (
-            list(provider_order) if provider_order else [effective_preferred]
-        )
+        _effective_order: List[Optional[str]] = list(provider_order) if provider_order else [effective_preferred]
 
         # 尝试按策略顺序逐个提供商
         for idx, provider in enumerate(_effective_order):
@@ -757,15 +746,16 @@ class UnifiedLLMRouter:
                 last_exc = exc
                 logger.warning(
                     "LLM provider %s failed (attempt %d/%d): %s",
-                    provider, idx + 1, len(_effective_order), exc,
+                    provider,
+                    idx + 1,
+                    len(_effective_order),
+                    exc,
                 )
                 continue
 
         if result is None:
             latency_ms = (time.monotonic() - start) * 1000
-            self._telemetry.record(
-                "unknown", success=False, latency_ms=latency_ms, is_fallback=False
-            )
+            self._telemetry.record("unknown", success=False, latency_ms=latency_ms, is_fallback=False)
             raise LLMProviderError(
                 provider="all",
                 reason=str(last_exc) if last_exc else "all providers failed",
@@ -786,11 +776,7 @@ class UnifiedLLMRouter:
             usage = getattr(result, "usage", {})
 
         # 估算成本（基于 token 用量）
-        total_tokens = (
-            usage.get("total_tokens", 0)
-            if isinstance(usage, dict)
-            else getattr(usage, "total_tokens", 0)
-        )
+        total_tokens = usage.get("total_tokens", 0) if isinstance(usage, dict) else getattr(usage, "total_tokens", 0)
         cost_per_1k = self._estimate_cost_per_1k(provider_name, task_type_str)
         estimated_cost = (total_tokens / 1000.0) * cost_per_1k
 
@@ -798,7 +784,9 @@ class UnifiedLLMRouter:
         if self._policy and not _check_cost_budget(cost_per_1k, task_type_str, self._policy):
             logger.warning(
                 "LLM cost budget exceeded for task_type=%s provider=%s cost_per_1k=%.4f",
-                task_type_str, provider_name, cost_per_1k,
+                task_type_str,
+                provider_name,
+                cost_per_1k,
             )
 
         # 记录遥测
@@ -1022,9 +1010,7 @@ class UnifiedLLMRouter:
         )
 
         # ── PR-6 L1: Consult the canonical route authority ────────────────────
-        l1_provider, _l1_model, _l1_alternatives, l1_decision = self._consult_l1_route(
-            task_type_str, provider
-        )
+        l1_provider, _l1_model, _l1_alternatives, l1_decision = self._consult_l1_route(task_type_str, provider)
 
         # ── PR-6 L2: Validate supply against the L1 route decision ───────────
         l2_provider, _l2_model, l2_satisfied = self._consult_l2_supply(l1_decision)
@@ -1032,9 +1018,7 @@ class UnifiedLLMRouter:
         # ── Determine effective preferred provider ────────────────────────────
         # Priority: L2 supplied → L1 route → caller-specified
         effective_provider: Optional[str] = (
-            l2_provider if l2_satisfied and l2_provider
-            else l1_provider if l1_provider
-            else provider
+            l2_provider if l2_satisfied and l2_provider else l1_provider if l1_provider else provider
         )
 
         # 应用策略层：获取首选 provider（统一策略层职责）
@@ -1113,6 +1097,7 @@ class UnifiedLLMRouter:
         # 降级：无后端时返回中等复杂度占位对象
         try:
             from core.schemas.routing import ComplexityVector
+
             return ComplexityVector(
                 context_length=0.5,
                 logic_depth=0.5,

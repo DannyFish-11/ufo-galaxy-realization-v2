@@ -41,13 +41,10 @@ logger = logging.getLogger("Galaxy.DAGEvolver")
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+
 def _find_dependents(task_id: str, subtasks) -> List[str]:
     """Return IDs of all tasks that directly depend on *task_id*."""
-    return [
-        st.task_id
-        for st in subtasks
-        if task_id in (st.depends_on or [])
-    ]
+    return [st.task_id for st in subtasks if task_id in (st.depends_on or [])]
 
 
 def _topological_sort(subtasks) -> List[str]:
@@ -61,7 +58,7 @@ def _topological_sort(subtasks) -> List[str]:
     in_degree: Dict[str, int] = {st.task_id: 0 for st in subtasks}
     # Second pass: increment for each valid dependency
     for st in subtasks:
-        for dep in (st.depends_on or []):
+        for dep in st.depends_on or []:
             if dep in in_degree:
                 in_degree[st.task_id] = in_degree.get(st.task_id, 0) + 1
 
@@ -69,7 +66,7 @@ def _topological_sort(subtasks) -> List[str]:
     order: List[str] = []
     adj: Dict[str, List[str]] = {st.task_id: [] for st in subtasks}
     for st in subtasks:
-        for dep in (st.depends_on or []):
+        for dep in st.depends_on or []:
             if dep in adj:
                 adj[dep].append(st.task_id)
 
@@ -86,6 +83,7 @@ def _topological_sort(subtasks) -> List[str]:
 # ---------------------------------------------------------------------------
 # DAGEvolver
 # ---------------------------------------------------------------------------
+
 
 class DAGEvolver:
     """Runtime DAG evolution engine.
@@ -166,7 +164,10 @@ class DAGEvolver:
 
             logger.info(
                 "DAG 演化 [on_task_failed]: 重置 %d 个任务 (attempt %d/%d) | 触发任务: %s",
-                len(affected), count, self.max_replan_attempts, failed_task_id,
+                len(affected),
+                count,
+                self.max_replan_attempts,
+                failed_task_id,
             )
             self._emit_audit(
                 "TASK_REPLANNED",
@@ -184,9 +185,7 @@ class DAGEvolver:
                 if failed_task_id in (st.depends_on or []):
                     st.status = SubTaskStatus.FAILED
                     st.error = f"上游任务 {failed_task_id} 已耗尽重试次数"
-            logger.warning(
-                "DAG 演化 [on_task_failed]: 重试次数耗尽，放弃任务 %s", failed_task_id
-            )
+            logger.warning("DAG 演化 [on_task_failed]: 重试次数耗尽，放弃任务 %s", failed_task_id)
             self._emit_audit(
                 "TASK_FAILED",
                 task_id=failed_task_id,
@@ -241,10 +240,7 @@ class DAGEvolver:
         timed_out_task.started_at = None
         timed_out_task.completed_at = None
 
-        logger.info(
-            "DAG 演化 [on_timeout]: 任务 %s 从设备 %s 重新分配",
-            timed_out_task_id, old_device or "(auto)"
-        )
+        logger.info("DAG 演化 [on_timeout]: 任务 %s 从设备 %s 重新分配", timed_out_task_id, old_device or "(auto)")
         self._emit_audit(
             "TASK_REASSIGNED",
             task_id=timed_out_task_id,
@@ -293,10 +289,7 @@ class DAGEvolver:
         gap_task = SubTask(
             task_id=gap_id,
             name=f"Acquire capability: {missing_capability}",
-            description=(
-                f"自动插入的能力获取节点，为任务 {requesting_task_id} "
-                f"获取能力 '{missing_capability}'。"
-            ),
+            description=(f"自动插入的能力获取节点，为任务 {requesting_task_id} " f"获取能力 '{missing_capability}'。"),
             action="acquire_capability",
             params={"capability": missing_capability},
             depends_on=[],
@@ -314,7 +307,9 @@ class DAGEvolver:
 
         logger.info(
             "DAG 演化 [on_missing_capability]: 插入能力缺口节点 %s (cap=%s) → 任务 %s",
-            gap_id, missing_capability, requesting_task_id,
+            gap_id,
+            missing_capability,
+            requesting_task_id,
         )
         self._emit_audit(
             "DAG_NODE_INSERTED",
@@ -334,6 +329,7 @@ class DAGEvolver:
         """Fire an audit-ledger event (best-effort, never raises)."""
         try:
             from core.control_plane.audit_ledger import AuditLedger, EventType
+
             ledger = AuditLedger.get_instance()
             et = getattr(EventType, event_name.upper(), None)
             if et is None:

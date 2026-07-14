@@ -81,6 +81,17 @@ if _PROJECT_ROOT not in sys.path:
 # Imports under test
 # ===========================================================================
 
+from core.architecture_completion import (
+    CompletionDimension,
+    MaturityLevel,
+    get_architecture_completion_scorecard,
+    reset_architecture_completion_scorecard,
+)
+from core.architecture_diagnostics import (
+    ArchitectureDiagnostics,
+    DiagnosticSeverity,
+    run_architecture_diagnostics,
+)
 from core.architecture_invariants import (
     AUTHORITY_CHAIN,
     CANONICAL_ADDON_CONTRACT_TYPES,
@@ -97,23 +108,10 @@ from core.architecture_invariants import (
     run_consolidation_invariants,
 )
 
-from core.architecture_diagnostics import (
-    ArchitectureDiagnostics,
-    DiagnosticSeverity,
-    run_architecture_diagnostics,
-)
-
-from core.architecture_completion import (
-    CompletionDimension,
-    MaturityLevel,
-    get_architecture_completion_scorecard,
-    reset_architecture_completion_scorecard,
-)
-
-
 # ===========================================================================
 # Fixtures and helpers
 # ===========================================================================
+
 
 @pytest.fixture(autouse=True)
 def reset_scorecard():
@@ -150,6 +148,7 @@ def _valid_diagnostics_snapshot() -> Dict[str, Any]:
 # ===========================================================================
 # TestArchitectureInvariantsConstants
 # ===========================================================================
+
 
 class TestArchitectureInvariantsConstants:
     """1. Canonical constant sets are populated correctly."""
@@ -192,10 +191,7 @@ class TestArchitectureInvariantsConstants:
         assert isinstance(PROJECTION_TRUTH_MARKERS, frozenset)
 
     def test_projection_driven_in_truth_markers(self):
-        assert (
-            "projection_driven" in PROJECTION_TRUTH_MARKERS
-            or "PROJECTION_DRIVEN" in PROJECTION_TRUTH_MARKERS
-        )
+        assert "projection_driven" in PROJECTION_TRUTH_MARKERS or "PROJECTION_DRIVEN" in PROJECTION_TRUTH_MARKERS
 
     def test_projection_markers_disjoint_from_legacy(self):
         overlap = PROJECTION_TRUTH_MARKERS & LEGACY_BOUNDARY_LABELS
@@ -231,6 +227,7 @@ class TestArchitectureInvariantsConstants:
 # TestCheckAuthorityLabelsConsistent
 # ===========================================================================
 
+
 class TestCheckAuthorityLabelsConsistent:
     """2. check_authority_labels_consistent validates authority label vocabulary."""
 
@@ -239,23 +236,17 @@ class TestCheckAuthorityLabelsConsistent:
         assert any(f.severity == InvariantSeverity.INFO.value for f in findings)
 
     def test_known_canonical_label_passes(self):
-        findings = check_authority_labels_consistent(
-            {"role": "subject_decision_authority"}
-        )
+        findings = check_authority_labels_consistent({"role": "subject_decision_authority"})
         errors = [f for f in findings if f.severity == InvariantSeverity.ERROR.value]
         assert len(errors) == 0
 
     def test_unknown_authority_label_is_error(self):
-        findings = check_authority_labels_consistent(
-            {"role": "some_unknown_authority"}
-        )
+        findings = check_authority_labels_consistent({"role": "some_unknown_authority"})
         errors = [f for f in findings if f.severity == InvariantSeverity.ERROR.value]
         assert len(errors) >= 1
 
     def test_nested_unknown_label_is_error(self):
-        findings = check_authority_labels_consistent(
-            {"authority_metadata": {"layer_role": "mystery_layer"}}
-        )
+        findings = check_authority_labels_consistent({"authority_metadata": {"layer_role": "mystery_layer"}})
         errors = [f for f in findings if f.severity == InvariantSeverity.ERROR.value]
         assert len(errors) >= 1
 
@@ -274,6 +265,7 @@ class TestCheckAuthorityLabelsConsistent:
 # ===========================================================================
 # TestCheckCanonicalLegacyMarkersUniform
 # ===========================================================================
+
 
 class TestCheckCanonicalLegacyMarkersUniform:
     """3. check_canonical_legacy_markers_uniform validates canonical/legacy uniformity."""
@@ -321,9 +313,7 @@ class TestCheckCanonicalLegacyMarkersUniform:
         assert len(errors) == 0
 
     def test_returns_list_of_invariant_findings(self):
-        findings = check_canonical_legacy_markers_uniform(
-            [{"surface_id": "x", "role": "execution_substrate"}]
-        )
+        findings = check_canonical_legacy_markers_uniform([{"surface_id": "x", "role": "execution_substrate"}])
         assert isinstance(findings, list)
         assert all(isinstance(f, InvariantFinding) for f in findings)
 
@@ -335,9 +325,7 @@ class TestCheckCanonicalLegacyMarkersUniform:
         assert len(infos) >= 1
 
     def test_info_for_correctly_labeled_legacy_surface(self):
-        findings = check_canonical_legacy_markers_uniform(
-            [{"surface_id": "dashboard", "role": "LEGACY_UI"}]
-        )
+        findings = check_canonical_legacy_markers_uniform([{"surface_id": "dashboard", "role": "LEGACY_UI"}])
         infos = [f for f in findings if f.severity == InvariantSeverity.INFO.value]
         assert len(infos) >= 1
 
@@ -346,13 +334,12 @@ class TestCheckCanonicalLegacyMarkersUniform:
 # TestCheckProjectionIsOutwardTruth
 # ===========================================================================
 
+
 class TestCheckProjectionIsOutwardTruth:
     """4. check_projection_is_outward_truth validates outward-truth policy."""
 
     def test_compliant_projection_passes(self):
-        findings = check_projection_is_outward_truth(
-            {"source": "projection", "is_outward_truth": True}
-        )
+        findings = check_projection_is_outward_truth({"source": "projection", "is_outward_truth": True})
         errors = [f for f in findings if f.severity == InvariantSeverity.ERROR.value]
         assert len(errors) == 0
 
@@ -373,15 +360,10 @@ class TestCheckProjectionIsOutwardTruth:
 
     def test_empty_metadata_is_warning(self):
         findings = check_projection_is_outward_truth({})
-        assert any(
-            f.severity in (InvariantSeverity.WARNING.value, InvariantSeverity.INFO.value)
-            for f in findings
-        )
+        assert any(f.severity in (InvariantSeverity.WARNING.value, InvariantSeverity.INFO.value) for f in findings)
 
     def test_runtime_projection_source_passes(self):
-        findings = check_projection_is_outward_truth(
-            {"source": "runtime_projection", "is_outward_truth": True}
-        )
+        findings = check_projection_is_outward_truth({"source": "runtime_projection", "is_outward_truth": True})
         errors = [f for f in findings if f.severity == InvariantSeverity.ERROR.value]
         assert len(errors) == 0
 
@@ -394,6 +376,7 @@ class TestCheckProjectionIsOutwardTruth:
 # ===========================================================================
 # TestCheckAddonContractMetadataUniform
 # ===========================================================================
+
 
 class TestCheckAddonContractMetadataUniform:
     """5. check_addon_contract_metadata_uniform validates addon/package metadata."""
@@ -417,23 +400,17 @@ class TestCheckAddonContractMetadataUniform:
         assert len(errors) == 0
 
     def test_missing_addon_id_is_error(self):
-        findings = check_addon_contract_metadata_uniform(
-            [{"contract_type": "mcp_addon", "version": "1.0.0"}]
-        )
+        findings = check_addon_contract_metadata_uniform([{"contract_type": "mcp_addon", "version": "1.0.0"}])
         errors = [f for f in findings if f.severity == InvariantSeverity.ERROR.value]
         assert len(errors) >= 1
 
     def test_missing_contract_type_is_error(self):
-        findings = check_addon_contract_metadata_uniform(
-            [{"addon_id": "x", "version": "1.0.0"}]
-        )
+        findings = check_addon_contract_metadata_uniform([{"addon_id": "x", "version": "1.0.0"}])
         errors = [f for f in findings if f.severity == InvariantSeverity.ERROR.value]
         assert len(errors) >= 1
 
     def test_missing_version_is_error(self):
-        findings = check_addon_contract_metadata_uniform(
-            [{"addon_id": "x", "contract_type": "mcp_addon"}]
-        )
+        findings = check_addon_contract_metadata_uniform([{"addon_id": "x", "contract_type": "mcp_addon"}])
         errors = [f for f in findings if f.severity == InvariantSeverity.ERROR.value]
         assert len(errors) >= 1
 
@@ -466,6 +443,7 @@ class TestCheckAddonContractMetadataUniform:
 # TestRunConsolidationInvariants
 # ===========================================================================
 
+
 class TestRunConsolidationInvariants:
     """6. run_consolidation_invariants aggregate entry point."""
 
@@ -485,22 +463,16 @@ class TestRunConsolidationInvariants:
                 {"surface_id": "status_board_v2", "role": "projection_driven"},
             ],
             projection_metadata={"source": "projection", "is_outward_truth": True},
-            addon_registry_snapshot=[
-                {"addon_id": "my_mcp", "contract_type": "mcp_addon", "version": "1.0.0"}
-            ],
+            addon_registry_snapshot=[{"addon_id": "my_mcp", "contract_type": "mcp_addon", "version": "1.0.0"}],
         )
         assert report.overall_consistent
 
     def test_invalid_authority_label_makes_inconsistent(self):
-        report = run_consolidation_invariants(
-            authority_metadata={"role": "bad_authority"}
-        )
+        report = run_consolidation_invariants(authority_metadata={"role": "bad_authority"})
         assert not report.overall_consistent
 
     def test_is_outward_truth_false_makes_inconsistent(self):
-        report = run_consolidation_invariants(
-            projection_metadata={"is_outward_truth": False}
-        )
+        report = run_consolidation_invariants(projection_metadata={"is_outward_truth": False})
         assert not report.overall_consistent
 
     def test_missing_addon_field_makes_inconsistent(self):
@@ -530,6 +502,7 @@ class TestRunConsolidationInvariants:
 # TestConsolidationReport
 # ===========================================================================
 
+
 class TestConsolidationReport:
     """7. ConsolidationReport data type."""
 
@@ -539,20 +512,24 @@ class TestConsolidationReport:
 
     def test_add_error_makes_inconsistent(self):
         report = ConsolidationReport()
-        report.add(InvariantFinding(
-            check="TEST",
-            severity=InvariantSeverity.ERROR.value,
-            message="test error",
-        ))
+        report.add(
+            InvariantFinding(
+                check="TEST",
+                severity=InvariantSeverity.ERROR.value,
+                message="test error",
+            )
+        )
         assert not report.overall_consistent
 
     def test_add_warning_stays_consistent(self):
         report = ConsolidationReport()
-        report.add(InvariantFinding(
-            check="TEST",
-            severity=InvariantSeverity.WARNING.value,
-            message="test warning",
-        ))
+        report.add(
+            InvariantFinding(
+                check="TEST",
+                severity=InvariantSeverity.WARNING.value,
+                message="test warning",
+            )
+        )
         assert report.overall_consistent
 
     def test_error_count_increments(self):
@@ -585,6 +562,7 @@ class TestConsolidationReport:
 # ===========================================================================
 # TestArchitectureDiagnosticsConsolidationChecks
 # ===========================================================================
+
 
 class TestArchitectureDiagnosticsConsolidationChecks:
     """8. New checks added to ArchitectureDiagnostics in PR-010."""
@@ -661,6 +639,7 @@ class TestArchitectureDiagnosticsConsolidationChecks:
 # TestScorecardDiagnosticAlignment
 # ===========================================================================
 
+
 class TestScorecardDiagnosticAlignment:
     """9. Scorecard and diagnostics tell the same architectural story."""
 
@@ -699,9 +678,9 @@ class TestScorecardDiagnosticAlignment:
     def test_scorecard_no_blocking_dimensions_are_legacy_ambiguity(self):
         sc = get_architecture_completion_scorecard()
         for dim in sc.dimensions:
-            assert dim.maturity_level != MaturityLevel.LEGACY_AMBIGUITY, (
-                f"Dimension {dim.dimension} is LEGACY_AMBIGUITY (blocking)"
-            )
+            assert (
+                dim.maturity_level != MaturityLevel.LEGACY_AMBIGUITY
+            ), f"Dimension {dim.dimension} is LEGACY_AMBIGUITY (blocking)"
 
     def test_architecture_diagnostics_valid_on_canonical_snapshot(self):
         report = run_architecture_diagnostics(_valid_diagnostics_snapshot())
@@ -731,11 +710,13 @@ class TestScorecardDiagnosticAlignment:
 # TestAuthorityLabelsCrossModuleConsistency
 # ===========================================================================
 
+
 class TestAuthorityLabelsCrossModuleConsistency:
     """10. Authority-role labels are consistent across modules."""
 
     def test_diagnostics_expected_roles_are_canonical(self):
         from core.architecture_diagnostics import _LAYER_EXPECTED_ROLES
+
         for layer_key, role in _LAYER_EXPECTED_ROLES.items():
             assert role in CANONICAL_AUTHORITY_LABELS, (
                 f"architecture_diagnostics._LAYER_EXPECTED_ROLES['{layer_key}'] = '{role}' "
@@ -744,6 +725,7 @@ class TestAuthorityLabelsCrossModuleConsistency:
 
     def test_authority_chain_roles_match_diagnostics_expected(self):
         from core.architecture_diagnostics import _LAYER_EXPECTED_ROLES
+
         for layer_key, role in AUTHORITY_CHAIN:
             if layer_key in _LAYER_EXPECTED_ROLES:
                 assert _LAYER_EXPECTED_ROLES[layer_key] == role, (
@@ -761,17 +743,18 @@ class TestAuthorityLabelsCrossModuleConsistency:
 
     def test_canonical_authority_labels_matches_diagnostics_role_order(self):
         from core.architecture_diagnostics import _LAYER_EXPECTED_ROLES
+
         # All roles in _LAYER_EXPECTED_ROLES must be canonical authority labels.
         for layer_key, role in _LAYER_EXPECTED_ROLES.items():
             assert role in CANONICAL_AUTHORITY_LABELS, (
-                f"_LAYER_EXPECTED_ROLES['{layer_key}'] = '{role}' "
-                f"is not in CANONICAL_AUTHORITY_LABELS"
+                f"_LAYER_EXPECTED_ROLES['{layer_key}'] = '{role}' " f"is not in CANONICAL_AUTHORITY_LABELS"
             )
 
 
 # ===========================================================================
 # TestProjectionOutwardTruthCrossModule
 # ===========================================================================
+
 
 class TestProjectionOutwardTruthCrossModule:
     """11. Projection outward-truth is consistent across modules."""
@@ -781,14 +764,17 @@ class TestProjectionOutwardTruthCrossModule:
             UISurfaceRole,
             is_projection_driven_surface,
         )
+
         assert is_projection_driven_surface("windows_client.status_board_v2")
 
     def test_ui_surface_authority_dashboard_is_deleted_not_legacy(self):
         from core.ui_surface_authority import is_legacy_surface
+
         assert not is_legacy_surface("dashboard.backend.main")
 
     def test_projection_driven_label_matches_ui_surface_authority_role(self):
         from core.ui_surface_authority import UISurfaceRole
+
         projection_driven_value = UISurfaceRole.PROJECTION_DRIVEN.value.lower()
         assert (
             projection_driven_value in PROJECTION_TRUTH_MARKERS
@@ -798,19 +784,15 @@ class TestProjectionOutwardTruthCrossModule:
 
     def test_legacy_ui_label_matches_ui_surface_authority_role(self):
         from core.ui_surface_authority import UISurfaceRole
+
         legacy_ui_value = UISurfaceRole.LEGACY_UI.value
-        assert (
-            legacy_ui_value in LEGACY_BOUNDARY_LABELS
-            or legacy_ui_value.lower() in LEGACY_BOUNDARY_LABELS
-        )
+        assert legacy_ui_value in LEGACY_BOUNDARY_LABELS or legacy_ui_value.lower() in LEGACY_BOUNDARY_LABELS
 
     def test_legacy_shell_label_matches_ui_surface_authority_role(self):
         from core.ui_surface_authority import UISurfaceRole
+
         legacy_shell_value = UISurfaceRole.LEGACY_SHELL.value
-        assert (
-            legacy_shell_value in LEGACY_BOUNDARY_LABELS
-            or legacy_shell_value.lower() in LEGACY_BOUNDARY_LABELS
-        )
+        assert legacy_shell_value in LEGACY_BOUNDARY_LABELS or legacy_shell_value.lower() in LEGACY_BOUNDARY_LABELS
 
     def test_scorecard_projection_alignment_dimension_is_canonical(self):
         sc = get_architecture_completion_scorecard()
@@ -820,9 +802,7 @@ class TestProjectionOutwardTruthCrossModule:
         assert not dim.legacy_ambiguity_remains
 
     def test_projection_diagnostics_check_on_valid_projection_snapshot(self):
-        snapshot = {
-            "projection": {"source": "projection", "is_outward_truth": True}
-        }
+        snapshot = {"projection": {"source": "projection", "is_outward_truth": True}}
         diag = ArchitectureDiagnostics(snapshot)
         diag.check_projection_metadata_coherent()
         report = diag.build_report()
@@ -832,6 +812,7 @@ class TestProjectionOutwardTruthCrossModule:
 # ===========================================================================
 # TestInstallableAddonContractMetadata
 # ===========================================================================
+
 
 class TestInstallableAddonContractMetadata:
     """12. Installable addon/package contract metadata is consistent."""

@@ -93,7 +93,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
 from .formation_group import DeviceFormationGroup
-from .formation_policy import BarrierPosture, FormationPolicy, DEFAULT_LOCAL_FORMATION_POLICY
+from .formation_policy import DEFAULT_LOCAL_FORMATION_POLICY, BarrierPosture, FormationPolicy
 from .formation_role import FormationMember, FormationRole
 
 __all__ = [
@@ -198,11 +198,7 @@ class FormationHealthSignal:
         unhealthy_threshold: float = _DEFAULT_UNHEALTHY_THRESHOLD,
         degraded_threshold: float = _DEFAULT_DEGRADED_THRESHOLD,
     ) -> bool:
-        return (
-            self.is_reachable
-            and self.health_score >= unhealthy_threshold
-            and self.health_score < degraded_threshold
-        )
+        return self.is_reachable and self.health_score >= unhealthy_threshold and self.health_score < degraded_threshold
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -420,9 +416,7 @@ class FormationRebalanceEngine:
             reachable = signal.is_reachable if signal is not None else True
 
             is_healthy = reachable and score >= self._unhealthy_threshold
-            is_degraded = (
-                reachable and score >= self._unhealthy_threshold and score < self._degraded_threshold
-            )
+            is_degraded = reachable and score >= self._unhealthy_threshold and score < self._degraded_threshold
 
             if role == FormationRole.SOURCE:
                 # Never remove SOURCE
@@ -462,9 +456,7 @@ class FormationRebalanceEngine:
 
         # If primary was demoted / absent, promote best fallback
         if primary_unhealthy or primary_device_id is None:
-            best_fallback = self._pick_best_fallback(
-                fallback_members, health_map, removed
-            )
+            best_fallback = self._pick_best_fallback(fallback_members, health_map, removed)
             if best_fallback:
                 actions[best_fallback] = MemberRebalanceAction.PROMOTE_TO_PRIMARY
                 if best_fallback in removed:
@@ -568,10 +560,7 @@ class FormationRebalanceEngine:
                 new_members.append(member)
 
         # Ensure there is always at least one PRIMARY_EXECUTION
-        has_primary = any(
-            getattr(m, "role", None) == FormationRole.PRIMARY_EXECUTION
-            for m in new_members
-        )
+        has_primary = any(getattr(m, "role", None) == FormationRole.PRIMARY_EXECUTION for m in new_members)
         if not has_primary:
             # Last resort: promote first remaining non-SOURCE member
             for m in new_members:
@@ -585,8 +574,7 @@ class FormationRebalanceEngine:
                         is_local=getattr(m, "is_local", False),
                     )
                     logger.warning(
-                        "Formation reshape: emergency PRIMARY_EXECUTION promotion "
-                        "for %s (formation=%s)",
+                        "Formation reshape: emergency PRIMARY_EXECUTION promotion " "for %s (formation=%s)",
                         m.device_id,
                         decision.original_formation_id,
                     )
@@ -614,9 +602,7 @@ class FormationRebalanceEngine:
                 else effective_primary_id
             ),
             barrier_posture=getattr(group, "barrier_posture", BarrierPosture.WAIT_PRIMARY.value),
-            formation_reason=(
-                f"reshaped from {decision.original_formation_id}: {decision.reason}"
-            ),
+            formation_reason=(f"reshaped from {decision.original_formation_id}: {decision.reason}"),
             runtime_domain_intent=getattr(group, "runtime_domain_intent", "local"),
         )
 
@@ -630,10 +616,7 @@ class FormationRebalanceEngine:
         already_removed: List[str],
     ) -> Optional[str]:
         """Return the device_id of the healthiest eligible fallback device."""
-        candidates = [
-            m for m in fallback_members
-            if getattr(m, "device_id", None) not in already_removed
-        ]
+        candidates = [m for m in fallback_members if getattr(m, "device_id", None) not in already_removed]
         if not candidates:
             return None
         # Sort by health score descending
@@ -648,14 +631,13 @@ class FormationRebalanceEngine:
     def _derive_policy(self, group: DeviceFormationGroup) -> FormationPolicy:
         """Derive a :class:`FormationPolicy` from the (reshaped) group."""
         from .formation_policy import FormationPolicy
+
         members = getattr(group, "members", []) or []
         is_cross_device = (
             getattr(group, "runtime_domain_intent", "local") == "cross_device"
             or len({getattr(m, "device_id", None) for m in members if getattr(m, "device_id", None)}) > 1
         )
-        has_fallback = any(
-            getattr(m, "role", None) == FormationRole.FALLBACK for m in members
-        )
+        has_fallback = any(getattr(m, "role", None) == FormationRole.FALLBACK for m in members)
         barrier_str = getattr(group, "barrier_posture", BarrierPosture.WAIT_PRIMARY.value)
         try:
             barrier = BarrierPosture(barrier_str)

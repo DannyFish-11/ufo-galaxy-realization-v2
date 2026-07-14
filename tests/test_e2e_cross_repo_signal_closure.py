@@ -64,7 +64,6 @@ from unittest.mock import MagicMock, call, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Module-level availability guards
 # ---------------------------------------------------------------------------
@@ -76,28 +75,31 @@ try:
         get_lifecycle_coordinator,
         reset_lifecycle_coordinator,
     )
+
     _COORDINATOR_AVAILABLE = True
 except ImportError:
     _COORDINATOR_AVAILABLE = False
 
 try:
     from core.android_handoff_v2_response_ingress import (
-        HandoffV2ResponseRuntime,
         HandoffV2ResponseOutcome,
+        HandoffV2ResponseRuntime,
         ingest_android_handoff_response,
     )
+
     _HANDOFF_INGRESS_AVAILABLE = True
 except ImportError:
     _HANDOFF_INGRESS_AVAILABLE = False
 
 try:
     from core.android_participant_truth_ingress import (
-        AndroidParticipantTruthKind,
-        AndroidParticipantTruthEnvelope,
         AndroidParticipantReconcileOutcome,
-        reconcile_android_participant_truth,
+        AndroidParticipantTruthEnvelope,
+        AndroidParticipantTruthKind,
         ingest_android_participant_truth_message,
+        reconcile_android_participant_truth,
     )
+
     _TRUTH_INGRESS_AVAILABLE = True
 except ImportError:
     _TRUTH_INGRESS_AVAILABLE = False
@@ -110,6 +112,7 @@ try:
         get_readiness_gate,
         reset_readiness_gate,
     )
+
     _READINESS_GATE_AVAILABLE = True
 except ImportError:
     _READINESS_GATE_AVAILABLE = False
@@ -120,23 +123,18 @@ try:
         ResultKind,
         ingest_delegated_execution_signal,
     )
+
     _DELEGATED_INGRESS_AVAILABLE = True
 except ImportError:
     _DELEGATED_INGRESS_AVAILABLE = False
 
 
-_skip_coordinator = pytest.mark.skipif(
-    not _COORDINATOR_AVAILABLE, reason="lifecycle coordinator unavailable"
-)
+_skip_coordinator = pytest.mark.skipif(not _COORDINATOR_AVAILABLE, reason="lifecycle coordinator unavailable")
 _skip_handoff_ingress = pytest.mark.skipif(
     not _HANDOFF_INGRESS_AVAILABLE, reason="handoff v2 response ingress unavailable"
 )
-_skip_truth_ingress = pytest.mark.skipif(
-    not _TRUTH_INGRESS_AVAILABLE, reason="participant truth ingress unavailable"
-)
-_skip_readiness_gate = pytest.mark.skipif(
-    not _READINESS_GATE_AVAILABLE, reason="readiness gate unavailable"
-)
+_skip_truth_ingress = pytest.mark.skipif(not _TRUTH_INGRESS_AVAILABLE, reason="participant truth ingress unavailable")
+_skip_readiness_gate = pytest.mark.skipif(not _READINESS_GATE_AVAILABLE, reason="readiness gate unavailable")
 _skip_delegated_ingress = pytest.mark.skipif(
     not _DELEGATED_INGRESS_AVAILABLE, reason="delegated signal ingress unavailable"
 )
@@ -146,8 +144,10 @@ _skip_delegated_ingress = pytest.mark.skipif(
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _run(coro):
     import asyncio
+
     try:
         loop = asyncio.get_running_loop()
         if loop.is_closed():
@@ -212,9 +212,7 @@ def _make_delegated_execution_signal_message(
     }
 
 
-def _make_handoff_ack_message(
-    handoff_id: str = "", device_id: str = "test-device"
-) -> Dict[str, Any]:
+def _make_handoff_ack_message(handoff_id: str = "", device_id: str = "test-device") -> Dict[str, Any]:
     return {
         "type": "handoff_ack",
         "device_id": device_id,
@@ -226,9 +224,7 @@ def _make_handoff_ack_message(
     }
 
 
-def _make_handoff_result_message(
-    handoff_id: str = "", device_id: str = "test-device"
-) -> Dict[str, Any]:
+def _make_handoff_result_message(handoff_id: str = "", device_id: str = "test-device") -> Dict[str, Any]:
     return {
         "type": "handoff_result",
         "device_id": device_id,
@@ -241,9 +237,7 @@ def _make_handoff_result_message(
     }
 
 
-def _make_handoff_failure_message(
-    handoff_id: str = "", device_id: str = "test-device"
-) -> Dict[str, Any]:
+def _make_handoff_failure_message(handoff_id: str = "", device_id: str = "test-device") -> Dict[str, Any]:
     return {
         "type": "handoff_failure",
         "device_id": device_id,
@@ -261,6 +255,7 @@ def _make_handoff_failure_message(
 # A. ReconciliationSignal: handler → lifecycle coordinator invocation
 # ===========================================================================
 
+
 class TestReconciliationSignalHandlerToCoordinator:
     """Group A: prove that the reconciliation_signal handler delegates to the
     lifecycle coordinator (not directly to truth ingress)."""
@@ -271,6 +266,7 @@ class TestReconciliationSignalHandlerToCoordinator:
         from galaxy_gateway.android.handlers.reconciliation_signal import (
             handle_reconciliation_signal,
         )
+
         bridge = MagicMock()
         msg = _make_reconciliation_signal_message(device_id="dev-A01")
 
@@ -295,15 +291,14 @@ class TestReconciliationSignalHandlerToCoordinator:
         from galaxy_gateway.android.handlers.reconciliation_signal import (
             handle_reconciliation_signal,
         )
+
         bridge = MagicMock()
         mid = str(uuid.uuid4())
         msg = _make_reconciliation_signal_message(device_id="dev-A02")
         msg["message_id"] = mid
 
         mock_coord = MagicMock()
-        mock_coord.on_reconciliation_signal.return_value = MagicMock(
-            was_handled=True, description="ok"
-        )
+        mock_coord.on_reconciliation_signal.return_value = MagicMock(was_handled=True, description="ok")
 
         with patch(
             "galaxy_gateway.android.handlers.reconciliation_signal._get_lifecycle_coordinator",
@@ -319,6 +314,7 @@ class TestReconciliationSignalHandlerToCoordinator:
         from galaxy_gateway.android.handlers.reconciliation_signal import (
             handle_reconciliation_signal,
         )
+
         bridge = MagicMock()
         msg = _make_reconciliation_signal_message(device_id="dev-A03")
 
@@ -334,6 +330,7 @@ class TestReconciliationSignalHandlerToCoordinator:
 # ===========================================================================
 # B. ReconciliationSignal: coordinator → participant truth ingress call chain
 # ===========================================================================
+
 
 class TestReconciliationSignalCoordinatorToTruthIngress:
     """Group B: prove that the lifecycle coordinator internally calls participant
@@ -351,9 +348,7 @@ class TestReconciliationSignalCoordinatorToTruthIngress:
             session_id="sess-B01",
         )
 
-        with patch(
-            "core.android_delegated_runtime_lifecycle_coordinator._ingest_truth"
-        ) as mock_ingest:
+        with patch("core.android_delegated_runtime_lifecycle_coordinator._ingest_truth") as mock_ingest:
             mock_ingest.return_value = MagicMock(
                 was_reconciled=True,
                 reject_reason="",
@@ -379,9 +374,7 @@ class TestReconciliationSignalCoordinatorToTruthIngress:
 
         msg = _make_reconciliation_signal_message(device_id="dev-B02", session_id="sess-B02")
 
-        with patch(
-            "core.android_delegated_runtime_lifecycle_coordinator._ingest_truth"
-        ) as mock_ingest:
+        with patch("core.android_delegated_runtime_lifecycle_coordinator._ingest_truth") as mock_ingest:
             mock_ingest.return_value = MagicMock(
                 was_reconciled=True,
                 reject_reason="",
@@ -407,9 +400,7 @@ class TestReconciliationSignalCoordinatorToTruthIngress:
 
         msg = _make_reconciliation_signal_message(device_id="dev-B03")
 
-        with patch(
-            "core.android_delegated_runtime_lifecycle_coordinator._ingest_truth"
-        ) as mock_ingest:
+        with patch("core.android_delegated_runtime_lifecycle_coordinator._ingest_truth") as mock_ingest:
             mock_ingest.return_value = MagicMock(
                 was_reconciled=False,
                 reject_reason="no_matching_record",
@@ -432,6 +423,7 @@ class TestReconciliationSignalCoordinatorToTruthIngress:
 # C. ReconciliationSignal: readiness-relevant truth kinds trigger coordinator
 # ===========================================================================
 
+
 class TestReconciliationSignalReadinessRelevantKinds:
     """Group C: prove that readiness-relevant truth kinds (readiness_assessment,
     participant_state) are processed by the coordinator path."""
@@ -442,10 +434,9 @@ class TestReconciliationSignalReadinessRelevantKinds:
         from galaxy_gateway.android.handlers.reconciliation_signal import (
             handle_reconciliation_signal,
         )
+
         bridge = MagicMock()
-        msg = _make_reconciliation_signal_message(
-            device_id="dev-C01", truth_kind="readiness_assessment"
-        )
+        msg = _make_reconciliation_signal_message(device_id="dev-C01", truth_kind="readiness_assessment")
 
         mock_coord = MagicMock()
         mock_coord.on_reconciliation_signal.return_value = MagicMock(
@@ -467,10 +458,9 @@ class TestReconciliationSignalReadinessRelevantKinds:
         from galaxy_gateway.android.handlers.reconciliation_signal import (
             handle_reconciliation_signal,
         )
+
         bridge = MagicMock()
-        msg = _make_reconciliation_signal_message(
-            device_id="dev-C02", truth_kind="runtime_state"
-        )
+        msg = _make_reconciliation_signal_message(device_id="dev-C02", truth_kind="runtime_state")
 
         mock_coord = MagicMock()
         mock_coord.on_reconciliation_signal.return_value = MagicMock(
@@ -492,10 +482,9 @@ class TestReconciliationSignalReadinessRelevantKinds:
         from galaxy_gateway.android.handlers.reconciliation_signal import (
             handle_reconciliation_signal,
         )
+
         bridge = MagicMock()
-        msg = _make_reconciliation_signal_message(
-            device_id="dev-C03", truth_kind="session_snapshot"
-        )
+        msg = _make_reconciliation_signal_message(device_id="dev-C03", truth_kind="session_snapshot")
 
         mock_coord = MagicMock()
         mock_coord.on_reconciliation_signal.return_value = MagicMock(
@@ -515,6 +504,7 @@ class TestReconciliationSignalReadinessRelevantKinds:
 # D. ReconciliationSignal: coordinator outcome describes truth ingress result
 # ===========================================================================
 
+
 class TestReconciliationSignalOutcomeFields:
     """Group D: prove that coordinator outcome carries meaningful E2E metadata."""
 
@@ -528,10 +518,14 @@ class TestReconciliationSignalOutcomeFields:
 
         with patch("core.android_delegated_runtime_lifecycle_coordinator._ingest_truth") as m:
             m.return_value = MagicMock(
-                was_reconciled=False, reject_reason="no_record",
+                was_reconciled=False,
+                reject_reason="no_record",
                 envelope=MagicMock(
                     truth_kind=MagicMock(value="reconciliation_signal"),
-                    task_id="", trace_id="", contract_id="", session_id=""
+                    task_id="",
+                    trace_id="",
+                    contract_id="",
+                    session_id="",
                 ),
             )
             outcome = coord.on_reconciliation_signal(message=msg)
@@ -548,10 +542,14 @@ class TestReconciliationSignalOutcomeFields:
 
         with patch("core.android_delegated_runtime_lifecycle_coordinator._ingest_truth") as m:
             m.return_value = MagicMock(
-                was_reconciled=False, reject_reason="no_record",
+                was_reconciled=False,
+                reject_reason="no_record",
                 envelope=MagicMock(
                     truth_kind=MagicMock(value="reconciliation_signal"),
-                    task_id="", trace_id="", contract_id="", session_id=""
+                    task_id="",
+                    trace_id="",
+                    contract_id="",
+                    session_id="",
                 ),
             )
             outcome = coord.on_reconciliation_signal(message=msg)
@@ -568,10 +566,14 @@ class TestReconciliationSignalOutcomeFields:
 
         with patch("core.android_delegated_runtime_lifecycle_coordinator._ingest_truth") as m:
             m.return_value = MagicMock(
-                was_reconciled=True, reject_reason="",
+                was_reconciled=True,
+                reject_reason="",
                 envelope=MagicMock(
                     truth_kind=MagicMock(value="readiness_assessment"),
-                    task_id="", trace_id="", contract_id="", session_id=""
+                    task_id="",
+                    trace_id="",
+                    contract_id="",
+                    session_id="",
                 ),
             )
             outcome = coord.on_reconciliation_signal(message=msg)
@@ -584,6 +586,7 @@ class TestReconciliationSignalOutcomeFields:
 # E. ReconciliationSignal: graceful degradation when coordinator unavailable
 # ===========================================================================
 
+
 class TestReconciliationSignalGracefulDegradation:
     """Group E: prove the handler survives coordinator import failures."""
 
@@ -593,6 +596,7 @@ class TestReconciliationSignalGracefulDegradation:
         from galaxy_gateway.android.handlers.reconciliation_signal import (
             handle_reconciliation_signal,
         )
+
         bridge = MagicMock()
         msg = _make_reconciliation_signal_message(device_id="dev-E01")
 
@@ -626,6 +630,7 @@ class TestReconciliationSignalGracefulDegradation:
 # ===========================================================================
 # F-J. HandoffEnvelopeV2 round-trip
 # ===========================================================================
+
 
 class TestHandoffEnvelopeV2RoundTrip:
     """Groups F–J: prove the full HandoffEnvelopeV2 round-trip from V2 dispatch
@@ -775,9 +780,7 @@ class TestHandoffEnvelopeV2RoundTrip:
             _make_handoff_failure_message,
         ]:
             msg = msg_factory()
-            with patch(
-                "galaxy_gateway.android.handlers.handoff_v2_result._ingest_handoff_response"
-            ) as mock_ingest:
+            with patch("galaxy_gateway.android.handlers.handoff_v2_result._ingest_handoff_response") as mock_ingest:
                 mock_ingest.return_value = MagicMock(
                     was_correlated=False,
                     reject_reason="no pending entry",
@@ -793,6 +796,7 @@ class TestHandoffEnvelopeV2RoundTrip:
 # K-R. Delegated execution full loop
 # ===========================================================================
 
+
 class TestDelegatedExecutionFullLoop:
     """Groups K–R: prove the delegated execution full loop via the lifecycle
     coordinator, covering all signal kinds and an exception path."""
@@ -804,13 +808,9 @@ class TestDelegatedExecutionFullLoop:
         reset_lifecycle_coordinator()
         coord = AndroidDelegatedRuntimeLifecycleCoordinator()
 
-        msg = _make_delegated_execution_signal_message(
-            device_id="dev-K01", signal_kind="ack"
-        )
+        msg = _make_delegated_execution_signal_message(device_id="dev-K01", signal_kind="ack")
 
-        with patch(
-            "core.android_delegated_runtime_lifecycle_coordinator._ingest_execution_signal"
-        ) as mock_ingest:
+        with patch("core.android_delegated_runtime_lifecycle_coordinator._ingest_execution_signal") as mock_ingest:
             mock_env = MagicMock()
             mock_env.signal_kind = MagicMock(value="ack")
             mock_env.session_id = "sess-K01"
@@ -832,19 +832,13 @@ class TestDelegatedExecutionFullLoop:
         reset_lifecycle_coordinator()
         coord = AndroidDelegatedRuntimeLifecycleCoordinator()
 
-        msg = _make_delegated_execution_signal_message(
-            device_id="dev-L01", signal_kind="progress"
-        )
+        msg = _make_delegated_execution_signal_message(device_id="dev-L01", signal_kind="progress")
 
-        with patch(
-            "core.android_delegated_runtime_lifecycle_coordinator._ingest_execution_signal"
-        ) as mock_ingest:
+        with patch("core.android_delegated_runtime_lifecycle_coordinator._ingest_execution_signal") as mock_ingest:
             mock_env = MagicMock()
             mock_env.signal_kind = MagicMock(value="progress")
             mock_env.session_id = ""
-            mock_ingest.return_value = MagicMock(
-                was_updated=True, reject_reason="", envelope=mock_env
-            )
+            mock_ingest.return_value = MagicMock(was_updated=True, reject_reason="", envelope=mock_env)
             outcome = coord.on_execution_signal(message=msg, device_id="dev-L01")
 
         assert outcome.was_handled is True
@@ -857,19 +851,13 @@ class TestDelegatedExecutionFullLoop:
         reset_lifecycle_coordinator()
         coord = AndroidDelegatedRuntimeLifecycleCoordinator()
 
-        msg = _make_delegated_execution_signal_message(
-            device_id="dev-M01", signal_kind="result", result_kind="success"
-        )
+        msg = _make_delegated_execution_signal_message(device_id="dev-M01", signal_kind="result", result_kind="success")
 
-        with patch(
-            "core.android_delegated_runtime_lifecycle_coordinator._ingest_execution_signal"
-        ) as mock_ingest:
+        with patch("core.android_delegated_runtime_lifecycle_coordinator._ingest_execution_signal") as mock_ingest:
             mock_env = MagicMock()
             mock_env.signal_kind = MagicMock(value="result")
             mock_env.session_id = ""
-            mock_ingest.return_value = MagicMock(
-                was_updated=True, reject_reason="", envelope=mock_env
-            )
+            mock_ingest.return_value = MagicMock(was_updated=True, reject_reason="", envelope=mock_env)
             outcome = coord.on_execution_signal(message=msg, device_id="dev-M01")
 
         assert outcome.was_handled is True
@@ -882,19 +870,13 @@ class TestDelegatedExecutionFullLoop:
         reset_lifecycle_coordinator()
         coord = AndroidDelegatedRuntimeLifecycleCoordinator()
 
-        msg = _make_delegated_execution_signal_message(
-            device_id="dev-N01", signal_kind="result", result_kind="failure"
-        )
+        msg = _make_delegated_execution_signal_message(device_id="dev-N01", signal_kind="result", result_kind="failure")
 
-        with patch(
-            "core.android_delegated_runtime_lifecycle_coordinator._ingest_execution_signal"
-        ) as mock_ingest:
+        with patch("core.android_delegated_runtime_lifecycle_coordinator._ingest_execution_signal") as mock_ingest:
             mock_env = MagicMock()
             mock_env.signal_kind = MagicMock(value="result")
             mock_env.session_id = ""
-            mock_ingest.return_value = MagicMock(
-                was_updated=True, reject_reason="", envelope=mock_env
-            )
+            mock_ingest.return_value = MagicMock(was_updated=True, reject_reason="", envelope=mock_env)
             outcome = coord.on_execution_signal(message=msg, device_id="dev-N01")
 
         assert outcome.was_handled is True
@@ -906,19 +888,13 @@ class TestDelegatedExecutionFullLoop:
         reset_lifecycle_coordinator()
         coord = AndroidDelegatedRuntimeLifecycleCoordinator()
 
-        msg = _make_delegated_execution_signal_message(
-            device_id="dev-O01", signal_kind="cancelled"
-        )
+        msg = _make_delegated_execution_signal_message(device_id="dev-O01", signal_kind="cancelled")
 
-        with patch(
-            "core.android_delegated_runtime_lifecycle_coordinator._ingest_execution_signal"
-        ) as mock_ingest:
+        with patch("core.android_delegated_runtime_lifecycle_coordinator._ingest_execution_signal") as mock_ingest:
             mock_env = MagicMock()
             mock_env.signal_kind = MagicMock(value="cancelled")
             mock_env.session_id = ""
-            mock_ingest.return_value = MagicMock(
-                was_updated=True, reject_reason="", envelope=mock_env
-            )
+            mock_ingest.return_value = MagicMock(was_updated=True, reject_reason="", envelope=mock_env)
             outcome = coord.on_execution_signal(message=msg, device_id="dev-O01")
 
         assert outcome.was_handled is True
@@ -937,9 +913,7 @@ class TestDelegatedExecutionFullLoop:
         reset_lifecycle_coordinator()
         coord = AndroidDelegatedRuntimeLifecycleCoordinator()
 
-        msg = _make_delegated_execution_signal_message(
-            device_id="dev-P01", signal_kind="result", result_kind="success"
-        )
+        msg = _make_delegated_execution_signal_message(device_id="dev-P01", signal_kind="result", result_kind="success")
 
         mock_raw_outcome = MagicMock()
         mock_env = MagicMock()
@@ -951,15 +925,19 @@ class TestDelegatedExecutionFullLoop:
 
         mock_consumer = MagicMock()
 
-        with patch(
-            "core.android_delegated_runtime_lifecycle_coordinator._ingest_execution_signal",
-            return_value=mock_raw_outcome,
-        ), patch(
-            "core.android_delegated_runtime_lifecycle_coordinator._android_result_consumer",
-            mock_consumer,
-        ), patch(
-            "core.android_delegated_runtime_lifecycle_coordinator._RESULT_CONSUMER_AVAILABLE",
-            True,
+        with (
+            patch(
+                "core.android_delegated_runtime_lifecycle_coordinator._ingest_execution_signal",
+                return_value=mock_raw_outcome,
+            ),
+            patch(
+                "core.android_delegated_runtime_lifecycle_coordinator._android_result_consumer",
+                mock_consumer,
+            ),
+            patch(
+                "core.android_delegated_runtime_lifecycle_coordinator._RESULT_CONSUMER_AVAILABLE",
+                True,
+            ),
         ):
             outcome = coord.on_execution_signal(message=msg, device_id="dev-P01")
 
@@ -973,9 +951,7 @@ class TestDelegatedExecutionFullLoop:
         reset_lifecycle_coordinator()
         coord = AndroidDelegatedRuntimeLifecycleCoordinator()
 
-        msg = _make_delegated_execution_signal_message(
-            device_id="dev-Q01", signal_kind="ack"
-        )
+        msg = _make_delegated_execution_signal_message(device_id="dev-Q01", signal_kind="ack")
 
         mock_raw_outcome = MagicMock()
         mock_env = MagicMock()
@@ -987,15 +963,19 @@ class TestDelegatedExecutionFullLoop:
 
         mock_consumer = MagicMock()
 
-        with patch(
-            "core.android_delegated_runtime_lifecycle_coordinator._ingest_execution_signal",
-            return_value=mock_raw_outcome,
-        ), patch(
-            "core.android_delegated_runtime_lifecycle_coordinator._android_result_consumer",
-            mock_consumer,
-        ), patch(
-            "core.android_delegated_runtime_lifecycle_coordinator._RESULT_CONSUMER_AVAILABLE",
-            True,
+        with (
+            patch(
+                "core.android_delegated_runtime_lifecycle_coordinator._ingest_execution_signal",
+                return_value=mock_raw_outcome,
+            ),
+            patch(
+                "core.android_delegated_runtime_lifecycle_coordinator._android_result_consumer",
+                mock_consumer,
+            ),
+            patch(
+                "core.android_delegated_runtime_lifecycle_coordinator._RESULT_CONSUMER_AVAILABLE",
+                True,
+            ),
         ):
             outcome = coord.on_execution_signal(message=msg, device_id="dev-Q01")
 
@@ -1028,6 +1008,7 @@ class TestDelegatedExecutionFullLoop:
         from galaxy_gateway.android.handlers.delegated_signal import (
             handle_delegated_execution_signal,
         )
+
         bridge = MagicMock()
         msg = _make_delegated_execution_signal_message(device_id="dev-R02")
 
@@ -1046,6 +1027,7 @@ class TestDelegatedExecutionFullLoop:
 # ===========================================================================
 # S-V. Android artifact → V2 readiness/governance visibility
 # ===========================================================================
+
 
 class TestAndroidArtifactReadinessGateVisibility:
     """Groups S–V: prove that Android-originated truth can reach V2 readiness
@@ -1106,9 +1088,7 @@ class TestAndroidArtifactReadinessGateVisibility:
 
         assert isinstance(report, DelegatedFlowReadinessReport)
         for dim in ReadinessDimension:
-            assert dim.value in report.dimensions, (
-                f"Missing dimension {dim.value!r} in gate report"
-            )
+            assert dim.value in report.dimensions, f"Missing dimension {dim.value!r} in gate report"
 
     @_skip_truth_ingress
     def test_U01_readiness_assessment_truth_is_local_only(self):
@@ -1142,6 +1122,7 @@ class TestAndroidArtifactReadinessGateVisibility:
     def test_V01_readiness_gate_report_is_json_serialisable(self):
         """DelegatedFlowReadinessReport must be JSON-serialisable end-to-end."""
         import json
+
         reset_readiness_gate()
         gate = DelegatedFlowReadinessGate()
         report = gate.evaluate()

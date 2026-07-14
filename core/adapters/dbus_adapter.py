@@ -14,6 +14,7 @@ logger = logging.getLogger("Galaxy.Adapter.DBus")
 
 try:
     import dbus
+
     DBUS_AVAILABLE = True
 except ImportError:
     dbus = None

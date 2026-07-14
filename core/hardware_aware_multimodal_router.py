@@ -39,6 +39,7 @@ logger = logging.getLogger("Galaxy.HAMRouter")
 def _ollama_base_url() -> str:
     """读 OLLAMA_URL 并兜底补全协议头——收口到 core.ollama_endpoint 唯一属主。"""
     from core.ollama_endpoint import resolve_ollama_base_url
+
     return resolve_ollama_base_url()
 
 
@@ -46,36 +47,42 @@ def _ollama_base_url() -> str:
 # Source Type — 模型来源类型
 # ---------------------------------------------------------------------------
 
+
 class SourceType(str, Enum):
     """模型来源类型 — 决定优先级"""
-    LOCAL_MULTIMODAL = "local_multimodal"     # 本地多模态（最高优先级）
-    LOCAL_LLM = "local_llm"                    # 本地文本模型
-    API_MULTIMODAL = "api_multimodal"          # API 多模态（GPT-4V等）
-    API_LLM = "api_llm"                        # API 文本模型
-    HF_DOWNLOADABLE = "hf_downloadable"        # HuggingFace 可下载
-    ONEAPI_AGGREGATOR = "oneapi_aggregator"    # OneAPI 聚合层
+
+    LOCAL_MULTIMODAL = "local_multimodal"  # 本地多模态（最高优先级）
+    LOCAL_LLM = "local_llm"  # 本地文本模型
+    API_MULTIMODAL = "api_multimodal"  # API 多模态（GPT-4V等）
+    API_LLM = "api_llm"  # API 文本模型
+    HF_DOWNLOADABLE = "hf_downloadable"  # HuggingFace 可下载
+    ONEAPI_AGGREGATOR = "oneapi_aggregator"  # OneAPI 聚合层
 
 
 # ---------------------------------------------------------------------------
 # Routing Strategy — 路由策略
 # ---------------------------------------------------------------------------
 
+
 class RoutingStrategy(str, Enum):
     """路由策略模式"""
-    MULTIMODAL_LOCAL_FIRST = "multimodal_local_first"    # 你要求的主策略
-    COST_OPTIMIZED = "cost_optimized"                     # 成本优先
-    SPEED_OPTIMIZED = "speed_optimized"                   # 速度优先
-    LOCAL_ONLY = "local_only"                             # 纯本地（隐私模式）
-    API_ONLY = "api_only"                                 # 纯API（无GPU模式）
+
+    MULTIMODAL_LOCAL_FIRST = "multimodal_local_first"  # 你要求的主策略
+    COST_OPTIMIZED = "cost_optimized"  # 成本优先
+    SPEED_OPTIMIZED = "speed_optimized"  # 速度优先
+    LOCAL_ONLY = "local_only"  # 纯本地（隐私模式）
+    API_ONLY = "api_only"  # 纯API（无GPU模式）
 
 
 # ---------------------------------------------------------------------------
 # Hardware-Aware Routing Decision
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class HARoutingDecision:
     """硬件感知路由决策"""
+
     provider: str
     model: str
     source_type: SourceType
@@ -164,6 +171,7 @@ class HardwareAwareMultimodalRouter:
     def _check_hf_hub() -> bool:
         try:
             import huggingface_hub
+
             return True
         except ImportError:
             return False
@@ -173,6 +181,7 @@ class HardwareAwareMultimodalRouter:
         """检查 Ollama 是否可用"""
         try:
             import httpx
+
             base = _ollama_base_url()
             resp = httpx.get(f"{base}/api/tags", timeout=2.0)
             return resp.status_code == 200
@@ -181,11 +190,14 @@ class HardwareAwareMultimodalRouter:
 
     # ── 核心路由方法 ──
 
-    async def route(self, task_type: str,
-                    messages: List[Dict],
-                    has_multimodal_input: bool = False,
-                    preferred_source: Optional[SourceType] = None,
-                    **kwargs) -> HARoutingDecision:
+    async def route(
+        self,
+        task_type: str,
+        messages: List[Dict],
+        has_multimodal_input: bool = False,
+        preferred_source: Optional[SourceType] = None,
+        **kwargs,
+    ) -> HARoutingDecision:
         """
         硬件感知多模态优先路由
 
@@ -201,6 +213,7 @@ class HardwareAwareMultimodalRouter:
         # 1. 获取硬件画像
         try:
             from core.hardware_compute_profiler import get_compute_profile_sync
+
             profile = get_compute_profile_sync()
         except Exception as exc:
             logger.debug("Fallback triggered: %s", exc)
@@ -210,9 +223,7 @@ class HardwareAwareMultimodalRouter:
         local_models = await self._scan_local_models()
 
         # 3. 确定策略偏好顺序
-        preferences = MULTIMODAL_LOCAL_FIRST_PREFERENCES.get(
-            task_type, MULTIMODAL_LOCAL_FIRST_PREFERENCES["general"]
-        )
+        preferences = MULTIMODAL_LOCAL_FIRST_PREFERENCES.get(task_type, MULTIMODAL_LOCAL_FIRST_PREFERENCES["general"])
 
         # 4. 如果有用户指定来源，提升到最前
         if preferred_source:
@@ -221,8 +232,7 @@ class HardwareAwareMultimodalRouter:
         # 5. 遍历偏好顺序，找到第一个可用的
         for source_type, providers in preferences:
             decision = await self._try_source(
-                source_type, providers, task_type, profile,
-                local_models, has_multimodal_input
+                source_type, providers, task_type, profile, local_models, has_multimodal_input
             )
             if decision:
                 return decision
@@ -240,12 +250,15 @@ class HardwareAwareMultimodalRouter:
 
     # ── 来源尝试 ──
 
-    async def _try_source(self, source_type: SourceType,
-                          providers: List[str],
-                          task_type: str,
-                          profile: Optional[Any],
-                          local_models: Dict[str, Any],
-                          has_multimodal: bool) -> Optional[HARoutingDecision]:
+    async def _try_source(
+        self,
+        source_type: SourceType,
+        providers: List[str],
+        task_type: str,
+        profile: Optional[Any],
+        local_models: Dict[str, Any],
+        has_multimodal: bool,
+    ) -> Optional[HARoutingDecision]:
         """尝试一个来源类型"""
 
         if source_type == SourceType.LOCAL_MULTIMODAL:
@@ -355,29 +368,35 @@ class HardwareAwareMultimodalRouter:
         if self._ollama_available:
             try:
                 import httpx
+
                 base = _ollama_base_url()
                 resp = httpx.get(f"{base}/api/tags", timeout=3.0)
                 if resp.status_code == 200:
                     for m in resp.json().get("models", []):
-                        models["llm"].append({
-                            "name": m["name"],
-                            "source": "ollama",
-                            "size_mb": m.get("size", 0) // (1024 * 1024),
-                        })
+                        models["llm"].append(
+                            {
+                                "name": m["name"],
+                                "source": "ollama",
+                                "size_mb": m.get("size", 0) // (1024 * 1024),
+                            }
+                        )
             except Exception as exc:
                 logger.warning("Exception suppressed: %s", exc)
 
         # 扫描 HF 本地模型
         try:
             from core.huggingface_model_manager import get_hf_model_manager
+
             hf_mgr = get_hf_model_manager()
             for entry in hf_mgr.list_local_models():
-                models.setdefault(entry.family.value, []).append({
-                    "name": entry.model_id,
-                    "source": "huggingface",
-                    "size_mb": entry.size_mb,
-                    "quantization": entry.quantization,
-                })
+                models.setdefault(entry.family.value, []).append(
+                    {
+                        "name": entry.model_id,
+                        "source": "huggingface",
+                        "size_mb": entry.size_mb,
+                        "quantization": entry.quantization,
+                    }
+                )
         except Exception as exc:
             logger.warning("Exception suppressed: %s", exc)
 
@@ -411,8 +430,9 @@ class HardwareAwareMultimodalRouter:
         return "gemma4:12b"  # 默认
 
     @staticmethod
-    def _reorder_by_source(preferences: List[Tuple[SourceType, List[str]]],
-                           target: SourceType) -> List[Tuple[SourceType, List[str]]]:
+    def _reorder_by_source(
+        preferences: List[Tuple[SourceType, List[str]]], target: SourceType
+    ) -> List[Tuple[SourceType, List[str]]]:
         """将指定来源提升到最前"""
         result = []
         for st, provs in preferences:
@@ -435,6 +455,7 @@ class HardwareAwareMultimodalRouter:
         if self._ollama_available:
             try:
                 import httpx
+
                 # 修复:原来硬编码 http://localhost:11434，未使用 _ollama_base_url() 兜底。
                 # 用户自定义 OLLAMA_URL（尤其只填 host:port 无协议头）时，同步路径永远
                 # 探测不到 Ollama，导致本地模型列表为空、路由直接落到 API。
@@ -442,24 +463,29 @@ class HardwareAwareMultimodalRouter:
                 resp = httpx.get(f"{base}/api/tags", timeout=3.0)
                 if resp.status_code == 200:
                     for m in resp.json().get("models", []):
-                        models["llm"].append({
-                            "name": m["name"],
-                            "source": "ollama",
-                            "size_mb": m.get("size", 0) // (1024 * 1024),
-                        })
+                        models["llm"].append(
+                            {
+                                "name": m["name"],
+                                "source": "ollama",
+                                "size_mb": m.get("size", 0) // (1024 * 1024),
+                            }
+                        )
             except Exception:
                 pass
 
         try:
             from core.huggingface_model_manager import get_hf_model_manager
+
             hf_mgr = get_hf_model_manager()
             for entry in hf_mgr.list_local_models():
-                models.setdefault(entry.family.value, []).append({
-                    "name": entry.model_id,
-                    "source": "huggingface",
-                    "size_mb": entry.size_mb,
-                    "quantization": entry.quantization,
-                })
+                models.setdefault(entry.family.value, []).append(
+                    {
+                        "name": entry.model_id,
+                        "source": "huggingface",
+                        "size_mb": entry.size_mb,
+                        "quantization": entry.quantization,
+                    }
+                )
         except Exception:
             pass
 
@@ -514,14 +540,13 @@ class HardwareAwareMultimodalRouter:
         """
         try:
             from core.hardware_compute_profiler import get_compute_profile_sync
+
             profile = get_compute_profile_sync()
         except Exception:
             profile = None
 
         local_models = self._scan_local_models_sync()
-        preferences = MULTIMODAL_LOCAL_FIRST_PREFERENCES.get(
-            task_type, MULTIMODAL_LOCAL_FIRST_PREFERENCES["general"]
-        )
+        preferences = MULTIMODAL_LOCAL_FIRST_PREFERENCES.get(task_type, MULTIMODAL_LOCAL_FIRST_PREFERENCES["general"])
 
         for source_type, providers in preferences:
             if source_type in (SourceType.API_LLM, SourceType.API_MULTIMODAL, SourceType.ONEAPI_AGGREGATOR):

@@ -33,15 +33,15 @@ All tests are self-contained (no live servers, no real devices).
 from __future__ import annotations
 
 import asyncio
+import os
 import sys
 import time
 import uuid
 from typing import Any, Dict, List, Optional
-from unittest.mock import MagicMock, patch, AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-import os
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
@@ -54,7 +54,7 @@ if _PROJECT_ROOT not in sys.path:
 
 class TestCanonicalChainStep:
     def test_all_steps_present(self):
-        from core.cross_device_execution_chain import CanonicalChainStep, CANONICAL_CHAIN_ORDER
+        from core.cross_device_execution_chain import CANONICAL_CHAIN_ORDER, CanonicalChainStep
 
         expected = [
             "openclawd_dispatch",
@@ -69,34 +69,41 @@ class TestCanonicalChainStep:
 
     def test_step_count(self):
         from core.cross_device_execution_chain import CanonicalChainStep
+
         assert len(CanonicalChainStep) == 7
 
     def test_step_values_are_strings(self):
         from core.cross_device_execution_chain import CanonicalChainStep
+
         for step in CanonicalChainStep:
             assert isinstance(step.value, str)
             assert len(step.value) > 0
 
     def test_openclawd_is_first(self):
-        from core.cross_device_execution_chain import CanonicalChainStep, CANONICAL_CHAIN_ORDER
+        from core.cross_device_execution_chain import CANONICAL_CHAIN_ORDER, CanonicalChainStep
+
         assert CANONICAL_CHAIN_ORDER[0] is CanonicalChainStep.openclawd_dispatch
 
     def test_openclawd_feedback_is_last(self):
-        from core.cross_device_execution_chain import CanonicalChainStep, CANONICAL_CHAIN_ORDER
+        from core.cross_device_execution_chain import CANONICAL_CHAIN_ORDER, CanonicalChainStep
+
         assert CANONICAL_CHAIN_ORDER[-1] is CanonicalChainStep.openclawd_feedback
 
     def test_command_router_before_gateway(self):
-        from core.cross_device_execution_chain import CanonicalChainStep, CANONICAL_CHAIN_ORDER
+        from core.cross_device_execution_chain import CANONICAL_CHAIN_ORDER, CanonicalChainStep
+
         steps = [s.value for s in CANONICAL_CHAIN_ORDER]
         assert steps.index("command_router") < steps.index("gateway_substrate")
 
     def test_gateway_before_worker(self):
-        from core.cross_device_execution_chain import CanonicalChainStep, CANONICAL_CHAIN_ORDER
+        from core.cross_device_execution_chain import CANONICAL_CHAIN_ORDER, CanonicalChainStep
+
         steps = [s.value for s in CANONICAL_CHAIN_ORDER]
         assert steps.index("gateway_substrate") < steps.index("worker_executor")
 
     def test_result_envelope_after_worker(self):
-        from core.cross_device_execution_chain import CanonicalChainStep, CANONICAL_CHAIN_ORDER
+        from core.cross_device_execution_chain import CANONICAL_CHAIN_ORDER, CanonicalChainStep
+
         steps = [s.value for s in CANONICAL_CHAIN_ORDER]
         assert steps.index("worker_executor") < steps.index("result_envelope")
 
@@ -109,9 +116,10 @@ class TestCanonicalChainStep:
 class TestChainStepAuthorities:
     def test_all_steps_have_authority(self):
         from core.cross_device_execution_chain import (
-            CanonicalChainStep,
             CHAIN_STEP_AUTHORITIES,
+            CanonicalChainStep,
         )
+
         for step in CanonicalChainStep:
             assert step in CHAIN_STEP_AUTHORITIES
             assert isinstance(CHAIN_STEP_AUTHORITIES[step], str)
@@ -119,33 +127,37 @@ class TestChainStepAuthorities:
 
     def test_openclawd_owns_dispatch_and_feedback(self):
         from core.cross_device_execution_chain import (
-            CanonicalChainStep,
             CHAIN_STEP_AUTHORITIES,
+            CanonicalChainStep,
         )
+
         assert "OpenClawd" in CHAIN_STEP_AUTHORITIES[CanonicalChainStep.openclawd_dispatch]
         assert "OpenClawd" in CHAIN_STEP_AUTHORITIES[CanonicalChainStep.openclawd_feedback]
 
     def test_command_router_owns_router_step(self):
         from core.cross_device_execution_chain import (
-            CanonicalChainStep,
             CHAIN_STEP_AUTHORITIES,
+            CanonicalChainStep,
         )
+
         assert "CommandRouter" in CHAIN_STEP_AUTHORITIES[CanonicalChainStep.command_router]
 
     def test_gateway_is_substrate_only(self):
         from core.cross_device_execution_chain import (
-            CanonicalChainStep,
             CHAIN_STEP_AUTHORITIES,
+            CanonicalChainStep,
         )
+
         # Gateway is substrate only, not a planning authority.
         authority = CHAIN_STEP_AUTHORITIES[CanonicalChainStep.gateway_substrate]
         assert "substrate" in authority.lower() or "galaxy_gateway" in authority.lower()
 
     def test_worker_is_executor_only(self):
         from core.cross_device_execution_chain import (
-            CanonicalChainStep,
             CHAIN_STEP_AUTHORITIES,
+            CanonicalChainStep,
         )
+
         authority = CHAIN_STEP_AUTHORITIES[CanonicalChainStep.worker_executor]
         assert "executor" in authority.lower() or "worker" in authority.lower()
 
@@ -157,7 +169,8 @@ class TestChainStepAuthorities:
 
 class TestResultEnvelope:
     def test_defaults(self):
-        from core.cross_device_execution_chain import ResultEnvelope, CanonicalChainStep
+        from core.cross_device_execution_chain import CanonicalChainStep, ResultEnvelope
+
         env = ResultEnvelope()
         assert env.task_id == ""
         assert env.device_id == ""
@@ -171,13 +184,27 @@ class TestResultEnvelope:
 
     def test_to_dict_keys(self):
         from core.cross_device_execution_chain import ResultEnvelope
+
         env = ResultEnvelope(task_id="t1", device_id="d1", success=True, status="success")
         d = env.to_dict()
         expected_keys = {
-            "result_id", "task_id", "device_id", "chain_step", "success",
-            "status", "payload", "error", "trace_id", "session_id", "route_mode",
-            "openclawd_merged", "projected", "audited", "memory_backflow_stored",
-            "timestamp", "extra",
+            "result_id",
+            "task_id",
+            "device_id",
+            "chain_step",
+            "success",
+            "status",
+            "payload",
+            "error",
+            "trace_id",
+            "session_id",
+            "route_mode",
+            "openclawd_merged",
+            "projected",
+            "audited",
+            "memory_backflow_stored",
+            "timestamp",
+            "extra",
         }
         assert expected_keys == set(d.keys())
         assert d["task_id"] == "t1"
@@ -186,6 +213,7 @@ class TestResultEnvelope:
 
     def test_from_dict_round_trip(self):
         from core.cross_device_execution_chain import ResultEnvelope
+
         env = ResultEnvelope(
             task_id="t2",
             device_id="d2",
@@ -204,12 +232,14 @@ class TestResultEnvelope:
         assert env2.trace_id == "tr123"
 
     def test_from_dict_unknown_chain_step_defaults(self):
-        from core.cross_device_execution_chain import ResultEnvelope, CanonicalChainStep
+        from core.cross_device_execution_chain import CanonicalChainStep, ResultEnvelope
+
         env = ResultEnvelope.from_dict({"chain_step": "nonexistent_step"})
         assert env.chain_step is CanonicalChainStep.result_envelope
 
     def test_result_id_is_unique(self):
         from core.cross_device_execution_chain import ResultEnvelope
+
         ids = {ResultEnvelope().result_id for _ in range(10)}
         assert len(ids) == 10
 
@@ -222,6 +252,7 @@ class TestResultEnvelope:
 class TestBuildResultEnvelope:
     def test_success_from_status_string(self):
         from core.cross_device_execution_chain import build_result_envelope
+
         env = build_result_envelope(
             {"status": "success", "data": {"val": 1}},
             task_id="t1",
@@ -233,32 +264,39 @@ class TestBuildResultEnvelope:
 
     def test_completed_is_success(self):
         from core.cross_device_execution_chain import build_result_envelope
+
         env = build_result_envelope({"status": "completed"})
         assert env.success is True
 
     def test_failure_status(self):
         from core.cross_device_execution_chain import build_result_envelope
+
         env = build_result_envelope({"status": "failed", "error": "timeout"})
         assert env.success is False
         assert env.error == "timeout"
 
     def test_payload_from_result_sub_dict(self):
         from core.cross_device_execution_chain import build_result_envelope
+
         env = build_result_envelope({"status": "ok", "result": {"screenshot": "abc"}})
         assert "screenshot" in env.payload
 
     def test_large_fields_excluded_from_payload(self):
         from core.cross_device_execution_chain import build_result_envelope
-        env = build_result_envelope({
-            "status": "ok",
-            "image_base64": "VERYLARGE",
-            "other": "kept",
-        })
+
+        env = build_result_envelope(
+            {
+                "status": "ok",
+                "image_base64": "VERYLARGE",
+                "other": "kept",
+            }
+        )
         assert "image_base64" not in env.payload
         assert "other" in env.payload
 
     def test_trace_id_from_arg_takes_precedence(self):
         from core.cross_device_execution_chain import build_result_envelope
+
         env = build_result_envelope(
             {"status": "ok", "trace_id": "from_raw"},
             trace_id="from_arg",
@@ -267,16 +305,19 @@ class TestBuildResultEnvelope:
 
     def test_trace_id_from_raw_result(self):
         from core.cross_device_execution_chain import build_result_envelope
+
         env = build_result_envelope({"status": "ok", "trace_id": "raw_trace"})
         assert env.trace_id == "raw_trace"
 
     def test_bool_true_status(self):
         from core.cross_device_execution_chain import build_result_envelope
+
         env = build_result_envelope({"status": True})
         assert env.success is True
 
     def test_bool_false_status(self):
         from core.cross_device_execution_chain import build_result_envelope
+
         env = build_result_envelope({"status": False})
         assert env.success is False
 
@@ -289,9 +330,10 @@ class TestBuildResultEnvelope:
 class TestChainExecutionRecord:
     def test_is_canonical_full_chain(self):
         from core.cross_device_execution_chain import (
-            build_chain_execution_record,
             CANONICAL_CHAIN_ORDER,
+            build_chain_execution_record,
         )
+
         rec = build_chain_execution_record(
             task_id="t1",
             device_id="d1",
@@ -302,9 +344,10 @@ class TestChainExecutionRecord:
 
     def test_is_not_canonical_partial_steps(self):
         from core.cross_device_execution_chain import (
-            build_chain_execution_record,
             CanonicalChainStep,
+            build_chain_execution_record,
         )
+
         rec = build_chain_execution_record(
             task_id="t2",
             steps_completed=[CanonicalChainStep.openclawd_dispatch],
@@ -313,9 +356,10 @@ class TestChainExecutionRecord:
 
     def test_legacy_path_used_marks_non_canonical(self):
         from core.cross_device_execution_chain import (
-            build_chain_execution_record,
             CANONICAL_CHAIN_ORDER,
+            build_chain_execution_record,
         )
+
         rec = build_chain_execution_record(
             task_id="t3",
             legacy_path_used="galaxy_gateway.orchestrator.galaxy_orchestrator",
@@ -326,15 +370,17 @@ class TestChainExecutionRecord:
 
     def test_no_steps_provided_defaults_to_canonical(self):
         from core.cross_device_execution_chain import (
-            build_chain_execution_record,
             CANONICAL_CHAIN_ORDER,
+            build_chain_execution_record,
         )
+
         rec = build_chain_execution_record(task_id="t4")
         assert rec.steps_completed == list(CANONICAL_CHAIN_ORDER)
         assert rec.is_canonical is True
 
     def test_no_steps_provided_legacy_path_defaults_empty(self):
         from core.cross_device_execution_chain import build_chain_execution_record
+
         rec = build_chain_execution_record(
             task_id="t5",
             legacy_path_used="some.legacy.path",
@@ -344,9 +390,10 @@ class TestChainExecutionRecord:
 
     def test_completed_at_set_when_result_envelope_provided(self):
         from core.cross_device_execution_chain import (
-            build_chain_execution_record,
             ResultEnvelope,
+            build_chain_execution_record,
         )
+
         env = ResultEnvelope(task_id="t6", success=True)
         rec = build_chain_execution_record(task_id="t6", result_envelope=env)
         assert rec.completed_at is not None
@@ -354,20 +401,32 @@ class TestChainExecutionRecord:
 
     def test_to_dict_keys(self):
         from core.cross_device_execution_chain import build_chain_execution_record
+
         rec = build_chain_execution_record(task_id="t7", device_id="d7")
         d = rec.to_dict()
         expected_keys = {
-            "record_id", "task_id", "trace_id", "device_id", "route_mode",
-            "steps_completed", "is_canonical", "legacy_path_used",
-            "result_envelope", "dispatched_at", "completed_at", "extra",
+            "record_id",
+            "task_id",
+            "trace_id",
+            "device_id",
+            "route_mode",
+            "steps_completed",
+            "is_canonical",
+            "legacy_path_used",
+            "result_envelope",
+            "dispatched_at",
+            "completed_at",
+            "extra",
             # 验收闭环字段:acceptance_state / acceptance_closed 已进入
             # ChainExecutionRecord 契约(to_dict/from_dict 双向携带)。
-            "acceptance_state", "acceptance_closed",
+            "acceptance_state",
+            "acceptance_closed",
         }
         assert expected_keys == set(d.keys())
 
     def test_from_dict_round_trip(self):
-        from core.cross_device_execution_chain import build_chain_execution_record, ResultEnvelope
+        from core.cross_device_execution_chain import ResultEnvelope, build_chain_execution_record
+
         env = ResultEnvelope(task_id="t8", success=True)
         rec = build_chain_execution_record(
             task_id="t8",
@@ -385,9 +444,12 @@ class TestChainExecutionRecord:
 
     def test_from_dict_unknown_step_skipped(self):
         from core.cross_device_execution_chain import ChainExecutionRecord
-        rec = ChainExecutionRecord.from_dict({
-            "steps_completed": ["openclawd_dispatch", "UNKNOWN_STEP", "result_envelope"],
-        })
+
+        rec = ChainExecutionRecord.from_dict(
+            {
+                "steps_completed": ["openclawd_dispatch", "UNKNOWN_STEP", "result_envelope"],
+            }
+        )
         step_values = [s.value for s in rec.steps_completed]
         assert "UNKNOWN_STEP" not in step_values
         assert "openclawd_dispatch" in step_values
@@ -402,13 +464,15 @@ class TestChainExecutionRecord:
 class TestRecordChainExecution:
     def setup_method(self):
         from core.cross_device_execution_chain import reset_cross_device_chain
+
         reset_cross_device_chain()
 
     def test_record_appended_to_singleton(self):
         from core.cross_device_execution_chain import (
-            record_chain_execution,
             get_cross_device_chain,
+            record_chain_execution,
         )
+
         record_chain_execution(task_id="task_rc1", device_id="dev1")
         chain = get_cross_device_chain()
         snap = chain.snapshot()
@@ -416,10 +480,11 @@ class TestRecordChainExecution:
 
     def test_canonical_record_marks_envelope_merged(self):
         from core.cross_device_execution_chain import (
-            record_chain_execution,
-            ResultEnvelope,
             CANONICAL_CHAIN_ORDER,
+            ResultEnvelope,
+            record_chain_execution,
         )
+
         env = ResultEnvelope(task_id="t_merge", success=True)
         assert env.openclawd_merged is False
         record_chain_execution(
@@ -431,9 +496,10 @@ class TestRecordChainExecution:
 
     def test_legacy_path_does_not_mark_envelope_merged(self):
         from core.cross_device_execution_chain import (
-            record_chain_execution,
             ResultEnvelope,
+            record_chain_execution,
         )
+
         env = ResultEnvelope(task_id="t_leg", success=True)
         record_chain_execution(
             task_id="t_leg",
@@ -444,7 +510,9 @@ class TestRecordChainExecution:
 
     def test_legacy_path_emits_warning(self, caplog):
         import logging
+
         from core.cross_device_execution_chain import record_chain_execution
+
         with caplog.at_level(logging.WARNING, logger="Galaxy.CrossDeviceExecutionChain"):
             record_chain_execution(
                 task_id="t_warn",
@@ -454,20 +522,20 @@ class TestRecordChainExecution:
 
     def test_canonical_path_does_not_emit_warning(self, caplog):
         import logging
-        from core.cross_device_execution_chain import record_chain_execution, CANONICAL_CHAIN_ORDER
+
+        from core.cross_device_execution_chain import CANONICAL_CHAIN_ORDER, record_chain_execution
+
         with caplog.at_level(logging.WARNING, logger="Galaxy.CrossDeviceExecutionChain"):
             record_chain_execution(
                 task_id="t_no_warn",
                 steps_completed=list(CANONICAL_CHAIN_ORDER),
             )
-        legacy_warnings = [
-            r for r in caplog.records
-            if "LEGACY CHAIN PATH" in r.message
-        ]
+        legacy_warnings = [r for r in caplog.records if "LEGACY CHAIN PATH" in r.message]
         assert len(legacy_warnings) == 0
 
     def test_returns_chain_execution_record(self):
-        from core.cross_device_execution_chain import record_chain_execution, ChainExecutionRecord
+        from core.cross_device_execution_chain import ChainExecutionRecord, record_chain_execution
+
         rec = record_chain_execution(task_id="t_ret", device_id="d_ret")
         assert isinstance(rec, ChainExecutionRecord)
 
@@ -480,14 +548,16 @@ class TestRecordChainExecution:
 class TestCrossDeviceChainSingleton:
     def setup_method(self):
         from core.cross_device_execution_chain import reset_cross_device_chain
+
         reset_cross_device_chain()
 
     def test_canonical_count(self):
         from core.cross_device_execution_chain import (
-            record_chain_execution,
-            get_cross_device_chain,
             CANONICAL_CHAIN_ORDER,
+            get_cross_device_chain,
+            record_chain_execution,
         )
+
         record_chain_execution(task_id="c1", steps_completed=list(CANONICAL_CHAIN_ORDER))
         record_chain_execution(task_id="c2", steps_completed=list(CANONICAL_CHAIN_ORDER))
         snap = get_cross_device_chain().snapshot()
@@ -496,9 +566,10 @@ class TestCrossDeviceChainSingleton:
 
     def test_legacy_count(self):
         from core.cross_device_execution_chain import (
-            record_chain_execution,
             get_cross_device_chain,
+            record_chain_execution,
         )
+
         record_chain_execution(
             task_id="l1",
             legacy_path_used="galaxy_gateway.orchestrator.galaxy_orchestrator",
@@ -509,10 +580,11 @@ class TestCrossDeviceChainSingleton:
 
     def test_total_count(self):
         from core.cross_device_execution_chain import (
-            record_chain_execution,
-            get_cross_device_chain,
             CANONICAL_CHAIN_ORDER,
+            get_cross_device_chain,
+            record_chain_execution,
         )
+
         for i in range(5):
             record_chain_execution(
                 task_id=f"t{i}",
@@ -523,9 +595,10 @@ class TestCrossDeviceChainSingleton:
 
     def test_clear_resets_counts(self):
         from core.cross_device_execution_chain import (
-            record_chain_execution,
             get_cross_device_chain,
+            record_chain_execution,
         )
+
         record_chain_execution(task_id="c1")
         get_cross_device_chain().clear()
         snap = get_cross_device_chain().snapshot()
@@ -535,6 +608,7 @@ class TestCrossDeviceChainSingleton:
 
     def test_max_records_bounded(self):
         from core.cross_device_execution_chain import CrossDeviceChainSingleton, build_chain_execution_record
+
         small = CrossDeviceChainSingleton(max_records=3)
         for i in range(10):
             small.append(build_chain_execution_record(task_id=f"t{i}"))
@@ -542,10 +616,11 @@ class TestCrossDeviceChainSingleton:
 
     def test_recent_records_limited(self):
         from core.cross_device_execution_chain import (
-            record_chain_execution,
-            get_cross_device_chain,
             CANONICAL_CHAIN_ORDER,
+            get_cross_device_chain,
+            record_chain_execution,
         )
+
         for i in range(25):
             record_chain_execution(
                 task_id=f"tr{i}",
@@ -563,32 +638,41 @@ class TestCrossDeviceChainSingleton:
 class TestBuildCrossDeviceChainSnapshot:
     def setup_method(self):
         from core.cross_device_execution_chain import reset_cross_device_chain
+
         reset_cross_device_chain()
 
     def test_snapshot_structure(self):
         from core.cross_device_execution_chain import build_cross_device_chain_snapshot
+
         snap = build_cross_device_chain_snapshot()
         d = snap.to_dict()
         expected_keys = {
-            "snapshot_id", "total_executions", "canonical_executions",
-            "legacy_executions", "recent_records", "chain_authority_map",
-            "canonical_chain_order", "timestamp",
+            "snapshot_id",
+            "total_executions",
+            "canonical_executions",
+            "legacy_executions",
+            "recent_records",
+            "chain_authority_map",
+            "canonical_chain_order",
+            "timestamp",
         }
         assert expected_keys == set(d.keys())
 
     def test_canonical_chain_order_in_snapshot(self):
         from core.cross_device_execution_chain import (
-            build_cross_device_chain_snapshot,
             CANONICAL_CHAIN_ORDER,
+            build_cross_device_chain_snapshot,
         )
+
         snap = build_cross_device_chain_snapshot()
         assert snap.canonical_chain_order == [s.value for s in CANONICAL_CHAIN_ORDER]
 
     def test_authority_map_in_snapshot(self):
         from core.cross_device_execution_chain import (
-            build_cross_device_chain_snapshot,
             CanonicalChainStep,
+            build_cross_device_chain_snapshot,
         )
+
         snap = build_cross_device_chain_snapshot()
         assert "openclawd_dispatch" in snap.chain_authority_map
         assert "command_router" in snap.chain_authority_map
@@ -603,6 +687,7 @@ class TestBuildCrossDeviceChainSnapshot:
 class TestSingletonLifecycle:
     def test_get_returns_same_instance(self):
         from core.cross_device_execution_chain import get_cross_device_chain
+
         a = get_cross_device_chain()
         b = get_cross_device_chain()
         assert a is b
@@ -612,6 +697,7 @@ class TestSingletonLifecycle:
             get_cross_device_chain,
             reset_cross_device_chain,
         )
+
         a = get_cross_device_chain()
         reset_cross_device_chain()
         b = get_cross_device_chain()
@@ -619,10 +705,11 @@ class TestSingletonLifecycle:
 
     def test_reset_clears_state(self):
         from core.cross_device_execution_chain import (
+            build_cross_device_chain_snapshot,
             record_chain_execution,
             reset_cross_device_chain,
-            build_cross_device_chain_snapshot,
         )
+
         record_chain_execution(task_id="before_reset")
         reset_cross_device_chain()
         snap = build_cross_device_chain_snapshot()
@@ -637,31 +724,30 @@ class TestSingletonLifecycle:
 class TestLegacyPathRegistryPR7:
     def test_galaxy_orchestrator_registered(self):
         from core.orchestration_authority.legacy_paths import LEGACY_PATH_REGISTRY
+
         assert "galaxy_gateway.orchestrator.galaxy_orchestrator" in LEGACY_PATH_REGISTRY
 
     def test_task_orchestrator_registered(self):
         from core.orchestration_authority.legacy_paths import LEGACY_PATH_REGISTRY
-        assert (
-            "galaxy_gateway.orchestrator.task_orchestrator.TaskOrchestrator"
-            in LEGACY_PATH_REGISTRY
-        )
+
+        assert "galaxy_gateway.orchestrator.task_orchestrator.TaskOrchestrator" in LEGACY_PATH_REGISTRY
 
     def test_device_router_route_task_registered(self):
         from core.orchestration_authority.legacy_paths import LEGACY_PATH_REGISTRY
+
         assert "galaxy_gateway.device_router.DeviceRouter.route_task" in LEGACY_PATH_REGISTRY
 
     def test_cross_device_coordinator_registered(self):
         from core.orchestration_authority.legacy_paths import LEGACY_PATH_REGISTRY
-        assert (
-            "galaxy_gateway.cross_device_coordinator.CrossDeviceCoordinator"
-            in LEGACY_PATH_REGISTRY
-        )
+
+        assert "galaxy_gateway.cross_device_coordinator.CrossDeviceCoordinator" in LEGACY_PATH_REGISTRY
 
     def test_galaxy_orchestrator_is_legacy_compatibility(self):
         from core.orchestration_authority.legacy_paths import (
             LEGACY_PATH_REGISTRY,
             LegacyPathStatus,
         )
+
         entry = LEGACY_PATH_REGISTRY["galaxy_gateway.orchestrator.galaxy_orchestrator"]
         assert entry.status is LegacyPathStatus.LEGACY_COMPATIBILITY
 
@@ -672,6 +758,7 @@ class TestLegacyPathRegistryPR7:
         # 相应升为 PR-S3(注册表 notes 有案)。"全部仍是 PR-7" 是晋升
         # 前的退役契约。
         from core.orchestration_authority.legacy_paths import LEGACY_PATH_REGISTRY
+
         expected_guardrails = {
             "galaxy_gateway.orchestrator.galaxy_orchestrator": "PR-7",
             "galaxy_gateway.orchestrator.task_orchestrator.TaskOrchestrator": "PR-7",
@@ -680,12 +767,11 @@ class TestLegacyPathRegistryPR7:
         }
         for path, tag in expected_guardrails.items():
             entry = LEGACY_PATH_REGISTRY[path]
-            assert entry.pr_guardrail_added == tag, (
-                f"{path} should have pr_guardrail_added={tag!r}"
-            )
+            assert entry.pr_guardrail_added == tag, f"{path} should have pr_guardrail_added={tag!r}"
 
     def test_pr7_entries_have_recommendation(self):
         from core.orchestration_authority.legacy_paths import LEGACY_PATH_REGISTRY
+
         pr7_paths = [
             "galaxy_gateway.orchestrator.galaxy_orchestrator",
             "galaxy_gateway.device_router.DeviceRouter.route_task",
@@ -696,18 +782,21 @@ class TestLegacyPathRegistryPR7:
 
     def test_is_legacy_path_returns_true_for_pr7(self):
         from core.orchestration_authority.legacy_paths import is_legacy_path
+
         assert is_legacy_path("galaxy_gateway.orchestrator.galaxy_orchestrator")
 
     def test_classify_path_status_returns_legacy_for_pr7(self):
         from core.orchestration_authority.legacy_paths import (
-            classify_path_status,
             LegacyPathStatus,
+            classify_path_status,
         )
+
         status = classify_path_status("galaxy_gateway.orchestrator.galaxy_orchestrator")
         assert status is LegacyPathStatus.LEGACY_COMPATIBILITY
 
     def test_to_dict_serialises_pr7_entry(self):
         from core.orchestration_authority.legacy_paths import LEGACY_PATH_REGISTRY
+
         entry = LEGACY_PATH_REGISTRY["galaxy_gateway.orchestrator.galaxy_orchestrator"]
         d = entry.to_dict()
         assert d["pr_guardrail_added"] == "PR-7"
@@ -722,6 +811,7 @@ class TestLegacyPathRegistryPR7:
 class TestStoreResultEnvelope:
     def setup_method(self):
         from core.cross_device_execution_chain import reset_cross_device_chain
+
         reset_cross_device_chain()
 
     def test_store_result_envelope_returns_true_on_success(self):
@@ -731,9 +821,7 @@ class TestStoreResultEnvelope:
         env = ResultEnvelope(task_id="t_bf1", device_id="d1", success=True)
 
         with patch("core.openclawd_memory_backflow.get_task_memory", return_value=None):
-            result = asyncio.new_event_loop().run_until_complete(
-                store_result_envelope(env)
-            )
+            result = asyncio.new_event_loop().run_until_complete(store_result_envelope(env))
 
         assert result is True
 
@@ -802,14 +890,13 @@ class TestStoreResultEnvelopeGracefulDegradation:
 
         # Temporarily hide the chain module by patching _CHAIN_AVAILABLE
         import core.openclawd_memory_backflow as bf_mod
+
         original = bf_mod._CHAIN_AVAILABLE
         bf_mod._CHAIN_AVAILABLE = False
         try:
             env = MagicMock()
             env.task_id = "t_unavail"
-            result = asyncio.new_event_loop().run_until_complete(
-                bf_mod.store_result_envelope(env)
-            )
+            result = asyncio.new_event_loop().run_until_complete(bf_mod.store_result_envelope(env))
             assert result is False
         finally:
             bf_mod._CHAIN_AVAILABLE = original
@@ -822,7 +909,7 @@ class TestStoreResultEnvelopeGracefulDegradation:
 
 class TestCrossDevicePolicyLegacyAuthority:
     def test_legacy_authority_blocks_cross_device(self):
-        from core.cross_device_policy import resolve_routing, RoutingPosture
+        from core.cross_device_policy import RoutingPosture, resolve_routing
 
         policy = {"cross_device_allowed": True, "requires_confirmation": False}
         result = resolve_routing(
@@ -834,7 +921,7 @@ class TestCrossDevicePolicyLegacyAuthority:
         assert result.expansion_allowed_by_execution_policy is False
 
     def test_deprecated_authority_blocks_cross_device(self):
-        from core.cross_device_policy import resolve_routing, RoutingPosture
+        from core.cross_device_policy import RoutingPosture, resolve_routing
 
         policy = {"cross_device_allowed": True}
         result = resolve_routing(
@@ -853,7 +940,7 @@ class TestCrossDevicePolicyLegacyAuthority:
 
 class TestCrossDevicePolicyCanonical:
     def test_cross_device_domain_allows_expansion(self):
-        from core.cross_device_policy import resolve_routing, RoutingPosture
+        from core.cross_device_policy import RoutingPosture, resolve_routing
 
         policy = {"cross_device_allowed": True}
         result = resolve_routing(
@@ -865,7 +952,7 @@ class TestCrossDevicePolicyCanonical:
         assert result.expansion_allowed_by_execution_policy is True
 
     def test_local_domain_does_not_expand(self):
-        from core.cross_device_policy import resolve_routing, RoutingPosture
+        from core.cross_device_policy import RoutingPosture, resolve_routing
 
         policy = {"cross_device_allowed": True}
         result = resolve_routing(
@@ -880,7 +967,7 @@ class TestCrossDevicePolicyCanonical:
         (OpenClawd / CommandRouter), not by the gateway.  The resolver
         accepts the policy dict as a signal — the gateway does not invoke it.
         """
-        from core.cross_device_policy import resolve_routing, RoutingPosture
+        from core.cross_device_policy import RoutingPosture, resolve_routing
 
         # Simulate a policy that would be set by OpenClawd / CommandRouter
         openclawd_policy = {
@@ -906,39 +993,46 @@ class TestCrossDevicePolicyCanonical:
 class TestGalaxyOrchestratorDemoted:
     def test_class_docstring_mentions_deprecated(self):
         from galaxy_gateway.orchestrator.galaxy_orchestrator import GalaxyOrchestrator
+
         doc = GalaxyOrchestrator.__doc__ or ""
         # Docstring should mention the deprecation / canonical chain
         assert "PR-7" in doc or "deprecated" in doc.lower() or "legacy" in doc.lower()
 
     def test_class_docstring_mentions_canonical_chain(self):
         from galaxy_gateway.orchestrator.galaxy_orchestrator import GalaxyOrchestrator
+
         doc = GalaxyOrchestrator.__doc__ or ""
         assert "CommandRouter" in doc or "canonical" in doc.lower()
 
     def test_init_emits_legacy_guardrail(self, caplog):
         import logging
         from unittest.mock import MagicMock, patch
+
         # GalaxyOrchestrator.__init__ tries to connect to AI gateway/device manager.
         # We patch those out to test only the guardrail emission.
-        with patch(
-            "galaxy_gateway.orchestrator.galaxy_orchestrator.AIGateway",
-            return_value=MagicMock(),
-        ), patch(
-            "galaxy_gateway.orchestrator.galaxy_orchestrator.DeviceManager",
-            return_value=MagicMock(),
+        with (
+            patch(
+                "galaxy_gateway.orchestrator.galaxy_orchestrator.AIGateway",
+                return_value=MagicMock(),
+            ),
+            patch(
+                "galaxy_gateway.orchestrator.galaxy_orchestrator.DeviceManager",
+                return_value=MagicMock(),
+            ),
         ):
             # PR-R9-CLEAN:守卫从 WARNING 降为 DEBUG(降噪),前缀统一为
             # "LEGACY GUARDRAIL"。钉住"init 仍发守卫"这一事实,级别按现契约。
             with caplog.at_level(logging.DEBUG, logger="Galaxy.OrchestrationAuthority"):
                 try:
                     from galaxy_gateway.orchestrator.galaxy_orchestrator import GalaxyOrchestrator
+
                     GalaxyOrchestrator(config={})
                 except Exception:
                     pass  # Construction errors are not what we're testing
         legacy_records = [
-            r for r in caplog.records
-            if "LEGACY GUARDRAIL" in r.message
-            and "galaxy_gateway.orchestrator.galaxy_orchestrator" in r.message
+            r
+            for r in caplog.records
+            if "LEGACY GUARDRAIL" in r.message and "galaxy_gateway.orchestrator.galaxy_orchestrator" in r.message
         ]
         assert len(legacy_records) >= 1
 
@@ -952,10 +1046,12 @@ class TestGalaxyOrchestratorDemoted:
 class TestLegacyPathWarning:
     def setup_method(self):
         from core.cross_device_execution_chain import reset_cross_device_chain
+
         reset_cross_device_chain()
 
     def test_galaxy_orchestrator_legacy_path_emits_warning(self, caplog):
         import logging
+
         from core.cross_device_execution_chain import record_chain_execution
 
         with caplog.at_level(logging.WARNING, logger="Galaxy.CrossDeviceExecutionChain"):
@@ -963,14 +1059,12 @@ class TestLegacyPathWarning:
                 task_id="t_gw_warn",
                 legacy_path_used="galaxy_gateway.orchestrator.galaxy_orchestrator",
             )
-        legacy_msgs = [
-            r for r in caplog.records
-            if "LEGACY CHAIN PATH" in r.message
-        ]
+        legacy_msgs = [r for r in caplog.records if "LEGACY CHAIN PATH" in r.message]
         assert len(legacy_msgs) >= 1
 
     def test_device_router_legacy_path_emits_warning(self, caplog):
         import logging
+
         from core.cross_device_execution_chain import record_chain_execution
 
         with caplog.at_level(logging.WARNING, logger="Galaxy.CrossDeviceExecutionChain"):
@@ -978,8 +1072,5 @@ class TestLegacyPathWarning:
                 task_id="t_dr_warn",
                 legacy_path_used="galaxy_gateway.device_router.DeviceRouter.route_task",
             )
-        legacy_msgs = [
-            r for r in caplog.records
-            if "LEGACY CHAIN PATH" in r.message
-        ]
+        legacy_msgs = [r for r in caplog.records if "LEGACY CHAIN PATH" in r.message]
         assert len(legacy_msgs) >= 1

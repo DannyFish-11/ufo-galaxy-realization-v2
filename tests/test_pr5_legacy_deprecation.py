@@ -30,7 +30,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 # ===========================================================================
 # Shared helpers
 # ===========================================================================
@@ -50,6 +49,7 @@ _CR_SUCCESS: Dict[str, Any] = {
 # A) Node_110 — startup warning + served_by + legacy_override guardrail
 # ===========================================================================
 
+
 class TestNode110DeprecationWarnings:
     """Node_110 server.py must emit deprecation log at module init."""
 
@@ -57,15 +57,14 @@ class TestNode110DeprecationWarnings:
         """Module-level logger.warning must fire DEPRECATION [Node_110…] on load."""
         # Force a fresh import so the module-level warning fires.
         import sys
+
         sys.modules.pop("nodes.Node_110_SmartOrchestrator.server", None)
 
         with caplog.at_level(logging.WARNING, logger="nodes.Node_110_SmartOrchestrator.server"):
             importlib.import_module("nodes.Node_110_SmartOrchestrator.server")
 
         deprecation_msgs = [r.message for r in caplog.records if "DEPRECATION" in r.message]
-        assert deprecation_msgs, (
-            "Node_110_SmartOrchestrator.server must log a DEPRECATION warning at startup"
-        )
+        assert deprecation_msgs, "Node_110_SmartOrchestrator.server must log a DEPRECATION warning at startup"
         assert any("Node_110" in m for m in deprecation_msgs)
 
     @pytest.mark.asyncio
@@ -79,8 +78,8 @@ class TestNode110DeprecationWarnings:
             return_value=mock_runtime,
         ):
             from nodes.Node_110_SmartOrchestrator.server import (
-                orchestrate_task,
                 OrchestrationRequest,
+                orchestrate_task,
             )
 
             req = OrchestrationRequest(task_description="pr5 test task")
@@ -109,8 +108,8 @@ class TestNode110DeprecationWarnings:
                 mock_fallback,
             ):
                 from nodes.Node_110_SmartOrchestrator.server import (
-                    orchestrate_task,
                     OrchestrationRequest,
+                    orchestrate_task,
                 )
 
                 req = OrchestrationRequest(
@@ -136,8 +135,8 @@ class TestNode110DeprecationWarnings:
                 logger="nodes.Node_110_SmartOrchestrator.server",
             ):
                 from nodes.Node_110_SmartOrchestrator.server import (
-                    orchestrate_task,
                     OrchestrationRequest,
+                    orchestrate_task,
                 )
 
                 req = OrchestrationRequest(
@@ -146,12 +145,8 @@ class TestNode110DeprecationWarnings:
                 )
                 await orchestrate_task(req)
 
-        guardrail_msgs = [
-            r.message for r in caplog.records if "DEPRECATION GUARDRAIL" in r.message
-        ]
-        assert guardrail_msgs, (
-            "A DEPRECATION GUARDRAIL warning must be logged when legacy_override=True"
-        )
+        guardrail_msgs = [r.message for r in caplog.records if "DEPRECATION GUARDRAIL" in r.message]
+        assert guardrail_msgs, "A DEPRECATION GUARDRAIL warning must be logged when legacy_override=True"
 
     @pytest.mark.asyncio
     async def test_fallback_without_override_logs_guardrail_warning(self, caplog):
@@ -178,19 +173,15 @@ class TestNode110DeprecationWarnings:
                     logger="nodes.Node_110_SmartOrchestrator.server",
                 ):
                     from nodes.Node_110_SmartOrchestrator.server import (
-                        orchestrate_task,
                         OrchestrationRequest,
+                        orchestrate_task,
                     )
 
                     req = OrchestrationRequest(task_description="no override test")
                     await orchestrate_task(req)
 
-        guardrail_msgs = [
-            r.message for r in caplog.records if "DEPRECATION GUARDRAIL" in r.message
-        ]
-        assert guardrail_msgs, (
-            "A DEPRECATION GUARDRAIL warning must be logged on legacy fallback even without override"
-        )
+        guardrail_msgs = [r.message for r in caplog.records if "DEPRECATION GUARDRAIL" in r.message]
+        assert guardrail_msgs, "A DEPRECATION GUARDRAIL warning must be logged on legacy fallback even without override"
 
     def test_orchestration_request_has_legacy_override_field(self):
         """OrchestrationRequest must accept legacy_override (default False)."""
@@ -199,9 +190,7 @@ class TestNode110DeprecationWarnings:
         req = OrchestrationRequest(task_description="check field")
         assert req.legacy_override is False
 
-        req_override = OrchestrationRequest(
-            task_description="check field", legacy_override=True
-        )
+        req_override = OrchestrationRequest(task_description="check field", legacy_override=True)
         assert req_override.legacy_override is True
 
     def test_orchestration_response_has_served_by_field(self):
@@ -220,6 +209,7 @@ class TestNode110DeprecationWarnings:
 # ===========================================================================
 # B) Node_81 — startup warning + legacy_override field + guardrail log
 # ===========================================================================
+
 
 class TestNode81DeprecationWarnings:
     """Node_81 main.py must emit deprecation log at startup and guard fallback."""
@@ -256,11 +246,11 @@ class TestNode81DeprecationWarnings:
                 logger="nodes.Node_81_Orchestrator.main",
             ):
                 from nodes.Node_81_Orchestrator.main import (
-                    execute_workflow,
-                    WorkflowRequest,
+                    NodeCall,
                     Task,
                     TaskType,
-                    NodeCall,
+                    WorkflowRequest,
+                    execute_workflow,
                 )
 
                 req = WorkflowRequest(
@@ -277,23 +267,19 @@ class TestNode81DeprecationWarnings:
                 )
                 await execute_workflow(req, background_tasks=MagicMock())
 
-        guardrail_msgs = [
-            r.message for r in caplog.records if "DEPRECATION GUARDRAIL" in r.message
-        ]
-        assert guardrail_msgs, (
-            "A DEPRECATION GUARDRAIL warning must be logged when legacy_override=True on Node_81"
-        )
+        guardrail_msgs = [r.message for r in caplog.records if "DEPRECATION GUARDRAIL" in r.message]
+        assert guardrail_msgs, "A DEPRECATION GUARDRAIL warning must be logged when legacy_override=True on Node_81"
 
     @pytest.mark.asyncio
     async def test_fallback_without_override_logs_guardrail_warning(self, caplog):
         """Fallback to local engine without legacy_override must log DEPRECATION GUARDRAIL."""
         from nodes.Node_81_Orchestrator.main import (
+            NodeCall,
+            Task,
+            TaskStatus,
+            TaskType,
             WorkflowRequest,
             WorkflowResult,
-            TaskStatus,
-            Task,
-            TaskType,
-            NodeCall,
         )
 
         fallback_result = WorkflowResult(
@@ -332,17 +318,14 @@ class TestNode81DeprecationWarnings:
                     )
                     await execute_workflow(req, background_tasks=MagicMock())
 
-        guardrail_msgs = [
-            r.message for r in caplog.records if "DEPRECATION GUARDRAIL" in r.message
-        ]
-        assert guardrail_msgs, (
-            "A DEPRECATION GUARDRAIL warning must be logged on Node_81 fallback"
-        )
+        guardrail_msgs = [r.message for r in caplog.records if "DEPRECATION GUARDRAIL" in r.message]
+        assert guardrail_msgs, "A DEPRECATION GUARDRAIL warning must be logged on Node_81 fallback"
 
 
 # ===========================================================================
 # C) Node_50 — DeprecationWarning on instantiation
 # ===========================================================================
+
 
 class TestNode50DeprecationWarning:
     """TaskOrchestrator must emit a DeprecationWarning when instantiated directly."""
@@ -364,12 +347,8 @@ class TestNode50DeprecationWarning:
             warnings.simplefilter("always")
             TaskOrchestrator()
 
-        deprecations = [
-            w for w in caught if issubclass(w.category, DeprecationWarning)
-        ]
-        assert deprecations, (
-            "TaskOrchestrator.__init__ must emit a DeprecationWarning"
-        )
+        deprecations = [w for w in caught if issubclass(w.category, DeprecationWarning)]
+        assert deprecations, "TaskOrchestrator.__init__ must emit a DeprecationWarning"
         msg = str(deprecations[0].message)
         assert "legacy" in msg.lower() or "subordinate" in msg.lower() or "ConstellationRuntime" in msg
 
@@ -378,24 +357,20 @@ class TestNode50DeprecationWarning:
         import ast
         import pathlib
 
-        src_path = (
-            pathlib.Path(__file__).parent.parent
-            / "nodes"
-            / "Node_50_Transformer"
-            / "task_orchestrator.py"
-        )
+        src_path = pathlib.Path(__file__).parent.parent / "nodes" / "Node_50_Transformer" / "task_orchestrator.py"
         source = src_path.read_text(encoding="utf-8")
         tree = ast.parse(source)
         doc = ast.get_docstring(tree) or ""
         doc_lower = doc.lower()
-        assert "legacy" in doc_lower or "从属" in doc or "subordinate" in doc_lower, (
-            "task_orchestrator.py docstring must mark this module as legacy/subordinate"
-        )
+        assert (
+            "legacy" in doc_lower or "从属" in doc or "subordinate" in doc_lower
+        ), "task_orchestrator.py docstring must mark this module as legacy/subordinate"
 
 
 # ===========================================================================
 # D) core/constellation_runtime — warn_legacy_path() + LEGACY_ORCHESTRATOR_PATHS
 # ===========================================================================
+
 
 class TestConstellationRuntimeGuardrails:
     """ConstellationRuntime must expose the warn_legacy_path() guardrail helper."""
@@ -422,9 +397,9 @@ class TestConstellationRuntimeGuardrails:
             "nodes.Node_81_Orchestrator.main",
             "nodes.Node_50_Transformer.task_orchestrator",
         }
-        assert known.issubset(LEGACY_ORCHESTRATOR_PATHS), (
-            f"LEGACY_ORCHESTRATOR_PATHS must contain {known}, got {LEGACY_ORCHESTRATOR_PATHS}"
-        )
+        assert known.issubset(
+            LEGACY_ORCHESTRATOR_PATHS
+        ), f"LEGACY_ORCHESTRATOR_PATHS must contain {known}, got {LEGACY_ORCHESTRATOR_PATHS}"
 
     def test_warn_legacy_path_logs_structured_warning(self, caplog):
         """warn_legacy_path() must log a WARNING containing caller and trace_id."""
@@ -437,15 +412,15 @@ class TestConstellationRuntimeGuardrails:
             )
 
         msgs = [r.message for r in caplog.records]
-        assert any("LEGACY PATH GUARDRAIL" in m for m in msgs), (
-            "warn_legacy_path() must log a message containing 'LEGACY PATH GUARDRAIL'"
-        )
-        assert any("trace-pr5-test" in m for m in msgs), (
-            "warn_legacy_path() must include the trace_id in the log message"
-        )
-        assert any("nodes.Node_110_SmartOrchestrator.server" in m for m in msgs), (
-            "warn_legacy_path() must include the caller in the log message"
-        )
+        assert any(
+            "LEGACY PATH GUARDRAIL" in m for m in msgs
+        ), "warn_legacy_path() must log a message containing 'LEGACY PATH GUARDRAIL'"
+        assert any(
+            "trace-pr5-test" in m for m in msgs
+        ), "warn_legacy_path() must include the trace_id in the log message"
+        assert any(
+            "nodes.Node_110_SmartOrchestrator.server" in m for m in msgs
+        ), "warn_legacy_path() must include the caller in the log message"
 
     def test_warn_legacy_path_without_trace_id(self, caplog):
         """warn_legacy_path() must still log when trace_id is omitted."""
@@ -461,6 +436,7 @@ class TestConstellationRuntimeGuardrails:
 # ===========================================================================
 # E) core/e2e_orchestrator — structured warning on use_constellation=False
 # ===========================================================================
+
 
 class TestE2EOrchestratorGuardrails:
     """process_user_input must log a structured warning when use_constellation=False."""
@@ -481,9 +457,7 @@ class TestE2EOrchestratorGuardrails:
         )
 
         with patch("core.e2e_pipeline.get_pipeline", return_value=mock_pipeline):
-            with caplog.at_level(
-                logging.WARNING, logger="Galaxy.E2EOrchestrator"
-            ):
+            with caplog.at_level(logging.WARNING, logger="Galaxy.E2EOrchestrator"):
                 from core.e2e_orchestrator import process_user_input
 
                 await process_user_input(
@@ -491,15 +465,11 @@ class TestE2EOrchestratorGuardrails:
                     use_constellation=False,
                 )
 
-        guardrail_msgs = [
-            r.message for r in caplog.records if "LEGACY PATH GUARDRAIL" in r.message
-        ]
-        assert guardrail_msgs, (
-            "process_user_input must log LEGACY PATH GUARDRAIL warning when use_constellation=False"
-        )
-        assert any("use_constellation=False" in m for m in guardrail_msgs), (
-            "The guardrail warning must mention use_constellation=False"
-        )
+        guardrail_msgs = [r.message for r in caplog.records if "LEGACY PATH GUARDRAIL" in r.message]
+        assert guardrail_msgs, "process_user_input must log LEGACY PATH GUARDRAIL warning when use_constellation=False"
+        assert any(
+            "use_constellation=False" in m for m in guardrail_msgs
+        ), "The guardrail warning must mention use_constellation=False"
 
     @pytest.mark.asyncio
     async def test_use_constellation_true_does_not_log_guardrail_warning(self, caplog):
@@ -511,9 +481,7 @@ class TestE2EOrchestratorGuardrails:
             "core.constellation_runtime.get_constellation_runtime",
             return_value=mock_runtime,
         ):
-            with caplog.at_level(
-                logging.WARNING, logger="Galaxy.E2EOrchestrator"
-            ):
+            with caplog.at_level(logging.WARNING, logger="Galaxy.E2EOrchestrator"):
                 from core.e2e_orchestrator import process_user_input
 
                 await process_user_input(
@@ -521,9 +489,7 @@ class TestE2EOrchestratorGuardrails:
                     use_constellation=True,
                 )
 
-        guardrail_msgs = [
-            r.message for r in caplog.records if "LEGACY PATH GUARDRAIL" in r.message
-        ]
-        assert not guardrail_msgs, (
-            "No LEGACY PATH GUARDRAIL warning should be logged on the normal use_constellation=True path"
-        )
+        guardrail_msgs = [r.message for r in caplog.records if "LEGACY PATH GUARDRAIL" in r.message]
+        assert (
+            not guardrail_msgs
+        ), "No LEGACY PATH GUARDRAIL warning should be logged on the normal use_constellation=True path"

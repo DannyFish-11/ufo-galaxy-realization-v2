@@ -69,6 +69,7 @@ try:
         is_recovery_eligible,
         record_participant_truth_with_ownership,
     )
+
     _BRIDGE_AVAILABLE = True
 except ImportError:
     _BRIDGE_AVAILABLE = False
@@ -84,6 +85,7 @@ try:
         record_session_truth,
         reset_canonical_session_truth_runtime,
     )
+
     _CST_AVAILABLE = True
 except ImportError:
     _CST_AVAILABLE = False
@@ -95,19 +97,14 @@ try:
         get_replay_foundation,
         reset_replay_foundation,
     )
+
     _REPLAY_AVAILABLE = True
 except ImportError:
     _REPLAY_AVAILABLE = False
 
-_SKIP_BRIDGE = pytest.mark.skipif(
-    not _BRIDGE_AVAILABLE, reason="canonical_ownership_truth_bridge unavailable"
-)
-_SKIP_CST = pytest.mark.skipif(
-    not _CST_AVAILABLE, reason="canonical_session_truth unavailable"
-)
-_SKIP_REPLAY = pytest.mark.skipif(
-    not _REPLAY_AVAILABLE, reason="replay_foundation unavailable"
-)
+_SKIP_BRIDGE = pytest.mark.skipif(not _BRIDGE_AVAILABLE, reason="canonical_ownership_truth_bridge unavailable")
+_SKIP_CST = pytest.mark.skipif(not _CST_AVAILABLE, reason="canonical_session_truth unavailable")
+_SKIP_REPLAY = pytest.mark.skipif(not _REPLAY_AVAILABLE, reason="replay_foundation unavailable")
 _SKIP_ALL = pytest.mark.skipif(
     not (_BRIDGE_AVAILABLE and _CST_AVAILABLE and _REPLAY_AVAILABLE),
     reason="one or more required modules unavailable",
@@ -128,9 +125,7 @@ def _make_ownership_context(
     return {
         "truth_kind": truth_kind,
         "authority_scope": (
-            "v2_canonical_orchestration"
-            if ownership_status == "canonicalized"
-            else "android_participant_local"
+            "v2_canonical_orchestration" if ownership_status == "canonicalized" else "android_participant_local"
         ),
         "ownership_status": ownership_status,
         "participant_identity": device_id,
@@ -312,15 +307,11 @@ class TestGroupE_CSTRecordOwnershipBoundaryField:
         assert rec.participant_ownership_boundary == "canonicalized"
 
     def test_e3_field_accepts_fallback_non_canonical(self) -> None:
-        rec = CanonicalSessionTruthRecord(
-            participant_ownership_boundary="fallback_non_canonical"
-        )
+        rec = CanonicalSessionTruthRecord(participant_ownership_boundary="fallback_non_canonical")
         assert rec.participant_ownership_boundary == "fallback_non_canonical"
 
     def test_e4_to_dict_includes_participant_ownership_boundary(self) -> None:
-        rec = CanonicalSessionTruthRecord(
-            participant_ownership_boundary="rejected_non_canonical"
-        )
+        rec = CanonicalSessionTruthRecord(participant_ownership_boundary="rejected_non_canonical")
         d = rec.to_dict()
         assert "participant_ownership_boundary" in d
         assert d["participant_ownership_boundary"] == "rejected_non_canonical"
@@ -841,15 +832,19 @@ class TestGroupN_NonCanonicalIsolation:
         for i in range(5):
             sid = f"sess-n1-canonical-{i}"
             canonical_sessions.append(sid)
-            rt.record(CanonicalSessionTruthRecord(
-                session_id=sid,
-                participant_ownership_boundary="canonicalized",
-            ))
+            rt.record(
+                CanonicalSessionTruthRecord(
+                    session_id=sid,
+                    participant_ownership_boundary="canonicalized",
+                )
+            )
         for boundary in ("fallback_non_canonical", "participant_local_only", "rejected_non_canonical"):
-            rt.record(CanonicalSessionTruthRecord(
-                session_id=f"sess-n1-blocked-{boundary}",
-                participant_ownership_boundary=boundary,
-            ))
+            rt.record(
+                CanonicalSessionTruthRecord(
+                    session_id=f"sess-n1-blocked-{boundary}",
+                    participant_ownership_boundary=boundary,
+                )
+            )
 
         snap = rt.snapshot(max_recent=20)
         assert snap.total_records == 5
@@ -859,23 +854,27 @@ class TestGroupN_NonCanonicalIsolation:
         for sid in canonical_sessions:
             assert sid in recorded_sessions, f"Canonical session {sid} missing from snapshot"
         for boundary in ("fallback_non_canonical", "participant_local_only", "rejected_non_canonical"):
-            assert f"sess-n1-blocked-{boundary}" not in recorded_sessions, (
-                f"Non-canonical session for {boundary} appeared in canonical snapshot"
-            )
+            assert (
+                f"sess-n1-blocked-{boundary}" not in recorded_sessions
+            ), f"Non-canonical session for {boundary} appeared in canonical snapshot"
 
     def test_n2_divergence_origin_does_not_pollute_canonical_substrate(self) -> None:
         """Rejected/diverged participant records must not increase canonical record count."""
         rt = CanonicalSessionTruthRuntime()
         # Submit a legitimate canonical record
-        rt.record(CanonicalSessionTruthRecord(
-            session_id="sess-n2-canonical",
-            participant_ownership_boundary="canonicalized",
-        ))
+        rt.record(
+            CanonicalSessionTruthRecord(
+                session_id="sess-n2-canonical",
+                participant_ownership_boundary="canonicalized",
+            )
+        )
         # Simulate diverged participant attempting to inject truth
-        rt.record(CanonicalSessionTruthRecord(
-            session_id="sess-n2-diverged",
-            participant_ownership_boundary="rejected_non_canonical",
-        ))
+        rt.record(
+            CanonicalSessionTruthRecord(
+                session_id="sess-n2-diverged",
+                participant_ownership_boundary="rejected_non_canonical",
+            )
+        )
         snap = rt.snapshot()
         assert snap.total_records == 1
         assert snap.non_canonical_rejected_count == 1
@@ -883,15 +882,15 @@ class TestGroupN_NonCanonicalIsolation:
     def test_n3_bridge_non_canonical_rejection_is_audited_not_silenced(self) -> None:
         """Non-canonical rejections must be counted (visible), not silently dropped."""
         rt = CanonicalSessionTruthRuntime()
-        rt.record(CanonicalSessionTruthRecord(
-            session_id="sess-n3-fallback",
-            participant_ownership_boundary="fallback_non_canonical",
-        ))
+        rt.record(
+            CanonicalSessionTruthRecord(
+                session_id="sess-n3-fallback",
+                participant_ownership_boundary="fallback_non_canonical",
+            )
+        )
         snap = rt.snapshot()
         # Rejection must be visible in the snapshot
-        assert snap.non_canonical_rejected_count > 0, (
-            "Non-canonical rejection must be counted, not silenced"
-        )
+        assert snap.non_canonical_rejected_count > 0, "Non-canonical rejection must be counted, not silenced"
 
 
 # ===========================================================================

@@ -114,6 +114,7 @@ class CapabilityResolver:
             return self._registry
         try:
             from core.agent.capability_registry import CapabilityRegistry
+
             return CapabilityRegistry.get_instance()
         except Exception as exc:
             logger.warning("CapabilityResolver: cannot load registry: %s", exc)
@@ -149,11 +150,7 @@ class CapabilityResolver:
                 "description": getattr(item, "description", ""),
                 "source": getattr(item, "source", "unknown"),
                 "source_id": getattr(item, "source_id", ""),
-                "version": (
-                    getattr(item, "version", None)
-                    or metadata.get("contract_version")
-                    or "1.0.0"
-                ),
+                "version": (getattr(item, "version", None) or metadata.get("contract_version") or "1.0.0"),
                 "parameters": getattr(item, "parameters", {}),
                 "available": getattr(item, "available", True),
                 "tags": list(metadata.get("contract_tags", [])),
@@ -294,10 +291,7 @@ class CapabilityResolver:
     def find(self, query: str) -> List[CapabilityContract]:
         """Keyword search across name + description of all valid contracts."""
         q = query.lower()
-        return [
-            c for c in self.resolve_all()
-            if q in c.name.lower() or q in c.description.lower()
-        ]
+        return [c for c in self.resolve_all() if q in c.name.lower() or q in c.description.lower()]
 
     def collect_tool_schemas(
         self,

@@ -24,16 +24,15 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
 
 def _reset_all() -> None:
+    from core.orchestration.global_arbiter import reset_global_arbiter
     from core.unified.idempotency import reset_idempotency_store
     from core.unified.release_gate import reset_release_gate
-    from core.orchestration.global_arbiter import reset_global_arbiter
 
     reset_idempotency_store()
     reset_release_gate()
@@ -47,7 +46,7 @@ def _reset_all() -> None:
 
 class TestGalaxyErrorCodeTaxonomy:
     def test_all_codes_in_registry(self):
-        from core.unified.error_codes import GalaxyErrorCode, ERROR_CODE_REGISTRY
+        from core.unified.error_codes import ERROR_CODE_REGISTRY, GalaxyErrorCode
 
         registry_keys = set()
         for k in ERROR_CODE_REGISTRY:
@@ -63,14 +62,19 @@ class TestGalaxyErrorCodeTaxonomy:
         assert len(values) == len(set(values)), "Duplicate code values found"
 
     def test_domain_coverage(self):
-        from core.unified.error_codes import GalaxyErrorCode, ErrorDomain, _registry
+        from core.unified.error_codes import ErrorDomain, GalaxyErrorCode, _registry
 
         reg = _registry()
         domains_covered = {v.domain for v in reg.values()}
         required_domains = {
-            ErrorDomain.PLANNER, ErrorDomain.EXECUTOR, ErrorDomain.GATEWAY,
-            ErrorDomain.DEVICE, ErrorDomain.TRANSPORT, ErrorDomain.IDEMPOTENCY,
-            ErrorDomain.ARBITER, ErrorDomain.RELEASE,
+            ErrorDomain.PLANNER,
+            ErrorDomain.EXECUTOR,
+            ErrorDomain.GATEWAY,
+            ErrorDomain.DEVICE,
+            ErrorDomain.TRANSPORT,
+            ErrorDomain.IDEMPOTENCY,
+            ErrorDomain.ARBITER,
+            ErrorDomain.RELEASE,
         }
         missing = required_domains - domains_covered
         assert not missing, f"Missing domain coverage: {missing}"
@@ -84,7 +88,7 @@ class TestGalaxyErrorCodeTaxonomy:
         assert is_retryable(GalaxyErrorCode.IDEMPOTENCY_DUPLICATE) is False
 
     def test_get_descriptor_returns_correct_domain(self):
-        from core.unified.error_codes import GalaxyErrorCode, ErrorDomain, get_descriptor
+        from core.unified.error_codes import ErrorDomain, GalaxyErrorCode, get_descriptor
 
         d = get_descriptor(GalaxyErrorCode.DEVICE_OFFLINE)
         assert d is not None
@@ -155,8 +159,8 @@ class TestErrorPayload:
 
 class TestErrorMapper:
     def test_map_stdlib_exceptions(self):
-        from core.unified.error_mapper import ErrorMapper
         from core.unified.error_codes import GalaxyErrorCode
+        from core.unified.error_mapper import ErrorMapper
 
         cases = [
             (TimeoutError("t"), GalaxyErrorCode.EXEC_TASK_TIMEOUT),
@@ -169,8 +173,8 @@ class TestErrorMapper:
             assert payload.code == expected.value, f"Expected {expected} for {type(exc).__name__}"
 
     def test_map_unified_exception_by_name(self):
-        from core.unified.error_mapper import ErrorMapper
         from core.unified.error_codes import GalaxyErrorCode
+        from core.unified.error_mapper import ErrorMapper
 
         class DeviceTimeoutError(Exception):
             pass
@@ -179,8 +183,8 @@ class TestErrorMapper:
         assert payload.code == GalaxyErrorCode.DEVICE_TIMEOUT.value
 
     def test_map_exception_with_code_attr(self):
-        from core.unified.error_mapper import ErrorMapper
         from core.unified.error_codes import GalaxyErrorCode
+        from core.unified.error_mapper import ErrorMapper
 
         class CustomErr(Exception):
             code = "DV_003"  # DEVICE_SEND_FAILED
@@ -189,8 +193,8 @@ class TestErrorMapper:
         assert payload.code == GalaxyErrorCode.DEVICE_SEND_FAILED.value
 
     def test_unknown_exception_maps_to_internal(self):
-        from core.unified.error_mapper import ErrorMapper
         from core.unified.error_codes import GalaxyErrorCode
+        from core.unified.error_mapper import ErrorMapper
 
         class WeirdError(Exception):
             pass
@@ -199,38 +203,36 @@ class TestErrorMapper:
         assert payload.code == GalaxyErrorCode.INTERNAL_UNKNOWN.value
 
     def test_from_legacy_gateway_error(self):
-        from core.unified.error_mapper import ErrorMapper
         from core.unified.error_codes import GalaxyErrorCode
+        from core.unified.error_mapper import ErrorMapper
 
         p = ErrorMapper.from_legacy_gateway_error("auth_error", "token expired")
         assert p.code == GalaxyErrorCode.GW_AUTH_FAILED.value
 
     def test_from_legacy_device_error_capability(self):
-        from core.unified.error_mapper import ErrorMapper
         from core.unified.error_codes import GalaxyErrorCode
+        from core.unified.error_mapper import ErrorMapper
 
-        p = ErrorMapper.from_legacy_device_error(
-            "dev_1", "device missing capability 'camera'"
-        )
+        p = ErrorMapper.from_legacy_device_error("dev_1", "device missing capability 'camera'")
         assert p.code == GalaxyErrorCode.DEVICE_CAPABILITY_MISSING.value
 
     def test_from_legacy_executor_timeout(self):
-        from core.unified.error_mapper import ErrorMapper
         from core.unified.error_codes import GalaxyErrorCode
+        from core.unified.error_mapper import ErrorMapper
 
         p = ErrorMapper.from_legacy_executor_error("task timed out after 30s")
         assert p.code == GalaxyErrorCode.EXEC_TASK_TIMEOUT.value
 
     def test_from_legacy_executor_preempt(self):
-        from core.unified.error_mapper import ErrorMapper
         from core.unified.error_codes import GalaxyErrorCode
+        from core.unified.error_mapper import ErrorMapper
 
         p = ErrorMapper.from_legacy_executor_error("task was preempted by scheduler")
         assert p.code == GalaxyErrorCode.EXEC_PREEMPTED.value
 
     def test_from_dict_round_trip(self):
+        from core.unified.error_codes import ErrorPayload, GalaxyErrorCode
         from core.unified.error_mapper import ErrorMapper
-        from core.unified.error_codes import GalaxyErrorCode, ErrorPayload
 
         orig = ErrorPayload.from_code(GalaxyErrorCode.ARBITER_QUOTA_EXCEEDED)
         restored = ErrorMapper.from_dict(orig.to_dict())
@@ -254,8 +256,11 @@ class TestIdempotencyStore:
 
     def test_record_and_check_completed(self):
         from core.unified.idempotency import (
-            check_idempotency, record_idempotency, make_payload_hash,
-            IdempotencyStatus, DuplicateCommandError,
+            DuplicateCommandError,
+            IdempotencyStatus,
+            check_idempotency,
+            make_payload_hash,
+            record_idempotency,
         )
 
         h = make_payload_hash("payload_x")
@@ -270,7 +275,10 @@ class TestIdempotencyStore:
 
     def test_in_flight_does_not_raise_duplicate(self):
         from core.unified.idempotency import (
-            get_idempotency_store, check_idempotency, make_payload_hash, IdempotencyStatus
+            IdempotencyStatus,
+            check_idempotency,
+            get_idempotency_store,
+            make_payload_hash,
         )
 
         h = make_payload_hash("inflight")
@@ -282,7 +290,10 @@ class TestIdempotencyStore:
 
     def test_failed_key_resubmittable(self):
         from core.unified.idempotency import (
-            get_idempotency_store, check_idempotency, make_payload_hash, IdempotencyStatus
+            IdempotencyStatus,
+            check_idempotency,
+            get_idempotency_store,
+            make_payload_hash,
         )
 
         h = make_payload_hash("failed_op")
@@ -295,7 +306,10 @@ class TestIdempotencyStore:
 
     def test_conflict_detection(self):
         from core.unified.idempotency import (
-            record_idempotency, check_idempotency, make_payload_hash, IdempotencyConflictError
+            IdempotencyConflictError,
+            check_idempotency,
+            make_payload_hash,
+            record_idempotency,
         )
 
         h1 = make_payload_hash("payload_1")
@@ -306,9 +320,7 @@ class TestIdempotencyStore:
             check_idempotency("conf-1", h2, raise_on_conflict=True)
 
     def test_explicit_remove(self):
-        from core.unified.idempotency import (
-            get_idempotency_store, record_idempotency, make_payload_hash
-        )
+        from core.unified.idempotency import get_idempotency_store, make_payload_hash, record_idempotency
 
         h = make_payload_hash("rm_payload")
         record_idempotency("rm-1", h)
@@ -318,9 +330,7 @@ class TestIdempotencyStore:
         assert store.get("rm-1") is None
 
     def test_ttl_eviction(self):
-        from core.unified.idempotency import (
-            get_idempotency_store, make_payload_hash
-        )
+        from core.unified.idempotency import get_idempotency_store, make_payload_hash
 
         store = get_idempotency_store()
         store.configure(ttl_seconds=0.01)
@@ -334,9 +344,7 @@ class TestIdempotencyStore:
         assert store.get("ttl-1") is None
 
     def test_max_entries_eviction(self):
-        from core.unified.idempotency import (
-            get_idempotency_store, make_payload_hash
-        )
+        from core.unified.idempotency import get_idempotency_store, make_payload_hash
 
         store = get_idempotency_store()
         store.configure(max_entries=5)
@@ -445,10 +453,7 @@ class TestGlobalArbiter:
 
     def test_fairness_different_origins_all_admitted(self):
         arbiter = self._fresh_arbiter(limit=5, quota=2)
-        outcomes = [
-            arbiter.admit(f"t{i}", priority=5, origin=f"user:{i}")
-            for i in range(5)
-        ]
+        outcomes = [arbiter.admit(f"t{i}", priority=5, origin=f"user:{i}") for i in range(5)]
         admitted_count = sum(1 for d in outcomes if d.admitted)
         assert admitted_count == 5
 
@@ -549,7 +554,10 @@ class TestIdempotencyCommandEnvelopeIntegration:
     def test_envelope_idempotency_key_is_deduped(self):
         from core.unified.command_envelope import CommandEnvelope
         from core.unified.idempotency import (
-            check_idempotency, record_idempotency, make_payload_hash, DuplicateCommandError
+            DuplicateCommandError,
+            check_idempotency,
+            make_payload_hash,
+            record_idempotency,
         )
 
         env = CommandEnvelope(
@@ -571,7 +579,7 @@ class TestIdempotencyCommandEnvelopeIntegration:
 
     def test_envelope_with_explicit_idempotency_key(self):
         from core.unified.command_envelope import CommandEnvelope
-        from core.unified.idempotency import record_idempotency, check_idempotency, make_payload_hash
+        from core.unified.idempotency import check_idempotency, make_payload_hash, record_idempotency
 
         ikey = "idem-abc-123"
         env = CommandEnvelope(
@@ -603,8 +611,8 @@ class TestArbiterGateIntegration:
         _reset_all()
 
     def test_arbiter_disabled_via_gate(self):
-        from core.unified.release_gate import get_release_gate, reset_release_gate
         from core.orchestration.global_arbiter import get_global_arbiter, reset_global_arbiter
+        from core.unified.release_gate import get_release_gate, reset_release_gate
 
         reset_release_gate()
         reset_global_arbiter()
@@ -625,8 +633,8 @@ class TestArbiterGateIntegration:
         assert admitted is True
 
     def test_arbiter_enabled_enforces_quota(self):
-        from core.unified.release_gate import get_release_gate, reset_release_gate
         from core.orchestration.global_arbiter import get_global_arbiter, reset_global_arbiter
+        from core.unified.release_gate import get_release_gate, reset_release_gate
 
         reset_release_gate()
         reset_global_arbiter()

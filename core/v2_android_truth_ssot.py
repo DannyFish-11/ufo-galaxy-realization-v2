@@ -88,8 +88,7 @@ V2_ANDROID_TRUTH_SSOT_POLICY: str = (
 )
 
 ANDROID_PARTICIPATION_PROVENANCE = (
-    "core.android_network_participation.get_participation_state_for_device"
-    " via core.v2_android_truth_ssot"
+    "core.android_network_participation.get_participation_state_for_device" " via core.v2_android_truth_ssot"
 )
 
 ANDROID_UPLINK_CANONICAL_TRUTH_ENTRY: str = (
@@ -142,9 +141,7 @@ ANDROID_FIELD_ALIAS_MAP: Dict[str, str] = {
 }
 
 # Android 上报的可读性（readiness）状态规范值集合
-ANDROID_CANONICAL_READINESS_VALUES: frozenset = frozenset(
-    {"ready", "degraded", "blocked", "unknown", "transitioning"}
-)
+ANDROID_CANONICAL_READINESS_VALUES: frozenset = frozenset({"ready", "degraded", "blocked", "unknown", "transitioning"})
 
 # Android 本地推理状态规范值集合
 ANDROID_CANONICAL_LOCAL_INFERENCE_STATUS_VALUES: frozenset = frozenset(
@@ -152,9 +149,7 @@ ANDROID_CANONICAL_LOCAL_INFERENCE_STATUS_VALUES: frozenset = frozenset(
 )
 
 # 导致本地推理不可用的状态值
-ANDROID_LOCAL_INFERENCE_UNAVAILABLE_STATUSES: frozenset = frozenset(
-    {"disabled", "unavailable", "unknown"}
-)
+ANDROID_LOCAL_INFERENCE_UNAVAILABLE_STATUSES: frozenset = frozenset({"disabled", "unavailable", "unknown"})
 
 
 def normalize_android_field_aliases(raw_payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -428,20 +423,12 @@ def build_v2_android_truth_block(
         state = get_participation_state_for_device(device_id)
         tier = state.tier
         block.participation_tier = tier.value
-        block.dispatch_eligible = (
-            tier >= AndroidNetworkParticipationTier.dispatch_eligible
-        )
-        block.distributed_participant = (
-            tier >= AndroidNetworkParticipationTier.distributed_participant
-        )
+        block.dispatch_eligible = tier >= AndroidNetworkParticipationTier.dispatch_eligible
+        block.distributed_participant = tier >= AndroidNetworkParticipationTier.distributed_participant
         block.participation_blocking_reasons = list(state.blocking_reasons)
         block.participation_tier_notes = list(state.tier_derivation_notes)
-        block.participation_last_signal = (
-            state.last_signal.value if state.last_signal is not None else None
-        )
-        block.participation_prior_tier = (
-            state.prior_tier.value if state.prior_tier is not None else None
-        )
+        block.participation_last_signal = state.last_signal.value if state.last_signal is not None else None
+        block.participation_prior_tier = state.prior_tier.value if state.prior_tier is not None else None
         block.participation_transition_history = list(
             list_participation_transition_history(device_id, limit=include_history_limit)
         )
@@ -475,8 +462,7 @@ def build_v2_android_truth_block(
             block.current_fallback_tier = snap.current_fallback_tier
             raw_payload = getattr(snap, "raw_payload", {}) or {}
             block.execution_mode_state = _coerce_optional_str(
-                raw_payload.get("execution_mode_state")
-                or raw_payload.get("executionModeState")
+                raw_payload.get("execution_mode_state") or raw_payload.get("executionModeState")
             )
             block.runtime_constrained = _coerce_optional_bool(
                 raw_payload.get("runtime_constrained")
@@ -504,15 +490,9 @@ def build_v2_android_truth_block(
             cap_report = cap_meta.get("capability_report", {}) or {}
             if cap_report:
                 cap_normalized = normalize_android_field_aliases(cap_report)
-                block.local_inference_ready = _coerce_optional_bool(
-                    cap_normalized.get("local_inference_ready")
-                )
-                block.local_inference_available = _coerce_optional_bool(
-                    cap_normalized.get("local_inference_available")
-                )
-                block.cross_device_eligibility = _coerce_optional_bool(
-                    cap_normalized.get("cross_device_eligibility")
-                )
+                block.local_inference_ready = _coerce_optional_bool(cap_normalized.get("local_inference_ready"))
+                block.local_inference_available = _coerce_optional_bool(cap_normalized.get("local_inference_available"))
+                block.cross_device_eligibility = _coerce_optional_bool(cap_normalized.get("cross_device_eligibility"))
                 block.goal_execution_eligibility = _coerce_optional_bool(
                     cap_normalized.get("goal_execution_eligibility")
                 )
@@ -526,9 +506,7 @@ def build_v2_android_truth_block(
         logger.debug("build_v2_android_truth_block[%s]: %s", device_id, note)
         block.build_error_notes.append(note)
     if not snapshot_truth_available:
-        block.participation_blocking_reasons.append(
-            "android_snapshot_not_fresh_or_disconnected"
-        )
+        block.participation_blocking_reasons.append("android_snapshot_not_fresh_or_disconnected")
         block.participation_tier_notes.append(
             "No fresh connected snapshot is available yet; retaining participation "
             "tier from registration/session truth when present."
@@ -561,17 +539,13 @@ def build_v2_android_truth_block(
                     block.parallel_execution_eligibility = bool(_pee)
             _mrs = getattr(mode_state, "mode_readiness_state", None)
             if _mrs is not None:
-                block.mode_readiness_state = (
-                    _mrs.value if hasattr(_mrs, "value") else str(_mrs)
-                )
+                block.mode_readiness_state = _mrs.value if hasattr(_mrs, "value") else str(_mrs)
             if block.runtime_constrained is None:
                 _degraded_mode = getattr(mode_state, "degraded_mode", None)
                 if _degraded_mode is not None:
                     block.runtime_constrained = bool(_degraded_mode)
             if block.runtime_deferred is None:
-                _mode_readiness = (
-                    block.mode_readiness_state or ""
-                ).strip().lower()
+                _mode_readiness = (block.mode_readiness_state or "").strip().lower()
                 if _mode_readiness in {"transitioning", "blocked", "degraded"}:
                     block.runtime_deferred = True
             if block.local_mode_active is None:
@@ -613,9 +587,7 @@ def build_v2_android_truth_block_multi(
     """
     result: Dict[str, V2AndroidTruthBlock] = {}
     for did in device_ids:
-        result[did] = build_v2_android_truth_block(
-            did, include_history_limit=include_history_limit
-        )
+        result[did] = build_v2_android_truth_block(did, include_history_limit=include_history_limit)
     return result
 
 

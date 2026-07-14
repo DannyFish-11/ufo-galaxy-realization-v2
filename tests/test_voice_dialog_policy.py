@@ -4,6 +4,7 @@
 GPT-Live 借鉴 · 对话政策(core.voice_dialog_policy)+ voice_loop 集成:
 语义回合判定 / eagerness / hold / 委托分类 / 捧哏节奏 / 委托后台执行。
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -17,14 +18,14 @@ from core.voice_loop import VoiceLoop
 @pytest.fixture(autouse=True)
 def _fresh(monkeypatch):
     vdp.reset_dialog_policy()
-    for k in ("GALAXY_VOICE_EAGERNESS", "GALAXY_VOICE_DELEGATE",
-              "GALAXY_VOICE_BACKCHANNEL", "GALAXY_VOICE_HOLD_S"):
+    for k in ("GALAXY_VOICE_EAGERNESS", "GALAXY_VOICE_DELEGATE", "GALAXY_VOICE_BACKCHANNEL", "GALAXY_VOICE_HOLD_S"):
         monkeypatch.delenv(k, raising=False)
     yield
     vdp.reset_dialog_policy()
 
 
 # ── 语义回合判定 ──
+
 
 class TestSemanticEndOfTurn:
     def test_terminal_punct_is_complete(self):
@@ -63,6 +64,7 @@ class TestSemanticEndOfTurn:
 
 # ── hold ──
 
+
 class TestHold:
     def test_hold_and_resume_commands(self):
         p = vdp.get_dialog_policy()
@@ -83,6 +85,7 @@ class TestHold:
 
 # ── 委托分类 ──
 
+
 class TestClassifyTurn:
     def test_quick_smalltalk(self):
         p = vdp.get_dialog_policy()
@@ -102,6 +105,7 @@ class TestClassifyTurn:
 
 
 # ── 捧哏节奏 ──
+
 
 class TestBackchannel:
     def test_pacing_first_at_5s_then_12s_max2(self):
@@ -124,6 +128,7 @@ class TestBackchannel:
 
 
 # ── voice_loop 集成 ──
+
 
 class _FakeGalaxy:
     def __init__(self, delay: float = 0.0):
@@ -152,8 +157,7 @@ class TestVoiceLoopIntegration:
 
     def test_heavy_turn_delegated_to_background(self, monkeypatch):
         spoken = []
-        monkeypatch.setattr("core.speech_output.speak_response",
-                            lambda text, source="": spoken.append(text))
+        monkeypatch.setattr("core.speech_output.speak_response", lambda text, source="": spoken.append(text))
         g = _FakeGalaxy(delay=0.15)
 
         async def _run():
@@ -164,6 +168,7 @@ class TestVoiceLoopIntegration:
             assert len(spoken) == 1  # 已口头致谢
             await asyncio.sleep(0.4)  # 等后台完成
             assert g.calls == ["帮我查一下明天的天气。"]
+
         asyncio.run(_run())
 
     def test_delegate_disabled_falls_back_sync(self, monkeypatch):
@@ -179,14 +184,15 @@ class TestVoiceLoopIntegration:
         async def _run():
             vl = _loop(g)
             await vl._on_voice_input("等一下,让我想想。")
-            assert g.calls == []                       # hold:安静
+            assert g.calls == []  # hold:安静
             await vl._on_voice_input("今天天气如何？")
-            assert g.calls == []                       # hold 中忽略
+            assert g.calls == []  # hold 中忽略
             await vl._on_voice_input("好了,继续。")
             # 恢复口令本身不算内容回合(它只解除 hold)……但当前实现会继续处理该句;
             # 关键断言:hold 已解除,后续回合正常
             await vl._on_voice_input("现在几点了？")
             assert "现在几点了？" in g.calls
+
         asyncio.run(_run())
 
     def test_incomplete_fragment_merges_with_next(self, monkeypatch):
@@ -196,12 +202,13 @@ class TestVoiceLoopIntegration:
         async def _run():
             vl = _loop(g)
             t1 = asyncio.ensure_future(vl._on_voice_input("帮我打开浏览器然后"))
-            await asyncio.sleep(0.1)   # 悬垂片段在等待窗口内
+            await asyncio.sleep(0.1)  # 悬垂片段在等待窗口内
             await vl._on_voice_input("看一下今天的新闻。")
             await t1
             # 两个片段并成一个回合,只处理一次
             assert len(g.calls) == 1
             assert "帮我打开浏览器然后" in g.calls[0] and "看一下今天的新闻。" in g.calls[0]
+
         asyncio.run(_run())
 
     def test_incomplete_fragment_alone_still_processed_after_wait(self, monkeypatch):
@@ -212,6 +219,7 @@ class TestVoiceLoopIntegration:
             vl = _loop(g)
             await vl._on_voice_input("帮我打开浏览器然后")
             assert len(g.calls) == 1  # 等待窗口过后仍会处理,不丢话
+
         asyncio.run(_run())
 
     def test_stop_cancels_background_tasks(self, monkeypatch):
@@ -224,15 +232,16 @@ class TestVoiceLoopIntegration:
             assert vl._bg_tasks
             await vl.stop()
             assert not vl._bg_tasks
+
         asyncio.run(_run())
 
 
 class TestAmbientHoldGate:
     def test_ambient_speak_suppressed_while_holding(self, monkeypatch):
-        from core.ambient_attention_loop import AmbientAttentionLoop, AmbientDecision, AmbientAction
+        from core.ambient_attention_loop import AmbientAction, AmbientAttentionLoop, AmbientDecision
+
         spoken = []
-        monkeypatch.setattr("core.speech_output.speak_response",
-                            lambda text, source="": spoken.append(text))
+        monkeypatch.setattr("core.speech_output.speak_response", lambda text, source="": spoken.append(text))
         vdp.get_dialog_policy().hold(30)
         loop = AmbientAttentionLoop()
         decision = AmbientDecision(action=AmbientAction.SPEAK, utterance="我注意到你在写代码")

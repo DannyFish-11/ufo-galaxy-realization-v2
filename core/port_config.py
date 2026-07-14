@@ -29,11 +29,11 @@ lookups and should eventually delegate here.
     all_nodes = config.list_node_ports()
 """
 
-import os
 import logging
+import os
 import threading
 from pathlib import Path
-from typing import Dict, Optional, Any
+from typing import Any, Dict, Optional
 
 logger = logging.getLogger("Galaxy.PortConfig")
 
@@ -45,19 +45,19 @@ _PORTS_YAML_PATH = _PROJECT_ROOT / "config" / "unified_ports.yaml"
 _DEFAULT_INFRASTRUCTURE_PORTS: Dict[str, int] = {
     "redis": 6379,
     "qdrant": 6333,
-    "dashboard": 8080,        # Dashboard Backend Web UI (unified port)
+    "dashboard": 8080,  # Dashboard Backend Web UI (unified port)
     "oneapi_web": 3001,
-    "api_gateway": 9000,      # Galaxy Gateway (unified port)
+    "api_gateway": 9000,  # Galaxy Gateway (unified port)
     "state_machine": 9000,
-    "gateway": 9000,           # Galaxy Gateway (unified port — WS + REST + WebRTC proxy)
+    "gateway": 9000,  # Galaxy Gateway (unified port — WS + REST + WebRTC proxy)
     "dashboard_backend": 8080,  # Same as dashboard (unified port)
-    "websocket": 9000,         # WebSocket served through Galaxy Gateway on 8765
+    "websocket": 9000,  # WebSocket served through Galaxy Gateway on 8765
     "websocket_http": 8081,
-    "health_monitor": 9100,    # Avoid conflict with gateway
+    "health_monitor": 9100,  # Avoid conflict with gateway
     "device_api": 8766,
     "ufo_api": 8767,
     "unified_launcher": 9000,  # Unified Launcher Web UI (avoids Node_85_PromptLibrary:8085)
-    "openclawd": 8099,           # OpenClawd main API server (Galaxy core)
+    "openclawd": 8099,  # OpenClawd main API server (Galaxy core)
 }
 
 
@@ -89,17 +89,12 @@ class PortConfig:
         try:
             import yaml
         except ImportError:
-            logger.warning(
-                "PyYAML 未安装，尝试用简单解析器读取端口配置。"
-                "建议安装: pip install pyyaml"
-            )
+            logger.warning("PyYAML 未安装，尝试用简单解析器读取端口配置。" "建议安装: pip install pyyaml")
             self._load_fallback()
             return
 
         if not _PORTS_YAML_PATH.exists():
-            logger.warning(
-                "端口配置文件不存在: %s，使用默认端口", _PORTS_YAML_PATH
-            )
+            logger.warning("端口配置文件不存在: %s，使用默认端口", _PORTS_YAML_PATH)
             self._load_fallback()
             return
 
@@ -130,9 +125,7 @@ class PortConfig:
                 if isinstance(services, dict):
                     for svc_name, svc_config in services.items():
                         if isinstance(svc_config, dict) and "port" in svc_config:
-                            self._service_ports[svc_name.lower()] = int(
-                                svc_config["port"]
-                            )
+                            self._service_ports[svc_name.lower()] = int(svc_config["port"])
 
         logger.info(
             "端口配置加载完成: %d 个节点, %d 个基础服务",
@@ -196,10 +189,7 @@ class PortConfig:
             if key.startswith(node_name + "_") or key == node_name:
                 return port
 
-        raise KeyError(
-            f"节点 '{node_name}' 端口未配置。"
-            f"请检查 config/unified_ports.yaml 或设置环境变量 {env_key}"
-        )
+        raise KeyError(f"节点 '{node_name}' 端口未配置。" f"请检查 config/unified_ports.yaml 或设置环境变量 {env_key}")
 
     def get_service_port(self, service_name: str) -> int:
         """获取基础设施服务端口号
@@ -234,8 +224,7 @@ class PortConfig:
             return self._service_ports[key]
 
         raise KeyError(
-            f"服务 '{service_name}' 端口未配置。"
-            f"请检查 config/unified_ports.yaml 或设置环境变量 {env_key}"
+            f"服务 '{service_name}' 端口未配置。" f"请检查 config/unified_ports.yaml 或设置环境变量 {env_key}"
         )
 
     def list_node_ports(self) -> Dict[str, int]:

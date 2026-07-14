@@ -51,12 +51,11 @@ import pytest
 from core.execution.intent_profile import (
     ExecutionIntentProfile,
     IntentMode,
-    build_execution_intent_profile,
     _entry_mode_to_device_scope,
-    _runtime_domain_to_device_scope,
     _infer_target_type,
+    _runtime_domain_to_device_scope,
+    build_execution_intent_profile,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -202,10 +201,21 @@ class TestExecutionIntentProfileSerialisation:
         profile = ExecutionIntentProfile()
         d = profile.to_dict()
         expected_keys = {
-            "intent_id", "runtime_session_id", "source", "action_level",
-            "intent_mode", "target_type", "target_ref", "target_payload",
-            "device_scope", "runtime_domain", "confidence", "safety_constraints",
-            "origin_state", "notes", "degrade_reason",
+            "intent_id",
+            "runtime_session_id",
+            "source",
+            "action_level",
+            "intent_mode",
+            "target_type",
+            "target_ref",
+            "target_payload",
+            "device_scope",
+            "runtime_domain",
+            "confidence",
+            "safety_constraints",
+            "origin_state",
+            "notes",
+            "degrade_reason",
         }
         assert expected_keys.issubset(set(d.keys()))
 
@@ -246,12 +256,15 @@ class TestExecutionIntentProfileSerialisation:
 
 
 class TestIntentMode:
-    @pytest.mark.parametrize("level,expected", [
-        ("observe", IntentMode.ADVISORY),
-        ("hint", IntentMode.ADVISORY),
-        ("assist", IntentMode.ASSISTIVE),
-        ("execute", IntentMode.DIRECT),
-    ])
+    @pytest.mark.parametrize(
+        "level,expected",
+        [
+            ("observe", IntentMode.ADVISORY),
+            ("hint", IntentMode.ADVISORY),
+            ("assist", IntentMode.ASSISTIVE),
+            ("execute", IntentMode.DIRECT),
+        ],
+    )
     def test_from_action_level(self, level, expected):
         assert IntentMode.from_action_level(level) == expected
 
@@ -379,12 +392,8 @@ class TestBuildExecutionIntentProfile:
 
 class TestFromStateContinuum:
     def test_equivalent_to_builder(self):
-        p1 = build_execution_intent_profile(
-            _MINIMAL_CONTINUUM, runtime_session_id="s1", source="chat"
-        )
-        p2 = ExecutionIntentProfile.from_state_continuum(
-            _MINIMAL_CONTINUUM, runtime_session_id="s1", source="chat"
-        )
+        p1 = build_execution_intent_profile(_MINIMAL_CONTINUUM, runtime_session_id="s1", source="chat")
+        p2 = ExecutionIntentProfile.from_state_continuum(_MINIMAL_CONTINUUM, runtime_session_id="s1", source="chat")
         # intent_id differs (unique per call); compare all other fields
         d1 = p1.to_dict()
         d2 = p2.to_dict()
@@ -415,12 +424,14 @@ class TestFromStateContinuum:
 class TestRuntimeProjectionIntegration:
     def _make_continuum_state(self):
         from core.continuum.types import ContinuumPhase, ContinuumState
+
         return ContinuumState(phase=ContinuumPhase.MANIFEST, coherence=0.7)
 
     def _make_runtime_projection(self, intent_profile=None):
         """Directly build a RuntimeProjection."""
         from core.continuum.types import TriStatePhase
         from core.projection.runtime_projection import RuntimeProjection
+
         kwargs = dict(
             tri_state_phase=TriStatePhase.MANIFEST,
             timestamp=1711533600.0,
@@ -526,33 +537,42 @@ class TestOpenClawdRunExecutionIntegration:
 
 
 class TestPrivateHelpers:
-    @pytest.mark.parametrize("ref,expected", [
-        ("https://example.com", "url"),
-        ("http://foo.bar/baz", "url"),
-        ("notepad.exe", "app"),
-        ("setup.bat", "app"),
-        ("run.sh", "app"),
-        ("device:phone-01", "device"),
-        ("dev-phone-02", "device"),
-        ("SomeWindow", "app"),
-    ])
+    @pytest.mark.parametrize(
+        "ref,expected",
+        [
+            ("https://example.com", "url"),
+            ("http://foo.bar/baz", "url"),
+            ("notepad.exe", "app"),
+            ("setup.bat", "app"),
+            ("run.sh", "app"),
+            ("device:phone-01", "device"),
+            ("dev-phone-02", "device"),
+            ("SomeWindow", "app"),
+        ],
+    )
     def test_infer_target_type(self, ref, expected):
         assert _infer_target_type(ref) == expected
 
-    @pytest.mark.parametrize("mode,expected", [
-        ("local", "local"),
-        ("cross_device", "remote"),
-        ("hybrid", "multi-device"),
-        ("unknown", None),
-    ])
+    @pytest.mark.parametrize(
+        "mode,expected",
+        [
+            ("local", "local"),
+            ("cross_device", "remote"),
+            ("hybrid", "multi-device"),
+            ("unknown", None),
+        ],
+    )
     def test_entry_mode_to_device_scope(self, mode, expected):
         assert _entry_mode_to_device_scope(mode) == expected
 
-    @pytest.mark.parametrize("domain,expected", [
-        ("local", "local"),
-        ("cross_device", "remote"),
-        ("transition", "local"),
-        ("unknown", None),
-    ])
+    @pytest.mark.parametrize(
+        "domain,expected",
+        [
+            ("local", "local"),
+            ("cross_device", "remote"),
+            ("transition", "local"),
+            ("unknown", None),
+        ],
+    )
     def test_runtime_domain_to_device_scope(self, domain, expected):
         assert _runtime_domain_to_device_scope(domain) == expected

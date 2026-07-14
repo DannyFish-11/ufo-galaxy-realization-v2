@@ -35,6 +35,7 @@ logger = logging.getLogger("Galaxy.Federation")
 
 try:
     import aiohttp
+
     _AIOHTTP_AVAILABLE = True
 except ImportError:
     _AIOHTTP_AVAILABLE = False
@@ -43,6 +44,7 @@ except ImportError:
 # ============================================================================
 # 配置
 # ============================================================================
+
 
 def _federation_enabled() -> bool:
     return os.environ.get("FEDERATION_ENABLED", "false").lower() in ("1", "true", "yes")
@@ -65,9 +67,11 @@ def _local_gateway_url() -> str:
 # 数据结构
 # ============================================================================
 
+
 @dataclass
 class PeerInstance:
     """远程 Galaxy 实例信息"""
+
     instance_id: str
     url: str
     name: str = ""
@@ -98,6 +102,7 @@ class PeerInstance:
 # 主类
 # ============================================================================
 
+
 class GalaxyFederation:
     """
     Galaxy 联邦协作管理器
@@ -108,32 +113,22 @@ class GalaxyFederation:
     """
 
     def __init__(self):
-        self.instance_id: str = os.environ.get(
-            "FEDERATION_INSTANCE_ID", str(uuid.uuid4())[:12]
-        )
+        self.instance_id: str = os.environ.get("FEDERATION_INSTANCE_ID", str(uuid.uuid4())[:12])
         self.local_url: str = _local_gateway_url()
         self._peers: Dict[str, PeerInstance] = {}
         self._heartbeat_task: Optional[asyncio.Task] = None
-        self._heartbeat_interval: float = float(
-            os.environ.get("FEDERATION_HEARTBEAT_INTERVAL", "15")
-        )
+        self._heartbeat_interval: float = float(os.environ.get("FEDERATION_HEARTBEAT_INTERVAL", "15"))
         self._running = False
-        self._offline_threshold: int = int(
-            os.environ.get("FEDERATION_OFFLINE_THRESHOLD", "3")
-        )
+        self._offline_threshold: int = int(os.environ.get("FEDERATION_OFFLINE_THRESHOLD", "3"))
         # Minimum seconds between accepted heartbeats from the same peer (anti-spam throttle)
-        self._min_heartbeat_interval: float = float(
-            os.environ.get("FEDERATION_MIN_HEARTBEAT_INTERVAL", "5")
-        )
+        self._min_heartbeat_interval: float = float(os.environ.get("FEDERATION_MIN_HEARTBEAT_INTERVAL", "5"))
         # Tracks the last time a heartbeat was accepted from each peer instance_id
         self._last_received: Dict[str, float] = {}
 
         # 从环境变量预注册 peers
         for url in _federation_peers():
             peer_id = f"peer_{url.replace('http://', '').replace('https://', '').replace(':', '_').replace('/', '_')}"
-            self._peers[peer_id] = PeerInstance(
-                instance_id=peer_id, url=url, status="unknown"
-            )
+            self._peers[peer_id] = PeerInstance(instance_id=peer_id, url=url, status="unknown")
 
     # ================================================================
     # 生命周期
@@ -146,10 +141,7 @@ class GalaxyFederation:
             return
         self._running = True
         self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
-        logger.info(
-            f"Galaxy Federation started: instance_id={self.instance_id}, "
-            f"peers={list(self._peers.keys())}"
-        )
+        logger.info(f"Galaxy Federation started: instance_id={self.instance_id}, " f"peers={list(self._peers.keys())}")
 
     async def stop(self) -> None:
         """停止联邦服务"""
@@ -280,7 +272,12 @@ class GalaxyFederation:
             远程响应字典
         """
         if not _AIOHTTP_AVAILABLE:
-            return {"success": False, "error": "aiohttp not installed", "error_type": "MissingDependency", "target": target_url_or_id}
+            return {
+                "success": False,
+                "error": "aiohttp not installed",
+                "error_type": "MissingDependency",
+                "target": target_url_or_id,
+            }
 
         # 解析目标
         if target_url_or_id.startswith("http"):
@@ -288,7 +285,12 @@ class GalaxyFederation:
         else:
             peer = self._peers.get(target_url_or_id)
             if not peer:
-                return {"success": False, "error": f"Unknown peer: {target_url_or_id}", "error_type": "UnknownPeer", "target": target_url_or_id}
+                return {
+                    "success": False,
+                    "error": f"Unknown peer: {target_url_or_id}",
+                    "error_type": "UnknownPeer",
+                    "target": target_url_or_id,
+                }
             url = peer.url
 
         payload = {
@@ -298,9 +300,7 @@ class GalaxyFederation:
         }
 
         try:
-            async with aiohttp.ClientSession(
-                timeout=aiohttp.ClientTimeout(total=timeout)
-            ) as session:
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=timeout)) as session:
                 async with session.post(
                     f"{url}/api/v1/federation/task",
                     json=payload,
@@ -343,9 +343,7 @@ class GalaxyFederation:
         self._last_received[instance_id] = now
 
         if instance_id not in self._peers:
-            self._peers[instance_id] = PeerInstance(
-                instance_id=instance_id, url=url, status="healthy"
-            )
+            self._peers[instance_id] = PeerInstance(instance_id=instance_id, url=url, status="healthy")
         else:
             self._peers[instance_id].last_heartbeat = now
             self._peers[instance_id].status = "healthy"

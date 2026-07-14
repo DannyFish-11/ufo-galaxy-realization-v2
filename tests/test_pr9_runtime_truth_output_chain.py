@@ -359,8 +359,7 @@ def test_snapshot_ordering_violations_empty() -> None:
 
 def test_snapshot_to_dict_keys() -> None:
     d = build_output_chain_snapshot().to_dict()
-    for key in ("authority", "sentinel", "policies", "stage_count", "stages",
-                "ordering_violations", "chain_is_clean"):
+    for key in ("authority", "sentinel", "policies", "stage_count", "stages", "ordering_violations", "chain_is_clean"):
         assert key in d, f"Missing key: {key}"
 
 
@@ -376,9 +375,16 @@ def test_snapshot_to_dict_stage_count_is_three() -> None:
 
 def test_chain_stage_record_to_dict_has_required_keys() -> None:
     required = {
-        "stage", "stage_index", "display_name", "primary_module",
-        "primary_function", "output_type", "responsibility_summary",
-        "may_call_stages", "known_surface_ids", "governance_constraint",
+        "stage",
+        "stage_index",
+        "display_name",
+        "primary_module",
+        "primary_function",
+        "output_type",
+        "responsibility_summary",
+        "may_call_stages",
+        "known_surface_ids",
+        "governance_constraint",
     }
     for record in build_output_chain_catalog():
         d = record.to_dict()
@@ -408,9 +414,7 @@ def test_may_call_stages_only_upstream() -> None:
 
 def test_every_stage_has_governance_constraint() -> None:
     for record in build_output_chain_catalog():
-        assert record.governance_constraint, (
-            f"Stage {record.stage_index} has an empty governance_constraint"
-        )
+        assert record.governance_constraint, f"Stage {record.stage_index} has an empty governance_constraint"
 
 
 # ---------------------------------------------------------------------------
@@ -420,9 +424,7 @@ def test_every_stage_has_governance_constraint() -> None:
 
 def test_every_stage_has_known_surface_ids() -> None:
     for record in build_output_chain_catalog():
-        assert len(record.known_surface_ids) >= 1, (
-            f"Stage {record.stage_index} has no known_surface_ids"
-        )
+        assert len(record.known_surface_ids) >= 1, f"Stage {record.stage_index} has no known_surface_ids"
 
 
 # ---------------------------------------------------------------------------

@@ -55,7 +55,6 @@ from core.unified_governance_semantics import (
     build_unified_governance_state,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -303,10 +302,7 @@ class TestGroupC_TruthBinding:
             },
         ):
             binding = get_execution_lifecycle_truth_binding("dev-idle")
-        assert (
-            binding.android_lifecycle_truth_quality
-            == AndroidExecutionLifecycleTruthQuality.v2_local_only
-        )
+        assert binding.android_lifecycle_truth_quality == AndroidExecutionLifecycleTruthQuality.v2_local_only
         assert not binding.android_lifecycle_truth_degraded
         assert binding.android_lifecycle_truth_governance_impact == "none"
 
@@ -319,6 +315,7 @@ class TestGroupC_TruthBinding:
             skip_conflict_check=True,
         )
         from core.unified_execution_governance import _register_active_execution
+
         _register_active_execution("dev-active", ExecutionType.goal_execution, "exec-1")
 
         with patch(
@@ -330,15 +327,13 @@ class TestGroupC_TruthBinding:
         ):
             binding = get_execution_lifecycle_truth_binding("dev-active")
 
-        assert (
-            binding.android_lifecycle_truth_quality
-            == AndroidExecutionLifecycleTruthQuality.missing_remote
-        )
+        assert binding.android_lifecycle_truth_quality == AndroidExecutionLifecycleTruthQuality.missing_remote
         assert binding.android_lifecycle_truth_degraded
         assert binding.android_lifecycle_truth_governance_impact == "degraded"
 
     def test_stale_remote_when_v2_active_android_event_old(self) -> None:
         from core.unified_execution_governance import _register_active_execution
+
         _register_active_execution("dev-stale", ExecutionType.goal_execution, "exec-2")
 
         stale_age = ANDROID_EXECUTION_LIFECYCLE_TRUTH_STALE_AFTER_SECONDS + 60
@@ -351,15 +346,13 @@ class TestGroupC_TruthBinding:
         ):
             binding = get_execution_lifecycle_truth_binding("dev-stale")
 
-        assert (
-            binding.android_lifecycle_truth_quality
-            == AndroidExecutionLifecycleTruthQuality.stale_remote
-        )
+        assert binding.android_lifecycle_truth_quality == AndroidExecutionLifecycleTruthQuality.stale_remote
         assert binding.android_lifecycle_truth_degraded
         assert binding.android_lifecycle_truth_governance_impact == "degraded"
 
     def test_conflicting_remote_v2_active_android_terminal(self) -> None:
         from core.unified_execution_governance import _register_active_execution
+
         _register_active_execution("dev-conflict", ExecutionType.goal_execution, "exec-3")
 
         with patch(
@@ -371,15 +364,13 @@ class TestGroupC_TruthBinding:
         ):
             binding = get_execution_lifecycle_truth_binding("dev-conflict")
 
-        assert (
-            binding.android_lifecycle_truth_quality
-            == AndroidExecutionLifecycleTruthQuality.conflicting_remote
-        )
+        assert binding.android_lifecycle_truth_quality == AndroidExecutionLifecycleTruthQuality.conflicting_remote
         assert binding.android_lifecycle_truth_degraded
         assert binding.android_lifecycle_truth_governance_impact == "blocked"
 
     def test_confirmed_when_v2_active_android_active_fresh(self) -> None:
         from core.unified_execution_governance import _register_active_execution
+
         _register_active_execution("dev-ok", ExecutionType.goal_execution, "exec-4")
 
         with patch(
@@ -391,10 +382,7 @@ class TestGroupC_TruthBinding:
         ):
             binding = get_execution_lifecycle_truth_binding("dev-ok")
 
-        assert (
-            binding.android_lifecycle_truth_quality
-            == AndroidExecutionLifecycleTruthQuality.android_remote_confirmed
-        )
+        assert binding.android_lifecycle_truth_quality == AndroidExecutionLifecycleTruthQuality.android_remote_confirmed
         assert not binding.android_lifecycle_truth_degraded
         assert binding.android_lifecycle_truth_governance_impact == "none"
 
@@ -429,10 +417,7 @@ class TestGroupC_TruthBinding:
             binding = get_execution_lifecycle_truth_binding("dev-error")
         # Should return a safe fallback binding without raising.
         assert isinstance(binding, ExecutionLifecycleTruthBinding)
-        assert (
-            binding.android_lifecycle_truth_quality
-            == AndroidExecutionLifecycleTruthQuality.v2_local_only
-        )
+        assert binding.android_lifecycle_truth_quality == AndroidExecutionLifecycleTruthQuality.v2_local_only
 
 
 # ---------------------------------------------------------------------------
@@ -456,6 +441,7 @@ class TestGroupD_RuntimeSnapshotFields:
 
     def test_snapshot_device_has_truth_quality_field(self) -> None:
         from core.unified_execution_governance import _register_active_execution
+
         _register_active_execution("dev-snap", ExecutionType.goal_execution, "e1")
 
         with patch(
@@ -475,6 +461,7 @@ class TestGroupD_RuntimeSnapshotFields:
 
     def test_snapshot_missing_remote_when_no_android_events(self) -> None:
         from core.unified_execution_governance import _register_active_execution
+
         _register_active_execution("dev-miss", ExecutionType.goal_execution, "e2")
 
         with patch(
@@ -493,6 +480,7 @@ class TestGroupD_RuntimeSnapshotFields:
 
     def test_snapshot_confirmed_when_android_active_fresh(self) -> None:
         from core.unified_execution_governance import _register_active_execution
+
         _register_active_execution("dev-conf", ExecutionType.goal_execution, "e3")
 
         with patch(
@@ -511,6 +499,7 @@ class TestGroupD_RuntimeSnapshotFields:
 
     def test_snapshot_conflicting_v2_active_android_terminal(self) -> None:
         from core.unified_execution_governance import _register_active_execution
+
         _register_active_execution("dev-cfl", ExecutionType.goal_execution, "e4")
 
         with patch(
@@ -529,6 +518,7 @@ class TestGroupD_RuntimeSnapshotFields:
 
     def test_snapshot_stale_remote_old_android_event(self) -> None:
         from core.unified_execution_governance import _register_active_execution
+
         _register_active_execution("dev-stl", ExecutionType.goal_execution, "e5")
 
         old_age = ANDROID_EXECUTION_LIFECYCLE_TRUTH_STALE_AFTER_SECONDS + 120
@@ -547,6 +537,7 @@ class TestGroupD_RuntimeSnapshotFields:
 
     def test_snapshot_source_field_present(self) -> None:
         from core.unified_execution_governance import _register_active_execution
+
         _register_active_execution("dev-src", ExecutionType.goal_execution, "e6")
 
         with patch(
@@ -646,6 +637,7 @@ class TestGroupE_DecisionCausality:
 
     def test_decision_causality_has_truth_quality_field(self) -> None:
         from core.unified_execution_governance import _register_active_execution
+
         _register_active_execution("dev-dc1", ExecutionType.goal_execution, "ex1")
 
         with self._patch_android_store(phase=None, age_s=None):
@@ -656,6 +648,7 @@ class TestGroupE_DecisionCausality:
 
     def test_decision_causality_has_truth_degraded_field(self) -> None:
         from core.unified_execution_governance import _register_active_execution
+
         _register_active_execution("dev-dc2", ExecutionType.goal_execution, "ex2")
 
         with self._patch_android_store(phase=None, age_s=None):
@@ -666,6 +659,7 @@ class TestGroupE_DecisionCausality:
 
     def test_decision_causality_has_governance_impact_field(self) -> None:
         from core.unified_execution_governance import _register_active_execution
+
         _register_active_execution("dev-dc3", ExecutionType.goal_execution, "ex3")
 
         with self._patch_android_store(phase=None, age_s=None):
@@ -677,6 +671,7 @@ class TestGroupE_DecisionCausality:
     def test_decision_causality_missing_remote_is_diagnosable(self) -> None:
         """Missing Android evidence must be diagnosable in decision_causality."""
         from core.unified_execution_governance import _register_active_execution
+
         _register_active_execution("dev-diag1", ExecutionType.goal_execution, "ex4")
 
         with self._patch_android_store(phase=None, age_s=None):
@@ -690,6 +685,7 @@ class TestGroupE_DecisionCausality:
     def test_decision_causality_conflicting_remote_is_diagnosable(self) -> None:
         """Conflicting Android evidence must be diagnosable in decision_causality."""
         from core.unified_execution_governance import _register_active_execution
+
         _register_active_execution("dev-diag2", ExecutionType.goal_execution, "ex5")
 
         with self._patch_android_store(phase="completed", age_s=3.0):
@@ -703,6 +699,7 @@ class TestGroupE_DecisionCausality:
     def test_decision_causality_confirmed_when_android_active_fresh(self) -> None:
         """android_remote_confirmed must appear in causality when Android is fresh."""
         from core.unified_execution_governance import _register_active_execution
+
         _register_active_execution("dev-diag3", ExecutionType.goal_execution, "ex6")
 
         with self._patch_android_store(phase="execution", age_s=5.0):
@@ -715,6 +712,7 @@ class TestGroupE_DecisionCausality:
 
     def test_decision_causality_includes_truth_reason_string(self) -> None:
         from core.unified_execution_governance import _register_active_execution
+
         _register_active_execution("dev-diag4", ExecutionType.goal_execution, "ex7")
 
         with self._patch_android_store(phase=None, age_s=None):
@@ -737,13 +735,13 @@ class TestGroupF_GovernanceImpactMapping:
 
     def test_v2_local_only_impact_none(self) -> None:
         from core.unified_execution_governance import _ANDROID_LIFECYCLE_TRUTH_GOVERNANCE_IMPACT
-        impact = _ANDROID_LIFECYCLE_TRUTH_GOVERNANCE_IMPACT[
-            AndroidExecutionLifecycleTruthQuality.v2_local_only
-        ]
+
+        impact = _ANDROID_LIFECYCLE_TRUTH_GOVERNANCE_IMPACT[AndroidExecutionLifecycleTruthQuality.v2_local_only]
         assert impact == "none"
 
     def test_android_remote_confirmed_impact_none(self) -> None:
         from core.unified_execution_governance import _ANDROID_LIFECYCLE_TRUTH_GOVERNANCE_IMPACT
+
         impact = _ANDROID_LIFECYCLE_TRUTH_GOVERNANCE_IMPACT[
             AndroidExecutionLifecycleTruthQuality.android_remote_confirmed
         ]
@@ -751,39 +749,39 @@ class TestGroupF_GovernanceImpactMapping:
 
     def test_stale_remote_impact_degraded(self) -> None:
         from core.unified_execution_governance import _ANDROID_LIFECYCLE_TRUTH_GOVERNANCE_IMPACT
-        impact = _ANDROID_LIFECYCLE_TRUTH_GOVERNANCE_IMPACT[
-            AndroidExecutionLifecycleTruthQuality.stale_remote
-        ]
+
+        impact = _ANDROID_LIFECYCLE_TRUTH_GOVERNANCE_IMPACT[AndroidExecutionLifecycleTruthQuality.stale_remote]
         assert impact == "degraded"
 
     def test_missing_remote_impact_degraded(self) -> None:
         from core.unified_execution_governance import _ANDROID_LIFECYCLE_TRUTH_GOVERNANCE_IMPACT
-        impact = _ANDROID_LIFECYCLE_TRUTH_GOVERNANCE_IMPACT[
-            AndroidExecutionLifecycleTruthQuality.missing_remote
-        ]
+
+        impact = _ANDROID_LIFECYCLE_TRUTH_GOVERNANCE_IMPACT[AndroidExecutionLifecycleTruthQuality.missing_remote]
         assert impact == "degraded"
 
     def test_conflicting_remote_impact_blocked(self) -> None:
         from core.unified_execution_governance import _ANDROID_LIFECYCLE_TRUTH_GOVERNANCE_IMPACT
-        impact = _ANDROID_LIFECYCLE_TRUTH_GOVERNANCE_IMPACT[
-            AndroidExecutionLifecycleTruthQuality.conflicting_remote
-        ]
+
+        impact = _ANDROID_LIFECYCLE_TRUTH_GOVERNANCE_IMPACT[AndroidExecutionLifecycleTruthQuality.conflicting_remote]
         assert impact == "blocked"
 
     def test_all_qualities_have_mapping(self) -> None:
         from core.unified_execution_governance import _ANDROID_LIFECYCLE_TRUTH_GOVERNANCE_IMPACT
+
         for quality in AndroidExecutionLifecycleTruthQuality:
-            assert quality in _ANDROID_LIFECYCLE_TRUTH_GOVERNANCE_IMPACT, (
-                f"Missing impact mapping for {quality}"
-            )
+            assert quality in _ANDROID_LIFECYCLE_TRUTH_GOVERNANCE_IMPACT, f"Missing impact mapping for {quality}"
 
     def test_degraded_quality_set_contains_correct_members(self) -> None:
         from core.unified_execution_governance import _ANDROID_LIFECYCLE_TRUTH_DEGRADED_QUALITIES
+
         assert AndroidExecutionLifecycleTruthQuality.missing_remote in _ANDROID_LIFECYCLE_TRUTH_DEGRADED_QUALITIES
         assert AndroidExecutionLifecycleTruthQuality.stale_remote in _ANDROID_LIFECYCLE_TRUTH_DEGRADED_QUALITIES
         assert AndroidExecutionLifecycleTruthQuality.conflicting_remote in _ANDROID_LIFECYCLE_TRUTH_DEGRADED_QUALITIES
         assert AndroidExecutionLifecycleTruthQuality.v2_local_only not in _ANDROID_LIFECYCLE_TRUTH_DEGRADED_QUALITIES
-        assert AndroidExecutionLifecycleTruthQuality.android_remote_confirmed not in _ANDROID_LIFECYCLE_TRUTH_DEGRADED_QUALITIES
+        assert (
+            AndroidExecutionLifecycleTruthQuality.android_remote_confirmed
+            not in _ANDROID_LIFECYCLE_TRUTH_DEGRADED_QUALITIES
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -828,6 +826,7 @@ class TestGroupG_BoundaryAndEdgeCases:
 
     def test_binding_active_count_matches_actual(self) -> None:
         from core.unified_execution_governance import _register_active_execution
+
         _register_active_execution("dev-cnt", ExecutionType.goal_execution, "ea")
         _register_active_execution("dev-cnt", ExecutionType.parallel_subtask, "eb")
 
@@ -844,6 +843,7 @@ class TestGroupG_BoundaryAndEdgeCases:
 
     def test_binding_latest_phase_propagated(self) -> None:
         from core.unified_execution_governance import _register_active_execution
+
         _register_active_execution("dev-ph", ExecutionType.goal_execution, "ec")
 
         with patch(
@@ -875,6 +875,7 @@ class TestGroupH_DegradedQualityDiagnosability:
 
     def test_missing_remote_marked_degraded_in_binding(self) -> None:
         from core.unified_execution_governance import _register_active_execution
+
         _register_active_execution("dev-h1", ExecutionType.goal_execution, "hx1")
 
         with patch(
@@ -891,6 +892,7 @@ class TestGroupH_DegradedQualityDiagnosability:
 
     def test_stale_remote_governance_impact_is_degraded_not_blocked(self) -> None:
         from core.unified_execution_governance import _register_active_execution
+
         _register_active_execution("dev-h2", ExecutionType.goal_execution, "hx2")
 
         old_age = ANDROID_EXECUTION_LIFECYCLE_TRUTH_STALE_AFTER_SECONDS + 200
@@ -908,6 +910,7 @@ class TestGroupH_DegradedQualityDiagnosability:
 
     def test_conflicting_remote_governance_impact_is_blocked(self) -> None:
         from core.unified_execution_governance import _register_active_execution
+
         _register_active_execution("dev-h3", ExecutionType.goal_execution, "hx3")
 
         with patch(
@@ -923,6 +926,7 @@ class TestGroupH_DegradedQualityDiagnosability:
 
     def test_non_degraded_qualities_have_none_impact(self) -> None:
         from core.unified_execution_governance import _register_active_execution
+
         _register_active_execution("dev-h4", ExecutionType.goal_execution, "hx4")
 
         with patch(
@@ -939,6 +943,7 @@ class TestGroupH_DegradedQualityDiagnosability:
 
     def test_missing_remote_reason_is_non_empty_string(self) -> None:
         from core.unified_execution_governance import _register_active_execution
+
         _register_active_execution("dev-h5", ExecutionType.goal_execution, "hx5")
 
         with patch(
@@ -955,6 +960,7 @@ class TestGroupH_DegradedQualityDiagnosability:
 
     def test_conflicting_remote_reason_names_the_conflict(self) -> None:
         from core.unified_execution_governance import _register_active_execution
+
         _register_active_execution("dev-h6", ExecutionType.goal_execution, "hx6")
 
         with patch(

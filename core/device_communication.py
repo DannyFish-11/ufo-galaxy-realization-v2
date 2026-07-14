@@ -36,7 +36,8 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional, Callable
+from typing import Any, Callable, Dict, List, Optional
+
 from fastapi import WebSocket
 
 logger = logging.getLogger("Galaxy.DeviceComm")
@@ -71,18 +72,19 @@ class MessageType(str, Enum):
       STATUS    → 应经 compat 转换为 device_status 后路由
       EVENT     → 应经 compat 转换为 wake_event 后路由
     """
+
     # 控制
-    COMMAND = "command"         # 命令
-    RESPONSE = "response"       # [v2 compat] 命令响应 — 勿直接用于路由
-    ACK = "ack"                 # 确认
+    COMMAND = "command"  # 命令
+    RESPONSE = "response"  # [v2 compat] 命令响应 — 勿直接用于路由
+    ACK = "ack"  # 确认
 
     # 状态
-    HEARTBEAT = "heartbeat"     # 心跳 (v3 DEVICE_HEARTBEAT.value = "heartbeat")
-    STATUS = "status"           # [v2 compat] 状态更新 — 勿直接用于路由
+    HEARTBEAT = "heartbeat"  # 心跳 (v3 DEVICE_HEARTBEAT.value = "heartbeat")
+    STATUS = "status"  # [v2 compat] 状态更新 — 勿直接用于路由
 
     # 事件
-    EVENT = "event"             # [v2 compat] 通用事件 — 勿直接用于路由
-    ERROR = "error"             # 错误
+    EVENT = "event"  # [v2 compat] 通用事件 — 勿直接用于路由
+    ERROR = "error"  # 错误
 
     # 流
     STREAM_START = "stream_start"
@@ -90,7 +92,7 @@ class MessageType(str, Enum):
     STREAM_END = "stream_end"
 
     # 唤醒与会话漫游
-    WAKE_EVENT = "wake_event"           # 设备唤醒事件
+    WAKE_EVENT = "wake_event"  # 设备唤醒事件
     SESSION_MIGRATE = "session_migrate"  # 会话迁移请求
     SESSION_RESTORE = "session_restore"  # 会话恢复
 
@@ -128,6 +130,7 @@ class MessageType(str, Enum):
 @dataclass
 class DeviceMessage:
     """设备消息"""
+
     type: MessageType
     action: str = ""
     payload: Dict[str, Any] = field(default_factory=dict)
@@ -137,15 +140,17 @@ class DeviceMessage:
     correlation_id: str = ""  # 关联的请求 ID
 
     def to_json(self) -> str:
-        return json.dumps({
-            "type": self.type.value,
-            "action": self.action,
-            "payload": self.payload,
-            "message_id": self.message_id,
-            "timestamp": self.timestamp,
-            "device_id": self.device_id,
-            "correlation_id": self.correlation_id,
-        })
+        return json.dumps(
+            {
+                "type": self.type.value,
+                "action": self.action,
+                "payload": self.payload,
+                "message_id": self.message_id,
+                "timestamp": self.timestamp,
+                "device_id": self.device_id,
+                "correlation_id": self.correlation_id,
+            }
+        )
 
     def to_aip_v3_dict(self) -> dict:
         """转换为 AIP v3.0 格式的字典"""
@@ -179,6 +184,7 @@ class DeviceMessage:
 @dataclass
 class DeviceConnection:
     """设备连接"""
+
     device_id: str
     websocket: Optional[WebSocket] = None
     connected_at: float = field(default_factory=time.time)
@@ -205,6 +211,7 @@ class DeviceConnection:
 # ============================================================================
 # 设备通信管理器
 # ============================================================================
+
 
 class DeviceCommunication:
     """
@@ -281,6 +288,7 @@ class DeviceCommunication:
             # 更新设备注册表
             try:
                 from core.device_registry import device_registry
+
                 await device_registry.update_status(device_id, status="online")
             except (ImportError, AttributeError) as e:
                 logger.debug(f"设备注册表不可用: {e}")
@@ -315,7 +323,8 @@ class DeviceCommunication:
 
         # 更新设备注册表
         try:
-            from core.device_registry import device_registry, DeviceStatus
+            from core.device_registry import DeviceStatus, device_registry
+
             await device_registry.update_status(device_id, status=DeviceStatus.OFFLINE)
         except (ImportError, AttributeError) as e:
             logger.debug(f"设备注册表不可用: {e}")
@@ -333,10 +342,7 @@ class DeviceCommunication:
 
     def list_connected_devices(self) -> List[str]:
         """列出已连接的设备"""
-        return [
-            device_id for device_id, conn in self.connections.items()
-            if conn.is_alive(self.heartbeat_timeout)
-        ]
+        return [device_id for device_id, conn in self.connections.items() if conn.is_alive(self.heartbeat_timeout)]
 
     # ========================================================================
     # 消息发送
@@ -502,6 +508,7 @@ class DeviceCommunication:
             # through unchanged.  After this point routing only sees v3 names.
             try:
                 from galaxy_gateway.protocol.compat import normalise_to_v3_dict
+
                 v3_msg = normalise_to_v3_dict(raw_msg)
             except Exception as _norm_err:
                 logger.warning("handle_message: compat normalisation failed: %s", _norm_err)
@@ -518,14 +525,13 @@ class DeviceCommunication:
                 logger.info("收到设备注册消息: %s", device_id)
                 try:
                     from core.device_registry import device_registry
+
                     if not device_registry.get(device_id):
                         await device_registry.register(
                             device_id=device_id,
-                            device_type=(v3_msg.get("device_type") or
-                                         v3_msg.get("platform", "android")),
+                            device_type=(v3_msg.get("device_type") or v3_msg.get("platform", "android")),
                             name=f"Device ({device_id[:8]})",
-                            capabilities=(v3_msg.get("capabilities") or
-                                          ["screen", "touch", "keyboard"]),
+                            capabilities=(v3_msg.get("capabilities") or ["screen", "touch", "keyboard"]),
                             metadata={"auto_registered": True},
                         )
                 except Exception as e:
@@ -560,14 +566,14 @@ class DeviceCommunication:
                     logger.warning(
                         "command_result from %s has no matching pending request "
                         "(correlation_id=%r); possibly late or duplicate",
-                        device_id, correlation_id,
+                        device_id,
+                        correlation_id,
                     )
                 return None
 
             # task_assign — dispatch to registered action handler
             if msg_type == "task_assign":
-                action = (v3_msg.get("action") or
-                          v3_msg.get("task_type", "task_assign"))
+                action = v3_msg.get("action") or v3_msg.get("task_type", "task_assign")
                 if action and action in self._message_handlers:
                     handler = self._message_handlers[action]
                     message = DeviceMessage(
@@ -634,6 +640,7 @@ class DeviceCommunication:
             if msg_type == "device_state_snapshot":
                 try:
                     from core.android_device_state_store import absorb_device_state_snapshot
+
                     absorb_device_state_snapshot(
                         device_id,
                         v3_msg.get("payload", v3_msg),
@@ -641,7 +648,8 @@ class DeviceCommunication:
                 except Exception as _snap_err:
                     logger.warning(
                         "Failed to absorb device_state_snapshot from %s: %s",
-                        device_id, _snap_err,
+                        device_id,
+                        _snap_err,
                     )
                 return DeviceMessage(
                     type=MessageType.ACK,
@@ -654,6 +662,7 @@ class DeviceCommunication:
             if msg_type == "device_execution_event":
                 try:
                     from core.android_device_state_store import absorb_device_execution_event
+
                     absorb_device_execution_event(
                         device_id,
                         v3_msg.get("payload", v3_msg),
@@ -661,7 +670,8 @@ class DeviceCommunication:
                 except Exception as _evt_err:
                     logger.warning(
                         "Failed to absorb device_execution_event from %s: %s",
-                        device_id, _evt_err,
+                        device_id,
+                        _evt_err,
                     )
                 return DeviceMessage(
                     type=MessageType.ACK,
@@ -692,12 +702,16 @@ class DeviceCommunication:
                         correlation_id=message.message_id,
                     )
 
-            await self._emit_event("message", device_id, DeviceMessage(
-                type=MessageType.EVENT,
-                action=msg_type,
-                payload=v3_msg.get("payload", {}),
-                device_id=device_id,
-            ))
+            await self._emit_event(
+                "message",
+                device_id,
+                DeviceMessage(
+                    type=MessageType.EVENT,
+                    action=msg_type,
+                    payload=v3_msg.get("payload", {}),
+                    device_id=device_id,
+                ),
+            )
             return None
 
         except Exception as e:
@@ -712,9 +726,9 @@ class DeviceCommunication:
         """处理 capability_report: 将设备能力更新到注册表。"""
         try:
             from core.device_registry import device_registry
+
             payload = v3_msg.get("payload", {})
-            capabilities = (payload.get("capabilities") or
-                            payload.get("supported_actions", []))
+            capabilities = payload.get("capabilities") or payload.get("supported_actions", [])
             if capabilities and hasattr(device_registry, "update_capabilities"):
                 await device_registry.update_capabilities(device_id, capabilities)
         except (ImportError, AttributeError) as e:
@@ -724,6 +738,7 @@ class DeviceCommunication:
         """处理状态更新"""
         try:
             from core.device_registry import device_registry
+
             status_data = message.payload
             # 更新设备状态
             # ...
@@ -745,7 +760,8 @@ class DeviceCommunication:
     async def _handle_wake_event(self, device_id: str, payload: dict):
         """将唤醒事件转发到 WakeEventBus"""
         try:
-            from galaxy_gateway.wake_event_bus import wake_event_bus, RawWakeEvent
+            from galaxy_gateway.wake_event_bus import RawWakeEvent, wake_event_bus
+
             raw = RawWakeEvent(
                 source_device_id=device_id,
                 wake_word=payload.get("wake_word", ""),
@@ -778,9 +794,12 @@ class DeviceCommunication:
                         continue
 
                     # 发送心跳
-                    await self.send(device_id, DeviceMessage(
-                        type=MessageType.HEARTBEAT,
-                    ))
+                    await self.send(
+                        device_id,
+                        DeviceMessage(
+                            type=MessageType.HEARTBEAT,
+                        ),
+                    )
 
             except asyncio.CancelledError:
                 break

@@ -26,8 +26,7 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
-from core.device_types import DeviceType, DeviceStatus, resolve_device_type
-
+from core.device_types import DeviceStatus, DeviceType, resolve_device_type
 
 # ============================================================================
 # 核心数据模型 — 系统内部使用

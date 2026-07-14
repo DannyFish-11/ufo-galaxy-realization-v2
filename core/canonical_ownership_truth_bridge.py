@@ -531,8 +531,7 @@ def record_participant_truth_with_ownership(
 
     boundary = extract_ownership_boundary(ownership_context)
     _logger.debug(
-        "record_participant_truth_with_ownership: session=%r, task=%r, "
-        "ownership_boundary=%r, canonical_eligible=%s",
+        "record_participant_truth_with_ownership: session=%r, task=%r, " "ownership_boundary=%r, canonical_eligible=%s",
         session_id,
         task_id,
         boundary,

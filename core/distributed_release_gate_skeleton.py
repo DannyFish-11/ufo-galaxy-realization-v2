@@ -605,10 +605,7 @@ class ReleaseGateReport:
 
     @classmethod
     def from_dict(cls, d: Dict[str, Any]) -> "ReleaseGateReport":
-        evals = [
-            GateCategoryEvaluation.from_dict(e)
-            for e in d.get("category_evaluations", [])
-        ]
+        evals = [GateCategoryEvaluation.from_dict(e) for e in d.get("category_evaluations", [])]
         return cls(
             report_id=d.get("report_id", ""),
             generated_at=float(d.get("generated_at", 0.0)),
@@ -631,11 +628,12 @@ class ReleaseGateReport:
 # ---------------------------------------------------------------------------
 
 try:
+    from core.v2_readiness_governance_evidence_surface import EvidenceDimensionEntry as _EvidenceDimensionEntry
+    from core.v2_readiness_governance_evidence_surface import EvidenceSurfaceReport as _EvidenceSurfaceReport
     from core.v2_readiness_governance_evidence_surface import (
         build_evidence_surface_report as _build_evidence_surface_report,
-        EvidenceSurfaceReport as _EvidenceSurfaceReport,
-        EvidenceDimensionEntry as _EvidenceDimensionEntry,
     )
+
     _EVIDENCE_SURFACE_AVAILABLE = True
 except ImportError:  # pragma: no cover
     _EVIDENCE_SURFACE_AVAILABLE = False
@@ -714,8 +712,7 @@ class DistributedReleaseGateSkeleton:
     def _evaluate_impl(self) -> ReleaseGateReport:
         if not _EVIDENCE_SURFACE_AVAILABLE or _build_evidence_surface_report is None:
             return self._unknown_report(
-                "core.v2_readiness_governance_evidence_surface not importable; "
-                "cannot evaluate gate categories."
+                "core.v2_readiness_governance_evidence_surface not importable; " "cannot evaluate gate categories."
             )
 
         surface_report = _build_evidence_surface_report()
@@ -775,19 +772,14 @@ class DistributedReleaseGateSkeleton:
                 verdict=ReleaseGateVerdict.unknown.value,
                 evidence_status="unknown",
                 evidence_dimension_ids=[],
-                summary=(
-                    f"Category '{category.value}' has no evidence dimension mapping; "
-                    "cannot evaluate."
-                ),
+                summary=(f"Category '{category.value}' has no evidence dimension mapping; " "cannot evaluate."),
                 blocking_condition_type=blocking_condition_type,
                 failure_state="mapping_missing",
             )
 
         # Aggregate evidence status across all mapped dimension IDs
         entries_found = [dim_index.get(did) for did in dim_ids if did in dim_index]
-        all_statuses = [
-            getattr(e, "evidence_status", "unknown") for e in entries_found
-        ]
+        all_statuses = [getattr(e, "evidence_status", "unknown") for e in entries_found]
 
         if not entries_found:
             agg_status = "unavailable"
@@ -803,10 +795,7 @@ class DistributedReleaseGateSkeleton:
             verdict = ReleaseGateVerdict.open.value
             gap = ""
             failure_state = "none"
-            summary = (
-                f"Category '{category.value}' evidence is present "
-                f"(dims: {dim_ids})."
-            )
+            summary = f"Category '{category.value}' evidence is present " f"(dims: {dim_ids})."
         elif agg_status == "absent":
             verdict = (
                 ReleaseGateVerdict.blocked.value
@@ -814,12 +803,10 @@ class DistributedReleaseGateSkeleton:
                 else ReleaseGateVerdict.deferred.value
             )
             failure_state = "evidence_absent"
-            gap = (
-                f"Evidence absent for category '{category.value}' "
-                f"(dims: {dim_ids}).  "
-                + ("Protected release/deploy path is blocked until this evidence is restored."
-                   if strength == GateCategoryStrength.gate_worthy
-                   else "Advisory gap; does not block release.")
+            gap = f"Evidence absent for category '{category.value}' " f"(dims: {dim_ids}).  " + (
+                "Protected release/deploy path is blocked until this evidence is restored."
+                if strength == GateCategoryStrength.gate_worthy
+                else "Advisory gap; does not block release."
             )
             summary = f"Category '{category.value}' evidence absent."
         else:
@@ -827,19 +814,16 @@ class DistributedReleaseGateSkeleton:
                 verdict = ReleaseGateVerdict.blocked.value
                 failure_state = "evidence_unavailable"
                 gap = (
-                   f"Evidence unavailable for gate_worthy category '{category.value}' "
-                   f"(dims: {dim_ids}).  Protected release/deploy path is blocked "
-                   "until evidence becomes measurable."
+                    f"Evidence unavailable for gate_worthy category '{category.value}' "
+                    f"(dims: {dim_ids}).  Protected release/deploy path is blocked "
+                    "until evidence becomes measurable."
                 )
                 summary = f"Category '{category.value}' evidence unavailable (blocking)."
             else:
                 verdict = ReleaseGateVerdict.deferred.value
                 failure_state = "evidence_unavailable"
                 gap = ""
-                summary = (
-                   f"Category '{category.value}' evidence unavailable "
-                   f"(dims: {dim_ids}); verdict deferred."
-                )
+                summary = f"Category '{category.value}' evidence unavailable " f"(dims: {dim_ids}); verdict deferred."
 
         notes = ""
         if strength == GateCategoryStrength.advisory:
@@ -875,37 +859,19 @@ class DistributedReleaseGateSkeleton:
         *,
         is_enforcing: bool = False,
     ) -> ReleaseGateReport:
-        gate_worthy = [
-            e for e in evaluations
-            if e.strength == GateCategoryStrength.gate_worthy.value
-        ]
-        advisory = [
-            e for e in evaluations
-            if e.strength == GateCategoryStrength.advisory.value
-        ]
-        deferred = [
-            e for e in evaluations
-            if e.strength == GateCategoryStrength.deferred.value
-        ]
+        gate_worthy = [e for e in evaluations if e.strength == GateCategoryStrength.gate_worthy.value]
+        advisory = [e for e in evaluations if e.strength == GateCategoryStrength.advisory.value]
+        deferred = [e for e in evaluations if e.strength == GateCategoryStrength.deferred.value]
 
-        blocked_gw = [
-            e for e in gate_worthy
-            if e.verdict == ReleaseGateVerdict.blocked.value
-        ]
-        open_gw = [
-            e for e in gate_worthy
-            if e.verdict == ReleaseGateVerdict.open.value
-        ]
+        blocked_gw = [e for e in gate_worthy if e.verdict == ReleaseGateVerdict.blocked.value]
+        open_gw = [e for e in gate_worthy if e.verdict == ReleaseGateVerdict.open.value]
 
         # Determine overall verdict
         if blocked_gw:
             overall = ReleaseGateVerdict.blocked.value
         elif not gate_worthy:
             overall = ReleaseGateVerdict.unknown.value
-        elif all(
-            e.verdict in (ReleaseGateVerdict.open.value, ReleaseGateVerdict.deferred.value)
-            for e in gate_worthy
-        ):
+        elif all(e.verdict in (ReleaseGateVerdict.open.value, ReleaseGateVerdict.deferred.value) for e in gate_worthy):
             if open_gw:
                 overall = ReleaseGateVerdict.open.value
             else:
@@ -951,18 +917,9 @@ class DistributedReleaseGateSkeleton:
             overall_verdict=ReleaseGateVerdict.unknown.value,
             is_enforcing=False,
             category_evaluations=evaluations,
-            gate_worthy_count=sum(
-                1 for c in GateCategory
-                if _CATEGORY_STRENGTH[c] == GateCategoryStrength.gate_worthy
-            ),
-            advisory_count=sum(
-                1 for c in GateCategory
-                if _CATEGORY_STRENGTH[c] == GateCategoryStrength.advisory
-            ),
-            deferred_count=sum(
-                1 for c in GateCategory
-                if _CATEGORY_STRENGTH[c] == GateCategoryStrength.deferred
-            ),
+            gate_worthy_count=sum(1 for c in GateCategory if _CATEGORY_STRENGTH[c] == GateCategoryStrength.gate_worthy),
+            advisory_count=sum(1 for c in GateCategory if _CATEGORY_STRENGTH[c] == GateCategoryStrength.advisory),
+            deferred_count=sum(1 for c in GateCategory if _CATEGORY_STRENGTH[c] == GateCategoryStrength.deferred),
             blocked_gate_worthy_count=0,
             open_gate_worthy_count=0,
             evidence_surface_report_id="",

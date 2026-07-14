@@ -52,6 +52,7 @@ Validates that:
   Windows path
   20. The Windows fast-path also registers and transitions continuity state.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -72,10 +73,10 @@ from core.hybrid_orchestration_continuity import (
     HybridPartialResultDisposition,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_registry() -> HybridOrchestrationContinuityRegistry:
     """Return a fresh, isolated continuity registry."""
@@ -128,6 +129,7 @@ def _make_arbiter_all_fail(registry: HybridOrchestrationContinuityRegistry) -> H
 # 1. Sentinel
 # ---------------------------------------------------------------------------
 
+
 class TestContinuitySentinel:
     def test_sentinel_is_non_empty_string(self):
         assert isinstance(HYBRID_EXECUTOR_CONTINUITY_WIRED, str)
@@ -141,28 +143,33 @@ class TestContinuitySentinel:
 # 2–4. Registration
 # ---------------------------------------------------------------------------
 
+
 class TestContinuityRegistration:
     def test_execute_registers_in_registry(self):
         """execute() must register an execution in the continuity registry."""
         registry = _make_registry()
         arbiter = _make_arbiter_success(registry)
-        asyncio.run(arbiter.execute(
-            device_id="android_device",
-            app_id="com.example.app",
-            action="tap",
-            windows_arbiter=False,
-        ))
+        asyncio.run(
+            arbiter.execute(
+                device_id="android_device",
+                app_id="com.example.app",
+                action="tap",
+                windows_arbiter=False,
+            )
+        )
         assert registry.count() == 1
 
     def test_registered_record_has_execution_id(self):
         registry = _make_registry()
         arbiter = _make_arbiter_success(registry)
-        asyncio.run(arbiter.execute(
-            device_id="android_device",
-            app_id="com.example.app",
-            action="tap",
-            windows_arbiter=False,
-        ))
+        asyncio.run(
+            arbiter.execute(
+                device_id="android_device",
+                app_id="com.example.app",
+                action="tap",
+                windows_arbiter=False,
+            )
+        )
         records = registry.list_all()
         assert len(records) == 1
         assert records[0].execution_id.startswith("hexec_")
@@ -179,16 +186,19 @@ class TestContinuityRegistration:
 # 5–6. Success path
 # ---------------------------------------------------------------------------
 
+
 class TestSuccessPath:
     def test_success_transitions_to_completed(self):
         registry = _make_registry()
         arbiter = _make_arbiter_success(registry)
-        asyncio.run(arbiter.execute(
-            device_id="android_device",
-            app_id="com.example.app",
-            action="tap",
-            windows_arbiter=False,
-        ))
+        asyncio.run(
+            arbiter.execute(
+                device_id="android_device",
+                app_id="com.example.app",
+                action="tap",
+                windows_arbiter=False,
+            )
+        )
         records = registry.list_terminal()
         assert len(records) == 1
         assert records[0].lifecycle_state == HybridOrchestrationLifecycleState.completed
@@ -196,12 +206,14 @@ class TestSuccessPath:
     def test_completed_record_has_result_snapshot(self):
         registry = _make_registry()
         arbiter = _make_arbiter_success(registry)
-        asyncio.run(arbiter.execute(
-            device_id="android_device",
-            app_id="com.example.app",
-            action="tap",
-            windows_arbiter=False,
-        ))
+        asyncio.run(
+            arbiter.execute(
+                device_id="android_device",
+                app_id="com.example.app",
+                action="tap",
+                windows_arbiter=False,
+            )
+        )
         record = registry.list_all()[0]
         assert record.result_snapshot is not None
 
@@ -210,17 +222,20 @@ class TestSuccessPath:
 # 7–8. All-failed path
 # ---------------------------------------------------------------------------
 
+
 class TestAllFailedPath:
     def test_all_failed_transitions_to_failed(self):
         registry = _make_registry()
         arbiter = _make_arbiter_all_fail(registry)
-        asyncio.run(arbiter.execute(
-            device_id="android_device",
-            app_id="com.example.app",
-            action="tap",
-            force_level=ExecutionLevel.A2A,
-            windows_arbiter=False,
-        ))
+        asyncio.run(
+            arbiter.execute(
+                device_id="android_device",
+                app_id="com.example.app",
+                action="tap",
+                force_level=ExecutionLevel.A2A,
+                windows_arbiter=False,
+            )
+        )
         records = registry.list_terminal()
         assert len(records) == 1
         assert records[0].lifecycle_state == HybridOrchestrationLifecycleState.failed
@@ -228,13 +243,15 @@ class TestAllFailedPath:
     def test_failed_record_has_result_snapshot(self):
         registry = _make_registry()
         arbiter = _make_arbiter_all_fail(registry)
-        asyncio.run(arbiter.execute(
-            device_id="android_device",
-            app_id="com.example.app",
-            action="tap",
-            force_level=ExecutionLevel.A2A,
-            windows_arbiter=False,
-        ))
+        asyncio.run(
+            arbiter.execute(
+                device_id="android_device",
+                app_id="com.example.app",
+                action="tap",
+                force_level=ExecutionLevel.A2A,
+                windows_arbiter=False,
+            )
+        )
         record = registry.list_all()[0]
         assert record.result_snapshot is not None
 
@@ -242,6 +259,7 @@ class TestAllFailedPath:
 # ---------------------------------------------------------------------------
 # 9–11. CancelledError interruption
 # ---------------------------------------------------------------------------
+
 
 class TestCancelledErrorInterruption:
     def test_cancelled_transitions_to_interrupted(self):
@@ -256,13 +274,15 @@ class TestCancelledErrorInterruption:
             continuity_registry=registry,
         )
         with pytest.raises(asyncio.CancelledError):
-            asyncio.run(arbiter.execute(
-                device_id="android_device",
-                app_id="com.example.app",
-                action="tap",
-                force_level=ExecutionLevel.A2A,
-                windows_arbiter=False,
-            ))
+            asyncio.run(
+                arbiter.execute(
+                    device_id="android_device",
+                    app_id="com.example.app",
+                    action="tap",
+                    force_level=ExecutionLevel.A2A,
+                    windows_arbiter=False,
+                )
+            )
 
         records = registry.list_interrupted()
         assert len(records) == 1
@@ -280,13 +300,15 @@ class TestCancelledErrorInterruption:
             continuity_registry=registry,
         )
         with pytest.raises(asyncio.CancelledError):
-            asyncio.run(arbiter.execute(
-                device_id="android_device",
-                app_id="com.example.app",
-                action="tap",
-                force_level=ExecutionLevel.A2A,
-                windows_arbiter=False,
-            ))
+            asyncio.run(
+                arbiter.execute(
+                    device_id="android_device",
+                    app_id="com.example.app",
+                    action="tap",
+                    force_level=ExecutionLevel.A2A,
+                    windows_arbiter=False,
+                )
+            )
 
     def test_cancelled_after_partial_success_preserves_partial_result(self):
         """A partial result from an earlier level is preserved on CancelledError."""
@@ -350,13 +372,15 @@ class TestCancelledErrorInterruption:
         )
 
         with pytest.raises((asyncio.CancelledError, Exception)):
-            asyncio.run(arbiter2.execute(
-                device_id="android_device",
-                app_id="com.example.app",
-                action="tap",
-                force_level=ExecutionLevel.A2A,
-                windows_arbiter=False,
-            ))
+            asyncio.run(
+                arbiter2.execute(
+                    device_id="android_device",
+                    app_id="com.example.app",
+                    action="tap",
+                    force_level=ExecutionLevel.A2A,
+                    windows_arbiter=False,
+                )
+            )
 
         # Record should be interrupted (not completed) and partial result preserved.
         interrupted = cancel_registry.list_interrupted()
@@ -368,6 +392,7 @@ class TestCancelledErrorInterruption:
 # ---------------------------------------------------------------------------
 # 12–13. Unexpected exception
 # ---------------------------------------------------------------------------
+
 
 class TestUnexpectedExceptionInterruption:
     def test_unexpected_exception_transitions_to_interrupted(self):
@@ -388,13 +413,15 @@ class TestUnexpectedExceptionInterruption:
         arbiter._try_level = _raising_try_level
 
         with pytest.raises(RuntimeError):
-            asyncio.run(arbiter.execute(
-                device_id="android_device",
-                app_id="com.example.app",
-                action="tap",
-                force_level=ExecutionLevel.A2A,
-                windows_arbiter=False,
-            ))
+            asyncio.run(
+                arbiter.execute(
+                    device_id="android_device",
+                    app_id="com.example.app",
+                    action="tap",
+                    force_level=ExecutionLevel.A2A,
+                    windows_arbiter=False,
+                )
+            )
 
         records = registry.list_interrupted()
         assert len(records) == 1
@@ -414,18 +441,21 @@ class TestUnexpectedExceptionInterruption:
         arbiter._try_level = _raising_try_level
 
         with pytest.raises(ValueError):
-            asyncio.run(arbiter.execute(
-                device_id="android_device",
-                app_id="com.example.app",
-                action="tap",
-                force_level=ExecutionLevel.A2A,
-                windows_arbiter=False,
-            ))
+            asyncio.run(
+                arbiter.execute(
+                    device_id="android_device",
+                    app_id="com.example.app",
+                    action="tap",
+                    force_level=ExecutionLevel.A2A,
+                    windows_arbiter=False,
+                )
+            )
 
 
 # ---------------------------------------------------------------------------
 # 14–15. Partial-result preservation on cancellation
 # ---------------------------------------------------------------------------
+
 
 class TestPartialResultPreservation:
     def test_partial_result_origin_is_local(self):
@@ -453,13 +483,15 @@ class TestPartialResultPreservation:
             continuity_registry=registry,
         )
         with pytest.raises((asyncio.CancelledError, Exception)):
-            asyncio.run(arbiter.execute(
-                device_id="android_device",
-                app_id="com.example.app",
-                action="tap",
-                force_level=ExecutionLevel.A2A,
-                windows_arbiter=False,
-            ))
+            asyncio.run(
+                arbiter.execute(
+                    device_id="android_device",
+                    app_id="com.example.app",
+                    action="tap",
+                    force_level=ExecutionLevel.A2A,
+                    windows_arbiter=False,
+                )
+            )
 
         interrupted = registry.list_interrupted()
         assert len(interrupted) == 1
@@ -485,13 +517,15 @@ class TestPartialResultPreservation:
             continuity_registry=registry,
         )
         with pytest.raises((asyncio.CancelledError, Exception)):
-            asyncio.run(arbiter.execute(
-                device_id="android_device",
-                app_id="com.example.app",
-                action="tap",
-                force_level=ExecutionLevel.A2A,
-                windows_arbiter=False,
-            ))
+            asyncio.run(
+                arbiter.execute(
+                    device_id="android_device",
+                    app_id="com.example.app",
+                    action="tap",
+                    force_level=ExecutionLevel.A2A,
+                    windows_arbiter=False,
+                )
+            )
 
         interrupted = registry.list_interrupted()
         assert len(interrupted) == 1
@@ -502,6 +536,7 @@ class TestPartialResultPreservation:
 # 16. Registry parameter injection
 # ---------------------------------------------------------------------------
 
+
 class TestRegistryInjection:
     def test_injected_registry_is_used(self):
         """Custom registry injected via __init__ must be used instead of singleton."""
@@ -510,12 +545,14 @@ class TestRegistryInjection:
             a2a_executor=_success_a2a,
             continuity_registry=registry,
         )
-        asyncio.run(arbiter.execute(
-            device_id="android_device",
-            app_id="app",
-            action="test",
-            windows_arbiter=False,
-        ))
+        asyncio.run(
+            arbiter.execute(
+                device_id="android_device",
+                app_id="app",
+                action="test",
+                windows_arbiter=False,
+            )
+        )
         # The injected registry should have the record.
         assert registry.count() == 1
 
@@ -525,6 +562,7 @@ class TestRegistryInjection:
             get_continuity_registry,
             reset_continuity_registry,
         )
+
         reset_continuity_registry()
         before_count = get_continuity_registry().count()
 
@@ -533,12 +571,14 @@ class TestRegistryInjection:
             a2a_executor=_success_a2a,
             continuity_registry=registry,
         )
-        asyncio.run(arbiter.execute(
-            device_id="android_device",
-            app_id="app",
-            action="test",
-            windows_arbiter=False,
-        ))
+        asyncio.run(
+            arbiter.execute(
+                device_id="android_device",
+                app_id="app",
+                action="test",
+                windows_arbiter=False,
+            )
+        )
 
         # The global singleton must NOT have been updated.
         assert get_continuity_registry().count() == before_count
@@ -549,6 +589,7 @@ class TestRegistryInjection:
 # ---------------------------------------------------------------------------
 # 17. No-registry resilience
 # ---------------------------------------------------------------------------
+
 
 class TestNoRegistryResilience:
     def test_execute_succeeds_when_registry_raises(self, monkeypatch):
@@ -565,6 +606,7 @@ class TestNoRegistryResilience:
         )
         # Monkeypatch the module-level get_continuity_registry import inside the method.
         import core.hybrid_orchestration_continuity as _cont_mod
+
         monkeypatch.setattr(_cont_mod, "get_continuity_registry", _failing_registry)
         # Also patch the arbiter's own _get_continuity_registry to use the failing fn.
         original = arbiter._get_continuity_registry
@@ -572,18 +614,21 @@ class TestNoRegistryResilience:
         def _patched():
             try:
                 from core.hybrid_orchestration_continuity import get_continuity_registry
+
                 return get_continuity_registry()
             except Exception:
                 return None
 
         arbiter._get_continuity_registry = _patched
 
-        result = asyncio.run(arbiter.execute(
-            device_id="android_device",
-            app_id="com.example.app",
-            action="tap",
-            windows_arbiter=False,
-        ))
+        result = asyncio.run(
+            arbiter.execute(
+                device_id="android_device",
+                app_id="com.example.app",
+                action="tap",
+                windows_arbiter=False,
+            )
+        )
         assert result.success is True
 
 
@@ -591,30 +636,35 @@ class TestNoRegistryResilience:
 # 18–19. session_id / task_id propagation
 # ---------------------------------------------------------------------------
 
+
 class TestSessionTaskIdPropagation:
     def test_session_id_stored_on_record(self):
         registry = _make_registry()
         arbiter = _make_arbiter_success(registry)
-        asyncio.run(arbiter.execute(
-            device_id="android_device",
-            app_id="com.example.app",
-            action="tap",
-            session_id="test_session_123",
-            windows_arbiter=False,
-        ))
+        asyncio.run(
+            arbiter.execute(
+                device_id="android_device",
+                app_id="com.example.app",
+                action="tap",
+                session_id="test_session_123",
+                windows_arbiter=False,
+            )
+        )
         record = registry.list_all()[0]
         assert record.session_id == "test_session_123"
 
     def test_task_id_stored_on_record(self):
         registry = _make_registry()
         arbiter = _make_arbiter_success(registry)
-        asyncio.run(arbiter.execute(
-            device_id="android_device",
-            app_id="com.example.app",
-            action="tap",
-            task_id="task_abc",
-            windows_arbiter=False,
-        ))
+        asyncio.run(
+            arbiter.execute(
+                device_id="android_device",
+                app_id="com.example.app",
+                action="tap",
+                task_id="task_abc",
+                windows_arbiter=False,
+            )
+        )
         record = registry.list_all()[0]
         assert record.task_id == "task_abc"
 
@@ -622,6 +672,7 @@ class TestSessionTaskIdPropagation:
 # ---------------------------------------------------------------------------
 # 20. Windows path continuity
 # ---------------------------------------------------------------------------
+
 
 class TestWindowsPathContinuity:
     def test_windows_path_registers_and_completes(self, monkeypatch):
@@ -643,10 +694,12 @@ class TestWindowsPathContinuity:
 
         import core.hybrid_executor as _hmod
         import core.windows_execution_arbiter as _wmod
+
         monkeypatch.setattr(_wmod, "get_windows_arbiter", lambda: mock_arbiter)
 
         # Map WinExecLevel.SYSTEM_API to A2A
         from unittest.mock import MagicMock as MM
+
         win_exec_level_mock = MM()
         win_exec_level_mock.SYSTEM_API = mock_win_result.final_level
         win_exec_level_mock.UIA = MM()
@@ -656,11 +709,13 @@ class TestWindowsPathContinuity:
 
         arbiter = HybridExecutionArbiter(continuity_registry=registry)
         # Trigger Windows path via device_id starting with "windows"
-        asyncio.run(arbiter.execute(
-            device_id="windows_desktop",
-            app_id="notepad",
-            action="open",
-        ))
+        asyncio.run(
+            arbiter.execute(
+                device_id="windows_desktop",
+                app_id="notepad",
+                action="open",
+            )
+        )
 
         # The registry should have a record (either terminal or interrupted
         # depending on whether the WinExecLevel mapping succeeded).

@@ -91,10 +91,11 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, Optional
 
-# ---------------------------------------------------------------------------
-# Imports from prior PR packages
-# ---------------------------------------------------------------------------
-
+from core.android_runtime_dispatch_binding import (
+    AndroidRuntimeDispatchBindingRecord,
+    AndroidRuntimeDispatchBindingRuntime,
+    resolve_dispatch_binding,
+)
 from core.attached_runtime_reuse_binding import (
     AttachedRuntimeReuseBindingRecord,
     AttachedRuntimeReuseBindingRuntime,
@@ -104,11 +105,11 @@ from core.attached_runtime_reuse_binding import (
     get_reuse_binding_by_device,
     register_dispatch_binding_id,
 )
-from core.android_runtime_dispatch_binding import (
-    AndroidRuntimeDispatchBindingRecord,
-    AndroidRuntimeDispatchBindingRuntime,
-    resolve_dispatch_binding,
-)
+
+# ---------------------------------------------------------------------------
+# Imports from prior PR packages
+# ---------------------------------------------------------------------------
+
 
 # PR-22: Registry gate — imported lazily so the module remains loadable when
 # the session registry is unavailable (e.g. during early boot or unit tests
@@ -116,10 +117,10 @@ from core.android_runtime_dispatch_binding import (
 try:
     from core.attached_runtime_session_registry import (
         AttachedSessionRegistry,
-        RegistryEntryState as _RegistryEntryState,
-        get_session_registry as _get_session_registry,
-        lookup_active_session as _lookup_active_session,
     )
+    from core.attached_runtime_session_registry import RegistryEntryState as _RegistryEntryState
+    from core.attached_runtime_session_registry import get_session_registry as _get_session_registry
+    from core.attached_runtime_session_registry import lookup_active_session as _lookup_active_session
 
     _REGISTRY_AVAILABLE: bool = True
 except ImportError:  # pragma: no cover
@@ -134,8 +135,7 @@ except ImportError:  # pragma: no cover
 # ---------------------------------------------------------------------------
 
 ATTACHED_RUNTIME_REUSE_DISPATCH_AUTHORITY: str = (
-    "core.attached_runtime_reuse_dispatch::PR17::canonical-dispatch-"
-    "consumption-of-attached-runtime-reuse-bindings"
+    "core.attached_runtime_reuse_dispatch::PR17::canonical-dispatch-" "consumption-of-attached-runtime-reuse-bindings"
 )
 
 # ---------------------------------------------------------------------------
@@ -439,14 +439,10 @@ class ReuseDispatchResolution:
             "session_id": self.session_id,
             "device_id": self.device_id,
             "reuse_binding_id": (
-                self.reuse_binding.identity.reuse_binding_id
-                if self.reuse_binding is not None
-                else ""
+                self.reuse_binding.identity.reuse_binding_id if self.reuse_binding is not None else ""
             ),
             "dispatch_binding_id": (
-                self.dispatch_binding.identity.binding_id
-                if self.dispatch_binding is not None
-                else ""
+                self.dispatch_binding.identity.binding_id if self.dispatch_binding is not None else ""
             ),
             "reject_reason": self.reject_reason,
             "resolved_at": self.resolved_at,
@@ -607,11 +603,7 @@ def resolve_reuse_dispatch_surface(
     )
 
     if eligibility == ReuseEligibilityStatus.ineligible:
-        _reason = (
-            record.invalidation_reason.value
-            if record.invalidation_reason is not None
-            else "ineligible"
-        )
+        _reason = record.invalidation_reason.value if record.invalidation_reason is not None else "ineligible"
         return ReuseDispatchResolution(
             resolution_kind=ReuseDispatchResolutionKind.rejected,
             session_id=session_id,
@@ -928,9 +920,7 @@ class TakeoverDispatchDecision:
             "session_id": self.session_id,
             "device_id": self.device_id,
             "reuse_resolution_kind": (
-                self.reuse_resolution.resolution_kind.value
-                if self.reuse_resolution is not None
-                else None
+                self.reuse_resolution.resolution_kind.value if self.reuse_resolution is not None else None
             ),
             "reject_reason": self.reject_reason,
             "decided_at": self.decided_at,
@@ -1050,8 +1040,7 @@ def resolve_takeover_or_fallback_route(
 
     # Rejected or no_binding → delegated fallback.
     _fallback_reason = resolution.reject_reason or (
-        f"no eligible attached-runtime reuse surface "
-        f"(resolution_kind={resolution.resolution_kind.value!r})"
+        f"no eligible attached-runtime reuse surface " f"(resolution_kind={resolution.resolution_kind.value!r})"
     )
     return TakeoverDispatchDecision(
         outcome=TakeoverRouteOutcome.delegated_fallback,

@@ -3,10 +3,12 @@
 验证 chat → ReAct Agent → send_to_device → gateway 设备 的完整链路。
 核心问题：三套 ConnectionManager 桥接后，命令能否到达 gateway 注册的设备。
 """
-import json
-import pytest
+
 import asyncio
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 
 class TestConnectionManagerBridge:
@@ -47,6 +49,7 @@ class TestConnectionManagerBridge:
         with patch("core.routes._shared.device_router", mock_router, create=True):
             # 由于 lazy import，patch the import path
             import core.routes._shared as shared_mod
+
             original = shared_mod.ConnectionManager.get_all_devices
 
             # Just verify the method exists and can be called
@@ -63,9 +66,7 @@ class TestConnectionManagerBridge:
         connection_manager.active_devices["local_device"] = mock_ws
 
         try:
-            result = await connection_manager.send_to_device(
-                "local_device", {"type": "test"}
-            )
+            result = await connection_manager.send_to_device("local_device", {"type": "test"})
             assert result is True
             mock_ws.send_json.assert_called_once_with({"type": "test"})
         finally:
@@ -76,9 +77,7 @@ class TestConnectionManagerBridge:
         """send_to_device 设备不存在时应返回 False"""
         from core.routes._shared import connection_manager
 
-        result = await connection_manager.send_to_device(
-            "nonexistent_device", {"type": "test"}
-        )
+        result = await connection_manager.send_to_device("nonexistent_device", {"type": "test"})
         assert result is False
 
 

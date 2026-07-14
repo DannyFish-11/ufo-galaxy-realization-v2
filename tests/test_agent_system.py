@@ -9,31 +9,32 @@ Covers: AgentFactory, AgentMessageBus, AgentTeam, FractalAgent,
 import asyncio
 import json
 import time
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-# ──────────────────────────── Imports ────────────────────────────
+import pytest
 
 from core.agent_factory import (
+    AGENT_TEMPLATES,
+    AgentCapability,
+    AgentConfig,
     AgentFactory,
-    AgentMessageBus,
     AgentMessage,
+    AgentMessageBus,
     AgentRole,
     AgentState,
     CreationMode,
-    AgentConfig,
-    AgentCapability,
     TaskAgent,
-    AGENT_TEMPLATES,
     get_message_bus,
 )
 from core.agent_manifest import (
     AgentManifest,
-    ExecutionMode,
     AgentPriority,
-    ToolDeclaration,
+    ExecutionMode,
     TaskItem,
+    ToolDeclaration,
 )
+
+# ──────────────────────────── Imports ────────────────────────────
 
 
 # ──────────────────────────── Fixtures ────────────────────────────
@@ -52,21 +53,23 @@ def factory():
 def mock_llm_router():
     """Mock LLM router for testing LLM-dependent features."""
     router = MagicMock()
-    router.chat = AsyncMock(return_value=MagicMock(
-        content='{"analysis": "test result"}',
-        provider="mock",
-    ))
-    router.chat_json = AsyncMock(return_value={
-        "role": "analyst",
-        "name": "Test Analyst",
-        "description": "Analyzes test data",
-        "capabilities": [
-            {"name": "analysis", "description": "Data analysis", "strength": 0.9}
-        ],
-        "system_prompt": "You are a test analyst.",
-        "max_subtasks": 3,
-        "max_depth": 2,
-    })
+    router.chat = AsyncMock(
+        return_value=MagicMock(
+            content='{"analysis": "test result"}',
+            provider="mock",
+        )
+    )
+    router.chat_json = AsyncMock(
+        return_value={
+            "role": "analyst",
+            "name": "Test Analyst",
+            "description": "Analyzes test data",
+            "capabilities": [{"name": "analysis", "description": "Data analysis", "strength": 0.9}],
+            "system_prompt": "You are a test analyst.",
+            "max_subtasks": 3,
+            "max_depth": 2,
+        }
+    )
     return router
 
 
@@ -186,10 +189,7 @@ class TestAgentFactoryTemplateCreation:
             assert agent.depth == 0
 
     def test_create_with_overrides(self, factory):
-        agent = factory.create_from_template(
-            "coordinator",
-            overrides={"name": "Custom Coordinator"}
-        )
+        agent = factory.create_from_template("coordinator", overrides={"name": "Custom Coordinator"})
         assert agent.config.name == "Custom Coordinator"
 
     def test_create_unknown_template_raises(self, factory):
@@ -342,9 +342,7 @@ class TestAgentExecution:
     @pytest.mark.asyncio
     async def test_execute_with_llm(self, factory_with_llm):
         agent = factory_with_llm.create_from_template("data_analyst")
-        result = await factory_with_llm.execute_agent_task(
-            agent.id, {"task": "analyze", "data": [1, 2, 3]}
-        )
+        result = await factory_with_llm.execute_agent_task(agent.id, {"task": "analyze", "data": [1, 2, 3]})
         assert result is not None
 
     @pytest.mark.asyncio
@@ -492,16 +490,18 @@ class TestFractalAgent:
 
     def test_import_fractal_modules(self):
         from core.fractal_agent import (
-            FractalAgent,
-            FractalTask,
-            FractalResult,
             Complexity,
+            FractalAgent,
+            FractalResult,
+            FractalTask,
         )
+
         assert Complexity.ATOMIC.value == "atomic"
         assert Complexity.EPIC.value == "epic"
 
     def test_fractal_task_creation(self):
-        from core.fractal_agent import FractalTask, Complexity
+        from core.fractal_agent import Complexity, FractalTask
+
         task = FractalTask(
             id="task_001",
             description="Analyze market data",
@@ -514,6 +514,7 @@ class TestFractalAgent:
 
     def test_fractal_result_creation(self):
         from core.fractal_agent import FractalResult
+
         result = FractalResult(
             task_id="task_001",
             success=True,
@@ -526,6 +527,7 @@ class TestFractalAgent:
 
     def test_fractal_agent_limits(self):
         from core.fractal_agent import FractalAgent
+
         assert FractalAgent.MAX_DEPTH == 4
         assert FractalAgent.MAX_SUBTASKS == 6
 
@@ -540,16 +542,18 @@ class TestSystemIntegration:
 
     def test_import_system_integration(self):
         from core.system_integration import (
-            SystemIntegration,
-            CapabilityType,
             Capability,
+            CapabilityType,
+            SystemIntegration,
         )
+
         assert CapabilityType.DEVICE.value == "device"
         assert CapabilityType.MCP.value == "mcp"
         assert CapabilityType.AGENT.value == "agent"
 
     def test_capability_to_dict(self):
         from core.system_integration import Capability, CapabilityType
+
         cap = Capability(
             name="device_control",
             source=CapabilityType.DEVICE,
@@ -575,16 +579,18 @@ class TestAgentTeam:
     def test_import_team_modules(self):
         from core.agent_team import (
             AgentTeam,
-            TeamStrategy,
-            TeamStatus,
             TeamMember,
+            TeamStatus,
+            TeamStrategy,
         )
+
         assert TeamStrategy.PARALLEL.value == "parallel"
         assert TeamStrategy.SPECIALIZED.value == "specialized"
         assert TeamStrategy.SWARM.value == "swarm"
 
     def test_team_member_to_dict(self):
         from core.agent_team import TeamMember
+
         member = TeamMember(
             agent_id="agent_001",
             agent_name="Analyst",

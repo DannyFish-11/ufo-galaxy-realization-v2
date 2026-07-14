@@ -139,17 +139,14 @@ class ClosureExecutionPlan:
         }
 
 
-def _ensure_all_issues_are_planned(
-    report: CompleteJointSystemReport, issue_to_prs: Dict[str, List[str]]
-) -> None:
+def _ensure_all_issues_are_planned(report: CompleteJointSystemReport, issue_to_prs: Dict[str, List[str]]) -> None:
     baseline_ids = {issue.issue_id for issue in report.remaining_issues}
     planned_ids = set(issue_to_prs.keys())
     if baseline_ids != planned_ids:
         missing = sorted(baseline_ids - planned_ids)
         extra = sorted(planned_ids - baseline_ids)
         raise ValueError(
-            "Closure execution plan must map exactly to baseline remaining issues. "
-            f"missing={missing}, extra={extra}"
+            "Closure execution plan must map exactly to baseline remaining issues. " f"missing={missing}, extra={extra}"
         )
 
 
@@ -194,8 +191,16 @@ def build_closure_phase_execution_plan() -> ClosureExecutionPlan:
     _ensure_all_issues_are_planned(report, issue_to_prs)
 
     blueprints = [
-        (1, "CP-01", "R1 orchestration truth-consumption closure", RepoOwnership.V2, [V2_REPOSITORY], ["R1"],
-         "B-P0-RUNTIME-CLOSURE", []),
+        (
+            1,
+            "CP-01",
+            "R1 orchestration truth-consumption closure",
+            RepoOwnership.V2,
+            [V2_REPOSITORY],
+            ["R1"],
+            "B-P0-RUNTIME-CLOSURE",
+            [],
+        ),
         (
             2,
             "CP-02",

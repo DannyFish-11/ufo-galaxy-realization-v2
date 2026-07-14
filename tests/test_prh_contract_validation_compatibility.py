@@ -87,7 +87,6 @@ from contracts.contract_compatibility import (
     validate_task_envelope_contract,
 )
 
-
 # ===========================================================================
 # A. Sentinel constants importable
 # ===========================================================================
@@ -794,14 +793,16 @@ class TestTaskEnvelopeModelDumpPasses:
 
     def test_default_envelope_passes(self):
         from core.schemas.task_envelope import TaskEnvelope
+
         env = TaskEnvelope()
         payload = env.model_dump()
         report = check_envelope_backward_compatibility(payload)
         assert report.is_compatible is True
 
     def test_evolved_envelope_passes(self):
-        from core.schemas.task_envelope import TaskEnvelope
         from core.schemas.remote_execution import ExecutorTargetType
+        from core.schemas.task_envelope import TaskEnvelope
+
         env = TaskEnvelope(
             executor_target_type=ExecutorTargetType.android_device,
             continuity_context={"continuity_id": "c_001", "prior_dispatch_id": "d_001"},
@@ -823,6 +824,7 @@ class TestSourceDispatchPlanToDictPasses:
 
     def test_default_plan_passes(self):
         from contracts.source_dispatch import SourceDispatchPlan
+
         plan = SourceDispatchPlan()
         payload = plan.to_dict()
         report = check_dispatch_plan_backward_compatibility(payload)
@@ -830,6 +832,7 @@ class TestSourceDispatchPlanToDictPasses:
 
     def test_plan_with_continuity_context_passes(self):
         from contracts.source_dispatch import build_source_dispatch_plan
+
         plan = build_source_dispatch_plan(
             mode=None,
             continuity_context={"continuity_id": "c_001", "prior_session_id": "s_001"},
@@ -850,6 +853,7 @@ class TestSourceDispatchResultToDictPasses:
 
     def test_default_result_passes(self):
         from contracts.source_dispatch import SourceDispatchResult
+
         result = SourceDispatchResult()
         payload = result.to_dict()
         report = check_dispatch_result_backward_compatibility(payload)
@@ -857,6 +861,7 @@ class TestSourceDispatchResultToDictPasses:
 
     def test_result_with_continuity_context_passes(self):
         from contracts.source_dispatch import build_source_dispatch_result
+
         result = build_source_dispatch_result(
             success=True,
             continuity_context={"continuity_id": "c_001"},
@@ -905,6 +910,7 @@ class TestNewEnvelopeParsedByOldConsumer:
 
     def test_new_envelope_parses_without_error(self):
         from core.schemas.task_envelope import TaskEnvelope
+
         # Simulate a new envelope that includes future unknown fields
         payload = {
             "task_id": "t_new",
@@ -929,6 +935,7 @@ class TestSourceDispatchDecisionNoneExecutorTargetType:
 
     def test_executor_target_type_absent_round_trip(self):
         from contracts.source_dispatch import SourceDispatchDecision
+
         decision = SourceDispatchDecision()
         d = decision.to_dict()
         restored = SourceDispatchDecision.from_dict(d)
@@ -938,6 +945,7 @@ class TestSourceDispatchDecisionNoneExecutorTargetType:
 
     def test_decision_with_unknown_extra_fields(self):
         from contracts.source_dispatch import SourceDispatchDecision
+
         # Simulate a newer decision payload with extra unknown fields
         payload = {
             "dispatch_id": "d_001",
@@ -1053,6 +1061,7 @@ class TestContinuityContextSurvivesDispatchPlanRoundTrip:
 
     def test_nested_continuity_context_round_trip(self):
         from contracts.source_dispatch import SourceDispatchPlan
+
         ctx_dict = {
             "continuity_id": "c_001",
             "prior_dispatch_id": "d_001",
@@ -1079,6 +1088,7 @@ class TestContinuityContextSurvivesDispatchPlanRoundTrip:
 
     def test_compat_report_for_plan_with_full_continuity(self):
         from contracts.source_dispatch import SourceDispatchPlan
+
         ctx_dict = {"continuity_id": "c_002", "prior_task_id": "t_002"}
         plan = SourceDispatchPlan(plan_id="plan_002", mode="staged_mesh", continuity_context=ctx_dict)
         report = check_dispatch_plan_backward_compatibility(plan.to_dict())

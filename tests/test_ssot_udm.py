@@ -12,17 +12,18 @@ Verifies that:
      the write-through pattern.
 """
 
-import sys
-import os
 import logging
+import os
+import sys
 import unittest
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, call, patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # ---------------------------------------------------------------------------
 # galaxy_gateway.ssot unit tests
 # ---------------------------------------------------------------------------
+
 
 class TestSSOTHelpers(unittest.TestCase):
     """Test the public helpers in galaxy_gateway.ssot."""
@@ -33,6 +34,7 @@ class TestSSOTHelpers(unittest.TestCase):
 
     def test_register_success_returns_true(self):
         from galaxy_gateway.ssot import udm_write_register
+
         udm = MagicMock()
         with patch("galaxy_gateway.ssot._get_udm", return_value=udm):
             result = udm_write_register(
@@ -48,6 +50,7 @@ class TestSSOTHelpers(unittest.TestCase):
 
     def test_register_udm_failure_returns_false_and_warns(self):
         from galaxy_gateway.ssot import udm_write_register
+
         udm = MagicMock()
         udm.register_device.side_effect = RuntimeError("db down")
         with patch("galaxy_gateway.ssot._get_udm", return_value=udm):
@@ -61,13 +64,12 @@ class TestSSOTHelpers(unittest.TestCase):
                 )
         self.assertFalse(result)
         # Structured event tag must appear in the log record extras
-        self.assertTrue(
-            any(getattr(r, "event", None) == "ssot_udm_write_failed" for r in cm.records)
-        )
+        self.assertTrue(any(getattr(r, "event", None) == "ssot_udm_write_failed" for r in cm.records))
 
     def test_register_unknown_device_type_uses_unknown(self):
         """Unknown device type string should not raise — fallback to UNKNOWN."""
         from galaxy_gateway.ssot import udm_write_register
+
         udm = MagicMock()
         with patch("galaxy_gateway.ssot._get_udm", return_value=udm):
             result = udm_write_register(
@@ -85,6 +87,7 @@ class TestSSOTHelpers(unittest.TestCase):
 
     def test_heartbeat_success_returns_true(self):
         from galaxy_gateway.ssot import udm_write_heartbeat
+
         udm = MagicMock()
         with patch("galaxy_gateway.ssot._get_udm", return_value=udm):
             result = udm_write_heartbeat("d1")
@@ -93,15 +96,14 @@ class TestSSOTHelpers(unittest.TestCase):
 
     def test_heartbeat_failure_returns_false_and_warns(self):
         from galaxy_gateway.ssot import udm_write_heartbeat
+
         udm = MagicMock()
         udm.update_device_status.side_effect = RuntimeError("timeout")
         with patch("galaxy_gateway.ssot._get_udm", return_value=udm):
             with self.assertLogs("galaxy_gateway.ssot", level="WARNING") as cm:
                 result = udm_write_heartbeat("d_hb_fail")
         self.assertFalse(result)
-        self.assertTrue(
-            any(getattr(r, "event", None) == "ssot_udm_heartbeat_failed" for r in cm.records)
-        )
+        self.assertTrue(any(getattr(r, "event", None) == "ssot_udm_heartbeat_failed" for r in cm.records))
 
     # ------------------------------------------------------------------
     # udm_write_unregister
@@ -109,6 +111,7 @@ class TestSSOTHelpers(unittest.TestCase):
 
     def test_unregister_success_returns_true(self):
         from galaxy_gateway.ssot import udm_write_unregister
+
         udm = MagicMock()
         with patch("galaxy_gateway.ssot._get_udm", return_value=udm):
             result = udm_write_unregister("d1")
@@ -117,6 +120,7 @@ class TestSSOTHelpers(unittest.TestCase):
 
     def test_unregister_failure_returns_false_and_warns(self):
         from galaxy_gateway.ssot import udm_write_unregister
+
         udm = MagicMock()
         udm.update_device_status.side_effect = RuntimeError("gone")
         udm.unregister_device.side_effect = RuntimeError("also gone")
@@ -124,14 +128,13 @@ class TestSSOTHelpers(unittest.TestCase):
             with self.assertLogs("galaxy_gateway.ssot", level="WARNING") as cm:
                 result = udm_write_unregister("d_un_fail")
         self.assertFalse(result)
-        self.assertTrue(
-            any(getattr(r, "event", None) == "ssot_udm_unregister_failed" for r in cm.records)
-        )
+        self.assertTrue(any(getattr(r, "event", None) == "ssot_udm_unregister_failed" for r in cm.records))
 
 
 # ---------------------------------------------------------------------------
 # GatewayWSManager.disconnect() SSOT ordering test
 # ---------------------------------------------------------------------------
+
 
 class TestWSManagerDisconnectOrder(unittest.TestCase):
     """disconnect() must call udm_write_unregister BEFORE clearing local state."""
@@ -153,12 +156,14 @@ class TestWSManagerDisconnectOrder(unittest.TestCase):
             mock_router.unregister_device.side_effect = fake_router_unregister
 
             from galaxy_gateway.websocket_handler import GatewayWSManager
+
             mgr = GatewayWSManager()
             ws_mock = MagicMock()
             mgr.active_connections["conn1"] = ws_mock
             mgr.device_connections["dev1"] = "conn1"
 
             import asyncio as _aio
+
             _aio.run(mgr.disconnect("conn1"))  # disconnect 已 async(B4 锁保护)
 
         self.assertEqual(call_order[0], ("udm", "dev1"), "UDM must be written first")
@@ -168,16 +173,19 @@ class TestWSManagerDisconnectOrder(unittest.TestCase):
         """Socket is gone — local state must still be cleaned up on UDM failure."""
         # Ensure module is imported before patch() resolves the target attribute
         import galaxy_gateway.websocket_handler  # noqa: F401
+
         with (
             patch("galaxy_gateway.websocket_handler.udm_write_unregister", return_value=False),
             patch("galaxy_gateway.websocket_handler.device_router"),
         ):
             from galaxy_gateway.websocket_handler import GatewayWSManager
+
             mgr = GatewayWSManager()
             mgr.active_connections["conn2"] = MagicMock()
             mgr.device_connections["dev2"] = "conn2"
 
             import asyncio as _aio
+
             _aio.run(mgr.disconnect("conn2"))  # disconnect 已 async(B4 锁保护)
 
         self.assertNotIn("conn2", mgr.active_connections)
@@ -188,11 +196,13 @@ class TestWSManagerDisconnectOrder(unittest.TestCase):
 # handlers.DeviceManager SSOT guardrail tests
 # ---------------------------------------------------------------------------
 
+
 class TestHandlersDeviceManagerSSOT(unittest.TestCase):
     """DeviceManager methods must gate local cache on ssot helper return value."""
 
     def _make_device_info(self, device_id="dm-test"):
         from galaxy_gateway.protocol import DeviceInfo, DeviceType
+
         return DeviceInfo(
             device_id=device_id,
             device_type=DeviceType.ANDROID_PHONE,
@@ -200,6 +210,7 @@ class TestHandlersDeviceManagerSSOT(unittest.TestCase):
 
     def test_register_does_not_update_local_on_udm_failure(self):
         from galaxy_gateway.handlers.device_manager import DeviceManager
+
         dm = DeviceManager()
         device_info = self._make_device_info("d_fail")
 
@@ -212,6 +223,7 @@ class TestHandlersDeviceManagerSSOT(unittest.TestCase):
 
     def test_register_updates_local_on_udm_success(self):
         from galaxy_gateway.handlers.device_manager import DeviceManager
+
         dm = DeviceManager()
         device_info = self._make_device_info("d_ok")
 
@@ -224,6 +236,7 @@ class TestHandlersDeviceManagerSSOT(unittest.TestCase):
 
     def test_unregister_does_not_remove_local_on_udm_failure(self):
         from galaxy_gateway.handlers.device_manager import DeviceManager
+
         dm = DeviceManager()
         device_info = self._make_device_info("d_un")
         dm.devices["d_un"] = device_info
@@ -237,6 +250,7 @@ class TestHandlersDeviceManagerSSOT(unittest.TestCase):
 
     def test_unregister_removes_local_on_udm_success(self):
         from galaxy_gateway.handlers.device_manager import DeviceManager
+
         dm = DeviceManager()
         device_info = self._make_device_info("d_un_ok")
         dm.devices["d_un_ok"] = device_info
@@ -250,7 +264,8 @@ class TestHandlersDeviceManagerSSOT(unittest.TestCase):
 
     def test_update_status_online_uses_heartbeat_helper(self):
         from galaxy_gateway.handlers.device_manager import DeviceManager
-        from galaxy_gateway.protocol import DeviceType, DeviceInfo
+        from galaxy_gateway.protocol import DeviceInfo, DeviceType
+
         dm = DeviceManager()
         dm.devices["d_hb"] = DeviceInfo(device_id="d_hb", device_type=DeviceType.ANDROID_PHONE)
         dm.device_status["d_hb"] = "offline"
@@ -263,7 +278,8 @@ class TestHandlersDeviceManagerSSOT(unittest.TestCase):
 
     def test_update_status_online_does_not_update_local_on_udm_failure(self):
         from galaxy_gateway.handlers.device_manager import DeviceManager
-        from galaxy_gateway.protocol import DeviceType, DeviceInfo
+        from galaxy_gateway.protocol import DeviceInfo, DeviceType
+
         dm = DeviceManager()
         dm.devices["d_hb2"] = DeviceInfo(device_id="d_hb2", device_type=DeviceType.ANDROID_PHONE)
         dm.device_status["d_hb2"] = "offline"

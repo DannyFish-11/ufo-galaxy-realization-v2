@@ -19,6 +19,7 @@ core.voice_loop — 语音闭环协调器
     # ...
     await voice_loop.stop()   # 停止监听
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -99,11 +100,11 @@ class VoiceLoop:
         # Lazy imports to avoid hard dependencies at module load time
         try:
             from core.asr import WhisperASR
-            from core.tts import EdgeTTSEngine
             from core.multimodal.audio_capture_service import (
-                AudioCaptureService,
                 AudioCaptureConfig,
+                AudioCaptureService,
             )
+            from core.tts import EdgeTTSEngine
         except ImportError as exc:
             # 语音(麦克风)是可选功能；依赖缺失时降为 warning 再向上抛由调用方处理，
             # 不在启动期刷红色 ERROR。
@@ -157,6 +158,7 @@ class VoiceLoop:
         # ASR 出词即视为用户已开口（句级打断）；集中式朗读走 speech_output。
         try:
             from core.speech_output import interrupt_speech, is_speaking
+
             if is_speaking():
                 interrupt_speech()
                 logger.info("Barge-in: 用户开口，打断 AI 朗读")
@@ -165,6 +167,7 @@ class VoiceLoop:
 
         # ── 对话政策(GPT-Live 借鉴,政策集中在 core.voice_dialog_policy)──
         from core.voice_dialog_policy import delegation_enabled, get_dialog_policy
+
         policy = get_dialog_policy()
 
         # hold("等一下别说话"):安静等着,只认恢复口令或窗口到期;期间不处理、不出声。
@@ -193,6 +196,7 @@ class VoiceLoop:
         # (唯一默认活跃的)语音闭环里补上推送,让面板与语音真正一体。容错、永不抛出。
         try:
             from core.lumiv_websocket_bridge import emit_conversation
+
             emit_conversation("user", text, source="voice")
         except Exception as _exc:  # noqa: BLE001
             logger.debug("emit_conversation(user) 跳过(非致命): %s", _exc)
@@ -204,11 +208,13 @@ class VoiceLoop:
             ack = policy.ack_phrase()
             try:
                 from core.speech_output import speak_response
+
                 speak_response(ack, source="voice")
             except Exception as _exc:  # noqa: BLE001
                 logger.debug("委托致谢朗读跳过(非致命): %s", _exc)
             try:
                 from core.lumiv_websocket_bridge import emit_conversation
+
                 emit_conversation("ai", ack, source="voice")
             except Exception as _exc:  # noqa: BLE001
                 logger.debug("emit_conversation(ack) 跳过(非致命): %s", _exc)
@@ -228,6 +234,7 @@ class VoiceLoop:
         返回最终成句的回合文本;返回 None 表示本片段已并入更新的回合。
         """
         from core.voice_dialog_policy import end_of_turn_wait
+
         self._turn_seq += 1
         my_seq = self._turn_seq
         if self._pending_text:
@@ -273,6 +280,7 @@ class VoiceLoop:
             # A 融合:AI 的语音回复也推给面板"实时上下文"。
             try:
                 from core.lumiv_websocket_bridge import emit_conversation
+
                 emit_conversation("ai", response, source="voice")
             except Exception as _exc:  # noqa: BLE001
                 logger.debug("emit_conversation(ai) 跳过(非致命): %s", _exc)
@@ -291,8 +299,10 @@ class VoiceLoop:
 
         hold 中/AI 正在朗读时跳过本拍,绝不叠声。
         """
-        from core.voice_dialog_policy import get_dialog_policy
         import time as _time
+
+        from core.voice_dialog_policy import get_dialog_policy
+
         policy = get_dialog_policy()
         start = _time.monotonic()
         emitted = 0
@@ -307,6 +317,7 @@ class VoiceLoop:
                     continue
                 try:
                     from core.speech_output import is_speaking, speak_response
+
                     if is_speaking():
                         continue  # 不压着正在播的话
                     speak_response(policy.backchannel_phrase(), source="voice")
@@ -372,6 +383,7 @@ class VoiceLoop:
             # 1. ASR
             if self.asr is None:
                 from core.asr import WhisperASR
+
                 self.asr = WhisperASR(model_size=self.model_size)
 
             text = self.asr.transcribe(audio_np, sample_rate=sample_rate, language=self.language)
@@ -398,6 +410,7 @@ class VoiceLoop:
             # 3. TTS
             if response and self.tts is None:
                 from core.tts import EdgeTTSEngine
+
                 self.tts = EdgeTTSEngine(voice=self.voice)
 
             if response and self.tts is not None:

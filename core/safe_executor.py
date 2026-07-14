@@ -38,9 +38,9 @@ import sqlite3
 import tempfile
 import time
 import uuid
-from pathlib import Path
-from typing import Dict, Any, Optional, List
 from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger("Galaxy.SafeExecutor")
 
@@ -56,7 +56,7 @@ _DANGEROUS_PATTERNS_PYTHON = [
     "subprocess.Popen",
     "subprocess.run",
     "__import__('os')",
-    "__import__(\"os\")",
+    '__import__("os")',
     "exec(",
     "eval(",
     "compile(",
@@ -110,6 +110,7 @@ _DANGEROUS_PATTERNS_JS = [
 
 class SecurityViolation(Exception):
     """安全违规异常"""
+
     pass
 
 
@@ -141,9 +142,11 @@ def check_code_safety(code: str, language: str = "python") -> Optional[str]:
 # 执行结果
 # ============================================================================
 
+
 @dataclass
 class ExecutionResult:
     """代码执行结果"""
+
     execution_id: str = field(default_factory=lambda: str(uuid.uuid4())[:12])
     language: str = "python"
     success: bool = False
@@ -171,6 +174,7 @@ class ExecutionResult:
 # ============================================================================
 # SafeExecutor
 # ============================================================================
+
 
 class SafeExecutor:
     """
@@ -286,6 +290,7 @@ class SafeExecutor:
     ) -> ExecutionResult:
         """委托 Node_09_Sandbox 执行"""
         import httpx
+
         async with httpx.AsyncClient(timeout=timeout + 5) as client:
             resp = await client.post(
                 f"{self._node09_url}/execute",
@@ -319,8 +324,7 @@ class SafeExecutor:
             return await self._exec_javascript(code, timeout, stdin)
         else:
             return ExecutionResult(
-                language=language, success=False,
-                error=f"Builtin executor not available for: {language}"
+                language=language, success=False, error=f"Builtin executor not available for: {language}"
             )
 
     async def _exec_python(self, code: str, timeout: int, stdin: str) -> ExecutionResult:
@@ -329,33 +333,22 @@ class SafeExecutor:
         安全模型：pattern-based 检测 + subprocess 隔离 + 超时限制。
         不依赖 Python builtins 限制（容易绕过），而是在独立子进程中运行。
         """
-        wrapped = (
-            "import sys\n"
-            "try:\n"
-        )
+        wrapped = "import sys\n" "try:\n"
         indented = "\n".join("    " + line for line in code.split("\n"))
         wrapped += indented + "\n"
         wrapped += "except Exception as _e:\n    print(f'Error: {_e}', file=sys.stderr)\n    sys.exit(1)\n"
 
-        return await self._run_subprocess(
-            ["python3", "-c", wrapped], timeout, stdin, "python"
-        )
+        return await self._run_subprocess(["python3", "-c", wrapped], timeout, stdin, "python")
 
     async def _exec_bash(self, code: str, timeout: int, stdin: str) -> ExecutionResult:
         """Bash 沙箱执行"""
-        return await self._run_subprocess(
-            ["bash", "-c", code], timeout, stdin, "bash"
-        )
+        return await self._run_subprocess(["bash", "-c", code], timeout, stdin, "bash")
 
     async def _exec_javascript(self, code: str, timeout: int, stdin: str) -> ExecutionResult:
         """JavaScript 沙箱执行 (需要 node)"""
-        return await self._run_subprocess(
-            ["node", "-e", code], timeout, stdin, "javascript"
-        )
+        return await self._run_subprocess(["node", "-e", code], timeout, stdin, "javascript")
 
-    async def _run_subprocess(
-        self, cmd: List[str], timeout: int, stdin: str, language: str
-    ) -> ExecutionResult:
+    async def _run_subprocess(self, cmd: List[str], timeout: int, stdin: str, language: str) -> ExecutionResult:
         """通用子进程执行"""
         try:
             proc = await asyncio.create_subprocess_exec(
@@ -385,17 +378,20 @@ class SafeExecutor:
             except Exception as exc:
                 logger.warning("Exception suppressed: %s", exc)
             return ExecutionResult(
-                language=language, success=False,
+                language=language,
+                success=False,
                 error=f"Execution timeout ({timeout}s)",
             )
         except FileNotFoundError:
             return ExecutionResult(
-                language=language, success=False,
+                language=language,
+                success=False,
                 error=f"Runtime not found for {language}",
             )
         except Exception as e:
             return ExecutionResult(
-                language=language, success=False,
+                language=language,
+                success=False,
                 error=str(e),
             )
 
@@ -418,14 +414,11 @@ class SafeExecutor:
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "code": {
-                            "type": "string",
-                            "description": "The source code to execute"
-                        },
+                        "code": {"type": "string", "description": "The source code to execute"},
                         "language": {
                             "type": "string",
                             "enum": ["python", "javascript", "bash"],
-                            "description": "Programming language"
+                            "description": "Programming language",
                         },
                     },
                     "required": ["code", "language"],
@@ -460,9 +453,7 @@ class SafeExecutor:
             return None
 
         try:
-            with tempfile.NamedTemporaryFile(
-                mode="w", suffix=suffix, delete=False, encoding="utf-8"
-            ) as f:
+            with tempfile.NamedTemporaryFile(mode="w", suffix=suffix, delete=False, encoding="utf-8") as f:
                 f.write(code)
                 tmp_path = f.name
 
@@ -480,9 +471,7 @@ class SafeExecutor:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-            _, stderr_bytes = await asyncio.wait_for(
-                proc.communicate(), timeout=5
-            )
+            _, stderr_bytes = await asyncio.wait_for(proc.communicate(), timeout=5)
 
             if proc.returncode != 0:
                 err = stderr_bytes.decode("utf-8", errors="replace").strip()
@@ -532,6 +521,7 @@ class SafeExecutor:
 # ============================================================================
 # Reflexion 反馈循环 — 执行经验持久化
 # ============================================================================
+
 
 class ExecutionFeedbackLoop:
     """
@@ -686,9 +676,7 @@ class ExecutionFeedbackLoop:
             return {"status": "offline"}
         try:
             total = self._conn.execute("SELECT COUNT(*) FROM executions").fetchone()[0]
-            success = self._conn.execute(
-                "SELECT COUNT(*) FROM executions WHERE success = 1"
-            ).fetchone()[0]
+            success = self._conn.execute("SELECT COUNT(*) FROM executions WHERE success = 1").fetchone()[0]
             failed = total - success
             return {
                 "status": "online",

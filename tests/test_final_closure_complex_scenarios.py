@@ -32,6 +32,7 @@ unified_execution_governance.py、canonical_completion_ingress.py 等核心模�
 
 合同版本：final_closure_complex_scenarios::v1.0.0
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -40,6 +41,10 @@ import types
 
 import pytest
 
+from core.closed_loop_governance_consolidation import (
+    ClosedLoopStage,
+    query_closed_loop_governance_state,
+)
 from core.unified_execution_governance import (
     ExecutionLifecyclePhase,
     ExecutionType,
@@ -48,11 +53,6 @@ from core.unified_execution_governance import (
     record_result_uplink,
     record_state_uplink,
 )
-from core.closed_loop_governance_consolidation import (
-    ClosedLoopStage,
-    query_closed_loop_governance_state,
-)
-
 
 # ---------------------------------------------------------------------------
 # Shared reset fixture
@@ -142,9 +142,9 @@ class TestGroupA_AdvancedReconciliationScenarios:
         assert view.system_completion_ready is False
         gap_types = set(view.system_completion_gap_types)
         # 冲突场景应有 reconciliation_conflict_present 和/或 reconciliation_not_fully_accepted
-        assert "reconciliation_conflict_present" in gap_types or \
-               "reconciliation_not_fully_accepted" in gap_types, \
-               f"Expected conflict/not-fully-accepted gap, got: {gap_types}"
+        assert (
+            "reconciliation_conflict_present" in gap_types or "reconciliation_not_fully_accepted" in gap_types
+        ), f"Expected conflict/not-fully-accepted gap, got: {gap_types}"
 
     def test_A03_in_progress_terminal_observation_held_not_mature(self):
         """A03: lifecycle 仍在 running，但 uplink 已报告 terminal → 不能成熟闭环。
@@ -298,6 +298,7 @@ class TestGroupB_CanonicalCompletionIngressFixes:
 
     def _make_ingress(self):
         from core.canonical_completion_ingress import CanonicalCompletionIngress
+
         return CanonicalCompletionIngress()
 
     def _run_sync(self, coro):
@@ -424,6 +425,7 @@ class TestGroupB_CanonicalCompletionIngressFixes:
             DUPLICATE_REGISTRATION_CANCELS_ORPHAN_POLICY,
             IS_TERMINAL_ATTRIBUTE_ERROR_POLICY,
         )
+
         assert DUPLICATE_REGISTRATION_CANCELS_ORPHAN_POLICY
         assert "DUPLICATE_REGISTRATION_CANCELS_ORPHAN" in DUPLICATE_REGISTRATION_CANCELS_ORPHAN_POLICY
         assert IS_TERMINAL_ATTRIBUTE_ERROR_POLICY

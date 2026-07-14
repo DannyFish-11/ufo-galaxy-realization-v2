@@ -13,12 +13,12 @@ Note:
   All network calls are mocked; no real server is required.
 """
 
-import sys
 import os
 import socket
+import sys
 import threading
 from pathlib import Path
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 
@@ -32,8 +32,15 @@ if str(PROJECT_ROOT) not in sys.path:
 # ---------------------------------------------------------------------------
 
 WINDOWS_CAPABILITIES = [
-    "get_screen_state", "click", "type", "press_key", "press_keys",
-    "scroll", "find_and_click", "find_and_type", "screenshot",
+    "get_screen_state",
+    "click",
+    "type",
+    "press_key",
+    "press_keys",
+    "scroll",
+    "find_and_click",
+    "find_and_type",
+    "screenshot",
 ]
 
 DEVICE_ID = f"windows_{socket.gethostname()}"
@@ -42,6 +49,7 @@ DEVICE_ID = f"windows_{socket.gethostname()}"
 # ---------------------------------------------------------------------------
 # Test 1: startup registration
 # ---------------------------------------------------------------------------
+
 
 class TestStartupRegistration:
     """Loop A-1: Windows client calls /api/v1/devices/register on startup."""
@@ -83,8 +91,8 @@ class TestStartupRegistration:
             return {"success": True, "device_id": DEVICE_ID}
 
         # Simulate the startup register logic
-        import socket as _socket
         import platform
+        import socket as _socket
 
         device_id = f"windows_{_socket.gethostname()}"
         try:
@@ -111,6 +119,7 @@ class TestStartupRegistration:
 
     def test_startup_register_handles_failure_gracefully(self, monkeypatch):
         """_startup_register must not raise if the server is unreachable."""
+
         def failing_call_api(path, payload=None, method="POST", base_url=None):
             raise ConnectionRefusedError("server not running")
 
@@ -124,6 +133,7 @@ class TestStartupRegistration:
 # ---------------------------------------------------------------------------
 # Test 2: periodic heartbeat
 # ---------------------------------------------------------------------------
+
 
 class TestPeriodicHeartbeat:
     """Loop A-2: heartbeat thread sends POST to /api/v1/devices/{id}/heartbeat."""
@@ -165,12 +175,13 @@ class TestPeriodicHeartbeat:
 # Test 3: capability bus sync on device registration
 # ---------------------------------------------------------------------------
 
+
 class TestCapabilityBusSync:
     """Loop A-3: CapabilityRegistry receives Windows capabilities after registration."""
 
     def test_sync_device_to_capability_registry(self):
         """_sync_device_to_capability_registry must add gateway__ entries for each cap."""
-        from core.agent.capability_registry import CapabilityRegistry, CapabilityItem
+        from core.agent.capability_registry import CapabilityItem, CapabilityRegistry
 
         # Create a fresh registry for the test
         reg = CapabilityRegistry.get_instance()
@@ -186,14 +197,16 @@ class TestCapabilityBusSync:
         # Use the same sync logic as devices.py
         for cap in device_info["capabilities"]:
             key = f"gateway__{device_info['device_id']}__{cap}"
-            reg.register(CapabilityItem(
-                name=key,
-                description=f"[Gateway:TestPC(windows_desktop)] 设备能力: {cap}",
-                source="gateway",
-                source_id=device_info["device_id"],
-                available=True,
-                metadata={"device_name": "TestPC", "device_type": "windows_desktop"},
-            ))
+            reg.register(
+                CapabilityItem(
+                    name=key,
+                    description=f"[Gateway:TestPC(windows_desktop)] 设备能力: {cap}",
+                    source="gateway",
+                    source_id=device_info["device_id"],
+                    available=True,
+                    metadata={"device_name": "TestPC", "device_type": "windows_desktop"},
+                )
+            )
 
         # All three capabilities must be present
         for cap in ["screenshot", "click", "type"]:
@@ -205,7 +218,7 @@ class TestCapabilityBusSync:
 
     def test_capability_registry_contains_windows_caps_after_import(self):
         """CapabilityRegistry.register() is idempotent (re-registration is safe)."""
-        from core.agent.capability_registry import CapabilityRegistry, CapabilityItem
+        from core.agent.capability_registry import CapabilityItem, CapabilityRegistry
 
         reg = CapabilityRegistry.get_instance()
         key = "gateway__win_idem_test__screenshot"
@@ -225,6 +238,7 @@ class TestCapabilityBusSync:
     def test_devices_route_sync_function_exists(self):
         """_sync_device_to_capability_registry function must exist in devices route."""
         from core.routes.devices import _sync_device_to_capability_registry
+
         assert callable(_sync_device_to_capability_registry)
 
     def test_devices_route_sync_returns_count(self):
@@ -245,23 +259,26 @@ class TestCapabilityBusSync:
 # Test 4: OpenClawd-callable automation path (unified route)
 # ---------------------------------------------------------------------------
 
+
 class TestOpenClawdCallablePath:
     """Loop A-4: registered Windows device is reachable via OpenClawd tool path."""
 
     def test_windows_caps_are_listable_from_registry(self):
         """After registration, gateway__ Windows caps appear in list_tools()."""
-        from core.agent.capability_registry import CapabilityRegistry, CapabilityItem
+        from core.agent.capability_registry import CapabilityItem, CapabilityRegistry
 
         reg = CapabilityRegistry.get_instance()
         # Register a test Windows capability
-        reg.register(CapabilityItem(
-            name="gateway__windows_callable_test__screenshot",
-            description="Windows screenshot capability",
-            source="gateway",
-            source_id="windows_callable_test",
-            available=True,
-            metadata={"device_type": "windows_desktop"},
-        ))
+        reg.register(
+            CapabilityItem(
+                name="gateway__windows_callable_test__screenshot",
+                description="Windows screenshot capability",
+                source="gateway",
+                source_id="windows_callable_test",
+                available=True,
+                metadata={"device_type": "windows_desktop"},
+            )
+        )
 
         tools = reg.list_tools(source="gateway")
         names = [t.name for t in tools]
@@ -288,7 +305,7 @@ class TestOpenClawdCallablePath:
         # Verify the capability list defined in this test file (mirroring main.py)
         # includes the required automation actions.
         for required in ("screenshot", "click", "type"):
-            assert required in WINDOWS_CAPABILITIES, \
-                f"Required capability '{required}' missing from WINDOWS_CAPABILITIES"
+            assert (
+                required in WINDOWS_CAPABILITIES
+            ), f"Required capability '{required}' missing from WINDOWS_CAPABILITIES"
         assert len(WINDOWS_CAPABILITIES) >= 9
-

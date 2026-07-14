@@ -17,12 +17,12 @@ All backends implement the unified LocalModelBackend interface:
 - list_models() -> List[str]
 """
 
-from abc import ABC, abstractmethod
-from typing import List, Dict, Any, Optional
 import asyncio
+import gc
 import logging
 import os
-import gc
+from abc import ABC, abstractmethod
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger("Galaxy.LocalBackends")
 
@@ -30,6 +30,7 @@ logger = logging.getLogger("Galaxy.LocalBackends")
 # ---------------------------------------------------------------------------
 # LocalModelBackend -- Abstract base class for all backends
 # ---------------------------------------------------------------------------
+
 
 class LocalModelBackend(ABC):
     """Local model inference backend base class"""
@@ -73,6 +74,7 @@ class LocalModelBackend(ABC):
 # ---------------------------------------------------------------------------
 # OllamaBackend -- Via HTTP API
 # ---------------------------------------------------------------------------
+
 
 class OllamaBackend(LocalModelBackend):
     """Ollama backend -- calls via HTTP API"""
@@ -168,6 +170,7 @@ class OllamaBackend(LocalModelBackend):
 # ---------------------------------------------------------------------------
 # LlamaCppBackend -- Direct GGUF loading via llama-cpp-python
 # ---------------------------------------------------------------------------
+
 
 class LlamaCppBackend(LocalModelBackend):
     """llama-cpp-python backend -- direct GGUF loading
@@ -290,6 +293,7 @@ class LlamaCppBackend(LocalModelBackend):
 # TransformersBackend -- Direct PyTorch/Safetensors loading
 # ---------------------------------------------------------------------------
 
+
 class TransformersBackend(LocalModelBackend):
     """Transformers backend -- direct PyTorch/Safetensors loading
 
@@ -344,9 +348,7 @@ class TransformersBackend(LocalModelBackend):
                 pad_token_id=tokenizer.eos_token_id,
             )
 
-        response = tokenizer.decode(
-            outputs[0][inputs.input_ids.shape[1] :], skip_special_tokens=True
-        )
+        response = tokenizer.decode(outputs[0][inputs.input_ids.shape[1] :], skip_special_tokens=True)
         return response
 
     def _build_prompt(self, messages, tokenizer):
@@ -354,9 +356,7 @@ class TransformersBackend(LocalModelBackend):
         # Use chat template if the model supports it
         if hasattr(tokenizer, "apply_chat_template"):
             try:
-                return tokenizer.apply_chat_template(
-                    messages, tokenize=False, add_generation_prompt=True
-                )
+                return tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
             except Exception as exc:
                 logger.warning("Exception suppressed: %s", exc)
 
@@ -371,8 +371,8 @@ class TransformersBackend(LocalModelBackend):
 
     async def load_model(self, model_id: str) -> bool:
         """Load a HF transformers model"""
-        from transformers import AutoModelForCausalLM, AutoTokenizer
         import torch
+        from transformers import AutoModelForCausalLM, AutoTokenizer
 
         try:
             # Resolve path: local path or HF Hub
@@ -391,14 +391,10 @@ class TransformersBackend(LocalModelBackend):
                 )
                 return False
 
-            tokenizer = AutoTokenizer.from_pretrained(
-                load_target, trust_remote_code=True
-            )
+            tokenizer = AutoTokenizer.from_pretrained(load_target, trust_remote_code=True)
             model_obj = AutoModelForCausalLM.from_pretrained(
                 load_target,
-                torch_dtype=torch.float16
-                if self._device == "cuda"
-                else torch.float32,
+                torch_dtype=torch.float16 if self._device == "cuda" else torch.float32,
                 device_map="auto" if self._device == "cuda" else None,
                 trust_remote_code=True,
             )
@@ -406,14 +402,10 @@ class TransformersBackend(LocalModelBackend):
                 model_obj = model_obj.to("cpu")
 
             self._pipelines[model_id] = (tokenizer, model_obj)
-            logger.info(
-                "Transformers loaded: %s on %s", model_id, self._device
-            )
+            logger.info("Transformers loaded: %s on %s", model_id, self._device)
             return True
         except Exception as exc:
-            logger.error(
-                "Failed to load transformers %s: %s", model_id, exc
-            )
+            logger.error("Failed to load transformers %s: %s", model_id, exc)
             return False
 
     def _resolve_model_path(self, model_id: str) -> Optional[str]:
@@ -439,10 +431,7 @@ class TransformersBackend(LocalModelBackend):
             for root, dirs, files in os.walk(models_dir):
                 if model_id.replace("/", "--") in root:
                     # Check if this looks like a transformers model dir
-                    if any(
-                        f in files
-                        for f in ["config.json", "model.safetensors", "pytorch_model.bin"]
-                    ):
+                    if any(f in files for f in ["config.json", "model.safetensors", "pytorch_model.bin"]):
                         return root
 
         return None
@@ -469,6 +458,7 @@ class TransformersBackend(LocalModelBackend):
 # ---------------------------------------------------------------------------
 # VLLMBackend -- High-throughput service inference
 # ---------------------------------------------------------------------------
+
 
 class VLLMBackend(LocalModelBackend):
     """vLLM backend -- high-throughput service inference
@@ -580,6 +570,7 @@ class VLLMBackend(LocalModelBackend):
 # HFHubBackend -- HuggingFace Hub Cloud Inference (Fallback)
 # ---------------------------------------------------------------------------
 
+
 class HFHubBackend(LocalModelBackend):
     """HuggingFace Hub backend -- cloud inference via Inference API
 
@@ -619,9 +610,7 @@ class HFHubBackend(LocalModelBackend):
         }
 
         async with httpx.AsyncClient() as client:
-            resp = await client.post(
-                api_url, headers=headers, json=payload, timeout=120.0
-            )
+            resp = await client.post(api_url, headers=headers, json=payload, timeout=120.0)
             resp.raise_for_status()
             data = resp.json()
             if isinstance(data, list) and len(data) > 0:
@@ -687,9 +676,7 @@ def create_backend(name: str, **kwargs) -> LocalModelBackend:
     backend_cls = BACKEND_REGISTRY.get(name)
     if not backend_cls:
         available = list(BACKEND_REGISTRY.keys())
-        raise ValueError(
-            f"Unknown backend: {name}. Available: {available}"
-        )
+        raise ValueError(f"Unknown backend: {name}. Available: {available}")
     return backend_cls(**kwargs)
 
 

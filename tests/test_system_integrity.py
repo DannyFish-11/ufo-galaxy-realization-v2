@@ -4,6 +4,7 @@
 
 import os
 import sys
+
 import pytest
 
 # Ensure project root is on the path
@@ -12,16 +13,19 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # ── Phase 1: Import crash protection ────────────────────
 
+
 class TestPhase1ImportProtection:
     """All L4 modules should be importable without crashing."""
 
     def test_galaxy_main_loop_importable(self):
         # Canonical location: core.galaxy_main_loop_l4_enhanced
         from core.galaxy_main_loop_l4_enhanced import GalaxyMainLoopL4
+
         assert GalaxyMainLoopL4 is not None
 
     def test_module_availability_flags_exist(self):
         import core.galaxy_main_loop_l4_enhanced as g
+
         flags = [
             "_PERCEPTION_AVAILABLE",
             "_GOAL_DECOMPOSER_AVAILABLE",
@@ -39,6 +43,7 @@ class TestPhase1ImportProtection:
 
     def test_module_status_method(self):
         from core.galaxy_main_loop_l4_enhanced import GalaxyMainLoopL4
+
         loop = GalaxyMainLoopL4()
         status = loop._module_status()
         assert isinstance(status, dict)
@@ -46,6 +51,7 @@ class TestPhase1ImportProtection:
 
     def test_placeholder_api_keys_not_loaded(self):
         from core.unified_config import UnifiedConfig
+
         assert UnifiedConfig._is_placeholder("sk-YOUR_OPENAI_KEY_HERE") is True
         assert UnifiedConfig._is_placeholder("sk-real-key-abc123") is False
         assert UnifiedConfig._is_placeholder(42) is False
@@ -53,13 +59,16 @@ class TestPhase1ImportProtection:
 
 # ── Phase 2: Device subsystem fixes ────────────────────
 
+
 class TestPhase2DeviceSubsystem:
     """Device subsystem fixes are in place."""
 
     def test_pyautogui_typewrite_used(self):
         """Verify pyautogui.write was replaced with typewrite."""
         import inspect
+
         from core.device_agent_manager import WindowsDeviceAgent
+
         source = inspect.getsource(WindowsDeviceAgent._execute_with_fallback)
         assert "typewrite" in source
         assert "pyautogui.write(" not in source
@@ -69,7 +78,9 @@ class TestPhase2DeviceSubsystem:
         # Verify the current implementation uses httpx.AsyncClient.request().
         source_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "nodes", "Node_08_Fetch", "main.py",
+            "nodes",
+            "Node_08_Fetch",
+            "main.py",
         )
         with open(source_path) as f:
             content = f.read()
@@ -82,7 +93,9 @@ class TestPhase2DeviceSubsystem:
             reason="galaxy_gateway.device_router requires fastapi — skip when not installed",
         )
         import inspect
+
         from galaxy_gateway.device_router import DeviceRouter
+
         source = inspect.getsource(DeviceRouter.dispatch_task)
         assert "asyncio.Event" in source or "asyncio.wait_for" in source
         assert "for _ in range(30)" not in source
@@ -90,20 +103,23 @@ class TestPhase2DeviceSubsystem:
 
 # ── Phase 3: Agent execution + skills ────────────────────
 
+
 class TestPhase3AgentSkills:
     """Agent factory reports simulated status; skills have handlers."""
 
     def test_skill_loader_available(self):
         from core.skill_loader import skill_loader
+
         # skill_loader 单例应可实例化且有 list_skills 方法
         skills = skill_loader.list_skills()
         assert isinstance(skills, list), "list_skills() should return a list"
 
     def test_fallback_action_not_none(self):
         from enhancements.reasoning.autonomous_planner import (
-            AutonomousPlanner,
             Action,
+            AutonomousPlanner,
         )
+
         planner = AutonomousPlanner()
         action = Action(
             id="test_action",
@@ -122,6 +138,7 @@ class TestPhase3AgentSkills:
 
 # ── Phase 4: Cross-device coordination ────────────────────
 
+
 class TestPhase4CrossDevice:
     """Private method renamed; hardcoded URL replaced."""
 
@@ -131,13 +148,15 @@ class TestPhase4CrossDevice:
             reason="galaxy_gateway.device_router requires fastapi — skip when not installed",
         )
         from galaxy_gateway.device_router import DeviceRouter
+
         assert hasattr(DeviceRouter, "dispatch_task")
         assert not hasattr(DeviceRouter, "_dispatch_single_device_task")
 
     def test_cross_device_coordinator_uses_public_method(self):
         source_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "galaxy_gateway", "cross_device_coordinator.py",
+            "galaxy_gateway",
+            "cross_device_coordinator.py",
         )
         with open(source_path) as f:
             content = f.read()
@@ -146,7 +165,9 @@ class TestPhase4CrossDevice:
     def test_node71_uses_registry_lookup(self):
         source_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "nodes", "Node_71_MultiDeviceCoordination", "main.py",
+            "nodes",
+            "Node_71_MultiDeviceCoordination",
+            "main.py",
         )
         with open(source_path) as f:
             content = f.read()
@@ -155,12 +176,15 @@ class TestPhase4CrossDevice:
 
 # ── Phase 5: Reasoning + learning fakes ────────────────────
 
+
 class TestPhase5ReasoningLearning:
     """Goal decomposer uses LLM path; experiment is real; confidence normalized."""
 
     def test_goal_decomposer_has_llm_path(self):
         import inspect
+
         from enhancements.reasoning.goal_decomposer import GoalDecomposer
+
         source = inspect.getsource(GoalDecomposer._generate_subtasks)
         assert "self.llm_client" in source
         assert "_generate_subtasks_with_llm" in source
@@ -168,7 +192,9 @@ class TestPhase5ReasoningLearning:
     def test_experiment_stage_no_fake_sleep(self):
         source_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "enhancements", "learning", "autonomous_learning_engine.py",
+            "enhancements",
+            "learning",
+            "autonomous_learning_engine.py",
         )
         with open(source_path) as f:
             content = f.read()
@@ -186,7 +212,8 @@ class TestPhase5ReasoningLearning:
     def test_confidence_formula_normalized(self):
         source_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "core", "ai_intent.py",
+            "core",
+            "ai_intent.py",
         )
         with open(source_path) as f:
             content = f.read()
@@ -195,13 +222,15 @@ class TestPhase5ReasoningLearning:
 
 # ── Phase 6: Security + configurability ────────────────────
 
+
 class TestPhase6SecurityConfig:
     """STUN ID random; safety thresholds configurable; digital twin logs."""
 
     def test_stun_transaction_id_random(self):
         source_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "galaxy_gateway", "p2p_connector.py",
+            "galaxy_gateway",
+            "p2p_connector.py",
         )
         with open(source_path) as f:
             content = f.read()
@@ -210,6 +239,7 @@ class TestPhase6SecurityConfig:
 
     def test_safety_thresholds_configurable(self):
         from enhancements.safety.safety_manager import SafetyManager, SafetyThresholds
+
         custom = SafetyThresholds(max_bed_temperature=100.0, max_nozzle_temperature=250.0)
         sm = SafetyManager(thresholds=custom)
         assert sm.thresholds.max_bed_temperature == 100.0
@@ -217,14 +247,17 @@ class TestPhase6SecurityConfig:
 
     def test_digital_twin_logs_warning(self):
         import inspect
+
         from core.digital_twin_engine import DigitalTwin
+
         source = inspect.getsource(DigitalTwin._sync_from_physical)
         assert "logger.warning" in source
 
     def test_llm_router_weighted_classification(self):
         source_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "core", "multi_llm_router.py",
+            "core",
+            "multi_llm_router.py",
         )
         with open(source_path) as f:
             content = f.read()
@@ -232,6 +265,7 @@ class TestPhase6SecurityConfig:
 
 
 # ── Phase 7: Architecture improvements ────────────────────
+
 
 class TestPhase7Architecture:
     """Result aggregation; A/B experiment dataclass."""
@@ -242,6 +276,7 @@ class TestPhase7Architecture:
             reason="galaxy_gateway.device_router requires fastapi — skip when not installed",
         )
         from galaxy_gateway.device_router import DeviceRouter
+
         results = [
             {"success": True, "device_id": "dev1"},
             {"success": False, "device_id": "dev2", "error": "timeout"},
@@ -257,6 +292,7 @@ class TestPhase7Architecture:
     def test_ab_experiment_dataclass(self):
         pytest.importorskip("numpy", reason="numpy required for learning engine")
         from enhancements.learning.autonomous_learning_engine import ABExperiment
+
         exp = ABExperiment(
             id="test_ab",
             hypothesis="Treatment is better",

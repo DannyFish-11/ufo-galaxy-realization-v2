@@ -112,18 +112,18 @@ from typing import Any, Dict, List, Optional
 
 import pytest
 
-# ---------------------------------------------------------------------------
-# Import subjects
-# ---------------------------------------------------------------------------
-
 from core.schemas.execution_plan import (
-    ExecutionStepType,
-    ExecutionStep,
     ExecutionPlan,
+    ExecutionStep,
+    ExecutionStepType,
     build_execution_plan,
     plan_from_orchestration_decisions,
     plan_summary,
 )
+
+# ---------------------------------------------------------------------------
+# Import subjects
+# ---------------------------------------------------------------------------
 
 
 # ---------------------------------------------------------------------------
@@ -184,9 +184,16 @@ class TestExecutionStep:
         )
         d = step.to_dict()
         for key in [
-            "step_id", "step_type", "target_devices", "remote_execution_mode",
-            "required_capabilities", "authority_origin", "timeout_ms",
-            "depends_on", "orchestration_plan_id", "metadata",
+            "step_id",
+            "step_type",
+            "target_devices",
+            "remote_execution_mode",
+            "required_capabilities",
+            "authority_origin",
+            "timeout_ms",
+            "depends_on",
+            "orchestration_plan_id",
+            "metadata",
         ]:
             assert key in d, f"Missing key: {key}"
 
@@ -198,6 +205,7 @@ class TestExecutionStep:
 
     def test_to_dict_json_safe(self):
         import json
+
         step = ExecutionStep(
             step_type=ExecutionStepType.ORCHESTRATION,
             target_devices=["*"],
@@ -272,9 +280,7 @@ class TestExecutionPlan:
         assert plan.is_remote is True
 
     def test_is_remote_true_for_command(self):
-        plan = ExecutionPlan(
-            steps=[ExecutionStep(step_type=ExecutionStepType.REMOTE_COMMAND)]
-        )
+        plan = ExecutionPlan(steps=[ExecutionStep(step_type=ExecutionStepType.REMOTE_COMMAND)])
         assert plan.is_remote is True
 
     def test_is_orchestration_true(self):
@@ -299,8 +305,14 @@ class TestExecutionPlan:
         )
         d = plan.to_dict()
         for key in [
-            "plan_id", "trace_id", "session_id", "execution_path",
-            "delegation_point", "steps", "created_at", "metadata",
+            "plan_id",
+            "trace_id",
+            "session_id",
+            "execution_path",
+            "delegation_point",
+            "steps",
+            "created_at",
+            "metadata",
         ]:
             assert key in d
 
@@ -580,21 +592,25 @@ class TestPlanFromOrchestrationDecisions:
 
     def test_agent_runtime_decision_produces_remote_agent(self):
         plan = plan_from_orchestration_decisions(
-            decisions=[{
-                "agent_id": "a1",
-                "target_device_id": "win-01",
-                "resolved_execution_mode": "agent_runtime",
-            }]
+            decisions=[
+                {
+                    "agent_id": "a1",
+                    "target_device_id": "win-01",
+                    "resolved_execution_mode": "agent_runtime",
+                }
+            ]
         )
         assert plan.steps[0].step_type == ExecutionStepType.REMOTE_AGENT
 
     def test_command_only_decision_produces_remote_command(self):
         plan = plan_from_orchestration_decisions(
-            decisions=[{
-                "agent_id": "a1",
-                "target_device_id": "iot-01",
-                "resolved_execution_mode": "command_only",
-            }]
+            decisions=[
+                {
+                    "agent_id": "a1",
+                    "target_device_id": "iot-01",
+                    "resolved_execution_mode": "command_only",
+                }
+            ]
         )
         assert plan.steps[0].step_type == ExecutionStepType.REMOTE_COMMAND
 
@@ -610,11 +626,13 @@ class TestPlanFromOrchestrationDecisions:
 
     def test_orchestration_plan_id_propagated(self):
         plan = plan_from_orchestration_decisions(
-            decisions=[{
-                "agent_id": "a1",
-                "target_device_id": "d1",
-                "resolved_execution_mode": "agent_runtime",
-            }],
+            decisions=[
+                {
+                    "agent_id": "a1",
+                    "target_device_id": "d1",
+                    "resolved_execution_mode": "agent_runtime",
+                }
+            ],
             orchestration_plan_id="orch-42",
         )
         assert plan.steps[0].orchestration_plan_id == "orch-42"
@@ -675,9 +693,17 @@ class TestPlanSummary:
         plan = build_execution_plan(execution_path="local", delegation_point="local")
         s = plan_summary(plan)
         expected_keys = [
-            "plan_id", "execution_path", "delegation_point", "step_count",
-            "primary_step_type", "is_local_only", "is_remote", "is_orchestration",
-            "is_observe", "trace_id", "session_id",
+            "plan_id",
+            "execution_path",
+            "delegation_point",
+            "step_count",
+            "primary_step_type",
+            "is_local_only",
+            "is_remote",
+            "is_orchestration",
+            "is_observe",
+            "trace_id",
+            "session_id",
         ]
         for k in expected_keys:
             assert k in s, f"Missing key: {k}"
@@ -696,6 +722,7 @@ class TestPlanSummary:
 class TestExecutionPlanSerialisability:
     def test_to_dict_json_serialisable(self):
         import json
+
         plan = build_execution_plan(
             execution_path="cross_device",
             delegation_point="single_remote",
@@ -727,6 +754,7 @@ class TestExecutionPlanSerialisability:
 class TestOpenClawdBuildExecutionPlan:
     def _get_openclawd(self):
         from core.openclawd import OpenClawd
+
         return OpenClawd()
 
     def test_returns_execution_plan_instance(self):
@@ -795,11 +823,13 @@ class TestBackwardCompatibility:
 
     def test_unified_chat_response_default_plan_summary_is_none(self):
         from core.unified_response import UnifiedChatResponse
+
         resp = UnifiedChatResponse(success=True, response="hi")
         assert resp.execution_plan_summary is None
 
     def test_unified_chat_response_accepts_dict_plan_summary(self):
         from core.unified_response import UnifiedChatResponse
+
         summary = {
             "plan_id": "p-001",
             "execution_path": "local",
@@ -810,6 +840,7 @@ class TestBackwardCompatibility:
 
     def test_to_json_response_includes_execution_plan_summary(self):
         from core.unified_response import UnifiedChatResponse
+
         resp = UnifiedChatResponse(success=True, response="hi")
         d = resp.to_json_response()
         # Key must be present (may be None or dict)
@@ -817,6 +848,7 @@ class TestBackwardCompatibility:
 
     def test_existing_core_fields_still_present(self):
         from core.unified_response import UnifiedChatResponse
+
         resp = UnifiedChatResponse(success=True, response="hello", intent="chat")
         d = resp.to_json_response()
         for key in ["success", "response", "intent", "confidence", "mode", "session_id"]:
@@ -825,6 +857,7 @@ class TestBackwardCompatibility:
     def test_build_execution_plan_returns_plan_with_has_a_dict(self):
         """build_execution_plan always returns a serialisable plan."""
         import json
+
         plan = build_execution_plan(
             execution_path="local",
             delegation_point="local",

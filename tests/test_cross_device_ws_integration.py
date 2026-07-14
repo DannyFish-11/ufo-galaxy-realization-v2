@@ -23,7 +23,6 @@ from __future__ import annotations
 
 import pytest
 
-
 # ===========================================================================
 # 1. AIP v3 compat layer: goal_result is mapped correctly for v1 clients
 # ===========================================================================
@@ -34,17 +33,17 @@ class TestCompatLayerGoalResultMapping:
 
     def test_goal_result_in_legacy_type_map(self) -> None:
         """CLOSED: 'goal_result' is in _LEGACY_TYPE_MAP and maps to GOAL_EXECUTION_RESULT."""
-        from galaxy_gateway.protocol.compat import _LEGACY_TYPE_MAP
         from galaxy_gateway.protocol.aip_v3 import MessageType
+        from galaxy_gateway.protocol.compat import _LEGACY_TYPE_MAP
 
         assert "goal_result" in _LEGACY_TYPE_MAP, (
             "CLOSED: 'goal_result' must be in _LEGACY_TYPE_MAP so v1.0 clients "
             "that emit 'goal_result' are normalised to GOAL_EXECUTION_RESULT. "
             "This was added in the joint audit PR."
         )
-        assert _LEGACY_TYPE_MAP["goal_result"] == MessageType.GOAL_EXECUTION_RESULT, (
-            "CLOSED: _LEGACY_TYPE_MAP['goal_result'] must map to MessageType.GOAL_EXECUTION_RESULT."
-        )
+        assert (
+            _LEGACY_TYPE_MAP["goal_result"] == MessageType.GOAL_EXECUTION_RESULT
+        ), "CLOSED: _LEGACY_TYPE_MAP['goal_result'] must map to MessageType.GOAL_EXECUTION_RESULT."
 
     def test_android_report_types_in_message_type_enum(self) -> None:
         """CLOSED: all previously-missing Android report types are in MessageType enum."""
@@ -61,8 +60,7 @@ class TestCompatLayerGoalResultMapping:
             try:
                 mt = MessageType(type_str)
                 assert mt.value == type_str, (
-                    f"CLOSED: MessageType('{type_str}').value must be '{type_str}'; "
-                    f"got {mt.value!r}"
+                    f"CLOSED: MessageType('{type_str}').value must be '{type_str}'; " f"got {mt.value!r}"
                 )
             except ValueError:
                 pytest.fail(
@@ -116,9 +114,9 @@ class TestAndroidBridgeHandlerRegistration:
         from galaxy_gateway.protocol.aip_v3 import MessageType
 
         bridge = AndroidBridge()
-        assert MessageType.GOAL_RESULT in bridge._message_handlers, (
-            "CLOSED: MessageType.GOAL_RESULT must have a registered handler."
-        )
+        assert (
+            MessageType.GOAL_RESULT in bridge._message_handlers
+        ), "CLOSED: MessageType.GOAL_RESULT must have a registered handler."
 
 
 # ===========================================================================
@@ -132,11 +130,13 @@ class TestCrossDeviceIntegrationReality:
     def test_known_gaps_are_documented(self) -> None:
         """CLOSED: integration reality sentinels are consistent with current code."""
         from core.cross_device_integration_reality import assert_known_gaps_are_documented
+
         assert_known_gaps_are_documented()
 
     def test_reality_dict_has_required_keys(self) -> None:
         """CLOSED: integration reality dict contains all expected keys."""
         from core.cross_device_integration_reality import CROSS_DEVICE_INTEGRATION_REALITY
+
         required_keys = [
             "ws_transport_protocol_aligned",
             "android_cross_device_disabled_by_default",
@@ -152,23 +152,23 @@ class TestCrossDeviceIntegrationReality:
             "e2e_live_ws_tests_present",
         ]
         missing = [k for k in required_keys if k not in CROSS_DEVICE_INTEGRATION_REALITY]
-        assert not missing, (
-            f"CLOSED: CROSS_DEVICE_INTEGRATION_REALITY is missing required keys: {missing}"
-        )
+        assert not missing, f"CLOSED: CROSS_DEVICE_INTEGRATION_REALITY is missing required keys: {missing}"
 
     def test_ws_transport_aligned(self) -> None:
         """CLOSED: WS transport protocol is confirmed aligned between repos."""
         from core.cross_device_integration_reality import WS_TRANSPORT_PROTOCOL_ALIGNED
+
         assert WS_TRANSPORT_PROTOCOL_ALIGNED is True
 
     def test_audit_fixes_present(self) -> None:
         """CLOSED: all audit-PR fixes are confirmed present in the reality surface."""
         from core.cross_device_integration_reality import (
-            GOAL_RESULT_ALIAS_HANDLED,
             ANDROID_GOVERNANCE_REPORT_TYPES_HANDLED,
-            V2_STALE_CLEANUP_BACKGROUND_TASK_PRESENT,
             E2E_LIVE_WS_TESTS_PRESENT,
+            GOAL_RESULT_ALIAS_HANDLED,
+            V2_STALE_CLEANUP_BACKGROUND_TASK_PRESENT,
         )
+
         assert GOAL_RESULT_ALIAS_HANDLED is True
         assert ANDROID_GOVERNANCE_REPORT_TYPES_HANDLED is True
         assert V2_STALE_CLEANUP_BACKGROUND_TASK_PRESENT is True
@@ -186,26 +186,27 @@ class TestCrossDeviceIntegrationReality:
         from core.cross_device_integration_reality import (
             ANDROID_CROSS_DEVICE_DISABLED_BY_DEFAULT,
             ANDROID_DEFAULT_URL_IS_PLACEHOLDER,
-            REMOTE_ACCESS_REQUIRES_TAILSCALE_OR_VPNISH,
-            INFLIGHT_TASK_LOSS_ON_DISCONNECT,
-            RESULT_INGESTION_HAS_SILENT_FAILURE_PATHS,
             ANDROID_RECONNECT_STOPS_PERMANENTLY_AT_LIMIT,
+            INFLIGHT_TASK_LOSS_ON_DISCONNECT,
             INFLIGHT_TASK_LOSS_RESIDUAL_RISK_ANDROID_TERMINAL_RECONNECT,
             INFLIGHT_TASK_LOSS_RESIDUAL_RISK_PROCESS_RESTART,
+            REMOTE_ACCESS_REQUIRES_TAILSCALE_OR_VPNISH,
+            RESULT_INGESTION_HAS_SILENT_FAILURE_PATHS,
         )
+
         # Still-open Android-side gaps (not fixable in V2 alone)
-        assert ANDROID_CROSS_DEVICE_DISABLED_BY_DEFAULT is True, (
-            "GAP_EXPOSED: Android cross_device_enabled=false default is still a real gap."
-        )
-        assert ANDROID_DEFAULT_URL_IS_PLACEHOLDER is True, (
-            "GAP_EXPOSED: Android default URL placeholder is still a real gap."
-        )
-        assert REMOTE_ACCESS_REQUIRES_TAILSCALE_OR_VPNISH is True, (
-            "GAP_EXPOSED: Remote access requires Tailscale/VPN — still a real constraint."
-        )
-        assert ANDROID_RECONNECT_STOPS_PERMANENTLY_AT_LIMIT is True, (
-            "GAP_EXPOSED: Android reconnect stops permanently at 10 attempts — still a real gap."
-        )
+        assert (
+            ANDROID_CROSS_DEVICE_DISABLED_BY_DEFAULT is True
+        ), "GAP_EXPOSED: Android cross_device_enabled=false default is still a real gap."
+        assert (
+            ANDROID_DEFAULT_URL_IS_PLACEHOLDER is True
+        ), "GAP_EXPOSED: Android default URL placeholder is still a real gap."
+        assert (
+            REMOTE_ACCESS_REQUIRES_TAILSCALE_OR_VPNISH is True
+        ), "GAP_EXPOSED: Remote access requires Tailscale/VPN — still a real constraint."
+        assert (
+            ANDROID_RECONNECT_STOPS_PERMANENTLY_AT_LIMIT is True
+        ), "GAP_EXPOSED: Android reconnect stops permanently at 10 attempts — still a real gap."
         # V2-fixed gaps — sentinels must now be False
         assert INFLIGHT_TASK_LOSS_ON_DISCONNECT is False, (
             "FIXED: pending-delivery buffer was added. "
@@ -216,9 +217,9 @@ class TestCrossDeviceIntegrationReality:
             "If this fails, the counters were removed — update the sentinel back to True."
         )
         # Residual risks still present even after fix
-        assert INFLIGHT_TASK_LOSS_RESIDUAL_RISK_ANDROID_TERMINAL_RECONNECT is True, (
-            "RESIDUAL: in-flight loss still possible if Android permanently stops reconnecting."
-        )
+        assert (
+            INFLIGHT_TASK_LOSS_RESIDUAL_RISK_ANDROID_TERMINAL_RECONNECT is True
+        ), "RESIDUAL: in-flight loss still possible if Android permanently stops reconnecting."
         assert INFLIGHT_TASK_LOSS_RESIDUAL_RISK_PROCESS_RESTART is False, (
             "FIXED: durable pending-delivery buffer added; V2 restarts no longer lose buffered msgs. "
             "If this fails, the durable buffer was removed — update the sentinel back to True."

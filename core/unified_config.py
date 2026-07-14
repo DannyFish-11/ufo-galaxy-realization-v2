@@ -39,13 +39,13 @@ Exported names for backward compatibility
     UnifiedConfigManager  — re-exported from core.unified.config_manager
 """
 
-import os
 import json
 import logging
+import os
+import threading
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Union
-from dataclasses import dataclass
-import threading
 
 logger = logging.getLogger("Galaxy.Config")
 
@@ -53,6 +53,7 @@ logger = logging.getLogger("Galaxy.Config")
 @dataclass
 class ConfigItem:
     """配置项"""
+
     key: str
     value: Any
     category: str = "general"
@@ -91,9 +92,9 @@ class UnifiedConfig:
         self.env_file = self.project_root / ".env"
 
         # Load configuration (precedence: lowest first, each step overrides previous)
-        self._load_config()            # Step 1: config.json (root) — static app config (lowest)
+        self._load_config()  # Step 1: config.json (root) — static app config (lowest)
         self._load_from_config_store()  # Step 2: runtime/config.json + runtime/secrets.env (canonical)
-        self._load_env()               # Step 3: .env (legacy), then system env vars (highest)
+        self._load_env()  # Step 3: .env (legacy), then system env vars (highest)
 
         # 回调列表
         self._callbacks: Dict[str, list] = {}
@@ -135,6 +136,7 @@ class UnifiedConfig:
         """
         try:
             from core.config_store import get_config_store  # noqa: PLC0415
+
             store = get_config_store()
 
             # Non-secret runtime config (providers.*, routing.*) — higher than config.json
@@ -158,9 +160,7 @@ class UnifiedConfig:
                 logger.debug("Could not load runtime/secrets.env via ConfigStore: %s", exc)
 
         except Exception as exc:
-            logger.debug(
-                "ConfigStore not available; using config.json + .env only: %s", exc
-            )
+            logger.debug("ConfigStore not available; using config.json + .env only: %s", exc)
 
     def _load_env(self):
         """加载 .env 文件"""
@@ -416,10 +416,12 @@ class UnifiedConfig:
 # 因此不存在循环引用。
 # ---------------------------------------------------------------------------
 
+
 def _create_config_singleton() -> "Union[Any, UnifiedConfig]":
     """工厂函数：优先使用 UnifiedConfigManager，否则回退到 UnifiedConfig。"""
     try:
         from core.unified.config_manager import get_unified_config_manager  # noqa: PLC0415
+
         mgr = get_unified_config_manager()
         logger.info(
             "core.unified_config: config singleton delegates to UnifiedConfigManager",
@@ -440,6 +442,7 @@ config: Any = _create_config_singleton()
 # ---------------------------------------------------------------------------
 # Backward-compatibility exports
 # ---------------------------------------------------------------------------
+
 
 def get_config() -> Any:
     """Return the process-level config singleton (UnifiedConfigManager or UnifiedConfig).

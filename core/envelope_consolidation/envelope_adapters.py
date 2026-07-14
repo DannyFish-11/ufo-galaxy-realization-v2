@@ -51,10 +51,10 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
-
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
 
 def _get(obj: Any, key: str, default: Any = None) -> Any:
     """Attribute-or-dict accessor with a default."""

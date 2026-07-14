@@ -109,6 +109,7 @@ class AndroidMemoryBackflow:
 
     def _mirror_to_unified(self, e: Dict[str, Any]) -> None:
         from core.memory import get_unified_memory
+
         goal = str(e.get("goal") or "").strip()
         summ = str(e.get("summary") or "").strip()
         status = str(e.get("status") or "").strip()

@@ -165,17 +165,15 @@ def test_all_domains_have_v2_anchors() -> None:
 def test_all_domains_have_valid_completion_pct() -> None:
     report = build_complete_joint_system_review()
     for domain in report.domain_statuses:
-        assert 0.0 <= domain.completion_pct <= 100.0, (
-            f"Domain {domain.domain_id!r} completion_pct out of range: {domain.completion_pct}"
-        )
+        assert (
+            0.0 <= domain.completion_pct <= 100.0
+        ), f"Domain {domain.domain_id!r} completion_pct out of range: {domain.completion_pct}"
 
 
 def test_all_domains_have_positive_weight() -> None:
     report = build_complete_joint_system_review()
     for domain in report.domain_statuses:
-        assert domain.weight > 0.0, (
-            f"Domain {domain.domain_id!r} has non-positive weight {domain.weight}"
-        )
+        assert domain.weight > 0.0, f"Domain {domain.domain_id!r} has non-positive weight {domain.weight}"
 
 
 def test_weighted_completion_differs_from_unweighted() -> None:
@@ -212,25 +210,23 @@ def test_propositions_use_all_three_verdicts() -> None:
 def test_v2_is_center_authority_is_hard_established() -> None:
     report = build_complete_joint_system_review()
     p1 = next(p for p in report.propositions if p.prop_id == "P1")
-    assert p1.verdict == PropositionVerdict.HARD_ESTABLISHED, (
-        "P1 (V2 is center authority) must be HARD_ESTABLISHED"
-    )
+    assert p1.verdict == PropositionVerdict.HARD_ESTABLISHED, "P1 (V2 is center authority) must be HARD_ESTABLISHED"
 
 
 def test_mesh_fully_closed_is_scaled_back() -> None:
     report = build_complete_joint_system_review()
     p7 = next(p for p in report.propositions if p.prop_id == "P7")
-    assert p7.verdict == PropositionVerdict.SHOULD_SCALE_BACK, (
-        "P7 (mesh fully closed) must be SHOULD_SCALE_BACK per current evidence"
-    )
+    assert (
+        p7.verdict == PropositionVerdict.SHOULD_SCALE_BACK
+    ), "P7 (mesh fully closed) must be SHOULD_SCALE_BACK per current evidence"
 
 
 def test_proof_thickness_is_scaled_back() -> None:
     report = build_complete_joint_system_review()
     p12 = next(p for p in report.propositions if p.prop_id == "P12")
-    assert p12.verdict == PropositionVerdict.SHOULD_SCALE_BACK, (
-        "P12 (proof surface thick enough) must be SHOULD_SCALE_BACK per current evidence"
-    )
+    assert (
+        p12.verdict == PropositionVerdict.SHOULD_SCALE_BACK
+    ), "P12 (proof surface thick enough) must be SHOULD_SCALE_BACK per current evidence"
 
 
 def test_all_propositions_have_v2_anchors_or_android_anchors() -> None:
@@ -350,9 +346,9 @@ def test_partially_established_propositions_have_blocking_issues() -> None:
     for entry in report.closure_map:
         prop = next(p for p in report.propositions if p.prop_id == entry.prop_id)
         if prop.verdict == PropositionVerdict.PARTIALLY_ESTABLISHED:
-            assert entry.blocking_issue_ids, (
-                f"PARTIALLY_ESTABLISHED proposition {entry.prop_id} should have blocking issue IDs"
-            )
+            assert (
+                entry.blocking_issue_ids
+            ), f"PARTIALLY_ESTABLISHED proposition {entry.prop_id} should have blocking issue IDs"
 
 
 # ---------------------------------------------------------------------------
@@ -453,25 +449,23 @@ def test_integrity_repair_actions_include_v2_implemented_fix_and_cross_repo_foll
 def test_stage_is_mid_stage_when_p0_issues_exist() -> None:
     """With P0 issues present the stage must be mid-stage consolidation."""
     report = build_complete_joint_system_review()
-    has_p0 = any(
-        i.stage_gate == StageGate.P0_BEFORE_RUNTIME_CLOSURE for i in report.remaining_issues
-    )
+    has_p0 = any(i.stage_gate == StageGate.P0_BEFORE_RUNTIME_CLOSURE for i in report.remaining_issues)
     if has_p0:
         assert report.stage == StageVerdict.MID_STAGE_CONSOLIDATION
 
 
 def test_overall_completion_is_plausible() -> None:
     report = build_complete_joint_system_review()
-    assert 30.0 < report.overall_completion_pct < 100.0, (
-        f"overall_completion_pct {report.overall_completion_pct} seems implausible"
-    )
+    assert (
+        30.0 < report.overall_completion_pct < 100.0
+    ), f"overall_completion_pct {report.overall_completion_pct} seems implausible"
 
 
 def test_weighted_completion_is_plausible() -> None:
     report = build_complete_joint_system_review()
-    assert 30.0 < report.weighted_completion_pct < 100.0, (
-        f"weighted_completion_pct {report.weighted_completion_pct} seems implausible"
-    )
+    assert (
+        30.0 < report.weighted_completion_pct < 100.0
+    ), f"weighted_completion_pct {report.weighted_completion_pct} seems implausible"
 
 
 # ---------------------------------------------------------------------------

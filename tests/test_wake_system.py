@@ -16,29 +16,36 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 # 1. WakeRouter 测试
 # =============================================================================
 
+
 async def test_wake_router_basic():
     """测试 WakeRouter 基本路由功能"""
     print("\n=== 测试 WakeRouter 基本路由 ===")
-    from galaxy_gateway.wake_router import WakeRouter, WakeEvent, WakeTaskType
+    from galaxy_gateway.wake_router import WakeEvent, WakeRouter, WakeTaskType
 
     router = WakeRouter()
 
     # 注入两个测试设备
     now = time.time()
-    router.inject_device_info("phone_1", {
-        "capabilities": ["screen", "speaker", "microphone"],
-        "last_heartbeat": now - 5,
-        "last_message": now - 5,
-        "screen_on": True,
-        "last_interaction": now - 3,
-    })
-    router.inject_device_info("tv_1", {
-        "capabilities": ["screen", "speaker"],
-        "last_heartbeat": now - 60,
-        "last_message": now - 60,
-        "screen_on": False,
-        "last_interaction": 0,
-    })
+    router.inject_device_info(
+        "phone_1",
+        {
+            "capabilities": ["screen", "speaker", "microphone"],
+            "last_heartbeat": now - 5,
+            "last_message": now - 5,
+            "screen_on": True,
+            "last_interaction": now - 3,
+        },
+    )
+    router.inject_device_info(
+        "tv_1",
+        {
+            "capabilities": ["screen", "speaker"],
+            "last_heartbeat": now - 60,
+            "last_message": now - 60,
+            "screen_on": False,
+            "last_interaction": 0,
+        },
+    )
 
     event = WakeEvent(
         event_id="evt_001",
@@ -50,9 +57,7 @@ async def test_wake_router_basic():
 
     assert decision is not None, "应该返回路由决策"
     # phone_1 更活跃（心跳更近、屏幕亮），应被选中
-    assert decision.selected_device_id == "phone_1", (
-        f"期望 phone_1 被选中，实际选中 {decision.selected_device_id}"
-    )
+    assert decision.selected_device_id == "phone_1", f"期望 phone_1 被选中，实际选中 {decision.selected_device_id}"
     print(f"  选中设备: {decision.selected_device_id} score={decision.score:.2f}")
     print("  ✅ WakeRouter 基本路由测试通过")
     return True
@@ -61,21 +66,25 @@ async def test_wake_router_basic():
 async def test_wake_router_dedup():
     """测试 WakeRouter 唤醒事件去重"""
     print("\n=== 测试 WakeRouter 去重 ===")
-    from galaxy_gateway.wake_router import WakeRouter, WakeEvent, WakeTaskType
+    from galaxy_gateway.wake_router import WakeEvent, WakeRouter, WakeTaskType
 
     router = WakeRouter()
     now = time.time()
-    router.inject_device_info("dev_a", {
-        "capabilities": ["speaker"],
-        "last_heartbeat": now - 1,
-        "last_message": now - 1,
-        "screen_on": True,
-        "last_interaction": now - 1,
-    })
+    router.inject_device_info(
+        "dev_a",
+        {
+            "capabilities": ["speaker"],
+            "last_heartbeat": now - 1,
+            "last_message": now - 1,
+            "screen_on": True,
+            "last_interaction": now - 1,
+        },
+    )
 
     evt1 = WakeEvent(event_id="dup_001", source_device_id="dev_a", wake_word="hey ufo")
-    evt2 = WakeEvent(event_id="dup_002", source_device_id="dev_b", wake_word="hey ufo",
-                     timestamp=now + 0.2)  # 200ms 后的相同唤醒词
+    evt2 = WakeEvent(
+        event_id="dup_002", source_device_id="dev_b", wake_word="hey ufo", timestamp=now + 0.2
+    )  # 200ms 后的相同唤醒词
 
     d1 = await router.route(evt1)
     d2 = await router.route(evt2)
@@ -89,25 +98,31 @@ async def test_wake_router_dedup():
 async def test_wake_router_capability_match():
     """测试 WakeRouter 能力匹配评分"""
     print("\n=== 测试 WakeRouter 能力匹配 ===")
-    from galaxy_gateway.wake_router import WakeRouter, WakeEvent, WakeTaskType
+    from galaxy_gateway.wake_router import WakeEvent, WakeRouter, WakeTaskType
 
     router = WakeRouter()
     now = time.time()
     # 两个设备活跃度相同，但能力不同
-    router.inject_device_info("speaker_device", {
-        "capabilities": ["speaker"],
-        "last_heartbeat": now - 1,
-        "last_message": now - 1,
-        "screen_on": False,
-        "last_interaction": 0,
-    })
-    router.inject_device_info("screen_device", {
-        "capabilities": ["screen"],
-        "last_heartbeat": now - 1,
-        "last_message": now - 1,
-        "screen_on": False,
-        "last_interaction": 0,
-    })
+    router.inject_device_info(
+        "speaker_device",
+        {
+            "capabilities": ["speaker"],
+            "last_heartbeat": now - 1,
+            "last_message": now - 1,
+            "screen_on": False,
+            "last_interaction": 0,
+        },
+    )
+    router.inject_device_info(
+        "screen_device",
+        {
+            "capabilities": ["screen"],
+            "last_heartbeat": now - 1,
+            "last_message": now - 1,
+            "screen_on": False,
+            "last_interaction": 0,
+        },
+    )
 
     voice_event = WakeEvent(
         event_id="cap_001",
@@ -117,9 +132,7 @@ async def test_wake_router_capability_match():
     )
     d = await router.route(voice_event)
     assert d is not None
-    assert d.selected_device_id == "speaker_device", (
-        f"语音任务应选 speaker_device，实际: {d.selected_device_id}"
-    )
+    assert d.selected_device_id == "speaker_device", f"语音任务应选 speaker_device，实际: {d.selected_device_id}"
     print(f"  语音任务选中: {d.selected_device_id}")
     print("  ✅ WakeRouter 能力匹配测试通过")
     return True
@@ -129,10 +142,11 @@ async def test_wake_router_capability_match():
 # 2. WakeEventBus 测试
 # =============================================================================
 
+
 async def test_wake_event_bus_publish():
     """测试 WakeEventBus 事件发布与去重"""
     print("\n=== 测试 WakeEventBus 发布与去重 ===")
-    from galaxy_gateway.wake_event_bus import WakeEventBus, RawWakeEvent
+    from galaxy_gateway.wake_event_bus import RawWakeEvent, WakeEventBus
 
     bus = WakeEventBus()
     dispatched = []
@@ -199,6 +213,7 @@ async def test_wake_event_bus_websocket_message():
 # 3. SessionRoaming 测试
 # =============================================================================
 
+
 async def test_session_roaming_create_and_migrate():
     """测试会话创建与迁移"""
     print("\n=== 测试 SessionRoaming 创建与迁移 ===")
@@ -264,9 +279,7 @@ async def test_session_roaming_auto_migrate():
 
     # 手机锁屏（失去焦点），电脑获得焦点
     await mgr.auto_migrate_on_attention_shift({"phone_1": False, "laptop_1": True})
-    assert session.device_id == "laptop_1", (
-        f"应迁移到 laptop_1，实际: {session.device_id}"
-    )
+    assert session.device_id == "laptop_1", f"应迁移到 laptop_1，实际: {session.device_id}"
     print(f"  自动迁移后设备: {session.device_id}")
     print("  ✅ SessionRoaming 自动迁移测试通过")
     return True
@@ -276,13 +289,14 @@ async def test_session_roaming_auto_migrate():
 # 4. FusedWakeDecision 测试
 # =============================================================================
 
+
 async def test_fused_wake_decision_voice_motion():
     """测试语音+运动触发的高置信度融合"""
     print("\n=== 测试 FusedWakeDecision 语音+运动融合 ===")
     from system_integration.fused_wake_decision import FusedWakeDecision
 
     try:
-        from system_integration.hardware_trigger import TriggerType, TriggerEvent, TriggerPriority, PlatformType
+        from system_integration.hardware_trigger import PlatformType, TriggerEvent, TriggerPriority, TriggerType
     except ImportError:
         print("  ⚠️ hardware_trigger 不可用，跳过 FusedWakeDecision 测试")
         return True
@@ -321,7 +335,7 @@ async def test_fused_wake_decision_voice_only_threshold():
     from system_integration.fused_wake_decision import FusedWakeDecision
 
     try:
-        from system_integration.hardware_trigger import TriggerType, TriggerEvent
+        from system_integration.hardware_trigger import TriggerEvent, TriggerType
     except ImportError:
         print("  ⚠️ hardware_trigger 不可用，跳过测试")
         return True
@@ -338,9 +352,7 @@ async def test_fused_wake_decision_voice_only_threshold():
     )
     r = await fused_high.process_event(voice_event)
     assert r is not None
-    assert r.should_wake is False, (
-        f"阈值 0.75 时仅语音不应触发唤醒，confidence={r.confidence:.2f}"
-    )
+    assert r.should_wake is False, f"阈值 0.75 时仅语音不应触发唤醒，confidence={r.confidence:.2f}"
 
     # 低阈值（0.50），仅语音应触发
     fused_low = FusedWakeDecision(window_seconds=2.0, wake_threshold=0.50)
@@ -359,7 +371,7 @@ async def test_fused_wake_decision_false_positive():
     from system_integration.fused_wake_decision import FusedWakeDecision
 
     try:
-        from system_integration.hardware_trigger import TriggerType, TriggerEvent
+        from system_integration.hardware_trigger import TriggerEvent, TriggerType
     except ImportError:
         print("  ⚠️ hardware_trigger 不可用，跳过测试")
         return True
@@ -374,9 +386,7 @@ async def test_fused_wake_decision_false_positive():
     )
     r = await fused.process_event(bg_voice)
     assert r is not None
-    assert r.should_wake is False, (
-        f"背景音源应不触发唤醒，confidence={r.confidence:.2f}"
-    )
+    assert r.should_wake is False, f"背景音源应不触发唤醒，confidence={r.confidence:.2f}"
     print(f"  背景音源 should_wake={r.should_wake} confidence={r.confidence:.2f}")
     print("  ✅ FusedWakeDecision 防误唤醒测试通过")
     return True
@@ -385,6 +395,7 @@ async def test_fused_wake_decision_false_positive():
 # =============================================================================
 # 主测试入口
 # =============================================================================
+
 
 async def main():
     print("=" * 70)
@@ -415,6 +426,7 @@ async def main():
         except Exception as e:
             print(f"  ❌ {test_fn.__name__} 异常: {e}")
             import traceback
+
             traceback.print_exc()
             failed += 1
 

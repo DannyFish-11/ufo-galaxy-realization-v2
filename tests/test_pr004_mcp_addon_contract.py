@@ -28,6 +28,7 @@ import pytest
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _run(coro):
     """Run a coroutine synchronously."""
     loop = asyncio.new_event_loop()
@@ -41,9 +42,11 @@ def _run(coro):
 # 1. Contract validation — valid cases
 # ===========================================================================
 
+
 class TestMCPAddonContractValid:
     def _validate(self, raw: Dict[str, Any]):
         from core.mcp_addon_contract import validate_mcp_addon_contract
+
         return validate_mcp_addon_contract(raw)
 
     def test_minimal_string_entrypoint(self):
@@ -109,6 +112,7 @@ class TestMCPAddonContractValid:
 
     def test_allow_future_schema(self):
         from core.mcp_addon_contract import validate_mcp_addon_contract
+
         # schema_version "99" should be accepted with allow_future_schema=True
         c = validate_mcp_addon_contract(
             {"name": "t", "entrypoint": "s.py", "schema_version": "99"},
@@ -121,14 +125,16 @@ class TestMCPAddonContractValid:
 # 2. Contract validation — invalid cases
 # ===========================================================================
 
+
 class TestMCPAddonContractInvalid:
     def _assert_violation(self, raw: Dict[str, Any], fragment: str):
-        from core.mcp_addon_contract import validate_mcp_addon_contract, MCPAddonContractError
+        from core.mcp_addon_contract import MCPAddonContractError, validate_mcp_addon_contract
+
         with pytest.raises(MCPAddonContractError) as exc_info:
             validate_mcp_addon_contract(raw)
-        assert any(fragment in v for v in exc_info.value.violations), (
-            f"Expected violation containing {fragment!r}, got {exc_info.value.violations}"
-        )
+        assert any(
+            fragment in v for v in exc_info.value.violations
+        ), f"Expected violation containing {fragment!r}, got {exc_info.value.violations}"
         return exc_info.value
 
     def test_missing_name(self):
@@ -208,17 +214,20 @@ class TestMCPAddonContractInvalid:
 
     def test_raw_not_dict_raises_type_error(self):
         from core.mcp_addon_contract import validate_mcp_addon_contract
+
         with pytest.raises(TypeError):
             validate_mcp_addon_contract("not a dict")  # type: ignore[arg-type]
 
     def test_multiple_violations_collected(self):
-        from core.mcp_addon_contract import validate_mcp_addon_contract, MCPAddonContractError
+        from core.mcp_addon_contract import MCPAddonContractError, validate_mcp_addon_contract
+
         with pytest.raises(MCPAddonContractError) as exc_info:
             validate_mcp_addon_contract({"name": "", "entrypoint": []})
         assert len(exc_info.value.violations) >= 2
 
     def test_error_code(self):
         from core.mcp_addon_contract import MCPAddonContractError
+
         err = MCPAddonContractError(["v1", "v2"], name="bad")
         assert err.error_code == "MCP_ADDON_CONTRACT_INVALID"
         assert err.addon_name == "bad"
@@ -229,17 +238,21 @@ class TestMCPAddonContractInvalid:
 # 3. is_valid_mcp_addon_contract helper
 # ===========================================================================
 
+
 class TestIsValidMCPAddonContract:
     def test_valid_returns_true(self):
         from core.mcp_addon_contract import is_valid_mcp_addon_contract
+
         assert is_valid_mcp_addon_contract({"name": "t", "entrypoint": "s.py"}) is True
 
     def test_invalid_returns_false(self):
         from core.mcp_addon_contract import is_valid_mcp_addon_contract
+
         assert is_valid_mcp_addon_contract({"name": "", "entrypoint": ""}) is False
 
     def test_non_dict_returns_false(self):
         from core.mcp_addon_contract import is_valid_mcp_addon_contract
+
         assert is_valid_mcp_addon_contract(None) is False  # type: ignore[arg-type]
 
 
@@ -247,16 +260,20 @@ class TestIsValidMCPAddonContract:
 # 4. build_mcp_addon_contract_summary helper
 # ===========================================================================
 
+
 class TestBuildMCPAddonContractSummary:
     def test_summary_fields(self):
-        from core.mcp_addon_contract import validate_mcp_addon_contract, build_mcp_addon_contract_summary
-        c = validate_mcp_addon_contract({
-            "name": "sum-tool",
-            "entrypoint": "s.py",
-            "dependencies": ["requests"],
-            "env": {"K": "V"},
-            "version": "2.0.0",
-        })
+        from core.mcp_addon_contract import build_mcp_addon_contract_summary, validate_mcp_addon_contract
+
+        c = validate_mcp_addon_contract(
+            {
+                "name": "sum-tool",
+                "entrypoint": "s.py",
+                "dependencies": ["requests"],
+                "env": {"K": "V"},
+                "version": "2.0.0",
+            }
+        )
         s = build_mcp_addon_contract_summary(c)
         assert s["name"] == "sum-tool"
         assert s["schema_version"] == "1"
@@ -270,9 +287,11 @@ class TestBuildMCPAddonContractSummary:
 # 5. _register_mcp_tool rejects invalid contracts
 # ===========================================================================
 
+
 class TestRegisterMCPToolContractEnforcement:
     def _call(self, tmp_dir: Path, manifest: Dict[str, Any]) -> Dict[str, Any]:
         from core.github_installer import _register_mcp_tool
+
         return _register_mcp_tool(tmp_dir, manifest)
 
     def test_missing_name_rejected(self, tmp_path):
@@ -316,14 +335,17 @@ class TestRegisterMCPToolContractEnforcement:
 # 6. GitHubInstaller.install early contract validation
 # ===========================================================================
 
+
 class TestGitHubInstallerContractEnforcement:
     """install() should abort early when mcp_tool.json is invalid."""
 
     def _make_installer(self, tmp_dir: Path):
         from core.github_installer import GitHubInstaller
+
         installer = GitHubInstaller.__new__(GitHubInstaller)
         installer._install_dir = tmp_dir
         from core.github_installer import _ManifestStore
+
         installer._manifest = _ManifestStore(tmp_dir)
         return installer
 
@@ -334,8 +356,10 @@ class TestGitHubInstallerContractEnforcement:
 
     def _patch_download(self, dest_holder):
         """Patch _fetch_repo to just return 'abc123' and write files."""
+
         def _fake(owner, repo, ref, dest):
             return "abc123"
+
         return patch("core.github_installer._fetch_repo", side_effect=_fake)
 
     def test_invalid_contract_aborts_install(self, tmp_path):
@@ -348,9 +372,15 @@ class TestGitHubInstallerContractEnforcement:
             self._fake_fetch(dest, {"name": "", "entrypoint": ""})
             return "abc123"
 
-        with patch("core.github_installer.validate_repo_url", return_value={
-            "valid": True, "owner": "owner", "repo": "repo", "ref": "HEAD",
-        }):
+        with patch(
+            "core.github_installer.validate_repo_url",
+            return_value={
+                "valid": True,
+                "owner": "owner",
+                "repo": "repo",
+                "ref": "HEAD",
+            },
+        ):
             with patch("core.github_installer._fetch_repo", side_effect=fake_fetch):
                 result = _run(installer.install("https://github.com/owner/repo"))
 
@@ -369,14 +399,18 @@ class TestGitHubInstallerContractEnforcement:
         mock_loader = MagicMock()
         mock_loader.load = AsyncMock(return_value={"success": True})
 
-        with patch("core.github_installer.validate_repo_url", return_value={
-            "valid": True, "owner": "owner", "repo": "good-tool", "ref": "HEAD",
-        }):
+        with patch(
+            "core.github_installer.validate_repo_url",
+            return_value={
+                "valid": True,
+                "owner": "owner",
+                "repo": "good-tool",
+                "ref": "HEAD",
+            },
+        ):
             with patch("core.github_installer._fetch_repo", side_effect=fake_fetch):
                 with patch("core.github_installer._install_deps", return_value=True):
-                    with patch.dict("sys.modules", {
-                        "core.mcp_loader": MagicMock(mcp_loader=mock_loader)
-                    }):
+                    with patch.dict("sys.modules", {"core.mcp_loader": MagicMock(mcp_loader=mock_loader)}):
                         result = _run(installer.install("https://github.com/owner/good-tool"))
 
         # Must not have aborted with a contract violation
@@ -386,6 +420,7 @@ class TestGitHubInstallerContractEnforcement:
 # ===========================================================================
 # 7. Successful install triggers capability registry refresh
 # ===========================================================================
+
 
 class TestCapabilityRegistryRefreshAfterInstall:
     """
@@ -418,16 +453,20 @@ class TestCapabilityRegistryRefreshAfterInstall:
 
     def test_capability_registry_refresh_is_async(self):
         """CapabilityRegistry.refresh() is an async method."""
-        import inspect
         # Import only the capability_registry module without pulling in kernel.py
         # which requires pydantic. We directly import the module file.
         import importlib.util
+        import inspect
         import os
+
         spec = importlib.util.spec_from_file_location(
             "cap_reg_isolated",
             os.path.join(
                 os.path.dirname(__file__),
-                "..", "core", "agent", "capability_registry.py",
+                "..",
+                "core",
+                "agent",
+                "capability_registry.py",
             ),
         )
         if spec is None or spec.loader is None:

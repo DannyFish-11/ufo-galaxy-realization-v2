@@ -106,9 +106,7 @@ NODE_INVOCATION_GOVERNANCE_IS_AUTHORITY: str = (
     "and fully auditable."
 )
 
-NODE_INVOCATION_GOVERNANCE_PR11_SENTINEL: str = (
-    "NODE_INVOCATION_GOVERNANCE::PR11_SENTINEL_V1"
-)
+NODE_INVOCATION_GOVERNANCE_PR11_SENTINEL: str = "NODE_INVOCATION_GOVERNANCE::PR11_SENTINEL_V1"
 
 # ===========================================================================
 # Policy sentinels
@@ -207,6 +205,7 @@ RUNTIME_DECISION_OBSERVABILITY_ALIGNED_GOVERNANCE_PR20: str = (
 # Override enum
 # ===========================================================================
 
+
 class NodeInvocationGovernanceOverride(str, Enum):
     """Controls whether the invocation-time governance gate is bypassed.
 
@@ -228,6 +227,7 @@ class NodeInvocationGovernanceOverride(str, Enum):
 # ===========================================================================
 # Decision dataclass
 # ===========================================================================
+
 
 @dataclass
 class NodeInvocationGovernanceDecision:
@@ -307,6 +307,7 @@ class NodeInvocationGovernanceDecision:
 # ===========================================================================
 # Core gate function
 # ===========================================================================
+
 
 def evaluate_invocation_governance(
     node_id: str,
@@ -395,6 +396,7 @@ def evaluate_invocation_governance(
     if memory_bias is not None:
         try:
             from core.cognitive.memory_bias_layer import build_memory_bias_diagnostics as _build_mbd
+
             _memory_bias_hint = _build_mbd(memory_bias)
         except Exception as _mbe:
             try:
@@ -490,6 +492,7 @@ def evaluate_invocation_governance(
             from core.runtime_decision_observability import (
                 enrich_governance_decision_with_observability as _enrich_gov_obs,
             )
+
             _enrich_gov_obs(
                 _unrg_diag,
                 activation_budget_hint=_budget_context,
@@ -523,6 +526,7 @@ def evaluate_invocation_governance(
     # ------------------------------------------------------------------
     try:
         from core.node_governance_runtime import evaluate_node_governance_eligibility  # noqa: PLC0415
+
         eligibility = evaluate_node_governance_eligibility(
             node_info,
             governor_record=governor_record,
@@ -567,10 +571,11 @@ def evaluate_invocation_governance(
 
         try:
             from core.node_activation_context import (  # noqa: PLC0415
+                build_activation_context_denial_diagnostics,
                 evaluate_node_activation_context,
                 get_activation_policy_kind_for_node,
-                build_activation_context_denial_diagnostics,
             )
+
             policy_kind = get_activation_policy_kind_for_node(node_info)
             ac_decision = evaluate_node_activation_context(
                 node_id,
@@ -592,9 +597,7 @@ def evaluate_invocation_governance(
                 else:
                     activation_context_status = f"blocked_{reason}" if reason else "blocked"
 
-                activation_context_denial = build_activation_context_denial_diagnostics(
-                    ac_decision
-                )
+                activation_context_denial = build_activation_context_denial_diagnostics(ac_decision)
                 denial_diag = dict(eligibility.diagnostic_context)
                 denial_diag["activation_context_denial"] = activation_context_denial
                 denial_diag["activation_context_status"] = activation_context_status
@@ -644,6 +647,7 @@ def evaluate_invocation_governance(
             from core.runtime_decision_observability import (
                 enrich_governance_decision_with_observability as _enrich_gov_obs,
             )
+
             _enrich_gov_obs(
                 gov_diag,
                 activation_budget_hint=_budget_context,
@@ -678,6 +682,7 @@ def evaluate_invocation_governance(
             from core.runtime_decision_observability import (
                 enrich_governance_decision_with_observability as _enrich_gov_obs,
             )
+
             _enrich_gov_obs(
                 _denied_diag,
                 activation_budget_hint=_budget_context,
@@ -702,6 +707,7 @@ def evaluate_invocation_governance(
 # ===========================================================================
 # Denial diagnostics helper
 # ===========================================================================
+
 
 def build_invocation_denial_diagnostics(
     decision: NodeInvocationGovernanceDecision,

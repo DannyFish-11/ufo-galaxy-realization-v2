@@ -16,6 +16,7 @@ voice interaction have all also run, giving the background pull much
 more time to finish) and corrects the phases_state entry in place if
 the real state has improved.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -46,6 +47,7 @@ class TestAiBrainStatusRecheck:
 
         async def refresh():
             brain.available_models = ["gemma4:e2b"]
+
         brain._refresh_model_list.side_effect = refresh
 
         phases_state = [("AI 大脑", "warn", "未安装(拉取失败/未完成)")]

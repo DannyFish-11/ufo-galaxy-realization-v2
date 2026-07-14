@@ -6,6 +6,7 @@
 OLLAMA_MODEL / GALAXY_MODEL_TIER 从记录派生;尺寸/默认主脑由目录拥有;旧的
 .galaxy_tier / .galaxy_model 一次性迁移。
 """
+
 from __future__ import annotations
 
 import json
@@ -30,6 +31,7 @@ def _isolate(tmp_path, monkeypatch):
 
 # ── 目录拥有尺寸 / 默认 ──
 
+
 def test_catalog_owns_sizes_and_default():
     assert mc.default_model() == "gemma4:12b"
     sizes = {s.tag: s.size_mb() for s in mc.all_models()}
@@ -41,11 +43,13 @@ def test_catalog_owns_sizes_and_default():
 
 def test_local_brain_manager_derives_from_catalog():
     from core.local_brain_manager import LocalBrainManager as L
+
     assert L.RECOMMENDED_MODELS["default"] == mc.default_model()
     assert L.MODEL_SIZE_ESTIMATE_MB["gemma4:e2b"] == 1800
 
 
 # ── 一条记录 + 派生 env ──
+
 
 def test_save_tier_writes_single_record_and_derives_env(monkeypatch):
     chosen = mc.save_tier("B", main_brain="openbmb/minicpm-o4.5")
@@ -55,6 +59,7 @@ def test_save_tier_writes_single_record_and_derives_env(monkeypatch):
     assert rec == {"tier": "B", "main_brain": "openbmb/minicpm-o4.5"}
     # 派生 env
     import os
+
     assert os.environ["GALAXY_MODEL_TIER"] == "B"
     assert os.environ["OLLAMA_MODEL"] == "openbmb/minicpm-o4.5"
     # 不再写旧的分裂文件
@@ -76,6 +81,7 @@ def test_explicit_main_brain_respected_even_if_off_catalog():
 
 # ── model_selection 收敛到同一门 ──
 
+
 def test_save_choice_routes_to_catalog_record(monkeypatch):
     monkeypatch.setattr(mc, "load_tier", lambda: "A")
     ms.save_choice("gemma4:e4b")
@@ -96,6 +102,7 @@ def test_env_overrides_record(monkeypatch):
 
 
 # ── 迁移:旧的分裂存点 → 一条记录 ──
+
 
 def test_migration_from_legacy_split_files():
     mc._LEGACY_TIER_FILE.write_text("B", encoding="utf-8")

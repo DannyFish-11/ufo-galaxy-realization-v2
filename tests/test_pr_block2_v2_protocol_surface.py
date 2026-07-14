@@ -76,9 +76,7 @@ _SKIP_BRIDGE = pytest.mark.skipif(not _BRIDGE_AVAILABLE, reason="android_bridge 
 _SKIP_RECONCILIATION = pytest.mark.skipif(
     not _RECONCILIATION_HANDLER_AVAILABLE, reason="reconciliation_signal handler unavailable"
 )
-_SKIP_HANDOFF = pytest.mark.skipif(
-    not _HANDOFF_HANDLER_AVAILABLE, reason="handoff_v2_result handler unavailable"
-)
+_SKIP_HANDOFF = pytest.mark.skipif(not _HANDOFF_HANDLER_AVAILABLE, reason="handoff_v2_result handler unavailable")
 
 
 # ---------------------------------------------------------------------------
@@ -212,6 +210,7 @@ class TestHandlerModuleImport:
     def test_B01_reconciliation_signal_importable_from_handlers_package(self) -> None:
         """handle_reconciliation_signal must be importable from the handlers package."""
         from galaxy_gateway.android.handlers import handle_reconciliation_signal  # noqa: F401
+
         assert callable(handle_reconciliation_signal)
 
     def test_B02_reconciliation_signal_in_handlers_all(self) -> None:
@@ -219,13 +218,13 @@ class TestHandlerModuleImport:
         import galaxy_gateway.android.handlers as pkg
 
         assert "handle_reconciliation_signal" in pkg.__all__, (
-            "handle_reconciliation_signal not in __all__ — it is not a first-class "
-            "exported handler from the package"
+            "handle_reconciliation_signal not in __all__ — it is not a first-class " "exported handler from the package"
         )
 
     def test_B03_handoff_v2_result_importable_from_handlers_package(self) -> None:
         """handle_handoff_v2_result must be importable from the handlers package."""
         from galaxy_gateway.android.handlers import handle_handoff_v2_result  # noqa: F401
+
         assert callable(handle_handoff_v2_result)
 
     def test_B04_handoff_v2_result_in_handlers_all(self) -> None:
@@ -233,8 +232,7 @@ class TestHandlerModuleImport:
         import galaxy_gateway.android.handlers as pkg
 
         assert "handle_handoff_v2_result" in pkg.__all__, (
-            "handle_handoff_v2_result not in __all__ — it is not a first-class "
-            "exported handler from the package"
+            "handle_handoff_v2_result not in __all__ — it is not a first-class " "exported handler from the package"
         )
 
     def test_B05_reconciliation_signal_is_coroutine_function(self) -> None:
@@ -347,8 +345,7 @@ class TestCanonicalHandlerIdentity:
             (ev2_handler, "HANDOFF_ENVELOPE_V2_RESULT"),
         ]:
             assert handler is not generic_handler, (
-                f"{name} handler is using handle_generic_forward — "
-                "it is not the canonical handoff_v2_result handler"
+                f"{name} handler is using handle_generic_forward — " "it is not the canonical handoff_v2_result handler"
             )
 
 
@@ -387,9 +384,9 @@ class TestReconciliationSignalDispatch:
         incoming_mid = msg["message_id"]
         resp = _run(bridge.handle_message(None, msg))
         assert resp is not None
-        assert resp.get("correlation_id") == incoming_mid, (
-            f"Expected correlation_id={incoming_mid!r}, got {resp.get('correlation_id')!r}"
-        )
+        assert (
+            resp.get("correlation_id") == incoming_mid
+        ), f"Expected correlation_id={incoming_mid!r}, got {resp.get('correlation_id')!r}"
 
     def test_E04_reconciliation_signal_not_routed_to_unknown_type_error(self) -> None:
         """reconciliation_signal must NOT produce an UNKNOWN_MESSAGE_TYPE error response."""
@@ -403,9 +400,7 @@ class TestReconciliationSignalDispatch:
             "an unknown/unsupported message type"
         )
         error_code = (resp.get("payload") or {}).get("code", "")
-        assert error_code != "UNKNOWN_MESSAGE_TYPE", (
-            "ReconciliationSignal fell through to UNKNOWN_MESSAGE_TYPE handler"
-        )
+        assert error_code != "UNKNOWN_MESSAGE_TYPE", "ReconciliationSignal fell through to UNKNOWN_MESSAGE_TYPE handler"
 
     def test_E05_reconciliation_signal_version_field_present(self) -> None:
         """ACK for reconciliation_signal must include version field."""
@@ -433,9 +428,7 @@ class TestHandoffEnvelopeV2Dispatch:
             (_make_handoff_envelope_v2_result_message, "handoff_envelope_v2_result"),
         ],
     )
-    def test_F01_bridge_dispatches_handoff_uplink_to_canonical_handler(
-        self, msg_factory, wire_type
-    ) -> None:
+    def test_F01_bridge_dispatches_handoff_uplink_to_canonical_handler(self, msg_factory, wire_type) -> None:
         """AndroidBridge must route all four HandoffEnvelopeV2 uplink types to the canonical handler."""
         bridge = _make_bridge()
         msg = msg_factory()
@@ -510,9 +503,9 @@ class TestProtocolSurfaceCompleteness:
             MessageType.HANDOFF_ENVELOPE_V2_RESULT,
         ]
         for mt in canonical_uplink_types:
-            assert mt in bridge._message_handlers, (
-                f"PR Block 2 canonical uplink type {mt.value!r} has no registered handler"
-            )
+            assert (
+                mt in bridge._message_handlers
+            ), f"PR Block 2 canonical uplink type {mt.value!r} has no registered handler"
             handler = bridge._message_handlers[mt]
             assert handler is not None
             assert handler is not handle_unregistered, (
@@ -523,17 +516,13 @@ class TestProtocolSurfaceCompleteness:
     def test_G02_reconciliation_signal_family_wire_value_registered(self) -> None:
         """The wire value 'reconciliation_signal' must be routed via the canonical handler."""
         bridge = _make_bridge()
-        registered_values: Set[str] = {
-            mt.value for mt in bridge._message_handlers
-        }
+        registered_values: Set[str] = {mt.value for mt in bridge._message_handlers}
         assert "reconciliation_signal" in registered_values
 
     def test_G03_handoff_envelope_v2_result_family_wire_values_registered(self) -> None:
         """All four HandoffEnvelopeV2 uplink wire values must be registered."""
         bridge = _make_bridge()
-        registered_values: Set[str] = {
-            mt.value for mt in bridge._message_handlers
-        }
+        registered_values: Set[str] = {mt.value for mt in bridge._message_handlers}
         required_wire_values = {
             "handoff_ack",
             "handoff_result",
@@ -541,9 +530,9 @@ class TestProtocolSurfaceCompleteness:
             "handoff_envelope_v2_result",
         }
         for wv in required_wire_values:
-            assert wv in registered_values, (
-                f"HandoffEnvelopeV2 uplink wire value {wv!r} is not registered in AndroidBridge"
-            )
+            assert (
+                wv in registered_values
+            ), f"HandoffEnvelopeV2 uplink wire value {wv!r} is not registered in AndroidBridge"
 
     def test_G04_pr_block2_v2_protocol_paths_are_complete(self) -> None:
         """
@@ -553,13 +542,11 @@ class TestProtocolSurfaceCompleteness:
         - ReconciliationSignal: canonical handler registered, not a fallback.
         - HandoffEnvelopeV2 response: canonical handler registered for all uplink types, not a fallback.
         """
-        from galaxy_gateway.android.handlers.registration import handle_unregistered
+        from galaxy_gateway.android.handlers.handoff_v2_result import handle_handoff_v2_result as _canonical_handoff
         from galaxy_gateway.android.handlers.reconciliation_signal import (
             handle_reconciliation_signal as _canonical_reconciliation,
         )
-        from galaxy_gateway.android.handlers.handoff_v2_result import (
-            handle_handoff_v2_result as _canonical_handoff,
-        )
+        from galaxy_gateway.android.handlers.registration import handle_unregistered
 
         bridge = _make_bridge()
 

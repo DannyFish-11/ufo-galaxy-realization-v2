@@ -41,14 +41,14 @@ logger = logging.getLogger("Galaxy.Adapter.TailscaleP2P")
 
 # ── Constants ────────────────────────────────────────────────────────────
 
-_DEFAULT_P2P_PORT = 19721           # Tailscale P2P direct port
-_CONNECT_TIMEOUT = 5.0              # seconds
-_READ_TIMEOUT = 10.0                # seconds for inbound read
-_PEER_CACHE_TTL = 60.0              # seconds: peer cache freshness
-_HEALTH_CHECK_INTERVAL = 60.0       # seconds: connection pool health check
-_MAX_MSG_SIZE = 10 * 1024 * 1024    # 10MB max message
-_MAX_CONNECTIONS = 50               # max pooled connections (LRU eviction)
-_CONN_IDLE_TIMEOUT = 300.0          # seconds: idle connection eviction
+_DEFAULT_P2P_PORT = 19721  # Tailscale P2P direct port
+_CONNECT_TIMEOUT = 5.0  # seconds
+_READ_TIMEOUT = 10.0  # seconds for inbound read
+_PEER_CACHE_TTL = 60.0  # seconds: peer cache freshness
+_HEALTH_CHECK_INTERVAL = 60.0  # seconds: connection pool health check
+_MAX_MSG_SIZE = 10 * 1024 * 1024  # 10MB max message
+_MAX_CONNECTIONS = 50  # max pooled connections (LRU eviction)
+_CONN_IDLE_TIMEOUT = 300.0  # seconds: idle connection eviction
 
 
 class _ConnectionEntry:
@@ -127,7 +127,9 @@ class TailscaleP2PAdapter(TransportAdapter):
                 )
                 logger.info(
                     "TailscaleP2PAdapter initialized | ip=%s host=%s peers=%d",
-                    self._my_ts_ip, self._my_hostname, len(self._peer_cache),
+                    self._my_ts_ip,
+                    self._my_hostname,
+                    len(self._peer_cache),
                 )
                 return True
         except Exception as exc:
@@ -337,7 +339,8 @@ class TailscaleP2PAdapter(TransportAdapter):
             now = time.time()
             async with self._conn_lock:
                 to_remove = [
-                    did for did, e in list(self._connections.items())
+                    did
+                    for did, e in list(self._connections.items())
                     if not e.is_alive or (now - e.last_used) > _CONN_IDLE_TIMEOUT
                 ]
                 for did in to_remove:
@@ -368,7 +371,11 @@ class TailscaleP2PAdapter(TransportAdapter):
         try:
             result = subprocess.run(
                 ["tailscale", "status", "--json"],
-                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=10,
             )
             if result.returncode == 0:
                 status = json.loads(result.stdout)
@@ -391,7 +398,11 @@ class TailscaleP2PAdapter(TransportAdapter):
         try:
             result = subprocess.run(
                 ["tailscale", "status", "--json"],
-                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=10,
             )
             if result.returncode == 0:
                 status = json.loads(result.stdout)
@@ -450,7 +461,9 @@ class TailscaleP2PAdapter(TransportAdapter):
         return server
 
     async def _handle_inbound(
-        self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter,
+        self,
+        reader: asyncio.StreamReader,
+        writer: asyncio.StreamWriter,
     ) -> None:
         """Handle inbound P2P connection."""
         peer_addr = writer.get_extra_info("peername")
@@ -477,12 +490,15 @@ class TailscaleP2PAdapter(TransportAdapter):
 
                 # PR-28: Reply ACK so sender knows delivery succeeded
                 try:
-                    ack = json.dumps({
-                        "type": "ack",
-                        "ack_for": message.get("id", message.get("message_id", "")),
-                        "received_via": "tailscale_p2p",
-                        "timestamp": time.time(),
-                    }, default=str).encode("utf-8")
+                    ack = json.dumps(
+                        {
+                            "type": "ack",
+                            "ack_for": message.get("id", message.get("message_id", "")),
+                            "received_via": "tailscale_p2p",
+                            "timestamp": time.time(),
+                        },
+                        default=str,
+                    ).encode("utf-8")
                     writer.write(len(ack).to_bytes(4, "big") + ack)
                     await writer.drain()
                 except Exception as ack_err:
@@ -502,7 +518,9 @@ class TailscaleP2PAdapter(TransportAdapter):
                 pass
 
     async def _dispatch_inbound(
-        self, message: Dict[str, Any], peer_addr: tuple,
+        self,
+        message: Dict[str, Any],
+        peer_addr: tuple,
     ) -> None:
         """Dispatch inbound AIP v3 message received via P2P."""
         try:
@@ -510,6 +528,7 @@ class TailscaleP2PAdapter(TransportAdapter):
             message["_peer_addr"] = f"{peer_addr[0]}:{peer_addr[1]}"
 
             from core.state_event_bus import get_state_event_bus
+
             get_state_event_bus().publish(
                 "aip.tailscale_p2p.received",
                 source="tailscale_p2p_adapter",

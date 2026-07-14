@@ -19,6 +19,7 @@ after append() whenever length exceeded _max_history - except _max_history
 self-evicts and that branch could never actually fire in practice (dead but
 still broken code).
 """
+
 from __future__ import annotations
 
 import pytest

@@ -8,6 +8,7 @@ Validates:
 5. PerceptionFrame integrity: bounded values, schema_version, frame_id.
 6. Bus subscription / unsubscription contract.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -18,18 +19,18 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
+from core.multimodal.audio_features import AudioState, extract_audio_features
+from core.multimodal.audio_ingest import AudioIngestConfig, AudioIngestPipeline
 from core.multimodal.ingress_bus import MultimodalIngressBus
 from core.multimodal.perception_frame import PerceptionFrame, SystemSignals
-from core.multimodal.audio_features import AudioState, extract_audio_features
+from core.multimodal.signal_quality import QualityFlag, SignalQuality
 from core.multimodal.video_features import VideoState
-from core.multimodal.signal_quality import SignalQuality, QualityFlag
-from core.multimodal.audio_ingest import AudioIngestPipeline, AudioIngestConfig
 from core.multimodal.video_ingest import VideoIngestPipeline
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_audio_state(energy: float = 0.3, speaking: bool = True) -> AudioState:
     return AudioState(
@@ -59,6 +60,7 @@ def _make_system_signals() -> SystemSignals:
 # Config flag wiring
 # ===========================================================================
 
+
 class TestConfigFlags:
     """enable_multimodal_ingest must exist in config.json."""
 
@@ -68,9 +70,7 @@ class TestConfigFlags:
 
         config_path = pathlib.Path(__file__).parent.parent / "config.json"
         config = json.loads(config_path.read_text())
-        assert "enable_multimodal_ingest" in config, (
-            "config.json must contain 'enable_multimodal_ingest'"
-        )
+        assert "enable_multimodal_ingest" in config, "config.json must contain 'enable_multimodal_ingest'"
 
     def test_flag_is_boolean(self):
         import json
@@ -93,6 +93,7 @@ class TestConfigFlags:
 # ===========================================================================
 # PerceptionFrame bounded-values contract
 # ===========================================================================
+
 
 class TestPerceptionFrameBounds:
     """All float fields in PerceptionFrame must be bounded [0, 1]."""
@@ -141,6 +142,7 @@ class TestPerceptionFrameBounds:
 # Audio pipeline → bus wiring
 # ===========================================================================
 
+
 class TestAudioPipelineToBusWiring:
     """AudioIngestPipeline callbacks must wire into MultimodalIngressBus."""
 
@@ -182,8 +184,7 @@ class TestAudioPipelineToBusWiring:
         mock_sd = MagicMock()
         mock_sd.InputStream.side_effect = PermissionError("mic denied")
 
-        with patch.object(mod, "_SOUNDDEVICE_AVAILABLE", True), \
-             patch.dict("sys.modules", {"sounddevice": mock_sd}):
+        with patch.object(mod, "_SOUNDDEVICE_AVAILABLE", True), patch.dict("sys.modules", {"sounddevice": mock_sd}):
             asyncio.new_event_loop().run_until_complete(pipeline.run())
 
         _, quality = pipeline.get_latest()
@@ -193,6 +194,7 @@ class TestAudioPipelineToBusWiring:
 # ===========================================================================
 # Video pipeline → bus wiring
 # ===========================================================================
+
 
 class TestVideoPipelineToBusWiring:
     """VideoIngestPipeline callbacks must wire into MultimodalIngressBus."""
@@ -213,15 +215,13 @@ class TestVideoPipelineToBusWiring:
 
     def test_pipeline_graceful_when_no_cv2(self):
         """Pipeline correctly reports device_unavailable when session is unavailable."""
-        from core.multimodal.webrtc_session import WebRTCCameraSession
         from unittest.mock import PropertyMock
+
+        from core.multimodal.webrtc_session import WebRTCCameraSession
 
         pipeline = VideoIngestPipeline()
 
-        with patch.object(
-            type(pipeline._session), "is_available",
-            new_callable=PropertyMock, return_value=False
-        ):
+        with patch.object(type(pipeline._session), "is_available", new_callable=PropertyMock, return_value=False):
             assert not pipeline.is_available
             # Verify the quality is correctly set when unavailable
             pipeline._quality = SignalQuality.device_unavailable()
@@ -233,6 +233,7 @@ class TestVideoPipelineToBusWiring:
 # ===========================================================================
 # Full ingress bus wiring
 # ===========================================================================
+
 
 class TestFullIngressBusWiring:
     """End-to-end bus test: all three modalities update and compose a frame."""
@@ -322,6 +323,7 @@ class TestFullIngressBusWiring:
 # Graceful degradation
 # ===========================================================================
 
+
 class TestGracefulDegradation:
     """When modalities are absent/stale the bus must still emit frames."""
 
@@ -335,9 +337,7 @@ class TestGracefulDegradation:
 
         frame = bus.build_frame()
         # With such a short stale threshold the audio should be excluded
-        assert frame.audio_quality.flag in (
-            QualityFlag.STALE, QualityFlag.MISSING, QualityFlag.OK
-        )
+        assert frame.audio_quality.flag in (QualityFlag.STALE, QualityFlag.MISSING, QualityFlag.OK)
 
     def test_empty_bus_returns_valid_frame(self):
         bus = MultimodalIngressBus()
@@ -358,14 +358,15 @@ class TestGracefulDegradation:
 # Multimodal __init__ public exports
 # ===========================================================================
 
+
 class TestMultimodalPackageExports:
     """core.multimodal.__init__ must export the key symbols."""
 
     def test_imports(self):
         from core.multimodal import (  # noqa: F401
-            SignalQuality,
-            QualityFlag,
-            PerceptionFrame,
-            SystemSignals,
             MultimodalIngressBus,
+            PerceptionFrame,
+            QualityFlag,
+            SignalQuality,
+            SystemSignals,
         )

@@ -98,6 +98,7 @@ Coverage
     - permission_safety_summary with registry-populated snapshot has trust label
     - permission_safety_summary never raises
 """
+
 from __future__ import annotations
 
 import json
@@ -108,7 +109,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -116,20 +116,21 @@ import pytest
 
 def _import_module():
     from core.multimodal.permission_safety_state import (
-        PermissionStatus,
-        TrustLabel,
-        SafetyGatingReason,
         ExecutionRiskTier,
-        ModalityPermissionRecord,
         ExecutionTrustAnnotation,
-        PermissionSafetySnapshot,
+        ModalityPermissionRecord,
         OperatorSafetySummary,
-        build_permission_safety_snapshot,
+        PermissionSafetySnapshot,
+        PermissionSafetyState,
+        PermissionStatus,
+        SafetyGatingReason,
+        TrustLabel,
         build_operator_safety_summary,
+        build_permission_safety_snapshot,
         get_permission_safety_state,
         reset_permission_safety_state,
-        PermissionSafetyState,
     )
+
     return (
         PermissionStatus,
         TrustLabel,
@@ -170,11 +171,7 @@ def _cam_source(health: str = "healthy", is_active: bool = True) -> Dict[str, An
 
 
 def _remote_execution_plan() -> Dict[str, Any]:
-    return {
-        "steps": [
-            {"step_type": "REMOTE_AGENT", "description": "deploy agent on remote node"}
-        ]
-    }
+    return {"steps": [{"step_type": "REMOTE_AGENT", "description": "deploy agent on remote node"}]}
 
 
 def _local_execution_plan() -> Dict[str, Any]:
@@ -188,7 +185,7 @@ def _local_execution_plan() -> Dict[str, Any]:
 
 class TestPermissionStatus:
     def test_all_values_present(self):
-        (PermissionStatus, *_) = _import_module()
+        PermissionStatus, *_ = _import_module()
         values = {v.value for v in PermissionStatus}
         assert "granted" in values
         assert "denied" in values
@@ -196,12 +193,12 @@ class TestPermissionStatus:
         assert "unknown" in values
 
     def test_from_string_round_trip(self):
-        (PermissionStatus, *_) = _import_module()
+        PermissionStatus, *_ = _import_module()
         for member in PermissionStatus:
             assert PermissionStatus.from_string(member.value) == member
 
     def test_from_string_unknown_default(self):
-        (PermissionStatus, *_) = _import_module()
+        PermissionStatus, *_ = _import_module()
         assert PermissionStatus.from_string("nonsense") == PermissionStatus.UNKNOWN
 
 
@@ -336,10 +333,9 @@ class TestModalityPermissionRecord:
         ) = _import_module()
         # Build via build_permission_safety_snapshot with unavailable source
         from core.multimodal.permission_safety_state import build_permission_safety_snapshot
+
         snap = build_permission_safety_snapshot(
-            source_registry_snapshot=_make_source_registry_snapshot(
-                [_cam_source(health="unavailable")]
-            )
+            source_registry_snapshot=_make_source_registry_snapshot([_cam_source(health="unavailable")])
         )
         rec = snap.modality_permissions[0]
         assert rec.permission_status == PermissionStatus.UNAVAILABLE
@@ -352,6 +348,7 @@ class TestModalityPermissionRecord:
             TrustLabel,
             build_permission_safety_snapshot,
         )
+
         snap = build_permission_safety_snapshot(
             source_registry_snapshot=_make_source_registry_snapshot(
                 [{"modality": "microphone", "health": "denied", "is_active": False}]
@@ -366,6 +363,7 @@ class TestModalityPermissionRecord:
             TrustLabel,
             build_permission_safety_snapshot,
         )
+
         snap = build_permission_safety_snapshot(
             source_registry_snapshot=_make_source_registry_snapshot([_mic_source()])
         )
@@ -414,12 +412,14 @@ class TestExecutionTrustAnnotation:
 
     def test_annotation_id_generated(self):
         from core.multimodal.permission_safety_state import ExecutionTrustAnnotation
+
         ann = ExecutionTrustAnnotation()
         assert ann.annotation_id is not None
         assert len(ann.annotation_id) > 0
 
     def test_remote_elevated_requires_confirmation(self):
         from core.multimodal.permission_safety_state import build_permission_safety_snapshot
+
         snap = build_permission_safety_snapshot(
             execution_plan=_remote_execution_plan(),
         )
@@ -475,11 +475,12 @@ class TestPermissionSafetySnapshot:
 
     def test_nested_execution_trust_annotation_survives_round_trip(self):
         from core.multimodal.permission_safety_state import (
-            PermissionSafetySnapshot,
-            ExecutionTrustAnnotation,
             ExecutionRiskTier,
+            ExecutionTrustAnnotation,
+            PermissionSafetySnapshot,
             TrustLabel,
         )
+
         eta = ExecutionTrustAnnotation(
             risk_tier=ExecutionRiskTier.REMOTE_ELEVATED,
             trust_label=TrustLabel.ELEVATED,
@@ -529,9 +530,10 @@ class TestOperatorSafetySummary:
 
     def test_derived_from_snapshot_id_matches_snapshot(self):
         from core.multimodal.permission_safety_state import (
-            build_permission_safety_snapshot,
             build_operator_safety_summary,
+            build_permission_safety_snapshot,
         )
+
         snap = build_permission_safety_snapshot()
         summary = build_operator_safety_summary(snap)
         assert summary.derived_from_snapshot_id == snap.snapshot_id
@@ -545,9 +547,10 @@ class TestOperatorSafetySummary:
 class TestBuildPermissionSafetySnapshot:
     def test_empty_input_valid_snapshot(self):
         from core.multimodal.permission_safety_state import (
-            build_permission_safety_snapshot,
             TrustLabel,
+            build_permission_safety_snapshot,
         )
+
         snap = build_permission_safety_snapshot()
         assert snap is not None
         assert snap.overall_trust_label is not None
@@ -555,9 +558,10 @@ class TestBuildPermissionSafetySnapshot:
 
     def test_healthy_microphone_sensitive_trust_active_list(self):
         from core.multimodal.permission_safety_state import (
-            build_permission_safety_snapshot,
             TrustLabel,
+            build_permission_safety_snapshot,
         )
+
         snap = build_permission_safety_snapshot(
             source_registry_snapshot=_make_source_registry_snapshot([_mic_source()])
         )
@@ -567,15 +571,15 @@ class TestBuildPermissionSafetySnapshot:
 
     def test_unavailable_camera_permission_missing(self):
         from core.multimodal.permission_safety_state import build_permission_safety_snapshot
+
         snap = build_permission_safety_snapshot(
-            source_registry_snapshot=_make_source_registry_snapshot(
-                [_cam_source(health="unavailable")]
-            )
+            source_registry_snapshot=_make_source_registry_snapshot([_cam_source(health="unavailable")])
         )
         assert snap.any_permission_missing is True
 
     def test_denied_source_permission_denied(self):
         from core.multimodal.permission_safety_state import build_permission_safety_snapshot
+
         snap = build_permission_safety_snapshot(
             source_registry_snapshot=_make_source_registry_snapshot(
                 [{"modality": "microphone", "health": "denied", "is_active": False}]
@@ -586,6 +590,7 @@ class TestBuildPermissionSafetySnapshot:
 
     def test_canonical_perception_active_modalities_supplement_registry(self):
         from core.multimodal.permission_safety_state import build_permission_safety_snapshot
+
         snap = build_permission_safety_snapshot(
             source_registry_snapshot=_make_source_registry_snapshot([]),
             canonical_perception={
@@ -599,48 +604,45 @@ class TestBuildPermissionSafetySnapshot:
 
     def test_degradation_reasons_propagated_from_perception(self):
         from core.multimodal.permission_safety_state import build_permission_safety_snapshot
-        snap = build_permission_safety_snapshot(
-            canonical_perception={"degradation_reasons": ["text_only", "no_audio"]}
-        )
+
+        snap = build_permission_safety_snapshot(canonical_perception={"degradation_reasons": ["text_only", "no_audio"]})
         assert "text_only" in snap.degradation_reasons
         assert "no_audio" in snap.degradation_reasons
 
     def test_remote_agent_step_remote_elevated_risk_tier(self):
         from core.multimodal.permission_safety_state import (
-            build_permission_safety_snapshot,
             ExecutionRiskTier,
+            build_permission_safety_snapshot,
         )
+
         snap = build_permission_safety_snapshot(execution_plan=_remote_execution_plan())
         assert snap.execution_trust_annotation is not None
         assert snap.execution_trust_annotation.risk_tier == ExecutionRiskTier.REMOTE_ELEVATED
 
     def test_degraded_envelope_critical_severity_gating_reason(self):
         from core.multimodal.permission_safety_state import (
-            build_permission_safety_snapshot,
             SafetyGatingReason,
+            build_permission_safety_snapshot,
         )
-        snap = build_permission_safety_snapshot(
-            degraded_operation_envelope={"operator_severity": "critical"}
-        )
+
+        snap = build_permission_safety_snapshot(degraded_operation_envelope={"operator_severity": "critical"})
         assert snap.is_gated is True
         assert SafetyGatingReason.ELEVATED_RISK_UNREVIEWED.value in snap.safety_gating_reasons
 
     def test_is_gated_when_gating_reasons_nonempty(self):
         from core.multimodal.permission_safety_state import build_permission_safety_snapshot
+
         snap = build_permission_safety_snapshot(
-            source_registry_snapshot=_make_source_registry_snapshot(
-                [_cam_source(health="unavailable")]
-            )
+            source_registry_snapshot=_make_source_registry_snapshot([_cam_source(health="unavailable")])
         )
         assert snap.is_gated is True
         assert len(snap.safety_gating_reasons) > 0
 
     def test_json_serialisable(self):
         from core.multimodal.permission_safety_state import build_permission_safety_snapshot
+
         snap = build_permission_safety_snapshot(
-            source_registry_snapshot=_make_source_registry_snapshot(
-                [_mic_source(), _cam_source(health="unavailable")]
-            ),
+            source_registry_snapshot=_make_source_registry_snapshot([_mic_source(), _cam_source(health="unavailable")]),
             execution_plan=_remote_execution_plan(),
             trace_id="trace-json-test",
         )
@@ -658,9 +660,10 @@ class TestBuildPermissionSafetySnapshot:
 class TestBuildOperatorSafetySummary:
     def test_fields_mirror_snapshot(self):
         from core.multimodal.permission_safety_state import (
-            build_permission_safety_snapshot,
             build_operator_safety_summary,
+            build_permission_safety_snapshot,
         )
+
         snap = build_permission_safety_snapshot(
             source_registry_snapshot=_make_source_registry_snapshot([_mic_source()])
         )
@@ -672,9 +675,10 @@ class TestBuildOperatorSafetySummary:
 
     def test_active_sensitive_in_operator_message(self):
         from core.multimodal.permission_safety_state import (
-            build_permission_safety_snapshot,
             build_operator_safety_summary,
+            build_permission_safety_snapshot,
         )
+
         snap = build_permission_safety_snapshot(
             source_registry_snapshot=_make_source_registry_snapshot([_mic_source()])
         )
@@ -683,33 +687,32 @@ class TestBuildOperatorSafetySummary:
 
     def test_missing_permission_in_operator_message(self):
         from core.multimodal.permission_safety_state import (
-            build_permission_safety_snapshot,
             build_operator_safety_summary,
+            build_permission_safety_snapshot,
         )
+
         snap = build_permission_safety_snapshot(
-            source_registry_snapshot=_make_source_registry_snapshot(
-                [_cam_source(health="unavailable")]
-            )
+            source_registry_snapshot=_make_source_registry_snapshot([_cam_source(health="unavailable")])
         )
         summary = build_operator_safety_summary(snap)
         assert "permission" in summary.operator_message.lower()
 
     def test_gating_reason_in_operator_message(self):
         from core.multimodal.permission_safety_state import (
-            build_permission_safety_snapshot,
             build_operator_safety_summary,
+            build_permission_safety_snapshot,
         )
-        snap = build_permission_safety_snapshot(
-            degraded_operation_envelope={"operator_severity": "critical"}
-        )
+
+        snap = build_permission_safety_snapshot(degraded_operation_envelope={"operator_severity": "critical"})
         summary = build_operator_safety_summary(snap)
         assert "gated" in summary.operator_message.lower()
 
     def test_remote_pending_in_operator_message(self):
         from core.multimodal.permission_safety_state import (
-            build_permission_safety_snapshot,
             build_operator_safety_summary,
+            build_permission_safety_snapshot,
         )
+
         snap = build_permission_safety_snapshot(execution_plan=_remote_execution_plan())
         summary = build_operator_safety_summary(snap)
         assert summary.remote_execution_pending is True
@@ -717,9 +720,10 @@ class TestBuildOperatorSafetySummary:
 
     def test_derived_from_snapshot_id_correct(self):
         from core.multimodal.permission_safety_state import (
-            build_permission_safety_snapshot,
             build_operator_safety_summary,
+            build_permission_safety_snapshot,
         )
+
         snap = build_permission_safety_snapshot()
         summary = build_operator_safety_summary(snap)
         assert summary.derived_from_snapshot_id == snap.snapshot_id
@@ -731,6 +735,7 @@ class TestBuildOperatorSafetySummary:
             TrustLabel,
             build_operator_safety_summary,
         )
+
         snap = PermissionSafetySnapshot(
             overall_trust_label=TrustLabel.TRUSTED,
             active_sensitive_modalities=[],
@@ -752,6 +757,7 @@ class TestBuildOperatorSafetySummary:
 class TestPermissionSafetyStateSingleton:
     def setup_method(self):
         from core.multimodal.permission_safety_state import reset_permission_safety_state
+
         reset_permission_safety_state()
 
     def test_same_singleton_repeated_calls(self):
@@ -759,6 +765,7 @@ class TestPermissionSafetyStateSingleton:
             get_permission_safety_state,
             reset_permission_safety_state,
         )
+
         reset_permission_safety_state()
         s1 = get_permission_safety_state()
         s2 = get_permission_safety_state()
@@ -769,6 +776,7 @@ class TestPermissionSafetyStateSingleton:
             get_permission_safety_state,
             reset_permission_safety_state,
         )
+
         reset_permission_safety_state()
         s1 = get_permission_safety_state()
         reset_permission_safety_state()
@@ -777,9 +785,10 @@ class TestPermissionSafetyStateSingleton:
 
     def test_commit_latest_snapshot_round_trip(self):
         from core.multimodal.permission_safety_state import (
-            get_permission_safety_state,
             build_permission_safety_snapshot,
+            get_permission_safety_state,
         )
+
         state = get_permission_safety_state()
         snap = build_permission_safety_snapshot(trace_id="commit-test")
         state.commit(snap)
@@ -790,15 +799,17 @@ class TestPermissionSafetyStateSingleton:
             get_permission_safety_state,
             reset_permission_safety_state,
         )
+
         reset_permission_safety_state()
         state = get_permission_safety_state()
         assert state.snapshot_dict() is None
 
     def test_snapshot_dict_after_commit(self):
         from core.multimodal.permission_safety_state import (
-            get_permission_safety_state,
             build_permission_safety_snapshot,
+            get_permission_safety_state,
         )
+
         state = get_permission_safety_state()
         snap = build_permission_safety_snapshot(trace_id="dict-test")
         state.commit(snap)
@@ -815,6 +826,7 @@ class TestPermissionSafetyStateSingleton:
 class TestPermissionDegradationVisibility:
     def test_denied_leads_to_is_gated(self):
         from core.multimodal.permission_safety_state import build_permission_safety_snapshot
+
         snap = build_permission_safety_snapshot(
             source_registry_snapshot=_make_source_registry_snapshot(
                 [{"modality": "microphone", "health": "denied", "is_active": False}]
@@ -825,10 +837,9 @@ class TestPermissionDegradationVisibility:
 
     def test_unavailable_leads_to_permission_missing(self):
         from core.multimodal.permission_safety_state import build_permission_safety_snapshot
+
         snap = build_permission_safety_snapshot(
-            source_registry_snapshot=_make_source_registry_snapshot(
-                [_cam_source(health="unavailable")]
-            )
+            source_registry_snapshot=_make_source_registry_snapshot([_cam_source(health="unavailable")])
         )
         assert snap.any_permission_missing is True
         assert snap.is_gated is True
@@ -842,10 +853,11 @@ class TestPermissionDegradationVisibility:
 class TestExecutionTrustAnnotationIntegration:
     def test_local_execution_local_safe_trusted(self):
         from core.multimodal.permission_safety_state import (
-            build_permission_safety_snapshot,
             ExecutionRiskTier,
             TrustLabel,
+            build_permission_safety_snapshot,
         )
+
         snap = build_permission_safety_snapshot(execution_plan=_local_execution_plan())
         assert snap.execution_trust_annotation is not None
         assert snap.execution_trust_annotation.risk_tier == ExecutionRiskTier.LOCAL_SAFE
@@ -853,10 +865,11 @@ class TestExecutionTrustAnnotationIntegration:
 
     def test_remote_agent_remote_elevated_elevated_label(self):
         from core.multimodal.permission_safety_state import (
-            build_permission_safety_snapshot,
             ExecutionRiskTier,
             TrustLabel,
+            build_permission_safety_snapshot,
         )
+
         snap = build_permission_safety_snapshot(execution_plan=_remote_execution_plan())
         ann = snap.execution_trust_annotation
         assert ann is not None
@@ -865,6 +878,7 @@ class TestExecutionTrustAnnotationIntegration:
 
     def test_remote_elevated_requires_confirmation(self):
         from core.multimodal.permission_safety_state import build_permission_safety_snapshot
+
         snap = build_permission_safety_snapshot(execution_plan=_remote_execution_plan())
         ann = snap.execution_trust_annotation
         assert ann is not None
@@ -880,13 +894,12 @@ class TestExecutionTrustAnnotationIntegration:
 class TestSerialisationAlignment:
     def test_full_snapshot_serialise_deserialise_no_loss(self):
         from core.multimodal.permission_safety_state import (
-            build_permission_safety_snapshot,
             PermissionSafetySnapshot,
+            build_permission_safety_snapshot,
         )
+
         snap = build_permission_safety_snapshot(
-            source_registry_snapshot=_make_source_registry_snapshot(
-                [_mic_source(), _cam_source(health="unavailable")]
-            ),
+            source_registry_snapshot=_make_source_registry_snapshot([_mic_source(), _cam_source(health="unavailable")]),
             execution_plan=_remote_execution_plan(),
             canonical_perception={"active_modalities": ["audio"], "degradation_reasons": []},
             trace_id="serial-test",
@@ -903,9 +916,10 @@ class TestSerialisationAlignment:
 
     def test_operator_summary_dict_has_expected_keys(self):
         from core.multimodal.permission_safety_state import (
-            build_permission_safety_snapshot,
             build_operator_safety_summary,
+            build_permission_safety_snapshot,
         )
+
         snap = build_permission_safety_snapshot()
         summary = build_operator_safety_summary(snap)
         d = summary.to_dict()
@@ -985,9 +999,11 @@ class TestOpenClawdIntegration:
 class TestDesktopPresenceRuntimeIntegration:
     def _make_runtime(self):
         from core.desktop_presence_runtime import DesktopPresenceRuntime
+
         rt = DesktopPresenceRuntime.__new__(DesktopPresenceRuntime)
         # Minimal initialisation for permission_safety_summary
         from core.multimodal.perception_source_registry import PerceptionSourceRegistry
+
         rt._source_registry = PerceptionSourceRegistry()
         return rt
 
@@ -1005,6 +1021,7 @@ class TestDesktopPresenceRuntimeIntegration:
         from core.multimodal.permission_safety_state import (
             reset_permission_safety_state,
         )
+
         reset_permission_safety_state()
         rt = self._make_runtime()
         result = rt.permission_safety_summary()
@@ -1013,6 +1030,7 @@ class TestDesktopPresenceRuntimeIntegration:
     def test_permission_safety_summary_never_raises(self):
         """permission_safety_summary must never propagate exceptions."""
         from core.desktop_presence_runtime import DesktopPresenceRuntime
+
         rt = DesktopPresenceRuntime.__new__(DesktopPresenceRuntime)
         # Deliberately broken registry to test resilience
         rt._source_registry = None
@@ -1025,14 +1043,11 @@ class TestDesktopPresenceRuntimeIntegration:
             build_permission_safety_snapshot,
             reset_permission_safety_state,
         )
+
         reset_permission_safety_state()
         rt = self._make_runtime()
         snap = build_permission_safety_snapshot(trace_id="rt-result-test")
-        fake_result = {
-            "metadata": {
-                "permission_safety_state": snap.to_dict()
-            }
-        }
+        fake_result = {"metadata": {"permission_safety_state": snap.to_dict()}}
         result = rt.permission_safety_summary(result=fake_result)
         assert result["derived_from_snapshot_id"] == snap.snapshot_id
 
@@ -1045,18 +1060,19 @@ class TestDesktopPresenceRuntimeIntegration:
 class TestModuleImports:
     def test_all_public_symbols_importable(self):
         from core.multimodal.permission_safety_state import (
-            PermissionStatus,
-            TrustLabel,
-            SafetyGatingReason,
             ExecutionRiskTier,
-            ModalityPermissionRecord,
             ExecutionTrustAnnotation,
-            PermissionSafetySnapshot,
+            ModalityPermissionRecord,
             OperatorSafetySummary,
-            build_permission_safety_snapshot,
+            PermissionSafetySnapshot,
+            PermissionSafetyState,
+            PermissionStatus,
+            SafetyGatingReason,
+            TrustLabel,
             build_operator_safety_summary,
+            build_permission_safety_snapshot,
             get_permission_safety_state,
             reset_permission_safety_state,
-            PermissionSafetyState,
         )
+
         assert PermissionSafetyState is not None

@@ -82,15 +82,15 @@ from __future__ import annotations
 
 import pytest
 
-# ---------------------------------------------------------------------------
-# Imports under test
-# ---------------------------------------------------------------------------
-
+from core.android_nl_semantic_chain_contract import (
+    V2_SEMANTIC_AUTHORITY,
+    build_android_nl_carrier_context,
+)
 from core.android_originated_authority_boundary import (
-    ANDROID_ORIGINATED_AUTHORITY_BOUNDARY_CONTRACT_VERSION,
-    ANDROID_ORIGINATED_AUTHORITY_BOUNDARY_SENTINEL,
     ANDROID_CANNOT_OVERRIDE_CENTER_AUTHORITY_POLICY,
     ANDROID_NL_MUST_ENTER_MAIN_CHAIN_POLICY,
+    ANDROID_ORIGINATED_AUTHORITY_BOUNDARY_CONTRACT_VERSION,
+    ANDROID_ORIGINATED_AUTHORITY_BOUNDARY_SENTINEL,
     ANDROID_RECONCILIATION_REQUIRES_MINIMUM_EVIDENCE_POLICY,
     ANDROID_TAKEOVER_WITHIN_AUTHORITY_BOUNDARY_POLICY,
     AndroidParticipationKind,
@@ -119,14 +119,14 @@ from core.android_originated_main_chain_ingress import (
 from core.closed_loop_governance_consolidation import (
     CLOSED_LOOP_GOVERNANCE_CONSOLIDATION_SENTINEL,
     CLOSED_LOOP_GOVERNANCE_CONTRACT_VERSION,
-    ClosedLoopStage,
     GAP_ANDROID_ORIGINATED_FALLBACK_COMBINED,
-    GAP_ANDROID_ORIGINATED_WITHOUT_MAIN_CHAIN as CLGC_GAP_ANDROID_WITHOUT_MAIN_CHAIN,
-    query_closed_loop_governance_state,
 )
-from core.android_nl_semantic_chain_contract import (
-    V2_SEMANTIC_AUTHORITY,
-    build_android_nl_carrier_context,
+from core.closed_loop_governance_consolidation import (
+    GAP_ANDROID_ORIGINATED_WITHOUT_MAIN_CHAIN as CLGC_GAP_ANDROID_WITHOUT_MAIN_CHAIN,
+)
+from core.closed_loop_governance_consolidation import (
+    ClosedLoopStage,
+    query_closed_loop_governance_state,
 )
 from core.unified_execution_governance import (
     ExecutionLifecyclePhase,
@@ -137,6 +137,10 @@ from core.unified_execution_governance import (
     record_result_uplink,
     record_state_uplink,
 )
+
+# ---------------------------------------------------------------------------
+# Imports under test
+# ---------------------------------------------------------------------------
 
 
 @pytest.fixture(autouse=True)
@@ -179,9 +183,9 @@ class TestGroupA_AuthorityBoundaryModel:
             if kind == AndroidParticipationKind.center_authority:
                 continue  # skip center_authority self-reference
             cls = classify_android_participation(kind)
-            assert cls.can_override_center_authority is False, (
-                f"kind={kind!r} returned can_override_center_authority=True"
-            )
+            assert (
+                cls.can_override_center_authority is False
+            ), f"kind={kind!r} returned can_override_center_authority=True"
 
     def test_a05_nl_participation_requires_main_chain(self):
         cls = classify_android_participation(AndroidParticipationKind.android_originated_nl)
@@ -247,9 +251,9 @@ class TestGroupA_AuthorityBoundaryModel:
                 AndroidParticipationKind.android_originated_signal,
                 proof_input_class=bad_class,
             )
-            assert cls.permission_level == AndroidSignalPermissionLevel.suggestion_only, (
-                f"Expected suggestion_only for proof_input_class={bad_class!r}"
-            )
+            assert (
+                cls.permission_level == AndroidSignalPermissionLevel.suggestion_only
+            ), f"Expected suggestion_only for proof_input_class={bad_class!r}"
             assert cls.can_enter_reconciliation is False
 
     def test_a10_passing_complete_proof_class_is_eligible(self):
@@ -261,9 +265,7 @@ class TestGroupA_AuthorityBoundaryModel:
         assert cls.can_enter_reconciliation is True
 
     def test_a11_authority_adjacent_is_observation_only(self):
-        cls = classify_android_participation(
-            AndroidParticipationKind.authority_adjacent_participation
-        )
+        cls = classify_android_participation(AndroidParticipationKind.authority_adjacent_participation)
         assert cls.permission_level == AndroidSignalPermissionLevel.observation_only
         assert cls.can_enter_reconciliation is False
         assert cls.can_override_center_authority is False
@@ -290,17 +292,15 @@ class TestGroupA_AuthorityBoundaryModel:
             ANDROID_RECONCILIATION_REQUIRES_MINIMUM_EVIDENCE_POLICY,
             ANDROID_TAKEOVER_WITHIN_AUTHORITY_BOUNDARY_POLICY,
         ]:
-            assert policy.startswith("POLICY::"), (
-                f"Policy sentinel does not start with 'POLICY::': {policy[:60]}"
-            )
+            assert policy.startswith("POLICY::"), f"Policy sentinel does not start with 'POLICY::': {policy[:60]}"
 
     def test_a15_non_main_chain_kinds_do_not_require_main_chain(self):
         for kind in AndroidParticipationKind:
             if kind == AndroidParticipationKind.android_originated_nl:
                 continue
-            assert not is_android_main_chain_eligible(kind), (
-                f"Expected is_android_main_chain_eligible=False for kind={kind!r}"
-            )
+            assert not is_android_main_chain_eligible(
+                kind
+            ), f"Expected is_android_main_chain_eligible=False for kind={kind!r}"
 
     def test_a16_reconciliation_participation_is_eligible_with_complete_proof(self):
         cls = classify_android_participation(
@@ -316,9 +316,7 @@ class TestGroupA_AuthorityBoundaryModel:
             == AndroidSignalPermissionLevel.main_chain_carrier
         )
         assert (
-            get_android_participation_permission(
-                AndroidParticipationKind.authority_adjacent_participation
-            )
+            get_android_participation_permission(AndroidParticipationKind.authority_adjacent_participation)
             == AndroidSignalPermissionLevel.observation_only
         )
 
@@ -340,11 +338,20 @@ class TestGroupB_MainChainIngress:
 
     def test_b03_full_lineage_enum_coverage(self):
         expected_values = {
-            "canonical", "center_originated", "android_originated",
-            "fallback", "compat", "degraded", "replay_assisted", "recovery_assisted",
-            "android_originated_fallback", "android_originated_replay",
-            "android_originated_recovery", "android_originated_takeover",
-            "android_originated_conflict", "unknown",
+            "canonical",
+            "center_originated",
+            "android_originated",
+            "fallback",
+            "compat",
+            "degraded",
+            "replay_assisted",
+            "recovery_assisted",
+            "android_originated_fallback",
+            "android_originated_replay",
+            "android_originated_recovery",
+            "android_originated_takeover",
+            "android_originated_conflict",
+            "unknown",
         }
         actual_values = {k.value for k in ExecutionLineageKind}
         assert actual_values == expected_values
@@ -456,9 +463,7 @@ class TestGroupB_MainChainIngress:
             ExecutionLineageKind.unknown,
         ]
         for kind in non_canonical:
-            assert is_canonical_lineage(kind) is False, (
-                f"Expected is_canonical_lineage=False for {kind!r}"
-            )
+            assert is_canonical_lineage(kind) is False, f"Expected is_canonical_lineage=False for {kind!r}"
 
     def test_b18_accept_main_chain_with_valid_carrier_context(self):
         icc = build_android_nl_carrier_context(
@@ -514,9 +519,11 @@ class TestGroupB_MainChainIngress:
         from core.android_originated_main_chain_ingress import (
             GAP_ANDROID_ORIGINATED_FALLBACK_COMBINED,
         )
+
         assert GAP_ANDROID_ORIGINATED_FALLBACK_COMBINED not in result.gap_types
         # Android-originated lineage (clean, no NL-level flags)
         from core.android_originated_main_chain_ingress import ExecutionLineageKind
+
         assert result.lineage == ExecutionLineageKind.android_originated
 
     def test_b21_accept_stale_evidence_gap(self):
@@ -733,9 +740,7 @@ class TestGroupC_LineageIntegration:
             execution_id=execution_id,
             ingress_result=result,
         )
-        view = query_closed_loop_governance_state(
-            execution_id, device_id, android_governance_context=gov_ctx
-        )
+        view = query_closed_loop_governance_state(execution_id, device_id, android_governance_context=gov_ctx)
         assert view.android_originated is True
 
     def test_c03_android_originated_lineage_propagated(self):
@@ -758,9 +763,7 @@ class TestGroupC_LineageIntegration:
             execution_id=execution_id,
             ingress_result=result,
         )
-        view = query_closed_loop_governance_state(
-            execution_id, device_id, android_governance_context=gov_ctx
-        )
+        view = query_closed_loop_governance_state(execution_id, device_id, android_governance_context=gov_ctx)
         assert view.android_originated_lineage == ExecutionLineageKind.android_originated.value
 
     def test_c04_android_originated_gap_types_merged_into_system_gaps(self):
@@ -779,9 +782,7 @@ class TestGroupC_LineageIntegration:
             execution_id=execution_id,
             ingress_result=result,
         )
-        view = query_closed_loop_governance_state(
-            execution_id, device_id, android_governance_context=gov_ctx
-        )
+        view = query_closed_loop_governance_state(execution_id, device_id, android_governance_context=gov_ctx)
         # The android gap must appear in the system gap types
         assert CLGC_GAP_ANDROID_WITHOUT_MAIN_CHAIN in view.system_completion_gap_types
         assert view.system_completion_ready is False
@@ -807,9 +808,7 @@ class TestGroupC_LineageIntegration:
             execution_id=execution_id,
             ingress_result=result,
         )
-        view = query_closed_loop_governance_state(
-            execution_id, device_id, android_governance_context=gov_ctx
-        )
+        view = query_closed_loop_governance_state(execution_id, device_id, android_governance_context=gov_ctx)
         assert view.stage == ClosedLoopStage.completion
         assert view.android_originated is True
         # android_originated clean lineage still blocks canonical closure
@@ -833,9 +832,7 @@ class TestGroupC_LineageIntegration:
             execution_id=execution_id,
             ingress_result=result,
         )
-        view = query_closed_loop_governance_state(
-            execution_id, device_id, android_governance_context=gov_ctx
-        )
+        view = query_closed_loop_governance_state(execution_id, device_id, android_governance_context=gov_ctx)
         assert view.system_completion_ready is False
         assert CLGC_GAP_ANDROID_WITHOUT_MAIN_CHAIN in view.system_completion_gap_types
 
@@ -927,9 +924,7 @@ class TestGroupD_ComplexScenarioGatekeeping:
             execution_id=execution_id,
             ingress_result=result,
         )
-        view = query_closed_loop_governance_state(
-            execution_id, device_id, android_governance_context=gov_ctx
-        )
+        view = query_closed_loop_governance_state(execution_id, device_id, android_governance_context=gov_ctx)
         # Lifecycle-level fallback must be detected
         assert view.fallback_path_used is True
         assert view.system_completion_ready is False
@@ -958,9 +953,7 @@ class TestGroupD_ComplexScenarioGatekeeping:
             execution_id=execution_id,
             ingress_result=result,
         )
-        view = query_closed_loop_governance_state(
-            execution_id, device_id, android_governance_context=gov_ctx
-        )
+        view = query_closed_loop_governance_state(execution_id, device_id, android_governance_context=gov_ctx)
         assert view.system_completion_ready is False
         assert GAP_ANDROID_ORIGINATED_STALE_EVIDENCE in view.system_completion_gap_types
 
@@ -986,9 +979,7 @@ class TestGroupD_ComplexScenarioGatekeeping:
             execution_id=execution_id,
             ingress_result=result,
         )
-        view = query_closed_loop_governance_state(
-            execution_id, device_id, android_governance_context=gov_ctx
-        )
+        view = query_closed_loop_governance_state(execution_id, device_id, android_governance_context=gov_ctx)
         assert view.system_completion_ready is False
         assert GAP_ANDROID_ORIGINATED_TAKEOVER_COMBINED in view.system_completion_gap_types
         assert result.lineage == ExecutionLineageKind.android_originated_takeover
@@ -1015,9 +1006,7 @@ class TestGroupD_ComplexScenarioGatekeeping:
             execution_id=execution_id,
             ingress_result=result,
         )
-        view = query_closed_loop_governance_state(
-            execution_id, device_id, android_governance_context=gov_ctx
-        )
+        view = query_closed_loop_governance_state(execution_id, device_id, android_governance_context=gov_ctx)
         assert view.system_completion_ready is False
         assert GAP_ANDROID_ORIGINATED_CONFLICT_PARTIAL in view.system_completion_gap_types
         assert result.lineage == ExecutionLineageKind.android_originated_conflict
@@ -1044,9 +1033,7 @@ class TestGroupD_ComplexScenarioGatekeeping:
             execution_id=execution_id,
             ingress_result=result,
         )
-        view = query_closed_loop_governance_state(
-            execution_id, device_id, android_governance_context=gov_ctx
-        )
+        view = query_closed_loop_governance_state(execution_id, device_id, android_governance_context=gov_ctx)
         assert view.system_completion_ready is False
         assert GAP_ANDROID_ORIGINATED_MULTI_DEVICE_RACE in view.system_completion_gap_types
 
@@ -1083,9 +1070,7 @@ class TestGroupD_ComplexScenarioGatekeeping:
             execution_id=execution_id,
             ingress_result=result,
         )
-        view = query_closed_loop_governance_state(
-            execution_id, device_id, android_governance_context=gov_ctx
-        )
+        view = query_closed_loop_governance_state(execution_id, device_id, android_governance_context=gov_ctx)
         # Compat path detected (uplink-only)
         assert view.compat_path_used is True
         assert view.system_completion_ready is False
@@ -1130,9 +1115,7 @@ class TestGroupD_ComplexScenarioGatekeeping:
             execution_id=execution_id,
             ingress_result=result,
         )
-        view = query_closed_loop_governance_state(
-            execution_id, device_id, android_governance_context=gov_ctx
-        )
+        view = query_closed_loop_governance_state(execution_id, device_id, android_governance_context=gov_ctx)
         assert view.degraded_path_used is True
         assert view.system_completion_ready is False
         assert view.android_originated is True
@@ -1154,9 +1137,7 @@ class TestGroupD_ComplexScenarioGatekeeping:
             execution_id=execution_id,
             ingress_result=result,
         )
-        view = query_closed_loop_governance_state(
-            execution_id, device_id, android_governance_context=gov_ctx
-        )
+        view = query_closed_loop_governance_state(execution_id, device_id, android_governance_context=gov_ctx)
         # Both gaps must be present
         assert CLGC_GAP_ANDROID_WITHOUT_MAIN_CHAIN in view.system_completion_gap_types
         assert "fallback_path_used" in view.system_completion_gap_types
@@ -1185,9 +1166,7 @@ class TestGroupD_ComplexScenarioGatekeeping:
             execution_id=execution_id,
             ingress_result=result,
         )
-        view = query_closed_loop_governance_state(
-            execution_id, device_id, android_governance_context=gov_ctx
-        )
+        view = query_closed_loop_governance_state(execution_id, device_id, android_governance_context=gov_ctx)
         # Lifecycle is canonical — stage should be completion
         assert view.stage == ClosedLoopStage.completion
         assert view.android_originated is True
@@ -1199,27 +1178,36 @@ class TestGroupD_ComplexScenarioGatekeeping:
     def test_d10_gap_constants_are_unique_strings(self):
         """D-10: All GAP constants must be unique non-empty strings."""
         from core.closed_loop_governance_consolidation import (
-            GAP_LOOP_NOT_IN_COMPLETION_STAGE,
-            GAP_TERMINAL_LIFECYCLE_NOT_REACHED,
-            GAP_TERMINAL_TRUTH_UNDETERMINED,
+            GAP_ANDROID_ORIGINATED_CONFLICT_PARTIAL,
+        )
+        from core.closed_loop_governance_consolidation import (
+            GAP_ANDROID_ORIGINATED_FALLBACK_COMBINED as CLGC_FALLBACK_COMBINED,
+        )
+        from core.closed_loop_governance_consolidation import (
+            GAP_ANDROID_ORIGINATED_MULTI_DEVICE_RACE,
+            GAP_ANDROID_ORIGINATED_REPLAY_COMBINED,
+            GAP_ANDROID_ORIGINATED_STALE_EVIDENCE,
+            GAP_ANDROID_ORIGINATED_TAKEOVER_COMBINED,
+        )
+        from core.closed_loop_governance_consolidation import (
+            GAP_ANDROID_ORIGINATED_WITHOUT_MAIN_CHAIN as CLGC_NO_MAIN_CHAIN,
+        )
+        from core.closed_loop_governance_consolidation import (
             GAP_CENTER_LIFECYCLE_AUTHORITY_MISSING,
+            GAP_COMPAT_PATH_USED,
+            GAP_DEGRADED_PATH_USED,
+            GAP_FALLBACK_PATH_USED,
+            GAP_GOVERNANCE_STORE_READ_ERROR,
+            GAP_LOOP_NOT_IN_COMPLETION_STAGE,
             GAP_MISSING_RESULT_UPLINK,
             GAP_MISSING_STATE_UPLINK,
             GAP_RECONCILIATION_CONFLICT_PRESENT,
             GAP_RECONCILIATION_NOT_FULLY_ACCEPTED,
             GAP_RUNTIME_HEALTH_NOT_STABLE,
-            GAP_FALLBACK_PATH_USED,
-            GAP_COMPAT_PATH_USED,
-            GAP_DEGRADED_PATH_USED,
-            GAP_GOVERNANCE_STORE_READ_ERROR,
-            GAP_ANDROID_ORIGINATED_WITHOUT_MAIN_CHAIN as CLGC_NO_MAIN_CHAIN,
-            GAP_ANDROID_ORIGINATED_FALLBACK_COMBINED as CLGC_FALLBACK_COMBINED,
-            GAP_ANDROID_ORIGINATED_REPLAY_COMBINED,
-            GAP_ANDROID_ORIGINATED_TAKEOVER_COMBINED,
-            GAP_ANDROID_ORIGINATED_CONFLICT_PARTIAL,
-            GAP_ANDROID_ORIGINATED_MULTI_DEVICE_RACE,
-            GAP_ANDROID_ORIGINATED_STALE_EVIDENCE,
+            GAP_TERMINAL_LIFECYCLE_NOT_REACHED,
+            GAP_TERMINAL_TRUTH_UNDETERMINED,
         )
+
         all_gaps = [
             GAP_LOOP_NOT_IN_COMPLETION_STAGE,
             GAP_TERMINAL_LIFECYCLE_NOT_REACHED,
@@ -1246,6 +1234,4 @@ class TestGroupD_ComplexScenarioGatekeeping:
         for gap in all_gaps:
             assert isinstance(gap, str) and gap, f"GAP constant is empty: {gap!r}"
         # All must be unique
-        assert len(set(all_gaps)) == len(all_gaps), (
-            f"Duplicate GAP constants detected: {sorted(all_gaps)}"
-        )
+        assert len(set(all_gaps)) == len(all_gaps), f"Duplicate GAP constants detected: {sorted(all_gaps)}"

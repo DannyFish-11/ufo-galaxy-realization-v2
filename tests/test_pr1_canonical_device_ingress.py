@@ -84,6 +84,7 @@ _CORE_ROUTES = _read("core/api_routes.py")
 # 1-6: CANONICAL_DEVICE_INGRESS_AUTHORITY sentinel
 # ---------------------------------------------------------------------------
 
+
 def test_01_sentinel_present_in_source():
     """CANONICAL_DEVICE_INGRESS_AUTHORITY is defined in gateway websocket source."""
     assert "CANONICAL_DEVICE_INGRESS_AUTHORITY" in _GW_WS
@@ -93,26 +94,20 @@ def test_02_sentinel_assigned_nonempty_string():
     """CANONICAL_DEVICE_INGRESS_AUTHORITY is assigned a non-empty string value."""
     # The assignment line must contain a string literal (quote after '=')
     import re
-    match = re.search(
-        r'CANONICAL_DEVICE_INGRESS_AUTHORITY\s*=\s*["\(]', _GW_WS
-    )
+
+    match = re.search(r'CANONICAL_DEVICE_INGRESS_AUTHORITY\s*=\s*["\(]', _GW_WS)
     assert match, "CANONICAL_DEVICE_INGRESS_AUTHORITY assignment not found or not a string"
 
 
 def test_03_sentinel_references_canonical_path():
     """CANONICAL_DEVICE_INGRESS_AUTHORITY references /ws/device/{device_id}."""
     import re
+
     # Extract the full sentinel assignment (handles multi-line parenthesised string)
-    match = re.search(
-        r'CANONICAL_DEVICE_INGRESS_AUTHORITY\s*=\s*\((.*?)\)',
-        _GW_WS, re.DOTALL
-    )
+    match = re.search(r"CANONICAL_DEVICE_INGRESS_AUTHORITY\s*=\s*\((.*?)\)", _GW_WS, re.DOTALL)
     if not match:
         # Try single-line assignment
-        match = re.search(
-            r'CANONICAL_DEVICE_INGRESS_AUTHORITY\s*=\s*"([^"]*)"',
-            _GW_WS
-        )
+        match = re.search(r'CANONICAL_DEVICE_INGRESS_AUTHORITY\s*=\s*"([^"]*)"', _GW_WS)
     assert match, "CANONICAL_DEVICE_INGRESS_AUTHORITY assignment not found"
     value = match.group(1)
     assert "ws/device" in value, f"Sentinel does not reference /ws/device/ path: {value!r}"
@@ -129,18 +124,13 @@ def test_04_sentinel_references_gateway_module():
 def _extract_sentinel_value(source: str) -> str:
     """Extract the string value of CANONICAL_DEVICE_INGRESS_AUTHORITY from source."""
     import re
+
     # Multi-line parenthesised string
-    match = re.search(
-        r'CANONICAL_DEVICE_INGRESS_AUTHORITY\s*=\s*\((.*?)\)',
-        source, re.DOTALL
-    )
+    match = re.search(r"CANONICAL_DEVICE_INGRESS_AUTHORITY\s*=\s*\((.*?)\)", source, re.DOTALL)
     if match:
         return match.group(1)
     # Single-line string
-    match = re.search(
-        r'CANONICAL_DEVICE_INGRESS_AUTHORITY\s*=\s*"([^"]*)"',
-        source
-    )
+    match = re.search(r'CANONICAL_DEVICE_INGRESS_AUTHORITY\s*=\s*"([^"]*)"', source)
     if match:
         return match.group(1)
     return ""
@@ -164,6 +154,7 @@ def test_06_sentinel_does_not_claim_readiness():
 # 7-12: Module docstring path authority table
 # ---------------------------------------------------------------------------
 
+
 def test_07_module_docstring_has_canonical_authority_section():
     """Gateway websocket module docstring contains CANONICAL_DEVICE_INGRESS_AUTHORITY section."""
     assert "CANONICAL DEVICE INGRESS AUTHORITY" in _GW_WS.upper()
@@ -174,6 +165,7 @@ def test_08_module_docstring_marks_ws_device_as_canonical():
     assert "[CANONICAL]" in _GW_WS
     # The [CANONICAL] tag must appear near /ws/device/
     import re
+
     # Accept either order on the same line
     assert re.search(r"\[CANONICAL\].*ws/device|ws/device.*\[CANONICAL\]", _GW_WS)
 
@@ -182,6 +174,7 @@ def test_09_module_docstring_marks_android_as_compat():
     """Gateway websocket module docstring marks /ws/android/{device_id} as [COMPAT]."""
     assert "[COMPAT]" in _GW_WS
     import re
+
     assert re.search(r"\[COMPAT\].*ws/android|ws/android.*\[COMPAT\]", _GW_WS)
 
 
@@ -204,6 +197,7 @@ def test_12_module_docstring_marks_ufo3_as_legacy_disabled():
 # 13-20: Individual route docstrings
 # ---------------------------------------------------------------------------
 
+
 def test_13_ws_device_route_docstring_contains_canonical_lowercase():
     """gateway /ws/device/{device_id} route docstring contains 'canonical' (case-insensitive)."""
     assert "canonical" in _GW_WS.lower()
@@ -213,11 +207,9 @@ def test_14_ws_device_route_docstring_contains_canonical_tag():
     """gateway /ws/device/{device_id} route docstring contains [CANONICAL] tag."""
     # The route function itself must carry [CANONICAL]
     import re
+
     # Find the websocket_device function body
-    match = re.search(
-        r'async def websocket_device.*?"""(.*?)"""',
-        _GW_WS, re.DOTALL
-    )
+    match = re.search(r'async def websocket_device.*?"""(.*?)"""', _GW_WS, re.DOTALL)
     assert match, "websocket_device function with docstring not found"
     docstring = match.group(1)
     assert "[CANONICAL]" in docstring, f"[CANONICAL] not in websocket_device docstring: {docstring!r}"
@@ -226,10 +218,8 @@ def test_14_ws_device_route_docstring_contains_canonical_tag():
 def test_15_android_route_docstring_contains_compat_tag():
     """gateway /ws/android/{device_id} route docstring contains [COMPAT] tag."""
     import re
-    match = re.search(
-        r'async def websocket_android_primary.*?"""(.*?)"""',
-        _GW_WS, re.DOTALL
-    )
+
+    match = re.search(r'async def websocket_android_primary.*?"""(.*?)"""', _GW_WS, re.DOTALL)
     assert match, "websocket_android_primary function with docstring not found"
     docstring = match.group(1)
     assert "[COMPAT]" in docstring, f"[COMPAT] not in websocket_android_primary docstring: {docstring!r}"
@@ -238,26 +228,26 @@ def test_15_android_route_docstring_contains_compat_tag():
 def test_16_android_route_docstring_states_not_canonical():
     """gateway /ws/android/{device_id} route docstring states it is NOT the canonical ingress."""
     import re
-    match = re.search(
-        r'async def websocket_android_primary.*?"""(.*?)"""',
-        _GW_WS, re.DOTALL
-    )
+
+    match = re.search(r'async def websocket_android_primary.*?"""(.*?)"""', _GW_WS, re.DOTALL)
     assert match
     docstring = match.group(1)
-    assert "NOT" in docstring or "not" in docstring.lower(), (
-        "websocket_android_primary docstring should state it is not canonical"
-    )
+    assert (
+        "NOT" in docstring or "not" in docstring.lower()
+    ), "websocket_android_primary docstring should state it is not canonical"
 
 
 # 收敛后契约:/ws/{device_id}(DEPRECATED)与 /ws(DEBUG)入口面已被移除,
 # 权威文档表记录其处置;以下测试改为断言"确实不存在 + 文档有交代"。
 
+
 def test_17_generic_deprecated_route_removed():
     """收敛契约:/ws/{device_id} 弃用入口已移除,不得再注册。"""
     import re
-    assert not re.search(r'@app\.websocket\("/ws/\{device_id\}"\)', _GW_WS), (
-        "/ws/{device_id} deprecated ingress must stay removed"
-    )
+
+    assert not re.search(
+        r'@app\.websocket\("/ws/\{device_id\}"\)', _GW_WS
+    ), "/ws/{device_id} deprecated ingress must stay removed"
     # 文档表仍须交代该面的处置
     assert "[DEPRECATED]" in _GW_WS
 
@@ -270,34 +260,33 @@ def test_18_module_doc_directs_to_canonical():
 def test_19_ws_root_debug_route_removed():
     """收敛契约:/ws 调试入口已移除,不得再注册。"""
     import re
-    assert not re.search(r'@app\.websocket\("/ws"\)', _GW_WS), (
-        "/ws debug ingress must stay removed"
-    )
+
+    assert not re.search(r'@app\.websocket\("/ws"\)', _GW_WS), "/ws debug ingress must stay removed"
     assert "[DEBUG]" in _GW_WS
 
 
 def test_20_only_one_canonical_ingress():
     """整个模块只允许一个 [CANONICAL] 入口(/ws/device/{device_id})。"""
     import re
-    canonical_routes = re.findall(
-        r'ingress_classification="canonical"', _GW_WS
-    )
+
+    canonical_routes = re.findall(r'ingress_classification="canonical"', _GW_WS)
     # 默认参数 + 规范路由两处;不允许出现第三处
-    assert len(canonical_routes) <= 2, (
-        f"only /ws/device/{{device_id}} may be canonical, found {len(canonical_routes)} markers"
-    )
+    assert (
+        len(canonical_routes) <= 2
+    ), f"only /ws/device/{{device_id}} may be canonical, found {len(canonical_routes)} markers"
 
 
 # ---------------------------------------------------------------------------
 # 21-26: core/api_routes.py compat annotations
 # ---------------------------------------------------------------------------
 
+
 def test_21_core_module_docstring_references_gateway_canonical():
     """core/api_routes.py module docstring mentions canonical ingress is in gateway."""
     lower = _CORE_ROUTES.lower()
-    assert "canonical" in lower and "gateway" in lower, (
-        "core/api_routes.py module docstring should reference gateway canonical ingress"
-    )
+    assert (
+        "canonical" in lower and "gateway" in lower
+    ), "core/api_routes.py module docstring should reference gateway canonical ingress"
 
 
 def test_22_core_module_docstring_marks_ws_device_as_compat():
@@ -308,40 +297,34 @@ def test_22_core_module_docstring_marks_ws_device_as_compat():
 def test_23_core_create_websocket_routes_marked_compat_surface():
     """core create_websocket_routes docstring marks it as COMPATIBILITY SURFACE."""
     import re
-    match = re.search(
-        r'def create_websocket_routes.*?"""(.*?)"""',
-        _CORE_ROUTES, re.DOTALL
-    )
+
+    match = re.search(r'def create_websocket_routes.*?"""(.*?)"""', _CORE_ROUTES, re.DOTALL)
     assert match, "create_websocket_routes function with docstring not found"
     docstring = match.group(1)
     upper = docstring.upper()
-    assert "COMPAT" in upper or "COMPATIBILITY" in upper, (
-        f"create_websocket_routes docstring should mark it as compatibility surface: {docstring!r}"
-    )
+    assert (
+        "COMPAT" in upper or "COMPATIBILITY" in upper
+    ), f"create_websocket_routes docstring should mark it as compatibility surface: {docstring!r}"
 
 
 def test_24_core_create_websocket_routes_not_canonical():
     """core create_websocket_routes docstring states NOT the canonical device ingress."""
     import re
-    match = re.search(
-        r'def create_websocket_routes.*?"""(.*?)"""',
-        _CORE_ROUTES, re.DOTALL
-    )
+
+    match = re.search(r'def create_websocket_routes.*?"""(.*?)"""', _CORE_ROUTES, re.DOTALL)
     assert match
     docstring = match.group(1)
     lower = docstring.lower()
-    assert "not" in lower and "canonical" in lower, (
-        "create_websocket_routes docstring should state NOT the canonical device ingress"
-    )
+    assert (
+        "not" in lower and "canonical" in lower
+    ), "create_websocket_routes docstring should state NOT the canonical device ingress"
 
 
 def test_25_core_device_websocket_handler_compat_tag():
     """core device_websocket handler docstring contains [COMPAT] tag."""
     import re
-    match = re.search(
-        r'async def device_websocket.*?"""(.*?)"""',
-        _CORE_ROUTES, re.DOTALL
-    )
+
+    match = re.search(r'async def device_websocket.*?"""(.*?)"""', _CORE_ROUTES, re.DOTALL)
     assert match, "device_websocket handler with docstring not found"
     docstring = match.group(1)
     assert "[COMPAT]" in docstring, f"[COMPAT] not in core device_websocket docstring: {docstring!r}"
@@ -350,20 +333,19 @@ def test_25_core_device_websocket_handler_compat_tag():
 def test_26_core_device_websocket_references_gateway_canonical():
     """core device_websocket handler docstring references galaxy_gateway as canonical."""
     import re
-    match = re.search(
-        r'async def device_websocket.*?"""(.*?)"""',
-        _CORE_ROUTES, re.DOTALL
-    )
+
+    match = re.search(r'async def device_websocket.*?"""(.*?)"""', _CORE_ROUTES, re.DOTALL)
     assert match
     docstring = match.group(1)
-    assert "galaxy_gateway" in docstring, (
-        "core device_websocket docstring should reference galaxy_gateway as canonical ingress"
-    )
+    assert (
+        "galaxy_gateway" in docstring
+    ), "core device_websocket docstring should reference galaxy_gateway as canonical ingress"
 
 
 # ---------------------------------------------------------------------------
 # 27-30: Behavioral invariants
 # ---------------------------------------------------------------------------
+
 
 def test_27_ufo3_disabled_guard_preserved():
     """gateway websocket source preserves legacy guard for /ws/ufo3 (disabled by default)."""
@@ -374,6 +356,7 @@ def test_27_ufo3_disabled_guard_preserved():
 def test_28_android_path_not_presented_as_canonical_in_gateway():
     """gateway websocket source does not present /ws/android as canonical ingress."""
     import re
+
     # The old "Primary Android WebSocket path" phrasing must be gone
     assert "Primary Android WebSocket path" not in _GW_WS
     # /ws/android should not appear with [CANONICAL] tag
@@ -383,11 +366,9 @@ def test_28_android_path_not_presented_as_canonical_in_gateway():
 def test_29_ws_root_not_presented_as_canonical():
     """gateway websocket source does not present /ws (root) as canonical ingress."""
     import re
+
     # The auto-assign endpoint docstring must not contain [CANONICAL]
-    match = re.search(
-        r'async def websocket_endpoint_auto.*?"""(.*?)"""',
-        _GW_WS, re.DOTALL
-    )
+    match = re.search(r'async def websocket_endpoint_auto.*?"""(.*?)"""', _GW_WS, re.DOTALL)
     if match:
         docstring = match.group(1)
         assert "[CANONICAL]" not in docstring
@@ -396,11 +377,9 @@ def test_29_ws_root_not_presented_as_canonical():
 def test_30_generic_path_not_presented_as_canonical():
     """gateway websocket source does not present /ws/{device_id} as canonical ingress."""
     import re
+
     # websocket_endpoint (the generic one) docstring must not contain [CANONICAL]
-    match = re.search(
-        r'async def websocket_endpoint\b.*?"""(.*?)"""',
-        _GW_WS, re.DOTALL
-    )
+    match = re.search(r'async def websocket_endpoint\b.*?"""(.*?)"""', _GW_WS, re.DOTALL)
     if match:
         docstring = match.group(1)
         assert "[CANONICAL]" not in docstring

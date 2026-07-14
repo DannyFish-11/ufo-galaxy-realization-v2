@@ -74,26 +74,27 @@ from pathlib import Path
 
 import pytest
 
-# ---------------------------------------------------------------------------
-# Imports under test
-# ---------------------------------------------------------------------------
-
 from scripts.node_audit import (
-    NodeTier,
-    NodePackagingStatus,
-    NodeAuditEntry,
-    NodeAuditReport,
-    run_audit,
-    CHECK_PASS,
-    CHECK_WARN,
     CHECK_FAIL,
-    CHECK_UNKNOWN,
     CHECK_PACKAGING,
+    CHECK_PASS,
+    CHECK_UNKNOWN,
+    CHECK_WARN,
     PACKAGING_POLICY_ACTIVE,
     PACKAGING_POLICY_OPTIONAL,
     PACKAGING_POLICY_SKIP,
     PACKAGING_POLICY_UNREGISTERED,
+    NodeAuditEntry,
+    NodeAuditReport,
+    NodePackagingStatus,
+    NodeTier,
+    run_audit,
 )
+
+# ---------------------------------------------------------------------------
+# Imports under test
+# ---------------------------------------------------------------------------
+
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -116,6 +117,7 @@ def nodes_by_name(audit_report: NodeAuditReport):
 # 1–2: Import smoke tests
 # ---------------------------------------------------------------------------
 
+
 def test_01_node_packaging_status_importable_from_scripts():
     from scripts.node_audit import NodePackagingStatus as NPS  # noqa: F401
 
@@ -127,6 +129,7 @@ def test_02_node_packaging_status_importable_from_core():
 # ---------------------------------------------------------------------------
 # 3–10: NodePackagingStatus dataclass defaults
 # ---------------------------------------------------------------------------
+
 
 def test_03_packaging_status_instantiates():
     ps = NodePackagingStatus()
@@ -159,14 +162,14 @@ def test_09_packaging_status_severity_defaults_to_unknown():
 
 def test_10_packaging_status_to_dict_has_all_keys():
     d = NodePackagingStatus().to_dict()
-    for key in ("has_dockerfile", "has_requirements", "missing",
-                "policy_class", "status", "severity"):
+    for key in ("has_dockerfile", "has_requirements", "missing", "policy_class", "status", "severity"):
         assert key in d, f"NodePackagingStatus.to_dict() missing key '{key}'"
 
 
 # ---------------------------------------------------------------------------
 # 11–18: Policy-class constants
 # ---------------------------------------------------------------------------
+
 
 def test_11_packaging_policy_active_constant():
     assert PACKAGING_POLICY_ACTIVE == "active"
@@ -186,27 +189,32 @@ def test_14_packaging_policy_unregistered_constant():
 
 def test_15_core_exports_packaging_policy_active():
     from core.node_audit import PACKAGING_POLICY_ACTIVE as C
+
     assert C == "active"
 
 
 def test_16_core_exports_packaging_policy_optional():
     from core.node_audit import PACKAGING_POLICY_OPTIONAL as C
+
     assert C == "optional"
 
 
 def test_17_core_exports_packaging_policy_skip():
     from core.node_audit import PACKAGING_POLICY_SKIP as C
+
     assert C == "skip"
 
 
 def test_18_core_exports_packaging_policy_unregistered():
     from core.node_audit import PACKAGING_POLICY_UNREGISTERED as C
+
     assert C == "unregistered"
 
 
 # ---------------------------------------------------------------------------
 # 19–22: NodeAuditEntry.packaging field
 # ---------------------------------------------------------------------------
+
 
 def test_19_node_audit_entry_has_packaging_field():
     e = NodeAuditEntry(name="Node_99_Test", path="nodes/Node_99_Test")
@@ -231,6 +239,7 @@ def test_22_node_audit_entry_to_dict_packaging_is_dict():
 # ---------------------------------------------------------------------------
 # 23–28: NodeAuditReport new packaging aggregate fields
 # ---------------------------------------------------------------------------
+
 
 def test_23_report_has_missing_dockerfile_nodes_field():
     r = NodeAuditReport(generated_at="2026-01-01T00:00:00Z", project_root="/tmp")
@@ -266,120 +275,103 @@ def test_28_report_to_dict_contains_missing_requirements_nodes():
 # 29–60: run_audit() integration tests
 # ---------------------------------------------------------------------------
 
+
 def test_29_every_entry_has_packaging_field(audit_report):
     for e in audit_report.nodes:
-        assert isinstance(e.packaging, NodePackagingStatus), (
-            f"{e.name} packaging field is not a NodePackagingStatus"
-        )
+        assert isinstance(e.packaging, NodePackagingStatus), f"{e.name} packaging field is not a NodePackagingStatus"
 
 
 def test_30_packaging_has_dockerfile_consistent_with_entry(audit_report):
     for e in audit_report.nodes:
         assert e.packaging.has_dockerfile == e.has_dockerfile, (
-            f"{e.name}: packaging.has_dockerfile={e.packaging.has_dockerfile} "
-            f"!= has_dockerfile={e.has_dockerfile}"
+            f"{e.name}: packaging.has_dockerfile={e.packaging.has_dockerfile} " f"!= has_dockerfile={e.has_dockerfile}"
         )
 
 
 def test_31_packaging_has_requirements_consistent_with_entry(audit_report):
     for e in audit_report.nodes:
-        assert e.packaging.has_requirements == e.has_requirements, (
-            f"{e.name}: packaging.has_requirements mismatch"
-        )
+        assert e.packaging.has_requirements == e.has_requirements, f"{e.name}: packaging.has_requirements mismatch"
 
 
 def test_32_packaging_missing_is_list(audit_report):
     for e in audit_report.nodes:
-        assert isinstance(e.packaging.missing, list), (
-            f"{e.name} packaging.missing is not a list"
-        )
+        assert isinstance(e.packaging.missing, list), f"{e.name} packaging.missing is not a list"
 
 
 def test_33_packaging_missing_contains_dockerfile_iff_absent(audit_report):
     for e in audit_report.nodes:
         has_df = "Dockerfile" not in e.packaging.missing
         assert has_df == e.has_dockerfile, (
-            f"{e.name}: 'Dockerfile' in missing={not has_df} but "
-            f"has_dockerfile={e.has_dockerfile}"
+            f"{e.name}: 'Dockerfile' in missing={not has_df} but " f"has_dockerfile={e.has_dockerfile}"
         )
 
 
 def test_34_packaging_missing_contains_requirements_iff_absent(audit_report):
     for e in audit_report.nodes:
         has_req = "requirements.txt" not in e.packaging.missing
-        assert has_req == e.has_requirements, (
-            f"{e.name}: 'requirements.txt' in missing mismatch"
-        )
+        assert has_req == e.has_requirements, f"{e.name}: 'requirements.txt' in missing mismatch"
 
 
 def test_35_packaging_policy_class_is_valid(audit_report):
     valid = {
-        PACKAGING_POLICY_ACTIVE, PACKAGING_POLICY_OPTIONAL,
-        PACKAGING_POLICY_SKIP, PACKAGING_POLICY_UNREGISTERED,
+        PACKAGING_POLICY_ACTIVE,
+        PACKAGING_POLICY_OPTIONAL,
+        PACKAGING_POLICY_SKIP,
+        PACKAGING_POLICY_UNREGISTERED,
     }
     for e in audit_report.nodes:
-        assert e.packaging.policy_class in valid, (
-            f"{e.name} packaging.policy_class={e.packaging.policy_class!r} invalid"
-        )
+        assert (
+            e.packaging.policy_class in valid
+        ), f"{e.name} packaging.policy_class={e.packaging.policy_class!r} invalid"
 
 
 def test_36_packaging_status_is_valid(audit_report):
     valid = {CHECK_PASS, CHECK_WARN, CHECK_FAIL}
     for e in audit_report.nodes:
-        assert e.packaging.status in valid, (
-            f"{e.name} packaging.status={e.packaging.status!r} invalid"
-        )
+        assert e.packaging.status in valid, f"{e.name} packaging.status={e.packaging.status!r} invalid"
 
 
 def test_37_packaging_severity_is_valid(audit_report):
     valid = {CHECK_PASS, CHECK_WARN, CHECK_FAIL}
     for e in audit_report.nodes:
-        assert e.packaging.severity in valid, (
-            f"{e.name} packaging.severity={e.packaging.severity!r} invalid"
-        )
+        assert e.packaging.severity in valid, f"{e.name} packaging.severity={e.packaging.severity!r} invalid"
 
 
 def test_38_fully_packaged_nodes_have_status_pass(audit_report):
     for e in audit_report.nodes:
         if e.has_dockerfile and e.has_requirements:
-            assert e.packaging.status == CHECK_PASS, (
-                f"{e.name} fully packaged but packaging.status={e.packaging.status}"
-            )
+            assert (
+                e.packaging.status == CHECK_PASS
+            ), f"{e.name} fully packaged but packaging.status={e.packaging.status}"
 
 
 def test_39_fully_packaged_nodes_have_empty_missing(audit_report):
     for e in audit_report.nodes:
         if e.has_dockerfile and e.has_requirements:
-            assert e.packaging.missing == [], (
-                f"{e.name} fully packaged but packaging.missing={e.packaging.missing}"
-            )
+            assert e.packaging.missing == [], f"{e.name} fully packaged but packaging.missing={e.packaging.missing}"
 
 
 def test_40_checks_packaging_equals_packaging_status(audit_report):
     for e in audit_report.nodes:
         expected = e.packaging.status
         actual = e.checks.get(CHECK_PACKAGING)
-        assert actual == expected, (
-            f"{e.name} checks['packaging']={actual} != packaging.status={expected}"
-        )
+        assert actual == expected, f"{e.name} checks['packaging']={actual} != packaging.status={expected}"
 
 
 def test_41_active_nodes_missing_dockerfile_have_packaging_fail(audit_report):
     for e in audit_report.nodes:
-        if (e.packaging.policy_class == PACKAGING_POLICY_ACTIVE
-                and not e.has_dockerfile):
-            assert e.packaging.status == CHECK_FAIL, (
-                f"{e.name} active, missing Dockerfile, but packaging.status={e.packaging.status}"
-            )
+        if e.packaging.policy_class == PACKAGING_POLICY_ACTIVE and not e.has_dockerfile:
+            assert (
+                e.packaging.status == CHECK_FAIL
+            ), f"{e.name} active, missing Dockerfile, but packaging.status={e.packaging.status}"
 
 
 def test_42_active_nodes_missing_dockerfile_have_severity_fail(audit_report):
     for e in audit_report.nodes:
-        if (e.packaging.policy_class == PACKAGING_POLICY_ACTIVE
-                and not e.has_dockerfile):
-            assert e.packaging.severity == CHECK_FAIL, (
-                f"{e.name} active, missing Dockerfile, severity={e.packaging.severity}"
-            )
+        if e.packaging.policy_class == PACKAGING_POLICY_ACTIVE and not e.has_dockerfile:
+            assert (
+                e.packaging.severity == CHECK_FAIL
+            ), f"{e.name} active, missing Dockerfile, severity={e.packaging.severity}"
 
 
 def test_43_optional_skip_nodes_missing_packaging_have_status_warn(audit_report):
@@ -387,18 +379,16 @@ def test_43_optional_skip_nodes_missing_packaging_have_status_warn(audit_report)
     for e in audit_report.nodes:
         if e.packaging.policy_class in non_active and e.packaging.missing:
             assert e.packaging.status == CHECK_WARN, (
-                f"{e.name} ({e.packaging.policy_class}) missing packaging but "
-                f"status={e.packaging.status}"
+                f"{e.name} ({e.packaging.policy_class}) missing packaging but " f"status={e.packaging.status}"
             )
 
 
 def test_44_unregistered_nodes_missing_packaging_have_status_warn(audit_report):
     for e in audit_report.nodes:
-        if (e.packaging.policy_class == PACKAGING_POLICY_UNREGISTERED
-                and e.packaging.missing):
-            assert e.packaging.status == CHECK_WARN, (
-                f"{e.name} unregistered, missing packaging, status={e.packaging.status}"
-            )
+        if e.packaging.policy_class == PACKAGING_POLICY_UNREGISTERED and e.packaging.missing:
+            assert (
+                e.packaging.status == CHECK_WARN
+            ), f"{e.name} unregistered, missing packaging, status={e.packaging.status}"
 
 
 def test_45_missing_dockerfile_nodes_matches_entries(audit_report):
@@ -412,10 +402,7 @@ def test_46_missing_requirements_nodes_matches_entries(audit_report):
 
 
 def test_47_missing_packaging_nodes_includes_either_missing(audit_report):
-    from_entries = sorted(
-        e.name for e in audit_report.nodes
-        if not e.has_dockerfile or not e.has_requirements
-    )
+    from_entries = sorted(e.name for e in audit_report.nodes if not e.has_dockerfile or not e.has_requirements)
     assert audit_report.missing_packaging_nodes == from_entries
 
 
@@ -423,8 +410,7 @@ def test_48_missing_packaging_superset_of_missing_dockerfile(audit_report):
     df_set = set(audit_report.missing_dockerfile_nodes)
     pkg_set = set(audit_report.missing_packaging_nodes)
     assert df_set <= pkg_set, (
-        f"missing_dockerfile_nodes is not a subset of missing_packaging_nodes: "
-        f"{df_set - pkg_set}"
+        f"missing_dockerfile_nodes is not a subset of missing_packaging_nodes: " f"{df_set - pkg_set}"
     )
 
 
@@ -432,8 +418,7 @@ def test_49_missing_packaging_superset_of_missing_requirements(audit_report):
     req_set = set(audit_report.missing_requirements_nodes)
     pkg_set = set(audit_report.missing_packaging_nodes)
     assert req_set <= pkg_set, (
-        f"missing_requirements_nodes is not a subset of missing_packaging_nodes: "
-        f"{req_set - pkg_set}"
+        f"missing_requirements_nodes is not a subset of missing_packaging_nodes: " f"{req_set - pkg_set}"
     )
 
 
@@ -446,8 +431,7 @@ def test_51_active_policy_for_nodes_in_config_without_explicit_policy(audit_repo
     for e in audit_report.nodes:
         if e.in_node_dependencies and e.config_startup_policy is None:
             assert e.packaging.policy_class == PACKAGING_POLICY_ACTIVE, (
-                f"{e.name} in config, policy=None should be 'active', "
-                f"got {e.packaging.policy_class!r}"
+                f"{e.name} in config, policy=None should be 'active', " f"got {e.packaging.policy_class!r}"
             )
 
 
@@ -470,8 +454,7 @@ def test_54_skip_policy_class_for_skip_nodes(audit_report):
     for e in audit_report.nodes:
         if e.config_startup_policy == "skip":
             assert e.packaging.policy_class == PACKAGING_POLICY_SKIP, (
-                f"{e.name} startup_policy=skip should have "
-                f"policy_class='skip', got {e.packaging.policy_class!r}"
+                f"{e.name} startup_policy=skip should have " f"policy_class='skip', got {e.packaging.policy_class!r}"
             )
 
 
@@ -479,8 +462,7 @@ def test_55_unregistered_policy_class_for_nodes_not_in_config(audit_report):
     for e in audit_report.nodes:
         if not e.in_node_dependencies:
             assert e.packaging.policy_class == PACKAGING_POLICY_UNREGISTERED, (
-                f"{e.name} not in config should have "
-                f"policy_class='unregistered', got {e.packaging.policy_class!r}"
+                f"{e.name} not in config should have " f"policy_class='unregistered', got {e.packaging.policy_class!r}"
             )
 
 

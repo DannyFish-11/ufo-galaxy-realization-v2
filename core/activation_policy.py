@@ -15,6 +15,7 @@ Policies:
 This module is policy-only; it does NOT start Nodes.  The actual
 activation is performed by launcher/launcher_adapter.py (Stage 3).
 """
+
 from __future__ import annotations
 
 import enum
@@ -29,9 +30,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Sentinel
 # ---------------------------------------------------------------------------
-DEVICE_ACTIVATION_POLICY_SENTINEL = (
-    "DEVICE_ACTIVATION_POLICY::NODE_STARTUP_DECISION_ENGINE"
-)
+DEVICE_ACTIVATION_POLICY_SENTINEL = "DEVICE_ACTIVATION_POLICY::NODE_STARTUP_DECISION_ENGINE"
 
 
 # ---------------------------------------------------------------------------
@@ -201,7 +200,8 @@ class ActivationPolicyEngine:
         # Unknown policy — be conservative
         logger.warning(
             "Unknown activation policy '%s' for node %s",
-            implementation.startup, implementation.node,
+            implementation.startup,
+            implementation.node,
         )
         return ActivationDecision(
             node=implementation.node,

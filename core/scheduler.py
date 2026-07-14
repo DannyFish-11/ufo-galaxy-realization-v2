@@ -12,12 +12,13 @@ Galaxy - 自主调度器 (Autonomous Scheduler)
   4. 运行时注入已连接设备的动态工具
 """
 
-import os
-import re
 import json
 import logging
+import os
+import re
 import uuid
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
+
 from pydantic import BaseModel
 
 logger = logging.getLogger("scheduler")
@@ -140,20 +141,20 @@ _BUILTIN_TOOLS = [
                 "properties": {
                     "device_id": {
                         "type": "string",
-                        "description": "The device ID to send to (from connected devices list)"
+                        "description": "The device ID to send to (from connected devices list)",
                     },
                     "task_type": {
                         "type": "string",
-                        "description": "The type of task: open_app, click, swipe, type_text, screenshot, shell_command, install_apk, key_event, get_device_info, get_battery, etc."
+                        "description": "The type of task: open_app, click, swipe, type_text, screenshot, shell_command, install_apk, key_event, get_device_info, get_battery, etc.",
                     },
                     "payload": {
                         "type": "object",
-                        "description": "Task parameters. For open_app: {app_name: 'WeChat'}. For click: {x: 100, y: 200}. For type_text: {text: 'hello'}. For shell_command: {command: 'ls'}."
-                    }
+                        "description": "Task parameters. For open_app: {app_name: 'WeChat'}. For click: {x: 100, y: 200}. For type_text: {text: 'hello'}. For shell_command: {command: 'ls'}.",
+                    },
                 },
-                "required": ["device_id", "task_type"]
-            }
-        }
+                "required": ["device_id", "task_type"],
+            },
+        },
     },
     {
         "type": "function",
@@ -163,18 +164,12 @@ _BUILTIN_TOOLS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "task_type": {
-                        "type": "string",
-                        "description": "The task type to broadcast"
-                    },
-                    "payload": {
-                        "type": "object",
-                        "description": "Task parameters"
-                    }
+                    "task_type": {"type": "string", "description": "The task type to broadcast"},
+                    "payload": {"type": "object", "description": "Task parameters"},
                 },
-                "required": ["task_type"]
-            }
-        }
+                "required": ["task_type"],
+            },
+        },
     },
     {
         "type": "function",
@@ -188,26 +183,14 @@ _BUILTIN_TOOLS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "source_device": {
-                        "type": "string",
-                        "description": "Source device ID"
-                    },
-                    "target_device": {
-                        "type": "string",
-                        "description": "Target device ID"
-                    },
-                    "payload_type": {
-                        "type": "string",
-                        "description": "Type of payload: task, command, chat"
-                    },
-                    "payload": {
-                        "type": "object",
-                        "description": "Message payload"
-                    }
+                    "source_device": {"type": "string", "description": "Source device ID"},
+                    "target_device": {"type": "string", "description": "Target device ID"},
+                    "payload_type": {"type": "string", "description": "Type of payload: task, command, chat"},
+                    "payload": {"type": "object", "description": "Message payload"},
                 },
-                "required": ["source_device", "target_device", "payload_type", "payload"]
-            }
-        }
+                "required": ["source_device", "target_device", "payload_type", "payload"],
+            },
+        },
     },
     {
         "type": "function",
@@ -221,19 +204,16 @@ _BUILTIN_TOOLS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "code": {
-                        "type": "string",
-                        "description": "Source code to execute"
-                    },
+                    "code": {"type": "string", "description": "Source code to execute"},
                     "language": {
                         "type": "string",
                         "enum": ["python", "javascript", "bash"],
-                        "description": "Programming language"
-                    }
+                        "description": "Programming language",
+                    },
                 },
-                "required": ["code", "language"]
-            }
-        }
+                "required": ["code", "language"],
+            },
+        },
     },
     {
         "type": "function",
@@ -248,27 +228,21 @@ _BUILTIN_TOOLS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "target_device": {
-                        "type": "string",
-                        "description": "Target device ID"
-                    },
-                    "payload": {
-                        "type": "object",
-                        "description": "Message payload to send"
-                    },
+                    "target_device": {"type": "string", "description": "Target device ID"},
+                    "payload": {"type": "object", "description": "Message payload to send"},
                     "payload_type": {
                         "type": "string",
                         "description": "Type of payload: task, command, chat",
-                        "default": "task"
+                        "default": "task",
                     },
                     "source_device": {
                         "type": "string",
-                        "description": "Source device ID (optional, defaults to server)"
-                    }
+                        "description": "Source device ID (optional, defaults to server)",
+                    },
                 },
-                "required": ["target_device", "payload"]
-            }
-        }
+                "required": ["target_device", "payload"],
+            },
+        },
     },
     {
         "type": "function",
@@ -285,15 +259,12 @@ _BUILTIN_TOOLS = [
                 "properties": {
                     "device_type": {
                         "type": "string",
-                        "description": "Device type to search: android, windows, ios, linux, macos"
+                        "description": "Device type to search: android, windows, ios, linux, macos",
                     },
-                    "device_name": {
-                        "type": "string",
-                        "description": "Device name or alias to search for"
-                    }
-                }
-            }
-        }
+                    "device_name": {"type": "string", "description": "Device name or alias to search for"},
+                },
+            },
+        },
     },
 ]
 
@@ -384,18 +355,12 @@ class AutonomousScheduler:
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "action": {
-                            "type": "string",
-                            "description": "The action to perform on this node"
-                        },
-                        "params": {
-                            "type": "object",
-                            "description": "Parameters for the action"
-                        }
+                        "action": {"type": "string", "description": "The action to perform on this node"},
+                        "params": {"type": "object", "description": "Parameters for the action"},
                     },
-                    "required": ["action"]
-                }
-            }
+                    "required": ["action"],
+                },
+            },
         }
         self.tools_cache.append(tool)
 
@@ -457,15 +422,17 @@ class AutonomousScheduler:
                 if len(parts) >= 2:
                     node_id = f"{parts[0]}_{parts[1]}"
                 category = "node"
-            definitions.append(ToolDefinition(
-                name=name,
-                description=desc,
-                node_id=node_id,
-                parameters=params,
-                category=category,
-                requires_device=requires_device,
-                source=source,
-            ))
+            definitions.append(
+                ToolDefinition(
+                    name=name,
+                    description=desc,
+                    node_id=node_id,
+                    parameters=params,
+                    category=category,
+                    requires_device=requires_device,
+                    source=source,
+                )
+            )
 
         return definitions
 
@@ -478,7 +445,8 @@ class AutonomousScheduler:
         longer injected here; the dispatch path provides a compat alias for it.
         """
         try:
-            from core.mcp_loader import mcp_loader, MCPServerStatus
+            from core.mcp_loader import MCPServerStatus, mcp_loader
+
             injected = 0
             existing_names = {t["function"]["name"] for t in self.tools_cache}
             for server_id, server in mcp_loader.servers.items():
@@ -489,14 +457,16 @@ class AutonomousScheduler:
                     func_name = f"mcp__{server_id}__{tool.name}"
                     if func_name in existing_names:
                         continue
-                    self.tools_cache.append({
-                        "type": "function",
-                        "function": {
-                            "name": func_name,
-                            "description": f"[MCP:{server.name}] {tool.description}",
-                            "parameters": tool.inputSchema or {"type": "object", "properties": {}},
-                        },
-                    })
+                    self.tools_cache.append(
+                        {
+                            "type": "function",
+                            "function": {
+                                "name": func_name,
+                                "description": f"[MCP:{server.name}] {tool.description}",
+                                "parameters": tool.inputSchema or {"type": "object", "properties": {}},
+                            },
+                        }
+                    )
                     existing_names.add(func_name)
                     injected += 1
             if injected:
@@ -514,6 +484,7 @@ class AutonomousScheduler:
         """
         try:
             from core.skill_loader import skill_loader as loader
+
             if not loader:
                 return
             existing_names = {t["function"]["name"] for t in self.tools_cache}
@@ -525,14 +496,16 @@ class AutonomousScheduler:
                 func_name = f"skill__{skill['name']}"
                 if func_name in existing_names:
                     continue
-                self.tools_cache.append({
-                    "type": "function",
-                    "function": {
-                        "name": func_name,
-                        "description": f"[Skill] {skill.get('description', skill['name'])}",
-                        "parameters": skill.get("params_schema") or {"type": "object", "properties": {}},
-                    },
-                })
+                self.tools_cache.append(
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": func_name,
+                            "description": f"[Skill] {skill.get('description', skill['name'])}",
+                            "parameters": skill.get("params_schema") or {"type": "object", "properties": {}},
+                        },
+                    }
+                )
                 existing_names.add(func_name)
                 injected += 1
             if injected:
@@ -567,19 +540,18 @@ class AutonomousScheduler:
                         caps = d.get("capabilities", [])
                         status = d.get("status", "unknown")
                         device_lines.append(
-                            f"  - ID: {did}, Name: {dname}, Type: {dtype}, "
-                            f"Status: {status}, Capabilities: {caps}"
+                            f"  - ID: {did}, Name: {dname}, Type: {dtype}, " f"Status: {status}, Capabilities: {caps}"
                         )
                 if device_lines:
-                    device_context = (
-                        "Connected Devices (use send_to_device tool to control them):\n"
-                        + "\n".join(device_lines)
+                    device_context = "Connected Devices (use send_to_device tool to control them):\n" + "\n".join(
+                        device_lines
                     )
 
         # RAG 增强: 注入相似经验和知识
         rag_context = ""
         try:
             from core.rag_memory import get_rag_memory
+
             rag = get_rag_memory()
             rag_context = await rag.enhance_agent_prompt(
                 instruction, device_id=context.get("device_id", "") if context else ""
@@ -673,26 +645,29 @@ CROSS-DEVICE:
                     logger.info(f"ReAct 执行: {function_name}({json.dumps(function_args, ensure_ascii=False)[:200]})")
 
                     # 执行工具
-                    tool_result_content = await self._execute_tool(
-                        function_name, function_args, context
+                    tool_result_content = await self._execute_tool(function_name, function_args, context)
+
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": tool_call.id,
+                            "name": function_name,
+                            "content": tool_result_content,
+                        }
                     )
 
-                    messages.append({
-                        "role": "tool",
-                        "tool_call_id": tool_call.id,
-                        "name": function_name,
-                        "content": tool_result_content,
-                    })
-
-                    executed_steps.append({
-                        "node_id": function_name.replace("call_", ""),
-                        "action": function_args.get("action") or function_args.get("task_type", ""),
-                        "result": tool_result_content[:500],
-                    })
+                    executed_steps.append(
+                        {
+                            "node_id": function_name.replace("call_", ""),
+                            "action": function_args.get("action") or function_args.get("task_type", ""),
+                            "result": tool_result_content[:500],
+                        }
+                    )
 
             # 记录执行经验到 RAG Memory
             try:
                 from core.rag_memory import get_rag_memory
+
                 rag = get_rag_memory()
                 rag.log_experience(
                     agent_name="scheduler_react",
@@ -716,6 +691,7 @@ CROSS-DEVICE:
             # 记录失败经验
             try:
                 from core.rag_memory import get_rag_memory
+
                 rag = get_rag_memory()
                 rag.log_experience(
                     agent_name="scheduler_react",
@@ -734,9 +710,7 @@ CROSS-DEVICE:
                 "reply": f"调度失败: {str(e)}",
             }
 
-    async def _execute_tool(
-        self, function_name: str, args: Dict, context: Dict
-    ) -> str:
+    async def _execute_tool(self, function_name: str, args: Dict, context: Dict) -> str:
         """统一工具执行入口"""
         try:
             executor = context.get("executor") if context else None
@@ -793,8 +767,7 @@ CROSS-DEVICE:
             # MCP 工具 (legacy compat alias): mcp_<server_id>_<tool_name>
             if function_name.startswith("mcp_"):
                 logger.debug(
-                    "Scheduler: legacy mcp_ prefix used for '%s'; "
-                    "prefer canonical mcp__<server>__<tool> form.",
+                    "Scheduler: legacy mcp_ prefix used for '%s'; " "prefer canonical mcp__<server>__<tool> form.",
                     function_name,
                 )
                 return await self._exec_mcp_tool(function_name, args)
@@ -802,8 +775,7 @@ CROSS-DEVICE:
             # 节点工具 (legacy compat alias): call_Node_xxx
             if function_name.startswith("call_"):
                 logger.debug(
-                    "Scheduler: legacy call_ prefix used for '%s'; "
-                    "prefer canonical node__<id>__<action> form.",
+                    "Scheduler: legacy call_ prefix used for '%s'; " "prefer canonical node__<id>__<action> form.",
                     function_name,
                 )
                 node_id = function_name.replace("call_", "")
@@ -818,8 +790,7 @@ CROSS-DEVICE:
             # Skill 工具 (legacy compat alias): skill_<name>
             if function_name.startswith("skill_"):
                 logger.debug(
-                    "Scheduler: legacy skill_ prefix used for '%s'; "
-                    "prefer canonical skill__<id> form.",
+                    "Scheduler: legacy skill_ prefix used for '%s'; " "prefer canonical skill__<id> form.",
                     function_name,
                 )
                 return await self._exec_skill_tool(function_name, args)
@@ -840,6 +811,7 @@ CROSS-DEVICE:
         otherwise the existing WS / ADB fallback paths are used unchanged.
         """
         import uuid as _uuid
+
         device_id = args.get("device_id", "")
         task_type = args.get("task_type", "")
         payload = args.get("payload", {})
@@ -847,6 +819,7 @@ CROSS-DEVICE:
         # so every dispatch carries consistent task_id / trace_id / session_id.
         try:
             from core.message_interop import extract_correlation as _extract_corr
+
             _corr = _extract_corr(args)
             task_id = _corr.task_id
             trace_id = _corr.trace_id
@@ -859,8 +832,9 @@ CROSS-DEVICE:
         # PR-507: Front-load CanonicalTask creation — establish task ontology
         # before recording ingress or normalizing to envelope.
         try:
-            from core.task_adapter import adapt_to_canonical_task as _adapt
             from core.canonical_task import TaskOrigin as _TaskOrigin
+            from core.task_adapter import adapt_to_canonical_task as _adapt
+
             _canonical = _adapt(
                 {
                     "task_id": task_id,
@@ -876,12 +850,14 @@ CROSS-DEVICE:
             trace_id = _canonical.identity.trace_id
             logger.debug(
                 "_exec_send_to_device: CanonicalTask front-loaded task_id=%s trace_id=%s",
-                task_id, trace_id,
+                task_id,
+                trace_id,
             )
         except Exception as _ct_err:
             logger.debug(
                 "_exec_send_to_device: CanonicalTask front-load unavailable "
-                "(graceful degradation — continuing with existing ids): %s", _ct_err
+                "(graceful degradation — continuing with existing ids): %s",
+                _ct_err,
             )
 
         # PR-3: Record ingress in execution spine log.
@@ -890,6 +866,7 @@ CROSS-DEVICE:
                 ExecutionIngressSource,
                 record_legacy_ingress,
             )
+
             record_legacy_ingress(
                 ExecutionIngressSource.SCHEDULER,
                 {**args, "task_id": task_id, "trace_id": trace_id},
@@ -901,16 +878,19 @@ CROSS-DEVICE:
         # Register this dispatch task in TaskGraphRuntime before routing/fallback
         # so lifecycle truth covers canonical and compat paths consistently.
         try:
-            from core.task_graph_runtime import (
-                get_task_graph_runtime as _get_tgr_send,
-                WorkflowContributorKind as _WCK_send,
-            )
+            from core.task_graph_runtime import WorkflowContributorKind as _WCK_send
+            from core.task_graph_runtime import get_task_graph_runtime as _get_tgr_send
+
             _get_tgr_send().register_canonical_task(
-                _canonical if _canonical is not None else {
-                    "task_id": task_id,
-                    "trace_id": trace_id,
-                    "tool_name": task_type or "send_to_device",
-                },
+                (
+                    _canonical
+                    if _canonical is not None
+                    else {
+                        "task_id": task_id,
+                        "trace_id": trace_id,
+                        "tool_name": task_type or "send_to_device",
+                    }
+                ),
                 contributor=_WCK_send.COMMAND_ROUTER,
             )
         except Exception as _send_tgr_err:
@@ -925,15 +905,15 @@ CROSS-DEVICE:
             or os.environ.get("GALAXY_ALLOW_LEGACY_SCHEDULER_FALLBACK", "")
         ).strip().lower() in {"1", "true", "yes", "on"}
         _require_canonical_router = bool(
-            args.get("require_canonical_router")
-            or (context or {}).get("require_canonical_router")
+            args.get("require_canonical_router") or (context or {}).get("require_canonical_router")
         )
 
         # PR-3: Attempt canonical spine routing via CommandRouter when available.
-        cmd_router = (context.get("command_router") if context else None)
+        cmd_router = context.get("command_router") if context else None
         if cmd_router is None:
             try:
                 from core.command_router import get_command_router as _gcr
+
                 cmd_router = _gcr()
             except Exception as exc:
                 logger.debug("Fallback triggered: %s", exc)
@@ -945,6 +925,7 @@ CROSS-DEVICE:
                     ExecutionIngressSource,
                     normalize_ingress_to_envelope,
                 )
+
                 _envelope = normalize_ingress_to_envelope(
                     {
                         "task_id": task_id,
@@ -959,18 +940,16 @@ CROSS-DEVICE:
                 return json.dumps(result, ensure_ascii=False)
             except Exception as _spine_err:
                 logger.debug(
-                    "_exec_send_to_device: spine routing failed (%s); "
-                    "falling back to direct WS/ADB path",
+                    "_exec_send_to_device: spine routing failed (%s); " "falling back to direct WS/ADB path",
                     _spine_err,
                 )
 
         if _require_canonical_router and not _allow_legacy_fallback:
             try:
-                from core.task_graph_runtime import (
-                    GraphNodeState as _GraphNodeState_send_blocked,
-                    WorkflowContributorKind as _WCK_send_blocked,
-                    get_task_graph_runtime as _get_tgr_send_blocked,
-                )
+                from core.task_graph_runtime import GraphNodeState as _GraphNodeState_send_blocked
+                from core.task_graph_runtime import WorkflowContributorKind as _WCK_send_blocked
+                from core.task_graph_runtime import get_task_graph_runtime as _get_tgr_send_blocked
+
                 _get_tgr_send_blocked().transition(
                     task_id,
                     _GraphNodeState_send_blocked.DEGRADED,
@@ -1005,13 +984,16 @@ CROSS-DEVICE:
         ws_sender = context.get("ws_sender") if context else None
         if ws_sender:
             try:
-                result = await ws_sender(device_id, {
-                    "type": "task",
-                    "task_id": task_id,
-                    "trace_id": trace_id,
-                    "task_type": task_type,
-                    "payload": payload,
-                })
+                result = await ws_sender(
+                    device_id,
+                    {
+                        "type": "task",
+                        "task_id": task_id,
+                        "trace_id": trace_id,
+                        "task_type": task_type,
+                        "payload": payload,
+                    },
+                )
                 if isinstance(result, dict):
                     result.setdefault("canonical_router_owner", "core.command_router.CommandRouter")
                     result.setdefault("task_id", task_id)
@@ -1019,11 +1001,10 @@ CROSS-DEVICE:
                     result["routing_plane"] = "legacy_fallback"
                     result["legacy_route_delegate"] = "scheduler.ws_sender"
                 try:
-                    from core.task_graph_runtime import (
-                        GraphNodeState as _GraphNodeState_send_ws,
-                        WorkflowContributorKind as _WCK_send_ws,
-                        get_task_graph_runtime as _get_tgr_send_ws,
-                    )
+                    from core.task_graph_runtime import GraphNodeState as _GraphNodeState_send_ws
+                    from core.task_graph_runtime import WorkflowContributorKind as _WCK_send_ws
+                    from core.task_graph_runtime import get_task_graph_runtime as _get_tgr_send_ws
+
                     _get_tgr_send_ws().transition(
                         task_id,
                         _GraphNodeState_send_ws.ROUTED,
@@ -1043,10 +1024,14 @@ CROSS-DEVICE:
         executor = context.get("executor") if context else None
         if executor:
             try:
-                result = await executor("Node_33_ADB", task_type, {
-                    "device_id": device_id,
-                    **payload,
-                })
+                result = await executor(
+                    "Node_33_ADB",
+                    task_type,
+                    {
+                        "device_id": device_id,
+                        **payload,
+                    },
+                )
                 if isinstance(result, dict):
                     result.setdefault("canonical_router_owner", "core.command_router.CommandRouter")
                     result.setdefault("task_id", task_id)
@@ -1054,11 +1039,10 @@ CROSS-DEVICE:
                     result["routing_plane"] = "legacy_fallback"
                     result["legacy_route_delegate"] = "scheduler.executor_adb"
                 try:
-                    from core.task_graph_runtime import (
-                        GraphNodeState as _GraphNodeState_send_exec,
-                        WorkflowContributorKind as _WCK_send_exec,
-                        get_task_graph_runtime as _get_tgr_send_exec,
-                    )
+                    from core.task_graph_runtime import GraphNodeState as _GraphNodeState_send_exec
+                    from core.task_graph_runtime import WorkflowContributorKind as _WCK_send_exec
+                    from core.task_graph_runtime import get_task_graph_runtime as _get_tgr_send_exec
+
                     _get_tgr_send_exec().transition(
                         task_id,
                         _GraphNodeState_send_exec.ROUTED,
@@ -1074,17 +1058,19 @@ CROSS-DEVICE:
             except Exception as e:
                 return json.dumps({"error": f"ADB executor failed: {e}"})
 
-        return json.dumps({
-            "status": "queued",
-            "device_id": device_id,
-            "task_id": task_id,
-            "trace_id": trace_id,
-            "task_type": task_type,
-            "note": "Device not connected via WS, command queued",
-            "canonical_router_owner": "core.command_router.CommandRouter",
-            "routing_plane": "legacy_fallback",
-            "legacy_route_delegate": "scheduler.queue_only",
-        })
+        return json.dumps(
+            {
+                "status": "queued",
+                "device_id": device_id,
+                "task_id": task_id,
+                "trace_id": trace_id,
+                "task_type": task_type,
+                "note": "Device not connected via WS, command queued",
+                "canonical_router_owner": "core.command_router.CommandRouter",
+                "routing_plane": "legacy_fallback",
+                "legacy_route_delegate": "scheduler.queue_only",
+            }
+        )
 
     async def _exec_broadcast(self, args: Dict, context: Dict) -> str:
         """广播到所有设备
@@ -1096,6 +1082,7 @@ CROSS-DEVICE:
         Ingress also recorded in execution spine log for observability.
         """
         import uuid as _uuid_bc
+
         task_type = args.get("task_type", "")
         payload = args.get("payload", {})
         devices = context.get("devices", {}) if context else {}
@@ -1103,6 +1090,7 @@ CROSS-DEVICE:
         # Stage 10: Record ingress in execution spine log.
         try:
             from core.execution_spine import ExecutionIngressSource, record_legacy_ingress
+
             record_legacy_ingress(
                 ExecutionIngressSource.SCHEDULER,
                 args,
@@ -1115,8 +1103,9 @@ CROSS-DEVICE:
         # execution is visible to the task graph (mirrors relay/mesh_send paths).
         _bc_task_id = args.get("task_id") or f"broadcast_{_uuid_bc.uuid4().hex[:16]}"
         try:
-            from core.task_adapter import adapt_to_canonical_task as _adapt_bc
             from core.canonical_task import TaskOrigin as _TO_bc
+            from core.task_adapter import adapt_to_canonical_task as _adapt_bc
+
             _bc_canonical = _adapt_bc(
                 {
                     "task_id": _bc_task_id,
@@ -1128,10 +1117,9 @@ CROSS-DEVICE:
                 origin=_TO_bc.SCHEDULER,
             )
             _bc_task_id = _bc_canonical.identity.task_id
-            from core.task_graph_runtime import (
-                get_task_graph_runtime as _get_tgr_bc,
-                WorkflowContributorKind as _WCK_bc,
-            )
+            from core.task_graph_runtime import WorkflowContributorKind as _WCK_bc
+            from core.task_graph_runtime import get_task_graph_runtime as _get_tgr_bc
+
             # Use register_canonical_task (not register_envelope) so that
             # CanonicalTask's intent.tool_name is read correctly.
             _get_tgr_bc().register_canonical_task(
@@ -1139,9 +1127,7 @@ CROSS-DEVICE:
                 contributor=_WCK_bc.COMMAND_ROUTER,
             )
         except Exception as _bc_tgr_err:
-            logger.debug(
-                "_exec_broadcast: TaskGraphRuntime registration skipped: %s", _bc_tgr_err
-            )
+            logger.debug("_exec_broadcast: TaskGraphRuntime registration skipped: %s", _bc_tgr_err)
 
         results = {}
         for did in devices:
@@ -1170,6 +1156,7 @@ CROSS-DEVICE:
         # PR-3: Record ingress in execution spine log.
         try:
             from core.execution_spine import ExecutionIngressSource, record_legacy_ingress
+
             record_legacy_ingress(
                 ExecutionIngressSource.SCHEDULER,
                 args,
@@ -1188,8 +1175,9 @@ CROSS-DEVICE:
         # PR-513 / GAP-512-002: Front-load CanonicalTask and register in TaskGraphRuntime
         # so that relay-path tasks are covered by task-graph realization (PR-508).
         try:
-            from core.task_adapter import adapt_to_canonical_task as _adapt_relay
             from core.canonical_task import TaskOrigin as _TO_relay
+            from core.task_adapter import adapt_to_canonical_task as _adapt_relay
+
             _relay_canonical = _adapt_relay(
                 {
                     "task_id": _relay_task_id,
@@ -1200,18 +1188,15 @@ CROSS-DEVICE:
                 },
                 origin=_TO_relay.SCHEDULER,
             )
-            from core.task_graph_runtime import (
-                get_task_graph_runtime as _get_tgr_relay,
-                WorkflowContributorKind as _WCK_relay,
-            )
+            from core.task_graph_runtime import WorkflowContributorKind as _WCK_relay
+            from core.task_graph_runtime import get_task_graph_runtime as _get_tgr_relay
+
             _get_tgr_relay().register_envelope(
                 _relay_canonical,
                 contributor=_WCK_relay.COMMAND_ROUTER,
             )
         except Exception as _relay_tgr_err:
-            logger.debug(
-                "_exec_relay: TaskGraphRuntime registration skipped: %s", _relay_tgr_err
-            )
+            logger.debug("_exec_relay: TaskGraphRuntime registration skipped: %s", _relay_tgr_err)
 
         # PR-B: Attempt canonical spine routing via CommandRouter.route_envelope()
         # before falling back to the ProxyRelay implementation.  This ensures
@@ -1221,6 +1206,7 @@ CROSS-DEVICE:
         if _cmd_router_relay is None:
             try:
                 from core.command_router import get_command_router as _gcr_relay
+
                 _cmd_router_relay = _gcr_relay()
             except Exception as exc:
                 logger.debug("Fallback triggered: %s", exc)
@@ -1228,10 +1214,9 @@ CROSS-DEVICE:
 
         if _cmd_router_relay is not None:
             try:
-                from core.execution_spine import (
-                    ExecutionIngressSource as _EIS_relay,
-                    normalize_ingress_to_envelope as _norm_relay,
-                )
+                from core.execution_spine import ExecutionIngressSource as _EIS_relay
+                from core.execution_spine import normalize_ingress_to_envelope as _norm_relay
+
                 _envelope_relay = _norm_relay(
                     {
                         "task_id": _relay_task_id,
@@ -1261,11 +1246,10 @@ CROSS-DEVICE:
         ).strip().lower() in {"1", "true", "yes", "on"}
         if not _allow_legacy_fallback:
             try:
-                from core.task_graph_runtime import (
-                    GraphNodeState as _GraphNodeState_relay,
-                    WorkflowContributorKind as _WCK_relay_blocked,
-                    get_task_graph_runtime as _get_tgr_relay_blocked,
-                )
+                from core.task_graph_runtime import GraphNodeState as _GraphNodeState_relay
+                from core.task_graph_runtime import WorkflowContributorKind as _WCK_relay_blocked
+                from core.task_graph_runtime import get_task_graph_runtime as _get_tgr_relay_blocked
+
                 _get_tgr_relay_blocked().transition(
                     _relay_task_id,
                     _GraphNodeState_relay.DEGRADED,
@@ -1293,7 +1277,8 @@ CROSS-DEVICE:
             )
 
         try:
-            from core.proxy_relay import get_proxy_relay, RelayRequest
+            from core.proxy_relay import RelayRequest, get_proxy_relay
+
             relay = get_proxy_relay()
             req = RelayRequest(
                 source_device=_relay_args.get("source_device", ""),
@@ -1308,11 +1293,10 @@ CROSS-DEVICE:
             result_dict["routing_plane"] = "legacy_fallback"
             result_dict["legacy_route_delegate"] = "core.proxy_relay.ProxyRelay"
             try:
-                from core.task_graph_runtime import (
-                    GraphNodeState as _GraphNodeState_relay_fb,
-                    WorkflowContributorKind as _WCK_relay_fb,
-                    get_task_graph_runtime as _get_tgr_relay_fb,
-                )
+                from core.task_graph_runtime import GraphNodeState as _GraphNodeState_relay_fb
+                from core.task_graph_runtime import WorkflowContributorKind as _WCK_relay_fb
+                from core.task_graph_runtime import get_task_graph_runtime as _get_tgr_relay_fb
+
                 _get_tgr_relay_fb().transition(
                     _relay_task_id,
                     _GraphNodeState_relay_fb.ROUTED,
@@ -1329,6 +1313,7 @@ CROSS-DEVICE:
         """安全代码执行"""
         try:
             from core.safe_executor import get_safe_executor
+
             executor = get_safe_executor()
             result = await executor.execute(
                 code=args.get("code", ""),
@@ -1358,6 +1343,7 @@ CROSS-DEVICE:
         # PR-3: Record ingress in execution spine log.
         try:
             from core.execution_spine import ExecutionIngressSource, record_legacy_ingress
+
             record_legacy_ingress(
                 ExecutionIngressSource.SCHEDULER,
                 args,
@@ -1373,8 +1359,9 @@ CROSS-DEVICE:
 
         # PR-513 / GAP-512-002: Front-load CanonicalTask and register in TaskGraphRuntime.
         try:
-            from core.task_adapter import adapt_to_canonical_task as _adapt_mesh
             from core.canonical_task import TaskOrigin as _TO_mesh
+            from core.task_adapter import adapt_to_canonical_task as _adapt_mesh
+
             _mesh_canonical = _adapt_mesh(
                 {
                     "task_id": _mesh_task_id,
@@ -1385,18 +1372,15 @@ CROSS-DEVICE:
                 },
                 origin=_TO_mesh.SCHEDULER,
             )
-            from core.task_graph_runtime import (
-                get_task_graph_runtime as _get_tgr_mesh,
-                WorkflowContributorKind as _WCK_mesh,
-            )
+            from core.task_graph_runtime import WorkflowContributorKind as _WCK_mesh
+            from core.task_graph_runtime import get_task_graph_runtime as _get_tgr_mesh
+
             _get_tgr_mesh().register_envelope(
                 _mesh_canonical,
                 contributor=_WCK_mesh.SCHEDULER,
             )
         except Exception as _mesh_tgr_err:
-            logger.debug(
-                "_exec_mesh_send: TaskGraphRuntime registration skipped: %s", _mesh_tgr_err
-            )
+            logger.debug("_exec_mesh_send: TaskGraphRuntime registration skipped: %s", _mesh_tgr_err)
 
         _target = _mesh_args.get("target_device", "")
         _source = _mesh_args.get("source_device", "")
@@ -1406,6 +1390,7 @@ CROSS-DEVICE:
         _mesh_advice = None
         try:
             from core.mesh_coordinator import get_mesh_coordinator
+
             mesh = get_mesh_coordinator()
             peer = mesh.get_peer(_target)
             if peer and (peer.reachable_direct or peer.reachable_relay):
@@ -1441,10 +1426,9 @@ CROSS-DEVICE:
             # Mesh unreachable or send failed → direct WS transport
             try:
                 from core.command_router import get_command_router as _gcr_mesh
-                from core.execution_spine import (
-                    ExecutionIngressSource as _EIS_mesh,
-                    normalize_ingress_to_envelope as _norm_mesh,
-                )
+                from core.execution_spine import ExecutionIngressSource as _EIS_mesh
+                from core.execution_spine import normalize_ingress_to_envelope as _norm_mesh
+
                 _cmd_router_mesh = _gcr_mesh()
                 _envelope_mesh = _norm_mesh(
                     {
@@ -1472,6 +1456,7 @@ CROSS-DEVICE:
 
             try:
                 from core.nats_bus import nats_bus
+
                 if nats_bus.is_connected():
                     await nats_bus._publish(
                         f"galaxy.tasks.result.{_mesh_task_id}",
@@ -1532,15 +1517,16 @@ CROSS-DEVICE:
         """
         try:
             from core.mcp_loader import mcp_loader
+
             if function_name.startswith("mcp__"):
                 # Canonical double-underscore form: mcp__<server_id>__<tool_name>
-                parts = function_name[len("mcp__"):].split("__", 1)
+                parts = function_name[len("mcp__") :].split("__", 1)
                 if len(parts) != 2:
                     return json.dumps({"error": f"Invalid canonical MCP tool name: {function_name}"})
                 server_id, tool_name = parts
             else:
                 # Legacy compat: mcp_<server_id>_<tool_name>
-                parts = function_name[len("mcp_"):].split("_", 1)
+                parts = function_name[len("mcp_") :].split("_", 1)
                 if len(parts) != 2:
                     return json.dumps({"error": f"Invalid MCP tool name: {function_name}"})
                 server_id, tool_name = parts
@@ -1558,12 +1544,13 @@ CROSS-DEVICE:
         """
         try:
             from core.skill_loader import skill_loader as loader
+
             if function_name.startswith("skill__"):
                 # Canonical double-underscore form.
-                skill_name = function_name[len("skill__"):]
+                skill_name = function_name[len("skill__") :]
             else:
                 # Legacy compat: strip single "skill_" prefix.
-                skill_name = function_name[len("skill_"):]
+                skill_name = function_name[len("skill_") :]
             result = await loader.execute(skill_name, **args)
             if isinstance(result, dict):
                 return json.dumps(result, ensure_ascii=False)
@@ -1596,19 +1583,41 @@ CROSS-DEVICE:
                 score += 20
             if any(k in inst_lower for k in ["网页", "web", "搜索"]) and "web" in func_name:
                 score += 20
-            if any(k in inst_lower for k in ["截图", "screenshot", "ocr"]) and ("ocr" in func_name or "vision" in func_name):
+            if any(k in inst_lower for k in ["截图", "screenshot", "ocr"]) and (
+                "ocr" in func_name or "vision" in func_name
+            ):
                 score += 20
-            if any(k in inst_lower for k in ["代码", "code", "编程", "bug", "测试", "test", "重构", "refactor"]) and ("code" in func_name or "coding" in func_name):
+            if any(k in inst_lower for k in ["代码", "code", "编程", "bug", "测试", "test", "重构", "refactor"]) and (
+                "code" in func_name or "coding" in func_name
+            ):
                 score += 20
-            if any(k in inst_lower for k in ["学习", "learn", "经验", "experience", "知识", "knowledge", "pattern", "模式"]) and ("learning" in func_name or "knowledge" in func_name):
+            if any(
+                k in inst_lower for k in ["学习", "learn", "经验", "experience", "知识", "knowledge", "pattern", "模式"]
+            ) and ("learning" in func_name or "knowledge" in func_name):
                 score += 20
-            if any(k in inst_lower for k in ["反思", "reflect", "评估", "assess", "认知", "cognition", "优化", "optimize", "分析", "analyze"]) and ("metacognition" in func_name or "cognit" in desc):
+            if any(
+                k in inst_lower
+                for k in [
+                    "反思",
+                    "reflect",
+                    "评估",
+                    "assess",
+                    "认知",
+                    "cognition",
+                    "优化",
+                    "optimize",
+                    "分析",
+                    "analyze",
+                ]
+            ) and ("metacognition" in func_name or "cognit" in desc):
                 score += 20
             if any(k in inst_lower for k in ["手机", "android", "安卓", "adb"]) and "adb" in func_name:
                 score += 20
             if any(k in inst_lower for k in ["shell", "命令", "终端"]) and "shell" in func_name:
                 score += 20
-            if any(k in inst_lower for k in ["windows", "电脑", "桌面", "窗口", "点击", "输入"]) and func_name.startswith("mcp_"):
+            if any(
+                k in inst_lower for k in ["windows", "电脑", "桌面", "窗口", "点击", "输入"]
+            ) and func_name.startswith("mcp_"):
                 score += 20
             scored.append((score, tool))
 

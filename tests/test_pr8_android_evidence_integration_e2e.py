@@ -92,7 +92,6 @@ from core.android_evidence_integration_pipeline import (
     get_android_evidence_integration_summary,
 )
 
-
 # ---------------------------------------------------------------------------
 # Shared test fixtures
 # ---------------------------------------------------------------------------
@@ -236,18 +235,14 @@ class TestFullyAbsentAndroidState:
     def test_absent_state_audit_dimension_is_absent(self) -> None:
         verdict = evaluate_android_evidence_integration("dev_absent", "")
         audit_result = next(
-            r for r in verdict.dimension_results
-            if r.dimension == AndroidEvidenceDimension.audit_authority
+            r for r in verdict.dimension_results if r.dimension == AndroidEvidenceDimension.audit_authority
         )
         assert audit_result.grade == AndroidEvidenceGrade.absent
         assert not audit_result.passed
 
     def test_absent_state_closed_loop_dimension_is_absent(self) -> None:
         verdict = evaluate_android_evidence_integration("dev_absent", "")
-        cl_result = next(
-            r for r in verdict.dimension_results
-            if r.dimension == AndroidEvidenceDimension.closed_loop
-        )
+        cl_result = next(r for r in verdict.dimension_results if r.dimension == AndroidEvidenceDimension.closed_loop)
         assert cl_result.grade == AndroidEvidenceGrade.absent
         assert not cl_result.passed
 
@@ -287,33 +282,27 @@ class TestContractValidEvidence:
 
         with (
             patch(
-                "core.android_evidence_integration_pipeline."
-                "classify_canonical_proof_input_diagnosis",
+                "core.android_evidence_integration_pipeline." "classify_canonical_proof_input_diagnosis",
                 return_value=mock_cap_diagnosis,
             ),
             patch(
-                "core.android_evidence_integration_pipeline."
-                "get_execution_lifecycle_truth_binding",
+                "core.android_evidence_integration_pipeline." "get_execution_lifecycle_truth_binding",
                 return_value=binding,
             ),
             patch(
-                "core.android_evidence_integration_pipeline."
-                "build_governance_authority_evidence",
+                "core.android_evidence_integration_pipeline." "build_governance_authority_evidence",
                 return_value=evidence,
             ),
             patch(
-                "core.android_evidence_integration_pipeline."
-                "verify_governance_authority_integrity",
+                "core.android_evidence_integration_pipeline." "verify_governance_authority_integrity",
                 return_value=[],
             ),
             patch(
-                "core.android_evidence_integration_pipeline."
-                "query_closed_loop_governance_state",
+                "core.android_evidence_integration_pipeline." "query_closed_loop_governance_state",
                 return_value=view,
             ),
             patch(
-                "core.android_evidence_integration_pipeline."
-                "assert_closed_loop_invariants",
+                "core.android_evidence_integration_pipeline." "assert_closed_loop_invariants",
                 return_value=[],
             ),
         ):
@@ -341,33 +330,27 @@ class TestContractValidEvidence:
 
         with (
             patch(
-                "core.android_evidence_integration_pipeline."
-                "classify_canonical_proof_input_diagnosis",
+                "core.android_evidence_integration_pipeline." "classify_canonical_proof_input_diagnosis",
                 return_value=mock_cap_diagnosis,
             ),
             patch(
-                "core.android_evidence_integration_pipeline."
-                "get_execution_lifecycle_truth_binding",
+                "core.android_evidence_integration_pipeline." "get_execution_lifecycle_truth_binding",
                 return_value=binding,
             ),
             patch(
-                "core.android_evidence_integration_pipeline."
-                "build_governance_authority_evidence",
+                "core.android_evidence_integration_pipeline." "build_governance_authority_evidence",
                 return_value=evidence,
             ),
             patch(
-                "core.android_evidence_integration_pipeline."
-                "verify_governance_authority_integrity",
+                "core.android_evidence_integration_pipeline." "verify_governance_authority_integrity",
                 return_value=[],
             ),
             patch(
-                "core.android_evidence_integration_pipeline."
-                "query_closed_loop_governance_state",
+                "core.android_evidence_integration_pipeline." "query_closed_loop_governance_state",
                 return_value=view,
             ),
             patch(
-                "core.android_evidence_integration_pipeline."
-                "assert_closed_loop_invariants",
+                "core.android_evidence_integration_pipeline." "assert_closed_loop_invariants",
                 return_value=[],
             ),
         ):
@@ -402,8 +385,7 @@ class TestCapabilityTruthDegradation:
             "proof_input_conflicts": [],
         }
         with patch(
-            "core.android_evidence_integration_pipeline."
-            "classify_canonical_proof_input_diagnosis",
+            "core.android_evidence_integration_pipeline." "classify_canonical_proof_input_diagnosis",
             return_value=mock_diagnosis,
         ):
             result = _evaluate_capability_truth_dimension("dev_test", {})
@@ -421,8 +403,7 @@ class TestCapabilityTruthDegradation:
             "proof_input_conflicts": [],
         }
         with patch(
-            "core.android_evidence_integration_pipeline."
-            "classify_canonical_proof_input_diagnosis",
+            "core.android_evidence_integration_pipeline." "classify_canonical_proof_input_diagnosis",
             return_value=mock_diagnosis,
         ):
             verdict = evaluate_android_evidence_integration(
@@ -440,8 +421,7 @@ class TestCapabilityTruthDegradation:
             "proof_input_conflicts": [],
         }
         with patch(
-            "core.android_evidence_integration_pipeline."
-            "classify_canonical_proof_input_diagnosis",
+            "core.android_evidence_integration_pipeline." "classify_canonical_proof_input_diagnosis",
             return_value=mock_diagnosis,
         ):
             verdict = evaluate_android_evidence_integration(
@@ -463,8 +443,7 @@ class TestCapabilityTruthDegradation:
             "proof_input_conflicts": [],
         }
         with patch(
-            "core.android_evidence_integration_pipeline."
-            "classify_canonical_proof_input_diagnosis",
+            "core.android_evidence_integration_pipeline." "classify_canonical_proof_input_diagnosis",
             return_value=mock_diagnosis,
         ):
             result = _evaluate_capability_truth_dimension("dev_test", {})
@@ -481,8 +460,7 @@ class TestCapabilityTruthDegradation:
             "proof_input_conflicts": [],
         }
         with patch(
-            "core.android_evidence_integration_pipeline."
-            "classify_canonical_proof_input_diagnosis",
+            "core.android_evidence_integration_pipeline." "classify_canonical_proof_input_diagnosis",
             return_value=mock_diagnosis,
         ):
             result = _evaluate_capability_truth_dimension("dev_test", {})
@@ -499,8 +477,7 @@ class TestCapabilityTruthDegradation:
             "proof_input_conflicts": [],
         }
         with patch(
-            "core.android_evidence_integration_pipeline."
-            "classify_canonical_proof_input_diagnosis",
+            "core.android_evidence_integration_pipeline." "classify_canonical_proof_input_diagnosis",
             return_value=mock_diagnosis,
         ):
             result = _evaluate_capability_truth_dimension("dev_test", {})
@@ -518,8 +495,7 @@ class TestCapabilityTruthDegradation:
             "proof_input_conflicts": [],
         }
         with patch(
-            "core.android_evidence_integration_pipeline."
-            "classify_canonical_proof_input_diagnosis",
+            "core.android_evidence_integration_pipeline." "classify_canonical_proof_input_diagnosis",
             return_value=mock_diagnosis,
         ):
             result = _evaluate_capability_truth_dimension("dev_test", {})
@@ -560,8 +536,7 @@ class TestLifecycleTruthDegradation:
 
         binding = self._make_binding(quality, degraded=True)
         with patch(
-            "core.android_evidence_integration_pipeline."
-            "get_execution_lifecycle_truth_binding",
+            "core.android_evidence_integration_pipeline." "get_execution_lifecycle_truth_binding",
             return_value=binding,
         ):
             result = _evaluate_lifecycle_truth_dimension("dev_lifecycle")
@@ -575,8 +550,7 @@ class TestLifecycleTruthDegradation:
     def test_degraded_lifecycle_causes_overall_deny(self, quality: str) -> None:
         binding = self._make_binding(quality, degraded=True)
         with patch(
-            "core.android_evidence_integration_pipeline."
-            "get_execution_lifecycle_truth_binding",
+            "core.android_evidence_integration_pipeline." "get_execution_lifecycle_truth_binding",
             return_value=binding,
         ):
             verdict = evaluate_android_evidence_integration("dev_lifecycle", "")
@@ -585,8 +559,7 @@ class TestLifecycleTruthDegradation:
     def test_degraded_lifecycle_named_in_causes(self) -> None:
         binding = self._make_binding("missing_remote", degraded=True)
         with patch(
-            "core.android_evidence_integration_pipeline."
-            "get_execution_lifecycle_truth_binding",
+            "core.android_evidence_integration_pipeline." "get_execution_lifecycle_truth_binding",
             return_value=binding,
         ):
             verdict = evaluate_android_evidence_integration("dev_lifecycle_diag", "")
@@ -600,8 +573,7 @@ class TestLifecycleTruthDegradation:
 
         binding = self._make_binding("android_remote_confirmed", degraded=False)
         with patch(
-            "core.android_evidence_integration_pipeline."
-            "get_execution_lifecycle_truth_binding",
+            "core.android_evidence_integration_pipeline." "get_execution_lifecycle_truth_binding",
             return_value=binding,
         ):
             result = _evaluate_lifecycle_truth_dimension("dev_ok")
@@ -615,8 +587,7 @@ class TestLifecycleTruthDegradation:
 
         binding = self._make_binding("v2_local_only", degraded=False, active_count=0)
         with patch(
-            "core.android_evidence_integration_pipeline."
-            "get_execution_lifecycle_truth_binding",
+            "core.android_evidence_integration_pipeline." "get_execution_lifecycle_truth_binding",
             return_value=binding,
         ):
             result = _evaluate_lifecycle_truth_dimension("dev_idle")
@@ -666,13 +637,11 @@ class TestAuditAuthorityDegradation:
 
         with (
             patch(
-                "core.android_evidence_integration_pipeline."
-                "build_governance_authority_evidence",
+                "core.android_evidence_integration_pipeline." "build_governance_authority_evidence",
                 return_value=evidence,
             ),
             patch(
-                "core.android_evidence_integration_pipeline."
-                "verify_governance_authority_integrity",
+                "core.android_evidence_integration_pipeline." "verify_governance_authority_integrity",
                 return_value=[violation],
             ),
         ):
@@ -690,13 +659,11 @@ class TestAuditAuthorityDegradation:
 
         with (
             patch(
-                "core.android_evidence_integration_pipeline."
-                "build_governance_authority_evidence",
+                "core.android_evidence_integration_pipeline." "build_governance_authority_evidence",
                 return_value=evidence,
             ),
             patch(
-                "core.android_evidence_integration_pipeline."
-                "verify_governance_authority_integrity",
+                "core.android_evidence_integration_pipeline." "verify_governance_authority_integrity",
                 return_value=[],
             ),
         ):
@@ -717,13 +684,11 @@ class TestAuditAuthorityDegradation:
 
         with (
             patch(
-                "core.android_evidence_integration_pipeline."
-                "build_governance_authority_evidence",
+                "core.android_evidence_integration_pipeline." "build_governance_authority_evidence",
                 return_value=evidence,
             ),
             patch(
-                "core.android_evidence_integration_pipeline."
-                "verify_governance_authority_integrity",
+                "core.android_evidence_integration_pipeline." "verify_governance_authority_integrity",
                 return_value=[],
             ),
         ):
@@ -747,13 +712,11 @@ class TestAuditAuthorityDegradation:
 
         with (
             patch(
-                "core.android_evidence_integration_pipeline."
-                "build_governance_authority_evidence",
+                "core.android_evidence_integration_pipeline." "build_governance_authority_evidence",
                 return_value=evidence,
             ),
             patch(
-                "core.android_evidence_integration_pipeline."
-                "verify_governance_authority_integrity",
+                "core.android_evidence_integration_pipeline." "verify_governance_authority_integrity",
                 return_value=[],
             ),
         ):
@@ -802,13 +765,11 @@ class TestClosedLoopDegradation:
 
         with (
             patch(
-                "core.android_evidence_integration_pipeline."
-                "query_closed_loop_governance_state",
+                "core.android_evidence_integration_pipeline." "query_closed_loop_governance_state",
                 return_value=view,
             ),
             patch(
-                "core.android_evidence_integration_pipeline."
-                "assert_closed_loop_invariants",
+                "core.android_evidence_integration_pipeline." "assert_closed_loop_invariants",
                 return_value=[violation],
             ),
         ):
@@ -826,13 +787,11 @@ class TestClosedLoopDegradation:
 
         with (
             patch(
-                "core.android_evidence_integration_pipeline."
-                "query_closed_loop_governance_state",
+                "core.android_evidence_integration_pipeline." "query_closed_loop_governance_state",
                 return_value=view,
             ),
             patch(
-                "core.android_evidence_integration_pipeline."
-                "assert_closed_loop_invariants",
+                "core.android_evidence_integration_pipeline." "assert_closed_loop_invariants",
                 return_value=[],
             ),
         ):
@@ -851,13 +810,11 @@ class TestClosedLoopDegradation:
 
         with (
             patch(
-                "core.android_evidence_integration_pipeline."
-                "query_closed_loop_governance_state",
+                "core.android_evidence_integration_pipeline." "query_closed_loop_governance_state",
                 return_value=view,
             ),
             patch(
-                "core.android_evidence_integration_pipeline."
-                "assert_closed_loop_invariants",
+                "core.android_evidence_integration_pipeline." "assert_closed_loop_invariants",
                 return_value=[],
             ),
         ):
@@ -875,13 +832,11 @@ class TestClosedLoopDegradation:
 
         with (
             patch(
-                "core.android_evidence_integration_pipeline."
-                "query_closed_loop_governance_state",
+                "core.android_evidence_integration_pipeline." "query_closed_loop_governance_state",
                 return_value=view,
             ),
             patch(
-                "core.android_evidence_integration_pipeline."
-                "assert_closed_loop_invariants",
+                "core.android_evidence_integration_pipeline." "assert_closed_loop_invariants",
                 return_value=[],
             ),
         ):
@@ -914,13 +869,11 @@ class TestCompositeDegradation:
 
         with (
             patch(
-                "core.android_evidence_integration_pipeline."
-                "classify_canonical_proof_input_diagnosis",
+                "core.android_evidence_integration_pipeline." "classify_canonical_proof_input_diagnosis",
                 return_value=mock_cap_diagnosis,
             ),
             patch(
-                "core.android_evidence_integration_pipeline."
-                "get_execution_lifecycle_truth_binding",
+                "core.android_evidence_integration_pipeline." "get_execution_lifecycle_truth_binding",
                 return_value=lifecycle_binding,
             ),
         ):
@@ -963,39 +916,31 @@ class TestCompositeDegradation:
 
         with (
             patch(
-                "core.android_evidence_integration_pipeline."
-                "classify_canonical_proof_input_diagnosis",
+                "core.android_evidence_integration_pipeline." "classify_canonical_proof_input_diagnosis",
                 return_value=mock_cap_diagnosis,
             ),
             patch(
-                "core.android_evidence_integration_pipeline."
-                "get_execution_lifecycle_truth_binding",
+                "core.android_evidence_integration_pipeline." "get_execution_lifecycle_truth_binding",
                 return_value=lifecycle_binding,
             ),
             patch(
-                "core.android_evidence_integration_pipeline."
-                "build_governance_authority_evidence",
+                "core.android_evidence_integration_pipeline." "build_governance_authority_evidence",
                 return_value=evidence_audit,
             ),
             patch(
-                "core.android_evidence_integration_pipeline."
-                "verify_governance_authority_integrity",
+                "core.android_evidence_integration_pipeline." "verify_governance_authority_integrity",
                 return_value=[violation_audit],
             ),
             patch(
-                "core.android_evidence_integration_pipeline."
-                "query_closed_loop_governance_state",
+                "core.android_evidence_integration_pipeline." "query_closed_loop_governance_state",
                 return_value=view_cl,
             ),
             patch(
-                "core.android_evidence_integration_pipeline."
-                "assert_closed_loop_invariants",
+                "core.android_evidence_integration_pipeline." "assert_closed_loop_invariants",
                 return_value=[violation_cl],
             ),
         ):
-            verdict = evaluate_android_evidence_integration(
-                "dev_all_failing", "exec_all_failing"
-            )
+            verdict = evaluate_android_evidence_integration("dev_all_failing", "exec_all_failing")
             assert verdict.integration_allowed is False
             # All four dimensions must appear in degradation_causes
             causes_joined = " ".join(verdict.degradation_causes)
@@ -1023,8 +968,7 @@ class TestOptimisticFallbackElimination:
         )
         # capability_truth dimension must not be passing
         cap_result = next(
-            r for r in verdict.dimension_results
-            if r.dimension == AndroidEvidenceDimension.capability_truth
+            r for r in verdict.dimension_results if r.dimension == AndroidEvidenceDimension.capability_truth
         )
         assert not cap_result.passed, (
             "CAPABILITY_TRUTH_ABSENT_FALLBACK: absent capability snapshot "
@@ -1047,8 +991,7 @@ class TestOptimisticFallbackElimination:
         binding.android_lifecycle_truth_governance_impact = "blocks_execution"
 
         with patch(
-            "core.android_evidence_integration_pipeline."
-            "get_execution_lifecycle_truth_binding",
+            "core.android_evidence_integration_pipeline." "get_execution_lifecycle_truth_binding",
             return_value=binding,
         ):
             result = _evaluate_lifecycle_truth_dimension("dev_fallback_b")
@@ -1065,8 +1008,7 @@ class TestOptimisticFallbackElimination:
 
         result = _evaluate_audit_authority_dimension("", "dev_fallback_c")
         assert not result.passed, (
-            "AUDIT_CHAIN_ABSENT_FALLBACK: absent execution_id must not "
-            "produce a passing audit dimension."
+            "AUDIT_CHAIN_ABSENT_FALLBACK: absent execution_id must not " "produce a passing audit dimension."
         )
         assert "GOVERNANCE_AUDIT_AUTHORITY_POLICY" in result.reason
 
@@ -1081,20 +1023,17 @@ class TestOptimisticFallbackElimination:
 
         with (
             patch(
-                "core.android_evidence_integration_pipeline."
-                "query_closed_loop_governance_state",
+                "core.android_evidence_integration_pipeline." "query_closed_loop_governance_state",
                 return_value=view,
             ),
             patch(
-                "core.android_evidence_integration_pipeline."
-                "assert_closed_loop_invariants",
+                "core.android_evidence_integration_pipeline." "assert_closed_loop_invariants",
                 return_value=[],
             ),
         ):
             result = _evaluate_closed_loop_dimension("exec_fallback_d", "dev_fallback_d")
             assert not result.passed, (
-                "CLOSED_LOOP_UNKNOWN_FALLBACK: unknown governance stage "
-                "must not be treated as idle/clean."
+                "CLOSED_LOOP_UNKNOWN_FALLBACK: unknown governance stage " "must not be treated as idle/clean."
             )
 
 
@@ -1239,33 +1178,27 @@ class TestContractValidStrongEvidence:
     def test_all_strong_dimensions_produce_allow_or_conditionally_allow(self) -> None:
         with (
             patch(
-                "core.android_evidence_integration_pipeline."
-                "classify_canonical_proof_input_diagnosis",
+                "core.android_evidence_integration_pipeline." "classify_canonical_proof_input_diagnosis",
                 return_value=self._make_strong_cap_diagnosis(),
             ),
             patch(
-                "core.android_evidence_integration_pipeline."
-                "get_execution_lifecycle_truth_binding",
+                "core.android_evidence_integration_pipeline." "get_execution_lifecycle_truth_binding",
                 return_value=self._make_strong_lifecycle(),
             ),
             patch(
-                "core.android_evidence_integration_pipeline."
-                "build_governance_authority_evidence",
+                "core.android_evidence_integration_pipeline." "build_governance_authority_evidence",
                 return_value=self._make_strong_audit(),
             ),
             patch(
-                "core.android_evidence_integration_pipeline."
-                "verify_governance_authority_integrity",
+                "core.android_evidence_integration_pipeline." "verify_governance_authority_integrity",
                 return_value=[],
             ),
             patch(
-                "core.android_evidence_integration_pipeline."
-                "query_closed_loop_governance_state",
+                "core.android_evidence_integration_pipeline." "query_closed_loop_governance_state",
                 return_value=self._make_strong_view(),
             ),
             patch(
-                "core.android_evidence_integration_pipeline."
-                "assert_closed_loop_invariants",
+                "core.android_evidence_integration_pipeline." "assert_closed_loop_invariants",
                 return_value=[],
             ),
         ):
@@ -1283,33 +1216,27 @@ class TestContractValidStrongEvidence:
     def test_all_strong_dimensions_zero_degradation_causes(self) -> None:
         with (
             patch(
-                "core.android_evidence_integration_pipeline."
-                "classify_canonical_proof_input_diagnosis",
+                "core.android_evidence_integration_pipeline." "classify_canonical_proof_input_diagnosis",
                 return_value=self._make_strong_cap_diagnosis(),
             ),
             patch(
-                "core.android_evidence_integration_pipeline."
-                "get_execution_lifecycle_truth_binding",
+                "core.android_evidence_integration_pipeline." "get_execution_lifecycle_truth_binding",
                 return_value=self._make_strong_lifecycle(),
             ),
             patch(
-                "core.android_evidence_integration_pipeline."
-                "build_governance_authority_evidence",
+                "core.android_evidence_integration_pipeline." "build_governance_authority_evidence",
                 return_value=self._make_strong_audit(),
             ),
             patch(
-                "core.android_evidence_integration_pipeline."
-                "verify_governance_authority_integrity",
+                "core.android_evidence_integration_pipeline." "verify_governance_authority_integrity",
                 return_value=[],
             ),
             patch(
-                "core.android_evidence_integration_pipeline."
-                "query_closed_loop_governance_state",
+                "core.android_evidence_integration_pipeline." "query_closed_loop_governance_state",
                 return_value=self._make_strong_view(),
             ),
             patch(
-                "core.android_evidence_integration_pipeline."
-                "assert_closed_loop_invariants",
+                "core.android_evidence_integration_pipeline." "assert_closed_loop_invariants",
                 return_value=[],
             ),
         ):
@@ -1341,9 +1268,7 @@ class TestPriorPRSentinelsIntact:
             ANDROID_CAPABILITY_TRUTH_ABSENT_DEGRADES_READINESS_POLICY,
         )
 
-        assert "ANDROID_CAPABILITY_TRUTH_ABSENT" in (
-            ANDROID_CAPABILITY_TRUTH_ABSENT_DEGRADES_READINESS_POLICY
-        )
+        assert "ANDROID_CAPABILITY_TRUTH_ABSENT" in (ANDROID_CAPABILITY_TRUTH_ABSENT_DEGRADES_READINESS_POLICY)
         assert "deny" in ANDROID_CAPABILITY_TRUTH_ABSENT_DEGRADES_READINESS_POLICY.lower()
 
     def test_pr13_sentinel_present(self) -> None:
@@ -1398,8 +1323,7 @@ class TestRecoveryTruthGapDegradation:
     def test_recovery_partial_gap_downgrades_allow_to_conditionally_allow(self) -> None:
         with (
             patch(
-                "core.android_evidence_integration_pipeline."
-                "classify_canonical_proof_input_diagnosis",
+                "core.android_evidence_integration_pipeline." "classify_canonical_proof_input_diagnosis",
                 return_value={
                     "proof_input_class": "complete",
                     "proof_input_degradation_causes": [],
@@ -1407,28 +1331,23 @@ class TestRecoveryTruthGapDegradation:
                 },
             ),
             patch(
-                "core.android_evidence_integration_pipeline."
-                "get_execution_lifecycle_truth_binding",
+                "core.android_evidence_integration_pipeline." "get_execution_lifecycle_truth_binding",
                 return_value=TestContractValidStrongEvidence()._make_strong_lifecycle(),
             ),
             patch(
-                "core.android_evidence_integration_pipeline."
-                "build_governance_authority_evidence",
+                "core.android_evidence_integration_pipeline." "build_governance_authority_evidence",
                 return_value=TestContractValidStrongEvidence()._make_strong_audit(),
             ),
             patch(
-                "core.android_evidence_integration_pipeline."
-                "verify_governance_authority_integrity",
+                "core.android_evidence_integration_pipeline." "verify_governance_authority_integrity",
                 return_value=[],
             ),
             patch(
-                "core.android_evidence_integration_pipeline."
-                "query_closed_loop_governance_state",
+                "core.android_evidence_integration_pipeline." "query_closed_loop_governance_state",
                 return_value=TestContractValidStrongEvidence()._make_strong_view(),
             ),
             patch(
-                "core.android_evidence_integration_pipeline."
-                "assert_closed_loop_invariants",
+                "core.android_evidence_integration_pipeline." "assert_closed_loop_invariants",
                 return_value=[],
             ),
         ):
@@ -1449,8 +1368,7 @@ class TestRecoveryTruthGapDegradation:
     def test_recovery_missing_conflicting_replay_fragmented_forces_deny(self) -> None:
         with (
             patch(
-                "core.android_evidence_integration_pipeline."
-                "classify_canonical_proof_input_diagnosis",
+                "core.android_evidence_integration_pipeline." "classify_canonical_proof_input_diagnosis",
                 return_value={
                     "proof_input_class": "complete",
                     "proof_input_degradation_causes": [],
@@ -1458,28 +1376,23 @@ class TestRecoveryTruthGapDegradation:
                 },
             ),
             patch(
-                "core.android_evidence_integration_pipeline."
-                "get_execution_lifecycle_truth_binding",
+                "core.android_evidence_integration_pipeline." "get_execution_lifecycle_truth_binding",
                 return_value=TestContractValidStrongEvidence()._make_strong_lifecycle(),
             ),
             patch(
-                "core.android_evidence_integration_pipeline."
-                "build_governance_authority_evidence",
+                "core.android_evidence_integration_pipeline." "build_governance_authority_evidence",
                 return_value=TestContractValidStrongEvidence()._make_strong_audit(),
             ),
             patch(
-                "core.android_evidence_integration_pipeline."
-                "verify_governance_authority_integrity",
+                "core.android_evidence_integration_pipeline." "verify_governance_authority_integrity",
                 return_value=[],
             ),
             patch(
-                "core.android_evidence_integration_pipeline."
-                "query_closed_loop_governance_state",
+                "core.android_evidence_integration_pipeline." "query_closed_loop_governance_state",
                 return_value=TestContractValidStrongEvidence()._make_strong_view(),
             ),
             patch(
-                "core.android_evidence_integration_pipeline."
-                "assert_closed_loop_invariants",
+                "core.android_evidence_integration_pipeline." "assert_closed_loop_invariants",
                 return_value=[],
             ),
         ):

@@ -134,10 +134,10 @@ from core.delegated_runtime_dispatch_intent import (
     reset_delegated_runtime_dispatch_runtime,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _fresh_runtime() -> DelegatedRuntimeDispatchRuntime:
     return DelegatedRuntimeDispatchRuntime()
@@ -150,6 +150,7 @@ def _make_session_id() -> str:
 # ---------------------------------------------------------------------------
 # Group A — Authority / policy sentinels
 # ---------------------------------------------------------------------------
+
 
 class TestGroupA:
     def test_A1_authority_non_empty(self):
@@ -214,6 +215,7 @@ class TestGroupA:
 # Group B — DelegationIntent enum
 # ---------------------------------------------------------------------------
 
+
 class TestGroupB:
     def test_B1_all_values_present(self):
         values = {m.value for m in DelegationIntent}
@@ -251,48 +253,32 @@ class TestGroupB:
 # Group C — HandoffPreparationState enum
 # ---------------------------------------------------------------------------
 
+
 class TestGroupC:
     def test_C1_all_values_present(self):
         values = {m.value for m in HandoffPreparationState}
-        assert values == {
-            "not_started", "preparing", "ready", "dispatched", "cancelled", "failed"
-        }
+        assert values == {"not_started", "preparing", "ready", "dispatched", "cancelled", "failed"}
 
     def test_C2_from_string_not_started(self):
-        assert (
-            HandoffPreparationState.from_string("not_started")
-            == HandoffPreparationState.not_started
-        )
+        assert HandoffPreparationState.from_string("not_started") == HandoffPreparationState.not_started
 
     def test_C3_from_string_preparing(self):
-        assert (
-            HandoffPreparationState.from_string("preparing")
-            == HandoffPreparationState.preparing
-        )
+        assert HandoffPreparationState.from_string("preparing") == HandoffPreparationState.preparing
 
     def test_C4_from_string_ready(self):
         assert HandoffPreparationState.from_string("ready") == HandoffPreparationState.ready
 
     def test_C5_from_string_dispatched(self):
-        assert (
-            HandoffPreparationState.from_string("dispatched")
-            == HandoffPreparationState.dispatched
-        )
+        assert HandoffPreparationState.from_string("dispatched") == HandoffPreparationState.dispatched
 
     def test_C6_from_string_cancelled(self):
-        assert (
-            HandoffPreparationState.from_string("cancelled")
-            == HandoffPreparationState.cancelled
-        )
+        assert HandoffPreparationState.from_string("cancelled") == HandoffPreparationState.cancelled
 
     def test_C7_from_string_failed(self):
         assert HandoffPreparationState.from_string("failed") == HandoffPreparationState.failed
 
     def test_C8_from_string_unknown_defaults_not_started(self):
-        assert (
-            HandoffPreparationState.from_string("bogus")
-            == HandoffPreparationState.not_started
-        )
+        assert HandoffPreparationState.from_string("bogus") == HandoffPreparationState.not_started
 
     def test_C9_is_terminal_dispatched(self):
         assert HandoffPreparationState.dispatched.is_terminal() is True
@@ -316,19 +302,13 @@ class TestGroupC:
         assert HandoffPreparationState.ready.is_actionable() is False
 
     def test_BZ_can_advance_to_terminal_from_terminal_false(self):
-        assert HandoffPreparationState.dispatched.can_advance_to(
-            HandoffPreparationState.ready
-        ) is False
+        assert HandoffPreparationState.dispatched.can_advance_to(HandoffPreparationState.ready) is False
 
     def test_CA_can_advance_not_started_to_preparing(self):
-        assert HandoffPreparationState.not_started.can_advance_to(
-            HandoffPreparationState.preparing
-        ) is True
+        assert HandoffPreparationState.not_started.can_advance_to(HandoffPreparationState.preparing) is True
 
     def test_CB_can_advance_regression_ready_to_not_started_false(self):
-        assert HandoffPreparationState.ready.can_advance_to(
-            HandoffPreparationState.not_started
-        ) is False
+        assert HandoffPreparationState.ready.can_advance_to(HandoffPreparationState.not_started) is False
 
     def test_BP_string_values_match_lowercase(self):
         assert HandoffPreparationState.not_started.value == "not_started"
@@ -343,6 +323,7 @@ class TestGroupC:
 # Group D — DispatchEligibilityOutcome
 # ---------------------------------------------------------------------------
 
+
 class TestGroupD:
     def test_D1_default_construction(self):
         o = DispatchEligibilityOutcome()
@@ -353,9 +334,16 @@ class TestGroupD:
         o = DispatchEligibilityOutcome()
         d = o.to_dict()
         for key in (
-            "is_eligible", "resolved_intent", "blocking_reason",
-            "applied_policy", "note", "device_id", "session_id",
-            "source_runtime_posture", "coordination_role", "capability_tier",
+            "is_eligible",
+            "resolved_intent",
+            "blocking_reason",
+            "applied_policy",
+            "note",
+            "device_id",
+            "session_id",
+            "source_runtime_posture",
+            "coordination_role",
+            "capability_tier",
         ):
             assert key in d, f"Missing key: {key}"
 
@@ -383,6 +371,7 @@ class TestGroupD:
 # Group E — HandoffInputBundle
 # ---------------------------------------------------------------------------
 
+
 class TestGroupE:
     def test_E1_default_construction(self):
         b = HandoffInputBundle()
@@ -394,10 +383,18 @@ class TestGroupE:
         b = HandoffInputBundle()
         d = b.to_dict()
         for key in (
-            "record_id", "device_id", "session_id", "source_runtime_posture",
-            "coordination_role", "android_host_role", "capability_tier",
-            "delegation_intent", "continuation_hint", "assembled_at",
-            "is_session_anchored", "metadata",
+            "record_id",
+            "device_id",
+            "session_id",
+            "source_runtime_posture",
+            "coordination_role",
+            "android_host_role",
+            "capability_tier",
+            "delegation_intent",
+            "continuation_hint",
+            "assembled_at",
+            "is_session_anchored",
+            "metadata",
         ):
             assert key in d, f"Missing key: {key}"
 
@@ -412,6 +409,7 @@ class TestGroupE:
 # ---------------------------------------------------------------------------
 # Group F — DelegatedRuntimeDispatchRecord
 # ---------------------------------------------------------------------------
+
 
 class TestGroupF:
     def test_F1_default_construction(self):
@@ -457,10 +455,20 @@ class TestGroupF:
         r = DelegatedRuntimeDispatchRecord()
         d = r.to_dict()
         for key in (
-            "record_id", "device_id", "session_id", "source_runtime_posture",
-            "coordination_role", "android_host_role", "capability_tier",
-            "delegation_intent", "preparation_state", "eligibility_outcome",
-            "continuation_hint", "created_at", "metadata", "reject_reason",
+            "record_id",
+            "device_id",
+            "session_id",
+            "source_runtime_posture",
+            "coordination_role",
+            "android_host_role",
+            "capability_tier",
+            "delegation_intent",
+            "preparation_state",
+            "eligibility_outcome",
+            "continuation_hint",
+            "created_at",
+            "metadata",
+            "reject_reason",
         ):
             assert key in d, f"Missing key: {key}"
 
@@ -502,9 +510,7 @@ class TestGroupF:
         uuid.UUID(r1.record_id)  # validates UUID format
 
     def test_BS_reject_reason_empty_when_accepted(self):
-        r = DelegatedRuntimeDispatchRecord(
-            session_id="s", delegation_intent=DelegationIntent.delegate
-        )
+        r = DelegatedRuntimeDispatchRecord(session_id="s", delegation_intent=DelegationIntent.delegate)
         assert r.to_dict()["reject_reason"] == ""
 
     def test_BJ_from_dict_missing_fields_use_defaults(self):
@@ -535,6 +541,7 @@ class TestGroupF:
 # Group G — DelegatedRuntimeDispatchSnapshot
 # ---------------------------------------------------------------------------
 
+
 class TestGroupG:
     def test_G1_default_construction(self):
         s = DelegatedRuntimeDispatchSnapshot()
@@ -545,8 +552,7 @@ class TestGroupG:
     def test_G2_to_dict_keys(self):
         s = DelegatedRuntimeDispatchSnapshot()
         d = s.to_dict()
-        for key in ("snapshot_id", "snapshotted_at", "records",
-                    "pending_count", "total_count", "policy_sentinels"):
+        for key in ("snapshot_id", "snapshotted_at", "records", "pending_count", "total_count", "policy_sentinels"):
             assert key in d, f"Missing key: {key}"
 
     def test_G3_to_json_valid(self):
@@ -578,6 +584,7 @@ class TestGroupG:
 # ---------------------------------------------------------------------------
 # Group H — DelegatedRuntimeDispatchRuntime
 # ---------------------------------------------------------------------------
+
 
 class TestGroupH:
     def test_H1_default_capacity(self):
@@ -657,6 +664,7 @@ class TestGroupH:
 # ---------------------------------------------------------------------------
 # Group I–Q — evaluate_dispatch_eligibility
 # ---------------------------------------------------------------------------
+
 
 class TestGroupI_Q:
     def test_I1_join_runtime_valid_session_eligible(self):
@@ -791,6 +799,7 @@ class TestGroupI_Q:
 # ---------------------------------------------------------------------------
 # Group R–AB — build_delegated_dispatch_record
 # ---------------------------------------------------------------------------
+
 
 class TestGroupR_AB:
     def test_R1_join_runtime_valid_returns_accepted(self):
@@ -943,12 +952,8 @@ class TestGroupR_AB:
         rt = _fresh_runtime()
         sid1 = _make_session_id()
         sid2 = _make_session_id()
-        r1 = build_delegated_dispatch_record(
-            session_id=sid1, source_runtime_posture="join_runtime", runtime=rt
-        )
-        build_delegated_dispatch_record(
-            session_id=sid2, source_runtime_posture="join_runtime", runtime=rt
-        )
+        r1 = build_delegated_dispatch_record(session_id=sid1, source_runtime_posture="join_runtime", runtime=rt)
+        build_delegated_dispatch_record(session_id=sid2, source_runtime_posture="join_runtime", runtime=rt)
         # r1 should remain unchanged
         assert r1.session_id == sid1
 
@@ -956,6 +961,7 @@ class TestGroupR_AB:
 # ---------------------------------------------------------------------------
 # Group AC–AF — prepare_handoff_inputs
 # ---------------------------------------------------------------------------
+
 
 class TestGroupAC_AF:
     def test_AC1_anchored_bundle_from_accepted_record(self):
@@ -978,9 +984,7 @@ class TestGroupAC_AF:
         assert bundle.is_session_anchored is False
 
     def test_AE1_override_continuation_hint_applied(self):
-        r = DelegatedRuntimeDispatchRecord(
-            session_id="s1", continuation_hint="orig"
-        )
+        r = DelegatedRuntimeDispatchRecord(session_id="s1", continuation_hint="orig")
         bundle = prepare_handoff_inputs(r, override_continuation_hint="new-hint")
         assert bundle.continuation_hint == "new-hint"
 
@@ -1002,9 +1006,7 @@ class TestGroupAC_AF:
         assert bundle.record_id == r.record_id
 
     def test_BV_bundle_metadata_matches_record(self):
-        r = DelegatedRuntimeDispatchRecord(
-            session_id="s1", metadata={"foo": "bar"}
-        )
+        r = DelegatedRuntimeDispatchRecord(session_id="s1", metadata={"foo": "bar"})
         bundle = prepare_handoff_inputs(r)
         assert bundle.metadata == {"foo": "bar"}
 
@@ -1012,6 +1014,7 @@ class TestGroupAC_AF:
 # ---------------------------------------------------------------------------
 # Group AG–AN — record_delegated_dispatch_intent, get, list, snapshot
 # ---------------------------------------------------------------------------
+
 
 class TestGroupAG_AN:
     def test_AG1_record_persisted_to_runtime(self):
@@ -1091,12 +1094,8 @@ class TestGroupAG_AN:
 
     def test_BU_two_sessions_both_in_pending(self):
         rt = _fresh_runtime()
-        rt.push(DelegatedRuntimeDispatchRecord(
-            session_id="sa", preparation_state=HandoffPreparationState.preparing
-        ))
-        rt.push(DelegatedRuntimeDispatchRecord(
-            session_id="sb", preparation_state=HandoffPreparationState.ready
-        ))
+        rt.push(DelegatedRuntimeDispatchRecord(session_id="sa", preparation_state=HandoffPreparationState.preparing))
+        rt.push(DelegatedRuntimeDispatchRecord(session_id="sb", preparation_state=HandoffPreparationState.ready))
         pending = list_pending_delegated_dispatch_records(runtime=rt)
         session_ids = {r.session_id for r in pending}
         assert session_ids == {"sa", "sb"}
@@ -1105,6 +1104,7 @@ class TestGroupAG_AN:
 # ---------------------------------------------------------------------------
 # Group AO–AP — core.runtime re-exports, projection sentinel
 # ---------------------------------------------------------------------------
+
 
 class TestGroupAO_AP:
     def test_AO_core_runtime_reexports(self):
@@ -1136,6 +1136,7 @@ class TestGroupAO_AP:
             from core.routes.projection import (
                 DELEGATED_RUNTIME_DISPATCH_INTENT_ALIGNED_PR8,
             )
+
             assert "UNAVAILABLE" not in DELEGATED_RUNTIME_DISPATCH_INTENT_ALIGNED_PR8
             assert "PR8" in DELEGATED_RUNTIME_DISPATCH_INTENT_ALIGNED_PR8
         except (ImportError, ModuleNotFoundError):
@@ -1146,20 +1147,19 @@ class TestGroupAO_AP:
 # Group AW–AX — from_string fallbacks
 # ---------------------------------------------------------------------------
 
+
 class TestGroupAW_AX:
     def test_AW_delegation_intent_from_string_unknown_defaults_none(self):
         assert DelegationIntent.from_string("xyz") == DelegationIntent.none
 
     def test_AX_handoff_preparation_state_unknown_defaults_not_started(self):
-        assert (
-            HandoffPreparationState.from_string("xyz")
-            == HandoffPreparationState.not_started
-        )
+        assert HandoffPreparationState.from_string("xyz") == HandoffPreparationState.not_started
 
 
 # ---------------------------------------------------------------------------
 # Group BM–BN — singleton management
 # ---------------------------------------------------------------------------
+
 
 class TestGroupBM_BN:
     def setup_method(self):
@@ -1185,18 +1185,23 @@ class TestGroupBM_BN:
 # Group AV — Multiple sessions
 # ---------------------------------------------------------------------------
 
+
 class TestGroupAV:
     def test_AV_multiple_sessions_independent(self):
         rt = _fresh_runtime()
         sid_a = _make_session_id()
         sid_b = _make_session_id()
         build_delegated_dispatch_record(
-            session_id=sid_a, source_runtime_posture="join_runtime",
-            device_id="dev-A", runtime=rt,
+            session_id=sid_a,
+            source_runtime_posture="join_runtime",
+            device_id="dev-A",
+            runtime=rt,
         )
         build_delegated_dispatch_record(
-            session_id=sid_b, source_runtime_posture="join_runtime",
-            device_id="dev-B", runtime=rt,
+            session_id=sid_b,
+            source_runtime_posture="join_runtime",
+            device_id="dev-B",
+            runtime=rt,
         )
         rec_a = get_delegated_dispatch_record(sid_a, runtime=rt)
         rec_b = get_delegated_dispatch_record(sid_b, runtime=rt)
@@ -1210,6 +1215,7 @@ class TestGroupAV:
 # Group BY — PR8 sentinel string content
 # ---------------------------------------------------------------------------
 
+
 class TestGroupBY:
     def test_BY_pr8_sentinel_contains_package_8(self):
         assert "package=8" in DELEGATED_RUNTIME_DISPATCH_INTENT_PR8_SENTINEL
@@ -1221,6 +1227,7 @@ class TestGroupBY:
 # ---------------------------------------------------------------------------
 # Group BX — End-to-end
 # ---------------------------------------------------------------------------
+
 
 class TestGroupBX:
     def test_BX_end_to_end_attach_evaluate_build_prepare(self):

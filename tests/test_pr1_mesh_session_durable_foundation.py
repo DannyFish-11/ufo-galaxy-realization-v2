@@ -66,7 +66,6 @@ from typing import Any, Dict, Optional
 
 import pytest
 
-
 # ===========================================================================
 # Helpers
 # ===========================================================================
@@ -74,11 +73,13 @@ import pytest
 
 def _make_store(tmp_dir: Optional[str] = None):
     from core.mesh.mesh_session_persistence import MeshSessionPersistenceStore
+
     return MeshSessionPersistenceStore(store_dir=tmp_dir or tempfile.mkdtemp())
 
 
 def _make_coordinator(store=None):
     from core.mesh.mesh_session_lifecycle import MeshSessionLifecycleCoordinator
+
     return MeshSessionLifecycleCoordinator(store=store)
 
 
@@ -101,14 +102,17 @@ class TestMeshSessionStatusExtensions:
 
     def test_suspended_status_exists(self):
         from contracts.mesh_session import MeshSessionStatus
+
         assert MeshSessionStatus.SUSPENDED.value == "suspended"
 
     def test_restoring_status_exists(self):
         from contracts.mesh_session import MeshSessionStatus
+
         assert MeshSessionStatus.RESTORING.value == "restoring"
 
     def test_terminal_statuses_sentinel(self):
         from contracts.mesh_session import MESH_SESSION_TERMINAL_STATUSES, MeshSessionStatus
+
         assert MeshSessionStatus.COMPLETED in MESH_SESSION_TERMINAL_STATUSES
         assert MeshSessionStatus.CANCELLED in MESH_SESSION_TERMINAL_STATUSES
         assert MeshSessionStatus.FAILED in MESH_SESSION_TERMINAL_STATUSES
@@ -117,11 +121,13 @@ class TestMeshSessionStatusExtensions:
 
     def test_restorable_statuses_sentinel(self):
         from contracts.mesh_session import MESH_SESSION_RESTORABLE_STATUSES, MeshSessionStatus
+
         assert MeshSessionStatus.SUSPENDED in MESH_SESSION_RESTORABLE_STATUSES
         assert MeshSessionStatus.ACTIVE not in MESH_SESSION_RESTORABLE_STATUSES
 
     def test_valid_transitions_is_dict(self):
         from contracts.mesh_session import MESH_SESSION_VALID_TRANSITIONS, MeshSessionStatus
+
         assert isinstance(MESH_SESSION_VALID_TRANSITIONS, dict)
         # All canonical source states present
         for status in (
@@ -135,62 +141,59 @@ class TestMeshSessionStatusExtensions:
 
     def test_lifecycle_is_explicit_sentinel(self):
         from contracts.mesh_session import MESH_SESSION_LIFECYCLE_IS_EXPLICIT
+
         assert isinstance(MESH_SESSION_LIFECYCLE_IS_EXPLICIT, str)
         assert "MESH_SESSION_LIFECYCLE_IS_EXPLICIT" in MESH_SESSION_LIFECYCLE_IS_EXPLICIT
         assert "PR-1" in MESH_SESSION_LIFECYCLE_IS_EXPLICIT
 
     def test_valid_transition_pending_to_active(self):
         from contracts.mesh_session import MeshSessionStatus, is_valid_lifecycle_transition
-        assert is_valid_lifecycle_transition(
-            MeshSessionStatus.PENDING, MeshSessionStatus.ACTIVE
-        ) is True
+
+        assert is_valid_lifecycle_transition(MeshSessionStatus.PENDING, MeshSessionStatus.ACTIVE) is True
 
     def test_valid_transition_active_to_suspended(self):
         from contracts.mesh_session import MeshSessionStatus, is_valid_lifecycle_transition
-        assert is_valid_lifecycle_transition(
-            MeshSessionStatus.ACTIVE, MeshSessionStatus.SUSPENDED
-        ) is True
+
+        assert is_valid_lifecycle_transition(MeshSessionStatus.ACTIVE, MeshSessionStatus.SUSPENDED) is True
 
     def test_valid_transition_suspended_to_restoring(self):
         from contracts.mesh_session import MeshSessionStatus, is_valid_lifecycle_transition
-        assert is_valid_lifecycle_transition(
-            MeshSessionStatus.SUSPENDED, MeshSessionStatus.RESTORING
-        ) is True
+
+        assert is_valid_lifecycle_transition(MeshSessionStatus.SUSPENDED, MeshSessionStatus.RESTORING) is True
 
     def test_valid_transition_restoring_to_active(self):
         from contracts.mesh_session import MeshSessionStatus, is_valid_lifecycle_transition
-        assert is_valid_lifecycle_transition(
-            MeshSessionStatus.RESTORING, MeshSessionStatus.ACTIVE
-        ) is True
+
+        assert is_valid_lifecycle_transition(MeshSessionStatus.RESTORING, MeshSessionStatus.ACTIVE) is True
 
     def test_valid_transition_active_to_completed(self):
         from contracts.mesh_session import MeshSessionStatus, is_valid_lifecycle_transition
-        assert is_valid_lifecycle_transition(
-            MeshSessionStatus.ACTIVE, MeshSessionStatus.COMPLETED
-        ) is True
+
+        assert is_valid_lifecycle_transition(MeshSessionStatus.ACTIVE, MeshSessionStatus.COMPLETED) is True
 
     def test_invalid_transition_completed_to_active(self):
         from contracts.mesh_session import MeshSessionStatus, is_valid_lifecycle_transition
-        assert is_valid_lifecycle_transition(
-            MeshSessionStatus.COMPLETED, MeshSessionStatus.ACTIVE
-        ) is False
+
+        assert is_valid_lifecycle_transition(MeshSessionStatus.COMPLETED, MeshSessionStatus.ACTIVE) is False
 
     def test_invalid_transition_active_to_pending(self):
         from contracts.mesh_session import MeshSessionStatus, is_valid_lifecycle_transition
-        assert is_valid_lifecycle_transition(
-            MeshSessionStatus.ACTIVE, MeshSessionStatus.PENDING
-        ) is False
+
+        assert is_valid_lifecycle_transition(MeshSessionStatus.ACTIVE, MeshSessionStatus.PENDING) is False
 
     def test_map_session_status_suspended(self):
-        from contracts.mesh_session import _map_session_status, MeshSessionStatus
+        from contracts.mesh_session import MeshSessionStatus, _map_session_status
+
         assert _map_session_status("suspended") is MeshSessionStatus.SUSPENDED
 
     def test_map_session_status_restoring(self):
-        from contracts.mesh_session import _map_session_status, MeshSessionStatus
+        from contracts.mesh_session import MeshSessionStatus, _map_session_status
+
         assert _map_session_status("restoring") is MeshSessionStatus.RESTORING
 
     def test_mesh_session_with_suspended_status(self):
         from contracts.mesh_session import MeshSession, MeshSessionStatus
+
         session = MeshSession(
             session_id="sess-susp",
             status=MeshSessionStatus.SUSPENDED,
@@ -200,6 +203,7 @@ class TestMeshSessionStatusExtensions:
 
     def test_mesh_session_round_trip_suspended_restoring(self):
         from contracts.mesh_session import MeshSession, MeshSessionStatus
+
         for status in (MeshSessionStatus.SUSPENDED, MeshSessionStatus.RESTORING):
             session = MeshSession(
                 session_id=f"sess-{status.value}",
@@ -221,23 +225,25 @@ class TestLifecycleSentinels:
         from core.mesh.mesh_session_lifecycle import (
             MESH_SESSION_LIFECYCLE_COORDINATOR_IS_AUTHORITY,
         )
+
         assert isinstance(MESH_SESSION_LIFECYCLE_COORDINATOR_IS_AUTHORITY, str)
-        assert "MESH_SESSION_LIFECYCLE_COORDINATOR_IS_AUTHORITY" in (
-            MESH_SESSION_LIFECYCLE_COORDINATOR_IS_AUTHORITY
-        )
+        assert "MESH_SESSION_LIFECYCLE_COORDINATOR_IS_AUTHORITY" in (MESH_SESSION_LIFECYCLE_COORDINATOR_IS_AUTHORITY)
 
     def test_mutations_persisted_sentinel(self):
         from core.mesh.mesh_session_lifecycle import LIFECYCLE_MUTATIONS_ARE_PERSISTED_POLICY
+
         assert isinstance(LIFECYCLE_MUTATIONS_ARE_PERSISTED_POLICY, str)
 
     def test_restore_requires_durable_state_sentinel(self):
         from core.mesh.mesh_session_lifecycle import RESTORE_REQUIRES_DURABLE_STATE_POLICY
+
         assert isinstance(RESTORE_REQUIRES_DURABLE_STATE_POLICY, str)
 
 
 class TestMeshSessionLifecycleRecord:
     def test_construction(self):
         from core.mesh.mesh_session_lifecycle import MeshSessionLifecycleRecord
+
         rec = MeshSessionLifecycleRecord(
             session_id="s1",
             status="pending",
@@ -249,6 +255,7 @@ class TestMeshSessionLifecycleRecord:
 
     def test_to_dict_keys(self):
         from core.mesh.mesh_session_lifecycle import MeshSessionLifecycleRecord
+
         rec = MeshSessionLifecycleRecord(session_id="s1", status="active")
         d = rec.to_dict()
         for key in ("session_id", "status", "created_at", "updated_at", "restore_count", "metadata"):
@@ -412,10 +419,11 @@ class TestMeshSessionLifecycleCoordinator:
 
     def test_get_lifecycle_coordinator_singleton(self, tmp_path):
         from core.mesh.mesh_session_lifecycle import (
+            MeshSessionLifecycleCoordinator,
             get_lifecycle_coordinator,
             reset_lifecycle_coordinator,
-            MeshSessionLifecycleCoordinator,
         )
+
         reset_lifecycle_coordinator()
         c1 = get_lifecycle_coordinator()
         c2 = get_lifecycle_coordinator()
@@ -428,6 +436,7 @@ class TestMeshSessionLifecycleCoordinator:
             get_lifecycle_coordinator,
             reset_lifecycle_coordinator,
         )
+
         reset_lifecycle_coordinator()
         c1 = get_lifecycle_coordinator()
         reset_lifecycle_coordinator()
@@ -439,23 +448,23 @@ class TestMeshSessionLifecycleCoordinator:
 class TestModuleLevelLifecycleFunctions:
     def test_create_durable_session(self, tmp_path):
         from core.mesh.mesh_session_lifecycle import (
-            create_durable_session,
             MeshSessionLifecycleCoordinator,
+            create_durable_session,
         )
+
         store = _make_store(str(tmp_path))
         coord = MeshSessionLifecycleCoordinator(store=store)
-        rec = create_durable_session(
-            _make_session_dict("fn-create"), coordinator=coord
-        )
+        rec = create_durable_session(_make_session_dict("fn-create"), coordinator=coord)
         assert rec is not None
         assert rec.session_id == "fn-create"
 
     def test_activate_durable_session(self, tmp_path):
         from core.mesh.mesh_session_lifecycle import (
-            create_durable_session,
-            activate_durable_session,
             MeshSessionLifecycleCoordinator,
+            activate_durable_session,
+            create_durable_session,
         )
+
         store = _make_store(str(tmp_path))
         coord = MeshSessionLifecycleCoordinator(store=store)
         create_durable_session(_make_session_dict("fn-act"), coordinator=coord)
@@ -465,11 +474,12 @@ class TestModuleLevelLifecycleFunctions:
 
     def test_suspend_durable_session(self, tmp_path):
         from core.mesh.mesh_session_lifecycle import (
-            create_durable_session,
-            activate_durable_session,
-            suspend_durable_session,
             MeshSessionLifecycleCoordinator,
+            activate_durable_session,
+            create_durable_session,
+            suspend_durable_session,
         )
+
         store = _make_store(str(tmp_path))
         coord = MeshSessionLifecycleCoordinator(store=store)
         create_durable_session(_make_session_dict("fn-susp"), coordinator=coord)
@@ -480,12 +490,13 @@ class TestModuleLevelLifecycleFunctions:
 
     def test_restore_durable_session(self, tmp_path):
         from core.mesh.mesh_session_lifecycle import (
-            create_durable_session,
-            activate_durable_session,
-            suspend_durable_session,
-            restore_durable_session,
             MeshSessionLifecycleCoordinator,
+            activate_durable_session,
+            create_durable_session,
+            restore_durable_session,
+            suspend_durable_session,
         )
+
         store = _make_store(str(tmp_path))
         coord = MeshSessionLifecycleCoordinator(store=store)
         create_durable_session(_make_session_dict("fn-restore"), coordinator=coord)
@@ -497,11 +508,12 @@ class TestModuleLevelLifecycleFunctions:
 
     def test_terminate_durable_session(self, tmp_path):
         from core.mesh.mesh_session_lifecycle import (
-            create_durable_session,
-            activate_durable_session,
-            terminate_durable_session,
             MeshSessionLifecycleCoordinator,
+            activate_durable_session,
+            create_durable_session,
+            terminate_durable_session,
         )
+
         store = _make_store(str(tmp_path))
         coord = MeshSessionLifecycleCoordinator(store=store)
         create_durable_session(_make_session_dict("fn-term"), coordinator=coord)
@@ -512,6 +524,7 @@ class TestModuleLevelLifecycleFunctions:
 
     def test_core_mesh_init_exports_lifecycle_symbols(self):
         import core.mesh as cm
+
         assert hasattr(cm, "MeshSessionLifecycleRecord")
         assert hasattr(cm, "MeshSessionLifecycleCoordinator")
         assert hasattr(cm, "get_lifecycle_coordinator")
@@ -533,13 +546,16 @@ class TestModuleLevelLifecycleFunctions:
 
 class TestOutwardRuntimeTruthDurableFacet:
     def test_snapshot_has_durable_mesh_session_facet_field(self):
-        from core.outward_runtime_truth import OutwardRuntimeTruthSnapshot
         import dataclasses
+
+        from core.outward_runtime_truth import OutwardRuntimeTruthSnapshot
+
         fields = {f.name for f in dataclasses.fields(OutwardRuntimeTruthSnapshot)}
         assert "durable_mesh_session_facet" in fields
 
     def test_to_dict_includes_durable_mesh_session_facet_key(self):
         from core.outward_runtime_truth import OutwardRuntimeTruthSnapshot
+
         snap = OutwardRuntimeTruthSnapshot(
             snapshot_id="test-snap",
             compiled_at=0.0,
@@ -551,6 +567,7 @@ class TestOutwardRuntimeTruthDurableFacet:
 
     def test_to_dict_durable_mesh_session_facet_none_by_default(self):
         from core.outward_runtime_truth import OutwardRuntimeTruthSnapshot
+
         snap = OutwardRuntimeTruthSnapshot(
             snapshot_id="test-snap-none",
             compiled_at=0.0,
@@ -564,28 +581,30 @@ class TestOutwardRuntimeTruthDurableFacet:
             compile_outward_truth,
             reset_outward_runtime_truth_runtime,
         )
+
         reset_outward_runtime_truth_runtime()
         snap = compile_outward_truth()
         source_names = {r.source_name for r in snap.source_records}
         assert "DurableMeshSessionFacet" in source_names
 
-    def test_durable_mesh_session_facet_populated_with_store_sessions(
-        self, tmp_path
-    ):
+    def test_durable_mesh_session_facet_populated_with_store_sessions(self, tmp_path):
         """When the store has non-terminal sessions, they appear in the facet."""
+        import unittest.mock as mock
+
         from core.mesh.mesh_session_persistence import MeshSessionPersistenceStore
         from core.outward_runtime_truth import (
             compile_outward_truth,
             reset_outward_runtime_truth_runtime,
         )
-        import unittest.mock as mock
 
         store = MeshSessionPersistenceStore(store_dir=str(tmp_path))
-        store.save({
-            "session_id": "facet-test-sess",
-            "coordinator_id": "coord-xyz",
-            "overall_status": "coordinating",
-        })
+        store.save(
+            {
+                "session_id": "facet-test-sess",
+                "coordinator_id": "coord-xyz",
+                "overall_status": "coordinating",
+            }
+        )
 
         reset_outward_runtime_truth_runtime()
 
@@ -599,6 +618,4 @@ class TestOutwardRuntimeTruthDurableFacet:
 
         assert snap.durable_mesh_session_facet is not None
         assert snap.durable_mesh_session_facet["recoverable_session_count"] >= 1
-        assert "facet-test-sess" in snap.durable_mesh_session_facet.get(
-            "recoverable_session_ids", []
-        )
+        assert "facet-test-sess" in snap.durable_mesh_session_facet.get("recoverable_session_ids", [])

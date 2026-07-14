@@ -115,9 +115,7 @@ FALLBACK_OWNER_DESCRIPTIONS: Dict[str, str] = {
         "The caller or client is responsible for deciding the fallback. "
         "Typically applies to HITL paths or user-facing interactive flows."
     ),
-    FallbackOwner.UNSPECIFIED.value: (
-        "Fallback ownership has not been declared for this path."
-    ),
+    FallbackOwner.UNSPECIFIED.value: ("Fallback ownership has not been declared for this path."),
 }
 
 

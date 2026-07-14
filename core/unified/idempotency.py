@@ -76,7 +76,7 @@ _DEFAULT_RESULT_ID_STORE_PATH = os.path.join(
 )
 
 # Default settings
-_DEFAULT_TTL_SECONDS: float = 3600.0   # 1 hour
+_DEFAULT_TTL_SECONDS: float = 3600.0  # 1 hour
 _DEFAULT_MAX_ENTRIES: int = 10_000
 
 
@@ -100,8 +100,7 @@ class IdempotencyConflictError(Exception):
 
     def __init__(self, key: str, stored_hash: str, received_hash: str) -> None:
         super().__init__(
-            f"Idempotency conflict for key '{key}': "
-            f"stored_hash={stored_hash!r} vs received_hash={received_hash!r}"
+            f"Idempotency conflict for key '{key}': " f"stored_hash={stored_hash!r} vs received_hash={received_hash!r}"
         )
         self.key = key
         self.stored_hash = stored_hash
@@ -117,9 +116,9 @@ class IdempotencyConflictError(Exception):
 class IdempotencyStatus(str, Enum):
     """Processing status of an idempotency entry."""
 
-    IN_FLIGHT = "in_flight"   # command is currently being executed
-    COMPLETED = "completed"   # command finished successfully
-    FAILED = "failed"         # command finished with error
+    IN_FLIGHT = "in_flight"  # command is currently being executed
+    COMPLETED = "completed"  # command finished successfully
+    FAILED = "failed"  # command finished with error
 
 
 @dataclass
@@ -397,13 +396,13 @@ def record_idempotency(
 
 try:
     from core.durable_result_idempotency import (  # noqa: F401
+        _DEFAULT_RESULT_ID_STORE_PATH,
         DURABLE_RESULT_IDEMPOTENCY_IS_AUTHORITY,
         DurableResultIdSet,
-        get_durable_result_id_store,
-        reset_durable_result_id_store,
         check_result_idempotency,
+        get_durable_result_id_store,
         record_result_idempotency,
-        _DEFAULT_RESULT_ID_STORE_PATH,
+        reset_durable_result_id_store,
     )
 except ImportError:
     pass

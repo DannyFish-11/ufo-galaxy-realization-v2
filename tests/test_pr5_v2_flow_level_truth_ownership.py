@@ -70,33 +70,33 @@ import pytest
 
 try:
     from core.flow_level_truth_ownership import (
+        ADVISORY_TRUTH_IS_NOTED_NOT_APPLIED_POLICY,
+        ANDROID_ADVANCED_AHEAD_OF_V2_CONFIRMATION_POLICY,
+        ANDROID_CANCEL_FAILURE_RESULT_ARE_AUTHORITATIVE_UPWARD_POLICY,
+        COMPAT_INFLUENCE_BLOCKS_AUTHORITATIVE_TRUTH_PATH_POLICY,
+        EXECUTION_EVIDENCE_IS_AUDIT_ONLY_POLICY,
         FLOW_LEVEL_TRUTH_OWNERSHIP_AUTHORITY,
         FLOW_LEVEL_TRUTH_OWNERSHIP_PR5V2_SENTINEL,
-        V2_CANONICAL_OWNS_TERMINAL_FLOW_DECISION_POLICY,
-        ANDROID_CANCEL_FAILURE_RESULT_ARE_AUTHORITATIVE_UPWARD_POLICY,
         PARTIAL_RESULT_LIVES_IN_EXECUTION_TRACKING_RECORD_POLICY,
-        ADVISORY_TRUTH_IS_NOTED_NOT_APPLIED_POLICY,
-        EXECUTION_EVIDENCE_IS_AUDIT_ONLY_POLICY,
         POSTURE_CHANGE_QUARANTINES_PRIOR_EVIDENCE_POLICY,
-        COMPAT_INFLUENCE_BLOCKS_AUTHORITATIVE_TRUTH_PATH_POLICY,
-        ANDROID_ADVANCED_AHEAD_OF_V2_CONFIRMATION_POLICY,
         UNKNOWN_TRUTH_KIND_DEFAULTS_TO_ADVISORY_POLICY,
-        FlowTruthSemanticKind,
+        V2_CANONICAL_OWNS_TERMINAL_FLOW_DECISION_POLICY,
+        FlowTruthAlignmentContext,
+        FlowTruthAlignmentRuntime,
+        FlowTruthAlignmentSnapshot,
+        FlowTruthDecisionArtifact,
         FlowTruthDecisionKind,
         FlowTruthOwnerKind,
+        FlowTruthSemanticKind,
         PostureChangeHandling,
-        FlowTruthAlignmentContext,
-        FlowTruthDecisionArtifact,
         PostureChangeImpactRecord,
-        FlowTruthAlignmentSnapshot,
-        FlowTruthAlignmentRuntime,
-        classify_flow_truth_kind,
-        align_android_truth_with_canonical,
-        evaluate_posture_change_impact,
         align_and_record,
-        record_flow_truth_decision,
+        align_android_truth_with_canonical,
         build_flow_truth_alignment_snapshot,
+        classify_flow_truth_kind,
+        evaluate_posture_change_impact,
         get_flow_truth_alignment_runtime,
+        record_flow_truth_decision,
         reset_flow_truth_alignment_runtime,
     )
 
@@ -105,9 +105,7 @@ except ImportError as _exc:  # pragma: no cover
     _MODULE_AVAILABLE = False
     _exc_detail = str(_exc)
 
-_SKIP_MODULE = pytest.mark.skipif(
-    not _MODULE_AVAILABLE, reason="flow_level_truth_ownership unavailable"
-)
+_SKIP_MODULE = pytest.mark.skipif(not _MODULE_AVAILABLE, reason="flow_level_truth_ownership unavailable")
 
 
 # ===========================================================================
@@ -197,16 +195,10 @@ class TestGroupC_FlowTruthDecisionKind:
         )
 
     def test_c3_from_string_unknown_defaults_to_accept_as_advisory(self):
-        assert (
-            FlowTruthDecisionKind.from_string("totally_unknown")
-            == FlowTruthDecisionKind.accept_as_advisory
-        )
+        assert FlowTruthDecisionKind.from_string("totally_unknown") == FlowTruthDecisionKind.accept_as_advisory
 
     def test_c4_from_string_none_defaults_to_accept_as_advisory(self):
-        assert (
-            FlowTruthDecisionKind.from_string(None)
-            == FlowTruthDecisionKind.accept_as_advisory
-        )
+        assert FlowTruthDecisionKind.from_string(None) == FlowTruthDecisionKind.accept_as_advisory
 
 
 # ===========================================================================
@@ -256,20 +248,15 @@ class TestGroupF_ClassifyFlowTruthKind:
 
     def test_f4_task_phase_completed_is_authoritative(self):
         assert (
-            classify_flow_truth_kind("task_phase", task_phase_value="completed")
-            == FlowTruthSemanticKind.authoritative
+            classify_flow_truth_kind("task_phase", task_phase_value="completed") == FlowTruthSemanticKind.authoritative
         )
 
     def test_f5_task_phase_failed_is_authoritative(self):
-        assert (
-            classify_flow_truth_kind("task_phase", task_phase_value="failed")
-            == FlowTruthSemanticKind.authoritative
-        )
+        assert classify_flow_truth_kind("task_phase", task_phase_value="failed") == FlowTruthSemanticKind.authoritative
 
     def test_f6_task_phase_cancelled_is_authoritative(self):
         assert (
-            classify_flow_truth_kind("task_phase", task_phase_value="cancelled")
-            == FlowTruthSemanticKind.authoritative
+            classify_flow_truth_kind("task_phase", task_phase_value="cancelled") == FlowTruthSemanticKind.authoritative
         )
 
     def test_f7_task_phase_running_is_evidence(self):
@@ -370,9 +357,7 @@ class TestGroupH_V2TerminalWins:
         ["completed", "failed", "cancelled", "suspended"],
     )
     def test_h1_result_rejected_when_v2_terminal(self, terminal_phase: str):
-        art = align_android_truth_with_canonical(
-            self._ctx("result", terminal_phase)
-        )
+        art = align_android_truth_with_canonical(self._ctx("result", terminal_phase))
         assert art.decision == FlowTruthDecisionKind.reject_due_to_canonical_terminal
 
     @pytest.mark.parametrize(
@@ -380,36 +365,26 @@ class TestGroupH_V2TerminalWins:
         ["completed", "failed", "cancelled", "suspended"],
     )
     def test_h2_cancel_rejected_when_v2_terminal(self, terminal_phase: str):
-        art = align_android_truth_with_canonical(
-            self._ctx("cancel", terminal_phase)
-        )
+        art = align_android_truth_with_canonical(self._ctx("cancel", terminal_phase))
         assert art.decision == FlowTruthDecisionKind.reject_due_to_canonical_terminal
 
     def test_h3_advisory_also_rejected_when_v2_terminal(self):
-        art = align_android_truth_with_canonical(
-            self._ctx("session_snapshot", "completed")
-        )
+        art = align_android_truth_with_canonical(self._ctx("session_snapshot", "completed"))
         assert art.decision == FlowTruthDecisionKind.reject_due_to_canonical_terminal
 
     def test_h4_non_terminal_phase_does_not_reject(self):
         for phase in ("created", "dispatched", "executing", "reconciling", ""):
-            art = align_android_truth_with_canonical(
-                self._ctx("result", phase)
-            )
-            assert art.decision != FlowTruthDecisionKind.reject_due_to_canonical_terminal, (
-                f"Unexpected rejection for phase={phase!r}"
-            )
+            art = align_android_truth_with_canonical(self._ctx("result", phase))
+            assert (
+                art.decision != FlowTruthDecisionKind.reject_due_to_canonical_terminal
+            ), f"Unexpected rejection for phase={phase!r}"
 
     def test_h5_policy_reference_mentions_terminal(self):
-        art = align_android_truth_with_canonical(
-            self._ctx("result", "completed")
-        )
+        art = align_android_truth_with_canonical(self._ctx("result", "completed"))
         assert "V2_CANONICAL_OWNS_TERMINAL" in art.policy_reference
 
     def test_h6_evidence_in_artifact(self):
-        art = align_android_truth_with_canonical(
-            self._ctx("failure", "failed")
-        )
+        art = align_android_truth_with_canonical(self._ctx("failure", "failed"))
         assert art.evidence["v2_canonical_flow_phase"] == "failed"
 
 
@@ -902,18 +877,22 @@ class TestGroupQ_AlignmentSnapshot:
     def test_q4_decision_counts_populated_after_records(self):
         rt = get_flow_truth_alignment_runtime()
         for _ in range(3):
-            rt.record(FlowTruthDecisionArtifact(
-                decision=FlowTruthDecisionKind.accept_as_advisory,
-                semantic_kind=FlowTruthSemanticKind.advisory,
-                truth_owner=FlowTruthOwnerKind.v2_canonical,
+            rt.record(
+                FlowTruthDecisionArtifact(
+                    decision=FlowTruthDecisionKind.accept_as_advisory,
+                    semantic_kind=FlowTruthSemanticKind.advisory,
+                    truth_owner=FlowTruthOwnerKind.v2_canonical,
+                    policy_reference="TEST",
+                )
+            )
+        rt.record(
+            FlowTruthDecisionArtifact(
+                decision=FlowTruthDecisionKind.accept_as_authoritative,
+                semantic_kind=FlowTruthSemanticKind.authoritative,
+                truth_owner=FlowTruthOwnerKind.android_execution,
                 policy_reference="TEST",
-            ))
-        rt.record(FlowTruthDecisionArtifact(
-            decision=FlowTruthDecisionKind.accept_as_authoritative,
-            semantic_kind=FlowTruthSemanticKind.authoritative,
-            truth_owner=FlowTruthOwnerKind.android_execution,
-            policy_reference="TEST",
-        ))
+            )
+        )
         snap = build_flow_truth_alignment_snapshot()
         assert snap.decision_counts.get("accept_as_advisory", 0) == 3
         assert snap.decision_counts.get("accept_as_authoritative", 0) == 1
@@ -990,9 +969,7 @@ class TestGroupS_ArtifactToDict:
         assert art.artifact_id.startswith("ftda_")
 
     def test_s3_evidence_dict_present_in_to_dict(self):
-        art = FlowTruthDecisionArtifact(
-            evidence={"truth_kind": "cancel", "v2_canonical_flow_phase": "executing"}
-        )
+        art = FlowTruthDecisionArtifact(evidence={"truth_kind": "cancel", "v2_canonical_flow_phase": "executing"})
         d = art.to_dict()
         assert "evidence" in d
         assert d["evidence"]["truth_kind"] == "cancel"
@@ -1036,33 +1013,33 @@ class TestGroupU_CoreRuntimeReexports:
     def test_u1_all_pr5v2_symbols_importable_from_core_runtime(self):
         try:
             from core.runtime import (  # noqa: F401
+                ADVISORY_TRUTH_IS_NOTED_NOT_APPLIED_POLICY,
+                ANDROID_ADVANCED_AHEAD_OF_V2_CONFIRMATION_POLICY,
+                ANDROID_CANCEL_FAILURE_RESULT_ARE_AUTHORITATIVE_UPWARD_POLICY,
+                COMPAT_INFLUENCE_BLOCKS_AUTHORITATIVE_TRUTH_PATH_POLICY,
+                EXECUTION_EVIDENCE_IS_AUDIT_ONLY_POLICY,
                 FLOW_LEVEL_TRUTH_OWNERSHIP_AUTHORITY,
                 FLOW_LEVEL_TRUTH_OWNERSHIP_PR5V2_SENTINEL,
-                V2_CANONICAL_OWNS_TERMINAL_FLOW_DECISION_POLICY,
-                ANDROID_CANCEL_FAILURE_RESULT_ARE_AUTHORITATIVE_UPWARD_POLICY,
                 PARTIAL_RESULT_LIVES_IN_EXECUTION_TRACKING_RECORD_POLICY,
-                ADVISORY_TRUTH_IS_NOTED_NOT_APPLIED_POLICY,
-                EXECUTION_EVIDENCE_IS_AUDIT_ONLY_POLICY,
                 POSTURE_CHANGE_QUARANTINES_PRIOR_EVIDENCE_POLICY,
-                COMPAT_INFLUENCE_BLOCKS_AUTHORITATIVE_TRUTH_PATH_POLICY,
-                ANDROID_ADVANCED_AHEAD_OF_V2_CONFIRMATION_POLICY,
                 UNKNOWN_TRUTH_KIND_DEFAULTS_TO_ADVISORY_POLICY,
-                FlowTruthSemanticKind,
+                V2_CANONICAL_OWNS_TERMINAL_FLOW_DECISION_POLICY,
+                FlowTruthAlignmentContext,
+                FlowTruthAlignmentRuntime,
+                FlowTruthAlignmentSnapshot,
+                FlowTruthDecisionArtifact,
                 FlowTruthDecisionKind,
                 FlowTruthOwnerKind,
+                FlowTruthSemanticKind,
                 PostureChangeHandling,
-                FlowTruthAlignmentContext,
-                FlowTruthDecisionArtifact,
                 PostureChangeImpactRecord,
-                FlowTruthAlignmentSnapshot,
-                FlowTruthAlignmentRuntime,
-                classify_flow_truth_kind,
-                align_android_truth_with_canonical,
-                evaluate_posture_change_impact,
                 align_and_record,
-                record_flow_truth_decision,
+                align_android_truth_with_canonical,
                 build_flow_truth_alignment_snapshot,
+                classify_flow_truth_kind,
+                evaluate_posture_change_impact,
                 get_flow_truth_alignment_runtime,
+                record_flow_truth_decision,
                 reset_flow_truth_alignment_runtime,
             )
         except ImportError as exc:

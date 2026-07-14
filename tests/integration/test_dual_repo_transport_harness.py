@@ -200,16 +200,12 @@ class TestTransportLayerRegister:
             client = AndroidProtocolClient(ws, device_id)
             ack = client.register()
 
-        assert ack["type"] == "device_register_ack", (
-            f"Expected 'device_register_ack', got {ack['type']!r}"
-        )
+        assert ack["type"] == "device_register_ack", f"Expected 'device_register_ack', got {ack['type']!r}"
         assert ack["success"] is True
         assert ack["device_id"] == device_id
         assert ack["version"] == "3.0"
 
-    def test_register_stores_device_in_bridge(
-        self, gw_client: Any, bridge: Any
-    ) -> None:
+    def test_register_stores_device_in_bridge(self, gw_client: Any, bridge: Any) -> None:
         """Bridge must persist device state while WS session is open."""
         device_id = f"tr-store-{uuid.uuid4().hex[:8]}"
         with gw_client.websocket_connect(f"/ws/device/{device_id}") as ws:
@@ -217,15 +213,11 @@ class TestTransportLayerRegister:
             client.register()
 
             device = bridge.get_device(device_id)
-            assert device is not None, (
-                f"Device {device_id!r} not found in bridge after registration"
-            )
+            assert device is not None, f"Device {device_id!r} not found in bridge after registration"
             assert device.device_id == device_id
             assert device.connected is True
 
-    def test_register_ack_carries_required_aip_v3_fields(
-        self, gw_client: Any
-    ) -> None:
+    def test_register_ack_carries_required_aip_v3_fields(self, gw_client: Any) -> None:
         """``device_register_ack`` must carry all canonical AIP v3 required fields."""
         device_id = f"tr-fields-{uuid.uuid4().hex[:8]}"
         with gw_client.websocket_connect(f"/ws/device/{device_id}") as ws:
@@ -234,9 +226,7 @@ class TestTransportLayerRegister:
 
         required = ("version", "type", "device_id", "message_id", "timestamp")
         for field in required:
-            assert field in ack, (
-                f"Required AIP v3 field '{field}' missing from register_ack"
-            )
+            assert field in ack, f"Required AIP v3 field '{field}' missing from register_ack"
 
 
 # ===========================================================================
@@ -257,15 +247,11 @@ class TestTransportLayerCapabilityReport:
             client.register()
             ack = client.report_capabilities(self.CAPABILITIES)
 
-        assert ack["type"] == "capability_report_ack", (
-            f"Expected 'capability_report_ack', got {ack['type']!r}"
-        )
+        assert ack["type"] == "capability_report_ack", f"Expected 'capability_report_ack', got {ack['type']!r}"
         assert ack.get("accepted") is True
         assert ack["device_id"] == device_id
 
-    def test_capability_report_persisted_to_bridge(
-        self, gw_client: Any, bridge: Any
-    ) -> None:
+    def test_capability_report_persisted_to_bridge(self, gw_client: Any, bridge: Any) -> None:
         """supported_actions must be stored on the bridge device object after report."""
         device_id = f"tr-cap-p-{uuid.uuid4().hex[:8]}"
         with gw_client.websocket_connect(f"/ws/device/{device_id}") as ws:
@@ -276,13 +262,9 @@ class TestTransportLayerCapabilityReport:
             device = bridge.get_device(device_id)
             assert device is not None
             for cap in self.CAPABILITIES:
-                assert cap in device.supported_actions, (
-                    f"Capability '{cap}' not found in device.supported_actions"
-                )
+                assert cap in device.supported_actions, f"Capability '{cap}' not found in device.supported_actions"
 
-    def test_capability_report_requires_prior_registration(
-        self, gw_client: Any
-    ) -> None:
+    def test_capability_report_requires_prior_registration(self, gw_client: Any) -> None:
         """capability_report on an unregistered device must not raise; ack is returned."""
         device_id = f"tr-cap-noreg-{uuid.uuid4().hex[:8]}"
         with gw_client.websocket_connect(f"/ws/device/{device_id}") as ws:
@@ -327,9 +309,7 @@ class TestDispatchResultWaiterUnblock:
         task_id = str(uuid.uuid4())
 
         # Step 1: register device so bridge knows about it
-        await bridge.handle_message(
-            ws, _v3("device_register", device_id, platform="android")
-        )
+        await bridge.handle_message(ws, _v3("device_register", device_id, platform="android"))
 
         # Step 2: install a Future that represents the V2 dispatch waiter
         loop = asyncio.get_running_loop()
@@ -349,10 +329,7 @@ class TestDispatchResultWaiterUnblock:
         )
 
         # Step 4: waiter must be unblocked
-        assert future.done(), (
-            "Future must be resolved after task_result is processed — "
-            "V2 waiter was not unblocked"
-        )
+        assert future.done(), "Future must be resolved after task_result is processed — " "V2 waiter was not unblocked"
         resolved = future.result()
         assert resolved is not None
 
@@ -373,19 +350,13 @@ class TestDispatchResultWaiterUnblock:
 
         sent_messages: List[Any] = []
         ws = MagicMock()
-        ws.send_json = AsyncMock(
-            side_effect=lambda msg: sent_messages.append(msg)
-        )
+        ws.send_json = AsyncMock(side_effect=lambda msg: sent_messages.append(msg))
         ws.send = AsyncMock(
-            side_effect=lambda msg: sent_messages.append(
-                json.loads(msg) if isinstance(msg, str) else msg
-            )
+            side_effect=lambda msg: sent_messages.append(json.loads(msg) if isinstance(msg, str) else msg)
         )
 
         # Register device
-        await bridge.handle_message(
-            ws, _v3("device_register", device_id, platform="android")
-        )
+        await bridge.handle_message(ws, _v3("device_register", device_id, platform="android"))
 
         task_msg = {
             "version": "3.0",
@@ -397,9 +368,7 @@ class TestDispatchResultWaiterUnblock:
         }
 
         async def dispatch_and_collect() -> Optional[Dict[str, Any]]:
-            return await bridge.send_to_device(
-                device_id, task_msg, wait_response=True, timeout=5.0
-            )
+            return await bridge.send_to_device(device_id, task_msg, wait_response=True, timeout=5.0)
 
         # Start dispatch (installs Future and awaits it)
         dispatch_task = asyncio.ensure_future(dispatch_and_collect())
@@ -421,13 +390,9 @@ class TestDispatchResultWaiterUnblock:
 
         # Dispatch waiter must return without timeout
         result = await asyncio.wait_for(dispatch_task, timeout=5.0)
-        assert result is not None, (
-            "send_to_device must return a result when task_result is received"
-        )
+        assert result is not None, "send_to_device must return a result when task_result is received"
 
-    def test_task_result_delivered_via_ws_transport(
-        self, gw_client: Any, bridge: Any
-    ) -> None:
+    def test_task_result_delivered_via_ws_transport(self, gw_client: Any, bridge: Any) -> None:
         """``task_result`` delivered via real WS transport is processed by V2.
 
         Validates that the WS transport pipeline is not a dead end for
@@ -558,9 +523,7 @@ class TestFullCanonicalMainChain:
         }
 
         async def dispatch() -> Optional[Dict[str, Any]]:
-            return await bridge.send_to_device(
-                device_id, task_assign_msg, wait_response=True, timeout=5.0
-            )
+            return await bridge.send_to_device(device_id, task_assign_msg, wait_response=True, timeout=5.0)
 
         dispatch_task = asyncio.ensure_future(dispatch())
         await asyncio.sleep(0.05)
@@ -579,6 +542,5 @@ class TestFullCanonicalMainChain:
 
         result = await asyncio.wait_for(dispatch_task, timeout=5.0)
         assert result is not None, (
-            "V2 waiter must be unblocked after Android sends task_result — "
-            "full canonical main chain failed"
+            "V2 waiter must be unblocked after Android sends task_result — " "full canonical main chain failed"
         )

@@ -107,8 +107,7 @@ TIMEOUT_OWNER_DESCRIPTIONS: Dict[str, str] = {
         "timeout. The Galaxy runtime does not guarantee a timeout for this path."
     ),
     TimeoutOwner.UNSPECIFIED.value: (
-        "Timeout ownership has not been declared for this path. "
-        "Treat as best-effort — no timeout guarantee."
+        "Timeout ownership has not been declared for this path. " "Treat as best-effort — no timeout guarantee."
     ),
 }
 

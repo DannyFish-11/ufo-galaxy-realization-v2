@@ -47,15 +47,13 @@ G6 增强: TTL / 冷热分层 / 漂移检测
         print(f"漂移! 相似度={result.similarity:.2f}, 动作={result.action}")
 """
 
-import re  # auto: missing import
-
-
 import json
 import logging
 import os
+import re  # auto: missing import
 import time
 import uuid
-from dataclasses import dataclass, asdict, field
+from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger("Galaxy.TaskMemory")
@@ -64,15 +62,15 @@ _DEFAULT_DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "da
 _MEMORY_FILE = "task_memory.jsonl"
 _MAX_IN_MEMORY = 200  # 热区默认大小（向后兼容）
 _CONTEXT_MARKER = "[TaskMemory]"  # 注入上下文时的标记，避免重复注入
-_MAX_TASK_LENGTH = 500    # 任务描述最大存储长度（字符）
+_MAX_TASK_LENGTH = 500  # 任务描述最大存储长度（字符）
 _MAX_SUMMARY_LENGTH = 300  # 结果摘要最大存储长度（字符）
 
 # G6: 漂移检测默认值
-_DEFAULT_DRIFT_THRESHOLD = 0.5   # Jaccard 相似度低于此值视为漂移
+_DEFAULT_DRIFT_THRESHOLD = 0.5  # Jaccard 相似度低于此值视为漂移
 _DEFAULT_DRIFT_ACTION = "human_review"  # "rerun" | "human_review" | "none"
 
 # PR-25/26/27: 认知进化系统默认配置
-_REFLECTION_AUTO_TRIGGER = True   # 是否在 record_task 后自动触发回顾反思
+_REFLECTION_AUTO_TRIGGER = True  # 是否在 record_task 后自动触发回顾反思
 _ADAPTIVE_PREDICTION_ENABLED = True  # 是否启用自适应预测
 
 
@@ -80,9 +78,11 @@ _ADAPTIVE_PREDICTION_ENABLED = True  # 是否启用自适应预测
 # 数据模型
 # ============================================================================
 
+
 @dataclass
 class TaskSummary:
     """单条任务执行摘要。"""
+
     summary_id: str = field(default_factory=lambda: str(uuid.uuid4())[:12])
     timestamp: float = field(default_factory=time.time)
     task: str = ""
@@ -137,9 +137,10 @@ class TaskSummary:
 @dataclass
 class DriftCheckResult:
     """漂移检测结果。"""
+
     is_drift: bool = False
-    similarity: float = 1.0   # 0.0–1.0；越高越相似
-    action: str = "none"      # "none" | "rerun" | "human_review"
+    similarity: float = 1.0  # 0.0–1.0；越高越相似
+    action: str = "none"  # "none" | "rerun" | "human_review"
     threshold: float = _DEFAULT_DRIFT_THRESHOLD
     cached_summary: Optional[str] = None
     task_key: str = ""
@@ -159,6 +160,7 @@ class DriftCheckResult:
 # 内部工具函数
 # ============================================================================
 
+
 def _text_similarity(a: str, b: str) -> float:
     """词级 Jaccard 相似度 (0.0–1.0)。空字符串视为无内容；两者均空返回 1.0。"""
     if not a and not b:
@@ -177,6 +179,7 @@ def _text_similarity(a: str, b: str) -> float:
 # ============================================================================
 # TaskMemory
 # ============================================================================
+
 
 class TaskMemory:
     """本地文件持久化任务记忆（含 TTL / 冷热分层 / 漂移检测）。
@@ -218,9 +221,7 @@ class TaskMemory:
             action:    漂移时的动作："rerun" | "human_review" | "none"
         """
         if action not in ("rerun", "human_review", "none"):
-            raise ValueError(
-                f"action 必须为 'rerun'、'human_review' 或 'none'，实际收到: {action!r}"
-            )
+            raise ValueError(f"action 必须为 'rerun'、'human_review' 或 'none'，实际收到: {action!r}")
         self._drift_threshold = max(0.0, min(1.0, threshold))
         self._drift_action = action
 
@@ -260,13 +261,14 @@ class TaskMemory:
         self._records.append(entry)
         # 保持热区上限（溢出条目仍保留在文件中，可通过冷区查询）
         if len(self._records) > self._hot_limit:
-            self._records = self._records[-self._hot_limit:]
+            self._records = self._records[-self._hot_limit :]
         # 持久化
         self._append_to_file(entry)
         # PR-25: 自动触发回顾反思（认知进化系统）
         if _REFLECTION_AUTO_TRIGGER:
             try:
                 from core.cognitive.reflection_engine import get_reflection_engine
+
                 reflection_engine = get_reflection_engine()
                 reflection = reflection_engine.reflect_retrospective(
                     task=task,
@@ -366,10 +368,7 @@ class TaskMemory:
             return 0
         before = len(self._records)
         now = time.time()
-        self._records = [
-            r for r in self._records
-            if (now - r.timestamp) <= self._ttl_seconds
-        ]
+        self._records = [r for r in self._records if (now - r.timestamp) <= self._ttl_seconds]
         return before - len(self._records)
 
     # ── 语义压缩 (SimpleMem-inspired) ──
@@ -378,7 +377,7 @@ class TaskMemory:
         """将原始对话压缩为原子事实列表。"""
         if not raw_text or not raw_text.strip():
             return []
-        sentences = re.split(r'[。\.\n]+', raw_text.strip())
+        sentences = re.split(r"[。\.\n]+", raw_text.strip())
         sentences = [s.strip() for s in sentences if s.strip()]
         stop_words = {"的", "了", "在", "是", "和", "或", "the", "a", "is", "to", "of"}
         facts = []
@@ -401,12 +400,10 @@ class TaskMemory:
         """
         if not query or not self._records:
             return []
-        docs = [
-            (str(i), f"{rec.task} {rec.result_summary}")
-            for i, rec in enumerate(self._records)
-        ]
+        docs = [(str(i), f"{rec.task} {rec.result_summary}") for i, rec in enumerate(self._records)]
         try:
             from core.cognitive.bm25_index import bm25_rank
+
             ranked = bm25_rank(query, docs, top_k=max(k, len(docs)))
             if ranked:
                 top = ranked[0][1] or 1.0
@@ -486,9 +483,8 @@ class TaskMemory:
             return context
 
         lines = [s.to_text() for s in summaries]
-        hint_content = (
-            f"{_CONTEXT_MARKER} 最近 {len(lines)} 条任务记忆（供参考）:\n"
-            + "\n".join(f"  {i+1}. {line}" for i, line in enumerate(lines))
+        hint_content = f"{_CONTEXT_MARKER} 最近 {len(lines)} 条任务记忆（供参考）:\n" + "\n".join(
+            f"  {i+1}. {line}" for i, line in enumerate(lines)
         )
         hint = {"role": "system", "content": hint_content}
         # 在历史最前面插入（不覆盖用户消息）

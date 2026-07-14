@@ -312,11 +312,7 @@ class CognitiveFieldEngine:
             import json
             import pathlib
 
-            cfg = json.loads(
-                (
-                    pathlib.Path(__file__).parents[2] / "config.json"
-                ).read_text()
-            )
+            cfg = json.loads((pathlib.Path(__file__).parents[2] / "config.json").read_text())
             return float(cfg.get("cognitive_field_tick_interval_s", 5.0))
         except Exception:
             return 5.0
@@ -327,11 +323,7 @@ class CognitiveFieldEngine:
             import json
             import pathlib
 
-            cfg = json.loads(
-                (
-                    pathlib.Path(__file__).parents[2] / "config.json"
-                ).read_text()
-            )
+            cfg = json.loads((pathlib.Path(__file__).parents[2] / "config.json").read_text())
             return bool(cfg.get("enable_cognitive_field_engine", True))
         except Exception:
             return True

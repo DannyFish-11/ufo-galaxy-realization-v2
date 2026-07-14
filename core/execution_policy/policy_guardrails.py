@@ -57,7 +57,6 @@ from .execution_policy import ExecutionPolicy
 from .policy_band import band_allows_execution
 from .policy_decision import PolicyDecision, PolicyOutcome, _make_allowed
 
-
 __all__ = [
     "check_side_effectful_execution",
     "check_confirmation_required",
@@ -110,10 +109,7 @@ def check_side_effectful_execution(
         return PolicyDecision(
             outcome=PolicyOutcome.BLOCKED_BY_POLICY,
             policy=policy,
-            reason=(
-                f"policy_band={policy.policy_band.value!r} does not permit "
-                "side-effectful execution"
-            ),
+            reason=(f"policy_band={policy.policy_band.value!r} does not permit " "side-effectful execution"),
             hint="blocked_by_policy",
         )
 
@@ -123,8 +119,7 @@ def check_side_effectful_execution(
             outcome=PolicyOutcome.CONFIRMATION_REQUIRED,
             policy=policy,
             reason=(
-                "confirmation required before side-effectful execution "
-                f"(policy_band={policy.policy_band.value!r})"
+                "confirmation required before side-effectful execution " f"(policy_band={policy.policy_band.value!r})"
             ),
             hint="confirmation_required",
         )
@@ -162,10 +157,7 @@ def check_confirmation_required(policy: ExecutionPolicy) -> PolicyDecision:
         return PolicyDecision(
             outcome=PolicyOutcome.CONFIRMATION_REQUIRED,
             policy=policy,
-            reason=(
-                f"requires_confirmation=True in current policy "
-                f"(policy_band={policy.policy_band.value!r})"
-            ),
+            reason=(f"requires_confirmation=True in current policy " f"(policy_band={policy.policy_band.value!r})"),
             hint="confirmation_required",
         )
     return _make_allowed(policy, reason="confirmation not required by policy")
@@ -195,10 +187,7 @@ def check_cross_device_expansion(policy: ExecutionPolicy) -> PolicyDecision:
         return PolicyDecision(
             outcome=PolicyOutcome.CROSS_DEVICE_NOT_ALLOWED,
             policy=policy,
-            reason=(
-                f"cross_device_allowed=False in current policy "
-                f"(policy_band={policy.policy_band.value!r})"
-            ),
+            reason=(f"cross_device_allowed=False in current policy " f"(policy_band={policy.policy_band.value!r})"),
             hint="cross_device_not_allowed",
         )
     return _make_allowed(policy, reason="cross-device expansion permitted by policy")
@@ -238,10 +227,7 @@ def check_executor_level(
         return PolicyDecision(
             outcome=PolicyOutcome.BLOCKED_BY_POLICY,
             policy=policy,
-            reason=(
-                f"no executor levels permitted by policy "
-                f"(policy_band={policy.policy_band.value!r})"
-            ),
+            reason=(f"no executor levels permitted by policy " f"(policy_band={policy.policy_band.value!r})"),
             hint="blocked_by_policy",
             blocked_levels=[requested_level],
         )
@@ -252,10 +238,7 @@ def check_executor_level(
         return PolicyDecision(
             outcome=PolicyOutcome.EXECUTOR_LEVEL_CAPPED,
             policy=policy,
-            reason=(
-                f"executor_level={requested_level!r} is not in policy's "
-                f"allowed_executor_levels={allowed}"
-            ),
+            reason=(f"executor_level={requested_level!r} is not in policy's " f"allowed_executor_levels={allowed}"),
             hint="executor_level_capped",
             blocked_levels=[requested_level],
             downgraded_to=suggested,

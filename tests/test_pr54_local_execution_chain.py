@@ -110,8 +110,10 @@ if _PROJECT_ROOT not in sys.path:
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _reset():
     from core.local_execution_chain import reset_local_execution_chain
+
     reset_local_execution_chain()
 
 
@@ -123,10 +125,12 @@ def _reset():
 class TestLocalChainStep:
     def test_step_count_is_6(self):
         from core.local_execution_chain import LocalChainStep
+
         assert len(LocalChainStep) == 6
 
     def test_chain_order_matches_expected(self):
         from core.local_execution_chain import LOCAL_CHAIN_ORDER
+
         expected = [
             "openclawd_dispatch",
             "agent_kernel_plan",
@@ -138,30 +142,36 @@ class TestLocalChainStep:
         assert [s.value for s in LOCAL_CHAIN_ORDER] == expected
 
     def test_first_step_is_openclawd_dispatch(self):
-        from core.local_execution_chain import LocalChainStep, LOCAL_CHAIN_ORDER
+        from core.local_execution_chain import LOCAL_CHAIN_ORDER, LocalChainStep
+
         assert LOCAL_CHAIN_ORDER[0] is LocalChainStep.openclawd_dispatch
 
     def test_last_step_is_openclawd_feedback(self):
-        from core.local_execution_chain import LocalChainStep, LOCAL_CHAIN_ORDER
+        from core.local_execution_chain import LOCAL_CHAIN_ORDER, LocalChainStep
+
         assert LOCAL_CHAIN_ORDER[-1] is LocalChainStep.openclawd_feedback
 
     def test_agent_kernel_before_command_router(self):
         from core.local_execution_chain import LOCAL_CHAIN_ORDER
+
         steps = [s.value for s in LOCAL_CHAIN_ORDER]
         assert steps.index("agent_kernel_plan") < steps.index("command_router_local")
 
     def test_command_router_before_local_executor(self):
         from core.local_execution_chain import LOCAL_CHAIN_ORDER
+
         steps = [s.value for s in LOCAL_CHAIN_ORDER]
         assert steps.index("command_router_local") < steps.index("local_executor")
 
     def test_local_executor_before_result_capture(self):
         from core.local_execution_chain import LOCAL_CHAIN_ORDER
+
         steps = [s.value for s in LOCAL_CHAIN_ORDER]
         assert steps.index("local_executor") < steps.index("result_capture")
 
     def test_result_capture_before_openclawd_feedback(self):
         from core.local_execution_chain import LOCAL_CHAIN_ORDER
+
         steps = [s.value for s in LOCAL_CHAIN_ORDER]
         assert steps.index("result_capture") < steps.index("openclawd_feedback")
 
@@ -173,31 +183,35 @@ class TestLocalChainStep:
 
 class TestLocalChainStepAuthorities:
     def test_all_steps_covered(self):
-        from core.local_execution_chain import LocalChainStep, LOCAL_CHAIN_STEP_AUTHORITIES
+        from core.local_execution_chain import LOCAL_CHAIN_STEP_AUTHORITIES, LocalChainStep
+
         for step in LocalChainStep:
             assert step in LOCAL_CHAIN_STEP_AUTHORITIES
 
     def test_all_authority_strings_non_empty(self):
         from core.local_execution_chain import LOCAL_CHAIN_STEP_AUTHORITIES
+
         for step, authority in LOCAL_CHAIN_STEP_AUTHORITIES.items():
-            assert isinstance(authority, str) and len(authority) > 0, (
-                f"Step {step} has empty authority"
-            )
+            assert isinstance(authority, str) and len(authority) > 0, f"Step {step} has empty authority"
 
     def test_openclawd_dispatch_authority(self):
-        from core.local_execution_chain import LocalChainStep, LOCAL_CHAIN_STEP_AUTHORITIES
+        from core.local_execution_chain import LOCAL_CHAIN_STEP_AUTHORITIES, LocalChainStep
+
         assert LOCAL_CHAIN_STEP_AUTHORITIES[LocalChainStep.openclawd_dispatch] == "core.openclawd"
 
     def test_openclawd_feedback_authority(self):
-        from core.local_execution_chain import LocalChainStep, LOCAL_CHAIN_STEP_AUTHORITIES
+        from core.local_execution_chain import LOCAL_CHAIN_STEP_AUTHORITIES, LocalChainStep
+
         assert LOCAL_CHAIN_STEP_AUTHORITIES[LocalChainStep.openclawd_feedback] == "core.openclawd"
 
     def test_command_router_authority(self):
-        from core.local_execution_chain import LocalChainStep, LOCAL_CHAIN_STEP_AUTHORITIES
+        from core.local_execution_chain import LOCAL_CHAIN_STEP_AUTHORITIES, LocalChainStep
+
         assert LOCAL_CHAIN_STEP_AUTHORITIES[LocalChainStep.command_router_local] == "core.command_router"
 
     def test_agent_kernel_authority(self):
-        from core.local_execution_chain import LocalChainStep, LOCAL_CHAIN_STEP_AUTHORITIES
+        from core.local_execution_chain import LOCAL_CHAIN_STEP_AUTHORITIES, LocalChainStep
+
         assert LOCAL_CHAIN_STEP_AUTHORITIES[LocalChainStep.agent_kernel_plan] == "core.agent.kernel"
 
 
@@ -209,6 +223,7 @@ class TestLocalChainStepAuthorities:
 class TestLocalExecutionResult:
     def test_default_construction(self):
         from core.local_execution_chain import LocalExecutionResult
+
         r = LocalExecutionResult()
         assert r.task_id == ""
         assert r.success is False
@@ -216,15 +231,28 @@ class TestLocalExecutionResult:
 
     def test_to_dict_keys(self):
         from core.local_execution_chain import LocalExecutionResult
+
         r = LocalExecutionResult(task_id="t1", success=True, status="completed")
         d = r.to_dict()
-        for key in ("task_id", "chain_step", "success", "status", "payload",
-                    "error", "executor_module", "session_id", "result_id",
-                    "timestamp", "extra", "openclawd_merged"):
+        for key in (
+            "task_id",
+            "chain_step",
+            "success",
+            "status",
+            "payload",
+            "error",
+            "executor_module",
+            "session_id",
+            "result_id",
+            "timestamp",
+            "extra",
+            "openclawd_merged",
+        ):
             assert key in d
 
     def test_from_dict_round_trip(self):
         from core.local_execution_chain import LocalExecutionResult
+
         r = LocalExecutionResult(task_id="rt1", success=True, status="done")
         d = r.to_dict()
         r2 = LocalExecutionResult.from_dict(d)
@@ -235,66 +263,79 @@ class TestLocalExecutionResult:
 
     def test_openclawd_merged_defaults_false(self):
         from core.local_execution_chain import LocalExecutionResult
+
         r = LocalExecutionResult()
         assert r.openclawd_merged is False
 
     def test_result_id_auto_generated(self):
         from core.local_execution_chain import LocalExecutionResult
+
         r = LocalExecutionResult()
         assert isinstance(r.result_id, str) and len(r.result_id) > 0
 
     def test_build_result_success_completed(self):
         from core.local_execution_chain import build_local_execution_result
+
         r = build_local_execution_result({"status": "completed"})
         assert r.success is True
 
     def test_build_result_success_success(self):
         from core.local_execution_chain import build_local_execution_result
+
         r = build_local_execution_result({"status": "success"})
         assert r.success is True
 
     def test_build_result_failure(self):
         from core.local_execution_chain import build_local_execution_result
+
         r = build_local_execution_result({"status": "failed"})
         assert r.success is False
 
     def test_build_result_payload_from_result_subdict(self):
         from core.local_execution_chain import build_local_execution_result
+
         r = build_local_execution_result({"status": "ok", "result": {"x": 1}})
         assert r.payload == {"x": 1}
 
     def test_build_result_payload_from_data_subdict(self):
         from core.local_execution_chain import build_local_execution_result
+
         r = build_local_execution_result({"status": "ok", "data": {"y": 2}})
         assert r.payload == {"y": 2}
 
     def test_build_result_excludes_image_base64(self):
         from core.local_execution_chain import build_local_execution_result
+
         r = build_local_execution_result({"status": "ok", "image_base64": "abc=="})
         assert "image_base64" not in r.payload
 
     def test_build_result_propagates_task_id_from_raw(self):
         from core.local_execution_chain import build_local_execution_result
+
         r = build_local_execution_result({"status": "ok", "task_id": "mytask"})
         assert r.task_id == "mytask"
 
     def test_build_result_propagates_session_id_kwarg(self):
         from core.local_execution_chain import build_local_execution_result
+
         r = build_local_execution_result({"status": "ok"}, session_id="sess1")
         assert r.session_id == "sess1"
 
     def test_build_result_chain_step_is_result_capture(self):
-        from core.local_execution_chain import build_local_execution_result, LocalChainStep
+        from core.local_execution_chain import LocalChainStep, build_local_execution_result
+
         r = build_local_execution_result({"status": "ok"})
         assert r.chain_step is LocalChainStep.result_capture
 
     def test_build_result_success_via_bool_true(self):
         from core.local_execution_chain import build_local_execution_result
+
         r = build_local_execution_result({"status": True})
         assert r.success is True
 
     def test_build_result_error_from_error_message(self):
         from core.local_execution_chain import build_local_execution_result
+
         r = build_local_execution_result({"status": "failed", "error_message": "oops"})
         assert r.error == "oops"
 
@@ -307,23 +348,38 @@ class TestLocalExecutionResult:
 class TestLocalExecutionRecord:
     def test_default_construction(self):
         from core.local_execution_chain import LocalExecutionRecord
+
         r = LocalExecutionRecord()
         assert r.task_id == ""
         assert r.is_canonical is False
 
     def test_to_dict_keys(self):
         from core.local_execution_chain import LocalExecutionRecord
+
         r = LocalExecutionRecord(task_id="t1")
         d = r.to_dict()
-        for key in ("task_id", "session_id", "executor_module", "steps_completed",
-                    "is_canonical", "legacy_path_used", "result", "record_id",
-                    "dispatched_at", "completed_at", "extra"):
+        for key in (
+            "task_id",
+            "session_id",
+            "executor_module",
+            "steps_completed",
+            "is_canonical",
+            "legacy_path_used",
+            "result",
+            "record_id",
+            "dispatched_at",
+            "completed_at",
+            "extra",
+        ):
             assert key in d
 
     def test_from_dict_round_trip(self):
-        from core.local_execution_chain import LocalExecutionRecord, LOCAL_CHAIN_ORDER
+        from core.local_execution_chain import LOCAL_CHAIN_ORDER, LocalExecutionRecord
+
         r = LocalExecutionRecord(
-            task_id="rt1", steps_completed=list(LOCAL_CHAIN_ORDER), is_canonical=True,
+            task_id="rt1",
+            steps_completed=list(LOCAL_CHAIN_ORDER),
+            is_canonical=True,
         )
         d = r.to_dict()
         r2 = LocalExecutionRecord.from_dict(d)
@@ -333,37 +389,44 @@ class TestLocalExecutionRecord:
 
     def test_is_canonical_false_when_legacy_path_used(self):
         from core.local_execution_chain import LocalExecutionRecord
+
         r = LocalExecutionRecord(legacy_path_used="some_legacy")
         assert r.is_canonical is False
 
     def test_build_record_canonical_when_steps_match_order(self):
-        from core.local_execution_chain import build_local_execution_record, LOCAL_CHAIN_ORDER
+        from core.local_execution_chain import LOCAL_CHAIN_ORDER, build_local_execution_record
+
         r = build_local_execution_record(steps_completed=list(LOCAL_CHAIN_ORDER))
         assert r.is_canonical is True
 
     def test_build_record_non_canonical_with_legacy_path(self):
         from core.local_execution_chain import build_local_execution_record
+
         r = build_local_execution_record(legacy_path_used="old_adapter")
         assert r.is_canonical is False
 
     def test_build_record_steps_default_to_canonical_order(self):
-        from core.local_execution_chain import build_local_execution_record, LOCAL_CHAIN_ORDER
+        from core.local_execution_chain import LOCAL_CHAIN_ORDER, build_local_execution_record
+
         r = build_local_execution_record()
         assert r.steps_completed == list(LOCAL_CHAIN_ORDER)
 
     def test_build_record_steps_default_to_empty_for_legacy(self):
         from core.local_execution_chain import build_local_execution_record
+
         r = build_local_execution_record(legacy_path_used="old_path")
         assert r.steps_completed == []
 
     def test_build_record_completed_at_set_when_result_provided(self):
-        from core.local_execution_chain import build_local_execution_record, LocalExecutionResult
+        from core.local_execution_chain import LocalExecutionResult, build_local_execution_record
+
         result = LocalExecutionResult(success=True, status="done")
         r = build_local_execution_record(result=result)
         assert r.completed_at is not None
 
     def test_build_record_completed_at_none_without_result(self):
         from core.local_execution_chain import build_local_execution_record
+
         r = build_local_execution_record()
         assert r.completed_at is None
 
@@ -376,21 +439,31 @@ class TestLocalExecutionRecord:
 class TestLocalChainSnapshot:
     def test_to_dict_keys(self):
         from core.local_execution_chain import LocalChainSnapshot
+
         s = LocalChainSnapshot()
         d = s.to_dict()
-        for key in ("total_executions", "canonical_executions", "legacy_executions",
-                    "recent_records", "chain_authority_map", "canonical_chain_order",
-                    "snapshot_id", "timestamp"):
+        for key in (
+            "total_executions",
+            "canonical_executions",
+            "legacy_executions",
+            "recent_records",
+            "chain_authority_map",
+            "canonical_chain_order",
+            "snapshot_id",
+            "timestamp",
+        ):
             assert key in d
 
     def test_canonical_chain_order_values(self):
-        from core.local_execution_chain import build_local_chain_snapshot, LOCAL_CHAIN_ORDER
+        from core.local_execution_chain import LOCAL_CHAIN_ORDER, build_local_chain_snapshot
+
         _reset()
         snap = build_local_chain_snapshot()
         assert snap.canonical_chain_order == [s.value for s in LOCAL_CHAIN_ORDER]
 
     def test_chain_authority_map_all_step_keys(self):
-        from core.local_execution_chain import build_local_chain_snapshot, LocalChainStep
+        from core.local_execution_chain import LocalChainStep, build_local_chain_snapshot
+
         _reset()
         snap = build_local_chain_snapshot()
         for step in LocalChainStep:
@@ -408,33 +481,38 @@ class TestLocalExecutionChainSingleton:
 
     def test_initial_total_zero(self):
         from core.local_execution_chain import get_local_execution_chain
+
         chain = get_local_execution_chain()
         snap = chain.snapshot()
         assert snap.total_executions == 0
 
     def test_append_increments_total(self):
-        from core.local_execution_chain import get_local_execution_chain, LocalExecutionRecord, LOCAL_CHAIN_ORDER
+        from core.local_execution_chain import LOCAL_CHAIN_ORDER, LocalExecutionRecord, get_local_execution_chain
+
         chain = get_local_execution_chain()
         rec = LocalExecutionRecord(steps_completed=list(LOCAL_CHAIN_ORDER), is_canonical=True)
         chain.append(rec)
         assert chain.snapshot().total_executions == 1
 
     def test_append_increments_canonical_count(self):
-        from core.local_execution_chain import get_local_execution_chain, LocalExecutionRecord, LOCAL_CHAIN_ORDER
+        from core.local_execution_chain import LOCAL_CHAIN_ORDER, LocalExecutionRecord, get_local_execution_chain
+
         chain = get_local_execution_chain()
         rec = LocalExecutionRecord(steps_completed=list(LOCAL_CHAIN_ORDER), is_canonical=True)
         chain.append(rec)
         assert chain.snapshot().canonical_executions == 1
 
     def test_append_increments_legacy_count(self):
-        from core.local_execution_chain import get_local_execution_chain, LocalExecutionRecord
+        from core.local_execution_chain import LocalExecutionRecord, get_local_execution_chain
+
         chain = get_local_execution_chain()
         rec = LocalExecutionRecord(legacy_path_used="old", is_canonical=False)
         chain.append(rec)
         assert chain.snapshot().legacy_executions == 1
 
     def test_snapshot_recent_records_bounded(self):
-        from core.local_execution_chain import get_local_execution_chain, LocalExecutionRecord
+        from core.local_execution_chain import LocalExecutionRecord, get_local_execution_chain
+
         chain = get_local_execution_chain()
         for i in range(30):
             chain.append(LocalExecutionRecord(task_id=f"t{i}"))
@@ -443,13 +521,15 @@ class TestLocalExecutionChainSingleton:
 
     def test_singleton_records_bounded_at_max(self):
         from core.local_execution_chain import LocalExecutionChainSingleton, LocalExecutionRecord
+
         chain = LocalExecutionChainSingleton(max_records=5)
         for i in range(10):
             chain.append(LocalExecutionRecord(task_id=f"t{i}"))
         assert len(chain._records) == 5
 
     def test_clear_resets_counts(self):
-        from core.local_execution_chain import get_local_execution_chain, LocalExecutionRecord, LOCAL_CHAIN_ORDER
+        from core.local_execution_chain import LOCAL_CHAIN_ORDER, LocalExecutionRecord, get_local_execution_chain
+
         chain = get_local_execution_chain()
         chain.append(LocalExecutionRecord(steps_completed=list(LOCAL_CHAIN_ORDER), is_canonical=True))
         chain.clear()
@@ -469,14 +549,14 @@ class TestRecordLocalExecution:
         _reset()
 
     def test_record_appends_to_singleton(self):
-        from core.local_execution_chain import record_local_execution, get_local_execution_chain
+        from core.local_execution_chain import get_local_execution_chain, record_local_execution
+
         record_local_execution(task_id="t1")
         assert get_local_execution_chain().snapshot().total_executions == 1
 
     def test_record_marks_openclawd_merged_for_canonical(self):
-        from core.local_execution_chain import (
-            record_local_execution, LocalExecutionResult, LOCAL_CHAIN_ORDER
-        )
+        from core.local_execution_chain import LOCAL_CHAIN_ORDER, LocalExecutionResult, record_local_execution
+
         result = LocalExecutionResult(success=True)
         rec = record_local_execution(
             task_id="t2",
@@ -486,7 +566,8 @@ class TestRecordLocalExecution:
         assert rec.result.openclawd_merged is True
 
     def test_record_does_not_mark_merged_for_legacy(self):
-        from core.local_execution_chain import record_local_execution, LocalExecutionResult
+        from core.local_execution_chain import LocalExecutionResult, record_local_execution
+
         result = LocalExecutionResult(success=True)
         rec = record_local_execution(
             task_id="t3",
@@ -497,41 +578,50 @@ class TestRecordLocalExecution:
 
     def test_record_emits_warning_for_legacy(self, caplog):
         from core.local_execution_chain import record_local_execution
+
         with caplog.at_level(logging.WARNING, logger="Galaxy.LocalExecutionChain"):
             record_local_execution(task_id="t4", legacy_path_used="bad_path")
         assert any("LEGACY LOCAL CHAIN PATH" in msg for msg in caplog.messages)
 
     def test_record_no_warning_for_canonical(self, caplog):
-        from core.local_execution_chain import record_local_execution, LOCAL_CHAIN_ORDER
+        from core.local_execution_chain import LOCAL_CHAIN_ORDER, record_local_execution
+
         with caplog.at_level(logging.WARNING, logger="Galaxy.LocalExecutionChain"):
             record_local_execution(task_id="t5", steps_completed=list(LOCAL_CHAIN_ORDER))
         assert not any("LEGACY LOCAL CHAIN PATH" in msg for msg in caplog.messages)
 
     def test_get_local_execution_chain_returns_singleton(self):
-        from core.local_execution_chain import get_local_execution_chain, LocalExecutionChainSingleton
+        from core.local_execution_chain import LocalExecutionChainSingleton, get_local_execution_chain
+
         chain = get_local_execution_chain()
         assert isinstance(chain, LocalExecutionChainSingleton)
 
     def test_reset_produces_fresh_singleton(self):
         from core.local_execution_chain import (
-            get_local_execution_chain, reset_local_execution_chain, LocalExecutionRecord
+            LocalExecutionRecord,
+            get_local_execution_chain,
+            reset_local_execution_chain,
         )
+
         get_local_execution_chain().append(LocalExecutionRecord(task_id="before"))
         reset_local_execution_chain()
         assert get_local_execution_chain().snapshot().total_executions == 0
 
     def test_build_local_chain_snapshot_returns_snapshot(self):
-        from core.local_execution_chain import build_local_chain_snapshot, LocalChainSnapshot
+        from core.local_execution_chain import LocalChainSnapshot, build_local_chain_snapshot
+
         snap = build_local_chain_snapshot()
         assert isinstance(snap, LocalChainSnapshot)
 
     def test_build_local_chain_snapshot_id_non_empty(self):
         from core.local_execution_chain import build_local_chain_snapshot
+
         snap = build_local_chain_snapshot()
         assert len(snap.snapshot_id) > 0
 
     def test_build_local_chain_snapshot_total_reflects_records(self):
-        from core.local_execution_chain import record_local_execution, build_local_chain_snapshot
+        from core.local_execution_chain import build_local_chain_snapshot, record_local_execution
+
         record_local_execution(task_id="counted1")
         record_local_execution(task_id="counted2")
         snap = build_local_chain_snapshot()
@@ -545,7 +635,8 @@ class TestRecordLocalExecution:
 
 class TestFromDictGraceful:
     def test_result_from_dict_unknown_chain_step(self):
-        from core.local_execution_chain import LocalExecutionResult, LocalChainStep
+        from core.local_execution_chain import LocalChainStep, LocalExecutionResult
+
         d = {
             "task_id": "x",
             "chain_step": "nonexistent_step",
@@ -557,6 +648,7 @@ class TestFromDictGraceful:
 
     def test_record_from_dict_unknown_step_values(self):
         from core.local_execution_chain import LocalExecutionRecord
+
         d = {
             "task_id": "x",
             "steps_completed": ["unknown_step_1", "openclawd_dispatch"],
@@ -577,37 +669,44 @@ class TestFromDictGraceful:
 class TestTwoChainModel:
     def test_local_chain_has_6_steps(self):
         from core.local_execution_chain import LOCAL_CHAIN_ORDER
+
         assert len(LOCAL_CHAIN_ORDER) == 6
 
     def test_cross_device_chain_has_7_steps(self):
         from core.cross_device_execution_chain import CANONICAL_CHAIN_ORDER
+
         assert len(CANONICAL_CHAIN_ORDER) == 7
 
     def test_both_chains_start_with_openclawd_dispatch(self):
-        from core.local_execution_chain import LOCAL_CHAIN_ORDER
         from core.cross_device_execution_chain import CANONICAL_CHAIN_ORDER
+        from core.local_execution_chain import LOCAL_CHAIN_ORDER
+
         assert LOCAL_CHAIN_ORDER[0].value == "openclawd_dispatch"
         assert CANONICAL_CHAIN_ORDER[0].value == "openclawd_dispatch"
 
     def test_both_chains_end_with_openclawd_feedback(self):
-        from core.local_execution_chain import LOCAL_CHAIN_ORDER
         from core.cross_device_execution_chain import CANONICAL_CHAIN_ORDER
+        from core.local_execution_chain import LOCAL_CHAIN_ORDER
+
         assert LOCAL_CHAIN_ORDER[-1].value == "openclawd_feedback"
         assert CANONICAL_CHAIN_ORDER[-1].value == "openclawd_feedback"
 
     def test_local_result_type_differs_from_cross_device(self):
-        from core.local_execution_chain import LocalExecutionResult
         from core.cross_device_execution_chain import ResultEnvelope
+        from core.local_execution_chain import LocalExecutionResult
+
         assert LocalExecutionResult is not ResultEnvelope
 
     def test_local_snapshot_type_differs_from_cross_device(self):
-        from core.local_execution_chain import LocalChainSnapshot
         from core.cross_device_execution_chain import CrossDeviceChainSnapshot
+        from core.local_execution_chain import LocalChainSnapshot
+
         assert LocalChainSnapshot is not CrossDeviceChainSnapshot
 
     def test_singletons_are_independent(self):
-        from core.local_execution_chain import get_local_execution_chain, reset_local_execution_chain
         from core.cross_device_execution_chain import get_cross_device_chain, reset_cross_device_chain
+        from core.local_execution_chain import get_local_execution_chain, reset_local_execution_chain
+
         reset_local_execution_chain()
         reset_cross_device_chain()
         assert get_local_execution_chain() is not get_cross_device_chain()
@@ -630,17 +729,28 @@ class TestDocsAndCommentPresence:
     def test_local_chain_doc_contains_canonical_step_names(self):
         doc_path = os.path.join(_PROJECT_ROOT, "docs", "LOCAL_EXECUTION_CHAIN.md")
         content = open(doc_path).read()
-        for step_name in ("openclawd_dispatch", "agent_kernel_plan",
-                          "command_router_local", "local_executor",
-                          "result_capture", "openclawd_feedback"):
+        for step_name in (
+            "openclawd_dispatch",
+            "agent_kernel_plan",
+            "command_router_local",
+            "local_executor",
+            "result_capture",
+            "openclawd_feedback",
+        ):
             assert step_name in content, f"LOCAL_EXECUTION_CHAIN.md missing step: {step_name}"
 
     def test_cross_device_chain_doc_contains_canonical_step_names(self):
         doc_path = os.path.join(_PROJECT_ROOT, "docs", "CROSS_DEVICE_EXECUTION_CHAIN.md")
         content = open(doc_path).read()
-        for step_name in ("openclawd_dispatch", "command_router", "task_envelope",
-                          "gateway_substrate", "worker_executor",
-                          "result_envelope", "openclawd_feedback"):
+        for step_name in (
+            "openclawd_dispatch",
+            "command_router",
+            "task_envelope",
+            "gateway_substrate",
+            "worker_executor",
+            "result_envelope",
+            "openclawd_feedback",
+        ):
             assert step_name in content, f"CROSS_DEVICE_EXECUTION_CHAIN.md missing step: {step_name}"
 
     def test_desktop_presence_runtime_mentions_local_chain(self):
@@ -672,12 +782,13 @@ class TestDocsAndCommentPresence:
 class TestJsonSerialisability:
     def test_local_execution_result_to_dict_json_serialisable(self):
         from core.local_execution_chain import LocalExecutionResult
-        r = LocalExecutionResult(task_id="j1", success=True, status="ok",
-                                  payload={"a": 1}, error=None)
+
+        r = LocalExecutionResult(task_id="j1", success=True, status="ok", payload={"a": 1}, error=None)
         json.dumps(r.to_dict())
 
     def test_local_execution_record_to_dict_json_serialisable(self):
-        from core.local_execution_chain import LocalExecutionRecord, LOCAL_CHAIN_ORDER
+        from core.local_execution_chain import LOCAL_CHAIN_ORDER, LocalExecutionRecord
+
         r = LocalExecutionRecord(
             task_id="j2",
             steps_completed=list(LOCAL_CHAIN_ORDER),
@@ -688,5 +799,6 @@ class TestJsonSerialisability:
     def test_local_chain_snapshot_to_dict_json_serialisable(self):
         _reset()
         from core.local_execution_chain import build_local_chain_snapshot
+
         snap = build_local_chain_snapshot()
         json.dumps(snap.to_dict())

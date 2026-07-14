@@ -14,6 +14,7 @@ attach to result payloads and canonical result surfaces.
 from __future__ import annotations
 
 import logging  # auto: ensure module logger is defined
+
 logger = logging.getLogger(__name__)
 
 
@@ -29,12 +30,10 @@ _LOSS_TOKENS = ("offline", "lost", "disconnect", "unreachable", "not connected")
 _DEGRADED_TOKENS = ("degraded", "busy", "timeout", "retry")
 
 try:
-    from contracts.participant_lifecycle_schema import (
-        ParticipantLifecycleState as _PLS,
-        ParticipantRole as _PR,
-        ParticipantTransitionTrigger as _PTT,
-        PARTICIPANT_STATE_TRANSITIONS as _PL_TRANSITIONS,
-    )
+    from contracts.participant_lifecycle_schema import PARTICIPANT_STATE_TRANSITIONS as _PL_TRANSITIONS
+    from contracts.participant_lifecycle_schema import ParticipantLifecycleState as _PLS
+    from contracts.participant_lifecycle_schema import ParticipantRole as _PR
+    from contracts.participant_lifecycle_schema import ParticipantTransitionTrigger as _PTT
 except Exception as exc:
     logger.debug("Fallback triggered: %s", exc)
     _PLS = None
@@ -51,57 +50,35 @@ ROLE_PRIMARY = _enum_value(getattr(_PR, "PRIMARY", None), "primary")
 ROLE_ASSISTANT = _enum_value(getattr(_PR, "ASSISTANT", None), "assistant")
 ROLE_FALLBACK = _enum_value(getattr(_PR, "FALLBACK", None), "fallback")
 ROLE_SUSPENDED = _enum_value(getattr(_PR, "SUSPENDED", None), "suspended")
-ROLE_TAKEOVER_CANDIDATE = _enum_value(
-    getattr(_PR, "TAKEOVER_CANDIDATE", None), "takeover_candidate"
-)
+ROLE_TAKEOVER_CANDIDATE = _enum_value(getattr(_PR, "TAKEOVER_CANDIDATE", None), "takeover_candidate")
 ROLE_DEGRADED = _enum_value(getattr(_PR, "DEGRADED", None), "degraded")
 
 STATE_ATTACHED = _enum_value(getattr(_PLS, "ATTACHED", None), "attached")
 STATE_EXECUTING = _enum_value(getattr(_PLS, "EXECUTING", None), "executing")
-STATE_RESULT_ACCEPTED = _enum_value(
-    getattr(_PLS, "RESULT_ACCEPTED", None), "result_accepted"
-)
-STATE_SUSPENDED = _enum_value(
-    getattr(_PLS, "SUSPENDED_STATE", None), "suspended_state"
-)
-STATE_TAKEOVER_CANDIDATE = _enum_value(
-    getattr(_PLS, "TAKEOVER_CANDIDATE_STATE", None), "takeover_candidate_state"
-)
+STATE_RESULT_ACCEPTED = _enum_value(getattr(_PLS, "RESULT_ACCEPTED", None), "result_accepted")
+STATE_SUSPENDED = _enum_value(getattr(_PLS, "SUSPENDED_STATE", None), "suspended_state")
+STATE_TAKEOVER_CANDIDATE = _enum_value(getattr(_PLS, "TAKEOVER_CANDIDATE_STATE", None), "takeover_candidate_state")
 STATE_DEGRADED = _enum_value(getattr(_PLS, "DEGRADED_STATE", None), "degraded_state")
 STATE_RECOVERING = _enum_value(getattr(_PLS, "RECOVERING", None), "recovering")
 STATE_DETACHED = _enum_value(getattr(_PLS, "DETACHED", None), "detached")
 STATE_TERMINAL = _enum_value(getattr(_PLS, "TERMINAL", None), "terminal")
-STATE_WAITING_RESULT = _enum_value(
-    getattr(_PLS, "WAITING_RESULT", None), "waiting_result"
-)
+STATE_WAITING_RESULT = _enum_value(getattr(_PLS, "WAITING_RESULT", None), "waiting_result")
 
 TR_ATTACH_SUCCESS = _enum_value(getattr(_PTT, "ATTACH_SUCCESS", None), "attach_success")
-TR_EXECUTION_STARTED = _enum_value(
-    getattr(_PTT, "EXECUTION_STARTED", None), "execution_started"
-)
+TR_EXECUTION_STARTED = _enum_value(getattr(_PTT, "EXECUTION_STARTED", None), "execution_started")
 TR_RESULT_ACCEPTED = _enum_value(
     getattr(_PTT, "RESULT_ACCEPTED_BY_CENTER", None),
     "result_accepted_by_center",
 )
-TR_SUSPENSION_ORDERED = _enum_value(
-    getattr(_PTT, "SUSPENSION_ORDERED", None), "suspension_ordered"
-)
+TR_SUSPENSION_ORDERED = _enum_value(getattr(_PTT, "SUSPENSION_ORDERED", None), "suspension_ordered")
 TR_TAKEOVER_NOMINATED = _enum_value(
     getattr(_PTT, "TAKEOVER_CANDIDATE_NOMINATED", None),
     "takeover_candidate_nominated",
 )
-TR_CAPABILITY_DEGRADED = _enum_value(
-    getattr(_PTT, "CAPABILITY_DEGRADED", None), "capability_degraded"
-)
-TR_RECOVERY_COMPLETED = _enum_value(
-    getattr(_PTT, "RECOVERY_COMPLETED", None), "recovery_completed"
-)
-TR_RECOVERY_INITIATED = _enum_value(
-    getattr(_PTT, "RECOVERY_INITIATED", None), "recovery_initiated"
-)
-TR_TRANSPORT_DISCONNECTED = _enum_value(
-    getattr(_PTT, "TRANSPORT_DISCONNECTED", None), "transport_disconnected"
-)
+TR_CAPABILITY_DEGRADED = _enum_value(getattr(_PTT, "CAPABILITY_DEGRADED", None), "capability_degraded")
+TR_RECOVERY_COMPLETED = _enum_value(getattr(_PTT, "RECOVERY_COMPLETED", None), "recovery_completed")
+TR_RECOVERY_INITIATED = _enum_value(getattr(_PTT, "RECOVERY_INITIATED", None), "recovery_initiated")
+TR_TRANSPORT_DISCONNECTED = _enum_value(getattr(_PTT, "TRANSPORT_DISCONNECTED", None), "transport_disconnected")
 TR_TERMINAL_LOSS = _enum_value(getattr(_PTT, "TERMINAL_LOSS", None), "terminal_loss")
 
 
@@ -118,12 +95,8 @@ def _find_transition_implications(
             and _enum_value(getattr(transition, "trigger", None)) == trigger
         ):
             return {
-                "truth_implication": str(
-                    getattr(transition, "truth_implication", "") or ""
-                ),
-                "closure_implication": str(
-                    getattr(transition, "closure_implication", "") or ""
-                ),
+                "truth_implication": str(getattr(transition, "truth_implication", "") or ""),
+                "closure_implication": str(getattr(transition, "closure_implication", "") or ""),
             }
     return {"truth_implication": "", "closure_implication": ""}
 
@@ -440,9 +413,7 @@ def build_multi_subject_truth_bridge(
     suspended_count = sum(1 for p in participants if p["state"] == "suspended")
 
     # Check recovery-path completion: at least one recovering device succeeded.
-    recovery_succeeded = any(
-        p["state"] == "ready" and p.get("is_recovery", False) for p in participants
-    )
+    recovery_succeeded = any(p["state"] == "ready" and p.get("is_recovery", False) for p in participants)
 
     if recovery_succeeded and success_count > 0:
         completion_state = "recovery_completion"
@@ -466,7 +437,8 @@ def build_multi_subject_truth_bridge(
 
     closure = {
         "completion_state": completion_state,
-        "terminal": completion_state in {
+        "terminal": completion_state
+        in {
             "success",
             "partial_success",
             "degraded_completion",
@@ -478,9 +450,7 @@ def build_multi_subject_truth_bridge(
         "reconcile_required": _reconcile_required,
         "canonical_truth_status": "converged" if participants else "partial",
     }
-    _dispatch_blocked = [
-        p["device_id"] for p in participants if not bool(p.get("dispatch_eligible", False))
-    ]
+    _dispatch_blocked = [p["device_id"] for p in participants if not bool(p.get("dispatch_eligible", False))]
 
     return {
         "authority": MULTI_SUBJECT_TRUTH_CONVERGENCE_BRIDGE_AUTHORITY,

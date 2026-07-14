@@ -81,7 +81,7 @@ class TestFormationRole:
         assert set(recovered) == {r.value for r in FormationRole}
 
     def test_role_precedence_contains_all_roles(self) -> None:
-        from core.device_formation import FormationRole, FORMATION_ROLE_PRECEDENCE
+        from core.device_formation import FORMATION_ROLE_PRECEDENCE, FormationRole
 
         assert set(FORMATION_ROLE_PRECEDENCE) == set(FormationRole)
 
@@ -335,7 +335,7 @@ class TestBarrierPosture:
             assert isinstance(posture.value, str)
 
     def test_posture_descriptions_cover_all(self) -> None:
-        from core.device_formation import BarrierPosture, BARRIER_POSTURE_DESCRIPTIONS
+        from core.device_formation import BARRIER_POSTURE_DESCRIPTIONS, BarrierPosture
 
         for posture in BarrierPosture:
             assert posture.value in BARRIER_POSTURE_DESCRIPTIONS
@@ -344,7 +344,7 @@ class TestBarrierPosture:
 
 class TestFormationPolicy:
     def test_default_policy(self) -> None:
-        from core.device_formation import FormationPolicy, BarrierPosture
+        from core.device_formation import BarrierPosture, FormationPolicy
 
         p = FormationPolicy()
         assert p.barrier_posture == BarrierPosture.WAIT_PRIMARY
@@ -354,7 +354,7 @@ class TestFormationPolicy:
         assert p.fallback_intent == "promote_fallback_device"
 
     def test_to_dict_is_json_serialisable(self) -> None:
-        from core.device_formation import FormationPolicy, BarrierPosture
+        from core.device_formation import BarrierPosture, FormationPolicy
 
         p = FormationPolicy(
             barrier_posture=BarrierPosture.WAIT_ALL,
@@ -370,7 +370,7 @@ class TestFormationPolicy:
         assert "dev_a" in recovered["minimum_required_device_ids"]
 
     def test_from_dict_round_trip(self) -> None:
-        from core.device_formation import FormationPolicy, BarrierPosture
+        from core.device_formation import BarrierPosture, FormationPolicy
 
         p = FormationPolicy(
             barrier_posture=BarrierPosture.WAIT_MERGE_OWNER,
@@ -383,7 +383,7 @@ class TestFormationPolicy:
         assert recovered.policy_reason == p.policy_reason
 
     def test_from_dict_unknown_posture_defaults_to_wait_primary(self) -> None:
-        from core.device_formation import FormationPolicy, BarrierPosture
+        from core.device_formation import BarrierPosture, FormationPolicy
 
         p = FormationPolicy.from_dict({"barrier_posture": "completely_unknown_xyz"})
         assert p.barrier_posture == BarrierPosture.WAIT_PRIMARY
@@ -403,7 +403,7 @@ class TestFormationPolicy:
 
 class TestResolveFormation:
     def test_resolve_empty_inputs_returns_valid_defaults(self) -> None:
-        from core.device_formation import resolve_formation, BarrierPosture
+        from core.device_formation import BarrierPosture, resolve_formation
 
         group, policy = resolve_formation()
         assert group is not None
@@ -413,7 +413,7 @@ class TestResolveFormation:
         json.dumps(policy.to_dict())
 
     def test_resolve_full_cross_device_inputs(self) -> None:
-        from core.device_formation import resolve_formation, FormationRole, BarrierPosture
+        from core.device_formation import BarrierPosture, FormationRole, resolve_formation
 
         group, policy = resolve_formation(
             runtime_domain="cross_device",
@@ -472,7 +472,7 @@ class TestResolveFormation:
         assert "tablet_003" in group.fallback_device_ids
 
     def test_resolve_merge_owner_explicit(self) -> None:
-        from core.device_formation import resolve_formation, FormationRole
+        from core.device_formation import FormationRole, resolve_formation
 
         group, policy = resolve_formation(
             runtime_domain="cross_device",
@@ -486,7 +486,7 @@ class TestResolveFormation:
         assert len(merge_owner_members) >= 1
 
     def test_resolve_barrier_posture_split_execution(self) -> None:
-        from core.device_formation import resolve_formation, BarrierPosture
+        from core.device_formation import BarrierPosture, resolve_formation
 
         routing_summary = {
             "posture": "split_execution",
@@ -501,7 +501,7 @@ class TestResolveFormation:
         assert group.barrier_posture == BarrierPosture.WAIT_ALL.value
 
     def test_resolve_barrier_posture_with_merge_owner(self) -> None:
-        from core.device_formation import resolve_formation, BarrierPosture
+        from core.device_formation import BarrierPosture, resolve_formation
 
         group, policy = resolve_formation(
             runtime_domain="cross_device",
@@ -543,8 +543,8 @@ class TestResolveFormation:
 class TestFormationSummary:
     def _make_full_summary(self):
         from core.device_formation import (
-            resolve_formation,
             build_formation_summary,
+            resolve_formation,
         )
 
         group, policy = resolve_formation(
@@ -657,7 +657,7 @@ class TestFormationSummary:
         assert hints["has_source"] is False
 
     def test_resolve_formation_summary_convenience(self) -> None:
-        from core.device_formation import resolve_formation_summary, FormationSummary
+        from core.device_formation import FormationSummary, resolve_formation_summary
 
         summary = resolve_formation_summary(
             runtime_domain="cross_device",
@@ -668,7 +668,7 @@ class TestFormationSummary:
         assert summary.source_device_id == "phone_001"
 
     def test_resolve_formation_summary_never_raises(self) -> None:
-        from core.device_formation import resolve_formation_summary, FormationSummary
+        from core.device_formation import FormationSummary, resolve_formation_summary
 
         # Even with garbage inputs, should return valid summary
         summary = resolve_formation_summary(
@@ -687,6 +687,7 @@ class TestDeviceFormationProjectionRoute:
         """Build a minimal FastAPI test app with the projection router."""
         try:
             from fastapi import FastAPI
+
             from core.routes.projection import create_router
 
             app = FastAPI()

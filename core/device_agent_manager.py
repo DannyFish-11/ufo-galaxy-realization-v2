@@ -15,14 +15,15 @@ Galaxy - 统一设备 Agent 管理器
 """
 
 import asyncio
-import logging
 import json
+import logging
 import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Dict, Any, Optional, List, Callable, Type
+from typing import Any, Callable, Dict, List, Optional, Type
+
 try:
     import aiohttp
 except ImportError:
@@ -38,6 +39,7 @@ from core.device_types import DeviceType  # noqa: F811,E402
 
 class DeviceStatus(Enum):
     """设备状态枚举"""
+
     OFFLINE = "offline"
     ONLINE = "online"
     BUSY = "busy"
@@ -48,6 +50,7 @@ class DeviceStatus(Enum):
 
 class DeviceCapability(Enum):
     """设备能力枚举"""
+
     SCREEN_CAPTURE = "screen_capture"
     UI_AUTOMATION = "ui_automation"
     VOICE_INPUT = "voice_input"
@@ -69,6 +72,7 @@ class DeviceCapability(Enum):
 @dataclass
 class DeviceInfo:
     """设备信息数据类"""
+
     device_id: str
     device_type: DeviceType
     device_name: str
@@ -87,13 +91,14 @@ class DeviceInfo:
             "capabilities": [c.value for c in self.capabilities],
             "metadata": self.metadata,
             "last_heartbeat": self.last_heartbeat.isoformat() if self.last_heartbeat else None,
-            "registered_at": self.registered_at.isoformat() if self.registered_at else None
+            "registered_at": self.registered_at.isoformat() if self.registered_at else None,
         }
 
 
 # ============================================================================
 # 设备 Agent 基类
 # ============================================================================
+
 
 class BaseDeviceAgent(ABC):
     """
@@ -168,6 +173,7 @@ class BaseDeviceAgent(ABC):
 # Android 设备 Agent
 # ============================================================================
 
+
 class AndroidDeviceAgent(BaseDeviceAgent):
     """Android 设备 Agent"""
 
@@ -180,9 +186,8 @@ class AndroidDeviceAgent(BaseDeviceAgent):
         try:
             # 通过 WebSocket 连接到 Android 设备
             import websockets
-            self.ws_connection = await websockets.connect(
-                f"{self.server_url}/device/{self.device_id}"
-            )
+
+            self.ws_connection = await websockets.connect(f"{self.server_url}/device/{self.device_id}")
             self.is_connected = True
             self.device_info.status = DeviceStatus.ONLINE
             logger.info(f"Android device {self.device_id} connected")
@@ -208,11 +213,7 @@ class AndroidDeviceAgent(BaseDeviceAgent):
             return {"error": "Device not connected"}
 
         try:
-            message = json.dumps({
-                "type": "command",
-                "command": command,
-                "params": params
-            })
+            message = json.dumps({"type": "command", "command": command, "params": params})
             await self.ws_connection.send(message)
             response = await self.ws_connection.recv()
             return json.loads(response)
@@ -229,7 +230,7 @@ class AndroidDeviceAgent(BaseDeviceAgent):
             "battery_level": self.device_info.metadata.get("battery_level", "unknown"),
             "screen_on": self.device_info.metadata.get("screen_on", False),
             "wifi_connected": self.device_info.metadata.get("wifi_connected", False),
-            "bluetooth_enabled": self.device_info.metadata.get("bluetooth_enabled", False)
+            "bluetooth_enabled": self.device_info.metadata.get("bluetooth_enabled", False),
         }
 
     async def get_capabilities(self) -> List[DeviceCapability]:
@@ -245,7 +246,7 @@ class AndroidDeviceAgent(BaseDeviceAgent):
             DeviceCapability.NFC,
             DeviceCapability.GPS,
             DeviceCapability.NOTIFICATION,
-            DeviceCapability.APP_CONTROL
+            DeviceCapability.APP_CONTROL,
         ]
 
     # Android 特有方法
@@ -256,11 +257,9 @@ class AndroidDeviceAgent(BaseDeviceAgent):
         return await self.execute_command("tap", {"x": x, "y": y})
 
     async def swipe(self, start_x: int, start_y: int, end_x: int, end_y: int, duration: int = 300) -> Dict[str, Any]:
-        return await self.execute_command("swipe", {
-            "start_x": start_x, "start_y": start_y,
-            "end_x": end_x, "end_y": end_y,
-            "duration": duration
-        })
+        return await self.execute_command(
+            "swipe", {"start_x": start_x, "start_y": start_y, "end_x": end_x, "end_y": end_y, "duration": duration}
+        )
 
     async def input_text(self, text: str) -> Dict[str, Any]:
         return await self.execute_command("input_text", {"text": text})
@@ -272,6 +271,7 @@ class AndroidDeviceAgent(BaseDeviceAgent):
 # ============================================================================
 # Windows 设备 Agent（集成微软 UFO）
 # ============================================================================
+
 
 class WindowsDeviceAgent(BaseDeviceAgent):
     """Windows 设备 Agent - 深度集成微软 UFO"""
@@ -299,11 +299,13 @@ class WindowsDeviceAgent(BaseDeviceAgent):
         """加载微软 UFO 模块"""
         try:
             import sys
+
             if self.ufo_path and os.path.isdir(self.ufo_path):
                 sys.path.insert(0, self.ufo_path)
 
             # 尝试导入微软 UFO 的 Puppeteer
             from external.microsoft_ufo.automator.puppeteer import Puppeteer
+
             self.puppeteer = Puppeteer()
             self.ufo_available = True
             logger.info("Microsoft UFO loaded successfully")
@@ -354,6 +356,7 @@ class WindowsDeviceAgent(BaseDeviceAgent):
         """降级执行（不使用微软 UFO）"""
         try:
             import pyautogui
+
             if command == "click":
                 pyautogui.click(params.get("x"), params.get("y"))
                 return {"success": True, "method": "pyautogui"}
@@ -372,7 +375,7 @@ class WindowsDeviceAgent(BaseDeviceAgent):
             "status": self.device_info.status.value,
             "is_connected": self.is_connected,
             "ufo_available": self.ufo_available,
-            "capabilities": [c.value for c in await self.get_capabilities()]
+            "capabilities": [c.value for c in await self.get_capabilities()],
         }
 
     async def get_capabilities(self) -> List[DeviceCapability]:
@@ -380,7 +383,7 @@ class WindowsDeviceAgent(BaseDeviceAgent):
             DeviceCapability.SCREEN_CAPTURE,
             DeviceCapability.UI_AUTOMATION,
             DeviceCapability.FILE_SYSTEM,
-            DeviceCapability.NETWORK
+            DeviceCapability.NETWORK,
         ]
         if self.ufo_available:
             caps.append(DeviceCapability.APP_CONTROL)
@@ -390,6 +393,7 @@ class WindowsDeviceAgent(BaseDeviceAgent):
 # ============================================================================
 # IoT 设备 Agent
 # ============================================================================
+
 
 class IoTDeviceAgent(BaseDeviceAgent):
     """IoT 设备 Agent - 支持各种物联网设备"""
@@ -416,6 +420,7 @@ class IoTDeviceAgent(BaseDeviceAgent):
         """通过 MQTT 连接"""
         try:
             import paho.mqtt.client as mqtt
+
             broker = self.device_info.metadata.get("mqtt_broker", "localhost")
             port = self.device_info.metadata.get("mqtt_port", 1883)
             self.mqtt_client = mqtt.Client()
@@ -428,6 +433,7 @@ class IoTDeviceAgent(BaseDeviceAgent):
         """通过 HTTP 连接"""
         try:
             import httpx
+
             address = self.device_info.address or self.device_info.metadata.get("http_url", "")
             if not address:
                 logger.warning(f"IoT device {self.device_id}: no HTTP address configured")
@@ -467,7 +473,7 @@ class IoTDeviceAgent(BaseDeviceAgent):
             "device_type": "iot",
             "status": self.device_info.status.value,
             "protocol": self.protocol,
-            "is_connected": self.is_connected
+            "is_connected": self.is_connected,
         }
 
     async def get_capabilities(self) -> List[DeviceCapability]:
@@ -477,6 +483,7 @@ class IoTDeviceAgent(BaseDeviceAgent):
 # ============================================================================
 # 设备 Agent 管理器
 # ============================================================================
+
 
 class DeviceAgentManager:
     """
@@ -505,7 +512,7 @@ class DeviceAgentManager:
         self._agent_types: Dict[DeviceType, Type[BaseDeviceAgent]] = {
             DeviceType.ANDROID: AndroidDeviceAgent,
             DeviceType.WINDOWS: WindowsDeviceAgent,
-            DeviceType.IOT: IoTDeviceAgent
+            DeviceType.IOT: IoTDeviceAgent,
         }
         self._event_handlers: Dict[str, List[Callable]] = {}
         self._heartbeat_task = None
@@ -517,6 +524,7 @@ class DeviceAgentManager:
     def _unified():
         """懒加载统一设备管理器（避免循环导入）。"""
         from core.unified.device_manager import get_unified_device_manager
+
         return get_unified_device_manager()
 
     async def initialize(self) -> bool:
@@ -546,7 +554,9 @@ class DeviceAgentManager:
         self._agent_types[device_type] = agent_class
         logger.info(f"Registered agent type: {device_type.value}")
 
-    async def register_device(self, device_info: DeviceInfo, ignore_udm_failure: bool = False, **kwargs) -> Optional[BaseDeviceAgent]:
+    async def register_device(
+        self, device_info: DeviceInfo, ignore_udm_failure: bool = False, **kwargs
+    ) -> Optional[BaseDeviceAgent]:
         """注册设备并创建 Agent。
 
         UDM 写入为 SSOT，必须成功。若写入失败且 ``ignore_udm_failure=False``（默认），
@@ -569,8 +579,13 @@ class DeviceAgentManager:
         # ── SSOT: write to UDM first ──────────────────────────────────────
         udm_ok = False
         try:
-            from core.unified.models import UnifiedDevice, UnifiedDeviceType, UnifiedDeviceStatus
-            utype_str = device_info.device_type.value if hasattr(device_info.device_type, "value") else str(device_info.device_type)
+            from core.unified.models import UnifiedDevice, UnifiedDeviceStatus, UnifiedDeviceType
+
+            utype_str = (
+                device_info.device_type.value
+                if hasattr(device_info.device_type, "value")
+                else str(device_info.device_type)
+            )
             try:
                 utype = UnifiedDeviceType(utype_str.lower())
             except ValueError:
@@ -596,14 +611,16 @@ class DeviceAgentManager:
             if ignore_udm_failure:
                 logger.error(
                     "DeviceAgentManager.register_device: UDM write failed for %s (ignored) — %s",
-                    device_info.device_id, exc,
+                    device_info.device_id,
+                    exc,
                 )
                 udm_ok = True  # Treat as OK when explicitly told to ignore
             else:
                 # Strict mode: roll back local agent state and propagate error
                 logger.error(
                     "DeviceAgentManager.register_device: UDM write failed for %s — rolling back — %s",
-                    device_info.device_id, exc,
+                    device_info.device_id,
+                    exc,
                 )
                 del self._agents[device_info.device_id]
                 return None
@@ -633,12 +650,14 @@ class DeviceAgentManager:
             if ignore_udm_failure:
                 logger.error(
                     "DeviceAgentManager.unregister_device: UDM write failed for %s (ignored) — %s",
-                    device_id, exc,
+                    device_id,
+                    exc,
                 )
             else:
                 logger.error(
                     "DeviceAgentManager.unregister_device: UDM write failed for %s — %s",
-                    device_id, exc,
+                    device_id,
+                    exc,
                 )
 
         logger.info(f"Device unregistered: {device_id}")
@@ -656,10 +675,7 @@ class DeviceAgentManager:
 
     def get_agents_by_type(self, device_type: DeviceType) -> List[BaseDeviceAgent]:
         """按类型获取设备 Agent"""
-        return [
-            agent for agent in self._agents.values()
-            if agent.device_type == device_type
-        ]
+        return [agent for agent in self._agents.values() if agent.device_type == device_type]
 
     async def get_all_status(self) -> Dict[str, Any]:
         """获取所有设备状态"""
@@ -689,7 +705,9 @@ class DeviceAgentManager:
             return {"error": f"Device not found: {device_id}"}
         return await agent.execute_command(command, params)
 
-    async def broadcast_command(self, command: str, params: Dict[str, Any], device_type: Optional[DeviceType] = None) -> Dict[str, Any]:
+    async def broadcast_command(
+        self, command: str, params: Dict[str, Any], device_type: Optional[DeviceType] = None
+    ) -> Dict[str, Any]:
         """向所有设备（或指定类型的设备）广播命令"""
         results = {}
         agents = self.get_agents_by_type(device_type) if device_type else list(self._agents.values())
@@ -719,6 +737,7 @@ class DeviceAgentManager:
 
     async def start_heartbeat(self, interval: int = 30):
         """启动心跳检测"""
+
         async def heartbeat_loop():
             while True:
                 await asyncio.sleep(interval)
@@ -753,6 +772,7 @@ device_manager = DeviceAgentManager()
 # FastAPI 路由（可选）
 # ============================================================================
 
+
 def create_device_api():
     """创建设备管理 API"""
     from fastapi import FastAPI, HTTPException
@@ -778,7 +798,7 @@ def create_device_api():
             device_type=DeviceType(request.device_type),
             device_name=request.device_name,
             capabilities=[DeviceCapability(c) for c in request.capabilities],
-            metadata=request.metadata
+            metadata=request.metadata,
         )
         agent = await device_manager.register_device(device_info)
         if agent:
@@ -805,9 +825,7 @@ def create_device_api():
 
     @app.post("/devices/{device_id}/execute")
     async def execute_command(device_id: str, request: ExecuteCommandRequest):
-        result = await device_manager.execute_on_device(
-            device_id, request.command, request.params
-        )
+        result = await device_manager.execute_on_device(device_id, request.command, request.params)
         return result
 
     @app.post("/devices/{device_id}/connect")
@@ -833,6 +851,7 @@ def create_device_api():
 # 示例使用
 # ============================================================================
 
+
 async def main():
     """示例：如何使用设备管理器"""
 
@@ -841,34 +860,19 @@ async def main():
         device_id="android_001",
         device_type=DeviceType.ANDROID,
         device_name="My Android Phone",
-        capabilities=[
-            DeviceCapability.SCREEN_CAPTURE,
-            DeviceCapability.UI_AUTOMATION,
-            DeviceCapability.CAMERA
-        ],
-        metadata={
-            "manufacturer": "Samsung",
-            "model": "Galaxy S24",
-            "android_version": "14"
-        }
+        capabilities=[DeviceCapability.SCREEN_CAPTURE, DeviceCapability.UI_AUTOMATION, DeviceCapability.CAMERA],
+        metadata={"manufacturer": "Samsung", "model": "Galaxy S24", "android_version": "14"},
     )
 
     # 注册设备
-    agent = await device_manager.register_device(
-        android_device,
-        server_url="ws://localhost:9000"
-    )
+    agent = await device_manager.register_device(android_device, server_url="ws://localhost:9000")
 
     # 获取所有设备状态
     all_status = await device_manager.get_all_status()
     print(f"All devices: {json.dumps(all_status, indent=2, default=str)}")
 
     # 在设备上执行命令
-    result = await device_manager.execute_on_device(
-        "android_001",
-        "capture_screen",
-        {}
-    )
+    result = await device_manager.execute_on_device("android_001", "capture_screen", {})
     print(f"Command result: {result}")
 
 

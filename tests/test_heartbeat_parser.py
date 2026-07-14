@@ -9,20 +9,21 @@ Validates:
 """
 
 import os
+
 import pytest
 
 from core.openclawd_heartbeat import (
-    load_heartbeat_tasks,
-    extract_task_lines,
+    _DEFAULT_CONFIG,
     _load_yaml_config,
     _parse_interval_seconds,
-    _DEFAULT_CONFIG,
+    extract_task_lines,
+    load_heartbeat_tasks,
 )
-
 
 # ---------------------------------------------------------------------------
 # load_heartbeat_tasks
 # ---------------------------------------------------------------------------
+
 
 class TestLoadHeartbeatTasks:
     def test_reads_file_content(self, tmp_path):
@@ -53,6 +54,7 @@ class TestLoadHeartbeatTasks:
 # ---------------------------------------------------------------------------
 # extract_task_lines
 # ---------------------------------------------------------------------------
+
 
 class TestExtractTaskLines:
     def test_basic_bullets(self):
@@ -91,6 +93,7 @@ class TestExtractTaskLines:
 # _parse_interval_seconds
 # ---------------------------------------------------------------------------
 
+
 class TestParseIntervalSecondsExtended:
     def test_1m(self):
         assert _parse_interval_seconds("1m") == 60
@@ -117,6 +120,7 @@ class TestParseIntervalSecondsExtended:
 # ---------------------------------------------------------------------------
 # _load_yaml_config
 # ---------------------------------------------------------------------------
+
 
 class TestLoadYamlConfig:
     def test_falls_back_to_defaults_when_file_missing(self, tmp_path):

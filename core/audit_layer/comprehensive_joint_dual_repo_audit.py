@@ -247,9 +247,7 @@ class AuditEvidenceLabel(str, Enum):
     STRONGLY_ESTABLISHED = "STRONGLY_ESTABLISHED"
     RUNTIME_EVIDENCED_CLOSED = "RUNTIME_EVIDENCED_CLOSED"
     PARTIALLY_ESTABLISHED = "PARTIALLY_ESTABLISHED"
-    INFRASTRUCTURE_PRESENT_NOT_YET_E2E_PROVEN = (
-        "INFRASTRUCTURE_PRESENT_NOT_YET_E2E_PROVEN"
-    )
+    INFRASTRUCTURE_PRESENT_NOT_YET_E2E_PROVEN = "INFRASTRUCTURE_PRESENT_NOT_YET_E2E_PROVEN"
     SURFACE_ALIGNMENT_ONLY = "SURFACE_ALIGNMENT_ONLY"
     MISSING_RUNTIME_EVIDENCE = "MISSING_RUNTIME_EVIDENCE"
     NOT_YET_IMPLEMENTED = "NOT_YET_IMPLEMENTED"
@@ -359,9 +357,7 @@ class DimensionAuditEntry:
             "gap_items": self.gap_items,
             "code_anchors": self.code_anchors,
             "android_evidence_refs": self.android_evidence_refs,
-            "actionability": (
-                self.actionability.value if self.actionability else None
-            ),
+            "actionability": (self.actionability.value if self.actionability else None),
         }
 
 
@@ -555,15 +551,9 @@ class ComprehensiveAuditReport:
             "actionability_surfaces": [a.to_dict() for a in self.actionability_surfaces],
             "system_verdict": self.system_verdict.value,
             "system_verdict_rationale": self.system_verdict_rationale,
-            "dimensions_strongly_established_count": (
-                self.dimensions_strongly_established_count
-            ),
-            "dimensions_runtime_evidenced_closed_count": (
-                self.dimensions_runtime_evidenced_closed_count
-            ),
-            "dimensions_partially_established_count": (
-                self.dimensions_partially_established_count
-            ),
+            "dimensions_strongly_established_count": (self.dimensions_strongly_established_count),
+            "dimensions_runtime_evidenced_closed_count": (self.dimensions_runtime_evidenced_closed_count),
+            "dimensions_partially_established_count": (self.dimensions_partially_established_count),
             "remaining_product_gaps": self.remaining_product_gaps,
             "follow_up_roadmap": self.follow_up_roadmap,
             "plain_language_conclusion": self.plain_language_conclusion,
@@ -694,11 +684,7 @@ def _audit_architecture_governance() -> DimensionAuditEntry:
     else:
         partial.append("test_orchestration_consumes_android_truth not found")
 
-    label = (
-        AuditEvidenceLabel.STRONGLY_ESTABLISHED
-        if not gaps
-        else AuditEvidenceLabel.PARTIALLY_ESTABLISHED
-    )
+    label = AuditEvidenceLabel.STRONGLY_ESTABLISHED if not gaps else AuditEvidenceLabel.PARTIALLY_ESTABLISHED
 
     return DimensionAuditEntry(
         dimension=AuditDimension.ARCHITECTURE_GOVERNANCE_ORCHESTRATION,
@@ -782,17 +768,13 @@ def _audit_android_runtime_carrier_paths() -> DimensionAuditEntry:
         anchors.append("core.android_delegated_runtime_lifecycle_coordinator")
 
     # --- Continuity path ---
-    if _source_contains(
-        "core.attached_runtime_session_registry", "durable_session_id"
-    ):
+    if _source_contains("core.attached_runtime_session_registry", "durable_session_id"):
         proven.append("durable_session_id field present in session registry")
         anchors.append("core.attached_runtime_session_registry")
     else:
         partial.append("durable_session_id not found in session registry")
 
-    if _source_contains(
-        "core.attached_runtime_session_registry", "session_continuity_epoch"
-    ):
+    if _source_contains("core.attached_runtime_session_registry", "session_continuity_epoch"):
         proven.append("session_continuity_epoch field present")
 
     # Continuity e2e roundtrip — known gap
@@ -802,8 +784,7 @@ def _audit_android_runtime_carrier_paths() -> DimensionAuditEntry:
         android_refs.append(continuity_e2e_test)
     else:
         partial.append(
-            "No standalone continuity e2e roundtrip test found — "
-            "continuity bridge is PARTIALLY_ESTABLISHED"
+            "No standalone continuity e2e roundtrip test found — " "continuity bridge is PARTIALLY_ESTABLISHED"
         )
 
     # Determine label based on partials/gaps
@@ -897,20 +878,14 @@ def _audit_operator_control_plane_apis() -> DimensionAuditEntry:
         )
 
     # Operator surface is read-only (confirmed by source inspection)
-    if _source_contains("core.operator_surface", "read-only") or _source_contains(
-        "core.operator_surface", "read_only"
-    ):
+    if _source_contains("core.operator_surface", "read-only") or _source_contains("core.operator_surface", "read_only"):
         proven.append("operator_surface explicitly documented as read-only projection")
 
     # Test for operator surface
     if _test_file_exists("tests.test_pr512_runtime_closure_audit"):
         proven.append("runtime closure audit test present")
 
-    label = (
-        AuditEvidenceLabel.PARTIALLY_ESTABLISHED
-        if gaps
-        else AuditEvidenceLabel.STRONGLY_ESTABLISHED
-    )
+    label = AuditEvidenceLabel.PARTIALLY_ESTABLISHED if gaps else AuditEvidenceLabel.STRONGLY_ESTABLISHED
 
     return DimensionAuditEntry(
         dimension=AuditDimension.OPERATOR_CONTROL_PLANE_APIS,
@@ -969,14 +944,11 @@ def _audit_desktop_shell_presence() -> DimensionAuditEntry:
         proven.append("system_integration.state_machine_ui_integration importable")
         anchors.append("system_integration.state_machine_ui_integration")
 
-    if _source_contains(
-        "system_integration.state_machine_ui_integration", "DORMANT"
-    ) and _source_contains(
+    if _source_contains("system_integration.state_machine_ui_integration", "DORMANT") and _source_contains(
         "system_integration.state_machine_ui_integration", "FULLAGENT"
     ):
         proven.append(
-            "DORMANT/ISLAND/SIDESHEET/FULLAGENT UI clothing states confirmed in "
-            "state_machine_ui_integration"
+            "DORMANT/ISLAND/SIDESHEET/FULLAGENT UI clothing states confirmed in " "state_machine_ui_integration"
         )
 
     # UI shell vocabulary unification test
@@ -993,16 +965,10 @@ def _audit_desktop_shell_presence() -> DimensionAuditEntry:
 
     # Three-state unified surface gap
     # Check if /api/v1/projection/runtime covers all three state systems
-    if _source_contains("core.routes.projection", "SILENT") or _source_contains(
-        "core.routes.projection", "tri_state"
-    ):
-        proven.append(
-            "/api/v1/projection/runtime includes tri-state lifecycle state"
-        )
+    if _source_contains("core.routes.projection", "SILENT") or _source_contains("core.routes.projection", "tri_state"):
+        proven.append("/api/v1/projection/runtime includes tri-state lifecycle state")
     else:
-        partial.append(
-            "/api/v1/projection/runtime may not expose subject tri-state lifecycle directly"
-        )
+        partial.append("/api/v1/projection/runtime may not expose subject tri-state lifecycle directly")
 
     # Check for unified three-state panel projection (subject + continuum + clothing)
     unified_three_state_candidates = [
@@ -1025,11 +991,7 @@ def _audit_desktop_shell_presence() -> DimensionAuditEntry:
     if _test_file_exists("tests.test_pr8v2_manifestation_shell_presence_semantics"):
         proven.append("Manifestation/shell/presence semantics test present")
 
-    label = (
-        AuditEvidenceLabel.PARTIALLY_ESTABLISHED
-        if gaps
-        else AuditEvidenceLabel.STRONGLY_ESTABLISHED
-    )
+    label = AuditEvidenceLabel.PARTIALLY_ESTABLISHED if gaps else AuditEvidenceLabel.STRONGLY_ESTABLISHED
 
     return DimensionAuditEntry(
         dimension=AuditDimension.DESKTOP_SHELL_PRESENCE_MANIFESTATION,
@@ -1093,12 +1055,8 @@ def _audit_natural_language_driving() -> DimensionAuditEntry:
     if _source_contains("core.openclawd", "process"):
         proven.append("OpenClawd.process() — LLM-driven decision/execution method present")
 
-    if _source_contains("core.openclawd", "function calling") or _source_contains(
-        "core.openclawd", "function_call"
-    ):
-        proven.append(
-            "OpenClawd uses LLM function calling — NL-to-tool orchestration present"
-        )
+    if _source_contains("core.openclawd", "function calling") or _source_contains("core.openclawd", "function_call"):
+        proven.append("OpenClawd uses LLM function calling — NL-to-tool orchestration present")
 
     # AI intent / classify_task
     if _try_import("core.ai_intent"):
@@ -1130,11 +1088,7 @@ def _audit_natural_language_driving() -> DimensionAuditEntry:
             "driving from real LLM backend processing in current CI"
         )
 
-    label = (
-        AuditEvidenceLabel.PARTIALLY_ESTABLISHED
-        if gaps
-        else AuditEvidenceLabel.RUNTIME_EVIDENCED_CLOSED
-    )
+    label = AuditEvidenceLabel.PARTIALLY_ESTABLISHED if gaps else AuditEvidenceLabel.RUNTIME_EVIDENCED_CLOSED
 
     return DimensionAuditEntry(
         dimension=AuditDimension.NATURAL_LANGUAGE_DRIVING,
@@ -1176,9 +1130,7 @@ def _audit_multimodal_perception_grounding() -> DimensionAuditEntry:
 
     # Continuous host ingress (MultimodalIngressBus)
     if _try_import("core.multimodal.ingest_runtime"):
-        proven.append(
-            "core.multimodal.ingest_runtime importable — continuous host perception bus"
-        )
+        proven.append("core.multimodal.ingest_runtime importable — continuous host perception bus")
         anchors.append("core.multimodal.ingest_runtime")
 
     if _try_import("core.multimodal.ingress_bus"):
@@ -1196,12 +1148,9 @@ def _audit_multimodal_perception_grounding() -> DimensionAuditEntry:
     # Request-bound multimodal context (MultimodalBus.ingest in OpenClawd)
     if _source_contains("core.openclawd", "multimodal_context"):
         proven.append(
-            "OpenClawd.process() accepts multimodal_context — request-bound "
-            "multimodal payload fusion path confirmed"
+            "OpenClawd.process() accepts multimodal_context — request-bound " "multimodal payload fusion path confirmed"
         )
-    if _source_contains("core.openclawd", "MultimodalBus") or _source_contains(
-        "core.openclawd", "multimodal_bus"
-    ):
+    if _source_contains("core.openclawd", "MultimodalBus") or _source_contains("core.openclawd", "multimodal_bus"):
         proven.append("OpenClawd references MultimodalBus for ingest fusion")
 
     # Vision pipeline
@@ -1225,18 +1174,14 @@ def _audit_multimodal_perception_grounding() -> DimensionAuditEntry:
 
     # Android vision uplink path
     if _try_import("galaxy_gateway.android.handlers.vision"):
-        proven.append(
-            "galaxy_gateway.android.handlers.vision importable — Android vision "
-            "uplink handler present"
-        )
+        proven.append("galaxy_gateway.android.handlers.vision importable — Android vision " "uplink handler present")
         android_refs.append("galaxy_gateway.android.handlers.vision")
         anchors.append("galaxy_gateway.android.handlers.vision")
 
     # Mobile VLM presence checks in state store
     if _source_contains("core.android_device_state_store", "mobilevlm_present"):
         proven.append(
-            "mobilevlm_present field in DeviceStateSnapshot — Android-side VLM "
-            "presence tracking confirmed"
+            "mobilevlm_present field in DeviceStateSnapshot — Android-side VLM " "presence tracking confirmed"
         )
     if _source_contains("core.android_device_state_store", "seeclick_present"):
         proven.append("seeclick_present field in DeviceStateSnapshot confirmed")
@@ -1329,7 +1274,7 @@ def _audit_state_surface_actionability() -> DimensionAuditEntry:
             "chat route (/api/v1/chat)",
             _try_import("core.routes.chat"),
             False,  # not a state surface — action input
-            True,   # action-capable (POST triggers execution)
+            True,  # action-capable (POST triggers execution)
             "action-capable: POST triggers NL execution via DesktopPresenceRuntime",
         ),
         (
@@ -1344,8 +1289,7 @@ def _audit_state_surface_actionability() -> DimensionAuditEntry:
     for domain, read_ok, consumed, action_ok, note in actionability_surfaces_evidence:
         if read_ok:
             proven.append(
-                f"{domain}: read_path=True, decision_consumed={consumed}, "
-                f"action_capable={action_ok} — {note}"
+                f"{domain}: read_path=True, decision_consumed={consumed}, " f"action_capable={action_ok} — {note}"
             )
             anchors.append(domain.split(" ")[0])
         else:
@@ -1400,17 +1344,13 @@ def _audit_end_to_end_controllability() -> DimensionAuditEntry:
     # Dispatch chain: V2 dispatch → Android execution → result uplink
     dispatch_test = "tests.test_orchestration_consumes_android_truth"
     if _test_file_exists(dispatch_test):
-        proven.append(
-            "Orchestration dispatch test confirms Android truth consumed in routing decisions"
-        )
+        proven.append("Orchestration dispatch test confirms Android truth consumed in routing decisions")
         android_refs.append(dispatch_test)
 
     # Delegated execution closure
     exec_closure = "tests.test_pr_dual_repo_task_result_truth_closure"
     if _test_file_exists(exec_closure):
-        proven.append(
-            "Delegated execution closure test confirms V2→Android dispatch→result chain"
-        )
+        proven.append("Delegated execution closure test confirms V2→Android dispatch→result chain")
         android_refs.append(exec_closure)
 
     # Source dispatch orchestrator
@@ -1425,15 +1365,11 @@ def _audit_end_to_end_controllability() -> DimensionAuditEntry:
 
     # Android execution signal reconciler
     if _try_import("core.android_execution_signal_reconciler"):
-        proven.append(
-            "android_execution_signal_reconciler importable — result ingest path present"
-        )
+        proven.append("android_execution_signal_reconciler importable — result ingest path present")
         anchors.append("core.android_execution_signal_reconciler")
 
     # Operator surface is read-only — not action-capable at panel level
-    if _source_contains("core.operator_surface", "read-only") or _source_contains(
-        "core.operator_surface", "read_only"
-    ):
+    if _source_contains("core.operator_surface", "read-only") or _source_contains("core.operator_surface", "read_only"):
         partial.append(
             "Operator surface is explicitly read-only — panel-level action triggering "
             "is not possible through /api/v1/operator/* endpoints"
@@ -1516,10 +1452,7 @@ def _build_completeness_questions() -> List[CompletenessQuestion]:
         ),
         CompletenessQuestion(
             question_id="nl_driven_end_to_end",
-            question_text=(
-                "Is the system truly natural-language-driven end-to-end on its "
-                "canonical paths?"
-            ),
+            question_text=("Is the system truly natural-language-driven end-to-end on its " "canonical paths?"),
             verdict_label=AuditEvidenceLabel.PARTIALLY_ESTABLISHED,
             answer=(
                 "STRUCTURALLY YES, CI-PROVEN NO. "
@@ -1543,10 +1476,7 @@ def _build_completeness_questions() -> List[CompletenessQuestion]:
         ),
         CompletenessQuestion(
             question_id="natively_multimodal_e2e",
-            question_text=(
-                "Is the system truly natively multimodal end-to-end on its "
-                "canonical paths?"
-            ),
+            question_text=("Is the system truly natively multimodal end-to-end on its " "canonical paths?"),
             verdict_label=AuditEvidenceLabel.INFRASTRUCTURE_PRESENT_NOT_YET_E2E_PROVEN,
             answer=(
                 "INFRASTRUCTURE PRESENT, DISABLED BY DEFAULT, NOT CI-PROVEN E2E. "
@@ -1832,15 +1762,13 @@ def build_comprehensive_joint_audit() -> ComprehensiveAuditReport:
     actionability_surfaces = _build_actionability_surfaces()
 
     # Count dimension labels
-    strongly_count = sum(
-        1 for d in dimensions if d.label == AuditEvidenceLabel.STRONGLY_ESTABLISHED
-    )
-    runtime_closed_count = sum(
-        1 for d in dimensions if d.label == AuditEvidenceLabel.RUNTIME_EVIDENCED_CLOSED
-    )
+    strongly_count = sum(1 for d in dimensions if d.label == AuditEvidenceLabel.STRONGLY_ESTABLISHED)
+    runtime_closed_count = sum(1 for d in dimensions if d.label == AuditEvidenceLabel.RUNTIME_EVIDENCED_CLOSED)
     partially_count = sum(
-        1 for d in dimensions
-        if d.label in (
+        1
+        for d in dimensions
+        if d.label
+        in (
             AuditEvidenceLabel.PARTIALLY_ESTABLISHED,
             AuditEvidenceLabel.INFRASTRUCTURE_PRESENT_NOT_YET_E2E_PROVEN,
         )
@@ -1855,8 +1783,7 @@ def build_comprehensive_joint_audit() -> ComprehensiveAuditReport:
         "SILENT/LIMINAL/MANIFEST + DORMANT/ISLAND/SIDESHEET/FULLAGENT + continuum posture "
         "not jointly aggregated",
         "P1-PRODUCT: NL end-to-end CI test with real LLM backend roundtrip",
-        "P2: Multimodal end-to-end CI activation test "
-        "(enable_multimodal_ingest=True path)",
+        "P2: Multimodal end-to-end CI activation test " "(enable_multimodal_ingest=True path)",
         "P2: Operator panel action endpoints for direct task dispatch/control",
         "P2: Multi-device hybrid orchestration dedicated CI test",
         "P3: Zero-config device pairing / QR setup",
@@ -1980,33 +1907,23 @@ def assert_comprehensive_audit_invariants() -> None:
     """
     report = get_comprehensive_joint_audit()
 
-    assert len(report.dimension_entries) == 8, (
-        f"Expected 8 dimension entries; got {len(report.dimension_entries)}"
-    )
-    assert len(report.completeness_questions) == 6, (
-        f"Expected 6 completeness questions; got {len(report.completeness_questions)}"
-    )
-    assert len(report.panel_api_surfaces) >= 5, (
-        f"Expected ≥ 5 panel API surfaces; got {len(report.panel_api_surfaces)}"
-    )
-    assert len(report.actionability_surfaces) >= 4, (
-        f"Expected ≥ 4 actionability surfaces; got {len(report.actionability_surfaces)}"
-    )
-    assert report.system_verdict == SystemCompletenessVerdict.LATE_STAGE_CLOSURE, (
-        f"Expected LATE_STAGE_CLOSURE verdict; got {report.system_verdict}"
-    )
-    assert len(report.system_verdict_rationale) > 0, (
-        "system_verdict_rationale must not be empty"
-    )
-    assert len(report.plain_language_conclusion) > 0, (
-        "plain_language_conclusion must not be empty"
-    )
-    assert len(report.remaining_product_gaps) >= 4, (
-        f"Expected ≥ 4 remaining product gaps; got {len(report.remaining_product_gaps)}"
-    )
-    assert len(report.follow_up_roadmap) >= 4, (
-        f"Expected ≥ 4 follow-up items; got {len(report.follow_up_roadmap)}"
-    )
+    assert len(report.dimension_entries) == 8, f"Expected 8 dimension entries; got {len(report.dimension_entries)}"
+    assert (
+        len(report.completeness_questions) == 6
+    ), f"Expected 6 completeness questions; got {len(report.completeness_questions)}"
+    assert len(report.panel_api_surfaces) >= 5, f"Expected ≥ 5 panel API surfaces; got {len(report.panel_api_surfaces)}"
+    assert (
+        len(report.actionability_surfaces) >= 4
+    ), f"Expected ≥ 4 actionability surfaces; got {len(report.actionability_surfaces)}"
+    assert (
+        report.system_verdict == SystemCompletenessVerdict.LATE_STAGE_CLOSURE
+    ), f"Expected LATE_STAGE_CLOSURE verdict; got {report.system_verdict}"
+    assert len(report.system_verdict_rationale) > 0, "system_verdict_rationale must not be empty"
+    assert len(report.plain_language_conclusion) > 0, "plain_language_conclusion must not be empty"
+    assert (
+        len(report.remaining_product_gaps) >= 4
+    ), f"Expected ≥ 4 remaining product gaps; got {len(report.remaining_product_gaps)}"
+    assert len(report.follow_up_roadmap) >= 4, f"Expected ≥ 4 follow-up items; got {len(report.follow_up_roadmap)}"
 
     # Verify the unified panel aggregation surface is marked NOT available
     panel_agg = next(
@@ -2014,10 +1931,7 @@ def assert_comprehensive_audit_invariants() -> None:
         None,
     )
     assert panel_agg is not None, "unified_panel_aggregation surface must be in panel_api_surfaces"
-    assert not panel_agg.available, (
-        "unified_panel_aggregation must be marked available=False "
-        "(not yet implemented)"
-    )
+    assert not panel_agg.available, "unified_panel_aggregation must be marked available=False " "(not yet implemented)"
 
     # Verify the NL-driving question is PARTIALLY_ESTABLISHED
     nl_q = next(
@@ -2025,9 +1939,9 @@ def assert_comprehensive_audit_invariants() -> None:
         None,
     )
     assert nl_q is not None, "nl_driven_end_to_end question must be in completeness_questions"
-    assert nl_q.verdict_label == AuditEvidenceLabel.PARTIALLY_ESTABLISHED, (
-        f"NL driving must be PARTIALLY_ESTABLISHED; got {nl_q.verdict_label}"
-    )
+    assert (
+        nl_q.verdict_label == AuditEvidenceLabel.PARTIALLY_ESTABLISHED
+    ), f"NL driving must be PARTIALLY_ESTABLISHED; got {nl_q.verdict_label}"
 
     # Verify multimodal question is INFRASTRUCTURE_PRESENT_NOT_YET_E2E_PROVEN
     mm_q = next(
@@ -2035,9 +1949,9 @@ def assert_comprehensive_audit_invariants() -> None:
         None,
     )
     assert mm_q is not None, "natively_multimodal_e2e question must be in completeness_questions"
-    assert mm_q.verdict_label == AuditEvidenceLabel.INFRASTRUCTURE_PRESENT_NOT_YET_E2E_PROVEN, (
-        f"Multimodal must be INFRASTRUCTURE_PRESENT_NOT_YET_E2E_PROVEN; got {mm_q.verdict_label}"
-    )
+    assert (
+        mm_q.verdict_label == AuditEvidenceLabel.INFRASTRUCTURE_PRESENT_NOT_YET_E2E_PROVEN
+    ), f"Multimodal must be INFRASTRUCTURE_PRESENT_NOT_YET_E2E_PROVEN; got {mm_q.verdict_label}"
 
     # JSON round-trip
     json_str = report.to_json()

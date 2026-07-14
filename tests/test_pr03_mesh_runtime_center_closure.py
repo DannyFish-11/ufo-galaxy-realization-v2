@@ -399,9 +399,7 @@ class TestGroupE_EligibilityStatus:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.skipif(
-    not _ALL_AVAILABLE, reason="required modules not available"
-)
+@pytest.mark.skipif(not _ALL_AVAILABLE, reason="required modules not available")
 class TestGroupF_PendingParticipants:
     def test_f1_none_coordinator_gives_pending(self) -> None:
         state = evaluate_center_runtime_status(None)
@@ -461,9 +459,7 @@ class TestGroupG_ParticipationReady:
         assert "runtime_closed" in combined
 
     def test_g3_participation_ready_count_correct(self) -> None:
-        coord = _make_coordinator_state(
-            session_id="s_count", device_ids=["d1", "d2", "d3"]
-        )
+        coord = _make_coordinator_state(session_id="s_count", device_ids=["d1", "d2", "d3"])
         state = evaluate_center_runtime_status(coord)
         # All pending participants → pending_eligibility, not yet participation_ready
         assert state.total_participant_count == 3
@@ -901,9 +897,7 @@ class TestGroupO_FullLifecycle:
 
     def test_o3_barrier_coordination_transitions(self) -> None:
         """Coordinator with awaiting_barrier → barrier_active center status."""
-        coord = _make_coordinator_state(
-            session_id="s_barrier_lifecycle", coord_status="awaiting_barrier"
-        )
+        coord = _make_coordinator_state(session_id="s_barrier_lifecycle", coord_status="awaiting_barrier")
         state = evaluate_center_runtime_status(coord)
         assert state.status == MeshRuntimeCenterStatus.barrier_active
 

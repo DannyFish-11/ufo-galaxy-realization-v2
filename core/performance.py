@@ -38,6 +38,7 @@ logger = logging.getLogger("Galaxy.Performance")
 # 1. 响应压缩中间件
 # ============================================================================
 
+
 class ResponseCompressor(BaseHTTPMiddleware):
     """
     gzip 响应压缩中间件
@@ -98,6 +99,7 @@ class ResponseCompressor(BaseHTTPMiddleware):
 # 2. 滑动窗口限流器
 # ============================================================================
 
+
 class RateLimiter:
     """
     滑动窗口限流器
@@ -128,9 +130,7 @@ class RateLimiter:
             window_start = now - self.window_seconds
 
             # 清理过期记录
-            self._windows[key] = [
-                t for t in self._windows[key] if t > window_start
-            ]
+            self._windows[key] = [t for t in self._windows[key] if t > window_start]
 
             current_count = len(self._windows[key])
             remaining = self.max_requests - current_count
@@ -157,10 +157,7 @@ class RateLimiter:
         """清理过期数据"""
         async with self._lock:
             now = time.time()
-            expired = [
-                k for k, v in self._windows.items()
-                if not v or v[-1] < now - self.window_seconds * 2
-            ]
+            expired = [k for k, v in self._windows.items() if not v or v[-1] < now - self.window_seconds * 2]
             for k in expired:
                 del self._windows[k]
 
@@ -223,6 +220,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 # ============================================================================
 # 3. API 响应缓存中间件
 # ============================================================================
+
 
 class CachingMiddleware(BaseHTTPMiddleware):
     """
@@ -299,12 +297,14 @@ class CachingMiddleware(BaseHTTPMiddleware):
 
             # 写入缓存
             try:
-                cache_data = json.dumps({
-                    "body": body.decode("utf-8", errors="replace"),
-                    "status": response.status_code,
-                    "headers": dict(response.headers),
-                    "media_type": response.media_type,
-                })
+                cache_data = json.dumps(
+                    {
+                        "body": body.decode("utf-8", errors="replace"),
+                        "status": response.status_code,
+                        "headers": dict(response.headers),
+                        "media_type": response.media_type,
+                    }
+                )
                 await self._cache.set(cache_key, cache_data, ttl)
             except Exception as exc:
                 logger.warning("Exception suppressed: %s", exc)
@@ -324,6 +324,7 @@ class CachingMiddleware(BaseHTTPMiddleware):
 # ============================================================================
 # 4. 请求耗时追踪中间件
 # ============================================================================
+
 
 class RequestTimerMiddleware(BaseHTTPMiddleware):
     """请求耗时追踪 - 在响应头中添加 X-Response-Time"""
@@ -362,9 +363,11 @@ class RequestTimerMiddleware(BaseHTTPMiddleware):
 # 5. 性能指标收集器
 # ============================================================================
 
+
 @dataclass
 class EndpointMetrics:
     """单个端点的指标"""
+
     total_requests: int = 0
     total_errors: int = 0
     latencies: List[float] = field(default_factory=list)
@@ -432,7 +435,7 @@ class PerformanceMonitor:
         ep.status_codes[status] += 1
         ep.latencies.append(latency_ms)
         if len(ep.latencies) > self._max_latencies:
-            ep.latencies = ep.latencies[-self._max_latencies // 2:]
+            ep.latencies = ep.latencies[-self._max_latencies // 2 :]
 
         if status >= 400:
             ep.total_errors += 1
@@ -441,7 +444,7 @@ class PerformanceMonitor:
         self._global.total_requests += 1
         self._global.latencies.append(latency_ms)
         if len(self._global.latencies) > self._max_latencies:
-            self._global.latencies = self._global.latencies[-self._max_latencies // 2:]
+            self._global.latencies = self._global.latencies[-self._max_latencies // 2 :]
         if status >= 400:
             self._global.total_errors += 1
 

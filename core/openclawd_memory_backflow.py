@@ -43,11 +43,10 @@ except ImportError:
 
 # PR-7: canonical chain import — non-fatal if not available
 try:
-    from core.cross_device_execution_chain import (
-        ResultEnvelope as _ResultEnvelope,
-        record_chain_execution as _record_chain_execution,
-        CANONICAL_CHAIN_ORDER as _CANONICAL_CHAIN_ORDER,
-    )
+    from core.cross_device_execution_chain import CANONICAL_CHAIN_ORDER as _CANONICAL_CHAIN_ORDER
+    from core.cross_device_execution_chain import ResultEnvelope as _ResultEnvelope
+    from core.cross_device_execution_chain import record_chain_execution as _record_chain_execution
+
     _CHAIN_AVAILABLE = True
 except ImportError:
     _CHAIN_AVAILABLE = False
@@ -105,22 +104,23 @@ async def store_task_result(
                 "task_id": task_id,
                 "device_id": device_id,
                 "route_mode": route_mode,
-                "raw_result": {
-                    k: v for k, v in result.items()
-                    if k not in ("image_base64",)  # 排除大字段
-                },
+                "raw_result": {k: v for k, v in result.items() if k not in ("image_base64",)},  # 排除大字段
             },
         )
 
         logger.debug(
             "Memory backflow recorded: task_id=%s device_id=%s route_mode=%s success=%s",
-            task_id, device_id, route_mode, success,
+            task_id,
+            device_id,
+            route_mode,
+            success,
         )
 
     except Exception as exc:
         logger.warning(
             "Memory backflow store failed (non-fatal): task_id=%s error=%s",
-            task_id, exc,
+            task_id,
+            exc,
         )
 
 
@@ -170,10 +170,7 @@ async def store_result_envelope(
             success = getattr(envelope, "success", False)
             status = getattr(envelope, "status", "unknown")
             error = getattr(envelope, "error", None)
-            result_summary = (
-                f"device={device_id} status={status}"
-                + (f" error={error}" if error else "")
-            )
+            result_summary = f"device={device_id} status={status}" + (f" error={error}" if error else "")
             mem.record_task(
                 task=f"[cross_device_chain] task_id={task_id}",
                 result_summary=result_summary,
@@ -187,7 +184,8 @@ async def store_result_envelope(
                     "route_mode": route_mode,
                     "trace_id": trace_id,
                     "result_envelope": {
-                        k: v for k, v in envelope.to_dict().items()
+                        k: v
+                        for k, v in envelope.to_dict().items()
                         if k not in ("image_base64", "screenshot_base64", "raw_bytes")
                     },
                     "chain_metadata": chain_metadata or {},
@@ -197,8 +195,7 @@ async def store_result_envelope(
             envelope.memory_backflow_stored = True
         except Exception as exc:
             logger.warning(
-                "store_result_envelope: memory write failed (non-fatal): "
-                "task_id=%s error=%s",
+                "store_result_envelope: memory write failed (non-fatal): " "task_id=%s error=%s",
                 task_id,
                 exc,
             )
@@ -216,16 +213,14 @@ async def store_result_envelope(
         )
     except Exception as exc:
         logger.warning(
-            "store_result_envelope: chain record failed (non-fatal): "
-            "task_id=%s error=%s",
+            "store_result_envelope: chain record failed (non-fatal): " "task_id=%s error=%s",
             task_id,
             exc,
         )
         return False
 
     logger.debug(
-        "store_result_envelope: backflow complete: "
-        "task_id=%s device_id=%s route_mode=%s success=%s memory=%s",
+        "store_result_envelope: backflow complete: " "task_id=%s device_id=%s route_mode=%s success=%s memory=%s",
         task_id,
         device_id,
         route_mode,

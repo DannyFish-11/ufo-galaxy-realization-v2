@@ -640,13 +640,9 @@ class TemporalEvidence:
         return cls(
             timestamp_present=bool(data.get("timestamp_present", False)),
             timestamp_authoritative=bool(data.get("timestamp_authoritative", False)),
-            within_authoritative_window=bool(
-                data.get("within_authoritative_window", False)
-            ),
+            within_authoritative_window=bool(data.get("within_authoritative_window", False)),
             within_freshness_window=bool(data.get("within_freshness_window", False)),
-            within_staleness_tolerance=bool(
-                data.get("within_staleness_tolerance", False)
-            ),
+            within_staleness_tolerance=bool(data.get("within_staleness_tolerance", False)),
             deadline_set=bool(data.get("deadline_set", False)),
             deadline_met=bool(data.get("deadline_met", False)),
             heartbeat_required=bool(data.get("heartbeat_required", False)),
@@ -654,12 +650,8 @@ class TemporalEvidence:
             heartbeat_within_window=bool(data.get("heartbeat_within_window", False)),
             lag_measured=bool(data.get("lag_measured", False)),
             lag_within_bound=bool(data.get("lag_within_bound", False)),
-            clock_uncertainty_acceptable=bool(
-                data.get("clock_uncertainty_acceptable", False)
-            ),
-            explicit_temporally_unreliable=bool(
-                data.get("explicit_temporally_unreliable", False)
-            ),
+            clock_uncertainty_acceptable=bool(data.get("clock_uncertainty_acceptable", False)),
+            explicit_temporally_unreliable=bool(data.get("explicit_temporally_unreliable", False)),
             participant_id=data.get("participant_id"),
             trace_id=data.get("trace_id"),
         )
@@ -733,32 +725,26 @@ class TemporalVerdict:
         # Count primary class flags (exactly one should be True).
         # Note: is_fresh can be True alongside is_timely_authoritative —
         # timely_authoritative implies is_fresh=True by contract.
-        primary_flags = sum([
-            self.is_timely_authoritative,
-            self.is_stale_but_usable,
-            self.is_deadline_missed,
-            self.is_temporally_unreliable,
-            # fresh-only (not timely_authoritative)
-            (self.is_fresh and not self.is_timely_authoritative),
-        ])
+        primary_flags = sum(
+            [
+                self.is_timely_authoritative,
+                self.is_stale_but_usable,
+                self.is_deadline_missed,
+                self.is_temporally_unreliable,
+                # fresh-only (not timely_authoritative)
+                (self.is_fresh and not self.is_timely_authoritative),
+            ]
+        )
         if primary_flags < 1:
-            raise ValueError(
-                "TemporalVerdict: at least one class flag must be True."
-            )
+            raise ValueError("TemporalVerdict: at least one class flag must be True.")
 
         # timely_authoritative must also set is_fresh
         if self.is_timely_authoritative and not self.is_fresh:
-            raise ValueError(
-                "TemporalVerdict: is_timely_authoritative=True requires "
-                "is_fresh=True."
-            )
+            raise ValueError("TemporalVerdict: is_timely_authoritative=True requires " "is_fresh=True.")
 
         # is_temporally_unreliable blocks all other positive flags
         if self.is_temporally_unreliable and (
-            self.is_timely_authoritative
-            or self.is_fresh
-            or self.is_stale_but_usable
-            or self.is_deadline_missed
+            self.is_timely_authoritative or self.is_fresh or self.is_stale_but_usable or self.is_deadline_missed
         ):
             raise ValueError(
                 "TemporalVerdict: is_temporally_unreliable=True must not "
@@ -830,10 +816,7 @@ def _classify(evidence: TemporalEvidence) -> TemporalVerdict:
                 "mandates temporally_unreliable regardless of any other "
                 "evidence.  No temporal claim can be made."
             ),
-            downgrade_reasons=[
-                "explicit_temporally_unreliable=True overrides all other "
-                "evidence dimensions"
-            ],
+            downgrade_reasons=["explicit_temporally_unreliable=True overrides all other " "evidence dimensions"],
             is_timely_authoritative=False,
             is_fresh=False,
             is_stale_but_usable=False,
@@ -857,9 +840,7 @@ def _classify(evidence: TemporalEvidence) -> TemporalVerdict:
                 "Timestamp presence is the minimum requirement for any "
                 "temporal classification above temporally_unreliable."
             ),
-            downgrade_reasons=[
-                "timestamp_present=False — no temporal anchor exists"
-            ],
+            downgrade_reasons=["timestamp_present=False — no temporal anchor exists"],
             is_timely_authoritative=False,
             is_fresh=False,
             is_stale_but_usable=False,
@@ -875,10 +856,7 @@ def _classify(evidence: TemporalEvidence) -> TemporalVerdict:
     # (unless explicit_temporally_unreliable, already handled above)
     # ------------------------------------------------------------------
     if evidence.deadline_set and not evidence.deadline_met:
-        downgrade_reasons.append(
-            "deadline_set=True AND deadline_met=False — formal deadline "
-            "has been missed"
-        )
+        downgrade_reasons.append("deadline_set=True AND deadline_met=False — formal deadline " "has been missed")
         return TemporalVerdict(
             temporal_class=TemporalClass.deadline_missed_or_timed_out,
             rationale=(
@@ -902,10 +880,7 @@ def _classify(evidence: TemporalEvidence) -> TemporalVerdict:
     # ------------------------------------------------------------------
     # Rule 3: data exceeds staleness tolerance (implicitly expired)
     # ------------------------------------------------------------------
-    if (
-        not evidence.within_freshness_window
-        and not evidence.within_staleness_tolerance
-    ):
+    if not evidence.within_freshness_window and not evidence.within_staleness_tolerance:
         downgrade_reasons.append(
             "within_freshness_window=False AND within_staleness_tolerance=False "
             "— data has exceeded all temporal tolerance bounds"
@@ -936,42 +911,29 @@ def _classify(evidence: TemporalEvidence) -> TemporalVerdict:
     timely_auth_blockers: List[str] = []
 
     if not evidence.timestamp_authoritative:
-        timely_auth_blockers.append(
-            "timestamp_authoritative=False — clock source is not authoritative"
-        )
+        timely_auth_blockers.append("timestamp_authoritative=False — clock source is not authoritative")
     if not evidence.within_authoritative_window:
         timely_auth_blockers.append(
-            "within_authoritative_window=False — data did not arrive within "
-            "the tight authoritative delivery window"
+            "within_authoritative_window=False — data did not arrive within " "the tight authoritative delivery window"
         )
     if not evidence.within_freshness_window:
-        timely_auth_blockers.append(
-            "within_freshness_window=False — data is not within freshness window"
-        )
+        timely_auth_blockers.append("within_freshness_window=False — data is not within freshness window")
     if not evidence.clock_uncertainty_acceptable:
         timely_auth_blockers.append(
-            "clock_uncertainty_acceptable=False — clock skew/drift is "
-            "unacceptable for a timely_authoritative claim"
+            "clock_uncertainty_acceptable=False — clock skew/drift is " "unacceptable for a timely_authoritative claim"
         )
     if not evidence.lag_measured:
         timely_auth_blockers.append(
-            "lag_measured=False — delivery lag is unknown, cannot confirm "
-            "it is within authoritative bounds"
+            "lag_measured=False — delivery lag is unknown, cannot confirm " "it is within authoritative bounds"
         )
     if evidence.lag_measured and not evidence.lag_within_bound:
-        timely_auth_blockers.append(
-            "lag_within_bound=False — measured lag exceeds tolerance"
-        )
+        timely_auth_blockers.append("lag_within_bound=False — measured lag exceeds tolerance")
     if evidence.heartbeat_required and not evidence.heartbeat_present:
         timely_auth_blockers.append(
             "heartbeat_required=True AND heartbeat_present=False — required "
             "heartbeat is absent; HEARTBEAT_ABSENT_BLOCKS_TIMELY_AUTHORITATIVE_POLICY"
         )
-    if (
-        evidence.heartbeat_required
-        and evidence.heartbeat_present
-        and not evidence.heartbeat_within_window
-    ):
+    if evidence.heartbeat_required and evidence.heartbeat_present and not evidence.heartbeat_within_window:
         timely_auth_blockers.append(
             "heartbeat_required=True AND heartbeat_within_window=False — "
             "heartbeat present but arrived outside the expected window"
@@ -1010,10 +972,7 @@ def _classify(evidence: TemporalEvidence) -> TemporalVerdict:
     # ------------------------------------------------------------------
     fresh_lag_blockers: List[str] = []
     if not evidence.within_freshness_window:
-        fresh_lag_blockers.append(
-            "within_freshness_window=False — data is stale, cannot be "
-            "fresh_with_bounded_lag"
-        )
+        fresh_lag_blockers.append("within_freshness_window=False — data is stale, cannot be " "fresh_with_bounded_lag")
     if not evidence.lag_measured:
         fresh_lag_blockers.append(
             "lag_measured=False — lag is unknown; "
@@ -1049,9 +1008,7 @@ def _classify(evidence: TemporalEvidence) -> TemporalVerdict:
             trace_id=evidence.trace_id,
         )
 
-    downgrade_reasons.extend(
-        r for r in fresh_lag_blockers if r not in downgrade_reasons
-    )
+    downgrade_reasons.extend(r for r in fresh_lag_blockers if r not in downgrade_reasons)
 
     # ------------------------------------------------------------------
     # Rule 6: stale_but_usable
@@ -1066,9 +1023,7 @@ def _classify(evidence: TemporalEvidence) -> TemporalVerdict:
                 "Data is stale (outside the freshness window) but within "
                 "the staleness tolerance bound, and the lag is measured.  "
                 "Data is usable for non-real-time or post-hoc decisions "
-                "but NOT current.  Downgrade reasons: "
-                + "; ".join(downgrade_reasons)
-                + "."
+                "but NOT current.  Downgrade reasons: " + "; ".join(downgrade_reasons) + "."
             ),
             downgrade_reasons=downgrade_reasons,
             is_timely_authoritative=False,
@@ -1090,8 +1045,7 @@ def _classify(evidence: TemporalEvidence) -> TemporalVerdict:
 
     if not downgrade_reasons:
         downgrade_reasons.append(
-            "Insufficient positive temporal evidence to assign any class "
-            "above temporally_unreliable"
+            "Insufficient positive temporal evidence to assign any class " "above temporally_unreliable"
         )
 
     return TemporalVerdict(
@@ -1100,9 +1054,7 @@ def _classify(evidence: TemporalEvidence) -> TemporalVerdict:
             "Insufficient temporal evidence to assign a defensible class "
             "above temporally_unreliable.  A timestamp is present but "
             "freshness, lag, staleness, heartbeat, or clock conditions "
-            "prevent any higher classification.  Downgrade reasons: "
-            + "; ".join(downgrade_reasons)
-            + "."
+            "prevent any higher classification.  Downgrade reasons: " + "; ".join(downgrade_reasons) + "."
         ),
         downgrade_reasons=downgrade_reasons,
         is_timely_authoritative=False,
@@ -1143,10 +1095,7 @@ def classify_temporal_semantics(evidence: TemporalEvidence) -> TemporalVerdict:
     try:
         return _classify(evidence)
     except Exception as exc:  # pragma: no cover
-        logger.exception(
-            "classify_temporal_semantics: unexpected error — "
-            "defaulting to temporally_unreliable"
-        )
+        logger.exception("classify_temporal_semantics: unexpected error — " "defaulting to temporally_unreliable")
         return TemporalVerdict(
             temporal_class=TemporalClass.temporally_unreliable,
             rationale=(

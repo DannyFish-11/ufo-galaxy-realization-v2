@@ -1124,9 +1124,7 @@ class FullSystemBaselineV3Evaluator:
         # - pipeline_verdict == "complete": canonical verdict classification
         # - closure_grade: strict android evidence closure criteria
         is_closure_grade_complete = (
-            grounding["is_complete"]
-            and pipeline_verdict_str == "complete"
-            and grounding["closure_grade"]
+            grounding["is_complete"] and pipeline_verdict_str == "complete" and grounding["closure_grade"]
         )
         if is_closure_grade_complete:
             state = SubsystemState.implemented_and_evidenced
@@ -1269,9 +1267,7 @@ class FullSystemBaselineV3Evaluator:
         )
         runtime_verified = dimension_counts.get("automated_verified", 0) > 0
         audit_report_closure_grade = (
-            system_verdict == "platform_baseline_established"
-            and no_structural_gaps
-            and runtime_verified
+            system_verdict == "platform_baseline_established" and no_structural_gaps and runtime_verified
         )
         state = (
             SubsystemState.implemented_and_evidenced
@@ -1332,8 +1328,7 @@ class FullSystemBaselineV3Evaluator:
                     ),
                 }
                 all_dimensions_resolved = (
-                    status_counts.get("pending", 0) == 0
-                    and status_counts.get("unresolved", 0) == 0
+                    status_counts.get("pending", 0) == 0 and status_counts.get("unresolved", 0) == 0
                 )
                 if (
                     grounding["is_fully_operational"]

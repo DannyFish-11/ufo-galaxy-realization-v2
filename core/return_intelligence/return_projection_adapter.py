@@ -54,11 +54,11 @@ import logging
 from typing import Any, Dict, Optional
 
 from .return_modes import (
-    ReturnMode,
-    MODES_THAT_SUPPRESS_MANIFEST,
     MODES_THAT_SOFTEN_LIMINAL,
+    MODES_THAT_SUPPRESS_MANIFEST,
+    ReturnMode,
 )
-from .return_summary import ReturnSummary, IDLE_RETURN_SUMMARY
+from .return_summary import IDLE_RETURN_SUMMARY, ReturnSummary
 
 logger = logging.getLogger("Galaxy.ReturnIntelligence.Adapter")
 

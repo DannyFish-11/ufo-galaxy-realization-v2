@@ -333,6 +333,7 @@ def _try_import_session_registry():
             classify_reconnect_outcome,
             get_session_registry,
         )
+
         return classify_reconnect_outcome, get_session_registry
     except Exception:
         return None, None
@@ -344,6 +345,7 @@ def _try_import_execution_tracker():
         from core.delegated_runtime_execution_tracker import (  # type: ignore
             get_execution_tracking_runtime,
         )
+
         return get_execution_tracking_runtime
     except Exception:
         return None
@@ -355,6 +357,7 @@ def _try_import_flow_entity_runtime():
         from core.delegated_flow_entity import (  # type: ignore
             get_delegated_flow_entity_runtime,
         )
+
         return get_delegated_flow_entity_runtime
     except Exception:
         return None
@@ -364,6 +367,7 @@ def _try_import_continuity_contract():
     """Return the android_v2_continuity_contract module or None."""
     try:
         import core.android_v2_continuity_contract as contract  # type: ignore
+
         return contract
     except Exception:
         return None
@@ -375,6 +379,7 @@ def _try_import_persistence_bundle():
         from core.delegated_flow_persistence import (  # type: ignore
             get_delegated_flow_persistence_bundle,
         )
+
         return get_delegated_flow_persistence_bundle
     except Exception:
         return None
@@ -386,6 +391,7 @@ def _try_import_recovery_coordinator():
         from core.runtime_restart_recovery import (  # type: ignore
             get_recovery_coordinator,
         )
+
         return get_recovery_coordinator
     except Exception:
         return None
@@ -699,19 +705,13 @@ class ContinuityDecisionArtifact:
         """Construct from a dictionary.  Tolerates unknown extra fields."""
         return cls(
             artifact_id=data.get("artifact_id", str(uuid.uuid4())),
-            event_kind=ContinuityEventKind.from_string(
-                data.get("event_kind", "unknown")
-            ),
-            decision=ContinuityDecision.from_string(
-                data.get("decision", "fail_closed")
-            ),
+            event_kind=ContinuityEventKind.from_string(data.get("event_kind", "unknown")),
+            decision=ContinuityDecision.from_string(data.get("decision", "fail_closed")),
             policy_reference=data.get("policy_reference", ""),
             detail=data.get("detail", ""),
             device_id=data.get("device_id", ""),
             session_id=data.get("session_id", ""),
-            runtime_attachment_session_id=data.get(
-                "runtime_attachment_session_id", ""
-            ),
+            runtime_attachment_session_id=data.get("runtime_attachment_session_id", ""),
             durable_session_id=data.get("durable_session_id", "") or "",
             continuity_epoch=int(data.get("continuity_epoch", 0) or 0),
             contract_id=data.get("contract_id", ""),
@@ -825,9 +825,7 @@ class FlowContinuityCoordinator:
     def _session_registry(self):
         """Return (classify_reconnect_outcome_fn, registry) or (None, None)."""
         if self._classify_reconnect_outcome is None:
-            self._classify_reconnect_outcome, self._get_session_registry = (
-                _try_import_session_registry()
-            )
+            self._classify_reconnect_outcome, self._get_session_registry = _try_import_session_registry()
         if self._get_session_registry is None:
             return None, None
         try:
@@ -1002,13 +1000,9 @@ class FlowContinuityCoordinator:
         try:
             entry = None
             if ctx.runtime_attachment_session_id:
-                lookup_fn = getattr(
-                    registry, "get_by_runtime_attachment_session_id", None
-                )
+                lookup_fn = getattr(registry, "get_by_runtime_attachment_session_id", None)
                 if lookup_fn is not None:
-                    entry = lookup_fn(
-                        ctx.runtime_attachment_session_id, active_only=False
-                    )
+                    entry = lookup_fn(ctx.runtime_attachment_session_id, active_only=False)
             if entry is None and ctx.device_id:
                 lookup_fn = getattr(registry, "get_active_for_device", None)
                 if lookup_fn is not None:
@@ -1024,9 +1018,7 @@ class FlowContinuityCoordinator:
     # Public scenario entry-points
     # ------------------------------------------------------------------
 
-    def decide_attach(
-        self, ctx: ContinuityEventContext
-    ) -> ContinuityDecisionArtifact:
+    def decide_attach(self, ctx: ContinuityEventContext) -> ContinuityDecisionArtifact:
         """Decide continuity for a fresh Android attach event.
 
         Scenario: Android device connects for the first time or after a
@@ -1050,13 +1042,13 @@ class FlowContinuityCoordinator:
         -------
         ContinuityDecisionArtifact
         """
-        ctx = ContinuityEventContext(
-            **{**ctx.__dict__, "event_kind": ContinuityEventKind.fresh_attach}
-        ) if ctx.event_kind == ContinuityEventKind.unknown else ctx
-
-        registry_entry_created: bool = ctx.metadata.get(
-            "registry_entry_created", True
+        ctx = (
+            ContinuityEventContext(**{**ctx.__dict__, "event_kind": ContinuityEventKind.fresh_attach})
+            if ctx.event_kind == ContinuityEventKind.unknown
+            else ctx
         )
+
+        registry_entry_created: bool = ctx.metadata.get("registry_entry_created", True)
 
         if not registry_entry_created:
             artifact = self._base_artifact(
@@ -1118,9 +1110,7 @@ class FlowContinuityCoordinator:
         self._record(artifact)
         return artifact
 
-    def decide_reconnect(
-        self, ctx: ContinuityEventContext
-    ) -> ContinuityDecisionArtifact:
+    def decide_reconnect(self, ctx: ContinuityEventContext) -> ContinuityDecisionArtifact:
         """Decide continuity for a transport-layer reconnect event.
 
         Scenario: the transport session reconnected after a transient
@@ -1141,9 +1131,11 @@ class FlowContinuityCoordinator:
         ctx
             ``device_id`` and ``runtime_attachment_session_id`` should be set.
         """
-        ctx = ContinuityEventContext(
-            **{**ctx.__dict__, "event_kind": ContinuityEventKind.transport_reconnect}
-        ) if ctx.event_kind == ContinuityEventKind.unknown else ctx
+        ctx = (
+            ContinuityEventContext(**{**ctx.__dict__, "event_kind": ContinuityEventKind.transport_reconnect})
+            if ctx.event_kind == ContinuityEventKind.unknown
+            else ctx
+        )
 
         classify_fn, registry = self._session_registry()
 
@@ -1188,9 +1180,7 @@ class FlowContinuityCoordinator:
         contract = self._contract()
         if contract is not None:
             attachment_id_preserved = bool(ctx.runtime_attachment_session_id)
-            reconnect_count_incremented = bool(
-                ctx.metadata.get("reconnect_count_incremented", True)
-            )
+            reconnect_count_incremented = bool(ctx.metadata.get("reconnect_count_incremented", True))
             outcome_obj = contract.classify_reconnect_continuity_outcome(
                 registry_outcome,
                 runtime_attachment_session_id_preserved=attachment_id_preserved,
@@ -1222,13 +1212,9 @@ class FlowContinuityCoordinator:
         effective_continuity_epoch = ctx.continuity_epoch
         if existing_entry is not None:
             if not effective_durable_session_id:
-                effective_durable_session_id = str(
-                    getattr(existing_entry, "durable_session_id", "") or ""
-                )
+                effective_durable_session_id = str(getattr(existing_entry, "durable_session_id", "") or "")
             if effective_continuity_epoch <= 0:
-                effective_continuity_epoch = int(
-                    getattr(existing_entry, "continuity_epoch", 0) or 0
-                )
+                effective_continuity_epoch = int(getattr(existing_entry, "continuity_epoch", 0) or 0)
 
         artifact = self._base_artifact(
             ctx,
@@ -1245,9 +1231,7 @@ class FlowContinuityCoordinator:
         self._record(artifact)
         return artifact
 
-    def decide_reattach_process_recreation(
-        self, ctx: ContinuityEventContext
-    ) -> ContinuityDecisionArtifact:
+    def decide_reattach_process_recreation(self, ctx: ContinuityEventContext) -> ContinuityDecisionArtifact:
         """Decide continuity for a process-recreation re-attach event.
 
         Scenario: the Android process was killed and restarted.  The client
@@ -1269,9 +1253,11 @@ class FlowContinuityCoordinator:
             ``metadata["prior_entry_was_active_or_detached"]`` and
             ``metadata["attachment_id_matched"]`` may be provided directly.
         """
-        ctx = ContinuityEventContext(
-            **{**ctx.__dict__, "event_kind": ContinuityEventKind.process_recreation_reattach}
-        ) if ctx.event_kind == ContinuityEventKind.unknown else ctx
+        ctx = (
+            ContinuityEventContext(**{**ctx.__dict__, "event_kind": ContinuityEventKind.process_recreation_reattach})
+            if ctx.event_kind == ContinuityEventKind.unknown
+            else ctx
+        )
 
         prior_active_or_detached: bool = ctx.metadata.get(
             "prior_entry_was_active_or_detached",
@@ -1322,9 +1308,7 @@ class FlowContinuityCoordinator:
         self._record(artifact)
         return artifact
 
-    def decide_stale_identity(
-        self, ctx: ContinuityEventContext
-    ) -> ContinuityDecisionArtifact:
+    def decide_stale_identity(self, ctx: ContinuityEventContext) -> ContinuityDecisionArtifact:
         """Decide continuity for a stale-identity signal.
 
         Scenario: Android presents an identity (session_id, contract_id, or
@@ -1344,9 +1328,11 @@ class FlowContinuityCoordinator:
             At least one of ``session_id``, ``contract_id``, or
             ``runtime_attachment_session_id`` should be set.
         """
-        ctx = ContinuityEventContext(
-            **{**ctx.__dict__, "event_kind": ContinuityEventKind.stale_identity}
-        ) if ctx.event_kind == ContinuityEventKind.unknown else ctx
+        ctx = (
+            ContinuityEventContext(**{**ctx.__dict__, "event_kind": ContinuityEventKind.stale_identity})
+            if ctx.event_kind == ContinuityEventKind.unknown
+            else ctx
+        )
 
         # Check session registry
         session_state = self._session_state_for_device(ctx)
@@ -1365,18 +1351,9 @@ class FlowContinuityCoordinator:
         _terminal_tracking = frozenset({"completed", "failed", "timed_out", "cancelled"})
         _terminal_flow = frozenset({"completed", "failed", "cancelled"})
 
-        session_is_stale = (
-            not session_state
-            or session_state in _TERMINAL_SESSION_STATES
-        )
-        tracking_is_stale = (
-            not tracking_phase
-            or tracking_phase in _terminal_tracking
-        )
-        flow_is_stale = (
-            not flow_phase
-            or flow_phase in _terminal_flow
-        )
+        session_is_stale = not session_state or session_state in _TERMINAL_SESSION_STATES
+        tracking_is_stale = not tracking_phase or tracking_phase in _terminal_tracking
+        flow_is_stale = not flow_phase or flow_phase in _terminal_flow
 
         # If we have no registry at all we can't safely classify
         _, registry = self._session_registry()
@@ -1393,11 +1370,8 @@ class FlowContinuityCoordinator:
             return artifact
 
         # A valid live identity: session active and tracking/flow not terminal
-        identity_is_live = (
-            session_state in ("active", "detached")
-            or (not session_state and (
-                not tracking_is_stale or not flow_is_stale
-            ))
+        identity_is_live = session_state in ("active", "detached") or (
+            not session_state and (not tracking_is_stale or not flow_is_stale)
         )
 
         if identity_is_live:
@@ -1440,9 +1414,7 @@ class FlowContinuityCoordinator:
         self._record(artifact)
         return artifact
 
-    def decide_duplicate_signal(
-        self, ctx: ContinuityEventContext
-    ) -> ContinuityDecisionArtifact:
+    def decide_duplicate_signal(self, ctx: ContinuityEventContext) -> ContinuityDecisionArtifact:
         """Decide continuity for a potential duplicate signal.
 
         Scenario: Android sends a signal (ack, progress, result) that may
@@ -1464,9 +1436,11 @@ class FlowContinuityCoordinator:
             ``signal_key`` and at least one of ``session_id`` / ``contract_id``
             should be set.
         """
-        ctx = ContinuityEventContext(
-            **{**ctx.__dict__, "event_kind": ContinuityEventKind.duplicate_signal}
-        ) if ctx.event_kind == ContinuityEventKind.unknown else ctx
+        ctx = (
+            ContinuityEventContext(**{**ctx.__dict__, "event_kind": ContinuityEventKind.duplicate_signal})
+            if ctx.event_kind == ContinuityEventKind.unknown
+            else ctx
+        )
 
         if not ctx.signal_key:
             # No idempotency key — cannot determine duplication; pass through
@@ -1500,15 +1474,9 @@ class FlowContinuityCoordinator:
             if ctx.session_id:
                 record = tracker.get_latest_for_session(ctx.session_id)
             if record is None and ctx.contract_id:
-                record = getattr(tracker, "get_latest_for_contract", lambda _: None)(
-                    ctx.contract_id
-                )
+                record = getattr(tracker, "get_latest_for_contract", lambda _: None)(ctx.contract_id)
             if record is not None:
-                tracking_phase = (
-                    record.phase.value
-                    if hasattr(record.phase, "value")
-                    else str(record.phase)
-                )
+                tracking_phase = record.phase.value if hasattr(record.phase, "value") else str(record.phase)
                 # Check acknowledgments for duplicate signal_key
                 acks = getattr(record, "acknowledgments", [])
                 for ack in acks:
@@ -1553,9 +1521,7 @@ class FlowContinuityCoordinator:
         self._record(artifact)
         return artifact
 
-    def decide_partial_result(
-        self, ctx: ContinuityEventContext
-    ) -> ContinuityDecisionArtifact:
+    def decide_partial_result(self, ctx: ContinuityEventContext) -> ContinuityDecisionArtifact:
         """Decide continuity for a partial-result delivery event.
 
         Scenario: Android delivers a partial result for an in-flight delegated
@@ -1575,9 +1541,11 @@ class FlowContinuityCoordinator:
             ``contract_id`` should be set.  ``partial_result_payload`` is
             forwarded in the artifact extension payload.
         """
-        ctx = ContinuityEventContext(
-            **{**ctx.__dict__, "event_kind": ContinuityEventKind.partial_result}
-        ) if ctx.event_kind == ContinuityEventKind.unknown else ctx
+        ctx = (
+            ContinuityEventContext(**{**ctx.__dict__, "event_kind": ContinuityEventKind.partial_result})
+            if ctx.event_kind == ContinuityEventKind.unknown
+            else ctx
+        )
 
         tracker = self._execution_tracker()
         if tracker is None:
@@ -1610,10 +1578,7 @@ class FlowContinuityCoordinator:
                     f"(phase={tracking_phase!r}); preserve and wait for completion"
                 )
             else:
-                detail = (
-                    "partial result for untracked execution context; "
-                    "preserve and wait for completion"
-                )
+                detail = "partial result for untracked execution context; " "preserve and wait for completion"
 
         artifact = self._base_artifact(
             ctx,
@@ -1627,9 +1592,7 @@ class FlowContinuityCoordinator:
         self._record(artifact)
         return artifact
 
-    def decide_v2_restart_recovery(
-        self, ctx: ContinuityEventContext
-    ) -> ContinuityDecisionArtifact:
+    def decide_v2_restart_recovery(self, ctx: ContinuityEventContext) -> ContinuityDecisionArtifact:
         """Decide continuity for a V2-restart recovery scenario.
 
         Scenario: V2 has restarted.  The coordinator consults the durable
@@ -1651,9 +1614,11 @@ class FlowContinuityCoordinator:
             ``flow_lineage_id`` or ``contract_id`` is used to look up durable
             flows.
         """
-        ctx = ContinuityEventContext(
-            **{**ctx.__dict__, "event_kind": ContinuityEventKind.v2_restart_recovery}
-        ) if ctx.event_kind == ContinuityEventKind.unknown else ctx
+        ctx = (
+            ContinuityEventContext(**{**ctx.__dict__, "event_kind": ContinuityEventKind.v2_restart_recovery})
+            if ctx.event_kind == ContinuityEventKind.unknown
+            else ctx
+        )
 
         if not ctx.recovery_completed:
             artifact = self._base_artifact(
@@ -1709,10 +1674,7 @@ class FlowContinuityCoordinator:
         else:
             decision = ContinuityDecision.new_attachment
             policy_ref = "V2_RESTART_CONTINUITY_USES_DURABLE_STORE_POLICY"
-            detail = (
-                "V2 restart recovery: no in-flight flow in durable store; "
-                "treating as new_attachment"
-            )
+            detail = "V2 restart recovery: no in-flight flow in durable store; " "treating as new_attachment"
 
         artifact = self._base_artifact(
             ctx,

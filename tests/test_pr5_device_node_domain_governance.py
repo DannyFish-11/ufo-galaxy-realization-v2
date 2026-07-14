@@ -60,23 +60,18 @@ from core.device_node_domain_governance import (
     get_surfaces_by_domain,
 )
 
-
 # ---------------------------------------------------------------------------
 # Authority and policy sentinel tests
 # ---------------------------------------------------------------------------
 
 
 def test_authority_sentinel_format():
-    assert DEVICE_NODE_DOMAIN_GOVERNANCE_IS_AUTHORITY.startswith(
-        "DEVICE_NODE_DOMAIN_GOVERNANCE_IS_AUTHORITY::"
-    )
+    assert DEVICE_NODE_DOMAIN_GOVERNANCE_IS_AUTHORITY.startswith("DEVICE_NODE_DOMAIN_GOVERNANCE_IS_AUTHORITY::")
     assert "core.device_node_domain_governance" in DEVICE_NODE_DOMAIN_GOVERNANCE_IS_AUTHORITY
 
 
 def test_pr5_sentinel_format():
-    assert DEVICE_NODE_DOMAIN_GOVERNANCE_PR5_SENTINEL.startswith(
-        "DEVICE_NODE_DOMAIN_GOVERNANCE_PR5_SENTINEL::"
-    )
+    assert DEVICE_NODE_DOMAIN_GOVERNANCE_PR5_SENTINEL.startswith("DEVICE_NODE_DOMAIN_GOVERNANCE_PR5_SENTINEL::")
     assert "PR5" in DEVICE_NODE_DOMAIN_GOVERNANCE_PR5_SENTINEL
     assert "device-node-domain-governance-v1" in DEVICE_NODE_DOMAIN_GOVERNANCE_PR5_SENTINEL
     assert "core.device_node_domain_governance" in DEVICE_NODE_DOMAIN_GOVERNANCE_PR5_SENTINEL
@@ -451,9 +446,7 @@ def test_get_bridge_relationship_unknown_returns_none():
 
 
 def test_classify_registry_surface_finds_udm():
-    result = classify_registry_surface(
-        "core.unified.unified_device_manager.UnifiedDeviceManager"
-    )
+    result = classify_registry_surface("core.unified.unified_device_manager.UnifiedDeviceManager")
     assert result is not None
     assert result.domain == RegistrySurfaceDomain.device
     assert result.role == RegistrySurfaceRole.ssot
@@ -461,9 +454,7 @@ def test_classify_registry_surface_finds_udm():
 
 
 def test_classify_registry_surface_finds_node_fabric_registry():
-    result = classify_registry_surface(
-        "core.nodes.node_fabric_registry.NodeFabricRegistry"
-    )
+    result = classify_registry_surface("core.nodes.node_fabric_registry.NodeFabricRegistry")
     assert result is not None
     assert result.domain == RegistrySurfaceDomain.node
     assert result.is_authoritative is True
@@ -477,9 +468,7 @@ def test_classify_registry_surface_finds_compat_facade():
 
 
 def test_classify_registry_surface_finds_capability_assimilation():
-    result = classify_registry_surface(
-        "core.capability_assimilation.CapabilityAssimilationLayer"
-    )
+    result = classify_registry_surface("core.capability_assimilation.CapabilityAssimilationLayer")
     assert result is not None
     assert result.domain == RegistrySurfaceDomain.bridge
 
@@ -684,14 +673,10 @@ def test_get_governance_summary_node_lifecycle_mentions_execution():
 
 
 def test_projection_alignment_sentinel_present():
-    pytest.importorskip(
-        "fastapi", reason="projection module requires fastapi"
-    )
+    pytest.importorskip("fastapi", reason="projection module requires fastapi")
     from core.routes.projection import DEVICE_NODE_DOMAIN_GOVERNANCE_ALIGNED_PR5
 
-    assert "DEVICE_NODE_DOMAIN_GOVERNANCE_ALIGNED_PR5_V1" in (
-        DEVICE_NODE_DOMAIN_GOVERNANCE_ALIGNED_PR5
-    )
+    assert "DEVICE_NODE_DOMAIN_GOVERNANCE_ALIGNED_PR5_V1" in (DEVICE_NODE_DOMAIN_GOVERNANCE_ALIGNED_PR5)
     assert "PR-5" in DEVICE_NODE_DOMAIN_GOVERNANCE_ALIGNED_PR5
 
 
@@ -761,9 +746,7 @@ def test_compat_facade_surfaces_are_not_authoritative():
     compat_facades = [s for s in all_surfaces if s.role == RegistrySurfaceRole.compat_facade]
     assert len(compat_facades) > 0
     for s in compat_facades:
-        assert s.is_authoritative is False, (
-            f"Compat facade {s.surface_name!r} must not be authoritative"
-        )
+        assert s.is_authoritative is False, f"Compat facade {s.surface_name!r} must not be authoritative"
 
 
 def test_ssot_surfaces_are_authoritative():
@@ -773,9 +756,7 @@ def test_ssot_surfaces_are_authoritative():
     ssot_surfaces = [s for s in all_surfaces if s.role == RegistrySurfaceRole.ssot]
     assert len(ssot_surfaces) > 0
     for s in ssot_surfaces:
-        assert s.is_authoritative is True, (
-            f"SSOT surface {s.surface_name!r} must be authoritative"
-        )
+        assert s.is_authoritative is True, f"SSOT surface {s.surface_name!r} must be authoritative"
 
 
 def test_projection_surfaces_are_not_authoritative():
@@ -785,9 +766,7 @@ def test_projection_surfaces_are_not_authoritative():
     projection_surfaces = [s for s in all_surfaces if s.role == RegistrySurfaceRole.projection]
     assert len(projection_surfaces) > 0
     for s in projection_surfaces:
-        assert s.is_authoritative is False, (
-            f"Projection surface {s.surface_name!r} must not be authoritative"
-        )
+        assert s.is_authoritative is False, f"Projection surface {s.surface_name!r} must not be authoritative"
 
 
 def test_android_relevance_is_present_in_all_bridges():

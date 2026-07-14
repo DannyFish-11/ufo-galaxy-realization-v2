@@ -58,9 +58,9 @@ def test_mcp_alignment():
         "mcp-ffmpeg": "8012",
         "mcp-arxiv": "8013",
         "mcp-terminal": "8014",
-        "mcp-weather": "8015"
+        "mcp-weather": "8015",
     }
-    
+
     with open("podman-compose.yml", "r") as f:
         compose_content = f.read()
         for service, port in expected_ports.items():
@@ -68,12 +68,13 @@ def test_mcp_alignment():
                 print(f"✅ {service}: Port {port} aligned.")
             else:
                 # 尝试不带引号的匹配
-                if f"{service}:" in compose_content and f'{port}:{port}' in compose_content:
+                if f"{service}:" in compose_content and f"{port}:{port}" in compose_content:
                     print(f"✅ {service}: Port {port} aligned.")
                 else:
                     print(f"❌ {service}: Port {port} NOT aligned.")
 
     print("\n=== Verification Complete ===")
+
 
 if __name__ == "__main__":
     test_mcp_alignment()

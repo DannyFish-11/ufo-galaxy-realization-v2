@@ -26,10 +26,10 @@ from galaxy_gateway.orchestrator.parallel_tracker import (
     get_tracker,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _new_tracker() -> ParallelGroupTracker:
     """Return a fresh tracker for each test (avoid shared singleton)."""
@@ -39,6 +39,7 @@ def _new_tracker() -> ParallelGroupTracker:
 # ---------------------------------------------------------------------------
 # 1. Full success path
 # ---------------------------------------------------------------------------
+
 
 class TestParallelTrackerSuccess:
     @pytest.mark.asyncio
@@ -81,8 +82,13 @@ class TestParallelTrackerSuccess:
         gid = "g-success-4"
         await tracker.start_group(gid, expected_count=1, timeout_s=30.0)
         await tracker.record_result(
-            gid, subtask_index=0, status="success", latency_ms=200,
-            summary="done", errors=None, outputs={"key": "val"},
+            gid,
+            subtask_index=0,
+            status="success",
+            latency_ms=200,
+            summary="done",
+            errors=None,
+            outputs={"key": "val"},
         )
         gs = await tracker.finalize_if_complete(gid)
         assert gs is not None
@@ -111,6 +117,7 @@ class TestParallelTrackerSuccess:
 # 2. partial_failed path
 # ---------------------------------------------------------------------------
 
+
 class TestParallelTrackerPartialFailed:
     @pytest.mark.asyncio
     async def test_partial_failed_when_one_fails(self):
@@ -118,8 +125,9 @@ class TestParallelTrackerPartialFailed:
         gid = "g-partial-1"
         await tracker.start_group(gid, expected_count=2, timeout_s=30.0)
         await tracker.record_result(gid, subtask_index=0, status="success", latency_ms=100)
-        await tracker.record_result(gid, subtask_index=1, status="failed", latency_ms=200,
-                                    errors=["something went wrong"])
+        await tracker.record_result(
+            gid, subtask_index=1, status="failed", latency_ms=200, errors=["something went wrong"]
+        )
         gs = await tracker.finalize_if_complete(gid)
         assert gs is not None
         assert gs.status == "partial_failed"
@@ -140,8 +148,7 @@ class TestParallelTrackerPartialFailed:
         tracker = _new_tracker()
         gid = "g-partial-3"
         await tracker.start_group(gid, expected_count=1, timeout_s=30.0)
-        await tracker.record_result(gid, subtask_index=0, status="failed", latency_ms=10,
-                                    errors=["err1", "err2"])
+        await tracker.record_result(gid, subtask_index=0, status="failed", latency_ms=10, errors=["err1", "err2"])
         gs = await tracker.finalize_if_complete(gid)
         r = gs.results[0]
         assert r.errors == ["err1", "err2"]
@@ -150,6 +157,7 @@ class TestParallelTrackerPartialFailed:
 # ---------------------------------------------------------------------------
 # 3. Timeout expiry
 # ---------------------------------------------------------------------------
+
 
 class TestParallelTrackerTimeout:
     @pytest.mark.asyncio
@@ -194,6 +202,7 @@ class TestParallelTrackerTimeout:
 # 4. Auto-create group (no prior start_group)
 # ---------------------------------------------------------------------------
 
+
 class TestParallelTrackerAutoCreate:
     @pytest.mark.asyncio
     async def test_record_without_start_group(self):
@@ -233,6 +242,7 @@ class TestParallelTrackerAutoCreate:
 # 5. get_group_status (sync)
 # ---------------------------------------------------------------------------
 
+
 class TestGetGroupStatus:
     @pytest.mark.asyncio
     async def test_returns_none_before_complete(self):
@@ -269,6 +279,7 @@ class TestGetGroupStatus:
 # ---------------------------------------------------------------------------
 # 6. Module-level singleton
 # ---------------------------------------------------------------------------
+
 
 def test_get_tracker_returns_same_instance():
     t1 = get_tracker()

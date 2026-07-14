@@ -6,15 +6,15 @@
 根据任务类型智能选择最优模型，支持故障转移和负载均衡。
 """
 
-import os
-import json
-import time
-import math
 import asyncio
+import json
 import logging
-from typing import List, Dict, Any, Optional, Callable, Tuple
+import math
+import os
+import time
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import httpx
 
@@ -23,14 +23,16 @@ logger = logging.getLogger("Galaxy.LLMRouter")
 
 # ───────────────────── 数据模型 ─────────────────────
 
+
 class TaskType(Enum):
     """任务类型 → 决定模型选择策略"""
-    REASONING = "reasoning"          # 复杂推理 → 强模型
+
+    REASONING = "reasoning"  # 复杂推理 → 强模型
     FAST_RESPONSE = "fast_response"  # 快速问答 → 快模型
-    CODING = "coding"                # 代码生成 → 代码模型
-    CREATIVE = "creative"            # 创作 → 创意模型
-    ANALYSIS = "analysis"            # 分析 → 均衡模型
-    PLANNING = "planning"            # 规划 → 强推理模型
+    CODING = "coding"  # 代码生成 → 代码模型
+    CREATIVE = "creative"  # 创作 → 创意模型
+    ANALYSIS = "analysis"  # 分析 → 均衡模型
+    PLANNING = "planning"  # 规划 → 强推理模型
     AGENT_CONTROL = "agent_control"  # Agent 指令生成
     GENERAL = "general"
 
@@ -44,6 +46,7 @@ class ProviderStatus(Enum):
 @dataclass
 class ProviderConfig:
     """单个提供商配置"""
+
     name: str
     api_key: str
     base_url: str
@@ -55,16 +58,16 @@ class ProviderConfig:
     supports_tools: bool = True
     supports_json_mode: bool = True
     timeout: float = 60.0
-    multimodal: bool = False          # 是否原生支持多模态（图像/音频/视频输入）
-    env_key: str = ""                 # 对应的环境变量名（用于可用性提示）
+    multimodal: bool = False  # 是否原生支持多模态（图像/音频/视频输入）
+    env_key: str = ""  # 对应的环境变量名（用于可用性提示）
     # PR-HA: 硬件感知 + 多模态优先新增字段
-    source_type: str = "api"          # "api" / "local" / "hf_local" / "oneapi"
-    hardware_tier: str = "remote"    # "gpu_full" / "gpu_quantized" / "cpu" / "remote"
-    supports_vision: bool = False     # 是否支持图像输入（VLM能力）
-    supports_audio: bool = False      # 是否支持音频输入
-    kv_cache_enabled: bool = False    # 是否启用KV cache（借鉴vLLM）
+    source_type: str = "api"  # "api" / "local" / "hf_local" / "oneapi"
+    hardware_tier: str = "remote"  # "gpu_full" / "gpu_quantized" / "cpu" / "remote"
+    supports_vision: bool = False  # 是否支持图像输入（VLM能力）
+    supports_audio: bool = False  # 是否支持音频输入
+    kv_cache_enabled: bool = False  # 是否启用KV cache（借鉴vLLM）
     prefix_cache_enabled: bool = False  # 是否启用前缀缓存（借鉴SGLang RadixAttention）
-    quantization: str = "none"        # "none" / "q4" / "q5" / "q8" / "awq" / "gptq"
+    quantization: str = "none"  # "none" / "q4" / "q5" / "q8" / "awq" / "gptq"
     # 运行时状态
     status: ProviderStatus = ProviderStatus.HEALTHY
     latency_avg_ms: float = 0.0
@@ -107,6 +110,7 @@ class ProviderConfig:
 @dataclass
 class RoutingDecision:
     """路由决策"""
+
     provider: str
     model: str
     reason: str
@@ -116,6 +120,7 @@ class RoutingDecision:
 @dataclass
 class LLMResponse:
     """统一响应"""
+
     content: str
     provider: str
     model: str
@@ -126,7 +131,7 @@ class LLMResponse:
     tool_calls: Optional[List[Dict]] = None
     raw_response: Optional[Dict] = None
     # L2 级联路由元数据
-    cascade_stage: int = 0           # 0-based:第几档答出来的(0=最便宜那档)
+    cascade_stage: int = 0  # 0-based:第几档答出来的(0=最便宜那档)
     cascade_escalated: bool = False  # 是否发生过升级(便宜档不合格才升到更贵档)
 
 
@@ -192,14 +197,49 @@ TASK_ROUTING_PREFERENCES: Dict[TaskType, List[str]] = {
     # 2026-05-29: 新增 minimax/step/mimo 三个国产提供商
     # 2026-07-10: 新增 meta(Muse Spark 1.1,agentic/多模态/1M ctx)——
     # 定位在专有兜底梯队,agentic 任务(AGENT_CONTROL/CODING/PLANNING)优先级靠前
-    TaskType.REASONING:      ["ollama", "hf_local", "anthropic", "openai", "meta", "deepseek", "google", "qwen", "step"],
-    TaskType.FAST_RESPONSE:  ["ollama", "hf_local", "deepseek", "mimo", "groq", "google", "openai", "zhipu"],
-    TaskType.CODING:         ["ollama", "hf_local", "deepseek", "qwen", "anthropic", "openai", "meta", "step", "mimo"],
-    TaskType.CREATIVE:       ["ollama", "hf_local", "openai", "anthropic", "mistral", "deepseek", "minimax"],
-    TaskType.ANALYSIS:       ["ollama", "hf_local", "anthropic", "openai", "meta", "deepseek", "google", "perplexity", "qwen", "step"],
-    TaskType.PLANNING:       ["ollama", "hf_local", "anthropic", "openai", "meta", "deepseek", "xai", "qwen", "minimax", "step"],
-    TaskType.AGENT_CONTROL:  ["ollama", "hf_local", "anthropic", "openai", "meta", "deepseek", "minimax", "step"],
-    TaskType.GENERAL:        ["ollama", "hf_local", "openai", "anthropic", "meta", "deepseek", "google", "qwen", "zhipu", "minimax", "step", "mimo"],
+    TaskType.REASONING: ["ollama", "hf_local", "anthropic", "openai", "meta", "deepseek", "google", "qwen", "step"],
+    TaskType.FAST_RESPONSE: ["ollama", "hf_local", "deepseek", "mimo", "groq", "google", "openai", "zhipu"],
+    TaskType.CODING: ["ollama", "hf_local", "deepseek", "qwen", "anthropic", "openai", "meta", "step", "mimo"],
+    TaskType.CREATIVE: ["ollama", "hf_local", "openai", "anthropic", "mistral", "deepseek", "minimax"],
+    TaskType.ANALYSIS: [
+        "ollama",
+        "hf_local",
+        "anthropic",
+        "openai",
+        "meta",
+        "deepseek",
+        "google",
+        "perplexity",
+        "qwen",
+        "step",
+    ],
+    TaskType.PLANNING: [
+        "ollama",
+        "hf_local",
+        "anthropic",
+        "openai",
+        "meta",
+        "deepseek",
+        "xai",
+        "qwen",
+        "minimax",
+        "step",
+    ],
+    TaskType.AGENT_CONTROL: ["ollama", "hf_local", "anthropic", "openai", "meta", "deepseek", "minimax", "step"],
+    TaskType.GENERAL: [
+        "ollama",
+        "hf_local",
+        "openai",
+        "anthropic",
+        "meta",
+        "deepseek",
+        "google",
+        "qwen",
+        "zhipu",
+        "minimax",
+        "step",
+        "mimo",
+    ],
 }
 
 # ───────────────────────────────────────────────────────────────────────────
@@ -212,23 +252,27 @@ TASK_ROUTING_PREFERENCES: Dict[TaskType, List[str]] = {
 # 当 GALAXY_OPENSOURCE_FIRST != "false"（默认开启）时，route() 会把开源
 # 提供商整体提到专有提供商之前，同时严格保持各自原有的任务偏好相对顺序。
 OPEN_SOURCE_PROVIDERS: set = {
-    "ollama",      # 本地原生多模态主脑（Gemma4 / MiniCPM-o）
-    "hf_local",    # 本地 HuggingFace 模型
-    "deepseek",    # DeepSeek（开源权重）
-    "qwen",        # 通义千问（开源权重）
-    "zhipu",       # 智谱 GLM（开源权重）
-    "groq",        # Groq 托管 Llama 等开源模型
-    "minimax",     # MiniMax（部分开源）
-    "step",        # 阶跃 StepFun
-    "mimo",        # 小米 MiMo（开源）
-    "moonshot",    # Kimi / Moonshot（Kimi-K2 开源）
-    "mistral",     # Mistral（开源权重）
-    "oneapi",      # OneAPI 聚合层（通常聚合开源模型）
+    "ollama",  # 本地原生多模态主脑（Gemma4 / MiniCPM-o）
+    "hf_local",  # 本地 HuggingFace 模型
+    "deepseek",  # DeepSeek（开源权重）
+    "qwen",  # 通义千问（开源权重）
+    "zhipu",  # 智谱 GLM（开源权重）
+    "groq",  # Groq 托管 Llama 等开源模型
+    "minimax",  # MiniMax（部分开源）
+    "step",  # 阶跃 StepFun
+    "mimo",  # 小米 MiMo（开源）
+    "moonshot",  # Kimi / Moonshot（Kimi-K2 开源）
+    "mistral",  # Mistral（开源权重）
+    "oneapi",  # OneAPI 聚合层（通常聚合开源模型）
 }
 
 # 专有闭源提供商（仅作高端兜底，开源优先时排最后）
 PROPRIETARY_PROVIDERS: set = {
-    "openai", "anthropic", "google", "xai", "perplexity",
+    "openai",
+    "anthropic",
+    "google",
+    "xai",
+    "perplexity",
 }
 
 
@@ -252,18 +296,18 @@ def reorder_open_source_first(provider_order: List[str]) -> List[str]:
 # 返回值由 select_brain_for_role() 解析为具体 (provider, model)。
 ROLE_BRAIN_HINTS: Dict[str, Dict[str, Any]] = {
     # 重角色：需要强推理 / 质量把关 → 倾向云端开源大模型
-    "critic":      {"prefer_local": False, "task_type": TaskType.REASONING, "min_complexity": 0.7},
-    "reviewer":    {"prefer_local": False, "task_type": TaskType.REASONING, "min_complexity": 0.7},
-    "reasoner":    {"prefer_local": False, "task_type": TaskType.REASONING, "min_complexity": 0.7},
-    "coordinator": {"prefer_local": False, "task_type": TaskType.PLANNING,  "min_complexity": 0.6},
-    "planner":     {"prefer_local": False, "task_type": TaskType.PLANNING,  "min_complexity": 0.6},
-    "analyst":     {"prefer_local": False, "task_type": TaskType.ANALYSIS,  "min_complexity": 0.6},
+    "critic": {"prefer_local": False, "task_type": TaskType.REASONING, "min_complexity": 0.7},
+    "reviewer": {"prefer_local": False, "task_type": TaskType.REASONING, "min_complexity": 0.7},
+    "reasoner": {"prefer_local": False, "task_type": TaskType.REASONING, "min_complexity": 0.7},
+    "coordinator": {"prefer_local": False, "task_type": TaskType.PLANNING, "min_complexity": 0.6},
+    "planner": {"prefer_local": False, "task_type": TaskType.PLANNING, "min_complexity": 0.6},
+    "analyst": {"prefer_local": False, "task_type": TaskType.ANALYSIS, "min_complexity": 0.6},
     # 轻角色：执行/产出/感知 → 倾向本地小模型
-    "executor":    {"prefer_local": True,  "task_type": TaskType.FAST_RESPONSE, "min_complexity": 0.0},
-    "worker":      {"prefer_local": True,  "task_type": TaskType.GENERAL,       "min_complexity": 0.0},
-    "researcher":  {"prefer_local": True,  "task_type": TaskType.GENERAL,       "min_complexity": 0.0},
-    "coder":       {"prefer_local": True,  "task_type": TaskType.CODING,        "min_complexity": 0.3},
-    "writer":      {"prefer_local": True,  "task_type": TaskType.CREATIVE,      "min_complexity": 0.0},
+    "executor": {"prefer_local": True, "task_type": TaskType.FAST_RESPONSE, "min_complexity": 0.0},
+    "worker": {"prefer_local": True, "task_type": TaskType.GENERAL, "min_complexity": 0.0},
+    "researcher": {"prefer_local": True, "task_type": TaskType.GENERAL, "min_complexity": 0.0},
+    "coder": {"prefer_local": True, "task_type": TaskType.CODING, "min_complexity": 0.3},
+    "writer": {"prefer_local": True, "task_type": TaskType.CREATIVE, "min_complexity": 0.0},
 }
 
 # ───────────────────────────────────────────────────────────────────────────
@@ -275,19 +319,32 @@ ROLE_BRAIN_HINTS: Dict[str, Dict[str, Any]] = {
 # DeepSeek/Qwen/GLM 等强开源模型同列 tier 3，确保"以开源为主"也能拿到最强档。
 PROVIDER_QUALITY_TIER: Dict[str, int] = {
     # tier 3 —— 前沿能力（含强开源大模型）
-    "anthropic": 3, "openai": 3, "google": 3, "xai": 3,
-    "deepseek": 3, "qwen": 3, "zhipu": 3,
+    "anthropic": 3,
+    "openai": 3,
+    "google": 3,
+    "xai": 3,
+    "deepseek": 3,
+    "qwen": 3,
+    "zhipu": 3,
     # tier 2 —— 强
-    "minimax": 2, "step": 2, "moonshot": 2, "mistral": 2,
-    "groq": 2, "mimo": 2, "perplexity": 2, "oneapi": 2,
+    "minimax": 2,
+    "step": 2,
+    "moonshot": 2,
+    "mistral": 2,
+    "groq": 2,
+    "mimo": 2,
+    "perplexity": 2,
+    "oneapi": 2,
     # tier 1 —— 本地轻量（无 GPU 笔电主脑）
-    "ollama": 1, "hf_local": 1,
+    "ollama": 1,
+    "hf_local": 1,
 }
 
 
 def _provider_quality_tier(name: str) -> int:
     """读提供商能力档；支持 env 覆盖 GALAXY_QUALITY_TIER_<PROVIDER>=N。"""
     import os as _os
+
     ov = _os.environ.get(f"GALAXY_QUALITY_TIER_{name.upper()}")
     if ov:
         try:
@@ -302,169 +359,170 @@ PROVIDER_MODEL_MAP: Dict[str, Dict[TaskType, str]] = {
     "openai": {
         # GPT-5.6 家族(2026-07-09 GA):gpt-5.6 = 旗舰 Sol 的别名(1.05M ctx/128K out);
         # terra=日常均衡($2.5/$15);luna=快而省($1/$6)。
-        TaskType.REASONING:     "gpt-5.6",
+        TaskType.REASONING: "gpt-5.6",
         TaskType.FAST_RESPONSE: "gpt-5.6-luna",
-        TaskType.CODING:        "gpt-5.6",
-        TaskType.CREATIVE:      "gpt-5.6",
-        TaskType.ANALYSIS:      "gpt-5.6",
-        TaskType.PLANNING:      "gpt-5.6",
+        TaskType.CODING: "gpt-5.6",
+        TaskType.CREATIVE: "gpt-5.6",
+        TaskType.ANALYSIS: "gpt-5.6",
+        TaskType.PLANNING: "gpt-5.6",
         TaskType.AGENT_CONTROL: "gpt-5.6",
-        TaskType.GENERAL:       "gpt-5.6-terra",
+        TaskType.GENERAL: "gpt-5.6-terra",
     },
     "anthropic": {
-        TaskType.REASONING:     "claude-opus-4-8-20250529",
+        TaskType.REASONING: "claude-opus-4-8-20250529",
         TaskType.FAST_RESPONSE: "claude-sonnet-5",
-        TaskType.CODING:        "claude-sonnet-5",
-        TaskType.CREATIVE:      "claude-opus-4-8-20250529",
-        TaskType.ANALYSIS:      "claude-opus-4-8-20250529",
-        TaskType.PLANNING:      "claude-opus-4-8-20250529",
+        TaskType.CODING: "claude-sonnet-5",
+        TaskType.CREATIVE: "claude-opus-4-8-20250529",
+        TaskType.ANALYSIS: "claude-opus-4-8-20250529",
+        TaskType.PLANNING: "claude-opus-4-8-20250529",
         TaskType.AGENT_CONTROL: "claude-sonnet-5",
-        TaskType.GENERAL:       "claude-sonnet-5",
+        TaskType.GENERAL: "claude-sonnet-5",
     },
     "google": {
         # 注:gemini-3.5-pro 延期到 2026-07-17 才发布——此前表里引用它会 404。
         # 现全走 GA 的 3.5-flash;Pro 上线后把 CODING/PLANNING/AGENT 升回去。
-        TaskType.REASONING:     "gemini-3.5-flash",
+        TaskType.REASONING: "gemini-3.5-flash",
         TaskType.FAST_RESPONSE: "gemini-3.5-flash",
-        TaskType.CODING:        "gemini-3.5-flash",
-        TaskType.CREATIVE:      "gemini-3.5-flash",
-        TaskType.ANALYSIS:      "gemini-3.5-flash",
-        TaskType.PLANNING:      "gemini-3.5-flash",
+        TaskType.CODING: "gemini-3.5-flash",
+        TaskType.CREATIVE: "gemini-3.5-flash",
+        TaskType.ANALYSIS: "gemini-3.5-flash",
+        TaskType.PLANNING: "gemini-3.5-flash",
         TaskType.AGENT_CONTROL: "gemini-3.5-flash",
-        TaskType.GENERAL:       "gemini-3.5-flash",
+        TaskType.GENERAL: "gemini-3.5-flash",
     },
     "meta": {
         # Muse Spark 1.1(2026-07-09,Meta Superintelligence Labs):Llama 后继,
         # Meta Model API 首发唯一模型。多模态推理+agentic(工具/电脑使用/编码),
         # 1M ctx,OpenAI SDK 兼容(api.meta.ai/v1),$1.25/$4.25 每 M tokens。
-        TaskType.REASONING:     "muse-spark-1.1",
+        TaskType.REASONING: "muse-spark-1.1",
         TaskType.FAST_RESPONSE: "muse-spark-1.1",
-        TaskType.CODING:        "muse-spark-1.1",
-        TaskType.CREATIVE:      "muse-spark-1.1",
-        TaskType.ANALYSIS:      "muse-spark-1.1",
-        TaskType.PLANNING:      "muse-spark-1.1",
+        TaskType.CODING: "muse-spark-1.1",
+        TaskType.CREATIVE: "muse-spark-1.1",
+        TaskType.ANALYSIS: "muse-spark-1.1",
+        TaskType.PLANNING: "muse-spark-1.1",
         TaskType.AGENT_CONTROL: "muse-spark-1.1",
-        TaskType.GENERAL:       "muse-spark-1.1",
+        TaskType.GENERAL: "muse-spark-1.1",
     },
     "xai": {
-        TaskType.REASONING:     "grok-4.5",
+        TaskType.REASONING: "grok-4.5",
         TaskType.FAST_RESPONSE: "grok-4.5",
-        TaskType.CODING:        "grok-4.5",
-        TaskType.CREATIVE:      "grok-4.5",
-        TaskType.ANALYSIS:      "grok-4.5",
-        TaskType.PLANNING:      "grok-4.5",
+        TaskType.CODING: "grok-4.5",
+        TaskType.CREATIVE: "grok-4.5",
+        TaskType.ANALYSIS: "grok-4.5",
+        TaskType.PLANNING: "grok-4.5",
         TaskType.AGENT_CONTROL: "grok-4.5",
-        TaskType.GENERAL:       "grok-4.5",
+        TaskType.GENERAL: "grok-4.5",
     },
     "mistral": {
-        TaskType.REASONING:     "mistral-large-3",
+        TaskType.REASONING: "mistral-large-3",
         TaskType.FAST_RESPONSE: "mistral-large-3",
-        TaskType.CODING:        "mistral-large-3",
-        TaskType.CREATIVE:      "mistral-large-3",
-        TaskType.ANALYSIS:      "mistral-large-3",
-        TaskType.PLANNING:      "mistral-large-3",
+        TaskType.CODING: "mistral-large-3",
+        TaskType.CREATIVE: "mistral-large-3",
+        TaskType.ANALYSIS: "mistral-large-3",
+        TaskType.PLANNING: "mistral-large-3",
         TaskType.AGENT_CONTROL: "mistral-large-3",
-        TaskType.GENERAL:       "mistral-large-3",
+        TaskType.GENERAL: "mistral-large-3",
     },
     "deepseek": {
-        TaskType.REASONING:     "deepseek-v4-pro",
+        TaskType.REASONING: "deepseek-v4-pro",
         TaskType.FAST_RESPONSE: "deepseek-v4-flash",
-        TaskType.CODING:        "deepseek-v4-pro",
-        TaskType.CREATIVE:      "deepseek-v4-pro",
-        TaskType.ANALYSIS:      "deepseek-v4-pro",
-        TaskType.PLANNING:      "deepseek-v4-pro",
+        TaskType.CODING: "deepseek-v4-pro",
+        TaskType.CREATIVE: "deepseek-v4-pro",
+        TaskType.ANALYSIS: "deepseek-v4-pro",
+        TaskType.PLANNING: "deepseek-v4-pro",
         TaskType.AGENT_CONTROL: "deepseek-v4-pro",
-        TaskType.GENERAL:       "deepseek-v4-pro",
+        TaskType.GENERAL: "deepseek-v4-pro",
     },
     "qwen": {
-        TaskType.REASONING:     "qwen3.7-max",
-        TaskType.CODING:        "qwen3.7-coder",
+        TaskType.REASONING: "qwen3.7-max",
+        TaskType.CODING: "qwen3.7-coder",
         TaskType.FAST_RESPONSE: "qwen-flash",
-        TaskType.GENERAL:       "qwen3.7-max",
-        TaskType.ANALYSIS:      "qwen3.7-max",
-        TaskType.PLANNING:      "qwen3.7-max",
+        TaskType.GENERAL: "qwen3.7-max",
+        TaskType.ANALYSIS: "qwen3.7-max",
+        TaskType.PLANNING: "qwen3.7-max",
         TaskType.AGENT_CONTROL: "qwen3.7-max",
     },
     "zhipu": {
-        TaskType.REASONING:     "glm-5.1",
-        TaskType.GENERAL:       "glm-5.1",
-        TaskType.ANALYSIS:      "glm-5.1",
-        TaskType.CODING:        "glm-5.1",
+        TaskType.REASONING: "glm-5.1",
+        TaskType.GENERAL: "glm-5.1",
+        TaskType.ANALYSIS: "glm-5.1",
+        TaskType.CODING: "glm-5.1",
         TaskType.FAST_RESPONSE: "glm-5.1-flash",
-        TaskType.CREATIVE:      "glm-5.1",
-        TaskType.PLANNING:      "glm-5.1",
+        TaskType.CREATIVE: "glm-5.1",
+        TaskType.PLANNING: "glm-5.1",
     },
     "minimax": {
-        TaskType.REASONING:     "minimax-m2.7",
+        TaskType.REASONING: "minimax-m2.7",
         TaskType.FAST_RESPONSE: "minimax-m2.7",
-        TaskType.CODING:        "minimax-m2.7",
-        TaskType.CREATIVE:      "minimax-m2.7",
-        TaskType.ANALYSIS:      "minimax-m2.7",
-        TaskType.PLANNING:      "minimax-m2.7",
+        TaskType.CODING: "minimax-m2.7",
+        TaskType.CREATIVE: "minimax-m2.7",
+        TaskType.ANALYSIS: "minimax-m2.7",
+        TaskType.PLANNING: "minimax-m2.7",
         TaskType.AGENT_CONTROL: "minimax-m2.7",
-        TaskType.GENERAL:       "minimax-m2.7",
+        TaskType.GENERAL: "minimax-m2.7",
     },
     "step": {
-        TaskType.REASONING:     "step-3.7-flash",
+        TaskType.REASONING: "step-3.7-flash",
         TaskType.FAST_RESPONSE: "step-3.7-turbo",
-        TaskType.CODING:        "step-3.7-flash",
-        TaskType.CREATIVE:      "step-3.7-flash",
-        TaskType.ANALYSIS:      "step-3.7-flash",
-        TaskType.PLANNING:      "step-3.7-flash",
+        TaskType.CODING: "step-3.7-flash",
+        TaskType.CREATIVE: "step-3.7-flash",
+        TaskType.ANALYSIS: "step-3.7-flash",
+        TaskType.PLANNING: "step-3.7-flash",
         TaskType.AGENT_CONTROL: "step-3.7-flash",
-        TaskType.GENERAL:       "step-3.7-flash",
+        TaskType.GENERAL: "step-3.7-flash",
     },
     "mimo": {
-        TaskType.REASONING:     "mimo-v2.5-pro",
+        TaskType.REASONING: "mimo-v2.5-pro",
         TaskType.FAST_RESPONSE: "mimo-v2.5-lite",
-        TaskType.CODING:        "mimo-v2.5-pro",
-        TaskType.CREATIVE:      "mimo-v2.5-pro",
-        TaskType.ANALYSIS:      "mimo-v2.5-pro",
-        TaskType.PLANNING:      "mimo-v2.5-pro",
+        TaskType.CODING: "mimo-v2.5-pro",
+        TaskType.CREATIVE: "mimo-v2.5-pro",
+        TaskType.ANALYSIS: "mimo-v2.5-pro",
+        TaskType.PLANNING: "mimo-v2.5-pro",
         TaskType.AGENT_CONTROL: "mimo-v2.5-pro",
-        TaskType.GENERAL:       "mimo-v2.5-pro",
+        TaskType.GENERAL: "mimo-v2.5-pro",
     },
     "moonshot": {
         # Kimi K2 系取代老 moonshot-v1-*:k2.6=最新最强(代码/agent);
         # k2.5=原生多模态 256K 长上下文(2026-01 开源权重)。
-        TaskType.GENERAL:       "kimi-k2.6",
-        TaskType.CODING:        "kimi-k2.6",
-        TaskType.ANALYSIS:      "kimi-k2.5",
+        TaskType.GENERAL: "kimi-k2.6",
+        TaskType.CODING: "kimi-k2.6",
+        TaskType.ANALYSIS: "kimi-k2.5",
         TaskType.FAST_RESPONSE: "kimi-k2.5",
     },
     "perplexity": {
-        TaskType.REASONING:     "sonar-deep-research",
-        TaskType.ANALYSIS:      "sonar-pro",
-        TaskType.GENERAL:       "sonar-pro",
+        TaskType.REASONING: "sonar-deep-research",
+        TaskType.ANALYSIS: "sonar-pro",
+        TaskType.GENERAL: "sonar-pro",
     },
     "groq": {
         TaskType.FAST_RESPONSE: "llama-3.3-70b-versatile",
-        TaskType.GENERAL:       "llama-3.3-70b-versatile",
+        TaskType.GENERAL: "llama-3.3-70b-versatile",
     },
     "ollama": {
-        TaskType.REASONING:     "gemma4:12b",
+        TaskType.REASONING: "gemma4:12b",
         TaskType.FAST_RESPONSE: "gemma4:e4b",
-        TaskType.CODING:        "gemma4:12b",
-        TaskType.CREATIVE:      "gemma4:12b",
-        TaskType.ANALYSIS:      "gemma4:26b",
-        TaskType.PLANNING:      "gemma4:26b",
+        TaskType.CODING: "gemma4:12b",
+        TaskType.CREATIVE: "gemma4:12b",
+        TaskType.ANALYSIS: "gemma4:26b",
+        TaskType.PLANNING: "gemma4:26b",
         TaskType.AGENT_CONTROL: "gemma4:12b",
-        TaskType.GENERAL:       "gemma4:e4b",
+        TaskType.GENERAL: "gemma4:e4b",
     },
     "hf_local": {
-        TaskType.REASONING:     "Qwen/Qwen2.5-14B-Instruct",
+        TaskType.REASONING: "Qwen/Qwen2.5-14B-Instruct",
         TaskType.FAST_RESPONSE: "Qwen/Qwen2.5-3B-Instruct",
-        TaskType.CODING:        "Qwen/Qwen2.5-Coder-14B-Instruct",
-        TaskType.CREATIVE:      "Qwen/Qwen2.5-14B-Instruct",
-        TaskType.ANALYSIS:      "Qwen/Qwen2.5-14B-Instruct",
-        TaskType.PLANNING:      "Qwen/Qwen2.5-14B-Instruct",
+        TaskType.CODING: "Qwen/Qwen2.5-Coder-14B-Instruct",
+        TaskType.CREATIVE: "Qwen/Qwen2.5-14B-Instruct",
+        TaskType.ANALYSIS: "Qwen/Qwen2.5-14B-Instruct",
+        TaskType.PLANNING: "Qwen/Qwen2.5-14B-Instruct",
         TaskType.AGENT_CONTROL: "Qwen/Qwen2.5-14B-Instruct",
-        TaskType.GENERAL:       "Qwen/Qwen2.5-14B-Instruct",
+        TaskType.GENERAL: "Qwen/Qwen2.5-14B-Instruct",
     },
 }
 
 
 # ───────────────────── 提供商适配器 ─────────────────────
+
 
 class ProviderCircuitBreaker:
     """
@@ -476,8 +534,9 @@ class ProviderCircuitBreaker:
     - HALF_OPEN: 恢复期，允许少量试探性调用
     """
 
-    def __init__(self, name: str, failure_threshold: int = 5,
-                 recovery_timeout: float = 60.0, half_open_max_calls: int = 2):
+    def __init__(
+        self, name: str, failure_threshold: int = 5, recovery_timeout: float = 60.0, half_open_max_calls: int = 2
+    ):
         self.name = name
         self.failure_threshold = failure_threshold
         self.recovery_timeout = recovery_timeout
@@ -528,10 +587,7 @@ class ProviderCircuitBreaker:
                 logger.warning(f"断路器 [{self.name}] HALF_OPEN → OPEN (恢复失败)")
         elif self._consecutive_failures >= self.failure_threshold:
             self._state = "open"
-            logger.warning(
-                f"断路器 [{self.name}] CLOSED → OPEN "
-                f"(连续 {self._consecutive_failures} 次失败)"
-            )
+            logger.warning(f"断路器 [{self.name}] CLOSED → OPEN " f"(连续 {self._consecutive_failures} 次失败)")
 
     def to_dict(self) -> Dict:
         return {
@@ -545,9 +601,9 @@ class ProviderCircuitBreaker:
 class BaseProviderAdapter:
     """提供商适配器基类"""
 
-    DEFAULT_TIMEOUT = 30.0    # 默认请求超时
-    MAX_RETRIES = 2           # 最大重试次数
-    RETRY_BASE_DELAY = 1.0    # 重试基础延迟
+    DEFAULT_TIMEOUT = 30.0  # 默认请求超时
+    MAX_RETRIES = 2  # 最大重试次数
+    RETRY_BASE_DELAY = 1.0  # 重试基础延迟
 
     # HTTP status codes that are safe to retry (transient errors)
     _RETRYABLE_STATUS_CODES = {408, 429, 500, 502, 503, 504}
@@ -578,10 +634,14 @@ class BaseProviderAdapter:
             try:
                 resp = await client.post(url, headers=headers, json=body)
                 if resp.status_code in self._RETRYABLE_STATUS_CODES and attempt < self.MAX_RETRIES:
-                    delay = self.RETRY_BASE_DELAY * (2 ** attempt)
+                    delay = self.RETRY_BASE_DELAY * (2**attempt)
                     logger.warning(
                         "Retryable HTTP %d from %s (attempt %d/%d), retrying in %.1fs",
-                        resp.status_code, self.config.name, attempt + 1, self.MAX_RETRIES + 1, delay,
+                        resp.status_code,
+                        self.config.name,
+                        attempt + 1,
+                        self.MAX_RETRIES + 1,
+                        delay,
                     )
                     await asyncio.sleep(delay)
                     continue
@@ -590,10 +650,13 @@ class BaseProviderAdapter:
             except httpx.TimeoutException as e:
                 last_exc = e
                 if attempt < self.MAX_RETRIES:
-                    delay = self.RETRY_BASE_DELAY * (2 ** attempt)
+                    delay = self.RETRY_BASE_DELAY * (2**attempt)
                     logger.warning(
                         "Timeout from %s (attempt %d/%d), retrying in %.1fs",
-                        self.config.name, attempt + 1, self.MAX_RETRIES + 1, delay,
+                        self.config.name,
+                        attempt + 1,
+                        self.MAX_RETRIES + 1,
+                        delay,
                     )
                     await asyncio.sleep(delay)
                     continue
@@ -606,12 +669,16 @@ class BaseProviderAdapter:
             raise last_exc
         raise RuntimeError(f"Exhausted retries for {self.config.name}")
 
-    async def chat(self, messages: List[Dict], model: str,
-                   tools: Optional[List[Dict]] = None,
-                   temperature: float = 0.7,
-                   max_tokens: int = 4096,
-                   response_format: Optional[Dict] = None,
-                   **kwargs) -> LLMResponse:
+    async def chat(
+        self,
+        messages: List[Dict],
+        model: str,
+        tools: Optional[List[Dict]] = None,
+        temperature: float = 0.7,
+        max_tokens: int = 4096,
+        response_format: Optional[Dict] = None,
+        **kwargs,
+    ) -> LLMResponse:
         raise NotImplementedError(
             f"Provider adapter '{self.config.name}' 未实现 chat()，"
             f"请使用具体的适配器子类 (OpenAI/Anthropic/Google/DeepSeek)"
@@ -625,9 +692,9 @@ class BaseProviderAdapter:
 class OpenAIAdapter(BaseProviderAdapter):
     """OpenAI / OpenAI-compatible adapter"""
 
-    async def chat(self, messages, model, tools=None,
-                   temperature=0.7, max_tokens=4096,
-                   response_format=None, **kwargs) -> LLMResponse:
+    async def chat(
+        self, messages, model, tools=None, temperature=0.7, max_tokens=4096, response_format=None, **kwargs
+    ) -> LLMResponse:
         headers = {
             "Authorization": f"Bearer {self.config.api_key}",
             "Content-Type": "application/json",
@@ -649,7 +716,10 @@ class OpenAIAdapter(BaseProviderAdapter):
         if _sink is not None and response_format is None:
             try:
                 return await self._chat_streaming(
-                    headers=headers, body=body, model=model, sink=_sink,
+                    headers=headers,
+                    body=body,
+                    model=model,
+                    sink=_sink,
                 )
             except Exception as exc:  # noqa: BLE001
                 logger.info("OpenAI 兼容流式失败,退回非流式: %s", exc)
@@ -661,7 +731,8 @@ class OpenAIAdapter(BaseProviderAdapter):
         t0 = time.monotonic()
         resp = await self._post_with_retry(
             f"{self.config.base_url}/chat/completions",
-            headers=headers, body=body,
+            headers=headers,
+            body=body,
         )
         latency = (time.monotonic() - t0) * 1000
         data = resp.json()
@@ -691,10 +762,14 @@ class OpenAIAdapter(BaseProviderAdapter):
         后续增量只带 ``function.arguments`` 的字符串片段,需按序拼接。
         """
         idx = int(delta_tc.get("index", 0) or 0)
-        slot = acc.setdefault(idx, {
-            "id": "", "type": "function",
-            "function": {"name": "", "arguments": ""},
-        })
+        slot = acc.setdefault(
+            idx,
+            {
+                "id": "",
+                "type": "function",
+                "function": {"name": "", "arguments": ""},
+            },
+        )
         if delta_tc.get("id"):
             slot["id"] = delta_tc["id"]
         if delta_tc.get("type"):
@@ -711,16 +786,17 @@ class OpenAIAdapter(BaseProviderAdapter):
         只把【正文】流出给用户;工具调用参数片段绝不进 sink。usage 仅在服务端支持
         ``stream_options.include_usage`` 时可得,拿不到就记 0(成本统计的已知取舍)。
         """
-        stream_body = {**body, "stream": True,
-                       "stream_options": {"include_usage": True}}
+        stream_body = {**body, "stream": True, "stream_options": {"include_usage": True}}
         client = await self._get_client()
         t0 = time.monotonic()
         content_parts: List[str] = []
         tool_acc: Dict[int, Dict[str, Any]] = {}
         usage: Dict[str, Any] = {}
         async with client.stream(
-            "POST", f"{self.config.base_url}/chat/completions",
-            headers=headers, json=stream_body,
+            "POST",
+            f"{self.config.base_url}/chat/completions",
+            headers=headers,
+            json=stream_body,
         ) as resp:
             resp.raise_for_status()
             async for line in resp.aiter_lines():
@@ -744,7 +820,7 @@ class OpenAIAdapter(BaseProviderAdapter):
                 if piece:
                     content_parts.append(piece)
                     sink.feed(piece)
-                for delta_tc in (delta.get("tool_calls") or []):
+                for delta_tc in delta.get("tool_calls") or []:
                     if isinstance(delta_tc, dict):
                         self._merge_tool_call_delta(tool_acc, delta_tc)
         latency = (time.monotonic() - t0) * 1000
@@ -764,9 +840,9 @@ class OpenAIAdapter(BaseProviderAdapter):
 class AnthropicAdapter(BaseProviderAdapter):
     """Anthropic Claude adapter (Messages API)"""
 
-    async def chat(self, messages, model, tools=None,
-                   temperature=0.7, max_tokens=4096,
-                   response_format=None, **kwargs) -> LLMResponse:
+    async def chat(
+        self, messages, model, tools=None, temperature=0.7, max_tokens=4096, response_format=None, **kwargs
+    ) -> LLMResponse:
         headers = {
             "x-api-key": self.config.api_key,
             "anthropic-version": "2023-06-01",
@@ -797,7 +873,8 @@ class AnthropicAdapter(BaseProviderAdapter):
         t0 = time.monotonic()
         resp = await self._post_with_retry(
             f"{self.config.base_url}/messages",
-            headers=headers, body=body,
+            headers=headers,
+            body=body,
         )
         latency = (time.monotonic() - t0) * 1000
         data = resp.json()
@@ -808,14 +885,16 @@ class AnthropicAdapter(BaseProviderAdapter):
             if block["type"] == "text":
                 content += block["text"]
             elif block["type"] == "tool_use":
-                tool_calls.append({
-                    "id": block["id"],
-                    "type": "function",
-                    "function": {
-                        "name": block["name"],
-                        "arguments": json.dumps(block["input"]),
+                tool_calls.append(
+                    {
+                        "id": block["id"],
+                        "type": "function",
+                        "function": {
+                            "name": block["name"],
+                            "arguments": json.dumps(block["input"]),
+                        },
                     }
-                })
+                )
 
         usage = data.get("usage", {})
         return LLMResponse(
@@ -836,11 +915,13 @@ class AnthropicAdapter(BaseProviderAdapter):
         for t in openai_tools:
             if t.get("type") == "function":
                 fn = t["function"]
-                anthropic_tools.append({
-                    "name": fn["name"],
-                    "description": fn.get("description", ""),
-                    "input_schema": fn.get("parameters", {"type": "object", "properties": {}}),
-                })
+                anthropic_tools.append(
+                    {
+                        "name": fn["name"],
+                        "description": fn.get("description", ""),
+                        "input_schema": fn.get("parameters", {"type": "object", "properties": {}}),
+                    }
+                )
         return anthropic_tools
 
 
@@ -875,13 +956,14 @@ class OllamaAdapter(BaseProviderAdapter):
         for t in tools or []:
             fn = t.get("function") if isinstance(t, dict) else None
             if isinstance(fn, dict):
-                specs.append({
-                    "name": fn.get("name", ""),
-                    "description": (fn.get("description") or "")[:200],
-                    "parameters": fn.get("parameters") or {},
-                })
-        return cls._TEXT_TOOL_INSTRUCTION.format(
-            tool_specs=json.dumps(specs, ensure_ascii=False))
+                specs.append(
+                    {
+                        "name": fn.get("name", ""),
+                        "description": (fn.get("description") or "")[:200],
+                        "parameters": fn.get("parameters") or {},
+                    }
+                )
+        return cls._TEXT_TOOL_INSTRUCTION.format(tool_specs=json.dumps(specs, ensure_ascii=False))
 
     @classmethod
     def _inject_text_tools(cls, messages: List[Dict], tools: List[Dict]) -> List[Dict]:
@@ -913,16 +995,15 @@ class OllamaAdapter(BaseProviderAdapter):
                             args = json.loads(args)
                         except (ValueError, TypeError):
                             args = {}
-                    lines.append(json.dumps(
-                        {"tool_call": {"name": fn.get("name", ""),
-                                       "arguments": args or {}}},
-                        ensure_ascii=False))
+                    lines.append(
+                        json.dumps(
+                            {"tool_call": {"name": fn.get("name", ""), "arguments": args or {}}}, ensure_ascii=False
+                        )
+                    )
                 content = (m.get("content") or "").strip()
-                out.append({"role": "assistant",
-                            "content": (content + "\n" if content else "") + "\n".join(lines)})
+                out.append({"role": "assistant", "content": (content + "\n" if content else "") + "\n".join(lines)})
             elif role == "tool":
-                out.append({"role": "user",
-                            "content": f"[工具结果] {m.get('content', '')}"})
+                out.append({"role": "user", "content": f"[工具结果] {m.get('content', '')}"})
             else:
                 out.append(m)
         return out
@@ -956,19 +1037,20 @@ class OllamaAdapter(BaseProviderAdapter):
             if end < 0:
                 break
             try:
-                obj = json.loads(content[start:end + 1])
+                obj = json.loads(content[start : end + 1])
                 tc = obj.get("tool_call") or {}
                 name = tc.get("name", "")
                 if name:
-                    calls.append({
-                        "id": f"ollama_text_call_{len(calls)}_{name}",
-                        "type": "function",
-                        "function": {
-                            "name": name,
-                            "arguments": json.dumps(
-                                tc.get("arguments") or {}, ensure_ascii=False),
-                        },
-                    })
+                    calls.append(
+                        {
+                            "id": f"ollama_text_call_{len(calls)}_{name}",
+                            "type": "function",
+                            "function": {
+                                "name": name,
+                                "arguments": json.dumps(tc.get("arguments") or {}, ensure_ascii=False),
+                            },
+                        }
+                    )
             except (ValueError, TypeError):
                 pass
             i = end + 1 if end >= 0 else k + 11
@@ -1036,11 +1118,13 @@ class OllamaAdapter(BaseProviderAdapter):
                 args = json.dumps(args, ensure_ascii=False)
             elif not isinstance(args, str):
                 args = "{}"
-            out.append({
-                "id": tc.get("id") or f"ollama_call_{i}_{fn.get('name', '')}",
-                "type": "function",
-                "function": {"name": fn.get("name", ""), "arguments": args},
-            })
+            out.append(
+                {
+                    "id": tc.get("id") or f"ollama_call_{i}_{fn.get('name', '')}",
+                    "type": "function",
+                    "function": {"name": fn.get("name", ""), "arguments": args},
+                }
+            )
         return out or None
 
     @staticmethod
@@ -1048,15 +1132,14 @@ class OllamaAdapter(BaseProviderAdapter):
         """Ollama 对无工具模板的模型(如 gemma 系)回 400 'does not support tools'。"""
         try:
             if isinstance(exc, httpx.HTTPStatusError) and exc.response is not None:
-                return (exc.response.status_code == 400
-                        and "tool" in exc.response.text.lower())
+                return exc.response.status_code == 400 and "tool" in exc.response.text.lower()
         except Exception:  # noqa: BLE001
             pass
         return False
 
-    async def chat(self, messages, model, tools=None,
-                   temperature=0.7, max_tokens=4096,
-                   response_format=None, **kwargs) -> LLMResponse:
+    async def chat(
+        self, messages, model, tools=None, temperature=0.7, max_tokens=4096, response_format=None, **kwargs
+    ) -> LLMResponse:
         # 模型常驻不卸载(-1):Ollama 默认几分钟不用就卸出内存,下次请求整段
         # 冷加载——真机"等待窗口未响应/像冷启动"的来源。按请求带上,即使
         # ollama serve 是安装器自启的(拿不到我们 spawn 时的环境变量)也生效。
@@ -1102,8 +1185,12 @@ class OllamaAdapter(BaseProviderAdapter):
         # 不再吃一次 400 往返。
         if tools and model in type(self)._text_protocol_models:
             return await self._chat_text_protocol(
-                base=_base, messages=messages, model=model, tools=tools,
-                options=_options, keep_alive=_keep_alive,
+                base=_base,
+                messages=messages,
+                model=model,
+                tools=tools,
+                options=_options,
+                keep_alive=_keep_alive,
                 sink=kwargs.get("stream"),
             )
 
@@ -1114,22 +1201,31 @@ class OllamaAdapter(BaseProviderAdapter):
         if _sink is not None:
             try:
                 return await self._chat_streaming(
-                    base=_base, body=body, model=model, sink=_sink,
+                    base=_base,
+                    body=body,
+                    model=model,
+                    sink=_sink,
                 )
             except Exception as exc:  # noqa: BLE001
                 if self._is_tools_unsupported_error(exc) and "tools" in body:
                     # 模型无工具模板(gemma 系):切文本协议重试——工具清单注入
                     # 提示词、从文本解析 JSON 调用,gemma 也能真正调工具。
                     logger.info(
-                        "Ollama 模型 %s 不支持原生工具,切文本协议工具兜底", model,
+                        "Ollama 模型 %s 不支持原生工具,切文本协议工具兜底",
+                        model,
                     )
                     try:
                         _sink.reset()
                     except Exception:  # noqa: BLE001
                         pass
                     return await self._chat_text_protocol(
-                        base=_base, messages=messages, model=model, tools=tools,
-                        options=_options, keep_alive=_keep_alive, sink=_sink,
+                        base=_base,
+                        messages=messages,
+                        model=model,
+                        tools=tools,
+                        options=_options,
+                        keep_alive=_keep_alive,
+                        sink=_sink,
                     )
                 logger.info("Ollama 流式失败,退回非流式: %s", exc)
                 try:
@@ -1148,11 +1244,16 @@ class OllamaAdapter(BaseProviderAdapter):
             if not (self._is_tools_unsupported_error(exc) and "tools" in body):
                 raise
             logger.info(
-                "Ollama 模型 %s 不支持原生工具,切文本协议工具兜底", model,
+                "Ollama 模型 %s 不支持原生工具,切文本协议工具兜底",
+                model,
             )
             return await self._chat_text_protocol(
-                base=_base, messages=messages, model=model, tools=tools,
-                options=_options, keep_alive=_keep_alive,
+                base=_base,
+                messages=messages,
+                model=model,
+                tools=tools,
+                options=_options,
+                keep_alive=_keep_alive,
                 sink=kwargs.get("stream"),
             )
         latency = (time.monotonic() - t0) * 1000
@@ -1171,8 +1272,15 @@ class OllamaAdapter(BaseProviderAdapter):
         )
 
     async def _chat_text_protocol(
-        self, *, base, messages, model, tools,
-        options, keep_alive, sink=None,
+        self,
+        *,
+        base,
+        messages,
+        model,
+        tools,
+        options,
+        keep_alive,
+        sink=None,
     ) -> LLMResponse:
         """文本协议工具兜底:无工具模板模型(gemma 系)的完整工具调用通路。
 
@@ -1228,8 +1336,10 @@ class OllamaAdapter(BaseProviderAdapter):
         raw_tool_calls: List[Dict] = []
         final: Dict[str, Any] = {}
         async with client.stream(
-            "POST", f"{base}/api/chat",
-            headers={"Content-Type": "application/json"}, json=stream_body,
+            "POST",
+            f"{base}/api/chat",
+            headers={"Content-Type": "application/json"},
+            json=stream_body,
         ) as resp:
             if getattr(resp, "status_code", 200) >= 400:
                 # 让 chat() 的"模型不支持工具 → 去工具重试"能拿到响应体判因
@@ -1282,12 +1392,23 @@ _ADAPTER_BY_PROTOCOL: Dict[str, type] = {
 
 # 兼容:老代码/外部若按名取适配器类,仍可用(全部收敛到真实类,不再指向空壳)。
 ADAPTER_MAP = {
-    "openai": OpenAIAdapter, "anthropic": AnthropicAdapter, "google": OpenAIAdapter,
-    "xai": OpenAIAdapter, "meta": OpenAIAdapter, "mistral": OpenAIAdapter,
-    "deepseek": OpenAIAdapter, "qwen": OpenAIAdapter, "zhipu": OpenAIAdapter,
-    "minimax": OpenAIAdapter, "step": OpenAIAdapter, "mimo": OpenAIAdapter,
-    "moonshot": OpenAIAdapter, "perplexity": OpenAIAdapter, "groq": OpenAIAdapter,
-    "ollama": OllamaAdapter, "hf_local": OpenAIAdapter,
+    "openai": OpenAIAdapter,
+    "anthropic": AnthropicAdapter,
+    "google": OpenAIAdapter,
+    "xai": OpenAIAdapter,
+    "meta": OpenAIAdapter,
+    "mistral": OpenAIAdapter,
+    "deepseek": OpenAIAdapter,
+    "qwen": OpenAIAdapter,
+    "zhipu": OpenAIAdapter,
+    "minimax": OpenAIAdapter,
+    "step": OpenAIAdapter,
+    "mimo": OpenAIAdapter,
+    "moonshot": OpenAIAdapter,
+    "perplexity": OpenAIAdapter,
+    "groq": OpenAIAdapter,
+    "ollama": OllamaAdapter,
+    "hf_local": OpenAIAdapter,
 }
 
 # ───────────────────────────────────────────────────────────────────────────
@@ -1308,57 +1429,157 @@ ADAPTER_MAP = {
 #   extra      透传给 ProviderConfig 的其它非默认字段(multimodal / supports_tools /
 #              supports_vision / max_tokens 等)
 PROVIDER_REGISTRY: List[Dict[str, Any]] = [
-    {"name": "openai", "env_key": "OPENAI_API_KEY",
-     "base_url": "https://api.openai.com/v1", "base_env": "OPENAI_API_BASE", "base_key": "openai_base",
-     "models": ["gpt-5.6", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5", "gpt-4o"],
-     "default_model": "gpt-5.6", "cost_in": 0.005, "cost_out": 0.015, "extra": {"multimodal": True}},
-    {"name": "anthropic", "env_key": "ANTHROPIC_API_KEY", "protocol": "anthropic",
-     "base_url": "https://api.anthropic.com/v1",
-     "models": ["claude-opus-4-8-20250529", "claude-sonnet-5", "claude-haiku-4-5-20251001"],
-     "default_model": "claude-sonnet-5", "cost_in": 0.003, "cost_out": 0.015, "extra": {"multimodal": True}},
-    {"name": "google", "env_key": "GOOGLE_API_KEY", "alt_env": ["GEMINI_API_KEY"],
-     "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
-     "models": ["gemini-3.5-flash", "gemini-3.5-pro", "gemini-2.5-pro"],
-     "default_model": "gemini-3.5-flash", "cost_in": 0.00125, "cost_out": 0.005, "extra": {"multimodal": True}},
-    {"name": "xai", "env_key": "XAI_API_KEY", "base_url": "https://api.x.ai/v1",
-     "models": ["grok-4.5", "grok-4.3"], "default_model": "grok-4.5",
-     "cost_in": 0.005, "cost_out": 0.015, "extra": {"multimodal": True}},
-    {"name": "meta", "env_key": "META_API_KEY", "base_url": "https://api.meta.ai/v1",
-     "models": ["muse-spark-1.1"], "default_model": "muse-spark-1.1",
-     "cost_in": 0.00125, "cost_out": 0.00425,
-     "extra": {"multimodal": True, "supports_vision": True, "max_tokens": 8192}},
-    {"name": "mistral", "env_key": "MISTRAL_API_KEY", "base_url": "https://api.mistral.ai/v1",
-     "models": ["mistral-large-3", "mistral-medium-3", "mistral-large-2"],
-     "default_model": "mistral-large-3", "cost_in": 0.002, "cost_out": 0.006, "extra": {"multimodal": True}},
-    {"name": "deepseek", "env_key": "DEEPSEEK_API_KEY", "base_url": "https://api.deepseek.com/v1",
-     "models": ["deepseek-v4-pro", "deepseek-v4-flash", "deepseek-chat", "deepseek-reasoner"],
-     "default_model": "deepseek-v4-pro", "cost_in": 0.000025, "cost_out": 0.00006},
-    {"name": "qwen", "env_key": "QWEN_API_KEY", "alt_env": ["DASHSCOPE_API_KEY"],
-     "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-     "models": ["qwen3.7-max", "qwen3.7-coder", "qwen3-235b-a22b"],
-     "default_model": "qwen3.7-max", "cost_in": 0.0025, "cost_out": 0.0075, "extra": {"multimodal": True}},
-    {"name": "zhipu", "env_key": "ZHIPU_API_KEY", "base_url": "https://open.bigmodel.cn/api/paas/v4",
-     "models": ["glm-5.1", "glm-5.1-flash", "glm-4-plus"],
-     "default_model": "glm-5.1", "cost_in": 0.001, "cost_out": 0.001, "extra": {"multimodal": True}},
-    {"name": "minimax", "env_key": "MINIMAX_API_KEY", "base_url": "https://api.minimax.chat/v1",
-     "models": ["minimax-m2.7", "minimax-m2.5", "minimax-text-01"],
-     "default_model": "minimax-m2.7", "cost_in": 0.001, "cost_out": 0.004},
-    {"name": "step", "env_key": "STEP_API_KEY", "base_url": "https://api.stepfun.com/v1",
-     "models": ["step-3.7-flash", "step-3.7-turbo", "step-3.7-mini"],
-     "default_model": "step-3.7-flash", "cost_in": 0.001, "cost_out": 0.004, "extra": {"multimodal": True}},
-    {"name": "mimo", "env_key": "MIMO_API_KEY", "base_url": "https://api.xiaomimimo.com/v1",
-     "models": ["mimo-v2.5-pro", "mimo-v2.5-standard", "mimo-v2.5-lite"],
-     "default_model": "mimo-v2.5-pro", "cost_in": 0.00002, "cost_out": 0.00008},
-    {"name": "moonshot", "env_key": "MOONSHOT_API_KEY", "base_url": "https://api.moonshot.cn/v1",
-     "models": ["kimi-k2.6", "kimi-k2.5", "moonshot-v1-128k"],
-     "default_model": "kimi-k2.6", "cost_in": 0.002, "cost_out": 0.002},
-    {"name": "perplexity", "env_key": "PERPLEXITY_API_KEY", "base_url": "https://api.perplexity.ai",
-     "models": ["sonar-pro", "sonar-deep-research", "sonar-reasoning-pro", "sonar"],
-     "default_model": "sonar-pro", "cost_in": 0.001, "cost_out": 0.001,
-     "extra": {"supports_tools": False}},
-    {"name": "groq", "env_key": "GROQ_API_KEY", "base_url": "https://api.groq.com/openai/v1",
-     "models": ["llama-3.3-70b-versatile"], "default_model": "llama-3.3-70b-versatile",
-     "cost_in": 0.00059, "cost_out": 0.00079, "extra": {"supports_tools": True}},
+    {
+        "name": "openai",
+        "env_key": "OPENAI_API_KEY",
+        "base_url": "https://api.openai.com/v1",
+        "base_env": "OPENAI_API_BASE",
+        "base_key": "openai_base",
+        "models": ["gpt-5.6", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5", "gpt-4o"],
+        "default_model": "gpt-5.6",
+        "cost_in": 0.005,
+        "cost_out": 0.015,
+        "extra": {"multimodal": True},
+    },
+    {
+        "name": "anthropic",
+        "env_key": "ANTHROPIC_API_KEY",
+        "protocol": "anthropic",
+        "base_url": "https://api.anthropic.com/v1",
+        "models": ["claude-opus-4-8-20250529", "claude-sonnet-5", "claude-haiku-4-5-20251001"],
+        "default_model": "claude-sonnet-5",
+        "cost_in": 0.003,
+        "cost_out": 0.015,
+        "extra": {"multimodal": True},
+    },
+    {
+        "name": "google",
+        "env_key": "GOOGLE_API_KEY",
+        "alt_env": ["GEMINI_API_KEY"],
+        "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
+        "models": ["gemini-3.5-flash", "gemini-3.5-pro", "gemini-2.5-pro"],
+        "default_model": "gemini-3.5-flash",
+        "cost_in": 0.00125,
+        "cost_out": 0.005,
+        "extra": {"multimodal": True},
+    },
+    {
+        "name": "xai",
+        "env_key": "XAI_API_KEY",
+        "base_url": "https://api.x.ai/v1",
+        "models": ["grok-4.5", "grok-4.3"],
+        "default_model": "grok-4.5",
+        "cost_in": 0.005,
+        "cost_out": 0.015,
+        "extra": {"multimodal": True},
+    },
+    {
+        "name": "meta",
+        "env_key": "META_API_KEY",
+        "base_url": "https://api.meta.ai/v1",
+        "models": ["muse-spark-1.1"],
+        "default_model": "muse-spark-1.1",
+        "cost_in": 0.00125,
+        "cost_out": 0.00425,
+        "extra": {"multimodal": True, "supports_vision": True, "max_tokens": 8192},
+    },
+    {
+        "name": "mistral",
+        "env_key": "MISTRAL_API_KEY",
+        "base_url": "https://api.mistral.ai/v1",
+        "models": ["mistral-large-3", "mistral-medium-3", "mistral-large-2"],
+        "default_model": "mistral-large-3",
+        "cost_in": 0.002,
+        "cost_out": 0.006,
+        "extra": {"multimodal": True},
+    },
+    {
+        "name": "deepseek",
+        "env_key": "DEEPSEEK_API_KEY",
+        "base_url": "https://api.deepseek.com/v1",
+        "models": ["deepseek-v4-pro", "deepseek-v4-flash", "deepseek-chat", "deepseek-reasoner"],
+        "default_model": "deepseek-v4-pro",
+        "cost_in": 0.000025,
+        "cost_out": 0.00006,
+    },
+    {
+        "name": "qwen",
+        "env_key": "QWEN_API_KEY",
+        "alt_env": ["DASHSCOPE_API_KEY"],
+        "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "models": ["qwen3.7-max", "qwen3.7-coder", "qwen3-235b-a22b"],
+        "default_model": "qwen3.7-max",
+        "cost_in": 0.0025,
+        "cost_out": 0.0075,
+        "extra": {"multimodal": True},
+    },
+    {
+        "name": "zhipu",
+        "env_key": "ZHIPU_API_KEY",
+        "base_url": "https://open.bigmodel.cn/api/paas/v4",
+        "models": ["glm-5.1", "glm-5.1-flash", "glm-4-plus"],
+        "default_model": "glm-5.1",
+        "cost_in": 0.001,
+        "cost_out": 0.001,
+        "extra": {"multimodal": True},
+    },
+    {
+        "name": "minimax",
+        "env_key": "MINIMAX_API_KEY",
+        "base_url": "https://api.minimax.chat/v1",
+        "models": ["minimax-m2.7", "minimax-m2.5", "minimax-text-01"],
+        "default_model": "minimax-m2.7",
+        "cost_in": 0.001,
+        "cost_out": 0.004,
+    },
+    {
+        "name": "step",
+        "env_key": "STEP_API_KEY",
+        "base_url": "https://api.stepfun.com/v1",
+        "models": ["step-3.7-flash", "step-3.7-turbo", "step-3.7-mini"],
+        "default_model": "step-3.7-flash",
+        "cost_in": 0.001,
+        "cost_out": 0.004,
+        "extra": {"multimodal": True},
+    },
+    {
+        "name": "mimo",
+        "env_key": "MIMO_API_KEY",
+        "base_url": "https://api.xiaomimimo.com/v1",
+        "models": ["mimo-v2.5-pro", "mimo-v2.5-standard", "mimo-v2.5-lite"],
+        "default_model": "mimo-v2.5-pro",
+        "cost_in": 0.00002,
+        "cost_out": 0.00008,
+    },
+    {
+        "name": "moonshot",
+        "env_key": "MOONSHOT_API_KEY",
+        "base_url": "https://api.moonshot.cn/v1",
+        "models": ["kimi-k2.6", "kimi-k2.5", "moonshot-v1-128k"],
+        "default_model": "kimi-k2.6",
+        "cost_in": 0.002,
+        "cost_out": 0.002,
+    },
+    {
+        "name": "perplexity",
+        "env_key": "PERPLEXITY_API_KEY",
+        "base_url": "https://api.perplexity.ai",
+        "models": ["sonar-pro", "sonar-deep-research", "sonar-reasoning-pro", "sonar"],
+        "default_model": "sonar-pro",
+        "cost_in": 0.001,
+        "cost_out": 0.001,
+        "extra": {"supports_tools": False},
+    },
+    {
+        "name": "groq",
+        "env_key": "GROQ_API_KEY",
+        "base_url": "https://api.groq.com/openai/v1",
+        "models": ["llama-3.3-70b-versatile"],
+        "default_model": "llama-3.3-70b-versatile",
+        "cost_in": 0.00059,
+        "cost_out": 0.00079,
+        "extra": {"supports_tools": True},
+    },
 ]
 
 
@@ -1417,6 +1638,7 @@ class MultiLLMRouter:
         # 1. Dashboard 配置（最高优先级）— 通过 UnifiedConfig 获取
         try:
             from core.unified_config import config as _cfg
+
             # Dashboard 将 API keys 存储在 llm.providers.<name>.api_key 路径
             val = _cfg.get(f"llm.providers.{key_name}.api_key", "")
             if not val:
@@ -1432,6 +1654,7 @@ class MultiLLMRouter:
         # 2. CredentialVault
         try:
             from core.credential_vault import get_vault
+
             val = get_vault().get_credential(key_name, actor="llm_router")
             if val:
                 return val
@@ -1466,6 +1689,7 @@ class MultiLLMRouter:
         """探测 hf_local 内部适配服务是否真的在监听(见 _discover_providers)。"""
         try:
             import httpx
+
             root = base_url.split("/v1/")[0]
             httpx.get(root, timeout=1.0)
             return True
@@ -1503,9 +1727,13 @@ class MultiLLMRouter:
                 if override:
                     base = override
             cfg = ProviderConfig(
-                name=name, api_key=key, base_url=base,
-                models=list(spec["models"]), default_model=spec["default_model"],
-                cost_per_1k_input=spec["cost_in"], cost_per_1k_output=spec["cost_out"],
+                name=name,
+                api_key=key,
+                base_url=base,
+                models=list(spec["models"]),
+                default_model=spec["default_model"],
+                cost_per_1k_input=spec["cost_in"],
+                cost_per_1k_output=spec["cost_out"],
                 env_key=spec["env_key"],
                 **spec.get("extra", {}),
             )
@@ -1528,6 +1756,7 @@ class MultiLLMRouter:
             # 尝试默认地址
             try:
                 import httpx
+
                 r = httpx.get(f"{ollama_default_url}/api/tags", timeout=2.0)
                 if r.status_code == 200:
                     ollama_url = ollama_default_url
@@ -1538,6 +1767,7 @@ class MultiLLMRouter:
             detected_models = ["gemma4:12b", "gemma4:e4b"]
             try:
                 import httpx
+
                 r = httpx.get(f"{ollama_url}/api/tags", timeout=3.0)
                 if r.status_code == 200:
                     detected_models = [m["name"] for m in r.json().get("models", [])]
@@ -1561,16 +1791,19 @@ class MultiLLMRouter:
             _default_model = _main_brain or (detected_models[0] if detected_models else "gemma4:e2b")
 
             cfg = ProviderConfig(
-                name="ollama", api_key="", base_url=ollama_url,
+                name="ollama",
+                api_key="",
+                base_url=ollama_url,
                 models=detected_models,
                 default_model=_default_model,
-                supports_tools=True, supports_json_mode=True,
+                supports_tools=True,
+                supports_json_mode=True,
                 multimodal=True,  # PR-HA: Ollama now marked multimodal-capable
                 env_key="OLLAMA_URL",
                 # PR-HA: 新增字段
                 source_type="local",
                 hardware_tier="gpu_full",
-                supports_vision=True,   # llava / bakllava via Ollama
+                supports_vision=True,  # llava / bakllava via Ollama
                 supports_audio=False,
                 kv_cache_enabled=True,
                 prefix_cache_enabled=False,
@@ -1582,8 +1815,8 @@ class MultiLLMRouter:
         # HuggingFace Local Models (as independent provider)
         try:
             from core.huggingface_model_manager import (
-                get_hf_model_manager,
                 ModelFamily,
+                get_hf_model_manager,
             )
 
             hf_mgr = get_hf_model_manager()
@@ -1613,13 +1846,12 @@ class MultiLLMRouter:
                 )
                 self.providers["hf_local"] = cfg
                 self.adapters["hf_local"] = OpenAIAdapter(cfg)
-                logger.info(
-                    "HF 本地模型提供商已注册: %d 个模型", len(hf_model_ids)
-                )
+                logger.info("HF 本地模型提供商已注册: %d 个模型", len(hf_model_ids))
             elif local_llm_models:
                 logger.debug(
                     "跳过 hf_local 注册:内部适配服务(%s)未运行,避免偏好列表命中它时"
-                    "连接失败(而非正常跳到下一个 provider)", hf_base_url,
+                    "连接失败(而非正常跳到下一个 provider)",
+                    hf_base_url,
                 )
         except Exception as exc:
             logger.debug("HF 本地模型提供商注册失败 (非致命): %s", exc)
@@ -1634,7 +1866,8 @@ class MultiLLMRouter:
         if oneapi_key and not oneapi_key.startswith("your-") and oneapi_url:
             models = self._discover_oneapi_models(oneapi_url, oneapi_key)
             cfg = ProviderConfig(
-                name="oneapi", api_key=oneapi_key,
+                name="oneapi",
+                api_key=oneapi_key,
                 base_url=f"{oneapi_url}/v1",
                 models=models,
                 default_model=models[0] if models else "gpt-4o",
@@ -1654,9 +1887,7 @@ class MultiLLMRouter:
 
         # 1. 读取 config/api_config.json 中预配置的模型
         try:
-            config_path = os.path.join(
-                os.path.dirname(os.path.dirname(__file__)), "config", "api_config.json"
-            )
+            config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "config", "api_config.json")
             with open(config_path, "r", encoding="utf-8") as f:
                 api_cfg = json.load(f)
             configured = api_cfg.get("oneapi", {}).get("models", [])
@@ -1691,7 +1922,9 @@ class MultiLLMRouter:
     # ───────── 复杂度评估 ─────────
 
     def _compute_complexity_vector(
-        self, messages: List[Dict], tools: Optional[List[Dict]] = None,
+        self,
+        messages: List[Dict],
+        tools: Optional[List[Dict]] = None,
     ):
         """量化评估任务复杂度，返回 ComplexityVector (Pydantic model)
 
@@ -1716,12 +1949,50 @@ class MultiLLMRouter:
 
         # ── 维度 2: 逻辑深度 (weight=0.25) ──
         logic_keywords = [
-            "如果", "那么", "否则", "但是", "然而", "因为", "所以", "首先", "其次", "最后",
-            "假设", "前提", "推导", "证明", "递归", "循环", "回溯", "遍历", "迭代",
-            "条件", "判断", "分支", "嵌套", "复杂", "步骤", "流程", "逻辑",
-            "if", "then", "else", "while", "for", "because", "therefore",
-            "first", "second", "finally", "assume", "prove", "recursive",
-            "algorithm", "iterate", "traverse", "backtrack",
+            "如果",
+            "那么",
+            "否则",
+            "但是",
+            "然而",
+            "因为",
+            "所以",
+            "首先",
+            "其次",
+            "最后",
+            "假设",
+            "前提",
+            "推导",
+            "证明",
+            "递归",
+            "循环",
+            "回溯",
+            "遍历",
+            "迭代",
+            "条件",
+            "判断",
+            "分支",
+            "嵌套",
+            "复杂",
+            "步骤",
+            "流程",
+            "逻辑",
+            "if",
+            "then",
+            "else",
+            "while",
+            "for",
+            "because",
+            "therefore",
+            "first",
+            "second",
+            "finally",
+            "assume",
+            "prove",
+            "recursive",
+            "algorithm",
+            "iterate",
+            "traverse",
+            "backtrack",
         ]
         logic_hits = sum(1 for kw in logic_keywords if kw in text_lower)
         dim_logic = min(1.0, logic_hits / 6)
@@ -1729,38 +2000,131 @@ class MultiLLMRouter:
         # ── 维度 3: 领域专业度 (weight=0.20) ──
         domain_keywords = [
             # 代码 (含中文编程术语)
-            "def ", "class ", "import ", "function", "async", "await", "return",
-            "try:", "except", "raise", "lambda", "yield",
-            "python", "java", "rust", "typescript", "javascript",
-            "实现", "编程", "代码", "函数", "接口", "模块", "编译", "调试",
-            "算法", "数据结构", "排序", "求解", "优化", "注解", "类型",
-            "测试", "单元测试", "集成测试",
+            "def ",
+            "class ",
+            "import ",
+            "function",
+            "async",
+            "await",
+            "return",
+            "try:",
+            "except",
+            "raise",
+            "lambda",
+            "yield",
+            "python",
+            "java",
+            "rust",
+            "typescript",
+            "javascript",
+            "实现",
+            "编程",
+            "代码",
+            "函数",
+            "接口",
+            "模块",
+            "编译",
+            "调试",
+            "算法",
+            "数据结构",
+            "排序",
+            "求解",
+            "优化",
+            "注解",
+            "类型",
+            "测试",
+            "单元测试",
+            "集成测试",
             # 数学
-            "∑", "∫", "∂", "矩阵", "向量", "微分", "积分", "概率",
-            "matrix", "vector", "derivative", "integral", "probability",
+            "∑",
+            "∫",
+            "∂",
+            "矩阵",
+            "向量",
+            "微分",
+            "积分",
+            "概率",
+            "matrix",
+            "vector",
+            "derivative",
+            "integral",
+            "probability",
             # 专业
-            "API", "SDK", "协议", "架构", "数据库", "索引", "并发", "事务",
-            "database", "index", "concurrent", "transaction",
-            "机器学习", "深度学习", "神经网络", "模型训练",
+            "API",
+            "SDK",
+            "协议",
+            "架构",
+            "数据库",
+            "索引",
+            "并发",
+            "事务",
+            "database",
+            "index",
+            "concurrent",
+            "transaction",
+            "机器学习",
+            "深度学习",
+            "神经网络",
+            "模型训练",
         ]
         domain_hits = sum(1 for kw in domain_keywords if kw in full_text.lower())
         dim_domain = min(1.0, domain_hits / 5)
 
         # ── 维度 4: 精度要求 (weight=0.20) ──
         precision_keywords = [
-            "精确", "准确", "正确", "严格", "必须", "确保", "验证", "要求",
-            "支持", "完整", "兼容", "标准", "规范",
-            "exact", "precise", "correct", "strict", "must", "verify",
-            "bug", "错误", "修复", "fix", "debug", "require",
+            "精确",
+            "准确",
+            "正确",
+            "严格",
+            "必须",
+            "确保",
+            "验证",
+            "要求",
+            "支持",
+            "完整",
+            "兼容",
+            "标准",
+            "规范",
+            "exact",
+            "precise",
+            "correct",
+            "strict",
+            "must",
+            "verify",
+            "bug",
+            "错误",
+            "修复",
+            "fix",
+            "debug",
+            "require",
         ]
         precision_hits = sum(1 for kw in precision_keywords if kw in text_lower)
         dim_precision = min(1.0, precision_hits / 4)
 
         # ── 维度 5: 工具需求 (weight=0.20) ──
         tool_keywords = [
-            "文件", "目录", "搜索", "执行", "运行", "安装", "设备", "屏幕",
-            "file", "directory", "search", "execute", "run", "install", "device", "screen",
-            "打开", "关闭", "截图", "发送", "下载", "上传",
+            "文件",
+            "目录",
+            "搜索",
+            "执行",
+            "运行",
+            "安装",
+            "设备",
+            "屏幕",
+            "file",
+            "directory",
+            "search",
+            "execute",
+            "run",
+            "install",
+            "device",
+            "screen",
+            "打开",
+            "关闭",
+            "截图",
+            "发送",
+            "下载",
+            "上传",
         ]
         tool_text_hits = sum(1 for kw in tool_keywords if kw in text_lower)
         has_tools = 1.0 if tools and len(tools) > 0 else 0.0
@@ -1776,7 +2140,9 @@ class MultiLLMRouter:
         )
 
     def _compute_complexity_score(
-        self, messages: List[Dict], tools: Optional[List[Dict]] = None,
+        self,
+        messages: List[Dict],
+        tools: Optional[List[Dict]] = None,
     ) -> float:
         """兼容接口 — 返回加权分数 (float 0.0-1.0)"""
         return self._compute_complexity_vector(messages, tools).weighted_score
@@ -1801,34 +2167,77 @@ class MultiLLMRouter:
         # 加权关键词 → 任务类型 (keyword, weight)
         weighted_patterns: Dict[TaskType, List[tuple]] = {
             TaskType.CODING: [
-                ("代码", 2), ("编程", 2), ("函数", 2), ("类", 1), ("bug", 3),
-                ("code", 3), ("implement", 3), ("debug", 3), ("function", 2),
-                ("class", 1), ("api", 2), ("脚本", 2), ("script", 2),
+                ("代码", 2),
+                ("编程", 2),
+                ("函数", 2),
+                ("类", 1),
+                ("bug", 3),
+                ("code", 3),
+                ("implement", 3),
+                ("debug", 3),
+                ("function", 2),
+                ("class", 1),
+                ("api", 2),
+                ("脚本", 2),
+                ("script", 2),
             ],
             TaskType.REASONING: [
-                ("为什么", 3), ("推理", 3), ("解释", 2), ("分析原因", 3),
-                ("why", 3), ("reason", 3), ("explain", 2), ("思考", 2),
-                ("逻辑", 3), ("论证", 2),
+                ("为什么", 3),
+                ("推理", 3),
+                ("解释", 2),
+                ("分析原因", 3),
+                ("why", 3),
+                ("reason", 3),
+                ("explain", 2),
+                ("思考", 2),
+                ("逻辑", 3),
+                ("论证", 2),
             ],
             TaskType.PLANNING: [
-                ("计划", 3), ("规划", 3), ("步骤", 2), ("方案", 2),
-                ("plan", 3), ("strategy", 3), ("分解", 2), ("目标", 1),
-                ("路线图", 3), ("roadmap", 3),
+                ("计划", 3),
+                ("规划", 3),
+                ("步骤", 2),
+                ("方案", 2),
+                ("plan", 3),
+                ("strategy", 3),
+                ("分解", 2),
+                ("目标", 1),
+                ("路线图", 3),
+                ("roadmap", 3),
             ],
             TaskType.CREATIVE: [
-                ("创作", 3), ("写", 1), ("故事", 3), ("诗", 3),
-                ("write", 1), ("create", 2), ("creative", 3),
-                ("设计", 2), ("文章", 2), ("作文", 3),
+                ("创作", 3),
+                ("写", 1),
+                ("故事", 3),
+                ("诗", 3),
+                ("write", 1),
+                ("create", 2),
+                ("creative", 3),
+                ("设计", 2),
+                ("文章", 2),
+                ("作文", 3),
             ],
             TaskType.ANALYSIS: [
-                ("分析", 3), ("数据", 2), ("报告", 2), ("统计", 3),
-                ("analyze", 3), ("data", 2), ("report", 2),
-                ("评估", 2), ("比较", 2),
+                ("分析", 3),
+                ("数据", 2),
+                ("报告", 2),
+                ("统计", 3),
+                ("analyze", 3),
+                ("data", 2),
+                ("report", 2),
+                ("评估", 2),
+                ("比较", 2),
             ],
             TaskType.AGENT_CONTROL: [
-                ("agent", 3), ("执行", 1), ("控制", 2), ("设备", 2),
-                ("节点", 2), ("device", 3), ("node", 2),
-                ("命令", 2), ("command", 2),
+                ("agent", 3),
+                ("执行", 1),
+                ("控制", 2),
+                ("设备", 2),
+                ("节点", 2),
+                ("device", 3),
+                ("node", 2),
+                ("命令", 2),
+                ("command", 2),
             ],
         }
 
@@ -1845,9 +2254,7 @@ class MultiLLMRouter:
 
         return TaskType.GENERAL
 
-    def select_model_by_complexity(
-        self, provider_name: str, task_type: TaskType, complexity: float
-    ) -> str:
+    def select_model_by_complexity(self, provider_name: str, task_type: TaskType, complexity: float) -> str:
         """根据复杂度选择模型 — 简单任务用轻量模型，复杂任务用强模型"""
         provider_models = PROVIDER_MODEL_MAP.get(provider_name, {})
         default = self.providers[provider_name].default_model
@@ -1871,9 +2278,9 @@ class MultiLLMRouter:
             heavy_model = provider_models.get(TaskType.REASONING, default)
             return heavy_model
 
-    def route(self, task_type: TaskType,
-              preferred_provider: Optional[str] = None,
-              complexity_score: float = 0.5) -> RoutingDecision:
+    def route(
+        self, task_type: TaskType, preferred_provider: Optional[str] = None, complexity_score: float = 0.5
+    ) -> RoutingDecision:
         """
         根据任务类型 + 复杂度评分做出路由决策
 
@@ -1896,13 +2303,13 @@ class MultiLLMRouter:
                 if ollama_prov.is_available():
                     model = self.select_model_by_complexity("ollama", task_type, complexity_score)
                     return RoutingDecision(
-                        provider="ollama", model=model,
+                        provider="ollama",
+                        model=model,
                         reason=f"本地主脑优先: Ollama 可用，任务类型 [{task_type.value}] 复杂度 {complexity_score:.2f}",
                         alternatives=[
                             f"{name}:{self.select_model_by_complexity(name, task_type, complexity_score)}"
                             for name in TASK_ROUTING_PREFERENCES.get(task_type, [])
-                            if name in self.providers and name != "ollama"
-                            and self.providers[name].is_available()
+                            if name in self.providers and name != "ollama" and self.providers[name].is_available()
                         ],
                     )
             # 检查 HF 本地模型是否可用
@@ -1913,24 +2320,23 @@ class MultiLLMRouter:
                     if not model or model not in hf_prov.models:
                         model = hf_prov.default_model or hf_prov.models[0]
                     return RoutingDecision(
-                        provider="hf_local", model=model,
+                        provider="hf_local",
+                        model=model,
                         reason=f"本地主脑优先: HuggingFace 本地模型 [{model}] 可用，任务类型 [{task_type.value}] 复杂度 {complexity_score:.2f}",
                         alternatives=[
                             f"{name}:{self.select_model_by_complexity(name, task_type, complexity_score)}"
                             for name in TASK_ROUTING_PREFERENCES.get(task_type, [])
-                            if name in self.providers and name != "hf_local"
-                            and self.providers[name].is_available()
+                            if name in self.providers and name != "hf_local" and self.providers[name].is_available()
                         ],
                     )
 
         if preferred_provider and preferred_provider in self.providers:
             prov = self.providers[preferred_provider]
             if prov.is_available():
-                model = self.select_model_by_complexity(
-                    preferred_provider, task_type, complexity_score
-                )
+                model = self.select_model_by_complexity(preferred_provider, task_type, complexity_score)
                 return RoutingDecision(
-                    provider=preferred_provider, model=model,
+                    provider=preferred_provider,
+                    model=model,
                     reason=f"用户指定提供商: {preferred_provider} (复杂度: {complexity_score:.2f})",
                 )
 
@@ -1949,15 +2355,14 @@ class MultiLLMRouter:
             if provider_name not in self.providers:
                 continue
             prov = self.providers[provider_name]
-            if (not prov.is_available()):
+            if not prov.is_available():
                 continue
 
-            model = self.select_model_by_complexity(
-                provider_name, task_type, complexity_score
-            )
+            model = self.select_model_by_complexity(provider_name, task_type, complexity_score)
             if not alternatives:
                 selected = RoutingDecision(
-                    provider=provider_name, model=model,
+                    provider=provider_name,
+                    model=model,
                     reason=f"任务类型 [{task_type.value}] 复杂度 {complexity_score:.2f}",
                 )
             alternatives.append(f"{provider_name}:{model}")
@@ -1970,14 +2375,16 @@ class MultiLLMRouter:
         for name, prov in self.providers.items():
             if prov.is_available():
                 return RoutingDecision(
-                    provider=name, model=prov.default_model,
+                    provider=name,
+                    model=prov.default_model,
                     reason=f"Fallback: 唯一可用提供商 {name}",
                 )
 
         # 无可用提供商 — 返回指向 none 的降级路由决策
         logger.error("没有可用的 LLM 提供商")
         return RoutingDecision(
-            provider="none", model="none",
+            provider="none",
+            model="none",
             reason="无可用提供商，请在 Dashboard 配置 API Key",
         )
 
@@ -2010,8 +2417,7 @@ class MultiLLMRouter:
 
         # ── 候选 = 已填 key + 健康 + 有 adapter（没填的天然不在 providers）──
         candidates = [
-            name for name, cfg in self.providers.items()
-            if cfg.is_available() and self.adapters.get(name) is not None
+            name for name, cfg in self.providers.items() if cfg.is_available() and self.adapters.get(name) is not None
         ]
         # ── 模态硬过滤 ──
         if has_multimodal:
@@ -2033,16 +2439,12 @@ class MultiLLMRouter:
 
         task_pref = TASK_ROUTING_PREFERENCES.get(task_type, [])
         # 成本/延迟归一化基准（避免量纲压过质量）
-        max_cost = max(
-            (self.providers[n].cost_per_1k_output for n in candidates), default=0.0
-        ) or 1.0
-        max_lat = max(
-            (self.providers[n].latency_avg_ms for n in candidates), default=0.0
-        ) or 1.0
+        max_cost = max((self.providers[n].cost_per_1k_output for n in candidates), default=0.0) or 1.0
+        max_lat = max((self.providers[n].latency_avg_ms for n in candidates), default=0.0) or 1.0
 
         def _score(name: str) -> float:
             cfg = self.providers[name]
-            quality = _provider_quality_tier(name)             # 1..3
+            quality = _provider_quality_tier(name)  # 1..3
             # 任务相关度：在该任务偏好表里 = 更贴合
             task_fit = 1.0 if name in task_pref else 0.6
             # 主：质量 × (0.5+复杂度) —— 越难越看重质量
@@ -2066,7 +2468,8 @@ class MultiLLMRouter:
                 self.providers[best].models[0] if self.providers[best].models else model
             )
         return RoutingDecision(
-            provider=best, model=model,
+            provider=best,
+            model=model,
             reason=(
                 f"fit-based: {best}:{model} quality={_provider_quality_tier(best)} "
                 f"task={task_type.value} complexity={complexity_score:.2f} "
@@ -2096,9 +2499,7 @@ class MultiLLMRouter:
         Returns:
             RoutingDecision(provider, model, reason)；无可用提供商时 provider="none"。
         """
-        hint = ROLE_BRAIN_HINTS.get(
-            role, {"prefer_local": True, "task_type": TaskType.GENERAL, "min_complexity": 0.0}
-        )
+        hint = ROLE_BRAIN_HINTS.get(role, {"prefer_local": True, "task_type": TaskType.GENERAL, "min_complexity": 0.0})
         eff_task = task_type or hint["task_type"]
         # 重角色用 max(任务复杂度, 角色最低复杂度) 确保选到足够强的模型
         eff_complexity = max(complexity_score, hint.get("min_complexity", 0.0))
@@ -2109,9 +2510,7 @@ class MultiLLMRouter:
         #   - 重角色(critic/reviewer...) → fit-based 质量优先。
         def _avail(name: str) -> bool:
             return (
-                name in self.providers
-                and self.providers[name].is_available()
-                and self.adapters.get(name) is not None
+                name in self.providers and self.providers[name].is_available() and self.adapters.get(name) is not None
             )
 
         if hint["prefer_local"]:
@@ -2123,7 +2522,8 @@ class MultiLLMRouter:
                             self.providers[local].models[0] if self.providers[local].models else model
                         )
                     return RoutingDecision(
-                        provider=local, model=model,
+                        provider=local,
+                        model=model,
                         reason=f"角色[{role}] 轻角色(本地小模型优先): {local}:{model} task={eff_task.value}",
                     )
 
@@ -2138,8 +2538,9 @@ class MultiLLMRouter:
 
     # ───────── 本地主脑优先路由 ─────────
 
-    async def route_local_brain_first(self, task_type: TaskType, messages: List[Dict],
-                                      has_multimodal: bool = False) -> RoutingDecision:
+    async def route_local_brain_first(
+        self, task_type: TaskType, messages: List[Dict], has_multimodal: bool = False
+    ) -> RoutingDecision:
         """本地主脑优先路由
 
         路由策略：
@@ -2170,8 +2571,7 @@ class MultiLLMRouter:
                 cloud_fallbacks = [
                     f"{name}:{self.select_model_by_complexity(name, task_type, complexity)}"
                     for name in TASK_ROUTING_PREFERENCES.get(task_type, [])
-                    if name in self.providers and name != "ollama"
-                    and self.providers[name].is_available()
+                    if name in self.providers and name != "ollama" and self.providers[name].is_available()
                 ]
                 return RoutingDecision(
                     provider="ollama",
@@ -2194,8 +2594,7 @@ class MultiLLMRouter:
                 cloud_fallbacks = [
                     f"{name}:{self.select_model_by_complexity(name, task_type, complexity)}"
                     for name in TASK_ROUTING_PREFERENCES.get(task_type, [])
-                    if name in self.providers and name != "hf_local"
-                    and self.providers[name].is_available()
+                    if name in self.providers and name != "hf_local" and self.providers[name].is_available()
                 ]
                 return RoutingDecision(
                     provider="hf_local",
@@ -2225,10 +2624,7 @@ class MultiLLMRouter:
         # 明确告警（而非静默回落）：本地主脑预期可用却未就绪时，提示用户检查
         # Ollama / 模型 tag（最常见是模型未 pull 或 tag 名不对），便于排查
         # "看着配了本地原生多模态、实际一直走云端" 的情况。
-        _local_present = any(
-            p in self.providers and self.providers[p].is_available()
-            for p in ("ollama", "hf_local")
-        )
+        _local_present = any(p in self.providers and self.providers[p].is_available() for p in ("ollama", "hf_local"))
         if not _local_present:
             logger.warning(
                 "LOCAL-BRAIN-FIRST: 本地主脑不可用(ollama/hf_local 未就绪)，本次回落云端。"
@@ -2295,7 +2691,7 @@ class MultiLLMRouter:
         # ── Tier 1: native multimodal-capable providers ──────────────────────
         mm_candidates: List[RoutingDecision] = []
         for name, prov in self.providers.items():
-            if (not prov.is_available()):
+            if not prov.is_available():
                 continue
             if not prov.multimodal:
                 continue
@@ -2316,9 +2712,7 @@ class MultiLLMRouter:
         if mm_candidates:
             # Prefer providers that appear early in the task routing preference order.
             preferred_order = TASK_ROUTING_PREFERENCES.get(task_type, [])
-            preferred_index: Dict[str, int] = {
-                name: idx for idx, name in enumerate(preferred_order)
-            }
+            preferred_index: Dict[str, int] = {name: idx for idx, name in enumerate(preferred_order)}
             ordered = sorted(
                 mm_candidates,
                 key=lambda d: preferred_index.get(d.provider, len(preferred_order)),
@@ -2344,10 +2738,7 @@ class MultiLLMRouter:
         return RoutingDecision(
             provider="none",
             model="none",
-            reason=(
-                "native_multimodal_first: tier=3 advisory "
-                "no_providers_available degraded_to=no_op"
-            ),
+            reason=("native_multimodal_first: tier=3 advisory " "no_providers_available degraded_to=no_op"),
         )
 
     def route_with_cost_policy(
@@ -2384,7 +2775,7 @@ class MultiLLMRouter:
             if provider_name not in self.providers:
                 continue
             prov = self.providers[provider_name]
-            if (not prov.is_available()):
+            if not prov.is_available():
                 continue
 
             model = self.select_model_by_complexity(provider_name, task_type, complexity_score)
@@ -2400,13 +2791,15 @@ class MultiLLMRouter:
             # 综合得分 = 任务适配 * (1-cost_weight) + 成本效益 * cost_weight
             composite = task_score * (1.0 - cost_weight) + cost_score * cost_weight
 
-            candidates.append({
-                "provider": provider_name,
-                "model": model,
-                "composite": composite,
-                "task_score": task_score,
-                "cost_score": cost_score,
-            })
+            candidates.append(
+                {
+                    "provider": provider_name,
+                    "model": model,
+                    "composite": composite,
+                    "task_score": task_score,
+                    "cost_score": cost_score,
+                }
+            )
 
         if not candidates:
             # 无候选 → 回退到原始 route()
@@ -2431,14 +2824,13 @@ class MultiLLMRouter:
                     if c["provider"] == hint_provider:
                         selected_provider = c["provider"]
                         selected_model = c["model"]
-                        logger.info(
-                            "LLM 微调建议已采纳（规则守护）: provider=%s", hint_provider
-                        )
+                        logger.info("LLM 微调建议已采纳（规则守护）: provider=%s", hint_provider)
                         break
             elif hint_provider:
                 logger.debug(
                     "LLM 微调建议已拒绝（提供商不在规则列表内）: %s not in %s",
-                    hint_provider, rule_providers,
+                    hint_provider,
+                    rule_providers,
                 )
 
             # 微调规则 B: 模型覆盖仅允许在规则选定的提供商内切换
@@ -2448,19 +2840,10 @@ class MultiLLMRouter:
                     selected_model = hint_model
                     logger.info("LLM 微调建议已采纳（模型守护）: model=%s", hint_model)
                 else:
-                    logger.debug(
-                        "LLM 微调建议已拒绝（模型不在该提供商允许列表内）: %s", hint_model
-                    )
+                    logger.debug("LLM 微调建议已拒绝（模型不在该提供商允许列表内）: %s", hint_model)
 
-        reason = (
-            f"策略路由: 任务类型 [{task_type.value}] "
-            f"复杂度 {complexity_score:.2f} 成本权重 {cost_weight:.2f}"
-        )
-        alternatives = [
-            f"{c['provider']}:{c['model']}"
-            for c in candidates
-            if c["provider"] != selected_provider
-        ]
+        reason = f"策略路由: 任务类型 [{task_type.value}] " f"复杂度 {complexity_score:.2f} 成本权重 {cost_weight:.2f}"
+        alternatives = [f"{c['provider']}:{c['model']}" for c in candidates if c["provider"] != selected_provider]
         return RoutingDecision(
             provider=selected_provider,
             model=selected_model,
@@ -2508,9 +2891,16 @@ class MultiLLMRouter:
             return False
         low = text.lower()
         bad_markers = (
-            "i cannot", "i can't help", "as an ai language model", "i'm unable to",
-            "无法回答", "抱歉，我不能", "对不起，我无法",
-            "error:", "internal server error", "rate limit",
+            "i cannot",
+            "i can't help",
+            "as an ai language model",
+            "i'm unable to",
+            "无法回答",
+            "抱歉，我不能",
+            "对不起，我无法",
+            "error:",
+            "internal server error",
+            "rate limit",
         )
         if any(m in low for m in bad_markers):
             return False
@@ -2535,9 +2925,9 @@ class MultiLLMRouter:
             return 2
         return 1
 
-    def _cost_ordered_ladder(self, task_type: TaskType, max_stages: int = 3,
-                             require_multimodal: bool = False,
-                             min_tier: int = 1) -> List[Tuple[str, str]]:
+    def _cost_ordered_ladder(
+        self, task_type: TaskType, max_stages: int = 3, require_multimodal: bool = False, min_tier: int = 1
+    ) -> List[Tuple[str, str]]:
         """构造【便宜→贵】的候选梯队 [(provider, model), ...]:先按能力档下限 min_tier 过滤
         (任务难就不带本地轻量档,避免注定失败的一轮),再在合格集合里按 cost_per_1k_output
         升序(便宜的强开源如 deepseek 天然靠前 → 既够强又省钱),require_multimodal 时只保留
@@ -2545,13 +2935,17 @@ class MultiLLMRouter:
 
         兜底:若没有任何提供商达到 min_tier(例如只配了本地模型),降级忽略下限用全量可用集合
         ——宁可用弱档兜底,也不空手而归。"""
+
         def _pool(floor: int) -> List["ProviderConfig"]:
             return [
-                cfg for name, cfg in self.providers.items()
-                if name in self.adapters and cfg.is_available()
+                cfg
+                for name, cfg in self.providers.items()
+                if name in self.adapters
+                and cfg.is_available()
                 and (not require_multimodal or cfg.multimodal)
                 and _provider_quality_tier(name) >= floor
             ]
+
         avail = _pool(min_tier)
         if not avail and min_tier > 1:
             avail = _pool(1)  # 达不到能力下限 → 降级兜底,不返回空
@@ -2559,7 +2953,7 @@ class MultiLLMRouter:
                 logger.info("级联路由:无提供商达能力档 %d,降级用全量可用集合兜底", min_tier)
         avail.sort(key=lambda c: (c.cost_per_1k_output, c.cost_per_1k_input))
         ladder: List[Tuple[str, str]] = []
-        for cfg in avail[:max(1, max_stages)]:
+        for cfg in avail[: max(1, max_stages)]:
             model = PROVIDER_MODEL_MAP.get(cfg.name, {}).get(task_type) or cfg.default_model
             ladder.append((cfg.name, model))
         return ladder
@@ -2597,15 +2991,23 @@ class MultiLLMRouter:
         complexity = min(1.0, max(0.0, complexity))
         floor = self._capability_floor_for_complexity(complexity)
         ladder = self._cost_ordered_ladder(
-            task_type, max_stages, require_multimodal, min_tier=floor,
+            task_type,
+            max_stages,
+            require_multimodal,
+            min_tier=floor,
         )
         if not ladder:
             logger.warning("级联路由:无可用提供商")
             return None
         # 合格门槛随复杂度自适应:难任务不接受一句话敷衍(最多抬到 ~24 字)。
         eff_min_chars = max(min_chars, int(round(complexity * 24)))
-        logger.info("级联路由:复杂度 %.2f → 能力档下限 %d,起步梯队 %s(min_chars=%d)",
-                    complexity, floor, [p for p, _ in ladder], eff_min_chars)
+        logger.info(
+            "级联路由:复杂度 %.2f → 能力档下限 %d,起步梯队 %s(min_chars=%d)",
+            complexity,
+            floor,
+            [p for p, _ in ladder],
+            eff_min_chars,
+        )
         verdict = judge or (lambda r: self._default_answer_adequate(r, eff_min_chars))
         # 真流式:级联升级会作废上一档已流出的草稿(消费端清屏/掐断朗读重来)。
         _sink = kwargs.get("stream")
@@ -2618,8 +3020,12 @@ class MultiLLMRouter:
                 _sink.reset()  # 上一档流出过内容 → 换档前作废
             try:
                 resp = await adapter.chat(
-                    messages, model, tools=tools,
-                    temperature=temperature, max_tokens=max_tokens, **kwargs,
+                    messages,
+                    model,
+                    tools=tools,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    **kwargs,
                 )
             except Exception as exc:  # noqa: BLE001
                 logger.info("级联第 %d 档 %s:%s 调用失败,升级: %s", stage, provider, model, exc)
@@ -2635,8 +3041,13 @@ class MultiLLMRouter:
                 resp.cascade_stage = stage
                 resp.cascade_escalated = stage > 0
                 self._last_provider = provider
-                logger.info("级联路由:第 %d 档 %s:%s 合格返回 %s", stage, provider, model,
-                            "(便宜档一次命中)" if stage == 0 else "(升级后命中)")
+                logger.info(
+                    "级联路由:第 %d 档 %s:%s 合格返回 %s",
+                    stage,
+                    provider,
+                    model,
+                    "(便宜档一次命中)" if stage == 0 else "(升级后命中)",
+                )
                 return resp
             logger.info("级联第 %d 档 %s:%s 答案不合格,升级", stage, provider, model)
         if last is not None:
@@ -2644,8 +3055,9 @@ class MultiLLMRouter:
             last.cascade_escalated = len(ladder) > 1
         return last
 
-    def _record_call(self, provider: str, model: str, task_type: TaskType,
-                     response: Optional["LLMResponse"], success: bool) -> None:
+    def _record_call(
+        self, provider: str, model: str, task_type: TaskType, response: Optional["LLMResponse"], success: bool
+    ) -> None:
         """统一记 call_history(供 L3 bandit 反哺决策),字段与既有 chat() 记录对齐,并补
         cost(成本感知排序用)。全程 try/except,绝不阻塞主流程。"""
         try:
@@ -2655,13 +3067,19 @@ class MultiLLMRouter:
             cost = 0.0
             if cfg:
                 cost = (itok / 1000.0) * cfg.cost_per_1k_input + (otok / 1000.0) * cfg.cost_per_1k_output
-            self.call_history.append({
-                "provider": provider, "model": model,
-                "task_type": task_type.value if hasattr(task_type, "value") else str(task_type),
-                "latency_ms": float(getattr(response, "latency_ms", 0.0) or 0.0),
-                "tokens": itok + otok, "tokens_out": otok, "cost": round(cost, 6),
-                "timestamp": time.time(), "success": bool(success),
-            })
+            self.call_history.append(
+                {
+                    "provider": provider,
+                    "model": model,
+                    "task_type": task_type.value if hasattr(task_type, "value") else str(task_type),
+                    "latency_ms": float(getattr(response, "latency_ms", 0.0) or 0.0),
+                    "tokens": itok + otok,
+                    "tokens_out": otok,
+                    "cost": round(cost, 6),
+                    "timestamp": time.time(),
+                    "success": bool(success),
+                }
+            )
             if len(self.call_history) > 500:
                 self.call_history = self.call_history[-500:]
             if cfg:
@@ -2674,6 +3092,7 @@ class MultiLLMRouter:
             # (无在途账单时静默无操作;账本故障绝不反噬)。
             try:
                 from core.task_cost_ledger import add_llm_usage
+
                 add_llm_usage(provider, itok, otok, cost)
             except Exception:  # noqa: BLE001
                 pass
@@ -2687,15 +3106,15 @@ class MultiLLMRouter:
         该任务的调用(粒度更贴切);None 则统计全量历史(任务级样本不足时的兜底)。"""
         tt = task_type.value if hasattr(task_type, "value") else task_type
         stats: Dict[str, Dict[str, float]] = {}
-        for rec in (getattr(self, "call_history", None) or []):
+        for rec in getattr(self, "call_history", None) or []:
             if tt is not None and rec.get("task_type") != tt:
                 continue
             p = rec.get("provider")
             if not p:
                 continue
-            s = stats.setdefault(p, {"calls": 0.0, "successes": 0.0,
-                                     "latency_sum": 0.0, "cost_sum": 0.0,
-                                     "tokens_out_sum": 0.0})
+            s = stats.setdefault(
+                p, {"calls": 0.0, "successes": 0.0, "latency_sum": 0.0, "cost_sum": 0.0, "tokens_out_sum": 0.0}
+            )
             s["calls"] += 1
             if rec.get("success"):
                 s["successes"] += 1
@@ -2704,9 +3123,17 @@ class MultiLLMRouter:
             s["tokens_out_sum"] += float(rec.get("tokens_out", 0.0) or 0.0)
         return stats
 
-    def _bandit_score(self, name: str, stats: Dict[str, Dict[str, float]], total: int,
-                      *, latency_weight: float = 0.2, cost_weight: float = 0.1,
-                      verbosity_weight: float = 0.1, explore_c: float = 1.4) -> float:
+    def _bandit_score(
+        self,
+        name: str,
+        stats: Dict[str, Dict[str, float]],
+        total: int,
+        *,
+        latency_weight: float = 0.2,
+        cost_weight: float = 0.1,
+        verbosity_weight: float = 0.1,
+        explore_c: float = 1.4,
+    ) -> float:
         """UCB1 式打分:利用项(成功率 − 延迟/成本/啰嗦惩罚)＋ 探索项。未试过的 provider
         返回 +inf(乐观初始化,保证每个都至少被探索一次)。惩罚做相对归一化,避免任何
         单项的绝对量级压过成功率主信号。
@@ -2722,15 +3149,16 @@ class MultiLLMRouter:
         avg_latency = s["latency_sum"] / n
         avg_cost = s["cost_sum"] / n
         avg_tokens_out = s.get("tokens_out_sum", 0.0) / n
-        lat_pen = latency_weight * min(1.0, avg_latency / 5000.0)   # 5s 封顶
-        cost_pen = cost_weight * min(1.0, avg_cost / 0.05)          # 0.05/次 封顶
+        lat_pen = latency_weight * min(1.0, avg_latency / 5000.0)  # 5s 封顶
+        cost_pen = cost_weight * min(1.0, avg_cost / 0.05)  # 0.05/次 封顶
         verb_pen = verbosity_weight * min(1.0, avg_tokens_out / 2000.0)  # 2k tok/次 封顶
         exploit = max(0.0, success_rate - lat_pen - cost_pen - verb_pen)
         explore = explore_c * math.sqrt(math.log(max(total, 1) + 1.0) / n)
         return exploit + explore
 
-    def _bandit_reorder(self, candidates: List[str], task_type: Optional[TaskType] = None,
-                        *, min_samples: int = 5) -> List[str]:
+    def _bandit_reorder(
+        self, candidates: List[str], task_type: Optional[TaskType] = None, *, min_samples: int = 5
+    ) -> List[str]:
         """按 UCB1 打分对候选 provider 列表做自适应重排(表现好的上浮,同时保留探索)。
         冷启动零回归:GALAXY_BANDIT_ROUTING=false 关闭;任务级样本不足退回全量历史,
         全量也不足(< min_samples)则原样返回。稳定排序,同分保持传入顺序。"""
@@ -2756,14 +3184,16 @@ class MultiLLMRouter:
         out: List[Dict[str, Any]] = []
         for name, s in stats.items():
             n = s["calls"] or 1
-            out.append({
-                "provider": name,
-                "calls": int(s["calls"]),
-                "success_rate": round(s["successes"] / n, 4),
-                "avg_latency_ms": round(s["latency_sum"] / n, 1),
-                "avg_cost": round(s["cost_sum"] / n, 6),
-                "bandit_score": self._bandit_score(name, stats, total),
-            })
+            out.append(
+                {
+                    "provider": name,
+                    "calls": int(s["calls"]),
+                    "success_rate": round(s["successes"] / n, 4),
+                    "avg_latency_ms": round(s["latency_sum"] / n, 1),
+                    "avg_cost": round(s["cost_sum"] / n, 6),
+                    "bandit_score": self._bandit_score(name, stats, total),
+                }
+            )
         out.sort(key=lambda d: -d["bandit_score"])
         # +inf 不便于 JSON 序列化,导出前替换为 None 标记"未试过/待探索"。
         for d in out:
@@ -2831,7 +3261,7 @@ class MultiLLMRouter:
                     ids.append(mid)
             return ids
         items = data.get("data", data) if isinstance(data, dict) else data
-        for it in (items or []):
+        for it in items or []:
             if isinstance(it, dict):
                 mid = it.get("id") or it.get("name") or ""
             elif isinstance(it, str):
@@ -2842,8 +3272,7 @@ class MultiLLMRouter:
                 ids.append(mid)
         return ids
 
-    def _reconcile_one(self, name: str, live: List[str], *, apply: bool,
-                       max_add: int) -> Dict[str, Any]:
+    def _reconcile_one(self, name: str, live: List[str], *, apply: bool, max_add: int) -> Dict[str, Any]:
         """把单个 provider 的 cfg.models 与实际 live 名单对账。返回诊断报告;
         apply=True 时就地修正 cfg(剪掉失效项、补进新发现项、必要时改 default_model)。
         剪枝绝不把名单清空(端点抽风也不至于让 provider 失去所有模型)。"""
@@ -2855,9 +3284,13 @@ class MultiLLMRouter:
         # 新发现:live 里、当前配置尚未覆盖到的 id
         newly = [lid for lid in live if not any(self._model_matches(m, {lid}) for m in configured)]
         report = {
-            "provider": name, "live_count": len(live),
-            "configured": configured, "valid": valid, "stale": stale,
-            "newly_available": newly[:max_add], "applied": False,
+            "provider": name,
+            "live_count": len(live),
+            "configured": configured,
+            "valid": valid,
+            "stale": stale,
+            "newly_available": newly[:max_add],
+            "applied": False,
         }
         if not apply:
             return report
@@ -2873,18 +3306,17 @@ class MultiLLMRouter:
         report["applied"] = True
         return report
 
-    async def sync_model_lists(self, *, apply: bool = False,
-                               only: Optional[List[str]] = None,
-                               max_add: int = 20) -> Dict[str, Any]:
+    async def sync_model_lists(
+        self, *, apply: bool = False, only: Optional[List[str]] = None, max_add: int = 20
+    ) -> Dict[str, Any]:
         """L4 模型名单自动同步:对每个可用 provider 查询其 /models 端点,与硬编码的
         ProviderConfig.models 对账。apply=False(默认)只出对账报告;apply=True 就地
         剪掉失效模型、补进新发现模型、修复失效的 default_model。不可达的 provider
         跳过(不误删其配置名单)。并发查询,整体不阻塞。"""
-        names = [n for n in (only or list(self.providers.keys()))
-                 if n in self.providers and self.providers[n].is_available()]
-        results = await asyncio.gather(
-            *(self._fetch_live_models(n) for n in names), return_exceptions=True
-        )
+        names = [
+            n for n in (only or list(self.providers.keys())) if n in self.providers and self.providers[n].is_available()
+        ]
+        results = await asyncio.gather(*(self._fetch_live_models(n) for n in names), return_exceptions=True)
         reports: List[Dict[str, Any]] = []
         unreachable: List[str] = []
         for n, live in zip(names, results):
@@ -2971,17 +3403,20 @@ class MultiLLMRouter:
 
             try:
                 response = await adapter.chat(
-                    messages=messages, model=mdl, tools=tools,
-                    temperature=temperature, max_tokens=max_tokens,
-                    response_format=response_format, **kwargs,
+                    messages=messages,
+                    model=mdl,
+                    tools=tools,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    response_format=response_format,
+                    **kwargs,
                 )
 
                 # 更新状态 + 断路器
                 self.providers[prov_name].success_count += 1
                 self.providers[prov_name].last_used = time.time()
                 self.providers[prov_name].latency_avg_ms = (
-                    self.providers[prov_name].latency_avg_ms * 0.8
-                    + response.latency_ms * 0.2
+                    self.providers[prov_name].latency_avg_ms * 0.8 + response.latency_ms * 0.2
                 )
                 if self.providers[prov_name].status in (ProviderStatus.DEGRADED, ProviderStatus.DOWN):
                     # DOWN 也要能被调用成功后清回 HEALTHY(冷却期过后 is_available()
@@ -3000,12 +3435,15 @@ class MultiLLMRouter:
                 if fallback_used:
                     logger.info(
                         "LLM 路由 fallback 生效 | 尝试顺序: %s -> 最终: %s:%s",
-                        tried_providers[:-1], prov_name, mdl,
+                        tried_providers[:-1],
+                        prov_name,
+                        mdl,
                     )
 
                 # 记录成本（非阻塞，失败不影响主流程）
                 try:
                     from core.cost_tracker import get_cost_tracker
+
                     prov_cfg = self.providers[prov_name]
                     get_cost_tracker().record(
                         provider=prov_name,
@@ -3022,18 +3460,20 @@ class MultiLLMRouter:
                     logger.warning("Exception suppressed: %s", exc)
 
                 # 记录调用历史（含结构化复杂度）
-                self.call_history.append({
-                    "provider": prov_name,
-                    "model": mdl,
-                    "task_type": classified.value,
-                    "complexity": complexity,
-                    "model_tier": cv.tier.value,
-                    "complexity_vector": cv.model_dump(),
-                    "latency_ms": response.latency_ms,
-                    "tokens": response.input_tokens + response.output_tokens,
-                    "timestamp": time.time(),
-                    "success": True,
-                })
+                self.call_history.append(
+                    {
+                        "provider": prov_name,
+                        "model": mdl,
+                        "task_type": classified.value,
+                        "complexity": complexity,
+                        "model_tier": cv.tier.value,
+                        "complexity_vector": cv.model_dump(),
+                        "latency_ms": response.latency_ms,
+                        "tokens": response.input_tokens + response.output_tokens,
+                        "timestamp": time.time(),
+                        "success": True,
+                    }
+                )
                 if len(self.call_history) > 500:
                     self.call_history = self.call_history[-500:]
 
@@ -3063,12 +3503,16 @@ class MultiLLMRouter:
 
                 logger.warning(f"LLM 调用失败 [{prov_name}:{mdl}]: {e}")
 
-                self.call_history.append({
-                    "provider": prov_name, "model": mdl,
-                    "task_type": classified.value,
-                    "timestamp": time.time(), "success": False,
-                    "error": str(e),
-                })
+                self.call_history.append(
+                    {
+                        "provider": prov_name,
+                        "model": mdl,
+                        "task_type": classified.value,
+                        "timestamp": time.time(),
+                        "success": False,
+                        "error": str(e),
+                    }
+                )
 
                 if not auto_failover:
                     raise
@@ -3088,15 +3532,16 @@ class MultiLLMRouter:
 
     # ───────── JSON 模式快捷方法 ─────────
 
-    async def chat_json(self, messages: List[Dict], schema_hint: str = "",
-                        **kwargs) -> Dict:
+    async def chat_json(self, messages: List[Dict], schema_hint: str = "", **kwargs) -> Dict:
         """调用 LLM 并解析 JSON 响应"""
         if schema_hint:
             messages = list(messages)
-            messages.append({
-                "role": "user",
-                "content": f"请以 JSON 格式返回结果。结构: {schema_hint}",
-            })
+            messages.append(
+                {
+                    "role": "user",
+                    "content": f"请以 JSON 格式返回结果。结构: {schema_hint}",
+                }
+            )
 
         resp = await self.chat(messages, **kwargs)
         # 尝试从响应中提取 JSON
@@ -3134,10 +3579,7 @@ class MultiLLMRouter:
         recent = self.call_history[-20:]
         return {
             "total_providers": len(self.providers),
-            "healthy_providers": sum(
-                1 for p in self.providers.values()
-                if p.status == ProviderStatus.HEALTHY
-            ),
+            "healthy_providers": sum(1 for p in self.providers.values() if p.status == ProviderStatus.HEALTHY),
             "providers": providers_status,
             "total_calls": len(self.call_history),
             "recent_calls": recent,
@@ -3182,17 +3624,19 @@ class MultiLLMRouter:
         """获取所有 Provider 状态（兼容 LLMManager 格式）"""
         result = []
         for name, prov in self.providers.items():
-            result.append({
-                "provider": name,
-                "model": prov.default_model,
-                "models": prov.models,
-                "source": "env/vault",
-                "active": prov.is_available(),
-                "available": prov.is_available(),
-                "supports_tools": prov.supports_tools,
-                "multimodal": prov.multimodal,
-                "env_key": prov.env_key,
-            })
+            result.append(
+                {
+                    "provider": name,
+                    "model": prov.default_model,
+                    "models": prov.models,
+                    "source": "env/vault",
+                    "active": prov.is_available(),
+                    "available": prov.is_available(),
+                    "supports_tools": prov.supports_tools,
+                    "multimodal": prov.multimodal,
+                    "env_key": prov.env_key,
+                }
+            )
         return result
 
     async def chat_completion(
@@ -3213,10 +3657,19 @@ class MultiLLMRouter:
             tools=tools,
             model=model_alias,
             task_type=task_type,
-            **{k: v for k, v in kwargs.items() if k in (
-                "temperature", "max_tokens", "response_format",
-                "auto_failover", "provider", "tool_choice",
-            )},
+            **{
+                k: v
+                for k, v in kwargs.items()
+                if k
+                in (
+                    "temperature",
+                    "max_tokens",
+                    "response_format",
+                    "auto_failover",
+                    "provider",
+                    "tool_choice",
+                )
+            },
         )
 
         # 如果 raw_response 存在且有标准 OpenAI 格式，直接用它
@@ -3228,14 +3681,17 @@ class MultiLLMRouter:
         if resp.tool_calls:
             message_dict["tool_calls"] = resp.tool_calls
 
-        return _OpenAICompatResponse({
-            "choices": [{"message": message_dict, "finish_reason": "stop"}],
-            "model": resp.model,
-            "usage": {
-                "prompt_tokens": resp.input_tokens,
-                "completion_tokens": resp.output_tokens,
+        return _OpenAICompatResponse(
+            {
+                "choices": [{"message": message_dict, "finish_reason": "stop"}],
+                "model": resp.model,
+                "usage": {
+                    "prompt_tokens": resp.input_tokens,
+                    "completion_tokens": resp.output_tokens,
+                },
             },
-        }, resp.model)
+            resp.model,
+        )
 
     async def chat_with_tools(
         self,

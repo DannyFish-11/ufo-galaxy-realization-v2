@@ -89,9 +89,7 @@ CURRENT_STATE_BACKBONE_CONTRACT_VERSION: str = "1.0.0"
 ANDROID_AUDITED_REF: str = "2857b93be7e8e6ea01e37d9a2af01ff2cae92c5c"
 
 # Android 侧关键代码锚点
-ANDROID_ANCHOR_WS_CLIENT = (
-    "ufo-galaxy-android/app/src/main/java/com/ufo/galaxy/network/GalaxyWebSocketClient.kt"
-)
+ANDROID_ANCHOR_WS_CLIENT = "ufo-galaxy-android/app/src/main/java/com/ufo/galaxy/network/GalaxyWebSocketClient.kt"
 ANDROID_ANCHOR_CONNECTION_SERVICE = (
     "ufo-galaxy-android/app/src/main/java/com/ufo/galaxy/service/GalaxyConnectionService.kt"
 )
@@ -101,9 +99,7 @@ ANDROID_ANCHOR_AUTONOMOUS_PIPELINE = (
 ANDROID_ANCHOR_MESH_CONTRACT = (
     "ufo-galaxy-android/app/src/main/java/com/ufo/galaxy/runtime/AndroidMeshParticipationContract.kt"
 )
-ANDROID_ANCHOR_LOCAL_MODE_GATE = (
-    "ufo-galaxy-android/app/src/main/java/com/ufo/galaxy/runtime/LocalExecutionModeGate.kt"
-)
+ANDROID_ANCHOR_LOCAL_MODE_GATE = "ufo-galaxy-android/app/src/main/java/com/ufo/galaxy/runtime/LocalExecutionModeGate.kt"
 ANDROID_ANCHOR_DURABLE_IDENTITY = (
     "ufo-galaxy-android/app/src/main/java/com/ufo/galaxy/session/DurableParticipantIdentity.kt"
 )
@@ -122,9 +118,7 @@ ANDROID_ANCHOR_CANONICAL_EXECUTION_EVENT = (
 ANDROID_ANCHOR_CANONICAL_DISPATCH_CHAIN = (
     "ufo-galaxy-android/app/src/main/java/com/ufo/galaxy/runtime/CanonicalDispatchChain.kt"
 )
-ANDROID_ANCHOR_RUNTIME_CONTROLLER = (
-    "ufo-galaxy-android/app/src/main/java/com/ufo/galaxy/runtime/RuntimeController.kt"
-)
+ANDROID_ANCHOR_RUNTIME_CONTROLLER = "ufo-galaxy-android/app/src/main/java/com/ufo/galaxy/runtime/RuntimeController.kt"
 
 __all__ = [
     "CURRENT_STATE_BACKBONE_AUDIT_AUTHORITY",
@@ -277,10 +271,7 @@ class ChainMap:
 
     def to_dict(self) -> Dict[str, Any]:
         return {
-            "chains": {
-                cid: [seg.to_dict() for seg in segs]
-                for cid, segs in self.chains.items()
-            },
+            "chains": {cid: [seg.to_dict() for seg in segs] for cid, segs in self.chains.items()},
             "overall_closure_by_chain": self.overall_closure_by_chain,
             "_source": self._source,
         }
@@ -435,20 +426,14 @@ def build_chain_map() -> ChainMap:
             v2_anchor="core.routes.chat :: POST /api/v1/chat",
             android_anchor="（不适用，入口在 V2）",
             closure_state=ClosureState.ESTABLISHED,
-            notes=(
-                "V2 chat 路由已实现，接受自然语言输入，"
-                "通过 DesktopPresenceRuntime / NL execution spine 传递。"
-            ),
+            notes=("V2 chat 路由已实现，接受自然语言输入，" "通过 DesktopPresenceRuntime / NL execution spine 传递。"),
         ),
         ChainSegment(
             name="NL 执行脊柱",
             v2_anchor="core.nl_execution_spine :: NLExecutionSpine",
             android_anchor="（不适用）",
             closure_state=ClosureState.ESTABLISHED,
-            notes=(
-                "NL execution spine PR-2 contract v2.2.0.0 已就位，"
-                "提供 task_completed / problem_solved 语义。"
-            ),
+            notes=("NL execution spine PR-2 contract v2.2.0.0 已就位，" "提供 task_completed / problem_solved 语义。"),
         ),
         ChainSegment(
             name="编排选路 → 设备选择",
@@ -466,15 +451,11 @@ def build_chain_map() -> ChainMap:
         ChainSegment(
             name="handoff_envelope_v2 下发给 Android",
             v2_anchor=(
-                "core.android_handoff_v2_response_ingress :: handoff_envelope_v2 ; "
-                "galaxy_gateway.android_bridge"
+                "core.android_handoff_v2_response_ingress :: handoff_envelope_v2 ; " "galaxy_gateway.android_bridge"
             ),
             android_anchor=ANDROID_ANCHOR_CONNECTION_SERVICE,
             closure_state=ClosureState.ESTABLISHED,
-            notes=(
-                "handoff_envelope_v2 协议已就位，Android 侧 GalaxyConnectionService "
-                "接收并路由 handoff。"
-            ),
+            notes=("handoff_envelope_v2 协议已就位，Android 侧 GalaxyConnectionService " "接收并路由 handoff。"),
         ),
     ]
 
@@ -487,10 +468,7 @@ def build_chain_map() -> ChainMap:
             v2_anchor="（Android 侧自主）",
             android_anchor=ANDROID_ANCHOR_AUTONOMOUS_PIPELINE,
             closure_state=ClosureState.ESTABLISHED,
-            notes=(
-                "AutonomousExecutionPipeline.kt 代码存在，"
-                "是 Android 侧接收 handoff 后的执行管线入口。"
-            ),
+            notes=("AutonomousExecutionPipeline.kt 代码存在，" "是 Android 侧接收 handoff 后的执行管线入口。"),
         ),
         ChainSegment(
             name="本地 LLM / NL 推理（本地模式）",
@@ -572,20 +550,14 @@ def build_chain_map() -> ChainMap:
             v2_anchor="galaxy_gateway.android_bridge",
             android_anchor=ANDROID_ANCHOR_WS_CLIENT,
             closure_state=ClosureState.ESTABLISHED,
-            notes=(
-                "GalaxyWebSocketClient.kt 是唯一跨端上行 transport，"
-                "goal_execution_result 通过 WS 回流 V2。"
-            ),
+            notes=("GalaxyWebSocketClient.kt 是唯一跨端上行 transport，" "goal_execution_result 通过 WS 回流 V2。"),
         ),
         ChainSegment(
             name="V2 统一结果入站",
             v2_anchor="core.unified_result_ingress :: ingest_result",
             android_anchor="（V2 侧处理）",
             closure_state=ClosureState.ESTABLISHED,
-            notes=(
-                "UnifiedResultIngress 是所有结果信号的单一入站入口，"
-                "整合了原先 5 条分散路径。"
-            ),
+            notes=("UnifiedResultIngress 是所有结果信号的单一入站入口，" "整合了原先 5 条分散路径。"),
         ),
         ChainSegment(
             name="真值链（truth chain）四步处理",
@@ -625,16 +597,11 @@ def build_chain_map() -> ChainMap:
             ),
             android_anchor="（V2 侧决策）",
             closure_state=ClosureState.ESTABLISHED,
-            notes=(
-                "quarantine/reject verdict 阻断 is_fully_closed，"
-                "防止低质量结果进入已闭合状态（PR 1141/1142）。"
-            ),
+            notes=("quarantine/reject verdict 阻断 is_fully_closed，" "防止低质量结果进入已闭合状态（PR 1141/1142）。"),
         ),
         ChainSegment(
             name="canonical closure + Android context 携带",
-            v2_anchor=(
-                "core.canonical_completion_ingress :: notify_with_android_context"
-            ),
+            v2_anchor=("core.canonical_completion_ingress :: notify_with_android_context"),
             android_anchor="（V2 侧接受）",
             closure_state=ClosureState.ESTABLISHED,
             notes=(
@@ -644,10 +611,7 @@ def build_chain_map() -> ChainMap:
         ),
         ChainSegment(
             name="closure 语义写入 operator evidence surface",
-            v2_anchor=(
-                "core.operator_execution_observability_surface :: "
-                "record_operator_evidence_entry"
-            ),
+            v2_anchor=("core.operator_execution_observability_surface :: " "record_operator_evidence_entry"),
             android_anchor="（V2 侧记录）",
             closure_state=ClosureState.ESTABLISHED,
             notes=(
@@ -660,9 +624,7 @@ def build_chain_map() -> ChainMap:
     # ------------------------------------------------------------------
     # 6. operator/panel/board/desktop/mobile 投影链
     # ------------------------------------------------------------------
-    _board_consumes_verdict = _probe(
-        "core.pr4_operator_action_governance", "android_participation_verdict"
-    )
+    _board_consumes_verdict = _probe("core.pr4_operator_action_governance", "android_participation_verdict")
     projection_chain: List[ChainSegment] = [
         ChainSegment(
             name="UnifiedPanelPayload android_participation_verdict",
@@ -676,15 +638,9 @@ def build_chain_map() -> ChainMap:
         ),
         ChainSegment(
             name="operator board projection 消费 participation_verdict",
-            v2_anchor=(
-                "core.pr4_operator_action_governance :: build_operator_board_projection"
-            ),
+            v2_anchor=("core.pr4_operator_action_governance :: build_operator_board_projection"),
             android_anchor="（V2 投影）",
-            closure_state=(
-                ClosureState.ESTABLISHED
-                if _board_consumes_verdict
-                else ClosureState.PARTIAL
-            ),
+            closure_state=(ClosureState.ESTABLISHED if _board_consumes_verdict else ClosureState.PARTIAL),
             notes=(
                 "build_operator_board_projection() 已从 panel_payload 读取 "
                 "android_participation_verdict 并输出 latest_closure_reasoning（PR4）。"
@@ -697,15 +653,12 @@ def build_chain_map() -> ChainMap:
             v2_anchor="core.routes.operator :: /api/v1/operator/board/operable-truth",
             android_anchor="（V2 路由）",
             closure_state=ClosureState.ESTABLISHED,
-            notes=(
-                "路由已就位，调用 build_operator_board_projection() 并返回 JSON。"
-            ),
+            notes=("路由已就位，调用 build_operator_board_projection() 并返回 JSON。"),
         ),
         ChainSegment(
             name="desktop presence 三态投影",
             v2_anchor=(
-                "core.desktop_presence_runtime :: DesktopPresenceRuntime ; "
-                "core.continuum :: tri_state_phase"
+                "core.desktop_presence_runtime :: DesktopPresenceRuntime ; " "core.continuum :: tri_state_phase"
             ),
             android_anchor="（显化层三态在 V2 侧）",
             closure_state=ClosureState.PARTIAL,
@@ -717,20 +670,15 @@ def build_chain_map() -> ChainMap:
         ),
         ChainSegment(
             name="GET /api/v1/projection/desktop-status-board",
-            v2_anchor=(
-                "core.routes.projection :: /api/v1/projection/desktop-status-board"
-            ),
+            v2_anchor=("core.routes.projection :: /api/v1/projection/desktop-status-board"),
             android_anchor="（V2 投影）",
             closure_state=ClosureState.ESTABLISHED,
-            notes=(
-                "路由已就位，包含 operational_state_board + source_of_truth_boundaries。"
-            ),
+            notes=("路由已就位，包含 operational_state_board + source_of_truth_boundaries。"),
         ),
         ChainSegment(
             name="mobile 端 UI 投影（悬浮窗 / floating service）",
             v2_anchor="（Android 侧 UI，V2 不直接控制）",
-            android_anchor=ANDROID_ANCHOR_CONNECTION_SERVICE
-            + " ; EnhancedFloatingService.kt",
+            android_anchor=ANDROID_ANCHOR_CONNECTION_SERVICE + " ; EnhancedFloatingService.kt",
             closure_state=ClosureState.PARTIAL,
             notes=(
                 "Android 侧 EnhancedFloatingService 实现悬浮窗界面，"
@@ -755,9 +703,7 @@ def build_chain_map() -> ChainMap:
             return ClosureState.PARTIAL.value
         return ClosureState.ESTABLISHED.value
 
-    cm.overall_closure_by_chain = {
-        cid: _chain_overall(segs) for cid, segs in cm.chains.items()
-    }
+    cm.overall_closure_by_chain = {cid: _chain_overall(segs) for cid, segs in cm.chains.items()}
 
     return cm
 
@@ -813,8 +759,7 @@ def build_mode_map() -> ModeMap:
                 "设备 session 存在。"
             ),
             gaps_zh=(
-                "需要 Android APK 单独构建并安装，不在 V2 clone-to-run 自动路径内；"
-                "网络可达性依赖具体部署环境。"
+                "需要 Android APK 单独构建并安装，不在 V2 clone-to-run 自动路径内；" "网络可达性依赖具体部署环境。"
             ),
         ),
         ModeEntry(
@@ -854,11 +799,7 @@ def build_mode_map() -> ModeMap:
                 "core.android_delegated_runtime_lifecycle_coordinator ; "
                 "core.android_runtime_dispatch_binding"
             ),
-            android_code_anchor=(
-                ANDROID_ANCHOR_DELEGATED_SIGNAL
-                + " ; "
-                + ANDROID_ANCHOR_CANONICAL_DISPATCH_CHAIN
-            ),
+            android_code_anchor=(ANDROID_ANCHOR_DELEGATED_SIGNAL + " ; " + ANDROID_ANCHOR_CANONICAL_DISPATCH_CHAIN),
             closure_state=ClosureState.ESTABLISHED,
             conditions_zh=(
                 "设备处于 cross_device_enabled 或以上 tier；"
@@ -883,9 +824,7 @@ def build_mode_map() -> ModeMap:
                 "core.android_delegated_runtime_lifecycle_coordinator :: "
                 "govern_takeover_decision"
             ),
-            android_code_anchor=(
-                "ufo-galaxy-android/...runtime/AndroidTakeoverOwnershipTransferContract.kt"
-            ),
+            android_code_anchor=("ufo-galaxy-android/...runtime/AndroidTakeoverOwnershipTransferContract.kt"),
             closure_state=ClosureState.PARTIAL,
             conditions_zh=(
                 "Android 侧 authority/proof/continuity 证据达标；"
@@ -972,30 +911,22 @@ def build_backbone_snapshot() -> BackboneSnapshot:
             v2_anchor="core.android_device_state_store :: get_android_participation_evidence",
             android_anchor=ANDROID_ANCHOR_RUNTIME_CONTROLLER,
             detail_zh=(
-                "android_device_state_store 维护设备快照，"
-                "RuntimeController.kt 管理 Android 侧生命周期与注册。"
+                "android_device_state_store 维护设备快照，" "RuntimeController.kt 管理 Android 侧生命周期与注册。"
             ),
         ),
         BackboneItem(
             label="AndroidNetworkParticipationTier 7 层级定义与评估",
             closure_state=ClosureState.ESTABLISHED,
-            v2_anchor=(
-                "core.android_network_participation :: "
-                "derive_android_network_participation_tier"
-            ),
+            v2_anchor=("core.android_network_participation :: " "derive_android_network_participation_tier"),
             android_anchor=ANDROID_ANCHOR_MESH_CONTRACT,
             detail_zh=(
-                "7 层级（local_only → distributed_participant）定义真实存在，"
-                "android_mode_gate_policy 提供三门评估。"
+                "7 层级（local_only → distributed_participant）定义真实存在，" "android_mode_gate_policy 提供三门评估。"
             ),
         ),
         BackboneItem(
             label="编排选路消费 Android participation truth（PR 1142）",
             closure_state=ClosureState.ESTABLISHED,
-            v2_anchor=(
-                "core.runtime.source_dispatch_orchestrator ; "
-                "galaxy_gateway.routing.device_selection"
-            ),
+            v2_anchor=("core.runtime.source_dispatch_orchestrator ; " "galaxy_gateway.routing.device_selection"),
             android_anchor="（选路评分在 V2 侧）",
             detail_zh=(
                 "source_dispatch_orchestrator + device_selection 已将 "
@@ -1007,10 +938,7 @@ def build_backbone_snapshot() -> BackboneSnapshot:
             closure_state=ClosureState.ESTABLISHED,
             v2_anchor="core.unified_result_ingress :: ingest_result",
             android_anchor=ANDROID_ANCHOR_WS_CLIENT,
-            detail_zh=(
-                "所有结果信号通过单一入站入口处理，"
-                "整合了原先 5 条分散路径。"
-            ),
+            detail_zh=("所有结果信号通过单一入站入口处理，" "整合了原先 5 条分散路径。"),
         ),
         BackboneItem(
             label="Android authoritative participation truth + mode 语义上送",
@@ -1019,11 +947,7 @@ def build_backbone_snapshot() -> BackboneSnapshot:
                 "core.android_device_state_store :: "
                 "absorb_device_state_snapshot / absorb_execution_event / ingest_result"
             ),
-            android_anchor=(
-                ANDROID_ANCHOR_WS_CLIENT
-                + " ; "
-                + ANDROID_ANCHOR_CONNECTION_SERVICE
-            ),
+            android_anchor=(ANDROID_ANCHOR_WS_CLIENT + " ; " + ANDROID_ANCHOR_CONNECTION_SERVICE),
             detail_zh=(
                 "GalaxyWebSocketClient.kt 上送 participation_tier/runtime_constrained/"
                 "runtime_deferred/local_mode_active；"
@@ -1049,9 +973,7 @@ def build_backbone_snapshot() -> BackboneSnapshot:
         BackboneItem(
             label="canonical_completion_ingress + notify_with_android_context",
             closure_state=ClosureState.ESTABLISHED,
-            v2_anchor=(
-                "core.canonical_completion_ingress :: notify_with_android_context"
-            ),
+            v2_anchor=("core.canonical_completion_ingress :: notify_with_android_context"),
             android_anchor="（V2 侧）",
             detail_zh=(
                 "closure 时刻携带 android_participation_tier / device_id / acceptance_verdict，"
@@ -1086,20 +1008,14 @@ def build_backbone_snapshot() -> BackboneSnapshot:
             closure_state=ClosureState.ESTABLISHED,
             v2_anchor="core.pr3_session_continuity_authority",
             android_anchor=ANDROID_ANCHOR_DURABLE_IDENTITY,
-            detail_zh=(
-                "跨重启参与者身份持久化代码存在，"
-                "V2 pr3_session_continuity_authority 管理 continuity 决策。"
-            ),
+            detail_zh=("跨重启参与者身份持久化代码存在，" "V2 pr3_session_continuity_authority 管理 continuity 决策。"),
         ),
         BackboneItem(
             label="handoff_envelope_v2 委托执行协议",
             closure_state=ClosureState.ESTABLISHED,
             v2_anchor="core.android_handoff_v2_response_ingress",
             android_anchor=ANDROID_ANCHOR_CANONICAL_DISPATCH_CHAIN,
-            detail_zh=(
-                "handoff_envelope_v2 协议双端对齐，"
-                "CanonicalDispatchChain.kt 执行委托任务。"
-            ),
+            detail_zh=("handoff_envelope_v2 协议双端对齐，" "CanonicalDispatchChain.kt 执行委托任务。"),
         ),
         BackboneItem(
             label="operator API 路由集（PR4：audit / board / snapshot / directed-action）",
@@ -1121,13 +1037,8 @@ def build_backbone_snapshot() -> BackboneSnapshot:
         BackboneItem(
             label="三态统一系统 API（两条语义线尚未合并）",
             closure_state=ClosureState.PARTIAL,
-            v2_anchor=(
-                "core.continuum :: tri_state_phase ; "
-                "core.desktop_presence_runtime :: presence_tristate"
-            ),
-            android_anchor=(
-                "AndroidNetworkParticipationTier（7 层 → 3 语义组映射）"
-            ),
+            v2_anchor=("core.continuum :: tri_state_phase ; " "core.desktop_presence_runtime :: presence_tristate"),
+            android_anchor=("AndroidNetworkParticipationTier（7 层 → 3 语义组映射）"),
             detail_zh=(
                 "显化层 tri_state_phase（V2 continuum）真实存在；"
                 "Android participation tier 7 层可收敛为 3 语义组；"
@@ -1138,9 +1049,7 @@ def build_backbone_snapshot() -> BackboneSnapshot:
             label="Android 本地 NL 模式（代码存在但非默认可用）",
             closure_state=ClosureState.PARTIAL,
             v2_anchor="core.android_mode_gate_policy :: AndroidDeviceMode.local",
-            android_anchor=ANDROID_ANCHOR_LOCAL_MODE_GATE
-            + " ; "
-            + ANDROID_ANCHOR_AUTONOMOUS_PIPELINE,
+            android_anchor=ANDROID_ANCHOR_LOCAL_MODE_GATE + " ; " + ANDROID_ANCHOR_AUTONOMOUS_PIPELINE,
             detail_zh=(
                 "LocalExecutionModeGate.kt + AutonomousExecutionPipeline.kt 真实存在；"
                 "但依赖本地 LLM 权重 + accessibility 权限，非开箱即用。"
@@ -1192,8 +1101,7 @@ def build_backbone_snapshot() -> BackboneSnapshot:
             label="takeover 完整端到端路径（门控存在，跨设备接管半闭合）",
             closure_state=ClosureState.PARTIAL,
             v2_anchor=(
-                "core.android_originated_authority_boundary ; "
-                "core.android_delegated_runtime_lifecycle_coordinator"
+                "core.android_originated_authority_boundary ; " "core.android_delegated_runtime_lifecycle_coordinator"
             ),
             android_anchor="AndroidTakeoverOwnershipTransferContract.kt",
             detail_zh=(
@@ -1216,10 +1124,7 @@ def build_backbone_snapshot() -> BackboneSnapshot:
             closure_state=ClosureState.PARTIAL,
             v2_anchor="（不在 V2 clone 路径内）",
             android_anchor="build_apk.sh ; app/build.gradle",
-            detail_zh=(
-                "Android APK 需单独执行 Gradle 构建，"
-                "不在 V2 clone-to-run 自动路径内，需开发者单独处理。"
-            ),
+            detail_zh=("Android APK 需单独执行 Gradle 构建，" "不在 V2 clone-to-run 自动路径内，需开发者单独处理。"),
         ),
     ]
 
@@ -1240,8 +1145,7 @@ def build_backbone_snapshot() -> BackboneSnapshot:
             label="distributed_participant tier 端到端实操验证",
             closure_state=ClosureState.OPEN,
             v2_anchor=(
-                "core.android_network_participation :: "
-                "AndroidNetworkParticipationTier.distributed_participant"
+                "core.android_network_participation :: " "AndroidNetworkParticipationTier.distributed_participant"
             ),
             android_anchor=ANDROID_ANCHOR_MESH_CONTRACT,
             detail_zh=(
@@ -1846,14 +1750,10 @@ def build_system_backbone_snapshot() -> Dict[str, Any]:
     d = snap.to_dict()
 
     chain_summary = {
-        cid: d["chain_map"]["overall_closure_by_chain"].get(cid, "unknown")
-        for cid in [c.value for c in ChainId]
+        cid: d["chain_map"]["overall_closure_by_chain"].get(cid, "unknown") for cid in [c.value for c in ChainId]
     }
 
-    mode_summary = {
-        m["mode_id"]: m["closure_state"]
-        for m in d["mode_map"]["modes"]
-    }
+    mode_summary = {m["mode_id"]: m["closure_state"] for m in d["mode_map"]["modes"]}
     control_plane_layering = {
         "operator": {
             "role": "governance / audit / decision explanation / authority-aware control context",
@@ -1887,10 +1787,7 @@ def build_system_backbone_snapshot() -> Dict[str, Any]:
         "stale_or_cached_summary": "stale/cached/degraded hints, not raw truth",
     }
 
-    top_open = [
-        {"label": item["label"], "detail_zh": item["detail_zh"]}
-        for item in d["open_items"]
-    ]
+    top_open = [{"label": item["label"], "detail_zh": item["detail_zh"]} for item in d["open_items"]]
     native_three_state_final_audit = _build_native_three_state_final_audit(
         mode_summary=mode_summary,
         layered_mode_model=dict(d.get("layered_mode_model") or {}),

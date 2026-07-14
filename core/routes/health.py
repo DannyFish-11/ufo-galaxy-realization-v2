@@ -65,6 +65,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """统一健康仪表盘（整合所有健康子系统）"""
         try:
             from core.health_integration import get_unified_health_manager
+
             uhm = get_unified_health_manager()
             payload = dict(uhm.get_dashboard() or {})
             payload["quasi_platform_state_integrity"] = _build_quasi_platform_health_assertion()
@@ -77,6 +78,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """快速健康概览"""
         try:
             from core.health_integration import get_unified_health_manager
+
             uhm = get_unified_health_manager()
             payload = dict(uhm.get_quick_status() or {})
             payload["quasi_platform_state_integrity"] = _build_quasi_platform_health_assertion()

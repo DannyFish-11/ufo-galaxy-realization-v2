@@ -25,10 +25,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_mock_rrd(
     *,
@@ -93,11 +93,13 @@ def _make_bridge_config_dict(
 # 1. Serialisation stability
 # ---------------------------------------------------------------------------
 
+
 class TestSerialisationStability:
     """LocalRuntimeHost serialises and round-trips correctly."""
 
     def test_to_dict_returns_serialisable_dict(self):
         from contracts.local_runtime_host import LocalRuntimeHost
+
         h = LocalRuntimeHost(device_id="dev_001")
         result = h.to_dict()
         assert isinstance(result, dict)
@@ -107,6 +109,7 @@ class TestSerialisationStability:
 
     def test_to_json_returns_valid_json(self):
         from contracts.local_runtime_host import LocalRuntimeHost
+
         h = LocalRuntimeHost(device_id="dev_002", host_enabled=True)
         raw = h.to_json()
         parsed = json.loads(raw)
@@ -115,6 +118,7 @@ class TestSerialisationStability:
 
     def test_from_dict_round_trip(self):
         from contracts.local_runtime_host import LocalRuntimeHost, LocalRuntimeHostStatus
+
         original = LocalRuntimeHost(
             device_id="dev_003",
             host_enabled=True,
@@ -131,6 +135,7 @@ class TestSerialisationStability:
 
     def test_to_json_then_from_dict_full_round_trip(self):
         from contracts.local_runtime_host import LocalRuntimeHost
+
         h = LocalRuntimeHost(
             device_id="dev_004",
             runtime_id="rt_123",
@@ -151,6 +156,7 @@ class TestSerialisationStability:
 # ---------------------------------------------------------------------------
 # 2. Stable field names
 # ---------------------------------------------------------------------------
+
 
 class TestStableFieldNames:
     """All documented top-level fields are present in to_dict output."""
@@ -185,6 +191,7 @@ class TestStableFieldNames:
 
     def test_all_required_fields_present(self):
         from contracts.local_runtime_host import LocalRuntimeHost
+
         h = LocalRuntimeHost(device_id="dev_fields")
         result = h.to_dict()
         missing = self.REQUIRED_FIELDS - set(result.keys())
@@ -192,6 +199,7 @@ class TestStableFieldNames:
 
     def test_sub_contract_fields_present(self):
         from contracts.local_runtime_host import LocalRuntimeHost
+
         h = LocalRuntimeHost(device_id="dev_sub")
         result = h.to_dict()
         caps = result["capabilities"]
@@ -213,6 +221,7 @@ class TestStableFieldNames:
 
     def test_host_id_is_auto_generated(self):
         from contracts.local_runtime_host import LocalRuntimeHost
+
         h1 = LocalRuntimeHost(device_id="dev_a")
         h2 = LocalRuntimeHost(device_id="dev_b")
         assert h1.host_id != h2.host_id
@@ -221,6 +230,7 @@ class TestStableFieldNames:
 
     def test_host_id_can_be_provided(self):
         from contracts.local_runtime_host import LocalRuntimeHost
+
         h = LocalRuntimeHost(device_id="dev_c", host_id="custom_host_id")
         assert h.host_id == "custom_host_id"
 
@@ -229,10 +239,12 @@ class TestStableFieldNames:
 # 3. Adapter: from_registered_runtime_device
 # ---------------------------------------------------------------------------
 
+
 class TestFromRegisteredRuntimeDevice:
 
     def test_basic_fields_mapped(self):
         from contracts.local_runtime_host import from_registered_runtime_device
+
         rrd = _make_mock_rrd()
         host = from_registered_runtime_device(rrd)
         assert host.device_id == "rrd_dev_001"
@@ -243,13 +255,15 @@ class TestFromRegisteredRuntimeDevice:
         assert host.host_enabled is True  # runtime_enabled and online
 
     def test_host_status_active_when_enabled_and_online(self):
-        from contracts.local_runtime_host import from_registered_runtime_device, LocalRuntimeHostStatus
+        from contracts.local_runtime_host import LocalRuntimeHostStatus, from_registered_runtime_device
+
         rrd = _make_mock_rrd(runtime_enabled=True, online=True)
         host = from_registered_runtime_device(rrd)
         assert host.host_status == LocalRuntimeHostStatus.ACTIVE
 
     def test_host_status_inactive_when_offline(self):
-        from contracts.local_runtime_host import from_registered_runtime_device, LocalRuntimeHostStatus
+        from contracts.local_runtime_host import LocalRuntimeHostStatus, from_registered_runtime_device
+
         rrd = _make_mock_rrd(runtime_enabled=True, online=False)
         host = from_registered_runtime_device(rrd)
         assert host.host_enabled is False
@@ -257,18 +271,21 @@ class TestFromRegisteredRuntimeDevice:
 
     def test_remote_handoff_receive_mapped(self):
         from contracts.local_runtime_host import from_registered_runtime_device
+
         rrd = _make_mock_rrd(supports_remote_handoff=True)
         host = from_registered_runtime_device(rrd)
         assert host.supports_remote_handoff_receive is True
 
     def test_active_session_ids_mapped(self):
         from contracts.local_runtime_host import from_registered_runtime_device
+
         rrd = _make_mock_rrd(active_session_ids=["s1", "s2"])
         host = from_registered_runtime_device(rrd)
         assert set(host.active_session_ids) == {"s1", "s2"}
 
     def test_capability_summary_mapped(self):
         from contracts.local_runtime_host import from_registered_runtime_device
+
         rrd = _make_mock_rrd(capabilities=["screen", "keyboard"])
         host = from_registered_runtime_device(rrd)
         assert "screen" in host.capability_summary
@@ -276,18 +293,21 @@ class TestFromRegisteredRuntimeDevice:
 
     def test_execution_modes_contain_local(self):
         from contracts.local_runtime_host import from_registered_runtime_device
+
         rrd = _make_mock_rrd(runtime_enabled=True)
         host = from_registered_runtime_device(rrd)
         assert "local" in host.execution_modes
 
     def test_callback_channel_from_hints(self):
         from contracts.local_runtime_host import from_registered_runtime_device
+
         rrd = _make_mock_rrd(supports_remote_handoff=True, preferred_callback_channel="nats")
         host = from_registered_runtime_device(rrd)
         assert "nats" in host.callback_channels
 
     def test_sub_contracts_populated(self):
         from contracts.local_runtime_host import from_registered_runtime_device
+
         rrd = _make_mock_rrd(runtime_enabled=True, supports_local_autonomy=True)
         host = from_registered_runtime_device(rrd)
         assert host.capabilities.supports_local_execution is True
@@ -297,8 +317,9 @@ class TestFromRegisteredRuntimeDevice:
 
     def test_from_real_registered_runtime_device(self):
         """Use the actual build_registered_runtime_device builder as source."""
-        from contracts.registered_runtime_device import build_registered_runtime_device
         from contracts.local_runtime_host import from_registered_runtime_device
+        from contracts.registered_runtime_device import build_registered_runtime_device
+
         rrd = build_registered_runtime_device(
             device_id="phone_001",
             device_name="Test Phone",
@@ -323,10 +344,12 @@ class TestFromRegisteredRuntimeDevice:
 # 4. Adapter: from_runtime_bridge_config
 # ---------------------------------------------------------------------------
 
+
 class TestFromRuntimeBridgeConfig:
 
     def test_dict_config_enabled(self):
-        from contracts.local_runtime_host import from_runtime_bridge_config, LocalRuntimeHostStatus
+        from contracts.local_runtime_host import LocalRuntimeHostStatus, from_runtime_bridge_config
+
         cfg = _make_bridge_config_dict(runtime_enabled=True, cross_device_enabled=True)
         host = from_runtime_bridge_config(cfg)
         assert host.host_enabled is True
@@ -335,7 +358,8 @@ class TestFromRuntimeBridgeConfig:
         assert host.supports_remote_handoff_receive is True
 
     def test_dict_config_disabled_runtime(self):
-        from contracts.local_runtime_host import from_runtime_bridge_config, LocalRuntimeHostStatus
+        from contracts.local_runtime_host import LocalRuntimeHostStatus, from_runtime_bridge_config
+
         cfg = _make_bridge_config_dict(runtime_enabled=False, cross_device_enabled=False)
         host = from_runtime_bridge_config(cfg)
         assert host.host_enabled is False
@@ -343,6 +367,7 @@ class TestFromRuntimeBridgeConfig:
 
     def test_dict_config_cross_device_only(self):
         from contracts.local_runtime_host import from_runtime_bridge_config
+
         cfg = _make_bridge_config_dict(runtime_enabled=True, cross_device_enabled=True)
         host = from_runtime_bridge_config(cfg)
         assert "remote" in host.execution_modes
@@ -350,6 +375,7 @@ class TestFromRuntimeBridgeConfig:
 
     def test_dict_config_no_cross_device(self):
         from contracts.local_runtime_host import from_runtime_bridge_config
+
         cfg = _make_bridge_config_dict(runtime_enabled=True, cross_device_enabled=False)
         host = from_runtime_bridge_config(cfg)
         assert host.supports_remote_handoff_receive is False
@@ -357,18 +383,21 @@ class TestFromRuntimeBridgeConfig:
 
     def test_dict_config_device_id_preserved(self):
         from contracts.local_runtime_host import from_runtime_bridge_config
+
         cfg = _make_bridge_config_dict(device_id="host_pc_001")
         host = from_runtime_bridge_config(cfg)
         assert host.device_id == "host_pc_001"
 
     def test_dict_config_auto_device_id_when_empty(self):
         from contracts.local_runtime_host import from_runtime_bridge_config
+
         cfg = _make_bridge_config_dict(device_id="")
         host = from_runtime_bridge_config(cfg)
         assert host.device_id.startswith("bridge_")
 
     def test_object_config(self):
         from contracts.local_runtime_host import from_runtime_bridge_config
+
         cfg = MagicMock()
         cfg.runtime_enabled = True
         cfg.cross_device_enabled = True
@@ -382,12 +411,14 @@ class TestFromRuntimeBridgeConfig:
 
     def test_callback_channels_populated_when_url_provided(self):
         from contracts.local_runtime_host import from_runtime_bridge_config
+
         cfg = _make_bridge_config_dict(runtime_url="http://localhost:9000")
         host = from_runtime_bridge_config(cfg)
         assert "ws" in host.callback_channels
 
     def test_serialisable_output(self):
         from contracts.local_runtime_host import from_runtime_bridge_config
+
         cfg = _make_bridge_config_dict()
         host = from_runtime_bridge_config(cfg)
         json.dumps(host.to_dict())
@@ -397,17 +428,20 @@ class TestFromRuntimeBridgeConfig:
 # 5. Builder: build_local_runtime_host
 # ---------------------------------------------------------------------------
 
+
 class TestBuildLocalRuntimeHost:
 
     def test_minimal_build(self):
         from contracts.local_runtime_host import build_local_runtime_host
+
         host = build_local_runtime_host(device_id="dev_min")
         assert host.device_id == "dev_min"
         assert host.host_enabled is False
         assert host.supports_local_autonomy is False
 
     def test_full_build(self):
-        from contracts.local_runtime_host import build_local_runtime_host, LocalRuntimeHostStatus
+        from contracts.local_runtime_host import LocalRuntimeHostStatus, build_local_runtime_host
+
         host = build_local_runtime_host(
             device_id="dev_full",
             host_id="custom_id",
@@ -447,6 +481,7 @@ class TestBuildLocalRuntimeHost:
 
     def test_sub_contracts_reflect_flags(self):
         from contracts.local_runtime_host import build_local_runtime_host
+
         host = build_local_runtime_host(
             device_id="dev_sc",
             supports_local_execution=True,
@@ -462,12 +497,14 @@ class TestBuildLocalRuntimeHost:
 
     def test_serialisable(self):
         from contracts.local_runtime_host import build_local_runtime_host
+
         host = build_local_runtime_host(device_id="dev_ser", host_enabled=True)
         payload = host.to_dict()
         json.dumps(payload)
 
     def test_unknown_host_status_defaults_to_inactive(self):
-        from contracts.local_runtime_host import build_local_runtime_host, LocalRuntimeHostStatus
+        from contracts.local_runtime_host import LocalRuntimeHostStatus, build_local_runtime_host
+
         host = build_local_runtime_host(device_id="dev_unk", host_status="totally_unknown")
         assert host.host_status == LocalRuntimeHostStatus.INACTIVE
 
@@ -476,10 +513,12 @@ class TestBuildLocalRuntimeHost:
 # 6. Summary helper: summarize_local_runtime_host
 # ---------------------------------------------------------------------------
 
+
 class TestSummarizeLocalRuntimeHost:
 
     def test_summary_keys_present(self):
         from contracts.local_runtime_host import build_local_runtime_host, summarize_local_runtime_host
+
         host = build_local_runtime_host(
             device_id="sum_dev",
             host_enabled=True,
@@ -487,14 +526,25 @@ class TestSummarizeLocalRuntimeHost:
         )
         summary = summarize_local_runtime_host(host)
         expected_keys = {
-            "host_id", "device_id", "runtime_id", "runtime_version",
-            "host_enabled", "host_status",
-            "supports_local_autonomy", "supports_local_execution",
-            "supports_local_planning", "supports_local_fallback",
-            "supports_remote_handoff_receive", "supports_remote_handoff_callback",
+            "host_id",
+            "device_id",
+            "runtime_id",
+            "runtime_version",
+            "host_enabled",
+            "host_status",
+            "supports_local_autonomy",
+            "supports_local_execution",
+            "supports_local_planning",
+            "supports_local_fallback",
+            "supports_remote_handoff_receive",
+            "supports_remote_handoff_callback",
             "supports_runtime_sessions",
-            "active_session_count", "execution_modes", "callback_channels",
-            "capability_summary", "max_concurrent_tasks", "current_load",
+            "active_session_count",
+            "execution_modes",
+            "callback_channels",
+            "capability_summary",
+            "max_concurrent_tasks",
+            "current_load",
             "recorded_at",
         }
         missing = expected_keys - set(summary.keys())
@@ -502,17 +552,20 @@ class TestSummarizeLocalRuntimeHost:
 
     def test_active_session_count(self):
         from contracts.local_runtime_host import build_local_runtime_host, summarize_local_runtime_host
+
         host = build_local_runtime_host(device_id="sum2", active_session_ids=["a", "b", "c"])
         summary = summarize_local_runtime_host(host)
         assert summary["active_session_count"] == 3
 
     def test_summary_is_json_serialisable(self):
         from contracts.local_runtime_host import build_local_runtime_host, summarize_local_runtime_host
+
         host = build_local_runtime_host(device_id="sum3")
         json.dumps(summarize_local_runtime_host(host))
 
     def test_summary_does_not_include_sub_contracts(self):
         from contracts.local_runtime_host import build_local_runtime_host, summarize_local_runtime_host
+
         host = build_local_runtime_host(device_id="sum4")
         summary = summarize_local_runtime_host(host)
         # Sub-contracts should not appear in the summary
@@ -526,10 +579,12 @@ class TestSummarizeLocalRuntimeHost:
 # 7. Enum helpers
 # ---------------------------------------------------------------------------
 
+
 class TestEnumHelpers:
 
     def test_host_status_from_string_known(self):
         from contracts.local_runtime_host import LocalRuntimeHostStatus
+
         assert LocalRuntimeHostStatus.from_string("active") == LocalRuntimeHostStatus.ACTIVE
         assert LocalRuntimeHostStatus.from_string("inactive") == LocalRuntimeHostStatus.INACTIVE
         assert LocalRuntimeHostStatus.from_string("degraded") == LocalRuntimeHostStatus.DEGRADED
@@ -539,15 +594,18 @@ class TestEnumHelpers:
 
     def test_host_status_from_string_unknown_defaults_to_inactive(self):
         from contracts.local_runtime_host import LocalRuntimeHostStatus
+
         result = LocalRuntimeHostStatus.from_string("not_a_real_status")
         assert result == LocalRuntimeHostStatus.INACTIVE
 
     def test_host_status_from_string_uppercase(self):
         from contracts.local_runtime_host import LocalRuntimeHostStatus
+
         assert LocalRuntimeHostStatus.from_string("ACTIVE") == LocalRuntimeHostStatus.ACTIVE
 
     def test_execution_mode_from_string_known(self):
         from contracts.local_runtime_host import LocalRuntimeExecutionMode
+
         assert LocalRuntimeExecutionMode.from_string("local") == LocalRuntimeExecutionMode.LOCAL
         assert LocalRuntimeExecutionMode.from_string("remote") == LocalRuntimeExecutionMode.REMOTE
         assert LocalRuntimeExecutionMode.from_string("hybrid") == LocalRuntimeExecutionMode.HYBRID
@@ -555,6 +613,7 @@ class TestEnumHelpers:
 
     def test_execution_mode_from_string_unknown_defaults_to_local(self):
         from contracts.local_runtime_host import LocalRuntimeExecutionMode
+
         result = LocalRuntimeExecutionMode.from_string("unknown_mode")
         assert result == LocalRuntimeExecutionMode.LOCAL
 
@@ -563,11 +622,13 @@ class TestEnumHelpers:
 # 8. Graceful handling of partial / missing data
 # ---------------------------------------------------------------------------
 
+
 class TestGracefulPartialData:
 
     def test_from_registered_runtime_device_none_fields(self):
         """from_registered_runtime_device handles an object with all None fields."""
         from contracts.local_runtime_host import from_registered_runtime_device
+
         m = MagicMock()
         m.device_id = None
         m.online = None
@@ -592,11 +653,13 @@ class TestGracefulPartialData:
                 raise RuntimeError("boom")
 
         host = from_registered_runtime_device(Broken())
-        assert isinstance(host, __import__("contracts.local_runtime_host",
-                                            fromlist=["LocalRuntimeHost"]).LocalRuntimeHost)
+        assert isinstance(
+            host, __import__("contracts.local_runtime_host", fromlist=["LocalRuntimeHost"]).LocalRuntimeHost
+        )
 
     def test_from_runtime_bridge_config_empty_dict(self):
         from contracts.local_runtime_host import from_runtime_bridge_config
+
         host = from_runtime_bridge_config({})
         assert isinstance(host.device_id, str)
         assert isinstance(host.to_dict(), dict)
@@ -614,6 +677,7 @@ class TestGracefulPartialData:
 
     def test_build_local_runtime_host_empty_lists_default(self):
         from contracts.local_runtime_host import build_local_runtime_host
+
         host = build_local_runtime_host(device_id="dev_empty")
         assert host.active_session_ids == []
         assert host.execution_modes == []
@@ -622,6 +686,7 @@ class TestGracefulPartialData:
 
     def test_metadata_tolerance(self):
         from contracts.local_runtime_host import build_local_runtime_host
+
         host = build_local_runtime_host(
             device_id="dev_meta",
             metadata={"nested": {"a": 1}, "list": [1, 2, 3]},
@@ -634,10 +699,12 @@ class TestGracefulPartialData:
 # 9. Sub-contract field correctness
 # ---------------------------------------------------------------------------
 
+
 class TestSubContractFieldCorrectness:
 
     def test_capabilities_sub_contract(self):
         from contracts.local_runtime_host import LocalRuntimeHostCapabilities
+
         caps = LocalRuntimeHostCapabilities(
             supports_local_autonomy=True,
             supports_local_execution=True,
@@ -653,6 +720,7 @@ class TestSubContractFieldCorrectness:
 
     def test_session_support_sub_contract(self):
         from contracts.local_runtime_host import LocalRuntimeSessionSupport
+
         sess = LocalRuntimeSessionSupport(
             supports_runtime_sessions=True,
             max_concurrent_tasks=8,
@@ -665,6 +733,7 @@ class TestSubContractFieldCorrectness:
 
     def test_handoff_support_sub_contract(self):
         from contracts.local_runtime_host import LocalRuntimeHandoffSupport
+
         h = LocalRuntimeHandoffSupport(
             supports_remote_handoff_receive=True,
             supports_remote_handoff_callback=True,
@@ -675,6 +744,7 @@ class TestSubContractFieldCorrectness:
 
     def test_execution_support_sub_contract(self):
         from contracts.local_runtime_host import LocalRuntimeExecutionSupport
+
         e = LocalRuntimeExecutionSupport(
             supports_local_execution=True,
             supports_local_planning=True,
@@ -691,24 +761,28 @@ class TestSubContractFieldCorrectness:
 # 10. contracts package root re-exports
 # ---------------------------------------------------------------------------
 
+
 class TestContractsPackageExports:
 
     def test_local_runtime_host_importable(self):
         from contracts import LocalRuntimeHost
+
         assert LocalRuntimeHost is not None
 
     def test_status_enum_importable(self):
         from contracts import LocalRuntimeHostStatus
+
         assert LocalRuntimeHostStatus.ACTIVE.value == "active"
 
     def test_all_sub_contract_types_importable(self):
         from contracts import (
+            LocalRuntimeExecutionMode,
+            LocalRuntimeExecutionSupport,
+            LocalRuntimeHandoffSupport,
             LocalRuntimeHostCapabilities,
             LocalRuntimeSessionSupport,
-            LocalRuntimeHandoffSupport,
-            LocalRuntimeExecutionSupport,
-            LocalRuntimeExecutionMode,
         )
+
         for cls in (
             LocalRuntimeHostCapabilities,
             LocalRuntimeSessionSupport,
@@ -720,11 +794,12 @@ class TestContractsPackageExports:
 
     def test_all_adapter_functions_importable(self):
         from contracts import (
+            build_local_runtime_host,
             from_registered_runtime_device,
             from_runtime_bridge_config,
-            build_local_runtime_host,
             summarize_local_runtime_host,
         )
+
         for fn in (
             from_registered_runtime_device,
             from_runtime_bridge_config,
@@ -736,12 +811,14 @@ class TestContractsPackageExports:
     def test_pr29_exports_still_work(self):
         """PR-30 must not break the PR-29 RegisteredRuntimeDevice exports."""
         from contracts import RegisteredRuntimeDevice, build_registered_runtime_device
+
         assert RegisteredRuntimeDevice is not None
         assert callable(build_registered_runtime_device)
 
     def test_pr25_exports_still_work(self):
         """PR-30 must not break the PR-25 ExecutionTrace exports."""
         from contracts import ExecutionTraceEnvelope, ExecutionTraceStage
+
         assert ExecutionTraceEnvelope is not None
         assert ExecutionTraceStage.INTENT_CREATED is not None
 
@@ -750,14 +827,17 @@ class TestContractsPackageExports:
 # 11. core.unified package re-exports
 # ---------------------------------------------------------------------------
 
+
 class TestCoreUnifiedReexports:
 
     def test_local_runtime_host_in_core_unified(self):
         from core.unified import LocalRuntimeHost
+
         assert LocalRuntimeHost is not None
 
     def test_builder_in_core_unified(self):
         from core.unified import build_local_runtime_host
+
         assert callable(build_local_runtime_host)
 
     def test_adapters_in_core_unified(self):
@@ -766,16 +846,19 @@ class TestCoreUnifiedReexports:
             from_runtime_bridge_config,
             summarize_local_runtime_host,
         )
+
         assert callable(from_registered_runtime_device)
         assert callable(from_runtime_bridge_config)
         assert callable(summarize_local_runtime_host)
 
     def test_status_enum_in_core_unified(self):
         from core.unified import LocalRuntimeHostStatus
+
         assert LocalRuntimeHostStatus.ACTIVE.value == "active"
 
     def test_pr29_still_exported_from_core_unified(self):
         from core.unified import RegisteredRuntimeDevice, build_registered_runtime_device
+
         assert RegisteredRuntimeDevice is not None
         assert callable(build_registered_runtime_device)
 
@@ -784,11 +867,13 @@ class TestCoreUnifiedReexports:
 # 12. Runtime host API endpoints
 # ---------------------------------------------------------------------------
 
+
 class TestRuntimeHostEndpoints:
     @pytest.fixture(scope="class")
     def app_client(self):
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
+
         from core.routes.devices import create_router
 
         app = FastAPI()
@@ -834,10 +919,18 @@ class TestRuntimeHostEndpoints:
             assert data["device_id"] == "pr30_test_dev_001"
             # All required fields must be present
             required = {
-                "host_id", "device_id", "host_enabled", "host_status",
-                "supports_local_autonomy", "supports_local_execution",
-                "supports_remote_handoff_receive", "capabilities",
-                "sessions", "handoff", "execution", "metadata",
+                "host_id",
+                "device_id",
+                "host_enabled",
+                "host_status",
+                "supports_local_autonomy",
+                "supports_local_execution",
+                "supports_remote_handoff_receive",
+                "capabilities",
+                "sessions",
+                "handoff",
+                "execution",
+                "metadata",
             }
             missing = required - set(data.keys())
             assert not missing, f"Missing keys in runtime-host response: {missing}"

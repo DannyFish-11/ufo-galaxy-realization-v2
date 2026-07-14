@@ -177,6 +177,7 @@ AUDIT_EVENT_SEMANTICS_DURABLE_AUDIT_SENTINEL: str = (
 # Enumerations
 # ---------------------------------------------------------------------------
 
+
 class AuditEventKind(str, Enum):
     """Canonical unified audit event vocabulary for Galaxy.
 
@@ -282,93 +283,40 @@ class AuditEventKind(str, Enum):
 # ---------------------------------------------------------------------------
 
 AUDIT_EVENT_DESCRIPTIONS: Dict[AuditEventKind, str] = {
-    AuditEventKind.TASK_ACCEPTED: (
-        "Task accepted at the system boundary; origin and intent recorded."
-    ),
-    AuditEventKind.TASK_ADMITTED: (
-        "Task admitted for execution; planning constraints resolved."
-    ),
-    AuditEventKind.TASK_DISPATCHED: (
-        "TaskEnvelope entered CommandRouter; execution spine engaged."
-    ),
-    AuditEventKind.TASK_COMPLETED: (
-        "Task completed successfully; result lineage available."
-    ),
-    AuditEventKind.TASK_FAILED: (
-        "Task failed; failure domain and error code recorded."
-    ),
-    AuditEventKind.TASK_CANCELLED: (
-        "Task explicitly cancelled before or during execution."
-    ),
-    AuditEventKind.TASK_DEGRADED: (
-        "Task completed with degraded result; fallback path was used."
-    ),
-    AuditEventKind.ROUTE_DECISION: (
-        "Routing decision recorded; targets and transport strategy selected."
-    ),
-    AuditEventKind.ROUTE_SELECTED: (
-        "Effective route selected; path and transport confirmed."
-    ),
-    AuditEventKind.ROUTE_DEGRADED: (
-        "Routing degraded; fallback path used due to primary unavailability."
-    ),
-    AuditEventKind.POLICY_ADMIT: (
-        "Policy convergence admitted the task for execution."
-    ),
-    AuditEventKind.POLICY_REJECT: (
-        "Policy convergence rejected the task; reason recorded."
-    ),
-    AuditEventKind.POLICY_DEGRADE: (
-        "Policy convergence degraded the task execution mode."
-    ),
-    AuditEventKind.POLICY_DECISION: (
-        "Policy decision recorded; verdict and score available."
-    ),
-    AuditEventKind.FALLBACK_TRIGGERED: (
-        "Fallback execution path triggered due to primary task failure."
-    ),
-    AuditEventKind.FALLBACK_SUCCEEDED: (
-        "Fallback execution completed successfully."
-    ),
-    AuditEventKind.FALLBACK_FAILED: (
-        "Fallback execution also failed; task is in error state."
-    ),
-    AuditEventKind.RETRY_TRIGGERED: (
-        "Retry attempt triggered; original task was retried."
-    ),
-    AuditEventKind.RETRY_SUCCEEDED: (
-        "Retry attempt completed successfully."
-    ),
-    AuditEventKind.RETRY_FAILED: (
-        "Retry attempt failed; escalation may occur."
-    ),
-    AuditEventKind.FAILURE_DOMAIN_IDENTIFIED: (
-        "Failure domain identified and recorded for diagnostics."
-    ),
-    AuditEventKind.EXECUTOR_SELECTED: (
-        "Executor or provider node selected for task execution."
-    ),
-    AuditEventKind.EXECUTOR_RESULT: (
-        "Result received from executor; result lineage updated."
-    ),
-    AuditEventKind.DEVICE_REGISTERED: (
-        "Device registered with the runtime; capabilities catalogued."
-    ),
-    AuditEventKind.DEVICE_HEARTBEAT: (
-        "Device heartbeat recorded; presence confirmed."
-    ),
-    AuditEventKind.DEVICE_DISCONNECTED: (
-        "Device disconnected; presence marked unavailable."
-    ),
-    AuditEventKind.RUNTIME_EVENT: (
-        "Generic runtime event recorded for observability."
-    ),
+    AuditEventKind.TASK_ACCEPTED: ("Task accepted at the system boundary; origin and intent recorded."),
+    AuditEventKind.TASK_ADMITTED: ("Task admitted for execution; planning constraints resolved."),
+    AuditEventKind.TASK_DISPATCHED: ("TaskEnvelope entered CommandRouter; execution spine engaged."),
+    AuditEventKind.TASK_COMPLETED: ("Task completed successfully; result lineage available."),
+    AuditEventKind.TASK_FAILED: ("Task failed; failure domain and error code recorded."),
+    AuditEventKind.TASK_CANCELLED: ("Task explicitly cancelled before or during execution."),
+    AuditEventKind.TASK_DEGRADED: ("Task completed with degraded result; fallback path was used."),
+    AuditEventKind.ROUTE_DECISION: ("Routing decision recorded; targets and transport strategy selected."),
+    AuditEventKind.ROUTE_SELECTED: ("Effective route selected; path and transport confirmed."),
+    AuditEventKind.ROUTE_DEGRADED: ("Routing degraded; fallback path used due to primary unavailability."),
+    AuditEventKind.POLICY_ADMIT: ("Policy convergence admitted the task for execution."),
+    AuditEventKind.POLICY_REJECT: ("Policy convergence rejected the task; reason recorded."),
+    AuditEventKind.POLICY_DEGRADE: ("Policy convergence degraded the task execution mode."),
+    AuditEventKind.POLICY_DECISION: ("Policy decision recorded; verdict and score available."),
+    AuditEventKind.FALLBACK_TRIGGERED: ("Fallback execution path triggered due to primary task failure."),
+    AuditEventKind.FALLBACK_SUCCEEDED: ("Fallback execution completed successfully."),
+    AuditEventKind.FALLBACK_FAILED: ("Fallback execution also failed; task is in error state."),
+    AuditEventKind.RETRY_TRIGGERED: ("Retry attempt triggered; original task was retried."),
+    AuditEventKind.RETRY_SUCCEEDED: ("Retry attempt completed successfully."),
+    AuditEventKind.RETRY_FAILED: ("Retry attempt failed; escalation may occur."),
+    AuditEventKind.FAILURE_DOMAIN_IDENTIFIED: ("Failure domain identified and recorded for diagnostics."),
+    AuditEventKind.EXECUTOR_SELECTED: ("Executor or provider node selected for task execution."),
+    AuditEventKind.EXECUTOR_RESULT: ("Result received from executor; result lineage updated."),
+    AuditEventKind.DEVICE_REGISTERED: ("Device registered with the runtime; capabilities catalogued."),
+    AuditEventKind.DEVICE_HEARTBEAT: ("Device heartbeat recorded; presence confirmed."),
+    AuditEventKind.DEVICE_DISCONNECTED: ("Device disconnected; presence marked unavailable."),
+    AuditEventKind.RUNTIME_EVENT: ("Generic runtime event recorded for observability."),
 }
 
 
 # ---------------------------------------------------------------------------
 # AuditEventRecord
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class AuditEventRecord:
@@ -379,9 +327,7 @@ class AuditEventRecord:
     consumption (lightweight, exportable).
     """
 
-    audit_id: str = field(
-        default_factory=lambda: f"aud_{uuid.uuid4().hex[:16]}"
-    )
+    audit_id: str = field(default_factory=lambda: f"aud_{uuid.uuid4().hex[:16]}")
     recorded_at: float = field(default_factory=time.time)
 
     kind: str = AuditEventKind.RUNTIME_EVENT
@@ -452,9 +398,7 @@ class AuditEventRecord:
 class AuditSemanticSnapshot:
     """Snapshot of recent audit records from the semantics runtime."""
 
-    snapshot_id: str = field(
-        default_factory=lambda: f"audsnap_{uuid.uuid4().hex[:12]}"
-    )
+    snapshot_id: str = field(default_factory=lambda: f"audsnap_{uuid.uuid4().hex[:12]}")
     generated_at: float = field(default_factory=time.time)
     event_count: int = 0
     recent_events: List[Dict[str, Any]] = field(default_factory=list)
@@ -475,6 +419,7 @@ class AuditSemanticSnapshot:
 # ---------------------------------------------------------------------------
 # AuditEventSemantics — main class
 # ---------------------------------------------------------------------------
+
 
 class AuditEventSemantics:
     """Singleton canonical audit event semantics runtime.
@@ -527,15 +472,14 @@ class AuditEventSemantics:
         if self._audit_store is not None:
             try:
                 from core.replay_audit_persistence import append_replay_audit_record
+
                 append_replay_audit_record(
                     record.to_dict(),
                     "audit_event",
                     store=self._audit_store,
                 )
             except Exception as _exc:  # noqa: BLE001
-                logger.debug(
-                    "AuditEventSemantics: durable write skipped: %s", _exc
-                )
+                logger.debug("AuditEventSemantics: durable write skipped: %s", _exc)
         return record
 
     def get_by_task(self, task_id: str) -> List[AuditEventRecord]:
@@ -587,6 +531,7 @@ def reset_audit_event_semantics() -> None:
 # ---------------------------------------------------------------------------
 # Helper factory functions
 # ---------------------------------------------------------------------------
+
 
 def _emit(
     kind: AuditEventKind,

@@ -48,20 +48,19 @@ Test classes
 
 from __future__ import annotations
 
-import sys
 import os
+import sys
 import unittest
 from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from core.device_readiness import (
-    RoutabilitySummary,
     LIVE_ROUTE_TRUTH_INTEGRATED,
     TRANSPORT_HIERARCHY_ENFORCED,
+    RoutabilitySummary,
     get_routability_summary,
 )
-
 
 # ---------------------------------------------------------------------------
 # 1. TestLiveRouteTruthSentinel
@@ -77,6 +76,7 @@ class TestLiveRouteTruthSentinel(unittest.TestCase):
 
     def test_sentinel_exportable(self):
         from core.device_readiness import __all__ as exports
+
         self.assertIn("LIVE_ROUTE_TRUTH_INTEGRATED", exports)
 
 
@@ -105,13 +105,11 @@ class TestTransportPresentVsUsable(unittest.TestCase):
         self.assertTrue(s.transport_present)
 
     def test_transport_usable_requires_effective_routable(self):
-        s = self._make_summary(transport_present=True, effective_routable=False,
-                                transport_usable=False)
+        s = self._make_summary(transport_present=True, effective_routable=False, transport_usable=False)
         self.assertFalse(s.transport_usable)
 
     def test_transport_usable_true_when_routable(self):
-        s = self._make_summary(transport_present=True, effective_routable=True,
-                                transport_usable=True)
+        s = self._make_summary(transport_present=True, effective_routable=True, transport_usable=True)
         self.assertTrue(s.transport_usable)
 
 
@@ -194,9 +192,11 @@ class TestDirectWSPath(unittest.TestCase):
 
     def test_direct_ws_sets_transport_present_and_usable(self):
         ucm = self._ucm_with_direct_ws("dev1")
-        with patch("core.device_readiness._get_ucm", return_value=ucm), \
-             patch("core.device_readiness._get_gateway_ws_manager", return_value=None), \
-             patch("core.device_readiness._get_device_router", return_value=None):
+        with (
+            patch("core.device_readiness._get_ucm", return_value=ucm),
+            patch("core.device_readiness._get_gateway_ws_manager", return_value=None),
+            patch("core.device_readiness._get_device_router", return_value=None),
+        ):
             summary = get_routability_summary("dev1")
         self.assertTrue(summary.transport_present)
         self.assertTrue(summary.transport_usable)
@@ -205,17 +205,21 @@ class TestDirectWSPath(unittest.TestCase):
 
     def test_direct_ws_device_routable_equals_effective_routable(self):
         ucm = self._ucm_with_direct_ws("dev1")
-        with patch("core.device_readiness._get_ucm", return_value=ucm), \
-             patch("core.device_readiness._get_gateway_ws_manager", return_value=None), \
-             patch("core.device_readiness._get_device_router", return_value=None):
+        with (
+            patch("core.device_readiness._get_ucm", return_value=ucm),
+            patch("core.device_readiness._get_gateway_ws_manager", return_value=None),
+            patch("core.device_readiness._get_device_router", return_value=None),
+        ):
             summary = get_routability_summary("dev1")
         self.assertEqual(summary.device_routable, summary.effective_routable)
 
     def test_direct_ws_effective_path_equals_preferred_path(self):
         ucm = self._ucm_with_direct_ws("dev1")
-        with patch("core.device_readiness._get_ucm", return_value=ucm), \
-             patch("core.device_readiness._get_gateway_ws_manager", return_value=None), \
-             patch("core.device_readiness._get_device_router", return_value=None):
+        with (
+            patch("core.device_readiness._get_ucm", return_value=ucm),
+            patch("core.device_readiness._get_gateway_ws_manager", return_value=None),
+            patch("core.device_readiness._get_device_router", return_value=None),
+        ):
             summary = get_routability_summary("dev1")
         self.assertEqual(summary.effective_path, summary.preferred_path)
 
@@ -231,10 +235,12 @@ class TestRelayOnlyPath(unittest.TestCase):
         ucm = MagicMock()
         ucm.get_connection.return_value = None
         ucm.is_device_connected.return_value = False
-        with patch("core.device_readiness._get_ucm", return_value=ucm), \
-             patch("core.device_readiness._get_gateway_ws_manager", return_value=None), \
-             patch("core.device_readiness._get_device_router", return_value=None), \
-             patch("builtins.__import__", side_effect=self._import_side_effect):
+        with (
+            patch("core.device_readiness._get_ucm", return_value=ucm),
+            patch("core.device_readiness._get_gateway_ws_manager", return_value=None),
+            patch("core.device_readiness._get_device_router", return_value=None),
+            patch("builtins.__import__", side_effect=self._import_side_effect),
+        ):
             summary = get_routability_summary("dev1")
         self.assertTrue(summary.relay_available)
         self.assertTrue(summary.transport_present)
@@ -259,10 +265,12 @@ class TestNoTransportPath(unittest.TestCase):
         ucm = MagicMock()
         ucm.get_connection.return_value = None
         ucm.is_device_connected.return_value = False
-        with patch("core.device_readiness._get_ucm", return_value=ucm), \
-             patch("core.device_readiness._get_gateway_ws_manager", return_value=None), \
-             patch("core.device_readiness._get_device_router", return_value=None), \
-             patch("builtins.__import__", side_effect=ImportError):
+        with (
+            patch("core.device_readiness._get_ucm", return_value=ucm),
+            patch("core.device_readiness._get_gateway_ws_manager", return_value=None),
+            patch("core.device_readiness._get_device_router", return_value=None),
+            patch("builtins.__import__", side_effect=ImportError),
+        ):
             summary = get_routability_summary("dev1")
         self.assertFalse(summary.transport_present)
         self.assertFalse(summary.transport_usable)
@@ -280,9 +288,11 @@ class TestGetRoutabilitySummaryPopulatesPR5Fields(unittest.TestCase):
         ucm = MagicMock()
         ucm.get_connection.return_value = None
         ucm.is_device_connected.return_value = False
-        with patch("core.device_readiness._get_ucm", return_value=ucm), \
-             patch("core.device_readiness._get_gateway_ws_manager", return_value=None), \
-             patch("core.device_readiness._get_device_router", return_value=None):
+        with (
+            patch("core.device_readiness._get_ucm", return_value=ucm),
+            patch("core.device_readiness._get_gateway_ws_manager", return_value=None),
+            patch("core.device_readiness._get_device_router", return_value=None),
+        ):
             summary = get_routability_summary("dev1")
         self.assertIsInstance(summary.transport_present, bool)
         self.assertIsInstance(summary.transport_usable, bool)
@@ -293,9 +303,11 @@ class TestGetRoutabilitySummaryPopulatesPR5Fields(unittest.TestCase):
         ucm = MagicMock()
         ucm.get_connection.return_value = None
         ucm.is_device_connected.return_value = False
-        with patch("core.device_readiness._get_ucm", return_value=ucm), \
-             patch("core.device_readiness._get_gateway_ws_manager", return_value=None), \
-             patch("core.device_readiness._get_device_router", return_value=None):
+        with (
+            patch("core.device_readiness._get_ucm", return_value=ucm),
+            patch("core.device_readiness._get_gateway_ws_manager", return_value=None),
+            patch("core.device_readiness._get_device_router", return_value=None),
+        ):
             summary = get_routability_summary("dev1")
         d = summary.to_dict()
         for key in ("transport_present", "transport_usable", "device_routable", "effective_path"):

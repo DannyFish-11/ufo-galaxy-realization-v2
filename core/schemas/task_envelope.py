@@ -39,7 +39,6 @@ from pydantic import BaseModel, Field
 
 from core.schemas.remote_execution import ExecutorTargetType, RemoteExecutionMode
 
-
 # ---------------------------------------------------------------------------
 # Lifecycle state literals (Capability 1)
 # ---------------------------------------------------------------------------
@@ -155,10 +154,7 @@ class TaskEnvelope(BaseModel):
     # ── Free-form metadata ───────────────────────────────────────────────────
     metadata: Dict[str, Any] = Field(
         default_factory=dict,
-        description=(
-            "Arbitrary key-value pairs: mode, notify_ws, relay hints, "
-            "tenant, user_id, …"
-        ),
+        description=("Arbitrary key-value pairs: mode, notify_ws, relay hints, " "tenant, user_id, …"),
     )
 
     # ── Remote execution style (PR-5) ────────────────────────────────────────
@@ -263,15 +259,14 @@ class TaskEnvelope(BaseModel):
             "failed": set(),
         }
         if new_status not in _allowed.get(self.lifecycle_status, set()):
-            raise ValueError(
-                f"Invalid lifecycle transition: {self.lifecycle_status!r} → {new_status!r}"
-            )
+            raise ValueError(f"Invalid lifecycle transition: {self.lifecycle_status!r} → {new_status!r}")
         return self.model_copy(update={"lifecycle_status": new_status})
 
 
 # ---------------------------------------------------------------------------
 # Adapter helpers (legacy → TaskEnvelope)
 # ---------------------------------------------------------------------------
+
 
 def envelope_from_command_request(
     *,

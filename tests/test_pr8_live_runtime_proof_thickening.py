@@ -74,7 +74,6 @@ from unittest.mock import MagicMock
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -237,9 +236,7 @@ class TestSignalKindMappingCompleteness:
     def test_terminal_signal_kinds_are_final_result_error_timeout_cancelled(self):
         from core.android_execution_signal_reconciler import AndroidSignalKind
 
-        terminal_kinds = {
-            k for k in AndroidSignalKind if k.is_terminal()
-        }
+        terminal_kinds = {k for k in AndroidSignalKind if k.is_terminal()}
         assert terminal_kinds == {
             AndroidSignalKind.final_result,
             AndroidSignalKind.error,
@@ -250,9 +247,7 @@ class TestSignalKindMappingCompleteness:
     def test_non_terminal_signal_kinds_are_ack_progress_partial_result(self):
         from core.android_execution_signal_reconciler import AndroidSignalKind
 
-        non_terminal = {
-            k for k in AndroidSignalKind if not k.is_terminal()
-        }
+        non_terminal = {k for k in AndroidSignalKind if not k.is_terminal()}
         assert non_terminal == {
             AndroidSignalKind.ack,
             AndroidSignalKind.progress,
@@ -272,21 +267,21 @@ class TestSignalEnvelopeExtraction:
         from core.android_execution_signal_reconciler import extract_signal_envelope
 
         msg = _v3(
-            "task_result", "top_level_device",
+            "task_result",
+            "top_level_device",
             status="completed",
             payload={"device_id": "payload_device"},
         )
         envelope = extract_signal_envelope(msg)
-        assert envelope.device_id == "top_level_device", (
-            "device_id from top-level must take precedence over payload"
-        )
+        assert envelope.device_id == "top_level_device", "device_id from top-level must take precedence over payload"
 
     def test_contract_id_resolved_from_payload(self):
         from core.android_execution_signal_reconciler import extract_signal_envelope
 
         contract_id = f"contract-{uuid.uuid4().hex[:8]}"
         msg = _v3(
-            "task_result", "dev",
+            "task_result",
+            "dev",
             status="completed",
             payload={"contract_id": contract_id},
         )
@@ -298,7 +293,8 @@ class TestSignalEnvelopeExtraction:
 
         session_id = f"sess-{uuid.uuid4().hex[:8]}"
         msg = _v3(
-            "task_result", "dev",
+            "task_result",
+            "dev",
             status="completed",
             payload={"session_id": session_id},
         )
@@ -310,7 +306,8 @@ class TestSignalEnvelopeExtraction:
 
         trace_id = f"trace-{uuid.uuid4().hex[:8]}"
         msg = _v3(
-            "task_result", "dev",
+            "task_result",
+            "dev",
             status="completed",
             payload={"trace_id": trace_id},
         )
@@ -331,7 +328,8 @@ class TestSignalEnvelopeExtraction:
         from core.android_execution_signal_reconciler import extract_signal_envelope
 
         msg = _v3(
-            "task_result", "dev",
+            "task_result",
+            "dev",
             payload={"contract_id": "cid_001"},
         )
         envelope = extract_signal_envelope(msg)
@@ -352,7 +350,8 @@ class TestSignalEnvelopeExtraction:
         trace_id = f"tid-rt-{uuid.uuid4().hex[:8]}"
         task_id = f"task-rt-{uuid.uuid4().hex[:8]}"
         msg = _v3(
-            "task_result", "dev_rt",
+            "task_result",
+            "dev_rt",
             status="completed",
             task_id=task_id,
             payload={
@@ -539,9 +538,9 @@ class TestCrossRepoPolicyStringsPresent:
         ]
 
         for sentinel in sentinels:
-            assert isinstance(sentinel, str) and len(sentinel) > 0, (
-                f"Policy sentinel must be a non-empty string; got: {sentinel!r}"
-            )
+            assert (
+                isinstance(sentinel, str) and len(sentinel) > 0
+            ), f"Policy sentinel must be a non-empty string; got: {sentinel!r}"
 
     def test_cross_repo_consistency_gates_pr12_sentinel(self):
         from core.cross_repo_consistency_gates import (
@@ -609,9 +608,7 @@ class TestLiveRuntimeSnapshotStoreIntegrity:
 
         stored = get_device_state_snapshot(device_id)
         assert stored is not None
-        assert stored.model_ready is True, (
-            "Third absorb (seq=3) must be the latest; model_ready should be True"
-        )
+        assert stored.model_ready is True, "Third absorb (seq=3) must be the latest; model_ready should be True"
         assert stored.snapshot_seq == 3
 
     def test_execution_event_absorbed_and_readable(self):
@@ -657,10 +654,7 @@ class TestLiveRuntimeSnapshotStoreIntegrity:
         )
 
         stored = get_device_state_snapshot(device_id)
-        assert stored is not None, (
-            "Store must be populated via snapshot path alone — "
-            "no task execution required"
-        )
+        assert stored is not None, "Store must be populated via snapshot path alone — " "no task execution required"
 
 
 # ===========================================================================
@@ -703,12 +697,8 @@ class TestReplayGuardDeterminism:
                 payload={"result": {"ok": True}},
             )
             o_replay = reconcile_android_execution_signal(replay, runtime=rt)
-            assert o_replay.was_updated is False, (
-                f"Replay {attempt}: was_updated must be False for terminal record"
-            )
-            assert o_replay.reject_reason, (
-                f"Replay {attempt}: reject_reason must be set"
-            )
+            assert o_replay.was_updated is False, f"Replay {attempt}: was_updated must be False for terminal record"
+            assert o_replay.reject_reason, f"Replay {attempt}: reject_reason must be set"
 
     def test_missing_lookup_key_always_produces_same_rejection(self):
         """Missing contract_id + session_id always produces the same rejection."""
@@ -758,11 +748,8 @@ class TestReplayGuardDeterminism:
         d1 = env.to_dict()
         d2 = env.to_dict()
 
-        for key in ("signal_kind", "contract_id", "session_id", "device_id",
-                    "trace_id", "task_id", "envelope_id"):
-            assert d1[key] == d2[key], (
-                f"to_dict() must be stable for key {key!r}"
-            )
+        for key in ("signal_kind", "contract_id", "session_id", "device_id", "trace_id", "task_id", "envelope_id"):
+            assert d1[key] == d2[key], f"to_dict() must be stable for key {key!r}"
 
 
 # ===========================================================================
@@ -785,9 +772,7 @@ class TestCrossRepoConsistencyGatesPass:
         results = run_all_consistency_gates()
         valid_verdicts = {GateVerdict.pass_, GateVerdict.warn, GateVerdict.fail}
         for result in results:
-            assert result.verdict in valid_verdicts, (
-                f"Gate {result.gate_id!r} has invalid verdict: {result.verdict!r}"
-            )
+            assert result.verdict in valid_verdicts, f"Gate {result.gate_id!r} has invalid verdict: {result.verdict!r}"
 
     def test_build_consistency_gate_snapshot_produces_valid_dict(self):
         from core.cross_repo_consistency_gates import build_consistency_gate_snapshot
@@ -796,8 +781,15 @@ class TestCrossRepoConsistencyGatesPass:
         d = snapshot.to_dict()
 
         required_keys = {
-            "generated_at", "total_gates", "passed_gates", "warned_gates",
-            "failed_gates", "drift_detected", "is_clean", "summary", "gate_results",
+            "generated_at",
+            "total_gates",
+            "passed_gates",
+            "warned_gates",
+            "failed_gates",
+            "drift_detected",
+            "is_clean",
+            "summary",
+            "gate_results",
         }
         for key in required_keys:
             assert key in d, f"Missing required key {key!r} in consistency_gate_snapshot.to_dict()"
@@ -834,22 +826,26 @@ class TestAndroidRuntimeTruthDrivesGovernanceDecisions:
         snap_ready.seeclick_present = None
 
         score_no_snap, _ = _score_candidate(
-            "sess_test", "dev_test",
-            readiness=readiness, participation=participation,
-            reuse_eligible=False, android_snapshot=None, execution_busy=False,
+            "sess_test",
+            "dev_test",
+            readiness=readiness,
+            participation=participation,
+            reuse_eligible=False,
+            android_snapshot=None,
+            execution_busy=False,
         )
         score_ready, _ = _score_candidate(
-            "sess_test", "dev_test",
-            readiness=readiness, participation=participation,
-            reuse_eligible=False, android_snapshot=snap_ready, execution_busy=False,
+            "sess_test",
+            "dev_test",
+            readiness=readiness,
+            participation=participation,
+            reuse_eligible=False,
+            android_snapshot=snap_ready,
+            execution_busy=False,
         )
 
-        assert score_ready > score_no_snap, (
-            "model_ready=True must produce higher dispatch score than no snapshot"
-        )
-        assert score_ready == score_no_snap + 10, (
-            "model_ready=True should add exactly 10 points to the dispatch score"
-        )
+        assert score_ready > score_no_snap, "model_ready=True must produce higher dispatch score than no snapshot"
+        assert score_ready == score_no_snap + 10, "model_ready=True should add exactly 10 points to the dispatch score"
 
     def test_warmup_failed_reduces_dispatch_score(self):
         from core.runtime.source_dispatch_orchestrator import _score_candidate
@@ -874,19 +870,25 @@ class TestAndroidRuntimeTruthDrivesGovernanceDecisions:
         snap_warmup_failed.seeclick_present = None
 
         score_no_snap, _ = _score_candidate(
-            "sess_test", "dev_test",
-            readiness=readiness, participation=participation,
-            reuse_eligible=False, android_snapshot=None, execution_busy=False,
+            "sess_test",
+            "dev_test",
+            readiness=readiness,
+            participation=participation,
+            reuse_eligible=False,
+            android_snapshot=None,
+            execution_busy=False,
         )
         score_warmup_failed, _ = _score_candidate(
-            "sess_test", "dev_test",
-            readiness=readiness, participation=participation,
-            reuse_eligible=False, android_snapshot=snap_warmup_failed, execution_busy=False,
+            "sess_test",
+            "dev_test",
+            readiness=readiness,
+            participation=participation,
+            reuse_eligible=False,
+            android_snapshot=snap_warmup_failed,
+            execution_busy=False,
         )
 
-        assert score_warmup_failed < score_no_snap, (
-            "warmup_result='failed' must reduce dispatch score"
-        )
+        assert score_warmup_failed < score_no_snap, "warmup_result='failed' must reduce dispatch score"
 
     def test_execution_busy_reduces_dispatch_score(self):
         from core.runtime.source_dispatch_orchestrator import _score_candidate
@@ -899,19 +901,25 @@ class TestAndroidRuntimeTruthDrivesGovernanceDecisions:
         participation.participant_tier = "joined_runtime"
 
         score_idle, _ = _score_candidate(
-            "sess_test", "dev_test",
-            readiness=readiness, participation=participation,
-            reuse_eligible=False, android_snapshot=None, execution_busy=False,
+            "sess_test",
+            "dev_test",
+            readiness=readiness,
+            participation=participation,
+            reuse_eligible=False,
+            android_snapshot=None,
+            execution_busy=False,
         )
         score_busy, _ = _score_candidate(
-            "sess_test", "dev_test",
-            readiness=readiness, participation=participation,
-            reuse_eligible=False, android_snapshot=None, execution_busy=True,
+            "sess_test",
+            "dev_test",
+            readiness=readiness,
+            participation=participation,
+            reuse_eligible=False,
+            android_snapshot=None,
+            execution_busy=True,
         )
 
-        assert score_busy < score_idle, (
-            "execution_busy=True must reduce dispatch score"
-        )
+        assert score_busy < score_idle, "execution_busy=True must reduce dispatch score"
 
     def test_healthy_vs_degraded_snapshot_score_difference(self):
         """Healthy snapshot must score materially higher than degraded snapshot."""
@@ -923,13 +931,23 @@ class TestAndroidRuntimeTruthDrivesGovernanceDecisions:
 
         absorb_device_state_snapshot(
             dev_healthy,
-            {"model_ready": True, "accessibility_ready": True, "warmup_result": "ok",
-             "snapshot_seq": 1, "snapshot_ts": int(time.time() * 1000)},
+            {
+                "model_ready": True,
+                "accessibility_ready": True,
+                "warmup_result": "ok",
+                "snapshot_seq": 1,
+                "snapshot_ts": int(time.time() * 1000),
+            },
         )
         absorb_device_state_snapshot(
             dev_degraded,
-            {"model_ready": False, "accessibility_ready": False, "warmup_result": "failed",
-             "snapshot_seq": 1, "snapshot_ts": int(time.time() * 1000)},
+            {
+                "model_ready": False,
+                "accessibility_ready": False,
+                "warmup_result": "failed",
+                "snapshot_seq": 1,
+                "snapshot_ts": int(time.time() * 1000),
+            },
         )
 
         snap_h = get_device_state_snapshot(dev_healthy)
@@ -943,19 +961,25 @@ class TestAndroidRuntimeTruthDrivesGovernanceDecisions:
         participation.participant_tier = "joined_runtime"
 
         score_h, _ = _score_candidate(
-            "sess_h", dev_healthy,
-            readiness=readiness, participation=participation,
-            reuse_eligible=False, android_snapshot=snap_h, execution_busy=False,
+            "sess_h",
+            dev_healthy,
+            readiness=readiness,
+            participation=participation,
+            reuse_eligible=False,
+            android_snapshot=snap_h,
+            execution_busy=False,
         )
         score_d, _ = _score_candidate(
-            "sess_d", dev_degraded,
-            readiness=readiness, participation=participation,
-            reuse_eligible=False, android_snapshot=snap_d, execution_busy=False,
+            "sess_d",
+            dev_degraded,
+            readiness=readiness,
+            participation=participation,
+            reuse_eligible=False,
+            android_snapshot=snap_d,
+            execution_busy=False,
         )
 
-        assert score_h > score_d, (
-            f"Healthy snapshot score ({score_h}) must exceed degraded snapshot score ({score_d})"
-        )
+        assert score_h > score_d, f"Healthy snapshot score ({score_h}) must exceed degraded snapshot score ({score_d})"
 
 
 # ===========================================================================
@@ -994,12 +1018,11 @@ class TestSignalChainIdempotencyAndOrdering:
             )
             outcome = reconcile_android_execution_signal(env_prog, runtime=rt)
             assert outcome.was_updated is True
-            assert outcome.record.phase.value in ("acknowledged", "in_progress"), (
-                f"Phase must not regress; got {outcome.record.phase.value!r}"
-            )
-            assert not outcome.record.phase.is_terminal(), (
-                "Progress must never produce a terminal phase"
-            )
+            assert outcome.record.phase.value in (
+                "acknowledged",
+                "in_progress",
+            ), f"Phase must not regress; got {outcome.record.phase.value!r}"
+            assert not outcome.record.phase.is_terminal(), "Progress must never produce a terminal phase"
 
     def test_ack_after_progress_does_not_regress_to_pending_ack(self):
         """An ack signal after in_progress must not regress the phase."""
@@ -1029,9 +1052,10 @@ class TestSignalChainIdempotencyAndOrdering:
             session_id=session_id,
         )
         outcome = reconcile_android_execution_signal(env_late_ack, runtime=rt)
-        assert outcome.record.phase.value in ("acknowledged", "in_progress"), (
-            "Late ack must not regress phase below current"
-        )
+        assert outcome.record.phase.value in (
+            "acknowledged",
+            "in_progress",
+        ), "Late ack must not regress phase below current"
 
     def test_signal_kind_is_terminal_property_is_consistent(self):
         from core.android_execution_signal_reconciler import AndroidSignalKind
@@ -1043,13 +1067,9 @@ class TestSignalChainIdempotencyAndOrdering:
                 AndroidSignalKind.timeout,
                 AndroidSignalKind.cancelled,
             ):
-                assert kind.is_terminal() is True, (
-                    f"{kind.value} must be terminal"
-                )
+                assert kind.is_terminal() is True, f"{kind.value} must be terminal"
             else:
-                assert kind.is_terminal() is False, (
-                    f"{kind.value} must not be terminal"
-                )
+                assert kind.is_terminal() is False, f"{kind.value} must not be terminal"
 
 
 # ===========================================================================

@@ -48,9 +48,7 @@ from typing import Any, Dict, List
 
 from core.hidden_context_visible_action_surface import SurfaceLayer, classify_content_layer
 
-DUAL_REPO_BOUNDARY_SENTINEL = (
-    "DUAL_REPO_BOUNDARY::ANDROID_V2_UNIFIED_HIDDEN_VISIBLE_BOUNDARY_V1"
-)
+DUAL_REPO_BOUNDARY_SENTINEL = "DUAL_REPO_BOUNDARY::ANDROID_V2_UNIFIED_HIDDEN_VISIBLE_BOUNDARY_V1"
 
 # ---------------------------------------------------------------------------
 # Android-originated info keys recognised by this router
@@ -129,11 +127,7 @@ class DualRepoBoundaryDecision:
 
 def _extract_blocker_reason(lifecycle: Dict[str, Any]) -> str:
     """Extract the blocker reason string from a lifecycle surface dict."""
-    return str(
-        lifecycle.get("blocker_reason")
-        or (lifecycle.get("blocker") or {}).get("reason", "")
-        or ""
-    ).strip()
+    return str(lifecycle.get("blocker_reason") or (lifecycle.get("blocker") or {}).get("reason", "") or "").strip()
 
 
 def _derive_presence_mode_from_signal(*, current_mode: str) -> str:
@@ -195,9 +189,7 @@ def extract_android_originated_info(result: Dict[str, Any]) -> Dict[str, Any]:
             blocker_reason = _extract_blocker_reason(lifecycle)
             if blocker_reason and "android_blocker" not in android_info:
                 android_info["android_blocker"] = blocker_reason
-            confirmation = bool(
-                lifecycle.get("confirmation_needed", False)
-            )
+            confirmation = bool(lifecycle.get("confirmation_needed", False))
             if confirmation and "android_confirmation_needed" not in android_info:
                 android_info["android_confirmation_needed"] = confirmation
             phase = str(lifecycle.get("phase") or "").strip()
@@ -223,12 +215,8 @@ def extract_android_originated_info(result: Dict[str, Any]) -> Dict[str, Any]:
             families = canonical_continuous_ingress.get("families") or {}
             if not isinstance(families, dict):
                 families = {}
-            desktop_stream_present = bool(
-                (families.get("desktop_continuous_stream") or {}).get("is_present")
-            )
-            android_stream_present = bool(
-                (families.get("android_device_continuous_stream") or {}).get("is_present")
-            )
+            desktop_stream_present = bool((families.get("desktop_continuous_stream") or {}).get("is_present"))
+            android_stream_present = bool((families.get("android_device_continuous_stream") or {}).get("is_present"))
             if desktop_stream_present or android_stream_present:
                 android_info.setdefault("android_stream_readiness", "presence_stream_coupled")
 

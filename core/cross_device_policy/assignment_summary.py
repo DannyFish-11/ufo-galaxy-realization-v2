@@ -52,7 +52,7 @@ import logging
 from typing import Any, Dict, List, Optional
 
 from .device_role import DeviceRole
-from .routing_policy import RoutingPolicy, RoutingPosture, DEFAULT_LOCAL_ROUTING_POLICY
+from .routing_policy import DEFAULT_LOCAL_ROUTING_POLICY, RoutingPolicy, RoutingPosture
 
 logger = logging.getLogger("Galaxy.CrossDevicePolicy.Summary")
 
@@ -145,12 +145,8 @@ class CrossDeviceAssignmentSummary:
             "fallback_device_ids": list(self.fallback_device_ids),
             "all_assignments": list(self.all_assignments),
             "runtime_domain_intent": self.runtime_domain_intent,
-            "expansion_allowed_by_execution_policy": (
-                self.expansion_allowed_by_execution_policy
-            ),
-            "confirmation_required_before_expansion": (
-                self.confirmation_required_before_expansion
-            ),
+            "expansion_allowed_by_execution_policy": (self.expansion_allowed_by_execution_policy),
+            "confirmation_required_before_expansion": (self.confirmation_required_before_expansion),
             "is_cross_device": self.is_cross_device,
             "policy_reason": self.policy_reason,
             "task_id": self.task_id,
@@ -173,12 +169,8 @@ class CrossDeviceAssignmentSummary:
             fallback_device_ids=list(data.get("fallback_device_ids", [])),
             all_assignments=list(data.get("all_assignments", [])),
             runtime_domain_intent=data.get("runtime_domain_intent"),
-            expansion_allowed_by_execution_policy=bool(
-                data.get("expansion_allowed_by_execution_policy", False)
-            ),
-            confirmation_required_before_expansion=bool(
-                data.get("confirmation_required_before_expansion", True)
-            ),
+            expansion_allowed_by_execution_policy=bool(data.get("expansion_allowed_by_execution_policy", False)),
+            confirmation_required_before_expansion=bool(data.get("confirmation_required_before_expansion", True)),
             is_cross_device=bool(data.get("is_cross_device", False)),
             policy_reason=str(data.get("policy_reason", "reconstructed from dict")),
             task_id=data.get("task_id"),
@@ -247,11 +239,7 @@ def build_assignment_summary(
         target = policy if policy is not None else DEFAULT_LOCAL_ROUTING_POLICY
 
         def _ids(role: DeviceRole) -> List[str]:
-            return [
-                a.device_id
-                for a in target.assigned_devices
-                if a.role is role and a.device_id is not None
-            ]
+            return [a.device_id for a in target.assigned_devices if a.role is role and a.device_id is not None]
 
         return CrossDeviceAssignmentSummary(
             posture=target.posture.value,
@@ -263,12 +251,8 @@ def build_assignment_summary(
             fallback_device_ids=_ids(DeviceRole.FALLBACK),
             all_assignments=[a.to_dict() for a in target.assigned_devices],
             runtime_domain_intent=target.runtime_domain_intent,
-            expansion_allowed_by_execution_policy=(
-                target.expansion_allowed_by_execution_policy
-            ),
-            confirmation_required_before_expansion=(
-                target.confirmation_required_before_expansion
-            ),
+            expansion_allowed_by_execution_policy=(target.expansion_allowed_by_execution_policy),
+            confirmation_required_before_expansion=(target.confirmation_required_before_expansion),
             is_cross_device=target.is_cross_device,
             policy_reason=target.policy_reason,
             task_id=target.task_id,
@@ -315,9 +299,7 @@ def attach_cross_device_to_projection(
         enriched["cross_device_routing"] = target.to_dict()
         return enriched
     except Exception as exc:  # pragma: no cover
-        logger.warning(
-            "attach_cross_device_to_projection: error attaching summary: %s", exc
-        )
+        logger.warning("attach_cross_device_to_projection: error attaching summary: %s", exc)
         fallback = dict(projection)
         fallback["cross_device_routing"] = IDLE_ASSIGNMENT_SUMMARY.to_dict()
         return fallback
@@ -364,12 +346,8 @@ def get_assignment_hints(
             "is_cross_device": target.is_cross_device,
             "has_primary": target.primary_execution_device_id is not None,
             "has_fallback": len(target.fallback_device_ids) > 0,
-            "expansion_allowed_by_execution_policy": (
-                target.expansion_allowed_by_execution_policy
-            ),
-            "confirmation_required_before_expansion": (
-                target.confirmation_required_before_expansion
-            ),
+            "expansion_allowed_by_execution_policy": (target.expansion_allowed_by_execution_policy),
+            "confirmation_required_before_expansion": (target.confirmation_required_before_expansion),
             "primary_execution_device_id": target.primary_execution_device_id,
             "source_device_id": target.source_device_id,
             "support_count": len(target.support_device_ids),

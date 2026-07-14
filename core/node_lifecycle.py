@@ -56,7 +56,11 @@ def _pid_alive(pid: int) -> bool:
         if sys.platform == "win32":
             out = subprocess.run(
                 ["tasklist", "/FI", f"PID eq {pid}", "/NH"],
-                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=5,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=5,
             ).stdout
             return str(pid) in out
         os.kill(pid, 0)  # 不发信号,只探测存在
@@ -96,7 +100,9 @@ def _resolve_dir(node: str) -> Optional[str]:
 def _port_probe(dir_name: str) -> bool:
     try:
         import httpx
+
         from core.port_config import get_node_port
+
         port = get_node_port(dir_name)
         if not port:
             return False
@@ -134,12 +140,14 @@ def start_node(node: str) -> Dict[str, object]:
         _LOG_DIR.mkdir(parents=True, exist_ok=True)
         logf = open(_LOG_DIR / f"{dir_name}.log", "ab")
         kwargs: Dict[str, object] = dict(
-            cwd=str(_ROOT), stdout=logf, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
+            cwd=str(_ROOT),
+            stdout=logf,
+            stderr=subprocess.STDOUT,
+            stdin=subprocess.DEVNULL,
         )
         if sys.platform == "win32":
-            kwargs["creationflags"] = (
-                getattr(subprocess, "DETACHED_PROCESS", 0x00000008)
-                | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)
+            kwargs["creationflags"] = getattr(subprocess, "DETACHED_PROCESS", 0x00000008) | getattr(
+                subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200
             )
         else:
             kwargs["start_new_session"] = True
@@ -173,6 +181,7 @@ def container_start_node(node: str) -> Dict[str, object]:
         return {"ok": False, "error": f"{dir_name} 无 Dockerfile,改用子进程启动", "fallback": "subprocess"}
     try:
         from core import container_runtime as cr
+
         rt = cr.resolve_runtime(interactive=False)
         if not rt:
             return {"ok": False, "error": "未装 Docker/Podman,回退子进程", "fallback": "subprocess"}
@@ -181,14 +190,16 @@ def container_start_node(node: str) -> Dict[str, object]:
         image = cname
         try:
             from core.port_config import get_node_port
+
             port = int(get_node_port(dir_name) or 0)
         except Exception:  # noqa: BLE001
             port = 0
         _LOG_DIR.mkdir(parents=True, exist_ok=True)
         logf = open(_LOG_DIR / f"{dir_name}.container.log", "ab")
         # build(幂等:已存在的层会缓存)
-        b = subprocess.run([rt_bin, "build", "-t", image, str(node_dir)],
-                           stdout=logf, stderr=subprocess.STDOUT, timeout=1800)
+        b = subprocess.run(
+            [rt_bin, "build", "-t", image, str(node_dir)], stdout=logf, stderr=subprocess.STDOUT, timeout=1800
+        )
         if b.returncode != 0:
             return {"ok": False, "error": f"{rt} build 失败(详见 logs/nodes/{dir_name}.container.log)"}
         # 先清掉同名旧容器,再 run -d
@@ -213,6 +224,7 @@ def container_stop_node(node: str) -> Dict[str, object]:
         return {"ok": False, "error": f"未找到节点: {node}"}
     try:
         from core import container_runtime as cr
+
         rt = cr.resolve_runtime(interactive=False)
         if not rt:
             return {"ok": True, "already_stopped": True, "dir": dir_name}
@@ -236,10 +248,10 @@ def stop_node(node: str) -> Dict[str, object]:
         return {"ok": True, "already_stopped": True, "dir": dir_name}
     try:
         if sys.platform == "win32":
-            subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)],
-                           capture_output=True, timeout=10)
+            subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], capture_output=True, timeout=10)
         else:
             import signal
+
             os.killpg(os.getpgid(pid), signal.SIGTERM)
         pids.pop(dir_name, None)
         _save_pids(pids)

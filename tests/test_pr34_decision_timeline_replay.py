@@ -120,46 +120,47 @@ Coverage
     - falls back to live timeline snapshot when no result provided
     - never raises; returns error key on unexpected failure
 """
+
 from __future__ import annotations
 
 import json
+
+# ---------------------------------------------------------------------------
+# Ensure repository root is importable
+# ---------------------------------------------------------------------------
+import os
 import sys
-import types
 import threading
 import time
+import types
 import uuid
 from typing import Any, Dict, List, Optional
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-# ---------------------------------------------------------------------------
-# Ensure repository root is importable
-# ---------------------------------------------------------------------------
-import os
-
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from core.decision_timeline import (
-    DecisionKind,
-    DecisionTraceRecord,
     ControlTimelineEvent,
-    ExplainabilitySnapshot,
+    DecisionKind,
     DecisionTimeline,
-    get_decision_timeline,
-    reset_decision_timeline,
-    record_decision_event,
-    record_route_selection_event,
-    record_operator_override_event,
-    record_trust_safety_gating_event,
-    record_source_switch_event,
+    DecisionTraceRecord,
+    ExplainabilitySnapshot,
     build_explainability_snapshot,
+    get_decision_timeline,
+    record_decision_event,
+    record_operator_override_event,
+    record_route_selection_event,
+    record_source_switch_event,
+    record_trust_safety_gating_event,
+    reset_decision_timeline,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _fresh_timeline() -> DecisionTimeline:
     """Reset and return a fresh global timeline singleton."""
@@ -292,12 +293,29 @@ class TestDecisionTraceRecord:
     def test_stable_field_names(self):
         d = DecisionTraceRecord().to_dict()
         for key in (
-            "record_id", "kind", "decision_summary", "rationale",
-            "route_kind", "selected_model", "previous_route_kind", "fallback_reason",
-            "source_modality", "previous_source_id", "new_source_id", "source_switch_reason",
-            "override_domains", "override_reason", "gating_reason", "gated_domains",
-            "previous_locality", "new_locality", "causal_policy",
-            "trace_id", "runtime_session_id", "timestamp", "extra",
+            "record_id",
+            "kind",
+            "decision_summary",
+            "rationale",
+            "route_kind",
+            "selected_model",
+            "previous_route_kind",
+            "fallback_reason",
+            "source_modality",
+            "previous_source_id",
+            "new_source_id",
+            "source_switch_reason",
+            "override_domains",
+            "override_reason",
+            "gating_reason",
+            "gated_domains",
+            "previous_locality",
+            "new_locality",
+            "causal_policy",
+            "trace_id",
+            "runtime_session_id",
+            "timestamp",
+            "extra",
         ):
             assert key in d, f"Missing field: {key}"
 
@@ -876,9 +894,7 @@ class TestRouteSelectionAcceptance:
         }
         record_route_selection_event(route_dict=route_dict)
         snap = build_explainability_snapshot()
-        route_ev = next(
-            ev for ev in snap.events if ev.record.kind == DecisionKind.ROUTE_SELECTION.value
-        )
+        route_ev = next(ev for ev in snap.events if ev.record.kind == DecisionKind.ROUTE_SELECTION.value)
         assert route_ev.record.rationale
         assert "no multimodal provider" in route_ev.record.rationale
 
@@ -911,9 +927,7 @@ class TestFallbackTransitionAcceptance:
         }
         record_route_selection_event(route_dict=route_dict)
         snap = build_explainability_snapshot()
-        fb_ev = next(
-            ev for ev in snap.events if ev.record.kind == DecisionKind.FALLBACK_TRANSITION.value
-        )
+        fb_ev = next(ev for ev in snap.events if ev.record.kind == DecisionKind.FALLBACK_TRANSITION.value)
         assert fb_ev.record.fallback_reason == "capability_mismatch"
 
     def test_previous_route_kind_present(self):
@@ -923,9 +937,7 @@ class TestFallbackTransitionAcceptance:
         }
         record_route_selection_event(route_dict=route_dict)
         snap = build_explainability_snapshot()
-        fb_ev = next(
-            ev for ev in snap.events if ev.record.kind == DecisionKind.FALLBACK_TRANSITION.value
-        )
+        fb_ev = next(ev for ev in snap.events if ev.record.kind == DecisionKind.FALLBACK_TRANSITION.value)
         assert fb_ev.record.previous_route_kind is not None
 
 
@@ -951,9 +963,7 @@ class TestSourceSwitchAcceptance:
         }
         record_source_switch_event(source_recovery_dict=snap_dict, trace_id="t-sw")
         snap = build_explainability_snapshot()
-        sw_ev = next(
-            ev for ev in snap.events if ev.record.kind == DecisionKind.SOURCE_SWITCH.value
-        )
+        sw_ev = next(ev for ev in snap.events if ev.record.kind == DecisionKind.SOURCE_SWITCH.value)
         assert sw_ev.record.source_modality == "video"
         assert sw_ev.record.previous_source_id == "builtin:webcam"
         assert sw_ev.record.new_source_id == "external:usb-cam"
@@ -982,9 +992,7 @@ class TestOperatorOverrideAcceptance:
         }
         record_operator_override_event(override_snapshot_dict=snap_dict, trace_id="t-ov")
         snap = build_explainability_snapshot()
-        ov_ev = next(
-            ev for ev in snap.events if ev.record.kind == DecisionKind.OPERATOR_OVERRIDE.value
-        )
+        ov_ev = next(ev for ev in snap.events if ev.record.kind == DecisionKind.OPERATOR_OVERRIDE.value)
         assert "multimodal_mode" in ov_ev.record.override_domains
         assert ov_ev.record.override_reason == "maintenance_window"
 
@@ -1072,9 +1080,7 @@ class TestExplanationsFromCanonicalDecisions:
         )
         snap = build_explainability_snapshot()
         for ev in snap.events:
-            assert ev.record.rationale, (
-                f"Event {ev.record.kind} has empty rationale"
-            )
+            assert ev.record.rationale, f"Event {ev.record.kind} has empty rationale"
 
 
 # ---------------------------------------------------------------------------
@@ -1089,9 +1095,11 @@ class TestDesktopPresenceRuntimeDecisionTimelineReplay:
     def _make_runtime(self):
         """Return a DesktopPresenceRuntime instance with minimal dependencies mocked."""
         from core.desktop_presence_runtime import DesktopPresenceRuntime
+
         rt = DesktopPresenceRuntime.__new__(DesktopPresenceRuntime)
         try:
             from core.multimodal.perception_source_registry import PerceptionSourceRegistry
+
             rt._source_registry = PerceptionSourceRegistry()
         except Exception:
             rt._source_registry = None

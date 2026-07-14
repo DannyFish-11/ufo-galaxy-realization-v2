@@ -29,9 +29,11 @@ if str(PROJECT_ROOT) not in sys.path:
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def factory():
     from core.agent_factory import AgentFactory
+
     f = AgentFactory(llm_router=None)
     f.agents.clear()
     f.agent_tree.clear()
@@ -41,6 +43,7 @@ def factory():
 @pytest.fixture
 def planner():
     from core.agent.execution_planner import ExecutionPlanner
+
     return ExecutionPlanner(llm_router=None)
 
 
@@ -48,18 +51,21 @@ def planner():
 # Test 1: trigger conditions
 # ---------------------------------------------------------------------------
 
+
 class TestTriggerConditions:
     """Loop C-1: AUTO_AGENT_TRIGGER_KEYWORDS define explicit trigger rules."""
 
     def test_auto_agent_trigger_keywords_exported(self):
         """AUTO_AGENT_TRIGGER_KEYWORDS must be exported from execution_planner."""
         from core.agent.execution_planner import AUTO_AGENT_TRIGGER_KEYWORDS
+
         assert isinstance(AUTO_AGENT_TRIGGER_KEYWORDS, tuple)
         assert len(AUTO_AGENT_TRIGGER_KEYWORDS) > 0
 
     def test_auto_agent_trigger_keywords_include_parallel_signals(self):
         """Trigger keywords must include parallel/multi-step signals."""
         from core.agent.execution_planner import AUTO_AGENT_TRIGGER_KEYWORDS
+
         parallel_words = {"team", "swarm", "并行", "多个", "批量"}
         found = parallel_words & set(AUTO_AGENT_TRIGGER_KEYWORDS)
         assert found, f"Missing parallel keywords in AUTO_AGENT_TRIGGER_KEYWORDS: {parallel_words}"
@@ -78,7 +84,7 @@ class TestTriggerConditions:
     def test_pick_strategy_returns_non_single_for_trigger_message(self):
         """_pick_strategy must not return 'single' for high-complexity trigger messages."""
         from core.agent.execution_planner import ExecutionPlanner, _estimate_complexity
-        from core.agent.intent_router import IntentResult, IntentMode
+        from core.agent.intent_router import IntentMode, IntentResult
 
         planner = ExecutionPlanner(llm_router=None)
 
@@ -90,7 +96,7 @@ class TestTriggerConditions:
     def test_pick_strategy_returns_single_for_simple_message(self):
         """_pick_strategy returns 'single' for simple, low-complexity messages."""
         from core.agent.execution_planner import ExecutionPlanner, _estimate_complexity
-        from core.agent.intent_router import IntentResult, IntentMode
+        from core.agent.intent_router import IntentMode, IntentResult
 
         planner = ExecutionPlanner(llm_router=None)
 
@@ -102,6 +108,7 @@ class TestTriggerConditions:
     def test_task_type_strategy_map_exists_and_non_empty(self):
         """TASK_TYPE_STRATEGY_MAP must be a non-empty dict."""
         from core.agent.execution_planner import TASK_TYPE_STRATEGY_MAP
+
         assert isinstance(TASK_TYPE_STRATEGY_MAP, dict)
         assert len(TASK_TYPE_STRATEGY_MAP) > 0
 
@@ -110,14 +117,15 @@ class TestTriggerConditions:
 # Test 2: factory invocation
 # ---------------------------------------------------------------------------
 
+
 class TestFactoryInvocation:
     """Loop C-2: AgentFactory is automatically invoked when trigger conditions met."""
 
     @pytest.mark.asyncio
     async def test_run_single_agent_invokes_agent_factory(self, factory):
         """_run_single_agent must call AgentFactory to create an agent."""
-        from core.agent.execution_planner import ExecutionPlanner, ExecutionPlan
-        from core.agent.intent_router import IntentResult, IntentMode
+        from core.agent.execution_planner import ExecutionPlan, ExecutionPlanner
+        from core.agent.intent_router import IntentMode, IntentResult
 
         planner = ExecutionPlanner(llm_router=None)
 
@@ -146,8 +154,8 @@ class TestFactoryInvocation:
     @pytest.mark.asyncio
     async def test_run_single_agent_sets_template_in_result(self, factory):
         """_run_single_agent must set auto_agent_template in ExecutionResult."""
-        from core.agent.execution_planner import ExecutionPlanner, ExecutionPlan
-        from core.agent.intent_router import IntentResult, IntentMode
+        from core.agent.execution_planner import ExecutionPlan, ExecutionPlanner
+        from core.agent.intent_router import IntentMode, IntentResult
 
         planner = ExecutionPlanner(llm_router=None)
 
@@ -172,15 +180,15 @@ class TestFactoryInvocation:
                 result = await planner._run_single_agent(plan, [], [])
 
         assert result.auto_agent_template is not None
-        assert result.auto_agent_template in list(__import__(
-            "core.agent_factory", fromlist=["AGENT_TEMPLATES"]
-        ).AGENT_TEMPLATES.keys())
+        assert result.auto_agent_template in list(
+            __import__("core.agent_factory", fromlist=["AGENT_TEMPLATES"]).AGENT_TEMPLATES.keys()
+        )
 
     @pytest.mark.asyncio
     async def test_execute_plan_triggers_agent_creation(self, factory):
         """ExecutionPlanner.execute() must create an agent for task_execute intent."""
-        from core.agent.execution_planner import ExecutionPlanner, ExecutionPlan
-        from core.agent.intent_router import IntentResult, IntentMode
+        from core.agent.execution_planner import ExecutionPlan, ExecutionPlanner
+        from core.agent.intent_router import IntentMode, IntentResult
 
         planner = ExecutionPlanner(llm_router=None)
 
@@ -194,8 +202,10 @@ class TestFactoryInvocation:
             session_id="test_session",
         )
 
-        with patch("core.agent_factory.get_agent_factory", return_value=factory), \
-             patch.object(factory, "execute_agent_task", new_callable=AsyncMock) as mock_exec:
+        with (
+            patch("core.agent_factory.get_agent_factory", return_value=factory),
+            patch.object(factory, "execute_agent_task", new_callable=AsyncMock) as mock_exec,
+        ):
             mock_exec.return_value = {
                 "status": "success",
                 "reply": "done",
@@ -210,12 +220,13 @@ class TestFactoryInvocation:
 # Test 3: visibility and lifecycle
 # ---------------------------------------------------------------------------
 
+
 class TestAgentVisibilityAndLifecycle:
     """Loop C-3: created agents are queryable through existing APIs."""
 
     def test_agent_factory_get_agent_tree_includes_new_agent(self, factory):
         """get_agent_tree must include newly created agents."""
-        from core.agent_factory import AgentFactory, AGENT_TEMPLATES
+        from core.agent_factory import AGENT_TEMPLATES, AgentFactory
 
         # Create an agent via template
         agent = factory.create_from_template("coordinator")
@@ -283,14 +294,15 @@ class TestAgentVisibilityAndLifecycle:
 # Test 4: safe fallback when agent creation fails
 # ---------------------------------------------------------------------------
 
+
 class TestSafeFallbackOnCreationFailure:
     """Loop C-4: task continues with fallback if auto-agent creation fails."""
 
     @pytest.mark.asyncio
     async def test_run_single_agent_falls_back_to_coordinator_template(self, factory):
         """_run_single_agent falls back to 'coordinator' template if primary fails."""
-        from core.agent.execution_planner import ExecutionPlanner, ExecutionPlan
-        from core.agent.intent_router import IntentResult, IntentMode
+        from core.agent.execution_planner import ExecutionPlan, ExecutionPlanner
+        from core.agent.intent_router import IntentMode, IntentResult
 
         planner = ExecutionPlanner(llm_router=None)
         plan = ExecutionPlan(
@@ -313,8 +325,10 @@ class TestSafeFallbackOnCreationFailure:
 
         factory.create_from_template = failing_first_create
 
-        with patch("core.agent_factory.get_agent_factory", return_value=factory), \
-             patch.object(factory, "execute_agent_task", new_callable=AsyncMock) as mock_exec:
+        with (
+            patch("core.agent_factory.get_agent_factory", return_value=factory),
+            patch.object(factory, "execute_agent_task", new_callable=AsyncMock) as mock_exec,
+        ):
             mock_exec.return_value = {
                 "status": "success",
                 "reply": "fallback result",
@@ -328,8 +342,8 @@ class TestSafeFallbackOnCreationFailure:
     @pytest.mark.asyncio
     async def test_execute_plan_returns_error_result_not_raise_on_all_failures(self, factory):
         """ExecutionPlanner.execute() must return failure result, not raise."""
-        from core.agent.execution_planner import ExecutionPlanner, ExecutionPlan
-        from core.agent.intent_router import IntentResult, IntentMode
+        from core.agent.execution_planner import ExecutionPlan, ExecutionPlanner
+        from core.agent.intent_router import IntentMode, IntentResult
 
         planner = ExecutionPlanner(llm_router=None)
         plan = ExecutionPlan(
@@ -342,9 +356,7 @@ class TestSafeFallbackOnCreationFailure:
         )
 
         with patch("core.agent_factory.get_agent_factory", return_value=factory):
-            factory.create_from_template = MagicMock(
-                side_effect=RuntimeError("all templates failed")
-            )
+            factory.create_from_template = MagicMock(side_effect=RuntimeError("all templates failed"))
             result = await planner.execute(plan)
 
         # Must return a result, not raise
@@ -360,8 +372,8 @@ class TestSafeFallbackOnCreationFailure:
     @pytest.mark.asyncio
     async def test_task_continues_after_partial_team_creation_failure(self, factory):
         """ExecutionPlanner must return a result even when team AND fractal creation fail."""
-        from core.agent.execution_planner import ExecutionPlanner, ExecutionPlan, ExecutionResult
-        from core.agent.intent_router import IntentResult, IntentMode
+        from core.agent.execution_planner import ExecutionPlan, ExecutionPlanner, ExecutionResult
+        from core.agent.intent_router import IntentMode, IntentResult
 
         planner = ExecutionPlanner(llm_router=None)
 

@@ -146,6 +146,7 @@ class SwarmCoordinator:
             return self._router
         try:
             from core.command_router import get_command_router
+
             return get_command_router()
         except Exception as exc:
             logger.warning("CommandRouter unavailable: %s", exc)
@@ -155,12 +156,14 @@ class SwarmCoordinator:
         if self._scoring_engine is not None:
             return self._scoring_engine
         from core.control_plane._globals import get_scoring_engine
+
         return get_scoring_engine()
 
     def _get_ledger(self):
         if self._ledger is not None:
             return self._ledger
         from core.control_plane._globals import get_audit_ledger
+
         return get_audit_ledger()
 
     # ------------------------------------------------------------------
@@ -227,8 +230,8 @@ class SwarmCoordinator:
         -------
         core.agent_team.TeamResult
         """
-        from core.control_plane.swarm_manifest import SwarmAgentManifest
         from core.agent_team import MemberResult, TeamResult
+        from core.control_plane.swarm_manifest import SwarmAgentManifest
         from core.orchestration.multi_device_plan import (
             OrchestrationDecision,
             build_orchestration_plan,
@@ -288,12 +291,11 @@ class SwarmCoordinator:
                             (c for c in device_candidates if c.device_id == best.device_id),
                             None,
                         )
-                        _exec_profile = (
-                            getattr(_candidate_input, "execution_profile", None)
-                            or build_profile_from_device_info(
-                                {"capabilities": list(getattr(_candidate_input, "capabilities", []))},
-                                device_id=best.device_id,
-                            )
+                        _exec_profile = getattr(
+                            _candidate_input, "execution_profile", None
+                        ) or build_profile_from_device_info(
+                            {"capabilities": list(getattr(_candidate_input, "capabilities", []))},
+                            device_id=best.device_id,
                         )
                         _mode_result = resolve_mode(profile=_exec_profile, task_intent="agent_execute")
                         resolved_mode = _mode_result.mode
@@ -310,9 +312,7 @@ class SwarmCoordinator:
                             manifest.metadata["resolved_execution_mode"] = _mode_result.mode
                             manifest.metadata["execution_mode_source"] = _mode_result.resolution_source
                     except Exception as _pr6_err:
-                        logger.debug(
-                            "SwarmCoordinator: PR-6 mode resolution non-fatal: %s", _pr6_err
-                        )
+                        logger.debug("SwarmCoordinator: PR-6 mode resolution non-fatal: %s", _pr6_err)
                         logger.info(
                             "SwarmCoordinator[orch]: member=%s assigned device=%s score=%.3f",
                             member.agent_name if hasattr(member, "agent_name") else member.agent_id,
@@ -326,15 +326,17 @@ class SwarmCoordinator:
                     )
 
             # Record orchestration decision (before substrate dispatch)
-            orch_decisions.append(OrchestrationDecision(
-                agent_id=getattr(member, "agent_id", str(idx)),
-                agent_name=getattr(member, "agent_name", ""),
-                target_device_id=assigned_device_id,
-                score=device_score,
-                resolved_execution_mode=resolved_mode,
-                assignment_source=assignment_source,
-                manifest_id=getattr(manifest, "manifest_id", ""),
-            ))
+            orch_decisions.append(
+                OrchestrationDecision(
+                    agent_id=getattr(member, "agent_id", str(idx)),
+                    agent_name=getattr(member, "agent_name", ""),
+                    target_device_id=assigned_device_id,
+                    score=device_score,
+                    resolved_execution_mode=resolved_mode,
+                    assignment_source=assignment_source,
+                    manifest_id=getattr(manifest, "manifest_id", ""),
+                )
+            )
             manifests.append(manifest)
 
         # Build the orchestration plan — captures all planning decisions
@@ -364,11 +366,7 @@ class SwarmCoordinator:
                     "session_id": session_id,
                     "trace_id": root_trace_id,
                 },
-                candidate_device_ids=[
-                    d.target_device_id
-                    for d in orch_decisions
-                    if d.target_device_id is not None
-                ],
+                candidate_device_ids=[d.target_device_id for d in orch_decisions if d.target_device_id is not None],
                 trace_id=root_trace_id,
             )
         except Exception as _harn_exc:
@@ -423,7 +421,8 @@ class SwarmCoordinator:
                 _mesh_session_id = _record.session_id
                 logger.info(
                     "SwarmCoordinator: mesh session created+activated: task_id=%s session_id=%s",
-                    root_task_id, _mesh_session_id,
+                    root_task_id,
+                    _mesh_session_id,
                 )
         except Exception as _mesh_exc:
             logger.debug(
@@ -449,22 +448,26 @@ class SwarmCoordinator:
         for member, result in zip(members, raw_results):
             if isinstance(result, Exception):
                 any_failure = True
-                member_results.append(MemberResult(
-                    member=member,
-                    result="",
-                    success=False,
-                    error=str(result),
-                ))
+                member_results.append(
+                    MemberResult(
+                        member=member,
+                        result="",
+                        success=False,
+                        error=str(result),
+                    )
+                )
             else:
                 if not result.get("success", True):
                     any_failure = True
-                member_results.append(MemberResult(
-                    member=member,
-                    result=result.get("output", result.get("result", "")),
-                    latency_ms=float(result.get("latency_ms", 0.0)),
-                    success=result.get("success", True),
-                    error=result.get("error") if not result.get("success", True) else None,
-                ))
+                member_results.append(
+                    MemberResult(
+                        member=member,
+                        result=result.get("output", result.get("result", "")),
+                        latency_ms=float(result.get("latency_ms", 0.0)),
+                        success=result.get("success", True),
+                        error=result.get("error") if not result.get("success", True) else None,
+                    )
+                )
 
         synthesized = self._synthesize(member_results)
 
@@ -480,7 +483,9 @@ class SwarmCoordinator:
                 )
                 logger.info(
                     "SwarmCoordinator: mesh session terminated: task_id=%s session_id=%s outcome=%s",
-                    root_task_id, _mesh_session_id, "failed" if any_failure else "completed",
+                    root_task_id,
+                    _mesh_session_id,
+                    "failed" if any_failure else "completed",
                 )
             except Exception as _mesh_term_exc:
                 logger.debug(
@@ -512,9 +517,10 @@ class SwarmCoordinator:
         Best-effort: published via NATS if connected, otherwise logged only.
         """
         try:
-            from core.schemas.aip_v3 import TaskAssignMsg  # noqa: PLC0415
-            from core.nats_bus import get_nats_bus  # noqa: PLC0415
             import asyncio
+
+            from core.nats_bus import get_nats_bus  # noqa: PLC0415
+            from core.schemas.aip_v3 import TaskAssignMsg  # noqa: PLC0415
 
             nats = get_nats_bus()
             loop = asyncio.get_running_loop()
@@ -550,9 +556,10 @@ class SwarmCoordinator:
         Best-effort: published via NATS if connected, otherwise logged only.
         """
         try:
-            from core.schemas.aip_v3 import TaskResultMsg  # noqa: PLC0415
-            from core.nats_bus import get_nats_bus  # noqa: PLC0415
             import asyncio
+
+            from core.nats_bus import get_nats_bus  # noqa: PLC0415
+            from core.schemas.aip_v3 import TaskResultMsg  # noqa: PLC0415
 
             nats = get_nats_bus()
             loop = asyncio.get_running_loop()
@@ -653,30 +660,32 @@ class SwarmCoordinator:
                     try:
                         from core.device_execution_profile import build_profile_from_device_info
                         from core.remote_execution_mode_resolver import resolve_mode
+
                         _candidate_input = next(
                             (c for c in device_candidates if c.device_id == best.device_id),
                             None,
                         )
-                        _exec_profile = (
-                            getattr(_candidate_input, "execution_profile", None)
-                            or build_profile_from_device_info(
-                                {"capabilities": list(getattr(_candidate_input, "capabilities", []))},
-                                device_id=best.device_id,
-                            )
+                        _exec_profile = getattr(
+                            _candidate_input, "execution_profile", None
+                        ) or build_profile_from_device_info(
+                            {"capabilities": list(getattr(_candidate_input, "capabilities", []))},
+                            device_id=best.device_id,
                         )
                         _mode_result = resolve_mode(profile=_exec_profile, task_intent="agent_execute")
                         resolved_mode = _mode_result.mode
                     except Exception as exc:
                         logger.warning("Exception suppressed: %s", exc)
 
-            decisions.append(OrchestrationDecision(
-                agent_id=agent_id,
-                agent_name=agent_name,
-                target_device_id=target_device_id,
-                score=device_score,
-                resolved_execution_mode=resolved_mode,
-                assignment_source=assignment_source,
-            ))
+            decisions.append(
+                OrchestrationDecision(
+                    agent_id=agent_id,
+                    agent_name=agent_name,
+                    target_device_id=target_device_id,
+                    score=device_score,
+                    resolved_execution_mode=resolved_mode,
+                    assignment_source=assignment_source,
+                )
+            )
 
         return build_orchestration_plan(
             task=task,
@@ -750,9 +759,7 @@ class SwarmCoordinator:
                 orchestration_plan_id=orch_plan.plan_id,
             )
         except Exception as _e:
-            logger.debug(
-                "SwarmCoordinator.build_execution_plan_for_orchestration failed: %s", _e
-            )
+            logger.debug("SwarmCoordinator.build_execution_plan_for_orchestration failed: %s", _e)
             return None
 
     # ------------------------------------------------------------------
@@ -806,8 +813,8 @@ class SwarmCoordinator:
         """
         try:
             from core.device_selection import (
-                select_orchestration_candidates,
                 device_score_input_from_canonical,
+                select_orchestration_candidates,
             )
 
             entries = select_orchestration_candidates(
@@ -829,9 +836,7 @@ class SwarmCoordinator:
 
             return score_inputs
         except Exception as exc:
-            logger.warning(
-                "SwarmCoordinator.device_candidates_from_canonical: error: %s", exc
-            )
+            logger.warning("SwarmCoordinator.device_candidates_from_canonical: error: %s", exc)
             return []
 
     async def _dispatch_one(self, manifest) -> Dict[str, Any]:
@@ -877,8 +882,12 @@ class SwarmCoordinator:
                 session_id=manifest.session_id,
                 payload={"manifest_id": manifest.manifest_id},
             )
-            return {"success": False, "error": "no_target_device", "agent_id": manifest.agent_id,
-                    "failure_domain": "remote_device_unavailable"}
+            return {
+                "success": False,
+                "error": "no_target_device",
+                "agent_id": manifest.agent_id,
+                "failure_domain": "remote_device_unavailable",
+            }
 
         # Emit AGENT_DISPATCHED
         dispatch_event_id = ledger.append(
@@ -911,8 +920,11 @@ class SwarmCoordinator:
                 session_id=manifest.session_id,
                 parent_ids=[dispatch_event_id],
             )
-            return {"success": False, "error": "command_router_unavailable",
-                    "failure_domain": "substrate_dispatch_failure"}
+            return {
+                "success": False,
+                "error": "command_router_unavailable",
+                "failure_domain": "substrate_dispatch_failure",
+            }
 
         try:
             t_dispatch = time.monotonic()
@@ -977,7 +989,9 @@ class SwarmCoordinator:
         except Exception as exc:
             logger.error(
                 "SwarmCoordinator: dispatch failed agent_id=%s device=%s error=%s",
-                manifest.agent_id, device_id, exc,
+                manifest.agent_id,
+                device_id,
+                exc,
             )
             ledger.append(
                 EventType.TASK_FAILED,
@@ -992,8 +1006,12 @@ class SwarmCoordinator:
                 parent_ids=[dispatch_event_id],
                 payload={"error": str(exc), "manifest_id": manifest.manifest_id},
             )
-            return {"success": False, "error": str(exc), "agent_id": manifest.agent_id,
-                    "failure_domain": "gateway_transport_failure"}
+            return {
+                "success": False,
+                "error": str(exc),
+                "agent_id": manifest.agent_id,
+                "failure_domain": "gateway_transport_failure",
+            }
 
     @staticmethod
     def _synthesize(member_results: List[Any]) -> str:
@@ -1003,10 +1021,7 @@ class SwarmCoordinator:
         synthesis (Phase 2 / :meth:`AgentTeam._synthesize_results`) can be
         triggered by passing the result to an :class:`AgentTeam` instance.
         """
-        successful = [
-            mr for mr in member_results
-            if getattr(mr, "success", True) and getattr(mr, "result", "")
-        ]
+        successful = [mr for mr in member_results if getattr(mr, "success", True) and getattr(mr, "result", "")]
         if not successful:
             return "All remote members failed to execute."
         if len(successful) == 1:

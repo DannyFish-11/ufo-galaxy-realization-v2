@@ -95,36 +95,43 @@ def test_01_legacy_ucp_routing_keys_importable():
 
 def test_02_legacy_ucp_routing_keys_is_frozenset():
     from contracts.desktop_status_projection import LEGACY_UCP_ROUTING_KEYS
+
     assert isinstance(LEGACY_UCP_ROUTING_KEYS, frozenset)
 
 
 def test_03_legacy_ucp_routing_keys_has_chosen_model():
     from contracts.desktop_status_projection import LEGACY_UCP_ROUTING_KEYS
+
     assert "chosen_model" in LEGACY_UCP_ROUTING_KEYS
 
 
 def test_04_legacy_ucp_routing_keys_has_chosen_provider():
     from contracts.desktop_status_projection import LEGACY_UCP_ROUTING_KEYS
+
     assert "chosen_provider" in LEGACY_UCP_ROUTING_KEYS
 
 
 def test_05_legacy_ucp_routing_keys_has_is_native_multimodal():
     from contracts.desktop_status_projection import LEGACY_UCP_ROUTING_KEYS
+
     assert "is_native_multimodal" in LEGACY_UCP_ROUTING_KEYS
 
 
 def test_06_legacy_ucp_routing_keys_has_support_model_ids():
     from contracts.desktop_status_projection import LEGACY_UCP_ROUTING_KEYS
+
     assert "support_model_ids" in LEGACY_UCP_ROUTING_KEYS
 
 
 def test_07_legacy_ucp_routing_keys_has_route_reason():
     from contracts.desktop_status_projection import LEGACY_UCP_ROUTING_KEYS
+
     assert "route_reason" in LEGACY_UCP_ROUTING_KEYS
 
 
 def test_08_legacy_ucp_routing_keys_has_multimodal_route():
     from contracts.desktop_status_projection import LEGACY_UCP_ROUTING_KEYS
+
     assert "multimodal_route" in LEGACY_UCP_ROUTING_KEYS
 
 
@@ -134,6 +141,7 @@ def test_09_projection_contract_authority_importable():
 
 def test_10_projection_contract_authority_is_non_empty_string():
     from contracts.desktop_status_projection import PROJECTION_CONTRACT_AUTHORITY
+
     assert isinstance(PROJECTION_CONTRACT_AUTHORITY, str)
     assert len(PROJECTION_CONTRACT_AUTHORITY) > 0
 
@@ -145,18 +153,21 @@ def test_10_projection_contract_authority_is_non_empty_string():
 
 def test_11_model_routing_projection_has_legacy_routing_fallback_active():
     from contracts.desktop_status_projection import ModelRoutingProjection
+
     proj = ModelRoutingProjection()
     assert hasattr(proj, "legacy_routing_fallback_active")
 
 
 def test_12_legacy_routing_fallback_active_defaults_to_false():
     from contracts.desktop_status_projection import ModelRoutingProjection
+
     proj = ModelRoutingProjection()
     assert proj.legacy_routing_fallback_active is False
 
 
 def test_13_legacy_routing_fallback_active_true_when_legacy_ucp_keys():
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     # UCP with only legacy chosen_model/chosen_provider, no topology_route_plan
     ucp = {"chosen_model": "gpt-4o", "chosen_provider": "openai"}
     proj = build_desktop_status_projection(unified_control_plan=ucp)
@@ -165,6 +176,7 @@ def test_13_legacy_routing_fallback_active_true_when_legacy_ucp_keys():
 
 def test_14_legacy_routing_fallback_active_false_when_topology_router():
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     # UCP with topology_route_plan (canonical path)
     ucp = {
         "topology_route_plan": {
@@ -184,6 +196,7 @@ def test_14_legacy_routing_fallback_active_false_when_topology_router():
 
 def test_15_legacy_routing_fallback_active_false_when_no_routing_data():
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     # Empty UCP → routing_authority_source == "none"
     proj = build_desktop_status_projection(unified_control_plan={})
     assert proj.model_routing.legacy_routing_fallback_active is False
@@ -200,21 +213,25 @@ def test_16_legacy_routing_fields_importable():
 
 def test_17_legacy_routing_fields_is_tuple():
     from core.model_topology.topology_router import LEGACY_ROUTING_FIELDS
+
     assert isinstance(LEGACY_ROUTING_FIELDS, tuple)
 
 
 def test_18_legacy_routing_fields_contains_chosen_model():
     from core.model_topology.topology_router import LEGACY_ROUTING_FIELDS
+
     assert "chosen_model" in LEGACY_ROUTING_FIELDS
 
 
 def test_19_legacy_routing_fields_contains_chosen_provider():
     from core.model_topology.topology_router import LEGACY_ROUTING_FIELDS
+
     assert "chosen_provider" in LEGACY_ROUTING_FIELDS
 
 
 def test_20_legacy_routing_fields_contains_multi_llm_router():
     from core.model_topology.topology_router import LEGACY_ROUTING_FIELDS
+
     assert "MultiLLMRouter" in LEGACY_ROUTING_FIELDS
 
 
@@ -229,16 +246,19 @@ def test_21_legacy_projection_ucp_keys_importable():
 
 def test_22_legacy_projection_ucp_keys_is_tuple():
     from core.projection.projection_compiler import LEGACY_PROJECTION_UCP_KEYS
+
     assert isinstance(LEGACY_PROJECTION_UCP_KEYS, tuple)
 
 
 def test_23_legacy_projection_ucp_keys_contains_chosen_model():
     from core.projection.projection_compiler import LEGACY_PROJECTION_UCP_KEYS
+
     assert "chosen_model" in LEGACY_PROJECTION_UCP_KEYS
 
 
 def test_24_legacy_projection_ucp_keys_contains_chosen_provider():
     from core.projection.projection_compiler import LEGACY_PROJECTION_UCP_KEYS
+
     assert "chosen_provider" in LEGACY_PROJECTION_UCP_KEYS
 
 
@@ -248,6 +268,7 @@ def test_25_projection_compiler_authority_importable():
 
 def test_26_projection_compiler_authority_is_non_empty_string():
     from core.projection.projection_compiler import PROJECTION_COMPILER_AUTHORITY
+
     assert isinstance(PROJECTION_COMPILER_AUTHORITY, str)
     assert len(PROJECTION_COMPILER_AUTHORITY) > 0
 
@@ -259,6 +280,7 @@ def test_26_projection_compiler_authority_is_non_empty_string():
 
 def test_27_topology_route_plan_sets_fallback_false():
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     ucp = {
         "topology_route_plan": {
             "primary_model": {
@@ -278,6 +300,7 @@ def test_27_topology_route_plan_sets_fallback_false():
 
 def test_28_legacy_ucp_keys_sets_fallback_true():
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     ucp = {
         "chosen_model": "claude-3-5-sonnet",
         "chosen_provider": "anthropic",
@@ -290,6 +313,7 @@ def test_28_legacy_ucp_keys_sets_fallback_true():
 
 def test_29_empty_ucp_sets_fallback_false():
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     proj = build_desktop_status_projection(unified_control_plan={})
     assert proj.model_routing.routing_authority_source == "none"
     assert proj.model_routing.legacy_routing_fallback_active is False
@@ -297,6 +321,7 @@ def test_29_empty_ucp_sets_fallback_false():
 
 def test_30_to_dict_includes_legacy_routing_fallback_active():
     from contracts.desktop_status_projection import ModelRoutingProjection
+
     proj = ModelRoutingProjection()
     d = proj.to_dict()
     assert "legacy_routing_fallback_active" in d
@@ -309,6 +334,7 @@ def test_30_to_dict_includes_legacy_routing_fallback_active():
 
 def test_31_pr4_oneapi_integration_field_still_present():
     from contracts.desktop_status_projection import DesktopStatusProjection
+
     proj = DesktopStatusProjection()
     assert hasattr(proj, "oneapi_integration")
 
@@ -318,6 +344,7 @@ def test_32_pr4_oneapi_integration_separate_from_model_routing():
         DesktopStatusProjection,
         ModelRoutingProjection,
     )
+
     # oneapi_integration is on DesktopStatusProjection, not ModelRoutingProjection
     assert hasattr(DesktopStatusProjection(), "oneapi_integration")
     # ModelRoutingProjection has oneapi_source (per-route context), not oneapi_integration
@@ -328,6 +355,7 @@ def test_32_pr4_oneapi_integration_separate_from_model_routing():
 
 def test_33_pr4_oneapi_source_none_for_direct_vendor():
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     ucp = {
         "topology_route_plan": {
             "primary_model": {
@@ -346,15 +374,15 @@ def test_33_pr4_oneapi_source_none_for_direct_vendor():
 
 def test_34_canonical_routing_authority_importable_unchanged():
     from core.model_topology.topology_router import CANONICAL_ROUTING_AUTHORITY  # noqa: F401
+
     assert isinstance(CANONICAL_ROUTING_AUTHORITY, str)
     assert len(CANONICAL_ROUTING_AUTHORITY) > 0
 
 
 def test_35_canonical_routing_authority_expected_value():
     from core.model_topology.topology_router import CANONICAL_ROUTING_AUTHORITY
-    assert CANONICAL_ROUTING_AUTHORITY == (
-        "core.model_topology.topology_router.TopologyRouter"
-    )
+
+    assert CANONICAL_ROUTING_AUTHORITY == ("core.model_topology.topology_router.TopologyRouter")
 
 
 # ===========================================================================
@@ -398,48 +426,56 @@ def test_41_doc_mentions_topology_route_plan():
 
 def test_42_assemble_server_canonicalization_status_returns_dict():
     from core.routes.projection import _assemble_server_canonicalization_status
+
     result = _assemble_server_canonicalization_status()
     assert isinstance(result, dict)
 
 
 def test_43_assemble_server_canonicalization_status_has_stage_key():
     from core.routes.projection import _assemble_server_canonicalization_status
+
     result = _assemble_server_canonicalization_status()
     assert "canonicalization_stage" in result
 
 
 def test_44_assemble_server_canonicalization_status_has_legacy_keys():
     from core.routes.projection import _assemble_server_canonicalization_status
+
     result = _assemble_server_canonicalization_status()
     assert "legacy_ucp_routing_keys" in result
 
 
 def test_45_assemble_server_canonicalization_status_has_pr4_key():
     from core.routes.projection import _assemble_server_canonicalization_status
+
     result = _assemble_server_canonicalization_status()
     assert "pr4_guarantees_intact" in result
 
 
 def test_46_assemble_server_canonicalization_status_pr4_guarantees_intact():
     from core.routes.projection import _assemble_server_canonicalization_status
+
     result = _assemble_server_canonicalization_status()
     assert result["pr4_guarantees_intact"] is True
 
 
 def test_47_assemble_server_canonicalization_status_has_consumer_guidance():
     from core.routes.projection import _assemble_server_canonicalization_status
+
     result = _assemble_server_canonicalization_status()
     assert "consumer_guidance" in result
 
 
 def test_48_consumer_guidance_prefer_topology_route_plan_true():
     from core.routes.projection import _assemble_server_canonicalization_status
+
     result = _assemble_server_canonicalization_status()
     assert result["consumer_guidance"]["prefer_topology_route_plan"] is True
 
 
 def test_49_consumer_guidance_avoid_legacy_ucp_keys_true():
     from core.routes.projection import _assemble_server_canonicalization_status
+
     result = _assemble_server_canonicalization_status()
     assert result["consumer_guidance"]["avoid_legacy_ucp_keys"] is True
 
@@ -452,4 +488,5 @@ def test_49_consumer_guidance_avoid_legacy_ucp_keys_true():
 def test_50_legacy_keys_consistent_between_modules():
     from contracts.desktop_status_projection import LEGACY_UCP_ROUTING_KEYS
     from core.projection.projection_compiler import LEGACY_PROJECTION_UCP_KEYS
+
     assert LEGACY_UCP_ROUTING_KEYS == set(LEGACY_PROJECTION_UCP_KEYS)

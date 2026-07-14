@@ -27,10 +27,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_body_entry(
     device_id: str = "dev_001",
@@ -46,6 +46,7 @@ def _make_body_entry(
     if roles is None:
         try:
             from core.mesh.body_mesh_registry import DeviceRole
+
             roles = [DeviceRole.PERCEPTION, DeviceRole.ACTION]
         except ImportError:
             roles = []
@@ -112,11 +113,13 @@ def _make_routing_summary(
 # 1. Serialisation stability
 # ---------------------------------------------------------------------------
 
+
 class TestSerialisationStability:
     """MeshMembership serialises and round-trips correctly."""
 
     def test_to_dict_returns_serialisable_dict(self):
         from contracts.mesh_membership import MeshMembership
+
         m = MeshMembership(mesh_id="mesh_a", member_device_id="dev_001")
         result = m.to_dict()
         assert isinstance(result, dict)
@@ -127,6 +130,7 @@ class TestSerialisationStability:
 
     def test_to_json_returns_valid_json(self):
         from contracts.mesh_membership import MeshMembership
+
         m = MeshMembership(mesh_id="mesh_b", member_device_id="dev_002")
         raw = m.to_json()
         parsed = json.loads(raw)
@@ -135,6 +139,7 @@ class TestSerialisationStability:
 
     def test_from_dict_round_trip(self):
         from contracts.mesh_membership import MeshMembership
+
         original = MeshMembership(
             mesh_id="mesh_c",
             member_device_id="dev_003",
@@ -147,7 +152,8 @@ class TestSerialisationStability:
         assert restored.member_runtime_id == original.member_runtime_id
 
     def test_to_json_from_json_round_trip(self):
-        from contracts.mesh_membership import MeshMembership, MeshMemberRole
+        from contracts.mesh_membership import MeshMemberRole, MeshMembership
+
         original = MeshMembership(
             mesh_id="mesh_d",
             member_device_id="dev_004",
@@ -159,16 +165,25 @@ class TestSerialisationStability:
 
     def test_to_compact_summary_keys(self):
         from contracts.mesh_membership import MeshMembership
+
         m = MeshMembership(mesh_id="mesh_e", member_device_id="dev_005")
         compact = m.to_compact_summary()
-        for key in ("membership_id", "mesh_id", "member_device_id", "roles",
-                    "authority_scope", "routing_intent", "hints"):
+        for key in (
+            "membership_id",
+            "mesh_id",
+            "member_device_id",
+            "roles",
+            "authority_scope",
+            "routing_intent",
+            "hints",
+        ):
             assert key in compact, f"Missing key in compact summary: {key}"
 
 
 # ---------------------------------------------------------------------------
 # 2. Stable field names
 # ---------------------------------------------------------------------------
+
 
 class TestStableFieldNames:
     """All documented fields are present in to_dict output."""
@@ -200,6 +215,7 @@ class TestStableFieldNames:
 
     def test_all_documented_fields_present(self):
         from contracts.mesh_membership import MeshMembership
+
         m = MeshMembership(mesh_id="mesh_x", member_device_id="dev_x")
         result = m.to_dict()
         for field in self._REQUIRED_FIELDS:
@@ -207,12 +223,18 @@ class TestStableFieldNames:
 
     def test_hints_sub_fields(self):
         from contracts.mesh_membership import MeshMembership
+
         m = MeshMembership(mesh_id="mesh_y", member_device_id="dev_y")
         hints = m.to_dict()["hints"]
         for field in (
-            "is_primary", "is_source", "is_fallback", "is_relay",
-            "is_observer", "has_execution_authority",
-            "multi_device_required", "merge_confirmation_required",
+            "is_primary",
+            "is_source",
+            "is_fallback",
+            "is_relay",
+            "is_observer",
+            "has_execution_authority",
+            "multi_device_required",
+            "merge_confirmation_required",
         ):
             assert field in hints, f"Missing hints field: {field}"
 
@@ -221,9 +243,11 @@ class TestStableFieldNames:
 # 3. Enum values
 # ---------------------------------------------------------------------------
 
+
 class TestEnumValues:
     def test_mesh_member_role_values(self):
         from contracts.mesh_membership import MeshMemberRole
+
         assert MeshMemberRole.SOURCE.value == "source"
         assert MeshMemberRole.PRIMARY.value == "primary"
         assert MeshMemberRole.SUPPORT.value == "support"
@@ -235,6 +259,7 @@ class TestEnumValues:
 
     def test_mesh_authority_scope_values(self):
         from contracts.mesh_membership import MeshAuthorityScope
+
         assert MeshAuthorityScope.MESH_AUTHORITY.value == "mesh_authority"
         assert MeshAuthorityScope.EXECUTION_AUTHORITY.value == "execution_authority"
         assert MeshAuthorityScope.OBSERVE_ONLY.value == "observe_only"
@@ -243,6 +268,7 @@ class TestEnumValues:
 
     def test_mesh_routing_intent_values(self):
         from contracts.mesh_membership import MeshRoutingIntent
+
         assert MeshRoutingIntent.LOCAL_PREFERRED.value == "local_preferred"
         assert MeshRoutingIntent.LOCAL_THEN_EXPAND.value == "local_then_expand"
         assert MeshRoutingIntent.REMOTE_REQUIRED.value == "remote_required"
@@ -255,9 +281,11 @@ class TestEnumValues:
 # 4. MeshParticipationHints
 # ---------------------------------------------------------------------------
 
+
 class TestMeshParticipationHints:
     def test_defaults_are_false(self):
         from contracts.mesh_membership import MeshParticipationHints
+
         h = MeshParticipationHints()
         assert h.is_primary is False
         assert h.is_source is False
@@ -270,6 +298,7 @@ class TestMeshParticipationHints:
 
     def test_to_dict_serialisable(self):
         from contracts.mesh_membership import MeshParticipationHints
+
         h = MeshParticipationHints(is_primary=True, has_execution_authority=True)
         d = h.to_dict()
         assert d["is_primary"] is True
@@ -278,8 +307,11 @@ class TestMeshParticipationHints:
 
     def test_hints_reflected_in_membership(self):
         from contracts.mesh_membership import (
-            MeshMembership, MeshMemberRole, MeshAuthorityScope,
+            MeshAuthorityScope,
+            MeshMemberRole,
+            MeshMembership,
         )
+
         m = MeshMembership(
             mesh_id="m",
             member_device_id="d",
@@ -295,9 +327,11 @@ class TestMeshParticipationHints:
 # 5. from_body_mesh_entry adapter
 # ---------------------------------------------------------------------------
 
+
 class TestFromBodyMeshEntry:
     def test_basic_entry(self):
         from contracts.mesh_membership import from_body_mesh_entry
+
         entry = _make_body_entry("phone_001")
         m = from_body_mesh_entry(entry, mesh_id="my_mesh")
         assert m.member_device_id == "phone_001"
@@ -305,6 +339,7 @@ class TestFromBodyMeshEntry:
 
     def test_body_roles_preserved_in_metadata(self):
         from contracts.mesh_membership import from_body_mesh_entry
+
         entry = _make_body_entry("phone_002")
         m = from_body_mesh_entry(entry, mesh_id="m")
         # Original body mesh roles should be in metadata
@@ -313,19 +348,22 @@ class TestFromBodyMeshEntry:
         assert isinstance(body_roles, list)
 
     def test_authority_nonzero_score(self):
-        from contracts.mesh_membership import from_body_mesh_entry, MeshAuthorityScope
+        from contracts.mesh_membership import MeshAuthorityScope, from_body_mesh_entry
+
         entry = _make_body_entry("dev_scored", body_score=3.0)
         m = from_body_mesh_entry(entry, mesh_id="m")
         assert m.authority_scope == MeshAuthorityScope.EXECUTION_AUTHORITY.value
 
     def test_authority_zero_score(self):
-        from contracts.mesh_membership import from_body_mesh_entry, MeshAuthorityScope
+        from contracts.mesh_membership import MeshAuthorityScope, from_body_mesh_entry
+
         entry = _make_body_entry("dev_zero", body_score=0.0)
         m = from_body_mesh_entry(entry, mesh_id="m")
         assert m.authority_scope == MeshAuthorityScope.NONE.value
 
     def test_primary_device_id_passed_through(self):
         from contracts.mesh_membership import from_body_mesh_entry
+
         entry = _make_body_entry("dev_a")
         m = from_body_mesh_entry(entry, mesh_id="m", primary_device_id="dev_b")
         assert m.primary_device_id == "dev_b"
@@ -333,6 +371,7 @@ class TestFromBodyMeshEntry:
     def test_none_entry_graceful(self):
         """from_body_mesh_entry should not raise on None."""
         from contracts.mesh_membership import from_body_mesh_entry
+
         # None has no device_id so result gets a generated id
         result = from_body_mesh_entry(None, mesh_id="m")
         assert result is not None
@@ -341,13 +380,15 @@ class TestFromBodyMeshEntry:
     def test_bad_entry_graceful(self):
         """Entries with missing attrs should not raise."""
         from contracts.mesh_membership import from_body_mesh_entry
+
         result = from_body_mesh_entry(object(), mesh_id="m")
         assert result is not None
 
     def test_real_body_entry(self):
         """Test with an actual BodyEntry from BodyMeshRegistry."""
-        from core.mesh.body_mesh_registry import BodyMeshRegistry, DeviceRole
         from contracts.mesh_membership import from_body_mesh_entry
+        from core.mesh.body_mesh_registry import BodyMeshRegistry, DeviceRole
+
         reg = BodyMeshRegistry()
         reg.register("real_dev", roles=[DeviceRole.ACTION])
         entry = reg.get("real_dev")
@@ -361,9 +402,11 @@ class TestFromBodyMeshEntry:
 # 6. from_device_formation_summary adapter
 # ---------------------------------------------------------------------------
 
+
 class TestFromDeviceFormationSummary:
     def test_returns_list(self):
         from contracts.mesh_membership import from_device_formation_summary
+
         summary = _make_formation_summary()
         result = from_device_formation_summary(summary, mesh_id="mesh_form")
         assert isinstance(result, list)
@@ -371,6 +414,7 @@ class TestFromDeviceFormationSummary:
 
     def test_unique_devices(self):
         from contracts.mesh_membership import from_device_formation_summary
+
         summary = _make_formation_summary(
             source_device_id="dev_s",
             primary_device_id="dev_p",
@@ -383,8 +427,11 @@ class TestFromDeviceFormationSummary:
 
     def test_primary_gets_mesh_authority(self):
         from contracts.mesh_membership import (
-            from_device_formation_summary, MeshAuthorityScope, MeshMemberRole,
+            MeshAuthorityScope,
+            MeshMemberRole,
+            from_device_formation_summary,
         )
+
         summary = _make_formation_summary(
             source_device_id="dev_s",
             primary_device_id="dev_p",
@@ -397,8 +444,10 @@ class TestFromDeviceFormationSummary:
 
     def test_observer_gets_observe_only(self):
         from contracts.mesh_membership import (
-            from_device_formation_summary, MeshAuthorityScope,
+            MeshAuthorityScope,
+            from_device_formation_summary,
         )
+
         summary = _make_formation_summary(observer=["obs_dev"])
         result = from_device_formation_summary(summary)
         obs_ms = [m for m in result if m.member_device_id == "obs_dev"]
@@ -407,6 +456,7 @@ class TestFromDeviceFormationSummary:
 
     def test_barrier_posture_preserved(self):
         from contracts.mesh_membership import from_device_formation_summary
+
         summary = _make_formation_summary(barrier_posture="wait_all")
         result = from_device_formation_summary(summary)
         for m in result:
@@ -414,6 +464,7 @@ class TestFromDeviceFormationSummary:
 
     def test_multi_device_required_flag(self):
         from contracts.mesh_membership import from_device_formation_summary
+
         summary = _make_formation_summary(multi_req=True)
         result = from_device_formation_summary(summary)
         for m in result:
@@ -421,10 +472,12 @@ class TestFromDeviceFormationSummary:
 
     def test_none_summary_returns_empty(self):
         from contracts.mesh_membership import from_device_formation_summary
+
         assert from_device_formation_summary(None) == []
 
     def test_empty_summary_returns_empty(self):
         from contracts.mesh_membership import from_device_formation_summary
+
         m = MagicMock()
         m.formation_id = "f"
         m.source_device_id = None
@@ -442,6 +495,7 @@ class TestFromDeviceFormationSummary:
 
     def test_all_members_serialisable(self):
         from contracts.mesh_membership import from_device_formation_summary
+
         summary = _make_formation_summary()
         result = from_device_formation_summary(summary)
         for m in result:
@@ -452,9 +506,11 @@ class TestFromDeviceFormationSummary:
 # 7. from_cross_device_routing_summary adapter
 # ---------------------------------------------------------------------------
 
+
 class TestFromCrossDeviceRoutingSummary:
     def test_returns_list(self):
         from contracts.mesh_membership import from_cross_device_routing_summary
+
         summary = _make_routing_summary()
         result = from_cross_device_routing_summary(summary, mesh_id="mesh_route")
         assert isinstance(result, list)
@@ -462,8 +518,10 @@ class TestFromCrossDeviceRoutingSummary:
 
     def test_routing_posture_mapped(self):
         from contracts.mesh_membership import (
-            from_cross_device_routing_summary, MeshRoutingIntent,
+            MeshRoutingIntent,
+            from_cross_device_routing_summary,
         )
+
         summary = _make_routing_summary(posture="local_preferred")
         result = from_cross_device_routing_summary(summary)
         for m in result:
@@ -471,8 +529,10 @@ class TestFromCrossDeviceRoutingSummary:
 
     def test_split_execution_posture(self):
         from contracts.mesh_membership import (
-            from_cross_device_routing_summary, MeshRoutingIntent,
+            MeshRoutingIntent,
+            from_cross_device_routing_summary,
         )
+
         summary = _make_routing_summary(posture="split_execution")
         result = from_cross_device_routing_summary(summary)
         for m in result:
@@ -480,8 +540,10 @@ class TestFromCrossDeviceRoutingSummary:
 
     def test_unknown_posture_maps_to_undecided(self):
         from contracts.mesh_membership import (
-            from_cross_device_routing_summary, MeshRoutingIntent,
+            MeshRoutingIntent,
+            from_cross_device_routing_summary,
         )
+
         summary = _make_routing_summary(posture="unknown_posture")
         result = from_cross_device_routing_summary(summary)
         for m in result:
@@ -489,10 +551,12 @@ class TestFromCrossDeviceRoutingSummary:
 
     def test_none_summary_returns_empty(self):
         from contracts.mesh_membership import from_cross_device_routing_summary
+
         assert from_cross_device_routing_summary(None) == []
 
     def test_all_members_serialisable(self):
         from contracts.mesh_membership import from_cross_device_routing_summary
+
         summary = _make_routing_summary(
             fallback=["fb_1"],
             support=["sup_1"],
@@ -505,8 +569,9 @@ class TestFromCrossDeviceRoutingSummary:
 
     def test_real_routing_summary(self):
         """Adapter works with an actual CrossDeviceAssignmentSummary."""
-        from core.cross_device_policy import build_assignment_summary, DEFAULT_LOCAL_ROUTING_POLICY
         from contracts.mesh_membership import from_cross_device_routing_summary
+        from core.cross_device_policy import DEFAULT_LOCAL_ROUTING_POLICY, build_assignment_summary
+
         routing = build_assignment_summary(DEFAULT_LOCAL_ROUTING_POLICY)
         result = from_cross_device_routing_summary(routing)
         assert isinstance(result, list)
@@ -516,9 +581,11 @@ class TestFromCrossDeviceRoutingSummary:
 # 8. build_mesh_membership factory
 # ---------------------------------------------------------------------------
 
+
 class TestBuildMeshMembership:
     def test_minimal_call(self):
         from contracts.mesh_membership import build_mesh_membership
+
         m = build_mesh_membership(
             mesh_id="minimal_mesh",
             member_device_id="dev_min",
@@ -528,8 +595,12 @@ class TestBuildMeshMembership:
 
     def test_full_call(self):
         from contracts.mesh_membership import (
-            build_mesh_membership, MeshMemberRole, MeshAuthorityScope, MeshRoutingIntent,
+            MeshAuthorityScope,
+            MeshMemberRole,
+            MeshRoutingIntent,
+            build_mesh_membership,
         )
+
         m = build_mesh_membership(
             mesh_id="full_mesh",
             member_device_id="dev_full",
@@ -567,14 +638,18 @@ class TestBuildMeshMembership:
 
     def test_auto_membership_id(self):
         from contracts.mesh_membership import build_mesh_membership
+
         m1 = build_mesh_membership("m", "d")
         m2 = build_mesh_membership("m", "d")
         assert m1.membership_id != m2.membership_id
 
     def test_hints_computed_correctly(self):
         from contracts.mesh_membership import (
-            build_mesh_membership, MeshMemberRole, MeshAuthorityScope,
+            MeshAuthorityScope,
+            MeshMemberRole,
+            build_mesh_membership,
         )
+
         m = build_mesh_membership(
             mesh_id="m",
             member_device_id="d",
@@ -589,9 +664,11 @@ class TestBuildMeshMembership:
 # 9. Graceful handling of partial / missing data
 # ---------------------------------------------------------------------------
 
+
 class TestGracefulPartialData:
     def test_from_body_mesh_entry_empty_roles(self):
         from contracts.mesh_membership import from_body_mesh_entry
+
         entry = _make_body_entry(roles=[])
         m = from_body_mesh_entry(entry)
         assert m is not None
@@ -599,17 +676,20 @@ class TestGracefulPartialData:
 
     def test_from_formation_summary_missing_attrs(self):
         from contracts.mesh_membership import from_device_formation_summary
+
         # Object with no relevant attrs
         result = from_device_formation_summary(object())
         assert isinstance(result, list)
 
     def test_from_routing_summary_missing_attrs(self):
         from contracts.mesh_membership import from_cross_device_routing_summary
+
         result = from_cross_device_routing_summary(object())
         assert isinstance(result, list)
 
     def test_membership_default_fields(self):
-        from contracts.mesh_membership import MeshMembership, MeshAuthorityScope, MeshRoutingIntent
+        from contracts.mesh_membership import MeshAuthorityScope, MeshMembership, MeshRoutingIntent
+
         m = MeshMembership(mesh_id="m", member_device_id="d")
         assert m.roles == []
         assert m.authority_scope == MeshAuthorityScope.NONE.value
@@ -625,6 +705,7 @@ class TestGracefulPartialData:
 # ---------------------------------------------------------------------------
 # 10. contracts package root re-exports
 # ---------------------------------------------------------------------------
+
 
 class TestContractsPackageExports:
     def test_mesh_membership_importable(self):
@@ -659,6 +740,7 @@ class TestContractsPackageExports:
 # 11. core.unified package re-exports
 # ---------------------------------------------------------------------------
 
+
 class TestCoreUnifiedExports:
     def test_mesh_membership_importable(self):
         from core.unified import MeshMembership  # noqa: F401
@@ -692,19 +774,23 @@ class TestCoreUnifiedExports:
 # 12. BodyMeshRegistry.get_mesh_memberships() integration
 # ---------------------------------------------------------------------------
 
+
 class TestBodyMeshRegistryIntegration:
     def setup_method(self):
         from core.mesh.body_mesh_registry import reset_body_mesh_registry
+
         reset_body_mesh_registry()
 
     def test_empty_registry_returns_empty(self):
         from core.mesh.body_mesh_registry import BodyMeshRegistry
+
         reg = BodyMeshRegistry()
         result = reg.get_mesh_memberships(mesh_id="m")
         assert result == []
 
     def test_returns_one_per_device(self):
         from core.mesh.body_mesh_registry import BodyMeshRegistry, DeviceRole
+
         reg = BodyMeshRegistry()
         reg.register("dev_a", roles=[DeviceRole.PERCEPTION])
         reg.register("dev_b", roles=[DeviceRole.ACTION])
@@ -715,6 +801,7 @@ class TestBodyMeshRegistryIntegration:
 
     def test_all_memberships_serialisable(self):
         from core.mesh.body_mesh_registry import BodyMeshRegistry, DeviceRole
+
         reg = BodyMeshRegistry()
         reg.register("dev_c", roles=[DeviceRole.PRESENCE])
         result = reg.get_mesh_memberships(mesh_id="m")
@@ -723,6 +810,7 @@ class TestBodyMeshRegistryIntegration:
 
     def test_session_filter(self):
         from core.mesh.body_mesh_registry import BodyMeshRegistry, DeviceRole
+
         reg = BodyMeshRegistry()
         reg.register("dev_s1", roles=[DeviceRole.ACTION], session_id="sess_a")
         reg.register("dev_s2", roles=[DeviceRole.PERCEPTION], session_id="sess_b")
@@ -732,6 +820,7 @@ class TestBodyMeshRegistryIntegration:
 
     def test_primary_device_identified(self):
         from core.mesh.body_mesh_registry import BodyMeshRegistry, DeviceRole
+
         reg = BodyMeshRegistry()
         reg.register("dev_low", roles=[DeviceRole.PERCEPTION])
         reg.register("dev_high", roles=[DeviceRole.ACTION])
@@ -745,10 +834,12 @@ class TestBodyMeshRegistryIntegration:
 # 13. Projection endpoint — GET /api/v1/mesh/memberships
 # ---------------------------------------------------------------------------
 
+
 class TestProjectionEndpoint:
     def test_endpoint_registered_in_router(self):
         """Router has GET /api/v1/mesh/memberships route."""
         from core.routes.projection import create_router
+
         router = create_router()
         route_paths = [r.path for r in router.routes]
         assert "/api/v1/mesh/memberships" in route_paths
@@ -756,8 +847,9 @@ class TestProjectionEndpoint:
     def test_endpoint_returns_valid_structure(self):
         """Endpoint response has expected keys."""
         import asyncio
-        from core.routes.projection import create_router
         from unittest.mock import patch
+
+        from core.routes.projection import create_router
 
         router = create_router()
 
@@ -785,8 +877,9 @@ class TestProjectionEndpoint:
     def test_endpoint_handles_exception_gracefully(self):
         """Endpoint does not raise when registry throws."""
         import asyncio
-        from core.routes.projection import create_router
         from unittest.mock import patch
+
+        from core.routes.projection import create_router
 
         router = create_router()
         handler = None
@@ -809,9 +902,11 @@ class TestProjectionEndpoint:
 # 14. to_compact_summary
 # ---------------------------------------------------------------------------
 
+
 class TestCompactSummary:
     def test_compact_summary_is_serialisable(self):
-        from contracts.mesh_membership import build_mesh_membership, MeshMemberRole
+        from contracts.mesh_membership import MeshMemberRole, build_mesh_membership
+
         m = build_mesh_membership(
             mesh_id="mesh_compact",
             member_device_id="dev_compact",
@@ -824,6 +919,7 @@ class TestCompactSummary:
 
     def test_compact_summary_contains_key_fields(self):
         from contracts.mesh_membership import MeshMembership
+
         m = MeshMembership(mesh_id="m", member_device_id="d")
         compact = m.to_compact_summary()
         assert compact["mesh_id"] == "m"

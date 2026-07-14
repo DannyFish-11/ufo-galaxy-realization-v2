@@ -24,6 +24,7 @@
 
 合成放 asyncio.to_thread(重推理,不占事件循环);播放/打断继承 EdgeTTSEngine。
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -62,7 +63,10 @@ def kick_background_fetch() -> None:
     GALAXY_INDEXTTS_AUTOFETCH=1 显式开启(支持 HF_ENDPOINT 国内镜像)。"""
     global _fetch_started
     if os.environ.get("GALAXY_INDEXTTS_AUTOFETCH", "0").strip().lower() not in (
-        "1", "true", "yes", "on",
+        "1",
+        "true",
+        "yes",
+        "on",
     ):
         return
     with _fetch_lock:
@@ -73,6 +77,7 @@ def kick_background_fetch() -> None:
     def _fetch() -> None:
         try:
             from huggingface_hub import snapshot_download
+
             d = _model_dir()
             d.mkdir(parents=True, exist_ok=True)
             logger.info("IndexTTS-2 模型后台拉取中(数 GB,首次较久): %s", _HF_REPO)
@@ -103,14 +108,16 @@ class IndexTTSEngine(EdgeTTSEngine):
             logger.info(
                 "IndexTTS-2 模型未就位(%s);设 GALAXY_INDEXTTS_AUTOFETCH=1 "
                 "可后台拉取,或手动 hf download %s --local-dir=%s",
-                _model_dir(), _HF_REPO, _model_dir(),
+                _model_dir(),
+                _HF_REPO,
+                _model_dir(),
             )
             return False
         ref = _ref_audio()
         if not ref or not os.path.exists(ref):
             logger.warning(
-                "IndexTTS 需要参考音频做零样本克隆:请设 GALAXY_INDEXTTS_REF_AUDIO "
-                "指向一段目标音色的 wav(当前: %r)", ref,
+                "IndexTTS 需要参考音频做零样本克隆:请设 GALAXY_INDEXTTS_REF_AUDIO " "指向一段目标音色的 wav(当前: %r)",
+                ref,
             )
             return False
         return True
@@ -119,11 +126,15 @@ class IndexTTSEngine(EdgeTTSEngine):
         if self._tts is None:
             d = str(_model_dir())
             use_fp16 = os.environ.get("GALAXY_INDEXTTS_FP16", "0").strip().lower() in (
-                "1", "true", "yes", "on",
+                "1",
+                "true",
+                "yes",
+                "on",
             )
             try:
                 # IndexTTS2(主线,情感+时长控制)
                 from indextts.infer_v2 import IndexTTS2
+
                 self._tts = IndexTTS2(
                     cfg_path=os.path.join(d, "config.yaml"),
                     model_dir=d,
@@ -133,6 +144,7 @@ class IndexTTSEngine(EdgeTTSEngine):
             except ImportError:
                 # 旧版包只有 v1 入口——降级加载,不带情绪参数
                 from indextts.infer import IndexTTS
+
                 self._tts = IndexTTS(cfg_path=os.path.join(d, "config.yaml"), model_dir=d)
                 logger.info("IndexTTS(v1) 引擎已加载——情绪控制参数将被忽略")
         return self._tts
@@ -148,7 +160,10 @@ class IndexTTSEngine(EdgeTTSEngine):
             kw["emo_text"] = emo_text
             kw["use_emo_text"] = True
         elif os.environ.get("GALAXY_INDEXTTS_USE_EMO_TEXT", "").strip().lower() in (
-            "1", "true", "yes", "on",
+            "1",
+            "true",
+            "yes",
+            "on",
         ):
             kw["use_emo_text"] = True  # 由台词语义自动推断
         try:
@@ -161,8 +176,8 @@ class IndexTTSEngine(EdgeTTSEngine):
         self,
         text: str,
         output_path: Optional[str] = None,
-        voice: Optional[str] = None,   # 接口兼容;IndexTTS 的"音色"来自参考音频
-        rate: Optional[str] = None,    # 接口兼容
+        voice: Optional[str] = None,  # 接口兼容;IndexTTS 的"音色"来自参考音频
+        rate: Optional[str] = None,  # 接口兼容
     ) -> str:
         def _run() -> str:
             tts = self._ensure_loaded()
@@ -186,7 +201,9 @@ class IndexTTSEngine(EdgeTTSEngine):
                 logger.debug("IndexTTS infer 签名不匹配,退最小参数集重试")
                 try:
                     tts.infer(
-                        spk_audio_prompt=_ref_audio(), text=text, output_path=path,
+                        spk_audio_prompt=_ref_audio(),
+                        text=text,
+                        output_path=path,
                     )
                 except TypeError:
                     # v1 位置参数形态: infer(voice, text, output_path)

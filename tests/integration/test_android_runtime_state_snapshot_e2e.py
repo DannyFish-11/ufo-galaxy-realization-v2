@@ -66,7 +66,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # AIP v3 helpers — identical to those used by production Android clients
 # ---------------------------------------------------------------------------
@@ -248,6 +247,7 @@ class AndroidRuntimeStub:
 def bridge():
     """Real AndroidBridge instance (no mocking)."""
     from galaxy_gateway.android_bridge import AndroidBridge
+
     return AndroidBridge()
 
 
@@ -259,6 +259,7 @@ def isolate_android_state_store():
     contamination cannot produce false positives.
     """
     from core.android_device_state_store import reset_android_device_state_store
+
     reset_android_device_state_store()
     yield
     reset_android_device_state_store()
@@ -273,6 +274,7 @@ def operator_client():
     """
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
+
     from core.routes.operator import create_router
 
     app = FastAPI()
@@ -288,6 +290,7 @@ def operator_panel_client():
     """FastAPI TestClient with operator + unified panel routes mounted."""
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
+
     from core.routes.operator import create_router as create_operator_router
     from core.routes.panel import create_router as create_panel_router
 
@@ -362,28 +365,26 @@ class TestAndroidSnapshotBridgePath:
 
         # Step 1: register
         reg_ack = await stub.register(bridge)
-        assert reg_ack.get("type") == "device_register_ack", (
-            f"STEP1 FAILED: expected device_register_ack, got {reg_ack.get('type')!r}"
-        )
+        assert (
+            reg_ack.get("type") == "device_register_ack"
+        ), f"STEP1 FAILED: expected device_register_ack, got {reg_ack.get('type')!r}"
         assert reg_ack.get("success") is True, "STEP1 FAILED: registration not successful"
 
         # Pre-condition: store is empty before snapshot
-        assert get_device_state_snapshot(device_id) is None, (
-            "PRE-CONDITION FAILED: store should be empty before snapshot is sent"
-        )
+        assert (
+            get_device_state_snapshot(device_id) is None
+        ), "PRE-CONDITION FAILED: store should be empty before snapshot is sent"
 
         # Step 2: send device_state_snapshot
         snap_ack = await stub.send_state_snapshot(bridge)
-        assert snap_ack.get("type") == "device_state_snapshot_ack", (
-            f"STEP2 FAILED: expected device_state_snapshot_ack, got {snap_ack.get('type')!r}"
-        )
+        assert (
+            snap_ack.get("type") == "device_state_snapshot_ack"
+        ), f"STEP2 FAILED: expected device_state_snapshot_ack, got {snap_ack.get('type')!r}"
         assert snap_ack.get("status") == "absorbed", (
             f"STEP2 FAILED: snapshot was not absorbed — status={snap_ack.get('status')!r}. "
             "This means the canonical absorb/store path did not execute."
         )
-        assert snap_ack.get("device_id") == device_id, (
-            "STEP2 FAILED: device_id mismatch in snapshot ack"
-        )
+        assert snap_ack.get("device_id") == device_id, "STEP2 FAILED: device_id mismatch in snapshot ack"
 
         # Step 3: verify store is non-empty
         stored_snap = get_device_state_snapshot(device_id)
@@ -425,44 +426,41 @@ class TestAndroidSnapshotBridgePath:
         assert stored is not None, "Store must be non-empty after snapshot absorption"
 
         # Identity: stored device_id matches the Android sender
-        assert stored.device_id == device_id, (
-            f"Stored device_id={stored.device_id!r} does not match sender {device_id!r}"
-        )
+        assert (
+            stored.device_id == device_id
+        ), f"Stored device_id={stored.device_id!r} does not match sender {device_id!r}"
 
         # Readiness flags: must reflect Android-reported values
         assert stored.model_ready == expected["model_ready"], (
-            f"model_ready mismatch: stored={stored.model_ready!r} "
-            f"expected={expected['model_ready']!r}"
+            f"model_ready mismatch: stored={stored.model_ready!r} " f"expected={expected['model_ready']!r}"
         )
-        assert stored.accessibility_ready == expected["accessibility_ready"], (
-            f"accessibility_ready mismatch: stored={stored.accessibility_ready!r}"
-        )
-        assert stored.local_loop_ready == expected["local_loop_ready"], (
-            f"local_loop_ready mismatch: stored={stored.local_loop_ready!r}"
-        )
+        assert (
+            stored.accessibility_ready == expected["accessibility_ready"]
+        ), f"accessibility_ready mismatch: stored={stored.accessibility_ready!r}"
+        assert (
+            stored.local_loop_ready == expected["local_loop_ready"]
+        ), f"local_loop_ready mismatch: stored={stored.local_loop_ready!r}"
 
         # Model identity: must reflect Android-reported model
-        assert stored.model_id == expected["model_id"], (
-            f"model_id mismatch: stored={stored.model_id!r} expected={expected['model_id']!r}"
-        )
-        assert stored.quantization == expected["quantization"], (
-            f"quantization mismatch: stored={stored.quantization!r}"
-        )
+        assert (
+            stored.model_id == expected["model_id"]
+        ), f"model_id mismatch: stored={stored.model_id!r} expected={expected['model_id']!r}"
+        assert stored.quantization == expected["quantization"], f"quantization mismatch: stored={stored.quantization!r}"
 
         # Fallback tier: must reflect Android-reported tier
-        assert stored.current_fallback_tier == expected["current_fallback_tier"], (
-            f"current_fallback_tier mismatch: stored={stored.current_fallback_tier!r}"
-        )
+        assert (
+            stored.current_fallback_tier == expected["current_fallback_tier"]
+        ), f"current_fallback_tier mismatch: stored={stored.current_fallback_tier!r}"
 
         # Runtime type: must reflect Android-reported runtime
-        assert stored.active_runtime_type == expected["active_runtime_type"], (
-            f"active_runtime_type mismatch: stored={stored.active_runtime_type!r}"
-        )
+        assert (
+            stored.active_runtime_type == expected["active_runtime_type"]
+        ), f"active_runtime_type mismatch: stored={stored.active_runtime_type!r}"
 
         # Warmup result: must reflect Android-reported warmup outcome
-        assert stored.warmup_result == expected["warmup_result"], (
-            f"warmup_result mismatch: stored={stored.warmup_result!r}"
-        )
+        assert (
+            stored.warmup_result == expected["warmup_result"]
+        ), f"warmup_result mismatch: stored={stored.warmup_result!r}"
 
     @pytest.mark.asyncio
     async def test_snapshot_to_dict_has_provenance_source(self, bridge: Any) -> None:
@@ -513,16 +511,14 @@ class TestAndroidSnapshotBridgePath:
             "total_devices_with_snapshot must be ≥ 1 after absorption — "
             "ecosystem summary does not reflect the absorbed snapshot."
         )
-        assert summary["model_ready_count"] >= 1, (
-            "model_ready_count must be ≥ 1 — the absorbed snapshot has model_ready=True"
-        )
+        assert (
+            summary["model_ready_count"] >= 1
+        ), "model_ready_count must be ≥ 1 — the absorbed snapshot has model_ready=True"
         assert summary["accessibility_ready_count"] >= 1, (
-            "accessibility_ready_count must be ≥ 1 — the absorbed snapshot has "
-            "accessibility_ready=True"
+            "accessibility_ready_count must be ≥ 1 — the absorbed snapshot has " "accessibility_ready=True"
         )
         assert summary["local_loop_ready_count"] >= 1, (
-            "local_loop_ready_count must be ≥ 1 — the absorbed snapshot has "
-            "local_loop_ready=True"
+            "local_loop_ready_count must be ≥ 1 — the absorbed snapshot has " "local_loop_ready=True"
         )
 
         # The per-device list in summary must include our device
@@ -559,9 +555,7 @@ class TestOperatorSurfaceExposesAndroidState:
     """
 
     @pytest.mark.asyncio
-    async def test_ecosystem_http_surface_returns_android_data(
-        self, bridge: Any, operator_client: Any
-    ) -> None:
+    async def test_ecosystem_http_surface_returns_android_data(self, bridge: Any, operator_client: Any) -> None:
         """GET /api/v1/operator/devices/ecosystem must reflect absorbed Android state.
 
         After Android sends device_state_snapshot, the operator ecosystem
@@ -574,31 +568,24 @@ class TestOperatorSurfaceExposesAndroidState:
         await stub.send_state_snapshot(bridge)
 
         resp = operator_client.get("/api/v1/operator/devices/ecosystem")
-        assert resp.status_code == 200, (
-            f"Ecosystem endpoint returned HTTP {resp.status_code}: {resp.text}"
-        )
+        assert resp.status_code == 200, f"Ecosystem endpoint returned HTTP {resp.status_code}: {resp.text}"
 
         body = resp.json()
         assert body.get("total_devices_with_snapshot", 0) >= 1, (
             "Operator ecosystem surface does not reflect the absorbed snapshot. "
             "total_devices_with_snapshot is 0 after absorption."
         )
-        assert body.get("model_ready_count", 0) >= 1, (
-            "model_ready_count is 0 — Android-derived readiness not reflected"
-        )
+        assert body.get("model_ready_count", 0) >= 1, "model_ready_count is 0 — Android-derived readiness not reflected"
 
         # Per-device list must include our device
         devices = body.get("devices", [])
         device_ids = {d.get("device_id") for d in devices}
         assert device_id in device_ids, (
-            f"Operator ecosystem surface does not include device {device_id!r}. "
-            f"Devices in response: {device_ids}"
+            f"Operator ecosystem surface does not include device {device_id!r}. " f"Devices in response: {device_ids}"
         )
 
     @pytest.mark.asyncio
-    async def test_per_device_ecosystem_http_surface(
-        self, bridge: Any, operator_client: Any
-    ) -> None:
+    async def test_per_device_ecosystem_http_surface(self, bridge: Any, operator_client: Any) -> None:
         """GET /api/v1/operator/devices/ecosystem/{device_id} returns Android state.
 
         The per-device operator endpoint must return HTTP 200 with Android-derived
@@ -618,9 +605,9 @@ class TestOperatorSurfaceExposesAndroidState:
         )
 
         body = resp.json()
-        assert body.get("device_id") == device_id, (
-            f"Response device_id mismatch: {body.get('device_id')!r} != {device_id!r}"
-        )
+        assert (
+            body.get("device_id") == device_id
+        ), f"Response device_id mismatch: {body.get('device_id')!r} != {device_id!r}"
         assert body.get("_source") == "android_device_state_store", (
             "Provenance marker _source must be 'android_device_state_store' — "
             "this confirms the response came from the canonical store."
@@ -629,20 +616,17 @@ class TestOperatorSurfaceExposesAndroidState:
         # Verify Android-derived values are present in the HTTP response
         expected_payload = AndroidRuntimeStub.REALISTIC_SNAPSHOT_PAYLOAD
         assert body.get("model_id") == expected_payload["model_id"], (
-            f"model_id in HTTP response: {body.get('model_id')!r} "
-            f"expected: {expected_payload['model_id']!r}"
+            f"model_id in HTTP response: {body.get('model_id')!r} " f"expected: {expected_payload['model_id']!r}"
         )
-        assert body.get("model_ready") == expected_payload["model_ready"], (
-            f"model_ready in HTTP response: {body.get('model_ready')!r}"
-        )
-        assert body.get("current_fallback_tier") == expected_payload["current_fallback_tier"], (
-            f"current_fallback_tier in HTTP response: {body.get('current_fallback_tier')!r}"
-        )
+        assert (
+            body.get("model_ready") == expected_payload["model_ready"]
+        ), f"model_ready in HTTP response: {body.get('model_ready')!r}"
+        assert (
+            body.get("current_fallback_tier") == expected_payload["current_fallback_tier"]
+        ), f"current_fallback_tier in HTTP response: {body.get('current_fallback_tier')!r}"
 
     @pytest.mark.asyncio
-    async def test_per_device_ecosystem_returns_404_before_snapshot(
-        self, operator_client: Any
-    ) -> None:
+    async def test_per_device_ecosystem_returns_404_before_snapshot(self, operator_client: Any) -> None:
         """GET /api/v1/operator/devices/ecosystem/{device_id} returns 404 before snapshot.
 
         This establishes the baseline: a device that has not sent a snapshot
@@ -675,12 +659,8 @@ class TestOperatorSurfaceExposesAndroidState:
         await stub.send_state_snapshot(bridge)
         await stub.send_execution_event(bridge, flow_id=flow_id, phase="grounding")
 
-        resp = operator_client.get(
-            f"/api/v1/operator/devices/execution-events?device_id={device_id}"
-        )
-        assert resp.status_code == 200, (
-            f"Execution events endpoint returned HTTP {resp.status_code}: {resp.text}"
-        )
+        resp = operator_client.get(f"/api/v1/operator/devices/execution-events?device_id={device_id}")
+        assert resp.status_code == 200, f"Execution events endpoint returned HTTP {resp.status_code}: {resp.text}"
 
         body = resp.json()
         assert body.get("total_events", 0) >= 1, (
@@ -695,9 +675,9 @@ class TestOperatorSurfaceExposesAndroidState:
             f"Events present: {[e.get('device_id') for e in events]}"
         )
         # Verify event carries Android-derived phase
-        assert device_events[0].get("phase") == "grounding", (
-            f"Event phase mismatch: {device_events[0].get('phase')!r} expected 'grounding'"
-        )
+        assert (
+            device_events[0].get("phase") == "grounding"
+        ), f"Event phase mismatch: {device_events[0].get('phase')!r} expected 'grounding'"
 
 
 # ===========================================================================
@@ -723,12 +703,10 @@ class TestAndroidExecutionEventCanonicalPath:
         await stub.register(bridge)
         evt_ack = await stub.send_execution_event(bridge, flow_id=flow_id, phase="planning")
 
-        assert evt_ack.get("type") == "device_execution_event_ack", (
-            f"Expected device_execution_event_ack, got {evt_ack.get('type')!r}"
-        )
-        assert evt_ack.get("status") == "absorbed", (
-            f"Execution event not absorbed: status={evt_ack.get('status')!r}"
-        )
+        assert (
+            evt_ack.get("type") == "device_execution_event_ack"
+        ), f"Expected device_execution_event_ack, got {evt_ack.get('type')!r}"
+        assert evt_ack.get("status") == "absorbed", f"Execution event not absorbed: status={evt_ack.get('status')!r}"
 
         # Verify the event is in the store's ring buffer
         events = list_recent_execution_events(device_id=device_id)
@@ -738,12 +716,10 @@ class TestAndroidExecutionEventCanonicalPath:
             "absorption path is not closed."
         )
         assert events[0].device_id == device_id
-        assert events[0].phase == "planning", (
-            f"Stored event phase mismatch: {events[0].phase!r} expected 'planning'"
-        )
-        assert events[0].flow_id == flow_id, (
-            f"Stored event flow_id mismatch: {events[0].flow_id!r} expected {flow_id!r}"
-        )
+        assert events[0].phase == "planning", f"Stored event phase mismatch: {events[0].phase!r} expected 'planning'"
+        assert (
+            events[0].flow_id == flow_id
+        ), f"Stored event flow_id mismatch: {events[0].flow_id!r} expected {flow_id!r}"
 
 
 # ===========================================================================
@@ -759,9 +735,7 @@ class TestCanonicalPathBypassRegression:
     """
 
     @pytest.mark.asyncio
-    async def test_absorb_path_active_iff_ack_status_is_absorbed(
-        self, bridge: Any
-    ) -> None:
+    async def test_absorb_path_active_iff_ack_status_is_absorbed(self, bridge: Any) -> None:
         """Status='absorbed' in ACK is coupled to actual store write.
 
         If status='absorbed' is returned but the store is empty, the ACK
@@ -787,9 +761,7 @@ class TestCanonicalPathBypassRegression:
         # but the snapshot tests above would catch that case.
 
     @pytest.mark.asyncio
-    async def test_snapshot_without_register_still_absorbed(
-        self, bridge: Any
-    ) -> None:
+    async def test_snapshot_without_register_still_absorbed(self, bridge: Any) -> None:
         """device_state_snapshot must be absorbed even without prior registration.
 
         The canonical absorb path should not silently discard snapshots from
@@ -805,18 +777,15 @@ class TestCanonicalPathBypassRegression:
         snap_ack = await stub.send_state_snapshot(bridge)
 
         # The message must return an ack (not crash)
-        assert isinstance(snap_ack, dict), (
-            "Snapshot without registration must return a dict ack, not raise"
-        )
-        assert snap_ack.get("type") == "device_state_snapshot_ack", (
-            f"Expected device_state_snapshot_ack, got {snap_ack.get('type')!r}"
-        )
+        assert isinstance(snap_ack, dict), "Snapshot without registration must return a dict ack, not raise"
+        assert (
+            snap_ack.get("type") == "device_state_snapshot_ack"
+        ), f"Expected device_state_snapshot_ack, got {snap_ack.get('type')!r}"
         # If status is absorbed, the store must be non-empty
         if snap_ack.get("status") == "absorbed":
             stored = get_device_state_snapshot(device_id)
             assert stored is not None, (
-                "ACK claims 'absorbed' but store is empty for unregistered device. "
-                "Store coupling is broken."
+                "ACK claims 'absorbed' but store is empty for unregistered device. " "Store coupling is broken."
             )
 
     @pytest.mark.asyncio
@@ -850,14 +819,12 @@ class TestCanonicalPathBypassRegression:
             "Store did not update after second snapshot — model_ready should be False. "
             "The store may be caching the first snapshot and ignoring updates."
         )
-        assert "model_checksum_failed" in (snap2.degraded_reasons or []), (
-            "degraded_reasons not updated from second snapshot"
-        )
+        assert "model_checksum_failed" in (
+            snap2.degraded_reasons or []
+        ), "degraded_reasons not updated from second snapshot"
 
     @pytest.mark.asyncio
-    async def test_store_is_independent_of_task_execution_path(
-        self, bridge: Any
-    ) -> None:
+    async def test_store_is_independent_of_task_execution_path(self, bridge: Any) -> None:
         """android_device_state_store must be populated by snapshot path, not task path.
 
         This ensures the snapshot store is separate from the task execution
@@ -1020,30 +987,34 @@ class TestAndroidSnapshotConvergenceDeterminism:
             },
         )
 
-        with patch(
-            "core.attached_runtime_session_registry.list_active_sessions",
-            return_value=[SimpleNamespace(device_id=device_id)],
-        ), patch(
-            "core.android_mode_gate_policy.build_mode_state_for_device",
-            return_value=SimpleNamespace(mode=SimpleNamespace(value="cross_device")),
-        ), patch(
-            "core.android_mode_gate_policy.evaluate_android_mode_readiness",
-            return_value=SimpleNamespace(
-                is_dispatch_eligible=True,
-                is_takeover_eligible=True,
-                is_cross_device_ready=True,
+        with (
+            patch(
+                "core.attached_runtime_session_registry.list_active_sessions",
+                return_value=[SimpleNamespace(device_id=device_id)],
             ),
-        ), patch(
-            "core.unified_execution_governance.is_takeover_active",
-            return_value=False,
+            patch(
+                "core.android_mode_gate_policy.build_mode_state_for_device",
+                return_value=SimpleNamespace(mode=SimpleNamespace(value="cross_device")),
+            ),
+            patch(
+                "core.android_mode_gate_policy.evaluate_android_mode_readiness",
+                return_value=SimpleNamespace(
+                    is_dispatch_eligible=True,
+                    is_takeover_eligible=True,
+                    is_cross_device_ready=True,
+                ),
+            ),
+            patch(
+                "core.unified_execution_governance.is_takeover_active",
+                return_value=False,
+            ),
         ):
             state = build_unified_governance_state()
 
         device_state = next((d for d in state["devices"] if d["device_id"] == device_id), None)
         governance_state_device_ids = [d.get("device_id") for d in state["devices"]]
         assert device_state is not None, (
-            f"Device {device_id!r} not present in governance state devices: "
-            f"{governance_state_device_ids}"
+            f"Device {device_id!r} not present in governance state devices: " f"{governance_state_device_ids}"
         )
         causality = device_state["governance_precedence"]["delegated_execution"]["decision_causality"]
         assert causality["snapshot_reconciliation_status"] == "out_of_order_rejected"
@@ -1110,8 +1081,7 @@ class TestCrossDeviceRuntimeRoundtripClosure:
         reg_ack = await stub.register(bridge)
         runtime_attachment_session_id = reg_ack.get("runtime_attachment_session_id", "")
         assert runtime_attachment_session_id, (
-            "device_register_ack must include runtime_attachment_session_id for "
-            "session continuity proof."
+            "device_register_ack must include runtime_attachment_session_id for " "session continuity proof."
         )
         session_entry = lookup_session_by_device(device_id)
         assert session_entry is not None
@@ -1152,13 +1122,13 @@ class TestCrossDeviceRuntimeRoundtripClosure:
         outbound_messages = [
             c.args[0] for c in stub.ws.send_json.call_args_list if c.args and isinstance(c.args[0], dict)
         ]
-        assert any(m.get("type") == "task_assign" for m in outbound_messages), (
-            "V2 dispatch did not emit task_assign to Android transport."
-        )
+        assert any(
+            m.get("type") == "task_assign" for m in outbound_messages
+        ), "V2 dispatch did not emit task_assign to Android transport."
         task_assign = next(m for m in outbound_messages if m.get("type") == "task_assign")
-        assert get_android_bridge_trace_id(task_assign) == trace_id, (
-            "trace_id must be preserved on V2→Android dispatch payload."
-        )
+        assert (
+            get_android_bridge_trace_id(task_assign) == trace_id
+        ), "trace_id must be preserved on V2→Android dispatch payload."
 
         fake_entity = _make_full_flow_entity(
             flow_id,
@@ -1170,9 +1140,12 @@ class TestCrossDeviceRuntimeRoundtripClosure:
         fake_runtime.get.side_effect = lambda fid: fake_entity if fid == flow_id else None
         fake_runtime.list_entities.return_value = [fake_entity]
 
-        with patch("core.delegated_flow_entity.get_delegated_flow", return_value=fake_entity), patch(
-            "core.delegated_flow_entity.get_delegated_flow_entity_runtime",
-            return_value=fake_runtime,
+        with (
+            patch("core.delegated_flow_entity.get_delegated_flow", return_value=fake_entity),
+            patch(
+                "core.delegated_flow_entity.get_delegated_flow_entity_runtime",
+                return_value=fake_runtime,
+            ),
         ):
             delegated_ack = await bridge.handle_message(
                 stub.ws,
@@ -1256,8 +1229,7 @@ class TestCrossDeviceRuntimeRoundtripClosure:
 
             panel = build_unified_panel_payload().to_dict()
             assert any(
-                d.get("device_id") == device_id
-                for d in panel.get("android_device_execution_digest", [])
+                d.get("device_id") == device_id for d in panel.get("android_device_execution_digest", [])
             ), "Unified panel digest must expose the Android device in roundtrip."
             last_exec = panel.get("last_execution_result", {})
             assert last_exec.get("action_kind") == "android_terminal"
@@ -1325,15 +1297,16 @@ class TestSnapshotHandlerRegistrationGuard:
     def test_snapshot_store_module_importable(self) -> None:
         """core.android_device_state_store must be importable with all required symbols."""
         from core.android_device_state_store import (
-            absorb_device_state_snapshot,
+            ANDROID_DEVICE_STATE_STORE_AUTHORITY,
             absorb_device_execution_event,
+            absorb_device_state_snapshot,
+            get_device_ecosystem_summary,
             get_device_state_snapshot,
             list_device_state_snapshots,
-            get_device_ecosystem_summary,
             list_recent_execution_events,
             reset_android_device_state_store,
-            ANDROID_DEVICE_STATE_STORE_AUTHORITY,
         )
+
         assert callable(absorb_device_state_snapshot)
         assert callable(absorb_device_execution_event)
         assert callable(get_device_state_snapshot)
@@ -1347,8 +1320,9 @@ class TestSnapshotHandlerRegistrationGuard:
     def test_snapshot_handler_module_importable(self) -> None:
         """galaxy_gateway.android.handlers.device_state_snapshot must be importable."""
         from galaxy_gateway.android.handlers.device_state_snapshot import (
-            handle_device_state_snapshot,
             handle_device_execution_event,
+            handle_device_state_snapshot,
         )
+
         assert callable(handle_device_state_snapshot)
         assert callable(handle_device_execution_event)

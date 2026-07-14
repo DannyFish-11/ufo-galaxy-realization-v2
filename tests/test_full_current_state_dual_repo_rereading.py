@@ -40,15 +40,15 @@ import json
 import pytest
 
 from core.full_current_state_dual_repo_rereading import (
+    FULL_CURRENT_STATE_REREADING_AUTHORITY,
+    FULL_CURRENT_STATE_REREADING_METHODOLOGY,
+    FULL_CURRENT_STATE_VERDICT_ZH,
     CanonicalPathEntry,
     ClaimMatrixEntry,
     CompletionStage,
     CompletionStageJudgment,
     CurrentEvidenceLabel,
     DualRepoSystemCharacterization,
-    FULL_CURRENT_STATE_REREADING_AUTHORITY,
-    FULL_CURRENT_STATE_REREADING_METHODOLOGY,
-    FULL_CURRENT_STATE_VERDICT_ZH,
     FullCurrentStateReport,
     PostNextPRJudgment,
     RoadmapEntry,
@@ -58,7 +58,6 @@ from core.full_current_state_dual_repo_rereading import (
     get_full_current_state_rereading,
     reset_full_current_state_rereading,
 )
-
 
 # =============================================================================
 # SECTION 1 — Module import and sentinel sanity
@@ -156,9 +155,7 @@ class TestBuildReport:
         assert "LATE_STAGE" in report.system_verdict or "late-stage" in report.system_verdict.lower()
 
     def test_p0_items_count_is_zero(self, report: FullCurrentStateReport) -> None:
-        assert report.p0_items_count == 0, (
-            f"Expected 0 P0 items; got {report.p0_items_count}"
-        )
+        assert report.p0_items_count == 0, f"Expected 0 P0 items; got {report.p0_items_count}"
 
 
 # =============================================================================
@@ -218,8 +215,7 @@ class TestClaimMatrix:
 
     def test_has_7_claims(self, report: FullCurrentStateReport) -> None:
         assert len(report.claim_matrix) == 7, (
-            f"Expected 7 claims; got {len(report.claim_matrix)}: "
-            f"{[c.claim_id for c in report.claim_matrix]}"
+            f"Expected 7 claims; got {len(report.claim_matrix)}: " f"{[c.claim_id for c in report.claim_matrix]}"
         )
 
     def test_all_items_are_claim_matrix_entry(self, report: FullCurrentStateReport) -> None:
@@ -269,9 +265,7 @@ class TestClaimMatrix:
             CurrentEvidenceLabel.RUNTIME_EVIDENCED_CLOSED,
         }
         for c in report.claim_matrix:
-            assert c.current_label in strong_labels, (
-                f"Claim {c.claim_id!r} has unexpected label: {c.current_label}"
-            )
+            assert c.current_label in strong_labels, f"Claim {c.claim_id!r} has unexpected label: {c.current_label}"
 
     def test_claim_matrix_to_dict(self, report: FullCurrentStateReport) -> None:
         for c in report.claim_matrix:
@@ -295,8 +289,7 @@ class TestPathClosureMap:
 
     def test_has_6_paths(self, report: FullCurrentStateReport) -> None:
         assert len(report.path_closure_map) == 6, (
-            f"Expected 6 paths; got {len(report.path_closure_map)}: "
-            f"{[p.path_id for p in report.path_closure_map]}"
+            f"Expected 6 paths; got {len(report.path_closure_map)}: " f"{[p.path_id for p in report.path_closure_map]}"
         )
 
     def test_all_items_are_canonical_path_entry(self, report: FullCurrentStateReport) -> None:
@@ -342,9 +335,9 @@ class TestPathClosureMap:
             None,
         )
         assert continuity is not None
-        assert continuity.current_label == CurrentEvidenceLabel.PARTIALLY_ESTABLISHED, (
-            f"Continuity path expected PARTIALLY_ESTABLISHED; got {continuity.current_label}"
-        )
+        assert (
+            continuity.current_label == CurrentEvidenceLabel.PARTIALLY_ESTABLISHED
+        ), f"Continuity path expected PARTIALLY_ESTABLISHED; got {continuity.current_label}"
 
     def test_continuity_path_not_runtime_closed(self, report: FullCurrentStateReport) -> None:
         continuity = next(
@@ -352,9 +345,9 @@ class TestPathClosureMap:
             None,
         )
         assert continuity is not None
-        assert not continuity.runtime_closed, (
-            "Continuity e2e roundtrip test is not yet in CI; runtime_closed must be False"
-        )
+        assert (
+            not continuity.runtime_closed
+        ), "Continuity e2e roundtrip test is not yet in CI; runtime_closed must be False"
 
     def test_orchestration_truth_path_not_surface_only(self, report: FullCurrentStateReport) -> None:
         """ORCHESTRATION_CONSUMES_ANDROID_TRUTH must NOT be SURFACE_ALIGNMENT_ONLY."""
@@ -363,9 +356,9 @@ class TestPathClosureMap:
             None,
         )
         assert orch is not None
-        assert orch.current_label != CurrentEvidenceLabel.SURFACE_ALIGNMENT_ONLY, (
-            f"Orchestration truth path must not be SURFACE_ALIGNMENT_ONLY; got {orch.current_label}"
-        )
+        assert (
+            orch.current_label != CurrentEvidenceLabel.SURFACE_ALIGNMENT_ONLY
+        ), f"Orchestration truth path must not be SURFACE_ALIGNMENT_ONLY; got {orch.current_label}"
 
     def test_orchestration_truth_path_has_closure_pr(self, report: FullCurrentStateReport) -> None:
         orch = next(
@@ -418,19 +411,16 @@ class TestCompletionStageJudgment:
             CompletionStage.LATE_STAGE_CLOSURE,
             CompletionStage.NON_P0_REFINEMENT_ONLY,
         ), (
-            f"Expected LATE_STAGE_CLOSURE or NON_P0_REFINEMENT_ONLY; "
-            f"got {judgment.current_stage}"
+            f"Expected LATE_STAGE_CLOSURE or NON_P0_REFINEMENT_ONLY; " f"got {judgment.current_stage}"
         )
 
     def test_p0_gaps_open_is_zero(self, judgment: CompletionStageJudgment) -> None:
-        assert judgment.p0_gaps_open == 0, (
-            f"Expected 0 P0 gaps open; got {judgment.p0_gaps_open}"
-        )
+        assert judgment.p0_gaps_open == 0, f"Expected 0 P0 gaps open; got {judgment.p0_gaps_open}"
 
     def test_paths_runtime_closed_at_least_4(self, judgment: CompletionStageJudgment) -> None:
-        assert judgment.paths_runtime_closed >= 4, (
-            f"Expected at least 4 paths runtime-closed; got {judgment.paths_runtime_closed}"
-        )
+        assert (
+            judgment.paths_runtime_closed >= 4
+        ), f"Expected at least 4 paths runtime-closed; got {judgment.paths_runtime_closed}"
 
     def test_all_claims_at_strong_or_closed_flag(self, judgment: CompletionStageJudgment) -> None:
         assert judgment.all_claims_at_strong_or_closed is True
@@ -491,9 +481,7 @@ class TestRoadmap:
 
     def test_no_p0_items(self, report: FullCurrentStateReport) -> None:
         p0_items = [r for r in report.roadmap if r.priority == RoadmapPriority.P0_BLOCKING]
-        assert len(p0_items) == 0, (
-            f"Expected 0 P0 items; got {[r.item_id for r in p0_items]}"
-        )
+        assert len(p0_items) == 0, f"Expected 0 P0 items; got {[r.item_id for r in p0_items]}"
 
     def test_has_p1_items(self, report: FullCurrentStateReport) -> None:
         p1_items = [r for r in report.roadmap if r.priority == RoadmapPriority.P1_CANONICAL_CLOSURE]
@@ -547,27 +535,15 @@ class TestCountAggregates:
         return build_full_current_state_rereading()
 
     def test_strongly_established_count_matches_claims(self, report: FullCurrentStateReport) -> None:
-        actual = sum(
-            1
-            for c in report.claim_matrix
-            if c.current_label == CurrentEvidenceLabel.STRONGLY_ESTABLISHED
-        )
+        actual = sum(1 for c in report.claim_matrix if c.current_label == CurrentEvidenceLabel.STRONGLY_ESTABLISHED)
         assert report.strongly_established_count == actual
 
     def test_runtime_evidenced_closed_count_matches_claims(self, report: FullCurrentStateReport) -> None:
-        actual = sum(
-            1
-            for c in report.claim_matrix
-            if c.current_label == CurrentEvidenceLabel.RUNTIME_EVIDENCED_CLOSED
-        )
+        actual = sum(1 for c in report.claim_matrix if c.current_label == CurrentEvidenceLabel.RUNTIME_EVIDENCED_CLOSED)
         assert report.runtime_evidenced_closed_count == actual
 
     def test_partially_established_count_matches_claims(self, report: FullCurrentStateReport) -> None:
-        actual = sum(
-            1
-            for c in report.claim_matrix
-            if c.current_label == CurrentEvidenceLabel.PARTIALLY_ESTABLISHED
-        )
+        actual = sum(1 for c in report.claim_matrix if c.current_label == CurrentEvidenceLabel.PARTIALLY_ESTABLISHED)
         assert report.partially_established_count == actual
 
     def test_paths_runtime_closed_count_matches_paths(self, report: FullCurrentStateReport) -> None:

@@ -84,10 +84,10 @@ from pathlib import Path
 from typing import Any, Dict
 from unittest.mock import patch
 
-
 # ===========================================================================
 # Helpers
 # ===========================================================================
+
 
 def _tmp_store(config_data: Dict[str, Any] = None, secrets_data: str = ""):
     """Return a ConfigStore wired to temporary files."""
@@ -110,6 +110,7 @@ def _tmp_store(config_data: Dict[str, Any] = None, secrets_data: str = ""):
 def _tmp_service(config_data: Dict[str, Any] = None, secrets_data: str = ""):
     """Return a ConfigService wired to temporary files."""
     from core.config_service import ConfigService
+
     store = _tmp_store(config_data=config_data, secrets_data=secrets_data)
     return ConfigService(store=store)
 
@@ -118,111 +119,136 @@ def _tmp_service(config_data: Dict[str, Any] = None, secrets_data: str = ""):
 # 1–4. ConfigSchema
 # ===========================================================================
 
+
 class TestConfigSchemaClassifyKey(unittest.TestCase):
     def test_openai_api_key_is_secret(self):
         from core.config_schema import classify_key
+
         self.assertEqual(classify_key("OPENAI_API_KEY"), "secret")
 
     def test_anthropic_api_key_is_secret(self):
         from core.config_schema import classify_key
+
         self.assertEqual(classify_key("ANTHROPIC_API_KEY"), "secret")
 
     def test_galaxy_api_token_is_secret(self):
         from core.config_schema import classify_key
+
         self.assertEqual(classify_key("GALAXY_API_TOKEN"), "secret")
 
     def test_heuristic_api_key_suffix(self):
         from core.config_schema import classify_key
+
         self.assertEqual(classify_key("CUSTOM_API_KEY"), "secret")
 
     def test_heuristic_token_suffix(self):
         from core.config_schema import classify_key
+
         self.assertEqual(classify_key("MY_SERVICE_TOKEN"), "secret")
 
     def test_heuristic_secret_suffix(self):
         from core.config_schema import classify_key
+
         self.assertEqual(classify_key("DB_PASSWORD"), "secret")
 
     def test_providers_enabled_is_config(self):
         from core.config_schema import classify_key
+
         self.assertEqual(classify_key("providers.openai.enabled"), "config")
 
     def test_routing_policy_is_config(self):
         from core.config_schema import classify_key
+
         self.assertEqual(classify_key("routing.native_multimodal_policy"), "config")
 
     def test_unknown_key(self):
         from core.config_schema import classify_key
+
         self.assertEqual(classify_key("GALAXY_DEBUG_VERBOSE"), "unknown")
 
     def test_lowercase_secret_key(self):
         from core.config_schema import classify_key
+
         self.assertEqual(classify_key("openai_api_key"), "secret")
 
 
 class TestConfigSchemaProviders(unittest.TestCase):
     def test_openai_in_providers(self):
         from core.config_schema import VALID_PROVIDERS
+
         self.assertIn("openai", VALID_PROVIDERS)
 
     def test_anthropic_in_providers(self):
         from core.config_schema import VALID_PROVIDERS
+
         self.assertIn("anthropic", VALID_PROVIDERS)
 
     def test_oneapi_in_providers(self):
         from core.config_schema import VALID_PROVIDERS
+
         self.assertIn("oneapi", VALID_PROVIDERS)
 
     def test_unknown_not_in_providers(self):
         from core.config_schema import VALID_PROVIDERS
+
         self.assertNotIn("fakeprovider", VALID_PROVIDERS)
 
     def test_provider_count_reasonable(self):
         from core.config_schema import VALID_PROVIDERS
+
         self.assertGreaterEqual(len(VALID_PROVIDERS), 5)
 
 
 class TestConfigSchemaNativeMM(unittest.TestCase):
     def test_prefer_valid(self):
         from core.config_schema import VALID_NATIVE_MM_POLICIES
+
         self.assertIn("prefer", VALID_NATIVE_MM_POLICIES)
 
     def test_strict_valid(self):
         from core.config_schema import VALID_NATIVE_MM_POLICIES
+
         self.assertIn("strict", VALID_NATIVE_MM_POLICIES)
 
     def test_allow_fallback_valid(self):
         from core.config_schema import VALID_NATIVE_MM_POLICIES
+
         self.assertIn("allow_fallback", VALID_NATIVE_MM_POLICIES)
 
     def test_invalid_not_in(self):
         from core.config_schema import VALID_NATIVE_MM_POLICIES
+
         self.assertNotIn("aggressive", VALID_NATIVE_MM_POLICIES)
 
 
 class TestConfigDefaults(unittest.TestCase):
     def test_as_dict_has_providers(self):
         from core.config_schema import ConfigDefaults
+
         d = ConfigDefaults.as_dict()
         self.assertIn("providers", d)
 
     def test_as_dict_has_routing(self):
         from core.config_schema import ConfigDefaults
+
         d = ConfigDefaults.as_dict()
         self.assertIn("routing", d)
 
     def test_openai_enabled_by_default(self):
         from core.config_schema import ConfigDefaults
+
         d = ConfigDefaults.as_dict()
         self.assertTrue(d["providers"]["openai"]["enabled"])
 
     def test_anthropic_disabled_by_default(self):
         from core.config_schema import ConfigDefaults
+
         d = ConfigDefaults.as_dict()
         self.assertFalse(d["providers"]["anthropic"]["enabled"])
 
     def test_default_mm_policy_is_prefer(self):
         from core.config_schema import ConfigDefaults
+
         d = ConfigDefaults.as_dict()
         self.assertEqual(d["routing"]["native_multimodal_policy"], "prefer")
 
@@ -230,6 +256,7 @@ class TestConfigDefaults(unittest.TestCase):
 # ===========================================================================
 # 5–20. ConfigStore
 # ===========================================================================
+
 
 class TestConfigStoreReadConfig(unittest.TestCase):
     def test_absent_file_returns_defaults(self):
@@ -252,6 +279,7 @@ class TestConfigStoreReadConfig(unittest.TestCase):
         cp = Path(d) / "config.json"
         cp.write_text("not-json{{")
         from core.config_store import ConfigStore
+
         store = ConfigStore(config_path=cp, secrets_path=Path(d) / "s.env")
         data = store.read_config()
         self.assertIn("providers", data)
@@ -286,6 +314,7 @@ class TestConfigStoreWriteConfig(unittest.TestCase):
 
     def test_rejects_secret_key(self):
         from core.config_store import SecretInConfigError
+
         store = _tmp_store()
         with self.assertRaises(SecretInConfigError):
             store.write_config({"OPENAI_API_KEY": "sk-bad"})
@@ -293,6 +322,7 @@ class TestConfigStoreWriteConfig(unittest.TestCase):
     def test_creates_parent_dirs(self):
         d = tempfile.mkdtemp()
         from core.config_store import ConfigStore
+
         deep = Path(d) / "sub" / "dir" / "config.json"
         store = ConfigStore(config_path=deep, secrets_path=Path(d) / "s.env")
         store.write_config({"routing": {}})
@@ -308,6 +338,7 @@ class TestConfigStoreWriteSecret(unittest.TestCase):
 
     def test_rejects_config_key(self):
         from core.config_store import NonSecretInSecretsError
+
         store = _tmp_store()
         with self.assertRaises(NonSecretInSecretsError):
             store.write_secret("providers.openai.enabled", "true")
@@ -330,6 +361,7 @@ class TestConfigStoreWriteSecretsBatch(unittest.TestCase):
 
     def test_batch_rejects_config_key(self):
         from core.config_store import NonSecretInSecretsError
+
         store = _tmp_store()
         with self.assertRaises(NonSecretInSecretsError):
             store.write_secrets({"providers.openai.enabled": "true"})
@@ -393,6 +425,7 @@ class TestConfigStoreGetConfigValue(unittest.TestCase):
 class TestConfigStoreSingleton(unittest.TestCase):
     def test_singleton_idempotent(self):
         from core.config_store import get_config_store, reset_config_store
+
         reset_config_store()
         s1 = get_config_store()
         s2 = get_config_store()
@@ -400,6 +433,7 @@ class TestConfigStoreSingleton(unittest.TestCase):
 
     def test_reset_creates_new_instance(self):
         from core.config_store import get_config_store, reset_config_store
+
         reset_config_store()
         s1 = get_config_store()
         reset_config_store()
@@ -410,6 +444,7 @@ class TestConfigStoreSingleton(unittest.TestCase):
 # ===========================================================================
 # 21–43. ConfigService
 # ===========================================================================
+
 
 class TestConfigServiceSetSecret(unittest.TestCase):
     def test_set_secret_persisted(self):
@@ -493,6 +528,7 @@ class TestConfigServiceSetToggle(unittest.TestCase):
 
     def test_all_valid_providers_accepted(self):
         from core.config_schema import VALID_PROVIDERS
+
         svc = _tmp_service()
         for p in VALID_PROVIDERS:
             svc.set_toggle(p, False)  # should not raise
@@ -518,6 +554,7 @@ class TestConfigServiceSetNativeMMPolicy(unittest.TestCase):
 
     def test_all_valid_policies_accepted(self):
         from core.config_schema import VALID_NATIVE_MM_POLICIES
+
         svc = _tmp_service()
         for policy in VALID_NATIVE_MM_POLICIES:
             svc.set_native_mm_policy(policy)  # should not raise
@@ -526,7 +563,8 @@ class TestConfigServiceSetNativeMMPolicy(unittest.TestCase):
 class TestConfigServiceValidate(unittest.TestCase):
     def test_no_enabled_providers_ok_true(self):
         # All providers disabled → no missing keys → ok
-        from core.config_schema import ConfigDefaults, VALID_PROVIDERS
+        from core.config_schema import VALID_PROVIDERS, ConfigDefaults
+
         cfg = ConfigDefaults.as_dict()
         for p in VALID_PROVIDERS:
             cfg["providers"][p] = {"enabled": False}
@@ -580,12 +618,14 @@ class TestConfigServiceValidate(unittest.TestCase):
 
     def test_provider_statuses_count(self):
         from core.config_schema import VALID_PROVIDERS
+
         svc = _tmp_service()
         result = svc.validate()
         self.assertEqual(len(result.provider_statuses), len(VALID_PROVIDERS))
 
     def test_to_dict_serialisable(self):
         import json as _json
+
         svc = _tmp_service()
         result = svc.validate()
         d = result.to_dict()
@@ -627,6 +667,7 @@ class TestConfigServiceIsProviderReady(unittest.TestCase):
 class TestConfigServiceSingleton(unittest.TestCase):
     def test_singleton_idempotent(self):
         from core.config_service import get_config_service, reset_config_service
+
         reset_config_service()
         s1 = get_config_service()
         s2 = get_config_service()
@@ -634,6 +675,7 @@ class TestConfigServiceSingleton(unittest.TestCase):
 
     def test_reset_creates_new_instance(self):
         from core.config_service import get_config_service, reset_config_service
+
         reset_config_service()
         s1 = get_config_service()
         reset_config_service()
@@ -644,6 +686,7 @@ class TestConfigServiceSingleton(unittest.TestCase):
 # ===========================================================================
 # 44–46. Preflight × runtime/secrets.env
 # ===========================================================================
+
 
 class TestPreflightRuntimeSecretsIntegration(unittest.TestCase):
     def test_secrets_env_loaded_before_check(self):
@@ -657,18 +700,21 @@ class TestPreflightRuntimeSecretsIntegration(unittest.TestCase):
         os.environ.pop("__GALAXY_TEST_PREFLIGHT_SECRET__", None)
         # Monkey-patch the path used by the loader
         import core.config_preflight as _pf
+
         _orig = Path(_pf.__file__).parent.parent / "runtime" / "secrets.env"
 
         # We use patch to redirect the path lookup
         with patch("core.config_preflight.Path") as mock_path_cls:
             # Make Path(__file__).parent.parent / "runtime" / "secrets.env" → our temp file
             import core.config_preflight as cpf_module
+
             original_fn = cpf_module._load_runtime_secrets_into_env
 
             # Call directly using the real file
             real_secrets = Path(d) / "secrets.env"
             # Simulate: load the file's contents into env
             import core.config_store as cs_module
+
             store_tmp = cs_module.ConfigStore(
                 config_path=Path(d) / "config.json",
                 secrets_path=real_secrets,
@@ -684,11 +730,13 @@ class TestPreflightRuntimeSecretsIntegration(unittest.TestCase):
     def test_absent_secrets_env_no_crash(self):
         """_load_runtime_secrets_into_env is safe when no file exists."""
         from core.config_preflight import _load_runtime_secrets_into_env
+
         # Should not raise even if runtime/secrets.env doesn't exist
         with patch("core.config_preflight.Path") as mock_path_cls:
             # Let it run with a non-existent path by testing it through ConfigStore
             d = tempfile.mkdtemp()
             from core.config_store import ConfigStore
+
             store = ConfigStore(
                 config_path=Path(d) / "config.json",
                 secrets_path=Path(d) / "nonexistent.env",
@@ -704,6 +752,7 @@ class TestPreflightRuntimeSecretsIntegration(unittest.TestCase):
 
         with patch.dict(os.environ, {"OPENAI_API_KEY": "from-env"}):
             from core.config_store import ConfigStore
+
             store = ConfigStore(
                 config_path=Path(d) / "config.json",
                 secrets_path=secrets_path,
@@ -716,30 +765,36 @@ class TestPreflightRuntimeSecretsIntegration(unittest.TestCase):
 # 47–60. Misc edge cases
 # ===========================================================================
 
+
 class TestParseDotenv(unittest.TestCase):
     def test_ignores_comments(self):
         from core.config_store import ConfigStore
+
         result = ConfigStore._parse_dotenv("# comment\nKEY=val\n")
         self.assertNotIn("# comment", result)
         self.assertEqual(result["KEY"], "val")
 
     def test_ignores_blank_lines(self):
         from core.config_store import ConfigStore
+
         result = ConfigStore._parse_dotenv("\n\nKEY=val\n\n")
         self.assertEqual(result["KEY"], "val")
 
     def test_strips_double_quotes(self):
         from core.config_store import ConfigStore
+
         result = ConfigStore._parse_dotenv('KEY="my value"\n')
         self.assertEqual(result["KEY"], "my value")
 
     def test_strips_single_quotes(self):
         from core.config_store import ConfigStore
+
         result = ConfigStore._parse_dotenv("KEY='my value'\n")
         self.assertEqual(result["KEY"], "my value")
 
     def test_ignores_lines_without_equals(self):
         from core.config_store import ConfigStore
+
         result = ConfigStore._parse_dotenv("NOEQUALS\nKEY=val\n")
         self.assertNotIn("NOEQUALS", result)
         self.assertEqual(result["KEY"], "val")
@@ -748,16 +803,19 @@ class TestParseDotenv(unittest.TestCase):
 class TestProviderStatusReady(unittest.TestCase):
     def test_ready_when_enabled_and_key(self):
         from core.config_service import ProviderStatus
+
         ps = ProviderStatus("openai", enabled=True, has_key=True)
         self.assertTrue(ps.ready)
 
     def test_not_ready_when_disabled(self):
         from core.config_service import ProviderStatus
+
         ps = ProviderStatus("openai", enabled=False, has_key=True)
         self.assertFalse(ps.ready)
 
     def test_not_ready_when_no_key(self):
         from core.config_service import ProviderStatus
+
         ps = ProviderStatus("openai", enabled=True, has_key=False)
         self.assertFalse(ps.ready)
 
@@ -765,6 +823,7 @@ class TestProviderStatusReady(unittest.TestCase):
 class TestSecretKeysUpperCase(unittest.TestCase):
     def test_all_secret_keys_uppercase(self):
         from core.config_schema import SECRET_KEYS
+
         for k in SECRET_KEYS:
             self.assertEqual(k, k.upper(), f"Secret key '{k}' should be uppercase")
 
@@ -772,6 +831,7 @@ class TestSecretKeysUpperCase(unittest.TestCase):
 class TestWriteSecretsRejectsConfigKey(unittest.TestCase):
     def test_batch_write_rejects_config_key(self):
         from core.config_store import NonSecretInSecretsError
+
         store = _tmp_store()
         with self.assertRaises(NonSecretInSecretsError):
             store.write_secrets({"providers.openai.enabled": "true"})
@@ -780,16 +840,19 @@ class TestWriteSecretsRejectsConfigKey(unittest.TestCase):
 class TestAuthoritysentinel(unittest.TestCase):
     def test_config_schema_authority_nonempty(self):
         from core.config_schema import CONFIG_SCHEMA_AUTHORITY
+
         self.assertIsInstance(CONFIG_SCHEMA_AUTHORITY, str)
         self.assertTrue(len(CONFIG_SCHEMA_AUTHORITY) > 0)
 
     def test_config_store_authority_nonempty(self):
         from core.config_store import CONFIG_STORE_AUTHORITY
+
         self.assertIsInstance(CONFIG_STORE_AUTHORITY, str)
         self.assertTrue(len(CONFIG_STORE_AUTHORITY) > 0)
 
     def test_config_service_authority_nonempty(self):
         from core.config_service import CONFIG_SERVICE_AUTHORITY
+
         self.assertIsInstance(CONFIG_SERVICE_AUTHORITY, str)
         self.assertTrue(len(CONFIG_SERVICE_AUTHORITY) > 0)
 
@@ -797,10 +860,10 @@ class TestAuthoritysentinel(unittest.TestCase):
 class TestConfigValidationResultToDict(unittest.TestCase):
     def test_to_dict_has_required_keys(self):
         from core.config_service import ConfigValidationResult
+
         r = ConfigValidationResult()
         d = r.to_dict()
-        for key in ("ok", "missing_secrets", "invalid_values", "provider_statuses",
-                    "oneapi_state", "warnings"):
+        for key in ("ok", "missing_secrets", "invalid_values", "provider_statuses", "oneapi_state", "warnings"):
             self.assertIn(key, d)
 
 

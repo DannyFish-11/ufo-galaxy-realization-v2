@@ -40,11 +40,13 @@ class TestEnsureOllamaRunningSkipsAutoInstallWhenBinaryExists:
     @pytest.mark.asyncio
     async def test_auto_install_not_attempted_when_ollama_command_found(self, manager):
         """命令存在(shutil.which 命中)但服务一直没响应时，不该再去"自动安装"。"""
-        with patch("core.local_brain_manager.shutil.which", return_value="/usr/bin/ollama"), \
-             patch.object(manager, "_ping_ollama", new=AsyncMock(return_value=False)), \
-             patch.object(manager, "_start_ollama", new=AsyncMock(return_value=True)), \
-             patch.object(manager, "_auto_install_ollama", new=AsyncMock(return_value=False)) as mock_install, \
-             patch("core.local_brain_manager.asyncio.sleep", new=AsyncMock()):
+        with (
+            patch("core.local_brain_manager.shutil.which", return_value="/usr/bin/ollama"),
+            patch.object(manager, "_ping_ollama", new=AsyncMock(return_value=False)),
+            patch.object(manager, "_start_ollama", new=AsyncMock(return_value=True)),
+            patch.object(manager, "_auto_install_ollama", new=AsyncMock(return_value=False)) as mock_install,
+            patch("core.local_brain_manager.asyncio.sleep", new=AsyncMock()),
+        ):
             result = await manager._ensure_ollama_running()
 
         assert result is False
@@ -54,11 +56,13 @@ class TestEnsureOllamaRunningSkipsAutoInstallWhenBinaryExists:
     @pytest.mark.asyncio
     async def test_auto_install_attempted_when_ollama_command_missing(self, manager):
         """命令确实不存在时，才应该走自动安装分支。"""
-        with patch("core.local_brain_manager.shutil.which", return_value=None), \
-             patch.object(manager, "_ping_ollama", new=AsyncMock(return_value=False)), \
-             patch.object(manager, "_start_ollama", new=AsyncMock(return_value=False)), \
-             patch.object(manager, "_auto_install_ollama", new=AsyncMock(return_value=False)) as mock_install, \
-             patch("core.local_brain_manager.asyncio.sleep", new=AsyncMock()):
+        with (
+            patch("core.local_brain_manager.shutil.which", return_value=None),
+            patch.object(manager, "_ping_ollama", new=AsyncMock(return_value=False)),
+            patch.object(manager, "_start_ollama", new=AsyncMock(return_value=False)),
+            patch.object(manager, "_auto_install_ollama", new=AsyncMock(return_value=False)) as mock_install,
+            patch("core.local_brain_manager.asyncio.sleep", new=AsyncMock()),
+        ):
             result = await manager._ensure_ollama_running()
 
         assert result is False
@@ -68,18 +72,21 @@ class TestEnsureOllamaRunningSkipsAutoInstallWhenBinaryExists:
     async def test_failure_message_distinguishes_installed_vs_missing(self, manager, caplog):
         """日志文案必须准确区分"已安装但服务没起来"与"确实没装"，不能都说"未安装"。"""
         import logging
+
         caplog.set_level(logging.WARNING, logger="Galaxy.LocalBrain")
 
-        with patch("core.local_brain_manager.shutil.which", return_value="/usr/bin/ollama"), \
-             patch.object(manager, "_ping_ollama", new=AsyncMock(return_value=False)), \
-             patch.object(manager, "_start_ollama", new=AsyncMock(return_value=True)), \
-             patch("core.local_brain_manager.asyncio.sleep", new=AsyncMock()):
+        with (
+            patch("core.local_brain_manager.shutil.which", return_value="/usr/bin/ollama"),
+            patch.object(manager, "_ping_ollama", new=AsyncMock(return_value=False)),
+            patch.object(manager, "_start_ollama", new=AsyncMock(return_value=True)),
+            patch("core.local_brain_manager.asyncio.sleep", new=AsyncMock()),
+        ):
             await manager._ensure_ollama_running()
 
         messages = " ".join(r.message for r in caplog.records)
-        assert "已安装" in messages and "未安装" not in messages, (
-            f"命令明明存在，日志不该说\"未安装\"（误导用户）: {messages}"
-        )
+        assert (
+            "已安装" in messages and "未安装" not in messages
+        ), f'命令明明存在，日志不该说"未安装"（误导用户）: {messages}'
 
 
 class TestAutoInstallOllamaWindowsNoLongerAttemptsBrokenDownload:
@@ -87,8 +94,7 @@ class TestAutoInstallOllamaWindowsNoLongerAttemptsBrokenDownload:
     async def test_windows_returns_false_fast_without_network_call(self, manager):
         """修复:Windows 分支之前会 urlretrieve 一个已 404 的 URL——现在应该直接
         快速返回 False，不再发起任何下载请求。"""
-        with patch("platform.system", return_value="Windows"), \
-             patch("urllib.request.urlretrieve") as mock_urlretrieve:
+        with patch("platform.system", return_value="Windows"), patch("urllib.request.urlretrieve") as mock_urlretrieve:
             result = await manager._auto_install_ollama()
 
         assert result is False

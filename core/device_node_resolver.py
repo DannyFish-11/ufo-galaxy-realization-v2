@@ -14,6 +14,7 @@ This is the anti-corruption layer between AIP v3 protocol semantics and
 the concrete Node implementations.  No existing Node code is imported here;
 only the YAML mapping is consulted.
 """
+
 from __future__ import annotations
 
 import logging
@@ -32,9 +33,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Sentinel
 # ---------------------------------------------------------------------------
-DEVICE_NODE_RESOLUTION_SENTINEL = (
-    "DEVICE_NODE_RESOLUTION::AIP_TO_NODE_ANTI_CORRUPTION_LAYER"
-)
+DEVICE_NODE_RESOLUTION_SENTINEL = "DEVICE_NODE_RESOLUTION::AIP_TO_NODE_ANTI_CORRUPTION_LAYER"
 
 
 # ---------------------------------------------------------------------------
@@ -130,7 +129,9 @@ class DeviceNodeResolver:
 
         logger.debug(
             "DeviceNodeResolver: no mapping for device_type=%s transport=%s caps=%s",
-            device_type, transport, capabilities,
+            device_type,
+            transport,
+            capabilities,
         )
         return None
 
@@ -187,11 +188,7 @@ class DeviceNodeResolver:
                 continue
             # 精确匹配,或短 ID 前缀匹配("Node_33" ↔ "Node_33_ADB"),
             # 用 "_" 边界防止 "Node_1" 误配 "Node_112_..."。
-            if (
-                node == node_id
-                or node.startswith(node_id + "_")
-                or node_id.startswith(node + "_")
-            ):
+            if node == node_id or node.startswith(node_id + "_") or node_id.startswith(node + "_"):
                 out = dict(impl)
                 out["node"] = node
                 return out
@@ -242,14 +239,13 @@ class DeviceNodeResolver:
             self._mappings = data.get("mappings", [])
             logger.info(
                 "Loaded %d device-node mappings from %s",
-                len(self._mappings), self._map_path,
+                len(self._mappings),
+                self._map_path,
             )
         except Exception as exc:
             logger.error("Failed to load device node map: %s", exc)
 
-    def _resolve_by_device_type(
-        self, device_type: str, transport: Optional[str] = None
-    ) -> Optional[ResolvedMapping]:
+    def _resolve_by_device_type(self, device_type: str, transport: Optional[str] = None) -> Optional[ResolvedMapping]:
         for m in self._mappings:
             match = m.get("match", {})
             if match.get("device_type") != device_type:
@@ -272,9 +268,7 @@ class DeviceNodeResolver:
                 return self._build_result(m, "transport", transport)
         return None
 
-    def _resolve_by_capabilities(
-        self, capabilities: List[str]
-    ) -> Optional[ResolvedMapping]:
+    def _resolve_by_capabilities(self, capabilities: List[str]) -> Optional[ResolvedMapping]:
         cap_set = set(capabilities)
         for m in self._mappings:
             match = m.get("match", {})
@@ -283,15 +277,11 @@ class DeviceNodeResolver:
                 continue
             required_caps = set(match.get("capabilities", []))
             if required_caps and required_caps.issubset(cap_set):
-                return self._build_result(
-                    m, "capabilities", ",".join(sorted(required_caps))
-                )
+                return self._build_result(m, "capabilities", ",".join(sorted(required_caps)))
         return None
 
     @staticmethod
-    def _build_result(
-        mapping: Dict[str, Any], match_type: str, match_key: str
-    ) -> ResolvedMapping:
+    def _build_result(mapping: Dict[str, Any], match_type: str, match_key: str) -> ResolvedMapping:
         impl = mapping.get("implementation", {})
         caps = mapping.get("capabilities", {})
         return ResolvedMapping(
@@ -333,6 +323,4 @@ def resolve(
     capabilities: Optional[Sequence[str]] = None,
 ) -> Optional[ResolvedMapping]:
     """Convenience: resolve using the module singleton."""
-    return get_resolver().resolve(
-        device_type=device_type, transport=transport, capabilities=capabilities
-    )
+    return get_resolver().resolve(device_type=device_type, transport=transport, capabilities=capabilities)

@@ -347,11 +347,11 @@ class TestNATSExecutor:
             task_id = task.task_id
             # Simulate result arriving from NATS
             asyncio.get_running_loop().call_soon(
-                lambda: executor._pending[task_id].set_result(
-                    {"success": True, "result": "ok", "task_id": task_id}
+                lambda: (
+                    executor._pending[task_id].set_result({"success": True, "result": "ok", "task_id": task_id})
+                    if task_id in executor._pending
+                    else None
                 )
-                if task_id in executor._pending
-                else None
             )
             return {"success": True, "seq": 1}
 
@@ -423,11 +423,13 @@ class TestNATSExecutor:
         fut: asyncio.Future = loop.create_future()
         executor._pending["task-xyz"] = fut
 
-        await executor._on_task_result({
-            "task_id": "task-xyz",
-            "status": "completed",
-            "result": {"data": "hello"},
-        })
+        await executor._on_task_result(
+            {
+                "task_id": "task-xyz",
+                "status": "completed",
+                "result": {"data": "hello"},
+            }
+        )
 
         assert fut.done()
         assert fut.result()["success"] is True
@@ -473,8 +475,9 @@ class TestNATSObservability:
         mock_bus = _make_mock_nats_bus(connected=True)
 
         # Import the router factory
-        from core.routes.observability import create_router
         import asyncio
+
+        from core.routes.observability import create_router
 
         router = create_router()
 
@@ -544,6 +547,7 @@ class TestStartupIntegration:
         with patch.dict(os.environ, {"GALAXY_NATS_URL": "nats://localhost:4222"}):
             with patch("core.nats_bus.nats_bus", mock_bus):
                 from core.nats_bus import nats_bus
+
                 result = await nats_bus.connect()
 
         # Verify connect was called (either on our mock or the real singleton)
@@ -577,6 +581,7 @@ class TestNATSURLMissing:
     def test_nats_bus_noop_when_url_absent(self):
         """NATSBus operates in no-op mode when GALAXY_NATS_URL is not set."""
         import importlib
+
         import core.nats_bus as _nb_mod
 
         # Temporarily patch env to remove the URL and re-init a fresh instance
@@ -646,6 +651,7 @@ class TestNATSURLMissing:
     async def test_master_brain_logs_warning_when_nats_noop(self, caplog):
         """MasterBrain logs a warning when NATS connection returns noop."""
         import logging
+
         from core.master_brain import MasterBrain
 
         mock_bus = _make_mock_nats_bus(connected=False)
@@ -709,8 +715,8 @@ class TestNATSConnectionFailure:
             # 显式 URL + _auto_local=False 时 max_reconnect_attempts=-1(无限重试),
             # 真拨号会挂死测试——patch 掉拨号本身,只钉失败返回形状。
             import nats as _nats_mod
-            with patch.object(_nats_mod, "connect",
-                              side_effect=Exception("connection refused")):
+
+            with patch.object(_nats_mod, "connect", side_effect=Exception("connection refused")):
                 result = await bus.connect()
 
         assert result["success"] is False
@@ -754,6 +760,7 @@ class TestNATSConnectionFailure:
     async def test_nats_executor_fallback_uses_warning_log(self, caplog):
         """NATSExecutor._use_fallback() emits a WARNING-level log."""
         import logging
+
         from core.command_router import NATSExecutor
 
         async def fallback(target, command, params):
@@ -801,12 +808,15 @@ class TestNATSConnected:
         fake_worker = _FakeTemporalWorker()
         brain = MasterBrain(nats=mock_bus)
 
-        with patch(
-            "core.temporal_workflows.get_temporal_client",
-            AsyncMock(return_value=object()),
-        ), patch(
-            "core.temporal_workflows.start_temporal_worker",
-            AsyncMock(return_value=fake_worker),
+        with (
+            patch(
+                "core.temporal_workflows.get_temporal_client",
+                AsyncMock(return_value=object()),
+            ),
+            patch(
+                "core.temporal_workflows.start_temporal_worker",
+                AsyncMock(return_value=fake_worker),
+            ),
         ):
             result = await brain.start()
             status = brain.get_status()
@@ -836,22 +846,26 @@ class TestNATSConnected:
         handle.id = "wf-stage9-01"
         handle.result_run_id = None
         handle.first_execution_run_id = None
-        handle.result = AsyncMock(return_value={
-            "success": True,
-            "data": {
-                "task_id": "stage9-temporal-01",
-                "worker_id": "worker-temporal-01",
-                "status": TaskStatus.SUCCESS.value,
-            },
-            "attempts": 1,
-        })
+        handle.result = AsyncMock(
+            return_value={
+                "success": True,
+                "data": {
+                    "task_id": "stage9-temporal-01",
+                    "worker_id": "worker-temporal-01",
+                    "status": TaskStatus.SUCCESS.value,
+                },
+                "attempts": 1,
+            }
+        )
         brain._temporal_client.start_workflow = AsyncMock(return_value=handle)
 
-        result = await brain.execute_distributed_task({
-            "task_id": "stage9-temporal-01",
-            "target_worker_id": "worker-temporal-01",
-            "trace_id": "trace-stage9-temporal-01",
-        })
+        result = await brain.execute_distributed_task(
+            {
+                "task_id": "stage9-temporal-01",
+                "target_worker_id": "worker-temporal-01",
+                "trace_id": "trace-stage9-temporal-01",
+            }
+        )
 
         assert result["success"] is True
         assert result["execution_path"] == "temporal_workflow"
@@ -903,9 +917,8 @@ class TestNATSConnected:
         assert sender._trace_id != "", "Expected auto-generated trace_id to be non-empty"
         # Verify it looks like a UUID
         import re
-        uuid_pattern = re.compile(
-            r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
-        )
+
+        uuid_pattern = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
         assert uuid_pattern.match(sender._trace_id), f"Expected UUID pattern, got {sender._trace_id!r}"
 
     @pytest.mark.asyncio
@@ -939,14 +952,16 @@ class TestNATSConnected:
         mock_bus = _make_mock_nats_bus(connected=True)
         brain = MasterBrain(nats=mock_bus)
 
-        await brain._on_worker_event({
-            "type": "worker_register",
-            "worker_register": {
-                "worker_id": "worker-reg-01",
-                "device_type": "linux",
-                "platform": "linux",
-            },
-        })
+        await brain._on_worker_event(
+            {
+                "type": "worker_register",
+                "worker_register": {
+                    "worker_id": "worker-reg-01",
+                    "device_type": "linux",
+                    "platform": "linux",
+                },
+            }
+        )
 
         topology = brain.get_worker_topology()
         assert "worker-reg-01" in topology
@@ -962,14 +977,16 @@ class TestNATSConnected:
         brain = MasterBrain(nats=mock_bus)
 
         await brain.register_worker(WorkerRegistrationModel(worker_id="worker-down-01", device_type="linux"))
-        await brain._on_worker_shutdown({
-            "type": "worker_shutdown",
-            "worker_shutdown": {
-                "worker_id": "worker-down-01",
-                "reason": "graceful_shutdown",
-                "drain_timeout_s": 30,
-            },
-        })
+        await brain._on_worker_shutdown(
+            {
+                "type": "worker_shutdown",
+                "worker_shutdown": {
+                    "worker_id": "worker-down-01",
+                    "reason": "graceful_shutdown",
+                    "drain_timeout_s": 30,
+                },
+            }
+        )
 
         topology = brain.get_worker_topology()
         assert topology["worker-down-01"]["status"] == "offline"
@@ -1013,17 +1030,19 @@ class TestNATSConnected:
         mock_bus.publish_task_dispatch = AsyncMock(return_value={"success": True, "seq": 13})
         brain = MasterBrain(nats=mock_bus, state_path=tmp_path / "brain-state.json")
         await brain.register_worker(WorkerRegistrationModel(worker_id="worker-shutdown-01", device_type="linux"))
-        brain._acl.validate_task_dispatch = AsyncMock(return_value={
-            "success": True,
-            "data": TaskDispatchModel(
-                task_id="stage8-shutdown-01",
-                task_type=TaskType.DEVICE_CMD,
-                target_worker_id="worker-shutdown-01",
-                device_payload=DeviceCommandPayloadModel(command="tap", target_device_id="worker-shutdown-01"),
-                context={"trace_id": "trace-stage8-shutdown"},
-                timeout_ms=5_000,
-            ),
-        })
+        brain._acl.validate_task_dispatch = AsyncMock(
+            return_value={
+                "success": True,
+                "data": TaskDispatchModel(
+                    task_id="stage8-shutdown-01",
+                    task_type=TaskType.DEVICE_CMD,
+                    target_worker_id="worker-shutdown-01",
+                    device_payload=DeviceCommandPayloadModel(command="tap", target_device_id="worker-shutdown-01"),
+                    context={"trace_id": "trace-stage8-shutdown"},
+                    timeout_ms=5_000,
+                ),
+            }
+        )
 
         await brain.dispatch_task({"task_id": "stage8-shutdown-01", "wait_for_completion": False})
         shutdown_result = await brain.handle_worker_shutdown(
@@ -1059,26 +1078,30 @@ class TestNATSConnected:
         mock_bus.publish_task_dispatch = AsyncMock(return_value={"success": True, "seq": 14})
         brain = MasterBrain(nats=mock_bus, state_path=state_path)
         await brain.register_worker(WorkerRegistrationModel(worker_id="worker-recover-01", device_type="linux"))
-        brain._acl.validate_task_dispatch = AsyncMock(return_value={
-            "success": True,
-            "data": TaskDispatchModel(
-                task_id="stage8-recover-01",
-                task_type=TaskType.DEVICE_CMD,
-                target_worker_id="worker-recover-01",
-                device_payload=DeviceCommandPayloadModel(command="tap", target_device_id="worker-recover-01"),
-                context={"trace_id": "trace-stage8-recover"},
-                timeout_ms=5_000,
-            ),
-        })
+        brain._acl.validate_task_dispatch = AsyncMock(
+            return_value={
+                "success": True,
+                "data": TaskDispatchModel(
+                    task_id="stage8-recover-01",
+                    task_type=TaskType.DEVICE_CMD,
+                    target_worker_id="worker-recover-01",
+                    device_payload=DeviceCommandPayloadModel(command="tap", target_device_id="worker-recover-01"),
+                    context={"trace_id": "trace-stage8-recover"},
+                    timeout_ms=5_000,
+                ),
+            }
+        )
 
         await brain.dispatch_task({"task_id": "stage8-recover-01", "wait_for_completion": False})
-        await brain.handle_task_result(TaskResultModel(
-            task_id="stage8-recover-01",
-            worker_id="worker-recover-01",
-            status=TaskStatus.RUNNING,
-            started_at=TimestampModel(seconds=10, nanos=0),
-            metadata={"trace_id": "trace-stage8-recover", "result_id": "res-stage8-running"},
-        ))
+        await brain.handle_task_result(
+            TaskResultModel(
+                task_id="stage8-recover-01",
+                worker_id="worker-recover-01",
+                status=TaskStatus.RUNNING,
+                started_at=TimestampModel(seconds=10, nanos=0),
+                metadata={"trace_id": "trace-stage8-recover", "result_id": "res-stage8-running"},
+            )
+        )
 
         recovered = MasterBrain(nats=mock_bus, state_path=state_path)
         topology = recovered.get_worker_topology()
@@ -1102,17 +1125,19 @@ class TestNATSConnected:
         mock_bus = _make_mock_nats_bus(connected=True)
         mock_bus.publish_task_dispatch = AsyncMock(return_value={"success": True, "seq": 15})
         brain = MasterBrain(nats=mock_bus, state_path=state_path)
-        brain._acl.validate_task_dispatch = AsyncMock(return_value={
-            "success": True,
-            "data": TaskDispatchModel(
-                task_id="stage8-timeout-01",
-                task_type=TaskType.DEVICE_CMD,
-                target_worker_id="worker-timeout-01",
-                device_payload=DeviceCommandPayloadModel(command="tap", target_device_id="worker-timeout-01"),
-                context={"trace_id": "trace-stage8-timeout"},
-                timeout_ms=10,
-            ),
-        })
+        brain._acl.validate_task_dispatch = AsyncMock(
+            return_value={
+                "success": True,
+                "data": TaskDispatchModel(
+                    task_id="stage8-timeout-01",
+                    task_type=TaskType.DEVICE_CMD,
+                    target_worker_id="worker-timeout-01",
+                    device_payload=DeviceCommandPayloadModel(command="tap", target_device_id="worker-timeout-01"),
+                    context={"trace_id": "trace-stage8-timeout"},
+                    timeout_ms=10,
+                ),
+            }
+        )
 
         await brain.dispatch_task({"task_id": "stage8-timeout-01", "wait_for_completion": False})
         await asyncio.sleep(0.15)
@@ -1135,29 +1160,33 @@ class TestNATSConnected:
         mock_bus = _make_mock_nats_bus(connected=True)
         mock_bus.publish_task_dispatch = AsyncMock(return_value={"success": True, "seq": 16})
         brain = MasterBrain(nats=mock_bus, state_path=tmp_path / "brain-state.json")
-        brain._acl.validate_task_dispatch = AsyncMock(return_value={
-            "success": True,
-            "data": TaskDispatchModel(
-                task_id="stage8-dlq-01",
-                task_type=TaskType.DEVICE_CMD,
-                target_worker_id="worker-dlq-01",
-                device_payload=DeviceCommandPayloadModel(command="tap", target_device_id="worker-dlq-01"),
-                context={"trace_id": "trace-stage8-dlq"},
-                timeout_ms=5_000,
-            ),
-        })
+        brain._acl.validate_task_dispatch = AsyncMock(
+            return_value={
+                "success": True,
+                "data": TaskDispatchModel(
+                    task_id="stage8-dlq-01",
+                    task_type=TaskType.DEVICE_CMD,
+                    target_worker_id="worker-dlq-01",
+                    device_payload=DeviceCommandPayloadModel(command="tap", target_device_id="worker-dlq-01"),
+                    context={"trace_id": "trace-stage8-dlq"},
+                    timeout_ms=5_000,
+                ),
+            }
+        )
 
         await brain.dispatch_task({"task_id": "stage8-dlq-01", "wait_for_completion": False})
         waiter = asyncio.create_task(brain.wait_for_task_result("stage8-dlq-01", timeout_s=1.0))
         await asyncio.sleep(0)
-        await brain._on_deadletter({
-            "task_id": "stage8-dlq-01",
-            "reason": "timeout",
-            "original": {
-                "target_worker_id": "worker-dlq-01",
-                "context": {"trace_id": "trace-stage8-dlq"},
-            },
-        })
+        await brain._on_deadletter(
+            {
+                "task_id": "stage8-dlq-01",
+                "reason": "timeout",
+                "original": {
+                    "target_worker_id": "worker-dlq-01",
+                    "context": {"trace_id": "trace-stage8-dlq"},
+                },
+            }
+        )
         observed = await waiter
 
         assert observed.get("status") == "timeout"
@@ -1172,23 +1201,25 @@ class TestNATSConnected:
         """MasterBrain dispatch must not report distributed success when publish is noop."""
         from core.master_brain import MasterBrain
         from core.schemas.contracts import (
+            DeviceCommandPayloadModel,
             TaskDispatchModel,
             TaskType,
-            DeviceCommandPayloadModel,
         )
 
         mock_bus = _make_mock_nats_bus(connected=True)
         mock_bus.publish_task_dispatch = AsyncMock(return_value={"success": False, "noop": True})
         brain = MasterBrain(nats=mock_bus)
-        brain._acl.validate_task_dispatch = AsyncMock(return_value={
-            "success": True,
-            "data": TaskDispatchModel(
-                task_id="noop-dispatch-01",
-                task_type=TaskType.DEVICE_CMD,
-                target_worker_id="worker-01",
-                device_payload=DeviceCommandPayloadModel(command="tap", target_device_id="worker-01"),
-            ),
-        })
+        brain._acl.validate_task_dispatch = AsyncMock(
+            return_value={
+                "success": True,
+                "data": TaskDispatchModel(
+                    task_id="noop-dispatch-01",
+                    task_type=TaskType.DEVICE_CMD,
+                    target_worker_id="worker-01",
+                    device_payload=DeviceCommandPayloadModel(command="tap", target_device_id="worker-01"),
+                ),
+            }
+        )
 
         result = await brain.dispatch_task({"task_id": "noop-dispatch-01"})
 
@@ -1225,18 +1256,20 @@ class TestNATSConnected:
         brain._workers["worker-best"].update(
             {"active_tasks": 0, "cpu_usage_percent": 5.0, "memory_usage_percent": 10.0}
         )
-        brain._acl.validate_task_dispatch = AsyncMock(return_value={
-            "success": True,
-            "data": TaskDispatchModel(
-                task_id="stage11-scoring-01",
-                task_type=TaskType.DEVICE_CMD,
-                target_device_type="linux",
-                device_payload=DeviceCommandPayloadModel(command="tap", target_device_id="worker-best"),
-                context={"trace_id": "trace-stage11-scoring"},
-                timeout_ms=120_000,
-                max_retries=3,
-            ),
-        })
+        brain._acl.validate_task_dispatch = AsyncMock(
+            return_value={
+                "success": True,
+                "data": TaskDispatchModel(
+                    task_id="stage11-scoring-01",
+                    task_type=TaskType.DEVICE_CMD,
+                    target_device_type="linux",
+                    device_payload=DeviceCommandPayloadModel(command="tap", target_device_id="worker-best"),
+                    context={"trace_id": "trace-stage11-scoring"},
+                    timeout_ms=120_000,
+                    max_retries=3,
+                ),
+            }
+        )
 
         result = await brain.dispatch_task({"task_id": "stage11-scoring-01", "wait_for_completion": False})
         observed = brain.get_task_status("stage11-scoring-01")
@@ -1289,15 +1322,17 @@ class TestNATSConnected:
             "execution_started": True,
         }
 
-        await brain.handle_task_result(TaskResultModel(
-            task_id="scaler-task-01",
-            worker_id="worker-1",
-            status=TaskStatus.SUCCESS,
-            started_at=TimestampModel(seconds=1, nanos=0),
-            completed_at=TimestampModel(seconds=2, nanos=0),
-            metadata={"result_id": "res-scaler-01", "trace_id": "trace-scaler-01"},
-            output={},
-        ))
+        await brain.handle_task_result(
+            TaskResultModel(
+                task_id="scaler-task-01",
+                worker_id="worker-1",
+                status=TaskStatus.SUCCESS,
+                started_at=TimestampModel(seconds=1, nanos=0),
+                completed_at=TimestampModel(seconds=2, nanos=0),
+                metadata={"result_id": "res-scaler-01", "trace_id": "trace-scaler-01"},
+                output={},
+            )
+        )
 
         scaling = brain.get_status().get("scaling", {})
         assert scaling.get("trigger") == "task_result"
@@ -1393,42 +1428,50 @@ class TestNATSConnected:
 
         mock_bus = _make_mock_nats_bus(connected=True)
         brain = MasterBrain(nats=mock_bus)
-        brain._acl.validate_task_dispatch = AsyncMock(return_value={
-            "success": True,
-            "data": TaskDispatchModel(
-                task_id="stage7-terminal-01",
-                task_type=TaskType.DEVICE_CMD,
-                target_worker_id="worker-42",
-                device_payload=DeviceCommandPayloadModel(command="tap", target_device_id="worker-42"),
-                context={"trace_id": "trace-stage7-terminal"},
-                timeout_ms=1_000,
-            ),
-        })
+        brain._acl.validate_task_dispatch = AsyncMock(
+            return_value={
+                "success": True,
+                "data": TaskDispatchModel(
+                    task_id="stage7-terminal-01",
+                    task_type=TaskType.DEVICE_CMD,
+                    target_worker_id="worker-42",
+                    device_payload=DeviceCommandPayloadModel(command="tap", target_device_id="worker-42"),
+                    context={"trace_id": "trace-stage7-terminal"},
+                    timeout_ms=1_000,
+                ),
+            }
+        )
 
         async def _publish_and_complete(*_args, **_kwargs):
             async def _emit_statuses():
                 await asyncio.sleep(0)
-                await brain.handle_task_result(TaskResultModel(
-                    task_id="stage7-terminal-01",
-                    worker_id="worker-42",
-                    status=TaskStatus.DISPATCHED,
-                    metadata={"trace_id": "trace-stage7-terminal", "result_id": "res-dispatched"},
-                ))
-                await brain.handle_task_result(TaskResultModel(
-                    task_id="stage7-terminal-01",
-                    worker_id="worker-42",
-                    status=TaskStatus.RUNNING,
-                    started_at=TimestampModel(seconds=1, nanos=0),
-                    metadata={"trace_id": "trace-stage7-terminal", "result_id": "res-running"},
-                ))
-                await brain.handle_task_result(TaskResultModel(
-                    task_id="stage7-terminal-01",
-                    worker_id="worker-42",
-                    status=TaskStatus.SUCCESS,
-                    started_at=TimestampModel(seconds=1, nanos=0),
-                    completed_at=TimestampModel(seconds=2, nanos=0),
-                    metadata={"trace_id": "trace-stage7-terminal", "result_id": "res-success"},
-                ))
+                await brain.handle_task_result(
+                    TaskResultModel(
+                        task_id="stage7-terminal-01",
+                        worker_id="worker-42",
+                        status=TaskStatus.DISPATCHED,
+                        metadata={"trace_id": "trace-stage7-terminal", "result_id": "res-dispatched"},
+                    )
+                )
+                await brain.handle_task_result(
+                    TaskResultModel(
+                        task_id="stage7-terminal-01",
+                        worker_id="worker-42",
+                        status=TaskStatus.RUNNING,
+                        started_at=TimestampModel(seconds=1, nanos=0),
+                        metadata={"trace_id": "trace-stage7-terminal", "result_id": "res-running"},
+                    )
+                )
+                await brain.handle_task_result(
+                    TaskResultModel(
+                        task_id="stage7-terminal-01",
+                        worker_id="worker-42",
+                        status=TaskStatus.SUCCESS,
+                        started_at=TimestampModel(seconds=1, nanos=0),
+                        completed_at=TimestampModel(seconds=2, nanos=0),
+                        metadata={"trace_id": "trace-stage7-terminal", "result_id": "res-success"},
+                    )
+                )
 
             asyncio.create_task(_emit_statuses())
             return {"success": True, "seq": 7}
@@ -1464,26 +1507,30 @@ class TestNATSConnected:
         mock_bus = _make_mock_nats_bus(connected=True)
         mock_bus.publish_task_dispatch = AsyncMock(return_value={"success": True, "seq": 11})
         brain = MasterBrain(nats=mock_bus)
-        brain._acl.validate_task_dispatch = AsyncMock(return_value={
-            "success": True,
-            "data": TaskDispatchModel(
-                task_id="stage7-observe-01",
-                task_type=TaskType.DEVICE_CMD,
-                target_worker_id="worker-7",
-                device_payload=DeviceCommandPayloadModel(command="tap", target_device_id="worker-7"),
-                context={"trace_id": "trace-stage7-observe"},
-                timeout_ms=1_000,
-            ),
-        })
+        brain._acl.validate_task_dispatch = AsyncMock(
+            return_value={
+                "success": True,
+                "data": TaskDispatchModel(
+                    task_id="stage7-observe-01",
+                    task_type=TaskType.DEVICE_CMD,
+                    target_worker_id="worker-7",
+                    device_payload=DeviceCommandPayloadModel(command="tap", target_device_id="worker-7"),
+                    context={"trace_id": "trace-stage7-observe"},
+                    timeout_ms=1_000,
+                ),
+            }
+        )
 
         dispatch_result = await brain.dispatch_task({"task_id": "stage7-observe-01", "wait_for_completion": False})
-        running_result = await brain.handle_task_result(TaskResultModel(
-            task_id="stage7-observe-01",
-            worker_id="worker-7",
-            status=TaskStatus.RUNNING,
-            started_at=TimestampModel(seconds=3, nanos=0),
-            metadata={"trace_id": "trace-stage7-observe", "result_id": "res-running-01"},
-        ))
+        running_result = await brain.handle_task_result(
+            TaskResultModel(
+                task_id="stage7-observe-01",
+                worker_id="worker-7",
+                status=TaskStatus.RUNNING,
+                started_at=TimestampModel(seconds=3, nanos=0),
+                metadata={"trace_id": "trace-stage7-observe", "result_id": "res-running-01"},
+            )
+        )
         observed = brain.get_task_status("stage7-observe-01")
 
         assert dispatch_result.get("success") is True
@@ -1517,25 +1564,29 @@ class TestNATSConnected:
         mock_bus = _make_mock_nats_bus(connected=True)
         mock_bus.publish_task_dispatch = AsyncMock(return_value={"success": True, "seq": 12})
         brain = MasterBrain(nats=mock_bus)
-        brain._acl.validate_task_dispatch = AsyncMock(return_value={
-            "success": True,
-            "data": TaskDispatchModel(
-                task_id="stage7-mismatch-01",
-                task_type=TaskType.DEVICE_CMD,
-                target_worker_id="worker-expected",
-                device_payload=DeviceCommandPayloadModel(command="tap", target_device_id="worker-expected"),
-                context={"trace_id": "trace-stage7-mismatch"},
-                timeout_ms=1_000,
-            ),
-        })
+        brain._acl.validate_task_dispatch = AsyncMock(
+            return_value={
+                "success": True,
+                "data": TaskDispatchModel(
+                    task_id="stage7-mismatch-01",
+                    task_type=TaskType.DEVICE_CMD,
+                    target_worker_id="worker-expected",
+                    device_payload=DeviceCommandPayloadModel(command="tap", target_device_id="worker-expected"),
+                    context={"trace_id": "trace-stage7-mismatch"},
+                    timeout_ms=1_000,
+                ),
+            }
+        )
 
         await brain.dispatch_task({"task_id": "stage7-mismatch-01", "wait_for_completion": False})
-        mismatch = await brain.handle_task_result(TaskResultModel(
-            task_id="stage7-mismatch-01",
-            worker_id="worker-other",
-            status=TaskStatus.SUCCESS,
-            metadata={"trace_id": "trace-stage7-mismatch", "result_id": "res-mismatch-01"},
-        ))
+        mismatch = await brain.handle_task_result(
+            TaskResultModel(
+                task_id="stage7-mismatch-01",
+                worker_id="worker-other",
+                status=TaskStatus.SUCCESS,
+                metadata={"trace_id": "trace-stage7-mismatch", "result_id": "res-mismatch-01"},
+            )
+        )
         observed = brain.get_task_status("stage7-mismatch-01")
 
         assert mismatch.get("success") is False
@@ -1554,21 +1605,23 @@ class TestNATSConnected:
 
         router = CommandRouter()
         master_brain = MagicMock()
-        master_brain.execute_distributed_task = AsyncMock(return_value={
-            "success": True,
-            "distributed_dispatch": True,
-            "execution_path": "temporal_workflow",
-            "completion_state": "execution_completed",
-            "closure_complete": True,
-            "dispatch_attempted": True,
-            "dispatch_accepted": True,
-            "execution_started": True,
-            "result_received": True,
-            "result_pending_closure": False,
-            "task_outcome_known": True,
-            "lifecycle_state": "succeeded",
-            "temporal_workflow_type": "code_execution",
-        })
+        master_brain.execute_distributed_task = AsyncMock(
+            return_value={
+                "success": True,
+                "distributed_dispatch": True,
+                "execution_path": "temporal_workflow",
+                "completion_state": "execution_completed",
+                "closure_complete": True,
+                "dispatch_attempted": True,
+                "dispatch_accepted": True,
+                "execution_started": True,
+                "result_received": True,
+                "result_pending_closure": False,
+                "task_outcome_known": True,
+                "lifecycle_state": "succeeded",
+                "temporal_workflow_type": "code_execution",
+            }
+        )
         envelope = TaskEnvelope(
             task_id="stage7-route-01",
             trace_id="trace-stage7-route",
@@ -1580,7 +1633,9 @@ class TestNATSConnected:
         )
 
         with patch("core.master_brain.get_master_brain", return_value=master_brain):
-            result = await router._route_worker_envelope(envelope, command_id="cmd-stage7-route", request_id="req-stage7-route")
+            result = await router._route_worker_envelope(
+                envelope, command_id="cmd-stage7-route", request_id="req-stage7-route"
+            )
 
         assert result["success"] is True
         assert result["execution_path"] == "temporal_workflow"
@@ -1639,15 +1694,17 @@ class TestNATSConnected:
 
         router = CommandRouter()
         master_brain = MagicMock()
-        master_brain.execute_distributed_task = AsyncMock(return_value={
-            "success": True,
-            "worker_id": "worker-selected-by-masterbrain",
-            "distributed_dispatch": True,
-            "execution_path": "nats_distributed",
-            "completion_state": "execution_completed",
-            "closure_complete": True,
-            "temporal_worker_active": False,
-        })
+        master_brain.execute_distributed_task = AsyncMock(
+            return_value={
+                "success": True,
+                "worker_id": "worker-selected-by-masterbrain",
+                "distributed_dispatch": True,
+                "execution_path": "nats_distributed",
+                "completion_state": "execution_completed",
+                "closure_complete": True,
+                "temporal_worker_active": False,
+            }
+        )
         envelope = TaskEnvelope(
             task_id="stage10-route-worker-id-01",
             trace_id="trace-stage10-route-worker-id",
@@ -1684,10 +1741,10 @@ class TestPR3NATSEnvelopeAlignment:
     def test_envelope_from_task_dispatch_preserves_task_id(self):
         """envelope_from_task_dispatch() retains the original task_id."""
         from core.schemas.contracts import (
-            envelope_from_task_dispatch,
+            DeviceCommandPayloadModel,
             TaskDispatchModel,
             TaskType,
-            DeviceCommandPayloadModel,
+            envelope_from_task_dispatch,
         )
 
         task = TaskDispatchModel(
@@ -1707,9 +1764,9 @@ class TestPR3NATSEnvelopeAlignment:
     def test_envelope_from_task_dispatch_generates_trace_id_when_missing(self):
         """envelope_from_task_dispatch() generates a trace_id if context lacks one."""
         from core.schemas.contracts import (
-            envelope_from_task_dispatch,
             TaskDispatchModel,
             TaskType,
+            envelope_from_task_dispatch,
         )
 
         task = TaskDispatchModel(
@@ -1923,24 +1980,27 @@ class TestPR3NATSEnvelopeAlignment:
     @pytest.mark.asyncio
     async def test_nats_executor_resolves_task_envelope_result(self):
         """_on_task_result() correctly resolves a TaskEnvelope-shaped result."""
-        from core.command_router import NATSExecutor
         import asyncio
+
+        from core.command_router import NATSExecutor
 
         executor = NATSExecutor()
         loop = asyncio.get_running_loop()
         fut = loop.create_future()
         executor._pending["task-env-res-001"] = fut
 
-        await executor._on_task_result({
-            "_nats_schema": "TaskEnvelope",
-            "task_id": "task-env-res-001",
-            "metadata": {
-                "success": True,
-                "status": "success",
-                "result": {"data": "envelope_ok"},
-                "error": None,
-            },
-        })
+        await executor._on_task_result(
+            {
+                "_nats_schema": "TaskEnvelope",
+                "task_id": "task-env-res-001",
+                "metadata": {
+                    "success": True,
+                    "status": "success",
+                    "result": {"data": "envelope_ok"},
+                    "error": None,
+                },
+            }
+        )
 
         assert fut.done()
         r = fut.result()
@@ -1951,19 +2011,22 @@ class TestPR3NATSEnvelopeAlignment:
     @pytest.mark.asyncio
     async def test_nats_executor_resolves_legacy_task_result(self):
         """_on_task_result() correctly resolves a legacy TaskResult dict."""
-        from core.command_router import NATSExecutor
         import asyncio
+
+        from core.command_router import NATSExecutor
 
         executor = NATSExecutor()
         loop = asyncio.get_running_loop()
         fut = loop.create_future()
         executor._pending["task-legacy-res-001"] = fut
 
-        await executor._on_task_result({
-            "task_id": "task-legacy-res-001",
-            "status": "success",
-            "result": {"output": "legacy_ok"},
-        })
+        await executor._on_task_result(
+            {
+                "task_id": "task-legacy-res-001",
+                "status": "success",
+                "result": {"output": "legacy_ok"},
+            }
+        )
 
         assert fut.done()
         r = fut.result()
@@ -1990,26 +2053,34 @@ class TestTemporalWorkflowActivities:
 
         async def _subscribe(callback, *, include_subscription=False):
             async def _emit():
-                await callback({
-                    "task_id": "temporal-task-01",
-                    "status": "dispatched",
-                    "metadata": {"result_id": "res-dispatch"},
-                })
-                await callback({
-                    "task_id": "temporal-task-01",
-                    "status": "running",
-                    "metadata": {"result_id": "res-running"},
-                })
-                await callback({
-                    "task_id": "temporal-task-01",
-                    "status": "success",
-                    "metadata": {"result_id": "res-success"},
-                })
-                await callback({
-                    "task_id": "temporal-task-01",
-                    "status": "success",
-                    "metadata": {"result_id": "res-success"},
-                })
+                await callback(
+                    {
+                        "task_id": "temporal-task-01",
+                        "status": "dispatched",
+                        "metadata": {"result_id": "res-dispatch"},
+                    }
+                )
+                await callback(
+                    {
+                        "task_id": "temporal-task-01",
+                        "status": "running",
+                        "metadata": {"result_id": "res-running"},
+                    }
+                )
+                await callback(
+                    {
+                        "task_id": "temporal-task-01",
+                        "status": "success",
+                        "metadata": {"result_id": "res-success"},
+                    }
+                )
+                await callback(
+                    {
+                        "task_id": "temporal-task-01",
+                        "status": "success",
+                        "metadata": {"result_id": "res-success"},
+                    }
+                )
 
             asyncio.create_task(_emit())
             return {"success": True, "subscription": subscription}
@@ -2030,11 +2101,13 @@ class TestTemporalWorkflowActivities:
         from core.temporal_workflows import wait_for_result_activity
 
         mock_bus = MagicMock()
-        mock_bus.subscribe_task_results = AsyncMock(return_value={
-            "success": False,
-            "noop": True,
-            "error": "nats_noop_transport",
-        })
+        mock_bus.subscribe_task_results = AsyncMock(
+            return_value={
+                "success": False,
+                "noop": True,
+                "error": "nats_noop_transport",
+            }
+        )
         mock_bus.unsubscribe = AsyncMock(return_value={"success": True})
 
         with patch("core.nats_bus.nats_bus", mock_bus):
@@ -2074,9 +2147,10 @@ class TestNATSAutoLocal:
 
         with patch.dict(os.environ, {}, clear=False):
             os.environ.pop("GALAXY_NATS_URL", None)
-            with patch.object(_nb_mod, "_HAS_NATS", False), \
-                 patch.object(_nb_mod.NATSBus, "_detect_tailscale_nats_url",
-                              staticmethod(lambda: "")):
+            with (
+                patch.object(_nb_mod, "_HAS_NATS", False),
+                patch.object(_nb_mod.NATSBus, "_detect_tailscale_nats_url", staticmethod(lambda: "")),
+            ):
                 bus = _nb_mod.NATSBus()
 
         assert bus._noop is False
@@ -2109,8 +2183,11 @@ class TestNATSAutoLocal:
                 return False
 
         import nats as _nats_mod
-        with patch.object(_nats_mod, "connect", side_effect=Exception("connection refused")), \
-             patch("core.nats_server.EmbeddedNATSServer", _FailingEmbedded):
+
+        with (
+            patch.object(_nats_mod, "connect", side_effect=Exception("connection refused")),
+            patch("core.nats_server.EmbeddedNATSServer", _FailingEmbedded),
+        ):
             result = await bus.connect()
 
         assert result.get("success") is False
@@ -2144,10 +2221,13 @@ class TestNATSAutoLocal:
 
         # LAN 提示只在「auto-local 拨号失败 + 嵌入式服务器也起不来」时发出
         import nats as _nats_mod
-        with patch.object(_nb_mod, "_get_lan_ip", return_value=fake_lan_ip), \
-             patch.object(_nats_mod, "connect", side_effect=Exception("refused")), \
-             patch("core.nats_server.EmbeddedNATSServer", _FailingEmbedded), \
-             patch.object(_nb_mod.logger, "warning") as mock_warn:
+
+        with (
+            patch.object(_nb_mod, "_get_lan_ip", return_value=fake_lan_ip),
+            patch.object(_nats_mod, "connect", side_effect=Exception("refused")),
+            patch("core.nats_server.EmbeddedNATSServer", _FailingEmbedded),
+            patch.object(_nb_mod.logger, "warning") as mock_warn,
+        ):
             await bus.connect()
             assert mock_warn.called
             all_warnings = " ".join(" ".join(str(a) for a in c[0]) for c in mock_warn.call_args_list)

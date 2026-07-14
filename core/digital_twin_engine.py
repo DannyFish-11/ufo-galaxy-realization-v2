@@ -12,38 +12,42 @@
 
 import asyncio
 import logging
+import math
 import time
 import uuid
-import math
-from typing import List, Dict, Any, Optional, Callable, Awaitable
+from collections import deque
 from dataclasses import dataclass, field
 from enum import Enum
-from collections import deque
+from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 logger = logging.getLogger("Galaxy.DigitalTwin")
 
 
 # ───────────────────── 数据模型 ─────────────────────
 
+
 class CouplingMode(Enum):
     """耦合模式"""
-    COUPLED = "coupled"        # 实时同步
-    DECOUPLED = "decoupled"    # 纯虚拟
-    HYBRID = "hybrid"          # 混合模式
+
+    COUPLED = "coupled"  # 实时同步
+    DECOUPLED = "decoupled"  # 纯虚拟
+    HYBRID = "hybrid"  # 混合模式
 
 
 class SyncDirection(Enum):
     """同步方向"""
+
     PHYSICAL_TO_DIGITAL = "p2d"  # 物理 → 数字
     DIGITAL_TO_PHYSICAL = "d2p"  # 数字 → 物理（下发指令）
-    BIDIRECTIONAL = "bi"         # 双向同步
+    BIDIRECTIONAL = "bi"  # 双向同步
 
 
 class TwinStatus(Enum):
     """孪生体状态"""
-    SYNCED = "synced"          # 同步正常
-    DRIFTED = "drifted"        # 状态漂移
-    OFFLINE = "offline"        # 物理设备离线
+
+    SYNCED = "synced"  # 同步正常
+    DRIFTED = "drifted"  # 状态漂移
+    OFFLINE = "offline"  # 物理设备离线
     SIMULATING = "simulating"  # 纯模拟中
     ERROR = "error"
 
@@ -51,36 +55,40 @@ class TwinStatus(Enum):
 @dataclass
 class PhysicalState:
     """物理设备状态"""
+
     device_id: str
     properties: Dict[str, Any]  # 设备属性 (位置、温度、电量等)
     timestamp: float = field(default_factory=time.time)
-    source: str = "sensor"     # sensor / manual / estimated
+    source: str = "sensor"  # sensor / manual / estimated
 
 
 @dataclass
 class DigitalState:
     """数字孪生状态"""
+
     twin_id: str
     device_id: str
     properties: Dict[str, Any]
     predicted_properties: Dict[str, Any] = field(default_factory=dict)
     timestamp: float = field(default_factory=time.time)
-    confidence: float = 1.0    # 状态置信度 (0-1)
+    confidence: float = 1.0  # 状态置信度 (0-1)
 
 
 @dataclass
 class DriftReport:
     """状态漂移报告"""
+
     twin_id: str
     drifted_properties: Dict[str, Dict]  # property → {physical, digital, delta}
-    max_drift: float           # 最大漂移值
+    max_drift: float  # 最大漂移值
     timestamp: float = field(default_factory=time.time)
-    severity: str = "low"      # low / medium / high / critical
+    severity: str = "low"  # low / medium / high / critical
 
 
 @dataclass
 class SimulationResult:
     """模拟结果"""
+
     twin_id: str
     action: str
     predicted_state: Dict[str, Any]
@@ -93,6 +101,7 @@ class SimulationResult:
 
 # ───────────────────── 数字孪生体 ─────────────────────
 
+
 class DigitalTwin:
     """
     单个设备的数字孪生体
@@ -104,9 +113,9 @@ class DigitalTwin:
     - 漂移检测
     """
 
-    def __init__(self, device_id: str, device_type: str,
-                 initial_state: Optional[Dict] = None,
-                 drift_threshold: float = 0.1):
+    def __init__(
+        self, device_id: str, device_type: str, initial_state: Optional[Dict] = None, drift_threshold: float = 0.1
+    ):
         self.twin_id = f"twin_{device_id}_{uuid.uuid4().hex[:6]}"
         self.device_id = device_id
         self.device_type = device_type
@@ -142,11 +151,13 @@ class DigitalTwin:
 
     # ─────── 耦合控制 ─────────
 
-    async def couple(self,
-                     state_fetcher: Callable[[], Awaitable[Dict]],
-                     command_sender: Optional[Callable[[str, Dict], Awaitable[Dict]]] = None,
-                     mode: CouplingMode = CouplingMode.COUPLED,
-                     sync_interval: float = 1.0):
+    async def couple(
+        self,
+        state_fetcher: Callable[[], Awaitable[Dict]],
+        command_sender: Optional[Callable[[str, Dict], Awaitable[Dict]]] = None,
+        mode: CouplingMode = CouplingMode.COUPLED,
+        sync_interval: float = 1.0,
+    ):
         """
         耦合到物理设备
 
@@ -223,11 +234,13 @@ class DigitalTwin:
                 self.digital_state.timestamp = time.time()
 
             # 记录历史
-            self.state_history.append({
-                "physical": physical_props,
-                "digital": self.digital_state.properties.copy(),
-                "timestamp": time.time(),
-            })
+            self.state_history.append(
+                {
+                    "physical": physical_props,
+                    "digital": self.digital_state.properties.copy(),
+                    "timestamp": time.time(),
+                }
+            )
 
             self.status = TwinStatus.SYNCED
 
@@ -292,8 +305,7 @@ class DigitalTwin:
                 drift = self.detect_drift()
                 if drift and drift.severity in ("high", "critical"):
                     logger.warning(
-                        f"[漂移告警] {self.twin_id}: 最大漂移 {drift.max_drift:.4f}, "
-                        f"严重性: {drift.severity}"
+                        f"[漂移告警] {self.twin_id}: 最大漂移 {drift.max_drift:.4f}, " f"严重性: {drift.severity}"
                     )
             except asyncio.CancelledError:
                 break
@@ -361,8 +373,7 @@ class DigitalTwin:
 
     # ─────── 模拟预测 ─────────
 
-    def register_physics_model(self, action: str,
-                               model: Callable[[Dict, Dict], Dict]):
+    def register_physics_model(self, action: str, model: Callable[[Dict, Dict], Dict]):
         """注册物理模型用于预测"""
         self._physics_models[action] = model
 
@@ -420,8 +431,7 @@ class DigitalTwin:
             return avg_prob
         return 0.8  # 默认
 
-    def _safety_check(self, action: str, params: Dict,
-                      predicted_state: Dict) -> Dict:
+    def _safety_check(self, action: str, params: Dict, predicted_state: Dict) -> Dict:
         """安全检查"""
         risks = []
         safe = True
@@ -445,8 +455,7 @@ class DigitalTwin:
 
         return {"safe": safe, "risks": risks}
 
-    async def predict_future_state(self, steps: int = 5,
-                                   interval: float = 1.0) -> List[Dict]:
+    async def predict_future_state(self, steps: int = 5, interval: float = 1.0) -> List[Dict]:
         """基于历史趋势预测未来状态"""
         if len(self.state_history) < 3:
             return [self.digital_state.properties.copy()] * steps
@@ -474,7 +483,7 @@ class DigitalTwin:
             return trends
 
         # 取最近的 N 个状态
-        recent = history[-min(20, len(history)):]
+        recent = history[-min(20, len(history)) :]
         first_state = recent[0].get("digital", {})
         last_state = recent[-1].get("digital", {})
 
@@ -506,6 +515,7 @@ class DigitalTwin:
 
 # ───────────────────── 孪生管理器 ─────────────────────
 
+
 class DigitalTwinEngine:
     """
     数字孪生引擎
@@ -521,9 +531,9 @@ class DigitalTwinEngine:
         self._by_device: Dict[str, str] = {}  # device_id → twin_id
         logger.info("数字孪生引擎已初始化")
 
-    def create_twin(self, device_id: str, device_type: str,
-                    initial_state: Optional[Dict] = None,
-                    drift_threshold: float = 0.1) -> DigitalTwin:
+    def create_twin(
+        self, device_id: str, device_type: str, initial_state: Optional[Dict] = None, drift_threshold: float = 0.1
+    ) -> DigitalTwin:
         """创建数字孪生体"""
         twin = DigitalTwin(
             device_id=device_id,
@@ -542,8 +552,9 @@ class DigitalTwinEngine:
         twin_id = self._by_device.get(device_id)
         return self.twins.get(twin_id) if twin_id else None
 
-    async def couple_all(self, state_fetcher_factory: Callable[[str], Callable],
-                         mode: CouplingMode = CouplingMode.COUPLED):
+    async def couple_all(
+        self, state_fetcher_factory: Callable[[str], Callable], mode: CouplingMode = CouplingMode.COUPLED
+    ):
         """批量耦合所有孪生体"""
         for twin in self.twins.values():
             fetcher = state_fetcher_factory(twin.device_id)
@@ -566,11 +577,15 @@ class DigitalTwinEngine:
             device_id = action_spec["device_id"]
             twin = self.get_twin_by_device(device_id)
             if not twin:
-                results.append(SimulationResult(
-                    twin_id="unknown", action=action_spec.get("action", ""),
-                    predicted_state={}, success_probability=0,
-                    risks=[f"设备 {device_id} 没有对应的数字孪生体"],
-                ))
+                results.append(
+                    SimulationResult(
+                        twin_id="unknown",
+                        action=action_spec.get("action", ""),
+                        predicted_state={},
+                        success_probability=0,
+                        risks=[f"设备 {device_id} 没有对应的数字孪生体"],
+                    )
+                )
                 continue
 
             result = await twin.simulate_action(
@@ -587,10 +602,7 @@ class DigitalTwinEngine:
             "total_twins": len(self.twins),
             "by_status": self._count_by_status(),
             "by_coupling": self._count_by_coupling(),
-            "twins": {
-                tid: twin.get_state()
-                for tid, twin in self.twins.items()
-            },
+            "twins": {tid: twin.get_state() for tid, twin in self.twins.items()},
         }
 
     def _count_by_status(self) -> Dict[str, int]:
@@ -614,6 +626,7 @@ class DigitalTwinEngine:
 
 # ───────────────── 预置物理模型 ──────────────────
 
+
 def drone_flight_model(state: Dict, params: Dict) -> Dict:
     """无人机飞行物理模型"""
     predicted = state.copy()
@@ -628,10 +641,9 @@ def drone_flight_model(state: Dict, params: Dict) -> Dict:
     predicted["longitude"] = target_lon
 
     # 电量消耗估算
-    distance = math.sqrt(
-        (target_lat - state.get("latitude", 0)) ** 2 +
-        (target_lon - state.get("longitude", 0)) ** 2
-    ) * 111000  # 度 → 米（粗略）
+    distance = (
+        math.sqrt((target_lat - state.get("latitude", 0)) ** 2 + (target_lon - state.get("longitude", 0)) ** 2) * 111000
+    )  # 度 → 米（粗略）
     alt_delta = abs(target_alt - state.get("altitude", 0))
     battery_drain = (distance / 1000 + alt_delta / 100) * 2  # 粗略消耗模型
     predicted["battery"] = max(0, state.get("battery", 100) - battery_drain)
@@ -663,9 +675,7 @@ def printer_3d_model(state: Dict, params: Dict) -> Dict:
 
     # 耗材消耗
     filament_used_g = file_size_mb * 5
-    predicted["filament_remaining_g"] = max(
-        0, state.get("filament_remaining_g", 1000) - filament_used_g
-    )
+    predicted["filament_remaining_g"] = max(0, state.get("filament_remaining_g", 1000) - filament_used_g)
 
     risks = []
     if predicted["filament_remaining_g"] < filament_used_g:

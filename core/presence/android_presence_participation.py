@@ -175,13 +175,8 @@ class AndroidPresenceParticipationRecord:
     @property
     def drives_liminal(self) -> bool:
         """True when this device's state should push presence toward LIMINAL."""
-        return (
-            self.is_presence_participant
-            and (
-                self.active_engagement
-                or self.sensing_stream_active
-                or self.handoff_interaction_active
-            )
+        return self.is_presence_participant and (
+            self.active_engagement or self.sensing_stream_active or self.handoff_interaction_active
         )
 
     @property
@@ -353,8 +348,7 @@ def summarise_android_presence_participation(
     """
     any_presence_participant = any(r.is_presence_participant for r in records)
     any_foreground_presence = any(
-        r.participation_mode == AndroidPresenceParticipationMode.FOREGROUND_PRESENCE
-        for r in records
+        r.participation_mode == AndroidPresenceParticipationMode.FOREGROUND_PRESENCE for r in records
     )
     any_drives_liminal = any(r.drives_liminal for r in records)
     any_drives_manifest = any(r.drives_manifest for r in records)

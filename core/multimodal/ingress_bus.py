@@ -42,6 +42,7 @@ Usage::
     asyncio.create_task(bus.run())
     frame = await q.get()   # PerceptionFrame
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -53,9 +54,9 @@ import time
 from typing import Any, Callable, Dict, List, Optional
 
 from .audio_features import AudioState
-from .video_features import VideoState
 from .perception_frame import PerceptionFrame, ScreenState, SystemSignals
-from .signal_quality import SignalQuality, QualityFlag
+from .signal_quality import QualityFlag, SignalQuality
+from .video_features import VideoState
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +74,7 @@ class MultimodalIngressBus:
     """
 
     # PR-ACTIVE-PERCEPTION: scan toolchain every N ticks (not every tick)
-    _TOOLCHAIN_SCAN_INTERVAL = 30   # ~30 ticks × 200 ms = 6 s
+    _TOOLCHAIN_SCAN_INTERVAL = 30  # ~30 ticks × 200 ms = 6 s
     _OPPORTUNITY_SCAN_INTERVAL = 150  # ~150 ticks × 200 ms = 30 s
 
     def __init__(self, tick_ms: int = 200) -> None:
@@ -115,25 +116,19 @@ class MultimodalIngressBus:
     # Signal injection
     # ------------------------------------------------------------------
 
-    def update_audio(
-        self, state: AudioState, quality: SignalQuality
-    ) -> None:
+    def update_audio(self, state: AudioState, quality: SignalQuality) -> None:
         """Ingest a new AudioState snapshot."""
         self._audio = state
         self._audio_quality = quality
         self._audio_ts = time.monotonic()
 
-    def update_video(
-        self, state: VideoState, quality: SignalQuality
-    ) -> None:
+    def update_video(self, state: VideoState, quality: SignalQuality) -> None:
         """Ingest a new VideoState snapshot."""
         self._video = state
         self._video_quality = quality
         self._video_ts = time.monotonic()
 
-    def update_screen(
-        self, state: ScreenState, quality: SignalQuality
-    ) -> None:
+    def update_screen(self, state: ScreenState, quality: SignalQuality) -> None:
         """Ingest a new ScreenState snapshot（连续屏幕感知）。"""
         self._screen = state
         self._screen_quality = quality
@@ -174,9 +169,7 @@ class MultimodalIngressBus:
     # Frame construction
     # ------------------------------------------------------------------
 
-    def _apply_staleness(
-        self, ts: Optional[float], quality: SignalQuality
-    ) -> SignalQuality:
+    def _apply_staleness(self, ts: Optional[float], quality: SignalQuality) -> SignalQuality:
         """Downgrade quality to STALE when the signal has not been updated."""
         if ts is None:
             return quality
@@ -329,9 +322,10 @@ class MultimodalIngressBus:
         """
         self._running = True
         logger.info(
-            "Multimodal ingress bus started (tick=%d ms, toolchain_scan=%d ticks, "
-            "opportunity_scan=%d ticks)",
-            self._tick_ms, self._TOOLCHAIN_SCAN_INTERVAL, self._OPPORTUNITY_SCAN_INTERVAL,
+            "Multimodal ingress bus started (tick=%d ms, toolchain_scan=%d ticks, " "opportunity_scan=%d ticks)",
+            self._tick_ms,
+            self._TOOLCHAIN_SCAN_INTERVAL,
+            self._OPPORTUNITY_SCAN_INTERVAL,
         )
         try:
             while self._running:
@@ -377,9 +371,7 @@ class MultimodalIngressBus:
         try:
             while not task.done() or not q.empty():
                 try:
-                    yield await asyncio.wait_for(
-                        q.get(), timeout=self._tick_ms / 1000.0 * 3
-                    )
+                    yield await asyncio.wait_for(q.get(), timeout=self._tick_ms / 1000.0 * 3)
                 except asyncio.TimeoutError:
                     if task.done():
                         break

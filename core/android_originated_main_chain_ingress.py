@@ -281,9 +281,7 @@ class AndroidOriginatedIngressContext:
     semantic_authority: str = V2_SEMANTIC_AUTHORITY
     lineage: ExecutionLineageKind = ExecutionLineageKind.android_originated
     is_main_chain_accepted: bool = False
-    participation_kind: AndroidParticipationKind = (
-        AndroidParticipationKind.android_originated_nl
-    )
+    participation_kind: AndroidParticipationKind = AndroidParticipationKind.android_originated_nl
     is_stale: bool = False
     is_replay: bool = False
     is_recovery_assisted: bool = False
@@ -637,10 +635,7 @@ def is_android_originated_main_chain_accepted(
     ingress_result: AndroidOriginatedIngressResult,
 ) -> bool:
     """Return True iff the ingress result confirms main-chain acceptance."""
-    return (
-        ingress_result.is_main_chain_accepted
-        and ingress_result.authority_source == V2_SEMANTIC_AUTHORITY
-    )
+    return ingress_result.is_main_chain_accepted and ingress_result.authority_source == V2_SEMANTIC_AUTHORITY
 
 
 # ---------------------------------------------------------------------------

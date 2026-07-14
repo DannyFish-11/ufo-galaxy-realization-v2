@@ -64,10 +64,10 @@ import pytest
 
 try:
     from core.runtime.source_dispatch_orchestrator import (
-        RECONNECT_RECOVERY_CONSISTENCY_PR33_SENTINEL,
-        RECONNECT_MUST_NOT_BREAK_HOST_SIDE_TRUTH_PR33_POLICY,
-        REGISTRY_RECONNECT_EVENT_IS_OBSERVABLE_PR33_POLICY,
         EXECUTION_TRACKER_SURVIVES_RECONNECT_PR33_POLICY,
+        RECONNECT_MUST_NOT_BREAK_HOST_SIDE_TRUTH_PR33_POLICY,
+        RECONNECT_RECOVERY_CONSISTENCY_PR33_SENTINEL,
+        REGISTRY_RECONNECT_EVENT_IS_OBSERVABLE_PR33_POLICY,
         RESULT_MERGE_CONSISTENT_THROUGH_RECOVERY_PR33_POLICY,
     )
 
@@ -83,13 +83,11 @@ except ImportError:
     _PROJECTION_AVAILABLE = False
 
 try:
-    from core.runtime import (
-        RECONNECT_RECOVERY_CONSISTENCY_PR33_SENTINEL as _rt_sentinel,
-        RECONNECT_MUST_NOT_BREAK_HOST_SIDE_TRUTH_PR33_POLICY as _rt_host_truth,
-        REGISTRY_RECONNECT_EVENT_IS_OBSERVABLE_PR33_POLICY as _rt_observable,
-        EXECUTION_TRACKER_SURVIVES_RECONNECT_PR33_POLICY as _rt_tracker,
-        RESULT_MERGE_CONSISTENT_THROUGH_RECOVERY_PR33_POLICY as _rt_merge,
-    )
+    from core.runtime import EXECUTION_TRACKER_SURVIVES_RECONNECT_PR33_POLICY as _rt_tracker
+    from core.runtime import RECONNECT_MUST_NOT_BREAK_HOST_SIDE_TRUTH_PR33_POLICY as _rt_host_truth
+    from core.runtime import RECONNECT_RECOVERY_CONSISTENCY_PR33_SENTINEL as _rt_sentinel
+    from core.runtime import REGISTRY_RECONNECT_EVENT_IS_OBSERVABLE_PR33_POLICY as _rt_observable
+    from core.runtime import RESULT_MERGE_CONSISTENT_THROUGH_RECOVERY_PR33_POLICY as _rt_merge
 
     _RUNTIME_EXPORTS_AVAILABLE = True
 except ImportError:
@@ -97,19 +95,19 @@ except ImportError:
 
 try:
     from core.attached_runtime_session_registry import (
+        REGISTRY_LAST_RECONNECT_AT_TRACKS_MOST_RECENT_RECONNECT_PR33_POLICY,
         REGISTRY_RECONNECT_CONSISTENCY_PR33_SENTINEL,
         REGISTRY_RECONNECT_COUNT_IS_MONOTONIC_PR33_POLICY,
-        REGISTRY_LAST_RECONNECT_AT_TRACKS_MOST_RECENT_RECONNECT_PR33_POLICY,
         AttachedSessionRegistry,
         AttachedSessionRegistryEntry,
+        InvalidationReason,
         RegistryEntryState,
         RegistryTransition,
-        InvalidationReason,
-        register_session,
-        reconnect_session,
         detach_session,
-        reattach_session,
         invalidate_session,
+        reattach_session,
+        reconnect_session,
+        register_session,
     )
 
     _REGISTRY_AVAILABLE = True
@@ -118,14 +116,14 @@ except ImportError:
 
 try:
     from core.attached_runtime_recovery_readiness import (
-        RECOVERY_READINESS_RECONNECT_CONSISTENCY_PR33_SENTINEL,
         RECOVERY_GUARD_CLEARS_SEQ_ON_RECONNECT_PR33_POLICY,
+        RECOVERY_READINESS_RECONNECT_CONSISTENCY_PR33_SENTINEL,
         RecoveryReadinessRuntime,
+        SignalGuardDecision,
         build_idempotency_key,
         check_signal_guard,
-        record_seen_signal,
         clear_seq_context_for_reconnect,
-        SignalGuardDecision,
+        record_seen_signal,
     )
 
     _RECOVERY_AVAILABLE = True
@@ -136,11 +134,11 @@ try:
     from core.delegated_runtime_execution_tracker import (
         EXECUTION_TRACKER_RECONNECT_CONSISTENCY_PR33_SENTINEL,
         TRACKER_ACTIVE_RECORDS_SURVIVE_RECONNECT_PR33_POLICY,
-        DelegatedExecutionTrackingRuntime,
-        DelegatedExecutionResult,
         DelegatedExecutionPhase,
-        create_execution_tracking_record,
+        DelegatedExecutionResult,
+        DelegatedExecutionTrackingRuntime,
         apply_result,
+        create_execution_tracking_record,
         get_active_execution_tracking_for_session,
     )
 
@@ -152,24 +150,14 @@ except ImportError:
 # Helpers
 # ---------------------------------------------------------------------------
 
-_skip_orchestrator = pytest.mark.skipif(
-    not _ORCHESTRATOR_AVAILABLE, reason="orchestrator module unavailable"
-)
+_skip_orchestrator = pytest.mark.skipif(not _ORCHESTRATOR_AVAILABLE, reason="orchestrator module unavailable")
 _skip_projection = pytest.mark.skipif(
     not _PROJECTION_AVAILABLE, reason="projection module unavailable (fastapi missing)"
 )
-_skip_runtime = pytest.mark.skipif(
-    not _RUNTIME_EXPORTS_AVAILABLE, reason="core.runtime exports unavailable"
-)
-_skip_registry = pytest.mark.skipif(
-    not _REGISTRY_AVAILABLE, reason="registry module unavailable"
-)
-_skip_recovery = pytest.mark.skipif(
-    not _RECOVERY_AVAILABLE, reason="recovery readiness module unavailable"
-)
-_skip_tracker = pytest.mark.skipif(
-    not _TRACKER_AVAILABLE, reason="execution tracker module unavailable"
-)
+_skip_runtime = pytest.mark.skipif(not _RUNTIME_EXPORTS_AVAILABLE, reason="core.runtime exports unavailable")
+_skip_registry = pytest.mark.skipif(not _REGISTRY_AVAILABLE, reason="registry module unavailable")
+_skip_recovery = pytest.mark.skipif(not _RECOVERY_AVAILABLE, reason="recovery readiness module unavailable")
+_skip_tracker = pytest.mark.skipif(not _TRACKER_AVAILABLE, reason="execution tracker module unavailable")
 
 
 def _make_registry() -> "AttachedSessionRegistry":
@@ -236,7 +224,10 @@ class TestProjectionSentinel:
         assert "UNAVAILABLE" not in RECONNECT_RECOVERY_CONSISTENCY_ALIGNED_PR33
 
     def test_AB3_sentinel_contains_pr33(self):
-        assert "PR33" in RECONNECT_RECOVERY_CONSISTENCY_ALIGNED_PR33 or "PR-33" in RECONNECT_RECOVERY_CONSISTENCY_ALIGNED_PR33
+        assert (
+            "PR33" in RECONNECT_RECOVERY_CONSISTENCY_ALIGNED_PR33
+            or "PR-33" in RECONNECT_RECOVERY_CONSISTENCY_ALIGNED_PR33
+        )
 
 
 # ===========================================================================
@@ -357,6 +348,7 @@ class TestRegistryLastReconnectAt:
 
     def test_AF3_last_reconnect_at_advances_on_second_reconnect(self):
         import time as _time
+
         r = _make_registry()
         e = register_session("dev6", registry=r)
         e = detach_session(e, registry=r)
@@ -634,9 +626,10 @@ class TestExecutionTrackerActiveForSession:
 
     def test_AN2_returns_in_flight_record_after_ack(self):
         from core.delegated_runtime_execution_tracker import (
-            apply_acknowledgment_signal,
             AcknowledgmentSignal,
+            apply_acknowledgment_signal,
         )
+
         rt = _fresh_tracker()
         rec = create_execution_tracking_record(session_id="s2", contract_id="c2", runtime=rt)
         apply_acknowledgment_signal(rec, AcknowledgmentSignal.ack, runtime=rt)
@@ -703,9 +696,7 @@ class TestExecutionTrackerSurvivesReconnect:
         e = detach_session(e, registry=reg)
         e = reconnect_session(e, registry=reg)
         # Tracker ring-buffer is unaffected by registry transition
-        active = get_active_execution_tracking_for_session(
-            e.session_id or "session_r", runtime=tr
-        )
+        active = get_active_execution_tracking_for_session(e.session_id or "session_r", runtime=tr)
         assert active is not None
 
     def test_AQ2_reconnect_count_observable_from_registry_after_reconnect(self):

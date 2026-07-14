@@ -429,13 +429,9 @@ class DelegatedFlowAcceptanceVerdict(str, Enum):
     rejected_due_to_missing_evidence = "rejected_due_to_missing_evidence"
     rejected_due_to_truth_contract_gap = "rejected_due_to_truth_contract_gap"
     rejected_due_to_result_contract_gap = "rejected_due_to_result_contract_gap"
-    rejected_due_to_operator_visibility_gap = (
-        "rejected_due_to_operator_visibility_gap"
-    )
+    rejected_due_to_operator_visibility_gap = "rejected_due_to_operator_visibility_gap"
     rejected_due_to_compat_bypass_risk = "rejected_due_to_compat_bypass_risk"
-    acceptance_unknown_due_to_incomplete_signals = (
-        "acceptance_unknown_due_to_incomplete_signals"
-    )
+    acceptance_unknown_due_to_incomplete_signals = "acceptance_unknown_due_to_incomplete_signals"
 
     @classmethod
     def from_string(cls, value: str) -> "DelegatedFlowAcceptanceVerdict":
@@ -591,10 +587,7 @@ class DelegatedFlowAcceptanceReport:
         return {
             "report_id": self.report_id,
             "verdict": self.verdict.value,
-            "dimensions": {
-                dim_key: dim_result.to_dict()
-                for dim_key, dim_result in self.dimensions.items()
-            },
+            "dimensions": {dim_key: dim_result.to_dict() for dim_key, dim_result in self.dimensions.items()},
             "summary": self.summary,
             "evidence_gaps": self.evidence_gaps,
             "is_accepted_for_graduation": self.is_accepted_for_graduation,
@@ -615,9 +608,7 @@ class DelegatedFlowAcceptanceReport:
             dimensions[dim_key] = DimensionEvidenceResult.from_dict(dim_data)
         return cls(
             report_id=data.get("report_id", uuid.uuid4().hex[:12]),
-            verdict=DelegatedFlowAcceptanceVerdict.from_string(
-                data.get("verdict", "")
-            ),
+            verdict=DelegatedFlowAcceptanceVerdict.from_string(data.get("verdict", "")),
             dimensions=dimensions,
             summary=data.get("summary", ""),
             evidence_gaps=data.get("evidence_gaps", []),
@@ -627,9 +618,7 @@ class DelegatedFlowAcceptanceReport:
             readiness_report_id=data.get("readiness_report_id", ""),
         )
 
-    def get_dimension(
-        self, dim: AcceptanceDimension
-    ) -> Optional[DimensionEvidenceResult]:
+    def get_dimension(self, dim: AcceptanceDimension) -> Optional[DimensionEvidenceResult]:
         """Return the :class:`DimensionEvidenceResult` for *dim*, or ``None``."""
         return self.dimensions.get(dim.value)
 
@@ -640,9 +629,10 @@ class DelegatedFlowAcceptanceReport:
 
 # FlowContinuityCoordinator (PR-3V2) — continuity_replay_evidence dimension
 try:
-    from core.flow_continuity_coordinator import (  # type: ignore[import]
-        get_flow_continuity_coordinator as _get_continuity_coordinator,
+    from core.flow_continuity_coordinator import (
+        get_flow_continuity_coordinator as _get_continuity_coordinator,  # type: ignore[import]
     )
+
     _CONTINUITY_AVAILABLE = True
 except Exception as exc:
     logger.debug("Fallback triggered: %s", exc)
@@ -651,9 +641,10 @@ except Exception as exc:
 
 # FlowTruthAlignmentRuntime (PR-5V2) — truth_ownership_evidence dimension
 try:
-    from core.flow_level_truth_ownership import (  # type: ignore[import]
-        build_flow_truth_alignment_snapshot as _build_truth_snapshot,
+    from core.flow_level_truth_ownership import (
+        build_flow_truth_alignment_snapshot as _build_truth_snapshot,  # type: ignore[import]
     )
+
     _TRUTH_AVAILABLE = True
 except Exception as exc:
     logger.debug("Fallback triggered: %s", exc)
@@ -662,9 +653,10 @@ except Exception as exc:
 
 # FlowAwareConvergenceCoordinator (PR-6V2) — result_convergence_evidence dimension
 try:
-    from core.flow_aware_result_convergence import (  # type: ignore[import]
-        build_flow_convergence_snapshot as _build_convergence_snapshot,
+    from core.flow_aware_result_convergence import (
+        build_flow_convergence_snapshot as _build_convergence_snapshot,  # type: ignore[import]
     )
+
     _CONVERGENCE_AVAILABLE = True
 except Exception as exc:
     logger.debug("Fallback triggered: %s", exc)
@@ -673,9 +665,10 @@ except Exception as exc:
 
 # FlowLevelOperatorSurface (PR-7V2) — operator_visibility_evidence dimension
 try:
-    from core.flow_level_operator_surface import (  # type: ignore[import]
-        get_flow_level_operator_surface as _get_operator_surface,
+    from core.flow_level_operator_surface import (
+        get_flow_level_operator_surface as _get_operator_surface,  # type: ignore[import]
     )
+
     _OPERATOR_SURFACE_AVAILABLE = True
 except Exception as exc:
     logger.debug("Fallback triggered: %s", exc)
@@ -684,9 +677,10 @@ except Exception as exc:
 
 # CompatLegacyPathBlockingCanonicalization (PR-8V2) — compat_bypass_evidence dimension
 try:
-    from core.compat_legacy_path_blocking_canonicalization import (  # type: ignore[import]
-        build_blocking_canonicalization_snapshot as _build_blocking_snapshot,
+    from core.compat_legacy_path_blocking_canonicalization import (
+        build_blocking_canonicalization_snapshot as _build_blocking_snapshot,  # type: ignore[import]
     )
+
     _COMPAT_AVAILABLE = True
 except Exception as exc:
     logger.debug("Fallback triggered: %s", exc)
@@ -695,10 +689,9 @@ except Exception as exc:
 
 # DelegatedFlowReadinessGate (PR-9V2) — readiness_prerequisite dimension
 try:
-    from core.delegated_flow_readiness_gate import (  # type: ignore[import]
-        get_readiness_gate as _get_readiness_gate,
-        DelegatedFlowReadinessVerdict as _ReadinessVerdict,
-    )
+    from core.delegated_flow_readiness_gate import DelegatedFlowReadinessVerdict as _ReadinessVerdict
+    from core.delegated_flow_readiness_gate import get_readiness_gate as _get_readiness_gate  # type: ignore[import]
+
     _READINESS_AVAILABLE = True
 except Exception as exc:
     logger.debug("Fallback triggered: %s", exc)
@@ -866,8 +859,7 @@ class DelegatedFlowAcceptanceGate:
                 dimension=dimension,
                 status=DimensionEvidenceStatus.unknown,
                 gap_description=(
-                    f"Error evaluating continuity / replay evidence: {exc}.  "
-                    "Cannot assess this dimension."
+                    f"Error evaluating continuity / replay evidence: {exc}.  " "Cannot assess this dimension."
                 ),
                 signal_source=signal_source,
             )
@@ -897,9 +889,9 @@ class DelegatedFlowAcceptanceGate:
 
             total_artifacts = evidence.get("total_artifacts", 0)
             decision_counts = evidence.get("decision_counts", {})
-            block_count = decision_counts.get(
-                "block_due_to_compat_influence", 0
-            ) + decision_counts.get("reject_due_to_canonical_terminal", 0)
+            block_count = decision_counts.get("block_due_to_compat_influence", 0) + decision_counts.get(
+                "reject_due_to_canonical_terminal", 0
+            )
             conflict_count = decision_counts.get("quarantine_due_to_posture_conflict", 0)
 
             if total_artifacts == 0:
@@ -960,8 +952,7 @@ class DelegatedFlowAcceptanceGate:
                 dimension=dimension,
                 status=DimensionEvidenceStatus.unknown,
                 gap_description=(
-                    f"Error evaluating truth ownership evidence: {exc}.  "
-                    "Cannot assess this dimension."
+                    f"Error evaluating truth ownership evidence: {exc}.  " "Cannot assess this dimension."
                 ),
                 signal_source=signal_source,
             )
@@ -1035,8 +1026,7 @@ class DelegatedFlowAcceptanceGate:
                 dimension=dimension,
                 status=DimensionEvidenceStatus.unknown,
                 gap_description=(
-                    f"Error evaluating result convergence evidence: {exc}.  "
-                    "Cannot assess this dimension."
+                    f"Error evaluating result convergence evidence: {exc}.  " "Cannot assess this dimension."
                 ),
                 signal_source=signal_source,
             )
@@ -1111,8 +1101,7 @@ class DelegatedFlowAcceptanceGate:
                 dimension=dimension,
                 status=DimensionEvidenceStatus.unknown,
                 gap_description=(
-                    f"Error evaluating operator visibility evidence: {exc}.  "
-                    "Cannot assess this dimension."
+                    f"Error evaluating operator visibility evidence: {exc}.  " "Cannot assess this dimension."
                 ),
                 signal_source=signal_source,
             )
@@ -1202,10 +1191,7 @@ class DelegatedFlowAcceptanceGate:
             return DimensionEvidenceResult(
                 dimension=dimension,
                 status=DimensionEvidenceStatus.unknown,
-                gap_description=(
-                    f"Error evaluating compat bypass evidence: {exc}.  "
-                    "Cannot assess this dimension."
-                ),
+                gap_description=(f"Error evaluating compat bypass evidence: {exc}.  " "Cannot assess this dimension."),
                 signal_source=signal_source,
             )
 
@@ -1288,8 +1274,7 @@ class DelegatedFlowAcceptanceGate:
                     dimension=dimension,
                     status=DimensionEvidenceStatus.unknown,
                     gap_description=(
-                        f"Error evaluating readiness prerequisite: {exc}.  "
-                        "Cannot assess this dimension."
+                        f"Error evaluating readiness prerequisite: {exc}.  " "Cannot assess this dimension."
                     ),
                     signal_source=signal_source,
                 ),
@@ -1382,10 +1367,7 @@ class DelegatedFlowAcceptanceGate:
     ) -> str:
         """Build a one-line human-readable summary."""
         if verdict == DelegatedFlowAcceptanceVerdict.accepted_for_graduation:
-            return (
-                "Delegated canonical path ACCEPTED FOR GRADUATION: all six "
-                "acceptance evidence dimensions passed."
-            )
+            return "Delegated canonical path ACCEPTED FOR GRADUATION: all six " "acceptance evidence dimensions passed."
         gap_dims = [g["dimension"] for g in evidence_gaps]
         return (
             f"Delegated canonical path NOT ACCEPTED: "
@@ -1403,6 +1385,7 @@ _DEFAULT_GATE_LOCK = None
 
 try:
     import threading as _threading
+
     _DEFAULT_GATE_LOCK = _threading.Lock()
 except Exception as exc:
     logger.debug("Suppressed: %s", exc)

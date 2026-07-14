@@ -38,8 +38,8 @@ R.  Runtime behavior stability: Android concrete session lifecycle functions
 
 from __future__ import annotations
 
-import sys
 import os
+import sys
 
 import pytest
 
@@ -51,33 +51,28 @@ if _PROJECT_ROOT not in sys.path:
 # Import the module under test
 # ---------------------------------------------------------------------------
 
-from core.participant_authority_interfaces import (
-    # Authority sentinels
+import core.participant_authority_interfaces as _mod
+from core.participant_authority_interfaces import (  # Authority sentinels; Policy sentinels; Enumerations; Registry
+    ANDROID_CONCRETE_MUST_NOT_BE_REMOVED_POLICY,
+    ANDROID_IS_CONCRETE_PARTICIPANT_IMPLEMENTATION_SENTINEL,
     PARTICIPANT_AUTHORITY_INTERFACES_SENTINEL,
     PARTICIPANT_AUTHORITY_PR8_SENTINEL,
-    ANDROID_IS_CONCRETE_PARTICIPANT_IMPLEMENTATION_SENTINEL,
-    # Policy sentinels
-    PARTICIPANT_GENERIC_LAYER_IS_ABOVE_ANDROID_CONCRETE_POLICY,
-    ANDROID_CONCRETE_MUST_NOT_BE_REMOVED_POLICY,
+    PARTICIPANT_AVAILABILITY_IS_PARTICIPANT_GENERIC_POLICY,
+    PARTICIPANT_CONCRETE_IMPLEMENTATION_REGISTRY,
     PARTICIPANT_DISPATCH_AUTHORITY_IS_PARTICIPANT_GENERIC_POLICY,
+    PARTICIPANT_GENERIC_LAYER_IS_ABOVE_ANDROID_CONCRETE_POLICY,
+    PARTICIPANT_ORCHESTRATION_BOUNDARY_IS_PARTICIPANT_GENERIC_POLICY,
     PARTICIPANT_RESULT_INGRESS_IS_PARTICIPANT_GENERIC_POLICY,
     PARTICIPANT_SESSION_LEGALITY_IS_PARTICIPANT_GENERIC_POLICY,
-    PARTICIPANT_AVAILABILITY_IS_PARTICIPANT_GENERIC_POLICY,
-    PARTICIPANT_ORCHESTRATION_BOUNDARY_IS_PARTICIPANT_GENERIC_POLICY,
     WRONG_LAYER_ANDROID_NAMING_MUST_BE_LIFTED_POLICY,
-    # Enumerations
+    ParticipantAvailabilityStatus,
+    ParticipantDispatchBindingSignal,
+    ParticipantDispatchBindingState,
+    ParticipantResultKind,
     ParticipantSessionPhase,
     ParticipantSessionSignal,
-    ParticipantDispatchBindingState,
-    ParticipantDispatchBindingSignal,
-    ParticipantAvailabilityStatus,
-    ParticipantResultKind,
-    # Registry
-    PARTICIPANT_CONCRETE_IMPLEMENTATION_REGISTRY,
     get_concrete_implementation_for,
 )
-import core.participant_authority_interfaces as _mod
-
 
 # ===========================================================================
 # A. Module import and sentinel presence
@@ -220,16 +215,10 @@ class TestParticipantSessionSignal:
             assert ParticipantSessionSignal(v) is not None
 
     def test_from_string_known(self):
-        assert (
-            ParticipantSessionSignal.from_string("result_success")
-            == ParticipantSessionSignal.result_success
-        )
+        assert ParticipantSessionSignal.from_string("result_success") == ParticipantSessionSignal.result_success
 
     def test_from_string_unknown_defaults(self):
-        assert (
-            ParticipantSessionSignal.from_string("no_such_signal")
-            == ParticipantSessionSignal.execution_progressed
-        )
+        assert ParticipantSessionSignal.from_string("no_such_signal") == ParticipantSessionSignal.execution_progressed
 
     def test_is_str_subclass(self):
         assert isinstance(ParticipantSessionSignal.result_failure, str)
@@ -255,16 +244,10 @@ class TestParticipantDispatchBindingState:
             assert not s.is_terminal()
 
     def test_from_string_known(self):
-        assert (
-            ParticipantDispatchBindingState.from_string("bound")
-            == ParticipantDispatchBindingState.bound
-        )
+        assert ParticipantDispatchBindingState.from_string("bound") == ParticipantDispatchBindingState.bound
 
     def test_from_string_unknown_defaults_to_unbound(self):
-        assert (
-            ParticipantDispatchBindingState.from_string("xyz")
-            == ParticipantDispatchBindingState.unbound
-        )
+        assert ParticipantDispatchBindingState.from_string("xyz") == ParticipantDispatchBindingState.unbound
 
 
 # ===========================================================================
@@ -278,16 +261,10 @@ class TestParticipantDispatchBindingSignal:
             assert ParticipantDispatchBindingSignal(v) is not None
 
     def test_from_string_known(self):
-        assert (
-            ParticipantDispatchBindingSignal.from_string("release")
-            == ParticipantDispatchBindingSignal.release
-        )
+        assert ParticipantDispatchBindingSignal.from_string("release") == ParticipantDispatchBindingSignal.release
 
     def test_from_string_unknown_defaults_to_bind(self):
-        assert (
-            ParticipantDispatchBindingSignal.from_string("no_such")
-            == ParticipantDispatchBindingSignal.bind
-        )
+        assert ParticipantDispatchBindingSignal.from_string("no_such") == ParticipantDispatchBindingSignal.bind
 
 
 # ===========================================================================
@@ -298,8 +275,14 @@ class TestParticipantDispatchBindingSignal:
 class TestParticipantAvailabilityStatus:
     def test_all_expected_values_present(self):
         for v in [
-            "ready", "degraded", "unavailable", "recovered",
-            "missing_evidence", "malformed_evidence", "stale_evidence", "unverified",
+            "ready",
+            "degraded",
+            "unavailable",
+            "recovered",
+            "missing_evidence",
+            "malformed_evidence",
+            "stale_evidence",
+            "unverified",
         ]:
             assert ParticipantAvailabilityStatus(v) is not None
 
@@ -324,16 +307,10 @@ class TestParticipantAvailabilityStatus:
             assert not ParticipantAvailabilityStatus(v).is_evidence_gap()
 
     def test_from_string_known(self):
-        assert (
-            ParticipantAvailabilityStatus.from_string("degraded")
-            == ParticipantAvailabilityStatus.degraded
-        )
+        assert ParticipantAvailabilityStatus.from_string("degraded") == ParticipantAvailabilityStatus.degraded
 
     def test_from_string_unknown_defaults_to_missing_evidence(self):
-        assert (
-            ParticipantAvailabilityStatus.from_string("not_known")
-            == ParticipantAvailabilityStatus.missing_evidence
-        )
+        assert ParticipantAvailabilityStatus.from_string("not_known") == ParticipantAvailabilityStatus.missing_evidence
 
     def test_from_string_non_str_defaults(self):
         assert (
@@ -350,9 +327,17 @@ class TestParticipantAvailabilityStatus:
 class TestParticipantResultKind:
     def test_all_expected_values_present(self):
         for v in [
-            "session_snapshot", "readiness_assessment", "task_phase",
-            "runtime_state", "cancel", "status", "failure", "result",
-            "reconciliation_signal", "governance_artifact", "unknown",
+            "session_snapshot",
+            "readiness_assessment",
+            "task_phase",
+            "runtime_state",
+            "cancel",
+            "status",
+            "failure",
+            "result",
+            "reconciliation_signal",
+            "governance_artifact",
+            "unknown",
         ]:
             assert ParticipantResultKind(v) is not None
 
@@ -361,13 +346,27 @@ class TestParticipantResultKind:
             assert ParticipantResultKind(v).is_terminal_signal()
 
     def test_non_terminal_signal_kinds(self):
-        for v in ["session_snapshot", "readiness_assessment", "task_phase",
-                  "runtime_state", "status", "governance_artifact", "unknown"]:
+        for v in [
+            "session_snapshot",
+            "readiness_assessment",
+            "task_phase",
+            "runtime_state",
+            "status",
+            "governance_artifact",
+            "unknown",
+        ]:
             assert not ParticipantResultKind(v).is_terminal_signal()
 
     def test_affects_canonical_state_kinds(self):
-        for v in ["cancel", "failure", "result", "status", "task_phase",
-                  "reconciliation_signal", "governance_artifact"]:
+        for v in [
+            "cancel",
+            "failure",
+            "result",
+            "status",
+            "task_phase",
+            "reconciliation_signal",
+            "governance_artifact",
+        ]:
             assert ParticipantResultKind(v).affects_canonical_state()
 
     def test_does_not_affect_canonical_state(self):
@@ -375,16 +374,10 @@ class TestParticipantResultKind:
             assert not ParticipantResultKind(v).affects_canonical_state()
 
     def test_from_string_known(self):
-        assert (
-            ParticipantResultKind.from_string("cancel")
-            == ParticipantResultKind.cancel
-        )
+        assert ParticipantResultKind.from_string("cancel") == ParticipantResultKind.cancel
 
     def test_from_string_unknown_defaults_to_unknown(self):
-        assert (
-            ParticipantResultKind.from_string("xyz")
-            == ParticipantResultKind.unknown
-        )
+        assert ParticipantResultKind.from_string("xyz") == ParticipantResultKind.unknown
 
 
 # ===========================================================================
@@ -406,29 +399,23 @@ class TestConcreteImplementationRegistry:
 
     def test_all_surfaces_registered(self):
         for surface in self._EXPECTED_SURFACES:
-            assert surface in PARTICIPANT_CONCRETE_IMPLEMENTATION_REGISTRY, (
-                f"Surface {surface!r} missing from registry"
-            )
+            assert surface in PARTICIPANT_CONCRETE_IMPLEMENTATION_REGISTRY, f"Surface {surface!r} missing from registry"
 
     def test_each_entry_has_required_keys(self):
         for surface, entry in PARTICIPANT_CONCRETE_IMPLEMENTATION_REGISTRY.items():
             for key in self._REQUIRED_KEYS:
-                assert key in entry, (
-                    f"Entry {surface!r} missing required key {key!r}"
-                )
+                assert key in entry, f"Entry {surface!r} missing required key {key!r}"
 
     def test_all_platforms_are_android(self):
         for surface, entry in PARTICIPANT_CONCRETE_IMPLEMENTATION_REGISTRY.items():
-            assert entry["platform"] == "android", (
-                f"Surface {surface!r} platform should be 'android', got {entry['platform']!r}"
-            )
+            assert (
+                entry["platform"] == "android"
+            ), f"Surface {surface!r} platform should be 'android', got {entry['platform']!r}"
 
     def test_concrete_modules_are_android_prefixed(self):
         for surface, entry in PARTICIPANT_CONCRETE_IMPLEMENTATION_REGISTRY.items():
             module = entry["concrete_module"]
-            assert "android" in module, (
-                f"Surface {surface!r} concrete_module {module!r} should reference android"
-            )
+            assert "android" in module, f"Surface {surface!r} concrete_module {module!r} should reference android"
 
 
 # ===========================================================================
@@ -553,8 +540,14 @@ class TestAvailabilityAlignmentWithAndroid:
         """Every AndroidParticipantStatus value has a ParticipantAvailabilityStatus
         equivalent (same string value for all but the evidence-gap states)."""
         android_values = [
-            "ready", "degraded", "unavailable", "recovered",
-            "missing_evidence", "malformed_evidence", "stale_evidence", "unverified",
+            "ready",
+            "degraded",
+            "unavailable",
+            "recovered",
+            "missing_evidence",
+            "malformed_evidence",
+            "stale_evidence",
+            "unverified",
         ]
         for v in android_values:
             status = ParticipantAvailabilityStatus(v)
@@ -578,9 +571,17 @@ class TestResultKindAlignmentWithAndroid:
         """Every AndroidParticipantTruthKind value has a ParticipantResultKind
         equivalent (identical string values)."""
         android_values = [
-            "session_snapshot", "readiness_assessment", "task_phase",
-            "runtime_state", "cancel", "status", "failure", "result",
-            "reconciliation_signal", "governance_artifact", "unknown",
+            "session_snapshot",
+            "readiness_assessment",
+            "task_phase",
+            "runtime_state",
+            "cancel",
+            "status",
+            "failure",
+            "result",
+            "reconciliation_signal",
+            "governance_artifact",
+            "unknown",
         ]
         for v in android_values:
             kind = ParticipantResultKind(v)
@@ -623,6 +624,7 @@ class TestArchitectureDeclarations:
         from core.android_participant_session_state import (
             ANDROID_PARTICIPANT_SESSION_STATE_AUTHORITY,
         )
+
         sentinel = ANDROID_PARTICIPANT_SESSION_STATE_AUTHORITY
         assert "participant_authority_interfaces" in sentinel or "PR-8" in sentinel, (
             "android_participant_session_state authority sentinel should reference "
@@ -633,6 +635,7 @@ class TestArchitectureDeclarations:
         from core.android_runtime_dispatch_binding import (
             ANDROID_RUNTIME_DISPATCH_BINDING_AUTHORITY,
         )
+
         sentinel = ANDROID_RUNTIME_DISPATCH_BINDING_AUTHORITY
         assert "participant_authority_interfaces" in sentinel or "PR-8" in sentinel, (
             "android_runtime_dispatch_binding authority sentinel should reference "
@@ -643,6 +646,7 @@ class TestArchitectureDeclarations:
         from core.android_participant_truth_ingress import (
             ANDROID_PARTICIPANT_TRUTH_INGRESS_AUTHORITY,
         )
+
         sentinel = ANDROID_PARTICIPANT_TRUTH_INGRESS_AUTHORITY
         assert "participant_authority_interfaces" in sentinel or "PR-8" in sentinel, (
             "android_participant_truth_ingress authority sentinel should reference "
@@ -653,6 +657,7 @@ class TestArchitectureDeclarations:
         from core.android_participant_evidence_ingress import (
             ANDROID_PARTICIPANT_EVIDENCE_INGRESS_AUTHORITY,
         )
+
         sentinel = ANDROID_PARTICIPANT_EVIDENCE_INGRESS_AUTHORITY
         assert "participant_authority_interfaces" in sentinel or "PR-8" in sentinel, (
             "android_participant_evidence_ingress authority sentinel should reference "
@@ -663,16 +668,22 @@ class TestArchitectureDeclarations:
         from core.android_participant_session_state import (
             ANDROID_PARTICIPANT_SESSION_STATE_AUTHORITY,
         )
-        assert "concrete" in ANDROID_PARTICIPANT_SESSION_STATE_AUTHORITY.lower() or \
-               "Android" in ANDROID_PARTICIPANT_SESSION_STATE_AUTHORITY or \
-               "android" in ANDROID_PARTICIPANT_SESSION_STATE_AUTHORITY.lower()
+
+        assert (
+            "concrete" in ANDROID_PARTICIPANT_SESSION_STATE_AUTHORITY.lower()
+            or "Android" in ANDROID_PARTICIPANT_SESSION_STATE_AUTHORITY
+            or "android" in ANDROID_PARTICIPANT_SESSION_STATE_AUTHORITY.lower()
+        )
 
     def test_dispatch_binding_authority_sentinel_is_concrete_android(self):
         from core.android_runtime_dispatch_binding import (
             ANDROID_RUNTIME_DISPATCH_BINDING_AUTHORITY,
         )
-        assert "concrete" in ANDROID_RUNTIME_DISPATCH_BINDING_AUTHORITY.lower() or \
-               "android" in ANDROID_RUNTIME_DISPATCH_BINDING_AUTHORITY.lower()
+
+        assert (
+            "concrete" in ANDROID_RUNTIME_DISPATCH_BINDING_AUTHORITY.lower()
+            or "android" in ANDROID_RUNTIME_DISPATCH_BINDING_AUTHORITY.lower()
+        )
 
 
 # ===========================================================================
@@ -720,10 +731,11 @@ class TestRuntimeBehaviorStability:
 
     def test_create_participant_session_record_returns_record(self):
         from core.android_participant_session_state import (
-            create_participant_session_record,
-            AndroidParticipantSessionRecord,
             AndroidParticipantSessionPhase,
+            AndroidParticipantSessionRecord,
+            create_participant_session_record,
         )
+
         record = create_participant_session_record(
             session_id="test-session-pr8",
             device_id="test-device-pr8",
@@ -734,16 +746,15 @@ class TestRuntimeBehaviorStability:
 
     def test_advance_participant_session_produces_new_record(self):
         from core.android_participant_session_state import (
-            create_participant_session_record,
-            advance_participant_session,
-            AndroidParticipantSessionRecord,
             AndroidParticipantSessionPhase,
+            AndroidParticipantSessionRecord,
             AndroidParticipantSessionSignal,
+            advance_participant_session,
+            create_participant_session_record,
         )
+
         record = create_participant_session_record(session_id="adv-test-pr8")
-        advanced = advance_participant_session(
-            record, AndroidParticipantSessionSignal.handoff_dispatched
-        )
+        advanced = advance_participant_session(record, AndroidParticipantSessionSignal.handoff_dispatched)
         assert isinstance(advanced, AndroidParticipantSessionRecord)
         assert advanced.phase == AndroidParticipantSessionPhase.handoff_dispatched
         # Original record is unchanged (immutable)
@@ -751,11 +762,12 @@ class TestRuntimeBehaviorStability:
 
     def test_terminal_android_phase_is_absorbing(self):
         from core.android_participant_session_state import (
-            create_participant_session_record,
-            advance_participant_session,
             AndroidParticipantSessionPhase,
             AndroidParticipantSessionSignal,
+            advance_participant_session,
+            create_participant_session_record,
         )
+
         record = create_participant_session_record(session_id="term-test-pr8")
         # Drive to terminal
         r1 = advance_participant_session(record, AndroidParticipantSessionSignal.handoff_dispatched)
@@ -784,8 +796,7 @@ class TestRuntimeBehaviorStability:
 
         for status in AndroidParticipantStatus:
             generic = ParticipantAvailabilityStatus.from_string(status.value)
-            assert generic != ParticipantAvailabilityStatus.missing_evidence or \
-                status.value == "missing_evidence", (
+            assert generic != ParticipantAvailabilityStatus.missing_evidence or status.value == "missing_evidence", (
                 f"AndroidParticipantStatus.{status.name} ({status.value!r}) should map "
                 f"to a known ParticipantAvailabilityStatus"
             )

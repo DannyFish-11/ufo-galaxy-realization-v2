@@ -132,7 +132,6 @@ from core.attached_runtime_reuse_binding import (
     reset_reuse_binding_runtime,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -363,15 +362,11 @@ class TestGroupD_Identity:
         uuid.UUID(ident.trace_id)
 
     def test_D03_override_reuse_binding_id(self):
-        ident = AttachedRuntimeReuseBindingIdentity(
-            session_id="s", device_id="d", reuse_binding_id="my-id"
-        )
+        ident = AttachedRuntimeReuseBindingIdentity(session_id="s", device_id="d", reuse_binding_id="my-id")
         assert ident.reuse_binding_id == "my-id"
 
     def test_D04_override_trace_id(self):
-        ident = AttachedRuntimeReuseBindingIdentity(
-            session_id="s", device_id="d", trace_id="my-trace"
-        )
+        ident = AttachedRuntimeReuseBindingIdentity(session_id="s", device_id="d", trace_id="my-trace")
         assert ident.trace_id == "my-trace"
 
     def test_D05_to_dict_keys(self):
@@ -446,9 +441,7 @@ class TestGroupE_Record:
 
     def test_E06_has_dispatch_binding_true(self):
         ident = AttachedRuntimeReuseBindingIdentity(session_id="s", device_id="d")
-        rec = AttachedRuntimeReuseBindingRecord(
-            identity=ident, dispatch_binding_id="dbid-1"
-        )
+        rec = AttachedRuntimeReuseBindingRecord(identity=ident, dispatch_binding_id="dbid-1")
         assert rec.has_dispatch_binding() is True
 
     def test_E07_to_dict_contains_expected_keys(self):
@@ -647,7 +640,8 @@ class TestGroupK_BadPosture:
     def test_K01_control_only_ineligible(self):
         rt = _fresh_rt()
         rec = establish_reuse_binding(
-            session_id="s1", device_id="d1",
+            session_id="s1",
+            device_id="d1",
             source_runtime_posture="control_only",
             runtime=rt,
         )
@@ -657,7 +651,8 @@ class TestGroupK_BadPosture:
     def test_K02_arbitrary_posture_ineligible(self):
         rt = _fresh_rt()
         rec = establish_reuse_binding(
-            session_id="s1", device_id="d1",
+            session_id="s1",
+            device_id="d1",
             source_runtime_posture="observer_only",
             runtime=rt,
         )
@@ -678,7 +673,8 @@ class TestGroupLT_EstablishParams:
     def test_M01_reuse_binding_id_override(self):
         rt = _fresh_rt()
         rec = establish_reuse_binding(
-            session_id="s1", device_id="d1",
+            session_id="s1",
+            device_id="d1",
             reuse_binding_id="fixed-id",
             runtime=rt,
         )
@@ -692,7 +688,8 @@ class TestGroupLT_EstablishParams:
     def test_O01_coordination_role_forwarded(self):
         rt = _fresh_rt()
         rec = establish_reuse_binding(
-            session_id="s1", device_id="d1",
+            session_id="s1",
+            device_id="d1",
             coordination_role="source_controller",
             runtime=rt,
         )
@@ -701,7 +698,8 @@ class TestGroupLT_EstablishParams:
     def test_P01_android_host_role_forwarded(self):
         rt = _fresh_rt()
         rec = establish_reuse_binding(
-            session_id="s1", device_id="d1",
+            session_id="s1",
+            device_id="d1",
             android_host_role="PARTIAL_RUNTIME_HOST",
             runtime=rt,
         )
@@ -710,7 +708,8 @@ class TestGroupLT_EstablishParams:
     def test_Q01_capability_tier_forwarded(self):
         rt = _fresh_rt()
         rec = establish_reuse_binding(
-            session_id="s1", device_id="d1",
+            session_id="s1",
+            device_id="d1",
             capability_tier="partial_runtime",
             runtime=rt,
         )
@@ -731,7 +730,8 @@ class TestGroupLT_EstablishParams:
     def test_T01_metadata_stored(self):
         rt = _fresh_rt()
         rec = establish_reuse_binding(
-            session_id="s1", device_id="d1",
+            session_id="s1",
+            device_id="d1",
             metadata={"key": "value"},
             runtime=rt,
         )
@@ -995,6 +995,7 @@ class TestGroupAY_RuntimeReExports:
     def test_AY01_all_pr14_symbols_from_core_runtime(self):
         pytest.importorskip("pydantic")
         import core.runtime as cr
+
         symbols = [
             "ATTACHED_RUNTIME_REUSE_BINDING_AUTHORITY",
             "REUSE_BINDING_REQUIRES_ATTACHED_SESSION_POLICY",
@@ -1038,6 +1039,7 @@ class TestGroupAZ_ProjectionSentinel:
     def test_AZ01_sentinel_present_and_not_unavailable(self):
         pytest.importorskip("fastapi")
         from core.routes.projection import ATTACHED_RUNTIME_REUSE_BINDING_ALIGNED_PR14
+
         assert ATTACHED_RUNTIME_REUSE_BINDING_ALIGNED_PR14
         assert "UNAVAILABLE" not in ATTACHED_RUNTIME_REUSE_BINDING_ALIGNED_PR14
 
@@ -1073,10 +1075,19 @@ class TestGroupBC_Serialisation:
         rec = _eligible_binding()
         d = rec.to_dict()
         expected_keys = {
-            "identity", "reuse_eligibility_status", "invalidation_reason",
-            "source_runtime_posture", "coordination_role", "android_host_role",
-            "capability_tier", "dispatch_binding_id", "is_session_anchored",
-            "is_device_bound", "established_at", "invalidated_at", "metadata",
+            "identity",
+            "reuse_eligibility_status",
+            "invalidation_reason",
+            "source_runtime_posture",
+            "coordination_role",
+            "android_host_role",
+            "capability_tier",
+            "dispatch_binding_id",
+            "is_session_anchored",
+            "is_device_bound",
+            "established_at",
+            "invalidated_at",
+            "metadata",
         }
         assert expected_keys == set(d.keys())
 
@@ -1098,6 +1109,7 @@ class TestGroupBE_Misc:
 
     def test_BF01_all_10_policy_sentinels_non_empty(self):
         from core.attached_runtime_reuse_binding import _ALL_POLICY_SENTINELS
+
         assert len(_ALL_POLICY_SENTINELS) == 10
         for s in _ALL_POLICY_SENTINELS:
             assert isinstance(s, str)
@@ -1220,8 +1232,12 @@ class TestGroupBK_Additional:
         assert ReuseInvalidationReason.from_string("zzz") == ReuseInvalidationReason.none
 
     def test_BW01_is_lifecycle_invalidation_only_for_lifecycle_signals(self):
-        lifecycle = {ReuseInvalidationReason.detach, ReuseInvalidationReason.disconnect,
-                     ReuseInvalidationReason.disable, ReuseInvalidationReason.invalidate}
+        lifecycle = {
+            ReuseInvalidationReason.detach,
+            ReuseInvalidationReason.disconnect,
+            ReuseInvalidationReason.disable,
+            ReuseInvalidationReason.invalidate,
+        }
         for r in ReuseInvalidationReason:
             if r in lifecycle:
                 assert r.is_lifecycle_invalidation() is True
@@ -1241,7 +1257,8 @@ class TestGroupBK_Additional:
         """An empty string posture should default to join_runtime (eligible)."""
         rt = _fresh_rt()
         rec = establish_reuse_binding(
-            session_id="s1", device_id="d1",
+            session_id="s1",
+            device_id="d1",
             source_runtime_posture="",  # empty → defaults to join_runtime
             runtime=rt,
         )

@@ -62,13 +62,13 @@ CONFIG_SERVICE_AUTHORITY: str = "ConfigService"
 # ---------------------------------------------------------------------------
 
 _PROVIDER_KEY_MAP: Dict[str, str] = {
-    "openai":     "OPENAI_API_KEY",
-    "anthropic":  "ANTHROPIC_API_KEY",
-    "gemini":     "GEMINI_API_KEY",
-    "deepseek":   "DEEPSEEK_API_KEY",
-    "groq":       "GROQ_API_KEY",
+    "openai": "OPENAI_API_KEY",
+    "anthropic": "ANTHROPIC_API_KEY",
+    "gemini": "GEMINI_API_KEY",
+    "deepseek": "DEEPSEEK_API_KEY",
+    "groq": "GROQ_API_KEY",
     "openrouter": "OPENROUTER_API_KEY",
-    "oneapi":     "ONEAPI_API_KEY",
+    "oneapi": "ONEAPI_API_KEY",
 }
 
 # ---------------------------------------------------------------------------
@@ -79,6 +79,7 @@ _PROVIDER_KEY_MAP: Dict[str, str] = {
 @dataclass
 class ProviderStatus:
     """Status of a single provider from the configuration service perspective."""
+
     provider_id: str
     enabled: bool
     has_key: bool
@@ -117,6 +118,7 @@ class ConfigValidationResult:
     warnings:
         Non-blocking issues (warnings from preflight or logic checks).
     """
+
     ok: bool = True
     missing_secrets: List[str] = field(default_factory=list)
     invalid_values: Dict[str, str] = field(default_factory=dict)
@@ -138,6 +140,7 @@ class ConfigValidationResult:
 # ---------------------------------------------------------------------------
 # Service
 # ---------------------------------------------------------------------------
+
 
 class ConfigService:
     """
@@ -189,10 +192,7 @@ class ConfigService:
         """
         provider = provider.lower().strip()
         if provider not in VALID_PROVIDERS:
-            raise ValueError(
-                f"Unknown provider '{provider}'. "
-                f"Valid providers: {sorted(VALID_PROVIDERS)}"
-            )
+            raise ValueError(f"Unknown provider '{provider}'. " f"Valid providers: {sorted(VALID_PROVIDERS)}")
         env_key = _PROVIDER_KEY_MAP.get(provider)
         if not env_key:
             raise ValueError(f"No API key mapping defined for provider '{provider}'.")
@@ -249,10 +249,7 @@ class ConfigService:
         """
         provider = provider.lower().strip()
         if provider not in VALID_PROVIDERS:
-            raise ValueError(
-                f"Unknown provider '{provider}'. "
-                f"Valid providers: {sorted(VALID_PROVIDERS)}"
-            )
+            raise ValueError(f"Unknown provider '{provider}'. " f"Valid providers: {sorted(VALID_PROVIDERS)}")
         config = self._store.read_config()
         providers = config.get("providers", {})
         if not isinstance(providers, dict):
@@ -277,8 +274,7 @@ class ConfigService:
         mode = mode.strip()
         if mode not in VALID_NATIVE_MM_POLICIES:
             raise ValueError(
-                f"Invalid native_multimodal_policy '{mode}'. "
-                f"Valid values: {sorted(VALID_NATIVE_MM_POLICIES)}"
+                f"Invalid native_multimodal_policy '{mode}'. " f"Valid values: {sorted(VALID_NATIVE_MM_POLICIES)}"
             )
         config = self._store.read_config()
         routing = config.get("routing", {})
@@ -294,11 +290,11 @@ class ConfigService:
     # ------------------------------------------------------------------
 
     _NETWORK_URL_KEYS: Dict[str, str] = {
-        "gateway_url":         "network.gateway_url",
+        "gateway_url": "network.gateway_url",
         "android_gateway_url": "network.android_gateway_url",
-        "nats_url":            "network.nats_url",
-        "ats_url":             "network.ats_url",
-        "webrtc_stun_url":     "network.webrtc_stun_url",
+        "nats_url": "network.nats_url",
+        "ats_url": "network.ats_url",
+        "webrtc_stun_url": "network.webrtc_stun_url",
     }
 
     def set_network_url(self, url_key: str, url_value: str) -> None:
@@ -318,10 +314,7 @@ class ConfigService:
         """
         url_key = url_key.strip()
         if url_key not in self._NETWORK_URL_KEYS:
-            raise ValueError(
-                f"Unknown network URL key '{url_key}'. "
-                f"Valid keys: {sorted(self._NETWORK_URL_KEYS)}"
-            )
+            raise ValueError(f"Unknown network URL key '{url_key}'. " f"Valid keys: {sorted(self._NETWORK_URL_KEYS)}")
         if not url_value or not url_value.strip():
             raise ValueError(f"URL value for '{url_key}' must be non-empty.")
         config = self._store.read_config()
@@ -347,10 +340,7 @@ class ConfigService:
         """
         url_key = url_key.strip()
         if url_key not in self._NETWORK_URL_KEYS:
-            raise ValueError(
-                f"Unknown network URL key '{url_key}'. "
-                f"Valid keys: {sorted(self._NETWORK_URL_KEYS)}"
-            )
+            raise ValueError(f"Unknown network URL key '{url_key}'. " f"Valid keys: {sorted(self._NETWORK_URL_KEYS)}")
         config = self._store.read_config()
         network = config.get("network", {})
         if not isinstance(network, dict):
@@ -377,8 +367,7 @@ class ConfigService:
         mode = mode.strip()
         if mode not in VALID_ANDROID_INFERENCE_MODES:
             raise ValueError(
-                f"Invalid android inference mode '{mode}'. "
-                f"Valid values: {sorted(VALID_ANDROID_INFERENCE_MODES)}"
+                f"Invalid android inference mode '{mode}'. " f"Valid values: {sorted(VALID_ANDROID_INFERENCE_MODES)}"
             )
         config = self._store.read_config()
         android = config.get("android", {})
@@ -451,9 +440,7 @@ class ConfigService:
                 if "ONEAPI_API_KEY" not in result.missing_secrets:
                     result.missing_secrets.append("ONEAPI_API_KEY")
             if not oneapi_base_url:
-                result.invalid_values["providers.oneapi.base_url"] = (
-                    "OneAPI is enabled but base_url is empty."
-                )
+                result.invalid_values["providers.oneapi.base_url"] = "OneAPI is enabled but base_url is empty."
         else:
             result.oneapi_state = "absent"
 
@@ -461,8 +448,7 @@ class ConfigService:
         policy = routing_cfg.get("native_multimodal_policy", "")
         if policy and policy not in VALID_NATIVE_MM_POLICIES:
             result.invalid_values["routing.native_multimodal_policy"] = (
-                f"Invalid value '{policy}'. "
-                f"Expected one of: {sorted(VALID_NATIVE_MM_POLICIES)}"
+                f"Invalid value '{policy}'. " f"Expected one of: {sorted(VALID_NATIVE_MM_POLICIES)}"
             )
 
         # ── Network URL warnings ──────────────────────────────────────
@@ -487,10 +473,7 @@ class ConfigService:
             )
 
         # ── Summary ──────────────────────────────────────────────────
-        result.ok = (
-            len(result.missing_secrets) == 0
-            and len(result.invalid_values) == 0
-        )
+        result.ok = len(result.missing_secrets) == 0 and len(result.invalid_values) == 0
         return result
 
     def describe_missing(self) -> str:
@@ -509,20 +492,12 @@ class ConfigService:
             lines.append("Invalid config values:")
             for k, msg in v.invalid_values.items():
                 lines.append(f"  • {k}: {msg}")
-        disabled = [
-            p.provider_id for p in v.provider_statuses
-            if not p.enabled
-        ]
+        disabled = [p.provider_id for p in v.provider_statuses if not p.enabled]
         if disabled:
             lines.append(f"Disabled providers: {', '.join(disabled)}")
-        unavailable = [
-            p.provider_id for p in v.provider_statuses
-            if p.enabled and not p.has_key
-        ]
+        unavailable = [p.provider_id for p in v.provider_statuses if p.enabled and not p.has_key]
         if unavailable:
-            lines.append(
-                f"Enabled but key missing: {', '.join(unavailable)}"
-            )
+            lines.append(f"Enabled but key missing: {', '.join(unavailable)}")
         lines.append(f"OneAPI state: {v.oneapi_state}")
         if not lines:
             return "Configuration OK — all enabled providers have keys."

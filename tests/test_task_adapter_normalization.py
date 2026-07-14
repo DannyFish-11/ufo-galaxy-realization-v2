@@ -40,6 +40,13 @@ from __future__ import annotations
 
 import pytest
 
+import core.task_adapter as _mod
+from core.canonical_task import (
+    CanonicalTask,
+    TaskOrigin,
+    build_canonical_task,
+    reset_canonical_task_runtime,
+)
 from core.task_adapter import (
     TASK_ADAPTER_AUTHORITY,
     TASK_ADAPTER_NORMALIZATION_POLICY,
@@ -49,18 +56,11 @@ from core.task_adapter import (
     get_adaptation_log,
     reset_adaptation_log,
 )
-from core.canonical_task import (
-    CanonicalTask,
-    TaskOrigin,
-    build_canonical_task,
-    reset_canonical_task_runtime,
-)
-import core.task_adapter as _mod
-
 
 # ===========================================================================
 # Fixtures
 # ===========================================================================
+
 
 @pytest.fixture(autouse=True)
 def reset_state():
@@ -74,6 +74,7 @@ def reset_state():
 # ===========================================================================
 # A) Authority sentinels
 # ===========================================================================
+
 
 def test_A1_authority_importable():
     assert TASK_ADAPTER_AUTHORITY is not None
@@ -96,6 +97,7 @@ def test_A4_policy_mentions_canonical_task():
 # B) AdaptationRecord
 # ===========================================================================
 
+
 def test_B1_record_defaults():
     rec = AdaptationRecord()
     assert rec.task_id == ""
@@ -117,6 +119,7 @@ def test_B2_record_to_dict_keys():
 # C) Passthrough — CanonicalTask
 # ===========================================================================
 
+
 def test_C1_canonical_task_passthrough():
     adapter = TaskAdapterLayer()
     task = build_canonical_task(register=False)
@@ -134,6 +137,7 @@ def test_C2_passthrough_returns_same_task_id():
 # ===========================================================================
 # D) TaskEnvelope fast path
 # ===========================================================================
+
 
 def test_D1_task_envelope_fast_path():
     try:
@@ -161,6 +165,7 @@ def test_D2_task_envelope_preserves_task_id():
 # E) API request normalization
 # ===========================================================================
 
+
 def test_E1_api_request_dict():
     adapter = TaskAdapterLayer()
     payload = {"action": "screenshot", "target_device_id": "dev_01"}
@@ -187,6 +192,7 @@ def test_E3_api_request_args_extracted():
 # F) AI intent normalization
 # ===========================================================================
 
+
 def test_F1_ai_intent_dict():
     adapter = TaskAdapterLayer()
     payload = {"action": "open_app", "goal": "open spotify"}
@@ -206,6 +212,7 @@ def test_F2_ai_intent_goal_preserved():
 # G) Workflow step normalization
 # ===========================================================================
 
+
 def test_G1_workflow_step_dict():
     adapter = TaskAdapterLayer()
     payload = {"task_type": "data_fetch", "description": "fetch sensor data"}
@@ -218,6 +225,7 @@ def test_G1_workflow_step_dict():
 # H) Orchestrator task normalization
 # ===========================================================================
 
+
 def test_H1_orchestrator_task_dict():
     adapter = TaskAdapterLayer()
     payload = {"command": "deploy", "device_id": "node_01"}
@@ -229,6 +237,7 @@ def test_H1_orchestrator_task_dict():
 # ===========================================================================
 # I) Device command normalization
 # ===========================================================================
+
 
 def test_I1_device_command_dict():
     adapter = TaskAdapterLayer()
@@ -249,6 +258,7 @@ def test_I2_device_command_target_extracted():
 # J) MCP tool call normalization
 # ===========================================================================
 
+
 def test_J1_mcp_tool_call_dict():
     adapter = TaskAdapterLayer()
     payload = {"tool": "search_web", "params": {"query": "weather"}}
@@ -267,6 +277,7 @@ def test_J2_mcp_tool_extracted():
 # ===========================================================================
 # K) Skill invocation normalization
 # ===========================================================================
+
 
 def test_K1_skill_invocation_dict():
     adapter = TaskAdapterLayer()
@@ -287,6 +298,7 @@ def test_K2_skill_name_extracted():
 # L) Minimal empty dict
 # ===========================================================================
 
+
 def test_L1_empty_dict():
     adapter = TaskAdapterLayer()
     task = adapter.adapt({}, origin=TaskOrigin.UNKNOWN)
@@ -297,6 +309,7 @@ def test_L1_empty_dict():
 # ===========================================================================
 # M) adapt_to_canonical_task() top-level helper
 # ===========================================================================
+
 
 def test_M1_helper_function():
     payload = {"tool_name": "ping", "targets": ["dev1"]}
@@ -313,6 +326,7 @@ def test_M2_helper_preserves_origin():
 # N) Adaptation log populated
 # ===========================================================================
 
+
 def test_N1_log_populated_after_adapt():
     reset_adaptation_log()
     adapt_to_canonical_task({"tool_name": "x"})
@@ -324,6 +338,7 @@ def test_N1_log_populated_after_adapt():
 # O) reset_adaptation_log()
 # ===========================================================================
 
+
 def test_O1_reset_clears_log():
     adapt_to_canonical_task({"tool_name": "x"})
     reset_adaptation_log()
@@ -334,6 +349,7 @@ def test_O1_reset_clears_log():
 # P) get_adaptation_log() returns list
 # ===========================================================================
 
+
 def test_P1_returns_list():
     assert isinstance(get_adaptation_log(), list)
 
@@ -341,6 +357,7 @@ def test_P1_returns_list():
 # ===========================================================================
 # Q) Passthrough sets was_passthrough=True
 # ===========================================================================
+
 
 def test_Q1_passthrough_flag_true():
     reset_adaptation_log()
@@ -354,6 +371,7 @@ def test_Q1_passthrough_flag_true():
 # R) Non-passthrough sets was_passthrough=False
 # ===========================================================================
 
+
 def test_R1_non_passthrough_flag_false():
     reset_adaptation_log()
     adapt_to_canonical_task({"tool_name": "screenshot"}, origin=TaskOrigin.API_REQUEST)
@@ -364,6 +382,7 @@ def test_R1_non_passthrough_flag_false():
 # ===========================================================================
 # S) Task ID / trace ID propagated from dict
 # ===========================================================================
+
 
 def test_S1_task_id_from_dict():
     task = adapt_to_canonical_task(
@@ -385,6 +404,7 @@ def test_S2_trace_id_from_dict():
 # T) Session ID propagated
 # ===========================================================================
 
+
 def test_T1_session_id_from_kwarg():
     task = adapt_to_canonical_task({}, session_id="sess_123")
     assert task.session_id == "sess_123"
@@ -398,6 +418,7 @@ def test_T2_session_id_from_dict():
 # ===========================================================================
 # U) Targets extracted from various keys
 # ===========================================================================
+
 
 def test_U1_targets_from_targets_key():
     task = adapt_to_canonical_task({"tool_name": "x", "targets": ["dev1", "dev2"]})
@@ -419,6 +440,7 @@ def test_U3_targets_from_device_id():
 # V) Args extracted from various keys
 # ===========================================================================
 
+
 def test_V1_args_from_args_key():
     task = adapt_to_canonical_task({"tool_name": "x", "args": {"a": 1}})
     assert task.execution.args.get("a") == 1
@@ -437,6 +459,7 @@ def test_V3_args_from_params_key():
 # ===========================================================================
 # W) __all__ completeness
 # ===========================================================================
+
 
 def test_W1_all_exports_importable():
     for name in _mod.__all__:

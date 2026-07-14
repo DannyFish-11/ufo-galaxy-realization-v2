@@ -84,26 +84,20 @@ LEGACY_PROJECTION_UCP_KEYS: tuple = (
 #: Sentinel string that marks the canonical projection compiler as the sole
 #: assembly authority for :class:`RuntimeProjection`.  Downstream surfaces
 #: must not assemble a ``RuntimeProjection`` outside of this function.
-PROJECTION_COMPILER_AUTHORITY: str = (
-    "core.projection.projection_compiler.build_runtime_projection"
-)
+PROJECTION_COMPILER_AUTHORITY: str = "core.projection.projection_compiler.build_runtime_projection"
 
 #: PR-6: Sentinel string identifying the topology-ready projection delivery
 #: layer.  Mirrors :data:`contracts.desktop_status_projection.TOPOLOGY_PROJECTION_DELIVERY_AUTHORITY`
 #: so that the projection compiler can reference the same canonical authority
 #: from within the ``core.projection`` namespace.
-TOPOLOGY_PROJECTION_DELIVERY_AUTHORITY: str = (
-    "contracts.desktop_status_projection.DesktopTopologyProjection"
-)
+TOPOLOGY_PROJECTION_DELIVERY_AUTHORITY: str = "contracts.desktop_status_projection.DesktopTopologyProjection"
 
 #: PR-7: Sentinel string identifying the topology projection quality/readiness
 #: block as a PR-7 canonical contract artefact.  Mirrors
 #: :data:`contracts.desktop_status_projection.TOPOLOGY_READINESS_CONTRACT_AUTHORITY`
 #: so that the projection compiler can reference the same authority from within
 #: the ``core.projection`` namespace.
-TOPOLOGY_READINESS_CONTRACT_AUTHORITY: str = (
-    "contracts.desktop_status_projection.TopologyProjectionQualityBlock"
-)
+TOPOLOGY_READINESS_CONTRACT_AUTHORITY: str = "contracts.desktop_status_projection.TopologyProjectionQualityBlock"
 
 #: PR-8: Sentinel string identifying the final desktop status board integration
 #: payload as a PR-8 canonical contract artefact.  Mirrors
@@ -256,10 +250,7 @@ def build_runtime_projection(
         support_model_ids = [n.node_id for n in route_plan.support_models]
 
         # Flatten ModelWeightField → float (combined_weight)
-        active_weights = {
-            node_id: wf.combined_weight
-            for node_id, wf in route_plan.active_weights.items()
-        }
+        active_weights = {node_id: wf.combined_weight for node_id, wf in route_plan.active_weights.items()}
 
         route_reason = route_plan.route_reason
         routing_authority = CANONICAL_ROUTING_AUTHORITY
@@ -276,6 +267,7 @@ def build_runtime_projection(
                 )
                 if _category == "oneapi":
                     from core.oneapi_system_position import build_oneapi_integration_summary
+
                     oneapi_summary = build_oneapi_integration_summary().to_dict()
             except Exception as _oa_exc:
                 logger.debug(
@@ -300,8 +292,7 @@ def build_runtime_projection(
             execution_intent_summary = intent_profile.compact_summary()
         except Exception as _exc:
             logger.warning(
-                "build_runtime_projection: intent_profile.compact_summary() failed "
-                "(intent_profile type=%s): %s",
+                "build_runtime_projection: intent_profile.compact_summary() failed " "(intent_profile type=%s): %s",
                 type(intent_profile).__name__,
                 _exc,
             )
@@ -312,6 +303,7 @@ def build_runtime_projection(
     if any(x is not None for x in _governance_inputs):
         try:
             from .assembly_governance import assemble_projection_governance
+
             gov_summary = assemble_projection_governance(
                 intent_profile=intent_profile,
                 readiness_result=readiness_result,
@@ -434,10 +426,11 @@ def build_desktop_status_board_integration_from_runtime(
         # callers can safely rely on "never returns None".
         try:
             from contracts.desktop_status_projection import (
-                DesktopStatusBoardIntegrationPayload,
                 DESKTOP_STATUS_BOARD_INTEGRATION_AUTHORITY,
+                DesktopStatusBoardIntegrationPayload,
                 ProjectionHealthSeverity,
             )
+
             return DesktopStatusBoardIntegrationPayload(
                 model_routing_summary={},
                 authority_indicators={
@@ -461,6 +454,7 @@ def build_desktop_status_board_integration_from_runtime(
             from contracts.desktop_status_projection import (
                 build_desktop_status_board_integration_payload,
             )
+
             return build_desktop_status_board_integration_payload()
 
     ucp: Dict[str, Any] = {}
@@ -469,8 +463,7 @@ def build_desktop_status_board_integration_from_runtime(
             ucp["topology_route_plan"] = route_plan.to_dict()
         except Exception as _rp_exc:
             logger.debug(
-                "build_desktop_status_board_integration_from_runtime: "
-                "route_plan.to_dict() skipped: %s",
+                "build_desktop_status_board_integration_from_runtime: " "route_plan.to_dict() skipped: %s",
                 _rp_exc,
             )
 

@@ -98,8 +98,7 @@ __all__ = [
 # ---------------------------------------------------------------------------
 
 DECISION_DIFF_TELEMETRY_AUTHORITY = (
-    "core.decision_diff_telemetry"
-    " — decision-diff telemetry for legacy vs canonical routing (PR-14)"
+    "core.decision_diff_telemetry" " — decision-diff telemetry for legacy vs canonical routing (PR-14)"
 )
 
 # ---------------------------------------------------------------------------
@@ -256,8 +255,7 @@ def _emit_record(record: DecisionDiffRecord) -> None:
     log_level = logging.WARNING if record.decisions_differ else logging.DEBUG
     logger.log(
         log_level,
-        "decision_diff decision_point=%s request_id=%s "
-        "legacy=%s canonical=%s diff=%s reason_codes=%s",
+        "decision_diff decision_point=%s request_id=%s " "legacy=%s canonical=%s diff=%s reason_codes=%s",
         record.decision_point,
         record.request_id or "",
         record.legacy_decision or "?",
@@ -268,7 +266,9 @@ def _emit_record(record: DecisionDiffRecord) -> None:
 
     # Best-effort: forward to state event bus
     try:
-        from core.state_event_bus import emit as _seb_emit, StateEventType
+        from core.state_event_bus import StateEventType
+        from core.state_event_bus import emit as _seb_emit
+
         _seb_emit(
             StateEventType.GENERIC,
             source="decision_diff_telemetry",
@@ -440,10 +440,7 @@ def record_candidate_diff(
                 reasons.append(REASON_CANONICAL_REQUIRES_READINESS)
                 if required_capabilities:
                     reasons.append(REASON_CAPABILITY_MISMATCH)
-                if (
-                    orchestration_ready_device_count is not None
-                    and orchestration_ready_device_count < 2
-                ):
+                if orchestration_ready_device_count is not None and orchestration_ready_device_count < 2:
                     reasons.append(REASON_INSUFFICIENT_ORCH_READY)
                 if target_device:
                     reasons.append(REASON_TARGET_NOT_ELIGIBLE)

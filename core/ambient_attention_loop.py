@@ -39,6 +39,7 @@
 5. 默认关闭(``GALAXY_AMBIENT_LOOP``),隐私跟随现有感知授权,不破坏既有行为。
 6. 冷却 + 场景去重兜住"话痨";全路径优雅降级,任何子步失败都不影响主流程。
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -54,11 +55,11 @@ from typing import Any, Dict, List, Optional, Protocol
 logger = logging.getLogger("Galaxy.Ambient")
 
 # 默认参数（均可由环境变量覆盖）
-_DEFAULT_INTERVAL_S = 2.0        # 循环节拍
-_DEFAULT_COOLDOWN_S = 20.0       # 开口/委托后的冷却
-_DEFAULT_DIFF_THRESHOLD = 0.06   # 帧差阈值（0..1，归一化平均像素差）
-_AMBIENT_SESSION = "ambient"     # 工作记忆专用会话
-_RECENT_MEMORY_N = 5             # 每次决策带上的最近记忆条数
+_DEFAULT_INTERVAL_S = 2.0  # 循环节拍
+_DEFAULT_COOLDOWN_S = 20.0  # 开口/委托后的冷却
+_DEFAULT_DIFF_THRESHOLD = 0.06  # 帧差阈值（0..1，归一化平均像素差）
+_AMBIENT_SESSION = "ambient"  # 工作记忆专用会话
+_RECENT_MEMORY_N = 5  # 每次决策带上的最近记忆条数
 
 
 # ---------------------------------------------------------------------------
@@ -67,8 +68,8 @@ _RECENT_MEMORY_N = 5             # 每次决策带上的最近记忆条数
 class AmbientAction(str, Enum):
     """注意力头的三选一——即"这一拍主体该处于哪个存在状态"的具象化。"""
 
-    SPEAK = "speak"       # 值得主动开口 → MANIFEST
-    SILENT = "silent"     # 看到了但不打扰 → 留在 SILENT（应是绝大多数情况）
+    SPEAK = "speak"  # 值得主动开口 → MANIFEST
+    SILENT = "silent"  # 看到了但不打扰 → 留在 SILENT（应是绝大多数情况）
     DELEGATE = "delegate"  # 该派活儿而非嘴上说 → LIMINAL 执行分支
 
 
@@ -77,10 +78,10 @@ class AmbientDecision:
     """一次注意力决策的结构化结果。"""
 
     action: AmbientAction
-    rationale: str = ""            # 为什么这么决定（记录 + 面板显示）
-    utterance: str = ""            # SPEAK 时要说的话
-    task: str = ""                 # DELEGATE 时要委托的任务
-    salient: bool = False          # 是否值得写入终身记忆
+    rationale: str = ""  # 为什么这么决定（记录 + 面板显示）
+    utterance: str = ""  # SPEAK 时要说的话
+    task: str = ""  # DELEGATE 时要委托的任务
+    salient: bool = False  # 是否值得写入终身记忆
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -145,6 +146,7 @@ class LLMRouterDecider:
     def _get_router(self):
         if self._router is None:
             from core.multi_llm_router import get_llm_router
+
             self._router = get_llm_router()
         return self._router
 
@@ -188,8 +190,16 @@ class LLMRouterDecider:
             # 纯文本降级重试一次
             logger.debug("Ambient decider 多模态调用失败,降级纯文本: %s", exc)
             try:
-                fallback = [{"role": "user", "content": messages[0]["content"][0]["text"]
-                             if isinstance(messages[0]["content"], list) else messages[0]["content"]}]
+                fallback = [
+                    {
+                        "role": "user",
+                        "content": (
+                            messages[0]["content"][0]["text"]
+                            if isinstance(messages[0]["content"], list)
+                            else messages[0]["content"]
+                        ),
+                    }
+                ]
                 resp = await router.chat(fallback, temperature=0.2, max_tokens=200)
                 text = (resp.content or "").strip()
             except Exception as exc2:  # noqa: BLE001
@@ -247,9 +257,7 @@ def parse_decision(text: str) -> AmbientDecision:
             return AmbientDecision(action=AmbientAction.SILENT, rationale="DELEGATE 无任务,降级沉默")
 
     salient = action in (AmbientAction.SPEAK, AmbientAction.DELEGATE)
-    return AmbientDecision(
-        action=action, rationale=rationale, utterance=utterance, task=task, salient=salient
-    )
+    return AmbientDecision(action=action, rationale=rationale, utterance=utterance, task=task, salient=salient)
 
 
 # ---------------------------------------------------------------------------
@@ -262,8 +270,9 @@ def _perceptual_signature(frame_b64: str) -> Optional[Any]:
     """
     try:
         import io
-        from PIL import Image
+
         import numpy as np
+        from PIL import Image
 
         raw = base64.b64decode(frame_b64)
         img = Image.open(io.BytesIO(raw)).convert("L").resize((16, 16))
@@ -302,6 +311,7 @@ class FrameGate:
         sig = _perceptual_signature(frame_b64)
         if sig is not None:
             import numpy as np
+
             if self._prev_sig is None:
                 self._prev_sig = sig
                 self._prev_b64 = frame_b64
@@ -326,6 +336,7 @@ def _ai_is_speaking() -> bool:
     """AI 当前是否正在朗读（反自激励门控用）。降级安全:取不到就当没在说。"""
     try:
         from core.speech_output import is_speaking
+
         return bool(is_speaking())
     except Exception:  # noqa: BLE001
         return False
@@ -366,9 +377,17 @@ class AmbientAttentionLoop:
         self._wm = working_memory
         self._um = unified_memory
         self._bus = event_bus
-        self.interval_s = interval_s if interval_s is not None else _float_env("GALAXY_AMBIENT_INTERVAL_S", _DEFAULT_INTERVAL_S)
-        self.cooldown_s = cooldown_s if cooldown_s is not None else _float_env("GALAXY_AMBIENT_COOLDOWN_S", _DEFAULT_COOLDOWN_S)
-        self._gate = FrameGate(diff_threshold if diff_threshold is not None else _float_env("GALAXY_AMBIENT_DIFF_THRESHOLD", _DEFAULT_DIFF_THRESHOLD))
+        self.interval_s = (
+            interval_s if interval_s is not None else _float_env("GALAXY_AMBIENT_INTERVAL_S", _DEFAULT_INTERVAL_S)
+        )
+        self.cooldown_s = (
+            cooldown_s if cooldown_s is not None else _float_env("GALAXY_AMBIENT_COOLDOWN_S", _DEFAULT_COOLDOWN_S)
+        )
+        self._gate = FrameGate(
+            diff_threshold
+            if diff_threshold is not None
+            else _float_env("GALAXY_AMBIENT_DIFF_THRESHOLD", _DEFAULT_DIFF_THRESHOLD)
+        )
         self.session_id = session_id
 
         self._task: Optional[asyncio.Task] = None
@@ -383,12 +402,14 @@ class AmbientAttentionLoop:
     def _get_store(self):
         if self._store is None:
             from core.perception.desktop_perception_store import get_desktop_perception_store
+
             self._store = get_desktop_perception_store()
         return self._store
 
     def _get_wm(self):
         if self._wm is None:
             from core.cognitive.working_memory import get_working_memory
+
             self._wm = get_working_memory()
         return self._wm
 
@@ -396,6 +417,7 @@ class AmbientAttentionLoop:
         if self._um is None:
             try:
                 from core.memory.unified import get_unified_memory
+
                 self._um = get_unified_memory()
             except Exception:  # noqa: BLE001
                 self._um = None
@@ -410,6 +432,7 @@ class AmbientAttentionLoop:
         if self._bus is None:
             try:
                 from core.state_event_bus import get_state_event_bus
+
                 self._bus = get_state_event_bus()
             except Exception:  # noqa: BLE001
                 self._bus = None
@@ -485,8 +508,11 @@ class AmbientAttentionLoop:
             return
         try:
             from core.modality_bridge import transcribe_b64
+
             obs.audio_transcript = await asyncio.to_thread(
-                transcribe_b64, obs.audio_b64, mime=obs.audio_mime,
+                transcribe_b64,
+                obs.audio_b64,
+                mime=obs.audio_mime,
             )
         except Exception as exc:  # noqa: BLE001 — 听不可用不致命
             logger.debug("Ambient 听桥接失败(非致命): %s", exc)
@@ -501,12 +527,15 @@ class AmbientAttentionLoop:
         # 听（转写）离线到线程池，不卡事件循环。
         await self._transcribe_async(obs)
 
-        self._emit("ambient.observed", {
-            "has_frame": bool(obs.frame_b64),
-            "frame_source": obs.frame_source,
-            "has_audio": bool(obs.audio_b64),
-            "recent_memory": obs.recent_memory,
-        })
+        self._emit(
+            "ambient.observed",
+            {
+                "has_frame": bool(obs.frame_b64),
+                "frame_source": obs.frame_source,
+                "has_audio": bool(obs.audio_b64),
+                "recent_memory": obs.recent_memory,
+            },
+        )
 
         try:
             decision = await self._get_decider().decide(obs)
@@ -525,6 +554,7 @@ class AmbientAttentionLoop:
             # hold 闸(对话政策唯一属主):用户说了"等一下别说话",自发开口同样闭嘴。
             try:
                 from core.voice_dialog_policy import get_dialog_policy
+
                 if get_dialog_policy().is_holding():
                     logger.debug("ambient SPEAK 被 hold 抑制")
                     return
@@ -533,6 +563,7 @@ class AmbientAttentionLoop:
             self._last_action_ts = time.time()
             try:
                 from core.speech_output import speak_response
+
                 # 与 handle_request 内部同一条 canonical TTS 路径。source="ambient"
                 # 让 speak_response 的去重/开关策略统一生效。
                 speak_response(decision.utterance, source="ambient")
@@ -561,9 +592,16 @@ class AmbientAttentionLoop:
             if obs.frame_b64:
                 try:
                     from core.schemas.multimodal import MultiModalContext, MultiModalImage
-                    mm_context = MultiModalContext(images=[MultiModalImage(
-                        mime=obs.frame_mime, data=obs.frame_b64, source=obs.frame_source,
-                    )])
+
+                    mm_context = MultiModalContext(
+                        images=[
+                            MultiModalImage(
+                                mime=obs.frame_mime,
+                                data=obs.frame_b64,
+                                source=obs.frame_source,
+                            )
+                        ]
+                    )
                 except Exception:  # noqa: BLE001
                     mm_context = None
 
@@ -575,13 +613,18 @@ class AmbientAttentionLoop:
             #    避免把理由日志与委托认知混在一起。
             import os as _os
             import uuid as _uuid
+
             session_id = f"ambient-delegate-{_uuid.uuid4().hex[:12]}"
             user_id = "ambient"
             if _os.getenv("GALAXY_AMBIENT_SHARE_SESSION", "1").strip().lower() not in (
-                "0", "false", "no", "off",
+                "0",
+                "false",
+                "no",
+                "off",
             ):
                 try:
                     from core.session_manager import get_session_manager
+
                     _sm = get_session_manager()
                     _primary = _sm.get_primary_session_id()
                     if _primary:
@@ -639,8 +682,11 @@ class AmbientAttentionLoop:
                     # 可选：把 salient 帧本身也存进跨模态记忆（默认关，档位 A 省资源）
                     if obs.frame_b64 and _bool_env("GALAXY_AMBIENT_MEMORY_MEDIA", False):
                         um.remember_media(
-                            obs.frame_b64, modality="image", mime=obs.frame_mime,
-                            tags=["ambient"], caption=summary,
+                            obs.frame_b64,
+                            modality="image",
+                            mime=obs.frame_mime,
+                            tags=["ambient"],
+                            caption=summary,
                         )
                 except Exception as exc:  # noqa: BLE001
                     logger.debug("Ambient 终身记忆写入失败(非致命): %s", exc)
@@ -658,7 +704,8 @@ class AmbientAttentionLoop:
     async def _run_loop(self) -> None:
         logger.info(
             "AmbientAttentionLoop 启动 | interval=%.1fs cooldown=%.1fs",
-            self.interval_s, self.cooldown_s,
+            self.interval_s,
+            self.cooldown_s,
         )
         while self._running:
             try:

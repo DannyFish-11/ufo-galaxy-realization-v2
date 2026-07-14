@@ -60,6 +60,7 @@ Usage::
     # In OpenClawd, read the active override set:
     active = state.active_override_set  # OperatorOverrideSet or None
 """
+
 from __future__ import annotations
 
 import logging
@@ -231,10 +232,7 @@ class OperatorOverrideSet:
     @property
     def has_source_override(self) -> bool:
         """True when at least one source override is set."""
-        return (
-            self.primary_audio_source_id is not None
-            or self.primary_video_source_id is not None
-        )
+        return self.primary_audio_source_id is not None or self.primary_video_source_id is not None
 
     @property
     def has_model_override(self) -> bool:
@@ -314,9 +312,7 @@ class OperatorOverrideSet:
             execution_locality=OverrideExecutionLocality.from_string(
                 str(data.get("execution_locality", OverrideExecutionLocality.DEFAULT.value))
             ),
-            remote_mode=OverrideRemoteMode.from_string(
-                str(data.get("remote_mode", OverrideRemoteMode.DEFAULT.value))
-            ),
+            remote_mode=OverrideRemoteMode.from_string(str(data.get("remote_mode", OverrideRemoteMode.DEFAULT.value))),
             override_reason=str(data.get("override_reason", "")),
             is_active=bool(data.get("is_active", True)),
         )
@@ -373,11 +369,7 @@ class PolicyOverrideRecord:
             record_id=str(data.get("record_id") or str(uuid.uuid4())),
             recorded_at=float(data.get("recorded_at", time.time())),
             event_kind=str(data.get("event_kind", "commit")),
-            override_set=(
-                OperatorOverrideSet.from_dict(raw_set)
-                if isinstance(raw_set, dict)
-                else None
-            ),
+            override_set=(OperatorOverrideSet.from_dict(raw_set) if isinstance(raw_set, dict) else None),
             applied_by=data.get("applied_by"),
             context_trace_id=data.get("context_trace_id"),
         )
@@ -435,9 +427,7 @@ class OperatorOverrideSnapshot:
             "runtime_session_id": self.runtime_session_id,
             "has_active_override": self.has_active_override,
             "active_override_set": (
-                self.active_override_set.to_dict()
-                if self.active_override_set is not None
-                else None
+                self.active_override_set.to_dict() if self.active_override_set is not None else None
             ),
             "applied_domains": list(self.applied_domains),
             "override_reason": self.override_reason,
@@ -452,11 +442,7 @@ class OperatorOverrideSnapshot:
             trace_id=data.get("trace_id"),
             runtime_session_id=data.get("runtime_session_id"),
             has_active_override=bool(data.get("has_active_override", False)),
-            active_override_set=(
-                OperatorOverrideSet.from_dict(raw_set)
-                if isinstance(raw_set, dict)
-                else None
-            ),
+            active_override_set=(OperatorOverrideSet.from_dict(raw_set) if isinstance(raw_set, dict) else None),
             applied_domains=list(data.get("applied_domains") or []),
             override_reason=str(data.get("override_reason", "")),
         )
@@ -682,8 +668,7 @@ def apply_route_override(
         result["route_type"] = "text_only"
         result["is_native_multimodal"] = False
         result["route_reason"] = (
-            f"operator_override:multimodal_mode=force_off "
-            f"reason={override_set.override_reason!r}"
+            f"operator_override:multimodal_mode=force_off " f"reason={override_set.override_reason!r}"
         )
         result["operator_override_applied"] = "multimodal_mode=force_off"
     elif override_set.multimodal_mode == OverrideMultimodalMode.FORCE_ON:
@@ -691,8 +676,7 @@ def apply_route_override(
             result["route_type"] = "native_multimodal"
             result["is_native_multimodal"] = True
             result["route_reason"] = (
-                f"operator_override:multimodal_mode=force_on "
-                f"reason={override_set.override_reason!r}"
+                f"operator_override:multimodal_mode=force_on " f"reason={override_set.override_reason!r}"
             )
             result["operator_override_applied"] = "multimodal_mode=force_on"
 
@@ -708,9 +692,7 @@ def apply_route_override(
         result["model"] = override_set.preferred_model
         result.setdefault("operator_override_applied", "")
         if "model" not in result.get("operator_override_applied", ""):
-            result["operator_override_applied"] = (
-                result.get("operator_override_applied", "") + " model_lock"
-            ).strip()
+            result["operator_override_applied"] = (result.get("operator_override_applied", "") + " model_lock").strip()
 
     return result
 
@@ -848,7 +830,5 @@ def build_override_summary(override_snapshot: OperatorOverrideSnapshot) -> Dict[
         "has_active_override": True,
         "applied_domains": list(override_snapshot.applied_domains),
         "override_reason": reason,
-        "operator_message": (
-            f"override=active domains=[{domain_str}] reason={reason!r}"
-        ),
+        "operator_message": (f"override=active domains=[{domain_str}] reason={reason!r}"),
     }

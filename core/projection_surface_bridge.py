@@ -376,45 +376,39 @@ class ProjectionBridgeSnapshot:
         Unix epoch seconds when this snapshot was assembled.
     """
 
-    snapshot_id: str = field(
-        default_factory=lambda: f"psb_{uuid.uuid4().hex[:12]}"
-    )
+    snapshot_id: str = field(default_factory=lambda: f"psb_{uuid.uuid4().hex[:12]}")
     projection_dict: Optional[Dict[str, Any]] = None
-    runtime_augmentation: RuntimeAugmentation = field(
-        default_factory=RuntimeAugmentation
+    runtime_augmentation: RuntimeAugmentation = field(default_factory=RuntimeAugmentation)
+    model_provider_topology_domain: str = field(default=MODEL_PROVIDER_TOPOLOGY_DOMAIN)
+    device_network_topology_domain: str = field(default=DEVICE_NETWORK_TOPOLOGY_DOMAIN)
+    task_graph_topology_domain: str = field(default=TASK_GRAPH_TOPOLOGY_DOMAIN)
+    projection_derived_fields: List[str] = field(
+        default_factory=lambda: [
+            "tri_state_phase",
+            "runtime_domain",
+            "presence_intensity",
+            "coherence",
+            "collapse_tendency",
+            "retreat_tendency",
+            "primary_model_id",
+            "support_model_ids",
+            "active_weights",
+            "route_reason",
+            "execution_stage",
+            "current_task_summary",
+            "topology_ready",
+        ]
     )
-    model_provider_topology_domain: str = field(
-        default=MODEL_PROVIDER_TOPOLOGY_DOMAIN
+    runtime_augmented_fields: List[str] = field(
+        default_factory=lambda: [
+            "active_task_count",
+            "executor_count",
+            "network_reachable_node_count",
+            "replay_event_count",
+            "operator_snapshot_dict",
+            "task_graph_snapshot_dict",
+        ]
     )
-    device_network_topology_domain: str = field(
-        default=DEVICE_NETWORK_TOPOLOGY_DOMAIN
-    )
-    task_graph_topology_domain: str = field(
-        default=TASK_GRAPH_TOPOLOGY_DOMAIN
-    )
-    projection_derived_fields: List[str] = field(default_factory=lambda: [
-        "tri_state_phase",
-        "runtime_domain",
-        "presence_intensity",
-        "coherence",
-        "collapse_tendency",
-        "retreat_tendency",
-        "primary_model_id",
-        "support_model_ids",
-        "active_weights",
-        "route_reason",
-        "execution_stage",
-        "current_task_summary",
-        "topology_ready",
-    ])
-    runtime_augmented_fields: List[str] = field(default_factory=lambda: [
-        "active_task_count",
-        "executor_count",
-        "network_reachable_node_count",
-        "replay_event_count",
-        "operator_snapshot_dict",
-        "task_graph_snapshot_dict",
-    ])
     bridge_authority: str = field(default=PROJECTION_SURFACE_BRIDGE_AUTHORITY)
     assembled_at: float = field(default_factory=time.time)
 
@@ -504,6 +498,7 @@ class ProjectionSurfaceBridge:
         # TaskGraphRuntime — active task count
         try:
             from core.task_graph_runtime import get_task_graph_runtime
+
             tgr = get_task_graph_runtime()
             snap = tgr.snapshot()
             active_task_count = snap.total_nodes
@@ -518,6 +513,7 @@ class ProjectionSurfaceBridge:
         # CapabilityAssimilation — online executor count
         try:
             from core.capability_assimilation import get_capability_assimilation_layer
+
             cal = get_capability_assimilation_layer()
             snap = cal.snapshot()
             executor_count = snap.online_count
@@ -527,21 +523,22 @@ class ProjectionSurfaceBridge:
         # NetworkTopologyRuntime — reachable node count
         try:
             from core.network_topology_runtime import get_network_topology_runtime
+
             ntr = get_network_topology_runtime()
             topo_snap = ntr.snapshot()
             network_reachable_node_count = sum(
-                1 for n in topo_snap.nodes
+                1
+                for n in topo_snap.nodes
                 if getattr(n, "state", None) is not None
                 and getattr(n.state, "value", "") in ("reachable", "connected", "preferred")
             )
         except (ImportError, AttributeError, RuntimeError) as exc:
-            logger.debug(
-                "ProjectionSurfaceBridge: NetworkTopologyRuntime unavailable: %s", exc
-            )
+            logger.debug("ProjectionSurfaceBridge: NetworkTopologyRuntime unavailable: %s", exc)
 
         # ReplayFoundation — event count
         try:
             from core.replay_foundation import get_replay_foundation
+
             rf = get_replay_foundation()
             rf_snap = rf.snapshot()
             replay_event_count = len(rf_snap.runtime_events)
@@ -551,6 +548,7 @@ class ProjectionSurfaceBridge:
         # OperatorSurface — operator snapshot
         try:
             from core.operator_surface import get_operator_surface
+
             os_ = get_operator_surface()
             op_snap = os_.operator_snapshot()
             operator_snapshot_dict = op_snap.to_dict()
@@ -644,8 +642,9 @@ class ProjectionSurfaceBridge:
         Returns a dict or None if the projection stack is unavailable.
         """
         try:
-            from core.projection.projection_compiler import build_runtime_projection
             from core.continuum.types import ContinuumState
+            from core.projection.projection_compiler import build_runtime_projection
+
             # Build a minimal default projection when no live continuum state
             # is readily accessible at this layer.  Real surfaces should pass
             # their own projection_dict.
@@ -653,9 +652,7 @@ class ProjectionSurfaceBridge:
             proj = build_runtime_projection(dummy)
             return proj.to_dict()
         except (ImportError, AttributeError) as exc:
-            logger.debug(
-                "ProjectionSurfaceBridge: could not read current projection: %s", exc
-            )
+            logger.debug("ProjectionSurfaceBridge: could not read current projection: %s", exc)
             return None
 
 

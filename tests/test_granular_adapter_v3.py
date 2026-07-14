@@ -12,16 +12,16 @@ Tests for PR-S3 "GranularAdapter v3-only" contract.
 4. Downstream business logic sees v3-normalised fields; no v2 fallbacks.
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
+
 from galaxy_gateway.android_granular_adapter import (
-    AndroidGranularAdapter,
     AIPAdapterVersionError,
+    AndroidGranularAdapter,
 )
 from galaxy_gateway.protocol.aip_v3 import AIPMessage, MessageType
 from galaxy_gateway.protocol.compat import parse_message_compat
-
 
 # ---------------------------------------------------------------------------
 # Shared fixtures

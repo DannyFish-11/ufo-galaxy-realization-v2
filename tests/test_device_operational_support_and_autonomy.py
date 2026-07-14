@@ -68,9 +68,7 @@ def test_autonomy_requires_complete_cross_repo_runtime_evidence_for_strong_class
         source_runtime_posture="join_runtime",
         role=SimpleNamespace(value="full_runtime_host"),
     )
-    support_verdict = SimpleNamespace(
-        to_dict=lambda: classify_device_operational_support("android").to_dict()
-    )
+    support_verdict = SimpleNamespace(to_dict=lambda: classify_device_operational_support("android").to_dict())
 
     with (
         patch(
@@ -148,9 +146,7 @@ def test_autonomy_demotes_when_cross_repo_evidence_is_not_complete():
         source_runtime_posture="join_runtime",
         role=SimpleNamespace(value="full_runtime_host"),
     )
-    support_verdict = SimpleNamespace(
-        to_dict=lambda: classify_device_operational_support("android").to_dict()
-    )
+    support_verdict = SimpleNamespace(to_dict=lambda: classify_device_operational_support("android").to_dict())
 
     with (
         patch(

@@ -50,8 +50,8 @@ D. TestDispatchCrossDeviceParticipationFilter
 
 from __future__ import annotations
 
-import sys
 import os
+import sys
 import unittest
 from typing import Any, Dict, List
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -124,33 +124,40 @@ class TestSentinelConstants(unittest.TestCase):
 
     def test_command_router_target_admissibility_sentinel_importable(self) -> None:
         from core.command_router import COMMAND_ROUTER_TARGET_ADMISSIBILITY_VALIDATED
+
         self.assertIsInstance(COMMAND_ROUTER_TARGET_ADMISSIBILITY_VALIDATED, str)
         self.assertTrue(len(COMMAND_ROUTER_TARGET_ADMISSIBILITY_VALIDATED) > 0)
 
     def test_command_router_target_admissibility_sentinel_contains_sched002(self) -> None:
         from core.command_router import COMMAND_ROUTER_TARGET_ADMISSIBILITY_VALIDATED
+
         self.assertIn("SCHED-002", COMMAND_ROUTER_TARGET_ADMISSIBILITY_VALIDATED)
 
     def test_device_selection_admissibility_prefilter_sentinel_importable(self) -> None:
         from galaxy_gateway.routing.device_selection import ADMISSIBILITY_PREFILTER_IN_SELECTION
+
         self.assertIsInstance(ADMISSIBILITY_PREFILTER_IN_SELECTION, str)
         self.assertTrue(len(ADMISSIBILITY_PREFILTER_IN_SELECTION) > 0)
 
     def test_device_selection_admissibility_prefilter_sentinel_contains_sched002(self) -> None:
         from galaxy_gateway.routing.device_selection import ADMISSIBILITY_PREFILTER_IN_SELECTION
+
         self.assertIn("SCHED-002", ADMISSIBILITY_PREFILTER_IN_SELECTION)
 
     def test_device_router_formation_participation_sentinel_importable(self) -> None:
         from galaxy_gateway.device_router import DEVICE_ROUTER_FORMATION_PARTICIPATION_FILTERED
+
         self.assertIsInstance(DEVICE_ROUTER_FORMATION_PARTICIPATION_FILTERED, str)
         self.assertTrue(len(DEVICE_ROUTER_FORMATION_PARTICIPATION_FILTERED) > 0)
 
     def test_device_router_formation_participation_sentinel_contains_admit003(self) -> None:
         from galaxy_gateway.device_router import DEVICE_ROUTER_FORMATION_PARTICIPATION_FILTERED
+
         self.assertIn("ADMIT-003", DEVICE_ROUTER_FORMATION_PARTICIPATION_FILTERED)
 
     def test_routing_package_exports_admissibility_prefilter_sentinel(self) -> None:
         from galaxy_gateway.routing import ADMISSIBILITY_PREFILTER_IN_SELECTION
+
         self.assertIsInstance(ADMISSIBILITY_PREFILTER_IN_SELECTION, str)
 
 
@@ -164,6 +171,7 @@ class TestSelectDevicesAdmissibilityPrefilter(unittest.TestCase):
 
     def _call_select(self, candidates: List[Any], analysis: Dict = None) -> List[Any]:
         from galaxy_gateway.routing.device_selection import select_devices
+
         return select_devices(analysis or {"target_device_type": "android"}, candidates)
 
     def test_offline_device_excluded_when_readiness_consulted(self) -> None:
@@ -174,9 +182,7 @@ class TestSelectDevicesAdmissibilityPrefilter(unittest.TestCase):
         def _vtd(device_id, **kwargs):
             if device_id == "dev-online":
                 return _make_validation_result("dev-online", valid=True, registered=True, ready=True)
-            return _make_validation_result(
-                device_id, valid=False, registered=True, ready=False, reasons=["not-ready"]
-            )
+            return _make_validation_result(device_id, valid=False, registered=True, ready=False, reasons=["not-ready"])
 
         with patch("core.target_device_validator.validate_target_device", side_effect=_vtd):
             result = self._call_select([online_dev, offline_dev])
@@ -215,6 +221,7 @@ class TestSelectDevicesAdmissibilityPrefilter(unittest.TestCase):
 
         with patch("core.target_device_validator.validate_target_device", side_effect=_vtd):
             from galaxy_gateway.routing.device_selection import select_devices
+
             # Pass minimal analysis so exec_mode/pool filters don't further trim.
             result = select_devices({"target_device_type": "android"}, [dev1, dev2])
 
@@ -261,6 +268,7 @@ class TestSelectDevicesAdmissibilityPrefilter(unittest.TestCase):
 
         with patch("core.target_device_validator.validate_target_device", side_effect=_vtd):
             from galaxy_gateway.routing.device_selection import select_devices
+
             result = select_devices({"target_device_type": "android"}, [dev])
 
         # Device should be INCLUDED because readiness was unavailable (graceful degradation)
@@ -327,11 +335,14 @@ class TestRouteEnvelopeTargetValidation(unittest.TestCase):
 
         with patch("core.target_device_validator.validate_target_device", side_effect=_vtd):
             from unittest.mock import MagicMock as MM
+
             mock_dr = MM()
             mock_dr.route_task = _mock_route_task
 
             import asyncio
+
             from core.command_router import CommandRouter
+
             router = CommandRouter.__new__(CommandRouter)
             router._logger = __import__("logging").getLogger("test")
 
@@ -364,16 +375,16 @@ class TestRouteEnvelopeTargetValidation(unittest.TestCase):
         def _vtd(device_id, **kwargs):
             if device_id == "valid-dev":
                 return _make_validation_result(device_id, valid=True, ready=True)
-            return _make_validation_result(
-                device_id, valid=False, ready=False, reasons=["not-ready"]
-            )
+            return _make_validation_result(device_id, valid=False, ready=False, reasons=["not-ready"])
 
         with patch("core.target_device_validator.validate_target_device", side_effect=_vtd):
             mock_dr = MagicMock()
             mock_dr.route_task = _mock_route_task
 
             import asyncio
+
             from core.command_router import CommandRouter
+
             router = CommandRouter.__new__(CommandRouter)
 
             with patch("galaxy_gateway.device_router.device_router", mock_dr, create=True):
@@ -406,7 +417,9 @@ class TestRouteEnvelopeTargetValidation(unittest.TestCase):
             mock_dr.route_task = _mock_route_task
 
             import asyncio
+
             from core.command_router import CommandRouter
+
             router = CommandRouter.__new__(CommandRouter)
 
             with patch("galaxy_gateway.device_router.device_router", mock_dr, create=True):
@@ -424,6 +437,7 @@ class TestRouteEnvelopeTargetValidation(unittest.TestCase):
 
     def test_result_is_dict_with_expected_keys(self) -> None:
         """_route_cross_device_envelope() always returns a structured result dict."""
+
         async def _mock_route_task(command, context=None):
             return {"success": True, "result": "done"}
 
@@ -437,7 +451,9 @@ class TestRouteEnvelopeTargetValidation(unittest.TestCase):
             mock_dr.route_task = _mock_route_task
 
             import asyncio
+
             from core.command_router import CommandRouter
+
             router = CommandRouter.__new__(CommandRouter)
 
             with patch("galaxy_gateway.device_router.device_router", mock_dr, create=True):
@@ -481,26 +497,29 @@ class TestDispatchCrossDeviceParticipationFilter(unittest.TestCase):
 
     def test_non_eligible_device_excluded_from_formation(self) -> None:
         """A device that is not orchestration_eligible is excluded from formation input."""
-        devices = self._make_dispatch_devices([
-            {"device_id": "elig-1"},
-            {"device_id": "inelig-1"},
-        ])
+        devices = self._make_dispatch_devices(
+            [
+                {"device_id": "elig-1"},
+                {"device_id": "inelig-1"},
+            ]
+        )
         task = {"task_id": "t1", "trace_id": "tr1", "command": "test", "source_device_id": "src"}
 
         def _gdp(device_id):
             m = MagicMock()
-            m.orchestration_eligible = (device_id == "elig-1")
+            m.orchestration_eligible = device_id == "elig-1"
             return m
 
         from unittest.mock import AsyncMock as AM
 
         with patch("core.device_participation.get_device_participation", side_effect=_gdp):
             from core.device_formation.formation_resolver import (
-                DeviceFormationGroup,
-                EMPTY_FORMATION_GROUP,
-                FormationPolicy,
                 DEFAULT_LOCAL_FORMATION_POLICY,
+                EMPTY_FORMATION_GROUP,
+                DeviceFormationGroup,
+                FormationPolicy,
             )
+
             mock_fg = MagicMock(spec=DeviceFormationGroup)
             mock_fg.formation_id = "fg-1"
             mock_fg.source_device_id = "src"
@@ -515,6 +534,7 @@ class TestDispatchCrossDeviceParticipationFilter(unittest.TestCase):
                 mock_resolve,
             ):
                 import asyncio
+
                 from galaxy_gateway.device_router import DeviceRouter
 
                 dr = DeviceRouter.__new__(DeviceRouter)
@@ -524,9 +544,7 @@ class TestDispatchCrossDeviceParticipationFilter(unittest.TestCase):
                     with patch.object(
                         dr,
                         "dispatch_task",
-                        new_callable=lambda: lambda *a, **kw: AsyncMock(
-                            return_value={"success": True}
-                        )(),
+                        new_callable=lambda: lambda *a, **kw: AsyncMock(return_value={"success": True})(),
                     ):
                         asyncio.run(
                             dr._dispatch_cross_device_task(
@@ -558,6 +576,7 @@ class TestDispatchCrossDeviceParticipationFilter(unittest.TestCase):
             mock_fg.to_dict = lambda: {}
 
             from core.device_formation.formation_resolver import DEFAULT_LOCAL_FORMATION_POLICY
+
             mock_resolve = MagicMock(return_value=(mock_fg, DEFAULT_LOCAL_FORMATION_POLICY))
 
             with patch(
@@ -565,6 +584,7 @@ class TestDispatchCrossDeviceParticipationFilter(unittest.TestCase):
                 mock_resolve,
             ):
                 import asyncio
+
                 from galaxy_gateway.device_router import DeviceRouter
 
                 dr = DeviceRouter.__new__(DeviceRouter)
@@ -574,9 +594,7 @@ class TestDispatchCrossDeviceParticipationFilter(unittest.TestCase):
                     with patch.object(
                         dr,
                         "dispatch_task",
-                        new_callable=lambda: lambda *a, **kw: AsyncMock(
-                            return_value={"success": True}
-                        )(),
+                        new_callable=lambda: lambda *a, **kw: AsyncMock(return_value={"success": True})(),
                     ):
                         result = asyncio.run(
                             dr._dispatch_cross_device_task(
@@ -607,6 +625,7 @@ class TestDispatchCrossDeviceParticipationFilter(unittest.TestCase):
         mock_fg.to_dict = lambda: {}
 
         from core.device_formation.formation_resolver import DEFAULT_LOCAL_FORMATION_POLICY
+
         mock_resolve = MagicMock(return_value=(mock_fg, DEFAULT_LOCAL_FORMATION_POLICY))
 
         with patch("core.device_participation.get_device_participation", side_effect=_gdp):
@@ -615,6 +634,7 @@ class TestDispatchCrossDeviceParticipationFilter(unittest.TestCase):
                 mock_resolve,
             ):
                 import asyncio
+
                 from galaxy_gateway.device_router import DeviceRouter
 
                 dr = DeviceRouter.__new__(DeviceRouter)
@@ -624,9 +644,7 @@ class TestDispatchCrossDeviceParticipationFilter(unittest.TestCase):
                     with patch.object(
                         dr,
                         "dispatch_task",
-                        new_callable=lambda: lambda *a, **kw: AsyncMock(
-                            return_value={"success": True}
-                        )(),
+                        new_callable=lambda: lambda *a, **kw: AsyncMock(return_value={"success": True})(),
                     ):
                         result = asyncio.run(
                             dr._dispatch_cross_device_task(

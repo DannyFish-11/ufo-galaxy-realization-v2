@@ -34,8 +34,14 @@ from galaxy_gateway.protocol.aip_v3 import MessageType
 
 # 修复前会被 server 端 MessageType(...) 拒收的 8 个客户端 wire 值。
 _PREVIOUSLY_REJECTED_CLIENT_WIRE_VALUES = [
-    "relay", "forward", "reply", "lock", "unlock", "broadcast",
-    "operator_action_request", "device_audit_report",
+    "relay",
+    "forward",
+    "reply",
+    "lock",
+    "unlock",
+    "broadcast",
+    "operator_action_request",
+    "device_audit_report",
 ]
 
 # 6 个短别名 → v2 canonical 长名。必须两者都在 enum 里(别名入向兼容、长名 canonical 输出)。
@@ -82,14 +88,24 @@ def test_drift_checker_reports_zero_unknown_for_known_client_sets():
     """
     checker = _load_drift_checker()
     v2_values = checker.parse_v2_messagetype(
-        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                     "galaxy_gateway", "protocol", "aip_v3.py")
+        os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "galaxy_gateway", "protocol", "aip_v3.py"
+        )
     )
 
     # android 当前的"非 canonical"wire 值(别名 + 专有扩展),必须全部被接受。
     android_non_canonical = {
-        "relay", "forward", "reply", "lock", "unlock", "broadcast",  # accepted_alias
-        "auth", "event", "liquid_event", "phase_report", "voice_query",  # client_ext
+        "relay",
+        "forward",
+        "reply",
+        "lock",
+        "unlock",
+        "broadcast",  # accepted_alias
+        "auth",
+        "event",
+        "liquid_event",
+        "phase_report",
+        "voice_query",  # client_ext
     }
     r = checker.classify(android_non_canonical, v2_values)
     assert r["unknown"] == [], f"android 不应有 server 会拒的未知类型: {r['unknown']}"
@@ -97,8 +113,14 @@ def test_drift_checker_reports_zero_unknown_for_known_client_sets():
 
     # wearos 当前的"非 canonical"wire 值。
     wearos_non_canonical = {
-        "relay", "broadcast",  # accepted_alias
-        "auth", "decision_request", "event", "liquid_event", "phase_report", "voice_query",
+        "relay",
+        "broadcast",  # accepted_alias
+        "auth",
+        "decision_request",
+        "event",
+        "liquid_event",
+        "phase_report",
+        "voice_query",
     }
     r2 = checker.classify(wearos_non_canonical, v2_values)
     assert r2["unknown"] == [], f"wearos 不应有 server 会拒的未知类型: {r2['unknown']}"

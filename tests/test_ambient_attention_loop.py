@@ -8,6 +8,7 @@
 
 所有协作者通过构造注入,不触网、不起真循环。
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -31,6 +32,7 @@ from core.ambient_attention_loop import (
 # ── 测试用真实 JPEG 帧 ──────────────────────────────────────────────────────
 def _jpeg(color: int, size: int = 64) -> str:
     from PIL import Image
+
     img = Image.new("L", (size, size), color)
     buf = io.BytesIO()
     img.save(buf, format="JPEG")
@@ -180,7 +182,7 @@ class TestTickGating:
         store = FakeStore({"camera_b64": _BLACK, "camera_mime": "image/jpeg"})
         dec = FakeDecider(AmbientDecision(AmbientAction.SILENT, rationale="ok"))
         loop = _loop(store, dec)
-        first = asyncio.run(loop.tick())   # 第一帧 → 放行
+        first = asyncio.run(loop.tick())  # 第一帧 → 放行
         assert first is not None and dec.calls == 1
         second = asyncio.run(loop.tick())  # 同一帧 → 挡下
         assert second is None and dec.calls == 1
@@ -190,7 +192,7 @@ class TestTickGating:
         dec = FakeDecider(AmbientDecision(AmbientAction.SILENT, rationale="ok"))
         loop = _loop(store, dec)
         asyncio.run(loop.tick())
-        store.set(camera_b64=_WHITE)       # 画面大变
+        store.set(camera_b64=_WHITE)  # 画面大变
         assert asyncio.run(loop.tick()) is not None
         assert dec.calls == 2
 
@@ -198,7 +200,7 @@ class TestTickGating:
         store = FakeStore({"camera_b64": _BLACK, "audio_b64": "AAAA", "audio_mime": "audio/webm"})
         dec = FakeDecider(AmbientDecision(AmbientAction.SILENT, rationale="ok"))
         loop = _loop(store, dec)
-        asyncio.run(loop.tick())           # 首拍消费帧+音频
+        asyncio.run(loop.tick())  # 首拍消费帧+音频
         # 帧不变，但来一段新音频 → 仍放行
         store.set(audio_b64="BBBB")
         assert asyncio.run(loop.tick()) is not None
@@ -208,7 +210,7 @@ class TestTickGating:
         store = FakeStore({"camera_b64": _BLACK, "audio_b64": "AAAA"})
         dec = FakeDecider(AmbientDecision(AmbientAction.SILENT, rationale="ok"))
         loop = _loop(store, dec)
-        asyncio.run(loop.tick())           # 首拍
+        asyncio.run(loop.tick())  # 首拍
         # 帧不变、音频也是同一段 → 挡下
         assert asyncio.run(loop.tick()) is None
         assert dec.calls == 1
@@ -234,8 +236,8 @@ class TestAmbientHearing:
         monkeypatch.setenv("GALAXY_NATIVE_AUDIO", native_gate)
         # 桥接转写打桩:返回定值,证明"确实调了转写"。
         import core.modality_bridge as mb
-        monkeypatch.setattr(mb, "transcribe_b64",
-                            lambda b64, mime="audio/webm", language="zh": "用户说了话")
+
+        monkeypatch.setattr(mb, "transcribe_b64", lambda b64, mime="audio/webm", language="zh": "用户说了话")
         store = FakeStore({"camera_b64": _BLACK, "audio_b64": "AAAA", "audio_mime": "audio/webm"})
         dec = FakeDecider(AmbientDecision(AmbientAction.SILENT, rationale="ok"))
         loop = _loop(store, dec)
@@ -266,7 +268,9 @@ class TestTickRouting:
     def test_speak_routes_to_tts_and_records(self):
         store = FakeStore({"camera_b64": _BLACK})
         wm, um, bus = FakeWM(), FakeUM(), FakeBus()
-        dec = FakeDecider(AmbientDecision(AmbientAction.SPEAK, rationale="卡住了", utterance="要帮忙吗？", salient=True))
+        dec = FakeDecider(
+            AmbientDecision(AmbientAction.SPEAK, rationale="卡住了", utterance="要帮忙吗？", salient=True)
+        )
         loop = _loop(store, dec, wm=wm, um=um, bus=bus)
         with _patch_speak() as spoken:
             d = asyncio.run(loop.tick())
@@ -288,13 +292,15 @@ class TestTickRouting:
         with _patch_speak() as spoken:
             d = asyncio.run(loop.tick())
         assert d.action == AmbientAction.SILENT
-        assert spoken == []                 # 沉默不出声
-        assert wm.adds                       # 但工作记忆仍记录
-        assert um.remembered == []           # 非 salient → 不进终身记忆
+        assert spoken == []  # 沉默不出声
+        assert wm.adds  # 但工作记忆仍记录
+        assert um.remembered == []  # 非 salient → 不进终身记忆
 
     def test_delegate_routes_through_handle_request(self):
         store = FakeStore({"camera_b64": _BLACK})
-        dec = FakeDecider(AmbientDecision(AmbientAction.DELEGATE, rationale="反复报错", task="查错误日志", salient=True))
+        dec = FakeDecider(
+            AmbientDecision(AmbientAction.DELEGATE, rationale="反复报错", task="查错误日志", salient=True)
+        )
         loop = _loop(store, dec)
 
         calls = {}
@@ -310,8 +316,8 @@ class TestTickRouting:
             d = asyncio.run(loop.tick())
         assert d.action == AmbientAction.DELEGATE
         assert calls["message"] == "查错误日志"
-        assert calls["source"] == "ambient"       # 走正门,来源标记 ambient
-        assert calls["mm"] is not None            # 携带当前帧
+        assert calls["source"] == "ambient"  # 走正门,来源标记 ambient
+        assert calls["mm"] is not None  # 携带当前帧
 
     def test_non_salient_skips_longterm_memory(self):
         store = FakeStore({"camera_b64": _BLACK})
@@ -328,7 +334,7 @@ class TestTickRouting:
         loop = _loop(store, dec, um=um)
         with _patch_speak():
             asyncio.run(loop.tick())
-        assert um.remembered == []          # enabled=False → 不写，也不报错
+        assert um.remembered == []  # enabled=False → 不写，也不报错
 
     def test_decider_exception_becomes_silent(self):
         store = FakeStore({"camera_b64": _BLACK})
@@ -340,7 +346,7 @@ class TestTickRouting:
         loop = _loop(store, BoomDecider())
         with _patch_speak() as spoken:
             d = asyncio.run(loop.tick())
-        assert d.action == AmbientAction.SILENT   # 决策异常 → 保守沉默
+        assert d.action == AmbientAction.SILENT  # 决策异常 → 保守沉默
         assert spoken == []
 
 
@@ -394,4 +400,4 @@ class TestLLMRouterDecider:
         d = LLMRouterDecider(router=r)
         out = asyncio.run(d.decide(AmbientObservation(frame_b64=_BLACK)))
         assert out.action == AmbientAction.SILENT
-        assert r.n == 2                     # 确实降级重试了
+        assert r.n == 2  # 确实降级重试了

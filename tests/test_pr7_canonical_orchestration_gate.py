@@ -40,9 +40,9 @@ C) ``get_orchestration_ready_devices`` and ``is_device_orchestration_ready``
 
 from __future__ import annotations
 
-import sys
-import os
 import asyncio
+import os
+import sys
 import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -60,6 +60,7 @@ class TestIsOrchestrationReadyHelper(unittest.TestCase):
 
     def _make_runtime(self):
         from core.constellation_runtime import ConstellationRuntime
+
         rt = ConstellationRuntime(enable_dag_evolution=False)
         return rt
 
@@ -116,6 +117,7 @@ class TestDagLoopCandidateGate(unittest.IsolatedAsyncioTestCase):
 
     def _make_runtime(self):
         from core.constellation_runtime import ConstellationRuntime
+
         rt = ConstellationRuntime(enable_dag_evolution=False)
         return rt
 
@@ -127,7 +129,7 @@ class TestDagLoopCandidateGate(unittest.IsolatedAsyncioTestCase):
         return pool
 
     def _make_orchestrator(self):
-        from core.schemas.orchestration import TaskDecomposition, SubTask, SubTaskStatus
+        from core.schemas.orchestration import SubTask, SubTaskStatus, TaskDecomposition
 
         mock_orch = MagicMock()
 
@@ -151,11 +153,14 @@ class TestDagLoopCandidateGate(unittest.IsolatedAsyncioTestCase):
 
         # run() 现在先过【集体】调度门(participation 层无就绪设备即 BLOCKED,
         # 逐候选门根本不被咨询)——给集体门一个候选,让本用例钉的逐候选门可达。
-        with patch.object(rt, "_get_device_pool", return_value=pool), \
-             patch.object(rt, "_get_orchestration_candidate_set",
-                          return_value=[SimpleNamespace(device_id="dev_eligible")]), \
-             patch.object(rt, "_try_node71", new_callable=AsyncMock, return_value=None), \
-             patch.object(rt, "_is_orchestration_ready", return_value=True) as mock_gate:
+        with (
+            patch.object(rt, "_get_device_pool", return_value=pool),
+            patch.object(
+                rt, "_get_orchestration_candidate_set", return_value=[SimpleNamespace(device_id="dev_eligible")]
+            ),
+            patch.object(rt, "_try_node71", new_callable=AsyncMock, return_value=None),
+            patch.object(rt, "_is_orchestration_ready", return_value=True) as mock_gate,
+        ):
             result = await rt.run(task_description="test task")
 
         # Gate was consulted with the device returned by pool
@@ -168,11 +173,14 @@ class TestDagLoopCandidateGate(unittest.IsolatedAsyncioTestCase):
         rt._smart_orchestrator = self._make_orchestrator()
         pool = self._make_pool("dev_not_eligible")
 
-        with patch.object(rt, "_get_device_pool", return_value=pool), \
-             patch.object(rt, "_get_orchestration_candidate_set",
-                          return_value=[SimpleNamespace(device_id="dev_not_eligible")]), \
-             patch.object(rt, "_try_node71", new_callable=AsyncMock, return_value=None), \
-             patch.object(rt, "_is_orchestration_ready", return_value=False) as mock_gate:
+        with (
+            patch.object(rt, "_get_device_pool", return_value=pool),
+            patch.object(
+                rt, "_get_orchestration_candidate_set", return_value=[SimpleNamespace(device_id="dev_not_eligible")]
+            ),
+            patch.object(rt, "_try_node71", new_callable=AsyncMock, return_value=None),
+            patch.object(rt, "_is_orchestration_ready", return_value=False) as mock_gate,
+        ):
             result = await rt.run(task_description="test task")
 
         mock_gate.assert_called_once_with("dev_not_eligible")
@@ -209,14 +217,12 @@ def _make_selector_status(
 def _make_udm(device_ids=None):
     udm = MagicMock()
     devices = []
-    for did in (device_ids or []):
+    for did in device_ids or []:
         d = MagicMock()
         d.device_id = did
         devices.append(d)
     udm.list_devices.return_value = devices
-    udm.get.side_effect = lambda did: next(
-        (d for d in devices if d.device_id == did), None
-    )
+    udm.get.side_effect = lambda did: next((d for d in devices if d.device_id == did), None)
     return udm
 
 
@@ -234,10 +240,14 @@ class TestGetOrchestrationReadyDevices(unittest.TestCase):
         def fake_selector(device_id):
             return eligible_status if device_id == "dev_a" else ineligible_status
 
-        with patch("core.device_participation._get_udm", return_value=udm), \
-             patch("core.device_participation._get_canonical_readiness",
-                   return_value=SimpleNamespace(registered=True, online=True, routable=True)), \
-             patch("core.device_participation._get_selector_status", side_effect=fake_selector):
+        with (
+            patch("core.device_participation._get_udm", return_value=udm),
+            patch(
+                "core.device_participation._get_canonical_readiness",
+                return_value=SimpleNamespace(registered=True, online=True, routable=True),
+            ),
+            patch("core.device_participation._get_selector_status", side_effect=fake_selector),
+        ):
             results = get_orchestration_ready_devices()
 
         eligible_ids = [r.device_id for r in results]
@@ -254,10 +264,14 @@ class TestGetOrchestrationReadyDevices(unittest.TestCase):
 
         # Layer-1 就绪(registered/routable)现在闸住 selector 资格——
         # 有意加严:selector 说合格但传输不可达的设备不得入选。补就绪桩。
-        with patch("core.device_participation._get_udm", return_value=udm), \
-             patch("core.device_participation._get_canonical_readiness",
-                   return_value=SimpleNamespace(registered=True, online=True, routable=True)), \
-             patch("core.device_participation._get_selector_status", return_value=eligible_status):
+        with (
+            patch("core.device_participation._get_udm", return_value=udm),
+            patch(
+                "core.device_participation._get_canonical_readiness",
+                return_value=SimpleNamespace(registered=True, online=True, routable=True),
+            ),
+            patch("core.device_participation._get_selector_status", return_value=eligible_status),
+        ):
             assert is_device_orchestration_ready("dev_ok") is True
 
     def test_is_device_orchestration_ready_false_for_ineligible(self):
@@ -266,8 +280,10 @@ class TestGetOrchestrationReadyDevices(unittest.TestCase):
         ineligible_status = _make_selector_status(orchestration_eligible=False)
         udm = _make_udm(["dev_no"])
 
-        with patch("core.device_participation._get_udm", return_value=udm), \
-             patch("core.device_participation._get_selector_status", return_value=ineligible_status):
+        with (
+            patch("core.device_participation._get_udm", return_value=udm),
+            patch("core.device_participation._get_selector_status", return_value=ineligible_status),
+        ):
             assert is_device_orchestration_ready("dev_no") is False
 
     # 9 — missing UDM degrades gracefully (empty list, no crash)
@@ -302,8 +318,10 @@ class TestGetOrchestrationReadyDevices(unittest.TestCase):
         )
         udm = _make_udm(["dev_online_not_eligible"])
 
-        with patch("core.device_participation._get_udm", return_value=udm), \
-             patch("core.device_participation._get_selector_status", return_value=status):
+        with (
+            patch("core.device_participation._get_udm", return_value=udm),
+            patch("core.device_participation._get_selector_status", return_value=status),
+        ):
             ready = is_device_orchestration_ready("dev_online_not_eligible")
 
         assert ready is False, (

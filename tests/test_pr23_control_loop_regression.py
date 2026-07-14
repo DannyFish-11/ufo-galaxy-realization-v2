@@ -76,7 +76,6 @@ from typing import Any, Dict, List, Optional
 
 import pytest
 
-
 # ===========================================================================
 # Shared Fixture Helpers
 # ===========================================================================
@@ -88,6 +87,7 @@ def _make_text_only_perception_state(
 ) -> Any:
     """Build a minimal text-only CanonicalPerceptionState fixture."""
     from core.perception.canonical_perception_state import build_canonical_perception_state
+
     return build_canonical_perception_state(
         runtime_session_id=session_id,
         trace_id=trace_id,
@@ -105,16 +105,10 @@ def _make_multimodal_perception_state(
 ) -> Any:
     """Build a perception state with request-bound multimodal context."""
     from core.perception.canonical_perception_state import build_canonical_perception_state
-    from core.schemas.multimodal import MultiModalContext, MultiModalImage, MultiModalAudio
+    from core.schemas.multimodal import MultiModalAudio, MultiModalContext, MultiModalImage
 
-    images = [
-        MultiModalImage(mime="image/jpeg", data="FAKEBASE64==", source="webcam")
-        for _ in range(n_images)
-    ]
-    audio = [
-        MultiModalAudio(mime="audio/wav", data="FAKEAUDIO==", source="microphone")
-        for _ in range(n_audio)
-    ]
+    images = [MultiModalImage(mime="image/jpeg", data="FAKEBASE64==", source="webcam") for _ in range(n_images)]
+    audio = [MultiModalAudio(mime="audio/wav", data="FAKEAUDIO==", source="microphone") for _ in range(n_audio)]
     mm_ctx = MultiModalContext(images=images, audio=audio)
     fused = {
         "images": [{"source": img.source} for img in images],
@@ -144,6 +138,7 @@ def _make_source_registry(
         PerceptionSourceType,
         SourceModality,
     )
+
     registry = PerceptionSourceRegistry()
 
     mic_id = registry.register(
@@ -193,6 +188,7 @@ def _make_plan_dict(**kwargs) -> Dict[str, Any]:
     fallback record, round-trip serialisation).
     """
     from core.schemas.unified_control_plan import build_unified_control_plan
+
     return build_unified_control_plan(**kwargs).to_dict()
 
 
@@ -223,10 +219,11 @@ def _make_proj_plan(
     """
     from core.schemas.unified_control_plan import (
         AUTHORITY_ROLE,
+        ORCHESTRATION_ROLE,
         SHELL_ROLE,
         SUBSTRATE_ROLE,
-        ORCHESTRATION_ROLE,
     )
+
     plan: Dict[str, Any] = {
         "decision_authority": AUTHORITY_ROLE,
         "chosen_model": chosen_model,
@@ -281,6 +278,7 @@ def _make_proj_plan(
 def _make_projection(**kwargs) -> Any:
     """Build a DesktopStatusProjection from kwargs."""
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     return build_desktop_status_projection(**kwargs)
 
 
@@ -334,6 +332,7 @@ class TestTextOnlyBaselineFlow:
     def test_text_only_plan_authority_is_subject_core(self):
         """Control plan authority chain always names subject_decision_authority."""
         from core.schemas.unified_control_plan import AUTHORITY_ROLE
+
         plan = _make_plan_dict(
             canonical_perception=_make_text_only_perception_state().to_dict(),
         )
@@ -451,6 +450,7 @@ class TestRequestBoundMultimodalFlow:
     def test_native_mm_plan_authority_unchanged(self):
         """Authority chain is subject_decision_authority for multimodal requests."""
         from core.schemas.unified_control_plan import AUTHORITY_ROLE
+
         plan = _make_plan_dict(is_native_multimodal=True)
         assert plan["authority_chain"]["decision_authority"] == AUTHORITY_ROLE
 
@@ -611,6 +611,7 @@ class TestNativeMultimodalUnavailableFallback:
     def test_fallback_plan_carries_fallback_level(self):
         """Control plan with fallback carries non-none fallback_level."""
         from core.schemas.unified_control_plan import FallbackLevel
+
         plan = _make_plan_dict(
             fallback_level=FallbackLevel.MODEL_FALLBACK.value,
             fallback_reason="native multimodal provider unavailable",
@@ -621,6 +622,7 @@ class TestNativeMultimodalUnavailableFallback:
     def test_fallback_plan_record_has_fallback_kinds(self):
         """FallbackDecisionRecord is populated with fallback_kinds when provided."""
         from core.schemas.unified_control_plan import FallbackKind, FallbackLevel
+
         plan = _make_plan_dict(
             fallback_level=FallbackLevel.TEXT_ONLY_FALLBACK.value,
             fallback_kinds=[FallbackKind.NATIVE_MULTIMODAL_TO_TEXT.value],
@@ -633,6 +635,7 @@ class TestNativeMultimodalUnavailableFallback:
     def test_fallback_plan_native_to_text_kind_present(self):
         """FallbackDecisionRecord carries native_multimodal_to_text kind."""
         from core.schemas.unified_control_plan import FallbackKind, FallbackLevel
+
         plan = _make_plan_dict(
             fallback_level=FallbackLevel.TEXT_ONLY_FALLBACK.value,
             fallback_kinds=[FallbackKind.NATIVE_MULTIMODAL_TO_TEXT.value],
@@ -643,6 +646,7 @@ class TestNativeMultimodalUnavailableFallback:
     def test_fallback_execution_decision_is_downgrade(self):
         """UnifiedExecutionDecision marks is_downgrade=True when fallback active."""
         from core.schemas.unified_control_plan import FallbackKind, FallbackLevel
+
         plan = _make_plan_dict(
             fallback_level=FallbackLevel.TEXT_ONLY_FALLBACK.value,
             fallback_kinds=[FallbackKind.NATIVE_MULTIMODAL_TO_TEXT.value],
@@ -655,6 +659,7 @@ class TestNativeMultimodalUnavailableFallback:
     def test_fallback_plan_serialisable(self):
         """Control plan with fallback info is fully JSON-serialisable."""
         from core.schemas.unified_control_plan import FallbackKind, FallbackLevel
+
         plan = _make_plan_dict(
             fallback_level=FallbackLevel.LOCAL_FALLBACK.value,
             fallback_kinds=[FallbackKind.NATIVE_MULTIMODAL_TO_TEXT.value],
@@ -665,6 +670,7 @@ class TestNativeMultimodalUnavailableFallback:
     def test_fallback_projection_has_fallback_flag(self):
         """Projection explainability block: has_fallback=True when plan has fallback."""
         from core.schemas.unified_control_plan import FallbackKind
+
         proj = _make_projection(
             unified_control_plan=_make_proj_plan(
                 fallback_level="partial",
@@ -677,6 +683,7 @@ class TestNativeMultimodalUnavailableFallback:
     def test_fallback_projection_health_reflects_downgrade(self):
         """Projection health is advisory or degraded when fallback is active."""
         from core.schemas.unified_control_plan import FallbackKind
+
         proj = _make_projection(
             unified_control_plan=_make_proj_plan(
                 fallback_level="partial",
@@ -689,6 +696,7 @@ class TestNativeMultimodalUnavailableFallback:
     def test_fallback_projection_serialisable(self):
         """Projection with fallback data is JSON-serialisable."""
         from core.schemas.unified_control_plan import FallbackKind
+
         proj = _make_projection(
             unified_control_plan=_make_proj_plan(
                 fallback_level="partial",
@@ -713,6 +721,7 @@ class TestRemoteExecutionModeFlow:
     def test_command_only_plan_execution_path_cross_device(self):
         """command_only remote plan sets cross_device execution path."""
         from core.schemas.remote_execution import RemoteExecutionMode
+
         plan = _make_plan_dict(
             execution_path="cross_device",
             remote_execution_mode=RemoteExecutionMode.command_only.value,
@@ -723,6 +732,7 @@ class TestRemoteExecutionModeFlow:
     def test_agent_runtime_plan_execution_path_cross_device(self):
         """agent_runtime remote plan sets cross_device execution path."""
         from core.schemas.remote_execution import RemoteExecutionMode
+
         plan = _make_plan_dict(
             execution_path="cross_device",
             remote_execution_mode=RemoteExecutionMode.agent_runtime.value,
@@ -733,6 +743,7 @@ class TestRemoteExecutionModeFlow:
     def test_command_only_mode_in_execution_decision(self):
         """UnifiedExecutionDecision records command_only remote execution mode."""
         from core.schemas.remote_execution import RemoteExecutionMode
+
         plan = _make_plan_dict(
             execution_path="cross_device",
             remote_execution_mode=RemoteExecutionMode.command_only.value,
@@ -743,6 +754,7 @@ class TestRemoteExecutionModeFlow:
     def test_agent_runtime_mode_in_execution_decision(self):
         """UnifiedExecutionDecision records agent_runtime remote execution mode."""
         from core.schemas.remote_execution import RemoteExecutionMode
+
         plan = _make_plan_dict(
             execution_path="cross_device",
             remote_execution_mode=RemoteExecutionMode.agent_runtime.value,
@@ -752,8 +764,9 @@ class TestRemoteExecutionModeFlow:
 
     def test_remote_plan_authority_unchanged(self):
         """Authority chain is subject_decision_authority regardless of remote mode."""
-        from core.schemas.unified_control_plan import AUTHORITY_ROLE
         from core.schemas.remote_execution import RemoteExecutionMode
+        from core.schemas.unified_control_plan import AUTHORITY_ROLE
+
         plan = _make_plan_dict(
             execution_path="cross_device",
             remote_execution_mode=RemoteExecutionMode.agent_runtime.value,
@@ -763,6 +776,7 @@ class TestRemoteExecutionModeFlow:
     def test_remote_plan_serialisable(self):
         """Remote execution plan is fully JSON-serialisable."""
         from core.schemas.remote_execution import RemoteExecutionMode
+
         plan = _make_plan_dict(
             execution_path="cross_device",
             remote_execution_mode=RemoteExecutionMode.agent_runtime.value,
@@ -841,6 +855,7 @@ class TestSourceDegradationFlow:
             PerceptionSourceType,
             SourceModality,
         )
+
         registry = PerceptionSourceRegistry()
         sid = registry.register(
             source_type=PerceptionSourceType.WEBRTC,
@@ -859,9 +874,10 @@ class TestSourceDegradationFlow:
         from core.multimodal.perception_source_registry import (
             PerceptionSourceRegistry,
             PerceptionSourceType,
-            SourceModality,
             SourceHealthStatus,
+            SourceModality,
         )
+
         registry = PerceptionSourceRegistry()
         sid = registry.register(
             source_type=PerceptionSourceType.EXTERNAL_STREAM,
@@ -938,12 +954,14 @@ class TestOrchestrationSubstrateBoundaryFlow:
     def test_orchestration_plan_authority_unchanged(self):
         """Authority chain is preserved as subject_decision_authority when orchestration is active."""
         from core.schemas.unified_control_plan import AUTHORITY_ROLE
+
         plan = _make_plan_dict(orchestration_active=True, execution_path="hybrid")
         assert plan["authority_chain"]["decision_authority"] == AUTHORITY_ROLE
 
     def test_orchestration_role_distinct_from_authority(self):
         """orchestration_role in authority chain is distinct from decision_authority."""
         from core.schemas.unified_control_plan import AUTHORITY_ROLE, ORCHESTRATION_ROLE
+
         plan = _make_plan_dict(orchestration_active=True, execution_path="hybrid")
         auth = plan["authority_chain"]
         assert auth["decision_authority"] == AUTHORITY_ROLE
@@ -952,7 +970,8 @@ class TestOrchestrationSubstrateBoundaryFlow:
 
     def test_substrate_role_distinct_from_orchestration_role(self):
         """Substrate role and orchestration role are distinct string constants."""
-        from core.schemas.unified_control_plan import SUBSTRATE_ROLE, ORCHESTRATION_ROLE
+        from core.schemas.unified_control_plan import ORCHESTRATION_ROLE, SUBSTRATE_ROLE
+
         assert SUBSTRATE_ROLE != ORCHESTRATION_ROLE
         assert SUBSTRATE_ROLE
         assert ORCHESTRATION_ROLE
@@ -960,6 +979,7 @@ class TestOrchestrationSubstrateBoundaryFlow:
     def test_orchestration_downgrade_in_fallback_record(self):
         """Orchestration downgrade is represented in FallbackDecisionRecord."""
         from core.schemas.unified_control_plan import FallbackKind
+
         plan = _make_plan_dict(
             orchestration_active=True,
             fallback_kinds=[FallbackKind.ORCHESTRATION_DOWNGRADE.value],
@@ -978,6 +998,7 @@ class TestOrchestrationSubstrateBoundaryFlow:
     def test_orchestration_plan_serialisable(self):
         """Orchestration-active plan is fully JSON-serialisable."""
         from core.schemas.unified_control_plan import FallbackKind
+
         plan = _make_plan_dict(
             orchestration_active=True,
             execution_path="hybrid",
@@ -1022,27 +1043,29 @@ class TestCrossLayerHandoffBoundaryInvariants:
     def test_source_registry_owned_by_shell_not_core(self):
         """OpenClawd must not expose a source_registry attribute (shell owns it)."""
         from core.openclawd import OpenClawd
+
         clawd = OpenClawd.__new__(OpenClawd)
-        assert not hasattr(clawd, "source_registry"), (
-            "OpenClawd must not own the source registry — it belongs to the runtime shell."
-        )
+        assert not hasattr(
+            clawd, "source_registry"
+        ), "OpenClawd must not own the source registry — it belongs to the runtime shell."
 
     def test_desktop_presence_runtime_owns_source_registry(self):
         """DesktopPresenceRuntime has a source_registry attribute (shell owns it)."""
         from core.desktop_presence_runtime import DesktopPresenceRuntime
+
         assert hasattr(DesktopPresenceRuntime, "__init__")
         # DesktopPresenceRuntime exposes source_registry as a property / attribute
         import inspect
+
         props_and_attrs = set(dir(DesktopPresenceRuntime))
-        assert "source_registry" in props_and_attrs or "snapshot_source_registry" in props_and_attrs, (
-            "DesktopPresenceRuntime must expose source_registry or snapshot_source_registry."
-        )
+        assert (
+            "source_registry" in props_and_attrs or "snapshot_source_registry" in props_and_attrs
+        ), "DesktopPresenceRuntime must expose source_registry or snapshot_source_registry."
 
     def test_authority_chain_is_subject_core_across_all_flows(self):
         """Every control plan variant has subject_decision_authority in authority chain."""
-        from core.schemas.unified_control_plan import AUTHORITY_ROLE
         from core.schemas.remote_execution import RemoteExecutionMode
-        from core.schemas.unified_control_plan import FallbackKind
+        from core.schemas.unified_control_plan import AUTHORITY_ROLE, FallbackKind
 
         variants = [
             {},  # text-only
@@ -1058,9 +1081,9 @@ class TestCrossLayerHandoffBoundaryInvariants:
         ]
         for kwargs in variants:
             plan = _make_plan_dict(**kwargs)
-            assert plan["authority_chain"]["decision_authority"] == AUTHORITY_ROLE, (
-                f"Authority chain violated for kwargs={kwargs!r}"
-            )
+            assert (
+                plan["authority_chain"]["decision_authority"] == AUTHORITY_ROLE
+            ), f"Authority chain violated for kwargs={kwargs!r}"
 
     def test_projection_derives_model_from_plan(self):
         """Desktop projection carries the same chosen model/provider as the plan dict."""
@@ -1076,6 +1099,7 @@ class TestCrossLayerHandoffBoundaryInvariants:
     def test_tristate_manifest_gives_active_lifecycle_stage(self):
         """tristate='manifest' with an execution path → lifecycle stage is run."""
         from contracts.desktop_status_projection import LifecycleStage
+
         proj = _make_projection(
             unified_control_plan=_make_proj_plan(execution_path="local"),
             tristate="manifest",
@@ -1086,6 +1110,7 @@ class TestCrossLayerHandoffBoundaryInvariants:
     def test_tristate_silent_gives_idle_or_succeed_lifecycle_stage(self):
         """tristate='silent' → lifecycle stage is idle (no target) or succeed (with target)."""
         from contracts.desktop_status_projection import LifecycleStage
+
         # No lifecycle target → idle
         proj_idle = _make_projection(
             unified_control_plan=_make_proj_plan(lifecycle_target=None),
@@ -1142,7 +1167,8 @@ class TestExplainabilityAssertions:
 
     def test_plan_summary_exposes_execution_reason(self):
         """unified_control_plan_summary exposes execution_reason."""
-        from core.schemas.unified_control_plan import unified_control_plan_summary, build_unified_control_plan
+        from core.schemas.unified_control_plan import build_unified_control_plan, unified_control_plan_summary
+
         plan = build_unified_control_plan(
             execution_reason="local execution selected; single-device session",
         )
@@ -1153,9 +1179,12 @@ class TestExplainabilityAssertions:
     def test_plan_summary_exposes_fallback_kinds(self):
         """unified_control_plan_summary exposes fallback_kinds when present."""
         from core.schemas.unified_control_plan import (
-            unified_control_plan_summary, build_unified_control_plan,
-            FallbackKind, FallbackLevel,
+            FallbackKind,
+            FallbackLevel,
+            build_unified_control_plan,
+            unified_control_plan_summary,
         )
+
         plan = build_unified_control_plan(
             fallback_level=FallbackLevel.TEXT_ONLY_FALLBACK.value,
             fallback_kinds=[FallbackKind.NATIVE_MULTIMODAL_TO_TEXT.value],
@@ -1167,6 +1196,7 @@ class TestExplainabilityAssertions:
     def test_plan_summary_none_for_none_input(self):
         """unified_control_plan_summary(None) returns None."""
         from core.schemas.unified_control_plan import unified_control_plan_summary
+
         assert unified_control_plan_summary(None) is None
 
     def test_projection_explainability_populated(self):
@@ -1177,6 +1207,7 @@ class TestExplainabilityAssertions:
     def test_projection_fallback_reason_propagated_to_explainability(self):
         """Fallback reason from plan is reflected in projection explainability."""
         from core.schemas.unified_control_plan import FallbackKind
+
         proj = _make_projection(
             unified_control_plan=_make_proj_plan(
                 fallback_level="partial",
@@ -1189,6 +1220,7 @@ class TestExplainabilityAssertions:
     def test_projection_summary_is_nonempty_dict(self):
         """desktop_status_projection_summary returns a non-empty dict."""
         from contracts.desktop_status_projection import desktop_status_projection_summary
+
         proj = _make_projection(
             unified_control_plan=_make_proj_plan(
                 chosen_model="gpt-4o",
@@ -1202,11 +1234,13 @@ class TestExplainabilityAssertions:
     def test_projection_summary_none_for_none_input(self):
         """desktop_status_projection_summary(None) returns None."""
         from contracts.desktop_status_projection import desktop_status_projection_summary
+
         assert desktop_status_projection_summary(None) is None
 
     def test_fallback_record_has_human_readable_summary(self):
         """FallbackDecisionRecord carries a non-empty human-readable summary."""
         from core.schemas.unified_control_plan import FallbackDecisionRecord, FallbackKind
+
         fdr = FallbackDecisionRecord(
             fallback_kinds=[FallbackKind.NATIVE_MULTIMODAL_TO_TEXT.value],
             multimodal_downgrade_reason="no native MM provider",
@@ -1228,7 +1262,8 @@ class TestFullRoundTripSerialisation:
 
     def test_unified_control_plan_to_dict_from_dict_round_trip(self):
         """UnifiedControlPlan to_dict → from_dict round-trip preserves key fields."""
-        from core.schemas.unified_control_plan import UnifiedControlPlan, AUTHORITY_ROLE
+        from core.schemas.unified_control_plan import AUTHORITY_ROLE, UnifiedControlPlan
+
         plan_dict = _make_plan_dict(
             chosen_model="gpt-4o",
             chosen_provider="openai",
@@ -1242,6 +1277,7 @@ class TestFullRoundTripSerialisation:
     def test_desktop_projection_to_json_from_dict_round_trip(self):
         """DesktopStatusProjection to_json → from_dict round-trip produces valid object."""
         from contracts.desktop_status_projection import DesktopStatusProjection
+
         proj = _make_projection(
             unified_control_plan=_make_proj_plan(
                 chosen_model="gpt-4o",
@@ -1255,8 +1291,8 @@ class TestFullRoundTripSerialisation:
 
     def test_all_scenario_plans_json_safe(self):
         """Control plans for all seven scenarios are JSON-safe dicts."""
-        from core.schemas.unified_control_plan import FallbackKind, FallbackLevel
         from core.schemas.remote_execution import RemoteExecutionMode
+        from core.schemas.unified_control_plan import FallbackKind, FallbackLevel
 
         scenarios = [
             {},  # 1. text-only

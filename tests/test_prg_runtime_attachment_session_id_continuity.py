@@ -46,56 +46,55 @@ from typing import Any, Dict, Optional
 
 import pytest
 
-# ---------------------------------------------------------------------------
-# Import guards
-# ---------------------------------------------------------------------------
-
 from contracts.dispatch_continuity import (
-    DISPATCH_CONTINUITY_PR_G_SENTINEL,
-    RUNTIME_ATTACHMENT_SESSION_ID_IS_CANONICAL_CONTINUITY_IDENTITY,
     CONTINUITY_CONSUMER_MUST_CONSUME_RUNTIME_ATTACHMENT_SESSION_ID_POLICY,
+    DISPATCH_CONTINUITY_PR_G_SENTINEL,
     RECONNECT_CONTINUITY_RESUME_REQUIRES_MATCHING_ATTACHMENT_ID_POLICY,
-    DispatchContinuityContext,
+    RUNTIME_ATTACHMENT_SESSION_ID_IS_CANONICAL_CONTINUITY_IDENTITY,
     DispatchContinuityClass,
+    DispatchContinuityContext,
     build_dispatch_continuity_context,
 )
-
 from core.attached_runtime_session import (
     ATTACHED_RUNTIME_SESSION_PR_G_SENTINEL,
     RUNTIME_ATTACHMENT_SESSION_ID_CANONICAL_FIELD_POLICY,
-    attach_runtime_session,
-    reset_attached_runtime_session_runtime,
     AttachedRuntimeSessionRecord,
     AttachmentState,
+    attach_runtime_session,
+    reset_attached_runtime_session_runtime,
 )
-
 from core.attached_runtime_session_registry import (
-    ATTACHED_RUNTIME_REGISTRY_PR_G_SENTINEL,
-    REGISTRY_RUNTIME_ATTACHMENT_SESSION_ID_IS_CANONICAL_IDENTITY_PR_G_POLICY,
-    REGISTRY_RECONNECT_OUTCOME_CLASSIFICATION_PR_G_POLICY,
-    REGISTRY_FALLBACK_WHEN_ATTACHMENT_ID_ABSENT_PR_G_POLICY,
-    AttachedSessionRegistry,
-    AttachedSessionRegistryEntry,
-    RegistryEntryState,
-    RegistryTransition,
-    InvalidationReason,
-    register_session,
-    reconnect_session,
-    reattach_session,
-    detach_session,
-    invalidate_session,
-    lookup_session_by_attachment_id,
-    classify_reconnect_outcome,
-    reset_session_registry,
-    get_session_registry,
     _RECONNECT_OUTCOME_CONTINUITY_RESUME,
     _RECONNECT_OUTCOME_NEW_ATTACHMENT,
+    ATTACHED_RUNTIME_REGISTRY_PR_G_SENTINEL,
+    REGISTRY_FALLBACK_WHEN_ATTACHMENT_ID_ABSENT_PR_G_POLICY,
+    REGISTRY_RECONNECT_OUTCOME_CLASSIFICATION_PR_G_POLICY,
+    REGISTRY_RUNTIME_ATTACHMENT_SESSION_ID_IS_CANONICAL_IDENTITY_PR_G_POLICY,
+    AttachedSessionRegistry,
+    AttachedSessionRegistryEntry,
+    InvalidationReason,
+    RegistryEntryState,
+    RegistryTransition,
+    classify_reconnect_outcome,
+    detach_session,
+    get_session_registry,
+    invalidate_session,
+    lookup_session_by_attachment_id,
+    reattach_session,
+    reconnect_session,
+    register_session,
+    reset_session_registry,
 )
+
+# ---------------------------------------------------------------------------
+# Import guards
+# ---------------------------------------------------------------------------
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_registry() -> AttachedSessionRegistry:
     """Return a fresh isolated registry for each test."""
@@ -114,6 +113,7 @@ def _make_attachment_id() -> str:
 # A — PR-G sentinels: contracts/dispatch_continuity.py
 # ---------------------------------------------------------------------------
 
+
 class TestPRGSentinelsDispatchContinuity:
     """PR-G sentinels present in contracts/dispatch_continuity.py."""
 
@@ -127,16 +127,23 @@ class TestPRGSentinelsDispatchContinuity:
 
     def test_continuity_consumer_policy(self):
         assert CONTINUITY_CONSUMER_MUST_CONSUME_RUNTIME_ATTACHMENT_SESSION_ID_POLICY
-        assert "runtime_attachment_session_id" in CONTINUITY_CONSUMER_MUST_CONSUME_RUNTIME_ATTACHMENT_SESSION_ID_POLICY.lower()
+        assert (
+            "runtime_attachment_session_id"
+            in CONTINUITY_CONSUMER_MUST_CONSUME_RUNTIME_ATTACHMENT_SESSION_ID_POLICY.lower()
+        )
 
     def test_reconnect_matching_policy(self):
         assert RECONNECT_CONTINUITY_RESUME_REQUIRES_MATCHING_ATTACHMENT_ID_POLICY
-        assert "runtime_attachment_session_id" in RECONNECT_CONTINUITY_RESUME_REQUIRES_MATCHING_ATTACHMENT_ID_POLICY.lower()
+        assert (
+            "runtime_attachment_session_id"
+            in RECONNECT_CONTINUITY_RESUME_REQUIRES_MATCHING_ATTACHMENT_ID_POLICY.lower()
+        )
 
 
 # ---------------------------------------------------------------------------
 # B — PR-G sentinels: core/attached_runtime_session.py
 # ---------------------------------------------------------------------------
+
 
 class TestPRGSentinelsAttachedRuntimeSession:
     """PR-G sentinels present in core/attached_runtime_session.py."""
@@ -154,6 +161,7 @@ class TestPRGSentinelsAttachedRuntimeSession:
 # C — PR-G sentinels: core/attached_runtime_session_registry.py
 # ---------------------------------------------------------------------------
 
+
 class TestPRGSentinelsRegistry:
     """PR-G sentinels present in core/attached_runtime_session_registry.py."""
 
@@ -163,7 +171,10 @@ class TestPRGSentinelsRegistry:
 
     def test_canonical_identity_policy(self):
         assert REGISTRY_RUNTIME_ATTACHMENT_SESSION_ID_IS_CANONICAL_IDENTITY_PR_G_POLICY
-        assert "runtime_attachment_session_id" in REGISTRY_RUNTIME_ATTACHMENT_SESSION_ID_IS_CANONICAL_IDENTITY_PR_G_POLICY.lower()
+        assert (
+            "runtime_attachment_session_id"
+            in REGISTRY_RUNTIME_ATTACHMENT_SESSION_ID_IS_CANONICAL_IDENTITY_PR_G_POLICY.lower()
+        )
 
     def test_classification_policy(self):
         assert REGISTRY_RECONNECT_OUTCOME_CLASSIFICATION_PR_G_POLICY
@@ -177,6 +188,7 @@ class TestPRGSentinelsRegistry:
 # ---------------------------------------------------------------------------
 # D — DispatchContinuityContext: prior_runtime_attachment_session_id field
 # ---------------------------------------------------------------------------
+
 
 class TestDispatchContinuityContextPRGField:
     """DispatchContinuityContext carries prior_runtime_attachment_session_id."""
@@ -204,6 +216,7 @@ class TestDispatchContinuityContextPRGField:
 # ---------------------------------------------------------------------------
 # E — build_dispatch_continuity_context: prior_runtime_attachment_session_id
 # ---------------------------------------------------------------------------
+
 
 class TestBuildDispatchContinuityContextPRG:
     """build_dispatch_continuity_context propagates prior_runtime_attachment_session_id."""
@@ -237,6 +250,7 @@ class TestBuildDispatchContinuityContextPRG:
 # F — AttachedRuntimeSessionRecord.to_dict() exposes runtime_attachment_session_id
 # ---------------------------------------------------------------------------
 
+
 class TestAttachedRuntimeSessionRecordToDict:
     """to_dict() exposes runtime_attachment_session_id explicitly."""
 
@@ -267,6 +281,7 @@ class TestAttachedRuntimeSessionRecordToDict:
 # G — AttachedRuntimeSessionRecord.from_dict() round-trip
 # ---------------------------------------------------------------------------
 
+
 class TestAttachedRuntimeSessionRecordFromDict:
     """from_dict() round-trips runtime_attachment_session_id."""
 
@@ -292,6 +307,7 @@ class TestAttachedRuntimeSessionRecordFromDict:
 # ---------------------------------------------------------------------------
 # H — attach_runtime_session: runtime_attachment_session_id propagated
 # ---------------------------------------------------------------------------
+
 
 class TestAttachRuntimeSessionPRG:
     """attach_runtime_session propagates runtime_attachment_session_id."""
@@ -330,6 +346,7 @@ class TestAttachRuntimeSessionPRG:
 # I — attach_runtime_session: session_id used as fallback
 # ---------------------------------------------------------------------------
 
+
 class TestAttachRuntimeSessionFallback:
     """session_id used as fallback when runtime_attachment_session_id absent."""
 
@@ -350,6 +367,7 @@ class TestAttachRuntimeSessionFallback:
 # J — AttachedSessionRegistryEntry: runtime_attachment_session_id field
 # ---------------------------------------------------------------------------
 
+
 class TestRegistryEntryField:
     """AttachedSessionRegistryEntry carries runtime_attachment_session_id."""
 
@@ -369,6 +387,7 @@ class TestRegistryEntryField:
 # ---------------------------------------------------------------------------
 # K — register_session: explicit runtime_attachment_session_id stored
 # ---------------------------------------------------------------------------
+
 
 class TestRegisterSessionPRG:
     """register_session stores explicit runtime_attachment_session_id."""
@@ -392,6 +411,7 @@ class TestRegisterSessionPRG:
 # ---------------------------------------------------------------------------
 # L — register_session: fallback UUID generated when id absent
 # ---------------------------------------------------------------------------
+
 
 class TestRegisterSessionFallback:
     """register_session generates a fallback UUID when runtime_attachment_session_id absent."""
@@ -417,6 +437,7 @@ class TestRegisterSessionFallback:
 # M — register_session: different devices get independent attachment IDs
 # ---------------------------------------------------------------------------
 
+
 class TestRegisterSessionIndependentIDs:
     """Different device registrations get independent attachment IDs."""
 
@@ -439,6 +460,7 @@ class TestRegisterSessionIndependentIDs:
 # ---------------------------------------------------------------------------
 # N — AttachedSessionRegistryEntry: to_dict / from_dict round-trip
 # ---------------------------------------------------------------------------
+
 
 class TestRegistryEntryRoundTrip:
     """AttachedSessionRegistryEntry.to_dict() / from_dict() round-trips attachment id."""
@@ -463,6 +485,7 @@ class TestRegistryEntryRoundTrip:
 # ---------------------------------------------------------------------------
 # O — lookup_session_by_attachment_id: returns active entry
 # ---------------------------------------------------------------------------
+
 
 class TestLookupByAttachmentId:
     """lookup_session_by_attachment_id returns the correct entry."""
@@ -495,6 +518,7 @@ class TestLookupByAttachmentId:
 # Q — lookup_session_by_attachment_id: respects active_only flag
 # ---------------------------------------------------------------------------
 
+
 class TestLookupByAttachmentIdActiveOnly:
     """lookup_session_by_attachment_id respects active_only=False."""
 
@@ -519,6 +543,7 @@ class TestLookupByAttachmentIdActiveOnly:
 # ---------------------------------------------------------------------------
 # R — classify_reconnect_outcome: continuity_resume when id matches active
 # ---------------------------------------------------------------------------
+
 
 class TestClassifyReconnectOutcome:
     """classify_reconnect_outcome decision logic."""
@@ -587,6 +612,7 @@ class TestClassifyReconnectOutcome:
 # Y — reconnect_session: preserves runtime_attachment_session_id
 # ---------------------------------------------------------------------------
 
+
 class TestReconnectSessionPRG:
     """reconnect_session preserves runtime_attachment_session_id."""
 
@@ -628,6 +654,7 @@ class TestReconnectSessionPRG:
 # AA — Idempotent reconnect: multiple reconnects don't create duplicates
 # ---------------------------------------------------------------------------
 
+
 class TestIdempotentReconnect:
     """Multiple reconnects are idempotent and don't create duplicate IDs."""
 
@@ -657,6 +684,7 @@ class TestIdempotentReconnect:
 # ---------------------------------------------------------------------------
 # AB — New registration supersedes old session
 # ---------------------------------------------------------------------------
+
 
 class TestNewRegistrationSupersedes:
     """New registration supersedes old active session."""
@@ -689,6 +717,7 @@ class TestNewRegistrationSupersedes:
 # AC — Attachment ID index updated after supersede
 # ---------------------------------------------------------------------------
 
+
 class TestAttachmentIdIndexAfterSupersede:
     """Attachment ID index reflects latest registration."""
 
@@ -716,6 +745,7 @@ class TestAttachmentIdIndexAfterSupersede:
 # AD — classify_reconnect_outcome: new_attachment when invalidated
 # ---------------------------------------------------------------------------
 
+
 class TestClassifyInvalidated:
     """classify_reconnect_outcome returns new_attachment for invalidated entry."""
 
@@ -735,6 +765,7 @@ class TestClassifyInvalidated:
 # AE — DispatchContinuityContext round-trip with PR-G field
 # ---------------------------------------------------------------------------
 
+
 class TestDispatchContinuityContextRoundTrip:
     """DispatchContinuityContext round-trips prior_runtime_attachment_session_id."""
 
@@ -750,6 +781,7 @@ class TestDispatchContinuityContextRoundTrip:
 
     def test_round_trip_to_json(self):
         import json
+
         aid = _make_attachment_id()
         ctx = build_dispatch_continuity_context(prior_runtime_attachment_session_id=aid)
         json_str = ctx.to_json()
@@ -766,6 +798,7 @@ class TestDispatchContinuityContextRoundTrip:
 # ---------------------------------------------------------------------------
 # AF — reset_session_registry provides test isolation
 # ---------------------------------------------------------------------------
+
 
 class TestResetSessionRegistry:
     """reset_session_registry provides clean state for each test."""

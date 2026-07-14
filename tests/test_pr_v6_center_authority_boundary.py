@@ -177,9 +177,7 @@ except ImportError:
 # Skip guard
 # ---------------------------------------------------------------------------
 
-_skip = pytest.mark.skipif(
-    not _MODULE_AVAILABLE, reason="center_authority_boundary unavailable"
-)
+_skip = pytest.mark.skipif(not _MODULE_AVAILABLE, reason="center_authority_boundary unavailable")
 
 
 # ===========================================================================
@@ -246,16 +244,10 @@ class TestAuthorityDomain:
         assert AuthorityDomain.COMPLETION_TRUTH.value == "completion_truth"
 
     def test_continuity_legality_truth_value(self) -> None:
-        assert (
-            AuthorityDomain.CONTINUITY_LEGALITY_TRUTH.value
-            == "continuity_legality_truth"
-        )
+        assert AuthorityDomain.CONTINUITY_LEGALITY_TRUTH.value == "continuity_legality_truth"
 
     def test_dispatch_readiness_truth_value(self) -> None:
-        assert (
-            AuthorityDomain.DISPATCH_READINESS_TRUTH.value
-            == "dispatch_readiness_truth"
-        )
+        assert AuthorityDomain.DISPATCH_READINESS_TRUTH.value == "dispatch_readiness_truth"
 
     def test_orchestration_truth_value(self) -> None:
         assert AuthorityDomain.ORCHESTRATION_TRUTH.value == "orchestration_truth"
@@ -297,22 +289,13 @@ class TestDomainBoundaryStatus:
 @_skip
 class TestExternalRole:
     def test_participant_truth_contributor_present(self) -> None:
-        assert (
-            ExternalRole.PARTICIPANT_TRUTH_CONTRIBUTOR.value
-            == "participant_truth_contributor"
-        )
+        assert ExternalRole.PARTICIPANT_TRUTH_CONTRIBUTOR.value == "participant_truth_contributor"
 
     def test_execution_signal_contributor_present(self) -> None:
-        assert (
-            ExternalRole.EXECUTION_SIGNAL_CONTRIBUTOR.value
-            == "execution_signal_contributor"
-        )
+        assert ExternalRole.EXECUTION_SIGNAL_CONTRIBUTOR.value == "execution_signal_contributor"
 
     def test_continuity_input_contributor_present(self) -> None:
-        assert (
-            ExternalRole.CONTINUITY_INPUT_CONTRIBUTOR.value
-            == "continuity_input_contributor"
-        )
+        assert ExternalRole.CONTINUITY_INPUT_CONTRIBUTOR.value == "continuity_input_contributor"
 
     def test_compat_ingress_adapter_present(self) -> None:
         assert ExternalRole.COMPAT_INGRESS_ADAPTER.value == "compat_ingress_adapter"
@@ -340,9 +323,7 @@ class TestCenterAuthorityViolation:
         assert exc.degraded_domains == []
 
     def test_degraded_domains_stored(self) -> None:
-        exc = CenterAuthorityViolation(
-            "msg", degraded_domains=[AuthorityDomain.COMPLETION_TRUTH]
-        )
+        exc = CenterAuthorityViolation("msg", degraded_domains=[AuthorityDomain.COMPLETION_TRUTH])
         assert AuthorityDomain.COMPLETION_TRUTH in exc.degraded_domains
 
     def test_report_default_none(self) -> None:
@@ -550,31 +531,23 @@ class TestEvaluateBoundaryIntact:
     def test_each_domain_status_intact(self) -> None:
         report = evaluate_center_authority_boundary()
         for key, state in report.domain_states.items():
-            assert state.status == DomainBoundaryStatus.INTACT, (
-                f"Domain {key} is not INTACT: {state.status}"
-            )
+            assert state.status == DomainBoundaryStatus.INTACT, f"Domain {key} is not INTACT: {state.status}"
 
     def test_each_domain_canonical_modules_non_empty(self) -> None:
         report = evaluate_center_authority_boundary()
         for key, state in report.domain_states.items():
-            assert len(state.canonical_modules) > 0, (
-                f"Domain {key} has no canonical modules"
-            )
+            assert len(state.canonical_modules) > 0, f"Domain {key} has no canonical modules"
 
     def test_each_domain_missing_modules_empty(self) -> None:
         report = evaluate_center_authority_boundary()
         for key, state in report.domain_states.items():
-            assert state.missing_modules == [], (
-                f"Domain {key} has missing modules: {state.missing_modules}"
-            )
+            assert state.missing_modules == [], f"Domain {key} has missing modules: {state.missing_modules}"
 
     def test_each_domain_all_sentinels_true(self) -> None:
         report = evaluate_center_authority_boundary()
         for key, state in report.domain_states.items():
             for sentinel, ok in state.sentinel_checks.items():
-                assert ok is True, (
-                    f"Domain {key} sentinel {sentinel} failed check"
-                )
+                assert ok is True, f"Domain {key} sentinel {sentinel} failed check"
 
     def test_each_domain_is_intact_true(self) -> None:
         report = evaluate_center_authority_boundary()
@@ -653,16 +626,11 @@ class TestContinuityLegalityDomain:
     def test_all_paths_policy_sentinel(self) -> None:
         state = self._get_state()
         assert "ALL_PATHS_MUST_USE_UNIFIED_AUTHORITY_POLICY" in state.sentinel_checks
-        assert (
-            state.sentinel_checks["ALL_PATHS_MUST_USE_UNIFIED_AUTHORITY_POLICY"] is True
-        )
+        assert state.sentinel_checks["ALL_PATHS_MUST_USE_UNIFIED_AUTHORITY_POLICY"] is True
 
     def test_continuity_fields_policy_sentinel(self) -> None:
         state = self._get_state()
-        assert (
-            "CONTINUITY_FIELDS_ARE_ACTIVE_GATE_NOT_PAYLOAD_POLICY"
-            in state.sentinel_checks
-        )
+        assert "CONTINUITY_FIELDS_ARE_ACTIVE_GATE_NOT_PAYLOAD_POLICY" in state.sentinel_checks
 
 
 # ===========================================================================
@@ -691,9 +659,7 @@ class TestDispatchReadinessDomain:
     def test_unified_dispatch_readiness_gate_sentinel(self) -> None:
         state = self._get_state()
         assert "UNIFIED_DISPATCH_READINESS_GATE_AUTHORITY" in state.sentinel_checks
-        assert (
-            state.sentinel_checks["UNIFIED_DISPATCH_READINESS_GATE_AUTHORITY"] is True
-        )
+        assert state.sentinel_checks["UNIFIED_DISPATCH_READINESS_GATE_AUTHORITY"] is True
 
     def test_canonical_dispatch_slot_authority_sentinel(self) -> None:
         state = self._get_state()
@@ -706,10 +672,7 @@ class TestDispatchReadinessDomain:
 
     def test_all_execution_modes_must_consume_canonical_slot_policy(self) -> None:
         state = self._get_state()
-        assert (
-            "ALL_EXECUTION_MODES_MUST_CONSUME_CANONICAL_SLOT_POLICY"
-            in state.sentinel_checks
-        )
+        assert "ALL_EXECUTION_MODES_MUST_CONSUME_CANONICAL_SLOT_POLICY" in state.sentinel_checks
 
 
 # ===========================================================================
@@ -742,16 +705,11 @@ class TestOrchestrationTruthDomain:
 
     def test_orchestration_spine_v4_consumes_canonical_slot_policy(self) -> None:
         state = self._get_state()
-        assert (
-            "ORCHESTRATION_SPINE_V4_CONSUMES_CANONICAL_SLOT_POLICY"
-            in state.sentinel_checks
-        )
+        assert "ORCHESTRATION_SPINE_V4_CONSUMES_CANONICAL_SLOT_POLICY" in state.sentinel_checks
 
     def test_orchestration_spine_v5_completion_closure_policy(self) -> None:
         state = self._get_state()
-        assert (
-            "ORCHESTRATION_SPINE_V5_COMPLETION_CLOSURE_POLICY" in state.sentinel_checks
-        )
+        assert "ORCHESTRATION_SPINE_V5_COMPLETION_CLOSURE_POLICY" in state.sentinel_checks
 
 
 # ===========================================================================
@@ -788,9 +746,7 @@ class TestAssertCenterAuthorityIntactDegraded:
         report.domain_states[domain.value] = state
         for other in AuthorityDomain:
             if other != domain:
-                intact_state = DomainBoundaryState(
-                    domain=other, status=DomainBoundaryStatus.INTACT
-                )
+                intact_state = DomainBoundaryState(domain=other, status=DomainBoundaryStatus.INTACT)
                 report.domain_states[other.value] = intact_state
         report.degraded_domains = [domain.value]
         report.all_domains_intact = False
@@ -894,9 +850,7 @@ class TestGetBoundaryReport:
 
 @_skip
 class TestDegradedDomainSimulation:
-    def _build_degraded_report_for_domain(
-        self, degraded_domain: AuthorityDomain
-    ) -> CenterAuthorityBoundaryReport:
+    def _build_degraded_report_for_domain(self, degraded_domain: AuthorityDomain) -> CenterAuthorityBoundaryReport:
         report = evaluate_center_authority_boundary()
         # Manually corrupt the target domain to DEGRADED.
         state = report.domain_states[degraded_domain.value]
@@ -915,21 +869,15 @@ class TestDegradedDomainSimulation:
         assert AuthorityDomain.COMPLETION_TRUTH.value in report.degraded_domains
 
     def test_degraded_continuity_sets_all_intact_false(self) -> None:
-        report = self._build_degraded_report_for_domain(
-            AuthorityDomain.CONTINUITY_LEGALITY_TRUTH
-        )
+        report = self._build_degraded_report_for_domain(AuthorityDomain.CONTINUITY_LEGALITY_TRUTH)
         assert report.all_domains_intact is False
 
     def test_degraded_readiness_in_degraded_list(self) -> None:
-        report = self._build_degraded_report_for_domain(
-            AuthorityDomain.DISPATCH_READINESS_TRUTH
-        )
+        report = self._build_degraded_report_for_domain(AuthorityDomain.DISPATCH_READINESS_TRUTH)
         assert AuthorityDomain.DISPATCH_READINESS_TRUTH.value in report.degraded_domains
 
     def test_degraded_orchestration_in_degraded_list(self) -> None:
-        report = self._build_degraded_report_for_domain(
-            AuthorityDomain.ORCHESTRATION_TRUTH
-        )
+        report = self._build_degraded_report_for_domain(AuthorityDomain.ORCHESTRATION_TRUTH)
         assert AuthorityDomain.ORCHESTRATION_TRUTH.value in report.degraded_domains
 
 

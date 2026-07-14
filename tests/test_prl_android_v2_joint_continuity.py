@@ -73,7 +73,6 @@ from typing import List
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # A — Module importable; sentinels present
 # ---------------------------------------------------------------------------
@@ -87,6 +86,7 @@ class TestModuleSentinels:
         from core.android_v2_continuity_contract import (
             ANDROID_V2_CONTINUITY_CONTRACT_AUTHORITY,
         )
+
         assert isinstance(ANDROID_V2_CONTINUITY_CONTRACT_AUTHORITY, str)
         assert len(ANDROID_V2_CONTINUITY_CONTRACT_AUTHORITY) > 0
         assert "PR-L" in ANDROID_V2_CONTINUITY_CONTRACT_AUTHORITY
@@ -95,6 +95,7 @@ class TestModuleSentinels:
         from core.android_v2_continuity_contract import (
             ANDROID_V2_CONTINUITY_CONTRACT_PRL_SENTINEL,
         )
+
         assert isinstance(ANDROID_V2_CONTINUITY_CONTRACT_PRL_SENTINEL, str)
         assert "PR-L" in ANDROID_V2_CONTINUITY_CONTRACT_PRL_SENTINEL
         assert "package=L" in ANDROID_V2_CONTINUITY_CONTRACT_PRL_SENTINEL
@@ -109,22 +110,23 @@ class TestPolicySentinels:
     def _import_all_sentinels(self):
         from core.android_v2_continuity_contract import (
             ANDROID_IS_DURABLE_PARTICIPANT_NOT_ORCHESTRATION_AUTHORITY_POLICY,
-            V2_IS_CANONICAL_ORCHESTRATION_AUTHORITY_POLICY,
-            ATTACH_MUST_CREATE_REGISTRY_ENTRY_POLICY,
             ATTACH_ASSIGNS_CANONICAL_ATTACHMENT_ID_POLICY,
+            ATTACH_MUST_CREATE_REGISTRY_ENTRY_POLICY,
+            DUPLICATE_REENTRY_MUST_NOT_CREATE_DUPLICATE_TASK_RECORD_POLICY,
+            DUPLICATE_SIGNAL_MUST_BE_SUPPRESSED_POLICY,
+            INFLIGHT_TASK_CONTINUITY_REQUIRES_V2_RECOVERY_COOPERATION_POLICY,
+            PARTIAL_RESULT_IS_SUPERSEDED_BY_TERMINAL_SIGNAL_POLICY,
+            PARTIAL_RESULT_MUST_BE_PRESERVED_UNTIL_COMPLETION_POLICY,
+            PROCESS_RECREATION_CONTINUITY_RESUME_REQUIRES_MATCHING_ID_POLICY,
+            REATTACH_AFTER_PROCESS_RECREATION_MUST_NOT_DUPLICATE_PARTICIPANT_POLICY,
             RECONNECT_CONTINUITY_RESUME_PRESERVES_ATTACHMENT_ID_POLICY,
             RECONNECT_NEW_ATTACHMENT_DOES_NOT_INHERIT_PRIOR_CONTEXT_POLICY,
-            REATTACH_AFTER_PROCESS_RECREATION_MUST_NOT_DUPLICATE_PARTICIPANT_POLICY,
-            PROCESS_RECREATION_CONTINUITY_RESUME_REQUIRES_MATCHING_ID_POLICY,
-            V2_RESTART_RECOVERY_MUST_ACCEPT_ANDROID_RESULT_AGAINST_RECOVERED_TASK_POLICY,
-            INFLIGHT_TASK_CONTINUITY_REQUIRES_V2_RECOVERY_COOPERATION_POLICY,
-            STALE_IDENTITY_MUST_BE_REJECTED_NON_DESTRUCTIVELY_POLICY,
             STALE_ATTACHMENT_ID_PRODUCES_NEW_ATTACHMENT_POLICY,
-            DUPLICATE_SIGNAL_MUST_BE_SUPPRESSED_POLICY,
-            DUPLICATE_REENTRY_MUST_NOT_CREATE_DUPLICATE_TASK_RECORD_POLICY,
-            PARTIAL_RESULT_MUST_BE_PRESERVED_UNTIL_COMPLETION_POLICY,
-            PARTIAL_RESULT_IS_SUPERSEDED_BY_TERMINAL_SIGNAL_POLICY,
+            STALE_IDENTITY_MUST_BE_REJECTED_NON_DESTRUCTIVELY_POLICY,
+            V2_IS_CANONICAL_ORCHESTRATION_AUTHORITY_POLICY,
+            V2_RESTART_RECOVERY_MUST_ACCEPT_ANDROID_RESULT_AGAINST_RECOVERED_TASK_POLICY,
         )
+
         return [
             ANDROID_IS_DURABLE_PARTICIPANT_NOT_ORCHESTRATION_AUTHORITY_POLICY,
             V2_IS_CANONICAL_ORCHESTRATION_AUTHORITY_POLICY,
@@ -168,22 +170,27 @@ class TestPolicySentinels:
 class TestAndroidAttachOutcomeEnum:
     def test_new_registration_value(self):
         from core.android_v2_continuity_contract import AndroidAttachOutcome
+
         assert AndroidAttachOutcome.new_registration.value == "new_registration"
 
     def test_continuity_resume_value(self):
         from core.android_v2_continuity_contract import AndroidAttachOutcome
+
         assert AndroidAttachOutcome.continuity_resume.value == "continuity_resume"
 
     def test_new_attachment_value(self):
         from core.android_v2_continuity_contract import AndroidAttachOutcome
+
         assert AndroidAttachOutcome.new_attachment.value == "new_attachment"
 
     def test_failed_value(self):
         from core.android_v2_continuity_contract import AndroidAttachOutcome
+
         assert AndroidAttachOutcome.failed.value == "failed"
 
     def test_all_four_values_present(self):
         from core.android_v2_continuity_contract import AndroidAttachOutcome
+
         expected = {"new_registration", "continuity_resume", "new_attachment", "failed"}
         actual = {v.value for v in AndroidAttachOutcome}
         assert expected == actual
@@ -197,6 +204,7 @@ class TestAndroidAttachOutcomeEnum:
 class TestContinuityScenarioEnum:
     def test_seven_values_present(self):
         from core.android_v2_continuity_contract import ContinuityScenario
+
         expected = {
             "attach",
             "reconnect",
@@ -218,6 +226,7 @@ class TestContinuityScenarioEnum:
 class TestContinuityVerificationResultEnum:
     def test_four_values_present(self):
         from core.android_v2_continuity_contract import ContinuityVerificationResult
+
         expected = {"pass", "fail", "advisory", "not_applicable"}
         actual = {v.value for v in ContinuityVerificationResult}
         assert expected == actual
@@ -231,9 +240,10 @@ class TestContinuityVerificationResultEnum:
 class TestAndroidAttachRecord:
     def test_required_fields_present(self):
         from core.android_v2_continuity_contract import (
-            AndroidAttachRecord,
             AndroidAttachOutcome,
+            AndroidAttachRecord,
         )
+
         rec = AndroidAttachRecord(
             device_id="dev_01",
             runtime_attachment_session_id="ras_001",
@@ -246,6 +256,7 @@ class TestAndroidAttachRecord:
 
     def test_to_dict_contains_expected_keys(self):
         from core.android_v2_continuity_contract import AndroidAttachRecord
+
         rec = AndroidAttachRecord(
             device_id="dev_02",
             runtime_attachment_session_id="ras_002",
@@ -263,6 +274,7 @@ class TestAndroidAttachRecord:
 
     def test_to_dict_values_serialisable(self):
         from core.android_v2_continuity_contract import AndroidAttachRecord
+
         rec = AndroidAttachRecord(
             device_id="dev_03",
             runtime_attachment_session_id="ras_003",
@@ -278,10 +290,11 @@ class TestAndroidAttachRecord:
 class TestContinuityScenarioOutcome:
     def test_required_fields_present(self):
         from core.android_v2_continuity_contract import (
-            ContinuityScenarioOutcome,
             ContinuityScenario,
+            ContinuityScenarioOutcome,
             ContinuityVerificationResult,
         )
+
         outcome = ContinuityScenarioOutcome(
             scenario=ContinuityScenario.attach,
             result=ContinuityVerificationResult.pass_,
@@ -293,10 +306,11 @@ class TestContinuityScenarioOutcome:
 
     def test_to_dict_contains_expected_keys(self):
         from core.android_v2_continuity_contract import (
-            ContinuityScenarioOutcome,
             ContinuityScenario,
+            ContinuityScenarioOutcome,
             ContinuityVerificationResult,
         )
+
         outcome = ContinuityScenarioOutcome(
             scenario=ContinuityScenario.reconnect,
             result=ContinuityVerificationResult.fail,
@@ -309,10 +323,11 @@ class TestContinuityScenarioOutcome:
 
     def test_to_dict_values_serialisable(self):
         from core.android_v2_continuity_contract import (
-            ContinuityScenarioOutcome,
             ContinuityScenario,
+            ContinuityScenarioOutcome,
             ContinuityVerificationResult,
         )
+
         outcome = ContinuityScenarioOutcome(
             scenario=ContinuityScenario.stale_identity,
             result=ContinuityVerificationResult.advisory,
@@ -328,6 +343,7 @@ class TestContinuityScenarioOutcome:
 class TestJointContinuityContractSnapshot:
     def test_required_fields_present(self):
         from core.android_v2_continuity_contract import JointContinuityContractSnapshot
+
         snap = JointContinuityContractSnapshot()
         assert snap.authority
         assert snap.prl_sentinel
@@ -340,6 +356,7 @@ class TestJointContinuityContractSnapshot:
 
     def test_to_dict_contains_expected_top_level_keys(self):
         from core.android_v2_continuity_contract import JointContinuityContractSnapshot
+
         snap = JointContinuityContractSnapshot()
         d = snap.to_dict()
         for key in (
@@ -357,6 +374,7 @@ class TestJointContinuityContractSnapshot:
 
     def test_to_dict_is_json_serialisable(self):
         from core.android_v2_continuity_contract import JointContinuityContractSnapshot
+
         snap = JointContinuityContractSnapshot()
         json.dumps(snap.to_dict())
 
@@ -369,16 +387,18 @@ class TestJointContinuityContractSnapshot:
 class TestToJson:
     def test_android_attach_record_to_json(self):
         from core.android_v2_continuity_contract import AndroidAttachRecord
+
         rec = AndroidAttachRecord(device_id="d", runtime_attachment_session_id="r")
         parsed = json.loads(rec.to_json())
         assert parsed["device_id"] == "d"
 
     def test_continuity_scenario_outcome_to_json(self):
         from core.android_v2_continuity_contract import (
-            ContinuityScenarioOutcome,
             ContinuityScenario,
+            ContinuityScenarioOutcome,
             ContinuityVerificationResult,
         )
+
         outcome = ContinuityScenarioOutcome(
             scenario=ContinuityScenario.attach,
             result=ContinuityVerificationResult.pass_,
@@ -389,6 +409,7 @@ class TestToJson:
 
     def test_snapshot_to_json(self):
         from core.android_v2_continuity_contract import JointContinuityContractSnapshot
+
         snap = JointContinuityContractSnapshot()
         parsed = json.loads(snap.to_json())
         assert "prl_sentinel" in parsed
@@ -402,11 +423,13 @@ class TestToJson:
 class TestClassifyAttachOutcomeNewRegistration:
     def test_no_prior_entry_is_new_registration(self):
         from core.android_v2_continuity_contract import (
-            classify_attach_outcome,
             AndroidAttachOutcome,
+            classify_attach_outcome,
         )
+
         result = classify_attach_outcome(
-            "dev_01", "ras_001",
+            "dev_01",
+            "ras_001",
             prior_entry_state="",
             registry_entry_created=True,
         )
@@ -414,8 +437,10 @@ class TestClassifyAttachOutcomeNewRegistration:
 
     def test_device_id_and_attachment_id_propagated(self):
         from core.android_v2_continuity_contract import classify_attach_outcome
+
         result = classify_attach_outcome(
-            "dev_99", "ras_xyz",
+            "dev_99",
+            "ras_xyz",
             prior_entry_state="",
             registry_entry_created=True,
         )
@@ -432,11 +457,13 @@ class TestClassifyAttachOutcomeNewRegistration:
 class TestClassifyAttachOutcomeContinuityResume:
     def test_prior_active_entry_is_continuity_resume(self):
         from core.android_v2_continuity_contract import (
-            classify_attach_outcome,
             AndroidAttachOutcome,
+            classify_attach_outcome,
         )
+
         result = classify_attach_outcome(
-            "dev_01", "ras_001",
+            "dev_01",
+            "ras_001",
             prior_entry_state="active",
             registry_entry_created=True,
         )
@@ -451,11 +478,13 @@ class TestClassifyAttachOutcomeContinuityResume:
 class TestClassifyAttachOutcomeNewAttachment:
     def test_prior_replaced_entry_is_new_attachment(self):
         from core.android_v2_continuity_contract import (
-            classify_attach_outcome,
             AndroidAttachOutcome,
+            classify_attach_outcome,
         )
+
         result = classify_attach_outcome(
-            "dev_01", "ras_new",
+            "dev_01",
+            "ras_new",
             prior_entry_state="replaced",
             registry_entry_created=True,
         )
@@ -470,11 +499,13 @@ class TestClassifyAttachOutcomeNewAttachment:
 class TestClassifyAttachOutcomeFailed:
     def test_registry_not_created_is_failed(self):
         from core.android_v2_continuity_contract import (
-            classify_attach_outcome,
             AndroidAttachOutcome,
+            classify_attach_outcome,
         )
+
         result = classify_attach_outcome(
-            "dev_01", "ras_001",
+            "dev_01",
+            "ras_001",
             prior_entry_state="",
             registry_entry_created=False,
         )
@@ -489,9 +520,10 @@ class TestClassifyAttachOutcomeFailed:
 class TestClassifyReconnectPass:
     def test_continuity_resume_preserved_is_pass(self):
         from core.android_v2_continuity_contract import (
-            classify_reconnect_continuity_outcome,
             ContinuityVerificationResult,
+            classify_reconnect_continuity_outcome,
         )
+
         outcome = classify_reconnect_continuity_outcome(
             "continuity_resume",
             runtime_attachment_session_id_preserved=True,
@@ -508,9 +540,10 @@ class TestClassifyReconnectPass:
 class TestClassifyReconnectContinuityResumeNotPreservedFail:
     def test_continuity_resume_not_preserved_is_fail(self):
         from core.android_v2_continuity_contract import (
-            classify_reconnect_continuity_outcome,
             ContinuityVerificationResult,
+            classify_reconnect_continuity_outcome,
         )
+
         outcome = classify_reconnect_continuity_outcome(
             "continuity_resume",
             runtime_attachment_session_id_preserved=False,
@@ -527,9 +560,10 @@ class TestClassifyReconnectContinuityResumeNotPreservedFail:
 class TestClassifyReconnectNoIncrementAdvisory:
     def test_continuity_resume_no_increment_is_advisory(self):
         from core.android_v2_continuity_contract import (
-            classify_reconnect_continuity_outcome,
             ContinuityVerificationResult,
+            classify_reconnect_continuity_outcome,
         )
+
         outcome = classify_reconnect_continuity_outcome(
             "continuity_resume",
             runtime_attachment_session_id_preserved=True,
@@ -546,9 +580,10 @@ class TestClassifyReconnectNoIncrementAdvisory:
 class TestClassifyReconnectNewAttachmentPass:
     def test_new_attachment_is_pass(self):
         from core.android_v2_continuity_contract import (
-            classify_reconnect_continuity_outcome,
             ContinuityVerificationResult,
+            classify_reconnect_continuity_outcome,
         )
+
         outcome = classify_reconnect_continuity_outcome(
             "new_attachment",
         )
@@ -563,9 +598,10 @@ class TestClassifyReconnectNewAttachmentPass:
 class TestClassifyReconnectUnknownFail:
     def test_unknown_outcome_is_fail(self):
         from core.android_v2_continuity_contract import (
-            classify_reconnect_continuity_outcome,
             ContinuityVerificationResult,
+            classify_reconnect_continuity_outcome,
         )
+
         outcome = classify_reconnect_continuity_outcome("bogus_outcome")
         assert outcome.result == ContinuityVerificationResult.fail
 
@@ -578,9 +614,10 @@ class TestClassifyReconnectUnknownFail:
 class TestReattachProcessRecreationPass:
     def test_active_match_continuity_resume_is_pass(self):
         from core.android_v2_continuity_contract import (
-            classify_reattach_process_recreation_outcome,
             ContinuityVerificationResult,
+            classify_reattach_process_recreation_outcome,
         )
+
         outcome = classify_reattach_process_recreation_outcome(
             "continuity_resume",
             prior_entry_was_active_or_detached=True,
@@ -597,9 +634,10 @@ class TestReattachProcessRecreationPass:
 class TestReattachProcessRecreationContractViolation:
     def test_active_match_new_attachment_is_fail(self):
         from core.android_v2_continuity_contract import (
-            classify_reattach_process_recreation_outcome,
             ContinuityVerificationResult,
+            classify_reattach_process_recreation_outcome,
         )
+
         outcome = classify_reattach_process_recreation_outcome(
             "new_attachment",
             prior_entry_was_active_or_detached=True,
@@ -616,9 +654,10 @@ class TestReattachProcessRecreationContractViolation:
 class TestReattachProcessRecreationMismatchedId:
     def test_mismatched_id_new_attachment_is_pass(self):
         from core.android_v2_continuity_contract import (
-            classify_reattach_process_recreation_outcome,
             ContinuityVerificationResult,
+            classify_reattach_process_recreation_outcome,
         )
+
         outcome = classify_reattach_process_recreation_outcome(
             "new_attachment",
             prior_entry_was_active_or_detached=True,
@@ -635,9 +674,10 @@ class TestReattachProcessRecreationMismatchedId:
 class TestReattachProcessRecreationTerminalEntry:
     def test_terminal_entry_new_attachment_is_pass(self):
         from core.android_v2_continuity_contract import (
-            classify_reattach_process_recreation_outcome,
             ContinuityVerificationResult,
+            classify_reattach_process_recreation_outcome,
         )
+
         # prior entry is terminal (not active/detached), ID matches;
         # new_attachment is correct
         outcome = classify_reattach_process_recreation_outcome(
@@ -656,9 +696,10 @@ class TestReattachProcessRecreationTerminalEntry:
 class TestStaleIdentityWasReconciledFail:
     def test_was_reconciled_true_is_fail(self):
         from core.android_v2_continuity_contract import (
-            verify_stale_identity_handling,
             ContinuityVerificationResult,
+            verify_stale_identity_handling,
         )
+
         outcome = verify_stale_identity_handling(
             was_reconciled=True,
             reject_reason="",
@@ -676,9 +717,10 @@ class TestStaleIdentityWasReconciledFail:
 class TestStaleIdentityV2StateAlteredFail:
     def test_v2_state_altered_is_fail(self):
         from core.android_v2_continuity_contract import (
-            verify_stale_identity_handling,
             ContinuityVerificationResult,
+            verify_stale_identity_handling,
         )
+
         outcome = verify_stale_identity_handling(
             was_reconciled=False,
             reject_reason="stale_session",
@@ -696,9 +738,10 @@ class TestStaleIdentityV2StateAlteredFail:
 class TestStaleIdentityPhantomRecordFail:
     def test_phantom_record_created_is_fail(self):
         from core.android_v2_continuity_contract import (
-            verify_stale_identity_handling,
             ContinuityVerificationResult,
+            verify_stale_identity_handling,
         )
+
         outcome = verify_stale_identity_handling(
             was_reconciled=False,
             reject_reason="stale_session",
@@ -716,9 +759,10 @@ class TestStaleIdentityPhantomRecordFail:
 class TestStaleIdentityEmptyRejectReasonAdvisory:
     def test_empty_reject_reason_is_advisory(self):
         from core.android_v2_continuity_contract import (
-            verify_stale_identity_handling,
             ContinuityVerificationResult,
+            verify_stale_identity_handling,
         )
+
         outcome = verify_stale_identity_handling(
             was_reconciled=False,
             reject_reason="",
@@ -736,9 +780,10 @@ class TestStaleIdentityEmptyRejectReasonAdvisory:
 class TestStaleIdentityAllClearPass:
     def test_all_clear_is_pass(self):
         from core.android_v2_continuity_contract import (
-            verify_stale_identity_handling,
             ContinuityVerificationResult,
+            verify_stale_identity_handling,
         )
+
         outcome = verify_stale_identity_handling(
             was_reconciled=False,
             reject_reason="missing_lookup_key",
@@ -757,9 +802,10 @@ class TestStaleIdentityAllClearPass:
 class TestDuplicateSignalNotSuppressedFail:
     def test_not_suppressed_is_fail(self):
         from core.android_v2_continuity_contract import (
-            verify_duplicate_signal_suppression,
             ContinuityVerificationResult,
+            verify_duplicate_signal_suppression,
         )
+
         outcome = verify_duplicate_signal_suppression(
             signal_suppressed=False,
             reconciler_called_count=2,
@@ -775,9 +821,10 @@ class TestDuplicateSignalNotSuppressedFail:
 class TestDuplicateSignalReconcilerCalledTwiceFail:
     def test_reconciler_called_twice_is_fail(self):
         from core.android_v2_continuity_contract import (
-            verify_duplicate_signal_suppression,
             ContinuityVerificationResult,
+            verify_duplicate_signal_suppression,
         )
+
         outcome = verify_duplicate_signal_suppression(
             signal_suppressed=True,
             reconciler_called_count=2,
@@ -793,9 +840,10 @@ class TestDuplicateSignalReconcilerCalledTwiceFail:
 class TestDuplicateSignalSuppressedOncePass:
     def test_suppressed_called_once_is_pass(self):
         from core.android_v2_continuity_contract import (
-            verify_duplicate_signal_suppression,
             ContinuityVerificationResult,
+            verify_duplicate_signal_suppression,
         )
+
         outcome = verify_duplicate_signal_suppression(
             signal_suppressed=True,
             reconciler_called_count=1,
@@ -811,9 +859,10 @@ class TestDuplicateSignalSuppressedOncePass:
 class TestDuplicateSignalSuppressedZeroTimesPass:
     def test_suppressed_called_zero_is_pass(self):
         from core.android_v2_continuity_contract import (
-            verify_duplicate_signal_suppression,
             ContinuityVerificationResult,
+            verify_duplicate_signal_suppression,
         )
+
         outcome = verify_duplicate_signal_suppression(
             signal_suppressed=True,
             reconciler_called_count=0,
@@ -831,6 +880,7 @@ class TestBuildSnapshotNoScenarios:
         from core.android_v2_continuity_contract import (
             build_joint_continuity_contract_snapshot,
         )
+
         snap = build_joint_continuity_contract_snapshot()
         assert snap.all_pass is True
         assert snap.fail_count == 0
@@ -846,11 +896,12 @@ class TestBuildSnapshotNoScenarios:
 class TestBuildSnapshotOneFail:
     def test_one_fail_sets_all_pass_false(self):
         from core.android_v2_continuity_contract import (
-            build_joint_continuity_contract_snapshot,
-            ContinuityScenarioOutcome,
             ContinuityScenario,
+            ContinuityScenarioOutcome,
             ContinuityVerificationResult,
+            build_joint_continuity_contract_snapshot,
         )
+
         scenarios = [
             ContinuityScenarioOutcome(
                 scenario=ContinuityScenario.attach,
@@ -873,6 +924,7 @@ class TestBuildSnapshotPolicySentinels:
         from core.android_v2_continuity_contract import (
             build_joint_continuity_contract_snapshot,
         )
+
         snap = build_joint_continuity_contract_snapshot()
         assert len(snap.policy_sentinels) == 16
 
@@ -885,9 +937,10 @@ class TestBuildSnapshotPolicySentinels:
 class TestGetJointContinuityContractSnapshot:
     def test_returns_snapshot_instance(self):
         from core.android_v2_continuity_contract import (
-            get_joint_continuity_contract_snapshot,
             JointContinuityContractSnapshot,
+            get_joint_continuity_contract_snapshot,
         )
+
         snap = get_joint_continuity_contract_snapshot()
         assert isinstance(snap, JointContinuityContractSnapshot)
 
@@ -895,6 +948,7 @@ class TestGetJointContinuityContractSnapshot:
         from core.android_v2_continuity_contract import (
             get_joint_continuity_contract_snapshot,
         )
+
         snap = get_joint_continuity_contract_snapshot()
         assert "PR-L" in snap.prl_sentinel
 
@@ -909,6 +963,7 @@ class TestIsContinuityHealthyEmpty:
         from core.android_v2_continuity_contract import (
             is_android_v2_continuity_healthy,
         )
+
         assert is_android_v2_continuity_healthy() is True
 
 
@@ -920,9 +975,10 @@ class TestIsContinuityHealthyEmpty:
 class TestIsContinuityHealthyWithFail:
     def test_snapshot_with_fail_is_not_healthy(self):
         from core.android_v2_continuity_contract import (
-            is_android_v2_continuity_healthy,
             JointContinuityContractSnapshot,
+            is_android_v2_continuity_healthy,
         )
+
         snap = JointContinuityContractSnapshot(fail_count=1, all_pass=False)
         assert is_android_v2_continuity_healthy(snap) is False
 
@@ -937,6 +993,7 @@ class TestSnapshotToDictKeys:
         from core.android_v2_continuity_contract import (
             get_joint_continuity_contract_snapshot,
         )
+
         d = get_joint_continuity_contract_snapshot().to_dict()
         expected_keys = {
             "authority",
@@ -962,6 +1019,7 @@ class TestSnapshotToJsonIsValidJson:
         from core.android_v2_continuity_contract import (
             get_joint_continuity_contract_snapshot,
         )
+
         snap = get_joint_continuity_contract_snapshot()
         parsed = json.loads(snap.to_json())
         assert isinstance(parsed, dict)
@@ -977,6 +1035,7 @@ class TestPrlSentinelContents:
         from core.android_v2_continuity_contract import (
             ANDROID_V2_CONTINUITY_CONTRACT_PRL_SENTINEL,
         )
+
         assert "PR-L" in ANDROID_V2_CONTINUITY_CONTRACT_PRL_SENTINEL
         assert "package=L" in ANDROID_V2_CONTINUITY_CONTRACT_PRL_SENTINEL
 
@@ -992,10 +1051,8 @@ class TestAuthorityBoundaryAndroidPolicy:
         from core.android_v2_continuity_contract import (
             ANDROID_IS_DURABLE_PARTICIPANT_NOT_ORCHESTRATION_AUTHORITY_POLICY,
         )
-        assert (
-            "orchestration authority"
-            in ANDROID_IS_DURABLE_PARTICIPANT_NOT_ORCHESTRATION_AUTHORITY_POLICY.lower()
-        )
+
+        assert "orchestration authority" in ANDROID_IS_DURABLE_PARTICIPANT_NOT_ORCHESTRATION_AUTHORITY_POLICY.lower()
 
 
 # ---------------------------------------------------------------------------
@@ -1008,6 +1065,7 @@ class TestAuthorityBoundaryV2Policy:
         from core.android_v2_continuity_contract import (
             V2_IS_CANONICAL_ORCHESTRATION_AUTHORITY_POLICY,
         )
+
         assert "V2" in V2_IS_CANONICAL_ORCHESTRATION_AUTHORITY_POLICY
 
 
@@ -1021,10 +1079,8 @@ class TestAttachPolicyMentionsRegistry:
         from core.android_v2_continuity_contract import (
             ATTACH_MUST_CREATE_REGISTRY_ENTRY_POLICY,
         )
-        assert (
-            "AttachedSessionRegistry"
-            in ATTACH_MUST_CREATE_REGISTRY_ENTRY_POLICY
-        )
+
+        assert "AttachedSessionRegistry" in ATTACH_MUST_CREATE_REGISTRY_ENTRY_POLICY
 
 
 # ---------------------------------------------------------------------------
@@ -1037,10 +1093,8 @@ class TestReconnectPolicyMentionsAttachmentId:
         from core.android_v2_continuity_contract import (
             RECONNECT_CONTINUITY_RESUME_PRESERVES_ATTACHMENT_ID_POLICY,
         )
-        assert (
-            "runtime_attachment_session_id"
-            in RECONNECT_CONTINUITY_RESUME_PRESERVES_ATTACHMENT_ID_POLICY
-        )
+
+        assert "runtime_attachment_session_id" in RECONNECT_CONTINUITY_RESUME_PRESERVES_ATTACHMENT_ID_POLICY
 
 
 # ---------------------------------------------------------------------------
@@ -1053,6 +1107,7 @@ class TestStaleIdentityPolicyMentionsNonDestructive:
         from core.android_v2_continuity_contract import (
             STALE_IDENTITY_MUST_BE_REJECTED_NON_DESTRUCTIVELY_POLICY,
         )
+
         lower = STALE_IDENTITY_MUST_BE_REJECTED_NON_DESTRUCTIVELY_POLICY.lower()
         assert "non-destructive" in lower or "non_destructive" in lower or "was_reconciled=false" in lower
 
@@ -1067,6 +1122,7 @@ class TestDuplicatePolicyMentionsIdempotencyKey:
         from core.android_v2_continuity_contract import (
             DUPLICATE_SIGNAL_MUST_BE_SUPPRESSED_POLICY,
         )
+
         assert "idempotency_key" in DUPLICATE_SIGNAL_MUST_BE_SUPPRESSED_POLICY
 
 
@@ -1080,10 +1136,8 @@ class TestPartialResultPolicyMentionsPartialResult:
         from core.android_v2_continuity_contract import (
             PARTIAL_RESULT_MUST_BE_PRESERVED_UNTIL_COMPLETION_POLICY,
         )
-        assert (
-            "partial result"
-            in PARTIAL_RESULT_MUST_BE_PRESERVED_UNTIL_COMPLETION_POLICY.lower()
-        )
+
+        assert "partial result" in PARTIAL_RESULT_MUST_BE_PRESERVED_UNTIL_COMPLETION_POLICY.lower()
 
 
 # ---------------------------------------------------------------------------
@@ -1096,10 +1150,8 @@ class TestV2RestartPolicyMentionsRecoveredTask:
         from core.android_v2_continuity_contract import (
             V2_RESTART_RECOVERY_MUST_ACCEPT_ANDROID_RESULT_AGAINST_RECOVERED_TASK_POLICY,
         )
-        assert (
-            "recovered task"
-            in V2_RESTART_RECOVERY_MUST_ACCEPT_ANDROID_RESULT_AGAINST_RECOVERED_TASK_POLICY.lower()
-        )
+
+        assert "recovered task" in V2_RESTART_RECOVERY_MUST_ACCEPT_ANDROID_RESULT_AGAINST_RECOVERED_TASK_POLICY.lower()
 
 
 # ---------------------------------------------------------------------------
@@ -1110,11 +1162,13 @@ class TestV2RestartPolicyMentionsRecoveredTask:
 class TestClassifyAttachOutcomeDetachedContinuityResume:
     def test_prior_detached_entry_is_continuity_resume(self):
         from core.android_v2_continuity_contract import (
-            classify_attach_outcome,
             AndroidAttachOutcome,
+            classify_attach_outcome,
         )
+
         result = classify_attach_outcome(
-            "dev_05", "ras_005",
+            "dev_05",
+            "ras_005",
             prior_entry_state="detached",
             registry_entry_created=True,
         )
@@ -1129,11 +1183,13 @@ class TestClassifyAttachOutcomeDetachedContinuityResume:
 class TestClassifyAttachOutcomeInvalidatedNewAttachment:
     def test_prior_invalidated_entry_is_new_attachment(self):
         from core.android_v2_continuity_contract import (
-            classify_attach_outcome,
             AndroidAttachOutcome,
+            classify_attach_outcome,
         )
+
         result = classify_attach_outcome(
-            "dev_06", "ras_006",
+            "dev_06",
+            "ras_006",
             prior_entry_state="invalidated",
             registry_entry_created=True,
         )
@@ -1148,10 +1204,11 @@ class TestClassifyAttachOutcomeInvalidatedNewAttachment:
 class TestMixedScenarioSnapshotCounts:
     def _make_outcomes(self):
         from core.android_v2_continuity_contract import (
-            ContinuityScenarioOutcome,
             ContinuityScenario,
+            ContinuityScenarioOutcome,
             ContinuityVerificationResult,
         )
+
         return [
             ContinuityScenarioOutcome(
                 scenario=ContinuityScenario.attach,
@@ -1175,6 +1232,7 @@ class TestMixedScenarioSnapshotCounts:
         from core.android_v2_continuity_contract import (
             build_joint_continuity_contract_snapshot,
         )
+
         snap = build_joint_continuity_contract_snapshot(self._make_outcomes())
         assert snap.fail_count == 1
 
@@ -1182,6 +1240,7 @@ class TestMixedScenarioSnapshotCounts:
         from core.android_v2_continuity_contract import (
             build_joint_continuity_contract_snapshot,
         )
+
         snap = build_joint_continuity_contract_snapshot(self._make_outcomes())
         assert snap.advisory_count == 1
 
@@ -1189,6 +1248,7 @@ class TestMixedScenarioSnapshotCounts:
         from core.android_v2_continuity_contract import (
             build_joint_continuity_contract_snapshot,
         )
+
         snap = build_joint_continuity_contract_snapshot(self._make_outcomes())
         assert snap.all_pass is False
 
@@ -1201,11 +1261,12 @@ class TestMixedScenarioSnapshotCounts:
 class TestScenarioOutcomesOrder:
     def test_scenarios_ordered_by_insertion(self):
         from core.android_v2_continuity_contract import (
-            build_joint_continuity_contract_snapshot,
-            ContinuityScenarioOutcome,
             ContinuityScenario,
+            ContinuityScenarioOutcome,
             ContinuityVerificationResult,
+            build_joint_continuity_contract_snapshot,
         )
+
         scenarios = [
             ContinuityScenarioOutcome(
                 scenario=ContinuityScenario.attach,

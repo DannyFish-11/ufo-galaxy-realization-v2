@@ -252,9 +252,7 @@ class DomainGovernanceSnapshot:
             "device_domain": self.device_domain.to_dict(),
             "node_domain": self.node_domain.to_dict(),
             "bridge_relationships": [b.to_dict() for b in self.bridge_relationships],
-            "registry_surface_catalogue": [
-                s.to_dict() for s in self.registry_surface_catalogue
-            ],
+            "registry_surface_catalogue": [s.to_dict() for s in self.registry_surface_catalogue],
             "generated_at": self.generated_at,
             "authority": self.authority,
             "sentinel": self.sentinel,
@@ -326,12 +324,10 @@ _BRIDGE_RELATIONSHIPS: Tuple[BridgeRelationship, ...] = (
             "core.runtime.source_dispatch_orchestrator",
         ),
         device_domain_role=(
-            "Provides device_id, connectivity facts, and runtime-host status "
-            "(maintained by UnifiedDeviceManager)."
+            "Provides device_id, connectivity facts, and runtime-host status " "(maintained by UnifiedDeviceManager)."
         ),
         node_domain_role=(
-            "Dispatch orchestrator uses runtime-host status to select the "
-            "device as a valid execution target."
+            "Dispatch orchestrator uses runtime-host status to select the " "device as a valid execution target."
         ),
         description=(
             "A device that hosts an active runtime may be selected as a "
@@ -420,10 +416,7 @@ _REGISTRY_SURFACE_CATALOGUE: Tuple[RegistrySurfaceClassification, ...] = (
         surface_name="UnifiedDeviceManager (UDM)",
         domain=RegistrySurfaceDomain.device,
         role=RegistrySurfaceRole.ssot,
-        notes=(
-            "SSOT — sole canonical write authority for device registration "
-            "and mutable device state."
-        ),
+        notes=("SSOT — sole canonical write authority for device registration " "and mutable device state."),
         is_authoritative=True,
     ),
     RegistrySurfaceClassification(
@@ -431,10 +424,7 @@ _REGISTRY_SURFACE_CATALOGUE: Tuple[RegistrySurfaceClassification, ...] = (
         surface_name="RegisteredRuntimeDevice contract",
         domain=RegistrySurfaceDomain.device,
         role=RegistrySurfaceRole.canonical_registry,
-        notes=(
-            "Canonical external single-device read contract "
-            "(read-authoritative)."
-        ),
+        notes=("Canonical external single-device read contract " "(read-authoritative)."),
         is_authoritative=True,
     ),
     RegistrySurfaceClassification(
@@ -442,10 +432,7 @@ _REGISTRY_SURFACE_CATALOGUE: Tuple[RegistrySurfaceClassification, ...] = (
         surface_name="DeviceRegistry",
         domain=RegistrySurfaceDomain.device,
         role=RegistrySurfaceRole.canonical_registry,
-        notes=(
-            "Canonical in-process registry; delegates writes to "
-            "UnifiedDeviceManager."
-        ),
+        notes=("Canonical in-process registry; delegates writes to " "UnifiedDeviceManager."),
         is_authoritative=True,
     ),
     RegistrySurfaceClassification(
@@ -453,10 +440,7 @@ _REGISTRY_SURFACE_CATALOGUE: Tuple[RegistrySurfaceClassification, ...] = (
         surface_name="device readiness",
         domain=RegistrySurfaceDomain.device,
         role=RegistrySurfaceRole.projection,
-        notes=(
-            "Readiness verdict synthesis; compiles readiness evidence and "
-            "does not write canonical state."
-        ),
+        notes=("Readiness verdict synthesis; compiles readiness evidence and " "does not write canonical state."),
         is_authoritative=False,
     ),
     RegistrySurfaceClassification(
@@ -464,10 +448,7 @@ _REGISTRY_SURFACE_CATALOGUE: Tuple[RegistrySurfaceClassification, ...] = (
         surface_name="device participation",
         domain=RegistrySurfaceDomain.device,
         role=RegistrySurfaceRole.projection,
-        notes=(
-            "Participation hints and group membership; projects from "
-            "device-domain state."
-        ),
+        notes=("Participation hints and group membership; projects from " "device-domain state."),
         is_authoritative=False,
     ),
     # -- Node domain ---------------------------------------------------------
@@ -484,10 +465,7 @@ _REGISTRY_SURFACE_CATALOGUE: Tuple[RegistrySurfaceClassification, ...] = (
         surface_name="NodeRegistry (compat facade)",
         domain=RegistrySurfaceDomain.node,
         role=RegistrySurfaceRole.compat_facade,
-        notes=(
-            "Legacy compat facade; must not be extended as canonical "
-            "architecture.  Not authoritative."
-        ),
+        notes=("Legacy compat facade; must not be extended as canonical " "architecture.  Not authoritative."),
         is_authoritative=False,
     ),
     RegistrySurfaceClassification(
@@ -503,10 +481,7 @@ _REGISTRY_SURFACE_CATALOGUE: Tuple[RegistrySurfaceClassification, ...] = (
         surface_name="node governance runtime",
         domain=RegistrySurfaceDomain.node,
         role=RegistrySurfaceRole.canonical_registry,
-        notes=(
-            "Runtime governance eligibility authority (architectural class, "
-            "health, lifecycle-stage)."
-        ),
+        notes=("Runtime governance eligibility authority (architectural class, " "health, lifecycle-stage)."),
         is_authoritative=True,
     ),
     RegistrySurfaceClassification(
@@ -523,8 +498,7 @@ _REGISTRY_SURFACE_CATALOGUE: Tuple[RegistrySurfaceClassification, ...] = (
         domain=RegistrySurfaceDomain.node,
         role=RegistrySurfaceRole.adapter,
         notes=(
-            "Canonical adapter contract for node execution; an execution "
-            "adapter, not a registry/discovery surface."
+            "Canonical adapter contract for node execution; an execution " "adapter, not a registry/discovery surface."
         ),
         is_authoritative=False,
     ),
@@ -545,10 +519,7 @@ _REGISTRY_SURFACE_CATALOGUE: Tuple[RegistrySurfaceClassification, ...] = (
         surface_name="source dispatch orchestrator",
         domain=RegistrySurfaceDomain.bridge,
         role=RegistrySurfaceRole.bridge,
-        notes=(
-            "Dispatch bridge surface; resolves dispatch targets but does not "
-            "write domain state."
-        ),
+        notes=("Dispatch bridge surface; resolves dispatch targets but does not " "write domain state."),
         is_authoritative=False,
     ),
     # -- Shared projection ----------------------------------------------------
@@ -557,10 +528,7 @@ _REGISTRY_SURFACE_CATALOGUE: Tuple[RegistrySurfaceClassification, ...] = (
         surface_name="projection routes (/api/v1/projection/*)",
         domain=RegistrySurfaceDomain.shared_projection,
         role=RegistrySurfaceRole.projection,
-        notes=(
-            "Read-only projection assembling facts from both domains; never "
-            "writes canonical state."
-        ),
+        notes=("Read-only projection assembling facts from both domains; never " "writes canonical state."),
         is_authoritative=False,
     ),
     RegistrySurfaceClassification(

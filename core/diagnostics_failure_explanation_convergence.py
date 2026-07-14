@@ -447,9 +447,7 @@ class DiagnosticsFailureConvergenceSnapshot:
             "artifact_evidence_count": self.artifact_evidence_count,
             "operator_summary_count": self.operator_summary_count,
             "audit_postrun_count": self.audit_postrun_count,
-            "android_diagnostics_uplink_surfaces": (
-                self.android_diagnostics_uplink_surfaces
-            ),
+            "android_diagnostics_uplink_surfaces": (self.android_diagnostics_uplink_surfaces),
             "generated_at": self.generated_at,
         }
 
@@ -460,17 +458,13 @@ class DiagnosticsFailureConvergenceSnapshot:
 
 #: All surfaces classified within the diagnostics/failure/explanation boundary.
 DIAGNOSTICS_SEMANTIC_SURFACE_REGISTRY: List[DiagnosticsSemanticSurface] = [
-
     # =========================================================================
     # AUTHORITY_EXECUTION_TRUTH — runtime authority sources for failure/success
     # =========================================================================
-
     DiagnosticsSemanticSurface(
         surface_id="desktop_presence_runtime_authority",
         module_path="core.desktop_presence_runtime.DesktopPresenceRuntime",
-        surface_name=(
-            "DesktopPresenceRuntime (canonical runtime shell authority — PR-4)"
-        ),
+        surface_name=("DesktopPresenceRuntime (canonical runtime shell authority — PR-4)"),
         semantic_kind=DiagnosticsSemanticKind.authority_execution_truth,
         may_not_redefine_authority_truth=False,
         android_diagnostics_uplink=False,
@@ -481,13 +475,10 @@ DIAGNOSTICS_SEMANTIC_SURFACE_REGISTRY: List[DiagnosticsSemanticSurface] = [
             "they do not redefine it."
         ),
     ),
-
     DiagnosticsSemanticSurface(
         surface_id="task_graph_runtime_authority",
         module_path="core.task_graph_runtime.TaskGraphRuntime",
-        surface_name=(
-            "TaskGraphRuntime (task execution authority — core)"
-        ),
+        surface_name=("TaskGraphRuntime (task execution authority — core)"),
         semantic_kind=DiagnosticsSemanticKind.authority_execution_truth,
         may_not_redefine_authority_truth=False,
         android_diagnostics_uplink=False,
@@ -498,13 +489,10 @@ DIAGNOSTICS_SEMANTIC_SURFACE_REGISTRY: List[DiagnosticsSemanticSurface] = [
             "from this, not vice versa."
         ),
     ),
-
     DiagnosticsSemanticSurface(
         surface_id="canonical_execution_chain_authority",
         module_path="core.canonical_execution_chain",
-        surface_name=(
-            "canonical_execution_chain (execution pipeline authority — core)"
-        ),
+        surface_name=("canonical_execution_chain (execution pipeline authority — core)"),
         semantic_kind=DiagnosticsSemanticKind.authority_execution_truth,
         may_not_redefine_authority_truth=False,
         android_diagnostics_uplink=False,
@@ -515,18 +503,13 @@ DIAGNOSTICS_SEMANTIC_SURFACE_REGISTRY: List[DiagnosticsSemanticSurface] = [
             "the runtime truth output chain."
         ),
     ),
-
     # =========================================================================
     # FAILURE_DIAGNOSTICS_TRUTH — failure records, degraded-state, error logs
     # =========================================================================
-
     DiagnosticsSemanticSurface(
         surface_id="failure_degraded_recovery_policy",
         module_path="core.failure_degraded_recovery_policy",
-        surface_name=(
-            "failure_degraded_recovery_policy (failure/degraded/recovery "
-            "policy layer — PR-13/Layer-13)"
-        ),
+        surface_name=("failure_degraded_recovery_policy (failure/degraded/recovery " "policy layer — PR-13/Layer-13)"),
         semantic_kind=DiagnosticsSemanticKind.failure_diagnostics_truth,
         may_not_redefine_authority_truth=True,
         android_diagnostics_uplink=False,
@@ -537,13 +520,11 @@ DIAGNOSTICS_SEMANTIC_SURFACE_REGISTRY: List[DiagnosticsSemanticSurface] = [
             "MUST NOT be read back as acceptance/closure gate inputs."
         ),
     ),
-
     DiagnosticsSemanticSurface(
         surface_id="failure_domains_classifier",
         module_path="core.failure_domains.FailureDomain",
         surface_name=(
-            "FailureDomain / FailureClassification (structured failure "
-            "classification — core.failure_domains)"
+            "FailureDomain / FailureClassification (structured failure " "classification — core.failure_domains)"
         ),
         semantic_kind=DiagnosticsSemanticKind.failure_diagnostics_truth,
         may_not_redefine_authority_truth=True,
@@ -554,13 +535,10 @@ DIAGNOSTICS_SEMANTIC_SURFACE_REGISTRY: List[DiagnosticsSemanticSurface] = [
             "CI visibility.  MUST NOT be reverse-read as acceptance gate inputs."
         ),
     ),
-
     DiagnosticsSemanticSurface(
         surface_id="error_framework_tracker",
         module_path="core.error_framework",
-        surface_name=(
-            "error_framework (global error tracking and categorisation — core)"
-        ),
+        surface_name=("error_framework (global error tracking and categorisation — core)"),
         semantic_kind=DiagnosticsSemanticKind.failure_diagnostics_truth,
         may_not_redefine_authority_truth=True,
         android_diagnostics_uplink=False,
@@ -571,14 +549,10 @@ DIAGNOSTICS_SEMANTIC_SURFACE_REGISTRY: List[DiagnosticsSemanticSurface] = [
             "state or closure evidence."
         ),
     ),
-
     DiagnosticsSemanticSurface(
         surface_id="diagnostics_route_surface",
         module_path="core.routes.diagnostics",
-        surface_name=(
-            "core.routes.diagnostics (system diagnostics route surface — "
-            "operational endpoints)"
-        ),
+        surface_name=("core.routes.diagnostics (system diagnostics route surface — " "operational endpoints)"),
         semantic_kind=DiagnosticsSemanticKind.failure_diagnostics_truth,
         may_not_redefine_authority_truth=True,
         android_diagnostics_uplink=False,
@@ -589,14 +563,10 @@ DIAGNOSTICS_SEMANTIC_SURFACE_REGISTRY: List[DiagnosticsSemanticSurface] = [
             "They MUST NOT be consumed as acceptance/closure gate inputs."
         ),
     ),
-
     DiagnosticsSemanticSurface(
         surface_id="android_failure_signal_ingress",
         module_path="core.android_participant_truth_ingress",
-        surface_name=(
-            "android_participant_truth_ingress (Android failure signal ingress — "
-            "canonical uplink path)"
-        ),
+        surface_name=("android_participant_truth_ingress (Android failure signal ingress — " "canonical uplink path)"),
         semantic_kind=DiagnosticsSemanticKind.failure_diagnostics_truth,
         may_not_redefine_authority_truth=True,
         android_diagnostics_uplink=True,
@@ -608,17 +578,14 @@ DIAGNOSTICS_SEMANTIC_SURFACE_REGISTRY: List[DiagnosticsSemanticSurface] = [
             "become authority_execution_truth.  The two must not be conflated."
         ),
     ),
-
     # =========================================================================
     # ARTIFACT_EVIDENCE_TRUTH — evaluator artefacts, execution chain artefacts
     # =========================================================================
-
     DiagnosticsSemanticSurface(
         surface_id="android_evaluator_artifact_ingress",
         module_path="core.android_evaluator_artifact_ingress",
         surface_name=(
-            "android_evaluator_artifact_ingress (Android evaluator artefact "
-            "ingress and registry — PR-4V2-GOV)"
+            "android_evaluator_artifact_ingress (Android evaluator artefact " "ingress and registry — PR-4V2-GOV)"
         ),
         semantic_kind=DiagnosticsSemanticKind.artifact_evidence_truth,
         may_not_redefine_authority_truth=True,
@@ -632,16 +599,10 @@ DIAGNOSTICS_SEMANTIC_SURFACE_REGISTRY: List[DiagnosticsSemanticSurface] = [
             "(PR-9V2 domain), not more artifact_evidence_truth."
         ),
     ),
-
     DiagnosticsSemanticSurface(
         surface_id="android_evaluator_artifact_registry",
-        module_path=(
-            "core.android_evaluator_artifact_ingress.AndroidEvaluatorArtifactRegistry"
-        ),
-        surface_name=(
-            "AndroidEvaluatorArtifactRegistry (in-process artefact store — "
-            "PR-4V2-GOV)"
-        ),
+        module_path=("core.android_evaluator_artifact_ingress.AndroidEvaluatorArtifactRegistry"),
+        surface_name=("AndroidEvaluatorArtifactRegistry (in-process artefact store — " "PR-4V2-GOV)"),
         semantic_kind=DiagnosticsSemanticKind.artifact_evidence_truth,
         may_not_redefine_authority_truth=True,
         android_diagnostics_uplink=True,
@@ -652,7 +613,6 @@ DIAGNOSTICS_SEMANTIC_SURFACE_REGISTRY: List[DiagnosticsSemanticSurface] = [
             "closure or acceptance — it is evidence for gate evaluation."
         ),
     ),
-
     DiagnosticsSemanticSurface(
         surface_id="v2_readiness_governance_evidence_surface",
         module_path="core.v2_readiness_governance_evidence_surface",
@@ -670,17 +630,14 @@ DIAGNOSTICS_SEMANTIC_SURFACE_REGISTRY: List[DiagnosticsSemanticSurface] = [
             "truth."
         ),
     ),
-
     # =========================================================================
     # OPERATOR_SUMMARY_EXPLANATION — human-readable summaries, explanations
     # =========================================================================
-
     DiagnosticsSemanticSurface(
         surface_id="projection_route_explanation_fields",
         module_path="core.routes.projection",
         surface_name=(
-            "core.routes.projection (projection route — operator-facing "
-            "runtime-truth view and explanation fields)"
+            "core.routes.projection (projection route — operator-facing " "runtime-truth view and explanation fields)"
         ),
         semantic_kind=DiagnosticsSemanticKind.operator_summary_explanation,
         may_not_redefine_authority_truth=True,
@@ -694,14 +651,10 @@ DIAGNOSTICS_SEMANTIC_SURFACE_REGISTRY: List[DiagnosticsSemanticSurface] = [
             "text into authority execution truth."
         ),
     ),
-
     DiagnosticsSemanticSurface(
         surface_id="routing_explanation_surface",
         module_path="core.routing_explanation",
-        surface_name=(
-            "routing_explanation (operator-facing routing decision explanation — "
-            "read-only)"
-        ),
+        surface_name=("routing_explanation (operator-facing routing decision explanation — " "read-only)"),
         semantic_kind=DiagnosticsSemanticKind.operator_summary_explanation,
         may_not_redefine_authority_truth=True,
         android_diagnostics_uplink=False,
@@ -712,13 +665,10 @@ DIAGNOSTICS_SEMANTIC_SURFACE_REGISTRY: List[DiagnosticsSemanticSurface] = [
             "routing authority decision itself."
         ),
     ),
-
     DiagnosticsSemanticSurface(
         surface_id="operator_surface",
         module_path="core.operator_surface",
-        surface_name=(
-            "operator_surface (operator-facing runtime surface — summary views)"
-        ),
+        surface_name=("operator_surface (operator-facing runtime surface — summary views)"),
         semantic_kind=DiagnosticsSemanticKind.operator_summary_explanation,
         may_not_redefine_authority_truth=True,
         android_diagnostics_uplink=False,
@@ -729,14 +679,10 @@ DIAGNOSTICS_SEMANTIC_SURFACE_REGISTRY: List[DiagnosticsSemanticSurface] = [
             "and failure diagnostics truth but do not produce or redefine them."
         ),
     ),
-
     DiagnosticsSemanticSurface(
         surface_id="mesh_participation_summary",
         module_path="core.mesh_participation_summary",
-        surface_name=(
-            "mesh_participation_summary (mesh-level participation summary — "
-            "operator read-only)"
-        ),
+        surface_name=("mesh_participation_summary (mesh-level participation summary — " "operator read-only)"),
         semantic_kind=DiagnosticsSemanticKind.operator_summary_explanation,
         may_not_redefine_authority_truth=True,
         android_diagnostics_uplink=False,
@@ -746,18 +692,13 @@ DIAGNOSTICS_SEMANTIC_SURFACE_REGISTRY: List[DiagnosticsSemanticSurface] = [
             "described here for human consumption, not defined here."
         ),
     ),
-
     # =========================================================================
     # AUDIT_POSTRUN_INTERPRETATION — post-hoc audit, forensic, post-run records
     # =========================================================================
-
     DiagnosticsSemanticSurface(
         surface_id="runtime_closure_audit",
         module_path="core.runtime_closure_audit",
-        surface_name=(
-            "runtime_closure_audit (post-hoc runtime closure audit record — "
-            "forensic)"
-        ),
+        surface_name=("runtime_closure_audit (post-hoc runtime closure audit record — " "forensic)"),
         semantic_kind=DiagnosticsSemanticKind.audit_postrun_interpretation,
         may_not_redefine_authority_truth=True,
         android_diagnostics_uplink=False,
@@ -767,14 +708,10 @@ DIAGNOSTICS_SEMANTIC_SURFACE_REGISTRY: List[DiagnosticsSemanticSurface] = [
             "and MUST NOT be used as real-time authority or live closure inputs."
         ),
     ),
-
     DiagnosticsSemanticSurface(
         surface_id="android_delegated_runtime_audit",
         module_path="core.android_delegated_runtime_audit",
-        surface_name=(
-            "android_delegated_runtime_audit (Android-side delegated runtime "
-            "audit — post-hoc forensic)"
-        ),
+        surface_name=("android_delegated_runtime_audit (Android-side delegated runtime " "audit — post-hoc forensic)"),
         semantic_kind=DiagnosticsSemanticKind.audit_postrun_interpretation,
         may_not_redefine_authority_truth=True,
         android_diagnostics_uplink=True,
@@ -786,14 +723,10 @@ DIAGNOSTICS_SEMANTIC_SURFACE_REGISTRY: List[DiagnosticsSemanticSurface] = [
             "authority decision."
         ),
     ),
-
     DiagnosticsSemanticSurface(
         surface_id="post_closure_dual_repo_reassessment",
         module_path="core.post_closure_dual_repo_reassessment",
-        surface_name=(
-            "post_closure_dual_repo_reassessment (post-closure dual-repo "
-            "reassessment — retrospective)"
-        ),
+        surface_name=("post_closure_dual_repo_reassessment (post-closure dual-repo " "reassessment — retrospective)"),
         semantic_kind=DiagnosticsSemanticKind.audit_postrun_interpretation,
         may_not_redefine_authority_truth=True,
         android_diagnostics_uplink=False,
@@ -804,14 +737,10 @@ DIAGNOSTICS_SEMANTIC_SURFACE_REGISTRY: List[DiagnosticsSemanticSurface] = [
             "closure decisions."
         ),
     ),
-
     DiagnosticsSemanticSurface(
         surface_id="audit_event_semantics",
         module_path="core.audit_event_semantics",
-        surface_name=(
-            "audit_event_semantics (audit event classification and semantics — "
-            "post-hoc)"
-        ),
+        surface_name=("audit_event_semantics (audit event classification and semantics — " "post-hoc)"),
         semantic_kind=DiagnosticsSemanticKind.audit_postrun_interpretation,
         may_not_redefine_authority_truth=True,
         android_diagnostics_uplink=False,
@@ -821,14 +750,10 @@ DIAGNOSTICS_SEMANTIC_SURFACE_REGISTRY: List[DiagnosticsSemanticSurface] = [
             "classifying an event does not constitute making a runtime decision."
         ),
     ),
-
     DiagnosticsSemanticSurface(
         surface_id="repo_goal_audit_route",
         module_path="core.routes.audit",
-        surface_name=(
-            "core.routes.audit (repo/goal audit route surface — "
-            "post-run interpretation)"
-        ),
+        surface_name=("core.routes.audit (repo/goal audit route surface — " "post-run interpretation)"),
         semantic_kind=DiagnosticsSemanticKind.audit_postrun_interpretation,
         may_not_redefine_authority_truth=True,
         android_diagnostics_uplink=False,
@@ -912,9 +837,7 @@ def get_surfaces_by_semantic_kind(
 # ---------------------------------------------------------------------------
 
 
-def build_diagnostics_failure_convergence_snapshot() -> (
-    DiagnosticsFailureConvergenceSnapshot
-):
+def build_diagnostics_failure_convergence_snapshot() -> DiagnosticsFailureConvergenceSnapshot:
     """Build an aggregate convergence snapshot for operator / CI visibility.
 
     Returns
@@ -923,9 +846,7 @@ def build_diagnostics_failure_convergence_snapshot() -> (
         Counts and metadata for all classified surfaces.
     """
     registry = DIAGNOSTICS_SEMANTIC_SURFACE_REGISTRY
-    android_uplink = [
-        s.surface_id for s in registry if s.android_diagnostics_uplink
-    ]
+    android_uplink = [s.surface_id for s in registry if s.android_diagnostics_uplink]
     return DiagnosticsFailureConvergenceSnapshot(
         authority=DIAGNOSTICS_FAILURE_EXPLANATION_CONVERGENCE_AUTHORITY,
         sentinel=DIAGNOSTICS_FAILURE_EXPLANATION_CONVERGENCE_PR10V2_SENTINEL,
@@ -938,24 +859,19 @@ def build_diagnostics_failure_convergence_snapshot() -> (
         ),
         total_surfaces=len(registry),
         authority_execution_truth_count=sum(
-            1 for s in registry
-            if s.semantic_kind == DiagnosticsSemanticKind.authority_execution_truth
+            1 for s in registry if s.semantic_kind == DiagnosticsSemanticKind.authority_execution_truth
         ),
         failure_diagnostics_count=sum(
-            1 for s in registry
-            if s.semantic_kind == DiagnosticsSemanticKind.failure_diagnostics_truth
+            1 for s in registry if s.semantic_kind == DiagnosticsSemanticKind.failure_diagnostics_truth
         ),
         artifact_evidence_count=sum(
-            1 for s in registry
-            if s.semantic_kind == DiagnosticsSemanticKind.artifact_evidence_truth
+            1 for s in registry if s.semantic_kind == DiagnosticsSemanticKind.artifact_evidence_truth
         ),
         operator_summary_count=sum(
-            1 for s in registry
-            if s.semantic_kind == DiagnosticsSemanticKind.operator_summary_explanation
+            1 for s in registry if s.semantic_kind == DiagnosticsSemanticKind.operator_summary_explanation
         ),
         audit_postrun_count=sum(
-            1 for s in registry
-            if s.semantic_kind == DiagnosticsSemanticKind.audit_postrun_interpretation
+            1 for s in registry if s.semantic_kind == DiagnosticsSemanticKind.audit_postrun_interpretation
         ),
         android_diagnostics_uplink_surfaces=android_uplink,
         generated_at=time.time(),
@@ -979,8 +895,7 @@ def get_android_diagnostics_uplink_path() -> Tuple[str, ...]:
     """
     return (
         "galaxy_gateway.android.handlers (ingress gateway)",
-        "core.android_evaluator_artifact_ingress (artifact ingress → "
-        "AndroidEvaluatorArtifactRegistry)",
+        "core.android_evaluator_artifact_ingress (artifact ingress → " "AndroidEvaluatorArtifactRegistry)",
         "core.android_participant_truth_ingress (failure signal ingress)",
         "core.v2_android_truth_ssot.build_v2_android_truth_block (SSOT build)",
         "core.canonical_session_truth (merge + record)",

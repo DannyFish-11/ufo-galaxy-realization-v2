@@ -53,20 +53,22 @@ from typing import Any, Dict
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # 1. DecisionFactor enum — values and serialisation stability
 # ---------------------------------------------------------------------------
 
+
 class TestDecisionFactor:
     def test_all_values_are_strings(self):
         from core.routing_explanation.decision_basis import DecisionFactor
+
         for member in DecisionFactor:
             assert isinstance(member.value, str)
             assert member.value  # non-empty
 
     def test_known_values_stable(self):
         from core.routing_explanation.decision_basis import DecisionFactor
+
         assert DecisionFactor.POLICY.value == "policy"
         assert DecisionFactor.HEALTH.value == "health"
         assert DecisionFactor.CAPABILITY.value == "capability"
@@ -77,11 +79,13 @@ class TestDecisionFactor:
 
     def test_roundtrip_via_value(self):
         from core.routing_explanation.decision_basis import DecisionFactor
+
         for member in DecisionFactor:
             assert DecisionFactor(member.value) is member
 
     def test_factor_description_non_empty(self):
         from core.routing_explanation.decision_basis import DecisionFactor, factor_description
+
         for member in DecisionFactor:
             desc = factor_description(member)
             assert isinstance(desc, str)
@@ -92,9 +96,11 @@ class TestDecisionFactor:
 # 2. DecisionBasis — construction, to_dict, from_dict round-trip
 # ---------------------------------------------------------------------------
 
+
 class TestDecisionBasis:
     def test_construction_defaults(self):
         from core.routing_explanation.decision_basis import DecisionBasis, DecisionFactor
+
         b = DecisionBasis(factor=DecisionFactor.HEALTH)
         assert b.factor is DecisionFactor.HEALTH
         assert b.accepted is True
@@ -103,6 +109,7 @@ class TestDecisionBasis:
 
     def test_to_dict_keys(self):
         from core.routing_explanation.decision_basis import DecisionBasis, DecisionFactor
+
         b = DecisionBasis(
             factor=DecisionFactor.POLICY,
             signal_value="local_preferred",
@@ -119,12 +126,14 @@ class TestDecisionBasis:
 
     def test_to_dict_json_serialisable(self):
         from core.routing_explanation.decision_basis import DecisionBasis, DecisionFactor
+
         b = DecisionBasis(factor=DecisionFactor.HEALTH, signal_value=0.87, weight=0.35)
         # Must not raise
         json.dumps(b.to_dict())
 
     def test_from_dict_roundtrip(self):
         from core.routing_explanation.decision_basis import DecisionBasis, DecisionFactor
+
         original = DecisionBasis(
             factor=DecisionFactor.CAPABILITY,
             signal_value=True,
@@ -140,6 +149,7 @@ class TestDecisionBasis:
 
     def test_from_dict_unknown_factor_defaults_to_policy(self):
         from core.routing_explanation.decision_basis import DecisionBasis, DecisionFactor
+
         b = DecisionBasis.from_dict({"factor": "nonexistent_xyz"})
         assert b.factor is DecisionFactor.POLICY
 
@@ -148,24 +158,29 @@ class TestDecisionBasis:
 # 3 & 4. make_decision_basis — coercion
 # ---------------------------------------------------------------------------
 
+
 class TestMakeDecisionBasis:
     def test_accepts_enum(self):
-        from core.routing_explanation.decision_basis import make_decision_basis, DecisionFactor
+        from core.routing_explanation.decision_basis import DecisionFactor, make_decision_basis
+
         b = make_decision_basis(factor=DecisionFactor.LATENCY)
         assert b.factor is DecisionFactor.LATENCY
 
     def test_accepts_string(self):
-        from core.routing_explanation.decision_basis import make_decision_basis, DecisionFactor
+        from core.routing_explanation.decision_basis import DecisionFactor, make_decision_basis
+
         b = make_decision_basis(factor="health")
         assert b.factor is DecisionFactor.HEALTH
 
     def test_unknown_string_defaults_to_policy(self):
-        from core.routing_explanation.decision_basis import make_decision_basis, DecisionFactor
+        from core.routing_explanation.decision_basis import DecisionFactor, make_decision_basis
+
         b = make_decision_basis(factor="totally_unknown_xyz")
         assert b.factor is DecisionFactor.POLICY
 
     def test_weight_clamped_to_zero_one(self):
         from core.routing_explanation.decision_basis import make_decision_basis
+
         b1 = make_decision_basis(factor="policy", weight=-0.5)
         b2 = make_decision_basis(factor="policy", weight=1.5)
         assert b1.weight == 0.0
@@ -173,6 +188,7 @@ class TestMakeDecisionBasis:
 
     def test_accepted_flag_preserved(self):
         from core.routing_explanation.decision_basis import make_decision_basis
+
         b = make_decision_basis(factor="fallback", accepted=False)
         assert b.accepted is False
 
@@ -181,39 +197,46 @@ class TestMakeDecisionBasis:
 # 5-8. Convenience builders
 # ---------------------------------------------------------------------------
 
+
 class TestConvenienceBuilders:
     def test_basis_from_health_score_healthy(self):
-        from core.routing_explanation.decision_basis import basis_from_health_score, DecisionFactor
+        from core.routing_explanation.decision_basis import DecisionFactor, basis_from_health_score
+
         b = basis_from_health_score("dev_a", health_score=0.9)
         assert b.factor is DecisionFactor.HEALTH
         assert b.accepted is True
         assert b.signal_value == pytest.approx(0.9, abs=0.001)
 
     def test_basis_from_health_score_unhealthy(self):
-        from core.routing_explanation.decision_basis import basis_from_health_score, DecisionFactor
+        from core.routing_explanation.decision_basis import DecisionFactor, basis_from_health_score
+
         b = basis_from_health_score("dev_b", health_score=0.2, threshold=0.5)
         assert b.factor is DecisionFactor.HEALTH
         assert b.accepted is False
 
     def test_basis_from_policy_posture(self):
-        from core.routing_explanation.decision_basis import basis_from_policy_posture, DecisionFactor
+        from core.routing_explanation.decision_basis import DecisionFactor, basis_from_policy_posture
+
         b = basis_from_policy_posture("remote_required", "must dispatch remotely")
         assert b.factor is DecisionFactor.POLICY
         assert "remote_required" in b.description
 
     def test_basis_from_availability_online(self):
-        from core.routing_explanation.decision_basis import basis_from_availability, DecisionFactor
+        from core.routing_explanation.decision_basis import DecisionFactor, basis_from_availability
+
         b = basis_from_availability("dev_x", is_available=True)
         assert b.factor is DecisionFactor.AVAILABILITY
         assert b.accepted is True
 
     def test_basis_from_availability_offline(self):
-        from core.routing_explanation.decision_basis import basis_from_availability, DecisionFactor
+        from core.routing_explanation.decision_basis import DecisionFactor, basis_from_availability
+
         b = basis_from_availability("dev_y", is_available=False)
         assert b.accepted is False
 
     def test_basis_from_capability(self):
-        from core.routing_explanation.decision_basis import basis_from_capability, DecisionFactor
+        from core.routing_explanation.decision_basis import DecisionFactor, basis_from_capability
+
         b = basis_from_capability("screen_control", is_available=True)
         assert b.factor is DecisionFactor.CAPABILITY
         assert b.accepted is True
@@ -223,14 +246,17 @@ class TestConvenienceBuilders:
 # 10-11. ConfidenceBand and RouteConfidence
 # ---------------------------------------------------------------------------
 
+
 class TestConfidenceBand:
     def test_all_values_are_strings(self):
         from core.routing_explanation.route_confidence import ConfidenceBand
+
         for member in ConfidenceBand:
             assert isinstance(member.value, str)
 
     def test_known_values_stable(self):
         from core.routing_explanation.route_confidence import ConfidenceBand
+
         assert ConfidenceBand.HIGH.value == "high"
         assert ConfidenceBand.MEDIUM.value == "medium"
         assert ConfidenceBand.LOW.value == "low"
@@ -239,18 +265,21 @@ class TestConfidenceBand:
 
 class TestRouteConfidence:
     def test_construction_defaults(self):
-        from core.routing_explanation.route_confidence import RouteConfidence, ConfidenceBand
+        from core.routing_explanation.route_confidence import ConfidenceBand, RouteConfidence
+
         rc = RouteConfidence()
         assert rc.score == 0.0
         assert rc.band is ConfidenceBand.UNDETERMINED
 
     def test_to_dict_json_serialisable(self):
         from core.routing_explanation.route_confidence import RouteConfidence
+
         rc = RouteConfidence(score=0.8, basis_count=3)
         json.dumps(rc.to_dict())
 
     def test_from_dict_roundtrip(self):
-        from core.routing_explanation.route_confidence import RouteConfidence, ConfidenceBand
+        from core.routing_explanation.route_confidence import ConfidenceBand, RouteConfidence
+
         original = RouteConfidence(
             score=0.8,
             band=ConfidenceBand.HIGH,
@@ -267,7 +296,8 @@ class TestRouteConfidence:
         assert "policy" in restored.contributing_factors
 
     def test_from_dict_unknown_band_defaults_to_undetermined(self):
-        from core.routing_explanation.route_confidence import RouteConfidence, ConfidenceBand
+        from core.routing_explanation.route_confidence import ConfidenceBand, RouteConfidence
+
         rc = RouteConfidence.from_dict({"band": "nonexistent_xyz"})
         assert rc.band is ConfidenceBand.UNDETERMINED
 
@@ -276,16 +306,19 @@ class TestRouteConfidence:
 # 12-15. compute_confidence
 # ---------------------------------------------------------------------------
 
+
 class TestComputeConfidence:
     def test_empty_returns_undetermined(self):
-        from core.routing_explanation.route_confidence import compute_confidence, ConfidenceBand
+        from core.routing_explanation.route_confidence import ConfidenceBand, compute_confidence
+
         rc = compute_confidence([])
         assert rc.band is ConfidenceBand.UNDETERMINED
         assert rc.score == 0.0
 
     def test_all_accepted_high_weight_gives_high_band(self):
         from core.routing_explanation.decision_basis import make_decision_basis
-        from core.routing_explanation.route_confidence import compute_confidence, ConfidenceBand
+        from core.routing_explanation.route_confidence import ConfidenceBand, compute_confidence
+
         bases = [
             make_decision_basis("policy", signal_value="local_preferred", accepted=True, weight=0.40),
             make_decision_basis("health", signal_value=0.95, accepted=True, weight=0.35),
@@ -299,7 +332,8 @@ class TestComputeConfidence:
 
     def test_all_rejected_gives_low_or_undetermined_band(self):
         from core.routing_explanation.decision_basis import make_decision_basis
-        from core.routing_explanation.route_confidence import compute_confidence, ConfidenceBand
+        from core.routing_explanation.route_confidence import ConfidenceBand, compute_confidence
+
         bases = [
             make_decision_basis("fallback", accepted=False, weight=0.50),
             make_decision_basis("availability", accepted=False, weight=0.50),
@@ -309,7 +343,8 @@ class TestComputeConfidence:
 
     def test_mixed_bases_intermediate(self):
         from core.routing_explanation.decision_basis import make_decision_basis
-        from core.routing_explanation.route_confidence import compute_confidence, ConfidenceBand
+        from core.routing_explanation.route_confidence import ConfidenceBand, compute_confidence
+
         bases = [
             make_decision_basis("policy", accepted=True, weight=0.40),
             make_decision_basis("fallback", accepted=False, weight=0.30),
@@ -323,6 +358,7 @@ class TestComputeConfidence:
     def test_contributing_factors_deduped(self):
         from core.routing_explanation.decision_basis import make_decision_basis
         from core.routing_explanation.route_confidence import compute_confidence
+
         bases = [
             make_decision_basis("policy", accepted=True, weight=0.20),
             make_decision_basis("policy", accepted=True, weight=0.20),
@@ -337,9 +373,11 @@ class TestComputeConfidence:
 # 16. UNDETERMINED_CONFIDENCE sentinel
 # ---------------------------------------------------------------------------
 
+
 class TestUndeterminedConfidenceSentinel:
     def test_sentinel_fields(self):
         from core.routing_explanation.route_confidence import UNDETERMINED_CONFIDENCE, ConfidenceBand
+
         assert UNDETERMINED_CONFIDENCE.score == 0.0
         assert UNDETERMINED_CONFIDENCE.band is ConfidenceBand.UNDETERMINED
         assert UNDETERMINED_CONFIDENCE.basis_count == 0
@@ -349,9 +387,11 @@ class TestUndeterminedConfidenceSentinel:
 # 17. RejectedCandidate — construction, to_dict, from_dict round-trip
 # ---------------------------------------------------------------------------
 
+
 class TestRejectedCandidate:
     def test_construction(self):
         from core.routing_explanation.route_explanation import RejectedCandidate
+
         rc = RejectedCandidate(
             candidate_id="dev_old",
             rejection_reason="health score too low",
@@ -364,11 +404,13 @@ class TestRejectedCandidate:
 
     def test_to_dict_json_serialisable(self):
         from core.routing_explanation.route_explanation import RejectedCandidate
+
         rc = RejectedCandidate(candidate_id="dev_z", health_score=0.3)
         json.dumps(rc.to_dict())
 
     def test_from_dict_roundtrip(self):
         from core.routing_explanation.route_explanation import RejectedCandidate
+
         original = RejectedCandidate(
             candidate_id="dev_abc",
             rejection_reason="offline",
@@ -383,6 +425,7 @@ class TestRejectedCandidate:
 
     def test_from_dict_none_health_score(self):
         from core.routing_explanation.route_explanation import RejectedCandidate
+
         rc = RejectedCandidate.from_dict({"candidate_id": "x"})
         assert rc.health_score is None
 
@@ -391,9 +434,11 @@ class TestRejectedCandidate:
 # 18-20. RouteExplanation
 # ---------------------------------------------------------------------------
 
+
 class TestRouteExplanation:
     def _make_bases(self):
         from core.routing_explanation.decision_basis import make_decision_basis
+
         return [
             make_decision_basis("policy", signal_value="local_preferred", accepted=True, weight=0.4),
             make_decision_basis("health", signal_value=0.9, accepted=True, weight=0.35),
@@ -401,14 +446,16 @@ class TestRouteExplanation:
 
     def test_construction_defaults(self):
         from core.routing_explanation.route_explanation import RouteExplanation
+
         exp = RouteExplanation()
         assert exp.selected_target is None
         assert exp.decision_bases == []
         assert exp.policy_posture == "undecided"
 
     def test_to_dict_json_serialisable(self):
-        from core.routing_explanation.route_explanation import RouteExplanation
         from core.routing_explanation.route_confidence import UNDETERMINED_CONFIDENCE
+        from core.routing_explanation.route_explanation import RouteExplanation
+
         exp = RouteExplanation(
             selected_target="dev_01",
             decision_bases=self._make_bases(),
@@ -417,8 +464,9 @@ class TestRouteExplanation:
         json.dumps(exp.to_dict())
 
     def test_from_dict_roundtrip(self):
-        from core.routing_explanation.route_explanation import RouteExplanation
         from core.routing_explanation.route_confidence import UNDETERMINED_CONFIDENCE
+        from core.routing_explanation.route_explanation import RouteExplanation
+
         original = RouteExplanation(
             selected_target="dev_02",
             decision_bases=self._make_bases(),
@@ -441,6 +489,7 @@ class TestRouteExplanation:
 
     def test_from_dict_partial_data_graceful(self):
         from core.routing_explanation.route_explanation import RouteExplanation
+
         # Only required-ish field
         exp = RouteExplanation.from_dict({"selected_target": "dev_x"})
         assert exp.selected_target == "dev_x"
@@ -451,8 +500,9 @@ class TestRouteExplanation:
 class TestBuildRouteExplanation:
     def test_auto_computes_confidence(self):
         from core.routing_explanation.decision_basis import make_decision_basis
-        from core.routing_explanation.route_explanation import build_route_explanation
         from core.routing_explanation.route_confidence import ConfidenceBand
+        from core.routing_explanation.route_explanation import build_route_explanation
+
         bases = [
             make_decision_basis("policy", accepted=True, weight=0.5),
             make_decision_basis("health", accepted=True, weight=0.5),
@@ -467,13 +517,15 @@ class TestBuildRouteExplanation:
         assert exp.confidence.band is ConfidenceBand.HIGH
 
     def test_empty_bases_returns_undetermined_confidence(self):
-        from core.routing_explanation.route_explanation import build_route_explanation
         from core.routing_explanation.route_confidence import ConfidenceBand
+        from core.routing_explanation.route_explanation import build_route_explanation
+
         exp = build_route_explanation()
         assert exp.confidence.band is ConfidenceBand.UNDETERMINED
 
     def test_never_raises_on_bad_input(self):
         from core.routing_explanation.route_explanation import build_route_explanation
+
         # Should not raise even with nonsense input
         exp = build_route_explanation(
             decision_bases=None,
@@ -485,6 +537,7 @@ class TestBuildRouteExplanation:
 class TestEmptyRouteExplanationSentinel:
     def test_sentinel_fields(self):
         from core.routing_explanation.route_explanation import EMPTY_ROUTE_EXPLANATION
+
         assert EMPTY_ROUTE_EXPLANATION.selected_target is None
         assert EMPTY_ROUTE_EXPLANATION.decision_bases == []
         assert EMPTY_ROUTE_EXPLANATION.policy_posture == "undecided"
@@ -494,13 +547,16 @@ class TestEmptyRouteExplanationSentinel:
 # 22-26. RoutingExplanationSummary and builders
 # ---------------------------------------------------------------------------
 
+
 class TestRoutingExplanationSummary:
     def _idle_dict(self):
         from core.routing_explanation.explanation_summary import IDLE_EXPLANATION_SUMMARY
+
         return IDLE_EXPLANATION_SUMMARY.to_dict()
 
     def test_construction_defaults(self):
         from core.routing_explanation.explanation_summary import RoutingExplanationSummary
+
         s = RoutingExplanationSummary()
         assert s.schema_version == 1
         assert s.route_target is None
@@ -509,10 +565,12 @@ class TestRoutingExplanationSummary:
 
     def test_to_dict_json_serialisable(self):
         from core.routing_explanation.explanation_summary import IDLE_EXPLANATION_SUMMARY
+
         json.dumps(IDLE_EXPLANATION_SUMMARY.to_dict())
 
     def test_from_dict_roundtrip(self):
         from core.routing_explanation.explanation_summary import RoutingExplanationSummary
+
         original = RoutingExplanationSummary(
             route_target="dev_01",
             policy_posture="remote_required",
@@ -535,6 +593,7 @@ class TestRoutingExplanationSummary:
 
     def test_from_dict_partial_degrades_gracefully(self):
         from core.routing_explanation.explanation_summary import RoutingExplanationSummary
+
         s = RoutingExplanationSummary.from_dict({})
         assert s.schema_version == 1
         assert s.route_target is None
@@ -544,18 +603,15 @@ class TestRoutingExplanationSummary:
 class TestBuildExplanationSummary:
     def test_from_full_explanation(self):
         from core.routing_explanation.decision_basis import make_decision_basis
-        from core.routing_explanation.route_explanation import build_route_explanation
-        from core.routing_explanation.route_explanation import RejectedCandidate
         from core.routing_explanation.explanation_summary import build_explanation_summary
         from core.routing_explanation.route_confidence import ConfidenceBand
+        from core.routing_explanation.route_explanation import RejectedCandidate, build_route_explanation
 
         bases = [
             make_decision_basis("policy", signal_value="remote_required", accepted=True, weight=0.5),
             make_decision_basis("health", signal_value=0.85, accepted=True, weight=0.5),
         ]
-        rejected = [
-            RejectedCandidate(candidate_id="dev_old", rejection_reason="offline")
-        ]
+        rejected = [RejectedCandidate(candidate_id="dev_old", rejection_reason="offline")]
         exp = build_route_explanation(
             selected_target="dev_new",
             decision_bases=bases,
@@ -578,8 +634,9 @@ class TestBuildExplanationSummary:
         assert summary.confidence["band"] == ConfidenceBand.HIGH.value
 
     def test_from_empty_explanation(self):
-        from core.routing_explanation.route_explanation import EMPTY_ROUTE_EXPLANATION
         from core.routing_explanation.explanation_summary import build_explanation_summary
+        from core.routing_explanation.route_explanation import EMPTY_ROUTE_EXPLANATION
+
         summary = build_explanation_summary(EMPTY_ROUTE_EXPLANATION)
         assert summary.route_target is None
         assert summary.decision_basis_list == []
@@ -589,6 +646,7 @@ class TestBuildExplanationSummary:
 class TestIdleExplanationSummarySentinel:
     def test_sentinel_fields(self):
         from core.routing_explanation.explanation_summary import IDLE_EXPLANATION_SUMMARY
+
         assert IDLE_EXPLANATION_SUMMARY.schema_version == 1
         assert IDLE_EXPLANATION_SUMMARY.route_target is None
         assert IDLE_EXPLANATION_SUMMARY.is_cross_device is False
@@ -600,15 +658,18 @@ class TestIdleExplanationSummarySentinel:
 # 27-31. resolve_explanation_from_projection
 # ---------------------------------------------------------------------------
 
+
 class TestResolveExplanationFromProjection:
     def test_minimal_projection_no_keys(self):
         from core.routing_explanation.explanation_summary import resolve_explanation_from_projection
+
         summary = resolve_explanation_from_projection({})
         assert summary.policy_posture == "undecided"
         assert summary.is_cross_device is False
 
     def test_with_cross_device_routing_block(self):
         from core.routing_explanation.explanation_summary import resolve_explanation_from_projection
+
         projection = {
             "cross_device_routing": {
                 "posture": "remote_required",
@@ -627,6 +688,7 @@ class TestResolveExplanationFromProjection:
 
     def test_with_execution_policy_block(self):
         from core.routing_explanation.explanation_summary import resolve_explanation_from_projection
+
         projection = {
             "execution_policy": {
                 "policy_band": "bounded_execute",
@@ -639,6 +701,7 @@ class TestResolveExplanationFromProjection:
 
     def test_with_device_formation_fallback(self):
         from core.routing_explanation.explanation_summary import resolve_explanation_from_projection
+
         projection = {
             "device_formation": {
                 "fallback_available": True,
@@ -654,6 +717,7 @@ class TestResolveExplanationFromProjection:
 
     def test_with_agent_dispatch_block(self):
         from core.routing_explanation.explanation_summary import resolve_explanation_from_projection
+
         projection = {
             "agent_dispatch": {
                 "dispatch_role": "planner",
@@ -666,6 +730,7 @@ class TestResolveExplanationFromProjection:
 
     def test_expansion_blocked_adds_rejected_basis(self):
         from core.routing_explanation.explanation_summary import resolve_explanation_from_projection
+
         projection = {
             "cross_device_routing": {
                 "posture": "remote_required",
@@ -683,12 +748,14 @@ class TestResolveExplanationFromProjection:
 # 32. attach_explanation_to_projection
 # ---------------------------------------------------------------------------
 
+
 class TestAttachExplanationToProjection:
     def test_additive_non_mutating(self):
         from core.routing_explanation.explanation_summary import (
-            attach_explanation_to_projection,
             IDLE_EXPLANATION_SUMMARY,
+            attach_explanation_to_projection,
         )
+
         original = {"tri_state_phase": "silent", "runtime_domain": None}
         result = attach_explanation_to_projection(original, IDLE_EXPLANATION_SUMMARY)
 
@@ -701,9 +768,10 @@ class TestAttachExplanationToProjection:
 
     def test_explanation_key_is_dict(self):
         from core.routing_explanation.explanation_summary import (
-            attach_explanation_to_projection,
             IDLE_EXPLANATION_SUMMARY,
+            attach_explanation_to_projection,
         )
+
         result = attach_explanation_to_projection({}, IDLE_EXPLANATION_SUMMARY)
         assert isinstance(result["routing_explanation"], dict)
 
@@ -712,19 +780,28 @@ class TestAttachExplanationToProjection:
 # 33-34. get_explanation_hints
 # ---------------------------------------------------------------------------
 
+
 class TestGetExplanationHints:
     _REQUIRED_HINT_KEYS = {
-        "route_target", "policy_posture", "policy_band",
-        "confidence_score", "confidence_band",
-        "is_cross_device", "has_fallback", "has_rejected_alternatives",
-        "rejected_count", "basis_count", "owner_agent",
+        "route_target",
+        "policy_posture",
+        "policy_band",
+        "confidence_score",
+        "confidence_band",
+        "is_cross_device",
+        "has_fallback",
+        "has_rejected_alternatives",
+        "rejected_count",
+        "basis_count",
+        "owner_agent",
     }
 
     def test_all_required_keys_present(self):
         from core.routing_explanation.explanation_summary import (
-            get_explanation_hints,
             IDLE_EXPLANATION_SUMMARY,
+            get_explanation_hints,
         )
+
         hints = get_explanation_hints(IDLE_EXPLANATION_SUMMARY)
         for key in self._REQUIRED_HINT_KEYS:
             assert key in hints, f"Missing hint key: {key}"
@@ -734,6 +811,7 @@ class TestGetExplanationHints:
             RoutingExplanationSummary,
             get_explanation_hints,
         )
+
         s = RoutingExplanationSummary(
             route_target="dev_01",
             policy_posture="remote_required",
@@ -752,9 +830,10 @@ class TestGetExplanationHints:
 
     def test_hints_json_serialisable(self):
         from core.routing_explanation.explanation_summary import (
-            get_explanation_hints,
             IDLE_EXPLANATION_SUMMARY,
+            get_explanation_hints,
         )
+
         hints = get_explanation_hints(IDLE_EXPLANATION_SUMMARY)
         json.dumps(hints)
 
@@ -763,13 +842,16 @@ class TestGetExplanationHints:
 # 35-36. Integration endpoint
 # ---------------------------------------------------------------------------
 
+
 class TestRoutingExplanationEndpoint:
     def _get_router(self):
         from core.routes.projection import create_router
+
         return create_router()
 
     def test_endpoint_registered(self):
         from fastapi import APIRouter
+
         router = self._get_router()
         routes = [r.path for r in router.routes]
         assert "/api/v1/projection/routing-explanation" in routes
@@ -777,6 +859,7 @@ class TestRoutingExplanationEndpoint:
     def test_endpoint_returns_required_keys(self):
         """Use the internal assemble function directly to verify payload shape."""
         from core.routes.projection import _assemble_projection_with_routing_explanation
+
         payload = _assemble_projection_with_routing_explanation()
 
         assert "routing_explanation" in payload, "routing_explanation key missing"
@@ -801,18 +884,21 @@ class TestRoutingExplanationEndpoint:
 
     def test_endpoint_payload_json_serialisable(self):
         from core.routes.projection import _assemble_projection_with_routing_explanation
+
         payload = _assemble_projection_with_routing_explanation()
         # Must not raise
         json.dumps(payload)
 
     def test_explanation_schema_version_is_1(self):
         from core.routes.projection import _assemble_projection_with_routing_explanation
+
         payload = _assemble_projection_with_routing_explanation()
         assert payload["routing_explanation"]["schema_version"] == 1
 
     def test_all_prior_layers_still_present(self):
         """Regression: adding routing_explanation must not remove prior layer keys."""
         from core.routes.projection import _assemble_projection_with_routing_explanation
+
         payload = _assemble_projection_with_routing_explanation()
         # Check for keys added by earlier projection layers
         assert "agent_dispatch" in payload, "agent_dispatch key missing (regression)"

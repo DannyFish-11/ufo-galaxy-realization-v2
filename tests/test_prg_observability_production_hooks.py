@@ -78,6 +78,7 @@ class TestDeviceLifecycleEmits:
 
     def setup_method(self):
         from core.runtime.runtime_observability_sink import reset_observability_sink
+
         reset_observability_sink()
 
     # ── A: attach emit on device registration ────────────────────────────────
@@ -108,8 +109,7 @@ class TestDeviceLifecycleEmits:
         sink = get_observability_sink()
         events = sink.list_device_lifecycle_events()
         assert any(
-            e.get("device_id") == "test_device_attach" and e.get("event_kind") == "attach"
-            for e in events
+            e.get("device_id") == "test_device_attach" and e.get("event_kind") == "attach" for e in events
         ), f"Expected attach event for test_device_attach in {events}"
 
     # ── B: detach emit on disconnect_device ───────────────────────────────────
@@ -117,8 +117,8 @@ class TestDeviceLifecycleEmits:
     def test_disconnect_device_emits_detach(self):
         """disconnect_device emits a device_lifecycle 'detach' event."""
         from core.runtime.runtime_observability_sink import get_observability_sink
-        from galaxy_gateway.android_bridge import AndroidBridge
         from galaxy_gateway.android.models import AndroidDevice
+        from galaxy_gateway.android_bridge import AndroidBridge
 
         bridge = AndroidBridge()
         device_id = "test_device_detach"
@@ -130,15 +130,13 @@ class TestDeviceLifecycleEmits:
         mock_device.websocket = mock_ws
         bridge._devices[device_id] = mock_device
 
-        with patch.object(bridge, "_sync_device_router_session"), \
-             patch.object(bridge, "_patch_disconnect_to_udm"):
+        with patch.object(bridge, "_sync_device_router_session"), patch.object(bridge, "_patch_disconnect_to_udm"):
             _run_async(bridge.disconnect_device(device_id))
 
         sink = get_observability_sink()
         events = sink.list_device_lifecycle_events()
         assert any(
-            e.get("device_id") == device_id and e.get("event_kind") == "detach"
-            for e in events
+            e.get("device_id") == device_id and e.get("event_kind") == "detach" for e in events
         ), f"Expected detach event for {device_id} in {events}"
 
     # ── C: reconnect emit on reconnect_device ─────────────────────────────────
@@ -146,8 +144,8 @@ class TestDeviceLifecycleEmits:
     def test_reconnect_device_emits_reconnect(self):
         """reconnect_device emits a device_lifecycle 'reconnect' event."""
         from core.runtime.runtime_observability_sink import get_observability_sink
-        from galaxy_gateway.android_bridge import AndroidBridge
         from galaxy_gateway.android.models import AndroidDevice
+        from galaxy_gateway.android_bridge import AndroidBridge
 
         bridge = AndroidBridge()
         device_id = "test_device_reconnect"
@@ -160,16 +158,14 @@ class TestDeviceLifecycleEmits:
         bridge._devices[device_id] = mock_device
 
         mock_ws = MagicMock()
-        with patch.object(bridge, "_patch_reconnect_to_udm"), \
-             patch.object(bridge, "_sync_device_router_session"):
+        with patch.object(bridge, "_patch_reconnect_to_udm"), patch.object(bridge, "_sync_device_router_session"):
             result = _run_async(bridge.reconnect_device(device_id, mock_ws))
 
         assert result is True
         sink = get_observability_sink()
         events = sink.list_device_lifecycle_events()
         assert any(
-            e.get("device_id") == device_id and e.get("event_kind") == "reconnect"
-            for e in events
+            e.get("device_id") == device_id and e.get("event_kind") == "reconnect" for e in events
         ), f"Expected reconnect event for {device_id} in {events}"
 
 
@@ -183,6 +179,7 @@ class TestMeshSessionTransitionEmits:
 
     def setup_method(self):
         from core.runtime.runtime_observability_sink import reset_observability_sink
+
         reset_observability_sink()
 
     def _make_mock_store(self):
@@ -205,8 +202,8 @@ class TestMeshSessionTransitionEmits:
 
     def test_create_session_emits_create(self):
         """create_session emits a mesh_session_transition 'create' event."""
-        from core.runtime.runtime_observability_sink import get_observability_sink
         from core.mesh.mesh_session_lifecycle import MeshSessionLifecycleCoordinator
+        from core.runtime.runtime_observability_sink import get_observability_sink
 
         store = self._make_mock_store()
         coord = MeshSessionLifecycleCoordinator(store=store)
@@ -217,16 +214,15 @@ class TestMeshSessionTransitionEmits:
         sink = get_observability_sink()
         events = sink.list_mesh_session_transition_events()
         assert any(
-            e.get("session_id") == sess["session_id"] and e.get("transition_kind") == "create"
-            for e in events
+            e.get("session_id") == sess["session_id"] and e.get("transition_kind") == "create" for e in events
         ), f"Expected create event for {sess['session_id']} in {events}"
 
     # ── E: activate emit ───────────────────────────────────────────────────────
 
     def test_activate_session_emits_activate(self):
         """activate_session emits a mesh_session_transition 'activate' event."""
-        from core.runtime.runtime_observability_sink import get_observability_sink
         from core.mesh.mesh_session_lifecycle import MeshSessionLifecycleCoordinator
+        from core.runtime.runtime_observability_sink import get_observability_sink
 
         store = self._make_mock_store()
         coord = MeshSessionLifecycleCoordinator(store=store)
@@ -238,16 +234,15 @@ class TestMeshSessionTransitionEmits:
         sink = get_observability_sink()
         events = sink.list_mesh_session_transition_events()
         assert any(
-            e.get("session_id") == sess["session_id"] and e.get("transition_kind") == "activate"
-            for e in events
+            e.get("session_id") == sess["session_id"] and e.get("transition_kind") == "activate" for e in events
         ), f"Expected activate event for {sess['session_id']} in {events}"
 
     # ── F: suspend emit ────────────────────────────────────────────────────────
 
     def test_suspend_session_emits_suspend(self):
         """suspend_session emits a mesh_session_transition 'suspend' event."""
-        from core.runtime.runtime_observability_sink import get_observability_sink
         from core.mesh.mesh_session_lifecycle import MeshSessionLifecycleCoordinator
+        from core.runtime.runtime_observability_sink import get_observability_sink
 
         store = self._make_mock_store()
         coord = MeshSessionLifecycleCoordinator(store=store)
@@ -260,16 +255,15 @@ class TestMeshSessionTransitionEmits:
         sink = get_observability_sink()
         events = sink.list_mesh_session_transition_events()
         assert any(
-            e.get("session_id") == sess["session_id"] and e.get("transition_kind") == "suspend"
-            for e in events
+            e.get("session_id") == sess["session_id"] and e.get("transition_kind") == "suspend" for e in events
         ), f"Expected suspend event for {sess['session_id']} in {events}"
 
     # ── G: terminate emit ──────────────────────────────────────────────────────
 
     def test_terminate_session_emits_terminate(self):
         """terminate_session emits a mesh_session_transition 'terminate' event."""
-        from core.runtime.runtime_observability_sink import get_observability_sink
         from core.mesh.mesh_session_lifecycle import MeshSessionLifecycleCoordinator
+        from core.runtime.runtime_observability_sink import get_observability_sink
 
         store = self._make_mock_store()
         coord = MeshSessionLifecycleCoordinator(store=store)
@@ -282,8 +276,7 @@ class TestMeshSessionTransitionEmits:
         sink = get_observability_sink()
         events = sink.list_mesh_session_transition_events()
         assert any(
-            e.get("session_id") == sess["session_id"] and e.get("transition_kind") == "terminate"
-            for e in events
+            e.get("session_id") == sess["session_id"] and e.get("transition_kind") == "terminate" for e in events
         ), f"Expected terminate event for {sess['session_id']} in {events}"
 
     # ── H: restore + recovery_decision emit ───────────────────────────────────
@@ -291,8 +284,8 @@ class TestMeshSessionTransitionEmits:
     def test_restore_session_emits_restore_and_recovery(self):
         """restore_session emits both mesh_session_transition 'restore' and
         a recovery_decision 'resumable_reassociation' event."""
-        from core.runtime.runtime_observability_sink import get_observability_sink
         from core.mesh.mesh_session_lifecycle import MeshSessionLifecycleCoordinator
+        from core.runtime.runtime_observability_sink import get_observability_sink
 
         sess_id = uuid.uuid4().hex
         sess = {
@@ -316,6 +309,7 @@ class TestMeshSessionTransitionEmits:
 
         # Pre-populate the coordinator with a SUSPENDED record
         from core.mesh.mesh_session_lifecycle import MeshSessionLifecycleRecord
+
         record = MeshSessionLifecycleRecord(
             session_id=sess_id,
             status="suspended",
@@ -334,13 +328,11 @@ class TestMeshSessionTransitionEmits:
         recovery_events = sink.list_recovery_decision_events()
 
         assert any(
-            e.get("session_id") == sess_id and e.get("transition_kind") == "restore"
-            for e in mesh_events
+            e.get("session_id") == sess_id and e.get("transition_kind") == "restore" for e in mesh_events
         ), f"Expected restore mesh event for {sess_id} in {mesh_events}"
 
         assert any(
-            e.get("decision_kind") == "resumable_reassociation"
-            for e in recovery_events
+            e.get("decision_kind") == "resumable_reassociation" for e in recovery_events
         ), f"Expected resumable_reassociation recovery event in {recovery_events}"
 
 
@@ -359,8 +351,8 @@ class TestDispatchDecisionEmit:
         # 让派发真正走到选案发射点。
         from core.canonical_dispatch_slot_authority import (
             CanonicalDispatchSlot,
-            CanonicalDispatchSlotStatus,
             CanonicalDispatchSlotsResult,
+            CanonicalDispatchSlotStatus,
         )
 
         def _approve_all(device_ids, execution_mode, **kwargs):
@@ -393,12 +385,13 @@ class TestDispatchDecisionEmit:
 
     def setup_method(self):
         from core.runtime.runtime_observability_sink import reset_observability_sink
+
         reset_observability_sink()
 
     def test_route_envelope_emits_dispatch_decision(self):
         """route_envelope emits a dispatch_decision 'plan_selected' event."""
-        from core.runtime.runtime_observability_sink import get_observability_sink
         from core.command_router import CommandRouter
+        from core.runtime.runtime_observability_sink import get_observability_sink
         from core.schemas.task_envelope import TaskEnvelope
 
         router = CommandRouter()
@@ -415,25 +408,30 @@ class TestDispatchDecisionEmit:
         )
 
         # Patch all downstream dispatch paths to avoid real network calls
-        with patch.object(router, "_execute_command", new=AsyncMock(return_value={
-            "success": True,
-            "task_id": task_id,
-            "trace_id": trace_id,
-            "result": "ok",
-        })):
+        with patch.object(
+            router,
+            "_execute_command",
+            new=AsyncMock(
+                return_value={
+                    "success": True,
+                    "task_id": task_id,
+                    "trace_id": trace_id,
+                    "result": "ok",
+                }
+            ),
+        ):
             _run_async(router.route_envelope(envelope))
 
         sink = get_observability_sink()
         events = sink.list_dispatch_decision_events()
         assert any(
-            e.get("task_id") == task_id and e.get("event_kind") == "plan_selected"
-            for e in events
+            e.get("task_id") == task_id and e.get("event_kind") == "plan_selected" for e in events
         ), f"Expected plan_selected event for {task_id} in {events}"
 
     def test_route_envelope_dispatch_event_carries_trace_id(self):
         """The dispatch decision event carries the envelope's trace_id for correlation."""
-        from core.runtime.runtime_observability_sink import get_observability_sink
         from core.command_router import CommandRouter
+        from core.runtime.runtime_observability_sink import get_observability_sink
         from core.schemas.task_envelope import TaskEnvelope
 
         router = CommandRouter()
@@ -449,12 +447,18 @@ class TestDispatchDecisionEmit:
             args={},
         )
 
-        with patch.object(router, "_execute_command", new=AsyncMock(return_value={
-            "success": True,
-            "task_id": task_id,
-            "trace_id": trace_id,
-            "result": None,
-        })):
+        with patch.object(
+            router,
+            "_execute_command",
+            new=AsyncMock(
+                return_value={
+                    "success": True,
+                    "task_id": task_id,
+                    "trace_id": trace_id,
+                    "result": None,
+                }
+            ),
+        ):
             _run_async(router.route_envelope(envelope))
 
         sink = get_observability_sink()
@@ -536,6 +540,7 @@ class TestContractCompatibilityAutomatedGate:
             EVOLVED_FIELDS_ARE_OPTIONAL_BACKWARD_COMPAT_POLICY,
             STAGED_MIGRATION_IS_SAFE_POLICY,
         )
+
         assert CONTRACT_COMPATIBILITY_PR_H_SENTINEL
         assert CONTRACT_EVOLUTION_IS_EXPLICIT_POLICY
         assert CONTRACT_VALIDATION_IS_AUTHORITY
@@ -557,6 +562,7 @@ class TestCrossRepoConsistencyGatesAutomatedGate:
     def test_gate_snapshot_is_json_serializable(self):
         """build_consistency_gate_snapshot() returns a JSON-serializable dict."""
         import json
+
         from core.cross_repo_consistency_gates import build_consistency_gate_snapshot
 
         snapshot = build_consistency_gate_snapshot()
@@ -569,11 +575,11 @@ class TestCrossRepoConsistencyGatesAutomatedGate:
         """Each individual gate runner returns a ConsistencyGateResult."""
         from core.cross_repo_consistency_gates import (
             ConsistencyGateResult,
+            run_descriptor_field_gate,
+            run_execution_enum_gate,
             run_schema_vocabulary_gate,
             run_session_family_gate,
-            run_execution_enum_gate,
             run_terminal_state_gate,
-            run_descriptor_field_gate,
             run_transitional_marker_gate,
         )
 
@@ -586,13 +592,9 @@ class TestCrossRepoConsistencyGatesAutomatedGate:
             run_transitional_marker_gate,
         ):
             result = gate_fn()
-            assert isinstance(result, ConsistencyGateResult), (
-                f"{gate_fn.__name__} should return ConsistencyGateResult"
-            )
+            assert isinstance(result, ConsistencyGateResult), f"{gate_fn.__name__} should return ConsistencyGateResult"
             # Gates must not raise — they return verdicts
-            assert result.verdict in ("pass", "warn", "fail", "skip"), (
-                f"Unexpected verdict: {result.verdict}"
-            )
+            assert result.verdict in ("pass", "warn", "fail", "skip"), f"Unexpected verdict: {result.verdict}"
 
     def test_consistency_gates_are_non_breaking(self):
         """run_all_consistency_gates does not raise even when drift is detected."""
@@ -747,7 +749,6 @@ class TestAndroidTraceHook:
         dispatch_events = sink.list_dispatch_decision_events()
         matched = [e for e in dispatch_events if e.get("trace_id") == extracted_trace_id]
         assert matched, (
-            f"No dispatch event with trace_id={extracted_trace_id} found in sink. "
-            f"Sink events: {dispatch_events}"
+            f"No dispatch event with trace_id={extracted_trace_id} found in sink. " f"Sink events: {dispatch_events}"
         )
         assert matched[0].get("task_id") == task_id

@@ -19,10 +19,10 @@ from core.control_plane.audit_ledger import (
     events_to_json,
 )
 
-
 # ---------------------------------------------------------------------------
 # TraceEvent model tests
 # ---------------------------------------------------------------------------
+
 
 class TestTraceEvent:
     def test_default_fields(self):
@@ -64,8 +64,11 @@ class TestTraceEvent:
     def test_severity_ordering(self):
         # Enum members exist
         for member in (
-            Severity.DEBUG, Severity.INFO, Severity.WARNING,
-            Severity.ERROR, Severity.CRITICAL,
+            Severity.DEBUG,
+            Severity.INFO,
+            Severity.WARNING,
+            Severity.ERROR,
+            Severity.CRITICAL,
         ):
             assert isinstance(member, Severity)
 
@@ -73,6 +76,7 @@ class TestTraceEvent:
 # ---------------------------------------------------------------------------
 # AuditLedger tests
 # ---------------------------------------------------------------------------
+
 
 class TestAuditLedger:
     def test_empty_on_init(self):
@@ -178,6 +182,7 @@ class TestAuditLedger:
 # Serialisation helpers
 # ---------------------------------------------------------------------------
 
+
 class TestSerialisationHelpers:
     def _make_chain(self) -> AuditLedger:
         ledger = AuditLedger()
@@ -233,9 +238,7 @@ class TestSerialisationHelpers:
 
     def test_events_to_dag_standalone(self):
         e1 = TraceEvent(event_type=EventType.TASK_CREATED)
-        e2 = TraceEvent(
-            event_type=EventType.TASK_DISPATCHED, parent_ids=[e1.event_id]
-        )
+        e2 = TraceEvent(event_type=EventType.TASK_DISPATCHED, parent_ids=[e1.event_id])
         dag = events_to_dag([e1, e2])
         assert dag[e1.event_id] == []
         assert dag[e2.event_id] == [e1.event_id]

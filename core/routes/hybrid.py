@@ -20,16 +20,15 @@ Routes:
   POST /api/v1/mesh/probe            - 触发 TCP 探测
 """
 
-import logging
 import json
+import logging
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends
-
-from core.auth import require_auth
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from core.auth import require_auth
 from core.routes._shared import connection_manager
 
 logger = logging.getLogger("Galaxy.API")
@@ -41,12 +40,13 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
     # ── Phase 3: Hybrid Execution ──────────────────────────────────────────
 
-    from core.hybrid_executor import get_hybrid_arbiter, ExecutionLevel
+    from core.hybrid_executor import ExecutionLevel, get_hybrid_arbiter
 
     hybrid_arbiter = get_hybrid_arbiter()
 
     class HybridExecuteRequest(BaseModel):
         """混合执行请求"""
+
         device_id: str
         app_id: str = ""
         action: str = ""
@@ -90,6 +90,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
     class RAGQueryRequest(BaseModel):
         """RAG 检索请求"""
+
         query: str
         top_k: int = 5
         include_experience: bool = True
@@ -98,6 +99,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
     class CodeExecuteRequest(BaseModel):
         """安全代码执行请求"""
+
         code: str
         language: str = "python"
         timeout: int = 15
@@ -113,11 +115,13 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             include_knowledge=req.include_knowledge,
         )
         similar_experiences = rag_memory.recall_similar(req.query, top_k=req.top_k, device_id=req.device_id)
-        return JSONResponse({
-            "enhanced_context": enhanced_context,
-            "experiences": [e.to_dict() for e in similar_experiences],
-            "patterns": rag_memory.get_learned_patterns(),
-        })
+        return JSONResponse(
+            {
+                "enhanced_context": enhanced_context,
+                "experiences": [e.to_dict() for e in similar_experiences],
+                "patterns": rag_memory.get_learned_patterns(),
+            }
+        )
 
     @router.get("/api/v1/rag/stats")
     async def rag_stats():
@@ -148,7 +152,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     # ── Phase 5: P2P Mesh Overlay ──────────────────────────────────────────
 
     from core.mesh_coordinator import get_mesh_coordinator
-    from core.proxy_relay import get_proxy_relay, RelayRequest as ProxyRelayRequest
+    from core.proxy_relay import RelayRequest as ProxyRelayRequest
+    from core.proxy_relay import get_proxy_relay
 
     mesh_coordinator = get_mesh_coordinator()
     proxy_relay = get_proxy_relay()
@@ -181,18 +186,21 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     mesh_coordinator._p2p_send = _mesh_p2p_send
 
     async def _mesh_relay_send(source, target, payload_type, payload):
-        result = await proxy_relay.relay(ProxyRelayRequest(
-            source_device=source,
-            target_device=target,
-            payload_type=payload_type,
-            payload=payload,
-        ))
+        result = await proxy_relay.relay(
+            ProxyRelayRequest(
+                source_device=source,
+                target_device=target,
+                payload_type=payload_type,
+                payload=payload,
+            )
+        )
         return result.to_dict()
 
     mesh_coordinator._relay_send = _mesh_relay_send
 
     class MeshSendRequest(BaseModel):
         """Mesh 发送请求"""
+
         target_device: str
         payload: Dict[str, Any] = {}
         payload_type: str = "task"
@@ -200,6 +208,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
     class PeerAnnounceRequest(BaseModel):
         """Peer 上报请求"""
+
         device_id: str
         local_ip: str = ""
         local_port: int = 0
@@ -268,19 +277,23 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     async def mesh_worker_status():
         """NATS worker 实时状态(running 为真实运行态,不从配置推断)。"""
         from core.worker_runtime import get_worker_runtime, worker_enabled
+
         wr = get_worker_runtime()
         nats_connected = False
         try:
             from core.nats_bus import get_nats_bus
+
             nats_connected = bool(get_nats_bus().is_connected())
         except Exception:  # noqa: BLE001 — 无 NATS 时诚实 False
             pass
-        return JSONResponse({
-            "running": bool(wr.running),
-            "worker_id": wr.worker_id,
-            "enabled_by_env": worker_enabled(),
-            "nats_connected": nats_connected,
-        })
+        return JSONResponse(
+            {
+                "running": bool(wr.running),
+                "worker_id": wr.worker_id,
+                "enabled_by_env": worker_enabled(),
+                "nats_connected": nats_connected,
+            }
+        )
 
     class MeshWorkerToggleRequest(BaseModel):
         enable: bool
@@ -289,20 +302,25 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     async def mesh_worker_toggle(req: MeshWorkerToggleRequest):
         """启/停 NATS worker。启动失败按 worker_runtime 的真实 reason 回报。"""
         from core.worker_runtime import get_worker_runtime
+
         wr = get_worker_runtime()
         if req.enable:
             outcome = await wr.start()
-            return JSONResponse({
+            return JSONResponse(
+                {
+                    "running": bool(wr.running),
+                    "worker_id": wr.worker_id,
+                    **outcome,
+                }
+            )
+        await wr.stop()
+        return JSONResponse(
+            {
                 "running": bool(wr.running),
                 "worker_id": wr.worker_id,
-                **outcome,
-            })
-        await wr.stop()
-        return JSONResponse({
-            "running": bool(wr.running),
-            "worker_id": wr.worker_id,
-            "started": False,
-            "stopped": True,
-        })
+                "started": False,
+                "stopped": True,
+            }
+        )
 
     return router

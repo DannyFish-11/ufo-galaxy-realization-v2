@@ -12,13 +12,13 @@ Galaxy - 系统负载监控器
 5. 进程监控
 """
 
-import os
 import asyncio
 import logging
-from typing import Dict, List, Optional, Any, Tuple
+import os
+from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime
-from collections import deque
+from typing import Any, Dict, List, Optional, Tuple
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 # 尝试导入 psutil，如果不可用则使用 /proc 文件系统
 try:
     import psutil
+
     HAS_PSUTIL = True
 except ImportError:
     HAS_PSUTIL = False
@@ -35,6 +36,7 @@ except ImportError:
 @dataclass
 class CPUStats:
     """CPU 统计"""
+
     usage_percent: float = 0.0
     user_percent: float = 0.0
     system_percent: float = 0.0
@@ -50,6 +52,7 @@ class CPUStats:
 @dataclass
 class MemoryStats:
     """内存统计"""
+
     total_bytes: int = 0
     available_bytes: int = 0
     used_bytes: int = 0
@@ -64,6 +67,7 @@ class MemoryStats:
 @dataclass
 class DiskStats:
     """磁盘统计"""
+
     total_bytes: int = 0
     used_bytes: int = 0
     free_bytes: int = 0
@@ -77,6 +81,7 @@ class DiskStats:
 @dataclass
 class NetworkStats:
     """网络统计"""
+
     bytes_sent: int = 0
     bytes_recv: int = 0
     packets_sent: int = 0
@@ -91,6 +96,7 @@ class NetworkStats:
 @dataclass
 class ProcessStats:
     """进程统计"""
+
     pid: int = 0
     name: str = ""
     cpu_percent: float = 0.0
@@ -103,6 +109,7 @@ class ProcessStats:
 @dataclass
 class SystemLoad:
     """系统负载综合信息"""
+
     timestamp: datetime = field(default_factory=datetime.now)
     cpu: CPUStats = field(default_factory=CPUStats)
     memory: MemoryStats = field(default_factory=MemoryStats)
@@ -131,11 +138,11 @@ class SystemLoad:
         iowait_score = self.cpu.iowait_percent / 100.0
 
         total_score = (
-            cpu_score * cpu_weight +
-            memory_score * memory_weight +
-            disk_score * disk_weight +
-            network_score * network_weight +
-            iowait_score * iowait_weight
+            cpu_score * cpu_weight
+            + memory_score * memory_weight
+            + disk_score * disk_weight
+            + network_score * network_weight
+            + iowait_score * iowait_weight
         )
 
         return round(total_score, 4)
@@ -144,11 +151,7 @@ class SystemLoad:
 class SystemLoadMonitor:
     """系统负载监控器"""
 
-    def __init__(
-        self,
-        history_size: int = 100,
-        sample_interval: float = 1.0
-    ):
+    def __init__(self, history_size: int = 100, sample_interval: float = 1.0):
         self.history_size = history_size
         self.sample_interval = sample_interval
 
@@ -181,7 +184,7 @@ class SystemLoadMonitor:
             stats.user_percent = cpu_times.user
             stats.system_percent = cpu_times.system
             stats.idle_percent = cpu_times.idle
-            stats.iowait_percent = getattr(cpu_times, 'iowait', 0)
+            stats.iowait_percent = getattr(cpu_times, "iowait", 0)
             stats.core_count = psutil.cpu_count()
             stats.per_core_usage = psutil.cpu_percent(percpu=True)
             stats.load_avg_1m = load_avg[0]
@@ -199,11 +202,11 @@ class SystemLoadMonitor:
 
         try:
             # 读取 /proc/stat
-            with open('/proc/stat', "r", encoding="utf-8") as f:
+            with open("/proc/stat", "r", encoding="utf-8") as f:
                 line = f.readline()
                 parts = line.split()
 
-                if parts[0] == 'cpu':
+                if parts[0] == "cpu":
                     user = int(parts[1])
                     nice = int(parts[2])
                     system = int(parts[3])
@@ -226,7 +229,7 @@ class SystemLoadMonitor:
                     self._last_cpu_times = (user, nice, system, idle, iowait, total)
 
             # 读取 /proc/loadavg
-            with open('/proc/loadavg', "r", encoding="utf-8") as f:
+            with open("/proc/loadavg", "r", encoding="utf-8") as f:
                 parts = f.readline().split()
                 stats.load_avg_1m = float(parts[0])
                 stats.load_avg_5m = float(parts[1])
@@ -252,8 +255,8 @@ class SystemLoadMonitor:
             stats.available_bytes = mem.available
             stats.used_bytes = mem.used
             stats.usage_percent = mem.percent
-            stats.cached_bytes = getattr(mem, 'cached', 0)
-            stats.buffers_bytes = getattr(mem, 'buffers', 0)
+            stats.cached_bytes = getattr(mem, "cached", 0)
+            stats.buffers_bytes = getattr(mem, "buffers", 0)
             stats.swap_total = swap.total
             stats.swap_used = swap.used
             stats.swap_percent = swap.percent
@@ -267,23 +270,23 @@ class SystemLoadMonitor:
         stats = MemoryStats()
 
         try:
-            with open('/proc/meminfo', "r", encoding="utf-8") as f:
+            with open("/proc/meminfo", "r", encoding="utf-8") as f:
                 meminfo = {}
                 for line in f:
-                    parts = line.split(':')
+                    parts = line.split(":")
                     if len(parts) == 2:
                         key = parts[0].strip()
                         value = parts[1].strip().split()[0]
                         meminfo[key] = int(value) * 1024  # KB to bytes
 
-                stats.total_bytes = meminfo.get('MemTotal', 0)
-                stats.available_bytes = meminfo.get('MemAvailable', meminfo.get('MemFree', 0))
+                stats.total_bytes = meminfo.get("MemTotal", 0)
+                stats.available_bytes = meminfo.get("MemAvailable", meminfo.get("MemFree", 0))
                 stats.used_bytes = stats.total_bytes - stats.available_bytes
                 stats.usage_percent = (stats.used_bytes / stats.total_bytes * 100) if stats.total_bytes > 0 else 0
-                stats.cached_bytes = meminfo.get('Cached', 0)
-                stats.buffers_bytes = meminfo.get('Buffers', 0)
-                stats.swap_total = meminfo.get('SwapTotal', 0)
-                stats.swap_used = stats.swap_total - meminfo.get('SwapFree', 0)
+                stats.cached_bytes = meminfo.get("Cached", 0)
+                stats.buffers_bytes = meminfo.get("Buffers", 0)
+                stats.swap_total = meminfo.get("SwapTotal", 0)
+                stats.swap_used = stats.swap_total - meminfo.get("SwapFree", 0)
                 stats.swap_percent = (stats.swap_used / stats.swap_total * 100) if stats.swap_total > 0 else 0
 
         except Exception as e:
@@ -291,7 +294,7 @@ class SystemLoadMonitor:
 
         return stats
 
-    def get_disk_stats(self, path: str = '/') -> DiskStats:
+    def get_disk_stats(self, path: str = "/") -> DiskStats:
         """获取磁盘统计"""
         stats = DiskStats()
 
@@ -314,7 +317,7 @@ class SystemLoadMonitor:
 
         return stats
 
-    def _get_disk_from_proc(self, path: str = '/') -> DiskStats:
+    def _get_disk_from_proc(self, path: str = "/") -> DiskStats:
         """从 /proc 获取磁盘统计"""
         stats = DiskStats()
 
@@ -327,7 +330,7 @@ class SystemLoadMonitor:
             stats.usage_percent = (stats.used_bytes / stats.total_bytes * 100) if stats.total_bytes > 0 else 0
 
             # 读取 /proc/diskstats
-            with open('/proc/diskstats', "r", encoding="utf-8") as f:
+            with open("/proc/diskstats", "r", encoding="utf-8") as f:
                 total_read = 0
                 total_write = 0
                 for line in f:
@@ -372,7 +375,7 @@ class SystemLoadMonitor:
         stats = NetworkStats()
 
         try:
-            with open('/proc/net/dev', "r", encoding="utf-8") as f:
+            with open("/proc/net/dev", "r", encoding="utf-8") as f:
                 lines = f.readlines()[2:]  # 跳过标题行
 
                 for line in lines:
@@ -389,9 +392,9 @@ class SystemLoadMonitor:
                         stats.drop_out += int(parts[12])
 
             # 统计连接数
-            with open('/proc/net/tcp', "r", encoding="utf-8") as f:
+            with open("/proc/net/tcp", "r", encoding="utf-8") as f:
                 stats.connections_count = len(f.readlines()) - 1
-            with open('/proc/net/tcp6', "r", encoding="utf-8") as f:
+            with open("/proc/net/tcp6", "r", encoding="utf-8") as f:
                 stats.connections_count += len(f.readlines()) - 1
 
         except Exception as e:
@@ -404,18 +407,22 @@ class SystemLoadMonitor:
         processes = []
 
         if HAS_PSUTIL:
-            for proc in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_percent', 'memory_info', 'num_threads', 'status']):
+            for proc in psutil.process_iter(
+                ["pid", "name", "cpu_percent", "memory_percent", "memory_info", "num_threads", "status"]
+            ):
                 try:
                     info = proc.info
-                    processes.append(ProcessStats(
-                        pid=info['pid'],
-                        name=info['name'],
-                        cpu_percent=info['cpu_percent'] or 0,
-                        memory_percent=info['memory_percent'] or 0,
-                        memory_rss=info['memory_info'].rss if info['memory_info'] else 0,
-                        threads=info['num_threads'] or 0,
-                        status=info['status'] or ''
-                    ))
+                    processes.append(
+                        ProcessStats(
+                            pid=info["pid"],
+                            name=info["name"],
+                            cpu_percent=info["cpu_percent"] or 0,
+                            memory_percent=info["memory_percent"] or 0,
+                            memory_rss=info["memory_info"].rss if info["memory_info"] else 0,
+                            threads=info["num_threads"] or 0,
+                            status=info["status"] or "",
+                        )
+                    )
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
                     pass
 
@@ -432,7 +439,7 @@ class SystemLoadMonitor:
             memory=self.get_memory_stats(),
             disk=self.get_disk_stats(),
             network=self.get_network_stats(),
-            top_processes=self.get_top_processes()
+            top_processes=self.get_top_processes(),
         )
 
         # 保存到历史
@@ -504,28 +511,28 @@ class SystemLoadMonitor:
         """导出统计信息。优先读后台采样缓存,没采样过(刚启动)才现算一次。"""
         load = self.get_cached_load() or self.get_system_load()
         return {
-            'timestamp': load.timestamp.isoformat(),
-            'overall_load_score': load.overall_load_score(),
-            'cpu': {
-                'usage_percent': load.cpu.usage_percent,
-                'load_avg_1m': load.cpu.load_avg_1m,
-                'core_count': load.cpu.core_count
+            "timestamp": load.timestamp.isoformat(),
+            "overall_load_score": load.overall_load_score(),
+            "cpu": {
+                "usage_percent": load.cpu.usage_percent,
+                "load_avg_1m": load.cpu.load_avg_1m,
+                "core_count": load.cpu.core_count,
             },
-            'memory': {
-                'usage_percent': load.memory.usage_percent,
-                'total_gb': load.memory.total_bytes / (1024**3),
-                'used_gb': load.memory.used_bytes / (1024**3)
+            "memory": {
+                "usage_percent": load.memory.usage_percent,
+                "total_gb": load.memory.total_bytes / (1024**3),
+                "used_gb": load.memory.used_bytes / (1024**3),
             },
-            'disk': {
-                'usage_percent': load.disk.usage_percent,
-                'total_gb': load.disk.total_bytes / (1024**3),
-                'free_gb': load.disk.free_bytes / (1024**3)
+            "disk": {
+                "usage_percent": load.disk.usage_percent,
+                "total_gb": load.disk.total_bytes / (1024**3),
+                "free_gb": load.disk.free_bytes / (1024**3),
             },
-            'network': {
-                'connections': load.network.connections_count,
-                'bytes_sent': load.network.bytes_sent,
-                'bytes_recv': load.network.bytes_recv
-            }
+            "network": {
+                "connections": load.network.connections_count,
+                "bytes_sent": load.network.bytes_sent,
+                "bytes_recv": load.network.bytes_recv,
+            },
         }
 
 
@@ -585,6 +592,7 @@ async def test_system_load_monitor():
 
     print("\n--- Export Stats ---")
     import json
+
     print(json.dumps(monitor.export_stats(), indent=2))
 
     print("\n✅ 测试完成")

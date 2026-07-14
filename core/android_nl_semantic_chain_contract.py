@@ -83,9 +83,7 @@ logger = logging.getLogger(__name__)
 # Contract sentinel — presence of this constant proves the contract is loaded.
 # ---------------------------------------------------------------------------
 
-ANDROID_NL_SEMANTIC_CHAIN_CONTRACT_SENTINEL: str = (
-    "ANDROID_NL_SEMANTIC_CHAIN_CONTRACT::v1 present"
-)
+ANDROID_NL_SEMANTIC_CHAIN_CONTRACT_SENTINEL: str = "ANDROID_NL_SEMANTIC_CHAIN_CONTRACT::v1 present"
 
 # ---------------------------------------------------------------------------
 # Component role declarations
@@ -114,9 +112,7 @@ CENTER_AUTHORITY_BOUNDARY: str = "center_authority"
 ANDROID_NL_CARRIER_SOURCE: str = "android_goal_execution"
 
 #: All DPR source tags that originate from an Android device carrier.
-ANDROID_CARRIER_SOURCES: frozenset = frozenset(
-    {"android_goal_execution", "android_vision"}
-)
+ANDROID_CARRIER_SOURCES: frozenset = frozenset({"android_goal_execution", "android_vision"})
 
 # ---------------------------------------------------------------------------
 # NL path type identifiers (stamped in ingress_carrier_context.nl_path_type)
@@ -323,9 +319,7 @@ def assert_v2_is_semantic_authority(result: Dict[str, Any], context: str = "") -
     """
     icc = result.get("ingress_carrier_context", {})
     prefix = f"[{context}] " if context else ""
-    assert isinstance(icc, dict), (
-        f"{prefix}ingress_carrier_context must be a dict; got {type(icc).__name__}"
-    )
+    assert isinstance(icc, dict), f"{prefix}ingress_carrier_context must be a dict; got {type(icc).__name__}"
     semantic_auth = icc.get("semantic_authority", "")
     assert semantic_auth == V2_SEMANTIC_AUTHORITY, (
         f"{prefix}semantic_authority must be {V2_SEMANTIC_AUTHORITY!r} — "
@@ -350,9 +344,7 @@ def assert_android_nl_carrier(result: Dict[str, Any], context: str = "") -> None
     """
     icc = result.get("ingress_carrier_context", {})
     prefix = f"[{context}] " if context else ""
-    assert isinstance(icc, dict), (
-        f"{prefix}ingress_carrier_context must be a dict; got {type(icc).__name__}"
-    )
+    assert isinstance(icc, dict), f"{prefix}ingress_carrier_context must be a dict; got {type(icc).__name__}"
     is_android = icc.get("is_android_carrier", False)
     assert is_android is True, (
         f"{prefix}is_android_carrier must be True for Android NL carrier paths. "
@@ -380,6 +372,5 @@ def assert_nl_path_type(
     prefix = f"[{context}] " if context else ""
     actual = icc.get("nl_path_type", "")
     assert actual == expected_nl_path_type, (
-        f"{prefix}nl_path_type must be {expected_nl_path_type!r}. "
-        f"Got {actual!r}. Full carrier context: {icc}"
+        f"{prefix}nl_path_type must be {expected_nl_path_type!r}. " f"Got {actual!r}. Full carrier context: {icc}"
     )

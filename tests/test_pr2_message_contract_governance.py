@@ -40,10 +40,10 @@ Validates that:
 
 from __future__ import annotations
 
-import sys
 import os
+import sys
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -53,23 +53,28 @@ class TestMessageInteropAuthority(unittest.TestCase):
 
     def test_01_authority_importable(self):
         from core.message_interop import MESSAGE_INTEROP_AUTHORITY
+
         self.assertIsNotNone(MESSAGE_INTEROP_AUTHORITY)
 
     def test_02_authority_contains_message_interop(self):
         from core.message_interop import MESSAGE_INTEROP_AUTHORITY
+
         self.assertIn("MESSAGE_INTEROP", MESSAGE_INTEROP_AUTHORITY)
 
     def test_03_correlation_policy_non_empty(self):
         from core.message_interop import MESSAGE_INTEROP_CORRELATION_POLICY
+
         self.assertIsInstance(MESSAGE_INTEROP_CORRELATION_POLICY, str)
         self.assertTrue(len(MESSAGE_INTEROP_CORRELATION_POLICY) > 0)
 
     def test_04_correlation_policy_mentions_task_id(self):
         from core.message_interop import MESSAGE_INTEROP_CORRELATION_POLICY
+
         self.assertIn("task_id", MESSAGE_INTEROP_CORRELATION_POLICY)
 
     def test_05_correlation_policy_mentions_trace_id(self):
         from core.message_interop import MESSAGE_INTEROP_CORRELATION_POLICY
+
         self.assertIn("trace_id", MESSAGE_INTEROP_CORRELATION_POLICY)
 
 
@@ -78,18 +83,22 @@ class TestMessageInteropImports(unittest.TestCase):
 
     def test_06_normalize_to_task_envelope_importable(self):
         from core.message_interop import normalize_to_task_envelope
+
         self.assertTrue(callable(normalize_to_task_envelope))
 
     def test_07_normalize_to_result_envelope_importable(self):
         from core.message_interop import normalize_to_result_envelope
+
         self.assertTrue(callable(normalize_to_result_envelope))
 
     def test_08_extract_correlation_importable(self):
         from core.message_interop import extract_correlation
+
         self.assertTrue(callable(extract_correlation))
 
     def test_09_correlation_fields_importable(self):
         from core.message_interop import CorrelationFields
+
         self.assertIsNotNone(CorrelationFields)
 
 
@@ -97,6 +106,7 @@ def _make_task_envelope():
     """Build a minimal TaskEnvelope for tests."""
     try:
         from core.schemas.task_envelope import TaskEnvelope
+
         return TaskEnvelope(
             task_id="task_abc123",
             trace_id="trace_def456",
@@ -112,6 +122,7 @@ class TestNormalizeToTaskEnvelope(unittest.TestCase):
 
     def _normalize(self, payload, **kwargs):
         from core.message_interop import normalize_to_task_envelope
+
         return normalize_to_task_envelope(payload, **kwargs)
 
     def test_10_fast_path_task_envelope_schema(self):
@@ -219,11 +230,13 @@ class TestConsumerSentinels(unittest.TestCase):
 
     def test_26_gateway_nats_adapter_sentinel(self):
         from galaxy_gateway.gateway_nats_adapter import MESSAGE_INTEROP_APPLIED
+
         self.assertIsInstance(MESSAGE_INTEROP_APPLIED, str)
         self.assertIn("INTEROP", MESSAGE_INTEROP_APPLIED)
 
     def test_27_scheduler_sentinel(self):
         from core.scheduler import SCHEDULER_MESSAGE_INTEROP_APPLIED
+
         self.assertIsInstance(SCHEDULER_MESSAGE_INTEROP_APPLIED, str)
         self.assertIn("INTEROP", SCHEDULER_MESSAGE_INTEROP_APPLIED)
 
@@ -233,6 +246,7 @@ class TestCorrelationFields(unittest.TestCase):
 
     def test_28_to_dict_includes_required_keys(self):
         from core.message_interop import CorrelationFields
+
         cf = CorrelationFields(task_id="t1", trace_id="tr1", session_id="s1")
         d = cf.to_dict()
         self.assertIn("task_id", d)
@@ -241,6 +255,7 @@ class TestCorrelationFields(unittest.TestCase):
 
     def test_29_non_dict_payload_graceful(self):
         from core.message_interop import normalize_to_task_envelope
+
         # Passing a non-dict payload (but wrapped in a dict for function call)
         # Simulate a payload that triggers the legacy path
         env = normalize_to_task_envelope({"task_type": "cmd"}, source="fallback")

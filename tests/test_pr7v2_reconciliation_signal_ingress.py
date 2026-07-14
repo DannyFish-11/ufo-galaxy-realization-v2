@@ -77,15 +77,9 @@ except ImportError:
     _TRACKER_AVAILABLE = False
 
 _SKIP_AIP = pytest.mark.skipif(not _AIP_AVAILABLE, reason="aip_v3 unavailable")
-_SKIP_MODULE = pytest.mark.skipif(
-    not _MODULE_AVAILABLE, reason="android_participant_truth_ingress unavailable"
-)
-_SKIP_HANDLER = pytest.mark.skipif(
-    not _HANDLER_AVAILABLE, reason="reconciliation_signal handler unavailable"
-)
-_SKIP_TRACKER = pytest.mark.skipif(
-    not _TRACKER_AVAILABLE, reason="delegated_runtime_execution_tracker unavailable"
-)
+_SKIP_MODULE = pytest.mark.skipif(not _MODULE_AVAILABLE, reason="android_participant_truth_ingress unavailable")
+_SKIP_HANDLER = pytest.mark.skipif(not _HANDLER_AVAILABLE, reason="reconciliation_signal handler unavailable")
+_SKIP_TRACKER = pytest.mark.skipif(not _TRACKER_AVAILABLE, reason="delegated_runtime_execution_tracker unavailable")
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -166,8 +160,15 @@ class TestGroupB_TruthKind:
     def test_b4_all_original_kinds_still_present(self) -> None:
         """All original truth kinds must still be present (no regression)."""
         for name in (
-            "session_snapshot", "readiness_assessment", "task_phase",
-            "runtime_state", "cancel", "status", "failure", "result", "unknown",
+            "session_snapshot",
+            "readiness_assessment",
+            "task_phase",
+            "runtime_state",
+            "cancel",
+            "status",
+            "failure",
+            "result",
+            "unknown",
         ):
             assert hasattr(AndroidParticipantTruthKind, name), f"Missing: {name}"
 
@@ -258,7 +259,9 @@ class TestGroupD_Handler:
 
         mock_coord_outcome = MagicMock()
         mock_coord_outcome.was_handled = True
-        mock_coord_outcome.description = "reconciliation_signal: truth_kind='reconciliation_signal' reconciled=True session='sx'"
+        mock_coord_outcome.description = (
+            "reconciliation_signal: truth_kind='reconciliation_signal' reconciled=True session='sx'"
+        )
         mock_coordinator = MagicMock()
         mock_coordinator.on_reconciliation_signal.return_value = mock_coord_outcome
 
@@ -288,15 +291,15 @@ class TestGroupE_BridgeRegistration:
         bridge = AndroidBridge.__new__(AndroidBridge)
         bridge._message_handlers = {}
         bridge._register_default_handlers()
-        assert MessageType.RECONCILIATION_SIGNAL in bridge._message_handlers, (
-            "RECONCILIATION_SIGNAL handler not registered in AndroidBridge"
-        )
+        assert (
+            MessageType.RECONCILIATION_SIGNAL in bridge._message_handlers
+        ), "RECONCILIATION_SIGNAL handler not registered in AndroidBridge"
 
     def test_e2_handler_is_not_unregistered_fallback(self) -> None:
         """The RECONCILIATION_SIGNAL handler must not be the generic unregistered handler."""
         try:
-            from galaxy_gateway.android_bridge import AndroidBridge
             from galaxy_gateway.android.handlers.registration import handle_unregistered
+            from galaxy_gateway.android_bridge import AndroidBridge
         except ImportError:
             pytest.skip("android_bridge or registration unavailable")
 

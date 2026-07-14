@@ -45,7 +45,7 @@ def tokenize(text: str) -> List[str]:
         # 相邻双字二元组（在原始顺序上，仅对连续 CJK 串）：提升中文短语区分度。
         for run in re.findall(r"[一-鿿぀-ヿ가-힯]+", lowered):
             for i in range(len(run) - 1):
-                tokens.append(run[i:i + 2])
+                tokens.append(run[i : i + 2])
         return tokens
     except Exception:
         return []
@@ -65,7 +65,7 @@ class BM25Index:
         self._doc_tokens: List[List[str]] = []
         self._doc_freqs: List[Counter] = []
         self._doc_len: List[int] = []
-        self._df: Counter = Counter()      # term → 出现该词的文档数
+        self._df: Counter = Counter()  # term → 出现该词的文档数
         self._avgdl: float = 0.0
 
     def add(self, doc_id: str, text: str) -> None:

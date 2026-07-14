@@ -65,6 +65,7 @@ Coverage
     - result is instance of DispatchResult
     - to_dict() output is identical to as_legacy_dict() keys plus metadata keys
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -81,6 +82,7 @@ import pytest
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _run(coro):
     return asyncio.new_event_loop().run_until_complete(coro)
 
@@ -89,9 +91,11 @@ def _run(coro):
 # 1. CapabilityLayer classification
 # ---------------------------------------------------------------------------
 
+
 class TestCapabilityLayerClassification:
     def _import(self):
         from core.capabilities.canonical_dispatcher import CapabilityLayer
+
         return CapabilityLayer
 
     def test_mcp_prefix(self):
@@ -129,9 +133,11 @@ class TestCapabilityLayerClassification:
 
     def test_classify_matches_tool_call_record(self):
         from core.capabilities.canonical_dispatcher import CapabilityLayer
+
         try:
             import importlib
             import sys
+
             # Import tool_call directly, bypassing schemas/__init__.py which needs pydantic
             spec = importlib.util.spec_from_file_location(
                 "core.schemas.tool_call",
@@ -160,9 +166,11 @@ class TestCapabilityLayerClassification:
 # 2. DispatchResult contract
 # ---------------------------------------------------------------------------
 
+
 class TestDispatchResult:
     def _import(self):
-        from core.capabilities.canonical_dispatcher import DispatchResult, CapabilityLayer
+        from core.capabilities.canonical_dispatcher import CapabilityLayer, DispatchResult
+
         return DispatchResult, CapabilityLayer
 
     def test_defaults(self):
@@ -235,9 +243,11 @@ class TestDispatchResult:
 # 3. CanonicalDispatcher construction
 # ---------------------------------------------------------------------------
 
+
 class TestCanonicalDispatcherConstruction:
     def _import(self):
         from core.capabilities.canonical_dispatcher import CanonicalDispatcher
+
         return CanonicalDispatcher
 
     def test_default_construction(self):
@@ -268,9 +278,11 @@ class TestCanonicalDispatcherConstruction:
 # 4. Permission guard
 # ---------------------------------------------------------------------------
 
+
 class TestPermissionGuard:
     def _make_dispatcher(self, checker=None):
         from core.capabilities.canonical_dispatcher import CanonicalDispatcher
+
         return CanonicalDispatcher(tool_permission_checker=checker)
 
     def test_no_checker_allows(self):
@@ -312,9 +324,11 @@ class TestPermissionGuard:
 # 5. MCP dispatch — mocked backend
 # ---------------------------------------------------------------------------
 
+
 class TestMCPDispatch:
     def _make_dispatcher(self):
         from core.capabilities.canonical_dispatcher import CanonicalDispatcher
+
         return CanonicalDispatcher()
 
     def test_mcp_success(self):
@@ -337,16 +351,19 @@ class TestMCPDispatch:
 
         with (
             patch("core.capabilities.canonical_dispatcher.time") as mock_time,
-            patch.dict("sys.modules", {
-                "core.mcp_loader": MagicMock(mcp_loader=mock_mcp_loader),
-                "core.skill_contract": MagicMock(
-                    SkillRequest=mock_req_cls,
-                    SkillMetrics=mock_metrics_cls,
-                    SkillResponse=mock_resp_cls,
-                    SkillErrorCode=MagicMock(EXECUTION_ERROR="exec_error"),
-                ),
-                "core.skill_registry": MagicMock(get_skill_registry=MagicMock(return_value=mock_registry)),
-            }),
+            patch.dict(
+                "sys.modules",
+                {
+                    "core.mcp_loader": MagicMock(mcp_loader=mock_mcp_loader),
+                    "core.skill_contract": MagicMock(
+                        SkillRequest=mock_req_cls,
+                        SkillMetrics=mock_metrics_cls,
+                        SkillResponse=mock_resp_cls,
+                        SkillErrorCode=MagicMock(EXECUTION_ERROR="exec_error"),
+                    ),
+                    "core.skill_registry": MagicMock(get_skill_registry=MagicMock(return_value=mock_registry)),
+                },
+            ),
         ):
             mock_time.time.return_value = 0.0
 
@@ -363,6 +380,7 @@ class TestMCPDispatch:
 
     def test_dispatch_returns_dispatch_result_for_mcp(self):
         from core.capabilities.canonical_dispatcher import DispatchResult
+
         d = self._make_dispatcher()
 
         mock_mcp_loader = MagicMock()
@@ -370,20 +388,23 @@ class TestMCPDispatch:
         mock_registry = MagicMock()
         mock_registry._emit_log = MagicMock()
 
-        with patch.dict("sys.modules", {
-            "core.mcp_loader": MagicMock(mcp_loader=mock_mcp_loader),
-            "core.skill_contract": MagicMock(
-                SkillRequest=MagicMock(return_value=MagicMock(trace_id="t")),
-                SkillMetrics=MagicMock(return_value=MagicMock(finish=MagicMock())),
-                SkillResponse=MagicMock(success=MagicMock(return_value=MagicMock())),
-                SkillErrorCode=MagicMock(EXECUTION_ERROR="e"),
-            ),
-            "core.skill_registry": MagicMock(get_skill_registry=MagicMock(return_value=mock_registry)),
-            "core.state_event_bus": MagicMock(
-                emit=MagicMock(),
-                StateEventType=MagicMock(SKILL_INVOKED="si", SKILL_FAILED="sf"),
-            ),
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "core.mcp_loader": MagicMock(mcp_loader=mock_mcp_loader),
+                "core.skill_contract": MagicMock(
+                    SkillRequest=MagicMock(return_value=MagicMock(trace_id="t")),
+                    SkillMetrics=MagicMock(return_value=MagicMock(finish=MagicMock())),
+                    SkillResponse=MagicMock(success=MagicMock(return_value=MagicMock())),
+                    SkillErrorCode=MagicMock(EXECUTION_ERROR="e"),
+                ),
+                "core.skill_registry": MagicMock(get_skill_registry=MagicMock(return_value=mock_registry)),
+                "core.state_event_bus": MagicMock(
+                    emit=MagicMock(),
+                    StateEventType=MagicMock(SKILL_INVOKED="si", SKILL_FAILED="sf"),
+                ),
+            },
+        ):
             result = _run(d.dispatch("mcp__weather__forecast", {}))
 
         assert isinstance(result, DispatchResult)
@@ -393,9 +414,11 @@ class TestMCPDispatch:
 # 6. Skill dispatch — mocked backend
 # ---------------------------------------------------------------------------
 
+
 class TestSkillDispatch:
     def _make_dispatcher(self):
         from core.capabilities.canonical_dispatcher import CanonicalDispatcher
+
         return CanonicalDispatcher()
 
     def _mock_registry(self, *, ok: bool = True, outputs=None, error_msg="fail"):
@@ -417,11 +440,14 @@ class TestSkillDispatch:
         d = self._make_dispatcher()
         mock_registry = self._mock_registry(ok=True, outputs={"greeting": "hi"})
 
-        with patch.dict("sys.modules", {
-            "core.skill_registry": MagicMock(get_skill_registry=MagicMock(return_value=mock_registry)),
-            "core.skill_contract": MagicMock(SkillRequest=MagicMock(return_value=MagicMock())),
-            "core.skill_loader": MagicMock(skill_loader=MagicMock()),
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "core.skill_registry": MagicMock(get_skill_registry=MagicMock(return_value=mock_registry)),
+                "core.skill_contract": MagicMock(SkillRequest=MagicMock(return_value=MagicMock())),
+                "core.skill_loader": MagicMock(skill_loader=MagicMock()),
+            },
+        ):
             result = _run(d._dispatch_skill("skill__hello", {}, "dev", "sess"))
 
         assert result.success is True
@@ -431,11 +457,14 @@ class TestSkillDispatch:
         d = self._make_dispatcher()
         mock_registry = self._mock_registry(ok=False, error_msg="no such skill")
 
-        with patch.dict("sys.modules", {
-            "core.skill_registry": MagicMock(get_skill_registry=MagicMock(return_value=mock_registry)),
-            "core.skill_contract": MagicMock(SkillRequest=MagicMock(return_value=MagicMock())),
-            "core.skill_loader": MagicMock(skill_loader=MagicMock()),
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "core.skill_registry": MagicMock(get_skill_registry=MagicMock(return_value=mock_registry)),
+                "core.skill_contract": MagicMock(SkillRequest=MagicMock(return_value=MagicMock())),
+                "core.skill_loader": MagicMock(skill_loader=MagicMock()),
+            },
+        ):
             result = _run(d._dispatch_skill("skill__missing", {}, "dev", "sess"))
 
         assert result.success is False
@@ -452,11 +481,14 @@ class TestSkillDispatch:
         resp.first_error = None
         mock_registry.invoke = AsyncMock(return_value=resp)
 
-        with patch.dict("sys.modules", {
-            "core.skill_registry": MagicMock(get_skill_registry=MagicMock(return_value=mock_registry)),
-            "core.skill_contract": MagicMock(SkillRequest=MagicMock(return_value=MagicMock())),
-            "core.skill_loader": MagicMock(skill_loader=MagicMock()),
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "core.skill_registry": MagicMock(get_skill_registry=MagicMock(return_value=mock_registry)),
+                "core.skill_contract": MagicMock(SkillRequest=MagicMock(return_value=MagicMock())),
+                "core.skill_loader": MagicMock(skill_loader=MagicMock()),
+            },
+        ):
             _run(d._dispatch_skill("skill__new_skill", {}, "", ""))
 
         mock_registry.register_skill.assert_called_once()
@@ -466,25 +498,31 @@ class TestSkillDispatch:
 # 7. Error wrapping
 # ---------------------------------------------------------------------------
 
+
 class TestErrorWrapping:
     def _make_dispatcher(self):
         from core.capabilities.canonical_dispatcher import CanonicalDispatcher
+
         return CanonicalDispatcher()
 
     def test_unknown_prefix_returns_error(self):
         d = self._make_dispatcher()
-        with patch.dict("sys.modules", {
-            "core.state_event_bus": MagicMock(
-                emit=MagicMock(),
-                StateEventType=MagicMock(SKILL_INVOKED="si", SKILL_FAILED="sf"),
-            ),
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "core.state_event_bus": MagicMock(
+                    emit=MagicMock(),
+                    StateEventType=MagicMock(SKILL_INVOKED="si", SKILL_FAILED="sf"),
+                ),
+            },
+        ):
             result = _run(d.dispatch("custom__something", {}))
         assert result.success is False
         assert "未知工具前缀" in (result.error or "")
 
     def test_mcp_backend_exception_returns_error(self):
         from core.capabilities.canonical_dispatcher import CapabilityLayer
+
         d = self._make_dispatcher()
 
         mock_mcp_loader = MagicMock()
@@ -492,20 +530,23 @@ class TestErrorWrapping:
         mock_registry = MagicMock()
         mock_registry._emit_log = MagicMock()
 
-        with patch.dict("sys.modules", {
-            "core.mcp_loader": MagicMock(mcp_loader=mock_mcp_loader),
-            "core.skill_contract": MagicMock(
-                SkillRequest=MagicMock(return_value=MagicMock(trace_id="t")),
-                SkillMetrics=MagicMock(return_value=MagicMock(finish=MagicMock())),
-                SkillResponse=MagicMock(failure=MagicMock(return_value=MagicMock())),
-                SkillErrorCode=MagicMock(EXECUTION_ERROR="e"),
-            ),
-            "core.skill_registry": MagicMock(get_skill_registry=MagicMock(return_value=mock_registry)),
-            "core.state_event_bus": MagicMock(
-                emit=MagicMock(),
-                StateEventType=MagicMock(SKILL_INVOKED="si", SKILL_FAILED="sf"),
-            ),
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "core.mcp_loader": MagicMock(mcp_loader=mock_mcp_loader),
+                "core.skill_contract": MagicMock(
+                    SkillRequest=MagicMock(return_value=MagicMock(trace_id="t")),
+                    SkillMetrics=MagicMock(return_value=MagicMock(finish=MagicMock())),
+                    SkillResponse=MagicMock(failure=MagicMock(return_value=MagicMock())),
+                    SkillErrorCode=MagicMock(EXECUTION_ERROR="e"),
+                ),
+                "core.skill_registry": MagicMock(get_skill_registry=MagicMock(return_value=mock_registry)),
+                "core.state_event_bus": MagicMock(
+                    emit=MagicMock(),
+                    StateEventType=MagicMock(SKILL_INVOKED="si", SKILL_FAILED="sf"),
+                ),
+            },
+        ):
             result = _run(d.dispatch("mcp__weather__forecast", {}))
 
         assert result.success is False
@@ -514,21 +555,25 @@ class TestErrorWrapping:
 
     def test_skill_backend_exception_returns_error(self):
         from core.capabilities.canonical_dispatcher import CapabilityLayer
+
         d = self._make_dispatcher()
 
         mock_registry = MagicMock()
         mock_registry.has_skill.return_value = True
         mock_registry.invoke = AsyncMock(side_effect=RuntimeError("db gone"))
 
-        with patch.dict("sys.modules", {
-            "core.skill_registry": MagicMock(get_skill_registry=MagicMock(return_value=mock_registry)),
-            "core.skill_contract": MagicMock(SkillRequest=MagicMock(return_value=MagicMock())),
-            "core.skill_loader": MagicMock(skill_loader=MagicMock()),
-            "core.state_event_bus": MagicMock(
-                emit=MagicMock(),
-                StateEventType=MagicMock(SKILL_INVOKED="si", SKILL_FAILED="sf"),
-            ),
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "core.skill_registry": MagicMock(get_skill_registry=MagicMock(return_value=mock_registry)),
+                "core.skill_contract": MagicMock(SkillRequest=MagicMock(return_value=MagicMock())),
+                "core.skill_loader": MagicMock(skill_loader=MagicMock()),
+                "core.state_event_bus": MagicMock(
+                    emit=MagicMock(),
+                    StateEventType=MagicMock(SKILL_INVOKED="si", SKILL_FAILED="sf"),
+                ),
+            },
+        ):
             result = _run(d.dispatch("skill__broken", {}))
 
         assert result.success is False
@@ -540,10 +585,12 @@ class TestErrorWrapping:
 # 8. OpenClawd integration
 # ---------------------------------------------------------------------------
 
+
 class TestOpenClawdIntegration:
     def _build_minimal_openclawd(self):
         """Construct a minimal OpenClawd without running full __init__ side effects."""
         from core.openclawd import OpenClawd
+
         oc = object.__new__(OpenClawd)
         oc._initialized = False
         oc._tool_permission_checker = None
@@ -553,12 +600,14 @@ class TestOpenClawdIntegration:
 
     def test_openclawd_has_capability_dispatcher_attribute(self):
         from core.openclawd import OpenClawd
+
         # The attribute must exist after __init__ (real or None from import error).
         oc = self._build_minimal_openclawd()
         assert hasattr(oc, "_capability_dispatcher")
 
     def test_dispatch_tool_call_uses_dispatcher_when_available(self):
-        from core.capabilities.canonical_dispatcher import CanonicalDispatcher, DispatchResult, CapabilityLayer
+        from core.capabilities.canonical_dispatcher import CanonicalDispatcher, CapabilityLayer, DispatchResult
+
         oc = self._build_minimal_openclawd()
         oc._current_trace_id = "tr1"
         oc._current_session_id = "sess1"
@@ -589,12 +638,15 @@ class TestOpenClawdIntegration:
         oc._current_device_id = ""
 
         # Patch the fallback inline path so it doesn't need real imports
-        with patch.dict("sys.modules", {
-            "core.state_event_bus": MagicMock(
-                emit=MagicMock(),
-                StateEventType=MagicMock(SKILL_INVOKED="si", SKILL_FAILED="sf"),
-            ),
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "core.state_event_bus": MagicMock(
+                    emit=MagicMock(),
+                    StateEventType=MagicMock(SKILL_INVOKED="si", SKILL_FAILED="sf"),
+                ),
+            },
+        ):
             result = _run(oc._dispatch_tool_call("unknown__tool", {}))
 
         # Inline fallback should return an error for unknown prefix
@@ -603,6 +655,7 @@ class TestOpenClawdIntegration:
     def test_dispatcher_context_synced_on_process(self):
         """After process() syncs context, dispatcher attrs reflect current request."""
         from core.capabilities.canonical_dispatcher import CanonicalDispatcher
+
         oc = self._build_minimal_openclawd()
         mock_dispatcher = MagicMock(spec=CanonicalDispatcher)
         mock_dispatcher.device_id = ""
@@ -629,11 +682,14 @@ class TestOpenClawdIntegration:
 # 9. Tool-call metadata stability
 # ---------------------------------------------------------------------------
 
+
 class TestToolCallMetadataStability:
     def test_layer_matches_tool_call_record(self):
         from core.capabilities.canonical_dispatcher import CapabilityLayer
+
         try:
             import importlib
+
             spec = importlib.util.spec_from_file_location(
                 "core.schemas.tool_call",
                 __import__("pathlib").Path(__file__).parent.parent / "core" / "schemas" / "tool_call.py",
@@ -658,16 +714,19 @@ class TestToolCallMetadataStability:
 
     def test_latency_ms_non_negative(self):
         from core.capabilities.canonical_dispatcher import DispatchResult
+
         r = DispatchResult(latency_ms=0.0)
         assert r.latency_ms >= 0.0
 
     def test_dispatch_ids_are_unique(self):
         from core.capabilities.canonical_dispatcher import DispatchResult
+
         ids = {DispatchResult().dispatch_id for _ in range(20)}
         assert len(ids) == 20  # all unique
 
     def test_to_dict_and_as_legacy_dict_share_core_keys(self):
-        from core.capabilities.canonical_dispatcher import DispatchResult, CapabilityLayer
+        from core.capabilities.canonical_dispatcher import CapabilityLayer, DispatchResult
+
         r = DispatchResult(success=True, result="x", layer=CapabilityLayer.SKILL, latency_ms=5.5)
         full = r.to_dict()
         legacy = r.as_legacy_dict()
@@ -680,16 +739,21 @@ class TestToolCallMetadataStability:
 # 10. dispatch() return type
 # ---------------------------------------------------------------------------
 
+
 class TestDispatchReturnType:
     def test_dispatch_returns_dispatch_result_for_unknown(self):
         from core.capabilities.canonical_dispatcher import CanonicalDispatcher, DispatchResult
+
         d = CanonicalDispatcher()
-        with patch.dict("sys.modules", {
-            "core.state_event_bus": MagicMock(
-                emit=MagicMock(),
-                StateEventType=MagicMock(SKILL_INVOKED="si", SKILL_FAILED="sf"),
-            ),
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "core.state_event_bus": MagicMock(
+                    emit=MagicMock(),
+                    StateEventType=MagicMock(SKILL_INVOKED="si", SKILL_FAILED="sf"),
+                ),
+            },
+        ):
             result = _run(d.dispatch("unknown__x", {"a": 1}))
         assert isinstance(result, DispatchResult)
         assert result.success is False
@@ -703,20 +767,23 @@ class TestDispatchReturnType:
         mock_registry = MagicMock()
         mock_registry._emit_log = MagicMock()
 
-        with patch.dict("sys.modules", {
-            "core.mcp_loader": MagicMock(mcp_loader=mock_mcp_loader),
-            "core.skill_contract": MagicMock(
-                SkillRequest=MagicMock(return_value=MagicMock(trace_id="t")),
-                SkillMetrics=MagicMock(return_value=MagicMock(finish=MagicMock())),
-                SkillResponse=MagicMock(success=MagicMock(return_value=MagicMock())),
-                SkillErrorCode=MagicMock(EXECUTION_ERROR="e"),
-            ),
-            "core.skill_registry": MagicMock(get_skill_registry=MagicMock(return_value=mock_registry)),
-            "core.state_event_bus": MagicMock(
-                emit=MagicMock(),
-                StateEventType=MagicMock(SKILL_INVOKED="si", SKILL_FAILED="sf"),
-            ),
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "core.mcp_loader": MagicMock(mcp_loader=mock_mcp_loader),
+                "core.skill_contract": MagicMock(
+                    SkillRequest=MagicMock(return_value=MagicMock(trace_id="t")),
+                    SkillMetrics=MagicMock(return_value=MagicMock(finish=MagicMock())),
+                    SkillResponse=MagicMock(success=MagicMock(return_value=MagicMock())),
+                    SkillErrorCode=MagicMock(EXECUTION_ERROR="e"),
+                ),
+                "core.skill_registry": MagicMock(get_skill_registry=MagicMock(return_value=mock_registry)),
+                "core.state_event_bus": MagicMock(
+                    emit=MagicMock(),
+                    StateEventType=MagicMock(SKILL_INVOKED="si", SKILL_FAILED="sf"),
+                ),
+            },
+        ):
             result = _run(d.dispatch("mcp__weather__forecast", {}))
 
         assert isinstance(result, DispatchResult)
@@ -728,18 +795,21 @@ class TestDispatchReturnType:
 # Module-level singleton
 # ---------------------------------------------------------------------------
 
+
 class TestGetCanonicalDispatcher:
     def test_get_returns_same_instance(self):
-        from core.capabilities.canonical_dispatcher import get_canonical_dispatcher
         import core.capabilities.canonical_dispatcher as mod
+        from core.capabilities.canonical_dispatcher import get_canonical_dispatcher
+
         mod._DEFAULT_DISPATCHER = None  # reset
         a = get_canonical_dispatcher()
         b = get_canonical_dispatcher()
         assert a is b
 
     def test_get_returns_canonical_dispatcher_instance(self):
-        from core.capabilities.canonical_dispatcher import get_canonical_dispatcher, CanonicalDispatcher
         import core.capabilities.canonical_dispatcher as mod
+        from core.capabilities.canonical_dispatcher import CanonicalDispatcher, get_canonical_dispatcher
+
         mod._DEFAULT_DISPATCHER = None
         inst = get_canonical_dispatcher()
         assert isinstance(inst, CanonicalDispatcher)

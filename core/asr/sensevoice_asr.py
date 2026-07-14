@@ -17,6 +17,7 @@ sample_rate, language) -> str`` + ``is_loaded``),因此能被 ``modality_bridge.
 缺包/加载失败时**优雅降级**(available()=False,transcribe 返回 ""),绝不抛出——
 选择器据此自动回退到 Whisper。
 """
+
 from __future__ import annotations
 
 import logging
@@ -40,9 +41,7 @@ class SenseVoiceASR:
     ) -> None:
         # 模型 id:默认 modelscope 的 iic/SenseVoiceSmall;可用 GALAXY_SENSEVOICE_MODEL 覆盖
         # (如 HF 的 FunAudioLLM/SenseVoiceSmall)。
-        self.model_name = model or os.getenv(
-            "GALAXY_SENSEVOICE_MODEL", "iic/SenseVoiceSmall"
-        )
+        self.model_name = model or os.getenv("GALAXY_SENSEVOICE_MODEL", "iic/SenseVoiceSmall")
         self._device_override = device
         self.model = None
         self._load_failed = False
@@ -61,15 +60,14 @@ class SenseVoiceASR:
         if device is None:
             try:
                 import torch
+
                 device = "cuda" if torch.cuda.is_available() else "cpu"
             except Exception:  # noqa: BLE001
                 device = "cpu"
 
         # 国内镜像:HF_ENDPOINT 未设时默认 hf-mirror.com(与 whisper_asr 一致)。
         if not os.environ.get("HF_ENDPOINT"):
-            os.environ["HF_ENDPOINT"] = os.environ.get(
-                "GALAXY_HF_ENDPOINT", "https://hf-mirror.com"
-            )
+            os.environ["HF_ENDPOINT"] = os.environ.get("GALAXY_HF_ENDPOINT", "https://hf-mirror.com")
 
         try:
             self.model = AutoModel(
@@ -122,6 +120,7 @@ class SenseVoiceASR:
             return ""
         try:
             from funasr.utils.postprocess_utils import rich_transcription_postprocess
+
             return rich_transcription_postprocess(text)
         except Exception:  # noqa: BLE001 — 官方后处理不可用时退回正则清洗
             return _RICH_TAG.sub("", text)

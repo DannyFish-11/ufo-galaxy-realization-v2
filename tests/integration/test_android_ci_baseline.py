@@ -48,7 +48,6 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -123,9 +122,7 @@ class TestProtocolSurfaceContracts:
         ws = _make_ws()
         device_id = f"ci-reg-{uuid.uuid4().hex[:8]}"
 
-        ack = await bridge.handle_message(
-            ws, _v3("device_register", device_id, platform="android")
-        )
+        ack = await bridge.handle_message(ws, _v3("device_register", device_id, platform="android"))
 
         assert ack is not None
         assert ack["type"] == "device_register_ack"
@@ -142,9 +139,7 @@ class TestProtocolSurfaceContracts:
         ws = _make_ws()
         device_id = f"ci-cap-{uuid.uuid4().hex[:8]}"
 
-        await bridge.handle_message(
-            ws, _v3("device_register", device_id, platform="android")
-        )
+        await bridge.handle_message(ws, _v3("device_register", device_id, platform="android"))
         ack = await bridge.handle_message(
             ws,
             _v3(
@@ -170,9 +165,7 @@ class TestProtocolSurfaceContracts:
         ws = _make_ws()
         device_id = f"ci-hb-{uuid.uuid4().hex[:8]}"
 
-        await bridge.handle_message(
-            ws, _v3("device_register", device_id, platform="android")
-        )
+        await bridge.handle_message(ws, _v3("device_register", device_id, platform="android"))
         ack = await bridge.handle_message(ws, _v3("heartbeat", device_id))
 
         assert ack is not None
@@ -189,9 +182,7 @@ class TestProtocolSurfaceContracts:
         ws = _make_ws()
         device_id = f"ci-te-{uuid.uuid4().hex[:8]}"
 
-        await bridge.handle_message(
-            ws, _v3("device_register", device_id, platform="android")
-        )
+        await bridge.handle_message(ws, _v3("device_register", device_id, platform="android"))
         ack = await bridge.handle_message(
             ws,
             _v3("task_end", device_id, task_id=str(uuid.uuid4()), status="completed"),
@@ -209,9 +200,7 @@ class TestProtocolSurfaceContracts:
         ws = _make_ws()
         device_id = f"ci-tr-{uuid.uuid4().hex[:8]}"
 
-        await bridge.handle_message(
-            ws, _v3("device_register", device_id, platform="android")
-        )
+        await bridge.handle_message(ws, _v3("device_register", device_id, platform="android"))
         result = await bridge.handle_message(
             ws,
             _v3(
@@ -238,9 +227,7 @@ class TestProtocolSurfaceContracts:
         ws = _make_ws()
         device_id = f"ci-all-{uuid.uuid4().hex[:8]}"
 
-        await bridge.handle_message(
-            ws, _v3("device_register", device_id, platform="android")
-        )
+        await bridge.handle_message(ws, _v3("device_register", device_id, platform="android"))
 
         types_with_expected_responses = {
             "device_register",
@@ -263,9 +250,7 @@ class TestProtocolSurfaceContracts:
                 extra = {"task_id": str(uuid.uuid4()), "status": "completed"}
 
             response = await bridge.handle_message(ws, _v3(msg_type, device_id, **extra))
-            assert response is not None, (
-                f"Message type '{msg_type}' must return a response (got None)"
-            )
+            assert response is not None, f"Message type '{msg_type}' must return a response (got None)"
 
         for msg_type in types_with_no_response:
             extra = {}
@@ -273,9 +258,9 @@ class TestProtocolSurfaceContracts:
                 extra = {"task_id": str(uuid.uuid4()), "status": "completed"}
             response = await bridge.handle_message(ws, _v3(msg_type, device_id, **extra))
             # None is acceptable; must not raise
-            assert response is None or isinstance(response, dict), (
-                f"Message type '{msg_type}' must return None or dict, got {type(response)}"
-            )
+            assert response is None or isinstance(
+                response, dict
+            ), f"Message type '{msg_type}' must return None or dict, got {type(response)}"
 
 
 # ===========================================================================
@@ -297,9 +282,7 @@ class TestHandlerCoverageAudit:
         from galaxy_gateway.protocol.aip_v3 import MessageType
 
         bridge = AndroidBridge()
-        registered_types: Set[str] = {
-            msg_type.value for msg_type in bridge._message_handlers
-        }
+        registered_types: Set[str] = {msg_type.value for msg_type in bridge._message_handlers}
 
         # These types must have handlers — they are the canonical Android protocol surface
         must_have_handlers = {
@@ -370,15 +353,17 @@ class TestInboundNormalisationContract:
         from galaxy_gateway.protocol.compat import normalise_to_v3_dict
 
         device_id = f"norm-{uuid.uuid4().hex[:8]}"
-        raw_json = json.dumps({
-            "version": "3.0",
-            "type": "device_register",
-            "message_id": str(uuid.uuid4()),
-            "device_id": device_id,
-            "timestamp": int(time.time() * 1000),
-            "platform": "android",
-            "model": "Pixel 7",
-        })
+        raw_json = json.dumps(
+            {
+                "version": "3.0",
+                "type": "device_register",
+                "message_id": str(uuid.uuid4()),
+                "device_id": device_id,
+                "timestamp": int(time.time() * 1000),
+                "platform": "android",
+                "model": "Pixel 7",
+            }
+        )
 
         normalised = normalise_to_v3_dict(raw_json)
 
@@ -455,9 +440,12 @@ class TestInboundNormalisationContract:
         assert response is not None
         assert isinstance(response, dict)
         # Should be an error response
-        assert response.get("type") in ("error", "unknown_message_type") or (
-            "error" in response.get("type", "").lower()
-        ) or response.get("success") is False or "ERROR" in str(response)
+        assert (
+            response.get("type") in ("error", "unknown_message_type")
+            or ("error" in response.get("type", "").lower())
+            or response.get("success") is False
+            or "ERROR" in str(response)
+        )
 
 
 # ===========================================================================
@@ -506,6 +494,7 @@ class TestCrossRepoContractStability:
     def test_canonical_device_ingress_path_exists(self) -> None:
         """The canonical ``/ws/device/{device_id}`` route must be registrable."""
         from fastapi import FastAPI
+
         from galaxy_gateway.routes.websocket import register_websocket_routes
 
         app = FastAPI()
@@ -531,18 +520,14 @@ class TestCrossRepoContractStability:
             "capability_report_ack missing 'accepted' field — "
             "Android AgentMessageHandler reads this to verify acceptance"
         )
-        assert isinstance(ack["accepted"], bool), (
-            "capability_report_ack.accepted must be a boolean"
-        )
+        assert isinstance(ack["accepted"], bool), "capability_report_ack.accepted must be a boolean"
 
     def test_heartbeat_ack_carries_device_id(self) -> None:
         """``heartbeat_ack`` must carry ``device_id`` so Android can correlate it."""
         from galaxy_gateway.android.message_builder import MessageBuilder
 
         ack = MessageBuilder.heartbeat_ack("test-device")
-        assert "device_id" in ack, (
-            "heartbeat_ack missing 'device_id' — Android correlation would break"
-        )
+        assert "device_id" in ack, "heartbeat_ack missing 'device_id' — Android correlation would break"
         assert ack["device_id"] == "test-device"
 
 
@@ -560,7 +545,7 @@ class TestAndroidCIFollowUp:
 
     def test_aip_v3_protocol_module_importable(self) -> None:
         """The canonical AIP v3 protocol module must be importable."""
-        from galaxy_gateway.protocol.aip_v3 import MessageType, AIPMessage
+        from galaxy_gateway.protocol.aip_v3 import AIPMessage, MessageType
 
         assert MessageType is not None
         assert AIPMessage is not None

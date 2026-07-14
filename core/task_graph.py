@@ -54,7 +54,8 @@ logger = logging.getLogger("Galaxy.TaskGraph")
 # PR-AIPV3-DAG: AIP v3 unified message models for cross-device task dispatch
 _AIPV3_AVAILABLE = False
 try:
-    from core.schemas.aip_v3 import TaskAssignMsg, TaskResultMsg, MsgType  # noqa: PLC0415
+    from core.schemas.aip_v3 import MsgType, TaskAssignMsg, TaskResultMsg  # noqa: PLC0415
+
     _AIPV3_AVAILABLE = True
 except ImportError:
     pass
@@ -67,12 +68,13 @@ except ImportError:
 
 class NodeStatus(str, Enum):
     """Lifecycle states for a single DAG node."""
+
     PENDING = "pending"
     RUNNING = "running"
     DONE = "done"
     FAILED = "failed"
     SKIPPED = "skipped"
-    CANCELLED = "cancelled"   # Block-4: cancel signal received
+    CANCELLED = "cancelled"  # Block-4: cancel signal received
     INTERRUPTED = "interrupted"  # Block-4: immediate abort signal
 
 
@@ -115,23 +117,21 @@ class TaskNode:
         completed_at:  Unix timestamp when the node finished.
     """
 
-    node_id: str = dataclasses.field(
-        default_factory=lambda: f"node_{uuid.uuid4().hex[:8]}"
-    )
+    node_id: str = dataclasses.field(default_factory=lambda: f"node_{uuid.uuid4().hex[:8]}")
     description: str = ""
     depends_on: List[str] = dataclasses.field(default_factory=list)
     device_id: str = ""
     status: NodeStatus = NodeStatus.PENDING
 
-    handler: Optional[
-        Callable[["TaskNode", Dict[str, Any]], Coroutine[Any, Any, Dict[str, Any]]]
-    ] = dataclasses.field(default=None, repr=False)
+    handler: Optional[Callable[["TaskNode", Dict[str, Any]], Coroutine[Any, Any, Dict[str, Any]]]] = dataclasses.field(
+        default=None, repr=False
+    )
 
     retry_policy: RetryPolicy = dataclasses.field(default_factory=RetryPolicy)
 
-    rollback: Optional[
-        Callable[["TaskNode", Dict[str, Any]], Coroutine[Any, Any, None]]
-    ] = dataclasses.field(default=None, repr=False)
+    rollback: Optional[Callable[["TaskNode", Dict[str, Any]], Coroutine[Any, Any, None]]] = dataclasses.field(
+        default=None, repr=False
+    )
 
     result: Optional[Dict[str, Any]] = dataclasses.field(default=None)
     error: str = ""
@@ -154,9 +154,7 @@ class TaskEdge:
 
     from_node: str
     to_node: str
-    condition: Optional[Callable[["TaskNode"], bool]] = dataclasses.field(
-        default=None, repr=False
-    )
+    condition: Optional[Callable[["TaskNode"], bool]] = dataclasses.field(default=None, repr=False)
 
 
 # ---------------------------------------------------------------------------
@@ -181,9 +179,7 @@ class GraphExecutionResult:
     error: str = ""
     elapsed_ms: float = 0.0
 
-    node_results: Dict[str, Optional[Dict[str, Any]]] = dataclasses.field(
-        default_factory=dict
-    )
+    node_results: Dict[str, Optional[Dict[str, Any]]] = dataclasses.field(default_factory=dict)
     node_errors: Dict[str, str] = dataclasses.field(default_factory=dict)
     node_statuses: Dict[str, str] = dataclasses.field(default_factory=dict)
 
@@ -239,13 +235,9 @@ class TaskGraph:
         node_id: Optional[str] = None,
         depends_on: Optional[List[str]] = None,
         device_id: str = "",
-        handler: Optional[
-            Callable[["TaskNode", Dict[str, Any]], Coroutine[Any, Any, Dict[str, Any]]]
-        ] = None,
+        handler: Optional[Callable[["TaskNode", Dict[str, Any]], Coroutine[Any, Any, Dict[str, Any]]]] = None,
         retry_policy: Optional[RetryPolicy] = None,
-        rollback: Optional[
-            Callable[["TaskNode", Dict[str, Any]], Coroutine[Any, Any, None]]
-        ] = None,
+        rollback: Optional[Callable[["TaskNode", Dict[str, Any]], Coroutine[Any, Any, None]]] = None,
     ) -> TaskNode:
         """Add a node to the graph and return it.
 
@@ -356,6 +348,7 @@ class TaskGraph:
             return
         try:
             import asyncio
+
             msg = TaskAssignMsg(
                 device_id=node.device_id or "local",
                 task_id=f"{self.graph_id}:{node.node_id}",
@@ -365,6 +358,7 @@ class TaskGraph:
                 session_id=self.runtime_session_id,
             )
             from core.nats_bus import get_nats_bus  # noqa: PLC0415
+
             nats = get_nats_bus()
             if nats.is_connected():
                 asyncio.get_running_loop().create_task(nats.publish_task_assign(msg))
@@ -383,6 +377,7 @@ class TaskGraph:
             return
         try:
             import asyncio
+
             status_map = {
                 NodeStatus.DONE: "completed",
                 NodeStatus.FAILED: "failed",
@@ -396,11 +391,14 @@ class TaskGraph:
                 status=status_map.get(node.status, str(node.status)),
                 result=node.result if isinstance(node.result, dict) else {"value": node.result},
                 error=node.error or "",
-                duration_ms=int((node.completed_at - node.started_at) * 1000) if node.completed_at and node.started_at else 0,
+                duration_ms=(
+                    int((node.completed_at - node.started_at) * 1000) if node.completed_at and node.started_at else 0
+                ),
                 trace_id=self.trace_id,
                 session_id=self.runtime_session_id,
             )
             from core.nats_bus import get_nats_bus  # noqa: PLC0415
+
             nats = get_nats_bus()
             if nats.is_connected():
                 asyncio.get_running_loop().create_task(nats.publish_task_result(msg))
@@ -412,7 +410,8 @@ class TaskGraph:
     def _emit_cancel_event(self, verb: str, reason: str) -> None:
         """Best-effort StateEventBus emission for cancel/interrupt."""
         try:
-            from core.state_event_bus import get_state_event_bus, StateEventType
+            from core.state_event_bus import StateEventType, get_state_event_bus
+
             bus = get_state_event_bus()
             event_type = getattr(StateEventType, "TASK_FAILED", StateEventType.GENERIC)
             bus.publish(
@@ -442,9 +441,7 @@ class TaskGraph:
         for node in self._nodes.values():
             for dep_id in node.depends_on:
                 if dep_id not in self._nodes:
-                    raise ValueError(
-                        f"Node '{node.node_id}' depends_on unknown node '{dep_id}'"
-                    )
+                    raise ValueError(f"Node '{node.node_id}' depends_on unknown node '{dep_id}'")
                 self._predecessors[node.node_id].append(dep_id)
                 # Create an implicit edge (no condition) if not already present
                 implicit = TaskEdge(from_node=dep_id, to_node=node.node_id)
@@ -498,10 +495,7 @@ class TaskGraph:
 
         if visited < len(self._nodes):
             cycle_nodes = [nid for nid, d in in_degree.items() if d > 0]
-            raise ValueError(
-                f"TaskGraph '{self.graph_id}': cycle detected involving nodes "
-                f"{cycle_nodes}"
-            )
+            raise ValueError(f"TaskGraph '{self.graph_id}': cycle detected involving nodes " f"{cycle_nodes}")
         return layers
 
     # ------------------------------------------------------------------
@@ -511,21 +505,26 @@ class TaskGraph:
     def _emit_node_event(self, node: TaskNode, status: NodeStatus) -> None:
         """Best-effort lifecycle event emission for a node."""
         try:
-            from integration.event_bus import event_bus, EventType
+            from integration.event_bus import EventType, event_bus
+
             et = getattr(EventType, "TASK_LIFECYCLE", None)
             if et is None:
                 return
-            event_bus.publish_sync(et, "task_graph", {
-                "graph_id": self.graph_id,
-                "node_id": node.node_id,
-                "description": node.description,
-                "device_id": node.device_id,
-                "trace_id": self.trace_id,
-                "runtime_session_id": self.runtime_session_id,
-                "status": status.value,
-                "attempt": node.attempt,
-                "ts": time.time(),
-            })
+            event_bus.publish_sync(
+                et,
+                "task_graph",
+                {
+                    "graph_id": self.graph_id,
+                    "node_id": node.node_id,
+                    "description": node.description,
+                    "device_id": node.device_id,
+                    "trace_id": self.trace_id,
+                    "runtime_session_id": self.runtime_session_id,
+                    "status": status.value,
+                    "attempt": node.attempt,
+                    "ts": time.time(),
+                },
+            )
         except Exception as exc:
             logger.warning("Exception suppressed: %s", exc)
 
@@ -571,7 +570,9 @@ class TaskGraph:
         self._emit_aip_v3_task_assign(node)
         logger.info(
             "TaskGraph '%s' | node='%s' status=running trace_id=%s",
-            self.graph_id, node.description or node.node_id, self.trace_id,
+            self.graph_id,
+            node.description or node.node_id,
+            self.trace_id,
         )
 
         last_exc: Optional[Exception] = None
@@ -590,7 +591,9 @@ class TaskGraph:
                 self._emit_aip_v3_task_result(node)
                 logger.info(
                     "TaskGraph '%s' | node='%s' status=done attempt=%d",
-                    self.graph_id, node.description or node.node_id, attempt,
+                    self.graph_id,
+                    node.description or node.node_id,
+                    attempt,
                 )
                 return
             except Exception as exc:
@@ -617,7 +620,9 @@ class TaskGraph:
         self._emit_aip_v3_task_result(node)
         logger.error(
             "TaskGraph '%s' | node='%s' status=failed error=%r",
-            self.graph_id, node.description or node.node_id, node.error,
+            self.graph_id,
+            node.description or node.node_id,
+            node.error,
         )
 
         # Attempt rollback if provided
@@ -625,13 +630,16 @@ class TaskGraph:
             try:
                 logger.info(
                     "TaskGraph '%s' | node='%s' running rollback",
-                    self.graph_id, node.description or node.node_id,
+                    self.graph_id,
+                    node.description or node.node_id,
                 )
                 await node.rollback(node, exec_ctx)
             except Exception as rb_exc:
                 logger.warning(
                     "TaskGraph '%s' | node='%s' rollback raised: %s",
-                    self.graph_id, node.description or node.node_id, rb_exc,
+                    self.graph_id,
+                    node.description or node.node_id,
+                    rb_exc,
                 )
 
     # ------------------------------------------------------------------
@@ -712,7 +720,10 @@ class TaskGraph:
 
         logger.info(
             "TaskGraph '%s' executing: %d nodes / %d layers | trace_id=%s",
-            self.graph_id, len(self._nodes), len(layers), self.trace_id,
+            self.graph_id,
+            len(self._nodes),
+            len(layers),
+            self.trace_id,
         )
 
         halt = False
@@ -724,13 +735,13 @@ class TaskGraph:
                     node = self._nodes[nid]
                     if node.status == NodeStatus.PENDING:
                         if self._cancel_requested:
-                            new_status = (
-                                NodeStatus.INTERRUPTED
-                                if self._interrupt_requested
-                                else NodeStatus.CANCELLED
-                            )
+                            new_status = NodeStatus.INTERRUPTED if self._interrupt_requested else NodeStatus.CANCELLED
                             node.status = new_status
-                            node.error = "interrupted by graph.interrupt()" if self._interrupt_requested else "cancelled by graph.cancel()"
+                            node.error = (
+                                "interrupted by graph.interrupt()"
+                                if self._interrupt_requested
+                                else "cancelled by graph.cancel()"
+                            )
                             self._emit_node_event(node, new_status)
                         else:
                             node.status = NodeStatus.SKIPPED
@@ -739,11 +750,7 @@ class TaskGraph:
 
             # Block-4: check cancel/interrupt at each layer boundary
             if self._cancel_requested:
-                cancel_status = (
-                    NodeStatus.INTERRUPTED
-                    if self._interrupt_requested
-                    else NodeStatus.CANCELLED
-                )
+                cancel_status = NodeStatus.INTERRUPTED if self._interrupt_requested else NodeStatus.CANCELLED
                 for nid in layer_node_ids:
                     node = self._nodes[nid]
                     if node.status == NodeStatus.PENDING:
@@ -780,14 +787,16 @@ class TaskGraph:
                 if blocking_pred is not None or skip_due_to_condition:
                     node.status = NodeStatus.SKIPPED
                     node.error = (
-                        f"predecessor '{blocking_pred.node_id}' "
-                        f"in state '{blocking_pred.status}'"
-                        if blocking_pred else "edge condition not satisfied"
+                        f"predecessor '{blocking_pred.node_id}' " f"in state '{blocking_pred.status}'"
+                        if blocking_pred
+                        else "edge condition not satisfied"
                     )
                     self._emit_node_event(node, NodeStatus.SKIPPED)
                     logger.info(
                         "TaskGraph '%s' | node='%s' skipped: %s",
-                        self.graph_id, node.description or nid, node.error,
+                        self.graph_id,
+                        node.description or nid,
+                        node.error,
                     )
                 else:
                     runnable.append(node)
@@ -796,7 +805,10 @@ class TaskGraph:
             if runnable:
                 logger.info(
                     "TaskGraph '%s' | layer %d/%d: running %d node(s) concurrently",
-                    self.graph_id, layer_idx + 1, len(layers), len(runnable),
+                    self.graph_id,
+                    layer_idx + 1,
+                    len(layers),
+                    len(runnable),
                 )
                 await asyncio.gather(
                     *[self._run_node(n, ctx) for n in runnable],
@@ -804,10 +816,7 @@ class TaskGraph:
                 )
 
             # Post-layer: check for failures
-            layer_failed = any(
-                self._nodes[nid].status == NodeStatus.FAILED
-                for nid in layer_node_ids
-            )
+            layer_failed = any(self._nodes[nid].status == NodeStatus.FAILED for nid in layer_node_ids)
             if layer_failed and not continue_on_failure:
                 halt = True
 
@@ -828,8 +837,7 @@ class TaskGraph:
         result.elapsed_ms = (time.monotonic() - t0) * 1000
 
         logger.info(
-            "TaskGraph '%s' finished | done=%d failed=%d skipped=%d "
-            "elapsed_ms=%.1f trace_id=%s",
+            "TaskGraph '%s' finished | done=%d failed=%d skipped=%d " "elapsed_ms=%.1f trace_id=%s",
             self.graph_id,
             result.done_nodes,
             result.failed_nodes,
@@ -859,16 +867,14 @@ class TaskGraph:
         - A policy decision is logged for every meaningful outcome.
         """
         try:
-            from core.execution_policy.policy_guardrails import (
-                check_side_effectful_execution,
-                check_cross_device_expansion,
-            )
             from core.execution_policy.policy_enforcement import emit_policy_decision
+            from core.execution_policy.policy_guardrails import (
+                check_cross_device_expansion,
+                check_side_effectful_execution,
+            )
 
             # ── 1. Observe-only band blocks all side-effectful execution ──────
-            side_effect_decision = check_side_effectful_execution(
-                policy, is_side_effectful=True
-            )
+            side_effect_decision = check_side_effectful_execution(policy, is_side_effectful=True)
             emit_policy_decision(
                 side_effect_decision,
                 context={"graph_id": self.graph_id, "trace_id": self.trace_id},
@@ -914,9 +920,7 @@ class TaskGraph:
             # ── 3. Cross-device check — skip non-local nodes if disallowed ────
             cross_device_decision = check_cross_device_expansion(policy)
             if not cross_device_decision.is_allowed:
-                cross_device_nodes = [
-                    n for n in self._nodes.values() if n.device_id and n.device_id != "local"
-                ]
+                cross_device_nodes = [n for n in self._nodes.values() if n.device_id and n.device_id != "local"]
                 if cross_device_nodes:
                     emit_policy_decision(
                         cross_device_decision,
@@ -927,8 +931,7 @@ class TaskGraph:
                         },
                     )
                     logger.info(
-                        "TaskGraph '%s' | cross_device_not_allowed | "
-                        "skipping %d cross-device nodes | trace_id=%s",
+                        "TaskGraph '%s' | cross_device_not_allowed | " "skipping %d cross-device nodes | trace_id=%s",
                         self.graph_id,
                         len(cross_device_nodes),
                         self.trace_id,
@@ -1005,9 +1008,7 @@ def compile_subtasks_to_graph(
     trace_id: str = "",
     runtime_session_id: str = "",
     default_retry_policy: Optional[RetryPolicy] = None,
-    node_handler: Optional[
-        Callable[["TaskNode", Dict[str, Any]], Coroutine[Any, Any, Dict[str, Any]]]
-    ] = None,
+    node_handler: Optional[Callable[["TaskNode", Dict[str, Any]], Coroutine[Any, Any, Dict[str, Any]]]] = None,
 ) -> TaskGraph:
     """Compile a list of :class:`~core.schemas.orchestration.SubTask` objects
     into a :class:`TaskGraph`.

@@ -133,15 +133,13 @@ Usage
 
 from __future__ import annotations
 
-from typing import Tuple  # auto: missing import
-
-
 import json
 import logging
 import time
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import Tuple  # auto: missing import
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -409,21 +407,13 @@ class GovernanceVerdict(str, Enum):
     """
 
     governance_compliant = "governance_compliant"
-    governance_violation_due_to_truth_regression = (
-        "governance_violation_due_to_truth_regression"
-    )
-    governance_violation_due_to_result_regression = (
-        "governance_violation_due_to_result_regression"
-    )
+    governance_violation_due_to_truth_regression = "governance_violation_due_to_truth_regression"
+    governance_violation_due_to_result_regression = "governance_violation_due_to_result_regression"
     governance_violation_due_to_operator_visibility_regression = (
         "governance_violation_due_to_operator_visibility_regression"
     )
-    governance_violation_due_to_compat_bypass = (
-        "governance_violation_due_to_compat_bypass"
-    )
-    governance_unknown_due_to_missing_monitoring_signal = (
-        "governance_unknown_due_to_missing_monitoring_signal"
-    )
+    governance_violation_due_to_compat_bypass = "governance_violation_due_to_compat_bypass"
+    governance_unknown_due_to_missing_monitoring_signal = "governance_unknown_due_to_missing_monitoring_signal"
 
     @classmethod
     def from_string(cls, value: str) -> "GovernanceVerdict":
@@ -504,12 +494,8 @@ class DimensionGovernanceResult:
     def from_dict(cls, data: Dict[str, Any]) -> "DimensionGovernanceResult":
         """Construct from a dict (round-trip complement of ``to_dict``)."""
         return cls(
-            dimension=GovernanceDimension.from_string(
-                data.get("dimension", "")
-            ),
-            status=DimensionGovernanceStatus.from_string(
-                data.get("status", "")
-            ),
+            dimension=GovernanceDimension.from_string(data.get("dimension", "")),
+            status=DimensionGovernanceStatus.from_string(data.get("status", "")),
             violation_description=data.get("violation_description", ""),
             evidence=data.get("evidence", {}),
             signal_source=data.get("signal_source", ""),
@@ -565,12 +551,8 @@ class DelegatedFlowGovernanceReport:
     """
 
     report_id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
-    verdict: GovernanceVerdict = (
-        GovernanceVerdict.governance_unknown_due_to_missing_monitoring_signal
-    )
-    dimensions: Dict[str, DimensionGovernanceResult] = field(
-        default_factory=dict
-    )
+    verdict: GovernanceVerdict = GovernanceVerdict.governance_unknown_due_to_missing_monitoring_signal
+    dimensions: Dict[str, DimensionGovernanceResult] = field(default_factory=dict)
     summary: str = ""
     violations: List[Dict[str, str]] = field(default_factory=list)
     is_compliant: bool = False
@@ -583,10 +565,7 @@ class DelegatedFlowGovernanceReport:
         return {
             "report_id": self.report_id,
             "verdict": self.verdict.value,
-            "dimensions": {
-                dim_key: dim_result.to_dict()
-                for dim_key, dim_result in self.dimensions.items()
-            },
+            "dimensions": {dim_key: dim_result.to_dict() for dim_key, dim_result in self.dimensions.items()},
             "summary": self.summary,
             "violations": self.violations,
             "is_compliant": self.is_compliant,
@@ -617,9 +596,7 @@ class DelegatedFlowGovernanceReport:
             acceptance_report_id=data.get("acceptance_report_id", ""),
         )
 
-    def get_dimension(
-        self, dimension: GovernanceDimension
-    ) -> Optional[DimensionGovernanceResult]:
+    def get_dimension(self, dimension: GovernanceDimension) -> Optional[DimensionGovernanceResult]:
         """Return the :class:`DimensionGovernanceResult` for *dimension*, or
         ``None`` if not present."""
         return self.dimensions.get(dimension.value)
@@ -764,16 +741,12 @@ class DelegatedFlowGovernanceEvaluator:
         acceptance_report_id: str = ""
 
         # --- 0. Acceptance baseline prerequisite ----------------------------
-        baseline_result, acceptance_report_id = (
-            self._evaluate_acceptance_baseline()
-        )
+        baseline_result, acceptance_report_id = self._evaluate_acceptance_baseline()
         dimensions[baseline_result.dimension.value] = baseline_result
 
         if baseline_result.status == DimensionGovernanceStatus.unknown:
             # Cannot establish governance without a valid graduation baseline.
-            verdict = (
-                GovernanceVerdict.governance_unknown_due_to_missing_monitoring_signal
-            )
+            verdict = GovernanceVerdict.governance_unknown_due_to_missing_monitoring_signal
             violations = self._collect_violations(dimensions)
             summary = self._build_summary(verdict, violations)
             is_compliant = False
@@ -787,8 +760,7 @@ class DelegatedFlowGovernanceEvaluator:
                 acceptance_report_id=acceptance_report_id,
             )
             logger.debug(
-                "DelegatedFlowGovernanceEvaluator.evaluate() → "
-                "verdict=%s (no baseline)",
+                "DelegatedFlowGovernanceEvaluator.evaluate() → " "verdict=%s (no baseline)",
                 verdict.value,
             )
             return report
@@ -926,8 +898,7 @@ class DelegatedFlowGovernanceEvaluator:
                     dimension=dimension,
                     status=DimensionGovernanceStatus.unknown,
                     violation_description=(
-                        f"DelegatedFlowAcceptanceGate.evaluate() raised "
-                        f"{type(exc).__name__}: {exc}"
+                        f"DelegatedFlowAcceptanceGate.evaluate() raised " f"{type(exc).__name__}: {exc}"
                     ),
                     signal_source=signal_source,
                 ),
@@ -949,8 +920,7 @@ class DelegatedFlowGovernanceEvaluator:
                 dimension=dimension,
                 status=DimensionGovernanceStatus.unknown,
                 violation_description=(
-                    "FlowLevelTruthOwnership module is not importable; "
-                    "truth alignment monitoring signal is absent."
+                    "FlowLevelTruthOwnership module is not importable; " "truth alignment monitoring signal is absent."
                 ),
                 signal_source=signal_source,
             )
@@ -972,13 +942,11 @@ class DelegatedFlowGovernanceEvaluator:
                 if isinstance(summary, dict):
                     evidence = summary
                     has_regression = bool(
-                        summary.get("has_unresolved_contracts", False)
-                        or summary.get("alignment_gap", False)
+                        summary.get("has_unresolved_contracts", False) or summary.get("alignment_gap", False)
                     )
                     if has_regression:
                         violation_desc = (
-                            "FlowLevelTruthOwnership summary indicates a "
-                            "truth alignment gap post-graduation."
+                            "FlowLevelTruthOwnership summary indicates a " "truth alignment gap post-graduation."
                         )
 
             if not violation_desc and not has_regression:
@@ -1001,19 +969,14 @@ class DelegatedFlowGovernanceEvaluator:
             return DimensionGovernanceResult(
                 dimension=dimension,
                 status=DimensionGovernanceStatus.unknown,
-                violation_description=(
-                    f"FlowLevelTruthOwnership probe raised "
-                    f"{type(exc).__name__}: {exc}"
-                ),
+                violation_description=(f"FlowLevelTruthOwnership probe raised " f"{type(exc).__name__}: {exc}"),
                 signal_source=signal_source,
             )
 
     def _evaluate_result_convergence(self) -> DimensionGovernanceResult:
         """Evaluate the result convergence governance dimension."""
         dimension = GovernanceDimension.result_convergence
-        signal_source = (
-            "core.flow_aware_result_convergence.get_result_convergence"
-        )
+        signal_source = "core.flow_aware_result_convergence.get_result_convergence"
 
         convergence_obj = _get_result_convergence()
         if convergence_obj is None:
@@ -1044,13 +1007,11 @@ class DelegatedFlowGovernanceEvaluator:
                 if isinstance(summary, dict):
                     evidence = summary
                     has_regression = bool(
-                        summary.get("has_quarantined_results", False)
-                        or summary.get("convergence_gap", False)
+                        summary.get("has_quarantined_results", False) or summary.get("convergence_gap", False)
                     )
                     if has_regression:
                         violation_desc = (
-                            "FlowAwareResultConvergence summary indicates a "
-                            "result convergence gap post-graduation."
+                            "FlowAwareResultConvergence summary indicates a " "result convergence gap post-graduation."
                         )
 
             if not violation_desc and not has_regression:
@@ -1073,19 +1034,14 @@ class DelegatedFlowGovernanceEvaluator:
             return DimensionGovernanceResult(
                 dimension=dimension,
                 status=DimensionGovernanceStatus.unknown,
-                violation_description=(
-                    f"FlowAwareResultConvergence probe raised "
-                    f"{type(exc).__name__}: {exc}"
-                ),
+                violation_description=(f"FlowAwareResultConvergence probe raised " f"{type(exc).__name__}: {exc}"),
                 signal_source=signal_source,
             )
 
     def _evaluate_operator_visibility(self) -> DimensionGovernanceResult:
         """Evaluate the operator visibility governance dimension."""
         dimension = GovernanceDimension.operator_visibility
-        signal_source = (
-            "core.flow_level_operator_surface.get_operator_surface"
-        )
+        signal_source = "core.flow_level_operator_surface.get_operator_surface"
 
         operator_obj = _get_operator_surface()
         if operator_obj is None:
@@ -1116,13 +1072,11 @@ class DelegatedFlowGovernanceEvaluator:
                 if isinstance(summary, dict):
                     evidence = summary
                     has_regression = bool(
-                        summary.get("has_visibility_gap", False)
-                        or summary.get("execution_evidence_absent", False)
+                        summary.get("has_visibility_gap", False) or summary.get("execution_evidence_absent", False)
                     )
                     if has_regression:
                         violation_desc = (
-                            "FlowLevelOperatorSurface summary indicates an "
-                            "operator visibility gap post-graduation."
+                            "FlowLevelOperatorSurface summary indicates an " "operator visibility gap post-graduation."
                         )
 
             if not violation_desc and not has_regression:
@@ -1145,19 +1099,14 @@ class DelegatedFlowGovernanceEvaluator:
             return DimensionGovernanceResult(
                 dimension=dimension,
                 status=DimensionGovernanceStatus.unknown,
-                violation_description=(
-                    f"FlowLevelOperatorSurface probe raised "
-                    f"{type(exc).__name__}: {exc}"
-                ),
+                violation_description=(f"FlowLevelOperatorSurface probe raised " f"{type(exc).__name__}: {exc}"),
                 signal_source=signal_source,
             )
 
     def _evaluate_compat_bypass(self) -> DimensionGovernanceResult:
         """Evaluate the compat/legacy bypass governance dimension."""
         dimension = GovernanceDimension.compat_bypass
-        signal_source = (
-            "core.compat_legacy_path_blocking_canonicalization.get_compat_blocking"
-        )
+        signal_source = "core.compat_legacy_path_blocking_canonicalization.get_compat_blocking"
 
         compat_obj = _get_compat_blocking()
         if compat_obj is None:
@@ -1189,8 +1138,7 @@ class DelegatedFlowGovernanceEvaluator:
                 if isinstance(summary, dict):
                     evidence = summary
                     has_regression = bool(
-                        summary.get("has_active_bypass", False)
-                        or summary.get("compat_leakage", False)
+                        summary.get("has_active_bypass", False) or summary.get("compat_leakage", False)
                     )
                     if has_regression:
                         violation_desc = (
@@ -1219,8 +1167,7 @@ class DelegatedFlowGovernanceEvaluator:
                 dimension=dimension,
                 status=DimensionGovernanceStatus.unknown,
                 violation_description=(
-                    f"CompatLegacyPathBlockingCanonicalization probe raised "
-                    f"{type(exc).__name__}: {exc}"
+                    f"CompatLegacyPathBlockingCanonicalization probe raised " f"{type(exc).__name__}: {exc}"
                 ),
                 signal_source=signal_source,
             )
@@ -1228,9 +1175,7 @@ class DelegatedFlowGovernanceEvaluator:
     def _evaluate_continuity_replay(self) -> DimensionGovernanceResult:
         """Evaluate the continuity / replay contract governance dimension."""
         dimension = GovernanceDimension.continuity_replay
-        signal_source = (
-            "core.flow_continuity_coordinator.get_continuity_coordinator"
-        )
+        signal_source = "core.flow_continuity_coordinator.get_continuity_coordinator"
 
         continuity_obj = _get_continuity_coordinator()
         if continuity_obj is None:
@@ -1250,9 +1195,7 @@ class DelegatedFlowGovernanceEvaluator:
             violation_desc = ""
 
             if hasattr(continuity_obj, "has_replay_contract_gap"):
-                has_regression = bool(
-                    continuity_obj.has_replay_contract_gap()
-                )
+                has_regression = bool(continuity_obj.has_replay_contract_gap())
                 if has_regression:
                     violation_desc = (
                         "FlowContinuityCoordinator reports a replay contract "
@@ -1263,8 +1206,7 @@ class DelegatedFlowGovernanceEvaluator:
                 if isinstance(summary, dict):
                     evidence = summary
                     has_regression = bool(
-                        summary.get("has_replay_contract_gap", False)
-                        or summary.get("continuity_drift", False)
+                        summary.get("has_replay_contract_gap", False) or summary.get("continuity_drift", False)
                     )
                     if has_regression:
                         violation_desc = (
@@ -1292,10 +1234,7 @@ class DelegatedFlowGovernanceEvaluator:
             return DimensionGovernanceResult(
                 dimension=dimension,
                 status=DimensionGovernanceStatus.unknown,
-                violation_description=(
-                    f"FlowContinuityCoordinator probe raised "
-                    f"{type(exc).__name__}: {exc}"
-                ),
+                violation_description=(f"FlowContinuityCoordinator probe raised " f"{type(exc).__name__}: {exc}"),
                 signal_source=signal_source,
             )
 
@@ -1320,9 +1259,7 @@ class DelegatedFlowGovernanceEvaluator:
            (continuity regressions are truth-adjacent)
         7. All compliant → ``governance_compliant``
         """
-        dim_statuses: Dict[str, str] = {
-            k: v.status.value for k, v in dimensions.items()
-        }
+        dim_statuses: Dict[str, str] = {k: v.status.value for k, v in dimensions.items()}
 
         # Rule 1: any unknown → unknown verdict
         if DimensionGovernanceStatus.unknown.value in dim_statuses.values():
@@ -1334,18 +1271,14 @@ class DelegatedFlowGovernanceEvaluator:
             return GovernanceVerdict.governance_violation_due_to_truth_regression
 
         # Rule 3: result_convergence violation
-        result_status = dim_statuses.get(
-            GovernanceDimension.result_convergence.value
-        )
+        result_status = dim_statuses.get(GovernanceDimension.result_convergence.value)
         if result_status == DimensionGovernanceStatus.violation.value:
             return GovernanceVerdict.governance_violation_due_to_result_regression
 
         # Rule 4: operator_visibility violation
         op_status = dim_statuses.get(GovernanceDimension.operator_visibility.value)
         if op_status == DimensionGovernanceStatus.violation.value:
-            return (
-                GovernanceVerdict.governance_violation_due_to_operator_visibility_regression
-            )
+            return GovernanceVerdict.governance_violation_due_to_operator_visibility_regression
 
         # Rule 5: compat_bypass violation
         compat_status = dim_statuses.get(GovernanceDimension.compat_bypass.value)

@@ -59,6 +59,7 @@ def _num_to_dir() -> Dict[int, str]:
 def _port_for(dir_name: str) -> Optional[int]:
     try:
         from core.port_config import get_node_port
+
         p = get_node_port(dir_name)
         return int(p) if p else None
     except Exception:  # noqa: BLE001
@@ -70,6 +71,7 @@ def _live_status_map() -> Dict[str, str]:
     out: Dict[str, str] = {}
     try:
         from core.nodes.node_fabric_registry import get_node_fabric_registry
+
         reg = get_node_fabric_registry()
         for n in reg.list_nodes():
             info = n.to_dict() if hasattr(n, "to_dict") else (n if isinstance(n, dict) else {})
@@ -106,17 +108,20 @@ def get_node_roster() -> Dict[str, Any]:
         num = entry.get("num")
         name = entry.get("name", "")
         dir_name = dirs.get(num, f"Node_{num}_{name}")
-        nodes.append({
-            **entry,
-            "dir": dir_name,
-            "port": _port_for(dir_name),
-            "status": _match_status(dir_name, name, num, live),
-            "has_dockerfile": os.path.isfile(os.path.join(_NODES_DIR, dir_name, "Dockerfile")),
-        })
+        nodes.append(
+            {
+                **entry,
+                "dir": dir_name,
+                "port": _port_for(dir_name),
+                "status": _match_status(dir_name, name, num, live),
+                "has_dockerfile": os.path.isfile(os.path.join(_NODES_DIR, dir_name, "Dockerfile")),
+            }
+        )
     nodes.sort(key=lambda n: n.get("num", 0))
 
     # 按类型分组的计数,供面板分组标题用。
     from collections import Counter
+
     by_type = Counter(n["type"] for n in nodes)
 
     return {

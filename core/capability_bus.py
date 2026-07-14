@@ -81,6 +81,7 @@ Usage::
         description="Capture current screen on the registered Android device.",
     )
 """
+
 from __future__ import annotations
 
 import json
@@ -361,6 +362,7 @@ class CapabilityBus:
         """
         try:
             import asyncio
+
             from core.schemas.aip_v3 import CapabilityReportMsg  # noqa: PLC0415
 
             msg = CapabilityReportMsg(
@@ -370,13 +372,12 @@ class CapabilityBus:
                 version="1.0.0",
             )
             from core.nats_bus import get_nats_bus  # noqa: PLC0415
+
             nats = get_nats_bus()
             if nats.is_connected():
                 asyncio.get_running_loop().create_task(nats.publish_capability_report(msg))
             else:
-                logger.debug(
-                    "AIPV3-CAP CAPABILITY_REPORT: %s", msg.model_dump_json(exclude_none=True)
-                )
+                logger.debug("AIPV3-CAP CAPABILITY_REPORT: %s", msg.model_dump_json(exclude_none=True))
         except Exception as exc:
             logger.warning("Exception suppressed: %s", exc)
 
@@ -403,6 +404,7 @@ class CapabilityBus:
             from core.agent.capability_registry import CapabilityItem  # noqa: PLC0415
             from core.capability_runtime.capability_state import CapabilityAvailability  # noqa: PLC0415
             from core.unified.capability_authority import CapabilityAuthority  # noqa: PLC0415
+
             role_val = entry.role.value if isinstance(entry.role, CapabilityBusRole) else str(entry.role)
             source = self._ROLE_TO_REGISTRY_SOURCE.get(role_val, "unknown")
             availability = (
@@ -422,9 +424,7 @@ class CapabilityBus:
                     "display_name": entry.display_name,
                     "capability_bus_role": role_val,
                     "capability_bus_health": (
-                        entry.health.value
-                        if isinstance(entry.health, CapabilityHealthStatus)
-                        else str(entry.health)
+                        entry.health.value if isinstance(entry.health, CapabilityHealthStatus) else str(entry.health)
                     ),
                     "capability_bus_schema": dict(entry.schema) if entry.schema else {},
                     "capability_bus_tags": list(entry.tags),
@@ -442,12 +442,12 @@ class CapabilityBus:
             CapabilityAuthority.get_instance().update_runtime(
                 entry.name,
                 availability=availability,
-                device_bindings=[entry.source_id] if role_val == CapabilityBusRole.DEVICE.value and entry.source_id else None,
+                device_bindings=(
+                    [entry.source_id] if role_val == CapabilityBusRole.DEVICE.value and entry.source_id else None
+                ),
                 metadata={
                     "health": (
-                        entry.health.value
-                        if isinstance(entry.health, CapabilityHealthStatus)
-                        else str(entry.health)
+                        entry.health.value if isinstance(entry.health, CapabilityHealthStatus) else str(entry.health)
                     ),
                     "participant_kind": role_val,
                 },
@@ -460,9 +460,7 @@ class CapabilityBus:
                 source,
             )
         except Exception as exc:
-            logger.debug(
-                "CapabilityBus._bridge_entry_to_canonical_registry failed (non-fatal): %s", exc
-            )
+            logger.debug("CapabilityBus._bridge_entry_to_canonical_registry failed (non-fatal): %s", exc)
 
     # ── Registration ─────────────────────────────────────────────────────────
 
@@ -519,9 +517,7 @@ class CapabilityBus:
                 return True
         return False
 
-    def set_health(
-        self, name: str, health: CapabilityHealthStatus
-    ) -> bool:
+    def set_health(self, name: str, health: CapabilityHealthStatus) -> bool:
         """Update the :attr:`~CapabilityBusEntry.health` field for *name*.
 
         Returns ``True`` on success, ``False`` if the entry was not found.
@@ -649,9 +645,7 @@ class CapabilityBus:
 
         nodes_dict: Dict[str, Any] = raw.get("nodes", raw)
         if not isinstance(nodes_dict, dict):
-            logger.warning(
-                "CapabilityBus.seed_from_node_registry: unexpected format in %s", path
-            )
+            logger.warning("CapabilityBus.seed_from_node_registry: unexpected format in %s", path)
             return 0
 
         count = 0

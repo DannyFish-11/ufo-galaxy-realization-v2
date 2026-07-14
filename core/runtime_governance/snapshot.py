@@ -156,12 +156,8 @@ class RuntimeGovernanceExecutionSummary(BaseModel):
     device_scope: Optional[str] = Field(default=None, description="Target device scope.")
     runtime_domain: Optional[str] = Field(default=None, description="Runtime domain.")
     confidence: Optional[float] = Field(default=None, description="Confidence score [0, 1].")
-    degrade_reason: Optional[str] = Field(
-        default=None, description="Reason for intent downgrade."
-    )
-    available: bool = Field(
-        default=False, description="True when a real intent profile was summarised."
-    )
+    degrade_reason: Optional[str] = Field(default=None, description="Reason for intent downgrade.")
+    available: bool = Field(default=False, description="True when a real intent profile was summarised.")
 
     model_config = {"from_attributes": True}
 
@@ -218,18 +214,14 @@ class RuntimeGovernancePolicySummary(BaseModel):
     ready: bool = Field(default=False, description="True when execution is permitted.")
     status: str = Field(default="blocked", description="Top-level readiness status.")
     reason: str = Field(default="", description="Human-readable reason.")
-    requires_confirmation: bool = Field(
-        default=False, description="True when confirmation is required."
-    )
+    requires_confirmation: bool = Field(default=False, description="True when confirmation is required.")
     action_level: str = Field(default="observe", description="Action level at evaluation time.")
     policy_band: Optional[str] = Field(default=None, description="Policy band string.")
     blocked_by: str = Field(default="none", description="Primary block-cause code.")
     runtime_domain: Optional[str] = Field(default=None, description="Runtime domain.")
     blocked: bool = Field(default=True, description="True when status is blocked.")
     degraded: bool = Field(default=False, description="True when posture is degraded/reduced.")
-    available: bool = Field(
-        default=False, description="True when a real readiness result was summarised."
-    )
+    available: bool = Field(default=False, description="True when a real readiness result was summarised.")
 
     model_config = {"from_attributes": True}
 
@@ -280,19 +272,11 @@ class RuntimeGovernanceTraceSummary(BaseModel):
 
     trace_id: Optional[str] = Field(default=None, description="Shared trace ID.")
     intent_id: Optional[str] = Field(default=None, description="Originating intent ID.")
-    runtime_session_id: Optional[str] = Field(
-        default=None, description="Active runtime session ID."
-    )
-    final_status: str = Field(
-        default="pending", description="Aggregate final status across all events."
-    )
+    runtime_session_id: Optional[str] = Field(default=None, description="Active runtime session ID.")
+    final_status: str = Field(default="pending", description="Aggregate final status across all events.")
     stage_count: int = Field(default=0, description="Number of lifecycle stages recorded.")
-    stages: List[str] = Field(
-        default_factory=list, description="Ordered list of stage names."
-    )
-    fallback_outcome: Optional[str] = Field(
-        default=None, description="Fallback decision outcome."
-    )
+    stages: List[str] = Field(default_factory=list, description="Ordered list of stage names.")
+    fallback_outcome: Optional[str] = Field(default=None, description="Fallback decision outcome.")
     available: bool = Field(
         default=False,
         description="True when a real execution trace envelope was summarised.",
@@ -372,15 +356,9 @@ class RuntimeGovernanceProjectionSummary(BaseModel):
     blocked: bool = Field(default=True, description="True when policy is blocked.")
     degraded: bool = Field(default=False, description="True when posture is degraded.")
     fallback_outcome: str = Field(default="noop", description="Fallback decision outcome.")
-    trace_final_status: str = Field(
-        default="pending", description="Final trace status."
-    )
-    tri_state_phase: Optional[str] = Field(
-        default=None, description="Tri-state phase from projection governance."
-    )
-    runtime_domain: Optional[str] = Field(
-        default=None, description="Runtime domain from projection governance."
-    )
+    trace_final_status: str = Field(default="pending", description="Final trace status.")
+    tri_state_phase: Optional[str] = Field(default=None, description="Tri-state phase from projection governance.")
+    runtime_domain: Optional[str] = Field(default=None, description="Runtime domain from projection governance.")
     assembled_at: Optional[float] = Field(
         default=None,
         description="Unix epoch timestamp when upstream governance summary was assembled.",
@@ -465,12 +443,8 @@ class RuntimeGovernanceSnapshot(BaseModel):
         default_factory=lambda: str(uuid.uuid4()),
         description="Unique identifier for this snapshot instance.",
     )
-    trace_id: Optional[str] = Field(
-        default=None, description="Shared trace ID from the current execution lifecycle."
-    )
-    runtime_session_id: Optional[str] = Field(
-        default=None, description="Active runtime / OpenClawd session ID."
-    )
+    trace_id: Optional[str] = Field(default=None, description="Shared trace ID from the current execution lifecycle.")
+    runtime_session_id: Optional[str] = Field(default=None, description="Active runtime / OpenClawd session ID.")
     tri_state_phase: Optional[str] = Field(
         default=None,
         description="Public three-state view of the system (silent / liminal / manifest).",
@@ -510,12 +484,8 @@ class RuntimeGovernanceSnapshot(BaseModel):
             "One of: execute / observe / blocked / degraded / unknown."
         ),
     )
-    blocked: bool = Field(
-        default=False, description="True when posture is blocked."
-    )
-    degraded: bool = Field(
-        default=False, description="True when posture is degraded."
-    )
+    blocked: bool = Field(default=False, description="True when posture is blocked.")
+    degraded: bool = Field(default=False, description="True when posture is degraded.")
     timestamp: float = Field(
         default_factory=time.time,
         description="Unix epoch seconds when this snapshot was assembled.",
@@ -623,8 +593,7 @@ def summarize_runtime_intent(
         )
     except Exception as exc:
         logger.warning(
-            "summarize_runtime_intent: failed to summarise intent_profile "
-            "(type=%s): %s",
+            "summarize_runtime_intent: failed to summarise intent_profile " "(type=%s): %s",
             type(intent_profile).__name__,
             exc,
         )
@@ -656,9 +625,7 @@ def summarize_runtime_readiness(
         ready = bool(getattr(readiness_result, "ready", False))
         status = str(getattr(readiness_result, "status", "blocked"))
         reason = str(getattr(readiness_result, "reason", ""))
-        requires_confirmation = bool(
-            getattr(readiness_result, "requires_confirmation", False)
-        )
+        requires_confirmation = bool(getattr(readiness_result, "requires_confirmation", False))
         action_level = str(getattr(readiness_result, "action_level", "observe"))
         policy_band = getattr(readiness_result, "policy_band", None)
         blocked_by = str(getattr(readiness_result, "blocked_by", "none"))
@@ -682,8 +649,7 @@ def summarize_runtime_readiness(
         )
     except Exception as exc:
         logger.warning(
-            "summarize_runtime_readiness: failed to summarise readiness_result "
-            "(type=%s): %s",
+            "summarize_runtime_readiness: failed to summarise readiness_result " "(type=%s): %s",
             type(readiness_result).__name__,
             exc,
         )
@@ -744,8 +710,7 @@ def summarize_runtime_fallback(
         )
     except Exception as exc:
         logger.warning(
-            "summarize_runtime_fallback: failed to summarise fallback_trace "
-            "(type=%s): %s",
+            "summarize_runtime_fallback: failed to summarise fallback_trace " "(type=%s): %s",
             type(fallback_trace).__name__,
             exc,
         )
@@ -789,23 +754,15 @@ def summarize_runtime_execution_trace(
         return RuntimeGovernanceTraceSummary(
             trace_id=getattr(execution_trace_envelope, "trace_id", None),
             intent_id=getattr(execution_trace_envelope, "intent_id", None),
-            runtime_session_id=getattr(
-                execution_trace_envelope, "runtime_session_id", None
-            ),
-            final_status=str(
-                getattr(execution_trace_envelope, "final_status", "pending")
-            ),
+            runtime_session_id=getattr(execution_trace_envelope, "runtime_session_id", None),
+            final_status=str(getattr(execution_trace_envelope, "final_status", "pending")),
             stage_count=len(getattr(execution_trace_envelope, "events", [])),
-            stages=[
-                getattr(e, "stage", str(e))
-                for e in getattr(execution_trace_envelope, "events", [])
-            ],
+            stages=[getattr(e, "stage", str(e)) for e in getattr(execution_trace_envelope, "events", [])],
             available=True,
         )
     except Exception as exc:
         logger.warning(
-            "summarize_runtime_execution_trace: failed to summarise envelope "
-            "(type=%s): %s",
+            "summarize_runtime_execution_trace: failed to summarise envelope " "(type=%s): %s",
             type(execution_trace_envelope).__name__,
             exc,
         )
@@ -857,9 +814,7 @@ def summarize_projection_governance_for_runtime(
             )
 
         # Pydantic model or attribute-bearing object
-        gov_available = bool(
-            getattr(projection_governance, "governance_available", False)
-        )
+        gov_available = bool(getattr(projection_governance, "governance_available", False))
         execution = getattr(projection_governance, "execution", None) or {}
         policy = getattr(projection_governance, "policy", None) or {}
         fallback = getattr(projection_governance, "fallback", None) or {}
@@ -887,8 +842,7 @@ def summarize_projection_governance_for_runtime(
         )
     except Exception as exc:
         logger.warning(
-            "summarize_projection_governance_for_runtime: failed to summarise "
-            "projection_governance (type=%s): %s",
+            "summarize_projection_governance_for_runtime: failed to summarise " "projection_governance (type=%s): %s",
             type(projection_governance).__name__,
             exc,
         )
@@ -918,11 +872,7 @@ def _derive_posture(
     5. unknown when insufficient signals are available
     """
     # Not enough signals
-    if (
-        not intent_summary.available
-        and not readiness_summary.available
-        and not execution_trace_summary.available
-    ):
+    if not intent_summary.available and not readiness_summary.available and not execution_trace_summary.available:
         return "unknown"
 
     # Blocked trumps all
@@ -1086,8 +1036,7 @@ def assemble_runtime_governance_snapshot(
         )
     except Exception as exc:
         logger.warning(
-            "assemble_runtime_governance_snapshot: assembly failed, "
-            "returning minimal snapshot: %s",
+            "assemble_runtime_governance_snapshot: assembly failed, " "returning minimal snapshot: %s",
             exc,
         )
         return RuntimeGovernanceSnapshot(

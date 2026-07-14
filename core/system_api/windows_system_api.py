@@ -60,6 +60,7 @@ Usage
         # fall back to UIA / GUI / VLM
         ...
 """
+
 from __future__ import annotations
 
 import logging
@@ -237,9 +238,11 @@ class WindowsSystemAPI:
         if self._adapter is None:
             try:
                 from core.system_api import get_system_api  # type: ignore[import]
+
                 self._adapter = get_system_api()
             except Exception as exc:
                 from core.system_api.platform_api import NoOpSystemAPI
+
                 self._adapter = NoOpSystemAPI()
         return self._adapter
 
@@ -376,9 +379,7 @@ class WindowsSystemAPI:
             return SystemAPIResponse(success=ok, error="" if ok else "window not found or close failed")
 
         if action == "enumerate_windows":
-            windows = adapter.enumerate_windows(
-                filter_title=params.get("title_filter") or params.get("filter")
-            )
+            windows = adapter.enumerate_windows(filter_title=params.get("title_filter") or params.get("filter"))
             return SystemAPIResponse(
                 success=True,
                 data={"windows": [w.__dict__ for w in windows]},
@@ -497,6 +498,7 @@ def get_windows_system_api(enabled: Optional[bool] = None) -> WindowsSystemAPI:
             try:
                 import json
                 import os as _os
+
                 _cfg_path = _os.path.join(
                     _os.path.dirname(_os.path.dirname(_os.path.dirname(__file__))),
                     "config.json",

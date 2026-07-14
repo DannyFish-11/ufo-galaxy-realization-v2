@@ -27,6 +27,7 @@ Usage::
     # ... runs in background thread ...
     wake.stop()
 """
+
 from __future__ import annotations
 
 import logging
@@ -40,6 +41,7 @@ logger = logging.getLogger("Galaxy.VoiceWake")
 # Optional wake-word engine
 try:
     import pvporcupine  # type: ignore[import-untyped]
+
     _PORCUPINE_AVAILABLE = True
 except ImportError:
     _PORCUPINE_AVAILABLE = False
@@ -48,6 +50,7 @@ try:
     # PR-WARN-SUPPRESS: webrtcvad 内部使用已弃用的 pkg_resources，
     # 触发 DeprecationWarning / UserWarning；在导入前临时过滤掉
     import warnings
+
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", category=DeprecationWarning)
         warnings.simplefilter("ignore", category=UserWarning)
@@ -58,6 +61,7 @@ except ImportError:
 
 try:
     import pyaudio  # type: ignore[import-untyped]
+
     _PYAUDIO_AVAILABLE = True
 except ImportError:
     _PYAUDIO_AVAILABLE = False
@@ -65,6 +69,7 @@ except ImportError:
 # Optional: use faster-whisper for wake-word spotting
 try:
     from faster_whisper import WhisperModel  # type: ignore[import-untyped]
+
     _WHISPER_AVAILABLE = True
 except ImportError:
     _WHISPER_AVAILABLE = False
@@ -197,7 +202,7 @@ class VoiceWakeModule:
 
                     # Prevent buffer overflow
                     if len(audio_buffer) > self.SAMPLE_RATE * 2 * buffer_max_ms // 1000:
-                        audio_buffer = audio_buffer[-self.SAMPLE_RATE:]  # keep last 1s
+                        audio_buffer = audio_buffer[-self.SAMPLE_RATE :]  # keep last 1s
 
             except Exception as exc:
                 logger.debug("VoiceWake: detection loop error: %s", exc)

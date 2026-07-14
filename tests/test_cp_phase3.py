@@ -18,13 +18,14 @@ Covers:
 from __future__ import annotations
 
 import asyncio
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 
 # ===========================================================================
 # A) SwarmAgentManifest serialisation
 # ===========================================================================
+
 
 class TestSwarmAgentManifestSerialization:
     """Verify that SwarmAgentManifest is fully JSON-serialisable and round-trips."""
@@ -88,6 +89,7 @@ class TestSwarmAgentManifestSerialization:
 
     def test_model_dump_is_json_serialisable(self):
         import json
+
         from core.control_plane.swarm_manifest import SwarmAgentManifest
 
         m = SwarmAgentManifest(
@@ -140,8 +142,9 @@ class TestSwarmAgentManifestSerialization:
         assert payload["task"] == "Main task only"
 
     def test_from_team_member_factory(self):
-        from core.control_plane.swarm_manifest import SwarmAgentManifest
         from dataclasses import dataclass
+
+        from core.control_plane.swarm_manifest import SwarmAgentManifest
 
         @dataclass
         class FakeMember:
@@ -174,8 +177,7 @@ class TestSwarmAgentManifestSerialization:
         from core.control_plane.swarm_manifest import SwarmAgentManifest
 
         ids = {
-            SwarmAgentManifest(agent_id=f"a{i}", task="t", session_id="s",
-                               trace_id="tr", task_id=f"tk{i}").manifest_id
+            SwarmAgentManifest(agent_id=f"a{i}", task="t", session_id="s", trace_id="tr", task_id=f"tk{i}").manifest_id
             for i in range(20)
         }
         assert len(ids) == 20, "manifest_id must be unique per instance"
@@ -184,6 +186,7 @@ class TestSwarmAgentManifestSerialization:
 # ===========================================================================
 # B) SwarmCoordinator — manifest building and device assignment
 # ===========================================================================
+
 
 class TestSwarmCoordinatorManifestBuilding:
     """Unit tests for manifest creation and device assignment logic."""
@@ -204,14 +207,15 @@ class TestSwarmCoordinatorManifestBuilding:
 
     def test_coordinator_instantiates(self):
         from core.swarm_coordinator import SwarmCoordinator
+
         coord = SwarmCoordinator()
         assert coord is not None
 
     @pytest.mark.asyncio
     async def test_dispatch_team_no_device_skips(self):
         """When no device candidates are provided, members get no device assigned."""
-        from core.swarm_coordinator import SwarmCoordinator
         from core.control_plane.audit_ledger import AuditLedger, EventType
+        from core.swarm_coordinator import SwarmCoordinator
 
         ledger = AuditLedger()
         coord = SwarmCoordinator(
@@ -237,9 +241,9 @@ class TestSwarmCoordinatorManifestBuilding:
     @pytest.mark.asyncio
     async def test_device_assignment_via_scoring_engine(self):
         """Best device is selected from candidates using the scoring engine."""
-        from core.swarm_coordinator import SwarmCoordinator
-        from core.control_plane.smart_scheduler import DeviceScoreInput, DeviceScoringEngine
         from core.control_plane.audit_ledger import AuditLedger
+        from core.control_plane.smart_scheduler import DeviceScoreInput, DeviceScoringEngine
+        from core.swarm_coordinator import SwarmCoordinator
 
         # Create a custom scoring engine
         engine = DeviceScoringEngine(require_all_capabilities=False)
@@ -247,15 +251,17 @@ class TestSwarmCoordinatorManifestBuilding:
 
         # Mock router that returns success
         mock_router = MagicMock()
-        mock_router.dispatch_agent_remote = AsyncMock(return_value={
-            "success": True,
-            "output": "done",
-            "agent_id": "ag_0",
-            "trace_id": "tr_sa",
-            "task_id": "tk_sa",
-            "session_id": "s_sa",
-            "latency_ms": 12.3,
-        })
+        mock_router.dispatch_agent_remote = AsyncMock(
+            return_value={
+                "success": True,
+                "output": "done",
+                "agent_id": "ag_0",
+                "trace_id": "tr_sa",
+                "task_id": "tk_sa",
+                "session_id": "s_sa",
+                "latency_ms": 12.3,
+            }
+        )
 
         coord = SwarmCoordinator(
             command_router=mock_router,
@@ -288,6 +294,7 @@ class TestSwarmCoordinatorManifestBuilding:
 # C) SwarmCoordinator — remote dispatch flow (mocked)
 # ===========================================================================
 
+
 class TestSwarmCoordinatorDispatchFlow:
     """Integration-style tests with mocked CommandRouter."""
 
@@ -307,6 +314,7 @@ class TestSwarmCoordinatorDispatchFlow:
 
     def _make_device_candidates(self, count: int = 1):
         from core.control_plane.smart_scheduler import DeviceScoreInput
+
         return [
             DeviceScoreInput(
                 device_id=f"dev_{i:02d}",
@@ -319,31 +327,33 @@ class TestSwarmCoordinatorDispatchFlow:
     @pytest.mark.asyncio
     async def test_successful_dispatch_aggregates_results(self):
         """Successful dispatch produces correct TeamResult."""
-        from core.swarm_coordinator import SwarmCoordinator
         from core.control_plane.audit_ledger import AuditLedger
+        from core.swarm_coordinator import SwarmCoordinator
 
         ledger = AuditLedger()
         mock_router = MagicMock()
-        mock_router.dispatch_agent_remote = AsyncMock(side_effect=[
-            {
-                "success": True,
-                "output": "Result from member 0",
-                "agent_id": "ag_d0",
-                "trace_id": "tr_df",
-                "task_id": "tk_df_ag_d0",
-                "session_id": "s_df",
-                "latency_ms": 50.0,
-            },
-            {
-                "success": True,
-                "output": "Result from member 1",
-                "agent_id": "ag_d1",
-                "trace_id": "tr_df",
-                "task_id": "tk_df_ag_d1",
-                "session_id": "s_df",
-                "latency_ms": 60.0,
-            },
-        ])
+        mock_router.dispatch_agent_remote = AsyncMock(
+            side_effect=[
+                {
+                    "success": True,
+                    "output": "Result from member 0",
+                    "agent_id": "ag_d0",
+                    "trace_id": "tr_df",
+                    "task_id": "tk_df_ag_d0",
+                    "session_id": "s_df",
+                    "latency_ms": 50.0,
+                },
+                {
+                    "success": True,
+                    "output": "Result from member 1",
+                    "agent_id": "ag_d1",
+                    "trace_id": "tr_df",
+                    "task_id": "tk_df_ag_d1",
+                    "session_id": "s_df",
+                    "latency_ms": 60.0,
+                },
+            ]
+        )
 
         coord = SwarmCoordinator(
             command_router=mock_router,
@@ -369,16 +379,24 @@ class TestSwarmCoordinatorDispatchFlow:
     @pytest.mark.asyncio
     async def test_partial_failure_preserves_successful_results(self):
         """When one member fails, successful results are still collected."""
-        from core.swarm_coordinator import SwarmCoordinator
         from core.control_plane.audit_ledger import AuditLedger
+        from core.swarm_coordinator import SwarmCoordinator
 
         ledger = AuditLedger()
         mock_router = MagicMock()
-        mock_router.dispatch_agent_remote = AsyncMock(side_effect=[
-            {"success": True, "output": "OK", "agent_id": "ag_d0",
-             "trace_id": "tr_pf", "task_id": "tk_pf_0", "session_id": "s_pf"},
-            Exception("connection timeout"),
-        ])
+        mock_router.dispatch_agent_remote = AsyncMock(
+            side_effect=[
+                {
+                    "success": True,
+                    "output": "OK",
+                    "agent_id": "ag_d0",
+                    "trace_id": "tr_pf",
+                    "task_id": "tk_pf_0",
+                    "session_id": "s_pf",
+                },
+                Exception("connection timeout"),
+            ]
+        )
 
         coord = SwarmCoordinator(command_router=mock_router, audit_ledger=ledger)
         members = [self._make_member(0), self._make_member(1)]
@@ -402,16 +420,21 @@ class TestSwarmCoordinatorDispatchFlow:
     @pytest.mark.asyncio
     async def test_dispatch_passes_manifest_fields_to_router(self):
         """Context fields (system_prompt, tool_schemas, memory_snapshot) reach the router."""
-        from core.swarm_coordinator import SwarmCoordinator
         from core.control_plane.audit_ledger import AuditLedger
+        from core.swarm_coordinator import SwarmCoordinator
 
         ledger = AuditLedger()
         mock_router = MagicMock()
-        mock_router.dispatch_agent_remote = AsyncMock(return_value={
-            "success": True, "output": "done",
-            "agent_id": "ag_d0", "trace_id": "tr_mf",
-            "task_id": "tk_mf_ag_d0", "session_id": "s_mf",
-        })
+        mock_router.dispatch_agent_remote = AsyncMock(
+            return_value={
+                "success": True,
+                "output": "done",
+                "agent_id": "ag_d0",
+                "trace_id": "tr_mf",
+                "task_id": "tk_mf_ag_d0",
+                "session_id": "s_mf",
+            }
+        )
 
         coord = SwarmCoordinator(command_router=mock_router, audit_ledger=ledger)
         members = [self._make_member(0)]
@@ -437,25 +460,42 @@ class TestSwarmCoordinatorDispatchFlow:
     @pytest.mark.asyncio
     async def test_synthesize_combines_results(self):
         """Synthesized output joins successful member results."""
-        from core.swarm_coordinator import SwarmCoordinator
         from core.control_plane.audit_ledger import AuditLedger
+        from core.swarm_coordinator import SwarmCoordinator
 
         ledger = AuditLedger()
         mock_router = MagicMock()
-        mock_router.dispatch_agent_remote = AsyncMock(side_effect=[
-            {"success": True, "output": "Part A", "agent_id": "ag_d0",
-             "trace_id": "tr_syn", "task_id": "tk_syn_0", "session_id": "s_syn"},
-            {"success": True, "output": "Part B", "agent_id": "ag_d1",
-             "trace_id": "tr_syn", "task_id": "tk_syn_1", "session_id": "s_syn"},
-        ])
+        mock_router.dispatch_agent_remote = AsyncMock(
+            side_effect=[
+                {
+                    "success": True,
+                    "output": "Part A",
+                    "agent_id": "ag_d0",
+                    "trace_id": "tr_syn",
+                    "task_id": "tk_syn_0",
+                    "session_id": "s_syn",
+                },
+                {
+                    "success": True,
+                    "output": "Part B",
+                    "agent_id": "ag_d1",
+                    "trace_id": "tr_syn",
+                    "task_id": "tk_syn_1",
+                    "session_id": "s_syn",
+                },
+            ]
+        )
 
         coord = SwarmCoordinator(command_router=mock_router, audit_ledger=ledger)
         members = [self._make_member(0), self._make_member(1)]
         candidates = self._make_device_candidates(1)
 
         result = await coord.dispatch_team(
-            members=members, task="Syn task",
-            session_id="s_syn", trace_id="tr_syn", task_id="tk_syn",
+            members=members,
+            task="Syn task",
+            session_id="s_syn",
+            trace_id="tr_syn",
+            task_id="tk_syn",
             device_candidates=candidates,
         )
 
@@ -466,6 +506,7 @@ class TestSwarmCoordinatorDispatchFlow:
 # ===========================================================================
 # D) Audit event emission
 # ===========================================================================
+
 
 class TestAuditEventEmission:
     """Verify that SwarmCoordinator emits the required audit events."""
@@ -486,17 +527,22 @@ class TestAuditEventEmission:
 
     @pytest.mark.asyncio
     async def test_agent_dispatched_event_emitted(self):
-        from core.swarm_coordinator import SwarmCoordinator
         from core.control_plane.audit_ledger import AuditLedger, EventType
         from core.control_plane.smart_scheduler import DeviceScoreInput
+        from core.swarm_coordinator import SwarmCoordinator
 
         ledger = AuditLedger()
         mock_router = MagicMock()
-        mock_router.dispatch_agent_remote = AsyncMock(return_value={
-            "success": True, "output": "ok",
-            "agent_id": "ag_ae0", "trace_id": "tr_ae",
-            "task_id": "tk_ae_ag_ae0", "session_id": "s_ae",
-        })
+        mock_router.dispatch_agent_remote = AsyncMock(
+            return_value={
+                "success": True,
+                "output": "ok",
+                "agent_id": "ag_ae0",
+                "trace_id": "tr_ae",
+                "task_id": "tk_ae_ag_ae0",
+                "session_id": "s_ae",
+            }
+        )
 
         coord = SwarmCoordinator(command_router=mock_router, audit_ledger=ledger)
         candidates = [DeviceScoreInput(device_id="dev_ae", ping_latency_ms=10.0)]
@@ -518,17 +564,22 @@ class TestAuditEventEmission:
 
     @pytest.mark.asyncio
     async def test_agent_executed_event_emitted(self):
-        from core.swarm_coordinator import SwarmCoordinator
         from core.control_plane.audit_ledger import AuditLedger, EventType
         from core.control_plane.smart_scheduler import DeviceScoreInput
+        from core.swarm_coordinator import SwarmCoordinator
 
         ledger = AuditLedger()
         mock_router = MagicMock()
-        mock_router.dispatch_agent_remote = AsyncMock(return_value={
-            "success": True, "output": "ok",
-            "agent_id": "ag_ae1", "trace_id": "tr_aex",
-            "task_id": "tk_aex_ag_ae1", "session_id": "s_aex",
-        })
+        mock_router.dispatch_agent_remote = AsyncMock(
+            return_value={
+                "success": True,
+                "output": "ok",
+                "agent_id": "ag_ae1",
+                "trace_id": "tr_aex",
+                "task_id": "tk_aex_ag_ae1",
+                "session_id": "s_aex",
+            }
+        )
 
         coord = SwarmCoordinator(command_router=mock_router, audit_ledger=ledger)
         candidates = [DeviceScoreInput(device_id="dev_aex", ping_latency_ms=5.0)]
@@ -548,17 +599,22 @@ class TestAuditEventEmission:
 
     @pytest.mark.asyncio
     async def test_agent_result_received_event_emitted(self):
-        from core.swarm_coordinator import SwarmCoordinator
         from core.control_plane.audit_ledger import AuditLedger, EventType
         from core.control_plane.smart_scheduler import DeviceScoreInput
+        from core.swarm_coordinator import SwarmCoordinator
 
         ledger = AuditLedger()
         mock_router = MagicMock()
-        mock_router.dispatch_agent_remote = AsyncMock(return_value={
-            "success": True, "output": "some result",
-            "agent_id": "ag_ae2", "trace_id": "tr_rr",
-            "task_id": "tk_rr_ag_ae2", "session_id": "s_rr",
-        })
+        mock_router.dispatch_agent_remote = AsyncMock(
+            return_value={
+                "success": True,
+                "output": "some result",
+                "agent_id": "ag_ae2",
+                "trace_id": "tr_rr",
+                "task_id": "tk_rr_ag_ae2",
+                "session_id": "s_rr",
+            }
+        )
 
         coord = SwarmCoordinator(command_router=mock_router, audit_ledger=ledger)
         candidates = [DeviceScoreInput(device_id="dev_rr", ping_latency_ms=5.0)]
@@ -578,17 +634,22 @@ class TestAuditEventEmission:
     @pytest.mark.asyncio
     async def test_all_three_events_emitted_per_member(self):
         """Each successful member dispatch emits DISPATCHED + EXECUTED + RESULT_RECEIVED."""
-        from core.swarm_coordinator import SwarmCoordinator
         from core.control_plane.audit_ledger import AuditLedger, EventType
         from core.control_plane.smart_scheduler import DeviceScoreInput
+        from core.swarm_coordinator import SwarmCoordinator
 
         ledger = AuditLedger()
         mock_router = MagicMock()
-        mock_router.dispatch_agent_remote = AsyncMock(return_value={
-            "success": True, "output": "ok",
-            "agent_id": "ag_ae3", "trace_id": "tr_all",
-            "task_id": "tk_all_ag_ae3", "session_id": "s_all",
-        })
+        mock_router.dispatch_agent_remote = AsyncMock(
+            return_value={
+                "success": True,
+                "output": "ok",
+                "agent_id": "ag_ae3",
+                "trace_id": "tr_all",
+                "task_id": "tk_all_ag_ae3",
+                "session_id": "s_all",
+            }
+        )
 
         coord = SwarmCoordinator(command_router=mock_router, audit_ledger=ledger)
         candidates = [DeviceScoreInput(device_id="dev_all")]
@@ -609,25 +670,33 @@ class TestAuditEventEmission:
     @pytest.mark.asyncio
     async def test_two_members_emit_three_events_each(self):
         """Two members together emit 6 audit events (3 per member)."""
-        from core.swarm_coordinator import SwarmCoordinator
         from core.control_plane.audit_ledger import AuditLedger, EventType
         from core.control_plane.smart_scheduler import DeviceScoreInput
+        from core.swarm_coordinator import SwarmCoordinator
 
         ledger = AuditLedger()
         mock_router = MagicMock()
-        mock_router.dispatch_agent_remote = AsyncMock(return_value={
-            "success": True, "output": "ok",
-            "agent_id": "ag_ae", "trace_id": "tr_2m",
-            "task_id": "tk_2m", "session_id": "s_2m",
-        })
+        mock_router.dispatch_agent_remote = AsyncMock(
+            return_value={
+                "success": True,
+                "output": "ok",
+                "agent_id": "ag_ae",
+                "trace_id": "tr_2m",
+                "task_id": "tk_2m",
+                "session_id": "s_2m",
+            }
+        )
 
         coord = SwarmCoordinator(command_router=mock_router, audit_ledger=ledger)
         candidates = [DeviceScoreInput(device_id="dev_2m")]
         members = [self._make_member(4), self._make_member(5)]
 
         await coord.dispatch_team(
-            members=members, task="Two-member test",
-            session_id="s_2m", trace_id="tr_2m", task_id="tk_2m",
+            members=members,
+            task="Two-member test",
+            session_id="s_2m",
+            trace_id="tr_2m",
+            task_id="tk_2m",
             device_candidates=candidates,
         )
 
@@ -638,15 +707,13 @@ class TestAuditEventEmission:
     @pytest.mark.asyncio
     async def test_dispatch_failure_emits_task_failed(self):
         """When dispatch raises, TASK_FAILED is emitted instead of AGENT_EXECUTED."""
-        from core.swarm_coordinator import SwarmCoordinator
         from core.control_plane.audit_ledger import AuditLedger, EventType
         from core.control_plane.smart_scheduler import DeviceScoreInput
+        from core.swarm_coordinator import SwarmCoordinator
 
         ledger = AuditLedger()
         mock_router = MagicMock()
-        mock_router.dispatch_agent_remote = AsyncMock(
-            side_effect=RuntimeError("network error")
-        )
+        mock_router.dispatch_agent_remote = AsyncMock(side_effect=RuntimeError("network error"))
 
         coord = SwarmCoordinator(command_router=mock_router, audit_ledger=ledger)
         candidates = [DeviceScoreInput(device_id="dev_fail")]
@@ -667,6 +734,7 @@ class TestAuditEventEmission:
 # ===========================================================================
 # E) Windows AIP client — _execute_agent_task handles SwarmAgentManifest fields
 # ===========================================================================
+
 
 class TestWindowsAIPClientSwarmManifestFields:
     """Verify _execute_agent_task extracts and propagates PR158 manifest context."""
@@ -740,9 +808,7 @@ class TestWindowsAIPClientSwarmManifestFields:
         from windows_client.windows_aip_client import _execute_agent_task
 
         mock_arbiter = MagicMock()
-        mock_arbiter.route_command.return_value = {
-            "success": True, "result": {"output": "arbiter result"}
-        }
+        mock_arbiter.route_command.return_value = {"success": True, "result": {"output": "arbiter result"}}
 
         payload = {
             "agent_id": "a_mgr",
@@ -776,11 +842,13 @@ class TestWindowsAIPClientSwarmManifestFields:
 # F) Windows AIP client — _agent_execute_result_msg propagates manifest_id
 # ===========================================================================
 
+
 class TestAgentExecuteResultMsg:
     """Verify _agent_execute_result_msg propagates manifest_id (PR158)."""
 
     def _make_client(self):
         from windows_client.windows_aip_client import WindowsAIPClient
+
         return WindowsAIPClient(host="127.0.0.1", port=9999, device_id="test_win")
 
     def test_manifest_id_from_result(self):
@@ -830,6 +898,7 @@ class TestAgentExecuteResultMsg:
 # G) No-device / router-unavailable failure paths
 # ===========================================================================
 
+
 class TestSwarmCoordinatorFailurePaths:
     """Ensure graceful failure when no device or no router is available."""
 
@@ -850,9 +919,9 @@ class TestSwarmCoordinatorFailurePaths:
     @pytest.mark.asyncio
     async def test_router_unavailable_returns_failure(self):
         """When CommandRouter is unavailable the dispatch should fail gracefully."""
-        from core.swarm_coordinator import SwarmCoordinator
         from core.control_plane.audit_ledger import AuditLedger, EventType
         from core.control_plane.smart_scheduler import DeviceScoreInput
+        from core.swarm_coordinator import SwarmCoordinator
 
         ledger = AuditLedger()
         # Coordinator with no pre-set router; patch the lazy-getter too
@@ -876,8 +945,8 @@ class TestSwarmCoordinatorFailurePaths:
     @pytest.mark.asyncio
     async def test_empty_members_list_produces_empty_result(self):
         """Empty member list returns an empty TeamResult."""
-        from core.swarm_coordinator import SwarmCoordinator
         from core.control_plane.audit_ledger import AuditLedger
+        from core.swarm_coordinator import SwarmCoordinator
 
         ledger = AuditLedger()
         coord = SwarmCoordinator(audit_ledger=ledger)
@@ -897,6 +966,7 @@ class TestSwarmCoordinatorFailurePaths:
 # ===========================================================================
 # H) AGENT_EXECUTED event type in audit_ledger
 # ===========================================================================
+
 
 class TestAgentExecutedEventType:
     """Validate that AGENT_EXECUTED is present in EventType and usable."""
@@ -926,4 +996,5 @@ class TestAgentExecutedEventType:
 
     def test_swarm_manifest_exported_from_control_plane(self):
         from core.control_plane import SwarmAgentManifest
+
         assert SwarmAgentManifest is not None

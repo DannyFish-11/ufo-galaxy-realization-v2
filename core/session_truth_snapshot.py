@@ -119,13 +119,9 @@ class SessionTruthSnapshotStore:
         self._max_records = max_records
         self._lock = threading.Lock()
         try:
-            os.makedirs(
-                os.path.dirname(os.path.abspath(self._store_path)), exist_ok=True
-            )
+            os.makedirs(os.path.dirname(os.path.abspath(self._store_path)), exist_ok=True)
         except Exception as exc:
-            logger.warning(
-                "SessionTruthSnapshotStore: could not create store directory: %s", exc
-            )
+            logger.warning("SessionTruthSnapshotStore: could not create store directory: %s", exc)
 
     # ------------------------------------------------------------------
     # Write
@@ -144,13 +140,11 @@ class SessionTruthSnapshotStore:
                 existing = self._load_locked()
                 existing.append(record_dict)
                 if len(existing) > self._max_records:
-                    existing = existing[-self._max_records:]
+                    existing = existing[-self._max_records :]
                 self._save_locked(existing)
             return True
         except Exception as exc:
-            logger.warning(
-                "SessionTruthSnapshotStore: append failed: %s", exc
-            )
+            logger.warning("SessionTruthSnapshotStore: append failed: %s", exc)
             return False
 
     # ------------------------------------------------------------------
@@ -178,9 +172,7 @@ class SessionTruthSnapshotStore:
                 os.unlink(self._store_path)
                 return True
             except Exception as exc:
-                logger.warning(
-                    "SessionTruthSnapshotStore: clear failed: %s", exc
-                )
+                logger.warning("SessionTruthSnapshotStore: clear failed: %s", exc)
                 return False
 
     @property
@@ -202,9 +194,7 @@ class SessionTruthSnapshotStore:
                 return list(records)
             return []
         except Exception as exc:
-            logger.warning(
-                "SessionTruthSnapshotStore: load failed: %s", exc
-            )
+            logger.warning("SessionTruthSnapshotStore: load failed: %s", exc)
             return []
 
     def _save_locked(self, records: List[Dict[str, Any]]) -> None:
@@ -247,9 +237,7 @@ def get_session_truth_snapshot_store(
     if _snapshot_store_instance is None:
         with _snapshot_store_lock:
             if _snapshot_store_instance is None:
-                _snapshot_store_instance = SessionTruthSnapshotStore(
-                    store_path=store_path
-                )
+                _snapshot_store_instance = SessionTruthSnapshotStore(store_path=store_path)
     return _snapshot_store_instance
 
 
@@ -291,16 +279,16 @@ def restore_session_truth_from_snapshot(
     if runtime is None:
         try:
             from core.canonical_session_truth import get_canonical_session_truth_runtime
+
             runtime = get_canonical_session_truth_runtime()
         except Exception as exc:
-            logger.warning(
-                "restore_session_truth_from_snapshot: could not get runtime: %s", exc
-            )
+            logger.warning("restore_session_truth_from_snapshot: could not get runtime: %s", exc)
             return 0
     restored = 0
     for rd in raw_records:
         try:
             from core.canonical_session_truth import CanonicalSessionTruthRecord
+
             rec = CanonicalSessionTruthRecord.from_dict(rd)
             runtime.record(rec)
             restored += 1

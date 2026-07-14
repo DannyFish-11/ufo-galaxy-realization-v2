@@ -106,9 +106,7 @@ CANONICAL_CHAIN_AUTHORITY: str = "core.canonical_execution_chain"
 declaration.  Import this symbol to assert that a call site is operating
 within the declared canonical execution chain."""
 
-DESKTOP_PRESENCE_RUNTIME_SHELL_AUTHORITY: str = (
-    "core.desktop_presence_runtime.DesktopPresenceRuntime"
-)
+DESKTOP_PRESENCE_RUNTIME_SHELL_AUTHORITY: str = "core.desktop_presence_runtime.DesktopPresenceRuntime"
 """Sentinel: ``DesktopPresenceRuntime`` is the canonical runtime shell authority.
 It owns runtime-session lifecycle and invokes OpenClawd as the execution core."""
 
@@ -143,6 +141,7 @@ top-level authorities."""
 # ---------------------------------------------------------------------------
 # Canonical chain stages
 # ---------------------------------------------------------------------------
+
 
 class CanonicalChainStage(str, Enum):
     """Ordered stages of the canonical execution chain.
@@ -181,14 +180,14 @@ class CanonicalChainStage(str, Enum):
 
 # Map each canonical stage to the owning authority sentinel.
 CHAIN_STAGE_AUTHORITY: Dict[CanonicalChainStage, str] = {
-    CanonicalChainStage.ROUTE_INGRESS:               ROUTE_ADAPTER_ROLE,
-    CanonicalChainStage.ROUTE_ADAPTER:               ROUTE_ADAPTER_ROLE,
-    CanonicalChainStage.DESKTOP_RUNTIME_SHELL:       DESKTOP_PRESENCE_RUNTIME_SHELL_AUTHORITY,
-    CanonicalChainStage.OPENCLAWD_SUBJECT:           OPENCLAWD_SUBJECT_AUTHORITY,
+    CanonicalChainStage.ROUTE_INGRESS: ROUTE_ADAPTER_ROLE,
+    CanonicalChainStage.ROUTE_ADAPTER: ROUTE_ADAPTER_ROLE,
+    CanonicalChainStage.DESKTOP_RUNTIME_SHELL: DESKTOP_PRESENCE_RUNTIME_SHELL_AUTHORITY,
+    CanonicalChainStage.OPENCLAWD_SUBJECT: OPENCLAWD_SUBJECT_AUTHORITY,
     CanonicalChainStage.COMMAND_ROUTER_ORCHESTRATION: COMMAND_ROUTER_ORCHESTRATION_AUTHORITY,
-    CanonicalChainStage.DEVICE_ROUTER_DISPATCH:      DEVICE_ROUTER_DISPATCH_AUTHORITY,
-    CanonicalChainStage.DEVICE_EXECUTION:            DEVICE_ROUTER_DISPATCH_AUTHORITY,
-    CanonicalChainStage.RESPONSE_RETURN:             OPENCLAWD_SUBJECT_AUTHORITY,
+    CanonicalChainStage.DEVICE_ROUTER_DISPATCH: DEVICE_ROUTER_DISPATCH_AUTHORITY,
+    CanonicalChainStage.DEVICE_EXECUTION: DEVICE_ROUTER_DISPATCH_AUTHORITY,
+    CanonicalChainStage.RESPONSE_RETURN: OPENCLAWD_SUBJECT_AUTHORITY,
 }
 
 # Ordered list of canonical stages (route → device).
@@ -245,9 +244,7 @@ SIDE_PATH_MODULE_REGISTRY: Dict[str, str] = {
     "core.canonical_handoff_path": "handoff_path_anchor_prototype",
     "core.takeover_tracking": "takeover_accept_reject_tracking_prototype",
     "core.android_handoff_v2_response_ingress": "handoff_v2_response_ingress_prototype",
-    "core.android_delegated_runtime_lifecycle_coordinator": (
-        "delegated_lifecycle_event_facade_prototype"
-    ),
+    "core.android_delegated_runtime_lifecycle_coordinator": ("delegated_lifecycle_event_facade_prototype"),
     "contracts.handoff_envelope_v2": "handoff_envelope_contract_prototype",
     # PR-8: Projection / diagnostics / operator — NOT distributed runtime authority
     "core.android_delegated_runtime_audit": "delegated_runtime_diagnostics_read_only",
@@ -275,6 +272,7 @@ MINIMAL_RUNTIME_MAINLINE_MODULES: tuple = (
 # ---------------------------------------------------------------------------
 # Chain execution context
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class ChainExecutionContext:
@@ -337,7 +335,9 @@ class ChainExecutionContext:
         self.last_stage_ts = time.time()
         logger.debug(
             "CanonicalChain.advance_stage | trace_id=%s stage=%s authority=%s",
-            self.trace_id, stage.value, self.current_authority,
+            self.trace_id,
+            stage.value,
+            self.current_authority,
         )
         return self
 
@@ -407,6 +407,7 @@ def build_chain_context(
 # ---------------------------------------------------------------------------
 # Introspection helpers
 # ---------------------------------------------------------------------------
+
 
 def is_canonical_module(module_name: str) -> bool:
     """Return ``True`` when *module_name* is one of the fixed canonical

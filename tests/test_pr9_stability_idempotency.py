@@ -14,29 +14,32 @@ Covers:
 
 import asyncio
 import unittest
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _reset_udm():
     """Reset UnifiedDeviceManager singleton for test isolation."""
     # Direct module import avoids triggering fastapi imports in core/unified/__init__.py
     from core.unified import device_manager as _mod
+
     _mod.UnifiedDeviceManager._instance = None
 
 
 def _fresh_udm():
     _reset_udm()
     from core.unified.device_manager import UnifiedDeviceManager
+
     return UnifiedDeviceManager()
 
 
 def _make_device(device_id: str, **kwargs):
     from core.unified.models import UnifiedDevice, UnifiedDeviceStatus
+
     dev = UnifiedDevice(device_id=device_id, **kwargs)
     dev.status = UnifiedDeviceStatus.ONLINE
     return dev
@@ -45,6 +48,7 @@ def _make_device(device_id: str, **kwargs):
 # ===========================================================================
 # 1. Heartbeat timeout & auto-offline with grace period
 # ===========================================================================
+
 
 class TestHeartbeatTimeout(unittest.IsolatedAsyncioTestCase):
     """check_heartbeat_timeouts marks devices offline after timeout+grace."""
@@ -59,6 +63,7 @@ class TestHeartbeatTimeout(unittest.IsolatedAsyncioTestCase):
         offline = await udm.check_heartbeat_timeouts(timeout_secs=60.0, grace_secs=10.0)
 
         from core.unified.models import UnifiedDeviceStatus
+
         self.assertIn("hb-dev-1", offline)
         self.assertEqual(udm._devices["hb-dev-1"].status, UnifiedDeviceStatus.OFFLINE)
 
@@ -72,6 +77,7 @@ class TestHeartbeatTimeout(unittest.IsolatedAsyncioTestCase):
         offline = await udm.check_heartbeat_timeouts(timeout_secs=60.0, grace_secs=10.0)
 
         from core.unified.models import UnifiedDeviceStatus
+
         self.assertNotIn("hb-dev-2", offline)
         self.assertEqual(udm._devices["hb-dev-2"].status, UnifiedDeviceStatus.ONLINE)
 
@@ -84,6 +90,7 @@ class TestHeartbeatTimeout(unittest.IsolatedAsyncioTestCase):
         await udm.check_heartbeat_timeouts(timeout_secs=60.0, grace_secs=10.0)
 
         from core.unified.models import UnifiedDeviceStatus
+
         self.assertEqual(udm._devices["hb-dev-3"].status, UnifiedDeviceStatus.OFFLINE)
 
         # New heartbeat should recover the device.
@@ -92,6 +99,7 @@ class TestHeartbeatTimeout(unittest.IsolatedAsyncioTestCase):
 
     async def test_already_offline_device_not_listed_again(self):
         from core.unified.models import UnifiedDeviceStatus
+
         udm = _fresh_udm()
         dev = _make_device("hb-dev-4")
         udm.register_device(dev)
@@ -107,6 +115,7 @@ class TestHeartbeatTimeout(unittest.IsolatedAsyncioTestCase):
 # ===========================================================================
 # 2. Device registration de-duplication
 # ===========================================================================
+
 
 class TestDeviceRegistrationDedup(unittest.TestCase):
     """Repeated registration of the same device_id must not create duplicates."""
@@ -149,6 +158,7 @@ class TestDeviceRegistrationDedup(unittest.TestCase):
 
     def test_duplicate_registration_sets_online(self):
         from core.unified.models import UnifiedDeviceStatus
+
         udm = _fresh_udm()
         dev1 = _make_device("dup-dev-4")
         udm.register_device(dev1)
@@ -169,6 +179,7 @@ class TestDeviceRegistrationDedup(unittest.TestCase):
 # 3. Idempotent task-result handling — MessageHandler
 # ===========================================================================
 
+
 class TestMessageHandlerTaskResultIdempotency(unittest.IsolatedAsyncioTestCase):
     """_handle_task_result must ignore duplicate task_id."""
 
@@ -179,6 +190,7 @@ class TestMessageHandlerTaskResultIdempotency(unittest.IsolatedAsyncioTestCase):
                 get_durable_result_id_store,
                 reset_durable_result_id_store,
             )
+
             get_durable_result_id_store().clear()
             reset_durable_result_id_store()
         except Exception:
@@ -192,11 +204,13 @@ class TestMessageHandlerTaskResultIdempotency(unittest.IsolatedAsyncioTestCase):
 
     def _make_handler(self):
         from galaxy_gateway.handlers.message_handler import MessageHandler
+
         dm = MagicMock()
         return MessageHandler(dm)
 
     def _make_task_result_message(self, task_id: str, payload: dict = None):
         from galaxy_gateway.protocol import AIPMessage, MessageType
+
         return AIPMessage(
             type=MessageType.TASK_RESULT,
             device_id="test-device",
@@ -264,6 +278,7 @@ class TestMessageHandlerTaskResultIdempotency(unittest.IsolatedAsyncioTestCase):
 # 4. Idempotent task-result handling — DeviceRouter
 # ===========================================================================
 
+
 class TestDeviceRouterTaskResultIdempotency(unittest.IsolatedAsyncioTestCase):
     """handle_task_result must ignore duplicate task_id in DeviceRouter."""
 
@@ -274,6 +289,7 @@ class TestDeviceRouterTaskResultIdempotency(unittest.IsolatedAsyncioTestCase):
                 get_durable_result_id_store,
                 reset_durable_result_id_store,
             )
+
             get_durable_result_id_store().clear()
             reset_durable_result_id_store()
         except Exception:
@@ -287,6 +303,7 @@ class TestDeviceRouterTaskResultIdempotency(unittest.IsolatedAsyncioTestCase):
 
     async def test_first_result_stored(self):
         from galaxy_gateway.device_router import DeviceRouter
+
         router = DeviceRouter()
         with patch(
             "galaxy_gateway.orchestrator.parallel_tracker.record_parallel_fields",
@@ -298,6 +315,7 @@ class TestDeviceRouterTaskResultIdempotency(unittest.IsolatedAsyncioTestCase):
 
     async def test_duplicate_result_not_overwritten(self):
         from galaxy_gateway.device_router import DeviceRouter
+
         router = DeviceRouter()
         first_result = {"success": True, "data": "original"}
         second_result = {"success": False, "data": "should_be_ignored"}
@@ -314,6 +332,7 @@ class TestDeviceRouterTaskResultIdempotency(unittest.IsolatedAsyncioTestCase):
 
     async def test_duplicate_does_not_re_signal_event(self):
         from galaxy_gateway.device_router import DeviceRouter
+
         router = DeviceRouter()
         event = asyncio.Event()
         router._task_events["tid-3"] = event
@@ -334,11 +353,13 @@ class TestDeviceRouterTaskResultIdempotency(unittest.IsolatedAsyncioTestCase):
 # 5. Local cache only updated after UDM write success (regression guard)
 # ===========================================================================
 
+
 class TestSSoTLocalCacheGuard(unittest.TestCase):
     """Local cache must NOT be updated when UDM write fails (regression guard)."""
 
     def _make_device_info(self, device_id="gc-test"):
         from galaxy_gateway.protocol import DeviceInfo, DeviceType
+
         return DeviceInfo(
             device_id=device_id,
             device_type=DeviceType.ANDROID_PHONE,
@@ -346,6 +367,7 @@ class TestSSoTLocalCacheGuard(unittest.TestCase):
 
     def test_register_no_local_update_on_udm_failure(self):
         from galaxy_gateway.handlers.device_manager import DeviceManager
+
         dm = DeviceManager()
         dev = self._make_device_info("gc-fail")
 
@@ -357,6 +379,7 @@ class TestSSoTLocalCacheGuard(unittest.TestCase):
 
     def test_register_local_update_on_udm_success(self):
         from galaxy_gateway.handlers.device_manager import DeviceManager
+
         dm = DeviceManager()
         dev = self._make_device_info("gc-ok")
 
@@ -369,6 +392,7 @@ class TestSSoTLocalCacheGuard(unittest.TestCase):
     def test_heartbeat_no_status_update_on_udm_failure(self):
         from galaxy_gateway.handlers.device_manager import DeviceManager
         from galaxy_gateway.protocol import DeviceInfo, DeviceType
+
         dm = DeviceManager()
         dm.devices["gc-hb"] = DeviceInfo(device_id="gc-hb", device_type=DeviceType.ANDROID_PHONE)
         dm.device_status["gc-hb"] = "offline"

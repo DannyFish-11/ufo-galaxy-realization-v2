@@ -35,7 +35,7 @@ import logging
 import math
 import os
 import time
-from typing import Dict, Any, List
+from typing import Any, Dict, List
 
 logger = logging.getLogger("Galaxy.Resilience.AdaptiveSemaphore")
 
@@ -87,7 +87,7 @@ class AdaptiveSemaphore:
         self._lock = asyncio.Lock()
 
         self._latency_samples: List[float] = []
-        self._error_flags: List[int] = []   # 1 = error, 0 = ok
+        self._error_flags: List[int] = []  # 1 = error, 0 = ok
         self._last_probe: float = time.monotonic()
 
         self._total_acquired: int = 0
@@ -115,8 +115,8 @@ class AdaptiveSemaphore:
             self._latency_samples.append(latency_ms)
             self._error_flags.append(1 if error else 0)
             if len(self._latency_samples) > self._sample_window:
-                self._latency_samples = self._latency_samples[-self._sample_window:]
-                self._error_flags = self._error_flags[-self._sample_window:]
+                self._latency_samples = self._latency_samples[-self._sample_window :]
+                self._error_flags = self._error_flags[-self._sample_window :]
 
             now = time.monotonic()
             if (now - self._last_probe) >= self._probe_interval:
@@ -136,9 +136,11 @@ class AdaptiveSemaphore:
             new_limit = max(self._min_limit, math.floor(self._limit / 2))
             if new_limit != self._limit:
                 logger.warning(
-                    "AdaptiveSemaphore: decreasing limit %d → %d "
-                    "(p99=%.1fms error_rate=%.2f)",
-                    self._limit, new_limit, p99, error_rate,
+                    "AdaptiveSemaphore: decreasing limit %d → %d " "(p99=%.1fms error_rate=%.2f)",
+                    self._limit,
+                    new_limit,
+                    p99,
+                    error_rate,
                 )
                 self._adjust_semaphore(new_limit)
                 self._total_adjustments += 1
@@ -147,9 +149,11 @@ class AdaptiveSemaphore:
             new_limit = min(self._max_limit, self._limit + 1)
             if new_limit != self._limit:
                 logger.debug(
-                    "AdaptiveSemaphore: increasing limit %d → %d "
-                    "(p99=%.1fms error_rate=%.2f)",
-                    self._limit, new_limit, p99, error_rate,
+                    "AdaptiveSemaphore: increasing limit %d → %d " "(p99=%.1fms error_rate=%.2f)",
+                    self._limit,
+                    new_limit,
+                    p99,
+                    error_rate,
                 )
                 self._adjust_semaphore(new_limit)
                 self._total_adjustments += 1

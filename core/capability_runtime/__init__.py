@@ -81,31 +81,31 @@ NO_PREFERENCE
 from __future__ import annotations
 
 from .capability_constraint import (
-    CapabilityConstraintFlags,
-    NO_CONSTRAINTS,
     CONFIRMATION_REQUIRED,
-    LOCAL_ONLY,
-    LATENCY_CRITICAL,
     EXCLUSIVE_LOCAL,
+    LATENCY_CRITICAL,
+    LOCAL_ONLY,
+    NO_CONSTRAINTS,
+    CapabilityConstraintFlags,
 )
 from .capability_preference import (
-    CapabilityPreference,
     NO_PREFERENCE,
+    CapabilityPreference,
 )
 from .capability_registry_runtime import CapabilityRuntimeRegistry
 from .capability_state import (
+    AVAILABILITY_DESCRIPTIONS,
     CapabilityAvailability,
     CapabilityRuntimeState,
     availability_description,
-    AVAILABILITY_DESCRIPTIONS,
 )
 from .capability_summary import (
-    CapabilityRuntimeSummary,
-    UNKNOWN_CAPABILITY_SUMMARY,
-    make_capability_summary,
-    get_capability_runtime_snapshot,
-    attach_runtime_summary_to_projection,
     SCHEMA_VERSION,
+    UNKNOWN_CAPABILITY_SUMMARY,
+    CapabilityRuntimeSummary,
+    attach_runtime_summary_to_projection,
+    get_capability_runtime_snapshot,
+    make_capability_summary,
 )
 
 __all__ = [

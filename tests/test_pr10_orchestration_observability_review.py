@@ -62,7 +62,6 @@ from core.orchestration_review_surface import (
     reset_legacy_dispatch_counters,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -429,9 +428,7 @@ def test_snapshot_to_dict_top_level_keys():
         "_partial",
         "_partial_reasons",
     }
-    assert expected_keys.issubset(set(d.keys())), (
-        f"Missing keys: {expected_keys - set(d.keys())}"
-    )
+    assert expected_keys.issubset(set(d.keys())), f"Missing keys: {expected_keys - set(d.keys())}"
 
 
 def test_snapshot_to_dict_is_json_serialisable():

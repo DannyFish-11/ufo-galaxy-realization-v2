@@ -88,17 +88,15 @@ try:
 except ImportError:
     _MODULE_AVAILABLE = False
 
-_SKIP_MODULE = pytest.mark.skipif(
-    not _MODULE_AVAILABLE, reason="android_participant_truth_ingress unavailable"
-)
+_SKIP_MODULE = pytest.mark.skipif(not _MODULE_AVAILABLE, reason="android_participant_truth_ingress unavailable")
 
 try:
     from core.delegated_runtime_execution_tracker import (
         AcknowledgmentSignal,
-        DelegatedExecutionTrackingRuntime,
         DelegatedExecutionPhase,
-        create_execution_tracking_record,
+        DelegatedExecutionTrackingRuntime,
         apply_acknowledgment_signal,
+        create_execution_tracking_record,
         get_execution_tracking_runtime,
     )
 
@@ -106,17 +104,15 @@ try:
 except ImportError:
     _TRACKER_AVAILABLE = False
 
-_SKIP_TRACKER = pytest.mark.skipif(
-    not _TRACKER_AVAILABLE, reason="delegated_runtime_execution_tracker unavailable"
-)
+_SKIP_TRACKER = pytest.mark.skipif(not _TRACKER_AVAILABLE, reason="delegated_runtime_execution_tracker unavailable")
 
 try:
     from core.attached_runtime_session_registry import (
         AttachedSessionRegistry,
         get_session_registry,
-        reset_session_registry,
-        register_session,
         lookup_active_session,
+        register_session,
+        reset_session_registry,
     )
 
     _REGISTRY_AVAILABLE = True
@@ -125,9 +121,9 @@ except ImportError:
 
 try:
     from core.replay_foundation import (
+        emit_runtime_event,
         get_replay_foundation,
         reset_replay_foundation,
-        emit_runtime_event,
     )
 
     _REPLAY_AVAILABLE = True
@@ -237,9 +233,18 @@ class TestGroupA_AuthorityChain:
 class TestGroupB_TruthKindEnum:
     def test_b1_all_expected_values_present(self) -> None:
         expected = {
-            "session_snapshot", "readiness_assessment", "task_phase",
-            "runtime_state", "cancel", "status", "failure", "result", "unknown",
-            "reconciliation_signal", "governance_artifact", "recovery_state",
+            "session_snapshot",
+            "readiness_assessment",
+            "task_phase",
+            "runtime_state",
+            "cancel",
+            "status",
+            "failure",
+            "result",
+            "unknown",
+            "reconciliation_signal",
+            "governance_artifact",
+            "recovery_state",
         }
         actual = {m.value for m in AndroidParticipantTruthKind}
         assert expected == actual
@@ -407,18 +412,14 @@ class TestGroupE_CancelSignal:
 
     def test_e2_cancel_sets_canonical_update(self) -> None:
         rt, _ = _make_runtime(contract_id="cid-e2", initial_phase="in_progress")
-        env = AndroidParticipantTruthEnvelope(
-            truth_kind=AndroidParticipantTruthKind.cancel, contract_id="cid-e2"
-        )
+        env = AndroidParticipantTruthEnvelope(truth_kind=AndroidParticipantTruthKind.cancel, contract_id="cid-e2")
         outcome = reconcile_android_participant_truth(env, runtime=rt)
         assert outcome.canonical_update, "canonical_update must be set on cancel"
         assert "cancel" in outcome.canonical_update.lower()
 
     def test_e3_cancel_outcome_is_accepted(self) -> None:
         rt, _ = _make_runtime(contract_id="cid-e3", initial_phase="in_progress")
-        env = AndroidParticipantTruthEnvelope(
-            truth_kind=AndroidParticipantTruthKind.cancel, contract_id="cid-e3"
-        )
+        env = AndroidParticipantTruthEnvelope(truth_kind=AndroidParticipantTruthKind.cancel, contract_id="cid-e3")
         outcome = reconcile_android_participant_truth(env, runtime=rt)
         assert outcome.is_accepted()
 
@@ -445,9 +446,7 @@ class TestGroupF_FailureSignal:
 
     def test_f2_failure_sets_canonical_update(self) -> None:
         rt, _ = _make_runtime(contract_id="cid-f2", initial_phase="in_progress")
-        env = AndroidParticipantTruthEnvelope(
-            truth_kind=AndroidParticipantTruthKind.failure, contract_id="cid-f2"
-        )
+        env = AndroidParticipantTruthEnvelope(truth_kind=AndroidParticipantTruthKind.failure, contract_id="cid-f2")
         outcome = reconcile_android_participant_truth(env, runtime=rt)
         assert "fail" in outcome.canonical_update.lower()
 
@@ -577,9 +576,7 @@ class TestGroupI_StatusSignal:
 
     def test_i2_status_updates_canonical_update(self) -> None:
         rt, _ = _make_runtime(contract_id="cid-i2", initial_phase="acknowledged")
-        env = AndroidParticipantTruthEnvelope(
-            truth_kind=AndroidParticipantTruthKind.status, contract_id="cid-i2"
-        )
+        env = AndroidParticipantTruthEnvelope(truth_kind=AndroidParticipantTruthKind.status, contract_id="cid-i2")
         outcome = reconcile_android_participant_truth(env, runtime=rt)
         assert outcome.canonical_update
 
@@ -1012,11 +1009,11 @@ class TestGroupR_CoreRuntimeReexports:
         from core.runtime import (  # noqa: F401
             ANDROID_PARTICIPANT_TRUTH_INGRESS_AUTHORITY,
             ANDROID_PARTICIPANT_TRUTH_INGRESS_PR4V2_SENTINEL,
+            CANCEL_FAILURE_RESULT_AFFECT_CANONICAL_STATE_POLICY,
+            V2_IS_CANONICAL_ORCHESTRATION_AUTHORITY_SENTINEL,
             AndroidParticipantReconcileOutcome,
             AndroidParticipantTruthEnvelope,
             AndroidParticipantTruthKind,
-            CANCEL_FAILURE_RESULT_AFFECT_CANONICAL_STATE_POLICY,
-            V2_IS_CANONICAL_ORCHESTRATION_AUTHORITY_SENTINEL,
             extract_participant_truth_envelope,
             ingest_android_participant_truth_message,
             reconcile_android_participant_truth,
@@ -1024,10 +1021,12 @@ class TestGroupR_CoreRuntimeReexports:
 
     def test_r2_pr4v2_sentinel_in_runtime_all(self) -> None:
         import core.runtime as _runtime_pkg
+
         assert "ANDROID_PARTICIPANT_TRUTH_INGRESS_PR4V2_SENTINEL" in dir(_runtime_pkg)
 
     def test_r3_reconcile_function_in_runtime_all(self) -> None:
         import core.runtime as _runtime_pkg
+
         assert "reconcile_android_participant_truth" in dir(_runtime_pkg)
 
 
@@ -1098,9 +1097,7 @@ class TestGroupT_ReconcileOutcome:
         assert not outcome.is_accepted()
 
     def test_t4_is_accepted_false_when_reject_reason_set(self) -> None:
-        outcome = AndroidParticipantReconcileOutcome(
-            was_reconciled=True, reject_reason="some_reason"
-        )
+        outcome = AndroidParticipantReconcileOutcome(was_reconciled=True, reject_reason="some_reason")
         assert not outcome.is_accepted()
 
     def test_t5_to_dict_contains_expected_keys(self) -> None:

@@ -11,6 +11,7 @@ path / methods / dependant / dependencies)。
 从这里拿摊平视图,不再各写各的遍历。旧版 FastAPI(无懒挂载)下本助手
 退化为原样遍历,双版本兼容。
 """
+
 from __future__ import annotations
 
 from typing import Any, Iterator
@@ -45,7 +46,4 @@ def find_route(app_or_router: Any, path: str, method: str | None = None) -> Any:
 
 def route_paths(app_or_router: Any) -> set:
     """全部路由路径集合(WebSocket 路由也计入)。"""
-    return {
-        p for p in (getattr(r, "path", None) for r in iter_flat_routes(app_or_router))
-        if p
-    }
+    return {p for p in (getattr(r, "path", None) for r in iter_flat_routes(app_or_router)) if p}

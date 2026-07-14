@@ -657,16 +657,12 @@ class OrchestrationDecision:
         this record as their canonical projection source.
     """
 
-    orchestration_id: str = field(
-        default_factory=lambda: f"orch_{uuid.uuid4().hex[:12]}"
-    )
+    orchestration_id: str = field(default_factory=lambda: f"orch_{uuid.uuid4().hex[:12]}")
     execution_mode: str = ExecutionMode.SINGLE_DEVICE_REMOTE.value
     can_proceed: bool = False
     ready_slots: List[DeviceOrchestrationSlot] = field(default_factory=list)
     blocked_slots: List[DeviceOrchestrationSlot] = field(default_factory=list)
-    completion_contract: CompletionContract = field(
-        default_factory=CompletionContract
-    )
+    completion_contract: CompletionContract = field(default_factory=CompletionContract)
     block_reason: str = ""
     spine_notes: List[str] = field(default_factory=list)
     lifecycle_stage: str = OrchestrationLifecycleStage.DISPATCH_EVALUATED.value
@@ -769,9 +765,7 @@ def _slot_from_canonical(
     ``DispatchReadinessStatus`` vocabulary for the ``readiness_status`` field
     while also exposing the canonical status in the new ``slot_status`` field.
     """
-    readiness_status = _CANONICAL_SLOT_TO_READINESS_STATUS.get(
-        canonical_slot.status, canonical_slot.status
-    )
+    readiness_status = _CANONICAL_SLOT_TO_READINESS_STATUS.get(canonical_slot.status, canonical_slot.status)
     return DeviceOrchestrationSlot(
         device_id=canonical_slot.device_id,
         dispatch_ready=dispatch_ready,
@@ -793,8 +787,7 @@ def _evaluate_impl(request: OrchestrationRequest) -> OrchestrationDecision:
     """Internal spine evaluation — V4: uses canonical dispatch-slot authority."""
     if get_canonical_dispatch_slots is None:
         raise RuntimeError(
-            "core.canonical_dispatch_slot_authority is unavailable; "
-            "cannot evaluate orchestration request."
+            "core.canonical_dispatch_slot_authority is unavailable; " "cannot evaluate orchestration request."
         )
 
     spine_notes: List[str] = []
@@ -808,10 +801,7 @@ def _evaluate_impl(request: OrchestrationRequest) -> OrchestrationDecision:
             execution_mode=mode,
             can_proceed=False,
             block_reason="No target devices specified in orchestration request.",
-            spine_notes=[
-                "target_device_ids is empty — cannot proceed without at "
-                "least one candidate device"
-            ],
+            spine_notes=["target_device_ids is empty — cannot proceed without at " "least one candidate device"],
             lifecycle_stage=OrchestrationLifecycleStage.ABORTED.value,
         )
 
@@ -819,9 +809,7 @@ def _evaluate_impl(request: OrchestrationRequest) -> OrchestrationDecision:
     # Evaluate all target devices via canonical dispatch-slot authority
     # (all ten legality dimensions)
     # ----------------------------------------------------------------
-    continuity_context: Dict[str, Any] = (
-        (request.metadata or {}).get("continuity_context") or {}
-    )
+    continuity_context: Dict[str, Any] = (request.metadata or {}).get("continuity_context") or {}
     slots_result = get_canonical_dispatch_slots(
         device_ids=request.target_device_ids,
         execution_mode=mode,
@@ -842,14 +830,10 @@ def _evaluate_impl(request: OrchestrationRequest) -> OrchestrationDecision:
     device_order = {did: idx for idx, did in enumerate(request.target_device_ids)}
 
     for canonical_slot in slots_result.approved_slots:
-        ready_slots.append(
-            _slot_from_canonical(canonical_slot, dispatch_ready=True, device_order=device_order)
-        )
+        ready_slots.append(_slot_from_canonical(canonical_slot, dispatch_ready=True, device_order=device_order))
 
     for canonical_slot in slots_result.blocked_slots:
-        blocked_slots.append(
-            _slot_from_canonical(canonical_slot, dispatch_ready=False, device_order=device_order)
-        )
+        blocked_slots.append(_slot_from_canonical(canonical_slot, dispatch_ready=False, device_order=device_order))
         spine_notes.append(
             f"device_id={canonical_slot.device_id!r} blocked: "
             f"slot_status={canonical_slot.status!r} "
@@ -874,10 +858,7 @@ def _evaluate_impl(request: OrchestrationRequest) -> OrchestrationDecision:
         )
         if blocked_slots:
             first_blocked = blocked_slots[0]
-            block_reason += (
-                f" First blocked device={first_blocked.device_id!r}: "
-                f"{first_blocked.readiness_reason!r}"
-            )
+            block_reason += f" First blocked device={first_blocked.device_id!r}: " f"{first_blocked.readiness_reason!r}"
 
     lifecycle_stage = (
         OrchestrationLifecycleStage.DISPATCH_EVALUATED.value
@@ -920,9 +901,7 @@ def _evaluate_impl(request: OrchestrationRequest) -> OrchestrationDecision:
     return decision
 
 
-def _derive_completion_contract(
-    mode: str, ready_slots: List[DeviceOrchestrationSlot]
-) -> CompletionContract:
+def _derive_completion_contract(mode: str, ready_slots: List[DeviceOrchestrationSlot]) -> CompletionContract:
     """Derive the appropriate completion contract for the given mode.
 
     V5: populates blocked_device_exclusion, degraded_success_allowed, and

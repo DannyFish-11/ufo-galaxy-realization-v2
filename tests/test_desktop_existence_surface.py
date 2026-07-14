@@ -23,7 +23,6 @@ import unittest
 from typing import Any, Dict
 from unittest.mock import MagicMock, patch
 
-
 # ---------------------------------------------------------------------------
 # A. Payload model — structure & serialisation
 # ---------------------------------------------------------------------------
@@ -35,16 +34,18 @@ class TestDesktopExistenceSurfaceStructure(unittest.TestCase):
 
     def test_A01_module_imports_without_error(self):
         from core.desktop_existence_surface import (
-            DesktopExistenceSurface,
             DESKTOP_EXISTENCE_SURFACE_AUTHORITY,
             EXISTENCE_SURFACE_SCHEMA_VERSION,
+            DesktopExistenceSurface,
         )
+
         self.assertIsInstance(DESKTOP_EXISTENCE_SURFACE_AUTHORITY, str)
         self.assertIn("DESKTOP_EXISTENCE_SURFACE_V1", DESKTOP_EXISTENCE_SURFACE_AUTHORITY)
         self.assertEqual(EXISTENCE_SURFACE_SCHEMA_VERSION, "1.1")
 
     def test_A02_default_construction(self):
         from core.desktop_existence_surface import DesktopExistenceSurface
+
         s = DesktopExistenceSurface()
         self.assertIsInstance(s.surface_id, str)
         self.assertTrue(s.surface_id.startswith("exist_"))
@@ -54,6 +55,7 @@ class TestDesktopExistenceSurfaceStructure(unittest.TestCase):
 
     def test_A03_subject_lifecycle_snapshot_fields(self):
         from core.desktop_existence_surface import SubjectLifecycleSnapshot
+
         snap = SubjectLifecycleSnapshot()
         self.assertEqual(snap.dominant_tristate, "silent")
         self.assertEqual(snap.active_session_count, 0)
@@ -62,12 +64,14 @@ class TestDesktopExistenceSurfaceStructure(unittest.TestCase):
 
     def test_A04_shell_clothing_snapshot_fields(self):
         from core.desktop_existence_surface import ShellClothingSnapshot
+
         snap = ShellClothingSnapshot()
         self.assertEqual(snap.shell_state, "dormant")
         self.assertEqual(snap._source, "state_machine_ui_integration")
 
     def test_A05_continuum_posture_snapshot_fields(self):
         from core.desktop_existence_surface import ContinuumPostureSnapshot
+
         snap = ContinuumPostureSnapshot()
         self.assertEqual(snap.tri_state_phase, "")
         self.assertIsNone(snap.runtime_domain)
@@ -77,6 +81,7 @@ class TestDesktopExistenceSurfaceStructure(unittest.TestCase):
 
     def test_A06_cognitive_field_snapshot_fields(self):
         from core.desktop_existence_surface import CognitiveFieldSnapshot
+
         snap = CognitiveFieldSnapshot()
         self.assertEqual(snap.activation, 0.0)
         self.assertEqual(snap.intent_strength, 0.0)
@@ -88,6 +93,7 @@ class TestDesktopExistenceSurfaceStructure(unittest.TestCase):
 
     def test_A07_android_presence_signals_fields(self):
         from core.desktop_existence_surface import AndroidPresenceSignals
+
         snap = AndroidPresenceSignals()
         self.assertEqual(snap.total_devices_with_snapshot, 0)
         self.assertEqual(snap.local_loop_ready_count, 0)
@@ -97,6 +103,7 @@ class TestDesktopExistenceSurfaceStructure(unittest.TestCase):
 
     def test_A08_existence_projection_fields(self):
         from core.desktop_existence_surface import ExistenceProjection
+
         proj = ExistenceProjection()
         self.assertEqual(proj.presence_verdict, "dormant")
         self.assertIsInstance(proj.contributing_families, list)
@@ -104,6 +111,7 @@ class TestDesktopExistenceSurfaceStructure(unittest.TestCase):
 
     def test_A09_to_dict_contains_all_required_keys(self):
         from core.desktop_existence_surface import DesktopExistenceSurface
+
         s = DesktopExistenceSurface()
         d = s.to_dict()
         required_keys = {
@@ -123,6 +131,7 @@ class TestDesktopExistenceSurfaceStructure(unittest.TestCase):
 
     def test_A10_to_dict_is_json_serialisable(self):
         from core.desktop_existence_surface import DesktopExistenceSurface
+
         s = DesktopExistenceSurface()
         raw = json.dumps(s.to_dict())
         self.assertIsInstance(raw, str)
@@ -132,26 +141,29 @@ class TestDesktopExistenceSurfaceStructure(unittest.TestCase):
 
     def test_A11_unique_surface_ids(self):
         from core.desktop_existence_surface import DesktopExistenceSurface
+
         ids = {DesktopExistenceSurface().surface_id for _ in range(20)}
         self.assertEqual(len(ids), 20)
 
     def test_A12_authority_in_source_field(self):
         from core.desktop_existence_surface import (
-            DesktopExistenceSurface,
             DESKTOP_EXISTENCE_SURFACE_AUTHORITY,
+            DesktopExistenceSurface,
         )
+
         s = DesktopExistenceSurface()
         self.assertEqual(s._source, DESKTOP_EXISTENCE_SURFACE_AUTHORITY)
 
     def test_A13_sub_dataclass_source_fields_are_real_module_names(self):
         """Every _source field must name a real current-codebase module (not fabricated)."""
         from core.desktop_existence_surface import (
-            SubjectLifecycleSnapshot,
-            ShellClothingSnapshot,
-            ContinuumPostureSnapshot,
-            CognitiveFieldSnapshot,
             AndroidPresenceSignals,
+            CognitiveFieldSnapshot,
+            ContinuumPostureSnapshot,
+            ShellClothingSnapshot,
+            SubjectLifecycleSnapshot,
         )
+
         expected_sources = {
             SubjectLifecycleSnapshot()._source: "desktop_presence_runtime",
             ShellClothingSnapshot()._source: "state_machine_ui_integration",
@@ -173,22 +185,26 @@ class TestDesktopExistenceSurfaceBuilder(unittest.TestCase):
 
     def setUp(self):
         from core.desktop_existence_surface import reset_desktop_existence_surface_builder
+
         reset_desktop_existence_surface_builder()
 
     def tearDown(self):
         from core.desktop_existence_surface import reset_desktop_existence_surface_builder
+
         reset_desktop_existence_surface_builder()
 
     def test_B01_builder_imports_and_instantiates(self):
         from core.desktop_existence_surface import DesktopExistenceSurfaceBuilder
+
         builder = DesktopExistenceSurfaceBuilder()
         self.assertIsNotNone(builder)
 
     def test_B02_build_returns_desktop_existence_surface(self):
         from core.desktop_existence_surface import (
-            DesktopExistenceSurfaceBuilder,
             DesktopExistenceSurface,
+            DesktopExistenceSurfaceBuilder,
         )
+
         builder = DesktopExistenceSurfaceBuilder()
         result = builder.build()
         self.assertIsInstance(result, DesktopExistenceSurface)
@@ -236,9 +252,10 @@ class TestDesktopExistenceSurfaceBuilder(unittest.TestCase):
     def test_B08_build_always_returns_even_when_all_sources_fail(self):
         """Builder must return a surface even when every source singleton fails."""
         from core.desktop_existence_surface import (
-            DesktopExistenceSurfaceBuilder,
             DesktopExistenceSurface,
+            DesktopExistenceSurfaceBuilder,
         )
+
         builder = DesktopExistenceSurfaceBuilder()
 
         with (
@@ -264,6 +281,7 @@ class TestDesktopExistenceSurfaceBuilder(unittest.TestCase):
             get_desktop_existence_surface_builder,
             reset_desktop_existence_surface_builder,
         )
+
         b1 = get_desktop_existence_surface_builder()
         reset_desktop_existence_surface_builder()
         b2 = get_desktop_existence_surface_builder()
@@ -271,9 +289,10 @@ class TestDesktopExistenceSurfaceBuilder(unittest.TestCase):
 
     def test_B11_build_convenience_function(self):
         from core.desktop_existence_surface import (
-            build_desktop_existence_surface,
             DesktopExistenceSurface,
+            build_desktop_existence_surface,
         )
+
         result = build_desktop_existence_surface()
         self.assertIsInstance(result, DesktopExistenceSurface)
 
@@ -289,13 +308,14 @@ class TestExistenceProjectionDerivation(unittest.TestCase):
     def _derive(self, fam1_kw=None, fam2_kw=None, fam3_kw=None, fam4_kw=None, fam5_kw=None):
         """Helper: build snapshots with given kwargs and run derivation."""
         from core.desktop_existence_surface import (
-            DesktopExistenceSurfaceBuilder,
-            SubjectLifecycleSnapshot,
-            ShellClothingSnapshot,
-            ContinuumPostureSnapshot,
-            CognitiveFieldSnapshot,
             AndroidPresenceSignals,
+            CognitiveFieldSnapshot,
+            ContinuumPostureSnapshot,
+            DesktopExistenceSurfaceBuilder,
+            ShellClothingSnapshot,
+            SubjectLifecycleSnapshot,
         )
+
         fam1 = SubjectLifecycleSnapshot(**(fam1_kw or {}))
         fam2 = ShellClothingSnapshot(**(fam2_kw or {}))
         fam3 = ContinuumPostureSnapshot(**(fam3_kw or {}))
@@ -337,10 +357,12 @@ class TestExistenceProjectionDerivation(unittest.TestCase):
         self.assertEqual(proj.presence_verdict, "background")
 
     def test_C08_android_local_loop_ready_yields_background(self):
-        proj = self._derive(fam5_kw={
-            "total_devices_with_snapshot": 1,
-            "local_loop_ready_count": 1,
-        })
+        proj = self._derive(
+            fam5_kw={
+                "total_devices_with_snapshot": 1,
+                "local_loop_ready_count": 1,
+            }
+        )
         self.assertEqual(proj.presence_verdict, "background")
 
     def test_C09_island_shell_yields_background(self):
@@ -382,13 +404,14 @@ class TestExistenceProjectionDerivation(unittest.TestCase):
         """presence_verdict must only be one of the four canonical values."""
         supported = {"dormant", "background", "active", "expressing"}
         from core.desktop_existence_surface import (
-            DesktopExistenceSurfaceBuilder,
-            SubjectLifecycleSnapshot,
-            ShellClothingSnapshot,
-            ContinuumPostureSnapshot,
-            CognitiveFieldSnapshot,
             AndroidPresenceSignals,
+            CognitiveFieldSnapshot,
+            ContinuumPostureSnapshot,
+            DesktopExistenceSurfaceBuilder,
+            ShellClothingSnapshot,
+            SubjectLifecycleSnapshot,
         )
+
         builder = DesktopExistenceSurfaceBuilder()
         test_cases = [
             {},
@@ -424,6 +447,7 @@ class TestStateFamilyGrounding(unittest.TestCase):
                 DesktopPresenceRuntime,
                 get_desktop_presence_runtime,
             )
+
             runtime = get_desktop_presence_runtime()
             # presence_summary 已从属性演进为方法
             summary = runtime.presence_summary()
@@ -433,15 +457,17 @@ class TestStateFamilyGrounding(unittest.TestCase):
             # numpy or other heavy dependency not installed in this env;
             # assert at least the module and class are importable by source inspection
             import importlib.util
+
             spec = importlib.util.find_spec("core.desktop_presence_runtime")
             self.assertIsNotNone(spec, f"core.desktop_presence_runtime not found: {exc}")
 
     def test_D02_shell_clothing_source_module_exists(self):
         """state_machine_ui_integration must be importable and have SystemStateMachine."""
         from system_integration.state_machine_ui_integration import (
-            SystemStateMachine,
             SystemState,
+            SystemStateMachine,
         )
+
         sm = SystemStateMachine()
         self.assertIsInstance(sm.current_state, SystemState)
 
@@ -466,8 +492,9 @@ class TestStateFamilyGrounding(unittest.TestCase):
 
     def test_D05_existence_surface_has_five_and_only_five_family_fields(self):
         """DesktopExistenceSurface must expose exactly the five defined state families."""
-        from core.desktop_existence_surface import DesktopExistenceSurface
         import dataclasses
+
+        from core.desktop_existence_surface import DesktopExistenceSurface
 
         field_names = {f.name for f in dataclasses.fields(DesktopExistenceSurface)}
         required_family_fields = {
@@ -490,8 +517,9 @@ class TestStateFamilyGrounding(unittest.TestCase):
         Verify that it contains no _source field claiming a real module —
         it must derive from the five families, not introduce a new one.
         """
-        from core.desktop_existence_surface import ExistenceProjection
         import dataclasses
+
+        from core.desktop_existence_surface import ExistenceProjection
 
         field_names = {f.name for f in dataclasses.fields(ExistenceProjection)}
         # ExistenceProjection must NOT have a _source field claiming canonical authority
@@ -530,6 +558,7 @@ class TestRegressionSafety(unittest.TestCase):
         builder = DesktopExistenceSurfaceBuilder()
         # Patch _read_subject_lifecycle to return a fabricated source
         from core.desktop_existence_surface import SubjectLifecycleSnapshot
+
         fake = SubjectLifecycleSnapshot(_source="fabricated_module")
 
         with patch.object(builder, "_read_subject_lifecycle", return_value=fake):
@@ -544,6 +573,7 @@ class TestRegressionSafety(unittest.TestCase):
             DesktopExistenceSurfaceBuilder,
             SubjectLifecycleSnapshot,
         )
+
         builder = DesktopExistenceSurfaceBuilder()
 
         silent_snap = SubjectLifecycleSnapshot(dominant_tristate="silent", active_session_count=0)
@@ -564,6 +594,7 @@ class TestRegressionSafety(unittest.TestCase):
             DesktopExistenceSurfaceBuilder,
             ShellClothingSnapshot,
         )
+
         builder = DesktopExistenceSurfaceBuilder()
 
         dormant_snap = ShellClothingSnapshot(shell_state="dormant")
@@ -581,9 +612,10 @@ class TestRegressionSafety(unittest.TestCase):
     def test_E04_cognitive_field_running_changes_verdict(self):
         """CognitiveFieldEngine.is_running=True must push verdict to at least 'background'."""
         from core.desktop_existence_surface import (
-            DesktopExistenceSurfaceBuilder,
             CognitiveFieldSnapshot,
+            DesktopExistenceSurfaceBuilder,
         )
+
         builder = DesktopExistenceSurfaceBuilder()
 
         stopped_snap = CognitiveFieldSnapshot(is_running=False, tick_count=0)
@@ -601,9 +633,10 @@ class TestRegressionSafety(unittest.TestCase):
     def test_E05_android_local_loop_ready_changes_verdict(self):
         """Android local_loop_ready_count > 0 must push verdict to at least 'background'."""
         from core.desktop_existence_surface import (
-            DesktopExistenceSurfaceBuilder,
             AndroidPresenceSignals,
+            DesktopExistenceSurfaceBuilder,
         )
+
         builder = DesktopExistenceSurfaceBuilder()
 
         no_android = AndroidPresenceSignals(total_devices_with_snapshot=0, local_loop_ready_count=0)
@@ -621,6 +654,7 @@ class TestRegressionSafety(unittest.TestCase):
     def test_E06_to_dict_existence_projection_has_verdict_key(self):
         """to_dict() must include 'existence_projection.presence_verdict' — regression guard."""
         from core.desktop_existence_surface import DesktopExistenceSurface
+
         s = DesktopExistenceSurface()
         d = s.to_dict()
         self.assertIn("existence_projection", d)
@@ -629,6 +663,7 @@ class TestRegressionSafety(unittest.TestCase):
     def test_E07_all_five_family_dicts_have_source_fields(self):
         """Every state-family sub-dict in to_dict() must have a '_source' key."""
         from core.desktop_existence_surface import DesktopExistenceSurface
+
         s = DesktopExistenceSurface()
         d = s.to_dict()
         families = [
@@ -643,16 +678,19 @@ class TestRegressionSafety(unittest.TestCase):
 
     def test_E08_schema_version_is_1_1(self):
         from core.desktop_existence_surface import EXISTENCE_SURFACE_SCHEMA_VERSION
+
         self.assertEqual(EXISTENCE_SURFACE_SCHEMA_VERSION, "1.1")
 
     def test_E09_existence_route_module_is_importable(self):
         try:
-            from core.routes.existence import create_router, EXISTENCE_ROUTES_AUTHORITY
+            from core.routes.existence import EXISTENCE_ROUTES_AUTHORITY, create_router
+
             self.assertIsInstance(EXISTENCE_ROUTES_AUTHORITY, str)
             self.assertIn("EXISTENCE_ROUTES_V1", EXISTENCE_ROUTES_AUTHORITY)
         except ModuleNotFoundError as exc:
             # fastapi not installed in this test env; verify source file exists
             import pathlib
+
             route_file = pathlib.Path(__file__).parents[1] / "core" / "routes" / "existence.py"
             self.assertTrue(route_file.exists(), f"existence.py not found: {exc}")
 
@@ -667,11 +705,13 @@ class TestPR1Integration(unittest.TestCase):
 
     def test_F01_unified_panel_payload_has_existence_surface_field(self):
         from core.unified_panel_aggregation import UnifiedPanelPayload
+
         p = UnifiedPanelPayload()
         self.assertIsInstance(p.existence_surface, dict)
 
     def test_F02_to_dict_includes_existence_surface_key(self):
         from core.unified_panel_aggregation import UnifiedPanelPayload
+
         p = UnifiedPanelPayload()
         d = p.to_dict()
         self.assertIn("existence_surface", d)
@@ -682,6 +722,7 @@ class TestPR1Integration(unittest.TestCase):
             UnifiedPanelAggregationService,
             reset_unified_panel_aggregation_service,
         )
+
         reset_unified_panel_aggregation_service()
         service = UnifiedPanelAggregationService()
         payload = service.build_payload()
@@ -692,8 +733,8 @@ class TestPR1Integration(unittest.TestCase):
     def test_F04_existence_surface_in_payload_contains_schema_version_when_available(self):
         """When DesktopExistenceSurface builds successfully, payload.existence_surface
         must contain 'schema_version'."""
-        from core.unified_panel_aggregation import UnifiedPanelPayload
         from core.desktop_existence_surface import build_desktop_existence_surface
+        from core.unified_panel_aggregation import UnifiedPanelPayload
 
         surface = build_desktop_existence_surface()
         payload = UnifiedPanelPayload()
@@ -703,8 +744,8 @@ class TestPR1Integration(unittest.TestCase):
         self.assertEqual(d["existence_surface"]["schema_version"], "1.1")
 
     def test_F05_unified_panel_payload_to_dict_is_json_serialisable_with_existence_surface(self):
-        from core.unified_panel_aggregation import UnifiedPanelPayload
         from core.desktop_existence_surface import build_desktop_existence_surface
+        from core.unified_panel_aggregation import UnifiedPanelPayload
 
         payload = UnifiedPanelPayload()
         payload.existence_surface = build_desktop_existence_surface().to_dict()
@@ -716,6 +757,7 @@ class TestPR1Integration(unittest.TestCase):
     def test_F06_removing_existence_surface_from_payload_is_detectable(self):
         """If existence_surface is removed from UnifiedPanelPayload.to_dict, tests fail."""
         from core.unified_panel_aggregation import UnifiedPanelPayload
+
         p = UnifiedPanelPayload()
         d = p.to_dict()
         # This test acts as a regression guard: if 'existence_surface' disappears
@@ -742,13 +784,12 @@ class TestFiveFamilyParticipation(unittest.TestCase):
             DesktopExistenceSurfaceBuilder,
             SubjectLifecycleSnapshot,
         )
+
         builder = DesktopExistenceSurfaceBuilder()
         with patch.object(
             builder,
             "_read_subject_lifecycle",
-            return_value=SubjectLifecycleSnapshot(
-                dominant_tristate="manifest", active_session_count=1
-            ),
+            return_value=SubjectLifecycleSnapshot(dominant_tristate="manifest", active_session_count=1),
         ):
             result = builder.build()
         self.assertEqual(result.existence_projection.presence_verdict, "expressing")
@@ -756,9 +797,10 @@ class TestFiveFamilyParticipation(unittest.TestCase):
     def test_G02_only_family4_running_drives_background(self):
         """Family 4 alone (engine running) should produce 'background'."""
         from core.desktop_existence_surface import (
-            DesktopExistenceSurfaceBuilder,
             CognitiveFieldSnapshot,
+            DesktopExistenceSurfaceBuilder,
         )
+
         builder = DesktopExistenceSurfaceBuilder()
         with patch.object(
             builder,
@@ -774,16 +816,15 @@ class TestFiveFamilyParticipation(unittest.TestCase):
     def test_G03_only_family5_android_signals_drives_background(self):
         """Family 5 alone (android local loop ready) should produce 'background'."""
         from core.desktop_existence_surface import (
-            DesktopExistenceSurfaceBuilder,
             AndroidPresenceSignals,
+            DesktopExistenceSurfaceBuilder,
         )
+
         builder = DesktopExistenceSurfaceBuilder()
         with patch.object(
             builder,
             "_read_android_signals",
-            return_value=AndroidPresenceSignals(
-                total_devices_with_snapshot=1, local_loop_ready_count=1
-            ),
+            return_value=AndroidPresenceSignals(total_devices_with_snapshot=1, local_loop_ready_count=1),
         ):
             result = builder.build()
         self.assertIn(result.existence_projection.presence_verdict, {"background", "active"})
@@ -791,13 +832,14 @@ class TestFiveFamilyParticipation(unittest.TestCase):
     def test_G04_contributing_families_empty_for_all_defaults(self):
         """When all five families return defaults, contributing_families must be empty."""
         from core.desktop_existence_surface import (
-            DesktopExistenceSurfaceBuilder,
-            SubjectLifecycleSnapshot,
-            ShellClothingSnapshot,
-            ContinuumPostureSnapshot,
-            CognitiveFieldSnapshot,
             AndroidPresenceSignals,
+            CognitiveFieldSnapshot,
+            ContinuumPostureSnapshot,
+            DesktopExistenceSurfaceBuilder,
+            ShellClothingSnapshot,
+            SubjectLifecycleSnapshot,
         )
+
         builder = DesktopExistenceSurfaceBuilder()
         with (
             patch.object(builder, "_read_subject_lifecycle", return_value=SubjectLifecycleSnapshot()),
@@ -813,11 +855,12 @@ class TestFiveFamilyParticipation(unittest.TestCase):
     def test_G05_three_families_contributing_all_listed(self):
         """When families 1, 2, and 4 contribute, all three are in contributing_families."""
         from core.desktop_existence_surface import (
-            DesktopExistenceSurfaceBuilder,
-            SubjectLifecycleSnapshot,
-            ShellClothingSnapshot,
             CognitiveFieldSnapshot,
+            DesktopExistenceSurfaceBuilder,
+            ShellClothingSnapshot,
+            SubjectLifecycleSnapshot,
         )
+
         builder = DesktopExistenceSurfaceBuilder()
         with (
             patch.object(

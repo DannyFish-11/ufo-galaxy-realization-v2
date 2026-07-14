@@ -54,15 +54,17 @@ FALLBACK_POLICY_PATH = "config/security_policy.yaml.bak"
 
 class ConfirmationLevel(str, Enum):
     """命令确认等级，从低到高。"""
-    NONE = "none"           # 无需确认
-    VOICE = "voice"         # 语音确认
+
+    NONE = "none"  # 无需确认
+    VOICE = "voice"  # 语音确认
     WATCH_BTN = "watch_btn"  # 手表按键确认
-    DUAL = "dual"           # 双重确认（语音+按键）
+    DUAL = "dual"  # 双重确认（语音+按键）
     FORBIDDEN = "forbidden"  # 完全禁止
 
 
 class AuditLevel(str, Enum):
     """审计日志级别。"""
+
     INFO = "info"
     WARNING = "warning"
     CRITICAL = "critical"
@@ -71,6 +73,7 @@ class AuditLevel(str, Enum):
 @dataclass
 class CommandCheckResult:
     """命令权限检查结果。"""
+
     allowed: bool
     reason: str
     confirmation_level: ConfirmationLevel
@@ -84,6 +87,7 @@ class CommandCheckResult:
 @dataclass
 class AuditRecord:
     """审计记录。"""
+
     timestamp: str
     trace_id: str
     source_device_id: str
@@ -124,8 +128,12 @@ class SecurityPolicy:
         self._daily_counters: Dict[str, Dict[str, int]] = {}  # device -> {command: count}
         self._last_day: str = time.strftime("%Y-%m-%d")
 
-        logger.info("SecurityPolicy loaded | version=%s boundaries=%d dangerous=%d",
-                    self._version, len(self._boundaries), len(self._dangerous))
+        logger.info(
+            "SecurityPolicy loaded | version=%s boundaries=%d dangerous=%d",
+            self._version,
+            len(self._boundaries),
+            len(self._dangerous),
+        )
 
     # -- Public API --------------------------------------------------------
 
@@ -285,6 +293,7 @@ class SecurityPolicy:
 # Factory / loader
 # ---------------------------------------------------------------------------
 
+
 def load_security_policy(path: Optional[str] = None) -> SecurityPolicy:
     """加载安全策略文件。
 
@@ -355,8 +364,14 @@ def _create_failsafe_policy() -> SecurityPolicy:
             },
             "android": {
                 "allowed_categories": ["query", "light_control", "scene_trigger", "media_playback"],
-                "denied_categories": ["door_lock", "camera_control", "hvac_control",
-                                       "appliance_power", "security_arm", "device_takeover"],
+                "denied_categories": [
+                    "door_lock",
+                    "camera_control",
+                    "hvac_control",
+                    "appliance_power",
+                    "security_arm",
+                    "device_takeover",
+                ],
             },
             "tablet": {
                 "allowed_categories": ["query", "media_playback"],

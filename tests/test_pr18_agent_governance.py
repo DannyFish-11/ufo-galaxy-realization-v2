@@ -39,7 +39,6 @@ from typing import Any, Dict
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # 1. AgentRole enum
 # ---------------------------------------------------------------------------
@@ -97,7 +96,7 @@ class TestAgentRole:
             assert len(desc) > 10  # non-trivial
 
     def test_precedence_covers_all_roles(self) -> None:
-        from core.agent_governance import AgentRole, AGENT_ROLE_PRECEDENCE
+        from core.agent_governance import AGENT_ROLE_PRECEDENCE, AgentRole
 
         assert set(AGENT_ROLE_PRECEDENCE) == set(AgentRole)
         assert len(AGENT_ROLE_PRECEDENCE) == len(AgentRole)
@@ -134,13 +133,13 @@ class TestRoleCapabilityHelpers:
         assert AgentRole.OBSERVER not in can_receive
 
     def test_role_can_initiate_handoff_frozenset(self) -> None:
-        from core.agent_governance import AgentRole, ROLE_CAN_INITIATE_HANDOFF
+        from core.agent_governance import ROLE_CAN_INITIATE_HANDOFF, AgentRole
 
         assert AgentRole.PLANNER in ROLE_CAN_INITIATE_HANDOFF
         assert AgentRole.OBSERVER not in ROLE_CAN_INITIATE_HANDOFF
 
     def test_role_can_receive_handoff_frozenset(self) -> None:
-        from core.agent_governance import AgentRole, ROLE_CAN_RECEIVE_HANDOFF
+        from core.agent_governance import ROLE_CAN_RECEIVE_HANDOFF, AgentRole
 
         assert AgentRole.EXECUTOR in ROLE_CAN_RECEIVE_HANDOFF
         assert AgentRole.OBSERVER not in ROLE_CAN_RECEIVE_HANDOFF
@@ -153,32 +152,30 @@ class TestRoleCapabilityHelpers:
 
 class TestHandoffGraph:
     def test_graph_keys_cover_all_roles(self) -> None:
-        from core.agent_governance import AgentRole, HANDOFF_GRAPH
+        from core.agent_governance import HANDOFF_GRAPH, AgentRole
 
         assert set(HANDOFF_GRAPH.keys()) == set(AgentRole)
 
     def test_graph_values_are_frozensets_of_roles(self) -> None:
-        from core.agent_governance import AgentRole, HANDOFF_GRAPH
+        from core.agent_governance import HANDOFF_GRAPH, AgentRole
 
         for role, targets in HANDOFF_GRAPH.items():
             assert hasattr(targets, "__iter__")
             for t in targets:
-                assert isinstance(t, AgentRole), (
-                    f"Target {t!r} for {role} is not an AgentRole"
-                )
+                assert isinstance(t, AgentRole), f"Target {t!r} for {role} is not an AgentRole"
 
     def test_observer_has_no_outgoing_edges(self) -> None:
-        from core.agent_governance import AgentRole, HANDOFF_GRAPH
+        from core.agent_governance import HANDOFF_GRAPH, AgentRole
 
         assert len(HANDOFF_GRAPH[AgentRole.OBSERVER]) == 0
 
     def test_unassigned_has_no_outgoing_edges(self) -> None:
-        from core.agent_governance import AgentRole, HANDOFF_GRAPH
+        from core.agent_governance import HANDOFF_GRAPH, AgentRole
 
         assert len(HANDOFF_GRAPH[AgentRole.UNASSIGNED]) == 0
 
     def test_planner_has_expected_targets(self) -> None:
-        from core.agent_governance import AgentRole, HANDOFF_GRAPH
+        from core.agent_governance import HANDOFF_GRAPH, AgentRole
 
         targets = HANDOFF_GRAPH[AgentRole.PLANNER]
         assert AgentRole.EXECUTOR in targets
@@ -187,7 +184,7 @@ class TestHandoffGraph:
         assert AgentRole.REMOTE_SPECIALIST in targets
 
     def test_recovery_can_only_go_to_executor(self) -> None:
-        from core.agent_governance import AgentRole, HANDOFF_GRAPH
+        from core.agent_governance import HANDOFF_GRAPH, AgentRole
 
         assert HANDOFF_GRAPH[AgentRole.RECOVERY] == frozenset({AgentRole.EXECUTOR})
 
@@ -198,23 +195,26 @@ class TestHandoffGraph:
 
 
 class TestIsValidHandoff:
-    @pytest.mark.parametrize("source,target", [
-        ("planner", "executor"),
-        ("planner", "bridge"),
-        ("planner", "local_assistant"),
-        ("planner", "remote_specialist"),
-        ("executor", "bridge"),
-        ("executor", "remote_specialist"),
-        ("executor", "recovery"),
-        ("local_assistant", "bridge"),
-        ("local_assistant", "remote_specialist"),
-        ("local_assistant", "recovery"),
-        ("bridge", "executor"),
-        ("bridge", "remote_specialist"),
-        ("bridge", "recovery"),
-        ("recovery", "executor"),
-        ("remote_specialist", "recovery"),
-    ])
+    @pytest.mark.parametrize(
+        "source,target",
+        [
+            ("planner", "executor"),
+            ("planner", "bridge"),
+            ("planner", "local_assistant"),
+            ("planner", "remote_specialist"),
+            ("executor", "bridge"),
+            ("executor", "remote_specialist"),
+            ("executor", "recovery"),
+            ("local_assistant", "bridge"),
+            ("local_assistant", "remote_specialist"),
+            ("local_assistant", "recovery"),
+            ("bridge", "executor"),
+            ("bridge", "remote_specialist"),
+            ("bridge", "recovery"),
+            ("recovery", "executor"),
+            ("remote_specialist", "recovery"),
+        ],
+    )
     def test_valid_edges(self, source: str, target: str) -> None:
         from core.agent_governance import AgentRole, is_valid_handoff
 
@@ -222,14 +222,17 @@ class TestIsValidHandoff:
         t = AgentRole(target)
         assert is_valid_handoff(s, t), f"Expected {source}→{target} to be valid"
 
-    @pytest.mark.parametrize("source,target", [
-        ("observer", "executor"),
-        ("observer", "bridge"),
-        ("unassigned", "executor"),
-        ("planner", "recovery"),  # planner does not directly hand off to recovery
-        ("executor", "planner"),  # no back-edges to planner
-        ("recovery", "bridge"),   # recovery only goes to executor
-    ])
+    @pytest.mark.parametrize(
+        "source,target",
+        [
+            ("observer", "executor"),
+            ("observer", "bridge"),
+            ("unassigned", "executor"),
+            ("planner", "recovery"),  # planner does not directly hand off to recovery
+            ("executor", "planner"),  # no back-edges to planner
+            ("recovery", "bridge"),  # recovery only goes to executor
+        ],
+    )
     def test_invalid_edges(self, source: str, target: str) -> None:
         from core.agent_governance import AgentRole, is_valid_handoff
 
@@ -288,9 +291,16 @@ class TestOwnershipRecord:
         rec = OwnershipRecord()
         d = rec.to_dict()
         required_keys = {
-            "schema_version", "dispatch_owner", "current_owner",
-            "final_outcome_owner", "handoff_count", "is_recovery_active",
-            "is_complete", "trace_id", "task_id", "last_handoff_reason",
+            "schema_version",
+            "dispatch_owner",
+            "current_owner",
+            "final_outcome_owner",
+            "handoff_count",
+            "is_recovery_active",
+            "is_complete",
+            "trace_id",
+            "task_id",
+            "last_handoff_reason",
         }
         assert required_keys.issubset(d.keys())
 
@@ -322,10 +332,12 @@ class TestOwnershipRecord:
     def test_from_dict_unknown_role_defaults_to_unassigned(self) -> None:
         from core.agent_governance import AgentRole, OwnershipRecord
 
-        rec = OwnershipRecord.from_dict({
-            "dispatch_owner": "nonexistent_role",
-            "current_owner": "also_unknown",
-        })
+        rec = OwnershipRecord.from_dict(
+            {
+                "dispatch_owner": "nonexistent_role",
+                "current_owner": "also_unknown",
+            }
+        )
         assert rec.dispatch_owner == AgentRole.UNASSIGNED
         assert rec.current_owner == AgentRole.UNASSIGNED
 
@@ -508,8 +520,9 @@ class TestPreBuiltPolicies:
         assert not OBSERVER_HANDOFF_POLICY.allow_recovery_retry
 
     def test_policies_are_immutable(self) -> None:
-        from core.agent_governance import DEFAULT_HANDOFF_POLICY
         import dataclasses
+
+        from core.agent_governance import DEFAULT_HANDOFF_POLICY
 
         assert dataclasses.fields(DEFAULT_HANDOFF_POLICY)  # is a dataclass
         # frozen=True means direct assignment should raise
@@ -531,12 +544,12 @@ class TestGetPolicyForRole:
             assert isinstance(policy, HandoffPolicy)
 
     def test_observer_gets_observer_policy(self) -> None:
-        from core.agent_governance import AgentRole, OBSERVER_HANDOFF_POLICY, get_policy_for_role
+        from core.agent_governance import OBSERVER_HANDOFF_POLICY, AgentRole, get_policy_for_role
 
         assert get_policy_for_role(AgentRole.OBSERVER) is OBSERVER_HANDOFF_POLICY
 
     def test_recovery_gets_recovery_policy(self) -> None:
-        from core.agent_governance import AgentRole, RECOVERY_HANDOFF_POLICY, get_policy_for_role
+        from core.agent_governance import RECOVERY_HANDOFF_POLICY, AgentRole, get_policy_for_role
 
         assert get_policy_for_role(AgentRole.RECOVERY) is RECOVERY_HANDOFF_POLICY
 
@@ -565,11 +578,20 @@ class TestOwnershipSummary:
         summary = OwnershipSummary()
         d = summary.to_dict()
         required = {
-            "schema_version", "dispatch_owner", "current_owner",
-            "final_outcome_owner", "handoff_count", "is_recovery_active",
-            "is_complete", "max_handoff_depth", "depth_exceeded",
-            "recovery_permitted", "trace_id", "task_id",
-            "last_handoff_reason", "policy_reason",
+            "schema_version",
+            "dispatch_owner",
+            "current_owner",
+            "final_outcome_owner",
+            "handoff_count",
+            "is_recovery_active",
+            "is_complete",
+            "max_handoff_depth",
+            "depth_exceeded",
+            "recovery_permitted",
+            "trace_id",
+            "task_id",
+            "last_handoff_reason",
+            "policy_reason",
         }
         assert required.issubset(d.keys())
 
@@ -596,8 +618,8 @@ class TestBuildOwnershipSummary:
     def test_builds_from_record_and_policy(self) -> None:
         from core.agent_governance import (
             AgentRole,
-            OwnershipRecord,
             HandoffPolicy,
+            OwnershipRecord,
             OwnershipSummary,
             build_ownership_summary,
         )
@@ -621,8 +643,8 @@ class TestBuildOwnershipSummary:
     def test_depth_exceeded_flag(self) -> None:
         from core.agent_governance import (
             AgentRole,
-            OwnershipRecord,
             HandoffPolicy,
+            OwnershipRecord,
             build_ownership_summary,
         )
 
@@ -714,9 +736,14 @@ class TestGetOwnershipHints:
 
         hints = get_ownership_hints(IDLE_OWNERSHIP_SUMMARY)
         required = {
-            "dispatch_owner", "current_owner", "is_recovery_active",
-            "is_complete", "depth_exceeded", "handoff_count",
-            "has_final_owner", "recovery_permitted",
+            "dispatch_owner",
+            "current_owner",
+            "is_recovery_active",
+            "is_complete",
+            "depth_exceeded",
+            "handoff_count",
+            "has_final_owner",
+            "recovery_permitted",
         }
         assert required.issubset(hints.keys())
 
@@ -753,9 +780,17 @@ class TestDispatchSummary:
         ds = DispatchSummary()
         d = ds.to_dict()
         required = {
-            "schema_version", "dispatch_role", "target_role", "handoff_valid",
-            "ownership", "trace_id", "task_id", "bridge_source",
-            "dispatch_success", "failure_reason", "policy_reason",
+            "schema_version",
+            "dispatch_role",
+            "target_role",
+            "handoff_valid",
+            "ownership",
+            "trace_id",
+            "task_id",
+            "bridge_source",
+            "dispatch_success",
+            "failure_reason",
+            "policy_reason",
         }
         assert required.issubset(d.keys())
 
@@ -1001,8 +1036,9 @@ class TestSentinels:
 
 class TestAgentDispatchProjectionRoute:
     def test_route_returns_200(self) -> None:
-        from fastapi.testclient import TestClient
         from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+
         from core.routes.projection import create_router
 
         app = FastAPI()
@@ -1012,8 +1048,9 @@ class TestAgentDispatchProjectionRoute:
         assert response.status_code == 200
 
     def test_response_contains_agent_dispatch_key(self) -> None:
-        from fastapi.testclient import TestClient
         from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+
         from core.routes.projection import create_router
 
         app = FastAPI()
@@ -1024,8 +1061,9 @@ class TestAgentDispatchProjectionRoute:
         assert "agent_dispatch" in body
 
     def test_response_contains_ownership_hints_key(self) -> None:
-        from fastapi.testclient import TestClient
         from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+
         from core.routes.projection import create_router
 
         app = FastAPI()
@@ -1036,8 +1074,9 @@ class TestAgentDispatchProjectionRoute:
         assert "ownership_hints" in body
 
     def test_agent_dispatch_has_required_fields(self) -> None:
-        from fastapi.testclient import TestClient
         from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+
         from core.routes.projection import create_router
 
         app = FastAPI()
@@ -1046,14 +1085,19 @@ class TestAgentDispatchProjectionRoute:
         response = client.get("/api/v1/projection/agent-dispatch")
         dispatch = response.json().get("agent_dispatch", {})
         required = {
-            "dispatch_role", "target_role", "handoff_valid", "ownership",
-            "dispatch_success", "policy_reason",
+            "dispatch_role",
+            "target_role",
+            "handoff_valid",
+            "ownership",
+            "dispatch_success",
+            "policy_reason",
         }
         assert required.issubset(dispatch.keys())
 
     def test_ownership_hints_has_required_fields(self) -> None:
-        from fastapi.testclient import TestClient
         from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+
         from core.routes.projection import create_router
 
         app = FastAPI()
@@ -1062,15 +1106,21 @@ class TestAgentDispatchProjectionRoute:
         response = client.get("/api/v1/projection/agent-dispatch")
         hints = response.json().get("ownership_hints", {})
         required = {
-            "dispatch_owner", "current_owner", "is_recovery_active",
-            "is_complete", "depth_exceeded", "handoff_count",
-            "has_final_owner", "recovery_permitted",
+            "dispatch_owner",
+            "current_owner",
+            "is_recovery_active",
+            "is_complete",
+            "depth_exceeded",
+            "handoff_count",
+            "has_final_owner",
+            "recovery_permitted",
         }
         assert required.issubset(hints.keys())
 
     def test_response_is_json_serialisable(self) -> None:
-        from fastapi.testclient import TestClient
         from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+
         from core.routes.projection import create_router
 
         app = FastAPI()
@@ -1110,9 +1160,11 @@ class TestGracefulDegradation:
     def test_ownership_record_from_dict_with_garbage_never_raises(self) -> None:
         from core.agent_governance import OwnershipRecord
 
-        rec = OwnershipRecord.from_dict({
-            "dispatch_owner": 12345,
-            "handoff_count": "not_a_number",
-        })
+        rec = OwnershipRecord.from_dict(
+            {
+                "dispatch_owner": 12345,
+                "handoff_count": "not_a_number",
+            }
+        )
         # Defaults should be used gracefully
         assert rec is not None

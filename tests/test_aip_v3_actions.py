@@ -22,14 +22,14 @@ from __future__ import annotations
 import pytest
 
 from galaxy_gateway.protocol.actions import (
+    LEGACY_ACTION_MAP,
     ActionType,
     AppLaunchPayload,
     ClickPayload,
     ClipboardPayload,
     KeyPressPayload,
-    LEGACY_ACTION_MAP,
-    ScrollPayload,
     ScreenshotPayload,
+    ScrollPayload,
     ShellPayload,
     SwipePayload,
     TypePayload,
@@ -45,22 +45,38 @@ from galaxy_gateway.protocol.aip_v3 import (
 )
 from galaxy_gateway.protocol.compat import normalize_action_in_payload
 
-
 # ============================================================================
 # 1. ActionType enum
 # ============================================================================
+
 
 class TestActionTypeEnum:
     """ActionType enum must cover the full canonical vocabulary."""
 
     def test_canonical_values_present(self):
         expected = {
-            "click", "long_press", "swipe", "scroll", "type", "key_press",
-            "screenshot", "app_launch", "app_stop", "shell",
-            "set_clipboard", "get_clipboard",
-            "back", "home", "recent_apps", "wake_screen", "lock_screen",
-            "volume_up", "volume_down",
-            "ui_query", "install_apk", "list_packages",
+            "click",
+            "long_press",
+            "swipe",
+            "scroll",
+            "type",
+            "key_press",
+            "screenshot",
+            "app_launch",
+            "app_stop",
+            "shell",
+            "set_clipboard",
+            "get_clipboard",
+            "back",
+            "home",
+            "recent_apps",
+            "wake_screen",
+            "lock_screen",
+            "volume_up",
+            "volume_down",
+            "ui_query",
+            "install_apk",
+            "list_packages",
         }
         actual = {a.value for a in ActionType}
         missing = expected - actual
@@ -76,27 +92,29 @@ class TestActionTypeEnum:
 # 2. LEGACY_ACTION_MAP completeness
 # ============================================================================
 
+
 class TestLegacyActionMap:
     """Every entry in LEGACY_ACTION_MAP must map to a valid ActionType."""
 
     def test_all_values_are_action_types(self):
         for alias, canonical in LEGACY_ACTION_MAP.items():
-            assert isinstance(canonical, ActionType), (
-                f"LEGACY_ACTION_MAP[{alias!r}] is {canonical!r}, not ActionType"
-            )
+            assert isinstance(canonical, ActionType), f"LEGACY_ACTION_MAP[{alias!r}] is {canonical!r}, not ActionType"
 
-    @pytest.mark.parametrize("alias,expected", [
-        ("tap", ActionType.CLICK),
-        ("input_text", ActionType.TYPE),
-        ("input", ActionType.TYPE),
-        ("screen_capture", ActionType.SCREENSHOT),
-        ("open_app", ActionType.APP_LAUNCH),
-        ("launch_app", ActionType.APP_LAUNCH),
-        ("keyevent", ActionType.KEY_PRESS),
-        ("key_event", ActionType.KEY_PRESS),
-        ("device_info", ActionType.SHELL),
-        ("list_pkg", ActionType.LIST_PACKAGES),
-    ])
+    @pytest.mark.parametrize(
+        "alias,expected",
+        [
+            ("tap", ActionType.CLICK),
+            ("input_text", ActionType.TYPE),
+            ("input", ActionType.TYPE),
+            ("screen_capture", ActionType.SCREENSHOT),
+            ("open_app", ActionType.APP_LAUNCH),
+            ("launch_app", ActionType.APP_LAUNCH),
+            ("keyevent", ActionType.KEY_PRESS),
+            ("key_event", ActionType.KEY_PRESS),
+            ("device_info", ActionType.SHELL),
+            ("list_pkg", ActionType.LIST_PACKAGES),
+        ],
+    )
     def test_known_alias(self, alias, expected):
         assert LEGACY_ACTION_MAP[alias] == expected
 
@@ -105,25 +123,39 @@ class TestLegacyActionMap:
 # 3. normalize_action_name()
 # ============================================================================
 
+
 class TestNormalizeActionName:
     """normalize_action_name must resolve aliases and pass through unknowns."""
 
-    @pytest.mark.parametrize("alias,canonical", [
-        ("tap", "click"),
-        ("input_text", "type"),
-        ("input", "type"),
-        ("screen_capture", "screenshot"),
-        ("open_app", "app_launch"),
-        ("keyevent", "key_press"),
-        ("key_event", "key_press"),
-    ])
+    @pytest.mark.parametrize(
+        "alias,canonical",
+        [
+            ("tap", "click"),
+            ("input_text", "type"),
+            ("input", "type"),
+            ("screen_capture", "screenshot"),
+            ("open_app", "app_launch"),
+            ("keyevent", "key_press"),
+            ("key_event", "key_press"),
+        ],
+    )
     def test_alias_resolved(self, alias, canonical):
         assert normalize_action_name(alias) == canonical
 
-    @pytest.mark.parametrize("canonical", [
-        "click", "type", "scroll", "swipe", "screenshot", "app_launch",
-        "shell", "long_press", "key_press",
-    ])
+    @pytest.mark.parametrize(
+        "canonical",
+        [
+            "click",
+            "type",
+            "scroll",
+            "swipe",
+            "screenshot",
+            "app_launch",
+            "shell",
+            "long_press",
+            "key_press",
+        ],
+    )
     def test_canonical_pass_through(self, canonical):
         assert normalize_action_name(canonical) == canonical
 
@@ -137,6 +169,7 @@ class TestNormalizeActionName:
 # ============================================================================
 # 4. validate_action_payload() — overall contract
 # ============================================================================
+
 
 class TestValidateActionPayload:
     """validate_action_payload must return (bool, Optional[str])."""
@@ -184,15 +217,11 @@ class TestValidateActionPayload:
         assert err is not None
 
     def test_valid_scroll_payload(self):
-        ok, err = validate_action_payload(
-            "scroll", {"x": 500, "y": 900, "direction": "up"}
-        )
+        ok, err = validate_action_payload("scroll", {"x": 500, "y": 900, "direction": "up"})
         assert ok is True
 
     def test_valid_swipe_payload(self):
-        ok, err = validate_action_payload(
-            "swipe", {"x1": 0, "y1": 100, "x2": 0, "y2": 500}
-        )
+        ok, err = validate_action_payload("swipe", {"x1": 0, "y1": 100, "x2": 0, "y2": 500})
         assert ok is True
 
     def test_invalid_swipe_missing_coords(self):
@@ -200,15 +229,11 @@ class TestValidateActionPayload:
         assert ok is False
 
     def test_valid_app_launch_by_package(self):
-        ok, err = validate_action_payload(
-            "app_launch", {"package": "com.example.app"}
-        )
+        ok, err = validate_action_payload("app_launch", {"package": "com.example.app"})
         assert ok is True
 
     def test_valid_app_launch_by_name(self):
-        ok, err = validate_action_payload(
-            "app_launch", {"app_name": "Chrome"}
-        )
+        ok, err = validate_action_payload("app_launch", {"app_name": "Chrome"})
         assert ok is True
 
     def test_invalid_app_launch_no_target(self):
@@ -247,6 +272,7 @@ class TestValidateActionPayload:
 # ============================================================================
 # 5. Per-action payload schemas — direct construction
 # ============================================================================
+
 
 class TestPayloadSchemas:
     """Pydantic payload schemas validate required fields correctly."""
@@ -320,6 +346,7 @@ class TestPayloadSchemas:
 # 6. validate_message() — tuple return contract
 # ============================================================================
 
+
 class TestValidateMessage:
     """validate_message must return (bool, Optional[str]) tuple."""
 
@@ -359,6 +386,7 @@ class TestValidateMessage:
 # 7. create_gui_scroll_message()
 # ============================================================================
 
+
 class TestCreateGuiScrollMessage:
     """create_gui_scroll_message factory must produce a valid v3 AIPMessage."""
 
@@ -390,6 +418,7 @@ class TestCreateGuiScrollMessage:
 # ============================================================================
 # 8. normalize_action_in_payload() shim
 # ============================================================================
+
 
 class TestNormalizeActionInPayload:
     """normalize_action_in_payload must resolve legacy names in payload dicts."""
@@ -441,6 +470,7 @@ class TestNormalizeActionInPayload:
 # 9. __init__.py exports
 # ============================================================================
 
+
 class TestProtocolPackageExports:
     """The galaxy_gateway.protocol package must export all new symbols."""
 
@@ -464,9 +494,15 @@ class TestProtocolPackageExports:
 
     def test_payload_schema_classes_exported(self):
         from galaxy_gateway.protocol import (  # noqa: F401
-            ClickPayload, SwipePayload, ScrollPayload, TypePayload,
-            KeyPressPayload, ScreenshotPayload, AppLaunchPayload,
-            ShellPayload, ClipboardPayload,
+            AppLaunchPayload,
+            ClickPayload,
+            ClipboardPayload,
+            KeyPressPayload,
+            ScreenshotPayload,
+            ScrollPayload,
+            ShellPayload,
+            SwipePayload,
+            TypePayload,
         )
 
     def test_legacy_action_map_exported(self):

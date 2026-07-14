@@ -120,6 +120,7 @@ RESERVED_NODES = [
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
+
 @pytest.fixture(scope="module")
 def ndj() -> Dict[str, Any]:
     with open(NDJ_PATH, encoding="utf-8") as fh:
@@ -139,8 +140,8 @@ def audit() -> Dict[str, Any]:
 
 def _make_launcher(node_configs: Dict[str, Any]) -> Any:
     """Build a NodeSystemLauncher with a fake service manager and config."""
-    from launcher.node_startup import NodeSystemLauncher
     from launcher.bootstrap import SystemConfig
+    from launcher.node_startup import NodeSystemLauncher
 
     svc_mgr = MagicMock()
     cfg = MagicMock(spec=SystemConfig)
@@ -155,6 +156,7 @@ def _make_launcher(node_configs: Dict[str, Any]) -> Any:
 
 
 # ── Tests ─────────────────────────────────────────────────────────────────────
+
 
 # 1. node_dependencies.json covers all nominal nodes (no config drift)
 def test_no_missing_config_entries(ndj_nodes):
@@ -296,10 +298,7 @@ def test_get_active_nodes_includes_optional(ndj_nodes):
     active = launcher.get_active_nodes()
     # At least some repair nodes should be included if they have main.py
     nodes_dir = PROJECT_ROOT / "nodes"
-    on_disk_optional = [
-        n for n in PR7_REPAIR_NODES
-        if (nodes_dir / n / "main.py").exists()
-    ]
+    on_disk_optional = [n for n in PR7_REPAIR_NODES if (nodes_dir / n / "main.py").exists()]
     for name in on_disk_optional:
         assert name in active, f"Optional node {name} with main.py not in get_active_nodes()"
 
@@ -309,9 +308,7 @@ def test_get_active_nodes_sorted(ndj_nodes):
     launcher = _make_launcher(ndj_nodes)
     active = launcher.get_active_nodes()
     # sorted by (priority, name) — just check no obvious out-of-order core nodes
-    assert active == sorted(active, key=lambda x: (
-        launcher.node_configs.get(x, {}).get("priority", 99), x
-    ))
+    assert active == sorted(active, key=lambda x: (launcher.node_configs.get(x, {}).get("priority", 99), x))
 
 
 # 24. get_core_nodes returns only core-group nodes
@@ -342,10 +339,7 @@ def test_get_all_nodes_filesystem_scan(ndj_nodes):
     launcher = _make_launcher(ndj_nodes)
     all_nodes = launcher.get_all_nodes()
     nodes_dir = PROJECT_ROOT / "nodes"
-    expected = sorted(
-        d.name for d in nodes_dir.iterdir()
-        if d.is_dir() and (d / "main.py").exists()
-    )
+    expected = sorted(d.name for d in nodes_dir.iterdir() if d.is_dir() and (d / "main.py").exists())
     assert all_nodes == expected
 
 
@@ -355,10 +349,7 @@ def test_get_all_nodes_may_include_skip(ndj_nodes):
     all_nodes = launcher.get_all_nodes()
     # At least some skip-policy nodes should appear if they have main.py
     nodes_dir = PROJECT_ROOT / "nodes"
-    skip_on_disk = [
-        n for n in RESERVED_NODES
-        if (nodes_dir / n / "main.py").exists()
-    ]
+    skip_on_disk = [n for n in RESERVED_NODES if (nodes_dir / n / "main.py").exists()]
     for name in skip_on_disk:
         assert name in all_nodes, f"Expected {name} in raw filesystem list"
 
@@ -436,8 +427,7 @@ def test_skip_nodes_audit_action_valid(ndj_nodes):
     for name, cfg in ndj_nodes.items():
         if isinstance(cfg, dict) and cfg.get("startup_policy") == "skip":
             action = cfg.get("audit_action")
-            assert action in ("archive", "delete"), \
-                f"Skip node {name} has unexpected audit_action={action!r}"
+            assert action in ("archive", "delete"), f"Skip node {name} has unexpected audit_action={action!r}"
 
 
 # 41. All optional nodes have audit_action 'repair'
@@ -445,8 +435,7 @@ def test_optional_nodes_audit_action_repair(ndj_nodes):
     for name, cfg in ndj_nodes.items():
         if isinstance(cfg, dict) and cfg.get("startup_policy") == "optional":
             action = cfg.get("audit_action")
-            assert action == "repair", \
-                f"Optional node {name} has audit_action={action!r}, expected 'repair'"
+            assert action == "repair", f"Optional node {name} has audit_action={action!r}, expected 'repair'"
 
 
 # 42. No PR-7 repair node has group 'core'
@@ -466,25 +455,27 @@ def test_groups_section_canonical(ndj):
 def test_core_group_nodes_not_skip(ndj_nodes):
     for name, cfg in ndj_nodes.items():
         if isinstance(cfg, dict) and cfg.get("group") == "core":
-            assert cfg.get("startup_policy", "active") != "skip", \
-                f"Core node {name} has startup_policy='skip'"
+            assert cfg.get("startup_policy", "active") != "skip", f"Core node {name} has startup_policy='skip'"
 
 
 # 45. _POLICY_SKIP constant
 def test_policy_skip_constant():
     from launcher.node_startup import NodeSystemLauncher
+
     assert NodeSystemLauncher._POLICY_SKIP == "skip"
 
 
 # 46. _POLICY_OPTIONAL constant
 def test_policy_optional_constant():
     from launcher.node_startup import NodeSystemLauncher
+
     assert NodeSystemLauncher._POLICY_OPTIONAL == "optional"
 
 
 # 47. _POLICY_ACTIVE constant
 def test_policy_active_constant():
     from launcher.node_startup import NodeSystemLauncher
+
     assert NodeSystemLauncher._POLICY_ACTIVE == "active"
 
 
@@ -499,7 +490,8 @@ def test_core_nodes_count_matches_config(ndj_nodes):
     launcher = _make_launcher(ndj_nodes)
     nodes_dir = PROJECT_ROOT / "nodes"
     expected_core = [
-        name for name, cfg in ndj_nodes.items()
+        name
+        for name, cfg in ndj_nodes.items()
         if isinstance(cfg, dict)
         and cfg.get("group") == "core"
         and cfg.get("startup_policy", "active") != "skip"
@@ -510,8 +502,5 @@ def test_core_nodes_count_matches_config(ndj_nodes):
 
 # 50. Total skip-policy nodes == 6
 def test_total_skip_count(ndj_nodes):
-    skip_count = sum(
-        1 for cfg in ndj_nodes.values()
-        if isinstance(cfg, dict) and cfg.get("startup_policy") == "skip"
-    )
+    skip_count = sum(1 for cfg in ndj_nodes.values() if isinstance(cfg, dict) and cfg.get("startup_policy") == "skip")
     assert skip_count == 6, f"Expected 6 skip nodes, got {skip_count}"

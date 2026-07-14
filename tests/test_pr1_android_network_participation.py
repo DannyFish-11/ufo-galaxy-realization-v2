@@ -51,8 +51,8 @@ N.  Registration handler integration — network_participation_tier in ack.
 
 from __future__ import annotations
 
-import sys
 import os
+import sys
 from typing import Any, Dict, List, Optional
 
 import pytest
@@ -70,23 +70,23 @@ from core.android_network_participation import (
     ANDROID_NETWORK_PARTICIPATION_CONTRACT_VERSION,
     ANDROID_ORIGINATING_CONTRACT,
     PARTICIPATION_TIER_TRANSITIONS,
+    AndroidNetworkParticipationState,
     AndroidNetworkParticipationTier,
     AndroidParticipationTransitionSignal,
-    AndroidNetworkParticipationState,
-    derive_android_network_participation_tier,
-    build_android_network_participation_state,
     apply_participation_signal,
-    record_participation_state,
+    build_android_network_participation_state,
+    derive_android_network_participation_tier,
+    get_participation_state_for_device,
     get_stored_participation_state,
     list_participation_transition_history,
+    record_participation_state,
     reset_participation_store,
-    get_participation_state_for_device,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _all_true_conditions(**overrides: Any) -> Dict[str, Any]:
     """Return a conditions dict where every flag is at its most permissive
@@ -137,8 +137,12 @@ class TestAuthoritySentinels:
 class TestAndroidNetworkParticipationTier:
     def test_all_seven_tiers_present(self):
         expected = {
-            "local_only", "control_only", "cross_device_capable",
-            "cross_device_enabled", "fully_attached", "dispatch_eligible",
+            "local_only",
+            "control_only",
+            "cross_device_capable",
+            "cross_device_enabled",
+            "fully_attached",
+            "dispatch_eligible",
             "distributed_participant",
         }
         actual = {t.value for t in AndroidNetworkParticipationTier}
@@ -181,17 +185,29 @@ class TestAndroidNetworkParticipationTier:
 class TestAndroidParticipationTransitionSignal:
     def test_all_expected_signals_present(self):
         expected = {
-            "websocket_connected", "registration_ack_success",
-            "registration_fully_attached", "registration_partial_attached",
-            "capability_visibility_gained", "capability_visibility_lost",
-            "active_session_acquired", "active_session_lost",
-            "readiness_satisfied", "readiness_lost",
-            "cross_device_switch_enabled", "cross_device_switch_disabled",
-            "cross_device_gate_enabled", "cross_device_gate_disabled",
-            "posture_join_runtime", "posture_control_only",
-            "execution_session_started", "execution_session_ended",
-            "websocket_disconnected", "reconnect_continuity_resumed",
-            "attachment_break", "operator_suspended", "operator_suspension_lifted",
+            "websocket_connected",
+            "registration_ack_success",
+            "registration_fully_attached",
+            "registration_partial_attached",
+            "capability_visibility_gained",
+            "capability_visibility_lost",
+            "active_session_acquired",
+            "active_session_lost",
+            "readiness_satisfied",
+            "readiness_lost",
+            "cross_device_switch_enabled",
+            "cross_device_switch_disabled",
+            "cross_device_gate_enabled",
+            "cross_device_gate_disabled",
+            "posture_join_runtime",
+            "posture_control_only",
+            "execution_session_started",
+            "execution_session_ended",
+            "websocket_disconnected",
+            "reconnect_continuity_resumed",
+            "attachment_break",
+            "operator_suspended",
+            "operator_suspension_lifted",
         }
         actual = {s.value for s in AndroidParticipationTransitionSignal}
         assert expected == actual
@@ -205,15 +221,15 @@ class TestAndroidParticipationTransitionSignal:
 class TestParticipationTierTransitions:
     def test_all_signals_covered(self):
         for signal in AndroidParticipationTransitionSignal:
-            assert signal in PARTICIPATION_TIER_TRANSITIONS, (
-                f"Signal {signal.value} not in PARTICIPATION_TIER_TRANSITIONS"
-            )
+            assert (
+                signal in PARTICIPATION_TIER_TRANSITIONS
+            ), f"Signal {signal.value} not in PARTICIPATION_TIER_TRANSITIONS"
 
     def test_values_are_non_empty_strings(self):
         for signal, description in PARTICIPATION_TIER_TRANSITIONS.items():
-            assert isinstance(description, str) and description.strip(), (
-                f"Transition for {signal.value} has empty description"
-            )
+            assert (
+                isinstance(description, str) and description.strip()
+            ), f"Transition for {signal.value} has empty description"
 
 
 # ---------------------------------------------------------------------------
@@ -573,6 +589,7 @@ class TestGetParticipationStateForDevice:
 class TestParticipationStateToDict:
     def test_to_dict_is_json_serialisable(self):
         import json
+
         state = build_android_network_participation_state(
             "ser-device",
             **_all_true_conditions(execution_active=True),
@@ -589,13 +606,27 @@ class TestParticipationStateToDict:
         )
         d = state.to_dict()
         for key in [
-            "device_id", "tier", "last_signal", "prior_tier", "derived_at",
-            "websocket_connected", "registration_ack_success",
-            "registration_fully_attached", "registration_gaps",
-            "capability_visible", "active_session_count", "session_posture",
-            "cross_device_enabled", "readiness_satisfied", "dispatch_gate_passed",
-            "operator_suspended", "execution_active", "blocking_reasons",
-            "tier_derivation_notes", "_authority", "_contract_version",
+            "device_id",
+            "tier",
+            "last_signal",
+            "prior_tier",
+            "derived_at",
+            "websocket_connected",
+            "registration_ack_success",
+            "registration_fully_attached",
+            "registration_gaps",
+            "capability_visible",
+            "active_session_count",
+            "session_posture",
+            "cross_device_enabled",
+            "readiness_satisfied",
+            "dispatch_gate_passed",
+            "operator_suspended",
+            "execution_active",
+            "blocking_reasons",
+            "tier_derivation_notes",
+            "_authority",
+            "_contract_version",
         ]:
             assert key in d, f"Missing key in to_dict(): {key}"
 
@@ -618,12 +649,12 @@ class TestV2UnifiedStateContractIntegration:
 
     def _make_minimal_contract(self, **kwargs: Any) -> Any:
         """Build a minimal V2 state contract for testing."""
-        from core.v2_unified_state_contract import build_v2_unified_state_contract
         from core.operational_registration_path import (
-            get_operational_registration_path,
             OnboardingValidation,
             ValidationStatus,
+            get_operational_registration_path,
         )
+        from core.v2_unified_state_contract import build_v2_unified_state_contract
 
         path = get_operational_registration_path()
         validation = OnboardingValidation(
@@ -676,9 +707,9 @@ class TestV2UnifiedStateContractIntegration:
     def test_m4_derived_state_contains_android_network_participation(self):
         contract = self._make_minimal_contract()
         d = contract.to_dict()
-        assert "android_network_participation" in d["derived_state"], (
-            "android_network_participation ContractDecision missing from derived_state"
-        )
+        assert (
+            "android_network_participation" in d["derived_state"]
+        ), "android_network_participation ContractDecision missing from derived_state"
         participation_decision = d["derived_state"]["android_network_participation"]
         assert participation_decision["decision_id"] == "android_network_participation"
         assert "tier" in participation_decision["evidence"]
@@ -686,6 +717,7 @@ class TestV2UnifiedStateContractIntegration:
 
     def test_m5_contract_version_bumped(self):
         from core.v2_unified_state_contract import V2_UNIFIED_STATE_CONTRACT_VERSION
+
         assert V2_UNIFIED_STATE_CONTRACT_VERSION == "1.3.0"
 
     def test_m_derived_state_participation_tier_matches_raw_signals(self):
@@ -751,9 +783,9 @@ class TestRegistrationHandlerIntegration:
 
         # Simulate what the handler does after registration succeeds with no gaps:
         from core.android_network_participation import (
+            AndroidParticipationTransitionSignal,
             build_android_network_participation_state,
             record_participation_state,
-            AndroidParticipationTransitionSignal,
         )
 
         gaps: List[str] = []
@@ -782,17 +814,15 @@ class TestRegistrationHandlerIntegration:
         ack["network_participation_tier"] = state.tier.value
 
         assert "network_participation_tier" in ack
-        assert ack["network_participation_tier"] in {
-            t.value for t in AndroidNetworkParticipationTier
-        }
+        assert ack["network_participation_tier"] in {t.value for t in AndroidNetworkParticipationTier}
 
     def test_n_partial_registration_ack_has_cross_device_capable_or_lower(self):
         """Partial registration (with gaps) should yield cross_device_capable tier."""
         reset_participation_store()
 
         from core.android_network_participation import (
-            build_android_network_participation_state,
             AndroidParticipationTransitionSignal,
+            build_android_network_participation_state,
         )
 
         gaps = ["model_capability_report"]
@@ -836,9 +866,7 @@ class TestParticipationTransitionAuditability:
         history = list_participation_transition_history("hist-device", limit=10)
         assert len(history) >= 2
         assert history[-1]["to_tier"] == second.tier.value
-        assert history[-1]["signal"] == (
-            AndroidParticipationTransitionSignal.registration_fully_attached.value
-        )
+        assert history[-1]["signal"] == (AndroidParticipationTransitionSignal.registration_fully_attached.value)
 
 
 class TestGatewayHandlerParticipationIntegration:
@@ -869,12 +897,13 @@ class TestGatewayHandlerParticipationIntegration:
 class TestAuthoritativeContractConsumptionPath:
     def test_contract_consumes_authoritative_participation_accessor_when_device_identity_present(self):
         from unittest.mock import patch
-        from core.v2_unified_state_contract import build_v2_unified_state_contract
+
         from core.operational_registration_path import (
-            get_operational_registration_path,
             OnboardingValidation,
             ValidationStatus,
+            get_operational_registration_path,
         )
+        from core.v2_unified_state_contract import build_v2_unified_state_contract
 
         path = get_operational_registration_path()
         validation = OnboardingValidation(checks=[], overall_status=ValidationStatus.PASS, summary="ok")

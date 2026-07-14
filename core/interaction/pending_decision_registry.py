@@ -41,6 +41,7 @@ When the caller does not pin a policy, :func:`derive_default_on_timeout` picks
 one from ``urgency`` (high → CANCEL, normal → DEFAULT_OPTION if a default exists
 else PROCEED, low → PROCEED).
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -61,9 +62,10 @@ _DEFAULT_TIMEOUT_S: float = 60.0
 # ---------------------------------------------------------------------------
 class OnTimeout(str, Enum):
     """What to do when no human replies before the timeout."""
+
     DEFAULT_OPTION = "default_option"  # resolve to the declared default option
-    CANCEL = "cancel"                  # abort — asker must not proceed
-    PROCEED = "proceed"                # continue without confirmation
+    CANCEL = "cancel"  # abort — asker must not proceed
+    PROCEED = "proceed"  # continue without confirmation
 
     @classmethod
     def from_string(cls, value: Optional[str]) -> Optional["OnTimeout"]:
@@ -76,16 +78,17 @@ class OnTimeout(str, Enum):
 
 
 class DecisionStatus(str, Enum):
-    RESOLVED = "resolved"               # a human answered
+    RESOLVED = "resolved"  # a human answered
     TIMEOUT_DEFAULT = "timeout_default"  # timed out → default option applied
-    TIMEOUT_CANCEL = "timeout_cancel"    # timed out → cancelled
+    TIMEOUT_CANCEL = "timeout_cancel"  # timed out → cancelled
     TIMEOUT_PROCEED = "timeout_proceed"  # timed out → proceed unconfirmed
-    CANCELLED = "cancelled"             # explicitly cancelled (e.g. shutdown)
+    CANCELLED = "cancelled"  # explicitly cancelled (e.g. shutdown)
 
 
 @dataclass
 class DecisionOutcome:
     """Result handed back to the asking coroutine."""
+
     decision_id: str
     status: DecisionStatus
     selected_option: Optional[str] = None
@@ -204,7 +207,11 @@ class PendingDecisionRegistry:
         self._pending[did] = record
         logger.info(
             "HITL.register | decision_id=%s urgency=%s on_timeout=%s timeout=%.0fs devices=%s",
-            did, urgency, policy.value, timeout_s, record.devices,
+            did,
+            urgency,
+            policy.value,
+            timeout_s,
+            record.devices,
         )
         return record
 
@@ -238,7 +245,10 @@ class PendingDecisionRegistry:
         )
         logger.info(
             "HITL.resolve | decision_id=%s option=%r source=%s elapsed=%.2fs",
-            decision_id, selected_option, source, outcome.elapsed_s,
+            decision_id,
+            selected_option,
+            source,
+            outcome.elapsed_s,
         )
         if not record.future.done():
             record.future.set_result(outcome)
@@ -271,7 +281,9 @@ class PendingDecisionRegistry:
             outcome = self._timeout_outcome(record)
             logger.info(
                 "HITL.timeout | decision_id=%s policy=%s → status=%s after %.0fs",
-                record.decision_id, record.on_timeout.value, outcome.status.value,
+                record.decision_id,
+                record.on_timeout.value,
+                outcome.status.value,
                 record.timeout_s,
             )
             return outcome
@@ -327,10 +339,7 @@ class PendingDecisionRegistry:
         (await_decision already handles its own timeout).  Returns swept ids.
         """
         now = time.time()
-        expired = [
-            did for did, rec in list(self._pending.items())
-            if now - rec.created_at > rec.timeout_s
-        ]
+        expired = [did for did, rec in list(self._pending.items()) if now - rec.created_at > rec.timeout_s]
         for did in expired:
             rec = self._pending.pop(did, None)
             if rec is None:
@@ -428,6 +437,7 @@ async def request_human_decision(
 async def _default_emit(device_id: str, message: Dict[str, Any]) -> None:
     """Default transport: deliver via the gateway connection manager."""
     from galaxy_gateway.websocket_handler import connection_manager  # noqa: PLC0415
+
     await connection_manager.send_to_device(device_id, message)
 
 

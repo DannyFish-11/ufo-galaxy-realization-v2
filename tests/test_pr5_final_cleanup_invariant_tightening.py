@@ -58,35 +58,35 @@ import pytest
 
 try:
     from core.final_cleanup_invariant_tightening import (
+        CANONICAL_CAPABILITY_ROUTING_PATH,
+        CANONICAL_COMPLETION_INGRESS_PATH,
+        CANONICAL_PROVIDER_ROUTING_PATH,
+        CANONICAL_RUNTIME_TRUTH_INGRESS_PATH,
+        CANONICAL_VALIDATION_GATE_PATH,
         FINAL_CLEANUP_INVARIANT_TIGHTENING_AUTHORITY,
         FINAL_CLEANUP_INVARIANT_TIGHTENING_PR5_SENTINEL,
-        NO_BYPASS_COMPLETION_INGRESS_POLICY,
+        LEGACY_PATH_MUST_NOT_RE_ENTER_CANONICAL_SURFACE_POLICY,
         NO_BYPASS_CAPABILITY_ROUTING_POLICY,
-        NO_BYPASS_RUNTIME_TRUTH_INGRESS_POLICY,
+        NO_BYPASS_COMPLETION_INGRESS_POLICY,
         NO_BYPASS_PROVIDER_ROUTING_POLICY,
+        NO_BYPASS_RUNTIME_TRUTH_INGRESS_POLICY,
         NO_BYPASS_VALIDATION_GATE_POLICY,
         SEMANTIC_CAPABILITY_TIER_POLICY,
-        LEGACY_PATH_MUST_NOT_RE_ENTER_CANONICAL_SURFACE_POLICY,
-        CANONICAL_COMPLETION_INGRESS_PATH,
-        CANONICAL_CAPABILITY_ROUTING_PATH,
-        CANONICAL_RUNTIME_TRUTH_INGRESS_PATH,
-        CANONICAL_PROVIDER_ROUTING_PATH,
-        CANONICAL_VALIDATION_GATE_PATH,
-        ClosureArea,
-        CapabilityTier,
-        BypassGuardVerdict,
         BypassGuardResult,
-        CapabilityTierRecord,
-        FinalCleanupPostureSnapshot,
+        BypassGuardVerdict,
         BypassInvariantViolation,
-        assert_completion_ingress_is_canonical,
+        CapabilityTier,
+        CapabilityTierRecord,
+        ClosureArea,
+        FinalCleanupPostureSnapshot,
         assert_capability_routing_is_canonical,
-        assert_runtime_truth_ingress_is_canonical,
+        assert_completion_ingress_is_canonical,
         assert_provider_routing_is_canonical,
+        assert_runtime_truth_ingress_is_canonical,
         assert_validation_gate_is_canonical,
-        get_capability_tier_registry,
-        get_capability_tier,
         build_final_cleanup_posture_snapshot,
+        get_capability_tier,
+        get_capability_tier_registry,
         is_final_cleanup_posture_acceptable,
         run_all_no_bypass_guards,
     )
@@ -96,22 +96,20 @@ except ImportError:
     _MODULE_AVAILABLE = False
 
 try:
-    from core.runtime import (
-        FINAL_CLEANUP_INVARIANT_TIGHTENING_AUTHORITY as _rt_authority,
-        FINAL_CLEANUP_INVARIANT_TIGHTENING_PR5_SENTINEL as _rt_pr5,
-        NO_BYPASS_COMPLETION_INGRESS_POLICY as _rt_completion,
-        NO_BYPASS_CAPABILITY_ROUTING_POLICY as _rt_capability,
-        NO_BYPASS_RUNTIME_TRUTH_INGRESS_POLICY as _rt_truth,
-        NO_BYPASS_PROVIDER_ROUTING_POLICY as _rt_provider,
-        NO_BYPASS_VALIDATION_GATE_POLICY as _rt_gate,
-        assert_completion_ingress_is_canonical as _rt_assert_completion,
-        assert_capability_routing_is_canonical as _rt_assert_capability,
-        assert_runtime_truth_ingress_is_canonical as _rt_assert_truth,
-        assert_provider_routing_is_canonical as _rt_assert_provider,
-        assert_validation_gate_is_canonical as _rt_assert_gate,
-        is_final_cleanup_posture_acceptable as _rt_posture_ok,
-        build_final_cleanup_posture_snapshot as _rt_snapshot,
-    )
+    from core.runtime import FINAL_CLEANUP_INVARIANT_TIGHTENING_AUTHORITY as _rt_authority
+    from core.runtime import FINAL_CLEANUP_INVARIANT_TIGHTENING_PR5_SENTINEL as _rt_pr5
+    from core.runtime import NO_BYPASS_CAPABILITY_ROUTING_POLICY as _rt_capability
+    from core.runtime import NO_BYPASS_COMPLETION_INGRESS_POLICY as _rt_completion
+    from core.runtime import NO_BYPASS_PROVIDER_ROUTING_POLICY as _rt_provider
+    from core.runtime import NO_BYPASS_RUNTIME_TRUTH_INGRESS_POLICY as _rt_truth
+    from core.runtime import NO_BYPASS_VALIDATION_GATE_POLICY as _rt_gate
+    from core.runtime import assert_capability_routing_is_canonical as _rt_assert_capability
+    from core.runtime import assert_completion_ingress_is_canonical as _rt_assert_completion
+    from core.runtime import assert_provider_routing_is_canonical as _rt_assert_provider
+    from core.runtime import assert_runtime_truth_ingress_is_canonical as _rt_assert_truth
+    from core.runtime import assert_validation_gate_is_canonical as _rt_assert_gate
+    from core.runtime import build_final_cleanup_posture_snapshot as _rt_snapshot
+    from core.runtime import is_final_cleanup_posture_acceptable as _rt_posture_ok
 
     _RUNTIME_AVAILABLE = True
 except ImportError:
@@ -197,8 +195,7 @@ class TestB_NoBypassGuards:
         assert result is not None
         assert result.area == expected_area
         assert result.verdict == BypassGuardVerdict.CANONICAL_PATH_CONFIRMED, (
-            f"Guard for {expected_area.value} did not confirm canonical path: "
-            f"{result.description}"
+            f"Guard for {expected_area.value} did not confirm canonical path: " f"{result.description}"
         )
         assert not result.bypass_risk, result.description
         assert isinstance(result.canonical_path, str)
@@ -253,8 +250,7 @@ class TestC_AggregateRunner:
         results = run_all_no_bypass_guards()
         for result in results:
             assert result.verdict == BypassGuardVerdict.CANONICAL_PATH_CONFIRMED, (
-                f"Guard for {result.area.value} returned {result.verdict.value}: "
-                f"{result.description}"
+                f"Guard for {result.area.value} returned {result.verdict.value}: " f"{result.description}"
             )
 
     def test_C04_no_bypass_risks_detected(self):
@@ -330,8 +326,7 @@ class TestE_PostureAcceptable:
 
     def test_E01_posture_is_acceptable(self):
         assert is_final_cleanup_posture_acceptable(), (
-            "is_final_cleanup_posture_acceptable() returned False; "
-            "at least one canonical module is not importable."
+            "is_final_cleanup_posture_acceptable() returned False; " "at least one canonical module is not importable."
         )
 
 
@@ -508,9 +503,7 @@ class TestI_ProjectionSentinel:
     def test_I03_sentinel_contains_expected_keywords(self):
         sentinel = FINAL_CLEANUP_INVARIANT_TIGHTENING_ALIGNED_PR5_FINAL
         for keyword in ("PR5", "FINAL", "no-bypass"):
-            assert keyword.lower() in sentinel.lower(), (
-                f"Sentinel missing expected keyword '{keyword}'"
-            )
+            assert keyword.lower() in sentinel.lower(), f"Sentinel missing expected keyword '{keyword}'"
 
 
 # ---------------------------------------------------------------------------
@@ -564,15 +557,19 @@ class TestK_SentinelKeywords:
         assert "AUTHORITY" in FINAL_CLEANUP_INVARIANT_TIGHTENING_AUTHORITY
 
     def test_K02_pr5_sentinel_contains_pr5_keyword(self):
-        assert "PR5" in FINAL_CLEANUP_INVARIANT_TIGHTENING_PR5_SENTINEL or \
-               "PR-5" in FINAL_CLEANUP_INVARIANT_TIGHTENING_PR5_SENTINEL
+        assert (
+            "PR5" in FINAL_CLEANUP_INVARIANT_TIGHTENING_PR5_SENTINEL
+            or "PR-5" in FINAL_CLEANUP_INVARIANT_TIGHTENING_PR5_SENTINEL
+        )
 
     def test_K03_completion_ingress_policy_contains_canonical_ingress_keyword(self):
         assert "CanonicalCompletionIngress" in NO_BYPASS_COMPLETION_INGRESS_POLICY
 
     def test_K04_capability_routing_policy_contains_gate_keyword(self):
-        assert "capability_gate" in NO_BYPASS_CAPABILITY_ROUTING_POLICY or \
-               "evaluate_capability_gate" in NO_BYPASS_CAPABILITY_ROUTING_POLICY
+        assert (
+            "capability_gate" in NO_BYPASS_CAPABILITY_ROUTING_POLICY
+            or "evaluate_capability_gate" in NO_BYPASS_CAPABILITY_ROUTING_POLICY
+        )
 
     def test_K05_runtime_truth_ingress_policy_contains_ingress_function_keyword(self):
         assert "ingest_android_runtime_state_update" in NO_BYPASS_RUNTIME_TRUTH_INGRESS_POLICY

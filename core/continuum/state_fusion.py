@@ -34,9 +34,8 @@ from __future__ import annotations
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
-from core.continuum.config import ContinuumConfig, DEFAULT_CONTINUUM_CONFIG
+from core.continuum.config import DEFAULT_CONTINUUM_CONFIG, ContinuumConfig
 from core.continuum.types import ContinuumPhase, HumanFieldState, UnifiedState
-
 
 # ---------------------------------------------------------------------------
 # Internal helpers
@@ -66,9 +65,7 @@ class StateFusion:
             :data:`~core.continuum.config.DEFAULT_CONTINUUM_CONFIG`.
     """
 
-    def __init__(
-        self, config: ContinuumConfig = DEFAULT_CONTINUUM_CONFIG
-    ) -> None:
+    def __init__(self, config: ContinuumConfig = DEFAULT_CONTINUUM_CONFIG) -> None:
         self._cfg = config
 
     # ------------------------------------------------------------------
@@ -105,9 +102,7 @@ class StateFusion:
 
         # Apply trend nudges from history when available.
         if history:
-            context_utility, urgency = self._apply_history_trend(
-                context_utility, urgency, history
-            )
+            context_utility, urgency = self._apply_history_trend(context_utility, urgency, history)
 
         phase_candidate, candidate_confidence = self._infer_phase_candidate(
             human=human,
@@ -152,10 +147,7 @@ class StateFusion:
         """
         # Presence signal: combination of intent + attention + utility + urgency.
         presence = _clamp(
-            0.40 * human.intent_probability
-            + 0.30 * human.attention
-            + 0.20 * context_utility
-            + 0.10 * urgency
+            0.40 * human.intent_probability + 0.30 * human.attention + 0.20 * context_utility + 0.10 * urgency
         )
 
         # Collapse signal: strong intent + high utility + low risk/uncertainty.
@@ -168,12 +160,7 @@ class StateFusion:
         )
 
         # Retreat signal: high risk/uncertainty/fatigue suppresses action.
-        retreat = _clamp(
-            0.40 * action_risk
-            + 0.30 * uncertainty
-            + 0.20 * human.fatigue
-            - 0.20 * context_utility
-        )
+        retreat = _clamp(0.40 * action_risk + 0.30 * uncertainty + 0.20 * human.fatigue - 0.20 * context_utility)
 
         # --- Phase selection -------------------------------------------
         # MANIFEST: collapse is strong, presence is sufficient, retreat low.
@@ -222,9 +209,7 @@ class StateFusion:
         if len(recent) < 2:
             return context_utility, urgency
 
-        utility_delta = (
-            recent[-1].context_utility - recent[0].context_utility
-        )
+        utility_delta = recent[-1].context_utility - recent[0].context_utility
         urgency_delta = recent[-1].urgency - recent[0].urgency
 
         # Small nudge in the direction of the delta (capped at ±10 %).

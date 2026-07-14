@@ -525,18 +525,14 @@ class DelegatedFlowHistoryReport:
         """Construct from a dict (round-trip complement of ``to_dict``)."""
         return cls(
             report_id=data.get("report_id", uuid.uuid4().hex[:12]),
-            evidence_status=HistoryEvidenceStatus.from_string(
-                data.get("evidence_status", "")
-            ),
+            evidence_status=HistoryEvidenceStatus.from_string(data.get("evidence_status", "")),
             structure_present=data.get("structure_present", False),
             runtime_closure_established=data.get("runtime_closure_established", False),
             total_entries=data.get("total_entries", 0),
             observed_kinds=data.get("observed_kinds", []),
             gap_description=data.get("gap_description", ""),
             summary=data.get("summary", ""),
-            staleness_threshold_seconds=data.get(
-                "staleness_threshold_seconds", DEFAULT_STALENESS_THRESHOLD_SECONDS
-            ),
+            staleness_threshold_seconds=data.get("staleness_threshold_seconds", DEFAULT_STALENESS_THRESHOLD_SECONDS),
             latest_entry_age_seconds=data.get("latest_entry_age_seconds"),
             evaluated_at=data.get("evaluated_at", time.time()),
         )
@@ -546,6 +542,7 @@ class DelegatedFlowHistoryReport:
 # Structure probe — imported lazily to avoid circular imports
 # ---------------------------------------------------------------------------
 
+
 def _probe_structure_present() -> bool:
     """Return True when the delegated flow acceptance gate is importable.
 
@@ -554,6 +551,7 @@ def _probe_structure_present() -> bool:
     """
     try:
         import core.delegated_flow_acceptance_gate as _m  # noqa: F401
+
         return hasattr(_m, "DelegatedFlowAcceptanceGate")
     except Exception:
         return False
@@ -791,10 +789,7 @@ class DelegatedFlowDecisionHistory:
                 f"missing: {'; '.join(missing_parts)}.  "
                 "End-to-end closure has not been witnessed."
             )
-            summary_str = (
-                f"observed_but_incomplete: {total} entries; "
-                f"missing {len(missing_parts)} category/ies"
-            )
+            summary_str = f"observed_but_incomplete: {total} entries; " f"missing {len(missing_parts)} category/ies"
         else:
             status = HistoryEvidenceStatus.insufficient_evidence
             gap_desc = (
@@ -803,10 +798,7 @@ class DelegatedFlowDecisionHistory:
                 f"Missing: {'; '.join(missing_parts)}.  "
                 "Cannot assess end-to-end closure."
             )
-            summary_str = (
-                f"insufficient_evidence: {total} entries; "
-                f"{categories_seen}/3 required categories"
-            )
+            summary_str = f"insufficient_evidence: {total} entries; " f"{categories_seen}/3 required categories"
 
         return DelegatedFlowHistoryReport(
             evidence_status=status,

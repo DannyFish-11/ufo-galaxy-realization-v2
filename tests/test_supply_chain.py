@@ -43,9 +43,7 @@ def _import_gen_report():
     """Import gen_node_security_report as a module."""
     import importlib.util
 
-    spec = importlib.util.spec_from_file_location(
-        "gen_node_security_report", str(GEN_REPORT_PY)
-    )
+    spec = importlib.util.spec_from_file_location("gen_node_security_report", str(GEN_REPORT_PY))
     mod = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
     spec.loader.exec_module(mod)  # type: ignore[union-attr]
     return mod
@@ -60,23 +58,18 @@ class TestRequirementsHashFile:
     """requirements.hash.txt must exist and be well-formed."""
 
     def test_hash_file_present(self):
-        assert REQUIREMENTS_HASH.exists(), (
-            "requirements.hash.txt is missing — run: scripts/pin_deps.sh"
-        )
+        assert REQUIREMENTS_HASH.exists(), "requirements.hash.txt is missing — run: scripts/pin_deps.sh"
 
     def test_hash_file_not_empty(self):
         content = REQUIREMENTS_HASH.read_text()
-        non_comment_lines = [
-            ln for ln in content.splitlines() if ln.strip() and not ln.startswith("#")
-        ]
+        non_comment_lines = [ln for ln in content.splitlines() if ln.strip() and not ln.startswith("#")]
         assert len(non_comment_lines) > 0, "requirements.hash.txt has no package entries"
 
     def test_hash_file_contains_require_hashes_entries(self):
         """At least one entry must have a --hash=sha256 annotation."""
         content = REQUIREMENTS_HASH.read_text()
         assert "--hash=sha256:" in content, (
-            "requirements.hash.txt contains no sha256 hash entries; "
-            "regenerate with: scripts/pin_deps.sh"
+            "requirements.hash.txt contains no sha256 hash entries; " "regenerate with: scripts/pin_deps.sh"
         )
 
     def test_hash_file_has_pinned_versions(self):
@@ -94,22 +87,19 @@ class TestRequirementsHashFile:
             if ">=" in stripped and "==" not in stripped:
                 range_pkgs.append(stripped)
         assert range_pkgs == [], (
-            f"requirements.hash.txt contains unpinned entries: {range_pkgs}; "
-            "regenerate with: scripts/pin_deps.sh"
+            f"requirements.hash.txt contains unpinned entries: {range_pkgs}; " "regenerate with: scripts/pin_deps.sh"
         )
 
     def test_hash_file_covers_fastapi(self):
         """fastapi must be included as it is a security-critical package."""
         content = REQUIREMENTS_HASH.read_text()
-        assert "fastapi==" in content.lower() or "fastapi ==" in content.lower(), (
-            "fastapi not found in requirements.hash.txt"
-        )
+        assert (
+            "fastapi==" in content.lower() or "fastapi ==" in content.lower()
+        ), "fastapi not found in requirements.hash.txt"
 
     def test_hash_file_covers_cryptography(self):
         content = REQUIREMENTS_HASH.read_text()
-        assert "cryptography==" in content.lower(), (
-            "cryptography not found in requirements.hash.txt"
-        )
+        assert "cryptography==" in content.lower(), "cryptography not found in requirements.hash.txt"
 
 
 # ===========================================================================
@@ -139,9 +129,7 @@ class TestRequirementsIn:
             stripped = line.strip()
             if not stripped or stripped.startswith("#"):
                 continue
-            assert "==" not in stripped, (
-                f"requirements.in should use >= ranges, not ==: '{stripped}'"
-            )
+            assert "==" not in stripped, f"requirements.in should use >= ranges, not ==: '{stripped}'"
 
 
 # ===========================================================================
@@ -154,9 +142,9 @@ class TestPinDepsScript:
         assert PIN_DEPS_SH.exists(), "scripts/pin_deps.sh is missing"
 
     def test_pin_deps_sh_executable(self):
-        assert os.access(PIN_DEPS_SH, os.X_OK), (
-            "scripts/pin_deps.sh is not executable — run: chmod +x scripts/pin_deps.sh"
-        )
+        assert os.access(
+            PIN_DEPS_SH, os.X_OK
+        ), "scripts/pin_deps.sh is not executable — run: chmod +x scripts/pin_deps.sh"
 
     def test_pin_deps_sh_help(self):
         """--help flag should exit 0 and print usage."""
@@ -224,12 +212,16 @@ class TestBuildNodeReport:
 
     def test_report_has_required_schema_keys(self):
         node_name, mod = self._first_node()
-        report = mod.build_node_report(
-            node_name, check_signatures=False
-        )
+        report = mod.build_node_report(node_name, check_signatures=False)
         required_keys = [
-            "schema_version", "generated_at", "node", "image",
-            "sbom", "signature", "dependencies", "hash_locked",
+            "schema_version",
+            "generated_at",
+            "node",
+            "image",
+            "sbom",
+            "signature",
+            "dependencies",
+            "hash_locked",
             "supply_chain_checks",
         ]
         for key in required_keys:
@@ -243,9 +235,7 @@ class TestBuildNodeReport:
     def test_report_hash_locked_true_when_file_present(self):
         node_name, mod = self._first_node()
         report = mod.build_node_report(node_name, check_signatures=False)
-        assert report["hash_locked"] is True, (
-            "requirements.hash.txt not found — report should reflect hash_locked=True"
-        )
+        assert report["hash_locked"] is True, "requirements.hash.txt not found — report should reflect hash_locked=True"
 
     def test_report_supply_chain_checks_structure(self):
         node_name, mod = self._first_node()
@@ -273,9 +263,7 @@ class TestBuildNodeReport:
 
     def test_report_sbom_absent_when_no_sbom_dir(self):
         node_name, mod = self._first_node()
-        report = mod.build_node_report(
-            node_name, sbom_dir=None, check_signatures=False
-        )
+        report = mod.build_node_report(node_name, sbom_dir=None, check_signatures=False)
         assert report["sbom"]["present"] is False
 
     def test_report_sbom_found_when_file_present(self, tmp_path):
@@ -286,9 +274,7 @@ class TestBuildNodeReport:
         sbom_data = {"components": [{"name": "pkg-a"}, {"name": "pkg-b"}]}
         sbom_file = tmp_path / f"{node_name.lower()}.sbom.json"
         sbom_file.write_text(json.dumps(sbom_data))
-        report = mod.build_node_report(
-            node_name, sbom_dir=tmp_path, check_signatures=False
-        )
+        report = mod.build_node_report(node_name, sbom_dir=tmp_path, check_signatures=False)
         assert report["sbom"]["present"] is True
         assert report["sbom"]["component_count"] == 2
         assert report["supply_chain_checks"]["sbom_present"] is True
@@ -316,9 +302,11 @@ class TestGenReportCLI:
         sample = nodes[:3]
         ret = mod.main(
             [
-                "--nodes", *sample,
+                "--nodes",
+                *sample,
                 "--no-sig-check",
-                "--output-dir", str(tmp_path),
+                "--output-dir",
+                str(tmp_path),
             ]
         )
         assert ret == 0
@@ -332,16 +320,22 @@ class TestGenReportCLI:
         nodes = mod.discover_nodes()
         mod.main(
             [
-                "--nodes", nodes[0],
+                "--nodes",
+                nodes[0],
                 "--no-sig-check",
-                "--output-dir", str(tmp_path),
+                "--output-dir",
+                str(tmp_path),
             ]
         )
         summary = json.loads((tmp_path / "security-summary.json").read_text())
         required = [
-            "schema_version", "generated_at", "total_nodes",
-            "nodes_with_sbom", "nodes_with_verified_signature",
-            "nodes_with_hash_locked_deps", "nodes",
+            "schema_version",
+            "generated_at",
+            "total_nodes",
+            "nodes_with_sbom",
+            "nodes_with_verified_signature",
+            "nodes_with_hash_locked_deps",
+            "nodes",
         ]
         for field in required:
             assert field in summary, f"Missing field in summary: {field}"
@@ -352,25 +346,28 @@ class TestGenReportCLI:
         sample = nodes[:2]
         mod.main(
             [
-                "--nodes", *sample,
+                "--nodes",
+                *sample,
                 "--no-sig-check",
-                "--output-dir", str(tmp_path),
+                "--output-dir",
+                str(tmp_path),
             ]
         )
         for node in sample:
-            assert (tmp_path / f"{node}.security.json").exists(), (
-                f"Per-node JSON not generated for {node}"
-            )
+            assert (tmp_path / f"{node}.security.json").exists(), f"Per-node JSON not generated for {node}"
 
     def test_text_format_output(self, tmp_path):
         mod = _import_gen_report()
         nodes = mod.discover_nodes()
         mod.main(
             [
-                "--nodes", nodes[0],
+                "--nodes",
+                nodes[0],
                 "--no-sig-check",
-                "--format", "text",
-                "--output-dir", str(tmp_path),
+                "--format",
+                "text",
+                "--output-dir",
+                str(tmp_path),
             ]
         )
         txt = tmp_path / f"{nodes[0]}.security.txt"
@@ -386,10 +383,12 @@ class TestGenReportCLI:
         sample = nodes[:2]
         mod.main(
             [
-                "--nodes", *sample,
+                "--nodes",
+                *sample,
                 "--no-sig-check",
                 "--summary-only",
-                "--output-dir", str(tmp_path),
+                "--output-dir",
+                str(tmp_path),
             ]
         )
         # Summary must exist
@@ -403,9 +402,12 @@ class TestGenReportCLI:
         nodes = mod.discover_nodes()
         ret = mod.main(
             [
-                "--nodes", nodes[0], "Node_DOES_NOT_EXIST_99999",
+                "--nodes",
+                nodes[0],
+                "Node_DOES_NOT_EXIST_99999",
                 "--no-sig-check",
-                "--output-dir", str(tmp_path),
+                "--output-dir",
+                str(tmp_path),
             ]
         )
         assert ret == 0
@@ -429,14 +431,16 @@ class TestPipHashVerify:
         """
         result = subprocess.run(
             [
-                sys.executable, "-m", "pip", "install",
+                sys.executable,
+                "-m",
+                "pip",
+                "install",
                 "--require-hashes",
                 "--dry-run",
-                "-r", str(REQUIREMENTS_HASH),
+                "-r",
+                str(REQUIREMENTS_HASH),
             ],
             capture_output=True,
             text=True,
         )
-        assert result.returncode == 0, (
-            f"pip --require-hashes --dry-run failed:\n{result.stderr}"
-        )
+        assert result.returncode == 0, f"pip --require-hashes --dry-run failed:\n{result.stderr}"

@@ -22,10 +22,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # OutputPlan tests
 # ---------------------------------------------------------------------------
+
 
 class TestOutputPlan:
     def test_text_only_defaults(self):
@@ -44,14 +44,17 @@ class TestOutputPlan:
         d = OutputPlan().to_dict()
         assert set(d.keys()) == {"text", "voice", "avatar", "overlay", "ui_surface"}
 
-    @pytest.mark.parametrize("mode,expected_surface", [
-        ("chat", "chat_panel"),
-        ("deep_thinking", "infinite_canvas"),
-        ("control_console", "control_console"),
-        ("field_assistant", "field_overlay"),
-        ("ambient_companion", "ambient"),
-        ("execution_bridge", "control_console"),
-    ])
+    @pytest.mark.parametrize(
+        "mode,expected_surface",
+        [
+            ("chat", "chat_panel"),
+            ("deep_thinking", "infinite_canvas"),
+            ("control_console", "control_console"),
+            ("field_assistant", "field_overlay"),
+            ("ambient_companion", "ambient"),
+            ("execution_bridge", "control_console"),
+        ],
+    )
     def test_from_mode_surface(self, mode: str, expected_surface: str):
         from core.schemas.interaction_envelope import OutputPlan
 
@@ -76,14 +79,21 @@ class TestOutputPlan:
     def test_from_mode_text_always_true(self):
         from core.schemas.interaction_envelope import OutputPlan
 
-        for mode in ("chat", "deep_thinking", "control_console", "field_assistant",
-                     "ambient_companion", "execution_bridge"):
+        for mode in (
+            "chat",
+            "deep_thinking",
+            "control_console",
+            "field_assistant",
+            "ambient_companion",
+            "execution_bridge",
+        ):
             assert OutputPlan.from_mode(mode).text is True
 
 
 # ---------------------------------------------------------------------------
 # InteractionEnvelope tests
 # ---------------------------------------------------------------------------
+
 
 class TestInteractionEnvelope:
     def test_default_construction(self):
@@ -102,10 +112,15 @@ class TestInteractionEnvelope:
 
         d = InteractionEnvelope().to_dict()
         expected_keys = {
-            "interaction_id", "trace_id", "session_id",
-            "mode", "relationship_mode",
-            "persona_state", "multimodal_context",
-            "output_plan", "created_at",
+            "interaction_id",
+            "trace_id",
+            "session_id",
+            "mode",
+            "relationship_mode",
+            "persona_state",
+            "multimodal_context",
+            "output_plan",
+            "created_at",
         }
         assert set(d.keys()) == expected_keys
 
@@ -134,6 +149,7 @@ class TestInteractionEnvelope:
         d = InteractionEnvelope().to_dict()
         # Should be parseable as ISO 8601
         from datetime import datetime
+
         dt = datetime.fromisoformat(d["created_at"])
         assert dt.tzinfo is not None
 
@@ -142,10 +158,12 @@ class TestInteractionEnvelope:
 # InteractionBuilder tests
 # ---------------------------------------------------------------------------
 
+
 class TestInteractionBuilder:
     def _make_decision(self, mode: str = "chat") -> Any:
         """Build a minimal InteractionDecision for testing."""
         from core.interaction.interaction_types import InteractionDecision, InteractionMode
+
         return InteractionDecision(
             mode=InteractionMode(mode),
             relationship_mode="scholar_companion",
@@ -155,6 +173,7 @@ class TestInteractionBuilder:
     def _make_persona_state(self) -> Any:
         """Build a minimal PersonaState for testing."""
         from core.schemas.persona_state import PersonaState
+
         return PersonaState(session_id="sess_test", mood="focused")
 
     def test_build_returns_envelope(self):
@@ -274,6 +293,7 @@ class TestInteractionBuilder:
 
     def test_to_dict_is_json_serialisable(self):
         import json
+
         from core.interaction.interaction_builder import InteractionBuilder
 
         env = InteractionBuilder().build(
@@ -292,6 +312,7 @@ class TestInteractionBuilder:
 # OpenClawd.process() integration tests
 # ---------------------------------------------------------------------------
 
+
 class TestOpenClawdInteractionEnvelope:
     """Verify OpenClawd.process() attaches interaction_envelope to its response.
 
@@ -306,8 +327,7 @@ class TestOpenClawdInteractionEnvelope:
 
         oc = OpenClawd()
 
-        async def _mock_chat(message, intent=None, device_id=None,
-                              session_id=None, trace_id=None):
+        async def _mock_chat(message, intent=None, device_id=None, session_id=None, trace_id=None):
             return {"success": True, "response": "ok", "metadata": {}}
 
         with patch.object(oc, "_get_kernel", return_value=None):
@@ -329,8 +349,15 @@ class TestOpenClawdInteractionEnvelope:
         result = await self._run_process(message="hello")
         envelope = result.get("interaction_envelope")
         assert envelope is not None
-        for key in ("interaction_id", "trace_id", "session_id", "mode",
-                    "relationship_mode", "output_plan", "created_at"):
+        for key in (
+            "interaction_id",
+            "trace_id",
+            "session_id",
+            "mode",
+            "relationship_mode",
+            "output_plan",
+            "created_at",
+        ):
             assert key in envelope, f"Key {key!r} missing from interaction_envelope"
 
     @pytest.mark.asyncio

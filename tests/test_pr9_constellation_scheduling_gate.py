@@ -49,11 +49,12 @@ D) ``ConstellationRuntime.run()`` top-level integration
 
 from __future__ import annotations
 
-import sys
-import os
 import asyncio
-import pytest
+import os
+import sys
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -62,13 +63,16 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_runtime(dag_evolution: bool = False):
     from core.constellation_runtime import ConstellationRuntime
+
     return ConstellationRuntime(enable_dag_evolution=dag_evolution)
 
 
 def _make_subtask(task_id: str = "t1", device_id: str = "", device_type: str = ""):
     from core.schemas.orchestration import SubTask, SubTaskStatus
+
     return SubTask(
         task_id=task_id,
         name=f"task_{task_id}",
@@ -80,6 +84,7 @@ def _make_subtask(task_id: str = "t1", device_id: str = "", device_type: str = "
 
 def _make_participation_summary(device_id: str, eligible: bool = True):
     from core.device_participation import ParticipationSummary
+
     return ParticipationSummary(
         device_id=device_id,
         assessed=True,
@@ -231,7 +236,7 @@ class TestCheckSchedulingGate:
 
 def _build_mock_orchestrator():
     """Return a mock SmartOrchestrator that decomposes into two subtasks."""
-    from core.schemas.orchestration import TaskDecomposition, SubTaskStatus
+    from core.schemas.orchestration import SubTaskStatus, TaskDecomposition
 
     mock = MagicMock()
 

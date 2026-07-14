@@ -159,9 +159,7 @@ logger = logging.getLogger("Galaxy.LLM.ExecutionAuthority")
 #: adapter-specific, or compatibility-layer path.
 #:
 #: See ``docs/MODEL_ROUTING_AUTHORITY.md`` §12 for the full execution policy.
-LLM_EXECUTION_AUTHORITY: str = (
-    "core.llm.execution_authority.CognitiveExecutionAuthority"
-)
+LLM_EXECUTION_AUTHORITY: str = "core.llm.execution_authority.CognitiveExecutionAuthority"
 
 
 # ---------------------------------------------------------------------------
@@ -270,8 +268,8 @@ class CognitiveExecutionResult:
     is_canonical: bool = True
     authority: str = LLM_EXECUTION_AUTHORITY
     execution_trace: List[str] = field(default_factory=list)
-    source_context: Optional[Any] = None   # CognitiveContextAssembly
-    source_supply: Optional[Any] = None    # SupplyResolutionResult
+    source_context: Optional[Any] = None  # CognitiveContextAssembly
+    source_supply: Optional[Any] = None  # SupplyResolutionResult
     raw_response: Optional[Dict[str, Any]] = None
     input_tokens: int = 0
     output_tokens: int = 0
@@ -375,6 +373,7 @@ class CognitiveExecutionAuthority:
         """
         if self._router is None:
             from core.multi_llm_router import get_llm_router
+
             self._router = get_llm_router()
         return self._router
 
@@ -430,15 +429,10 @@ class CognitiveExecutionAuthority:
         supplied_provider = _get_attr(request.supply_resolution, "supplied_provider") or ""
         supplied_model = _get_attr(request.supply_resolution, "supplied_model") or ""
 
-        trace.append(
-            f"execution_target: provider={supplied_provider!r} model={supplied_model!r}"
-        )
+        trace.append(f"execution_target: provider={supplied_provider!r} model={supplied_model!r}")
 
         if request.execution_metadata:
-            meta_summary = ", ".join(
-                f"{k}={v!r}"
-                for k, v in list(request.execution_metadata.items())[:8]
-            )
+            meta_summary = ", ".join(f"{k}={v!r}" for k, v in list(request.execution_metadata.items())[:8])
             trace.append(f"execution_metadata: {meta_summary}")
 
         # ── 4. Extract assembled messages from L3 context ─────────────
@@ -450,8 +444,7 @@ class CognitiveExecutionAuthority:
             trace.append(f"tool_manifest: count={len(tool_manifest)}")
 
         logger.debug(
-            "CognitiveExecutionAuthority.execute: provider=%s model=%s "
-            "messages=%d tools=%s feature=%s",
+            "CognitiveExecutionAuthority.execute: provider=%s model=%s " "messages=%d tools=%s feature=%s",
             supplied_provider,
             supplied_model,
             len(messages),
@@ -471,8 +464,8 @@ class CognitiveExecutionAuthority:
         )
 
         # ── 6. Normalize output under center-owned semantics ──────────
-        content, tool_calls, raw_dict, input_tokens, output_tokens, latency_ms = (
-            self._normalize_response(raw_llm_response, trace)
+        content, tool_calls, raw_dict, input_tokens, output_tokens, latency_ms = self._normalize_response(
+            raw_llm_response, trace
         )
 
         trace.append("execution: complete")
@@ -554,10 +547,7 @@ class CognitiveExecutionAuthority:
         is_satisfied = _get_attr(supply_resolution, "is_satisfied")
         if not is_satisfied:
             supplied_provider = _get_attr(supply_resolution, "supplied_provider")
-            trace.append(
-                f"supply_authority: verified but unsatisfied "
-                f"(supplied_provider={supplied_provider!r})"
-            )
+            trace.append(f"supply_authority: verified but unsatisfied " f"(supplied_provider={supplied_provider!r})")
             raise ValueError(
                 "CognitiveExecutionAuthority: supply is not satisfied — no "
                 "legal provider/model path was resolved by LLMSupplyAuthority. "
@@ -647,10 +637,7 @@ class CognitiveExecutionAuthority:
         if tool_calls is not None and len(tool_calls) == 0:
             tool_calls = None
 
-        trace.append(
-            f"normalization: content_len={len(content)} "
-            f"tool_calls={'yes' if tool_calls else 'none'}"
-        )
+        trace.append(f"normalization: content_len={len(content)} " f"tool_calls={'yes' if tool_calls else 'none'}")
         return content, tool_calls, raw_dict, input_tokens, output_tokens, latency_ms
 
 

@@ -62,6 +62,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from core.execution.intent_profile import (
+    ExecutionIntentProfile,
+    build_execution_intent_profile,
+)
 from core.execution.readiness_gate import (
     BlockedBy,
     ExecutionReadinessGate,
@@ -70,11 +74,6 @@ from core.execution.readiness_gate import (
     evaluate_readiness,
     reset_readiness_gate,
 )
-from core.execution.intent_profile import (
-    ExecutionIntentProfile,
-    build_execution_intent_profile,
-)
-
 
 # ---------------------------------------------------------------------------
 # Fixtures / helpers
@@ -473,8 +472,8 @@ class TestConfirmRequiredPath:
         assert result.requires_confirmation is True
 
     def test_hitl_manual_mode_returns_confirm_required(self):
-        from core.policy.hitl_policy import HITLPolicy, HITLMode, HITLDecisionOutcome
         from core.execution_policy import ExecutionPolicy, PolicyBand
+        from core.policy.hitl_policy import HITLDecisionOutcome, HITLMode, HITLPolicy
 
         hitl = HITLPolicy()
         hitl.mode = HITLMode.MANUAL
@@ -564,9 +563,7 @@ class TestEvaluateReadinessHelper:
     def test_same_result_as_direct_gate(self):
         reset_readiness_gate()
         profile = _make_profile(action_level="execute", runtime_domain="cross_device")
-        direct = ExecutionReadinessGate().evaluate(
-            profile, state_continuum=_MANIFEST_CROSS_DEVICE_CONTINUUM
-        )
+        direct = ExecutionReadinessGate().evaluate(profile, state_continuum=_MANIFEST_CROSS_DEVICE_CONTINUUM)
         helper = evaluate_readiness(profile, state_continuum=_MANIFEST_CROSS_DEVICE_CONTINUUM)
         assert direct.status == helper.status
         assert direct.ready == helper.ready
@@ -730,6 +727,7 @@ class TestOpenClawdCheckReadiness:
         """
         try:
             from core.openclawd import OpenClawd
+
             return OpenClawd.__new__(OpenClawd)
         except Exception:
             return None
@@ -759,6 +757,7 @@ class TestOpenClawdCheckReadiness:
         """_run_execution result dict must contain the 'readiness' key (PR-23)."""
         try:
             from core.openclawd import OpenClawd
+
             oc = OpenClawd.__new__(OpenClawd)
         except Exception:
             pytest.skip("OpenClawd not available")

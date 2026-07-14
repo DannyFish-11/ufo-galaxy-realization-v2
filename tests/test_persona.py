@@ -11,16 +11,19 @@ Tests cover:
 
 from __future__ import annotations
 
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
 
 # ---------------------------------------------------------------------------
 # PersonaState schema tests
 # ---------------------------------------------------------------------------
 
+
 class TestPersonaStateSchema:
     def test_default_baseline(self):
         from core.schemas.persona_state import PersonaState
+
         state = PersonaState.default_baseline("sess_1")
         assert state.session_id == "sess_1"
         assert state.mood == "calm"
@@ -30,14 +33,26 @@ class TestPersonaStateSchema:
 
     def test_to_dict_contains_required_fields(self):
         from core.schemas.persona_state import PersonaState
+
         d = PersonaState.default_baseline("s1").to_dict()
-        for key in ("session_id", "mood", "energy", "focus", "curiosity",
-                    "urgency", "trust_level", "expression_mode", "updated_at"):
+        for key in (
+            "session_id",
+            "mood",
+            "energy",
+            "focus",
+            "curiosity",
+            "urgency",
+            "trust_level",
+            "expression_mode",
+            "updated_at",
+        ):
             assert key in d, f"Missing field: {key}"
 
     def test_to_dict_values_serialisable(self):
         import json
+
         from core.schemas.persona_state import PersonaState
+
         d = PersonaState.default_baseline().to_dict()
         # must not raise
         json.dumps(d)
@@ -47,9 +62,11 @@ class TestPersonaStateSchema:
 # EmotionEngine tests
 # ---------------------------------------------------------------------------
 
+
 class TestEmotionEngine:
     def setup_method(self):
         from core.persona.emotion_engine import EmotionEngine
+
         self.engine = EmotionEngine()
 
     def test_gratitude_increases_trust(self):
@@ -84,9 +101,7 @@ class TestEmotionEngine:
         assert delta.get("urgency", 0) > 0
 
     def test_task_failure_control_console_sets_mood_override(self):
-        delta = self.engine.compute_delta(
-            "执行脚本", interaction_mode="control_console", task_success=False
-        )
+        delta = self.engine.compute_delta("执行脚本", interaction_mode="control_console", task_success=False)
         assert delta.get("_mood_override") == "focused"
         assert delta.get("urgency", 0) > 0
 
@@ -105,6 +120,7 @@ class TestEmotionEngine:
 
     def test_apply_delta_clips_values(self):
         from core.schemas.persona_state import PersonaState
+
         state = PersonaState.default_baseline("s1")
         state.urgency = 0.95
         delta = {"urgency": 0.5}  # should clip to 1.0, not 1.45
@@ -113,6 +129,7 @@ class TestEmotionEngine:
 
     def test_apply_delta_updates_mood(self):
         from core.schemas.persona_state import PersonaState
+
         state = PersonaState.default_baseline("s1")
         # drive urgency above 0.6 → mood should become "concerned"
         state.urgency = 0.0
@@ -122,14 +139,17 @@ class TestEmotionEngine:
 
     def test_apply_delta_honours_mood_override(self):
         from core.schemas.persona_state import PersonaState
+
         state = PersonaState.default_baseline("s1")
         delta = {"_mood_override": "focused"}
         self.engine.apply_delta(state, delta)
         assert state.mood == "focused"
 
     def test_apply_delta_updates_updated_at(self):
-        from core.schemas.persona_state import PersonaState
         from datetime import datetime, timezone
+
+        from core.schemas.persona_state import PersonaState
+
         state = PersonaState.default_baseline("s1")
         old_ts = state.updated_at
         delta = {"energy": 0.1}
@@ -141,9 +161,11 @@ class TestEmotionEngine:
 # StateStore tests
 # ---------------------------------------------------------------------------
 
+
 class TestStateStore:
     def setup_method(self):
         from core.persona.state_store import StateStore
+
         self.store = StateStore()
 
     def test_get_state_creates_baseline_on_first_access(self):
@@ -162,9 +184,7 @@ class TestStateStore:
         assert state.session_id == "__global__"
 
     def test_update_state_returns_state_and_delta(self):
-        state, delta = self.store.update_state(
-            "sess_upd", message="谢谢", task_success=True
-        )
+        state, delta = self.store.update_state("sess_upd", message="谢谢", task_success=True)
         assert state is not None
         assert isinstance(delta, dict)
         assert state.trust_level > 0.5  # gratitude + task_success should push it up
@@ -198,25 +218,31 @@ class TestStateStore:
 # PersonaRules helpers
 # ---------------------------------------------------------------------------
 
+
 class TestPersonaRules:
     def test_derive_mood_concerned_when_urgency_high(self):
         from core.persona.persona_rules import derive_mood
+
         assert derive_mood(urgency=0.8, focus=0.5, energy=0.5, trust_level=0.5) == "concerned"
 
     def test_derive_mood_focused_when_focus_high(self):
         from core.persona.persona_rules import derive_mood
+
         assert derive_mood(urgency=0.1, focus=0.9, energy=0.5, trust_level=0.5) == "focused"
 
     def test_derive_mood_tired_when_energy_low(self):
         from core.persona.persona_rules import derive_mood
+
         assert derive_mood(urgency=0.1, focus=0.5, energy=0.2, trust_level=0.5) == "tired"
 
     def test_derive_mood_warm_when_trust_high(self):
         from core.persona.persona_rules import derive_mood
+
         assert derive_mood(urgency=0.1, focus=0.5, energy=0.5, trust_level=0.9) == "warm"
 
     def test_derive_mood_calm_default(self):
         from core.persona.persona_rules import derive_mood
+
         assert derive_mood(urgency=0.1, focus=0.5, energy=0.5, trust_level=0.5) == "calm"
 
 
@@ -224,10 +250,12 @@ class TestPersonaRules:
 # OpenClawd.process() integration — persona_state included, text-only stable
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_process_includes_persona_state():
     """OpenClawd.process() must include persona_state in response dict."""
     from core.openclawd import OpenClawd
+
     oc = OpenClawd()
 
     with patch.object(oc, "_get_kernel", return_value=None):
@@ -254,6 +282,7 @@ async def test_process_includes_persona_state():
 async def test_process_text_only_response_unchanged():
     """text-only callers: result['response'] must equal the handler's reply."""
     from core.openclawd import OpenClawd
+
     oc = OpenClawd()
     expected_reply = "这是回复内容"
 
@@ -277,6 +306,7 @@ async def test_process_text_only_response_unchanged():
 async def test_process_persona_state_stable_across_calls():
     """Consecutive calls on same session must not degrade the state to error."""
     from core.openclawd import OpenClawd
+
     oc = OpenClawd()
 
     for i in range(3):

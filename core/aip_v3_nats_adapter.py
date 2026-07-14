@@ -25,6 +25,7 @@ Design principles:
     - Wire format: all messages carry {"type": "<msg_type>", ...payload}
       so subscribers can identify the message type without inspecting payload shapes.
 """
+
 from __future__ import annotations
 
 import logging

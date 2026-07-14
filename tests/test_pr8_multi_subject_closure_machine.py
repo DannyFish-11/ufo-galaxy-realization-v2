@@ -45,7 +45,6 @@ from unittest.mock import patch
 
 import pytest
 
-
 # ===========================================================================
 # 1. Module sentinels
 # ===========================================================================
@@ -56,6 +55,7 @@ class TestModuleSentinels:
         from core.multi_subject_closure_machine import (
             MULTI_SUBJECT_CLOSURE_MACHINE_AUTHORITY,
         )
+
         assert "MULTI_SUBJECT_CLOSURE_MACHINE" in MULTI_SUBJECT_CLOSURE_MACHINE_AUTHORITY
         assert "CANONICAL_GOVERNANCE_V1" in MULTI_SUBJECT_CLOSURE_MACHINE_AUTHORITY
         assert len(MULTI_SUBJECT_CLOSURE_MACHINE_AUTHORITY) > 40
@@ -64,6 +64,7 @@ class TestModuleSentinels:
         from core.multi_subject_closure_machine import (
             MULTI_SUBJECT_CLOSURE_MACHINE_PR8_SENTINEL,
         )
+
         assert "PR-8" in MULTI_SUBJECT_CLOSURE_MACHINE_PR8_SENTINEL
         assert len(MULTI_SUBJECT_CLOSURE_MACHINE_PR8_SENTINEL) > 20
 
@@ -78,6 +79,7 @@ class TestPolicySentinels:
         from core.multi_subject_closure_machine import (
             V2_IS_SOLE_CANONICAL_CLOSURE_AUTHORITY_POLICY,
         )
+
         assert "V2" in V2_IS_SOLE_CANONICAL_CLOSURE_AUTHORITY_POLICY
         assert "sole" in V2_IS_SOLE_CANONICAL_CLOSURE_AUTHORITY_POLICY.lower()
 
@@ -85,12 +87,14 @@ class TestPolicySentinels:
         from core.multi_subject_closure_machine import (
             NO_PARALLEL_CLOSURE_SYSTEM_POLICY,
         )
+
         assert "parallel" in NO_PARALLEL_CLOSURE_SYSTEM_POLICY.lower()
 
     def test_participant_local_terminal_not_final_truth_policy(self):
         from core.multi_subject_closure_machine import (
             PARTICIPANT_LOCAL_TERMINAL_NOT_FINAL_TRUTH_POLICY,
         )
+
         assert "participant" in PARTICIPANT_LOCAL_TERMINAL_NOT_FINAL_TRUTH_POLICY.lower()
         assert "final" in PARTICIPANT_LOCAL_TERMINAL_NOT_FINAL_TRUTH_POLICY.lower()
 
@@ -98,6 +102,7 @@ class TestPolicySentinels:
         from core.multi_subject_closure_machine import (
             OPERATOR_MUST_CONSUME_CANONICAL_CLOSURE_OUTPUT_POLICY,
         )
+
         assert "operator" in OPERATOR_MUST_CONSUME_CANONICAL_CLOSURE_OUTPUT_POLICY.lower()
         assert "canonical" in OPERATOR_MUST_CONSUME_CANONICAL_CLOSURE_OUTPUT_POLICY.lower()
 
@@ -105,6 +110,7 @@ class TestPolicySentinels:
         from core.multi_subject_closure_machine import (
             RECONCILE_REQUIRED_TRIGGERS_ARE_EXPLICIT_POLICY,
         )
+
         assert "reconcile" in RECONCILE_REQUIRED_TRIGGERS_ARE_EXPLICIT_POLICY.lower()
         assert "explicit" in RECONCILE_REQUIRED_TRIGGERS_ARE_EXPLICIT_POLICY.lower()
 
@@ -112,6 +118,7 @@ class TestPolicySentinels:
         from core.multi_subject_closure_machine import (
             DEGRADED_COMPLETION_IS_IN_MAIN_CHAIN_POLICY,
         )
+
         assert "degraded" in DEGRADED_COMPLETION_IS_IN_MAIN_CHAIN_POLICY.lower()
         assert "main" in DEGRADED_COMPLETION_IS_IN_MAIN_CHAIN_POLICY.lower()
 
@@ -292,7 +299,11 @@ def _bridge(
     completion_state: str,
     participants,
     takeover_candidate: str | None = None,
-    success=0, degraded=0, lost=0, failed=0, suspended=0,
+    success=0,
+    degraded=0,
+    lost=0,
+    failed=0,
+    suspended=0,
 ):
     return {
         "authority": "BRIDGE_AUTHORITY",
@@ -387,7 +398,8 @@ class TestPartialSuccess:
         snapshot = _bridge(
             "partial_success",
             [_p("dev-a", "primary", "ready"), _p("dev-b", "assistant", "failed")],
-            success=1, failed=1,
+            success=1,
+            failed=1,
         )
         c = build_closure_candidate(snapshot)
         assert c.terminal_kind == ClosureTerminalKind.partial_success
@@ -400,7 +412,8 @@ class TestPartialSuccess:
         snapshot = _bridge(
             "partial_success",
             [_p("dev-a", "primary", "ready"), _p("dev-b", "assistant", "failed")],
-            success=1, failed=1,
+            success=1,
+            failed=1,
         )
         c = build_closure_candidate(snapshot)
         assert c.reconcile_required is False
@@ -421,7 +434,8 @@ class TestDegradedCompletion:
         snapshot = _bridge(
             "degraded_completion",
             [_p("dev-a", "primary", "ready"), _p("dev-b", "assistant", "lost")],
-            success=1, lost=1,
+            success=1,
+            lost=1,
         )
         c = build_closure_candidate(snapshot)
         assert c.terminal_kind == ClosureTerminalKind.degraded_completion
@@ -438,7 +452,8 @@ class TestDegradedCompletion:
         snapshot = _bridge(
             "degraded_completion",
             [_p("dev-a", "primary", "ready"), _p("dev-b", "assistant", "degraded")],
-            success=1, degraded=1,
+            success=1,
+            degraded=1,
         )
         c = build_closure_candidate(snapshot)
         assert c.is_terminal is True
@@ -463,7 +478,8 @@ class TestTakeoverContinuation:
                 _p("dev-fallback", "takeover_candidate", "ready"),
             ],
             takeover_candidate="dev-fallback",
-            success=1, lost=1,
+            success=1,
+            lost=1,
         )
         c = build_closure_candidate(snapshot)
         assert c.terminal_kind == ClosureTerminalKind.takeover_continuation
@@ -515,13 +531,8 @@ class TestRecoveryCompletion:
             [_p("dev-r", "assistant", "ready", is_recovery=True)],
             success=1,
         )
-        c = build_closure_candidate(
-            snapshot, recovery_device_ids=["dev-r"]
-        )
-        assert (
-            ReconcileRequiredTrigger.recovery_completion_unverified.value
-            not in c.reconcile_triggers
-        )
+        c = build_closure_candidate(snapshot, recovery_device_ids=["dev-r"])
+        assert ReconcileRequiredTrigger.recovery_completion_unverified.value not in c.reconcile_triggers
 
 
 # ===========================================================================
@@ -542,7 +553,8 @@ class TestParticipantLost:
                 _p("dev-primary", "primary", "lost"),
                 _p("dev-assistant", "assistant", "failed"),
             ],
-            lost=1, failed=1,
+            lost=1,
+            failed=1,
         )
         c = build_closure_candidate(snapshot)
         assert c.terminal_kind == ClosureTerminalKind.participant_lost
@@ -599,10 +611,7 @@ class TestReconcileTriggerParticipantLost:
         )
         c = build_closure_candidate(snapshot)
         assert c.reconcile_required is True
-        assert (
-            ReconcileRequiredTrigger.participant_lost_no_takeover.value
-            in c.reconcile_triggers
-        )
+        assert ReconcileRequiredTrigger.participant_lost_no_takeover.value in c.reconcile_triggers
 
 
 # ===========================================================================
@@ -623,14 +632,12 @@ class TestReconcileTriggerAmbiguousFailure:
                 _p("dev-a", "primary", "failed"),
                 _p("dev-b", "assistant", "degraded"),
             ],
-            failed=1, degraded=1,
+            failed=1,
+            degraded=1,
         )
         c = build_closure_candidate(snapshot)
         assert c.reconcile_required is True
-        assert (
-            ReconcileRequiredTrigger.ambiguous_failure_degraded_present.value
-            in c.reconcile_triggers
-        )
+        assert ReconcileRequiredTrigger.ambiguous_failure_degraded_present.value in c.reconcile_triggers
 
 
 # ===========================================================================
@@ -648,10 +655,7 @@ class TestReconcileTriggerEmptyFormation:
         snapshot = _bridge("failed", [], failed=0)
         c = build_closure_candidate(snapshot, formation_member_count=3)
         assert c.reconcile_required is True
-        assert (
-            ReconcileRequiredTrigger.empty_formation_divergence.value
-            in c.reconcile_triggers
-        )
+        assert ReconcileRequiredTrigger.empty_formation_divergence.value in c.reconcile_triggers
 
 
 # ===========================================================================
@@ -676,10 +680,7 @@ class TestReconcileTriggerRecoveryUnverified:
         c = build_closure_candidate(snapshot, recovery_device_ids=[])
         assert c.terminal_kind == ClosureTerminalKind.recovery_completion
         assert c.reconcile_required is True
-        assert (
-            ReconcileRequiredTrigger.recovery_completion_unverified.value
-            in c.reconcile_triggers
-        )
+        assert ReconcileRequiredTrigger.recovery_completion_unverified.value in c.reconcile_triggers
 
 
 # ===========================================================================
@@ -707,10 +708,7 @@ class TestExplicitConflictResolution:
         c = build_closure_candidate(snapshot)
         assert c.terminal_kind == ClosureTerminalKind.reconcile_required
         assert c.reconcile_required is True
-        assert (
-            ReconcileRequiredTrigger.conflicting_participant_signals.value
-            in c.reconcile_triggers
-        )
+        assert ReconcileRequiredTrigger.conflicting_participant_signals.value in c.reconcile_triggers
 
     def test_partial_result_contradiction_maps_to_reconcile_required(self):
         from core.multi_subject_closure_machine import (
@@ -731,10 +729,7 @@ class TestExplicitConflictResolution:
         c = build_closure_candidate(snapshot)
         assert c.terminal_kind == ClosureTerminalKind.reconcile_required
         assert c.reconcile_required is True
-        assert (
-            ReconcileRequiredTrigger.conflicting_participant_signals.value
-            in c.reconcile_triggers
-        )
+        assert ReconcileRequiredTrigger.conflicting_participant_signals.value in c.reconcile_triggers
 
     def test_conflict_kind_field_also_forces_center_reconcile(self):
         from core.multi_subject_closure_machine import (
@@ -757,10 +752,7 @@ class TestExplicitConflictResolution:
         c = build_closure_candidate(snapshot)
         assert c.terminal_kind == ClosureTerminalKind.reconcile_required
         assert c.reconcile_required is True
-        assert (
-            ReconcileRequiredTrigger.conflicting_participant_signals.value
-            in c.reconcile_triggers
-        )
+        assert ReconcileRequiredTrigger.conflicting_participant_signals.value in c.reconcile_triggers
 
 
 # ===========================================================================

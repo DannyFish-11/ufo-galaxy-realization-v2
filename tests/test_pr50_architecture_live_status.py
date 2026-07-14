@@ -110,7 +110,6 @@ import importlib
 import json
 from typing import Any, Dict, List
 
-
 # ---------------------------------------------------------------------------
 # Import helpers
 # ---------------------------------------------------------------------------
@@ -157,6 +156,7 @@ class TestRuntimeReadiness:
 class TestCanonicalPathEntry:
     def test_05_is_frozen_dataclass(self):
         import dataclasses
+
         m = _import_module()
         assert dataclasses.is_dataclass(m.CanonicalPathEntry)
         fields = dataclasses.fields(m.CanonicalPathEntry)
@@ -195,6 +195,7 @@ class TestCanonicalPathEntry:
 class TestLegacyZoneEntry:
     def test_09_is_frozen_dataclass(self):
         import dataclasses
+
         m = _import_module()
         assert dataclasses.is_dataclass(m.LegacyZoneEntry)
         entry = m.LegacyZoneEntry(path="a", status="DEPRECATED", superseded_by=None, notes="x")
@@ -233,6 +234,7 @@ class TestLegacyZoneEntry:
 class TestActiveBlocker:
     def test_14_is_frozen_dataclass(self):
         import dataclasses
+
         m = _import_module()
         assert dataclasses.is_dataclass(m.ActiveBlocker)
         b = m.ActiveBlocker(dimension="d", severity="blocking", description="x", recommended_action="y")
@@ -381,9 +383,7 @@ class TestArchitectureLiveStatusSerialisation:
 
     def test_34_to_dict_canonical_paths_is_list_of_dicts(self):
         m = _import_module()
-        s = m.ArchitectureLiveStatus(
-            canonical_paths=[m.CanonicalPathEntry(path="x", role="y", pr_introduced="PR-1")]
-        )
+        s = m.ArchitectureLiveStatus(canonical_paths=[m.CanonicalPathEntry(path="x", role="y", pr_introduced="PR-1")])
         d = s.to_dict()
         assert isinstance(d["canonical_paths"], list)
         assert isinstance(d["canonical_paths"][0], dict)
@@ -400,7 +400,9 @@ class TestArchitectureLiveStatusSerialisation:
     def test_36_to_dict_active_blockers_is_list_of_dicts(self):
         m = _import_module()
         s = m.ArchitectureLiveStatus(
-            active_blockers=[m.ActiveBlocker(dimension="d", severity="blocking", description="x", recommended_action="y")]
+            active_blockers=[
+                m.ActiveBlocker(dimension="d", severity="blocking", description="x", recommended_action="y")
+            ]
         )
         d = s.to_dict()
         assert isinstance(d["active_blockers"], list)
@@ -582,9 +584,7 @@ class TestSingleton:
 class TestReadinessClassification:
     def _classify(self, scorecard_summary, projection_status, authority_chain_status, active_blockers):
         m = _import_module()
-        return m._classify_readiness(
-            scorecard_summary, projection_status, authority_chain_status, active_blockers
-        )
+        return m._classify_readiness(scorecard_summary, projection_status, authority_chain_status, active_blockers)
 
     def test_63_blocked_when_blocking_count_gt_0(self):
         m = _import_module()
@@ -702,10 +702,7 @@ class TestReadinessClassification:
             "legacy_ambiguity_dimensions": ["capability_integration_completeness"],
         }
         blockers = m._build_active_blockers(scorecard_summary)
-        assert any(
-            b.severity == "warning" and b.dimension == "capability_integration_completeness"
-            for b in blockers
-        )
+        assert any(b.severity == "warning" and b.dimension == "capability_integration_completeness" for b in blockers)
 
 
 # ===========================================================================

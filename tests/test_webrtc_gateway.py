@@ -25,19 +25,20 @@ import uvicorn
 from fastapi import FastAPI, WebSocket
 from fastapi.testclient import TestClient
 
-
 # ---------------------------------------------------------------------------
 # Minimal FastAPI app that exposes only the WebRTC endpoints under test
 # ---------------------------------------------------------------------------
 
+
 def _make_test_app() -> FastAPI:
     """Build a minimal FastAPI app with the WebRTC proxy routes."""
+    from fastapi import HTTPException
+
     from galaxy_gateway.webrtc_proxy import (
         check_node95_reachable,
         get_webrtc_endpoint_info,
         proxy_webrtc_signaling,
     )
-    from fastapi import HTTPException
 
     app = FastAPI()
 
@@ -61,6 +62,7 @@ def _make_test_app() -> FastAPI:
 # Fixture helpers
 # ---------------------------------------------------------------------------
 
+
 def _free_port() -> int:
     with socket.socket() as s:
         s.bind(("localhost", 0))
@@ -70,6 +72,7 @@ def _free_port() -> int:
 # ---------------------------------------------------------------------------
 # Fixture: mock Node_95 server (HTTP health + WS signaling)
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture()
 def mock_node95(monkeypatch):
@@ -98,9 +101,7 @@ def mock_node95(monkeypatch):
             while True:
                 msg = await websocket.receive_text()
                 received.append(msg)
-                await websocket.send_text(
-                    json.dumps({"type": "echo", "received": msg})
-                )
+                await websocket.send_text(json.dumps({"type": "echo", "received": msg}))
         except Exception:
             pass
 
@@ -132,6 +133,7 @@ def mock_node95(monkeypatch):
 # Fixture: unreachable Node_95
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture()
 def no_node95(monkeypatch):
     """Configure NODE_95_URL to a port nothing is listening on."""
@@ -142,6 +144,7 @@ def no_node95(monkeypatch):
 # ---------------------------------------------------------------------------
 # TestClient fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture()
 def test_client(mock_node95):
@@ -160,6 +163,7 @@ def test_client_no_node95(no_node95):
 # ===========================================================================
 # Tests: REST endpoint /api/v1/webrtc/endpoint
 # ===========================================================================
+
 
 class TestWebRTCEndpointREST:
 
@@ -187,6 +191,7 @@ class TestWebRTCEndpointREST:
 # ===========================================================================
 # Tests: WebSocket proxy /ws/webrtc/{device_id}
 # ===========================================================================
+
 
 class TestWebRTCWebSocketProxy:
 
@@ -253,6 +258,7 @@ class TestWebRTCWebSocketProxy:
 # Tests: SmartTransportRouter.use_gateway
 # ===========================================================================
 
+
 class TestSmartTransportRouterUseGateway:
 
     @pytest.mark.asyncio
@@ -266,15 +272,18 @@ class TestSmartTransportRouterUseGateway:
 
         async def _always_available(method, device_id):
             return True
+
         router._is_method_available = _always_available  # type: ignore
 
-        resp = await router.route(TransportRequest(
-            device_id="test_phone",
-            task_type="dynamic",
-            realtime=True,
-            preferred_method="webrtc",
-            use_gateway=True,
-        ))
+        resp = await router.route(
+            TransportRequest(
+                device_id="test_phone",
+                task_type="dynamic",
+                realtime=True,
+                preferred_method="webrtc",
+                use_gateway=True,
+            )
+        )
 
         assert resp.success is True
         assert resp.method.value == "webrtc"
@@ -293,15 +302,18 @@ class TestSmartTransportRouterUseGateway:
 
         async def _always_available(method, device_id):
             return True
+
         router._is_method_available = _always_available  # type: ignore
 
-        resp = await router.route(TransportRequest(
-            device_id="test_phone2",
-            task_type="dynamic",
-            realtime=True,
-            preferred_method="webrtc",
-            use_gateway=False,
-        ))
+        resp = await router.route(
+            TransportRequest(
+                device_id="test_phone2",
+                task_type="dynamic",
+                realtime=True,
+                preferred_method="webrtc",
+                use_gateway=False,
+            )
+        )
 
         assert resp.success is True
         assert "/ws/webrtc/" not in resp.endpoint
@@ -316,14 +328,17 @@ class TestSmartTransportRouterUseGateway:
 
         async def _always_available(method, device_id):
             return True
+
         router._is_method_available = _always_available  # type: ignore
 
-        resp = await router.route(TransportRequest(
-            device_id="device_ssl",
-            task_type="interactive",
-            preferred_method="webrtc",
-            use_gateway=True,
-        ))
+        resp = await router.route(
+            TransportRequest(
+                device_id="device_ssl",
+                task_type="interactive",
+                preferred_method="webrtc",
+                use_gateway=True,
+            )
+        )
 
         assert resp.endpoint.startswith("wss://")
         assert "gateway.example.com" in resp.endpoint
@@ -344,12 +359,14 @@ class TestSmartTransportRouterUseGateway:
         # No mock for _is_method_available — let the real implementation run
         # (it tries /health which will fail for all unreachable nodes)
 
-        resp = await router.route(TransportRequest(
-            device_id="fallback_phone",
-            task_type="dynamic",
-            realtime=True,
-            use_gateway=True,
-        ))
+        resp = await router.route(
+            TransportRequest(
+                device_id="fallback_phone",
+                task_type="dynamic",
+                realtime=True,
+                use_gateway=True,
+            )
+        )
 
         # Router must still return a valid response
         assert resp.success is True
@@ -361,19 +378,23 @@ class TestSmartTransportRouterUseGateway:
 # Tests: webrtc_proxy helpers
 # ===========================================================================
 
+
 class TestWebRTCProxyHelpers:
 
     def test_get_webrtc_endpoint_info_structure(self, mock_node95):
         from galaxy_gateway.webrtc_proxy import get_webrtc_endpoint_info
+
         info = get_webrtc_endpoint_info()
         assert {"node95_url", "ws_signaling_path", "gateway_ws_url", "gateway_ws_path"} <= set(info.keys())
 
     @pytest.mark.asyncio
     async def test_check_node95_reachable_true(self, mock_node95):
         from galaxy_gateway.webrtc_proxy import check_node95_reachable
+
         assert await check_node95_reachable() is True
 
     @pytest.mark.asyncio
     async def test_check_node95_reachable_false(self, no_node95):
         from galaxy_gateway.webrtc_proxy import check_node95_reachable
+
         assert await check_node95_reachable() is False

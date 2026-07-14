@@ -110,7 +110,6 @@ import importlib
 import json
 from typing import Any, Dict
 
-
 # ---------------------------------------------------------------------------
 # Import helpers
 # ---------------------------------------------------------------------------
@@ -213,6 +212,7 @@ class TestDimensionScorecard:
 
     def test_15_is_frozen(self):
         import dataclasses
+
         m = _import_module()
         fields = dataclasses.fields(m.DimensionScorecard)
         assert any(f.name == "dimension" for f in fields)
@@ -542,9 +542,7 @@ class TestBuildAndGetScorecard:
             legacy_ambiguity_remains=False,
             rationale="Override rationale",
         )
-        sc = m.build_architecture_completion_scorecard(
-            overrides={m.CompletionDimension.AUTHORITY_CLARITY: override}
-        )
+        sc = m.build_architecture_completion_scorecard(overrides={m.CompletionDimension.AUTHORITY_CLARITY: override})
         rec = sc.dimension_by_name(m.CompletionDimension.AUTHORITY_CLARITY)
         assert rec is not None
         assert rec.maturity_level == m.MaturityLevel.COMPLETE
@@ -576,9 +574,7 @@ class TestBuildAndGetScorecard:
             legacy_ambiguity_remains=False,
             rationale="Override",
         )
-        sc = m.build_architecture_completion_scorecard(
-            overrides={m.CompletionDimension.AUTHORITY_CLARITY: override}
-        )
+        sc = m.build_architecture_completion_scorecard(overrides={m.CompletionDimension.AUTHORITY_CLARITY: override})
         rec = sc.dimension_by_name(m.CompletionDimension.LEGACY_SURFACE_DEMOTION)
         assert rec is not None
         assert rec.maturity_level == default_rec.maturity_level  # type: ignore[union-attr]
@@ -785,7 +781,8 @@ class TestSerialization:
             level = m.MaturityLevel.CANONICALIZED if i < 5 else m.MaturityLevel.IN_PROGRESS
             dims.append(
                 m.build_dimension_scorecard(
-                    d, level,
+                    d,
+                    level,
                     canonical_path_established=(i < 5),
                     legacy_ambiguity_remains=False,
                     rationale="Test",
@@ -811,6 +808,7 @@ class TestSerialization:
     def test_86_completion_dimension_values_are_lowercase_underscore(self):
         m = _import_module()
         import re
+
         pattern = re.compile(r"^[a-z][a-z0-9_]*$")
         for dim in m.CompletionDimension:
             assert pattern.match(dim.value), f"Value '{dim.value}' is not lowercase_underscore"

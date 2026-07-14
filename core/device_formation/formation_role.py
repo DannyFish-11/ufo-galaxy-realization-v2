@@ -259,9 +259,4 @@ class FormationMember:
         )
 
     def __repr__(self) -> str:
-        return (
-            f"<FormationMember "
-            f"device={self.device_id!r} "
-            f"role={self.role.value} "
-            f"local={self.is_local}>"
-        )
+        return f"<FormationMember " f"device={self.device_id!r} " f"role={self.role.value} " f"local={self.is_local}>"

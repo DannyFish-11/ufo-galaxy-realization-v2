@@ -26,8 +26,9 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from core.security_middleware import RateLimiter as SecurityRateLimiter, create_rate_limit_middleware
 from core.performance import RateLimitMiddleware as PerformanceRateLimitMiddleware
+from core.security_middleware import RateLimiter as SecurityRateLimiter
+from core.security_middleware import create_rate_limit_middleware
 
 
 class TestSecurityMiddlewareLoopbackExemption:
@@ -53,8 +54,7 @@ class TestSecurityMiddlewareLoopbackExemption:
         assert r1.status_code == 200
         r2 = client.post("/api/config", json={"config": {}})
         assert r2.status_code == 200, (
-            "本机回环地址的请求不该被本应用自己的轮询流量误伤限流——"
-            "这正是用户反馈的\"保存失败\"根因"
+            "本机回环地址的请求不该被本应用自己的轮询流量误伤限流——" '这正是用户反馈的"保存失败"根因'
         )
 
     def test_external_ip_still_rate_limited(self, monkeypatch):
@@ -118,7 +118,4 @@ class TestPerformanceMiddlewareLoopbackExemption:
         client = TestClient(app, client=("203.0.113.7", 54321))
 
         statuses = [client.post("/api/config", json={"config": {}}).status_code for _ in range(25)]
-        assert 429 in statuses, (
-            f"外部(非回环)IP 高速打 25 次请求，应该在某一次触发 429；"
-            f"实际全部状态码: {statuses}"
-        )
+        assert 429 in statuses, f"外部(非回环)IP 高速打 25 次请求，应该在某一次触发 429；" f"实际全部状态码: {statuses}"

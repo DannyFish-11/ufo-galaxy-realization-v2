@@ -69,9 +69,11 @@ class UnifiedCapabilityRecord:
                     "name": contract.name,
                     "availability": runtime_payload.get(
                         "availability",
-                        CapabilityAvailability.AVAILABLE.value
-                        if contract.available
-                        else CapabilityAvailability.UNKNOWN.value,
+                        (
+                            CapabilityAvailability.AVAILABLE.value
+                            if contract.available
+                            else CapabilityAvailability.UNKNOWN.value
+                        ),
                     ),
                     "device_bindings": runtime_payload.get("device_bindings", []),
                     "preferred_device_ids": runtime_payload.get("preferred_device_ids", []),
@@ -88,14 +90,10 @@ class UnifiedCapabilityRecord:
             runtime_state.availability.value
             if runtime_state is not None and hasattr(runtime_state.availability, "value")
             else (
-                CapabilityAvailability.AVAILABLE.value
-                if contract.available
-                else CapabilityAvailability.UNKNOWN.value
+                CapabilityAvailability.AVAILABLE.value if contract.available else CapabilityAvailability.UNKNOWN.value
             )
         )
-        reliability_flags = (
-            dict(runtime_state.reliability_flags or {}) if runtime_state is not None else {}
-        )
+        reliability_flags = dict(runtime_state.reliability_flags or {}) if runtime_state is not None else {}
         runtime_metadata = dict(runtime_state.metadata or {}) if runtime_state is not None else {}
         return cls(
             capability_id=str(metadata.get("capability_id") or contract.name),
@@ -108,7 +106,9 @@ class UnifiedCapabilityRecord:
             version=contract.version,
             tags=list(contract.tags or []),
             execution_surface=str(provider.get("execution_surface_type") or "unknown"),
-            participant_kind=str(runtime_metadata.get("participant_kind") or metadata.get("participant_kind") or "unknown"),
+            participant_kind=str(
+                runtime_metadata.get("participant_kind") or metadata.get("participant_kind") or "unknown"
+            ),
             exec_mode=str(metadata.get("exec_mode") or "both"),
             routability=str(runtime_metadata.get("routability") or metadata.get("routability") or "unknown"),
             availability=availability,

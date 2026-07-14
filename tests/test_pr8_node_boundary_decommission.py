@@ -30,10 +30,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_stub_node(node_id: str, arch_class: str = "capability_node") -> Any:
     """Return a minimal stub NodeInfo-like object."""
@@ -48,6 +48,7 @@ def _make_stub_node(node_id: str, arch_class: str = "capability_node") -> Any:
 def _try_import():
     try:
         import core.node_boundary_runtime as m
+
         return m
     except ImportError as e:
         return None, str(e)
@@ -222,8 +223,14 @@ class TestNodeBoundaryDecision:
         except ImportError as e:
             pytest.skip(f"node_boundary_runtime not importable: {e}")
         d = NodeBoundaryDecision(node_id="test_node_2").to_dict()
-        for key in ("node_id", "architectural_class", "is_canonical",
-                    "boundary_violations", "diagnostic_context", "evaluated_at"):
+        for key in (
+            "node_id",
+            "architectural_class",
+            "is_canonical",
+            "boundary_violations",
+            "diagnostic_context",
+            "evaluated_at",
+        ):
             assert key in d, f"Missing key: {key}"
 
     def test_violations_list_accumulates(self):
@@ -281,8 +288,7 @@ class TestLegacyNodeSurfaceEntry:
             canonical_replacement="canonical path",
         )
         d = entry.to_dict()
-        for key in ("surface_id", "display_name", "status", "canonical_replacement",
-                    "pr_demoted", "notes"):
+        for key in ("surface_id", "display_name", "status", "canonical_replacement", "pr_demoted", "notes"):
             assert key in d, f"Missing key: {key}"
 
     def test_status_serialises_to_string(self):
@@ -291,7 +297,8 @@ class TestLegacyNodeSurfaceEntry:
         except ImportError as e:
             pytest.skip(f"node_boundary_runtime not importable: {e}")
         entry = LegacyNodeSurfaceEntry(
-            surface_id="s2", display_name="S2",
+            surface_id="s2",
+            display_name="S2",
             status=LegacyNodeSurfaceStatus.COMPAT_ENDPOINT,
             canonical_replacement="invoke_node()",
         )
@@ -322,13 +329,20 @@ class TestNodeBoundarySnapshot:
         except ImportError as e:
             pytest.skip(f"node_boundary_runtime not importable: {e}")
         d = NodeBoundarySnapshot().to_dict()
-        for key in ("total_nodes", "canonical_nodes", "legacy_nodes",
-                    "violation_nodes", "node_decisions", "legacy_surfaces", "snapshot_time"):
+        for key in (
+            "total_nodes",
+            "canonical_nodes",
+            "legacy_nodes",
+            "violation_nodes",
+            "node_decisions",
+            "legacy_surfaces",
+            "snapshot_time",
+        ):
             assert key in d, f"Missing key: {key}"
 
     def test_node_decisions_serialises_correctly(self):
         try:
-            from core.node_boundary_runtime import NodeBoundarySnapshot, NodeBoundaryDecision
+            from core.node_boundary_runtime import NodeBoundaryDecision, NodeBoundarySnapshot
         except ImportError as e:
             pytest.skip(f"node_boundary_runtime not importable: {e}")
         decision = NodeBoundaryDecision(node_id="snap_node_1")
@@ -348,70 +362,70 @@ class TestClassifyInvocationPathway:
 
     def test_invoke_node_is_canonical(self):
         try:
-            from core.node_boundary_runtime import classify_invocation_pathway, NodePathwayKind
+            from core.node_boundary_runtime import NodePathwayKind, classify_invocation_pathway
         except ImportError as e:
             pytest.skip(f"node_boundary_runtime not importable: {e}")
         assert classify_invocation_pathway("invoke_node") == NodePathwayKind.CANONICAL
 
     def test_unified_executor_is_canonical(self):
         try:
-            from core.node_boundary_runtime import classify_invocation_pathway, NodePathwayKind
+            from core.node_boundary_runtime import NodePathwayKind, classify_invocation_pathway
         except ImportError as e:
             pytest.skip(f"node_boundary_runtime not importable: {e}")
         assert classify_invocation_pathway("unified_node_executor") == NodePathwayKind.CANONICAL
 
     def test_capability_registry_tool_call_is_canonical(self):
         try:
-            from core.node_boundary_runtime import classify_invocation_pathway, NodePathwayKind
+            from core.node_boundary_runtime import NodePathwayKind, classify_invocation_pathway
         except ImportError as e:
             pytest.skip(f"node_boundary_runtime not importable: {e}")
         assert classify_invocation_pathway("capability_registry_tool_call") == NodePathwayKind.CANONICAL
 
     def test_openclawd_dispatch_is_canonical(self):
         try:
-            from core.node_boundary_runtime import classify_invocation_pathway, NodePathwayKind
+            from core.node_boundary_runtime import NodePathwayKind, classify_invocation_pathway
         except ImportError as e:
             pytest.skip(f"node_boundary_runtime not importable: {e}")
         assert classify_invocation_pathway("openclawd_node_dispatch") == NodePathwayKind.CANONICAL
 
     def test_post_api_nodes_call_is_compat_only(self):
         try:
-            from core.node_boundary_runtime import classify_invocation_pathway, NodePathwayKind
+            from core.node_boundary_runtime import NodePathwayKind, classify_invocation_pathway
         except ImportError as e:
             pytest.skip(f"node_boundary_runtime not importable: {e}")
         assert classify_invocation_pathway("post_api_v1_nodes_call") == NodePathwayKind.COMPAT_ONLY
 
     def test_legacy_http_node_call_is_compat_only(self):
         try:
-            from core.node_boundary_runtime import classify_invocation_pathway, NodePathwayKind
+            from core.node_boundary_runtime import NodePathwayKind, classify_invocation_pathway
         except ImportError as e:
             pytest.skip(f"node_boundary_runtime not importable: {e}")
         assert classify_invocation_pathway("legacy_http_node_call") == NodePathwayKind.COMPAT_ONLY
 
     def test_fs_scan_is_legacy_scan(self):
         try:
-            from core.node_boundary_runtime import classify_invocation_pathway, NodePathwayKind
+            from core.node_boundary_runtime import NodePathwayKind, classify_invocation_pathway
         except ImportError as e:
             pytest.skip(f"node_boundary_runtime not importable: {e}")
         assert classify_invocation_pathway("get_api_v1_nodes_fs_scan") == NodePathwayKind.LEGACY_SCAN
 
     def test_direct_nodes_dir_scan_is_legacy_scan(self):
         try:
-            from core.node_boundary_runtime import classify_invocation_pathway, NodePathwayKind
+            from core.node_boundary_runtime import NodePathwayKind, classify_invocation_pathway
         except ImportError as e:
             pytest.skip(f"node_boundary_runtime not importable: {e}")
         assert classify_invocation_pathway("direct_nodes_dir_scan") == NodePathwayKind.LEGACY_SCAN
 
     def test_node_registry_legacy_is_legacy_registry(self):
         try:
-            from core.node_boundary_runtime import classify_invocation_pathway, NodePathwayKind
+            from core.node_boundary_runtime import NodePathwayKind, classify_invocation_pathway
         except ImportError as e:
             pytest.skip(f"node_boundary_runtime not importable: {e}")
         assert classify_invocation_pathway("node_registry_legacy") == NodePathwayKind.LEGACY_REGISTRY
 
     def test_unknown_pathway_defaults_to_canonical(self):
         try:
-            from core.node_boundary_runtime import classify_invocation_pathway, NodePathwayKind
+            from core.node_boundary_runtime import NodePathwayKind, classify_invocation_pathway
         except ImportError as e:
             pytest.skip(f"node_boundary_runtime not importable: {e}")
         assert classify_invocation_pathway("unknown_xyz_pathway") == NodePathwayKind.CANONICAL
@@ -479,9 +493,7 @@ class TestBuildLegacySurfaceRegistry:
         except ImportError as e:
             pytest.skip(f"node_boundary_runtime not importable: {e}")
         for entry in build_legacy_surface_registry():
-            assert entry.canonical_replacement, (
-                f"Entry '{entry.surface_id}' has empty canonical_replacement"
-            )
+            assert entry.canonical_replacement, f"Entry '{entry.surface_id}' has empty canonical_replacement"
 
     def test_returns_copy_not_original(self):
         try:
@@ -627,6 +639,7 @@ class TestGetCanonicalNodes:
             pytest.skip(f"node_boundary_runtime not importable: {e}")
         import sys
         from unittest.mock import patch
+
         # Patch out the fabric registry import to simulate unavailability
         with patch.dict(sys.modules, {"core.nodes.node_fabric_registry": None}):
             result = get_canonical_nodes(fabric_registry=None)
@@ -646,9 +659,7 @@ class TestGetCanonicalNodes:
         mock_registry.list_by_architectural_class.return_value = [cap_node]
 
         result = get_canonical_nodes(fabric_registry=mock_registry)
-        mock_registry.list_by_architectural_class.assert_called_once_with(
-            NodeArchitecturalClass.CAPABILITY_NODE
-        )
+        mock_registry.list_by_architectural_class.assert_called_once_with(NodeArchitecturalClass.CAPABILITY_NODE)
         assert result == [cap_node]
 
     def test_accepts_explicit_fabric_registry(self):
@@ -688,6 +699,7 @@ class TestBuildNodeBoundarySnapshot:
             pytest.skip(f"node_boundary_runtime not importable: {e}")
         import sys
         from unittest.mock import patch
+
         with patch.dict(sys.modules, {"core.nodes.node_fabric_registry": None}):
             snap = build_node_boundary_snapshot(fabric_registry=None)
         assert snap is not None
@@ -729,8 +741,15 @@ class TestBuildNodeBoundarySnapshot:
         mock_registry = MagicMock()
         mock_registry.list_nodes.return_value = []
         d = build_node_boundary_snapshot(fabric_registry=mock_registry).to_dict()
-        for key in ("total_nodes", "canonical_nodes", "legacy_nodes",
-                    "violation_nodes", "node_decisions", "legacy_surfaces", "snapshot_time"):
+        for key in (
+            "total_nodes",
+            "canonical_nodes",
+            "legacy_nodes",
+            "violation_nodes",
+            "node_decisions",
+            "legacy_surfaces",
+            "snapshot_time",
+        ):
             assert key in d, f"Missing key: {key}"
 
 
@@ -750,9 +769,15 @@ class TestGetBoundarySummary:
         mock_registry = MagicMock()
         mock_registry.list_nodes.return_value = []
         summary = get_boundary_summary(fabric_registry=mock_registry)
-        for key in ("total_nodes", "canonical_nodes", "legacy_nodes",
-                    "violation_nodes", "legacy_surface_count",
-                    "boundary_health", "pr8_sentinel"):
+        for key in (
+            "total_nodes",
+            "canonical_nodes",
+            "legacy_nodes",
+            "violation_nodes",
+            "legacy_surface_count",
+            "boundary_health",
+            "pr8_sentinel",
+        ):
             assert key in summary, f"Missing key: {key}"
 
     def test_boundary_health_clean_when_no_violations(self):
@@ -779,7 +804,7 @@ class TestGetBoundarySummary:
 
     def test_pr8_sentinel_key_has_correct_value(self):
         try:
-            from core.node_boundary_runtime import get_boundary_summary, NODE_BOUNDARY_RUNTIME_PR8_SENTINEL
+            from core.node_boundary_runtime import NODE_BOUNDARY_RUNTIME_PR8_SENTINEL, get_boundary_summary
         except ImportError as e:
             pytest.skip(f"node_boundary_runtime not importable: {e}")
         mock_registry = MagicMock()
@@ -789,9 +814,7 @@ class TestGetBoundarySummary:
 
     def test_legacy_surface_count_matches_catalogue(self):
         try:
-            from core.node_boundary_runtime import (
-                get_boundary_summary, build_legacy_surface_registry
-            )
+            from core.node_boundary_runtime import build_legacy_surface_registry, get_boundary_summary
         except ImportError as e:
             pytest.skip(f"node_boundary_runtime not importable: {e}")
         mock_registry = MagicMock()

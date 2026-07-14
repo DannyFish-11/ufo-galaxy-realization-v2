@@ -186,12 +186,15 @@ def _mock_idempotency_store():
         seen.add(key)
         return True
 
-    with patch(
-        "core.durable_result_idempotency.check_result_idempotency",
-        side_effect=_check,
-    ), patch(
-        "core.durable_result_idempotency.record_result_idempotency",
-        side_effect=_record,
+    with (
+        patch(
+            "core.durable_result_idempotency.check_result_idempotency",
+            side_effect=_check,
+        ),
+        patch(
+            "core.durable_result_idempotency.record_result_idempotency",
+            side_effect=_record,
+        ),
     ):
         yield seen
 
@@ -227,10 +230,7 @@ def _assert_invariant_final_closed_not_resumed(ack: Dict[str, Any], *, task_id: 
 
     decisions = {d["task_id"]: d for d in ack.get("pending_lifecycle_decisions", [])}
     assert decisions[task_id]["decision"] == "closure_already_decided"
-    assert (
-        decisions[task_id]["continuity_adjudication_classification"]
-        == "abandoned-or-superseded"
-    )
+    assert decisions[task_id]["continuity_adjudication_classification"] == "abandoned-or-superseded"
     assert not get_lifecycle_registry().is_pending(task_id)
 
 
@@ -432,16 +432,8 @@ class TestAndroidV2ContinuityCorrectnessMatrix:
             ),
         )
         assert ack["pending_lifecycle_decision_count"] >= 1
-        assert (
-            ack["pending_lifecycle_decision_summary"].get("request_replay_reconciliation", 0)
-            >= 1
-        )
-        assert (
-            ack["continuity_adjudication_summary"].get(
-                "replay-reconciliation-required", 0
-            )
-            >= 1
-        )
+        assert ack["pending_lifecycle_decision_summary"].get("request_replay_reconciliation", 0) >= 1
+        assert ack["continuity_adjudication_summary"].get("replay-reconciliation-required", 0) >= 1
         assert isinstance(ack.get("pending_lifecycle_decisions", []), list)
 
     @pytest.mark.asyncio
@@ -523,18 +515,18 @@ class TestAndroidV2ContinuityCorrectnessMatrix:
                 completion_emission_id=f"{task_id}:late",
             )
 
-            with _mock_idempotency_store(), patch(
-                "core.attached_runtime_session_registry.lookup_session_by_device",
-                return_value=_registry_entry(4),
+            with (
+                _mock_idempotency_store(),
+                patch(
+                    "core.attached_runtime_session_registry.lookup_session_by_device",
+                    return_value=_registry_entry(4),
+                ),
             ):
                 accepted_outcome = ingress.process(current)
                 delayed_outcome = ingress.process(delayed)
 
             assert accepted_outcome.completion_disposition == "first_accepted"
-            assert (
-                accepted_outcome.continuity_adjudication_classification
-                == "current-accepted"
-            )
+            assert accepted_outcome.continuity_adjudication_classification == "current-accepted"
             _assert_invariant_stale_does_not_advance_closure(delayed_outcome)
             return
 
@@ -598,9 +590,12 @@ class TestAndroidV2ContinuityCorrectnessMatrix:
                 completion_emission_id=f"{task_id}:replay",
             )
 
-            with _mock_idempotency_store(), patch(
-                "core.attached_runtime_session_registry.lookup_session_by_device",
-                return_value=_registry_entry(8),
+            with (
+                _mock_idempotency_store(),
+                patch(
+                    "core.attached_runtime_session_registry.lookup_session_by_device",
+                    return_value=_registry_entry(8),
+                ),
             ):
                 replay_outcome = ingress.process(replay_event)
 
@@ -628,9 +623,12 @@ class TestAndroidV2ContinuityCorrectnessMatrix:
                 completion_emission_id=f"{task_id}:completion-a",
             )
 
-            with _mock_idempotency_store(), patch(
-                "core.attached_runtime_session_registry.lookup_session_by_device",
-                return_value=_registry_entry(9),
+            with (
+                _mock_idempotency_store(),
+                patch(
+                    "core.attached_runtime_session_registry.lookup_session_by_device",
+                    return_value=_registry_entry(9),
+                ),
             ):
                 first_outcome = ingress.process(first_event)
                 duplicate_outcome = ingress.process(duplicate_event)

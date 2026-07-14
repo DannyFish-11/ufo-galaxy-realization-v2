@@ -42,8 +42,8 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Optional
 
-from .formation_group import DeviceFormationGroup, EMPTY_FORMATION_GROUP
-from .formation_policy import BarrierPosture, FormationPolicy, DEFAULT_LOCAL_FORMATION_POLICY
+from .formation_group import EMPTY_FORMATION_GROUP, DeviceFormationGroup
+from .formation_policy import DEFAULT_LOCAL_FORMATION_POLICY, BarrierPosture, FormationPolicy
 from .formation_role import FormationMember, FormationRole
 
 __all__ = [

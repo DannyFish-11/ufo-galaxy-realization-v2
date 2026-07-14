@@ -89,9 +89,7 @@ class TestDefaultPathBehaviorChange:
         it is true (FULL_DEPLOYMENT canonical default posture).
         """
         cfg = _load_canonical_config()
-        assert "enable_multimodal_ingest" in cfg, (
-            "config.json must contain enable_multimodal_ingest key"
-        )
+        assert "enable_multimodal_ingest" in cfg, "config.json must contain enable_multimodal_ingest key"
         assert cfg["enable_multimodal_ingest"] is True, (
             "config.json must have enable_multimodal_ingest=True — "
             "continuous host perception is the canonical default runtime path. "
@@ -179,9 +177,7 @@ class TestDefaultCapabilityActivation:
         assert record.status == CapabilityRuntimeStatus.ACTIVE_MAINLINE, (
             "multimodal_ingest must be ACTIVE_MAINLINE.  Got: %s" % record.status
         )
-        assert is_mainline_active("multimodal_ingest"), (
-            "is_mainline_active('multimodal_ingest') must return True"
-        )
+        assert is_mainline_active("multimodal_ingest"), "is_mainline_active('multimodal_ingest') must return True"
 
     def test_continuous_host_perception_capability_is_active_mainline(self):
         """continuous_host_perception must be ACTIVE_MAINLINE in the registry."""
@@ -193,27 +189,26 @@ class TestDefaultCapabilityActivation:
 
         registry = get_canonical_capability_status_registry()
         assert "continuous_host_perception" in registry, (
-            "continuous_host_perception must be present in the canonical capability "
-            "status registry."
+            "continuous_host_perception must be present in the canonical capability " "status registry."
         )
         record = registry["continuous_host_perception"]
         assert record.status == CapabilityRuntimeStatus.ACTIVE_MAINLINE, (
             "continuous_host_perception must be ACTIVE_MAINLINE.  Got: %s" % record.status
         )
-        assert is_mainline_active("continuous_host_perception"), (
-            "is_mainline_active('continuous_host_perception') must return True"
-        )
+        assert is_mainline_active(
+            "continuous_host_perception"
+        ), "is_mainline_active('continuous_host_perception') must return True"
 
     def test_active_mainline_status_sentinel_exists(self):
         """MULTIMODAL_INGEST_IS_ACTIVE_MAINLINE_STATUS sentinel must be present."""
         from core.canonical_capability_status import MULTIMODAL_INGEST_IS_ACTIVE_MAINLINE_STATUS
 
-        assert isinstance(MULTIMODAL_INGEST_IS_ACTIVE_MAINLINE_STATUS, str), (
-            "MULTIMODAL_INGEST_IS_ACTIVE_MAINLINE_STATUS must be a string sentinel"
-        )
-        assert "ACTIVE_MAINLINE" in MULTIMODAL_INGEST_IS_ACTIVE_MAINLINE_STATUS, (
-            "MULTIMODAL_INGEST_IS_ACTIVE_MAINLINE_STATUS must contain 'ACTIVE_MAINLINE'"
-        )
+        assert isinstance(
+            MULTIMODAL_INGEST_IS_ACTIVE_MAINLINE_STATUS, str
+        ), "MULTIMODAL_INGEST_IS_ACTIVE_MAINLINE_STATUS must be a string sentinel"
+        assert (
+            "ACTIVE_MAINLINE" in MULTIMODAL_INGEST_IS_ACTIVE_MAINLINE_STATUS
+        ), "MULTIMODAL_INGEST_IS_ACTIVE_MAINLINE_STATUS must contain 'ACTIVE_MAINLINE'"
 
     def test_webrtc_remains_experimental_not_promoted(self):
         """WebRTC must still be EXPERIMENTAL — this PR only promotes multimodal_ingest."""
@@ -246,12 +241,12 @@ class TestCanonicalVsCompatPathDistinction:
         """MULTIMODAL_INGEST_CANONICAL_DEFAULT_PATH sentinel must be importable."""
         from core.multimodal.ingest_runtime import MULTIMODAL_INGEST_CANONICAL_DEFAULT_PATH
 
-        assert isinstance(MULTIMODAL_INGEST_CANONICAL_DEFAULT_PATH, str), (
-            "MULTIMODAL_INGEST_CANONICAL_DEFAULT_PATH must be a string sentinel"
-        )
-        assert "CANONICAL_DEFAULT_PATH" in MULTIMODAL_INGEST_CANONICAL_DEFAULT_PATH, (
-            "Sentinel must contain 'CANONICAL_DEFAULT_PATH' for machine-verifiability"
-        )
+        assert isinstance(
+            MULTIMODAL_INGEST_CANONICAL_DEFAULT_PATH, str
+        ), "MULTIMODAL_INGEST_CANONICAL_DEFAULT_PATH must be a string sentinel"
+        assert (
+            "CANONICAL_DEFAULT_PATH" in MULTIMODAL_INGEST_CANONICAL_DEFAULT_PATH
+        ), "Sentinel must contain 'CANONICAL_DEFAULT_PATH' for machine-verifiability"
 
     def test_explicit_disable_produces_safe_default_not_full_deployment(self):
         """Explicit opt-out (enable_multimodal_ingest=False) must resolve SAFE_DEFAULT.
@@ -274,12 +269,10 @@ class TestCanonicalVsCompatPathDistinction:
             },
             env={},
         )
-        assert opt_out.profile == MultimodalRuntimeProfile.SAFE_DEFAULT, (
-            "Explicit opt-out must resolve SAFE_DEFAULT, not FULL_DEPLOYMENT"
-        )
-        assert opt_out.enable_multimodal_ingest is False, (
-            "Explicit opt-out must have enable_multimodal_ingest=False"
-        )
+        assert (
+            opt_out.profile == MultimodalRuntimeProfile.SAFE_DEFAULT
+        ), "Explicit opt-out must resolve SAFE_DEFAULT, not FULL_DEPLOYMENT"
+        assert opt_out.enable_multimodal_ingest is False, "Explicit opt-out must have enable_multimodal_ingest=False"
 
     def test_canonical_vs_compat_profiles_are_distinct(self):
         """Canonical default profile must differ from compat/fallback profile."""
@@ -294,9 +287,11 @@ class TestCanonicalVsCompatPathDistinction:
             env={},
         )
 
-        assert canonical.profile != compat.profile, (
-            "Canonical default profile (%s) must differ from compat/fallback "
-            "profile (%s)" % (canonical.profile, compat.profile)
+        assert (
+            canonical.profile != compat.profile
+        ), "Canonical default profile (%s) must differ from compat/fallback " "profile (%s)" % (
+            canonical.profile,
+            compat.profile,
         )
         assert canonical.enable_multimodal_ingest is True
         assert compat.enable_multimodal_ingest is False
@@ -306,15 +301,14 @@ class TestCanonicalVsCompatPathDistinction:
         from core.multimodal_runtime_profile import MultimodalRuntimeProfile
 
         assert hasattr(MultimodalRuntimeProfile, "SAFE_DEFAULT"), (
-            "MultimodalRuntimeProfile must still have SAFE_DEFAULT — "
-            "it is preserved as an explicit opt-out posture"
+            "MultimodalRuntimeProfile must still have SAFE_DEFAULT — " "it is preserved as an explicit opt-out posture"
         )
         assert MultimodalRuntimeProfile.SAFE_DEFAULT.value == "safe_default"
 
     def test_start_ingest_bus_skips_on_explicit_disable(self):
         """start_ingest_bus() must return False when explicitly disabled (compat path)."""
-        from core.multimodal.ingest_runtime import start_ingest_bus, get_ingest_bus
         import core.multimodal.ingest_runtime as _ir
+        from core.multimodal.ingest_runtime import get_ingest_bus, start_ingest_bus
 
         _ir._ingest_bus = None
         _ir._ingest_task = None
@@ -326,17 +320,15 @@ class TestCanonicalVsCompatPathDistinction:
             "start_ingest_bus() must return False when enable_multimodal_ingest=False "
             "(explicit compat/fallback opt-out path)"
         )
-        assert get_ingest_bus() is None, (
-            "Ingest bus must not be started on the explicit opt-out (compat) path"
-        )
+        assert get_ingest_bus() is None, "Ingest bus must not be started on the explicit opt-out (compat) path"
 
         _ir._ingest_bus = None
         _ir._ingest_task = None
 
     def test_start_ingest_bus_starts_on_canonical_default(self):
         """start_ingest_bus() must start when called with canonical default config (True)."""
-        from core.multimodal.ingest_runtime import start_ingest_bus, get_ingest_bus
         import core.multimodal.ingest_runtime as _ir
+        from core.multimodal.ingest_runtime import get_ingest_bus, start_ingest_bus
 
         _ir._ingest_bus = None
         _ir._ingest_task = None
@@ -346,12 +338,9 @@ class TestCanonicalVsCompatPathDistinction:
                 result = start_ingest_bus()
 
         assert result is True, (
-            "start_ingest_bus() must return True on canonical default path "
-            "(enable_multimodal_ingest=True)"
+            "start_ingest_bus() must return True on canonical default path " "(enable_multimodal_ingest=True)"
         )
-        assert get_ingest_bus() is not None, (
-            "Ingest bus must be started on the canonical default path"
-        )
+        assert get_ingest_bus() is not None, "Ingest bus must be started on the canonical default path"
 
         _ir._ingest_bus = None
         _ir._ingest_task = None
@@ -376,15 +365,14 @@ class TestUserVisibleDefaultOutput:
 
         summary = build_multimodal_runtime_profile_summary()
         assert summary["profile"] == "full_deployment", (
-            "Default runtime profile summary must report 'full_deployment'. "
-            "Got: %s" % summary["profile"]
+            "Default runtime profile summary must report 'full_deployment'. " "Got: %s" % summary["profile"]
         )
-        assert summary["enable_multimodal_ingest"] is True, (
-            "Default runtime profile summary must have enable_multimodal_ingest=True"
-        )
-        assert summary["is_full_deployment"] is True, (
-            "Default runtime profile summary must have is_full_deployment=True"
-        )
+        assert (
+            summary["enable_multimodal_ingest"] is True
+        ), "Default runtime profile summary must have enable_multimodal_ingest=True"
+        assert (
+            summary["is_full_deployment"] is True
+        ), "Default runtime profile summary must have is_full_deployment=True"
         assert summary["is_safe_default"] is False, (
             "Default runtime profile summary must have is_safe_default=False — "
             "SAFE_DEFAULT is no longer the canonical default posture"
@@ -403,9 +391,7 @@ class TestUserVisibleDefaultOutput:
             },
             env={},
         )
-        assert summary["profile"] == "safe_default", (
-            "Explicit opt-out profile summary must report 'safe_default'"
-        )
+        assert summary["profile"] == "safe_default", "Explicit opt-out profile summary must report 'safe_default'"
         assert summary["enable_multimodal_ingest"] is False
         assert summary["is_safe_default"] is True
         assert summary["is_full_deployment"] is False

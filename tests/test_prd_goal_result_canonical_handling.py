@@ -35,7 +35,6 @@ from core.goal_result_aggregator import (
     reset_goal_result_aggregator,
 )
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -218,9 +217,9 @@ def _build_minimal_runtime():
 class TestOnGoalExecutionResultCanonicalTaskUpdate:
     def test_existing_task_updated_to_completed(self):
         from core.canonical_task import (
-            get_canonical_task_runtime,
-            build_canonical_task,
             TaskLifecycle,
+            build_canonical_task,
+            get_canonical_task_runtime,
             reset_canonical_task_runtime,
         )
 
@@ -251,9 +250,9 @@ class TestOnGoalExecutionResultCanonicalTaskUpdate:
 
     def test_existing_task_updated_to_failed_on_error(self):
         from core.canonical_task import (
-            get_canonical_task_runtime,
-            build_canonical_task,
             TaskLifecycle,
+            build_canonical_task,
+            get_canonical_task_runtime,
             reset_canonical_task_runtime,
         )
 
@@ -290,8 +289,8 @@ class TestOnGoalExecutionResultCanonicalTaskUpdate:
 class TestOnGoalExecutionResultResultFirst:
     def test_unknown_task_id_creates_canonical_task_record(self):
         from core.canonical_task import (
-            get_canonical_task_runtime,
             TaskLifecycle,
+            get_canonical_task_runtime,
             reset_canonical_task_runtime,
         )
 
@@ -391,13 +390,15 @@ class TestHandleGoalExecutionResultStoreSignature:
         captured_calls = []
 
         async def mock_store(task_id, device_id, route_mode, result, session_id=None):
-            captured_calls.append({
-                "task_id": task_id,
-                "device_id": device_id,
-                "route_mode": route_mode,
-                "result": result,
-                "session_id": session_id,
-            })
+            captured_calls.append(
+                {
+                    "task_id": task_id,
+                    "device_id": device_id,
+                    "route_mode": route_mode,
+                    "result": result,
+                    "session_id": session_id,
+                }
+            )
 
         message = {
             "device_id": "android_dev1",
@@ -465,9 +466,7 @@ class TestHandleGoalExecutionResultAggregator:
         async def _run():
             with patch.object(ge_mod, "store_task_result", new=AsyncMock()):
                 with patch.object(ge_mod, "_reconcile_goal_result", new=None):
-                    with patch.object(
-                        ge_mod, "_get_goal_result_aggregator", return_value=mock_agg
-                    ):
+                    with patch.object(ge_mod, "_get_goal_result_aggregator", return_value=mock_agg):
                         with patch(
                             "core.desktop_presence_runtime.get_desktop_presence_runtime",
                             return_value=mock_runtime,
@@ -513,9 +512,7 @@ class TestHandleGoalExecutionResultAggregator:
         async def _run():
             with patch.object(ge_mod, "store_task_result", new=AsyncMock()):
                 with patch.object(ge_mod, "_reconcile_goal_result", new=None):
-                    with patch.object(
-                        ge_mod, "_get_goal_result_aggregator", return_value=mock_agg
-                    ):
+                    with patch.object(ge_mod, "_get_goal_result_aggregator", return_value=mock_agg):
                         with patch(
                             "core.desktop_presence_runtime.get_desktop_presence_runtime",
                             return_value=mock_runtime,
@@ -526,8 +523,7 @@ class TestHandleGoalExecutionResultAggregator:
         # on_goal_execution_result is called at least once for the group-complete
         # notification with group_id and group_summary kwargs.
         group_complete_calls = [
-            c for c in mock_runtime.on_goal_execution_result.call_args_list
-            if c.kwargs.get("group_id") == "group-done"
+            c for c in mock_runtime.on_goal_execution_result.call_args_list if c.kwargs.get("group_id") == "group-done"
         ]
         assert len(group_complete_calls) == 1
         assert group_complete_calls[0].kwargs.get("group_summary") == {"overall_success": True}
@@ -558,9 +554,7 @@ class TestHandleGoalExecutionResultNonGrouped:
         async def _run():
             with patch.object(ge_mod, "store_task_result", new=AsyncMock()):
                 with patch.object(ge_mod, "_reconcile_goal_result", new=None):
-                    with patch.object(
-                        ge_mod, "_get_goal_result_aggregator", return_value=mock_agg
-                    ):
+                    with patch.object(ge_mod, "_get_goal_result_aggregator", return_value=mock_agg):
                         with patch(
                             "core.desktop_presence_runtime.get_desktop_presence_runtime",
                             return_value=mock_runtime,
@@ -635,4 +629,3 @@ class TestGroupResultStateSerialization:
         assert d["failure_count"] == 0
         assert "results" in d
         assert "summary" in d
-

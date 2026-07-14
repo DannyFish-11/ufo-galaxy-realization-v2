@@ -101,6 +101,7 @@ def test_03_build_oneapi_status_summary_returns_oneapi_status_summary():
         OneAPIStatusSummary,
         build_oneapi_status_summary,
     )
+
     result = build_oneapi_status_summary()
     assert isinstance(result, OneAPIStatusSummary)
 
@@ -110,96 +111,112 @@ def test_04_oneapi_status_summary_system_layer_is_sentinel():
         ONEAPI_SYSTEM_LAYER,
         build_oneapi_status_summary,
     )
+
     result = build_oneapi_status_summary()
     assert result.system_layer == ONEAPI_SYSTEM_LAYER
 
 
 def test_05_build_oneapi_status_summary_configured_true():
     from core.oneapi_system_position import build_oneapi_status_summary
+
     result = build_oneapi_status_summary(configured=True)
     assert result.configured is True
 
 
 def test_06_build_oneapi_status_summary_configured_false():
     from core.oneapi_system_position import build_oneapi_status_summary
+
     result = build_oneapi_status_summary(configured=False)
     assert result.configured is False
 
 
 def test_07_build_oneapi_status_summary_health_healthy():
     from core.oneapi_system_position import build_oneapi_status_summary
+
     result = build_oneapi_status_summary(health="healthy")
     assert result.health == "healthy"
 
 
 def test_08_build_oneapi_status_summary_health_skipped():
     from core.oneapi_system_position import build_oneapi_status_summary
+
     result = build_oneapi_status_summary(health="skipped")
     assert result.health == "skipped"
 
 
 def test_09_build_oneapi_status_summary_base_url_hint():
     from core.oneapi_system_position import build_oneapi_status_summary
+
     result = build_oneapi_status_summary(base_url_hint="http://host:3000")
     assert result.base_url_hint == "http://host:3000"
 
 
 def test_10_build_oneapi_status_summary_base_url_hint_default_none():
     from core.oneapi_system_position import build_oneapi_status_summary
+
     result = build_oneapi_status_summary()
     assert result.base_url_hint is None
 
 
 def test_11_build_oneapi_status_summary_model_count():
     from core.oneapi_system_position import build_oneapi_status_summary
+
     result = build_oneapi_status_summary(model_count=42)
     assert result.model_count == 42
 
 
 def test_12_build_oneapi_status_summary_gateway_identity():
     from core.oneapi_system_position import build_oneapi_status_summary
+
     result = build_oneapi_status_summary(gateway_identity="oneapi-gateway")
     assert result.gateway_identity == "oneapi-gateway"
 
 
 def test_13_oneapi_status_summary_to_dict_includes_system_layer():
     from core.oneapi_system_position import build_oneapi_status_summary
+
     d = build_oneapi_status_summary().to_dict()
     assert "system_layer" in d
 
 
 def test_14_oneapi_status_summary_to_dict_includes_configured():
     from core.oneapi_system_position import build_oneapi_status_summary
+
     d = build_oneapi_status_summary().to_dict()
     assert "configured" in d
 
 
 def test_15_oneapi_status_summary_to_dict_includes_health():
     from core.oneapi_system_position import build_oneapi_status_summary
+
     d = build_oneapi_status_summary().to_dict()
     assert "health" in d
 
 
 def test_16_oneapi_status_summary_to_dict_includes_base_url_hint():
     from core.oneapi_system_position import build_oneapi_status_summary
+
     d = build_oneapi_status_summary().to_dict()
     assert "base_url_hint" in d
 
 
 def test_17_oneapi_status_summary_to_dict_includes_model_count():
     from core.oneapi_system_position import build_oneapi_status_summary
+
     d = build_oneapi_status_summary().to_dict()
     assert "model_count" in d
 
 
 def test_18_oneapi_status_summary_to_dict_includes_gateway_identity():
     from core.oneapi_system_position import build_oneapi_status_summary
+
     d = build_oneapi_status_summary().to_dict()
     assert "gateway_identity" in d
 
 
 def test_19_oneapi_status_summary_to_dict_system_layer_is_aggregator_integration():
     from core.oneapi_system_position import build_oneapi_status_summary
+
     d = build_oneapi_status_summary().to_dict()
     assert d["system_layer"] == "aggregator_integration"
 
@@ -211,48 +228,56 @@ def test_19_oneapi_status_summary_to_dict_system_layer_is_aggregator_integration
 
 def test_20_desktop_status_projection_has_oneapi_integration_field():
     from contracts.desktop_status_projection import DesktopStatusProjection
+
     proj = DesktopStatusProjection()
     assert hasattr(proj, "oneapi_integration")
 
 
 def test_21_desktop_status_projection_oneapi_integration_default_none():
     from contracts.desktop_status_projection import DesktopStatusProjection
+
     proj = DesktopStatusProjection()
     assert proj.oneapi_integration is None
 
 
 def test_22_build_desktop_status_projection_always_produces_oneapi_integration():
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     proj = build_desktop_status_projection()
     assert proj.oneapi_integration is not None
 
 
 def test_23_oneapi_integration_block_has_system_layer():
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     proj = build_desktop_status_projection()
     assert "system_layer" in proj.oneapi_integration
 
 
 def test_24_oneapi_integration_block_has_configured():
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     proj = build_desktop_status_projection()
     assert "configured" in proj.oneapi_integration
 
 
 def test_25_oneapi_integration_block_has_health():
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     proj = build_desktop_status_projection()
     assert "health" in proj.oneapi_integration
 
 
 def test_26_oneapi_integration_system_layer_is_aggregator_integration():
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     proj = build_desktop_status_projection()
     assert proj.oneapi_integration["system_layer"] == "aggregator_integration"
 
 
 def test_27_build_desktop_status_projection_with_empty_ucp_produces_oneapi_integration():
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     proj = build_desktop_status_projection(unified_control_plan={})
     assert proj.oneapi_integration is not None
     assert proj.oneapi_integration.get("system_layer") == "aggregator_integration"
@@ -323,6 +348,7 @@ def test_30_model_routing_oneapi_source_not_none_when_vendor_source_oneapi():
 def test_31_oneapi_integration_block_separate_from_model_routing_block():
     """oneapi_integration must not be the same object as model_routing."""
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     proj = build_desktop_status_projection()
     # They are different types: model_routing is a Pydantic model, oneapi_integration is a dict
     assert type(proj.oneapi_integration) is dict
@@ -331,6 +357,7 @@ def test_31_oneapi_integration_block_separate_from_model_routing_block():
 def test_32_oneapi_integration_present_when_no_oneapi_data_in_ucp():
     """The block must be present even when the UCP has no OneAPI data at all."""
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     ucp = {"topology_route_plan": {}}
     proj = build_desktop_status_projection(unified_control_plan=ucp)
     assert proj.oneapi_integration is not None
@@ -339,6 +366,7 @@ def test_32_oneapi_integration_present_when_no_oneapi_data_in_ucp():
 
 def test_33_oneapi_integration_present_when_ucp_has_oneapi_status():
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     ucp = {
         "oneapi_status": {
             "system_layer": "aggregator_integration",
@@ -356,6 +384,7 @@ def test_33_oneapi_integration_present_when_ucp_has_oneapi_status():
 
 def test_34_ucp_provided_oneapi_status_forwarded_to_oneapi_integration():
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     ucp = {
         "oneapi_status": {
             "system_layer": "aggregator_integration",
@@ -375,6 +404,7 @@ def test_34_ucp_provided_oneapi_status_forwarded_to_oneapi_integration():
 
 def test_35_oneapi_integration_present_when_ucp_has_oneapi_summary():
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     ucp = {
         "oneapi_summary": {
             "system_layer": "aggregator_integration",
@@ -451,6 +481,7 @@ def test_43_status_board_v2_doc_mentions_oneapi_integration():
 
 def test_44_build_oneapi_status_summary_not_configured_defaults_to_skipped():
     from core.oneapi_system_position import build_oneapi_status_summary
+
     result = build_oneapi_status_summary(configured=False)
     # default health when not configured should indicate "skipped" or similar
     # (the caller may pass health explicitly; default is "skipped")
@@ -461,12 +492,14 @@ def test_44_build_oneapi_status_summary_not_configured_defaults_to_skipped():
 def test_45_build_oneapi_integration_summary_still_works():
     """Backward compatibility: build_oneapi_integration_summary must still work."""
     from core.oneapi_system_position import build_oneapi_integration_summary
+
     snapshot = build_oneapi_integration_summary()
     assert snapshot.system_layer == "aggregator_integration"
 
 
 def test_46_desktop_status_projection_to_dict_includes_oneapi_integration():
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     proj = build_desktop_status_projection()
     d = proj.to_dict()
     assert "oneapi_integration" in d
@@ -474,6 +507,7 @@ def test_46_desktop_status_projection_to_dict_includes_oneapi_integration():
 
 def test_47_serialised_projection_oneapi_integration_is_dict_or_none():
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     proj = build_desktop_status_projection()
     d = proj.to_dict()
     val = d.get("oneapi_integration")
@@ -484,6 +518,7 @@ def test_48_oneapi_integration_system_layer_never_direct():
     """system_layer must always be 'aggregator_integration', never 'direct' or
     'top_layer'."""
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     proj = build_desktop_status_projection()
     sl = proj.oneapi_integration.get("system_layer", "")
     assert sl != "direct"
@@ -523,11 +558,11 @@ def test_50_build_oneapi_integration_projection_returns_aggregator_integration()
     """Indirect test of the lower-horizon projection builder via
     build_desktop_status_projection."""
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     # With no UCP data, the builder should still produce an aggregator_integration block
     proj = build_desktop_status_projection(unified_control_plan={})
     assert isinstance(proj.oneapi_integration, dict)
     assert proj.oneapi_integration.get("system_layer") == "aggregator_integration"
     # Must have the required PR-4 keys
-    required_keys = {"system_layer", "configured", "health", "base_url_hint",
-                     "model_count", "gateway_identity"}
+    required_keys = {"system_layer", "configured", "health", "base_url_hint", "model_count", "gateway_identity"}
     assert required_keys.issubset(proj.oneapi_integration.keys())

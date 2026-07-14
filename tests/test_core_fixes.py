@@ -28,11 +28,13 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # 1. NLU 引擎测试
 # =============================================================================
 
+
 class TestEnhancedNLUEngine:
     """测试增强版 NLU 引擎"""
 
     def _make_engine(self, **kw):
         from nodes.Node_50_Transformer.enhanced_nlu_engine import EnhancedNLUEngine
+
         return EnhancedNLUEngine(**kw)
 
     def test_rule_based_understanding(self):
@@ -63,10 +65,7 @@ class TestEnhancedNLUEngine:
         """当 OneAPI 不可达时应降级到规则引擎"""
         os.environ["ONEAPI_API_KEY"] = "test-key"
         try:
-            engine = self._make_engine(
-                use_ai_model=True,
-                oneapi_url="http://127.0.0.1:19999"  # 不可达端口
-            )
+            engine = self._make_engine(use_ai_model=True, oneapi_url="http://127.0.0.1:19999")  # 不可达端口
             intent = engine.understand("打开微信")
             assert intent.target == "wechat"
         finally:
@@ -88,6 +87,7 @@ class TestEnhancedNLUEngine:
 # 2. 学习系统持久化测试
 # =============================================================================
 
+
 class TestLearningPersistence:
     """测试学习系统 SQLite 持久化"""
 
@@ -97,12 +97,14 @@ class TestLearningPersistence:
 
     def _make_persistence(self, tmp_dir):
         from enhancements.learning.autonomous_learning_engine import LearningPersistence
+
         db_path = os.path.join(tmp_dir, "test_learning.db")
         return LearningPersistence(db_path=db_path)
 
     def test_save_and_load_observations(self):
-        from enhancements.learning.autonomous_learning_engine import LearningObservation
         from datetime import datetime
+
+        from enhancements.learning.autonomous_learning_engine import LearningObservation
 
         with tempfile.TemporaryDirectory() as tmp:
             persistence = self._make_persistence(tmp)
@@ -146,18 +148,17 @@ class TestLearningPersistence:
             assert "src1" in loaded["key1"]["sources"]
 
     def test_knowledge_accumulator_with_persistence(self):
-        from enhancements.learning.autonomous_learning_engine import (
-            KnowledgeAccumulator,
-            LearningPersistence,
-            DiscoveredPattern,
-            PatternType,
-        )
         from datetime import datetime
 
+        from enhancements.learning.autonomous_learning_engine import (
+            DiscoveredPattern,
+            KnowledgeAccumulator,
+            LearningPersistence,
+            PatternType,
+        )
+
         with tempfile.TemporaryDirectory() as tmp:
-            persistence = LearningPersistence(
-                db_path=os.path.join(tmp, "test.db")
-            )
+            persistence = LearningPersistence(db_path=os.path.join(tmp, "test.db"))
             acc = KnowledgeAccumulator(persistence=persistence)
 
             pattern = DiscoveredPattern(
@@ -172,9 +173,7 @@ class TestLearningPersistence:
                 examples=["example1"],
             )
 
-            stats = asyncio.run(
-                acc.accumulate([pattern], "test_source")
-            )
+            stats = asyncio.run(acc.accumulate([pattern], "test_source"))
             assert stats["added"] == 1
 
             # Verify persistence: create new accumulator from same DB
@@ -186,11 +185,13 @@ class TestLearningPersistence:
 # 3. Agent 消息总线测试
 # =============================================================================
 
+
 class TestAgentMessageBus:
     """测试 Agent 通信消息总线"""
 
     def _make_bus(self):
         from core.agent_factory import AgentMessageBus
+
         return AgentMessageBus()
 
     def test_register_and_send(self):
@@ -254,6 +255,7 @@ class TestAgentMessageBus:
         bus.unregister("agent_x")
 
         from core.agent_factory import AgentMessage
+
         msg = AgentMessage(
             id="msg_003",
             sender_id="other",
@@ -269,11 +271,13 @@ class TestAgentMessageBus:
 # 4. 知识库持久化和搜索模式标识测试
 # =============================================================================
 
+
 class TestKnowledgeBaseSystem:
     """测试知识库系统"""
 
     def _make_kb(self, tmp_dir):
         from nodes.Node_72_KnowledgeBase.knowledge_base_system import KnowledgeBaseSystem
+
         return KnowledgeBaseSystem(persist_directory=tmp_dir)
 
     def test_add_and_search(self):
@@ -321,11 +325,13 @@ class TestKnowledgeBaseSystem:
 # 5. Memory System 测试
 # =============================================================================
 
+
 class TestMemoryDatabase:
     """测试记忆数据库"""
 
     def _make_db(self, tmp_dir):
         from nodes.Node_100_MemorySystem.main import MemoryDatabase
+
         db_path = os.path.join(tmp_dir, "test_memory.db")
         return MemoryDatabase(db_path)
 
@@ -376,11 +382,13 @@ class TestMemoryDatabase:
 # 6. 自主编程引擎安全性测试
 # =============================================================================
 
+
 class TestAutonomousCodingEngine:
     """测试自主编程引擎的安全性修复"""
 
     def _make_engine(self, tmp_dir):
         from enhancements.coding.autonomous_coding_engine import AutonomousCodingEngine
+
         return AutonomousCodingEngine(workspace_root=tmp_dir)
 
     def test_workspace_path_auto_detection(self):
@@ -421,6 +429,7 @@ class TestAutonomousCodingEngine:
 # 7. L4 主循环测试
 # =============================================================================
 
+
 class TestGalaxyMainLoopL4:
     """测试 L4 主循环的修复"""
 
@@ -433,17 +442,19 @@ class TestGalaxyMainLoopL4:
 
         # 模拟 100 条历史
         for i in range(100):
-            loop.task_history.append({
-                "goal": f"goal_{i}",
-                "success": True,
-                "duration": 1.0,
-                "actions_count": 1,
-                "success_rate": 0.8,
-            })
+            loop.task_history.append(
+                {
+                    "goal": f"goal_{i}",
+                    "success": True,
+                    "duration": 1.0,
+                    "actions_count": 1,
+                    "success_rate": 0.8,
+                }
+            )
 
         # 触发裁剪
         if len(loop.task_history) > loop._max_task_history:
-            loop.task_history = loop.task_history[-loop._max_task_history:]
+            loop.task_history = loop.task_history[-loop._max_task_history :]
 
         assert len(loop.task_history) == 10
 
@@ -452,11 +463,13 @@ class TestGalaxyMainLoopL4:
 # 8. Android Bridge 测试
 # =============================================================================
 
+
 class TestAndroidBridge:
     """测试 Android 桥接服务"""
 
     def _make_bridge(self):
         from galaxy_gateway.android_bridge import AndroidBridge
+
         return AndroidBridge()
 
     def test_device_health_empty(self):
@@ -484,9 +497,7 @@ class TestAndroidBridge:
             "os_version": "14",
             "auth_token": "test-token-device-register",
         }
-        result = asyncio.run(
-            bridge.handle_message(MockWebSocket(), msg)
-        )
+        result = asyncio.run(bridge.handle_message(MockWebSocket(), msg))
         assert result is not None
         assert result["success"] is True
 

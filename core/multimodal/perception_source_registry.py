@@ -49,6 +49,7 @@ Usage::
     snapshot = registry.snapshot()
     import json; json.dumps(snapshot)  # safe — no binary payloads
 """
+
 from __future__ import annotations
 
 import logging
@@ -348,9 +349,7 @@ class PerceptionSourceRegistry:
         """Mark a source as actively delivering signal."""
         record = self._sources.get(source_id)
         if record is None:
-            logger.debug(
-                "PerceptionSourceRegistry.mark_active: unknown source_id=%s", source_id
-            )
+            logger.debug("PerceptionSourceRegistry.mark_active: unknown source_id=%s", source_id)
             return
         record.is_active = True
         record.last_seen_at = time.time()
@@ -368,9 +367,7 @@ class PerceptionSourceRegistry:
             if reason not in record.degradation_reasons:
                 record.degradation_reasons.append(reason)
 
-    def mark_unavailable(
-        self, source_id: str, reason: Optional[str] = None
-    ) -> None:
+    def mark_unavailable(self, source_id: str, reason: Optional[str] = None) -> None:
         """Mark a source as hardware-unavailable or otherwise unusable.
 
         This does not remove the source from the registry — an unavailable
@@ -384,9 +381,7 @@ class PerceptionSourceRegistry:
         if reason and reason not in record.degradation_reasons:
             record.degradation_reasons.append(reason)
 
-    def mark_degraded(
-        self, source_id: str, reason: Optional[str] = None
-    ) -> None:
+    def mark_degraded(self, source_id: str, reason: Optional[str] = None) -> None:
         """Mark a source as degraded but potentially still usable."""
         record = self._sources.get(source_id)
         if record is None:
@@ -414,8 +409,7 @@ class PerceptionSourceRegistry:
             return
         if record.health == SourceHealthStatus.UNAVAILABLE:
             logger.debug(
-                "PerceptionSourceRegistry.mark_recovered: source_id=%s is UNAVAILABLE"
-                " — skipping auto-recovery",
+                "PerceptionSourceRegistry.mark_recovered: source_id=%s is UNAVAILABLE" " — skipping auto-recovery",
                 source_id,
             )
             return
@@ -423,9 +417,7 @@ class PerceptionSourceRegistry:
         record.is_active = True
         record.last_seen_at = time.time()
         record.degradation_reasons.clear()
-        logger.debug(
-            "PerceptionSourceRegistry: source_id=%s recovered to HEALTHY", source_id
-        )
+        logger.debug("PerceptionSourceRegistry: source_id=%s recovered to HEALTHY", source_id)
 
     def touch(self, source_id: str) -> None:
         """Update the ``last_seen_at`` timestamp for a source."""
@@ -477,8 +469,7 @@ class PerceptionSourceRegistry:
 
         if record.modality not in (SourceModality.AUDIO, SourceModality.MULTI):
             logger.warning(
-                "PerceptionSourceRegistry.set_primary_audio: source_id=%s has "
-                "modality=%s (not audio-capable)",
+                "PerceptionSourceRegistry.set_primary_audio: source_id=%s has " "modality=%s (not audio-capable)",
                 source_id,
                 record.modality.value,
             )
@@ -490,9 +481,7 @@ class PerceptionSourceRegistry:
 
         record.is_primary_audio = True
         self._primary_audio_id = source_id
-        logger.debug(
-            "PerceptionSourceRegistry: primary audio = source_id=%s", source_id
-        )
+        logger.debug("PerceptionSourceRegistry: primary audio = source_id=%s", source_id)
         return True
 
     def set_primary_video(self, source_id: str) -> bool:
@@ -514,8 +503,7 @@ class PerceptionSourceRegistry:
 
         if record.modality not in (SourceModality.VIDEO, SourceModality.MULTI):
             logger.warning(
-                "PerceptionSourceRegistry.set_primary_video: source_id=%s has "
-                "modality=%s (not video-capable)",
+                "PerceptionSourceRegistry.set_primary_video: source_id=%s has " "modality=%s (not video-capable)",
                 source_id,
                 record.modality.value,
             )
@@ -527,9 +515,7 @@ class PerceptionSourceRegistry:
 
         record.is_primary_video = True
         self._primary_video_id = source_id
-        logger.debug(
-            "PerceptionSourceRegistry: primary video = source_id=%s", source_id
-        )
+        logger.debug("PerceptionSourceRegistry: primary video = source_id=%s", source_id)
         return True
 
     def clear_primary_audio(self) -> None:
@@ -578,17 +564,11 @@ class PerceptionSourceRegistry:
         """Return records for all currently-active sources."""
         return [r for r in self._sources.values() if r.is_active]
 
-    def sources_by_type(
-        self, source_type: PerceptionSourceType
-    ) -> List[PerceptionSourceRecord]:
+    def sources_by_type(self, source_type: PerceptionSourceType) -> List[PerceptionSourceRecord]:
         """Return all records with the given ``source_type``."""
-        return [
-            r for r in self._sources.values() if r.source_type == source_type
-        ]
+        return [r for r in self._sources.values() if r.source_type == source_type]
 
-    def sources_by_modality(
-        self, modality: SourceModality
-    ) -> List[PerceptionSourceRecord]:
+    def sources_by_modality(self, modality: SourceModality) -> List[PerceptionSourceRecord]:
         """Return all records with the given ``modality`` (including MULTI)."""
         compatible = {modality, SourceModality.MULTI}
         return [r for r in self._sources.values() if r.modality in compatible]
@@ -598,8 +578,7 @@ class PerceptionSourceRegistry:
         return [
             r
             for r in self._sources.values()
-            if r.health
-            in (SourceHealthStatus.DEGRADED, SourceHealthStatus.UNAVAILABLE)
+            if r.health in (SourceHealthStatus.DEGRADED, SourceHealthStatus.UNAVAILABLE)
         ]
 
     # ------------------------------------------------------------------
@@ -623,8 +602,7 @@ class PerceptionSourceRegistry:
             degraded_count = sum(
                 1
                 for r in self._sources.values()
-                if r.health
-                in (SourceHealthStatus.DEGRADED, SourceHealthStatus.UNAVAILABLE)
+                if r.health in (SourceHealthStatus.DEGRADED, SourceHealthStatus.UNAVAILABLE)
             )
             return {
                 "snapshot_at": time.time(),
@@ -636,9 +614,7 @@ class PerceptionSourceRegistry:
                 "sources": sources_list,
             }
         except Exception as exc:  # pragma: no cover
-            logger.debug(
-                "PerceptionSourceRegistry.snapshot failed (non-fatal): %s", exc
-            )
+            logger.debug("PerceptionSourceRegistry.snapshot failed (non-fatal): %s", exc)
             return {
                 "snapshot_at": time.time(),
                 "error": str(exc),

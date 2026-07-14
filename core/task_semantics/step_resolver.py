@@ -72,9 +72,9 @@ from typing import Any, Dict, List, Optional, Tuple
 from .step_kind import StepKind, coerce_step_kind
 from .step_policy import StepSemanticPolicy, build_policy_for_kind
 from .task_semantic_summary import (
+    EMPTY_SEMANTIC_SUMMARY,
     ClassifiedStep,
     TaskSemanticSummary,
-    EMPTY_SEMANTIC_SUMMARY,
 )
 
 logger = logging.getLogger("Galaxy.TaskSemantics.Resolver")
@@ -414,9 +414,7 @@ def resolve_step_policy(
         if hasattr(execution_policy, "cross_device_allowed"):
             cross_device_allowed = bool(execution_policy.cross_device_allowed)
         elif isinstance(execution_policy, dict):
-            cross_device_allowed = bool(
-                execution_policy.get("cross_device_allowed", False)
-            )
+            cross_device_allowed = bool(execution_policy.get("cross_device_allowed", False))
 
     # Derive requires_confirmation override
     requires_confirmation: Optional[bool] = None
@@ -424,9 +422,7 @@ def resolve_step_policy(
         if hasattr(execution_policy, "requires_confirmation"):
             requires_confirmation = bool(execution_policy.requires_confirmation)
         elif isinstance(execution_policy, dict):
-            requires_confirmation = bool(
-                execution_policy.get("requires_confirmation", False)
-            )
+            requires_confirmation = bool(execution_policy.get("requires_confirmation", False))
 
     return build_policy_for_kind(
         kind,

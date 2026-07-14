@@ -14,13 +14,14 @@ Covers:
 from __future__ import annotations
 
 import asyncio
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 
 # ===========================================================================
 # A) Swarm auto-scaling
 # ===========================================================================
+
 
 class TestSwarmScalerPolicy:
     """Verify ScalingPolicy validation."""
@@ -121,8 +122,8 @@ class TestSwarmScalerScaleUp:
         assert all(w.startswith("swarm_worker_") for w in new_workers)
 
     def test_scale_up_emits_audit_event(self):
-        from core.control_plane.swarm_scaler import ScalingPolicy, SwarmScaler
         from core.control_plane.audit_ledger import AuditLedger
+        from core.control_plane.swarm_scaler import ScalingPolicy, SwarmScaler
 
         ledger = AuditLedger()
         p = ScalingPolicy(max_workers=10, scale_step=2)
@@ -158,8 +159,8 @@ class TestSwarmScalerScaleDown:
         assert retired == ["w3", "w4"]
 
     def test_scale_down_emits_audit_event(self):
-        from core.control_plane.swarm_scaler import ScalingPolicy, SwarmScaler
         from core.control_plane.audit_ledger import AuditLedger
+        from core.control_plane.swarm_scaler import ScalingPolicy, SwarmScaler
 
         ledger = AuditLedger()
         p = ScalingPolicy(min_workers=1, scale_step=2)
@@ -185,8 +186,8 @@ class TestSwarmScalerAutoscale:
     """Verify the end-to-end autoscale() convenience method."""
 
     def test_autoscale_complex_task_scales_up(self):
-        from core.control_plane.swarm_scaler import ScalingAction, ScalingPolicy, SwarmScaler
         from core.control_plane.audit_ledger import AuditLedger
+        from core.control_plane.swarm_scaler import ScalingAction, ScalingPolicy, SwarmScaler
 
         ledger = AuditLedger()
         p = ScalingPolicy(scale_up_complexity=0.5, max_workers=10, scale_step=2)
@@ -198,8 +199,8 @@ class TestSwarmScalerAutoscale:
         assert result["retired"] == []
 
     def test_autoscale_simple_task_scales_down(self):
-        from core.control_plane.swarm_scaler import ScalingAction, ScalingPolicy, SwarmScaler
         from core.control_plane.audit_ledger import AuditLedger
+        from core.control_plane.swarm_scaler import ScalingAction, ScalingPolicy, SwarmScaler
 
         ledger = AuditLedger()
         p = ScalingPolicy(scale_down_complexity=0.35, min_workers=1, scale_step=1)
@@ -215,6 +216,7 @@ class TestSwarmScalerAutoscale:
 # B) Trace replay endpoints (timeline + graph)
 # ===========================================================================
 
+
 class TestAuditTimelineEndpoint:
     """Verify GET /api/v1/audit/traces/{trace_id}/timeline."""
 
@@ -222,17 +224,33 @@ class TestAuditTimelineEndpoint:
     def client_with_events(self):
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
+
         from core.control_plane.audit_ledger import AuditLedger, EventType, Severity
         from core.routes.audit import create_router
 
         ledger = AuditLedger()
         trace_id = "trace_timeline_test"
-        ledger.append(event_type=EventType.TASK_CREATED, severity=Severity.INFO,
-                      source="test", trace_id=trace_id, message="task created")
-        ledger.append(event_type=EventType.TASK_DISPATCHED, severity=Severity.INFO,
-                      source="scheduler", trace_id=trace_id, message="dispatched")
-        ledger.append(event_type=EventType.TASK_COMPLETED, severity=Severity.INFO,
-                      source="executor", trace_id=trace_id, message="completed")
+        ledger.append(
+            event_type=EventType.TASK_CREATED,
+            severity=Severity.INFO,
+            source="test",
+            trace_id=trace_id,
+            message="task created",
+        )
+        ledger.append(
+            event_type=EventType.TASK_DISPATCHED,
+            severity=Severity.INFO,
+            source="scheduler",
+            trace_id=trace_id,
+            message="dispatched",
+        )
+        ledger.append(
+            event_type=EventType.TASK_COMPLETED,
+            severity=Severity.INFO,
+            source="executor",
+            trace_id=trace_id,
+            message="completed",
+        )
 
         app = FastAPI()
         with patch("core.control_plane._globals.get_audit_ledger", return_value=ledger):
@@ -245,17 +263,33 @@ class TestAuditTimelineEndpoint:
         with patch("core.control_plane._globals._audit_ledger", _):
             from fastapi import FastAPI
             from fastapi.testclient import TestClient
+
             from core.control_plane.audit_ledger import AuditLedger, EventType, Severity
             from core.routes.audit import create_router
 
             ledger = AuditLedger()
             tid = "trace_timeline_test_2"
-            ledger.append(event_type=EventType.TASK_CREATED, severity=Severity.INFO,
-                          source="test", trace_id=tid, message="task created")
-            ledger.append(event_type=EventType.TASK_DISPATCHED, severity=Severity.INFO,
-                          source="scheduler", trace_id=tid, message="dispatched")
-            ledger.append(event_type=EventType.TASK_COMPLETED, severity=Severity.INFO,
-                          source="executor", trace_id=tid, message="completed")
+            ledger.append(
+                event_type=EventType.TASK_CREATED,
+                severity=Severity.INFO,
+                source="test",
+                trace_id=tid,
+                message="task created",
+            )
+            ledger.append(
+                event_type=EventType.TASK_DISPATCHED,
+                severity=Severity.INFO,
+                source="scheduler",
+                trace_id=tid,
+                message="dispatched",
+            )
+            ledger.append(
+                event_type=EventType.TASK_COMPLETED,
+                severity=Severity.INFO,
+                source="executor",
+                trace_id=tid,
+                message="completed",
+            )
 
             app2 = FastAPI()
 
@@ -263,17 +297,20 @@ class TestAuditTimelineEndpoint:
                 return ledger
 
             import core.routes.audit as audit_module
+
             original = audit_module.create_router
 
             def patched_create_router():
                 from fastapi import APIRouter
+
                 r = original()
                 return r
 
             app2.include_router(patched_create_router())
 
             # Direct unit test of the aggregation logic
-            from core.routes.audit import _event_stage, _STAGE_ORDER
+            from core.routes.audit import _STAGE_ORDER, _event_stage
+
             assert _event_stage("task_created") == "intent"
             assert _event_stage("task_dispatched") == "dispatch"
             assert _event_stage("task_completed") == "result"
@@ -298,13 +335,14 @@ class TestAuditTimelineEndpoint:
             "random_unknown": "other",
         }
         for event_type, expected_stage in cases.items():
-            assert _event_stage(event_type) == expected_stage, (
-                f"Expected stage '{expected_stage}' for event_type '{event_type}'"
-            )
+            assert (
+                _event_stage(event_type) == expected_stage
+            ), f"Expected stage '{expected_stage}' for event_type '{event_type}'"
 
     def test_timeline_endpoint_404_for_unknown_trace(self):
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
+
         from core.control_plane.audit_ledger import AuditLedger
         from core.routes.audit import create_router
 
@@ -312,6 +350,7 @@ class TestAuditTimelineEndpoint:
         app = FastAPI()
 
         import core.routes.audit as audit_mod
+
         original_fn = audit_mod._event_stage  # just to verify module is importable
 
         router = create_router()
@@ -330,6 +369,7 @@ class TestAuditTimelineEndpoint:
     def test_timeline_chronological_ordering(self):
         """Events in timeline response should be sorted by timestamp."""
         import time
+
         from core.control_plane.audit_ledger import AuditLedger, EventType, Severity
         from core.routes.audit import _event_stage
 
@@ -337,8 +377,7 @@ class TestAuditTimelineEndpoint:
         trace_id = "trace_order_test"
         # Append in order — timestamps are auto-assigned
         for et in [EventType.TASK_CREATED, EventType.TASK_STARTED, EventType.TASK_COMPLETED]:
-            ledger.append(event_type=et, severity=Severity.INFO,
-                          source="test", trace_id=trace_id)
+            ledger.append(event_type=et, severity=Severity.INFO, source="test", trace_id=trace_id)
 
         events = ledger.query(trace_id=trace_id)
         sorted_events = sorted(events, key=lambda e: e.timestamp)
@@ -357,16 +396,24 @@ class TestAuditGraphEndpoint:
         ledger = AuditLedger()
         trace_id = "trace_graph_test"
         ev1_id = ledger.append(
-            event_type=EventType.TASK_CREATED, severity=Severity.INFO,
-            source="test", trace_id=trace_id,
+            event_type=EventType.TASK_CREATED,
+            severity=Severity.INFO,
+            source="test",
+            trace_id=trace_id,
         )
         ev2_id = ledger.append(
-            event_type=EventType.TASK_DISPATCHED, severity=Severity.INFO,
-            source="scheduler", trace_id=trace_id, parent_ids=[ev1_id],
+            event_type=EventType.TASK_DISPATCHED,
+            severity=Severity.INFO,
+            source="scheduler",
+            trace_id=trace_id,
+            parent_ids=[ev1_id],
         )
         ev3_id = ledger.append(
-            event_type=EventType.TASK_COMPLETED, severity=Severity.INFO,
-            source="executor", trace_id=trace_id, parent_ids=[ev2_id],
+            event_type=EventType.TASK_COMPLETED,
+            severity=Severity.INFO,
+            source="executor",
+            trace_id=trace_id,
+            parent_ids=[ev2_id],
         )
 
         events = ledger.query(trace_id=trace_id)
@@ -388,10 +435,8 @@ class TestAuditGraphEndpoint:
 
         ledger = AuditLedger()
         trace_id = "trace_graph_stage_test"
-        ledger.append(event_type=EventType.TASK_CREATED, severity=Severity.INFO,
-                      source="test", trace_id=trace_id)
-        ledger.append(event_type=EventType.TASK_COMPLETED, severity=Severity.INFO,
-                      source="test", trace_id=trace_id)
+        ledger.append(event_type=EventType.TASK_CREATED, severity=Severity.INFO, source="test", trace_id=trace_id)
+        ledger.append(event_type=EventType.TASK_COMPLETED, severity=Severity.INFO, source="test", trace_id=trace_id)
 
         events = ledger.query(trace_id=trace_id)
         for ev in events:
@@ -403,6 +448,7 @@ class TestAuditGraphEndpoint:
 # ===========================================================================
 # C) Session migration
 # ===========================================================================
+
 
 class TestSessionMigration:
     """Verify POST /api/v1/sessions/migrate."""
@@ -481,11 +527,13 @@ class TestSessionMigration:
     @pytest.mark.asyncio
     async def test_migrate_endpoint_success(self):
         """Smoke-test the migration endpoint via FastAPI TestClient."""
+        import time
+        from unittest.mock import MagicMock, patch
+
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
-        from unittest.mock import MagicMock, patch
+
         from core.session_manager import SessionManager
-        import time
 
         # Build a real SessionManager with a pre-seeded session
         sm = SessionManager.__new__(SessionManager)
@@ -501,20 +549,25 @@ class TestSessionMigration:
         from core.routes import sessions as sessions_mod
 
         app = FastAPI()
-        with patch.object(sessions_mod, "get_session_manager", return_value=sm), \
-             patch("core.routes._shared.connection_manager") as mock_conn:
+        with (
+            patch.object(sessions_mod, "get_session_manager", return_value=sm),
+            patch("core.routes._shared.connection_manager") as mock_conn,
+        ):
             mock_conn.send_to_device = AsyncMock(return_value=True)
             mock_conn.broadcast_status = AsyncMock()
             router = sessions_mod.create_router(service_manager=None, config=None)
             app.include_router(router)
             client = TestClient(app)
 
-            resp = client.post("/api/v1/sessions/migrate", json={
-                "session_id": session.id,
-                "source_device": "phone_01",
-                "target_device": "desktop_02",
-                "context": {"new_key": "new_value"},
-            })
+            resp = client.post(
+                "/api/v1/sessions/migrate",
+                json={
+                    "session_id": session.id,
+                    "source_device": "phone_01",
+                    "target_device": "desktop_02",
+                    "context": {"new_key": "new_value"},
+                },
+            )
             assert resp.status_code == 200
             data = resp.json()
             assert data["success"] is True
@@ -523,11 +576,13 @@ class TestSessionMigration:
     @pytest.mark.asyncio
     async def test_migrate_endpoint_session_not_found(self):
         """Migration endpoint returns 404 when session doesn't exist."""
+        from unittest.mock import AsyncMock, MagicMock, patch
+
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
-        from unittest.mock import MagicMock, AsyncMock, patch
-        from core.session_manager import SessionManager
+
         from core.routes import sessions as sessions_mod
+        from core.session_manager import SessionManager
 
         sm = SessionManager.__new__(SessionManager)
         sm._sessions = {}
@@ -535,29 +590,36 @@ class TestSessionMigration:
         sm._on_update_callback = None
 
         app = FastAPI()
-        with patch.object(sessions_mod, "get_session_manager", return_value=sm), \
-             patch("core.routes._shared.connection_manager") as mock_conn:
+        with (
+            patch.object(sessions_mod, "get_session_manager", return_value=sm),
+            patch("core.routes._shared.connection_manager") as mock_conn,
+        ):
             mock_conn.send_to_device = AsyncMock(return_value=False)
             mock_conn.broadcast_status = AsyncMock()
             router = sessions_mod.create_router(service_manager=None, config=None)
             app.include_router(router)
             client = TestClient(app)
 
-            resp = client.post("/api/v1/sessions/migrate", json={
-                "session_id": "nonexistent_session",
-                "source_device": "phone_01",
-                "target_device": "desktop_02",
-            })
+            resp = client.post(
+                "/api/v1/sessions/migrate",
+                json={
+                    "session_id": "nonexistent_session",
+                    "source_device": "phone_01",
+                    "target_device": "desktop_02",
+                },
+            )
             assert resp.status_code == 404
 
     @pytest.mark.asyncio
     async def test_migrate_endpoint_wrong_source_device(self):
         """Migration endpoint returns 409 when source_device not in session."""
+        from unittest.mock import AsyncMock, patch
+
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
-        from unittest.mock import AsyncMock, patch
-        from core.session_manager import SessionManager
+
         from core.routes import sessions as sessions_mod
+        from core.session_manager import SessionManager
 
         sm = SessionManager.__new__(SessionManager)
         sm._sessions = {}
@@ -567,25 +629,31 @@ class TestSessionMigration:
         session = await sm.create_session(user_id="user_1", device_id="phone_01")
 
         app = FastAPI()
-        with patch.object(sessions_mod, "get_session_manager", return_value=sm), \
-             patch("core.routes._shared.connection_manager") as mock_conn:
+        with (
+            patch.object(sessions_mod, "get_session_manager", return_value=sm),
+            patch("core.routes._shared.connection_manager") as mock_conn,
+        ):
             mock_conn.send_to_device = AsyncMock(return_value=False)
             mock_conn.broadcast_status = AsyncMock()
             router = sessions_mod.create_router(service_manager=None, config=None)
             app.include_router(router)
             client = TestClient(app)
 
-            resp = client.post("/api/v1/sessions/migrate", json={
-                "session_id": session.id,
-                "source_device": "wrong_device",
-                "target_device": "desktop_02",
-            })
+            resp = client.post(
+                "/api/v1/sessions/migrate",
+                json={
+                    "session_id": session.id,
+                    "source_device": "wrong_device",
+                    "target_device": "desktop_02",
+                },
+            )
             assert resp.status_code == 409
 
 
 # ===========================================================================
 # D) Security policy
 # ===========================================================================
+
 
 class TestSecurityPolicyEvaluation:
     """Verify evaluate_policy() returns correct risk level + HITL flag."""
@@ -634,7 +702,7 @@ class TestSecurityPolicyEvaluation:
         assert result["require_hitl"] is True
 
     def test_first_matching_rule_wins(self):
-        from core.routes.security_policy import evaluate_policy, set_policy, get_policy
+        from core.routes.security_policy import evaluate_policy, get_policy, set_policy
 
         # Save original
         original = get_policy()
@@ -661,6 +729,7 @@ class TestSecurityPolicyRoutes:
     def policy_client(self):
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
+
         from core.routes.security_policy import create_router
 
         app = FastAPI()
@@ -675,16 +744,14 @@ class TestSecurityPolicyRoutes:
         assert "rules" in data["policy"]
 
     def test_evaluate_high_risk_tool(self, policy_client):
-        resp = policy_client.post("/api/v1/security/policy/evaluate",
-                                  json={"action": "", "tool": "shell_exec"})
+        resp = policy_client.post("/api/v1/security/policy/evaluate", json={"action": "", "tool": "shell_exec"})
         assert resp.status_code == 200
         data = resp.json()
         assert data["ok"] is True
         assert data["require_hitl"] is True
 
     def test_evaluate_low_risk_action(self, policy_client):
-        resp = policy_client.post("/api/v1/security/policy/evaluate",
-                                  json={"action": "list_files", "tool": ""})
+        resp = policy_client.post("/api/v1/security/policy/evaluate", json={"action": "list_files", "tool": ""})
         assert resp.status_code == 200
         data = resp.json()
         assert data["ok"] is True
@@ -692,9 +759,7 @@ class TestSecurityPolicyRoutes:
 
     def test_put_policy_accepts_valid_body(self, policy_client):
         new_policy = {
-            "rules": [
-                {"match": {"action": "custom_action"}, "risk_level": "medium", "require_hitl": False}
-            ],
+            "rules": [{"match": {"action": "custom_action"}, "risk_level": "medium", "require_hitl": False}],
             "default_risk_level": "low",
             "default_require_hitl": False,
         }
@@ -714,10 +779,8 @@ class TestSecurityInterceptorWithPolicy:
 
     @pytest.mark.asyncio
     async def test_low_risk_action_auto_approved(self):
-        from core.control_plane.security_interceptor import (
-            ApprovalRegistry, SecurityInterceptor
-        )
-        from core.routes.security_policy import set_policy, get_policy, _DEFAULT_POLICY
+        from core.control_plane.security_interceptor import ApprovalRegistry, SecurityInterceptor
+        from core.routes.security_policy import _DEFAULT_POLICY, get_policy, set_policy
 
         # Ensure default policy is active
         original = get_policy()
@@ -738,10 +801,8 @@ class TestSecurityInterceptorWithPolicy:
 
     @pytest.mark.asyncio
     async def test_high_risk_action_requires_hitl(self):
-        from core.control_plane.security_interceptor import (
-            ApprovalRegistry, SecurityInterceptor, ApprovalTimeoutError
-        )
-        from core.routes.security_policy import set_policy, _DEFAULT_POLICY
+        from core.control_plane.security_interceptor import ApprovalRegistry, ApprovalTimeoutError, SecurityInterceptor
+        from core.routes.security_policy import _DEFAULT_POLICY, set_policy
 
         # Ensure default policy is active
         set_policy(dict(_DEFAULT_POLICY))
@@ -758,10 +819,8 @@ class TestSecurityInterceptorWithPolicy:
 
     @pytest.mark.asyncio
     async def test_high_risk_action_approved_by_operator(self):
-        from core.control_plane.security_interceptor import (
-            ApprovalRegistry, SecurityInterceptor
-        )
-        from core.routes.security_policy import set_policy, _DEFAULT_POLICY
+        from core.control_plane.security_interceptor import ApprovalRegistry, SecurityInterceptor
+        from core.routes.security_policy import _DEFAULT_POLICY, set_policy
 
         # Ensure default policy is active
         set_policy(dict(_DEFAULT_POLICY))
@@ -791,7 +850,7 @@ class TestSecurityPolicyCustomRules:
     """Verify custom policy rules are respected by evaluate_policy."""
 
     def test_custom_medium_rule_no_hitl(self):
-        from core.routes.security_policy import set_policy, evaluate_policy, get_policy
+        from core.routes.security_policy import evaluate_policy, get_policy, set_policy
 
         original = get_policy()
         try:
@@ -810,7 +869,7 @@ class TestSecurityPolicyCustomRules:
             set_policy(original)
 
     def test_empty_rules_uses_default(self):
-        from core.routes.security_policy import set_policy, evaluate_policy, get_policy
+        from core.routes.security_policy import evaluate_policy, get_policy, set_policy
 
         original = get_policy()
         try:

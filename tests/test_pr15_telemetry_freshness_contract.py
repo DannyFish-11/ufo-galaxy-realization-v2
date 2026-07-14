@@ -90,28 +90,25 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 _MODULE_AVAILABLE = False
 try:
-    from core.telemetry_freshness_contract import (
-        # Authority / policy sentinels
+    from core.telemetry_freshness_contract import (  # Authority / policy sentinels; Enumerations; Data classes; Functions
+        DELIVERY_GAP_MUST_DOWNGRADE_FROM_REALTIME_POLICY,
+        FRESHNESS_TAXONOMY_IS_FIRST_CLASS_DIMENSION_POLICY,
+        PARTIAL_CHANNELS_BLOCK_REALTIME_AUTHORITATIVE_POLICY,
+        POST_HOC_EVIDENCE_MUST_NOT_CLAIM_REALTIME_AUTHORITATIVE_POLICY,
+        SIGNAL_PRESENCE_MUST_NOT_CLAIM_REALTIME_AUTHORITATIVE_POLICY,
+        STALE_TELEMETRY_MUST_DOWNGRADE_CLASS_POLICY,
+        TELEMETRY_ABSENCE_DEFAULTS_TO_UNRELIABLE_POLICY,
         TELEMETRY_FRESHNESS_CONTRACT_AUTHORITY,
         TELEMETRY_FRESHNESS_CONTRACT_PR15_SENTINEL,
-        FRESHNESS_TAXONOMY_IS_FIRST_CLASS_DIMENSION_POLICY,
-        SIGNAL_PRESENCE_MUST_NOT_CLAIM_REALTIME_AUTHORITATIVE_POLICY,
-        POST_HOC_EVIDENCE_MUST_NOT_CLAIM_REALTIME_AUTHORITATIVE_POLICY,
-        PARTIAL_CHANNELS_BLOCK_REALTIME_AUTHORITATIVE_POLICY,
-        STALE_TELEMETRY_MUST_DOWNGRADE_CLASS_POLICY,
-        DELIVERY_GAP_MUST_DOWNGRADE_FROM_REALTIME_POLICY,
-        TELEMETRY_ABSENCE_DEFAULTS_TO_UNRELIABLE_POLICY,
-        # Enumerations
-        TelemetryFreshnessClass,
         ObservationPathKind,
-        # Data classes
+        TelemetryFreshnessClass,
         TelemetryFreshnessEvidence,
         TelemetryFreshnessVerdict,
-        # Functions
-        classify_telemetry_freshness,
-        build_telemetry_freshness_verdict,
         build_baseline_telemetry_freshness_verdict,
+        build_telemetry_freshness_verdict,
+        classify_telemetry_freshness,
     )
+
     _MODULE_AVAILABLE = True
 except ImportError as _imp_err:
     print(f"SKIP: core.telemetry_freshness_contract unavailable: {_imp_err}")
@@ -119,10 +116,12 @@ except ImportError as _imp_err:
 
 def _skip_if_unavailable(test_fn):
     """Decorator: skip test if the module is not available."""
+
     def wrapper(self):
         if not _MODULE_AVAILABLE:
             self.skipTest("core.telemetry_freshness_contract not available")
         return test_fn(self)
+
     wrapper.__name__ = test_fn.__name__
     return wrapper
 
@@ -130,6 +129,7 @@ def _skip_if_unavailable(test_fn):
 # ---------------------------------------------------------------------------
 # Helper: build evidence with named overrides
 # ---------------------------------------------------------------------------
+
 
 def _ev(**kwargs) -> "TelemetryFreshnessEvidence":
     """Build a TelemetryFreshnessEvidence with default-conservative values."""
@@ -143,9 +143,7 @@ def _ev(**kwargs) -> "TelemetryFreshnessEvidence":
         evidence_lag_known=kwargs.get("evidence_lag_known", False),
         post_hoc_evidence_only=kwargs.get("post_hoc_evidence_only", False),
         explicit_unreliable=kwargs.get("explicit_unreliable", False),
-        observation_path_kind=kwargs.get(
-            "observation_path_kind", ObservationPathKind.unknown
-        ),
+        observation_path_kind=kwargs.get("observation_path_kind", ObservationPathKind.unknown),
         participant_id=kwargs.get("participant_id"),
         trace_id=kwargs.get("trace_id"),
     )
@@ -968,19 +966,13 @@ class TestTelemetryFreshnessContract(unittest.TestCase):
         d = original.to_dict()
         self.assertIsInstance(d, dict)
         restored = TelemetryFreshnessEvidence.from_dict(d)
-        self.assertEqual(
-            restored.realtime_channel_confirmed, original.realtime_channel_confirmed
-        )
+        self.assertEqual(restored.realtime_channel_confirmed, original.realtime_channel_confirmed)
         self.assertEqual(
             restored.all_required_channels_active,
             original.all_required_channels_active,
         )
-        self.assertEqual(
-            restored.freshness_within_window, original.freshness_within_window
-        )
-        self.assertEqual(
-            restored.observation_path_kind, original.observation_path_kind
-        )
+        self.assertEqual(restored.freshness_within_window, original.freshness_within_window)
+        self.assertEqual(restored.observation_path_kind, original.observation_path_kind)
         self.assertEqual(restored.participant_id, original.participant_id)
 
     @_skip_if_unavailable
@@ -1007,12 +999,8 @@ class TestTelemetryFreshnessContract(unittest.TestCase):
         d = verdict.to_dict()
         self.assertIsInstance(d, dict)
         restored = TelemetryFreshnessVerdict.from_dict(d)
-        self.assertEqual(
-            restored.freshness_class, verdict.freshness_class
-        )
-        self.assertEqual(
-            restored.is_realtime_authoritative, verdict.is_realtime_authoritative
-        )
+        self.assertEqual(restored.freshness_class, verdict.freshness_class)
+        self.assertEqual(restored.is_realtime_authoritative, verdict.is_realtime_authoritative)
         self.assertEqual(restored.is_fresh, verdict.is_fresh)
 
     @_skip_if_unavailable
@@ -1039,11 +1027,7 @@ class TestTelemetryFreshnessContract(unittest.TestCase):
     @_skip_if_unavailable
     def test_AA01_is_realtime_authoritative_only_true_for_that_class(self):
         for cls in TelemetryFreshnessClass:
-            evidence = (
-                _ev_realtime_authoritative()
-                if cls == TelemetryFreshnessClass.realtime_authoritative
-                else _ev()
-            )
+            evidence = _ev_realtime_authoritative() if cls == TelemetryFreshnessClass.realtime_authoritative else _ev()
             if cls == TelemetryFreshnessClass.realtime_authoritative:
                 verdict = classify_telemetry_freshness(evidence)
                 self.assertTrue(verdict.is_realtime_authoritative)
@@ -1068,9 +1052,7 @@ class TestTelemetryFreshnessContract(unittest.TestCase):
             freshness_within_window=True,
         )
         verdict = classify_telemetry_freshness(evidence)
-        self.assertEqual(
-            verdict.freshness_class, TelemetryFreshnessClass.fresh_not_realtime
-        )
+        self.assertEqual(verdict.freshness_class, TelemetryFreshnessClass.fresh_not_realtime)
         self.assertTrue(verdict.is_fresh)
 
     @_skip_if_unavailable
@@ -1094,9 +1076,7 @@ class TestTelemetryFreshnessContract(unittest.TestCase):
             post_hoc_evidence_only=True,
         )
         verdict = classify_telemetry_freshness(evidence)
-        self.assertEqual(
-            verdict.freshness_class, TelemetryFreshnessClass.delayed_observable
-        )
+        self.assertEqual(verdict.freshness_class, TelemetryFreshnessClass.delayed_observable)
         self.assertTrue(verdict.is_delayed)
 
     @_skip_if_unavailable
@@ -1116,9 +1096,7 @@ class TestTelemetryFreshnessContract(unittest.TestCase):
             freshness_within_window=True,
         )
         verdict = classify_telemetry_freshness(evidence)
-        self.assertEqual(
-            verdict.freshness_class, TelemetryFreshnessClass.partially_observable
-        )
+        self.assertEqual(verdict.freshness_class, TelemetryFreshnessClass.partially_observable)
         self.assertTrue(verdict.is_partial)
 
     @_skip_if_unavailable
@@ -1133,9 +1111,7 @@ class TestTelemetryFreshnessContract(unittest.TestCase):
     @_skip_if_unavailable
     def test_AE01_is_unreliable_true_for_telemetry_unreliable(self):
         verdict = classify_telemetry_freshness(_ev())
-        self.assertEqual(
-            verdict.freshness_class, TelemetryFreshnessClass.telemetry_unreliable
-        )
+        self.assertEqual(verdict.freshness_class, TelemetryFreshnessClass.telemetry_unreliable)
         self.assertTrue(verdict.is_unreliable)
 
     @_skip_if_unavailable
@@ -1154,9 +1130,7 @@ class TestTelemetryFreshnessContract(unittest.TestCase):
             freshness_within_window=True,
         )
         verdict = classify_telemetry_freshness(evidence)
-        self.assertEqual(
-            verdict.freshness_class, TelemetryFreshnessClass.fresh_not_realtime
-        )
+        self.assertEqual(verdict.freshness_class, TelemetryFreshnessClass.fresh_not_realtime)
         self.assertGreater(len(verdict.downgrade_reasons), 0)
 
     @_skip_if_unavailable
@@ -1219,8 +1193,8 @@ class TestTelemetryFreshnessContract(unittest.TestCase):
     def test_AH02_telemetry_freshness_dimension_has_valid_status(self):
         try:
             from core.system_final_acceptance_verdict import (
-                SystemFinalAcceptanceEvaluator,
                 DimensionStatus,
+                SystemFinalAcceptanceEvaluator,
             )
         except ImportError:
             self.skipTest("core.system_final_acceptance_verdict not available")
@@ -1262,8 +1236,8 @@ class TestTelemetryFreshnessContract(unittest.TestCase):
     def test_AJ01_telemetry_freshness_probe_returns_pending_with_baseline(self):
         try:
             from core.system_final_acceptance_verdict import (
-                SystemFinalAcceptanceEvaluator,
                 DimensionStatus,
+                SystemFinalAcceptanceEvaluator,
             )
         except ImportError:
             self.skipTest("core.system_final_acceptance_verdict not available")
@@ -1282,8 +1256,8 @@ class TestTelemetryFreshnessContract(unittest.TestCase):
     def test_AJ02_telemetry_freshness_probe_not_accepted_with_zero_evidence(self):
         try:
             from core.system_final_acceptance_verdict import (
-                SystemFinalAcceptanceEvaluator,
                 DimensionStatus,
+                SystemFinalAcceptanceEvaluator,
             )
         except ImportError:
             self.skipTest("core.system_final_acceptance_verdict not available")

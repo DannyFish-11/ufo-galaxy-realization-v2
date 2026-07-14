@@ -16,6 +16,7 @@ Two related wiring defects found by the omni-modal capability audit:
    main invocation chain could never reach it: the system's only
    "LLM autonomously picks and executes a tool" capability sat orphaned.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -56,11 +57,13 @@ class TestResolveByNodeId:
         不能再是 resolver 自身的 AttributeError。"""
         from core.node_facade_local import LocalNodeFacade
 
-        result = asyncio.run(LocalNodeFacade().invoke(
-            node_id="Node_107_FunctionCalling",
-            action="call",
-            params={},
-        ))
+        result = asyncio.run(
+            LocalNodeFacade().invoke(
+                node_id="Node_107_FunctionCalling",
+                action="call",
+                params={},
+            )
+        )
         assert not str(result.get("error", "")).startswith("resolver_error"), result
         # 未映射节点走 legacy 回退是预期行为
         assert result.get("error") == "NO_MAPPING"
@@ -69,7 +72,8 @@ class TestResolveByNodeId:
 def _load_node107_main():
     node_dir = REPO_ROOT / "nodes" / "Node_107_FunctionCalling"
     spec = importlib.util.spec_from_file_location(
-        "Node_107_FunctionCalling.main", str(node_dir / "main.py"),
+        "Node_107_FunctionCalling.main",
+        str(node_dir / "main.py"),
         submodule_search_locations=[str(node_dir)],
     )
     mod = importlib.util.module_from_spec(spec)
@@ -81,8 +85,7 @@ class TestNode107InProcessEntry:
     def test_module_level_process_exists(self):
         mod = _load_node107_main()
         assert hasattr(mod, "process"), (
-            "Node_107 main.py 缺少模块级 process() — fusion_entry 探测不到入口,"
-            "节点在主调用链里不可达"
+            "Node_107 main.py 缺少模块级 process() — fusion_entry 探测不到入口," "节点在主调用链里不可达"
         )
 
     def test_list_tools_works_in_process(self):
@@ -100,7 +103,8 @@ class TestNode107InProcessEntry:
         """端到端:通过节点自己的 fusion_entry(主链的实际加载方式)调用。"""
         node_dir = REPO_ROOT / "nodes" / "Node_107_FunctionCalling"
         spec = importlib.util.spec_from_file_location(
-            "Node_107_FunctionCalling.fusion_entry", str(node_dir / "fusion_entry.py"),
+            "Node_107_FunctionCalling.fusion_entry",
+            str(node_dir / "fusion_entry.py"),
             submodule_search_locations=[str(node_dir)],
         )
         fe = importlib.util.module_from_spec(spec)

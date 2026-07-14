@@ -75,22 +75,26 @@ class TestTransportStrategySelection(unittest.TestCase):
     """Validate select_transport_strategy priority and fallback rules."""
 
     def test_01_nothing_available_returns_unknown(self):
-        from core.agent_bus_fabric import select_transport_strategy, TRANSPORT_STRATEGY_UNKNOWN
+        from core.agent_bus_fabric import TRANSPORT_STRATEGY_UNKNOWN, select_transport_strategy
+
         rec = select_transport_strategy()
         self.assertEqual(rec.strategy, TRANSPORT_STRATEGY_UNKNOWN)
 
     def test_02_direct_only_returns_direct(self):
-        from core.agent_bus_fabric import select_transport_strategy, TRANSPORT_STRATEGY_DIRECT
+        from core.agent_bus_fabric import TRANSPORT_STRATEGY_DIRECT, select_transport_strategy
+
         rec = select_transport_strategy(direct_available=True)
         self.assertEqual(rec.strategy, TRANSPORT_STRATEGY_DIRECT)
 
     def test_03_direct_beats_gateway_when_both_available(self):
-        from core.agent_bus_fabric import select_transport_strategy, TRANSPORT_STRATEGY_DIRECT
+        from core.agent_bus_fabric import TRANSPORT_STRATEGY_DIRECT, select_transport_strategy
+
         rec = select_transport_strategy(direct_available=True, gateway_available=True)
         self.assertEqual(rec.strategy, TRANSPORT_STRATEGY_DIRECT)
 
     def test_04_gateway_beats_nats_when_direct_unavailable(self):
-        from core.agent_bus_fabric import select_transport_strategy, TRANSPORT_STRATEGY_GATEWAY
+        from core.agent_bus_fabric import TRANSPORT_STRATEGY_GATEWAY, select_transport_strategy
+
         rec = select_transport_strategy(
             direct_available=False,
             gateway_available=True,
@@ -99,7 +103,8 @@ class TestTransportStrategySelection(unittest.TestCase):
         self.assertEqual(rec.strategy, TRANSPORT_STRATEGY_GATEWAY)
 
     def test_05_nats_beats_relay_when_direct_and_gateway_unavailable(self):
-        from core.agent_bus_fabric import select_transport_strategy, TRANSPORT_STRATEGY_NATS
+        from core.agent_bus_fabric import TRANSPORT_STRATEGY_NATS, select_transport_strategy
+
         rec = select_transport_strategy(
             direct_available=False,
             gateway_available=False,
@@ -109,7 +114,8 @@ class TestTransportStrategySelection(unittest.TestCase):
         self.assertEqual(rec.strategy, TRANSPORT_STRATEGY_NATS)
 
     def test_06_relay_beats_mesh(self):
-        from core.agent_bus_fabric import select_transport_strategy, TRANSPORT_STRATEGY_RELAY
+        from core.agent_bus_fabric import TRANSPORT_STRATEGY_RELAY, select_transport_strategy
+
         rec = select_transport_strategy(
             direct_available=False,
             gateway_available=False,
@@ -120,12 +126,14 @@ class TestTransportStrategySelection(unittest.TestCase):
         self.assertEqual(rec.strategy, TRANSPORT_STRATEGY_RELAY)
 
     def test_07_mesh_only_returns_mesh(self):
-        from core.agent_bus_fabric import select_transport_strategy, TRANSPORT_STRATEGY_MESH
+        from core.agent_bus_fabric import TRANSPORT_STRATEGY_MESH, select_transport_strategy
+
         rec = select_transport_strategy(mesh_available=True)
         self.assertEqual(rec.strategy, TRANSPORT_STRATEGY_MESH)
 
     def test_08_preferred_direct_available_no_fallback(self):
-        from core.agent_bus_fabric import select_transport_strategy, TRANSPORT_STRATEGY_DIRECT
+        from core.agent_bus_fabric import TRANSPORT_STRATEGY_DIRECT, select_transport_strategy
+
         rec = select_transport_strategy(
             direct_available=True,
             preferred=TRANSPORT_STRATEGY_DIRECT,
@@ -135,10 +143,11 @@ class TestTransportStrategySelection(unittest.TestCase):
 
     def test_09_preferred_direct_unavailable_gateway_available_fallback(self):
         from core.agent_bus_fabric import (
-            select_transport_strategy,
             TRANSPORT_STRATEGY_DIRECT,
             TRANSPORT_STRATEGY_GATEWAY,
+            select_transport_strategy,
         )
+
         rec = select_transport_strategy(
             direct_available=False,
             gateway_available=True,
@@ -150,10 +159,11 @@ class TestTransportStrategySelection(unittest.TestCase):
 
     def test_10_preferred_gateway_unavailable_only_relay(self):
         from core.agent_bus_fabric import (
-            select_transport_strategy,
             TRANSPORT_STRATEGY_GATEWAY,
             TRANSPORT_STRATEGY_RELAY,
+            select_transport_strategy,
         )
+
         rec = select_transport_strategy(
             gateway_available=False,
             nats_available=False,
@@ -165,10 +175,11 @@ class TestTransportStrategySelection(unittest.TestCase):
 
     def test_11_preferred_nats_unavailable_nothing_else_unknown(self):
         from core.agent_bus_fabric import (
-            select_transport_strategy,
             TRANSPORT_STRATEGY_NATS,
             TRANSPORT_STRATEGY_UNKNOWN,
+            select_transport_strategy,
         )
+
         rec = select_transport_strategy(
             nats_available=False,
             preferred=TRANSPORT_STRATEGY_NATS,
@@ -176,7 +187,8 @@ class TestTransportStrategySelection(unittest.TestCase):
         self.assertEqual(rec.strategy, TRANSPORT_STRATEGY_UNKNOWN)
 
     def test_12_preferred_mesh_available_no_fallback(self):
-        from core.agent_bus_fabric import select_transport_strategy, TRANSPORT_STRATEGY_MESH
+        from core.agent_bus_fabric import TRANSPORT_STRATEGY_MESH, select_transport_strategy
+
         rec = select_transport_strategy(
             mesh_available=True,
             preferred=TRANSPORT_STRATEGY_MESH,
@@ -186,10 +198,11 @@ class TestTransportStrategySelection(unittest.TestCase):
 
     def test_13_preferred_relay_unavailable_nats_available_fallback(self):
         from core.agent_bus_fabric import (
-            select_transport_strategy,
-            TRANSPORT_STRATEGY_RELAY,
             TRANSPORT_STRATEGY_NATS,
+            TRANSPORT_STRATEGY_RELAY,
+            select_transport_strategy,
         )
+
         rec = select_transport_strategy(
             relay_available=False,
             nats_available=True,
@@ -199,7 +212,8 @@ class TestTransportStrategySelection(unittest.TestCase):
         self.assertEqual(rec.strategy, TRANSPORT_STRATEGY_NATS)
 
     def test_24_no_preference_all_available_selects_direct(self):
-        from core.agent_bus_fabric import select_transport_strategy, TRANSPORT_STRATEGY_DIRECT
+        from core.agent_bus_fabric import TRANSPORT_STRATEGY_DIRECT, select_transport_strategy
+
         rec = select_transport_strategy(
             direct_available=True,
             gateway_available=True,
@@ -216,14 +230,16 @@ class TestFabricTransportStrategyRecord(unittest.TestCase):
 
     def test_14_record_layer_is_command_router_strategy_layer(self):
         from core.agent_bus_fabric import (
-            select_transport_strategy,
             COMMAND_ROUTER_STRATEGY_LAYER,
+            select_transport_strategy,
         )
+
         rec = select_transport_strategy(direct_available=True)
         self.assertEqual(rec.layer, COMMAND_ROUTER_STRATEGY_LAYER)
 
     def test_15_preferred_strategy_reflects_caller_preference(self):
-        from core.agent_bus_fabric import select_transport_strategy, TRANSPORT_STRATEGY_GATEWAY
+        from core.agent_bus_fabric import TRANSPORT_STRATEGY_GATEWAY, select_transport_strategy
+
         rec = select_transport_strategy(
             gateway_available=True,
             preferred=TRANSPORT_STRATEGY_GATEWAY,
@@ -232,6 +248,7 @@ class TestFabricTransportStrategyRecord(unittest.TestCase):
 
     def test_16_to_dict_includes_fallback_used(self):
         from core.agent_bus_fabric import select_transport_strategy
+
         rec = select_transport_strategy(direct_available=True)
         d = rec.to_dict()
         self.assertIn("fallback_used", d)
@@ -239,12 +256,14 @@ class TestFabricTransportStrategyRecord(unittest.TestCase):
 
     def test_21_selected_at_is_float(self):
         from core.agent_bus_fabric import select_transport_strategy
+
         rec = select_transport_strategy(nats_available=True)
         self.assertIsInstance(rec.selected_at, float)
         self.assertGreater(rec.selected_at, 0)
 
     def test_23_task_id_and_trace_id_propagated(self):
         from core.agent_bus_fabric import select_transport_strategy
+
         rec = select_transport_strategy(
             nats_available=True,
             task_id="my-task-123",
@@ -259,23 +278,27 @@ class TestFabricObservabilityRingBuffer(unittest.TestCase):
 
     def test_17_record_fabric_event_fallback_triggered_true(self):
         from core.agent_bus_fabric import record_fabric_event
+
         rec = record_fabric_event(fallback_triggered=True)
         self.assertTrue(rec.fallback_triggered)
 
     def test_18_record_fabric_event_fallback_triggered_false(self):
         from core.agent_bus_fabric import record_fabric_event
+
         rec = record_fabric_event(fallback_triggered=False)
         self.assertFalse(rec.fallback_triggered)
 
     def test_19_ring_buffer_maxlen_prevents_unbounded_growth(self):
-        from core.agent_bus_fabric import record_fabric_event, get_fabric_event_log
+        from core.agent_bus_fabric import get_fabric_event_log, record_fabric_event
+
         log = get_fabric_event_log()
         for _ in range(300):
             record_fabric_event(task_id="overflow-test")
         self.assertLessEqual(len(log), 256)
 
     def test_20_record_fabric_event_appended_to_log(self):
-        from core.agent_bus_fabric import record_fabric_event, get_fabric_event_log
+        from core.agent_bus_fabric import get_fabric_event_log, record_fabric_event
+
         log = get_fabric_event_log()
         before = len(log)
         marker = f"append-test-{id(self)}"
@@ -287,6 +310,7 @@ class TestFabricObservabilityRingBuffer(unittest.TestCase):
 
     def test_22_event_id_is_non_empty_string(self):
         from core.agent_bus_fabric import record_fabric_event
+
         rec = record_fabric_event(task_id="event-id-test")
         self.assertIsInstance(rec.event_id, str)
         self.assertTrue(len(rec.event_id) > 0)
@@ -297,6 +321,7 @@ class TestCommandRouterTransportStrategyApplied(unittest.TestCase):
 
     def test_25_command_router_transport_strategy_applied_importable(self):
         from core.command_router import COMMAND_ROUTER_TRANSPORT_STRATEGY_APPLIED
+
         self.assertIsInstance(COMMAND_ROUTER_TRANSPORT_STRATEGY_APPLIED, str)
         self.assertIn("COMMAND_ROUTER", COMMAND_ROUTER_TRANSPORT_STRATEGY_APPLIED)
 

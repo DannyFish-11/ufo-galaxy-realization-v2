@@ -49,15 +49,16 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _reset_all() -> None:
     """Reset all relevant singletons for test isolation."""
     try:
         from core.mesh.mesh_auto_enrollment import reset_auto_enrollment_service
+
         reset_auto_enrollment_service()
     except Exception:
         pass
@@ -65,11 +66,13 @@ def _reset_all() -> None:
         from core.device_formation.formation_auto_enrollment import (
             reset_formation_auto_enrollment_manager,
         )
+
         reset_formation_auto_enrollment_manager()
     except Exception:
         pass
     try:
         from core.mesh.body_mesh_registry import reset_body_mesh_registry
+
         reset_body_mesh_registry()
     except Exception:
         pass
@@ -79,6 +82,7 @@ def _make_roles(names: Optional[List[str]] = None) -> List[Any]:
     """Return real DeviceRole objects if available; fall back to strings."""
     try:
         from core.mesh.body_mesh_registry import DeviceRole
+
         names = names or ["action"]
         result = []
         for n in names:
@@ -101,29 +105,34 @@ class TestSentinels:
         from core.mesh.mesh_auto_enrollment import (
             MESH_AUTO_ENROLLMENT_SERVICE_IS_AUTHORITY,
         )
+
         assert isinstance(MESH_AUTO_ENROLLMENT_SERVICE_IS_AUTHORITY, str)
         assert "MESH_AUTO_ENROLLMENT_SERVICE_IS_AUTHORITY" in MESH_AUTO_ENROLLMENT_SERVICE_IS_AUTHORITY
 
     def test_idempotent_policy_sentinel(self):
         from core.mesh.mesh_auto_enrollment import AUTO_ENROLLMENT_IS_IDEMPOTENT_POLICY
+
         assert isinstance(AUTO_ENROLLMENT_IS_IDEMPOTENT_POLICY, str)
 
     def test_defer_policy_sentinel(self):
         from core.mesh.mesh_auto_enrollment import (
             AUTO_ENROLLMENT_DEFERS_ON_MISSING_CAPABILITY_POLICY,
         )
+
         assert isinstance(AUTO_ENROLLMENT_DEFERS_ON_MISSING_CAPABILITY_POLICY, str)
 
     def test_formation_manager_authority_sentinel(self):
         from core.device_formation.formation_auto_enrollment import (
             FORMATION_AUTO_ENROLLMENT_MANAGER_IS_AUTHORITY,
         )
+
         assert isinstance(FORMATION_AUTO_ENROLLMENT_MANAGER_IS_AUTHORITY, str)
 
     def test_formation_idempotent_policy_sentinel(self):
         from core.device_formation.formation_auto_enrollment import (
             FORMATION_AUTO_ENROLLMENT_IS_IDEMPOTENT_POLICY,
         )
+
         assert isinstance(FORMATION_AUTO_ENROLLMENT_IS_IDEMPOTENT_POLICY, str)
 
 
@@ -135,6 +144,7 @@ class TestSentinels:
 class TestMeshEnrollmentRecord:
     def test_defaults(self):
         from core.mesh.mesh_auto_enrollment import MeshEnrollmentRecord
+
         rec = MeshEnrollmentRecord(device_id="dev-001")
         assert rec.device_id == "dev-001"
         assert rec.registered is False
@@ -148,6 +158,7 @@ class TestMeshEnrollmentRecord:
 
     def test_to_dict_stable_fields(self):
         from core.mesh.mesh_auto_enrollment import MeshEnrollmentRecord
+
         rec = MeshEnrollmentRecord(
             device_id="dev-002",
             registered=True,
@@ -177,6 +188,7 @@ class TestRegistrationDefer:
 
     def test_defers_when_no_capability(self):
         from core.mesh.mesh_auto_enrollment import MeshAutoEnrollmentService
+
         svc = MeshAutoEnrollmentService()
         rec = svc.on_device_registered("dev-003")
         assert rec.registered is True
@@ -185,6 +197,7 @@ class TestRegistrationDefer:
 
     def test_registered_flag_set(self):
         from core.mesh.mesh_auto_enrollment import MeshAutoEnrollmentService
+
         svc = MeshAutoEnrollmentService()
         rec = svc.on_device_registered("dev-004")
         assert rec.registered is True
@@ -201,6 +214,7 @@ class TestCapabilityEnrollment:
 
     def test_enrolled_after_register_then_capability(self):
         from core.mesh.mesh_auto_enrollment import MeshAutoEnrollmentService
+
         svc = MeshAutoEnrollmentService(auto_enroll_on_capability=True)
         svc.on_device_registered("dev-005")
         roles = _make_roles(["action"])
@@ -211,6 +225,7 @@ class TestCapabilityEnrollment:
     def test_enrolled_on_capability_without_prior_register(self):
         """capability_report alone is insufficient; registration is required."""
         from core.mesh.mesh_auto_enrollment import MeshAutoEnrollmentService
+
         svc = MeshAutoEnrollmentService(auto_enroll_on_capability=True)
         roles = _make_roles(["action"])
         rec = svc.on_capability_reported("dev-006", roles=roles)
@@ -219,6 +234,7 @@ class TestCapabilityEnrollment:
 
     def test_capability_sets_flag(self):
         from core.mesh.mesh_auto_enrollment import MeshAutoEnrollmentService
+
         svc = MeshAutoEnrollmentService()
         roles = _make_roles(["action"])
         rec = svc.on_capability_reported("dev-007", roles=roles)
@@ -236,6 +252,7 @@ class TestReadinessEnrollment:
 
     def test_enrolled_after_full_chain_strict_mode(self):
         from core.mesh.mesh_auto_enrollment import MeshAutoEnrollmentService
+
         svc = MeshAutoEnrollmentService(auto_enroll_on_capability=False)
         roles = _make_roles(["action"])
         svc.on_device_registered("dev-008")
@@ -245,6 +262,7 @@ class TestReadinessEnrollment:
 
     def test_readiness_without_capability_defers(self):
         from core.mesh.mesh_auto_enrollment import MeshAutoEnrollmentService
+
         svc = MeshAutoEnrollmentService(auto_enroll_on_capability=False)
         svc.on_device_registered("dev-009")
         rec = svc.on_readiness_confirmed("dev-009")
@@ -252,6 +270,7 @@ class TestReadinessEnrollment:
 
     def test_readiness_without_register_defers(self):
         from core.mesh.mesh_auto_enrollment import MeshAutoEnrollmentService
+
         svc = MeshAutoEnrollmentService(auto_enroll_on_capability=False)
         roles = _make_roles(["action"])
         svc.on_capability_reported("dev-010", roles=roles)
@@ -269,8 +288,9 @@ class TestBodyMeshRegistryAutoEnroll:
         _reset_all()
 
     def test_body_mesh_entry_present_after_enrollment(self):
-        from core.mesh.mesh_auto_enrollment import MeshAutoEnrollmentService
         from core.mesh.body_mesh_registry import get_body_mesh_registry, reset_body_mesh_registry
+        from core.mesh.mesh_auto_enrollment import MeshAutoEnrollmentService
+
         reset_body_mesh_registry()
 
         svc = MeshAutoEnrollmentService(auto_enroll_on_capability=True)
@@ -294,8 +314,9 @@ class TestMeshMembershipDerivation:
         _reset_all()
 
     def test_membership_derivable_after_enrollment(self):
-        from core.mesh.mesh_auto_enrollment import MeshAutoEnrollmentService
         from core.mesh.body_mesh_registry import get_body_mesh_registry, reset_body_mesh_registry
+        from core.mesh.mesh_auto_enrollment import MeshAutoEnrollmentService
+
         reset_body_mesh_registry()
 
         svc = MeshAutoEnrollmentService(auto_enroll_on_capability=True)
@@ -306,9 +327,7 @@ class TestMeshMembershipDerivation:
         # Membership derivation via BodyMeshRegistry
         registry = get_body_mesh_registry()
         memberships = registry.get_mesh_memberships()
-        assert any(
-            getattr(m, "member_device_id", None) == "dev-012" for m in memberships
-        )
+        assert any(getattr(m, "member_device_id", None) == "dev-012" for m in memberships)
 
 
 # ---------------------------------------------------------------------------
@@ -321,11 +340,12 @@ class TestFormationAutoEnrollment:
         _reset_all()
 
     def test_formation_participant_present(self):
-        from core.mesh.mesh_auto_enrollment import MeshAutoEnrollmentService
-        from core.mesh.body_mesh_registry import reset_body_mesh_registry
         from core.device_formation.formation_auto_enrollment import (
             get_formation_auto_enrollment_manager,
         )
+        from core.mesh.body_mesh_registry import reset_body_mesh_registry
+        from core.mesh.mesh_auto_enrollment import MeshAutoEnrollmentService
+
         reset_body_mesh_registry()
 
         svc = MeshAutoEnrollmentService(auto_enroll_on_capability=True)
@@ -349,8 +369,9 @@ class TestIdempotency:
         _reset_all()
 
     def test_repeated_registration_stable(self):
+        from core.mesh.body_mesh_registry import get_body_mesh_registry, reset_body_mesh_registry
         from core.mesh.mesh_auto_enrollment import MeshAutoEnrollmentService
-        from core.mesh.body_mesh_registry import reset_body_mesh_registry, get_body_mesh_registry
+
         reset_body_mesh_registry()
 
         svc = MeshAutoEnrollmentService(auto_enroll_on_capability=True)
@@ -368,8 +389,9 @@ class TestIdempotency:
         assert len([d for d in svc.list_enrolled_device_ids() if d == "dev-014"]) == 1
 
     def test_body_mesh_no_duplicate_roles(self):
+        from core.mesh.body_mesh_registry import get_body_mesh_registry, reset_body_mesh_registry
         from core.mesh.mesh_auto_enrollment import MeshAutoEnrollmentService
-        from core.mesh.body_mesh_registry import reset_body_mesh_registry, get_body_mesh_registry
+
         reset_body_mesh_registry()
 
         svc = MeshAutoEnrollmentService(auto_enroll_on_capability=True)
@@ -396,8 +418,9 @@ class TestRoleMerge:
         _reset_all()
 
     def test_roles_accumulate_across_events(self):
-        from core.mesh.mesh_auto_enrollment import MeshAutoEnrollmentService
         from core.mesh.body_mesh_registry import reset_body_mesh_registry
+        from core.mesh.mesh_auto_enrollment import MeshAutoEnrollmentService
+
         reset_body_mesh_registry()
 
         svc = MeshAutoEnrollmentService(auto_enroll_on_capability=True)
@@ -424,8 +447,9 @@ class TestDeviceLost:
         _reset_all()
 
     def test_enrolled_false_after_lost(self):
-        from core.mesh.mesh_auto_enrollment import MeshAutoEnrollmentService
         from core.mesh.body_mesh_registry import reset_body_mesh_registry
+        from core.mesh.mesh_auto_enrollment import MeshAutoEnrollmentService
+
         reset_body_mesh_registry()
 
         svc = MeshAutoEnrollmentService(auto_enroll_on_capability=True)
@@ -452,6 +476,7 @@ class TestFormationRoleAssignment:
         from core.device_formation.formation_auto_enrollment import (
             FormationAutoEnrollmentManager,
         )
+
         manager = FormationAutoEnrollmentManager(formation_id="test-fm-001")
         roles = _make_roles(["action"])
         entry = manager.enroll_device("dev-018", roles=roles)
@@ -461,6 +486,7 @@ class TestFormationRoleAssignment:
         from core.device_formation.formation_auto_enrollment import (
             FormationAutoEnrollmentManager,
         )
+
         manager = FormationAutoEnrollmentManager(formation_id="test-fm-002")
         roles = _make_roles(["action"])
         manager.enroll_device("dev-019a", roles=roles)
@@ -481,6 +507,7 @@ class TestRemoveDevice:
         from core.device_formation.formation_auto_enrollment import (
             FormationAutoEnrollmentManager,
         )
+
         manager = FormationAutoEnrollmentManager(formation_id="test-fm-003")
         roles = _make_roles(["action"])
         manager.enroll_device("dev-020", roles=roles)
@@ -492,6 +519,7 @@ class TestRemoveDevice:
         from core.device_formation.formation_auto_enrollment import (
             FormationAutoEnrollmentManager,
         )
+
         manager = FormationAutoEnrollmentManager(formation_id="test-fm-004")
         result = manager.remove_device("nonexistent-device")
         assert result is None
@@ -510,6 +538,7 @@ class TestUpdateReadiness:
         from core.device_formation.formation_auto_enrollment import (
             FormationAutoEnrollmentManager,
         )
+
         manager = FormationAutoEnrollmentManager(formation_id="test-fm-005")
         roles = _make_roles(["action"])
         manager.enroll_device("dev-021", roles=roles)
@@ -529,9 +558,11 @@ class TestFormationSnapshot:
 
     def test_snapshot_is_serialisable(self):
         import json
+
         from core.device_formation.formation_auto_enrollment import (
             FormationAutoEnrollmentManager,
         )
+
         manager = FormationAutoEnrollmentManager(formation_id="test-fm-006")
         roles = _make_roles(["action"])
         manager.enroll_device("dev-022", roles=roles)
@@ -553,13 +584,15 @@ class TestDeferredEnrollment:
 
     def test_no_enrollment_before_capability(self):
         from core.mesh.mesh_auto_enrollment import MeshAutoEnrollmentService
+
         svc = MeshAutoEnrollmentService(auto_enroll_on_capability=True)
         svc.on_device_registered("dev-023")
         assert svc.get_record("dev-023").enrolled is False
 
     def test_enrolled_after_capability_follows(self):
-        from core.mesh.mesh_auto_enrollment import MeshAutoEnrollmentService
         from core.mesh.body_mesh_registry import reset_body_mesh_registry
+        from core.mesh.mesh_auto_enrollment import MeshAutoEnrollmentService
+
         reset_body_mesh_registry()
 
         svc = MeshAutoEnrollmentService(auto_enroll_on_capability=True)
@@ -582,6 +615,7 @@ class TestConvenienceFunctions:
 
     def test_notify_device_registered_returns_record(self):
         from core.mesh.mesh_auto_enrollment import notify_device_registered
+
         rec = notify_device_registered("dev-025")
         assert rec is not None
         assert rec.device_id == "dev-025"
@@ -589,9 +623,10 @@ class TestConvenienceFunctions:
 
     def test_notify_capability_reported_returns_record(self):
         from core.mesh.mesh_auto_enrollment import (
-            notify_device_registered,
             notify_capability_reported,
+            notify_device_registered,
         )
+
         notify_device_registered("dev-026")
         roles = _make_roles(["action"])
         rec = notify_capability_reported("dev-026", roles=roles)
@@ -600,10 +635,11 @@ class TestConvenienceFunctions:
 
     def test_notify_readiness_confirmed_returns_record(self):
         from core.mesh.mesh_auto_enrollment import (
-            notify_device_registered,
             notify_capability_reported,
+            notify_device_registered,
             notify_readiness_confirmed,
         )
+
         notify_device_registered("dev-027")
         roles = _make_roles(["action"])
         notify_capability_reported("dev-027", roles=roles)
@@ -612,12 +648,13 @@ class TestConvenienceFunctions:
         assert rec.readiness_confirmed is True
 
     def test_notify_device_lost_returns_record(self):
+        from core.mesh.body_mesh_registry import reset_body_mesh_registry
         from core.mesh.mesh_auto_enrollment import (
-            notify_device_registered,
             notify_capability_reported,
             notify_device_lost,
+            notify_device_registered,
         )
-        from core.mesh.body_mesh_registry import reset_body_mesh_registry
+
         reset_body_mesh_registry()
 
         notify_device_registered("dev-028")
@@ -629,9 +666,10 @@ class TestConvenienceFunctions:
 
     def test_get_enrollment_record(self):
         from core.mesh.mesh_auto_enrollment import (
-            notify_device_registered,
             get_enrollment_record,
+            notify_device_registered,
         )
+
         notify_device_registered("dev-029")
         rec = get_enrollment_record("dev-029")
         assert rec is not None
@@ -639,6 +677,7 @@ class TestConvenienceFunctions:
 
     def test_get_enrollment_record_unknown(self):
         from core.mesh.mesh_auto_enrollment import get_enrollment_record
+
         rec = get_enrollment_record("dev-unknown-999")
         assert rec is None
 
@@ -653,8 +692,9 @@ class TestStrictMode:
         _reset_all()
 
     def test_strict_waits_for_readiness(self):
-        from core.mesh.mesh_auto_enrollment import MeshAutoEnrollmentService
         from core.mesh.body_mesh_registry import reset_body_mesh_registry
+        from core.mesh.mesh_auto_enrollment import MeshAutoEnrollmentService
+
         reset_body_mesh_registry()
 
         svc = MeshAutoEnrollmentService(auto_enroll_on_capability=False)
@@ -677,25 +717,30 @@ class TestStrictMode:
 class TestDeviceFormationExports:
     def test_auto_enrollment_manager_importable(self):
         from core.device_formation import FormationAutoEnrollmentManager
+
         assert callable(FormationAutoEnrollmentManager)
 
     def test_get_manager_importable(self):
         from core.device_formation import get_formation_auto_enrollment_manager
+
         assert callable(get_formation_auto_enrollment_manager)
 
     def test_reset_manager_importable(self):
         from core.device_formation import reset_formation_auto_enrollment_manager
+
         assert callable(reset_formation_auto_enrollment_manager)
 
     def test_participant_entry_importable(self):
         from core.device_formation import FormationParticipantEntry
+
         assert callable(FormationParticipantEntry)
 
     def test_sentinels_importable(self):
         from core.device_formation import (
-            FORMATION_AUTO_ENROLLMENT_MANAGER_IS_AUTHORITY,
             FORMATION_AUTO_ENROLLMENT_IS_IDEMPOTENT_POLICY,
+            FORMATION_AUTO_ENROLLMENT_MANAGER_IS_AUTHORITY,
         )
+
         assert isinstance(FORMATION_AUTO_ENROLLMENT_MANAGER_IS_AUTHORITY, str)
         assert isinstance(FORMATION_AUTO_ENROLLMENT_IS_IDEMPOTENT_POLICY, str)
 
@@ -711,6 +756,7 @@ class TestEmptyDeviceId:
 
     def test_empty_device_id_no_raise(self):
         from core.mesh.mesh_auto_enrollment import MeshAutoEnrollmentService
+
         svc = MeshAutoEnrollmentService()
         rec = svc.on_device_registered("")
         assert rec.device_id == ""
@@ -718,6 +764,7 @@ class TestEmptyDeviceId:
 
     def test_empty_capability_no_raise(self):
         from core.mesh.mesh_auto_enrollment import MeshAutoEnrollmentService
+
         svc = MeshAutoEnrollmentService()
         rec = svc.on_capability_reported("", roles=[])
         assert rec.enrolled is False
@@ -726,6 +773,7 @@ class TestEmptyDeviceId:
         from core.device_formation.formation_auto_enrollment import (
             FormationAutoEnrollmentManager,
         )
+
         manager = FormationAutoEnrollmentManager()
         entry = manager.enroll_device("")
         assert entry.device_id == ""
@@ -741,8 +789,9 @@ class TestServiceSummary:
         _reset_all()
 
     def test_summary_fields(self):
-        from core.mesh.mesh_auto_enrollment import MeshAutoEnrollmentService
         from core.mesh.body_mesh_registry import reset_body_mesh_registry
+        from core.mesh.mesh_auto_enrollment import MeshAutoEnrollmentService
+
         reset_body_mesh_registry()
 
         svc = MeshAutoEnrollmentService(auto_enroll_on_capability=True)
@@ -772,6 +821,7 @@ class TestListActiveDevices:
         from core.device_formation.formation_auto_enrollment import (
             FormationAutoEnrollmentManager,
         )
+
         manager = FormationAutoEnrollmentManager(formation_id="test-fm-007")
         roles = _make_roles(["action"])
         manager.enroll_device("dev-032a", roles=roles)
@@ -784,6 +834,7 @@ class TestListActiveDevices:
         from core.device_formation.formation_auto_enrollment import (
             FormationAutoEnrollmentManager,
         )
+
         manager = FormationAutoEnrollmentManager(formation_id="test-fm-008")
         roles = _make_roles(["action"])
         manager.enroll_device("dev-033", roles=roles)
@@ -804,12 +855,14 @@ class TestSingletonStability:
         from core.device_formation.formation_auto_enrollment import (
             get_formation_auto_enrollment_manager,
         )
+
         m1 = get_formation_auto_enrollment_manager()
         m2 = get_formation_auto_enrollment_manager()
         assert m1 is m2
 
     def test_same_service_returned(self):
         from core.mesh.mesh_auto_enrollment import get_auto_enrollment_service
+
         s1 = get_auto_enrollment_service()
         s2 = get_auto_enrollment_service()
         assert s1 is s2
@@ -819,6 +872,7 @@ class TestSingletonStability:
             get_auto_enrollment_service,
             reset_auto_enrollment_service,
         )
+
         s1 = get_auto_enrollment_service()
         reset_auto_enrollment_service()
         s2 = get_auto_enrollment_service()
@@ -835,8 +889,9 @@ class TestReEnrollmentAfterLost:
         _reset_all()
 
     def test_re_enroll_after_lost(self):
-        from core.mesh.mesh_auto_enrollment import MeshAutoEnrollmentService
         from core.mesh.body_mesh_registry import reset_body_mesh_registry
+        from core.mesh.mesh_auto_enrollment import MeshAutoEnrollmentService
+
         reset_body_mesh_registry()
 
         svc = MeshAutoEnrollmentService(auto_enroll_on_capability=True)
@@ -869,6 +924,7 @@ class TestCapabilityReportHandlerWiring:
         # notify_capability_reported function is called inside the handler.
         import ast
         import os
+
         handler_path = os.path.join(
             os.path.dirname(__file__),
             "..",
@@ -879,12 +935,8 @@ class TestCapabilityReportHandlerWiring:
         )
         with open(handler_path) as f:
             source = f.read()
-        assert "notify_capability_reported" in source, (
-            "capability_report handler must call notify_capability_reported"
-        )
-        assert "mesh_auto_enrollment" in source, (
-            "capability_report handler must import from mesh_auto_enrollment"
-        )
+        assert "notify_capability_reported" in source, "capability_report handler must call notify_capability_reported"
+        assert "mesh_auto_enrollment" in source, "capability_report handler must import from mesh_auto_enrollment"
 
 
 # ---------------------------------------------------------------------------
@@ -897,6 +949,7 @@ class TestRegistrationHandlerWiring:
 
     def test_notify_called_on_registration(self):
         import os
+
         handler_path = os.path.join(
             os.path.dirname(__file__),
             "..",
@@ -907,12 +960,8 @@ class TestRegistrationHandlerWiring:
         )
         with open(handler_path) as f:
             source = f.read()
-        assert "notify_device_registered" in source, (
-            "registration handler must call notify_device_registered"
-        )
-        assert "mesh_auto_enrollment" in source, (
-            "registration handler must import from mesh_auto_enrollment"
-        )
+        assert "notify_device_registered" in source, "registration handler must call notify_device_registered"
+        assert "mesh_auto_enrollment" in source, "registration handler must import from mesh_auto_enrollment"
 
 
 # ---------------------------------------------------------------------------
@@ -925,6 +974,7 @@ class TestFormationParticipantEntry:
         from core.device_formation.formation_auto_enrollment import (
             FormationParticipantEntry,
         )
+
         entry = FormationParticipantEntry(
             device_id="dev-035",
             role="primary_execution_device",
@@ -940,5 +990,6 @@ class TestFormationParticipantEntry:
         from core.device_formation.formation_auto_enrollment import (
             FormationParticipantEntry,
         )
+
         entry = FormationParticipantEntry(device_id="dev-036")
         assert entry.enrolled_at > 0

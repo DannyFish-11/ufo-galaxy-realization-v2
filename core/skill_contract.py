@@ -24,6 +24,7 @@ Validation helpers
 validate_skill_request(req)   → raises ``ValueError`` on contract violations.
 validate_skill_response(resp) → raises ``ValueError`` on contract violations.
 """
+
 from __future__ import annotations
 
 import time
@@ -31,7 +32,6 @@ import uuid
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional
-
 
 # ---------------------------------------------------------------------------
 # Error catalogue
@@ -174,7 +174,7 @@ class SkillStatus(str, Enum):
 
     SUCCESS = "success"
     FAILURE = "failure"
-    PARTIAL = "partial"     # handler returned a result but with warnings
+    PARTIAL = "partial"  # handler returned a result but with warnings
 
 
 @dataclass
@@ -349,10 +349,6 @@ def validate_skill_response(resp: SkillResponse) -> None:
     if not isinstance(resp.skill_name, str) or not resp.skill_name.strip():
         raise ValueError("SkillResponse.skill_name must be a non-empty string")
     if resp.status == SkillStatus.FAILURE and not resp.errors:
-        raise ValueError(
-            "SkillResponse with status=failure must contain at least one error"
-        )
+        raise ValueError("SkillResponse with status=failure must contain at least one error")
     if resp.status == SkillStatus.SUCCESS and resp.errors:
-        raise ValueError(
-            "SkillResponse with status=success must not contain errors"
-        )
+        raise ValueError("SkillResponse with status=success must not contain errors")

@@ -24,14 +24,14 @@ import time
 import pytest
 
 from core.continuum.config import (
-    ContinuumConfig,
     DEFAULT_CONTINUUM_CONFIG,
+    ContinuumConfig,
     DwellConfig,
     HysteresisConfig,
 )
 from core.continuum.temporal_engine import (
-    HysteresisGate,
     DwellGuard,
+    HysteresisGate,
     TemporalEngine,
     apply_decay,
     apply_ema,
@@ -43,7 +43,6 @@ from core.continuum.types import (
     HumanFieldState,
     UnifiedState,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers shared across test groups
@@ -286,30 +285,30 @@ class TestHysteresisGate:
     def test_between_exit_and_enter_stays_active(self):
         gate = HysteresisGate(enter=0.68, exit_=0.45)
         gate.update(0.70)  # activate
-        assert gate.update(0.60) is True   # between exit and enter
-        assert gate.update(0.50) is True   # still above exit
+        assert gate.update(0.60) is True  # between exit and enter
+        assert gate.update(0.50) is True  # still above exit
 
     def test_below_exit_deactivates(self):
         gate = HysteresisGate(enter=0.68, exit_=0.45)
-        gate.update(0.70)           # activate
+        gate.update(0.70)  # activate
         assert gate.update(0.44) is False  # below exit → deactivated
 
     def test_at_exit_stays_active(self):
         # exit_ threshold is *strict* less-than; at exactly exit_ → still active
         gate = HysteresisGate(enter=0.68, exit_=0.45)
         gate.update(0.70)
-        assert gate.update(0.45) is True   # not strictly below exit_
+        assert gate.update(0.45) is True  # not strictly below exit_
 
     def test_re_activation_after_deactivation(self):
         gate = HysteresisGate(enter=0.68, exit_=0.45)
-        gate.update(0.70)    # activate
-        gate.update(0.30)    # deactivate
+        gate.update(0.70)  # activate
+        gate.update(0.30)  # deactivate
         assert gate.update(0.50) is False  # below enter; stays inactive
-        assert gate.update(0.70) is True   # crosses enter again
+        assert gate.update(0.70) is True  # crosses enter again
 
     def test_reset_to_false(self):
         gate = HysteresisGate(enter=0.68, exit_=0.45)
-        gate.update(0.90)        # activate
+        gate.update(0.90)  # activate
         gate.reset(False)
         assert gate.active is False
 
@@ -362,7 +361,7 @@ class TestDwellGuard:
         guard.reset()
         time.sleep(0.04)
         assert guard.is_satisfied()
-        guard.reset()         # restart
+        guard.reset()  # restart
         assert guard.is_satisfied() is False
 
 
@@ -421,7 +420,7 @@ class TestTemporalEngineRateLimit:
         # Start from 0.0, apply large input; max_delta=0.08 should limit movement.
         cfg = _fast_config(ema_alpha=1.0, max_delta=0.08)
         engine = TemporalEngine(cfg)
-        state = engine.tick(_strong_liminal())   # raw ≈ 0.9
+        state = engine.tick(_strong_liminal())  # raw ≈ 0.9
         assert state.presence_intensity <= 0.08 + 1e-9
 
     def test_rate_limit_not_applied_on_small_step(self):
@@ -499,7 +498,9 @@ class TestTemporalEngineHysteresis:
         # manifest_enter (0.7) so the manifest gate is NOT yet activated.
         # candidate_confidence=0.6 → collapse = 0.6*0.9 = 0.54 < manifest_enter=0.7
         enter_liminal = _unified(
-            intent=0.9, attention=0.9, context_utility=0.9,
+            intent=0.9,
+            attention=0.9,
+            context_utility=0.9,
             candidate=ContinuumPhase.LIMINAL,
             candidate_confidence=0.6,
             uncertainty=0.1,
@@ -509,7 +510,9 @@ class TestTemporalEngineHysteresis:
         # Now provide collapse_tendency still below manifest_enter (0.7) with
         # candidate=MANIFEST → collapse = 0.6*0.9 = 0.54 < 0.7; gate inactive.
         u = _unified(
-            intent=0.9, attention=0.9, context_utility=0.9,
+            intent=0.9,
+            attention=0.9,
+            context_utility=0.9,
             candidate=ContinuumPhase.MANIFEST,
             candidate_confidence=0.6,
             uncertainty=0.1,
@@ -851,14 +854,13 @@ class TestPublicApiSurface:
         assert engine.config.ema_alpha == pytest.approx(0.3)
 
     def test_temporal_engine_accessible_via_package(self):
-        from core.continuum import (  # noqa: F401
-            TemporalEngine as TE,
-            HysteresisGate as HG,
-            DwellGuard as DG,
-            apply_ema as ae,
-            apply_rate_limit as arl,
-            apply_decay as ad,
-        )
+        from core.continuum import DwellGuard as DG
+        from core.continuum import HysteresisGate as HG
+        from core.continuum import TemporalEngine as TE  # noqa: F401
+        from core.continuum import apply_decay as ad
+        from core.continuum import apply_ema as ae
+        from core.continuum import apply_rate_limit as arl
+
         assert TE is TemporalEngine
         assert HG is HysteresisGate
         assert DG is DwellGuard

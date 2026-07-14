@@ -1,4 +1,5 @@
 """Unit tests for audio ingest pipeline and features (PR-0A)."""
+
 from __future__ import annotations
 
 import asyncio
@@ -8,15 +9,15 @@ from typing import List
 import numpy as np
 import pytest
 
-from core.multimodal.vad import VoiceActivityDetector, VADConfig, VADState
 from core.multimodal.audio_features import AudioState, extract_audio_features
-from core.multimodal.audio_ingest import AudioIngestPipeline, AudioIngestConfig
-from core.multimodal.signal_quality import SignalQuality, QualityFlag
-
+from core.multimodal.audio_ingest import AudioIngestConfig, AudioIngestPipeline
+from core.multimodal.signal_quality import QualityFlag, SignalQuality
+from core.multimodal.vad import VADConfig, VADState, VoiceActivityDetector
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_silent(n: int = 1600) -> np.ndarray:
     return np.zeros(n, dtype=np.float32)
@@ -43,6 +44,7 @@ def _make_vad_state(
 # ---------------------------------------------------------------------------
 # VAD tests
 # ---------------------------------------------------------------------------
+
 
 class TestVoiceActivityDetector:
     def test_silence_is_not_speaking(self):
@@ -121,6 +123,7 @@ class TestVoiceActivityDetector:
 # Audio feature extraction tests
 # ---------------------------------------------------------------------------
 
+
 class TestAudioFeatureExtraction:
     def test_returns_audio_state_type(self):
         chunk = np.random.randn(1600).astype(np.float32) * 0.1
@@ -156,9 +159,7 @@ class TestAudioFeatureExtraction:
 
     def test_vad_fields_propagated(self):
         chunk = _make_loud()
-        vad_state = _make_vad_state(
-            is_speaking=True, energy=0.42, speaking_ratio=0.77, pause_density=0.22
-        )
+        vad_state = _make_vad_state(is_speaking=True, energy=0.42, speaking_ratio=0.77, pause_density=0.22)
         state = extract_audio_features(chunk, vad_state)
         assert state.is_speaking
         assert state.energy == pytest.approx(0.42)
@@ -169,6 +170,7 @@ class TestAudioFeatureExtraction:
 # ---------------------------------------------------------------------------
 # AudioIngestPipeline tests
 # ---------------------------------------------------------------------------
+
 
 class TestAudioIngestPipeline:
     def test_instantiation_default_config(self):
@@ -182,6 +184,7 @@ class TestAudioIngestPipeline:
 
     def test_not_available_when_sounddevice_absent(self, monkeypatch):
         import core.multimodal.audio_ingest as mod
+
         monkeypatch.setattr(mod, "_SOUNDDEVICE_AVAILABLE", False)
         pipeline = AudioIngestPipeline()
         assert not pipeline.is_available
@@ -189,6 +192,7 @@ class TestAudioIngestPipeline:
     @pytest.mark.asyncio
     async def test_run_returns_immediately_when_no_sounddevice(self, monkeypatch):
         import core.multimodal.audio_ingest as mod
+
         monkeypatch.setattr(mod, "_SOUNDDEVICE_AVAILABLE", False)
         pipeline = AudioIngestPipeline()
         await asyncio.wait_for(pipeline.run(), timeout=2.0)

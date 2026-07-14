@@ -36,21 +36,21 @@ Introspection helpers::
     )
 """
 
-from .plane_kind import PlaneKind
-from .message_kind import MessageKind
 from .contract_descriptor import ContractDescriptor
+from .contract_introspection import (
+    get_contracts_for_plane,
+    get_descriptor_for_kind,
+    get_messages_snapshot,
+    get_planes_snapshot,
+    get_required_fields_summary,
+)
 from .contract_registry import (
     ContractRegistry,
     get_contract_registry,
     reset_contract_registry,
 )
-from .contract_introspection import (
-    get_planes_snapshot,
-    get_messages_snapshot,
-    get_descriptor_for_kind,
-    get_required_fields_summary,
-    get_contracts_for_plane,
-)
+from .message_kind import MessageKind
+from .plane_kind import PlaneKind
 
 __all__ = [
     "PlaneKind",

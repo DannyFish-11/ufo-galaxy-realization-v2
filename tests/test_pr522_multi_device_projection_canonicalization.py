@@ -569,12 +569,12 @@ class TestG2_SourceRuntimePostureEnrichment(unittest.TestCase):
         _reset_source_runtime_posture()
 
     def test_G2_1_posture_snapshot_available_when_runtime_reachable(self):
+        from core.multi_device_projection_canonicalization import (
+            enrich_multi_device_projection,
+        )
         from core.source_runtime_posture import (
             SourceRuntimePosture,
             record_source_runtime_posture,
-        )
-        from core.multi_device_projection_canonicalization import (
-            enrich_multi_device_projection,
         )
 
         record_source_runtime_posture(
@@ -626,8 +626,8 @@ class TestH_SurfacingStateLogic(unittest.TestCase):
 
     def test_H1_full_when_both_chain_and_graph_available(self):
         from core.multi_device_projection_canonicalization import (
-            enrich_multi_device_projection,
             CanonicalProjectionSurfacingState,
+            enrich_multi_device_projection,
         )
 
         result = enrich_multi_device_projection()
@@ -637,8 +637,8 @@ class TestH_SurfacingStateLogic(unittest.TestCase):
 
     def test_H2_partial_when_only_chain_available(self):
         from core.multi_device_projection_canonicalization import (
-            enrich_multi_device_projection,
             CanonicalProjectionSurfacingState,
+            enrich_multi_device_projection,
         )
 
         with patch(
@@ -651,8 +651,8 @@ class TestH_SurfacingStateLogic(unittest.TestCase):
 
     def test_H3_partial_when_only_graph_available(self):
         from core.multi_device_projection_canonicalization import (
-            enrich_multi_device_projection,
             CanonicalProjectionSurfacingState,
+            enrich_multi_device_projection,
         )
 
         with patch(
@@ -665,8 +665,8 @@ class TestH_SurfacingStateLogic(unittest.TestCase):
 
     def test_H4_unavailable_when_neither_available(self):
         from core.multi_device_projection_canonicalization import (
-            enrich_multi_device_projection,
             CanonicalProjectionSurfacingState,
+            enrich_multi_device_projection,
         )
 
         with (
@@ -957,10 +957,10 @@ class TestJ_ProjectionEndpointCanonicalKeys(unittest.TestCase):
 
     def test_J7_canonical_surfacing_state_is_valid_enum_value(self):
         try:
-            from core.routes.projection import create_router
             from core.multi_device_projection_canonicalization import (
                 CanonicalProjectionSurfacingState,
             )
+            from core.routes.projection import create_router
 
             router = create_router()
             handler = None

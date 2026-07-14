@@ -8,25 +8,23 @@ only prose. Evidence is grounded in current code anchors:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from enum import Enum
 import importlib.util
 import logging
 import os
 import sys
 import time
+from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any, Dict, List
 
 JOINT_BASELINE_PR_TITLE = (
     "Joint dual-repo real-code baseline audit: full integrated status and remaining-gap closure review"
 )
 JOINT_BASELINE_AUTHORITY = (
-    "JOINT_DUAL_REPO_REAL_CODE_BASELINE::"
-    "core.joint_dual_repo_real_code_baseline::real-code-only-v2-plus-android"
+    "JOINT_DUAL_REPO_REAL_CODE_BASELINE::" "core.joint_dual_repo_real_code_baseline::real-code-only-v2-plus-android"
 )
 JOINT_BASELINE_METHOD = (
-    "Only current real code is used as evidence. "
-    "No historical PR narrative/audit markdown is used as factual proof."
+    "Only current real code is used as evidence. " "No historical PR narrative/audit markdown is used as factual proof."
 )
 
 # Android repository ref audited when compiling this baseline.
@@ -168,9 +166,7 @@ def _module_exists(module_path: str) -> bool:
     rel = module_path.replace(".", os.sep) + ".py"
     rel_pkg = module_path.replace(".", os.sep) + os.sep + "__init__.py"
     return any(
-        os.path.isfile(os.path.join(base, rel))
-        or os.path.isfile(os.path.join(base, rel_pkg))
-        for base in sys.path
+        os.path.isfile(os.path.join(base, rel)) or os.path.isfile(os.path.join(base, rel_pkg)) for base in sys.path
     )
 
 
@@ -396,9 +392,7 @@ def build_joint_dual_repo_real_code_baseline() -> JointRealCodeBaselineReport:
 
     overall = round(sum(item.completion_pct for item in domains) / len(domains), 1)
     has_must = any(item.priority == WorkPriority.MUST_FIRST for item in remaining)
-    has_important = any(
-        item.priority == WorkPriority.IMPORTANT_SECONDARY for item in remaining
-    )
+    has_important = any(item.priority == WorkPriority.IMPORTANT_SECONDARY for item in remaining)
     if has_must:
         stage = StageVerdict.MID_STAGE_CONSOLIDATION
     elif has_important:

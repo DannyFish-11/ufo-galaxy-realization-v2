@@ -30,8 +30,7 @@ UGCP_SHARED_SCHEMA_FAMILY_AUTHORITY: str = (
 )
 
 UGCP_SHARED_SCHEMA_FAMILY_PR2_SENTINEL: str = (
-    "UGCP_SHARED_SCHEMA_FAMILY_PR2_SENTINEL::namespace=core.schemas.ugcp "
-    "module=core.schemas.ugcp.shared"
+    "UGCP_SHARED_SCHEMA_FAMILY_PR2_SENTINEL::namespace=core.schemas.ugcp " "module=core.schemas.ugcp.shared"
 )
 
 UGCP_CANONICAL_CONCEPT_VOCABULARY_ALIGNMENT_PR51_SENTINEL: str = (
@@ -164,12 +163,14 @@ class DelegationTransferSessionId:
 @dataclass(frozen=True)
 class ControlSessionId:
     """Compatibility alias for conversation/control continuity session identity."""
+
     value: str
 
 
 @dataclass(frozen=True)
 class RuntimeSessionId:
     """Compatibility alias for runtime attachment session identity."""
+
     value: str
 
 
@@ -186,6 +187,7 @@ class NodeId:
     :class:`GraphNodeId` for topology/task-model nodes when introducing new
     schema surfaces.
     """
+
     value: str
 
 
@@ -533,8 +535,8 @@ def map_from_device_participation_summary(summary: Any) -> ParticipantModel:
     orchestration_eligible = bool(_pick(data, "orchestration_eligible", default=False))
     session_id = normalize_runtime_attachment_session_id(data) or _pick(data, "session_id")
     roles = _pick(data, "roles", default=[]) or []
-    coordination_role = str(roles[0]) if isinstance(roles, list) and roles else str(
-        _pick(data, "coordination_role", default="")
+    coordination_role = (
+        str(roles[0]) if isinstance(roles, list) and roles else str(_pick(data, "coordination_role", default=""))
     )
 
     registered = bool(_pick(data, "registered", default=False))
@@ -829,9 +831,7 @@ def map_from_runtime_session_snapshot(snapshot: Any) -> RuntimeTruth:
     identity = _pick(snapshot, "identity", default={}) or {}
     raw_status = _pick(snapshot, "status", default="unknown")
     normalized_status = (
-        raw_status
-        if isinstance(raw_status, str) and raw_status in _VALID_TERMINAL_STATES
-        else "unknown"
+        raw_status if isinstance(raw_status, str) and raw_status in _VALID_TERMINAL_STATES else "unknown"
     )
     reason = _pick(snapshot, "reason", default="")
     runtime_session_id = (

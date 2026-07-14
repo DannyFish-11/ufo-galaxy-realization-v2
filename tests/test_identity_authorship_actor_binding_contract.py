@@ -94,42 +94,36 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 _MODULE_AVAILABLE = False
 try:
-    from core.identity_authorship_actor_binding_contract import (
-        # Authority / policy sentinels
-        IDENTITY_AUTHORSHIP_BINDING_CONTRACT_AUTHORITY,
-        IDENTITY_AUTHORSHIP_BINDING_CONTRACT_SENTINEL,
-        IDENTITY_TAXONOMY_IS_FIRST_CLASS_DIMENSION_POLICY,
+    from core.identity_authorship_actor_binding_contract import (  # Authority / policy sentinels; Enumerations; Data classes; Functions
         ACTOR_FIELD_PRESENCE_IS_NOT_AUTHORITATIVE_BINDING_POLICY,
         ASSERTION_MUST_NOT_CLAIM_AUTHORSHIP_VERIFIED_POLICY,
         DELEGATION_MUST_NOT_CLAIM_DIRECT_AUTHORSHIP_POLICY,
+        IDENTITY_AUTHORSHIP_BINDING_CONTRACT_AUTHORITY,
+        IDENTITY_AUTHORSHIP_BINDING_CONTRACT_SENTINEL,
+        IDENTITY_TAXONOMY_IS_FIRST_CLASS_DIMENSION_POLICY,
         PROVENANCE_ABSENCE_DEFAULTS_TO_UNCERTAIN_POLICY,
-        # Enumerations
         IdentityBindingClass,
-        IdentityBindingSignalStrength,
-        # Data classes
         IdentityBindingEvidence,
+        IdentityBindingSignalStrength,
         IdentityBindingVerdict,
-        # Functions
-        classify_identity_binding,
-        build_identity_binding_verdict,
         build_baseline_identity_binding_verdict,
+        build_identity_binding_verdict,
+        classify_identity_binding,
     )
+
     _MODULE_AVAILABLE = True
 except ImportError as _imp_err:
-    print(
-        f"SKIP: core.identity_authorship_actor_binding_contract unavailable: "
-        f"{_imp_err}"
-    )
+    print(f"SKIP: core.identity_authorship_actor_binding_contract unavailable: " f"{_imp_err}")
 
 
 def _skip_if_unavailable(test_fn):
     """Decorator: skip test if the module is not available."""
+
     def wrapper(self):
         if not _MODULE_AVAILABLE:
-            self.skipTest(
-                "core.identity_authorship_actor_binding_contract not available"
-            )
+            self.skipTest("core.identity_authorship_actor_binding_contract not available")
         return test_fn(self)
+
     wrapper.__name__ = test_fn.__name__
     return wrapper
 
@@ -138,29 +132,20 @@ def _skip_if_unavailable(test_fn):
 # Helper: build evidence with named overrides
 # ---------------------------------------------------------------------------
 
+
 def _ev(**kwargs) -> "IdentityBindingEvidence":
     """Build an IdentityBindingEvidence with fail-conservative defaults."""
     return IdentityBindingEvidence(
         actor_field_present=kwargs.get("actor_field_present", False),
-        identity_verified_by_authority=kwargs.get(
-            "identity_verified_by_authority", False
-        ),
+        identity_verified_by_authority=kwargs.get("identity_verified_by_authority", False),
         authorship_validated=kwargs.get("authorship_validated", False),
         binding_confirmed=kwargs.get("binding_confirmed", False),
         is_delegation_or_proxy=kwargs.get("is_delegation_or_proxy", False),
-        delegation_explicitly_documented=kwargs.get(
-            "delegation_explicitly_documented", False
-        ),
+        delegation_explicitly_documented=kwargs.get("delegation_explicitly_documented", False),
         assertion_only=kwargs.get("assertion_only", False),
-        provenance_missing_or_ambiguous=kwargs.get(
-            "provenance_missing_or_ambiguous", False
-        ),
-        identity_explicitly_uncertain=kwargs.get(
-            "identity_explicitly_uncertain", False
-        ),
-        multiple_authority_sources_agree=kwargs.get(
-            "multiple_authority_sources_agree", False
-        ),
+        provenance_missing_or_ambiguous=kwargs.get("provenance_missing_or_ambiguous", False),
+        identity_explicitly_uncertain=kwargs.get("identity_explicitly_uncertain", False),
+        multiple_authority_sources_agree=kwargs.get("multiple_authority_sources_agree", False),
     )
 
 
@@ -186,9 +171,7 @@ class TestSentinelImports(unittest.TestCase):
 
     @_skip_if_unavailable
     def test_A01_authority_sentinel_importable_and_non_empty(self):
-        self.assertIsInstance(
-            IDENTITY_AUTHORSHIP_BINDING_CONTRACT_AUTHORITY, str
-        )
+        self.assertIsInstance(IDENTITY_AUTHORSHIP_BINDING_CONTRACT_AUTHORITY, str)
         self.assertTrue(len(IDENTITY_AUTHORSHIP_BINDING_CONTRACT_AUTHORITY) > 0)
 
     @_skip_if_unavailable
@@ -198,48 +181,28 @@ class TestSentinelImports(unittest.TestCase):
 
     @_skip_if_unavailable
     def test_A03_identity_taxonomy_policy_non_empty(self):
-        self.assertIsInstance(
-            IDENTITY_TAXONOMY_IS_FIRST_CLASS_DIMENSION_POLICY, str
-        )
-        self.assertTrue(
-            len(IDENTITY_TAXONOMY_IS_FIRST_CLASS_DIMENSION_POLICY) > 0
-        )
+        self.assertIsInstance(IDENTITY_TAXONOMY_IS_FIRST_CLASS_DIMENSION_POLICY, str)
+        self.assertTrue(len(IDENTITY_TAXONOMY_IS_FIRST_CLASS_DIMENSION_POLICY) > 0)
 
     @_skip_if_unavailable
     def test_A04_actor_field_policy_non_empty(self):
-        self.assertIsInstance(
-            ACTOR_FIELD_PRESENCE_IS_NOT_AUTHORITATIVE_BINDING_POLICY, str
-        )
-        self.assertTrue(
-            len(ACTOR_FIELD_PRESENCE_IS_NOT_AUTHORITATIVE_BINDING_POLICY) > 0
-        )
+        self.assertIsInstance(ACTOR_FIELD_PRESENCE_IS_NOT_AUTHORITATIVE_BINDING_POLICY, str)
+        self.assertTrue(len(ACTOR_FIELD_PRESENCE_IS_NOT_AUTHORITATIVE_BINDING_POLICY) > 0)
 
     @_skip_if_unavailable
     def test_A05_assertion_policy_non_empty(self):
-        self.assertIsInstance(
-            ASSERTION_MUST_NOT_CLAIM_AUTHORSHIP_VERIFIED_POLICY, str
-        )
-        self.assertTrue(
-            len(ASSERTION_MUST_NOT_CLAIM_AUTHORSHIP_VERIFIED_POLICY) > 0
-        )
+        self.assertIsInstance(ASSERTION_MUST_NOT_CLAIM_AUTHORSHIP_VERIFIED_POLICY, str)
+        self.assertTrue(len(ASSERTION_MUST_NOT_CLAIM_AUTHORSHIP_VERIFIED_POLICY) > 0)
 
     @_skip_if_unavailable
     def test_A06_delegation_policy_non_empty(self):
-        self.assertIsInstance(
-            DELEGATION_MUST_NOT_CLAIM_DIRECT_AUTHORSHIP_POLICY, str
-        )
-        self.assertTrue(
-            len(DELEGATION_MUST_NOT_CLAIM_DIRECT_AUTHORSHIP_POLICY) > 0
-        )
+        self.assertIsInstance(DELEGATION_MUST_NOT_CLAIM_DIRECT_AUTHORSHIP_POLICY, str)
+        self.assertTrue(len(DELEGATION_MUST_NOT_CLAIM_DIRECT_AUTHORSHIP_POLICY) > 0)
 
     @_skip_if_unavailable
     def test_A07_provenance_policy_non_empty(self):
-        self.assertIsInstance(
-            PROVENANCE_ABSENCE_DEFAULTS_TO_UNCERTAIN_POLICY, str
-        )
-        self.assertTrue(
-            len(PROVENANCE_ABSENCE_DEFAULTS_TO_UNCERTAIN_POLICY) > 0
-        )
+        self.assertIsInstance(PROVENANCE_ABSENCE_DEFAULTS_TO_UNCERTAIN_POLICY, str)
+        self.assertTrue(len(PROVENANCE_ABSENCE_DEFAULTS_TO_UNCERTAIN_POLICY) > 0)
 
 
 # ===========================================================================
@@ -298,27 +261,19 @@ class TestIdentityBindingSignalStrengthEnum(unittest.TestCase):
 
     @_skip_if_unavailable
     def test_C01_authoritative_exists(self):
-        self.assertEqual(
-            IdentityBindingSignalStrength.authoritative.value, "authoritative"
-        )
+        self.assertEqual(IdentityBindingSignalStrength.authoritative.value, "authoritative")
 
     @_skip_if_unavailable
     def test_C02_validated_exists(self):
-        self.assertEqual(
-            IdentityBindingSignalStrength.validated.value, "validated"
-        )
+        self.assertEqual(IdentityBindingSignalStrength.validated.value, "validated")
 
     @_skip_if_unavailable
     def test_C03_asserted_exists(self):
-        self.assertEqual(
-            IdentityBindingSignalStrength.asserted.value, "asserted"
-        )
+        self.assertEqual(IdentityBindingSignalStrength.asserted.value, "asserted")
 
     @_skip_if_unavailable
     def test_C04_delegated_exists(self):
-        self.assertEqual(
-            IdentityBindingSignalStrength.delegated.value, "delegated"
-        )
+        self.assertEqual(IdentityBindingSignalStrength.delegated.value, "delegated")
 
     @_skip_if_unavailable
     def test_C05_absent_or_uncertain_exists(self):
@@ -360,9 +315,7 @@ class TestIdentityAuthoritativelyBound(unittest.TestCase):
     @_skip_if_unavailable
     def test_D03_signal_strength_is_authoritative(self):
         v = classify_identity_binding(_ev_authoritative())
-        self.assertEqual(
-            v.signal_strength, IdentityBindingSignalStrength.authoritative
-        )
+        self.assertEqual(v.signal_strength, IdentityBindingSignalStrength.authoritative)
 
     @_skip_if_unavailable
     def test_D04_is_authoritatively_bound_flag_true(self):
@@ -439,9 +392,7 @@ class TestAuthoritativeBoundRequirements(unittest.TestCase):
             IdentityBindingClass.identity_authoritatively_bound,
         )
         # It should be delegated instead
-        self.assertEqual(
-            v.binding_class, IdentityBindingClass.delegated_or_proxy_actor
-        )
+        self.assertEqual(v.binding_class, IdentityBindingClass.delegated_or_proxy_actor)
 
     @_skip_if_unavailable
     def test_I01_blocked_by_provenance_missing(self):
@@ -489,17 +440,13 @@ class TestAuthorshipVerified(unittest.TestCase):
             authorship_validated=True,
         )
         v = classify_identity_binding(e)
-        self.assertEqual(
-            v.binding_class, IdentityBindingClass.authorship_verified
-        )
+        self.assertEqual(v.binding_class, IdentityBindingClass.authorship_verified)
 
     @_skip_if_unavailable
     def test_K02_signal_strength_is_validated(self):
         e = _ev(actor_field_present=True, authorship_validated=True)
         v = classify_identity_binding(e)
-        self.assertEqual(
-            v.signal_strength, IdentityBindingSignalStrength.validated
-        )
+        self.assertEqual(v.signal_strength, IdentityBindingSignalStrength.validated)
 
     @_skip_if_unavailable
     def test_K03_is_authorship_verified_flag_true(self):
@@ -519,13 +466,9 @@ class TestAuthorshipVerified(unittest.TestCase):
             assertion_only=True,
         )
         v = classify_identity_binding(e)
-        self.assertNotEqual(
-            v.binding_class, IdentityBindingClass.authorship_verified
-        )
+        self.assertNotEqual(v.binding_class, IdentityBindingClass.authorship_verified)
         # Should fall back to asserted_but_unverified
-        self.assertEqual(
-            v.binding_class, IdentityBindingClass.asserted_but_unverified
-        )
+        self.assertEqual(v.binding_class, IdentityBindingClass.asserted_but_unverified)
 
     @_skip_if_unavailable
     def test_M01_delegation_blocks_authorship_verified(self):
@@ -536,12 +479,8 @@ class TestAuthorshipVerified(unittest.TestCase):
             is_delegation_or_proxy=True,
         )
         v = classify_identity_binding(e)
-        self.assertNotEqual(
-            v.binding_class, IdentityBindingClass.authorship_verified
-        )
-        self.assertEqual(
-            v.binding_class, IdentityBindingClass.delegated_or_proxy_actor
-        )
+        self.assertNotEqual(v.binding_class, IdentityBindingClass.authorship_verified)
+        self.assertEqual(v.binding_class, IdentityBindingClass.delegated_or_proxy_actor)
 
     @_skip_if_unavailable
     def test_N01_provenance_blocks_authorship_verified(self):
@@ -552,9 +491,7 @@ class TestAuthorshipVerified(unittest.TestCase):
             provenance_missing_or_ambiguous=True,
         )
         v = classify_identity_binding(e)
-        self.assertNotEqual(
-            v.binding_class, IdentityBindingClass.authorship_verified
-        )
+        self.assertNotEqual(v.binding_class, IdentityBindingClass.authorship_verified)
 
 
 # ===========================================================================
@@ -569,18 +506,14 @@ class TestAssertedButUnverified(unittest.TestCase):
         """actor_field_present with no verification → asserted_but_unverified."""
         e = _ev(actor_field_present=True)
         v = classify_identity_binding(e)
-        self.assertEqual(
-            v.binding_class, IdentityBindingClass.asserted_but_unverified
-        )
+        self.assertEqual(v.binding_class, IdentityBindingClass.asserted_but_unverified)
 
     @_skip_if_unavailable
     def test_P01_assertion_only_yields_asserted_class(self):
         """assertion_only=True with actor present → asserted_but_unverified."""
         e = _ev(actor_field_present=True, assertion_only=True)
         v = classify_identity_binding(e)
-        self.assertEqual(
-            v.binding_class, IdentityBindingClass.asserted_but_unverified
-        )
+        self.assertEqual(v.binding_class, IdentityBindingClass.asserted_but_unverified)
 
     @_skip_if_unavailable
     def test_Q01_asserted_is_above_uncertain(self):
@@ -589,9 +522,7 @@ class TestAssertedButUnverified(unittest.TestCase):
         e_uncertain = _ev()  # no evidence at all
         v_asserted = classify_identity_binding(e_asserted)
         v_uncertain = classify_identity_binding(e_uncertain)
-        self.assertEqual(
-            v_asserted.binding_class, IdentityBindingClass.asserted_but_unverified
-        )
+        self.assertEqual(v_asserted.binding_class, IdentityBindingClass.asserted_but_unverified)
         self.assertEqual(
             v_uncertain.binding_class,
             IdentityBindingClass.identity_or_provenance_uncertain,
@@ -626,9 +557,7 @@ class TestDelegatedOrProxyActor(unittest.TestCase):
         """is_delegation_or_proxy=True → delegated_or_proxy_actor."""
         e = _ev(is_delegation_or_proxy=True)
         v = classify_identity_binding(e)
-        self.assertEqual(
-            v.binding_class, IdentityBindingClass.delegated_or_proxy_actor
-        )
+        self.assertEqual(v.binding_class, IdentityBindingClass.delegated_or_proxy_actor)
 
     @_skip_if_unavailable
     def test_S01_documented_delegation_still_delegated(self):
@@ -638,9 +567,7 @@ class TestDelegatedOrProxyActor(unittest.TestCase):
             delegation_explicitly_documented=True,
         )
         v = classify_identity_binding(e)
-        self.assertEqual(
-            v.binding_class, IdentityBindingClass.delegated_or_proxy_actor
-        )
+        self.assertEqual(v.binding_class, IdentityBindingClass.delegated_or_proxy_actor)
 
     @_skip_if_unavailable
     def test_T01_delegation_is_not_authoritatively_bound(self):
@@ -666,9 +593,7 @@ class TestDelegatedOrProxyActor(unittest.TestCase):
             is_delegation_or_proxy=True,
         )
         v = classify_identity_binding(e)
-        self.assertNotEqual(
-            v.binding_class, IdentityBindingClass.authorship_verified
-        )
+        self.assertNotEqual(v.binding_class, IdentityBindingClass.authorship_verified)
 
     @_skip_if_unavailable
     def test_U02_signal_strength_is_delegated(self):
@@ -912,31 +837,28 @@ class TestConvenienceFlags(unittest.TestCase):
         """is_authoritatively_bound is True only for identity_authoritatively_bound."""
         for ev_fn, expected_class in [
             (_ev_authoritative, IdentityBindingClass.identity_authoritatively_bound),
-            (lambda: _ev(actor_field_present=True, authorship_validated=True),
-             IdentityBindingClass.authorship_verified),
-            (lambda: _ev(actor_field_present=True),
-             IdentityBindingClass.asserted_but_unverified),
-            (lambda: _ev(is_delegation_or_proxy=True),
-             IdentityBindingClass.delegated_or_proxy_actor),
-            (lambda: _ev(),
-             IdentityBindingClass.identity_or_provenance_uncertain),
+            (
+                lambda: _ev(actor_field_present=True, authorship_validated=True),
+                IdentityBindingClass.authorship_verified,
+            ),
+            (lambda: _ev(actor_field_present=True), IdentityBindingClass.asserted_but_unverified),
+            (lambda: _ev(is_delegation_or_proxy=True), IdentityBindingClass.delegated_or_proxy_actor),
+            (lambda: _ev(), IdentityBindingClass.identity_or_provenance_uncertain),
         ]:
             v = classify_identity_binding(ev_fn())
             self.assertEqual(v.binding_class, expected_class)
-            expected_flag = (
-                expected_class
-                == IdentityBindingClass.identity_authoritatively_bound
-            )
+            expected_flag = expected_class == IdentityBindingClass.identity_authoritatively_bound
             self.assertEqual(v.is_authoritatively_bound, expected_flag)
 
     @_skip_if_unavailable
     def test_AE01_is_authorship_verified_only_for_verified_class(self):
         for ev_fn, expected_class in [
             (_ev_authoritative, IdentityBindingClass.identity_authoritatively_bound),
-            (lambda: _ev(actor_field_present=True, authorship_validated=True),
-             IdentityBindingClass.authorship_verified),
-            (lambda: _ev(actor_field_present=True),
-             IdentityBindingClass.asserted_but_unverified),
+            (
+                lambda: _ev(actor_field_present=True, authorship_validated=True),
+                IdentityBindingClass.authorship_verified,
+            ),
+            (lambda: _ev(actor_field_present=True), IdentityBindingClass.asserted_but_unverified),
         ]:
             v = classify_identity_binding(ev_fn())
             self.assertEqual(
@@ -1048,9 +970,10 @@ _ACCEPTANCE_AVAILABLE = False
 try:
     from core.system_final_acceptance_verdict import (
         AcceptanceDimensionId,
-        SystemFinalAcceptanceEvaluator,
         DimensionStatus,
+        SystemFinalAcceptanceEvaluator,
     )
+
     _ACCEPTANCE_AVAILABLE = True
 except ImportError:
     pass
@@ -1061,6 +984,7 @@ def _skip_if_acceptance_unavailable(test_fn):
         if not _ACCEPTANCE_AVAILABLE:
             self.skipTest("core.system_final_acceptance_verdict not available")
         return test_fn(self)
+
     wrapper.__name__ = test_fn.__name__
     return wrapper
 
@@ -1071,9 +995,7 @@ class TestAcceptanceDimensionIntegration(unittest.TestCase):
     def test_AK01_evaluator_has_identity_dimension_method(self):
         """SystemFinalAcceptanceEvaluator has _evaluate_identity_authorship_binding."""
         evaluator = SystemFinalAcceptanceEvaluator()
-        self.assertTrue(
-            hasattr(evaluator, "_evaluate_identity_authorship_binding")
-        )
+        self.assertTrue(hasattr(evaluator, "_evaluate_identity_authorship_binding"))
 
     @_skip_if_acceptance_unavailable
     def test_AL01_all_dimensions_includes_identity_authorship_binding(self):
@@ -1101,9 +1023,7 @@ class TestAcceptanceDimensionIntegration(unittest.TestCase):
         """Probe returns pending (not unresolved) when zero-evidence correctly
         returns identity_or_provenance_uncertain."""
         if not _MODULE_AVAILABLE:
-            self.skipTest(
-                "identity_authorship_actor_binding_contract not available"
-            )
+            self.skipTest("identity_authorship_actor_binding_contract not available")
         evaluator = SystemFinalAcceptanceEvaluator()
         item = evaluator._evaluate_identity_authorship_binding()
         # Contract is present and wired correctly → should be pending
@@ -1113,14 +1033,10 @@ class TestAcceptanceDimensionIntegration(unittest.TestCase):
     def test_AN01_evaluate_includes_identity_dimension(self):
         """Full evaluate() produces a checklist that includes identity dimension."""
         if not _MODULE_AVAILABLE:
-            self.skipTest(
-                "identity_authorship_actor_binding_contract not available"
-            )
+            self.skipTest("identity_authorship_actor_binding_contract not available")
         evaluator = SystemFinalAcceptanceEvaluator()
         report = evaluator.evaluate()
-        self.assertIn(
-            "identity_authorship_binding", report.checklist
-        )
+        self.assertIn("identity_authorship_binding", report.checklist)
 
 
 # ===========================================================================

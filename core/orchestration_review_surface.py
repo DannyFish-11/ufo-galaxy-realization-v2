@@ -708,30 +708,14 @@ class OrchestrationReviewSnapshot:
             "snapshot_id": self.snapshot_id,
             "assembled_at": self.assembled_at,
             "execution_path_summary": (
-                self.execution_path_summary.to_dict()
-                if self.execution_path_summary is not None
-                else None
+                self.execution_path_summary.to_dict() if self.execution_path_summary is not None else None
             ),
-            "fallback_cascade": (
-                self.fallback_cascade.to_dict()
-                if self.fallback_cascade is not None
-                else None
-            ),
-            "recovery_review": (
-                self.recovery_review.to_dict()
-                if self.recovery_review is not None
-                else None
-            ),
+            "fallback_cascade": (self.fallback_cascade.to_dict() if self.fallback_cascade is not None else None),
+            "recovery_review": (self.recovery_review.to_dict() if self.recovery_review is not None else None),
             "reconciliation_review": (
-                self.reconciliation_review.to_dict()
-                if self.reconciliation_review is not None
-                else None
+                self.reconciliation_review.to_dict() if self.reconciliation_review is not None else None
             ),
-            "legacy_dispatch": (
-                self.legacy_dispatch.to_dict()
-                if self.legacy_dispatch is not None
-                else None
-            ),
+            "legacy_dispatch": (self.legacy_dispatch.to_dict() if self.legacy_dispatch is not None else None),
             "observability_authority": self.observability_authority,
             "_partial": self._partial,
             "_partial_reasons": list(self._partial_reasons),
@@ -822,17 +806,20 @@ def _assemble_fallback_cascade() -> tuple[FallbackCascadeReview, Optional[str]]:
         steps: List[FallbackCascadeStep] = []
         try:
             from core.windows_execution_arbiter import get_last_attempt_log
+
             raw_attempts = get_last_attempt_log() or []
             for idx, attempt in enumerate(raw_attempts):
                 ctx = FallbackContext.from_arbiter_attempt(attempt)
-                steps.append(FallbackCascadeStep(
-                    step_index=idx,
-                    from_tier=_get_enum_value(ctx.from_level),
-                    to_tier=_get_enum_value(ctx.to_level),
-                    reason=_get_enum_value(ctx.reason),
-                    raw_reason=ctx.raw_reason,
-                    authority="core.windows_execution_arbiter",
-                ))
+                steps.append(
+                    FallbackCascadeStep(
+                        step_index=idx,
+                        from_tier=_get_enum_value(ctx.from_level),
+                        to_tier=_get_enum_value(ctx.to_level),
+                        reason=_get_enum_value(ctx.reason),
+                        raw_reason=ctx.raw_reason,
+                        authority="core.windows_execution_arbiter",
+                    )
+                )
         except Exception as exc:
             logger.warning("Exception suppressed: %s", exc)
 
@@ -929,9 +916,7 @@ def _assemble_reconciliation_review() -> tuple[ReconciliationOutcomeReview, Opti
             outcome=outcome,
             was_reconciled=was_reconciled,
             v2_terminal_state_blocked=v2_terminal,
-            advisory_only_fields_skipped=list(
-                outcome_dict.get("advisory_only_fields_skipped") or []
-            ),
+            advisory_only_fields_skipped=list(outcome_dict.get("advisory_only_fields_skipped") or []),
             applied_signal_types=list(outcome_dict.get("applied_signal_types") or []),
             device_id=outcome_dict.get("device_id"),
             task_id=outcome_dict.get("task_id"),

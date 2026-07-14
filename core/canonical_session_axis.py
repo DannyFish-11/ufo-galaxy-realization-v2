@@ -791,19 +791,14 @@ _ANDROID_SESSION_MAPPING_CATALOGUE: Tuple[AndroidSessionMapping, ...] = (
         center_canonical_field="delegation_transfer_session_id",
         family=SessionFamily.delegation_transfer,
         classification="TRANSITIONAL_ALIAS",
-        notes=(
-            "Normalised at ingress by normalize_delegation_transfer_session_id()."
-        ),
+        notes=("Normalised at ingress by normalize_delegation_transfer_session_id()."),
     ),
     AndroidSessionMapping(
         android_field="mesh_session_id",
         center_canonical_field="mesh_session_id",
         family=SessionFamily.mesh,
         classification="CANONICAL_MATCH",
-        notes=(
-            "Same name in both repositories.  Preserved end-to-end when mesh "
-            "coordination is active."
-        ),
+        notes=("Same name in both repositories.  Preserved end-to-end when mesh " "coordination is active."),
     ),
     AndroidSessionMapping(
         android_field="conversation_session_id",

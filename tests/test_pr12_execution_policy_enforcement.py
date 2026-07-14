@@ -107,36 +107,38 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from core.execution_policy import (
+    DEFAULT_CONSERVATIVE_POLICY,
+    ExecutionPolicy,
+    PolicyBand,
+)
+from core.execution_policy import PolicyDecision as PolicyDecisionPublic
+from core.execution_policy import PolicyOutcome as PolicyOutcomePublic  # PR-12 re-exports
+from core.execution_policy import check_cross_device_expansion as check_cross_device_expansion_public
+from core.execution_policy import check_side_effectful_execution as check_side_public
+from core.execution_policy import enforce_execution_intent as enforce_public
+from core.execution_policy import (
+    resolve_policy,
+)
+from core.execution_policy.policy_decision import PolicyDecision, PolicyOutcome
+from core.execution_policy.policy_enforcement import (
+    emit_policy_decision,
+    enforce_cross_device,
+    enforce_execution_intent,
+    enforce_executor_levels,
+)
+from core.execution_policy.policy_guardrails import (
+    check_confirmation_required,
+    check_cross_device_expansion,
+    check_executor_level,
+    check_side_effectful_execution,
+    filter_executor_levels,
+)
+
 # ---------------------------------------------------------------------------
 # Import subjects
 # ---------------------------------------------------------------------------
 
-from core.execution_policy.policy_decision import PolicyOutcome, PolicyDecision
-from core.execution_policy.policy_guardrails import (
-    check_side_effectful_execution,
-    check_confirmation_required,
-    check_cross_device_expansion,
-    check_executor_level,
-    filter_executor_levels,
-)
-from core.execution_policy.policy_enforcement import (
-    enforce_execution_intent,
-    enforce_cross_device,
-    enforce_executor_levels,
-    emit_policy_decision,
-)
-from core.execution_policy import (
-    PolicyBand,
-    ExecutionPolicy,
-    DEFAULT_CONSERVATIVE_POLICY,
-    resolve_policy,
-    # PR-12 re-exports
-    PolicyOutcome as PolicyOutcomePublic,
-    PolicyDecision as PolicyDecisionPublic,
-    check_side_effectful_execution as check_side_public,
-    check_cross_device_expansion as check_cross_device_expansion_public,
-    enforce_execution_intent as enforce_public,
-)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -153,6 +155,7 @@ def _make_policy(
     """Build a test policy with explicit fields."""
     if allowed_executor_levels is None:
         from core.execution_policy.policy_resolver import _BAND_EXECUTOR_LEVELS
+
         allowed_executor_levels = list(_BAND_EXECUTOR_LEVELS[band])
     return ExecutionPolicy(
         policy_band=band,
@@ -177,11 +180,16 @@ _FULL_CROSS_DEVICE_POLICY = _make_policy(PolicyBand.FULL_EXECUTE, cross_device_a
 # A) PolicyOutcome enum
 # ============================================================
 
+
 class TestPolicyOutcome:
     def test_all_expected_values(self):
         expected = {
-            "allowed", "blocked_by_policy", "confirmation_required",
-            "cross_device_not_allowed", "executor_level_capped", "downgraded",
+            "allowed",
+            "blocked_by_policy",
+            "confirmation_required",
+            "cross_device_not_allowed",
+            "executor_level_capped",
+            "downgraded",
         }
         actual = {o.value for o in PolicyOutcome}
         assert expected == actual
@@ -196,6 +204,7 @@ class TestPolicyOutcome:
 # ============================================================
 # B) PolicyDecision dataclass
 # ============================================================
+
 
 class TestPolicyDecision:
     def test_construction(self):
@@ -280,6 +289,7 @@ class TestPolicyDecision:
 # C) check_side_effectful_execution
 # ============================================================
 
+
 class TestCheckSideEffectfulExecution:
     def test_observe_only_blocks_side_effectful(self):
         d = check_side_effectful_execution(_OBSERVE_POLICY, is_side_effectful=True)
@@ -314,6 +324,7 @@ class TestCheckSideEffectfulExecution:
 # D) check_confirmation_required
 # ============================================================
 
+
 class TestCheckConfirmationRequired:
     def test_requires_confirmation_true(self):
         policy = _make_policy(PolicyBand.BOUNDED_EXECUTE, requires_confirmation=True)
@@ -330,6 +341,7 @@ class TestCheckConfirmationRequired:
 # ============================================================
 # E) check_cross_device_expansion
 # ============================================================
+
 
 class TestCheckCrossDeviceExpansion:
     def test_denied_when_not_allowed(self):
@@ -350,6 +362,7 @@ class TestCheckCrossDeviceExpansion:
 # ============================================================
 # F) check_executor_level
 # ============================================================
+
 
 class TestCheckExecutorLevel:
     def test_empty_allowed_list_blocks(self):
@@ -379,6 +392,7 @@ class TestCheckExecutorLevel:
 # ============================================================
 # G) filter_executor_levels
 # ============================================================
+
 
 class TestFilterExecutorLevels:
     def test_all_permitted(self):
@@ -414,6 +428,7 @@ class TestFilterExecutorLevels:
 # H) enforce_execution_intent — composite
 # ============================================================
 
+
 class TestEnforceExecutionIntent:
     def test_observe_only_blocked(self):
         d = enforce_execution_intent(_OBSERVE_POLICY, is_side_effectful=True)
@@ -424,9 +439,7 @@ class TestEnforceExecutionIntent:
         assert d.needs_confirmation
 
     def test_full_local_cross_device_denied(self):
-        d = enforce_execution_intent(
-            _FULL_LOCAL_POLICY, is_side_effectful=True, requires_cross_device=True
-        )
+        d = enforce_execution_intent(_FULL_LOCAL_POLICY, is_side_effectful=True, requires_cross_device=True)
         assert d.outcome is PolicyOutcome.CROSS_DEVICE_NOT_ALLOWED
 
     def test_full_cd_executor_capped(self):
@@ -477,6 +490,7 @@ class TestEnforceExecutionIntent:
 # I) enforce_cross_device
 # ============================================================
 
+
 class TestEnforceCrossDevice:
     def test_denied_when_not_allowed(self):
         d = enforce_cross_device(_FULL_LOCAL_POLICY)
@@ -494,6 +508,7 @@ class TestEnforceCrossDevice:
 # ============================================================
 # J) enforce_executor_levels
 # ============================================================
+
 
 class TestEnforceExecutorLevels:
     def test_some_blocked(self):
@@ -528,6 +543,7 @@ class TestEnforceExecutorLevels:
 # ============================================================
 # K) emit_policy_decision smoke test
 # ============================================================
+
 
 class TestEmitPolicyDecision:
     def test_does_not_raise_for_blocked(self):
@@ -567,18 +583,18 @@ class TestEmitPolicyDecision:
 # L) WindowsExecutionArbiter integration
 # ============================================================
 
+
 class TestWindowsArbiterPolicyIntegration:
     """Narrow integration tests for the WindowsExecutionArbiter + policy."""
 
     def _make_arbiter(self):
         from core.windows_execution_arbiter import WindowsExecutionArbiter
+
         return WindowsExecutionArbiter(use_defaults=False)
 
     async def _execute_with_policy(self, policy, action="click", **kwargs):
         arbiter = self._make_arbiter()
-        return await arbiter.execute(
-            action=action, device_id="test_device", policy=policy, **kwargs
-        )
+        return await arbiter.execute(action=action, device_id="test_device", policy=policy, **kwargs)
 
     @pytest.mark.asyncio
     async def test_observe_only_blocks(self):
@@ -634,6 +650,7 @@ class TestWindowsArbiterPolicyIntegration:
 # ============================================================
 # M) TaskGraph integration
 # ============================================================
+
 
 class TestTaskGraphPolicyIntegration:
     """Narrow integration tests for TaskGraph + policy."""
@@ -703,6 +720,7 @@ class TestTaskGraphPolicyIntegration:
 # N) run_multi_device_via_task_graph integration
 # ============================================================
 
+
 class TestRunMultiDevicePolicyIntegration:
     """Integration tests for run_multi_device_via_task_graph + policy."""
 
@@ -714,11 +732,13 @@ class TestRunMultiDevicePolicyIntegration:
                 self.description = f"Subtask {i}"
                 self.depends_on = []
                 self.device_id = f"device_{i}"
+
         return [FakeSubtask(i) for i in range(n)]
 
     @pytest.mark.asyncio
     async def test_cross_device_denied_by_policy(self):
         from core.e2e_orchestrator import run_multi_device_via_task_graph
+
         subtasks = self._make_subtasks(2)
         result = await run_multi_device_via_task_graph(
             subtasks,
@@ -730,6 +750,7 @@ class TestRunMultiDevicePolicyIntegration:
     @pytest.mark.asyncio
     async def test_empty_subtasks_unchanged(self):
         from core.e2e_orchestrator import run_multi_device_via_task_graph
+
         result = await run_multi_device_via_task_graph(
             [],
             policy=_FULL_LOCAL_POLICY,
@@ -740,6 +761,7 @@ class TestRunMultiDevicePolicyIntegration:
     async def test_no_policy_backward_compat(self):
         """Without a policy, behavior is unchanged from PR-2."""
         from core.e2e_orchestrator import run_multi_device_via_task_graph
+
         subtasks = self._make_subtasks(1)
         # Should proceed to compile_and_run_dag (may fail due to no handlers, but not policy)
         result = await run_multi_device_via_task_graph(subtasks, policy=None)
@@ -748,6 +770,7 @@ class TestRunMultiDevicePolicyIntegration:
     @pytest.mark.asyncio
     async def test_policy_result_has_stable_keys(self):
         from core.e2e_orchestrator import run_multi_device_via_task_graph
+
         subtasks = self._make_subtasks(2)
         result = await run_multi_device_via_task_graph(
             subtasks,
@@ -763,6 +786,7 @@ class TestRunMultiDevicePolicyIntegration:
 # ============================================================
 # O) Structured result stability
 # ============================================================
+
 
 class TestStructuredResultStability:
     """Verify that stable outcome codes are preserved in to_dict() output."""
@@ -807,6 +831,7 @@ class TestStructuredResultStability:
 # P) Observability: policy_hint in DesktopPresenceRuntime
 # ============================================================
 
+
 class TestDesktopPresenceRuntimePolicyHint:
     """Smoke-tests that policy_hint is attached to DesktopPresenceRuntime results."""
 
@@ -849,6 +874,4 @@ class TestDesktopPresenceRuntimePolicyHint:
         runtime._dispatch = _mock_dispatch  # type: ignore[assignment]
 
         result = await runtime.handle_request(message="test", source="chat")
-        assert result["policy_hint"]["policy_band"] in {
-            "observe_only", "assistive", "bounded_execute", "full_execute"
-        }
+        assert result["policy_hint"]["policy_band"] in {"observe_only", "assistive", "bounded_execute", "full_execute"}

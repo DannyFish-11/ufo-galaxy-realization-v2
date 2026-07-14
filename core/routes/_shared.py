@@ -83,6 +83,7 @@ def _save_registered_devices(devices: Dict[str, Dict[str, Any]]) -> None:
 # WebSocket Connection Manager
 # ============================================================================
 
+
 class RouteConnectionPool:
     """
     WebSocket 传输层连接池 — 兼容投影（PR-S4）。
@@ -119,6 +120,7 @@ class RouteConnectionPool:
     @staticmethod
     def _unified() -> "UnifiedConnectionManager":  # type: ignore[name-defined]
         from core.unified.connection_manager import get_unified_connection_manager
+
         return get_unified_connection_manager()
 
     # ── 在场判定的 canonical 读(融合·域4)────────────────────────────────────
@@ -158,18 +160,18 @@ class RouteConnectionPool:
         # 同步到统一连接管理器（不再重复 accept）
         ucm = self._unified()
         ucm._websockets[device_id] = websocket
-        from core.unified.models import UnifiedConnectionInfo, UnifiedConnectionState
         from datetime import datetime as _dt
+
+        from core.unified.models import UnifiedConnectionInfo, UnifiedConnectionState
+
         ucm._connections[device_id] = UnifiedConnectionInfo(
             device_id=device_id,
             state=UnifiedConnectionState.CONNECTED,
             connected_at=_dt.utcnow(),
         )
-        await self.broadcast_status({
-            "type": "device_connected",
-            "device_id": device_id,
-            "timestamp": datetime.now().isoformat()
-        })
+        await self.broadcast_status(
+            {"type": "device_connected", "device_id": device_id, "timestamp": datetime.now().isoformat()}
+        )
 
     def disconnect_device(self, device_id: str):
         self.active_devices.pop(device_id, None)
@@ -236,9 +238,7 @@ class RouteConnectionPool:
         for ws in disconnected:
             self.status_subscribers.discard(ws)
 
-    async def send_command_and_wait(
-        self, device_id: str, command: str, params: dict, timeout: float = 15.0
-    ) -> dict:
+    async def send_command_and_wait(self, device_id: str, command: str, params: dict, timeout: float = 15.0) -> dict:
         """发送命令到设备并等待设备回传结果 (request-response 模式)。
 
         委托 UCM 管理 pending futures（presence backbone owns the request-response
@@ -246,9 +246,7 @@ class RouteConnectionPool:
         """
         # Delegate to UCM (presence backbone owns pending response futures)
         try:
-            return await self._unified().send_command_and_wait(
-                device_id, command, params, timeout=timeout
-            )
+            return await self._unified().send_command_and_wait(device_id, command, params, timeout=timeout)
         except Exception as exc:
             logger.warning("Exception suppressed: %s", exc)
 

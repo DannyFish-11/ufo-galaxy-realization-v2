@@ -56,11 +56,11 @@ Primary regression suites covering this module
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from enum import Enum
 import importlib
 import logging
 import time
+from dataclasses import dataclass
+from enum import Enum
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -69,11 +69,11 @@ logger = logging.getLogger(__name__)
 # internal source module.
 try:
     from core.unified_execution_governance import (  # noqa: F401
-        CANONICAL_PROOF_INPUT_DIAGNOSIS_POLICY,
         ANDROID_EXECUTION_LIFECYCLE_TRUTH_POLICY,
-        EXECUTION_LIFECYCLE_TRUTH_BINDING_SENTINEL,
-        EXECUTION_LIFECYCLE_TRUTH_BINDING_CONTRACT_VERSION,
         ANDROID_EXECUTION_LIFECYCLE_TRUTH_STALE_AFTER_SECONDS,
+        CANONICAL_PROOF_INPUT_DIAGNOSIS_POLICY,
+        EXECUTION_LIFECYCLE_TRUTH_BINDING_CONTRACT_VERSION,
+        EXECUTION_LIFECYCLE_TRUTH_BINDING_SENTINEL,
         AndroidExecutionLifecycleTruthQuality,
         ExecutionLifecycleTruthBinding,
         classify_canonical_proof_input_diagnosis,
@@ -109,20 +109,22 @@ except ImportError:  # pragma: no cover
     ) -> Any:
         return None
 
+
 # PR-16: Re-export ownership-transfer proof quality so consumers only need
 # one import target.
 try:
     from core.ownership_transfer_proof_quality import (  # noqa: F401
-        OWNERSHIP_TRANSFER_PROOF_QUALITY_SENTINEL,
         OWNERSHIP_TRANSFER_PROOF_QUALITY_CONTRACT_VERSION,
-        RESUMED_OWNERSHIP_TRANSFER_REQUIRES_PROOF_POLICY,
         OWNERSHIP_TRANSFER_PROOF_QUALITY_POLICY,
+        OWNERSHIP_TRANSFER_PROOF_QUALITY_SENTINEL,
+        RESUMED_OWNERSHIP_TRANSFER_REQUIRES_PROOF_POLICY,
         STALE_OWNERSHIP_EVIDENCE_THRESHOLD_SECONDS,
         OwnershipTransferProofClass,
         OwnershipTransferProofQualityResult,
         classify_ownership_transfer_proof_quality,
         get_latest_ownership_transfer_proof_quality_for_device,
     )
+
     _OWNERSHIP_TRANSFER_PROOF_QUALITY_AVAILABLE = True
 except ImportError:  # pragma: no cover
     _OWNERSHIP_TRANSFER_PROOF_QUALITY_AVAILABLE = False
@@ -154,6 +156,7 @@ except ImportError:  # pragma: no cover
         stale_threshold_seconds: float = 300.0,
     ) -> Any:
         return None
+
 
 UNIFIED_GOVERNANCE_SEMANTICS_AUTHORITY: str = (
     "UNIFIED_GOVERNANCE_SEMANTICS_V1: "
@@ -267,9 +270,7 @@ def _has_recovery_truth_quality(recovery_truth_quality: str) -> bool:
 
 def _is_resumable_state(*, latest_phase: str, recovery_truth_quality: str) -> bool:
     """Resumable when there is active execution phase or recovery truth allows replay."""
-    return latest_phase in _POLICY_RESUMABLE_PHASES or (
-        _has_recovery_truth_quality(recovery_truth_quality)
-    )
+    return latest_phase in _POLICY_RESUMABLE_PHASES or (_has_recovery_truth_quality(recovery_truth_quality))
 
 
 class GovernancePath(str, Enum):
@@ -386,9 +387,7 @@ def _normalize_cross_repo_truth_report(raw_report: Any) -> Dict[str, Any]:
     return {
         "pipeline_verdict": str(report_dict.get("pipeline_verdict") or "insufficient"),
         "is_complete": bool(report_dict.get("is_complete", False)),
-        "primary_sources_complete": bool(
-            report_dict.get("primary_sources_complete", False)
-        ),
+        "primary_sources_complete": bool(report_dict.get("primary_sources_complete", False)),
         "primary_sources_fresh": bool(report_dict.get("primary_sources_fresh", False)),
         "downgrade_reasons": list(report_dict.get("downgrade_reasons") or []),
         "source_provenance": normalized_sources,
@@ -423,24 +422,19 @@ def _derive_canonical_truth_basis(
         ``canonical_truth_confirmed``, and
         ``canonical_truth_inferred``.
     """
-    lifecycle_truth_quality = str(
-        runtime_state_for_device.get("android_lifecycle_truth_quality") or "v2_local_only"
-    ).strip().lower() or "v2_local_only"
-    freshness_state = str(
-        runtime_state_for_device.get("android_semantics_freshness_state") or ""
-    ).strip().lower()
-    proof_input_class = str(
-        proof_input_diagnosis.get("proof_input_class") or "missing"
-    ).strip().lower() or "missing"
-    snapshot_reconciliation_status = str(
-        runtime_state_for_device.get("snapshot_reconciliation_status") or ""
-    ).strip().lower()
-    cross_repo_verdict = str(
-        cross_repo_truth_report.get("pipeline_verdict") or "insufficient"
-    ).strip().lower() or "insufficient"
-    cross_repo_primary_fresh = bool(
-        cross_repo_truth_report.get("primary_sources_fresh", False)
+    lifecycle_truth_quality = (
+        str(runtime_state_for_device.get("android_lifecycle_truth_quality") or "v2_local_only").strip().lower()
+        or "v2_local_only"
     )
+    freshness_state = str(runtime_state_for_device.get("android_semantics_freshness_state") or "").strip().lower()
+    proof_input_class = str(proof_input_diagnosis.get("proof_input_class") or "missing").strip().lower() or "missing"
+    snapshot_reconciliation_status = (
+        str(runtime_state_for_device.get("snapshot_reconciliation_status") or "").strip().lower()
+    )
+    cross_repo_verdict = (
+        str(cross_repo_truth_report.get("pipeline_verdict") or "insufficient").strip().lower() or "insufficient"
+    )
+    cross_repo_primary_fresh = bool(cross_repo_truth_report.get("primary_sources_fresh", False))
 
     stale_remote = (
         freshness_state == "stale"
@@ -520,26 +514,17 @@ def _build_android_originated_canonical_diagnosis(
     mesh_proof_quality: Optional[str],
 ) -> Dict[str, Any]:
     """Reconcile Android-originated diagnostics into stable canonical domains."""
-    runtime_class = str(
-        runtime_state_for_device.get("android_lifecycle_truth_quality") or "missing_remote"
-    ).strip().lower() or "missing_remote"
-    runtime_reasons = _normalize_reason_tokens(
-        runtime_state_for_device.get("android_lifecycle_truth_reason")
+    runtime_class = (
+        str(runtime_state_for_device.get("android_lifecycle_truth_quality") or "missing_remote").strip().lower()
+        or "missing_remote"
     )
-    runtime_reasons.extend(
-        _normalize_reason_tokens(runtime_state_for_device.get("snapshot_reconciliation_reason"))
-    )
+    runtime_reasons = _normalize_reason_tokens(runtime_state_for_device.get("android_lifecycle_truth_reason"))
+    runtime_reasons.extend(_normalize_reason_tokens(runtime_state_for_device.get("snapshot_reconciliation_reason")))
     runtime_reasons = list(dict.fromkeys(runtime_reasons))
 
-    capability_class = str(
-        proof_input_diagnosis.get("proof_input_class") or "missing"
-    ).strip().lower() or "missing"
-    capability_reasons = _normalize_reason_tokens(
-        proof_input_diagnosis.get("proof_input_degradation_causes")
-    )
-    capability_reasons.extend(
-        _normalize_reason_tokens(proof_input_diagnosis.get("proof_input_conflicts"))
-    )
+    capability_class = str(proof_input_diagnosis.get("proof_input_class") or "missing").strip().lower() or "missing"
+    capability_reasons = _normalize_reason_tokens(proof_input_diagnosis.get("proof_input_degradation_causes"))
+    capability_reasons.extend(_normalize_reason_tokens(proof_input_diagnosis.get("proof_input_conflicts")))
     capability_reasons.extend(
         _normalize_reason_tokens(runtime_state_for_device.get("android_semantics_contract_diagnosis"))
     )
@@ -548,27 +533,22 @@ def _build_android_originated_canonical_diagnosis(
     )
     capability_reasons = list(dict.fromkeys(capability_reasons))
 
-    recovery_class = str(
-        android_evidence_integration.get("recovery_truth_quality") or "not_provided"
-    ).strip().lower() or "not_provided"
-    recovery_reasons = _normalize_reason_tokens(
-        android_evidence_integration.get("recovery_truth_gap_types")
+    recovery_class = (
+        str(android_evidence_integration.get("recovery_truth_quality") or "not_provided").strip().lower()
+        or "not_provided"
     )
-    recovery_reasons.extend(
-        _normalize_reason_tokens(android_evidence_integration.get("recovery_truth_diagnosis"))
-    )
+    recovery_reasons = _normalize_reason_tokens(android_evidence_integration.get("recovery_truth_gap_types"))
+    recovery_reasons.extend(_normalize_reason_tokens(android_evidence_integration.get("recovery_truth_diagnosis")))
     recovery_reasons = list(dict.fromkeys(recovery_reasons))
 
     takeover_class = str(ownership_transfer_proof_class or "incomplete").strip().lower() or "incomplete"
     takeover_reasons = _normalize_reason_tokens(ownership_transfer_proof_diagnosis)
 
-    mesh_class = str(
-        mesh_runtime_state.get("proof_quality") or mesh_proof_quality or "missing"
-    ).strip().lower() or "missing"
-    mesh_reasons = _normalize_reason_tokens(mesh_runtime_state.get("proof_quality_reason"))
-    mesh_reasons.extend(
-        _normalize_reason_tokens(mesh_runtime_state.get("governance_readiness_impact"))
+    mesh_class = (
+        str(mesh_runtime_state.get("proof_quality") or mesh_proof_quality or "missing").strip().lower() or "missing"
     )
+    mesh_reasons = _normalize_reason_tokens(mesh_runtime_state.get("proof_quality_reason"))
+    mesh_reasons.extend(_normalize_reason_tokens(mesh_runtime_state.get("governance_readiness_impact")))
     mesh_reasons = list(dict.fromkeys(mesh_reasons))
 
     return {
@@ -749,12 +729,8 @@ def build_mesh_runtime_state(
         live_runtime_proof_snapshot = {}
 
     # None-safe coercion protects against unexpected/legacy snapshot values.
-    live_runtime_dispatch_count = _safe_counter_int(
-        live_runtime_proof_snapshot.get("staged_mesh_dispatch_count", 0)
-    )
-    live_runtime_run_count = _safe_counter_int(
-        live_runtime_proof_snapshot.get("live_mesh_run_count", 0)
-    )
+    live_runtime_dispatch_count = _safe_counter_int(live_runtime_proof_snapshot.get("staged_mesh_dispatch_count", 0))
+    live_runtime_run_count = _safe_counter_int(live_runtime_proof_snapshot.get("live_mesh_run_count", 0))
     has_live_runtime_path_execution = live_runtime_run_count > 0
 
     # Extract last_live_run_at for staleness detection (added by PR-08v2).
@@ -793,9 +769,7 @@ def build_mesh_runtime_state(
         runtime_proof_count=runtime_proof_count,
         live_mesh_run_count=live_runtime_run_count,
     )
-    governance_readiness_impact = _mesh_proof_quality_to_governance_readiness_impact(
-        proof_quality
-    )
+    governance_readiness_impact = _mesh_proof_quality_to_governance_readiness_impact(proof_quality)
 
     # Build center-side state machine snapshot (PR-03)
     center_state_snapshot: Dict[str, Any] = {}
@@ -1069,13 +1043,9 @@ def _derive_device_policy_outcome(
     deferred = blocked_by == "canonical_execution_gate:defer"
 
     runtime_health_status = str(runtime_state_for_device.get("runtime_health_status") or "").strip().lower()
-    freshness_state = str(
-        canonical_truth_basis.get("canonical_truth_freshness_state") or ""
-    ).strip().lower()
+    freshness_state = str(canonical_truth_basis.get("canonical_truth_freshness_state") or "").strip().lower()
     integration_allowed = bool(android_evidence_integration.get("integration_allowed", False))
-    recovery_truth_quality = str(
-        android_evidence_integration.get("recovery_truth_quality") or ""
-    ).strip().lower()
+    recovery_truth_quality = str(android_evidence_integration.get("recovery_truth_quality") or "").strip().lower()
     recovery_truth_degraded = bool(android_evidence_integration.get("recovery_truth_degraded", False))
     degraded_signals = (
         runtime_health_status == "degraded"
@@ -1105,15 +1075,9 @@ def _derive_device_policy_outcome(
         latest_phase=latest_phase,
         recovery_truth_quality=recovery_truth_quality,
     )
-    recovery_eligible = operation_state != "admissible" and (
-        _has_recovery_truth_quality(recovery_truth_quality)
-    )
+    recovery_eligible = operation_state != "admissible" and (_has_recovery_truth_quality(recovery_truth_quality))
 
-    closure_acceptable = (
-        ownership_transfer_proof_sufficient
-        and integration_allowed
-        and freshness_state != "stale"
-    )
+    closure_acceptable = ownership_transfer_proof_sufficient and integration_allowed and freshness_state != "stale"
     if closure_acceptable and not degraded_signals:
         closure_quality_threshold = _POLICY_CLOSURE_MEETS_CANONICAL
     elif closure_acceptable:
@@ -1140,8 +1104,7 @@ def _derive_device_policy_outcome(
         manual_decision = _POLICY_MANUAL_NONE
 
     escalation_required = (
-        dependency_severity in _POLICY_ESCALATION_SEVERITIES
-        or manual_decision in _POLICY_ESCALATION_MANUAL_DECISIONS
+        dependency_severity in _POLICY_ESCALATION_SEVERITIES or manual_decision in _POLICY_ESCALATION_MANUAL_DECISIONS
     )
     escalation_level = (
         "immediate"
@@ -1193,8 +1156,7 @@ def _derive_device_policy_outcome(
             "required": escalation_required,
             "level": escalation_level,
             "defer_allowed": (
-                dependency_severity == _POLICY_SEVERITY_MEDIUM
-                or automatic_decision == _POLICY_AUTOMATIC_HOLD
+                dependency_severity == _POLICY_SEVERITY_MEDIUM or automatic_decision == _POLICY_AUTOMATIC_HOLD
             ),
         },
         "_policy": UNIFIED_GOVERNANCE_POLICY_LAYER_POLICY,
@@ -1206,12 +1168,12 @@ def build_unified_governance_state(
     device_ids: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     try:
-        from core.attached_runtime_session_registry import list_active_sessions
         from core.android_mode_gate_policy import (
             build_mode_state_for_device,
             evaluate_android_mode_readiness,
             resolve_android_execution_gate_decision,
         )
+        from core.attached_runtime_session_registry import list_active_sessions
         from core.unified_execution_governance import (
             classify_canonical_proof_input_diagnosis,
             get_execution_runtime_snapshot,
@@ -1244,8 +1206,10 @@ def build_unified_governance_state(
         from core.android_evidence_integration_pipeline import (
             get_android_evidence_integration_summary,
         )
+
         android_evidence_integration_summary_fn = get_android_evidence_integration_summary
     except Exception as exc:
+
         def _fallback_get_android_evidence_integration_summary(  # type: ignore[misc]
             device_id: str,
             execution_id: str = "",
@@ -1259,39 +1223,36 @@ def build_unified_governance_state(
                 "integration_allowed": False,
                 "overall_grade": "absent",
                 "dimension_results": [],
-                "degradation_causes": [
-                    "android_evidence_integration_summary_unavailable"
-                ],
+                "degradation_causes": ["android_evidence_integration_summary_unavailable"],
                 "recovery_truth_quality": "not_provided",
                 "recovery_truth_degraded": False,
                 "recovery_truth_gap_types": [],
                 "recovery_truth_diagnosis": "recovery_truth_not_provided",
             }
+
         android_evidence_integration_summary_fn = _fallback_get_android_evidence_integration_summary
 
     try:
         from core.canonical_cross_repo_evidence_pipeline import (
             get_canonical_cross_repo_evidence_report,
         )
+
         canonical_cross_repo_report_fn = get_canonical_cross_repo_evidence_report
     except Exception as exc:
+
         def _fallback_get_canonical_cross_repo_evidence_report() -> Dict[str, Any]:  # type: ignore[misc]
             return {
                 "pipeline_verdict": "insufficient",
                 "is_complete": False,
                 "primary_sources_complete": False,
                 "primary_sources_fresh": False,
-                "downgrade_reasons": [
-                    "canonical_cross_repo_evidence_report_unavailable"
-                ],
+                "downgrade_reasons": ["canonical_cross_repo_evidence_report_unavailable"],
                 "sources": [],
             }
 
         canonical_cross_repo_report_fn = _fallback_get_canonical_cross_repo_evidence_report
 
-    cross_repo_truth_report = _normalize_cross_repo_truth_report(
-        canonical_cross_repo_report_fn()
-    )
+    cross_repo_truth_report = _normalize_cross_repo_truth_report(canonical_cross_repo_report_fn())
 
     if device_ids is None:
         try:
@@ -1339,12 +1300,10 @@ def build_unified_governance_state(
         # that Android capability truth quality can degrade the gate decision.
         # Absent/stale/conflicting/downgraded Android truth must NOT be treated
         # as positive evidence — the gate decision must reflect this explicitly.
-        proof_input_diagnosis = classify_canonical_proof_input_diagnosis(
-            runtime_state_for_device
+        proof_input_diagnosis = classify_canonical_proof_input_diagnosis(runtime_state_for_device)
+        android_capability_truth_quality: Optional[str] = (
+            str(proof_input_diagnosis.get("proof_input_class") or "").strip() or None
         )
-        android_capability_truth_quality: Optional[str] = str(
-            proof_input_diagnosis.get("proof_input_class") or ""
-        ).strip() or None
         primary_execution_id = _extract_primary_execution_id(runtime_state_for_device)
         android_evidence_integration = android_evidence_integration_summary_fn(
             device_id,
@@ -1359,9 +1318,7 @@ def build_unified_governance_state(
                 "integration_allowed": False,
                 "overall_grade": "absent",
                 "dimension_results": [],
-                "degradation_causes": [
-                    "android_evidence_integration_summary_invalid_shape"
-                ],
+                "degradation_causes": ["android_evidence_integration_summary_invalid_shape"],
                 "recovery_truth_quality": "not_provided",
                 "recovery_truth_degraded": False,
                 "recovery_truth_gap_types": [],
@@ -1372,9 +1329,7 @@ def build_unified_governance_state(
             policy_eligible=dispatch_eligible,
             readiness_ready=bool(getattr(readiness, "is_cross_device_ready", False)),
             execution_busy=bool(runtime_state_for_device.get("execution_busy", False)),
-            local_inference_available=bool(
-                runtime_state_for_device.get("local_inference_available", False)
-            ),
+            local_inference_available=bool(runtime_state_for_device.get("local_inference_available", False)),
             fallback_tier=runtime_state_for_device.get("current_fallback_tier"),
             android_capability_truth_quality=android_capability_truth_quality,
         )
@@ -1398,24 +1353,16 @@ def build_unified_governance_state(
         ownership_transfer_proof_diagnosis: List[str] = []
         if _OWNERSHIP_TRANSFER_PROOF_QUALITY_AVAILABLE:
             try:
-                ownership_transfer_proof_result = (
-                    get_latest_ownership_transfer_proof_quality_for_device(device_id)
-                )
+                ownership_transfer_proof_result = get_latest_ownership_transfer_proof_quality_for_device(device_id)
                 if ownership_transfer_proof_result is not None:
                     _pq = ownership_transfer_proof_result
-                    ownership_transfer_proof_class = str(
-                        getattr(_pq.proof_class, "value", str(_pq.proof_class))
-                    )
-                    ownership_transfer_proof_sufficient = bool(
-                        _pq.is_sufficient_for_closure
-                    )
+                    ownership_transfer_proof_class = str(getattr(_pq.proof_class, "value", str(_pq.proof_class)))
+                    ownership_transfer_proof_sufficient = bool(_pq.is_sufficient_for_closure)
                     ownership_transfer_proof_degraded = bool(_pq.degraded)
                     ownership_transfer_proof_diagnosis = list(_pq.diagnosis)
             except Exception as exc:
                 logger.debug("Fallback triggered: %s", exc)
-                ownership_transfer_proof_diagnosis = [
-                    "ownership_transfer_proof_quality_lookup_failed"
-                ]
+                ownership_transfer_proof_diagnosis = ["ownership_transfer_proof_quality_lookup_failed"]
 
         android_originated_canonical_diagnosis = _build_android_originated_canonical_diagnosis(
             runtime_state_for_device=runtime_state_for_device,
@@ -1440,12 +1387,8 @@ def build_unified_governance_state(
                 dispatch_eligible=dispatch_eligible,
                 takeover_eligible=takeover_eligible,
                 takeover_active=takeover_active,
-                highest_priority_execution_type=runtime_state_for_device.get(
-                    "highest_priority_execution_type"
-                ),
-                blocked_execution_types=list(
-                    runtime_state_for_device.get("blocked_execution_types", [])
-                ),
+                highest_priority_execution_type=runtime_state_for_device.get("highest_priority_execution_type"),
+                blocked_execution_types=list(runtime_state_for_device.get("blocked_execution_types", [])),
                 canonical_execution_gate_decision=canonical_gate.decision,
                 mesh_proof_quality=mesh_proof_quality,
             )
@@ -1455,30 +1398,14 @@ def build_unified_governance_state(
                 "dispatch_eligible": dispatch_eligible,
                 "takeover_eligible": takeover_eligible,
                 "takeover_active": takeover_active,
-                "active_execution_count": int(
-                    runtime_state_for_device.get("active_execution_count", 0)
-                ),
-                "highest_priority_execution_type": runtime_state_for_device.get(
-                    "highest_priority_execution_type"
-                ),
-                "blocked_execution_types": list(
-                    runtime_state_for_device.get("blocked_execution_types", [])
-                ),
-                "offline_queue_depth": int(
-                    runtime_state_for_device.get("offline_queue_depth", 0) or 0
-                ),
-                "execution_busy": bool(
-                    runtime_state_for_device.get("execution_busy", False)
-                ),
-                "local_inference_available": bool(
-                    runtime_state_for_device.get("local_inference_available", False)
-                ),
-                "android_reported_mode": runtime_state_for_device.get(
-                    "android_reported_mode"
-                ),
-                "android_reported_mode_state": runtime_state_for_device.get(
-                    "android_reported_mode_state"
-                ),
+                "active_execution_count": int(runtime_state_for_device.get("active_execution_count", 0)),
+                "highest_priority_execution_type": runtime_state_for_device.get("highest_priority_execution_type"),
+                "blocked_execution_types": list(runtime_state_for_device.get("blocked_execution_types", [])),
+                "offline_queue_depth": int(runtime_state_for_device.get("offline_queue_depth", 0) or 0),
+                "execution_busy": bool(runtime_state_for_device.get("execution_busy", False)),
+                "local_inference_available": bool(runtime_state_for_device.get("local_inference_available", False)),
+                "android_reported_mode": runtime_state_for_device.get("android_reported_mode"),
+                "android_reported_mode_state": runtime_state_for_device.get("android_reported_mode_state"),
                 "android_reported_mode_readiness_state": runtime_state_for_device.get(
                     "android_reported_mode_readiness_state"
                 ),
@@ -1500,9 +1427,7 @@ def build_unified_governance_state(
                 "android_reported_local_inference_available": runtime_state_for_device.get(
                     "android_reported_local_inference_available"
                 ),
-                "android_semantics_contract_state": runtime_state_for_device.get(
-                    "android_semantics_contract_state"
-                ),
+                "android_semantics_contract_state": runtime_state_for_device.get("android_semantics_contract_state"),
                 "android_semantics_contract_complete": bool(
                     runtime_state_for_device.get("android_semantics_contract_complete", False)
                 ),
@@ -1515,13 +1440,9 @@ def build_unified_governance_state(
                 "android_semantics_unknown_keys": list(
                     runtime_state_for_device.get("android_semantics_unknown_keys", [])
                 ),
-                "android_semantics_conflicts": list(
-                    runtime_state_for_device.get("android_semantics_conflicts", [])
-                ),
+                "android_semantics_conflicts": list(runtime_state_for_device.get("android_semantics_conflicts", [])),
                 "android_semantics_downgraded_reasons": list(
-                    runtime_state_for_device.get(
-                        "android_semantics_downgraded_reasons", []
-                    )
+                    runtime_state_for_device.get("android_semantics_downgraded_reasons", [])
                 ),
                 "android_semantics_governance_readiness_impact": runtime_state_for_device.get(
                     "android_semantics_governance_readiness_impact"
@@ -1543,45 +1464,26 @@ def build_unified_governance_state(
                     else None
                 ),
                 "android_semantics_freshness_threshold_s": float(
-                    runtime_state_for_device.get("android_semantics_freshness_threshold_s", 0.0)
-                    or 0.0
+                    runtime_state_for_device.get("android_semantics_freshness_threshold_s", 0.0) or 0.0
                 ),
-                "android_semantics_freshness_state": runtime_state_for_device.get(
-                    "android_semantics_freshness_state"
-                ),
+                "android_semantics_freshness_state": runtime_state_for_device.get("android_semantics_freshness_state"),
                 "android_semantics_freshness_reason": runtime_state_for_device.get(
                     "android_semantics_freshness_reason"
                 ),
-                "android_runtime_truth_authority": runtime_state_for_device.get(
-                    "android_runtime_truth_authority"
-                ),
+                "android_runtime_truth_authority": runtime_state_for_device.get("android_runtime_truth_authority"),
                 "android_runtime_truth_usable": bool(
                     runtime_state_for_device.get("android_runtime_truth_usable", False)
                 ),
-                "runtime_health_status": runtime_state_for_device.get(
-                    "runtime_health_status"
-                ),
-                "current_fallback_tier": runtime_state_for_device.get(
-                    "current_fallback_tier"
-                ),
+                "runtime_health_status": runtime_state_for_device.get("runtime_health_status"),
+                "current_fallback_tier": runtime_state_for_device.get("current_fallback_tier"),
                 "canonical_execution_gate_decision": canonical_gate.decision,
                 "canonical_execution_gate_reasons": list(canonical_gate.reasons),
                 "capability_ready": canonical_gate.capability_ready,
-                "snapshot_reconciliation_status": runtime_state_for_device.get(
-                    "snapshot_reconciliation_status"
-                ),
-                "snapshot_reconciliation_reason": runtime_state_for_device.get(
-                    "snapshot_reconciliation_reason"
-                ),
-                "snapshot_conflict": bool(
-                    runtime_state_for_device.get("snapshot_conflict", False)
-                ),
-                "snapshot_ordering_basis": runtime_state_for_device.get(
-                    "snapshot_ordering_basis"
-                ),
-                "snapshot_last_updated_at": float(
-                    runtime_state_for_device.get("snapshot_last_updated_at", 0.0) or 0.0
-                ),
+                "snapshot_reconciliation_status": runtime_state_for_device.get("snapshot_reconciliation_status"),
+                "snapshot_reconciliation_reason": runtime_state_for_device.get("snapshot_reconciliation_reason"),
+                "snapshot_conflict": bool(runtime_state_for_device.get("snapshot_conflict", False)),
+                "snapshot_ordering_basis": runtime_state_for_device.get("snapshot_ordering_basis"),
+                "snapshot_last_updated_at": float(runtime_state_for_device.get("snapshot_last_updated_at", 0.0) or 0.0),
                 "snapshot_reconciliation_applied": bool(
                     runtime_state_for_device.get("snapshot_reconciliation_applied", False)
                 ),
@@ -1589,12 +1491,9 @@ def build_unified_governance_state(
                     status=runtime_state_for_device.get("snapshot_reconciliation_status"),
                     conflict=bool(runtime_state_for_device.get("snapshot_conflict", False)),
                 ),
-                "latest_execution_event_phase": runtime_state_for_device.get(
-                    "latest_execution_event_phase"
-                ),
+                "latest_execution_event_phase": runtime_state_for_device.get("latest_execution_event_phase"),
                 "latest_execution_event_absorbed_at": float(
-                    runtime_state_for_device.get("latest_execution_event_absorbed_at", 0.0)
-                    or 0.0
+                    runtime_state_for_device.get("latest_execution_event_absorbed_at", 0.0) or 0.0
                 ),
                 "latest_execution_event_age_s": (
                     float(runtime_state_for_device.get("latest_execution_event_age_s"))
@@ -1602,8 +1501,7 @@ def build_unified_governance_state(
                     else None
                 ),
                 "execution_busy_window_seconds": float(
-                    runtime_state_for_device.get("execution_busy_window_seconds", 60.0)
-                    or 60.0
+                    runtime_state_for_device.get("execution_busy_window_seconds", 60.0) or 60.0
                 ),
                 "mesh_proof_quality": mesh_proof_quality,
                 "mesh_governance_readiness_impact": mesh_governance_readiness_impact,
@@ -1617,20 +1515,14 @@ def build_unified_governance_state(
                 # operators can distinguish truth-driven denials from
                 # eligibility-driven denials.
                 "android_capability_truth_quality": android_capability_truth_quality,
-                "android_capability_truth_degraded": bool(
-                    canonical_gate.android_capability_truth_degraded
-                ),
+                "android_capability_truth_degraded": bool(canonical_gate.android_capability_truth_degraded),
                 # ── PR-5: Android execution lifecycle truth quality ───────────
                 # Reflects Android-remote-confirmed vs V2-local-only vs
                 # stale/missing/conflicting remote state.  These fields ensure
                 # decision_causality reflects Android truth quality rather than
                 # only V2-local bookkeeping.
-                "android_lifecycle_truth_quality": runtime_state_for_device.get(
-                    "android_lifecycle_truth_quality"
-                ),
-                "android_lifecycle_truth_reason": runtime_state_for_device.get(
-                    "android_lifecycle_truth_reason"
-                ),
+                "android_lifecycle_truth_quality": runtime_state_for_device.get("android_lifecycle_truth_quality"),
+                "android_lifecycle_truth_reason": runtime_state_for_device.get("android_lifecycle_truth_reason"),
                 "android_lifecycle_truth_degraded": bool(
                     runtime_state_for_device.get("android_lifecycle_truth_degraded", False)
                 ),
@@ -1638,21 +1530,15 @@ def build_unified_governance_state(
                     "android_lifecycle_truth_governance_impact"
                 ),
                 "android_evidence_integration_execution_id": primary_execution_id,
-                "android_evidence_integration_decision": android_evidence_integration.get(
-                    "integration_decision"
-                ),
+                "android_evidence_integration_decision": android_evidence_integration.get("integration_decision"),
                 "android_evidence_integration_allowed": bool(
                     android_evidence_integration.get("integration_allowed", False)
                 ),
-                "android_evidence_integration_grade": android_evidence_integration.get(
-                    "overall_grade"
-                ),
+                "android_evidence_integration_grade": android_evidence_integration.get("overall_grade"),
                 "android_evidence_integration_degradation_causes": list(
                     android_evidence_integration.get("degradation_causes", [])
                 ),
-                "android_evidence_recovery_truth_quality": android_evidence_integration.get(
-                    "recovery_truth_quality"
-                ),
+                "android_evidence_recovery_truth_quality": android_evidence_integration.get("recovery_truth_quality"),
                 "android_evidence_recovery_truth_degraded": bool(
                     android_evidence_integration.get("recovery_truth_degraded", False)
                 ),
@@ -1668,29 +1554,19 @@ def build_unified_governance_state(
                 "ownership_transfer_proof_class": ownership_transfer_proof_class,
                 "ownership_transfer_proof_sufficient": ownership_transfer_proof_sufficient,
                 "ownership_transfer_proof_degraded": ownership_transfer_proof_degraded,
-                "ownership_transfer_proof_diagnosis": list(
-                    ownership_transfer_proof_diagnosis
-                ),
+                "ownership_transfer_proof_diagnosis": list(ownership_transfer_proof_diagnosis),
                 "android_originated_canonical_diagnosis": android_originated_canonical_diagnosis,
                 **canonical_truth_basis,
-                "cross_repo_truth_pipeline_verdict": cross_repo_truth_report.get(
-                    "pipeline_verdict"
-                ),
-                "cross_repo_truth_is_complete": bool(
-                    cross_repo_truth_report.get("is_complete", False)
-                ),
+                "cross_repo_truth_pipeline_verdict": cross_repo_truth_report.get("pipeline_verdict"),
+                "cross_repo_truth_is_complete": bool(cross_repo_truth_report.get("is_complete", False)),
                 "cross_repo_truth_primary_sources_complete": bool(
                     cross_repo_truth_report.get("primary_sources_complete", False)
                 ),
                 "cross_repo_truth_primary_sources_fresh": bool(
                     cross_repo_truth_report.get("primary_sources_fresh", False)
                 ),
-                "cross_repo_truth_downgrade_reasons": list(
-                    cross_repo_truth_report.get("downgrade_reasons", [])
-                ),
-                "cross_repo_truth_source_provenance": list(
-                    cross_repo_truth_report.get("source_provenance", [])
-                ),
+                "cross_repo_truth_downgrade_reasons": list(cross_repo_truth_report.get("downgrade_reasons", [])),
+                "cross_repo_truth_source_provenance": list(cross_repo_truth_report.get("source_provenance", [])),
             }
             paths[path.value] = decision_dict
 
@@ -1733,9 +1609,7 @@ def build_unified_governance_state(
     soft_degraded_count = sum(
         1 for item in policy_devices if item["policy_outcome"].get("operation_state") == "soft_degraded"
     )
-    manual_decision_count = sum(
-        1 for item in policy_devices if item["policy_outcome"].get("manual_decision") != "none"
-    )
+    manual_decision_count = sum(1 for item in policy_devices if item["policy_outcome"].get("manual_decision") != "none")
 
     return {
         "devices": devices,

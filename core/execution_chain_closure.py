@@ -375,9 +375,7 @@ def _derive_closure_truth_flags(
         and bool(truth_chain_complete)
         and str(acceptance_verdict or "").strip().lower() in {"accept", "accepted"}
     )
-    mature_closure_achieved = (
-        canonical_truth_completed and str(normalized_status or "").strip().lower() == "completed"
-    )
+    mature_closure_achieved = canonical_truth_completed and str(normalized_status or "").strip().lower() == "completed"
     return canonical_truth_completed, mature_closure_achieved
 
 
@@ -454,8 +452,7 @@ def record_local_chain_closure(
 
     _write_record(record)
     logger.debug(
-        "execution_chain_closure: local chain recorded task_id=%s state=%s "
-        "verdict=%s is_fully_closed=%s",
+        "execution_chain_closure: local chain recorded task_id=%s state=%s " "verdict=%s is_fully_closed=%s",
         task_id,
         closure_state.value,
         acceptance_verdict or "n/a",
@@ -591,15 +588,13 @@ def get_dual_chain_closure_summary(
     cross_records = [r for r in records if r.chain_kind == ChainKind.CROSS_DEVICE]
 
     local_accepted = sum(
-        1 for r in local_records
-        if r.closure_state in (ClosureState.ACCEPTED, ClosureState.ACCEPTED_PROVISIONAL)
+        1 for r in local_records if r.closure_state in (ClosureState.ACCEPTED, ClosureState.ACCEPTED_PROVISIONAL)
     )
     local_partial = sum(1 for r in local_records if r.closure_state == ClosureState.PARTIAL)
     local_failed = sum(1 for r in local_records if r.closure_state in _FAILED_STATES)
 
     cross_accepted = sum(
-        1 for r in cross_records
-        if r.closure_state in (ClosureState.ACCEPTED, ClosureState.ACCEPTED_PROVISIONAL)
+        1 for r in cross_records if r.closure_state in (ClosureState.ACCEPTED, ClosureState.ACCEPTED_PROVISIONAL)
     )
     cross_partial = sum(1 for r in cross_records if r.closure_state == ClosureState.PARTIAL)
     cross_failed = sum(1 for r in cross_records if r.closure_state in _FAILED_STATES)

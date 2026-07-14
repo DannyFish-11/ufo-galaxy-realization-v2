@@ -104,7 +104,6 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-
 # ---------------------------------------------------------------------------
 # Authority constants
 # ---------------------------------------------------------------------------
@@ -517,14 +516,16 @@ class FallbackDecisionRecord:
 
     def __post_init__(self) -> None:
         # Derive has_fallback from fallback_kinds OR any populated reason field.
-        _has_reasons = any([
-            self.model_fallback_reason,
-            self.multimodal_downgrade_reason,
-            self.agent_to_command_reason,
-            self.remote_to_local_reason,
-            self.orchestration_downgrade_reason,
-            self.blocked_reason,
-        ])
+        _has_reasons = any(
+            [
+                self.model_fallback_reason,
+                self.multimodal_downgrade_reason,
+                self.agent_to_command_reason,
+                self.remote_to_local_reason,
+                self.orchestration_downgrade_reason,
+                self.blocked_reason,
+            ]
+        )
         if (self.fallback_kinds or _has_reasons) and not self.has_fallback:
             self.has_fallback = True
         # Populate machine_readable_codes from fallback_kinds when absent.
@@ -839,9 +840,7 @@ class UnifiedControlPlan:
             "chosen_model_decision": self.chosen_model_decision.to_dict(),
             "chosen_execution_decision": self.chosen_execution_decision.to_dict(),
             "unified_execution_decision": (
-                self.unified_execution_decision.to_dict()
-                if self.unified_execution_decision is not None
-                else None
+                self.unified_execution_decision.to_dict() if self.unified_execution_decision is not None else None
             ),
             # PR-24: canonical routing decision embedded in the plan
             "multimodal_route_decision": self.multimodal_route_decision,
@@ -849,9 +848,7 @@ class UnifiedControlPlan:
             "fallback_level": self.fallback_level,
             "fallback_reason": self.fallback_reason,
             "fallback_decision_record": (
-                self.fallback_decision_record.to_dict()
-                if self.fallback_decision_record is not None
-                else None
+                self.fallback_decision_record.to_dict() if self.fallback_decision_record is not None else None
             ),
             "lifecycle_target": self.lifecycle_target,
             "execution_plan_summary": self.execution_plan_summary,
@@ -895,15 +892,11 @@ class UnifiedControlPlan:
             desktop_native_ingress_backbone=d.get("desktop_native_ingress_backbone"),
             fallback_level=_safe_fallback(d.get("fallback_level")),
             fallback_reason=d.get("fallback_reason"),
-            fallback_decision_record=(
-                FallbackDecisionRecord.from_dict(fdr_raw) if isinstance(fdr_raw, dict) else None
-            ),
+            fallback_decision_record=(FallbackDecisionRecord.from_dict(fdr_raw) if isinstance(fdr_raw, dict) else None),
             lifecycle_target=d.get("lifecycle_target"),
             execution_plan_summary=d.get("execution_plan_summary"),
             diagnostics_summary=d.get("diagnostics_summary"),
-            authority_chain=(
-                AuthorityChain.from_dict(ac_raw) if isinstance(ac_raw, dict) else AuthorityChain()
-            ),
+            authority_chain=(AuthorityChain.from_dict(ac_raw) if isinstance(ac_raw, dict) else AuthorityChain()),
             shell_projection_hints=(
                 ShellProjectionHints.from_dict(sp_raw) if isinstance(sp_raw, dict) else ShellProjectionHints()
             ),
@@ -1198,14 +1191,16 @@ def build_unified_control_plan(
 
     # PR-21 — build FallbackDecisionRecord (governance record)
     _fk = list(fallback_kinds or [])
-    if _fk or any([
-        model_fallback_reason,
-        multimodal_downgrade_reason,
-        agent_to_command_reason,
-        remote_to_local_reason,
-        orchestration_downgrade_reason,
-        blocked_reason,
-    ]):
+    if _fk or any(
+        [
+            model_fallback_reason,
+            multimodal_downgrade_reason,
+            agent_to_command_reason,
+            remote_to_local_reason,
+            orchestration_downgrade_reason,
+            blocked_reason,
+        ]
+    ):
         fdr = FallbackDecisionRecord(
             fallback_kinds=_fk,
             model_fallback_reason=model_fallback_reason,
@@ -1306,8 +1301,6 @@ def unified_control_plan_summary(plan: Optional["UnifiedControlPlan"]) -> Option
         "has_desktop_native_ingress_backbone": plan.desktop_native_ingress_backbone is not None,
         # PR-24: include routing tier from embedded decision
         "multimodal_route_type": (
-            plan.multimodal_route_decision.get("route_type")
-            if plan.multimodal_route_decision is not None
-            else None
+            plan.multimodal_route_decision.get("route_type") if plan.multimodal_route_decision is not None else None
         ),
     }

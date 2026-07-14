@@ -69,30 +69,34 @@ from unittest.mock import MagicMock
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _reset() -> None:
     """Reset all relevant singletons between tests."""
     try:
         from core.nodes.node_fabric_registry import reset_node_fabric_registry
+
         reset_node_fabric_registry()
     except ImportError:
         pass
     try:
         from core.agent.capability_registry import CapabilityRegistry
+
         CapabilityRegistry._instance = None
     except ImportError:
         pass
     try:
         from core.node_lifecycle_governor import reset_node_lifecycle_governor
+
         reset_node_lifecycle_governor()
     except ImportError:
         pass
     try:
         from core.node_governance_runtime import reset_governance_runtime_cache
+
         reset_governance_runtime_cache()
     except ImportError:
         pass
@@ -106,16 +110,14 @@ def _make_node(
 ):
     """Build a NodeInfo for testing."""
     from core.nodes.node_fabric_registry import (
+        NodeArchitecturalClass,
+        NodeCapability,
         NodeInfo,
         NodeRole,
         NodeStatus,
-        NodeCapability,
-        NodeArchitecturalClass,
     )
-    caps = [
-        NodeCapability(name=c, description=f"cap {c}")
-        for c in (capabilities or ["action"])
-    ]
+
+    caps = [NodeCapability(name=c, description=f"cap {c}") for c in (capabilities or ["action"])]
     ac = architectural_class or NodeArchitecturalClass.CAPABILITY_NODE
     node = NodeInfo(
         node_id=node_id,
@@ -132,7 +134,8 @@ def _make_node(
 
 def _make_governor_record(stage_value: str):
     """Build a mock NodeGovernanceRecord with the given lifecycle_stage value."""
-    from core.node_lifecycle_governor import NodeLifecycleStage, NodeGovernanceRecord
+    from core.node_lifecycle_governor import NodeGovernanceRecord, NodeLifecycleStage
+
     record = NodeGovernanceRecord(node_name="test-node")
     record.lifecycle_stage = NodeLifecycleStage(stage_value)
     return record
@@ -148,32 +151,39 @@ class TestSentinels:
 
     def test_authority_importable(self) -> None:
         from core.node_governance_runtime import NODE_GOVERNANCE_IS_RUNTIME_CONSTRAINT_AUTHORITY
+
         assert NODE_GOVERNANCE_IS_RUNTIME_CONSTRAINT_AUTHORITY
         assert "PR6" in NODE_GOVERNANCE_IS_RUNTIME_CONSTRAINT_AUTHORITY
 
     def test_pr6_sentinel_importable(self) -> None:
         from core.node_governance_runtime import NODE_GOVERNANCE_RUNTIME_CONSTRAINT_PR6_SENTINEL
+
         assert NODE_GOVERNANCE_RUNTIME_CONSTRAINT_PR6_SENTINEL
         assert "PR6" in NODE_GOVERNANCE_RUNTIME_CONSTRAINT_PR6_SENTINEL
 
     def test_policy_archived_deprecated(self) -> None:
         from core.node_governance_runtime import ARCHIVED_AND_DEPRECATED_NODES_EXCLUDED_POLICY
+
         assert ARCHIVED_AND_DEPRECATED_NODES_EXCLUDED_POLICY
 
     def test_policy_unhealthy(self) -> None:
         from core.node_governance_runtime import UNHEALTHY_NODES_EXCLUDED_FROM_CANONICAL_PATH_POLICY
+
         assert UNHEALTHY_NODES_EXCLUDED_FROM_CANONICAL_PATH_POLICY
 
     def test_policy_readiness_gap(self) -> None:
         from core.node_governance_runtime import READINESS_GAP_NODES_EXCLUDED_POLICY
+
         assert READINESS_GAP_NODES_EXCLUDED_POLICY
 
     def test_policy_diagnosable(self) -> None:
         from core.node_governance_runtime import GOVERNANCE_EXCLUSION_IS_DIAGNOSABLE_POLICY
+
         assert GOVERNANCE_EXCLUSION_IS_DIAGNOSABLE_POLICY
 
     def test_policy_fallback_non_canonical(self) -> None:
         from core.node_governance_runtime import COMPATIBILITY_FALLBACK_IS_NON_CANONICAL_POLICY
+
         assert COMPATIBILITY_FALLBACK_IS_NON_CANONICAL_POLICY
 
 
@@ -187,6 +197,7 @@ class TestNodeGovernanceEligibilityDecision:
 
     def test_eligible_decision(self) -> None:
         from core.node_governance_runtime import NodeGovernanceEligibilityDecision
+
         d = NodeGovernanceEligibilityDecision(
             node_id="test-01",
             eligible=True,
@@ -197,9 +208,10 @@ class TestNodeGovernanceEligibilityDecision:
 
     def test_excluded_decision(self) -> None:
         from core.node_governance_runtime import (
-            NodeGovernanceEligibilityDecision,
             REASON_ARCHIVED,
+            NodeGovernanceEligibilityDecision,
         )
+
         d = NodeGovernanceEligibilityDecision(
             node_id="archived-01",
             eligible=False,
@@ -211,6 +223,7 @@ class TestNodeGovernanceEligibilityDecision:
 
     def test_to_dict_fields(self) -> None:
         from core.node_governance_runtime import NodeGovernanceEligibilityDecision
+
         d = NodeGovernanceEligibilityDecision(
             node_id="x-01",
             eligible=True,
@@ -228,17 +241,17 @@ class TestNodeGovernanceEligibilityDecision:
 
     def test_repr_eligible(self) -> None:
         from core.node_governance_runtime import NodeGovernanceEligibilityDecision
+
         d = NodeGovernanceEligibilityDecision(node_id="n-01", eligible=True)
         assert "ELIGIBLE" in repr(d)
 
     def test_repr_excluded(self) -> None:
         from core.node_governance_runtime import (
-            NodeGovernanceEligibilityDecision,
             REASON_UNHEALTHY,
+            NodeGovernanceEligibilityDecision,
         )
-        d = NodeGovernanceEligibilityDecision(
-            node_id="n-02", eligible=False, exclusion_reasons=[REASON_UNHEALTHY]
-        )
+
+        d = NodeGovernanceEligibilityDecision(node_id="n-02", eligible=False, exclusion_reasons=[REASON_UNHEALTHY])
         assert "EXCLUDED" in repr(d)
         assert "unhealthy" in repr(d)
 
@@ -257,6 +270,7 @@ class TestArchitecturalClassRules:
     def test_capability_node_healthy_is_eligible(self) -> None:
         from core.node_governance_runtime import evaluate_node_governance_eligibility
         from core.nodes.node_fabric_registry import NodeArchitecturalClass
+
         node = _make_node("cap-01", NodeArchitecturalClass.CAPABILITY_NODE, healthy=True)
         decision = evaluate_node_governance_eligibility(node)
         assert decision.eligible is True
@@ -264,10 +278,11 @@ class TestArchitecturalClassRules:
 
     def test_archived_node_is_excluded(self) -> None:
         from core.node_governance_runtime import (
-            evaluate_node_governance_eligibility,
             REASON_ARCHIVED,
+            evaluate_node_governance_eligibility,
         )
         from core.nodes.node_fabric_registry import NodeArchitecturalClass
+
         node = _make_node("arc-01", NodeArchitecturalClass.ARCHIVED_NODE, healthy=True)
         decision = evaluate_node_governance_eligibility(node)
         assert decision.eligible is False
@@ -275,10 +290,11 @@ class TestArchitecturalClassRules:
 
     def test_service_node_is_excluded(self) -> None:
         from core.node_governance_runtime import (
-            evaluate_node_governance_eligibility,
             REASON_NON_CAPABILITY_CLASS,
+            evaluate_node_governance_eligibility,
         )
         from core.nodes.node_fabric_registry import NodeArchitecturalClass
+
         node = _make_node("svc-01", NodeArchitecturalClass.SERVICE_NODE, healthy=True)
         decision = evaluate_node_governance_eligibility(node)
         assert decision.eligible is False
@@ -286,10 +302,11 @@ class TestArchitecturalClassRules:
 
     def test_legacy_orchestrator_node_is_excluded(self) -> None:
         from core.node_governance_runtime import (
-            evaluate_node_governance_eligibility,
             REASON_NON_CAPABILITY_CLASS,
+            evaluate_node_governance_eligibility,
         )
         from core.nodes.node_fabric_registry import NodeArchitecturalClass
+
         node = _make_node("leg-01", NodeArchitecturalClass.LEGACY_ORCHESTRATOR_NODE, healthy=True)
         decision = evaluate_node_governance_eligibility(node)
         assert decision.eligible is False
@@ -297,10 +314,11 @@ class TestArchitecturalClassRules:
 
     def test_experimental_node_is_excluded(self) -> None:
         from core.node_governance_runtime import (
-            evaluate_node_governance_eligibility,
             REASON_NON_CAPABILITY_CLASS,
+            evaluate_node_governance_eligibility,
         )
         from core.nodes.node_fabric_registry import NodeArchitecturalClass
+
         node = _make_node("exp-01", NodeArchitecturalClass.EXPERIMENTAL_NODE, healthy=True)
         decision = evaluate_node_governance_eligibility(node)
         assert decision.eligible is False
@@ -320,10 +338,11 @@ class TestHealthRules:
 
     def test_capability_node_unhealthy_is_excluded(self) -> None:
         from core.node_governance_runtime import (
-            evaluate_node_governance_eligibility,
             REASON_UNHEALTHY,
+            evaluate_node_governance_eligibility,
         )
         from core.nodes.node_fabric_registry import NodeArchitecturalClass
+
         node = _make_node("cap-unhealthy", NodeArchitecturalClass.CAPABILITY_NODE, healthy=False)
         decision = evaluate_node_governance_eligibility(node)
         assert decision.eligible is False
@@ -332,6 +351,7 @@ class TestHealthRules:
     def test_capability_node_healthy_is_eligible(self) -> None:
         from core.node_governance_runtime import evaluate_node_governance_eligibility
         from core.nodes.node_fabric_registry import NodeArchitecturalClass
+
         node = _make_node("cap-healthy", NodeArchitecturalClass.CAPABILITY_NODE, healthy=True)
         decision = evaluate_node_governance_eligibility(node)
         assert decision.eligible is True
@@ -339,6 +359,7 @@ class TestHealthRules:
     def test_diagnostic_context_includes_is_healthy(self) -> None:
         from core.node_governance_runtime import evaluate_node_governance_eligibility
         from core.nodes.node_fabric_registry import NodeArchitecturalClass
+
         node = _make_node("cap-h2", NodeArchitecturalClass.CAPABILITY_NODE, healthy=True)
         decision = evaluate_node_governance_eligibility(node)
         assert "is_healthy" in decision.diagnostic_context
@@ -358,10 +379,11 @@ class TestLifecycleStageRules:
 
     def test_deprecated_stage_is_excluded(self) -> None:
         from core.node_governance_runtime import (
-            evaluate_node_governance_eligibility,
             REASON_DEPRECATED,
+            evaluate_node_governance_eligibility,
         )
         from core.nodes.node_fabric_registry import NodeArchitecturalClass
+
         node = _make_node("cap-dep", NodeArchitecturalClass.CAPABILITY_NODE, healthy=True)
         gov_record = _make_governor_record("deprecated")
         decision = evaluate_node_governance_eligibility(node, governor_record=gov_record)
@@ -371,10 +393,11 @@ class TestLifecycleStageRules:
 
     def test_registered_stage_is_excluded_readiness_gap(self) -> None:
         from core.node_governance_runtime import (
-            evaluate_node_governance_eligibility,
             REASON_READINESS_GAP,
+            evaluate_node_governance_eligibility,
         )
         from core.nodes.node_fabric_registry import NodeArchitecturalClass
+
         node = _make_node("cap-reg", NodeArchitecturalClass.CAPABILITY_NODE, healthy=True)
         gov_record = _make_governor_record("registered")
         decision = evaluate_node_governance_eligibility(node, governor_record=gov_record)
@@ -384,6 +407,7 @@ class TestLifecycleStageRules:
     def test_active_stage_is_eligible(self) -> None:
         from core.node_governance_runtime import evaluate_node_governance_eligibility
         from core.nodes.node_fabric_registry import NodeArchitecturalClass
+
         node = _make_node("cap-act", NodeArchitecturalClass.CAPABILITY_NODE, healthy=True)
         gov_record = _make_governor_record("active")
         decision = evaluate_node_governance_eligibility(node, governor_record=gov_record)
@@ -394,6 +418,7 @@ class TestLifecycleStageRules:
     def test_capability_registered_stage_is_eligible(self) -> None:
         from core.node_governance_runtime import evaluate_node_governance_eligibility
         from core.nodes.node_fabric_registry import NodeArchitecturalClass
+
         node = _make_node("cap-capreg", NodeArchitecturalClass.CAPABILITY_NODE, healthy=True)
         gov_record = _make_governor_record("capability_registered")
         decision = evaluate_node_governance_eligibility(node, governor_record=gov_record)
@@ -402,6 +427,7 @@ class TestLifecycleStageRules:
     def test_optional_stage_is_eligible(self) -> None:
         from core.node_governance_runtime import evaluate_node_governance_eligibility
         from core.nodes.node_fabric_registry import NodeArchitecturalClass
+
         node = _make_node("cap-opt", NodeArchitecturalClass.CAPABILITY_NODE, healthy=True)
         gov_record = _make_governor_record("optional")
         decision = evaluate_node_governance_eligibility(node, governor_record=gov_record)
@@ -411,6 +437,7 @@ class TestLifecycleStageRules:
         """Without a governor record, only arch-class + health rules apply."""
         from core.node_governance_runtime import evaluate_node_governance_eligibility
         from core.nodes.node_fabric_registry import NodeArchitecturalClass
+
         node = _make_node("cap-nrec", NodeArchitecturalClass.CAPABILITY_NODE, healthy=True)
         decision = evaluate_node_governance_eligibility(node, governor_record=None)
         assert decision.eligible is True
@@ -419,6 +446,7 @@ class TestLifecycleStageRules:
     def test_diagnostic_context_includes_lifecycle_rule(self) -> None:
         from core.node_governance_runtime import evaluate_node_governance_eligibility
         from core.nodes.node_fabric_registry import NodeArchitecturalClass
+
         node = _make_node("cap-diag", NodeArchitecturalClass.CAPABILITY_NODE, healthy=True)
         gov_record = _make_governor_record("active")
         decision = evaluate_node_governance_eligibility(node, governor_record=gov_record)
@@ -439,11 +467,12 @@ class TestMultiReasonExclusion:
 
     def test_archived_plus_unhealthy(self) -> None:
         from core.node_governance_runtime import (
-            evaluate_node_governance_eligibility,
             REASON_ARCHIVED,
             REASON_UNHEALTHY,
+            evaluate_node_governance_eligibility,
         )
         from core.nodes.node_fabric_registry import NodeArchitecturalClass
+
         node = _make_node("arc-unhealthy", NodeArchitecturalClass.ARCHIVED_NODE, healthy=False)
         decision = evaluate_node_governance_eligibility(node)
         assert decision.eligible is False
@@ -453,11 +482,12 @@ class TestMultiReasonExclusion:
 
     def test_non_capability_plus_unhealthy(self) -> None:
         from core.node_governance_runtime import (
-            evaluate_node_governance_eligibility,
             REASON_NON_CAPABILITY_CLASS,
             REASON_UNHEALTHY,
+            evaluate_node_governance_eligibility,
         )
         from core.nodes.node_fabric_registry import NodeArchitecturalClass
+
         node = _make_node("svc-unhealthy", NodeArchitecturalClass.SERVICE_NODE, healthy=False)
         decision = evaluate_node_governance_eligibility(node)
         assert decision.eligible is False
@@ -479,6 +509,7 @@ class TestGetGovernanceEligibleNodes:
     def test_filters_out_non_eligible(self) -> None:
         from core.node_governance_runtime import get_governance_eligible_nodes
         from core.nodes.node_fabric_registry import NodeArchitecturalClass
+
         nodes = [
             _make_node("cap-a", NodeArchitecturalClass.CAPABILITY_NODE, healthy=True),
             _make_node("arc-b", NodeArchitecturalClass.ARCHIVED_NODE, healthy=True),
@@ -496,11 +527,13 @@ class TestGetGovernanceEligibleNodes:
 
     def test_empty_input(self) -> None:
         from core.node_governance_runtime import get_governance_eligible_nodes
+
         assert get_governance_eligible_nodes([]) == []
 
     def test_all_eligible(self) -> None:
         from core.node_governance_runtime import get_governance_eligible_nodes
         from core.nodes.node_fabric_registry import NodeArchitecturalClass
+
         nodes = [
             _make_node("cap-x", NodeArchitecturalClass.CAPABILITY_NODE, healthy=True),
             _make_node("cap-y", NodeArchitecturalClass.CAPABILITY_NODE, healthy=True),
@@ -510,8 +543,8 @@ class TestGetGovernanceEligibleNodes:
 
     def test_with_governor_filters_deprecated(self) -> None:
         from core.node_governance_runtime import get_governance_eligible_nodes
-        from core.nodes.node_fabric_registry import NodeArchitecturalClass
         from core.node_lifecycle_governor import NodeGovernanceRecord, NodeLifecycleStage
+        from core.nodes.node_fabric_registry import NodeArchitecturalClass
 
         node = _make_node("cap-dep-bulk", NodeArchitecturalClass.CAPABILITY_NODE, healthy=True)
 
@@ -540,6 +573,7 @@ class TestBuildGovernanceExclusionReport:
     def test_report_structure(self) -> None:
         from core.node_governance_runtime import build_governance_exclusion_report
         from core.nodes.node_fabric_registry import NodeArchitecturalClass
+
         nodes = [
             _make_node("cap-r1", NodeArchitecturalClass.CAPABILITY_NODE, healthy=True),
             _make_node("arc-r2", NodeArchitecturalClass.ARCHIVED_NODE, healthy=True),
@@ -557,6 +591,7 @@ class TestBuildGovernanceExclusionReport:
     def test_report_counts(self) -> None:
         from core.node_governance_runtime import build_governance_exclusion_report
         from core.nodes.node_fabric_registry import NodeArchitecturalClass
+
         nodes = [
             _make_node("cap-c1", NodeArchitecturalClass.CAPABILITY_NODE, healthy=True),
             _make_node("cap-c2", NodeArchitecturalClass.CAPABILITY_NODE, healthy=True),
@@ -570,10 +605,11 @@ class TestBuildGovernanceExclusionReport:
 
     def test_exclusion_summary_keys(self) -> None:
         from core.node_governance_runtime import (
-            build_governance_exclusion_report,
             REASON_ARCHIVED,
+            build_governance_exclusion_report,
         )
         from core.nodes.node_fabric_registry import NodeArchitecturalClass
+
         nodes = [
             _make_node("arc-s1", NodeArchitecturalClass.ARCHIVED_NODE, healthy=True),
             _make_node("arc-s2", NodeArchitecturalClass.ARCHIVED_NODE, healthy=True),
@@ -584,6 +620,7 @@ class TestBuildGovernanceExclusionReport:
     def test_excluded_nodes_entry_format(self) -> None:
         from core.node_governance_runtime import build_governance_exclusion_report
         from core.nodes.node_fabric_registry import NodeArchitecturalClass
+
         nodes = [
             _make_node("arc-fmt", NodeArchitecturalClass.ARCHIVED_NODE, healthy=True),
         ]
@@ -596,6 +633,7 @@ class TestBuildGovernanceExclusionReport:
 
     def test_empty_nodes(self) -> None:
         from core.node_governance_runtime import build_governance_exclusion_report
+
         report = build_governance_exclusion_report([])
         assert report["total"] == 0
         assert report["eligible_count"] == 0
@@ -620,9 +658,10 @@ class TestSyncCapabilitiesGovernanceIntegration:
     def test_capability_node_synced(self) -> None:
         """A CAPABILITY_NODE + healthy node is synced to CapabilityRegistry."""
         from core.nodes.node_fabric_registry import (
-            NodeFabricRegistry,
             NodeArchitecturalClass,
+            NodeFabricRegistry,
         )
+
         fab = NodeFabricRegistry()
         fab.register(_make_node("sync-cap", NodeArchitecturalClass.CAPABILITY_NODE, ["run"]))
         count = fab.sync_capabilities_to_registry()
@@ -635,9 +674,10 @@ class TestSyncCapabilitiesGovernanceIntegration:
     def test_archived_node_not_synced(self) -> None:
         """An ARCHIVED_NODE is excluded by governance and not synced."""
         from core.nodes.node_fabric_registry import (
-            NodeFabricRegistry,
             NodeArchitecturalClass,
+            NodeFabricRegistry,
         )
+
         fab = NodeFabricRegistry()
         fab.register(_make_node("sync-arc", NodeArchitecturalClass.ARCHIVED_NODE, ["old"]))
         count = fab.sync_capabilities_to_registry()
@@ -650,13 +690,12 @@ class TestSyncCapabilitiesGovernanceIntegration:
     def test_unhealthy_capability_node_not_synced(self) -> None:
         """An unhealthy CAPABILITY_NODE is excluded by governance and not synced."""
         from core.nodes.node_fabric_registry import (
-            NodeFabricRegistry,
             NodeArchitecturalClass,
+            NodeFabricRegistry,
         )
+
         fab = NodeFabricRegistry()
-        fab.register(
-            _make_node("sync-unhealthy", NodeArchitecturalClass.CAPABILITY_NODE, ["do"], healthy=False)
-        )
+        fab.register(_make_node("sync-unhealthy", NodeArchitecturalClass.CAPABILITY_NODE, ["do"], healthy=False))
         count = fab.sync_capabilities_to_registry()
         assert count == 0
 
@@ -668,9 +707,10 @@ class TestSyncCapabilitiesGovernanceIntegration:
             pytest.skip("CapabilityRegistry not available")
 
         from core.nodes.node_fabric_registry import (
-            NodeFabricRegistry,
             NodeArchitecturalClass,
+            NodeFabricRegistry,
         )
+
         fab = NodeFabricRegistry()
         fab.register(_make_node("gov-meta", NodeArchitecturalClass.CAPABILITY_NODE, ["ping"]))
         count = fab.sync_capabilities_to_registry()

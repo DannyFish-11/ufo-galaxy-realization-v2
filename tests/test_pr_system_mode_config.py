@@ -55,10 +55,10 @@ from core.system_mode import (  # noqa: E402
     resolve_fabric_config,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _cfg(**kwargs) -> FabricConfig:
     """Build a FabricConfig from a subset of env vars."""
@@ -68,6 +68,7 @@ def _cfg(**kwargs) -> FabricConfig:
 # ===========================================================================
 # 1. SystemMode enum values
 # ===========================================================================
+
 
 class TestSystemModeEnum:
     def test_desktop_local_value(self):
@@ -83,6 +84,7 @@ class TestSystemModeEnum:
 # ===========================================================================
 # 2. NetworkMode enum values
 # ===========================================================================
+
 
 class TestNetworkModeEnum:
     def test_local(self):
@@ -101,6 +103,7 @@ class TestNetworkModeEnum:
 # ===========================================================================
 # 3. Default config (no env vars)
 # ===========================================================================
+
 
 class TestDefaultConfig:
     def test_mode_is_desktop_local(self):
@@ -148,6 +151,7 @@ class TestDefaultConfig:
 # 4. desktop-cross-device via GALAXY_SYSTEM_MODE
 # ===========================================================================
 
+
 class TestCrossDeviceMode:
     def test_mode_resolved(self):
         cfg = _cfg(GALAXY_SYSTEM_MODE="desktop-cross-device")
@@ -180,6 +184,7 @@ class TestCrossDeviceMode:
 # ===========================================================================
 # 5. Mode inference from GALAXY_CROSS_DEVICE_ENABLED
 # ===========================================================================
+
 
 class TestModeInference:
     def test_true_implies_cross_device(self):
@@ -215,6 +220,7 @@ class TestModeInference:
 # 6. Unknown GALAXY_SYSTEM_MODE falls back to desktop-local
 # ===========================================================================
 
+
 class TestUnknownMode:
     def test_unknown_value_falls_back(self):
         cfg = _cfg(GALAXY_SYSTEM_MODE="unknown-mode")
@@ -224,6 +230,7 @@ class TestUnknownMode:
 # ===========================================================================
 # 7. GALAXY_NATS_ENABLED explicit override
 # ===========================================================================
+
 
 class TestNatsEnabledOverride:
     def test_explicit_true_in_local_mode(self):
@@ -250,6 +257,7 @@ class TestNatsEnabledOverride:
 # 8. GALAXY_NATS_URL implicitly enables NATS
 # ===========================================================================
 
+
 class TestNatsUrlImplicit:
     def test_nats_url_enables_nats(self):
         cfg = _cfg(GALAXY_NATS_URL="nats://10.0.0.5:4222")
@@ -268,6 +276,7 @@ class TestNatsUrlImplicit:
 # 9–10. GALAXY_FABRIC_STRICT
 # ===========================================================================
 
+
 class TestFabricStrict:
     def test_strict_true_and_nats_enabled_makes_required(self):
         cfg = _cfg(GALAXY_NATS_ENABLED="true", GALAXY_FABRIC_STRICT="true")
@@ -285,6 +294,7 @@ class TestFabricStrict:
 # ===========================================================================
 # 11–12. GALAXY_NETWORK_MODE
 # ===========================================================================
+
 
 class TestNetworkMode:
     def test_lan(self):
@@ -312,6 +322,7 @@ class TestNetworkMode:
 # 13–14. Transport priority
 # ===========================================================================
 
+
 class TestTransportPriority:
     def test_custom_value(self):
         cfg = _cfg(GALAXY_TRANSPORT_PRIORITY="tailscale,intranet,relay")
@@ -337,6 +348,7 @@ class TestTransportPriority:
 # 15–16. Tailscale
 # ===========================================================================
 
+
 class TestTailscale:
     def test_tailscale_enabled_true(self):
         cfg = _cfg(GALAXY_TAILSCALE_ENABLED="true")
@@ -359,6 +371,7 @@ class TestTailscale:
 # 17. FabricConfig convenience helpers
 # ===========================================================================
 
+
 class TestFabricConfigHelpers:
     def test_is_desktop_local_true(self):
         cfg = _cfg()
@@ -375,14 +388,22 @@ class TestFabricConfigHelpers:
 # 18. FabricConfig.as_dict()
 # ===========================================================================
 
+
 class TestAsDictMethod:
     def test_all_keys_present(self):
         cfg = _cfg()
         d = cfg.as_dict()
         expected_keys = {
-            "mode", "nats_enabled", "nats_url", "nats_required",
-            "fabric_strict", "network_mode", "cross_device_enabled",
-            "tailscale_enabled", "tailscale_host", "transport_priority",
+            "mode",
+            "nats_enabled",
+            "nats_url",
+            "nats_required",
+            "fabric_strict",
+            "network_mode",
+            "cross_device_enabled",
+            "tailscale_enabled",
+            "tailscale_host",
+            "transport_priority",
         }
         assert expected_keys == set(d.keys())
 
@@ -403,6 +424,7 @@ class TestAsDictMethod:
 # 19–20. Module-level exports
 # ===========================================================================
 
+
 class TestModuleExports:
     def test_fabric_config_singleton(self):
         assert isinstance(FABRIC_CONFIG, FabricConfig)
@@ -418,6 +440,7 @@ class TestModuleExports:
 # ===========================================================================
 # 21–22. cross_device_enabled derivation
 # ===========================================================================
+
 
 class TestCrossDeviceEnabledDerivation:
     def test_derived_false_in_local_mode(self):
@@ -450,14 +473,16 @@ class TestCrossDeviceEnabledDerivation:
 # 23–25. /health/nats endpoint mode-aware response
 # ===========================================================================
 
+
 class TestNatsHealthEndpoint:
     """Tests for the observability /health/nats endpoint mode fix."""
 
     def _call_nats_health_with_env(self, env_overrides: dict) -> dict:
         """Patch env vars, build a minimal app, and call GET /health/nats."""
-        from fastapi.testclient import TestClient
-        from fastapi import FastAPI
         import os
+
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
 
         original_env = dict(os.environ)
         try:
@@ -472,6 +497,7 @@ class TestNatsHealthEndpoint:
             # Build a minimal app with the observability router
             app = FastAPI()
             from core.routes.observability import create_router
+
             mock_bus_stats = {"connected": False, "noop_mode": True, "published": 0}
             mock_nats_bus = MagicMock()
             mock_nats_bus.get_stats.return_value = mock_bus_stats
@@ -487,41 +513,50 @@ class TestNatsHealthEndpoint:
             os.environ.update(original_env)
 
     def test_required_false_in_desktop_local(self):
-        result = self._call_nats_health_with_env({
-            "GALAXY_SYSTEM_MODE": "desktop-local",
-            "GALAXY_FABRIC_STRICT": "false",
-            "GALAXY_NATS_ENABLED": "false",
-        })
+        result = self._call_nats_health_with_env(
+            {
+                "GALAXY_SYSTEM_MODE": "desktop-local",
+                "GALAXY_FABRIC_STRICT": "false",
+                "GALAXY_NATS_ENABLED": "false",
+            }
+        )
         assert result["required"] is False
         assert result["posture"] == "development-allowed-degraded"
         assert result["assertion_ok"] is True
 
     def test_required_true_in_cross_device_strict(self):
-        result = self._call_nats_health_with_env({
-            "GALAXY_SYSTEM_MODE": "desktop-cross-device",
-            "GALAXY_FABRIC_STRICT": "true",
-            "GALAXY_NATS_ENABLED": "true",
-        })
+        result = self._call_nats_health_with_env(
+            {
+                "GALAXY_SYSTEM_MODE": "desktop-cross-device",
+                "GALAXY_FABRIC_STRICT": "true",
+                "GALAXY_NATS_ENABLED": "true",
+            }
+        )
         assert result["required"] is True
         assert result["posture"] == "production-required"
         assert result["assertion_ok"] is False
 
     def test_system_mode_field_present(self):
-        result = self._call_nats_health_with_env({
-            "GALAXY_SYSTEM_MODE": "desktop-local",
-        })
+        result = self._call_nats_health_with_env(
+            {
+                "GALAXY_SYSTEM_MODE": "desktop-local",
+            }
+        )
         assert "system_mode" in result
 
     def test_system_mode_value_desktop_local(self):
-        result = self._call_nats_health_with_env({
-            "GALAXY_SYSTEM_MODE": "desktop-local",
-        })
+        result = self._call_nats_health_with_env(
+            {
+                "GALAXY_SYSTEM_MODE": "desktop-local",
+            }
+        )
         assert result["system_mode"] == "desktop-local"
 
 
 # ===========================================================================
 # 26. GET /api/v1/system/mode-status endpoint (Axis-6)
 # ===========================================================================
+
 
 class TestModeStatusEndpoint:
     """Verify GET /api/v1/system/mode-status exposes the canonical mode state.
@@ -533,8 +568,10 @@ class TestModeStatusEndpoint:
 
     def _call_mode_status_with_env(self, env_overrides: dict) -> dict:
         import os
+
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
+
         from core.routes.system import create_router
 
         original_env = os.environ.copy()
@@ -586,33 +623,41 @@ class TestModeStatusEndpoint:
 
     def test_26_07_cross_device_disabled_in_local_mode(self):
         """cross_device_enabled=False in desktop-local mode."""
-        result = self._call_mode_status_with_env({
-            "GALAXY_SYSTEM_MODE": "desktop-local",
-            "GALAXY_CROSS_DEVICE_ENABLED": "0",
-        })
+        result = self._call_mode_status_with_env(
+            {
+                "GALAXY_SYSTEM_MODE": "desktop-local",
+                "GALAXY_CROSS_DEVICE_ENABLED": "0",
+            }
+        )
         assert result["cross_device_enabled"] is False
 
     def test_26_08_takeover_not_available_when_cross_device_off(self):
         """takeover_available=False when cross-device is disabled."""
-        result = self._call_mode_status_with_env({
-            "GALAXY_SYSTEM_MODE": "desktop-local",
-            "GALAXY_CROSS_DEVICE_ENABLED": "0",
-        })
+        result = self._call_mode_status_with_env(
+            {
+                "GALAXY_SYSTEM_MODE": "desktop-local",
+                "GALAXY_CROSS_DEVICE_ENABLED": "0",
+            }
+        )
         assert result["takeover_available"] is False
 
     def test_26_09_cross_device_mode_reflected(self):
         """desktop-cross-device mode is reflected in mode and cross_device_enabled."""
-        result = self._call_mode_status_with_env({
-            "GALAXY_SYSTEM_MODE": "desktop-cross-device",
-        })
+        result = self._call_mode_status_with_env(
+            {
+                "GALAXY_SYSTEM_MODE": "desktop-cross-device",
+            }
+        )
         assert result["mode"] == "desktop-cross-device"
         assert result["cross_device_enabled"] is True
 
     def test_26_10_takeover_available_in_cross_device_mode(self):
         """takeover_available=True when system is in cross-device mode."""
-        result = self._call_mode_status_with_env({
-            "GALAXY_SYSTEM_MODE": "desktop-cross-device",
-        })
+        result = self._call_mode_status_with_env(
+            {
+                "GALAXY_SYSTEM_MODE": "desktop-cross-device",
+            }
+        )
         assert result["takeover_available"] is True
 
     def test_26_11_android_devices_online_field_present(self):

@@ -53,23 +53,23 @@ import time
 import pytest
 
 from core.hybrid_execution_policy import (
-    HYBRID_EXECUTION_POLICY_IS_AUTHORITY,
-    SEQUENTIAL_DEGRADE_IS_EXPLICIT_POLICY,
-    PARALLEL_RACE_IS_REAL_HYBRID_POLICY,
     DECISION_IS_SERIALISABLE_POLICY,
+    HYBRID_EXECUTION_POLICY_IS_AUTHORITY,
     HYBRID_EXECUTION_POLICY_PR5_SENTINEL,
-    HybridExecutionMode,
+    PARALLEL_RACE_IS_REAL_HYBRID_POLICY,
+    SEQUENTIAL_DEGRADE_IS_EXPLICIT_POLICY,
     HybridExecutionDecision,
+    HybridExecutionMode,
     HybridExecutionPolicy,
     evaluate_hybrid_execution_mode,
     get_hybrid_execution_policy,
     reset_hybrid_execution_policy,
 )
 
-
 # ---------------------------------------------------------------------------
 # A — Sentinels
 # ---------------------------------------------------------------------------
+
 
 class TestSentinels:
     def test_authority_sentinel(self):
@@ -78,13 +78,17 @@ class TestSentinels:
 
     def test_sequential_degrade_policy_sentinel(self):
         assert isinstance(SEQUENTIAL_DEGRADE_IS_EXPLICIT_POLICY, str)
-        assert "sequential_degrade" in SEQUENTIAL_DEGRADE_IS_EXPLICIT_POLICY.lower() \
+        assert (
+            "sequential_degrade" in SEQUENTIAL_DEGRADE_IS_EXPLICIT_POLICY.lower()
             or "SEQUENTIAL" in SEQUENTIAL_DEGRADE_IS_EXPLICIT_POLICY
+        )
 
     def test_parallel_race_policy_sentinel(self):
         assert isinstance(PARALLEL_RACE_IS_REAL_HYBRID_POLICY, str)
-        assert "parallel_race" in PARALLEL_RACE_IS_REAL_HYBRID_POLICY.lower() \
+        assert (
+            "parallel_race" in PARALLEL_RACE_IS_REAL_HYBRID_POLICY.lower()
             or "PARALLEL" in PARALLEL_RACE_IS_REAL_HYBRID_POLICY
+        )
 
     def test_serialisable_policy_sentinel(self):
         assert isinstance(DECISION_IS_SERIALISABLE_POLICY, str)
@@ -97,6 +101,7 @@ class TestSentinels:
 # ---------------------------------------------------------------------------
 # B–G — HybridExecutionMode
 # ---------------------------------------------------------------------------
+
 
 class TestHybridExecutionMode:
     def test_all_five_modes_present(self):
@@ -137,6 +142,7 @@ class TestHybridExecutionMode:
 # ---------------------------------------------------------------------------
 # H–L — HybridExecutionDecision
 # ---------------------------------------------------------------------------
+
 
 class TestHybridExecutionDecision:
     def test_construction(self):
@@ -196,6 +202,7 @@ class TestHybridExecutionDecision:
 # ---------------------------------------------------------------------------
 # M–V — HybridExecutionPolicy.evaluate
 # ---------------------------------------------------------------------------
+
 
 class TestHybridExecutionPolicyEvaluate:
     def setup_method(self):
@@ -274,6 +281,7 @@ class TestHybridExecutionPolicyEvaluate:
 # W — describe_mode
 # ---------------------------------------------------------------------------
 
+
 class TestDescribeMode:
     def test_all_modes_described(self):
         policy = HybridExecutionPolicy()
@@ -286,6 +294,7 @@ class TestDescribeMode:
 # ---------------------------------------------------------------------------
 # X–AF — miscellaneous
 # ---------------------------------------------------------------------------
+
 
 class TestMiscellaneous:
     def test_decision_id_is_unique(self):
@@ -324,6 +333,7 @@ class TestMiscellaneous:
     def test_context_snapshot_excludes_non_serialisable(self):
         class _NonSerializable:
             pass
+
         ctx = {"app_id": "com.test", "bad_key": _NonSerializable(), "has_a2a": True}
         dec = evaluate_hybrid_execution_mode(ctx)
         assert "bad_key" not in dec.context_snapshot
@@ -349,5 +359,4 @@ class TestMiscellaneous:
         assert dec.mode == HybridExecutionMode.sequential_degrade
 
     def test_pr5_sentinel_value(self):
-        assert "pr5" in HYBRID_EXECUTION_POLICY_PR5_SENTINEL.lower() \
-            or "PR5" in HYBRID_EXECUTION_POLICY_PR5_SENTINEL
+        assert "pr5" in HYBRID_EXECUTION_POLICY_PR5_SENTINEL.lower() or "PR5" in HYBRID_EXECUTION_POLICY_PR5_SENTINEL

@@ -24,6 +24,7 @@ Test groups
   Q) SkillResponse.to_dict() round-trip
   R) openclawd._dispatch_tool_call skill__ path routes through registry
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -50,7 +51,6 @@ from core.skill_registry import (
     get_skill_registry,
     reset_skill_registry,
 )
-
 
 # ===========================================================================
 # Helpers
@@ -556,9 +556,7 @@ class TestSkillRegistrySingleton:
 
 class TestSkillResponseToDict:
     def test_failure_to_dict_includes_errors(self):
-        resp = SkillResponse.failure(
-            "s", "tid", SkillErrorCode.EXECUTION_ERROR, "boom"
-        )
+        resp = SkillResponse.failure("s", "tid", SkillErrorCode.EXECUTION_ERROR, "boom")
         d = resp.to_dict()
         assert d["status"] == "failure"
         assert len(d["errors"]) == 1
@@ -609,6 +607,7 @@ class TestOpenClawdSkillDispatchRouting:
 
         # Build a minimal OpenClawd-like object with _dispatch_tool_call
         from core.openclawd import OpenClawd
+
         oc = OpenClawd.__new__(OpenClawd)
         # Minimal required state
         oc._tool_permission_checker = None
@@ -636,6 +635,7 @@ class TestOpenClawdSkillDispatchRouting:
             mock_sl.execute = mock_execute
 
             from core.openclawd import OpenClawd
+
             oc = OpenClawd.__new__(OpenClawd)
             oc._tool_permission_checker = None
 

@@ -105,11 +105,13 @@ _MANIFEST_SAMPLE: Dict[str, Any] = {
 # StateSpaceMapper tests
 # ---------------------------------------------------------------------------
 
+
 class TestStateSpaceMapper:
     """Tests for StateSpaceMapper.map()."""
 
     def setup_method(self):
         from desktop_projection.state_space_mapper import StateSpaceMapper
+
         self.mapper = StateSpaceMapper()
 
     def test_silent_minimal_depth(self):
@@ -205,9 +207,11 @@ class TestStateSpaceMapper:
 
     def test_accepts_object_with_to_dict(self):
         """Mapper should work with any object that has a .to_dict() method."""
+
         class FakeProjection:
             def to_dict(self):
                 return _LIMINAL_SAMPLE
+
         state = self.mapper.map(FakeProjection())
         assert state.source_phase == "liminal"
 
@@ -239,12 +243,14 @@ class TestStateSpaceMapper:
 # TransitionAnimator tests
 # ---------------------------------------------------------------------------
 
+
 class TestTransitionAnimator:
     """Tests for TransitionAnimator."""
 
     def setup_method(self):
-        from desktop_projection.transition_animator import TransitionAnimator, EasingCurve, TransitionPhase
-        from desktop_projection.state_space_mapper import StateSpaceMapper, LiminalSpaceState
+        from desktop_projection.state_space_mapper import LiminalSpaceState, StateSpaceMapper
+        from desktop_projection.transition_animator import EasingCurve, TransitionAnimator, TransitionPhase
+
         self.TransitionAnimator = TransitionAnimator
         self.EasingCurve = EasingCurve
         self.TransitionPhase = TransitionPhase
@@ -295,9 +301,8 @@ class TestTransitionAnimator:
     @pytest.mark.parametrize("curve_name", ["linear", "ease_in_out", "ease_out"])
     def test_easing_monotonically_non_decreasing(self, curve_name):
         """Easing t in [0,1] should always produce non-decreasing output."""
-        from desktop_projection.transition_animator import (
-            _ease_linear, _ease_in_out, _ease_out, EasingCurve
-        )
+        from desktop_projection.transition_animator import EasingCurve, _ease_in_out, _ease_linear, _ease_out
+
         fn_map = {
             "linear": _ease_linear,
             "ease_in_out": _ease_in_out,
@@ -314,11 +319,13 @@ class TestTransitionAnimator:
 
     def test_ease_in_out_boundary_values(self):
         from desktop_projection.transition_animator import _ease_in_out
+
         assert abs(_ease_in_out(0.0) - 0.0) < 1e-9
         assert abs(_ease_in_out(1.0) - 1.0) < 1e-9
 
     def test_ease_out_boundary_values(self):
         from desktop_projection.transition_animator import _ease_out
+
         assert abs(_ease_out(0.0) - 0.0) < 1e-9
         assert abs(_ease_out(1.0) - 1.0) < 1e-9
 
@@ -403,11 +410,13 @@ class TestTransitionAnimator:
 # LiminalSpaceEngine tests
 # ---------------------------------------------------------------------------
 
+
 class TestLiminalSpaceEngine:
     """Tests for LiminalSpaceEngine."""
 
     def setup_method(self):
         from desktop_projection.liminal_space_engine import LiminalSpaceEngine
+
         self.LiminalSpaceEngine = LiminalSpaceEngine
 
     def test_initial_state_is_none(self):
@@ -471,6 +480,7 @@ class TestLiminalSpaceEngine:
 
     def test_render_text_explicit_state(self):
         from desktop_projection.state_space_mapper import StateSpaceMapper
+
         engine = self.LiminalSpaceEngine()
         state = StateSpaceMapper().map(_MANIFEST_SAMPLE)
         text = engine.render_text(state)
@@ -484,6 +494,7 @@ class TestLiminalSpaceEngine:
 
     def test_last_frame_equals_target_state(self):
         from desktop_projection.state_space_mapper import StateSpaceMapper
+
         engine = self.LiminalSpaceEngine(default_steps=15)
         engine.update(_SILENT_MINIMAL)
         frames = engine.update(_MANIFEST_SAMPLE)
@@ -496,11 +507,13 @@ class TestLiminalSpaceEngine:
 # LiminalSurface tests
 # ---------------------------------------------------------------------------
 
+
 class TestLiminalSurface:
     """Tests for the Status Board V2 LiminalSurface adapter."""
 
     def setup_method(self):
         from windows_client.status_board_v2.liminal_surface import LiminalSurface
+
         self.surface = LiminalSurface()
 
     def test_render_returns_string(self):
@@ -528,6 +541,7 @@ class TestLiminalSurface:
     def test_legacy_fallback_still_renders_dimension_bars(self):
         """legacy 兜底路径保留维度条(仅在三部制映射不可用时使用)。"""
         from desktop_projection import StateSpaceMapper
+
         liminal = StateSpaceMapper().map(_LIMINAL_SAMPLE)
         result = self.surface._render_legacy(liminal)
         assert "Depth" in result
@@ -553,12 +567,14 @@ class TestLiminalSurface:
 # Boundary condition tests
 # ---------------------------------------------------------------------------
 
+
 class TestBoundaryConditions:
     """Explicit boundary/extreme value tests."""
 
     def setup_method(self):
         from desktop_projection.state_space_mapper import StateSpaceMapper
         from desktop_projection.transition_animator import TransitionAnimator
+
         self.mapper = StateSpaceMapper()
         self.animator = TransitionAnimator()
 
@@ -611,6 +627,7 @@ class TestBoundaryConditions:
     def test_identity_transition_all_same(self):
         """Same source and target → all frames identical to target."""
         from desktop_projection.state_space_mapper import LiminalSpaceState
+
         state = self.mapper.map(_LIMINAL_SAMPLE)
         frames = list(self.animator.interpolate(state, state, steps=10))
         for frame in frames:

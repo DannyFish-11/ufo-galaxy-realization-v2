@@ -551,9 +551,7 @@ _inv(
             "goal_execution_result.  Permitted only when the upstream gateway "
             "handler cannot guarantee a true delegated_execution_signal message."
         ),
-        canonical_replacement=(
-            "core.android_delegated_signal_ingress.ingest_delegated_execution_signal"
-        ),
+        canonical_replacement=("core.android_delegated_signal_ingress.ingest_delegated_execution_signal"),
         policy=ANDROID_COMPAT_INFLUENCE_MUST_PASS_INGRESS_GATE_POLICY,
         android_compat_influence=True,
         pr_origin="PR-convergence",
@@ -570,9 +568,7 @@ _inv(
             "Permitted as a bounded compat path for the HandoffEnvelopeV2 round-trip.  "
             "Must delegate result binding to the canonical delegated flow entity."
         ),
-        canonical_replacement=(
-            "core.delegated_flow_entity.DelegatedFlowEntity  (result convergence)"
-        ),
+        canonical_replacement=("core.delegated_flow_entity.DelegatedFlowEntity  (result convergence)"),
         policy=ANDROID_COMPAT_INFLUENCE_MUST_PASS_INGRESS_GATE_POLICY,
         android_compat_influence=True,
         pr_origin="PR-convergence",
@@ -653,9 +649,7 @@ _inv(
             "TaskOrchestrator path.  Default-off; canonical ingress is "
             "websocket_handler → DeviceRouter (chain A)."
         ),
-        canonical_replacement=(
-            "galaxy_gateway.websocket_handler → DeviceRouter (chain A)"
-        ),
+        canonical_replacement=("galaxy_gateway.websocket_handler → DeviceRouter (chain A)"),
         policy=DEFAULT_OFF_LEGACY_BEHAVIOR_POLICY,
         pr_origin="PR-convergence",
         notes="Default-off chain-B ingress.  Must not be the default message routing path.",
@@ -717,9 +711,7 @@ _inv(
             "Legacy session migration manager (PR-M).  Bypasses canonical session "
             "axis.  Default-off; use canonical session axis + attached-runtime session layer."
         ),
-        canonical_replacement=(
-            "core.canonical_session_axis  +  core.attached_runtime_session"
-        ),
+        canonical_replacement=("core.canonical_session_axis  +  core.attached_runtime_session"),
         policy=DEFAULT_OFF_LEGACY_BEHAVIOR_POLICY,
         pr_origin="PR-convergence",
         notes="Default-off.  PR-M demotion.",
@@ -753,9 +745,7 @@ _inv(
             "delegated-flow state WITHOUT passing through the participant truth ingress gate.  "
             "This path pattern is fully blocked."
         ),
-        canonical_replacement=(
-            "core.android_participant_truth_ingress.ingest_android_participant_truth_message"
-        ),
+        canonical_replacement=("core.android_participant_truth_ingress.ingest_android_participant_truth_message"),
         policy=ANDROID_COMPAT_INFLUENCE_MUST_PASS_INGRESS_GATE_POLICY,
         android_compat_influence=True,
         pr_origin="PR-convergence",
@@ -921,9 +911,7 @@ def enforce_canonical_selection(
 
     # Determine if enforcement was required (any legacy path would have been
     # an incorrect default choice).
-    enforcement_active = bool(legacy) or (
-        role not in (CanonicalPathRole.canonical, CanonicalPathRole.compat_allowed)
-    )
+    enforcement_active = bool(legacy) or (role not in (CanonicalPathRole.canonical, CanonicalPathRole.compat_allowed))
 
     record = CanonicalSelectionRecord(
         calling_site=calling_site,
@@ -936,8 +924,7 @@ def enforce_canonical_selection(
 
     if enforcement_active:
         logger.info(
-            "CANONICAL_SELECTION_ENFORCED [%s] site=%s selected=%s "
-            "legacy_paths=%s enforcement_active=%s",
+            "CANONICAL_SELECTION_ENFORCED [%s] site=%s selected=%s " "legacy_paths=%s enforcement_active=%s",
             record.record_id,
             calling_site,
             canonical_path_id,
@@ -972,34 +959,19 @@ def build_convergence_audit_snapshot() -> ConvergenceAuditSnapshot:
     """
     inv = CANONICAL_PATH_INVENTORY
 
-    canonical_count = sum(
-        1 for e in inv.values() if e.role == CanonicalPathRole.canonical
-    )
-    compat_allowed_count = sum(
-        1 for e in inv.values() if e.role == CanonicalPathRole.compat_allowed
-    )
-    observation_only_count = sum(
-        1 for e in inv.values() if e.role == CanonicalPathRole.observation_only
-    )
-    deprecated_live_count = sum(
-        1 for e in inv.values() if e.role == CanonicalPathRole.deprecated_live
-    )
-    fully_blocked_count = sum(
-        1 for e in inv.values() if e.role == CanonicalPathRole.fully_blocked
-    )
+    canonical_count = sum(1 for e in inv.values() if e.role == CanonicalPathRole.canonical)
+    compat_allowed_count = sum(1 for e in inv.values() if e.role == CanonicalPathRole.compat_allowed)
+    observation_only_count = sum(1 for e in inv.values() if e.role == CanonicalPathRole.observation_only)
+    deprecated_live_count = sum(1 for e in inv.values() if e.role == CanonicalPathRole.deprecated_live)
+    fully_blocked_count = sum(1 for e in inv.values() if e.role == CanonicalPathRole.fully_blocked)
 
     default_off_paths = [
-        e.path_id for e in inv.values()
+        e.path_id
+        for e in inv.values()
         if e.role in (CanonicalPathRole.deprecated_live, CanonicalPathRole.fully_blocked)
     ]
-    observation_only_paths = [
-        e.path_id for e in inv.values()
-        if e.role == CanonicalPathRole.observation_only
-    ]
-    android_compat_influence_paths = [
-        e.path_id for e in inv.values()
-        if e.android_compat_influence
-    ]
+    observation_only_paths = [e.path_id for e in inv.values() if e.role == CanonicalPathRole.observation_only]
+    android_compat_influence_paths = [e.path_id for e in inv.values() if e.android_compat_influence]
 
     # Healthy when every path has a classification and there is at least one
     # canonical path.

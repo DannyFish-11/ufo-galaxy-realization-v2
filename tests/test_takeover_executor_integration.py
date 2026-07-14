@@ -24,14 +24,14 @@ from __future__ import annotations
 import asyncio
 import uuid
 from typing import Any, Dict
-from unittest.mock import AsyncMock, MagicMock, patch, call
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _run(coro):
     return asyncio.new_event_loop().run_until_complete(coro)
@@ -76,6 +76,7 @@ def _make_reject_msg(
 # M.  send_takeover_request — lifecycle coordinator notified on send
 # ============================================================================
 
+
 class TestSendTakeoverRequestCoordinatorIntegration:
     """Verify send_takeover_request notifies the lifecycle coordinator so
     the outbound request is recorded as a canonical orchestrated lifecycle
@@ -83,6 +84,7 @@ class TestSendTakeoverRequestCoordinatorIntegration:
 
     def _make_bridge(self) -> Any:
         from galaxy_gateway.android_bridge import AndroidBridge
+
         return AndroidBridge()
 
     def test_M01_coordinator_on_takeover_requested_called_after_send(self):
@@ -104,12 +106,14 @@ class TestSendTakeoverRequestCoordinatorIntegration:
             "galaxy_gateway.android_bridge._get_lifecycle_coordinator",
             return_value=mock_coordinator,
         ):
-            _run(bridge.send_takeover_request(
-                "dev-1",
-                "tkv-abc",
-                session_id="sess-123",
-                trace_id="trace-xyz",
-            ))
+            _run(
+                bridge.send_takeover_request(
+                    "dev-1",
+                    "tkv-abc",
+                    session_id="sess-123",
+                    trace_id="trace-xyz",
+                )
+            )
 
         mock_coordinator.on_takeover_requested.assert_called_once()
         call_kwargs = mock_coordinator.on_takeover_requested.call_args[1]
@@ -156,11 +160,13 @@ class TestSendTakeoverRequestCoordinatorIntegration:
             "galaxy_gateway.android_bridge._get_lifecycle_coordinator",
             return_value=mock_coordinator,
         ):
-            _run(bridge.send_takeover_request(
-                "dev-1",
-                "tkv-tc",
-                task_context={"task_id": "task-999", "goal": "open camera"},
-            ))
+            _run(
+                bridge.send_takeover_request(
+                    "dev-1",
+                    "tkv-tc",
+                    task_context={"task_id": "task-999", "goal": "open camera"},
+                )
+            )
 
         call_kwargs = mock_coordinator.on_takeover_requested.call_args[1]
         assert call_kwargs["task_id"] == "task-999"
@@ -170,6 +176,7 @@ class TestSendTakeoverRequestCoordinatorIntegration:
 # N.  handle_takeover_response — lifecycle coordinator called (response path)
 # ============================================================================
 
+
 class TestHandleResponseCoordinatorIntegration:
     """Verify the response handler calls the lifecycle coordinator in addition
     to the direct tracking call, so session state reduction and audit are
@@ -177,12 +184,12 @@ class TestHandleResponseCoordinatorIntegration:
 
     def test_N01_coordinator_on_takeover_response_called_on_accept(self):
         from galaxy_gateway.android.handlers.takeover_response import handle_takeover_response
+
         msg = _make_accept_msg(takeover_id="tkv-n01", session_id="sess-n01")
 
         mock_coordinator = MagicMock()
         mock_coordinator.on_takeover_response.return_value = MagicMock(
-            was_handled=True, phase_before="dispatched", phase_after="takeover_accepted",
-            was_transitioned=True
+            was_handled=True, phase_before="dispatched", phase_after="takeover_accepted", was_transitioned=True
         )
 
         with patch(
@@ -199,12 +206,12 @@ class TestHandleResponseCoordinatorIntegration:
 
     def test_N02_coordinator_on_takeover_response_called_on_reject(self):
         from galaxy_gateway.android.handlers.takeover_response import handle_takeover_response
+
         msg = _make_reject_msg(takeover_id="tkv-n02", reason="screen locked")
 
         mock_coordinator = MagicMock()
         mock_coordinator.on_takeover_response.return_value = MagicMock(
-            was_handled=True, phase_before="takeover_pending", phase_after="takeover_rejected",
-            was_transitioned=True
+            was_handled=True, phase_before="takeover_pending", phase_after="takeover_rejected", was_transitioned=True
         )
 
         with patch(
@@ -219,6 +226,7 @@ class TestHandleResponseCoordinatorIntegration:
 
     def test_N03_ack_returned_even_when_coordinator_raises(self):
         from galaxy_gateway.android.handlers.takeover_response import handle_takeover_response
+
         msg = _make_accept_msg()
 
         mock_coordinator = MagicMock()
@@ -234,6 +242,7 @@ class TestHandleResponseCoordinatorIntegration:
 
     def test_N04_coordinator_receives_task_id_and_trace_id(self):
         from galaxy_gateway.android.handlers.takeover_response import handle_takeover_response
+
         msg = _make_accept_msg(
             takeover_id="tkv-n04",
             task_id="task-abc",
@@ -258,14 +267,15 @@ class TestHandleResponseCoordinatorIntegration:
 # O.  Tracking ring-buffer — records stored and queryable after response
 # ============================================================================
 
+
 class TestTrackingRingBuffer:
     """Verify that after handle_takeover_response, the decision is stored
     in the canonical tracking ring buffer and queryable by takeover_id."""
 
     def test_O01_accept_record_stored_in_ring_buffer(self):
         from core.takeover_tracking import (
-            reset_takeover_tracking_runtime,
             get_takeover_record,
+            reset_takeover_tracking_runtime,
         )
         from galaxy_gateway.android.handlers.takeover_response import handle_takeover_response
 
@@ -283,8 +293,8 @@ class TestTrackingRingBuffer:
 
     def test_O02_reject_record_stored_with_reason(self):
         from core.takeover_tracking import (
-            reset_takeover_tracking_runtime,
             get_takeover_record,
+            reset_takeover_tracking_runtime,
         )
         from galaxy_gateway.android.handlers.takeover_response import handle_takeover_response
 
@@ -301,8 +311,8 @@ class TestTrackingRingBuffer:
 
     def test_O03_record_captures_session_id(self):
         from core.takeover_tracking import (
-            reset_takeover_tracking_runtime,
             get_takeover_record,
+            reset_takeover_tracking_runtime,
         )
         from galaxy_gateway.android.handlers.takeover_response import handle_takeover_response
 
@@ -319,8 +329,8 @@ class TestTrackingRingBuffer:
 
     def test_O04_record_queryable_by_session_id(self):
         from core.takeover_tracking import (
-            reset_takeover_tracking_runtime,
             list_takeover_records_for_session,
+            reset_takeover_tracking_runtime,
         )
         from galaxy_gateway.android.handlers.takeover_response import handle_takeover_response
 
@@ -339,6 +349,7 @@ class TestTrackingRingBuffer:
 # ============================================================================
 # P.  Snapshot visibility — takeover decisions in operator snapshot
 # ============================================================================
+
 
 class TestSnapshotVisibility:
     """Verify that after a response is processed, the takeover decision
@@ -380,12 +391,13 @@ class TestSnapshotVisibility:
         assert matching[0].was_rejected is True
 
     def test_P03_snapshot_to_dict_is_serialisable(self):
+        import json
+
         from core.takeover_tracking import (
             reset_takeover_tracking_runtime,
             takeover_tracking_snapshot,
         )
         from galaxy_gateway.android.handlers.takeover_response import handle_takeover_response
-        import json
 
         reset_takeover_tracking_runtime()
         msg = _make_accept_msg()
@@ -404,16 +416,19 @@ class TestSnapshotVisibility:
 # Q.  Both accept and reject paths store correct canonical fields
 # ============================================================================
 
+
 class TestCanonicalFieldsOnBothPaths:
     """Prove that both the accept and reject paths write a complete
     TakeoverTrackingRecord with all canonical identity fields."""
 
     def _process(self, msg: Dict[str, Any]) -> Any:
         from galaxy_gateway.android.handlers.takeover_response import handle_takeover_response
+
         _run(handle_takeover_response(MagicMock(), None, msg))
 
     def test_Q01_accept_record_has_record_id(self):
-        from core.takeover_tracking import reset_takeover_tracking_runtime, get_takeover_record
+        from core.takeover_tracking import get_takeover_record, reset_takeover_tracking_runtime
+
         reset_takeover_tracking_runtime()
         tid = f"tkv_q01_{uuid.uuid4().hex[:8]}"
         self._process(_make_accept_msg(takeover_id=tid))
@@ -422,7 +437,8 @@ class TestCanonicalFieldsOnBothPaths:
         assert rec.record_id != ""
 
     def test_Q02_reject_record_has_record_id(self):
-        from core.takeover_tracking import reset_takeover_tracking_runtime, get_takeover_record
+        from core.takeover_tracking import get_takeover_record, reset_takeover_tracking_runtime
+
         reset_takeover_tracking_runtime()
         tid = f"tkv_q02_{uuid.uuid4().hex[:8]}"
         self._process(_make_reject_msg(takeover_id=tid))
@@ -432,10 +448,11 @@ class TestCanonicalFieldsOnBothPaths:
 
     def test_Q03_accept_record_decision_is_accepted(self):
         from core.takeover_tracking import (
-            reset_takeover_tracking_runtime,
-            get_takeover_record,
             TakeoverDecision,
+            get_takeover_record,
+            reset_takeover_tracking_runtime,
         )
+
         reset_takeover_tracking_runtime()
         tid = f"tkv_q03_{uuid.uuid4().hex[:8]}"
         self._process(_make_accept_msg(takeover_id=tid))
@@ -444,10 +461,11 @@ class TestCanonicalFieldsOnBothPaths:
 
     def test_Q04_reject_record_decision_is_rejected(self):
         from core.takeover_tracking import (
-            reset_takeover_tracking_runtime,
-            get_takeover_record,
             TakeoverDecision,
+            get_takeover_record,
+            reset_takeover_tracking_runtime,
         )
+
         reset_takeover_tracking_runtime()
         tid = f"tkv_q04_{uuid.uuid4().hex[:8]}"
         self._process(_make_reject_msg(takeover_id=tid, reason="offline"))
@@ -455,20 +473,31 @@ class TestCanonicalFieldsOnBothPaths:
         assert rec.decision == TakeoverDecision.rejected
 
     def test_Q05_record_to_dict_contains_all_required_keys(self):
-        from core.takeover_tracking import reset_takeover_tracking_runtime, get_takeover_record
+        from core.takeover_tracking import get_takeover_record, reset_takeover_tracking_runtime
+
         reset_takeover_tracking_runtime()
         tid = f"tkv_q05_{uuid.uuid4().hex[:8]}"
         self._process(_make_accept_msg(takeover_id=tid))
         rec = get_takeover_record(tid)
         d = rec.to_dict()
-        for key in ("record_id", "takeover_id", "device_id", "decision",
-                    "session_id", "task_id", "trace_id", "reason", "recorded_at"):
+        for key in (
+            "record_id",
+            "takeover_id",
+            "device_id",
+            "decision",
+            "session_id",
+            "task_id",
+            "trace_id",
+            "reason",
+            "recorded_at",
+        ):
             assert key in d, f"Missing key: {key}"
 
 
 # ============================================================================
 # R.  Coordinator integration — outcome fields from on_takeover_response
 # ============================================================================
+
 
 class TestCoordinatorOutcomeFields:
     """Verify that the lifecycle coordinator returns a structured outcome
@@ -479,6 +508,7 @@ class TestCoordinatorOutcomeFields:
             get_lifecycle_coordinator,
             reset_lifecycle_coordinator,
         )
+
         reset_lifecycle_coordinator()
         coordinator = get_lifecycle_coordinator()
         outcome = coordinator.on_takeover_response(
@@ -495,6 +525,7 @@ class TestCoordinatorOutcomeFields:
             get_lifecycle_coordinator,
             reset_lifecycle_coordinator,
         )
+
         reset_lifecycle_coordinator()
         coordinator = get_lifecycle_coordinator()
         outcome = coordinator.on_takeover_response(
@@ -511,6 +542,7 @@ class TestCoordinatorOutcomeFields:
             get_lifecycle_coordinator,
             reset_lifecycle_coordinator,
         )
+
         reset_lifecycle_coordinator()
         coordinator = get_lifecycle_coordinator()
         outcome = coordinator.on_takeover_requested(
@@ -526,12 +558,14 @@ class TestCoordinatorOutcomeFields:
 # S.  send_takeover_request — coordinator failure does not break send
 # ============================================================================
 
+
 class TestSendResilientToCoordinatorFailure:
     """Verify that send_takeover_request returns the send result even when
     the lifecycle coordinator call raises an exception."""
 
     def _make_bridge(self) -> Any:
         from galaxy_gateway.android_bridge import AndroidBridge
+
         return AndroidBridge()
 
     def test_S01_coordinator_exception_does_not_prevent_message_send(self):
@@ -580,13 +614,16 @@ class TestSendResilientToCoordinatorFailure:
 # T.  TakeoverTrackingRecord — canonical shape and to_json
 # ============================================================================
 
+
 class TestTakeoverTrackingRecordShape:
     """Verify the canonical shape of TakeoverTrackingRecord and its
     serialisation to JSON (operator surface contract)."""
 
     def test_T01_record_to_json_is_valid_json(self):
-        from core.takeover_tracking import TakeoverTrackingRecord, TakeoverDecision
         import json
+
+        from core.takeover_tracking import TakeoverDecision, TakeoverTrackingRecord
+
         rec = TakeoverTrackingRecord(
             takeover_id="tkv-t01",
             device_id="dev-t01",
@@ -602,13 +639,10 @@ class TestTakeoverTrackingRecordShape:
         assert data["decision"] == "accepted"
 
     def test_T02_was_accepted_and_was_rejected_are_mutually_exclusive(self):
-        from core.takeover_tracking import TakeoverTrackingRecord, TakeoverDecision
-        accepted_rec = TakeoverTrackingRecord(
-            takeover_id="tkv-t02a", device_id="d", decision=TakeoverDecision.accepted
-        )
-        rejected_rec = TakeoverTrackingRecord(
-            takeover_id="tkv-t02r", device_id="d", decision=TakeoverDecision.rejected
-        )
+        from core.takeover_tracking import TakeoverDecision, TakeoverTrackingRecord
+
+        accepted_rec = TakeoverTrackingRecord(takeover_id="tkv-t02a", device_id="d", decision=TakeoverDecision.accepted)
+        rejected_rec = TakeoverTrackingRecord(takeover_id="tkv-t02r", device_id="d", decision=TakeoverDecision.rejected)
         assert accepted_rec.was_accepted is True
         assert accepted_rec.was_rejected is False
         assert rejected_rec.was_accepted is False
@@ -616,6 +650,7 @@ class TestTakeoverTrackingRecordShape:
 
     def test_T03_from_bool_maps_correctly(self):
         from core.takeover_tracking import TakeoverDecision
+
         assert TakeoverDecision.from_bool(True) == TakeoverDecision.accepted
         assert TakeoverDecision.from_bool(False) == TakeoverDecision.rejected
 
@@ -623,6 +658,7 @@ class TestTakeoverTrackingRecordShape:
 # ============================================================================
 # U.  Validation note — V2 closed items vs Android PR #247 dependencies
 # ============================================================================
+
 
 class TestValidationNote:
     """Structured evidence of what is fully closed on the V2 side and what
@@ -638,9 +674,9 @@ class TestValidationNote:
             TakeoverDecision,
             TakeoverTrackingRecord,
             TakeoverTrackingRuntime,
-            record_takeover_response,
             get_takeover_record,
             list_takeover_records_for_session,
+            record_takeover_response,
             takeover_tracking_snapshot,
         )
 
@@ -648,6 +684,7 @@ class TestValidationNote:
         """PR-11-V2: 追踪/审计已收口到生命周期协调器,handler 不再持有直挂钩子;
         钉协调器绑定存在(顺序契约由协调器自己的套件钉)。"""
         import galaxy_gateway.android.handlers.takeover_response as mod
+
         assert hasattr(mod, "_get_lifecycle_coordinator")
 
     def test_U03_lifecycle_coordinator_has_on_takeover_requested_and_on_takeover_response(self):
@@ -655,27 +692,28 @@ class TestValidationNote:
         from core.android_delegated_runtime_lifecycle_coordinator import (
             AndroidDelegatedRuntimeLifecycleCoordinator,
         )
-        assert callable(
-            getattr(AndroidDelegatedRuntimeLifecycleCoordinator, "on_takeover_requested", None)
-        )
-        assert callable(
-            getattr(AndroidDelegatedRuntimeLifecycleCoordinator, "on_takeover_response", None)
-        )
+
+        assert callable(getattr(AndroidDelegatedRuntimeLifecycleCoordinator, "on_takeover_requested", None))
+        assert callable(getattr(AndroidDelegatedRuntimeLifecycleCoordinator, "on_takeover_response", None))
 
     def test_U04_android_bridge_send_takeover_request_exists_and_is_coroutine(self):
         """AndroidBridge.send_takeover_request is present and async."""
         import asyncio
+
         from galaxy_gateway.android_bridge import AndroidBridge
+
         assert asyncio.iscoroutinefunction(AndroidBridge.send_takeover_request)
 
     def test_U05_android_bridge_has_lifecycle_coordinator_import(self):
         """android_bridge exposes _get_lifecycle_coordinator at module level."""
         import galaxy_gateway.android_bridge as mod
+
         assert hasattr(mod, "_get_lifecycle_coordinator")
 
     def test_U06_message_builder_has_takeover_request(self):
         """MessageBuilder.takeover_request() builds the canonical downlink message."""
         from galaxy_gateway.android.message_builder import MessageBuilder
+
         msg = MessageBuilder.takeover_request(
             device_id="v2-closed",
             takeover_id="tkv-u06",
@@ -686,6 +724,7 @@ class TestValidationNote:
     def test_U07_aip_v3_has_takeover_message_types(self):
         """AIP v3 protocol layer has TAKEOVER_REQUEST and TAKEOVER_RESPONSE."""
         from galaxy_gateway.protocol.aip_v3 import MessageType
+
         assert MessageType.TAKEOVER_REQUEST.value == "takeover_request"
         assert MessageType.TAKEOVER_RESPONSE.value == "takeover_response"
 
@@ -693,6 +732,7 @@ class TestValidationNote:
         """AndroidBridge registers a dedicated handler for TAKEOVER_RESPONSE."""
         from galaxy_gateway.android_bridge import AndroidBridge
         from galaxy_gateway.protocol.aip_v3 import MessageType
+
         bridge = AndroidBridge()
         assert MessageType.TAKEOVER_RESPONSE in bridge._message_handlers
 

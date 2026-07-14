@@ -73,9 +73,7 @@ def run(port: int) -> None:
         }
 
         # Fire-and-forget — avoids blocking the event loop
-        asyncio.ensure_future(
-            _bridge.send_to_device(device_id, task_assign_msg, wait_response=False)
-        )
+        asyncio.ensure_future(_bridge.send_to_device(device_id, task_assign_msg, wait_response=False))
         return {"dispatched": True, "task_id": task_id}
 
     uvicorn.run(app, host="127.0.0.1", port=port, log_level="error")

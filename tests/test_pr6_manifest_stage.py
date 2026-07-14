@@ -111,6 +111,7 @@ _RETREAT_SAMPLE: Dict[str, Any] = {
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_liminal(ambient: float = 0.5, source_phase: str = "liminal") -> object:
     """Return a minimal LiminalSpaceState-like dict."""
     return {
@@ -127,11 +128,13 @@ def _make_liminal(ambient: float = 0.5, source_phase: str = "liminal") -> object
 # 1. ManifestStageState dataclass
 # ---------------------------------------------------------------------------
 
+
 class TestManifestStageState:
     """Tests for the ManifestStageState dataclass."""
 
     def setup_method(self):
         from desktop_projection.manifest_stage_state import ManifestStageState
+
         self.cls = ManifestStageState
 
     def test_defaults(self):
@@ -184,11 +187,13 @@ class TestManifestStageState:
 # 2. ManifestStageController — state mapping
 # ---------------------------------------------------------------------------
 
+
 class TestManifestStageControllerMapping:
     """Tests for ManifestStageController.update() field mapping."""
 
     def setup_method(self):
         from desktop_projection.manifest_stage_controller import ManifestStageController
+
         self.ctrl = ManifestStageController()
 
     def test_focus_intensity_positive_when_ambient_and_coherence(self):
@@ -230,6 +235,7 @@ class TestManifestStageControllerMapping:
 
     def test_stage_ready_false_at_exactly_threshold(self):
         from desktop_projection.manifest_stage_state import STAGE_READY_THRESHOLD
+
         liminal = _make_liminal(ambient=STAGE_READY_THRESHOLD)
         proj = {**_MANIFEST_SAMPLE, "retreat_tendency": 0.1}
         state = self.ctrl.update(proj, liminal)
@@ -293,15 +299,18 @@ class TestManifestStageControllerMapping:
 
     def test_accepts_object_with_to_dict(self):
         """Controller accepts typed objects that implement to_dict()."""
+
         class FakeProjection:
             def to_dict(self):
                 return dict(_MANIFEST_SAMPLE)
+
         state = self.ctrl.update(FakeProjection(), _make_liminal())
         assert state.primary_model_id == "gpt-4o"
 
     def test_accepts_liminal_state_object(self):
         """Controller accepts a LiminalSpaceState object (not just dict)."""
         from desktop_projection.state_space_mapper import LiminalSpaceState
+
         lim_obj = LiminalSpaceState(ambient_intensity=0.6, source_phase="liminal")
         state = self.ctrl.update(_MANIFEST_SAMPLE, lim_obj)
         assert state.stage_ready is True
@@ -311,11 +320,13 @@ class TestManifestStageControllerMapping:
 # 3. ManifestStageController — retreat softening
 # ---------------------------------------------------------------------------
 
+
 class TestRetreatSoftening:
     """Tests for the retreat_tendency softening policy."""
 
     def test_first_call_no_softening(self):
         from desktop_projection.manifest_stage_controller import ManifestStageController
+
         ctrl = ManifestStageController(retreat_blend=0.7)
         liminal = _make_liminal(ambient=0.6)
         proj = {**_RETREAT_SAMPLE, "coherence": 0.36, "collapse_tendency": 0.0}
@@ -327,6 +338,7 @@ class TestRetreatSoftening:
 
     def test_second_call_retreat_softens_focus(self):
         from desktop_projection.manifest_stage_controller import ManifestStageController
+
         ctrl = ManifestStageController(retreat_blend=0.7)
         liminal_hi = _make_liminal(ambient=0.64)
         proj_normal = {**_MANIFEST_SAMPLE, "coherence": 0.36, "collapse_tendency": 0.0, "retreat_tendency": 0.1}
@@ -342,6 +354,7 @@ class TestRetreatSoftening:
 
     def test_reset_clears_previous(self):
         from desktop_projection.manifest_stage_controller import ManifestStageController
+
         ctrl = ManifestStageController(retreat_blend=0.7)
         ctrl.update(_MANIFEST_SAMPLE, _make_liminal())
         assert ctrl.previous_state is not None
@@ -350,6 +363,7 @@ class TestRetreatSoftening:
 
     def test_invalid_retreat_blend_raises(self):
         from desktop_projection.manifest_stage_controller import ManifestStageController
+
         with pytest.raises(ValueError):
             ManifestStageController(retreat_blend=1.5)
 
@@ -358,11 +372,13 @@ class TestRetreatSoftening:
 # 4. ManifestStageController — smooth transition
 # ---------------------------------------------------------------------------
 
+
 class TestSmoothTransition:
     """Integration-level: stage progression should be monotone in normal operation."""
 
     def test_liminal_to_manifest_focus_increases(self):
         from desktop_projection.manifest_stage_controller import ManifestStageController
+
         ctrl = ManifestStageController()
 
         projections = [
@@ -378,12 +394,13 @@ class TestSmoothTransition:
 
         # Each step should not decrease (weakly monotone)
         for i in range(1, len(focuses)):
-            assert focuses[i] >= focuses[i - 1] - 1e-6, (
-                f"Focus decreased at step {i}: {focuses[i-1]:.4f} → {focuses[i]:.4f}"
-            )
+            assert (
+                focuses[i] >= focuses[i - 1] - 1e-6
+            ), f"Focus decreased at step {i}: {focuses[i-1]:.4f} → {focuses[i]:.4f}"
 
     def test_retreat_mid_sequence_softens(self):
         from desktop_projection.manifest_stage_controller import ManifestStageController
+
         ctrl = ManifestStageController(retreat_blend=0.9)
 
         # Build up focus
@@ -403,23 +420,27 @@ class TestSmoothTransition:
 # 5. Edge cases
 # ---------------------------------------------------------------------------
 
+
 class TestEdgeCases:
     """Edge-case coverage for ManifestStageController."""
 
     def test_empty_weights_returns_empty_active_weights(self):
         from desktop_projection.manifest_stage_controller import ManifestStageController
+
         proj = {**_MANIFEST_SAMPLE, "active_weights": {}}
         state = ManifestStageController().update(proj, _make_liminal())
         assert state.active_weights == {}
 
     def test_none_weights_returns_empty_active_weights(self):
         from desktop_projection.manifest_stage_controller import ManifestStageController
+
         proj = {**_MANIFEST_SAMPLE, "active_weights": None}
         state = ManifestStageController().update(proj, _make_liminal())
         assert state.active_weights == {}
 
     def test_focus_zero_when_coherence_zero(self):
         from desktop_projection.manifest_stage_controller import ManifestStageController
+
         proj = {**_MANIFEST_SAMPLE, "coherence": 0.0, "collapse_tendency": 0.0}
         state = ManifestStageController().update(proj, _make_liminal(ambient=0.8))
         # sqrt(0.8 * 0.0) = 0
@@ -427,11 +448,13 @@ class TestEdgeCases:
 
     def test_source_phase_preserved_silent(self):
         from desktop_projection.manifest_stage_controller import ManifestStageController
+
         state = ManifestStageController().update(_SILENT_MINIMAL, _make_liminal(ambient=0.0))
         assert state.source_phase == "silent"
 
     def test_top_n_custom(self):
         from desktop_projection.manifest_stage_controller import ManifestStageController
+
         ctrl = ManifestStageController(top_n=2)
         weights = {"a": 0.9, "b": 0.8, "c": 0.7, "d": 0.6}
         proj = {**_MANIFEST_SAMPLE, "active_weights": weights}
@@ -445,11 +468,13 @@ class TestEdgeCases:
 # 6. ManifestSurface (Status Board V2)
 # ---------------------------------------------------------------------------
 
+
 class TestManifestSurface:
     """Tests for the ManifestSurface read-only render adapter."""
 
     def setup_method(self):
         from windows_client.status_board_v2.manifest_surface import ManifestSurface
+
         self.surface = ManifestSurface()
 
     def test_render_returns_non_empty_string(self):
@@ -506,6 +531,4 @@ class TestManifestSurface:
         assert callable(getattr(self.surface, "render"))
         # No 'send', 'submit', 'execute', or 'command' methods.
         for forbidden in ("send", "submit", "execute", "command"):
-            assert not hasattr(self.surface, forbidden), (
-                f"ManifestSurface should not expose '{forbidden}' method"
-            )
+            assert not hasattr(self.surface, forbidden), f"ManifestSurface should not expose '{forbidden}' method"

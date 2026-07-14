@@ -4,6 +4,7 @@
 NATS worker 消费循环:派发 → 规范执行器执行 → 回传结果。补上此前全仓零调用的
 执行端。用假 bus + 打桩 invoke_node,不触网。
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -19,17 +20,22 @@ class _FakeBus:
         self.published_results = []
         self.subscribed = None
         self.registered = None
+
     def is_connected(self):
         return self._connected
+
     async def connect(self):
         self._connected = True
         return {"success": True}
+
     async def publish_worker_registration(self, model):
         self.registered = model
         return {"success": True}
+
     async def subscribe_task_dispatches(self, worker_id, callback):
         self.subscribed = (worker_id, callback)
         return {"success": True}
+
     async def publish_task_result(self, msg):
         self.published_results.append(msg)
         return {"success": True}
@@ -53,15 +59,25 @@ def _reset(monkeypatch):
 class TestExecuteDispatch:
     def test_executes_via_invoke_node_and_builds_result(self, monkeypatch):
         captured = {}
+
         async def _fake_invoke(node_id, action, params, **kw):
             captured.update(node_id=node_id, action=action, kw=kw)
             return _OkResult()
+
         monkeypatch.setattr("core.node_invocation.invoke_node", _fake_invoke)
         w = wr.WorkerRuntime(worker_id="w1", nats_bus=_FakeBus())
-        res = asyncio.run(w.execute_dispatch({
-            "task_id": "t1", "node_id": "Node_36_UIAWindows", "action": "click",
-            "params": {"x": 1, "y": 2}, "ui_graph": {"source": "uia"}, "trace_id": "tr1",
-        }))
+        res = asyncio.run(
+            w.execute_dispatch(
+                {
+                    "task_id": "t1",
+                    "node_id": "Node_36_UIAWindows",
+                    "action": "click",
+                    "params": {"x": 1, "y": 2},
+                    "ui_graph": {"source": "uia"},
+                    "trace_id": "tr1",
+                }
+            )
+        )
         assert res.status == "completed" and res.task_id == "t1"
         assert captured["node_id"] == "Node_36_UIAWindows" and captured["action"] == "click"
         assert captured["kw"].get("ui_graph") == {"source": "uia"}  # 结构优先透传
@@ -74,6 +90,7 @@ class TestExecuteDispatch:
     def test_invoke_exception_becomes_failed_result(self, monkeypatch):
         async def _boom(*a, **k):
             raise RuntimeError("node blew up")
+
         monkeypatch.setattr("core.node_invocation.invoke_node", _boom)
         w = wr.WorkerRuntime(worker_id="w1", nats_bus=_FakeBus())
         res = asyncio.run(w.execute_dispatch({"task_id": "t3", "node_id": "N", "action": "a"}))
@@ -84,6 +101,7 @@ class TestStartSubscribeReply:
     def test_start_subscribes_and_dispatch_replies(self, monkeypatch):
         async def _fake_invoke(*a, **k):
             return _OkResult()
+
         monkeypatch.setattr("core.node_invocation.invoke_node", _fake_invoke)
         bus = _FakeBus()
         w = wr.WorkerRuntime(worker_id="w1", nats_bus=bus)
@@ -98,9 +116,11 @@ class TestStartSubscribeReply:
 
     def test_start_noop_when_nats_unavailable(self):
         w = wr.WorkerRuntime(worker_id="w1", nats_bus=_FakeBus(connected=False))
+
         # 让 connect 也连不上
         async def _fail_connect():
             return {"success": False}
+
         w._nats.connect = _fail_connect  # type: ignore
         out = asyncio.run(w.start())
         assert not out["started"] and out["reason"] == "nats_unavailable"

@@ -123,8 +123,7 @@ DELIVERY_MODE_DESCRIPTIONS: Dict[str, str] = {
         "enforced at every hop. Reserved for critical/audit paths."
     ),
     DeliveryMode.UNKNOWN.value: (
-        "Delivery mode not yet classified. Used when metadata is unavailable. "
-        "Treat as BEST_EFFORT for safety."
+        "Delivery mode not yet classified. Used when metadata is unavailable. " "Treat as BEST_EFFORT for safety."
     ),
 }
 

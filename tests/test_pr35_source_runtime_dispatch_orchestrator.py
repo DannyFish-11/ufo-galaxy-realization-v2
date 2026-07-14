@@ -61,7 +61,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -185,12 +184,21 @@ class TestSourceDispatchDecisionSerialisation:
 
 class TestSourceDispatchDecisionFieldNames:
     REQUIRED_FIELDS = [
-        "dispatch_id", "trace_id", "task_id", "session_id",
-        "source_device_id", "source_runtime_id",
-        "mode", "selected_target", "decision_reason",
-        "policy_alignment", "governance_snapshot",
-        "mesh_session", "handoff_envelope",
-        "timestamp", "metadata",
+        "dispatch_id",
+        "trace_id",
+        "task_id",
+        "session_id",
+        "source_device_id",
+        "source_runtime_id",
+        "mode",
+        "selected_target",
+        "decision_reason",
+        "policy_alignment",
+        "governance_snapshot",
+        "mesh_session",
+        "handoff_envelope",
+        "timestamp",
+        "metadata",
     ]
 
     def test_all_fields_present(self):
@@ -263,7 +271,7 @@ class TestSourceDispatchTarget:
 
 class TestSourceDispatchPlanSerialisation:
     def test_to_dict(self):
-        from contracts.source_dispatch import SourceDispatchPlan, SourceDispatchMode
+        from contracts.source_dispatch import SourceDispatchMode, SourceDispatchPlan
 
         p = SourceDispatchPlan(mode=SourceDispatchMode.local, ready=True)
         d = p.to_dict()
@@ -279,7 +287,7 @@ class TestSourceDispatchPlanSerialisation:
         assert isinstance(json.loads(j), dict)
 
     def test_from_dict_round_trip(self):
-        from contracts.source_dispatch import SourceDispatchPlan, SourceDispatchMode
+        from contracts.source_dispatch import SourceDispatchMode, SourceDispatchPlan
 
         original = SourceDispatchPlan(
             trace_id="trace_plan",
@@ -299,10 +307,21 @@ class TestSourceDispatchPlanSerialisation:
 
 class TestSourceDispatchPlanFieldNames:
     REQUIRED_FIELDS = [
-        "plan_id", "dispatch_id", "trace_id", "task_id", "session_id",
-        "mode", "selected_target", "handoff_envelope", "mesh_session",
-        "policy_alignment", "governance_snapshot",
-        "ready", "readiness_notes", "timestamp", "metadata",
+        "plan_id",
+        "dispatch_id",
+        "trace_id",
+        "task_id",
+        "session_id",
+        "mode",
+        "selected_target",
+        "handoff_envelope",
+        "mesh_session",
+        "policy_alignment",
+        "governance_snapshot",
+        "ready",
+        "readiness_notes",
+        "timestamp",
+        "metadata",
     ]
 
     def test_all_fields_present(self):
@@ -320,7 +339,7 @@ class TestSourceDispatchPlanFieldNames:
 
 class TestSourceDispatchResultSerialisation:
     def test_to_dict_returns_dict(self):
-        from contracts.source_dispatch import SourceDispatchResult, SourceDispatchMode
+        from contracts.source_dispatch import SourceDispatchMode, SourceDispatchResult
 
         r = SourceDispatchResult(trace_id="t1", mode=SourceDispatchMode.local, success=True)
         assert isinstance(r.to_dict(), dict)
@@ -333,7 +352,7 @@ class TestSourceDispatchResultSerialisation:
         assert isinstance(json.loads(j), dict)
 
     def test_from_dict_round_trip(self):
-        from contracts.source_dispatch import SourceDispatchResult, SourceDispatchMode
+        from contracts.source_dispatch import SourceDispatchMode, SourceDispatchResult
 
         original = SourceDispatchResult(
             trace_id="t3",
@@ -354,12 +373,26 @@ class TestSourceDispatchResultSerialisation:
 
 class TestSourceDispatchResultFieldNames:
     REQUIRED_FIELDS = [
-        "result_id", "dispatch_id", "trace_id", "task_id", "session_id",
-        "source_device_id", "source_runtime_id",
-        "mode", "selected_target", "success", "result",
-        "execution_trace", "takeover_result",
-        "governance_snapshot", "policy_alignment", "mesh_session",
-        "errors", "decision_reason", "timestamp", "metadata",
+        "result_id",
+        "dispatch_id",
+        "trace_id",
+        "task_id",
+        "session_id",
+        "source_device_id",
+        "source_runtime_id",
+        "mode",
+        "selected_target",
+        "success",
+        "result",
+        "execution_trace",
+        "takeover_result",
+        "governance_snapshot",
+        "policy_alignment",
+        "mesh_session",
+        "errors",
+        "decision_reason",
+        "timestamp",
+        "metadata",
     ]
 
     def test_all_fields_present(self):
@@ -390,7 +423,7 @@ class TestSourceDispatchResultFieldNames:
 
 class TestSourceDispatchResultCompactSummary:
     def test_compact_summary_keys(self):
-        from contracts.source_dispatch import SourceDispatchResult, SourceDispatchMode
+        from contracts.source_dispatch import SourceDispatchMode, SourceDispatchResult
 
         r = SourceDispatchResult(
             trace_id="trace_cs",
@@ -409,7 +442,7 @@ class TestSourceDispatchResultCompactSummary:
         assert "has_takeover_result" in s
 
     def test_compact_summary_mode_string(self):
-        from contracts.source_dispatch import SourceDispatchResult, SourceDispatchMode
+        from contracts.source_dispatch import SourceDispatchMode, SourceDispatchResult
 
         r = SourceDispatchResult(mode=SourceDispatchMode.remote_handoff)
         s = r.to_compact_summary()
@@ -423,7 +456,7 @@ class TestSourceDispatchResultCompactSummary:
 
 class TestSourceDispatchSummary:
     def test_to_dict(self):
-        from contracts.source_dispatch import SourceDispatchSummary, SourceDispatchMode
+        from contracts.source_dispatch import SourceDispatchMode, SourceDispatchSummary
 
         s = SourceDispatchSummary(mode=SourceDispatchMode.local, success=True)
         d = s.to_dict()
@@ -438,7 +471,7 @@ class TestSourceDispatchSummary:
         assert isinstance(json.loads(j), dict)
 
     def test_from_dict(self):
-        from contracts.source_dispatch import SourceDispatchSummary, SourceDispatchMode
+        from contracts.source_dispatch import SourceDispatchMode, SourceDispatchSummary
 
         original = SourceDispatchSummary(
             trace_id="trace_s",
@@ -638,31 +671,31 @@ class TestFailureDispatchResult:
 
 class TestSelectDispatchMode:
     def test_force_local(self):
-        from core.runtime.source_dispatch_orchestrator import select_dispatch_mode
         from contracts.source_dispatch import SourceDispatchMode
+        from core.runtime.source_dispatch_orchestrator import select_dispatch_mode
 
         mode, reason = select_dispatch_mode(force_local=True)
         assert mode == SourceDispatchMode.local
         assert "force_local" in reason
 
     def test_force_remote_with_target(self):
-        from core.runtime.source_dispatch_orchestrator import select_dispatch_mode
         from contracts.source_dispatch import SourceDispatchMode
+        from core.runtime.source_dispatch_orchestrator import select_dispatch_mode
 
         mode, reason = select_dispatch_mode(force_remote=True, target_device_id="dev_001")
         assert mode == SourceDispatchMode.remote_handoff
         assert "force_remote" in reason
 
     def test_force_remote_without_target(self):
-        from core.runtime.source_dispatch_orchestrator import select_dispatch_mode
         from contracts.source_dispatch import SourceDispatchMode
+        from core.runtime.source_dispatch_orchestrator import select_dispatch_mode
 
         mode, reason = select_dispatch_mode(force_remote=True)
         assert mode == SourceDispatchMode.local
 
     def test_policy_alignment_blocked(self):
-        from core.runtime.source_dispatch_orchestrator import select_dispatch_mode
         from contracts.source_dispatch import SourceDispatchMode
+        from core.runtime.source_dispatch_orchestrator import select_dispatch_mode
 
         pa = _make_policy_alignment(blocked=True)
         mode, reason = select_dispatch_mode(policy_alignment=pa)
@@ -670,8 +703,8 @@ class TestSelectDispatchMode:
         assert "blocked" in reason
 
     def test_policy_alignment_can_expand_cross_device_with_target(self):
-        from core.runtime.source_dispatch_orchestrator import select_dispatch_mode
         from contracts.source_dispatch import SourceDispatchMode
+        from core.runtime.source_dispatch_orchestrator import select_dispatch_mode
 
         pa = _make_policy_alignment(can_expand_cross_device=True)
         mode, reason = select_dispatch_mode(
@@ -681,8 +714,8 @@ class TestSelectDispatchMode:
         assert mode == SourceDispatchMode.remote_handoff
 
     def test_governance_snapshot_execution_not_allowed(self):
-        from core.runtime.source_dispatch_orchestrator import select_dispatch_mode
         from contracts.source_dispatch import SourceDispatchMode
+        from core.runtime.source_dispatch_orchestrator import select_dispatch_mode
 
         gs = _make_governance_snapshot(execution_allowed=False)
         mode, reason = select_dispatch_mode(governance_snapshot=gs)
@@ -690,24 +723,24 @@ class TestSelectDispatchMode:
         assert "execution_not_allowed" in reason
 
     def test_mesh_session_multi_device_staged_mesh(self):
-        from core.runtime.source_dispatch_orchestrator import select_dispatch_mode
         from contracts.source_dispatch import SourceDispatchMode
+        from core.runtime.source_dispatch_orchestrator import select_dispatch_mode
 
         ms = _make_mesh_session(participant_count=3)
         mode, reason = select_dispatch_mode(mesh_session=ms)
         assert mode == SourceDispatchMode.staged_mesh
 
     def test_explicit_target_device_remote_handoff(self):
-        from core.runtime.source_dispatch_orchestrator import select_dispatch_mode
         from contracts.source_dispatch import SourceDispatchMode
+        from core.runtime.source_dispatch_orchestrator import select_dispatch_mode
 
         mode, reason = select_dispatch_mode(target_device_id="dev_002")
         assert mode == SourceDispatchMode.remote_handoff
         assert "target_device_specified" in reason
 
     def test_default_local(self):
-        from core.runtime.source_dispatch_orchestrator import select_dispatch_mode
         from contracts.source_dispatch import SourceDispatchMode
+        from core.runtime.source_dispatch_orchestrator import select_dispatch_mode
 
         mode, reason = select_dispatch_mode()
         assert mode == SourceDispatchMode.local
@@ -767,8 +800,8 @@ class TestSelectDispatchTarget:
 
 class TestBuildSourceDispatchPlanOrchestrator:
     def test_local_mode(self):
-        from core.runtime.source_dispatch_orchestrator import build_source_dispatch_plan
         from contracts.source_dispatch import SourceDispatchMode
+        from core.runtime.source_dispatch_orchestrator import build_source_dispatch_plan
 
         plan = build_source_dispatch_plan(
             trace_id="trace_plan_local",
@@ -782,8 +815,8 @@ class TestBuildSourceDispatchPlanOrchestrator:
         assert plan.mode == SourceDispatchMode.local
 
     def test_remote_handoff_mode(self):
-        from core.runtime.source_dispatch_orchestrator import build_source_dispatch_plan
         from contracts.source_dispatch import SourceDispatchMode
+        from core.runtime.source_dispatch_orchestrator import build_source_dispatch_plan
 
         plan = build_source_dispatch_plan(
             trace_id="trace_plan_remote",
@@ -798,8 +831,8 @@ class TestBuildSourceDispatchPlanOrchestrator:
         assert plan.mode == SourceDispatchMode.remote_handoff
 
     def test_blocked_mode(self):
-        from core.runtime.source_dispatch_orchestrator import build_source_dispatch_plan
         from contracts.source_dispatch import SourceDispatchMode
+        from core.runtime.source_dispatch_orchestrator import build_source_dispatch_plan
 
         pa = _make_policy_alignment(blocked=True)
         plan = build_source_dispatch_plan(
@@ -834,8 +867,8 @@ class TestBuildSourceDispatchPlanOrchestrator:
 class TestOrchestrateSourceRuntimeDispatch:
     def test_local_mode_executor_unavailable(self):
         """Local mode returns a result even when OpenClawd is unavailable."""
-        from core.runtime.source_dispatch_orchestrator import orchestrate_source_runtime_dispatch
         from contracts.source_dispatch import SourceDispatchMode
+        from core.runtime.source_dispatch_orchestrator import orchestrate_source_runtime_dispatch
 
         result = orchestrate_source_runtime_dispatch(
             trace_id="trace_local",
@@ -852,8 +885,8 @@ class TestOrchestrateSourceRuntimeDispatch:
         assert isinstance(result.to_dict(), dict)
 
     def test_blocked_mode(self):
-        from core.runtime.source_dispatch_orchestrator import orchestrate_source_runtime_dispatch
         from contracts.source_dispatch import SourceDispatchMode
+        from core.runtime.source_dispatch_orchestrator import orchestrate_source_runtime_dispatch
 
         pa = _make_policy_alignment(blocked=True)
         result = orchestrate_source_runtime_dispatch(
@@ -867,8 +900,8 @@ class TestOrchestrateSourceRuntimeDispatch:
         assert result.success is False
 
     def test_staged_mesh_mode(self):
-        from core.runtime.source_dispatch_orchestrator import orchestrate_source_runtime_dispatch
         from contracts.source_dispatch import SourceDispatchMode
+        from core.runtime.source_dispatch_orchestrator import orchestrate_source_runtime_dispatch
 
         ms = _make_mesh_session(participant_count=3)
         result = orchestrate_source_runtime_dispatch(
@@ -892,8 +925,8 @@ class TestOrchestrateSourceRuntimeDispatch:
 
     def test_remote_handoff_no_bridge_fallback_local(self):
         """Remote handoff without a real bridge falls back to local."""
-        from core.runtime.source_dispatch_orchestrator import orchestrate_source_runtime_dispatch
         from contracts.source_dispatch import SourceDispatchMode
+        from core.runtime.source_dispatch_orchestrator import orchestrate_source_runtime_dispatch
 
         result = orchestrate_source_runtime_dispatch(
             trace_id="trace_remote",
@@ -949,8 +982,8 @@ class TestSourceDispatchOrchestrator:
         assert result.result_id is not None
 
     def test_plan_returns_plan(self):
-        from core.runtime.source_dispatch_orchestrator import SourceDispatchOrchestrator
         from contracts.source_dispatch import SourceDispatchMode
+        from core.runtime.source_dispatch_orchestrator import SourceDispatchOrchestrator
 
         orchestrator = SourceDispatchOrchestrator()
         plan = orchestrator.plan(
@@ -987,42 +1020,52 @@ class TestSourceDispatchOrchestrator:
 class TestContractsPackageReExports:
     def test_source_dispatch_mode_exported(self):
         from contracts import SourceDispatchMode
+
         assert SourceDispatchMode is not None
 
     def test_source_dispatch_decision_exported(self):
         from contracts import SourceDispatchDecision
+
         assert SourceDispatchDecision is not None
 
     def test_source_dispatch_target_exported(self):
         from contracts import SourceDispatchTarget
+
         assert SourceDispatchTarget is not None
 
     def test_source_dispatch_plan_exported(self):
         from contracts import SourceDispatchPlan
+
         assert SourceDispatchPlan is not None
 
     def test_source_dispatch_result_exported(self):
         from contracts import SourceDispatchResult
+
         assert SourceDispatchResult is not None
 
     def test_source_dispatch_summary_exported(self):
         from contracts import SourceDispatchSummary
+
         assert SourceDispatchSummary is not None
 
     def test_build_source_dispatch_decision_exported(self):
         from contracts import build_source_dispatch_decision
+
         assert callable(build_source_dispatch_decision)
 
     def test_build_source_dispatch_result_exported(self):
         from contracts import build_source_dispatch_result
+
         assert callable(build_source_dispatch_result)
 
     def test_build_source_dispatch_summary_exported(self):
         from contracts import build_source_dispatch_summary
+
         assert callable(build_source_dispatch_summary)
 
     def test_failure_dispatch_result_exported(self):
         from contracts import failure_dispatch_result
+
         assert callable(failure_dispatch_result)
 
 
@@ -1034,18 +1077,22 @@ class TestContractsPackageReExports:
 class TestCoreUnifiedReExports:
     def test_source_dispatch_mode_exported(self):
         from core.unified import SourceDispatchMode
+
         assert SourceDispatchMode is not None
 
     def test_source_dispatch_result_exported(self):
         from core.unified import SourceDispatchResult
+
         assert SourceDispatchResult is not None
 
     def test_source_dispatch_summary_exported(self):
         from core.unified import SourceDispatchSummary
+
         assert SourceDispatchSummary is not None
 
     def test_failure_dispatch_result_exported(self):
         from core.unified import failure_dispatch_result
+
         assert callable(failure_dispatch_result)
 
 
@@ -1057,22 +1104,27 @@ class TestCoreUnifiedReExports:
 class TestCoreRuntimeReExports:
     def test_orchestrator_exported(self):
         from core.runtime import SourceDispatchOrchestrator
+
         assert SourceDispatchOrchestrator is not None
 
     def test_select_dispatch_mode_exported(self):
         from core.runtime import select_dispatch_mode
+
         assert callable(select_dispatch_mode)
 
     def test_select_dispatch_target_exported(self):
         from core.runtime import select_dispatch_target
+
         assert callable(select_dispatch_target)
 
     def test_build_source_dispatch_plan_exported(self):
         from core.runtime import build_source_dispatch_plan
+
         assert callable(build_source_dispatch_plan)
 
     def test_orchestrate_source_runtime_dispatch_exported(self):
         from core.runtime import orchestrate_source_runtime_dispatch
+
         assert callable(orchestrate_source_runtime_dispatch)
 
     def test_pr34_exports_still_present(self):
@@ -1082,6 +1134,7 @@ class TestCoreRuntimeReExports:
             execute_local_takeover,
             normalize_handoff_envelope,
         )
+
         assert TargetTakeoverHandler is not None
         assert callable(execute_local_takeover)
         assert callable(normalize_handoff_envelope)
@@ -1097,8 +1150,8 @@ class TestSourceDispatchSummaryEndpoint:
         """GET /api/v1/runtime/source-dispatch-summary should return 200."""
         pytest.importorskip("fastapi")
         pytest.importorskip("httpx")
-        from fastapi.testclient import TestClient
         from fastapi import FastAPI
+        from fastapi.testclient import TestClient
 
         from core.routes.projection import create_router
 
@@ -1114,8 +1167,8 @@ class TestSourceDispatchSummaryEndpoint:
         """GET /api/v1/runtime/source-dispatch-summary returns JSON with mode field."""
         pytest.importorskip("fastapi")
         pytest.importorskip("httpx")
-        from fastapi.testclient import TestClient
         from fastapi import FastAPI
+        from fastapi.testclient import TestClient
 
         from core.routes.projection import create_router
 
@@ -1182,7 +1235,7 @@ class TestGracefulPartialInputs:
 
 class TestSourceDispatchResultFromDict:
     def test_round_trip_all_fields(self):
-        from contracts.source_dispatch import SourceDispatchResult, SourceDispatchMode
+        from contracts.source_dispatch import SourceDispatchMode, SourceDispatchResult
 
         original = SourceDispatchResult(
             trace_id="trace_rt",

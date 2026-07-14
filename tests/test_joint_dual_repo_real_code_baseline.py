@@ -1,9 +1,9 @@
 from core.joint_dual_repo_real_code_baseline import (
     ANDROID_AUDITED_REF,
-    GapClass,
     JOINT_BASELINE_AUTHORITY,
     JOINT_BASELINE_METHOD,
     JOINT_BASELINE_PR_TITLE,
+    GapClass,
     JointRealCodeBaselineReport,
     WorkPriority,
     build_joint_dual_repo_real_code_baseline,

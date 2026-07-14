@@ -28,12 +28,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from core.system_orchestrator import SystemOrchestrator, PhaseStatus, StartupPhase
-
+from core.system_orchestrator import PhaseStatus, StartupPhase, SystemOrchestrator
 
 # ---------------------------------------------------------------------------
 # A — Phase 4 invokes run_startup_recovery and populates startup_recovery
 # ---------------------------------------------------------------------------
+
 
 class TestPhase4StartsRecovery:
     def test_phase4_invokes_startup_recovery(self, monkeypatch):
@@ -55,8 +55,9 @@ class TestPhase4StartsRecovery:
             raising=False,
         )
         # Patch the import inside the method
-        import core.system_orchestrator as _so_mod
         import core.runtime_restart_recovery as _rr_mod
+        import core.system_orchestrator as _so_mod
+
         monkeypatch.setattr(_rr_mod, "run_startup_recovery", _fake_run_startup_recovery)
 
         orch = SystemOrchestrator()
@@ -72,6 +73,7 @@ class TestPhase4StartsRecovery:
 # B — Phase 4 startup_recovery diagnostics include expected keys
 # ---------------------------------------------------------------------------
 
+
 class TestPhase4RecoveryDiagnosticKeys:
     def test_phase4_recovery_diagnostic_keys(self, monkeypatch):
         """startup_recovery dict in Phase 4 data must include canonical keys."""
@@ -84,6 +86,7 @@ class TestPhase4RecoveryDiagnosticKeys:
         mock_report.inflight_tasks_replay_only = 1
 
         import core.runtime_restart_recovery as _rr_mod
+
         monkeypatch.setattr(_rr_mod, "run_startup_recovery", lambda **kw: mock_report)
 
         orch = SystemOrchestrator()
@@ -114,6 +117,7 @@ class TestPhase4RecoveryDiagnosticKeys:
 # C — Phase 4 calls registry.restore_from_snapshot and records count
 # ---------------------------------------------------------------------------
 
+
 class TestPhase4LifecycleRegistryRestore:
     def test_phase4_restores_lifecycle_registry(self, monkeypatch):
         """Phase 4 must call get_lifecycle_registry().restore_from_snapshot()."""
@@ -121,6 +125,7 @@ class TestPhase4LifecycleRegistryRestore:
         mock_registry.restore_from_snapshot.return_value = 3
 
         import core.task_envelope_lifecycle_registry as _lr_mod
+
         monkeypatch.setattr(_lr_mod, "get_lifecycle_registry", lambda: mock_registry)
 
         orch = SystemOrchestrator()
@@ -135,6 +140,7 @@ class TestPhase4LifecycleRegistryRestore:
 # D — inflight_tasks_recovered is recorded in startup_recovery
 # ---------------------------------------------------------------------------
 
+
 class TestPhase4InFlightTaskCount:
     def test_inflight_tasks_recovered_recorded(self, monkeypatch):
         """inflight_tasks_recovered in startup_recovery must reflect recovery report."""
@@ -146,6 +152,7 @@ class TestPhase4InFlightTaskCount:
         mock_report.inflight_tasks_terminal = 2
 
         import core.runtime_restart_recovery as _rr_mod
+
         monkeypatch.setattr(_rr_mod, "run_startup_recovery", lambda **kw: mock_report)
 
         orch = SystemOrchestrator()
@@ -160,10 +167,12 @@ class TestPhase4InFlightTaskCount:
 # E — Phase 4 survives recovery exception (non-fatal)
 # ---------------------------------------------------------------------------
 
+
 class TestPhase4RecoveryNonFatal:
     def test_phase4_ok_when_recovery_raises(self, monkeypatch):
         """Phase 4 must not hard-fail when run_startup_recovery() raises."""
         import core.runtime_restart_recovery as _rr_mod
+
         monkeypatch.setattr(
             _rr_mod, "run_startup_recovery", lambda **kw: (_ for _ in ()).throw(RuntimeError("store unavailable"))
         )
@@ -180,24 +189,30 @@ class TestPhase4RecoveryNonFatal:
 # F — async_shutdown persists lifecycle snapshot
 # ---------------------------------------------------------------------------
 
+
 class TestShutdownPersistsLifecycleSnapshot:
     def test_async_shutdown_persists_snapshot(self, monkeypatch):
         """async_shutdown must call persist_lifecycle_snapshot before subsystem teardown."""
         persist_called = {}
 
         import core.task_envelope_lifecycle_registry as _lr_mod
+
         monkeypatch.setattr(
             _lr_mod, "persist_lifecycle_snapshot", lambda store=None: persist_called.update({"ok": True}) or True
         )
 
-        import launcher.shutdown as _sd_mod
-
         # Patch internal imports used by async_shutdown
         import unittest.mock as _mock
-        with _mock.patch.dict("sys.modules", {
-            "core.startup": _mock.MagicMock(shutdown_subsystems=lambda: asyncio.sleep(0)),
-            "core.nats_bus": _mock.MagicMock(nats_bus=_mock.AsyncMock()),
-        }):
+
+        import launcher.shutdown as _sd_mod
+
+        with _mock.patch.dict(
+            "sys.modules",
+            {
+                "core.startup": _mock.MagicMock(shutdown_subsystems=lambda: asyncio.sleep(0)),
+                "core.nats_bus": _mock.MagicMock(nats_bus=_mock.AsyncMock()),
+            },
+        ):
             asyncio.run(_sd_mod.async_shutdown())
 
         assert persist_called.get("ok") is True
@@ -207,22 +222,27 @@ class TestShutdownPersistsLifecycleSnapshot:
         call_order = []
 
         import core.task_envelope_lifecycle_registry as _lr_mod
+
         monkeypatch.setattr(
             _lr_mod,
             "persist_lifecycle_snapshot",
             lambda store=None: call_order.append("persist") or True,
         )
 
-        import launcher.shutdown as _sd_mod
         import unittest.mock as _mock
+
+        import launcher.shutdown as _sd_mod
 
         async def _fake_shutdown_subsystems():
             call_order.append("subsystems")
 
-        with _mock.patch.dict("sys.modules", {
-            "core.startup": _mock.MagicMock(shutdown_subsystems=_fake_shutdown_subsystems),
-            "core.nats_bus": _mock.MagicMock(nats_bus=_mock.AsyncMock()),
-        }):
+        with _mock.patch.dict(
+            "sys.modules",
+            {
+                "core.startup": _mock.MagicMock(shutdown_subsystems=_fake_shutdown_subsystems),
+                "core.nats_bus": _mock.MagicMock(nats_bus=_mock.AsyncMock()),
+            },
+        ):
             asyncio.run(_sd_mod.async_shutdown())
 
         assert "persist" in call_order
@@ -234,23 +254,29 @@ class TestShutdownPersistsLifecycleSnapshot:
 # G — async_shutdown continues when persist_lifecycle_snapshot raises
 # ---------------------------------------------------------------------------
 
+
 class TestShutdownPersistFailureNonFatal:
     def test_async_shutdown_continues_when_persist_raises(self, monkeypatch):
         """async_shutdown must continue (not raise) when persist_lifecycle_snapshot fails."""
         import core.task_envelope_lifecycle_registry as _lr_mod
+
         monkeypatch.setattr(
             _lr_mod,
             "persist_lifecycle_snapshot",
             lambda store=None: (_ for _ in ()).throw(IOError("disk full")),
         )
 
-        import launcher.shutdown as _sd_mod
         import unittest.mock as _mock
 
-        with _mock.patch.dict("sys.modules", {
-            "core.startup": _mock.MagicMock(shutdown_subsystems=lambda: asyncio.sleep(0)),
-            "core.nats_bus": _mock.MagicMock(nats_bus=_mock.AsyncMock()),
-        }):
+        import launcher.shutdown as _sd_mod
+
+        with _mock.patch.dict(
+            "sys.modules",
+            {
+                "core.startup": _mock.MagicMock(shutdown_subsystems=lambda: asyncio.sleep(0)),
+                "core.nats_bus": _mock.MagicMock(nats_bus=_mock.AsyncMock()),
+            },
+        ):
             # Must not raise
             asyncio.run(_sd_mod.async_shutdown())
 
@@ -259,11 +285,12 @@ class TestShutdownPersistFailureNonFatal:
 # H — Distinct sentinels
 # ---------------------------------------------------------------------------
 
+
 class TestDistinctSentinels:
     def test_orchestrator_and_recovery_sentinels_are_distinct(self):
         """SYSTEM_ORCHESTRATOR_AUTHORITY and RUNTIME_RESTART_RECOVERY_IS_AUTHORITY must differ."""
-        from core.system_orchestrator import SYSTEM_ORCHESTRATOR_AUTHORITY
         from core.runtime_restart_recovery import RUNTIME_RESTART_RECOVERY_IS_AUTHORITY
+        from core.system_orchestrator import SYSTEM_ORCHESTRATOR_AUTHORITY
 
         assert SYSTEM_ORCHESTRATOR_AUTHORITY != RUNTIME_RESTART_RECOVERY_IS_AUTHORITY
         assert len(SYSTEM_ORCHESTRATOR_AUTHORITY) > 0
@@ -274,6 +301,7 @@ class TestDistinctSentinels:
 # I — Full startup sequence Phase 4 data includes startup_recovery
 # ---------------------------------------------------------------------------
 
+
 class TestFullSequenceIncludesRecovery:
     def test_run_startup_sequence_phase4_data_has_startup_recovery(self, monkeypatch):
         """run_startup_sequence must include startup_recovery in Phase 4 data."""
@@ -283,6 +311,7 @@ class TestFullSequenceIncludesRecovery:
         mock_report.completed_at = mock_report.started_at + 0.01
 
         import core.runtime_restart_recovery as _rr_mod
+
         monkeypatch.setattr(_rr_mod, "run_startup_recovery", lambda **kw: mock_report)
 
         orch = SystemOrchestrator(continue_on_failure=True)
@@ -299,6 +328,7 @@ class TestFullSequenceIncludesRecovery:
 # ---------------------------------------------------------------------------
 # J — lifecycle_registry_restored_count is non-negative
 # ---------------------------------------------------------------------------
+
 
 class TestLifecycleRestoreCountNonNegative:
     def test_lifecycle_registry_restored_count_non_negative(self, monkeypatch):

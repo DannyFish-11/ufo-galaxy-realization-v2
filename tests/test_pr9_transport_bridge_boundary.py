@@ -1,14 +1,15 @@
 from __future__ import annotations
 
-import pytest
 from unittest.mock import MagicMock
+
+import pytest
 
 try:
     from galaxy_gateway.android.handlers.generic import (
         get_generic_forward_compat_allowlist,
         handle_generic_forward,
-        is_generic_forward_compat_message_type,
         is_generic_forward_blocked_message_type,
+        is_generic_forward_compat_message_type,
     )
     from galaxy_gateway.android.runtime_ws_profile import classify_android_runtime_ws_mapping
     from galaxy_gateway.android_bridge import AndroidBridge
@@ -19,9 +20,7 @@ except Exception:  # pragma: no cover
     _AVAILABLE = False
 
 
-_skip_if_unavailable = pytest.mark.skipif(
-    not _AVAILABLE, reason="transport bridge boundary dependencies unavailable"
-)
+_skip_if_unavailable = pytest.mark.skipif(not _AVAILABLE, reason="transport bridge boundary dependencies unavailable")
 
 
 @pytest.mark.asyncio
@@ -37,9 +36,7 @@ _skip_if_unavailable = pytest.mark.skipif(
         ("device_execution_event", "android_device_execution_event_ingress"),
     ],
 )
-async def test_generic_forward_rejects_canonical_ingress_message_types(
-    msg_type: str, handler_name: str
-) -> None:
+async def test_generic_forward_rejects_canonical_ingress_message_types(msg_type: str, handler_name: str) -> None:
     bridge = AndroidBridge()
     websocket = MagicMock()
     resp = await handle_generic_forward(

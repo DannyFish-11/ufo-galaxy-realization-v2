@@ -74,29 +74,28 @@ if _PROJECT_ROOT not in sys.path:
 
 import core.canonical_cross_repo_evidence_pipeline as _mod
 from core.canonical_cross_repo_evidence_pipeline import (
+    _SOURCE_AUTHORITY,
+    AUTHORITY_UNCLEAR_BLOCKS_COMPLETE_VERDICT_POLICY,
     CANONICAL_CROSS_REPO_EVIDENCE_PIPELINE_AUTHORITY,
     CANONICAL_CROSS_REPO_EVIDENCE_PIPELINE_PR05_SENTINEL,
-    PRIMARY_SOURCE_FRESHNESS_REQUIRED_POLICY,
-    STALE_EVIDENCE_NEVER_UPGRADES_VERDICT_POLICY,
-    AUTHORITY_UNCLEAR_BLOCKS_COMPLETE_VERDICT_POLICY,
-    CONFLICTING_EVIDENCE_NEVER_OPTIMISTIC_POLICY,
-    CANONICAL_PRECEDENCE_PRIMARY_OVER_SECONDARY_POLICY,
-    MISSING_PRIMARY_SOURCE_DOWNGRADES_TO_PARTIAL_POLICY,
     CANONICAL_PIPELINE_PRIMARY_FRESHNESS_MAX_AGE_SECONDS,
     CANONICAL_PIPELINE_SECONDARY_FRESHNESS_MAX_AGE_SECONDS,
-    EvidenceSourceId,
+    CANONICAL_PRECEDENCE_PRIMARY_OVER_SECONDARY_POLICY,
+    CONFLICTING_EVIDENCE_NEVER_OPTIMISTIC_POLICY,
+    MISSING_PRIMARY_SOURCE_DOWNGRADES_TO_PARTIAL_POLICY,
+    PRIMARY_SOURCE_FRESHNESS_REQUIRED_POLICY,
+    STALE_EVIDENCE_NEVER_UPGRADES_VERDICT_POLICY,
+    CanonicalCrossRepoEvidencePipeline,
+    CanonicalCrossRepoEvidenceReport,
     EvidenceSourceAuthority,
+    EvidenceSourceId,
+    IngestionSourceEntry,
     IngestionStatus,
     PipelineVerdict,
-    IngestionSourceEntry,
-    CanonicalCrossRepoEvidenceReport,
-    CanonicalCrossRepoEvidencePipeline,
     build_canonical_cross_repo_evidence_report,
     get_canonical_cross_repo_evidence_report,
     reset_canonical_cross_repo_evidence_report,
-    _SOURCE_AUTHORITY,
 )
-
 
 # ===========================================================================
 # Helpers
@@ -401,9 +400,14 @@ class TestIngestionSourceEntry:
         entry = _make_source(EvidenceSourceId.readiness_evidence)
         d = entry.to_dict()
         for key in (
-            "source_id", "authority", "status",
-            "evidence_summary", "freshness_secs", "is_stale",
-            "raw_evidence", "notes",
+            "source_id",
+            "authority",
+            "status",
+            "evidence_summary",
+            "freshness_secs",
+            "is_stale",
+            "raw_evidence",
+            "notes",
         ):
             assert key in d, f"Missing key: {key}"
 
@@ -445,13 +449,23 @@ class TestCanonicalCrossRepoEvidenceReport:
         report = _make_complete_report()
         d = report.to_dict()
         for key in (
-            "report_id", "generated_at", "authority",
-            "pipeline_verdict", "is_complete", "sources",
-            "primary_sources_complete", "primary_sources_fresh",
-            "downgrade_reasons", "conflict_notes",
-            "stale_sources", "missing_sources", "partial_sources",
-            "unavailable_sources", "authority_unclear_sources",
-            "canonical_precedence_applied", "merge_policy_notes",
+            "report_id",
+            "generated_at",
+            "authority",
+            "pipeline_verdict",
+            "is_complete",
+            "sources",
+            "primary_sources_complete",
+            "primary_sources_fresh",
+            "downgrade_reasons",
+            "conflict_notes",
+            "stale_sources",
+            "missing_sources",
+            "partial_sources",
+            "unavailable_sources",
+            "authority_unclear_sources",
+            "canonical_precedence_applied",
+            "merge_policy_notes",
             "summary",
         ):
             assert key in d, f"Missing key: {key}"
@@ -567,10 +581,7 @@ class TestAuthorityUnclear:
         ):
             report = pipeline.build()
         assert len(report.downgrade_reasons) > 0
-        assert any(
-            "authority_unclear" in r.lower() or "unavailable" in r.lower()
-            for r in report.downgrade_reasons
-        )
+        assert any("authority_unclear" in r.lower() or "unavailable" in r.lower() for r in report.downgrade_reasons)
 
     def test_authority_unclear_blocks_complete_verdict(self):
         """Authority unclear MUST NOT produce a complete verdict per policy."""
@@ -781,7 +792,10 @@ class TestCompleteEvidence:
         mock_registry.build_snapshot.return_value = {
             "total_artifacts": 4,
             "artifact_counts_by_kind": {
-                "readiness": 1, "acceptance": 1, "governance": 1, "strategy": 1,
+                "readiness": 1,
+                "acceptance": 1,
+                "governance": 1,
+                "strategy": 1,
             },
             "latest_by_kind": {
                 "readiness": {"received_at": now - 120},
@@ -891,14 +905,17 @@ class TestAuthorityUnclearNeverUpgrades:
 
 
 class TestIsComplete:
-    @pytest.mark.parametrize("verdict", [
-        PipelineVerdict.partial,
-        PipelineVerdict.stale,
-        PipelineVerdict.missing,
-        PipelineVerdict.conflicting,
-        PipelineVerdict.authority_unclear,
-        PipelineVerdict.insufficient,
-    ])
+    @pytest.mark.parametrize(
+        "verdict",
+        [
+            PipelineVerdict.partial,
+            PipelineVerdict.stale,
+            PipelineVerdict.missing,
+            PipelineVerdict.conflicting,
+            PipelineVerdict.authority_unclear,
+            PipelineVerdict.insufficient,
+        ],
+    )
     def test_non_complete_verdict_not_is_complete(self, verdict: PipelineVerdict):
         assert not verdict.is_complete
 
@@ -1004,8 +1021,7 @@ class TestAdvisorySourceDoesNotAffectVerdict:
         # Should be authority_unclear (due to evaluator unavailable), not worse
         # The key point: ADVISORY source status doesn't determine the verdict
         advisory_entry = next(
-            (s for s in report.sources
-             if s.source_id == EvidenceSourceId.delegated_runtime_audit),
+            (s for s in report.sources if s.source_id == EvidenceSourceId.delegated_runtime_audit),
             None,
         )
         assert advisory_entry is not None
@@ -1013,10 +1029,7 @@ class TestAdvisorySourceDoesNotAffectVerdict:
 
         # Audit status doesn't appear in authority_unclear_sources (that's for PRIMARY only)
         if advisory_entry.status == IngestionStatus.unavailable:
-            assert (
-                EvidenceSourceId.delegated_runtime_audit.value
-                not in report.authority_unclear_sources
-            )
+            assert EvidenceSourceId.delegated_runtime_audit.value not in report.authority_unclear_sources
 
 
 # ===========================================================================
@@ -1078,23 +1091,27 @@ class TestJsonSerialisation:
 class TestSystemFinalAcceptanceIntegration:
     def test_cross_repo_dimension_in_acceptance_dimension_id(self):
         from core.system_final_acceptance_verdict import AcceptanceDimensionId
+
         assert AcceptanceDimensionId.cross_repo_evidence_pipeline
 
     def test_cross_repo_dimension_in_all_dimensions(self):
         from core.system_final_acceptance_verdict import AcceptanceDimensionId
+
         dims = AcceptanceDimensionId.all_dimensions()
         assert AcceptanceDimensionId.cross_repo_evidence_pipeline in dims
 
     def test_evaluate_includes_cross_repo_key(self):
         from core.system_final_acceptance_verdict import evaluate_system_acceptance
+
         report = evaluate_system_acceptance()
         assert "cross_repo_evidence_pipeline" in report.checklist
 
     def test_evaluate_cross_repo_item_is_checklist_item(self):
         from core.system_final_acceptance_verdict import (
-            evaluate_system_acceptance,
             AcceptanceChecklistItem,
+            evaluate_system_acceptance,
         )
+
         report = evaluate_system_acceptance()
         item = report.checklist.get("cross_repo_evidence_pipeline")
         assert isinstance(item, AcceptanceChecklistItem)
@@ -1102,25 +1119,27 @@ class TestSystemFinalAcceptanceIntegration:
     def test_cross_repo_unresolved_produces_critical_risk(self):
         """When cross_repo dimension is unresolved, overall verdict must be critical risk."""
         from core.system_final_acceptance_verdict import (
-            SystemFinalAcceptanceEvaluator,
+            AcceptanceChecklistItem,
             AcceptanceDimensionId,
             DimensionStatus,
             SystemAcceptanceVerdict,
-            AcceptanceChecklistItem,
+            SystemFinalAcceptanceEvaluator,
         )
+
         evaluator = SystemFinalAcceptanceEvaluator()
         # Build a checklist where all dims are accepted except cross_repo_evidence_pipeline
         from tests.test_pr17_v2_system_final_acceptance_verdict import (  # type: ignore[import]
             _make_accepted_item,
             _make_unresolved_item,
         )
+
         checklist = {
             dim.value: _make_accepted_item(dim)
             for dim in AcceptanceDimensionId.all_dimensions()
             if dim != AcceptanceDimensionId.cross_repo_evidence_pipeline
         }
-        checklist[AcceptanceDimensionId.cross_repo_evidence_pipeline.value] = (
-            _make_unresolved_item(AcceptanceDimensionId.cross_repo_evidence_pipeline)
+        checklist[AcceptanceDimensionId.cross_repo_evidence_pipeline.value] = _make_unresolved_item(
+            AcceptanceDimensionId.cross_repo_evidence_pipeline
         )
         verdict = evaluator._compute_verdict(checklist)
         assert verdict == SystemAcceptanceVerdict.not_fully_operational_critical_risk
@@ -1128,10 +1147,10 @@ class TestSystemFinalAcceptanceIntegration:
     def test_cross_repo_pending_produces_pending_verdict(self):
         """When cross_repo dimension is pending, verdict must be pending (not fully_op)."""
         from core.system_final_acceptance_verdict import (
-            SystemFinalAcceptanceEvaluator,
             AcceptanceDimensionId,
             DimensionStatus,
             SystemAcceptanceVerdict,
+            SystemFinalAcceptanceEvaluator,
         )
         from tests.test_pr17_v2_system_final_acceptance_verdict import (  # type: ignore[import]
             _make_accepted_item,
@@ -1148,25 +1167,27 @@ class TestSystemFinalAcceptanceIntegration:
             )
 
         from core.system_final_acceptance_verdict import AcceptanceChecklistItem
+
         evaluator = SystemFinalAcceptanceEvaluator()
         checklist = {
             dim.value: _make_accepted_item(dim)
             for dim in AcceptanceDimensionId.all_dimensions()
             if dim != AcceptanceDimensionId.cross_repo_evidence_pipeline
         }
-        checklist[AcceptanceDimensionId.cross_repo_evidence_pipeline.value] = (
-            _make_pending_item(AcceptanceDimensionId.cross_repo_evidence_pipeline)
+        checklist[AcceptanceDimensionId.cross_repo_evidence_pipeline.value] = _make_pending_item(
+            AcceptanceDimensionId.cross_repo_evidence_pipeline
         )
         verdict = evaluator._compute_verdict(checklist)
         assert verdict == SystemAcceptanceVerdict.not_fully_operational_pending_dimensions
 
     def test_pipeline_module_unavailable_gives_unresolved_dimension(self):
         """When pipeline module unavailable, cross_repo_evidence_pipeline is unresolved."""
-        from core.system_final_acceptance_verdict import (
-            SystemFinalAcceptanceEvaluator,
-            DimensionStatus,
-        )
         import core.system_final_acceptance_verdict as _sfav
+        from core.system_final_acceptance_verdict import (
+            DimensionStatus,
+            SystemFinalAcceptanceEvaluator,
+        )
+
         evaluator = SystemFinalAcceptanceEvaluator()
         with (
             patch.object(_sfav, "_CROSS_REPO_PIPELINE_AVAILABLE", False),
@@ -1177,11 +1198,11 @@ class TestSystemFinalAcceptanceIntegration:
 
     def test_pipeline_complete_gives_accepted_dimension(self):
         """When pipeline verdict is complete, cross_repo_evidence_pipeline is accepted."""
-        from core.system_final_acceptance_verdict import (
-            SystemFinalAcceptanceEvaluator,
-            DimensionStatus,
-        )
         import core.system_final_acceptance_verdict as _sfav
+        from core.system_final_acceptance_verdict import (
+            DimensionStatus,
+            SystemFinalAcceptanceEvaluator,
+        )
 
         complete_report = _make_complete_report()
         evaluator = SystemFinalAcceptanceEvaluator()
@@ -1189,7 +1210,8 @@ class TestSystemFinalAcceptanceIntegration:
             patch.object(_sfav, "_CROSS_REPO_PIPELINE_AVAILABLE", True),
             patch.object(_sfav, "_build_cross_repo_report", return_value=complete_report),
             patch.object(
-                _sfav, "_PipelineVerdict",
+                _sfav,
+                "_PipelineVerdict",
                 PipelineVerdict,
             ),
         ):
@@ -1198,11 +1220,11 @@ class TestSystemFinalAcceptanceIntegration:
 
     def test_pipeline_partial_gives_pending_dimension(self):
         """When pipeline verdict is partial, cross_repo_evidence_pipeline is pending."""
-        from core.system_final_acceptance_verdict import (
-            SystemFinalAcceptanceEvaluator,
-            DimensionStatus,
-        )
         import core.system_final_acceptance_verdict as _sfav
+        from core.system_final_acceptance_verdict import (
+            DimensionStatus,
+            SystemFinalAcceptanceEvaluator,
+        )
 
         partial_report = CanonicalCrossRepoEvidenceReport(
             report_id="partial-report",
@@ -1225,11 +1247,11 @@ class TestSystemFinalAcceptanceIntegration:
 
     def test_pipeline_authority_unclear_gives_unresolved_dimension(self):
         """When pipeline verdict is authority_unclear, dimension is unresolved."""
-        from core.system_final_acceptance_verdict import (
-            SystemFinalAcceptanceEvaluator,
-            DimensionStatus,
-        )
         import core.system_final_acceptance_verdict as _sfav
+        from core.system_final_acceptance_verdict import (
+            DimensionStatus,
+            SystemFinalAcceptanceEvaluator,
+        )
 
         unclear_report = CanonicalCrossRepoEvidenceReport(
             report_id="unclear-report",

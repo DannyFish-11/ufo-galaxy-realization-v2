@@ -54,10 +54,11 @@ from typing import Any, Dict
 
 import pytest
 
+import core.task_graph_runtime as _mod
 from core.task_graph_runtime import (
+    TASK_GRAPH_NODE_CONTRACT_VERSION,
     TASK_GRAPH_RUNTIME_AUTHORITY,
     TASK_GRAPH_RUNTIME_LAYER_POSITION,
-    TASK_GRAPH_NODE_CONTRACT_VERSION,
     WORKFLOW_GRAPH_PROJECTION_POLICY,
     GraphEdge,
     GraphEdgeKind,
@@ -73,8 +74,6 @@ from core.task_graph_runtime import (
     reset_task_graph_runtime,
     result_envelope_to_node_update,
 )
-import core.task_graph_runtime as _mod
-
 
 # ===========================================================================
 # Helpers
@@ -263,8 +262,7 @@ def test_E05_queued_at_is_recent() -> None:
 def test_F01_to_dict_has_required_keys() -> None:
     n = GraphNode(task_id="t1", trace_id="tr1", tool_name="foo")
     d = n.to_dict()
-    for key in ("node_id", "task_id", "trace_id", "state", "contributor",
-                "depends_on", "queued_at", "tool_name"):
+    for key in ("node_id", "task_id", "trace_id", "state", "contributor", "depends_on", "queued_at", "tool_name"):
         assert key in d, f"missing key: {key}"
 
 
@@ -329,9 +327,13 @@ def test_H02_to_dict_kind_is_string() -> None:
 
 def test_I01_record_fields() -> None:
     r = GraphRuntimeRecord(
-        node_id="n1", task_id="t1", trace_id="tr1",
-        previous_state="queued", new_state="running",
-        transition_reason="test", contributor="scheduler",
+        node_id="n1",
+        task_id="t1",
+        trace_id="tr1",
+        previous_state="queued",
+        new_state="running",
+        transition_reason="test",
+        contributor="scheduler",
     )
     d = r.to_dict()
     assert d["node_id"] == "n1"
@@ -695,8 +697,17 @@ def test_AD01_snapshot_has_required_keys() -> None:
     rt = _fresh_runtime()
     snap = rt.snapshot()
     d = snap.to_dict()
-    for key in ("snapshot_id", "ts", "total_nodes", "total_edges",
-                "nodes_by_state", "nodes", "edges", "recent_records", "authority"):
+    for key in (
+        "snapshot_id",
+        "ts",
+        "total_nodes",
+        "total_edges",
+        "nodes_by_state",
+        "nodes",
+        "edges",
+        "recent_records",
+        "authority",
+    ):
         assert key in d, f"missing key: {key}"
 
 
@@ -732,6 +743,7 @@ def test_AF01_observability_log_is_deque() -> None:
     rt = _fresh_runtime()
     log = rt.get_observability_log()
     from collections import deque
+
     assert isinstance(log, deque)
 
 
@@ -758,6 +770,7 @@ def test_AG01_projection_log_is_deque() -> None:
     rt = _fresh_runtime()
     plog = rt.get_projection_log()
     from collections import deque
+
     assert isinstance(plog, deque)
 
 
@@ -814,13 +827,16 @@ def test_AJ02_all_contains_enums() -> None:
 
 
 def test_AJ03_all_contains_dataclasses() -> None:
-    for name in ("GraphNode", "GraphEdge", "GraphRuntimeRecord",
-                 "GraphRuntimeSnapshot", "WorkflowProjectionRecord"):
+    for name in ("GraphNode", "GraphEdge", "GraphRuntimeRecord", "GraphRuntimeSnapshot", "WorkflowProjectionRecord"):
         assert name in _mod.__all__, f"{name} missing from __all__"
 
 
 def test_AJ04_all_contains_helpers() -> None:
-    for name in ("envelope_to_graph_node", "result_envelope_to_node_update",
-                 "project_workflow_to_graph", "get_task_graph_runtime",
-                 "reset_task_graph_runtime"):
+    for name in (
+        "envelope_to_graph_node",
+        "result_envelope_to_node_update",
+        "project_workflow_to_graph",
+        "get_task_graph_runtime",
+        "reset_task_graph_runtime",
+    ):
         assert name in _mod.__all__, f"{name} missing from __all__"

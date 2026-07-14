@@ -184,9 +184,7 @@ TASK_GRAPH_NODE_CONTRACT_VERSION: str = "GRAPH_NODE_CONTRACT_V1"
 #: Policy: legacy workflow/orchestration outputs are projected onto the task
 #: graph as contributor records.  They are NEVER removed; only demoted to
 #: graph contributors.
-WORKFLOW_GRAPH_PROJECTION_POLICY: str = (
-    "WORKFLOW_CONTRIBUTORS_PROJECTED_TO_GRAPH_NOT_REMOVED"
-)
+WORKFLOW_GRAPH_PROJECTION_POLICY: str = "WORKFLOW_CONTRIBUTORS_PROJECTED_TO_GRAPH_NOT_REMOVED"
 
 #: PR-C convergence authority sentinel.  Signals that retry / fallback /
 #: fanout / fanin edges, the extended lifecycle states, and the CanonicalTask
@@ -238,6 +236,7 @@ class GraphNodeState(str, Enum):
     (admitted, planned, routed, partial_result, cancelled, degraded, replayed)
     are additive.
     """
+
     # Original PR-6 states (preserved, unchanged)
     QUEUED = "queued"
     DISPATCH = "dispatch"
@@ -283,6 +282,7 @@ class GraphEdgeKind(str, Enum):
     fanin_edge  (PR-C)
         Links a child node back to the aggregator node collecting results.
     """
+
     DEPENDENCY = "dependency_edge"
     DISPATCH = "dispatch_edge"
     RESULT = "result_edge"
@@ -294,10 +294,11 @@ class GraphEdgeKind(str, Enum):
 
 class WorkflowContributorKind(str, Enum):
     """Sources that can contribute nodes/edges to the task graph runtime."""
+
     GALAXY_ORCHESTRATOR = "galaxy_orchestrator"
     UNIFIED_ORCHESTRATOR = "unified_orchestrator"
     E2E_ORCHESTRATOR = "e2e_orchestrator"
-    TASK_GRAPH_ENGINE = "task_graph_engine"         # core.task_graph.TaskGraph
+    TASK_GRAPH_ENGINE = "task_graph_engine"  # core.task_graph.TaskGraph
     OPENCLAWD = "openclawd"
     SCHEDULER = "scheduler"
     COMMAND_ROUTER = "command_router"
@@ -732,9 +733,9 @@ class TaskGraphRuntime:
     _RING_BUFFER_SIZE: int = 256
 
     def __init__(self) -> None:
-        self._nodes: Dict[str, GraphNode] = {}          # keyed by task_id
+        self._nodes: Dict[str, GraphNode] = {}  # keyed by task_id
         self._nodes_by_node_id: Dict[str, GraphNode] = {}  # keyed by node_id
-        self._edges: Dict[str, GraphEdge] = {}          # keyed by edge_id
+        self._edges: Dict[str, GraphEdge] = {}  # keyed by edge_id
         self._records: Deque[GraphRuntimeRecord] = deque(maxlen=self._RING_BUFFER_SIZE)
         self._projections: Deque[WorkflowProjectionRecord] = deque(maxlen=self._RING_BUFFER_SIZE)
         # PR-C: retry / fallback / fanout lineage ring buffers
@@ -770,7 +771,9 @@ class TaskGraphRuntime:
         )
         logger.debug(
             "task_graph_runtime | registered node_id=%s task_id=%s state=%s",
-            node.node_id, node.task_id, node.state.value,
+            node.node_id,
+            node.task_id,
+            node.state.value,
         )
         return node
 
@@ -863,9 +866,7 @@ class TaskGraphRuntime:
         """
         node = self._nodes.get(task_id)
         if node is None:
-            logger.warning(
-                "task_graph_runtime | transition: unknown task_id=%s", task_id
-            )
+            logger.warning("task_graph_runtime | transition: unknown task_id=%s", task_id)
             return None
 
         previous_state = node.state.value
@@ -905,7 +906,10 @@ class TaskGraphRuntime:
         )
         logger.info(
             "task_graph_runtime | transition task_id=%s %s → %s reason=%s",
-            task_id, previous_state, new_state.value, reason,
+            task_id,
+            previous_state,
+            new_state.value,
+            reason,
         )
         return node
 
@@ -928,8 +932,10 @@ class TaskGraphRuntime:
         self._edges[edge.edge_id] = edge
         logger.debug(
             "task_graph_runtime | registered edge_id=%s kind=%s %s → %s",
-            edge.edge_id, edge.kind.value,
-            edge.source_node_id, edge.target_node_id,
+            edge.edge_id,
+            edge.kind.value,
+            edge.source_node_id,
+            edge.target_node_id,
         )
         return edge
 
@@ -1000,7 +1006,7 @@ class TaskGraphRuntime:
         registered = self.register_node(node)
 
         # Wire dependency edges for each listed dependency
-        for dep_task_id in (depends_on or []):
+        for dep_task_id in depends_on or []:
             dep_node = self._nodes.get(dep_task_id)
             if dep_node is not None:
                 self.add_dependency_edge(
@@ -1031,10 +1037,7 @@ class TaskGraphRuntime:
         """
         task_id = getattr(result_envelope, "task_id", "")
         if not task_id:
-            logger.warning(
-                "task_graph_runtime | complete_from_result_envelope: "
-                "result_envelope has no task_id"
-            )
+            logger.warning("task_graph_runtime | complete_from_result_envelope: " "result_envelope has no task_id")
             return None
 
         # Move to RESULT state first (acknowledges result receipt)
@@ -1092,11 +1095,7 @@ class TaskGraphRuntime:
         # TaskEnvelope-like objects and proper CanonicalTask instances.
         tool_name = ""
         if intent is not None:
-            tool_name = (
-                getattr(intent, "tool_name", "") or
-                getattr(intent, "requested_action", "") or
-                ""
-            )
+            tool_name = getattr(intent, "tool_name", "") or getattr(intent, "requested_action", "") or ""
 
         routing = getattr(canonical_task, "routing", None)
         device_id = getattr(routing, "selected_device_id", "") or "" if routing else ""
@@ -1105,23 +1104,21 @@ class TaskGraphRuntime:
         lifecycle_val = getattr(canonical_task, "lifecycle", None)
         lifecycle_str = lifecycle_val.value if hasattr(lifecycle_val, "value") else str(lifecycle_val)
         _lc_map = {
-            "created":    GraphNodeState.QUEUED,
-            "admitted":   GraphNodeState.ADMITTED,
-            "planned":    GraphNodeState.PLANNED,
-            "routed":     GraphNodeState.ROUTED,
+            "created": GraphNodeState.QUEUED,
+            "admitted": GraphNodeState.ADMITTED,
+            "planned": GraphNodeState.PLANNED,
+            "routed": GraphNodeState.ROUTED,
             "dispatched": GraphNodeState.DISPATCH,
-            "running":    GraphNodeState.RUNNING,
-            "completed":  GraphNodeState.COMPLETED,
-            "failed":     GraphNodeState.FAILED,
-            "cancelled":  GraphNodeState.CANCELLED,
-            "degraded":   GraphNodeState.DEGRADED,
+            "running": GraphNodeState.RUNNING,
+            "completed": GraphNodeState.COMPLETED,
+            "failed": GraphNodeState.FAILED,
+            "cancelled": GraphNodeState.CANCELLED,
+            "degraded": GraphNodeState.DEGRADED,
         }
         initial_state = _lc_map.get(lifecycle_str, GraphNodeState.QUEUED)
 
         if not task_id:
-            logger.warning(
-                "register_canonical_task: CanonicalTask has no task_id; skipping."
-            )
+            logger.warning("register_canonical_task: CanonicalTask has no task_id; skipping.")
             task_id = f"ctask_{uuid.uuid4().hex[:12]}"
 
         # Check for existing node first (idempotent)
@@ -1208,7 +1205,9 @@ class TaskGraphRuntime:
         self._retry_records.append(record)
         logger.info(
             "task_graph_runtime | retry_registered original=%s retry=%s attempt=%d",
-            original_task_id, retry_task_id, attempt_number,
+            original_task_id,
+            retry_task_id,
+            attempt_number,
         )
         return record
 
@@ -1272,7 +1271,8 @@ class TaskGraphRuntime:
         self._fallback_records.append(record)
         logger.info(
             "task_graph_runtime | fallback_registered primary=%s fallback=%s",
-            primary_task_id, fallback_task_id,
+            primary_task_id,
+            fallback_task_id,
         )
         return record
 
@@ -1330,7 +1330,8 @@ class TaskGraphRuntime:
         self._fanout_records.append(record)
         logger.info(
             "task_graph_runtime | fanout_registered parent=%s children=%d",
-            parent_task_id, len(child_task_ids),
+            parent_task_id,
+            len(child_task_ids),
         )
         return record
 
@@ -1388,7 +1389,8 @@ class TaskGraphRuntime:
         self._fanout_records.append(record)
         logger.info(
             "task_graph_runtime | fanin_registered aggregator=%s children=%d",
-            aggregator_task_id, len(child_task_ids),
+            aggregator_task_id,
+            len(child_task_ids),
         )
         return record
 
@@ -1399,20 +1401,14 @@ class TaskGraphRuntime:
 
         Records are returned in insertion order.
         """
-        return [
-            r for r in self._retry_records
-            if r.original_task_id == task_id or r.retry_task_id == task_id
-        ]
+        return [r for r in self._retry_records if r.original_task_id == task_id or r.retry_task_id == task_id]
 
     def get_fallback_lineage(self, task_id: str) -> List[FallbackRecord]:
         """Return all fallback records involving ``task_id`` (as primary or fallback).
 
         Records are returned in insertion order.
         """
-        return [
-            r for r in self._fallback_records
-            if r.primary_task_id == task_id or r.fallback_task_id == task_id
-        ]
+        return [r for r in self._fallback_records if r.primary_task_id == task_id or r.fallback_task_id == task_id]
 
     def get_fanout_children(self, parent_task_id: str) -> List[str]:
         """Return task_ids of all direct fanout children for ``parent_task_id``."""
@@ -1478,7 +1474,7 @@ class TaskGraphRuntime:
             registered = self.register_node(node)
             node_ids.append(registered.node_id)
 
-        for edge in (edges or []):
+        for edge in edges or []:
             registered_edge = self.register_edge(edge)
             edge_ids.append(registered_edge.edge_id)
 
@@ -1492,9 +1488,11 @@ class TaskGraphRuntime:
         )
         self._projections.append(record)
         logger.info(
-            "task_graph_runtime | workflow_projection contributor=%s "
-            "nodes=%d edges=%d trace_id=%s",
-            contributor.value, len(node_ids), len(edge_ids), trace_id,
+            "task_graph_runtime | workflow_projection contributor=%s " "nodes=%d edges=%d trace_id=%s",
+            contributor.value,
+            len(node_ids),
+            len(edge_ids),
+            trace_id,
         )
         return record
 
@@ -1734,24 +1732,24 @@ def project_workflow_to_graph(
 
     # Map legacy NodeStatus → GraphNodeState
     _status_map: Dict[str, GraphNodeState] = {
-        "pending":       GraphNodeState.QUEUED,
-        "queued":        GraphNodeState.QUEUED,
-        "admitted":      GraphNodeState.ADMITTED,
-        "planned":       GraphNodeState.PLANNED,
-        "routed":        GraphNodeState.ROUTED,
-        "running":       GraphNodeState.RUNNING,
-        "done":          GraphNodeState.COMPLETED,
-        "completed":     GraphNodeState.COMPLETED,
-        "failed":        GraphNodeState.FAILED,
-        "skipped":       GraphNodeState.FAILED,
-        "cancelled":     GraphNodeState.CANCELLED,
-        "interrupted":   GraphNodeState.FAILED,
-        "dispatch":      GraphNodeState.DISPATCH,
-        "dispatched":    GraphNodeState.DISPATCH,
-        "result":        GraphNodeState.RESULT,
+        "pending": GraphNodeState.QUEUED,
+        "queued": GraphNodeState.QUEUED,
+        "admitted": GraphNodeState.ADMITTED,
+        "planned": GraphNodeState.PLANNED,
+        "routed": GraphNodeState.ROUTED,
+        "running": GraphNodeState.RUNNING,
+        "done": GraphNodeState.COMPLETED,
+        "completed": GraphNodeState.COMPLETED,
+        "failed": GraphNodeState.FAILED,
+        "skipped": GraphNodeState.FAILED,
+        "cancelled": GraphNodeState.CANCELLED,
+        "interrupted": GraphNodeState.FAILED,
+        "dispatch": GraphNodeState.DISPATCH,
+        "dispatched": GraphNodeState.DISPATCH,
+        "result": GraphNodeState.RESULT,
         "partial_result": GraphNodeState.PARTIAL_RESULT,
-        "degraded":      GraphNodeState.DEGRADED,
-        "replayed":      GraphNodeState.REPLAYED,
+        "degraded": GraphNodeState.DEGRADED,
+        "replayed": GraphNodeState.REPLAYED,
     }
 
     nodes: List[GraphNode] = []

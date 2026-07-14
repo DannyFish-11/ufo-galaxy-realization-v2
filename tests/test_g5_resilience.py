@@ -37,16 +37,17 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 # ===========================================================================
 # 1–4. CircuitBreaker
 # ===========================================================================
+
 
 class TestCircuitBreakerStates:
     """State machine transitions."""
 
     def _fresh_cb(self, failure_threshold=3, recovery_timeout=60, window_size=5):
         from core.resilience.circuit_breaker import CircuitBreaker, CircuitState
+
         return CircuitBreaker(
             target="test_target",
             failure_threshold=failure_threshold,
@@ -58,6 +59,7 @@ class TestCircuitBreakerStates:
     async def test_initial_state_is_closed(self):
         cb = self._fresh_cb()
         from core.resilience.circuit_breaker import CircuitState
+
         assert cb.state == CircuitState.CLOSED
 
     @pytest.mark.asyncio
@@ -91,6 +93,7 @@ class TestCircuitBreakerStates:
     async def test_open_circuit_raises_without_fallback(self):
         cb = self._fresh_cb()
         from core.resilience.circuit_breaker import CircuitOpenError
+
         await cb.trip()
 
         async def fn():
@@ -108,6 +111,7 @@ class TestCircuitBreakerStates:
             return "degraded"
 
         from core.resilience.circuit_breaker import CircuitBreaker
+
         cb = CircuitBreaker(
             target="t",
             failure_threshold=1,
@@ -150,6 +154,7 @@ class TestCircuitBreakerStates:
     async def test_manual_reset(self):
         cb = self._fresh_cb()
         from core.resilience.circuit_breaker import CircuitState
+
         await cb.trip()
         assert cb.state == CircuitState.OPEN
         await cb.reset()
@@ -160,9 +165,15 @@ class TestCircuitBreakerStates:
         cb = self._fresh_cb()
         snap = cb.snapshot()
         for key in (
-            "target", "state", "total_calls", "total_failures",
-            "total_fallbacks", "total_circuit_opens",
-            "recent_error_rate", "failure_threshold", "recovery_timeout_s",
+            "target",
+            "state",
+            "total_calls",
+            "total_failures",
+            "total_fallbacks",
+            "total_circuit_opens",
+            "recent_error_rate",
+            "failure_threshold",
+            "recovery_timeout_s",
         ):
             assert key in snap, f"Missing key: {key}"
 
@@ -183,11 +194,13 @@ class TestCircuitBreakerStates:
 # 5–7. AdaptiveSemaphore
 # ===========================================================================
 
+
 class TestAdaptiveSemaphore:
     """Adaptive semaphore behaviour."""
 
     def _fresh(self, initial=5, min_limit=1, max_limit=20, target_latency=200.0):
         from core.resilience.adaptive_semaphore import AdaptiveSemaphore
+
         return AdaptiveSemaphore(
             initial_limit=initial,
             min_limit=min_limit,
@@ -236,9 +249,14 @@ class TestAdaptiveSemaphore:
         sem = self._fresh()
         snap = sem.snapshot()
         for key in (
-            "current_limit", "min_limit", "max_limit",
-            "total_acquired", "total_adjustments",
-            "p50_latency_ms", "p99_latency_ms", "recent_error_rate",
+            "current_limit",
+            "min_limit",
+            "max_limit",
+            "total_acquired",
+            "total_adjustments",
+            "p50_latency_ms",
+            "p99_latency_ms",
+            "recent_error_rate",
         ):
             assert key in snap, f"Missing key: {key}"
         # Value / type assertions
@@ -256,11 +274,13 @@ class TestAdaptiveSemaphore:
 # 8–11. ResilienceMetrics
 # ===========================================================================
 
+
 class TestResilienceMetrics:
     """Resilience metrics counters and Prometheus output."""
 
     def _fresh(self):
         from core.resilience.metrics import ResilienceMetrics
+
         return ResilienceMetrics()
 
     def test_queue_depth_tracking(self):
@@ -323,6 +343,7 @@ class TestResilienceMetrics:
 
     def test_singleton_same_instance(self):
         from core.resilience.metrics import get_resilience_metrics
+
         a = get_resilience_metrics()
         b = get_resilience_metrics()
         assert a is b
@@ -331,9 +352,14 @@ class TestResilienceMetrics:
         m = self._fresh()
         snap = m.snapshot()
         for key in (
-            "queue_depth", "queue_depth_max", "total_accepted",
-            "total_rejected", "rejection_rate_per_min",
-            "rejection_fraction", "total_fallbacks", "total_circuit_opens",
+            "queue_depth",
+            "queue_depth_max",
+            "total_accepted",
+            "total_rejected",
+            "rejection_rate_per_min",
+            "rejection_fraction",
+            "total_fallbacks",
+            "total_circuit_opens",
             "uptime_seconds",
         ):
             assert key in snap, f"Missing key: {key}"
@@ -342,6 +368,7 @@ class TestResilienceMetrics:
 # ===========================================================================
 # 12–15. CommandRouter integration
 # ===========================================================================
+
 
 class TestCommandRouterResilience:
     """CommandRouter PR-G5 integration tests."""
@@ -380,7 +407,8 @@ class TestCommandRouterResilience:
         )
 
         def _make_req(idx):
-            from core.command_router import CommandRequest, CommandMode
+            from core.command_router import CommandMode, CommandRequest
+
             return CommandRequest(
                 targets=[f"dev_{idx}"],
                 command="ping",
@@ -395,7 +423,8 @@ class TestCommandRouterResilience:
         await asyncio.wait_for(blocked_event.wait(), timeout=2.0)
 
         # Now the 3rd should be rejected
-        from core.command_router import CommandRequest, CommandMode
+        from core.command_router import CommandMode, CommandRequest
+
         req3 = CommandRequest(targets=["dev_3"], command="ping", mode=CommandMode.SYNC)
         result3 = await router.dispatch(req3)
         assert result3.status == CommandStatus.FAILED
@@ -427,7 +456,7 @@ class TestCommandRouterResilience:
     @pytest.mark.asyncio
     async def test_circuit_breaker_opens_after_failures(self):
         """After repeated failures the CB for that target should be OPEN."""
-        from core.command_router import CommandRouter, CommandRequest, CommandMode
+        from core.command_router import CommandMode, CommandRequest, CommandRouter
 
         call_count = 0
 
@@ -444,14 +473,17 @@ class TestCommandRouterResilience:
         )
         # Patch CB failure threshold to 2 so we don't need many dispatches
         from core.resilience.circuit_breaker import CircuitBreaker, CircuitState
+
         cb = CircuitBreaker(target="dev_x", failure_threshold=2, recovery_timeout=60)
         router._circuit_breakers["dev_x"] = cb
 
         # Manually inject failures to trip the CB
         for _ in range(2):
             try:
+
                 async def f():
                     raise RuntimeError("x")
+
                 await cb.call(f)
             except RuntimeError:
                 pass
@@ -459,11 +491,10 @@ class TestCommandRouterResilience:
         assert cb.state == CircuitState.OPEN
 
         # Now dispatch should use the open-CB fast path
-        req = CommandRequest(
-            targets=["dev_x"], command="ping", mode=CommandMode.SYNC, max_retries=0
-        )
+        req = CommandRequest(targets=["dev_x"], command="ping", mode=CommandMode.SYNC, max_retries=0)
         result = await router.dispatch(req)
         from core.command_router import CommandStatus
+
         assert result.status == CommandStatus.FAILED
         assert "OPEN" in (result.targets["dev_x"].error or "")
 
@@ -479,22 +510,27 @@ class TestCommandRouterResilience:
 # 16–19. Resilience API routes
 # ===========================================================================
 
+
 class TestResilienceRoutes:
     """FastAPI route tests for PR-G5 resilience endpoints."""
 
     def _app(self):
         from fastapi import FastAPI
+
         from core.routes.resilience import create_router
+
         app = FastAPI()
         app.include_router(create_router())
         return app
 
     def test_metrics_json_returns_200(self):
-        from httpx import AsyncClient
         import asyncio
 
+        from httpx import AsyncClient
+
         async def run():
-            from httpx import AsyncClient, ASGITransport
+            from httpx import ASGITransport, AsyncClient
+
             app = self._app()
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 resp = await client.get("/api/v1/resilience/metrics")
@@ -508,7 +544,8 @@ class TestResilienceRoutes:
         import asyncio
 
         async def run():
-            from httpx import AsyncClient, ASGITransport
+            from httpx import ASGITransport, AsyncClient
+
             app = self._app()
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 resp = await client.get("/api/v1/resilience/metrics")
@@ -523,7 +560,8 @@ class TestResilienceRoutes:
         import asyncio
 
         async def run():
-            from httpx import AsyncClient, ASGITransport
+            from httpx import ASGITransport, AsyncClient
+
             app = self._app()
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 resp = await client.get("/api/v1/resilience/metrics/prom")
@@ -536,7 +574,8 @@ class TestResilienceRoutes:
         import asyncio
 
         async def run():
-            from httpx import AsyncClient, ASGITransport
+            from httpx import ASGITransport, AsyncClient
+
             app = self._app()
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 resp = await client.get("/api/v1/resilience/metrics/prom")
@@ -548,7 +587,8 @@ class TestResilienceRoutes:
         import asyncio
 
         async def run():
-            from httpx import AsyncClient, ASGITransport
+            from httpx import ASGITransport, AsyncClient
+
             app = self._app()
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 resp = await client.get("/api/v1/resilience/circuit-breakers")
@@ -562,7 +602,8 @@ class TestResilienceRoutes:
         import asyncio
 
         async def run():
-            from httpx import AsyncClient, ASGITransport
+            from httpx import ASGITransport, AsyncClient
+
             app = self._app()
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 resp = await client.post("/api/v1/resilience/circuit-breakers/unknown_target/reset")
@@ -574,7 +615,8 @@ class TestResilienceRoutes:
         import asyncio
 
         async def run():
-            from httpx import AsyncClient, ASGITransport
+            from httpx import ASGITransport, AsyncClient
+
             from core.command_router import get_command_router
             from core.resilience.circuit_breaker import CircuitBreaker
 
@@ -597,13 +639,14 @@ class TestResilienceRoutes:
 # 20. Load-test smoke — concurrent dispatches under moderate concurrency
 # ===========================================================================
 
+
 class TestConcurrentLoadSmoke:
     """Quick smoke: 50 concurrent dispatches must not raise or corrupt schema."""
 
     @pytest.mark.asyncio
     async def test_concurrent_dispatches_no_schema_break(self):
         """50 concurrent dispatches complete without unhandled exceptions."""
-        from core.command_router import CommandRouter, CommandRequest, CommandMode, CommandStatus
+        from core.command_router import CommandMode, CommandRequest, CommandRouter, CommandStatus
 
         results_ok = []
         results_throttled = []
@@ -646,7 +689,7 @@ class TestConcurrentLoadSmoke:
     @pytest.mark.asyncio
     async def test_throttled_result_schema(self):
         """Throttled results must conform to CommandResult schema."""
-        from core.command_router import CommandRouter, CommandRequest, CommandMode, CommandStatus
+        from core.command_router import CommandMode, CommandRequest, CommandRouter, CommandStatus
 
         async def slow_executor(target, command, params):
             await asyncio.sleep(10)
@@ -660,7 +703,8 @@ class TestConcurrentLoadSmoke:
         )
 
         # First async request fills the slot
-        from core.command_router import CommandRequest, CommandMode
+        from core.command_router import CommandMode, CommandRequest
+
         req1 = CommandRequest(targets=["dev_a"], command="ping", mode=CommandMode.ASYNC)
         await router.dispatch(req1)
 

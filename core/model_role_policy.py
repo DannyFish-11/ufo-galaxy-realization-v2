@@ -37,26 +37,28 @@ logger = logging.getLogger("Galaxy.ModelRolePolicy")
 # Enumerations
 # ---------------------------------------------------------------------------
 
+
 class ModelRole(str, Enum):
     """Component roles in the Galaxy decision pipeline."""
 
-    PRIMARY = "primary"       # OpenClawd — sole decision authority
+    PRIMARY = "primary"  # OpenClawd — sole decision authority
     ORCHESTRATOR = "orchestrator"  # E2E / Gateway — plan scheduling only
-    EXECUTOR = "executor"      # HybridExecutor / WindowsArbiter — action dispatch
-    TRANSPORT = "transport"     # WebSocket / relay — message delivery
+    EXECUTOR = "executor"  # HybridExecutor / WindowsArbiter — action dispatch
+    TRANSPORT = "transport"  # WebSocket / relay — message delivery
 
 
 class DecisionAuthority(str, Enum):
     """Levels of decision authority."""
 
-    FULL = "full"     # May perform primary intent resolution + model selection
+    FULL = "full"  # May perform primary intent resolution + model selection
     EXECUTE = "execute"  # May only execute a pre-formed decision
-    RELAY = "relay"    # May only forward messages unchanged
+    RELAY = "relay"  # May only forward messages unchanged
 
 
 # ---------------------------------------------------------------------------
 # Exceptions
 # ---------------------------------------------------------------------------
+
 
 class PolicyViolationError(RuntimeError):
     """Raised when a non-primary component attempts a primary decision."""
@@ -65,6 +67,7 @@ class PolicyViolationError(RuntimeError):
 # ---------------------------------------------------------------------------
 # Policy registry
 # ---------------------------------------------------------------------------
+
 
 class ModelRolePolicy:
     """Central policy registry for component decision authority.
@@ -89,13 +92,13 @@ class ModelRolePolicy:
     def __init__(self) -> None:
         # Maps component names → their assigned role.
         self._component_roles: dict[str, ModelRole] = {
-            "openclawd":          ModelRole.PRIMARY,
-            "e2e_orchestrator":   ModelRole.ORCHESTRATOR,
-            "galaxy_gateway":     ModelRole.ORCHESTRATOR,
-            "task_orchestrator":  ModelRole.ORCHESTRATOR,
-            "hybrid_executor":    ModelRole.EXECUTOR,
-            "windows_arbiter":    ModelRole.EXECUTOR,
-            "smart_transport":    ModelRole.TRANSPORT,
+            "openclawd": ModelRole.PRIMARY,
+            "e2e_orchestrator": ModelRole.ORCHESTRATOR,
+            "galaxy_gateway": ModelRole.ORCHESTRATOR,
+            "task_orchestrator": ModelRole.ORCHESTRATOR,
+            "hybrid_executor": ModelRole.EXECUTOR,
+            "windows_arbiter": ModelRole.EXECUTOR,
+            "smart_transport": ModelRole.TRANSPORT,
         }
 
     # ------------------------------------------------------------------
@@ -139,10 +142,7 @@ class ModelRolePolicy:
         """
         if not self.may_decide(component):
             role = self.get_role(component)
-            msg = (
-                f"PolicyViolation: '{component}' (role={role.value}) is not "
-                f"authorised to make primary decisions."
-            )
+            msg = f"PolicyViolation: '{component}' (role={role.value}) is not " f"authorised to make primary decisions."
             if context:
                 msg += f" Context: {context}"
             logger.error(msg)
@@ -176,12 +176,12 @@ class ModelRolePolicy:
         """
         role = self.get_role(component)
         log_data = {
-            "event":     "primary_decision_authority",
+            "event": "primary_decision_authority",
             "authority": component,
-            "role":      role.value,
-            "trace_id":  trace_id,
-            "model":     model,
-            "intent":    intent,
+            "role": role.value,
+            "trace_id": trace_id,
+            "model": model,
+            "intent": intent,
         }
         if extra:
             log_data.update(extra)
@@ -219,6 +219,7 @@ def reset_policy() -> None:
 # ---------------------------------------------------------------------------
 # Convenience guard (module-level shortcut)
 # ---------------------------------------------------------------------------
+
 
 def assert_primary(component: str, context: str = "") -> None:
     """Module-level shortcut for :meth:`ModelRolePolicy.assert_primary`."""

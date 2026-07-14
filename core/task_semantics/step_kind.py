@@ -138,39 +138,23 @@ READONLY_KINDS: FrozenSet[StepKind] = frozenset(
 
 _KIND_DESCRIPTIONS: Dict[str, str] = {
     StepKind.PERCEIVE.value: (
-        "Gather environmental data (screenshot, sensor read, API poll). "
-        "Read-only, no system side effects."
+        "Gather environmental data (screenshot, sensor read, API poll). " "Read-only, no system side effects."
     ),
-    StepKind.ANALYZE.value: (
-        "Process or reason over gathered data. No I/O side effects."
-    ),
-    StepKind.DECIDE.value: (
-        "Choose among alternatives or select an execution plan. No direct "
-        "system effects."
-    ),
+    StepKind.ANALYZE.value: ("Process or reason over gathered data. No I/O side effects."),
+    StepKind.DECIDE.value: ("Choose among alternatives or select an execution plan. No direct " "system effects."),
     StepKind.EXECUTE.value: (
         "Perform a concrete system action (click, type, file-write, API call "
         "with side effects, shell command). Side-effectful."
     ),
-    StepKind.CONFIRM.value: (
-        "Await or record explicit user/system confirmation before proceeding. "
-        "Gate step."
-    ),
+    StepKind.CONFIRM.value: ("Await or record explicit user/system confirmation before proceeding. " "Gate step."),
     StepKind.NOTIFY.value: (
-        "Deliver a notification (push, log alert, webhook). May be "
-        "side-effectful in terms of network I/O."
+        "Deliver a notification (push, log alert, webhook). May be " "side-effectful in terms of network I/O."
     ),
-    StepKind.ROLLBACK.value: (
-        "Undo or compensate for a previously executed step. Side-effectful."
-    ),
+    StepKind.ROLLBACK.value: ("Undo or compensate for a previously executed step. Side-effectful."),
     StepKind.OBSERVE_REMOTE.value: (
-        "Observe the state of a remote device without performing any action. "
-        "Cross-device read-only."
+        "Observe the state of a remote device without performing any action. " "Cross-device read-only."
     ),
-    StepKind.UNKNOWN.value: (
-        "Step kind could not be inferred. Treated conservatively as "
-        "side-effectful."
-    ),
+    StepKind.UNKNOWN.value: ("Step kind could not be inferred. Treated conservatively as " "side-effectful."),
 }
 
 

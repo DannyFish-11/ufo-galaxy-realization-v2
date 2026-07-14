@@ -159,7 +159,6 @@ from typing import Any, Dict, Optional
 
 import pytest
 
-
 # ===========================================================================
 # Helpers
 # ===========================================================================
@@ -446,13 +445,13 @@ class TestRecomputeWindow:
         json.dumps(w.to_dict())
 
     def test_first_call_is_full(self):
-        from core.control_loop_latency_budget import RecomputeWindow, RecomputePolicy
+        from core.control_loop_latency_budget import RecomputePolicy, RecomputeWindow
 
         w = RecomputeWindow(min_interval_seconds=60.0)
         assert w.decide() == RecomputePolicy.FULL
 
     def test_rapid_second_call_is_coalesced(self):
-        from core.control_loop_latency_budget import RecomputeWindow, RecomputePolicy
+        from core.control_loop_latency_budget import RecomputePolicy, RecomputeWindow
 
         w = RecomputeWindow(min_interval_seconds=60.0)
         w.decide()  # FULL
@@ -460,7 +459,7 @@ class TestRecomputeWindow:
         assert result == RecomputePolicy.COALESCED
 
     def test_churn_triggers_deferred(self):
-        from core.control_loop_latency_budget import RecomputeWindow, RecomputePolicy
+        from core.control_loop_latency_budget import RecomputePolicy, RecomputeWindow
 
         # Very short churn window, very low threshold
         w = RecomputeWindow(
@@ -512,13 +511,13 @@ class TestProjectionRefreshWindow:
         json.dumps(ProjectionRefreshWindow().to_dict())
 
     def test_first_call_is_immediate(self):
-        from core.control_loop_latency_budget import ProjectionRefreshWindow, ProjectionRefreshPolicy
+        from core.control_loop_latency_budget import ProjectionRefreshPolicy, ProjectionRefreshWindow
 
         w = ProjectionRefreshWindow(min_interval_seconds=0.0)
         assert w.decide() == ProjectionRefreshPolicy.IMMEDIATE
 
     def test_rapid_same_fingerprint_is_suppressed(self):
-        from core.control_loop_latency_budget import ProjectionRefreshWindow, ProjectionRefreshPolicy
+        from core.control_loop_latency_budget import ProjectionRefreshPolicy, ProjectionRefreshWindow
 
         w = ProjectionRefreshWindow(min_interval_seconds=60.0)
         w.decide(state_fingerprint="fp1")  # IMMEDIATE (first call, elapsed > min because _last=0)
@@ -526,7 +525,7 @@ class TestProjectionRefreshWindow:
         assert result == ProjectionRefreshPolicy.SUPPRESSED
 
     def test_rapid_changed_fingerprint_is_coalesced(self):
-        from core.control_loop_latency_budget import ProjectionRefreshWindow, ProjectionRefreshPolicy
+        from core.control_loop_latency_budget import ProjectionRefreshPolicy, ProjectionRefreshWindow
 
         w = ProjectionRefreshWindow(min_interval_seconds=60.0)
         w.decide(state_fingerprint="fp1")  # IMMEDIATE
@@ -602,7 +601,7 @@ class TestProviderSelectionBudget:
 
 class TestTextOnlyFastPathAssessment:
     def test_construction_defaults(self):
-        from core.control_loop_latency_budget import TextOnlyFastPathAssessment, ModalityFastPathKind
+        from core.control_loop_latency_budget import ModalityFastPathKind, TextOnlyFastPathAssessment
 
         a = TextOnlyFastPathAssessment()
         assert a.fast_path_kind == ModalityFastPathKind.UNKNOWN
@@ -610,7 +609,7 @@ class TestTextOnlyFastPathAssessment:
         assert a.active_modalities == []
 
     def test_to_dict_from_dict_roundtrip(self):
-        from core.control_loop_latency_budget import TextOnlyFastPathAssessment, ModalityFastPathKind
+        from core.control_loop_latency_budget import ModalityFastPathKind, TextOnlyFastPathAssessment
 
         a = TextOnlyFastPathAssessment(
             fast_path_kind=ModalityFastPathKind.TEXT_ONLY,
@@ -655,7 +654,7 @@ class TestTextOnlyFastPathAssessment:
 
 class TestLatencyBudgetSummary:
     def test_construction_defaults(self):
-        from core.control_loop_latency_budget import LatencyBudgetSummary, IngestCadencePolicy
+        from core.control_loop_latency_budget import IngestCadencePolicy, LatencyBudgetSummary
 
         s = LatencyBudgetSummary()
         assert s.ingest_cadence_policy == IngestCadencePolicy.UNKNOWN.value
@@ -701,11 +700,20 @@ class TestLatencyBudgetSummary:
 
         d = LatencyBudgetSummary().to_dict()
         expected = {
-            "summary_id", "timestamp", "trace_id", "runtime_session_id",
-            "ingest_cadence_policy", "recompute_policy", "projection_refresh_policy",
-            "provider_selection_budget", "text_only_fast_path",
-            "ingest_window_stats", "recompute_window_stats", "projection_window_stats",
-            "projection_stale_snapshot_suspected", "projection_stale_snapshot_rate",
+            "summary_id",
+            "timestamp",
+            "trace_id",
+            "runtime_session_id",
+            "ingest_cadence_policy",
+            "recompute_policy",
+            "projection_refresh_policy",
+            "provider_selection_budget",
+            "text_only_fast_path",
+            "ingest_window_stats",
+            "recompute_window_stats",
+            "projection_window_stats",
+            "projection_stale_snapshot_suspected",
+            "projection_stale_snapshot_rate",
         }
         assert expected.issubset(set(d.keys()))
 
@@ -717,7 +725,7 @@ class TestLatencyBudgetSummary:
 
 class TestAssessTextOnlyFastPath:
     def test_none_context_no_modalities_is_text_only(self):
-        from core.control_loop_latency_budget import assess_text_only_fast_path, ModalityFastPathKind
+        from core.control_loop_latency_budget import ModalityFastPathKind, assess_text_only_fast_path
 
         result = assess_text_only_fast_path(
             multimodal_context=None,
@@ -727,7 +735,7 @@ class TestAssessTextOnlyFastPath:
         assert result.is_text_only is True
 
     def test_explicit_mm_context_is_multimodal_required(self):
-        from core.control_loop_latency_budget import assess_text_only_fast_path, ModalityFastPathKind
+        from core.control_loop_latency_budget import ModalityFastPathKind, assess_text_only_fast_path
 
         result = assess_text_only_fast_path(
             multimodal_context={"audio": True},
@@ -738,18 +746,16 @@ class TestAssessTextOnlyFastPath:
         assert result.has_multimodal_context is True
 
     def test_active_modalities_in_perception_is_multimodal_required(self):
-        from core.control_loop_latency_budget import assess_text_only_fast_path, ModalityFastPathKind
+        from core.control_loop_latency_budget import ModalityFastPathKind, assess_text_only_fast_path
 
         result = assess_text_only_fast_path(
             multimodal_context=None,
-            canonical_perception=_multimodal_perception(
-                active_modalities=["audio", "video"], requires_native=False
-            ),
+            canonical_perception=_multimodal_perception(active_modalities=["audio", "video"], requires_native=False),
         )
         assert result.fast_path_kind == ModalityFastPathKind.MULTIMODAL_REQUIRED
 
     def test_requires_native_multimodal_is_multimodal_required(self):
-        from core.control_loop_latency_budget import assess_text_only_fast_path, ModalityFastPathKind
+        from core.control_loop_latency_budget import ModalityFastPathKind, assess_text_only_fast_path
 
         result = assess_text_only_fast_path(
             multimodal_context=None,
@@ -758,7 +764,7 @@ class TestAssessTextOnlyFastPath:
         assert result.fast_path_kind == ModalityFastPathKind.MULTIMODAL_REQUIRED
 
     def test_all_none_inputs_returns_text_only(self):
-        from core.control_loop_latency_budget import assess_text_only_fast_path, ModalityFastPathKind
+        from core.control_loop_latency_budget import ModalityFastPathKind, assess_text_only_fast_path
 
         result = assess_text_only_fast_path(
             multimodal_context=None,
@@ -785,19 +791,17 @@ class TestAssessTextOnlyFastPath:
 class TestBuildLatencyBudgetSummary:
     def test_builds_correct_summary_with_all_params(self):
         from core.control_loop_latency_budget import (
-            build_latency_budget_summary,
             IngestCadencePolicy,
-            RecomputePolicy,
+            ModalityFastPathKind,
             ProjectionRefreshPolicy,
             ProviderSelectionBudget,
+            RecomputePolicy,
             TextOnlyFastPathAssessment,
-            ModalityFastPathKind,
+            build_latency_budget_summary,
         )
 
         psb = ProviderSelectionBudget(budget_ms=20.0, measured_ms=5.0, route_type="text_only")
-        fp = TextOnlyFastPathAssessment(
-            fast_path_kind=ModalityFastPathKind.TEXT_ONLY, is_text_only=True
-        )
+        fp = TextOnlyFastPathAssessment(fast_path_kind=ModalityFastPathKind.TEXT_ONLY, is_text_only=True)
         s = build_latency_budget_summary(
             trace_id="tr1",
             runtime_session_id="rs1",
@@ -825,8 +829,8 @@ class TestBuildLatencyBudgetSummary:
 
     def test_projection_stale_rate_derived_from_projection_window_stats(self):
         from core.control_loop_latency_budget import (
-            build_latency_budget_summary,
             ProjectionRefreshPolicy,
+            build_latency_budget_summary,
         )
 
         s = build_latency_budget_summary(
@@ -847,7 +851,7 @@ class TestBuildLatencyBudgetSummary:
         assert s is not None
 
     def test_never_raises_with_garbage_params(self):
-        from core.control_loop_latency_budget import build_latency_budget_summary, IngestCadencePolicy
+        from core.control_loop_latency_budget import IngestCadencePolicy, build_latency_budget_summary
 
         # Should not raise even if passed None for optional objects
         s = build_latency_budget_summary(
@@ -866,10 +870,12 @@ class TestBuildLatencyBudgetSummary:
 class TestControlLoopLatencyBudget:
     def setup_method(self):
         from core.control_loop_latency_budget import reset_latency_budget
+
         reset_latency_budget()
 
     def teardown_method(self):
         from core.control_loop_latency_budget import reset_latency_budget
+
         reset_latency_budget()
 
     def test_construction_defaults(self):
@@ -992,10 +998,12 @@ class TestControlLoopLatencyBudget:
 class TestSingleton:
     def setup_method(self):
         from core.control_loop_latency_budget import reset_latency_budget
+
         reset_latency_budget()
 
     def teardown_method(self):
         from core.control_loop_latency_budget import reset_latency_budget
+
         reset_latency_budget()
 
     def test_get_returns_singleton(self):
@@ -1022,14 +1030,16 @@ class TestSingleton:
 class TestTextOnlyFastPathBehavior:
     def setup_method(self):
         from core.control_loop_latency_budget import reset_latency_budget
+
         reset_latency_budget()
 
     def teardown_method(self):
         from core.control_loop_latency_budget import reset_latency_budget
+
         reset_latency_budget()
 
     def test_plain_text_request_is_text_only(self):
-        from core.control_loop_latency_budget import assess_text_only_fast_path, ModalityFastPathKind
+        from core.control_loop_latency_budget import ModalityFastPathKind, assess_text_only_fast_path
 
         result = assess_text_only_fast_path(
             multimodal_context=None,
@@ -1039,7 +1049,7 @@ class TestTextOnlyFastPathBehavior:
         assert result.is_text_only is True
 
     def test_ingest_cadence_skipped_for_text_only(self):
-        from core.control_loop_latency_budget import get_control_loop_latency_budget, IngestCadencePolicy
+        from core.control_loop_latency_budget import IngestCadencePolicy, get_control_loop_latency_budget
 
         b = get_control_loop_latency_budget()
         result = b.decide_ingest_cadence(has_multimodal_context=False, is_text_only=True)
@@ -1047,10 +1057,10 @@ class TestTextOnlyFastPathBehavior:
 
     def test_summary_reflects_text_only_fast_path(self):
         from core.control_loop_latency_budget import (
-            assess_text_only_fast_path,
-            build_latency_budget_summary,
             IngestCadencePolicy,
             ModalityFastPathKind,
+            assess_text_only_fast_path,
+            build_latency_budget_summary,
         )
 
         fp = assess_text_only_fast_path(multimodal_context=None, canonical_perception=None)
@@ -1071,10 +1081,12 @@ class TestTextOnlyFastPathBehavior:
 class TestChurnThrottling:
     def setup_method(self):
         from core.control_loop_latency_budget import reset_latency_budget
+
         reset_latency_budget()
 
     def teardown_method(self):
         from core.control_loop_latency_budget import reset_latency_budget
+
         reset_latency_budget()
 
     def test_rapid_recomputes_coalesced_or_deferred(self):
@@ -1096,9 +1108,7 @@ class TestChurnThrottling:
         from core.control_loop_latency_budget import ControlLoopLatencyBudget, RecomputePolicy
 
         b = ControlLoopLatencyBudget(recompute_min_interval_seconds=60.0)
-        full_count = sum(
-            1 for _ in range(5) if b.decide_recompute() == RecomputePolicy.FULL
-        )
+        full_count = sum(1 for _ in range(5) if b.decide_recompute() == RecomputePolicy.FULL)
         assert full_count == 1
 
 
@@ -1110,10 +1120,12 @@ class TestChurnThrottling:
 class TestProjectionBudgetBehavior:
     def setup_method(self):
         from core.control_loop_latency_budget import reset_latency_budget
+
         reset_latency_budget()
 
     def teardown_method(self):
         from core.control_loop_latency_budget import reset_latency_budget
+
         reset_latency_budget()
 
     def test_repeated_same_fingerprint_suppressed(self):
@@ -1154,10 +1166,10 @@ class TestProviderSelectionLatencyAccounting:
     def test_full_roundtrip_json_serialisable(self):
         from core.control_loop_latency_budget import (
             ControlLoopLatencyBudget,
-            build_latency_budget_summary,
             IngestCadencePolicy,
-            RecomputePolicy,
             ProjectionRefreshPolicy,
+            RecomputePolicy,
+            build_latency_budget_summary,
         )
 
         b = ControlLoopLatencyBudget()
@@ -1198,10 +1210,12 @@ class TestProviderSelectionLatencyAccounting:
 class TestRapidUpdateResilience:
     def setup_method(self):
         from core.control_loop_latency_budget import reset_latency_budget
+
         reset_latency_budget()
 
     def teardown_method(self):
         from core.control_loop_latency_budget import reset_latency_budget
+
         reset_latency_budget()
 
     def test_100_rapid_recompute_calls_no_exception(self):
@@ -1264,14 +1278,17 @@ class TestCanonicalArtifactPreservation:
 class TestOpenClawdIntegration:
     def setup_method(self):
         from core.control_loop_latency_budget import reset_latency_budget
+
         reset_latency_budget()
 
     def teardown_method(self):
         from core.control_loop_latency_budget import reset_latency_budget
+
         reset_latency_budget()
 
     def _make_openclawd(self):
         from core.openclawd import OpenClawd
+
         return OpenClawd.__new__(OpenClawd)
 
     def test_apply_latency_budget_returns_dict_for_typical_inputs(self):
@@ -1336,22 +1353,23 @@ class TestOpenClawdIntegration:
 class TestModuleImports:
     def test_all_public_symbols_importable(self):
         from core.control_loop_latency_budget import (
+            ControlLoopLatencyBudget,
             IngestCadencePolicy,
-            RecomputePolicy,
-            ProjectionRefreshPolicy,
-            ModalityFastPathKind,
             IngestCadenceWindow,
-            RecomputeWindow,
+            LatencyBudgetSummary,
+            ModalityFastPathKind,
+            ProjectionRefreshPolicy,
             ProjectionRefreshWindow,
             ProviderSelectionBudget,
+            RecomputePolicy,
+            RecomputeWindow,
             TextOnlyFastPathAssessment,
-            LatencyBudgetSummary,
-            ControlLoopLatencyBudget,
             assess_text_only_fast_path,
             build_latency_budget_summary,
             get_control_loop_latency_budget,
             reset_latency_budget,
         )
+
         # If this test reaches here, all imports succeeded
         assert IngestCadencePolicy is not None
         assert ControlLoopLatencyBudget is not None

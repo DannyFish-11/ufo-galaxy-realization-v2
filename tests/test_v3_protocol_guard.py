@@ -13,19 +13,20 @@ Verifies the single-source-of-truth invariants for the AIP v3 protocol:
    a direct reference to ``aip_protocol_v2``.
 """
 
+import glob
 import importlib
 import os
 import sys
-import glob
+
 import pytest
 
 from galaxy_gateway.protocol.aip_v3 import AIPMessage, MessageType
 from galaxy_gateway.protocol.compat import parse_message_compat
 
-
 # ---------------------------------------------------------------------------
 # 1. aip_protocol_v2 raises on import
 # ---------------------------------------------------------------------------
+
 
 class TestV2ImportBlocked:
     """Importing galaxy_gateway.aip_protocol_v2 must raise ImportError."""
@@ -40,6 +41,7 @@ class TestV2ImportBlocked:
 # ---------------------------------------------------------------------------
 # 2. Legacy → compat → v3
 # ---------------------------------------------------------------------------
+
 
 class TestCompatLayer:
     """Legacy inputs must be normalised to v3 AIPMessage by parse_message_compat."""
@@ -105,32 +107,49 @@ class TestCompatLayer:
 # 3. v3 AIPMessage has all previously v2-only types
 # ---------------------------------------------------------------------------
 
+
 class TestV3MessageTypeCompleteness:
     """All formerly-v2-only types must be present in v3 MessageType."""
 
-    @pytest.mark.parametrize("type_value", [
-        # Phase 1 – Agent dispatch
-        "agent_deploy", "agent_deploy_ack", "agent_status", "agent_result",
-        # Phase 2 – Relay
-        "relay_request", "relay_forward", "relay_reply", "relay_ack",
-        # Phase 3 – Hybrid execution
-        "hybrid_execute", "hybrid_result", "hybrid_degrade",
-        # Phase 4 – RAG & code execution
-        "rag_query", "rag_result", "code_execute", "code_result",
-        # Phase 5 – P2P mesh
-        "peer_announce", "peer_exchange", "mesh_topology",
-    ])
+    @pytest.mark.parametrize(
+        "type_value",
+        [
+            # Phase 1 – Agent dispatch
+            "agent_deploy",
+            "agent_deploy_ack",
+            "agent_status",
+            "agent_result",
+            # Phase 2 – Relay
+            "relay_request",
+            "relay_forward",
+            "relay_reply",
+            "relay_ack",
+            # Phase 3 – Hybrid execution
+            "hybrid_execute",
+            "hybrid_result",
+            "hybrid_degrade",
+            # Phase 4 – RAG & code execution
+            "rag_query",
+            "rag_result",
+            "code_execute",
+            "code_result",
+            # Phase 5 – P2P mesh
+            "peer_announce",
+            "peer_exchange",
+            "mesh_topology",
+        ],
+    )
     def test_type_present(self, type_value):
         all_values = {t.value for t in MessageType}
         assert type_value in all_values, (
-            f"MessageType is missing '{type_value}' — "
-            "it should have been promoted from v2 ExtendedMessageType"
+            f"MessageType is missing '{type_value}' — " "it should have been promoted from v2 ExtendedMessageType"
         )
 
 
 # ---------------------------------------------------------------------------
 # 4. Source-code guard: no file (other than the stub) references aip_protocol_v2
 # ---------------------------------------------------------------------------
+
 
 class TestNoV2SourceReferences:
     """No .py file other than aip_protocol_v2.py itself may import the module.
@@ -150,17 +169,20 @@ class TestNoV2SourceReferences:
     #   • test_device_ssot_capability_integration.py — asserts import raises
     #   • test_prS7_final_compat_demotion.py  — checks purge registry entry
     #   • test_pr7_final_consolidation.py     — uses name as test-string literal
-    _EXEMPT_BASENAMES = frozenset({
-        "aip_protocol_v2.py",
-        "test_v3_protocol_guard.py",
-        "test_device_ssot_capability_integration.py",
-        "test_prS7_final_compat_demotion.py",
-        "test_pr7_final_consolidation.py",
-    })
+    _EXEMPT_BASENAMES = frozenset(
+        {
+            "aip_protocol_v2.py",
+            "test_v3_protocol_guard.py",
+            "test_device_ssot_capability_integration.py",
+            "test_prS7_final_compat_demotion.py",
+            "test_pr7_final_consolidation.py",
+        }
+    )
 
     def _find_import_violations(self):
         """Return paths that contain a bare import of aip_protocol_v2."""
         import re
+
         repo_root = os.path.dirname(os.path.dirname(__file__))
         search_dirs = ["galaxy_gateway", "core", "enhancements", "tests"]
         # Match ``import galaxy_gateway.aip_protocol_v2`` or
@@ -190,7 +212,6 @@ class TestNoV2SourceReferences:
 
     def test_no_v2_references_in_source(self):
         violations = self._find_import_violations()
-        assert not violations, (
-            "The following files still import 'aip_protocol_v2' and must be updated:\n"
-            + "\n".join(f"  {v}" for v in violations)
+        assert not violations, "The following files still import 'aip_protocol_v2' and must be updated:\n" + "\n".join(
+            f"  {v}" for v in violations
         )

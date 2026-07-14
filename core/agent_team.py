@@ -26,9 +26,10 @@ import json
 import logging
 import time
 import uuid
-from typing import List, Dict, Optional
-from dataclasses import dataclass, replace as _dc_replace
+from dataclasses import dataclass
+from dataclasses import replace as _dc_replace
 from enum import Enum
+from typing import Dict, List, Optional
 
 logger = logging.getLogger("Galaxy.AgentTeam")
 
@@ -40,9 +41,9 @@ def _soul_prefix(soul: str) -> str:
 
 # 孪生模型管理器（可选依赖）
 try:
-    from enhancements.agent_factory.twin_model import (
-        TwinModelManager, CouplingMode as TwinCouplingMode, TwinState
-    )
+    from enhancements.agent_factory.twin_model import CouplingMode as TwinCouplingMode
+    from enhancements.agent_factory.twin_model import TwinModelManager, TwinState
+
     TWIN_AVAILABLE = True
 except ImportError:
     TWIN_AVAILABLE = False
@@ -53,12 +54,13 @@ except ImportError:
 
 # ───────────────────── 数据模型 ─────────────────────
 
+
 class TeamStrategy(Enum):
     PARALLEL = "parallel"
     SPECIALIZED = "specialized"
     SWARM = "swarm"
-    CRITIC = "critic"        # 做/审分离
-    PIPELINE = "pipeline"    # 流水线交接
+    CRITIC = "critic"  # 做/审分离
+    PIPELINE = "pipeline"  # 流水线交接
 
 
 class TeamStatus(Enum):
@@ -71,6 +73,7 @@ class TeamStatus(Enum):
 @dataclass
 class TeamMember:
     """团队成员"""
+
     agent_id: str
     agent_name: str
     provider: str
@@ -92,6 +95,7 @@ class TeamMember:
 @dataclass
 class MemberResult:
     """单个成员的执行结果"""
+
     member: TeamMember
     result: str
     latency_ms: float = 0.0
@@ -113,6 +117,7 @@ class MemberResult:
 @dataclass
 class TeamResult:
     """团队执行结果"""
+
     team_id: str
     strategy: str
     task: str
@@ -151,6 +156,7 @@ TASK_TYPE_TO_TEMPLATE = {
 
 # ───────────────────── AgentTeam ─────────────────────
 
+
 class AgentTeam:
     """一个 Agent 团队实例
 
@@ -158,10 +164,15 @@ class AgentTeam:
     通过 couple/decouple 随时切换耦合模式。
     """
 
-    def __init__(self, team_id: str, strategy: TeamStrategy,
-                 members: List[TeamMember],
-                 agent_factory, llm_router,
-                 twin_manager=None):
+    def __init__(
+        self,
+        team_id: str,
+        strategy: TeamStrategy,
+        members: List[TeamMember],
+        agent_factory,
+        llm_router,
+        twin_manager=None,
+    ):
         self.team_id = team_id
         self.strategy = strategy
         self.members = members
@@ -241,15 +252,17 @@ class AgentTeam:
             if twin_id:
                 twin = self._twin_manager.get_twin(twin_id)
                 if twin:
-                    statuses.append({
-                        "agent_id": member.agent_id,
-                        "agent_name": member.agent_name,
-                        "twin_id": twin.twin_id,
-                        "state": twin.state.value,
-                        "coupling_mode": twin.coupling_mode.value,
-                        "divergence": twin.current_divergence,
-                        "sync_count": twin.sync_count,
-                    })
+                    statuses.append(
+                        {
+                            "agent_id": member.agent_id,
+                            "agent_name": member.agent_name,
+                            "twin_id": twin.twin_id,
+                            "state": twin.state.value,
+                            "coupling_mode": twin.coupling_mode.value,
+                            "divergence": twin.current_divergence,
+                            "sync_count": twin.sync_count,
+                        }
+                    )
         return statuses
 
     async def _update_member_twin(self, agent_id: str, snapshot_update: Dict):
@@ -310,14 +323,17 @@ class AgentTeam:
 
             # 更新所有成员孪生体
             for mr in result.member_results:
-                await self._update_member_twin(mr.member.agent_id, {
-                    "status": "completed" if mr.success else "error",
-                    "last_task": task[:100],
-                    "last_result": mr.result[:200] if mr.result else None,
-                    "last_latency_ms": mr.latency_ms,
-                    "task_count": 1,  # will be merged with existing
-                    "success": mr.success,
-                })
+                await self._update_member_twin(
+                    mr.member.agent_id,
+                    {
+                        "status": "completed" if mr.success else "error",
+                        "last_task": task[:100],
+                        "last_result": mr.result[:200] if mr.result else None,
+                        "last_latency_ms": mr.latency_ms,
+                        "task_count": 1,  # will be merged with existing
+                        "success": mr.success,
+                    },
+                )
 
             return result
 
@@ -337,7 +353,10 @@ class AgentTeam:
     # ─────── 成员 ReAct 执行 (带工具) ───────
 
     async def _call_member_with_tools(
-        self, member: TeamMember, messages: List[Dict], max_iterations: Optional[int] = None,
+        self,
+        member: TeamMember,
+        messages: List[Dict],
+        max_iterations: Optional[int] = None,
     ) -> MemberResult:
         """带 ReAct 工具调用的成员执行 — 有工具走循环，无工具走直连。
 
@@ -350,6 +369,7 @@ class AgentTeam:
         try:
             if self._tools and self._dispatch_fn:
                 from core.agent.react_loop import ReactConfig, run_react_tool_loop
+
                 cfg = ReactConfig.from_env()
                 iters = max_iterations if max_iterations is not None else cfg.team_member_max_iterations
 
@@ -420,20 +440,21 @@ class AgentTeam:
 
         async def _call_member(member: TeamMember) -> MemberResult:
             messages = [
-                {"role": "system", "content": soul_pfx + f"你是 {member.agent_name}，擅长 {member.role_in_team}。请独立分析并回答。"},
+                {
+                    "role": "system",
+                    "content": soul_pfx + f"你是 {member.agent_name}，擅长 {member.role_in_team}。请独立分析并回答。",
+                },
                 {"role": "user", "content": task},
             ]
             if context:
                 messages[0]["content"] += f"\n\n上下文:\n{json.dumps(context, ensure_ascii=False)}"
             try:
                 return await asyncio.wait_for(
-                    self._call_member_with_tools(member, messages),
-                    timeout=90.0  # 单成员最多 90 秒
+                    self._call_member_with_tools(member, messages), timeout=90.0  # 单成员最多 90 秒
                 )
             except asyncio.TimeoutError:
                 return MemberResult(
-                    member=member, result="", latency_ms=90000,
-                    success=False, error="成员执行超时 (90s)"
+                    member=member, result="", latency_ms=90000, success=False, error="成员执行超时 (90s)"
                 )
 
         # 并行调用所有成员 (return_exceptions 防止一个成员异常拖垮全组)
@@ -444,17 +465,19 @@ class AgentTeam:
         member_results = []
         for i, r in enumerate(raw_results):
             if isinstance(r, Exception):
-                member_results.append(MemberResult(
-                    member=self.members[i], result="",
-                    success=False, error=str(r),
-                ))
+                member_results.append(
+                    MemberResult(
+                        member=self.members[i],
+                        result="",
+                        success=False,
+                        error=str(r),
+                    )
+                )
             else:
                 member_results.append(r)
 
         # 综合所有结果
-        synthesized = await self._synthesize_results(
-            task, member_results, "综合以上各方回答，给出最全面准确的回答。"
-        )
+        synthesized = await self._synthesize_results(task, member_results, "综合以上各方回答，给出最全面准确的回答。")
 
         return TeamResult(
             team_id=self.team_id,
@@ -483,15 +506,14 @@ class AgentTeam:
 
         for st in subtasks:
             # 分类子任务
-            task_type = self._router.classify_task(
-                [{"role": "user", "content": st["description"]}]
-            )
+            task_type = self._router.classify_task([{"role": "user", "content": st["description"]}])
             # 特种部队核心：按"实际情况"给每个子任务配最优模型（质量优先+适度token，
             # 只在已填key里选）。fit-based 选不出时退回通用 route()。
             decision = None
             if hasattr(self._router, "select_brain_for_task"):
                 try:
                     from core.multi_llm_router import TaskType as _TT
+
                     _tt = task_type if isinstance(task_type, _TT) else _TT.GENERAL
                     decision = self._router.select_brain_for_task(_tt, complexity_score=0.6)
                     if decision.provider == "none":
@@ -534,9 +556,7 @@ class AgentTeam:
                 result.result = f"[{subtask['title']}] 失败"
             return result
 
-        member_results = await asyncio.gather(
-            *[_exec_subtask(st, m) for st, m in assignments]
-        )
+        member_results = await asyncio.gather(*[_exec_subtask(st, m) for st, m in assignments])
         member_results = list(member_results)
 
         # Step 4: 综合
@@ -565,9 +585,7 @@ class AgentTeam:
             ]
             return await self._call_member_with_tools(member, messages)
 
-        member_results = list(await asyncio.gather(
-            *[_call_member(m) for m in self.members]
-        ))
+        member_results = list(await asyncio.gather(*[_call_member(m) for m in self.members]))
 
         # 综合合并
         synthesized = await self._synthesize_results(
@@ -591,6 +609,7 @@ class AgentTeam:
         来把关质量，最多 GALAXY_CRITIC_MAX_ROUNDS 轮。
         """
         import os as _os
+
         soul_pfx = _soul_prefix((context or {}).get("soul", ""))
         max_rounds = max(1, int(_os.environ.get("GALAXY_CRITIC_MAX_ROUNDS", "2")))
 
@@ -601,8 +620,13 @@ class AgentTeam:
             logger.debug("CRITIC: 无独立 critic 成员，退回 parallel")
             return await self._execute_parallel(task, context)
         if executor is None:
-            return TeamResult(team_id=self.team_id, strategy="critic", task=task,
-                              member_results=[], synthesized="无可用 executor 成员")
+            return TeamResult(
+                team_id=self.team_id,
+                strategy="critic",
+                task=task,
+                member_results=[],
+                synthesized="无可用 executor 成员",
+            )
 
         member_results: List[MemberResult] = []
         draft = ""
@@ -615,7 +639,9 @@ class AgentTeam:
             # ── 执行者产出 / 修订 ──
             if rnd == 0:
                 exec_user = task
-                exec_sys = soul_pfx + f"你是 {executor.agent_name}（执行者）。请完成以下任务，给出完整、可直接交付的产出。"
+                exec_sys = (
+                    soul_pfx + f"你是 {executor.agent_name}（执行者）。请完成以下任务，给出完整、可直接交付的产出。"
+                )
             else:
                 exec_user = (
                     f"原始任务:\n{task}\n\n你上一版产出:\n{draft}\n\n"
@@ -641,7 +667,7 @@ class AgentTeam:
             )
             review_user = (
                 f"任务:\n{task}\n\n待审产出:\n{draft}\n\n"
-                "请只返回 JSON：{\"verdict\": \"pass\"或\"revise\", \"feedback\": \"具体问题与改进建议；pass 时可为空\"}。"
+                '请只返回 JSON：{"verdict": "pass"或"revise", "feedback": "具体问题与改进建议；pass 时可为空"}。'
             )
             review_msgs = [
                 {"role": "system", "content": review_sys},
@@ -680,13 +706,14 @@ class AgentTeam:
             t = raw
             if "```" in t:
                 import re as _re
-                m = _re.search(r'```(?:json)?\s*([\s\S]*?)```', t)
+
+                m = _re.search(r"```(?:json)?\s*([\s\S]*?)```", t)
                 if m:
                     t = m.group(1).strip()
             # 截取第一个 {...}
             start, end = t.find("{"), t.rfind("}")
             if start != -1 and end != -1 and end > start:
-                data = json.loads(t[start:end + 1])
+                data = json.loads(t[start : end + 1])
                 verdict = str(data.get("verdict", "")).strip().lower()
                 feedback = str(data.get("feedback", "")).strip()
                 if verdict in ("pass", "revise"):
@@ -710,14 +737,15 @@ class AgentTeam:
         """
         soul_pfx = _soul_prefix((context or {}).get("soul", ""))
         if not self.members:
-            return TeamResult(team_id=self.team_id, strategy="pipeline", task=task,
-                              member_results=[], synthesized="无可用成员")
+            return TeamResult(
+                team_id=self.team_id, strategy="pipeline", task=task, member_results=[], synthesized="无可用成员"
+            )
 
         member_results: List[MemberResult] = []
         prev_output = ""
         for i, member in enumerate(self.members):
             stage_no = i + 1
-            is_last = (i == len(self.members) - 1)
+            is_last = i == len(self.members) - 1
             if i == 0:
                 stage_sys = soul_pfx + (
                     f"你是流水线第 {stage_no} 站 {member.agent_name}（{member.role_in_team}）。"
@@ -727,8 +755,11 @@ class AgentTeam:
             else:
                 stage_sys = soul_pfx + (
                     f"你是流水线第 {stage_no} 站 {member.agent_name}（{member.role_in_team}）。"
-                    + ("这是最后一站，请产出最终可交付结果。" if is_last
-                       else "请在上一站产出的基础上继续推进你这一环节。")
+                    + (
+                        "这是最后一站，请产出最终可交付结果。"
+                        if is_last
+                        else "请在上一站产出的基础上继续推进你这一环节。"
+                    )
                 )
                 stage_user = f"原始任务:\n{task}\n\n上一站产出:\n{prev_output}\n\n请完成你这一站的工作。"
             msgs = [
@@ -786,7 +817,8 @@ class AgentTeam:
             # 尝试从 markdown 代码块提取
             if "```" in text:
                 import re
-                match = re.search(r'```(?:json)?\s*([\s\S]*?)```', text)
+
+                match = re.search(r"```(?:json)?\s*([\s\S]*?)```", text)
                 if match:
                     text = match.group(1).strip()
 
@@ -797,9 +829,7 @@ class AgentTeam:
             logger.warning(f"任务分解失败: {e}")
         return []
 
-    async def _synthesize_results(self, task: str,
-                                   member_results: List[MemberResult],
-                                   instruction: str) -> str:
+    async def _synthesize_results(self, task: str, member_results: List[MemberResult], instruction: str) -> str:
         """用 coordinator LLM 综合所有成员结果"""
         successful = [mr for mr in member_results if mr.success and mr.result]
         if not successful:
@@ -809,8 +839,7 @@ class AgentTeam:
             return successful[0].result
 
         results_text = "\n\n".join(
-            f"--- {mr.member.agent_name} ({mr.member.provider}:{mr.member.model}) ---\n{mr.result}"
-            for mr in successful
+            f"--- {mr.member.agent_name} ({mr.member.provider}:{mr.member.model}) ---\n{mr.result}" for mr in successful
         )
 
         try:
@@ -831,6 +860,7 @@ class AgentTeam:
 
 # ───────────────────── TeamManager ─────────────────────
 
+
 class TeamManager:
     """管理所有 Agent Team 的生命周期
 
@@ -845,8 +875,7 @@ class TeamManager:
         self.teams: Dict[str, AgentTeam] = {}
         logger.info(f"TeamManager 已初始化 (twin={TWIN_AVAILABLE and twin_manager is not None})")
 
-    async def create_team(self, strategy: str, task_hint: str = "",
-                          complexity_score: float = 0.5) -> AgentTeam:
+    async def create_team(self, strategy: str, task_hint: str = "", complexity_score: float = 0.5) -> AgentTeam:
         """创建一个 Agent 团队"""
         try:
             strat = TeamStrategy(strategy)
@@ -871,35 +900,38 @@ class TeamManager:
         logger.info(f"Team {team_id} 已创建，策略={strategy}，成员数={len(members)}")
         return team
 
-    def _create_members(self, strategy: TeamStrategy, task_hint: str,
-                        complexity_score: float = 0.5) -> List[TeamMember]:
+    def _create_members(
+        self, strategy: TeamStrategy, task_hint: str, complexity_score: float = 0.5
+    ) -> List[TeamMember]:
         """根据策略创建团队成员 (按复杂度选模型)"""
         members = []
 
         if not self._router or not self._router.providers:
-            return [TeamMember(
-                agent_id=f"agent_{uuid.uuid4().hex[:8]}",
-                agent_name="默认 Agent",
-                provider="none",
-                model="none",
-                role_in_team="worker",
-            )]
+            return [
+                TeamMember(
+                    agent_id=f"agent_{uuid.uuid4().hex[:8]}",
+                    agent_name="默认 Agent",
+                    provider="none",
+                    model="none",
+                    role_in_team="worker",
+                )
+            ]
 
         providers = list(self._router.providers.items())
 
         # 预计算任务类型 (用于复杂度选模型)
         _task_type = None
         if task_hint:
-            _task_type = self._router.classify_task(
-                [{"role": "user", "content": task_hint}]
-            )
+            _task_type = self._router.classify_task([{"role": "user", "content": task_hint}])
 
         def _pick_model(prov_name: str, prov_cfg) -> str:
             """按复杂度选模型，fallback 到 default_model"""
             if _task_type and hasattr(self._router, "select_model_by_complexity"):
                 try:
                     return self._router.select_model_by_complexity(
-                        prov_name, _task_type, complexity_score,
+                        prov_name,
+                        _task_type,
+                        complexity_score,
                     )
                 except Exception as exc:
                     logger.warning("Exception suppressed: %s", exc)
@@ -919,14 +951,16 @@ class TeamManager:
                     except Exception as exc:
                         logger.warning("Exception suppressed: %s", exc)
 
-                members.append(TeamMember(
-                    agent_id=agent_id,
-                    agent_name=f"研究员-{prov_name}",
-                    provider=prov_name,
-                    model=_pick_model(prov_name, prov_cfg),
-                    role_in_team="researcher",
-                    template="research",
-                ))
+                members.append(
+                    TeamMember(
+                        agent_id=agent_id,
+                        agent_name=f"研究员-{prov_name}",
+                        provider=prov_name,
+                        model=_pick_model(prov_name, prov_cfg),
+                        role_in_team="researcher",
+                        template="research",
+                    )
+                )
 
         elif strategy == TeamStrategy.SPECIALIZED:
             # 创建不同角色的成员，分配到不同提供商
@@ -946,14 +980,16 @@ class TeamManager:
                     except Exception as exc:
                         logger.warning("Exception suppressed: %s", exc)
 
-                members.append(TeamMember(
-                    agent_id=agent_id,
-                    agent_name=name,
-                    provider=prov_name,
-                    model=_pick_model(prov_name, prov_cfg),
-                    role_in_team=role,
-                    template=template,
-                ))
+                members.append(
+                    TeamMember(
+                        agent_id=agent_id,
+                        agent_name=name,
+                        provider=prov_name,
+                        model=_pick_model(prov_name, prov_cfg),
+                        role_in_team=role,
+                        template=template,
+                    )
+                )
 
             # 加一个 coordinator
             prov_name, prov_cfg = providers[0]
@@ -964,14 +1000,16 @@ class TeamManager:
                     agent_id = agent.id
                 except Exception as exc:
                     logger.warning("Exception suppressed: %s", exc)
-            members.append(TeamMember(
-                agent_id=agent_id,
-                agent_name="总协调",
-                provider=prov_name,
-                model=_pick_model(prov_name, prov_cfg),
-                role_in_team="coordinator",
-                template="coordinator",
-            ))
+            members.append(
+                TeamMember(
+                    agent_id=agent_id,
+                    agent_name="总协调",
+                    provider=prov_name,
+                    model=_pick_model(prov_name, prov_cfg),
+                    role_in_team="coordinator",
+                    template="coordinator",
+                )
+            )
 
         elif strategy == TeamStrategy.SWARM:
             # 批量创建同类 Agent，分布到不同提供商
@@ -985,14 +1023,16 @@ class TeamManager:
                         agent_id = agent.id
                     except Exception as exc:
                         logger.warning("Exception suppressed: %s", exc)
-                members.append(TeamMember(
-                    agent_id=agent_id,
-                    agent_name=f"Swarm-{i+1}",
-                    provider=prov_name,
-                    model=_pick_model(prov_name, prov_cfg),
-                    role_in_team=f"swarm_worker_{i+1}",
-                    template="research",
-                ))
+                members.append(
+                    TeamMember(
+                        agent_id=agent_id,
+                        agent_name=f"Swarm-{i+1}",
+                        provider=prov_name,
+                        model=_pick_model(prov_name, prov_cfg),
+                        role_in_team=f"swarm_worker_{i+1}",
+                        template="research",
+                    )
+                )
 
         elif strategy == TeamStrategy.CRITIC:
             # 做/审分离：executor(本地小模型) + critic(开源大模型)
@@ -1001,9 +1041,16 @@ class TeamManager:
                 ("critic", "coordinator", "审核者"),
             ]
             for role, template, name in critic_roles:
-                members.append(self._make_role_member(
-                    role, template, name, complexity_score, _task_type, providers,
-                ))
+                members.append(
+                    self._make_role_member(
+                        role,
+                        template,
+                        name,
+                        complexity_score,
+                        _task_type,
+                        providers,
+                    )
+                )
 
         elif strategy == TeamStrategy.PIPELINE:
             # 流水线：研究 → 分析 → 写作 → 审核，各环节绑定合适的脑
@@ -1014,15 +1061,27 @@ class TeamManager:
                 ("reviewer", "coordinator", "审核站"),
             ]
             for role, template, name in pipeline_roles:
-                members.append(self._make_role_member(
-                    role, template, name, complexity_score, _task_type, providers,
-                ))
+                members.append(
+                    self._make_role_member(
+                        role,
+                        template,
+                        name,
+                        complexity_score,
+                        _task_type,
+                        providers,
+                    )
+                )
 
         return members
 
     def _make_role_member(
-        self, role: str, template: str, name: str,
-        complexity_score: float, task_type, providers: list,
+        self,
+        role: str,
+        template: str,
+        name: str,
+        complexity_score: float,
+        task_type,
+        providers: list,
     ) -> "TeamMember":
         """按"角色→脑"绑定创建一个成员（大小模型配合的执行层）。
 
@@ -1041,7 +1100,9 @@ class TeamManager:
         if hasattr(self._router, "select_brain_for_role"):
             try:
                 decision = self._router.select_brain_for_role(
-                    role, complexity_score=complexity_score, task_type=task_type,
+                    role,
+                    complexity_score=complexity_score,
+                    task_type=task_type,
                 )
                 provider, model = decision.provider, decision.model
             except Exception as exc:
@@ -1059,8 +1120,7 @@ class TeamManager:
             template=template,
         )
 
-    async def execute_team(self, team_id: str, task: str,
-                           context: Optional[Dict] = None) -> TeamResult:
+    async def execute_team(self, team_id: str, task: str, context: Optional[Dict] = None) -> TeamResult:
         """执行团队任务"""
         team = self.teams.get(team_id)
         if not team:
@@ -1123,13 +1183,12 @@ class TeamManager:
                 for agent_id, twin_id in team._member_twins.items():
                     try:
                         loop = asyncio.get_running_loop()
-                        task = loop.create_task(
-                            team._twin_manager.delete_twin(twin_id)
-                        )
+                        task = loop.create_task(team._twin_manager.delete_twin(twin_id))
                         task.add_done_callback(
                             lambda t, tid=twin_id: (
                                 logger.warning(f"孪生体 {tid} 清理失败: {t.exception()}")
-                                if not t.cancelled() and t.exception() else None
+                                if not t.cancelled() and t.exception()
+                                else None
                             )
                         )
                     except RuntimeError:

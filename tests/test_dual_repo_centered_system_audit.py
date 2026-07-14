@@ -29,9 +29,9 @@ J  - helper 函数接口
 
 from __future__ import annotations
 
-import pytest
 from typing import List
 
+import pytest
 
 # ---------------------------------------------------------------------------
 # Group A: Module imports and constant integrity
@@ -48,6 +48,7 @@ class TestGroupA_ModuleImportsAndConstants:
         from core.dual_repo_centered_system_audit_contract import (
             DUAL_REPO_CENTERED_SYSTEM_AUDIT_AUTHORITY,
         )
+
         assert isinstance(DUAL_REPO_CENTERED_SYSTEM_AUDIT_AUTHORITY, str)
         assert "DUAL_REPO_CENTERED_SYSTEM_AUDIT_V4" in DUAL_REPO_CENTERED_SYSTEM_AUDIT_AUTHORITY
         assert "two-repo-unified-audit" in DUAL_REPO_CENTERED_SYSTEM_AUDIT_AUTHORITY
@@ -56,12 +57,14 @@ class TestGroupA_ModuleImportsAndConstants:
         from core.dual_repo_centered_system_audit_contract import (
             DUAL_REPO_CENTERED_SYSTEM_AUDIT_CONTRACT_VERSION,
         )
+
         assert DUAL_REPO_CENTERED_SYSTEM_AUDIT_CONTRACT_VERSION == "4.0.0"
 
     def test_baseline_prs_correct(self) -> None:
         from core.dual_repo_centered_system_audit_contract import (
             DUAL_REPO_AUDIT_BASELINE_PRS,
         )
+
         assert isinstance(DUAL_REPO_AUDIT_BASELINE_PRS, list)
         assert 993 in DUAL_REPO_AUDIT_BASELINE_PRS
         assert 1041 in DUAL_REPO_AUDIT_BASELINE_PRS
@@ -72,23 +75,26 @@ class TestGroupA_ModuleImportsAndConstants:
         from core.dual_repo_centered_system_audit_contract import (
             DUAL_REPO_AUDIT_METHODOLOGY,
         )
+
         assert isinstance(DUAL_REPO_AUDIT_METHODOLOGY, str)
         assert "真实代码" in DUAL_REPO_AUDIT_METHODOLOGY
 
     def test_system_nature_definition_exists(self) -> None:
         from core.dual_repo_centered_system_audit_contract import SYSTEM_NATURE_DEFINITION
+
         assert isinstance(SYSTEM_NATURE_DEFINITION, str)
         assert "中心治理核" in SYSTEM_NATURE_DEFINITION
         assert "中心化分布式" in SYSTEM_NATURE_DEFINITION
 
     def test_e2e_class_constants_exist(self) -> None:
         from core.dual_repo_centered_system_audit_contract import (
-            E2E_CLASS_V2_UNIT,
             E2E_CLASS_ANDROID_UNIT,
-            E2E_CLASS_V2_STUB,
             E2E_CLASS_CROSS_REPO_MOCK,
             E2E_CLASS_TRUE_CROSS_REPO,
+            E2E_CLASS_V2_STUB,
+            E2E_CLASS_V2_UNIT,
         )
+
         classes = [
             E2E_CLASS_V2_UNIT,
             E2E_CLASS_ANDROID_UNIT,
@@ -102,6 +108,7 @@ class TestGroupA_ModuleImportsAndConstants:
 
     def test_proof_quality_level_enum_complete(self) -> None:
         from core.dual_repo_centered_system_audit_contract import ProofQualityLevel
+
         levels = [e.value for e in ProofQualityLevel]
         assert "structural_only" in levels
         assert "mainline_path_exists" in levels
@@ -112,6 +119,7 @@ class TestGroupA_ModuleImportsAndConstants:
 
     def test_dual_repo_ownership_enum_complete(self) -> None:
         from core.dual_repo_centered_system_audit_contract import DualRepoOwnership
+
         values = [e.value for e in DualRepoOwnership]
         assert "v2_only" in values
         assert "android_only" in values
@@ -119,6 +127,7 @@ class TestGroupA_ModuleImportsAndConstants:
 
     def test_definition_fulfillment_status_enum_complete(self) -> None:
         from core.dual_repo_centered_system_audit_contract import DefinitionFulfillmentStatus
+
         values = [e.value for e in DefinitionFulfillmentStatus]
         assert "fulfilled" in values
         assert "partially_fulfilled" in values
@@ -139,6 +148,7 @@ class TestGroupB_ReportBuildingAndTopLevelStructure:
         from core.dual_repo_centered_system_audit_contract import (
             build_dual_repo_centered_system_audit,
         )
+
         return build_dual_repo_centered_system_audit()
 
     def test_report_builds_without_error(self, report) -> None:
@@ -167,6 +177,7 @@ class TestGroupB_ReportBuildingAndTopLevelStructure:
         d = report.to_dict()
         assert isinstance(d, dict)
         import json
+
         json_str = json.dumps(d, ensure_ascii=False)
         assert len(json_str) > 0
 
@@ -188,6 +199,7 @@ class TestGroupC_DefinitionAreaAuditCoverage:
         from core.dual_repo_centered_system_audit_contract import (
             build_dual_repo_centered_system_audit,
         )
+
         report = build_dual_repo_centered_system_audit()
         return report.definition_area_audits
 
@@ -199,12 +211,11 @@ class TestGroupC_DefinitionAreaAuditCoverage:
     def test_each_audit_has_v2_anchors(self, audits) -> None:
         """所有定义域审计在 V2 侧必须有至少一个代码锚点。"""
         for audit in audits:
-            assert len(audit.v2_anchors) > 0, (
-                f"定义域 {audit.domain_id} 必须有至少一个 V2 侧代码锚点"
-            )
+            assert len(audit.v2_anchors) > 0, f"定义域 {audit.domain_id} 必须有至少一个 V2 侧代码锚点"
 
     def test_each_audit_has_fulfillment_status(self, audits) -> None:
         from core.dual_repo_centered_system_audit_contract import DefinitionFulfillmentStatus
+
         valid_statuses = set(e.value for e in DefinitionFulfillmentStatus)
         for audit in audits:
             assert audit.fulfillment_status.value in valid_statuses
@@ -213,23 +224,23 @@ class TestGroupC_DefinitionAreaAuditCoverage:
         """每个定义域审计必须列出已知缺口（双仓联合审计的核心约束）。"""
         for audit in audits:
             assert isinstance(audit.known_gaps, list)
-            assert len(audit.known_gaps) > 0, (
-                f"定义域 {audit.domain_id} 必须列出已知缺口（双仓联合审计要求）"
-            )
+            assert len(audit.known_gaps) > 0, f"定义域 {audit.domain_id} 必须列出已知缺口（双仓联合审计要求）"
 
     def test_no_domain_claims_runtime_grounded(self, audits) -> None:
         """当前阶段不应有任何定义域声明 runtime_grounded（最高证明质量）。
         此约束确保 proof 质量不被高估。"""
         from core.dual_repo_centered_system_audit_contract import ProofQualityLevel
+
         for audit in audits:
-            assert audit.proof_quality != ProofQualityLevel.RUNTIME_GROUNDED, (
-                f"定义域 {audit.domain_id} 当前不应声明 runtime_grounded proof quality"
-            )
+            assert (
+                audit.proof_quality != ProofQualityLevel.RUNTIME_GROUNDED
+            ), f"定义域 {audit.domain_id} 当前不应声明 runtime_grounded proof quality"
 
     def test_d4_mesh_must_be_partially_fulfilled(self, audits) -> None:
         """D4（Mesh Runtime Center Closure）必须标记为 partially_fulfilled——
         因为 runtime_closed 从未通过真实 Android 参与触发（PR #1043 关键约束）。"""
         from core.dual_repo_centered_system_audit_contract import DefinitionFulfillmentStatus
+
         d4 = next(a for a in audits if a.domain_id == "D4")
         assert d4.fulfillment_status == DefinitionFulfillmentStatus.PARTIALLY_FULFILLED
 
@@ -237,6 +248,7 @@ class TestGroupC_DefinitionAreaAuditCoverage:
         """D3（Execution Lifecycle Governance Binding）是 PR #1042 的直接成果，
         可以标记为 fulfilled（V2 侧已充分实现）。"""
         from core.dual_repo_centered_system_audit_contract import DefinitionFulfillmentStatus
+
         d3 = next(a for a in audits if a.domain_id == "D3")
         assert d3.fulfillment_status in {
             DefinitionFulfillmentStatus.FULFILLED,
@@ -270,13 +282,13 @@ class TestGroupD_SystemNatureVerdictConstraints:
         from core.dual_repo_centered_system_audit_contract import (
             build_dual_repo_centered_system_audit,
         )
+
         return build_dual_repo_centered_system_audit()
 
     def test_system_nature_is_center_governed_distributed_network(self, report) -> None:
         from core.dual_repo_centered_system_audit_contract import SystemNatureVerdict
-        assert report.system_nature_verdict == (
-            SystemNatureVerdict.CENTER_GOVERNED_DISTRIBUTED_NETWORK
-        )
+
+        assert report.system_nature_verdict == (SystemNatureVerdict.CENTER_GOVERNED_DISTRIBUTED_NETWORK)
 
     def test_system_nature_description_mentions_v2_as_center(self, report) -> None:
         desc = report.system_nature_description
@@ -306,6 +318,7 @@ class TestGroupE_CombinedIssueListConstraints:
         from core.dual_repo_centered_system_audit_contract import (
             build_dual_repo_centered_system_audit,
         )
+
         report = build_dual_repo_centered_system_audit()
         return report.combined_issues
 
@@ -348,6 +361,7 @@ class TestGroupE_CombinedIssueListConstraints:
 
     def test_all_issues_have_resolution_scope(self, issues) -> None:
         from core.dual_repo_centered_system_audit_contract import DualRepoOwnership
+
         valid_scopes = set(e.value for e in DualRepoOwnership)
         for issue in issues:
             assert issue.resolution_scope.value in valid_scopes
@@ -357,16 +371,13 @@ class TestGroupE_CombinedIssueListConstraints:
         for issue in issues:
             if issue.severity == "high":
                 total_anchors = len(issue.v2_anchors) + len(issue.android_anchors)
-                assert total_anchors > 0, (
-                    f"高严重度问题 {issue.issue_id} 必须有代码锚点"
-                )
+                assert total_anchors > 0, f"高严重度问题 {issue.issue_id} 必须有代码锚点"
 
     def test_most_issues_require_dual_repo_resolution(self, issues) -> None:
         """大多数问题应属于双仓解决范围（因为这是双仓联合审计的核心发现）。"""
         from core.dual_repo_centered_system_audit_contract import DualRepoOwnership
-        dual_repo_count = sum(
-            1 for i in issues if i.resolution_scope == DualRepoOwnership.DUAL_REPO
-        )
+
+        dual_repo_count = sum(1 for i in issues if i.resolution_scope == DualRepoOwnership.DUAL_REPO)
         # 超过一半应是双仓问题
         assert dual_repo_count > len(issues) // 2
 
@@ -391,48 +402,41 @@ class TestGroupF_FakeVsTrueE2EClassificationConstraints:
         from core.dual_repo_centered_system_audit_contract import (
             build_dual_repo_centered_system_audit,
         )
+
         report = build_dual_repo_centered_system_audit()
         return report.e2e_classifications
 
     def test_true_cross_repo_class_appears_once(self, e2e_classifications) -> None:
         """必须有且只有一个'true_cross_repo_two_runtime'条目，且内容应明确当前不存在。"""
         from core.dual_repo_centered_system_audit_contract import E2E_CLASS_TRUE_CROSS_REPO
-        true_e2e = [
-            e for e in e2e_classifications
-            if e.classification == E2E_CLASS_TRUE_CROSS_REPO
-        ]
+
+        true_e2e = [e for e in e2e_classifications if e.classification == E2E_CLASS_TRUE_CROSS_REPO]
         assert len(true_e2e) >= 1, "必须有 true_cross_repo_two_runtime 分类条目"
         # 该条目应表明当前不存在真实双运行时测试
-        assert any(
-            "不存在" in c.what_it_proves or "N/A" in c.what_it_proves
-            for c in true_e2e
-        )
+        assert any("不存在" in c.what_it_proves or "N/A" in c.what_it_proves for c in true_e2e)
 
     def test_v2_only_tests_present(self, e2e_classifications) -> None:
         from core.dual_repo_centered_system_audit_contract import E2E_CLASS_V2_UNIT
+
         v2_only = [e for e in e2e_classifications if e.classification == E2E_CLASS_V2_UNIT]
         assert len(v2_only) >= 2, "至少应有 2 个 V2-only 单元测试分类条目"
 
     def test_android_local_tests_present(self, e2e_classifications) -> None:
         from core.dual_repo_centered_system_audit_contract import E2E_CLASS_ANDROID_UNIT
-        android_local = [
-            e for e in e2e_classifications if e.classification == E2E_CLASS_ANDROID_UNIT
-        ]
+
+        android_local = [e for e in e2e_classifications if e.classification == E2E_CLASS_ANDROID_UNIT]
         assert len(android_local) >= 1, "至少应有 1 个 Android-only 本地测试分类条目"
 
     def test_cross_repo_mock_tests_present(self, e2e_classifications) -> None:
         from core.dual_repo_centered_system_audit_contract import E2E_CLASS_CROSS_REPO_MOCK
-        cross_mock = [
-            e for e in e2e_classifications if e.classification == E2E_CLASS_CROSS_REPO_MOCK
-        ]
+
+        cross_mock = [e for e in e2e_classifications if e.classification == E2E_CLASS_CROSS_REPO_MOCK]
         assert len(cross_mock) >= 1
 
     def test_all_entries_have_what_it_does_not_prove(self, e2e_classifications) -> None:
         """每个分类条目必须说明它不证明什么（双仓审计完整性要求）。"""
         for entry in e2e_classifications:
-            assert entry.what_it_does_not_prove, (
-                f"E2E 分类条目 {entry.test_id} 必须说明 what_it_does_not_prove"
-            )
+            assert entry.what_it_does_not_prove, f"E2E 分类条目 {entry.test_id} 必须说明 what_it_does_not_prove"
 
     def test_all_entries_have_test_file(self, e2e_classifications) -> None:
         for entry in e2e_classifications:
@@ -459,6 +463,7 @@ class TestGroupG_RoadmapCompletenessConstraints:
         from core.dual_repo_centered_system_audit_contract import (
             build_dual_repo_centered_system_audit,
         )
+
         report = build_dual_repo_centered_system_audit()
         return report.roadmap
 
@@ -473,25 +478,21 @@ class TestGroupG_RoadmapCompletenessConstraints:
     def test_true_e2e_framework_roadmap_exists(self, roadmap) -> None:
         """PR 路线图必须包含建立真实双运行时回归测试框架的条目。"""
         e2e_items = [
-            r for r in roadmap
-            if "E2E" in r.title or "P5" in str(r.targeted_problems) or "双运行时" in r.title
+            r for r in roadmap if "E2E" in r.title or "P5" in str(r.targeted_problems) or "双运行时" in r.title
         ]
         assert len(e2e_items) >= 1
 
     def test_most_roadmap_prs_are_dual_repo(self, roadmap) -> None:
         """大多数路线图 PR 应涉及双仓（体现真正的双仓协调交付物特性）。"""
         from core.dual_repo_centered_system_audit_contract import DualRepoOwnership
-        dual_repo_count = sum(
-            1 for r in roadmap if r.repo_scope == DualRepoOwnership.DUAL_REPO
-        )
+
+        dual_repo_count = sum(1 for r in roadmap if r.repo_scope == DualRepoOwnership.DUAL_REPO)
         assert dual_repo_count > len(roadmap) // 2
 
     def test_all_roadmap_items_have_acceptance_criteria(self, roadmap) -> None:
         for item in roadmap:
             assert isinstance(item.acceptance_criteria, list)
-            assert len(item.acceptance_criteria) > 0, (
-                f"路线图 PR {item.pr_id} 必须有接受标准"
-            )
+            assert len(item.acceptance_criteria) > 0, f"路线图 PR {item.pr_id} 必须有接受标准"
 
     def test_all_roadmap_items_have_targeted_problems(self, roadmap) -> None:
         for item in roadmap:
@@ -517,12 +518,14 @@ class TestGroupH_CrossRepoProofSummaryOutput:
 
     def test_get_cross_repo_proof_summary_without_arg(self) -> None:
         from core.dual_repo_centered_system_audit_contract import get_cross_repo_proof_summary
+
         summary = get_cross_repo_proof_summary()
         assert isinstance(summary, dict)
         assert len(summary) == 8
 
     def test_summary_contains_all_domains(self) -> None:
         from core.dual_repo_centered_system_audit_contract import get_cross_repo_proof_summary
+
         summary = get_cross_repo_proof_summary()
         for domain_id in ["D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8"]:
             assert domain_id in summary
@@ -530,20 +533,22 @@ class TestGroupH_CrossRepoProofSummaryOutput:
     def test_no_runtime_grounded_in_summary(self) -> None:
         """当前阶段，proof 摘要中不应出现 runtime_grounded。"""
         from core.dual_repo_centered_system_audit_contract import (
-            get_cross_repo_proof_summary,
             ProofQualityLevel,
+            get_cross_repo_proof_summary,
         )
+
         summary = get_cross_repo_proof_summary()
         for domain_id, info in summary.items():
-            assert info["proof_quality"] != ProofQualityLevel.RUNTIME_GROUNDED.value, (
-                f"定义域 {domain_id} 当前不应有 runtime_grounded proof quality"
-            )
+            assert (
+                info["proof_quality"] != ProofQualityLevel.RUNTIME_GROUNDED.value
+            ), f"定义域 {domain_id} 当前不应有 runtime_grounded proof quality"
 
     def test_summary_each_domain_has_fulfillment_status(self) -> None:
         from core.dual_repo_centered_system_audit_contract import (
-            get_cross_repo_proof_summary,
             DefinitionFulfillmentStatus,
+            get_cross_repo_proof_summary,
         )
+
         valid_statuses = set(e.value for e in DefinitionFulfillmentStatus)
         summary = get_cross_repo_proof_summary()
         for domain_id, info in summary.items():
@@ -563,6 +568,7 @@ class TestGroupI_ConclusionFieldConstraints:
         from core.dual_repo_centered_system_audit_contract import (
             build_dual_repo_centered_system_audit,
         )
+
         return build_dual_repo_centered_system_audit()
 
     def test_current_stage_is_mid_stage_consolidation(self, report) -> None:
@@ -575,16 +581,19 @@ class TestGroupI_ConclusionFieldConstraints:
     def test_pr_993_fulfillment_is_partially_fulfilled(self, report) -> None:
         """PR #993 定义已部分满足（V2 侧充分，跨仓 E2E 不足）。"""
         from core.dual_repo_centered_system_audit_contract import DefinitionFulfillmentStatus
+
         assert report.pr_993_fulfillment == DefinitionFulfillmentStatus.PARTIALLY_FULFILLED
 
     def test_pr_1042_fulfillment_is_fulfilled(self, report) -> None:
         """PR #1042（execution lifecycle governance binding）V2 侧已充分满足。"""
         from core.dual_repo_centered_system_audit_contract import DefinitionFulfillmentStatus
+
         assert report.pr_1042_fulfillment == DefinitionFulfillmentStatus.FULFILLED
 
     def test_pr_1043_fulfillment_is_partially_fulfilled(self, report) -> None:
         """PR #1043（mesh runtime center closure）V2 侧已满足，跨仓 runtime_closed 仍 deferred。"""
         from core.dual_repo_centered_system_audit_contract import DefinitionFulfillmentStatus
+
         assert report.pr_1043_fulfillment == DefinitionFulfillmentStatus.PARTIALLY_FULFILLED
 
     def test_claims_backed_by_real_code_not_empty(self, report) -> None:
@@ -618,12 +627,14 @@ class TestGroupJ_HelperFunctionInterfaces:
 
     def test_get_combined_issue_list_no_filter(self) -> None:
         from core.dual_repo_centered_system_audit_contract import get_combined_issue_list
+
         issues = get_combined_issue_list()
         assert isinstance(issues, list)
         assert len(issues) >= 10
 
     def test_get_combined_issue_list_high_filter(self) -> None:
         from core.dual_repo_centered_system_audit_contract import get_combined_issue_list
+
         high_issues = get_combined_issue_list(severity_filter="high")
         assert isinstance(high_issues, list)
         assert all(i["severity"] == "high" for i in high_issues)
@@ -631,24 +642,27 @@ class TestGroupJ_HelperFunctionInterfaces:
 
     def test_get_roadmap_no_filter(self) -> None:
         from core.dual_repo_centered_system_audit_contract import get_roadmap
+
         roadmap = get_roadmap()
         assert isinstance(roadmap, list)
         assert len(roadmap) >= 6
 
     def test_get_roadmap_dual_repo_filter(self) -> None:
         from core.dual_repo_centered_system_audit_contract import (
-            get_roadmap,
             DualRepoOwnership,
+            get_roadmap,
         )
+
         dual_items = get_roadmap(repo_scope_filter=DualRepoOwnership.DUAL_REPO)
         assert isinstance(dual_items, list)
         assert len(dual_items) >= 4
 
     def test_get_roadmap_v2_only_filter(self) -> None:
         from core.dual_repo_centered_system_audit_contract import (
-            get_roadmap,
             DualRepoOwnership,
+            get_roadmap,
         )
+
         v2_items = get_roadmap(repo_scope_filter=DualRepoOwnership.V2_ONLY)
         assert isinstance(v2_items, list)
         assert len(v2_items) >= 1
@@ -657,6 +671,7 @@ class TestGroupJ_HelperFunctionInterfaces:
         from core.dual_repo_centered_system_audit_contract import (
             build_dual_repo_centered_system_audit,
         )
+
         report = build_dual_repo_centered_system_audit()
         assert len(report.canonical_path_traces) >= 4
 
@@ -665,20 +680,18 @@ class TestGroupJ_HelperFunctionInterfaces:
         from core.dual_repo_centered_system_audit_contract import (
             build_dual_repo_centered_system_audit,
         )
+
         report = build_dual_repo_centered_system_audit()
         for trace in report.canonical_path_traces:
             repos_in_trace = {seg.repo for seg in trace.segments}
-            assert "v2" in repos_in_trace, (
-                f"路径 {trace.path_id} 必须有 V2 段"
-            )
-            assert "android" in repos_in_trace, (
-                f"路径 {trace.path_id} 必须有 Android 段"
-            )
+            assert "v2" in repos_in_trace, f"路径 {trace.path_id} 必须有 V2 段"
+            assert "android" in repos_in_trace, f"路径 {trace.path_id} 必须有 Android 段"
 
     def test_each_path_trace_has_notes(self) -> None:
         from core.dual_repo_centered_system_audit_contract import (
             build_dual_repo_centered_system_audit,
         )
+
         report = build_dual_repo_centered_system_audit()
         for trace in report.canonical_path_traces:
             assert trace.notes, f"路径 {trace.path_id} 必须有说明（notes）"
@@ -686,9 +699,10 @@ class TestGroupJ_HelperFunctionInterfaces:
     def test_path_none_runtime_grounded(self) -> None:
         """当前路径追踪不应有 runtime_grounded proof quality。"""
         from core.dual_repo_centered_system_audit_contract import (
-            build_dual_repo_centered_system_audit,
             ProofQualityLevel,
+            build_dual_repo_centered_system_audit,
         )
+
         report = build_dual_repo_centered_system_audit()
         for trace in report.canonical_path_traces:
             assert trace.proof_quality != ProofQualityLevel.RUNTIME_GROUNDED

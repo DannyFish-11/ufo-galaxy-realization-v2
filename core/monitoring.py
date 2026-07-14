@@ -30,9 +30,10 @@ logger = logging.getLogger("Galaxy.Monitoring")
 # 1. 熔断器
 # ============================================================================
 
+
 class CircuitState(str, Enum):
-    CLOSED = "closed"       # 正常：请求通过
-    OPEN = "open"           # 熔断：请求直接拒绝
+    CLOSED = "closed"  # 正常：请求通过
+    OPEN = "open"  # 熔断：请求直接拒绝
     HALF_OPEN = "half_open"  # 探测：允许少量请求试探
 
 
@@ -115,8 +116,7 @@ class CircuitBreaker:
             "failure_count": self.failure_count,
             "success_count": self.success_count,
             "last_failure": (
-                datetime.fromtimestamp(self.last_failure_time).isoformat()
-                if self.last_failure_time else None
+                datetime.fromtimestamp(self.last_failure_time).isoformat() if self.last_failure_time else None
             ),
         }
 
@@ -145,11 +145,13 @@ class CircuitBreakerOpenError(Exception):
 # 2. 健康检查聚合器
 # ============================================================================
 
+
 @dataclass
 class ComponentHealth:
     """组件健康状态"""
+
     name: str
-    status: str = "unknown"         # healthy / degraded / unhealthy / unknown
+    status: str = "unknown"  # healthy / degraded / unhealthy / unknown
     latency_ms: float = 0.0
     last_check: Optional[float] = None
     details: Dict[str, Any] = field(default_factory=dict)
@@ -255,10 +257,7 @@ class HealthAggregator:
             components[name] = {
                 "status": comp.status,
                 "latency_ms": round(comp.latency_ms, 2),
-                "last_check": (
-                    datetime.fromtimestamp(comp.last_check).isoformat()
-                    if comp.last_check else None
-                ),
+                "last_check": (datetime.fromtimestamp(comp.last_check).isoformat() if comp.last_check else None),
                 "error": comp.error,
                 "consecutive_failures": comp.consecutive_failures,
             }
@@ -279,6 +278,7 @@ class HealthAggregator:
 # 3. 告警管理器
 # ============================================================================
 
+
 class AlertSeverity(str, Enum):
     INFO = "info"
     WARNING = "warning"
@@ -288,6 +288,7 @@ class AlertSeverity(str, Enum):
 @dataclass
 class Alert:
     """告警"""
+
     alert_id: str
     severity: AlertSeverity
     component: str
@@ -305,10 +306,7 @@ class Alert:
             "message": self.message,
             "timestamp": datetime.fromtimestamp(self.timestamp).isoformat(),
             "resolved": self.resolved,
-            "resolved_at": (
-                datetime.fromtimestamp(self.resolved_at).isoformat()
-                if self.resolved_at else None
-            ),
+            "resolved_at": (datetime.fromtimestamp(self.resolved_at).isoformat() if self.resolved_at else None),
         }
 
 
@@ -375,11 +373,7 @@ class AlertManager:
 
     def get_active_alerts(self) -> List[dict]:
         """获取活跃告警"""
-        return [
-            a.to_dict()
-            for a in self._active_alerts.values()
-            if not a.resolved
-        ]
+        return [a.to_dict() for a in self._active_alerts.values() if not a.resolved]
 
     def get_history(self, limit: int = 50) -> List[dict]:
         """获取告警历史"""
@@ -389,6 +383,7 @@ class AlertManager:
 # ============================================================================
 # 4. 系统指标采集器
 # ============================================================================
+
 
 class MetricsCollector:
     """
@@ -407,16 +402,19 @@ class MetricsCollector:
 
     def record(self, metric_name: str, value: float, labels: Optional[Dict] = None):
         """记录指标"""
-        self._metrics[metric_name].append({
-            "value": value,
-            "timestamp": time.time(),
-            "labels": labels or {},
-        })
+        self._metrics[metric_name].append(
+            {
+                "value": value,
+                "timestamp": time.time(),
+                "labels": labels or {},
+            }
+        )
 
     async def collect_system_metrics(self):
         """采集系统指标"""
         try:
             import psutil
+
             cpu = psutil.cpu_percent(interval=0)
             mem = psutil.virtual_memory()
             disk = psutil.disk_usage("/")
@@ -465,6 +463,7 @@ class MetricsCollector:
 # ============================================================================
 # 综合监控管理器
 # ============================================================================
+
 
 class MonitoringManager:
     """
@@ -529,10 +528,7 @@ class MonitoringManager:
                 "active": self.alerts.get_active_alerts(),
                 "recent": self.alerts.get_history(10),
             },
-            "circuit_breakers": {
-                name: cb.get_status()
-                for name, cb in self._circuit_breakers.items()
-            },
+            "circuit_breakers": {name: cb.get_status() for name, cb in self._circuit_breakers.items()},
             "metrics": self.metrics.get_dashboard(),
             "timestamp": datetime.now().isoformat(),
         }

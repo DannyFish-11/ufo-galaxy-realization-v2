@@ -118,27 +118,23 @@ import uuid
 
 import pytest
 
-# ---------------------------------------------------------------------------
-# Import the module under test
-# ---------------------------------------------------------------------------
-
 from core.attached_runtime_session_registry import (
     ATTACHED_RUNTIME_SESSION_REGISTRY_AUTHORITY,
     ATTACHED_RUNTIME_SESSION_REGISTRY_PR19_SENTINEL,
-    AttachedSessionRegistry,
-    AttachedSessionRegistryEntry,
-    AttachedSessionRegistrySnapshot,
-    InvalidationReason,
-    REGISTRY_DEVICE_HAS_AT_MOST_ONE_ACTIVE_SESSION_POLICY,
     REGISTRY_DETACH_REQUIRES_EXPLICIT_SIGNAL_POLICY,
+    REGISTRY_DEVICE_HAS_AT_MOST_ONE_ACTIVE_SESSION_POLICY,
     REGISTRY_DISPATCH_MUST_CONSULT_REGISTRY_POLICY,
     REGISTRY_INVALIDATED_ENTRY_IS_TERMINAL_POLICY,
     REGISTRY_IS_SINGLE_TRUTH_SOURCE_POLICY,
     REGISTRY_LOOKUP_RETURNS_ACTIVE_ONLY_BY_DEFAULT_POLICY,
-    REGISTRY_RECONNECT_PRESERVES_RUNTIME_SESSION_ID_POLICY,
     REGISTRY_RECONCILIATION_MUST_CONSULT_REGISTRY_POLICY,
+    REGISTRY_RECONNECT_PRESERVES_RUNTIME_SESSION_ID_POLICY,
     REGISTRY_REGISTER_REPLACES_OLD_SESSION_POLICY,
     REGISTRY_REUSE_MUST_CONSULT_REGISTRY_POLICY,
+    AttachedSessionRegistry,
+    AttachedSessionRegistryEntry,
+    AttachedSessionRegistrySnapshot,
+    InvalidationReason,
     RegistryEntryState,
     RegistryTransition,
     build_registry_snapshot,
@@ -154,10 +150,15 @@ from core.attached_runtime_session_registry import (
     reset_session_registry,
 )
 
+# ---------------------------------------------------------------------------
+# Import the module under test
+# ---------------------------------------------------------------------------
+
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_registry() -> AttachedSessionRegistry:
     """Return a fresh, isolated AttachedSessionRegistry for each test."""
@@ -276,10 +277,7 @@ class TestRegistryEntryState:
         assert RegistryEntryState.from_string("invalidated") == RegistryEntryState.invalidated
 
     def test_B6_from_string_invalid_with_default(self):
-        assert (
-            RegistryEntryState.from_string("bogus", RegistryEntryState.detached)
-            == RegistryEntryState.detached
-        )
+        assert RegistryEntryState.from_string("bogus", RegistryEntryState.detached) == RegistryEntryState.detached
 
     def test_B7_from_string_invalid_without_default(self):
         # Falls back to active
@@ -333,10 +331,7 @@ class TestRegistryTransition:
         assert RegistryTransition.from_string("detach") == RegistryTransition.detach
 
     def test_C3_from_string_invalid_with_default(self):
-        assert (
-            RegistryTransition.from_string("bogus", RegistryTransition.detach)
-            == RegistryTransition.detach
-        )
+        assert RegistryTransition.from_string("bogus", RegistryTransition.detach) == RegistryTransition.detach
 
     def test_C4_string_values(self):
         assert RegistryTransition.register.value == "register"
@@ -369,10 +364,7 @@ class TestInvalidationReason:
         assert InvalidationReason.from_string("bad_posture") == InvalidationReason.bad_posture
 
     def test_D3_from_string_invalid_with_default(self):
-        assert (
-            InvalidationReason.from_string("bogus", InvalidationReason.detached)
-            == InvalidationReason.detached
-        )
+        assert InvalidationReason.from_string("bogus", InvalidationReason.detached) == InvalidationReason.detached
 
     def test_D4_string_values(self):
         assert InvalidationReason.none.value == "none"
@@ -610,9 +602,7 @@ class TestAttachedSessionRegistryPushNew:
 
     def test_K3_push_non_active_entry_does_not_update_active_by_device(self):
         r = _make_registry()
-        e = _make_entry(
-            device_id="d1", attachment_state=RegistryEntryState.detached
-        )
+        e = _make_entry(device_id="d1", attachment_state=RegistryEntryState.detached)
         r.push_new(e)
         assert r.get_active_for_device("d1") is None
 
@@ -633,9 +623,7 @@ class TestGetActiveForDevice:
 
     def test_M1_returns_none_for_detached(self):
         r = _make_registry()
-        e = _make_entry(
-            device_id="d1", attachment_state=RegistryEntryState.detached
-        )
+        e = _make_entry(device_id="d1", attachment_state=RegistryEntryState.detached)
         r.push_new(e)
         assert r.get_active_for_device("d1") is None
 
@@ -778,9 +766,7 @@ class TestListEntries:
     def test_S1_list_all_active_returns_only_active(self):
         r = _make_registry()
         e_active = _make_entry(device_id="d1")
-        e_detached = _make_entry(
-            device_id="d2", attachment_state=RegistryEntryState.detached
-        )
+        e_detached = _make_entry(device_id="d2", attachment_state=RegistryEntryState.detached)
         r.push_new(e_active)
         r.push_new(e_detached)
         active_list = r.list_all_active()
@@ -849,28 +835,20 @@ class TestSnapshotCounts:
 
     def test_W2_detached_count(self):
         r = _make_registry()
-        r.push_new(
-            _make_entry(device_id="d1", attachment_state=RegistryEntryState.detached)
-        )
+        r.push_new(_make_entry(device_id="d1", attachment_state=RegistryEntryState.detached))
         snap = r.snapshot()
         assert snap.detached_count == 1
         assert snap.active_count == 0
 
     def test_W3_replaced_count(self):
         r = _make_registry()
-        r.push_new(
-            _make_entry(device_id="d1", attachment_state=RegistryEntryState.replaced)
-        )
+        r.push_new(_make_entry(device_id="d1", attachment_state=RegistryEntryState.replaced))
         snap = r.snapshot()
         assert snap.replaced_count == 1
 
     def test_W4_invalidated_count(self):
         r = _make_registry()
-        r.push_new(
-            _make_entry(
-                device_id="d1", attachment_state=RegistryEntryState.invalidated
-            )
-        )
+        r.push_new(_make_entry(device_id="d1", attachment_state=RegistryEntryState.invalidated))
         snap = r.snapshot()
         assert snap.invalidated_count == 1
 
@@ -1453,17 +1431,13 @@ class TestCustomInvalidationReasons:
     def test_BT1_custom_detach_reason_preserved(self):
         r = _make_registry()
         e = register_session("dev1", registry=r)
-        e_det = detach_session(
-            e, reason=InvalidationReason.disconnected, registry=r
-        )
+        e_det = detach_session(e, reason=InvalidationReason.disconnected, registry=r)
         assert e_det.invalidation_reason == InvalidationReason.disconnected
 
     def test_BU1_bad_posture_invalidation_reason(self):
         r = _make_registry()
         e = register_session("dev1", registry=r)
-        e_inv = invalidate_session(
-            e, InvalidationReason.bad_posture, registry=r
-        )
+        e_inv = invalidate_session(e, InvalidationReason.bad_posture, registry=r)
         assert e_inv.invalidation_reason == InvalidationReason.bad_posture
 
 

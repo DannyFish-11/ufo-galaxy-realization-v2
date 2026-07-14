@@ -536,8 +536,7 @@ class MeshRuntimeCenterState:
     def build_lifecycle_proof(self) -> Dict[str, Any]:
         """Build an explicit proof surface for mesh runtime lifecycle closure."""
         has_active_or_terminal_center_status = (
-            self.status in MESH_RUNTIME_CENTER_ACTIVE_STATUSES
-            or self.status in MESH_RUNTIME_CENTER_TERMINAL_STATUSES
+            self.status in MESH_RUNTIME_CENTER_ACTIVE_STATUSES or self.status in MESH_RUNTIME_CENTER_TERMINAL_STATUSES
         )
         coordination_activated = (
             self.coordinator_status in _COORDINATION_ACTIVATED_COORDINATOR_STATUSES
@@ -548,12 +547,9 @@ class MeshRuntimeCenterState:
             or self.coordinator_status == "awaiting_barrier"
             or self.status == MeshRuntimeCenterStatus.barrier_active
         )
-        barrier_release_observed = (
-            self.barrier_status == "released"
-            or self.status in (
-                MeshRuntimeCenterStatus.barrier_released,
-                MeshRuntimeCenterStatus.runtime_closed,
-            )
+        barrier_release_observed = self.barrier_status == "released" or self.status in (
+            MeshRuntimeCenterStatus.barrier_released,
+            MeshRuntimeCenterStatus.runtime_closed,
         )
         completion_observed = (
             self.coordinator_status in _COMPLETION_OBSERVED_COORDINATOR_STATUSES
@@ -561,7 +557,8 @@ class MeshRuntimeCenterState:
             or self.status in MESH_RUNTIME_CENTER_TERMINAL_STATUSES
         )
         partial_or_degraded_path = (
-            self.status in (
+            self.status
+            in (
                 MeshRuntimeCenterStatus.degraded,
                 MeshRuntimeCenterStatus.constrained,
                 MeshRuntimeCenterStatus.failed,
@@ -811,9 +808,7 @@ def evaluate_center_runtime_status(
         for p in participants:
             did = getattr(p, "device_id", "")
             p_status_obj = getattr(p, "status", None)
-            p_status = (
-                p_status_obj.value if hasattr(p_status_obj, "value") else str(p_status_obj or "unknown")
-            )
+            p_status = p_status_obj.value if hasattr(p_status_obj, "value") else str(p_status_obj or "unknown")
             roles = list(getattr(p, "roles", []) or [])
             online = getattr(p, "online", None)
 
@@ -873,31 +868,20 @@ def evaluate_center_runtime_status(
 
         # is_participation_ready: True iff ≥1 participant is participation-ready
         # and coordinator is not failed
-        is_participation_ready = (
-            participation_ready_count > 0
-            and coord_status not in ("failed",)
-        )
+        is_participation_ready = participation_ready_count > 0 and coord_status not in ("failed",)
 
         # is_runtime_closed: True ONLY when the full coordination cycle completed
         is_runtime_closed = center_status == MeshRuntimeCenterStatus.runtime_closed
 
         # Build deferred/constrained notes
         if ineligible_count > 0:
-            deferred.append(
-                f"{ineligible_count}/{total_participant_count} participants ineligible to participate"
-            )
+            deferred.append(f"{ineligible_count}/{total_participant_count} participants ineligible to participate")
         if degraded_count > 0:
-            deferred.append(
-                f"{degraded_count}/{total_participant_count} participants in degraded state"
-            )
+            deferred.append(f"{degraded_count}/{total_participant_count} participants in degraded state")
         if constrained_count > 0:
-            deferred.append(
-                f"{constrained_count}/{total_participant_count} participants constrained"
-            )
+            deferred.append(f"{constrained_count}/{total_participant_count} participants constrained")
         if not is_runtime_closed and total_participant_count > 0:
-            deferred.append(
-                "runtime not yet closed — full coordination cycle has not completed"
-            )
+            deferred.append("runtime not yet closed — full coordination cycle has not completed")
         # Add the participation_ready vs runtime_closed distinction note only when
         # the state is explicitly participation_ready (i.e. participants registered and
         # eligible but coordinator has not yet started active execution).  In
@@ -971,6 +955,7 @@ def build_mesh_runtime_center_state(
                 from core.mesh.live_mesh_session_coordinator import (
                     LIVE_MESH_SESSION_COORDINATOR_PR_J_SENTINEL,
                 )
+
                 # Runtime modules are present; coordinator state not provided
                 # Return a valid "participation_ready" snapshot based on sentinel presence
                 center_state = MeshRuntimeCenterState(

@@ -140,7 +140,6 @@ from __future__ import annotations
 import json
 from typing import Any, Dict
 
-
 # ---------------------------------------------------------------------------
 # Fixture helpers
 # ---------------------------------------------------------------------------
@@ -197,12 +196,14 @@ def _clean_snapshot() -> Dict[str, Any]:
 class TestGuardSeverity:
     def test_all_expected_values_present(self):
         from core.architecture_truth_guards import GuardSeverity
+
         assert hasattr(GuardSeverity, "INFO")
         assert hasattr(GuardSeverity, "WARNING")
         assert hasattr(GuardSeverity, "ERROR")
 
     def test_string_values_are_stable(self):
         from core.architecture_truth_guards import GuardSeverity
+
         assert GuardSeverity.INFO.value == "info"
         assert GuardSeverity.WARNING.value == "warning"
         assert GuardSeverity.ERROR.value == "error"
@@ -216,6 +217,7 @@ class TestGuardSeverity:
 class TestGuardFinding:
     def test_construction_with_all_fields(self):
         from core.architecture_truth_guards import GuardFinding, GuardSeverity
+
         f = GuardFinding(
             code="TEST_CODE",
             severity=GuardSeverity.ERROR,
@@ -228,6 +230,7 @@ class TestGuardFinding:
 
     def test_to_dict_is_json_serialisable(self):
         from core.architecture_truth_guards import GuardFinding, GuardSeverity
+
         f = GuardFinding(
             code="X",
             severity=GuardSeverity.WARNING,
@@ -243,6 +246,7 @@ class TestGuardFinding:
 
     def test_to_dict_omits_detail_when_none(self):
         from core.architecture_truth_guards import GuardFinding, GuardSeverity
+
         f = GuardFinding(code="Y", severity=GuardSeverity.INFO, message="info msg")
         d = f.to_dict()
         assert "detail" not in d
@@ -256,11 +260,13 @@ class TestGuardFinding:
 class TestGuardReport:
     def test_passed_true_when_no_errors(self):
         from core.architecture_truth_guards import GuardReport
+
         r = GuardReport(passed=True, error_count=0)
         assert r.passed is True
 
     def test_passed_false_when_errors(self):
-        from core.architecture_truth_guards import GuardReport, GuardFinding, GuardSeverity
+        from core.architecture_truth_guards import GuardFinding, GuardReport, GuardSeverity
+
         r = GuardReport(
             passed=False,
             error_count=1,
@@ -270,11 +276,13 @@ class TestGuardReport:
 
     def test_format_failures_empty_on_clean_report(self):
         from core.architecture_truth_guards import GuardReport
+
         r = GuardReport(passed=True)
         assert r.format_failures() == ""
 
     def test_format_failures_actionable_on_error_report(self):
-        from core.architecture_truth_guards import GuardReport, GuardFinding, GuardSeverity
+        from core.architecture_truth_guards import GuardFinding, GuardReport, GuardSeverity
+
         r = GuardReport(
             passed=False,
             error_count=1,
@@ -291,7 +299,8 @@ class TestGuardReport:
         assert "execution_substrate" in text
 
     def test_to_dict_is_json_serialisable(self):
-        from core.architecture_truth_guards import GuardReport, GuardFinding, GuardSeverity
+        from core.architecture_truth_guards import GuardFinding, GuardReport, GuardSeverity
+
         r = GuardReport(
             passed=False,
             error_count=1,
@@ -306,7 +315,8 @@ class TestGuardReport:
         json.dumps(d)  # must not raise
 
     def test_to_json_round_trip(self):
-        from core.architecture_truth_guards import GuardReport, GuardFinding, GuardSeverity
+        from core.architecture_truth_guards import GuardFinding, GuardReport, GuardSeverity
+
         r = GuardReport(
             passed=True,
             info_count=1,
@@ -328,6 +338,7 @@ class TestGuardReport:
 class TestAssertSourceRegistryIsShellOwned:
     def test_clean_snapshot_passes(self):
         from core.architecture_truth_guards import CanonicalTruthOwnershipGuard
+
         snapshot = {
             "runtime_shell": {"owns_source_registry": True},
             "subject_core": {"owns_source_registry": False},
@@ -337,6 +348,7 @@ class TestAssertSourceRegistryIsShellOwned:
 
     def test_subject_core_owning_registry_is_error(self):
         from core.architecture_truth_guards import CanonicalTruthOwnershipGuard
+
         snapshot = {
             "runtime_shell": {"owns_source_registry": True},
             "subject_core": {"owns_source_registry": True},
@@ -348,6 +360,7 @@ class TestAssertSourceRegistryIsShellOwned:
 
     def test_third_layer_owning_registry_is_error(self):
         from core.architecture_truth_guards import CanonicalTruthOwnershipGuard
+
         snapshot = {
             "runtime_shell": {"owns_source_registry": True},
             "subject_core": {"owns_source_registry": False},
@@ -360,6 +373,7 @@ class TestAssertSourceRegistryIsShellOwned:
 
     def test_shell_disowning_registry_is_error(self):
         from core.architecture_truth_guards import CanonicalTruthOwnershipGuard
+
         snapshot = {
             "runtime_shell": {"owns_source_registry": False},
             "subject_core": {"owns_source_registry": False},
@@ -369,6 +383,7 @@ class TestAssertSourceRegistryIsShellOwned:
 
     def test_empty_snapshot_passes_fail_open(self):
         from core.architecture_truth_guards import CanonicalTruthOwnershipGuard
+
         report = CanonicalTruthOwnershipGuard.assert_source_registry_is_shell_owned({})
         assert report.passed
 
@@ -381,6 +396,7 @@ class TestAssertSourceRegistryIsShellOwned:
 class TestAssertOpenclawdIsFinalAuthority:
     def test_correct_role_passes(self):
         from core.architecture_truth_guards import CanonicalTruthOwnershipGuard
+
         snapshot = {
             "subject_core": {
                 "authority_role": "subject_decision_authority",
@@ -392,9 +408,8 @@ class TestAssertOpenclawdIsFinalAuthority:
 
     def test_wrong_role_is_error(self):
         from core.architecture_truth_guards import CanonicalTruthOwnershipGuard
-        snapshot = {
-            "subject_core": {"authority_role": "execution_substrate"}
-        }
+
+        snapshot = {"subject_core": {"authority_role": "execution_substrate"}}
         report = CanonicalTruthOwnershipGuard.assert_openclawd_is_final_authority(snapshot)
         assert not report.passed
         codes = [f.code for f in report.findings if f.severity.value == "error"]
@@ -402,6 +417,7 @@ class TestAssertOpenclawdIsFinalAuthority:
 
     def test_final_model_authority_false_is_error(self):
         from core.architecture_truth_guards import CanonicalTruthOwnershipGuard
+
         snapshot = {
             "subject_core": {
                 "authority_role": "subject_decision_authority",
@@ -413,6 +429,7 @@ class TestAssertOpenclawdIsFinalAuthority:
 
     def test_another_layer_claiming_subject_authority_is_error(self):
         from core.architecture_truth_guards import CanonicalTruthOwnershipGuard
+
         snapshot = {
             "subject_core": {"authority_role": "subject_decision_authority"},
             "rogue_router": {"authority_role": "subject_decision_authority"},
@@ -424,6 +441,7 @@ class TestAssertOpenclawdIsFinalAuthority:
 
     def test_empty_subject_core_has_error_on_role(self):
         from core.architecture_truth_guards import CanonicalTruthOwnershipGuard
+
         # Missing subject_core → role will be None → error
         report = CanonicalTruthOwnershipGuard.assert_openclawd_is_final_authority({})
         # None != "subject_decision_authority" → must emit error
@@ -438,25 +456,22 @@ class TestAssertOpenclawdIsFinalAuthority:
 class TestAssertCanonicalSupplyIsCapabilityTruth:
     def test_valid_canonical_supply_passes(self):
         from core.architecture_truth_guards import CanonicalTruthOwnershipGuard
-        snapshot = {
-            "canonical_supply": {"is_canonical_supply_layer": True}
-        }
+
+        snapshot = {"canonical_supply": {"is_canonical_supply_layer": True}}
         report = CanonicalTruthOwnershipGuard.assert_canonical_supply_is_capability_truth(snapshot)
         assert report.passed, report.format_failures()
 
     def test_canonical_supply_not_declared_is_error(self):
         from core.architecture_truth_guards import CanonicalTruthOwnershipGuard
-        snapshot = {
-            "canonical_supply": {"is_canonical_supply_layer": False}
-        }
+
+        snapshot = {"canonical_supply": {"is_canonical_supply_layer": False}}
         report = CanonicalTruthOwnershipGuard.assert_canonical_supply_is_capability_truth(snapshot)
         assert not report.passed
 
     def test_router_claiming_capability_truth_is_error(self):
         from core.architecture_truth_guards import CanonicalTruthOwnershipGuard
-        snapshot = {
-            "router": {"is_capability_truth": True}
-        }
+
+        snapshot = {"router": {"is_capability_truth": True}}
         report = CanonicalTruthOwnershipGuard.assert_canonical_supply_is_capability_truth(snapshot)
         assert not report.passed
         codes = [f.code for f in report.findings if f.severity.value == "error"]
@@ -464,17 +479,15 @@ class TestAssertCanonicalSupplyIsCapabilityTruth:
 
     def test_provider_adapter_claiming_capability_truth_is_error(self):
         from core.architecture_truth_guards import CanonicalTruthOwnershipGuard
-        snapshot = {
-            "provider_adapter": {"is_capability_truth": True}
-        }
+
+        snapshot = {"provider_adapter": {"is_capability_truth": True}}
         report = CanonicalTruthOwnershipGuard.assert_canonical_supply_is_capability_truth(snapshot)
         assert not report.passed
 
     def test_routing_decision_with_independent_registry_is_error(self):
         from core.architecture_truth_guards import CanonicalTruthOwnershipGuard
-        snapshot = {
-            "routing_decision": {"independent_capability_registry": True}
-        }
+
+        snapshot = {"routing_decision": {"independent_capability_registry": True}}
         report = CanonicalTruthOwnershipGuard.assert_canonical_supply_is_capability_truth(snapshot)
         assert not report.passed
         codes = [f.code for f in report.findings if f.severity.value == "error"]
@@ -482,14 +495,14 @@ class TestAssertCanonicalSupplyIsCapabilityTruth:
 
     def test_routing_decision_not_from_canonical_supply_is_error(self):
         from core.architecture_truth_guards import CanonicalTruthOwnershipGuard
-        snapshot = {
-            "routing_decision": {"sourced_from_canonical_supply": False}
-        }
+
+        snapshot = {"routing_decision": {"sourced_from_canonical_supply": False}}
         report = CanonicalTruthOwnershipGuard.assert_canonical_supply_is_capability_truth(snapshot)
         assert not report.passed
 
     def test_empty_snapshot_passes(self):
         from core.architecture_truth_guards import CanonicalTruthOwnershipGuard
+
         report = CanonicalTruthOwnershipGuard.assert_canonical_supply_is_capability_truth({})
         assert report.passed
 
@@ -502,6 +515,7 @@ class TestAssertCanonicalSupplyIsCapabilityTruth:
 class TestAssertProjectionDoesNotReconstructTruth:
     def test_clean_projection_passes(self):
         from core.architecture_truth_guards import CanonicalTruthOwnershipGuard
+
         snapshot = {
             "projection": {
                 "is_truth_reconstruction_layer": False,
@@ -513,9 +527,8 @@ class TestAssertProjectionDoesNotReconstructTruth:
 
     def test_truth_reconstruction_layer_is_error(self):
         from core.architecture_truth_guards import CanonicalTruthOwnershipGuard
-        snapshot = {
-            "projection": {"is_truth_reconstruction_layer": True}
-        }
+
+        snapshot = {"projection": {"is_truth_reconstruction_layer": True}}
         report = CanonicalTruthOwnershipGuard.assert_projection_does_not_reconstruct_truth(snapshot)
         assert not report.passed
         codes = [f.code for f in report.findings if f.severity.value == "error"]
@@ -523,6 +536,7 @@ class TestAssertProjectionDoesNotReconstructTruth:
 
     def test_not_sourced_from_canonical_plan_is_error(self):
         from core.architecture_truth_guards import CanonicalTruthOwnershipGuard
+
         snapshot = {
             "projection": {
                 "is_truth_reconstruction_layer": False,
@@ -534,9 +548,8 @@ class TestAssertProjectionDoesNotReconstructTruth:
 
     def test_projection_owning_source_registry_is_error(self):
         from core.architecture_truth_guards import CanonicalTruthOwnershipGuard
-        snapshot = {
-            "projection": {"owns_source_registry": True}
-        }
+
+        snapshot = {"projection": {"owns_source_registry": True}}
         report = CanonicalTruthOwnershipGuard.assert_projection_does_not_reconstruct_truth(snapshot)
         assert not report.passed
         codes = [f.code for f in report.findings if f.severity.value == "error"]
@@ -544,9 +557,8 @@ class TestAssertProjectionDoesNotReconstructTruth:
 
     def test_projection_claiming_model_authority_is_error(self):
         from core.architecture_truth_guards import CanonicalTruthOwnershipGuard
-        snapshot = {
-            "projection": {"is_final_model_authority": True}
-        }
+
+        snapshot = {"projection": {"is_final_model_authority": True}}
         report = CanonicalTruthOwnershipGuard.assert_projection_does_not_reconstruct_truth(snapshot)
         assert not report.passed
         codes = [f.code for f in report.findings if f.severity.value == "error"]
@@ -554,6 +566,7 @@ class TestAssertProjectionDoesNotReconstructTruth:
 
     def test_no_projection_in_snapshot_gives_info_not_error(self):
         from core.architecture_truth_guards import CanonicalTruthOwnershipGuard
+
         report = CanonicalTruthOwnershipGuard.assert_projection_does_not_reconstruct_truth({})
         assert report.passed  # no projection → no error, just INFO
         codes = [f.code for f in report.findings]
@@ -568,6 +581,7 @@ class TestAssertProjectionDoesNotReconstructTruth:
 class TestAssertSubstrateDoesNotSelfPromote:
     def test_correct_role_passes(self):
         from core.architecture_truth_guards import BoundaryInvariantGuard
+
         snapshot = {
             "execution_substrate": {
                 "authority_role": "execution_substrate",
@@ -580,9 +594,8 @@ class TestAssertSubstrateDoesNotSelfPromote:
 
     def test_substrate_claiming_runtime_shell_is_error(self):
         from core.architecture_truth_guards import BoundaryInvariantGuard
-        snapshot = {
-            "execution_substrate": {"authority_role": "runtime_shell_authority"}
-        }
+
+        snapshot = {"execution_substrate": {"authority_role": "runtime_shell_authority"}}
         report = BoundaryInvariantGuard.assert_substrate_does_not_self_promote(snapshot)
         assert not report.passed
         codes = [f.code for f in report.findings if f.severity.value == "error"]
@@ -590,9 +603,8 @@ class TestAssertSubstrateDoesNotSelfPromote:
 
     def test_substrate_claiming_subject_decision_is_error(self):
         from core.architecture_truth_guards import BoundaryInvariantGuard
-        snapshot = {
-            "execution_substrate": {"authority_role": "subject_decision_authority"}
-        }
+
+        snapshot = {"execution_substrate": {"authority_role": "subject_decision_authority"}}
         report = BoundaryInvariantGuard.assert_substrate_does_not_self_promote(snapshot)
         assert not report.passed
         codes = [f.code for f in report.findings if f.severity.value == "error"]
@@ -600,20 +612,17 @@ class TestAssertSubstrateDoesNotSelfPromote:
 
     def test_substrate_unexpected_role_is_warning_not_error(self):
         from core.architecture_truth_guards import BoundaryInvariantGuard
-        snapshot = {
-            "execution_substrate": {"authority_role": "cognition_planning_layer"}
-        }
+
+        snapshot = {"execution_substrate": {"authority_role": "cognition_planning_layer"}}
         report = BoundaryInvariantGuard.assert_substrate_does_not_self_promote(snapshot)
         # cognition_planning_layer is not in _ELEVATED_ROLES → warning, not error
         assert report.passed
-        sev_values = {
-            f.severity.value if hasattr(f.severity, "value") else f.severity
-            for f in report.findings
-        }
+        sev_values = {f.severity.value if hasattr(f.severity, "value") else f.severity for f in report.findings}
         assert "warning" in sev_values
 
     def test_substrate_claiming_model_authority_is_error(self):
         from core.architecture_truth_guards import BoundaryInvariantGuard
+
         snapshot = {
             "execution_substrate": {
                 "authority_role": "execution_substrate",
@@ -627,6 +636,7 @@ class TestAssertSubstrateDoesNotSelfPromote:
 
     def test_substrate_claiming_policy_authority_is_error(self):
         from core.architecture_truth_guards import BoundaryInvariantGuard
+
         snapshot = {
             "execution_substrate": {
                 "authority_role": "execution_substrate",
@@ -640,6 +650,7 @@ class TestAssertSubstrateDoesNotSelfPromote:
 
     def test_no_substrate_in_snapshot_gives_info(self):
         from core.architecture_truth_guards import BoundaryInvariantGuard
+
         report = BoundaryInvariantGuard.assert_substrate_does_not_self_promote({})
         assert report.passed
         codes = [f.code for f in report.findings]
@@ -654,6 +665,7 @@ class TestAssertSubstrateDoesNotSelfPromote:
 class TestAssertOrchestrationDistinct:
     def test_clean_orchestration_passes(self):
         from core.architecture_truth_guards import BoundaryInvariantGuard
+
         snapshot = {
             "orchestration_layer": {"authority_role": "orchestration_layer"},
             "execution_substrate": {"authority_role": "execution_substrate"},
@@ -663,6 +675,7 @@ class TestAssertOrchestrationDistinct:
 
     def test_orchestration_claiming_execution_substrate_is_error(self):
         from core.architecture_truth_guards import BoundaryInvariantGuard
+
         snapshot = {
             "orchestration_layer": {"authority_role": "execution_substrate"},
         }
@@ -673,6 +686,7 @@ class TestAssertOrchestrationDistinct:
 
     def test_orchestration_claiming_subject_authority_is_error(self):
         from core.architecture_truth_guards import BoundaryInvariantGuard
+
         snapshot = {
             "orchestration_layer": {"authority_role": "subject_decision_authority"},
         }
@@ -683,6 +697,7 @@ class TestAssertOrchestrationDistinct:
 
     def test_substrate_claiming_orchestration_role_is_error(self):
         from core.architecture_truth_guards import BoundaryInvariantGuard
+
         snapshot = {
             "execution_substrate": {"authority_role": "orchestration_layer"},
         }
@@ -693,19 +708,18 @@ class TestAssertOrchestrationDistinct:
 
     def test_orchestration_with_unexpected_role_is_warning(self):
         from core.architecture_truth_guards import BoundaryInvariantGuard
+
         snapshot = {
             "orchestration_layer": {"authority_role": "compatibility_adapter"},
         }
         report = BoundaryInvariantGuard.assert_orchestration_distinct_from_substrate_and_authority(snapshot)
         assert report.passed  # unexpected but not elevated → warning only
-        sev_values = {
-            f.severity.value if hasattr(f.severity, "value") else f.severity
-            for f in report.findings
-        }
+        sev_values = {f.severity.value if hasattr(f.severity, "value") else f.severity for f in report.findings}
         assert "warning" in sev_values
 
     def test_empty_snapshot_passes(self):
         from core.architecture_truth_guards import BoundaryInvariantGuard
+
         report = BoundaryInvariantGuard.assert_orchestration_distinct_from_substrate_and_authority({})
         assert report.passed
 
@@ -718,6 +732,7 @@ class TestAssertOrchestrationDistinct:
 class TestAssertRouterNotFinalAuthority:
     def test_clean_router_passes(self):
         from core.architecture_truth_guards import BoundaryInvariantGuard
+
         snapshot = {
             "router": {"is_final_model_authority": False},
             "provider_adapter": {"is_final_model_authority": False},
@@ -727,6 +742,7 @@ class TestAssertRouterNotFinalAuthority:
 
     def test_router_claiming_final_authority_is_error(self):
         from core.architecture_truth_guards import BoundaryInvariantGuard
+
         snapshot = {
             "router": {"is_final_model_authority": True},
         }
@@ -737,6 +753,7 @@ class TestAssertRouterNotFinalAuthority:
 
     def test_provider_adapter_claiming_final_authority_is_error(self):
         from core.architecture_truth_guards import BoundaryInvariantGuard
+
         snapshot = {
             "provider_adapter": {"is_final_model_authority": True},
         }
@@ -745,6 +762,7 @@ class TestAssertRouterNotFinalAuthority:
 
     def test_router_with_elevated_authority_role_is_error(self):
         from core.architecture_truth_guards import BoundaryInvariantGuard
+
         snapshot = {
             "router": {"authority_role": "subject_decision_authority"},
         }
@@ -755,6 +773,7 @@ class TestAssertRouterNotFinalAuthority:
 
     def test_empty_router_passes_cleanly(self):
         from core.architecture_truth_guards import BoundaryInvariantGuard
+
         report = BoundaryInvariantGuard.assert_router_not_final_authority({})
         assert report.passed
 
@@ -767,6 +786,7 @@ class TestAssertRouterNotFinalAuthority:
 class TestAssertNoDuplicateTruthPaths:
     def test_single_registry_owner_passes(self):
         from core.architecture_truth_guards import BoundaryInvariantGuard
+
         snapshot = {
             "runtime_shell": {"owns_source_registry": True},
             "subject_core": {"owns_source_registry": False},
@@ -776,6 +796,7 @@ class TestAssertNoDuplicateTruthPaths:
 
     def test_two_registry_owners_is_error(self):
         from core.architecture_truth_guards import BoundaryInvariantGuard
+
         snapshot = {
             "runtime_shell": {"owns_source_registry": True},
             "rogue": {"owns_source_registry": True},
@@ -787,6 +808,7 @@ class TestAssertNoDuplicateTruthPaths:
 
     def test_single_capability_truth_owner_passes(self):
         from core.architecture_truth_guards import BoundaryInvariantGuard
+
         snapshot = {
             "canonical_supply": {"is_capability_truth": True},
         }
@@ -795,6 +817,7 @@ class TestAssertNoDuplicateTruthPaths:
 
     def test_two_capability_truth_owners_is_error(self):
         from core.architecture_truth_guards import BoundaryInvariantGuard
+
         snapshot = {
             "canonical_supply": {"is_capability_truth": True},
             "router": {"is_capability_truth": True},
@@ -806,6 +829,7 @@ class TestAssertNoDuplicateTruthPaths:
 
     def test_no_owners_passes_no_duplicate(self):
         from core.architecture_truth_guards import BoundaryInvariantGuard
+
         snapshot = {
             "runtime_shell": {"some_flag": True},
         }
@@ -821,11 +845,13 @@ class TestAssertNoDuplicateTruthPaths:
 class TestRunCanonicalTruthOwnershipChecks:
     def test_clean_snapshot_passes(self):
         from core.architecture_truth_guards import run_canonical_truth_ownership_checks
+
         report = run_canonical_truth_ownership_checks(_clean_snapshot())
         assert report.passed, report.format_failures()
 
     def test_corrupted_subject_core_role_fails(self):
         from core.architecture_truth_guards import run_canonical_truth_ownership_checks
+
         snap = _clean_snapshot()
         snap["subject_core"]["authority_role"] = "execution_substrate"
         report = run_canonical_truth_ownership_checks(snap)
@@ -833,6 +859,7 @@ class TestRunCanonicalTruthOwnershipChecks:
 
     def test_projection_reconstructing_truth_fails(self):
         from core.architecture_truth_guards import run_canonical_truth_ownership_checks
+
         snap = _clean_snapshot()
         snap["projection"]["is_truth_reconstruction_layer"] = True
         report = run_canonical_truth_ownership_checks(snap)
@@ -840,11 +867,13 @@ class TestRunCanonicalTruthOwnershipChecks:
 
     def test_none_snapshot_passes_fail_open(self):
         from core.architecture_truth_guards import run_canonical_truth_ownership_checks
+
         report = run_canonical_truth_ownership_checks(None)
         assert report.passed
 
     def test_never_raises_on_garbage_input(self):
         from core.architecture_truth_guards import run_canonical_truth_ownership_checks
+
         for garbage in ["not a dict", 42, [], object()]:
             report = run_canonical_truth_ownership_checks(garbage)  # type: ignore[arg-type]
             assert isinstance(report.passed, bool)  # must not raise
@@ -858,11 +887,13 @@ class TestRunCanonicalTruthOwnershipChecks:
 class TestRunBoundaryInvariantChecks:
     def test_clean_snapshot_passes(self):
         from core.architecture_truth_guards import run_boundary_invariant_checks
+
         report = run_boundary_invariant_checks(_clean_snapshot())
         assert report.passed, report.format_failures()
 
     def test_substrate_self_promotion_fails(self):
         from core.architecture_truth_guards import run_boundary_invariant_checks
+
         snap = _clean_snapshot()
         snap["execution_substrate"]["authority_role"] = "subject_decision_authority"
         report = run_boundary_invariant_checks(snap)
@@ -870,6 +901,7 @@ class TestRunBoundaryInvariantChecks:
 
     def test_duplicate_source_registry_fails(self):
         from core.architecture_truth_guards import run_boundary_invariant_checks
+
         snap = _clean_snapshot()
         snap["rogue_layer"] = {"owns_source_registry": True}
         report = run_boundary_invariant_checks(snap)
@@ -877,11 +909,13 @@ class TestRunBoundaryInvariantChecks:
 
     def test_none_snapshot_passes_fail_open(self):
         from core.architecture_truth_guards import run_boundary_invariant_checks
+
         report = run_boundary_invariant_checks(None)
         assert report.passed
 
     def test_never_raises_on_garbage_input(self):
         from core.architecture_truth_guards import run_boundary_invariant_checks
+
         for garbage in ["string", 0, set()]:
             report = run_boundary_invariant_checks(garbage)  # type: ignore[arg-type]
             assert isinstance(report.passed, bool)
@@ -895,11 +929,13 @@ class TestRunBoundaryInvariantChecks:
 class TestRunAllArchitectureGuards:
     def test_representative_clean_flow_passes(self):
         from core.architecture_truth_guards import run_all_architecture_guards
+
         report = run_all_architecture_guards(_clean_snapshot())
         assert report.passed, report.format_failures()
 
     def test_ownership_error_propagated(self):
         from core.architecture_truth_guards import run_all_architecture_guards
+
         snap = _clean_snapshot()
         snap["subject_core"]["authority_role"] = "cognition_planning_layer"
         report = run_all_architecture_guards(snap)
@@ -907,6 +943,7 @@ class TestRunAllArchitectureGuards:
 
     def test_boundary_error_propagated(self):
         from core.architecture_truth_guards import run_all_architecture_guards
+
         snap = _clean_snapshot()
         snap["router"]["is_final_model_authority"] = True
         report = run_all_architecture_guards(snap)
@@ -914,16 +951,19 @@ class TestRunAllArchitectureGuards:
 
     def test_none_snapshot_passes(self):
         from core.architecture_truth_guards import run_all_architecture_guards
+
         report = run_all_architecture_guards(None)
         assert report.passed
 
     def test_report_is_json_serialisable(self):
         from core.architecture_truth_guards import run_all_architecture_guards
+
         report = run_all_architecture_guards(_clean_snapshot())
         json.dumps(report.to_dict())  # must not raise
 
     def test_format_failures_is_actionable(self):
         from core.architecture_truth_guards import run_all_architecture_guards
+
         snap = _clean_snapshot()
         snap["execution_substrate"]["authority_role"] = "subject_decision_authority"
         report = run_all_architecture_guards(snap)
@@ -941,6 +981,7 @@ class TestRunAllArchitectureGuards:
 class TestBuildArchitectureSnapshotFromResponse:
     def test_extracts_arch_layer_id_from_top_level(self):
         from core.architecture_truth_guards import build_architecture_snapshot_from_response
+
         response = {
             "arch_layer_id": "subject_core",
             "authority_role": "subject_decision_authority",
@@ -950,6 +991,7 @@ class TestBuildArchitectureSnapshotFromResponse:
 
     def test_extracts_arch_layer_id_from_nested_metadata(self):
         from core.architecture_truth_guards import build_architecture_snapshot_from_response
+
         response = {
             "metadata": {
                 "arch_layer_id": "execution_substrate",
@@ -961,11 +1003,13 @@ class TestBuildArchitectureSnapshotFromResponse:
 
     def test_ignores_non_dict_input(self):
         from core.architecture_truth_guards import build_architecture_snapshot_from_response
+
         assert build_architecture_snapshot_from_response("not a dict") == {}  # type: ignore[arg-type]
         assert build_architecture_snapshot_from_response(None) == {}  # type: ignore[arg-type]
 
     def test_never_raises_on_garbage_input(self):
         from core.architecture_truth_guards import build_architecture_snapshot_from_response
+
         for garbage in [42, [], set(), object()]:
             result = build_architecture_snapshot_from_response(garbage)  # type: ignore[arg-type]
             assert isinstance(result, dict)
@@ -1008,8 +1052,9 @@ class TestIntegrationWithRealModules:
 
     def test_openclawd_response_carries_subject_decision_authority(self):
         """OpenClawd stamps subject_decision_authority in response metadata."""
-        from core.openclawd import OpenClawd
         import asyncio
+
+        from core.openclawd import OpenClawd
 
         oc = OpenClawd()
 
@@ -1027,8 +1072,7 @@ class TestIntegrationWithRealModules:
             role = meta.get("authority_role") or response.get("authority_role")
             if role is not None:
                 assert role == "subject_decision_authority", (
-                    f"OpenClawd response must carry authority_role='subject_decision_authority', "
-                    f"found '{role}'"
+                    f"OpenClawd response must carry authority_role='subject_decision_authority', " f"found '{role}'"
                 )
 
     def test_command_router_carries_execution_substrate_role(self):
@@ -1044,8 +1088,7 @@ class TestIntegrationWithRealModules:
                 layer_id = result.get("arch_layer_id")
                 if layer_id is not None:
                     assert layer_id == "execution_substrate", (
-                        f"CommandRouter result must carry arch_layer_id='execution_substrate', "
-                        f"found '{layer_id}'"
+                        f"CommandRouter result must carry arch_layer_id='execution_substrate', " f"found '{layer_id}'"
                     )
         except Exception:
             # Routing may fail without a live environment — verify guard structure only
@@ -1054,9 +1097,10 @@ class TestIntegrationWithRealModules:
     def test_desktop_status_projection_sourced_from_canonical_plan(self):
         """build_desktop_status_projection consumes canonical plan, not reconstruct truth."""
         from contracts.desktop_status_projection import (
-            build_desktop_status_projection,
             DesktopStatusProjection,
+            build_desktop_status_projection,
         )
+
         # build_desktop_status_projection must accept a control plan dict without error
         result = build_desktop_status_projection(
             unified_control_plan=None,
@@ -1072,10 +1116,12 @@ class TestIntegrationWithRealModules:
     def test_source_registry_guard_with_real_runtime_shell_snapshot(self):
         """Guard passes for a snapshot derived from actual DesktopPresenceRuntime."""
         import pytest
+
         from core.architecture_truth_guards import CanonicalTruthOwnershipGuard
 
         try:
             from core.desktop_presence_runtime import DesktopPresenceRuntime
+
             dpr = DesktopPresenceRuntime()
         except Exception as e:
             pytest.skip(f"DesktopPresenceRuntime requires optional deps: {e}")
@@ -1107,6 +1153,7 @@ class TestAntiCorruptionAdapterGuard:
 
     def test_adapter_exposing_source_registry_is_flagged(self):
         from core.architecture_truth_guards import run_all_architecture_guards
+
         snapshot = {
             "runtime_shell": {
                 "authority_role": "runtime_shell_authority",
@@ -1124,12 +1171,13 @@ class TestAntiCorruptionAdapterGuard:
         report = run_all_architecture_guards(snapshot)
         assert not report.passed
         codes = [f.code for f in report.findings if f.severity.value == "error"]
-        assert any("SOURCE_REGISTRY" in c or "DUPLICATE" in c for c in codes), (
-            f"Expected a source registry violation, got codes: {codes}"
-        )
+        assert any(
+            "SOURCE_REGISTRY" in c or "DUPLICATE" in c for c in codes
+        ), f"Expected a source registry violation, got codes: {codes}"
 
     def test_adapter_exposing_final_model_authority_is_flagged(self):
         from core.architecture_truth_guards import run_boundary_invariant_checks
+
         snapshot = {
             "provider_adapter": {
                 "is_final_model_authority": True,
@@ -1249,6 +1297,4 @@ class TestAdditiveIntegration:
         for finding in report.findings:
             code = finding.code
             assert isinstance(code, str), f"Finding code must be str, got {type(code)}"
-            assert code.isupper() or "_" in code, (
-                f"Finding code '{code}' should be UPPER_SNAKE_CASE for easy searching"
-            )
+            assert code.isupper() or "_" in code, f"Finding code '{code}' should be UPPER_SNAKE_CASE for easy searching"

@@ -39,9 +39,10 @@ class ClipMemoryProvider(MemoryProvider):
     def available(self) -> bool:
         if self._available is None:
             try:
-                import sentence_transformers  # noqa: F401
                 import chromadb  # noqa: F401
+                import sentence_transformers  # noqa: F401
                 from PIL import Image  # noqa: F401
+
                 self._available = True
             except Exception:  # noqa: BLE001
                 self._available = False
@@ -52,6 +53,7 @@ class ClipMemoryProvider(MemoryProvider):
     def _get_model(self):
         if self._model is None:
             from sentence_transformers import SentenceTransformer
+
             name = os.getenv("GALAXY_CLIP_MODEL", "clip-ViT-B-32")
             logger.info("Loading CLIP model %s (first run downloads weights)…", name)
             self._model = SentenceTransformer(name)
@@ -60,16 +62,14 @@ class ClipMemoryProvider(MemoryProvider):
     def _get_col(self):
         if self._col is None:
             import chromadb
-            persist = os.getenv("GALAXY_CLIP_DIR", os.path.join(
-                os.getenv("CHROMA_PERSIST_DIR", "./data/clip_memory")))
+
+            persist = os.getenv("GALAXY_CLIP_DIR", os.path.join(os.getenv("CHROMA_PERSIST_DIR", "./data/clip_memory")))
             try:
                 os.makedirs(persist, exist_ok=True)
             except Exception:  # noqa: BLE001
                 pass
             client = chromadb.PersistentClient(path=persist)
-            self._col = client.get_or_create_collection(
-                _COLLECTION, metadata={"hnsw:space": "cosine"}
-            )
+            self._col = client.get_or_create_collection(_COLLECTION, metadata={"hnsw:space": "cosine"})
         return self._col
 
     def _embed_text(self, text: str):
@@ -77,6 +77,7 @@ class ClipMemoryProvider(MemoryProvider):
 
     def _embed_image(self, path: str):
         from PIL import Image
+
         with Image.open(path) as im:
             return self._get_model().encode(im.convert("RGB"), normalize_embeddings=True).tolist()
 
@@ -131,11 +132,13 @@ class ClipMemoryProvider(MemoryProvider):
         metas = (res.get("metadatas") or [[]])[0]
         for i, doc in enumerate(docs):
             dist = dists[i] if i < len(dists) else 1.0
-            hits.append(MemoryHit(
-                content=str(doc),
-                score=round(1.0 - float(dist), 4),   # cosine distance → similarity
-                source=self.backend_name,
-                modality="image",
-                metadata=metas[i] if i < len(metas) else {},
-            ))
+            hits.append(
+                MemoryHit(
+                    content=str(doc),
+                    score=round(1.0 - float(dist), 4),  # cosine distance → similarity
+                    source=self.backend_name,
+                    modality="image",
+                    metadata=metas[i] if i < len(metas) else {},
+                )
+            )
         return hits

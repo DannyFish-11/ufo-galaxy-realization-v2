@@ -9,23 +9,24 @@ Validates:
 """
 
 import asyncio
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from core.openclawd_heartbeat import (
     HeartbeatScheduler,
     _parse_interval_seconds,
-    load_heartbeat_tasks,
     extract_task_lines,
-    is_ack_response,
-    should_escalate_to_tier2,
     get_heartbeat_scheduler,
+    is_ack_response,
+    load_heartbeat_tasks,
+    should_escalate_to_tier2,
 )
-
 
 # ---------------------------------------------------------------------------
 # Interval parsing
 # ---------------------------------------------------------------------------
+
 
 class TestParseIntervalSeconds:
     def test_minutes(self):
@@ -47,6 +48,7 @@ class TestParseIntervalSeconds:
 # ---------------------------------------------------------------------------
 # ACK suppression
 # ---------------------------------------------------------------------------
+
 
 class TestIsAckResponse:
     def test_starts_with_token_short(self):
@@ -83,6 +85,7 @@ class TestIsAckResponse:
 # Tier escalation
 # ---------------------------------------------------------------------------
 
+
 class TestShouldEscalateToTier2:
     _TRIGGERS = ["complex_reasoning", "multi_step_plan", "code_generation"]
 
@@ -114,6 +117,7 @@ class TestShouldEscalateToTier2:
 # HEARTBEAT.md loading
 # ---------------------------------------------------------------------------
 
+
 class TestLoadHeartbeatTasks:
     def test_loads_existing_file(self, tmp_path):
         hb = tmp_path / "HEARTBEAT.md"
@@ -135,6 +139,7 @@ class TestLoadHeartbeatTasks:
 # ---------------------------------------------------------------------------
 # Scheduler lifecycle
 # ---------------------------------------------------------------------------
+
 
 class TestHeartbeatSchedulerLifecycle:
     def _make_scheduler(self, enabled: bool = True, interval: str = "1s") -> HeartbeatScheduler:
@@ -192,8 +197,7 @@ class TestHeartbeatSchedulerLifecycle:
         call_kwargs = mock_clawd.process.call_args
         context_arg = call_kwargs.kwargs.get("context", [])
         assert any(
-            "source=heartbeat" in msg.get("content", "")
-            for msg in context_arg
+            "source=heartbeat" in msg.get("content", "") for msg in context_arg
         ), "process() context must include source=heartbeat tag"
 
     @pytest.mark.asyncio
@@ -212,9 +216,11 @@ class TestHeartbeatSchedulerLifecycle:
 # get_heartbeat_scheduler helper
 # ---------------------------------------------------------------------------
 
+
 class TestGetHeartbeatScheduler:
     def test_returns_none_when_openclawd_unavailable(self):
         import core.openclawd_heartbeat as hb_mod
+
         original = hb_mod._heartbeat_scheduler
         hb_mod._heartbeat_scheduler = None
         try:
@@ -227,13 +233,12 @@ class TestGetHeartbeatScheduler:
 
     def test_returns_scheduler_with_provided_openclawd(self):
         import core.openclawd_heartbeat as hb_mod
+
         original = hb_mod._heartbeat_scheduler
         hb_mod._heartbeat_scheduler = None
         try:
             mock_clawd = MagicMock()
-            scheduler = get_heartbeat_scheduler(
-                openclawd=mock_clawd, config_path="config/agent.yaml"
-            )
+            scheduler = get_heartbeat_scheduler(openclawd=mock_clawd, config_path="config/agent.yaml")
             assert scheduler is not None
             assert scheduler._openclawd is mock_clawd
         finally:

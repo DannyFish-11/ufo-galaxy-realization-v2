@@ -26,6 +26,7 @@ Usage (inside Mesh engine)::
     if convergence.is_remote(device_id):
         await convergence.request_participant_action(device_id, action, params)
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -38,9 +39,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Sentinel
 # ---------------------------------------------------------------------------
-MESH_NATS_FUSION_SENTINEL = (
-    "MESH_NATS_FUSION::CONVERGENCE_LAYER::NO_BRIDGE"
-)
+MESH_NATS_FUSION_SENTINEL = "MESH_NATS_FUSION::CONVERGENCE_LAYER::NO_BRIDGE"
 
 
 # ---------------------------------------------------------------------------
@@ -85,6 +84,7 @@ class MeshNATSConvergence:
         # Check if device is local: look up in device_node_map
         try:
             from core.device_node_resolver import get_resolver
+
             resolver = get_resolver()
             # If we can resolve it AND the node is running locally → local
             resolved = resolver.resolve(device_type=None, transport=None, capabilities=[])
@@ -120,12 +120,8 @@ class MeshNATSConvergence:
             logger.debug("[MeshNATS] NATS not available, skipping remote request for %s", device_id)
             return None
 
-        request_subject = self.SUBJ_MESH_BARRIER_REQUEST.format(
-            session_id=session_id, device_id=device_id
-        )
-        reply_subject = self.SUBJ_MESH_BARRIER_REPLY.format(
-            session_id=session_id, device_id=device_id
-        )
+        request_subject = self.SUBJ_MESH_BARRIER_REQUEST.format(session_id=session_id, device_id=device_id)
+        reply_subject = self.SUBJ_MESH_BARRIER_REPLY.format(session_id=session_id, device_id=device_id)
 
         payload = {
             "session_id": session_id,
@@ -141,7 +137,9 @@ class MeshNATSConvergence:
             await self._nats.publish(request_subject, payload)
             logger.info(
                 "[MeshNATS] Barrier request sent | session=%s device=%s action=%s",
-                session_id, device_id, action,
+                session_id,
+                device_id,
+                action,
             )
 
             # Wait for reply with timeout
@@ -149,13 +147,15 @@ class MeshNATSConvergence:
             if reply:
                 logger.info(
                     "[MeshNATS] Barrier reply received | session=%s device=%s",
-                    session_id, device_id,
+                    session_id,
+                    device_id,
                 )
                 return reply.get("result")
             else:
                 logger.warning(
                     "[MeshNATS] Barrier reply TIMEOUT | session=%s device=%s",
-                    session_id, device_id,
+                    session_id,
+                    device_id,
                 )
                 return None
 
@@ -189,7 +189,8 @@ class MeshNATSConvergence:
             await self._nats.publish(subject, payload)
             logger.debug(
                 "[MeshNATS] Result submitted | session=%s device=%s",
-                session_id, device_id,
+                session_id,
+                device_id,
             )
         except Exception as exc:
             logger.error("[MeshNATS] Result submission failed: %s", exc)

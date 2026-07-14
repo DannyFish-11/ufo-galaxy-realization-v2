@@ -3,6 +3,7 @@
 
 审计账本防篡改哈希链:每条哈希【自身内容 + 前一条 entry_hash】,改任意一条 → 链断。
 """
+
 from __future__ import annotations
 
 from core.control_plane.audit_ledger import AuditLedger, EventType
@@ -25,8 +26,8 @@ class TestHashChain:
         lg = _ledger(3)
         evs = lg._events
         assert [e.seq for e in evs] == [0, 1, 2]
-        assert evs[0].prev_hash == "0" * 64            # 创世
-        assert evs[1].prev_hash == evs[0].entry_hash    # 链接
+        assert evs[0].prev_hash == "0" * 64  # 创世
+        assert evs[1].prev_hash == evs[0].entry_hash  # 链接
         assert evs[2].prev_hash == evs[1].entry_hash
 
     def test_tamper_message_breaks_chain(self):
@@ -42,7 +43,7 @@ class TestHashChain:
 
     def test_delete_event_breaks_chain(self):
         lg = _ledger(5)
-        del lg._events[2]                               # 删一条 → 后续 prev_hash 对不上
+        del lg._events[2]  # 删一条 → 后续 prev_hash 对不上
         v = lg.verify_chain()
         assert not v["intact"] and v["broken_at"] == 2
 

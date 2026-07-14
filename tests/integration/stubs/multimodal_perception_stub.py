@@ -50,15 +50,12 @@ STUB_ANDROID_SOURCE: str = "android_screen:test-android-001"
 #: Minimal 1×1 transparent PNG, base64-encoded.
 #: Using a real (but tiny) PNG so multimodal schema validation passes.
 STUB_IMAGE_B64: str = (
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk"
-    "+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk" "+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
 )
 
 #: Minimal WAV header bytes (44-byte minimal WAV), base64-encoded.
 #: Used to inject audio modality without requiring audio hardware.
-STUB_AUDIO_B64: str = (
-    "UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAAZGF0YQAAAAA="
-)
+STUB_AUDIO_B64: str = "UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAAZGF0YQAAAAA="
 
 
 # ---------------------------------------------------------------------------

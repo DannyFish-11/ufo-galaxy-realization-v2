@@ -100,21 +100,21 @@ import pytest
 from core.android_execution_signal_reconciler import (
     ANDROID_EXECUTION_SIGNAL_RECONCILER_AUTHORITY,
     ANDROID_EXECUTION_SIGNAL_RECONCILER_PR13_SENTINEL,
-    RECONCILER_REQUIRES_CONTRACT_ID_OR_SESSION_ID_POLICY,
-    RECONCILER_SIGNAL_MAPPING_IS_CANONICAL_POLICY,
-    RECONCILER_TERMINAL_RECORD_BLOCKS_FURTHER_SIGNALS_POLICY,
-    RECONCILER_IDENTITY_IS_PRESERVED_ACROSS_RECONCILE_POLICY,
-    RECONCILER_UNKNOWN_SIGNAL_DEFAULTS_TO_PROGRESS_POLICY,
-    RECONCILER_TASK_STATUS_MAPS_TO_ACK_SIGNAL_CANONICALLY_POLICY,
-    RECONCILER_ERROR_SIGNAL_CLOSES_TRACKING_RECORD_POLICY,
-    RECONCILER_TIMEOUT_SIGNAL_CLOSES_TRACKING_RECORD_POLICY,
     RECONCILER_CANCELLED_SIGNAL_CLOSES_TRACKING_RECORD_POLICY,
+    RECONCILER_ERROR_SIGNAL_CLOSES_TRACKING_RECORD_POLICY,
+    RECONCILER_IDENTITY_IS_PRESERVED_ACROSS_RECONCILE_POLICY,
+    RECONCILER_REQUIRES_CONTRACT_ID_OR_SESSION_ID_POLICY,
     RECONCILER_RESULT_PAYLOAD_IS_FORWARDED_TO_TRACKER_POLICY,
-    AndroidSignalKind,
+    RECONCILER_SIGNAL_MAPPING_IS_CANONICAL_POLICY,
+    RECONCILER_TASK_STATUS_MAPS_TO_ACK_SIGNAL_CANONICALLY_POLICY,
+    RECONCILER_TERMINAL_RECORD_BLOCKS_FURTHER_SIGNALS_POLICY,
+    RECONCILER_TIMEOUT_SIGNAL_CLOSES_TRACKING_RECORD_POLICY,
+    RECONCILER_UNKNOWN_SIGNAL_DEFAULTS_TO_PROGRESS_POLICY,
     AndroidExecutionSignalEnvelope,
+    AndroidSignalKind,
     AndroidSignalReconcileOutcome,
-    normalize_android_message_to_signal_kind,
     extract_signal_envelope,
+    normalize_android_message_to_signal_kind,
     reconcile_android_execution_signal,
     reconcile_inbound_message,
 )
@@ -158,14 +158,17 @@ def _make_tracking_record(
     runtime: Optional[DelegatedExecutionTrackingRuntime] = None,
 ):
     rt = runtime or _fresh_tracker_runtime()
-    return create_execution_tracking_record(
-        session_id=session_id,
-        contract_id=contract_id,
-        device_id=device_id,
-        trace_id=trace_id,
-        source_runtime_posture="join_runtime",
-        runtime=rt,
-    ), rt
+    return (
+        create_execution_tracking_record(
+            session_id=session_id,
+            contract_id=contract_id,
+            device_id=device_id,
+            trace_id=trace_id,
+            source_runtime_posture="join_runtime",
+            runtime=rt,
+        ),
+        rt,
+    )
 
 
 def _make_envelope(
@@ -319,11 +322,15 @@ def test_E05_task_end_empty_is_final_result():
 
 
 def test_F01_goal_execution_result_completed_is_final_result():
-    assert normalize_android_message_to_signal_kind("goal_execution_result", "completed") == AndroidSignalKind.final_result
+    assert (
+        normalize_android_message_to_signal_kind("goal_execution_result", "completed") == AndroidSignalKind.final_result
+    )
 
 
 def test_F02_goal_execution_result_success_is_final_result():
-    assert normalize_android_message_to_signal_kind("goal_execution_result", "success") == AndroidSignalKind.final_result
+    assert (
+        normalize_android_message_to_signal_kind("goal_execution_result", "success") == AndroidSignalKind.final_result
+    )
 
 
 def test_F03_goal_execution_result_true_is_final_result():
@@ -598,8 +605,17 @@ def test_S01_default_signal_kind_is_progress():
 def test_S02_to_dict_contains_expected_keys():
     env = _make_envelope()
     d = env.to_dict()
-    for k in ("signal_kind", "contract_id", "session_id", "device_id", "trace_id",
-              "task_id", "payload", "envelope_id", "received_at"):
+    for k in (
+        "signal_kind",
+        "contract_id",
+        "session_id",
+        "device_id",
+        "trace_id",
+        "task_id",
+        "payload",
+        "envelope_id",
+        "received_at",
+    ):
         assert k in d
 
 
@@ -1051,14 +1067,15 @@ def test_AS01_all_pr13_symbols_in_core_runtime():
     from core.runtime import (
         ANDROID_EXECUTION_SIGNAL_RECONCILER_AUTHORITY,
         ANDROID_EXECUTION_SIGNAL_RECONCILER_PR13_SENTINEL,
-        AndroidSignalKind,
         AndroidExecutionSignalEnvelope,
+        AndroidSignalKind,
         AndroidSignalReconcileOutcome,
-        normalize_android_message_to_signal_kind,
         extract_signal_envelope,
+        normalize_android_message_to_signal_kind,
         reconcile_android_execution_signal,
         reconcile_inbound_message,
     )
+
     assert ANDROID_EXECUTION_SIGNAL_RECONCILER_AUTHORITY
     assert ANDROID_EXECUTION_SIGNAL_RECONCILER_PR13_SENTINEL
     assert AndroidSignalKind is not None
@@ -1077,6 +1094,7 @@ def test_AS01_all_pr13_symbols_in_core_runtime():
 )
 def test_AT01_projection_sentinel_present_and_not_unavailable():
     from core.routes.projection import ANDROID_EXECUTION_SIGNAL_RECONCILER_ALIGNED_PR13
+
     assert ANDROID_EXECUTION_SIGNAL_RECONCILER_ALIGNED_PR13
     assert "UNAVAILABLE" not in ANDROID_EXECUTION_SIGNAL_RECONCILER_ALIGNED_PR13
 
@@ -1235,9 +1253,7 @@ def test_BB01_error_after_progress_advances_to_failed():
 def test_BC01_timeout_after_ack_advances_to_timed_out():
     record, rt = _make_tracking_record()
     ctr = record.identity.contract_id
-    reconcile_android_execution_signal(
-        _make_envelope(signal_kind=AndroidSignalKind.ack, contract_id=ctr), runtime=rt
-    )
+    reconcile_android_execution_signal(_make_envelope(signal_kind=AndroidSignalKind.ack, contract_id=ctr), runtime=rt)
     o2 = reconcile_android_execution_signal(
         _make_envelope(signal_kind=AndroidSignalKind.timeout, contract_id=ctr), runtime=rt
     )

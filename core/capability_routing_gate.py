@@ -238,10 +238,7 @@ def device_meets_capabilities(
             required_capabilities=required,
             matched_capabilities=matched,
             missing_capabilities=missing,
-            reason=(
-                f"device {device_id!r} is missing required capabilities: "
-                f"{missing!r}"
-            ),
+            reason=(f"device {device_id!r} is missing required capabilities: " f"{missing!r}"),
         )
 
     return CapabilityGateResult(
@@ -250,10 +247,7 @@ def device_meets_capabilities(
         required_capabilities=required,
         matched_capabilities=matched,
         missing_capabilities=[],
-        reason=(
-            f"device {device_id!r} satisfies all required capabilities: "
-            f"{required!r}"
-        ),
+        reason=(f"device {device_id!r} satisfies all required capabilities: " f"{required!r}"),
     )
 
 
@@ -313,10 +307,7 @@ def evaluate_capability_gate(
             device_id=device_id,
             verdict=CapabilityGateVerdict.INSUFFICIENT_DATA,
             required_capabilities=required,
-            reason=(
-                f"capability information unavailable for device {device_id!r}: "
-                f"{exc}"
-            ),
+            reason=(f"capability information unavailable for device {device_id!r}: " f"{exc}"),
         )
 
     return device_meets_capabilities(
@@ -402,16 +393,14 @@ def filter_by_required_capabilities(
             # FAIL verdict — hard exclude
             rejected_count += 1
             logger.debug(
-                "filter_by_required_capabilities: excluding device %s "
-                "— missing: %s",
+                "filter_by_required_capabilities: excluding device %s " "— missing: %s",
                 result.device_id,
                 result.missing_capabilities,
             )
 
     if not accepted and rejected_count > 0:
         logger.warning(
-            "filter_by_required_capabilities: no devices satisfy "
-            "required_capabilities=%r; %d device(s) excluded",
+            "filter_by_required_capabilities: no devices satisfy " "required_capabilities=%r; %d device(s) excluded",
             required,
             rejected_count,
         )

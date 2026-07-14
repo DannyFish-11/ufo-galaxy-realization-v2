@@ -24,10 +24,10 @@ from core.control_plane.security_interceptor import (
     SecurityInterceptor,
 )
 
-
 # ---------------------------------------------------------------------------
 # ApprovalRequest model tests
 # ---------------------------------------------------------------------------
+
 
 class TestApprovalRequest:
     def test_defaults(self):
@@ -59,6 +59,7 @@ class TestApprovalRequest:
 # ---------------------------------------------------------------------------
 # ApprovalRegistry tests
 # ---------------------------------------------------------------------------
+
 
 class TestApprovalRegistry:
     def _make_registry_with_request(self, action="test_action"):
@@ -154,6 +155,7 @@ class TestApprovalRegistry:
 # ---------------------------------------------------------------------------
 # SecurityInterceptor async tests
 # ---------------------------------------------------------------------------
+
 
 class TestSecurityInterceptor:
     async def test_require_approval_granted(self):

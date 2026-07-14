@@ -16,6 +16,7 @@
 - **幂等**:重复 :func:`install` 只装一次;不会二次包裹。
 - **可关**:``GALAXY_URL_SENTINEL=0``(或 false/no/off)即禁用,默认开。
 """
+
 from __future__ import annotations
 
 import logging
@@ -83,11 +84,13 @@ def _report(url) -> None:
         # 记进环形缓冲,供面板 DiagnosticsDrawer / 诊断端点展示(让用户看得见、能复制)
         try:
             culprit = _culprit_frame(frames)
-            _catches.append({
-                "ts": time.strftime("%H:%M:%S"),
-                "url": str(url),
-                "culprit": culprit,
-            })
+            _catches.append(
+                {
+                    "ts": time.strftime("%H:%M:%S"),
+                    "url": str(url),
+                    "culprit": culprit,
+                }
+            )
         except Exception:  # noqa: BLE001
             pass
         logger.warning(
@@ -107,7 +110,10 @@ def install() -> None:
     if _INSTALLED:
         return
     if os.environ.get("GALAXY_URL_SENTINEL", "1").strip().lower() in (
-        "0", "false", "no", "off",
+        "0",
+        "false",
+        "no",
+        "off",
     ):
         _INSTALLED = True  # 明确禁用,记为已处理,后续不再尝试
         return

@@ -62,9 +62,10 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Request, Depends
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field  # noqa
+
 from core.unified_response import UnifiedChatResponse  # noqa
 
 # 导入鉴权模块
@@ -72,12 +73,12 @@ try:
     from .auth import require_auth
 except ImportError:
     logging.getLogger("Galaxy.API").warning(
-        "core.auth 模块未找到，所有需要鉴权的路由将拒绝访问（HTTP 401）。"
-        "请确保 core/auth.py 存在。"
+        "core.auth 模块未找到，所有需要鉴权的路由将拒绝访问（HTTP 401）。" "请确保 core/auth.py 存在。"
     )
 
     async def require_auth():
         raise HTTPException(status_code=401, detail="鉴权模块不可用，拒绝访问")
+
 
 logger = logging.getLogger("Galaxy.API")
 
@@ -185,13 +186,9 @@ def get_core_compat_device_ingress_policy(
     effective_env = dict(os.environ if env is None else env)
     fabric = resolve_fabric_config(effective_env)
     compat_requested = _env_truthy(effective_env.get("GALAXY_ENABLE_CORE_COMPAT_WS", ""))
-    protected_override = _env_truthy(
-        effective_env.get(PROTECTED_CORE_COMPAT_WS_OVERRIDE_ENV, "")
-    )
+    protected_override = _env_truthy(effective_env.get(PROTECTED_CORE_COMPAT_WS_OVERRIDE_ENV, ""))
     protected_mode = fabric.is_cross_device
-    blocked_by_protected_mode = (
-        compat_requested and protected_mode and not protected_override
-    )
+    blocked_by_protected_mode = compat_requested and protected_mode and not protected_override
     effective_enabled = compat_requested and not blocked_by_protected_mode
 
     if blocked_by_protected_mode:
@@ -248,12 +245,28 @@ def get_device_ingress_surface_report(
 
     return {
         "canonical_device_ingress_authority": CANONICAL_DEVICE_INGRESS_AUTHORITY,
-        "gateway_device_ingress_surfaces": [
-            dict(entry) for entry in DEVICE_WS_INGRESS_SURFACE_REGISTRY
-        ],
+        "gateway_device_ingress_surfaces": [dict(entry) for entry in DEVICE_WS_INGRESS_SURFACE_REGISTRY],
         "core_compat_device_ingress_policy": get_core_compat_device_ingress_policy(env),
     }
 
+
+from core.routes._helpers import _execute_node, _load_node, _node_instances, nodes_root  # noqa
+from core.routes._models import (  # noqa
+    AIIntentRequest,
+    ChatRequest,
+    CommandDispatchRequest,
+    CommandStatus,
+    ConversationRequest,
+    DeviceRegisterRequest,
+    DeviceStatusUpdate,
+    NodeCallRequest,
+    OCRRequest,
+    TargetResult,
+    TaskRequest,
+    UnifiedCommandRequest,
+    UnifiedCommandResponse,
+    VisionRequest,
+)
 
 # ---------------------------------------------------------------------------
 # Re-export shared state and models for backward compatibility
@@ -261,51 +274,43 @@ def get_device_ingress_surface_report(
 # ---------------------------------------------------------------------------
 from core.routes._shared import (  # noqa
     RouteConnectionPool,
-    connection_manager,
-    registered_devices,
-    task_queue,
-    node_status_cache,
-    command_results,
-    broadcast_event,
     _sse_queues,
     _sse_queues_lock,
+    broadcast_event,
+    command_results,
+    connection_manager,
+    node_status_cache,
+    registered_devices,
+    task_queue,
 )
-from core.routes._models import (  # noqa
-    DeviceRegisterRequest,
-    DeviceStatusUpdate,
-    VisionRequest,
-    TaskRequest,
-    ChatRequest,
-    NodeCallRequest,
-    OCRRequest,
-    CommandDispatchRequest,
-    AIIntentRequest,
-    ConversationRequest,
-    CommandStatus,
-    TargetResult,
-    UnifiedCommandRequest,
-    UnifiedCommandResponse,
-)
-from core.routes._helpers import nodes_root, _load_node, _execute_node, _node_instances  # noqa
-
 
 # ============================================================================
 # 创建路由 (assembles all sub-routers)
 # ============================================================================
 
+
 def create_api_routes(service_manager=None, config=None) -> APIRouter:
     """创建完整的 API 路由（组合各子路由模块）"""
 
-    from core.routes import system, devices, nodes, vision, tasks, command as cmd_routes
-    from core.routes import chat, ai, monitoring, relay, hybrid, vault, cost, channels, federation
-    from core.routes import compat, twin, sessions, config as config_route
-    from core.routes import models as models_route
-    from core.routes import ui_act as ui_act_route
-    from core.routes import perception as perception_routes
-    from core.routes import remote_desktop as remote_desktop_routes
     # Batch PR-4: dedicated health and diagnostics domain modules
-    from core.routes import health as health_routes
+    from core.routes import ai, channels, chat
+    from core.routes import command as cmd_routes
+    from core.routes import compat
+    from core.routes import config as config_route
+    from core.routes import cost, devices
     from core.routes import diagnostics as diagnostics_routes
+    from core.routes import federation
+    from core.routes import health as health_routes
+    from core.routes import hybrid
+    from core.routes import models as models_route
+    from core.routes import monitoring, nodes
+    from core.routes import perception as perception_routes
+    from core.routes import relay
+    from core.routes import remote_desktop as remote_desktop_routes
+    from core.routes import sessions, system, tasks, twin
+    from core.routes import ui_act as ui_act_route
+    from core.routes import vault, vision
+
     try:
         from core.routes import protocols
     except ImportError:
@@ -341,12 +346,18 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     router.include_router(system.create_router(service_manager=service_manager, config=config), dependencies=_auth_deps)
     router.include_router(nodes.create_router(service_manager=service_manager, config=config), dependencies=_auth_deps)
     router.include_router(tasks.create_router(service_manager=service_manager, config=config), dependencies=_auth_deps)
-    router.include_router(cmd_routes.create_router(service_manager=service_manager, config=config), dependencies=_auth_deps)
+    router.include_router(
+        cmd_routes.create_router(service_manager=service_manager, config=config), dependencies=_auth_deps
+    )
     router.include_router(relay.create_router(service_manager=service_manager, config=config), dependencies=_auth_deps)
     router.include_router(vault.create_router(service_manager=service_manager, config=config), dependencies=_auth_deps)
-    router.include_router(federation.create_router(service_manager=service_manager, config=config), dependencies=_auth_deps)
+    router.include_router(
+        federation.create_router(service_manager=service_manager, config=config), dependencies=_auth_deps
+    )
     # 远程桌面兜底接管(VNC):接管能力,需鉴权
-    router.include_router(remote_desktop_routes.create_router(service_manager=service_manager, config=config), dependencies=_auth_deps)
+    router.include_router(
+        remote_desktop_routes.create_router(service_manager=service_manager, config=config), dependencies=_auth_deps
+    )
 
     # Exempt routes: no auth required (health, docs, observability, device registration)
     router.include_router(devices.create_router(service_manager=service_manager, config=config))
@@ -381,41 +392,48 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     # Control Plane Phase 2: audit ledger and HITL approval routes
     try:
         from core.routes import audit as audit_routes
+
         router.include_router(audit_routes.create_router())
     except Exception as _e:
         logger.warning("审计路由加载失败（可选）: %s", _e)
     try:
         from core.routes import approvals as approvals_routes
+
         router.include_router(approvals_routes.create_router())
     except Exception as _e:
         logger.warning("审批路由加载失败（可选）: %s", _e)
     # Control Plane Phase 4: security policy routes
     try:
         from core.routes import security_policy as security_policy_routes
+
         router.include_router(security_policy_routes.create_router())
     except Exception as _e:
         logger.warning("安全策略路由加载失败（可选）: %s", _e)
     # Control Plane Phase 5: device health & circuit-breaker routes
     try:
         from core.routes.device_health import router as device_health_router
+
         router.include_router(device_health_router)
     except Exception as _e:
         logger.warning("设备健康路由加载失败（可选）: %s", _e)
     # PR-4 Status Board V2: read-only RuntimeProjection endpoint
     try:
         from core.routes import projection as projection_routes
+
         router.include_router(projection_routes.create_router())
     except Exception as _e:
         logger.warning("投影路由加载失败（可选）: %s", _e)
     # Read-only device readiness & participation inspection endpoints
     try:
         from core.routes import device_readiness as device_readiness_routes
+
         router.include_router(device_readiness_routes.create_router())
     except Exception as _e:
         logger.warning("设备就绪路由加载失败（可选）: %s", _e)
     # PR1114 follow-up: unified operational readiness / clone-to-use acceptance surfaces
     try:
         from core.routes import operational_readiness as operational_readiness_routes
+
         router.include_router(operational_readiness_routes.create_router())
     except Exception as _e:
         logger.warning("可操作就绪面路由加载失败（可选）: %s", _e)
@@ -425,6 +443,7 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     #        served by this router (delivery semantics for existing runtime paths).
     try:
         from core.routes import contracts as contracts_routes
+
         router.include_router(contracts_routes.create_router())
     except Exception as _e:
         logger.warning("合约路由加载失败（可选）: %s", _e)
@@ -434,6 +453,7 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     #        GET /api/v1/capabilities/runtime/{capability_name}
     try:
         from core.routes import capabilities_runtime as cap_runtime_routes
+
         router.include_router(cap_runtime_routes.create_router())
     except Exception as _e:
         logger.warning("能力运行时路由加载失败（可选）: %s", _e)
@@ -447,6 +467,7 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     #         GET /api/v1/operator/inspect/lineage/{task_id}
     try:
         from core.routes import operator as operator_routes
+
         router.include_router(operator_routes.create_router())
     except Exception as _e:
         logger.warning("算子路由加载失败（可选）: %s", _e)
@@ -455,6 +476,7 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     #        GET /api/v1/panel/unified
     try:
         from core.routes import panel as panel_routes
+
         router.include_router(panel_routes.create_router())
     except Exception as _e:
         logger.warning("统一面板路由加载失败（可选）: %s", _e)
@@ -463,6 +485,7 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     #        GET /api/v1/existence/surface
     try:
         from core.routes import existence as existence_routes
+
         router.include_router(existence_routes.create_router())
     except Exception as _e:
         logger.warning("存在面路由加载失败（可选）: %s", _e)
@@ -472,12 +495,9 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     #         never block API startup.  The sentinel asserts the audit layer is
     #         present and machine-checkable.
     try:
-        from core.runtime_closure_audit import (  # noqa
-            RUNTIME_CLOSURE_AUDIT_AUTHORITY as _RCA_AUTHORITY,
-        )
-        RUNTIME_CLOSURE_AUDIT_INTEGRATED: str = (
-            "API_ROUTES::RUNTIME_CLOSURE_AUDIT_INTEGRATED_V1"
-        )
+        from core.runtime_closure_audit import RUNTIME_CLOSURE_AUDIT_AUTHORITY as _RCA_AUTHORITY  # noqa
+
+        RUNTIME_CLOSURE_AUDIT_INTEGRATED: str = "API_ROUTES::RUNTIME_CLOSURE_AUDIT_INTEGRATED_V1"
     except ImportError:
         RUNTIME_CLOSURE_AUDIT_INTEGRATED: str = (  # type: ignore[no-redef]
             "API_ROUTES::RUNTIME_CLOSURE_AUDIT_INTEGRATED_UNAVAILABLE"
@@ -526,7 +546,13 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
             await _register()
             try:
                 # Send a welcome event immediately so the client knows it's connected
-                welcome = json.dumps({"type": "connected", "message": "Galaxy SSE stream connected", "timestamp": datetime.now().isoformat()})
+                welcome = json.dumps(
+                    {
+                        "type": "connected",
+                        "message": "Galaxy SSE stream connected",
+                        "timestamp": datetime.now().isoformat(),
+                    }
+                )
                 yield f"data: {welcome}\n\n"
                 while True:
                     if await request.is_disconnected():
@@ -566,6 +592,7 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
 # LLM 降级调用 (kept here for WebSocket handler)
 # ============================================================================
 
+
 async def _chat_with_gemini(req: ChatRequest, api_key: str) -> JSONResponse:
     """使用 Gemini API 进行对话"""
     import httpx
@@ -581,20 +608,14 @@ async def _chat_with_gemini(req: ChatRequest, api_key: str) -> JSONResponse:
             f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}",
             json={
                 "contents": contents,
-                "systemInstruction": {
-                    "parts": [{"text": "你是 Galaxy 智能助手，一个 L4 级自主性 AI 系统。"}]
-                }
-            }
+                "systemInstruction": {"parts": [{"text": "你是 Galaxy 智能助手，一个 L4 级自主性 AI 系统。"}]},
+            },
         )
         resp.raise_for_status()
         data = resp.json()
         reply = data["candidates"][0]["content"]["parts"][0]["text"]
 
-        return JSONResponse({
-            "success": True,
-            "reply": reply,
-            "model": "gemini-2.0-flash"
-        })
+        return JSONResponse({"success": True, "reply": reply, "model": "gemini-2.0-flash"})
 
 
 async def _chat_with_openrouter(req: ChatRequest, api_key: str) -> JSONResponse:
@@ -610,26 +631,19 @@ async def _chat_with_openrouter(req: ChatRequest, api_key: str) -> JSONResponse:
         resp = await client.post(
             "https://openrouter.ai/api/v1/chat/completions",
             headers={"Authorization": f"Bearer {api_key}"},
-            json={
-                "model": "google/gemini-2.0-flash-exp:free",
-                "messages": messages,
-                "max_tokens": 2048
-            }
+            json={"model": "google/gemini-2.0-flash-exp:free", "messages": messages, "max_tokens": 2048},
         )
         resp.raise_for_status()
         data = resp.json()
         reply = data["choices"][0]["message"]["content"]
 
-        return JSONResponse({
-            "success": True,
-            "reply": reply,
-            "model": data.get("model", "openrouter")
-        })
+        return JSONResponse({"success": True, "reply": reply, "model": data.get("model", "openrouter")})
 
 
 # ============================================================================
 # WebSocket 端点
 # ============================================================================
+
 
 def create_websocket_routes(app: FastAPI, service_manager=None):
     """创建 WebSocket 端点 — 兼容层 (非规范设备主入口)
@@ -642,13 +656,11 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
     primary device ingress authority.
     """
 
-    from core.desktop_presence_runtime import (
-        get_desktop_presence_runtime as _get_desktop_presence_runtime,
-    )
+    from core.desktop_presence_runtime import get_desktop_presence_runtime as _get_desktop_presence_runtime
+
     compat_ws_policy = get_core_compat_device_ingress_policy()
     logger.info(
-        "Core compat WS ingress policy resolved: state=%s requested=%s enabled=%s "
-        "protected_mode=%s system_mode=%s",
+        "Core compat WS ingress policy resolved: state=%s requested=%s enabled=%s " "protected_mode=%s system_mode=%s",
         compat_ws_policy["policy_state"],
         compat_ws_policy["compat_requested"],
         compat_ws_policy["effective_enabled"],
@@ -670,9 +682,7 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
     ) -> None:
         if task_id not in task_queue or outcome is None:
             return
-        task_queue[task_id]["problem_execution_closure"] = (
-            outcome.problem_execution_closure
-        )
+        task_queue[task_id]["problem_execution_closure"] = outcome.problem_execution_closure
         task_queue[task_id]["task_completed"] = outcome.task_completed
         task_queue[task_id]["problem_solved"] = outcome.problem_solved
         task_queue[task_id]["problem_solved_via"] = outcome.problem_solved_via
@@ -713,11 +723,7 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
         """
         if not compat_ws_policy["effective_enabled"]:
             blocked_by_policy = compat_ws_policy["blocked_by_protected_mode"]
-            message_type = (
-                "compat_ws_blocked_protected_mode"
-                if blocked_by_policy
-                else "compat_ws_disabled"
-            )
+            message_type = "compat_ws_blocked_protected_mode" if blocked_by_policy else "compat_ws_disabled"
             await websocket.accept()
             await websocket.send_json(
                 {
@@ -762,6 +768,7 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
         # already exists there.
         try:
             from core.unified.device_manager import get_unified_device_manager as _get_udm
+
             _get_udm().patch_device(device_id, {"status": "online"})
         except Exception as _udm_err:
             logger.debug("compat_ws: UDM online patch failed for %s — %s", device_id, _udm_err)
@@ -779,39 +786,41 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
                     # SSOT: write heartbeat to UDM first
                     try:
                         from core.unified.device_manager import get_unified_device_manager as _get_udm
+
                         _get_udm().heartbeat(device_id)
                     except Exception as _udm_hb_err:
                         logger.debug("compat_ws: UDM heartbeat failed for %s — %s", device_id, _udm_hb_err)
                     # COMPAT_MIRROR_WRITE: update compat cache AFTER UDM heartbeat
                     if device_id in registered_devices:
                         registered_devices[device_id]["last_seen"] = datetime.now().isoformat()  # COMPAT_MIRROR_WRITE
-                    await websocket.send_json({
-                        "type": "heartbeat_ack",
-                        "timestamp": datetime.now().isoformat()
-                    })
+                    await websocket.send_json({"type": "heartbeat_ack", "timestamp": datetime.now().isoformat()})
 
                 elif msg_type == "status_update":
                     # COMPAT_MIRROR_WRITE: registered_devices is not truth source; update after UDM
                     if device_id in registered_devices:
                         registered_devices[device_id]["status_detail"] = data.get("status", {})  # COMPAT_MIRROR_WRITE
                         registered_devices[device_id]["last_seen"] = datetime.now().isoformat()  # COMPAT_MIRROR_WRITE
-                    await connection_manager.broadcast_status({
-                        "type": "device_status_update",
-                        "device_id": device_id,
-                        "status": data.get("status", {}),
-                        "timestamp": datetime.now().isoformat()
-                    })
+                    await connection_manager.broadcast_status(
+                        {
+                            "type": "device_status_update",
+                            "device_id": device_id,
+                            "status": data.get("status", {}),
+                            "timestamp": datetime.now().isoformat(),
+                        }
+                    )
 
                 elif msg_type == "command_result":
                     cmd_id = data.get("command_id")
                     if cmd_id:
                         connection_manager.resolve_command_response(cmd_id, data.get("payload", data))
-                    await connection_manager.broadcast_status({
-                        "type": "command_result",
-                        "device_id": device_id,
-                        "data": data,
-                        "timestamp": datetime.now().isoformat()
-                    })
+                    await connection_manager.broadcast_status(
+                        {
+                            "type": "command_result",
+                            "device_id": device_id,
+                            "data": data,
+                            "timestamp": datetime.now().isoformat(),
+                        }
+                    )
 
                 elif msg_type == "task_result":
                     task_id = data.get("task_id", "")
@@ -826,13 +835,11 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
                                 ResultSourceChannel,
                                 ingest_result,
                             )
+
                             _raw_epoch = (
-                                data["continuity_epoch"] if "continuity_epoch" in data
-                                else data.get("session_epoch")
+                                data["continuity_epoch"] if "continuity_epoch" in data else data.get("session_epoch")
                             )
-                            _epoch_val: Optional[int] = (
-                                int(_raw_epoch) if _raw_epoch is not None else None
-                            )
+                            _epoch_val: Optional[int] = int(_raw_epoch) if _raw_epoch is not None else None
                             _event = NormalizedResultEvent(
                                 task_id=task_id,
                                 device_id=device_id,
@@ -895,13 +902,12 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
                                 NormalizedResultEvent,
                                 ResultSourceChannel,
                                 ingest_result,
-                                normalize_status as _normalize_status,
                             )
+                            from core.unified_result_ingress import normalize_status as _normalize_status
 
                             _goal_mapped_status = _normalize_status(data.get("status", ""))
                             _goal_raw_epoch = (
-                                data["continuity_epoch"] if "continuity_epoch" in data
-                                else data.get("session_epoch")
+                                data["continuity_epoch"] if "continuity_epoch" in data else data.get("session_epoch")
                             )
                             _goal_epoch_val: Optional[int] = (
                                 int(_goal_raw_epoch) if _goal_raw_epoch is not None else None
@@ -930,8 +936,7 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
                                 )
                         except Exception as _goal_ingress_err:
                             logger.debug(
-                                "compat_ws: goal_result unified ingress skipped "
-                                "(non-fatal): %s",
+                                "compat_ws: goal_result unified ingress skipped " "(non-fatal): %s",
                                 _goal_ingress_err,
                             )
 
@@ -945,7 +950,9 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
 
                             logger.info(
                                 "compat_ws: goal_result task_id=%s status=%s→%s",
-                                _goal_task_id, _goal_raw_status, _goal_mapped_status,
+                                _goal_task_id,
+                                _goal_raw_status,
+                                _goal_mapped_status,
                             )
 
                             if _goal_task_id in task_queue:
@@ -995,13 +1002,11 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
                                 ResultSourceChannel,
                                 ingest_result,
                             )
+
                             _ger_raw_epoch = (
-                                data["continuity_epoch"] if "continuity_epoch" in data
-                                else data.get("session_epoch")
+                                data["continuity_epoch"] if "continuity_epoch" in data else data.get("session_epoch")
                             )
-                            _ger_epoch_val: Optional[int] = (
-                                int(_ger_raw_epoch) if _ger_raw_epoch is not None else None
-                            )
+                            _ger_epoch_val: Optional[int] = int(_ger_raw_epoch) if _ger_raw_epoch is not None else None
                             _ger_event = NormalizedResultEvent(
                                 task_id=_ger_task_id,
                                 device_id=device_id,
@@ -1019,22 +1024,19 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
                             _ger_ingress_ok = True
                             if _ger_was_dedup:
                                 logger.debug(
-                                    "compat_ws: duplicate goal_execution_result suppressed "
-                                    "task_id=%s device_id=%s",
+                                    "compat_ws: duplicate goal_execution_result suppressed " "task_id=%s device_id=%s",
                                     _ger_task_id,
                                     device_id,
                                 )
                             elif not _ger_outcome.truth_chain_complete:
                                 logger.debug(
-                                    "compat_ws: goal_execution_result truth chain incomplete "
-                                    "task_id=%s: %s",
+                                    "compat_ws: goal_execution_result truth chain incomplete " "task_id=%s: %s",
                                     _ger_task_id,
                                     _ger_outcome.incomplete_reason,
                                 )
                         except Exception as _ger_ingress_err:
                             logger.debug(
-                                "compat_ws: goal_execution_result unified ingress skipped "
-                                "(non-fatal): %s",
+                                "compat_ws: goal_execution_result unified ingress skipped " "(non-fatal): %s",
                                 _ger_ingress_err,
                             )
 
@@ -1042,16 +1044,16 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
                         if not _ger_was_dedup:
                             logger.info(
                                 "compat_ws: goal_execution_result task_id=%s status=%s→%s",
-                                _ger_task_id, _ger_raw_status, _ger_mapped_status,
+                                _ger_task_id,
+                                _ger_raw_status,
+                                _ger_mapped_status,
                             )
                             if _ger_task_id in task_queue:
                                 task_queue[_ger_task_id]["status"] = _ger_mapped_status
-                                task_queue[_ger_task_id]["result"] = (
-                                    _payload_sub.get("result") or data.get("result", {})
+                                task_queue[_ger_task_id]["result"] = _payload_sub.get("result") or data.get(
+                                    "result", {}
                                 )
-                                task_queue[_ger_task_id]["completed_at"] = (
-                                    datetime.now().isoformat()
-                                )
+                                task_queue[_ger_task_id]["completed_at"] = datetime.now().isoformat()
                                 _stamp_problem_closure_to_task_queue(
                                     _ger_task_id,
                                     _ger_outcome,
@@ -1070,42 +1072,53 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
                             raise ValueError(f"Image too large: exceeds {MAX_IMAGE_SIZE} bytes limit")
                         image_data = base64.b64decode(image_b64, validate=True)
                         if len(image_data) > MAX_IMAGE_SIZE:
-                            raise ValueError(f"Image too large: {len(image_data)} bytes exceeds {MAX_IMAGE_SIZE} bytes limit")
+                            raise ValueError(
+                                f"Image too large: {len(image_data)} bytes exceeds {MAX_IMAGE_SIZE} bytes limit"
+                            )
                         from core.vision_pipeline import VisionPipeline
+
                         pipeline = VisionPipeline()
                         result = await asyncio.wait_for(
                             asyncio.get_running_loop().run_in_executor(
                                 None, pipeline.understand, image_data, mode, instruction
                             ),
-                            timeout=30.0
+                            timeout=30.0,
                         )
-                        await websocket.send_json({
-                            "type": "ocr_result",
-                            "request_id": data.get("request_id", ""),
-                            "success": True,
-                            "result": result
-                        })
+                        await websocket.send_json(
+                            {
+                                "type": "ocr_result",
+                                "request_id": data.get("request_id", ""),
+                                "success": True,
+                                "result": result,
+                            }
+                        )
                     except (ValueError, binascii.Error) as e:
-                        await websocket.send_json({
-                            "type": "ocr_result",
-                            "request_id": data.get("request_id", ""),
-                            "success": False,
-                            "error": f"Invalid image data: {e}"
-                        })
+                        await websocket.send_json(
+                            {
+                                "type": "ocr_result",
+                                "request_id": data.get("request_id", ""),
+                                "success": False,
+                                "error": f"Invalid image data: {e}",
+                            }
+                        )
                     except asyncio.TimeoutError:
-                        await websocket.send_json({
-                            "type": "ocr_result",
-                            "request_id": data.get("request_id", ""),
-                            "success": False,
-                            "error": "Image processing timed out after 30 seconds"
-                        })
+                        await websocket.send_json(
+                            {
+                                "type": "ocr_result",
+                                "request_id": data.get("request_id", ""),
+                                "success": False,
+                                "error": "Image processing timed out after 30 seconds",
+                            }
+                        )
                     except Exception as e:
-                        await websocket.send_json({
-                            "type": "ocr_result",
-                            "request_id": data.get("request_id", ""),
-                            "success": False,
-                            "error": str(e)
-                        })
+                        await websocket.send_json(
+                            {
+                                "type": "ocr_result",
+                                "request_id": data.get("request_id", ""),
+                                "success": False,
+                                "error": str(e),
+                            }
+                        )
 
                 elif msg_type == "chat":
                     try:
@@ -1122,27 +1135,36 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
                             multimodal_context=data.get("multimodal_context"),
                             entry_mode=data.get("entry_mode", "local"),
                         )
-                        await websocket.send_json({
-                            "type": "chat_reply",
-                            "request_id": data.get("request_id", ""),
-                            "reply": result.get("response", result.get("reply", "")),
-                            "mode": result.get("intent", "chat"),
-                            "success": result.get("success", True),
-                            "runtime_session_id": result.get("runtime_session_id"),
-                            "problem_execution_spine": result.get("metadata", {}).get("problem_execution_spine", {}),
-                        })
+                        await websocket.send_json(
+                            {
+                                "type": "chat_reply",
+                                "request_id": data.get("request_id", ""),
+                                "reply": result.get("response", result.get("reply", "")),
+                                "mode": result.get("intent", "chat"),
+                                "success": result.get("success", True),
+                                "runtime_session_id": result.get("runtime_session_id"),
+                                "problem_execution_spine": result.get("metadata", {}).get(
+                                    "problem_execution_spine", {}
+                                ),
+                            }
+                        )
                     except Exception as e:
-                        await websocket.send_json({
-                            "type": "chat_reply",
-                            "request_id": data.get("request_id", ""),
-                            "reply": f"处理消息时出错: {str(e)}"
-                        })
+                        await websocket.send_json(
+                            {
+                                "type": "chat_reply",
+                                "request_id": data.get("request_id", ""),
+                                "reply": f"处理消息时出错: {str(e)}",
+                            }
+                        )
 
                 elif msg_type == "command_dispatch":
                     try:
                         from core.command_router import (
-                            CommandRequest, CommandMode, get_command_router,
+                            CommandMode,
+                            CommandRequest,
+                            get_command_router,
                         )
+
                         cmd_router = get_command_router()
                         cmd_req = CommandRequest(
                             source=f"ws:{device_id}",
@@ -1154,41 +1176,51 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
                             notify_ws=True,
                         )
                         result = await cmd_router.dispatch(cmd_req)
-                        await websocket.send_json({
-                            "type": "command_result",
-                            "request_id": result.request_id,
-                            "data": result.to_dict(),
-                        })
+                        await websocket.send_json(
+                            {
+                                "type": "command_result",
+                                "request_id": result.request_id,
+                                "data": result.to_dict(),
+                            }
+                        )
                     except Exception as e:
-                        await websocket.send_json({
-                            "type": "command_error",
-                            "request_id": data.get("request_id", ""),
-                            "error": str(e),
-                        })
+                        await websocket.send_json(
+                            {
+                                "type": "command_error",
+                                "request_id": data.get("request_id", ""),
+                                "error": str(e),
+                            }
+                        )
 
                 elif msg_type == "relay_request":
                     try:
                         from core.proxy_relay import get_proxy_relay
+
                         relay = get_proxy_relay()
                         relay.set_sender(connection_manager.send_to_device)
                         relay.set_online_getter(lambda: connection_manager.online_device_ids())
                         result = await relay.handle_relay_request_from_device(device_id, data)
-                        await websocket.send_json({
-                            "type": "relay_ack",
-                            "relay_id": data.get("relay_id", ""),
-                            **result.to_dict(),
-                        })
+                        await websocket.send_json(
+                            {
+                                "type": "relay_ack",
+                                "relay_id": data.get("relay_id", ""),
+                                **result.to_dict(),
+                            }
+                        )
                     except Exception as e:
-                        await websocket.send_json({
-                            "type": "relay_ack",
-                            "relay_id": data.get("relay_id", ""),
-                            "status": "failed",
-                            "error": str(e),
-                        })
+                        await websocket.send_json(
+                            {
+                                "type": "relay_ack",
+                                "relay_id": data.get("relay_id", ""),
+                                "status": "failed",
+                                "error": str(e),
+                            }
+                        )
 
                 elif msg_type == "relay_reply":
                     try:
                         from core.proxy_relay import get_proxy_relay
+
                         relay = get_proxy_relay()
                         await relay.handle_relay_reply(
                             relay_id=data.get("relay_id", ""),
@@ -1200,99 +1232,112 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
                 elif msg_type == "peer_announce":
                     try:
                         from core.mesh_coordinator import get_mesh_coordinator
+
                         mesh = get_mesh_coordinator()
                         peer = mesh.handle_peer_announce(device_id, data)
                         peer_list = mesh.build_peer_exchange(exclude_device=device_id)
-                        await websocket.send_json({
-                            "type": "peer_exchange",
-                            "peers": peer_list,
-                            "your_peer": peer.to_dict(),
-                        })
+                        await websocket.send_json(
+                            {
+                                "type": "peer_exchange",
+                                "peers": peer_list,
+                                "your_peer": peer.to_dict(),
+                            }
+                        )
                     except Exception as e:
                         logger.error(f"Peer announce handling failed: {e}")
 
                 elif msg_type == "peer_exchange_request":
                     try:
                         from core.mesh_coordinator import get_mesh_coordinator
+
                         mesh = get_mesh_coordinator()
                         peer_list = mesh.build_peer_exchange(exclude_device=device_id)
-                        await websocket.send_json({
-                            "type": "peer_exchange",
-                            "peers": peer_list,
-                        })
+                        await websocket.send_json(
+                            {
+                                "type": "peer_exchange",
+                                "peers": peer_list,
+                            }
+                        )
                     except Exception as e:
                         logger.error(f"Peer exchange request failed: {e}")
 
                 elif msg_type == "agent_deploy_ack":
                     manifest_id = data.get("manifest_id", "")
                     logger.info(f"Agent {manifest_id} 已被设备 {device_id} 接收")
-                    await connection_manager.broadcast_status({
-                        "type": "agent_deploy_ack",
-                        "device_id": device_id,
-                        "manifest_id": manifest_id,
-                        "timestamp": datetime.now().isoformat(),
-                    })
+                    await connection_manager.broadcast_status(
+                        {
+                            "type": "agent_deploy_ack",
+                            "device_id": device_id,
+                            "manifest_id": manifest_id,
+                            "timestamp": datetime.now().isoformat(),
+                        }
+                    )
 
                 elif msg_type == "agent_status":
-                    await connection_manager.broadcast_status({
-                        "type": "agent_status",
-                        "device_id": device_id,
-                        "manifest_id": data.get("manifest_id", ""),
-                        "step": data.get("step", {}),
-                        "timestamp": datetime.now().isoformat(),
-                    })
+                    await connection_manager.broadcast_status(
+                        {
+                            "type": "agent_status",
+                            "device_id": device_id,
+                            "manifest_id": data.get("manifest_id", ""),
+                            "step": data.get("step", {}),
+                            "timestamp": datetime.now().isoformat(),
+                        }
+                    )
 
                 elif msg_type == "agent_result":
                     manifest_id = data.get("manifest_id", "")
                     logger.info(f"Agent {manifest_id} 在设备 {device_id} 执行完成")
-                    await connection_manager.broadcast_status({
-                        "type": "agent_result",
-                        "device_id": device_id,
-                        "manifest_id": manifest_id,
-                        "result": data.get("result", {}),
-                        "timestamp": datetime.now().isoformat(),
-                    })
+                    await connection_manager.broadcast_status(
+                        {
+                            "type": "agent_result",
+                            "device_id": device_id,
+                            "manifest_id": manifest_id,
+                            "result": data.get("result", {}),
+                            "timestamp": datetime.now().isoformat(),
+                        }
+                    )
 
                 elif msg_type == "ai_intent":
                     try:
                         from core.ai_intent import get_intent_parser
+
                         parser = get_intent_parser()
                         parsed = await parser.parse(data.get("text", ""))
-                        await websocket.send_json({
-                            "type": "ai_intent_result",
-                            "request_id": data.get("request_id", ""),
-                            **parsed.to_dict(),
-                        })
+                        await websocket.send_json(
+                            {
+                                "type": "ai_intent_result",
+                                "request_id": data.get("request_id", ""),
+                                **parsed.to_dict(),
+                            }
+                        )
                     except Exception as e:
-                        await websocket.send_json({
-                            "type": "ai_intent_error",
-                            "request_id": data.get("request_id", ""),
-                            "error": str(e),
-                        })
+                        await websocket.send_json(
+                            {
+                                "type": "ai_intent_error",
+                                "request_id": data.get("request_id", ""),
+                                "error": str(e),
+                            }
+                        )
 
                 else:
                     logger.warning(f"未知消息类型: {msg_type} from {device_id}")
-                    await websocket.send_json({
-                        "type": "error",
-                        "message": f"未知消息类型: {msg_type}"
-                    })
+                    await websocket.send_json({"type": "error", "message": f"未知消息类型: {msg_type}"})
 
         except WebSocketDisconnect:
             connection_manager.disconnect_device(device_id)
             # SSOT: propagate offline state to UDM first
             try:
                 from core.unified.device_manager import get_unified_device_manager as _get_udm
+
                 _get_udm().patch_device(device_id, {"status": "offline"})
             except Exception as _udm_off_err:
                 logger.debug("compat_ws: UDM offline patch failed for %s — %s", device_id, _udm_off_err)
             # COMPAT_MIRROR_WRITE: update compat cache AFTER UDM write (non-authoritative)
             if device_id in registered_devices:
                 registered_devices[device_id]["status"] = "offline"  # COMPAT_MIRROR_WRITE
-            await connection_manager.broadcast_status({
-                "type": "device_disconnected",
-                "device_id": device_id,
-                "timestamp": datetime.now().isoformat()
-            })
+            await connection_manager.broadcast_status(
+                {"type": "device_disconnected", "device_id": device_id, "timestamp": datetime.now().isoformat()}
+            )
         except Exception as e:
             logger.error(f"WebSocket 错误 ({device_id}): {e}")
             connection_manager.disconnect_device(device_id)
@@ -1304,49 +1349,56 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
         """
         await connection_manager.subscribe_status(websocket)
         try:
-            await websocket.send_json({
-                "type": "initial_status",
-                "devices_online": len(connection_manager.online_device_ids()),
-                "devices_registered": len(registered_devices),
-                "timestamp": datetime.now().isoformat()
-            })
+            await websocket.send_json(
+                {
+                    "type": "initial_status",
+                    "devices_online": len(connection_manager.online_device_ids()),
+                    "devices_registered": len(registered_devices),
+                    "timestamp": datetime.now().isoformat(),
+                }
+            )
 
             while True:
                 raw = await websocket.receive_text()
                 if raw == "ping":
-                    await websocket.send_json({
-                        "type": "pong",
-                        "timestamp": datetime.now().isoformat()
-                    })
+                    await websocket.send_json({"type": "pong", "timestamp": datetime.now().isoformat()})
                 else:
                     try:
                         msg = json.loads(raw)
                         msg_type = msg.get("type", "")
 
                         if msg_type == "subscribe_commands":
-                            await websocket.send_json({
-                                "type": "subscribed",
-                                "channel": "command_results",
-                                "timestamp": datetime.now().isoformat(),
-                            })
+                            await websocket.send_json(
+                                {
+                                    "type": "subscribed",
+                                    "channel": "command_results",
+                                    "timestamp": datetime.now().isoformat(),
+                                }
+                            )
 
                         elif msg_type == "get_metrics":
                             from core.performance import PerformanceMonitor
+
                             perf = PerformanceMonitor.instance()
-                            await websocket.send_json({
-                                "type": "metrics",
-                                "data": perf.get_dashboard(),
-                                "timestamp": datetime.now().isoformat(),
-                            })
+                            await websocket.send_json(
+                                {
+                                    "type": "metrics",
+                                    "data": perf.get_dashboard(),
+                                    "timestamp": datetime.now().isoformat(),
+                                }
+                            )
 
                         elif msg_type == "get_health":
                             from core.monitoring import get_monitoring_manager
+
                             mon = get_monitoring_manager()
-                            await websocket.send_json({
-                                "type": "health",
-                                "data": mon.health.get_status(),
-                                "timestamp": datetime.now().isoformat(),
-                            })
+                            await websocket.send_json(
+                                {
+                                    "type": "health",
+                                    "data": mon.health.get_status(),
+                                    "timestamp": datetime.now().isoformat(),
+                                }
+                            )
 
                     except (json.JSONDecodeError, ValueError):
                         pass
@@ -1374,6 +1426,7 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
         bridge = None
         try:
             from core.lumiv_websocket_bridge import GalaxyPresenceBridge
+
             bridge = GalaxyPresenceBridge.get_instance()
             # 注册即推送一次当前状态（register_client 内部会立即下发）。
             await bridge.register_client(websocket)
@@ -1386,7 +1439,8 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
             while True:
                 raw = await websocket.receive_text()
                 if raw == "ping":
-                    await websocket.send_json({"type": "pong"}); continue
+                    await websocket.send_json({"type": "pong"})
+                    continue
                 try:
                     msg = json.loads(raw)
                     if msg.get("type") == "register":
@@ -1395,18 +1449,29 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
                         if bridge is not None:
                             await bridge._send_to(websocket)
                         else:
-                            await websocket.send_json({
-                                "type": "state_event", "event_category": "ambient_tick",
-                                "payload": {"phase": "silent", "intent": 0.0, "speaking": False, "depth_factor": 0.05}
-                            })
+                            await websocket.send_json(
+                                {
+                                    "type": "state_event",
+                                    "event_category": "ambient_tick",
+                                    "payload": {
+                                        "phase": "silent",
+                                        "intent": 0.0,
+                                        "speaking": False,
+                                        "depth_factor": 0.05,
+                                    },
+                                }
+                            )
                 except (json.JSONDecodeError, ValueError):
                     pass
-        except (WebSocketDisconnect, asyncio.TimeoutError): pass
-        except Exception as exc: logger.debug("desktop-presence ws error: %s", exc)
+        except (WebSocketDisconnect, asyncio.TimeoutError):
+            pass
+        except Exception as exc:
+            logger.debug("desktop-presence ws error: %s", exc)
         finally:
             if bridge is not None:
                 try:
                     await bridge.unregister_client(websocket)
                 except Exception:  # noqa: BLE001
                     pass
-            async with _desktop_lock: _desktop_clients.discard(websocket)
+            async with _desktop_lock:
+                _desktop_clients.discard(websocket)

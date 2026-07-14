@@ -25,7 +25,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # A. MessageType enum
 # ---------------------------------------------------------------------------
@@ -34,14 +33,17 @@ import pytest
 class TestMessageTypeEnum:
     def test_A01_device_state_snapshot_present(self):
         from galaxy_gateway.protocol.aip_v3 import MessageType
+
         assert MessageType.DEVICE_STATE_SNAPSHOT == "device_state_snapshot"
 
     def test_A02_device_execution_event_present(self):
         from galaxy_gateway.protocol.aip_v3 import MessageType
+
         assert MessageType.DEVICE_EXECUTION_EVENT == "device_execution_event"
 
     def test_A03_values_are_correct_strings(self):
         from galaxy_gateway.protocol.aip_v3 import MessageType
+
         assert MessageType("device_state_snapshot") == MessageType.DEVICE_STATE_SNAPSHOT
         assert MessageType("device_execution_event") == MessageType.DEVICE_EXECUTION_EVENT
 
@@ -54,18 +56,22 @@ class TestMessageTypeEnum:
 class TestIngressEventKindConstants:
     def test_B01_device_state_snapshot_present(self):
         from galaxy_gateway.protocol.normalized_ingress_event import IngressEventKind
+
         assert IngressEventKind.DEVICE_STATE_SNAPSHOT == "device_state_snapshot"
 
     def test_B02_device_execution_event_present(self):
         from galaxy_gateway.protocol.normalized_ingress_event import IngressEventKind
+
         assert IngressEventKind.DEVICE_EXECUTION_EVENT == "device_execution_event"
 
     def test_B03_device_state_snapshot_in_ALL(self):
         from galaxy_gateway.protocol.normalized_ingress_event import IngressEventKind
+
         assert IngressEventKind.DEVICE_STATE_SNAPSHOT in IngressEventKind._ALL
 
     def test_B04_device_execution_event_in_ALL(self):
         from galaxy_gateway.protocol.normalized_ingress_event import IngressEventKind
+
         assert IngressEventKind.DEVICE_EXECUTION_EVENT in IngressEventKind._ALL
 
 
@@ -77,16 +83,19 @@ class TestIngressEventKindConstants:
 class TestIngressEventKindNormalise:
     def test_C01_normalise_device_state_snapshot(self):
         from galaxy_gateway.protocol.normalized_ingress_event import IngressEventKind
+
         result = IngressEventKind.normalise("device_state_snapshot")
         assert result == IngressEventKind.DEVICE_STATE_SNAPSHOT
 
     def test_C02_normalise_device_execution_event(self):
         from galaxy_gateway.protocol.normalized_ingress_event import IngressEventKind
+
         result = IngressEventKind.normalise("device_execution_event")
         assert result == IngressEventKind.DEVICE_EXECUTION_EVENT
 
     def test_C03_normalise_unknown_still_works(self):
         from galaxy_gateway.protocol.normalized_ingress_event import IngressEventKind
+
         result = IngressEventKind.normalise("definitely_not_a_valid_kind")
         assert result == IngressEventKind.UNKNOWN
 
@@ -98,13 +107,15 @@ class TestIngressEventKindNormalise:
 
 class TestAndroidDomainKinds:
     def test_D01_device_state_snapshot_in_domain_kinds(self):
-        from galaxy_gateway.websocket_handler import _ANDROID_DOMAIN_KINDS
         from galaxy_gateway.protocol.normalized_ingress_event import IngressEventKind
+        from galaxy_gateway.websocket_handler import _ANDROID_DOMAIN_KINDS
+
         assert IngressEventKind.DEVICE_STATE_SNAPSHOT in _ANDROID_DOMAIN_KINDS
 
     def test_D02_device_execution_event_in_domain_kinds(self):
-        from galaxy_gateway.websocket_handler import _ANDROID_DOMAIN_KINDS
         from galaxy_gateway.protocol.normalized_ingress_event import IngressEventKind
+        from galaxy_gateway.websocket_handler import _ANDROID_DOMAIN_KINDS
+
         assert IngressEventKind.DEVICE_EXECUTION_EVENT in _ANDROID_DOMAIN_KINDS
 
 
@@ -116,19 +127,21 @@ class TestAndroidDomainKinds:
 class TestIngressClassifier:
     def test_E01_device_state_snapshot_classified_as_transport(self):
         from galaxy_gateway.protocol.ingress_classifier import (
-            classify_ingress_kind,
             IngressMessageClass,
+            classify_ingress_kind,
         )
         from galaxy_gateway.protocol.normalized_ingress_event import IngressEventKind
+
         cls = classify_ingress_kind(IngressEventKind.DEVICE_STATE_SNAPSHOT)
         assert cls == IngressMessageClass.TRANSPORT
 
     def test_E02_device_execution_event_classified_as_transport(self):
         from galaxy_gateway.protocol.ingress_classifier import (
-            classify_ingress_kind,
             IngressMessageClass,
+            classify_ingress_kind,
         )
         from galaxy_gateway.protocol.normalized_ingress_event import IngressEventKind
+
         cls = classify_ingress_kind(IngressEventKind.DEVICE_EXECUTION_EVENT)
         assert cls == IngressMessageClass.TRANSPORT
 
@@ -142,12 +155,14 @@ class TestAndroidBridgeDispatchTable:
     def test_F01_device_state_snapshot_registered(self):
         from galaxy_gateway.android_bridge import AndroidBridge
         from galaxy_gateway.protocol.aip_v3 import MessageType
+
         bridge = AndroidBridge()
         assert MessageType.DEVICE_STATE_SNAPSHOT in bridge._message_handlers
 
     def test_F02_device_execution_event_registered(self):
         from galaxy_gateway.android_bridge import AndroidBridge
         from galaxy_gateway.protocol.aip_v3 import MessageType
+
         bridge = AndroidBridge()
         assert MessageType.DEVICE_EXECUTION_EVENT in bridge._message_handlers
 
@@ -159,10 +174,10 @@ class TestAndroidBridgeDispatchTable:
 
 class TestHandleDeviceStateSnapshot:
     def test_G01_absorbs_snapshot_and_returns_ack(self):
+        from core.android_device_state_store import reset_android_device_state_store
         from galaxy_gateway.android.handlers.device_state_snapshot import (
             handle_device_state_snapshot,
         )
-        from core.android_device_state_store import reset_android_device_state_store
 
         reset_android_device_state_store()
         try:
@@ -178,9 +193,7 @@ class TestHandleDeviceStateSnapshot:
             }
             bridge = MagicMock()
             websocket = MagicMock()
-            response = asyncio.run(
-                handle_device_state_snapshot(bridge, websocket, message)
-            )
+            response = asyncio.run(handle_device_state_snapshot(bridge, websocket, message))
             assert response is not None
             assert response.get("type") == "device_state_snapshot_ack"
             assert response.get("status") == "absorbed"
@@ -189,6 +202,7 @@ class TestHandleDeviceStateSnapshot:
 
             # Verify the snapshot was absorbed into the store
             from core.android_device_state_store import get_device_state_snapshot
+
             snap = get_device_state_snapshot("test_device_rt_01")
             assert snap is not None
             assert snap.model_ready is True
@@ -198,10 +212,10 @@ class TestHandleDeviceStateSnapshot:
             reset_android_device_state_store()
 
     def test_G02_missing_payload_still_absorbs_and_acks(self):
+        from core.android_device_state_store import reset_android_device_state_store
         from galaxy_gateway.android.handlers.device_state_snapshot import (
             handle_device_state_snapshot,
         )
-        from core.android_device_state_store import reset_android_device_state_store
 
         reset_android_device_state_store()
         try:
@@ -213,25 +227,23 @@ class TestHandleDeviceStateSnapshot:
             }
             bridge = MagicMock()
             websocket = MagicMock()
-            response = asyncio.run(
-                handle_device_state_snapshot(bridge, websocket, message)
-            )
+            response = asyncio.run(handle_device_state_snapshot(bridge, websocket, message))
             assert response is not None
             assert response.get("type") == "device_state_snapshot_ack"
         finally:
             reset_android_device_state_store()
 
     def test_G03_ready_snapshot_with_takeover_gate_advances_lifecycle_to_takeover_eligible(self):
-        from galaxy_gateway.android.handlers.device_state_snapshot import (
-            handle_device_state_snapshot,
-        )
         from core.android_device_state_store import reset_android_device_state_store
         from core.device_lifecycle_state import (
-            reset_lifecycle_store,
-            get_lifecycle_record,
-            transition_device_lifecycle,
-            DeviceLifecycleTransitionEvent,
             DeviceLifecycleStage,
+            DeviceLifecycleTransitionEvent,
+            get_lifecycle_record,
+            reset_lifecycle_store,
+            transition_device_lifecycle,
+        )
+        from galaxy_gateway.android.handlers.device_state_snapshot import (
+            handle_device_state_snapshot,
         )
 
         reset_android_device_state_store()
@@ -263,9 +275,7 @@ class TestHandleDeviceStateSnapshot:
             }
             bridge = MagicMock()
             websocket = MagicMock()
-            with patch(
-                "core.android_mode_gate_policy.evaluate_android_mode_readiness"
-            ) as mock_mode_gate:
+            with patch("core.android_mode_gate_policy.evaluate_android_mode_readiness") as mock_mode_gate:
                 mock_mode_gate.return_value = MagicMock(
                     is_dispatch_eligible=True,
                     is_takeover_eligible=True,
@@ -286,10 +296,10 @@ class TestHandleDeviceStateSnapshot:
 
 class TestHandleDeviceExecutionEvent:
     def test_H01_absorbs_event_and_returns_ack(self):
+        from core.android_device_state_store import get_android_device_state_store, reset_android_device_state_store
         from galaxy_gateway.android.handlers.device_state_snapshot import (
             handle_device_execution_event,
         )
-        from core.android_device_state_store import reset_android_device_state_store, get_android_device_state_store
 
         reset_android_device_state_store()
         try:
@@ -307,9 +317,7 @@ class TestHandleDeviceExecutionEvent:
             }
             bridge = MagicMock()
             websocket = MagicMock()
-            response = asyncio.run(
-                handle_device_execution_event(bridge, websocket, message)
-            )
+            response = asyncio.run(handle_device_execution_event(bridge, websocket, message))
             assert response is not None
             assert response.get("type") == "device_execution_event_ack"
             assert response.get("status") == "absorbed"
@@ -327,16 +335,16 @@ class TestHandleDeviceExecutionEvent:
             reset_android_device_state_store()
 
     def test_H02_execution_event_phases_drive_lifecycle_participating_and_back_to_ready(self):
-        from galaxy_gateway.android.handlers.device_state_snapshot import (
-            handle_device_execution_event,
-        )
         from core.android_device_state_store import reset_android_device_state_store
         from core.device_lifecycle_state import (
-            reset_lifecycle_store,
-            get_lifecycle_record,
-            transition_device_lifecycle,
-            DeviceLifecycleTransitionEvent,
             DeviceLifecycleStage,
+            DeviceLifecycleTransitionEvent,
+            get_lifecycle_record,
+            reset_lifecycle_store,
+            transition_device_lifecycle,
+        )
+        from galaxy_gateway.android.handlers.device_state_snapshot import (
+            handle_device_execution_event,
         )
 
         reset_android_device_state_store()
@@ -396,16 +404,16 @@ class TestHandleDeviceExecutionEvent:
             reset_lifecycle_store()
 
     def test_H03_unknown_or_empty_phase_does_not_force_execution_end_transition(self):
-        from galaxy_gateway.android.handlers.device_state_snapshot import (
-            handle_device_execution_event,
-        )
         from core.android_device_state_store import reset_android_device_state_store
         from core.device_lifecycle_state import (
-            reset_lifecycle_store,
-            get_lifecycle_record,
-            transition_device_lifecycle,
-            DeviceLifecycleTransitionEvent,
             DeviceLifecycleStage,
+            DeviceLifecycleTransitionEvent,
+            get_lifecycle_record,
+            reset_lifecycle_store,
+            transition_device_lifecycle,
+        )
+        from galaxy_gateway.android.handlers.device_state_snapshot import (
+            handle_device_execution_event,
         )
 
         reset_android_device_state_store()
@@ -450,9 +458,7 @@ class TestHandleDeviceExecutionEvent:
                 "message_id": "msg_exec_whitespace",
                 "payload": {"phase": "   "},
             }
-            _ = asyncio.run(
-                handle_device_execution_event(bridge, websocket, whitespace_message)
-            )
+            _ = asyncio.run(handle_device_execution_event(bridge, websocket, whitespace_message))
             record_after_whitespace = get_lifecycle_record(device_id)
             assert record_after_whitespace.stage == DeviceLifecycleStage.ready
             assert record_after_whitespace.execution_active is False
@@ -469,18 +475,21 @@ class TestHandleDeviceExecutionEvent:
 class TestOperatorSnapshotAndroidEcosystem:
     def test_I01_operator_snapshot_has_android_ecosystem_field(self):
         from core.operator_surface import OperatorSnapshot
+
         snap = OperatorSnapshot()
         assert hasattr(snap, "android_ecosystem")
         assert isinstance(snap.android_ecosystem, dict)
 
     def test_I02_to_dict_includes_android_ecosystem(self):
         from core.operator_surface import OperatorSnapshot
+
         snap = OperatorSnapshot()
         d = snap.to_dict()
         assert "android_ecosystem" in d
 
     def test_I03_android_ecosystem_survives_serialisation_round_trip(self):
         from core.operator_surface import OperatorSnapshot
+
         snap = OperatorSnapshot()
         snap.android_ecosystem = {"total_devices_with_snapshot": 2, "local_ai_ready_count": 1}
         d = snap.to_dict()
@@ -495,19 +504,22 @@ class TestOperatorSnapshotAndroidEcosystem:
 
 class TestOperatorSnapshotPopulatesAndroidEcosystem:
     def test_J01_android_ecosystem_populated_when_store_has_snapshot(self):
-        from core.operator_surface import get_operator_surface
         from core.android_device_state_store import (
             absorb_device_state_snapshot,
             reset_android_device_state_store,
         )
+        from core.operator_surface import get_operator_surface
 
         reset_android_device_state_store()
         try:
-            absorb_device_state_snapshot("eco_device_01", {
-                "model_ready": True,
-                "llama_cpp_available": True,
-                "local_loop_ready": True,
-            })
+            absorb_device_state_snapshot(
+                "eco_device_01",
+                {
+                    "model_ready": True,
+                    "llama_cpp_available": True,
+                    "local_loop_ready": True,
+                },
+            )
             surface = get_operator_surface()
             snap = surface.operator_snapshot()
             eco = snap.android_ecosystem
@@ -525,12 +537,14 @@ class TestOperatorSnapshotPopulatesAndroidEcosystem:
 class TestExecutionEventsRoute:
     def test_K01_route_registered_in_operator_router(self):
         from core.routes.operator import create_router
+
         router = create_router()
         paths = [r.path for r in router.routes]
         assert "/api/v1/operator/devices/execution-events" in paths
 
     def test_K02_route_is_get_method(self):
         from core.routes.operator import create_router
+
         router = create_router()
         for r in router.routes:
             if hasattr(r, "path") and r.path == "/api/v1/operator/devices/execution-events":

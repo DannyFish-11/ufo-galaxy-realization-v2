@@ -94,40 +94,37 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 _MODULE_AVAILABLE = False
 try:
-    from core.temporal_semantics_contract import (
-        # Authority / policy sentinels
+    from core.temporal_semantics_contract import (  # Authority / policy sentinels; Enumerations; Data classes; Functions
+        CLOCK_UNCERTAINTY_BLOCKS_TIMELY_AUTHORITATIVE_POLICY,
+        DEADLINE_MISS_FORCES_TIMED_OUT_CLASS_POLICY,
+        EXPLICIT_UNRELIABLE_ALWAYS_FORCES_LOWEST_CLASS_POLICY,
+        HEARTBEAT_ABSENT_BLOCKS_TIMELY_AUTHORITATIVE_POLICY,
+        LAG_UNMEASURED_BLOCKS_FRESH_BOUNDED_LAG_POLICY,
+        TEMPORAL_ABSENCE_DEFAULTS_TO_UNRELIABLE_POLICY,
         TEMPORAL_SEMANTICS_CONTRACT_AUTHORITY,
         TEMPORAL_SEMANTICS_CONTRACT_PR14_SENTINEL,
         TIMESTAMP_PRESENCE_IS_NOT_TEMPORAL_AUTHORITY_POLICY,
-        LAG_UNMEASURED_BLOCKS_FRESH_BOUNDED_LAG_POLICY,
-        DEADLINE_MISS_FORCES_TIMED_OUT_CLASS_POLICY,
-        HEARTBEAT_ABSENT_BLOCKS_TIMELY_AUTHORITATIVE_POLICY,
-        CLOCK_UNCERTAINTY_BLOCKS_TIMELY_AUTHORITATIVE_POLICY,
-        TEMPORAL_ABSENCE_DEFAULTS_TO_UNRELIABLE_POLICY,
-        EXPLICIT_UNRELIABLE_ALWAYS_FORCES_LOWEST_CLASS_POLICY,
-        # Enumerations
         TemporalClass,
-        # Data classes
         TemporalEvidence,
         TemporalVerdict,
-        # Functions
-        classify_temporal_semantics,
-        build_temporal_verdict,
         build_baseline_temporal_verdict,
+        build_temporal_verdict,
+        classify_temporal_semantics,
     )
+
     _MODULE_AVAILABLE = True
 except ImportError as _imp_err:
-    print(
-        f"SKIP: core.temporal_semantics_contract unavailable: {_imp_err}"
-    )
+    print(f"SKIP: core.temporal_semantics_contract unavailable: {_imp_err}")
 
 
 def _skip_if_unavailable(test_fn):
     """Decorator: skip test if the module is not available."""
+
     def wrapper(self):
         if not _MODULE_AVAILABLE:
             self.skipTest("core.temporal_semantics_contract not available")
         return test_fn(self)
+
     wrapper.__name__ = test_fn.__name__
     return wrapper
 
@@ -135,6 +132,7 @@ def _skip_if_unavailable(test_fn):
 # ---------------------------------------------------------------------------
 # Helpers: build evidence with named overrides
 # ---------------------------------------------------------------------------
+
 
 def _ev(**kwargs) -> "TemporalEvidence":
     """Build TemporalEvidence with fully conservative defaults."""
@@ -152,9 +150,7 @@ def _ev(**kwargs) -> "TemporalEvidence":
         lag_measured=kwargs.get("lag_measured", False),
         lag_within_bound=kwargs.get("lag_within_bound", False),
         clock_uncertainty_acceptable=kwargs.get("clock_uncertainty_acceptable", False),
-        explicit_temporally_unreliable=kwargs.get(
-            "explicit_temporally_unreliable", False
-        ),
+        explicit_temporally_unreliable=kwargs.get("explicit_temporally_unreliable", False),
         participant_id=kwargs.get("participant_id"),
         trace_id=kwargs.get("trace_id"),
     )
@@ -212,12 +208,8 @@ class TestTemporalSemanticsContract(unittest.TestCase):
 
     @_skip_if_unavailable
     def test_A03_timestamp_presence_policy_importable(self):
-        self.assertIsInstance(
-            TIMESTAMP_PRESENCE_IS_NOT_TEMPORAL_AUTHORITY_POLICY, str
-        )
-        self.assertGreater(
-            len(TIMESTAMP_PRESENCE_IS_NOT_TEMPORAL_AUTHORITY_POLICY), 0
-        )
+        self.assertIsInstance(TIMESTAMP_PRESENCE_IS_NOT_TEMPORAL_AUTHORITY_POLICY, str)
+        self.assertGreater(len(TIMESTAMP_PRESENCE_IS_NOT_TEMPORAL_AUTHORITY_POLICY), 0)
 
     @_skip_if_unavailable
     def test_A04_lag_unmeasured_policy_importable(self):
@@ -231,21 +223,13 @@ class TestTemporalSemanticsContract(unittest.TestCase):
 
     @_skip_if_unavailable
     def test_A06_heartbeat_absent_policy_importable(self):
-        self.assertIsInstance(
-            HEARTBEAT_ABSENT_BLOCKS_TIMELY_AUTHORITATIVE_POLICY, str
-        )
-        self.assertGreater(
-            len(HEARTBEAT_ABSENT_BLOCKS_TIMELY_AUTHORITATIVE_POLICY), 0
-        )
+        self.assertIsInstance(HEARTBEAT_ABSENT_BLOCKS_TIMELY_AUTHORITATIVE_POLICY, str)
+        self.assertGreater(len(HEARTBEAT_ABSENT_BLOCKS_TIMELY_AUTHORITATIVE_POLICY), 0)
 
     @_skip_if_unavailable
     def test_A07_clock_uncertainty_policy_importable(self):
-        self.assertIsInstance(
-            CLOCK_UNCERTAINTY_BLOCKS_TIMELY_AUTHORITATIVE_POLICY, str
-        )
-        self.assertGreater(
-            len(CLOCK_UNCERTAINTY_BLOCKS_TIMELY_AUTHORITATIVE_POLICY), 0
-        )
+        self.assertIsInstance(CLOCK_UNCERTAINTY_BLOCKS_TIMELY_AUTHORITATIVE_POLICY, str)
+        self.assertGreater(len(CLOCK_UNCERTAINTY_BLOCKS_TIMELY_AUTHORITATIVE_POLICY), 0)
 
     @_skip_if_unavailable
     def test_A08_temporal_absence_policy_importable(self):
@@ -254,12 +238,8 @@ class TestTemporalSemanticsContract(unittest.TestCase):
 
     @_skip_if_unavailable
     def test_A09_explicit_unreliable_policy_importable(self):
-        self.assertIsInstance(
-            EXPLICIT_UNRELIABLE_ALWAYS_FORCES_LOWEST_CLASS_POLICY, str
-        )
-        self.assertGreater(
-            len(EXPLICIT_UNRELIABLE_ALWAYS_FORCES_LOWEST_CLASS_POLICY), 0
-        )
+        self.assertIsInstance(EXPLICIT_UNRELIABLE_ALWAYS_FORCES_LOWEST_CLASS_POLICY, str)
+        self.assertGreater(len(EXPLICIT_UNRELIABLE_ALWAYS_FORCES_LOWEST_CLASS_POLICY), 0)
 
     # -----------------------------------------------------------------------
     # Group B — Enum completeness
@@ -291,9 +271,7 @@ class TestTemporalSemanticsContract(unittest.TestCase):
     def test_C01_all_conditions_produces_timely_authoritative(self):
         evidence = _ev_timely_authoritative()
         verdict = classify_temporal_semantics(evidence)
-        self.assertEqual(
-            verdict.temporal_class, TemporalClass.timely_authoritative
-        )
+        self.assertEqual(verdict.temporal_class, TemporalClass.timely_authoritative)
 
     @_skip_if_unavailable
     def test_C02_timely_authoritative_flag_true(self):
@@ -318,9 +296,7 @@ class TestTemporalSemanticsContract(unittest.TestCase):
             heartbeat_within_window=True,
         )
         verdict = classify_temporal_semantics(evidence)
-        self.assertEqual(
-            verdict.temporal_class, TemporalClass.timely_authoritative
-        )
+        self.assertEqual(verdict.temporal_class, TemporalClass.timely_authoritative)
 
     @_skip_if_unavailable
     def test_C06_timely_authoritative_with_deadline_met(self):
@@ -329,9 +305,7 @@ class TestTemporalSemanticsContract(unittest.TestCase):
             deadline_met=True,
         )
         verdict = classify_temporal_semantics(evidence)
-        self.assertEqual(
-            verdict.temporal_class, TemporalClass.timely_authoritative
-        )
+        self.assertEqual(verdict.temporal_class, TemporalClass.timely_authoritative)
 
     # -----------------------------------------------------------------------
     # Group D — timely_authoritative blocked by missing timestamp_authoritative
@@ -341,9 +315,7 @@ class TestTemporalSemanticsContract(unittest.TestCase):
     def test_D01_non_authoritative_timestamp_not_timely_authoritative(self):
         evidence = _ev_timely_authoritative(timestamp_authoritative=False)
         verdict = classify_temporal_semantics(evidence)
-        self.assertNotEqual(
-            verdict.temporal_class, TemporalClass.timely_authoritative
-        )
+        self.assertNotEqual(verdict.temporal_class, TemporalClass.timely_authoritative)
 
     @_skip_if_unavailable
     def test_D02_non_authoritative_timestamp_not_timely_flag(self):
@@ -359,9 +331,7 @@ class TestTemporalSemanticsContract(unittest.TestCase):
     def test_E01_outside_authoritative_window_not_timely_authoritative(self):
         evidence = _ev_timely_authoritative(within_authoritative_window=False)
         verdict = classify_temporal_semantics(evidence)
-        self.assertNotEqual(
-            verdict.temporal_class, TemporalClass.timely_authoritative
-        )
+        self.assertNotEqual(verdict.temporal_class, TemporalClass.timely_authoritative)
 
     @_skip_if_unavailable
     def test_E02_outside_authoritative_window_can_be_fresh_bounded_lag(self):
@@ -369,9 +339,7 @@ class TestTemporalSemanticsContract(unittest.TestCase):
         # should be fresh_with_bounded_lag
         evidence = _ev_timely_authoritative(within_authoritative_window=False)
         verdict = classify_temporal_semantics(evidence)
-        self.assertEqual(
-            verdict.temporal_class, TemporalClass.fresh_with_bounded_lag
-        )
+        self.assertEqual(verdict.temporal_class, TemporalClass.fresh_with_bounded_lag)
 
     # -----------------------------------------------------------------------
     # Group F — timely_authoritative blocked by clock_uncertainty
@@ -381,9 +349,7 @@ class TestTemporalSemanticsContract(unittest.TestCase):
     def test_F01_unacceptable_clock_uncertainty_not_timely_authoritative(self):
         evidence = _ev_timely_authoritative(clock_uncertainty_acceptable=False)
         verdict = classify_temporal_semantics(evidence)
-        self.assertNotEqual(
-            verdict.temporal_class, TemporalClass.timely_authoritative
-        )
+        self.assertNotEqual(verdict.temporal_class, TemporalClass.timely_authoritative)
 
     @_skip_if_unavailable
     def test_F02_clock_uncertainty_downgrade_reason_present(self):
@@ -400,18 +366,14 @@ class TestTemporalSemanticsContract(unittest.TestCase):
     def test_G01_unmeasured_lag_not_timely_authoritative(self):
         evidence = _ev_timely_authoritative(lag_measured=False)
         verdict = classify_temporal_semantics(evidence)
-        self.assertNotEqual(
-            verdict.temporal_class, TemporalClass.timely_authoritative
-        )
+        self.assertNotEqual(verdict.temporal_class, TemporalClass.timely_authoritative)
 
     @_skip_if_unavailable
     def test_G02_unmeasured_lag_blocks_fresh_bounded_lag(self):
         # lag_measured=False blocks fresh_with_bounded_lag too
         evidence = _ev_fresh_bounded_lag(lag_measured=False)
         verdict = classify_temporal_semantics(evidence)
-        self.assertNotEqual(
-            verdict.temporal_class, TemporalClass.fresh_with_bounded_lag
-        )
+        self.assertNotEqual(verdict.temporal_class, TemporalClass.fresh_with_bounded_lag)
 
     # -----------------------------------------------------------------------
     # Group H — timely_authoritative blocked by lag out of bound
@@ -421,17 +383,13 @@ class TestTemporalSemanticsContract(unittest.TestCase):
     def test_H01_lag_out_of_bound_not_timely_authoritative(self):
         evidence = _ev_timely_authoritative(lag_within_bound=False)
         verdict = classify_temporal_semantics(evidence)
-        self.assertNotEqual(
-            verdict.temporal_class, TemporalClass.timely_authoritative
-        )
+        self.assertNotEqual(verdict.temporal_class, TemporalClass.timely_authoritative)
 
     @_skip_if_unavailable
     def test_H02_lag_out_of_bound_blocks_fresh_bounded_lag(self):
         evidence = _ev_fresh_bounded_lag(lag_within_bound=False)
         verdict = classify_temporal_semantics(evidence)
-        self.assertNotEqual(
-            verdict.temporal_class, TemporalClass.fresh_with_bounded_lag
-        )
+        self.assertNotEqual(verdict.temporal_class, TemporalClass.fresh_with_bounded_lag)
 
     # -----------------------------------------------------------------------
     # Group I — timely_authoritative blocked by absent required heartbeat
@@ -444,9 +402,7 @@ class TestTemporalSemanticsContract(unittest.TestCase):
             heartbeat_present=False,
         )
         verdict = classify_temporal_semantics(evidence)
-        self.assertNotEqual(
-            verdict.temporal_class, TemporalClass.timely_authoritative
-        )
+        self.assertNotEqual(verdict.temporal_class, TemporalClass.timely_authoritative)
 
     @_skip_if_unavailable
     def test_I02_absent_required_heartbeat_downgrade_reason_present(self):
@@ -466,9 +422,7 @@ class TestTemporalSemanticsContract(unittest.TestCase):
             heartbeat_present=False,
         )
         verdict = classify_temporal_semantics(evidence)
-        self.assertEqual(
-            verdict.temporal_class, TemporalClass.timely_authoritative
-        )
+        self.assertEqual(verdict.temporal_class, TemporalClass.timely_authoritative)
 
     # -----------------------------------------------------------------------
     # Group J — timely_authoritative blocked by heartbeat outside window
@@ -482,9 +436,7 @@ class TestTemporalSemanticsContract(unittest.TestCase):
             heartbeat_within_window=False,
         )
         verdict = classify_temporal_semantics(evidence)
-        self.assertNotEqual(
-            verdict.temporal_class, TemporalClass.timely_authoritative
-        )
+        self.assertNotEqual(verdict.temporal_class, TemporalClass.timely_authoritative)
 
     # -----------------------------------------------------------------------
     # Group K — fresh_with_bounded_lag classification
@@ -494,9 +446,7 @@ class TestTemporalSemanticsContract(unittest.TestCase):
     def test_K01_fresh_bounded_lag_basic(self):
         evidence = _ev_fresh_bounded_lag()
         verdict = classify_temporal_semantics(evidence)
-        self.assertEqual(
-            verdict.temporal_class, TemporalClass.fresh_with_bounded_lag
-        )
+        self.assertEqual(verdict.temporal_class, TemporalClass.fresh_with_bounded_lag)
 
     @_skip_if_unavailable
     def test_K02_fresh_bounded_lag_is_fresh_true(self):
@@ -530,9 +480,7 @@ class TestTemporalSemanticsContract(unittest.TestCase):
             lag_measured=False,  # lag unknown
         )
         verdict = classify_temporal_semantics(evidence)
-        self.assertNotEqual(
-            verdict.temporal_class, TemporalClass.fresh_with_bounded_lag
-        )
+        self.assertNotEqual(verdict.temporal_class, TemporalClass.fresh_with_bounded_lag)
 
     @_skip_if_unavailable
     def test_L02_unmeasured_lag_downgrade_reason_references_policy(self):
@@ -558,9 +506,7 @@ class TestTemporalSemanticsContract(unittest.TestCase):
             lag_within_bound=False,  # lag exceeds tolerance
         )
         verdict = classify_temporal_semantics(evidence)
-        self.assertNotEqual(
-            verdict.temporal_class, TemporalClass.fresh_with_bounded_lag
-        )
+        self.assertNotEqual(verdict.temporal_class, TemporalClass.fresh_with_bounded_lag)
 
     # -----------------------------------------------------------------------
     # Group N — stale_but_usable classification
@@ -575,9 +521,7 @@ class TestTemporalSemanticsContract(unittest.TestCase):
             lag_measured=True,
         )
         verdict = classify_temporal_semantics(evidence)
-        self.assertEqual(
-            verdict.temporal_class, TemporalClass.stale_but_usable
-        )
+        self.assertEqual(verdict.temporal_class, TemporalClass.stale_but_usable)
 
     @_skip_if_unavailable
     def test_N02_stale_but_usable_is_stale_flag_true(self):
@@ -622,9 +566,7 @@ class TestTemporalSemanticsContract(unittest.TestCase):
             lag_measured=False,  # lag not measured
         )
         verdict = classify_temporal_semantics(evidence)
-        self.assertNotEqual(
-            verdict.temporal_class, TemporalClass.stale_but_usable
-        )
+        self.assertNotEqual(verdict.temporal_class, TemporalClass.stale_but_usable)
 
     # -----------------------------------------------------------------------
     # Group P — deadline_missed_or_timed_out via deadline_set + not deadline_met
@@ -638,9 +580,7 @@ class TestTemporalSemanticsContract(unittest.TestCase):
             deadline_met=False,
         )
         verdict = classify_temporal_semantics(evidence)
-        self.assertEqual(
-            verdict.temporal_class, TemporalClass.deadline_missed_or_timed_out
-        )
+        self.assertEqual(verdict.temporal_class, TemporalClass.deadline_missed_or_timed_out)
 
     @_skip_if_unavailable
     def test_P02_deadline_miss_is_deadline_missed_flag_true(self):
@@ -661,9 +601,7 @@ class TestTemporalSemanticsContract(unittest.TestCase):
             deadline_met=False,
         )
         verdict = classify_temporal_semantics(evidence)
-        self.assertEqual(
-            verdict.temporal_class, TemporalClass.deadline_missed_or_timed_out
-        )
+        self.assertEqual(verdict.temporal_class, TemporalClass.deadline_missed_or_timed_out)
         self.assertFalse(verdict.is_fresh)
 
     @_skip_if_unavailable
@@ -674,9 +612,7 @@ class TestTemporalSemanticsContract(unittest.TestCase):
             deadline_set=False,
         )
         verdict = classify_temporal_semantics(evidence)
-        self.assertNotEqual(
-            verdict.temporal_class, TemporalClass.deadline_missed_or_timed_out
-        )
+        self.assertNotEqual(verdict.temporal_class, TemporalClass.deadline_missed_or_timed_out)
 
     # -----------------------------------------------------------------------
     # Group Q — deadline_missed_or_timed_out via staleness tolerance exceeded
@@ -690,9 +626,7 @@ class TestTemporalSemanticsContract(unittest.TestCase):
             within_staleness_tolerance=False,  # beyond all tolerance bounds
         )
         verdict = classify_temporal_semantics(evidence)
-        self.assertEqual(
-            verdict.temporal_class, TemporalClass.deadline_missed_or_timed_out
-        )
+        self.assertEqual(verdict.temporal_class, TemporalClass.deadline_missed_or_timed_out)
 
     @_skip_if_unavailable
     def test_Q02_within_staleness_tolerance_not_deadline_missed(self):
@@ -703,9 +637,7 @@ class TestTemporalSemanticsContract(unittest.TestCase):
             lag_measured=True,
         )
         verdict = classify_temporal_semantics(evidence)
-        self.assertNotEqual(
-            verdict.temporal_class, TemporalClass.deadline_missed_or_timed_out
-        )
+        self.assertNotEqual(verdict.temporal_class, TemporalClass.deadline_missed_or_timed_out)
 
     # -----------------------------------------------------------------------
     # Group R — temporally_unreliable (zero evidence)
@@ -715,9 +647,7 @@ class TestTemporalSemanticsContract(unittest.TestCase):
     def test_R01_zero_evidence_is_temporally_unreliable(self):
         evidence = _ev()  # all False
         verdict = classify_temporal_semantics(evidence)
-        self.assertEqual(
-            verdict.temporal_class, TemporalClass.temporally_unreliable
-        )
+        self.assertEqual(verdict.temporal_class, TemporalClass.temporally_unreliable)
 
     @_skip_if_unavailable
     def test_R02_zero_evidence_is_temporally_unreliable_flag(self):
@@ -742,9 +672,7 @@ class TestTemporalSemanticsContract(unittest.TestCase):
     def test_S01_explicit_unreliable_forces_temporally_unreliable(self):
         evidence = _ev(explicit_temporally_unreliable=True)
         verdict = classify_temporal_semantics(evidence)
-        self.assertEqual(
-            verdict.temporal_class, TemporalClass.temporally_unreliable
-        )
+        self.assertEqual(verdict.temporal_class, TemporalClass.temporally_unreliable)
 
     @_skip_if_unavailable
     def test_S02_explicit_unreliable_flag_is_true(self):
@@ -761,25 +689,19 @@ class TestTemporalSemanticsContract(unittest.TestCase):
         """TIMESTAMP_PRESENCE_IS_NOT_TEMPORAL_AUTHORITY_POLICY check."""
         evidence = _ev(timestamp_present=True)  # only timestamp, no other evidence
         verdict = classify_temporal_semantics(evidence)
-        self.assertNotEqual(
-            verdict.temporal_class, TemporalClass.timely_authoritative
-        )
+        self.assertNotEqual(verdict.temporal_class, TemporalClass.timely_authoritative)
 
     @_skip_if_unavailable
     def test_T02_timestamp_only_is_not_fresh_bounded_lag(self):
         evidence = _ev(timestamp_present=True)
         verdict = classify_temporal_semantics(evidence)
-        self.assertNotEqual(
-            verdict.temporal_class, TemporalClass.fresh_with_bounded_lag
-        )
+        self.assertNotEqual(verdict.temporal_class, TemporalClass.fresh_with_bounded_lag)
 
     @_skip_if_unavailable
     def test_T03_timestamp_only_is_not_stale_but_usable(self):
         evidence = _ev(timestamp_present=True)
         verdict = classify_temporal_semantics(evidence)
-        self.assertNotEqual(
-            verdict.temporal_class, TemporalClass.stale_but_usable
-        )
+        self.assertNotEqual(verdict.temporal_class, TemporalClass.stale_but_usable)
 
     # -----------------------------------------------------------------------
     # Group U — explicit_temporally_unreliable overrides all
@@ -790,17 +712,13 @@ class TestTemporalSemanticsContract(unittest.TestCase):
         """Even with fully timely_authoritative evidence, explicit unreliable wins."""
         evidence = _ev_timely_authoritative(explicit_temporally_unreliable=True)
         verdict = classify_temporal_semantics(evidence)
-        self.assertEqual(
-            verdict.temporal_class, TemporalClass.temporally_unreliable
-        )
+        self.assertEqual(verdict.temporal_class, TemporalClass.temporally_unreliable)
 
     @_skip_if_unavailable
     def test_U02_explicit_unreliable_overrides_fresh_bounded_lag_evidence(self):
         evidence = _ev_fresh_bounded_lag(explicit_temporally_unreliable=True)
         verdict = classify_temporal_semantics(evidence)
-        self.assertEqual(
-            verdict.temporal_class, TemporalClass.temporally_unreliable
-        )
+        self.assertEqual(verdict.temporal_class, TemporalClass.temporally_unreliable)
 
     @_skip_if_unavailable
     def test_U03_explicit_unreliable_overrides_stale_but_usable_evidence(self):
@@ -811,9 +729,7 @@ class TestTemporalSemanticsContract(unittest.TestCase):
             explicit_temporally_unreliable=True,
         )
         verdict = classify_temporal_semantics(evidence)
-        self.assertEqual(
-            verdict.temporal_class, TemporalClass.temporally_unreliable
-        )
+        self.assertEqual(verdict.temporal_class, TemporalClass.temporally_unreliable)
 
     # -----------------------------------------------------------------------
     # Group V — deadline miss overrides freshness
@@ -827,9 +743,7 @@ class TestTemporalSemanticsContract(unittest.TestCase):
             deadline_met=False,
         )
         verdict = classify_temporal_semantics(evidence)
-        self.assertEqual(
-            verdict.temporal_class, TemporalClass.deadline_missed_or_timed_out
-        )
+        self.assertEqual(verdict.temporal_class, TemporalClass.deadline_missed_or_timed_out)
 
     @_skip_if_unavailable
     def test_V02_deadline_miss_overrides_fresh_bounded_lag_conditions(self):
@@ -838,9 +752,7 @@ class TestTemporalSemanticsContract(unittest.TestCase):
             deadline_met=False,
         )
         verdict = classify_temporal_semantics(evidence)
-        self.assertEqual(
-            verdict.temporal_class, TemporalClass.deadline_missed_or_timed_out
-        )
+        self.assertEqual(verdict.temporal_class, TemporalClass.deadline_missed_or_timed_out)
 
     # -----------------------------------------------------------------------
     # Group W — is_timely_authoritative flag
@@ -850,11 +762,14 @@ class TestTemporalSemanticsContract(unittest.TestCase):
     def test_W01_is_timely_authoritative_only_for_timely_authoritative(self):
         for cls_name, ev_fn in [
             ("fresh_with_bounded_lag", _ev_fresh_bounded_lag),
-            ("stale_but_usable", lambda: _ev(
-                timestamp_present=True,
-                within_staleness_tolerance=True,
-                lag_measured=True,
-            )),
+            (
+                "stale_but_usable",
+                lambda: _ev(
+                    timestamp_present=True,
+                    within_staleness_tolerance=True,
+                    lag_measured=True,
+                ),
+            ),
             ("temporally_unreliable", lambda: _ev()),
         ]:
             with self.subTest(cls=cls_name):
@@ -1037,9 +952,7 @@ class TestTemporalSemanticsContract(unittest.TestCase):
     @_skip_if_unavailable
     def test_AE01_baseline_returns_temporally_unreliable(self):
         verdict = build_baseline_temporal_verdict()
-        self.assertEqual(
-            verdict.temporal_class, TemporalClass.temporally_unreliable
-        )
+        self.assertEqual(verdict.temporal_class, TemporalClass.temporally_unreliable)
 
     @_skip_if_unavailable
     def test_AE02_baseline_is_temporally_unreliable_flag(self):
@@ -1055,9 +968,7 @@ class TestTemporalSemanticsContract(unittest.TestCase):
     def test_AE04_build_temporal_verdict_alias_works(self):
         ev = _ev()
         verdict = build_temporal_verdict(ev)
-        self.assertEqual(
-            verdict.temporal_class, TemporalClass.temporally_unreliable
-        )
+        self.assertEqual(verdict.temporal_class, TemporalClass.temporally_unreliable)
 
     # -----------------------------------------------------------------------
     # Group AF — TemporalClass.rank ordering
@@ -1145,14 +1056,13 @@ class TestTemporalSemanticsContract(unittest.TestCase):
             from core.system_final_acceptance_verdict import (
                 SystemFinalAcceptanceEvaluator,
             )
+
             _ACCEPTANCE_AVAILABLE = True
         except ImportError:
             pass
 
         if not _ACCEPTANCE_AVAILABLE:
-            self.skipTest(
-                "core.system_final_acceptance_verdict not available"
-            )
+            self.skipTest("core.system_final_acceptance_verdict not available")
 
         evaluator = SystemFinalAcceptanceEvaluator()
         report = evaluator.evaluate()
@@ -1168,14 +1078,13 @@ class TestTemporalSemanticsContract(unittest.TestCase):
         _ACCEPTANCE_AVAILABLE = False
         try:
             from core.system_final_acceptance_verdict import AcceptanceDimensionId
+
             _ACCEPTANCE_AVAILABLE = True
         except ImportError:
             pass
 
         if not _ACCEPTANCE_AVAILABLE:
-            self.skipTest(
-                "core.system_final_acceptance_verdict not available"
-            )
+            self.skipTest("core.system_final_acceptance_verdict not available")
 
         dims = AcceptanceDimensionId.all_dimensions()
         dim_values = [d.value for d in dims]
@@ -1186,14 +1095,13 @@ class TestTemporalSemanticsContract(unittest.TestCase):
         _ACCEPTANCE_AVAILABLE = False
         try:
             from core.system_final_acceptance_verdict import AcceptanceDimensionId
+
             _ACCEPTANCE_AVAILABLE = True
         except ImportError:
             pass
 
         if not _ACCEPTANCE_AVAILABLE:
-            self.skipTest(
-                "core.system_final_acceptance_verdict not available"
-            )
+            self.skipTest("core.system_final_acceptance_verdict not available")
 
         dims = AcceptanceDimensionId.all_dimensions()
         self.assertEqual(len(dims), 17)
@@ -1208,17 +1116,16 @@ class TestTemporalSemanticsContract(unittest.TestCase):
         _ACCEPTANCE_AVAILABLE = False
         try:
             from core.system_final_acceptance_verdict import (
-                SystemFinalAcceptanceEvaluator,
                 DimensionStatus,
+                SystemFinalAcceptanceEvaluator,
             )
+
             _ACCEPTANCE_AVAILABLE = True
         except ImportError:
             pass
 
         if not _ACCEPTANCE_AVAILABLE:
-            self.skipTest(
-                "core.system_final_acceptance_verdict not available"
-            )
+            self.skipTest("core.system_final_acceptance_verdict not available")
 
         evaluator = SystemFinalAcceptanceEvaluator()
         report = evaluator.evaluate()
@@ -1238,31 +1145,23 @@ class TestTemporalSemanticsContract(unittest.TestCase):
     def test_AK01_zero_evidence_probe_not_timely_authoritative(self):
         """TIMESTAMP_PRESENCE_IS_NOT_TEMPORAL_AUTHORITY_POLICY guard."""
         verdict = build_baseline_temporal_verdict()
-        self.assertNotEqual(
-            verdict.temporal_class, TemporalClass.timely_authoritative
-        )
+        self.assertNotEqual(verdict.temporal_class, TemporalClass.timely_authoritative)
         self.assertFalse(verdict.is_timely_authoritative)
 
     @_skip_if_unavailable
     def test_AK02_zero_evidence_probe_not_fresh_bounded_lag(self):
         verdict = build_baseline_temporal_verdict()
-        self.assertNotEqual(
-            verdict.temporal_class, TemporalClass.fresh_with_bounded_lag
-        )
+        self.assertNotEqual(verdict.temporal_class, TemporalClass.fresh_with_bounded_lag)
 
     @_skip_if_unavailable
     def test_AK03_zero_evidence_probe_not_stale_but_usable(self):
         verdict = build_baseline_temporal_verdict()
-        self.assertNotEqual(
-            verdict.temporal_class, TemporalClass.stale_but_usable
-        )
+        self.assertNotEqual(verdict.temporal_class, TemporalClass.stale_but_usable)
 
     @_skip_if_unavailable
     def test_AK04_zero_evidence_probe_not_deadline_missed(self):
         verdict = build_baseline_temporal_verdict()
-        self.assertNotEqual(
-            verdict.temporal_class, TemporalClass.deadline_missed_or_timed_out
-        )
+        self.assertNotEqual(verdict.temporal_class, TemporalClass.deadline_missed_or_timed_out)
 
 
 # ---------------------------------------------------------------------------

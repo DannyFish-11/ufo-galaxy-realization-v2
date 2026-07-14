@@ -119,6 +119,7 @@ Usage::
     snap = build_explainability_snapshot(trace_id=trace_id)
     response["metadata"]["decision_timeline_snapshot"] = snap.to_dict()
 """
+
 from __future__ import annotations
 
 import logging
@@ -397,11 +398,7 @@ class ControlTimelineEvent:
         """Reconstruct a :class:`ControlTimelineEvent` from a dict produced by
         :meth:`to_dict`.  Unknown keys are silently ignored."""
         raw_record = data.get("record")
-        record = (
-            DecisionTraceRecord.from_dict(raw_record)
-            if isinstance(raw_record, dict)
-            else DecisionTraceRecord()
-        )
+        record = DecisionTraceRecord.from_dict(raw_record) if isinstance(raw_record, dict) else DecisionTraceRecord()
         return cls(
             event_id=data.get("event_id", str(uuid.uuid4())),
             sequence=int(data.get("sequence", 0)),
@@ -468,8 +465,7 @@ class ExplainabilitySnapshot:
         by :meth:`to_dict`.  Unknown keys are silently ignored."""
         raw_events = data.get("events") or []
         events = [
-            ControlTimelineEvent.from_dict(e) if isinstance(e, dict) else ControlTimelineEvent()
-            for e in raw_events
+            ControlTimelineEvent.from_dict(e) if isinstance(e, dict) else ControlTimelineEvent() for e in raw_events
         ]
         return cls(
             snapshot_id=data.get("snapshot_id", str(uuid.uuid4())),
@@ -648,9 +644,7 @@ def _derive_fallback_transition_record(
     routing dict and the previous route kind."""
     new_route = str(route_dict.get("route_type") or route_dict.get("route_kind") or "unknown")
     fallback_reason = str(route_dict.get("fallback_reason") or "degradation policy applied")
-    decision_summary = (
-        f"fallback from {previous_route_kind or 'unknown'} to {new_route}"
-    )
+    decision_summary = f"fallback from {previous_route_kind or 'unknown'} to {new_route}"
     rationale = fallback_reason
 
     return DecisionTraceRecord(
@@ -687,15 +681,12 @@ def _derive_operator_override_record(
 
     active_set = override_snapshot_dict.get("active_override_set") or {}
     if isinstance(active_set, dict):
-        override_reason = active_set.get("override_reason") or (
-            reasons[0] if reasons else None
-        )
+        override_reason = active_set.get("override_reason") or (reasons[0] if reasons else None)
     else:
         override_reason = reasons[0] if reasons else None
 
-    decision_summary = (
-        f"operator override active on {len(domains)} domain(s): "
-        + (", ".join(domains) if domains else "none")
+    decision_summary = f"operator override active on {len(domains)} domain(s): " + (
+        ", ".join(domains) if domains else "none"
     )
     rationale = override_reason or "operator-committed override via DesktopPresenceRuntime"
 

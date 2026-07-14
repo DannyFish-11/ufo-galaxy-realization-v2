@@ -66,9 +66,7 @@ logger = logging.getLogger("Galaxy.DevicePoolManager")
 # ensures that device selection always respects the unified capability graph
 # and never bypasses the assimilation layer.  The sentinel below confirms
 # this integration is present.
-DEVICE_POOL_CAPABILITY_ASSIMILATION_LAYER_INTEGRATED: str = (
-    "DEVICE_POOL_CAPABILITY_ASSIMILATION_LAYER_INTEGRATED_V1"
-)
+DEVICE_POOL_CAPABILITY_ASSIMILATION_LAYER_INTEGRATED: str = "DEVICE_POOL_CAPABILITY_ASSIMILATION_LAYER_INTEGRATED_V1"
 
 # ---------------------------------------------------------------------------
 # Enumerations
@@ -77,6 +75,7 @@ DEVICE_POOL_CAPABILITY_ASSIMILATION_LAYER_INTEGRATED: str = (
 
 class SchedulingStrategy(str, Enum):
     """Available device-selection strategies."""
+
     ROUND_ROBIN = "round_robin"
     LEAST_CONN = "least_conn"
     ADAPTIVE = "adaptive"
@@ -86,6 +85,7 @@ class SchedulingStrategy(str, Enum):
 # Device record
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class PoolDevice:
     """Metadata and runtime state for a single device in the pool."""
@@ -94,7 +94,7 @@ class PoolDevice:
     capabilities: List[str] = field(default_factory=list)
     device_type: str = ""
     weight: float = 1.0
-    capacity: int = 10          # max concurrent tasks
+    capacity: int = 10  # max concurrent tasks
     active_connections: int = 0
     registered_at: float = field(default_factory=time.monotonic)
     metadata: Dict[str, Any] = field(default_factory=dict)
@@ -119,6 +119,7 @@ class PoolDevice:
 # ---------------------------------------------------------------------------
 # DevicePoolManager
 # ---------------------------------------------------------------------------
+
 
 class DevicePoolManager:
     """Unified device pool — registration, health, weights, and scheduling.
@@ -168,9 +169,7 @@ class DevicePoolManager:
             quarantine_threshold=quarantine_threshold,
             circuit_failure_threshold=circuit_failure_threshold,
         )
-        logger.info(
-            "DevicePoolManager 初始化完成 [strategy=%s]", strategy.value
-        )
+        logger.info("DevicePoolManager 初始化完成 [strategy=%s]", strategy.value)
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -183,6 +182,7 @@ class DevicePoolManager:
     ):
         try:
             from core.control_plane.device_health_registry import DeviceHealthRegistry
+
             return DeviceHealthRegistry(
                 quarantine_threshold=quarantine_threshold,
                 circuit_failure_threshold=circuit_failure_threshold,
@@ -300,6 +300,7 @@ class DevicePoolManager:
         """Write device registration to UDM SSOT (best-effort, never raises)."""
         try:
             from galaxy_gateway.ssot import udm_write_register  # noqa: PLC0415
+
             udm_write_register(
                 device_id=device_id,
                 device_name=metadata.get("device_name", device_id),
@@ -310,8 +311,7 @@ class DevicePoolManager:
             )
         except Exception as exc:
             logger.warning(
-                "DevicePoolManager: UDM write failed for device %s — "
-                "pool record updated in degraded mode. error=%s",
+                "DevicePoolManager: UDM write failed for device %s — " "pool record updated in degraded mode. error=%s",
                 device_id,
                 exc,
             )
@@ -321,6 +321,7 @@ class DevicePoolManager:
         """Write device unregister to UDM SSOT (best-effort, never raises)."""
         try:
             from galaxy_gateway.ssot import udm_write_unregister  # noqa: PLC0415
+
             udm_write_unregister(device_id)
         except Exception as exc:
             logger.warning(
@@ -412,9 +413,7 @@ class DevicePoolManager:
 
             canonical_executors = query_routable_executors(required_capabilities)
             canonical_candidate_ids = {
-                str(executor.node_id)
-                for executor in canonical_executors
-                if getattr(executor, "node_id", None)
+                str(executor.node_id) for executor in canonical_executors if getattr(executor, "node_id", None)
             }
         except Exception as exc:
             logger.debug(
@@ -424,19 +423,14 @@ class DevicePoolManager:
 
         with self._lock:
             candidates = [
-                dev for dev in self._devices.values()
+                dev
+                for dev in self._devices.values()
                 if dev.device_id not in exclude_set
                 and not dev.is_full
                 and self._is_eligible(dev.device_id)
-                and (
-                    canonical_candidate_ids is None
-                    or dev.device_id in canonical_candidate_ids
-                )
+                and (canonical_candidate_ids is None or dev.device_id in canonical_candidate_ids)
                 and (not device_type or dev.device_type == device_type)
-                and (
-                    not required_capabilities
-                    or all(c in dev.capabilities for c in required_capabilities)
-                )
+                and (not required_capabilities or all(c in dev.capabilities for c in required_capabilities))
             ]
 
             if not candidates:
@@ -454,7 +448,9 @@ class DevicePoolManager:
                 chosen.active_connections += 1
                 logger.debug(
                     "选中设备: %s [strategy=%s, conns=%d]",
-                    chosen.device_id, effective_strategy.value, chosen.active_connections,
+                    chosen.device_id,
+                    effective_strategy.value,
+                    chosen.active_connections,
                 )
                 return chosen.device_id
             return None
@@ -590,6 +586,7 @@ class DevicePoolManager:
         """Fire an audit-ledger event (best-effort, never raises)."""
         try:
             from core.control_plane.audit_ledger import AuditLedger, EventType
+
             ledger = AuditLedger.get_instance()
             et = getattr(EventType, event_name.upper(), None)
             if et is None:
@@ -606,13 +603,8 @@ class DevicePoolManager:
         """Return pool-level statistics."""
         with self._lock:
             total = len(self._devices)
-            eligible = sum(
-                1 for d in self._devices
-                if self._is_eligible(d)
-            )
-            total_conns = sum(
-                d.active_connections for d in self._devices.values()
-            )
+            eligible = sum(1 for d in self._devices if self._is_eligible(d))
+            total_conns = sum(d.active_connections for d in self._devices.values())
             return {
                 "total_devices": total,
                 "eligible_devices": eligible,
@@ -723,8 +715,7 @@ def _android_runtime_score(device_id: str) -> float:
 
     except Exception as _exc:
         logger.debug(
-            "DevicePoolManager: android_runtime_score unavailable for %s "
-            "(fail-open, returning 1.0): %s",
+            "DevicePoolManager: android_runtime_score unavailable for %s " "(fail-open, returning 1.0): %s",
             device_id,
             _exc,
         )

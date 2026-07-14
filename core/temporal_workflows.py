@@ -73,6 +73,7 @@ async def validate_task_activity(raw: dict) -> dict:
     or ``{"success": False, "error": ...}``.
     """
     from core.acl import acl
+
     result = await acl.validate_task_dispatch(raw)
     if result["success"]:
         result["data"] = result["data"].model_dump(mode="json", exclude_none=True)
@@ -278,9 +279,7 @@ class CodeExecutionWorkflow:
 
             # Step 4: check if LSP failed and retryable
             if status == "lsp_failed" and attempt <= max_retries:
-                logger.info(
-                    f"CodeExecutionWorkflow: LSP failed on attempt {attempt}/{max_retries}, retrying"
-                )
+                logger.info(f"CodeExecutionWorkflow: LSP failed on attempt {attempt}/{max_retries}, retrying")
                 # Generate new task_id for retry
                 task_data["task_id"] = str(uuid.uuid4())
                 task_data["attempt_number"] = attempt + 1
@@ -362,7 +361,9 @@ class MultiDeviceTaskWorkflow:
             elif isinstance(r, dict) and r.get("success"):
                 successes.append(r["data"])
             else:
-                failures.append({"worker_id": worker_ids[i], "error": r.get("error", "unknown") if isinstance(r, dict) else str(r)})
+                failures.append(
+                    {"worker_id": worker_ids[i], "error": r.get("error", "unknown") if isinstance(r, dict) else str(r)}
+                )
 
         return {
             "success": len(failures) == 0,

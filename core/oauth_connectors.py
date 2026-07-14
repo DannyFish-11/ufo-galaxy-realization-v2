@@ -131,9 +131,13 @@ def _extract_account(service: str, tok: Dict[str, Any], userinfo: Optional[Dict[
 
 # 节点编号 → 连接器服务(供前端在节点卡上显示「连接」)。
 NODE_TO_SERVICE: Dict[int, str] = {
-    11: "github", 106: "github",
-    16: "google", 123: "google",
-    10: "slack", 21: "notion", 26: "discord",
+    11: "github",
+    106: "github",
+    16: "google",
+    123: "google",
+    10: "slack",
+    21: "notion",
+    26: "discord",
 }
 
 
@@ -188,16 +192,18 @@ def list_connectors() -> Dict[str, Any]:
     out: List[Dict[str, Any]] = []
     for svc, meta in CONNECTORS.items():
         entry = data.get(svc, {})
-        out.append({
-            "service": svc,
-            "label": meta["label"],
-            "status": _status(svc, entry),
-            "account": entry.get("account"),
-            "redirect_uri": redirect_uri(svc),
-            "create_app_url": meta.get("create_app_url"),
-            "create_hint": meta.get("create_hint"),
-            "has_client_id": bool(entry.get("client_id")),
-        })
+        out.append(
+            {
+                "service": svc,
+                "label": meta["label"],
+                "status": _status(svc, entry),
+                "account": entry.get("account"),
+                "redirect_uri": redirect_uri(svc),
+                "create_app_url": meta.get("create_app_url"),
+                "create_hint": meta.get("create_hint"),
+                "has_client_id": bool(entry.get("client_id")),
+            }
+        )
     return {"connectors": out, "node_to_service": NODE_TO_SERVICE}
 
 
@@ -215,6 +221,7 @@ def build_authorize_url(service: str) -> Tuple[Optional[str], Optional[str]]:
     data[service] = entry
     _save(data)
     from urllib.parse import urlencode
+
     params = {
         "client_id": entry["client_id"],
         "redirect_uri": redirect_uri(service),
@@ -240,6 +247,7 @@ async def handle_callback(service: str, code: str, state: str) -> Dict[str, Any]
         return {"ok": False, "error": "state 校验失败(可能是过期或 CSRF)"}
     try:
         import httpx
+
         headers = {"Accept": "application/json"}
         async with httpx.AsyncClient(timeout=20.0) as client:
             if meta.get("token_auth") == "basic_json":

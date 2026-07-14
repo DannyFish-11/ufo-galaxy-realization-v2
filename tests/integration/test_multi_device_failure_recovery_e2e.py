@@ -128,18 +128,14 @@ def _wait_for_port(host: str, port: int, timeout: float = 20.0) -> None:
                 return
         except (ConnectionRefusedError, OSError):
             time.sleep(0.1)
-    raise RuntimeError(
-        f"Server on {host}:{port} did not start within {timeout}s"
-    )
+    raise RuntimeError(f"Server on {host}:{port} did not start within {timeout}s")
 
 
 # ---------------------------------------------------------------------------
 # Pytest fixture — live uvicorn server in a separate OS process
 # ---------------------------------------------------------------------------
 
-_SERVER_HELPER = os.path.join(
-    os.path.dirname(__file__), "_ws_e2e_multi_device_server_helper.py"
-)
+_SERVER_HELPER = os.path.join(os.path.dirname(__file__), "_ws_e2e_multi_device_server_helper.py")
 
 
 @pytest.fixture(scope="module")
@@ -251,9 +247,7 @@ def _dispatch(base_url: str, device_id: str, task_id: str, command: str) -> Dict
         json={"task_id": task_id, "command": command},
         timeout=5.0,
     )
-    assert resp.status_code == 200, (
-        f"dispatch endpoint returned {resp.status_code}: {resp.text}"
-    )
+    assert resp.status_code == 200, f"dispatch endpoint returned {resp.status_code}: {resp.text}"
     body = resp.json()
     assert body.get("dispatched") is True
     return body
@@ -272,9 +266,7 @@ def _takeover_dispatch(
         json={"command": command, "original_device_id": original_device_id},
         timeout=5.0,
     )
-    assert resp.status_code == 200, (
-        f"takeover-dispatch endpoint returned {resp.status_code}: {resp.text}"
-    )
+    assert resp.status_code == 200, f"takeover-dispatch endpoint returned {resp.status_code}: {resp.text}"
     body = resp.json()
     assert body.get("dispatched") is True
     assert body.get("takeover") is True
@@ -308,9 +300,7 @@ class TestMultiDeviceNetworkE2E:
     # Test 1 — concurrent registration
     # ------------------------------------------------------------------
 
-    async def test_two_devices_concurrent_registration(
-        self, live_server: str
-    ) -> None:
+    async def test_two_devices_concurrent_registration(self, live_server: str) -> None:
         """Two devices register concurrently; both receive independent acks.
 
         Proves that the gateway correctly handles simultaneous connections
@@ -338,26 +328,18 @@ class TestMultiDeviceNetworkE2E:
             hb_ack = result["heartbeat_ack"]
             did = result["device_id"]
 
-            assert reg_ack["type"] == "device_register_ack", (
-                f"[{did}] expected device_register_ack; got {reg_ack.get('type')!r}"
-            )
-            assert reg_ack.get("success") is True, (
-                f"[{did}] register_ack.success must be True"
-            )
-            assert reg_ack.get("device_id") == did, (
-                f"[{did}] register_ack.device_id mismatch"
-            )
-            assert hb_ack["type"] == "heartbeat_ack", (
-                f"[{did}] expected heartbeat_ack after register"
-            )
+            assert (
+                reg_ack["type"] == "device_register_ack"
+            ), f"[{did}] expected device_register_ack; got {reg_ack.get('type')!r}"
+            assert reg_ack.get("success") is True, f"[{did}] register_ack.success must be True"
+            assert reg_ack.get("device_id") == did, f"[{did}] register_ack.device_id mismatch"
+            assert hb_ack["type"] == "heartbeat_ack", f"[{did}] expected heartbeat_ack after register"
 
     # ------------------------------------------------------------------
     # Test 2 — independent capability reporting
     # ------------------------------------------------------------------
 
-    async def test_two_devices_independent_capability_report(
-        self, live_server: str
-    ) -> None:
+    async def test_two_devices_independent_capability_report(self, live_server: str) -> None:
         """Each device reports distinct capabilities; both capability_report_acks arrive.
 
         Verifies that capability_report is processed independently for each
@@ -384,20 +366,16 @@ class TestMultiDeviceNetworkE2E:
             cap_ack = result["cap_ack"]
             did = result["device_id"]
 
-            assert cap_ack["type"] == "capability_report_ack", (
-                f"[{did}] expected capability_report_ack; got {cap_ack.get('type')!r}"
-            )
-            assert cap_ack.get("accepted") is True, (
-                f"[{did}] capability_report_ack.accepted must be True"
-            )
+            assert (
+                cap_ack["type"] == "capability_report_ack"
+            ), f"[{did}] expected capability_report_ack; got {cap_ack.get('type')!r}"
+            assert cap_ack.get("accepted") is True, f"[{did}] capability_report_ack.accepted must be True"
 
     # ------------------------------------------------------------------
     # Test 3 — per-device task isolation
     # ------------------------------------------------------------------
 
-    async def test_per_device_task_isolation(
-        self, live_server: str
-    ) -> None:
+    async def test_per_device_task_isolation(self, live_server: str) -> None:
         """Task dispatched to device A is not received by device B (and vice versa).
 
         Verifies that the gateway correctly routes task_assign messages to
@@ -411,8 +389,7 @@ class TestMultiDeviceNetworkE2E:
         task_for_a = str(uuid.uuid4())
         task_for_b = str(uuid.uuid4())
 
-        async with ws_connect(ws_url_a, open_timeout=10) as ws_a, \
-                   ws_connect(ws_url_b, open_timeout=10) as ws_b:
+        async with ws_connect(ws_url_a, open_timeout=10) as ws_a, ws_connect(ws_url_b, open_timeout=10) as ws_b:
 
             client_a = NetworkE2EClient(ws_a, dev_a)
             client_b = NetworkE2EClient(ws_b, dev_b)
@@ -432,36 +409,26 @@ class TestMultiDeviceNetworkE2E:
 
             # Device A should receive task_assign
             msg_a = await client_a.recv(timeout=5.0)
-            assert msg_a["type"] == "task_assign", (
-                f"Device A expected task_assign; got {msg_a.get('type')!r}"
-            )
-            assert msg_a.get("task_id") == task_for_a, (
-                "Device A task_id mismatch"
-            )
+            assert msg_a["type"] == "task_assign", f"Device A expected task_assign; got {msg_a.get('type')!r}"
+            assert msg_a.get("task_id") == task_for_a, "Device A task_id mismatch"
 
             # Device B should receive NOTHING (no cross-talk)
             msg_b_unexpected = await client_b.recv_optional(timeout=1.5)
             assert msg_b_unexpected is None, (
-                f"Device B received unexpected message after A-only dispatch: "
-                f"{msg_b_unexpected!r}"
+                f"Device B received unexpected message after A-only dispatch: " f"{msg_b_unexpected!r}"
             )
 
             # Now dispatch to device B; device A should not receive it
             _dispatch(live_server, dev_b, task_for_b, "tap")
 
             msg_b = await client_b.recv(timeout=5.0)
-            assert msg_b["type"] == "task_assign", (
-                f"Device B expected task_assign; got {msg_b.get('type')!r}"
-            )
-            assert msg_b.get("task_id") == task_for_b, (
-                "Device B task_id mismatch"
-            )
+            assert msg_b["type"] == "task_assign", f"Device B expected task_assign; got {msg_b.get('type')!r}"
+            assert msg_b.get("task_id") == task_for_b, "Device B task_id mismatch"
 
             # Device A should still receive NOTHING (no spill)
             msg_a_unexpected = await client_a.recv_optional(timeout=1.5)
             assert msg_a_unexpected is None, (
-                f"Device A received unexpected message after B-only dispatch: "
-                f"{msg_a_unexpected!r}"
+                f"Device A received unexpected message after B-only dispatch: " f"{msg_a_unexpected!r}"
             )
 
             # Both sessions remain alive after the task routing
@@ -476,9 +443,7 @@ class TestMultiDeviceNetworkE2E:
     # Test 4 — concurrent task execution and result collection
     # ------------------------------------------------------------------
 
-    async def test_concurrent_task_execution_and_result_collection(
-        self, live_server: str
-    ) -> None:
+    async def test_concurrent_task_execution_and_result_collection(self, live_server: str) -> None:
         """Two devices execute independent tasks concurrently; both complete.
 
         Verifies multi-device concurrent task execution at network level:
@@ -509,9 +474,9 @@ class TestMultiDeviceNetworkE2E:
 
                 # Wait to receive task_assign (dispatched from outside)
                 task_assign_msg = await client.recv(timeout=8.0)
-                assert task_assign_msg["type"] == "task_assign", (
-                    f"[{device_id}] expected task_assign; got {task_assign_msg.get('type')!r}"
-                )
+                assert (
+                    task_assign_msg["type"] == "task_assign"
+                ), f"[{device_id}] expected task_assign; got {task_assign_msg.get('type')!r}"
                 received_task_id = task_assign_msg.get("task_id")
 
                 # Execute and send task_result
@@ -523,9 +488,7 @@ class TestMultiDeviceNetworkE2E:
 
                 # Continuation: heartbeat proves session alive after task_result
                 hb_ack = await client.heartbeat()
-                assert hb_ack["type"] == "heartbeat_ack", (
-                    f"[{device_id}] session broken after task_result"
-                )
+                assert hb_ack["type"] == "heartbeat_ack", f"[{device_id}] session broken after task_result"
 
                 return {
                     "device_id": device_id,
@@ -561,9 +524,7 @@ class TestMultiDeviceNetworkE2E:
     # Test 5 — delegated takeover path
     # ------------------------------------------------------------------
 
-    async def test_delegated_takeover_path(
-        self, live_server: str
-    ) -> None:
+    async def test_delegated_takeover_path(self, live_server: str) -> None:
         """Primary device disconnects before task_result; takeover device completes task.
 
         Canonical takeover sequence validated at network level:
@@ -602,12 +563,9 @@ class TestMultiDeviceNetworkE2E:
                 # Primary device receives task_assign
                 task_assign_a = await client_a.recv(timeout=5.0)
                 assert task_assign_a["type"] == "task_assign", (
-                    f"Primary device expected task_assign; "
-                    f"got {task_assign_a.get('type')!r}"
+                    f"Primary device expected task_assign; " f"got {task_assign_a.get('type')!r}"
                 )
-                assert task_assign_a.get("task_id") == takeover_task_id, (
-                    "Primary device task_id mismatch"
-                )
+                assert task_assign_a.get("task_id") == takeover_task_id, "Primary device task_id mismatch"
                 # Device A disconnects WITHOUT sending task_result (failure)
             # ws_a context exits here — device A is now disconnected
 
@@ -620,26 +578,20 @@ class TestMultiDeviceNetworkE2E:
                 original_device_id=dev_a,
                 command="screenshot",
             )
-            assert takeover_resp["task_id"] == takeover_task_id, (
-                "Takeover dispatch must preserve original task_id"
-            )
+            assert takeover_resp["task_id"] == takeover_task_id, "Takeover dispatch must preserve original task_id"
 
             # ── Phase 4: device B receives takeover task_assign ───────────
             task_assign_b = await client_b.recv(timeout=5.0)
             assert task_assign_b["type"] == "task_assign", (
-                f"Takeover device expected task_assign; "
-                f"got {task_assign_b.get('type')!r}"
+                f"Takeover device expected task_assign; " f"got {task_assign_b.get('type')!r}"
             )
             # Result continuity: takeover task carries the original task_id
             assert task_assign_b.get("task_id") == takeover_task_id, (
-                "Takeover task_assign must carry the ORIGINAL task_id "
-                "(result continuity across the handoff)"
+                "Takeover task_assign must carry the ORIGINAL task_id " "(result continuity across the handoff)"
             )
             # Takeover flag must be set
             payload = task_assign_b.get("payload") or {}
-            assert payload.get("takeover") is True, (
-                "Takeover task_assign payload.takeover must be True"
-            )
+            assert payload.get("takeover") is True, "Takeover task_assign payload.takeover must be True"
 
             # ── Phase 5: takeover device completes the task ───────────────
             await client_b.task_result(
@@ -654,17 +606,14 @@ class TestMultiDeviceNetworkE2E:
             # ── Phase 6: continuation — session B remains alive ───────────
             hb_b = await client_b.heartbeat()
             assert hb_b["type"] == "heartbeat_ack", (
-                "Takeover device session broken after task_result — "
-                "continuation not preserved"
+                "Takeover device session broken after task_result — " "continuation not preserved"
             )
 
     # ------------------------------------------------------------------
     # Test 6 — participant disconnect, reconnect, and task recovery
     # ------------------------------------------------------------------
 
-    async def test_participant_disconnect_reconnect_recovery(
-        self, live_server: str
-    ) -> None:
+    async def test_participant_disconnect_reconnect_recovery(self, live_server: str) -> None:
         """Device fails mid-task; reconnects; receives a new task; completes it.
 
         Validates the full failure-recovery lifecycle at network level:
@@ -691,9 +640,7 @@ class TestMultiDeviceNetworkE2E:
             # Dispatch first task — device will receive but not complete it
             _dispatch(live_server, device_id, task_before_failure, "screenshot")
             assign_before = await client.recv(timeout=5.0)
-            assert assign_before["type"] == "task_assign", (
-                "Expected task_assign before failure"
-            )
+            assert assign_before["type"] == "task_assign", "Expected task_assign before failure"
             # Close WebSocket without sending task_result (simulates crash)
         # ws context exits — device is now disconnected
 
@@ -704,33 +651,23 @@ class TestMultiDeviceNetworkE2E:
             # Re-registration must succeed (server must not refuse reconnect)
             reg2 = await client2.register()
             assert reg2["type"] == "device_register_ack", (
-                "Reconnect: expected device_register_ack; "
-                f"got {reg2.get('type')!r}"
+                "Reconnect: expected device_register_ack; " f"got {reg2.get('type')!r}"
             )
-            assert reg2.get("success") is True, (
-                "Reconnect: register_ack.success must be True"
-            )
-            assert reg2.get("device_id") == device_id, (
-                "Reconnect: register_ack.device_id must match"
-            )
+            assert reg2.get("success") is True, "Reconnect: register_ack.success must be True"
+            assert reg2.get("device_id") == device_id, "Reconnect: register_ack.device_id must match"
 
             # Report capabilities again on the new session
             cap_ack = await client2.report_capabilities(["screenshot"])
-            assert cap_ack.get("accepted") is True, (
-                "Reconnect: capability_report_ack.accepted must be True"
-            )
+            assert cap_ack.get("accepted") is True, "Reconnect: capability_report_ack.accepted must be True"
 
             # Dispatch recovery task to reconnected device
             _dispatch(live_server, device_id, task_after_recovery, "screenshot")
 
             assign_after = await client2.recv(timeout=5.0)
             assert assign_after["type"] == "task_assign", (
-                "Recovery: expected task_assign; "
-                f"got {assign_after.get('type')!r}"
+                "Recovery: expected task_assign; " f"got {assign_after.get('type')!r}"
             )
-            assert assign_after.get("task_id") == task_after_recovery, (
-                "Recovery: task_id must match dispatched task"
-            )
+            assert assign_after.get("task_id") == task_after_recovery, "Recovery: task_id must match dispatched task"
 
             # Complete the recovery task and verify session continuity
             await client2.task_result(
@@ -739,17 +676,13 @@ class TestMultiDeviceNetworkE2E:
                 result_data={"output": "recovered"},
             )
             hb_ack = await client2.heartbeat()
-            assert hb_ack["type"] == "heartbeat_ack", (
-                "Session continuity broken after recovery task_result"
-            )
+            assert hb_ack["type"] == "heartbeat_ack", "Session continuity broken after recovery task_result"
 
     # ------------------------------------------------------------------
     # Test 7 — capability mismatch routing
     # ------------------------------------------------------------------
 
-    async def test_capability_mismatch_routing(
-        self, live_server: str
-    ) -> None:
+    async def test_capability_mismatch_routing(self, live_server: str) -> None:
         """Capable device receives tap task; limited device does not.
 
         Validates capability-aware routing isolation:
@@ -767,8 +700,7 @@ class TestMultiDeviceNetworkE2E:
 
         tap_task_id = str(uuid.uuid4())
 
-        async with ws_connect(ws_url_a, open_timeout=10) as ws_a, \
-                   ws_connect(ws_url_b, open_timeout=10) as ws_b:
+        async with ws_connect(ws_url_a, open_timeout=10) as ws_a, ws_connect(ws_url_b, open_timeout=10) as ws_b:
 
             client_a = NetworkE2EClient(ws_a, dev_a)
             client_b = NetworkE2EClient(ws_b, dev_b)
@@ -781,8 +713,8 @@ class TestMultiDeviceNetworkE2E:
 
             # Each reports distinct capabilities
             await asyncio.gather(
-                client_a.report_capabilities(["screenshot"]),           # limited
-                client_b.report_capabilities(["tap", "screenshot"]),   # capable
+                client_a.report_capabilities(["screenshot"]),  # limited
+                client_b.report_capabilities(["tap", "screenshot"]),  # capable
             )
 
             # Capability-matched routing: tap task → device B only
@@ -790,15 +722,11 @@ class TestMultiDeviceNetworkE2E:
 
             # Device B receives the tap task_assign
             assign_b = await client_b.recv(timeout=5.0)
-            assert assign_b["type"] == "task_assign", (
-                f"Capable device expected task_assign; got {assign_b.get('type')!r}"
-            )
-            assert assign_b.get("task_id") == tap_task_id, (
-                "Capable device task_id mismatch"
-            )
-            assert (assign_b.get("payload") or {}).get("command") == "tap", (
-                "task_assign payload.command must be 'tap'"
-            )
+            assert (
+                assign_b["type"] == "task_assign"
+            ), f"Capable device expected task_assign; got {assign_b.get('type')!r}"
+            assert assign_b.get("task_id") == tap_task_id, "Capable device task_id mismatch"
+            assert (assign_b.get("payload") or {}).get("command") == "tap", "task_assign payload.command must be 'tap'"
 
             # Device A must receive NOTHING (capability mismatch — not routed to it)
             msg_a_unexpected = await client_a.recv_optional(timeout=1.5)
@@ -820,20 +748,14 @@ class TestMultiDeviceNetworkE2E:
                 client_a.heartbeat(),
                 client_b.heartbeat(),
             )
-            assert hb_a["type"] == "heartbeat_ack", (
-                "Limited-capability device session broken after mismatch test"
-            )
-            assert hb_b["type"] == "heartbeat_ack", (
-                "Capable device session broken after tap task completion"
-            )
+            assert hb_a["type"] == "heartbeat_ack", "Limited-capability device session broken after mismatch test"
+            assert hb_b["type"] == "heartbeat_ack", "Capable device session broken after tap task completion"
 
     # ------------------------------------------------------------------
     # Test 8 — multi-device result aggregation
     # ------------------------------------------------------------------
 
-    async def test_multi_device_result_aggregation(
-        self, live_server: str
-    ) -> None:
+    async def test_multi_device_result_aggregation(self, live_server: str) -> None:
         """Multiple tasks across two devices; results correlated to correct device_ids.
 
         Validates that result data from each device is independently
@@ -851,8 +773,7 @@ class TestMultiDeviceNetworkE2E:
 
         collected_tasks: Dict[str, Dict[str, Any]] = {}
 
-        async with ws_connect(ws_url_a, open_timeout=10) as ws_a, \
-                   ws_connect(ws_url_b, open_timeout=10) as ws_b:
+        async with ws_connect(ws_url_a, open_timeout=10) as ws_a, ws_connect(ws_url_b, open_timeout=10) as ws_b:
 
             client_a = NetworkE2EClient(ws_a, dev_a)
             client_b = NetworkE2EClient(ws_b, dev_b)
@@ -897,15 +818,9 @@ class TestMultiDeviceNetworkE2E:
             )
 
             # Verify task→device correlation
-            assert collected_tasks.get(task_a1, {}).get("device_id") == dev_a, (
-                "Task A1 must be correlated to device A"
-            )
-            assert collected_tasks.get(task_b1, {}).get("device_id") == dev_b, (
-                "Task B1 must be correlated to device B"
-            )
-            assert collected_tasks.get(task_a2, {}).get("device_id") == dev_a, (
-                "Task A2 must be correlated to device A"
-            )
+            assert collected_tasks.get(task_a1, {}).get("device_id") == dev_a, "Task A1 must be correlated to device A"
+            assert collected_tasks.get(task_b1, {}).get("device_id") == dev_b, "Task B1 must be correlated to device B"
+            assert collected_tasks.get(task_a2, {}).get("device_id") == dev_a, "Task A2 must be correlated to device A"
 
             # Both sessions alive after all task roundtrips
             hb_a, hb_b = await asyncio.gather(
@@ -919,9 +834,7 @@ class TestMultiDeviceNetworkE2E:
     # Test 9 — degraded participant (minimal capability set)
     # ------------------------------------------------------------------
 
-    async def test_degraded_participant_minimal_capability(
-        self, live_server: str
-    ) -> None:
+    async def test_degraded_participant_minimal_capability(self, live_server: str) -> None:
         """Degraded device (single capability) handles matched task; mismatched task goes elsewhere.
 
         Proves that a device reporting a minimal / degraded capability set:
@@ -931,15 +844,14 @@ class TestMultiDeviceNetworkE2E:
         - Session remains alive throughout (not evicted for being limited)
         """
         dev_degraded = f"md-dgr-deg-{uuid.uuid4().hex[:8]}"  # degraded: screenshot only
-        dev_capable = f"md-dgr-cap-{uuid.uuid4().hex[:8]}"   # full: tap + screenshot
+        dev_capable = f"md-dgr-cap-{uuid.uuid4().hex[:8]}"  # full: tap + screenshot
         ws_url_deg = live_server.replace("http://", "ws://") + f"/ws/device/{dev_degraded}"
         ws_url_cap = live_server.replace("http://", "ws://") + f"/ws/device/{dev_capable}"
 
         task_for_degraded = str(uuid.uuid4())
         task_for_capable = str(uuid.uuid4())
 
-        async with ws_connect(ws_url_deg, open_timeout=10) as ws_deg, \
-                   ws_connect(ws_url_cap, open_timeout=10) as ws_cap:
+        async with ws_connect(ws_url_deg, open_timeout=10) as ws_deg, ws_connect(ws_url_cap, open_timeout=10) as ws_cap:
 
             client_deg = NetworkE2EClient(ws_deg, dev_degraded)
             client_cap = NetworkE2EClient(ws_cap, dev_capable)
@@ -952,17 +864,13 @@ class TestMultiDeviceNetworkE2E:
 
             # Degraded device reports single capability
             cap_ack_deg = await client_deg.report_capabilities(["screenshot"])
-            assert cap_ack_deg.get("accepted") is True, (
-                "Degraded device capability_report must be accepted"
-            )
+            assert cap_ack_deg.get("accepted") is True, "Degraded device capability_report must be accepted"
             await client_cap.report_capabilities(["tap", "screenshot", "input_text"])
 
             # Route matched task to degraded device (screenshot task)
             _dispatch(live_server, dev_degraded, task_for_degraded, "screenshot")
             assign_deg = await client_deg.recv(timeout=5.0)
-            assert assign_deg["type"] == "task_assign", (
-                "Degraded device must receive matched task_assign"
-            )
+            assert assign_deg["type"] == "task_assign", "Degraded device must receive matched task_assign"
             assert assign_deg.get("task_id") == task_for_degraded
 
             # Route capability-mismatched task to capable device only
@@ -972,9 +880,7 @@ class TestMultiDeviceNetworkE2E:
 
             # Degraded device must not receive the tap task
             msg_deg_unexpected = await client_deg.recv_optional(timeout=1.5)
-            assert msg_deg_unexpected is None, (
-                f"Degraded device received unexpected tap task: {msg_deg_unexpected!r}"
-            )
+            assert msg_deg_unexpected is None, f"Degraded device received unexpected tap task: {msg_deg_unexpected!r}"
 
             # Both complete their respective tasks
             await asyncio.gather(
@@ -987,12 +893,8 @@ class TestMultiDeviceNetworkE2E:
                 client_deg.heartbeat(),
                 client_cap.heartbeat(),
             )
-            assert hb_deg["type"] == "heartbeat_ack", (
-                "Degraded device session must remain alive after task completion"
-            )
-            assert hb_cap["type"] == "heartbeat_ack", (
-                "Capable device session must remain alive after task completion"
-            )
+            assert hb_deg["type"] == "heartbeat_ack", "Degraded device session must remain alive after task completion"
+            assert hb_cap["type"] == "heartbeat_ack", "Capable device session must remain alive after task completion"
 
 
 # ---------------------------------------------------------------------------
@@ -1013,10 +915,7 @@ class TestGapMultiDeviceFailureRecoveryRegistered:
         from core.dual_repo_system_map import WORKSTREAM_GAP_REGISTRY
 
         gap = next(
-            (
-                g for g in WORKSTREAM_GAP_REGISTRY
-                if g.gap_id == "GAP_MULTI_DEVICE_FAILURE_RECOVERY_INTEGRATION"
-            ),
+            (g for g in WORKSTREAM_GAP_REGISTRY if g.gap_id == "GAP_MULTI_DEVICE_FAILURE_RECOVERY_INTEGRATION"),
             None,
         )
         assert gap is not None, (
@@ -1024,18 +923,13 @@ class TestGapMultiDeviceFailureRecoveryRegistered:
             "WORKSTREAM_GAP_REGISTRY.  The gap entry must be registered "
             "alongside the test file that closes it."
         )
-        assert gap.description, (
-            "GAP_MULTI_DEVICE_FAILURE_RECOVERY_INTEGRATION must have a non-empty description."
-        )
+        assert gap.description, "GAP_MULTI_DEVICE_FAILURE_RECOVERY_INTEGRATION must have a non-empty description."
 
     def test_gap_multi_device_failure_recovery_severity_is_p0(self) -> None:
         from core.dual_repo_system_map import WORKSTREAM_GAP_REGISTRY, GapSeverity
 
         gap = next(
-            (
-                g for g in WORKSTREAM_GAP_REGISTRY
-                if g.gap_id == "GAP_MULTI_DEVICE_FAILURE_RECOVERY_INTEGRATION"
-            ),
+            (g for g in WORKSTREAM_GAP_REGISTRY if g.gap_id == "GAP_MULTI_DEVICE_FAILURE_RECOVERY_INTEGRATION"),
             None,
         )
         assert gap is not None

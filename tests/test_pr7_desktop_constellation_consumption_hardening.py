@@ -92,6 +92,7 @@ def test_01_topology_readiness_authority_importable_from_contracts():
 
 def test_02_topology_readiness_authority_is_non_empty_string():
     from contracts.desktop_status_projection import TOPOLOGY_READINESS_CONTRACT_AUTHORITY
+
     assert isinstance(TOPOLOGY_READINESS_CONTRACT_AUTHORITY, str)
     assert len(TOPOLOGY_READINESS_CONTRACT_AUTHORITY) > 0
 
@@ -103,6 +104,7 @@ def test_03_topology_readiness_authority_importable_from_compiler():
 def test_04_topology_readiness_authority_consistent_across_modules():
     from contracts.desktop_status_projection import TOPOLOGY_READINESS_CONTRACT_AUTHORITY as A
     from core.projection.projection_compiler import TOPOLOGY_READINESS_CONTRACT_AUTHORITY as B
+
     assert A == B
 
 
@@ -117,26 +119,31 @@ def test_05_topology_projection_readiness_importable():
 
 def test_06_readiness_has_canonical_value():
     from contracts.desktop_status_projection import TopologyProjectionReadiness
+
     assert TopologyProjectionReadiness.canonical.value == "canonical"
 
 
 def test_07_readiness_has_degraded_value():
     from contracts.desktop_status_projection import TopologyProjectionReadiness
+
     assert TopologyProjectionReadiness.degraded.value == "degraded"
 
 
 def test_08_readiness_has_partial_value():
     from contracts.desktop_status_projection import TopologyProjectionReadiness
+
     assert TopologyProjectionReadiness.partial.value == "partial"
 
 
 def test_09_readiness_has_unavailable_value():
     from contracts.desktop_status_projection import TopologyProjectionReadiness
+
     assert TopologyProjectionReadiness.unavailable.value == "unavailable"
 
 
 def test_10_readiness_is_str_enum():
     from contracts.desktop_status_projection import TopologyProjectionReadiness
+
     for val in TopologyProjectionReadiness:
         assert isinstance(val.value, str)
 
@@ -152,40 +159,47 @@ def test_11_topology_quality_block_importable():
 
 def test_12_quality_block_has_readiness_field():
     from contracts.desktop_status_projection import TopologyProjectionQualityBlock
+
     assert "readiness" in TopologyProjectionQualityBlock.model_fields
 
 
 def test_13_quality_block_has_authoritative_field():
     from contracts.desktop_status_projection import TopologyProjectionQualityBlock
+
     assert "authoritative" in TopologyProjectionQualityBlock.model_fields
 
 
 def test_14_quality_block_has_degraded_field():
     from contracts.desktop_status_projection import TopologyProjectionQualityBlock
+
     assert "degraded" in TopologyProjectionQualityBlock.model_fields
 
 
 def test_15_quality_block_has_partial_field():
     from contracts.desktop_status_projection import TopologyProjectionQualityBlock
+
     assert "partial" in TopologyProjectionQualityBlock.model_fields
 
 
 def test_16_quality_block_has_quality_note_field():
     from contracts.desktop_status_projection import TopologyProjectionQualityBlock
+
     assert "quality_note" in TopologyProjectionQualityBlock.model_fields
 
 
 def test_17_quality_block_has_quality_authority_field():
     from contracts.desktop_status_projection import TopologyProjectionQualityBlock
+
     assert "quality_authority" in TopologyProjectionQualityBlock.model_fields
 
 
 def test_18_quality_block_authority_defaults_to_sentinel():
     from contracts.desktop_status_projection import (
-        TopologyProjectionQualityBlock,
         TOPOLOGY_READINESS_CONTRACT_AUTHORITY,
+        TopologyProjectionQualityBlock,
         TopologyProjectionReadiness,
     )
+
     block = TopologyProjectionQualityBlock()
     assert block.quality_authority == TOPOLOGY_READINESS_CONTRACT_AUTHORITY
     assert block.readiness == TopologyProjectionReadiness.unavailable
@@ -196,6 +210,7 @@ def test_18_quality_block_authority_defaults_to_sentinel():
 
 def test_19_quality_block_to_dict_returns_dict():
     from contracts.desktop_status_projection import TopologyProjectionQualityBlock
+
     block = TopologyProjectionQualityBlock()
     result = block.to_dict()
     assert isinstance(result, dict)
@@ -214,11 +229,13 @@ def test_19_quality_block_to_dict_returns_dict():
 
 def test_20_desktop_topology_projection_has_projection_quality_field():
     from contracts.desktop_status_projection import DesktopTopologyProjection
+
     assert "projection_quality" in DesktopTopologyProjection.model_fields
 
 
 def test_21_desktop_topology_projection_quality_defaults_to_none():
     from contracts.desktop_status_projection import DesktopTopologyProjection
+
     topo = DesktopTopologyProjection()
     assert topo.projection_quality is None
 
@@ -226,6 +243,7 @@ def test_21_desktop_topology_projection_quality_defaults_to_none():
 # ===========================================================================
 # Helper: build projections for various paths
 # ===========================================================================
+
 
 def _canonical_ucp():
     return {
@@ -259,11 +277,7 @@ def _empty_ucp():
 
 def _canonical_ucp_provider_unavailable():
     ucp = _canonical_ucp()
-    ucp["canonical_model_supply"] = {
-        "providers": [
-            {"provider_id": "openai", "health_status": "unavailable"}
-        ]
-    }
+    ucp["canonical_model_supply"] = {"providers": [{"provider_id": "openai", "health_status": "unavailable"}]}
     return ucp
 
 
@@ -274,9 +288,10 @@ def _canonical_ucp_provider_unavailable():
 
 def test_22_canonical_path_sets_readiness_canonical():
     from contracts.desktop_status_projection import (
-        build_desktop_status_projection,
         TopologyProjectionReadiness,
+        build_desktop_status_projection,
     )
+
     proj = build_desktop_status_projection(unified_control_plan=_canonical_ucp())
     assert proj.topology_ready is not None
     assert proj.topology_ready.projection_quality is not None
@@ -285,18 +300,21 @@ def test_22_canonical_path_sets_readiness_canonical():
 
 def test_23_canonical_path_sets_authoritative_true():
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     proj = build_desktop_status_projection(unified_control_plan=_canonical_ucp())
     assert proj.topology_ready.projection_quality.authoritative is True
 
 
 def test_24_canonical_path_sets_degraded_false():
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     proj = build_desktop_status_projection(unified_control_plan=_canonical_ucp())
     assert proj.topology_ready.projection_quality.degraded is False
 
 
 def test_25_canonical_path_sets_partial_false():
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     proj = build_desktop_status_projection(unified_control_plan=_canonical_ucp())
     assert proj.topology_ready.projection_quality.partial is False
 
@@ -308,27 +326,31 @@ def test_25_canonical_path_sets_partial_false():
 
 def test_26_legacy_path_sets_readiness_degraded():
     from contracts.desktop_status_projection import (
-        build_desktop_status_projection,
         TopologyProjectionReadiness,
+        build_desktop_status_projection,
     )
+
     proj = build_desktop_status_projection(unified_control_plan=_legacy_ucp())
     assert proj.topology_ready.projection_quality.readiness == TopologyProjectionReadiness.degraded
 
 
 def test_27_legacy_path_sets_authoritative_false():
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     proj = build_desktop_status_projection(unified_control_plan=_legacy_ucp())
     assert proj.topology_ready.projection_quality.authoritative is False
 
 
 def test_28_legacy_path_sets_degraded_true():
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     proj = build_desktop_status_projection(unified_control_plan=_legacy_ucp())
     assert proj.topology_ready.projection_quality.degraded is True
 
 
 def test_29_legacy_path_sets_partial_false():
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     proj = build_desktop_status_projection(unified_control_plan=_legacy_ucp())
     assert proj.topology_ready.projection_quality.partial is False
 
@@ -340,21 +362,24 @@ def test_29_legacy_path_sets_partial_false():
 
 def test_30_empty_ucp_sets_readiness_unavailable():
     from contracts.desktop_status_projection import (
-        build_desktop_status_projection,
         TopologyProjectionReadiness,
+        build_desktop_status_projection,
     )
+
     proj = build_desktop_status_projection(unified_control_plan=_empty_ucp())
     assert proj.topology_ready.projection_quality.readiness == TopologyProjectionReadiness.unavailable
 
 
 def test_31_empty_ucp_sets_authoritative_false():
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     proj = build_desktop_status_projection(unified_control_plan=_empty_ucp())
     assert proj.topology_ready.projection_quality.authoritative is False
 
 
 def test_32_empty_ucp_sets_degraded_false():
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     proj = build_desktop_status_projection(unified_control_plan=_empty_ucp())
     assert proj.topology_ready.projection_quality.degraded is False
 
@@ -366,28 +391,25 @@ def test_32_empty_ucp_sets_degraded_false():
 
 def test_33_canonical_unavailable_provider_sets_readiness_partial():
     from contracts.desktop_status_projection import (
-        build_desktop_status_projection,
         TopologyProjectionReadiness,
+        build_desktop_status_projection,
     )
-    proj = build_desktop_status_projection(
-        unified_control_plan=_canonical_ucp_provider_unavailable()
-    )
+
+    proj = build_desktop_status_projection(unified_control_plan=_canonical_ucp_provider_unavailable())
     assert proj.topology_ready.projection_quality.readiness == TopologyProjectionReadiness.partial
 
 
 def test_34_canonical_unavailable_provider_sets_authoritative_false():
     from contracts.desktop_status_projection import build_desktop_status_projection
-    proj = build_desktop_status_projection(
-        unified_control_plan=_canonical_ucp_provider_unavailable()
-    )
+
+    proj = build_desktop_status_projection(unified_control_plan=_canonical_ucp_provider_unavailable())
     assert proj.topology_ready.projection_quality.authoritative is False
 
 
 def test_35_canonical_unavailable_provider_sets_partial_true():
     from contracts.desktop_status_projection import build_desktop_status_projection
-    proj = build_desktop_status_projection(
-        unified_control_plan=_canonical_ucp_provider_unavailable()
-    )
+
+    proj = build_desktop_status_projection(unified_control_plan=_canonical_ucp_provider_unavailable())
     assert proj.topology_ready.projection_quality.partial is True
 
 
@@ -398,6 +420,7 @@ def test_35_canonical_unavailable_provider_sets_partial_true():
 
 def test_36_quality_note_is_non_empty_on_all_paths():
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     ucps = [
         _canonical_ucp(),
         _legacy_ucp(),
@@ -407,13 +430,12 @@ def test_36_quality_note_is_non_empty_on_all_paths():
     for ucp in ucps:
         proj = build_desktop_status_projection(unified_control_plan=ucp)
         note = proj.topology_ready.projection_quality.quality_note
-        assert isinstance(note, str) and len(note) > 0, (
-            f"quality_note was empty for ucp={ucp}"
-        )
+        assert isinstance(note, str) and len(note) > 0, f"quality_note was empty for ucp={ucp}"
 
 
 def test_37_quality_note_differs_between_canonical_and_degraded():
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     proj_canonical = build_desktop_status_projection(unified_control_plan=_canonical_ucp())
     proj_degraded = build_desktop_status_projection(unified_control_plan=_legacy_ucp())
     note_canonical = proj_canonical.topology_ready.projection_quality.quality_note
@@ -428,6 +450,7 @@ def test_37_quality_note_differs_between_canonical_and_degraded():
 
 def test_38_quality_to_dict_includes_readiness():
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     proj = build_desktop_status_projection(unified_control_plan=_canonical_ucp())
     d = proj.topology_ready.projection_quality.to_dict()
     assert "readiness" in d
@@ -435,6 +458,7 @@ def test_38_quality_to_dict_includes_readiness():
 
 def test_39_quality_to_dict_includes_authoritative():
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     proj = build_desktop_status_projection(unified_control_plan=_canonical_ucp())
     d = proj.topology_ready.projection_quality.to_dict()
     assert "authoritative" in d
@@ -442,6 +466,7 @@ def test_39_quality_to_dict_includes_authoritative():
 
 def test_40_quality_to_dict_includes_quality_authority():
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     proj = build_desktop_status_projection(unified_control_plan=_canonical_ucp())
     d = proj.topology_ready.projection_quality.to_dict()
     assert "quality_authority" in d
@@ -449,6 +474,7 @@ def test_40_quality_to_dict_includes_quality_authority():
 
 def test_41_topology_projection_to_dict_includes_projection_quality():
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     proj = build_desktop_status_projection(unified_control_plan=_canonical_ucp())
     d = proj.topology_ready.to_dict()
     assert "projection_quality" in d
@@ -462,18 +488,21 @@ def test_41_topology_projection_to_dict_includes_projection_quality():
 
 def test_42_projection_quality_not_none_on_canonical_path():
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     proj = build_desktop_status_projection(unified_control_plan=_canonical_ucp())
     assert proj.topology_ready.projection_quality is not None
 
 
 def test_43_projection_quality_not_none_on_legacy_fallback_path():
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     proj = build_desktop_status_projection(unified_control_plan=_legacy_ucp())
     assert proj.topology_ready.projection_quality is not None
 
 
 def test_44_projection_quality_not_none_on_empty_ucp():
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     proj = build_desktop_status_projection(unified_control_plan=_empty_ucp())
     assert proj.topology_ready.projection_quality is not None
 
@@ -485,15 +514,17 @@ def test_44_projection_quality_not_none_on_empty_ucp():
 
 def test_45_pr6_contract_authority_still_equals_topology_delivery_authority():
     from contracts.desktop_status_projection import (
-        build_desktop_status_projection,
         TOPOLOGY_PROJECTION_DELIVERY_AUTHORITY,
+        build_desktop_status_projection,
     )
+
     proj = build_desktop_status_projection(unified_control_plan=_canonical_ucp())
     assert proj.topology_ready.contract_authority == TOPOLOGY_PROJECTION_DELIVERY_AUTHORITY
 
 
 def test_46_oneapi_integration_remains_lower_horizon():
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     proj = build_desktop_status_projection(unified_control_plan=_canonical_ucp())
     topo = proj.topology_ready
     assert topo.oneapi_integration is not None
@@ -505,6 +536,7 @@ def test_46_oneapi_integration_remains_lower_horizon():
 
 def test_47_pr4_oneapi_integration_in_desktop_status_projection_preserved():
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     proj = build_desktop_status_projection(unified_control_plan=_canonical_ucp())
     # PR-4 field on DesktopStatusProjection (top-level block, separate from topology)
     assert hasattr(proj, "oneapi_integration")
@@ -514,6 +546,7 @@ def test_47_pr4_oneapi_integration_in_desktop_status_projection_preserved():
 
 def test_48_pr5_legacy_routing_fallback_active_preserved():
     from contracts.desktop_status_projection import build_desktop_status_projection
+
     proj = build_desktop_status_projection(unified_control_plan=_legacy_ucp())
     # PR-5 field on ModelRoutingProjection
     assert hasattr(proj.model_routing, "legacy_routing_fallback_active")
@@ -528,6 +561,7 @@ def test_48_pr5_legacy_routing_fallback_active_preserved():
 def test_49_minimal_fallback_payload_includes_projection_quality():
     # Import the internal helper via the module
     import importlib
+
     routes_mod = importlib.import_module("core.routes.projection")
     fallback_fn = getattr(routes_mod, "_minimal_desktop_topology_fallback", None)
     assert fallback_fn is not None, "_minimal_desktop_topology_fallback not found"

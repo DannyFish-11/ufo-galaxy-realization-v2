@@ -7,8 +7,8 @@ Loop 2: Learning -> planner strategy (galaxy_main_loop_l4 + autonomous_planner)
 Loop 3: Capability gap -> auto expand (autonomous_coder._deploy_as_node)
 """
 
-import sys
 import os
+import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -23,15 +23,21 @@ if str(PROJECT_ROOT) not in sys.path:
 # Loop 1: Self-healing -> code fix
 # ---------------------------------------------------------------------------
 
+
 class TestSelfHealingCodeFix:
     """Loop 1: FixAction.CODE_FIX enum, _determine_action heuristic, _code_fix dispatch."""
 
     @pytest.fixture(autouse=True)
     def _import(self):
         from nodes.Node_112_SelfHealing.main import (
-            FixAction, AutoFixer, DiagnosisResult, IssueType, HealthStatus,
             _CODE_FIX_KEYWORDS,
+            AutoFixer,
+            DiagnosisResult,
+            FixAction,
+            HealthStatus,
+            IssueType,
         )
+
         self.FixAction = FixAction
         self.AutoFixer = AutoFixer
         self.DiagnosisResult = DiagnosisResult
@@ -86,9 +92,7 @@ class TestSelfHealingCodeFix:
         }
         for issue_type, expected_action in cases.items():
             diag = self._diagnosis(issue_type=issue_type)
-            assert fixer._determine_action(diag) == expected_action, (
-                f"Expected {expected_action} for {issue_type}"
-            )
+            assert fixer._determine_action(diag) == expected_action, f"Expected {expected_action} for {issue_type}"
 
     def test_fix_dispatches_to_code_fix(self):
         """AutoFixer.fix must invoke _code_fix when action is CODE_FIX."""
@@ -97,6 +101,7 @@ class TestSelfHealingCodeFix:
         diag = self._diagnosis(recommendation=f"{kw} fix needed")
 
         from nodes.Node_112_SelfHealing.main import FixResult
+
         with patch.object(fixer, "_code_fix") as stub:
             stub.return_value = FixResult(
                 action=self.FixAction.CODE_FIX,
@@ -113,14 +118,18 @@ class TestSelfHealingCodeFix:
 # Loop 2: Learning -> planner strategy
 # ---------------------------------------------------------------------------
 
+
 class TestLearningPlannerFeedback:
     """Loop 2: AutonomousPlanner.update_decision_weights and its call from _perform_optimization."""
 
     @pytest.fixture(autouse=True)
     def _import(self):
         from enhancements.reasoning.autonomous_planner import (
-            AutonomousPlanner, Resource, ResourceType,
+            AutonomousPlanner,
+            Resource,
+            ResourceType,
         )
+
         self.AutonomousPlanner = AutonomousPlanner
         self.Resource = Resource
         self.ResourceType = ResourceType
@@ -179,13 +188,13 @@ class TestLearningPlannerFeedback:
         API 仍在,由本类其余用例直接覆盖)。根文件不得复活。
         """
         assert not (PROJECT_ROOT / "galaxy_main_loop_l4.py").exists(), (
-            "root galaxy_main_loop_l4.py was deleted when the canonical L4 "
-            "module was promoted — do not recreate"
+            "root galaxy_main_loop_l4.py was deleted when the canonical L4 " "module was promoted — do not recreate"
         )
         from core.galaxy_main_loop_l4_enhanced import (
             GalaxyMainLoopL4,
             get_galaxy_loop,
         )
+
         assert callable(GalaxyMainLoopL4)
         assert callable(get_galaxy_loop)
         # 旧编排钩子确已退役
@@ -197,12 +206,14 @@ class TestLearningPlannerFeedback:
 # Loop 3: Capability gap -> auto expand
 # ---------------------------------------------------------------------------
 
+
 class TestAutoExpandDeployAsNode:
     """Loop 3: _deploy_as_node registers node in NodeFactory and capability_manager."""
 
     @pytest.fixture(autouse=True)
     def _import(self):
         from enhancements.reasoning.autonomous_coder import AutonomousCoder
+
         self.AutonomousCoder = AutonomousCoder
 
     def test_deploy_as_node_calls_node_factory_register(self, tmp_path):
@@ -229,13 +240,17 @@ class TestAutoExpandDeployAsNode:
                 return str(nodes_dir)
             return orig_join(*a)
 
-        with patch(
-            "nodes.Node_118_NodeFactory.main.get_node_factory",
-            return_value=mock_factory,
-        ), patch(
-            "core.capability_manager.get_capability_manager",
-            side_effect=Exception("cap mgr unavailable"),
-        ), patch("os.path.join", side_effect=_join):
+        with (
+            patch(
+                "nodes.Node_118_NodeFactory.main.get_node_factory",
+                return_value=mock_factory,
+            ),
+            patch(
+                "core.capability_manager.get_capability_manager",
+                side_effect=Exception("cap mgr unavailable"),
+            ),
+            patch("os.path.join", side_effect=_join),
+        ):
             coder._deploy_as_node("print('hello')", task)
 
         mock_factory.register_node.assert_called()
@@ -257,12 +272,15 @@ class TestAutoExpandDeployAsNode:
         nodes_dir = tmp_path / "nodes"
         nodes_dir.mkdir()
 
-        with patch(
-            "nodes.Node_118_NodeFactory.main.get_node_factory",
-            side_effect=Exception("factory error"),
-        ), patch(
-            "core.capability_manager.get_capability_manager",
-            side_effect=Exception("cap mgr error"),
+        with (
+            patch(
+                "nodes.Node_118_NodeFactory.main.get_node_factory",
+                side_effect=Exception("factory error"),
+            ),
+            patch(
+                "core.capability_manager.get_capability_manager",
+                side_effect=Exception("cap mgr error"),
+            ),
         ):
             # Use real filesystem but redirect nodes dir to tmp_path
             orig_join = os.path.join
@@ -279,8 +297,9 @@ class TestAutoExpandDeployAsNode:
 
     def test_deploy_as_node_calls_capability_manager_register(self, tmp_path):
         """_deploy_as_node must call capability_manager.register_capability when available."""
-        from enhancements.reasoning.autonomous_coder import CodingTask
         import asyncio
+
+        from enhancements.reasoning.autonomous_coder import CodingTask
 
         coder = self.AutonomousCoder()
         task = CodingTask(
@@ -297,9 +316,7 @@ class TestAutoExpandDeployAsNode:
         async def _fake_register(**kwargs):
             return True
 
-        mock_cap_mgr.register_capability = MagicMock(
-            return_value=_fake_register()
-        )
+        mock_cap_mgr.register_capability = MagicMock(return_value=_fake_register())
 
         nodes_dir = tmp_path / "nodes"
         nodes_dir.mkdir()
@@ -310,13 +327,17 @@ class TestAutoExpandDeployAsNode:
                 return str(nodes_dir)
             return orig_join(*a)
 
-        with patch(
-            "nodes.Node_118_NodeFactory.main.get_node_factory",
-            side_effect=Exception("factory unavailable"),
-        ), patch(
-            "core.capability_manager.get_capability_manager",
-            return_value=mock_cap_mgr,
-        ), patch("os.path.join", side_effect=_join):
+        with (
+            patch(
+                "nodes.Node_118_NodeFactory.main.get_node_factory",
+                side_effect=Exception("factory unavailable"),
+            ),
+            patch(
+                "core.capability_manager.get_capability_manager",
+                return_value=mock_cap_mgr,
+            ),
+            patch("os.path.join", side_effect=_join),
+        ):
             coder._deploy_as_node("print('cap')", task)
 
         mock_cap_mgr.register_capability.assert_called()
@@ -324,6 +345,7 @@ class TestAutoExpandDeployAsNode:
     def test_deploy_as_node_signature(self):
         """_deploy_as_node must accept (code, task) parameters."""
         import inspect
+
         coder = self.AutonomousCoder()
         sig = inspect.signature(coder._deploy_as_node)
         params = list(sig.parameters.keys())
@@ -335,15 +357,23 @@ class TestAutoExpandDeployAsNode:
 # Loop 1 supplemental: SelfHealingEngine phase logging & verification
 # ---------------------------------------------------------------------------
 
+
 class TestSelfHealingPhaseLogging:
     """Loop 1: run_once() must emit phase-tagged log messages and run a verification step."""
 
     @pytest.fixture(autouse=True)
     def _import(self):
         from nodes.Node_112_SelfHealing.main import (
-            SelfHealingEngine, HealthMetrics, HealthStatus, IssueType,
-            DiagnosisResult, FixResult, FixAction, IncidentReport,
+            DiagnosisResult,
+            FixAction,
+            FixResult,
+            HealthMetrics,
+            HealthStatus,
+            IncidentReport,
+            IssueType,
+            SelfHealingEngine,
         )
+
         self.SelfHealingEngine = SelfHealingEngine
         self.HealthMetrics = HealthMetrics
         self.HealthStatus = HealthStatus
@@ -355,31 +385,30 @@ class TestSelfHealingPhaseLogging:
 
     def _make_metrics(self, cpu=50.0, mem=50.0, disk=50.0, net=True):
         return self.HealthMetrics(
-            cpu_percent=cpu, memory_percent=mem, disk_percent=disk,
-            network_ok=net, timestamp="2026-01-01T00:00:00"
+            cpu_percent=cpu, memory_percent=mem, disk_percent=disk, network_ok=net, timestamp="2026-01-01T00:00:00"
         )
 
     def test_run_once_emits_detection_log(self, caplog):
         """run_once must log [DETECTION] when anomalies are found."""
         import logging
+
         engine = self.SelfHealingEngine({"report_dir": "/tmp"})
         bad_metrics = self._make_metrics(cpu=95.0)  # triggers CRITICAL
-        fix_result = self.FixResult(
-            action=self.FixAction.RESTART, success=True,
-            message="ok", timestamp="t"
-        )
+        fix_result = self.FixResult(action=self.FixAction.RESTART, success=True, message="ok", timestamp="t")
         diag = self.DiagnosisResult(
             issue_type=self.IssueType.HIGH_CPU,
             severity=self.HealthStatus.CRITICAL,
             description="cpu high",
             affected_components=["cpu"],
-            recommendation="restart"
+            recommendation="restart",
         )
-        with patch.object(engine.detector, "collect_metrics", return_value=bad_metrics), \
-             patch.object(engine.diagnoser, "diagnose", return_value=diag), \
-             patch.object(engine.fixer, "fix", return_value=fix_result), \
-             patch.object(engine.reporter, "generate_report") as mock_report, \
-             caplog.at_level(logging.INFO, logger="SelfHealing"):
+        with (
+            patch.object(engine.detector, "collect_metrics", return_value=bad_metrics),
+            patch.object(engine.diagnoser, "diagnose", return_value=diag),
+            patch.object(engine.fixer, "fix", return_value=fix_result),
+            patch.object(engine.reporter, "generate_report") as mock_report,
+            caplog.at_level(logging.INFO, logger="SelfHealing"),
+        ):
             mock_report.return_value = MagicMock()
             engine.run_once()
         assert any("[DETECTION]" in r.message for r in caplog.records)
@@ -387,19 +416,17 @@ class TestSelfHealingPhaseLogging:
     def test_run_once_emits_verification_log(self, caplog):
         """run_once must log [VERIFICATION] after attempting a fix."""
         import logging
+
         engine = self.SelfHealingEngine({"report_dir": "/tmp"})
         bad_metrics = self._make_metrics(mem=95.0)
         healthy_metrics = self._make_metrics()
-        fix_result = self.FixResult(
-            action=self.FixAction.RESTART, success=True,
-            message="ok", timestamp="t"
-        )
+        fix_result = self.FixResult(action=self.FixAction.RESTART, success=True, message="ok", timestamp="t")
         diag = self.DiagnosisResult(
             issue_type=self.IssueType.HIGH_MEMORY,
             severity=self.HealthStatus.CRITICAL,
             description="mem high",
             affected_components=["memory"],
-            recommendation="restart"
+            recommendation="restart",
         )
         call_count = [0]
 
@@ -407,11 +434,13 @@ class TestSelfHealingPhaseLogging:
             call_count[0] += 1
             return bad_metrics if call_count[0] == 1 else healthy_metrics
 
-        with patch.object(engine.detector, "collect_metrics", side_effect=_metrics), \
-             patch.object(engine.diagnoser, "diagnose", return_value=diag), \
-             patch.object(engine.fixer, "fix", return_value=fix_result), \
-             patch.object(engine.reporter, "generate_report") as mock_report, \
-             caplog.at_level(logging.INFO, logger="SelfHealing"):
+        with (
+            patch.object(engine.detector, "collect_metrics", side_effect=_metrics),
+            patch.object(engine.diagnoser, "diagnose", return_value=diag),
+            patch.object(engine.fixer, "fix", return_value=fix_result),
+            patch.object(engine.reporter, "generate_report") as mock_report,
+            caplog.at_level(logging.INFO, logger="SelfHealing"),
+        ):
             mock_report.return_value = MagicMock()
             engine.run_once()
         assert any("[VERIFICATION]" in r.message for r in caplog.records)
@@ -420,24 +449,24 @@ class TestSelfHealingPhaseLogging:
     def test_run_once_code_fix_logs_sandbox_and_commit(self, caplog):
         """When CODE_FIX succeeds, run_once must log [SANDBOX_TEST] and [COMMIT]."""
         import logging
+
         engine = self.SelfHealingEngine({"report_dir": "/tmp"})
         bad_metrics = self._make_metrics(cpu=95.0)
-        code_fix_result = self.FixResult(
-            action=self.FixAction.CODE_FIX, success=True,
-            message="fixed", timestamp="t"
-        )
+        code_fix_result = self.FixResult(action=self.FixAction.CODE_FIX, success=True, message="fixed", timestamp="t")
         diag = self.DiagnosisResult(
             issue_type=self.IssueType.HIGH_CPU,
             severity=self.HealthStatus.CRITICAL,
             description="cpu high",
             affected_components=["cpu"],
-            recommendation="code fix needed"
+            recommendation="code fix needed",
         )
-        with patch.object(engine.detector, "collect_metrics", return_value=bad_metrics), \
-             patch.object(engine.diagnoser, "diagnose", return_value=diag), \
-             patch.object(engine.fixer, "fix", return_value=code_fix_result), \
-             patch.object(engine.reporter, "generate_report") as mock_report, \
-             caplog.at_level(logging.INFO, logger="SelfHealing"):
+        with (
+            patch.object(engine.detector, "collect_metrics", return_value=bad_metrics),
+            patch.object(engine.diagnoser, "diagnose", return_value=diag),
+            patch.object(engine.fixer, "fix", return_value=code_fix_result),
+            patch.object(engine.reporter, "generate_report") as mock_report,
+            caplog.at_level(logging.INFO, logger="SelfHealing"),
+        ):
             mock_report.return_value = MagicMock()
             engine.run_once()
         messages = [r.message for r in caplog.records]
@@ -448,6 +477,7 @@ class TestSelfHealingPhaseLogging:
 # ---------------------------------------------------------------------------
 # Loop 2 supplemental: forced weight update in _learn_from_execution
 # ---------------------------------------------------------------------------
+
 
 class TestForcedDecisionWeightUpdate:
     """Loop 2 的 L4 编排面已退役,权重反哺行为下沉到 planner 层直接钉。
@@ -462,17 +492,19 @@ class TestForcedDecisionWeightUpdate:
         """终局钉:根 L4 文件与 _learn_from_execution 编排钩子不得复活。"""
         assert not (PROJECT_ROOT / "galaxy_main_loop_l4.py").exists()
         from core.galaxy_main_loop_l4_enhanced import GalaxyMainLoopL4
+
         assert not hasattr(GalaxyMainLoopL4, "_learn_from_execution")
 
     def test_weight_update_affects_routing_at_planner_level(self):
         """低成功率指标直接驱动 planner 资源可用度下降(行为契约保留)。"""
         from enhancements.reasoning.autonomous_planner import (
-            AutonomousPlanner, Resource, ResourceType,
+            AutonomousPlanner,
+            Resource,
+            ResourceType,
         )
 
         resource = Resource(
-            id="r1", type=ResourceType.NODE, name="TestNode",
-            capabilities=[], availability=0.5, metadata={}
+            id="r1", type=ResourceType.NODE, name="TestNode", capabilities=[], availability=0.5, metadata={}
         )
         planner = AutonomousPlanner(available_resources=[resource])
         planner.update_decision_weights({"average_success_rate": 0.1})
@@ -483,6 +515,7 @@ class TestForcedDecisionWeightUpdate:
 # Loop 1 supplemental: sandbox + commit gating for CODE_FIX
 # ---------------------------------------------------------------------------
 
+
 class TestCodeFixSandboxGating:
     """Loop 1: verify that the commit step is gated on sandbox success and that
     apply_code_fix() writes a real file to disk when auto_commit is enabled."""
@@ -490,9 +523,16 @@ class TestCodeFixSandboxGating:
     @pytest.fixture(autouse=True)
     def _import(self):
         from nodes.Node_112_SelfHealing.main import (
-            SelfHealingEngine, AutoFixer, FixResult, FixAction,
-            HealthMetrics, IssueType, HealthStatus, DiagnosisResult,
+            AutoFixer,
+            DiagnosisResult,
+            FixAction,
+            FixResult,
+            HealthMetrics,
+            HealthStatus,
+            IssueType,
+            SelfHealingEngine,
         )
+
         self.SelfHealingEngine = SelfHealingEngine
         self.AutoFixer = AutoFixer
         self.FixResult = FixResult
@@ -504,8 +544,7 @@ class TestCodeFixSandboxGating:
 
     def _make_metrics(self, cpu=95.0):
         return self.HealthMetrics(
-            cpu_percent=cpu, memory_percent=50.0, disk_percent=50.0,
-            network_ok=True, timestamp="2026-01-01T00:00:00"
+            cpu_percent=cpu, memory_percent=50.0, disk_percent=50.0, network_ok=True, timestamp="2026-01-01T00:00:00"
         )
 
     def _make_diag(self):
@@ -522,6 +561,7 @@ class TestCodeFixSandboxGating:
         fixer = self.AutoFixer()
         # Simulate a successful _code_fix result by setting _last_coding_result
         from types import SimpleNamespace
+
         fixer._last_coding_result = SimpleNamespace(code="print('hello')")
         applied = fixer.apply_code_fix(target_dir=str(tmp_path))
         assert applied != ""
@@ -543,27 +583,24 @@ class TestCodeFixSandboxGating:
         只剩委托抛异常时的降级兜底。"auto_commit=True 即直呼 apply_code_
         fix" 是中介化之前的退役契约(由下一个用例钉降级路径)。
         """
-        engine = self.SelfHealingEngine({
-            "report_dir": str(tmp_path),
-            "auto_commit": True,
-            "applied_fixes_dir": str(tmp_path / "fixes"),
-        })
-        code_fix_result = self.FixResult(
-            action=self.FixAction.CODE_FIX, success=True,
-            message="fixed", timestamp="t"
+        engine = self.SelfHealingEngine(
+            {
+                "report_dir": str(tmp_path),
+                "auto_commit": True,
+                "applied_fixes_dir": str(tmp_path / "fixes"),
+            }
         )
+        code_fix_result = self.FixResult(action=self.FixAction.CODE_FIX, success=True, message="fixed", timestamp="t")
         mock_loop = MagicMock()
         mock_loop.submit_diagnosis.return_value = MagicMock(proposal_id="prop-1")
-        with patch.object(engine.detector, "collect_metrics",
-                          return_value=self._make_metrics()), \
-             patch.object(engine.diagnoser, "diagnose",
-                          return_value=self._make_diag()), \
-             patch.object(engine.fixer, "fix", return_value=code_fix_result), \
-             patch.object(engine.reporter, "generate_report",
-                          return_value=MagicMock()), \
-             patch("core.self_improvement.get_self_healing_loop",
-                   return_value=mock_loop), \
-             patch.object(engine.fixer, "apply_code_fix") as mock_apply:
+        with (
+            patch.object(engine.detector, "collect_metrics", return_value=self._make_metrics()),
+            patch.object(engine.diagnoser, "diagnose", return_value=self._make_diag()),
+            patch.object(engine.fixer, "fix", return_value=code_fix_result),
+            patch.object(engine.reporter, "generate_report", return_value=MagicMock()),
+            patch("core.self_improvement.get_self_healing_loop", return_value=mock_loop),
+            patch.object(engine.fixer, "apply_code_fix") as mock_apply,
+        ):
             engine.run_once()
         # 六阶段全部走到,auto_commit 经 apply_patch 元数据传递
         mock_loop.submit_diagnosis.assert_called_once()
@@ -575,48 +612,44 @@ class TestCodeFixSandboxGating:
 
     def test_code_fix_falls_back_to_direct_apply_when_loop_unavailable(self, tmp_path):
         """中介 loop 委托抛异常 → 降级按 auto_commit 直呼 apply_code_fix。"""
-        engine = self.SelfHealingEngine({
-            "report_dir": str(tmp_path),
-            "auto_commit": True,
-            "applied_fixes_dir": str(tmp_path / "fixes"),
-        })
-        code_fix_result = self.FixResult(
-            action=self.FixAction.CODE_FIX, success=True,
-            message="fixed", timestamp="t"
+        engine = self.SelfHealingEngine(
+            {
+                "report_dir": str(tmp_path),
+                "auto_commit": True,
+                "applied_fixes_dir": str(tmp_path / "fixes"),
+            }
         )
-        with patch.object(engine.detector, "collect_metrics",
-                          return_value=self._make_metrics()), \
-             patch.object(engine.diagnoser, "diagnose",
-                          return_value=self._make_diag()), \
-             patch.object(engine.fixer, "fix", return_value=code_fix_result), \
-             patch.object(engine.reporter, "generate_report",
-                          return_value=MagicMock()), \
-             patch("core.self_improvement.get_self_healing_loop",
-                   side_effect=RuntimeError("loop unavailable")), \
-             patch.object(engine.fixer, "apply_code_fix",
-                          return_value=str(tmp_path / "fixes" / "fix.py")) as mock_apply:
+        code_fix_result = self.FixResult(action=self.FixAction.CODE_FIX, success=True, message="fixed", timestamp="t")
+        with (
+            patch.object(engine.detector, "collect_metrics", return_value=self._make_metrics()),
+            patch.object(engine.diagnoser, "diagnose", return_value=self._make_diag()),
+            patch.object(engine.fixer, "fix", return_value=code_fix_result),
+            patch.object(engine.reporter, "generate_report", return_value=MagicMock()),
+            patch("core.self_improvement.get_self_healing_loop", side_effect=RuntimeError("loop unavailable")),
+            patch.object(engine.fixer, "apply_code_fix", return_value=str(tmp_path / "fixes" / "fix.py")) as mock_apply,
+        ):
             engine.run_once()
         mock_apply.assert_called_once()
 
     def test_no_commit_when_fix_fails(self, tmp_path):
         """When CODE_FIX sandbox fails, apply_code_fix must NOT be called."""
-        engine = self.SelfHealingEngine({
-            "report_dir": str(tmp_path),
-            "auto_commit": True,
-            "applied_fixes_dir": str(tmp_path / "fixes"),
-        })
-        failed_result = self.FixResult(
-            action=self.FixAction.CODE_FIX, success=False,
-            message="sandbox failed", timestamp="t"
+        engine = self.SelfHealingEngine(
+            {
+                "report_dir": str(tmp_path),
+                "auto_commit": True,
+                "applied_fixes_dir": str(tmp_path / "fixes"),
+            }
         )
-        with patch.object(engine.detector, "collect_metrics",
-                          return_value=self._make_metrics()), \
-             patch.object(engine.diagnoser, "diagnose",
-                          return_value=self._make_diag()), \
-             patch.object(engine.fixer, "fix", return_value=failed_result), \
-             patch.object(engine.reporter, "generate_report",
-                          return_value=MagicMock()), \
-             patch.object(engine.fixer, "apply_code_fix") as mock_apply:
+        failed_result = self.FixResult(
+            action=self.FixAction.CODE_FIX, success=False, message="sandbox failed", timestamp="t"
+        )
+        with (
+            patch.object(engine.detector, "collect_metrics", return_value=self._make_metrics()),
+            patch.object(engine.diagnoser, "diagnose", return_value=self._make_diag()),
+            patch.object(engine.fixer, "fix", return_value=failed_result),
+            patch.object(engine.reporter, "generate_report", return_value=MagicMock()),
+            patch.object(engine.fixer, "apply_code_fix") as mock_apply,
+        ):
             engine.run_once()
         mock_apply.assert_not_called()
 
@@ -625,17 +658,13 @@ class TestCodeFixSandboxGating:
         even when the sandbox passes."""
         engine = self.SelfHealingEngine({"report_dir": str(tmp_path)})
         assert engine.auto_commit is False
-        code_fix_result = self.FixResult(
-            action=self.FixAction.CODE_FIX, success=True,
-            message="fixed", timestamp="t"
-        )
-        with patch.object(engine.detector, "collect_metrics",
-                          return_value=self._make_metrics()), \
-             patch.object(engine.diagnoser, "diagnose",
-                          return_value=self._make_diag()), \
-             patch.object(engine.fixer, "fix", return_value=code_fix_result), \
-             patch.object(engine.reporter, "generate_report",
-                          return_value=MagicMock()), \
-             patch.object(engine.fixer, "apply_code_fix") as mock_apply:
+        code_fix_result = self.FixResult(action=self.FixAction.CODE_FIX, success=True, message="fixed", timestamp="t")
+        with (
+            patch.object(engine.detector, "collect_metrics", return_value=self._make_metrics()),
+            patch.object(engine.diagnoser, "diagnose", return_value=self._make_diag()),
+            patch.object(engine.fixer, "fix", return_value=code_fix_result),
+            patch.object(engine.reporter, "generate_report", return_value=MagicMock()),
+            patch.object(engine.fixer, "apply_code_fix") as mock_apply,
+        ):
             engine.run_once()
         mock_apply.assert_not_called()

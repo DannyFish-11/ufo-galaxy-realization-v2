@@ -90,28 +90,25 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 _MODULE_AVAILABLE = False
 try:
-    from core.resource_pressure_capacity_contract import (
-        # Authority / policy sentinels
-        RESOURCE_PRESSURE_CAPACITY_CONTRACT_AUTHORITY,
-        RESOURCE_PRESSURE_CAPACITY_CONTRACT_PR17_SENTINEL,
-        CAPACITY_TAXONOMY_IS_FIRST_CLASS_DIMENSION_POLICY,
-        PARTIAL_SERVICE_MUST_NOT_CLAIM_NORMAL_CAPACITY_POLICY,
-        BACKPRESSURE_MUST_DOWNGRADE_FROM_NORMAL_CAPACITY_POLICY,
+    from core.resource_pressure_capacity_contract import (  # Authority / policy sentinels; Enumerations; Data classes; Functions
         ADMISSION_GATING_MUST_NOT_CLAIM_NORMAL_CAPACITY_POLICY,
-        SHED_LOAD_MUST_DOWNGRADE_FROM_NORMAL_CAPACITY_POLICY,
+        BACKPRESSURE_MUST_DOWNGRADE_FROM_NORMAL_CAPACITY_POLICY,
         BEST_EFFORT_MUST_NOT_CLAIM_NORMAL_CAPACITY_POLICY,
         CAPACITY_ABSENCE_DEFAULTS_TO_UNAVAILABLE_POLICY,
-        # Enumerations
+        CAPACITY_TAXONOMY_IS_FIRST_CLASS_DIMENSION_POLICY,
+        PARTIAL_SERVICE_MUST_NOT_CLAIM_NORMAL_CAPACITY_POLICY,
+        RESOURCE_PRESSURE_CAPACITY_CONTRACT_AUTHORITY,
+        RESOURCE_PRESSURE_CAPACITY_CONTRACT_PR17_SENTINEL,
+        SHED_LOAD_MUST_DOWNGRADE_FROM_NORMAL_CAPACITY_POLICY,
         CapacityClass,
-        ResourcePressureLevel,
-        # Data classes
         CapacityEvidence,
         CapacityVerdict,
-        # Functions
-        classify_capacity,
-        build_capacity_verdict,
+        ResourcePressureLevel,
         build_baseline_capacity_verdict,
+        build_capacity_verdict,
+        classify_capacity,
     )
+
     _MODULE_AVAILABLE = True
 except ImportError as _imp_err:
     print(f"SKIP: core.resource_pressure_capacity_contract unavailable: {_imp_err}")
@@ -119,10 +116,12 @@ except ImportError as _imp_err:
 
 def _skip_if_unavailable(test_fn):
     """Decorator: skip test if the module is not available."""
+
     def wrapper(self):
         if not _MODULE_AVAILABLE:
             self.skipTest("core.resource_pressure_capacity_contract not available")
         return test_fn(self)
+
     wrapper.__name__ = test_fn.__name__
     return wrapper
 
@@ -131,12 +130,11 @@ def _skip_if_unavailable(test_fn):
 # Helper: build evidence with named overrides
 # ---------------------------------------------------------------------------
 
+
 def _ev(**kwargs) -> "CapacityEvidence":
     """Build a CapacityEvidence with default-conservative values."""
     return CapacityEvidence(
-        resource_pressure_within_normal_bounds=kwargs.get(
-            "resource_pressure_within_normal_bounds", False
-        ),
+        resource_pressure_within_normal_bounds=kwargs.get("resource_pressure_within_normal_bounds", False),
         all_admission_gates_open=kwargs.get("all_admission_gates_open", False),
         throughput_at_nominal_level=kwargs.get("throughput_at_nominal_level", False),
         no_backpressure_active=kwargs.get("no_backpressure_active", False),
@@ -777,14 +775,16 @@ class TestResourcePressureCapacityContract(unittest.TestCase):
 
     @_skip_if_unavailable
     def test_AD02_is_normal_false_for_degraded(self):
-        verdict = classify_capacity(_ev(
-            resource_pressure_within_normal_bounds=True,
-            all_admission_gates_open=True,
-            throughput_at_nominal_level=True,
-            no_backpressure_active=True,
-            no_shed_load_active=True,
-            backpressure_active=True,
-        ))
+        verdict = classify_capacity(
+            _ev(
+                resource_pressure_within_normal_bounds=True,
+                all_admission_gates_open=True,
+                throughput_at_nominal_level=True,
+                no_backpressure_active=True,
+                no_shed_load_active=True,
+                backpressure_active=True,
+            )
+        )
         self.assertFalse(verdict.is_normal)
 
     @_skip_if_unavailable
@@ -798,14 +798,16 @@ class TestResourcePressureCapacityContract(unittest.TestCase):
 
     @_skip_if_unavailable
     def test_AE01_is_degraded_true_for_degraded_capacity(self):
-        verdict = classify_capacity(_ev(
-            resource_pressure_within_normal_bounds=True,
-            all_admission_gates_open=True,
-            throughput_at_nominal_level=True,
-            no_backpressure_active=True,
-            no_shed_load_active=True,
-            resource_pressure_observed=True,
-        ))
+        verdict = classify_capacity(
+            _ev(
+                resource_pressure_within_normal_bounds=True,
+                all_admission_gates_open=True,
+                throughput_at_nominal_level=True,
+                no_backpressure_active=True,
+                no_shed_load_active=True,
+                resource_pressure_observed=True,
+            )
+        )
         self.assertTrue(verdict.is_degraded)
 
     @_skip_if_unavailable
@@ -866,14 +868,16 @@ class TestResourcePressureCapacityContract(unittest.TestCase):
 
     @_skip_if_unavailable
     def test_AI01_downgrade_reasons_nonempty_when_degraded(self):
-        verdict = classify_capacity(_ev(
-            resource_pressure_within_normal_bounds=True,
-            all_admission_gates_open=True,
-            throughput_at_nominal_level=True,
-            no_backpressure_active=True,
-            no_shed_load_active=True,
-            backpressure_active=True,
-        ))
+        verdict = classify_capacity(
+            _ev(
+                resource_pressure_within_normal_bounds=True,
+                all_admission_gates_open=True,
+                throughput_at_nominal_level=True,
+                no_backpressure_active=True,
+                no_shed_load_active=True,
+                backpressure_active=True,
+            )
+        )
         self.assertGreater(len(verdict.downgrade_reasons), 0)
 
     @_skip_if_unavailable
@@ -913,9 +917,9 @@ class TestResourcePressureCapacityContract(unittest.TestCase):
     def test_AK01_system_final_acceptance_evaluator_includes_dimension(self):
         try:
             from core.system_final_acceptance_verdict import (
-                SystemFinalAcceptanceEvaluator,
                 AcceptanceDimensionId,
                 DimensionStatus,
+                SystemFinalAcceptanceEvaluator,
                 reset_system_acceptance_evaluator,
             )
         except ImportError as e:
@@ -934,9 +938,9 @@ class TestResourcePressureCapacityContract(unittest.TestCase):
     def test_AK02_resource_pressure_capacity_dimension_is_not_missing(self):
         try:
             from core.system_final_acceptance_verdict import (
-                SystemFinalAcceptanceEvaluator,
                 AcceptanceDimensionId,
                 DimensionStatus,
+                SystemFinalAcceptanceEvaluator,
                 reset_system_acceptance_evaluator,
             )
         except ImportError as e:
@@ -956,9 +960,9 @@ class TestResourcePressureCapacityContract(unittest.TestCase):
         rather than unresolved (module not found or misconfigured)."""
         try:
             from core.system_final_acceptance_verdict import (
-                SystemFinalAcceptanceEvaluator,
                 AcceptanceDimensionId,
                 DimensionStatus,
+                SystemFinalAcceptanceEvaluator,
                 reset_system_acceptance_evaluator,
             )
         except ImportError as e:
@@ -1012,9 +1016,9 @@ class TestResourcePressureCapacityContract(unittest.TestCase):
         unavailable, the acceptance probe should return pending status."""
         try:
             from core.system_final_acceptance_verdict import (
-                SystemFinalAcceptanceEvaluator,
                 AcceptanceDimensionId,
                 DimensionStatus,
+                SystemFinalAcceptanceEvaluator,
                 reset_system_acceptance_evaluator,
             )
         except ImportError as e:
@@ -1066,9 +1070,9 @@ class TestResourcePressureCapacityContract(unittest.TestCase):
         # Simulate: system is still processing some tasks (some positive signals)
         # but resource pressure is observed (degradation present)
         evidence = _ev(
-            throughput_at_nominal_level=True,     # some capacity remains
-            no_shed_load_active=True,             # not shedding load currently
-            resource_pressure_observed=True,      # BUT resource pressure present
+            throughput_at_nominal_level=True,  # some capacity remains
+            no_shed_load_active=True,  # not shedding load currently
+            resource_pressure_observed=True,  # BUT resource pressure present
         )
         verdict = classify_capacity(evidence)
         self.assertNotEqual(

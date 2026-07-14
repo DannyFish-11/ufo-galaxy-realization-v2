@@ -305,8 +305,7 @@ class GoalResultAggregator:
                 self._insertion_order.append(group_id)
                 self._evict_if_needed()
                 logger.debug(
-                    "GoalResultAggregator: on-the-fly group creation for "
-                    "group_id=%s (no prior register_group call)",
+                    "GoalResultAggregator: on-the-fly group creation for " "group_id=%s (no prior register_group call)",
                     group_id,
                 )
             else:
@@ -315,8 +314,7 @@ class GoalResultAggregator:
             # Idempotent: first write wins for a given task_id
             if task_id in state.results:
                 logger.debug(
-                    "GoalResultAggregator: duplicate result ignored | "
-                    "group_id=%s task_id=%s",
+                    "GoalResultAggregator: duplicate result ignored | " "group_id=%s task_id=%s",
                     group_id,
                     task_id,
                 )
@@ -352,8 +350,7 @@ class GoalResultAggregator:
                 )
             else:
                 logger.debug(
-                    "GoalResultAggregator: subtask recorded | group_id=%s "
-                    "task_id=%s completed=%d/%s",
+                    "GoalResultAggregator: subtask recorded | group_id=%s " "task_id=%s completed=%d/%s",
                     group_id,
                     task_id,
                     state.completed_count,
@@ -386,8 +383,7 @@ class GoalResultAggregator:
             "trace_id": state.trace_id,
             "completed_at": state.completed_at,
             "subtask_statuses": [
-                {"task_id": r.task_id, "device_id": r.device_id, "success": r.success}
-                for r in state.results.values()
+                {"task_id": r.task_id, "device_id": r.device_id, "success": r.success} for r in state.results.values()
             ],
         }
 
@@ -396,9 +392,7 @@ class GoalResultAggregator:
         while len(self._groups) > self._MAX_GROUPS and self._insertion_order:
             oldest = self._insertion_order.pop(0)
             self._groups.pop(oldest, None)
-            logger.debug(
-                "GoalResultAggregator: evicted oldest group_id=%s", oldest
-            )
+            logger.debug("GoalResultAggregator: evicted oldest group_id=%s", oldest)
 
 
 # ---------------------------------------------------------------------------

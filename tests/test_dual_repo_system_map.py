@@ -37,8 +37,8 @@ import pytest
 
 from core.dual_repo_system_map import (
     DUAL_REPO_MAIN_CHAIN,
-    SYSTEM_PLANE_REGISTRY,
     MODULE_SEMANTIC_TYPE_REGISTRY,
+    SYSTEM_PLANE_REGISTRY,
     WORKSTREAM_GAP_REGISTRY,
     GapSeverity,
     ModuleSemanticType,
@@ -50,7 +50,6 @@ from core.dual_repo_system_map import (
     list_modules_by_semantic_type,
     list_open_gaps_by_severity,
 )
-
 
 # ---------------------------------------------------------------------------
 # A. Registry completeness
@@ -105,9 +104,7 @@ class TestRegistryCompleteness:
         """SYSTEM_PLANE_REGISTRY must have entries for all five planes."""
         covered_planes = {e.plane for e in SYSTEM_PLANE_REGISTRY}
         for plane in SystemPlane:
-            assert plane in covered_planes, (
-                f"SYSTEM_PLANE_REGISTRY does not cover {plane.value}."
-            )
+            assert plane in covered_planes, f"SYSTEM_PLANE_REGISTRY does not cover {plane.value}."
 
     def test_semantic_registry_has_minimum_entries(self):
         """MODULE_SEMANTIC_TYPE_REGISTRY must have at least 15 entries."""
@@ -129,39 +126,29 @@ class TestClassificationConsistency:
         """Each module path appears at most once in SYSTEM_PLANE_REGISTRY."""
         paths = [e.module_path for e in SYSTEM_PLANE_REGISTRY]
         duplicates = [p for p in paths if paths.count(p) > 1]
-        assert not duplicates, (
-            f"Duplicate module paths in SYSTEM_PLANE_REGISTRY: {set(duplicates)}"
-        )
+        assert not duplicates, f"Duplicate module paths in SYSTEM_PLANE_REGISTRY: {set(duplicates)}"
 
     def test_no_duplicate_module_paths_in_semantic_registry(self):
         """Each module path appears at most once in MODULE_SEMANTIC_TYPE_REGISTRY."""
         paths = [e.module_path for e in MODULE_SEMANTIC_TYPE_REGISTRY]
         duplicates = [p for p in paths if paths.count(p) > 1]
-        assert not duplicates, (
-            f"Duplicate module paths in MODULE_SEMANTIC_TYPE_REGISTRY: {set(duplicates)}"
-        )
+        assert not duplicates, f"Duplicate module paths in MODULE_SEMANTIC_TYPE_REGISTRY: {set(duplicates)}"
 
     def test_no_duplicate_gap_ids_in_workstream_registry(self):
         """Each gap_id appears at most once in WORKSTREAM_GAP_REGISTRY."""
         ids = [e.gap_id for e in WORKSTREAM_GAP_REGISTRY]
         duplicates = [i for i in ids if ids.count(i) > 1]
-        assert not duplicates, (
-            f"Duplicate gap IDs in WORKSTREAM_GAP_REGISTRY: {set(duplicates)}"
-        )
+        assert not duplicates, f"Duplicate gap IDs in WORKSTREAM_GAP_REGISTRY: {set(duplicates)}"
 
     def test_plane_registry_entries_have_non_empty_paths(self):
         """All SYSTEM_PLANE_REGISTRY entries have non-empty module_path."""
         for entry in SYSTEM_PLANE_REGISTRY:
-            assert entry.module_path.strip(), (
-                "Found empty module_path in SYSTEM_PLANE_REGISTRY."
-            )
+            assert entry.module_path.strip(), "Found empty module_path in SYSTEM_PLANE_REGISTRY."
 
     def test_semantic_registry_entries_have_non_empty_paths(self):
         """All MODULE_SEMANTIC_TYPE_REGISTRY entries have non-empty module_path."""
         for entry in MODULE_SEMANTIC_TYPE_REGISTRY:
-            assert entry.module_path.strip(), (
-                "Found empty module_path in MODULE_SEMANTIC_TYPE_REGISTRY."
-            )
+            assert entry.module_path.strip(), "Found empty module_path in MODULE_SEMANTIC_TYPE_REGISTRY."
 
 
 # ---------------------------------------------------------------------------
@@ -201,8 +188,7 @@ class TestDeclarativeVsRuntimeBoundary:
         """
         stype = get_semantic_type("core.final_cleanup_invariant_tightening")
         assert stype is not None, (
-            "core.final_cleanup_invariant_tightening is not in "
-            "MODULE_SEMANTIC_TYPE_REGISTRY. It must be classified."
+            "core.final_cleanup_invariant_tightening is not in " "MODULE_SEMANTIC_TYPE_REGISTRY. It must be classified."
         )
         assert stype == ModuleSemanticType.DECLARATIVE, (
             f"core.final_cleanup_invariant_tightening is classified as {stype.value} "
@@ -218,9 +204,7 @@ class TestDeclarativeVsRuntimeBoundary:
         default-enforced runtime invariant yet.
         """
         stype = get_semantic_type("core.capability_routing_gate")
-        assert stype is not None, (
-            "core.capability_routing_gate is not in MODULE_SEMANTIC_TYPE_REGISTRY."
-        )
+        assert stype is not None, "core.capability_routing_gate is not in MODULE_SEMANTIC_TYPE_REGISTRY."
         assert stype == ModuleSemanticType.SEMI_EXECUTABLE, (
             f"core.capability_routing_gate is classified as {stype.value} but "
             "must be SEMI_EXECUTABLE. The gate is real but not enforced by default "
@@ -338,9 +322,7 @@ class TestWorkstreamGapRegistry:
             "GAP_JOINT_INTEGRATION_TEST must be marked resolved=True.  "
             "It was closed by the separated-process WebSocket E2E implementation."
         )
-        assert gap.resolution_pr, (
-            "GAP_JOINT_INTEGRATION_TEST.resolution_pr must reference the closing PR."
-        )
+        assert gap.resolution_pr, "GAP_JOINT_INTEGRATION_TEST.resolution_pr must reference the closing PR."
 
     def test_gap_capability_gate_default_enforcement_is_resolved(self):
         """GAP_CAPABILITY_GATE_DEFAULT_ENFORCEMENT must be marked resolved.
@@ -357,9 +339,7 @@ class TestWorkstreamGapRegistry:
             "GAP_CAPABILITY_GATE_DEFAULT_ENFORCEMENT must be marked resolved=True.  "
             "It was closed by the capability enforcement hardener implementation."
         )
-        assert gap.resolution_pr, (
-            "GAP_CAPABILITY_GATE_DEFAULT_ENFORCEMENT.resolution_pr must reference the closing PR."
-        )
+        assert gap.resolution_pr, "GAP_CAPABILITY_GATE_DEFAULT_ENFORCEMENT.resolution_pr must reference the closing PR."
 
     def test_gap_multi_device_failure_recovery_is_resolved(self):
         """GAP_MULTI_DEVICE_FAILURE_RECOVERY_INTEGRATION must be marked resolved with
@@ -374,8 +354,7 @@ class TestWorkstreamGapRegistry:
         .github/workflows/dual_repo_integration.yml.
         """
         gap = next(
-            (g for g in WORKSTREAM_GAP_REGISTRY
-             if g.gap_id == "GAP_MULTI_DEVICE_FAILURE_RECOVERY_INTEGRATION"),
+            (g for g in WORKSTREAM_GAP_REGISTRY if g.gap_id == "GAP_MULTI_DEVICE_FAILURE_RECOVERY_INTEGRATION"),
             None,
         )
         assert gap is not None, (
@@ -391,9 +370,7 @@ class TestWorkstreamGapRegistry:
             "GAP_MULTI_DEVICE_FAILURE_RECOVERY_INTEGRATION.resolution_pr must "
             "reference the closing PR (#854 / PR-7)."
         )
-        assert "854" in gap.resolution_pr, (
-            f"resolution_pr should reference #854, got: {gap.resolution_pr!r}"
-        )
+        assert "854" in gap.resolution_pr, f"resolution_pr should reference #854, got: {gap.resolution_pr!r}"
         assert gap.resolution_evidence, (
             "GAP_MULTI_DEVICE_FAILURE_RECOVERY_INTEGRATION.resolution_evidence must "
             "be non-empty.  Formal closure requires bound test file, workflow job, "
@@ -442,8 +419,14 @@ class TestSnapshotFunction:
     def test_snapshot_has_required_keys(self):
         """Snapshot must contain all expected top-level keys."""
         snapshot = build_system_map_snapshot()
-        required_keys = {"version", "plane_counts", "semantic_type_counts",
-                         "main_chain_node_count", "open_gaps", "total_open_gaps"}
+        required_keys = {
+            "version",
+            "plane_counts",
+            "semantic_type_counts",
+            "main_chain_node_count",
+            "open_gaps",
+            "total_open_gaps",
+        }
         missing = required_keys - set(snapshot.keys())
         assert not missing, f"Snapshot missing keys: {missing}"
 
@@ -452,18 +435,14 @@ class TestSnapshotFunction:
         snapshot = build_system_map_snapshot()
         plane_counts = snapshot["plane_counts"]
         for plane in SystemPlane:
-            assert plane.value in plane_counts, (
-                f"plane_counts missing {plane.value}"
-            )
+            assert plane.value in plane_counts, f"plane_counts missing {plane.value}"
 
     def test_snapshot_semantic_counts_cover_all_types(self):
         """Snapshot semantic_type_counts must include all semantic types."""
         snapshot = build_system_map_snapshot()
         semantic_counts = snapshot["semantic_type_counts"]
         for stype in ModuleSemanticType:
-            assert stype.value in semantic_counts, (
-                f"semantic_type_counts missing {stype.value}"
-            )
+            assert stype.value in semantic_counts, f"semantic_type_counts missing {stype.value}"
 
     def test_snapshot_open_gaps_has_p0_p1_p2(self):
         """Snapshot open_gaps must have P0, P1, P2 keys."""
@@ -486,17 +465,15 @@ class TestSnapshotFunction:
         """
         snapshot = build_system_map_snapshot()
         p0_gaps = snapshot["open_gaps"]["P0"]
-        assert isinstance(p0_gaps, list), (
-            "open_gaps['P0'] must be a list."
-        )
+        assert isinstance(p0_gaps, list), "open_gaps['P0'] must be a list."
         assert p0_gaps == [], (
-            f"All P0 gaps must be resolved after PRs 1–7.  "
-            f"Open P0 gaps remaining: {[g['id'] for g in p0_gaps]}"
+            f"All P0 gaps must be resolved after PRs 1–7.  " f"Open P0 gaps remaining: {[g['id'] for g in p0_gaps]}"
         )
 
     def test_snapshot_version_matches_module(self):
         """Snapshot version must match DUAL_REPO_SYSTEM_MAP_VERSION."""
         from core.dual_repo_system_map import DUAL_REPO_SYSTEM_MAP_VERSION
+
         snapshot = build_system_map_snapshot()
         assert snapshot["version"] == DUAL_REPO_SYSTEM_MAP_VERSION
 
@@ -557,6 +534,4 @@ class TestQueryFunctions:
     def test_list_open_gaps_by_severity_p0_excludes_resolved(self):
         gaps = list_open_gaps_by_severity(GapSeverity.P0)
         for gap in gaps:
-            assert not gap.resolved, (
-                f"list_open_gaps_by_severity(P0) returned resolved gap '{gap.gap_id}'"
-            )
+            assert not gap.resolved, f"list_open_gaps_by_severity(P0) returned resolved gap '{gap.gap_id}'"

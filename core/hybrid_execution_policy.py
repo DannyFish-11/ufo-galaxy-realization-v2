@@ -159,9 +159,7 @@ DECISION_IS_SERIALISABLE_POLICY: str = (
     "replay, and test assertions."
 )
 
-HYBRID_EXECUTION_POLICY_PR5_SENTINEL: str = (
-    "HYBRID_EXECUTION_POLICY_PR5::hybrid-execution-policy-explicit-modes-pr5-v1"
-)
+HYBRID_EXECUTION_POLICY_PR5_SENTINEL: str = "HYBRID_EXECUTION_POLICY_PR5::hybrid-execution-policy-explicit-modes-pr5-v1"
 
 
 # ---------------------------------------------------------------------------
@@ -202,9 +200,7 @@ class HybridExecutionMode(str, Enum):
     remote_preferred = "remote_preferred"
 
     @classmethod
-    def from_string(
-        cls, value: str, default: Optional["HybridExecutionMode"] = None
-    ) -> "HybridExecutionMode":
+    def from_string(cls, value: str, default: Optional["HybridExecutionMode"] = None) -> "HybridExecutionMode":
         """Parse *value* into a :class:`HybridExecutionMode`.
 
         Returns *default* (or ``sequential_degrade``) for unrecognised values.
@@ -288,10 +284,7 @@ class HybridExecutionDecision:
         Raises ``ValueError`` if *data* is not a dict.
         """
         if not isinstance(data, dict):
-            raise ValueError(
-                f"HybridExecutionDecision.from_dict expects a dict, got "
-                f"{type(data).__name__!r}"
-            )
+            raise ValueError(f"HybridExecutionDecision.from_dict expects a dict, got " f"{type(data).__name__!r}")
         return cls(
             decision_id=data.get("decision_id", f"hdec_{uuid.uuid4().hex[:12]}"),
             mode=HybridExecutionMode.from_string(data.get("mode", "sequential_degrade")),
@@ -427,10 +420,7 @@ class HybridExecutionPolicy:
         if prefer_local:
             return HybridExecutionDecision(
                 mode=HybridExecutionMode.local_preferred,
-                reason=(
-                    "prefer_local=True; local execution path takes priority "
-                    "with remote VLM as fallback."
-                ),
+                reason=("prefer_local=True; local execution path takes priority " "with remote VLM as fallback."),
                 context_snapshot=snapshot,
                 confidence=0.85,
                 policy_version=self.VERSION,
@@ -443,10 +433,7 @@ class HybridExecutionPolicy:
         if prefer_remote:
             return HybridExecutionDecision(
                 mode=HybridExecutionMode.remote_preferred,
-                reason=(
-                    "prefer_remote=True; remote execution path takes priority "
-                    "with local GUI/A2A as fallback."
-                ),
+                reason=("prefer_remote=True; remote execution path takes priority " "with local GUI/A2A as fallback."),
                 context_snapshot=snapshot,
                 confidence=0.85,
                 policy_version=self.VERSION,
@@ -485,12 +472,10 @@ class HybridExecutionPolicy:
                 "(GUI presentation).  Hard boundaries; no silent degradation."
             ),
             HybridExecutionMode.local_preferred: (
-                "Local-preferred: try local A2A/GUI first; fall back to "
-                "remote VLM only on failure."
+                "Local-preferred: try local A2A/GUI first; fall back to " "remote VLM only on failure."
             ),
             HybridExecutionMode.remote_preferred: (
-                "Remote-preferred: try remote API/VLM first; fall back to "
-                "local GUI/A2A on failure."
+                "Remote-preferred: try remote API/VLM first; fall back to " "local GUI/A2A on failure."
             ),
         }
         return descriptions.get(mode, f"Unknown mode: {mode!r}")

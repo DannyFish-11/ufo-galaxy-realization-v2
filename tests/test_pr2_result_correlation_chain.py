@@ -35,8 +35,8 @@ Validates that:
 
 from __future__ import annotations
 
-import sys
 import os
+import sys
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -47,10 +47,12 @@ class TestExtractCorrelation(unittest.TestCase):
 
     def _extract(self, payload):
         from core.message_interop import extract_correlation
+
         return extract_correlation(payload)
 
     def test_01_returns_correlation_fields_instance(self):
         from core.message_interop import CorrelationFields
+
         cf = self._extract({"task_id": "t1", "trace_id": "tr1"})
         self.assertIsInstance(cf, CorrelationFields)
 
@@ -101,6 +103,7 @@ class TestNormalizeToResultEnvelope(unittest.TestCase):
 
     def _normalize_result(self, raw, **kwargs):
         from core.message_interop import normalize_to_result_envelope
+
         return normalize_to_result_envelope(raw, **kwargs)
 
     def test_12_preserves_task_id_kwarg(self):
@@ -122,7 +125,8 @@ class TestNormalizeToResultEnvelope(unittest.TestCase):
     def test_16_not_success_when_error_present(self):
         env = self._normalize_result(
             {"status": "error", "error": "something went wrong"},
-            task_id="t1", trace_id="tr1",
+            task_id="t1",
+            trace_id="tr1",
         )
         # 'error' status should not be mapped to success
         self.assertFalse(env.success)
@@ -156,7 +160,7 @@ class TestEndToEndCorrelation(unittest.TestCase):
 
     def test_21_result_task_id_traceable_to_envelope(self):
         """ResultEnvelope.task_id matches originating TaskEnvelope.task_id."""
-        from core.message_interop import normalize_to_task_envelope, normalize_to_result_envelope
+        from core.message_interop import normalize_to_result_envelope, normalize_to_task_envelope
 
         task_payload = {
             "task_id": "e2e_task_001",
@@ -183,6 +187,7 @@ class TestEndToEndCorrelation(unittest.TestCase):
     def test_22_extract_correlation_deterministic_same_dict(self):
         """Two extract_correlation calls on same dict return same task_id."""
         from core.message_interop import extract_correlation
+
         d = {"task_id": "deterministic_001", "trace_id": "tr_det"}
         cf1 = extract_correlation(d)
         cf2 = extract_correlation(d)
@@ -191,7 +196,7 @@ class TestEndToEndCorrelation(unittest.TestCase):
 
     def test_23_round_trip_preserves_ids(self):
         """normalize_to_task_envelope → extract_correlation round-trip."""
-        from core.message_interop import normalize_to_task_envelope, extract_correlation
+        from core.message_interop import extract_correlation, normalize_to_task_envelope
 
         task_payload = {
             "task_id": "round_trip_001",
@@ -215,6 +220,7 @@ class TestEndToEndCorrelation(unittest.TestCase):
 
     def test_25_correlation_to_dict_session_none_when_absent(self):
         from core.message_interop import CorrelationFields
+
         cf = CorrelationFields(task_id="t1", trace_id="tr1")
         d = cf.to_dict()
         self.assertIsNone(d["session_id"])

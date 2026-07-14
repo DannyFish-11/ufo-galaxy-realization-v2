@@ -167,12 +167,8 @@ def test_every_record_has_required_fields() -> None:
         assert record.surface_id, f"surface_id empty for {record.module_path}"
         assert record.module_path, f"module_path empty for {record.surface_id}"
         assert record.surface_name, f"surface_name empty for {record.surface_id}"
-        assert record.canonical_replacement, (
-            f"canonical_replacement empty for {record.surface_id}"
-        )
-        assert record.removal_condition, (
-            f"removal_condition empty for {record.surface_id}"
-        )
+        assert record.canonical_replacement, f"canonical_replacement empty for {record.surface_id}"
+        assert record.removal_condition, f"removal_condition empty for {record.surface_id}"
 
 
 # ---------------------------------------------------------------------------
@@ -181,14 +177,8 @@ def test_every_record_has_required_fields() -> None:
 
 
 def test_no_tier_undecided_in_inventory() -> None:
-    undecided = [
-        r for r in get_compat_surface_inventory()
-        if r.tier == RetirementTier.TIER_UNDECIDED
-    ]
-    assert undecided == [], (
-        f"Found TIER_UNDECIDED surfaces (must be resolved): "
-        f"{[r.surface_id for r in undecided]}"
-    )
+    undecided = [r for r in get_compat_surface_inventory() if r.tier == RetirementTier.TIER_UNDECIDED]
+    assert undecided == [], f"Found TIER_UNDECIDED surfaces (must be resolved): " f"{[r.surface_id for r in undecided]}"
 
 
 # ---------------------------------------------------------------------------
@@ -199,9 +189,7 @@ def test_no_tier_undecided_in_inventory() -> None:
 def test_every_record_has_valid_status() -> None:
     valid_statuses = set(RetirementStatus)
     for record in get_compat_surface_inventory():
-        assert record.status in valid_statuses, (
-            f"{record.surface_id} has unexpected status {record.status!r}"
-        )
+        assert record.status in valid_statuses, f"{record.surface_id} has unexpected status {record.status!r}"
 
 
 # ---------------------------------------------------------------------------
@@ -246,9 +234,7 @@ def test_high_risk_surfaces_all_high() -> None:
 
 def test_high_risk_surfaces_have_canonical_replacement() -> None:
     for record in get_high_risk_surfaces():
-        assert record.canonical_replacement, (
-            f"HIGH-risk surface {record.surface_id} has no canonical_replacement"
-        )
+        assert record.canonical_replacement, f"HIGH-risk surface {record.surface_id} has no canonical_replacement"
 
 
 # ---------------------------------------------------------------------------
@@ -298,9 +284,7 @@ def test_summary_is_roadmap_summary() -> None:
 
 def test_summary_total_equals_tier_sum() -> None:
     s = build_retirement_roadmap_summary()
-    assert s.total_surfaces == (
-        s.tier_1_count + s.tier_2_count + s.tier_3_count + s.tier_undecided_count
-    )
+    assert s.total_surfaces == (s.tier_1_count + s.tier_2_count + s.tier_3_count + s.tier_undecided_count)
 
 
 # ---------------------------------------------------------------------------
@@ -314,9 +298,7 @@ def test_summary_tier_counts_match_inventory() -> None:
     assert s.tier_1_count == sum(1 for r in inventory if r.tier == RetirementTier.TIER_1)
     assert s.tier_2_count == sum(1 for r in inventory if r.tier == RetirementTier.TIER_2)
     assert s.tier_3_count == sum(1 for r in inventory if r.tier == RetirementTier.TIER_3)
-    assert s.tier_undecided_count == sum(
-        1 for r in inventory if r.tier == RetirementTier.TIER_UNDECIDED
-    )
+    assert s.tier_undecided_count == sum(1 for r in inventory if r.tier == RetirementTier.TIER_UNDECIDED)
 
 
 # ---------------------------------------------------------------------------
@@ -340,18 +322,10 @@ def test_summary_risk_counts_match_inventory() -> None:
 def test_summary_status_counts_match_inventory() -> None:
     inventory = get_compat_surface_inventory()
     s = build_retirement_roadmap_summary()
-    assert s.hard_deprecated_count == sum(
-        1 for r in inventory if r.status == RetirementStatus.HARD_DEPRECATED
-    )
-    assert s.legacy_compat_count == sum(
-        1 for r in inventory if r.status == RetirementStatus.LEGACY_COMPAT
-    )
-    assert s.compat_only_count == sum(
-        1 for r in inventory if r.status == RetirementStatus.COMPAT_ONLY
-    )
-    assert s.transitional_count == sum(
-        1 for r in inventory if r.status == RetirementStatus.TRANSITIONAL
-    )
+    assert s.hard_deprecated_count == sum(1 for r in inventory if r.status == RetirementStatus.HARD_DEPRECATED)
+    assert s.legacy_compat_count == sum(1 for r in inventory if r.status == RetirementStatus.LEGACY_COMPAT)
+    assert s.compat_only_count == sum(1 for r in inventory if r.status == RetirementStatus.COMPAT_ONLY)
+    assert s.transitional_count == sum(1 for r in inventory if r.status == RetirementStatus.TRANSITIONAL)
 
 
 # ---------------------------------------------------------------------------
@@ -414,10 +388,7 @@ def test_record_to_dict_keys() -> None:
 
 def test_surface_ids_are_unique() -> None:
     ids = [r.surface_id for r in get_compat_surface_inventory()]
-    assert len(ids) == len(set(ids)), (
-        f"Duplicate surface_ids found: "
-        f"{[x for x in ids if ids.count(x) > 1]}"
-    )
+    assert len(ids) == len(set(ids)), f"Duplicate surface_ids found: " f"{[x for x in ids if ids.count(x) > 1]}"
 
 
 # ---------------------------------------------------------------------------

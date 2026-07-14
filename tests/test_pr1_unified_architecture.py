@@ -104,10 +104,12 @@ class TestDocumentationFiles:
 class TestEntrypointRouter:
     def setup_method(self):
         from core.unified.entrypoint_router import reset_entrypoint_router
+
         reset_entrypoint_router()
 
     def teardown_method(self):
         from core.unified.entrypoint_router import reset_entrypoint_router
+
         reset_entrypoint_router()
 
     def test_import(self):
@@ -116,16 +118,19 @@ class TestEntrypointRouter:
             get_entrypoint_router,
             reset_entrypoint_router,
         )
+
         assert EntrypointRouter is not None
 
     def test_singleton(self):
         from core.unified.entrypoint_router import get_entrypoint_router
+
         r1 = get_entrypoint_router()
         r2 = get_entrypoint_router()
         assert r1 is r2
 
     def test_reset(self):
         from core.unified.entrypoint_router import get_entrypoint_router, reset_entrypoint_router
+
         r1 = get_entrypoint_router()
         reset_entrypoint_router()
         r2 = get_entrypoint_router()
@@ -180,9 +185,7 @@ class TestEntrypointRouter:
             return {}
 
         await router.route_request(message="a", source="s1", handler=handler)
-        await router.route_request(
-            message="b", source="s2", handler=handler, via_legacy_adapter=True
-        )
+        await router.route_request(message="b", source="s2", handler=handler, via_legacy_adapter=True)
 
         stats = router.stats()
         assert stats["total"] == 2
@@ -198,9 +201,7 @@ class TestEntrypointRouter:
         async def handler(**kwargs):
             return {"custom_key": "custom_value", "success": True}
 
-        result = await router.route_request(
-            message="hi", source="s", handler=handler
-        )
+        result = await router.route_request(message="hi", source="s", handler=handler)
         assert result["custom_key"] == "custom_value"
         assert result["success"] is True
 
@@ -222,9 +223,7 @@ class TestEntrypointRouter:
             return {}
 
         fixed_trace = "fixed-trace-001"
-        result = await router.route_request(
-            message="x", source="s", handler=handler, trace_id=fixed_trace
-        )
+        result = await router.route_request(message="x", source="s", handler=handler, trace_id=fixed_trace)
         assert result["_routing"]["trace_id"] == fixed_trace
 
 
@@ -236,16 +235,17 @@ class TestEntrypointRouter:
 class TestStateSchema:
     def test_all_types_importable(self):
         from core.unified.state_schema import (
-            DeviceState,
-            TaskState,
             CognitiveState,
-            PresenceState,
-            ExecutionState,
+            DeviceState,
             EntryPath,
-            TaskStatus,
-            PresencePhase,
+            ExecutionState,
             ExecutionStatus,
+            PresencePhase,
+            PresenceState,
+            TaskState,
+            TaskStatus,
         )
+
         assert DeviceState is not None
         assert TaskState is not None
         assert CognitiveState is not None
@@ -254,6 +254,7 @@ class TestStateSchema:
 
     def test_device_state_roundtrip(self):
         from core.unified.state_schema import DeviceState
+
         ds = DeviceState(
             device_id="dev-001",
             status="online",
@@ -272,6 +273,7 @@ class TestStateSchema:
 
     def test_task_state_roundtrip(self):
         from core.unified.state_schema import TaskState
+
         ts = TaskState(
             task_id="task-001",
             tool_name="open_app",
@@ -287,6 +289,7 @@ class TestStateSchema:
 
     def test_cognitive_state_roundtrip(self):
         from core.unified.state_schema import CognitiveState
+
         cs = CognitiveState(
             session_id="sess-001",
             activation=0.7,
@@ -299,6 +302,7 @@ class TestStateSchema:
 
     def test_presence_state_roundtrip(self):
         from core.unified.state_schema import PresenceState
+
         ps = PresenceState(
             runtime_session_id="rt-001",
             phase="manifest",
@@ -311,6 +315,7 @@ class TestStateSchema:
 
     def test_execution_state_roundtrip(self):
         from core.unified.state_schema import ExecutionState
+
         es = ExecutionState(
             task_id="task-001",
             tool_name="close_app",
@@ -324,28 +329,33 @@ class TestStateSchema:
 
     def test_entry_path_enum(self):
         from core.unified.state_schema import EntryPath
+
         assert EntryPath.CANONICAL.value == "canonical"
         assert EntryPath.LEGACY.value == "legacy"
 
     def test_task_status_enum(self):
         from core.unified.state_schema import TaskStatus
+
         assert TaskStatus.RUNNING.value == "running"
         assert TaskStatus.DONE.value == "done"
         assert TaskStatus.FAILED.value == "failed"
 
     def test_presence_phase_enum(self):
         from core.unified.state_schema import PresencePhase
+
         assert PresencePhase.SILENT.value == "silent"
         assert PresencePhase.LIMINAL.value == "liminal"
         assert PresencePhase.MANIFEST.value == "manifest"
 
     def test_execution_status_enum(self):
         from core.unified.state_schema import ExecutionStatus
+
         assert ExecutionStatus.SUCCESS.value == "success"
         assert ExecutionStatus.FAILURE.value == "failure"
 
     def test_from_dict_ignores_unknown_fields(self):
         from core.unified.state_schema import DeviceState
+
         d = DeviceState(device_id="x").to_dict()
         d["unknown_future_field"] = "some_value"
         ds = DeviceState.from_dict(d)  # must not raise
@@ -363,6 +373,7 @@ class TestLegacyAdapters:
             LegacyConnectionManagerAdapter,
             LegacyDeviceAgentManagerAdapter,
         )
+
         assert LegacyConnectionManagerAdapter is not None
         assert LegacyDeviceAgentManagerAdapter is not None
 
@@ -439,18 +450,21 @@ class TestLegacyAdapters:
 class TestEmitState:
     def setup_method(self):
         from core.state_event_bus import reset_state_event_bus
+
         reset_state_event_bus()
 
     def teardown_method(self):
         from core.state_event_bus import reset_state_event_bus
+
         reset_state_event_bus()
 
     def test_emit_state_importable(self):
         from core.state_event_bus import emit_state
+
         assert callable(emit_state)
 
     def test_emit_state_device_state(self):
-        from core.state_event_bus import emit_state, get_state_event_bus, StateEventType
+        from core.state_event_bus import StateEventType, emit_state, get_state_event_bus
         from core.unified.state_schema import DeviceState
 
         received = []
@@ -466,7 +480,7 @@ class TestEmitState:
         assert received[0].payload.get("device_id") == "dev-001"
 
     def test_emit_state_task_state_running(self):
-        from core.state_event_bus import emit_state, get_state_event_bus, StateEventType
+        from core.state_event_bus import StateEventType, emit_state, get_state_event_bus
         from core.unified.state_schema import TaskState
 
         received = []
@@ -482,7 +496,7 @@ class TestEmitState:
         assert received[0].payload.get("task_id") == "t-001"
 
     def test_emit_state_presence_state_manifest(self):
-        from core.state_event_bus import emit_state, get_state_event_bus, StateEventType
+        from core.state_event_bus import StateEventType, emit_state, get_state_event_bus
         from core.unified.state_schema import PresenceState
 
         received = []
@@ -513,15 +527,17 @@ class TestEmitState:
 class TestTaskLifecycleUnifiedEmit:
     def setup_method(self):
         from core.state_event_bus import reset_state_event_bus
+
         reset_state_event_bus()
 
     def teardown_method(self):
         from core.state_event_bus import reset_state_event_bus
+
         reset_state_event_bus()
 
     def test_emit_state_bus_event_emits_task_state(self):
+        from core.state_event_bus import StateEventType, get_state_event_bus
         from core.task_lifecycle import _emit_state_bus_event
-        from core.state_event_bus import get_state_event_bus, StateEventType
 
         received = []
         bus = get_state_event_bus()
@@ -552,20 +568,22 @@ class TestUnifiedInitExports:
             get_entrypoint_router,
             reset_entrypoint_router,
         )
+
         assert EntrypointRouter is not None
 
     def test_state_schema_exported(self):
         from core.unified import (
-            EntryPath,
-            TaskStatus,
-            PresencePhase,
-            ExecutionStatus,
-            DeviceState,
-            TaskState,
             CognitiveState,
-            PresenceState,
+            DeviceState,
+            EntryPath,
             ExecutionState,
+            ExecutionStatus,
+            PresencePhase,
+            PresenceState,
+            TaskState,
+            TaskStatus,
         )
+
         assert DeviceState is not None
         assert TaskState is not None
 
@@ -579,19 +597,17 @@ class TestChatAndOpenClawdIntegration:
     def test_chat_py_references_entrypoint_router(self):
         chat_file = REPO_ROOT / "core" / "routes" / "chat.py"
         content = chat_file.read_text(encoding="utf-8")
-        assert "entrypoint_router" in content or "EntrypointRouter" in content, (
-            "core/routes/chat.py must reference entrypoint_router (PR-1 Block-1)"
-        )
-        assert "entry_path" in content, (
-            "core/routes/chat.py must stamp entry_path"
-        )
+        assert (
+            "entrypoint_router" in content or "EntrypointRouter" in content
+        ), "core/routes/chat.py must reference entrypoint_router (PR-1 Block-1)"
+        assert "entry_path" in content, "core/routes/chat.py must stamp entry_path"
 
     def test_openclawd_py_references_entrypoint_router(self):
         oc_file = REPO_ROOT / "core" / "openclawd.py"
         content = oc_file.read_text(encoding="utf-8")
-        assert "entrypoint_router" in content or "EntrypointRouter" in content, (
-            "core/openclawd.py must reference entrypoint_router (PR-1 Block-1)"
-        )
+        assert (
+            "entrypoint_router" in content or "EntrypointRouter" in content
+        ), "core/openclawd.py must reference entrypoint_router (PR-1 Block-1)"
 
 
 # ===========================================================================
@@ -619,6 +635,7 @@ class TestDocsCrossReference:
 class TestImportSanity:
     def test_entrypoint_router_module(self):
         import importlib
+
         mod = importlib.import_module("core.unified.entrypoint_router")
         assert hasattr(mod, "EntrypointRouter")
         assert hasattr(mod, "get_entrypoint_router")
@@ -626,17 +643,20 @@ class TestImportSanity:
 
     def test_state_schema_module(self):
         import importlib
+
         mod = importlib.import_module("core.unified.state_schema")
         for name in ("DeviceState", "TaskState", "CognitiveState", "PresenceState", "ExecutionState"):
             assert hasattr(mod, name), f"state_schema missing {name}"
 
     def test_legacy_adapters_module(self):
         import importlib
+
         mod = importlib.import_module("core.legacy_adapters")
         assert hasattr(mod, "LegacyConnectionManagerAdapter")
         assert hasattr(mod, "LegacyDeviceAgentManagerAdapter")
 
     def test_state_event_bus_emit_state(self):
         import importlib
+
         mod = importlib.import_module("core.state_event_bus")
         assert hasattr(mod, "emit_state"), "state_event_bus must export emit_state"

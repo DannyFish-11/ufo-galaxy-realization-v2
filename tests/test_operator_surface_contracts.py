@@ -49,8 +49,8 @@ Coverage:
 from __future__ import annotations
 
 import json
-import sys
 import os
+import sys
 import time
 from typing import Any, Dict
 
@@ -60,36 +60,37 @@ _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
+import core.operator_surface as _mod
 from core.operator_surface import (
-    OPERATOR_SURFACE_AUTHORITY,
-    OPERATOR_SURFACE_LAYER_POSITION,
-    OPERATOR_SURFACE_CONTRACT_VERSION,
-    OPERATOR_SURFACE_PROJECTION_POLICY,
     OPERATOR_CONSOLE_ROLE,
+    OPERATOR_SURFACE_AUTHORITY,
+    OPERATOR_SURFACE_CONTRACT_VERSION,
+    OPERATOR_SURFACE_LAYER_POSITION,
+    OPERATOR_SURFACE_PROJECTION_POLICY,
     STATUS_BOARD_ROLE,
     TOPOLOGY_VIEWER_ROLE,
-    TaskInspection,
-    RouteInspection,
+    DevicePresenceSummary,
     ExecutorInspection,
     FailureDomainInspection,
     LineageInspection,
-    DevicePresenceSummary,
     OperatorSnapshot,
     OperatorSurface,
+    RouteInspection,
+    TaskInspection,
     get_operator_surface,
     reset_operator_surface,
 )
-import core.operator_surface as _mod
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture(autouse=True)
 def reset_surface():
     reset_operator_surface()
     from core.canonical_task import reset_canonical_task_runtime
+
     reset_canonical_task_runtime()
     yield
     reset_operator_surface()
@@ -98,11 +99,12 @@ def reset_surface():
 
 def _build_task(goal: str = "test goal", lifecycle: str = "completed"):
     from core.canonical_task import (
-        build_canonical_task,
-        get_canonical_task_runtime,
         TaskLifecycle,
         TaskOrigin,
+        build_canonical_task,
+        get_canonical_task_runtime,
     )
+
     task = build_canonical_task(
         goal=goal,
         origin=TaskOrigin.API_REQUEST,
@@ -110,7 +112,7 @@ def _build_task(goal: str = "test goal", lifecycle: str = "completed"):
         selected_targets=["device_001"],
     )
     task.lifecycle = TaskLifecycle(lifecycle)
-    task.result.success = (lifecycle == "completed")
+    task.result.success = lifecycle == "completed"
     rt = get_canonical_task_runtime()
     rt.register(task)
     return task
@@ -119,6 +121,7 @@ def _build_task(goal: str = "test goal", lifecycle: str = "completed"):
 # ===========================================================================
 # 1-6: Authority sentinels
 # ===========================================================================
+
 
 class TestAuthoritySentinels:
     def test_01_authority_importable(self):
@@ -168,6 +171,7 @@ class TestAuthoritySentinels:
 # 7-19: Dataclass structure
 # ===========================================================================
 
+
 class TestDataclassStructure:
     def test_07_task_inspection_fields(self):
         ti = TaskInspection(task_id="t1", lifecycle="completed")
@@ -203,9 +207,7 @@ class TestDataclassStructure:
         assert "_source" in d
 
     def test_13_failure_domain_inspection_fields(self):
-        fd = FailureDomainInspection(
-            task_id="t1", failure_domain="routing", error_code="TIMEOUT"
-        )
+        fd = FailureDomainInspection(task_id="t1", failure_domain="routing", error_code="TIMEOUT")
         assert fd.failure_domain == "routing"
         assert fd.error_code == "TIMEOUT"
 
@@ -214,9 +216,7 @@ class TestDataclassStructure:
         json.dumps(fd.to_dict())  # should not raise
 
     def test_15_lineage_inspection_fields(self):
-        li = LineageInspection(
-            task_id="t1", retry_chain=["t2"], fallback_chain=["t3"]
-        )
+        li = LineageInspection(task_id="t1", retry_chain=["t2"], fallback_chain=["t3"])
         assert li.retry_chain == ["t2"]
         assert li.fallback_chain == ["t3"]
 
@@ -245,6 +245,7 @@ class TestDataclassStructure:
 # ===========================================================================
 # 20-29: Singleton and graceful degradation
 # ===========================================================================
+
 
 class TestSingletonAndGraceful:
     def test_20_get_operator_surface_returns_instance(self):
@@ -297,6 +298,7 @@ class TestSingletonAndGraceful:
 # 30-35: Live task inspection
 # ===========================================================================
 
+
 class TestLiveTaskInspection:
     def test_30_inspect_task_registered_returns_inspection(self):
         task = _build_task("screenshot goal", "completed")
@@ -332,11 +334,12 @@ class TestLiveTaskInspection:
 
     def test_34_lineage_timeline_ordered(self):
         from core.canonical_task import (
-            build_canonical_task,
-            get_canonical_task_runtime,
             TaskLifecycle,
             TaskOrigin,
+            build_canonical_task,
+            get_canonical_task_runtime,
         )
+
         task = build_canonical_task(goal="timeline task", origin=TaskOrigin.API_REQUEST)
         task.admitted_at = time.time() + 0.001
         task.routed_at = time.time() + 0.002

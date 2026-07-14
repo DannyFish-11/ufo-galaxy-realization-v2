@@ -5,21 +5,6 @@ Bridges ContinuumState decision output to OS-level actions via
 explicitly enabled via ``enable_system_actions=true`` in ``config.json``.
 """
 
-from core.execution.decision_executor import DecisionExecutor, ExecutionResult, PolicyGate
-from core.execution.intent_profile import (
-    ExecutionIntentProfile,
-    IntentMode,
-    build_execution_intent_profile,
-)
-from core.execution.readiness_gate import (
-    ReadinessStatus,
-    ReadinessResult,
-    BlockedBy,
-    ExecutionReadinessGate,
-    evaluate_readiness,
-    reset_readiness_gate,
-)
-
 # PR-25: Execution Trace Contract
 from contracts.execution_trace import (
     ExecutionTraceEnvelope,
@@ -31,6 +16,20 @@ from contracts.execution_trace import (
     from_execution_result,
     from_fallback_trace,
     from_readiness_result,
+)
+from core.execution.decision_executor import DecisionExecutor, ExecutionResult, PolicyGate
+from core.execution.intent_profile import (
+    ExecutionIntentProfile,
+    IntentMode,
+    build_execution_intent_profile,
+)
+from core.execution.readiness_gate import (
+    BlockedBy,
+    ExecutionReadinessGate,
+    ReadinessResult,
+    ReadinessStatus,
+    evaluate_readiness,
+    reset_readiness_gate,
 )
 
 __all__ = [

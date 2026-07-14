@@ -43,25 +43,24 @@ Test classes
 
 from __future__ import annotations
 
-import sys
 import os
+import sys
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from core.failure_domains import (
-    FailureDomain,
+    DOMAIN_DESCRIPTIONS,
+    FAILURE_DOMAIN_CLOSURE_AUTHORITY,
+    PR_B_FAILURE_DOMAINS,
     FailureClassification,
+    FailureDomain,
     classify_from_error_code,
     classify_from_exception,
-    is_retryable_by_domain,
     downgrade_hint_for_domain,
-    DOMAIN_DESCRIPTIONS,
-    PR_B_FAILURE_DOMAINS,
-    FAILURE_DOMAIN_CLOSURE_AUTHORITY,
+    is_retryable_by_domain,
     map_to_pr_b_domain,
 )
-
 
 # ---------------------------------------------------------------------------
 # 1. PR-B failure domain members
@@ -81,9 +80,7 @@ class TestPRBFailureDomainMembers(unittest.TestCase):
 
     def test_all_pr_b_members_present(self) -> None:
         for member_name in self._REQUIRED_PR_B:
-            assert hasattr(FailureDomain, member_name), (
-                f"FailureDomain.{member_name} is missing"
-            )
+            assert hasattr(FailureDomain, member_name), f"FailureDomain.{member_name} is missing"
 
     def test_pr_b_member_values_are_strings(self) -> None:
         for member_name in self._REQUIRED_PR_B:
@@ -131,9 +128,7 @@ class TestPRBFailureDomainsSet(unittest.TestCase):
 
     def test_pr_b_domains_contains_all_expected(self) -> None:
         for domain in self._EXPECTED:
-            assert domain in PR_B_FAILURE_DOMAINS, (
-                f"{domain} not in PR_B_FAILURE_DOMAINS"
-            )
+            assert domain in PR_B_FAILURE_DOMAINS, f"{domain} not in PR_B_FAILURE_DOMAINS"
 
     def test_pr_b_domains_has_exactly_seven(self) -> None:
         assert len(PR_B_FAILURE_DOMAINS) == 7
@@ -176,16 +171,13 @@ class TestMapToPRBDomain(unittest.TestCase):
         for pr13_domain, expected_pr_b in self._PR13_TO_PR_B.items():
             result = map_to_pr_b_domain(pr13_domain)
             assert result == expected_pr_b, (
-                f"map_to_pr_b_domain({pr13_domain!r}) should return "
-                f"{expected_pr_b!r}, got {result!r}"
+                f"map_to_pr_b_domain({pr13_domain!r}) should return " f"{expected_pr_b!r}, got {result!r}"
             )
 
     def test_pr_b_domains_map_to_themselves(self) -> None:
         for domain in PR_B_FAILURE_DOMAINS:
             result = map_to_pr_b_domain(domain)
-            assert result == domain, (
-                f"PR-B domain {domain!r} should map to itself, got {result!r}"
-            )
+            assert result == domain, f"PR-B domain {domain!r} should map to itself, got {result!r}"
 
     def test_unknown_failure_maps_to_unknown(self) -> None:
         result = map_to_pr_b_domain(FailureDomain.UNKNOWN_FAILURE)
@@ -200,16 +192,12 @@ class TestMapToPRBDomain(unittest.TestCase):
 class TestPRBDomainsInDomainDescriptions(unittest.TestCase):
     def test_all_pr_b_domains_have_descriptions(self) -> None:
         for domain in PR_B_FAILURE_DOMAINS:
-            assert domain in DOMAIN_DESCRIPTIONS, (
-                f"PR-B domain {domain!r} has no entry in DOMAIN_DESCRIPTIONS"
-            )
+            assert domain in DOMAIN_DESCRIPTIONS, f"PR-B domain {domain!r} has no entry in DOMAIN_DESCRIPTIONS"
 
     def test_pr_b_descriptions_are_non_empty(self) -> None:
         for domain in PR_B_FAILURE_DOMAINS:
             desc = DOMAIN_DESCRIPTIONS.get(domain, "")
-            assert desc, (
-                f"PR-B domain {domain!r} has empty description"
-            )
+            assert desc, f"PR-B domain {domain!r} has empty description"
 
 
 # ---------------------------------------------------------------------------
@@ -226,27 +214,17 @@ class TestPRBRetryEligibility(unittest.TestCase):
 
     def test_semantic_failure_retryable_on_alternate_target(self) -> None:
         # Not retryable on same target
-        assert not is_retryable_by_domain(
-            FailureDomain.SEMANTIC_FAILURE, allow_alternate_target=False
-        )
+        assert not is_retryable_by_domain(FailureDomain.SEMANTIC_FAILURE, allow_alternate_target=False)
         # But retryable on alternate target
-        assert is_retryable_by_domain(
-            FailureDomain.SEMANTIC_FAILURE, allow_alternate_target=True
-        )
+        assert is_retryable_by_domain(FailureDomain.SEMANTIC_FAILURE, allow_alternate_target=True)
 
     def test_routing_failure_retryable_on_alternate_target(self) -> None:
-        assert not is_retryable_by_domain(
-            FailureDomain.ROUTING_FAILURE, allow_alternate_target=False
-        )
-        assert is_retryable_by_domain(
-            FailureDomain.ROUTING_FAILURE, allow_alternate_target=True
-        )
+        assert not is_retryable_by_domain(FailureDomain.ROUTING_FAILURE, allow_alternate_target=False)
+        assert is_retryable_by_domain(FailureDomain.ROUTING_FAILURE, allow_alternate_target=True)
 
     def test_policy_failure_not_retryable(self) -> None:
         assert not is_retryable_by_domain(FailureDomain.POLICY_FAILURE)
-        assert not is_retryable_by_domain(
-            FailureDomain.POLICY_FAILURE, allow_alternate_target=True
-        )
+        assert not is_retryable_by_domain(FailureDomain.POLICY_FAILURE, allow_alternate_target=True)
 
     def test_validation_failure_not_retryable(self) -> None:
         assert not is_retryable_by_domain(FailureDomain.VALIDATION_FAILURE)
@@ -321,9 +299,8 @@ class TestClassifyFromExceptionPreservesExisting(unittest.TestCase):
 class TestAllDomainValuesUnique(unittest.TestCase):
     def test_all_values_are_unique(self) -> None:
         values = [d.value for d in FailureDomain]
-        assert len(values) == len(set(values)), (
-            "FailureDomain has duplicate values: "
-            + str([v for v in values if values.count(v) > 1])
+        assert len(values) == len(set(values)), "FailureDomain has duplicate values: " + str(
+            [v for v in values if values.count(v) > 1]
         )
 
     def test_pr_b_values_do_not_overlap_with_pr13_values(self) -> None:
@@ -340,9 +317,7 @@ class TestAllDomainValuesUnique(unittest.TestCase):
         }
         pr_b_values = {d.value for d in PR_B_FAILURE_DOMAINS}
         overlap = pr13_values & pr_b_values
-        assert not overlap, (
-            f"PR-13 and PR-B domain values overlap: {overlap}"
-        )
+        assert not overlap, f"PR-13 and PR-B domain values overlap: {overlap}"
 
 
 if __name__ == "__main__":

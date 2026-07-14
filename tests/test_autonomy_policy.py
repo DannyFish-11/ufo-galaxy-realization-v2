@@ -7,6 +7,7 @@
   - 授权: once 用后即焚 / session 进程期 / always 持久化且可撤销。
   - 执行器集成: 需审批的动作被排队(approval_required),授权后重试通过本门。
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -35,8 +36,7 @@ class TestLevelAndClassification:
         assert ap.autonomy_level() is ap.AutonomyLevel.GUIDED
 
     def test_read_actions(self):
-        for a in ("screenshot", "get_ui_tree", "list_windows", "find_element",
-                  "devices", "status", "locate_on_screen"):
+        for a in ("screenshot", "get_ui_tree", "list_windows", "find_element", "devices", "status", "locate_on_screen"):
             assert ap.is_read_action(a), a
 
     def test_write_actions(self):
@@ -69,7 +69,7 @@ class TestGrants:
         st = ap.get_grant_store()
         st.grant("Node_36_UIAWindows", "click", ap.GrantScope.ONCE)
         assert not ap.evaluate_autonomy("Node_36_UIAWindows", "click").needs_approval  # 消费
-        assert ap.evaluate_autonomy("Node_36_UIAWindows", "click").needs_approval      # 已焚
+        assert ap.evaluate_autonomy("Node_36_UIAWindows", "click").needs_approval  # 已焚
 
     def test_session_persists_within_process(self):
         ap.get_grant_store().grant("Node_36_UIAWindows", "click", ap.GrantScope.SESSION)
@@ -101,6 +101,7 @@ class TestApprovalQueue:
 
     def test_queued_request_visible_in_registry(self):
         from core.control_plane._globals import get_approval_registry
+
         ap.ensure_approval_request("Node_45_DesktopAuto", "type", {})
         pending = [r.action for r in get_approval_registry().list_pending()]
         assert "Node_45_DesktopAuto.type" in pending
@@ -118,8 +119,9 @@ class TestExecutorIntegration:
 
         # 授权"仅此次"后重试:通过自治门(后续在别处失败也不该再是 approval_required)
         ap.get_grant_store().grant("Node_36_UIAWindows", "click", ap.GrantScope.ONCE)
-        retried = asyncio.run(UnifiedNodeExecutor().execute(
-            NodeInvocationEnvelope(node_id="Node_36_UIAWindows", action="click")))
+        retried = asyncio.run(
+            UnifiedNodeExecutor().execute(NodeInvocationEnvelope(node_id="Node_36_UIAWindows", action="click"))
+        )
         assert "approval_required" not in (retried.error or "")
 
     def test_read_action_not_held_in_guided(self):

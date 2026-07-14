@@ -120,9 +120,7 @@ class FormationPolicy:
     barrier_posture: BarrierPosture = BarrierPosture.WAIT_PRIMARY
     multi_device_required: bool = False
     merge_confirmation_required: bool = False
-    minimum_required_device_ids: List[str] = dataclasses.field(
-        default_factory=list
-    )
+    minimum_required_device_ids: List[str] = dataclasses.field(default_factory=list)
     fallback_intent: str = "promote_fallback_device"
     policy_reason: str = "default"
 
@@ -153,12 +151,8 @@ class FormationPolicy:
         return cls(
             barrier_posture=posture,
             multi_device_required=bool(data.get("multi_device_required", False)),
-            merge_confirmation_required=bool(
-                data.get("merge_confirmation_required", False)
-            ),
-            minimum_required_device_ids=list(
-                data.get("minimum_required_device_ids", [])
-            ),
+            merge_confirmation_required=bool(data.get("merge_confirmation_required", False)),
+            minimum_required_device_ids=list(data.get("minimum_required_device_ids", [])),
             fallback_intent=str(data.get("fallback_intent", "promote_fallback_device")),
             policy_reason=str(data.get("policy_reason", "reconstructed from dict")),
         )

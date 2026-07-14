@@ -25,15 +25,16 @@ import sys
 import unittest
 from unittest.mock import MagicMock, patch
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _reset_udm_singleton() -> None:
     """Reset the UnifiedDeviceManager singleton between tests."""
     try:
         from core.unified import device_manager as _dm_mod
+
         _dm_mod.UnifiedDeviceManager._instance = None
     except Exception:
         pass
@@ -43,6 +44,7 @@ def _reset_capability_bus_singleton() -> None:
     """Reset the CapabilityBus singleton between tests."""
     try:
         from core import capability_bus as _cb_mod
+
         _cb_mod.reset_capability_bus()
     except Exception:
         pass
@@ -51,6 +53,7 @@ def _reset_capability_bus_singleton() -> None:
 # ---------------------------------------------------------------------------
 # 1. UDM register → CapabilityBus propagation
 # ---------------------------------------------------------------------------
+
 
 class TestUDMCapabilityBusPropagation(unittest.TestCase):
     """Registering a device via UDM must propagate capabilities to CapabilityBus."""
@@ -65,9 +68,9 @@ class TestUDMCapabilityBusPropagation(unittest.TestCase):
 
     def test_register_device_propagates_capabilities_to_bus(self):
         """Capabilities declared on a device appear in CapabilityBus after registration."""
+        from core.capability_bus import CapabilityBusRole, get_capability_bus
         from core.unified.device_manager import UnifiedDeviceManager
         from core.unified.models import UnifiedDevice, UnifiedDeviceStatus, UnifiedDeviceType
-        from core.capability_bus import get_capability_bus, CapabilityBusRole
 
         udm = UnifiedDeviceManager()
         device = UnifiedDevice(
@@ -126,9 +129,9 @@ class TestUDMCapabilityBusPropagation(unittest.TestCase):
 
     def test_unregister_device_removes_capabilities_from_bus(self):
         """Unregistering a device via UDM must remove its capabilities from CapabilityBus."""
+        from core.capability_bus import CapabilityBusRole, get_capability_bus
         from core.unified.device_manager import UnifiedDeviceManager
         from core.unified.models import UnifiedDevice, UnifiedDeviceStatus, UnifiedDeviceType
-        from core.capability_bus import get_capability_bus, CapabilityBusRole
 
         udm = UnifiedDeviceManager()
         device = UnifiedDevice(
@@ -165,9 +168,9 @@ class TestUDMCapabilityBusPropagation(unittest.TestCase):
 
     def test_reregister_device_updates_capabilities(self):
         """Re-registering a device (dedup) re-propagates capabilities."""
+        from core.capability_bus import CapabilityBusRole, get_capability_bus
         from core.unified.device_manager import UnifiedDeviceManager
         from core.unified.models import UnifiedDevice, UnifiedDeviceStatus, UnifiedDeviceType
-        from core.capability_bus import get_capability_bus, CapabilityBusRole
 
         udm = UnifiedDeviceManager()
         device_v1 = UnifiedDevice(
@@ -203,6 +206,7 @@ class TestUDMCapabilityBusPropagation(unittest.TestCase):
 # 2. DevicePoolManager UDM write-through
 # ---------------------------------------------------------------------------
 
+
 class TestDevicePoolManagerUDMWriteThrough(unittest.TestCase):
     """DevicePoolManager must write to UDM before updating the local pool."""
 
@@ -212,6 +216,7 @@ class TestDevicePoolManagerUDMWriteThrough(unittest.TestCase):
         # Reset pool manager singleton
         try:
             from core import device_pool_manager as _dpm_mod
+
             _dpm_mod.DevicePoolManager._instance = None
         except Exception:
             pass
@@ -221,6 +226,7 @@ class TestDevicePoolManagerUDMWriteThrough(unittest.TestCase):
         _reset_capability_bus_singleton()
         try:
             from core import device_pool_manager as _dpm_mod
+
             _dpm_mod.DevicePoolManager._instance = None
         except Exception:
             pass
@@ -290,6 +296,7 @@ class TestDevicePoolManagerUDMWriteThrough(unittest.TestCase):
 # 3. SSOT helpers — canonical gateway entry point
 # ---------------------------------------------------------------------------
 
+
 class TestSSOTHelpers(unittest.TestCase):
     """galaxy_gateway.ssot helpers are the canonical gateway write entry point."""
 
@@ -314,7 +321,7 @@ class TestSSOTHelpers(unittest.TestCase):
 
     def test_udm_write_heartbeat_succeeds(self):
         """udm_write_heartbeat must return True after successful registration."""
-        from galaxy_gateway.ssot import udm_write_register, udm_write_heartbeat
+        from galaxy_gateway.ssot import udm_write_heartbeat, udm_write_register
 
         udm_write_register(
             device_id="ssot_dev_002",
@@ -343,6 +350,7 @@ class TestSSOTHelpers(unittest.TestCase):
     def test_ssot_docstring_describes_canonical_path(self):
         """ssot module docstring must mention the canonical path chain."""
         from galaxy_gateway import ssot
+
         doc = ssot.__doc__ or ""
         self.assertIn(
             "UnifiedDeviceManager",
@@ -359,6 +367,7 @@ class TestSSOTHelpers(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # 4. Protocol authority — aip_protocol_v2 hard-disabled
 # ---------------------------------------------------------------------------
+
 
 class TestProtocolAuthority(unittest.TestCase):
     """The canonical protocol path is aip_v3; aip_protocol_v2 must be disabled."""
@@ -377,6 +386,7 @@ class TestProtocolAuthority(unittest.TestCase):
     def test_protocol_package_init_documents_canonical_path(self):
         """Protocol package __init__ must document the canonical path."""
         from galaxy_gateway import protocol
+
         doc = protocol.__doc__ or ""
         self.assertIn(
             "aip_v3",
@@ -394,12 +404,14 @@ class TestProtocolAuthority(unittest.TestCase):
 # 5. Capability facade demotion — capability_manager / capability_orchestrator
 # ---------------------------------------------------------------------------
 
+
 class TestCapabilityFacadeDemotion(unittest.TestCase):
     """capability_manager and capability_orchestrator must be marked as legacy facades."""
 
     def test_capability_manager_docstring_has_deprecated_marker(self):
         """CapabilityManager module docstring must contain a deprecation notice."""
         from core import capability_manager
+
         doc = capability_manager.__doc__ or ""
         self.assertIn(
             "deprecated",
@@ -420,6 +432,7 @@ class TestCapabilityFacadeDemotion(unittest.TestCase):
     def test_capability_orchestrator_docstring_has_deprecated_marker(self):
         """CapabilityOrchestrator module docstring must contain a deprecation notice."""
         from core import capability_orchestrator
+
         doc = capability_orchestrator.__doc__ or ""
         self.assertIn(
             "deprecated",
@@ -442,12 +455,14 @@ class TestCapabilityFacadeDemotion(unittest.TestCase):
 # 6. DevicePoolManager architecture role documentation
 # ---------------------------------------------------------------------------
 
+
 class TestDevicePoolManagerArchitectureRole(unittest.TestCase):
     """DevicePoolManager module must document its scheduling-layer role."""
 
     def test_module_docstring_describes_scheduling_layer_role(self):
         """DevicePoolManager module docstring must clarify it's a scheduling layer."""
         from core import device_pool_manager
+
         doc = device_pool_manager.__doc__ or ""
         self.assertIn(
             "UnifiedDeviceManager",
@@ -465,12 +480,14 @@ class TestDevicePoolManagerArchitectureRole(unittest.TestCase):
 # 7. DeviceStatusAPI architecture role documentation
 # ---------------------------------------------------------------------------
 
+
 class TestDeviceStatusAPIArchitectureRole(unittest.TestCase):
     """device_status_api module must document its presentation-layer role."""
 
     def test_module_docstring_describes_presentation_layer_role(self):
         """device_status_api module docstring must clarify it's a presentation layer."""
         from core import device_status_api
+
         doc = device_status_api.__doc__ or ""
         self.assertIn(
             "UnifiedDeviceManager",
@@ -488,10 +505,12 @@ class TestDeviceStatusAPIArchitectureRole(unittest.TestCase):
 # 8. UDM register → CapabilityAssimilationLayer projection (PR-B2)
 # ---------------------------------------------------------------------------
 
+
 def _reset_capability_assimilation_singleton() -> None:
     """Reset the CapabilityAssimilationLayer singleton between tests."""
     try:
         from core.capability_assimilation import reset_capability_assimilation_layer
+
         reset_capability_assimilation_layer()
     except Exception:
         pass
@@ -519,9 +538,9 @@ class TestUDMCapabilityAssimilationIntegration(unittest.TestCase):
 
     def test_register_device_projects_into_assimilation_layer(self):
         """After register_device(), the device must be queryable in CapabilityAssimilationLayer."""
+        from core.capability_assimilation import get_capability_assimilation_layer
         from core.unified.device_manager import UnifiedDeviceManager
         from core.unified.models import UnifiedDevice, UnifiedDeviceStatus, UnifiedDeviceType
-        from core.capability_assimilation import get_capability_assimilation_layer
 
         udm = UnifiedDeviceManager()
         device = UnifiedDevice(
@@ -553,9 +572,9 @@ class TestUDMCapabilityAssimilationIntegration(unittest.TestCase):
 
     def test_register_device_no_capabilities_does_not_raise_assimilation(self):
         """Registering a device with empty capabilities must not raise during assimilation."""
+        from core.capability_assimilation import get_capability_assimilation_layer
         from core.unified.device_manager import UnifiedDeviceManager
         from core.unified.models import UnifiedDevice, UnifiedDeviceStatus, UnifiedDeviceType
-        from core.capability_assimilation import get_capability_assimilation_layer
 
         udm = UnifiedDeviceManager()
         device = UnifiedDevice(
@@ -578,9 +597,9 @@ class TestUDMCapabilityAssimilationIntegration(unittest.TestCase):
 
     def test_upsert_capabilities_triggers_reassimilation(self):
         """upsert_device_state() with new capabilities must update the AssimilationLayer."""
+        from core.capability_assimilation import get_capability_assimilation_layer
         from core.unified.device_manager import UnifiedDeviceManager
         from core.unified.models import UnifiedDevice, UnifiedDeviceStatus, UnifiedDeviceType
-        from core.capability_assimilation import get_capability_assimilation_layer
 
         udm = UnifiedDeviceManager()
         device = UnifiedDevice(
@@ -630,9 +649,10 @@ class TestUDMCapabilityAssimilationIntegration(unittest.TestCase):
 
     def test_upsert_no_capability_change_does_not_change_assimilation(self):
         """upsert_device_state() without capability change must not re-trigger assimilation."""
+        from unittest.mock import patch as mock_patch
+
         from core.unified.device_manager import UnifiedDeviceManager
         from core.unified.models import UnifiedDevice, UnifiedDeviceStatus, UnifiedDeviceType
-        from unittest.mock import patch as mock_patch
 
         udm = UnifiedDeviceManager()
         device = UnifiedDevice(
@@ -646,9 +666,7 @@ class TestUDMCapabilityAssimilationIntegration(unittest.TestCase):
         udm.register_device(device)
 
         # Upsert only status — no capability change; assimilation must NOT be triggered again.
-        with mock_patch.object(
-            udm, "_assimilate_device_to_capability_layer"
-        ) as mock_assimilate:
+        with mock_patch.object(udm, "_assimilate_device_to_capability_layer") as mock_assimilate:
             udm.upsert_device_state(
                 "assim_upsert_noop_001",
                 {"status": "busy"},
@@ -658,9 +676,9 @@ class TestUDMCapabilityAssimilationIntegration(unittest.TestCase):
 
     def test_reregister_device_updates_assimilation_idempotently(self):
         """Re-registering a device must update capabilities in AssimilationLayer."""
+        from core.capability_assimilation import get_capability_assimilation_layer
         from core.unified.device_manager import UnifiedDeviceManager
         from core.unified.models import UnifiedDevice, UnifiedDeviceStatus, UnifiedDeviceType
-        from core.capability_assimilation import get_capability_assimilation_layer
 
         udm = UnifiedDeviceManager()
         device_v1 = UnifiedDevice(

@@ -49,23 +49,22 @@ Test classes
 
 from __future__ import annotations
 
-import sys
 import os
+import sys
 import unittest
 from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from core.target_device_validator import (
-    TargetDeviceValidationResult,
-    CanonicalValidationInput,
-    validate_target_device,
-    validate_target_device_from_canonical,
     TARGET_DEVICE_VALIDATOR_AUTHORITY,
     VALIDATOR_CANONICAL_INPUTS_ONLY,
     VALIDATOR_TRUTH_SOURCE,
+    CanonicalValidationInput,
+    TargetDeviceValidationResult,
+    validate_target_device,
+    validate_target_device_from_canonical,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -111,6 +110,7 @@ class TestValidatorCanonicalInputsSentinel(unittest.TestCase):
 
     def test_sentinels_in_exports(self):
         from core.target_device_validator import __all__ as exports
+
         self.assertIn("VALIDATOR_CANONICAL_INPUTS_ONLY", exports)
         self.assertIn("CanonicalValidationInput", exports)
         self.assertIn("validate_target_device_from_canonical", exports)
@@ -145,15 +145,11 @@ class TestCanonicalValidationInputAdapter(unittest.TestCase):
         self.assertEqual(ci.source_label, "legacy_compat")
 
     def test_from_legacy_with_capabilities(self):
-        ci = CanonicalValidationInput.from_legacy(
-            "dev1", capabilities=["screen", "touch"]
-        )
+        ci = CanonicalValidationInput.from_legacy("dev1", capabilities=["screen", "touch"])
         self.assertEqual(ci.required_capabilities, ["screen", "touch"])
 
     def test_from_legacy_with_orchestration_eligible(self):
-        ci = CanonicalValidationInput.from_legacy(
-            "dev1", orchestration_eligible=True
-        )
+        ci = CanonicalValidationInput.from_legacy("dev1", orchestration_eligible=True)
         self.assertTrue(ci.require_orchestration_eligible)
 
     def test_from_legacy_all_params(self):
@@ -178,8 +174,7 @@ class TestValidateFromCanonicalDelegates(unittest.TestCase):
     def test_returns_target_device_validation_result(self):
         ci = CanonicalValidationInput(device_id="dev1")
         rs = _make_readiness()
-        with patch("core.target_device_validator._check_readiness",
-                   return_value=(True, True, {"readiness": {}}, [])):
+        with patch("core.target_device_validator._check_readiness", return_value=(True, True, {"readiness": {}}, [])):
             result = validate_target_device_from_canonical(ci)
         self.assertIsInstance(result, TargetDeviceValidationResult)
 
@@ -190,16 +185,14 @@ class TestValidateFromCanonicalDelegates(unittest.TestCase):
 
     def test_result_sources_contains_canonical_input_source(self):
         ci = CanonicalValidationInput(device_id="dev1", source_label="test_label")
-        with patch("core.target_device_validator._check_readiness",
-                   return_value=(True, True, {"readiness": {}}, [])):
+        with patch("core.target_device_validator._check_readiness", return_value=(True, True, {"readiness": {}}, [])):
             result = validate_target_device_from_canonical(ci)
         self.assertIn("canonical_input_source", result.sources)
         self.assertEqual(result.sources["canonical_input_source"], "test_label")
 
     def test_legacy_source_label_preserved(self):
         ci = CanonicalValidationInput.from_legacy("dev1", legacy_source="compat_v1")
-        with patch("core.target_device_validator._check_readiness",
-                   return_value=(True, True, {"readiness": {}}, [])):
+        with patch("core.target_device_validator._check_readiness", return_value=(True, True, {"readiness": {}}, [])):
             result = validate_target_device_from_canonical(ci)
         self.assertEqual(result.sources["canonical_input_source"], "compat_v1")
 
@@ -212,10 +205,10 @@ class TestValidateFromCanonicalDelegates(unittest.TestCase):
 class TestValidatorOnlyConsumesCanonicalTruth(unittest.TestCase):
     def test_registered_and_ready_device_is_valid(self):
         """Validator produces valid=True when readiness confirms registered+ready."""
-        with patch("core.target_device_validator._check_readiness",
-                   return_value=(True, True, {"readiness": {}}, [])), \
-             patch("core.target_device_validator._check_capabilities",
-                   return_value=(True, {}, [])):
+        with (
+            patch("core.target_device_validator._check_readiness", return_value=(True, True, {"readiness": {}}, [])),
+            patch("core.target_device_validator._check_capabilities", return_value=(True, {}, [])),
+        ):
             result = validate_target_device("dev1")
         self.assertTrue(result.registered)
         self.assertTrue(result.ready)
@@ -223,16 +216,14 @@ class TestValidatorOnlyConsumesCanonicalTruth(unittest.TestCase):
 
     def test_unregistered_device_is_invalid(self):
         """Validator produces valid=False when readiness says not registered."""
-        with patch("core.target_device_validator._check_readiness",
-                   return_value=(False, False, {}, [])):
+        with patch("core.target_device_validator._check_readiness", return_value=(False, False, {}, [])):
             result = validate_target_device("dev1")
         self.assertFalse(result.registered)
         self.assertFalse(result.valid)
 
     def test_registered_but_not_ready_device_is_invalid(self):
         """Validator produces valid=False when registered but not ready."""
-        with patch("core.target_device_validator._check_readiness",
-                   return_value=(True, False, {"readiness": {}}, [])):
+        with patch("core.target_device_validator._check_readiness", return_value=(True, False, {"readiness": {}}, [])):
             result = validate_target_device("dev1")
         self.assertTrue(result.registered)
         self.assertFalse(result.ready)
@@ -255,10 +246,10 @@ class TestLegacyInputsNormalisedViaAdapter(unittest.TestCase):
         ci_direct = CanonicalValidationInput(device_id="dev1")
         ci_legacy = CanonicalValidationInput.from_legacy("dev1")
 
-        with patch("core.target_device_validator._check_readiness",
-                   return_value=(True, True, {"readiness": {}}, [])), \
-             patch("core.target_device_validator._check_capabilities",
-                   return_value=(True, {}, [])):
+        with (
+            patch("core.target_device_validator._check_readiness", return_value=(True, True, {"readiness": {}}, [])),
+            patch("core.target_device_validator._check_capabilities", return_value=(True, {}, [])),
+        ):
             result_direct = validate_target_device_from_canonical(ci_direct)
             result_legacy = validate_target_device_from_canonical(ci_legacy)
 
@@ -270,10 +261,10 @@ class TestLegacyInputsNormalisedViaAdapter(unittest.TestCase):
         ci_direct = CanonicalValidationInput(device_id="dev1", source_label="canonical")
         ci_legacy = CanonicalValidationInput.from_legacy("dev1", legacy_source="legacy_compat")
 
-        with patch("core.target_device_validator._check_readiness",
-                   return_value=(True, True, {"readiness": {}}, [])), \
-             patch("core.target_device_validator._check_capabilities",
-                   return_value=(True, {}, [])):
+        with (
+            patch("core.target_device_validator._check_readiness", return_value=(True, True, {"readiness": {}}, [])),
+            patch("core.target_device_validator._check_capabilities", return_value=(True, {}, [])),
+        ):
             r1 = validate_target_device_from_canonical(ci_direct)
             r2 = validate_target_device_from_canonical(ci_legacy)
 
@@ -289,10 +280,13 @@ class TestLegacyInputsNormalisedViaAdapter(unittest.TestCase):
 class TestCapabilityCheckViaCanonicalInput(unittest.TestCase):
     def test_canonical_input_with_capabilities_triggers_cap_check(self):
         ci = CanonicalValidationInput(device_id="dev1", required_capabilities=["camera"])
-        with patch("core.target_device_validator._check_readiness",
-                   return_value=(True, True, {}, [])), \
-             patch("core.target_device_validator._check_capabilities",
-                   return_value=(False, {}, ["capability-mismatch:missing=camera"])) as mock_cap:
+        with (
+            patch("core.target_device_validator._check_readiness", return_value=(True, True, {}, [])),
+            patch(
+                "core.target_device_validator._check_capabilities",
+                return_value=(False, {}, ["capability-mismatch:missing=camera"]),
+            ) as mock_cap,
+        ):
             result = validate_target_device_from_canonical(ci)
         # check that capabilities were passed through
         mock_cap.assert_called_once_with("dev1", ["camera"])
@@ -300,10 +294,10 @@ class TestCapabilityCheckViaCanonicalInput(unittest.TestCase):
 
     def test_canonical_input_no_capabilities_skips_cap_check(self):
         ci = CanonicalValidationInput(device_id="dev1")
-        with patch("core.target_device_validator._check_readiness",
-                   return_value=(True, True, {}, [])), \
-             patch("core.target_device_validator._check_capabilities",
-                   return_value=(True, {}, [])) as mock_cap:
+        with (
+            patch("core.target_device_validator._check_readiness", return_value=(True, True, {}, [])),
+            patch("core.target_device_validator._check_capabilities", return_value=(True, {}, [])) as mock_cap,
+        ):
             result = validate_target_device_from_canonical(ci)
         mock_cap.assert_called_once_with("dev1", [])
         self.assertTrue(result.capability_match)

@@ -109,14 +109,10 @@ from typing import Dict, List, Optional
 # Sentinels
 # ---------------------------------------------------------------------------
 
-LONG_TAIL_COMPAT_SURFACE_IS_AUTHORITY: str = (
-    "LONG_TAIL_COMPAT_SURFACE::IS_CANONICAL_AUTHORITY_PR8"
-)
+LONG_TAIL_COMPAT_SURFACE_IS_AUTHORITY: str = "LONG_TAIL_COMPAT_SURFACE::IS_CANONICAL_AUTHORITY_PR8"
 """This module is the canonical authority for long-tail compat path inventory."""
 
-LONG_TAIL_COMPAT_SURFACE_PR8_SENTINEL: str = (
-    "LONG_TAIL_COMPAT_SURFACE::PR8_SENTINEL"
-)
+LONG_TAIL_COMPAT_SURFACE_PR8_SENTINEL: str = "LONG_TAIL_COMPAT_SURFACE::PR8_SENTINEL"
 """Machine-checkable sentinel confirming PR-8 long-tail compat surface wiring."""
 
 GENERIC_FORWARD_IS_TRANSITIONAL_POLICY: str = (
@@ -276,9 +272,7 @@ _LONG_TAIL_CATALOG: List[LongTailPathRecord] = [
         kind=LongTailPathKind.FILE_TRANSFER,
         value_tier=LongTailValueTier.HIGHEST,
         transition_status=LongTailTransitionStatus.CANONICAL,
-        canonical_handler=(
-            "galaxy_gateway.android.handlers.file_transfer.handle_file_transfer"
-        ),
+        canonical_handler=("galaxy_gateway.android.handlers.file_transfer.handle_file_transfer"),
         compat_handler="galaxy_gateway.android.handlers.generic.handle_generic_forward",
         notes=(
             "PR-8: Dedicated stateful handler created.  The handler records"
@@ -294,9 +288,7 @@ _LONG_TAIL_CATALOG: List[LongTailPathRecord] = [
         kind=LongTailPathKind.PEER_EXCHANGE,
         value_tier=LongTailValueTier.HIGHEST,
         transition_status=LongTailTransitionStatus.CANONICAL,
-        canonical_handler=(
-            "galaxy_gateway.android.handlers.peer_exchange.handle_peer_announce"
-        ),
+        canonical_handler=("galaxy_gateway.android.handlers.peer_exchange.handle_peer_announce"),
         compat_handler="galaxy_gateway.android.handlers.generic.handle_generic_forward",
         notes=(
             "PR-8: Dedicated stateful handler created.  Registers the peer in"
@@ -311,9 +303,7 @@ _LONG_TAIL_CATALOG: List[LongTailPathRecord] = [
         kind=LongTailPathKind.PEER_EXCHANGE,
         value_tier=LongTailValueTier.HIGHEST,
         transition_status=LongTailTransitionStatus.CANONICAL,
-        canonical_handler=(
-            "galaxy_gateway.android.handlers.peer_exchange.handle_peer_exchange"
-        ),
+        canonical_handler=("galaxy_gateway.android.handlers.peer_exchange.handle_peer_exchange"),
         compat_handler="galaxy_gateway.android.handlers.generic.handle_generic_forward",
         notes=(
             "PR-8: Dedicated stateful handler created.  Returns the current"
@@ -327,9 +317,7 @@ _LONG_TAIL_CATALOG: List[LongTailPathRecord] = [
         kind=LongTailPathKind.MESH_TOPOLOGY,
         value_tier=LongTailValueTier.HIGHEST,
         transition_status=LongTailTransitionStatus.CANONICAL,
-        canonical_handler=(
-            "galaxy_gateway.android.handlers.mesh_topology.handle_mesh_topology"
-        ),
+        canonical_handler=("galaxy_gateway.android.handlers.mesh_topology.handle_mesh_topology"),
         compat_handler="galaxy_gateway.android.handlers.generic.handle_generic_forward",
         notes=(
             "PR-8: Dedicated stateful handler created.  Returns the full mesh"
@@ -479,9 +467,7 @@ _LONG_TAIL_CATALOG: List[LongTailPathRecord] = [
         kind=LongTailPathKind.MESH_LIFECYCLE,
         value_tier=LongTailValueTier.HIGHEST,
         transition_status=LongTailTransitionStatus.CANONICAL,
-        canonical_handler=(
-            "galaxy_gateway.android.handlers.mesh_lifecycle.handle_mesh_join"
-        ),
+        canonical_handler=("galaxy_gateway.android.handlers.mesh_lifecycle.handle_mesh_join"),
         compat_handler="galaxy_gateway.android.handlers.generic.handle_generic_forward",
         notes=(
             "PR-13: 专用有状态处理器已创建。将 mesh_join 事件落盘至"
@@ -497,9 +483,7 @@ _LONG_TAIL_CATALOG: List[LongTailPathRecord] = [
         kind=LongTailPathKind.MESH_LIFECYCLE,
         value_tier=LongTailValueTier.HIGHEST,
         transition_status=LongTailTransitionStatus.CANONICAL,
-        canonical_handler=(
-            "galaxy_gateway.android.handlers.mesh_lifecycle.handle_mesh_result"
-        ),
+        canonical_handler=("galaxy_gateway.android.handlers.mesh_lifecycle.handle_mesh_result"),
         compat_handler="galaxy_gateway.android.handlers.generic.handle_generic_forward",
         notes=(
             "PR-13: 专用有状态处理器已创建。将 mesh_result 事件（含结果 payload）落盘至"
@@ -513,9 +497,7 @@ _LONG_TAIL_CATALOG: List[LongTailPathRecord] = [
         kind=LongTailPathKind.MESH_LIFECYCLE,
         value_tier=LongTailValueTier.HIGHEST,
         transition_status=LongTailTransitionStatus.CANONICAL,
-        canonical_handler=(
-            "galaxy_gateway.android.handlers.mesh_lifecycle.handle_mesh_leave"
-        ),
+        canonical_handler=("galaxy_gateway.android.handlers.mesh_lifecycle.handle_mesh_leave"),
         compat_handler="galaxy_gateway.android.handlers.generic.handle_generic_forward",
         notes=(
             "PR-13: 专用有状态处理器已创建。将 mesh_leave 事件落盘至"
@@ -528,9 +510,7 @@ _LONG_TAIL_CATALOG: List[LongTailPathRecord] = [
 ]
 
 # Keyed lookup: message_type → record
-_CATALOG_INDEX: Dict[str, LongTailPathRecord] = {
-    r.message_type: r for r in _LONG_TAIL_CATALOG
-}
+_CATALOG_INDEX: Dict[str, LongTailPathRecord] = {r.message_type: r for r in _LONG_TAIL_CATALOG}
 
 
 # ---------------------------------------------------------------------------
@@ -550,11 +530,7 @@ def get_paths_by_tier(tier: LongTailValueTier) -> List[LongTailPathRecord]:
 
 def get_generic_forward_paths() -> List[LongTailPathRecord]:
     """Return all catalog entries still routed through generic-forward."""
-    return [
-        r
-        for r in _LONG_TAIL_CATALOG
-        if r.transition_status == LongTailTransitionStatus.GENERIC_FORWARD
-    ]
+    return [r for r in _LONG_TAIL_CATALOG if r.transition_status == LongTailTransitionStatus.GENERIC_FORWARD]
 
 
 def get_closed_loop_paths() -> List[LongTailPathRecord]:

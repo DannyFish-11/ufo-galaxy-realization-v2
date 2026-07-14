@@ -14,26 +14,28 @@ import asyncio
 import os
 import tempfile
 import time
-
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 
 # =============================================================================
 # 1A: SOUL 人格继承
 # =============================================================================
+
 
 class TestSOULInheritance:
     """子 Agent 继承主控 SOUL（1A）。"""
 
     def _make_factory(self):
         from core.agent_factory import AgentFactory
+
         f = AgentFactory(llm_router=None)
         f.agents.clear()
         return f
 
     def test_agent_config_has_inherited_soul_field(self):
-        from core.agent_factory import AgentConfig, AgentRole, AgentCapability
+        from core.agent_factory import AgentCapability, AgentConfig, AgentRole
+
         cfg = AgentConfig(
             role=AgentRole.EXECUTOR,
             name="test",
@@ -48,6 +50,7 @@ class TestSOULInheritance:
 
     def test_get_effective_soul_combines_fields(self):
         from core.agent_factory import AgentConfig, AgentRole, get_effective_soul
+
         cfg = AgentConfig(
             role=AgentRole.EXECUTOR,
             name="test",
@@ -63,6 +66,7 @@ class TestSOULInheritance:
 
     def test_get_effective_soul_no_soul(self):
         from core.agent_factory import AgentConfig, AgentRole, get_effective_soul
+
         cfg = AgentConfig(
             role=AgentRole.EXECUTOR,
             name="test",
@@ -82,7 +86,8 @@ class TestSOULInheritance:
 
     def test_split_agent_inherits_soul(self):
         """子 Agent 分裂时继承父代的 soul 约束。"""
-        from core.agent_factory import AgentConfig, AgentRole, AgentCapability, TaskAgent, CreationMode, AgentState
+        from core.agent_factory import AgentCapability, AgentConfig, AgentRole, AgentState, CreationMode, TaskAgent
+
         f = self._make_factory()
 
         # 手动创建一个带 soul 的父代 Agent
@@ -95,7 +100,8 @@ class TestSOULInheritance:
             inherited_soul="master soul constraint",
             metadata={"soul_policy": "master soul constraint"},
         )
-        from core.agent_factory import TaskAgent, CreationMode, AgentState
+        from core.agent_factory import AgentState, CreationMode, TaskAgent
+
         parent = TaskAgent(
             id="parent_001",
             config=cfg,
@@ -104,37 +110,40 @@ class TestSOULInheritance:
         parent.task_queue = [{"task": "sub1"}, {"task": "sub2"}]
         f.agents["parent_001"] = parent
 
-        children = asyncio.new_event_loop().run_until_complete(
-            f.split_agent("parent_001", num_children=2)
-        )
+        children = asyncio.new_event_loop().run_until_complete(f.split_agent("parent_001", num_children=2))
         assert len(children) == 2
         for child in children:
             # C阶段 1A: 子代必须继承主控 SOUL
-            assert child.config.inherited_soul == "master soul constraint", \
-                f"Child should inherit master soul, got: {child.config.inherited_soul!r}"
+            assert (
+                child.config.inherited_soul == "master soul constraint"
+            ), f"Child should inherit master soul, got: {child.config.inherited_soul!r}"
 
 
 # =============================================================================
 # 2C: 工具/MCP 调用守护与回滚
 # =============================================================================
 
+
 class TestToolGuardian:
     """工具调用守护: 风险评分 + 拦截 + 重试 + 回滚（2C）。"""
 
     def test_score_safe_tool(self):
-        from core.tool_guardian import score_tool_risk, ToolRiskLevel
+        from core.tool_guardian import ToolRiskLevel, score_tool_risk
+
         result = score_tool_risk("screenshot")
         assert result["level"] == ToolRiskLevel.SAFE
         assert result["score"] < 0.5
 
     def test_score_dangerous_tool(self):
-        from core.tool_guardian import score_tool_risk, ToolRiskLevel
+        from core.tool_guardian import ToolRiskLevel, score_tool_risk
+
         result = score_tool_risk("file_delete")
         assert result["level"] == ToolRiskLevel.DANGEROUS
         assert result["score"] >= 0.7
 
     def test_score_critical_tool(self):
-        from core.tool_guardian import score_tool_risk, ToolRiskLevel
+        from core.tool_guardian import ToolRiskLevel, score_tool_risk
+
         result = score_tool_risk("system_cmd_exec")
         assert result["level"] == ToolRiskLevel.CRITICAL
         assert result["score"] >= 0.9
@@ -142,7 +151,7 @@ class TestToolGuardian:
     @pytest.mark.asyncio
     async def test_passthrough_when_disabled(self):
         """disabled 时直接透传，不影响调用。"""
-        from core.tool_guardian import call_with_guardian, GuardedCallConfig
+        from core.tool_guardian import GuardedCallConfig, call_with_guardian
 
         called = []
 
@@ -162,7 +171,7 @@ class TestToolGuardian:
     @pytest.mark.asyncio
     async def test_blocks_critical_tool(self):
         """风险得分 >= block_score 时抛出 ToolGuardianBlockedError。"""
-        from core.tool_guardian import call_with_guardian, GuardedCallConfig, ToolGuardianBlockedError
+        from core.tool_guardian import GuardedCallConfig, ToolGuardianBlockedError, call_with_guardian
 
         async def critical_fn():
             return {}
@@ -178,7 +187,7 @@ class TestToolGuardian:
     @pytest.mark.asyncio
     async def test_retry_on_failure(self):
         """调用失败时按 max_retries 重试。"""
-        from core.tool_guardian import call_with_guardian, GuardedCallConfig
+        from core.tool_guardian import GuardedCallConfig, call_with_guardian
 
         attempt_counts = [0]
 
@@ -199,7 +208,7 @@ class TestToolGuardian:
     @pytest.mark.asyncio
     async def test_rollback_called_on_final_failure(self):
         """所有重试失败后调用 rollback_fn。"""
-        from core.tool_guardian import call_with_guardian, GuardedCallConfig
+        from core.tool_guardian import GuardedCallConfig, call_with_guardian
 
         rollback_called = []
 
@@ -224,8 +233,9 @@ class TestToolGuardian:
 
     def test_audit_log_records_entries(self):
         """成功调用后审计日志中有记录。"""
-        from core.tool_guardian import call_with_guardian, GuardedCallConfig, get_guardian_audit_log
         import asyncio
+
+        from core.tool_guardian import GuardedCallConfig, call_with_guardian, get_guardian_audit_log
 
         async def ok_fn():
             return "ok"
@@ -245,29 +255,35 @@ class TestToolGuardian:
 # 3B: 协同策略映射表
 # =============================================================================
 
+
 class TestStrategyMappingTable:
     """任务类型 → 执行策略映射表（3B）。"""
 
     def test_mapping_table_exists_and_non_empty(self):
         from core.agent.execution_planner import TASK_TYPE_STRATEGY_MAP
+
         assert isinstance(TASK_TYPE_STRATEGY_MAP, dict)
         assert len(TASK_TYPE_STRATEGY_MAP) > 0
 
     def test_fast_response_maps_to_single(self):
         from core.agent.execution_planner import TASK_TYPE_STRATEGY_MAP
+
         assert TASK_TYPE_STRATEGY_MAP.get("fast_response") == "single"
 
     def test_swarm_maps_to_swarm(self):
         from core.agent.execution_planner import TASK_TYPE_STRATEGY_MAP
+
         assert TASK_TYPE_STRATEGY_MAP.get("swarm") == "swarm"
 
     def test_research_maps_to_specialized(self):
         from core.agent.execution_planner import TASK_TYPE_STRATEGY_MAP
+
         assert TASK_TYPE_STRATEGY_MAP.get("research") == "specialized"
 
     def test_pick_strategy_uses_mapping_first(self):
         """task_type 在映射表中时，_pick_strategy 优先使用映射。"""
         from core.agent.execution_planner import ExecutionPlanner
+
         planner = ExecutionPlanner(llm_router=None)
 
         # fast_response → single，即使 complexity 很高
@@ -277,6 +293,7 @@ class TestStrategyMappingTable:
     def test_pick_strategy_falls_back_when_no_mapping(self):
         """task_type 不在映射表时回退到原有复杂度规则。"""
         from core.agent.execution_planner import ExecutionPlanner
+
         planner = ExecutionPlanner(llm_router=None)
 
         result = planner._pick_strategy("普通消息", complexity=0.3, task_type="unknown_type")
@@ -286,6 +303,7 @@ class TestStrategyMappingTable:
     def test_pick_strategy_keyword_still_works(self):
         """即使 task_type 不在表中，关键词规则依然生效。"""
         from core.agent.execution_planner import ExecutionPlanner
+
         planner = ExecutionPlanner(llm_router=None)
 
         result = planner._pick_strategy("swarm 批量任务处理", complexity=0.3, task_type="")
@@ -296,12 +314,14 @@ class TestStrategyMappingTable:
 # 4B: 任务记忆/长期记忆
 # =============================================================================
 
+
 class TestTaskMemory:
     """任务记忆: 写入/读取/注入 context（4B）。"""
 
     def _make_memory(self):
         """每个测试使用独立的临时目录，避免文件污染。"""
         from core.task_memory import TaskMemory
+
         tmp = tempfile.mkdtemp()
         return TaskMemory(data_dir=tmp)
 
@@ -323,7 +343,9 @@ class TestTaskMemory:
     def test_persistence_to_file(self):
         """记录写入文件，重新加载后可读取。"""
         import json
+
         from core.task_memory import TaskMemory
+
         tmp = tempfile.mkdtemp()
         mem1 = TaskMemory(data_dir=tmp)
         mem1.record_task(task="persistent task", success=True)
@@ -375,11 +397,13 @@ class TestTaskMemory:
 # 5C: 执行链路可视化字段
 # =============================================================================
 
+
 class TestExecutionVisualizationFields:
     """ExecutionResult 包含 total_latency_ms / total_tokens / total_cost_usd（5C）。"""
 
     def test_execution_result_has_new_fields(self):
         from core.agent.execution_planner import ExecutionResult
+
         r = ExecutionResult(success=True, reply="done")
         # 字段存在且默认 None（向后兼容）
         assert hasattr(r, "total_latency_ms")
@@ -391,6 +415,7 @@ class TestExecutionVisualizationFields:
 
     def test_execution_result_can_set_new_fields(self):
         from core.agent.execution_planner import ExecutionResult
+
         r = ExecutionResult(
             success=True,
             reply="done",
@@ -405,6 +430,7 @@ class TestExecutionVisualizationFields:
     def test_execution_result_serializable(self):
         """新字段不破坏 Pydantic model_dump / JSON 序列化。"""
         from core.agent.execution_planner import ExecutionResult
+
         r = ExecutionResult(
             success=True,
             reply="test",
@@ -420,6 +446,7 @@ class TestExecutionVisualizationFields:
     def test_old_fields_still_present(self):
         """现有字段不受影响（向后兼容性）。"""
         from core.agent.execution_planner import ExecutionResult
+
         r = ExecutionResult(
             success=True,
             reply="done",
@@ -436,22 +463,26 @@ class TestExecutionVisualizationFields:
 # 整合：C阶段 API 路由
 # =============================================================================
 
+
 class TestCStageAPIRoutes:
     """C阶段 API 路由基本可加载（2C/3B/4B）。"""
 
     def test_c_stage_router_importable(self):
         from core.routes.c_stage import create_router
+
         router = create_router()
         assert router is not None
 
     def test_strategy_endpoint_path_exists(self):
         from core.routes.c_stage import create_router
+
         router = create_router()
         paths = [r.path for r in router.routes]
         assert "/api/v1/strategy/mappings" in paths
 
     def test_memory_endpoints_exist(self):
         from core.routes.c_stage import create_router
+
         router = create_router()
         paths = [r.path for r in router.routes]
         assert "/api/v1/memory/tasks" in paths
@@ -459,6 +490,7 @@ class TestCStageAPIRoutes:
 
     def test_guardian_audit_endpoint_exists(self):
         from core.routes.c_stage import create_router
+
         router = create_router()
         paths = [r.path for r in router.routes]
         assert "/api/v1/guardian/audit" in paths

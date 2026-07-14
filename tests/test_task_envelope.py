@@ -13,20 +13,18 @@ Covers:
 """
 
 import asyncio
-import pytest
-
 from datetime import datetime, timezone
 
+import pytest
 from pydantic import ValidationError
 
+from core.schemas import TaskEnvelope as TaskEnvelopeFromPackage  # re-export check
 from core.schemas.task_envelope import (
     TaskEnvelope,
     envelope_from_command_request,
-    envelope_from_relay_request,
     envelope_from_mcp_call,
+    envelope_from_relay_request,
 )
-from core.schemas import TaskEnvelope as TaskEnvelopeFromPackage  # re-export check
-
 
 # ============================================================================
 # 1. Schema creation & defaults
@@ -39,14 +37,15 @@ def _bypass_dispatch_gates(monkeypatch):
     能力门与 V3 槽权威(各有专门套件);裸环境两道门会在委派前拒掉目标。
     按 test_pr2_task_envelope_pipeline 的既定钉法放行。"""
     import core.capability_aware_routing_default as card
+
     monkeypatch.setattr(card, "infer_dispatch_capabilities", lambda tool: [])
 
+    import core.canonical_dispatch_slot_authority as _slot_mod
     from core.canonical_dispatch_slot_authority import (
         CanonicalDispatchSlot,
-        CanonicalDispatchSlotStatus,
         CanonicalDispatchSlotsResult,
+        CanonicalDispatchSlotStatus,
     )
-    import core.canonical_dispatch_slot_authority as _slot_mod
 
     def _approve_all(device_ids, execution_mode, **_kw):
         slots = [
@@ -107,8 +106,13 @@ class TestTaskEnvelopeDefaults:
         # log_context 有意扩展了 session_id/permission_level/lifecycle_status
         # (会话关联/权限可见性/生命周期观测)。钉当前完整键集。
         assert set(ctx.keys()) == {
-            "task_id", "trace_id", "source", "tool_name",
-            "session_id", "permission_level", "lifecycle_status",
+            "task_id",
+            "trace_id",
+            "source",
+            "tool_name",
+            "session_id",
+            "permission_level",
+            "lifecycle_status",
         }
 
     def test_re_export_from_package(self):
@@ -120,6 +124,7 @@ class TestTaskEnvelopeDefaults:
 # ============================================================================
 # 2. Field validation
 # ============================================================================
+
 
 class TestTaskEnvelopeValidation:
     def test_priority_lower_bound(self):
@@ -147,6 +152,7 @@ class TestTaskEnvelopeValidation:
 # ============================================================================
 # 3. envelope_from_command_request adapter
 # ============================================================================
+
 
 class TestEnvelopeFromCommandRequest:
     def test_basic_conversion(self):
@@ -196,15 +202,14 @@ class TestEnvelopeFromCommandRequest:
         assert env1.trace_id != env2.trace_id
 
     def test_explicit_trace_id(self):
-        env = envelope_from_command_request(
-            command="c", targets=[], params={}, trace_id="my-trace"
-        )
+        env = envelope_from_command_request(command="c", targets=[], params={}, trace_id="my-trace")
         assert env.trace_id == "my-trace"
 
 
 # ============================================================================
 # 4. envelope_from_relay_request adapter
 # ============================================================================
+
 
 class TestEnvelopeFromRelayRequest:
     def test_source_and_target(self):
@@ -243,8 +248,11 @@ class TestEnvelopeFromRelayRequest:
 
     def test_timeout_propagated(self):
         env = envelope_from_relay_request(
-            source_device="A", target_device="B",
-            payload_type="t", payload={}, timeout_seconds=45.0,
+            source_device="A",
+            target_device="B",
+            payload_type="t",
+            payload={},
+            timeout_seconds=45.0,
         )
         assert env.timeout == 45.0
 
@@ -252,6 +260,7 @@ class TestEnvelopeFromRelayRequest:
 # ============================================================================
 # 5. envelope_from_mcp_call adapter
 # ============================================================================
+
 
 class TestEnvelopeFromMcpCall:
     def test_basic_mcp_call(self):
@@ -266,14 +275,14 @@ class TestEnvelopeFromMcpCall:
         assert env.metadata["mcp_server"] == "my-mcp"
 
     def test_source_default(self):
-        env = envelope_from_mcp_call(
-            server_name="srv", tool_name="t", arguments={}
-        )
+        env = envelope_from_mcp_call(server_name="srv", tool_name="t", arguments={})
         assert env.source == "api"
 
     def test_custom_trace_id(self):
         env = envelope_from_mcp_call(
-            server_name="srv", tool_name="t", arguments={},
+            server_name="srv",
+            tool_name="t",
+            arguments={},
             trace_id="trace-custom",
         )
         assert env.trace_id == "trace-custom"
@@ -283,16 +292,19 @@ class TestEnvelopeFromMcpCall:
 # 6 & 7. CommandRouter integration
 # ============================================================================
 
+
 class TestCommandRouterEnvelopeIntegration:
     """CommandRouter.route_command and route_envelope with a mock executor."""
 
     def _make_router(self, executor):
         from core.command_router import CommandRouter
+
         return CommandRouter(executor=executor)
 
     @pytest.mark.asyncio
     async def test_route_command_without_trace_id(self):
         """Backward compat: trace_id is auto-generated when omitted."""
+
         async def mock_executor(target, command, params):
             return {"done": True}
 
@@ -351,7 +363,7 @@ class TestCommandRouterEnvelopeIntegration:
             task_id="bad-task",
             trace_id="bad-trace",
             source="test",
-            targets=[],   # no targets → empty device_id
+            targets=[],  # no targets → empty device_id
             tool_name="ping",
         )
         result = await router.route_envelope(envelope)

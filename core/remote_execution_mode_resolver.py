@@ -109,8 +109,7 @@ class ModeResolutionResult(BaseModel):
     failure_domain: Optional[str] = Field(
         default=None,
         description=(
-            "PR-13: Canonical failure domain when a fallback was required. "
-            "None for non-fallback resolutions."
+            "PR-13: Canonical failure domain when a fallback was required. " "None for non-fallback resolutions."
         ),
     )
 
@@ -123,6 +122,7 @@ class ModeResolutionResult(BaseModel):
         on ``core.schemas``, preserving testability in isolation.
         """
         from core.schemas.remote_execution import RemoteExecutionMode
+
         return RemoteExecutionMode(self.mode)
 
 
@@ -319,8 +319,7 @@ class RemoteExecutionModeResolver:
 
         # Rule 5: conservative fallback
         logger.warning(
-            "RemoteExecutionModeResolver: insufficient profile data for device=%s — "
-            "defaulting to %s",
+            "RemoteExecutionModeResolver: insufficient profile data for device=%s — " "defaulting to %s",
             device_id,
             self.default_mode,
         )
@@ -330,10 +329,7 @@ class RemoteExecutionModeResolver:
             profile_class=profile_class,
             device_id=device_id,
             failure_domain="remote_capability_mismatch",
-            notes=(
-                "Profile has no supported modes and no preferred mode; "
-                "using conservative fallback."
-            ),
+            notes=("Profile has no supported modes and no preferred mode; " "using conservative fallback."),
         )
 
     # ------------------------------------------------------------------
@@ -362,17 +358,19 @@ class RemoteExecutionModeResolver:
         take_screenshot, etc.) are always routed via command_only regardless
         of the device's richer capabilities.
         """
-        _COMMAND_INTENTS = frozenset({
-            "device_control",
-            "take_screenshot",
-            "screenshot",
-            "click",
-            "swipe",
-            "keypress",
-            "type_text",
-            "send_command",
-            "gateway_command",
-        })
+        _COMMAND_INTENTS = frozenset(
+            {
+                "device_control",
+                "take_screenshot",
+                "screenshot",
+                "click",
+                "swipe",
+                "keypress",
+                "type_text",
+                "send_command",
+                "gateway_command",
+            }
+        )
         return task_intent.lower() in _COMMAND_INTENTS
 
 

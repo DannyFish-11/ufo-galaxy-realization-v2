@@ -27,14 +27,15 @@ def _bypass_dispatch_gates(monkeypatch):
     套件);裸环境两道门会在 handle_agent_task 之前拒掉目标设备,导致透传断言
     落空(基线红根因)。按 test_pr2_task_envelope_pipeline 的既定钉法放行。"""
     import core.capability_aware_routing_default as card
+
     monkeypatch.setattr(card, "infer_dispatch_capabilities", lambda tool: [])
 
+    import core.canonical_dispatch_slot_authority as _slot_mod
     from core.canonical_dispatch_slot_authority import (
         CanonicalDispatchSlot,
-        CanonicalDispatchSlotStatus,
         CanonicalDispatchSlotsResult,
+        CanonicalDispatchSlotStatus,
     )
-    import core.canonical_dispatch_slot_authority as _slot_mod
 
     def _approve_all(device_ids, execution_mode, **_kw):
         slots = [
@@ -67,14 +68,21 @@ if str(PROJECT_ROOT) not in sys.path:
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def mock_llm_router():
     router = MagicMock()
     router.is_available = MagicMock(return_value=False)
-    router.chat = AsyncMock(return_value=MagicMock(
-        content="task result", provider="mock", model="mock",
-        latency_ms=5.0, input_tokens=5, output_tokens=10,
-    ))
+    router.chat = AsyncMock(
+        return_value=MagicMock(
+            content="task result",
+            provider="mock",
+            model="mock",
+            latency_ms=5.0,
+            input_tokens=5,
+            output_tokens=10,
+        )
+    )
     router._compute_complexity_vector = MagicMock(return_value=MagicMock(weighted_score=0.2))
     return router
 
@@ -82,6 +90,7 @@ def mock_llm_router():
 # ---------------------------------------------------------------------------
 # Test 1: trace continuity
 # ---------------------------------------------------------------------------
+
 
 class TestTraceContinuity:
     """Loop B-1: every dispatch path carries trace_id, task_id, device_id."""
@@ -91,18 +100,20 @@ class TestTraceContinuity:
         """OpenClawd.process() must return a non-empty trace_id in every response."""
         with patch("core.openclawd.get_openclawd") as mock_get:
             mock_instance = MagicMock()
-            mock_instance.process = AsyncMock(return_value={
-                "success": True,
-                "response": "ok",
-                "intent": "chat",
-                "trace_id": "test_trace_abc123",
-                "metadata": {
+            mock_instance.process = AsyncMock(
+                return_value={
+                    "success": True,
+                    "response": "ok",
+                    "intent": "chat",
                     "trace_id": "test_trace_abc123",
-                    "task_id": "",
-                    "session_id": "test_session",
-                    "device_id": "windows_client",
-                },
-            })
+                    "metadata": {
+                        "trace_id": "test_trace_abc123",
+                        "task_id": "",
+                        "session_id": "test_session",
+                        "device_id": "windows_client",
+                    },
+                }
+            )
             mock_get.return_value = mock_instance
 
             clawd = mock_get()
@@ -120,9 +131,8 @@ class TestTraceContinuity:
     @pytest.mark.asyncio
     async def test_handle_agent_task_returns_task_id(self, mock_llm_router):
         """handle_agent_task must include task_id in returned metadata."""
-        import core.multi_llm_router  # ensure module is importable before patching
         import core.agent_factory
-
+        import core.multi_llm_router  # ensure module is importable before patching
         from core.openclawd import OpenClawd
 
         clawd = OpenClawd.__new__(OpenClawd)
@@ -144,8 +154,10 @@ class TestTraceContinuity:
 
         clawd.handle_chat = fake_handle_chat
 
-        with patch("core.agent_factory.get_agent_factory") as mock_factory_fn, \
-             patch("core.multi_llm_router.get_llm_router") as mock_llm_fn:
+        with (
+            patch("core.agent_factory.get_agent_factory") as mock_factory_fn,
+            patch("core.multi_llm_router.get_llm_router") as mock_llm_fn,
+        ):
             mock_llm_fn.return_value = mock_llm_router
             mock_factory = MagicMock()
             mock_agent = MagicMock()
@@ -154,10 +166,12 @@ class TestTraceContinuity:
             mock_agent.config.role = MagicMock()
             mock_agent.config.role.value = "analyst"
             mock_factory.create_from_template = MagicMock(return_value=mock_agent)
-            mock_factory.execute_agent_task = AsyncMock(return_value={
-                "status": "success",
-                "results": [{"output": "test output"}],
-            })
+            mock_factory.execute_agent_task = AsyncMock(
+                return_value={
+                    "status": "success",
+                    "results": [{"output": "test output"}],
+                }
+            )
             mock_factory.terminate_agent = MagicMock()
             mock_factory_fn.return_value = mock_factory
 
@@ -217,8 +231,9 @@ class TestTraceContinuity:
             trace_id=trace_id,
         )
 
-        assert received_kwargs.get("trace_id") == trace_id, \
-            f"trace_id not forwarded to handle_agent_task: {received_kwargs}"
+        assert (
+            received_kwargs.get("trace_id") == trace_id
+        ), f"trace_id not forwarded to handle_agent_task: {received_kwargs}"
         assert received_kwargs.get("device_id") == "local_dev_x"
         assert received_kwargs.get("session_id") == "sess_x"
 
@@ -226,6 +241,7 @@ class TestTraceContinuity:
 # ---------------------------------------------------------------------------
 # Test 2: backflow persistence
 # ---------------------------------------------------------------------------
+
 
 class TestBackflowPersistence:
     """Loop B-2: task results are persisted via memory backflow and retrievable."""
@@ -276,9 +292,8 @@ class TestBackflowPersistence:
     @pytest.mark.asyncio
     async def test_handle_agent_task_calls_backflow_on_success(self, mock_llm_router):
         """handle_agent_task must call store_task_result after successful execution."""
-        import core.multi_llm_router  # ensure module is importable before patching
         import core.agent_factory
-
+        import core.multi_llm_router  # ensure module is importable before patching
         from core.openclawd import OpenClawd
 
         clawd = OpenClawd.__new__(OpenClawd)
@@ -295,10 +310,11 @@ class TestBackflowPersistence:
         async def mock_store_task_result(**kwargs):
             backflow_calls.append(kwargs)
 
-        with patch("core.agent_factory.get_agent_factory") as mock_factory_fn, \
-             patch("core.multi_llm_router.get_llm_router") as mock_llm_fn, \
-             patch("core.openclawd_memory_backflow.store_task_result",
-                   side_effect=mock_store_task_result):
+        with (
+            patch("core.agent_factory.get_agent_factory") as mock_factory_fn,
+            patch("core.multi_llm_router.get_llm_router") as mock_llm_fn,
+            patch("core.openclawd_memory_backflow.store_task_result", side_effect=mock_store_task_result),
+        ):
 
             mock_llm_fn.return_value = mock_llm_router
             mock_factory = MagicMock()
@@ -308,10 +324,12 @@ class TestBackflowPersistence:
             mock_agent.config.role = MagicMock()
             mock_agent.config.role.value = "analyst"
             mock_factory.create_from_template = MagicMock(return_value=mock_agent)
-            mock_factory.execute_agent_task = AsyncMock(return_value={
-                "status": "success",
-                "results": [{"output": "done"}],
-            })
+            mock_factory.execute_agent_task = AsyncMock(
+                return_value={
+                    "status": "success",
+                    "results": [{"output": "done"}],
+                }
+            )
             mock_factory.terminate_agent = MagicMock()
             mock_factory_fn.return_value = mock_factory
 
@@ -340,14 +358,15 @@ class TestBackflowPersistence:
 # Test 3: failure semantics
 # ---------------------------------------------------------------------------
 
+
 class TestFailureSemantics:
     """Loop B-3: structured errors on timeout / disconnect / unsupported capability."""
 
     @pytest.mark.asyncio
     async def test_execution_planner_timeout_returns_structured_error(self):
         """ExecutionPlanner must return structured ExecutionResult on timeout."""
-        from core.agent.execution_planner import ExecutionPlanner, ExecutionPlan
-        from core.agent.intent_router import IntentResult, IntentMode
+        from core.agent.execution_planner import ExecutionPlan, ExecutionPlanner
+        from core.agent.intent_router import IntentMode, IntentResult
 
         planner = ExecutionPlanner(llm_router=None)
 
@@ -371,8 +390,8 @@ class TestFailureSemantics:
     @pytest.mark.asyncio
     async def test_execution_planner_exception_returns_structured_error(self):
         """ExecutionPlanner must return structured ExecutionResult on generic exception."""
-        from core.agent.execution_planner import ExecutionPlanner, ExecutionPlan
-        from core.agent.intent_router import IntentResult, IntentMode
+        from core.agent.execution_planner import ExecutionPlan, ExecutionPlanner
+        from core.agent.intent_router import IntentMode, IntentResult
 
         planner = ExecutionPlanner(llm_router=None)
 
@@ -398,13 +417,15 @@ class TestFailureSemantics:
         with patch("core.openclawd.get_openclawd") as mock_get:
             mock_instance = MagicMock()
             trace = uuid.uuid4().hex
-            mock_instance.process = AsyncMock(return_value={
-                "success": False,
-                "response": "处理请求时发生错误: forced error",
-                "intent": "error",
-                "trace_id": trace,
-                "metadata": {"trace_id": trace, "error": "forced error"},
-            })
+            mock_instance.process = AsyncMock(
+                return_value={
+                    "success": False,
+                    "response": "处理请求时发生错误: forced error",
+                    "intent": "error",
+                    "trace_id": trace,
+                    "metadata": {"trace_id": trace, "error": "forced error"},
+                }
+            )
             mock_get.return_value = mock_instance
 
             clawd = mock_get()

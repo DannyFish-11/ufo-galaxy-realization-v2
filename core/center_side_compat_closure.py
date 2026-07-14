@@ -615,8 +615,7 @@ _COMPAT_GAP_CATALOG: List[CompatGapRecord] = [
         status=CompatClosureStatus.FENCED,
         fence_kind=CompatFenceKind.sentinel_guard,
         canonical_replacement=(
-            "core.projection_surface_bridge.ProjectionSurfaceBridge "
-            "(enrich_runtime_projection())"
+            "core.projection_surface_bridge.ProjectionSurfaceBridge " "(enrich_runtime_projection())"
         ),
         retirement_condition=(
             "Retire ProjectionEngine from independent projection assembly when "
@@ -648,10 +647,7 @@ _COMPAT_GAP_CATALOG: List[CompatGapRecord] = [
         severity="LOW",
         domain=CompatGapDomain.rest_endpoint,
         module_path="core.routes.compat",
-        surface_name=(
-            "Android REST compat aliases "
-            "(POST /api/devices/register, GET /api/devices/list)"
-        ),
+        surface_name=("Android REST compat aliases " "(POST /api/devices/register, GET /api/devices/list)"),
         status=CompatClosureStatus.FENCED,
         fence_kind=CompatFenceKind.deprecation_warning,
         canonical_replacement="core.routes.devices (/api/v1/devices/*)",
@@ -690,9 +686,7 @@ _COMPAT_GAP_CATALOG: List[CompatGapRecord] = [
         surface_name="/ws/ufo3/{device_id} (legacy UFO3 WebSocket path)",
         status=CompatClosureStatus.FENCED,
         fence_kind=CompatFenceKind.env_var_gate,
-        canonical_replacement=(
-            "/ws/device/{device_id} (AIP v3, canonical device ingress)"
-        ),
+        canonical_replacement=("/ws/device/{device_id} (AIP v3, canonical device ingress)"),
         retirement_condition=(
             "Remove /ws/ufo3 route registration from websocket.py when no "
             "active client is confirmed using this path and GALAXY_ENABLE_LEGACY_PROTOCOLS "
@@ -934,8 +928,7 @@ def assert_canonical_path_preferred(
     )
     if context and result.verdict != FenceVerdict.CANONICAL_PREFERRED:
         logger.warning(
-            "CENTER_SIDE_COMPAT_CLOSURE assert_canonical_path_preferred "
-            "[%s] context=%r verdict=%s",
+            "CENTER_SIDE_COMPAT_CLOSURE assert_canonical_path_preferred " "[%s] context=%r verdict=%s",
             gap_id,
             context,
             result.verdict.value,
@@ -964,9 +957,7 @@ def build_compat_closure_snapshot() -> CompatClosureSnapshot:
     retired_gaps = [r for r in catalog if r.status == CompatClosureStatus.RETIRED]
     tombstoned_gaps = [r for r in catalog if r.status == CompatClosureStatus.TOMBSTONED]
 
-    high_or_medium_open = [
-        r for r in open_gaps if r.severity in ("CRITICAL", "HIGH", "MEDIUM")
-    ]
+    high_or_medium_open = [r for r in open_gaps if r.severity in ("CRITICAL", "HIGH", "MEDIUM")]
 
     cross_repo_ready = len(open_gaps) == 0
 

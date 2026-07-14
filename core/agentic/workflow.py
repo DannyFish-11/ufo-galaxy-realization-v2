@@ -41,6 +41,7 @@ SessionT = Any
 
 # ─────────────────────────── Session I/O 契约 ───────────────────────────
 
+
 def read_task(session: SessionT) -> str:
     """从 Session 取本次要处理的任务文本（pending_task 优先，否则最后一条 user 消息）。"""
     try:
@@ -100,8 +101,7 @@ def coerce_text(result: Any) -> str:
         except Exception:  # noqa: BLE001
             src = result
     if isinstance(src, dict):
-        for k in ("synthesized", "result", "output", "text", "response",
-                  "content", "answer", "analysis", "summary"):
+        for k in ("synthesized", "result", "output", "text", "response", "content", "answer", "analysis", "summary"):
             v = src.get(k)
             if isinstance(v, str) and v.strip():
                 return v
@@ -131,7 +131,8 @@ async def write_result(
     返回同一个 Session 对象（便于链式）。
     """
     try:
-        from core.session_manager import get_session_manager, EvidenceKind
+        from core.session_manager import EvidenceKind, get_session_manager
+
         sm = get_session_manager()
         if structured is not None:
             try:
@@ -142,14 +143,17 @@ async def write_result(
                 pass
         if emit_message and text:
             await sm.add_message(
-                getattr(session, "id", ""), "assistant", text,
+                getattr(session, "id", ""),
+                "assistant",
+                text,
                 metadata={"actor": actor},
             )
         # 工作流步骤证据（与 message chunk 互补：记录哪层变换、结构化结果）
         sm.record_evidence(
-            getattr(session, "id", ""), EvidenceKind.NOTE, actor=f"workflow:{actor}",
-            payload={"event": "forward", "text": (text or "")[:500],
-                     "structured": _jsonable(structured)},
+            getattr(session, "id", ""),
+            EvidenceKind.NOTE,
+            actor=f"workflow:{actor}",
+            payload={"event": "forward", "text": (text or "")[:500], "structured": _jsonable(structured)},
         )
     except Exception as exc:  # noqa: BLE001
         logger.debug("write_result 失败(已忽略): %s", exc)
@@ -157,6 +161,7 @@ async def write_result(
 
 
 # ─────────────────────────── Workflow 契约 ───────────────────────────
+
 
 class Workflow(ABC):
     """一层 Session→Session 变换。子类只需实现 ``forward``。
@@ -211,66 +216,86 @@ class Agent(Workflow):
             result = await self._invoke(task)
         except Exception as exc:  # noqa: BLE001 —— 单层失败也要落证据、不崩整条链
             logger.warning("Agent[%s] 执行失败: %s", self.name, exc)
-            await write_result(session, text=f"[{self.name} 失败] {exc}",
-                               actor=self.name, structured={"error": str(exc)})
+            await write_result(
+                session, text=f"[{self.name} 失败] {exc}", actor=self.name, structured={"error": str(exc)}
+            )
             return session
-        await write_result(session, text=coerce_text(result),
-                           actor=self.name, structured=result)
+        await write_result(session, text=coerce_text(result), actor=self.name, structured=result)
         return session
 
 
 # ── 三个真实形状的构造器（在 invoke 闭包里接线，Phase B/C 用） ──
 
-def from_task_agent(factory: Any, agent_id: str, *,
-                    name: str = "", description: str = "") -> Agent:
+
+def from_task_agent(factory: Any, agent_id: str, *, name: str = "", description: str = "") -> Agent:
     """单 agent：``factory.execute_agent_task(agent_id, {"task": task})``。"""
+
     async def _invoke(task: str) -> Any:
-        return await factory.execute_agent_task(
-            agent_id, {"task": task, "description": task})
+        return await factory.execute_agent_task(agent_id, {"task": task, "description": task})
+
     return Agent(_invoke, name=name or f"agent:{agent_id}", description=description)
 
 
-def from_team(team_manager: Any, strategy: Any = "specialized", *,
-              member_count: int = 3, providers: Optional[List[str]] = None,
-              name: str = "team", description: str = "") -> Agent:
+def from_team(
+    team_manager: Any,
+    strategy: Any = "specialized",
+    *,
+    member_count: int = 3,
+    providers: Optional[List[str]] = None,
+    name: str = "team",
+    description: str = "",
+) -> Agent:
     """团队（一站式）：``team_manager.execute_team_task(task, strategy, ...)``。"""
+
     async def _invoke(task: str) -> Any:
-        return await team_manager.execute_team_task(
-            task, strategy, member_count=member_count, providers=providers)
+        return await team_manager.execute_team_task(task, strategy, member_count=member_count, providers=providers)
+
     return Agent(_invoke, name=name, description=description)
 
 
-def from_fractal(fractal: Any, *, name: str = "fractal",
-                 description: str = "") -> Agent:
+def from_fractal(fractal: Any, *, name: str = "fractal", description: str = "") -> Agent:
     """分形 agent：``fractal.execute(FractalTask(...))``。"""
+
     async def _invoke(task: str) -> Any:
-        from core.fractal_agent import FractalTask
         import uuid as _uuid
-        return await fractal.execute(
-            FractalTask(id=f"ft_{_uuid.uuid4().hex[:8]}", description=task))
+
+        from core.fractal_agent import FractalTask
+
+        return await fractal.execute(FractalTask(id=f"ft_{_uuid.uuid4().hex[:8]}", description=task))
+
     return Agent(_invoke, name=name, description=description)
 
 
-def from_fractal_executor(executor: Any, *, name: str = "fractal",
-                          description: str = "递归分解复杂任务并并行执行") -> Agent:
+def from_fractal_executor(
+    executor: Any, *, name: str = "fractal", description: str = "递归分解复杂任务并并行执行"
+) -> Agent:
     """分形执行器（系统级入口）：``executor.run(task, context)``。"""
+
     async def _invoke(task: str) -> Any:
         return await executor.run(task, {})
+
     return Agent(_invoke, name=name, description=description)
 
 
-def from_team_manager(manager: Any, strategy: Any = "specialized", *,
-                      member_count: int = 3, providers: Optional[List[str]] = None,
-                      name: str = "team",
-                      description: str = "多专家协作完成任务") -> Agent:
+def from_team_manager(
+    manager: Any,
+    strategy: Any = "specialized",
+    *,
+    member_count: int = 3,
+    providers: Optional[List[str]] = None,
+    name: str = "team",
+    description: str = "多专家协作完成任务",
+) -> Agent:
     """团队（一站式）：``manager.execute_team_task(task, strategy, ...)``。"""
+
     async def _invoke(task: str) -> Any:
-        return await manager.execute_team_task(
-            task, strategy, member_count=member_count, providers=providers)
+        return await manager.execute_team_task(task, strategy, member_count=member_count, providers=providers)
+
     return Agent(_invoke, name=name, description=description)
 
 
 # ─────────────────────────── 组合子（本身也是 Workflow） ───────────────────────────
+
 
 class Sequential(Workflow):
     """串联：前一层的 session 喂下一层（≈ nn.Sequential）。"""
@@ -299,18 +324,19 @@ class Parallel(Workflow):
     无 SessionManager（如纯对象测试）时退化为「不 fork、各分支直接跑」。
     """
 
-    def __init__(self, branches: Sequence[Workflow], *,
-                 merge: MergeStrategy = "collect", name: str = "parallel") -> None:
+    def __init__(
+        self, branches: Sequence[Workflow], *, merge: MergeStrategy = "collect", name: str = "parallel"
+    ) -> None:
         self.branches = list(branches)
         self.merge = merge
         self.name = name
-        self.description = "run branches in parallel: " + ", ".join(
-            b.name for b in self.branches)
+        self.description = "run branches in parallel: " + ", ".join(b.name for b in self.branches)
 
     async def forward(self, session: SessionT) -> SessionT:
         sm = None
         try:
             from core.session_manager import get_session_manager
+
             sm = get_session_manager()
         except Exception:  # noqa: BLE001
             sm = None
@@ -321,8 +347,7 @@ class Parallel(Workflow):
             for b in self.branches:
                 child = None
                 try:
-                    child = await sm.fork_session(
-                        session.id, branch_label=f"parallel:{b.name}")
+                    child = await sm.fork_session(session.id, branch_label=f"parallel:{b.name}")
                 except Exception as exc:  # noqa: BLE001
                     logger.debug("Parallel fork 失败，回退共享会话: %s", exc)
                 children.append(child if child is not None else session)
@@ -354,15 +379,16 @@ class Parallel(Workflow):
             merged = self.merge(session, branch_results)
         elif self.merge == "first_success":
             merged = next(
-                (br for br in branch_results
-                 if not (isinstance(br.get("result"), dict)
-                         and br["result"].get("error")) and "error" not in br),
+                (
+                    br
+                    for br in branch_results
+                    if not (isinstance(br.get("result"), dict) and br["result"].get("error")) and "error" not in br
+                ),
                 branch_results[0] if branch_results else {},
             )
         else:  # "collect"
             merged = {"parallel_results": branch_results}
-        await write_result(session, text=coerce_text(merged),
-                           actor=self.name, structured=merged)
+        await write_result(session, text=coerce_text(merged), actor=self.name, structured=merged)
         return session
 
 
@@ -379,14 +405,14 @@ class Selector(Workflow):
     （core.canonical_dispatch_slot_authority / openclawd 执行路径决策）。
     """
 
-    def __init__(self, select_fn: SelectFn, choices: Sequence[Workflow], *,
-                 max_steps: int = 8, name: str = "selector") -> None:
+    def __init__(
+        self, select_fn: SelectFn, choices: Sequence[Workflow], *, max_steps: int = 8, name: str = "selector"
+    ) -> None:
         self.select_fn = select_fn
         self.choices = list(choices)
         self.max_steps = max_steps
         self.name = name
-        self.description = "dynamically route among: " + ", ".join(
-            f"{c.name}({c.description})" for c in self.choices)
+        self.description = "dynamically route among: " + ", ".join(f"{c.name}({c.description})" for c in self.choices)
 
     async def forward(self, session: SessionT) -> SessionT:
         for _ in range(self.max_steps):
@@ -404,6 +430,7 @@ class Selector(Workflow):
 
 # ─────────────────────────── 运行入口（Phase B/C 用） ───────────────────────────
 
+
 class WorkflowRunner:
     """便捷入口：确保会话存在、设置任务、forward、返回会话。
 
@@ -413,12 +440,12 @@ class WorkflowRunner:
     def __init__(self, workflow: Workflow) -> None:
         self.workflow = workflow
 
-    async def run(self, session_id: str, task: str, *,
-                  user_id: str = "", device_id: str = "") -> SessionT:
+    async def run(self, session_id: str, task: str, *, user_id: str = "", device_id: str = "") -> SessionT:
         from core.session_manager import get_session_manager
+
         sm = get_session_manager()
         session = await sm.ensure_session(
-            session_id, user_id=user_id or f"device::{device_id or 'default'}",
-            device_id=device_id)
+            session_id, user_id=user_id or f"device::{device_id or 'default'}", device_id=device_id
+        )
         set_task(session, task)
         return await self.workflow.forward(session)

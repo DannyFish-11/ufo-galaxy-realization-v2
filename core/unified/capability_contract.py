@@ -162,9 +162,7 @@ def normalize_capability_provider_metadata(
         CapabilityProviderType.AUTONOMOUS.value: CapabilityExecutionSurfaceType.AUTONOMOUS_RUNTIME.value,
     }
     provider_type = provider_type_map.get(src_raw, CapabilityProviderType.UNKNOWN.value)
-    execution_surface = execution_surface_map.get(
-        provider_type, CapabilityExecutionSurfaceType.UNKNOWN.value
-    )
+    execution_surface = execution_surface_map.get(provider_type, CapabilityExecutionSurfaceType.UNKNOWN.value)
 
     if src_raw in ("mcp", "skill"):
         capability_kind = CapabilityKind.TOOL.value
@@ -359,9 +357,7 @@ class CapabilityContractError(ValueError):
     def __init__(self, violations: List[str], name: str = "") -> None:
         self.violations = violations
         self.capability_name = name
-        super().__init__(
-            f"CapabilityContract '{name}' invalid: {violations}"
-        )
+        super().__init__(f"CapabilityContract '{name}' invalid: {violations}")
 
 
 def validate_capability_contract(contract: CapabilityContract) -> None:
@@ -385,29 +381,21 @@ def validate_capability_contract(contract: CapabilityContract) -> None:
     params = contract.parameters
     if params:
         if not isinstance(params, dict):
-            violations.append(
-                f"'parameters' must be a dict (JSON Schema object), got {type(params).__name__}"
-            )
+            violations.append(f"'parameters' must be a dict (JSON Schema object), got {type(params).__name__}")
         else:
             ptype = params.get("type")
             if ptype is not None and not isinstance(ptype, str):
-                violations.append(
-                    "'parameters.type' must be a string when present"
-                )
+                violations.append("'parameters.type' must be a string when present")
             props = params.get("properties")
             if props is not None and not isinstance(props, dict):
-                violations.append(
-                    "'parameters.properties' must be a dict when present"
-                )
+                violations.append("'parameters.properties' must be a dict when present")
 
     # 3. Source enum
     if isinstance(contract.source, str):
         try:
             CapabilitySource(contract.source)
         except ValueError:
-            violations.append(
-                f"'source' value '{contract.source}' is not a valid CapabilitySource"
-            )
+            violations.append(f"'source' value '{contract.source}' is not a valid CapabilitySource")
 
     # 4. Capability-plane provider metadata
     provider_meta = (contract.metadata or {}).get("capability_provider", {})
@@ -422,9 +410,7 @@ def validate_capability_contract(contract: CapabilityContract) -> None:
         )
         for field_name in required_provider_fields:
             if not provider_meta.get(field_name):
-                violations.append(
-                    f"'metadata.capability_provider.{field_name}' must be non-empty"
-                )
+                violations.append(f"'metadata.capability_provider.{field_name}' must be non-empty")
 
     boundary_meta = (contract.metadata or {}).get("capability_plane_boundary", {})
     if not isinstance(boundary_meta, dict):

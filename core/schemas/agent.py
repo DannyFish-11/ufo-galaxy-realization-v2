@@ -13,14 +13,15 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
-
 # ───────── Agent CRUD ─────────
+
 
 class AgentPermissions(BaseModel):
     """Agent 能力权限开关
 
     对应 MCP/Skill 四大能力类别，默认全部关闭以最小化权限。
     """
+
     filesystem: bool = Field(default=False, description="允许读写本地文件系统")
     terminal: bool = Field(default=False, description="允许执行终端/Shell 命令")
     network: bool = Field(default=False, description="允许访问外部网络（HTTP/API）")
@@ -78,13 +79,15 @@ class AgentResponseSchema(BaseModel):
 
 # ───────── Team Manifest (异构团队清单) ─────────
 
+
 class TeamStrategyEnum(str, Enum):
     """团队协作策略"""
-    PARALLEL = "parallel"       # Perplexity 风格 — 同一任务多 LLM 并行
+
+    PARALLEL = "parallel"  # Perplexity 风格 — 同一任务多 LLM 并行
     SPECIALIZED = "specialized"  # 特种部队 — 子任务分解，各匹配最优 Agent+LLM
-    SWARM = "swarm"             # 群体智能 — 批量同类 Agent 投票/合并
-    CRITIC = "critic"           # 做/审分离 — executor(本地小模型)产出，critic(开源大模型)审核可打回
-    PIPELINE = "pipeline"       # 流水线 — A→B→C 顺序交接，前一步产出为后一步输入
+    SWARM = "swarm"  # 群体智能 — 批量同类 Agent 投票/合并
+    CRITIC = "critic"  # 做/审分离 — executor(本地小模型)产出，critic(开源大模型)审核可打回
+    PIPELINE = "pipeline"  # 流水线 — A→B→C 顺序交接，前一步产出为后一步输入
 
 
 class TeamMemberSchema(BaseModel):
@@ -126,15 +129,20 @@ class TeamManifestSchema(BaseModel):
     )
     task: str = Field(..., min_length=1, description="原始任务描述")
     members: List[TeamMemberSchema] = Field(
-        ..., min_length=1,
+        ...,
+        min_length=1,
         description="团队成员列表 (至少 1 人)",
     )
     complexity_score: float = Field(
-        default=0.5, ge=0, le=1,
+        default=0.5,
+        ge=0,
+        le=1,
         description="任务复杂度评分 — 影响团队规模和模型等级",
     )
     max_iterations: int = Field(
-        default=8, ge=1, le=20,
+        default=8,
+        ge=1,
+        le=20,
         description="每个成员的 ReAct 循环最大迭代次数",
     )
     synthesis_provider: Optional[str] = Field(
@@ -204,6 +212,7 @@ class TeamResultSchema(BaseModel):
 
 
 # ───────── Twin / Swarm (保持兼容) ─────────
+
 
 class TwinCreateSchema(BaseModel):
     """Twin（双子协作）创建请求"""

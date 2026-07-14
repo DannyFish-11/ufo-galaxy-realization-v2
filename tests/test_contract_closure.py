@@ -43,28 +43,27 @@ Test classes
 from __future__ import annotations
 
 import json
-import sys
 import os
+import sys
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from core.contract_closure import (
-    INTERNAL_CONTRACT_CLOSURE_AUTHORITY,
+    CANONICAL_ADAPTER_REGISTRY,
     CONTRACT_CLOSURE_LAYER_POSITION,
     CONTRACT_CLOSURE_VERSION,
+    EDGE_ADAPTER_BOUNDARY,
+    INTERNAL_CANONICAL_BOUNDARY,
+    INTERNAL_CONTRACT_CLOSURE_AUTHORITY,
     INTERNAL_DISPATCH_CONTRACT,
     INTERNAL_RESULT_CONTRACT,
     PUBLIC_API_BOUNDARY,
-    EDGE_ADAPTER_BOUNDARY,
-    INTERNAL_CANONICAL_BOUNDARY,
-    CANONICAL_ADAPTER_REGISTRY,
+    describe_contract_closure,
+    get_contract_boundary,
     is_canonical_dispatch_contract,
     is_canonical_result_contract,
-    get_contract_boundary,
-    describe_contract_closure,
 )
-
 
 # ---------------------------------------------------------------------------
 # 1. Sentinels
@@ -157,16 +156,12 @@ class TestCanonicalAdapterRegistry(unittest.TestCase):
 
     def test_all_required_adapters_present(self) -> None:
         for name in self._REQUIRED_ADAPTERS:
-            assert name in CANONICAL_ADAPTER_REGISTRY, (
-                f"Expected adapter {name!r} in CANONICAL_ADAPTER_REGISTRY"
-            )
+            assert name in CANONICAL_ADAPTER_REGISTRY, f"Expected adapter {name!r} in CANONICAL_ADAPTER_REGISTRY"
 
     def test_each_entry_has_required_keys(self) -> None:
         for name, entry in CANONICAL_ADAPTER_REGISTRY.items():
             for key in ("module", "produces", "boundary", "description"):
-                assert key in entry, (
-                    f"Adapter {name!r} is missing key {key!r}"
-                )
+                assert key in entry, f"Adapter {name!r} is missing key {key!r}"
 
     def test_dispatch_adapters_produce_task_envelope(self) -> None:
         dispatch_adapters = {
@@ -179,9 +174,7 @@ class TestCanonicalAdapterRegistry(unittest.TestCase):
         }
         for name in dispatch_adapters:
             entry = CANONICAL_ADAPTER_REGISTRY[name]
-            assert "TaskEnvelope" in entry["produces"], (
-                f"Adapter {name!r} should produce TaskEnvelope"
-            )
+            assert "TaskEnvelope" in entry["produces"], f"Adapter {name!r} should produce TaskEnvelope"
 
     def test_result_adapter_produces_result_envelope(self) -> None:
         entry = CANONICAL_ADAPTER_REGISTRY["normalize_to_result_envelope"]
@@ -189,9 +182,7 @@ class TestCanonicalAdapterRegistry(unittest.TestCase):
 
     def test_all_adapters_at_edge_boundary(self) -> None:
         for name, entry in CANONICAL_ADAPTER_REGISTRY.items():
-            assert entry["boundary"] == EDGE_ADAPTER_BOUNDARY, (
-                f"Adapter {name!r} should be at EDGE_ADAPTER_BOUNDARY"
-            )
+            assert entry["boundary"] == EDGE_ADAPTER_BOUNDARY, f"Adapter {name!r} should be at EDGE_ADAPTER_BOUNDARY"
 
 
 # ---------------------------------------------------------------------------
@@ -267,16 +258,12 @@ class TestGetContractBoundary(unittest.TestCase):
     def test_public_keywords(self) -> None:
         for hint in ("public", "api", "external", "PUBLIC", "API"):
             result = get_contract_boundary(hint)
-            assert result == PUBLIC_API_BOUNDARY, (
-                f"hint={hint!r} expected PUBLIC_API_BOUNDARY, got {result!r}"
-            )
+            assert result == PUBLIC_API_BOUNDARY, f"hint={hint!r} expected PUBLIC_API_BOUNDARY, got {result!r}"
 
     def test_edge_keywords(self) -> None:
         for hint in ("edge", "adapter", "acl", "gateway", "EDGE", "ADAPTER"):
             result = get_contract_boundary(hint)
-            assert result == EDGE_ADAPTER_BOUNDARY, (
-                f"hint={hint!r} expected EDGE_ADAPTER_BOUNDARY, got {result!r}"
-            )
+            assert result == EDGE_ADAPTER_BOUNDARY, f"hint={hint!r} expected EDGE_ADAPTER_BOUNDARY, got {result!r}"
 
     def test_internal_keywords(self) -> None:
         for hint in ("internal", "canonical", "spine", "INTERNAL"):

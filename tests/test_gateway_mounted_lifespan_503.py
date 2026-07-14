@@ -28,30 +28,31 @@ from fastapi import HTTPException
 
 class _Req:
     """最小请求替身:dependencies 只读 request.app.state。"""
+
     def __init__(self, app):
         self.app = app
 
 
 @pytest.mark.asyncio
 async def test_required_deps_503_before_init_and_resolve_after():
+    # 用一个干净的 state,确保"init 前"确实是未就绪态(其它测试可能已 init 过全局 app)。
+    from starlette.datastructures import State
+
     from galaxy_gateway.app import app as gw
     from galaxy_gateway.bootstrap.lifecycle import init_gateway_core_services
     from galaxy_gateway.dependencies import (
         get_device_manager,
         get_message_handler,
-        get_websocket_manager,
-        get_task_orchestrator,
         get_nats_adapter,
+        get_task_orchestrator,
+        get_websocket_manager,
     )
 
-    # 用一个干净的 state,确保"init 前"确实是未就绪态(其它测试可能已 init 过全局 app)。
-    from starlette.datastructures import State
     gw.state = State()
     req = _Req(gw)
 
     # BEFORE：required 依赖必须 503。
-    for getter in (get_device_manager, get_message_handler,
-                   get_websocket_manager, get_task_orchestrator):
+    for getter in (get_device_manager, get_message_handler, get_websocket_manager, get_task_orchestrator):
         with pytest.raises(HTTPException) as ei:
             getter(req)
         assert ei.value.status_code == 503, f"{getter.__name__} 未按预期 503"
@@ -73,6 +74,7 @@ async def test_required_deps_503_before_init_and_resolve_after():
     finally:
         # 干净收尾(与 core/startup 的 shutdown 钩子一致)。
         import contextlib
+
         with contextlib.suppress(Exception):
             await to.stop()
         with contextlib.suppress(Exception):
@@ -82,11 +84,12 @@ async def test_required_deps_503_before_init_and_resolve_after():
 @pytest.mark.asyncio
 async def test_init_also_updates_legacy_module_globals():
     """旧 import 路径(from galaxy_gateway.app import websocket_manager)也要被填上。"""
+    from starlette.datastructures import State
+
+    import galaxy_gateway.app as gw_app
     from galaxy_gateway.app import app as gw
     from galaxy_gateway.bootstrap.lifecycle import init_gateway_core_services
-    import galaxy_gateway.app as gw_app
 
-    from starlette.datastructures import State
     gw.state = State()
 
     dm, mh, wsm, to = await init_gateway_core_services(gw)
@@ -96,6 +99,7 @@ async def test_init_also_updates_legacy_module_globals():
         assert gw_app.task_orchestrator is to
     finally:
         import contextlib
+
         with contextlib.suppress(Exception):
             await to.stop()
         with contextlib.suppress(Exception):

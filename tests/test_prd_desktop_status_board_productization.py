@@ -63,13 +63,15 @@ if _REPO_ROOT not in sys.path:
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _minimal_path_and_validation():
     """Return a minimal (path, validation) pair that passes V2 side."""
     from core.operational_registration_path import (
-        OperationalRegistrationPath,
         OnboardingValidation,
+        OperationalRegistrationPath,
         ValidationStatus,
     )
+
     path = OperationalRegistrationPath()
     validation = OnboardingValidation(
         overall_status=ValidationStatus.PASS,
@@ -158,8 +160,10 @@ def _contract_dict(
 # Group A: ContractDecision.lifecycle_stage field
 # ---------------------------------------------------------------------------
 
+
 def test_A1_contract_decision_has_lifecycle_stage_field():
     from core.v2_unified_state_contract import ContractDecision
+
     d = ContractDecision(
         decision_id="test",
         label="Test",
@@ -172,6 +176,7 @@ def test_A1_contract_decision_has_lifecycle_stage_field():
 
 def test_A2_contract_decision_to_dict_includes_lifecycle_stage():
     from core.v2_unified_state_contract import ContractDecision
+
     d = ContractDecision(
         decision_id="test",
         label="Test",
@@ -186,6 +191,7 @@ def test_A2_contract_decision_to_dict_includes_lifecycle_stage():
 
 def test_A3_contract_decision_to_dict_omits_lifecycle_stage_when_none():
     from core.v2_unified_state_contract import ContractDecision
+
     d = ContractDecision(
         decision_id="test",
         label="Test",
@@ -200,8 +206,10 @@ def test_A3_contract_decision_to_dict_omits_lifecycle_stage_when_none():
 # Group B: Contract version bump
 # ---------------------------------------------------------------------------
 
+
 def test_B4_v2_unified_state_contract_version_is_1_2_0():
     from core.v2_unified_state_contract import V2_UNIFIED_STATE_CONTRACT_VERSION
+
     # PR-1 bumped the contract to 1.3.0 to reflect the addition of the
     # android_network_participation derived_state decision and the
     # participation_evidence parameter.
@@ -215,193 +223,182 @@ def test_B4_v2_unified_state_contract_version_is_1_2_0():
 # Group C: New derived_state categories
 # ---------------------------------------------------------------------------
 
+
 def test_C5_contract_has_gateway_bridge_presence_in_derived_state():
     c = _build_minimal_contract()
-    assert "gateway_bridge_presence" in c.derived_state, (
-        "derived_state missing gateway_bridge_presence"
-    )
+    assert "gateway_bridge_presence" in c.derived_state, "derived_state missing gateway_bridge_presence"
 
 
 def test_C6_gateway_bridge_presence_not_applicable_without_android():
     c = _build_minimal_contract()
     d = c.derived_state["gateway_bridge_presence"]
-    assert d.state == "not_applicable", (
-        f"Expected not_applicable without Android, got '{d.state}'"
-    )
+    assert d.state == "not_applicable", f"Expected not_applicable without Android, got '{d.state}'"
 
 
 def test_C7_gateway_bridge_presence_present_with_android_attached():
     c = _build_minimal_contract(android_device_count=1, snapshot_count=1)
     d = c.derived_state["gateway_bridge_presence"]
-    assert d.state in ("present", "degraded"), (
-        f"Expected present or degraded with Android attached, got '{d.state}'"
-    )
+    assert d.state in ("present", "degraded"), f"Expected present or degraded with Android attached, got '{d.state}'"
 
 
 def test_C8_contract_has_runtime_host_dispatch_binding_in_derived_state():
     c = _build_minimal_contract()
-    assert "runtime_host_dispatch_binding" in c.derived_state, (
-        "derived_state missing runtime_host_dispatch_binding"
-    )
+    assert "runtime_host_dispatch_binding" in c.derived_state, "derived_state missing runtime_host_dispatch_binding"
 
 
 def test_C9_runtime_host_dispatch_not_applicable_without_android():
     c = _build_minimal_contract()
     d = c.derived_state["runtime_host_dispatch_binding"]
-    assert d.state == "not_applicable", (
-        f"Expected not_applicable without Android, got '{d.state}'"
-    )
+    assert d.state == "not_applicable", f"Expected not_applicable without Android, got '{d.state}'"
 
 
 def test_C10_contract_has_participant_device_session_dependencies_in_derived_state():
     c = _build_minimal_contract()
-    assert "participant_device_session_dependencies" in c.derived_state, (
-        "derived_state missing participant_device_session_dependencies"
-    )
+    assert (
+        "participant_device_session_dependencies" in c.derived_state
+    ), "derived_state missing participant_device_session_dependencies"
 
 
 def test_C11_participant_device_session_not_applicable_without_android():
     c = _build_minimal_contract()
     d = c.derived_state["participant_device_session_dependencies"]
-    assert d.state == "not_applicable", (
-        f"Expected not_applicable without Android, got '{d.state}'"
-    )
+    assert d.state == "not_applicable", f"Expected not_applicable without Android, got '{d.state}'"
 
 
 def test_C12_task_execution_visibility_in_closure_quality_state():
     c = _build_minimal_contract()
-    assert "task_execution_visibility" in c.closure_quality_state, (
-        "closure_quality_state missing task_execution_visibility"
-    )
+    assert (
+        "task_execution_visibility" in c.closure_quality_state
+    ), "closure_quality_state missing task_execution_visibility"
 
 
 def test_C13_task_execution_not_applicable_without_android():
     c = _build_minimal_contract()
     d = c.closure_quality_state["task_execution_visibility"]
-    assert d.state == "not_applicable", (
-        f"Expected not_applicable without Android, got '{d.state}'"
-    )
+    assert d.state == "not_applicable", f"Expected not_applicable without Android, got '{d.state}'"
 
 
 # ---------------------------------------------------------------------------
 # Group D: Lifecycle stage on existing and new categories
 # ---------------------------------------------------------------------------
 
+
 def test_D14_registration_state_has_lifecycle_stage_observation():
     c = _build_minimal_contract()
     d = c.derived_state["registration_state"]
-    assert d.lifecycle_stage == "observation", (
-        f"registration_state lifecycle_stage should be 'observation', got '{d.lifecycle_stage}'"
-    )
+    assert (
+        d.lifecycle_stage == "observation"
+    ), f"registration_state lifecycle_stage should be 'observation', got '{d.lifecycle_stage}'"
 
 
 def test_D15_capability_visibility_has_lifecycle_stage_observation():
     c = _build_minimal_contract()
     d = c.derived_state["capability_visibility"]
-    assert d.lifecycle_stage == "observation", (
-        f"capability_visibility lifecycle_stage should be 'observation', got '{d.lifecycle_stage}'"
-    )
+    assert (
+        d.lifecycle_stage == "observation"
+    ), f"capability_visibility lifecycle_stage should be 'observation', got '{d.lifecycle_stage}'"
 
 
 def test_D16_gateway_bridge_presence_has_lifecycle_stage_observation():
     c = _build_minimal_contract()
     d = c.derived_state["gateway_bridge_presence"]
-    assert d.lifecycle_stage == "observation", (
-        f"gateway_bridge_presence lifecycle_stage should be 'observation', got '{d.lifecycle_stage}'"
-    )
+    assert (
+        d.lifecycle_stage == "observation"
+    ), f"gateway_bridge_presence lifecycle_stage should be 'observation', got '{d.lifecycle_stage}'"
 
 
 def test_D17_operational_readiness_has_lifecycle_stage_admission():
     c = _build_minimal_contract()
     d = c.derived_state["operational_readiness"]
-    assert d.lifecycle_stage == "admission", (
-        f"operational_readiness lifecycle_stage should be 'admission', got '{d.lifecycle_stage}'"
-    )
+    assert (
+        d.lifecycle_stage == "admission"
+    ), f"operational_readiness lifecycle_stage should be 'admission', got '{d.lifecycle_stage}'"
 
 
 def test_D18_main_chain_availability_has_lifecycle_stage_admission():
     c = _build_minimal_contract()
     d = c.derived_state["main_chain_availability"]
-    assert d.lifecycle_stage == "admission", (
-        f"main_chain_availability lifecycle_stage should be 'admission', got '{d.lifecycle_stage}'"
-    )
+    assert (
+        d.lifecycle_stage == "admission"
+    ), f"main_chain_availability lifecycle_stage should be 'admission', got '{d.lifecycle_stage}'"
 
 
 def test_D19_active_path_has_lifecycle_stage_readiness():
     c = _build_minimal_contract()
     d = c.derived_state["active_path"]
-    assert d.lifecycle_stage == "readiness", (
-        f"active_path lifecycle_stage should be 'readiness', got '{d.lifecycle_stage}'"
-    )
+    assert (
+        d.lifecycle_stage == "readiness"
+    ), f"active_path lifecycle_stage should be 'readiness', got '{d.lifecycle_stage}'"
 
 
 def test_D20_recovery_active_state_has_lifecycle_stage_readiness():
     c = _build_minimal_contract()
     d = c.derived_state["recovery_active_state"]
-    assert d.lifecycle_stage == "readiness", (
-        f"recovery_active_state lifecycle_stage should be 'readiness', got '{d.lifecycle_stage}'"
-    )
+    assert (
+        d.lifecycle_stage == "readiness"
+    ), f"recovery_active_state lifecycle_stage should be 'readiness', got '{d.lifecycle_stage}'"
 
 
 def test_D21_session_continuity_has_lifecycle_stage_readiness():
     c = _build_minimal_contract()
     d = c.derived_state["session_continuity"]
-    assert d.lifecycle_stage == "readiness", (
-        f"session_continuity lifecycle_stage should be 'readiness', got '{d.lifecycle_stage}'"
-    )
+    assert (
+        d.lifecycle_stage == "readiness"
+    ), f"session_continuity lifecycle_stage should be 'readiness', got '{d.lifecycle_stage}'"
 
 
 def test_D22_participant_device_session_has_lifecycle_stage_readiness():
     c = _build_minimal_contract()
     d = c.derived_state["participant_device_session_dependencies"]
-    assert d.lifecycle_stage == "readiness", (
-        f"participant_device_session_dependencies lifecycle_stage should be 'readiness', got '{d.lifecycle_stage}'"
-    )
+    assert (
+        d.lifecycle_stage == "readiness"
+    ), f"participant_device_session_dependencies lifecycle_stage should be 'readiness', got '{d.lifecycle_stage}'"
 
 
 def test_D23_runtime_host_dispatch_has_lifecycle_stage_eligibility():
     c = _build_minimal_contract()
     d = c.derived_state["runtime_host_dispatch_binding"]
-    assert d.lifecycle_stage == "eligibility", (
-        f"runtime_host_dispatch_binding lifecycle_stage should be 'eligibility', got '{d.lifecycle_stage}'"
-    )
+    assert (
+        d.lifecycle_stage == "eligibility"
+    ), f"runtime_host_dispatch_binding lifecycle_stage should be 'eligibility', got '{d.lifecycle_stage}'"
 
 
 def test_D24_task_initiation_has_lifecycle_stage_eligibility():
     c = _build_minimal_contract()
     d = c.eligibility_state["task_initiation"]
-    assert d.lifecycle_stage == "eligibility", (
-        f"task_initiation lifecycle_stage should be 'eligibility', got '{d.lifecycle_stage}'"
-    )
+    assert (
+        d.lifecycle_stage == "eligibility"
+    ), f"task_initiation lifecycle_stage should be 'eligibility', got '{d.lifecycle_stage}'"
 
 
 def test_D25_task_execution_visibility_has_lifecycle_stage_execution():
     c = _build_minimal_contract()
     d = c.closure_quality_state["task_execution_visibility"]
-    assert d.lifecycle_stage == "execution", (
-        f"task_execution_visibility lifecycle_stage should be 'execution', got '{d.lifecycle_stage}'"
-    )
+    assert (
+        d.lifecycle_stage == "execution"
+    ), f"task_execution_visibility lifecycle_stage should be 'execution', got '{d.lifecycle_stage}'"
 
 
 def test_D26_result_closure_has_lifecycle_stage_closure():
     c = _build_minimal_contract()
     d = c.closure_quality_state["result_closure"]
-    assert d.lifecycle_stage == "closure", (
-        f"result_closure lifecycle_stage should be 'closure', got '{d.lifecycle_stage}'"
-    )
+    assert (
+        d.lifecycle_stage == "closure"
+    ), f"result_closure lifecycle_stage should be 'closure', got '{d.lifecycle_stage}'"
 
 
 def test_D27_blocked_state_has_lifecycle_stage_conditions():
     c = _build_minimal_contract()
     d = c.closure_quality_state["blocked_state"]
-    assert d.lifecycle_stage == "conditions", (
-        f"blocked_state lifecycle_stage should be 'conditions', got '{d.lifecycle_stage}'"
-    )
+    assert (
+        d.lifecycle_stage == "conditions"
+    ), f"blocked_state lifecycle_stage should be 'conditions', got '{d.lifecycle_stage}'"
 
 
 # ---------------------------------------------------------------------------
 # Group E: Source-of-truth boundary classification
 # ---------------------------------------------------------------------------
+
 
 def test_E28_registration_state_boundary_is_v2_authoritative():
     c = _build_minimal_contract()
@@ -410,9 +407,7 @@ def test_E28_registration_state_boundary_is_v2_authoritative():
     sources = d_dict.get("sources") or []
     # registration_state should have no android source → v2_authoritative
     has_android = any("android" in s.lower() for s in sources)
-    assert not has_android, (
-        f"registration_state should be V2-authoritative (no android source), got sources={sources}"
-    )
+    assert not has_android, f"registration_state should be V2-authoritative (no android source), got sources={sources}"
 
 
 def test_E29_capability_visibility_boundary_includes_android_origin():
@@ -421,17 +416,17 @@ def test_E29_capability_visibility_boundary_includes_android_origin():
     d_dict = d.to_dict()
     sources = d_dict.get("sources") or []
     has_android = any("android" in s.lower() for s in sources)
-    assert has_android, (
-        f"capability_visibility should have android source, got sources={sources}"
-    )
+    assert has_android, f"capability_visibility should have android source, got sources={sources}"
 
 
 # ---------------------------------------------------------------------------
 # Group F: Projection-layer board assembly
 # ---------------------------------------------------------------------------
 
+
 def test_F30_empty_operational_state_board_has_lifecycle_stage_index():
     import importlib
+
     routes_mod = importlib.import_module("core.routes.projection")
     empty_fn = getattr(routes_mod, "_empty_operational_state_board", None)
     assert empty_fn is not None
@@ -447,6 +442,7 @@ def test_F30_empty_operational_state_board_has_lifecycle_stage_index():
 
 def test_F31_build_operational_state_board_includes_new_categories():
     import importlib
+
     routes_mod = importlib.import_module("core.routes.projection")
     build_fn = getattr(routes_mod, "_build_operational_state_board_from_contract", None)
     assert build_fn is not None
@@ -455,24 +451,26 @@ def test_F31_build_operational_state_board_includes_new_categories():
     category_ids = {item["category_id"] for item in board["categories"]}
     assert "gateway_bridge_presence" in category_ids, "board missing gateway_bridge_presence"
     assert "runtime_host_dispatch_binding" in category_ids, "board missing runtime_host_dispatch_binding"
-    assert "participant_device_session_dependencies" in category_ids, "board missing participant_device_session_dependencies"
+    assert (
+        "participant_device_session_dependencies" in category_ids
+    ), "board missing participant_device_session_dependencies"
     assert "task_execution_visibility" in category_ids, "board missing task_execution_visibility"
 
 
 def test_F32_board_categories_include_lifecycle_stage_field():
     import importlib
+
     routes_mod = importlib.import_module("core.routes.projection")
     build_fn = getattr(routes_mod, "_build_operational_state_board_from_contract", None)
     c = _build_minimal_contract()
     board = build_fn(c.to_dict())
     for item in board["categories"]:
-        assert "lifecycle_stage" in item, (
-            f"category '{item.get('category_id')}' missing lifecycle_stage field"
-        )
+        assert "lifecycle_stage" in item, f"category '{item.get('category_id')}' missing lifecycle_stage field"
 
 
 def test_F33_board_lifecycle_stage_index_populated():
     import importlib
+
     routes_mod = importlib.import_module("core.routes.projection")
     build_fn = getattr(routes_mod, "_build_operational_state_board_from_contract", None)
     c = _build_minimal_contract()
@@ -488,6 +486,7 @@ def test_F33_board_lifecycle_stage_index_populated():
 
 def test_F34_assemble_desktop_board_includes_new_categories():
     import importlib
+
     routes_mod = importlib.import_module("core.routes.projection")
     assemble_fn = getattr(routes_mod, "_assemble_desktop_status_board_payload", None)
     assert assemble_fn is not None
@@ -496,9 +495,9 @@ def test_F34_assemble_desktop_board_includes_new_categories():
     category_ids = {item.get("category_id") for item in (board.get("categories") or [])}
     assert "gateway_bridge_presence" in category_ids, "assembled board missing gateway_bridge_presence"
     assert "runtime_host_dispatch_binding" in category_ids, "assembled board missing runtime_host_dispatch_binding"
-    assert "participant_device_session_dependencies" in category_ids, (
-        "assembled board missing participant_device_session_dependencies"
-    )
+    assert (
+        "participant_device_session_dependencies" in category_ids
+    ), "assembled board missing participant_device_session_dependencies"
     assert "task_execution_visibility" in category_ids, "assembled board missing task_execution_visibility"
 
 
@@ -508,9 +507,7 @@ def test_F34b_board_exposes_pr5_problem_solving_and_hotspot_surfaces():
     routes_mod = importlib.import_module("core.routes.projection")
     assemble_fn = getattr(routes_mod, "_assemble_desktop_status_board_payload", None)
     assert assemble_fn is not None
-    payload = assemble_fn(
-        route_paths={"/api/v1/health", "/api/v1/chat", "/api/v1/projection/runtime"}
-    )
+    payload = assemble_fn(route_paths={"/api/v1/health", "/api/v1/chat", "/api/v1/projection/runtime"})
     board = payload.get("operational_state_board") or {}
     chain = board.get("problem_solving_chain") or {}
     hotspots = board.get("operational_hotspots") or {}
@@ -524,9 +521,11 @@ def test_F34b_board_exposes_pr5_problem_solving_and_hotspot_surfaces():
 # Group G: OperationalStateSurface renderer
 # ---------------------------------------------------------------------------
 
+
 def _make_board_with_categories() -> Dict[str, Any]:
     """Return a minimal projection dict with a populated operational_state_board."""
     import importlib
+
     routes_mod = importlib.import_module("core.routes.projection")
     build_fn = getattr(routes_mod, "_build_operational_state_board_from_contract")
     c = _build_minimal_contract()
@@ -536,6 +535,7 @@ def _make_board_with_categories() -> Dict[str, Any]:
 
 def test_G35_operational_state_surface_renders_without_error():
     from windows_client.status_board_v2.operational_state_surface import OperationalStateSurface
+
     surface = OperationalStateSurface()
     projection = _make_board_with_categories()
     result = surface.render(projection)
@@ -544,33 +544,30 @@ def test_G35_operational_state_surface_renders_without_error():
 
 
 def test_G36_rendered_board_contains_lifecycle_stage_headers():
-    from windows_client.status_board_v2.operational_state_surface import OperationalStateSurface, _STAGE_LABELS
+    from windows_client.status_board_v2.operational_state_surface import _STAGE_LABELS, OperationalStateSurface
+
     surface = OperationalStateSurface()
     projection = _make_board_with_categories()
     result = surface.render(projection)
     # At least observation and admission headers should appear
-    assert "Observation" in result or "observation" in result.lower(), (
-        "Board render missing Observation stage header"
-    )
-    assert "Admission" in result or "admission" in result.lower(), (
-        "Board render missing Admission stage header"
-    )
+    assert "Observation" in result or "observation" in result.lower(), "Board render missing Observation stage header"
+    assert "Admission" in result or "admission" in result.lower(), "Board render missing Admission stage header"
 
 
 def test_G37_rendered_board_contains_source_boundary_short_labels():
     from windows_client.status_board_v2.operational_state_surface import OperationalStateSurface
+
     surface = OperationalStateSurface()
     projection = _make_board_with_categories()
     result = surface.render(projection)
     # 边界标签格式已演进为 "[短标/原值]"(如 [V2/v2_authoritative]),
     # 保留短标可读性同时带上完整边界值便于审计。
-    assert "[V2/v2_authoritative]" in result, (
-        "Board render should contain V2 boundary label in short/raw form"
-    )
+    assert "[V2/v2_authoritative]" in result, "Board render should contain V2 boundary label in short/raw form"
 
 
 def test_G38_rendered_board_with_empty_categories_shows_fallback_message():
     from windows_client.status_board_v2.operational_state_surface import OperationalStateSurface
+
     surface = OperationalStateSurface()
     projection: Dict[str, Any] = {}
     result = surface.render(projection)
@@ -579,6 +576,7 @@ def test_G38_rendered_board_with_empty_categories_shows_fallback_message():
 
 def test_G39_rendered_board_blocked_state_shows_conditions():
     from windows_client.status_board_v2.operational_state_surface import OperationalStateSurface
+
     surface = OperationalStateSurface()
     projection = _make_board_with_categories()
     result = surface.render(projection)
@@ -588,7 +586,8 @@ def test_G39_rendered_board_blocked_state_shows_conditions():
 
 
 def test_G40_stage_labels_cover_all_required_stages():
-    from windows_client.status_board_v2.operational_state_surface import _STAGE_ORDER, _STAGE_LABELS
+    from windows_client.status_board_v2.operational_state_surface import _STAGE_LABELS, _STAGE_ORDER
+
     for stage in ("observation", "admission", "readiness", "eligibility", "execution", "closure", "conditions"):
         assert stage in _STAGE_ORDER, f"Missing stage '{stage}' in _STAGE_ORDER"
         assert stage in _STAGE_LABELS, f"Missing stage '{stage}' in _STAGE_LABELS"
@@ -598,12 +597,14 @@ def test_G40_stage_labels_cover_all_required_stages():
 # Group H: End-to-end correctness for Android-attached scenarios
 # ---------------------------------------------------------------------------
 
+
 def test_H41_gateway_bridge_present_when_android_device_count_nonzero():
     c = _build_minimal_contract(android_device_count=2, snapshot_count=2)
     d = c.derived_state["gateway_bridge_presence"]
-    assert d.state in ("present", "degraded"), (
-        f"gateway_bridge_presence should be present/degraded with android_device_count=2, got '{d.state}'"
-    )
+    assert d.state in (
+        "present",
+        "degraded",
+    ), f"gateway_bridge_presence should be present/degraded with android_device_count=2, got '{d.state}'"
     assert d.active is True
 
 
@@ -614,15 +615,18 @@ def test_H42_runtime_host_dispatch_available_when_android_main_chain_ready():
         capability_visible_count=1,
         active_session_count=1,
         route_paths={
-            "/api/v1/health", "/api/v1/chat", "/api/v1/projection/runtime",
+            "/api/v1/health",
+            "/api/v1/chat",
+            "/api/v1/projection/runtime",
             "/api/v1/projection/operational-readiness",
             "/api/v1/projection/clone-to-use-acceptance",
         },
     )
     d = c.derived_state["runtime_host_dispatch_binding"]
-    assert d.state in ("available", "active"), (
-        f"dispatch binding should be available/active with Android+main_chain ready, got '{d.state}'"
-    )
+    assert d.state in (
+        "available",
+        "active",
+    ), f"dispatch binding should be available/active with Android+main_chain ready, got '{d.state}'"
 
 
 def test_H43_runtime_host_dispatch_active_when_task_initiated():
@@ -632,15 +636,15 @@ def test_H43_runtime_host_dispatch_active_when_task_initiated():
         active_session_count=1,
         task_initiated=True,
         route_paths={
-            "/api/v1/health", "/api/v1/chat", "/api/v1/projection/runtime",
+            "/api/v1/health",
+            "/api/v1/chat",
+            "/api/v1/projection/runtime",
             "/api/v1/projection/operational-readiness",
             "/api/v1/projection/clone-to-use-acceptance",
         },
     )
     d = c.derived_state["runtime_host_dispatch_binding"]
-    assert d.state == "active", (
-        f"dispatch binding should be active when task_initiated=True, got '{d.state}'"
-    )
+    assert d.state == "active", f"dispatch binding should be active when task_initiated=True, got '{d.state}'"
     assert d.active is True
 
 
@@ -652,9 +656,9 @@ def test_H44_participant_dependencies_satisfied_when_cross_device_available():
         active_session_count=1,
     )
     d = c.derived_state["participant_device_session_dependencies"]
-    assert d.state == "satisfied", (
-        f"participant_device_session_dependencies should be 'satisfied' when cross_device_available, got '{d.state}'"
-    )
+    assert (
+        d.state == "satisfied"
+    ), f"participant_device_session_dependencies should be 'satisfied' when cross_device_available, got '{d.state}'"
     assert d.active is True
 
 
@@ -666,9 +670,9 @@ def test_H45_task_execution_visibility_active_when_task_initiated_not_closed():
         result_closure_established=False,
     )
     d = c.closure_quality_state["task_execution_visibility"]
-    assert d.state == "active", (
-        f"task_execution_visibility should be 'active' when task initiated and not closed, got '{d.state}'"
-    )
+    assert (
+        d.state == "active"
+    ), f"task_execution_visibility should be 'active' when task initiated and not closed, got '{d.state}'"
     assert d.active is True
     assert d.complete is False
 
@@ -680,9 +684,9 @@ def test_H46_task_execution_visibility_complete_when_result_closure_established(
         result_closure_established=True,
     )
     d = c.closure_quality_state["task_execution_visibility"]
-    assert d.state == "complete", (
-        f"task_execution_visibility should be 'complete' when result_closure_established, got '{d.state}'"
-    )
+    assert (
+        d.state == "complete"
+    ), f"task_execution_visibility should be 'complete' when result_closure_established, got '{d.state}'"
     assert d.complete is True
 
 
@@ -693,18 +697,18 @@ def test_H47_recovery_active_surfaces_as_first_class_state():
         recovery_active=True,
     )
     d = c.derived_state["recovery_active_state"]
-    assert d.state == "active", (
-        f"recovery_active_state should be 'active', got '{d.state}'"
-    )
+    assert d.state == "active", f"recovery_active_state should be 'active', got '{d.state}'"
     assert d.active is True
 
 
 def test_H48_degraded_path_surfaces_as_first_class_in_board():
     import importlib
+
     routes_mod = importlib.import_module("core.routes.projection")
     build_fn = getattr(routes_mod, "_build_operational_state_board_from_contract")
     # Provide all required routes so main_chain is available but degraded via runtime_verdict
-    from core.v2_unified_state_contract import build_v2_unified_state_contract, _REQUIRED_API_PATHS
+    from core.v2_unified_state_contract import _REQUIRED_API_PATHS, build_v2_unified_state_contract
+
     path, validation = _minimal_path_and_validation()
     c = build_v2_unified_state_contract(
         path=path,
@@ -716,10 +720,10 @@ def test_H48_degraded_path_surfaces_as_first_class_in_board():
     board = build_fn(c.to_dict())
     category_map = {item["category_id"]: item for item in board["categories"]}
     op_readiness = category_map.get("operational_readiness") or {}
-    assert op_readiness.get("state") == "degraded", (
-        f"operational_readiness should be 'degraded' with degraded runtime_verdict, got '{op_readiness.get('state')}'"
-    )
+    assert (
+        op_readiness.get("state") == "degraded"
+    ), f"operational_readiness should be 'degraded' with degraded runtime_verdict, got '{op_readiness.get('state')}'"
     degraded_path = category_map.get("compat_degraded_path") or {}
-    assert degraded_path.get("state") == "degraded_operation", (
-        f"compat_degraded_path should be 'degraded_operation', got '{degraded_path.get('state')}'"
-    )
+    assert (
+        degraded_path.get("state") == "degraded_operation"
+    ), f"compat_degraded_path should be 'degraded_operation', got '{degraded_path.get('state')}'"

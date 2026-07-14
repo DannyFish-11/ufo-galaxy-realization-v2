@@ -111,22 +111,21 @@ from unittest.mock import MagicMock
 import pytest
 
 from core.policy.alignment_surface import (
-    AlignmentDimensionSummary,
-    AlignmentMismatch,
-    ExecutionPolicyAlignmentSummary,
-    ExecutionPolicyHints,
     POSTURE_BLOCKED,
     POSTURE_CONFIRMATION_GATED,
     POSTURE_DEGRADED,
     POSTURE_LOCAL_PREFERRED,
     POSTURE_REMOTE_REQUIRED,
     POSTURE_UNKNOWN,
+    AlignmentDimensionSummary,
+    AlignmentMismatch,
+    ExecutionPolicyAlignmentSummary,
+    ExecutionPolicyHints,
     build_execution_policy_alignment_surface,
     summarize_dispatch_policy_alignment,
     summarize_projection_policy_alignment,
     summarize_runtime_policy_alignment,
 )
-
 
 # ---------------------------------------------------------------------------
 # Test fixtures / helpers
@@ -245,9 +244,7 @@ def _make_execution_trace_envelope(
 
 class TestAlignmentMismatch:
     def test_defaults(self):
-        m = AlignmentMismatch(
-            dimension_a="runtime_policy", dimension_b="readiness_policy"
-        )
+        m = AlignmentMismatch(dimension_a="runtime_policy", dimension_b="readiness_policy")
         assert m.dimension_a == "runtime_policy"
         assert m.dimension_b == "readiness_policy"
         assert m.field_a is None
@@ -273,9 +270,7 @@ class TestAlignmentMismatch:
         assert m.value_b is True
 
     def test_to_dict_json_serialisable(self):
-        m = AlignmentMismatch(
-            dimension_a="a", dimension_b="b", severity="info"
-        )
+        m = AlignmentMismatch(dimension_a="a", dimension_b="b", severity="info")
         d = m.to_dict()
         assert isinstance(d, dict)
         json.dumps(d)  # must not raise
@@ -331,9 +326,7 @@ class TestAlignmentDimensionSummary:
         assert d.summary_fields == {"foo": "bar"}
 
     def test_to_dict_json_serialisable(self):
-        d = AlignmentDimensionSummary(
-            dimension="fallback_policy", available=True, blocked=True
-        )
+        d = AlignmentDimensionSummary(dimension="fallback_policy", available=True, blocked=True)
         raw = d.to_dict()
         json.dumps(raw)  # must not raise
 
@@ -569,9 +562,7 @@ class TestSummarizeProjectionPolicyAlignment:
         assert d.available is False
 
     def test_extracts_from_dict(self):
-        gov = _make_projection_governance_dict(
-            blocked=False, requires_confirmation=True, action_level="assist"
-        )
+        gov = _make_projection_governance_dict(blocked=False, requires_confirmation=True, action_level="assist")
         d = summarize_projection_policy_alignment(gov)
         assert d.available is True
         assert d.confirmation_required is True
@@ -628,9 +619,7 @@ class TestBuildExecutionPolicyAlignmentSurface:
         assert s.policy_posture == POSTURE_BLOCKED
 
     def test_confirmation_required_propagates(self):
-        readiness = _make_readiness_result_obj(
-            ready=True, requires_confirmation=True, status="confirm_required"
-        )
+        readiness = _make_readiness_result_obj(ready=True, requires_confirmation=True, status="confirm_required")
         s = build_execution_policy_alignment_surface(readiness_result=readiness)
         assert s.confirmation_required is True
         assert s.policy_posture == POSTURE_CONFIRMATION_GATED
@@ -663,9 +652,7 @@ class TestBuildExecutionPolicyAlignmentSurface:
         assert s.policy_posture in (POSTURE_LOCAL_PREFERRED, POSTURE_UNKNOWN)
 
     def test_posture_remote_required_with_cross_device(self):
-        readiness = _make_readiness_result_obj(
-            ready=True, cross_device_allowed=True
-        )
+        readiness = _make_readiness_result_obj(ready=True, cross_device_allowed=True)
         s = build_execution_policy_alignment_surface(
             readiness_result=readiness,
             runtime_domain="cross_device",
@@ -673,12 +660,8 @@ class TestBuildExecutionPolicyAlignmentSurface:
         assert s.policy_posture == POSTURE_REMOTE_REQUIRED
 
     def test_trace_id_resolved_from_envelope(self):
-        envelope = _make_execution_trace_envelope(
-            trace_id="trace-123", runtime_session_id="sess-456"
-        )
-        s = build_execution_policy_alignment_surface(
-            execution_trace_envelope=envelope
-        )
+        envelope = _make_execution_trace_envelope(trace_id="trace-123", runtime_session_id="sess-456")
+        s = build_execution_policy_alignment_surface(execution_trace_envelope=envelope)
         assert s.trace_id == "trace-123"
         assert s.runtime_session_id == "sess-456"
 
@@ -692,9 +675,7 @@ class TestBuildExecutionPolicyAlignmentSurface:
 
     def test_runtime_domain_resolved_from_snapshot(self):
         snap = _make_runtime_snapshot_dict(runtime_domain="cross_device")
-        s = build_execution_policy_alignment_surface(
-            runtime_governance_snapshot=snap
-        )
+        s = build_execution_policy_alignment_surface(runtime_governance_snapshot=snap)
         assert s.runtime_domain == "cross_device"
 
     def test_never_raises_on_all_none(self):
@@ -752,9 +733,7 @@ class TestBuildExecutionPolicyAlignmentSurface:
 class TestMismatchDetection:
     def test_no_mismatches_with_one_dimension(self):
         snap = _make_runtime_snapshot_dict(blocked=False)
-        s = build_execution_policy_alignment_surface(
-            runtime_governance_snapshot=snap
-        )
+        s = build_execution_policy_alignment_surface(runtime_governance_snapshot=snap)
         assert s.mismatches == []
 
     def test_blocked_mismatch_is_critical(self):
@@ -778,12 +757,8 @@ class TestMismatchDetection:
         assert len(warning) >= 1
 
     def test_no_mismatch_when_dimensions_agree(self):
-        snap = _make_runtime_snapshot_dict(
-            blocked=False, requires_confirmation=False, ready=True
-        )
-        proj = _make_projection_governance_dict(
-            blocked=False, requires_confirmation=False
-        )
+        snap = _make_runtime_snapshot_dict(blocked=False, requires_confirmation=False, ready=True)
+        proj = _make_projection_governance_dict(blocked=False, requires_confirmation=False)
         s = build_execution_policy_alignment_surface(
             runtime_governance_snapshot=snap,
             projection_governance=proj,
@@ -805,9 +780,7 @@ class TestAlignmentHints:
     def test_hint_source_partial_when_some_available(self):
         snap = _make_runtime_snapshot_dict()
         # Only runtime snapshot provided → runtime_policy available, others not
-        s = build_execution_policy_alignment_surface(
-            runtime_governance_snapshot=snap
-        )
+        s = build_execution_policy_alignment_surface(runtime_governance_snapshot=snap)
         assert s.alignment_hints.hint_source == "partial"
 
     def test_can_execute_locally_false_when_blocked(self):
@@ -816,9 +789,7 @@ class TestAlignmentHints:
         assert s.alignment_hints.can_execute_locally is False
 
     def test_can_expand_cross_device_true_only_with_all_agree(self):
-        readiness = _make_readiness_result_obj(
-            ready=True, cross_device_allowed=True
-        )
+        readiness = _make_readiness_result_obj(ready=True, cross_device_allowed=True)
         s = build_execution_policy_alignment_surface(readiness_result=readiness)
         assert s.alignment_hints.can_expand_cross_device is True
 
@@ -828,9 +799,7 @@ class TestAlignmentHints:
 
     def test_alignment_confidence_positive_with_data(self):
         snap = _make_runtime_snapshot_dict()
-        s = build_execution_policy_alignment_surface(
-            runtime_governance_snapshot=snap
-        )
+        s = build_execution_policy_alignment_surface(runtime_governance_snapshot=snap)
         assert s.alignment_hints.alignment_confidence > 0.0
 
     def test_is_blocked_hint_matches_top_level(self):
@@ -914,6 +883,7 @@ class TestAdditiveIntegration:
     def test_runtime_projection_has_policy_alignment_field(self):
         try:
             import importlib
+
             mod = importlib.import_module("core.projection.runtime_projection")
             RuntimeProjection = mod.RuntimeProjection
             assert "policy_alignment" in RuntimeProjection.model_fields
@@ -921,16 +891,16 @@ class TestAdditiveIntegration:
             pytest.skip(f"Optional dependency not installed: {exc}")
 
     def test_runtime_projection_to_dict_includes_policy_alignment(self):
-        from core.projection.runtime_projection import RuntimeProjection
         from core.continuum.types import TriStatePhase
+        from core.projection.runtime_projection import RuntimeProjection
 
         p = RuntimeProjection(tri_state_phase=TriStatePhase.SILENT)
         d = p.to_dict()
         assert "policy_alignment" in d
 
     def test_policy_alignment_none_by_default(self):
-        from core.projection.runtime_projection import RuntimeProjection
         from core.continuum.types import TriStatePhase
+        from core.projection.runtime_projection import RuntimeProjection
 
         p = RuntimeProjection(tri_state_phase=TriStatePhase.SILENT)
         assert p.policy_alignment is None
@@ -938,8 +908,8 @@ class TestAdditiveIntegration:
         assert d["policy_alignment"] is None
 
     def test_existing_fields_unchanged(self):
+        from core.continuum.types import RuntimeDomain, TriStatePhase
         from core.projection.runtime_projection import RuntimeProjection
-        from core.continuum.types import TriStatePhase, RuntimeDomain
 
         p = RuntimeProjection(
             tri_state_phase=TriStatePhase.MANIFEST,
@@ -953,8 +923,8 @@ class TestAdditiveIntegration:
         assert d["policy_alignment"] is None
 
     def test_policy_alignment_can_be_set(self):
-        from core.projection.runtime_projection import RuntimeProjection
         from core.continuum.types import TriStatePhase
+        from core.projection.runtime_projection import RuntimeProjection
 
         alignment_dict = {"alignment_id": "test-id", "aligned": True}
         p = RuntimeProjection(

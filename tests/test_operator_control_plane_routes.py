@@ -16,6 +16,7 @@ Tests for the new V2 control-plane operator endpoints added in this PR:
 Each test uses the FastAPI TestClient against the operator router directly,
 isolating from the full application startup.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -27,7 +28,6 @@ from core.android_device_state_store import (
     reset_android_device_state_store,
 )
 from core.routes.operator import create_router
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -83,9 +83,7 @@ def test_readiness_has_matrix_id(client):
 def test_readiness_verdict_is_valid_string(client):
     data = client.get("/api/v1/readiness").json()
     verdict = data.get("verdict", "")
-    assert verdict in ("ready", "blocked", "degraded", "unknown"), (
-        f"Unexpected verdict: {verdict!r}"
-    )
+    assert verdict in ("ready", "blocked", "degraded", "unknown"), f"Unexpected verdict: {verdict!r}"
 
 
 # ---------------------------------------------------------------------------
@@ -238,12 +236,15 @@ def test_devices_ecosystem_empty_when_no_snapshots(client):
 
 
 def test_devices_ecosystem_reflects_absorbed_snapshot(client):
-    absorb_device_state_snapshot("route_test_dev", {
-        "model_ready": True,
-        "local_loop_ready": True,
-        "llama_cpp_available": True,
-        "model_id": "mobilevlm_v2_7b",
-    })
+    absorb_device_state_snapshot(
+        "route_test_dev",
+        {
+            "model_ready": True,
+            "local_loop_ready": True,
+            "llama_cpp_available": True,
+            "model_id": "mobilevlm_v2_7b",
+        },
+    )
     data = client.get("/api/v1/operator/devices/ecosystem").json()
     assert data["total_devices_with_snapshot"] == 1
     assert data["local_ai_ready_count"] == 1
@@ -288,12 +289,15 @@ def test_device_ecosystem_single_200_when_present(client):
 
 
 def test_device_ecosystem_single_has_snapshot_fields(client):
-    absorb_device_state_snapshot("field_dev", {
-        "model_ready": True,
-        "llama_cpp_available": True,
-        "model_id": "mobilevlm_v2",
-        "offline_queue_depth": 2,
-    })
+    absorb_device_state_snapshot(
+        "field_dev",
+        {
+            "model_ready": True,
+            "llama_cpp_available": True,
+            "model_id": "mobilevlm_v2",
+            "offline_queue_depth": 2,
+        },
+    )
     data = client.get("/api/v1/operator/devices/ecosystem/field_dev").json()
     assert data["device_id"] == "field_dev"
     assert data["model_ready"] is True

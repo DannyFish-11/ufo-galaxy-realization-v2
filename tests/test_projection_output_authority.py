@@ -19,7 +19,6 @@ import time
 from typing import Any, Dict, Optional
 from unittest.mock import MagicMock, patch
 
-
 # ---------------------------------------------------------------------------
 # Module import helpers
 # ---------------------------------------------------------------------------
@@ -31,11 +30,13 @@ def _import_runtime_truth_compiler():
         RuntimeTruthSnapshot,
         compile_runtime_truth,
     )
+
     return RUNTIME_TRUTH_COMPILER_AUTHORITY, RuntimeTruthSnapshot, compile_runtime_truth
 
 
 def _import_projection_package():
     import core.projection as pkg
+
     return pkg
 
 
@@ -170,15 +171,11 @@ class TestRuntimeTruthSnapshotProperties:
         assert snap.has_canonical_topology is False
 
     def test_31_has_canonical_topology_true_when_topology_router_source(self):
-        snap = self._make_snapshot(
-            topology={"routing_authority_source": "topology_router", "primary_model": "gpt-4o"}
-        )
+        snap = self._make_snapshot(topology={"routing_authority_source": "topology_router", "primary_model": "gpt-4o"})
         assert snap.has_canonical_topology is True
 
     def test_32_has_canonical_topology_false_when_legacy_source(self):
-        snap = self._make_snapshot(
-            topology={"routing_authority_source": "legacy_ucp_keys"}
-        )
+        snap = self._make_snapshot(topology={"routing_authority_source": "legacy_ucp_keys"})
         assert snap.has_canonical_topology is False
 
     def test_33_tri_state_phase_none_when_no_continuum(self):
@@ -206,15 +203,11 @@ class TestRuntimeTruthSnapshotProperties:
         assert snap.primary_provider_id == "openai"
 
     def test_39_oneapi_is_lower_horizon_only_true(self):
-        snap = self._make_snapshot(
-            oneapi={"system_layer": "aggregator_integration"}
-        )
+        snap = self._make_snapshot(oneapi={"system_layer": "aggregator_integration"})
         assert snap.oneapi_is_lower_horizon_only is True
 
     def test_40_oneapi_is_lower_horizon_only_false_when_wrong_layer(self):
-        snap = self._make_snapshot(
-            oneapi={"system_layer": "direct_provider"}
-        )
+        snap = self._make_snapshot(oneapi={"system_layer": "direct_provider"})
         assert snap.oneapi_is_lower_horizon_only is False
 
 
@@ -433,6 +426,7 @@ class TestCompileRuntimeTruth:
 
     def test_81_snapshot_to_dict_is_json_serialisable(self):
         import json
+
         _, _, compile_runtime_truth = _import_runtime_truth_compiler()
         snapshot = compile_runtime_truth()
         d = snapshot.to_dict()
@@ -450,7 +444,9 @@ class TestCompileRuntimeTruth:
         _, _, compile_runtime_truth = _import_runtime_truth_compiler()
         # Allow a small sleep so timestamps can differ
         s1 = compile_runtime_truth()
-        import time as _t; _t.sleep(0.001)
+        import time as _t
+
+        _t.sleep(0.001)
         s2 = compile_runtime_truth()
         assert s2.compiled_at >= s1.compiled_at
 

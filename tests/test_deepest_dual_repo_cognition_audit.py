@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helper: run the full snapshot once
 # ---------------------------------------------------------------------------
@@ -31,6 +30,7 @@ def _get_snapshot():
     global _snapshot
     if _snapshot is None:
         from core.deepest_dual_repo_cognition_audit import build_cognition_audit_snapshot
+
         _snapshot = build_cognition_audit_snapshot()
     return _snapshot
 
@@ -149,27 +149,22 @@ class TestConfigOperatorChecks:
 class TestSnapshotStructure:
     def test_snapshot_has_required_keys(self):
         snapshot = _get_snapshot()
-        for key in ("checks", "passed", "failed", "verdict", "gap_summary",
-                    "hard_failures", "methodology"):
+        for key in ("checks", "passed", "failed", "verdict", "gap_summary", "hard_failures", "methodology"):
             assert key in snapshot, f"Key '{key}' missing from snapshot"
 
     def test_no_hard_failures(self):
         snapshot = _get_snapshot()
-        assert snapshot["hard_failures"] == [], (
-            f"Unexpected hard failures: {snapshot['hard_failures']}"
-        )
+        assert snapshot["hard_failures"] == [], f"Unexpected hard failures: {snapshot['hard_failures']}"
 
     def test_verdict_is_passed(self):
         snapshot = _get_snapshot()
-        assert snapshot["verdict"] == "COGNITION_AUDIT_PASSED", (
-            f"Expected COGNITION_AUDIT_PASSED, got {snapshot['verdict']}"
-        )
+        assert (
+            snapshot["verdict"] == "COGNITION_AUDIT_PASSED"
+        ), f"Expected COGNITION_AUDIT_PASSED, got {snapshot['verdict']}"
 
     def test_total_check_count(self):
         snapshot = _get_snapshot()
-        assert len(snapshot["checks"]) >= 16, (
-            f"Expected >=16 checks, got {len(snapshot['checks'])}"
-        )
+        assert len(snapshot["checks"]) >= 16, f"Expected >=16 checks, got {len(snapshot['checks'])}"
 
     def test_methodology_string(self):
         snapshot = _get_snapshot()

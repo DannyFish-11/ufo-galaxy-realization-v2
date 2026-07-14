@@ -12,8 +12,8 @@ class MemoryHit:
 
     content: str
     score: float = 0.0
-    source: str = ""          # 产出该条的后端名（vector_backend / omni_simplemem）
-    modality: str = "text"    # text / image / audio / video
+    source: str = ""  # 产出该条的后端名（vector_backend / omni_simplemem）
+    modality: str = "text"  # text / image / audio / video
     metadata: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:

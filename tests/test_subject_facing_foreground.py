@@ -48,7 +48,6 @@ from core.subject_facing_foreground import (
     build_subject_facing_foreground,
 )
 
-
 # ===========================================================================
 # Helpers
 # ===========================================================================
@@ -153,8 +152,8 @@ class TestDefaultForegroundCompositionChange:
         assert "result" in d
         # Raw runtime-internal fields must NOT be present
         assert "current_presence_mode" not in d  # visible_action_surface key
-        assert "current_action_state" not in d   # visible_action_surface key
-        assert "lifecycle_origin" not in d       # runtime origin tag
+        assert "current_action_state" not in d  # visible_action_surface key
+        assert "lifecycle_origin" not in d  # runtime origin tag
 
     def test_A04_subject_foreground_and_visible_action_surface_are_structurally_different(self):
         """
@@ -210,9 +209,7 @@ class TestSubjectFacingPrimaryObject:
             sfg = build_subject_facing_foreground(
                 visible_action_surface=_visible(presence_mode=mode),
             )
-            assert sfg.subject_state == mode, (
-                f"subject_state should be {mode!r} but got {sfg.subject_state!r}"
-            )
+            assert sfg.subject_state == mode, f"subject_state should be {mode!r} but got {sfg.subject_state!r}"
 
     def test_B02_action_phase_reflects_lifecycle_phase(self):
         """action_phase reflects canonical lifecycle phase from the surface."""
@@ -342,7 +339,7 @@ class TestBlockerConfirmationForegroundPriority:
         sfg = build_subject_facing_foreground(
             visible_action_surface=_visible(
                 blocker_summary="device offline",
-                action_state="completed",   # would normally be COMPLETED
+                action_state="completed",  # would normally be COMPLETED
                 lifecycle_phase="result_received",
             ),
         )
@@ -377,7 +374,7 @@ class TestBlockerConfirmationForegroundPriority:
         sfg = build_subject_facing_foreground(
             visible_action_surface=_visible(
                 confirmation_needed=True,
-                action_state="completed",   # would normally be COMPLETED
+                action_state="completed",  # would normally be COMPLETED
                 lifecycle_phase="result_received",
             ),
         )
@@ -622,6 +619,7 @@ class TestControlPlaneDemotion:
         }
 
         from core.routes.chat import _apply_hidden_visible_boundary
+
         _, vis_surface, fg_resp, _ = _apply_hidden_visible_boundary(
             result=control_plane_heavy_result,
             metadata=metadata,

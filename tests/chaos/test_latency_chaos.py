@@ -17,9 +17,9 @@ import pytest
 
 
 def _reset() -> None:
+    from core.orchestration.global_arbiter import reset_global_arbiter
     from core.unified.idempotency import reset_idempotency_store
     from core.unified.release_gate import reset_release_gate
-    from core.orchestration.global_arbiter import reset_global_arbiter
 
     reset_idempotency_store()
     reset_release_gate()
@@ -36,8 +36,8 @@ class TestTimeoutErrorClassification:
         _reset()
 
     def test_stdlib_timeout_error_maps_to_exec_timeout(self):
-        from core.unified.error_mapper import ErrorMapper
         from core.unified.error_codes import GalaxyErrorCode
+        from core.unified.error_mapper import ErrorMapper
 
         exc = TimeoutError("operation timed out")
         payload = ErrorMapper.from_exception(exc, trace_id="lat-001")
@@ -51,12 +51,10 @@ class TestTimeoutErrorClassification:
         assert desc.retryable == Retryable.BACKOFF
 
     def test_device_timeout_maps_from_legacy_executor(self):
-        from core.unified.error_mapper import ErrorMapper
         from core.unified.error_codes import GalaxyErrorCode
+        from core.unified.error_mapper import ErrorMapper
 
-        payload = ErrorMapper.from_legacy_executor_error(
-            "executor timeout after 30s", trace_id="lat-002"
-        )
+        payload = ErrorMapper.from_legacy_executor_error("executor timeout after 30s", trace_id="lat-002")
         assert payload.code == GalaxyErrorCode.EXEC_TASK_TIMEOUT.value
         assert payload.retryable is True
 
@@ -105,9 +103,7 @@ class TestArbiterUnderLatency:
         arbiter.admit("hp-task", priority=10, origin="user")
 
         decisions = arbiter.recent_decisions()
-        preemption = next(
-            (d for d in decisions if d.get("preempted_task_id") == "bg-task"), None
-        )
+        preemption = next((d for d in decisions if d.get("preempted_task_id") == "bg-task"), None)
         assert preemption is not None
         assert preemption["outcome"] == "preempted_other"
 

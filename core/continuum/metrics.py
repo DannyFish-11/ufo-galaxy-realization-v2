@@ -158,9 +158,7 @@ class ContinuumMetrics:
             "receding": 0,
         }
         self._tick_latency = _LatencyTracker()
-        self._stage_latency: Dict[str, _LatencyTracker] = {
-            s: _LatencyTracker() for s in self._STAGES
-        }
+        self._stage_latency: Dict[str, _LatencyTracker] = {s: _LatencyTracker() for s in self._STAGES}
 
     # ------------------------------------------------------------------
     # Recording helpers
@@ -234,10 +232,7 @@ class ContinuumMetrics:
             **totals,
             "phases": phases,
             "tick_latency": self._tick_latency.snapshot(),
-            "stage_latency": {
-                name: tracker.snapshot()
-                for name, tracker in self._stage_latency.items()
-            },
+            "stage_latency": {name: tracker.snapshot() for name, tracker in self._stage_latency.items()},
         }
 
     def reset(self) -> None:

@@ -58,7 +58,8 @@ from typing import Any, Dict, Optional
 
 from core.perception.context_fuser import ContextFuser
 from core.perception.event_types import PERCEPTION_FUSED, PERCEPTION_INGESTED
-from integration.event_bus import UIGalaxyEvent, event_bus as _galaxy_event_bus
+from integration.event_bus import UIGalaxyEvent
+from integration.event_bus import event_bus as _galaxy_event_bus
 
 logger = logging.getLogger(__name__)
 

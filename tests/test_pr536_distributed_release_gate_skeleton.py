@@ -126,33 +126,33 @@ from typing import Any, Dict, List
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Module availability guards
 # ---------------------------------------------------------------------------
 
 try:
     from core.distributed_release_gate_skeleton import (
+        _CATEGORY_DIMENSION_IDS,
+        _CATEGORY_STRENGTH,
+        ANDROID_COMPANION_EVIDENCE_IS_GATE_WORTHY_AFTER_V2_INGESTION_POLICY,
+        DEFERRED_CATEGORIES_MUST_NOT_BLOCK_RELEASE_POLICY,
         DISTRIBUTED_RELEASE_GATE_SKELETON_AUTHORITY,
         DISTRIBUTED_RELEASE_GATE_SKELETON_PR7V2_SENTINEL,
-        GATE_SKELETON_IS_NON_ENFORCING_POLICY,
         GATE_IS_NOW_CI_ENFORCING_AUTHORITY,
+        GATE_SKELETON_IS_NON_ENFORCING_POLICY,
         GATE_WORTHY_CATEGORIES_REQUIRE_CANONICAL_EVIDENCE_POLICY,
-        DEFERRED_CATEGORIES_MUST_NOT_BLOCK_RELEASE_POLICY,
-        ANDROID_COMPANION_EVIDENCE_IS_GATE_WORTHY_AFTER_V2_INGESTION_POLICY,
         V2_IS_CANONICAL_ORCHESTRATION_AUTHORITY_POLICY,
-        GateCategoryStrength,
-        GateCategory,
-        ReleaseGateVerdict,
-        GateCategoryEvaluation,
-        ReleaseGateReport,
         DistributedReleaseGateSkeleton,
+        GateCategory,
+        GateCategoryEvaluation,
+        GateCategoryStrength,
+        ReleaseGateReport,
+        ReleaseGateVerdict,
         evaluate_distributed_release_gate,
         get_release_gate_report,
         reset_release_gate_report,
-        _CATEGORY_STRENGTH,
-        _CATEGORY_DIMENSION_IDS,
     )
+
     _SKELETON_AVAILABLE = True
 except ImportError:
     _SKELETON_AVAILABLE = False
@@ -266,17 +266,15 @@ def test_A07_ci_enforcing_authority_sentinel_content():
 @_skip_if_unavailable
 def test_B01_every_category_has_strength_mapping():
     for category in GateCategory:
-        assert category in _CATEGORY_STRENGTH, (
-            f"GateCategory.{category.value} missing from _CATEGORY_STRENGTH"
-        )
+        assert category in _CATEGORY_STRENGTH, f"GateCategory.{category.value} missing from _CATEGORY_STRENGTH"
 
 
 @_skip_if_unavailable
 def test_B02_every_category_has_dimension_id_mapping():
     for category in GateCategory:
-        assert category in _CATEGORY_DIMENSION_IDS, (
-            f"GateCategory.{category.value} missing from _CATEGORY_DIMENSION_IDS"
-        )
+        assert (
+            category in _CATEGORY_DIMENSION_IDS
+        ), f"GateCategory.{category.value} missing from _CATEGORY_DIMENSION_IDS"
 
 
 @_skip_if_unavailable
@@ -306,26 +304,16 @@ def test_B03_gate_worthy_categories_use_canonical_evidence_dimensions():
 
 @_skip_if_unavailable
 def test_B04_advisory_categories_use_advisory_prefix():
-    advisory_cats = [
-        c for c, s in _CATEGORY_STRENGTH.items()
-        if s == GateCategoryStrength.advisory
-    ]
+    advisory_cats = [c for c, s in _CATEGORY_STRENGTH.items() if s == GateCategoryStrength.advisory]
     for cat in advisory_cats:
-        assert cat.value.startswith("advisory_"), (
-            f"Advisory category {cat.value!r} does not use 'advisory_' prefix"
-        )
+        assert cat.value.startswith("advisory_"), f"Advisory category {cat.value!r} does not use 'advisory_' prefix"
 
 
 @_skip_if_unavailable
 def test_B05_deferred_categories_use_deferred_prefix():
-    deferred_cats = [
-        c for c, s in _CATEGORY_STRENGTH.items()
-        if s == GateCategoryStrength.deferred
-    ]
+    deferred_cats = [c for c, s in _CATEGORY_STRENGTH.items() if s == GateCategoryStrength.deferred]
     for cat in deferred_cats:
-        assert cat.value.startswith("deferred_"), (
-            f"Deferred category {cat.value!r} does not use 'deferred_' prefix"
-        )
+        assert cat.value.startswith("deferred_"), f"Deferred category {cat.value!r} does not use 'deferred_' prefix"
 
 
 @_skip_if_unavailable
@@ -371,8 +359,14 @@ def test_C02_gate_category_evaluation_to_dict_keys():
     )
     d = e.to_dict()
     required_keys = [
-        "category", "strength", "verdict", "evidence_status",
-        "evidence_dimension_ids", "summary", "gap_description", "notes",
+        "category",
+        "strength",
+        "verdict",
+        "evidence_status",
+        "evidence_dimension_ids",
+        "summary",
+        "gap_description",
+        "notes",
     ]
     for k in required_keys:
         assert k in d, f"to_dict missing key: {k}"
@@ -431,10 +425,18 @@ def test_D02_release_gate_report_to_dict_keys():
     )
     d = r.to_dict()
     required_keys = [
-        "report_id", "generated_at", "authority", "overall_verdict",
-        "is_enforcing", "category_evaluations", "gate_worthy_count",
-        "advisory_count", "deferred_count", "blocked_gate_worthy_count",
-        "open_gate_worthy_count", "evidence_surface_report_id",
+        "report_id",
+        "generated_at",
+        "authority",
+        "overall_verdict",
+        "is_enforcing",
+        "category_evaluations",
+        "gate_worthy_count",
+        "advisory_count",
+        "deferred_count",
+        "blocked_gate_worthy_count",
+        "open_gate_worthy_count",
+        "evidence_surface_report_id",
         "deferred_notes",
     ]
     for k in required_keys:
@@ -543,8 +545,7 @@ def test_E05_report_has_all_category_evaluations():
     report = evaluate_distributed_release_gate()
     expected_count = len(list(GateCategory))
     assert len(report.category_evaluations) == expected_count, (
-        f"Expected {expected_count} category evaluations, "
-        f"got {len(report.category_evaluations)}"
+        f"Expected {expected_count} category evaluations, " f"got {len(report.category_evaluations)}"
     )
 
 
@@ -558,9 +559,7 @@ def test_E06_is_enforcing_is_true():
 @_skip_if_unavailable
 def test_E07_gate_worthy_count_at_least_seven():
     report = evaluate_distributed_release_gate()
-    assert report.gate_worthy_count >= 7, (
-        f"Expected at least 7 gate_worthy categories, got {report.gate_worthy_count}"
-    )
+    assert report.gate_worthy_count >= 7, f"Expected at least 7 gate_worthy categories, got {report.gate_worthy_count}"
 
 
 @_skip_if_unavailable
@@ -601,10 +600,7 @@ def test_E12_report_to_json_valid():
 @_skip_if_unavailable
 def test_E13_blocked_plus_open_le_gate_worthy():
     report = evaluate_distributed_release_gate()
-    assert (
-        report.blocked_gate_worthy_count + report.open_gate_worthy_count
-        <= report.gate_worthy_count
-    )
+    assert report.blocked_gate_worthy_count + report.open_gate_worthy_count <= report.gate_worthy_count
 
 
 # ===========================================================================
@@ -619,9 +615,9 @@ def test_F01_gate_worthy_evaluations_have_non_advisory_verdicts():
         if e.strength == GateCategoryStrength.gate_worthy.value:
             # verdict may be open, blocked, deferred, or unknown — not a V2-level concern
             # But it must not be a forbidden advisory-specific value (there isn't one)
-            assert e.verdict in {v.value for v in ReleaseGateVerdict}, (
-                f"Unexpected verdict for gate_worthy category {e.category!r}: {e.verdict!r}"
-            )
+            assert e.verdict in {
+                v.value for v in ReleaseGateVerdict
+            }, f"Unexpected verdict for gate_worthy category {e.category!r}: {e.verdict!r}"
 
 
 @_skip_if_unavailable
@@ -629,9 +625,9 @@ def test_F02_advisory_evaluations_have_non_blocked_verdict():
     report = evaluate_distributed_release_gate()
     for e in report.category_evaluations:
         if e.strength == GateCategoryStrength.advisory.value:
-            assert e.verdict != ReleaseGateVerdict.blocked.value, (
-                f"Advisory category {e.category!r} must not have verdict 'blocked'"
-            )
+            assert (
+                e.verdict != ReleaseGateVerdict.blocked.value
+            ), f"Advisory category {e.category!r} must not have verdict 'blocked'"
 
 
 @_skip_if_unavailable
@@ -640,8 +636,7 @@ def test_F03_deferred_evaluations_have_deferred_verdict():
     for e in report.category_evaluations:
         if e.strength == GateCategoryStrength.deferred.value:
             assert e.verdict == ReleaseGateVerdict.deferred.value, (
-                f"Deferred category {e.category!r} must have verdict 'deferred', "
-                f"got {e.verdict!r}"
+                f"Deferred category {e.category!r} must have verdict 'deferred', " f"got {e.verdict!r}"
             )
 
 
@@ -649,8 +644,7 @@ def test_F03_deferred_evaluations_have_deferred_verdict():
 def test_F04_companion_android_is_gate_worthy_in_report():
     report = evaluate_distributed_release_gate()
     companion = next(
-        (e for e in report.category_evaluations
-         if e.category == GateCategory.companion_android.value),
+        (e for e in report.category_evaluations if e.category == GateCategory.companion_android.value),
         None,
     )
     assert companion is not None, "companion_android category not found in report"
@@ -661,8 +655,7 @@ def test_F04_companion_android_is_gate_worthy_in_report():
 def test_F05_advisory_audit_records_is_advisory():
     report = evaluate_distributed_release_gate()
     e = next(
-        (e for e in report.category_evaluations
-         if e.category == GateCategory.advisory_audit_records.value),
+        (e for e in report.category_evaluations if e.category == GateCategory.advisory_audit_records.value),
         None,
     )
     assert e is not None
@@ -673,8 +666,7 @@ def test_F05_advisory_audit_records_is_advisory():
 def test_F06_advisory_participant_session_is_advisory():
     report = evaluate_distributed_release_gate()
     e = next(
-        (e for e in report.category_evaluations
-         if e.category == GateCategory.advisory_participant_session.value),
+        (e for e in report.category_evaluations if e.category == GateCategory.advisory_participant_session.value),
         None,
     )
     assert e is not None
@@ -685,8 +677,7 @@ def test_F06_advisory_participant_session_is_advisory():
 def test_F07_deferred_rollout_promotion_is_deferred():
     report = evaluate_distributed_release_gate()
     e = next(
-        (ev for ev in report.category_evaluations
-         if ev.category == GateCategory.deferred_rollout_promotion.value),
+        (ev for ev in report.category_evaluations if ev.category == GateCategory.deferred_rollout_promotion.value),
         None,
     )
     assert e is not None
@@ -697,8 +688,7 @@ def test_F07_deferred_rollout_promotion_is_deferred():
 def test_F08_deferred_ci_enforcement_is_deferred():
     report = evaluate_distributed_release_gate()
     e = next(
-        (ev for ev in report.category_evaluations
-         if ev.category == GateCategory.deferred_ci_enforcement.value),
+        (ev for ev in report.category_evaluations if ev.category == GateCategory.deferred_ci_enforcement.value),
         None,
     )
     assert e is not None
@@ -729,14 +719,13 @@ def test_G02_non_enforcing_policy_sentinel_content():
 def test_G03_blocked_verdict_does_not_raise():
     """Simulate a blocked scenario: inject a gate_worthy dim with absent evidence."""
     from core.distributed_release_gate_skeleton import DistributedReleaseGateSkeleton
+
     skeleton = DistributedReleaseGateSkeleton()
     # Inject a fake dim index with an absent gate_worthy dimension
     fake_dim_index = {
         "delegated_flow_readiness": type("FakeDim", (), {"evidence_status": "absent"})(),
     }
-    eval_result = skeleton._evaluate_category(
-        GateCategory.canonical_runtime_lifecycle, fake_dim_index
-    )
+    eval_result = skeleton._evaluate_category(GateCategory.canonical_runtime_lifecycle, fake_dim_index)
     assert eval_result.verdict == ReleaseGateVerdict.blocked.value
     # Now build the report — should not raise
     report = skeleton._build_report(
@@ -750,13 +739,12 @@ def test_G03_blocked_verdict_does_not_raise():
 @_skip_if_unavailable
 def test_G04_gate_worthy_unavailable_evidence_is_blocking():
     from core.distributed_release_gate_skeleton import DistributedReleaseGateSkeleton
+
     skeleton = DistributedReleaseGateSkeleton()
     fake_dim_index = {
         "delegated_flow_readiness": type("FakeDim", (), {"evidence_status": "unavailable"})(),
     }
-    eval_result = skeleton._evaluate_category(
-        GateCategory.canonical_runtime_lifecycle, fake_dim_index
-    )
+    eval_result = skeleton._evaluate_category(GateCategory.canonical_runtime_lifecycle, fake_dim_index)
     assert eval_result.verdict == ReleaseGateVerdict.blocked.value
     assert eval_result.failure_state == "evidence_unavailable"
     assert eval_result.blocking_condition_type == "continuity_risk"
@@ -784,10 +772,7 @@ def test_H01_companion_android_category_in_report():
 @_skip_if_unavailable
 def test_H02_companion_android_references_ingestion_dimension():
     report = evaluate_distributed_release_gate()
-    companion = next(
-        e for e in report.category_evaluations
-        if e.category == GateCategory.companion_android.value
-    )
+    companion = next(e for e in report.category_evaluations if e.category == GateCategory.companion_android.value)
     assert "android_evaluator_artifact_ingestion" in companion.evidence_dimension_ids
 
 
@@ -851,6 +836,7 @@ def test_J01_v2_readiness_evidence_surface_importable():
         from core.v2_readiness_governance_evidence_surface import (
             V2_READINESS_GOVERNANCE_EVIDENCE_SURFACE_AUTHORITY,
         )
+
         assert V2_READINESS_GOVERNANCE_EVIDENCE_SURFACE_AUTHORITY
     except ImportError:
         pytest.skip("core.v2_readiness_governance_evidence_surface not available")
@@ -893,6 +879,6 @@ def test_K04_non_deferred_categories_have_dimension_ids():
     for e in report.category_evaluations:
         if e.strength != GateCategoryStrength.deferred.value:
             # Non-deferred categories must reference at least one dimension
-            assert len(e.evidence_dimension_ids) >= 1, (
-                f"Non-deferred category {e.category!r} has no evidence_dimension_ids"
-            )
+            assert (
+                len(e.evidence_dimension_ids) >= 1
+            ), f"Non-deferred category {e.category!r} has no evidence_dimension_ids"

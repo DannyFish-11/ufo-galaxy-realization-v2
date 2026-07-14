@@ -38,24 +38,26 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 
-from core.routes._shared import (
-    connection_manager,
-    command_results,
-)
+from core.node_invocation import InvocationSource, invoke_node
 from core.routes._helpers import nodes_root
-from core.node_invocation import invoke_node, InvocationSource
 from core.routes._models import (
     CommandStatus,
     TargetResult,
     UnifiedCommandRequest,
+)
+from core.routes._shared import (
+    command_results,
+    connection_manager,
 )
 from core.schemas.task_envelope import envelope_from_command_request
 
 try:
     from core.auth import require_auth
 except ImportError:
+
     async def require_auth():
         return {"authenticated": True, "dev_mode": True}
+
 
 logger = logging.getLogger("Galaxy.API")
 
@@ -66,6 +68,7 @@ def _get_node71_url() -> str:
     """Return the base URL for Node_71 (Multi-Device Coordination Engine)."""
     try:
         from core.port_config import get_node_port
+
         port = get_node_port("Node_71_MultiDeviceCoordination")
     except Exception as exc:
         logger.debug("Fallback triggered: %s", exc)
@@ -105,18 +108,21 @@ async def _delegate_to_mdce(
     except (httpx.HTTPError, httpx.TransportError, OSError, ValueError) as exc:
         logger.warning(
             "Node_71 MDCE delegation failed (request_id=%s): %s -- falling back to local dispatch",
-            request_id, exc,
+            request_id,
+            exc,
         )
         return None
 
-    return JSONResponse({
-        "request_id": request_id,
-        "status": CommandStatus.QUEUED,
-        "created_at": created_at,
-        "mdce": True,
-        "mdce_task_id": mdce_result.get("task_id"),
-        "message": "Multi-device command delegated to Node_71 MDCE.",
-    })
+    return JSONResponse(
+        {
+            "request_id": request_id,
+            "status": CommandStatus.QUEUED,
+            "created_at": created_at,
+            "mdce": True,
+            "mdce_task_id": mdce_result.get("task_id"),
+            "message": "Multi-device command delegated to Node_71 MDCE.",
+        }
+    )
 
 
 def create_router(service_manager=None, config=None) -> APIRouter:
@@ -138,14 +144,11 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                     output=None,
                     error="Target device not connected",
                     started_at=started_at,
-                    completed_at=datetime.now(timezone.utc).isoformat()
+                    completed_at=datetime.now(timezone.utc).isoformat(),
                 )
 
             result = await connection_manager.send_command_and_wait(
-                device_id=target,
-                command=command,
-                params=params,
-                timeout=float(timeout)
+                device_id=target, command=command, params=params, timeout=float(timeout)
             )
 
             if "error" in result:
@@ -154,7 +157,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                     output=None,
                     error=result["error"],
                     started_at=started_at,
-                    completed_at=datetime.now(timezone.utc).isoformat()
+                    completed_at=datetime.now(timezone.utc).isoformat(),
                 )
 
             return TargetResult(
@@ -162,7 +165,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 output=result,
                 error=None,
                 started_at=started_at,
-                completed_at=datetime.now(timezone.utc).isoformat()
+                completed_at=datetime.now(timezone.utc).isoformat(),
             )
 
         except Exception as e:
@@ -172,7 +175,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 output=None,
                 error=str(e),
                 started_at=started_at,
-                completed_at=datetime.now(timezone.utc).isoformat()
+                completed_at=datetime.now(timezone.utc).isoformat(),
             )
 
     def _build_canonical_envelope(req: UnifiedCommandRequest, request_id: str):
@@ -202,10 +205,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         error_message = route_result.get("error_message")
         status = CommandStatus.DONE if success else CommandStatus.FAILED
 
-        if (
-            isinstance(result_payload, dict)
-            and isinstance(result_payload.get("results"), list)
-        ):
+        if isinstance(result_payload, dict) and isinstance(result_payload.get("results"), list):
             mapped: Dict[str, Any] = {}
             for entry in result_payload["results"]:
                 if not isinstance(entry, dict):
@@ -243,7 +243,11 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         envelope = _build_canonical_envelope(req, request_id)
         logger.info(
             "统一命令进入 canonical spine: trace_id=%s task_id=%s command=%s targets=%s mode=%s",
-            envelope.trace_id, envelope.task_id, req.command, req.targets, req.mode,
+            envelope.trace_id,
+            envelope.task_id,
+            req.command,
+            req.targets,
+            req.mode,
         )
         route_result = await command_router.route_envelope(envelope)
 
@@ -264,10 +268,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         }
 
     @router.post("/api/v1/command/unified")
-    async def unified_command(
-        req: UnifiedCommandRequest,
-        auth: dict = Depends(require_auth)
-    ):
+    async def unified_command(req: UnifiedCommandRequest, auth: dict = Depends(require_auth)):
         """
         统一命令端点 - 支持多目标、sync/async 模式、超时控制
         """
@@ -289,35 +290,40 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             "status": CommandStatus.QUEUED,
             "created_at": created_at,
             "completed_at": None,
-            "results": {}
+            "results": {},
         }
 
         if req.mode == "sync":
             command_results[request_id]["status"] = CommandStatus.RUNNING
             execution = await _execute_via_canonical_route(req, request_id, created_at)
-            return JSONResponse({
-                "request_id": request_id,
-                "status": execution["status"],
-                "created_at": created_at,
-                "completed_at": execution["completed_at"],
-                "results": execution["results"],
-            })
+            return JSONResponse(
+                {
+                    "request_id": request_id,
+                    "status": execution["status"],
+                    "created_at": created_at,
+                    "completed_at": execution["completed_at"],
+                    "results": execution["results"],
+                }
+            )
 
         else:
+
             async def execute_async():
                 """后台执行任务"""
                 try:
                     command_results[request_id]["status"] = CommandStatus.RUNNING
                     execution = await _execute_via_canonical_route(req, request_id, created_at)
 
-                    await connection_manager.broadcast_status({
-                        "type": "command_result",
-                        "request_id": request_id,
-                        "status": execution["status"],
-                        "created_at": created_at,
-                        "completed_at": execution["completed_at"],
-                        "results": execution["results"],
-                    })
+                    await connection_manager.broadcast_status(
+                        {
+                            "type": "command_result",
+                            "request_id": request_id,
+                            "status": execution["status"],
+                            "created_at": created_at,
+                            "completed_at": execution["completed_at"],
+                            "results": execution["results"],
+                        }
+                    )
 
                 except Exception as e:
                     logger.error(f"异步命令执行失败: {e}")
@@ -330,50 +336,53 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                             output=None,
                             error=str(e),
                             started_at=created_at,
-                            completed_at=completed_at
+                            completed_at=completed_at,
                         ).model_dump()
                         for target in req.targets
                     }
 
-                    await connection_manager.broadcast_status({
-                        "type": "command_result",
-                        "request_id": request_id,
-                        "status": CommandStatus.FAILED,
-                        "created_at": created_at,
-                        "completed_at": completed_at,
-                        "results": command_results[request_id]["results"]
-                    })
+                    await connection_manager.broadcast_status(
+                        {
+                            "type": "command_result",
+                            "request_id": request_id,
+                            "status": CommandStatus.FAILED,
+                            "created_at": created_at,
+                            "completed_at": completed_at,
+                            "results": command_results[request_id]["results"],
+                        }
+                    )
 
             asyncio.create_task(execute_async())
 
-            return JSONResponse({
-                "request_id": request_id,
-                "status": CommandStatus.QUEUED,
-                "created_at": created_at,
-                "message": (
-                    "Command queued for async execution. "
-                    "Use GET /api/v1/command/{request_id}/status to check status."
-                ),
-            })
+            return JSONResponse(
+                {
+                    "request_id": request_id,
+                    "status": CommandStatus.QUEUED,
+                    "created_at": created_at,
+                    "message": (
+                        "Command queued for async execution. "
+                        "Use GET /api/v1/command/{request_id}/status to check status."
+                    ),
+                }
+            )
 
     @router.get("/api/v1/command/unified/{request_id}/status")
-    async def get_unified_command_status(
-        request_id: str,
-        auth: dict = Depends(require_auth)
-    ):
+    async def get_unified_command_status(request_id: str, auth: dict = Depends(require_auth)):
         """查询异步统一命令执行状态和结果"""
         if request_id not in command_results:
             raise HTTPException(status_code=404, detail="Command not found")
 
         result = command_results[request_id]
 
-        return JSONResponse({
-            "request_id": result["request_id"],
-            "status": result["status"],
-            "created_at": result["created_at"],
-            "completed_at": result["completed_at"],
-            "results": result["results"]
-        })
+        return JSONResponse(
+            {
+                "request_id": result["request_id"],
+                "status": result["status"],
+                "created_at": result["created_at"],
+                "completed_at": result["completed_at"],
+                "results": result["results"],
+            }
+        )
 
     # ── Command Router endpoints ────────────────────────────────────────────
 
@@ -401,11 +410,14 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                     break
             if not found_as_node:
                 if connection_manager.is_online(target):
-                    sent = await connection_manager.send_to_device(target, {
-                        "type": "command",
-                        "command": command,
-                        "params": params,
-                    })
+                    sent = await connection_manager.send_to_device(
+                        target,
+                        {
+                            "type": "command",
+                            "command": command,
+                            "params": params,
+                        },
+                    )
                     return {"sent_to_device": target, "success": sent}
                 return {"error": f"Target {target} not found"}
 
@@ -438,13 +450,15 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         if request_id not in command_results:
             raise HTTPException(status_code=404, detail=f"Command {request_id} not found")
         result = command_results[request_id]
-        return JSONResponse({
-            "request_id": result["request_id"],
-            "status": result["status"],
-            "created_at": result["created_at"],
-            "completed_at": result.get("completed_at"),
-            "results": result.get("results", {}),
-        })
+        return JSONResponse(
+            {
+                "request_id": result["request_id"],
+                "status": result["status"],
+                "created_at": result["created_at"],
+                "completed_at": result.get("completed_at"),
+                "results": result.get("results", {}),
+            }
+        )
 
     @router.get("/api/v1/command/{request_id}")
     async def get_command_status(request_id: str):

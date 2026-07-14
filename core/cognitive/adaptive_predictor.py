@@ -41,12 +41,10 @@ Design principles
 
 from __future__ import annotations
 
-from collections import defaultdict  # auto: missing import
-
-
 import logging
 import threading
 import time
+from collections import defaultdict  # auto: missing import
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
@@ -54,10 +52,10 @@ logger = logging.getLogger("Galaxy.Cognitive.AdaptivePredictor")
 
 # ── Constants ────────────────────────────────────────────────────────────
 
-_MIN_CONFIDENCE_THRESHOLD = 0.3       # drop recommendations below this
-_STRATEGY_SWITCH_CONFIDENCE = 0.75   # need this confidence to suggest switching
-_TIMEOUT_SAFETY_FACTOR = 1.5         # multiply avg duration by this for timeout
-_MAX_PREHEAT_TOOLS = 3               # cap number of tools to preheat
+_MIN_CONFIDENCE_THRESHOLD = 0.3  # drop recommendations below this
+_STRATEGY_SWITCH_CONFIDENCE = 0.75  # need this confidence to suggest switching
+_TIMEOUT_SAFETY_FACTOR = 1.5  # multiply avg duration by this for timeout
+_MAX_PREHEAT_TOOLS = 3  # cap number of tools to preheat
 _PREDICTION_EVENT = "cognitive.prediction"
 
 
@@ -200,17 +198,14 @@ class AdaptivePredictor:
                 "strategy_match": recommendation.strategy == actual_strategy,
                 "recommended_timeout": recommendation.timeout_ms,
                 "actual_duration": duration_ms,
-                "timeout_adequate": (
-                    recommendation.timeout_ms == 0
-                    or recommendation.timeout_ms >= duration_ms
-                ),
+                "timeout_adequate": (recommendation.timeout_ms == 0 or recommendation.timeout_ms >= duration_ms),
                 "success": success,
                 "overall_confidence": recommendation.overall_confidence,
             }
             with self._lock:
                 self._recommendation_history.append(entry)
                 if len(self._recommendation_history) > self._max_history:
-                    self._recommendation_history = self._recommendation_history[-self._max_history:]
+                    self._recommendation_history = self._recommendation_history[-self._max_history :]
 
             # If our recommendation was wrong, log for calibration
             if recommendation.strategy and recommendation.strategy != actual_strategy:
@@ -218,7 +213,8 @@ class AdaptivePredictor:
                     logger.info(
                         "AdaptivePredictor calibration: recommended '%s' but '%s' "
                         "succeeded. Adjusting confidence model.",
-                        recommendation.strategy, actual_strategy,
+                        recommendation.strategy,
+                        actual_strategy,
                     )
         except Exception as exc:
             logger.debug("record_outcome failed (non-fatal): %s", exc)
@@ -230,15 +226,9 @@ class AdaptivePredictor:
                 return {"samples": 0}
 
             total = len(self._recommendation_history)
-            strategy_matches = sum(
-                1 for e in self._recommendation_history if e.get("strategy_match")
-            )
-            timeout_ok = sum(
-                1 for e in self._recommendation_history if e.get("timeout_adequate")
-            )
-            successes = sum(
-                1 for e in self._recommendation_history if e.get("success")
-            )
+            strategy_matches = sum(1 for e in self._recommendation_history if e.get("strategy_match"))
+            timeout_ok = sum(1 for e in self._recommendation_history if e.get("timeout_adequate"))
+            successes = sum(1 for e in self._recommendation_history if e.get("success"))
 
             return {
                 "samples": total,
@@ -247,15 +237,11 @@ class AdaptivePredictor:
                 "overall_success_rate": round(successes / total, 4) if total else 0,
                 "high_conf_accuracy": round(
                     sum(
-                        1 for e in self._recommendation_history
-                        if e.get("strategy_match")
-                        and e.get("overall_confidence", 0) > 0.7
-                    ) / max(
-                        sum(
-                            1 for e in self._recommendation_history
-                            if e.get("overall_confidence", 0) > 0.7
-                        ), 1
-                    ),
+                        1
+                        for e in self._recommendation_history
+                        if e.get("strategy_match") and e.get("overall_confidence", 0) > 0.7
+                    )
+                    / max(sum(1 for e in self._recommendation_history if e.get("overall_confidence", 0) > 0.7), 1),
                     4,
                 ),
             }
@@ -311,9 +297,7 @@ class AdaptivePredictor:
                     if pat.recommendation.get("preheat"):
                         tt = pat.conditions.get("task_type", "")
                         if tt:
-                            preheat_suggestions[tt].append(
-                                pat.confidence * pat.activation_score
-                            )
+                            preheat_suggestions[tt].append(pat.confidence * pat.activation_score)
 
                 elif pat.pattern_type == "sequence":
                     next_task = pat.recommendation.get("likely_next", "")
@@ -357,15 +341,10 @@ class AdaptivePredictor:
                     key=lambda x: sum(x[1]) / len(x[1]),
                     reverse=True,
                 )
-                rec.preheat_tools = [
-                    tool for tool, _ in sorted_preheat[:_MAX_PREHEAT_TOOLS]
-                ]
+                rec.preheat_tools = [tool for tool, _ in sorted_preheat[:_MAX_PREHEAT_TOOLS]]
                 rec.preheat_confidence = min(
                     1.0,
-                    sum(
-                        sum(scores) / len(scores)
-                        for _, scores in sorted_preheat[:_MAX_PREHEAT_TOOLS]
-                    )
+                    sum(sum(scores) / len(scores) for _, scores in sorted_preheat[:_MAX_PREHEAT_TOOLS])
                     / max(len(sorted_preheat[:_MAX_PREHEAT_TOOLS]), 1),
                 )
 
@@ -389,8 +368,7 @@ class AdaptivePredictor:
             for reflection in active_reflections:
                 rec.reflection_notes.append(reflection.reflection_text[:300])
                 # Reflections about failures boost caution
-                if "failed" in reflection.reflection_text.lower() or \
-                   "failure" in reflection.reflection_text.lower():
+                if "failed" in reflection.reflection_text.lower() or "failure" in reflection.reflection_text.lower():
                     if not rec.caution:
                         rec.caution = (
                             "Historical failure detected for similar tasks — "
@@ -418,11 +396,7 @@ class AdaptivePredictor:
             tm = get_task_memory()
             recent = tm.get_recent_summaries(n=20)
             task_lower = (task or "").lower()
-            similar = [
-                s for s in recent
-                if task_type and s.task_type == task_type
-                or task_lower in s.task.lower()
-            ]
+            similar = [s for s in recent if task_type and s.task_type == task_type or task_lower in s.task.lower()]
             durations = [s.duration_ms for s in similar if s.duration_ms > 0]
             if durations:
                 avg = sum(durations) / len(durations)
@@ -479,11 +453,9 @@ class AdaptivePredictor:
             return 0.0
         mean = sum(values) / len(values)
         variance = sum((x - mean) ** 2 for x in values) / len(values)
-        return variance ** 0.5
+        return variance**0.5
 
-    def _emit_prediction_event(
-        self, rec: ExecutionRecommendation, trace_id: Optional[str]
-    ) -> None:
+    def _emit_prediction_event(self, rec: ExecutionRecommendation, trace_id: Optional[str]) -> None:
         """Emit prediction event on state event bus."""
         try:
             from core.state_event_bus import get_state_event_bus

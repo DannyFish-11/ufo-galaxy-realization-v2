@@ -57,6 +57,7 @@ def _source_contains(rel_path: str, tokens: List[str]) -> bool:
         logger.debug("CognitionAudit source probe failed for %s: %s", rel_path, exc)
         return False
 
+
 # ---------------------------------------------------------------------------
 # Methodology sentinel
 # ---------------------------------------------------------------------------
@@ -108,7 +109,7 @@ def check_desktop_presence_runtime_tristate_ownership() -> CognitionCheckResult:
     """
     check = "desktop_presence_runtime_tristate_ownership"
     try:
-        from core.desktop_presence_runtime import TriState, DesktopPresenceRuntime
+        from core.desktop_presence_runtime import DesktopPresenceRuntime, TriState
 
         assert TriState.SILENT.value == "silent"
         assert TriState.LIMINAL.value == "liminal"
@@ -204,18 +205,10 @@ def check_openclawd_subject_core_existence() -> CognitionCheckResult:
 
         # Verify key method existence (four-stage flow)
         assert hasattr(OpenClawd, "process"), "OpenClawd.process() missing"
-        assert hasattr(OpenClawd, "_determine_execution_path"), (
-            "OpenClawd._determine_execution_path() missing"
-        )
-        assert hasattr(OpenClawd, "_select_multimodal_route"), (
-            "OpenClawd._select_multimodal_route() missing"
-        )
-        assert hasattr(OpenClawd, "_delegate_local_manifestation"), (
-            "OpenClawd._delegate_local_manifestation() missing"
-        )
-        assert hasattr(OpenClawd, "_delegate_single_remote"), (
-            "OpenClawd._delegate_single_remote() missing"
-        )
+        assert hasattr(OpenClawd, "_determine_execution_path"), "OpenClawd._determine_execution_path() missing"
+        assert hasattr(OpenClawd, "_select_multimodal_route"), "OpenClawd._select_multimodal_route() missing"
+        assert hasattr(OpenClawd, "_delegate_local_manifestation"), "OpenClawd._delegate_local_manifestation() missing"
+        assert hasattr(OpenClawd, "_delegate_single_remote"), "OpenClawd._delegate_single_remote() missing"
         return CognitionCheckResult(
             check_name=check,
             passed=True,
@@ -326,8 +319,7 @@ def check_local_execution_chain_steps() -> CognitionCheckResult:
             check_name=check,
             passed=True,
             evidence=(
-                "core.local_execution_chain.LocalChainStep defines all canonical steps: "
-                f"{sorted(required_steps)}"
+                "core.local_execution_chain.LocalChainStep defines all canonical steps: " f"{sorted(required_steps)}"
             ),
         )
     except Exception as exc:
@@ -376,15 +368,11 @@ def check_handoff_envelope_v2_android_wire_format() -> CognitionCheckResult:
     try:
         from contracts.handoff_envelope_v2 import HandoffEnvelopeV2
 
-        assert hasattr(HandoffEnvelopeV2, "to_android_task_assign_payload"), (
-            "HandoffEnvelopeV2.to_android_task_assign_payload() missing"
-        )
-        assert hasattr(HandoffEnvelopeV2, "to_dict"), (
-            "HandoffEnvelopeV2.to_dict() missing"
-        )
-        assert hasattr(HandoffEnvelopeV2, "to_json"), (
-            "HandoffEnvelopeV2.to_json() missing"
-        )
+        assert hasattr(
+            HandoffEnvelopeV2, "to_android_task_assign_payload"
+        ), "HandoffEnvelopeV2.to_android_task_assign_payload() missing"
+        assert hasattr(HandoffEnvelopeV2, "to_dict"), "HandoffEnvelopeV2.to_dict() missing"
+        assert hasattr(HandoffEnvelopeV2, "to_json"), "HandoffEnvelopeV2.to_json() missing"
         return CognitionCheckResult(
             check_name=check,
             passed=True,
@@ -429,15 +417,9 @@ def check_multimodal_ingress_bus_existence() -> CognitionCheckResult:
     try:
         from core.multimodal.ingress_bus import MultimodalIngressBus
 
-        assert hasattr(MultimodalIngressBus, "run"), (
-            "MultimodalIngressBus.run() missing"
-        )
-        assert hasattr(MultimodalIngressBus, "stream"), (
-            "MultimodalIngressBus.stream() missing"
-        )
-        assert hasattr(MultimodalIngressBus, "build_frame"), (
-            "MultimodalIngressBus.build_frame() missing"
-        )
+        assert hasattr(MultimodalIngressBus, "run"), "MultimodalIngressBus.run() missing"
+        assert hasattr(MultimodalIngressBus, "stream"), "MultimodalIngressBus.stream() missing"
+        assert hasattr(MultimodalIngressBus, "build_frame"), "MultimodalIngressBus.build_frame() missing"
         return CognitionCheckResult(
             check_name=check,
             passed=True,
@@ -484,10 +466,10 @@ def check_pending_delivery_buffer_guarantees() -> CognitionCheckResult:
     check = "pending_delivery_buffer_guarantees"
     try:
         from galaxy_gateway.pending_delivery_buffer import (
-            PendingDeliveryBuffer,
-            DurablePendingDeliveryBuffer,
             PENDING_DELIVERY_MAX_QUEUE_PER_DEVICE,
             PENDING_DELIVERY_TTL_SECONDS,
+            DurablePendingDeliveryBuffer,
+            PendingDeliveryBuffer,
         )
 
         assert hasattr(PendingDeliveryBuffer, "enqueue")
@@ -573,20 +555,14 @@ def check_config_service_network_url_surface() -> CognitionCheckResult:
     try:
         from core.config_service import ConfigService
 
-        assert hasattr(ConfigService, "set_network_url"), (
-            "ConfigService.set_network_url() missing"
-        )
-        assert hasattr(ConfigService, "get_network_url"), (
-            "ConfigService.get_network_url() missing"
-        )
-        assert hasattr(ConfigService, "set_android_inference_mode"), (
-            "ConfigService.set_android_inference_mode() missing"
-        )
+        assert hasattr(ConfigService, "set_network_url"), "ConfigService.set_network_url() missing"
+        assert hasattr(ConfigService, "get_network_url"), "ConfigService.get_network_url() missing"
+        assert hasattr(
+            ConfigService, "set_android_inference_mode"
+        ), "ConfigService.set_android_inference_mode() missing"
 
         # Verify the URL key map is present as a class-level attribute
-        assert hasattr(ConfigService, "_NETWORK_URL_KEYS"), (
-            "ConfigService._NETWORK_URL_KEYS missing"
-        )
+        assert hasattr(ConfigService, "_NETWORK_URL_KEYS"), "ConfigService._NETWORK_URL_KEYS missing"
         required_url_keys = {
             "gateway_url",
             "android_gateway_url",
@@ -630,9 +606,7 @@ def check_url_config_surface_renders() -> CognitionCheckResult:
     try:
         from windows_client.status_board_v2.url_config_surface import URLConfigSurface
 
-        assert hasattr(URLConfigSurface, "render"), (
-            "URLConfigSurface.render() missing"
-        )
+        assert hasattr(URLConfigSurface, "render"), "URLConfigSurface.render() missing"
         return CognitionCheckResult(
             check_name=check,
             passed=True,
@@ -660,9 +634,7 @@ def check_config_control_surface_apply_network_url() -> CognitionCheckResult:
     try:
         from windows_client.status_board_v2.config_control import ConfigControlSurface
 
-        assert hasattr(ConfigControlSurface, "apply_network_url"), (
-            "ConfigControlSurface.apply_network_url() missing"
-        )
+        assert hasattr(ConfigControlSurface, "apply_network_url"), "ConfigControlSurface.apply_network_url() missing"
         return CognitionCheckResult(
             check_name=check,
             passed=True,
@@ -766,9 +738,9 @@ def check_stage7_distributed_execution_result_correlation() -> CognitionCheckRes
         # TaskStatus must include terminal states for result closure
         # TaskStatus uses SUCCESS (not COMPLETED), FAILED, and CANCELLED
         terminal_states = {TaskStatus.SUCCESS, TaskStatus.FAILED, TaskStatus.CANCELLED}
-        assert all(s in list(TaskStatus) for s in terminal_states), (
-            f"TaskStatus missing terminal states: {terminal_states - set(list(TaskStatus))}"
-        )
+        assert all(
+            s in list(TaskStatus) for s in terminal_states
+        ), f"TaskStatus missing terminal states: {terminal_states - set(list(TaskStatus))}"
         return CognitionCheckResult(
             check_name=check,
             passed=True,
@@ -782,7 +754,12 @@ def check_stage7_distributed_execution_result_correlation() -> CognitionCheckRes
     except Exception as exc:
         if _source_contains(
             "core/master_brain.py",
-            ["def dispatch_task", "def handle_task_result", "def _classify_task_result", "def execute_distributed_task"],
+            [
+                "def dispatch_task",
+                "def handle_task_result",
+                "def _classify_task_result",
+                "def execute_distributed_task",
+            ],
         ) and _source_contains(
             "core/schemas/contracts.py",
             ["class TaskStatus", 'SUCCESS = "success"', 'FAILED = "failed"', 'CANCELLED = "cancelled"'],
@@ -875,8 +852,8 @@ def check_stage9_temporal_conditional_real() -> CognitionCheckResult:
     """
     check = "stage9_temporal_conditional_real"
     try:
-        from core.master_brain import MasterBrain
         from core import temporal_workflows as tw
+        from core.master_brain import MasterBrain
 
         # Temporal availability gate is a two-part check (client + worker)
         assert hasattr(MasterBrain, "is_temporal_runtime_available")
@@ -955,12 +932,12 @@ def check_stage10_scheduling_truth_harness() -> CognitionCheckResult:
     check = "stage10_scheduling_truth_harness"
     try:
         from core.scheduling_truth_harness import (
+            GAP_512_002_CLOSED_SENTINEL,
+            GAP_512_004_ADDRESSED_SENTINEL,
+            SCHEDULING_TRUTH_HARNESS_IS_AUTHORITY,
             SchedulingTruthHarness,
             ensure_task_registered,
             query_routable_executors_for_task,
-            SCHEDULING_TRUTH_HARNESS_IS_AUTHORITY,
-            GAP_512_002_CLOSED_SENTINEL,
-            GAP_512_004_ADDRESSED_SENTINEL,
         )
 
         assert callable(ensure_task_registered)
@@ -1049,13 +1026,9 @@ def build_cognition_audit_snapshot() -> Dict[str, Any]:
     # The android_model_checksums_populated check is an expected gap —
     # it does not block the operational verdict but records the gap honestly.
     hard_failures = [
-        c.check_name
-        for c in checks
-        if not c.passed and c.check_name != "android_model_checksums_populated"
+        c.check_name for c in checks if not c.passed and c.check_name != "android_model_checksums_populated"
     ]
-    verdict = (
-        "COGNITION_AUDIT_PASSED" if not hard_failures else "COGNITION_AUDIT_PARTIAL"
-    )
+    verdict = "COGNITION_AUDIT_PASSED" if not hard_failures else "COGNITION_AUDIT_PARTIAL"
 
     return {
         "checks": [c.to_dict() for c in checks],

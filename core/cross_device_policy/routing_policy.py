@@ -187,9 +187,7 @@ class RoutingPolicy:
     source_device_id: Optional[str] = None
 
     # Device assignments
-    assigned_devices: List[DeviceRoleAssignment] = dataclasses.field(
-        default_factory=list
-    )
+    assigned_devices: List[DeviceRoleAssignment] = dataclasses.field(default_factory=list)
 
     # Domain intent (plain string to avoid hard import)
     runtime_domain_intent: Optional[str] = None
@@ -268,9 +266,7 @@ class RoutingPolicy:
         Unknown or missing fields are silently ignored / defaulted.
         """
         try:
-            posture = RoutingPosture(
-                data.get("posture", RoutingPosture.UNDECIDED.value)
-            )
+            posture = RoutingPosture(data.get("posture", RoutingPosture.UNDECIDED.value))
         except (ValueError, KeyError):
             posture = RoutingPosture.UNDECIDED
 
@@ -288,12 +284,8 @@ class RoutingPolicy:
             assigned_devices=assignments,
             runtime_domain_intent=data.get("runtime_domain_intent"),
             policy_reason=str(data.get("policy_reason", "reconstructed from dict")),
-            expansion_allowed_by_execution_policy=bool(
-                data.get("expansion_allowed_by_execution_policy", False)
-            ),
-            confirmation_required_before_expansion=bool(
-                data.get("confirmation_required_before_expansion", True)
-            ),
+            expansion_allowed_by_execution_policy=bool(data.get("expansion_allowed_by_execution_policy", False)),
+            confirmation_required_before_expansion=bool(data.get("confirmation_required_before_expansion", True)),
             task_id=data.get("task_id"),
             trace_id=data.get("trace_id"),
         )

@@ -30,7 +30,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -95,12 +94,15 @@ class TestStagedMeshProductionPath:
         oc = _make_openclawd_instance()
 
         async def run():
-            with patch(
-                "core.runtime.source_dispatch_orchestrator._try_mesh_session",
-                return_value=mesh_dict,
-            ), patch(
-                "core.runtime.source_dispatch_orchestrator.orchestrate_source_runtime_dispatch",
-                return_value=fake_result,
+            with (
+                patch(
+                    "core.runtime.source_dispatch_orchestrator._try_mesh_session",
+                    return_value=mesh_dict,
+                ),
+                patch(
+                    "core.runtime.source_dispatch_orchestrator.orchestrate_source_runtime_dispatch",
+                    return_value=fake_result,
+                ),
             ):
                 return await oc._delegate_multi_device_orchestration(
                     message="run mesh task",
@@ -132,12 +134,15 @@ class TestStagedMeshProductionPath:
         oc = _make_openclawd_instance()
 
         async def run():
-            with patch(
-                "core.runtime.source_dispatch_orchestrator._try_mesh_session",
-                return_value=mesh_dict,
-            ), patch(
-                "core.runtime.source_dispatch_orchestrator.orchestrate_source_runtime_dispatch",
-                return_value=fake_result,
+            with (
+                patch(
+                    "core.runtime.source_dispatch_orchestrator._try_mesh_session",
+                    return_value=mesh_dict,
+                ),
+                patch(
+                    "core.runtime.source_dispatch_orchestrator.orchestrate_source_runtime_dispatch",
+                    return_value=fake_result,
+                ),
             ):
                 return await oc._delegate_multi_device_orchestration(
                     message="staged mesh",
@@ -246,12 +251,15 @@ class TestFallbackNonStagedMeshResult:
         oc._dispatch_parallel_goal = fake_parallel_goal
 
         async def run():
-            with patch(
-                "core.runtime.source_dispatch_orchestrator._try_mesh_session",
-                return_value=mesh_dict,
-            ), patch(
-                "core.runtime.source_dispatch_orchestrator.orchestrate_source_runtime_dispatch",
-                return_value=local_result,
+            with (
+                patch(
+                    "core.runtime.source_dispatch_orchestrator._try_mesh_session",
+                    return_value=mesh_dict,
+                ),
+                patch(
+                    "core.runtime.source_dispatch_orchestrator.orchestrate_source_runtime_dispatch",
+                    return_value=local_result,
+                ),
             ):
                 return await oc._delegate_multi_device_orchestration(
                     message="local mode",
@@ -284,12 +292,15 @@ class TestFallbackNonStagedMeshResult:
         oc._dispatch_parallel_goal = fake_parallel_goal
 
         async def run():
-            with patch(
-                "core.runtime.source_dispatch_orchestrator._try_mesh_session",
-                return_value=mesh_dict,
-            ), patch(
-                "core.runtime.source_dispatch_orchestrator.orchestrate_source_runtime_dispatch",
-                return_value=failed_result,
+            with (
+                patch(
+                    "core.runtime.source_dispatch_orchestrator._try_mesh_session",
+                    return_value=mesh_dict,
+                ),
+                patch(
+                    "core.runtime.source_dispatch_orchestrator.orchestrate_source_runtime_dispatch",
+                    return_value=failed_result,
+                ),
             ):
                 return await oc._delegate_multi_device_orchestration(
                     message="failed mesh",
@@ -322,12 +333,15 @@ class TestFallbackOnOrchestratorException:
         oc._dispatch_parallel_goal = fake_parallel_goal
 
         async def run():
-            with patch(
-                "core.runtime.source_dispatch_orchestrator._try_mesh_session",
-                return_value=mesh_dict,
-            ), patch(
-                "core.runtime.source_dispatch_orchestrator.orchestrate_source_runtime_dispatch",
-                side_effect=RuntimeError("unexpected orchestrator failure"),
+            with (
+                patch(
+                    "core.runtime.source_dispatch_orchestrator._try_mesh_session",
+                    return_value=mesh_dict,
+                ),
+                patch(
+                    "core.runtime.source_dispatch_orchestrator.orchestrate_source_runtime_dispatch",
+                    side_effect=RuntimeError("unexpected orchestrator failure"),
+                ),
             ):
                 return await oc._delegate_multi_device_orchestration(
                     message="error case",
@@ -375,12 +389,8 @@ class TestDelegationPointAlwaysSet:
             with patches[0]:
                 if len(patches) > 1:
                     with patches[1]:
-                        return await oc._delegate_multi_device_orchestration(
-                            message="test", trace_id="trace_dp"
-                        )
-                return await oc._delegate_multi_device_orchestration(
-                    message="test", trace_id="trace_dp"
-                )
+                        return await oc._delegate_multi_device_orchestration(message="test", trace_id="trace_dp")
+                return await oc._delegate_multi_device_orchestration(message="test", trace_id="trace_dp")
 
         return asyncio.new_event_loop().run_until_complete(run())
 
@@ -417,16 +427,17 @@ class TestDelegationPointAlwaysSet:
         oc = _make_openclawd_instance()
 
         async def run():
-            with patch(
-                "core.runtime.source_dispatch_orchestrator._try_mesh_session",
-                return_value=_make_mesh_session_dict(participant_count=3),
-            ), patch(
-                "core.runtime.source_dispatch_orchestrator.orchestrate_source_runtime_dispatch",
-                return_value=fake_result,
+            with (
+                patch(
+                    "core.runtime.source_dispatch_orchestrator._try_mesh_session",
+                    return_value=_make_mesh_session_dict(participant_count=3),
+                ),
+                patch(
+                    "core.runtime.source_dispatch_orchestrator.orchestrate_source_runtime_dispatch",
+                    return_value=fake_result,
+                ),
             ):
-                return await oc._delegate_multi_device_orchestration(
-                    message="staged mesh", trace_id="trace_dp2"
-                )
+                return await oc._delegate_multi_device_orchestration(message="staged mesh", trace_id="trace_dp2")
 
         result = asyncio.new_event_loop().run_until_complete(run())
         assert result["metadata"]["delegation_point"] == "multi_device_orchestration"
@@ -443,6 +454,7 @@ class TestProductionCallerExists:
 
     def test_orchestrate_called_in_method_source(self):
         import inspect
+
         from core.openclawd import OpenClawd
 
         source = inspect.getsource(OpenClawd._delegate_multi_device_orchestration)
@@ -456,6 +468,7 @@ class TestProductionCallerExists:
         internally, so SourceDispatchPlan is part of the production dispatch flow
         whenever the orchestrator is invoked."""
         import inspect
+
         from core.runtime.source_dispatch_orchestrator import (
             orchestrate_source_runtime_dispatch,
         )
@@ -485,9 +498,8 @@ class TestSourceDispatchPlanInProductionFlow:
 
         real_orchestrate = None
         try:
-            from core.runtime.source_dispatch_orchestrator import (
-                orchestrate_source_runtime_dispatch as _real,
-            )
+            from core.runtime.source_dispatch_orchestrator import orchestrate_source_runtime_dispatch as _real
+
             real_orchestrate = _real
         except ImportError:
             pytest.skip("orchestrate_source_runtime_dispatch not available")
@@ -547,12 +559,15 @@ class TestStagedMeshReachable:
         oc = _make_openclawd_instance()
 
         async def run():
-            with patch(
-                "core.runtime.source_dispatch_orchestrator._try_mesh_session",
-                return_value=mesh_dict,
-            ), patch(
-                "core.runtime.source_dispatch_orchestrator.orchestrate_source_runtime_dispatch",
-                return_value=fake_result,
+            with (
+                patch(
+                    "core.runtime.source_dispatch_orchestrator._try_mesh_session",
+                    return_value=mesh_dict,
+                ),
+                patch(
+                    "core.runtime.source_dispatch_orchestrator.orchestrate_source_runtime_dispatch",
+                    return_value=fake_result,
+                ),
             ):
                 return await oc._delegate_multi_device_orchestration(
                     message="end-to-end staged mesh",
@@ -582,12 +597,15 @@ class TestStagedMeshReachable:
         }
 
         async def run():
-            with patch(
-                "core.runtime.source_dispatch_orchestrator._try_mesh_session",
-                return_value=thin_mesh,
-            ), patch(
-                "core.runtime.source_dispatch_orchestrator.orchestrate_source_runtime_dispatch",
-                side_effect=lambda **kw: staged_mesh_triggered.append(True) or MagicMock(),
+            with (
+                patch(
+                    "core.runtime.source_dispatch_orchestrator._try_mesh_session",
+                    return_value=thin_mesh,
+                ),
+                patch(
+                    "core.runtime.source_dispatch_orchestrator.orchestrate_source_runtime_dispatch",
+                    side_effect=lambda **kw: staged_mesh_triggered.append(True) or MagicMock(),
+                ),
             ):
                 return await oc._delegate_multi_device_orchestration(
                     message="thin mesh",

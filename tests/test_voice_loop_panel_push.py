@@ -37,6 +37,7 @@ async def test_voice_loop_pushes_user_and_ai_turns_to_panel(monkeypatch):
 
     # 拦截真实的 bridge 推送,只观察调用。
     import core.lumiv_websocket_bridge as bridge
+
     monkeypatch.setattr(bridge, "emit_conversation", _fake_emit)
 
     loop = VoiceLoop(_FakeGalaxy(), speak_responses=False)
@@ -61,6 +62,7 @@ async def test_empty_response_still_pushes_user_turn(monkeypatch):
         pushed.append(role)
 
     import core.lumiv_websocket_bridge as bridge
+
     monkeypatch.setattr(bridge, "emit_conversation", _fake_emit)
 
     class _EmptyGalaxy:
@@ -77,10 +79,12 @@ async def test_empty_response_still_pushes_user_turn(monkeypatch):
 @pytest.mark.asyncio
 async def test_emit_failure_does_not_break_voice_processing(monkeypatch):
     """面板推送失败绝不能影响语音主流程(容错)。"""
+
     def _boom(*a, **k):  # noqa: ANN001, ANN002, ANN003
         raise RuntimeError("bridge down")
 
     import core.lumiv_websocket_bridge as bridge
+
     monkeypatch.setattr(bridge, "emit_conversation", _boom)
 
     loop = VoiceLoop(_FakeGalaxy(), speak_responses=False)
@@ -96,6 +100,7 @@ class TestSingleVoiceLoopExclusion:
 
     def test_legacy_bridge_module_removed(self):
         import importlib.util
-        assert importlib.util.find_spec("core.voice_conversation_bridge") is None, (
-            "voice_conversation_bridge 已删除(voice_loop 是唯一语音回路),不应复活"
-        )
+
+        assert (
+            importlib.util.find_spec("core.voice_conversation_bridge") is None
+        ), "voice_conversation_bridge 已删除(voice_loop 是唯一语音回路),不应复活"

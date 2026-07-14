@@ -90,13 +90,10 @@ async def test_speak_response_toggles_overlay_speaking_during_playback(monkeypat
 
         so.speak_response("今天天气不错", source="voice")
         assert await _wait_until(lambda: played["active"]), "播放应在期限内开始"
-        assert await _wait_until(
-            lambda: played["saw_active"] and not played["active"]
-        ), "播放应在期限内彻底结束"
+        assert await _wait_until(lambda: played["saw_active"] and not played["active"]), "播放应在期限内彻底结束"
         # 结束后的 speaking=False 广播帧也可能晚于引擎返回一拍,等它落地
         assert await _wait_until(
-            lambda: (lambda s: True in s and s[-1] is False)(
-                _speaking_sequence(ws.received))
+            lambda: (lambda s: True in s and s[-1] is False)(_speaking_sequence(ws.received))
         ), f"覆盖层应先后收到 speaking=True/False; got {_speaking_sequence(ws.received)}"
     finally:
         await bridge.unregister_client(ws)
@@ -109,5 +106,6 @@ async def test_speak_response_toggles_overlay_speaking_during_playback(monkeypat
 def test_set_ai_speaking_never_raises():
     """set_ai_speaking 对无客户端/无事件循环等边界情况永不抛出。"""
     from core.lumiv_websocket_bridge import set_ai_speaking
+
     set_ai_speaking(True)
     set_ai_speaking(False)

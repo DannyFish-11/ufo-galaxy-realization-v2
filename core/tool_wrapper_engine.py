@@ -79,9 +79,7 @@ class ToolWrapperEngine:
         self.execution_history: List[ExecutionResult] = []
         logger.info("工具包装引擎已初始化")
 
-    def use_tool(
-        self, tool_name: str, task_description: str, context: Optional[Dict] = None
-    ) -> ExecutionResult:
+    def use_tool(self, tool_name: str, task_description: str, context: Optional[Dict] = None) -> ExecutionResult:
         result = ExecutionResult(
             tool_name=tool_name,
             task=task_description,
@@ -96,11 +94,15 @@ class ToolWrapperEngine:
         if sid:
             try:
                 from core.session_manager import get_session_manager
+
                 get_session_manager().record_tool_call(
-                    sid, tool_name,
+                    sid,
+                    tool_name,
                     arguments={"task": task_description},
-                    result=result.output, status="ok" if result.success else "error",
-                    error=result.error, trace_id=(context or {}).get("trace_id", ""),
+                    result=result.output,
+                    status="ok" if result.success else "error",
+                    error=result.error,
+                    trace_id=(context or {}).get("trace_id", ""),
                 )
             except Exception:  # noqa: BLE001
                 pass

@@ -35,8 +35,8 @@ All tests are self-contained (no live servers, no real devices).
 from __future__ import annotations
 
 import asyncio
-import sys
 import os
+import sys
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -55,39 +55,48 @@ def _run(coro):
 # A. Sentinel constants
 # ===========================================================================
 
+
 class TestPRBSentinels(unittest.TestCase):
     """Sentinel constants confirm each path has been converged."""
 
     def test_01_device_orchestrator_convergence_sentinel_importable(self):
         from core.device_orchestrator import DEVICE_ORCHESTRATOR_SPINE_CONVERGENCE
+
         self.assertIsNotNone(DEVICE_ORCHESTRATOR_SPINE_CONVERGENCE)
 
     def test_02_device_orchestrator_convergence_sentinel_mentions_spine(self):
         from core.device_orchestrator import DEVICE_ORCHESTRATOR_SPINE_CONVERGENCE
+
         self.assertIn("CONVERGENCE", DEVICE_ORCHESTRATOR_SPINE_CONVERGENCE)
 
     def test_03_device_orchestrator_convergence_sentinel_mentions_route_envelope(self):
         from core.device_orchestrator import DEVICE_ORCHESTRATOR_SPINE_CONVERGENCE
+
         self.assertIn("route_envelope", DEVICE_ORCHESTRATOR_SPINE_CONVERGENCE)
 
     def test_04_scheduler_relay_mesh_convergence_sentinel_importable(self):
         from core.scheduler import SCHEDULER_RELAY_MESH_SPINE_CONVERGENCE
+
         self.assertIsNotNone(SCHEDULER_RELAY_MESH_SPINE_CONVERGENCE)
 
     def test_05_scheduler_relay_mesh_convergence_sentinel_mentions_spine(self):
         from core.scheduler import SCHEDULER_RELAY_MESH_SPINE_CONVERGENCE
+
         self.assertIn("CONVERGENCE", SCHEDULER_RELAY_MESH_SPINE_CONVERGENCE)
 
     def test_06_scheduler_relay_mesh_convergence_sentinel_mentions_route_envelope(self):
         from core.scheduler import SCHEDULER_RELAY_MESH_SPINE_CONVERGENCE
+
         self.assertIn("route_envelope", SCHEDULER_RELAY_MESH_SPINE_CONVERGENCE)
 
     def test_07_device_orchestrator_facade_authority_still_present(self):
         from core.device_orchestrator import DEVICE_ORCHESTRATOR_FACADE_AUTHORITY
+
         self.assertIn("FACADE", DEVICE_ORCHESTRATOR_FACADE_AUTHORITY)
 
     def test_08_scheduler_routes_command_router_still_present(self):
         from core.scheduler import SCHEDULER_ROUTES_COMMAND_ROUTER
+
         self.assertIn("COMMAND_ROUTER", SCHEDULER_ROUTES_COMMAND_ROUTER)
 
 
@@ -95,11 +104,13 @@ class TestPRBSentinels(unittest.TestCase):
 # B. DeviceOrchestrator.send_command — spine routing path
 # ===========================================================================
 
+
 class TestDeviceOrchestratorSpineRouting(unittest.TestCase):
     """send_command calls CommandRouter.route_envelope when router available."""
 
     def _make_orchestrator(self):
         from core.device_orchestrator import DeviceOrchestrator
+
         orch = DeviceOrchestrator.__new__(DeviceOrchestrator)
         return orch
 
@@ -108,9 +119,7 @@ class TestDeviceOrchestratorSpineRouting(unittest.TestCase):
         orch = self._make_orchestrator()
 
         mock_router = MagicMock()
-        mock_router.route_envelope = AsyncMock(
-            return_value={"success": True, "via": "route_envelope"}
-        )
+        mock_router.route_envelope = AsyncMock(return_value={"success": True, "via": "route_envelope"})
 
         with patch("core.command_router.get_command_router", return_value=mock_router):
             result_raw = _run(orch.send_command("dev_1", "tap", {"x": 100}))
@@ -123,9 +132,7 @@ class TestDeviceOrchestratorSpineRouting(unittest.TestCase):
         orch = self._make_orchestrator()
 
         mock_router = MagicMock()
-        mock_router.route_envelope = AsyncMock(
-            return_value={"success": True, "data": "ok"}
-        )
+        mock_router.route_envelope = AsyncMock(return_value={"success": True, "data": "ok"})
 
         with patch("core.command_router.get_command_router", return_value=mock_router):
             result = _run(orch.send_command("dev_1", "screenshot", {}))
@@ -167,15 +174,13 @@ class TestDeviceOrchestratorSpineRouting(unittest.TestCase):
 
     def test_13_send_command_records_ingress_before_routing(self):
         """record_legacy_ingress is called regardless of spine availability."""
-        from core.execution_spine import reset_ingress_log, get_ingress_log
+        from core.execution_spine import get_ingress_log, reset_ingress_log
 
         reset_ingress_log()
         orch = self._make_orchestrator()
 
         mock_router = MagicMock()
-        mock_router.route_envelope = AsyncMock(
-            return_value={"success": True}
-        )
+        mock_router.route_envelope = AsyncMock(return_value={"success": True})
 
         with patch("core.command_router.get_command_router", return_value=mock_router):
             _run(orch.send_command("dev_1", "tap", {"x": 10}))
@@ -188,6 +193,7 @@ class TestDeviceOrchestratorSpineRouting(unittest.TestCase):
 # ===========================================================================
 # C. Scheduler._exec_relay — spine routing path
 # ===========================================================================
+
 
 class TestSchedulerRelaySpineRouting(unittest.TestCase):
     """_exec_relay calls CommandRouter.route_envelope when router available."""
@@ -205,18 +211,19 @@ class TestSchedulerRelaySpineRouting(unittest.TestCase):
         sched = self._make_scheduler()
 
         mock_router = MagicMock()
-        mock_router.route_envelope = AsyncMock(
-            return_value={"success": True, "via": "route_envelope"}
-        )
+        mock_router.route_envelope = AsyncMock(return_value={"success": True, "via": "route_envelope"})
         context = {"command_router": mock_router}
 
-        result_raw = _run(sched._exec_relay(
-            {"source_device": "src", "target_device": "tgt", "payload": {}},
-            context,
-        ))
+        result_raw = _run(
+            sched._exec_relay(
+                {"source_device": "src", "target_device": "tgt", "payload": {}},
+                context,
+            )
+        )
 
         mock_router.route_envelope.assert_called_once()
         import json
+
         result = json.loads(result_raw)
         self.assertTrue(result.get("success"))
 
@@ -261,10 +268,12 @@ class TestSchedulerRelaySpineRouting(unittest.TestCase):
         # ── 默认:回退被封,ProxyRelay 不得被调用 ──
         with patch("core.proxy_relay.get_proxy_relay", return_value=mock_proxy_relay):
             with patch("core.proxy_relay.RelayRequest", MagicMock()):
-                blocked_raw = _run(sched._exec_relay(
-                    {"source_device": "s", "target_device": "t", "payload": {}},
-                    context,
-                ))
+                blocked_raw = _run(
+                    sched._exec_relay(
+                        {"source_device": "s", "target_device": "t", "payload": {}},
+                        context,
+                    )
+                )
         mock_proxy_relay.relay.assert_not_called()
         blocked = json.loads(blocked_raw)
         self.assertFalse(blocked.get("success"))
@@ -274,15 +283,17 @@ class TestSchedulerRelaySpineRouting(unittest.TestCase):
         # ── 显式 opt-in:ProxyRelay 回退可用,并打 legacy_fallback 标记 ──
         with patch("core.proxy_relay.get_proxy_relay", return_value=mock_proxy_relay):
             with patch("core.proxy_relay.RelayRequest", MagicMock()):
-                result_raw = _run(sched._exec_relay(
-                    {
-                        "source_device": "s",
-                        "target_device": "t",
-                        "payload": {},
-                        "allow_legacy_scheduler_fallback": True,
-                    },
-                    context,
-                ))
+                result_raw = _run(
+                    sched._exec_relay(
+                        {
+                            "source_device": "s",
+                            "target_device": "t",
+                            "payload": {},
+                            "allow_legacy_scheduler_fallback": True,
+                        },
+                        context,
+                    )
+                )
 
         mock_proxy_relay.relay.assert_called_once()
         result = json.loads(result_raw)
@@ -304,7 +315,7 @@ class TestSchedulerRelaySpineRouting(unittest.TestCase):
 
     def test_18_exec_relay_records_ingress(self):
         """record_legacy_ingress is called with SCHEDULER source."""
-        from core.execution_spine import reset_ingress_log, get_ingress_log
+        from core.execution_spine import get_ingress_log, reset_ingress_log
 
         reset_ingress_log()
         sched = self._make_scheduler()
@@ -324,6 +335,7 @@ class TestSchedulerRelaySpineRouting(unittest.TestCase):
 # D. Scheduler._exec_mesh_send — spine routing path
 # ===========================================================================
 
+
 class TestSchedulerMeshSendSpineRouting(unittest.TestCase):
     """_exec_mesh_send calls CommandRouter.route_envelope when router available."""
 
@@ -340,17 +352,14 @@ class TestSchedulerMeshSendSpineRouting(unittest.TestCase):
         sched = self._make_scheduler()
 
         mock_router = MagicMock()
-        mock_router.route_envelope = AsyncMock(
-            return_value={"success": True, "via": "route_envelope"}
-        )
+        mock_router.route_envelope = AsyncMock(return_value={"success": True, "via": "route_envelope"})
 
         with patch("core.command_router.get_command_router", return_value=mock_router):
-            result_raw = _run(sched._exec_mesh_send(
-                {"target_device": "tgt", "payload": {"data": 1}}
-            ))
+            result_raw = _run(sched._exec_mesh_send({"target_device": "tgt", "payload": {"data": 1}}))
 
         mock_router.route_envelope.assert_called_once()
         import json
+
         result = json.loads(result_raw)
         self.assertTrue(result.get("success"))
 
@@ -371,7 +380,9 @@ class TestSchedulerMeshSendSpineRouting(unittest.TestCase):
         mock_mesh_coord.send = AsyncMock(return_value=mock_mesh_result)
         if reachable:
             mock_mesh_coord.get_peer.return_value = SimpleNamespace(
-                reachable_direct=True, reachable_relay=False, latency_ms=12.5,
+                reachable_direct=True,
+                reachable_relay=False,
+                latency_ms=12.5,
             )
         else:
             mock_mesh_coord.get_peer.return_value = None
@@ -421,7 +432,7 @@ class TestSchedulerMeshSendSpineRouting(unittest.TestCase):
 
     def test_22_exec_mesh_send_records_ingress(self):
         """record_legacy_ingress is called with SCHEDULER source."""
-        from core.execution_spine import reset_ingress_log, get_ingress_log
+        from core.execution_spine import get_ingress_log, reset_ingress_log
 
         reset_ingress_log()
         sched = self._make_scheduler()
@@ -441,33 +452,37 @@ class TestSchedulerMeshSendSpineRouting(unittest.TestCase):
 # E. LegacyDispatchRegistry — PR-B entries present
 # ===========================================================================
 
+
 class TestPRBLegacyDispatchRegistryEntries(unittest.TestCase):
     """PR-B entries are present in the LegacyDispatchRegistry."""
 
     def setUp(self):
         # Reset and re-bootstrap so PR-B entries are loaded.
         from core.legacy_dispatch_registry import reset_registry
+
         reset_registry()
 
     def test_23_device_orchestrator_send_command_registered(self):
         from core.legacy_dispatch_registry import get_legacy_dispatch_registry
+
         reg = get_legacy_dispatch_registry()
-        self.assertTrue(
-            reg.is_registered("core.device_orchestrator.DeviceOrchestrator.send_command")
-        )
+        self.assertTrue(reg.is_registered("core.device_orchestrator.DeviceOrchestrator.send_command"))
 
     def test_24_scheduler_exec_relay_registered(self):
         from core.legacy_dispatch_registry import get_legacy_dispatch_registry
+
         reg = get_legacy_dispatch_registry()
         self.assertTrue(reg.is_registered("core.scheduler.Scheduler._exec_relay"))
 
     def test_25_scheduler_exec_mesh_send_registered(self):
         from core.legacy_dispatch_registry import get_legacy_dispatch_registry
+
         reg = get_legacy_dispatch_registry()
         self.assertTrue(reg.is_registered("core.scheduler.Scheduler._exec_mesh_send"))
 
     def test_26_device_orchestrator_pr_origin_is_prb(self):
         from core.legacy_dispatch_registry import get_legacy_dispatch_registry
+
         reg = get_legacy_dispatch_registry()
         entry = reg.get("core.device_orchestrator.DeviceOrchestrator.send_command")
         self.assertIsNotNone(entry)
@@ -475,6 +490,7 @@ class TestPRBLegacyDispatchRegistryEntries(unittest.TestCase):
 
     def test_27_scheduler_relay_pr_origin_is_prb(self):
         from core.legacy_dispatch_registry import get_legacy_dispatch_registry
+
         reg = get_legacy_dispatch_registry()
         entry = reg.get("core.scheduler.Scheduler._exec_relay")
         self.assertIsNotNone(entry)
@@ -482,6 +498,7 @@ class TestPRBLegacyDispatchRegistryEntries(unittest.TestCase):
 
     def test_28_scheduler_mesh_pr_origin_is_prb(self):
         from core.legacy_dispatch_registry import get_legacy_dispatch_registry
+
         reg = get_legacy_dispatch_registry()
         entry = reg.get("core.scheduler.Scheduler._exec_mesh_send")
         self.assertIsNotNone(entry)
@@ -489,9 +506,10 @@ class TestPRBLegacyDispatchRegistryEntries(unittest.TestCase):
 
     def test_29_all_prb_entries_are_compat_only(self):
         from core.legacy_dispatch_registry import (
-            get_legacy_dispatch_registry,
             LegacyDispatchClassification,
+            get_legacy_dispatch_registry,
         )
+
         reg = get_legacy_dispatch_registry()
         prb_modules = [
             "core.device_orchestrator.DeviceOrchestrator.send_command",
@@ -510,6 +528,7 @@ class TestPRBLegacyDispatchRegistryEntries(unittest.TestCase):
 
     def test_30_snapshot_includes_prb_entries(self):
         from core.legacy_dispatch_registry import snapshot_registry
+
         snap = snapshot_registry()
         modules_in_snap = [e["module"] for e in snap.entries]
         self.assertIn(
@@ -524,11 +543,13 @@ class TestPRBLegacyDispatchRegistryEntries(unittest.TestCase):
 # F. LEGACY_PATH_REGISTRY — PR-B entries present
 # ===========================================================================
 
+
 class TestPRBLegacyPathRegistryEntries(unittest.TestCase):
     """PR-B entries are present in the orchestration_authority LEGACY_PATH_REGISTRY."""
 
     def test_31_device_orchestrator_send_command_in_registry(self):
         from core.orchestration_authority.legacy_paths import LEGACY_PATH_REGISTRY
+
         self.assertIn(
             "core.device_orchestrator.DeviceOrchestrator.send_command",
             LEGACY_PATH_REGISTRY,
@@ -536,26 +557,29 @@ class TestPRBLegacyPathRegistryEntries(unittest.TestCase):
 
     def test_32_scheduler_exec_relay_in_registry(self):
         from core.orchestration_authority.legacy_paths import LEGACY_PATH_REGISTRY
+
         self.assertIn("core.scheduler.Scheduler._exec_relay", LEGACY_PATH_REGISTRY)
 
     def test_33_scheduler_exec_mesh_send_in_registry(self):
         from core.orchestration_authority.legacy_paths import LEGACY_PATH_REGISTRY
+
         self.assertIn("core.scheduler.Scheduler._exec_mesh_send", LEGACY_PATH_REGISTRY)
 
     def test_34_device_orchestrator_guardrail_is_prb(self):
         from core.orchestration_authority.legacy_paths import LEGACY_PATH_REGISTRY
-        entry = LEGACY_PATH_REGISTRY[
-            "core.device_orchestrator.DeviceOrchestrator.send_command"
-        ]
+
+        entry = LEGACY_PATH_REGISTRY["core.device_orchestrator.DeviceOrchestrator.send_command"]
         self.assertEqual(entry.pr_guardrail_added, "PR-B")
 
     def test_35_scheduler_relay_guardrail_is_prb(self):
         from core.orchestration_authority.legacy_paths import LEGACY_PATH_REGISTRY
+
         entry = LEGACY_PATH_REGISTRY["core.scheduler.Scheduler._exec_relay"]
         self.assertEqual(entry.pr_guardrail_added, "PR-B")
 
     def test_36_scheduler_mesh_guardrail_is_prb(self):
         from core.orchestration_authority.legacy_paths import LEGACY_PATH_REGISTRY
+
         entry = LEGACY_PATH_REGISTRY["core.scheduler.Scheduler._exec_mesh_send"]
         self.assertEqual(entry.pr_guardrail_added, "PR-B")
 
@@ -564,6 +588,7 @@ class TestPRBLegacyPathRegistryEntries(unittest.TestCase):
             LEGACY_PATH_REGISTRY,
             LegacyPathStatus,
         )
+
         prb_paths = [
             "core.device_orchestrator.DeviceOrchestrator.send_command",
             "core.scheduler.Scheduler._exec_relay",
@@ -581,6 +606,7 @@ class TestPRBLegacyPathRegistryEntries(unittest.TestCase):
     def test_38_prb_paths_in_legacy_orchestrator_paths_shim(self):
         """PR-B paths appear in the LEGACY_ORCHESTRATOR_PATHS compatibility shim."""
         from core.orchestration_authority.legacy_paths import LEGACY_ORCHESTRATOR_PATHS
+
         self.assertIn(
             "core.device_orchestrator.DeviceOrchestrator.send_command",
             LEGACY_ORCHESTRATOR_PATHS,
@@ -591,6 +617,7 @@ class TestPRBLegacyPathRegistryEntries(unittest.TestCase):
     def test_39_prb_recommendation_mentions_route_envelope(self):
         """Each PR-B entry's recommendation references CommandRouter.route_envelope()."""
         from core.orchestration_authority.legacy_paths import LEGACY_PATH_REGISTRY
+
         prb_paths = [
             "core.device_orchestrator.DeviceOrchestrator.send_command",
             "core.scheduler.Scheduler._exec_relay",
@@ -610,28 +637,33 @@ class TestPRBLegacyPathRegistryEntries(unittest.TestCase):
 # G. Regression — existing spine functionality unbroken
 # ===========================================================================
 
+
 class TestExistingSpineFunctionalityUnbroken(unittest.TestCase):
     """Regression: PR-3 spine authority and ingress source enumeration still intact."""
 
     def test_40_execution_spine_authority_still_importable(self):
         from core.execution_spine import EXECUTION_SPINE_AUTHORITY
+
         self.assertIn("EXECUTION_SPINE", EXECUTION_SPINE_AUTHORITY)
 
     def test_41_device_orchestrator_source_is_device_orchestrator(self):
         from core.execution_spine import ExecutionIngressSource
+
         self.assertEqual(ExecutionIngressSource.DEVICE_ORCHESTRATOR.value, "device_orchestrator")
 
     def test_42_scheduler_source_is_scheduler(self):
         from core.execution_spine import ExecutionIngressSource
+
         self.assertEqual(ExecutionIngressSource.SCHEDULER.value, "scheduler")
 
     def test_43_record_legacy_ingress_still_works(self):
         from core.execution_spine import (
-            reset_ingress_log,
-            record_legacy_ingress,
-            get_ingress_log,
             ExecutionIngressSource,
+            get_ingress_log,
+            record_legacy_ingress,
+            reset_ingress_log,
         )
+
         reset_ingress_log()
         record_legacy_ingress(
             ExecutionIngressSource.DEVICE_ORCHESTRATOR,
@@ -652,7 +684,8 @@ class TestExistingSpineFunctionalityUnbroken(unittest.TestCase):
 
     def test_45_legacy_dispatch_registry_pre_existing_entries_unchanged(self):
         """Pre-existing PR-3 entries are still present after PR-B additions."""
-        from core.legacy_dispatch_registry import reset_registry, get_legacy_dispatch_registry
+        from core.legacy_dispatch_registry import get_legacy_dispatch_registry, reset_registry
+
         reset_registry()
         reg = get_legacy_dispatch_registry()
         # PR-3 entries

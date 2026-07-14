@@ -31,6 +31,7 @@ Usage::
     await dwc.on_device_registered(device)  # called after UDM write
     await dwc.on_device_heartbeat(device_id)  # called on heartbeat
 """
+
 from __future__ import annotations
 
 import logging
@@ -42,9 +43,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Sentinel
 # ---------------------------------------------------------------------------
-DEVICE_WORKER_CONVERGENCE_SENTINEL = (
-    "DEVICE_WORKER_CONVERGENCE::UDM_IS_WORKER::NO_BRIDGE"
-)
+DEVICE_WORKER_CONVERGENCE_SENTINEL = "DEVICE_WORKER_CONVERGENCE::UDM_IS_WORKER::NO_BRIDGE"
 
 
 # ---------------------------------------------------------------------------
@@ -115,10 +114,13 @@ class DeviceWorkerConvergence:
         # Publish capabilities separately
         if capabilities:
             try:
-                await self._nats.publish(self.SUBJ_WORKER_CAPABILITIES, {
-                    "worker_id": worker_id,
-                    "capabilities": capabilities,
-                })
+                await self._nats.publish(
+                    self.SUBJ_WORKER_CAPABILITIES,
+                    {
+                        "worker_id": worker_id,
+                        "capabilities": capabilities,
+                    },
+                )
             except Exception as exc:
                 logger.warning("Exception suppressed: %s", exc)
 
@@ -138,11 +140,14 @@ class DeviceWorkerConvergence:
             self._device_worker_map[device_id] = worker_id
 
         try:
-            await self._nats.publish(self.SUBJ_WORKER_HEARTBEAT, {
-                "worker_id": worker_id,
-                "device_id": device_id,
-                "timestamp": time.time(),
-            })
+            await self._nats.publish(
+                self.SUBJ_WORKER_HEARTBEAT,
+                {
+                    "worker_id": worker_id,
+                    "device_id": device_id,
+                    "timestamp": time.time(),
+                },
+            )
             logger.debug("[DevWorker] Heartbeat | device=%s worker=%s", device_id, worker_id)
         except Exception as exc:
             logger.error("[DevWorker] Heartbeat failed for %s: %s", device_id, exc)
@@ -157,11 +162,14 @@ class DeviceWorkerConvergence:
             return
 
         try:
-            await self._nats.publish(self.SUBJ_WORKER_SHUTDOWN, {
-                "worker_id": worker_id,
-                "device_id": device_id,
-                "reason": "unregistered",
-            })
+            await self._nats.publish(
+                self.SUBJ_WORKER_SHUTDOWN,
+                {
+                    "worker_id": worker_id,
+                    "device_id": device_id,
+                    "reason": "unregistered",
+                },
+            )
             logger.info("[DevWorker] Device %s unregistered (worker %s)", device_id, worker_id)
         except Exception as exc:
             logger.error("[DevWorker] Shutdown failed for %s: %s", device_id, exc)

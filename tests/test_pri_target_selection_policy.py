@@ -79,7 +79,6 @@ from core.runtime.execution_target_policy_engine import (
     apply_target_selection_policy,
 )
 
-
 # ---------------------------------------------------------------------------
 # A. TargetSelectionPolicyKind enum
 # ---------------------------------------------------------------------------
@@ -434,27 +433,19 @@ class TestBuildFailureHandlingDecisionDerivedAction:
         assert d.recommended_action == "retry_after_delay"
 
     def test_fallback_local_derives_proceed_local(self):
-        d = build_failure_handling_decision(
-            policy_kind=FailureHandlingPolicyKind.fallback_local
-        )
+        d = build_failure_handling_decision(policy_kind=FailureHandlingPolicyKind.fallback_local)
         assert d.recommended_action == "proceed_local"
 
     def test_reject_derives_reject_task(self):
-        d = build_failure_handling_decision(
-            policy_kind=FailureHandlingPolicyKind.reject_with_reason
-        )
+        d = build_failure_handling_decision(policy_kind=FailureHandlingPolicyKind.reject_with_reason)
         assert d.recommended_action == "reject_task"
 
     def test_escalate_derives_escalate(self):
-        d = build_failure_handling_decision(
-            policy_kind=FailureHandlingPolicyKind.escalate_to_operator
-        )
+        d = build_failure_handling_decision(policy_kind=FailureHandlingPolicyKind.escalate_to_operator)
         assert d.recommended_action == "escalate"
 
     def test_wait_and_requeue_derives_wait_and_requeue(self):
-        d = build_failure_handling_decision(
-            policy_kind=FailureHandlingPolicyKind.wait_and_requeue
-        )
+        d = build_failure_handling_decision(policy_kind=FailureHandlingPolicyKind.wait_and_requeue)
         assert d.recommended_action == "wait_and_requeue"
 
     def test_explicit_recommended_action_overrides_derived(self):
@@ -509,9 +500,7 @@ class TestApplyTargetSelectionPolicyExplicitType:
     def test_explicit_overrides_mesh_topology(self):
         mesh_session = {
             "session_id": "mesh_001",
-            "participants": [
-                {"device_id": "mesh_dev_01", "status": "active"}
-            ],
+            "participants": [{"device_id": "mesh_dev_01", "status": "active"}],
         }
         decision = apply_target_selection_policy(
             executor_target_type="node_service",
@@ -1297,38 +1286,46 @@ class TestContractsInitExports:
 
     def test_target_selection_policy_kind_importable(self):
         from contracts import TargetSelectionPolicyKind as _TSP
+
         assert _TSP.explicit_executor_type == "explicit_executor_type"
 
     def test_failure_handling_policy_kind_importable(self):
         from contracts import FailureHandlingPolicyKind as _FHP
+
         assert _FHP.retry == "retry"
 
     def test_degraded_readiness_policy_kind_importable(self):
         from contracts import DegradedReadinessPolicyKind as _DRP
+
         assert _DRP.accept_degraded == "accept_degraded"
 
     def test_target_selection_decision_importable(self):
         from contracts import TargetSelectionDecision as _TSD
+
         d = _TSD()
         assert d.policy_kind == "default_local"
 
     def test_failure_handling_decision_importable(self):
         from contracts import FailureHandlingDecision as _FHD
+
         d = _FHD()
         assert d.policy_kind == "reject_with_reason"
 
     def test_build_target_selection_decision_importable(self):
         from contracts import build_target_selection_decision as _btsd
+
         result = _btsd()
         assert isinstance(result, TargetSelectionDecision)
 
     def test_build_failure_handling_decision_importable(self):
         from contracts import build_failure_handling_decision as _bfhd
+
         result = _bfhd()
         assert isinstance(result, FailureHandlingDecision)
 
     def test_pr_i_sentinel_importable(self):
         from contracts import EXECUTION_TARGET_POLICY_PR_I_SENTINEL as sentinel
+
         assert "PR-I" in sentinel
 
 
@@ -1346,6 +1343,7 @@ class TestBackwardCompatibility:
             SourceDispatchMode,
             build_source_dispatch_decision,
         )
+
         decision = build_source_dispatch_decision(
             trace_id="trace_compat",
             mode=SourceDispatchMode.local,
@@ -1359,6 +1357,7 @@ class TestBackwardCompatibility:
             SourceDispatchMode,
             build_source_dispatch_decision,
         )
+
         decision = build_source_dispatch_decision(
             trace_id="trace_compat_remote",
             mode=SourceDispatchMode.remote_handoff,
@@ -1372,6 +1371,7 @@ class TestBackwardCompatibility:
             SourceDispatchMode,
             build_source_dispatch_decision,
         )
+
         decision = build_source_dispatch_decision(
             trace_id="trace_compat_fallback",
             mode=SourceDispatchMode.fallback_local,

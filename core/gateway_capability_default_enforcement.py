@@ -365,8 +365,7 @@ def enforce_gateway_default_capability_gate(
         eff_device_caps = lookup_device_capabilities(device_id)
 
     logger.debug(
-        "[%s] gateway capability gate: device=%s command=%s "
-        "effective_required=%s device_caps=%s",
+        "[%s] gateway capability gate: device=%s command=%s " "effective_required=%s device_caps=%s",
         calling_site,
         device_id,
         command,

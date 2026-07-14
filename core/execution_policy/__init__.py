@@ -129,38 +129,38 @@ docs/EXECUTION_POLICY_ENFORCEMENT.md — enforcement design document (PR-12).
 
 from __future__ import annotations
 
+from .execution_policy import DEFAULT_CONSERVATIVE_POLICY, ExecutionPolicy
 from .policy_band import (
-    PolicyBand,
     BAND_ORDER,
-    band_allows_execution,
+    PolicyBand,
     band_allows_cross_device,
+    band_allows_execution,
     band_requires_confirmation,
 )
-from .execution_policy import ExecutionPolicy, DEFAULT_CONSERVATIVE_POLICY
-from .policy_resolver import (
-    resolve_policy,
-    RETURN_PRESSURE_FORCE_OBSERVE,
-    RETURN_PRESSURE_RESTRICT,
+from .policy_decision import PolicyDecision, PolicyOutcome
+from .policy_enforcement import (
+    emit_policy_decision,
+    enforce_cross_device,
+    enforce_execution_intent,
+    enforce_executor_levels,
 )
-from .policy_summary import (
-    summarise_policy,
-    get_policy_hints,
-    attach_policy_to_projection,
-    build_policy_for_projection,
-)
-from .policy_decision import PolicyOutcome, PolicyDecision
 from .policy_guardrails import (
-    check_side_effectful_execution,
     check_confirmation_required,
     check_cross_device_expansion,
     check_executor_level,
+    check_side_effectful_execution,
     filter_executor_levels,
 )
-from .policy_enforcement import (
-    enforce_execution_intent,
-    enforce_cross_device,
-    enforce_executor_levels,
-    emit_policy_decision,
+from .policy_resolver import (
+    RETURN_PRESSURE_FORCE_OBSERVE,
+    RETURN_PRESSURE_RESTRICT,
+    resolve_policy,
+)
+from .policy_summary import (
+    attach_policy_to_projection,
+    build_policy_for_projection,
+    get_policy_hints,
+    summarise_policy,
 )
 
 __all__ = [

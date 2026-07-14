@@ -28,17 +28,18 @@ Design
 for the highest-priority healthy provider, falling back down the preference
 list if earlier providers are unavailable or degraded.
 """
+
 from __future__ import annotations
 
 import logging
 from typing import Any, Dict, List, Optional
 
 from core.multi_llm_router import (
+    PROVIDER_MODEL_MAP,
+    TASK_ROUTING_PREFERENCES,
     ProviderConfig,
     ProviderStatus,
     TaskType,
-    TASK_ROUTING_PREFERENCES,
-    PROVIDER_MODEL_MAP,
 )
 
 logger = logging.getLogger("Galaxy.LLM.Policies")
@@ -154,9 +155,7 @@ class PolicyBasedSelector:
             ``None`` only if no providers are available at all.
         """
         exclusion_set = set(exclude or [])
-        preference_list = TASK_ROUTING_PREFERENCES.get(
-            task_type, TASK_ROUTING_PREFERENCES.get(TaskType.GENERAL, [])
-        )
+        preference_list = TASK_ROUTING_PREFERENCES.get(task_type, TASK_ROUTING_PREFERENCES.get(TaskType.GENERAL, []))
 
         healthy_result: Optional[ProviderSelectionResult] = None
         degraded_result: Optional[ProviderSelectionResult] = None

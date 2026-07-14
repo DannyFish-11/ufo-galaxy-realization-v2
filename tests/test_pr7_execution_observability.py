@@ -31,20 +31,22 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ===========================================================================
 # 1. ExecutorLevel
 # ===========================================================================
 
+
 class TestExecutorLevel:
     def test_values_are_strings(self):
         from core.execution_observability import ExecutorLevel
+
         for member in ExecutorLevel:
             assert isinstance(member.value, str)
             assert member == member.value  # str mixin
 
     def test_from_string_exact(self):
         from core.execution_observability import ExecutorLevel
+
         assert ExecutorLevel.from_string("system_api") is ExecutorLevel.SYSTEM_API
         assert ExecutorLevel.from_string("uia") is ExecutorLevel.UIA
         assert ExecutorLevel.from_string("gui") is ExecutorLevel.GUI
@@ -54,17 +56,20 @@ class TestExecutorLevel:
 
     def test_from_string_case_insensitive(self):
         from core.execution_observability import ExecutorLevel
+
         assert ExecutorLevel.from_string("SYSTEM_API") is ExecutorLevel.SYSTEM_API
         assert ExecutorLevel.from_string("VLM") is ExecutorLevel.VLM
 
     def test_from_string_unknown_fallback(self):
         from core.execution_observability import ExecutorLevel
+
         assert ExecutorLevel.from_string("bogus") is ExecutorLevel.UNKNOWN
         assert ExecutorLevel.from_string("") is ExecutorLevel.UNKNOWN
 
     def test_from_string_none_treated_as_empty(self):
         """from_string should tolerate None gracefully (as documented)."""
         from core.execution_observability import ExecutorLevel
+
         result = ExecutorLevel.from_string(None)  # type: ignore[arg-type]
         assert result is ExecutorLevel.UNKNOWN
 
@@ -80,8 +85,8 @@ class TestExecutorLevel:
 
     def test_is_local_and_remote(self):
         from core.execution_observability import ExecutorLevel
-        for lvl in (ExecutorLevel.SYSTEM_API, ExecutorLevel.UIA,
-                    ExecutorLevel.GUI, ExecutorLevel.VLM):
+
+        for lvl in (ExecutorLevel.SYSTEM_API, ExecutorLevel.UIA, ExecutorLevel.GUI, ExecutorLevel.VLM):
             assert lvl.is_local()
             assert not lvl.is_remote()
         assert ExecutorLevel.REMOTE_EXECUTOR.is_remote()
@@ -92,20 +97,24 @@ class TestExecutorLevel:
 # 2. FallbackReason
 # ===========================================================================
 
+
 class TestFallbackReason:
     def test_all_values_are_strings(self):
         from core.execution_observability import FallbackReason
+
         for member in FallbackReason:
             assert isinstance(member.value, str)
 
     def test_from_string_known(self):
         from core.execution_observability import FallbackReason
+
         assert FallbackReason.from_string("timeout") is FallbackReason.TIMEOUT
         assert FallbackReason.from_string("partial_failure") is FallbackReason.PARTIAL_FAILURE
         assert FallbackReason.from_string("safety_hold") is FallbackReason.SAFETY_HOLD
 
     def test_from_string_unknown_fallback(self):
         from core.execution_observability import FallbackReason
+
         assert FallbackReason.from_string("made_up") is FallbackReason.UNKNOWN
         assert FallbackReason.from_string("") is FallbackReason.UNKNOWN
 
@@ -113,6 +122,7 @@ class TestFallbackReason:
 # ===========================================================================
 # 3. FallbackContext
 # ===========================================================================
+
 
 class TestFallbackContext:
     def test_to_dict_round_trip(self):
@@ -140,9 +150,11 @@ class TestFallbackContext:
 
     def test_from_dict_missing_fields(self):
         from core.execution_observability.fallback_schema import FallbackContext
+
         ctx = FallbackContext.from_dict({})
         # Should not raise; defaults to UNKNOWN
         from core.execution_observability import ExecutorLevel, FallbackReason
+
         assert ctx.from_level is ExecutorLevel.UNKNOWN
         assert ctx.reason is FallbackReason.UNKNOWN
         assert ctx.to_level is None
@@ -179,20 +191,24 @@ class TestFallbackContext:
 # 4. TraceCorrelation
 # ===========================================================================
 
+
 class TestTraceCorrelation:
     def test_new_generates_non_empty_trace_id(self):
         from core.execution_observability import TraceCorrelation
+
         tc = TraceCorrelation.new()
         assert tc.trace_id
         assert len(tc.trace_id) >= 12
 
     def test_auto_generate_trace_id_when_empty(self):
         from core.execution_observability import TraceCorrelation
+
         tc = TraceCorrelation(trace_id="")
         assert tc.trace_id  # __post_init__ fills it
 
     def test_from_dict_full(self):
         from core.execution_observability import TraceCorrelation
+
         d = {
             "trace_id": "abc123",
             "runtime_session_id": "sess-1",
@@ -207,17 +223,20 @@ class TestTraceCorrelation:
 
     def test_from_dict_missing_trace_id(self):
         from core.execution_observability import TraceCorrelation
+
         tc = TraceCorrelation.from_dict({})
         assert tc.trace_id  # auto-generated
 
     def test_from_dict_none_values(self):
         from core.execution_observability import TraceCorrelation
+
         tc = TraceCorrelation.from_dict({"trace_id": None, "task_id": None})
         assert tc.trace_id  # auto-generated
         assert tc.task_id is None
 
     def test_from_e2e_context(self):
         from core.execution_observability import TraceCorrelation
+
         ctx = {"trace_id": "e2e-001", "runtime_session_id": "s1", "other": "data"}
         tc = TraceCorrelation.from_e2e_context(ctx)
         assert tc.trace_id == "e2e-001"
@@ -250,6 +269,7 @@ class TestTraceCorrelation:
 
     def test_to_dict_omits_none_fields(self):
         from core.execution_observability import TraceCorrelation
+
         tc = TraceCorrelation(trace_id="t1", runtime_session_id="")
         d = tc.to_dict()
         assert "trace_id" in d
@@ -258,9 +278,8 @@ class TestTraceCorrelation:
 
     def test_child_inherits_context(self):
         from core.execution_observability import TraceCorrelation
-        parent = TraceCorrelation(
-            trace_id="p-trace", runtime_session_id="s1", task_id="t1"
-        )
+
+        parent = TraceCorrelation(trace_id="p-trace", runtime_session_id="s1", task_id="t1")
         child = parent.child(action_id="act-3")
         assert child.trace_id == "p-trace"
         assert child.task_id == "t1"
@@ -271,9 +290,11 @@ class TestTraceCorrelation:
 # 5. ExecutionEvent
 # ===========================================================================
 
+
 class TestExecutionEvent:
     def test_build_defaults(self):
         from core.execution_observability import ExecutionEvent, ExecutorLevel
+
         ev = ExecutionEvent.build()
         assert ev.event_id
         assert ev.timestamp > 0
@@ -322,13 +343,17 @@ class TestExecutionEvent:
 
     def test_from_dict_tolerates_missing_fields(self):
         from core.execution_observability import ExecutionEvent, ExecutorLevel
+
         ev = ExecutionEvent.from_dict({})
         assert ev.executor_level is ExecutorLevel.UNKNOWN
         assert ev.fallback is None
 
     def test_projection_summary_compact(self):
         from core.execution_observability import (
-            ExecutionEvent, ExecutorLevel, FallbackReason, TraceCorrelation,
+            ExecutionEvent,
+            ExecutorLevel,
+            FallbackReason,
+            TraceCorrelation,
         )
         from core.execution_observability.fallback_schema import FallbackContext
 
@@ -356,6 +381,7 @@ class TestExecutionEvent:
 # 6. Normalizers
 # ===========================================================================
 
+
 class TestNormalizers:
     def test_normalize_e2e_context_full(self):
         from core.execution_observability import ExecutorLevel
@@ -377,6 +403,7 @@ class TestNormalizers:
 
     def test_normalize_e2e_context_partial(self):
         from core.execution_observability.normalizers import normalize_e2e_context
+
         ev = normalize_e2e_context({})
         assert ev.trace.trace_id  # auto-generated
 
@@ -396,6 +423,7 @@ class TestNormalizers:
 
     def test_normalize_task_envelope_dict(self):
         from core.execution_observability.normalizers import normalize_task_envelope
+
         ev = normalize_task_envelope({"trace_id": "d-trace", "task_id": "d-task"})
         assert ev.trace.task_id == "d-task"
 
@@ -456,6 +484,7 @@ class TestNormalizers:
     def test_normalize_arbiter_attempt_no_fallback(self):
         """When fallback_reason is empty, no FallbackContext is created."""
         from core.execution_observability.normalizers import normalize_arbiter_attempt
+
         attempt = {
             "executor_level": "vlm",
             "fallback_reason": "",
@@ -499,6 +528,7 @@ class TestNormalizers:
 
     def test_normalize_observability_payload_empty(self):
         from core.execution_observability.normalizers import normalize_observability_payload
+
         ev = normalize_observability_payload({})
         assert ev.trace.trace_id  # auto-generated
         assert ev.fallback is None
@@ -507,6 +537,7 @@ class TestNormalizers:
 # ===========================================================================
 # 7. New observability routes (PR-7)
 # ===========================================================================
+
 
 class TestObservabilityRoutes:
     """Test the three new /execution/... endpoints via FastAPI TestClient."""
@@ -521,6 +552,7 @@ class TestObservabilityRoutes:
             pytest.skip("fastapi / httpx not installed")
 
         from core.routes.observability import create_router
+
         app = FastAPI()
         app.include_router(create_router())
         return TestClient(app, raise_server_exceptions=False)

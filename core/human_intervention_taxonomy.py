@@ -487,23 +487,13 @@ class HumanInterventionEvidence:
     def from_dict(cls, data: Dict[str, Any]) -> "HumanInterventionEvidence":
         """Construct from a dict (round-trip complement of ``to_dict``)."""
         return cls(
-            operator_action_observed=bool(
-                data.get("operator_action_observed", False)
-            ),
-            manual_override_observed=bool(
-                data.get("manual_override_observed", False)
-            ),
-            human_confirmation_observed=bool(
-                data.get("human_confirmation_observed", False)
-            ),
-            system_incomplete_without_human=bool(
-                data.get("system_incomplete_without_human", False)
-            ),
+            operator_action_observed=bool(data.get("operator_action_observed", False)),
+            manual_override_observed=bool(data.get("manual_override_observed", False)),
+            human_confirmation_observed=bool(data.get("human_confirmation_observed", False)),
+            system_incomplete_without_human=bool(data.get("system_incomplete_without_human", False)),
             escalation_triggered=bool(data.get("escalation_triggered", False)),
             escalation_resolved=bool(data.get("escalation_resolved", False)),
-            autonomous_evidence_present=bool(
-                data.get("autonomous_evidence_present", False)
-            ),
+            autonomous_evidence_present=bool(data.get("autonomous_evidence_present", False)),
             context=dict(data.get("context", {})),
         )
 
@@ -542,9 +532,7 @@ class HumanInterventionVerdict:
         Unix timestamp of evaluation.
     """
 
-    intervention_class: HumanInterventionClass = (
-        HumanInterventionClass.escalation_required
-    )
+    intervention_class: HumanInterventionClass = HumanInterventionClass.escalation_required
     is_autonomous: bool = False
     involves_human_action: bool = True
     is_positive_closure: bool = False
@@ -563,11 +551,7 @@ class HumanInterventionVerdict:
             "is_positive_closure": self.is_positive_closure,
             "downgrade_reasons": list(self.downgrade_reasons),
             "evidence_summary": self.evidence_summary,
-            "evaluated_evidence": (
-                self.evaluated_evidence.to_dict()
-                if self.evaluated_evidence is not None
-                else None
-            ),
+            "evaluated_evidence": (self.evaluated_evidence.to_dict() if self.evaluated_evidence is not None else None),
             "verdict_id": self.verdict_id,
             "evaluated_at": self.evaluated_at,
         }
@@ -580,14 +564,8 @@ class HumanInterventionVerdict:
     def from_dict(cls, data: Dict[str, Any]) -> "HumanInterventionVerdict":
         """Construct from a dict (round-trip complement of ``to_dict``)."""
         evidence_data = data.get("evaluated_evidence")
-        evidence = (
-            HumanInterventionEvidence.from_dict(evidence_data)
-            if evidence_data is not None
-            else None
-        )
-        intervention_class = HumanInterventionClass.from_string(
-            data.get("intervention_class", "")
-        )
+        evidence = HumanInterventionEvidence.from_dict(evidence_data) if evidence_data is not None else None
+        intervention_class = HumanInterventionClass.from_string(data.get("intervention_class", ""))
         return cls(
             intervention_class=intervention_class,
             is_autonomous=bool(data.get("is_autonomous", False)),

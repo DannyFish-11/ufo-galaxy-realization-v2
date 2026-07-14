@@ -30,10 +30,10 @@ from typing import Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
-
 # ---------------------------------------------------------------------------
 # Enumerations
 # ---------------------------------------------------------------------------
+
 
 class SafetyTierName(str, Enum):
     RESTRICTED = "restricted"
@@ -59,6 +59,7 @@ class ShedStrategy(str, Enum):
 # ---------------------------------------------------------------------------
 # Sub-schemas
 # ---------------------------------------------------------------------------
+
 
 class SafetyTierConfig(BaseModel):
     """Configuration for a single safety tier (allowed models, limits)."""
@@ -131,6 +132,7 @@ class QueuePolicy(BaseModel):
 # ---------------------------------------------------------------------------
 # Root schema
 # ---------------------------------------------------------------------------
+
 
 class GovernancePolicy(BaseModel):
     """Root governance policy document."""

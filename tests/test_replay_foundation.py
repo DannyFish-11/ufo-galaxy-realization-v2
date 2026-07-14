@@ -59,8 +59,8 @@ Coverage:
 from __future__ import annotations
 
 import json
-import sys
 import os
+import sys
 import time
 from typing import Any
 
@@ -70,34 +70,34 @@ _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
+import core.replay_foundation as _mod
 from core.replay_foundation import (
     REPLAY_FOUNDATION_AUTHORITY,
-    REPLAY_FOUNDATION_LAYER_POSITION,
     REPLAY_FOUNDATION_CONTRACT_VERSION,
+    REPLAY_FOUNDATION_LAYER_POSITION,
     REPLAY_ONLY_PRINCIPLE,
     ReplayEventKind,
-    TaskExecutionRecord,
-    RuntimeEventRecord,
-    RouteDecisionRecord,
     ReplayFallbackRecord,
-    ReplayRetryRecord,
-    TaskLineage,
-    ReplayFoundationSnapshot,
     ReplayFoundation,
-    record_task_execution,
-    record_route_decision,
-    record_fallback,
-    record_retry,
+    ReplayFoundationSnapshot,
+    ReplayRetryRecord,
+    RouteDecisionRecord,
+    RuntimeEventRecord,
+    TaskExecutionRecord,
+    TaskLineage,
     emit_runtime_event,
     get_replay_foundation,
+    record_fallback,
+    record_retry,
+    record_route_decision,
+    record_task_execution,
     reset_replay_foundation,
 )
-import core.replay_foundation as _mod
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(autouse=True)
 def reset():
@@ -109,6 +109,7 @@ def reset():
 # ===========================================================================
 # 1-5: Authority sentinels
 # ===========================================================================
+
 
 class TestAuthoritySentinels:
     def test_01_authority_importable(self):
@@ -157,6 +158,7 @@ class TestAuthoritySentinels:
 # 6-10: ReplayEventKind
 # ===========================================================================
 
+
 class TestReplayEventKind:
     def test_06_task_created(self):
         assert ReplayEventKind.TASK_CREATED == "task_created"
@@ -178,11 +180,15 @@ class TestReplayEventKind:
 # 11-21: Record serialisation
 # ===========================================================================
 
+
 class TestRecordSerialisation:
     def test_11_task_execution_record_roundtrip(self):
         rec = TaskExecutionRecord(
-            task_id="t1", trace_id="tr1", goal="do thing",
-            final_lifecycle="completed", success=True,
+            task_id="t1",
+            trace_id="tr1",
+            goal="do thing",
+            final_lifecycle="completed",
+            success=True,
         )
         d = rec.to_dict()
         restored = TaskExecutionRecord.from_dict(d)
@@ -228,8 +234,10 @@ class TestRecordSerialisation:
 
     def test_17_route_decision_record_roundtrip(self):
         rec = RouteDecisionRecord(
-            task_id="t1", transport_strategy="nats",
-            effective_path="direct", capability_fit=True,
+            task_id="t1",
+            transport_strategy="nats",
+            effective_path="direct",
+            capability_fit=True,
         )
         d = rec.to_dict()
         restored = RouteDecisionRecord.from_dict(d)
@@ -237,9 +245,7 @@ class TestRecordSerialisation:
         assert restored.effective_path == "direct"
 
     def test_18_fallback_record_roundtrip(self):
-        rec = ReplayFallbackRecord(
-            primary_task_id="t1", fallback_task_id="t2", reason="timeout"
-        )
+        rec = ReplayFallbackRecord(primary_task_id="t1", fallback_task_id="t2", reason="timeout")
         d = rec.to_dict()
         restored = ReplayFallbackRecord.from_dict(d)
         assert restored.primary_task_id == "t1"
@@ -247,8 +253,10 @@ class TestRecordSerialisation:
 
     def test_19_retry_record_roundtrip(self):
         rec = ReplayRetryRecord(
-            original_task_id="t1", retry_task_id="t2",
-            attempt_number=2, reason="transient_error",
+            original_task_id="t1",
+            retry_task_id="t2",
+            attempt_number=2,
+            reason="transient_error",
         )
         d = rec.to_dict()
         restored = ReplayRetryRecord.from_dict(d)
@@ -256,7 +264,8 @@ class TestRecordSerialisation:
 
     def test_20_task_lineage_json_serialisable(self):
         lineage = TaskLineage(
-            task_id="t1", trace_id="tr1",
+            task_id="t1",
+            trace_id="tr1",
             execution_record=TaskExecutionRecord(task_id="t1"),
             route_decisions=[RouteDecisionRecord(task_id="t1")],
         )
@@ -270,6 +279,7 @@ class TestRecordSerialisation:
 # ===========================================================================
 # 22-37: ReplayFoundation operations
 # ===========================================================================
+
 
 class TestReplayFoundationOperations:
     def test_22_record_execution_stores(self):
@@ -293,15 +303,9 @@ class TestReplayFoundationOperations:
 
     def test_25_get_events_for_task(self):
         foundation = ReplayFoundation()
-        foundation.emit_event(RuntimeEventRecord(
-            kind=ReplayEventKind.TASK_CREATED, task_id="t_a"
-        ))
-        foundation.emit_event(RuntimeEventRecord(
-            kind=ReplayEventKind.TASK_DISPATCHED, task_id="t_a"
-        ))
-        foundation.emit_event(RuntimeEventRecord(
-            kind=ReplayEventKind.TASK_COMPLETED, task_id="t_b"
-        ))
+        foundation.emit_event(RuntimeEventRecord(kind=ReplayEventKind.TASK_CREATED, task_id="t_a"))
+        foundation.emit_event(RuntimeEventRecord(kind=ReplayEventKind.TASK_DISPATCHED, task_id="t_a"))
+        foundation.emit_event(RuntimeEventRecord(kind=ReplayEventKind.TASK_COMPLETED, task_id="t_b"))
         assert len(foundation.get_events_for_task("t_a")) == 2
         assert len(foundation.get_events_for_task("t_b")) == 1
 
@@ -325,9 +329,7 @@ class TestReplayFoundationOperations:
 
     def test_29_get_fallback_history(self):
         foundation = ReplayFoundation()
-        foundation.record_fallback(
-            ReplayFallbackRecord(primary_task_id="t1", fallback_task_id="t2", reason="err")
-        )
+        foundation.record_fallback(ReplayFallbackRecord(primary_task_id="t1", fallback_task_id="t2", reason="err"))
         history = foundation.get_fallback_history("t1")
         assert history[0].reason == "err"
 
@@ -339,12 +341,8 @@ class TestReplayFoundationOperations:
 
     def test_31_get_retry_history(self):
         foundation = ReplayFoundation()
-        foundation.record_retry(ReplayRetryRecord(
-            original_task_id="t1", retry_task_id="t2", attempt_number=1
-        ))
-        foundation.record_retry(ReplayRetryRecord(
-            original_task_id="t1", retry_task_id="t3", attempt_number=2
-        ))
+        foundation.record_retry(ReplayRetryRecord(original_task_id="t1", retry_task_id="t2", attempt_number=1))
+        foundation.record_retry(ReplayRetryRecord(original_task_id="t1", retry_task_id="t3", attempt_number=2))
         history = foundation.get_retry_history("t1")
         assert len(history) == 2
 
@@ -364,14 +362,20 @@ class TestReplayFoundationOperations:
 
     def test_34_replay_task_timeline_returns_dicts(self):
         foundation = ReplayFoundation()
-        foundation.emit_event(RuntimeEventRecord(
-            kind=ReplayEventKind.TASK_CREATED, task_id="t1",
-            recorded_at=1.0,
-        ))
-        foundation.emit_event(RuntimeEventRecord(
-            kind=ReplayEventKind.TASK_COMPLETED, task_id="t1",
-            recorded_at=2.0,
-        ))
+        foundation.emit_event(
+            RuntimeEventRecord(
+                kind=ReplayEventKind.TASK_CREATED,
+                task_id="t1",
+                recorded_at=1.0,
+            )
+        )
+        foundation.emit_event(
+            RuntimeEventRecord(
+                kind=ReplayEventKind.TASK_COMPLETED,
+                task_id="t1",
+                recorded_at=2.0,
+            )
+        )
         timeline = foundation.replay_task_timeline("t1")
         assert len(timeline) == 2
         assert all(isinstance(e, dict) for e in timeline)
@@ -403,6 +407,7 @@ class TestReplayFoundationOperations:
 # 38-45: Singleton and helpers
 # ===========================================================================
 
+
 class TestSingletonAndHelpers:
     def test_38_get_replay_foundation_singleton(self):
         f1 = get_replay_foundation()
@@ -416,7 +421,8 @@ class TestSingletonAndHelpers:
         assert f1 is not f2
 
     def test_40_record_task_execution_with_canonical_task(self):
-        from core.canonical_task import build_canonical_task, TaskOrigin, TaskLifecycle
+        from core.canonical_task import TaskLifecycle, TaskOrigin, build_canonical_task
+
         task = build_canonical_task(goal="do thing", origin=TaskOrigin.API_REQUEST)
         task.lifecycle = TaskLifecycle.COMPLETED
         task.result.success = True
@@ -426,7 +432,8 @@ class TestSingletonAndHelpers:
 
     def test_41_record_route_decision_helper(self):
         rec = record_route_decision(
-            "t1", "tr1",
+            "t1",
+            "tr1",
             selected_targets=["device_a"],
             transport_strategy="websocket",
             effective_path="direct",

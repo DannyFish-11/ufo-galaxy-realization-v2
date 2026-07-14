@@ -5,6 +5,7 @@ Features: motion_level, scene_change_rate, face_presence (optional),
 
 No heavy CV inference — uses frame differencing and Haar cascades only.
 """
+
 from __future__ import annotations
 
 import time
@@ -18,8 +19,8 @@ import numpy as np
 class VideoState:
     """Lightweight video state features emitted every ~200–500 ms."""
 
-    motion_level: float = 0.0           # Normalised motion intensity [0, 1]
-    scene_change_rate: float = 0.0      # Scene changes per second (rolling 10 s)
+    motion_level: float = 0.0  # Normalised motion intensity [0, 1]
+    scene_change_rate: float = 0.0  # Scene changes per second (rolling 10 s)
     face_presence: Optional[float] = None  # 1.0/0.0 if detection enabled, else None
     video_freshness_ms: float = float("inf")  # ms since previous frame
     timestamp: float = field(default_factory=time.monotonic)
@@ -69,11 +70,7 @@ class VideoFeatureExtractor:
         motion_level = self._compute_motion(gray)
         scene_change_rate = self._compute_scene_change_rate(gray, now)
 
-        freshness_ms = (
-            (now - self._last_update_ts) * 1000.0
-            if self._last_update_ts is not None
-            else 0.0
-        )
+        freshness_ms = (now - self._last_update_ts) * 1000.0 if self._last_update_ts is not None else 0.0
         self._prev_gray = gray
         self._last_update_ts = now
 
@@ -116,23 +113,15 @@ class VideoFeatureExtractor:
         """Update the scene-change counter and return changes-per-second."""
         current_mean = float(np.mean(gray))
         if self._prev_mean is not None:
-            rel_change = abs(current_mean - self._prev_mean) / (
-                max(self._prev_mean, 1e-6)
-            )
+            rel_change = abs(current_mean - self._prev_mean) / (max(self._prev_mean, 1e-6))
             if rel_change > self.scene_change_threshold:
                 self._scene_change_times.append(now)
         self._prev_mean = current_mean
 
         # Retain only changes within the last 10 s
         cutoff = now - 10.0
-        self._scene_change_times = [
-            t for t in self._scene_change_times if t > cutoff
-        ]
-        window = (
-            now - self._scene_change_times[0]
-            if self._scene_change_times
-            else 0.0
-        )
+        self._scene_change_times = [t for t in self._scene_change_times if t > cutoff]
+        window = now - self._scene_change_times[0] if self._scene_change_times else 0.0
         return len(self._scene_change_times) / max(window, 1.0)
 
     @staticmethod
@@ -141,16 +130,10 @@ class VideoFeatureExtractor:
         try:
             import cv2  # optional dependency
 
-            gray = (
-                cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                if frame.ndim == 3
-                else frame
-            )
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY) if frame.ndim == 3 else frame
             cascade_path = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
             cascade = cv2.CascadeClassifier(cascade_path)
-            faces = cascade.detectMultiScale(
-                gray, scaleFactor=1.1, minNeighbors=3, minSize=(30, 30)
-            )
+            faces = cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=3, minSize=(30, 30))
             return 1.0 if len(faces) > 0 else 0.0
         except Exception:
             return None

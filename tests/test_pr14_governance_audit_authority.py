@@ -67,7 +67,6 @@ from core.unified_execution_governance import (
     record_state_uplink,
 )
 
-
 # ---------------------------------------------------------------------------
 # Shared fixture
 # ---------------------------------------------------------------------------
@@ -109,16 +108,15 @@ class TestGroupA_AuthorityChainConstruction:
         assert evidence.authority_source == "none"
 
         for entry in evidence.audit_entries:
-            assert entry.reached is False, (
-                f"Stage {entry.stage.value!r} should not be reached for empty history."
-            )
+            assert entry.reached is False, f"Stage {entry.stage.value!r} should not be reached for empty history."
 
     def test_A02_lifecycle_event_only_reaches_lifecycle_stage(self):
         """A02: A single lifecycle event marks admission and lifecycle as reached."""
         eid = "exec-pr14-a02-lifecycle-only"
         did = "device-pr14-a02"
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
             phase=ExecutionLifecyclePhase.created,
         )
@@ -137,7 +135,8 @@ class TestGroupA_AuthorityChainConstruction:
         eid = "exec-pr14-a03-uplink-only"
         did = "device-pr14-a03"
         record_result_uplink(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.parallel_subtask,
             payload={"status": "ok"},
         )
@@ -156,37 +155,40 @@ class TestGroupA_AuthorityChainConstruction:
         did = "device-pr14-a04"
 
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
             phase=ExecutionLifecyclePhase.created,
         )
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
             phase=ExecutionLifecyclePhase.running,
             enforce_transition=False,
         )
         record_state_uplink(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
             payload={"progress": 0.5},
         )
         record_result_uplink(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
             payload={"status": "ok"},
         )
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
             phase=ExecutionLifecyclePhase.succeeded,
         )
 
         evidence = build_governance_authority_evidence(eid, did)
         for entry in evidence.audit_entries:
-            assert entry.reached is True, (
-                f"Stage {entry.stage.value!r} should be reached for full lifecycle."
-            )
+            assert entry.reached is True, f"Stage {entry.stage.value!r} should be reached for full lifecycle."
 
         assert evidence.highest_stage_reached == GovernanceAuditStage.terminal
         assert evidence.authority_chain_complete is True
@@ -214,12 +216,14 @@ class TestGroupA_AuthorityChainConstruction:
         did = f"device-pr14-a-multi-{execution_type.value}"
 
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=execution_type,
             phase=ExecutionLifecyclePhase.created,
         )
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=execution_type,
             phase=terminal_phase,
             enforce_transition=False,
@@ -236,12 +240,14 @@ class TestGroupA_AuthorityChainConstruction:
         did = "device-pr14-a10"
 
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
             phase=ExecutionLifecyclePhase.created,
         )
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
             phase=ExecutionLifecyclePhase.running,
             enforce_transition=False,
@@ -279,15 +285,11 @@ class TestGroupB_AuthorityChainIntegrityVerification:
             )
 
         violations = verify_governance_authority_integrity(eid, did)
-        assert violations == [], (
-            f"REGRESSION: Coherent chain should have 0 violations, got {violations}."
-        )
+        assert violations == [], f"REGRESSION: Coherent chain should have 0 violations, got {violations}."
 
     def test_B02_no_history_has_zero_violations(self):
         """B02: An execution with no history has no violations (nothing to verify)."""
-        violations = verify_governance_authority_integrity(
-            "exec-pr14-b02-no-history", "device-pr14-b02"
-        )
+        violations = verify_governance_authority_integrity("exec-pr14-b02-no-history", "device-pr14-b02")
         assert violations == []
 
     def test_B03_center_lifecycle_authority_wins_i_a1(self):
@@ -296,12 +298,14 @@ class TestGroupB_AuthorityChainIntegrityVerification:
         did = "device-pr14-b03"
 
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
             phase=ExecutionLifecyclePhase.created,
         )
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
             phase=ExecutionLifecyclePhase.succeeded,
             enforce_transition=False,
@@ -318,17 +322,20 @@ class TestGroupB_AuthorityChainIntegrityVerification:
         did = "device-pr14-b04"
 
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
             phase=ExecutionLifecyclePhase.created,
         )
         record_result_uplink(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
             payload={"status": "ok"},
         )
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
             phase=ExecutionLifecyclePhase.succeeded,
             enforce_transition=False,
@@ -345,7 +352,8 @@ class TestGroupB_AuthorityChainIntegrityVerification:
 
         # Only uplink, no lifecycle — no conflict, so I-A4 is not triggered
         record_result_uplink(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
             payload={"status": "success"},
         )
@@ -361,19 +369,22 @@ class TestGroupB_AuthorityChainIntegrityVerification:
 
         # Record lifecycle terminal phase
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
             phase=ExecutionLifecyclePhase.created,
         )
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
             phase=ExecutionLifecyclePhase.succeeded,
             enforce_transition=False,
         )
         # Then record a conflicting uplink (failure after success)
         record_result_uplink(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
             payload={"status": "failed"},
         )
@@ -388,9 +399,7 @@ class TestGroupB_AuthorityChainIntegrityVerification:
         # Construct a scenario where we can inspect a violation record
         # by calling verify directly with an edge case that produces violations.
         # Use an empty execution to get violations = [] (no violations).
-        violations = verify_governance_authority_integrity(
-            "exec-pr14-b07-fields", "device-pr14-b07"
-        )
+        violations = verify_governance_authority_integrity("exec-pr14-b07-fields", "device-pr14-b07")
         # Even if empty, any violation record must satisfy the schema.
         # Construct one manually to validate the schema.
         v = GovernanceAuthorityViolation(
@@ -413,17 +422,20 @@ class TestGroupB_AuthorityChainIntegrityVerification:
         did = "device-pr14-b08"
 
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.parallel_subtask,
             phase=ExecutionLifecyclePhase.created,
         )
         record_state_uplink(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.parallel_subtask,
             payload={"progress": 0.7},
         )
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.parallel_subtask,
             phase=ExecutionLifecyclePhase.succeeded,
             enforce_transition=False,
@@ -439,17 +451,23 @@ class TestGroupB_AuthorityChainIntegrityVerification:
 
         with _patch_mode_gate_pass():
             evaluate_execution_governance(
-                ExecutionType.delegated_execution, did,
-                execution_id=eid, register_if_accepted=True,
+                ExecutionType.delegated_execution,
+                did,
+                execution_id=eid,
+                register_if_accepted=True,
             )
 
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.delegated_execution,
-            phase=ExecutionLifecyclePhase.running, enforce_transition=False,
+            phase=ExecutionLifecyclePhase.running,
+            enforce_transition=False,
         )
         notify_execution_completed(
-            did, ExecutionType.delegated_execution, eid,
+            did,
+            ExecutionType.delegated_execution,
+            eid,
             completion_phase=ExecutionLifecyclePhase.succeeded,
         )
 
@@ -462,12 +480,14 @@ class TestGroupB_AuthorityChainIntegrityVerification:
         did = "device-pr14-b10"
 
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.takeover_request,
             phase=ExecutionLifecyclePhase.created,
         )
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.takeover_request,
             phase=ExecutionLifecyclePhase.cancelled,
             enforce_transition=False,
@@ -505,18 +525,21 @@ class TestGroupC_AdverseConditions:
         did = "device-pr14-c02"
 
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
             phase=ExecutionLifecyclePhase.created,
         )
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
             phase=ExecutionLifecyclePhase.running,
             enforce_transition=False,
         )
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
             phase=ExecutionLifecyclePhase.interrupted,
             interruption_reason=InterruptionReason.device_disconnect,
@@ -535,19 +558,22 @@ class TestGroupC_AdverseConditions:
         did = "device-pr14-c03"
 
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
             phase=ExecutionLifecyclePhase.created,
         )
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
             phase=ExecutionLifecyclePhase.succeeded,
             enforce_transition=False,
         )
         # Late-arriving uplink with a conflicting status
         record_result_uplink(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
             payload={"status": "failed"},
         )
@@ -575,7 +601,8 @@ class TestGroupC_AdverseConditions:
             ExecutionLifecyclePhase.succeeded,
         ]:
             record_execution_lifecycle_event(
-                execution_id=eid, device_id=did,
+                execution_id=eid,
+                device_id=did,
                 execution_type=ExecutionType.goal_execution,
                 phase=phase,
                 enforce_transition=False,
@@ -593,17 +620,20 @@ class TestGroupC_AdverseConditions:
         did = "device-pr14-c05"
 
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
             phase=ExecutionLifecyclePhase.created,
         )
         record_state_uplink(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
             payload={"status": "running"},
         )
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
             phase=ExecutionLifecyclePhase.succeeded,
             enforce_transition=False,
@@ -626,7 +656,8 @@ class TestGroupC_AdverseConditions:
             ExecutionLifecyclePhase.succeeded,
         ]:
             record_execution_lifecycle_event(
-                execution_id=eid, device_id=did,
+                execution_id=eid,
+                device_id=did,
                 execution_type=ExecutionType.goal_execution,
                 phase=phase,
                 enforce_transition=False,
@@ -643,12 +674,14 @@ class TestGroupC_AdverseConditions:
         did = "device-pr14-c07"
 
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.takeover_request,
             phase=ExecutionLifecyclePhase.created,
         )
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.takeover_request,
             phase=ExecutionLifecyclePhase.timed_out,
             enforce_transition=False,
@@ -666,23 +699,27 @@ class TestGroupC_AdverseConditions:
         did = "device-pr14-c08"
 
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
             phase=ExecutionLifecyclePhase.created,
         )
         for i in range(3):
             record_state_uplink(
-                execution_id=eid, device_id=did,
+                execution_id=eid,
+                device_id=did,
                 execution_type=ExecutionType.goal_execution,
                 payload={"progress": i * 0.3},
             )
         record_result_uplink(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
             payload={"status": "ok"},
         )
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
             phase=ExecutionLifecyclePhase.succeeded,
             enforce_transition=False,
@@ -708,12 +745,14 @@ class TestGroupD_CrossExecutionAndDeviceIsolation:
 
         # eid_a: full lifecycle → succeeded
         record_execution_lifecycle_event(
-            execution_id=eid_a, device_id=did,
+            execution_id=eid_a,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
             phase=ExecutionLifecyclePhase.created,
         )
         record_execution_lifecycle_event(
-            execution_id=eid_a, device_id=did,
+            execution_id=eid_a,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
             phase=ExecutionLifecyclePhase.succeeded,
             enforce_transition=False,
@@ -721,7 +760,8 @@ class TestGroupD_CrossExecutionAndDeviceIsolation:
 
         # eid_b: created only
         record_execution_lifecycle_event(
-            execution_id=eid_b, device_id=did,
+            execution_id=eid_b,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
             phase=ExecutionLifecyclePhase.created,
         )
@@ -741,12 +781,14 @@ class TestGroupD_CrossExecutionAndDeviceIsolation:
         did_b = "device-pr14-d02-B"
 
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did_a,
+            execution_id=eid,
+            device_id=did_a,
             execution_type=ExecutionType.goal_execution,
             phase=ExecutionLifecyclePhase.created,
         )
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did_a,
+            execution_id=eid,
+            device_id=did_a,
             execution_type=ExecutionType.goal_execution,
             phase=ExecutionLifecyclePhase.succeeded,
             enforce_transition=False,
@@ -771,12 +813,14 @@ class TestGroupD_CrossExecutionAndDeviceIsolation:
 
         # Close the old execution
         record_execution_lifecycle_event(
-            execution_id=eid_old, device_id=did,
+            execution_id=eid_old,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
             phase=ExecutionLifecyclePhase.created,
         )
         record_execution_lifecycle_event(
-            execution_id=eid_old, device_id=did,
+            execution_id=eid_old,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
             phase=ExecutionLifecyclePhase.succeeded,
             enforce_transition=False,
@@ -784,7 +828,8 @@ class TestGroupD_CrossExecutionAndDeviceIsolation:
 
         # Start a new execution on the same device
         record_execution_lifecycle_event(
-            execution_id=eid_new, device_id=did,
+            execution_id=eid_new,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
             phase=ExecutionLifecyclePhase.created,
         )
@@ -801,18 +846,16 @@ class TestGroupD_CrossExecutionAndDeviceIsolation:
         for i in range(5):
             eid = f"exec-pr14-d04-dev{i}"
             did = f"device-pr14-d04-dev{i}"
-            phase = (
-                ExecutionLifecyclePhase.succeeded
-                if i % 2 == 0
-                else ExecutionLifecyclePhase.failed
-            )
+            phase = ExecutionLifecyclePhase.succeeded if i % 2 == 0 else ExecutionLifecyclePhase.failed
             record_execution_lifecycle_event(
-                execution_id=eid, device_id=did,
+                execution_id=eid,
+                device_id=did,
                 execution_type=ExecutionType.goal_execution,
                 phase=ExecutionLifecyclePhase.created,
             )
             record_execution_lifecycle_event(
-                execution_id=eid, device_id=did,
+                execution_id=eid,
+                device_id=did,
                 execution_type=ExecutionType.goal_execution,
                 phase=phase,
                 enforce_transition=False,
@@ -834,7 +877,8 @@ class TestGroupD_CrossExecutionAndDeviceIsolation:
         did = "device-pr14-d05"
 
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
             phase=ExecutionLifecyclePhase.succeeded,
             enforce_transition=False,
@@ -882,12 +926,14 @@ class TestGroupE_AuditSummaryAndSentinelCoverage:
         did = "device-pr14-e04"
 
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
             phase=ExecutionLifecyclePhase.created,
         )
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
             phase=ExecutionLifecyclePhase.succeeded,
             enforce_transition=False,
@@ -927,22 +973,16 @@ class TestGroupE_AuditSummaryAndSentinelCoverage:
             "cross_repo_truth_source_provenance",
         ]
         for field_name in required_fields:
-            assert field_name in summary, (
-                f"Required field {field_name!r} missing from governance audit summary."
-            )
+            assert field_name in summary, f"Required field {field_name!r} missing from governance audit summary."
 
     def test_E06_audit_summary_sentinel_matches_module_sentinel(self):
         """E06: The 'sentinel' field in audit summary matches the module-level sentinel."""
-        summary = get_governance_audit_summary(
-            "exec-pr14-e06-sentinel", "device-pr14-e06"
-        )
+        summary = get_governance_audit_summary("exec-pr14-e06-sentinel", "device-pr14-e06")
         assert summary["sentinel"] == GOVERNANCE_AUDIT_AUTHORITY_SENTINEL
 
     def test_E07_audit_summary_contract_version_matches_module_version(self):
         """E07: The 'contract_version' field matches GOVERNANCE_AUDIT_CONTRACT_VERSION."""
-        summary = get_governance_audit_summary(
-            "exec-pr14-e07-version", "device-pr14-e07"
-        )
+        summary = get_governance_audit_summary("exec-pr14-e07-version", "device-pr14-e07")
         assert summary["contract_version"] == GOVERNANCE_AUDIT_CONTRACT_VERSION
 
     def test_E08_coherent_terminal_chain_summary_has_integrity_ok_true(self):
@@ -951,17 +991,20 @@ class TestGroupE_AuditSummaryAndSentinelCoverage:
         did = "device-pr14-e08"
 
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
             phase=ExecutionLifecyclePhase.created,
         )
         record_result_uplink(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
             payload={"status": "ok"},
         )
         record_execution_lifecycle_event(
-            execution_id=eid, device_id=did,
+            execution_id=eid,
+            device_id=did,
             execution_type=ExecutionType.goal_execution,
             phase=ExecutionLifecyclePhase.succeeded,
             enforce_transition=False,

@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import pytest
 
+import core.task_graph_runtime as _mod
 from core.task_graph_runtime import (
     GRAPH_RUNTIME_CONVERGENCE_AUTHORITY,
     FallbackRecord,
@@ -46,8 +47,6 @@ from core.task_graph_runtime import (
     get_task_graph_runtime,
     reset_task_graph_runtime,
 )
-import core.task_graph_runtime as _mod
-
 
 # ===========================================================================
 # Helpers
@@ -153,6 +152,7 @@ def test_C01_register_retry_absent_original_still_creates_record(caplog) -> None
     rt = _fresh()
     _add_node(rt, "task_b")
     import logging
+
     with caplog.at_level(logging.WARNING, logger="Galaxy.TaskGraphRuntime"):
         rec = rt.register_retry("task_missing", "task_b")
     assert rec.original_task_id == "task_missing"
@@ -162,6 +162,7 @@ def test_C02_register_retry_absent_retry_still_creates_edge(caplog) -> None:
     rt = _fresh()
     _add_node(rt, "task_a")
     import logging
+
     with caplog.at_level(logging.WARNING, logger="Galaxy.TaskGraphRuntime"):
         rt.register_retry("task_a", "task_missing")
     retry_edges = [e for e in rt.all_edges() if e.kind == GraphEdgeKind.RETRY]
@@ -322,6 +323,7 @@ def test_J01_register_fallback_absent_primary_still_creates_record(caplog) -> No
     rt = _fresh()
     _add_node(rt, "fallback")
     import logging
+
     with caplog.at_level(logging.WARNING, logger="Galaxy.TaskGraphRuntime"):
         rec = rt.register_fallback("missing_primary", "fallback")
     assert rec.primary_task_id == "missing_primary"

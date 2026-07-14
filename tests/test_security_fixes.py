@@ -19,15 +19,18 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # SQL 注入防护
 # =============================================================================
 
+
 class TestSQLInjectionPrevention(unittest.TestCase):
     """测试 SQL 标识符验证"""
 
     def _get_sqlite_validator(self):
         from nodes.Node_13_SQLite.main import SQLiteManager
+
         return SQLiteManager._validate_identifier
 
     def _get_postgres_validator(self):
         from nodes.Node_12_Postgres.main import PostgresManager
+
         return PostgresManager._validate_identifier
 
     def test_sqlite_valid_identifiers(self):
@@ -60,12 +63,13 @@ class TestSQLInjectionPrevention(unittest.TestCase):
         with self.assertRaises(ValueError):
             v("users; DROP TABLE users; --")
         with self.assertRaises(ValueError):
-            v("table\"; DROP TABLE --")
+            v('table"; DROP TABLE --')
 
 
 # =============================================================================
 # 命令注入防护
 # =============================================================================
+
 
 class TestCommandInjectionPrevention(unittest.TestCase):
     """测试命令注入防护"""
@@ -73,6 +77,7 @@ class TestCommandInjectionPrevention(unittest.TestCase):
     def test_uia_launch_app_rejects_shell_metacharacters(self):
         """launch_app 应拒绝含 shell 元字符的路径"""
         import asyncio
+
         from nodes.Node_36_UIAWindows.ufo_deep_integration import UFODeepIntegration
 
         integration = UFODeepIntegration.__new__(UFODeepIntegration)
@@ -90,6 +95,7 @@ class TestCommandInjectionPrevention(unittest.TestCase):
     def test_uia_close_app_rejects_injection(self):
         """close_app 应拒绝含特殊字符的进程名"""
         import asyncio
+
         from nodes.Node_36_UIAWindows.ufo_deep_integration import UFODeepIntegration
 
         integration = UFODeepIntegration.__new__(UFODeepIntegration)
@@ -102,15 +108,20 @@ class TestCommandInjectionPrevention(unittest.TestCase):
         # Valid process name should pass validation (subprocess may fail but that's OK)
         result = loop.run_until_complete(integration.close_app("notepad.exe"))
         # On non-Windows, taskkill will fail but the validation passes
-        self.assertTrue(result.get("success") or "taskkill" in str(result.get("error", "")).lower()
-                        or "No such file" in str(result.get("error", "")))
+        self.assertTrue(
+            result.get("success")
+            or "taskkill" in str(result.get("error", "")).lower()
+            or "No such file" in str(result.get("error", ""))
+        )
 
         loop.close()
 
     def test_android_list_packages_no_pipe_injection(self):
         """android_granular_adapter 不应使用 shell 管道"""
         import inspect
+
         from galaxy_gateway.android_granular_adapter import AndroidGranularAdapter
+
         source = inspect.getsource(AndroidGranularAdapter._handle_list_packages)
         # 确保不再有 shell 管道
         self.assertNotIn("| grep", source)
@@ -121,6 +132,7 @@ class TestCommandInjectionPrevention(unittest.TestCase):
 # =============================================================================
 # 路径穿越防护
 # =============================================================================
+
 
 class TestPathTraversalPrevention(unittest.TestCase):
     """测试路径穿越防护"""
@@ -153,12 +165,14 @@ class TestPathTraversalPrevention(unittest.TestCase):
 # exec() 沙箱
 # =============================================================================
 
+
 class TestExecSandbox(unittest.TestCase):
     """测试代码执行沙箱安全性"""
 
     def test_safe_executor_exists(self):
         """SafeExecutor 应可导入且提供沙箱执行"""
         from core.safe_executor import SafeExecutor
+
         executor = SafeExecutor()
         assert hasattr(executor, "execute")
 
@@ -166,15 +180,48 @@ class TestExecSandbox(unittest.TestCase):
         """安全内置函数白名单应包含常用函数但排除危险函数"""
         # 模拟 skill_manager 的白名单逻辑
         SAFE_NAMES = [
-            "len", "range", "str", "int", "float", "list", "dict",
-            "bool", "tuple", "set", "frozenset", "type",
-            "isinstance", "issubclass", "enumerate", "zip",
-            "map", "filter", "sorted", "reversed", "min", "max",
-            "sum", "abs", "round", "print", "repr", "hash",
+            "len",
+            "range",
+            "str",
+            "int",
+            "float",
+            "list",
+            "dict",
+            "bool",
+            "tuple",
+            "set",
+            "frozenset",
+            "type",
+            "isinstance",
+            "issubclass",
+            "enumerate",
+            "zip",
+            "map",
+            "filter",
+            "sorted",
+            "reversed",
+            "min",
+            "max",
+            "sum",
+            "abs",
+            "round",
+            "print",
+            "repr",
+            "hash",
         ]
         # 确保危险函数不在白名单中
-        DANGEROUS = ["eval", "exec", "compile", "open", "__import__",
-                     "getattr", "setattr", "delattr", "globals", "locals"]
+        DANGEROUS = [
+            "eval",
+            "exec",
+            "compile",
+            "open",
+            "__import__",
+            "getattr",
+            "setattr",
+            "delattr",
+            "globals",
+            "locals",
+        ]
         for d in DANGEROUS:
             self.assertNotIn(d, SAFE_NAMES, f"Dangerous function {d} in whitelist!")
 
@@ -204,26 +251,33 @@ class TestExecSandbox(unittest.TestCase):
 # Source code verification
 # =============================================================================
 
+
 class TestSourceCodeVerification(unittest.TestCase):
     """验证源代码中的安全修复确实存在"""
 
     def test_sqlite_uses_validator(self):
         import inspect
+
         from nodes.Node_13_SQLite.main import SQLiteManager
+
         source = inspect.getsource(SQLiteManager.get_table_stats)
         self.assertIn("_validate_identifier", source)
-        self.assertNotIn("f\"SELECT COUNT(*) as count FROM {table_name}\"", source)
+        self.assertNotIn('f"SELECT COUNT(*) as count FROM {table_name}"', source)
 
     def test_postgres_uses_validator(self):
         import inspect
+
         from nodes.Node_12_Postgres.main import PostgresManager
+
         source = inspect.getsource(PostgresManager.get_table_stats)
         self.assertIn("_validate_identifier", source)
 
     def test_node_120_raises_on_outside(self):
         try:
             import inspect
+
             from nodes.Node_120_File.main import FileService
+
             source = inspect.getsource(FileService._resolve_path)
             self.assertIn("raise ValueError", source)
             self.assertNotIn("# Allow absolute paths outside workspace", source)

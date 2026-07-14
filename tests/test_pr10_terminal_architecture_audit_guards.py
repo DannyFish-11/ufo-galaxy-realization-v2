@@ -91,10 +91,10 @@ try:
         L1_L2_L3_ROUTER_DETACHMENT_REGRESSION_GUARD_POLICY,
         TERMINAL_ARCHITECTURE_AUDIT_GUARDS_AUTHORITY,
         TERMINAL_ARCHITECTURE_AUDIT_GUARDS_PR10_SENTINEL,
-        TerminalGuardFinding,
-        TerminalGuardReport,
         V4_SCOPE_REGRESSION_GUARD_POLICY,
         V6_HOT_PATH_REGRESSION_GUARD_POLICY,
+        TerminalGuardFinding,
+        TerminalGuardReport,
         check_architecture_declaration_coherence,
         check_completion_truth_bypass,
         check_l1_l2_l3_router_detachment,
@@ -102,12 +102,12 @@ try:
         check_v6_hot_path_regression,
         run_terminal_audit_guards,
     )
+
     _MODULE_AVAILABLE = True
 except ImportError:
     _MODULE_AVAILABLE = False
 
-_skip = pytest.mark.skipif(not _MODULE_AVAILABLE,
-                           reason="core.terminal_architecture_audit_guards not available")
+_skip = pytest.mark.skipif(not _MODULE_AVAILABLE, reason="core.terminal_architecture_audit_guards not available")
 
 
 # ===========================================================================
@@ -150,12 +150,16 @@ class TestModuleSentinels:
         assert ARCHITECTURE_DECLARATION_COHERENCE_GUARD_POLICY.strip()
 
     def test_authority_sentinel_contains_pr10(self):
-        assert "PR10" in TERMINAL_ARCHITECTURE_AUDIT_GUARDS_AUTHORITY or \
-               "PR-10" in TERMINAL_ARCHITECTURE_AUDIT_GUARDS_AUTHORITY
+        assert (
+            "PR10" in TERMINAL_ARCHITECTURE_AUDIT_GUARDS_AUTHORITY
+            or "PR-10" in TERMINAL_ARCHITECTURE_AUDIT_GUARDS_AUTHORITY
+        )
 
     def test_pr10_sentinel_contains_pr10(self):
-        assert "PR-10" in TERMINAL_ARCHITECTURE_AUDIT_GUARDS_PR10_SENTINEL or \
-               "PR10" in TERMINAL_ARCHITECTURE_AUDIT_GUARDS_PR10_SENTINEL
+        assert (
+            "PR-10" in TERMINAL_ARCHITECTURE_AUDIT_GUARDS_PR10_SENTINEL
+            or "PR10" in TERMINAL_ARCHITECTURE_AUDIT_GUARDS_PR10_SENTINEL
+        )
 
 
 # ===========================================================================
@@ -232,10 +236,12 @@ class TestTerminalGuardReport:
 
     def test_extend_multiple(self):
         r = TerminalGuardReport()
-        r.extend([
-            TerminalGuardFinding("G", "error", "e1"),
-            TerminalGuardFinding("G", "error", "e2"),
-        ])
+        r.extend(
+            [
+                TerminalGuardFinding("G", "error", "e1"),
+                TerminalGuardFinding("G", "error", "e2"),
+            ]
+        )
         assert r.error_count == 2
         assert r.overall_passed is False
 
@@ -243,8 +249,13 @@ class TestTerminalGuardReport:
         r = TerminalGuardReport()
         d = r.to_dict()
         expected = {
-            "overall_passed", "error_count", "warning_count",
-            "guards_run", "findings", "generated_at", "policy_sentinels",
+            "overall_passed",
+            "error_count",
+            "warning_count",
+            "guards_run",
+            "findings",
+            "generated_at",
+            "policy_sentinels",
         }
         assert expected.issubset(set(d.keys()))
 
@@ -285,10 +296,12 @@ class TestV4ScopeRegressionGuard:
         findings = check_v4_scope_regression(snapshot=snapshot)
         errors = [f for f in findings if f.severity == "error"]
         assert errors, "Expected error for V4 is_per_request_gate=True"
-        assert any("V4_IS_NOT_PER_REQUEST_GATE" in str(f.detail) or
-                   "per_request_gate" in str(f.detail).lower() or
-                   "per-request" in f.message.lower()
-                   for f in errors)
+        assert any(
+            "V4_IS_NOT_PER_REQUEST_GATE" in str(f.detail)
+            or "per_request_gate" in str(f.detail).lower()
+            or "per-request" in f.message.lower()
+            for f in errors
+        )
 
     def test_d3_snapshot_per_request_gate_false_is_ok(self):
         """Snapshot declaring V4 as NOT a per-request gate must not produce errors
@@ -299,9 +312,7 @@ class TestV4ScopeRegressionGuard:
         }
         findings = check_v4_scope_regression(snapshot=snapshot)
         # No error specifically about this snapshot key
-        snapshot_errors = [f for f in findings
-                           if f.severity == "error"
-                           and "is_per_request_gate" in str(f.detail)]
+        snapshot_errors = [f for f in findings if f.severity == "error" and "is_per_request_gate" in str(f.detail)]
         assert not snapshot_errors
 
     def test_d4_v4_not_per_request_policy_intact(self):
@@ -371,9 +382,7 @@ class TestV6HotPathRegressionGuard:
         findings = check_v6_hot_path_regression(snapshot=snapshot)
         errors = [f for f in findings if f.severity == "error"]
         assert errors, "Expected error for V6 is_per_request_gate=True"
-        assert any("V6" in f.guard or "hot" in f.message.lower() or
-                   "per-request" in f.message.lower()
-                   for f in errors)
+        assert any("V6" in f.guard or "hot" in f.message.lower() or "per-request" in f.message.lower() for f in errors)
 
     def test_e3_v6_not_per_request_gate_sentinel_intact(self):
         try:
@@ -434,8 +443,7 @@ class TestL1L2L3RouterDetachmentGuard:
         findings = check_l1_l2_l3_router_detachment(snapshot=snapshot)
         errors = [f for f in findings if f.severity == "error"]
         assert errors, "Expected error for L1/L2/L3 is_shadow_stack=True"
-        assert any("shadow" in f.message.lower() or "L1" in f.guard
-                   for f in errors)
+        assert any("shadow" in f.message.lower() or "L1" in f.guard for f in errors)
 
     def test_f3_unified_llm_router_source_has_authority_attributes(self):
         """core/unified/llm_router.py source must reference L1/L2/L3 authority attrs."""
@@ -445,8 +453,7 @@ class TestL1L2L3RouterDetachmentGuard:
         source = source_path.read_text(encoding="utf-8")
         for attr in ["_l1_authority", "_l2_authority", "_l3_authority"]:
             assert attr in source, (
-                f"UnifiedLLMRouter source is missing '{attr}' — "
-                "L1/L2/L3 cognitive authority detached (regression)."
+                f"UnifiedLLMRouter source is missing '{attr}' — " "L1/L2/L3 cognitive authority detached (regression)."
             )
 
     def test_f4_unified_llm_router_source_has_helper_methods(self):
@@ -455,8 +462,7 @@ class TestL1L2L3RouterDetachmentGuard:
         if not source_path.exists():
             pytest.skip("core/unified/llm_router.py not found")
         source = source_path.read_text(encoding="utf-8")
-        for method in ["_get_l1_route_authority", "_get_l2_supply_authority",
-                       "_get_l3_context_authority"]:
+        for method in ["_get_l1_route_authority", "_get_l2_supply_authority", "_get_l3_context_authority"]:
             assert method in source, (
                 f"UnifiedLLMRouter source does not define '{method}' — "
                 "L1/L2/L3 authority helper removed (regression)."
@@ -499,8 +505,7 @@ class TestCompletionTruthBypassGuard:
         findings = check_completion_truth_bypass(snapshot=snapshot)
         errors = [f for f in findings if f.severity == "error"]
         assert errors, "Expected error for completion truth is_optional_signaling=True"
-        assert any("optional" in f.message.lower() or "truth" in f.message.lower()
-                   for f in errors)
+        assert any("optional" in f.message.lower() or "truth" in f.message.lower() for f in errors)
 
     def test_g3_task_result_truth_chain_must_run_policy_intact(self):
         try:
@@ -571,9 +576,9 @@ class TestArchitectureDeclarationCoherenceGuard:
             "multi_step_orchestration_spine",
             "startup_release_integrity",
         }
-        assert expected.issubset(CANONICAL_LAYER_KEYS), (
-            f"Missing layer keys: {expected - frozenset(CANONICAL_LAYER_KEYS)}"
-        )
+        assert expected.issubset(
+            CANONICAL_LAYER_KEYS
+        ), f"Missing layer keys: {expected - frozenset(CANONICAL_LAYER_KEYS)}"
 
     def test_h3_all_four_not_policy_sentinels_present(self):
         try:
@@ -591,8 +596,9 @@ class TestArchitectureDeclarationCoherenceGuard:
             L1_L2_L3_BELONGS_TO_ROUTER_LAYER_NOT_SHADOW_STACK,
             COMPLETION_TRUTH_IS_ENFORCED_NOT_OPTIONAL,
         ]:
-            assert isinstance(sentinel, str) and sentinel.strip(), \
-                f"NOT-policy sentinel is empty or missing: {sentinel!r}"
+            assert (
+                isinstance(sentinel, str) and sentinel.strip()
+            ), f"NOT-policy sentinel is empty or missing: {sentinel!r}"
 
     def test_h4_run_layer_model_invariants_consistent(self):
         try:
@@ -650,9 +656,7 @@ class TestRunTerminalAuditGuards:
             "is_per_request_gate": True,
         }
         report = run_terminal_audit_guards(snapshot=snapshot)
-        assert not report.overall_passed, (
-            "Expected overall_passed=False when V4 regression snapshot is provided."
-        )
+        assert not report.overall_passed, "Expected overall_passed=False when V4 regression snapshot is provided."
 
     def test_i4_policy_sentinels_list_has_five_entries(self):
         report = run_terminal_audit_guards()
@@ -662,8 +666,13 @@ class TestRunTerminalAuditGuards:
         report = run_terminal_audit_guards()
         d = report.to_dict()
         expected_keys = {
-            "overall_passed", "error_count", "warning_count",
-            "guards_run", "findings", "generated_at", "policy_sentinels",
+            "overall_passed",
+            "error_count",
+            "warning_count",
+            "guards_run",
+            "findings",
+            "generated_at",
+            "policy_sentinels",
         }
         assert expected_keys.issubset(set(d.keys()))
 

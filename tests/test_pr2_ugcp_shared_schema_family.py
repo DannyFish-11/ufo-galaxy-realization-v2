@@ -8,21 +8,21 @@ import pytest
 
 from core.schemas.task_envelope import TaskEnvelope as ExistingTaskEnvelope
 from core.schemas.ugcp import (
-    ParticipantKind,
-    ParticipantRuntimeTier,
-    ParticipantTier,
-    ParticipantState,
-    UGCP_CANONICAL_PARTICIPANT_TIERS_PR3_SENTINEL,
     UGCP_CANONICAL_PARTICIPANT_MODEL_PR52_SENTINEL,
+    UGCP_CANONICAL_PARTICIPANT_TIERS_PR3_SENTINEL,
     UGCP_SHARED_SCHEMA_FAMILY_AUTHORITY,
     UGCP_SHARED_SCHEMA_FAMILY_PR2_SENTINEL,
-    map_from_device_participation_summary,
+    ParticipantKind,
+    ParticipantRuntimeTier,
+    ParticipantState,
+    ParticipantTier,
     RuntimeTruth,
     TaskTruth,
     TerminalReason,
     TerminalState,
     map_from_delegated_dispatch_record,
     map_from_delegated_handoff_contract,
+    map_from_device_participation_summary,
     map_from_message_interop_payload,
     map_from_node_participant_record,
     map_from_runtime_participant_surface,
@@ -39,16 +39,12 @@ def test_sentinel_strings_present() -> None:
 
 
 def test_pr52_participant_model_sentinel_present() -> None:
-    assert UGCP_CANONICAL_PARTICIPANT_MODEL_PR52_SENTINEL.startswith(
-        "UGCP_CANONICAL_PARTICIPANT_MODEL_PR52_SENTINEL::"
-    )
+    assert UGCP_CANONICAL_PARTICIPANT_MODEL_PR52_SENTINEL.startswith("UGCP_CANONICAL_PARTICIPANT_MODEL_PR52_SENTINEL::")
     assert "participant_identity_runtime_tier" in UGCP_CANONICAL_PARTICIPANT_MODEL_PR52_SENTINEL
 
 
 def test_pr3_participant_tiers_sentinel_present() -> None:
-    assert UGCP_CANONICAL_PARTICIPANT_TIERS_PR3_SENTINEL.startswith(
-        "UGCP_CANONICAL_PARTICIPANT_TIERS_PR3_SENTINEL::"
-    )
+    assert UGCP_CANONICAL_PARTICIPANT_TIERS_PR3_SENTINEL.startswith("UGCP_CANONICAL_PARTICIPANT_TIERS_PR3_SENTINEL::")
     assert "full_runtime_host" in UGCP_CANONICAL_PARTICIPANT_TIERS_PR3_SENTINEL
 
 

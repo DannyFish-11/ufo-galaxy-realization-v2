@@ -217,21 +217,11 @@ LEGACY_PATH_MUST_NOT_RE_ENTER_CANONICAL_SURFACE_POLICY: str = (
 # Canonical path declarations (importable string constants)
 # ---------------------------------------------------------------------------
 
-CANONICAL_COMPLETION_INGRESS_PATH: str = (
-    "core.canonical_completion_ingress.CanonicalCompletionIngress"
-)
-CANONICAL_CAPABILITY_ROUTING_PATH: str = (
-    "core.capability_routing_gate.evaluate_capability_gate"
-)
-CANONICAL_RUNTIME_TRUTH_INGRESS_PATH: str = (
-    "core.unified_runtime_truth_ingress.ingest_android_runtime_state_update"
-)
-CANONICAL_PROVIDER_ROUTING_PATH: str = (
-    "core.unified.llm_router.UnifiedLLMRouter"
-)
-CANONICAL_VALIDATION_GATE_PATH: str = (
-    "core.unified.release_gate.ReleaseGate"
-)
+CANONICAL_COMPLETION_INGRESS_PATH: str = "core.canonical_completion_ingress.CanonicalCompletionIngress"
+CANONICAL_CAPABILITY_ROUTING_PATH: str = "core.capability_routing_gate.evaluate_capability_gate"
+CANONICAL_RUNTIME_TRUTH_INGRESS_PATH: str = "core.unified_runtime_truth_ingress.ingest_android_runtime_state_update"
+CANONICAL_PROVIDER_ROUTING_PATH: str = "core.unified.llm_router.UnifiedLLMRouter"
+CANONICAL_VALIDATION_GATE_PATH: str = "core.unified.release_gate.ReleaseGate"
 
 # ---------------------------------------------------------------------------
 # Enumerations
@@ -367,10 +357,7 @@ class BypassInvariantViolation(RuntimeError):
     """
 
     def __init__(self, area: ClosureArea, canonical_path: str, detail: str) -> None:
-        super().__init__(
-            f"BypassInvariantViolation [{area.value}]: {detail} "
-            f"(canonical path: {canonical_path})"
-        )
+        super().__init__(f"BypassInvariantViolation [{area.value}]: {detail} " f"(canonical path: {canonical_path})")
         self.area = area
         self.canonical_path = canonical_path
         self.detail = detail
@@ -408,8 +395,8 @@ def assert_completion_ingress_is_canonical(
 
     try:
         from core.canonical_completion_ingress import (  # noqa: F401
-            CanonicalCompletionIngress,
             CANONICAL_COMPLETION_INGRESS_SENTINEL,
+            CanonicalCompletionIngress,
             get_canonical_completion_ingress,
         )
 
@@ -432,8 +419,7 @@ def assert_completion_ingress_is_canonical(
             verdict=BypassGuardVerdict.CANONICAL_MODULE_UNAVAILABLE,
             canonical_path=canonical,
             description=(
-                f"CanonicalCompletionIngress could not be imported: {exc}.  "
-                "Completion bypass risk is unknown."
+                f"CanonicalCompletionIngress could not be imported: {exc}.  " "Completion bypass risk is unknown."
             ),
             bypass_risk=True,
             details={"import_error": str(exc)},
@@ -465,9 +451,9 @@ def assert_capability_routing_is_canonical(
 
     try:
         from core.capability_routing_gate import (  # noqa: F401
-            evaluate_capability_gate,
-            CAPABILITY_ROUTING_GATE_IS_AUTHORITY,
             CAPABILITY_GATE_ELEVATES_FROM_ADVISORY_POLICY,
+            CAPABILITY_ROUTING_GATE_IS_AUTHORITY,
+            evaluate_capability_gate,
         )
 
         sentinel_ok = bool(CAPABILITY_ROUTING_GATE_IS_AUTHORITY)
@@ -493,8 +479,7 @@ def assert_capability_routing_is_canonical(
             verdict=BypassGuardVerdict.CANONICAL_MODULE_UNAVAILABLE,
             canonical_path=canonical,
             description=(
-                f"CapabilityRoutingGate could not be imported: {exc}.  "
-                "Capability routing bypass risk is unknown."
+                f"CapabilityRoutingGate could not be imported: {exc}.  " "Capability routing bypass risk is unknown."
             ),
             bypass_risk=True,
             details={"import_error": str(exc)},
@@ -526,10 +511,10 @@ def assert_runtime_truth_ingress_is_canonical(
 
     try:
         from core.unified_runtime_truth_ingress import (  # noqa: F401
-            ingest_android_runtime_state_update,
-            UNIFIED_RUNTIME_TRUTH_INGRESS_AUTHORITY,
             NO_PARALLEL_WRITE_TO_CANONICAL_STATE_POLICY,
             SESSION_AUTHORITY_IS_ATTACHED_REGISTRY_POLICY,
+            UNIFIED_RUNTIME_TRUTH_INGRESS_AUTHORITY,
+            ingest_android_runtime_state_update,
         )
 
         sentinel_ok = bool(UNIFIED_RUNTIME_TRUTH_INGRESS_AUTHORITY)
@@ -555,8 +540,7 @@ def assert_runtime_truth_ingress_is_canonical(
             verdict=BypassGuardVerdict.CANONICAL_MODULE_UNAVAILABLE,
             canonical_path=canonical,
             description=(
-                f"UnifiedRuntimeTruthIngress could not be imported: {exc}.  "
-                "Runtime truth bypass risk is unknown."
+                f"UnifiedRuntimeTruthIngress could not be imported: {exc}.  " "Runtime truth bypass risk is unknown."
             ),
             bypass_risk=True,
             details={"import_error": str(exc)},
@@ -589,8 +573,8 @@ def assert_provider_routing_is_canonical(
 
     try:
         from core.unified.llm_router import (  # noqa: F401
-            UnifiedLLMRouter,
             UNIFIED_LLM_ROUTER_AUTHORITY,
+            UnifiedLLMRouter,
             get_unified_llm_router,
         )
 
@@ -613,8 +597,7 @@ def assert_provider_routing_is_canonical(
             verdict=BypassGuardVerdict.CANONICAL_MODULE_UNAVAILABLE,
             canonical_path=canonical,
             description=(
-                f"UnifiedLLMRouter could not be imported: {exc}.  "
-                "Provider routing bypass risk is unknown."
+                f"UnifiedLLMRouter could not be imported: {exc}.  " "Provider routing bypass risk is unknown."
             ),
             bypass_risk=True,
             details={"import_error": str(exc)},
@@ -646,10 +629,10 @@ def assert_validation_gate_is_canonical(
 
     try:
         from core.unified.release_gate import (  # noqa: F401
-            ReleaseGate,
-            get_release_gate,
             FeatureDisabledError,
+            ReleaseGate,
             RolloutBlockedError,
+            get_release_gate,
         )
 
         # Confirm the gate exposes require_enabled() — the blocking (non-advisory)
@@ -674,10 +657,7 @@ def assert_validation_gate_is_canonical(
             area=area,
             verdict=BypassGuardVerdict.CANONICAL_MODULE_UNAVAILABLE,
             canonical_path=canonical,
-            description=(
-                f"ReleaseGate could not be imported: {exc}.  "
-                "Validation gate bypass risk is unknown."
-            ),
+            description=(f"ReleaseGate could not be imported: {exc}.  " "Validation gate bypass risk is unknown."),
             bypass_risk=True,
             details={"import_error": str(exc)},
         )
@@ -841,14 +821,8 @@ def build_final_cleanup_posture_snapshot() -> FinalCleanupPostureSnapshot:
     """
     results = run_all_no_bypass_guards(strict=False)
     bypass_risks = [r.area.value for r in results if r.bypass_risk]
-    unavailable = [
-        r.area.value
-        for r in results
-        if r.verdict == BypassGuardVerdict.CANONICAL_MODULE_UNAVAILABLE
-    ]
-    all_confirmed = all(
-        r.verdict == BypassGuardVerdict.CANONICAL_PATH_CONFIRMED for r in results
-    )
+    unavailable = [r.area.value for r in results if r.verdict == BypassGuardVerdict.CANONICAL_MODULE_UNAVAILABLE]
+    all_confirmed = all(r.verdict == BypassGuardVerdict.CANONICAL_PATH_CONFIRMED for r in results)
     return FinalCleanupPostureSnapshot(
         guard_results=results,
         all_canonical_confirmed=all_confirmed,

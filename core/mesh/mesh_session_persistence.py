@@ -269,9 +269,7 @@ class MeshSessionPersistenceStore:
             The persisted record, or ``None`` if persistence failed.
         """
         try:
-            snap_dict, session_id, coordinator_id, status = self._extract_fields(
-                coordinator_state
-            )
+            snap_dict, session_id, coordinator_id, status = self._extract_fields(coordinator_state)
             if not session_id:
                 logger.warning("save: coordinator_state has no session_id — skipping")
                 return None
@@ -462,8 +460,7 @@ class MeshSessionPersistenceStore:
         try:
             os.makedirs(self._store_dir, exist_ok=True)
         except OSError as exc:
-            logger.warning("MeshSessionPersistenceStore: cannot create store_dir %s: %s",
-                           self._store_dir, exc)
+            logger.warning("MeshSessionPersistenceStore: cannot create store_dir %s: %s", self._store_dir, exc)
 
     def _session_path(self, session_id: str) -> str:
         # Sanitise session_id to avoid path traversal

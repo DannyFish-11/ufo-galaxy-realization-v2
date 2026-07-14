@@ -84,7 +84,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -108,7 +107,8 @@ def _make_mesh_session_dict(
         "source_device_id": source_device_id,
         "primary_device_id": primary_device_id,
         "merge_owner_device_id": merge_owner_device_id,
-        "participants": participants or [
+        "participants": participants
+        or [
             {
                 "device_id": "phone_001",
                 "roles": ["source"],
@@ -124,7 +124,8 @@ def _make_mesh_session_dict(
                 "metadata": {},
             },
         ],
-        "subtask_assignments": subtask_assignments or [
+        "subtask_assignments": subtask_assignments
+        or [
             {
                 "subtask_id": "subtask_001",
                 "device_id": "tablet_002",
@@ -219,8 +220,14 @@ class TestMeshCoordinatorStatusEnum:
         from contracts.mesh_session_coordinator import MeshCoordinatorStatus
 
         expected = {
-            "pending", "active", "awaiting_barrier", "merging",
-            "completed", "failed", "partial", "unknown",
+            "pending",
+            "active",
+            "awaiting_barrier",
+            "merging",
+            "completed",
+            "failed",
+            "partial",
+            "unknown",
         }
         actual = {s.value for s in MeshCoordinatorStatus}
         assert expected == actual
@@ -242,8 +249,14 @@ class TestMeshParticipantStatusEnum:
         from contracts.mesh_session_coordinator import MeshParticipantStatus
 
         expected = {
-            "pending", "ready", "working", "waiting",
-            "completed", "failed", "offline", "unknown",
+            "pending",
+            "ready",
+            "working",
+            "waiting",
+            "completed",
+            "failed",
+            "offline",
+            "unknown",
         }
         actual = {s.value for s in MeshParticipantStatus}
         assert expected == actual
@@ -259,8 +272,14 @@ class TestMeshAssignmentStatusEnum:
         from contracts.mesh_session_coordinator import MeshAssignmentStatus
 
         expected = {
-            "pending", "dispatched", "accepted", "in_progress",
-            "completed", "failed", "cancelled", "unknown",
+            "pending",
+            "dispatched",
+            "accepted",
+            "in_progress",
+            "completed",
+            "failed",
+            "cancelled",
+            "unknown",
         }
         actual = {s.value for s in MeshAssignmentStatus}
         assert expected == actual
@@ -290,12 +309,18 @@ class TestMeshCoordinationEventKindEnum:
         from contracts.mesh_session_coordinator import MeshCoordinationEventKind
 
         expected = {
-            "participant_joined", "participant_ready",
-            "assignment_created", "assignment_dispatched",
-            "assignment_completed", "assignment_failed",
-            "barrier_reached", "barrier_released",
-            "merge_started", "merge_completed",
-            "coordinator_status_changed", "error",
+            "participant_joined",
+            "participant_ready",
+            "assignment_created",
+            "assignment_dispatched",
+            "assignment_completed",
+            "assignment_failed",
+            "barrier_reached",
+            "barrier_released",
+            "merge_started",
+            "merge_completed",
+            "coordinator_status_changed",
+            "error",
         }
         actual = {k.value for k in MeshCoordinationEventKind}
         assert expected == actual
@@ -385,9 +410,14 @@ class TestMeshAssignmentStateFields:
         a = MeshAssignmentState(device_id="dev_001")
         d = a.to_dict()
         for field in [
-            "subtask_id", "device_id", "status",
-            "capability_required", "handoff_id", "result_unit_id",
-            "created_at", "updated_at",
+            "subtask_id",
+            "device_id",
+            "status",
+            "capability_required",
+            "handoff_id",
+            "result_unit_id",
+            "created_at",
+            "updated_at",
         ]:
             assert field in d, f"Missing field: {field}"
 
@@ -443,7 +473,8 @@ class TestMeshBarrierStateFields:
 class TestMeshCoordinationEventSerialization:
     def test_to_dict_returns_dict(self):
         from contracts.mesh_session_coordinator import (
-            MeshCoordinationEvent, MeshCoordinationEventKind,
+            MeshCoordinationEvent,
+            MeshCoordinationEventKind,
         )
 
         e = MeshCoordinationEvent(
@@ -534,11 +565,24 @@ class TestMeshSessionCoordinatorStateFields:
         c = MeshSessionCoordinatorState()
         d = c.to_dict()
         for field in [
-            "coordinator_id", "session_id", "mesh_id", "trace_id", "task_id",
-            "status", "participants", "assignments", "barrier_state",
-            "merge_owner_device_id", "pending_device_ids", "completed_device_ids",
-            "failed_device_ids", "coordination_events", "result_merge_summary",
-            "created_at", "updated_at", "metadata",
+            "coordinator_id",
+            "session_id",
+            "mesh_id",
+            "trace_id",
+            "task_id",
+            "status",
+            "participants",
+            "assignments",
+            "barrier_state",
+            "merge_owner_device_id",
+            "pending_device_ids",
+            "completed_device_ids",
+            "failed_device_ids",
+            "coordination_events",
+            "result_merge_summary",
+            "created_at",
+            "updated_at",
+            "metadata",
         ]:
             assert field in d, f"Missing field: {field}"
 
@@ -583,8 +627,8 @@ class TestMeshSessionCoordinatorStateCompactSummary:
 
     def test_to_compact_summary_counts_match(self):
         from contracts.mesh_session_coordinator import (
-            MeshSessionCoordinatorState,
             MeshParticipantCoordinationState,
+            MeshSessionCoordinatorState,
         )
 
         participants = [
@@ -651,10 +695,20 @@ class TestMeshSessionCoordinatorSummaryFields:
         s = MeshSessionCoordinatorSummary()
         d = s.to_dict()
         for field in [
-            "summary_id", "coordinator_id", "session_id", "mesh_id", "trace_id",
-            "status", "participant_count", "assignment_count",
-            "pending_count", "completed_count", "failed_count",
-            "barrier_status", "merge_owner_device_id", "has_result_merge_summary",
+            "summary_id",
+            "coordinator_id",
+            "session_id",
+            "mesh_id",
+            "trace_id",
+            "status",
+            "participant_count",
+            "assignment_count",
+            "pending_count",
+            "completed_count",
+            "failed_count",
+            "barrier_status",
+            "merge_owner_device_id",
+            "has_result_merge_summary",
             "timestamp",
         ]:
             assert field in d, f"Missing field: {field}"
@@ -715,8 +769,8 @@ class TestBuildMeshSessionCoordinatorRobust:
 
 class TestFromMeshSessionObject:
     def test_from_mesh_session_object(self):
-        from contracts.mesh_session_coordinator import from_mesh_session
         from contracts.mesh_session import build_mesh_session
+        from contracts.mesh_session_coordinator import from_mesh_session
 
         session = build_mesh_session(
             source_device_id="phone_001",
@@ -728,8 +782,8 @@ class TestFromMeshSessionObject:
         assert coordinator.mesh_id == "mesh_alpha"
 
     def test_session_id_propagated(self):
-        from contracts.mesh_session_coordinator import from_mesh_session
         from contracts.mesh_session import build_mesh_session
+        from contracts.mesh_session_coordinator import from_mesh_session
 
         session = build_mesh_session(
             source_device_id="phone_001",
@@ -770,7 +824,8 @@ class TestFromMeshSessionDict:
 class TestFromMeshSessionNone:
     def test_none_returns_default_state(self):
         from contracts.mesh_session_coordinator import (
-            from_mesh_session, MeshSessionCoordinatorState,
+            MeshSessionCoordinatorState,
+            from_mesh_session,
         )
 
         coordinator = from_mesh_session(None)
@@ -847,14 +902,14 @@ class TestFromMeshSessionAssignments:
 
 class TestFromMeshSessionBarrierPosture:
     def test_soft_barrier_maps_to_open(self):
-        from contracts.mesh_session_coordinator import from_mesh_session, MeshBarrierStatus
+        from contracts.mesh_session_coordinator import MeshBarrierStatus, from_mesh_session
 
         session_dict = _make_mesh_session_dict(barrier_posture="soft_barrier")
         coordinator = from_mesh_session(session_dict)
         assert coordinator.barrier_state.status == MeshBarrierStatus.open
 
     def test_none_posture_maps_to_not_required(self):
-        from contracts.mesh_session_coordinator import from_mesh_session, MeshBarrierStatus
+        from contracts.mesh_session_coordinator import MeshBarrierStatus, from_mesh_session
 
         session_dict = _make_mesh_session_dict(barrier_posture="none")
         coordinator = from_mesh_session(session_dict)
@@ -883,8 +938,9 @@ class TestFromMeshSessionMergeOwner:
 class TestUpdateWithDispatchResultSuccess:
     def test_success_sets_active_status(self):
         from contracts.mesh_session_coordinator import (
-            from_mesh_session, update_coordinator_with_dispatch_result,
             MeshCoordinatorStatus,
+            from_mesh_session,
+            update_coordinator_with_dispatch_result,
         )
 
         coordinator = from_mesh_session(_make_mesh_session_dict())
@@ -894,7 +950,8 @@ class TestUpdateWithDispatchResultSuccess:
 
     def test_trace_id_updated_if_missing(self):
         from contracts.mesh_session_coordinator import (
-            build_mesh_session_coordinator, update_coordinator_with_dispatch_result,
+            build_mesh_session_coordinator,
+            update_coordinator_with_dispatch_result,
         )
 
         coordinator = build_mesh_session_coordinator()
@@ -911,8 +968,9 @@ class TestUpdateWithDispatchResultSuccess:
 class TestUpdateWithDispatchResultFailure:
     def test_failure_sets_failed_status(self):
         from contracts.mesh_session_coordinator import (
-            from_mesh_session, update_coordinator_with_dispatch_result,
             MeshCoordinatorStatus,
+            from_mesh_session,
+            update_coordinator_with_dispatch_result,
         )
 
         coordinator = from_mesh_session(_make_mesh_session_dict())
@@ -929,7 +987,8 @@ class TestUpdateWithDispatchResultFailure:
 class TestUpdateWithDispatchResultNone:
     def test_none_returns_unchanged(self):
         from contracts.mesh_session_coordinator import (
-            from_mesh_session, update_coordinator_with_dispatch_result,
+            from_mesh_session,
+            update_coordinator_with_dispatch_result,
         )
 
         coordinator = from_mesh_session(_make_mesh_session_dict())
@@ -945,7 +1004,8 @@ class TestUpdateWithDispatchResultNone:
 class TestUpdateWithDispatchResultRobust:
     def test_never_raises(self):
         from contracts.mesh_session_coordinator import (
-            build_mesh_session_coordinator, update_coordinator_with_dispatch_result,
+            build_mesh_session_coordinator,
+            update_coordinator_with_dispatch_result,
         )
 
         coordinator = build_mesh_session_coordinator()
@@ -962,17 +1022,16 @@ class TestUpdateWithDispatchResultRobust:
 class TestUpdateWithTakeoverResultSuccess:
     def test_success_updates_participant_status(self):
         from contracts.mesh_session_coordinator import (
-            from_mesh_session, update_coordinator_with_takeover_result,
             MeshParticipantStatus,
+            from_mesh_session,
+            update_coordinator_with_takeover_result,
         )
 
         coordinator = from_mesh_session(_make_mesh_session_dict())
         result = _make_takeover_result_dict(success=True, device_id="tablet_002")
         updated = update_coordinator_with_takeover_result(coordinator, result)
 
-        tablet_participant = next(
-            (p for p in updated.participants if p.device_id == "tablet_002"), None
-        )
+        tablet_participant = next((p for p in updated.participants if p.device_id == "tablet_002"), None)
         assert tablet_participant is not None
         assert tablet_participant.status == MeshParticipantStatus.completed
 
@@ -985,17 +1044,16 @@ class TestUpdateWithTakeoverResultSuccess:
 class TestUpdateWithTakeoverResultFailure:
     def test_failure_sets_participant_failed(self):
         from contracts.mesh_session_coordinator import (
-            from_mesh_session, update_coordinator_with_takeover_result,
             MeshParticipantStatus,
+            from_mesh_session,
+            update_coordinator_with_takeover_result,
         )
 
         coordinator = from_mesh_session(_make_mesh_session_dict())
         result = _make_takeover_result_dict(success=False, device_id="tablet_002", status="failed")
         updated = update_coordinator_with_takeover_result(coordinator, result)
 
-        tablet_participant = next(
-            (p for p in updated.participants if p.device_id == "tablet_002"), None
-        )
+        tablet_participant = next((p for p in updated.participants if p.device_id == "tablet_002"), None)
         assert tablet_participant is not None
         assert tablet_participant.status == MeshParticipantStatus.failed
 
@@ -1008,7 +1066,8 @@ class TestUpdateWithTakeoverResultFailure:
 class TestUpdateWithTakeoverResultCompletedDevices:
     def test_device_in_completed(self):
         from contracts.mesh_session_coordinator import (
-            from_mesh_session, update_coordinator_with_takeover_result,
+            from_mesh_session,
+            update_coordinator_with_takeover_result,
         )
 
         coordinator = from_mesh_session(_make_mesh_session_dict())
@@ -1026,7 +1085,8 @@ class TestUpdateWithTakeoverResultCompletedDevices:
 class TestUpdateWithTakeoverResultFailedDevices:
     def test_device_in_failed(self):
         from contracts.mesh_session_coordinator import (
-            from_mesh_session, update_coordinator_with_takeover_result,
+            from_mesh_session,
+            update_coordinator_with_takeover_result,
         )
 
         coordinator = from_mesh_session(_make_mesh_session_dict())
@@ -1044,7 +1104,8 @@ class TestUpdateWithTakeoverResultFailedDevices:
 class TestUpdateWithTakeoverResultNone:
     def test_none_returns_unchanged(self):
         from contracts.mesh_session_coordinator import (
-            from_mesh_session, update_coordinator_with_takeover_result,
+            from_mesh_session,
+            update_coordinator_with_takeover_result,
         )
 
         coordinator = from_mesh_session(_make_mesh_session_dict())
@@ -1060,7 +1121,8 @@ class TestUpdateWithTakeoverResultNone:
 class TestUpdateWithTakeoverResultRobust:
     def test_never_raises(self):
         from contracts.mesh_session_coordinator import (
-            build_mesh_session_coordinator, update_coordinator_with_takeover_result,
+            build_mesh_session_coordinator,
+            update_coordinator_with_takeover_result,
         )
 
         coordinator = build_mesh_session_coordinator()
@@ -1076,8 +1138,9 @@ class TestUpdateWithTakeoverResultRobust:
 class TestUpdateWithMergedResultSuccess:
     def test_success_sets_completed_status(self):
         from contracts.mesh_session_coordinator import (
-            from_mesh_session, update_coordinator_with_merged_result,
             MeshCoordinatorStatus,
+            from_mesh_session,
+            update_coordinator_with_merged_result,
         )
 
         coordinator = from_mesh_session(_make_mesh_session_dict())
@@ -1094,8 +1157,9 @@ class TestUpdateWithMergedResultSuccess:
 class TestUpdateWithMergedResultPartial:
     def test_partial_sets_partial_status(self):
         from contracts.mesh_session_coordinator import (
-            from_mesh_session, update_coordinator_with_merged_result,
             MeshCoordinatorStatus,
+            from_mesh_session,
+            update_coordinator_with_merged_result,
         )
 
         coordinator = from_mesh_session(_make_mesh_session_dict())
@@ -1112,8 +1176,9 @@ class TestUpdateWithMergedResultPartial:
 class TestUpdateWithMergedResultFailed:
     def test_failure_sets_failed_status(self):
         from contracts.mesh_session_coordinator import (
-            from_mesh_session, update_coordinator_with_merged_result,
             MeshCoordinatorStatus,
+            from_mesh_session,
+            update_coordinator_with_merged_result,
         )
 
         coordinator = from_mesh_session(_make_mesh_session_dict())
@@ -1130,7 +1195,8 @@ class TestUpdateWithMergedResultFailed:
 class TestUpdateWithMergedResultSummary:
     def test_result_merge_summary_set(self):
         from contracts.mesh_session_coordinator import (
-            from_mesh_session, update_coordinator_with_merged_result,
+            from_mesh_session,
+            update_coordinator_with_merged_result,
         )
 
         coordinator = from_mesh_session(_make_mesh_session_dict())
@@ -1148,7 +1214,8 @@ class TestUpdateWithMergedResultSummary:
 class TestUpdateWithMergedResultNone:
     def test_none_returns_unchanged(self):
         from contracts.mesh_session_coordinator import (
-            from_mesh_session, update_coordinator_with_merged_result,
+            from_mesh_session,
+            update_coordinator_with_merged_result,
         )
 
         coordinator = from_mesh_session(_make_mesh_session_dict())
@@ -1164,7 +1231,9 @@ class TestUpdateWithMergedResultNone:
 class TestBuildCoordinatorSummaryFromCoordinator:
     def test_summary_from_coordinator(self):
         from contracts.mesh_session_coordinator import (
-            from_mesh_session, build_coordinator_summary, MeshSessionCoordinatorSummary,
+            MeshSessionCoordinatorSummary,
+            build_coordinator_summary,
+            from_mesh_session,
         )
 
         coordinator = from_mesh_session(_make_mesh_session_dict())
@@ -1183,7 +1252,8 @@ class TestBuildCoordinatorSummaryFromCoordinator:
 class TestBuildCoordinatorSummaryFromKwargs:
     def test_summary_from_kwargs(self):
         from contracts.mesh_session_coordinator import (
-            build_coordinator_summary, MeshCoordinatorStatus,
+            MeshCoordinatorStatus,
+            build_coordinator_summary,
         )
 
         summary = build_coordinator_summary(
@@ -1237,8 +1307,8 @@ class TestMeshSessionCoordinatorClass:
 
 class TestMeshSessionCoordinatorDispatch:
     def test_update_with_dispatch_result(self):
-        from core.mesh.mesh_session_coordinator import MeshSessionCoordinator
         from contracts.mesh_session_coordinator import MeshCoordinatorStatus
+        from core.mesh.mesh_session_coordinator import MeshSessionCoordinator
 
         handler = MeshSessionCoordinator()
         state = handler.from_mesh_session(_make_mesh_session_dict())
@@ -1271,14 +1341,12 @@ class TestMeshSessionCoordinatorTakeover:
 
 class TestMeshSessionCoordinatorMerge:
     def test_update_with_merged_result(self):
-        from core.mesh.mesh_session_coordinator import MeshSessionCoordinator
         from contracts.mesh_session_coordinator import MeshCoordinatorStatus
+        from core.mesh.mesh_session_coordinator import MeshSessionCoordinator
 
         handler = MeshSessionCoordinator()
         state = handler.from_mesh_session(_make_mesh_session_dict())
-        updated = handler.update_with_merged_result(
-            state, _make_merged_result_dict(success=True)
-        )
+        updated = handler.update_with_merged_result(state, _make_merged_result_dict(success=True))
         assert updated.status == MeshCoordinatorStatus.completed
 
 
@@ -1289,8 +1357,8 @@ class TestMeshSessionCoordinatorMerge:
 
 class TestMeshSessionCoordinatorGetSummary:
     def test_get_summary(self):
-        from core.mesh.mesh_session_coordinator import MeshSessionCoordinator
         from contracts.mesh_session_coordinator import MeshSessionCoordinatorSummary
+        from core.mesh.mesh_session_coordinator import MeshSessionCoordinator
 
         handler = MeshSessionCoordinator()
         state = handler.from_mesh_session(_make_mesh_session_dict())
@@ -1340,8 +1408,8 @@ class TestCoordinateMeshSessionConvenience:
 
 class TestCoordinateMeshSessionAllInputs:
     def test_full_lifecycle_via_convenience(self):
-        from core.mesh.mesh_session_coordinator import coordinate_mesh_session
         from contracts.mesh_session_coordinator import MeshCoordinatorStatus
+        from core.mesh.mesh_session_coordinator import coordinate_mesh_session
 
         state = coordinate_mesh_session(
             mesh_session=_make_mesh_session_dict(),
@@ -1375,10 +1443,11 @@ class TestCoordinateMeshSessionNone:
 
 class TestGetCoordinatorSummary:
     def test_from_coordinator(self):
-        from core.mesh.mesh_session_coordinator import (
-            coordinate_mesh_session, get_coordinator_summary,
-        )
         from contracts.mesh_session_coordinator import MeshSessionCoordinatorSummary
+        from core.mesh.mesh_session_coordinator import (
+            coordinate_mesh_session,
+            get_coordinator_summary,
+        )
 
         state = coordinate_mesh_session(mesh_session=_make_mesh_session_dict())
         summary = get_coordinator_summary(state)
@@ -1393,12 +1462,12 @@ class TestGetCoordinatorSummary:
 class TestFullLifecycle:
     def test_full_lifecycle(self):
         from contracts.mesh_session_coordinator import (
+            MeshCoordinatorStatus,
+            build_coordinator_summary,
             from_mesh_session,
             update_coordinator_with_dispatch_result,
-            update_coordinator_with_takeover_result,
             update_coordinator_with_merged_result,
-            build_coordinator_summary,
-            MeshCoordinatorStatus,
+            update_coordinator_with_takeover_result,
         )
 
         # Step 1: Build from session
@@ -1406,9 +1475,7 @@ class TestFullLifecycle:
         assert state.status == MeshCoordinatorStatus.pending
 
         # Step 2: Dispatch
-        state = update_coordinator_with_dispatch_result(
-            state, _make_dispatch_result_dict(success=True)
-        )
+        state = update_coordinator_with_dispatch_result(state, _make_dispatch_result_dict(success=True))
         assert state.status == MeshCoordinatorStatus.active
 
         # Step 3: Takeover
@@ -1418,9 +1485,7 @@ class TestFullLifecycle:
         )
 
         # Step 4: Merge
-        state = update_coordinator_with_merged_result(
-            state, _make_merged_result_dict(success=True)
-        )
+        state = update_coordinator_with_merged_result(state, _make_merged_result_dict(success=True))
         assert state.status == MeshCoordinatorStatus.completed
 
         # Step 5: Summary
@@ -1461,23 +1526,23 @@ class TestGracefulPartialData:
 class TestContractsPackageReexports:
     def test_all_types_exported(self):
         from contracts import (
-            MeshCoordinatorStatus,
-            MeshParticipantStatus,
-            MeshAssignmentStatus,
-            MeshBarrierStatus,
-            MeshCoordinationEventKind,
-            MeshParticipantCoordinationState,
             MeshAssignmentState,
+            MeshAssignmentStatus,
             MeshBarrierState,
+            MeshBarrierStatus,
             MeshCoordinationEvent,
+            MeshCoordinationEventKind,
+            MeshCoordinatorStatus,
+            MeshParticipantCoordinationState,
+            MeshParticipantStatus,
             MeshSessionCoordinatorState,
             MeshSessionCoordinatorSummary,
+            build_coordinator_summary,
             build_mesh_session_coordinator,
             coordinator_from_mesh_session,
             update_coordinator_with_dispatch_result,
-            update_coordinator_with_takeover_result,
             update_coordinator_with_merged_result,
-            build_coordinator_summary,
+            update_coordinator_with_takeover_result,
         )
 
         assert MeshCoordinatorStatus is not None
@@ -1497,9 +1562,9 @@ class TestCoreUnifiedReexports:
             MeshCoordinatorStatus,
             MeshSessionCoordinatorState,
             MeshSessionCoordinatorSummary,
+            build_coordinator_summary,
             build_mesh_session_coordinator,
             coordinator_from_mesh_session,
-            build_coordinator_summary,
         )
 
         assert MeshCoordinatorStatus is not None
@@ -1532,8 +1597,9 @@ class TestCoreRuntimeReexports:
 
 class TestProjectionEndpointCoordinatorSummary:
     def test_endpoint_returns_200(self):
-        from fastapi.testclient import TestClient
         from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+
         from core.routes.projection import create_router
 
         app = FastAPI()
@@ -1543,8 +1609,9 @@ class TestProjectionEndpointCoordinatorSummary:
         assert resp.status_code == 200
 
     def test_endpoint_returns_valid_json(self):
-        from fastapi.testclient import TestClient
         from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+
         from core.routes.projection import create_router
 
         app = FastAPI()
@@ -1555,8 +1622,9 @@ class TestProjectionEndpointCoordinatorSummary:
         assert isinstance(body, dict)
 
     def test_endpoint_has_required_fields(self):
-        from fastapi.testclient import TestClient
         from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+
         from core.routes.projection import create_router
 
         app = FastAPI()
@@ -1568,8 +1636,9 @@ class TestProjectionEndpointCoordinatorSummary:
             assert field in body, f"Missing field: {field}"
 
     def test_endpoint_does_not_break_existing_routes(self):
-        from fastapi.testclient import TestClient
         from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+
         from core.routes.projection import create_router
 
         app = FastAPI()
@@ -1588,16 +1657,16 @@ class TestProjectionEndpointCoordinatorSummary:
 class TestMeshSessionCoordinatorStateFullRoundTrip:
     def test_full_round_trip(self):
         from contracts.mesh_session_coordinator import (
-            MeshSessionCoordinatorState,
-            MeshParticipantCoordinationState,
             MeshAssignmentState,
-            MeshBarrierState,
-            MeshCoordinationEvent,
-            MeshCoordinatorStatus,
-            MeshParticipantStatus,
             MeshAssignmentStatus,
+            MeshBarrierState,
             MeshBarrierStatus,
+            MeshCoordinationEvent,
             MeshCoordinationEventKind,
+            MeshCoordinatorStatus,
+            MeshParticipantCoordinationState,
+            MeshParticipantStatus,
+            MeshSessionCoordinatorState,
         )
 
         c = MeshSessionCoordinatorState(
@@ -1657,8 +1726,8 @@ class TestMeshSessionCoordinatorStateFullRoundTrip:
 
 class TestBodyMeshRegistryGetCoordinator:
     def test_get_coordinator_returns_state(self):
-        from core.mesh.body_mesh_registry import BodyMeshRegistry
         from contracts.mesh_session_coordinator import MeshSessionCoordinatorState
+        from core.mesh.body_mesh_registry import BodyMeshRegistry
 
         registry = BodyMeshRegistry()
         # Registry is empty — should return a minimal state or None gracefully
@@ -1668,8 +1737,8 @@ class TestBodyMeshRegistryGetCoordinator:
             assert isinstance(coordinator, MeshSessionCoordinatorState)
 
     def test_get_coordinator_with_registered_devices(self):
-        from core.mesh.body_mesh_registry import BodyMeshRegistry
         from contracts.mesh_session_coordinator import MeshSessionCoordinatorState
+        from core.mesh.body_mesh_registry import BodyMeshRegistry
 
         registry = BodyMeshRegistry()
         registry.register("dev_a")
@@ -1688,19 +1757,19 @@ class TestBodyMeshRegistryGetCoordinator:
 class TestCoordinationEventsAppended:
     def test_events_appended_on_dispatch(self):
         from contracts.mesh_session_coordinator import (
-            from_mesh_session, update_coordinator_with_dispatch_result,
+            from_mesh_session,
+            update_coordinator_with_dispatch_result,
         )
 
         coordinator = from_mesh_session(_make_mesh_session_dict())
         initial_event_count = len(coordinator.coordination_events)
-        updated = update_coordinator_with_dispatch_result(
-            coordinator, _make_dispatch_result_dict(success=True)
-        )
+        updated = update_coordinator_with_dispatch_result(coordinator, _make_dispatch_result_dict(success=True))
         assert len(updated.coordination_events) > initial_event_count
 
     def test_events_appended_on_takeover(self):
         from contracts.mesh_session_coordinator import (
-            from_mesh_session, update_coordinator_with_takeover_result,
+            from_mesh_session,
+            update_coordinator_with_takeover_result,
         )
 
         coordinator = from_mesh_session(_make_mesh_session_dict())
@@ -1712,14 +1781,13 @@ class TestCoordinationEventsAppended:
 
     def test_events_appended_on_merge(self):
         from contracts.mesh_session_coordinator import (
-            from_mesh_session, update_coordinator_with_merged_result,
+            from_mesh_session,
+            update_coordinator_with_merged_result,
         )
 
         coordinator = from_mesh_session(_make_mesh_session_dict())
         initial_count = len(coordinator.coordination_events)
-        updated = update_coordinator_with_merged_result(
-            coordinator, _make_merged_result_dict(success=True)
-        )
+        updated = update_coordinator_with_merged_result(coordinator, _make_merged_result_dict(success=True))
         assert len(updated.coordination_events) > initial_count
 
 
@@ -1731,8 +1799,9 @@ class TestCoordinationEventsAppended:
 class TestAssignmentStatusUpdatedOnTakeover:
     def test_assignment_status_completed(self):
         from contracts.mesh_session_coordinator import (
-            from_mesh_session, update_coordinator_with_takeover_result,
             MeshAssignmentStatus,
+            from_mesh_session,
+            update_coordinator_with_takeover_result,
         )
 
         session_dict = _make_mesh_session_dict(
@@ -1745,9 +1814,7 @@ class TestAssignmentStatusUpdatedOnTakeover:
             coordinator,
             _make_takeover_result_dict(success=True, device_id="tablet_002"),
         )
-        assignment = next(
-            (a for a in updated.assignments if a.device_id == "tablet_002"), None
-        )
+        assignment = next((a for a in updated.assignments if a.device_id == "tablet_002"), None)
         if assignment is not None:
             assert assignment.status == MeshAssignmentStatus.completed
 
@@ -1759,7 +1826,7 @@ class TestAssignmentStatusUpdatedOnTakeover:
 
 class TestBarrierPostureNone:
     def test_none_barrier(self):
-        from contracts.mesh_session_coordinator import from_mesh_session, MeshBarrierStatus
+        from contracts.mesh_session_coordinator import MeshBarrierStatus, from_mesh_session
 
         session_dict = _make_mesh_session_dict(barrier_posture="none")
         coordinator = from_mesh_session(session_dict)
@@ -1773,7 +1840,7 @@ class TestBarrierPostureNone:
 
 class TestBarrierPostureHard:
     def test_hard_barrier(self):
-        from contracts.mesh_session_coordinator import from_mesh_session, MeshBarrierStatus
+        from contracts.mesh_session_coordinator import MeshBarrierStatus, from_mesh_session
 
         session_dict = _make_mesh_session_dict(barrier_posture="hard_barrier")
         coordinator = from_mesh_session(session_dict)
@@ -1788,7 +1855,8 @@ class TestBarrierPostureHard:
 class TestSummaryHasResultMergeSummaryFlag:
     def test_flag_false_when_no_summary(self):
         from contracts.mesh_session_coordinator import (
-            from_mesh_session, build_coordinator_summary,
+            build_coordinator_summary,
+            from_mesh_session,
         )
 
         coordinator = from_mesh_session(_make_mesh_session_dict())
@@ -1797,14 +1865,12 @@ class TestSummaryHasResultMergeSummaryFlag:
 
     def test_flag_true_when_summary_present(self):
         from contracts.mesh_session_coordinator import (
+            build_coordinator_summary,
             from_mesh_session,
             update_coordinator_with_merged_result,
-            build_coordinator_summary,
         )
 
         coordinator = from_mesh_session(_make_mesh_session_dict())
-        coordinator = update_coordinator_with_merged_result(
-            coordinator, _make_merged_result_dict(success=True)
-        )
+        coordinator = update_coordinator_with_merged_result(coordinator, _make_merged_result_dict(success=True))
         summary = build_coordinator_summary(coordinator=coordinator)
         assert summary.has_result_merge_summary is True

@@ -285,9 +285,7 @@ class GovernanceAuthorityEvidence:
             "execution_id": self.execution_id,
             "device_id": self.device_id,
             "highest_stage_reached": (
-                self.highest_stage_reached.value
-                if self.highest_stage_reached is not None
-                else None
+                self.highest_stage_reached.value if self.highest_stage_reached is not None else None
             ),
             "audit_entries": [e.to_dict() for e in self.audit_entries],
             "authority_source": self.authority_source,
@@ -359,9 +357,7 @@ def _normalize_cross_repo_truth_report(raw_report: Any) -> Dict[str, Any]:
     return {
         "pipeline_verdict": str(report_dict.get("pipeline_verdict") or "insufficient"),
         "is_complete": bool(report_dict.get("is_complete", False)),
-        "primary_sources_complete": bool(
-            report_dict.get("primary_sources_complete", False)
-        ),
+        "primary_sources_complete": bool(report_dict.get("primary_sources_complete", False)),
         "primary_sources_fresh": bool(report_dict.get("primary_sources_fresh", False)),
         "downgrade_reasons": list(report_dict.get("downgrade_reasons") or []),
         "source_provenance": normalized_sources,
@@ -399,24 +395,21 @@ def _derive_audit_truth_basis(
     """
     reconciliation_status = str(truth.get("reconciliation_status") or "missing").strip().lower()
     authority_source = str(evidence.authority_source or "none").strip().lower()
-    cross_repo_verdict = str(
-        cross_repo_truth_report.get("pipeline_verdict") or "insufficient"
-    ).strip().lower()
-    cross_repo_primary_fresh = bool(
-        cross_repo_truth_report.get("primary_sources_fresh", False)
-    )
+    cross_repo_verdict = str(cross_repo_truth_report.get("pipeline_verdict") or "insufficient").strip().lower()
+    cross_repo_primary_fresh = bool(cross_repo_truth_report.get("primary_sources_fresh", False))
 
-    stale_remote = reconciliation_status in {
-        "stale_rejected",
-        "reconnect_delayed_rejected",
-        "out_of_order_rejected",
-    } or cross_repo_verdict == "stale"
+    stale_remote = (
+        reconciliation_status
+        in {
+            "stale_rejected",
+            "reconnect_delayed_rejected",
+            "out_of_order_rejected",
+        }
+        or cross_repo_verdict == "stale"
+    )
     if stale_remote:
         provenance = "stale_remote_evidence"
-    elif (
-        authority_source == "reported_uplink"
-        and evidence.canonical_terminal_outcome not in (None, "")
-    ):
+    elif authority_source == "reported_uplink" and evidence.canonical_terminal_outcome not in (None, ""):
         provenance = "android_confirmed_truth"
     elif reconciliation_status not in {"missing", "unavailable"} and authority_source == "none":
         provenance = "inferred_reconciliation"
@@ -441,8 +434,7 @@ def _derive_audit_truth_basis(
         "canonical_truth_source_trust_level": trust_level,
         "canonical_truth_freshness_state": freshness_state,
         "canonical_truth_freshness_reason": (
-            f"reconciliation_status:{reconciliation_status};"
-            f"cross_repo_pipeline_verdict:{cross_repo_verdict}"
+            f"reconciliation_status:{reconciliation_status};" f"cross_repo_pipeline_verdict:{cross_repo_verdict}"
         ),
         "canonical_truth_confirmed": provenance == "android_confirmed_truth",
         "canonical_truth_inferred": provenance == "inferred_reconciliation",
@@ -457,18 +449,12 @@ def _build_admission_entry(truth: Dict[str, Any]) -> GovernanceAuditEntry:
     # executions that were never admitted there will be no lifecycle history
     # and no uplink records.
     has_lifecycle = lifecycle_event_count > 0
-    has_uplink = (truth.get("result_uplink_count") or 0) + (
-        truth.get("state_uplink_count") or 0
-    ) > 0
+    has_uplink = (truth.get("result_uplink_count") or 0) + (truth.get("state_uplink_count") or 0) > 0
     reached = has_lifecycle or has_uplink
     if reached:
-        evidence_summary = (
-            "Execution admitted: lifecycle events or uplink records observed."
-        )
+        evidence_summary = "Execution admitted: lifecycle events or uplink records observed."
     else:
-        evidence_summary = (
-            "No admission evidence: no lifecycle events or uplink records."
-        )
+        evidence_summary = "No admission evidence: no lifecycle events or uplink records."
     return GovernanceAuditEntry(
         stage=GovernanceAuditStage.admission,
         reached=reached,
@@ -488,8 +474,7 @@ def _build_lifecycle_entry(truth: Dict[str, Any]) -> GovernanceAuditEntry:
     reached = lifecycle_event_count > 0
     if reached:
         evidence_summary = (
-            f"Lifecycle recorded: {lifecycle_event_count} event(s), "
-            f"current_phase={lifecycle_phase!r}."
+            f"Lifecycle recorded: {lifecycle_event_count} event(s), " f"current_phase={lifecycle_phase!r}."
         )
     else:
         evidence_summary = "No lifecycle events recorded."
@@ -510,10 +495,7 @@ def _build_uplink_observation_entry(truth: Dict[str, Any]) -> GovernanceAuditEnt
     state_count: int = truth.get("state_uplink_count") or 0
     reached = (result_count + state_count) > 0
     if reached:
-        evidence_summary = (
-            f"Uplink observed: {result_count} result uplink(s), "
-            f"{state_count} state uplink(s)."
-        )
+        evidence_summary = f"Uplink observed: {result_count} result uplink(s), " f"{state_count} state uplink(s)."
     else:
         evidence_summary = "No uplink observations recorded."
     return GovernanceAuditEntry(
@@ -537,8 +519,7 @@ def _build_reconciliation_entry(truth: Dict[str, Any]) -> GovernanceAuditEntry:
     reached = reconciliation_status not in ("missing",)
     if reached:
         evidence_summary = (
-            f"Reconciliation completed: status={reconciliation_status!r}, "
-            f"reason={reconciliation_reason!r}."
+            f"Reconciliation completed: status={reconciliation_status!r}, " f"reason={reconciliation_reason!r}."
         )
     else:
         evidence_summary = "No reconciliation evidence (no lifecycle or uplink)."
@@ -550,12 +531,8 @@ def _build_reconciliation_entry(truth: Dict[str, Any]) -> GovernanceAuditEntry:
             "reconciliation_status": reconciliation_status,
             "reconciliation_reason": reconciliation_reason,
             "reconciliation_conflict": truth.get("reconciliation_conflict") or False,
-            "reconciliation_delayed_observation": (
-                truth.get("reconciliation_delayed_observation") or False
-            ),
-            "reconciliation_partial_observation": (
-                truth.get("reconciliation_partial_observation") or False
-            ),
+            "reconciliation_delayed_observation": (truth.get("reconciliation_delayed_observation") or False),
+            "reconciliation_partial_observation": (truth.get("reconciliation_partial_observation") or False),
         },
     )
 
@@ -564,9 +541,7 @@ def _build_terminal_entry(truth: Dict[str, Any]) -> GovernanceAuditEntry:
     """Build the terminal stage entry."""
     is_terminal: bool = bool(truth.get("is_terminal"))
     canonical_terminal_outcome = truth.get("canonical_terminal_outcome")
-    terminal_truth_authoritative_source: str = (
-        truth.get("terminal_truth_authoritative_source") or "none"
-    )
+    terminal_truth_authoritative_source: str = truth.get("terminal_truth_authoritative_source") or "none"
     reached = is_terminal and canonical_terminal_outcome is not None
     if reached:
         evidence_summary = (
@@ -575,8 +550,7 @@ def _build_terminal_entry(truth: Dict[str, Any]) -> GovernanceAuditEntry:
         )
     else:
         evidence_summary = (
-            "Terminal stage not reached: execution is not yet terminal or "
-            "canonical outcome is undetermined."
+            "Terminal stage not reached: execution is not yet terminal or " "canonical outcome is undetermined."
         )
     return GovernanceAuditEntry(
         stage=GovernanceAuditStage.terminal,
@@ -586,9 +560,7 @@ def _build_terminal_entry(truth: Dict[str, Any]) -> GovernanceAuditEntry:
             "is_terminal": is_terminal,
             "canonical_terminal_outcome": canonical_terminal_outcome,
             "terminal_truth_authoritative_source": terminal_truth_authoritative_source,
-            "terminal_truth_determined": bool(
-                truth.get("terminal_truth_determined")
-            ),
+            "terminal_truth_determined": bool(truth.get("terminal_truth_determined")),
         },
     )
 
@@ -652,8 +624,7 @@ def build_governance_authority_evidence(
         authority_chain_complete=authority_chain_complete,
     )
     logger.debug(
-        "build_governance_authority_evidence: execution_id=%r device_id=%r "
-        "highest_stage=%r complete=%r",
+        "build_governance_authority_evidence: execution_id=%r device_id=%r " "highest_stage=%r complete=%r",
         execution_id,
         device_id,
         highest_stage.value if highest_stage else None,
@@ -694,19 +665,21 @@ def verify_governance_authority_integrity(
     if truth.get("is_terminal") and truth.get("lifecycle_phase") is not None:
         source = truth.get("terminal_truth_authoritative_source") or "none"
         if source != "center_lifecycle":
-            violations.append(GovernanceAuthorityViolation(
-                invariant_id="I-A1",
-                description=(
-                    "Center-lifecycle authority MUST be the terminal truth source "
-                    "when a terminal lifecycle phase is recorded, but "
-                    f"terminal_truth_authoritative_source={source!r}."
-                ),
-                stage=GovernanceAuditStage.terminal,
-                evidence={
-                    "lifecycle_phase": truth.get("lifecycle_phase"),
-                    "terminal_truth_authoritative_source": source,
-                },
-            ))
+            violations.append(
+                GovernanceAuthorityViolation(
+                    invariant_id="I-A1",
+                    description=(
+                        "Center-lifecycle authority MUST be the terminal truth source "
+                        "when a terminal lifecycle phase is recorded, but "
+                        f"terminal_truth_authoritative_source={source!r}."
+                    ),
+                    stage=GovernanceAuditStage.terminal,
+                    evidence={
+                        "lifecycle_phase": truth.get("lifecycle_phase"),
+                        "terminal_truth_authoritative_source": source,
+                    },
+                )
+            )
 
     # I-A2: A terminal evidence record MUST carry a non-None canonical_terminal_outcome.
     terminal_entry = next(
@@ -716,15 +689,17 @@ def verify_governance_authority_integrity(
     if terminal_entry is not None and terminal_entry.reached:
         canonical_outcome = truth.get("canonical_terminal_outcome")
         if canonical_outcome is None:
-            violations.append(GovernanceAuthorityViolation(
-                invariant_id="I-A2",
-                description=(
-                    "A terminal authority evidence record MUST carry a non-None "
-                    "canonical_terminal_outcome, but canonical_terminal_outcome=None."
-                ),
-                stage=GovernanceAuditStage.terminal,
-                evidence={"canonical_terminal_outcome": None},
-            ))
+            violations.append(
+                GovernanceAuthorityViolation(
+                    invariant_id="I-A2",
+                    description=(
+                        "A terminal authority evidence record MUST carry a non-None "
+                        "canonical_terminal_outcome, but canonical_terminal_outcome=None."
+                    ),
+                    stage=GovernanceAuditStage.terminal,
+                    evidence={"canonical_terminal_outcome": None},
+                )
+            )
 
     # I-A3: Monotonic chain — the core stages must be forward-progressing.
     #       Uses the module-level _REQUIRED_PREDECESSORS constant.
@@ -735,38 +710,42 @@ def verify_governance_authority_integrity(
             for pred_stage in required_preds:
                 pred_entry = by_stage_map.get(pred_stage)
                 if pred_entry is not None and not pred_entry.reached:
-                    violations.append(GovernanceAuthorityViolation(
-                        invariant_id="I-A3",
-                        description=(
-                            f"Stage {stage.value!r} was reached but required prior "
-                            f"stage {pred_stage.value!r} has no evidence. "
-                            "The authority chain must be monotonically forward-progressing."
-                        ),
-                        stage=stage,
-                        evidence={
-                            "reached_stage": stage.value,
-                            "missing_prior_stage": pred_stage.value,
-                        },
-                    ))
+                    violations.append(
+                        GovernanceAuthorityViolation(
+                            invariant_id="I-A3",
+                            description=(
+                                f"Stage {stage.value!r} was reached but required prior "
+                                f"stage {pred_stage.value!r} has no evidence. "
+                                "The authority chain must be monotonically forward-progressing."
+                            ),
+                            stage=stage,
+                            evidence={
+                                "reached_stage": stage.value,
+                                "missing_prior_stage": pred_stage.value,
+                            },
+                        )
+                    )
 
     # I-A4: Uplink observation MUST NOT override center-lifecycle terminal truth.
     if truth.get("reconciliation_conflict"):
         source = truth.get("terminal_truth_authoritative_source") or "none"
         if source != "center_lifecycle":
-            violations.append(GovernanceAuthorityViolation(
-                invariant_id="I-A4",
-                description=(
-                    "Uplink observation MUST NOT override center-lifecycle terminal "
-                    "truth. A reconciliation_conflict was detected, but the terminal "
-                    f"truth source is {source!r} (expected 'center_lifecycle')."
-                ),
-                stage=GovernanceAuditStage.reconciliation,
-                evidence={
-                    "reconciliation_conflict": True,
-                    "terminal_truth_authoritative_source": source,
-                    "reconciliation_status": truth.get("reconciliation_status"),
-                },
-            ))
+            violations.append(
+                GovernanceAuthorityViolation(
+                    invariant_id="I-A4",
+                    description=(
+                        "Uplink observation MUST NOT override center-lifecycle terminal "
+                        "truth. A reconciliation_conflict was detected, but the terminal "
+                        f"truth source is {source!r} (expected 'center_lifecycle')."
+                    ),
+                    stage=GovernanceAuditStage.reconciliation,
+                    evidence={
+                        "reconciliation_conflict": True,
+                        "terminal_truth_authoritative_source": source,
+                        "reconciliation_status": truth.get("reconciliation_status"),
+                    },
+                )
+            )
 
     return violations
 
@@ -804,9 +783,7 @@ def get_governance_audit_summary(
             get_canonical_cross_repo_evidence_report,
         )
 
-        cross_repo_truth_report = _normalize_cross_repo_truth_report(
-            get_canonical_cross_repo_evidence_report()
-        )
+        cross_repo_truth_report = _normalize_cross_repo_truth_report(get_canonical_cross_repo_evidence_report())
     except Exception as exc:
         logger.debug("Fallback triggered: %s", exc)
         cross_repo_truth_report = _normalize_cross_repo_truth_report(
@@ -815,9 +792,7 @@ def get_governance_audit_summary(
                 "is_complete": False,
                 "primary_sources_complete": False,
                 "primary_sources_fresh": False,
-                "downgrade_reasons": [
-                    "canonical_cross_repo_evidence_report_unavailable"
-                ],
+                "downgrade_reasons": ["canonical_cross_repo_evidence_report_unavailable"],
                 "sources": [],
             }
         )
@@ -835,9 +810,7 @@ def get_governance_audit_summary(
         "integrity_violations": [v.to_dict() for v in violations],
         "integrity_ok": len(violations) == 0,
         "highest_stage_reached": (
-            evidence.highest_stage_reached.value
-            if evidence.highest_stage_reached is not None
-            else None
+            evidence.highest_stage_reached.value if evidence.highest_stage_reached is not None else None
         ),
         "authority_chain_complete": evidence.authority_chain_complete,
         "canonical_terminal_outcome": evidence.canonical_terminal_outcome,
@@ -846,22 +819,12 @@ def get_governance_audit_summary(
         "contract_version": GOVERNANCE_AUDIT_CONTRACT_VERSION,
         "_policy": GOVERNANCE_AUDIT_AUTHORITY_POLICY,
         **canonical_truth_basis,
-        "cross_repo_truth_pipeline_verdict": cross_repo_truth_report.get(
-            "pipeline_verdict"
-        ),
-        "cross_repo_truth_is_complete": bool(
-            cross_repo_truth_report.get("is_complete", False)
-        ),
+        "cross_repo_truth_pipeline_verdict": cross_repo_truth_report.get("pipeline_verdict"),
+        "cross_repo_truth_is_complete": bool(cross_repo_truth_report.get("is_complete", False)),
         "cross_repo_truth_primary_sources_complete": bool(
             cross_repo_truth_report.get("primary_sources_complete", False)
         ),
-        "cross_repo_truth_primary_sources_fresh": bool(
-            cross_repo_truth_report.get("primary_sources_fresh", False)
-        ),
-        "cross_repo_truth_downgrade_reasons": list(
-            cross_repo_truth_report.get("downgrade_reasons", [])
-        ),
-        "cross_repo_truth_source_provenance": list(
-            cross_repo_truth_report.get("source_provenance", [])
-        ),
+        "cross_repo_truth_primary_sources_fresh": bool(cross_repo_truth_report.get("primary_sources_fresh", False)),
+        "cross_repo_truth_downgrade_reasons": list(cross_repo_truth_report.get("downgrade_reasons", [])),
+        "cross_repo_truth_source_provenance": list(cross_repo_truth_report.get("source_provenance", [])),
     }

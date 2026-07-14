@@ -28,6 +28,7 @@
         def tearDown(self):
             cleanup_dispatchable_devices()
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -46,15 +47,18 @@ def register_dispatchable_device(
     caps = list(capabilities or ["screen"])
 
     from core.unified.device_manager import get_unified_device_manager
+
     get_unified_device_manager().register_device_from_dict(
         device_id,
         {"device_type": device_type, "status": "online", "capabilities": caps},
     )
 
     from core.capability_assimilation import get_capability_assimilation_layer
+
     get_capability_assimilation_layer().assimilate(device_id, capabilities=caps)
 
     from core.unified.connection_manager import get_unified_connection_manager
+
     ucm = get_unified_connection_manager()
     _run_async(ucm.register_connection(device_id, MagicMock()))
 
@@ -64,9 +68,9 @@ def register_dispatchable_device(
 
 def cleanup_dispatchable_devices() -> None:
     """注销本装置注册过的全部测试设备(UDM/能力网络/UCM 三处)。"""
-    from core.unified.device_manager import get_unified_device_manager
     from core.capability_assimilation import get_capability_assimilation_layer
     from core.unified.connection_manager import get_unified_connection_manager
+    from core.unified.device_manager import get_unified_device_manager
 
     udm = get_unified_device_manager()
     layer = get_capability_assimilation_layer()

@@ -527,9 +527,7 @@ _DISPATCH_PATH_CATALOGUE: List[DispatchChainRecord] = [
 ]
 
 #: Index from DispatchPathKind → DispatchChainRecord (built once at import time)
-_CATALOGUE_INDEX: Dict[DispatchPathKind, DispatchChainRecord] = {
-    r.path_kind: r for r in _DISPATCH_PATH_CATALOGUE
-}
+_CATALOGUE_INDEX: Dict[DispatchPathKind, DispatchChainRecord] = {r.path_kind: r for r in _DISPATCH_PATH_CATALOGUE}
 
 
 # ---------------------------------------------------------------------------
@@ -609,12 +607,8 @@ def build_dispatch_chain_snapshot() -> DispatchChainSnapshot:
     endpoints.  It is generated fresh each call (no caching) so that it
     always reflects the current catalogue.
     """
-    canonical_count = sum(
-        1 for r in _DISPATCH_PATH_CATALOGUE if r.role == DispatchPathRole.canonical
-    )
-    fallback_count = sum(
-        1 for r in _DISPATCH_PATH_CATALOGUE if r.role == DispatchPathRole.fallback
-    )
+    canonical_count = sum(1 for r in _DISPATCH_PATH_CATALOGUE if r.role == DispatchPathRole.canonical)
+    fallback_count = sum(1 for r in _DISPATCH_PATH_CATALOGUE if r.role == DispatchPathRole.fallback)
     return DispatchChainSnapshot(
         generated_at=time.time(),
         authority=CANONICAL_TASK_DISPATCH_CHAIN_IS_AUTHORITY,

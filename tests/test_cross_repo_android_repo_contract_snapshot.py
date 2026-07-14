@@ -107,15 +107,12 @@ def test_android_schema_and_dedupe_tokens_for_v2_contract_are_present() -> None:
     if "offline_replay_result" in msg_type_values:
         for replay_token in ["replay_session_id", "replay_item_id", "replay_seq"]:
             assert _contains_token(replay_token), (
-                f"Android replay contract token {replay_token!r} missing while "
-                "offline_replay_result is declared."
+                f"Android replay contract token {replay_token!r} missing while " "offline_replay_result is declared."
             )
 
 
 def test_android_completion_closure_contract_schema_version_matches_v2_gate() -> None:
-    source = _read_android_file(
-        "app/src/main/java/com/ufo/galaxy/runtime/AndroidCompletionClosureUplinkContract.kt"
-    )
+    source = _read_android_file("app/src/main/java/com/ufo/galaxy/runtime/AndroidCompletionClosureUplinkContract.kt")
     schema_match = re.search(r'const val SCHEMA_VERSION\s*=\s*"([^"]+)"', source)
     assert schema_match is not None, "AndroidCompletionClosureUplinkContract must declare SCHEMA_VERSION."
     assert schema_match.group(1) == ANDROID_COMPLETION_CLOSURE_UPLINK_SCHEMA_VERSION
@@ -128,9 +125,9 @@ def test_android_completion_closure_contract_schema_version_matches_v2_gate() ->
         "v2_mature_closure_achieved",
         "outward_truth_surface_class",
     ]:
-        assert required_wire_key in source, (
-            f"AndroidCompletionClosureUplinkContract missing required wire key {required_wire_key!r}."
-        )
+        assert (
+            required_wire_key in source
+        ), f"AndroidCompletionClosureUplinkContract missing required wire key {required_wire_key!r}."
 
 
 def test_android_cross_repo_gate_covers_recovery_readiness_and_diagnostics_surfaces() -> None:
@@ -141,9 +138,9 @@ def test_android_cross_repo_gate_covers_recovery_readiness_and_diagnostics_surfa
         "checkObservabilityTraceFieldNames",
         "checkReconciliationSignalKinds",
     ]:
-        assert f"fun {required_check}" in source, (
-            f"Android CrossRepoConsistencyGate missing {required_check}() enforcement surface."
-        )
-        assert f"{required_check}()" in source, (
-            f"Android CrossRepoConsistencyGate.runAllGates does not include {required_check}()."
-        )
+        assert (
+            f"fun {required_check}" in source
+        ), f"Android CrossRepoConsistencyGate missing {required_check}() enforcement surface."
+        assert (
+            f"{required_check}()" in source
+        ), f"Android CrossRepoConsistencyGate.runAllGates does not include {required_check}()."

@@ -128,16 +128,12 @@ DEVICE_WRITE_SSOT: str = "core.unified.device_manager.UnifiedDeviceManager"
 #: Canonical single-device external READ contract.
 #: Downstream and external consumers MUST read individual device state
 #: through this model (or its functional equivalent).
-CANONICAL_SINGLE_DEVICE_READ_CONTRACT: str = (
-    "contracts.registered_runtime_device.RegisteredRuntimeDevice"
-)
+CANONICAL_SINGLE_DEVICE_READ_CONTRACT: str = "contracts.registered_runtime_device.RegisteredRuntimeDevice"
 
 #: Canonical multi-device READ projection.
 #: Multi-device queries use this function to enumerate device truth.
 #: Direct fan-out to internal UDM/UCM data structures is prohibited.
-CANONICAL_MULTI_DEVICE_READ_PROJECTION: str = (
-    "core.truth_integration_layer.resolve_all_device_truth"
-)
+CANONICAL_MULTI_DEVICE_READ_PROJECTION: str = "core.truth_integration_layer.resolve_all_device_truth"
 
 # ---------------------------------------------------------------------------
 # Compat cache governance
@@ -181,16 +177,14 @@ MODEL_CLASSIFICATION: Dict[str, Dict[str, str]] = {
         "role": "read",
         "module": "contracts.registered_runtime_device",
         "description": (
-            "Canonical single-device external READ contract. "
-            "The stable public read interface for a single device."
+            "Canonical single-device external READ contract. " "The stable public read interface for a single device."
         ),
     },
     "CanonicalDeviceTruth": {
         "role": "read",
         "module": "core.truth_integration_layer",
         "description": (
-            "Canonical multi-device read projection. "
-            "Fused UCM + UDM truth with explicit conflict-resolution policy."
+            "Canonical multi-device read projection. " "Fused UCM + UDM truth with explicit conflict-resolution policy."
         ),
     },
     "DeviceReadinessSummary": {
@@ -303,9 +297,7 @@ def classify_model_role(model_name: str) -> str:
     short = model_name.split(".")[-1]
     if short in MODEL_CLASSIFICATION:
         return MODEL_CLASSIFICATION[short]["role"]
-    logger.debug(
-        "TruthSourceLock: unknown model %r; returning 'unknown'", model_name
-    )
+    logger.debug("TruthSourceLock: unknown model %r; returning 'unknown'", model_name)
     return "unknown"
 
 
@@ -326,9 +318,7 @@ def describe_truth_source_lock() -> Dict[str, Any]:
         "canonical_single_device_read_contract": CANONICAL_SINGLE_DEVICE_READ_CONTRACT,
         "canonical_multi_device_read_projection": CANONICAL_MULTI_DEVICE_READ_PROJECTION,
         "compat_cache_read_only": COMPAT_CACHE_READ_ONLY,
-        "model_roles": {
-            name: entry["role"] for name, entry in MODEL_CLASSIFICATION.items()
-        },
+        "model_roles": {name: entry["role"] for name, entry in MODEL_CLASSIFICATION.items()},
         "invariants": [
             "UnifiedDeviceManager is the ONLY authoritative device writer",
             "External callers read device state via RegisteredRuntimeDevice only",

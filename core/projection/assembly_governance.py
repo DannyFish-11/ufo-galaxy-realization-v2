@@ -123,9 +123,7 @@ class ProjectionExecutionSummary(BaseModel):
     runtime_domain: Optional[str] = Field(default=None, description="Runtime domain.")
     confidence: Optional[float] = Field(default=None, description="Confidence score [0, 1].")
     degrade_reason: Optional[str] = Field(default=None, description="Reason for intent downgrade.")
-    available: bool = Field(
-        default=False, description="True when a real intent profile was summarised."
-    )
+    available: bool = Field(default=False, description="True when a real intent profile was summarised.")
 
     model_config = {"from_attributes": True}
 
@@ -181,18 +179,14 @@ class ProjectionPolicySummary(BaseModel):
     ready: bool = Field(default=False, description="True when execution is permitted.")
     status: str = Field(default="blocked", description="Top-level readiness status.")
     reason: str = Field(default="", description="Human-readable reason.")
-    requires_confirmation: bool = Field(
-        default=False, description="True when confirmation is required."
-    )
+    requires_confirmation: bool = Field(default=False, description="True when confirmation is required.")
     action_level: str = Field(default="observe", description="Action level at evaluation time.")
     policy_band: Optional[str] = Field(default=None, description="Policy band string.")
     blocked_by: str = Field(default="none", description="Primary block-cause code.")
     runtime_domain: Optional[str] = Field(default=None, description="Runtime domain.")
     blocked: bool = Field(default=True, description="True when status is blocked.")
     degraded: bool = Field(default=False, description="True when posture is degraded/reduced.")
-    available: bool = Field(
-        default=False, description="True when a real readiness result was summarised."
-    )
+    available: bool = Field(default=False, description="True when a real readiness result was summarised.")
 
     model_config = {"from_attributes": True}
 
@@ -245,13 +239,9 @@ class ProjectionTraceSummary(BaseModel):
     fallback_path: Optional[str] = Field(default=None, description="Selected fallback path.")
     reason: Optional[str] = Field(default=None, description="Fallback selection reason.")
     primary_path: Optional[str] = Field(default=None, description="Originally attempted path.")
-    primary_block_reason: Optional[str] = Field(
-        default=None, description="Why the primary path was not taken."
-    )
+    primary_block_reason: Optional[str] = Field(default=None, description="Why the primary path was not taken.")
     action_level: str = Field(default="observe", description="Action level at decision time.")
-    available: bool = Field(
-        default=False, description="True when a real fallback trace was summarised."
-    )
+    available: bool = Field(default=False, description="True when a real fallback trace was summarised.")
 
     model_config = {"from_attributes": True}
 
@@ -293,16 +283,10 @@ class ProjectionExecutionTraceSummary(BaseModel):
 
     trace_id: Optional[str] = Field(default=None, description="Shared trace ID.")
     intent_id: Optional[str] = Field(default=None, description="Originating intent ID.")
-    final_status: str = Field(
-        default="pending", description="Aggregate final status across all events."
-    )
+    final_status: str = Field(default="pending", description="Aggregate final status across all events.")
     stage_count: int = Field(default=0, description="Number of lifecycle stages recorded.")
-    stages: List[str] = Field(
-        default_factory=list, description="Ordered list of stage names."
-    )
-    available: bool = Field(
-        default=False, description="True when a real execution trace envelope was summarised."
-    )
+    stages: List[str] = Field(default_factory=list, description="Ordered list of stage names.")
+    available: bool = Field(default=False, description="True when a real execution trace envelope was summarised.")
 
     model_config = {"from_attributes": True}
 
@@ -463,8 +447,7 @@ def summarize_intent_for_projection(
         )
     except Exception as exc:
         logger.warning(
-            "summarize_intent_for_projection: failed to summarise intent_profile "
-            "(type=%s): %s",
+            "summarize_intent_for_projection: failed to summarise intent_profile " "(type=%s): %s",
             type(intent_profile).__name__,
             exc,
         )
@@ -496,9 +479,7 @@ def summarize_readiness_for_projection(
         ready = bool(getattr(readiness_result, "ready", False))
         status = str(getattr(readiness_result, "status", "blocked"))
         reason = str(getattr(readiness_result, "reason", ""))
-        requires_confirmation = bool(
-            getattr(readiness_result, "requires_confirmation", False)
-        )
+        requires_confirmation = bool(getattr(readiness_result, "requires_confirmation", False))
         action_level = str(getattr(readiness_result, "action_level", "observe"))
         policy_band = getattr(readiness_result, "policy_band", None)
         blocked_by = str(getattr(readiness_result, "blocked_by", "none"))
@@ -522,8 +503,7 @@ def summarize_readiness_for_projection(
         )
     except Exception as exc:
         logger.warning(
-            "summarize_readiness_for_projection: failed to summarise readiness_result "
-            "(type=%s): %s",
+            "summarize_readiness_for_projection: failed to summarise readiness_result " "(type=%s): %s",
             type(readiness_result).__name__,
             exc,
         )
@@ -570,8 +550,7 @@ def summarize_fallback_for_projection(
             outcome=str(getattr(fallback_trace, "outcome", "noop")),
             decision_source=str(getattr(fallback_trace, "decision_source", "unknown")),
             fallback_path=getattr(fallback_trace, "fallback_path", None),
-            reason=getattr(fallback_trace, "fallback_reason", None)
-            or getattr(fallback_trace, "reason", None),
+            reason=getattr(fallback_trace, "fallback_reason", None) or getattr(fallback_trace, "reason", None),
             primary_path=getattr(fallback_trace, "primary_path", None),
             primary_block_reason=getattr(fallback_trace, "primary_block_reason", None),
             action_level=str(getattr(fallback_trace, "action_level", "observe")),
@@ -579,8 +558,7 @@ def summarize_fallback_for_projection(
         )
     except Exception as exc:
         logger.warning(
-            "summarize_fallback_for_projection: failed to summarise fallback_trace "
-            "(type=%s): %s",
+            "summarize_fallback_for_projection: failed to summarise fallback_trace " "(type=%s): %s",
             type(fallback_trace).__name__,
             exc,
         )
@@ -624,20 +602,14 @@ def summarize_execution_trace_for_projection(
         return ProjectionExecutionTraceSummary(
             trace_id=getattr(execution_trace_envelope, "trace_id", None),
             intent_id=getattr(execution_trace_envelope, "intent_id", None),
-            final_status=str(
-                getattr(execution_trace_envelope, "final_status", "pending")
-            ),
+            final_status=str(getattr(execution_trace_envelope, "final_status", "pending")),
             stage_count=len(getattr(execution_trace_envelope, "events", [])),
-            stages=[
-                getattr(e, "stage", str(e))
-                for e in getattr(execution_trace_envelope, "events", [])
-            ],
+            stages=[getattr(e, "stage", str(e)) for e in getattr(execution_trace_envelope, "events", [])],
             available=True,
         )
     except Exception as exc:
         logger.warning(
-            "summarize_execution_trace_for_projection: failed to summarise envelope "
-            "(type=%s): %s",
+            "summarize_execution_trace_for_projection: failed to summarise envelope " "(type=%s): %s",
             type(execution_trace_envelope).__name__,
             exc,
         )
@@ -707,13 +679,9 @@ def assemble_projection_governance(
                     phase = getattr(state_continuum, "tri_state_phase", None)
                     domain = getattr(state_continuum, "runtime_domain", None)
                     if phase is not None:
-                        tri_state_phase = (
-                            phase.value if hasattr(phase, "value") else str(phase)
-                        )
+                        tri_state_phase = phase.value if hasattr(phase, "value") else str(phase)
                     if domain is not None:
-                        runtime_domain = (
-                            domain.value if hasattr(domain, "value") else str(domain)
-                        )
+                        runtime_domain = domain.value if hasattr(domain, "value") else str(domain)
             except Exception as _exc:
                 logger.warning(
                     "assemble_projection_governance: failed to extract phase/domain "

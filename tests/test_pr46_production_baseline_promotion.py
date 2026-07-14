@@ -31,9 +31,9 @@ Related modules:   core.openclawd, core.desktop_presence_runtime,
 
 from __future__ import annotations
 
-import pytest
 from typing import Any, Dict, List, Optional
 
+import pytest
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -166,7 +166,7 @@ class TestProductionBaselineModule:
         assert d["pr_introduced"] == "PR-19"
 
     def test_legacy_path_declaration_stable_fields(self):
-        from core.production_baseline import LegacyPathDeclaration, BaselineRole
+        from core.production_baseline import BaselineRole, LegacyPathDeclaration
 
         decl = LegacyPathDeclaration(
             metadata_key="multimodal_context",
@@ -192,10 +192,12 @@ class TestProductionBaselineRegistry:
 
     def setup_method(self):
         from core.production_baseline import reset_production_baseline_registry
+
         reset_production_baseline_registry()
 
     def teardown_method(self):
         from core.production_baseline import reset_production_baseline_registry
+
         reset_production_baseline_registry()
 
     def test_registry_singleton(self):
@@ -219,7 +221,7 @@ class TestProductionBaselineRegistry:
 
     def test_registry_openclawd_owns_core_artifacts(self):
         """Subject core (OpenClawd) must own all control/routing artifacts."""
-        from core.production_baseline import get_production_baseline_registry, CanonicalArtifact
+        from core.production_baseline import CanonicalArtifact, get_production_baseline_registry
 
         reg = get_production_baseline_registry()
         core_artifacts = {
@@ -237,7 +239,7 @@ class TestProductionBaselineRegistry:
 
     def test_registry_shell_owns_source_registry_artifacts(self):
         """Runtime shell (DesktopPresenceRuntime) must own source-registry artifacts."""
-        from core.production_baseline import get_production_baseline_registry, CanonicalArtifact
+        from core.production_baseline import CanonicalArtifact, get_production_baseline_registry
 
         reg = get_production_baseline_registry()
         shell_keys = {a.artifact for a in reg.shell_owned_artifacts}
@@ -245,7 +247,7 @@ class TestProductionBaselineRegistry:
 
     def test_registry_desktop_projection_is_derived_only(self):
         """desktop_status_projection must be DERIVED_ONLY, not CANONICAL_PRIMARY."""
-        from core.production_baseline import get_production_baseline_registry, BaselineRole
+        from core.production_baseline import BaselineRole, get_production_baseline_registry
 
         reg = get_production_baseline_registry()
         role = reg.get_artifact_role("desktop_status_projection")
@@ -253,21 +255,21 @@ class TestProductionBaselineRegistry:
 
     def test_registry_routing_event_is_derived_only(self):
         """routing_decision_event must be DERIVED_ONLY."""
-        from core.production_baseline import get_production_baseline_registry, BaselineRole
+        from core.production_baseline import BaselineRole, get_production_baseline_registry
 
         reg = get_production_baseline_registry()
         role = reg.get_artifact_role("routing_decision_event")
         assert role == BaselineRole.DERIVED_ONLY
 
     def test_registry_unified_control_plan_is_canonical_primary(self):
-        from core.production_baseline import get_production_baseline_registry, BaselineRole
+        from core.production_baseline import BaselineRole, get_production_baseline_registry
 
         reg = get_production_baseline_registry()
         assert reg.is_canonical_primary("unified_control_plan")
 
     def test_registry_multimodal_context_is_legacy(self):
         """multimodal_context must be explicitly marked as LEGACY_SECONDARY."""
-        from core.production_baseline import get_production_baseline_registry, BaselineRole
+        from core.production_baseline import BaselineRole, get_production_baseline_registry
 
         reg = get_production_baseline_registry()
         role = reg.get_artifact_role("multimodal_context")
@@ -275,7 +277,7 @@ class TestProductionBaselineRegistry:
 
     def test_registry_multimodal_route_decision_is_legacy(self):
         """top-level multimodal_route_decision must be LEGACY_SECONDARY."""
-        from core.production_baseline import get_production_baseline_registry, BaselineRole
+        from core.production_baseline import BaselineRole, get_production_baseline_registry
 
         reg = get_production_baseline_registry()
         role = reg.get_artifact_role("multimodal_route_decision")
@@ -314,10 +316,12 @@ class TestCanonicalArtifactCoverage:
 
     def setup_method(self):
         from core.production_baseline import reset_production_baseline_registry
+
         reset_production_baseline_registry()
 
     def teardown_method(self):
         from core.production_baseline import reset_production_baseline_registry
+
         reset_production_baseline_registry()
 
     def test_full_coverage_when_all_present(self):
@@ -349,7 +353,7 @@ class TestCanonicalArtifactCoverage:
         assert 0.0 < result["coverage_ratio"] < 1.0
 
     def test_covered_keys_are_subset_of_canonical_primary(self):
-        from core.production_baseline import get_production_baseline_registry, BaselineRole
+        from core.production_baseline import BaselineRole, get_production_baseline_registry
 
         meta = _make_canonical_metadata()
         reg = get_production_baseline_registry()
@@ -376,10 +380,12 @@ class TestProjectionIsDownstream:
 
     def setup_method(self):
         from core.production_baseline import reset_production_baseline_registry
+
         reset_production_baseline_registry()
 
     def teardown_method(self):
         from core.production_baseline import reset_production_baseline_registry
+
         reset_production_baseline_registry()
 
     def test_projection_absent_passes(self):
@@ -427,7 +433,7 @@ class TestProjectionIsDownstream:
 
     def test_desktop_status_projection_is_derived_only_in_registry(self):
         """The registry must classify desktop_status_projection as DERIVED_ONLY."""
-        from core.production_baseline import get_production_baseline_registry, BaselineRole
+        from core.production_baseline import BaselineRole, get_production_baseline_registry
 
         reg = get_production_baseline_registry()
         assert reg.is_derived_only("desktop_status_projection")
@@ -450,7 +456,7 @@ class TestLegacyPathsAreSecondary:
 
     def test_multimodal_context_is_legacy_in_registry(self):
         """multimodal_context must be explicitly flagged as LEGACY_SECONDARY."""
-        from core.production_baseline import get_production_baseline_registry, BaselineRole
+        from core.production_baseline import BaselineRole, get_production_baseline_registry
 
         reg = get_production_baseline_registry()
         assert reg.is_legacy_secondary("multimodal_context")
@@ -486,9 +492,7 @@ class TestLegacyPathsAreSecondary:
         from core.production_baseline import LEGACY_PATH_DECLARATIONS
 
         for decl in LEGACY_PATH_DECLARATIONS:
-            assert decl.replacement, (
-                f"Legacy declaration for {decl.metadata_key!r} must specify a replacement."
-            )
+            assert decl.replacement, f"Legacy declaration for {decl.metadata_key!r} must specify a replacement."
             assert "canonical" in decl.replacement or "unified_control_plan" in decl.replacement
 
 
@@ -502,7 +506,7 @@ class TestCanonicalArtifactsAvailable:
     explainability artifacts remain available to downstream consumers."""
 
     def test_degraded_operation_is_canonical_primary(self):
-        from core.production_baseline import get_production_baseline_registry, BaselineRole
+        from core.production_baseline import BaselineRole, get_production_baseline_registry
 
         reg = get_production_baseline_registry()
         assert reg.is_canonical_primary("degraded_operation_envelope")
@@ -537,9 +541,7 @@ class TestCanonicalArtifactsAvailable:
 
         reg = get_production_baseline_registry()
         for art in reg.canonical_primary_artifacts:
-            assert art.response_metadata_key, (
-                f"Artifact {art.artifact.value!r} has no response_metadata_key."
-            )
+            assert art.response_metadata_key, f"Artifact {art.artifact.value!r} has no response_metadata_key."
 
     def test_all_canonical_primary_artifacts_have_pr_reference(self):
         """Every CANONICAL_PRIMARY artifact must reference its introducing PR."""
@@ -547,9 +549,9 @@ class TestCanonicalArtifactsAvailable:
 
         reg = get_production_baseline_registry()
         for art in reg.canonical_primary_artifacts:
-            assert art.pr_introduced.startswith("PR-"), (
-                f"Artifact {art.artifact.value!r} pr_introduced={art.pr_introduced!r}."
-            )
+            assert art.pr_introduced.startswith(
+                "PR-"
+            ), f"Artifact {art.artifact.value!r} pr_introduced={art.pr_introduced!r}."
 
     def test_baseline_manifest_includes_degraded_operation(self):
         from core.production_baseline import PRODUCTION_BASELINE_ARTIFACTS, CanonicalArtifact
@@ -602,9 +604,9 @@ class TestAuthorityBoundaries:
 
         reg = get_production_baseline_registry()
         shell_keys = {a.response_metadata_key for a in reg.shell_owned_artifacts}
-        assert "desktop_status_projection" in shell_keys, (
-            "desktop_status_projection must be owned by the runtime shell."
-        )
+        assert (
+            "desktop_status_projection" in shell_keys
+        ), "desktop_status_projection must be owned by the runtime shell."
 
     def test_no_artifact_owned_by_both_shell_and_core(self):
         """An artifact must not be claimed by both owners simultaneously."""
@@ -618,7 +620,7 @@ class TestAuthorityBoundaries:
 
     def test_derived_only_surfaces_are_not_canonical_primary(self):
         """A derived-only surface must not also be declared canonical primary."""
-        from core.production_baseline import get_production_baseline_registry, BaselineRole
+        from core.production_baseline import BaselineRole, get_production_baseline_registry
 
         reg = get_production_baseline_registry()
         derived_keys = {a.response_metadata_key for a in reg.derived_only_artifacts}
@@ -633,15 +635,14 @@ class TestAuthorityBoundaries:
         reg = get_production_baseline_registry()
         shell_owners = {a.authority_owner for a in reg.shell_owned_artifacts}
         assert shell_owners <= {"desktop_presence_runtime"}, (
-            f"Shell-owned artifacts must only be owned by 'desktop_presence_runtime'; "
-            f"found owners: {shell_owners}"
+            f"Shell-owned artifacts must only be owned by 'desktop_presence_runtime'; " f"found owners: {shell_owners}"
         )
 
     def test_architecture_truth_guards_compatible(self):
         """architecture_truth_guards must be importable alongside production_baseline."""
         from core.architecture_truth_guards import (
-            CanonicalTruthOwnershipGuard,
             BoundaryInvariantGuard,
+            CanonicalTruthOwnershipGuard,
             run_all_architecture_guards,
         )
         from core.production_baseline import get_production_baseline_registry
@@ -663,10 +664,12 @@ class TestBuildProductionBaselineSummary:
 
     def setup_method(self):
         from core.production_baseline import reset_production_baseline_registry
+
         reset_production_baseline_registry()
 
     def teardown_method(self):
         from core.production_baseline import reset_production_baseline_registry
+
         reset_production_baseline_registry()
 
     def test_summary_baseline_active_true(self):
@@ -743,8 +746,12 @@ class TestBuildProductionBaselineSummary:
         summary = build_production_baseline_summary()
         assert isinstance(summary, dict)
         # Required keys always present
-        for key in ("baseline_active", "production_baseline_version",
-                    "production_baseline_pr", "canonical_artifact_count"):
+        for key in (
+            "baseline_active",
+            "production_baseline_version",
+            "production_baseline_pr",
+            "canonical_artifact_count",
+        ):
             assert key in summary, f"Key {key!r} missing from summary."
 
     def test_summary_derivation_count_fields(self):
@@ -766,6 +773,7 @@ class TestDesktopPresenceRuntimeBaselineSummary:
     def _make_runtime(self):
         """Return a DesktopPresenceRuntime with minimal dependencies mocked."""
         from core.desktop_presence_runtime import DesktopPresenceRuntime
+
         rt = DesktopPresenceRuntime.__new__(DesktopPresenceRuntime)
         rt._active_sessions = {}
         rt._source_registry = None
@@ -853,10 +861,12 @@ class TestProductionBaselineStability:
 
     def setup_method(self):
         from core.production_baseline import reset_production_baseline_registry
+
         reset_production_baseline_registry()
 
     def teardown_method(self):
         from core.production_baseline import reset_production_baseline_registry
+
         reset_production_baseline_registry()
 
     def test_text_only_scenario_baseline_stable(self):
@@ -1015,6 +1025,4 @@ class TestArchitectureDocumentation:
 
         reg = get_production_baseline_registry()
         for art in reg.canonical_primary_artifacts:
-            assert art.description, (
-                f"Artifact {art.artifact.value!r} has no description."
-            )
+            assert art.description, f"Artifact {art.artifact.value!r} has no description."

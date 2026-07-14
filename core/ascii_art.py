@@ -13,8 +13,8 @@ Galaxy ASCII 艺术字 / 统一终端输出格式
 所有启动入口均应导入并使用本模块的公共接口，以保证视觉一致性。
 """
 
-import sys
 import os
+import sys
 
 # ---------------------------------------------------------------------------
 # 版本 & 标语 (single source of truth)
@@ -29,9 +29,7 @@ GALAXY_TAGLINE = "L4 Autonomous Intelligence System"
 # Version line is composed from GALAXY_TAGLINE / GALAXY_VERSION constants.
 # ---------------------------------------------------------------------------
 
-_BANNER_VERSION_LINE = (
-    "║     " + GALAXY_TAGLINE + "   " + GALAXY_VERSION
-).ljust(59) + "║"
+_BANNER_VERSION_LINE = ("║     " + GALAXY_TAGLINE + "   " + GALAXY_VERSION).ljust(59) + "║"
 
 
 def _normalize_banner(lines: list) -> str:
@@ -104,17 +102,18 @@ GALAXY_ASCII_MINIMAL = GALAXY_BANNER
 
 class Colors:
     """ANSI 终端颜色代码 (gracefully degrades on unsupported terminals)."""
-    HEADER = '\033[95m'
-    BLUE = '\033[94m'
-    CYAN = '\033[96m'
-    GREEN = '\033[92m'
-    YELLOW = '\033[93m'
-    RED = '\033[91m'
-    PURPLE = '\033[35m'
-    PINK = '\033[95m'
-    ENDC = '\033[0m'
-    BOLD = '\033[1m'
-    DIM = '\033[2m'
+
+    HEADER = "\033[95m"
+    BLUE = "\033[94m"
+    CYAN = "\033[96m"
+    GREEN = "\033[92m"
+    YELLOW = "\033[93m"
+    RED = "\033[91m"
+    PURPLE = "\033[35m"
+    PINK = "\033[95m"
+    ENDC = "\033[0m"
+    BOLD = "\033[1m"
+    DIM = "\033[2m"
 
 
 def ansi_supported() -> bool:
@@ -127,12 +126,13 @@ def ansi_supported() -> bool:
     Returns:
         bool: True 表示可安全使用 ANSI 颜色，False 表示应降级为纯文本。
     """
-    if not hasattr(sys.stdout, 'isatty') or not sys.stdout.isatty():
+    if not hasattr(sys.stdout, "isatty") or not sys.stdout.isatty():
         return False
-    if os.name == 'nt':
+    if os.name == "nt":
         try:
             import ctypes
-            if not hasattr(ctypes, 'windll'):
+
+            if not hasattr(ctypes, "windll"):
                 return False
             kernel32 = ctypes.windll.kernel32
             STD_OUTPUT_HANDLE = -11
@@ -159,9 +159,9 @@ def ansi_supported() -> bool:
 _ANCHOR_COLORS = [
     (0, 225, 253),  # aurora cyan
     (41, 156, 255),  # tech blue
-    (109,  92, 255),  # indigo
-    (184,  61, 245),  # neon purple
-    (255,  46, 147),  # cyber pink
+    (109, 92, 255),  # indigo
+    (184, 61, 245),  # neon purple
+    (255, 46, 147),  # cyber pink
 ]
 
 
@@ -234,10 +234,10 @@ def _colorize_line(line: str, banner_width: int = 60) -> str:
 _STATUS_ICONS: dict = {
     "success": "✓",
     "warning": "⚠",
-    "error":   "✗",
+    "error": "✗",
     "loading": "◐",
-    "step":    "▶",
-    "info":    "·",
+    "step": "▶",
+    "info": "·",
 }
 
 
@@ -250,6 +250,7 @@ def get_status_icon(status: str) -> str:
 # 公共打印助手 (public print helpers)
 # ---------------------------------------------------------------------------
 
+
 def print_powershell_hint() -> None:
     """Print a one-time startup tip for Windows PowerShell users.
 
@@ -260,7 +261,7 @@ def print_powershell_hint() -> None:
     PowerShell session (detected via the ``PSModulePath`` or ``PSVersionTable``
     environment variables) and is silently skipped on other platforms.
     """
-    if os.name != 'nt' or not (os.environ.get("PSModulePath") or os.environ.get("PSVersionTable")):
+    if os.name != "nt" or not (os.environ.get("PSModulePath") or os.environ.get("PSVersionTable")):
         return
     print(
         "\n[Galaxy Tip] PowerShell 显示建议:\n"
@@ -346,10 +347,10 @@ def print_status_row(
     color_map = {
         "success": Colors.GREEN,
         "warning": Colors.YELLOW,
-        "error":   Colors.RED,
+        "error": Colors.RED,
         "loading": Colors.CYAN,
-        "step":    Colors.CYAN,
-        "info":    Colors.BLUE,
+        "step": Colors.CYAN,
+        "info": Colors.BLUE,
     }
 
     if use_color:
@@ -370,6 +371,7 @@ def print_status_row(
 # ---------------------------------------------------------------------------
 # 旧版兼容函数 (legacy compat)
 # ---------------------------------------------------------------------------
+
 
 def print_galaxy(style: str = "minimal") -> None:
     """打印 Galaxy ASCII 艺术字（旧版接口，新代码请使用 print_banner()）。"""

@@ -78,6 +78,7 @@ Usage::
 from __future__ import annotations
 
 import logging  # auto: ensure module logger is defined
+
 logger = logging.getLogger(__name__)
 
 
@@ -85,7 +86,6 @@ import json
 import uuid
 from enum import Enum
 from typing import Any, Dict, Optional
-
 
 # ---------------------------------------------------------------------------
 # Internal helpers
@@ -242,12 +242,8 @@ class AndroidRuntimeHostIdentity:
         return cls(
             device_id=str(data.get("device_id", "") or ""),
             device_name=str(data.get("device_name", "") or ""),
-            role=AndroidRuntimeHostRole.from_string(
-                str(data.get("role", "unclassified"))
-            ),
-            source_runtime_posture=str(
-                data.get("source_runtime_posture", "control_only") or "control_only"
-            ),
+            role=AndroidRuntimeHostRole.from_string(str(data.get("role", "unclassified"))),
+            source_runtime_posture=str(data.get("source_runtime_posture", "control_only") or "control_only"),
             is_runtime_host=bool(data.get("is_runtime_host", False)),
             runtime_enabled=bool(data.get("runtime_enabled", False)),
             supports_remote_handoff=bool(data.get("supports_remote_handoff", False)),
@@ -432,21 +428,15 @@ def build_android_runtime_host_identity(device: Any) -> AndroidRuntimeHostIdenti
 
 # Confirms that this module provides canonical Android runtime-host
 # classification for the main-repo half of PR-5 (post-533 dual-repo track).
-ANDROID_FIRST_CLASS_RUNTIME_HOST_PR5_SENTINEL = (
-    "ANDROID_FIRST_CLASS_RUNTIME_HOST_PR5_SENTINEL"
-)
+ANDROID_FIRST_CLASS_RUNTIME_HOST_PR5_SENTINEL = "ANDROID_FIRST_CLASS_RUNTIME_HOST_PR5_SENTINEL"
 
 # Confirms that AndroidRuntimeHostRole distinguishes runtime-host identity
 # from mere connected-device presence.
-ANDROID_RUNTIME_HOST_DISTINCT_FROM_CONNECTED_DEVICE_PR5 = (
-    "ANDROID_RUNTIME_HOST_DISTINCT_FROM_CONNECTED_DEVICE_PR5"
-)
+ANDROID_RUNTIME_HOST_DISTINCT_FROM_CONNECTED_DEVICE_PR5 = "ANDROID_RUNTIME_HOST_DISTINCT_FROM_CONNECTED_DEVICE_PR5"
 
 # Confirms that posture semantics from PR-533 are preserved and honoured in
 # the classification logic above.
-ANDROID_RUNTIME_HOST_POSTURE_PRESERVED_PR5 = (
-    "ANDROID_RUNTIME_HOST_POSTURE_PRESERVED_PR5"
-)
+ANDROID_RUNTIME_HOST_POSTURE_PRESERVED_PR5 = "ANDROID_RUNTIME_HOST_POSTURE_PRESERVED_PR5"
 
 # ---------------------------------------------------------------------------
 # Android local AI / on-device inference status sentinels

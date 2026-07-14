@@ -55,31 +55,31 @@ logger = logging.getLogger("Galaxy.ModelTopology.ModelWeightField")
 _PHASE_ROLE_MODIFIER: Dict[Tuple[TriStatePhase, TopologyRole], float] = {
     # ---- SILENT: emphasize multimodal + perception; minimize execution ----
     (TriStatePhase.SILENT, TopologyRole.MULTIMODAL_CORE): 1.4,
-    (TriStatePhase.SILENT, TopologyRole.REASONING):        0.7,
-    (TriStatePhase.SILENT, TopologyRole.EXECUTION):        0.3,  # minimized
-    (TriStatePhase.SILENT, TopologyRole.MEMORY):           1.0,
-    (TriStatePhase.SILENT, TopologyRole.ROUTING):          0.5,  # minimized
-    (TriStatePhase.SILENT, TopologyRole.CROSS_DEVICE):     0.2,  # minimized
-    (TriStatePhase.SILENT, TopologyRole.GENERAL):          0.8,
-    (TriStatePhase.SILENT, TopologyRole.UNKNOWN):          0.6,
+    (TriStatePhase.SILENT, TopologyRole.REASONING): 0.7,
+    (TriStatePhase.SILENT, TopologyRole.EXECUTION): 0.3,  # minimized
+    (TriStatePhase.SILENT, TopologyRole.MEMORY): 1.0,
+    (TriStatePhase.SILENT, TopologyRole.ROUTING): 0.5,  # minimized
+    (TriStatePhase.SILENT, TopologyRole.CROSS_DEVICE): 0.2,  # minimized
+    (TriStatePhase.SILENT, TopologyRole.GENERAL): 0.8,
+    (TriStatePhase.SILENT, TopologyRole.UNKNOWN): 0.6,
     # ---- LIMINAL: reasoning + routing aggregators up; multimodal anchor ----
     (TriStatePhase.LIMINAL, TopologyRole.MULTIMODAL_CORE): 1.3,  # anchor kept
-    (TriStatePhase.LIMINAL, TopologyRole.REASONING):       1.3,  # increased
-    (TriStatePhase.LIMINAL, TopologyRole.EXECUTION):       0.6,
-    (TriStatePhase.LIMINAL, TopologyRole.MEMORY):          1.1,
-    (TriStatePhase.LIMINAL, TopologyRole.ROUTING):         1.3,  # increased
-    (TriStatePhase.LIMINAL, TopologyRole.CROSS_DEVICE):    1.0,
-    (TriStatePhase.LIMINAL, TopologyRole.GENERAL):         0.9,
-    (TriStatePhase.LIMINAL, TopologyRole.UNKNOWN):         0.7,
+    (TriStatePhase.LIMINAL, TopologyRole.REASONING): 1.3,  # increased
+    (TriStatePhase.LIMINAL, TopologyRole.EXECUTION): 0.6,
+    (TriStatePhase.LIMINAL, TopologyRole.MEMORY): 1.1,
+    (TriStatePhase.LIMINAL, TopologyRole.ROUTING): 1.3,  # increased
+    (TriStatePhase.LIMINAL, TopologyRole.CROSS_DEVICE): 1.0,
+    (TriStatePhase.LIMINAL, TopologyRole.GENERAL): 0.9,
+    (TriStatePhase.LIMINAL, TopologyRole.UNKNOWN): 0.7,
     # ---- MANIFEST: execution roles up; cross-device specialists allowed ----
     (TriStatePhase.MANIFEST, TopologyRole.MULTIMODAL_CORE): 1.2,
-    (TriStatePhase.MANIFEST, TopologyRole.REASONING):       1.0,
-    (TriStatePhase.MANIFEST, TopologyRole.EXECUTION):       1.4,  # increased
-    (TriStatePhase.MANIFEST, TopologyRole.MEMORY):          1.0,
-    (TriStatePhase.MANIFEST, TopologyRole.ROUTING):         1.0,
-    (TriStatePhase.MANIFEST, TopologyRole.CROSS_DEVICE):    1.2,  # allowed
-    (TriStatePhase.MANIFEST, TopologyRole.GENERAL):         1.0,
-    (TriStatePhase.MANIFEST, TopologyRole.UNKNOWN):         0.8,
+    (TriStatePhase.MANIFEST, TopologyRole.REASONING): 1.0,
+    (TriStatePhase.MANIFEST, TopologyRole.EXECUTION): 1.4,  # increased
+    (TriStatePhase.MANIFEST, TopologyRole.MEMORY): 1.0,
+    (TriStatePhase.MANIFEST, TopologyRole.ROUTING): 1.0,
+    (TriStatePhase.MANIFEST, TopologyRole.CROSS_DEVICE): 1.2,  # allowed
+    (TriStatePhase.MANIFEST, TopologyRole.GENERAL): 1.0,
+    (TriStatePhase.MANIFEST, TopologyRole.UNKNOWN): 0.8,
 }
 
 _DEFAULT_PHASE_MODIFIER = 1.0
@@ -92,31 +92,31 @@ _DEFAULT_PHASE_MODIFIER = 1.0
 _DOMAIN_ROLE_MODIFIER: Dict[Tuple[RuntimeDomain, TopologyRole], float] = {
     # LOCAL: prefer local-affine roles; penalise cross-device specialists
     (RuntimeDomain.LOCAL, TopologyRole.MULTIMODAL_CORE): 1.1,
-    (RuntimeDomain.LOCAL, TopologyRole.REASONING):        1.0,
-    (RuntimeDomain.LOCAL, TopologyRole.EXECUTION):        1.0,
-    (RuntimeDomain.LOCAL, TopologyRole.MEMORY):           1.0,
-    (RuntimeDomain.LOCAL, TopologyRole.ROUTING):          1.0,
-    (RuntimeDomain.LOCAL, TopologyRole.CROSS_DEVICE):     0.4,  # penalized
-    (RuntimeDomain.LOCAL, TopologyRole.GENERAL):          1.0,
-    (RuntimeDomain.LOCAL, TopologyRole.UNKNOWN):          0.9,
+    (RuntimeDomain.LOCAL, TopologyRole.REASONING): 1.0,
+    (RuntimeDomain.LOCAL, TopologyRole.EXECUTION): 1.0,
+    (RuntimeDomain.LOCAL, TopologyRole.MEMORY): 1.0,
+    (RuntimeDomain.LOCAL, TopologyRole.ROUTING): 1.0,
+    (RuntimeDomain.LOCAL, TopologyRole.CROSS_DEVICE): 0.4,  # penalized
+    (RuntimeDomain.LOCAL, TopologyRole.GENERAL): 1.0,
+    (RuntimeDomain.LOCAL, TopologyRole.UNKNOWN): 0.9,
     # CROSS_DEVICE: amplify cross-device specialists
     (RuntimeDomain.CROSS_DEVICE, TopologyRole.MULTIMODAL_CORE): 1.1,
-    (RuntimeDomain.CROSS_DEVICE, TopologyRole.REASONING):        1.0,
-    (RuntimeDomain.CROSS_DEVICE, TopologyRole.EXECUTION):        1.1,
-    (RuntimeDomain.CROSS_DEVICE, TopologyRole.MEMORY):           1.0,
-    (RuntimeDomain.CROSS_DEVICE, TopologyRole.ROUTING):          1.1,
-    (RuntimeDomain.CROSS_DEVICE, TopologyRole.CROSS_DEVICE):     1.5,  # amplified
-    (RuntimeDomain.CROSS_DEVICE, TopologyRole.GENERAL):          1.0,
-    (RuntimeDomain.CROSS_DEVICE, TopologyRole.UNKNOWN):          0.9,
+    (RuntimeDomain.CROSS_DEVICE, TopologyRole.REASONING): 1.0,
+    (RuntimeDomain.CROSS_DEVICE, TopologyRole.EXECUTION): 1.1,
+    (RuntimeDomain.CROSS_DEVICE, TopologyRole.MEMORY): 1.0,
+    (RuntimeDomain.CROSS_DEVICE, TopologyRole.ROUTING): 1.1,
+    (RuntimeDomain.CROSS_DEVICE, TopologyRole.CROSS_DEVICE): 1.5,  # amplified
+    (RuntimeDomain.CROSS_DEVICE, TopologyRole.GENERAL): 1.0,
+    (RuntimeDomain.CROSS_DEVICE, TopologyRole.UNKNOWN): 0.9,
     # TRANSITION: neutral; slight boost to routing/arbiter nodes
     (RuntimeDomain.TRANSITION, TopologyRole.MULTIMODAL_CORE): 1.1,
-    (RuntimeDomain.TRANSITION, TopologyRole.REASONING):        1.0,
-    (RuntimeDomain.TRANSITION, TopologyRole.EXECUTION):        0.8,
-    (RuntimeDomain.TRANSITION, TopologyRole.MEMORY):           1.0,
-    (RuntimeDomain.TRANSITION, TopologyRole.ROUTING):          1.2,  # slight boost
-    (RuntimeDomain.TRANSITION, TopologyRole.CROSS_DEVICE):     1.1,
-    (RuntimeDomain.TRANSITION, TopologyRole.GENERAL):          0.9,
-    (RuntimeDomain.TRANSITION, TopologyRole.UNKNOWN):          0.8,
+    (RuntimeDomain.TRANSITION, TopologyRole.REASONING): 1.0,
+    (RuntimeDomain.TRANSITION, TopologyRole.EXECUTION): 0.8,
+    (RuntimeDomain.TRANSITION, TopologyRole.MEMORY): 1.0,
+    (RuntimeDomain.TRANSITION, TopologyRole.ROUTING): 1.2,  # slight boost
+    (RuntimeDomain.TRANSITION, TopologyRole.CROSS_DEVICE): 1.1,
+    (RuntimeDomain.TRANSITION, TopologyRole.GENERAL): 0.9,
+    (RuntimeDomain.TRANSITION, TopologyRole.UNKNOWN): 0.8,
 }
 
 _DEFAULT_DOMAIN_MODIFIER = 1.0
@@ -155,9 +155,7 @@ class ModelWeightField:
         self._recompute()
 
     def _recompute(self) -> None:
-        self.combined_weight = round(
-            self.base_weight * self.state_modifier * self.domain_modifier, 6
-        )
+        self.combined_weight = round(self.base_weight * self.state_modifier * self.domain_modifier, 6)
 
     # ------------------------------------------------------------------
     # Comparison (deterministic: combined desc, node_id asc for ties)
@@ -171,10 +169,7 @@ class ModelWeightField:
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, ModelWeightField):
             return NotImplemented
-        return (
-            self.combined_weight == other.combined_weight
-            and self.node_id == other.node_id
-        )
+        return self.combined_weight == other.combined_weight and self.node_id == other.node_id
 
     def __repr__(self) -> str:
         return (

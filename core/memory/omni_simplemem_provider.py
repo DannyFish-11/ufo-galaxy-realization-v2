@@ -22,12 +22,7 @@ logger = logging.getLogger("Galaxy.Memory.SimpleMem")
 
 
 def _api_key() -> str:
-    return (
-        os.getenv("GALAXY_SIMPLEMEM_API_KEY")
-        or os.getenv("OPENAI_API_KEY")
-        or os.getenv("DEEPSEEK_API_KEY")
-        or ""
-    )
+    return os.getenv("GALAXY_SIMPLEMEM_API_KEY") or os.getenv("OPENAI_API_KEY") or os.getenv("DEEPSEEK_API_KEY") or ""
 
 
 class OmniSimpleMemProvider(MemoryProvider):
@@ -44,19 +39,19 @@ class OmniSimpleMemProvider(MemoryProvider):
             ok = False
             try:
                 import simplemem  # noqa: F401
+
                 ok = hasattr(simplemem, "SimpleMemSystem") and bool(_api_key())
             except Exception:  # noqa: BLE001
                 ok = False
             if not ok:
-                logger.debug(
-                    "SimpleMem backend unavailable (need `pip install simplemem` + an LLM key)"
-                )
+                logger.debug("SimpleMem backend unavailable (need `pip install simplemem` + an LLM key)")
             self._available = ok
         return self._available
 
     def _ensure(self):
         if self._mem is None:
             from simplemem import SimpleMemSystem
+
             db_dir = os.getenv("GALAXY_OMNIMEM_DIR", "./data/omni_simplemem")
             try:
                 os.makedirs(db_dir, exist_ok=True)

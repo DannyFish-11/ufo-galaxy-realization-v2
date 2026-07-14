@@ -43,7 +43,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-from .policy_schema import ToolPolicy, RiskTierConfig
+from .policy_schema import RiskTierConfig, ToolPolicy
 
 logger = logging.getLogger("Galaxy.Governance.ToolGovernor")
 
@@ -52,16 +52,14 @@ logger = logging.getLogger("Galaxy.Governance.ToolGovernor")
 # Exceptions
 # ---------------------------------------------------------------------------
 
+
 class ToolRateLimitError(Exception):
     """Raised when a tool's rate limit is exhausted."""
 
     def __init__(self, tool_name: str, limit_per_minute: int) -> None:
         self.tool_name = tool_name
         self.limit_per_minute = limit_per_minute
-        super().__init__(
-            f"Rate limit exhausted for tool '{tool_name}': "
-            f"max {limit_per_minute} calls/min"
-        )
+        super().__init__(f"Rate limit exhausted for tool '{tool_name}': " f"max {limit_per_minute} calls/min")
 
 
 class ToolDeniedError(PermissionError):
@@ -76,6 +74,7 @@ class ToolDeniedError(PermissionError):
 # ---------------------------------------------------------------------------
 # Decision record
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class ToolDecision:
@@ -105,6 +104,7 @@ class ToolDecision:
 # Token bucket
 # ---------------------------------------------------------------------------
 
+
 class _TokenBucket:
     """Simple token-bucket for rate limiting.
 
@@ -117,7 +117,7 @@ class _TokenBucket:
 
     def __init__(self, rate_per_minute: int) -> None:
         self.capacity: float = max(float(rate_per_minute), 1.0)
-        self.rate: float = rate_per_minute / 60.0          # tokens/second
+        self.rate: float = rate_per_minute / 60.0  # tokens/second
         self._tokens: float = self.capacity
         self._last_refill: float = time.monotonic()
 
@@ -138,6 +138,7 @@ class _TokenBucket:
 # ToolGovernor
 # ---------------------------------------------------------------------------
 
+
 class ToolGovernor:
     """Central governance engine for tool invocations.
 
@@ -154,7 +155,7 @@ class ToolGovernor:
     def __init__(
         self,
         tool_policy: ToolPolicy,
-        ledger: Optional[Any] = None,          # AuditLedger — avoid circular import
+        ledger: Optional[Any] = None,  # AuditLedger — avoid circular import
     ) -> None:
         self._policy = tool_policy
         self._ledger = ledger
@@ -196,6 +197,7 @@ class ToolGovernor:
         if self._ledger is not None and decision.require_audit:
             try:
                 from core.control_plane.audit_ledger import EventType, Severity
+
                 self._ledger.append(
                     event_type=EventType.TOOL_GOVERNANCE_DECISION,
                     severity=Severity.WARNING if not decision.allowed else Severity.INFO,
@@ -329,12 +331,6 @@ class ToolGovernor:
             "default_action": self._policy.default_action.value,
             "allow_list": self._policy.allow_list,
             "deny_list": self._policy.deny_list,
-            "risk_tiers": {
-                tier: cfg.model_dump()
-                for tier, cfg in self._policy.risk_tiers.items()
-            },
-            "per_tool_overrides": {
-                tool: cfg.model_dump()
-                for tool, cfg in self._policy.per_tool_overrides.items()
-            },
+            "risk_tiers": {tier: cfg.model_dump() for tier, cfg in self._policy.risk_tiers.items()},
+            "per_tool_overrides": {tool: cfg.model_dump() for tool, cfg in self._policy.per_tool_overrides.items()},
         }

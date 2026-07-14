@@ -96,9 +96,7 @@ class InteractionBuilder:
                 output_plan=output_plan,
             )
         except Exception as exc:
-            logger.warning(
-                "InteractionBuilder.build failed, returning text-only fallback: %s", exc
-            )
+            logger.warning("InteractionBuilder.build failed, returning text-only fallback: %s", exc)
             return self._fallback_envelope(trace_id=trace_id, session_id=session_id)
 
     # ------------------------------------------------------------------
@@ -142,11 +140,7 @@ class InteractionBuilder:
         # avoid accidentally propagating large blobs in API responses.
         clean_context: Optional[Dict[str, Any]] = None
         if fused_context is not None:
-            filtered = {
-                k: v
-                for k, v in fused_context.items()
-                if k not in ("images", "audio")
-            }
+            filtered = {k: v for k, v in fused_context.items() if k not in ("images", "audio")}
             # Represent an all-stripped context as None rather than an empty dict
             # so that downstream serialisers can omit the field cleanly.
             clean_context = filtered if filtered else None

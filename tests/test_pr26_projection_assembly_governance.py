@@ -106,7 +106,6 @@ from core.projection.assembly_governance import (
     summarize_readiness_for_projection,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers — minimal stub objects
 # ---------------------------------------------------------------------------
@@ -258,9 +257,7 @@ class TestProjectionExecutionSummary:
         assert s.confidence == 0.95
 
     def test_to_dict_json_serialisable(self):
-        s = ProjectionExecutionSummary(
-            intent_id="x-1", action_level="execute", available=True
-        )
+        s = ProjectionExecutionSummary(intent_id="x-1", action_level="execute", available=True)
         d = s.to_dict()
         json_str = json.dumps(d)
         assert isinstance(json_str, str)
@@ -269,9 +266,7 @@ class TestProjectionExecutionSummary:
         assert "available" in d
 
     def test_to_json_round_trip(self):
-        s = ProjectionExecutionSummary(
-            intent_id="x-2", action_level="assist", intent_mode="assistive", available=True
-        )
+        s = ProjectionExecutionSummary(intent_id="x-2", action_level="assist", intent_mode="assistive", available=True)
         json_str = s.to_json()
         d = json.loads(json_str)
         assert d["intent_id"] == "x-2"
@@ -453,9 +448,7 @@ class TestSummarizeIntentForProjection:
         assert result.intent_mode == "advisory"
 
     def test_uses_compact_summary_when_available(self):
-        profile = _make_intent_profile(
-            action_level="execute", intent_mode="direct", target_ref="notepad"
-        )
+        profile = _make_intent_profile(action_level="execute", intent_mode="direct", target_ref="notepad")
         result = summarize_intent_for_projection(profile)
         assert result.available is True
         assert result.action_level == "execute"
@@ -524,9 +517,7 @@ class TestSummarizeReadinessForProjection:
         assert result.degraded is True
 
     def test_requires_confirmation_propagated(self):
-        r = _make_readiness_result(
-            ready=True, status="confirm_required", requires_confirmation=True
-        )
+        r = _make_readiness_result(ready=True, status="confirm_required", requires_confirmation=True)
         result = summarize_readiness_for_projection(r)
         assert result.requires_confirmation is True
 
@@ -736,16 +727,19 @@ class TestBuildRuntimeProjectionGovernanceIntegration:
 
     def _make_minimal_continuum(self):
         from core.continuum.types import ContinuumPhase, ContinuumState
+
         return ContinuumState(phase=ContinuumPhase.LIMINAL)
 
     def test_governance_none_when_no_governance_inputs(self):
         from core.projection import build_runtime_projection
+
         state = self._make_minimal_continuum()
         projection = build_runtime_projection(state)
         assert projection.governance is None
 
     def test_governance_populated_when_readiness_provided(self):
         from core.projection import build_runtime_projection
+
         state = self._make_minimal_continuum()
         readiness = _make_readiness_result()
         projection = build_runtime_projection(state, readiness_result=readiness)
@@ -756,6 +750,7 @@ class TestBuildRuntimeProjectionGovernanceIntegration:
 
     def test_governance_populated_when_all_inputs_provided(self):
         from core.projection import build_runtime_projection
+
         state = self._make_minimal_continuum()
         projection = build_runtime_projection(
             state,
@@ -768,16 +763,15 @@ class TestBuildRuntimeProjectionGovernanceIntegration:
         assert projection.governance["governance_available"] is True
 
     def test_existing_fields_unchanged(self):
-        from core.projection import build_runtime_projection
         from core.continuum.types import ContinuumPhase, ContinuumState, RuntimeDomain
+        from core.projection import build_runtime_projection
+
         state = ContinuumState(
             phase=ContinuumPhase.MANIFEST,
             coherence=0.8,
             presence_intensity=0.9,
         )
-        projection = build_runtime_projection(
-            state, readiness_result=_make_readiness_result()
-        )
+        projection = build_runtime_projection(state, readiness_result=_make_readiness_result())
         # Base fields are unaffected
         assert projection.tri_state_phase.value == "manifest"
         assert projection.coherence == 0.8
@@ -787,16 +781,16 @@ class TestBuildRuntimeProjectionGovernanceIntegration:
 
     def test_to_dict_includes_governance_key(self):
         from core.projection import build_runtime_projection
+
         state = self._make_minimal_continuum()
-        projection = build_runtime_projection(
-            state, readiness_result=_make_readiness_result()
-        )
+        projection = build_runtime_projection(state, readiness_result=_make_readiness_result())
         d = projection.to_dict()
         assert "governance" in d
         assert d["governance"] is not None
 
     def test_to_dict_governance_none_when_not_provided(self):
         from core.projection import build_runtime_projection
+
         state = self._make_minimal_continuum()
         projection = build_runtime_projection(state)
         d = projection.to_dict()
@@ -812,6 +806,7 @@ class TestBuildRuntimeProjectionGovernanceIntegration:
 class TestAdditiveIntegration:
     def test_exports_from_core_projection(self):
         import core.projection as proj_pkg
+
         # All new PR-26 symbols should be importable from core.projection
         assert hasattr(proj_pkg, "ProjectionGovernanceSummary")
         assert hasattr(proj_pkg, "ProjectionExecutionSummary")
@@ -830,6 +825,7 @@ class TestAdditiveIntegration:
             RuntimeProjection,
             build_runtime_projection,
         )
+
         assert RuntimeProjection is not None
         assert ExecutionSummary is not None
         assert build_runtime_projection is not None

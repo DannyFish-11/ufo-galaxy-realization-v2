@@ -127,21 +127,21 @@ import pytest
 
 import core.network_topology_runtime as _mod
 from core.network_topology_runtime import (
+    NETWORK_TOPOLOGY_CONTRACT_VERSION,
     NETWORK_TOPOLOGY_RUNTIME_AUTHORITY,
     NETWORK_TOPOLOGY_RUNTIME_LAYER_POSITION,
-    NETWORK_TOPOLOGY_CONTRACT_VERSION,
     TOPOLOGY_CONSUMER_POLICY,
     TRANSPORT_HIERARCHY_ASSIMILATION_POLICY,
-    TopologyNodeKind,
-    TopologyEdgeKind,
-    TopologyConnectionState,
-    TopologyNode,
-    TopologyEdge,
-    TopologyRecord,
-    TransportPathInfo,
-    TopologySnapshot,
     GroundedRuntimeTopology,
     NetworkTopologyRuntime,
+    TopologyConnectionState,
+    TopologyEdge,
+    TopologyEdgeKind,
+    TopologyNode,
+    TopologyNodeKind,
+    TopologyRecord,
+    TopologySnapshot,
+    TransportPathInfo,
     build_grounded_runtime_topology,
     get_network_topology_runtime,
     reset_network_topology_runtime,
@@ -299,9 +299,19 @@ def test_e01_topology_node_construction_minimal():
 def test_e02_to_dict_expected_keys():
     n = TopologyNode(node_id="dev-1", kind=TopologyNodeKind.DEVICE)
     d = n.to_dict()
-    for key in ("node_id", "kind", "state", "host", "port", "transport_hints",
-                "tags", "metadata", "registered_at", "last_updated_at",
-                "contract_version"):
+    for key in (
+        "node_id",
+        "kind",
+        "state",
+        "host",
+        "port",
+        "transport_hints",
+        "tags",
+        "metadata",
+        "registered_at",
+        "last_updated_at",
+        "contract_version",
+    ):
         assert key in d, f"key {key!r} missing from TopologyNode.to_dict()"
 
 
@@ -335,15 +345,24 @@ def test_f01_topology_edge_construction():
 def test_f02_to_dict_expected_keys():
     e = TopologyEdge(edge_id="e1", source_node_id="a", target_node_id="b")
     d = e.to_dict()
-    for key in ("edge_id", "source_node_id", "target_node_id", "kind", "state",
-                "preferred", "latency_hint_ms", "metadata", "created_at",
-                "last_updated_at", "contract_version"):
+    for key in (
+        "edge_id",
+        "source_node_id",
+        "target_node_id",
+        "kind",
+        "state",
+        "preferred",
+        "latency_hint_ms",
+        "metadata",
+        "created_at",
+        "last_updated_at",
+        "contract_version",
+    ):
         assert key in d, f"key {key!r} missing from TopologyEdge.to_dict()"
 
 
 def test_f03_to_dict_kind_is_string():
-    e = TopologyEdge(edge_id="e1", source_node_id="a", target_node_id="b",
-                     kind=TopologyEdgeKind.RELAY)
+    e = TopologyEdge(edge_id="e1", source_node_id="a", target_node_id="b", kind=TopologyEdgeKind.RELAY)
     assert isinstance(e.to_dict()["kind"], str)
 
 
@@ -366,8 +385,7 @@ def test_g01_topology_record_construction():
 def test_g02_to_dict_expected_keys():
     r = TopologyRecord(record_id="r1", event_kind="test", node_id="n1")
     d = r.to_dict()
-    for key in ("record_id", "event_kind", "node_id", "kind", "state",
-                "timestamp", "details", "contract_version"):
+    for key in ("record_id", "event_kind", "node_id", "kind", "state", "timestamp", "details", "contract_version"):
         assert key in d, f"key {key!r} missing from TopologyRecord.to_dict()"
 
 
@@ -390,9 +408,16 @@ def test_h01_transport_path_info_construction():
 def test_h02_to_dict_expected_keys():
     t = TransportPathInfo(source_id="src", target_id="tgt")
     d = t.to_dict()
-    for key in ("source_id", "target_id", "effective_path", "fallback_path",
-                "available_paths", "transport_strategy", "preferred_edge_id",
-                "contract_version"):
+    for key in (
+        "source_id",
+        "target_id",
+        "effective_path",
+        "fallback_path",
+        "available_paths",
+        "transport_strategy",
+        "preferred_edge_id",
+        "contract_version",
+    ):
         assert key in d, f"key {key!r} missing from TransportPathInfo.to_dict()"
 
 
@@ -410,9 +435,17 @@ def test_i01_snapshot_construction():
 def test_i02_to_dict_expected_keys():
     s = TopologySnapshot()
     d = s.to_dict()
-    for key in ("authority", "total_nodes", "total_edges", "nodes_by_kind",
-                "nodes_by_state", "edges_by_kind", "preferred_edges",
-                "recent_records", "contract_version"):
+    for key in (
+        "authority",
+        "total_nodes",
+        "total_edges",
+        "nodes_by_kind",
+        "nodes_by_state",
+        "edges_by_kind",
+        "preferred_edges",
+        "recent_records",
+        "contract_version",
+    ):
         assert key in d, f"key {key!r} missing from TopologySnapshot.to_dict()"
 
 
@@ -584,10 +617,8 @@ def test_k09_remove_edge_returns_false_for_unknown():
 
 def test_k10_preferred_edges_returns_only_preferred():
     rt = get_network_topology_runtime()
-    rt.register_edge(TopologyEdge(
-        edge_id="pref1", source_node_id="a", target_node_id="b", preferred=True))
-    rt.register_edge(TopologyEdge(
-        edge_id="notpref1", source_node_id="a", target_node_id="c", preferred=False))
+    rt.register_edge(TopologyEdge(edge_id="pref1", source_node_id="a", target_node_id="b", preferred=True))
+    rt.register_edge(TopologyEdge(edge_id="notpref1", source_node_id="a", target_node_id="c", preferred=False))
     preferred = rt.preferred_edges()
     assert any(e.edge_id == "pref1" for e in preferred)
     assert all(e.preferred for e in preferred)
@@ -659,17 +690,16 @@ def test_l08_snapshot_nodes_by_state_populated():
 
 def test_l09_snapshot_edges_by_kind_populated():
     rt = get_network_topology_runtime()
-    rt.register_edge(TopologyEdge(
-        edge_id="snap_e1", source_node_id="a", target_node_id="b",
-        kind=TopologyEdgeKind.RELAY))
+    rt.register_edge(
+        TopologyEdge(edge_id="snap_e1", source_node_id="a", target_node_id="b", kind=TopologyEdgeKind.RELAY)
+    )
     s = rt.snapshot()
     assert "relay" in s.edges_by_kind
 
 
 def test_l10_snapshot_preferred_edges_populated():
     rt = get_network_topology_runtime()
-    rt.register_edge(TopologyEdge(
-        edge_id="snap_pref", source_node_id="a", target_node_id="b", preferred=True))
+    rt.register_edge(TopologyEdge(edge_id="snap_pref", source_node_id="a", target_node_id="b", preferred=True))
     s = rt.snapshot()
     assert "snap_pref" in s.preferred_edges
 
@@ -700,6 +730,7 @@ def test_m02_reset_creates_new_instance():
 def test_n01_nats_bus_integration_sentinel():
     pytest.importorskip("pydantic", reason="pydantic not installed")
     from core.nats_bus import NETWORK_TOPOLOGY_RUNTIME_INTEGRATED
+
     assert isinstance(NETWORK_TOPOLOGY_RUNTIME_INTEGRATED, str)
     assert "NETWORK_TOPOLOGY_RUNTIME" in NETWORK_TOPOLOGY_RUNTIME_INTEGRATED
 
@@ -712,6 +743,7 @@ def test_n01_nats_bus_integration_sentinel():
 def test_o01_gateway_adapter_integration_sentinel():
     pytest.importorskip("pydantic", reason="pydantic not installed")
     from galaxy_gateway.gateway_nats_adapter import NETWORK_TOPOLOGY_RUNTIME_INTEGRATED
+
     assert isinstance(NETWORK_TOPOLOGY_RUNTIME_INTEGRATED, str)
     assert "NETWORK_TOPOLOGY_RUNTIME" in NETWORK_TOPOLOGY_RUNTIME_INTEGRATED
 
@@ -751,8 +783,5 @@ def test_o03_grounded_runtime_topology_includes_allocation_relations():
     get_canonical_task_runtime().register(task)
 
     topo = build_grounded_runtime_topology(max_allocation_records=32).to_dict()
-    alloc_rels = [
-        r for r in topo["relations"]
-        if r.get("relation_kind") == "task_allocated_to_executor"
-    ]
+    alloc_rels = [r for r in topo["relations"] if r.get("relation_kind") == "task_allocated_to_executor"]
     assert any(r.get("source_id") == "task::gt_task_01" for r in alloc_rels)

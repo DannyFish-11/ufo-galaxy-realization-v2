@@ -95,7 +95,7 @@ import logging
 import threading
 import time
 import uuid
-from collections import deque, defaultdict
+from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from typing import Any, Deque, Dict, List, Optional
 
@@ -369,10 +369,7 @@ class CapabilityUtilizationObservability:
         for rec in all_records:
             by_tool[rec.tool_name].append(rec)
 
-        reports = [
-            self._build_report(tool_name, recs)
-            for tool_name, recs in by_tool.items()
-        ]
+        reports = [self._build_report(tool_name, recs) for tool_name, recs in by_tool.items()]
         reports.sort(key=lambda r: r.total_calls, reverse=True)
 
         total_calls = sum(r.total_calls for r in reports)
@@ -380,9 +377,7 @@ class CapabilityUtilizationObservability:
 
         most_called = reports[0].tool_name if reports else None
         most_failing = (
-            max(reports, key=lambda r: r.failure_count).tool_name
-            if any(r.failure_count > 0 for r in reports)
-            else None
+            max(reports, key=lambda r: r.failure_count).tool_name if any(r.failure_count > 0 for r in reports) else None
         )
         least_called = reports[-1].tool_name if reports else None
 
@@ -406,9 +401,7 @@ class CapabilityUtilizationObservability:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _build_report(
-        tool_name: str, records: List[CapabilityCallRecord]
-    ) -> UtilizationReport:
+    def _build_report(tool_name: str, records: List[CapabilityCallRecord]) -> UtilizationReport:
         report = UtilizationReport(tool_name=tool_name)
         failure_domains: Dict[str, int] = defaultdict(int)
         for rec in records:

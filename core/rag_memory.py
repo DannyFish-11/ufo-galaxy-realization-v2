@@ -54,8 +54,8 @@ import logging
 import os
 import time
 import uuid
-from typing import Dict, Optional, List
 from dataclasses import dataclass, field
+from typing import Dict, List, Optional
 
 logger = logging.getLogger("Galaxy.RAGMemory")
 
@@ -63,6 +63,7 @@ logger = logging.getLogger("Galaxy.RAGMemory")
 @dataclass
 class ExperienceEntry:
     """Agent 执行经验条目"""
+
     experience_id: str = field(default_factory=lambda: str(uuid.uuid4())[:12])
     agent_name: str = ""
     device_id: str = ""
@@ -120,9 +121,10 @@ class KnowledgeChunk:
         tags           — 语义标签（用于过滤和检索增强）
         metadata       — 来源后端的扩展元数据
     """
+
     chunk_id: str = ""
     content: str = ""
-    source: str = ""          # 来源标识 (node_name, file_path, url)
+    source: str = ""  # 来源标识 (node_name, file_path, url)
     source_type: str = "node"  # 来源类型: node | file | url | memos | experience
     relevance_score: float = 0.0
     tags: List[str] = field(default_factory=list)
@@ -168,9 +170,7 @@ class RAGMemory:
 
     def __init__(self, data_dir: str = None, namespace: str = ""):
         self._namespace = namespace or ""
-        self._data_dir = data_dir or os.path.join(
-            os.path.dirname(os.path.dirname(__file__)), "data", "rag_memory"
-        )
+        self._data_dir = data_dir or os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "rag_memory")
         # 若有命名空间，使用独立子目录
         if self._namespace:
             self._data_dir = os.path.join(self._data_dir, "ns_" + self._namespace)
@@ -228,15 +228,10 @@ class RAGMemory:
         # 检查 patterns
         self._detect_patterns(entry)
 
-        logger.info(
-            f"Experience logged: {entry.experience_id} "
-            f"[{agent_name}] success={success}"
-        )
+        logger.info(f"Experience logged: {entry.experience_id} " f"[{agent_name}] success={success}")
         return entry
 
-    def recall_similar(
-        self, instruction: str, top_k: int = 3, device_id: str = ""
-    ) -> List[ExperienceEntry]:
+    def recall_similar(self, instruction: str, top_k: int = 3, device_id: str = "") -> List[ExperienceEntry]:
         """检索相似经验 (N-gram + 关键词匹配 + 时间权重)"""
         self._stats["queries_total"] += 1
 
@@ -251,15 +246,14 @@ class RAGMemory:
         # 中文 2-gram / 3-gram
         for n in (2, 3):
             for i in range(len(instruction) - n + 1):
-                gram = instruction[i:i+n]
+                gram = instruction[i : i + n]
                 if not gram.isspace():
                     keywords.add(gram.lower())
 
         scored = []
         for exp in self._experiences:
             score = 0.0
-            exp_text = (exp.instruction + " " + exp.agent_name + " " +
-                        " ".join(exp.tags)).lower()
+            exp_text = (exp.instruction + " " + exp.agent_name + " " + " ".join(exp.tags)).lower()
 
             # 关键词匹配
             for kw in keywords:
@@ -284,9 +278,7 @@ class RAGMemory:
         scored.sort(key=lambda x: x[0], reverse=True)
         return [exp for _, exp in scored[:top_k]]
 
-    def format_few_shot_context(
-        self, instruction: str, top_k: int = 2, device_id: str = ""
-    ) -> str:
+    def format_few_shot_context(self, instruction: str, top_k: int = 2, device_id: str = "") -> str:
         """将相似经验格式化为 Few-shot Context, 可注入 Agent system_prompt"""
         similar = self.recall_similar(instruction, top_k, device_id)
         if not similar:
@@ -301,18 +293,13 @@ class RAGMemory:
                 f"Outcome: {exp.final_output[:200]}"
             )
 
-        return (
-            "\n\nRELEVANT PAST EXPERIENCES (for reference):\n"
-            + "\n\n".join(sections) + "\n"
-        )
+        return "\n\nRELEVANT PAST EXPERIENCES (for reference):\n" + "\n\n".join(sections) + "\n"
 
     # ================================================================
     # 知识库检索
     # ================================================================
 
-    async def query_knowledge(
-        self, query: str, top_k: int = 5, sources: List[str] = None
-    ) -> List[KnowledgeChunk]:
+    async def query_knowledge(self, query: str, top_k: int = 5, sources: List[str] = None) -> List[KnowledgeChunk]:
         """
         从知识库检索相关片段 (Knowledge Core 查询入口)
 
@@ -334,19 +321,20 @@ class RAGMemory:
         # ── 1. Node_105 (UnifiedKnowledgeBase) — 主后端 ──────────────────
         try:
             from nodes.Node_105_UnifiedKnowledgeBase.main import kb as node105_kb
-            results = await asyncio.get_running_loop().run_in_executor(
-                None, node105_kb.search_hybrid, query, top_k
-            )
-            for r in (results or []):
-                chunks.append(KnowledgeChunk(
-                    chunk_id=getattr(r, "id", ""),
-                    content=getattr(r, "content", ""),
-                    source="Node_105",
-                    source_type=getattr(r, "source_type", "node"),
-                    relevance_score=0.8,
-                    tags=list(getattr(r, "metadata", {}).get("tags", [])),
-                    metadata=getattr(r, "metadata", {}),
-                ))
+
+            results = await asyncio.get_running_loop().run_in_executor(None, node105_kb.search_hybrid, query, top_k)
+            for r in results or []:
+                chunks.append(
+                    KnowledgeChunk(
+                        chunk_id=getattr(r, "id", ""),
+                        content=getattr(r, "content", ""),
+                        source="Node_105",
+                        source_type=getattr(r, "source_type", "node"),
+                        relevance_score=0.8,
+                        tags=list(getattr(r, "metadata", {}).get("tags", [])),
+                        metadata=getattr(r, "metadata", {}),
+                    )
+                )
         except Exception as e:
             logger.debug(f"Node_105 query failed: {e}")
 
@@ -354,9 +342,10 @@ class RAGMemory:
         if len(chunks) < top_k:
             try:
                 from nodes.Node_72_KnowledgeBase.knowledge_base_system import KnowledgeBaseSystem
+
                 kb72 = KnowledgeBaseSystem()
                 results = kb72.search(query, top_k=top_k - len(chunks))
-                for r in (results or []):
+                for r in results or []:
                     # KnowledgeBaseSystem.search() 返回 KnowledgeEntry dataclass
                     if hasattr(r, "content"):
                         content = r.content
@@ -368,15 +357,17 @@ class RAGMemory:
                         content = r.get("content", r.get("text", ""))
                         meta = r.get("metadata", {})
                         entry_id = r.get("id", "")
-                    chunks.append(KnowledgeChunk(
-                        chunk_id=entry_id,
-                        content=content,
-                        source="Node_72",
-                        source_type="node",
-                        relevance_score=meta.get("score", 0.0),
-                        tags=list(meta.get("tags", [])),
-                        metadata=meta,
-                    ))
+                    chunks.append(
+                        KnowledgeChunk(
+                            chunk_id=entry_id,
+                            content=content,
+                            source="Node_72",
+                            source_type="node",
+                            relevance_score=meta.get("score", 0.0),
+                            tags=list(meta.get("tags", [])),
+                            metadata=meta,
+                        )
+                    )
             except Exception as e:
                 logger.debug(f"Node_72 query failed: {e}")
 
@@ -384,6 +375,7 @@ class RAGMemory:
         if len(chunks) < top_k:
             try:
                 import httpx
+
                 async with httpx.AsyncClient(timeout=5) as client:
                     response = await client.post(
                         "http://localhost:8080/memory/recall",
@@ -392,15 +384,17 @@ class RAGMemory:
                     if response.status_code == 200:
                         data = response.json()
                         for mem in data.get("memories", []):
-                            chunks.append(KnowledgeChunk(
-                                chunk_id=mem.get("id", ""),
-                                content=mem.get("content", ""),
-                                source="Node_80_Memos",
-                                source_type="memos",
-                                relevance_score=mem.get("relevance_score", 0.5),
-                                tags=mem.get("tags", []),
-                                metadata=mem.get("metadata", {}),
-                            ))
+                            chunks.append(
+                                KnowledgeChunk(
+                                    chunk_id=mem.get("id", ""),
+                                    content=mem.get("content", ""),
+                                    source="Node_80_Memos",
+                                    source_type="memos",
+                                    relevance_score=mem.get("relevance_score", 0.5),
+                                    tags=mem.get("tags", []),
+                                    metadata=mem.get("metadata", {}),
+                                )
+                            )
             except Exception as e:
                 logger.debug(f"Node_80 memory recall failed: {e}")
 
@@ -414,14 +408,10 @@ class RAGMemory:
         sections = []
         for i, chunk in enumerate(chunks):
             sections.append(
-                f"[{i+1}] (source: {chunk.source}, score: {chunk.relevance_score:.2f})\n"
-                f"{chunk.content[:500]}"
+                f"[{i+1}] (source: {chunk.source}, score: {chunk.relevance_score:.2f})\n" f"{chunk.content[:500]}"
             )
 
-        return (
-            "\n\nRELEVANT KNOWLEDGE:\n"
-            + "\n\n".join(sections) + "\n"
-        )
+        return "\n\nRELEVANT KNOWLEDGE:\n" + "\n\n".join(sections) + "\n"
 
     def ingest_knowledge(
         self,
@@ -458,6 +448,7 @@ class RAGMemory:
         # ── 1. 写入 Node_105 (主后端，in-process) ────────────────────────
         try:
             from nodes.Node_105_UnifiedKnowledgeBase.main import kb as node105_kb
+
             entry_id = node105_kb.ingest_knowledge(
                 content=content,
                 source=source,
@@ -473,11 +464,13 @@ class RAGMemory:
         experience_entry = self.log_experience(
             agent_name=source,
             instruction=f"[ingest:{source_type}] {content[:120]}",
-            steps=[{
-                "thought": "Knowledge ingested into unified knowledge flow",
-                "action": "ingest_knowledge",
-                "observation": content,
-            }],
+            steps=[
+                {
+                    "thought": "Knowledge ingested into unified knowledge flow",
+                    "action": "ingest_knowledge",
+                    "observation": content,
+                }
+            ],
             final_output=content,
             success=True,
             tags=["knowledge_ingestion", source_type] + tags,
@@ -491,12 +484,11 @@ class RAGMemory:
     # 对话记忆 (桥接)
     # ================================================================
 
-    async def get_conversation_context(
-        self, session_id: str, max_turns: int = 10
-    ) -> List[Dict]:
+    async def get_conversation_context(self, session_id: str, max_turns: int = 10) -> List[Dict]:
         """获取对话记忆 (桥接 ai_intent)"""
         try:
             from core.ai_intent import get_conversation_memory
+
             memory = get_conversation_memory()
             return await memory.get_context(session_id, max_turns)
         except Exception:
@@ -522,10 +514,7 @@ class RAGMemory:
 
         # 统计相同指令前缀的出现次数
         prefix = self._extract_prefix(entry.instruction)
-        similar_count = sum(
-            1 for e in self._experiences
-            if self._extract_prefix(e.instruction) == prefix
-        )
+        similar_count = sum(1 for e in self._experiences if self._extract_prefix(e.instruction) == prefix)
 
         if similar_count >= 3:
             # 检查是否已有此 pattern
@@ -540,9 +529,9 @@ class RAGMemory:
                 "prefix": prefix,
                 "count": similar_count,
                 "success_rate": sum(
-                    1 for e in self._experiences
-                    if " ".join(e.instruction.split()[:3]).lower() == prefix and e.success
-                ) / similar_count,
+                    1 for e in self._experiences if " ".join(e.instruction.split()[:3]).lower() == prefix and e.success
+                )
+                / similar_count,
                 "suggested_optimization": self._suggest_optimization(prefix),
                 "detected_at": time.time(),
             }
@@ -552,10 +541,7 @@ class RAGMemory:
 
     def _suggest_optimization(self, prefix: str) -> str:
         """根据 pattern 生成优化建议"""
-        matching = [
-            e for e in self._experiences
-            if self._extract_prefix(e.instruction) == prefix
-        ]
+        matching = [e for e in self._experiences if self._extract_prefix(e.instruction) == prefix]
         if not matching:
             return ""
 
@@ -600,17 +586,19 @@ class RAGMemory:
                     line = line.strip()
                     if line:
                         data = json.loads(line)
-                        self._experiences.append(ExperienceEntry(
-                            experience_id=data.get("experience_id", ""),
-                            agent_name=data.get("agent_name", ""),
-                            device_id=data.get("device_id", ""),
-                            instruction=data.get("instruction", ""),
-                            steps=data.get("steps", []),
-                            final_output=data.get("final_output", ""),
-                            success=data.get("success", True),
-                            timestamp=data.get("timestamp", 0),
-                            tags=data.get("tags", []),
-                        ))
+                        self._experiences.append(
+                            ExperienceEntry(
+                                experience_id=data.get("experience_id", ""),
+                                agent_name=data.get("agent_name", ""),
+                                device_id=data.get("device_id", ""),
+                                instruction=data.get("instruction", ""),
+                                steps=data.get("steps", []),
+                                final_output=data.get("final_output", ""),
+                                success=data.get("success", True),
+                                timestamp=data.get("timestamp", 0),
+                                tags=data.get("tags", []),
+                            )
+                        )
             self._stats["experiences_total"] = len(self._experiences)
             logger.info(f"Loaded {len(self._experiences)} historical experiences")
         except Exception as e:

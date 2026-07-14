@@ -56,5 +56,6 @@ def test_compose_base_shape(monkeypatch):
 
     class _OK:
         returncode = 0
+
     monkeypatch.setattr(cr.subprocess, "run", lambda *a, **k: _OK())
     assert cr.compose_base("docker") == ["/usr/bin/docker", "compose"]

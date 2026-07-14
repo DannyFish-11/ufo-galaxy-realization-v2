@@ -683,12 +683,10 @@ _CONTRACT_BOUNDARY_CATALOG: List[ContractBoundaryRecord] = [
         kind=ContractBoundaryKind.projection_consumption,
         status=FinalizationStatus.HARDENING,
         center_authority=(
-            "core.projection_surface_bridge.ProjectionSurfaceBridge + "
-            "core.outward_runtime_truth.OutwardRuntimeTruth"
+            "core.projection_surface_bridge.ProjectionSurfaceBridge + " "core.outward_runtime_truth.OutwardRuntimeTruth"
         ),
         android_counterpart=(
-            "Android projection consumption via projection_snapshot AIP event "
-            "or REST /api/v1/projection/snapshot"
+            "Android projection consumption via projection_snapshot AIP event " "or REST /api/v1/projection/snapshot"
         ),
         description=(
             "Runtime truth and projection outputs consumed by Android must "
@@ -730,9 +728,7 @@ _CONTRACT_BOUNDARY_CATALOG: List[ContractBoundaryRecord] = [
         boundary_id="CONTRACT-005",
         kind=ContractBoundaryKind.capability_descriptor,
         status=FinalizationStatus.STABLE,
-        center_authority=(
-            "core.capability_assimilation.CapabilityAssimilationLayer"
-        ),
+        center_authority=("core.capability_assimilation.CapabilityAssimilationLayer"),
         android_counterpart=(
             "Android capability report via device_capabilities AIP message; "
             "capability descriptor fields: capabilities, capability_flags, "
@@ -774,12 +770,8 @@ _CONTRACT_BOUNDARY_CATALOG: List[ContractBoundaryRecord] = [
         boundary_id="CONTRACT-006",
         kind=ContractBoundaryKind.result_surface,
         status=FinalizationStatus.HARDENING,
-        center_authority=(
-            "core.delegated_runtime_execution_tracker.DelegatedRuntimeExecutionTracker"
-        ),
-        android_counterpart=(
-            "Android result report via task_result or execution_result AIP message"
-        ),
+        center_authority=("core.delegated_runtime_execution_tracker.DelegatedRuntimeExecutionTracker"),
+        android_counterpart=("Android result report via task_result or execution_result AIP message"),
         description=(
             "Delegated execution result semantics are center-authoritative. "
             "Android must report results using canonical terminal state values "
@@ -821,8 +813,7 @@ _CONTRACT_BOUNDARY_CATALOG: List[ContractBoundaryRecord] = [
         status=FinalizationStatus.LEGACY_ONLY,
         center_authority="core.routes.compat",
         android_counterpart=(
-            "Android REST calls to POST /api/devices/register and "
-            "GET /api/devices/list (legacy paths, COMPAT-006)"
+            "Android REST calls to POST /api/devices/register and " "GET /api/devices/list (legacy paths, COMPAT-006)"
         ),
         description=(
             "The legacy REST compat aliases "
@@ -914,13 +905,8 @@ _DRIFT_VECTOR_CATALOG: List[DriftVectorRecord] = [
         vector_id="DRIFT-001",
         kind=DriftVectorKind.enum_vocabulary,
         severity="MEDIUM",
-        v2_surface=(
-            "core.cross_repo_protocol_consistency "
-            "(terminal_state_timeout_variant allowance)"
-        ),
-        android_surface=(
-            "Android task_result AIP message terminal_state field"
-        ),
+        v2_surface=("core.cross_repo_protocol_consistency " "(terminal_state_timeout_variant allowance)"),
+        android_surface=("Android task_result AIP message terminal_state field"),
         description=(
             "Android uses 'timeout' as a terminal state value while the "
             "center-side canonical set uses 'timed_out'.  A transitional "
@@ -951,13 +937,8 @@ _DRIFT_VECTOR_CATALOG: List[DriftVectorRecord] = [
         vector_id="DRIFT-002",
         kind=DriftVectorKind.enum_vocabulary,
         severity="LOW",
-        v2_surface=(
-            "core.schemas.ugcp.shared._VALID_TERMINAL_STATES "
-            "(contains 'interrupted' as legacy value)"
-        ),
-        android_surface=(
-            "Android task_result AIP message terminal_state field"
-        ),
+        v2_surface=("core.schemas.ugcp.shared._VALID_TERMINAL_STATES " "(contains 'interrupted' as legacy value)"),
+        android_surface=("Android task_result AIP message terminal_state field"),
         description=(
             "'interrupted' is present in the shared schema _VALID_TERMINAL_STATES "
             "but does not appear in DelegatedExecutionPhase terminal set and "
@@ -988,12 +969,8 @@ _DRIFT_VECTOR_CATALOG: List[DriftVectorRecord] = [
         vector_id="DRIFT-003",
         kind=DriftVectorKind.authority_ambiguity,
         severity="MEDIUM",
-        v2_surface=(
-            "core.capability_registry.CapabilityRegistry (COMPAT-002)"
-        ),
-        android_surface=(
-            "Android capability report ingestion and routing decisions"
-        ),
+        v2_surface=("core.capability_registry.CapabilityRegistry (COMPAT-002)"),
+        android_surface=("Android capability report ingestion and routing decisions"),
         description=(
             "The governance boundary between CapabilityRegistry (permitted for "
             "device-local bookkeeping) and CapabilityAssimilationLayer (required "
@@ -1014,8 +991,7 @@ _DRIFT_VECTOR_CATALOG: List[DriftVectorRecord] = [
             "analysis is prescribed."
         ),
         notes=(
-            "Medium severity: the ambiguity is documented and fenced; "
-            "call-site audit is the remaining closure step."
+            "Medium severity: the ambiguity is documented and fenced; " "call-site audit is the remaining closure step."
         ),
     ),
     # -------------------------------------------------------------------------
@@ -1025,12 +1001,8 @@ _DRIFT_VECTOR_CATALOG: List[DriftVectorRecord] = [
         vector_id="DRIFT-004",
         kind=DriftVectorKind.authority_ambiguity,
         severity="LOW",
-        v2_surface=(
-            "core.local_agent_runtime.LocalAgentRuntime (COMPAT-004)"
-        ),
-        android_surface=(
-            "Android co-hosted LocalAgentRuntime instances"
-        ),
+        v2_surface=("core.local_agent_runtime.LocalAgentRuntime (COMPAT-004)"),
+        android_surface=("Android co-hosted LocalAgentRuntime instances"),
         description=(
             "LocalAgentRuntime has a retired server-side planning role and a "
             "retained device-side sandbox role.  The boundary between these "
@@ -1058,12 +1030,8 @@ _DRIFT_VECTOR_CATALOG: List[DriftVectorRecord] = [
         vector_id="DRIFT-005",
         kind=DriftVectorKind.lifecycle_semantics,
         severity="MEDIUM",
-        v2_surface=(
-            "desktop_projection.projection_engine.ProjectionEngine (COMPAT-005)"
-        ),
-        android_surface=(
-            "Android projection_snapshot consumption"
-        ),
+        v2_surface=("desktop_projection.projection_engine.ProjectionEngine (COMPAT-005)"),
+        android_surface=("Android projection_snapshot consumption"),
         description=(
             "ProjectionEngine can assemble projection outputs without delegating "
             "to ProjectionSurfaceBridge, meaning Android could receive "
@@ -1095,9 +1063,7 @@ _DRIFT_VECTOR_CATALOG: List[DriftVectorRecord] = [
         kind=DriftVectorKind.transitional_expansion,
         severity="LOW",
         v2_surface="core.routes.compat (COMPAT-006)",
-        android_surface=(
-            "Android REST API calls to /api/devices/* legacy paths"
-        ),
+        android_surface=("Android REST API calls to /api/devices/* legacy paths"),
         description=(
             "The legacy REST compat aliases (/api/devices/*) have been present "
             "for multiple batch PRs with no confirmed retirement timeline.  "
@@ -1221,30 +1187,21 @@ def run_contract_boundary_gate(
     legacy_only = [r for r in boundaries if r.status == FinalizationStatus.LEGACY_ONLY]
 
     # Unaddressed drift vectors for this boundary kind
-    drift_vectors = [
-        v for v in _DRIFT_VECTOR_CATALOG
-        if not v.addressed
-    ]
+    drift_vectors = [v for v in _DRIFT_VECTOR_CATALOG if not v.addressed]
     # Narrow to drift vectors that are semantically related to this boundary
     # (heuristic: kind name appears in v2_surface or android_surface)
     kind_str = kind.value.lower()
     relevant_drift = [
-        v for v in drift_vectors
-        if kind_str in v.v2_surface.lower() or kind_str in v.android_surface.lower()
+        v for v in drift_vectors if kind_str in v.v2_surface.lower() or kind_str in v.android_surface.lower()
     ]
 
     issues: List[str] = []
     if ambiguous:
         for r in ambiguous:
-            issues.append(
-                f"AMBIGUOUS boundary {r.boundary_id}: {r.description[:80]}..."
-            )
+            issues.append(f"AMBIGUOUS boundary {r.boundary_id}: {r.description[:80]}...")
     if relevant_drift:
         for v in relevant_drift:
-            issues.append(
-                f"Unaddressed drift vector {v.vector_id} ({v.severity}): "
-                f"{v.description[:80]}..."
-            )
+            issues.append(f"Unaddressed drift vector {v.vector_id} ({v.severity}): " f"{v.description[:80]}...")
 
     if ambiguous or relevant_drift:
         verdict = FinalizationGateVerdict.fail
@@ -1309,8 +1266,7 @@ def run_drift_vector_gate() -> FinalizationGateResult:
     issues: List[str] = []
     for v in unaddressed:
         issues.append(
-            f"Unaddressed drift vector {v.vector_id} ({v.severity}, {v.kind.value}): "
-            f"{v.description[:80]}..."
+            f"Unaddressed drift vector {v.vector_id} ({v.severity}, {v.kind.value}): " f"{v.description[:80]}..."
         )
 
     if high_unaddressed:
@@ -1327,10 +1283,7 @@ def run_drift_vector_gate() -> FinalizationGateResult:
         )
     else:
         verdict = FinalizationGateVerdict.pass_
-        details = (
-            f"Drift vector gate: all {len(all_vectors)} vectors addressed.  "
-            "No unaddressed drift detected."
-        )
+        details = f"Drift vector gate: all {len(all_vectors)} vectors addressed.  " "No unaddressed drift detected."
 
     return FinalizationGateResult(
         gate_id="aggregate_drift_vector",
@@ -1388,9 +1341,7 @@ def build_finalization_snapshot() -> ContractFinalizationSnapshot:
 
     addressed = sum(1 for v in drift_vectors if v.addressed)
     unaddressed = sum(1 for v in drift_vectors if not v.addressed)
-    high_unaddressed = sum(
-        1 for v in drift_vectors if not v.addressed and v.severity == "HIGH"
-    )
+    high_unaddressed = sum(1 for v in drift_vectors if not v.addressed and v.severity == "HIGH")
 
     finalization_complete = ambiguous == 0 and high_unaddressed == 0
 
@@ -1433,9 +1384,5 @@ def is_contract_finalization_complete() -> bool:
     bool
     """
     ambiguous = get_ambiguous_boundaries()
-    high_unaddressed = [
-        v
-        for v in _DRIFT_VECTOR_CATALOG
-        if not v.addressed and v.severity == "HIGH"
-    ]
+    high_unaddressed = [v for v in _DRIFT_VECTOR_CATALOG if not v.addressed and v.severity == "HIGH"]
     return len(ambiguous) == 0 and len(high_unaddressed) == 0

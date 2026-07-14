@@ -27,10 +27,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers — mock objects shaped like real runtime data
 # ---------------------------------------------------------------------------
+
 
 def _make_formation_summary(
     formation_id: str = "formation_001",
@@ -119,9 +119,11 @@ def _make_decomposition(
 # 1. Serialisation stability
 # ---------------------------------------------------------------------------
 
+
 class TestSerialisationStability:
     def test_to_dict_is_json_safe(self):
         from contracts.mesh_session import build_mesh_session
+
         session = build_mesh_session(
             source_device_id="dev_a",
             primary_device_id="dev_b",
@@ -133,6 +135,7 @@ class TestSerialisationStability:
 
     def test_to_json_round_trip(self):
         from contracts.mesh_session import MeshSession, build_mesh_session
+
         session = build_mesh_session(
             source_device_id="dev_a",
             primary_device_id="dev_b",
@@ -148,6 +151,7 @@ class TestSerialisationStability:
 
     def test_from_dict_tolerates_extra_fields(self):
         from contracts.mesh_session import MeshSession
+
         d = {
             "session_id": "msess_aaa",
             "source_device_id": "dev_x",
@@ -162,6 +166,7 @@ class TestSerialisationStability:
 
     def test_from_dict_tolerates_missing_optionals(self):
         from contracts.mesh_session import MeshSession
+
         session = MeshSession.from_dict({"session_id": "msess_min"})
         assert session.session_id == "msess_min"
         assert session.participants == []
@@ -171,6 +176,7 @@ class TestSerialisationStability:
 # ---------------------------------------------------------------------------
 # 2. Stable field names
 # ---------------------------------------------------------------------------
+
 
 class TestStableFieldNames:
     REQUIRED_TOP_LEVEL_FIELDS = [
@@ -195,6 +201,7 @@ class TestStableFieldNames:
 
     def test_all_fields_present_in_to_dict(self):
         from contracts.mesh_session import build_mesh_session
+
         session = build_mesh_session(
             source_device_id="dev_a",
             primary_device_id="dev_b",
@@ -205,6 +212,7 @@ class TestStableFieldNames:
 
     def test_participant_fields_present(self):
         from contracts.mesh_session import MeshSessionParticipant
+
         p = MeshSessionParticipant(
             device_id="dev_a",
             roles=["primary"],
@@ -218,6 +226,7 @@ class TestStableFieldNames:
 
     def test_subtask_assignment_fields_present(self):
         from contracts.mesh_session import MeshSubtaskAssignment
+
         a = MeshSubtaskAssignment(
             subtask_id="sub_001",
             device_id="dev_a",
@@ -234,9 +243,11 @@ class TestStableFieldNames:
 # 3. Enum values
 # ---------------------------------------------------------------------------
 
+
 class TestEnumValues:
     def test_session_status_values(self):
         from contracts.mesh_session import MeshSessionStatus
+
         assert MeshSessionStatus.PENDING.value == "pending"
         assert MeshSessionStatus.ACTIVE.value == "active"
         assert MeshSessionStatus.MERGING.value == "merging"
@@ -247,6 +258,7 @@ class TestEnumValues:
 
     def test_merge_policy_values(self):
         from contracts.mesh_session import MeshMergePolicy
+
         assert MeshMergePolicy.NO_MERGE.value == "no_merge"
         assert MeshMergePolicy.SEQUENTIAL.value == "sequential"
         assert MeshMergePolicy.PARALLEL.value == "parallel"
@@ -256,6 +268,7 @@ class TestEnumValues:
 
     def test_barrier_posture_values(self):
         from contracts.mesh_session import MeshBarrierPosture
+
         assert MeshBarrierPosture.NO_BARRIER.value == "no_barrier"
         assert MeshBarrierPosture.WAIT_PRIMARY.value == "wait_primary"
         assert MeshBarrierPosture.WAIT_ALL.value == "wait_all"
@@ -264,7 +277,8 @@ class TestEnumValues:
         assert MeshBarrierPosture.UNKNOWN.value == "unknown"
 
     def test_enum_serialised_as_string(self):
-        from contracts.mesh_session import build_mesh_session, MeshSessionStatus, MeshMergePolicy, MeshBarrierPosture
+        from contracts.mesh_session import MeshBarrierPosture, MeshMergePolicy, MeshSessionStatus, build_mesh_session
+
         session = build_mesh_session(
             status=MeshSessionStatus.ACTIVE,
             merge_policy=MeshMergePolicy.PARALLEL,
@@ -280,9 +294,11 @@ class TestEnumValues:
 # 4. Sub-contracts
 # ---------------------------------------------------------------------------
 
+
 class TestSubContracts:
     def test_participant_defaults(self):
         from contracts.mesh_session import MeshSessionParticipant
+
         p = MeshSessionParticipant()
         assert p.device_id == ""
         assert p.roles == []
@@ -292,6 +308,7 @@ class TestSubContracts:
 
     def test_participant_to_dict_round_trip(self):
         from contracts.mesh_session import MeshSessionParticipant
+
         p = MeshSessionParticipant(
             device_id="dev_001",
             roles=["primary", "source"],
@@ -310,6 +327,7 @@ class TestSubContracts:
 
     def test_subtask_assignment_defaults(self):
         from contracts.mesh_session import MeshSubtaskAssignment
+
         a = MeshSubtaskAssignment()
         assert a.device_id == ""
         assert a.status == "pending"
@@ -318,6 +336,7 @@ class TestSubContracts:
 
     def test_subtask_assignment_to_dict(self):
         from contracts.mesh_session import MeshSubtaskAssignment
+
         a = MeshSubtaskAssignment(
             subtask_id="sub_abc",
             device_id="dev_b",
@@ -335,9 +354,11 @@ class TestSubContracts:
 # 5. from_device_formation_summary
 # ---------------------------------------------------------------------------
 
+
 class TestFromDeviceFormationSummary:
     def test_basic_formation(self):
         from contracts.mesh_session import from_device_formation_summary
+
         summary = _make_formation_summary()
         session = from_device_formation_summary(summary)
         assert session.source_device_id == "phone_001"
@@ -348,24 +369,28 @@ class TestFromDeviceFormationSummary:
 
     def test_mesh_id_from_formation_id(self):
         from contracts.mesh_session import from_device_formation_summary
+
         summary = _make_formation_summary(formation_id="form_xyz")
         session = from_device_formation_summary(summary)
         assert session.mesh_id == "form_xyz"
 
     def test_merge_policy_mapped(self):
-        from contracts.mesh_session import from_device_formation_summary, MeshMergePolicy
+        from contracts.mesh_session import MeshMergePolicy, from_device_formation_summary
+
         summary = _make_formation_summary(merge_policy="parallel")
         session = from_device_formation_summary(summary)
         assert session.merge_policy == MeshMergePolicy.PARALLEL
 
     def test_barrier_posture_mapped(self):
-        from contracts.mesh_session import from_device_formation_summary, MeshBarrierPosture
+        from contracts.mesh_session import MeshBarrierPosture, from_device_formation_summary
+
         summary = _make_formation_summary(barrier_posture="wait_primary")
         session = from_device_formation_summary(summary)
         assert session.barrier_posture == MeshBarrierPosture.WAIT_PRIMARY
 
     def test_merge_owner_populated(self):
         from contracts.mesh_session import from_device_formation_summary
+
         summary = _make_formation_summary(merge_owner="merge_dev_99")
         session = from_device_formation_summary(summary)
         assert session.merge_owner_device_id == "merge_dev_99"
@@ -373,6 +398,7 @@ class TestFromDeviceFormationSummary:
 
     def test_fallback_support_in_participants(self):
         from contracts.mesh_session import from_device_formation_summary
+
         summary = _make_formation_summary(
             fallback=["fallback_003"],
             support=["support_004"],
@@ -386,6 +412,7 @@ class TestFromDeviceFormationSummary:
 
     def test_optional_ids_passed_through(self):
         from contracts.mesh_session import from_device_formation_summary
+
         summary = _make_formation_summary()
         session = from_device_formation_summary(
             summary,
@@ -398,7 +425,8 @@ class TestFromDeviceFormationSummary:
         assert session.trace_id == "trace_abc"
 
     def test_none_returns_stub(self):
-        from contracts.mesh_session import from_device_formation_summary, MeshSessionStatus
+        from contracts.mesh_session import MeshSessionStatus, from_device_formation_summary
+
         session = from_device_formation_summary(None)
         assert isinstance(session.session_id, str)
         assert session.status == MeshSessionStatus.UNKNOWN
@@ -406,6 +434,7 @@ class TestFromDeviceFormationSummary:
 
     def test_serialisable(self):
         from contracts.mesh_session import from_device_formation_summary
+
         summary = _make_formation_summary()
         session = from_device_formation_summary(summary)
         json.dumps(session.to_dict())
@@ -415,9 +444,11 @@ class TestFromDeviceFormationSummary:
 # 6. from_cross_device_routing_summary
 # ---------------------------------------------------------------------------
 
+
 class TestFromCrossDeviceRoutingSummary:
     def test_basic_routing(self):
         from contracts.mesh_session import from_cross_device_routing_summary
+
         summary = _make_routing_summary()
         session = from_cross_device_routing_summary(summary)
         assert session.source_device_id == "phone_001"
@@ -425,21 +456,24 @@ class TestFromCrossDeviceRoutingSummary:
         assert session.mesh_id == "mesh_alpha"
 
     def test_split_posture_maps_to_parallel_merge(self):
-        from contracts.mesh_session import from_cross_device_routing_summary, MeshMergePolicy, MeshBarrierPosture
+        from contracts.mesh_session import MeshBarrierPosture, MeshMergePolicy, from_cross_device_routing_summary
+
         summary = _make_routing_summary(routing_posture="split_execution")
         session = from_cross_device_routing_summary(summary)
         assert session.merge_policy == MeshMergePolicy.PARALLEL
         assert session.barrier_posture == MeshBarrierPosture.WAIT_ALL
 
     def test_sequential_posture_maps_correctly(self):
-        from contracts.mesh_session import from_cross_device_routing_summary, MeshMergePolicy, MeshBarrierPosture
+        from contracts.mesh_session import MeshBarrierPosture, MeshMergePolicy, from_cross_device_routing_summary
+
         summary = _make_routing_summary(routing_posture="sequential")
         session = from_cross_device_routing_summary(summary)
         assert session.merge_policy == MeshMergePolicy.SEQUENTIAL
         assert session.barrier_posture == MeshBarrierPosture.WAIT_PRIMARY
 
     def test_remote_posture_maps_to_no_merge(self):
-        from contracts.mesh_session import from_cross_device_routing_summary, MeshMergePolicy, MeshBarrierPosture
+        from contracts.mesh_session import MeshBarrierPosture, MeshMergePolicy, from_cross_device_routing_summary
+
         summary = _make_routing_summary(routing_posture="remote_required")
         session = from_cross_device_routing_summary(summary)
         assert session.merge_policy == MeshMergePolicy.NO_MERGE
@@ -447,6 +481,7 @@ class TestFromCrossDeviceRoutingSummary:
 
     def test_assigned_devices_in_participants(self):
         from contracts.mesh_session import from_cross_device_routing_summary
+
         summary = _make_routing_summary(
             assigned_device_ids=["dev_c", "dev_d"],
         )
@@ -456,13 +491,15 @@ class TestFromCrossDeviceRoutingSummary:
         assert "dev_d" in device_ids
 
     def test_none_returns_stub(self):
-        from contracts.mesh_session import from_cross_device_routing_summary, MeshSessionStatus
+        from contracts.mesh_session import MeshSessionStatus, from_cross_device_routing_summary
+
         session = from_cross_device_routing_summary(None)
         assert session.status == MeshSessionStatus.UNKNOWN
         assert session.metadata.get("empty") is True
 
     def test_serialisable(self):
         from contracts.mesh_session import from_cross_device_routing_summary
+
         summary = _make_routing_summary()
         session = from_cross_device_routing_summary(summary)
         json.dumps(session.to_dict())
@@ -472,9 +509,11 @@ class TestFromCrossDeviceRoutingSummary:
 # 7. from_constellation_decomposition
 # ---------------------------------------------------------------------------
 
+
 class TestFromConstellationDecomposition:
     def test_basic_decomposition(self):
         from contracts.mesh_session import from_constellation_decomposition
+
         subtasks = [
             _make_subtask("sub_1", device_id="dev_a", device_type="phone"),
             _make_subtask("sub_2", device_id="dev_b", device_type="tablet"),
@@ -491,6 +530,7 @@ class TestFromConstellationDecomposition:
 
     def test_subtask_status_mapped(self):
         from contracts.mesh_session import from_constellation_decomposition
+
         subtasks = [
             _make_subtask("sub_1", status="success"),
             _make_subtask("sub_2", status="failed"),
@@ -502,7 +542,8 @@ class TestFromConstellationDecomposition:
         assert statuses["sub_2"] == "failed"
 
     def test_session_status_inferred_all_success(self):
-        from contracts.mesh_session import from_constellation_decomposition, MeshSessionStatus
+        from contracts.mesh_session import MeshSessionStatus, from_constellation_decomposition
+
         subtasks = [
             _make_subtask("sub_1", status="success"),
             _make_subtask("sub_2", status="success"),
@@ -512,7 +553,8 @@ class TestFromConstellationDecomposition:
         assert session.status == MeshSessionStatus.COMPLETED
 
     def test_session_status_inferred_any_failed(self):
-        from contracts.mesh_session import from_constellation_decomposition, MeshSessionStatus
+        from contracts.mesh_session import MeshSessionStatus, from_constellation_decomposition
+
         subtasks = [
             _make_subtask("sub_1", status="success"),
             _make_subtask("sub_2", status="failed"),
@@ -523,6 +565,7 @@ class TestFromConstellationDecomposition:
 
     def test_multi_device_required_when_multiple_devices(self):
         from contracts.mesh_session import from_constellation_decomposition
+
         subtasks = [
             _make_subtask("sub_1", device_id="dev_a"),
             _make_subtask("sub_2", device_id="dev_b"),
@@ -533,6 +576,7 @@ class TestFromConstellationDecomposition:
 
     def test_single_device_not_multi_required(self):
         from contracts.mesh_session import from_constellation_decomposition
+
         subtasks = [
             _make_subtask("sub_1", device_id="dev_a"),
             _make_subtask("sub_2", device_id="dev_a"),
@@ -543,6 +587,7 @@ class TestFromConstellationDecomposition:
 
     def test_capability_required_from_device_type(self):
         from contracts.mesh_session import from_constellation_decomposition
+
         subtasks = [_make_subtask("sub_1", device_id="dev_a", device_type="camera_device")]
         decomp = _make_decomposition(subtasks=subtasks)
         session = from_constellation_decomposition(decomp)
@@ -550,13 +595,15 @@ class TestFromConstellationDecomposition:
         assert assignment.capability_required == "camera_device"
 
     def test_none_returns_stub(self):
-        from contracts.mesh_session import from_constellation_decomposition, MeshSessionStatus
+        from contracts.mesh_session import MeshSessionStatus, from_constellation_decomposition
+
         session = from_constellation_decomposition(None)
         assert session.status == MeshSessionStatus.UNKNOWN
         assert session.metadata.get("empty") is True
 
     def test_serialisable(self):
         from contracts.mesh_session import from_constellation_decomposition
+
         subtasks = [_make_subtask("sub_1", device_id="dev_a")]
         decomp = _make_decomposition(subtasks=subtasks)
         session = from_constellation_decomposition(decomp)
@@ -567,9 +614,11 @@ class TestFromConstellationDecomposition:
 # 8. build_mesh_session
 # ---------------------------------------------------------------------------
 
+
 class TestBuildMeshSession:
     def test_defaults(self):
-        from contracts.mesh_session import build_mesh_session, MeshSessionStatus, MeshMergePolicy, MeshBarrierPosture
+        from contracts.mesh_session import MeshBarrierPosture, MeshMergePolicy, MeshSessionStatus, build_mesh_session
+
         session = build_mesh_session()
         assert session.session_id.startswith("msess_")
         assert session.status == MeshSessionStatus.PENDING
@@ -579,7 +628,8 @@ class TestBuildMeshSession:
         assert session.subtask_assignments == []
 
     def test_explicit_params(self):
-        from contracts.mesh_session import build_mesh_session, MeshSessionStatus, MeshMergePolicy, MeshBarrierPosture
+        from contracts.mesh_session import MeshBarrierPosture, MeshMergePolicy, MeshSessionStatus, build_mesh_session
+
         session = build_mesh_session(
             source_device_id="phone",
             primary_device_id="tablet",
@@ -610,7 +660,8 @@ class TestBuildMeshSession:
         assert session.metadata["custom"] == "value"
 
     def test_with_participants(self):
-        from contracts.mesh_session import build_mesh_session, MeshSessionParticipant
+        from contracts.mesh_session import MeshSessionParticipant, build_mesh_session
+
         p = MeshSessionParticipant(device_id="dev_a", roles=["primary"])
         session = build_mesh_session(participants=[p])
         assert len(session.participants) == 1
@@ -621,9 +672,11 @@ class TestBuildMeshSession:
 # 9. Graceful handling of partial / missing data
 # ---------------------------------------------------------------------------
 
+
 class TestGracefulPartialData:
     def test_formation_summary_with_no_device_ids(self):
         from contracts.mesh_session import from_device_formation_summary
+
         summary = MagicMock()
         summary.formation_id = ""
         summary.source_device_id = ""
@@ -643,18 +696,21 @@ class TestGracefulPartialData:
 
     def test_routing_summary_missing_attrs(self):
         from contracts.mesh_session import from_cross_device_routing_summary
+
         summary = MagicMock(spec=[])  # no attributes
         session = from_cross_device_routing_summary(summary)
         assert session is not None
 
     def test_decomposition_with_empty_subtasks(self):
         from contracts.mesh_session import from_constellation_decomposition
+
         decomp = _make_decomposition(subtasks=[])
         session = from_constellation_decomposition(decomp)
         assert session.subtask_assignments == []
 
     def test_decomposition_subtask_with_missing_fields(self):
         from contracts.mesh_session import from_constellation_decomposition
+
         bad_subtask = MagicMock(spec=["task_id"])
         bad_subtask.task_id = "sub_bad"
         decomp = _make_decomposition(subtasks=[bad_subtask])
@@ -664,6 +720,7 @@ class TestGracefulPartialData:
 
     def test_participant_with_all_nones(self):
         from contracts.mesh_session import MeshSessionParticipant
+
         p = MeshSessionParticipant(device_id="dev", online=None, health_score=None)
         d = p.to_dict()
         assert d["online"] is None
@@ -672,6 +729,7 @@ class TestGracefulPartialData:
 
     def test_from_dict_minimal_session(self):
         from contracts.mesh_session import MeshSession
+
         session = MeshSession.from_dict({})
         # Should have defaults, not crash
         assert isinstance(session.session_id, str)
@@ -682,45 +740,56 @@ class TestGracefulPartialData:
 # 10. contracts package root re-exports
 # ---------------------------------------------------------------------------
 
+
 class TestContractsPackageReExports:
     def test_mesh_session_importable_from_contracts(self):
         from contracts import MeshSession
+
         assert MeshSession is not None
 
     def test_mesh_session_participant_importable(self):
         from contracts import MeshSessionParticipant
+
         assert MeshSessionParticipant is not None
 
     def test_mesh_subtask_assignment_importable(self):
         from contracts import MeshSubtaskAssignment
+
         assert MeshSubtaskAssignment is not None
 
     def test_mesh_merge_policy_importable(self):
         from contracts import MeshMergePolicy
+
         assert MeshMergePolicy is not None
 
     def test_mesh_barrier_posture_importable(self):
         from contracts import MeshBarrierPosture
+
         assert MeshBarrierPosture is not None
 
     def test_mesh_session_status_importable(self):
         from contracts import MeshSessionStatus
+
         assert MeshSessionStatus is not None
 
     def test_build_mesh_session_importable(self):
         from contracts import build_mesh_session
+
         assert callable(build_mesh_session)
 
     def test_from_constellation_decomposition_importable(self):
         from contracts import from_constellation_decomposition
+
         assert callable(from_constellation_decomposition)
 
     def test_mesh_session_from_formation_importable(self):
         from contracts import mesh_session_from_formation
+
         assert callable(mesh_session_from_formation)
 
     def test_mesh_session_from_routing_importable(self):
         from contracts import mesh_session_from_routing
+
         assert callable(mesh_session_from_routing)
 
 
@@ -728,29 +797,36 @@ class TestContractsPackageReExports:
 # 11. core.unified package re-exports
 # ---------------------------------------------------------------------------
 
+
 class TestCoreUnifiedReExports:
     def test_mesh_session_importable_from_core_unified(self):
         from core.unified import MeshSession
+
         assert MeshSession is not None
 
     def test_build_mesh_session_importable_from_core_unified(self):
         from core.unified import build_mesh_session
+
         assert callable(build_mesh_session)
 
     def test_mesh_session_status_importable_from_core_unified(self):
         from core.unified import MeshSessionStatus
+
         assert MeshSessionStatus is not None
 
     def test_from_constellation_decomposition_importable_from_core_unified(self):
         from core.unified import from_constellation_decomposition
+
         assert callable(from_constellation_decomposition)
 
     def test_mesh_session_from_formation_importable_from_core_unified(self):
         from core.unified import mesh_session_from_formation
+
         assert callable(mesh_session_from_formation)
 
     def test_mesh_session_from_routing_importable_from_core_unified(self):
         from core.unified import mesh_session_from_routing
+
         assert callable(mesh_session_from_routing)
 
 
@@ -758,9 +834,11 @@ class TestCoreUnifiedReExports:
 # 12. BodyMeshRegistry.get_mesh_session()
 # ---------------------------------------------------------------------------
 
+
 class TestBodyMeshRegistryGetMeshSession:
     def test_empty_registry_returns_default_session(self):
         from core.mesh.body_mesh_registry import BodyMeshRegistry
+
         registry = BodyMeshRegistry()
         session = registry.get_mesh_session(mesh_id="test_mesh")
         assert session is not None
@@ -769,6 +847,7 @@ class TestBodyMeshRegistryGetMeshSession:
 
     def test_single_device_session(self):
         from core.mesh.body_mesh_registry import BodyMeshRegistry, DeviceRole
+
         registry = BodyMeshRegistry()
         registry.register("device_alpha", roles=[DeviceRole.PERCEPTION])
         session = registry.get_mesh_session(mesh_id="test_mesh")
@@ -778,6 +857,7 @@ class TestBodyMeshRegistryGetMeshSession:
 
     def test_multi_device_session_marks_multi_required(self):
         from core.mesh.body_mesh_registry import BodyMeshRegistry, DeviceRole
+
         registry = BodyMeshRegistry()
         registry.register("dev_x", roles=[DeviceRole.PERCEPTION])
         registry.register("dev_y", roles=[DeviceRole.ACTION])
@@ -790,6 +870,7 @@ class TestBodyMeshRegistryGetMeshSession:
 
     def test_session_serialisable(self):
         from core.mesh.body_mesh_registry import BodyMeshRegistry, DeviceRole
+
         registry = BodyMeshRegistry()
         registry.register("dev_z", roles=[DeviceRole.PRESENCE])
         session = registry.get_mesh_session(mesh_id="test_mesh")
@@ -798,6 +879,7 @@ class TestBodyMeshRegistryGetMeshSession:
 
     def test_mesh_id_embedded_in_session(self):
         from core.mesh.body_mesh_registry import BodyMeshRegistry, DeviceRole
+
         registry = BodyMeshRegistry()
         registry.register("dev_a", roles=[DeviceRole.PERCEPTION])
         session = registry.get_mesh_session(mesh_id="my_mesh_id")
@@ -809,10 +891,12 @@ class TestBodyMeshRegistryGetMeshSession:
 # 13. Projection endpoint — GET /api/v1/mesh/session
 # ---------------------------------------------------------------------------
 
+
 class TestProjectionEndpoint:
     def test_endpoint_registered_in_router(self):
         """The /api/v1/mesh/session GET route should be present."""
         from core.routes.projection import create_router
+
         router = create_router()
         routes = [r.path for r in router.routes]
         assert "/api/v1/mesh/session" in routes
@@ -821,6 +905,7 @@ class TestProjectionEndpoint:
     async def test_endpoint_returns_valid_session(self):
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
+
         from core.routes.projection import create_router
 
         app = FastAPI()
@@ -838,6 +923,7 @@ class TestProjectionEndpoint:
     async def test_endpoint_is_additive_does_not_break_memberships(self):
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
+
         from core.routes.projection import create_router
 
         app = FastAPI()
@@ -862,9 +948,11 @@ class TestProjectionEndpoint:
 # 14. to_compact_summary
 # ---------------------------------------------------------------------------
 
+
 class TestCompactSummary:
     def test_compact_summary_has_expected_keys(self):
         from contracts.mesh_session import build_mesh_session
+
         session = build_mesh_session(
             source_device_id="dev_a",
             primary_device_id="dev_b",
@@ -872,20 +960,31 @@ class TestCompactSummary:
         )
         summary = session.to_compact_summary()
         for key in [
-            "session_id", "status", "source_device_id", "primary_device_id",
-            "merge_owner_device_id", "participant_count", "subtask_count",
-            "multi_device_required", "merge_policy", "barrier_posture",
-            "mesh_id", "task_id", "trace_id",
+            "session_id",
+            "status",
+            "source_device_id",
+            "primary_device_id",
+            "merge_owner_device_id",
+            "participant_count",
+            "subtask_count",
+            "multi_device_required",
+            "merge_policy",
+            "barrier_posture",
+            "mesh_id",
+            "task_id",
+            "trace_id",
         ]:
             assert key in summary, f"Missing compact summary key: {key}"
 
     def test_compact_summary_serialisable(self):
         from contracts.mesh_session import build_mesh_session
+
         session = build_mesh_session(source_device_id="a", primary_device_id="b")
         json.dumps(session.to_compact_summary())
 
     def test_compact_summary_counts_participants(self):
-        from contracts.mesh_session import build_mesh_session, MeshSessionParticipant
+        from contracts.mesh_session import MeshSessionParticipant, build_mesh_session
+
         p1 = MeshSessionParticipant(device_id="d1", roles=["primary"])
         p2 = MeshSessionParticipant(device_id="d2", roles=["support"])
         session = build_mesh_session(participants=[p1, p2])

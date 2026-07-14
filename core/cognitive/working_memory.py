@@ -98,18 +98,12 @@ class WorkingMemory:
         enabled: Optional[bool] = None,
     ) -> None:
         cfg = self._read_config()
-        self._capacity = capacity if capacity is not None else int(
-            cfg.get("working_memory_capacity", 20)
-        )
-        self._enabled = enabled if enabled is not None else bool(
-            cfg.get("enable_cognitive_memory_split", True)
-        )
+        self._capacity = capacity if capacity is not None else int(cfg.get("working_memory_capacity", 20))
+        self._enabled = enabled if enabled is not None else bool(cfg.get("enable_cognitive_memory_split", True))
         # session_id → deque of WorkingMemoryEntry
         self._store: Dict[str, Deque[WorkingMemoryEntry]] = {}
         self._lock = threading.Lock()
-        logger.debug(
-            "WorkingMemory init | capacity=%d enabled=%s", self._capacity, self._enabled
-        )
+        logger.debug("WorkingMemory init | capacity=%d enabled=%s", self._capacity, self._enabled)
 
     # ------------------------------------------------------------------
     # Public API
@@ -130,20 +124,14 @@ class WorkingMemory:
         """
         if not self._enabled:
             return
-        entry = WorkingMemoryEntry(
-            role=role, content=content, trace_id=trace_id, metadata=metadata
-        )
+        entry = WorkingMemoryEntry(role=role, content=content, trace_id=trace_id, metadata=metadata)
         with self._lock:
             if session_id not in self._store:
                 self._store[session_id] = deque(maxlen=self._capacity)
             self._store[session_id].append(entry)
-        logger.debug(
-            "WorkingMemory.add session=%s role=%s trace=%s", session_id, role, trace_id
-        )
+        logger.debug("WorkingMemory.add session=%s role=%s trace=%s", session_id, role, trace_id)
 
-    def get(
-        self, *, session_id: str, last_n: Optional[int] = None
-    ) -> List[Dict[str, Any]]:
+    def get(self, *, session_id: str, last_n: Optional[int] = None) -> List[Dict[str, Any]]:
         """Return working memory entries for *session_id* as a list of dicts.
 
         融合(域3):对话轮次的唯一属主是 SessionManager —— 若它认识该会话,
@@ -168,6 +156,7 @@ class WorkingMemory:
         # 对话会话 → 读唯一属主 SessionManager(内存 dict 读,无 IO)。
         try:
             from core.session_manager import get_session_manager
+
             sm = get_session_manager()
             if sm.get_session(session_id) is not None:
                 history = sm.get_full_history(session_id)
@@ -222,9 +211,7 @@ class WorkingMemory:
             import json
             import pathlib
 
-            return json.loads(
-                (pathlib.Path(__file__).parents[2] / "config.json").read_text()
-            )
+            return json.loads((pathlib.Path(__file__).parents[2] / "config.json").read_text())
         except Exception:
             return {}
 

@@ -180,9 +180,7 @@ def build_formation_summary(
     """
     from .formation_role import FormationRole
 
-    fallback_available = any(
-        m.role == FormationRole.FALLBACK for m in group.members
-    )
+    fallback_available = any(m.role == FormationRole.FALLBACK for m in group.members)
 
     return FormationSummary(
         formation_id=group.formation_id,
@@ -304,6 +302,7 @@ def resolve_formation_summary(
         return build_formation_summary(group, policy)
     except Exception as exc:
         import logging as _logging
+
         _logging.getLogger("Galaxy.DeviceFormation.Summary").warning(
             "resolve_formation_summary failed, returning idle summary: %s", exc
         )

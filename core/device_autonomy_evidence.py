@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging  # auto: ensure module logger is defined
+
 logger = logging.getLogger(__name__)
 
 
@@ -65,14 +66,9 @@ def _build_allocation_evidence(device_id: str) -> Dict[str, Any]:
     records = [
         record.to_dict()
         for record in get_canonical_task_runtime().list_allocation_records(limit=2048)
-        if str(
-            record.selected_executor or record.execution_location or ""
-        ).strip()
-        == device_id
+        if str(record.selected_executor or record.execution_location or "").strip() == device_id
     ]
-    accepted = [
-        record for record in records if str(record.get("accepted_allocation") or "") == "accepted"
-    ]
+    accepted = [record for record in records if str(record.get("accepted_allocation") or "") == "accepted"]
     closed = [record for record in records if bool(record.get("canonical_closed"))]
     latest_closed_at = max(
         [
@@ -85,14 +81,9 @@ def _build_allocation_evidence(device_id: str) -> Dict[str, Any]:
     )
     earliest_accepted_at = min(
         [
-            _safe_timestamp(record.get("accepted_at"))
-            or _safe_timestamp(record.get("updated_at"))
+            _safe_timestamp(record.get("accepted_at")) or _safe_timestamp(record.get("updated_at"))
             for record in accepted
-            if (
-                _safe_timestamp(record.get("accepted_at"))
-                or _safe_timestamp(record.get("updated_at"))
-            )
-            > 0.0
+            if (_safe_timestamp(record.get("accepted_at")) or _safe_timestamp(record.get("updated_at"))) > 0.0
         ]
         or [0.0]
     )
@@ -101,9 +92,9 @@ def _build_allocation_evidence(device_id: str) -> Dict[str, Any]:
         "closed_tasks": len(closed),
         "fallback_count": len([record for record in records if bool(record.get("fallback_used"))]),
         "latest_closed_at": latest_closed_at or None,
-        "continuity_span_seconds": max(0.0, latest_closed_at - earliest_accepted_at)
-        if latest_closed_at and earliest_accepted_at
-        else 0.0,
+        "continuity_span_seconds": (
+            max(0.0, latest_closed_at - earliest_accepted_at) if latest_closed_at and earliest_accepted_at else 0.0
+        ),
     }
 
 
@@ -118,9 +109,7 @@ def _build_tracker_evidence(device_id: str) -> Dict[str, Any]:
         "recovered_unrevalidated": len(
             [record for record in records if record.recovery_status == "recovered_unrevalidated"]
         ),
-        "recovered_stale": len(
-            [record for record in records if record.recovery_status == "recovered_stale"]
-        ),
+        "recovered_stale": len([record for record in records if record.recovery_status == "recovered_stale"]),
         "latest_updated_at": latest_updated_at or None,
         "runtime_snapshot": {
             "recovered_unrevalidated_count": snapshot.recovered_unrevalidated_count,
@@ -133,8 +122,7 @@ def _build_tracker_evidence(device_id: str) -> Dict[str, Any]:
 def _build_event_evidence(device_id: str) -> Dict[str, Any]:
     events = list_recent_execution_events(device_id=device_id, limit=500)
     latest_event_at = max(
-        [_safe_timestamp(event.event_ts) or _safe_timestamp(event.absorbed_at) for event in events]
-        or [0.0]
+        [_safe_timestamp(event.event_ts) or _safe_timestamp(event.absorbed_at) for event in events] or [0.0]
     )
     return {
         "event_count": len(events),
@@ -175,17 +163,14 @@ def classify_device_autonomy(device_id: str) -> Dict[str, Any]:
     evidence_stale = bool(latest_evidence_at and (now - latest_evidence_at) > _AUTONOMY_STALE_SECONDS)
     cross_repo_complete = cross_repo_report.pipeline_verdict == PipelineVerdict.complete
     stable_runtime_host_posture = (
-        host_identity.source_runtime_posture == "join_runtime"
-        and host_identity.role.value == "full_runtime_host"
+        host_identity.source_runtime_posture == "join_runtime" and host_identity.role.value == "full_runtime_host"
     )
     readiness_satisfied = bool(getattr(participation, "readiness_satisfied", False))
     dispatch_gate_passed = bool(getattr(participation, "dispatch_gate_passed", False))
     accepted_execution = allocation["accepted_tasks"] >= 1
     actual_local_execution = events["event_count"] >= 1 or tracker["tracking_records"] >= 1
     result_returned = (
-        events["terminal_events"] >= 1
-        or tracker["completed_results"] >= 1
-        or allocation["closed_tasks"] >= 1
+        events["terminal_events"] >= 1 or tracker["completed_results"] >= 1 or allocation["closed_tasks"] >= 1
     )
     closure_integrated = allocation["closed_tasks"] >= 1
     repeated_continuity = allocation["closed_tasks"] >= 3 and allocation["accepted_tasks"] >= 3
@@ -199,9 +184,7 @@ def classify_device_autonomy(device_id: str) -> Dict[str, Any]:
     if not support["dispatch_target_capable"]:
         demotion_reasons.append("device_type_not_operationally_supported")
     if not cross_repo_complete:
-        demotion_reasons.append(
-            f"cross_repo_evidence_{cross_repo_report.pipeline_verdict.value}"
-        )
+        demotion_reasons.append(f"cross_repo_evidence_{cross_repo_report.pipeline_verdict.value}")
     if not stable_runtime_host_posture:
         demotion_reasons.append("runtime_host_posture_not_stably_join_runtime")
     if not readiness_satisfied:
@@ -242,11 +225,7 @@ def classify_device_autonomy(device_id: str) -> Dict[str, Any]:
         and not evidence_inconsistent
     ):
         autonomy_class = "semi_autonomous_runtime_capable"
-    elif (
-        getattr(participation, "active_session_count", 0) > 0
-        or accepted_execution
-        or actual_local_execution
-    ):
+    elif getattr(participation, "active_session_count", 0) > 0 or accepted_execution or actual_local_execution:
         autonomy_class = "participant_capable"
     elif getattr(participation, "websocket_connected", False):
         autonomy_class = "observable_only"
@@ -284,9 +263,7 @@ def classify_device_autonomy(device_id: str) -> Dict[str, Any]:
             TRUTH_GRADE_PROJECTION,
             source="core.device_autonomy_evidence.classify_device_autonomy",
             recovery_status="live",
-            revalidation_required=bool(
-                tracker["recovered_unrevalidated"] or tracker["recovered_stale"]
-            ),
+            revalidation_required=bool(tracker["recovered_unrevalidated"] or tracker["recovered_stale"]),
             degraded=bool(evidence_stale or evidence_inconsistent),
             field_truth_grades={
                 "autonomy_classification": TRUTH_GRADE_PROJECTION,

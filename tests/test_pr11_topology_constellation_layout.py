@@ -99,9 +99,9 @@ Test index:
   80. TopologyLayoutLayer to_dict() is JSON-serialisable.
 """
 
-import sys
-import os
 import json
+import os
+import sys
 
 import pytest
 
@@ -116,21 +116,21 @@ if _REPO_ROOT not in sys.path:
 # Imports under test
 # ---------------------------------------------------------------------------
 from windows_client.status_board_v2.topology_layout import (
-    build_constellation_layout,
+    TOPOLOGY_LAYOUT_AUTHORITY,
     TopologyConstellationLayout,
+    TopologyLayerKind,
     TopologyLayoutLayer,
     TopologyLayoutNode,
     TopologyLayoutRelation,
     TopologyNodeKind,
     TopologyRelationKind,
-    TopologyLayerKind,
-    TOPOLOGY_LAYOUT_AUTHORITY,
+    build_constellation_layout,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers — minimal mock view-models
 # ---------------------------------------------------------------------------
+
 
 class _MockProviderRouting:
     def __init__(self, selected=None, vendor=None, legacy=False, available=True, reason=None):
@@ -200,6 +200,7 @@ def _make_canonical_vm():
             system_layer="OneAPI",
             available=True,
         )
+
     return _VM()
 
 
@@ -229,6 +230,7 @@ def _make_degraded_vm():
             system_layer="OneAPI",
             available=False,
         )
+
     return _VM()
 
 
@@ -253,6 +255,7 @@ def _make_partial_vm():
             available=False,
         )
         oneapi_horizon = _MockOneAPIHorizon()
+
     return _VM()
 
 
@@ -272,6 +275,7 @@ def _make_unavailable_vm():
         integration_health = "unavailable"
         provider_routing = _MockProviderRouting()
         oneapi_horizon = None
+
     return _VM()
 
 
@@ -279,75 +283,90 @@ def _make_unavailable_vm():
 # Test 1-13: importability
 # ---------------------------------------------------------------------------
 
+
 def test_01_topology_layout_module_importable():
     import windows_client.status_board_v2.topology_layout as _m
+
     assert _m is not None
 
 
 def test_02_build_constellation_layout_importable():
     from windows_client.status_board_v2.topology_layout import build_constellation_layout
+
     assert callable(build_constellation_layout)
 
 
 def test_03_authority_importable():
     from windows_client.status_board_v2.topology_layout import TOPOLOGY_LAYOUT_AUTHORITY
+
     assert isinstance(TOPOLOGY_LAYOUT_AUTHORITY, str)
     assert len(TOPOLOGY_LAYOUT_AUTHORITY) > 0
 
 
 def test_04_TopologyConstellationLayout_importable():
     from windows_client.status_board_v2.topology_layout import TopologyConstellationLayout
+
     assert TopologyConstellationLayout is not None
 
 
 def test_05_TopologyLayoutNode_importable():
     from windows_client.status_board_v2.topology_layout import TopologyLayoutNode
+
     assert TopologyLayoutNode is not None
 
 
 def test_06_TopologyLayoutRelation_importable():
     from windows_client.status_board_v2.topology_layout import TopologyLayoutRelation
+
     assert TopologyLayoutRelation is not None
 
 
 def test_07_TopologyLayoutLayer_importable():
     from windows_client.status_board_v2.topology_layout import TopologyLayoutLayer
+
     assert TopologyLayoutLayer is not None
 
 
 def test_08_TopologyNodeKind_importable():
     from windows_client.status_board_v2.topology_layout import TopologyNodeKind
+
     assert TopologyNodeKind is not None
 
 
 def test_09_TopologyRelationKind_importable():
     from windows_client.status_board_v2.topology_layout import TopologyRelationKind
+
     assert TopologyRelationKind is not None
 
 
 def test_10_TopologyLayerKind_importable():
     from windows_client.status_board_v2.topology_layout import TopologyLayerKind
+
     assert TopologyLayerKind is not None
 
 
 def test_11_build_constellation_layout_importable_from_package():
     from windows_client.status_board_v2 import build_constellation_layout
+
     assert callable(build_constellation_layout)
 
 
 def test_12_TopologyConstellationLayout_importable_from_package():
     from windows_client.status_board_v2 import TopologyConstellationLayout
+
     assert TopologyConstellationLayout is not None
 
 
 def test_13_authority_importable_from_package():
     from windows_client.status_board_v2 import TOPOLOGY_LAYOUT_AUTHORITY
+
     assert isinstance(TOPOLOGY_LAYOUT_AUTHORITY, str)
 
 
 # ---------------------------------------------------------------------------
 # Test 14-16: enumerations
 # ---------------------------------------------------------------------------
+
 
 def test_14_TopologyNodeKind_values():
     assert TopologyNodeKind.primary_provider.value == "primary_provider"
@@ -372,6 +391,7 @@ def test_16_TopologyLayerKind_values():
 # ---------------------------------------------------------------------------
 # Test 17-25: None view-model (unavailable layout)
 # ---------------------------------------------------------------------------
+
 
 def test_17_build_from_none_returns_layout():
     layout = build_constellation_layout(None)
@@ -424,6 +444,7 @@ def test_25_build_from_none_does_not_raise():
 # ---------------------------------------------------------------------------
 # Test 26-47: Canonical layout
 # ---------------------------------------------------------------------------
+
 
 def test_26_canonical_readiness_label():
     layout = build_constellation_layout(_make_canonical_vm())
@@ -553,6 +574,7 @@ def test_47_canonical_lower_horizon_link_not_authoritative():
 # Test 48-53: Degraded layout
 # ---------------------------------------------------------------------------
 
+
 def test_48_degraded_readiness_label():
     layout = build_constellation_layout(_make_degraded_vm())
     assert layout.readiness_label == "degraded"
@@ -592,6 +614,7 @@ def test_53_degraded_lower_horizon_still_present():
 # Test 54-59: Partial and unavailable
 # ---------------------------------------------------------------------------
 
+
 def test_54_partial_readiness_label():
     layout = build_constellation_layout(_make_partial_vm())
     assert layout.readiness_label == "partial"
@@ -626,6 +649,7 @@ def test_59_unavailable_primary_layer_empty():
 # ---------------------------------------------------------------------------
 # Test 60-62: Dict-based view-model
 # ---------------------------------------------------------------------------
+
 
 def test_60_dict_based_vm_works():
     d = {
@@ -693,6 +717,7 @@ def test_62_dict_degraded_produces_degraded_layout():
 # Test 63-70: to_dict / to_json
 # ---------------------------------------------------------------------------
 
+
 def test_63_to_dict_returns_dict():
     layout = build_constellation_layout(_make_canonical_vm())
     assert isinstance(layout.to_dict(), dict)
@@ -742,6 +767,7 @@ def test_70_to_json_is_valid_json():
 # Test 71-80: layers / nodes helpers and extra invariants
 # ---------------------------------------------------------------------------
 
+
 def test_71_layers_length_three():
     layout = build_constellation_layout(_make_canonical_vm())
     assert len(layout.layers) == 3
@@ -764,11 +790,7 @@ def test_74_layers_third_is_lower_horizon():
 
 def test_75_all_nodes_covers_all_layers():
     layout = build_constellation_layout(_make_canonical_vm())
-    total = (
-        len(layout.primary_layer.nodes)
-        + len(layout.support_layer.nodes)
-        + len(layout.lower_horizon_layer.nodes)
-    )
+    total = len(layout.primary_layer.nodes) + len(layout.support_layer.nodes) + len(layout.lower_horizon_layer.nodes)
     assert len(layout.all_nodes) == total
 
 
@@ -782,9 +804,9 @@ def test_76_oneapi_node_never_authoritative_any_readiness():
     ]:
         layout = build_constellation_layout(vm)
         for node in layout.lower_horizon_layer.nodes:
-            assert node.is_authoritative is False, (
-                f"OneAPI node marked authoritative in {layout.readiness_label} layout"
-            )
+            assert (
+                node.is_authoritative is False
+            ), f"OneAPI node marked authoritative in {layout.readiness_label} layout"
 
 
 def test_77_oneapi_never_in_primary_layer():
@@ -797,9 +819,9 @@ def test_77_oneapi_never_in_primary_layer():
     ]:
         layout = build_constellation_layout(vm)
         for node in layout.primary_layer.nodes:
-            assert node.kind != TopologyNodeKind.oneapi_horizon, (
-                f"OneAPI node appeared in primary layer for {layout.readiness_label}"
-            )
+            assert (
+                node.kind != TopologyNodeKind.oneapi_horizon
+            ), f"OneAPI node appeared in primary layer for {layout.readiness_label}"
 
 
 def test_78_node_to_dict_json_serialisable():
