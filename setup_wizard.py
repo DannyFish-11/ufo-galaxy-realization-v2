@@ -392,14 +392,20 @@ class SetupWizard:
         """配置数据库"""
         # 容器运行时选择(Docker / Podman)——此前这里对每个数据库都写死打印
         # "docker run ..."，完全没有 Podman 选项、也没给用户任何选择机会。
-        # 复用 core.container_runtime 里已实现、已测试的选择器(交互菜单/推荐项/
-        # 安装指引全部一套逻辑),而不是在这里重新造一遍不一致的文案。选一次，
-        # 后面所有数据库共用同一个运行时(与 unified_launcher.ensure_docker_infra
-        # 的语义一致：系统级只选一个容器运行时，不是逐个数据库分别选)。
+        # 真 bug 修复(第二轮):第一次改用 resolve_runtime(interactive=True) 时，
+        # 仍然继承了它"只装了一个就静默直接用、不弹菜单"的短路——而绝大多数机器
+        # 只装了 Docker(比 Podman 普及得多），于是"选择"在向导里实际上几乎从来
+        # 不出现，复现了"压根就没有"的报告。resolve_runtime 那条短路本身是对的
+        # (它同时服务日常静默启动路径 unified_launcher.ensure_docker_infra，不该
+        # 每次启动都打扰用户），问题是配置向导不该复用它——向导的意图就是让用户
+        # 主动看到并做选择。改用 setup_wizard_select_runtime()：专门给"一次性
+        # 交互配置"场景用，无论已装几个都总是展示完整菜单。选一次，后面所有
+        # 数据库共用同一个运行时(与 ensure_docker_infra 的语义一致：系统级只选
+        # 一个容器运行时，不是逐个数据库分别选)。
         runtime = ""
         try:
             from core import container_runtime as cr
-            runtime = cr.resolve_runtime(interactive=True)
+            runtime = cr.setup_wizard_select_runtime()
         except Exception:
             runtime = ""
         rt_bin = runtime or "docker"
