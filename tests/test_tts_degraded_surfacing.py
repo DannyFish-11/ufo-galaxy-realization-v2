@@ -41,7 +41,9 @@ def test_neural_engine_clears_degraded_reason():
     assert so.get_tts_degraded_reason() is None, "用上神经引擎(edge/kokoro)后应清除降级态"
 
 
-def test_none_engine_is_noop():
+def test_none_engine_reports_fully_unavailable():
+    """整条链解析到 None(所有引擎不可用=完全无声)必须置降级原因,不能误报"自然音"。"""
     _reset()
     so._note_engine_choice(None)
-    assert so.get_tts_degraded_reason() is None
+    reason = so.get_tts_degraded_reason()
+    assert reason and "完全不可用" in reason, "无任何引擎=无声时必须如实报降级,不能保持 None"

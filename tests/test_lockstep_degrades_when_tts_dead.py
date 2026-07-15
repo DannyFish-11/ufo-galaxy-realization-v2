@@ -109,6 +109,58 @@ def test_lockstep_degrades_to_streaming_when_tts_dead(monkeypatch):
     assert done.get("response") == full
 
 
+def test_lockstep_degrades_on_midstream_stall(monkeypatch):
+    """TTS 念了第一句后【中途卡住】(不再开口)→ 不能挂到收尾再一次性冒出;
+    应在 stall 宽限后 reset 前端文字并把全文逐字直出(语音继续尾随)。"""
+    monkeypatch.setenv("GALAXY_TEXT_VOICE_LOCKSTEP", "1")
+    monkeypatch.setenv("GALAXY_LOCKSTEP_GRACE_S", "5.0")  # 首句宽限设大,确保走的是"中途卡住"分支
+    monkeypatch.setenv("GALAXY_LOCKSTEP_STALL_S", "0.15")
+    monkeypatch.setenv("GALAXY_CHAT_TIMEOUT_S", "10")
+
+    class _StallSpeaker:
+        # 只在第一句开口回调一次,其后永远卡住(不再 reveal),chunks_spoken 停在 1。
+        def __init__(self, on_sentence_start):
+            self._cb = on_sentence_start
+            self._buf = ""
+            self._revealed_once = False
+            self.chunks_spoken = 0
+            self._player_task = None
+
+        def feed(self, t):
+            self._buf += t
+            if not self._revealed_once and self._buf and self._buf[-1] in "。!?！?.":
+                self._revealed_once = True
+                sent = self._buf
+                self._buf = ""
+                self.chunks_spoken = 1
+                if self._cb is not None:
+                    self._cb(sent)
+
+        def reset(self):
+            self._buf = ""
+
+        def finish(self):
+            pass
+
+    tokens = ["你好呀。", "第二句", "较长", "内容", "还有", "第三句", "结尾。"]
+    frames, full = _run_stream(
+        monkeypatch,
+        lambda on_sentence_start=None, **k: _StallSpeaker(on_sentence_start),
+        tokens,
+    )
+
+    types = [f.get("type") for f in frames]
+    assert "done" in types
+    # 中途卡住应触发一次 reset(清掉已露出的第一句),随后把全文逐字直出。
+    assert "reset" in types, f"中途卡住应 reset 前端文字再全量重放; got {types}"
+    # reset 之后拼起来的文字 == 权威全文(无重复、无丢失)。
+    last_reset = len(types) - 1 - types[::-1].index("reset")
+    after_reset = "".join(f.get("text", "") for f in frames[last_reset + 1 :] if f.get("type") == "delta")
+    assert after_reset == full, f"reset 后重放的文字应等于全文; got {after_reset!r} vs {full!r}"
+    # delta 必须早于 done(不是憋到收尾)。
+    assert types.index("delta") < types.index("done")
+
+
 def test_lockstep_stays_synced_when_tts_alive(monkeypatch):
     """TTS 正常(每凑满一句即"开口")→ 仍逐句同步露出,不误触降级。"""
     monkeypatch.setenv("GALAXY_TEXT_VOICE_LOCKSTEP", "1")

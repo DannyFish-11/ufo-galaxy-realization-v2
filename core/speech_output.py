@@ -204,6 +204,12 @@ def _note_engine_choice(eng: Any) -> None:
     不再"无声降级成机器人音、用户不知为何"(所有者反馈的"语音太僵")。"""
     global _tts_degraded_reason
     if eng is None:
+        # 整条链解析到 None = 所有引擎(含 SAPI)都不可用 = 完全无声。绝不能让
+        # get_tts_degraded_reason() 保持 None(那被定义为"自然音"),否则面板误报"正常"。
+        _tts_degraded_reason = (
+            "语音输出完全不可用:所有 TTS 引擎(edge/kokoro/melo/piper/SAPI)均不可用,"
+            "当前无声。装一个可用引擎(如 pip install edge-tts / kokoro-onnx)后重启。"
+        )
         return
     if type(eng).__name__ == "SapiTTSEngine":
         if _tts_degraded_reason is None:  # 一次性,避免刷屏
@@ -218,20 +224,29 @@ def _note_engine_choice(eng: Any) -> None:
         _tts_degraded_reason = None
 
 
-def demote_current_engine(reason: str = "") -> Optional[Any]:
-    """当前引擎【运行期】失败(合成/网络):拉黑其类型并重选下一个可用引擎。
+def demote_current_engine(reason: str = "", failed_engine: Any = None) -> Optional[Any]:
+    """某个引擎【运行期】失败(合成/网络):拉黑【确实失败的那个】并重选下一个可用引擎。
 
     返回新引擎(None=链上已无可用)。选择期探不出的失败(edge 构造成功但云端
     不可达)靠这里自愈:第一句失败 → 换引擎 → 同句重试,用户最多丢一拍。
+
+    failed_engine:调用方【实际失败的那个引擎实例】。并发朗读(chat 增量 + voice/ambient
+    整段)共用同一全局引擎缓存:若 A 路已把 edge 降级成健康的 kokoro,B 路(还握着旧
+    edge)再失败时【不能】按全局 _engine 去拉黑——那会误拉黑健康的 kokoro,一路拉到
+    SAPI/静默。故传入失败实例:它已不是现役引擎时,直接返回现役,绝不重复/误拉黑。
+    不传(旧调用/测试)则保持旧行为(按全局 _engine)。
     """
     global _engine, _engine_failed
-    cur = _engine
-    if cur is None:
-        return None
-    _failed_engine_types.add(type(cur).__name__)
+    target = failed_engine if failed_engine is not None else _engine
+    if target is None:
+        return _engine
+    # 并发保护:显式传了失败实例、而它已不是现役全局引擎 → 别人已降级过,返回现役健康引擎。
+    if failed_engine is not None and _engine is not None and target is not _engine:
+        return _engine
+    _failed_engine_types.add(type(target).__name__)
     logger.warning(
         "TTS 引擎 %s 运行期失败(%s),拉黑并降级到下一引擎",
-        type(cur).__name__,
+        type(target).__name__,
         (reason or "")[:120],
     )
     _engine = None
@@ -288,7 +303,7 @@ def speak_response(text: str, *, source: str = "") -> None:
                 try:
                     return await holder["engine"].synthesize(chunk)
                 except Exception as exc:  # noqa: BLE001
-                    new_engine = demote_current_engine(str(exc))
+                    new_engine = demote_current_engine(str(exc), failed_engine=holder["engine"])
                     if new_engine is None:
                         raise
                     holder["engine"] = new_engine
@@ -343,7 +358,7 @@ def speak_response(text: str, *, source: str = "") -> None:
         try:
             await engine.synthesize_and_play(spoken)
         except Exception as exc:  # noqa: BLE001
-            new_engine = demote_current_engine(str(exc))
+            new_engine = demote_current_engine(str(exc), failed_engine=engine)
             if new_engine is None:
                 _log_speak_failure("语音输出", exc)
             else:
@@ -411,7 +426,7 @@ def begin_incremental_speech(
         try:
             return await holder["engine"].synthesize(chunk)
         except Exception as exc:  # noqa: BLE001
-            new_engine = demote_current_engine(str(exc))
+            new_engine = demote_current_engine(str(exc), failed_engine=holder["engine"])
             if new_engine is None:
                 raise
             holder["engine"] = new_engine
