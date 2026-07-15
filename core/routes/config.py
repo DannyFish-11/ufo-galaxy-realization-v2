@@ -648,33 +648,38 @@ async def update_config(req: ConfigUpdateRequest):
             detail=f"Unknown config key(s): {', '.join(unknown_keys)}",
         )
 
+    # ── 计算最终值(url 补协议头),此刻【先不碰 os.environ】────────────────
+    # 真机复现过:用户填 url 类字段(OLLAMA_URL/ONEAPI_URL 等)时只填 host:port
+    # (如 "localhost:11434")没带协议头,原样落盘后 httpx 才炸「missing 'http://'
+    # protocol」。在写入这一步就补全,不指望每个消费端自己校验。
+    final: Dict[str, str] = {}
     for key, value in req.config.items():
         value = str(value)
-        # 真机复现过:用户在面板填 url 类字段(OLLAMA_URL/ONEAPI_URL 等)时只填了
-        # host:port(如 "localhost:11434"),没带协议头。这个值原样落进 .env,
-        # 直到真正发起请求时 httpx 才会炸「missing 'http://' or 'https://'
-        # protocol」——用户看到的只是笼统的"LLM 调用失败"。在写入这一步就
-        # 补全协议头,而不是指望每个读它的消费端都记得自己校验。
         if CONFIG_SCHEMA[key]["type"] == "url":
             stripped = value.strip()
             if stripped and not stripped.startswith(("http://", "https://")):
                 value = f"http://{stripped}"
-        os.environ[key] = value
+        final[key] = value
 
-    # 密钥收敛到【唯一密钥库】:API key / token 等敏感项走 ConfigService.set_secret
-    # → runtime/secrets.env(canonical 密钥库),不再明文落进 .env。
-    # 关键的重启正确性:main.py 顶部先把 .env 灌进 os.environ,config_preflight 再以
-    # `key not in os.environ` 的门读 secrets.env——所以 .env 里若残留同名旧值会【盖住】
-    # secrets.env(正是历史上"重启丢 key"的根因)。因此:成功写进 secrets.env 的密钥
-    # 必须从 .env 排除(_write_env_file 全量重写时自动清掉旧明文行);写 secrets.env 失败
-    # 的仍回落 .env,不丢持久化。os.environ 上面已设,当次即时生效。
+    # ── 【先落盘、成功才应用到 os.environ】────────────────────────────────
+    # 修复"显示已配置、却又保存失败"的自相矛盾:此前是先写 os.environ(前端 GET
+    # /api/config 据 os.getenv 判定"已配置")、再写盘,一旦写盘失败(Windows 上
+    # .env 被杀毒/编辑器占用、目录只读),就成了"明明已配置、却报保存失败",
+    # 用户根本分不清到底存没存、生没生效。现在颠倒顺序:
+    #   落盘成功 → 才把值应用进 os.environ(当次即时生效)、"已配置"随之如实为真;
+    #   落盘失败 → os.environ 原封不动、"已配置"保持原状,错误如实说明原因。
+    # 于是"已配置"与"保存成功"永远一致:存了就是存了、生效了;没存就没存、没生效。
+    #
+    # 密钥收敛到唯一密钥库:敏感项走 ConfigService.set_secret → runtime/secrets.env,
+    # 不明文落 .env(否则重启时 .env 旧值会盖住 secrets.env,历史"重启丢 key"根因);
+    # 写 secrets.env 失败的密钥回落 .env(不丢持久化)。
     _secrets_persisted: set = set()
     try:
         from core.config_schema import classify_key as _classify
         from core.config_service import ConfigService as _CS
 
         _cs = None
-        for _k, _v in req.config.items():
+        for _k, _v in final.items():
             if _classify(_k) == "secret" and str(_v).strip():
                 try:
                     if _cs is None:
@@ -686,24 +691,31 @@ async def update_config(req: ConfigUpdateRequest):
     except Exception as exc:  # noqa: BLE001 — ConfigService 不可用 → 全部回落 .env
         logger.debug("密钥收敛不可用(降级为 .env 持久化): %s", exc)
 
+    try:
+        _write_env_file_with(final, exclude=_secrets_persisted)
+    except OSError as exc:
+        # 落盘失败 → os.environ 一个字没动,"已配置"如实保持原状,不制造矛盾。
+        raise HTTPException(
+            status_code=500,
+            detail=f"写入 .env 失败: {exc}(检查文件是否被占用/只读，或目录权限）；本次未改动任何配置",
+        ) from exc
+
+    # ── 落盘成功 → 应用到 os.environ(当次即时生效),并做即时联动 ──────────
+    os.environ.update(final)
+
     # 模型选择收敛到唯一门:model_catalog.save_tier 把【档位 + 主脑】写进同一条
-    # 记录(runtime/model_state.json)并派生 OLLAMA_MODEL —— 不再各写 .galaxy_model /
-    # .galaxy_tier / OLLAMA_MODEL 三处。按模型反推档位并联动,消除档位↔主脑分叉
-    # (否则 active_effective_io() 读的档位与实际主脑不符,modality_bridge 会误判听/说通路)。
-    # 上面 .env 里也已写了 OLLAMA_MODEL(env 层持久化,归配置域);二者一致。
-    if "OLLAMA_MODEL" in req.config:
+    # 记录(runtime/model_state.json)并派生 OLLAMA_MODEL,按模型反推档位并联动。
+    if "OLLAMA_MODEL" in final:
         try:
             from core import model_catalog as _mc
 
-            _tag = req.config["OLLAMA_MODEL"]
+            _tag = final["OLLAMA_MODEL"]
             _mc.save_tier(_mc.infer_tier_from_model(_tag), main_brain=_tag)
         except Exception as exc:  # noqa: BLE001
             logger.debug("模型状态联动写入失败(非致命): %s", exc)
 
-    # 自发在场开关改动 → 立刻生效(启动/停止常驻循环),不必重启。GALAXY_SPEAK/
-    # TTS_STREAMING/NATIVE_AUDIO 都是每次用时现读 os.environ,上面已写入即时生效,
-    # 唯独 ambient 循环是常驻后台任务,需在这里显式拉起/收起。
-    if "GALAXY_AMBIENT_LOOP" in req.config:
+    # 自发在场开关改动 → 立刻生效(启动/停止常驻循环),不必重启。
+    if "GALAXY_AMBIENT_LOOP" in final:
         try:
             from core.ambient_attention_loop import ambient_loop_enabled, get_ambient_loop
 
@@ -714,18 +726,6 @@ async def update_config(req: ConfigUpdateRequest):
                 await _loop.stop()
         except Exception as exc:  # noqa: BLE001
             logger.debug("ambient 循环即时开关失败(非致命): %s", exc)
-
-    # 修复:_write_env_file() 之前完全没有 try/except——Windows 上 .env 若被
-    # 杀毒软件/编辑器占用锁定,或所在目录权限不足,write_text() 会抛
-    # PermissionError,FastAPI 缺省转成裸 500、无任何 detail,前端只能显示
-    # "保存失败"四个字,排查全靠猜。这里显式捕获并把真实原因透传出去。
-    try:
-        _write_env_file(exclude=_secrets_persisted)
-    except OSError as exc:
-        raise HTTPException(
-            status_code=500,
-            detail=f"写入 .env 失败: {exc}(检查文件是否被占用/只读，或目录权限）",
-        ) from exc
 
     # UnifiedConfig 是进程启动时读一次 .env 就不再变的单例("Dashboard 优先级"
     # 那一层实际读的是它)——本函数只写了 os.environ/.env,从没告诉过它内容
@@ -742,7 +742,7 @@ async def update_config(req: ConfigUpdateRequest):
 
     # 若改动涉及模型 API（llm 类），热刷新 LLM 路由器，让新填的 key 即时生效（无需重启）。
     refreshed = None
-    if any(CONFIG_SCHEMA.get(k, {}).get("category") == "llm" for k in req.config):
+    if any(CONFIG_SCHEMA.get(k, {}).get("category") == "llm" for k in final):
         try:
             from core.multi_llm_router import refresh_llm_router
 
@@ -750,7 +750,7 @@ async def update_config(req: ConfigUpdateRequest):
         except Exception:
             refreshed = None
 
-    return {"success": True, "updated": list(req.config.keys()), "router_refreshed": refreshed}
+    return {"success": True, "updated": list(final.keys()), "router_refreshed": refreshed}
 
 
 @router.post("/save")
@@ -824,7 +824,15 @@ async def probe_config_urls(req: ProbeRequest):
 
 
 def _write_env_file(exclude=None):
-    """将所有【非空】配置写入 .env 文件。
+    """将所有【非空】配置写入 .env 文件(读 os.environ 现值)。"""
+    return _write_env_file_with(None, exclude=exclude)
+
+
+def _write_env_file_with(overrides=None, exclude=None):
+    """将所有【非空】配置写入 .env 文件;overrides 里的键用其新值(而非 os.environ)。
+
+    overrides: {key: 新值} —— 允许在【尚未写入 os.environ】时就把新值落盘,从而做到
+    "先落盘、成功再应用 os.environ"(见 update_config)。None 时退化为读 os.environ 现值。
 
     exclude: 已写进 canonical 密钥库(runtime/secrets.env)的密钥名集合——这些
     不再明文落进 .env(否则重启时 .env 旧值会盖住 secrets.env),全量重写即清掉旧行。
@@ -843,10 +851,11 @@ def _write_env_file(exclude=None):
     # 按类别分组
     current_category = ""
     _exclude = exclude or set()
+    _overrides = overrides or {}
     for key, meta in sorted(CONFIG_SCHEMA.items(), key=lambda x: x[1]["category"]):
         if key in _exclude:
             continue  # 已入 canonical 密钥库,不再明文写 .env
-        value = os.environ.get(key, meta["default"])
+        value = _overrides.get(key, os.environ.get(key, meta["default"]))
         if not str(value).strip():
             continue  # 空值不落盘——否则会把代码默认值顶掉
         if meta["category"] != current_category:
