@@ -345,8 +345,8 @@ class AudioCaptureService:
         elif self._speech_chunks == 0:
             logger.warning(
                 "🎙️ 语音输入无效:%.0fs 内收到音频(%d 块)但【VAD 从未判定为说话】——"
-                "多半是麦克风增益太低/选错了输入设备/太安静。请对着麦克风正常音量说话,"
-                "或在系统里调高该麦克风的输入音量。",
+                "麦克风增益极低/选错了输入设备/太安静。VAD 已自适应噪声底,若仍不触发,"
+                "请在系统里调高该麦克风输入音量,或设 GALAXY_VAD_MIN_FLOOR=0.001(更灵敏)后重跑。",
                 delay,
                 self._chunks_seen,
             )
