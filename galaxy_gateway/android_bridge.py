@@ -1327,15 +1327,29 @@ class AndroidBridge:
                 await device.websocket.send_json(message)
 
             if wait_response:
-                message_id = message.get("message_id") or message.get("task_id")
                 future = asyncio.get_running_loop().create_future()
-                self._pending_responses[message_id] = future
+                # 双键登记:设备回包可能只带 message_id 或只带 task_id(结果处理器多按
+                # task_id 解析),此前只按 `message_id or task_id` 单键登记 → 若消息同时
+                # 带二者、设备只回 task_id,future 永远等不到、白白超时。现在两个 id 都
+                # 指向同一个 future,任一命中即可解析,消除"设备回了却超时"。
+                keys = [k for k in (message.get("message_id"), message.get("task_id")) if k]
+                if not keys:
+                    keys = [None]  # 无任何 id:保持旧行为(登记单个 None 键)
+                for k in keys:
+                    self._pending_responses[k] = future
+
+                # future 完成(被任一键解析 / 取消 / 超时)时,清掉它名下所有键,避免残留。
+                def _cleanup(_f: "asyncio.Future", _keys: tuple = tuple(keys)) -> None:
+                    for _k in _keys:
+                        if self._pending_responses.get(_k) is future:
+                            self._pending_responses.pop(_k, None)
+
+                future.add_done_callback(_cleanup)
 
                 try:
                     return await asyncio.wait_for(future, timeout=timeout)
                 except asyncio.TimeoutError:
-                    self._pending_responses.pop(message_id, None)
-                    logger.warning("Response timeout for message: %s", message_id)
+                    logger.warning("Response timeout for message keys: %s", keys)
                     return None
 
             return {"success": True}

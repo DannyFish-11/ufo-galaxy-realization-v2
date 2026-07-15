@@ -183,6 +183,7 @@ _PROVIDER_ENV_KEY_MAP: Dict[str, str] = {
     "moonshot": "MOONSHOT_API_KEY",
     "perplexity": "PERPLEXITY_API_KEY",
     "groq": "GROQ_API_KEY",
+    "openrouter": "OPENROUTER_API_KEY",
     "ollama": "OLLAMA_URL",
     "oneapi": "ONEAPI_API_KEY",
     "oneapi_url": "ONEAPI_URL",
@@ -194,17 +195,21 @@ _PROVIDER_ENV_KEY_MAP: Dict[str, str] = {
 # 云端结果会回流到本地主脑进行整合。
 TASK_ROUTING_PREFERENCES: Dict[TaskType, List[str]] = {
     # 本地主脑优先，API 专科后备
-    # LOCAL-BRAIN-FIRST: hf_local (HuggingFace local models) are checked after ollama
+    # 2026-07-15: 移除 "hf_local"——其内部适配器从未被实现过,故永远不会注册,
+    #   却曾占据每个列表的第 2 位,污染自动选择顺序。发现/注册代码保留在别处,
+    #   仅从偏好列表里剔除。每个列表仍以本地 ollama 主脑打头。
+    # 2026-07-15: 把已注册但从未进偏好列表的 agnes/moonshot/openrouter 接入自动路由——
+    #   agnes(免费+多模态+工具)排在便宜开源之后、专有之前;moonshot(Kimi)入
+    #   CODING/GENERAL/FAST_RESPONSE 尾;openrouter(聚合器)入 GENERAL/ANALYSIS 尾。
     # 2026-05-29: 新增 minimax/step/mimo 三个国产提供商
     # 2026-07-10: 新增 meta(Muse Spark 1.1,agentic/多模态/1M ctx)——
     # 定位在专有兜底梯队,agentic 任务(AGENT_CONTROL/CODING/PLANNING)优先级靠前
-    TaskType.REASONING: ["ollama", "hf_local", "anthropic", "openai", "meta", "deepseek", "google", "qwen", "step"],
-    TaskType.FAST_RESPONSE: ["ollama", "hf_local", "deepseek", "mimo", "groq", "google", "openai", "zhipu"],
-    TaskType.CODING: ["ollama", "hf_local", "deepseek", "qwen", "anthropic", "openai", "meta", "step", "mimo"],
-    TaskType.CREATIVE: ["ollama", "hf_local", "openai", "anthropic", "mistral", "deepseek", "minimax"],
+    TaskType.REASONING: ["ollama", "anthropic", "openai", "meta", "deepseek", "google", "qwen", "step"],
+    TaskType.FAST_RESPONSE: ["ollama", "deepseek", "mimo", "agnes", "groq", "google", "openai", "zhipu", "moonshot"],
+    TaskType.CODING: ["ollama", "deepseek", "qwen", "anthropic", "openai", "meta", "step", "mimo", "moonshot"],
+    TaskType.CREATIVE: ["ollama", "openai", "anthropic", "mistral", "deepseek", "minimax"],
     TaskType.ANALYSIS: [
         "ollama",
-        "hf_local",
         "anthropic",
         "openai",
         "meta",
@@ -213,10 +218,10 @@ TASK_ROUTING_PREFERENCES: Dict[TaskType, List[str]] = {
         "perplexity",
         "qwen",
         "step",
+        "openrouter",
     ],
     TaskType.PLANNING: [
         "ollama",
-        "hf_local",
         "anthropic",
         "openai",
         "meta",
@@ -226,20 +231,22 @@ TASK_ROUTING_PREFERENCES: Dict[TaskType, List[str]] = {
         "minimax",
         "step",
     ],
-    TaskType.AGENT_CONTROL: ["ollama", "hf_local", "anthropic", "openai", "meta", "deepseek", "minimax", "step"],
+    TaskType.AGENT_CONTROL: ["ollama", "anthropic", "openai", "meta", "deepseek", "minimax", "step"],
     TaskType.GENERAL: [
         "ollama",
-        "hf_local",
         "openai",
         "anthropic",
         "meta",
         "deepseek",
+        "agnes",
         "google",
         "qwen",
         "zhipu",
         "minimax",
         "step",
         "mimo",
+        "moonshot",
+        "openrouter",
     ],
 }
 
@@ -255,6 +262,7 @@ TASK_ROUTING_PREFERENCES: Dict[TaskType, List[str]] = {
 OPEN_SOURCE_PROVIDERS: set = {
     "ollama",  # 本地原生多模态主脑（Gemma4 / MiniCPM-o）
     "hf_local",  # 本地 HuggingFace 模型
+    "agnes",  # Agnes AI（全模态免费 API，开放/免费档友好）
     "deepseek",  # DeepSeek（开源权重）
     "qwen",  # 通义千问（开源权重）
     "zhipu",  # 智谱 GLM（开源权重）
@@ -336,6 +344,8 @@ PROVIDER_QUALITY_TIER: Dict[str, int] = {
     "mimo": 2,
     "perplexity": 2,
     "oneapi": 2,
+    "agnes": 2,
+    "openrouter": 2,
     # tier 1 —— 本地轻量（无 GPU 笔电主脑）
     "ollama": 1,
     "hf_local": 1,
@@ -489,6 +499,16 @@ PROVIDER_MODEL_MAP: Dict[str, Dict[TaskType, str]] = {
         TaskType.CODING: "kimi-k2.6",
         TaskType.ANALYSIS: "kimi-k2.5",
         TaskType.FAST_RESPONSE: "kimi-k2.5",
+    },
+    "agnes": {
+        # 免费全模态,默认走 2.5-flash;直连路径据此解析出具体模型串。
+        TaskType.FAST_RESPONSE: "agnes-2.5-flash",
+        TaskType.GENERAL: "agnes-2.5-flash",
+    },
+    "openrouter": {
+        # 聚合器,"auto" 让 OpenRouter 自选底层模型。
+        TaskType.ANALYSIS: "openrouter/auto",
+        TaskType.GENERAL: "openrouter/auto",
     },
     "perplexity": {
         TaskType.REASONING: "sonar-deep-research",
@@ -1409,6 +1429,7 @@ ADAPTER_MAP = {
     "moonshot": OpenAIAdapter,
     "perplexity": OpenAIAdapter,
     "groq": OpenAIAdapter,
+    "openrouter": OpenAIAdapter,
     "ollama": OllamaAdapter,
     "hf_local": OpenAIAdapter,
 }
@@ -1597,6 +1618,20 @@ PROVIDER_REGISTRY: List[Dict[str, Any]] = [
         "default_model": "llama-3.3-70b-versatile",
         "cost_in": 0.00059,
         "cost_out": 0.00079,
+        "extra": {"supports_tools": True},
+    },
+    {
+        # OpenRouter:OpenAI 兼容的聚合器,"openrouter/auto" 让其自选底层模型。
+        # cost 0 为占位——真实成本随所选底层模型浮动,由计费层回填。
+        "name": "openrouter",
+        "env_key": "OPENROUTER_API_KEY",
+        "base_url": "https://openrouter.ai/api/v1",
+        "models": ["openrouter/auto"],
+        "default_model": "openrouter/auto",
+        "cost_in": 0.0,
+        "cost_out": 0.0,
+        # extra 会被 **unpack 进 ProviderConfig,只能用其合法字段;聚合器语义用
+        # source_type="api" 即可(无 aggregator 字段,误用会让整个路由器构造崩溃)。
         "extra": {"supports_tools": True},
     },
 ]

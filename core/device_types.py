@@ -151,6 +151,19 @@ _PREFIX_TO_DEVICE_TYPE: dict[str, DeviceType] = {
     "virtual": DeviceType.CUSTOM,
 }
 
+# 客户端实发字符串别名(不匹配枚举/AIP 值,但语义已知)。
+# Wear OS 手表实际发的是 "wearos"(见 galaxy-wearos AuthMessage.kt),而规范 AIP 值是
+# "android_wear" → 直接发 wearos 会掉进 CUSTOM。Wear OS 本质是 Android,归 ANDROID,
+# 与 android_wear 一致。理想上手表应改发 android_wear(客户端侧另修),此处先兜住。
+_STRING_ALIASES: dict[str, DeviceType] = {
+    "wearos": DeviceType.ANDROID,
+    "wear_os": DeviceType.ANDROID,
+    "wear": DeviceType.ANDROID,
+    "watch": DeviceType.ANDROID,
+    "raspberrypi": DeviceType.LINUX,
+    "raspberry_pi": DeviceType.LINUX,
+}
+
 
 def resolve_device_type(raw: str) -> DeviceType:
     """将任意设备类型字符串解析为统一的 DeviceType。
@@ -179,6 +192,10 @@ def resolve_device_type(raw: str) -> DeviceType:
     # 2. AIP v3 细分类型
     if raw_lower in _AIP_TO_DEVICE_TYPE:
         return _AIP_TO_DEVICE_TYPE[raw_lower]
+
+    # 2.5 客户端实发字符串别名(如手表 "wearos" → ANDROID)
+    if raw_lower in _STRING_ALIASES:
+        return _STRING_ALIASES[raw_lower]
 
     # 3. 前缀匹配
     prefix = raw_lower.split("_")[0]

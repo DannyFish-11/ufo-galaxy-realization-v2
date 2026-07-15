@@ -9,7 +9,7 @@ the same Wi-Fi network. Falls back to Tailscale for off-LAN use.
 
 Usage:
     from galaxy_gateway.mdns_announcer import MdnsAnnouncer
-    announcer = MdnsAnnouncer(port=8765)
+    announcer = MdnsAnnouncer(port=9000)  # 与统一网关端口一致
     announcer.start()   # non-blocking
     ...
     announcer.stop()
@@ -26,8 +26,9 @@ _zeroconf = None
 _Zeroconf = None
 _ServiceInfo = None
 
+
 def _ensure_zeroconf():
-    global _zeroconf, _Zeroconf, _ServiceInfo
+    global _Zeroconf, _ServiceInfo  # _zeroconf 从不在本函数赋值,不列(F824)
     if _Zeroconf is not None:
         return True
     try:
@@ -56,7 +57,7 @@ class MdnsAnnouncer:
     SERVICE_TYPE = "_galaxy._tcp.local."
     SERVICE_NAME = "Galaxy Gateway"
 
-    def __init__(self, port: int = 8765, gateway_token: str = ""):
+    def __init__(self, port: int = 9000, gateway_token: str = ""):
         self.port = port
         self.gateway_token = gateway_token
         self._zc: Optional[Any] = None
@@ -119,7 +120,7 @@ class MdnsAnnouncer:
                 addresses=[socket.inet_aton(ip)],
                 port=self.port,
                 properties=desc,
-                server=f"galaxy-gateway.local.",
+                server="galaxy-gateway.local.",
             )
             self._zc = _Zeroconf()
             self._zc.register_service(self._info)

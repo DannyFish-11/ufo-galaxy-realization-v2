@@ -195,6 +195,36 @@ def _build_feature_flags() -> Dict[str, bool]:
     }
 
 
+def _build_discovery() -> Dict[str, Any]:
+    """发现与配对提示,让客户端【从服务端拿】而非编译期硬编码。
+
+    - mDNS 服务类型:局域网零配置发现(网关 mdns_announcer 广播 _galaxy._tcp)。
+    - Tailscale:跨设备可选网络层;网关的 tailnet 地址由客户端【自己】查本机
+      tailscale/MagicDNS 得到,这里【不】per-request shell 出去(避免阻塞/延迟)。
+    - 配对流程路径:新设备据此走 enroll → status → claim(去硬编码 IP/流程)。
+    """
+    try:
+        import zeroconf  # noqa: F401
+
+        mdns_available = True
+    except Exception:  # noqa: BLE001
+        mdns_available = False
+    return {
+        "mdns_service": "_galaxy._tcp",
+        "mdns_enabled": mdns_available,
+        "tailscale": {
+            "recommended_for_cross_device": True,
+            "network_layer": "tailscale",  # 跨设备模式的网络底座(选填,设置里开启)
+            "magicdns_hint": "客户端连接稳定 MagicDNS 名而非硬编码 IP",
+        },
+        "pairing": {
+            "enroll_path": "/api/v1/pairing/enroll",
+            "status_path": "/api/v1/pairing/status/{request_id}",
+            "claim_path": "/api/v1/pairing/claim/{request_id}",
+        },
+    }
+
+
 def build_client_config() -> Dict[str, Any]:
     """
     Assemble the full client configuration dictionary.
@@ -220,6 +250,7 @@ def build_client_config() -> Dict[str, Any]:
         "turn_servers": _build_turn_servers(),
         "transport_priority": _build_transport_priority(),
         "feature_flags": _build_feature_flags(),
+        "discovery": _build_discovery(),
     }
 
 

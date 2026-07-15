@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import uuid
 from collections import OrderedDict
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
@@ -665,6 +666,25 @@ def _evaluate_ingress_authentication(message: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _should_gate_unapproved(auth_outcome: Dict[str, Any]) -> bool:
+    """设备准入闸决策:是否应把【未批准】设备降级为 control_only。
+
+    仅当环境开关 GALAXY_REQUIRE_DEVICE_APPROVAL 打开、且设备【未批准】时返回 True。
+    默认关 → 恒 False → 注册行为与现状逐字节一致(opt-in)。
+
+    "已批准" == auth_outcome["token_valid"]:core.auth.verify_api_token 已【优先】校验
+    每设备 token(core/device_token_registry),故设备持有效每设备 token 时 token_valid
+    即 True——即便处于默认开放模式;配对批准发放的正是这种 token,天然闭环。
+    """
+    require = os.environ.get("GALAXY_REQUIRE_DEVICE_APPROVAL", "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+    return require and not bool(auth_outcome.get("token_valid"))
+
+
 def _evaluate_ingress_identity(
     *,
     message_device_id: str,
@@ -788,6 +808,9 @@ async def handle_device_register(
     device_id = message.get("device_id")
     websocket_device_id = str(message.get("_ingress_connection_device_id") or "").strip() or None
     auth_outcome = _evaluate_ingress_authentication(message)
+    # 设备准入闸(opt-in,默认关 → 行为与现状逐字节一致)。开启后:未批准的设备
+    # 仍可连接,但被降为 control_only(永不作为派发目标),批准后可原地升级。
+    _gate_unapproved = _should_gate_unapproved(auth_outcome)
     identity_outcome = _evaluate_ingress_identity(
         message_device_id=str(device_id or ""),
         websocket_device_id=websocket_device_id,
@@ -865,6 +888,16 @@ async def handle_device_register(
         _inbound_runtime_posture = str(_raw_runtime_posture or "").strip().lower()
         if _inbound_runtime_posture not in {"join_runtime", "control_only"}:
             _inbound_runtime_posture = "join_runtime"
+        # 准入闸(承重改动):未批准且开关开启 → 降为 control_only。posture 是唯一的
+        # 杠杆——它级联卡住三处:附着运行时会话、参与档(封顶 control_only)、以及
+        # delegated 派发硬闸(select_delegated_target 判 bad_posture)。设备仍完全连接,
+        # 只是永不作为派发目标;批准后 reconnect/capability 事件把 posture 升回 join_runtime。
+        if _gate_unapproved and _inbound_runtime_posture == "join_runtime":
+            logger.info(
+                "设备准入闸:device_id=%s 未批准,降为 control_only(仅连接,非派发目标)",
+                device_id,
+            )
+            _inbound_runtime_posture = "control_only"
         if inbound_durable_session_id:
             logger.debug(
                 "handle_device_register: durable continuity fields present: "
@@ -1103,19 +1136,24 @@ async def handle_device_register(
 
         # PR-I: notify the auto-enrollment service so that MeshMembership and
         # Formation auto-enrollment are triggered as part of the registration chain.
-        try:
-            from core.mesh.mesh_auto_enrollment import notify_device_registered
-            notify_device_registered(
-                device_id,
-                roles=_roles,
-                session_id=inbound_attachment_id,
-                metadata={"registration_trigger": "android_device_register"},
-            )
-        except Exception as _ae_exc:
-            logger.debug(
-                "android_bridge: auto_enrollment notify non-fatal: device_id=%s error=%s",
-                device_id, _ae_exc,
-            )
+        # 准入闸:未批准且开关开启时【不】把设备登记进 mesh/formation 成员表(保持
+        # 干净)。这只是清理——真正的派发拦截由上面的 control_only posture 承担。
+        if _gate_unapproved:
+            logger.debug("设备准入闸:device_id=%s 未批准,跳过 mesh 自动登记", device_id)
+        else:
+            try:
+                from core.mesh.mesh_auto_enrollment import notify_device_registered
+                notify_device_registered(
+                    device_id,
+                    roles=_roles,
+                    session_id=inbound_attachment_id,
+                    metadata={"registration_trigger": "android_device_register"},
+                )
+            except Exception as _ae_exc:
+                logger.debug(
+                    "android_bridge: auto_enrollment notify non-fatal: device_id=%s error=%s",
+                    device_id, _ae_exc,
+                )
 
         logger.info(
             "Android device registered: device_id=%s model=%s platform=%s "
