@@ -5,6 +5,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { getBackendUrl } from '@/lib/api';
+import { _mapPhaseToken } from './usePhase';
 import type { Phase } from '@/types/phase';
 
 // ── AIP v3 类型定义 ──────────────────────────────
@@ -236,43 +237,60 @@ export function usePanelData(): UsePanelDataReturn {
     const handleState = (state: any) => {
       try {
         const payload = state?.payload || state;
-        const phase = (payload.tri_state_phase || payload.phase || 'silent') as Phase;
-        const intensity = payload.presence_intensity || 0;
-
-        // 根据 intensity 映射 phase（如果后端未提供 tri_state_phase）
-        let mappedPhase: Phase = phase;
-        if (!payload.tri_state_phase && intensity > 0) {
-          if (intensity < 0.33) mappedPhase = 'silent';
-          else if (intensity < 0.66) mappedPhase = 'liminal';
-          else mappedPhase = 'manifest';
-        }
+        // 真 bug 修复:后端在场桥用"存在模式"词汇广播(static/liminal/manifest,
+        // 见 core/lumiv_websocket_bridge._build_message),而面板三态词汇是
+        // silent/liminal/manifest——这里此前直接把原始 payload.phase(如
+        // "static")强制类型转换成 Phase,从未归一化。WS 未连上/重连窗口期间
+        // 走的正是这条 IPC 直推路径,会短暂把 phase 设成无效的 "static",导致
+        // 在场状态标签渲染空白、光球丢失待机样式、三态圆点没有一个被点亮。
+        // 复用 usePhase.ts 已有的归一化(WS 消息路径早就这么做了)。
+        const rawPhase = payload.tri_state_phase || payload.phase;
+        const phase: Phase = (rawPhase && _mapPhaseToken(String(rawPhase))) || 'silent';
 
         // ambient 只由 bridge 的 state_event 携带；/panel/feed 慢轮询里没有此字段。
         // 用函数式更新在缺省时【保留上一次】ambient，避免两路交替刷新时闪烁掉。
         const incomingAmbient = payload.ambient;
+
+        // 真 bug 修复(headline finding):handleState 被两条完全不同形状的推送
+        // 共用——高频小帧 state_event(core/lumiv_websocket_bridge._build_message:
+        // 只有 phase/depth_factor/intent/speaking/mode/source/ambient,见该函数
+        // 定义)和低频富帧 panel_feed(core/routes/panel.py::build_panel_feed:
+        // mesh/topology/nats/cost/llm_routing/mcp/skills 等一整套维态数据)。此前
+        // 除 ambient 外的每个字段都用 `payload.xxx || DEFAULT_PANEL_DATA.xxx`
+        // 兜底——state_event 完全不携带这些富字段,于是每一次相位切换/自发注意力
+        // tick(几乎每次对话都会触发多次)都会把维态/能力/诊断面板的真实数据整体
+        // 闪回空/零,直到下一次真实设备/任务/技能/mesh 事件或 30s IPC 兜底轮询
+        // 才恢复。现在把 ambient 已经用的"缺省时保留 prev"模式推广到全部富字段——
+        // 只有真正收到该字段时才更新,state_event 这类不携带它们的推送不再覆盖。
         setPanelData((prev) => ({
-          phase: mappedPhase,
-          phaseLabel: mappedPhase.toUpperCase(),
-          presenceIntensity: intensity,
-          coherence: payload.coherence ?? 0,
-          collapseTendency: payload.collapse_tendency ?? 0,
-          llmRouting: {
-            activeProviders: payload.llm_routing?.active_providers || [],
-            lastModelUsed: payload.llm_routing?.last_model_used || '',
-          },
-          nodeTopology: {
-            totalNodes: payload.node_topology?.total_nodes ?? 0,
-            healthyNodes: payload.node_topology?.healthy_nodes ?? 0,
-            degradedNodes: payload.node_topology?.degraded_nodes ?? 0,
-          },
-          costSummary: {
-            totalUsd: payload.cost_summary?.total_usd || 0,
-            tokensInput: payload.cost_summary?.tokens_input || 0,
-            tokensOutput: payload.cost_summary?.tokens_output || 0,
-          },
-          topologyNodes: payload.topology_nodes || DEFAULT_PANEL_DATA.topologyNodes,
-          topologyEdges: payload.topology_edges || DEFAULT_PANEL_DATA.topologyEdges,
-          meshSession: payload.mesh_session || DEFAULT_PANEL_DATA.meshSession,
+          phase,
+          phaseLabel: phase.toUpperCase(),
+          presenceIntensity: payload.presence_intensity ?? prev.presenceIntensity,
+          coherence: payload.coherence ?? prev.coherence,
+          collapseTendency: payload.collapse_tendency ?? prev.collapseTendency,
+          llmRouting: payload.llm_routing
+            ? {
+                activeProviders: payload.llm_routing.active_providers || [],
+                lastModelUsed: payload.llm_routing.last_model_used || '',
+              }
+            : prev.llmRouting,
+          nodeTopology: payload.node_topology
+            ? {
+                totalNodes: payload.node_topology.total_nodes ?? 0,
+                healthyNodes: payload.node_topology.healthy_nodes ?? 0,
+                degradedNodes: payload.node_topology.degraded_nodes ?? 0,
+              }
+            : prev.nodeTopology,
+          costSummary: payload.cost_summary
+            ? {
+                totalUsd: payload.cost_summary.total_usd || 0,
+                tokensInput: payload.cost_summary.tokens_input || 0,
+                tokensOutput: payload.cost_summary.tokens_output || 0,
+              }
+            : prev.costSummary,
+          topologyNodes: payload.topology_nodes || prev.topologyNodes,
+          topologyEdges: payload.topology_edges || prev.topologyEdges,
+          meshSession: payload.mesh_session || prev.meshSession,
           natsWorker: payload.nats_worker
             ? {
                 running: !!payload.nats_worker.running,
@@ -281,14 +299,14 @@ export function usePanelData(): UsePanelDataReturn {
                 starting: !!payload.nats_worker.starting,
                 lastError: payload.nats_worker.last_error ?? null,
               }
-            : DEFAULT_PANEL_DATA.natsWorker,
-          openclawdStatus: payload.openclawd_status || DEFAULT_PANEL_DATA.openclawdStatus,
-          natsMessages: payload.nats_messages || DEFAULT_PANEL_DATA.natsMessages,
-          smartDeviceList: payload.smart_devices || DEFAULT_PANEL_DATA.smartDeviceList,
-          diagnostics: payload.diagnostics || DEFAULT_PANEL_DATA.diagnostics,
-          startupTiming: payload.startup_timing || DEFAULT_PANEL_DATA.startupTiming,
-          mcpServers: payload.mcp_servers || DEFAULT_PANEL_DATA.mcpServers,
-          skills: payload.skills || DEFAULT_PANEL_DATA.skills,
+            : prev.natsWorker,
+          openclawdStatus: payload.openclawd_status || prev.openclawdStatus,
+          natsMessages: payload.nats_messages || prev.natsMessages,
+          smartDeviceList: payload.smart_devices || prev.smartDeviceList,
+          diagnostics: payload.diagnostics || prev.diagnostics,
+          startupTiming: payload.startup_timing || prev.startupTiming,
+          mcpServers: payload.mcp_servers || prev.mcpServers,
+          skills: payload.skills || prev.skills,
           ambient: incomingAmbient ? {
             seeing: !!incomingAmbient.seeing,
             hearing: !!incomingAmbient.hearing,

@@ -54,12 +54,19 @@ export default function ConversationView({ onStreamPhase }: ConversationViewProp
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
+  // 真 bug 修复(竞态):挂载时拉历史是异步的,若用户在它 resolve 之前就已经
+  // 发送了消息(send() 用函数式更新乐观追加 userMsg/aiMsg),历史一旦晚到,这里
+  // 的 setMessages(hist...) 会【整体覆盖】messages,把刚发的用户消息和正在流式
+  // 的 AI 回复静默吞掉,界面回退成保存前的旧快照——用户完全不知道发生了什么。
+  // 用一个"已经手动发送过消息"标记在 send() 一开始就置位,历史加载 resolve 时
+  // 若已置位则放弃这次覆盖(用户的实时操作优先于挂载时的历史快照)。
+  const hasSentRef = useRef(false);
 
   // 进入时拉历史(若有持久会话)。无历史则保留欢迎语。
   useEffect(() => {
     (async () => {
       const hist = await fetchHistory(sessionIdRef.current);
-      if (hist.length) {
+      if (hist.length && !hasSentRef.current) {
         setMessages(
           hist.map((h) => ({
             id: idRef.current++,
@@ -91,6 +98,7 @@ export default function ConversationView({ onStreamPhase }: ConversationViewProp
     const text = input.trim();
     if (!text || sending) return;
 
+    hasSentRef.current = true;
     const userMsg: Message = { id: idRef.current++, role: 'user', content: text };
     const aiMsg: Message = { id: idRef.current++, role: 'ai', content: '', streaming: true };
     setMessages((m) => [...m, userMsg, aiMsg]);

@@ -48,7 +48,12 @@ export interface Catalog {
   /** 逐模型 GPU 适配:ok | no_gpu(需显卡但没有) | insufficient_vram(装不下) */
   gpu_fit?: Record<string, 'ok' | 'no_gpu' | 'insufficient_vram'>;
 }
-export type ModelStatus = 'installed' | 'absent' | 'broken';
+// 真 bug 修复(类型契约缺口):后端 core/routes/models.py::_catalog_placeholder()
+// (探测超时/首次加载兜底)会产出 status:"unknown",但这里此前只声明了三个值——
+// 当前因为 placeholder 条目总是同时带 ollama_reachable:false、被 StatusBadge
+// 先挡住而没有可见问题,但类型本身是假的,一旦未来某个路径在 ollama_reachable
+// 为 true 时也给出 "unknown",会被无声地当成 'absent'/'未安装' 误判。
+export type ModelStatus = 'installed' | 'absent' | 'broken' | 'unknown';
 export interface StatusEntry {
   status: ModelStatus;
   ollama_reachable: boolean;

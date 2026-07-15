@@ -27,7 +27,11 @@ function isPhaseMessage(msg: WebSocketMessage | null): msg is WebSocketMessage &
 // 而面板三态词汇是 silent/liminal/manifest。"static" 等同于 "silent"(待机)。
 // 之前只认 "silent" → 回到待机的 static 帧被丢弃 → 覆盖层/面板三态回不去 →
 // 表现为"触发不了三态变化"。此处把 static/idle/quiet 都归一到 silent。
-function _mapPhaseToken(raw: string): Phase | null {
+// 导出:usePanelData.ts 的 IPC 直推路径(handleState)也需要同一份归一化——
+// 它此前直接把后端原始 payload.phase(如 "static")当 Phase 强制类型转换，
+// 没有走这层映射，导致 presence-state 标签/光球/三态圆点在 WS 未连上或重连
+// 期间短暂读到无效的 "static" 值而渲染异常。见 usePanelData.ts 的引用处。
+export function _mapPhaseToken(raw: string): Phase | null {
   const t = raw.toLowerCase();
   if (t.includes('silent') || t.includes('static') || t.includes('idle') || t.includes('quiet')) return 'silent';
   if (t.includes('liminal') || t.includes('processing')) return 'liminal';
