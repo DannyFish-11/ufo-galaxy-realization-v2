@@ -390,10 +390,23 @@ jobs:
           for cap in ["tap", "screenshot", "task_assign", "task_result", "register"]:
               assert is_mainline_active(cap), f"{cap!r} should be ACTIVE_MAINLINE"
 
-          for cap in ["local_ai", "mesh", "federation"]:
+          # local_ai 已于 2026-05-02 从 STRUCTURAL_ONLY 上调为 DEGRADED(安卓端
+          # llama.cpp/NCNN 运行时已真实打进 APK,只是首跑还需下载 ~1.65GB 模型——
+          # 见 core/canonical_capability_status.py 的 LOCAL_AI_IS_DEGRADED_STATUS
+          # 完整说明)。此断言脚本此前没跟着这次分级调整更新,把 local_ai 和仍是
+          # STRUCTURAL_ONLY 的 mesh/federation 混在同一个循环里断言,导致门禁常年
+          # 误报。拆开:local_ai 单独断言 DEGRADED,mesh/federation 保持不变。
+          for cap in ["mesh", "federation"]:
               assert not is_mainline_active(cap), f"{cap!r} should NOT be mainline"
               rec = registry[cap]
               assert rec.status == CapabilityRuntimeStatus.STRUCTURAL_ONLY
+
+          assert not is_mainline_active("local_ai"), "'local_ai' should NOT be mainline"
+          assert registry["local_ai"].status == CapabilityRuntimeStatus.DEGRADED, (
+              "local_ai 应为 DEGRADED(2026-05-02 起真机 llama.cpp/NCNN 运行时已随 APK"
+              "打包,只是首跑仍需下载模型)——若这条断言又失败,说明分级被真的改动过,"
+              "需要核实是否为有意的降级/升级决策,而不是简单改回旧断言。"
+          )
 
           for cap in ["webrtc", "advanced_handoff"]:
               assert not is_mainline_active(cap), f"{cap!r} should NOT be mainline"
