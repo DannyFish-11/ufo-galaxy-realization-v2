@@ -81,3 +81,84 @@ class TestResolveGatewayPort:
         monkeypatch.delenv("GALAXY_UNIFIED_LAUNCHER_PORT", raising=False)
         # 默认配置里 unified_launcher 端口是 9000(见 core/port_config.py)。
         assert resolve_gateway_port() == 9000
+
+
+class _FakeShutil:
+    """假 shutil：按预置名单回答 which()。"""
+
+    def __init__(self, on_path):
+        self._on_path = set(on_path)
+
+    def which(self, name):
+        return f"C:\\fake\\{name}" if name in self._on_path else None
+
+
+class TestWindowsMsvcPrecheck:
+    """Windows MSVC 链接器预检：只认 cl.exe / 磁盘上真实存在的 link.exe，
+    杜绝"裸 link.exe 或组件已注册"的假阳性(真机踩过：放行后编译数分钟才崩)。"""
+
+    def test_cl_on_path_is_msvc(self):
+        from core.electron_launch_guard import _link_on_path_is_msvc
+
+        assert _link_on_path_is_msvc(_FakeShutil(["cl.exe"])) is True
+
+    def test_bare_link_on_path_not_trusted(self):
+        # 只有 link.exe(可能是非 MSVC 的)→ 不认，交由磁盘核实
+        from core.electron_launch_guard import _link_on_path_is_msvc
+
+        assert _link_on_path_is_msvc(_FakeShutil(["link.exe"])) is False
+        assert _link_on_path_is_msvc(_FakeShutil([])) is False
+
+    def test_present_true_when_cl_on_path(self, monkeypatch):
+        import core.electron_launch_guard as g
+
+        # cl 在 PATH → 无需 vswhere 即判就位（且不应调用 vswhere 探测）
+        monkeypatch.setattr(g, "_windows_msvc_linker_dir", lambda sp: (_ for _ in ()).throw(AssertionError("不该调用")))
+        assert g._windows_msvc_present(_FakeShutil(["cl.exe"]), None) is True
+
+    def test_present_true_when_disk_linker_found(self, monkeypatch):
+        import core.electron_launch_guard as g
+
+        monkeypatch.setattr(g, "_windows_msvc_linker_dir", lambda sp: r"C:\VS\VC\Tools\MSVC\14.4\bin\Hostx64\x64")
+        assert g._windows_msvc_present(_FakeShutil([]), None) is True
+
+    def test_present_false_when_registered_but_no_binary(self, monkeypatch):
+        import core.electron_launch_guard as g
+
+        # 组件"已注册"但磁盘无 link.exe → linker_dir 返回 None → 判为不就位
+        monkeypatch.setattr(g, "_windows_msvc_linker_dir", lambda sp: None)
+        assert g._windows_msvc_present(_FakeShutil([]), None) is False
+
+    def test_prepend_path_dedups(self, monkeypatch):
+        # 用不含 os.pathsep 的目录名，使 dedup 逻辑在任意平台可测
+        # (真实 Windows 盘符路径含 ':'，但那里 pathsep 是 ';'，不会误切)
+        import core.electron_launch_guard as g
+
+        monkeypatch.setenv("PATH", "dirA" + os.pathsep + "dirB")
+        g._prepend_path("msvcbin")
+        assert os.environ["PATH"].startswith("msvcbin" + os.pathsep)
+        # 再插一次不重复
+        g._prepend_path("msvcbin")
+        assert os.environ["PATH"].count("msvcbin") == 1
+
+    def test_hint_injects_path_and_proceeds_when_linker_on_disk(self, monkeypatch):
+        import core.electron_launch_guard as g
+
+        monkeypatch.setenv("PATH", "C:\\a")
+        monkeypatch.setattr(g, "_link_on_path_is_msvc", lambda sh: False)
+        monkeypatch.setattr(g, "_windows_msvc_linker_dir", lambda sp: r"C:\VS\...\Hostx64\x64")
+        # 磁盘有链接器 → 注入 PATH、返回 None（放行构建），不触发自动安装
+        monkeypatch.setattr(
+            g, "_windows_try_install_msvc", lambda *a: (_ for _ in ()).throw(AssertionError("不该装"))
+        )
+        assert g._windows_msvc_hint(_FakeShutil([]), None) is None
+        assert r"C:\VS\...\Hostx64\x64" in os.environ["PATH"]
+
+    def test_hint_returns_manual_msg_when_absent_and_autoinstall_off(self, monkeypatch):
+        import core.electron_launch_guard as g
+
+        monkeypatch.setenv("GALAXY_TAURI_AUTO_INSTALL_MSVC", "0")
+        monkeypatch.setattr(g, "_link_on_path_is_msvc", lambda sh: False)
+        monkeypatch.setattr(g, "_windows_msvc_linker_dir", lambda sp: None)
+        out = g._windows_msvc_hint(_FakeShutil([]), None)
+        assert out is not None and "MSVC" in out and "BuildTools" in out
