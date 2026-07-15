@@ -22,6 +22,7 @@ from typing import Dict, Optional, Tuple, List
 from dataclasses import dataclass
 from enum import Enum
 
+from core.credential_vault import PLACEHOLDER_PREFIXES
 from core.port_config import get_service_port
 
 # 颜色输出
@@ -263,7 +264,7 @@ class SetupWizard:
                     line = line.strip()
                     if line and not line.startswith('#') and '=' in line:
                         key, value = line.split('=', 1)
-                        if value and value != 'your-' and not value.startswith('your-'):
+                        if value and not value.lower().startswith(PLACEHOLDER_PREFIXES):
                             self.config[key] = value
         
         # 从环境变量加载

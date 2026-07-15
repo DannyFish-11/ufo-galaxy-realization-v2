@@ -35,6 +35,9 @@ contextBridge.exposeInMainWorld('galaxyAPI', {
   // getConfig/setConfig：精简版(模型 tab)—— status/configured/values,不含密钥明文。
   getConfig: () => ipcRenderer.invoke('galaxy:get-config'),
   setConfig: (config) => ipcRenderer.invoke('galaxy:set-config', config),
+  // 渲染层保存超时死线的真源在主进程(见 electron/main.js 的
+  // CONFIG_FETCH_BUDGET_MS 等常量)，这里现查而不是渲染层自己另维护一份数字。
+  getConfigSaveTimeoutMs: () => ipcRenderer.invoke('galaxy:get-config-save-timeout-ms'),
   // getSettings：完整明细(设置 tab)—— 105 项配置的 value/default/type/category/description。
   // 与 getConfig 分开路径,避免后端路由遮蔽导致设置 tab 拿不到任何一项内容。
   getSettings: () => ipcRenderer.invoke('galaxy:get-settings'),

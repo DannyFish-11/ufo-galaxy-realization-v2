@@ -744,17 +744,40 @@ let settingsCache = {};    // 完整明细(设置 tab):{KEY: {value, default, ty
 // 时序问题吸收掉，不再让用户在这个窗口内的操作直接判死。
 // 真机复现过首次启动光下载语音模型就要 1~2 分钟，重试预算按此设(约 60s 封顶)——
 // 短了盖不住真实的首次启动窗口，长了会让用户的一次点击卡住看起来像"没反应"。
-async function fetchWithRetry(url, options, { retries = 24, delayMs = 2500 } = {}) {
+//
+// 真 bug 修复(面板"保存 API key 直接失败"排查):这个 60s 预算此前是【单次
+// 尝试无上限】的计数重试(retries × delayMs)——一次卡死不断的连接可能吃光整个
+// 预算,且渲染层(ModelsTab.tsx)自己另外套了一个独立的 20s withTimeout 死线，
+// 两个数字从未对齐过：渲染层 20s 一到就先报"保存失败"，主进程这边却可能在
+// 30~60s 后才真的存成功——用户看到一次本可避免的假失败。
+// 现在改成【墙钟时间片】循环:总预算(budgetMs)不变，但新增单次尝试的硬上限
+// (attemptTimeoutMs，AbortController 强制中断)，避免一次卡死的连接吃光整个
+// 预算；渲染层则改为通过 galaxy:get-config-save-timeout-ms 现查这里的真实
+// 预算，不再自己维护一份独立数字（见下方 handler）。
+const CONFIG_FETCH_BUDGET_MS = 60000;        // 总预算，不变——仍对应文档化的
+                                              // 冷启动窗口(约 60s 封顶)
+const CONFIG_FETCH_ATTEMPT_TIMEOUT_MS = 8000; // 新增:单次尝试的硬上限
+const CONFIG_FETCH_RETRY_DELAY_MS = 2500;    // 不变
+async function fetchWithRetry(url, options, {
+    budgetMs = CONFIG_FETCH_BUDGET_MS,
+    delayMs = CONFIG_FETCH_RETRY_DELAY_MS,
+    attemptTimeoutMs = CONFIG_FETCH_ATTEMPT_TIMEOUT_MS,
+} = {}) {
+    const deadline = Date.now() + budgetMs;
     let lastErr;
-    for (let attempt = 0; attempt <= retries; attempt++) {
+    for (;;) {
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), attemptTimeoutMs);
         try {
-            return await fetch(url, options);
+            return await fetch(url, { ...options, signal: ctrl.signal });
         } catch (e) {
             lastErr = e;
-            if (attempt < retries) {
-                await new Promise((r) => setTimeout(r, delayMs));
-            }
+        } finally {
+            clearTimeout(timer);
         }
+        if (Date.now() >= deadline) break;
+        await new Promise((r) => setTimeout(r, delayMs));
+        if (Date.now() >= deadline) break;
     }
     throw lastErr;
 }
@@ -871,6 +894,16 @@ ipcMain.handle('galaxy:set-config', async (_, config) => {
         return { success: false, error: `无法连接后端(已重试多次)：${e.message} —— 后端可能仍在启动中，请稍后重试` };
     }
 });
+
+// 渲染层需要知道这条 IPC 实际能跑多久，才能把自己的 withTimeout 设得比这个
+// 真实预算更长——否则会出现渲染层已经判"超时失败"、主进程这边还在后台
+// 重试并最终成功的错位(用户看到假失败)。这里把 CONFIG_FETCH_BUDGET_MS +
+// 单次尝试上限 + 一点 IPC/序列化余量一并吐给渲染层，渲染层不再自己维护一份
+// 独立数字(否则两边永远有再次漂移的可能)。
+const CONFIG_SAVE_CLIENT_MARGIN_MS = 10000;
+ipcMain.handle('galaxy:get-config-save-timeout-ms', () =>
+    CONFIG_FETCH_BUDGET_MS + CONFIG_FETCH_ATTEMPT_TIMEOUT_MS + CONFIG_SAVE_CLIENT_MARGIN_MS
+); // = 78000ms 今日实际值；main.js 改动后渲染层兜底常量需同步更新
 
 // 保存配置到文件
 ipcMain.handle('galaxy:save-config', async () => {

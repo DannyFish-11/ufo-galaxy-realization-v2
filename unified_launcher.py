@@ -149,6 +149,7 @@ from core.ascii_art import (
     print_section_header,
     print_status_row,
 )
+from core.credential_vault import PLACEHOLDER_PREFIXES
 
 
 def print_status(message: str, status: str = "info"):
@@ -308,7 +309,7 @@ def ai_brain_readiness(
         _model_tag_root(a) == _model_tag_root(chosen_model) for a in available_models
     )
     cloud_key_set = any(
-        env.get(k, "").strip() and not env.get(k, "").startswith("your-")
+        env.get(k, "").strip() and not env.get(k, "").strip().lower().startswith(PLACEHOLDER_PREFIXES)
         for k in _CLOUD_LLM_KEY_ENV_VARS
     )
     truly_usable = model_installed or cloud_key_set
