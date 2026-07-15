@@ -12,17 +12,17 @@ name = "galaxy-overlay"
 path = "src/main.rs"
 
 [build-dependencies]
-tauri-build = { version = "2", features = [] }
+tauri-build = { version = "2.0.0", features = [] }
 
 [dependencies]
 # macos-private-api：让透明窗口在 macOS 上也可用（Windows 不需要该 feature，但带着无害）。
-tauri = { version = "2", features = ["macos-private-api"] }
-tauri-plugin-global-shortcut = "2"
-tauri-plugin-single-instance = "2"
-tauri-plugin-dialog = "2"
-tauri-plugin-notification = "2"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+tauri = { version = "2.0.0", features = ["macos-private-api"] }
+tauri-plugin-global-shortcut = "2.0.0"
+tauri-plugin-single-instance = "2.0.0"
+tauri-plugin-dialog = "2.0.0"
+tauri-plugin-notification = "2.0.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 # 仅访问本机网关(http)，用 rustls 避免依赖系统 OpenSSL/native-tls。
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 # 复刻 Electron main.js 的 IPC HTTP 接收端（托盘/后端 POST /ipc/*）。
@@ -31,7 +31,7 @@ tiny_http = "0.12"
 tokio = { version = "1", features = ["time"] }
 # 第一态原生连续屏幕采集（跨平台截屏；Windows 走 Win32，免 getDisplayMedia 选择器）。
 # 用 xcap 自带 re-export 的 image（pub use image），避免 image 版本冲突；它默认带 JPEG 编码。
-xcap = "0.0"
+xcap = "0.0.15"
 base64 = "0.22"
 
 [profile.release]
