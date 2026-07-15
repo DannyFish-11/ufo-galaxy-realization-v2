@@ -4,7 +4,7 @@ Lumiv Presence Bridge — 桌面覆盖层事件推送
 职责：
 1. 订阅 DesktopPresenceRuntime 的状态事件
 2. 将 DesktopPresenceMode (STATIC/LIMINAL/MANIFEST) 映射为 depth_factor
-3. 优先通过 IPC HTTP POST 推送到 Electron main.js (localhost:9229)
+3. 优先通过 IPC HTTP POST 推送到 Electron main.js (localhost:9231，与 GALAXY_IPC_PORT 同源)
 4. Fallback 到 WebSocket 广播（浏览器预览模式）
 
 这是 DesktopPresenceRuntime 与 Electron 外壳之间的唯一桥梁。
@@ -29,8 +29,29 @@ except ImportError:
 
 logger = logging.getLogger("Lumiv.PresenceBridge")
 
-# PR-IPC: Electron HTTP 接收端端口（从环境变量读取，兼容用户自定义端口）
-_ELECTRON_PORT = int(os.environ.get("GALAXY_ELECTRON_PORT", os.environ.get("GATEWAY_PORT", "9229")))
+# PR-IPC: Electron HTTP 接收端端口。【必须与 Electron 侧同源】——electron/main.js 读
+# GALAXY_IPC_PORT(默认 9231)。此前本侧默认 9229 与之【错配】:overlay 只走 IPC、无 WS 兜底,
+# 收不到任何后端状态 → 冻在硬编码 SILENT 默认(所有者反馈"第二态说话动画换不起来"的真凶)。
+# 故这里【同读 GALAXY_IPC_PORT、同默认 9231】;保留 GALAXY_ELECTRON_PORT 作显式覆盖以兼容。
+# 端口契约:overlay(electron/main.js)与本桥【唯一真源】都是 GALAXY_IPC_PORT,默认 9231。
+ELECTRON_IPC_PORT_DEFAULT = 9231
+
+
+def resolve_electron_ipc_port(environ: Optional[Dict[str, str]] = None) -> int:
+    """解析 Electron IPC 接收端口,须与 electron/main.js 的 GALAXY_IPC_PORT 同源。
+
+    优先级:GALAXY_ELECTRON_PORT(旧显式覆盖)→ GALAXY_IPC_PORT(规范,与 Electron 同名)
+    → 9231(与 electron/main.js 默认一致)。
+    """
+    e = environ if environ is not None else os.environ
+    raw = e.get("GALAXY_ELECTRON_PORT") or e.get("GALAXY_IPC_PORT")
+    try:
+        return int(raw) if raw else ELECTRON_IPC_PORT_DEFAULT
+    except (TypeError, ValueError):
+        return ELECTRON_IPC_PORT_DEFAULT
+
+
+_ELECTRON_PORT = resolve_electron_ipc_port()
 _ELECTRON_IPC_URL = f"http://127.0.0.1:{_ELECTRON_PORT}/ipc/presence-state"
 
 
@@ -56,7 +77,7 @@ class GalaxyPresenceBridge:
     将 presence 模式转换为 depth_factor 推送到前端。
 
     推送策略（PR-IPC）：
-    1. 优先 HTTP POST 到 Electron main.js: http://localhost:9229/ipc/presence-state
+    1. 优先 HTTP POST 到 Electron main.js: http://localhost:9231/ipc/presence-state
     2. Electron 不可用时 fallback 到 WebSocket 广播（浏览器预览模式）
     """
 
@@ -387,17 +408,23 @@ class GalaxyPresenceBridge:
         # 可见的在场深度——说完(set_ai_speaking(False) 广播)才落回相位深度,
         # 由渲染端弹簧自然缓落。消除"话没说完、画面先睡"的割裂。
         _depth = self._current_depth
+        _phase = self._current_mode
         if _speaking:
             _depth = max(_depth, MODE_DEPTH_MAP["liminal"])
+            # 说话即"阈限在场":TTS 在相位已回 SILENT 之后才发声,若仍报 static,只认 phase 的
+            # 消费者(React 面板 usePhase)不会显示第二态。说话时把 phase/mode 报成 liminal,
+            # 与 overlay(读 depth+speaking)语义一致、面板与 overlay 同步显示第二态。
+            if _phase == "static":
+                _phase = "liminal"
         return {
             "type": "state_event",
             "event_category": "ambient_tick",
             "payload": {
-                "phase": self._current_mode,
+                "phase": _phase,
                 "depth_factor": round(_depth, 4),
                 "intent": round(self._intent, 4),
                 "speaking": _speaking,
-                "mode": self._current_mode,
+                "mode": _phase,
                 "source": "DesktopPresenceRuntime",
                 # 自发注意力最近一拍（面板在场栏展示"在看/在听 + 决策"）。
                 "ambient": {
