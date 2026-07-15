@@ -145,21 +145,14 @@ _CHECKS: List[EnvCheck] = [
         var="OPENAI_API_KEY",
         severity=Severity.WARNING,
         description="OpenAI API key for LLM inference.",
-        hint=(
-            "Set OPENAI_API_KEY in .env or export it in the shell.\n"
-            "  Example: OPENAI_API_KEY=sk-...\n"
-            "  At least one LLM provider key is required to run agents."
-        ),
+        hint="Set OPENAI_API_KEY=sk-… in .env (≥1 LLM provider key required to run agents).",
         groups=["core", "all"],
     ),
     EnvCheck(
         var="ANTHROPIC_API_KEY",
         severity=Severity.WARNING,
         description="Anthropic Claude API key (optional if OpenAI is set).",
-        hint=(
-            "Set ANTHROPIC_API_KEY=sk-ant-... in .env if you want to use Claude.\n"
-            "  Required when GALAXY_LLM_PROVIDER=anthropic."
-        ),
+        hint="Set ANTHROPIC_API_KEY=sk-ant-… in .env to use Claude (required when GALAXY_LLM_PROVIDER=anthropic).",
         groups=["core", "all"],
     ),
     # ── Core: auth / security ────────────────────────────────────────────
@@ -168,12 +161,10 @@ _CHECKS: List[EnvCheck] = [
         severity=Severity.CRITICAL,
         description="Bearer token used to authenticate REST + WebSocket endpoints.",
         hint=(
-            "Generate a random token and set it in .env:\n"
-            '  GALAXY_API_TOKEN=$(python3 -c "import secrets; print(secrets.token_urlsafe(32))")\n'
-            "  Also set GALAXY_AUTH_ENABLED=true to enforce it.\n"
-            "  Or set GALAXY_REQUIRE_API_TOKEN=true to treat a missing token as CRITICAL "
-            "even when Bearer auth is disabled (staging hardening).\n"
-            "  Without this token any client can send commands to the API when auth is off."
+            'Set GALAXY_API_TOKEN=$(python3 -c "import secrets;print(secrets.token_urlsafe(32))") '
+            "in .env + GALAXY_AUTH_ENABLED=true to enforce.\n"
+            "GALAXY_REQUIRE_API_TOKEN=true makes a missing token CRITICAL even with auth off "
+            "(staging). Without it, any client can command the API when auth is off."
         ),
         groups=["core", "gateway", "all"],
     ),
@@ -183,10 +174,8 @@ _CHECKS: List[EnvCheck] = [
         severity=Severity.WARNING,
         description="Master encryption key for Node_03 SecretVault.",
         hint=(
-            "Generate and set SECRETVAULT_MASTER_KEY in .env:\n"
-            "  SECRETVAULT_MASTER_KEY=$(python3 -c 'from cryptography.fernet import Fernet;"
-            " print(Fernet.generate_key().decode())')\n"
-            "  Required when GALAXY_SECRET_BACKEND=vault."
+            "Set SECRETVAULT_MASTER_KEY=$(python3 -c 'from cryptography.fernet import Fernet;"
+            "print(Fernet.generate_key().decode())') in .env (required when GALAXY_SECRET_BACKEND=vault)."
         ),
         groups=["vault", "all"],
     ),
@@ -197,9 +186,8 @@ _CHECKS: List[EnvCheck] = [
         severity=Severity.INFO,
         description="System startup/fabric mode (default: desktop-local).",
         hint=(
-            "Set GALAXY_SYSTEM_MODE=desktop-local for first-start / single-machine use.\n"
-            "  Set to desktop-cross-device when the cross-device fabric should be active.\n"
-            "  See docs/SYSTEM_MODE_CONFIG.md for details."
+            "desktop-local for single-machine (default); desktop-cross-device to activate the "
+            "cross-device fabric. See docs/SYSTEM_MODE_CONFIG.md."
         ),
         groups=["core", "gateway", "all"],
     ),
@@ -207,10 +195,7 @@ _CHECKS: List[EnvCheck] = [
         var="GALAXY_NATS_ENABLED",
         severity=Severity.INFO,
         description="Enable the NATS bus (default: derived from GALAXY_SYSTEM_MODE).",
-        hint=(
-            "Set GALAXY_NATS_ENABLED=true to activate NATS regardless of mode.\n"
-            "  Defaults to false in desktop-local mode, true in desktop-cross-device mode."
-        ),
+        hint="true to force-enable NATS regardless of mode (default: off desktop-local, on cross-device).",
         groups=["gateway", "all"],
     ),
     EnvCheck(
@@ -218,9 +203,8 @@ _CHECKS: List[EnvCheck] = [
         severity=Severity.INFO,
         description="Treat missing fabric dependencies as hard startup failures (default: false).",
         hint=(
-            "Set GALAXY_FABRIC_STRICT=true only in desktop-cross-device mode when NATS\n"
-            "  must be available for the system to function.  Leave false (default) for\n"
-            "  graceful degradation."
+            "true only in desktop-cross-device mode when NATS is mandatory; leave false "
+            "(default) for graceful degradation."
         ),
         groups=["gateway", "all"],
     ),
@@ -228,11 +212,7 @@ _CHECKS: List[EnvCheck] = [
         var="GALAXY_NETWORK_MODE",
         severity=Severity.INFO,
         description="Network topology mode: local | lan | tailscale | relay (default: local).",
-        hint=(
-            "Set GALAXY_NETWORK_MODE=lan for LAN-only deployments.\n"
-            "  Set to tailscale when Tailscale is the primary network fabric.\n"
-            "  Set to relay when using a public relay server."
-        ),
+        hint="local (default) | lan (LAN-only) | tailscale (Tailscale fabric) | relay (public relay server).",
         groups=["gateway", "all"],
     ),
     EnvCheck(
@@ -240,9 +220,8 @@ _CHECKS: List[EnvCheck] = [
         severity=Severity.INFO,
         description="Enable/disable cross-device routing (default: derived from GALAXY_SYSTEM_MODE).",
         hint=(
-            "Set GALAXY_CROSS_DEVICE_ENABLED=true to enable cross-device routing.\n"
-            "  Set to false to disable (safe default for single-device deployments).\n"
-            "  When GALAXY_SYSTEM_MODE is set, this value is derived automatically."
+            "true/false to force cross-device routing (false = safe single-device default); "
+            "auto-derived from GALAXY_SYSTEM_MODE when that is set."
         ),
         groups=["gateway", "all"],
     ),
@@ -251,10 +230,7 @@ _CHECKS: List[EnvCheck] = [
         var="GALAXY_SIGNALING_TIMEOUT_S",
         severity=Severity.INFO,
         description="WebRTC signaling timeout in seconds (default: 30).",
-        hint=(
-            "Set GALAXY_SIGNALING_TIMEOUT_S=30 (or another positive integer).\n"
-            "  Increase to 60 on high-latency networks."
-        ),
+        hint="Positive int seconds (default 30; raise to 60 on high-latency networks).",
         groups=["ws", "all"],
     ),
     # ── Android bridge ───────────────────────────────────────────────────
@@ -262,11 +238,7 @@ _CHECKS: List[EnvCheck] = [
         var="GALAXY_AUTH_ENABLED",
         severity=Severity.WARNING,
         description="Enforce Bearer-token auth on all endpoints (default: false).",
-        hint=(
-            "Set GALAXY_AUTH_ENABLED=true in production.\n"
-            "  Requires GALAXY_API_TOKEN to also be set.\n"
-            "  Without this, Android clients can connect without authentication."
-        ),
+        hint="true in production (also needs GALAXY_API_TOKEN); without it Android clients connect unauthenticated.",
         groups=["android", "gateway", "all"],
     ),
     # ── TLS ─────────────────────────────────────────────────────────────
@@ -275,8 +247,8 @@ _CHECKS: List[EnvCheck] = [
         severity=Severity.INFO,
         description="Path to TLS certificate file (enables HTTPS when set with GALAXY_TLS_KEY).",
         hint=(
-            "Set GALAXY_TLS_CERT=/path/to/cert.pem and GALAXY_TLS_KEY=/path/to/key.pem\n"
-            "  to enable HTTPS.  Leave blank for plain HTTP (development only)."
+            "Set GALAXY_TLS_CERT=/path/cert.pem + GALAXY_TLS_KEY=/path/key.pem for HTTPS; "
+            "blank = plain HTTP (dev only)."
         ),
         groups=["gateway", "ws", "all"],
     ),
@@ -285,10 +257,7 @@ _CHECKS: List[EnvCheck] = [
         var="GALAXY_NATS_URL",
         severity=Severity.INFO,
         description="NATS control-plane URL (default: nats://localhost:4222).",
-        hint=(
-            "Set GALAXY_NATS_URL=nats://localhost:4222 if using the NATS control plane.\n"
-            "  Leave unset to disable NATS (all NATS paths become no-ops)."
-        ),
+        hint="nats://localhost:4222 to use the NATS control plane; unset disables NATS (paths become no-ops).",
         groups=["gateway", "all"],
     ),
     # ── Runtime bridge (optional) ────────────────────────────────────────
@@ -296,10 +265,7 @@ _CHECKS: List[EnvCheck] = [
         var="GALAXY_RUNTIME_URL",
         severity=Severity.INFO,
         description="URL of the Galaxy Agent Runtime (for AgentBridge).",
-        hint=(
-            "Set GALAXY_RUNTIME_URL=http://localhost:8200 if running the agent runtime.\n"
-            "  Leave unset to disable the agent bridge (GALAXY_RUNTIME_ENABLED=0)."
-        ),
+        hint="http://localhost:8200 if running the agent runtime; unset disables the agent bridge.",
         groups=["gateway", "all"],
     ),
 ]
@@ -344,6 +310,24 @@ class PreflightReport:
     # ── display ──────────────────────────────────────────────────────────
 
     def format(self, verbose: bool = True) -> str:
+        # 颜色/字体与启动界面其余部分统一:走 core.cli_render 的 _use_color() 门闸
+        # + core.ascii_art.Colors 同一套配色(标题 CYAN 粗体、✗ 红、⚠ 黄、✓ 绿、
+        # 变量名粗体、描述与提示 DIM)。非 TTY / 不支持色彩时自动退化为纯文本
+        # (故 assertIn 一类测试不受影响)。任何导入失败都安全回退为无色。
+        try:
+            from core import cli_render as _r
+            from core.ascii_art import Colors as _Co
+
+            _use = _r._use_color()
+        except Exception:  # noqa: BLE001 — 渲染增强失败绝不影响预检本身
+            _use = False
+
+            class _Co:  # type: ignore
+                BOLD = CYAN = DIM = GREEN = YELLOW = RED = ENDC = ""
+
+        def _c(t: str, color: str) -> str:
+            return f"{color}{t}{_Co.ENDC}" if _use else t
+
         # 盒子标题按盒宽【居中计算】,不再手写空格——真机复现过标题行内宽 57、
         # 上下边框内宽 58,导致标题右侧 ║ 比边框的 ╗ 缩进一格(整个白框歪一行)。
         # 盒宽 58 与启动 banner(core.ascii_art)一致,两个白框从此完全对齐。
@@ -352,44 +336,43 @@ class PreflightReport:
         _pad = max(0, _box_inner - len(_title))
         _left = _pad // 2
         _right = _pad - _left
+        _summary = (
+            f"  {_c('Mode', _Co.DIM)}  : {self.mode}   "
+            f"{_c('passed', _Co.DIM)} {_c(str(len(self.passed)), _Co.GREEN)}  "
+            f"{_c('warn', _Co.DIM)} {_c(str(len(self.warnings)), _Co.YELLOW)}  "
+            f"{_c('crit', _Co.DIM)} {_c(str(len(self.criticals)), _Co.RED)}"
+            f"   {_c(f'/ {len(self.findings)} checks', _Co.DIM)}"
+        )
         lines: List[str] = [
             "",
-            "╔" + "═" * _box_inner + "╗",
-            "║" + " " * _left + _title + " " * _right + "║",
-            "╚" + "═" * _box_inner + "╝",
-            f"  Mode  : {self.mode}",
-            f"  Checks: {len(self.findings)}  "
-            f"passed={len(self.passed)}  "
-            f"warnings={len(self.warnings)}  "
-            f"criticals={len(self.criticals)}",
+            _c("╔" + "═" * _box_inner + "╗", _Co.CYAN),
+            _c("║" + " " * _left, _Co.CYAN) + _c(_title, _Co.BOLD + _Co.CYAN) + _c(" " * _right + "║", _Co.CYAN),
+            _c("╚" + "═" * _box_inner + "╝", _Co.CYAN),
+            _summary,
             "",
         ]
 
         # 符号与 core.cli_render 统一(✓/⚠/✗,均为 1 显示格),不再混用 emoji
         # ✅/⚠️/❌(带变体选择符、多数终端渲染成 2 格),避免整个克隆界面对号列
-        # 因图标宽度不一而错位——真机反馈"绿色对号没对齐成一列"根因之一。
+        # 因图标宽度不一而错位。每条:`• VAR — 描述`(变量名与描述并作一行,省一行),
+        # 提示首行带 💡、续行只缩进不再重复 💡,条目间不留空行 → 更紧凑。
+        def _emit_section(header: str, color: str, findings: List["Finding"]) -> None:
+            lines.append("  " + _c(header, color))
+            lines.append("  " + _c("─" * 56, _Co.DIM))
+            for f in findings:
+                _desc = _c("— " + f.check.description, _Co.DIM)
+                lines.append(f"  {_c('•', color)} {_c(f.check.var, _Co.BOLD)} {_desc}")
+                hint_lines = f.check.hint.splitlines()
+                for i, hint_line in enumerate(hint_lines):
+                    prefix = "💡 " if i == 0 else "   "
+                    lines.append("    " + _c(prefix + hint_line.strip(), _Co.DIM))
+
         if self.criticals:
-            lines.append("  ✗  CRITICAL — startup blocked")
-            lines.append("  " + "─" * 56)
-            for f in self.criticals:
-                lines.append(f"  • {f.check.var}")
-                lines.append(f"    {f.check.description}")
-                for hint_line in f.check.hint.splitlines():
-                    lines.append(f"    💡 {hint_line}")
-                lines.append("")
-
+            _emit_section("✗  CRITICAL — startup blocked", _Co.RED, self.criticals)
         if self.warnings and verbose:
-            lines.append("  ⚠  WARNING — degraded functionality")
-            lines.append("  " + "─" * 56)
-            for f in self.warnings:
-                lines.append(f"  • {f.check.var}")
-                lines.append(f"    {f.check.description}")
-                for hint_line in f.check.hint.splitlines():
-                    lines.append(f"    💡 {hint_line}")
-                lines.append("")
-
+            _emit_section("⚠  WARNING — degraded functionality", _Co.YELLOW, self.warnings)
         if self.ok:
-            lines.append("  ✓  All CRITICAL checks passed.")
+            lines.append("  " + _c("✓  All CRITICAL checks passed.", _Co.GREEN))
 
         lines.append("")
         return "\n".join(lines)

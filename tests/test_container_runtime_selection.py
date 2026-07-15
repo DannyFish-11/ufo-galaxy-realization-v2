@@ -43,6 +43,14 @@ def test_both_installed_noninteractive_defaults_to_docker_first(monkeypatch):
     assert cr.resolve_runtime(interactive=False) == "docker"
 
 
+def test_prefer_recommended_puts_podman_first():
+    # 交互菜单的展示/默认把推荐运行时(Podman·更轻)排到最前,其余保持原序
+    assert cr._prefer_recommended(["docker", "podman"]) == ["podman", "docker"]
+    assert cr._prefer_recommended(["podman", "docker"]) == ["podman", "docker"]
+    assert cr._prefer_recommended(["docker"]) == ["docker"]  # 无 podman → 不变
+    assert cr._RECOMMENDED == "podman"
+
+
 def test_saved_choice_used_when_no_env(monkeypatch, tmp_path):
     monkeypatch.setattr(cr.shutil, "which", lambda name: f"/usr/bin/{name}" if name in ("docker", "podman") else None)
     (tmp_path / ".galaxy_runtime").write_text("podman", encoding="utf-8")
