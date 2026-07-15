@@ -154,9 +154,7 @@ class TestWindowsMsvcPrecheck:
             return True
 
         monkeypatch.setattr(g, "_windows_setup_msvc_build_env", _fake_vcvars)
-        monkeypatch.setattr(
-            g, "_windows_try_install_msvc", lambda *a: (_ for _ in ()).throw(AssertionError("不该装"))
-        )
+        monkeypatch.setattr(g, "_windows_try_install_msvc", lambda *a: (_ for _ in ()).throw(AssertionError("不该装")))
         assert g._windows_msvc_hint(_FakeShutil([]), None) is None
         assert calls["vcvars"] == 1  # 走的是 vcvars 加载,不是裸 PATH 注入
 
