@@ -254,13 +254,21 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
     # Step 0a: 观测追踪(OpenTelemetry)一次性初始化 —— 默认关(GALAXY_OTEL_ENABLED=1
     # 才启用)、未装 opentelemetry 时纯 no-op,绝不影响启动。放在最前,使随后所有
     # span 都在 provider 就绪后创建。
+    # 关键:results 里每一项的值都必须是【带 "status" 键的 dict】—— 后面
+    # ok_count/summary(startup.py)与 unified_launcher 都对 results.values() 调
+    # v.get("status")。之前这里存了个裸 bool,导致 "'bool' object has no attribute
+    # 'get'" 把整个引导判为失败。这里改回规范的 status dict 形状。
     try:
         from core.otel_tracing import init_tracing
 
-        results["otel_tracing_active"] = init_tracing()
+        _otel_active = init_tracing()
+        results["otel_tracing"] = {
+            "status": "ok" if _otel_active else "skipped",
+            "active": _otel_active,
+        }
     except Exception as _e:  # noqa: BLE001 — 观测初始化绝不阻断启动
         logger.debug("OTel 追踪初始化跳过: %s", _e)
-        results["otel_tracing_active"] = False
+        results["otel_tracing"] = {"status": "skipped", "active": False}
 
     # Step 0: pip 依赖可用性检查
     try:

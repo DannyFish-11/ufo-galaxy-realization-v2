@@ -243,6 +243,81 @@ def _windows_msvc_present(shutil, subprocess):
     return _link_on_path_is_msvc(shutil) or _windows_msvc_linker_dir(subprocess) is not None
 
 
+def _windows_setup_msvc_build_env(subprocess) -> bool:
+    """把【完整的 x64 MSVC 构建环境】(PATH + LIB + INCLUDE + LIBPATH 等)灌进
+    os.environ,使随后 fork 的 cargo 子进程能真正链接成功。成功返回 True。
+
+    为什么只注 PATH 不够(真机 LNK1181 根因):link.exe 找得到了,但 ``kernel32.lib``
+    这类库属于 **Windows SDK**、不在 MSVC 的 bin 里;链接器靠 ``LIB`` 环境变量才能
+    定位 SDK/CRT 的 lib 目录。只把 MSVC bin 塞进 PATH → link.exe 在、但 LIB/INCLUDE
+    没设 → "LNK1181: cannot open input file 'kernel32.lib'"。而且按目录名 glob 还可能
+    选到 Hostx86\\x86(32 位)的链接器,与 x86_64 target 不匹配。
+
+    正解:经 vswhere 定位 VS 安装 → 运行官方 ``vcvars64.bat`` → 把它设置的整套开发
+    环境 dump 回来应用到 os.environ(等价于在『x64 Native Tools 命令行』里构建)。
+    先 ``chcp 65001`` 强制 UTF-8 输出,避免中文用户目录路径(如 C:\\Users\\李帅霖)
+    被控制台代码页弄乱。
+    """
+    import shutil as _shutil
+
+    program_files_x86 = os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")
+    vswhere = os.path.join(program_files_x86, "Microsoft Visual Studio", "Installer", "vswhere.exe")
+    if not os.path.isfile(vswhere):
+        return False
+    try:
+        out = subprocess.run(
+            [
+                vswhere,
+                "-latest",
+                "-products",
+                "*",
+                "-requires",
+                "Microsoft.VisualStudio.Component.VC.Tools.x86.x64",
+                "-property",
+                "installationPath",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=20,
+        )
+    except Exception:
+        return False
+    if out.returncode != 0 or not out.stdout.strip():
+        return False
+    install = out.stdout.strip().splitlines()[0].strip()
+    vcvars = os.path.join(install, "VC", "Auxiliary", "Build", "vcvars64.bat")
+    if not os.path.isfile(vcvars):
+        return False
+    try:
+        proc = subprocess.run(
+            ["cmd", "/c", f'chcp 65001 >nul 2>&1 && call "{vcvars}" >nul 2>&1 && set'],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=120,
+        )
+    except Exception as exc:  # noqa: BLE001
+        _log(f"加载 vcvars64 环境失败({exc!r})。")
+        return False
+    if proc.returncode != 0 or not proc.stdout:
+        return False
+    applied = 0
+    for line in proc.stdout.splitlines():
+        if "=" not in line:
+            continue
+        key, _, val = line.partition("=")
+        key = key.strip()
+        if not key:  # cmd 的 "=C:=..." / "=ExitCode=..." 之类伪变量,跳过
+            continue
+        os.environ[key] = val
+        applied += 1
+    if _shutil.which("cl.exe"):  # 复检:cl.exe 现应在 PATH → 环境确已就位
+        _log(f"已加载 vcvars64 完整构建环境(应用 {applied} 项 env,含 PATH/LIB/INCLUDE)。")
+        return True
+    return False
+
+
 def _windows_try_install_msvc(shutil, subprocess):
     """用 winget 自动安装【最新版】VS Build Tools 的 C++ 工作负载（含 MSVC 链接器）。
 
@@ -287,18 +362,19 @@ def _windows_msvc_hint(shutil, subprocess):
     VS Build Tools 装上，可用 GALAXY_TAURI_AUTO_INSTALL_MSVC=0 关掉。
 
     关键:当链接器已装在磁盘上但不在当前 PATH(最常见——用户从普通终端而非
-    "x64 Native Tools" 命令行启动)时,把它的 bin 目录注入 PATH,让随后的 cargo
-    子进程一定找得到 link.exe,而不是编译数分钟后才崩。
+    "x64 Native Tools" 命令行启动)时,加载完整的 vcvars64 构建环境
+    (PATH+LIB+INCLUDE),让随后的 cargo 子进程能真正链接成功——只注 PATH 不够,
+    会因缺 LIB 找不到 kernel32.lib(Windows SDK)而 LNK1181 崩。
     """
     # cl.exe 已在 PATH(处于 MSVC 开发环境)→ 直接就位
     if _link_on_path_is_msvc(shutil):
         return None
-    # 磁盘上有真实 MSVC 链接器但不在 PATH → 注入 PATH,构建即可继续
-    bindir = _windows_msvc_linker_dir(subprocess)
-    if bindir:
-        _prepend_path(bindir)
-        _log(f"检测到 MSVC 链接器于 {bindir}，已注入本次构建的 PATH → 继续构建 Tauri。")
-        return None
+    # 磁盘上有真实 MSVC → 加载完整 vcvars64 构建环境后继续
+    if _windows_msvc_linker_dir(subprocess) is not None:
+        if _windows_setup_msvc_build_env(subprocess):
+            _log("已加载完整 MSVC(vcvars64)构建环境 → 继续构建 Tauri。")
+            return None
+        return _vcvars_manual_hint()
 
     # 默认自动安装（用户要求：让它自己去装、直接拉最新适配版）
     if os.environ.get("GALAXY_TAURI_AUTO_INSTALL_MSVC", "1").strip().lower() not in ("0", "false", "no"):
@@ -306,12 +382,10 @@ def _windows_msvc_hint(shutil, subprocess):
         if _link_on_path_is_msvc(shutil):
             _log("MSVC C++ 生成工具已就位 → 继续构建 Tauri。")
             return None
-        bindir = _windows_msvc_linker_dir(subprocess)
-        if bindir:
-            _prepend_path(bindir)
-            _log(f"MSVC 安装完成，链接器于 {bindir}，已注入 PATH → 继续构建 Tauri。")
+        if _windows_msvc_linker_dir(subprocess) is not None and _windows_setup_msvc_build_env(subprocess):
+            _log("MSVC 安装完成,已加载 vcvars64 构建环境 → 继续构建 Tauri。")
             return None
-        _log("自动安装后仍未探测到 MSVC 链接器 → 回退 Electron（详见下方手动安装提示）。")
+        _log("自动安装后仍未就位 → 回退 Electron（详见下方手动安装提示）。")
 
     winget = (
         "  winget install --id Microsoft.VisualStudio.2022.BuildTools -e "
@@ -325,4 +399,15 @@ def _windows_msvc_hint(shutil, subprocess):
         "手动装 VS Build Tools 的 C++ 工作负载后重试（会自动回退 Electron）：\n"
         + winget
         + "\n或手动下载：https://visualstudio.microsoft.com/visual-cpp-build-tools/"
+    )
+
+
+def _vcvars_manual_hint() -> str:
+    """检测到 MSVC 链接器、但无法自动加载完整 vcvars 环境时的提示(回退 Electron)。"""
+    return (
+        "检测到 MSVC 链接器,但无法自动加载完整构建环境(vcvars64)——直接构建会因缺 LIB/"
+        "INCLUDE 而链接崩(LNK1181: kernel32.lib)。请从开始菜单的\n"
+        "『x64 Native Tools Command Prompt for VS 2022』里手动构建一次:\n"
+        "  cd desktop-tauri/src-tauri && cargo build --release\n"
+        "构建成功后,之后每次启动都会自动优先用 Tauri;本次回退 Electron。"
     )

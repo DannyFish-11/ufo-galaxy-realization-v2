@@ -69,6 +69,9 @@ edge-tts>=6.1.0               # 语音输出:云端神经 TTS(默认)
 # 与 sounddevice(麦克风)/edge-tts(TTS)同属"语音闭环三件套",故一并作默认装机依赖,
 # 三缺一都会让语音交互静默失效。模型(base,~140MB)首次用时自动下载。
 faster-whisper>=1.0.0
+# 繁体→简体:Whisper 对普通话常吐繁体,opencc 确保转成简体(真机反馈"识别出来是繁体")。
+# 纯 Python、体积小;缺它则仅靠 initial_prompt 偏置(不总生效)。
+opencc-python-reimplemented>=0.1.7
 # 离线高质量 TTS(Kokoro-82M ONNX):edge-tts 云端不可达时的首选兜底,纯 CPU 快于实时
 kokoro-onnx>=0.4.0
 # 高性能事件循环:Windows 用 winloop(≈5×默认 Proactor),其它平台用 uvloop

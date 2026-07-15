@@ -131,7 +131,15 @@ class EdgeTTSEngine:
                 volume=self.volume,
                 proxy=self.proxy,
             )
-            await communicate.save(output_path)
+            # 关键:edge-tts 走 websocket 连微软云。国内/离线/受限网络下 save() 会【无限
+            # 期卡住】(不抛异常)→ 上层的 demote 换引擎逻辑永远不触发 → 用户"一句没听到"。
+            # 加超时:连不上就快速失败,让 speech_output 降级到离线引擎(Windows 落 SAPI),
+            # 真正出声。GALAXY_EDGE_TTS_TIMEOUT_S 可调,默认 8 秒。
+            try:
+                _timeout = float(os.getenv("GALAXY_EDGE_TTS_TIMEOUT_S", "8") or "8")
+            except (TypeError, ValueError):
+                _timeout = 8.0
+            await asyncio.wait_for(communicate.save(output_path), timeout=_timeout)
         except Exception:
             # M3 fixed: cleanup temp file on synthesis failure
             if _tmp_path is not None:

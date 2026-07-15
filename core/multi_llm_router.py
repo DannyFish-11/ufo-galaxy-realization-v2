@@ -1497,11 +1497,16 @@ PROVIDER_REGISTRY: List[Dict[str, Any]] = [
         "extra": {"multimodal": True},
     },
     {
+        # Meta Llama API(联网核实 llama.developer.meta.com 官方文档):OpenAI 兼容 base
+        # 是 api.llama.com/compat/v1,不是 api.meta.ai;"muse-spark" 并非真实模型,
+        # 改用官方 Llama-4 模型名。注意:Meta 已于 2026-07-06 起【收尾 Llama API 公测】
+        # (仅美区 waitlist),该 provider 实际多半不可用——保留正确配置,能用则用,
+        # 不能用则由 verify_provider 如实报错、路由自动跳过。
         "name": "meta",
         "env_key": "META_API_KEY",
-        "base_url": "https://api.meta.ai/v1",
-        "models": ["muse-spark-1.1"],
-        "default_model": "muse-spark-1.1",
+        "base_url": "https://api.llama.com/compat/v1",
+        "models": ["Llama-4-Maverick-17B-128E-Instruct-FP8", "Llama-4-Scout-17B-16E-Instruct-FP8"],
+        "default_model": "Llama-4-Maverick-17B-128E-Instruct-FP8",
         "cost_in": 0.00125,
         "cost_out": 0.00425,
         "extra": {"multimodal": True, "supports_vision": True, "max_tokens": 8192},
@@ -1564,13 +1569,17 @@ PROVIDER_REGISTRY: List[Dict[str, Any]] = [
         "extra": {"multimodal": True},
     },
     {
+        # 官方 OpenAI 兼容端点(联网核实 platform.minimax.io 官方文档):base 是
+        # api.minimax.io/v1,不是旧的 api.minimax.chat(已非官方端点)。当前主力
+        # MiniMax-M3(1M 上下文·agentic),M2.7/M2.5 仍在。模型名大小写按官方。
         "name": "minimax",
         "env_key": "MINIMAX_API_KEY",
-        "base_url": "https://api.minimax.chat/v1",
-        "models": ["minimax-m2.7", "minimax-m2.5", "minimax-text-01"],
-        "default_model": "minimax-m2.7",
+        "base_url": "https://api.minimax.io/v1",
+        "models": ["MiniMax-M3", "MiniMax-M2.7", "MiniMax-M2.5"],
+        "default_model": "MiniMax-M3",
         "cost_in": 0.001,
         "cost_out": 0.004,
+        "extra": {"multimodal": True},
     },
     {
         "name": "step",

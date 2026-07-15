@@ -358,10 +358,10 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         注意：敏感 Key (如 OPENAI_API_KEY) 不应直接返回，除非在受控的本地环境。
         """
         host = "localhost"
-        port = "8099"
+        port = "9000"
         if request:
             host = request.url.hostname or "localhost"
-            port = str(request.url.port or 8099)
+            port = str(request.url.port or 9000)
 
         def _is_configured(key_name: str) -> bool:
             val = os.getenv(key_name, "")
@@ -377,6 +377,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             "DEEPSEEK_API_KEY",
             "GEMINI_API_KEY",
             "GOOGLE_API_KEY",
+            "META_API_KEY",  # 修复:面板列了 Meta、schema/router 都有它,唯独这里漏登记 → 永远显示"未配置"
             "GROQ_API_KEY",
             "OPENROUTER_API_KEY",
             "PERPLEXITY_API_KEY",
