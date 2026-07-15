@@ -1063,21 +1063,28 @@ class GalaxyUnified:
                     "装 Rust(https://rustup.rs) 后重启即自动构建并优先用 Tauri。"
                 )
             else:
-                logger.info(
-                    "首次启动：自动构建 Tauri 桌面壳(cargo build --release，首次约需数分钟，"
-                    "Linux 需 webkit2gtk 等系统依赖)，请稍候…"
-                )
+                # 构建前预检系统级依赖（Linux 的 webkit2gtk 等）——缺则给出 apt 命令并跳过，
+                # 避免 cargo build 崩得莫名其妙；Rust crate 依赖由 Cargo 自理。
                 try:
-                    _rc = sp.call(["cargo", "build", "--release"], cwd=str(tdir / "src-tauri"))
-                except Exception as _bexc:  # noqa: BLE001
-                    _rc = -1
-                    logger.warning("Tauri 自动构建启动失败：%s", _bexc)
-                if _rc == 0:
-                    binp = next((c for c in candidates if c.exists()), None)
-                    if binp:
-                        logger.info("Tauri 壳构建完成 ✓ 之后每次启动将自动优先用它。")
+                    from core.electron_launch_guard import tauri_build_prereqs_hint
+                    _hint = tauri_build_prereqs_hint()
+                except Exception:
+                    _hint = None
+                if _hint:
+                    logger.info("Tauri 构建系统依赖缺失，跳过自动构建 → 回退 Electron：\n%s", _hint)
                 else:
-                    logger.warning("Tauri 自动构建失败(cargo rc=%s)，本次回退 Electron。", _rc)
+                    logger.info("首次启动：自动构建 Tauri 桌面壳(cargo build --release，首次约需数分钟)，请稍候…")
+                    try:
+                        _rc = sp.call(["cargo", "build", "--release"], cwd=str(tdir / "src-tauri"))
+                    except Exception as _bexc:  # noqa: BLE001
+                        _rc = -1
+                        logger.warning("Tauri 自动构建启动失败：%s", _bexc)
+                    if _rc == 0:
+                        binp = next((c for c in candidates if c.exists()), None)
+                        if binp:
+                            logger.info("Tauri 壳构建完成 ✓ 之后每次启动将自动优先用它。")
+                    else:
+                        logger.warning("Tauri 自动构建失败(cargo rc=%s)，本次回退 Electron。", _rc)
         if not binp:
             logger.info(
                 "Tauri 壳不可用 → 回退 Electron。"

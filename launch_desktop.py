@@ -544,6 +544,15 @@ def start_tauri_frontend() -> Optional[subprocess.Popen]:
                 "（装 Rust(https://rustup.rs) 后重启即自动构建并优先 Tauri）"
             )
             return None
+        # 构建前预检系统级依赖（Linux 的 webkit2gtk 等）——缺则给出 apt 命令、跳过、回退 Electron。
+        try:
+            from core.electron_launch_guard import tauri_build_prereqs_hint
+            _hint = tauri_build_prereqs_hint()
+        except Exception:
+            _hint = None
+        if _hint:
+            logger.info(f"  Tauri 构建系统依赖缺失，跳过自动构建 → 回退 Electron：\n{_hint}")
+            return None
         logger.info("  首次启动：自动构建 Tauri 桌面壳(cargo build --release，首次约数分钟)…")
         rc, _, err = run(["cargo", "build", "--release"], cwd=str(tdir / "src-tauri"), timeout=1800)
         if rc != 0:
