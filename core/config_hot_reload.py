@@ -1,4 +1,4 @@
-"""
+'''
 配置热更新管理器 (Config Hot-Reload Manager)
 =============================================
 
@@ -7,7 +7,7 @@
 - 版本控制：记录每次变更的 diff
 - Schema 验证：JSON Schema 校验配置合法性
 - 变更订阅：配置变更时通知订阅者
-"""
+'''
 
 import asyncio
 import hashlib
@@ -28,7 +28,7 @@ logger = logging.getLogger("Galaxy.ConfigHotReload")
 
 @dataclass
 class ConfigVersion:
-    """配置版本快照"""
+    '''配置版本快照'''
 
     version: int
     timestamp: float
@@ -47,14 +47,14 @@ class ConfigVersion:
 
 
 class ConfigVersionStore:
-    """配置版本存储"""
+    '''配置版本存储'''
 
     def __init__(self, max_versions: int = 100):
         self._versions: deque = deque(maxlen=max_versions)
         self._current_version = 0
 
     def record(self, config: Dict, changes: Dict, source: str = "") -> ConfigVersion:
-        """记录新版本"""
+        '''记录新版本'''
         self._current_version += 1
         ver = ConfigVersion(
             version=self._current_version,
@@ -83,11 +83,11 @@ class ConfigVersionStore:
 
 
 class ConfigValidator:
-    """
+    '''
     轻量级配置验证器
 
     支持注册字段规则：类型、范围、必填、自定义校验函数。
-    """
+    '''
 
     def __init__(self):
         self._rules: Dict[str, Dict] = {}
@@ -102,7 +102,7 @@ class ConfigValidator:
         choices: List = None,
         validator: Callable = None,
     ):
-        """添加字段验证规则"""
+        '''添加字段验证规则'''
         self._rules[key] = {
             "type": type_,
             "required": required,
@@ -113,11 +113,11 @@ class ConfigValidator:
         }
 
     def validate(self, config: Dict) -> List[str]:
-        """
+        '''
         验证配置
 
         Returns: 错误列表（空 = 通过）
-        """
+        '''
         errors = []
 
         for key, rule in self._rules.items():
@@ -155,7 +155,7 @@ class ConfigValidator:
 
     @staticmethod
     def _get_nested(config: Dict, key: str) -> Any:
-        """支持 'a.b.c' 格式的嵌套取值"""
+        '''支持 'a.b.c' 格式的嵌套取值'''
         parts = key.split(".")
         current = config
         for part in parts:
@@ -170,7 +170,7 @@ class ConfigValidator:
 
 
 class HotReloadConfigManager:
-    """
+    '''
     热更新配置管理器
 
     功能：
@@ -180,7 +180,7 @@ class HotReloadConfigManager:
     4. 记录版本历史
     5. 通知订阅者配置变更
     6. 支持运行时动态修改
-    """
+    '''
 
     def __init__(self, config_path: Optional[str] = None, check_interval: float = 5.0):
         self._config_path = config_path
@@ -199,7 +199,7 @@ class HotReloadConfigManager:
     # ─── 配置读写 ───
 
     def get(self, key: str, default: Any = None) -> Any:
-        """获取配置值（支持 dot notation）"""
+        '''获取配置值（支持 dot notation）'''
         parts = key.split(".")
         current = self._config
         for part in parts:
@@ -210,11 +210,11 @@ class HotReloadConfigManager:
         return current
 
     def set(self, key: str, value: Any, source: str = "api") -> List[str]:
-        """
+        '''
         设置配置值
 
         Returns: 验证错误列表（空 = 成功）
-        """
+        '''
         # 应用变更到临时副本
         new_config = deepcopy(self._config)
         parts = key.split(".")
@@ -242,13 +242,13 @@ class HotReloadConfigManager:
         return []
 
     def get_all(self) -> Dict:
-        """获取完整配置（深拷贝）"""
+        '''获取完整配置（深拷贝）'''
         return deepcopy(self._config)
 
     # ─── 文件操作 ───
 
     def load_from_file(self, path: Optional[str] = None) -> List[str]:
-        """从文件加载配置"""
+        '''从文件加载配置'''
         path = path or self._config_path
         if not path or not os.path.exists(path):
             return [f"配置文件不存在: {path}"]
@@ -260,6 +260,10 @@ class HotReloadConfigManager:
             return [f"JSON 解析失败: {e}"]
         except Exception as e:
             return [f"文件读取失败: {e}"]
+
+        # 基础结构校验
+        if not isinstance(new_config, dict):
+            return [f"配置格式错误: 期望 dict, 实际为 {type(new_config).__name__}"]
 
         # 验证
         errors = self._validator.validate(new_config)
@@ -287,12 +291,12 @@ class HotReloadConfigManager:
         return []
 
     def save_to_file(self, path: Optional[str] = None) -> Optional[str]:
-        """
+        '''
         原子保存配置到文件
 
         先写入临时文件，成功后 rename 替换目标文件，
         保证即使进程崩溃也不会产生半写的配置文件。
-        """
+        '''
         path = path or self._config_path
         if not path:
             return "未指定配置文件路径"
@@ -324,7 +328,7 @@ class HotReloadConfigManager:
     # ─── 热更新 ───
 
     async def start_watching(self):
-        """启动文件监控"""
+        '''启动文件监控'''
         if not self._config_path:
             logger.warning("未指定配置文件路径，跳过文件监控")
             return
@@ -334,7 +338,7 @@ class HotReloadConfigManager:
         logger.info(f"配置文件监控已启动: {self._config_path} (间隔 {self._check_interval}s)")
 
     async def stop_watching(self):
-        """停止文件监控"""
+        '''停止文件监控'''
         self._running = False
         if self._watch_task and not self._watch_task.done():
             self._watch_task.cancel()
@@ -344,7 +348,7 @@ class HotReloadConfigManager:
                 pass
 
     async def _watch_loop(self):
-        """文件变更检测循环"""
+        '''文件变更检测循环'''
         while self._running:
             try:
                 await asyncio.sleep(self._check_interval)
@@ -363,11 +367,11 @@ class HotReloadConfigManager:
     # ─── 订阅 ───
 
     def subscribe(self, callback: Callable):
-        """订阅配置变更"""
+        '''订阅配置变更'''
         self._subscribers.append(callback)
 
     def _notify_subscribers(self, changes: Dict):
-        """通知所有订阅者，单个回调失败不影响其他"""
+        '''通知所有订阅者，单个回调失败不影响其他'''
         failed = 0
         for cb in self._subscribers:
             try:
@@ -402,7 +406,7 @@ class HotReloadConfigManager:
 
     @staticmethod
     def _diff(old: Dict, new: Dict, prefix: str = "") -> Dict:
-        """计算两个配置的差异"""
+        '''计算两个配置的差异'''
         changes = {}
         all_keys = set(list(old.keys()) + list(new.keys()))
 
@@ -434,7 +438,6 @@ class HotReloadConfigManager:
 
 
 # ───────────────────── 单例 ─────────────────────
-
 _instance: Optional[HotReloadConfigManager] = None
 
 
@@ -446,10 +449,10 @@ def get_config_manager(config_path: Optional[str] = None, **kwargs) -> HotReload
 
 
 def get_existing_manager() -> Optional[HotReloadConfigManager]:
-    """Return the HotReloadConfigManager singleton if already initialised, or None.
+    '''Return the HotReloadConfigManager singleton if already initialised, or None.
 
     Unlike :func:`get_config_manager`, this function never creates a new instance.
     It is safe to call when you only want to trigger a reload if the manager is
     already running (e.g., from the status board control surface).
-    """
+    '''
     return _instance
