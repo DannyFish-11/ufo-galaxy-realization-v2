@@ -62,8 +62,13 @@ docker>=6.0.0
 Pillow>=10.2.0
 opencv-python>=4.8.0
 numpy>=1.26.3
-sounddevice>=0.4.0
-edge-tts>=6.1.0
+sounddevice>=0.4.0            # 语音输入:麦克风采集(VoiceLoop / audio_ingest)
+edge-tts>=6.1.0               # 语音输出:云端神经 TTS(默认)
+# 语音输入 ASR:faster-whisper —— VoiceLoop 的转写引擎。缺它则 WhisperASR import 失败,
+# start_voice_interaction() 返回 False,常开监听循环从不启动 → "对它说话没反应"。
+# 与 sounddevice(麦克风)/edge-tts(TTS)同属"语音闭环三件套",故一并作默认装机依赖,
+# 三缺一都会让语音交互静默失效。模型(base,~140MB)首次用时自动下载。
+faster-whisper>=1.0.0
 # 离线高质量 TTS(Kokoro-82M ONNX):edge-tts 云端不可达时的首选兜底,纯 CPU 快于实时
 kokoro-onnx>=0.4.0
 # 高性能事件循环:Windows 用 winloop(≈5×默认 Proactor),其它平台用 uvloop
@@ -181,8 +186,8 @@ tqdm>=4.65.0              # 模型下载/长任务进度条(此前仅在 require
 # vllm                         # 自托管高吞吐推理后端
 # llama-cpp-python             # GGUF 本地推理后端
 # intel-extension-for-pytorch  # Intel XPU 加速(hardware_compute_profiler)
-# faster-whisper               # Whisper ASR
-# funasr                       # SenseVoice ASR
+# faster-whisper 已上移为默认依赖(语音闭环必需);此处不再注释保留
+# funasr                       # SenseVoice ASR(GALAXY_ASR_ENGINE=sensevoice 时的备选)
 # indextts                     # IndexTTS2 零样本克隆 TTS(GALAXY_TTS_ENGINE=indextts)
 # melotts                      # MeloTTS 引擎
 # piper-tts                    # Piper 离线 TTS 引擎

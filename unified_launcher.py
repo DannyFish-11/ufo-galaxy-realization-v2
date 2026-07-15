@@ -1254,6 +1254,7 @@ class GalaxyUnified:
         GALAXY_VOICE=0 可关闭。
         """
         if os.environ.get("GALAXY_VOICE", "1").strip().lower() in ("0", "false", "no", "off"):
+            self._voice_input_disabled_reason = "GALAXY_VOICE=0(已手动关闭)"
             return False
         try:
             from core.voice_loop import VoiceLoop
@@ -1280,15 +1281,26 @@ class GalaxyUnified:
             await self._voice_loop.start()
             return True
         except ImportError as exc:  # noqa: BLE001
+            # 语音输入静默失效最常见的原因。醒目告知 + 给可直接照做的命令,
+            # 而不是淹没在启动日志里的一行 warning(所有者反馈"对它说话没反应、不知为何")。
+            self._voice_input_disabled_reason = f"缺 ASR 依赖({exc});运行 pip install faster-whisper 后重启"
             logger.warning(
-                "语音交互未启动(缺依赖: pip install faster-whisper edge-tts sounddevice): %s", exc
+                "\n%s\n⚠️  语音输入未启用 —— 对它说话不会有反应。\n"
+                "    缺 ASR 依赖:%s\n"
+                "    装上后重启即开启(麦克风/TTS 通常已随默认依赖装好):\n"
+                "        pip install faster-whisper\n%s",
+                "=" * 66,
+                exc,
+                "=" * 66,
             )
             return False
         except Exception as exc:  # noqa: BLE001
             _exc_s = str(exc)
             if any(k in _exc_s for k in ("Hub", "locate the files", "snapshot folder", "internet")):
+                self._voice_input_disabled_reason = f"Whisper 模型下载失败(检查网络/代理):{exc}"
                 logger.warning("语音交互未启动(Whisper 模型下载失败，检查网络或设置代理): %s", exc)
             else:
+                self._voice_input_disabled_reason = f"运行时错误:{exc}"
                 logger.warning("语音交互未启动(运行时错误，GALAXY_VOICE=0 可关闭): %s", exc)
             return False
 
@@ -1626,10 +1638,11 @@ class GalaxyUnified:
         # ── 语音交互闭环：听 → 识别 → 主回路(驱动三态 + 回复) → 朗读 ──
         # 这是"对它说话它会回应、三态随对话变化"的关键(此前 VoiceLoop 从未启动)。
         voice_ok = await self.start_voice_interaction()
+        _voice_reason = getattr(self, "_voice_input_disabled_reason", None)
         _emit(
             "语音交互",
             ("已开启 · 直接对它说话即可（三态随对话变化）" if voice_ok
-             else "未启用（详见上方日志；GALAXY_VOICE=0 永久关闭）"),
+             else f"未启用：{_voice_reason or '详见上方日志'}"),
             "ok" if voice_ok else "warn",
         )
 
