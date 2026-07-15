@@ -33,6 +33,9 @@ struct AppState {
     overlay_awake: AtomicBool,
     http: reqwest::Client,
     config_cache: Mutex<Value>,
+    settings_cache: Mutex<Value>,                 // /api/config/all 完整明细（设置 tab）
+    config_refresh_inflight: AtomicBool,          // 去重：同一时间只跑一条配置刷新链
+    settings_refresh_inflight: AtomicBool,
 }
 
 // preload 注入脚本：在每个窗口里重建 window.galaxyAPI（指向 Tauri invoke/event）。
@@ -52,10 +55,21 @@ const GALAXY_API_SHIM: &str = r#"
     sendDesktopPerception: function (payload) { return invoke('send_desktop_perception', { payload: payload }); },
     platform: '__PLATFORM__',
     getConfig: function () { return invoke('get_config'); },
+    getSettings: function () { return invoke('get_settings'); },
     setConfig: function (config) { return invoke('set_config', { config: config }); },
     onConfigUpdate: function (cb) { var un = null; listen('galaxy:config-update', cb).then(function (f) { un = f; }); return function () { if (un) un(); }; },
+    onConfigReady: function (cb) { var un = null; listen('galaxy:config-ready', cb).then(function (f) { un = f; }); return function () { if (un) un(); }; },
     saveConfig: function () { return invoke('save_config'); }
   };
+  // 窗口级 F12/F10 兜底(第二层)：等价 electron 的 before-input-event。globalShortcut(OS 级)
+  // 在 RDP/虚拟机/全屏下常被上层截走收不到；覆盖层/面板 webview 恰好持键盘焦点时这里兜底。
+  // key 或 code 任一命中即可（兼容只回报 code 的远程/虚拟键盘）。
+  window.addEventListener('keydown', function (e) {
+    if (e.key === 'F12' || e.code === 'F12' || e.key === 'F10' || e.code === 'F10') {
+      e.preventDefault();
+      invoke('toggle_panel_cmd');
+    }
+  }, true);
   console.log('[Tauri-Preload] galaxyAPI shim ready');
 })();
 "#;
@@ -165,15 +179,27 @@ fn toggle_overlay_wake(app: &AppHandle) {
 }
 
 fn toggle_panel(app: &AppHandle) {
+    use tauri_plugin_notification::NotificationExt;
+    // 非阻塞提示（等价 electron 的 Notification）：面板可能开在别的屏/被挡，给用户一个可见回执。
+    let notify = |body: &str| {
+        let _ = app
+            .notification()
+            .builder()
+            .title("Galaxy 控制面板")
+            .body(body)
+            .show();
+    };
     if let Some(win) = app.get_webview_window("panel") {
         let visible = win.is_visible().unwrap_or(false);
         if visible {
             let _ = win.hide();
             println!("[Panel] Hidden");
+            notify("已隐藏");
         } else {
             let _ = win.show();
             let _ = win.set_focus();
             println!("[Panel] Shown");
+            notify("已显示");
         }
         return;
     }
@@ -182,6 +208,7 @@ fn toggle_panel(app: &AppHandle) {
             let _ = win.show();
             let _ = win.set_focus();
             println!("[Panel] Created & Shown");
+            notify("已显示");
         }
         Err(e) => eprintln!("[Panel] 创建失败: {e}"),
     }
@@ -280,6 +307,10 @@ fn start_ipc_http(app: AppHandle, port: u16) {
             } else if is_post && url == "/ipc/toggle-overlay" {
                 on_main(&app, toggle_overlay_wake);
                 (200, r#"{"success":true,"action":"toggle-overlay"}"#.into())
+            } else if is_post && url == "/ipc/hide-overlay" {
+                // 始终【隐藏】覆盖层（幂等，永不显示）——托盘「收起覆盖层」走这条。
+                on_main(&app, |a| set_overlay_phase(a, false));
+                (200, r#"{"success":true,"action":"hide-overlay"}"#.into())
             } else if is_post && url == "/ipc/presence-state" {
                 let mut buf = String::new();
                 let _ = req.as_reader().read_to_string(&mut buf);
@@ -471,19 +502,68 @@ async fn send_desktop_perception(state: State<'_, AppState>, payload: Value) -> 
     Ok(())
 }
 
-#[tauri::command]
-async fn get_config(state: State<'_, AppState>) -> Result<Value, String> {
-    let base = state.gateway_base.clone();
-    match state.http.get(format!("{base}/api/config")).send().await {
-        Ok(resp) if resp.status().is_success() => match resp.json::<Value>().await {
-            Ok(v) => {
-                *state.config_cache.lock().unwrap() = v.clone();
-                Ok(v)
-            }
-            Err(_) => Ok(state.config_cache.lock().unwrap().clone()),
-        },
-        _ => Ok(state.config_cache.lock().unwrap().clone()),
+// 配置/设置后台刷新 + config-ready 广播（等价 electron scheduleConfigRefresh/scheduleSettingsRefresh）。
+// 立即返回缓存、后台异步刷新，刷到手后广播 galaxy:config-ready(kind)，渲染层(useConfigCache)就地重取。
+fn schedule_config_refresh(app: AppHandle) {
+    let st = app.state::<AppState>();
+    if st.config_refresh_inflight.swap(true, Ordering::SeqCst) {
+        return; // 已有刷新在飞，去重
     }
+    let base = st.gateway_base.clone();
+    let http = st.http.clone();
+    tauri::async_runtime::spawn(async move {
+        if let Ok(resp) = http.get(format!("{base}/api/config")).send().await {
+            if resp.status().is_success() {
+                if let Ok(v) = resp.json::<Value>().await {
+                    *app.state::<AppState>().config_cache.lock().unwrap() = v;
+                    let _ = app.emit("galaxy:config-ready", "config");
+                }
+            }
+        }
+        app.state::<AppState>().config_refresh_inflight.store(false, Ordering::SeqCst);
+    });
+}
+
+fn schedule_settings_refresh(app: AppHandle) {
+    let st = app.state::<AppState>();
+    if st.settings_refresh_inflight.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    let base = st.gateway_base.clone();
+    let http = st.http.clone();
+    tauri::async_runtime::spawn(async move {
+        if let Ok(resp) = http.get(format!("{base}/api/config/all")).send().await {
+            if resp.status().is_success() {
+                if let Ok(v) = resp.json::<Value>().await {
+                    *app.state::<AppState>().settings_cache.lock().unwrap() = v;
+                    let _ = app.emit("galaxy:config-ready", "settings");
+                }
+            }
+        }
+        app.state::<AppState>().settings_refresh_inflight.store(false, Ordering::SeqCst);
+    });
+}
+
+// GET 配置(精简版 — 模型 tab)：立即返回缓存，后台异步刷新并广播 config-ready。
+#[tauri::command]
+fn get_config(app: AppHandle, state: State<'_, AppState>) -> Value {
+    let cached = state.config_cache.lock().unwrap().clone();
+    schedule_config_refresh(app);
+    cached
+}
+
+// GET 配置(完整明细 — 设置 tab)：立即返回缓存，后台异步刷新并广播 config-ready。
+#[tauri::command]
+fn get_settings(app: AppHandle, state: State<'_, AppState>) -> Value {
+    let cached = state.settings_cache.lock().unwrap().clone();
+    schedule_settings_refresh(app);
+    cached
+}
+
+// 窗口级按键兜底调用（shim 的 keydown → 切换面板；等价 electron before-input-event → togglePanel）。
+#[tauri::command]
+fn toggle_panel_cmd(app: AppHandle) {
+    toggle_panel(&app);
 }
 
 #[tauri::command]
@@ -509,6 +589,18 @@ async fn set_config(app: AppHandle, state: State<'_, AppState>, config: Value) -
                 }
                 cache.clone()
             };
+            // 同步更新完整明细缓存里对应项的 value（保持 ConfigItem 形状，等价 electron），
+            // 否则设置 tab 下次读缓存会拿到旧值/undefined。
+            {
+                let mut sc = state.settings_cache.lock().unwrap();
+                if let (Some(sobj), Some(patch)) = (sc.as_object_mut(), config.as_object()) {
+                    for (k, v) in patch {
+                        if let Some(item) = sobj.get_mut(k).and_then(|it| it.as_object_mut()) {
+                            item.insert("value".to_string(), v.clone());
+                        }
+                    }
+                }
+            }
             let _ = app.emit("galaxy:config-update", merged);
             Ok(json!({ "success": true }))
         }
@@ -571,6 +663,9 @@ fn main() {
         overlay_awake: AtomicBool::new(false),
         http: reqwest::Client::new(),
         config_cache: Mutex::new(json!({})),
+        settings_cache: Mutex::new(json!({})),
+        config_refresh_inflight: AtomicBool::new(false),
+        settings_refresh_inflight: AtomicBool::new(false),
     };
 
     tauri::Builder::default()
@@ -583,6 +678,7 @@ fn main() {
         }))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_notification::init())
         .manage(state)
         .invoke_handler(tauri::generate_handler![
             get_backend_url,
@@ -591,8 +687,10 @@ fn main() {
             get_perception_config,
             send_desktop_perception,
             get_config,
+            get_settings,
             set_config,
-            save_config
+            save_config,
+            toggle_panel_cmd
         ])
         .setup(|app| {
             let handle = app.handle().clone();
@@ -655,6 +753,11 @@ fn main() {
             start_panel_feed_poll(handle.clone());
             // 第一态原生连续屏幕采集（与渲染层摄像头/麦克风共同构成一体化感知）。
             start_native_screen_capture(handle.clone());
+
+            // 5) 启动即预载配置/设置缓存（等价 electron 启动期 schedule*Refresh）：
+            //    后端就绪后广播 galaxy:config-ready，面板打开时缓存已暖、tab 就地刷新。
+            schedule_config_refresh(handle.clone());
+            schedule_settings_refresh(handle.clone());
 
             Ok(())
         })
