@@ -78,3 +78,39 @@ def test_env_adaptive_off(monkeypatch):
     monkeypatch.setenv("GALAXY_VAD_ADAPTIVE", "false")
     cfg = VADConfig.from_env()
     assert cfg.adaptive is False
+
+
+def test_sustained_speech_does_not_self_poison_noise_floor():
+    """回归锁定(真机复现的自我投毒 bug):持续说话不能让噪声底收敛到语音电平。
+
+    此前 _energy_history 无差别吸收【每一帧】能量(含正在说话的帧)——持续说话
+    ~10s(100 帧默认窗口)后,20 分位数估计出的"噪声底"收敛到语音本身电平,
+    自适应门限(噪声底 × 3)变得不可企及,VAD 从此永久停止判活,与真机反馈
+    "20s 内收到 199 块音频但 VAD 从未判定为说话"完全吻合。现在只把确认静音的
+    帧计入噪声底,持续说话应该【从头到尾】保持判活,不会中途"熄火"。
+    """
+    vad = VoiceActivityDetector(config=VADConfig(min_speech_frames=1))
+    for _ in range(20):  # 2s 静音,建立噪声底(RMS≈0.0008)
+        vad.process_frame(_chunk(0.0008))
+
+    results = [vad.process_frame(_chunk(0.006)).is_speaking for _ in range(180)]  # 18s 持续说话
+
+    # 旧 bug 下,大约 frame 75 起(噪声底被语音自身喂饱之后)会连续判非说话;
+    # 这里断言窗口填满之后(> noise_window_frames 帧)依然持续判活。
+    tail = results[120:]
+    assert all(tail), f"持续说话中途停止触发(自我投毒回归):tail={tail}"
+
+
+def test_hangover_frames_excluded_from_noise_floor():
+    """语音结束后的 hangover 帧也不应被计入噪声底(避免拖尾能量污染估计)。"""
+    vad = VoiceActivityDetector(config=VADConfig(min_speech_frames=1, adaptive_hangover_frames=5))
+    for _ in range(20):
+        vad.process_frame(_chunk(0.0008))
+    vad.process_frame(_chunk(0.006))  # 一帧语音,触发 hangover
+
+    # hangover 期间(接下来 5 帧)即便能量仍偏高,也不应被计入 _energy_history。
+    before = list(vad._energy_history)
+    for _ in range(5):
+        vad.process_frame(_chunk(0.004))  # 拖尾能量,理应被跳过
+    after = list(vad._energy_history)
+    assert before == after, "hangover 期间的帧不应计入噪声底历史"

@@ -46,7 +46,11 @@ class VADConfig:
     """Configuration for the VAD."""
 
     energy_threshold: float = 0.01  # RMS threshold for activity (fast path)
-    frame_duration_ms: int = 20  # Duration of each VAD frame (ms)
+    # 真机复现的第二个 bug:此值此前假设 20ms/帧,但实际管线(audio_ingest.py /
+    # audio_capture_service.py)按 ~100ms/块投喂——于是 window_duration_ms 换算出的
+    # 帧数窗口实际上比文档意图长 5 倍(300ms 名义窗口其实是 1.5s)。改成与真实
+    # 投喂节奏一致的 100ms,窗口大小才如注释所述。
+    frame_duration_ms: int = 100  # Duration of each VAD frame (ms) — matches real ~100ms chunks
     window_duration_ms: int = 300  # Rolling window for ratio metrics (ms)
     min_speech_frames: int = 3  # Consecutive active frames to confirm speech
 
@@ -58,6 +62,12 @@ class VADConfig:
     adaptive_min_floor: float = 0.0020  # 绝对下限(≈ -54 dBFS),防数字静音/极低底噪误触发
     noise_window_frames: int = 100  # 噪声底估计的滚动窗口(帧)
     noise_percentile: float = 20.0  # 取窗口内该分位数作噪声底(避开语音峰值)
+    # 真机复现的第一个 bug(自我投毒):此前【每一帧】——包括正在说话的帧——都会被
+    # 计入 _energy_history,于是持续说话 ~10s 后噪声底估计值收敛到语音电平本身,
+    # 自适应门限("显著高于噪声底")变得不可企及,VAD 从此永久不再判活(直到一段
+    # 静音把窗口冲刷掉)。现在只把"确认静音"的帧计入噪声底——语音期间及其后
+    # adaptive_hangover_frames 帧一律跳过,噪声底只反映真实的环境背景。
+    adaptive_hangover_frames: int = 5  # 语音结束后再跳过几帧才恢复计入噪声底估计
 
     @classmethod
     def from_env(cls) -> "VADConfig":
@@ -74,6 +84,9 @@ class VADConfig:
             adaptive=_env_bool("GALAXY_VAD_ADAPTIVE", cls.adaptive),
             adaptive_speech_mult=_env_float("GALAXY_VAD_SPEECH_MULT", cls.adaptive_speech_mult),
             adaptive_min_floor=_env_float("GALAXY_VAD_MIN_FLOOR", cls.adaptive_min_floor),
+            adaptive_hangover_frames=int(
+                _env_float("GALAXY_VAD_HANGOVER_FRAMES", cls.adaptive_hangover_frames)
+            ),
         )
 
 
@@ -111,8 +124,11 @@ class VoiceActivityDetector:
         self._recent: Deque[bool] = deque(maxlen=self._window_frames)
         self._consecutive_speech = 0
         self._last_speech_ts: Optional[float] = None
-        # 近段帧能量,用于估计噪声底(自适应门限)。
+        # 近段帧能量,用于估计噪声底(自适应门限)——只累积"确认静音"的帧,
+        # 见 process_frame 与 VADConfig.adaptive_hangover_frames 的说明。
         self._energy_history: Deque[float] = deque(maxlen=max(1, self.config.noise_window_frames))
+        # 语音结束后仍需跳过的帧数(hangover),跳过期间也不计入噪声底。
+        self._hangover_remaining = 0
 
     def _is_active(self, energy: float) -> bool:
         """判活:固定阈值(快路径)∪ 显著高于噪声底(自适应,救低增益麦克风)。"""
@@ -128,9 +144,21 @@ class VoiceActivityDetector:
         """Process one chunk of PCM audio and return a VADState."""
         samples = audio_chunk.astype(np.float32).flatten()
         energy = float(np.sqrt(np.mean(samples**2))) if samples.size else 0.0
-        # 噪声底基于历史帧估计;先判活再把当前帧计入,避免当前语音帧抬高本次门限。
+        # 噪声底基于历史帧估计;先判活再决定是否把当前帧计入,避免当前语音帧
+        # 抬高本次门限。
         is_active = self._is_active(energy)
-        self._energy_history.append(energy)
+
+        # 自我投毒修复:只把"确认静音"的帧计入噪声底估计——语音期间(is_active)
+        # 以及语音结束后 adaptive_hangover_frames 帧内一律跳过,不进 _energy_history。
+        # 否则持续说话会把整个滚动窗口填满语音自身的能量,20 分位数估计出的"噪声底"
+        # 收敛到语音电平,自适应门限(噪声底 × 3)变得不可企及——真机复现:VAD 在
+        # 持续说话数秒后永久停止判活,直到出现一段真实静音把窗口冲刷掉为止。
+        if is_active:
+            self._hangover_remaining = self.config.adaptive_hangover_frames
+        elif self._hangover_remaining > 0:
+            self._hangover_remaining -= 1
+        else:
+            self._energy_history.append(energy)
 
         if is_active:
             self._consecutive_speech += 1
@@ -166,3 +194,4 @@ class VoiceActivityDetector:
         self._energy_history.clear()
         self._consecutive_speech = 0
         self._last_speech_ts = None
+        self._hangover_remaining = 0

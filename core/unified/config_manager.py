@@ -168,10 +168,21 @@ class UnifiedConfigManager:
             raise ConfigError(f"Failed to save config: {exc}") from exc
 
     def reload(self) -> None:
-        """从磁盘重新加载配置。"""
+        """从磁盘重新加载配置。
+
+        真 bug 修复(面板 API-key 排查):此前漏了 `_load_from_config_store()`
+        这一步 —— 它是 runtime/secrets.env(面板保存密钥的落盘位置)真正被读回
+        Dashboard 层的地方。少了它,一次实时 reload() 不会把刚保存的密钥反映到
+        `UnifiedConfig._config`,此前全靠 core/routes/config.py 里紧跟着的
+        `os.environ.update()` 巧合掩盖(任何只走 Dashboard 层、不兜底
+        os.environ 的调用方都会读不到)。顺序须与 UnifiedConfig.__init__ 一致
+        (config.json → runtime store → .env/环境变量,后者优先级更高)。
+        """
         try:
             if hasattr(self._backend, "_load_config"):
                 self._backend._load_config()
+            if hasattr(self._backend, "_load_from_config_store"):
+                self._backend._load_from_config_store()
             if hasattr(self._backend, "_load_env"):
                 self._backend._load_env()
             logger.info("Config reloaded", extra={"event": "reload"})

@@ -85,7 +85,19 @@ def kick_background_fetch() -> None:
                 shutil.copyfile(got, d / fname)
             logger.info("Kokoro 模型就绪(%s)——下次语音引擎选择/重启后启用", _model_dir())
         except Exception as exc:  # noqa: BLE001
-            logger.info("Kokoro 模型拉取失败(下次启动再试): %s", exc)
+            # 真机排查发现:此前只 INFO 级(默认 WARNING 控制台看不到),用户只会
+            # 看到"语音降级为系统音"的笼统提示,不知道离线引擎为什么没准备好。
+            # 提到 WARNING,并给出可操作的具体路径/文件名/镜像,呼应
+            # speech_output._note_engine_choice() 的"手动预置模型"指引。
+            logger.warning(
+                "Kokoro 模型拉取失败(下次启动再试): %s ——网络受限时可手动下载 %s 与 %s"
+                " 放到 %s(HF 镜像可设 HF_ENDPOINT=https://hf-mirror.com,来源仓库 %s)",
+                exc,
+                _model_file(),
+                _VOICES_FILE,
+                _model_dir(),
+                _HF_REPO,
+            )
 
     threading.Thread(target=_fetch, name="kokoro-fetch", daemon=True).start()
 
