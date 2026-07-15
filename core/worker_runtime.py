@@ -73,6 +73,36 @@ class WorkerRuntime:
                 status="failed",
                 error="worker: 派发缺 node_id/action",
             )
+
+        # 派发侧幂等守卫(默认开):NATS 是 at-least-once,ack 在回调之后(nats_bus
+        # ._subscribe),worker 执行副作用后若崩在 ack 前 → JetStream 重投 → 同一动作
+        # (安卓点按/桌面控制)被执行第二次。这里在【执行副作用之前】用可持久化的
+        # 键(idempotency_key/task_id)判重:已派发过就直接短路返回"去重"结果、绝不
+        # 二次执行;否则悲观地先记键、再执行,只有执行器抛异常(没干净跑成)才回滚
+        # 键以便重投重试。GALAXY_DISPATCH_IDEMPOTENCY=0 可关。见
+        # core.durable_dispatch_idempotency 的完整语义说明。
+        from core.durable_dispatch_idempotency import (
+            already_dispatched,
+            dispatch_idempotency_enabled,
+            dispatch_key_for,
+            mark_dispatched,
+            unmark_dispatched,
+        )
+
+        _idem_on = dispatch_idempotency_enabled()
+        _idem_key = dispatch_key_for(msg) if _idem_on else ""
+        if _idem_key and already_dispatched(_idem_key):
+            logger.info("worker: 派发已执行过(幂等去重,不二次执行) task=%s key=%s", task_id, _idem_key)
+            return TaskResultMsg(
+                device_id=self.worker_id,
+                task_id=task_id,
+                trace_id=trace_id,
+                status="completed",
+                result={"deduplicated": True, "reason": "dispatch already executed (idempotency guard)"},
+            )
+        if _idem_key:
+            mark_dispatched(_idem_key)  # 悲观:执行前先记,重投永不二次触发副作用
+
         try:
             result = await invoke_node(
                 node_id,
@@ -97,6 +127,10 @@ class WorkerRuntime:
                 duration_ms=int(getattr(result, "duration_ms", 0)),
             )
         except Exception as exc:  # noqa: BLE001 — 单个任务失败不拖垮 worker
+            # 执行器抛异常 = 副作用没干净跑成 → 回滚幂等键,允许重投重试(不留"标了
+            # 已做、其实没做"的空洞)。节点【返回】失败(非抛异常)则视为已尝试、保留键。
+            if _idem_key:
+                unmark_dispatched(_idem_key)
             logger.warning("worker 执行派发失败 task=%s: %s", task_id, exc)
             return TaskResultMsg(
                 device_id=self.worker_id,
