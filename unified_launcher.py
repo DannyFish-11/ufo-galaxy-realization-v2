@@ -1050,9 +1050,45 @@ class GalaxyUnified:
         ]
         binp = next((c for c in candidates if c.exists()), None)
         if not binp:
+            # A 档：首启自动构建 Tauri 壳。仅当有 cargo 工具链时尝试；GALAXY_TAURI_AUTOBUILD=0 可关。
+            import shutil as _shutil
+            _optout = os.environ.get("GALAXY_TAURI_AUTOBUILD", "").strip().lower() in (
+                "0", "false", "no", "off",
+            )
+            if _optout:
+                logger.info("GALAXY_TAURI_AUTOBUILD=0：跳过 Tauri 自动构建，回退 Electron。")
+            elif _shutil.which("cargo") is None:
+                logger.info(
+                    "未检测到 Rust(cargo)，跳过 Tauri 自动构建 → 回退 Electron。"
+                    "装 Rust(https://rustup.rs) 后重启即自动构建并优先用 Tauri。"
+                )
+            else:
+                # 构建前预检系统级依赖（Linux 的 webkit2gtk 等）——缺则给出 apt 命令并跳过，
+                # 避免 cargo build 崩得莫名其妙；Rust crate 依赖由 Cargo 自理。
+                try:
+                    from core.electron_launch_guard import tauri_build_prereqs_hint
+                    _hint = tauri_build_prereqs_hint()
+                except Exception:
+                    _hint = None
+                if _hint:
+                    logger.info("Tauri 构建系统依赖缺失，跳过自动构建 → 回退 Electron：\n%s", _hint)
+                else:
+                    logger.info("首次启动：自动构建 Tauri 桌面壳(cargo build --release，首次约需数分钟)，请稍候…")
+                    try:
+                        _rc = sp.call(["cargo", "build", "--release"], cwd=str(tdir / "src-tauri"))
+                    except Exception as _bexc:  # noqa: BLE001
+                        _rc = -1
+                        logger.warning("Tauri 自动构建启动失败：%s", _bexc)
+                    if _rc == 0:
+                        binp = next((c for c in candidates if c.exists()), None)
+                        if binp:
+                            logger.info("Tauri 壳构建完成 ✓ 之后每次启动将自动优先用它。")
+                    else:
+                        logger.warning("Tauri 自动构建失败(cargo rc=%s)，本次回退 Electron。", _rc)
+        if not binp:
             logger.info(
-                "Tauri 壳未构建（desktop-tauri 无二进制），回退 Electron。"
-                "构建一次即自动优先用它：cd desktop-tauri/src-tauri && cargo build --release"
+                "Tauri 壳不可用 → 回退 Electron。"
+                "可手动构建一次：cd desktop-tauri/src-tauri && cargo build --release"
             )
             return False
         try:

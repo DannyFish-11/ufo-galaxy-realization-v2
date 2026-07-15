@@ -107,3 +107,40 @@ def electron_package_intact(electron_dir: str) -> bool:
     """
     pkg = os.path.join(electron_dir, "node_modules", "electron")
     return os.path.isfile(os.path.join(pkg, "package.json")) and os.path.isfile(os.path.join(pkg, "cli.js"))
+
+
+def tauri_build_prereqs_hint():
+    """Tauri 自动构建的【系统级依赖】预检（Rust crate 依赖由 Cargo 自理，不在此列）。
+
+    依赖齐全返回 None；缺依赖返回一句可直接执行的安装提示，供 launcher 打印后
+    跳过构建、回退 Electron —— 避免在缺 WebView 开发库的机器上让 cargo build
+    崩得莫名其妙。
+    - Linux：Tauri/wry 编译需 webkit2gtk-4.1 / gtk+-3.0 / libsoup-3.0 /
+      javascriptcoregtk-4.1 开发库（缺则 build 必失败）。
+    - Windows / macOS：WebView2 / WebKit 一般随系统，返回 None（构建真失败时
+      launcher 已有回退兜底）。
+    """
+    import shutil
+    import subprocess
+    import sys as _sys
+
+    if not _sys.platform.startswith("linux"):
+        return None
+    apt = (
+        "  sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev "
+        "libsoup-3.0-dev libjavascriptcoregtk-4.1-dev build-essential pkg-config"
+    )
+    pkgconf = shutil.which("pkg-config")
+    if pkgconf is None:
+        return "缺 pkg-config 与 WebView 开发库，无法构建 Tauri。Debian/Ubuntu 装：\n" + apt
+    missing = []
+    for name in ("webkit2gtk-4.1", "gtk+-3.0", "libsoup-3.0", "javascriptcoregtk-4.1"):
+        try:
+            rc = subprocess.run([pkgconf, "--exists", name]).returncode
+        except Exception:
+            rc = 1
+        if rc != 0:
+            missing.append(name)
+    if missing:
+        return "缺 Tauri 构建所需系统库: " + ", ".join(missing) + "。Debian/Ubuntu 装：\n" + apt
+    return None

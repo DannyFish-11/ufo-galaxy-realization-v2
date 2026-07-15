@@ -8,6 +8,7 @@
     "core:window:default",
     "core:webview:default",
     "global-shortcut:default",
-    "dialog:default"
+    "dialog:default",
+    "notification:default"
   ]
 }

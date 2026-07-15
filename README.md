@@ -156,14 +156,35 @@ skills/
 ```bash
 python launch_desktop.py
 ```
-自动完成：环境检查 → 依赖安装 → 模型下载 → Gateway 启动 → Electron 启动
+自动完成：环境检查 → 依赖安装 → 模型下载 → Gateway 启动 → **桌面壳启动**
+
+**桌面壳默认优先 Tauri（轻量：内存/启动/体积远小于 Electron），无则回退 Electron：**
+- 检测到 Rust(cargo) 工具链 → 首次自动 `cargo build --release`（约数分钟，之后每次秒起并直接优先 Tauri）；
+  Linux 需先装 webkit2gtk 等系统依赖。
+- 无 Rust / 构建失败 → 自动回退 Electron，功能一致（前端同一套 renderer，行为对等）。
+- `GALAXY_TAURI_AUTOBUILD=0` 关闭自动构建；`GALAXY_DESKTOP_SHELL=electron` 强制用 Electron。
 
 选项：
 ```bash
 python launch_desktop.py --check      # 只检查环境
 python launch_desktop.py --backend    # 只启动 Gateway
-python launch_desktop.py --frontend   # 只启动 Electron
+python launch_desktop.py --frontend   # 只启动桌面壳（Tauri 优先，回退 Electron）
 ```
+
+#### Tauri 桌面壳构建依赖（想用轻量壳时）
+启动器会**自动构建**一次 Tauri 壳，但需要以下系统依赖（缺则自动回退 Electron，并在日志给出安装命令）：
+
+- **通用**：Rust 工具链 — 一行装：`curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`（或见 https://rustup.rs ）
+- **Linux**（Debian/Ubuntu）额外需 WebView 开发库：
+  ```bash
+  sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev \
+    libsoup-3.0-dev libjavascriptcoregtk-4.1-dev build-essential pkg-config
+  ```
+- **Windows**：仅需 Rust（WebView2 一般随 Edge 自带；缺则装 Evergreen WebView2 Runtime）
+- **macOS**：Rust + Xcode Command Line Tools（`xcode-select --install`）
+
+装好后跑 `python launch_desktop.py`，首次自动 `cargo build --release`（约数分钟），之后每次秒起并直接优先 Tauri。
+不想用 Tauri：`GALAXY_TAURI_AUTOBUILD=0`（关自动构建）或 `GALAXY_DESKTOP_SHELL=electron`（强制 Electron）。
 
 ### 方式二：Docker Compose（后端服务）
 ```bash
