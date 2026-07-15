@@ -17,6 +17,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import uuid
@@ -44,10 +45,21 @@ class WorkerRuntime:
         self.worker_id = worker_id or default_worker_id()
         self._nats = nats_bus
         self._running = False
+        self._starting = False
+        self._last_error: Optional[str] = None
+        self._start_task: Optional["asyncio.Task"] = None
 
     @property
     def running(self) -> bool:
         return self._running
+
+    @property
+    def starting(self) -> bool:
+        return self._starting
+
+    @property
+    def last_error(self) -> Optional[str]:
+        return self._last_error
 
     async def execute_dispatch(self, msg: Dict[str, Any]) -> "Any":
         """执行一条派发,返回 TaskResultMsg(不发送 —— 便于单测)。
@@ -172,14 +184,21 @@ class WorkerRuntime:
         return self._nats
 
     async def start(self) -> Dict[str, Any]:
-        """连接 NATS、注册 worker、订阅派发。best-effort:不可用则返回 not-started。"""
+        """连接 NATS、注册 worker、订阅派发。best-effort:不可用则返回 not-started。
+
+        可能耗时(冷启动时 NATS 连接失败会级联到 core.nats_server 的嵌入式服务器
+        拉起 + 自动装(curl|sh,超时 120s)+ 15s 轮询)——调用方若在请求路径上直接
+        await 本方法(而非走下面的 start_background），会阻塞到那整条链路。
+        """
         if self._running:
+            self._last_error = None
             return {"started": True, "already": True, "worker_id": self.worker_id}
         bus = self._get_bus()
         try:
             if not bus.is_connected():
                 await bus.connect()
             if not bus.is_connected():
+                self._last_error = "nats_unavailable"
                 return {"started": False, "reason": "nats_unavailable"}
             # 注册 worker(best-effort)
             try:
@@ -192,15 +211,50 @@ class WorkerRuntime:
                 logger.debug("worker 注册跳过(非致命): %s", exc)
             await bus.subscribe_task_dispatches(self.worker_id, self._on_dispatch)
             self._running = True
+            self._last_error = None
             logger.info(
                 "WorkerRuntime 启动 worker_id=%s(订阅 galaxy.tasks.dispatch.%s)", self.worker_id, self.worker_id
             )
             return {"started": True, "worker_id": self.worker_id}
         except Exception as exc:  # noqa: BLE001
             logger.warning("WorkerRuntime 启动失败: %s", exc)
+            self._last_error = str(exc)
             return {"started": False, "reason": str(exc)}
 
+    def start_background(self) -> Dict[str, Any]:
+        """立即返回;真正的 NATS 连接(含可能的嵌入式服务器拉起/自动装/轮询)放后台任务跑。
+
+        真 bug 修复:面板"启用 Worker"开关此前直接 `await start()`,把上面文档的整条
+        慢链路(NATS 连接失败→嵌入式服务器自动装 curl|sh 超时 120s→15s 轮询,最坏
+        ~135s)同步压在一次 HTTP 请求路径上,按钮点下去像卡死、且几乎没有任何加载
+        反馈。已运行/已在启动中时立即诚实回报,不重复发起;否则 fire-and-forget
+        起一个后台任务,立刻返回 starting=True——真实结果(running/starting/
+        last_error)由 panel feed(WS 推送)持续反映,不阻塞这次请求。
+        """
+        if self._running:
+            self._last_error = None
+            return {"started": True, "already": True, "starting": False, "worker_id": self.worker_id}
+        if self._starting:
+            return {"started": False, "starting": True, "already_starting": True, "worker_id": self.worker_id}
+
+        self._starting = True
+        self._last_error = None
+
+        async def _run() -> None:
+            try:
+                await self.start()
+            finally:
+                self._starting = False
+
+        self._start_task = asyncio.create_task(_run())
+        return {"started": False, "starting": True, "worker_id": self.worker_id}
+
     async def stop(self) -> None:
+        # 取消可能仍在飞的后台启动任务,避免用户已明确点了"停止"之后,一个排队中的
+        # start_background() 慢链路才姗姗来迟地把 _running 又悄悄拨回 True。
+        if self._start_task is not None and not self._start_task.done():
+            self._start_task.cancel()
+        self._starting = False
         self._running = False
 
 

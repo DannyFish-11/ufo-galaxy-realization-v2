@@ -665,6 +665,18 @@ html, body, #root {
   cursor: wait;
   opacity: 0.6;
 }
+/* 真 bug 修复:此前"启动中"仅靠上面这行淡淡的 opacity 变化——用户反馈"点了跟没点
+   一样、卡死看不出来"。加一个可见的旋转指示圈,让"正在连接"这件事真正看得见,
+   而不是只有几十毫秒的 fetch 等待期才有反应、之后长达数秒到十几秒的后台连接
+   期间开关看起来毫无变化。 */
+.switch-spinner {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--r-pill);
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: var(--accent);
+  animation: spin 0.7s linear infinite;
+}
 .switch:focus-visible {
   outline: 1px solid var(--accent);
   outline-offset: 2px;

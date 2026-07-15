@@ -344,18 +344,26 @@ class GalaxyPresenceBridge:
     # ── 广播 ──
 
     async def _broadcast_state(self, speaking_override: Optional[bool] = None) -> None:
-        """广播状态到前端。优先 IPC HTTP，fallback WebSocket。
+        """广播状态到前端 —— 同时推 IPC HTTP 与 WebSocket，两条通道并发、非互斥。
 
         speaking_override 透传给 _build_message,保证 set_ai_speaking 的 True 脉冲
         携带调用时快照值,不被后到的 False 覆盖(见 _build_message 说明)。
+
+        REGRESSION-FIX(本会话早前的 IPC 端口对齐修复引出的副作用):此前 IPC 成功就
+        `return`、跳过 WS 广播 —— 注释写的是"优先 IPC / WS 是浏览器预览模式的 fallback",
+        隐含假设两条通道是【互斥的部署形态】(要么整个 Electron App、要么裸浏览器预览)。
+        但实测面板窗口自己本身还会直连 `/ws/desktop-presence`(useWebSocket.ts,喂
+        usePhase 的 wsPhase),与 IPC→main.js→webContents.send 转发给面板的通道
+        (usePanelData.ts 的 IPC 监听)是【同一个运行中的 App 内并存的两条独立通道】,
+        不是二选一的部署模式。之前 IPC 端口错配(9229≠9231)时 `_try_ipc_http` 恒失败,
+        才"意外"让 WS 广播兜底工作,面板才收得到实时 state_event。端口对齐(9231)后
+        IPC 稳定成功,WS 广播被跳过,面板自己那条直连 WS 上的 wsPhase 就只在连接瞬间
+        拿到一次快照、之后再收不到任何后续状态,而 App.tsx 又优先取 wsPhase —— 面板表现
+        为"卡在某个相位不再跟随、行为怪异"。两条通道各自成本都很低(IPC POST 1s 超时；
+        WS 广播对空 clients 集合是纯本地 no-op),改成【总是两条都推】,不再依赖谁先成功。
         """
         msg = self._build_message(speaking_override=speaking_override)
-
-        # PR-IPC: 优先推送到 Electron main.js HTTP 接收端
-        if await self._try_ipc_http(msg):
-            return
-
-        # Fallback: 传统 WebSocket 广播（浏览器预览模式）
+        await self._try_ipc_http(msg)
         await self._ws_broadcast(msg)
 
     async def _try_ipc_http(self, msg: Dict[str, Any]) -> bool:

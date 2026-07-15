@@ -394,6 +394,11 @@ async def build_panel_feed() -> dict:
             "running": bool(_wr.running),
             "worker_id": _wr.worker_id,
             "enabled_by_env": worker_enabled(),
+            # starting/last_error:配合 mesh_worker_toggle 的 start_background()——
+            # 该端点现在立即返回、真正的 NATS 连接在后台跑,面板靠这两个字段(WS 推送)
+            # 持续反映"正在启动"与"失败原因",而不是等一次可能几十秒的 HTTP 往返。
+            "starting": bool(getattr(_wr, "starting", False)),
+            "last_error": getattr(_wr, "last_error", None),
         }
     except Exception as exc:  # noqa: BLE001 — worker 模块不可用时诚实缺省
         logger.debug("panel feed: worker 状态聚合失败: %s", exc)
@@ -403,6 +408,8 @@ async def build_panel_feed() -> dict:
                 "running": False,
                 "worker_id": "",
                 "enabled_by_env": False,
+                "starting": False,
+                "last_error": None,
             },
         )
 

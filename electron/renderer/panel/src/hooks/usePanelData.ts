@@ -65,11 +65,16 @@ export interface PanelData {
     createdAt: number;
   };
 
-  // NATS worker(Mesh 区显示/开关)
+  // NATS worker(Mesh 区显示/开关)。starting/lastError 配合后端
+  // start_background()(toggle 立即返回、真正连接放后台跑)——
+  // 由本 WS 推送持续反映"正在启动"与失败原因,而不是等一次可能
+  // 很慢的 HTTP 往返。
   natsWorker: {
     running: boolean;
     workerId: string;
     enabledByEnv: boolean;
+    starting: boolean;
+    lastError: string | null;
   };
 
   // OpenClawd 状态
@@ -188,6 +193,8 @@ const DEFAULT_PANEL_DATA: PanelData = {
     running: false,
     workerId: '',
     enabledByEnv: false,
+    starting: false,
+    lastError: null,
   },
   openclawdStatus: {
     runtimeState: 'RESTARTING',
@@ -271,6 +278,8 @@ export function usePanelData(): UsePanelDataReturn {
                 running: !!payload.nats_worker.running,
                 workerId: payload.nats_worker.worker_id || '',
                 enabledByEnv: !!payload.nats_worker.enabled_by_env,
+                starting: !!payload.nats_worker.starting,
+                lastError: payload.nats_worker.last_error ?? null,
               }
             : DEFAULT_PANEL_DATA.natsWorker,
           openclawdStatus: payload.openclawd_status || DEFAULT_PANEL_DATA.openclawdStatus,
