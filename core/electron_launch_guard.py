@@ -117,13 +117,19 @@ def tauri_build_prereqs_hint():
     崩得莫名其妙。
     - Linux：Tauri/wry 编译需 webkit2gtk-4.1 / gtk+-3.0 / libsoup-3.0 /
       javascriptcoregtk-4.1 开发库（缺则 build 必失败）。
-    - Windows / macOS：WebView2 / WebKit 一般随系统，返回 None（构建真失败时
-      launcher 已有回退兜底）。
+    - Windows：Rust 的 msvc target 需要 MSVC C++ 链接器（link.exe）。缺它时
+      cargo 会先下载 ~280 个 crate（约 11 分钟）才在链接阶段以 "linker
+      link.exe not found" 崩溃 —— 这里提前检出并给出 VS Build Tools 安装命令，
+      让构建快速失败、干净回退 Electron。
+    - macOS：Xcode CLT / WKWebView 随系统，返回 None（构建真失败时 launcher
+      已有回退兜底）。
     """
     import shutil
     import subprocess
     import sys as _sys
 
+    if _sys.platform.startswith("win"):
+        return _windows_msvc_hint(shutil, subprocess)
     if not _sys.platform.startswith("linux"):
         return None
     apt = (
@@ -144,3 +150,55 @@ def tauri_build_prereqs_hint():
     if missing:
         return "缺 Tauri 构建所需系统库: " + ", ".join(missing) + "。Debian/Ubuntu 装：\n" + apt
     return None
+
+
+def _windows_msvc_hint(shutil, subprocess):
+    """Windows：检测 Rust msvc target 所需的 MSVC C++ 链接器是否就位。
+
+    齐全返回 None；缺则返回一句可直接执行的安装提示。检测顺序：
+      1. PATH 上已有 link.exe / cl.exe（多见于在 "x64 Native Tools" 命令行里
+         启动，或 rustup 的 msvc target 已能链接）→ 视为就位。
+      2. 否则用 VS 官方定位器 vswhere.exe 查是否已安装含 VC.Tools 组件的
+         Visual Studio / Build Tools —— 装了但没进 PATH 时，cargo 通常仍能经由
+         vcvars 自行找到链接器，故也视为就位。
+      3. 两者皆无 → 判定缺 MSVC 生成工具，回退 Electron 并提示安装。
+    """
+    # 1) 链接器已在 PATH（native tools 环境或已配置）
+    if shutil.which("link.exe") or shutil.which("cl.exe"):
+        return None
+
+    # 2) vswhere 探测已安装的 VC.Tools 组件（cargo 可经 vcvars 找到链接器）
+    program_files_x86 = os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")
+    vswhere = os.path.join(program_files_x86, "Microsoft Visual Studio", "Installer", "vswhere.exe")
+    if os.path.isfile(vswhere):
+        try:
+            out = subprocess.run(
+                [
+                    vswhere,
+                    "-latest",
+                    "-products",
+                    "*",
+                    "-requires",
+                    "Microsoft.VisualStudio.Component.VC.Tools.x86.x64",
+                    "-property",
+                    "installationPath",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=20,
+            )
+            if out.returncode == 0 and out.stdout.strip():
+                return None
+        except Exception:
+            pass
+
+    winget = (
+        '  winget install --id Microsoft.VisualStudio.2022.BuildTools -e '
+        '--override "--add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"'
+    )
+    return (
+        "缺 MSVC C++ 生成工具（Rust 的 msvc target 需要 link.exe），无法构建 Tauri。\n"
+        "装 VS Build Tools 的 C++ 工作负载后重试（会自动回退 Electron）：\n"
+        + winget
+        + "\n或手动下载：https://visualstudio.microsoft.com/visual-cpp-build-tools/"
+    )
