@@ -81,7 +81,10 @@ async def enroll(body: EnrollBody) -> Dict[str, Any]:
             pairing_code=body.pairing_code,
         )
     except ValueError as exc:
-        return {"ok": False, "error": str(exc)}
+        # 不把异常文本回给未鉴权的设备端(CodeQL:信息泄漏)——详情落日志,
+        # 对外只给静态、无堆栈的校验提示。
+        logger.warning("enroll rejected (invalid request): %s", exc)
+        return {"ok": False, "error": "invalid enrollment request (device_id required)"}
     return {
         "ok": True,
         "request_id": req.request_id,
