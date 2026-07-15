@@ -429,6 +429,9 @@ class RuntimeRecoveryReport:
     # Holds a TaskContinuityReport instance when the InFlightTaskContinuityContract
     # module is available.  None if the module could not be loaded.
     continuity_report: Optional[Any] = None
+    # Feature ①: 可持久化 DAG 续跑视图(GALAXY_DURABLE_EXEC 开时填充;否则 None)。
+    # 记录重启后 task graph 从盘上重建出的 completed/resumable/blocked 分类。
+    task_graph_resume: Optional[Dict[str, Any]] = None
     errors: List[str] = field(default_factory=list)
     non_goals: List[str] = field(default_factory=list)
 
@@ -466,6 +469,7 @@ class RuntimeRecoveryReport:
             "durable_truth_converged": self.durable_truth_converged,
             "participants_consolidated": dict(self.participants_consolidated),
             "result_continuity_guard_active": self.result_continuity_guard_active,
+            "task_graph_resume": self.task_graph_resume,
             "errors": list(self.errors),
             "non_goals": list(self.non_goals),
         }
@@ -767,6 +771,32 @@ class RuntimeRestartRecoveryCoordinator:
             err = f"In-flight task continuity evaluation failed: {exc}"
             logger.warning("RuntimeRestartRecovery: %s", err)
             report.errors.append(err)
+
+        # ----------------------------------------------------------------
+        # Step 12: Feature ① — 可持久化 DAG 续跑视图。
+        #          仅在 GALAXY_DURABLE_EXEC 开时:task graph 单例在构造时已从盘上
+        #          重建(完成步/未完成步都在),这里把它的续跑分类(completed /
+        #          resumable / blocked)记进报告并落日志——把"步级检查点"正式接入
+        #          规范的重启恢复流程。实际重派由启动序列注入 dispatch_fn 调用
+        #          TaskGraphRuntime.resume_pending_dispatch 完成(见其文档)。
+        # ----------------------------------------------------------------
+        try:
+            from core.task_graph_runtime import durable_exec_enabled, get_task_graph_runtime
+
+            if durable_exec_enabled():
+                snap = get_task_graph_runtime().resume_snapshot()
+                report.task_graph_resume = snap
+                logger.info(
+                    "RuntimeRestartRecovery: 可持久化 DAG 续跑 — 共 %d 节点,"
+                    "已完成 %d、可续跑 %d、依赖阻塞 %d(state=%s)",
+                    snap.get("total_nodes", 0),
+                    len(snap.get("completed", [])),
+                    len(snap.get("resumable", [])),
+                    len(snap.get("blocked", [])),
+                    snap.get("state_path", ""),
+                )
+        except Exception as exc:  # noqa: BLE001 — 续跑视图失败不影响其余恢复
+            logger.debug("durable task-graph resume snapshot skipped: %s", exc)
 
         report.completed_at = time.time()
         logger.info(

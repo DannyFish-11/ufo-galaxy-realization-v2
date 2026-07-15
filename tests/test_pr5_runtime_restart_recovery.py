@@ -484,3 +484,45 @@ class TestInflightTaskDefaults:
         # The old "in-flight task queues are NOT recovered" non-goal must NOT
         # appear in non-goals since we now durably recover them.
         assert "in-flight task queues are not recovered" not in non_goal_text
+
+
+class TestDurableTaskGraphResumeStep:
+    """Step 12(Feature ①):重启恢复流程接入可持久化 DAG 续跑视图。"""
+
+    def test_resume_snapshot_populated_when_durable_enabled(self, tmp_path, monkeypatch):
+        import core.task_graph_runtime as tg
+        from core.task_graph_runtime import GraphNode, GraphNodeState, TaskGraphRuntime
+
+        monkeypatch.setenv("GALAXY_DURABLE_EXEC", "1")
+        monkeypatch.setenv("GALAXY_TASK_GRAPH_STATE_PATH", str(tmp_path / "g.json"))
+        tg.reset_task_graph_runtime()
+
+        # 先在"上一进程"落一个两步 DAG:t1 完成、t2 依赖 t1 待续跑
+        prev = TaskGraphRuntime()
+        prev.register_node(GraphNode(task_id="t1", state=GraphNodeState.QUEUED))
+        prev.register_node(GraphNode(task_id="t2", state=GraphNodeState.QUEUED, depends_on=["t1"]))
+        prev.transition("t1", GraphNodeState.COMPLETED)
+        # 新单例 = 重启后从盘上重建
+        tg.reset_task_graph_runtime()
+
+        coord = RuntimeRestartRecoveryCoordinator(
+            mesh_session_store=_make_mesh_session_store(str(tmp_path)),
+            body_mesh_store=_make_body_mesh_store(str(tmp_path)),
+            body_mesh_registry=FakeRegistry(),
+        )
+        report = coord.run_recovery()
+        assert report.task_graph_resume is not None
+        assert report.task_graph_resume["completed"] == ["t1"]
+        assert report.task_graph_resume["resumable"] == ["t2"]
+        assert report.to_dict()["task_graph_resume"]["resumable"] == ["t2"]
+        tg.reset_task_graph_runtime()
+
+    def test_resume_snapshot_none_when_durable_disabled(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("GALAXY_DURABLE_EXEC", raising=False)
+        coord = RuntimeRestartRecoveryCoordinator(
+            mesh_session_store=_make_mesh_session_store(str(tmp_path)),
+            body_mesh_store=_make_body_mesh_store(str(tmp_path)),
+            body_mesh_registry=FakeRegistry(),
+        )
+        report = coord.run_recovery()
+        assert report.task_graph_resume is None  # 默认关 → 不接入,零影响
