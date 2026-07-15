@@ -931,6 +931,10 @@ class OpenClawd:
     def __init__(self):
         self._initialized = False
         self._session_memory: Dict[str, List[Dict]] = {}
+        # 单调追加式 JIT 工具加载(GALAXY_TOOLS_JIT=on 时启用):按 session 持有
+        # 的【已解锁工具名】有序列表,只增不减 → 跨轮工具前缀单调增长、前缀缓存
+        # 友好。见 core.context_trim.select_tools_jit。
+        self._session_jit_tools: Dict[str, List[str]] = {}
         self._request_count = 0
         self._error_count = 0
         self._start_time = time.time()
@@ -8228,11 +8232,14 @@ class OpenClawd:
             # 延迟优化(auto 档):工具定义是 prompt 预填的大头(实测 22 个
             # ≈3.2k tokens)。数量在阈值(默认 24)内**原样不动**——质量优先;
             # 超了才按与本次请求的词法相关性挑 top-K,核心工具永不裁。
+            # GALAXY_TOOLS_JIT=on 时改走单调追加式 JIT:热核以外按需逐轮解锁,
+            # 用本 session 的 _session_jit_tools 累加集合保持前缀缓存友好。
             try:
                 from core.context_trim import slim_tools
 
                 _n_before = len(tools)
-                tools = slim_tools(tools, message)
+                _unlocked = self._session_jit_tools.setdefault(session_id, []) if session_id else None
+                tools = slim_tools(tools, message, session_unlocked=_unlocked)
                 if len(tools) != _n_before:
                     logger.info(
                         "工具定义瘦身: %d → %d(GALAXY_TOOLS_SLIM=off 可关闭)",
@@ -9001,6 +9008,7 @@ class OpenClawd:
     async def clear_session(self, session_id: str):
         """清除会话记忆"""
         self._session_memory.pop(session_id, None)
+        self._session_jit_tools.pop(session_id, None)
         try:
             from core.ai_intent import get_conversation_memory
 

@@ -480,6 +480,8 @@ async def latency_probe() -> Dict[str, Any]:
                     f"预填速度 {prefill_tps:.0f} tok/s → 满配代理回合首字约 {est:.0f}s。"
                     "这就是'怎么都慢'的主因:每回合重发全部工具定义。已启用工具粘滞"
                     "(GALAXY_TOOLS_STICKY)让前缀缓存生效——同一会话第二回合起应显著变快;"
+                    "若连【首轮】也想砍,开 GALAXY_TOOLS_JIT=on:热核以外的工具按需逐轮解锁、"
+                    "只增不减,首轮仅下发几百 token 而非全量;"
                     "语音实时体验建议叠加云端 API(如 Agnes 免费档)。"
                 )
             else:
