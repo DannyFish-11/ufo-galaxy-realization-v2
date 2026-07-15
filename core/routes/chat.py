@@ -683,6 +683,18 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             streamed_chars = 0
             revealed_chars = 0  # 锁步下已逐句上屏的字符数
             manifested = False
+            # 有界锁步:锁步把"可见文字"押在"TTS 真的念出某句"上;可 TTS 运行期常静默
+            # 失败(edge 云端不可达/无音频设备),那样一句都不会念 → 一字不上屏 → 整段憋到
+            # done 帧一次性冒出。这里加"降级":喂给 TTS 但尚未露出的原始 delta 缓进 _ls_buf,
+            # 若首 delta 起 _ls_grace 秒内【一句都没开口念】(revealed_chars==0),判 TTS 没在
+            # 播 → 把缓存补吐、其后 delta 直接逐字上屏(等价非锁步),文字绝不再憋成一大段。
+            _ls_buf: list = []  # 已喂 TTS 但未露出的原始 delta(降级时补吐)
+            _ls_first_t = None  # 首个 delta 时刻(判 TTS 是否真在播的宽限起点)
+            _ls_degraded = False  # 锁步已降级为逐字直出
+            try:
+                _ls_grace = float(os.environ.get("GALAXY_LOCKSTEP_GRACE_S", "2.0") or "2.0")
+            except (TypeError, ValueError):
+                _ls_grace = 2.0
             try:
                 # 消费循环:增量帧即到即转;runtime 任务完成且队列排空后出循环。
                 while True:
@@ -696,10 +708,14 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                     except asyncio.TimeoutError:
                         pass  # 无新帧:落到下面锁步露出/循环条件复查
                     if kind == "delta":
-                        if _lockstep:
-                            # 锁步:只喂 TTS,【不】立刻上屏;文字随语音逐句露出。
+                        if _lockstep and not _ls_degraded:
+                            # 锁步(未降级):喂 TTS + 缓存,暂不上屏;文字随语音逐句露出。
                             speaker.feed(payload)
+                            _ls_buf.append(payload)
+                            if _ls_first_t is None:
+                                _ls_first_t = asyncio.get_running_loop().time()
                         else:
+                            # 非锁步 或 锁步已降级:逐字直接上屏。
                             if not manifested:
                                 manifested = True
                                 yield _sse({"type": "phase", "phase": "manifest"})
@@ -712,12 +728,14 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                             while not reveal_q.empty():
                                 reveal_q.get_nowait()
                             revealed_chars = 0
+                            _ls_buf.clear()
+                            _ls_first_t = None
                         streamed_chars = 0
                         yield _sse({"type": "reset"})
                         if speaker is not None:
                             speaker.reset()
-                    # 锁步:把"刚开口念的句子"逐句吐出(文字与语音同刻)。
-                    if _lockstep:
+                    # 锁步(未降级):把"刚开口念的句子"逐句吐出(文字与语音同刻)。
+                    if _lockstep and not _ls_degraded:
                         while not reveal_q.empty():
                             sent = reveal_q.get_nowait()
                             if not manifested:
@@ -726,6 +744,29 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                             revealed_chars += len(sent)
                             streamed_chars += len(sent)
                             yield _sse({"type": "delta", "text": sent})
+                        # 有界降级:首 delta 起宽限内【一句都没开口念】(revealed_chars==0)→
+                        # 判 TTS 没在播,把已缓存文字补吐、转逐字直出(其后 delta 走 else 分支,
+                        # 仍继续喂 speaker 让语音尽力跟随)。文字自此绝不再憋成一大段。
+                        if (
+                            not _ls_degraded
+                            and revealed_chars == 0
+                            and _ls_buf
+                            and _ls_first_t is not None
+                            and (asyncio.get_running_loop().time() - _ls_first_t) > _ls_grace
+                        ):
+                            _ls_degraded = True
+                            if not manifested:
+                                manifested = True
+                                yield _sse({"type": "phase", "phase": "manifest"})
+                            _catchup = "".join(_ls_buf)
+                            _ls_buf.clear()
+                            if _catchup:
+                                streamed_chars += len(_catchup)
+                                yield _sse({"type": "delta", "text": _catchup})
+                            logger.info(
+                                "文字/语音锁步降级:%.1fs 内一句未念出,转逐字流式" "(TTS 疑不可用);语音继续尽力跟随。",
+                                _ls_grace,
+                            )
 
                 result = task.result()  # 异常在此抛出,统一走下面的 except
                 metadata = result.get("metadata", {})
@@ -763,11 +804,12 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 if _emit_conv is not None:
                     _emit_conv("ai", text, source="text", turn_id=_turn_id)
 
-                if _lockstep and speaker is not None:
-                    # ── 锁步收尾 ──────────────────────────────────────────────
-                    # 生成阶段一句都没喂进去过(极少:边界整段替换)→ 把全文喂进去念。
+                if _lockstep and not _ls_degraded and speaker is not None:
+                    # ── 锁步收尾(TTS 正常)────────────────────────────────────
+                    # 全程没有任何 delta 喂进去过(非流式适配器:整段一次返回)→ 把全文喂进去念。
+                    # (有 delta 时已逐个喂过,不再整段重喂,免重复。)
                     try:
-                        if revealed_chars == 0 and streamed_chars == 0 and text:
+                        if _ls_first_t is None and text:
                             speaker.feed(text)
                         speaker.finish()
                     except Exception:  # noqa: BLE001
@@ -796,6 +838,20 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                             await asyncio.sleep(0.05)
                     # 兜底:语音未能覆盖全文(TTS 部分/全失败)不在此逐字补 ——
                     # 下面 done 的 response=全文 会把气泡快照到权威全文,自然补齐。
+                elif _lockstep and _ls_degraded and speaker is not None:
+                    # 锁步已降级:文字早已逐字直出(streamed_chars>0),reveal_q 不再取用。
+                    # 补吐理论残余,并收尾语音(尾音由后台 _player 播完,不阻塞 done ——
+                    # 文字已完整,不必等语音)。
+                    try:
+                        if _ls_buf:
+                            _tail = "".join(_ls_buf)
+                            _ls_buf.clear()
+                            if _tail:
+                                streamed_chars += len(_tail)
+                                yield _sse({"type": "delta", "text": _tail})
+                        speaker.finish()
+                    except Exception:  # noqa: BLE001
+                        pass
                 elif streamed_chars == 0 and text:
                     # 非锁步兜底:没有任何真增量(非流式适配器/边界降级为全新文本)。
                     # 退回逐字假流式,观感与真流式前完全一致。
