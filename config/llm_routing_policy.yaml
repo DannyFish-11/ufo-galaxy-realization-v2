@@ -34,11 +34,13 @@ global_slo:
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 任务类型路由规则 (2026-05-29: 加入minimax/step/mimo)
+# LOCAL-FIRST (2026-07-15): 每个任务的 priorities 均以 ollama 打头,贯彻本地主脑
+#   优先设计。ollama 仅在本地实际运行时才被选中;未运行则自动跳过 → 回退云端。
 # ─────────────────────────────────────────────────────────────────────────────
 task_routing:
 
   reasoning:
-    priorities: [anthropic, anthropic, openai, deepseek, google, qwen, step, xai]
+    priorities: [ollama, anthropic, anthropic, openai, deepseek, google, qwen, step, xai]
     # ^ 双anthropic = Fable 5 (Mythos-class) → Opus 4.8 (safeguard fallback)
     constraints:
       require_tools: false
@@ -50,7 +52,7 @@ task_routing:
     fallback_chain: [deepseek, openai]
 
   fast_response:
-    priorities: [deepseek, agnes, mimo, groq, google, openai, zhipu, moonshot]
+    priorities: [ollama, deepseek, agnes, mimo, groq, google, openai, zhipu, moonshot]
     constraints:
       require_tools: false
     cost_budget:
@@ -61,7 +63,7 @@ task_routing:
     fallback_chain: [openai, anthropic]
 
   coding:
-    priorities: [anthropic, deepseek, qwen, openai, step, mimo]
+    priorities: [ollama, anthropic, deepseek, qwen, openai, step, mimo]
     # ^ anthropic = Fable 5 (SWE-Bench Pro 80.3%, 代码迁移50M行Ruby一天完成)
     constraints:
       require_tools: false
@@ -73,7 +75,7 @@ task_routing:
     fallback_chain: [openai, anthropic]
 
   creative:
-    priorities: [openai, anthropic, mistral, deepseek, minimax]
+    priorities: [ollama, openai, anthropic, mistral, deepseek, minimax]
     constraints:
       require_tools: false
     cost_budget:
@@ -84,7 +86,7 @@ task_routing:
     fallback_chain: [deepseek, openai]
 
   analysis:
-    priorities: [anthropic, openai, deepseek, google, perplexity, qwen, step]
+    priorities: [ollama, anthropic, openai, deepseek, google, perplexity, qwen, step]
     # ^ anthropic = Fable 5 (Hex analytics首个>90%模型)
     constraints:
       require_tools: false
@@ -96,7 +98,7 @@ task_routing:
     fallback_chain: [deepseek, openai]
 
   planning:
-    priorities: [anthropic, openai, deepseek, xai, qwen, minimax, step]
+    priorities: [ollama, anthropic, openai, deepseek, xai, qwen, minimax, step]
     # ^ anthropic = Fable 5 (长程规划，多步自主任务)
     constraints:
       require_tools: false
@@ -108,7 +110,7 @@ task_routing:
     fallback_chain: [openai, deepseek]
 
   agent_control:
-    priorities: [anthropic, openai, deepseek, minimax, step]
+    priorities: [ollama, anthropic, openai, deepseek, minimax, step]
     # ^ anthropic = Fable 5 (长程agentic任务最优，持久记忆游戏通关率3x)
     constraints:
       require_tools: true
@@ -120,7 +122,7 @@ task_routing:
     fallback_chain: [openai, anthropic]
 
   general:
-    priorities: [openai, anthropic, deepseek, google, agnes, qwen, zhipu, minimax, step, mimo]
+    priorities: [ollama, openai, anthropic, deepseek, google, agnes, qwen, zhipu, minimax, step, mimo]
     constraints:
       require_tools: false
     cost_budget:

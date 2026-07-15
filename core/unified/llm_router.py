@@ -1026,56 +1026,77 @@ class UnifiedLLMRouter:
             task_type_str,
             preferred_provider=effective_provider,
         )
-        # 取策略层最优先 provider；若无策略顺序（空列表或 None）则使用 effective_provider。
-        # `_provider_order[0]` is safe here because we only access index 0 when the list is
-        # non-empty (truthy), which is guaranteed by the `if _provider_order` guard.
-        _effective_provider = _provider_order[0] if _provider_order else effective_provider
+        # 【故障转移修复】此前只取 _provider_order[0] 强制成单一 provider,导致执行层
+        # route() 返回它时 alternatives 为空、无从兜底 —— 工具路径中途失败即降级。
+        # 现改为【沿策略顺序逐个尝试】:某候选抛异常或软降级(provider=="none")就换
+        # 下一个,首个真成功即返回。强制 model 只对首选生效;换 provider 时让其自选默认
+        # 模型(原 model 名对新 provider 无意义)。
+        _candidates: List[Optional[str]] = (
+            list(_provider_order) if _provider_order else ([effective_provider] if effective_provider else [None])
+        )
 
-        start = time.monotonic()
-        try:
-            # 执行层（MultiLLMRouter）负责 provider 内部故障转移（auto_failover 默认 True）
-            result = await self._backend.chat(
-                messages=enriched_messages,
-                task_type=task_type_str,
-                provider=_effective_provider,
-                model=model,
-                tools=tools,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                **kwargs,
-            )
-            latency_ms = (time.monotonic() - start) * 1000
-            _actual_provider = getattr(result, "provider", _effective_provider or "unknown")
-            is_fallback = bool(_effective_provider and _actual_provider != _effective_provider)
-            self._telemetry.record(
-                provider=_actual_provider,
-                success=True,
-                latency_ms=latency_ms,
-                is_fallback=is_fallback,
-            )
-            logger.info(
-                "chat_with_tools completed",
-                extra={
-                    "event": "chat_with_tools_done",
-                    "task_type": task_type_str,
-                    "preferred_provider": _effective_provider,
-                    "actual_provider": _actual_provider,
-                    "model": getattr(result, "model", "unknown"),
-                    "latency_ms": round(latency_ms, 2),
-                    "is_fallback": is_fallback,
-                    "has_tools": bool(tools),
-                },
-            )
-            return result
-        except Exception as exc:
-            logger.debug("Fallback triggered: %s", exc)
-            latency_ms = (time.monotonic() - start) * 1000
-            self._telemetry.record(
-                _effective_provider or "unknown",
-                success=False,
-                latency_ms=latency_ms,
-            )
-            raise
+        def _is_soft_failure(res: Any) -> bool:
+            if res is None:
+                return True
+            p = getattr(res, "provider", None)
+            return p is None or str(p).lower() in ("none", "")
+
+        last_result: Any = None
+        last_exc: Optional[Exception] = None
+        for _idx, _cand in enumerate(_candidates):
+            start = time.monotonic()
+            try:
+                result = await self._backend.chat(
+                    messages=enriched_messages,
+                    task_type=task_type_str,
+                    provider=_cand,
+                    model=model if _idx == 0 else None,
+                    tools=tools,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    **kwargs,
+                )
+                latency_ms = (time.monotonic() - start) * 1000
+                if _is_soft_failure(result):
+                    # 软降级:该候选没答出来,记失败并换下一个。
+                    last_result = result
+                    self._telemetry.record(_cand or "unknown", success=False, latency_ms=latency_ms)
+                    logger.debug("chat_with_tools 候选 %s 软降级,换下一个", _cand)
+                    continue
+                _actual_provider = getattr(result, "provider", _cand or "unknown")
+                is_fallback = _idx > 0 or bool(_cand and _actual_provider != _cand)
+                self._telemetry.record(
+                    provider=_actual_provider,
+                    success=True,
+                    latency_ms=latency_ms,
+                    is_fallback=is_fallback,
+                )
+                logger.info(
+                    "chat_with_tools completed",
+                    extra={
+                        "event": "chat_with_tools_done",
+                        "task_type": task_type_str,
+                        "preferred_provider": _cand,
+                        "actual_provider": _actual_provider,
+                        "model": getattr(result, "model", "unknown"),
+                        "latency_ms": round(latency_ms, 2),
+                        "is_fallback": is_fallback,
+                        "has_tools": bool(tools),
+                    },
+                )
+                return result
+            except Exception as exc:  # noqa: BLE001
+                latency_ms = (time.monotonic() - start) * 1000
+                last_exc = exc
+                self._telemetry.record(_cand or "unknown", success=False, latency_ms=latency_ms)
+                logger.debug("chat_with_tools 候选 %s 失败,换下一个: %s", _cand, exc)
+                continue
+
+        # 所有候选都没答出来:契约统一 —— 有软降级结果就返回它(与 MultiLLMRouter.chat
+        # 的软返回一致,不抛给上层),否则(纯异常无软结果)才抛。
+        if last_result is not None:
+            return last_result
+        raise last_exc if last_exc is not None else NoAvailableProviderError(task_type=task_type)
 
     def compute_complexity_vector(
         self,
