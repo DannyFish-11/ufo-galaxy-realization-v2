@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable, List, Optional
@@ -107,6 +108,12 @@ class AudioCaptureService:
         # Metrics
         self._chunks_processed: int = 0
         self._start_ts: Optional[float] = None
+        # 语音输入链路诊断计数(供可见的一次性诊断看门狗判断"死在哪一步"):
+        #   收到音频块 / 其中被 VAD 判为"说话"的块 / 成功转写出文字的次数。
+        self._chunks_seen: int = 0
+        self._speech_chunks: int = 0
+        self._transcripts: int = 0
+        self._diag_task: Optional[asyncio.Task] = None
 
         # Voice input callback — invoked when ASR produces text
         self.on_voice_input: Optional[Callable[[str], None]] = None
@@ -179,8 +186,11 @@ class AudioCaptureService:
             if not quality.is_usable or len(state.samples) == 0:
                 return
 
+            self._chunks_seen += 1  # 诊断:确有音频块流进来(麦克风采集在工作)
+
             # Only buffer when speech is detected
             if state.is_speaking:
+                self._speech_chunks += 1  # 诊断:VAD 判定为"说话"
                 buffer.append(state.samples.copy())
                 buffer_duration += len(state.samples) / state.sample_rate
 
@@ -203,6 +213,7 @@ class AudioCaptureService:
                     try:
                         text = whisper_asr.transcribe(_audio, sample_rate=_sr, language=language)
                         if text:
+                            self._transcripts += 1  # 诊断:成功转写出文字
                             logger.info("ASR result: %s", text)
                             self._emit_voice_input(text)
                     except Exception as exc:
@@ -269,6 +280,9 @@ class AudioCaptureService:
 
         self._start_ts = time.monotonic()
         self._chunks_processed = 0
+        self._chunks_seen = 0
+        self._speech_chunks = 0
+        self._transcripts = 0
 
         if not self.is_available:
             logger.warning("AudioCaptureService: sounddevice unavailable; skipping start")
@@ -284,15 +298,72 @@ class AudioCaptureService:
             )
         )
         self._task = asyncio.create_task(self._run(), name="audio_capture_service")
+        self._diag_task = asyncio.create_task(self._voice_input_watchdog(), name="voice_input_watchdog")
         logger.info(
             "AudioCaptureService started (sr=%d, chunk_ms=%d)",
             self.config.sample_rate,
             self.config.chunk_duration_ms,
         )
 
+    async def _voice_input_watchdog(self) -> None:
+        """一次性【可见】诊断:启动 N 秒后按计数如实说清语音输入链路死在哪一步。
+
+        真机排查痛点:整条链路只在 INFO/DEBUG 打日志,而用户控制台是 WARNING 级 →
+        麦克风就算在工作也【看不到】,坏了更是"死得不明不白"。这里用 WARNING 级打一条
+        (用户一定看得见),把黑盒变白盒:
+          - 一个音频块都没收到 → 采集没打开(默认录音设备/权限/独占)。
+          - 收到音频但 VAD 从未判"说话" → 麦克风增益太低/选错设备/环境太静。
+          - 判过"说话"但没转写出文字 → Whisper 模型/语言问题。
+          - 有转写 → 语音输入正常(如实报一次,消除"到底通没通"的疑虑)。
+        GALAXY_VOICE_DIAG_S=0 可关;默认 20 秒。
+        """
+        try:
+            delay = float(os.environ.get("GALAXY_VOICE_DIAG_S", "20") or "20")
+        except (TypeError, ValueError):
+            delay = 20.0
+        if delay <= 0:
+            return
+        try:
+            await asyncio.sleep(delay)
+        except asyncio.CancelledError:
+            return
+        if self._transcripts > 0:
+            logger.warning(
+                "🎙️ 语音输入正常:%.0fs 内已转写 %d 段(收到音频块 %d、其中说话 %d)。",
+                delay,
+                self._transcripts,
+                self._chunks_seen,
+                self._speech_chunks,
+            )
+        elif self._chunks_seen == 0:
+            logger.warning(
+                "🎙️ 语音输入无效:%.0fs 内【麦克风一个音频块都没收到】——采集未打开。"
+                "检查 Windows 声音设置→录制→默认麦克风(是否被禁用/拔出/被其它程序独占),"
+                "或授予麦克风权限后重启。",
+                delay,
+            )
+        elif self._speech_chunks == 0:
+            logger.warning(
+                "🎙️ 语音输入无效:%.0fs 内收到音频(%d 块)但【VAD 从未判定为说话】——"
+                "多半是麦克风增益太低/选错了输入设备/太安静。请对着麦克风正常音量说话,"
+                "或在系统里调高该麦克风的输入音量。",
+                delay,
+                self._chunks_seen,
+            )
+        else:
+            logger.warning(
+                "🎙️ 语音输入卡在转写:%.0fs 内检测到说话(%d 块)但【没转写出文字】——"
+                "Whisper 模型/语言问题。可试 GALAXY_WHISPER_MODEL=small 提升准确度。",
+                delay,
+                self._speech_chunks,
+            )
+
     async def stop(self) -> None:
         """Stop microphone capture and await the background task."""
         self._pipeline.stop()
+        if self._diag_task is not None:
+            self._diag_task.cancel()
+            self._diag_task = None
         if self._task is not None:
             try:
                 await asyncio.wait_for(self._task, timeout=5.0)
