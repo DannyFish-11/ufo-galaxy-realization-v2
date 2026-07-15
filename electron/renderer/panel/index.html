@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' ws://localhost:* http://localhost:*; img-src 'self' data: blob:;">
   <title>Galaxy — Colorless Lens</title>
   <!-- Vite 入口必须指向源码入口 src/main.tsx，构建时由 Vite 编译并注入
        带哈希的产物。此前误指向已构建的 assets/*.js，导致每次构建只是复制
