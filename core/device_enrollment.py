@@ -234,11 +234,7 @@ class DeviceEnrollmentCoordinator:
                     r.decided_at = now
                 # 批准但迟迟未领:超过领取窗口即作废,并清掉暂存明文 token(防止
                 # 一次性能力凭据永久可领;不吊销注册表记录,以免误伤该设备其它有效 token)。
-                elif (
-                    r.status == APPROVED
-                    and r.decided_at is not None
-                    and (now - r.decided_at) > self._claim_ttl
-                ):
+                elif r.status == APPROVED and r.decided_at is not None and (now - r.decided_at) > self._claim_ttl:
                     r.status = EXPIRED
                     r._token = None
 
