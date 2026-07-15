@@ -819,24 +819,20 @@ def phase2_ensure_deps(env_status: dict) -> bool:
     if not voice_missing:
         print_item("语音依赖", "ok", "sounddevice, pvporcupine, webrtcvad, faster-whisper")
     else:
-        print_item(f"语音依赖缺失: {', '.join(voice_missing)}", "warn")
-        print_item("正在自动安装语音依赖...", "ok")
-        if _run_pip_install(voice_missing):
-            print_item("语音依赖安装完成", "ok")
-        else:
-            print_item("语音依赖安装失败", "warn", "麦克风支持可能不可用")
+        # 首启健壮:【不】在启动时现装语音依赖 —— pip 安装慢(_run_pip_install 超时 900s,
+        # faster-whisper 会拉几百 MB),且依赖网络/镜像,一旦卡住/失败就把首启拖死或拖挂。
+        # 语音是【可选】的麦克风路径(缺了远程/文字路径照常可用),故改为清晰引导按需手动装。
+        print_item(f"语音依赖缺失(可选,麦克风路径用): {', '.join(voice_missing)}", "warn")
+        print_item("按需手动安装(不自动装以免拖慢/挂死首启)", "warn",
+                   f"pip install {' '.join(voice_missing)}  —— 或 `python main.py setup`")
 
-    # pyaudio (needs system libs)
+    # pyaudio (needs system libs;同样不在首启现装)
     try:
         __import__("pyaudio")
         print_item("PyAudio", "ok")
     except Exception:
-        print_item("PyAudio 未安装", "warn")
-        print_item("正在自动安装 PyAudio...", "ok")
-        if _run_pip_install(["pyaudio"]):
-            print_item("PyAudio 安装完成", "ok")
-        else:
-            print_item("PyAudio 安装失败", "warn", "需要系统库: apt install portaudio19-dev")
+        print_item("PyAudio 未安装(可选)", "warn",
+                   "手动: apt install portaudio19-dev && pip install pyaudio")
 
     return all_ok
 
