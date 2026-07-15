@@ -24,9 +24,22 @@
 
 from __future__ import annotations
 
+import logging
 import os
 
 _LOCK_FILENAME = ".electron.pid"
+_logger = logging.getLogger(__name__)
+
+
+def _log(msg: str) -> None:
+    """打印一条进度信息。有 logging handler 就走 logging，否则退化为 print，
+    确保 Windows 自动安装 MSVC 这类耗时步骤对用户可见。"""
+    try:
+        _logger.info(msg)
+    except Exception:
+        pass
+    if not _logger.handlers and not logging.getLogger().handlers:
+        print(msg, flush=True)
 
 
 def _project_root() -> str:
@@ -119,8 +132,10 @@ def tauri_build_prereqs_hint():
       javascriptcoregtk-4.1 开发库（缺则 build 必失败）。
     - Windows：Rust 的 msvc target 需要 MSVC C++ 链接器（link.exe）。缺它时
       cargo 会先下载 ~280 个 crate（约 11 分钟）才在链接阶段以 "linker
-      link.exe not found" 崩溃 —— 这里提前检出并给出 VS Build Tools 安装命令，
-      让构建快速失败、干净回退 Electron。
+      link.exe not found" 崩溃。这里提前检出，并【默认自动用 winget 拉取最新版
+      VS Build Tools 的 C++ 工作负载】装上（含 MSVC 链接器）；装成功则返回 None
+      让构建继续，装失败/无 winget 才返回安装提示、回退 Electron。
+      自动安装可用 GALAXY_TAURI_AUTO_INSTALL_MSVC=0 关掉。
     - macOS：Xcode CLT / WKWebView 随系统，返回 None（构建真失败时 launcher
       已有回退兜底）。
     """
@@ -152,22 +167,13 @@ def tauri_build_prereqs_hint():
     return None
 
 
-def _windows_msvc_hint(shutil, subprocess):
-    """Windows：检测 Rust msvc target 所需的 MSVC C++ 链接器是否就位。
-
-    齐全返回 None；缺则返回一句可直接执行的安装提示。检测顺序：
-      1. PATH 上已有 link.exe / cl.exe（多见于在 "x64 Native Tools" 命令行里
-         启动，或 rustup 的 msvc target 已能链接）→ 视为就位。
-      2. 否则用 VS 官方定位器 vswhere.exe 查是否已安装含 VC.Tools 组件的
-         Visual Studio / Build Tools —— 装了但没进 PATH 时，cargo 通常仍能经由
-         vcvars 自行找到链接器，故也视为就位。
-      3. 两者皆无 → 判定缺 MSVC 生成工具，回退 Electron 并提示安装。
-    """
+def _windows_msvc_present(shutil, subprocess):
+    """True 当 MSVC C++ 链接器已就位（PATH 上有 link.exe/cl.exe，或已装含
+    VC.Tools 组件的 VS/Build Tools —— 后者 cargo 可经 vcvars 自行找到链接器）。"""
     # 1) 链接器已在 PATH（native tools 环境或已配置）
     if shutil.which("link.exe") or shutil.which("cl.exe"):
-        return None
-
-    # 2) vswhere 探测已安装的 VC.Tools 组件（cargo 可经 vcvars 找到链接器）
+        return True
+    # 2) vswhere 探测已安装的 VC.Tools 组件
     program_files_x86 = os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")
     vswhere = os.path.join(program_files_x86, "Microsoft Visual Studio", "Installer", "vswhere.exe")
     if os.path.isfile(vswhere):
@@ -188,17 +194,76 @@ def _windows_msvc_hint(shutil, subprocess):
                 timeout=20,
             )
             if out.returncode == 0 and out.stdout.strip():
-                return None
+                return True
         except Exception:
             pass
+    return False
+
+
+def _windows_try_install_msvc(shutil, subprocess):
+    """用 winget 自动安装【最新版】VS Build Tools 的 C++ 工作负载（含 MSVC 链接器）。
+
+    需要 winget（Win10 1809+/Win11 自带），且通常需要管理员提权（可能弹 UAC）。
+    刻意不捕获子进程输出 —— 让 winget/VS 引导器的下载进度直接透传到控制台，
+    用户能看到实时进度。任何异常/失败都吞掉；是否真的装上由调用方用
+    _windows_msvc_present() 复检为准。
+    """
+    winget = shutil.which("winget")
+    if not winget:
+        _log("无 winget，无法自动安装 MSVC 生成工具 → 回退 Electron。")
+        return
+    _log(
+        "检测到缺 MSVC C++ 生成工具，正在用 winget 自动安装最新版 VS Build Tools 的 "
+        "C++ 工作负载（首次下载数 GB、约需数分钟，可能弹出 UAC 提权）…"
+    )
+    # --override 会整体替换 VS 引导器参数，故需带全静默安装所需的全部开关。
+    # 不指定具体版本 → winget 拉当前最新的 2022 BuildTools（自带适配当下的 MSVC 工具集）。
+    cmd = [
+        winget,
+        "install",
+        "--id",
+        "Microsoft.VisualStudio.2022.BuildTools",
+        "-e",
+        "--accept-package-agreements",
+        "--accept-source-agreements",
+        "--override",
+        "--quiet --wait --norestart --nocache "
+        "--add Microsoft.VisualStudio.Workload.VCTools --includeRecommended",
+    ]
+    try:
+        rc = subprocess.run(cmd, timeout=3600).returncode
+        _log(f"winget 安装 VS Build Tools 结束（退出码 {rc}）。")
+    except Exception as e:  # noqa: BLE001 —— 自动安装尽力而为，失败即回退
+        _log(f"自动安装 MSVC 生成工具失败（{e!r}）→ 回退 Electron。")
+
+
+def _windows_msvc_hint(shutil, subprocess):
+    """Windows：确保 Rust msvc target 所需的 MSVC C++ 链接器就位。
+
+    就位（或成功自动装上）返回 None 让构建继续；否则返回一句可直接执行的安装
+    提示，供上层打印后回退 Electron。默认会在缺失时先用 winget 自动拉取最新版
+    VS Build Tools 装上，可用 GALAXY_TAURI_AUTO_INSTALL_MSVC=0 关掉。
+    """
+    if _windows_msvc_present(shutil, subprocess):
+        return None
+
+    # 默认自动安装（用户要求：让它自己去装、直接拉最新适配版）
+    if os.environ.get("GALAXY_TAURI_AUTO_INSTALL_MSVC", "1").strip().lower() not in ("0", "false", "no"):
+        _windows_try_install_msvc(shutil, subprocess)
+        if _windows_msvc_present(shutil, subprocess):
+            _log("MSVC C++ 生成工具已就位 → 继续构建 Tauri。")
+            return None
 
     winget = (
         '  winget install --id Microsoft.VisualStudio.2022.BuildTools -e '
-        '--override "--add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"'
+        '--accept-package-agreements --accept-source-agreements '
+        '--override "--quiet --wait --norestart '
+        '--add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"'
     )
     return (
-        "缺 MSVC C++ 生成工具（Rust 的 msvc target 需要 link.exe），无法构建 Tauri。\n"
-        "装 VS Build Tools 的 C++ 工作负载后重试（会自动回退 Electron）：\n"
+        "缺 MSVC C++ 生成工具（Rust 的 msvc target 需要 link.exe），且自动安装未成功，"
+        "无法构建 Tauri。\n"
+        "手动装 VS Build Tools 的 C++ 工作负载后重试（会自动回退 Electron）：\n"
         + winget
         + "\n或手动下载：https://visualstudio.microsoft.com/visual-cpp-build-tools/"
     )
