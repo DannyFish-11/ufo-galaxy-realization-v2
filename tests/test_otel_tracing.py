@@ -1,8 +1,9 @@
 """tests/test_otel_tracing.py
 ================================
-Feature ③ — OpenTelemetry 追踪包装:默认关、未装 opentelemetry 时是零成本 no-op、
-绝不抛异常;注入假 tracer 时能正确开 span/带属性/记异常。追踪失败绝不打断被追踪
-的真实工作。
+Feature ③ — OpenTelemetry 追踪包装:默认【跟随跨设备开关】(跨设备默认开 → 这里
+默认开)、显式 GALAXY_OTEL_ENABLED=0/1 总是优先、未装 opentelemetry 时是零成本
+no-op、绝不抛异常;注入假 tracer 时能正确开 span/带属性/记异常。追踪失败绝不打断
+被追踪的真实工作。
 """
 
 from __future__ import annotations
@@ -14,12 +15,19 @@ import pytest
 @pytest.fixture(autouse=True)
 def _iso(monkeypatch):
     monkeypatch.delenv("GALAXY_OTEL_ENABLED", raising=False)
+    monkeypatch.delenv("GALAXY_CROSS_DEVICE_ENABLED", raising=False)
     ot._reset_for_test()
     yield
     ot._reset_for_test()
 
 
-def test_disabled_by_default_is_noop():
+def test_follows_cross_device_default_when_unset():
+    # 两个开关都不设:跨设备默认开 → otel 默认也开(不再是硬编码默认关)。
+    assert ot.otel_enabled() is True
+
+
+def test_off_when_cross_device_disabled(monkeypatch):
+    monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", "0")
     assert ot.otel_enabled() is False
     assert ot.init_tracing() is False
     assert ot.is_active() is False
@@ -30,8 +38,20 @@ def test_disabled_by_default_is_noop():
     ot.record_exception(None, RuntimeError("nope"))
 
 
+def test_explicit_env_overrides_cross_device_off(monkeypatch):
+    monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", "0")
+    monkeypatch.setenv("GALAXY_OTEL_ENABLED", "1")
+    assert ot.otel_enabled() is True
+
+
+def test_explicit_env_overrides_cross_device_on(monkeypatch):
+    # 跨设备默认开,但显式 GALAXY_OTEL_ENABLED=0 仍应关闭 —— 显式开关优先级最高。
+    monkeypatch.setenv("GALAXY_OTEL_ENABLED", "0")
+    assert ot.otel_enabled() is False
+
+
 def test_enabled_but_otel_absent_stays_noop(monkeypatch):
-    # 开了开关但环境里没装 opentelemetry(本沙箱即如此)→ 仍是安全 no-op、不抛
+    # 开了开关但环境里没装 opentelemetry → 仍是安全 no-op、不抛(不依赖本沙箱是否已装)。
     monkeypatch.setenv("GALAXY_OTEL_ENABLED", "1")
     ot._reset_for_test()
     active = ot.init_tracing()

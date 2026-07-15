@@ -18,7 +18,7 @@ import asyncio
 import json
 import pathlib
 from typing import Any, Dict, Optional
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
 import pytest
 
@@ -178,6 +178,41 @@ class TestIngestRuntimeModule:
                     _mock_emit.assert_called_once()
                     call_kwargs = _mock_emit.call_args.kwargs
                     assert call_kwargs["runtime_session_id"] == "test-sess"
+
+    def test_video_available_false_when_aiortc_absent(self):
+        """修复(误报"已启用"):之前 video_available 只要 VideoIngestPipeline()
+        构造不抛异常就是 True,与 aiortc 是否真的装了无关——生产代码里也没有任何
+        地方调用它的 connect() 真正建立 WebRTC 会话,这条管线永远收不到真实帧。
+        现在必须如实取 pipeline.is_available(aiortc 能否导入),装了才可能是 True。"""
+        from core.multimodal.ingest_runtime import start_ingest_bus
+
+        with patch("core.unified_config.config", {"enable_multimodal_ingest": True}):
+            with patch("core.multimodal.ingest_runtime._schedule_pipeline"):
+                with patch(
+                    "core.multimodal.video_ingest.VideoIngestPipeline.is_available",
+                    new_callable=PropertyMock,
+                    return_value=False,
+                ):
+                    with patch("core.multimodal.ingest_runtime._emit_ingest_active") as _mock_emit:
+                        start_ingest_bus()
+                        call_kwargs = _mock_emit.call_args.kwargs
+                        assert call_kwargs["video_available"] is False
+
+    def test_video_available_true_when_aiortc_present(self):
+        """反向验证:pipeline.is_available=True 时如实透传 True(不是硬编码 False)。"""
+        from core.multimodal.ingest_runtime import start_ingest_bus
+
+        with patch("core.unified_config.config", {"enable_multimodal_ingest": True}):
+            with patch("core.multimodal.ingest_runtime._schedule_pipeline"):
+                with patch(
+                    "core.multimodal.video_ingest.VideoIngestPipeline.is_available",
+                    new_callable=PropertyMock,
+                    return_value=True,
+                ):
+                    with patch("core.multimodal.ingest_runtime._emit_ingest_active") as _mock_emit:
+                        start_ingest_bus()
+                        call_kwargs = _mock_emit.call_args.kwargs
+                        assert call_kwargs["video_available"] is True
 
 
 # ===========================================================================

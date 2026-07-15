@@ -167,7 +167,14 @@ def start_ingest_bus(
         video_pipeline = VideoIngestPipeline()
         video_pipeline.add_callback(bus.update_video)
         _schedule_pipeline(video_pipeline, "video")
-        video_available = True
+        # 修复(误报"已启用"):VideoIngestPipeline() 构造成功只说明 Python 对象建好了,
+        # 不代表 aiortc 已装、更不代表真的连上了摄像头——这条 WebRTC ingest 管线在生产
+        # 代码里目前没有任何调用方去 connect() 建立会话,永远收不到真实帧(真正在用的
+        # 摄像头通路是桌面覆盖层 getUserMedia → DesktopPerceptionStore,走的是下面的
+        # _start_desktop_perception_bridge,不受此标志影响)。这里如实取
+        # video_pipeline.is_available(aiortc 是否可导入),不再无条件 True 去骗
+        # PerceptionSourceRegistry / MULTIMODAL_INGEST_ACTIVE 说它"健康"。
+        video_available = video_pipeline.is_available
     except Exception as _video_err:
         logger.debug("VideoIngestPipeline unavailable (non-fatal): %s", _video_err)
 

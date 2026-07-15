@@ -30,6 +30,13 @@ _opencc_converter = None
 _opencc_tried = False
 
 
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.environ.get(name)
+    if raw is None or raw.strip() == "":
+        return default
+    return raw.strip().lower() in ("1", "true", "yes", "on")
+
+
 def _to_simplified(text: str) -> str:
     """把可能的繁体中文转成简体。装了 opencc 就【确保】转换,否则原样返回。"""
     global _opencc_converter, _opencc_tried
@@ -215,7 +222,14 @@ class WhisperASR:
         # 默认VAD参数
         transcribe_kwargs = {
             "language": language,
-            "vad_filter": True,
+            # 修复(真机反馈:VAD 增益问题解决后"检测到说话但没转写出文字"仍会出现)——
+            # 送到这里的音频已经过 core.multimodal.vad 的能量/自适应噪声门限筛过一遍,
+            # 只有判定为"说话"的块才会被缓冲送来。faster-whisper 自带的第二层 Silero
+            # VAD(vad_filter=True)会在这段已经筛过、往往短促而偏安静的语音上再判一次,
+            # 经常把它当静音又滤掉一遍,segments 变空、返回空字符串——两层 VAD 互相拆台。
+            # 默认关掉这层重复过滤;GALAXY_ASR_VAD_FILTER=1 可显式重新打开(比如上游换成
+            # 更宽松的自定义 VAD、确实想再加一层保险时)。
+            "vad_filter": _env_bool("GALAXY_ASR_VAD_FILTER", False),
             "vad_parameters": {"min_silence_duration_ms": 500},
             # 短语音指令逐句独立:不拿上一段做条件,显著减少跨片段的幻觉/重复
             # (真机反馈"识别得不清楚"的一大来源)。
