@@ -1,9 +1,30 @@
 /**
  * WebSocket 桥接层
  * 负责：连接 Python 后端、接收状态更新、降级模式
+ *
+ * @typedef {Object} StatusPayload
+ * @property {boolean} connected
+ * @property {boolean} [error]
+ *
+ * @typedef {Object} StatePayload
+ * @property {string} [phase]
+ * @property {number} [depth_factor]
+ * @property {number} [intent]
+ * @property {boolean} [speaking]
  */
 
+/** 默认重连延迟（毫秒） */
+const DEFAULT_RECONNECT_DELAY_MS = 3000;
+/** 最大重连延迟（毫秒） */
+const MAX_RECONNECT_DELAY_MS = 30000;
+/** 重连延迟增长倍数 */
+const RECONNECT_BACKOFF_MULTIPLIER = 1.5;
+
 class BackendBridge {
+  /**
+   * @param {function(StatePayload): void} onState - 状态更新回调
+   * @param {function(StatusPayload): void} onStatus - 连接状态回调
+   */
   constructor(onState, onStatus) {
     this.onState = onState;
     this.onStatus = onStatus;
@@ -11,13 +32,14 @@ class BackendBridge {
     this.url = null;
     this.reconnectTimer = null;
     this.connected = false;
-    this.reconnectDelay = 3000;
-    this.maxReconnectDelay = 30000;
+    this.reconnectDelay = DEFAULT_RECONNECT_DELAY_MS;
+    this.maxReconnectDelay = MAX_RECONNECT_DELAY_MS;
     this.simulateMode = false;
   }
 
-  // ── 连接 ────────────────────────────────────────
+  // ── Connection ────────────────────────────────────────
 
+  /** Establish WebSocket connection to the backend. */
   async connect() {
     // 获取后端地址
     if (window.galaxyAPI) {
@@ -76,14 +98,19 @@ class BackendBridge {
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     console.log(`[BackendBridge] Reconnecting in ${this.reconnectDelay}ms...`);
     this.reconnectTimer = setTimeout(() => {
-      this.reconnectDelay = Math.min(this.reconnectDelay * 1.5, this.maxReconnectDelay);
+      this.reconnectDelay = Math.min(
+        this.reconnectDelay * RECONNECT_BACKOFF_MULTIPLIER,
+        this.maxReconnectDelay
+      );
       this._tryConnect();
     }, this.reconnectDelay);
   }
 
-  // ── 降级模拟模式 ────────────────────────────────
-  // 当后端断开时，启用本地模拟，确保动画不中断
+  // ── Simulation fallback ────────────────────────────────
+  // When backend disconnects, enable local simulation so the animation
+  // loop keeps running rather than freezing on a blank screen.
 
+  /** Enable local simulation mode (animation continues without backend). */
   enableSimulation() {
     if (this.simulateMode) return;
     this.simulateMode = true;
@@ -94,16 +121,21 @@ class BackendBridge {
     return this.simulateMode;
   }
 
-  // ── 发送 ────────────────────────────────────────
+  // ── Send ────────────────────────────────────────
 
+  /**
+   * Send data to the backend via WebSocket.
+   * @param {Object} data — serialisable payload object
+   */
   send(data) {
     if (this.ws && this.connected) {
       this.ws.send(JSON.stringify(data));
     }
   }
 
-  // ── 断开 ────────────────────────────────────────
+  // ── Disconnect ────────────────────────────────────────
 
+  /** Clean up timers and close the WebSocket connection. */
   disconnect() {
     this.simulateMode = false;
     if (this.reconnectTimer) {
