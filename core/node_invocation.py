@@ -824,8 +824,8 @@ async def invoke_node(
     #
     # 观测(未激活时零成本 no-op):invoke_node 是【所有】本地节点执行的唯一入口(in-process
     # ReAct / REST / 命令路由 / worker 都经此),故在此开一个 span 即覆盖全路径,把 bespoke
-    # trace_id 作为属性带上以便在 OTel 后端关联。默认跟随跨设备开关(跨设备默认开→这里
-    # 默认开);GALAXY_OTEL_ENABLED=0/1 可显式覆盖。未装 opentelemetry 时仍是纯 no-op、零开销。
+    # trace_id 作为属性带上以便在 OTel 后端关联。默认无条件开(GALAXY_OTEL_ENABLED=0 才关)。
+    # 未装 opentelemetry 时仍是纯 no-op、零开销。
     from core.otel_tracing import record_exception, set_attribute, start_span
 
     with start_span(

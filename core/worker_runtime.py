@@ -104,8 +104,7 @@ class WorkerRuntime:
             mark_dispatched(_idem_key)  # 悲观:执行前先记,重投永不二次触发副作用
 
         # 观测(未激活时零成本 no-op):给 worker 执行开一个 span,把 bespoke trace_id 作为
-        # 属性带上,使跨设备派发在 OTel 后端可关联。默认跟随跨设备开关(跨设备默认开→这里
-        # 默认开);GALAXY_OTEL_ENABLED=0/1 可显式覆盖。
+        # 属性带上,使跨设备派发在 OTel 后端可关联。默认无条件开(GALAXY_OTEL_ENABLED=0 才关)。
         from core.otel_tracing import record_exception, start_span
 
         with start_span(

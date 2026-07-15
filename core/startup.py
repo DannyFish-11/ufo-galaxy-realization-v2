@@ -251,9 +251,9 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
     results = {}
     t0 = time.monotonic()
 
-    # Step 0a: 观测追踪(OpenTelemetry)一次性初始化 —— 默认跟随跨设备开关(跨设备默认
-    # 开 → 这里默认开;GALAXY_OTEL_ENABLED=0/1 可显式覆盖)、未装 opentelemetry 时纯
-    # no-op,绝不影响启动。放在最前,使随后所有 span 都在 provider 就绪后创建。
+    # Step 0a: 观测追踪(OpenTelemetry)一次性初始化 —— 默认无条件开(GALAXY_OTEL_ENABLED=0
+    # 才关)、未装 opentelemetry 时纯 no-op,绝不影响启动。放在最前,使随后所有 span
+    # 都在 provider 就绪后创建。
     # 关键:results 里每一项的值都必须是【带 "status" 键的 dict】—— 后面
     # ok_count/summary(startup.py)与 unified_launcher 都对 results.values() 调
     # v.get("status")。之前这里存了个裸 bool,导致 "'bool' object has no attribute

@@ -1,9 +1,13 @@
 """tests/test_otel_tracing.py
 ================================
-Feature ③ — OpenTelemetry 追踪包装:默认【跟随跨设备开关】(跨设备默认开 → 这里
-默认开)、显式 GALAXY_OTEL_ENABLED=0/1 总是优先、未装 opentelemetry 时是零成本
-no-op、绝不抛异常;注入假 tracer 时能正确开 span/带属性/记异常。追踪失败绝不打断
-被追踪的真实工作。
+Feature ③ — OpenTelemetry 追踪包装:默认【无条件开】、GALAXY_OTEL_ENABLED=0 才关、
+未装 opentelemetry 时是零成本 no-op、绝不抛异常;注入假 tracer 时能正确开 span/
+带属性/记异常。追踪失败绝不打断被追踪的真实工作。
+
+(历史:曾经把默认值挂在跨设备开关上,理由是"跨设备默认开"——但真机验证发现
+.env.example 出厂就是 GALAXY_CROSS_DEVICE_ENABLED=false,权威的
+core/system_mode.py 在未显式设置时也默认 desktop-local,导致对绝大多数单机用户
+"默认开"从未真正生效过。现已解耦为独立开关,见 core/otel_tracing.py 顶部说明。)
 """
 
 from __future__ import annotations
@@ -15,19 +19,17 @@ import pytest
 @pytest.fixture(autouse=True)
 def _iso(monkeypatch):
     monkeypatch.delenv("GALAXY_OTEL_ENABLED", raising=False)
-    monkeypatch.delenv("GALAXY_CROSS_DEVICE_ENABLED", raising=False)
     ot._reset_for_test()
     yield
     ot._reset_for_test()
 
 
-def test_follows_cross_device_default_when_unset():
-    # 两个开关都不设:跨设备默认开 → otel 默认也开(不再是硬编码默认关)。
+def test_enabled_by_default_when_unset():
     assert ot.otel_enabled() is True
 
 
-def test_off_when_cross_device_disabled(monkeypatch):
-    monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", "0")
+def test_off_when_explicitly_disabled(monkeypatch):
+    monkeypatch.setenv("GALAXY_OTEL_ENABLED", "0")
     assert ot.otel_enabled() is False
     assert ot.init_tracing() is False
     assert ot.is_active() is False
@@ -38,16 +40,17 @@ def test_off_when_cross_device_disabled(monkeypatch):
     ot.record_exception(None, RuntimeError("nope"))
 
 
-def test_explicit_env_overrides_cross_device_off(monkeypatch):
-    monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", "0")
+def test_explicit_env_on_when_set(monkeypatch):
     monkeypatch.setenv("GALAXY_OTEL_ENABLED", "1")
     assert ot.otel_enabled() is True
 
 
-def test_explicit_env_overrides_cross_device_on(monkeypatch):
-    # 跨设备默认开,但显式 GALAXY_OTEL_ENABLED=0 仍应关闭 —— 显式开关优先级最高。
-    monkeypatch.setenv("GALAXY_OTEL_ENABLED", "0")
-    assert ot.otel_enabled() is False
+def test_independent_of_cross_device_switch(monkeypatch):
+    # 不再挂在跨设备开关上——不管跨设备开关是什么值,otel 的默认值都不受影响。
+    monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", "false")
+    assert ot.otel_enabled() is True
+    monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", "true")
+    assert ot.otel_enabled() is True
 
 
 def test_enabled_but_otel_absent_stays_noop(monkeypatch):
