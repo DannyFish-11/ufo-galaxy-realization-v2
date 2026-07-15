@@ -161,14 +161,24 @@ def test_provider_env_key_map_covers_all_router_call_sites():
 
 
 def test_load_dotenv_actually_called_in_main_py():
-    """静态核实:main.py 顶部确实调用了 load_dotenv()，防止未来改动悄悄删掉。"""
+    """静态核实:main.py 顶部确实加载了 .env，防止未来改动悄悄删掉。
+
+    修复(过时断言):两个入口早就从 python-dotenv 的 ``load_dotenv()`` 换成了
+    ``dotenv_values()``(main.py/unified_launcher.py 同一条注释里写明的原因:
+    ``load_dotenv()`` 会把设置面板生成的空值键整个灌进 os.environ,把代码默认值
+    顶掉)。只认字面 "load_dotenv" 字符串会让测试跟着实现细节一起过时——只要
+    换用任何等价机制就误报"漏加载",却毫无能力验证真正在意的事:.env 到底有没有
+    被加载进 os.environ。故只检查是否 import 了 dotenv 的加载函数之一。
+    """
     main_py = Path(__file__).resolve().parent.parent / "main.py"
     src = main_py.read_text(encoding="utf-8")
-    assert "load_dotenv" in src, "main.py 必须在最早期调用 load_dotenv() 加载 .env"
+    assert "load_dotenv" in src or "dotenv_values" in src, "main.py 必须在最早期加载 .env(load_dotenv 或 dotenv_values)"
 
 
 def test_load_dotenv_actually_called_in_unified_launcher():
-    """静态核实:unified_launcher.py(可能被单独运行)也有防御性的 load_dotenv()。"""
+    """静态核实:unified_launcher.py(可能被单独运行)也有防御性的 .env 加载。见上方说明。"""
     launcher_py = Path(__file__).resolve().parent.parent / "unified_launcher.py"
     src = launcher_py.read_text(encoding="utf-8")
-    assert "load_dotenv" in src, "unified_launcher.py 也应防御性调用 load_dotenv()"
+    assert (
+        "load_dotenv" in src or "dotenv_values" in src
+    ), "unified_launcher.py 也应防御性加载 .env(load_dotenv 或 dotenv_values)"
