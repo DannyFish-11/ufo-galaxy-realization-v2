@@ -390,12 +390,32 @@ class SetupWizard:
             
     def _configure_databases(self):
         """配置数据库"""
+        # 容器运行时选择(Docker / Podman)——此前这里对每个数据库都写死打印
+        # "docker run ..."，完全没有 Podman 选项、也没给用户任何选择机会。
+        # 复用 core.container_runtime 里已实现、已测试的选择器(交互菜单/推荐项/
+        # 安装指引全部一套逻辑),而不是在这里重新造一遍不一致的文案。选一次，
+        # 后面所有数据库共用同一个运行时(与 unified_launcher.ensure_docker_infra
+        # 的语义一致：系统级只选一个容器运行时，不是逐个数据库分别选)。
+        runtime = ""
+        try:
+            from core import container_runtime as cr
+            runtime = cr.resolve_runtime(interactive=True)
+        except Exception:
+            runtime = ""
+        rt_bin = runtime or "docker"
+        rt_label = cr.display_name(runtime) if runtime else "Docker"
+
         for db in DATABASE_CONFIGS:
             print(f"\n{Colors.BOLD}{db['name']}{Colors.ENDC} - {db['description']}")
             print(f"  环境变量: {db['env_var']}")
             print(f"  默认值: {db['default']}")
-            print(f"  Docker 部署: {db['docker_cmd']}")
-            
+            # Podman 的 CLI 与 Docker 基本兼容（`podman run` 同名参数），故直接替换
+            # 命令前缀即可，不需要为每个数据库单独维护一份 Podman 命令。
+            cmd = db['docker_cmd']
+            if rt_bin != "docker":
+                cmd = cmd.replace("docker run", f"{rt_bin} run", 1)
+            print(f"  {rt_label} 部署: {cmd}")
+
             current = self.config.get(db['env_var'])
             if current:
                 print(f"  当前值: {current}")

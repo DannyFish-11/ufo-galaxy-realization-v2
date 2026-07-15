@@ -858,10 +858,19 @@ def phase2_ensure_deps(env_status: dict) -> bool:
 
 
 def _run_setup_wizard() -> int:
-    """Run the interactive setup wizard."""
+    """Run the interactive setup wizard.
+
+    真 bug 修复:此前不带任何参数调用 setup_wizard.py,而它的 main() 在没有
+    --interactive/--quick/--test 时默认落到 quick_setup()(纯非交互、只从环境变量
+    探测 API Key,探测不到就打印一行提示直接退出)——也就是说 start.bat 首启(无 .env
+    时自动跑 `python main.py --setup`)实际上【什么交互向导都没跑】,包括数据库/
+    容器运行时(Docker/Podman)配置在内的整个 run_interactive_setup() 流程全被跳过。
+    这正是"克隆界面里没有 Docker/Podman 选择"的根因——不是选项没做,是这条路径
+    压根没跑到有选项的那个函数。显式传 --interactive 走真正的交互向导。
+    """
     wizard_path = PROJECT_ROOT / "setup_wizard.py"
     if wizard_path.exists():
-        sys.exit(subprocess.call([sys.executable, str(wizard_path)]))
+        sys.exit(subprocess.call([sys.executable, str(wizard_path), "--interactive"]))
     else:
         logger.info("Configuration wizard not found: %s", wizard_path)  # L2 fixed
         sys.exit(1)
