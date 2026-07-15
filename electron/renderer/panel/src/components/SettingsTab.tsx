@@ -20,6 +20,10 @@ interface GalaxyAPI {
   // .env 写入失败等)在 Electron IPC 层就被丢弃了,前端只能显示笼统的
   // "保存失败"，用户没法自己判断到底是哪个字段的问题。现在带回 error。
   setConfig: (config: Record<string, string>) => Promise<{ success: boolean; error?: string }>;
+  // 保存超时死线的真源在主进程(electron/main.js 的 CONFIG_FETCH_BUDGET_MS 等
+  // 常量);渲染层(ModelsTab.tsx)现查这个值而不是自己另维护一份独立数字，
+  // 避免两边超时预算再次互相不对齐(真机复现过的"面板保存直接判假失败"根因)。
+  getConfigSaveTimeoutMs?: () => Promise<number>;
   // 完整明细(本 tab 用):与 getConfig 分开路径,避免后端 /api/config 路由遮蔽
   // (system.py 精简版先注册、抢占同路径)导致这里永远读不到任何一项内容。
   getSettings?: () => Promise<Record<string, ConfigItem>>;

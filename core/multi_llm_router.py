@@ -1930,11 +1930,17 @@ class MultiLLMRouter:
         # OneAPI fallback
         oneapi_key = self._get_key("oneapi")
         if not oneapi_key:
-            oneapi_key = os.environ.get("ONEAPI_API_KEY", "")
+            # 与 _get_key() 自身的环境变量兜底层(约 1734-1737 行)同一模式:直接
+            # os.environ 兜底会绕开 _get_key() 内部已做的 PLACEHOLDER_PREFIXES 过滤,
+            # 必须在这里重新过滤一遍,否则 .env.example 里的
+            # "your_oneapi_api_key_here" 会被当成真实密钥注册 provider。
+            raw = os.environ.get("ONEAPI_API_KEY", "")
+            if raw and not raw.lower().startswith(PLACEHOLDER_PREFIXES):
+                oneapi_key = raw
         oneapi_url = self._normalize_base_url(self._get_key("oneapi_url"))
         if not oneapi_url:
             oneapi_url = self._normalize_base_url(os.environ.get("ONEAPI_URL", ""))
-        if oneapi_key and not oneapi_key.startswith("your-") and oneapi_url:
+        if oneapi_key and not oneapi_key.lower().startswith(PLACEHOLDER_PREFIXES) and oneapi_url:
             models = self._discover_oneapi_models(oneapi_url, oneapi_key)
             cfg = ProviderConfig(
                 name="oneapi",

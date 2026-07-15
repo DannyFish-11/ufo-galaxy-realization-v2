@@ -57,10 +57,18 @@ const AGGREGATE: Provider[] = [
 ];
 
 // 一个值是否"已配置"（非空 + 非占位）
+// 与后端 core.credential_vault.PLACEHOLDER_PREFIXES 保持同一份判定口径
+// (.env.example / runtime/secrets.example.env 实际发的是下划线格式
+// "your_..._here",连字符格式是历史遗留)。这里只做前缀集合的手工镜像——
+// TS 渲染层和 Python 后端之间没有共享常量的构建期机制,若以后
+// PLACEHOLDER_PREFIXES 改动,需要手动同步这里(与 electron/main.js 的
+// CONFIG_FETCH_* 常量不同,这个值不是运行期可查询的,因为它纯粹是本地即时
+// UI 预览逻辑,不值得为此新增一条 IPC 往返)。
+const ISSET_PLACEHOLDER_PREFIXES = ['your_', 'your-', 'change_me', 'todo', '<', 'example', 'xxx'];
 function isSet(v?: string): boolean {
   if (!v) return false;
-  const t = v.trim();
-  return t.length > 0 && !t.startsWith('your-');
+  const t = v.trim().toLowerCase();
+  return t.length > 0 && !ISSET_PLACEHOLDER_PREFIXES.some((p) => t.startsWith(p));
 }
 
 // 后端 GET /api/config 返回形状(system.py 增量字段):
@@ -92,16 +100,39 @@ async function fetchConfig(): Promise<FrontendConfig> {
 // 修复:之前只返回 boolean,后端/Electron IPC 层其实带回了真实错误原因
 // (未知配置键、.env 写入失败等),但被这里直接丢弃,失败时只能显示笼统的
 // "保存失败"，用户没法自己判断到底是哪个字段的问题。现在把 error 一并带出。
+//
+// 真 bug 修复(真机反馈"面板保存 API key 直接失败"):这里的 IPC 分支此前硬编码
+// 20000ms 死线,但 electron/main.js 的 galaxy:set-config 处理器自己的重试预算
+// (专门为"后端首次启动要下语音模型、1~2 分钟才监听端口"这个真实场景设计)最长
+// 约 60s——两个数字从未对齐过,渲染层 20s 一到就先报"保存失败",主进程那边却
+// 可能 30~60s 后才真的存成功,用户看到的是一次本可避免的假失败。
+// 兜底值:与 electron/main.js 的 CONFIG_FETCH_BUDGET_MS(60s)+
+// CONFIG_FETCH_ATTEMPT_TIMEOUT_MS(8s)+CONFIG_SAVE_CLIENT_MARGIN_MS(10s)
+// 保持一致。只有 galaxyAPI.getConfigSaveTimeoutMs 未暴露时(preload/main
+// 版本落后的极端情况)才会走到这个数字——正常情况下这里的"真源"是主进程,
+// 渲染层通过 IPC 现查,不再自己维护一份独立数字。
+const FALLBACK_SAVE_TIMEOUT_MS = 78000;
 async function saveConfig(changed: Record<string, string>): Promise<{ success: boolean; error?: string }> {
   // IPC 与 HTTP 两条路径都加超时:后端启动期/写盘卡住时,裸调用会挂到 OS 级
   // 超时(几分钟),"保存中…"按钮就一直转圈。到点即返回一个可显示的错误。
   if (window.galaxyAPI?.setConfig) {
+    let timeoutMs = FALLBACK_SAVE_TIMEOUT_MS;
+    if (window.galaxyAPI.getConfigSaveTimeoutMs) {
+      try {
+        timeoutMs = await window.galaxyAPI.getConfigSaveTimeoutMs();
+      } catch {
+        /* IPC 查询失败:退回本地兜底值,不影响后续保存本身 */
+      }
+    }
     try {
-      return await withTimeout(window.galaxyAPI.setConfig(changed), 20000, '保存配置');
+      return await withTimeout(window.galaxyAPI.setConfig(changed), timeoutMs, '保存配置');
     } catch (e) {
       return { success: false, error: e instanceof Error ? e.message : '保存超时' };
     }
   }
+  // 浏览器预览兜底路径(无 galaxyAPI,无 Electron 中间层/重试预算):这里的
+  // fetchWithTimeout(...20000) 保持不变——没有 main.js 的重试层,后端未起来时
+  // fetch() 会直接 ECONNREFUSED(近乎瞬时),20s 绰绰有余,与本 bug 无关。
   const r = await fetchWithTimeout('/api/config', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -343,6 +374,18 @@ export default function ModelsTab() {
     });
   }, [invalidate]);
 
+  // 迟到成功兜底:理论上渲染层的保存超时死线现在已经 ≥ 主进程真实预算(见
+  // saveConfig() 的 getConfigSaveTimeoutMs 现查逻辑),不该再出现"渲染层已经
+  // 判超时失败、主进程后来却真的存成功了"这种错位——但仍保留这层兜底,覆盖
+  // getConfigSaveTimeoutMs 不可用、退回本地兜底值的边缘情况。那种情况下 toast
+  // 已经错误地显示过"失败",这里监听 main.js 的迟到广播,至少把"已连接"徽标
+  // 自我纠正过来，不额外弹二次 toast(用户可能已经离开这个 tab,二次提示反而
+  // 困惑)。
+  useEffect(() => {
+    if (!window.galaxyAPI?.onConfigUpdate) return undefined;
+    return window.galaxyAPI.onConfigUpdate(() => invalidate());
+  }, [invalidate]);
+
   const configured = cfg?.configured ?? {};
   const values = cfg?.values ?? {};
 
@@ -378,8 +421,15 @@ export default function ModelsTab() {
     if (saving) return;
     setSaving(true);
     // 立即给等待态:后端启动期/拥塞时这一步可能要好几秒,没有这条用户会以为
-    // "点了没反应"(真机反馈)。
-    flash('保存中…', 30000);
+    // "点了没反应"(真机反馈)。覆盖主进程最坏情形(~78s):避免这条 toast 自己
+    // 的自动消失定时器在中途把"保存中"提前撤掉,看起来像"卡死无提示"。
+    flash('保存中…', 80000);
+    // 12s 是经验值:正常(后端已在线)保存几乎瞬时完成,这个定时器多半会在
+    // finally 里被 clearTimeout 掉、从不触发;只有真的撞上冷启动重试窗口时
+    // 才会把提示换成更明确的文案,而不是让用户盯着同一句"保存中…"数十秒。
+    const interimTimer = setTimeout(() => {
+      flash('仍在保存中，后端可能仍在启动…', 80000);
+    }, 12000);
 
     // 阶段一:持久化。saveConfig 现已带超时,不会无限挂起。持久化【一结束】
     // 就释放按钮 —— 后续的连通性验证是慢步骤(真实上游试调),绝不能再把
@@ -397,6 +447,7 @@ export default function ModelsTab() {
       flash(`保存出错：${e instanceof Error ? e.message : ''}`, 8000);
       return;
     } finally {
+      clearTimeout(interimTimer);
       setSaving(false); // 无论成败,持久化阶段一结束就解锁按钮
     }
     if (!persisted) return;
