@@ -249,3 +249,56 @@ class TestAudioIngestPipeline:
         pipeline.add_callback(bad_cb)
         # Should not raise
         await pipeline._process_chunk(_make_loud())
+
+
+class _FakeSd:
+    """假 sounddevice:openable = 能通过 check_input_settings 的设备索引集合(None=系统默认)。"""
+
+    def __init__(self, devices, openable):
+        self._devices = devices  # list[dict(max_input_channels=...)]
+        self._openable = set(openable)
+
+    def query_devices(self):
+        return self._devices
+
+    def check_input_settings(self, device=None, samplerate=None, channels=None, dtype=None):
+        if device not in self._openable:
+            raise RuntimeError(f"device {device} cannot open")
+
+
+class TestResolveInputDevice:
+    """麦克风设备回退:默认设备被改/被拔时,自动挑一个能打开的输入设备。"""
+
+    def _devs(self):
+        # index 0: 输出设备(无输入); 1,2: 有输入通道
+        return [
+            {"max_input_channels": 0},
+            {"max_input_channels": 2},
+            {"max_input_channels": 1},
+        ]
+
+    def test_default_ok_keeps_default(self):
+        from core.multimodal.audio_ingest import _resolve_input_device
+
+        sd = _FakeSd(self._devs(), openable={None})  # 系统默认可用
+        assert _resolve_input_device(sd, None, 16000, 1) is None
+
+    def test_default_broken_falls_back_to_first_working_input(self):
+        from core.multimodal.audio_ingest import _resolve_input_device
+
+        # 默认(None)打不开,枚举里 index 1 可开 → 回退到 1(跳过无输入的 index 0)
+        sd = _FakeSd(self._devs(), openable={1, 2})
+        assert _resolve_input_device(sd, None, 16000, 1) == 1
+
+    def test_configured_device_preferred_when_openable(self):
+        from core.multimodal.audio_ingest import _resolve_input_device
+
+        sd = _FakeSd(self._devs(), openable={2})
+        assert _resolve_input_device(sd, 2, 16000, 1) == 2
+
+    def test_nothing_openable_returns_configured(self):
+        from core.multimodal.audio_ingest import _resolve_input_device
+
+        # 全打不开 → 返回 configured(None),维持原行为让 InputStream 抛错+打诊断
+        sd = _FakeSd(self._devs(), openable=set())
+        assert _resolve_input_device(sd, None, 16000, 1) is None
