@@ -594,6 +594,14 @@ def phase2_ensure_deps(env_status: dict) -> bool:
         # 也没有 → 真机全新克隆缺包,speech_output 每次合成静默失败,表现为
         # "回复文字出来了、一句话都不说"。包本身很小(纯 HTTP 客户端)。
         "edge_tts": "edge-tts",
+        # 分布式追踪(OpenTelemetry SDK):core/otel_tracing.py 默认跟随跨设备开关
+        # 而开(跨设备默认开),但只有这里真的把包装上,"默认开"才不只是纸面上的
+        # 开关——否则每次全新 clone 后 import 失败,仍会静默降级为 no-op、启动摘要
+        # 里打"otel_tracing: skipped"警告。纯 Python、无重型原生依赖,装得快,跟
+        # jsonschema/tqdm 一个量级,放进阻塞式核心依赖清单不会拖慢首启。
+        # (OTLP 导出器额外依赖 grpcio,较重且默认不导出——按需手动装,见下方引导,
+        # 不放进这里,呼应"语音依赖不阻塞首启"的同一条原则。)
+        "opentelemetry.sdk": "opentelemetry-sdk",
     }
     # 高性能事件循环(平台各取所需):Windows 默认 Proactor 循环开销大(真机:
     # 面板首开并发把循环拖出 10s 级冻结),winloop ≈5×;Linux/macOS 用 uvloop。
@@ -833,6 +841,18 @@ def phase2_ensure_deps(env_status: dict) -> bool:
     except Exception:
         print_item("PyAudio 未安装(可选)", "warn",
                    "手动: apt install portaudio19-dev && pip install pyaudio")
+
+    # OTLP 导出器(可选;真正导出追踪数据到 Jaeger/Tempo 等后端时才需要,依赖较重
+    # 的 grpcio,默认 GALAXY_OTEL_EXPORTER 未设时用不上——不在首启阻塞安装,
+    # 同一条"首启健壮"原则,按需手动装)
+    try:
+        __import__("opentelemetry.exporter.otlp.proto.grpc.trace_exporter")
+    except Exception:
+        print_item(
+            "OTLP 追踪导出器未安装(可选,导出到 Jaeger/Tempo 等才需要)",
+            "warn",
+            "手动: pip install opentelemetry-exporter-otlp-proto-grpc",
+        )
 
     return all_ok
 
