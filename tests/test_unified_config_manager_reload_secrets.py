@@ -55,6 +55,15 @@ def test_reload_actually_refreshes_secret_from_config_store(tmp_path, monkeypatc
             secrets_path=tmp_path / "secrets.env",
         ),
     )
+    # 真隔离缺口(全量测试套件里复现过):_load_env()(core/unified_config.py:190-193)
+    # 会无条件把 os.environ 里任何 OPENAI/ANTHROPIC/.../DEEPSEEK/... 前缀的变量合并
+    # 进 self._config——这是真实生产行为(core/routes/config.py::update_config() 存
+    # 密钥后会 os.environ.update(),让新值立即在当前进程生效),不是要修的 bug。但
+    # 同一 pytest 进程里跑在本测试之前的任何测试(比如真的打过一次 POST /api/config
+    # 保存 DEEPSEEK_API_KEY 的测试)会把这个环境变量真的留在 os.environ 里(不是走
+    # monkeypatch.setenv,不会被自动清理),本测试如果不显式清掉,会被那个残留值
+    # 覆盖掉刚从隔离 ConfigStore 里读到的 "sk-real-saved-key"。
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
 
     backend = UnifiedConfig.__new__(UnifiedConfig)
     backend._config = {}
