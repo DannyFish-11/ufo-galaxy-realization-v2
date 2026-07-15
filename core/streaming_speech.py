@@ -262,12 +262,16 @@ class IncrementalSpeaker:
         on_speaking: Optional[Callable[[bool], None]] = None,
         discard: Optional[Callable[[str], Any]] = None,
         min_chars: int = _MIN_CHUNK_CHARS,
+        on_sentence_start: Optional[Callable[[str], None]] = None,
     ) -> None:
         self._synth = synth
         self._play = play
         self._stop = stop
         self._on_speaking = on_speaking
         self._discard = discard
+        # 逐句"开口即回调":恰在某句真正开始播放的那一刻用【该句文本】回调。
+        # 供文字/语音锁步——调用方据此把这句文字与语音同刻上屏。仅通知,不阻塞播放。
+        self._on_sentence_start = on_sentence_start
         self._min_chars = min_chars
         self._buf = ""
         self._queue: "asyncio.Queue" = asyncio.Queue()
@@ -419,6 +423,12 @@ class IncrementalSpeaker:
                     continue
                 if not self._speaking:
                     self._mark_speaking(True)
+                # 恰在这句开始播放的此刻回调其文本(锁步:文字与语音同刻上屏)。
+                if self._on_sentence_start is not None:
+                    try:
+                        self._on_sentence_start(text)
+                    except Exception as exc:  # noqa: BLE001
+                        logger.debug("on_sentence_start 回调失败(非致命): %s", exc)
                 prev_play = asyncio.ensure_future(self._play_one(handle))
             if prev_play is not None:
                 try:

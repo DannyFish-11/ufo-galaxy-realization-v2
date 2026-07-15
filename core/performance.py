@@ -29,6 +29,7 @@ from typing import Dict, List, Tuple
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
+from starlette.responses import StreamingResponse
 from starlette.types import ASGIApp
 
 logger = logging.getLogger("Galaxy.Performance")
@@ -37,6 +38,19 @@ logger = logging.getLogger("Galaxy.Performance")
 # ============================================================================
 # 1. 响应压缩中间件
 # ============================================================================
+
+
+def _is_streaming_response(response: Response) -> bool:
+    """判断是否为流式响应(SSE / StreamingResponse)——这类响应绝不能被读干缓冲。
+
+    两条判据任一命中即算流式:
+      1. isinstance StreamingResponse(FastAPI/Starlette 的流式类型);
+      2. content-type 以 text/event-stream 开头(SSE)。
+    """
+    if isinstance(response, StreamingResponse):
+        return True
+    ctype = response.headers.get("content-type", "")
+    return ctype.startswith("text/event-stream")
 
 
 class ResponseCompressor(BaseHTTPMiddleware):
@@ -59,6 +73,15 @@ class ResponseCompressor(BaseHTTPMiddleware):
             return await call_next(request)
 
         response = await call_next(request)
+
+        # 【关键】流式响应(SSE)必须原样透传,绝不可读干。
+        # content-type "text/event-stream" 会命中下面的 "text/" 判断,若不在此豁免,
+        # 下面的 `async for chunk in body_iterator` 会把整条 SSE 流抽干成一个 buffer
+        # 再一次性返回 —— 这正是桌面对话"文字整段蹦出、不逐字流"的根因(逐 token 的
+        # delta 帧被攒到生成结束才到达前端)。见 core/routes/chat.py 的
+        # media_type="text/event-stream"。
+        if _is_streaming_response(response):
+            return response
 
         # 仅压缩 JSON 和文本响应
         content_type = response.headers.get("content-type", "")
@@ -285,6 +308,11 @@ class CachingMiddleware(BaseHTTPMiddleware):
 
         # 缓存未命中，执行请求
         response = await call_next(request)
+
+        # 流式响应(SSE)绝不缓存 —— 读干 body_iterator 会破坏流式(防御性:当前只
+        # GET 且白名单路径无 SSE,但白名单一旦扩展就可能踩到,提前豁免)。
+        if _is_streaming_response(response):
+            return response
 
         # 仅缓存成功响应
         if 200 <= response.status_code < 300:

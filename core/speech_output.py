@@ -20,7 +20,7 @@ import contextvars
 import logging
 import os
 import time
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 logger = logging.getLogger("Galaxy.SpeechOutput")
 
@@ -337,7 +337,9 @@ def speak_response(text: str, *, source: str = "") -> None:
             pass
 
 
-def begin_incremental_speech(*, source: str = "") -> Optional[Any]:
+def begin_incremental_speech(
+    *, source: str = "", on_sentence_start: Optional[Callable[[str], None]] = None
+) -> Optional[Any]:
     """建立【边生成边念】会话(真流式 TTS)。
 
     供流式消费端(/chat/stream)在 token 开始流出前调用:拿到会话后把每段增量
@@ -399,6 +401,7 @@ def begin_incremental_speech(*, source: str = "") -> Optional[Any]:
         stop=_stop,
         on_speaking=_set_speaking,
         discard=_rm,
+        on_sentence_start=on_sentence_start,
     )
     if not speaker.start():
         return None  # 无运行中事件循环(同步环境),降级整段
