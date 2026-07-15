@@ -121,3 +121,42 @@ class TestSetAiSpeaking:
 
 async def _capture(sink, msg):
     sink.append(msg)
+
+
+class TestBroadcastStateDualChannel:
+    """回归锁定:_broadcast_state 必须【总是】同时推 IPC 与 WS,不能因 IPC 成功就跳过 WS。
+
+    背景真 bug:此前 IPC 成功即 return、跳过 WS 广播(注释假设两条通道是互斥的部署
+    形态)。但面板窗口自身还会直连 /ws/desktop-presence(与 IPC→main.js 转发给面板
+    是同一 App 内并存的两条独立通道,不是二选一)。之前 IPC 端口错配时它恒失败,才
+    "意外"让 WS 广播兜底工作;端口对齐后 IPC 稳定成功,WS 广播被跳过,面板直连 WS
+    上的相位只在连接瞬间收到一次快照、之后再收不到任何状态更新——表现为"卡住不动、
+    行为怪异"。此测试锁定:无论 IPC 成功与否,WS 广播都必须被调用。
+    """
+
+    def test_ws_broadcast_still_called_when_ipc_succeeds(self):
+        async def run():
+            b = _fresh()
+            b._try_ipc_http = lambda msg: _true()  # 模拟 IPC 成功
+            captured = []
+            b._ws_broadcast = lambda msg: _capture(captured, msg)
+            await b._broadcast_state()
+            return captured
+
+        captured = asyncio.run(run())
+        assert captured, "IPC 成功时 WS 广播被跳过——面板直连 WS 通道会失去实时状态更新"
+
+    def test_ws_broadcast_still_called_when_ipc_fails(self):
+        async def run():
+            b = _fresh()  # _fresh() 默认 _try_ipc_http 返回 False
+            captured = []
+            b._ws_broadcast = lambda msg: _capture(captured, msg)
+            await b._broadcast_state()
+            return captured
+
+        captured = asyncio.run(run())
+        assert captured, "IPC 失败时 WS 广播理应作为唯一通道正常工作"
+
+
+async def _true():
+    return True

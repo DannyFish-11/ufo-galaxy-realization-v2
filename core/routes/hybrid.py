@@ -300,15 +300,22 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
     @router.post("/api/v1/mesh/worker/toggle")
     async def mesh_worker_toggle(req: MeshWorkerToggleRequest):
-        """启/停 NATS worker。启动失败按 worker_runtime 的真实 reason 回报。"""
+        """启/停 NATS worker。
+
+        真 bug 修复:此前 enable=True 直接 `await wr.start()` —— NATS 不可用时会级联到
+        嵌入式服务器自动装(curl|sh,超时 120s)+ 15s 轮询,全部同步压在这一次 HTTP
+        请求路径上,面板按钮点下去能卡到一分多钟。改用 start_background():立即返回
+        starting=True,真正的连接在后台任务里跑,结果经 panel feed(WS 推送)持续反映。
+        """
         from core.worker_runtime import get_worker_runtime
 
         wr = get_worker_runtime()
         if req.enable:
-            outcome = await wr.start()
+            outcome = wr.start_background()
             return JSONResponse(
                 {
                     "running": bool(wr.running),
+                    "starting": bool(wr.starting),
                     "worker_id": wr.worker_id,
                     **outcome,
                 }
@@ -317,6 +324,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         return JSONResponse(
             {
                 "running": bool(wr.running),
+                "starting": False,
                 "worker_id": wr.worker_id,
                 "started": False,
                 "stopped": True,
