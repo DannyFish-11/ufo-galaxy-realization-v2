@@ -109,3 +109,33 @@ def test_set_ai_speaking_never_raises():
 
     set_ai_speaking(True)
     set_ai_speaking(False)
+
+
+def test_speaking_broadcast_snapshots_value_no_lost_true_pulse():
+    """竞态回归:set_ai_speaking(True) 的广播帧必须携带【调用时快照值】。
+
+    根因:广播是 fire-and-forget 任务,_build_message 原读 live self._speaking;
+    True→播放→False 两次快速切换下,若 True 广播任务被事件循环饿过后面的
+    _speaking=False,它会读到 False → True 脉冲丢失(说话动画偶发不起 + CI flaky)。
+    本测试强制复现该顺序,断言快照修复后 True 帧仍为 True。
+    """
+    from core.lumiv_websocket_bridge import GalaxyPresenceBridge
+
+    b = GalaxyPresenceBridge.get_instance()
+    _saved = b._speaking  # bridge 是单例:测完必须还原,否则污染后续测试
+    try:
+        b._speaking = True
+        frame_true = b._build_message(speaking_override=True)
+        # 模拟后到的 set_ai_speaking(False) 抢先把 live 态翻了
+        b._speaking = False
+        frame_live = b._build_message()
+
+        assert frame_true["payload"]["speaking"] is True, "快照未生效:True 脉冲会被丢!"
+        assert frame_live["payload"]["speaking"] is False
+        # 说话深度地板也应随快照抬起(说话时维持可见在场深度)
+        assert frame_true["payload"]["depth_factor"] >= 0.5
+        # 默认(无 override)沿用 live,其它调用点行为不变
+        b._speaking = True
+        assert b._build_message()["payload"]["speaking"] is True
+    finally:
+        b._speaking = _saved

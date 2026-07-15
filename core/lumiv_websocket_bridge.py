@@ -322,9 +322,13 @@ class GalaxyPresenceBridge:
 
     # ── 广播 ──
 
-    async def _broadcast_state(self) -> None:
-        """广播状态到前端。优先 IPC HTTP，fallback WebSocket。"""
-        msg = self._build_message()
+    async def _broadcast_state(self, speaking_override: Optional[bool] = None) -> None:
+        """广播状态到前端。优先 IPC HTTP，fallback WebSocket。
+
+        speaking_override 透传给 _build_message,保证 set_ai_speaking 的 True 脉冲
+        携带调用时快照值,不被后到的 False 覆盖(见 _build_message 说明)。
+        """
+        msg = self._build_message(speaking_override=speaking_override)
 
         # PR-IPC: 优先推送到 Electron main.js HTTP 接收端
         if await self._try_ipc_http(msg):
@@ -370,13 +374,20 @@ class GalaxyPresenceBridge:
         except Exception as exc:
             logger.debug("Send to single client failed: %s", exc)
 
-    def _build_message(self) -> Dict[str, Any]:
-        """构建与前端兼容的 state_event 消息。"""
+    def _build_message(self, speaking_override: Optional[bool] = None) -> Dict[str, Any]:
+        """构建与前端兼容的 state_event 消息。
+
+        speaking_override:set_ai_speaking 的广播用【调用时快照值】而非任务运行时
+        的 live self._speaking —— 否则 True→播放→False 两次快速切换下,若 True 的
+        广播任务被事件循环饿过了后面的 _speaking=False,它会读到 False,True 脉冲
+        丢失(说话动画偶发不起 + CI flaky)。默认 None → 沿用 live 值,其它调用点不变。
+        """
+        _speaking = self._speaking if speaking_override is None else speaking_override
         # 说话地板:TTS 还在播时即使相位已回 SILENT(depth 0.05),也维持一个
         # 可见的在场深度——说完(set_ai_speaking(False) 广播)才落回相位深度,
         # 由渲染端弹簧自然缓落。消除"话没说完、画面先睡"的割裂。
         _depth = self._current_depth
-        if self._speaking:
+        if _speaking:
             _depth = max(_depth, MODE_DEPTH_MAP["liminal"])
         return {
             "type": "state_event",
@@ -385,7 +396,7 @@ class GalaxyPresenceBridge:
                 "phase": self._current_mode,
                 "depth_factor": round(_depth, 4),
                 "intent": round(self._intent, 4),
-                "speaking": self._speaking,
+                "speaking": _speaking,
                 "mode": self._current_mode,
                 "source": "DesktopPresenceRuntime",
                 # 自发注意力最近一拍（面板在场栏展示"在看/在听 + 决策"）。
@@ -455,8 +466,10 @@ def set_ai_speaking(speaking: bool) -> None:
     """
     try:
         bridge = GalaxyPresenceBridge.get_instance()
-        bridge._speaking = bool(speaking)
-        _schedule(bridge._broadcast_state())
+        v = bool(speaking)
+        bridge._speaking = v
+        # 快照 v 随广播:True 帧永远携带 True,不被后到的 False 覆盖(修偶发丢脉冲)。
+        _schedule(bridge._broadcast_state(speaking_override=v))
     except Exception as exc:  # noqa: BLE001
         logger.debug("set_ai_speaking 跳过(非致命): %s", exc)
 
