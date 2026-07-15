@@ -437,6 +437,41 @@ class AgentFactory:
             logger.warning("Agent 状态加载失败，以全新状态启动: %s", _load_err)
         logger.info("AgentFactory 已初始化")
 
+    async def create_agent(
+        self,
+        name: Optional[str] = None,
+        task: Optional[str] = None,
+        parent_id: Optional[str] = None,
+        **kwargs,
+    ) -> "TaskAgent":
+        """便捷统一创建入口：给定任务(可选名字/父 Agent)创建一个 Agent。
+
+        有 LLM Router → 动态生成(create_from_llm)；否则按任务匹配模板兜底(create_from_template)。
+        修复：routes/ai.py 的 /api/v1/agents/{id}/split 端点此前调用了不存在的
+        create_agent()，一走就 AttributeError→500；本方法补上该缺失入口。
+        """
+        task_desc = task or name or "generic task"
+        agent = None
+        if self.llm_router:
+            try:
+                agent = await self.create_from_llm(task_desc, parent_id=parent_id)
+            except Exception as e:  # noqa: BLE001
+                logger.warning("create_agent: LLM 生成失败，回退模板兜底：%s", e)
+                agent = None
+        if agent is None:
+            template = self._match_template(task_desc)
+            overrides = {"name": name} if name else None
+            agent = self.create_from_template(template, parent_id=parent_id, overrides=overrides)
+        # 指定了 name 但生成路径未套用时补写（尽力而为，不因命名失败而中断创建）。
+        if name:
+            cfg = getattr(agent, "config", None)
+            if cfg is not None and getattr(cfg, "name", None) != name:
+                try:
+                    cfg.name = name
+                except Exception:
+                    pass
+        return agent
+
     # ─────── 模式 1: 模板创建 ─────────
 
     def create_from_template(
