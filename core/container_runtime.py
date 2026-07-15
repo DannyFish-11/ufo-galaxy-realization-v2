@@ -288,6 +288,94 @@ def interactive_install_guide() -> str:
     return ""  # 当前仍不可用(安装进行中/待装),偏好已持久化
 
 
+def setup_wizard_select_runtime() -> str:
+    """首启配置向导专用:【总是】展示 Docker/Podman 完整选择菜单,不因为已装了其中
+    一个就静默跳过。
+
+    真 bug 修复:``resolve_runtime()`` 的"只装了一个 → 直接用、不打扰"是【自动化
+    静默启动路径】(``unified_launcher.ensure_docker_infra``,每次 ``python main.py``
+    都会走)的正确设计——不该在日常启动时突然弹一个交互菜单。但配置向导
+    (``setup_wizard.py``,只在 ``python main.py --setup`` 时跑一次)的意图恰恰
+    相反:用户主动来"配置"就是想【看到并做选择】,而不是被代码替他决定。之前
+    ``_configure_databases()`` 直接调用 ``resolve_runtime(interactive=True)``,
+    继承了它"单一已装就跳过菜单"的短路——绝大多数机器只装了 Docker(比 Podman
+    普及得多),于是"Docker/Podman 选择"在向导里实际上【几乎从来不出现】,这正是
+    "压根就没有"这个报告的真根因,而不是菜单代码本身有 bug。
+
+    环境变量 ``GALAXY_CONTAINER_RUNTIME`` 仍是最高优先级(操作者显式指定,任何
+    场景都该尊重,包括这里)。其余情况一律展示菜单;已安装的选项标注"已安装"
+    可直接生效,未安装的选项选中后走安装引导(同 ``interactive_install_guide``
+    的自动装/手动装分支)。非交互终端(无 TTY)不弹菜单,委托给
+    ``resolve_runtime(interactive=False)`` 的静默逻辑,避免在自动化场景卡住。
+    """
+    env = _env_choice()
+    if env in _RUNTIMES and shutil.which(env):
+        save_choice(env)
+        return env
+
+    if not (sys.stdin and sys.stdin.isatty()):
+        return resolve_runtime(interactive=False)
+
+    from core import cli_render as r
+    from core.ascii_art import Colors
+
+    def _c(t, color):
+        return f"{color}{t}{Colors.ENDC}" if r._use_color() else t
+
+    installed = set(available_runtimes())
+    menu = _prefer_recommended(list(_RUNTIMES))
+    print()
+    print("  " + _c("选择容器运行时", Colors.BOLD + Colors.CYAN) + _c("  (后台拉取并运行节点基础设施)", Colors.DIM))
+    r.rule()
+    for i, rt in enumerate(menu, 1):
+        is_first = i == 1
+        marker = _c("▸", Colors.GREEN) if is_first else " "
+        num = _c(f"[{i}]", Colors.BOLD if is_first else Colors.DIM)
+        name = r.pad_display(rt.capitalize(), 10)
+        status = _c("  ✓ 已安装", Colors.GREEN) if rt in installed else _c("  未安装（选中后自动/引导安装）", Colors.DIM)
+        tail = (_c("  ← 推荐" if rt == _RECOMMENDED else "  ← 默认", Colors.GREEN) if is_first else "") + status
+        print(f"  {marker} {num} {name}{tail}")
+        print(f"         {_c(_LABELS.get(rt, ''), Colors.DIM)}")
+    r.rule()
+    print("  " + _c("回车=用默认 · 数字=手选 · s=跳过(桌面照常运行)", Colors.DIM))
+    try:
+        choice = input(f"  请选择运行时 [1-{len(menu)} / 回车 / s]: ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        choice = ""
+    if choice == "s":
+        return ""
+    pick = menu[0]
+    if choice.isdigit() and 1 <= int(choice) <= len(menu):
+        pick = menu[int(choice) - 1]
+    elif choice in _RUNTIMES:
+        pick = choice
+
+    if pick in installed:
+        save_choice(pick)
+        print("  " + _c(f"已选择: {pick.capitalize()}（已安装，立即生效）", Colors.GREEN))
+        return pick
+
+    # 选中的运行时尚未安装:记住偏好,尽力后台自动装(同 interactive_install_guide
+    # 的安装分支);装好后下次启动即自动采用,本次仍返回 ""(当前不可用)。
+    save_choice(pick)
+    print("  " + _c(f"已记住偏好: {pick.capitalize()}（尚未安装）", Colors.GREEN))
+    if can_auto_install():
+        if background_install(pick):
+            print(
+                "  "
+                + _c(
+                    f"  正在【后台自动安装】{pick.capitalize()}…(日志 logs/container_runtime_install.log;"
+                    f"Windows 会弹一次 UAC 确认)。装好后重跑即自动启用。",
+                    Colors.CYAN,
+                )
+            )
+        else:
+            print("  " + _c(f"  安装(手动): {_INSTALL_HINTS.get(pick, '')}", Colors.DIM))
+    else:
+        print("  " + _c(f"  未检测到可用的自动安装工具,请手动安装: {_INSTALL_HINTS.get(pick, '')}", Colors.DIM))
+    return ""
+
+
 def resolve_runtime(interactive: bool = True) -> str:
     """解析并持久化最终容器运行时。返回运行时名("" = 当前无可用运行时)。
 
