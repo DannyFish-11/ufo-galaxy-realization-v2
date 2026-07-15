@@ -227,8 +227,7 @@ def _windows_try_install_msvc(shutil, subprocess):
         "--accept-package-agreements",
         "--accept-source-agreements",
         "--override",
-        "--quiet --wait --norestart --nocache "
-        "--add Microsoft.VisualStudio.Workload.VCTools --includeRecommended",
+        "--quiet --wait --norestart --nocache " "--add Microsoft.VisualStudio.Workload.VCTools --includeRecommended",
     ]
     try:
         rc = subprocess.run(cmd, timeout=3600).returncode
@@ -255,8 +254,8 @@ def _windows_msvc_hint(shutil, subprocess):
             return None
 
     winget = (
-        '  winget install --id Microsoft.VisualStudio.2022.BuildTools -e '
-        '--accept-package-agreements --accept-source-agreements '
+        "  winget install --id Microsoft.VisualStudio.2022.BuildTools -e "
+        "--accept-package-agreements --accept-source-agreements "
         '--override "--quiet --wait --norestart '
         '--add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"'
     )
