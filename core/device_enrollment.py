@@ -92,11 +92,15 @@ class DeviceEnrollmentCoordinator:
         *,
         code_ttl: float = 300.0,
         request_ttl: float = 600.0,
+        claim_ttl: float = 300.0,
         policy: Optional[AdmissionPolicy] = None,
     ) -> None:
         self._registry = registry or get_device_token_registry()
         self._code_ttl = code_ttl
         self._request_ttl = request_ttl
+        # 批准后【领取窗口】:超过 claim_ttl 仍未 claim,则作废该请求并清掉暂存明文
+        # token——request_id 是"一次性、短时效"能力凭据,批准却无人领取不应永久可领。
+        self._claim_ttl = claim_ttl
         self._policy = policy
         self._lock = threading.RLock()
         self._codes: Dict[str, float] = {}  # code -> expiry_at(用完即删)
@@ -202,7 +206,12 @@ class DeviceEnrollmentCoordinator:
         return True
 
     def claim(self, request_id: str) -> Optional[str]:
-        """设备侧领取 token:仅当已批准且未领过,返回一次明文 token,随后清空转 CLAIMED。"""
+        """设备侧领取 token:仅当已批准且未领过,返回一次明文 token,随后清空转 CLAIMED。
+
+        领取前先跑一次过期清理:批准后超过 claim_ttl 未领的请求已被作废(EXPIRED),
+        这里就取不到 token —— 确保"过期领取窗口"在 claim 热路径上也权威生效。
+        """
+        self._expire_locked_free()
         with self._lock:
             r = self._requests.get(request_id)
             if r is None or r.status != APPROVED or r._token is None:
@@ -223,6 +232,15 @@ class DeviceEnrollmentCoordinator:
                 if r.status == PENDING and (now - r.created_at) > self._request_ttl:
                     r.status = EXPIRED
                     r.decided_at = now
+                # 批准但迟迟未领:超过领取窗口即作废,并清掉暂存明文 token(防止
+                # 一次性能力凭据永久可领;不吊销注册表记录,以免误伤该设备其它有效 token)。
+                elif (
+                    r.status == APPROVED
+                    and r.decided_at is not None
+                    and (now - r.decided_at) > self._claim_ttl
+                ):
+                    r.status = EXPIRED
+                    r._token = None
 
 
 # ── 进程级单例 ────────────────────────────────────────────────────────────
