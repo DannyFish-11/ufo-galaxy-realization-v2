@@ -152,6 +152,13 @@ temporalio>=1.7.0
 grpcio>=1.62.0
 grpcio-tools>=1.62.0
 protobuf>=4.25.0
+# 分布式追踪(OpenTelemetry):core/otel_tracing.py 默认跟随跨设备开关(跨设备默认开→
+# 这里默认开),给跨设备派发/节点执行打 span。缺它仍是纯 no-op、不影响启动,但默认装机
+# 使"默认开"名副其实(不装则悄悄降级为关,不再报警)。OTLP 导出复用上面已声明的
+# grpcio/protobuf,增量成本很小。
+opentelemetry-api>=1.24.0
+opentelemetry-sdk>=1.24.0
+opentelemetry-exporter-otlp-proto-grpc>=1.24.0
 
 # ============================================================================
 # Remote SSH (Linux Agent node)

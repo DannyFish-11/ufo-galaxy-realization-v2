@@ -28,7 +28,15 @@ with no runtime cost and no import risk when tracing is disabled.
 
 Enable
 ------
-``GALAXY_OTEL_ENABLED=1`` turns it on (requires ``opentelemetry-sdk`` installed).
+Default: **follows the cross-device switch**
+(``galaxy_gateway.cross_device_switch.is_cross_device_enabled()``, itself
+default-ON). Cross-device is exactly the case where the bespoke ``trace_id``
+correlation this module exists to upgrade actually matters — calls hop across
+devices/processes — so tracing opts in automatically whenever cross-device
+routing is on, instead of requiring a second flag nobody remembers to set.
+``GALAXY_OTEL_ENABLED=0`` / ``=1`` always overrides the derived default in
+either direction. Requires ``opentelemetry-sdk`` installed (default dependency
+as of this change); still a safe no-op if absent.
 Exporter selection:
 - ``GALAXY_OTEL_EXPORTER=otlp`` + ``OTEL_EXPORTER_OTLP_ENDPOINT`` → OTLP export.
 - ``GALAXY_OTEL_EXPORTER=console`` → console span exporter (debug).
@@ -62,8 +70,24 @@ _state: Dict[str, Any] = {"initialized": False, "active": False, "tracer": None}
 
 
 def otel_enabled() -> bool:
-    """Whether OTel tracing is requested via env (default OFF)."""
-    return str(os.getenv("GALAXY_OTEL_ENABLED", "")).strip().lower() in ("1", "true", "yes", "on")
+    """Whether OTel tracing is requested.
+
+    ``GALAXY_OTEL_ENABLED=0/1`` (any of the usual truthy/falsy spellings), when
+    set, always wins. When unset, the default **follows the cross-device
+    switch**: cross-device is on by default system-wide
+    (``GALAXY_CROSS_DEVICE_ENABLED`` defaults to enabled), and that is exactly
+    the scenario where end-to-end span correlation earns its keep, so tracing
+    rides along with it rather than needing its own opt-in.
+    """
+    raw = os.getenv("GALAXY_OTEL_ENABLED")
+    if raw is not None and raw.strip() != "":
+        return raw.strip().lower() in ("1", "true", "yes", "on")
+    try:
+        from galaxy_gateway.cross_device_switch import is_cross_device_enabled
+
+        return is_cross_device_enabled()
+    except Exception:  # noqa: BLE001 — 观测开关绝不能因跨设备模块不可用而报错/阻断
+        return False
 
 
 def _build_exporter():
