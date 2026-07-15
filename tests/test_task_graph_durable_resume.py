@@ -9,8 +9,9 @@ from __future__ import annotations
 
 import asyncio
 
-import core.task_graph_runtime as tg
 import pytest
+
+import core.task_graph_runtime as tg
 from core.task_graph_runtime import GraphNode, GraphNodeState, TaskGraphRuntime
 
 

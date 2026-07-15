@@ -12,8 +12,9 @@ core/system_mode.py 在未显式设置时也默认 desktop-local,导致对绝大
 
 from __future__ import annotations
 
-import core.otel_tracing as ot
 import pytest
+
+import core.otel_tracing as ot
 
 
 @pytest.fixture(autouse=True)

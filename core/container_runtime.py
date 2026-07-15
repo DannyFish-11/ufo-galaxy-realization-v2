@@ -255,7 +255,9 @@ def interactive_install_guide() -> str:
         print(f"         {_c(_LABELS.get(rt, ''), Colors.DIM)}")
         print(f"         {_c('安装: ' + _INSTALL_HINTS.get(rt, ''), Colors.DIM)}")
     r.rule()
-    print("  " + _c(f"回车=记住默认({_RECOMMENDED.capitalize()}·更轻) · 数字=记住偏好 · s=跳过(桌面照常运行)", Colors.DIM))
+    print(
+        "  " + _c(f"回车=记住默认({_RECOMMENDED.capitalize()}·更轻) · 数字=记住偏好 · s=跳过(桌面照常运行)", Colors.DIM)
+    )
     try:
         choice = input(f"  选择偏好运行时 [1-{len(_menu)} / 回车 / s]: ").strip().lower()
     except (EOFError, KeyboardInterrupt):
@@ -332,7 +334,9 @@ def setup_wizard_select_runtime() -> str:
         marker = _c("▸", Colors.GREEN) if is_first else " "
         num = _c(f"[{i}]", Colors.BOLD if is_first else Colors.DIM)
         name = r.pad_display(rt.capitalize(), 10)
-        status = _c("  ✓ 已安装", Colors.GREEN) if rt in installed else _c("  未安装（选中后自动/引导安装）", Colors.DIM)
+        status = (
+            _c("  ✓ 已安装", Colors.GREEN) if rt in installed else _c("  未安装（选中后自动/引导安装）", Colors.DIM)
+        )
         tail = (_c("  ← 推荐" if rt == _RECOMMENDED else "  ← 默认", Colors.GREEN) if is_first else "") + status
         print(f"  {marker} {num} {name}{tail}")
         print(f"         {_c(_LABELS.get(rt, ''), Colors.DIM)}")

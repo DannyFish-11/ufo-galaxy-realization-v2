@@ -32,8 +32,7 @@ def test_launcher_calls_kokoro_prefetch_unconditionally_before_voice_interaction
     assert prefetch_idx != -1, "unified_launcher.py 必须主动调用 kokoro kick_background_fetch"
     assert voice_idx != -1, "start_voice_interaction() 调用点消失,测试基准失效"
     assert prefetch_idx < voice_idx, (
-        "Kokoro 预取必须在语音交互启动之前触发,且不能依赖其结果——"
-        "回归了'被动懒加载,3 分钟下载来不及'的 bug"
+        "Kokoro 预取必须在语音交互启动之前触发,且不能依赖其结果——" "回归了'被动懒加载,3 分钟下载来不及'的 bug"
     )
     # 预取调用不能被包在语音输入是否可用的判断之内——TTS 出声与麦克风/ASR
     # 是否可用无关,不该被 GALAXY_VOICE 挡住。
@@ -66,7 +65,8 @@ def test_autofetch_off_switch_prevents_thread(monkeypatch, tmp_path):
     monkeypatch.setenv("GALAXY_KOKORO_AUTOFETCH", "0")
     ran = {"count": 0}
     monkeypatch.setattr(
-        kokoro_engine.threading, "Thread",
+        kokoro_engine.threading,
+        "Thread",
         lambda *a, **k: ran.__setitem__("count", ran["count"] + 1) or _SyncThread(*a, **k),
     )
     kokoro_engine.kick_background_fetch()
@@ -90,9 +90,9 @@ def test_fetch_failure_logs_at_warning_with_actionable_hint(monkeypatch, tmp_pat
         kokoro_engine.kick_background_fetch()  # _SyncThread 让 _fetch() 原地跑完
 
     warnings = [r for r in caplog.records if r.levelno >= logging.WARNING]
-    assert any("Kokoro 模型拉取失败" in r.message for r in warnings), (
-        f"拉取失败应以 WARNING 上报,实际记录: {[(r.levelname, r.message) for r in caplog.records]}"
-    )
+    assert any(
+        "Kokoro 模型拉取失败" in r.message for r in warnings
+    ), f"拉取失败应以 WARNING 上报,实际记录: {[(r.levelname, r.message) for r in caplog.records]}"
     assert any(kokoro_engine._model_file() in r.message for r in warnings), "警告应包含具体模型文件名"
     assert any("HF_ENDPOINT" in r.message for r in warnings), "警告应包含镜像指引"
 

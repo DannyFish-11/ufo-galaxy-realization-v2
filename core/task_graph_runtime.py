@@ -442,6 +442,7 @@ class GraphNode:
     @classmethod
     def from_dict(cls, d: Dict[str, Any]) -> "GraphNode":
         """Rehydrate a ``GraphNode`` from :meth:`to_dict` output (durable resume)."""
+
         def _state(v: str) -> GraphNodeState:
             try:
                 return GraphNodeState(v)

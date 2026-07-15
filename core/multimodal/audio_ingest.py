@@ -43,6 +43,7 @@ def _resolve_input_device(sd, configured, sample_rate: int, channels: int):
     不通过 → 返回 configured(维持原行为,让下面的 InputStream 抛错并打完整诊断)。
     仅在默认设备确实打不开时才改选别的,不打扰正常情形。
     """
+
     def _ok(dev) -> bool:
         try:
             sd.check_input_settings(device=dev, samplerate=sample_rate, channels=channels, dtype="float32")

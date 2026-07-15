@@ -36,20 +36,20 @@ def test_secret_saved_only_in_secrets_env_is_counted(monkeypatch, tmp_path, caps
     # .env 里该 key 是未编辑的占位符(面板保存后会把它从 .env 里剔除,但这里
     # 模拟"用户还没存过这个 key、.env 仍是自动生成的模板"这一常见起始状态)。
     status = _run(
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
         env_text="OPENAI_API_KEY=your_openai_api_key_here\n",
         secrets={"DEEPSEEK_API_KEY": "sk-real-deepseek-key"},
     )
     out = capsys.readouterr().out
-    assert status["api_keys_configured"] == 1, (
-        f"只计了 .env 文本,漏了 runtime/secrets.env 里真实保存的密钥: {status}"
-    )
+    assert status["api_keys_configured"] == 1, f"只计了 .env 文本,漏了 runtime/secrets.env 里真实保存的密钥: {status}"
     assert "API Key 已配置 (1个)" in out
 
 
 def test_placeholder_only_reports_zero_configured(monkeypatch, tmp_path, capsys):
     status = _run(
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
         env_text="OPENAI_API_KEY=your_openai_api_key_here\nGALAXY_API_TOKEN=your_galaxy_api_token_here\n",
         secrets={},
     )
@@ -60,7 +60,8 @@ def test_placeholder_only_reports_zero_configured(monkeypatch, tmp_path, capsys)
 
 def test_dedupes_key_present_in_both_env_and_secrets(monkeypatch, tmp_path, capsys):
     status = _run(
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
         env_text="ANTHROPIC_API_KEY=sk-real-anthropic-key\n",
         secrets={"ANTHROPIC_API_KEY": "sk-real-anthropic-key"},
     )

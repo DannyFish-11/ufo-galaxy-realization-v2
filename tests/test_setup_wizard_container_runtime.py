@@ -30,8 +30,8 @@ import sys
 
 import pytest
 
-from core import container_runtime as cr
 import setup_wizard as sw
+from core import container_runtime as cr
 
 
 @pytest.fixture(autouse=True)
@@ -61,7 +61,8 @@ class TestConfigureDatabasesUsesSetupWizardSelector:
 
     def test_offers_podman_choice_when_both_installed(self, monkeypatch, capsys):
         out = _run_configure_databases(
-            monkeypatch, capsys,
+            monkeypatch,
+            capsys,
             stdin_text="1\n" + "\n" * 20,  # '1' = Podman（推荐，排最前）
             which_map={"docker": "/usr/bin/docker", "podman": "/usr/bin/podman"},
         )
@@ -70,7 +71,8 @@ class TestConfigureDatabasesUsesSetupWizardSelector:
 
     def test_substitutes_chosen_runtime_into_commands(self, monkeypatch, capsys):
         out = _run_configure_databases(
-            monkeypatch, capsys,
+            monkeypatch,
+            capsys,
             stdin_text="1\n" + "\n" * 20,
             which_map={"docker": "/usr/bin/docker", "podman": "/usr/bin/podman"},
         )
@@ -83,7 +85,8 @@ class TestConfigureDatabasesUsesSetupWizardSelector:
         不能像 resolve_runtime 那样静默跳过——这正是"压根没有选择"的真根因。
         """
         out = _run_configure_databases(
-            monkeypatch, capsys,
+            monkeypatch,
+            capsys,
             stdin_text="2\n" + "\n" * 20,  # 显式选 [2]=Docker（已安装，立即生效）
             which_map={"docker": "/usr/bin/docker"},
         )
@@ -95,7 +98,8 @@ class TestConfigureDatabasesUsesSetupWizardSelector:
     def test_can_pick_uninstalled_runtime_when_only_docker_installed(self, monkeypatch, capsys):
         """只装 Docker 时依然可以【选 Podman】——即便它还没装。"""
         out = _run_configure_databases(
-            monkeypatch, capsys,
+            monkeypatch,
+            capsys,
             stdin_text="1\n" + "\n" * 20,  # '1' = Podman（未安装）
             which_map={"docker": "/usr/bin/docker"},
         )
@@ -135,7 +139,8 @@ class TestSetupWizardSelectRuntime:
 
     def test_picking_installed_runtime_returns_immediately_usable(self, monkeypatch):
         monkeypatch.setattr(
-            cr.shutil, "which",
+            cr.shutil,
+            "which",
             lambda name: {"docker": "/usr/bin/docker", "podman": "/usr/bin/podman"}.get(name),
         )
         fake_stdin = io.StringIO("2\n")  # Docker
@@ -167,7 +172,8 @@ class TestSetupWizardSelectRuntime:
 
     def test_enter_picks_recommended_default(self, monkeypatch):
         monkeypatch.setattr(
-            cr.shutil, "which",
+            cr.shutil,
+            "which",
             lambda name: {"docker": "/usr/bin/docker", "podman": "/usr/bin/podman"}.get(name),
         )
         fake_stdin = io.StringIO("\n")  # 回车 = 默认（推荐 Podman）
@@ -200,6 +206,4 @@ def test_run_setup_wizard_invokes_interactive_flag(monkeypatch, tmp_path):
         main_mod._run_setup_wizard()
 
     assert "cmd" in captured, "subprocess.call 应被调用"
-    assert "--interactive" in captured["cmd"], (
-        f"_run_setup_wizard 必须传 --interactive，实际调用: {captured['cmd']}"
-    )
+    assert "--interactive" in captured["cmd"], f"_run_setup_wizard 必须传 --interactive，实际调用: {captured['cmd']}"

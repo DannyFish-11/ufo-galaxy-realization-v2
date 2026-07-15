@@ -34,8 +34,7 @@ def test_reload_calls_load_from_config_store():
     mgr.reload()
 
     assert "_load_from_config_store" in calls, (
-        "reload() 漏了 _load_from_config_store() —— runtime/secrets.env 里刚保存的"
-        "密钥不会被读回 Dashboard 层"
+        "reload() 漏了 _load_from_config_store() —— runtime/secrets.env 里刚保存的" "密钥不会被读回 Dashboard 层"
     )
     # 顺序必须和 UnifiedConfig.__init__ 一致:config.json(最低)→ runtime store
     # (secrets.env,居中)→ .env/环境变量(最高),否则优先级会被打乱。
@@ -73,6 +72,6 @@ def test_reload_actually_refreshes_secret_from_config_store(tmp_path, monkeypatc
     config_store_module.get_config_store().write_secret("DEEPSEEK_API_KEY", "sk-real-saved-key")
     mgr.reload()
 
-    assert mgr.get("deepseek_api_key", "") == "sk-real-saved-key", (
-        "reload() 之后 Dashboard 层应能读到刚保存进 runtime/secrets.env 的密钥"
-    )
+    assert (
+        mgr.get("deepseek_api_key", "") == "sk-real-saved-key"
+    ), "reload() 之后 Dashboard 层应能读到刚保存进 runtime/secrets.env 的密钥"
