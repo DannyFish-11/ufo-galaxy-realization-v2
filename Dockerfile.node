@@ -34,7 +34,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Install node-specific extra dependencies if present
-ARG NODE_NAME
+ARG NODE_NAME=galaxy
 RUN if [ -f "nodes/${NODE_NAME}/requirements.txt" ]; then \
         pip install --no-cache-dir -r "nodes/${NODE_NAME}/requirements.txt"; \
     fi
