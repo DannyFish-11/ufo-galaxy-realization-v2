@@ -98,6 +98,32 @@ def test_request_ttl_expiry(tmp_path):
     assert c.approve(req.request_id) is None, "过期请求不能批准"
 
 
+def test_approved_but_unclaimed_expires_claim_window(tmp_path):
+    """批准后迟迟不领:超过 claim_ttl 即作废,token 领不到、也不留暂存明文。
+
+    request_id 是"一次性、短时效"能力凭据;批准却无人领取不应永久可领。
+    """
+    c, reg = _coord(tmp_path, claim_ttl=0.05)
+    req = c.submit_enrollment("dev-late")
+    tok = c.approve(req.request_id)
+    assert tok, "批准应发放 token"
+    time.sleep(0.08)
+    # 过了领取窗口 → 请求作废,claim 拿不到
+    assert c.claim(req.request_id) is None, "过期领取窗口后不得再领"
+    assert c.get(req.request_id)["status"] == EXPIRED
+    # 暂存明文 token 已清(不残留在内存)
+    with c._lock:
+        assert c._requests[req.request_id]._token is None
+
+
+def test_claim_within_window_still_works(tmp_path):
+    """回归:领取窗口内 claim 正常(过期逻辑不误伤及时领取)。"""
+    c, reg = _coord(tmp_path, claim_ttl=5.0)
+    req = c.submit_enrollment("dev-prompt")
+    tok = c.approve(req.request_id)
+    assert c.claim(req.request_id) == tok, "窗口内应能正常领取"
+
+
 def test_pairing_code_ttl(tmp_path):
     c, reg = _coord(tmp_path, code_ttl=0.05)
     code = c.create_pairing_code()["code"]
