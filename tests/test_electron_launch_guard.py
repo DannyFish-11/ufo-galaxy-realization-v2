@@ -141,18 +141,35 @@ class TestWindowsMsvcPrecheck:
         g._prepend_path("msvcbin")
         assert os.environ["PATH"].count("msvcbin") == 1
 
-    def test_hint_injects_path_and_proceeds_when_linker_on_disk(self, monkeypatch):
+    def test_hint_loads_vcvars_and_proceeds_when_linker_on_disk(self, monkeypatch):
         import core.electron_launch_guard as g
 
-        monkeypatch.setenv("PATH", "C:\\a")
         monkeypatch.setattr(g, "_link_on_path_is_msvc", lambda sh: False)
         monkeypatch.setattr(g, "_windows_msvc_linker_dir", lambda sp: r"C:\VS\...\Hostx64\x64")
-        # 磁盘有链接器 → 注入 PATH、返回 None（放行构建），不触发自动安装
+        # 磁盘有链接器 → 加载完整 vcvars64 环境成功 → 返回 None（放行构建），不触发自动安装
+        calls = {"vcvars": 0}
+
+        def _fake_vcvars(sp):
+            calls["vcvars"] += 1
+            return True
+
+        monkeypatch.setattr(g, "_windows_setup_msvc_build_env", _fake_vcvars)
         monkeypatch.setattr(
             g, "_windows_try_install_msvc", lambda *a: (_ for _ in ()).throw(AssertionError("不该装"))
         )
         assert g._windows_msvc_hint(_FakeShutil([]), None) is None
-        assert r"C:\VS\...\Hostx64\x64" in os.environ["PATH"]
+        assert calls["vcvars"] == 1  # 走的是 vcvars 加载,不是裸 PATH 注入
+
+    def test_hint_returns_native_tools_hint_when_vcvars_load_fails(self, monkeypatch):
+        # 有链接器但 vcvars 加载失败 → 不硬着头皮构建(会 LNK1181),回退 Electron 并提示
+        # 从 x64 Native Tools 手动构建
+        import core.electron_launch_guard as g
+
+        monkeypatch.setattr(g, "_link_on_path_is_msvc", lambda sh: False)
+        monkeypatch.setattr(g, "_windows_msvc_linker_dir", lambda sp: r"C:\VS\...\Hostx64\x64")
+        monkeypatch.setattr(g, "_windows_setup_msvc_build_env", lambda sp: False)
+        out = g._windows_msvc_hint(_FakeShutil([]), None)
+        assert out is not None and "Native Tools" in out
 
     def test_hint_returns_manual_msg_when_absent_and_autoinstall_off(self, monkeypatch):
         import core.electron_launch_guard as g
@@ -162,3 +179,61 @@ class TestWindowsMsvcPrecheck:
         monkeypatch.setattr(g, "_windows_msvc_linker_dir", lambda sp: None)
         out = g._windows_msvc_hint(_FakeShutil([]), None)
         assert out is not None and "MSVC" in out and "BuildTools" in out
+
+
+class _FakeR:
+    def __init__(self, rc, out):
+        self.returncode = rc
+        self.stdout = out
+
+
+class _FakeSub:
+    """假 subprocess:第 1 次(vswhere)返回安装路径,第 2 次(cmd set)返回 vcvars dump。"""
+
+    _DEFAULT_DUMP = "PATH=C:\\vc\\bin\nLIB=C:\\sdk\\lib\nINCLUDE=C:\\sdk\\inc\n=C:=weird\n"
+
+    def __init__(self, install="C:\\VS\\BuildTools", dump=None):
+        self.n = 0
+        self._install = install
+        self._dump = dump if dump is not None else self._DEFAULT_DUMP
+
+    def run(self, cmd, **kw):
+        self.n += 1
+        if self.n == 1:
+            return _FakeR(0, self._install + "\n")
+        return _FakeR(0, self._dump)
+
+
+class TestVcvarsBuildEnv:
+    """vcvars64 完整构建环境加载:PATH+LIB+INCLUDE 一并灌进 os.environ(修 LNK1181)。"""
+
+    def test_applies_full_env_and_confirms_cl(self, monkeypatch):
+        import shutil
+
+        import core.electron_launch_guard as g
+
+        monkeypatch.setattr(g.os.path, "isfile", lambda p: True)  # vswhere + vcvars64.bat 都在
+        monkeypatch.setattr(shutil, "which", lambda name: "C:\\vc\\bin\\cl.exe" if name == "cl.exe" else None)
+        monkeypatch.delenv("LIB", raising=False)
+        monkeypatch.delenv("INCLUDE", raising=False)
+        ok = g._windows_setup_msvc_build_env(_FakeSub())
+        assert ok is True
+        # 关键:LIB/INCLUDE(Windows SDK 库/头所在)也被设上了,不只是 PATH
+        assert os.environ["LIB"] == "C:\\sdk\\lib"
+        assert os.environ["INCLUDE"] == "C:\\sdk\\inc"
+
+    def test_returns_false_when_cl_still_absent(self, monkeypatch):
+        import shutil
+
+        import core.electron_launch_guard as g
+
+        monkeypatch.setattr(g.os.path, "isfile", lambda p: True)
+        monkeypatch.setattr(shutil, "which", lambda name: None)  # 加载后 cl 仍不在 → 判失败
+        ok = g._windows_setup_msvc_build_env(_FakeSub())
+        assert ok is False
+
+    def test_returns_false_when_no_vswhere(self, monkeypatch):
+        import core.electron_launch_guard as g
+
+        monkeypatch.setattr(g.os.path, "isfile", lambda p: False)  # vswhere 不存在
+        assert g._windows_setup_msvc_build_env(_FakeSub()) is False
