@@ -594,11 +594,11 @@ def phase2_ensure_deps(env_status: dict) -> bool:
         # 也没有 → 真机全新克隆缺包,speech_output 每次合成静默失败,表现为
         # "回复文字出来了、一句话都不说"。包本身很小(纯 HTTP 客户端)。
         "edge_tts": "edge-tts",
-        # 分布式追踪(OpenTelemetry SDK):core/otel_tracing.py 默认跟随跨设备开关
-        # 而开(跨设备默认开),但只有这里真的把包装上,"默认开"才不只是纸面上的
-        # 开关——否则每次全新 clone 后 import 失败,仍会静默降级为 no-op、启动摘要
-        # 里打"otel_tracing: skipped"警告。纯 Python、无重型原生依赖,装得快,跟
-        # jsonschema/tqdm 一个量级,放进阻塞式核心依赖清单不会拖慢首启。
+        # 分布式追踪(OpenTelemetry SDK):core/otel_tracing.py 默认无条件开
+        # (GALAXY_OTEL_ENABLED=0 才关),但只有这里真的把包装上,"默认开"才不只是
+        # 纸面上的开关——否则每次全新 clone 后 import 失败,仍会静默降级为 no-op、
+        # 启动摘要里打"otel_tracing: skipped"警告。纯 Python、无重型原生依赖,装得
+        # 快,跟 jsonschema/tqdm 一个量级,放进阻塞式核心依赖清单不会拖慢首启。
         # (OTLP 导出器额外依赖 grpcio,较重且默认不导出——按需手动装,见下方引导,
         # 不放进这里,呼应"语音依赖不阻塞首启"的同一条原则。)
         "opentelemetry.sdk": "opentelemetry-sdk",
