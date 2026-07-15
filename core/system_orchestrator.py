@@ -606,7 +606,15 @@ class SystemOrchestrator:
                     status=PhaseStatus.DEGRADED,
                     detail="Electron GUI skipped (npm not in PATH — Node.js installed but npm missing)",
                 )
-            logger.warning("[启动·桌面壳] Electron 依赖缺失或不完整 -- running npm install ...")
+            # 首次(或依赖不完整)先【安静地装】,不要在装之前就抛一条像"报错"的
+            # WARNING —— 真机反馈:启动一上来先喊"依赖缺失或不完整"、把用户吓一跳,
+            # 紧接着 npm 却报 "up to date"(其实好好的)。这里降为中性 INFO、措辞改成
+            # "正在准备/补齐",只有 npm install 真失败(下面的分支)才升级为告警。
+            _first_install = not os.path.isdir(node_modules)
+            logger.info(
+                "[启动·桌面壳] %s桌面前端依赖(npm install，首次可能数分钟)…",
+                "首次准备" if _first_install else "补齐",
+            )
             try:
                 # Windows 子进程默认按 cp1252 解码,npm 的 UTF-8 输出会让读线程
                 # UnicodeDecodeError 崩掉、stderr 变 None——显式 UTF-8 + replace。

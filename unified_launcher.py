@@ -1256,6 +1256,26 @@ class GalaxyUnified:
         if os.environ.get("GALAXY_VOICE", "1").strip().lower() in ("0", "false", "no", "off"):
             self._voice_input_disabled_reason = "GALAXY_VOICE=0(已手动关闭)"
             return False
+        # 麦克风采集依赖 sounddevice/PortAudio。它不就位时 AudioCaptureService.start()
+        # 会【静默跳过】、mic 永不打开,而此前本函数照样 return True → 摘要谎报"语音交互
+        # 已开启"(所有者反馈"对它说话没反应、不知为何")。这里显式探测并如实报因。
+        try:
+            from core.multimodal.audio_ingest import _SOUNDDEVICE_AVAILABLE as _sd_ok
+        except Exception:
+            _sd_ok = False
+        if not _sd_ok:
+            self._voice_input_disabled_reason = (
+                "麦克风采集不可用:sounddevice/PortAudio 未就绪 —— 对它说话不会有反应。"
+                "Linux 装 libportaudio2 portaudio19-dev;Windows 试 "
+                "pip install --force-reinstall sounddevice"
+            )
+            logger.warning(
+                "\n%s\n⚠️  语音输入未启用:麦克风采集依赖 sounddevice/PortAudio 未就绪。\n    %s\n%s",
+                "=" * 66,
+                self._voice_input_disabled_reason,
+                "=" * 66,
+            )
+            return False
         try:
             from core.voice_loop import VoiceLoop
 

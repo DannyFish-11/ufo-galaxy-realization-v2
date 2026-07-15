@@ -821,4 +821,27 @@ async def invoke_node(
     # 关键:此前这里是个【裸 return】(返回 None)——invoke_node 号称"所有本地节点
     # 执行的唯一首选入口",却对每一次调用都返回 None(REST /nodes/call、命令路由、
     # OpenClawd 工具派发、能力分发器全部拿到 None)。补上真正的委派。
-    return await get_unified_node_executor().execute(envelope)
+    #
+    # 观测(默认零成本 no-op):invoke_node 是【所有】本地节点执行的唯一入口(in-process
+    # ReAct / REST / 命令路由 / worker 都经此),故在此开一个 span 即覆盖全路径,把 bespoke
+    # trace_id 作为属性带上以便在 OTel 后端关联。GALAXY_OTEL_ENABLED=1 才真正启用;未装
+    # opentelemetry 或未开时是纯 no-op、零开销。
+    from core.otel_tracing import record_exception, set_attribute, start_span
+
+    with start_span(
+        "galaxy.node.invoke",
+        {
+            "galaxy.trace_id": envelope.trace_id,
+            "galaxy.task_id": envelope.task_id,
+            "galaxy.node_id": node_id,
+            "galaxy.action": action,
+            "galaxy.invocation_source": getattr(invocation_source, "value", str(invocation_source)),
+        },
+    ) as _span:
+        try:
+            _res = await get_unified_node_executor().execute(envelope)
+            set_attribute(_span, "galaxy.success", bool(getattr(_res, "success", False)))
+            return _res
+        except Exception as _exc:  # noqa: BLE001 — 追踪不改变异常传播语义
+            record_exception(_span, _exc)
+            raise

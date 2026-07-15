@@ -42,6 +42,28 @@ def _iso(tmp_path, monkeypatch):
         os.environ.pop(k, None)
 
 
+def test_persist_failure_leaves_os_environ_untouched(monkeypatch):
+    """落盘失败 → os.environ 一个字不动,消除"显示已配置却又保存失败"的自相矛盾。
+
+    前端 GET /api/config 用 os.getenv 判"已配置";过去先写 os.environ 再落盘,落盘
+    失败就成了"已配置↔保存失败"并存、无法判断到底存没存。现在先落盘、成功才应用,
+    落盘失败则 os.environ 原封不动,"已配置"保持原状、错误如实报出。
+    """
+    from fastapi import HTTPException
+
+    def _boom(*a, **k):
+        raise OSError(".env locked by antivirus")
+
+    monkeypatch.setattr(cfg, "_write_env_file_with", _boom)
+    assert "GALAXY_SPEAK" not in os.environ
+    with pytest.raises(HTTPException) as ei:
+        _run({"GALAXY_SPEAK": "1"})
+    assert ei.value.status_code == 500
+    assert "未改动任何配置" in str(ei.value.detail)
+    # 关键:未改动 os.environ → "已配置"如实保持 false,不与"保存失败"矛盾
+    assert "GALAXY_SPEAK" not in os.environ
+
+
 def test_secret_goes_to_canonical_store_not_plaintext_dotenv():
     _run({"DEEPSEEK_API_KEY": "sk-secret-xyz", "GALAXY_SPEAK": "1"})
     # 密钥进 canonical 密钥库

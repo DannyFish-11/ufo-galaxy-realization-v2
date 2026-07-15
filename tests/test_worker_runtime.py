@@ -49,11 +49,19 @@ class _OkResult:
 
 
 @pytest.fixture(autouse=True)
-def _reset(monkeypatch):
+def _reset(monkeypatch, tmp_path):
     wr.reset_worker_runtime()
     monkeypatch.delenv("GALAXY_MASTER_BRAIN_ENABLED", raising=False)
+    monkeypatch.delenv("GALAXY_DISPATCH_IDEMPOTENCY", raising=False)
+    # 派发幂等守卫默认开且可持久化 → 隔离到 tmp,避免把 task_id 记进真实 data/ 文件、
+    # 污染同一进程/重跑(否则第二次跑同一 task_id 会被去重、invoke_node 不再被调)。
+    import core.durable_dispatch_idempotency as ddi
+
+    ddi.reset_durable_dispatch_id_store()
+    ddi.get_durable_dispatch_id_store(str(tmp_path / "dispatch_idem.json"))
     yield
     wr.reset_worker_runtime()
+    ddi.reset_durable_dispatch_id_store()
 
 
 class TestExecuteDispatch:
@@ -95,6 +103,58 @@ class TestExecuteDispatch:
         w = wr.WorkerRuntime(worker_id="w1", nats_bus=_FakeBus())
         res = asyncio.run(w.execute_dispatch({"task_id": "t3", "node_id": "N", "action": "a"}))
         assert res.status == "failed" and "worker 执行异常" in res.error
+
+
+class TestDispatchIdempotency:
+    """派发侧幂等:同一派发被 NATS 重投时不二次执行副作用(默认开)。"""
+
+    def _count_invokes(self, monkeypatch):
+        calls = {"n": 0}
+
+        async def _invoke(*a, **k):
+            calls["n"] += 1
+            return _OkResult()
+
+        monkeypatch.setattr("core.node_invocation.invoke_node", _invoke)
+        return calls
+
+    def test_redelivery_does_not_double_execute(self, monkeypatch):
+        calls = self._count_invokes(monkeypatch)
+        w = wr.WorkerRuntime(worker_id="w1", nats_bus=_FakeBus())
+        d = {"task_id": "dup1", "node_id": "N", "action": "click", "params": {}}
+        r1 = asyncio.run(w.execute_dispatch(d))
+        r2 = asyncio.run(w.execute_dispatch(d))  # 模拟重投
+        assert calls["n"] == 1  # 副作用只执行一次
+        assert r1.status == "completed"
+        assert r2.status == "completed" and r2.result.get("deduplicated") is True
+
+    def test_executor_exception_rolls_back_key_so_retry_runs(self, monkeypatch):
+        state = {"boom": True, "n": 0}
+
+        async def _invoke(*a, **k):
+            state["n"] += 1
+            if state["boom"]:
+                state["boom"] = False
+                raise RuntimeError("transient")
+            return _OkResult()
+
+        monkeypatch.setattr("core.node_invocation.invoke_node", _invoke)
+        w = wr.WorkerRuntime(worker_id="w1", nats_bus=_FakeBus())
+        d = {"task_id": "retry1", "node_id": "N", "action": "click", "params": {}}
+        r1 = asyncio.run(w.execute_dispatch(d))  # 抛异常 → 回滚键
+        r2 = asyncio.run(w.execute_dispatch(d))  # 重投 → 应真正重试执行
+        assert r1.status == "failed"
+        assert r2.status == "completed"
+        assert state["n"] == 2  # 回滚后确实重跑了
+
+    def test_disabled_flag_always_executes(self, monkeypatch):
+        monkeypatch.setenv("GALAXY_DISPATCH_IDEMPOTENCY", "0")
+        calls = self._count_invokes(monkeypatch)
+        w = wr.WorkerRuntime(worker_id="w1", nats_bus=_FakeBus())
+        d = {"task_id": "off1", "node_id": "N", "action": "click", "params": {}}
+        asyncio.run(w.execute_dispatch(d))
+        asyncio.run(w.execute_dispatch(d))
+        assert calls["n"] == 2  # 关掉守卫 → 每次都执行(旧行为)
 
 
 class TestStartSubscribeReply:

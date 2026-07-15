@@ -629,10 +629,11 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 on_delta=lambda t: frames.put_nowait(("delta", t)),
                 on_reset=lambda: frames.put_nowait(("reset", None)),
             )
-            # 文字/语音锁步:每句在【被念出的那一刻】才逐句上屏,文字与语音同刻对齐。
-            # reveal_q 收集"刚开口念的句子文本";speaker 的 on_sentence_start 往里塞。
-            # GALAXY_TEXT_VOICE_LOCKSTEP=0 可关(桌面默认开);关或无 TTS 时退回
-            # "文字逐 token 快流、语音按句松散跟随"。
+            # 文字/语音锁步:开启时每句在【被念出的那一刻】才逐句上屏,文字与语音
+            # 同刻对齐——但代价是面板文字变成"一句一句蹦"、不再逐字平滑(真机反馈"一大段
+            # 蹦一段又一段")。所有者要的是"实时语音+字符一起"= 文字逐 token 平滑流、
+            # 语音按句松散跟随,正是【关闭锁步】的行为(下面 else 分支逐字 yield + 并行
+            # speaker.feed)。故默认【关】;想要严格逐句同步再设 GALAXY_TEXT_VOICE_LOCKSTEP=1。
             reveal_q: "asyncio.Queue" = asyncio.Queue()
 
             # 边生成边念:能建则建;建成后在请求上下文里抑制收尾的整段重念。
@@ -650,7 +651,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             except Exception as exc:  # noqa: BLE001
                 logger.debug("增量朗读建立失败(退回整段): %s", exc)
 
-            _lockstep = speaker is not None and os.environ.get("GALAXY_TEXT_VOICE_LOCKSTEP", "1").strip().lower() in (
+            _lockstep = speaker is not None and os.environ.get("GALAXY_TEXT_VOICE_LOCKSTEP", "0").strip().lower() in (
                 "1",
                 "true",
                 "yes",

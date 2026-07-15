@@ -115,7 +115,11 @@ Class:
 
 from __future__ import annotations
 
+import json
 import logging
+import os
+import tempfile
+import threading
 import time
 import uuid
 from collections import deque
@@ -124,6 +128,24 @@ from enum import Enum
 from typing import Any, Deque, Dict, List, Optional, Sequence
 
 logger = logging.getLogger("Galaxy.TaskGraphRuntime")
+
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def durable_exec_enabled() -> bool:
+    """Feature ①: 是否启用【DAG 步级检查点 + 断点续跑】的可持久化。默认关。
+
+    仅在跨设备分布式编排(本就 opt-in)下才有意义;开启后 task graph 的每步状态变更
+    会原子落盘,进程重启即从盘上重建、跳过已完成步、把未完成步交给恢复协调器重派。
+    单机默认关 → 零行为变化、零额外 IO。
+    """
+    return str(os.getenv("GALAXY_DURABLE_EXEC", "")).strip().lower() in ("1", "true", "yes", "on")
+
+
+def _task_graph_state_path() -> str:
+    p = str(os.getenv("GALAXY_TASK_GRAPH_STATE_PATH", "")).strip()
+    return p or os.path.join(_REPO_ROOT, "runtime", "task_graph_state.json")
+
 
 __all__ = [
     # Authority sentinels
@@ -253,6 +275,32 @@ class GraphNodeState(str, Enum):
     CANCELLED = "cancelled"
     DEGRADED = "degraded"
     REPLAYED = "replayed"
+
+
+# Feature ① 续跑分类:
+#  - 终态:已了结,重启后【跳过】,不重派。
+#  - 已执行态:拿到结果、等定案,别重派(否则重复副作用)。
+#  - 待执行态:尚未真正执行,重启后可重新派发(RUNNING=崩时在途,靠 ② 幂等守卫防重复)。
+_TERMINAL_GRAPH_STATES = frozenset(
+    {
+        GraphNodeState.COMPLETED,
+        GraphNodeState.FAILED,
+        GraphNodeState.CANCELLED,
+        GraphNodeState.DEGRADED,
+        GraphNodeState.REPLAYED,
+    }
+)
+_EXECUTED_GRAPH_STATES = frozenset({GraphNodeState.RESULT, GraphNodeState.PARTIAL_RESULT})
+_PENDING_GRAPH_STATES = frozenset(
+    {
+        GraphNodeState.QUEUED,
+        GraphNodeState.ADMITTED,
+        GraphNodeState.PLANNED,
+        GraphNodeState.ROUTED,
+        GraphNodeState.DISPATCH,
+        GraphNodeState.RUNNING,
+    }
+)
 
 
 class GraphEdgeKind(str, Enum):
@@ -391,6 +439,41 @@ class GraphNode:
             "metadata": dict(self.metadata),
         }
 
+    @classmethod
+    def from_dict(cls, d: Dict[str, Any]) -> "GraphNode":
+        """Rehydrate a ``GraphNode`` from :meth:`to_dict` output (durable resume)."""
+        def _state(v: str) -> GraphNodeState:
+            try:
+                return GraphNodeState(v)
+            except Exception:
+                return GraphNodeState.QUEUED
+
+        def _contrib(v: str) -> WorkflowContributorKind:
+            try:
+                return WorkflowContributorKind(v)
+            except Exception:
+                return WorkflowContributorKind.UNKNOWN
+
+        return cls(
+            node_id=str(d.get("node_id") or f"gn_{uuid.uuid4().hex[:16]}"),
+            task_id=str(d.get("task_id") or ""),
+            trace_id=str(d.get("trace_id") or ""),
+            session_id=str(d.get("session_id") or ""),
+            tool_name=str(d.get("tool_name") or ""),
+            device_id=str(d.get("device_id") or ""),
+            state=_state(str(d.get("state") or "queued")),
+            contributor=_contrib(str(d.get("contributor") or "unknown")),
+            depends_on=list(d.get("depends_on") or []),
+            queued_at=float(d.get("queued_at") or time.time()),
+            dispatch_at=d.get("dispatch_at"),
+            running_at=d.get("running_at"),
+            result_at=d.get("result_at"),
+            completed_at=d.get("completed_at"),
+            result_summary=str(d.get("result_summary") or ""),
+            error=str(d.get("error") or ""),
+            metadata=dict(d.get("metadata") or {}),
+        )
+
 
 @dataclass
 class GraphEdge:
@@ -431,6 +514,23 @@ class GraphEdge:
             "created_at": self.created_at,
             "metadata": dict(self.metadata),
         }
+
+    @classmethod
+    def from_dict(cls, d: Dict[str, Any]) -> "GraphEdge":
+        """Rehydrate a ``GraphEdge`` from :meth:`to_dict` output (durable resume)."""
+        try:
+            kind = GraphEdgeKind(str(d.get("kind") or "dependency_edge"))
+        except Exception:
+            kind = GraphEdgeKind.DEPENDENCY
+        return cls(
+            edge_id=str(d.get("edge_id") or f"ge_{uuid.uuid4().hex[:12]}"),
+            kind=kind,
+            source_node_id=str(d.get("source_node_id") or ""),
+            target_node_id=str(d.get("target_node_id") or ""),
+            transport_path=str(d.get("transport_path") or ""),
+            created_at=float(d.get("created_at") or time.time()),
+            metadata=dict(d.get("metadata") or {}),
+        )
 
 
 @dataclass
@@ -743,6 +843,157 @@ class TaskGraphRuntime:
         self._fallback_records: Deque[FallbackRecord] = deque(maxlen=self._RING_BUFFER_SIZE)
         self._fanout_records: Deque[FanoutRecord] = deque(maxlen=self._RING_BUFFER_SIZE)
 
+        # Feature ①: DAG 步级检查点(默认关)。开启则每次 register/transition 后原子落盘,
+        # 构造时从盘上重建 → 支持"重启即续跑"。持久化只在 durable-exec 开时发生。
+        self._durable: bool = durable_exec_enabled()
+        self._state_path: str = _task_graph_state_path()
+        self._persist_lock = threading.Lock()
+        if self._durable:
+            try:
+                os.makedirs(os.path.dirname(os.path.abspath(self._state_path)), exist_ok=True)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("task_graph_runtime: 无法创建状态目录: %s", exc)
+            self._load_checkpoint()
+
+    # ── Durable checkpoint / resume (Feature ①) ──────────────────────────────
+
+    def _checkpoint(self) -> None:
+        """把当前 DAG(节点+边)原子落盘。仅 durable-exec 开时生效;失败不影响主流程。"""
+        if not self._durable:
+            return
+        with self._persist_lock:
+            try:
+                payload = json.dumps(
+                    {
+                        "schema": "task_graph_state_v1",
+                        "saved_at": time.time(),
+                        "nodes": [n.to_dict() for n in self._nodes.values()],
+                        "edges": [e.to_dict() for e in self._edges.values()],
+                    },
+                    ensure_ascii=False,
+                )
+                state_dir = os.path.dirname(os.path.abspath(self._state_path))
+                fd, tmp_path = tempfile.mkstemp(dir=state_dir, suffix=".tmp")
+                try:
+                    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                        fh.write(payload)
+                    os.replace(tmp_path, self._state_path)
+                except Exception:
+                    try:
+                        os.unlink(tmp_path)
+                    except OSError:
+                        pass
+                    raise
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("task_graph_runtime: 检查点落盘失败 %s: %s", self._state_path, exc)
+
+    def _load_checkpoint(self) -> None:
+        """从盘上重建 DAG(进程重启后的续跑基础)。best-effort。"""
+        if not os.path.exists(self._state_path):
+            return
+        try:
+            with open(self._state_path, "r", encoding="utf-8") as fh:
+                data = json.load(fh)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("task_graph_runtime: 读取检查点失败 %s: %s", self._state_path, exc)
+            return
+        n_loaded = 0
+        for nd in data.get("nodes", []) or []:
+            try:
+                node = GraphNode.from_dict(nd)
+                if not node.task_id:
+                    continue
+                self._nodes[node.task_id] = node
+                self._nodes_by_node_id[node.node_id] = node
+                n_loaded += 1
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("task_graph_runtime: 跳过损坏节点记录: %s", exc)
+        for ed in data.get("edges", []) or []:
+            try:
+                edge = GraphEdge.from_dict(ed) if hasattr(GraphEdge, "from_dict") else None
+                if edge is not None and edge.edge_id:
+                    self._edges[edge.edge_id] = edge
+            except Exception:  # noqa: BLE001
+                pass
+        if n_loaded:
+            logger.info("task_graph_runtime: 从检查点重建 %d 个节点(续跑基础) ← %s", n_loaded, self._state_path)
+
+    def completed_task_ids(self) -> List[str]:
+        """已到终态且成功(COMPLETED)的 task_id —— 续跑时应跳过。"""
+        return [tid for tid, n in self._nodes.items() if n.state == GraphNodeState.COMPLETED]
+
+    def resumable_nodes(self) -> List[GraphNode]:
+        """重启后【应重新派发】的节点:处于待执行态、且其所有依赖都已 COMPLETED。
+
+        终态/已执行态节点不返回(不重复副作用);依赖未满足的待执行节点暂不返回
+        (等依赖完成后的下一轮再取)。RUNNING(崩时在途)也在内,靠 ② 派发幂等守卫
+        保证重派不会二次触发副作用。
+        """
+        completed = {tid for tid, n in self._nodes.items() if n.state == GraphNodeState.COMPLETED}
+        out: List[GraphNode] = []
+        for node in self._nodes.values():
+            if node.state not in _PENDING_GRAPH_STATES:
+                continue
+            if all(dep in completed for dep in (node.depends_on or [])):
+                out.append(node)
+        return out
+
+    def resume_snapshot(self) -> Dict[str, Any]:
+        """续跑视图:已完成 / 可重派 / 阻塞(依赖未满足)/ 已执行待定案 —— 供恢复协调器
+        与操作台消费。"""
+        completed = self.completed_task_ids()
+        completed_set = set(completed)
+        resumable = [n.task_id for n in self.resumable_nodes()]
+        resumable_set = set(resumable)
+        blocked = [
+            n.task_id
+            for n in self._nodes.values()
+            if n.state in _PENDING_GRAPH_STATES and n.task_id not in resumable_set
+        ]
+        executed_pending = [n.task_id for n in self._nodes.values() if n.state in _EXECUTED_GRAPH_STATES]
+        terminal_failed = [
+            n.task_id
+            for n in self._nodes.values()
+            if n.state in _TERMINAL_GRAPH_STATES and n.task_id not in completed_set
+        ]
+        return {
+            "state_path": self._state_path,
+            "durable": self._durable,
+            "total_nodes": len(self._nodes),
+            "completed": completed,
+            "resumable": resumable,
+            "blocked": blocked,
+            "executed_pending_finalization": executed_pending,
+            "terminal_non_success": terminal_failed,
+        }
+
+    async def resume_pending_dispatch(self, dispatch_fn) -> Dict[str, Any]:
+        """重启续跑的执行入口:对每个可续跑节点调用 ``dispatch_fn(node)`` 重新派发,
+        并把节点置回 DISPATCH。dispatch_fn 由恢复协调器/主脑注入(它知道怎么真正派发)。
+
+        - 只处理 resumable_nodes()(待执行态 + 依赖已满足);已完成/已执行不碰。
+        - 重派本身靠 ② 派发幂等守卫防二次副作用(RUNNING 在途节点尤其依赖它)。
+        - dispatch_fn 可为普通函数或协程函数;单个失败不拖垮其余。
+        返回 {resumed:[task_id], failed:[(task_id, err)]}。
+        """
+        import inspect
+
+        resumed: List[str] = []
+        failed: List[Any] = []
+        for node in self.resumable_nodes():
+            try:
+                res = dispatch_fn(node)
+                if inspect.isawaitable(res):
+                    await res
+                self.transition(node.task_id, GraphNodeState.DISPATCH, reason="resumed_after_restart")
+                resumed.append(node.task_id)
+            except Exception as exc:  # noqa: BLE001 — 单节点重派失败不影响其余
+                logger.warning("task_graph_runtime: 续跑重派失败 task=%s: %s", node.task_id, exc)
+                failed.append([node.task_id, str(exc)])
+        if resumed:
+            logger.info("task_graph_runtime: 重启续跑重派 %d 个节点: %s", len(resumed), resumed)
+        return {"resumed": resumed, "failed": failed}
+
     # ── Node management ──────────────────────────────────────────────────────
 
     def register_node(self, node: GraphNode) -> GraphNode:
@@ -775,6 +1026,7 @@ class TaskGraphRuntime:
             node.task_id,
             node.state.value,
         )
+        self._checkpoint()  # Feature ①: 新节点入图即落盘(含 depends_on,续跑基础)
         return node
 
     def register_node_raw(
@@ -911,6 +1163,7 @@ class TaskGraphRuntime:
             new_state.value,
             reason,
         )
+        self._checkpoint()  # Feature ①: 每步状态变更即落盘 → 重启可续跑(跳过已完成步)
         return node
 
     # ── Edge management ──────────────────────────────────────────────────────

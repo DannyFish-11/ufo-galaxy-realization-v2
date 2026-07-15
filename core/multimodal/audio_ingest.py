@@ -34,6 +34,35 @@ except Exception as exc:
     logger.debug("Suppressed: %s", exc)
 
 
+def _resolve_input_device(sd, configured, sample_rate: int, channels: int):
+    """选一个【真的能以目标参数打开】的输入设备,专治"默认录音设备被改/被拔/被独占
+    → 之前能录、现在 device=None 直接打不开"这一最常见的麦克风失灵根因。
+
+    顺序:显式 configured → 系统默认(None)→ 枚举里所有有输入通道的设备;每个候选
+    用 sd.check_input_settings 实测能否以目标 sr/通道打开,第一个通过的即采用。全都
+    不通过 → 返回 configured(维持原行为,让下面的 InputStream 抛错并打完整诊断)。
+    仅在默认设备确实打不开时才改选别的,不打扰正常情形。
+    """
+    def _ok(dev) -> bool:
+        try:
+            sd.check_input_settings(device=dev, samplerate=sample_rate, channels=channels, dtype="float32")
+            return True
+        except Exception:
+            return False
+
+    candidates: List = [configured] if configured is not None else [None]  # 先试显式/系统默认
+    try:
+        for idx, dev in enumerate(sd.query_devices()):
+            if dev.get("max_input_channels", 0) > 0 and idx not in candidates:
+                candidates.append(idx)
+    except Exception:
+        pass
+    for dev in candidates:
+        if _ok(dev):
+            return dev
+    return configured
+
+
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
@@ -122,6 +151,17 @@ class AudioIngestPipeline:
 
         import sounddevice as sd  # deferred to avoid import-time failure
 
+        # 默认录音设备可能被改/被拔/被独占 → device=None 直接打不开(经典"之前能录现在
+        # 不行")。这里先挑一个实测能打开的输入设备,默认可用就原样用,不可用才回退。
+        _device = _resolve_input_device(sd, self.config.device, self.config.sample_rate, self.config.channels)
+        if _device != self.config.device:
+            logger.warning(
+                "默认录音设备不可用,已回退到输入设备 index=%s(原 device=%s)。"
+                "如非预期,Windows 声音设置→录制里确认默认麦克风。",
+                _device,
+                self.config.device,
+            )
+
         chunk_size = max(
             1,
             int(self.config.sample_rate * self.config.chunk_duration_ms / 1000),
@@ -167,7 +207,7 @@ class AudioIngestPipeline:
                 channels=self.config.channels,
                 dtype="float32",
                 blocksize=chunk_size,
-                device=self.config.device,
+                device=_device,
                 callback=_sd_callback,
             ):
                 logger.info(

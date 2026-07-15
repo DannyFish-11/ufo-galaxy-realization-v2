@@ -800,7 +800,11 @@ def phase2_ensure_deps(env_status: dict) -> bool:
 
     # 2.6 Voice dependencies (REQUIRED)
     print_item("检查语音依赖...", "ok")
+    # sounddevice 是"对它说话它就回应"这条主路径(VoiceLoop→麦克风采集)的关键依赖,
+    # 之前这份清单漏了它 → 明明麦克风采集打不开,横幅却报"语音依赖 ✓",误导排查。
+    # 注:import sounddevice 会一并加载 PortAudio 原生库,故它失败也能兜住"PortAudio 缺失"。
     voice_deps = {
+        "sounddevice": "sounddevice",
         "pvporcupine": "pvporcupine",
         "webrtcvad": "webrtcvad",
         "faster_whisper": "faster-whisper",
@@ -813,7 +817,7 @@ def phase2_ensure_deps(env_status: dict) -> bool:
             voice_missing.append(pip_name)
 
     if not voice_missing:
-        print_item("语音依赖", "ok", "pvporcupine, webrtcvad, faster-whisper")
+        print_item("语音依赖", "ok", "sounddevice, pvporcupine, webrtcvad, faster-whisper")
     else:
         print_item(f"语音依赖缺失: {', '.join(voice_missing)}", "warn")
         print_item("正在自动安装语音依赖...", "ok")

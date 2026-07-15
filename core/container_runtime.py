@@ -33,10 +33,21 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 _CHOICE_FILE = PROJECT_ROOT / ".galaxy_runtime"
 
 _RUNTIMES = ("docker", "podman")
+# 交互菜单里【推荐】的运行时:Podman 无守护、rootless、更轻,Windows 上一条 winget
+# 就能装(Docker Desktop 太重、还要单独装/开守护)。仅影响用户实际看到的选择菜单的
+# 默认项与排序;非交互/headless 路径仍保持 docker 优先(见 available_runtimes)。
+_RECOMMENDED = "podman"
 _LABELS: Dict[str, str] = {
-    "docker": "Docker —— 最广泛;Docker Desktop / Engine + docker compose",
-    "podman": "Podman —— 无守护进程、rootless、更轻;podman / podman-compose",
+    "docker": "Docker —— 最广泛;需 Docker Desktop / Engine + 守护进程(较重)",
+    "podman": "Podman —— 无守护、rootless、更轻,一条 winget 即可装(推荐)",
 }
+
+
+def _prefer_recommended(runtimes: List[str]) -> List[str]:
+    """把推荐运行时(Podman)排到最前,其余保持原相对顺序。用于交互菜单的展示与默认项。"""
+    rec = [rt for rt in runtimes if rt == _RECOMMENDED]
+    rest = [rt for rt in runtimes if rt != _RECOMMENDED]
+    return rec + rest
 
 
 def detect_runtimes() -> Dict[str, Optional[str]]:
@@ -85,6 +96,9 @@ def interactive_select(avail: List[str]) -> str:
     if not (sys.stdin and sys.stdin.isatty()):
         return avail[0]
 
+    # 展示与默认项把推荐运行时(Podman·更轻)排到最前;回车即用它。
+    avail = _prefer_recommended(avail)
+
     from core import cli_render as r
     from core.ascii_art import Colors
 
@@ -99,7 +113,7 @@ def interactive_select(avail: List[str]) -> str:
         marker = _c("▸", Colors.GREEN) if is_first else " "
         num = _c(f"[{i}]", Colors.BOLD if is_first else Colors.DIM)
         name = r.pad_display(rt.capitalize(), 10)
-        tail = _c("  ← 默认", Colors.GREEN) if is_first else ""
+        tail = _c("  ← 推荐" if rt == _RECOMMENDED else "  ← 默认", Colors.GREEN) if is_first else ""
         print(f"  {marker} {num} {name}{tail}")
         print(f"         {_c(_LABELS.get(rt, ''), Colors.DIM)}")
     r.rule()
@@ -223,6 +237,8 @@ def interactive_install_guide() -> str:
     def _c(t, color):
         return f"{color}{t}{Colors.ENDC}" if r._use_color() else t
 
+    # 推荐运行时(Podman·更轻)排最前、作默认;Docker 仍可选。
+    _menu = _prefer_recommended(list(_RUNTIMES))
     print()
     print(
         "  "
@@ -230,25 +246,25 @@ def interactive_install_guide() -> str:
         + _c("  (节点基础设施需要;两者都未检测到,先选一个偏好并安装)", Colors.DIM)
     )
     r.rule()
-    for i, rt in enumerate(_RUNTIMES, 1):
+    for i, rt in enumerate(_menu, 1):
         marker = _c("▸", Colors.GREEN) if i == 1 else " "
         num = _c(f"[{i}]", Colors.BOLD if i == 1 else Colors.DIM)
         name = r.pad_display(rt.capitalize(), 10)
-        tail = _c("  ← 默认", Colors.GREEN) if i == 1 else ""
+        tail = _c("  ← 推荐" if rt == _RECOMMENDED else "  ← 默认", Colors.GREEN) if i == 1 else ""
         print(f"  {marker} {num} {name}{tail}")
         print(f"         {_c(_LABELS.get(rt, ''), Colors.DIM)}")
         print(f"         {_c('安装: ' + _INSTALL_HINTS.get(rt, ''), Colors.DIM)}")
     r.rule()
-    print("  " + _c("回车=记住默认(Docker) · 数字=记住偏好 · s=跳过(桌面照常运行)", Colors.DIM))
+    print("  " + _c(f"回车=记住默认({_RECOMMENDED.capitalize()}·更轻) · 数字=记住偏好 · s=跳过(桌面照常运行)", Colors.DIM))
     try:
-        choice = input(f"  选择偏好运行时 [1-{len(_RUNTIMES)} / 回车 / s]: ").strip().lower()
+        choice = input(f"  选择偏好运行时 [1-{len(_menu)} / 回车 / s]: ").strip().lower()
     except (EOFError, KeyboardInterrupt):
         return ""
     if choice == "s":
         return ""
-    pick = _RUNTIMES[0]
-    if choice.isdigit() and 1 <= int(choice) <= len(_RUNTIMES):
-        pick = _RUNTIMES[int(choice) - 1]
+    pick = _menu[0]  # 回车 → 推荐(Podman)
+    if choice.isdigit() and 1 <= int(choice) <= len(_menu):
+        pick = _menu[int(choice) - 1]
     elif choice in _RUNTIMES:
         pick = choice
     save_choice(pick)  # 记住偏好;装好后下次即自动采用
