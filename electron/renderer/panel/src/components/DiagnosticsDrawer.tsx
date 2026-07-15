@@ -82,7 +82,12 @@ export default function DiagnosticsDrawer({ open, onClose, data }: DiagnosticsDr
           <div className="section-header">运行时</div>
           <div className="kv mono">
             <span>coherence</span><span>{data.coherence.toFixed(2)}</span>
-            <span>collapse</span><span>{data.collapseTendency.toFixed(2)}</span>
+            {/* 真 bug 修复:collapseTendency(collapse_tendency)后端从未产出过
+                (核对 core/routes/panel.py::build_panel_feed 与
+                core/lumiv_websocket_bridge.py 全文,均无此字段的真实来源)——
+                永远显示 0.00,紧挨着真正实时的 coherence 却让人误以为也是活的
+                指标。已确认没有任何生产者,直接去掉这行死数字,而不是继续假装
+                有数据。*/}
             <span>uptime</span><span>{data.openclawdStatus.uptime}s</span>
             <span>completed</span><span>{data.openclawdStatus.completedTasks}</span>
             <span>tick</span><span>{data.meshSession.tickSequence}</span>

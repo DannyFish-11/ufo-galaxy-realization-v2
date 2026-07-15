@@ -36,9 +36,15 @@ interface GalaxyAPI {
 }
 
 // 浏览器预览兜底(无 galaxyAPI 时):直连后端完整明细端点。
+// 真 bug 修复:此前这里是裸 fetch('/api/config/all')——相对路径解析到【页面自身
+// 的 origin】,不是后端网关(与本文件其它 fetch 如 fetchRoster/fetchConnectors
+// 等早就统一改成 await getBackendUrl() 不同,这里当时漏改)。也没有 vite 开发
+// 代理去桥接这个落差,所以纯浏览器预览(无 Electron)下打开设置 tab,每个分类
+// 都会显示"未从后端加载"占位行,保存也必然失败——与注释"直连后端"名不副实。
 async function fetchSettings(): Promise<Record<string, ConfigItem>> {
   if (window.galaxyAPI?.getSettings) return window.galaxyAPI.getSettings();
-  const r = await fetch('/api/config/all');
+  const base = await getBackendUrl();
+  const r = await fetch(`${base}/api/config/all`);
   if (!r.ok) throw new Error(`/api/config/all ${r.status}`);
   return r.json();
 }
@@ -122,7 +128,6 @@ interface CategoryDef {
   key: string;
   label: string;
   icon: string;
-  count: number;
   advanced?: boolean;   // true=开发者/高级项，默认收在「高级」分组里，不占普通用户视线
 }
 
@@ -131,16 +136,23 @@ interface CategoryDef {
 // 自发在场/原生音频),用户无需再去设置环境变量,打开设置即见、一键切换。
 // 限流熔断/网络/开发者/服务水平 是内部/高级项(用户反馈"看不懂"),标 advanced,
 // 默认折进「高级 · 开发者」分组,普通用户界面只留常用的几类。
+// 真 bug 修复:每个分类的项数此前在这里手写死数字(count),跟下方 CONFIG_KEYS
+// 实际数组长度早就对不上(behavior 写 6、实际 12;auth 写 12、实际 11;
+// mesh 写 13、实际 15——因为 GALAXY_SYSTEM_MODE 曾重复登记在 mesh/dev 两处)。
+// 内容区角标(见 renderCategoryItems 用 CONFIG_KEYS[activeCategory]?.length)
+// 早就是从数组现算的,唯独这里的导航栏 title 提示还是手写死数字,会显示错误的
+// 项数。彻底删掉这个字段,改在渲染处统一从 CONFIG_KEYS[cat.key].length 现算，
+// 不再有第二份需要手动同步的数字。
 const CATEGORIES: CategoryDef[] = [
-  { key: 'behavior', label: '行为 · 在场', icon: '✨', count: 6 },
-  { key: 'ports', label: '端口与节点', icon: '🔌', count: 16 },
-  { key: 'auth', label: '鉴权', icon: '🔒', count: 12 },
-  { key: 'mesh', label: '组网 · 多设备', icon: '🕸️', count: 13 },
-  { key: 'storage', label: '存储', icon: '💾', count: 7 },
-  { key: 'circuit', label: '限流熔断', icon: '⚡', count: 14, advanced: true },
-  { key: 'dev', label: '开发者', icon: '🛠️', count: 11, advanced: true },
-  { key: 'network', label: '网络', icon: '🌐', count: 7, advanced: true },
-  { key: 'slo', label: '服务水平', icon: '📊', count: 7, advanced: true },
+  { key: 'behavior', label: '行为 · 在场', icon: '✨' },
+  { key: 'ports', label: '端口与节点', icon: '🔌' },
+  { key: 'auth', label: '鉴权', icon: '🔒' },
+  { key: 'mesh', label: '组网 · 多设备', icon: '🕸️' },
+  { key: 'storage', label: '存储', icon: '💾' },
+  { key: 'circuit', label: '限流熔断', icon: '⚡', advanced: true },
+  { key: 'dev', label: '开发者', icon: '🛠️', advanced: true },
+  { key: 'network', label: '网络', icon: '🌐', advanced: true },
+  { key: 'slo', label: '服务水平', icon: '📊', advanced: true },
 ];
 
 // ── Config Key Registry (105 items) ─────────────────────────────────
@@ -186,7 +198,12 @@ const CONFIG_KEYS: Record<string, string[]> = {
     'ANDROID_DEVICE_STATE_STORE_PATH', 'ANDROID_DEVICE_SNAPSHOT_TTL_SECONDS',
   ],
   dev: [
-    'GALAXY_DEV_MODE', 'GALAXY_MODE', 'GALAXY_SYSTEM_MODE', 'GALAXY_PREFLIGHT_MODE',
+    // 真 bug 修复:GALAXY_SYSTEM_MODE 此前在 mesh/dev 两个分类里重复出现——
+    // core/routes/config.py::CONFIG_SCHEMA 里它的唯一 canonical category 是
+    // "mesh"(desktop-local/desktop-cross-device),dev 分类是误重复。功能上
+    // 编辑不受影响(共用同一份 changed 状态),但导致下方 CATEGORIES 的项数
+    // 统计跟着漂移。只保留 mesh 分类里的那一份。
+    'GALAXY_DEV_MODE', 'GALAXY_MODE', 'GALAXY_PREFLIGHT_MODE',
     'GALAXY_PREFLIGHT_FAIL_FAST', 'GALAXY_ALLOW_LEGACY_SCHEDULER_FALLBACK',
     'GALAXY_ENTRYMODE_USE_READINESS', 'CMD_MAX_CONCURRENT', 'CONCURRENCY_GLOBAL_MAX',
     'GALAXY_MAX_CONTEXT_TOKENS', 'GALAXY_MAX_MESSAGE_SIZE',
@@ -319,6 +336,7 @@ function NumberControl({
 export default function SettingsTab() {
   const [config, setConfig] = useState<Record<string, ConfigItem>>({});
   const [changed, setChanged] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState(false);
   const [activeCategory, setActiveCategory] = useState<string>('behavior');
   const [showAdvanced, setShowAdvanced] = useState<boolean>(false);
   const [loading, setLoading] = useState(true);
@@ -442,21 +460,46 @@ export default function SettingsTab() {
     }
   }, [refreshConnectors]);
 
+  // 真 bug 修复:这两个接口(core/routes/nodes.py::connector_disconnect/
+  // connector_creds)无论成功失败都固定返回 HTTP 200,真实结果只在响应体的
+  // {ok, error} 里——此前只看 fetch 是否抛异常(网络层失败才会抛),完全没读
+  // 响应体的 ok 字段,也没包 try/catch。于是后端拒绝(比如未知连接器)时,
+  // disconnectService 悄无声息什么反馈都没有,saveConnCreds 还会无条件弹出
+  // "凭据已保存"的成功提示、并清空刚填的 client_id/secret 输入框——用户以为
+  // 保存成功,实际什么都没存住,还得重新把两个值再打一遍。
   const disconnectService = useCallback(async (svc: string) => {
-    const base = await getBackendUrl();
-    await fetch(`${base}/api/v1/connectors/${svc}/disconnect`, { method: 'POST' });
-    refreshConnectors();
-  }, [refreshConnectors]);
+    try {
+      const base = await getBackendUrl();
+      const r = await fetch(`${base}/api/v1/connectors/${svc}/disconnect`, { method: 'POST' });
+      const body = await r.json().catch(() => ({}));
+      if (!r.ok || body?.ok === false) {
+        showToast(`${svc} 断开失败：${body?.error || `HTTP ${r.status}`}`);
+        return;
+      }
+      refreshConnectors();
+    } catch (e) {
+      showToast(`${svc} 断开出错：${e instanceof Error ? e.message : ''}`);
+    }
+  }, [refreshConnectors, showToast]);
 
   const saveConnCreds = useCallback(async (svc: string) => {
-    const base = await getBackendUrl();
-    await fetch(`${base}/api/v1/connectors/${svc}/credentials`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ client_id: cid.trim(), client_secret: csecret.trim() }),
-    });
-    setConnCfg(null); setCid(''); setCsecret('');
-    showToast(`${svc} 凭据已保存,可点连接授权`);
-    refreshConnectors();
+    try {
+      const base = await getBackendUrl();
+      const r = await fetch(`${base}/api/v1/connectors/${svc}/credentials`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ client_id: cid.trim(), client_secret: csecret.trim() }),
+      });
+      const body = await r.json().catch(() => ({}));
+      if (!r.ok || body?.ok === false) {
+        showToast(`${svc} 凭据保存失败：${body?.error || `HTTP ${r.status}`}`);
+        return; // 保存失败时保留 cid/csecret 输入框内容,不清空,免得用户重打一遍
+      }
+      setConnCfg(null); setCid(''); setCsecret('');
+      showToast(`${svc} 凭据已保存,可点连接授权`);
+      refreshConnectors();
+    } catch (e) {
+      showToast(`${svc} 凭据保存出错：${e instanceof Error ? e.message : ''}`);
+    }
   }, [cid, csecret, refreshConnectors, showToast]);
 
   // ── Value change handler ─────────────────────────────────────────
@@ -468,14 +511,27 @@ export default function SettingsTab() {
   // ── Save handler ─────────────────────────────────────────────────
 
   const handleSave = useCallback(async () => {
+    if (saving) return;
+    // 真 bug 修复(数据丢失):保存这条 IPC 调用最长可能要等主进程 ~68s 的
+    // 冷启动重试预算(见 electron/main.js CONFIG_FETCH_BUDGET_MS),但此前此按钮
+    // 没有任何 saving 态锁定——用户在保存进行中继续编辑其它字段,一旦这次保存
+    // 成功返回,`setChanged({})` 会把保存期间新增的编辑连同已保存的一起【无条件
+    // 清空】,用户眼睁睁看着刚打的字消失,毫无提示。这里先快照本次实际要保存的
+    // 内容,保存成功后只精确移除"值自那以后未再被改过"的那些键——保存期间新增
+    // 或改成新值的编辑原样保留在 changed 里,下次点保存会带上它们。
+    const snapshot = changed;
+    setSaving(true);
     try {
       const result = window.galaxyAPI
-        ? await window.galaxyAPI.setConfig(changed)
+        ? await window.galaxyAPI.setConfig(snapshot)
         : await (async () => {
-            const r = await fetch('/api/config', {
+            // 真 bug 修复:此前是裸 fetch('/api/config', ...)——相对路径解析到
+            // 页面自身 origin 而非后端网关,浏览器预览模式下保存必然失败。
+            const base = await getBackendUrl();
+            const r = await fetch(`${base}/api/config`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ config: changed }),
+              body: JSON.stringify({ config: snapshot }),
             });
             if (r.ok) return { success: true };
             let detail = `HTTP ${r.status}`;
@@ -490,7 +546,13 @@ export default function SettingsTab() {
       if (result.success) {
         // 保存成功后使缓存失效，确保读到服务端真值
         invalidate();
-        setChanged({});
+        setChanged((prev) => {
+          const next = { ...prev };
+          for (const k of Object.keys(snapshot)) {
+            if (next[k] === snapshot[k]) delete next[k];
+          }
+          return next;
+        });
         showToast('已保存并即时生效');
       } else {
         // 修复:之前不管真实原因是什么,一律显示"保存失败"四个字，用户没法
@@ -500,8 +562,10 @@ export default function SettingsTab() {
     } catch (err) {
       const msg = err instanceof Error ? err.message : '';
       showToast(`保存出错：${msg}`);
+    } finally {
+      setSaving(false);
     }
-  }, [changed, invalidate, showToast]);
+  }, [changed, invalidate, showToast, saving]);
 
   // ── Cancel handler ───────────────────────────────────────────────
 
@@ -874,7 +938,7 @@ export default function SettingsTab() {
             key={cat.key}
             className={`settings-nav-item ${activeCategory === cat.key ? 'active' : ''}`}
             onClick={() => setActiveCategory(cat.key)}
-            title={`${cat.label} (${cat.count} items)`}
+            title={`${cat.label} (${CONFIG_KEYS[cat.key]?.length ?? 0} items)`}
           >
             <span className="settings-nav-icon">{cat.icon}</span>
             <span className="settings-nav-label">{cat.label}</span>
@@ -893,7 +957,7 @@ export default function SettingsTab() {
             key={cat.key}
             className={`settings-nav-item settings-nav-sub ${activeCategory === cat.key ? 'active' : ''}`}
             onClick={() => setActiveCategory(cat.key)}
-            title={`${cat.label} (${cat.count} items)`}
+            title={`${cat.label} (${CONFIG_KEYS[cat.key]?.length ?? 0} items)`}
           >
             <span className="settings-nav-icon">{cat.icon}</span>
             <span className="settings-nav-label">{cat.label}</span>
@@ -933,17 +997,17 @@ export default function SettingsTab() {
           <button
             className="settings-btn settings-btn-cancel"
             onClick={handleCancel}
-            disabled={!isDirty}
+            disabled={!isDirty || saving}
           >
             放弃
           </button>
           <button
             className={`settings-btn settings-btn-save ${isDirty ? 'dirty' : ''}`}
             onClick={handleSave}
-            disabled={!isDirty}
+            disabled={!isDirty || saving}
           >
-            保存
-            {isDirty && (
+            {saving ? '保存中…' : '保存'}
+            {isDirty && !saving && (
               <span className="settings-dirty-badge">
                 {Object.keys(changed).length}
               </span>

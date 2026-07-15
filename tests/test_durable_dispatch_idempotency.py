@@ -7,8 +7,9 @@
 
 from __future__ import annotations
 
-import core.durable_dispatch_idempotency as ddi
 import pytest
+
+import core.durable_dispatch_idempotency as ddi
 
 
 @pytest.fixture(autouse=True)

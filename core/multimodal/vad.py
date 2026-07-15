@@ -84,9 +84,7 @@ class VADConfig:
             adaptive=_env_bool("GALAXY_VAD_ADAPTIVE", cls.adaptive),
             adaptive_speech_mult=_env_float("GALAXY_VAD_SPEECH_MULT", cls.adaptive_speech_mult),
             adaptive_min_floor=_env_float("GALAXY_VAD_MIN_FLOOR", cls.adaptive_min_floor),
-            adaptive_hangover_frames=int(
-                _env_float("GALAXY_VAD_HANGOVER_FRAMES", cls.adaptive_hangover_frames)
-            ),
+            adaptive_hangover_frames=int(_env_float("GALAXY_VAD_HANGOVER_FRAMES", cls.adaptive_hangover_frames)),
         )
 
 
