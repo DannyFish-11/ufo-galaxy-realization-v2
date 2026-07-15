@@ -167,7 +167,7 @@ class TestIncrementalSynthFailover:
         monkeypatch.setattr(
             so,
             "demote_current_engine",
-            lambda reason="": _WorkingSapi(),
+            lambda reason="", failed_engine=None: _WorkingSapi(),
         )
         # os.remove 对假句柄(非真实文件)静默
         monkeypatch.setattr(so.os, "remove", lambda p: None)
