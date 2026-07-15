@@ -40,10 +40,17 @@ function usePerception(): PerceptionStatus {
           // undefined,导致"感知·SENSES"三个药丸无论摄像头/屏幕/麦克风是否真的在
           // 工作,永远显示未激活。
           const s = d?.store ?? {};
+          // 修复:camera_received/screen_received/audio_received 是【自进程启动起
+          // 单调递增的计数器】,一旦收到过一帧就恒为非零(≥1),?? 只在左侧是
+          // null/undefined 时才会落到右侧的 *_fresh——所以旧写法下 *_fresh 实际上
+          // 从未生效,药丸一旦亮起就【永远亮着】,哪怕摄像头/屏幕/麦克风早已断开
+          // 或用户后来撤销了授权,面板依然显示"已启用"。这里改成只看 *_fresh
+          // (TTL 内是否有新鲜帧/音频),如实反映"现在是否真的通着"而不是"历史上
+          // 是否来过一帧"。
           setP({
-            camera: Boolean(s.camera_received ?? s.camera_fresh),
-            screen: Boolean(s.screen_received ?? s.screen_fresh),
-            audio: Boolean(s.audio_received ?? s.audio_fresh),
+            camera: Boolean(s.camera_fresh),
+            screen: Boolean(s.screen_fresh),
+            audio: Boolean(s.audio_fresh),
           });
         }
       } catch {

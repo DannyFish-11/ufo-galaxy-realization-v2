@@ -74,3 +74,21 @@ def test_env_override_initial_prompt(monkeypatch):
     asr = _asr_with(m)
     asr.transcribe(np.zeros(1600, dtype=np.float32), language="zh")
     assert m.captured.get("initial_prompt") == "自定义提示"
+
+
+def test_internal_vad_filter_off_by_default():
+    # 上游 core.multimodal.vad 已经筛过一遍"是否在说话",这里不该再用 faster-whisper
+    # 自带的第二层 Silero VAD 二次过滤——那会把已经筛出来的短促/安静语音再滤成空
+    # (真机反馈"检测到说话但没转写出文字")。默认必须是 False。
+    m = _FakeModel("你好")
+    asr = _asr_with(m)
+    asr.transcribe(np.zeros(1600, dtype=np.float32), language="zh")
+    assert m.captured.get("vad_filter") is False
+
+
+def test_env_override_internal_vad_filter_on(monkeypatch):
+    monkeypatch.setenv("GALAXY_ASR_VAD_FILTER", "1")
+    m = _FakeModel("你好")
+    asr = _asr_with(m)
+    asr.transcribe(np.zeros(1600, dtype=np.float32), language="zh")
+    assert m.captured.get("vad_filter") is True
