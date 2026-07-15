@@ -192,6 +192,64 @@ class RehearsalOutcome:
         )[:max_chars]
 
 
+def n_candidates() -> int:
+    """多方案模拟的候选数(选择模式/做各种决策并模拟)。默认 1 = 单方案(旧行为,零变化);
+    GALAXY_REHEARSAL_CANDIDATES=N(2..5)开启"生成多策略 → 各自沙盘模拟 → 排名选优"。"""
+    try:
+        return max(1, min(5, int(os.environ.get("GALAXY_REHEARSAL_CANDIDATES", "1"))))
+    except (TypeError, ValueError):
+        return 1
+
+
+@dataclass
+class CandidatePlan:
+    """一个候选策略(模式)及其在沙盘里模拟出的结果。"""
+
+    label: str  # 简短模式标签(供 LIMINAL 投影展示候选路径)
+    approach: str  # 该策略的一句话描述(注入预演)
+    outcome: RehearsalOutcome
+
+    def rank_key(self):
+        """排序键:成功优先 → 步数少优先 → 尝试次数少优先。"""
+        return (0 if self.outcome.success else 1, len(self.outcome.trajectory), self.outcome.attempts)
+
+
+@dataclass
+class MultiCandidateOutcome:
+    """多方案模拟的合并结果:所有候选 + 选中项(= 在第二态里"做出的决策")。"""
+
+    candidates: List[CandidatePlan] = field(default_factory=list)
+    selected_index: int = -1
+
+    @property
+    def selected(self) -> Optional[CandidatePlan]:
+        if 0 <= self.selected_index < len(self.candidates):
+            return self.candidates[self.selected_index]
+        return None
+
+    @property
+    def outcome(self) -> RehearsalOutcome:
+        """选中候选的预演结果(供既有 guidance 注入沿用);无则空结果。"""
+        s = self.selected
+        return s.outcome if s is not None else RehearsalOutcome(success=False, attempts=0)
+
+    def simulation_summary_kwargs(
+        self, *, is_active: bool = False, scenario_label: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """转成 build_simulation_summary 的 kwargs —— 喂 LIMINAL 投影,展示
+        "在评估的多个候选 vs 已提交的那个"。committed_path 仅在选中且成功时给出。"""
+        sel = self.selected
+        committed = sel.label if (sel is not None and sel.outcome.success) else None
+        return {
+            "is_active": is_active,
+            "simulation_kind": "sandbox",
+            "candidate_paths": [c.label for c in self.candidates],
+            "committed_path": committed,
+            "scenario_label": scenario_label,
+            "step_count": len(sel.outcome.trajectory) if sel is not None else 0,
+        }
+
+
 class LiminalRehearsal:
     """预演循环:影子 ReAct → 校验/模拟/状态更新 → 任务级裁判 → 反馈重试。"""
 
@@ -235,7 +293,9 @@ class LiminalRehearsal:
         except Exception as exc:  # noqa: BLE001 — 裁判失败视为未完成(保守)
             return {"complete": False, "feedback": f"裁判不可用: {exc}"[:200]}
 
-    async def rehearse(self, task: str) -> RehearsalOutcome:
+    async def rehearse(self, task: str, approach_hint: Optional[str] = None) -> RehearsalOutcome:
+        """在影子沙盘里预演一个计划。approach_hint 非空时,把该"策略角度"作为系统提示注入,
+        用于多方案模拟(rehearse_options)时让各候选走不同路子。"""
         from core.tool_call_validator import (
             is_high_risk_tool,
             semantic_check,
@@ -263,6 +323,8 @@ class LiminalRehearsal:
                 },
                 {"role": "user", "content": task},
             ]
+            if approach_hint:
+                messages.insert(1, {"role": "system", "content": f"[本次预演采用的策略/模式] {approach_hint[:300]}"})
             for fb in outcome.feedback_history[-2:]:
                 messages.append({"role": "system", "content": f"[上一轮预演反馈] {fb[:400]}"})
 
@@ -338,3 +400,64 @@ class LiminalRehearsal:
             logger.info("预演第 %d 轮未完成: %s", attempt, fb[:160])
 
         return outcome
+
+    async def _generate_candidate_approaches(self, task: str, n: int) -> List[Dict[str, str]]:
+        """让模型给出 n 种不同的完成策略/模式(选择模式)。失败则退回单一"直接"策略。"""
+        prompt = (
+            f"针对下面的任务,给出 {n} 种【明显不同】的完成策略/模式(不同工具组合或思路),"
+            "各配一个 2-6 字的简短标签。只回 JSON 数组: "
+            '[{"label":"标签","approach":"一句话策略"}, ...]\n'
+            f"任务: {task[:400]}"
+        )
+        try:
+            resp = await self._router.chat([{"role": "user", "content": prompt}], temperature=0.6, max_tokens=400)
+            text = (getattr(resp, "content", "") or "").strip()
+            start, end = text.find("["), text.rfind("]")
+            arr = json.loads(text[start : end + 1]) if start >= 0 <= end else []
+            out = [
+                {"label": str(x.get("label", f"方案{i+1}"))[:12], "approach": str(x.get("approach", ""))[:300]}
+                for i, x in enumerate(arr)
+                if isinstance(x, dict)
+            ][:n]
+            if out:
+                return out
+        except Exception as exc:  # noqa: BLE001 — 生成失败退回单方案
+            logger.debug("候选策略生成失败(退回单方案): %s", exc)
+        return [{"label": "直接", "approach": ""}]
+
+    async def rehearse_options(self, task: str, candidates: Optional[int] = None) -> MultiCandidateOutcome:
+        """多方案模拟(第二态"做各种决策并进行模拟"):生成多策略 → 各自沙盘预演 → 排名选优。
+
+        candidates<=1 时等价单方案 rehearse(零行为变化)。返回 MultiCandidateOutcome,
+        其 .selected 即"在阈限态做出的决策",供 MANIFEST 提交执行 + 喂 LIMINAL 投影展示候选。
+        """
+        n = candidates if candidates is not None else n_candidates()
+        if n <= 1:
+            out = await self.rehearse(task)
+            return MultiCandidateOutcome(
+                candidates=[CandidatePlan(label="直接", approach="", outcome=out)],
+                selected_index=0,
+            )
+
+        approaches = await self._generate_candidate_approaches(task, n)
+        _emit_rehearsal_event(
+            "candidates_generated",
+            {"count": len(approaches), "labels": [a["label"] for a in approaches]},
+        )
+        plans: List[CandidatePlan] = []
+        for a in approaches:
+            oc = await self.rehearse(task, approach_hint=a["approach"])
+            plans.append(CandidatePlan(label=a["label"], approach=a["approach"], outcome=oc))
+            _emit_rehearsal_event(
+                "candidate_simulated",
+                {"label": a["label"], "success": oc.success, "steps": len(oc.trajectory)},
+            )
+        # 排名选优:成功优先 → 步数少 → 尝试少。全失败也选"最不坏"的一个。
+        best_idx = min(range(len(plans)), key=lambda i: plans[i].rank_key()) if plans else -1
+        result = MultiCandidateOutcome(candidates=plans, selected_index=best_idx)
+        sel = result.selected
+        _emit_rehearsal_event(
+            "candidate_selected",
+            {"label": sel.label if sel else None, "success": sel.outcome.success if sel else False},
+        )
+        return result
