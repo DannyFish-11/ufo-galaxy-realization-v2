@@ -1655,6 +1655,21 @@ class GalaxyUnified:
         except Exception as _exc:  # noqa: BLE001
             logger.debug("远程桌面兜底自动开启跳过(非致命): %s", _exc)
 
+        # ── Kokoro 离线 TTS 模型主动预取(与语音输入是否可用无关)──
+        # 真机排查发现:kokoro 的模型拉取此前【纯被动】——只有第一次真的要朗读、
+        # edge-tts 失败降级时才会被 _try_kokoro() 顺手踢一次后台线程,而模型
+        # 337MB、~3 分钟起,那时才开始下载必然来不及,当次对话只能落到 SAPI
+        # 机器人音。对比 Whisper ASR 模型(145MB)在 start_voice_interaction()
+        # 里就是主动 eager 拉取的——这里补上同等的主动性:启动时无条件踢一次
+        # 后台拉取(幂等、非阻塞,不依赖麦克风/GALAXY_VOICE,TTS 出声本就与语音
+        # 输入是否可用无关),让下载与启动的其余步骤 + 用户前几轮对话的等待时间
+        # 并行,而不是等真正要用了才临时抱佛脚。
+        try:
+            from core.tts.kokoro_engine import kick_background_fetch as _kokoro_prefetch
+            _kokoro_prefetch()
+        except Exception as _exc:  # noqa: BLE001
+            logger.debug("Kokoro 模型主动预取跳过(非致命): %s", _exc)
+
         # ── 语音交互闭环：听 → 识别 → 主回路(驱动三态 + 回复) → 朗读 ──
         # 这是"对它说话它会回应、三态随对话变化"的关键(此前 VoiceLoop 从未启动)。
         voice_ok = await self.start_voice_interaction()

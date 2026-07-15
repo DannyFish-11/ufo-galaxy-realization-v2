@@ -18,6 +18,8 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import httpx
 
+from core.credential_vault import PLACEHOLDER_PREFIXES
+
 logger = logging.getLogger("Galaxy.LLMRouter")
 
 
@@ -1710,7 +1712,7 @@ class MultiLLMRouter:
                 # 修复:.env/UnifiedConfig._load_env() 按真实长名(小写)存储，
                 # 短名从未命中过——补上按长名查询。
                 val = _cfg.get(f"api_keys.{real_env_key}", "")
-            if val and not str(val).startswith("your-"):
+            if val and not str(val).lower().startswith(PLACEHOLDER_PREFIXES):
                 return str(val)
         except Exception as exc:
             logger.warning("Exception suppressed: %s", exc)
@@ -1724,11 +1726,17 @@ class MultiLLMRouter:
         except Exception as exc:
             logger.warning("Exception suppressed: %s", exc)
         # 3. 环境变量（兜底）—— 修复:优先用真实长名查(.env/系统环境变量都是
-        # 这个约定)，短名查询保留作最后兜底(不改变既有行为)。
+        # 这个约定)，短名查询保留作最后兜底(不改变既有行为)。同样要过滤占位符
+        # (.env.example 里未编辑的模板值,如 "your_deepseek_api_key_here"),否则
+        # 这条兜底路径会把模板文字当真密钥返回,provider 照样被注册、真实调用
+        # 必然认证失败。
         val = os.environ.get(real_env_key, "")
-        if val:
+        if val and not val.lower().startswith(PLACEHOLDER_PREFIXES):
             return val
-        return os.environ.get(key_name.upper() if "_" in key_name else key_name, "")
+        val = os.environ.get(key_name.upper() if "_" in key_name else key_name, "")
+        if val and not val.lower().startswith(PLACEHOLDER_PREFIXES):
+            return val
+        return ""
 
     @staticmethod
     def _normalize_base_url(raw: str) -> str:
@@ -1777,7 +1785,7 @@ class MultiLLMRouter:
                     key = os.environ.get(envk, "")
                     if key:
                         break
-            if not key or key.startswith("your-"):
+            if not key or key.lower().startswith(PLACEHOLDER_PREFIXES):
                 continue
             base = spec["base_url"]
             base_key = spec.get("base_key")
@@ -1825,7 +1833,7 @@ class MultiLLMRouter:
                     ollama_url = ollama_default_url
             except Exception as exc:
                 logger.warning("Exception suppressed: %s", exc)
-        if ollama_url and not ollama_url.startswith("your-"):
+        if ollama_url and not ollama_url.lower().startswith(PLACEHOLDER_PREFIXES):
             # 检测 Ollama 实际可用的模型（包括 VLM）
             detected_models = ["gemma4:12b", "gemma4:e4b"]
             try:

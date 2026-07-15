@@ -414,14 +414,39 @@ def phase0_env_check() -> dict:
     status["env_exists"] = env_exists
 
     # API Key check
+    # 真 bug(面板 API-key 排查发现):此前只读 .env 文本计数——但密钥经面板保存后
+    # 会被收敛进 runtime/secrets.env(不再明文留在 .env,见 core/config_store.py),
+    # 于是这条横幅在密钥已正确保存的情况下依然永远报"未配置",强化"存了但没用"
+    # 的错觉。这里额外并入 secrets.env 里的真实密钥键,并用共享的占位符前缀表
+    # 过滤 .env 里尚未替换的模板值(如 your_openai_api_key_here),避免双向误判。
     api_count = 0
+    seen_keys: set[str] = set()
     try:
+        from core.credential_vault import PLACEHOLDER_PREFIXES
+
         env_text = ENV_FILE.read_text() if env_exists else ""
         for line in env_text.splitlines():
             if "=" in line and not line.startswith("#"):
                 key, _, val = line.partition("=")
-                if val.strip() and any(k in key.upper() for k in ["API_KEY", "KEY"]):
-                    api_count += 1
+                val = val.strip()
+                key = key.strip()
+                if (
+                    val
+                    and not val.lower().startswith(PLACEHOLDER_PREFIXES)
+                    and any(k in key.upper() for k in ["API_KEY", "KEY"])
+                ):
+                    seen_keys.add(key.upper())
+        try:
+            from core.config_store import get_config_store
+
+            for key, val in get_config_store().read_secrets().items():
+                if val and not val.lower().startswith(PLACEHOLDER_PREFIXES) and any(
+                    k in key.upper() for k in ["API_KEY", "KEY"]
+                ):
+                    seen_keys.add(key.upper())
+        except Exception:
+            pass
+        api_count = len(seen_keys)
     except Exception:
         pass
     if api_count > 0:
