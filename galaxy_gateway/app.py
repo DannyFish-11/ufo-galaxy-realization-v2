@@ -171,6 +171,13 @@ try:
 except Exception as _cfg_err:
     logger.warning("Client config route mount skipped: %s", _cfg_err)
 
+try:
+    from .api.pairing import router as _pairing_router
+    app.include_router(_pairing_router)
+    logger.info("Device pairing routes mounted: /api/v1/pairing/*")
+except Exception as _pair_err:
+    logger.warning("Device pairing routes mount skipped: %s", _pair_err)
+
 
 # ============================================================================
 # Main entry point
