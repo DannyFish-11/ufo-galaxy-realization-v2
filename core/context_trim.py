@@ -35,6 +35,25 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
+def _core_markers() -> tuple:
+    """热核工具名标记(每轮几乎必用的元能力)。可用 GALAXY_TOOLS_CORE 覆盖
+    (逗号分隔的名字子串);留空则用内置默认。"""
+    raw = os.environ.get("GALAXY_TOOLS_CORE", "").strip()
+    if raw:
+        markers = tuple(m.strip() for m in raw.split(",") if m.strip())
+        if markers:
+            return markers
+    return _CORE_TOOL_MARKERS
+
+
+def _tool_name(t: Dict[str, Any]) -> str:
+    return str((t.get("function") or {}).get("name", ""))
+
+
+def _is_core(name: str, markers: tuple) -> bool:
+    return any(m in name for m in markers)
+
+
 # ---------------------------------------------------------------------------
 # 1. 工具结果插入截断
 # ---------------------------------------------------------------------------
@@ -111,11 +130,18 @@ def slim_tools(
     tools: List[Dict[str, Any]],
     query: str,
     max_tools: int = 0,
+    *,
+    session_unlocked: List[str] | None = None,
 ) -> List[Dict[str, Any]]:
     """工具数 ≤ 阈值时原样返回(零行为变化);超了才挑 top-K。
 
     GALAXY_TOOLS_SLIM=auto(默认)|off;阈值 GALAXY_TOOLS_MAX=24。
     核心工具(memory__/ask_human__)始终入选。
+
+    session_unlocked: 调用方按 session 持有的【已解锁工具名】列表。传入且
+      GALAXY_TOOLS_JIT=on 时,改走单调追加式 JIT(见 select_tools_jit)——
+      热核以外的工具默认不下发、按需逐轮解锁,专治首轮 56s 预填。默认不传 →
+      沿用下面的粘滞/相关性逻辑,零行为变化。
 
     选取策略(GALAXY_TOOLS_STICKY=auto(默认)|on|off):
     - 粘滞(本地主脑场景):按【静态优先级】挑——核心工具 + 目录原序
@@ -130,6 +156,13 @@ def slim_tools(
     mode = os.environ.get("GALAXY_TOOLS_SLIM", "auto").strip().lower()
     if mode in ("0", "off", "false", "no"):
         return tools
+
+    # ── 单调追加式 JIT(会话级前缀缓存友好，见 select_tools_jit)──────────
+    # 调用方传入本会话持有的 unlocked 列表且开关开启时走这条:不受下面 24 阈值
+    # 约束(热核以外的工具默认不下发,按需逐轮解锁)。默认关闭,零行为变化。
+    if session_unlocked is not None and _jit_enabled():
+        return select_tools_jit(tools, query, session_unlocked, max_tools=max_tools)
+
     limit = max_tools or _env_int("GALAXY_TOOLS_MAX", 24)
     if limit <= 0 or len(tools) <= limit:
         return tools
@@ -163,3 +196,93 @@ def slim_tools(
     picked = sorted(scored, key=lambda x: (-x[0], x[1]))[:limit]
     picked.sort(key=lambda x: x[1])  # 恢复原始相对顺序(前缀字节稳定)
     return [t for _, _, t in picked]
+
+
+# ---------------------------------------------------------------------------
+# 4. 单调追加式 JIT 工具加载(会话级前缀缓存友好)
+# ---------------------------------------------------------------------------
+
+
+def _jit_enabled() -> bool:
+    """GALAXY_TOOLS_JIT=on|1|true|yes 开启;默认关闭(零行为变化)。"""
+    return os.environ.get("GALAXY_TOOLS_JIT", "off").strip().lower() in ("1", "on", "true", "yes")
+
+
+def select_tools_jit(
+    tools: List[Dict[str, Any]],
+    query: str,
+    unlocked: List[str],
+    max_tools: int = 0,
+) -> List[Dict[str, Any]]:
+    """单调追加式 JIT 工具选择 —— 专治 CPU 本地模型的首轮预填。
+
+    与 slim_tools 的"每轮重挑"不同:本函数维护一个【只增不减】的已解锁集合
+    ``unlocked``(调用方按 session 持有并复用,函数原地 mutate 它)。每轮:
+
+      1. 热核工具(``_core_markers()``)始终入选 —— 每轮几乎必用的元能力;
+      2. 本轮 ``query`` 词法命中的非核心工具 → 追加进 ``unlocked``(去重、保序,
+         只在末尾追加、从不删除或重排);
+      3. 输出 = ``[热核(目录序)] + [unlocked(解锁序)]``,映射回当前 ``tools``。
+
+    因为 ``unlocked`` 单调增长,跨轮的提示词工具前缀也单调增长 → 只有"解锁到
+    新工具的那一轮"付一次局部重预填,其余轮次(不解锁新工具)全命中 Ollama 的
+    KV 前缀缓存 → 首轮从"全量 24 个 ≈3.2k token"降到"热核几百 token",同时不像
+    naive JIT 那样每轮砸缓存。
+
+    参数
+    ----
+    unlocked:
+        有序、可变的【工具名】列表(调用方按 session 持有)。原地更新:
+        追加本轮命中的新工具名;顺带剔除已从目录消失的名字(能力下线)。
+    max_tools:
+        已解锁工具的总量上限(含热核),默认 ``GALAXY_TOOLS_MAX``。达上限即
+        冻结,不再解锁新工具(宁可漏召回也不无界膨胀/砸缓存)。
+
+    返回选中的 ``tools`` 子列表,可直接下发给模型。
+    """
+    limit = max_tools or _env_int("GALAXY_TOOLS_MAX", 24)
+    markers = _core_markers()
+
+    # 目录:名字 → 工具(去重,保留首个出现顺序)
+    by_name: Dict[str, Dict[str, Any]] = {}
+    order: Dict[str, int] = {}
+    for i, t in enumerate(tools):
+        nm = _tool_name(t)
+        if nm and nm not in by_name:
+            by_name[nm] = t
+            order[nm] = i
+
+    core_names = [nm for nm in by_name if _is_core(nm, markers)]
+    core_set = set(core_names)
+
+    # 剔除已消失/已被归类为核心的陈旧解锁项(原地,保持其余项的相对顺序)
+    unlocked[:] = [nm for nm in unlocked if nm in by_name and nm not in core_set]
+    # 去重(防御:调用方若重复传入)——保序保留首次
+    if len(set(unlocked)) != len(unlocked):
+        _seen: set = set()
+        unlocked[:] = [nm for nm in unlocked if not (nm in _seen or _seen.add(nm))]
+
+    unlocked_budget = max(0, limit - len(core_names))
+    q_terms = _terms_of(query)
+    if q_terms and len(unlocked) < unlocked_budget:
+        already = set(unlocked)
+        candidates = []
+        for nm, t in by_name.items():
+            if nm in core_set or nm in already:
+                continue
+            fn = t.get("function") or {}
+            blob = _terms_of(f"{nm} {fn.get('description', '')}")
+            score = len(q_terms & blob)
+            if score > 0:
+                candidates.append((score, order[nm], nm))
+        # 命中分高者优先解锁;同分按目录原序(确定性,便于测试与复现)
+        candidates.sort(key=lambda x: (-x[0], x[1]))
+        for _, _, nm in candidates:
+            if len(unlocked) >= unlocked_budget:
+                break
+            unlocked.append(nm)
+
+    # 输出:热核(目录序)+ 已解锁(解锁序)——前缀单调、字节稳定
+    picked = [by_name[nm] for nm in by_name if nm in core_set]
+    picked += [by_name[nm] for nm in unlocked]
+    return picked

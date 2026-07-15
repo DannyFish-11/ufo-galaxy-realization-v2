@@ -324,6 +324,102 @@ class TestContextTrim:
         tools = self._mk_tools(50)
         assert slim_tools(tools, "q", max_tools=5) is tools
 
+    # ── 单调追加式 JIT 工具加载 ──────────────────────────────────────────
+    def _mk_jit_tools(self):
+        tools = self._mk_tools(20)
+        tools.append(
+            {"type": "function", "function": {"name": "node__fs__截图屏幕", "description": "截取当前屏幕画面"}}
+        )
+        tools.append(
+            {"type": "function", "function": {"name": "node__web__搜索网页", "description": "联网搜索网页内容"}}
+        )
+        tools.append({"type": "function", "function": {"name": "memory__recall", "description": "记忆召回"}})
+        return tools
+
+    def test_jit_disabled_by_default_uses_legacy_path(self, monkeypatch):
+        """不设 GALAXY_TOOLS_JIT → 即便传 session_unlocked 也走旧逻辑(零行为变化)。"""
+        from core.context_trim import slim_tools
+
+        monkeypatch.delenv("GALAXY_TOOLS_JIT", raising=False)
+        monkeypatch.setenv("GALAXY_TOOLS_SLIM", "auto")
+        tools = self._mk_tools(10)
+        unlocked = []
+        assert slim_tools(tools, "问问", max_tools=24, session_unlocked=unlocked) is tools
+        assert unlocked == []  # 未启用 → 不动累加集合
+
+    def test_jit_first_turn_only_core_plus_matched(self, monkeypatch):
+        """首轮:只下发热核 + 本轮命中的工具,而非全量 23 个。"""
+        from core.context_trim import select_tools_jit, slim_tools
+
+        monkeypatch.setenv("GALAXY_TOOLS_JIT", "on")
+        monkeypatch.setenv("GALAXY_TOOLS_SLIM", "auto")
+        tools = self._mk_jit_tools()
+        unlocked = []
+        out = slim_tools(tools, "帮我截图屏幕看看", max_tools=24, session_unlocked=unlocked)
+        names = [t["function"]["name"] for t in out]
+        assert "memory__recall" in names  # 热核始终在
+        assert "node__fs__截图屏幕" in names  # 本轮命中被解锁
+        assert "node__web__搜索网页" not in names  # 未命中不下发
+        assert len(out) < len(tools)  # 远小于全量
+        assert unlocked == ["node__fs__截图屏幕"]
+        # select_tools_jit 直接调用应与经 slim_tools 一致
+        assert [t["function"]["name"] for t in select_tools_jit(tools, "x", list(unlocked))] == names
+
+    def test_jit_is_monotonic_and_prefix_stable(self, monkeypatch):
+        """跨轮:解锁集合只增不减,且输出是逐轮前缀扩展(前缀缓存友好)。"""
+        from core.context_trim import select_tools_jit
+
+        markers = None  # 用默认热核
+        assert markers is None
+        tools = self._mk_jit_tools()
+        unlocked = []
+        # 轮1:截图
+        r1 = [t["function"]["name"] for t in select_tools_jit(tools, "截图屏幕", unlocked)]
+        # 轮2:与工具无关的闲聊 → 不解锁新工具,输出应与轮1完全一致
+        r2 = [t["function"]["name"] for t in select_tools_jit(tools, "你好呀今天天气不错", unlocked)]
+        assert r2 == r1
+        # 轮3:搜索网页 → 追加解锁,前缀应为 r1 的扩展
+        r3 = [t["function"]["name"] for t in select_tools_jit(tools, "搜索网页找资料", unlocked)]
+        assert r3[: len(r1)] == r1  # 前缀单调扩展,老工具位置不变
+        assert "node__web__搜索网页" in r3
+        assert unlocked == ["node__fs__截图屏幕", "node__web__搜索网页"]  # 只增
+
+    def test_jit_budget_freezes_unlocking(self, monkeypatch):
+        """达 max_tools 上限后冻结,不再解锁新工具(不无界膨胀/不砸缓存)。"""
+        from core.context_trim import select_tools_jit
+
+        tools = self._mk_jit_tools()
+        unlocked = []
+        # 上限 = 2:热核占 1(memory__recall)→ 非核心预算仅 1
+        select_tools_jit(tools, "截图屏幕", unlocked, max_tools=2)
+        assert unlocked == ["node__fs__截图屏幕"]
+        select_tools_jit(tools, "搜索网页", unlocked, max_tools=2)  # 预算已满
+        assert unlocked == ["node__fs__截图屏幕"]  # 冻结,未解锁 web
+
+    def test_jit_drops_vanished_tool(self, monkeypatch):
+        """已解锁工具从目录消失(能力下线)→ 自动剔除,不下发不存在的 schema。"""
+        from core.context_trim import select_tools_jit
+
+        tools = self._mk_jit_tools()
+        unlocked = []
+        select_tools_jit(tools, "截图屏幕 搜索网页", unlocked)
+        assert "node__web__搜索网页" in unlocked
+        # 下一轮 web 工具下线
+        tools2 = [t for t in tools if t["function"]["name"] != "node__web__搜索网页"]
+        out = [t["function"]["name"] for t in select_tools_jit(tools2, "闲聊", unlocked)]
+        assert "node__web__搜索网页" not in out
+        assert "node__web__搜索网页" not in unlocked  # 陈旧项被剔除
+
+    def test_jit_custom_core_markers(self, monkeypatch):
+        """GALAXY_TOOLS_CORE 覆盖热核标记。"""
+        from core.context_trim import select_tools_jit
+
+        monkeypatch.setenv("GALAXY_TOOLS_CORE", "node__00__,node__01__")
+        tools = self._mk_jit_tools()
+        out = [t["function"]["name"] for t in select_tools_jit(tools, "无关", [])]
+        assert "node__00__act0" in out and "node__01__act1" in out
+        assert "memory__recall" not in out  # 默认热核被覆盖掉了
+
 
 # ---------------------------------------------------------------------------
 # 4. IndexTTS 质量档
