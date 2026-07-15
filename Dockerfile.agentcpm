@@ -1,28 +1,48 @@
+# ============================================================
 # AgentCPM-GUI Service Dockerfile
-# ================================
-# Builds the AgentCPM GUI inference service.
+# Multi-stage build for smaller, secure images
 # Requires NVIDIA GPU runtime.
+# ============================================================
 
+# ── Stage 1: Builder ──
+FROM python:3.11-slim AS builder
+
+WORKDIR /build
+
+# Install build-time dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy and install Python dependencies to a separate prefix
+COPY external/agentcpm/ ./external/agentcpm/
+RUN if [ -f external/agentcpm/requirements.txt ]; then \
+      pip install --no-cache-dir --prefix=/install -r external/agentcpm/requirements.txt; \
+    fi
+
+# ── Stage 2: Runtime ──
 FROM python:3.11-slim
+
+LABEL maintainer="Galaxy Team"
+LABEL version="2.3.23"
+LABEL description="AgentCPM-GUI Inference Service"
+LABEL org.opencontainers.image.source="https://github.com/ufo-galaxy/ufo-galaxy-realization-v2"
 
 WORKDIR /app
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
-# Install system dependencies
+# Install runtime-only system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    git \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
+# Copy Python packages from builder stage
+COPY --from=builder /install /usr/local
+
 # Copy AgentCPM source
 COPY external/agentcpm/ ./external/agentcpm/
-
-# Install Python dependencies (if requirements exist)
-RUN if [ -f external/agentcpm/requirements.txt ]; then \
-      pip install --no-cache-dir -r external/agentcpm/requirements.txt; \
-    fi
 
 # Create non-root user
 RUN useradd -m -u 1000 agentcpm && \
