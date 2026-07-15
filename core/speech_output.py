@@ -180,13 +180,42 @@ def _get_engine() -> Optional[Any]:
         _engine = _try_sapi()
     elif choice == "auto":
         _engine = _try_edge() or _try_kokoro() or _try_melo() or _try_piper() or _try_sapi()
-    else:  # edge(默认)——运行期失败仍可经 demote 落到离线链
-        _engine = _try_edge() or _try_melo() or _try_piper() or _try_kokoro() or _try_sapi()
+    else:  # edge(默认)——运行期失败仍可经 demote 落到离线链;离线首选 kokoro(默认装机·神经音)
+        _engine = _try_edge() or _try_kokoro() or _try_melo() or _try_piper() or _try_sapi()
 
     if _engine is None:
         logger.warning("TTS 引擎不可用(语音输出降级;装 edge-tts / melotts / piper-tts 可启用)")
         _engine_failed = True
+    _note_engine_choice(_engine)
     return _engine
+
+
+# 语音输出降级态(落到 SAPI 系统音 = 神经引擎全不可用)。供能力面板/诊断查询。
+_tts_degraded_reason: Optional[str] = None
+
+
+def get_tts_degraded_reason() -> Optional[str]:
+    """当前语音输出是否处于"机器人音"降级态;None=用着神经引擎(自然音)。"""
+    return _tts_degraded_reason
+
+
+def _note_engine_choice(eng: Any) -> None:
+    """落到系统音(SAPI)意味着 edge/kokoro 等神经引擎全不可用 —— 如实、醒目告知一次,
+    不再"无声降级成机器人音、用户不知为何"(所有者反馈的"语音太僵")。"""
+    global _tts_degraded_reason
+    if eng is None:
+        return
+    if type(eng).__name__ == "SapiTTSEngine":
+        if _tts_degraded_reason is None:  # 一次性,避免刷屏
+            _tts_degraded_reason = (
+                "语音降级为系统音(SAPI 机器人音):edge-tts 云端不可达、且离线神经引擎"
+                "(kokoro)模型未就绪。自然嗓音需 edge 可达,或等 kokoro 模型下载完成后重启"
+                "(GALAXY_KOKORO_AUTOFETCH 默认开;网络受限时可手动预置模型)。"
+            )
+            logger.warning("\n%s\n🔊 %s\n%s", "=" * 66, _tts_degraded_reason, "=" * 66)
+    else:
+        # 用上了神经引擎(edge/kokoro/melo/piper)→ 清除降级态。
+        _tts_degraded_reason = None
 
 
 def demote_current_engine(reason: str = "") -> Optional[Any]:
