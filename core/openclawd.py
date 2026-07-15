@@ -8263,7 +8263,11 @@ class OpenClawd:
             # 故障都降级为直接执行,绝不阻塞主流程。
             _rehearsal_meta: Dict[str, Any] = {}
             try:
-                from core.liminal_rehearsal import LiminalRehearsal, should_rehearse
+                from core.liminal_rehearsal import (
+                    LiminalRehearsal,
+                    n_candidates,
+                    should_rehearse,
+                )
 
                 _cx = float(cv.weighted_score) if cv is not None else 0.5
                 if should_rehearse(_cx, tools):
@@ -8272,13 +8276,39 @@ class OpenClawd:
                         real_dispatch=self._dispatch_tool_call,
                         tools=tools,
                     )
-                    _outcome = await rehearsal.rehearse(message)
-                    _rehearsal_meta = {
-                        "rehearsed": True,
-                        "rehearsal_success": _outcome.success,
-                        "rehearsal_attempts": _outcome.attempts,
-                        "rehearsal_steps": len(_outcome.trajectory),
-                    }
+                    _ncand = n_candidates()
+                    if _ncand > 1:
+                        # 阈限态"选择模式/做各种决策并模拟":生成多策略 → 各自沙盘模拟 →
+                        # 排名选优。选中项即在第二态做出的决策,其成功轨迹注入真实执行。
+                        _mc = await rehearsal.rehearse_options(message, candidates=_ncand)
+                        _outcome = _mc.outcome
+                        _sel = _mc.selected
+                        _rehearsal_meta = {
+                            "rehearsed": True,
+                            "rehearsal_success": _outcome.success,
+                            "rehearsal_attempts": _outcome.attempts,
+                            "rehearsal_steps": len(_outcome.trajectory),
+                            "rehearsal_candidates": [c.label for c in _mc.candidates],
+                            "rehearsal_committed": (_sel.label if (_sel and _outcome.success) else None),
+                        }
+                        # 喂 LIMINAL 投影:候选 vs 已提交(经既有可见化事件族上面板)。
+                        try:
+                            from core.liminal_rehearsal import _emit_rehearsal_event as _emit_rh
+
+                            _emit_rh(
+                                "simulation_summary",
+                                _mc.simulation_summary_kwargs(is_active=True, scenario_label=message[:60]),
+                            )
+                        except Exception:  # noqa: BLE001 — 可见化失败不影响决策
+                            pass
+                    else:
+                        _outcome = await rehearsal.rehearse(message)
+                        _rehearsal_meta = {
+                            "rehearsed": True,
+                            "rehearsal_success": _outcome.success,
+                            "rehearsal_attempts": _outcome.attempts,
+                            "rehearsal_steps": len(_outcome.trajectory),
+                        }
                     guidance = _outcome.guidance_text()
                     if guidance:
                         messages.append({"role": "system", "content": guidance})
