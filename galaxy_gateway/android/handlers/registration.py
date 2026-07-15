@@ -655,11 +655,30 @@ def _evaluate_ingress_authentication(message: Dict[str, Any]) -> Dict[str, Any]:
             state = "token_invalid_compat"
             reason = "Invalid token provided in compatibility mode"
 
+    # 设备准入绑定:每设备 token 必须【发放给本 device_id】才算"本设备已批准",否则一枚
+    # 泄露的 token 换个 device_id 就能冒充接入,击穿"别处批准 · 每设备"模型。共享/环境
+    # 管理员 token(非每设备)则按 token_valid 视为管理员放行。查询失败回退 token_valid,
+    # 不因注册表异常把所有设备锁死。
+    device_approved = token_valid
+    try:
+        from core.device_token_registry import verify_device_token
+
+        if token:
+            per_device_rec = verify_device_token(token)
+            if per_device_rec is not None:
+                msg_device_id = str(message.get("device_id") or "").strip()
+                device_approved = bool(msg_device_id) and per_device_rec.get("device_id") == msg_device_id
+            else:
+                device_approved = token_valid  # 环境/共享管理员 token(或无效→False)
+    except Exception:  # noqa: BLE001  注册表不可用不应把设备锁死
+        device_approved = token_valid
+
     return {
         "enforced": auth_enforced,
         "token_present": token_present,
         "token_source": token_source,
         "token_valid": token_valid,
+        "device_approved": device_approved,
         "active_token_count": active_token_count,
         "state": state,
         "reason": reason,
@@ -672,9 +691,10 @@ def _should_gate_unapproved(auth_outcome: Dict[str, Any]) -> bool:
     仅当环境开关 GALAXY_REQUIRE_DEVICE_APPROVAL 打开、且设备【未批准】时返回 True。
     默认关 → 恒 False → 注册行为与现状逐字节一致(opt-in)。
 
-    "已批准" == auth_outcome["token_valid"]:core.auth.verify_api_token 已【优先】校验
-    每设备 token(core/device_token_registry),故设备持有效每设备 token 时 token_valid
-    即 True——即便处于默认开放模式;配对批准发放的正是这种 token,天然闭环。
+    "已批准" == auth_outcome["device_approved"]:每设备 token 必须【发放给本 device_id】
+    才算本设备已批准(见 _evaluate_ingress_authentication 的绑定校验),否则一枚泄露 token
+    换个 device_id 就能冒充接入。共享/环境管理员 token 仍按 token_valid 放行。配对批准
+    发放的正是绑定本设备的 token,天然闭环。
     """
     require = os.environ.get("GALAXY_REQUIRE_DEVICE_APPROVAL", "").strip().lower() in (
         "1",
@@ -682,7 +702,7 @@ def _should_gate_unapproved(auth_outcome: Dict[str, Any]) -> bool:
         "yes",
         "on",
     )
-    return require and not bool(auth_outcome.get("token_valid"))
+    return require and not bool(auth_outcome.get("device_approved"))
 
 
 def _evaluate_ingress_identity(

@@ -124,6 +124,39 @@ def test_claim_within_window_still_works(tmp_path):
     assert c.claim(req.request_id) == tok, "窗口内应能正常领取"
 
 
+def test_approve_rejects_expired_request_without_prior_scan(tmp_path):
+    """approve() 本身先扫过期:即使没有别的调用触发过清理,超 request_ttl 的请求也不能被批准(TOCTOU)。"""
+    c, reg = _coord(tmp_path, request_ttl=0.05)
+    req = c.submit_enrollment("dev-x")
+    time.sleep(0.08)
+    # 不先调用 get()/pending();直接 approve —— 修复前会成功发 token,修复后应拒。
+    assert c.approve(req.request_id) is None, "过期请求不得被批准"
+    assert c.get(req.request_id)["status"] == EXPIRED
+
+
+def test_terminal_requests_are_purged_after_retention(tmp_path):
+    """终态(denied 等)记录过保留窗口后被清除,防止 _requests 无限堆积(无鉴权 /enroll 的内存 DoS)。"""
+    c, reg = _coord(tmp_path, terminal_retention=0.05)
+    req = c.submit_enrollment("dev-purge")
+    assert c.deny(req.request_id) is True
+    time.sleep(0.08)
+    c._expire_locked_free()  # 触发清理
+    assert c.get(req.request_id) is None, "过保留窗口的终态记录应被清除"
+    with c._lock:
+        assert req.request_id not in c._requests
+
+
+def test_requests_dict_is_hard_capped(tmp_path):
+    """洪泛兜底:_requests 超过 max_requests 即逐出,绝不无界增长。"""
+    c, reg = _coord(tmp_path, max_requests=5, terminal_retention=9999)
+    for i in range(50):
+        c.submit_enrollment(f"dev-{i}")
+    with c._lock:
+        # 逐出在 submit 开头的 _expire 里执行,故稳态为 max+1(刚插入的这条);关键是【有界】,
+        # 绝不随 /enroll 次数无限增长。
+        assert len(c._requests) <= 6, f"_requests 必须被硬上限约束(有界); got {len(c._requests)}"
+
+
 def test_pairing_code_ttl(tmp_path):
     c, reg = _coord(tmp_path, code_ttl=0.05)
     code = c.create_pairing_code()["code"]

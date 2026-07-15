@@ -93,6 +93,8 @@ class DeviceEnrollmentCoordinator:
         code_ttl: float = 300.0,
         request_ttl: float = 600.0,
         claim_ttl: float = 300.0,
+        terminal_retention: float = 120.0,
+        max_requests: int = 4096,
         policy: Optional[AdmissionPolicy] = None,
     ) -> None:
         self._registry = registry or get_device_token_registry()
@@ -101,6 +103,11 @@ class DeviceEnrollmentCoordinator:
         # 批准后【领取窗口】:超过 claim_ttl 仍未 claim,则作废该请求并清掉暂存明文
         # token——request_id 是"一次性、短时效"能力凭据,批准却无人领取不应永久可领。
         self._claim_ttl = claim_ttl
+        # 终态(EXPIRED/DENIED/CLAIMED)保留窗口:留一小段供设备 /status 读到结果,过后清除,
+        # 避免 _requests 无限堆积(/enroll 无鉴权,否则是内存 DoS)。
+        self._terminal_retention = terminal_retention
+        # 硬上限(洪泛兜底):超过则按"终态优先、最旧优先"逐出,绝不无界增长。
+        self._max_requests = max_requests
         self._policy = policy
         self._lock = threading.RLock()
         self._codes: Dict[str, float] = {}  # code -> expiry_at(用完即删)
@@ -183,6 +190,7 @@ class DeviceEnrollmentCoordinator:
     # ── 终裁 ────────────────────────────────────────────────────────────
     def approve(self, request_id: str) -> Optional[str]:
         """批准(HITL 终裁):经注册表发放专属 token 并暂存,返回明文 token(供推回设备)。"""
+        self._expire_locked_free()  # 先扫过期:绝不批准一个已超 request_ttl 的陈旧请求(TOCTOU)
         with self._lock:
             r = self._requests.get(request_id)
             if r is None or r.status != PENDING:
@@ -195,6 +203,7 @@ class DeviceEnrollmentCoordinator:
         return token
 
     def deny(self, request_id: str, reason: Optional[str] = None) -> bool:
+        self._expire_locked_free()
         with self._lock:
             r = self._requests.get(request_id)
             if r is None or r.status != PENDING:
@@ -237,6 +246,21 @@ class DeviceEnrollmentCoordinator:
                 elif r.status == APPROVED and r.decided_at is not None and (now - r.decided_at) > self._claim_ttl:
                     r.status = EXPIRED
                     r._token = None
+            # 清除超过保留窗口的终态记录:防止 _requests 无限堆积(无鉴权 /enroll 的内存 DoS)。
+            _terminal = (EXPIRED, DENIED, CLAIMED)
+            for rid, r in list(self._requests.items()):
+                if r.status in _terminal:
+                    ref = r.decided_at if r.decided_at is not None else r.created_at
+                    if (now - ref) > self._terminal_retention:
+                        del self._requests[rid]
+            # 硬上限兜底(洪泛):超上限则逐出——终态优先、最旧优先。
+            if len(self._requests) > self._max_requests:
+                ordered = sorted(
+                    self._requests.items(),
+                    key=lambda kv: (kv[1].status == PENDING, kv[1].created_at),
+                )
+                for rid, _r in ordered[: len(self._requests) - self._max_requests]:
+                    del self._requests[rid]
 
 
 # ── 进程级单例 ────────────────────────────────────────────────────────────
