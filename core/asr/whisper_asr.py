@@ -25,6 +25,30 @@ import numpy as np
 
 logger = logging.getLogger("Galaxy.ASR")
 
+# 繁体→简体转换器(opencc):懒加载、进程级缓存。未装 opencc 时为 None、退化为不转换。
+_opencc_converter = None
+_opencc_tried = False
+
+
+def _to_simplified(text: str) -> str:
+    """把可能的繁体中文转成简体。装了 opencc 就【确保】转换,否则原样返回。"""
+    global _opencc_converter, _opencc_tried
+    if not _opencc_tried:
+        _opencc_tried = True
+        try:
+            import opencc  # opencc-python-reimplemented
+
+            _opencc_converter = opencc.OpenCC("t2s")  # Traditional → Simplified
+        except Exception as exc:  # noqa: BLE001
+            logger.info("opencc 不可用,繁→简仅靠 initial_prompt 偏置(pip install opencc-python-reimplemented): %s", exc)
+            _opencc_converter = None
+    if _opencc_converter is not None:
+        try:
+            return _opencc_converter.convert(text)
+        except Exception:  # noqa: BLE001
+            return text
+    return text
+
 
 class WhisperASR:
     """本地ASR引擎（faster-whisper）
@@ -193,11 +217,26 @@ class WhisperASR:
             "language": language,
             "vad_filter": True,
             "vad_parameters": {"min_silence_duration_ms": 500},
+            # 短语音指令逐句独立:不拿上一段做条件,显著减少跨片段的幻觉/重复
+            # (真机反馈"识别得不清楚"的一大来源)。
+            "condition_on_previous_text": False,
         }
+        # 中文:Whisper 对普通话常吐【繁体】。用简体 initial_prompt 把输出偏置到简体、
+        # 顺带给点上下文提升准确度;GALAXY_ASR_INITIAL_PROMPT 可覆盖。
+        if str(language).lower().startswith("zh"):
+            transcribe_kwargs.setdefault(
+                "initial_prompt",
+                os.environ.get("GALAXY_ASR_INITIAL_PROMPT", "以下是普通话的句子。"),
+            )
         transcribe_kwargs.update(kwargs)
 
         segments, info = self.model.transcribe(audio_np, **transcribe_kwargs)
-        text = " ".join([s.text for s in segments])
+        text = " ".join([s.text for s in segments]).strip()
+
+        # 繁体→简体兜底:initial_prompt 偏置不总生效;装了 opencc 就【确保】输出简体
+        # (pip install opencc-python-reimplemented)。没装则仅靠上面的偏置。
+        if text and str(language).lower().startswith("zh"):
+            text = _to_simplified(text)
 
         logger.debug(
             "ASR result: language=%s, probability=%.2f, text='%s'",
@@ -205,7 +244,7 @@ class WhisperASR:
             info.language_probability,
             text[:100],
         )
-        return text.strip()
+        return text
 
     @property
     def is_loaded(self) -> bool:
