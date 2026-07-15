@@ -323,7 +323,8 @@ html, body, #root {
   height: 40px;
   flex: none;
   border-radius: var(--r-pill);
-  background: radial-gradient(circle at 32% 28%, var(--avatar-from), var(--avatar-via) 55%, var(--avatar-to));
+  /* 态势在场标识 = 定稿星云图，与应用/托盘/品牌图标像素一致（不再是纯渐变球）。 */
+  background: url('./assets/nebula-icon.png') center / cover no-repeat;
   box-shadow: var(--avatar-glow);
   transition: box-shadow var(--slow) var(--ease), transform var(--slow) var(--ease);
 }
