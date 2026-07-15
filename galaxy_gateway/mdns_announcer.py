@@ -26,8 +26,9 @@ _zeroconf = None
 _Zeroconf = None
 _ServiceInfo = None
 
+
 def _ensure_zeroconf():
-    global _zeroconf, _Zeroconf, _ServiceInfo
+    global _Zeroconf, _ServiceInfo  # _zeroconf 从不在本函数赋值,不列(F824)
     if _Zeroconf is not None:
         return True
     try:
@@ -119,7 +120,7 @@ class MdnsAnnouncer:
                 addresses=[socket.inet_aton(ip)],
                 port=self.port,
                 properties=desc,
-                server=f"galaxy-gateway.local.",
+                server="galaxy-gateway.local.",
             )
             self._zc = _Zeroconf()
             self._zc.register_service(self._info)

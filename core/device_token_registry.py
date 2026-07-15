@@ -29,7 +29,6 @@ UI 能填、``/api/v1/config`` 也不吐 token,更没有"给某台设备发一�
 from __future__ import annotations
 
 import hashlib
-import hmac
 import logging
 import os
 import secrets
@@ -157,7 +156,11 @@ class DeviceTokenRegistry:
     def verify(self, token: str) -> Optional[Dict[str, Any]]:
         """校验呈递的 token;命中且未吊销则返回其设备记录(不含明文),否则 None。
 
-        常量时间比较,避免时序侧信道;命中即刷新 last_seen。
+        实现:把呈递 token 取 sha256,按摘要做 O(1) 字典查(安全性来自 sha256 的
+        原像抗性,而非比较时序——攻击者要伪造需先求出摘要的原像,不可行)。
+        命中只在【内存】刷新 last_seen,【不】落盘——否则每次鉴权都写一次文件,
+        高频连接下是明显的 I/O 负担;last_seen 属可丢的观测字段,落盘由 issue/revoke
+        触发即可。
         """
         if not token:
             return None
@@ -166,20 +169,11 @@ class DeviceTokenRegistry:
         except Exception:  # noqa: BLE001
             return None
         with self._lock:
-            match: Optional[Dict[str, Any]] = None
-            for h, rec in self._by_hash.items():
-                # 常量时间比较每个摘要(摘要等长,compare_digest 安全)
-                if hmac.compare_digest(h, presented):
-                    match = rec
-                    break
-            if match is None:
+            rec = self._by_hash.get(presented)
+            if rec is None or rec.get("revoked"):
                 return None
-            if match.get("revoked"):
-                return None
-            match["last_seen"] = time.time()
-            self._persist()
-            # 返回副本,避免调用方改到内部状态
-            return dict(match)
+            rec["last_seen"] = time.time()  # 仅内存,不落盘
+            return dict(rec)  # 返回副本,避免调用方改到内部状态
 
     def revoke_device(self, device_id: str) -> int:
         """吊销某设备名下的【全部】token,返回吊销条数。"""
