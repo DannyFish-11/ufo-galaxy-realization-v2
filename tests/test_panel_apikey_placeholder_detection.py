@@ -38,8 +38,7 @@ class TestIsConfiguredRecognizesUnderscorePlaceholder:
         assert r.status_code == 200
         data = r.json()
         assert data["configured"]["OPENAI_API_KEY"] is False, (
-            "下划线占位符 'your_...' 被误判为已配置——面板会显示'已连接',"
-            "而真实调用会用这串模板文字去认证,必然失败"
+            "下划线占位符 'your_...' 被误判为已配置——面板会显示'已连接'," "而真实调用会用这串模板文字去认证,必然失败"
         )
         assert data["status"]["openai"] is False
 
@@ -87,8 +86,7 @@ class TestOneApiFallbackRejectsUnderscorePlaceholder:
         monkeypatch.setenv("ONEAPI_URL", "https://oneapi.example.com")
         router = MultiLLMRouter()
         assert "oneapi" not in router.providers, (
-            "未编辑的占位符 'your_oneapi_api_key_here' 被当成真实密钥,"
-            "OneAPI provider 被错误注册"
+            "未编辑的占位符 'your_oneapi_api_key_here' 被当成真实密钥," "OneAPI provider 被错误注册"
         )
 
     def test_real_looking_env_fallback_still_registers(self, monkeypatch):
@@ -148,9 +146,9 @@ class TestSetupWizardRejectsUnderscorePlaceholder:
         wiz.config = {}
         wiz.load_existing_config()
 
-        assert "OPENAI_API_KEY" not in wiz.config, (
-            "未编辑的占位符 'your_openai_api_key_here' 被当成已配置密钥加载进向导状态"
-        )
+        assert (
+            "OPENAI_API_KEY" not in wiz.config
+        ), "未编辑的占位符 'your_openai_api_key_here' 被当成已配置密钥加载进向导状态"
 
     def test_real_looking_key_loaded_as_configured(self, tmp_path):
         import setup_wizard as sw
