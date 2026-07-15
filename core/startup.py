@@ -251,6 +251,17 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
     results = {}
     t0 = time.monotonic()
 
+    # Step 0a: 观测追踪(OpenTelemetry)一次性初始化 —— 默认关(GALAXY_OTEL_ENABLED=1
+    # 才启用)、未装 opentelemetry 时纯 no-op,绝不影响启动。放在最前,使随后所有
+    # span 都在 provider 就绪后创建。
+    try:
+        from core.otel_tracing import init_tracing
+
+        results["otel_tracing_active"] = init_tracing()
+    except Exception as _e:  # noqa: BLE001 — 观测初始化绝不阻断启动
+        logger.debug("OTel 追踪初始化跳过: %s", _e)
+        results["otel_tracing_active"] = False
+
     # Step 0: pip 依赖可用性检查
     try:
         dep_report = _check_pip_dependencies()

@@ -103,42 +103,57 @@ class WorkerRuntime:
         if _idem_key:
             mark_dispatched(_idem_key)  # 悲观:执行前先记,重投永不二次触发副作用
 
-        try:
-            result = await invoke_node(
-                node_id,
-                action,
-                params,
-                invocation_source=InvocationSource.UNKNOWN,
-                task_id=task_id,
-                trace_id=trace_id,
-                ui_graph=ui_graph,
-            )
-            return TaskResultMsg(
-                device_id=self.worker_id,
-                task_id=task_id,
-                trace_id=trace_id,
-                status="completed" if getattr(result, "success", False) else "failed",
-                result=(
-                    getattr(result, "result", None)
-                    if isinstance(getattr(result, "result", None), dict)
-                    else {"value": getattr(result, "result", None)}
-                ),
-                error=getattr(result, "error", "") or "",
-                duration_ms=int(getattr(result, "duration_ms", 0)),
-            )
-        except Exception as exc:  # noqa: BLE001 — 单个任务失败不拖垮 worker
-            # 执行器抛异常 = 副作用没干净跑成 → 回滚幂等键,允许重投重试(不留"标了
-            # 已做、其实没做"的空洞)。节点【返回】失败(非抛异常)则视为已尝试、保留键。
-            if _idem_key:
-                unmark_dispatched(_idem_key)
-            logger.warning("worker 执行派发失败 task=%s: %s", task_id, exc)
-            return TaskResultMsg(
-                device_id=self.worker_id,
-                task_id=task_id,
-                trace_id=trace_id,
-                status="failed",
-                error=f"worker 执行异常: {exc}",
-            )
+        # 观测(默认零成本 no-op):给 worker 执行开一个 span,把 bespoke trace_id 作为
+        # 属性带上,使跨设备派发在 OTel 后端可关联。GALAXY_OTEL_ENABLED=1 才真正启用。
+        from core.otel_tracing import record_exception, start_span
+
+        with start_span(
+            "galaxy.worker.execute_dispatch",
+            {
+                "galaxy.trace_id": trace_id,
+                "galaxy.task_id": task_id,
+                "galaxy.node_id": node_id,
+                "galaxy.action": action,
+                "galaxy.worker_id": self.worker_id,
+            },
+        ) as _span:
+            try:
+                result = await invoke_node(
+                    node_id,
+                    action,
+                    params,
+                    invocation_source=InvocationSource.UNKNOWN,
+                    task_id=task_id,
+                    trace_id=trace_id,
+                    ui_graph=ui_graph,
+                )
+                return TaskResultMsg(
+                    device_id=self.worker_id,
+                    task_id=task_id,
+                    trace_id=trace_id,
+                    status="completed" if getattr(result, "success", False) else "failed",
+                    result=(
+                        getattr(result, "result", None)
+                        if isinstance(getattr(result, "result", None), dict)
+                        else {"value": getattr(result, "result", None)}
+                    ),
+                    error=getattr(result, "error", "") or "",
+                    duration_ms=int(getattr(result, "duration_ms", 0)),
+                )
+            except Exception as exc:  # noqa: BLE001 — 单个任务失败不拖垮 worker
+                # 执行器抛异常 = 副作用没干净跑成 → 回滚幂等键,允许重投重试(不留"标了
+                # 已做、其实没做"的空洞)。节点【返回】失败(非抛异常)则视为已尝试、保留键。
+                if _idem_key:
+                    unmark_dispatched(_idem_key)
+                record_exception(_span, exc)
+                logger.warning("worker 执行派发失败 task=%s: %s", task_id, exc)
+                return TaskResultMsg(
+                    device_id=self.worker_id,
+                    task_id=task_id,
+                    trace_id=trace_id,
+                    status="failed",
+                    error=f"worker 执行异常: {exc}",
+                )
 
     async def _on_dispatch(self, msg: Dict[str, Any]) -> None:
         """NATS 回调:执行派发并把结果回传主脑。"""
