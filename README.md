@@ -156,13 +156,19 @@ skills/
 ```bash
 python launch_desktop.py
 ```
-自动完成：环境检查 → 依赖安装 → 模型下载 → Gateway 启动 → Electron 启动
+自动完成：环境检查 → 依赖安装 → 模型下载 → Gateway 启动 → **桌面壳启动**
+
+**桌面壳默认优先 Tauri（轻量：内存/启动/体积远小于 Electron），无则回退 Electron：**
+- 检测到 Rust(cargo) 工具链 → 首次自动 `cargo build --release`（约数分钟，之后每次秒起并直接优先 Tauri）；
+  Linux 需先装 webkit2gtk 等系统依赖。
+- 无 Rust / 构建失败 → 自动回退 Electron，功能一致（前端同一套 renderer，行为对等）。
+- `GALAXY_TAURI_AUTOBUILD=0` 关闭自动构建；`GALAXY_DESKTOP_SHELL=electron` 强制用 Electron。
 
 选项：
 ```bash
 python launch_desktop.py --check      # 只检查环境
 python launch_desktop.py --backend    # 只启动 Gateway
-python launch_desktop.py --frontend   # 只启动 Electron
+python launch_desktop.py --frontend   # 只启动桌面壳（Tauri 优先，回退 Electron）
 ```
 
 ### 方式二：Docker Compose（后端服务）

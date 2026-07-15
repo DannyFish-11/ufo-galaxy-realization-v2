@@ -514,6 +514,63 @@ def start_electron_frontend() -> Optional[subprocess.Popen]:
     return proc
 
 
+def start_tauri_frontend() -> Optional[subprocess.Popen]:
+    """优先启动 Tauri 壳（系统 WebView，远轻于 Electron：内存/启动/体积都小得多）。
+    无二进制且有 cargo → 自动构建一次(cargo build --release)后启动；无 cargo / 构建失败 /
+    GALAXY_TAURI_AUTOBUILD=0 / GALAXY_DESKTOP_SHELL=electron → 返回 None，由调用方回退 Electron。
+    env 与 Electron 注入完全一致（端口/锁），托盘与后端 bridge 无需改动。"""
+    from core.electron_launch_guard import already_running, resolve_gateway_port, write_lock
+    if os.environ.get("GALAXY_DESKTOP_SHELL", "").strip().lower() == "electron":
+        return None
+    if already_running():
+        logger.info("  桌面壳已由其他路径拉起，跳过 Tauri 启动")
+        return None
+    tdir = PROJECT_ROOT / "desktop-tauri"
+    if not tdir.exists():
+        return None
+    exe = "galaxy-overlay.exe" if os.name == "nt" else "galaxy-overlay"
+    candidates = [
+        tdir / "src-tauri" / "target" / "release" / exe,
+        tdir / "src-tauri" / "target" / "debug" / exe,
+    ]
+    binp = next((c for c in candidates if c.exists()), None)
+    if binp is None:
+        optout = os.environ.get("GALAXY_TAURI_AUTOBUILD", "").strip().lower() in (
+            "0", "false", "no", "off",
+        )
+        if optout or shutil.which("cargo") is None:
+            logger.info(
+                "  Tauri 无二进制且不自动构建 → 回退 Electron"
+                "（装 Rust(https://rustup.rs) 后重启即自动构建并优先 Tauri）"
+            )
+            return None
+        logger.info("  首次启动：自动构建 Tauri 桌面壳(cargo build --release，首次约数分钟)…")
+        rc, _, err = run(["cargo", "build", "--release"], cwd=str(tdir / "src-tauri"), timeout=1800)
+        if rc != 0:
+            logger.info(f"  Tauri 构建失败(rc={rc}) → 回退 Electron")
+            return None
+        binp = next((c for c in candidates if c.exists()), None)
+        if binp is None:
+            return None
+        logger.info("  Tauri 壳构建完成 ✓ 之后启动将自动优先用它")
+
+    logger.info("  启动 Tauri 桌面覆盖层（轻量壳）...")
+    env = os.environ.copy()
+    env["GALAXY_GATEWAY_PORT"] = str(resolve_gateway_port())
+    env.setdefault("PORT", env["GALAXY_GATEWAY_PORT"])
+    popen_kwargs = {}
+    if sys.platform == "win32":
+        popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
+    proc = subprocess.Popen([str(binp)], cwd=str(tdir / "src-tauri"), env=env, **popen_kwargs)
+    write_lock(proc.pid)
+    return proc
+
+
+def start_desktop_shell() -> Optional[subprocess.Popen]:
+    """统一桌面壳入口：优先 Tauri（轻量），无则回退 Electron。"""
+    return start_tauri_frontend() or start_electron_frontend()
+
+
 # ───────────────────────────────────────────────────────────────────────────
 # 主流程
 # ───────────────────────────────────────────────────────────────────────────
@@ -567,7 +624,7 @@ def main():
             logger.error("Gateway 未在 %s 响应", GATEWAY_HEALTH_URL)
             sys.exit(1)
         global _proc_electron
-        _proc_electron = start_electron_frontend()
+        _proc_electron = start_desktop_shell()
         if _proc_electron is None:
             logger.info("桌面覆盖层已由其他启动路径拉起，本进程无需再等待")
             return
@@ -629,7 +686,7 @@ def main():
     # Phase 4: 启动 Electron
     banner("Phase 4: 启动三态桌面覆盖层")
     try:
-        _proc_electron = start_electron_frontend()
+        _proc_electron = start_desktop_shell()
         if _proc_electron is not None:
             ok(f"Electron 启动 ✓ PID={_proc_electron.pid}")
         else:
