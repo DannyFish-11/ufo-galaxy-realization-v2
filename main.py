@@ -130,77 +130,26 @@ All startup options are forwarded to ``unified_launcher.py`` (subordinate
 component) after the orchestrator completes its staged pre-flight sequence.
 """
 
+__all__ = [
+    "main",
+    "phase0_env_check",
+    "phase2_ensure_deps",
+    "SYSTEM_ORCHESTRATOR_AUTHORITY",
+]
+
 import os
 import asyncio
 import sys
 import subprocess
 import logging
 import argparse
+import threading
 from pathlib import Path
 
 from core.ascii_art import print_banner, print_section_header
 
 # ── Phase output helpers ──────────────────────────────────
 _PHASE_WIDTH = 60
-
-
-def print_phase(title: str) -> None:
-    """打印阶段小标题。
-
-    统一走 core.cli_render（与启动后半段同一套 clig.dev 风格：细线 + 干净标题，
-    而非旧的 ═══×60 大框）——让【整个克隆界面】前后一致。cli_render 不可用时兜底回旧风格。
-    """
-    try:
-        from core import cli_render as r
-        r.section(title)
-    except Exception:
-        print_section_header(title)  # 极端环境兜底
-    # PR-WIN-ENCODING: logger may still use cp1252 even after SafeStreamHandler
-    try:
-        logger.info("[Phase] %s", title)
-    except UnicodeEncodeError:
-        pass
-
-
-def print_item(name: str, status: str = "ok", detail: str = "") -> None:
-    """打印阶段内的状态项。
-
-    统一走 core.cli_render 的子项行（✓/⚠/✗/· + 按显示宽度对齐 + 颜色可降级），
-    与启动后半段完全一致。cli_render 不可用时兜底回旧的 [OK]/[WARN] ASCII。
-
-    Args:
-        name: Item description.
-        status: "ok" | "warn" | "error" | "info".
-        detail: Optional detail text shown dimmed.
-    """
-    _status_map = {"ok": "ok", "warn": "warn", "error": "fail", "info": "info"}
-    printed = False
-    try:
-        from core import cli_render as r
-        # 用 phase()(2 格缩进,标签第 4 列)而非 detail()(6 格缩进)——让 Phase 0/1/2
-        # 的状态项与「系统启动」后的运行时项(核心服务/基础设施/... 也走 phase)以及
-        # ▶ 启动行处在【同一列】。此前 Phase 段 6 格、运行时段 2 格,对勾对不齐。
-        r.phase(name, detail, _status_map.get(status, "info"))
-        printed = True
-    except Exception:
-        printed = False
-    if not printed:
-        # 兜底：旧风格 ASCII（cli_render 不可用时），Windows cp1252 安全打印
-        icon = {"ok": "[OK]", "warn": "[WARN]", "error": "[ERR]", "info": "[INFO]"}.get(status, "[*]")
-        line = f"  {icon} {name}" + (f"  ({detail})" if detail else "")
-        try:
-            print(line)
-        except UnicodeEncodeError:
-            try:
-                print(line.encode("cp1252", errors="replace").decode("cp1252"))
-            except Exception:
-                pass
-    # PR-WIN-ENCODING: wrap logger to suppress cp1252 UnicodeEncodeError
-    try:
-        logger.info("[%s] %s %s", status.upper(), name, detail)
-    except UnicodeEncodeError:
-        pass
-
 
 from entrypoint_role_contract import (
     EntrypointRole,
@@ -273,20 +222,81 @@ log_dir.mkdir(exist_ok=True)
 # SECURITY: Only configure logging if no handlers exist yet.
 # Multiple entry points (main.py, lumiv_daemon.py, system_manager.py)
 # call basicConfig; repeated calls are no-ops after the first.
-if not logging.getLogger().handlers:
-    handler = RotatingFileHandler(
-        str(log_dir / "lumiv.log"), maxBytes=10 * 1024 * 1024, backupCount=5,
-        encoding="utf-8",
-    )
-    _console = SafeStreamHandler()
-    _console.setLevel(logging.WARNING)  # console只显示警告/错误；详情在 logs/lumiv.log
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s | %(levelname)s | %(message)s",
-        datefmt="%H:%M:%S",
-        handlers=[handler, _console],
-    )
+_log_config_lock = threading.Lock()
+with _log_config_lock:
+    if not logging.getLogger().handlers:
+        handler = RotatingFileHandler(
+            str(log_dir / "lumiv.log"), maxBytes=10 * 1024 * 1024, backupCount=5,
+            encoding="utf-8",
+        )
+        _console = SafeStreamHandler()
+        _console.setLevel(logging.WARNING)  # console只显示警告/错误；详情在 logs/lumiv.log
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(asctime)s | %(levelname)s | %(message)s",
+            datefmt="%H:%M:%S",
+            handlers=[handler, _console],
+        )
 logger = logging.getLogger("Galaxy")
+
+
+def print_phase(title: str) -> None:
+    """打印阶段小标题。
+
+    统一走 core.cli_render（与启动后半段同一套 clig.dev 风格：细线 + 干净标题，
+    而非旧的 ═══×60 大框）——让【整个克隆界面】前后一致。cli_render 不可用时兜底回旧风格。
+    """
+    try:
+        from core import cli_render as r
+        r.section(title)
+    except Exception:
+        print_section_header(title)  # 极端环境兜底
+    # PR-WIN-ENCODING: logger may still use cp1252 even after SafeStreamHandler
+    try:
+        logger.info("[Phase] %s", title)
+    except UnicodeEncodeError:
+        pass
+
+
+def print_item(name: str, status: str = "ok", detail: str = "") -> None:
+    """打印阶段内的状态项。
+
+    统一走 core.cli_render 的子项行（✓/⚠/✗/· + 按显示宽度对齐 + 颜色可降级），
+    与启动后半段完全一致。cli_render 不可用时兜底回旧的 [OK]/[WARN] ASCII。
+
+    Args:
+        name: Item description.
+        status: "ok" | "warn" | "error" | "info".
+        detail: Optional detail text shown dimmed.
+    """
+    _status_map = {"ok": "ok", "warn": "warn", "error": "fail", "info": "info"}
+    printed = False
+    try:
+        from core import cli_render as r
+        # 用 phase()(2 格缩进,标签第 4 列)而非 detail()(6 格缩进)——让 Phase 0/1/2
+        # 的状态项与「系统启动」后的运行时项(核心服务/基础设施/... 也走 phase)以及
+        # ▶ 启动行处在【同一列】。此前 Phase 段 6 格、运行时段 2 格,对勾对不齐。
+        r.phase(name, detail, _status_map.get(status, "info"))
+        printed = True
+    except Exception:
+        printed = False
+    if not printed:
+        # 兜底：旧风格 ASCII（cli_render 不可用时），Windows cp1252 安全打印
+        icon = {"ok": "[OK]", "warn": "[WARN]", "error": "[ERR]", "info": "[INFO]"}.get(status, "[*]")
+        line = f"  {icon} {name}" + (f"  ({detail})" if detail else "")
+        try:
+            print(line)
+        except UnicodeEncodeError:
+            try:
+                print(line.encode("cp1252", errors="replace").decode("cp1252"))
+            except Exception:
+                pass
+    # PR-WIN-ENCODING: wrap logger to suppress cp1252 UnicodeEncodeError
+    try:
+        logger.info("[%s] %s %s", status.upper(), name, detail)
+    except UnicodeEncodeError:
+        pass
+
 
 # 静默 URL 哨兵:给 httpx 加一层【只观测、不干预】的薄壳,任何缺 http(s):// 协议头的
 # 请求 URL(那个 "Request URL is missing protocol" 的根源)一出现就把精确调用栈记进日志。
@@ -299,7 +309,7 @@ except Exception:  # noqa: BLE001
 
 # Health / validation tracking (non-strict mode diagnostics)
 _health_status: str = "unknown"
-_failed_validations: list = []
+_failed_validations: list[str] = []
 
 # ---------------------------------------------------------------------------
 # Authority declaration — referenced by validate_runtime.py and CI guardrails
@@ -376,7 +386,7 @@ def _run_orchestrator_preflight() -> bool:
         return True
 
 
-def phase0_env_check() -> dict:
+def phase0_env_check() -> dict[str, object]:
     """Phase 0: Environment check — Python, .env, API Key, pip, npm.
 
     Returns:
@@ -413,46 +423,45 @@ def phase0_env_check() -> dict:
         status["ready"] = False
     status["env_exists"] = env_exists
 
-    # API Key check
-    # 真 bug(面板 API-key 排查发现):此前只读 .env 文本计数——但密钥经面板保存后
-    # 会被收敛进 runtime/secrets.env(不再明文留在 .env,见 core/config_store.py),
-    # 于是这条横幅在密钥已正确保存的情况下依然永远报"未配置",强化"存了但没用"
-    # 的错觉。这里额外并入 secrets.env 里的真实密钥键,并用共享的占位符前缀表
-    # 过滤 .env 里尚未替换的模板值(如 your_openai_api_key_here),避免双向误判。
+    # API Key check (with basic format validation)
     api_count = 0
-    seen_keys: set[str] = set()
-    try:
-        from core.credential_vault import PLACEHOLDER_PREFIXES
+    api_invalid: list[str] = []
 
+    def _is_valid_api_key(key_name: str, key_val: str) -> bool:
+        """Basic API key format validation: reject obvious placeholders."""
+        val = key_val.strip()
+        if not val or val.startswith(("your-", "YOUR_", "sk-xxx", "placeholder")):
+            return False
+        # Reject values that look like comments or documentation
+        if val.startswith(("#", "//", "http://", "https://")):
+            return False
+        # Most real API keys are at least 8 chars
+        if len(val) < 8:
+            return False
+        return True
+
+    try:
         env_text = ENV_FILE.read_text() if env_exists else ""
         for line in env_text.splitlines():
             if "=" in line and not line.startswith("#"):
                 key, _, val = line.partition("=")
-                val = val.strip()
-                key = key.strip()
-                if (
-                    val
-                    and not val.lower().startswith(PLACEHOLDER_PREFIXES)
-                    and any(k in key.upper() for k in ["API_KEY", "KEY"])
-                ):
-                    seen_keys.add(key.upper())
-        try:
-            from core.config_store import get_config_store
-
-            for key, val in get_config_store().read_secrets().items():
-                if val and not val.lower().startswith(PLACEHOLDER_PREFIXES) and any(
-                    k in key.upper() for k in ["API_KEY", "KEY"]
-                ):
-                    seen_keys.add(key.upper())
-        except Exception:
-            pass
-        api_count = len(seen_keys)
+                if val.strip() and any(k in key.upper() for k in ["API_KEY", "KEY"]):
+                    if _is_valid_api_key(key, val):
+                        api_count += 1
+                    else:
+                        api_invalid.append(key.strip())
     except Exception:
         pass
     if api_count > 0:
         print_item(f"API Key 已配置 ({api_count}个)", "ok")
+        if api_invalid:
+            print_item(f"API Key 格式可疑 ({len(api_invalid)}个)", "warn",
+                       "请检查: " + ", ".join(api_invalid[:3]))
     else:
-        print_item("API Key 未配置", "warn", "请编辑 .env 添加你的 Key")
+        detail = ""
+        if api_invalid:
+            detail = f"{len(api_invalid)}个 Key 格式无效(占位符/过短),请编辑 .env"
+        print_item("API Key 未配置", "warn", detail or "请编辑 .env 添加你的 Key")
     status["api_keys_configured"] = api_count
 
     # npm
@@ -469,13 +478,26 @@ def phase0_env_check() -> dict:
         status["ready"] = False
     status["npm_installed"] = npm_ok
 
-    # Node.js
+    # Node.js (improved version parsing for v22+)
     node_ok = shutil.which("node") is not None
     if node_ok:
         try:
             rc = sp.run(["node", "--version"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=5)
-            node_ver = rc.stdout.strip() if rc.returncode == 0 else "?"
-            print_item("Node.js", "ok", node_ver)
+            node_ver_raw = rc.stdout.strip() if rc.returncode == 0 else "?"
+            # Robust version parsing: handles "v22.3.0", "22.3.0", "v20.11.0"
+            node_ver = node_ver_raw
+            if node_ver_raw.startswith("v"):
+                _ver_parts = node_ver_raw[1:].split(".")
+                if len(_ver_parts) >= 1 and _ver_parts[0].isdigit():
+                    _major = int(_ver_parts[0])
+                    if _major < 18:
+                        print_item("Node.js", "warn", f"{node_ver_raw} — 版本过旧,建议 v18+")
+                    else:
+                        print_item("Node.js", "ok", node_ver_raw)
+                else:
+                    print_item("Node.js", "ok", node_ver_raw)
+            else:
+                print_item("Node.js", "ok", node_ver_raw)
         except Exception:
             print_item("Node.js", "ok")
     else:
@@ -508,7 +530,7 @@ def phase0_env_check() -> dict:
     return status
 
 
-def phase2_ensure_deps(env_status: dict) -> bool:
+def phase2_ensure_deps(env_status: dict[str, object]) -> bool:
     """Phase 2: Ensure dependencies — pip / npm / Electron / Ollama / Voice.
 
     Auto-fixes missing dependencies including:
@@ -534,31 +556,53 @@ def phase2_ensure_deps(env_status: dict) -> bool:
     #   ①【流式输出】不 capture,进度可见——避免"看着像卡死";
     #   ②默认源失败后逐个回退国内镜像(清华 → 阿里云),抗单点;
     #   ③pip 自带重试/超时放宽。
-    _PIP_INDEX_CANDIDATES: list = [
+    _PIP_INDEX_CANDIDATES: list[str | None] = [
         None,  # 默认源(尊重用户已配置的 pip.conf / 环境)
         "https://pypi.tuna.tsinghua.edu.cn/simple",
         "https://mirrors.aliyun.com/pypi/simple/",
     ]
 
-    def _run_pip_install(pkgs: list, timeout: int = 900) -> bool:
-        """逐镜像候选安装 pkgs,全部失败才返回 False(诚实上报)。"""
-        base = [sys.executable, "-m", "pip", "install",
-                "--retries", "3", "--timeout", "60"] + pkgs
-        for idx, index_url in enumerate(_PIP_INDEX_CANDIDATES):
-            cmd = list(base)
-            if index_url:
-                cmd += ["-i", index_url]
-                print_item(f"回退镜像源 {idx}/{len(_PIP_INDEX_CANDIDATES) - 1}",
-                           "warn", index_url)
+    def _retry_with_fallback(
+        candidates: list,
+        operation: callable,
+        on_fallback: callable | None = None,
+    ) -> bool:
+        """通用镜像源回退重试逻辑。
+
+        Args:
+            candidates: 候选配置列表(镜像源/参数等)。
+            operation: 接收单个候选配置、返回 bool 的调用函数。
+            on_fallback: 可选的回调(idx, total, candidate)，切换源时触发。
+
+        Returns:
+            True if any candidate succeeds.
+        """
+        for idx, candidate in enumerate(candidates):
+            if idx > 0 and on_fallback:
+                on_fallback(idx, len(candidates) - 1, candidate)
             try:
-                if sp.run(cmd, timeout=timeout).returncode == 0:
+                if operation(candidate):
                     return True
             except sp.TimeoutExpired:
-                print_item(f"pip 安装超时({timeout}s)", "warn",
-                           "镜像候选轮换中" if idx < len(_PIP_INDEX_CANDIDATES) - 1 else "")
+                print_item(f"安装超时", "warn",
+                           "镜像候选轮换中" if idx < len(candidates) - 1 else "")
             except Exception as exc:
-                print_item(f"pip 安装异常: {exc}", "warn")
+                print_item(f"安装异常: {exc}", "warn")
         return False
+
+    def _run_pip_install(pkgs: list[str], timeout: int = 900) -> bool:
+        """逐镜像候选安装 pkgs,全部失败才返回 False(诚实上报)。"""
+        def _op(index_url: str | None) -> bool:
+            cmd = [sys.executable, "-m", "pip", "install",
+                   "--retries", "3", "--timeout", "60"] + pkgs
+            if index_url:
+                cmd += ["-i", index_url]
+            return sp.run(cmd, timeout=timeout).returncode == 0
+
+        def _on_fallback(idx: int, total: int, index_url: str | None) -> None:
+            print_item(f"回退镜像源 {idx}/{total}", "warn", index_url or "")
+
+        return _retry_with_fallback(_PIP_INDEX_CANDIDATES, _op, _on_fallback)
 
     # 2.0 Ensure pip is available
     if not env_status.get("pip_ok"):
@@ -573,18 +617,48 @@ def phase2_ensure_deps(env_status: dict) -> bool:
             if rc == 0:
                 pip_fixed = True
                 print_item("pip 已通过 ensurepip 安装", "ok")
-        except Exception:
-            pass
+            else:
+                pip_fixed = False
+                logger.debug("ensurepip 失败 (rc=%d)", rc)
+        except Exception as _ensure_exc:
+            pip_fixed = False
+            logger.debug("ensurepip 不可用: %s", _ensure_exc)
         # Method 2: get-pip.py
         if not pip_fixed:
+            get_pip_tmp = None
             try:
                 import tempfile
-                get_pip_tmp = os.path.join(tempfile.gettempdir(), "get-pip.py")
-                rc = sp.run([
-                    sys.executable, "-c",
-                    f"import urllib.request; "
-                    f"urllib.request.urlretrieve('https://bootstrap.pypa.io/get-pip.py', r'{get_pip_tmp}')",
-                ], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30).returncode
+                with tempfile.NamedTemporaryFile(mode='wb', suffix='.py', delete=False) as _f:
+                    get_pip_tmp = _f.name
+                # 带超时与重试的 get-pip.py 下载
+                _get_pip_ok = False
+
+                def _urlretrieve_with_retry(url: str, dest: str, retries: int = 3, timeout: int = 15) -> bool:
+                    """带指数退避的 urlretrieve 重试逻辑。"""
+                    import urllib.request
+                    import urllib.error
+                    for attempt in range(retries):
+                        try:
+                            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+                            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                                with open(dest, "wb") as f:
+                                    f.write(resp.read())
+                            return True
+                        except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError):
+                            if attempt < retries - 1:
+                                import time
+                                time.sleep(2 ** attempt)
+                            continue
+                        except Exception:
+                            break
+                    return False
+
+                for _url in ("https://bootstrap.pypa.io/get-pip.py",
+                             "https://hf-mirror.com/pypa/get-pip.py"):
+                    if _urlretrieve_with_retry(_url, get_pip_tmp, retries=3, timeout=15):
+                        _get_pip_ok = True
+                        break
+                rc = 0 if _get_pip_ok else 1
                 if rc == 0:
                     rc2 = sp.run(
                         [sys.executable, get_pip_tmp],
@@ -595,6 +669,12 @@ def phase2_ensure_deps(env_status: dict) -> bool:
                         print_item("pip 已通过 get-pip.py 安装", "ok")
             except Exception:
                 pass
+            finally:
+                if get_pip_tmp:
+                    try:
+                        os.unlink(get_pip_tmp)
+                    except Exception:
+                        pass
         if not pip_fixed:
             print_item("pip 安装失败，请手动安装", "error")
             all_ok = False
@@ -646,10 +726,14 @@ def phase2_ensure_deps(env_status: dict) -> bool:
     else:
         print_item(f"缺失 {len(core_deps_missing)} 个包", "warn", f"{', '.join(core_deps_missing)}")
         print_item("正在自动安装...", "ok")
-        if _run_pip_install(core_deps_missing):
-            print_item(f"已安装 {len(core_deps_missing)} 个 Python 包", "ok")
-        else:
-            print_item("pip install 失败(默认源+国内镜像均不通)", "error")
+        try:
+            if _run_pip_install(core_deps_missing):
+                print_item(f"已安装 {len(core_deps_missing)} 个 Python 包", "ok")
+            else:
+                print_item("pip install 失败(默认源+国内镜像均不通)", "error")
+                all_ok = False
+        except Exception as _pip_exc:
+            print_item(f"pip install 异常: {_pip_exc}", "error")
             all_ok = False
 
     # 2.2 .env auto-create
@@ -761,7 +845,7 @@ def phase2_ensure_deps(env_status: dict) -> bool:
             ("", []),  # 最后回退官方源(直连 GitHub 良好的用户)
         ]
 
-        def _run_npm_install(electron_mirror: str, extra: list) -> int:
+        def _run_npm_install(electron_mirror: str, extra: list[str]) -> bool:
             env = dict(os.environ)
             if electron_mirror:
                 env["ELECTRON_MIRROR"] = electron_mirror
@@ -771,18 +855,16 @@ def phase2_ensure_deps(env_status: dict) -> bool:
                     [npm_cmd, "install", *_npm_net_flags, *extra],
                     cwd=str(ELECTRON_DIR),
                     env=env, timeout=900,
-                ).returncode
+                ).returncode == 0
             except Exception as exc:  # noqa: BLE001
                 print_item(f"npm install 异常: {exc}", "warn")
-                return 1
+                return False
 
-        rc = 1
-        for _i, (_mirror, _extra) in enumerate(_attempts):
-            if _i > 0:
-                print_item(f"npm install 失败,切换镜像重试({_i}/{len(_attempts) - 1})...", "warn")
-            rc = _run_npm_install(_mirror, _extra)
-            if rc == 0:
-                break
+        def _npm_fallback(idx: int, total: int, attempt: tuple) -> None:
+            print_item(f"npm install 失败,切换镜像重试({idx}/{total})...", "warn")
+
+        _npm_success = _retry_with_fallback(_attempts, lambda a: _run_npm_install(a[0], a[1]), _npm_fallback)
+        rc = 0 if _npm_success else 1
         if rc == 0:
             print_item("Electron 依赖就绪", "ok")
         else:
@@ -818,15 +900,15 @@ def phase2_ensure_deps(env_status: dict) -> bool:
                 # 导致几 GB 的下载全程无声,"看着像卡死");②超时放宽到 1h——
                 # 600s 在弱网下必然误杀大模型下载(ollama pull 本身断点续传,
                 # 超时后重跑会从断点继续,但不该让正常慢速下载被误判失败)。
+                rc2 = 1
                 try:
                     rc2 = sp.run(["ollama", "pull", rec_model], timeout=3600).returncode
                 except sp.TimeoutExpired:
-                    rc2 = -1
                     print_item("模型下载超 1h 未完成", "warn",
                                f"ollama pull {rec_model} 支持断点续传,重跑即从断点继续")
                 if rc2 == 0:
                     print_item(f"模型 {rec_model} 下载完成", "ok")
-                elif rc2 != -1:
+                else:
                     print_item("模型下载失败", "warn", f"ollama pull {rec_model} 手动重试")
         except Exception as exc:
             print_item(f"Ollama 模型检查失败: {exc}", "warn")
@@ -846,8 +928,10 @@ def phase2_ensure_deps(env_status: dict) -> bool:
     for mod_name, pip_name in voice_deps.items():
         try:
             __import__(mod_name)
-        except Exception:
+        except (ImportError, ModuleNotFoundError):
             voice_missing.append(pip_name)
+        except Exception as _voice_err:
+            logger.warning("语音依赖 %s 导入异常: %s", mod_name, _voice_err)
 
     if not voice_missing:
         print_item("语音依赖", "ok", "sounddevice, pvporcupine, webrtcvad, faster-whisper")
@@ -855,9 +939,16 @@ def phase2_ensure_deps(env_status: dict) -> bool:
         # 首启健壮:【不】在启动时现装语音依赖 —— pip 安装慢(_run_pip_install 超时 900s,
         # faster-whisper 会拉几百 MB),且依赖网络/镜像,一旦卡住/失败就把首启拖死或拖挂。
         # 语音是【可选】的麦克风路径(缺了远程/文字路径照常可用),故改为清晰引导按需手动装。
-        print_item(f"语音依赖缺失(可选,麦克风路径用): {', '.join(voice_missing)}", "warn")
-        print_item("按需手动安装(不自动装以免拖慢/挂死首启)", "warn",
-                   f"pip install {' '.join(voice_missing)}  —— 或 `python main.py setup`")
+        # 终端宽度检测:窄终端(≤60列)缩短消息,避免换行混乱
+        _tty_width = os.environ.get("COLUMNS", "")
+        _narrow = _tty_width.isdigit() and int(_tty_width) <= 60
+        if _narrow:
+            print_item(f"语音缺失(可选): {', '.join(voice_missing[:2])}", "warn")
+            print_item("手动装: pip install " + " ".join(voice_missing), "warn")
+        else:
+            print_item(f"语音依赖缺失(可选,麦克风路径用): {', '.join(voice_missing)}", "warn")
+            print_item("按需手动安装(不自动装以免拖慢/挂死首启)", "warn",
+                       f"pip install {' '.join(voice_missing)}  —— 或 `python main.py setup`")
 
     # pyaudio (needs system libs;同样不在首启现装)
     try:
@@ -1060,4 +1151,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main() or 0)
