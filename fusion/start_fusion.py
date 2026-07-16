@@ -15,29 +15,45 @@ Galaxy Fusion - Unified Startup Script (Reinforced)
 版本: 1.2.0 (加固版)
 """
 
+import argparse
 import asyncio
 import logging
-import sys
 import os
 import signal
 import subprocess
+import sys
 import time
 from pathlib import Path
-from typing import Dict, List, Optional, Any
+from typing import Any, Dict, Optional
 
 # 添加项目根目录到 Python 路径
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from fusion.topology_manager import TopologyManager
-from fusion.unified_orchestrator import UnifiedOrchestrator, Task, TaskType, TaskPriority
 from fusion.node_executor import ExecutionPool
+from fusion.topology_manager import TopologyManager
+from fusion.unified_orchestrator import (
+    Task, TaskPriority, TaskType, UnifiedOrchestrator,
+)
 from core.port_config import get_service_port
 
-# 配置日志
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+
+LOG_FORMAT: str = "%(asctime)s [%(levelname)s] %(name)s - %(message)s"
+DEFAULT_LOG_LEVEL: str = os.environ.get("FUSION_LOG_LEVEL", "INFO")
+GRACEFUL_SHUTDOWN_TIMEOUT_SECONDS: int = int(os.environ.get("FUSION_SHUTDOWN_TIMEOUT", "10"))
+GATEWAY_STARTUP_WAIT_SECONDS: int = int(os.environ.get("FUSION_GATEWAY_WAIT", "3"))
+GATEWAY_KILL_TIMEOUT_SECONDS: int = int(os.environ.get("FUSION_GATEWAY_KILL_TIMEOUT", "5"))
+
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
+
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=getattr(logging, DEFAULT_LOG_LEVEL.upper(), logging.INFO),
+    format=LOG_FORMAT,
     handlers=[
         logging.StreamHandler(sys.stdout),
         logging.FileHandler(PROJECT_ROOT / 'logs' / 'fusion.log', mode='a')
@@ -45,27 +61,29 @@ logging.basicConfig(
 )
 logger = logging.getLogger("FusionStartup")
 
+
 class FusionSystem:
     """
     融合系统 - 统一的系统入口
     """
-    
-    def __init__(self, config_path: str):
-        self.config_path = Path(config_path)
+
+    def __init__(self, config_path: str) -> None:
+        self.config_path: Path = Path(config_path)
         self.topology_manager: Optional[TopologyManager] = None
         self.execution_pool: Optional[ExecutionPool] = None
         self.orchestrator: Optional[UnifiedOrchestrator] = None
         self.gateway_process: Optional[subprocess.Popen] = None
-        self.is_running = False
-        
+        self.is_running: bool = False
+        self._shutdown_event: asyncio.Event = asyncio.Event()
+
         # 创建日志目录
         (PROJECT_ROOT / 'logs').mkdir(exist_ok=True)
 
-    async def start_gateway(self):
+    async def start_gateway(self) -> None:
         """启动统一节点网关进程"""
-        logger.info("🚀 Starting Unified Node Gateway...")
-        gateway_script = PROJECT_ROOT / "galaxy_gateway" / "unified_node_gateway.py"
-        
+        logger.info("Starting Unified Node Gateway...")
+        gateway_script: Path = PROJECT_ROOT / "galaxy_gateway" / "unified_node_gateway.py"
+
         # 使用 subprocess 启动网关
         self.gateway_process = subprocess.Popen(
             [sys.executable, str(gateway_script)],
@@ -73,60 +91,84 @@ class FusionSystem:
             stderr=subprocess.STDOUT,
             text=True
         )
-        
+
         # 等待网关启动并检查状态
-        logger.info("⏳ Waiting for gateway to initialize...")
-        await asyncio.sleep(3)
+        logger.info("Waiting for gateway to initialize...")
+        await asyncio.sleep(GATEWAY_STARTUP_WAIT_SECONDS)
         if self.gateway_process.poll() is None:
-            logger.info("✅ Gateway process started (PID: %d)", self.gateway_process.pid)
+            logger.info("Gateway process started (PID: %d)", self.gateway_process.pid)
         else:
-            logger.error("❌ Gateway process failed to start")
+            logger.error("Gateway process failed to start")
             raise RuntimeError("Gateway failed to start")
 
-    async def initialize(self):
+    async def initialize(self) -> None:
         """初始化系统组件"""
-        logger.info("📋 Initializing Fusion System Components...")
-        
+        logger.info("Initializing Fusion System Components...")
+
         # 1. 加载拓扑配置
-        topology_config = self.config_path / "topology.json"
+        topology_config: Path = self.config_path / "topology.json"
         self.topology_manager = TopologyManager(str(topology_config))
-        
+
         # 2. 初始化执行池 (指向统一网关)
-        self.execution_pool = ExecutionPool(gateway_url=f"http://localhost:{get_service_port('state_machine')}")
-        
+        self.execution_pool = ExecutionPool(
+            gateway_url=f"http://localhost:{get_service_port('state_machine')}"
+        )
+
         # 3. 初始化统一编排引擎
         self.orchestrator = UnifiedOrchestrator(
             topology_manager=self.topology_manager,
             execution_pool=self.execution_pool
         )
-        
+
         await self.orchestrator.start()
         self.is_running = True
-        logger.info("✅ Fusion System initialized successfully")
+        logger.info("Fusion System initialized successfully")
 
-    async def stop(self):
-        """优雅停止系统"""
+    async def stop(self) -> None:
+        """优雅停止系统 (graceful shutdown)"""
         if not self.is_running:
             return
-        
-        logger.info("🛑 Stopping Fusion System...")
+
+        logger.info("Stopping Fusion System (graceful shutdown)...")
         self.is_running = False
-        
+        self._shutdown_event.set()
+
         if self.orchestrator:
             await self.orchestrator.stop()
-        
+
         if self.execution_pool:
             await self.execution_pool.close_all()
-            
+
         if self.gateway_process:
-            logger.info("Terminating gateway process...")
+            logger.info("Terminating gateway process (PID: %d)...", self.gateway_process.pid)
             self.gateway_process.terminate()
             try:
-                self.gateway_process.wait(timeout=5)
+                self.gateway_process.wait(timeout=GATEWAY_KILL_TIMEOUT_SECONDS)
+                logger.info("Gateway process terminated gracefully")
             except subprocess.TimeoutExpired:
+                logger.warning("Gateway process did not terminate in time, forcing kill")
                 self.gateway_process.kill()
-            
-        logger.info("✅ Fusion System stopped")
+                self.gateway_process.wait()
+
+        logger.info("Fusion System stopped")
+
+    def register_signal_handlers(self) -> None:
+        """注册 OS 信号处理器用于优雅关闭.
+
+        在主线程的事件循环中调用此方法。
+        """
+        try:
+            loop: asyncio.AbstractEventLoop = asyncio.get_running_loop()
+            for sig in (signal.SIGINT, signal.SIGTERM):
+                loop.add_signal_handler(sig, lambda s=sig: asyncio.create_task(self._handle_signal(s)))
+            logger.info("Signal handlers registered for SIGINT and SIGTERM")
+        except (NotImplementedError, RuntimeError) as exc:
+            logger.debug("Signal handler registration skipped: %s", exc)
+
+    async def _handle_signal(self, sig: signal.Signals) -> None:
+        """Handle OS shutdown signals gracefully."""
+        logger.info("Received signal %s, initiating graceful shutdown...", sig.name)
+        await self.stop()
 
     async def execute_task(self, task: Task) -> Dict[str, Any]:
         """执行任务"""
@@ -134,56 +176,60 @@ class FusionSystem:
             raise RuntimeError("Orchestrator not initialized")
         return await self.orchestrator.execute_task(task)
 
-async def run_demo():
+
+async def run_demo() -> None:
     """运行演示模式"""
-    system = FusionSystem(str(PROJECT_ROOT / "config"))
-    
+    system: FusionSystem = FusionSystem(str(PROJECT_ROOT / "config"))
+    system.register_signal_handlers()
+
     try:
         # 1. 启动网关
         await system.start_gateway()
-        
+
         # 2. 初始化系统
         await system.initialize()
-        
+
         # 3. 运行演示任务
-        logger.info("="*80)
-        logger.info("📝 Running Demo Task: Hybrid Analysis")
-        logger.info("="*80)
-        
-        task = Task(
+        logger.info("=" * 80)
+        logger.info("Running Demo Task: Hybrid Analysis")
+        logger.info("=" * 80)
+
+        task: Task = Task(
             task_id=f"demo_{int(time.time())}",
             description="Perform a cross-layer analysis of system state and security",
             task_type=TaskType.HYBRID,
             priority=TaskPriority.HIGH,
             required_capabilities=["vision", "analysis", "coordination"]
         )
-        
-        result = await system.execute_task(task)
-        logger.info("🏁 Demo Task Result: %s", result)
-        
-    except Exception as e:
-        logger.error("❌ Demo failed: %s", e, exc_info=True)
+
+        result: Dict[str, Any] = await system.execute_task(task)
+        logger.info("Demo Task Result: %s", result)
+
+    except Exception as exc:
+        logger.error("Demo failed: %s", exc, exc_info=True)
     finally:
         await system.stop()
 
-async def run_interactive():
+
+async def run_interactive() -> None:
     """运行交互模式：读取用户输入的任务描述并执行"""
     import uuid
-    system = FusionSystem(str(PROJECT_ROOT / "config"))
+    system: FusionSystem = FusionSystem(str(PROJECT_ROOT / "config"))
+    system.register_signal_handlers()
 
     try:
         await system.start_gateway()
         await system.initialize()
 
-        logger.info("="*80)
-        logger.info("🎛️  Galaxy Fusion — Interactive Mode")
+        logger.info("=" * 80)
+        logger.info("Galaxy Fusion - Interactive Mode")
         logger.info("Type a task description and press Enter. Type 'quit' to exit.")
-        logger.info("="*80)
+        logger.info("=" * 80)
 
-        loop = asyncio.get_running_loop()
+        loop: asyncio.AbstractEventLoop = asyncio.get_running_loop()
         while True:
             try:
-                description = await loop.run_in_executor(None, lambda: input("task> "))
+                description: str = await loop.run_in_executor(None, lambda: input("task> "))
                 description = description.strip()
             except (EOFError, KeyboardInterrupt):
                 break
@@ -191,7 +237,7 @@ async def run_interactive():
             if not description or description.lower() in {"quit", "exit", "q"}:
                 break
 
-            task = Task(
+            task: Task = Task(
                 task_id=f"interactive_{uuid.uuid4().hex[:8]}",
                 description=description,
                 task_type=TaskType.HYBRID,
@@ -199,32 +245,32 @@ async def run_interactive():
                 required_capabilities=["analysis"],
             )
 
-            result = await system.execute_task(task)
-            logger.info("✅ Result: %s", result)
+            result: Dict[str, Any] = await system.execute_task(task)
+            logger.info("Result: %s", result)
 
-    except Exception as e:
-        logger.error("❌ Interactive mode error: %s", e, exc_info=True)
+    except Exception as exc:
+        logger.error("Interactive mode error: %s", exc, exc_info=True)
     finally:
         await system.stop()
 
 
-def main():
+def main() -> None:
     """主入口"""
-    import argparse
-    parser = argparse.ArgumentParser(description="Galaxy Fusion System")
+    parser: argparse.ArgumentParser = argparse.ArgumentParser(description="Galaxy Fusion System")
     parser.add_argument("--mode", choices=["demo", "interactive"], default="demo")
-    args = parser.parse_args()
-    
+    args: argparse.Namespace = parser.parse_args()
+
     try:
         if args.mode == "demo":
             asyncio.run(run_demo())
         else:
             asyncio.run(run_interactive())
     except KeyboardInterrupt:
-        logger.info("\n🛑 Interrupted by user")
-    except Exception as e:
-        logger.error(f"❌ Fatal error: {e}")
+        logger.info("Interrupted by user")
+    except Exception as exc:
+        logger.error("Fatal error: %s", exc)
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()
