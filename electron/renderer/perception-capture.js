@@ -4,7 +4,7 @@
  *
  * 默认关闭（隐私优先）。仅当壳层通过 GALAXY_DESKTOP_PERCEPTION=1 启用时才采集。
  * 采集生命周期【贴合第一态】：覆盖层进入第一态(silent)即开启三路连续采集，作为环境
- * 基线常驻感知（一旦开启便持续，进入二/三态也不中断，保证 AI 始终“在场感知”）。
+ * 基线常驻感知（一旦开启便持续，进入二/三态也不中断，保证 AI 始终"在场感知"）。
  *
  * - 摄像头：getUserMedia({video}) → 每 intervalMs 抓一帧 JPEG → 后端(source=desktop_camera)
  * - 麦克风：getUserMedia({audio}) → MediaRecorder 周期切片 → 后端
@@ -38,6 +38,22 @@
     } catch (e) { /* non-fatal */ }
   }
 
+  // 活动定时器注册表，用于页面卸载时统一清理（防止 setInterval 泄漏）。
+  const _activeTimers = [];
+  // MediaStream 轨道注册表，用于页面卸载时统一停止（防止摄像头/麦克风泄漏）。
+  const _activeStreams = [];
+  window.addEventListener('beforeunload', () => {
+    _activeTimers.forEach(id => clearInterval(id));
+    _activeTimers.length = 0;
+    // Bug-fix: 停止所有 MediaStream 轨道，释放摄像头/麦克风
+    _activeStreams.forEach((stream) => {
+      try {
+        stream.getTracks().forEach((track) => track.stop());
+      } catch (e) { /* ignore */ }
+    });
+    _activeStreams.length = 0;
+  });
+
   // 通用：把一个 MediaStream 的视频轨周期性抓帧成 JPEG 发往后端（摄像头/屏幕共用）。
   async function pumpVideoFrames(stream, intervalMs, source, label) {
     const video = document.createElement('video');
@@ -45,7 +61,7 @@
     video.muted = true;
     await video.play().catch(() => {});
     const canvas = document.createElement('canvas');
-    setInterval(() => {
+    const timerId = setInterval(() => {
       try {
         const w = video.videoWidth, h = video.videoHeight;
         if (!w || !h) return;
@@ -55,6 +71,7 @@
         if (b64) send({ type: 'frame', image_base64: b64, mime: 'image/jpeg', source });
       } catch (e) { /* skip this frame */ }
     }, Math.max(500, intervalMs));
+    _activeTimers.push(timerId);
     console.log(`[Perception] ${label} capture started`);
   }
 
@@ -62,6 +79,7 @@
     let stream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
+      _activeStreams.push(stream);
     } catch (e) {
       console.warn('[Perception] camera unavailable:', e && e.message);
       return;
@@ -83,6 +101,7 @@
     try {
       // Electron 侧需 main.js 的 setDisplayMediaRequestHandler 自动提供主屏（无选择器弹窗）。
       stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 1 }, audio: false });
+      _activeStreams.push(stream);
     } catch (e) {
       console.warn('[Perception] screen unavailable:', e && e.message);
       return;
@@ -94,6 +113,7 @@
     let stream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      _activeStreams.push(stream);
     } catch (e) {
       console.warn('[Perception] microphone unavailable:', e && e.message);
       return;
@@ -114,9 +134,10 @@
         reader.readAsDataURL(ev.data);
       };
       rec.start();
-      setInterval(() => {
+      const audioTimerId = setInterval(() => {
         try { if (rec.state === 'recording') rec.requestData(); } catch (e) { /* ignore */ }
       }, Math.max(1000, intervalMs * 2));
+      _activeTimers.push(audioTimerId);
       console.log('[Perception] microphone capture started');
     } catch (e) {
       console.warn('[Perception] audio recorder failed:', e && e.message);
