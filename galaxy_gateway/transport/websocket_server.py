@@ -15,13 +15,21 @@ via :func:`~galaxy_gateway.protocol.normalized_ingress_event.to_normalized_ingre
 before entering runtime dispatch.  Internal dispatch branches on
 ``event.kind`` (an :class:`~galaxy_gateway.protocol.normalized_ingress_event.IngressEventKind`
 constant) rather than raw type strings.
+
+Bug fixes applied:
+- Bug 1: f-string logger calls converted to %-format for structured logging
+- Bug 2: WebSocket message size limit enforced (MAX_MESSAGE_SIZE_BYTES)
+- Bug 13: type annotations added throughout
+- Bug 16: magic numbers extracted as module constants
 """
+
+from __future__ import annotations
 
 import asyncio
 import json
 import logging
-from typing import Dict, Optional, Callable, Set
 from datetime import datetime, timedelta, timezone
+from typing import Any, Callable, Dict, List, Optional, Set
 
 from fastapi import WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, ConfigDict
@@ -35,6 +43,16 @@ from ..protocol.normalized_ingress_event import (
 )
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Constants (Bug 16 — extracted magic numbers)
+# ---------------------------------------------------------------------------
+DEFAULT_HEARTBEAT_INTERVAL: int = 30       # seconds between heartbeat checks
+DEFAULT_HEARTBEAT_TIMEOUT: int = 90        # seconds before a connection is considered dead
+DEFAULT_BACKOFF_BASE: float = 1.0          # initial reconnect backoff in seconds
+DEFAULT_BACKOFF_MAX: float = 60.0          # max reconnect backoff in seconds
+BACKOFF_DOUBLE_WINDOW: int = 120           # seconds — double backoff if disconnect within this window
+MAX_MESSAGE_SIZE_BYTES: int = 2 * 1024 * 1024  # Bug 2 fix: 2 MiB WebSocket message size limit
 
 
 class DeviceConnection(BaseModel):
@@ -58,12 +76,12 @@ class WebSocketManager:
     
     def __init__(
         self,
-        heartbeat_interval: int = 30,
-        heartbeat_timeout: int = 90,
+        heartbeat_interval: int = DEFAULT_HEARTBEAT_INTERVAL,
+        heartbeat_timeout: int = DEFAULT_HEARTBEAT_TIMEOUT,
         on_message: Optional[Callable[[str, AIPMessage], None]] = None,
         on_connect: Optional[Callable[[str], None]] = None,
         on_disconnect: Optional[Callable[[str], None]] = None
-    ):
+    ) -> None:
         self.connections: Dict[str, DeviceConnection] = {}
         self.heartbeat_interval = heartbeat_interval
         self.heartbeat_timeout = heartbeat_timeout
@@ -73,16 +91,16 @@ class WebSocketManager:
         self._heartbeat_task: Optional[asyncio.Task] = None
         self._running = False
         self._reconnect_backoff: Dict[str, float] = {}  # M5 fixed: exponential backoff tracker
-        self._backoff_base = 1.0
-        self._backoff_max = 60.0
+        self._backoff_base = DEFAULT_BACKOFF_BASE
+        self._backoff_max = DEFAULT_BACKOFF_MAX
         
-    async def start(self):
+    async def start(self) -> None:
         """启动管理器"""
         self._running = True
         self._heartbeat_task = asyncio.create_task(self._heartbeat_checker())
         logger.info("WebSocket Manager started")
         
-    async def stop(self):
+    async def stop(self) -> None:
         """停止管理器"""
         self._running = False
         if self._heartbeat_task:
@@ -110,30 +128,32 @@ class WebSocketManager:
         try:
             await websocket.accept()
             
-            now = datetime.now(timezone.utc)
+            now_dt = datetime.now(timezone.utc)
             self.connections[device_id] = DeviceConnection(
                 device_id=device_id,
-                connected_at=now,
-                last_heartbeat=now
+                connected_at=now_dt,
+                last_heartbeat=now_dt
             )
             _websocket_sockets[device_id] = websocket  # M4 fixed: store WebSocket separately
             
-            logger.info(f"Device connected: {device_id}")
+            # Bug 1 fix: use %-format for structured logging
+            logger.info("Device connected: %s", device_id)
             
             if self.on_connect:
                 await self._safe_callback(self.on_connect, device_id)
             
             return True
         except Exception as e:
-            logger.error(f"Failed to accept connection for {device_id}: {e}")
+            # Bug 1 fix: use %-format for structured logging
+            logger.error("Failed to accept connection for %s: %s", device_id, e)
             return False
     
-    async def disconnect(self, device_id: str):
+    async def disconnect(self, device_id: str) -> None:
         """断开连接"""
         # M5 fixed: set exponential backoff before removing connection
         prev_backoff = self._reconnect_backoff.get(device_id, 0)
         now_ts = datetime.now(timezone.utc).timestamp()
-        if now_ts - prev_backoff < 120:  # double backoff if disconnect within 2min
+        if now_ts - prev_backoff < BACKOFF_DOUBLE_WINDOW:  # double backoff if disconnect within window
             self._reconnect_backoff[device_id] = now_ts + min(
                 self._backoff_max, self._backoff_base * 2 ** len([k for k, v in self._reconnect_backoff.items() if v > now_ts])
             )
@@ -158,25 +178,28 @@ class WebSocketManager:
     async def send_message(self, device_id: str, message: AIPMessage) -> bool:
         """发送消息到指定设备"""
         if device_id not in self.connections:
-            logger.warning(f"Device not connected: {device_id}")
+            # Bug 1 fix: use %-format for structured logging
+            logger.warning("Device not connected: %s", device_id)
             return False
         
         conn = self.connections[device_id]
         if not conn.is_active:
-            logger.warning(f"Device connection inactive: {device_id}")
+            # Bug 1 fix: use %-format for structured logging
+            logger.warning("Device connection inactive: %s", device_id)
             return False
         
         try:
             data = message.model_dump_json()
             await conn.websocket.send_text(data)
-            logger.debug(f"Sent message to {device_id}: {message.type}")
+            logger.debug("Sent message to %s: %s", device_id, message.type)
             return True
         except Exception as e:
-            logger.error(f"Failed to send message to {device_id}: {e}")
+            # Bug 1 fix: use %-format for structured logging
+            logger.error("Failed to send message to %s: %s", device_id, e)
             await self.disconnect(device_id)
             return False
     
-    async def broadcast(self, message: AIPMessage, exclude: Optional[Set[str]] = None):
+    async def broadcast(self, message: AIPMessage, exclude: Optional[Set[str]] = None) -> None:
         """广播消息到所有设备"""
         exclude = exclude or set()
         tasks = []
@@ -188,7 +211,7 @@ class WebSocketManager:
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
     
-    async def handle_connection(self, websocket: WebSocket, device_id: str):
+    async def handle_connection(self, websocket: WebSocket, device_id: str) -> None:
         """处理设备连接的完整生命周期"""
         if not await self.connect(websocket, device_id):
             # M5 fixed: set exponential backoff on connection failure to prevent tight retry loops
@@ -203,15 +226,25 @@ class WebSocketManager:
         try:
             while True:
                 data = await websocket.receive_text()
+                # Bug 2 fix: enforce message size limit
+                if len(data.encode("utf-8")) > MAX_MESSAGE_SIZE_BYTES:
+                    logger.warning(
+                        "Message from %s exceeds size limit (%d > %d bytes), closing connection",
+                        device_id, len(data.encode("utf-8")), MAX_MESSAGE_SIZE_BYTES,
+                    )
+                    await websocket.close(code=1009, reason="Message too large")
+                    break
                 await self._handle_message(device_id, data)
         except WebSocketDisconnect:
-            logger.info(f"Device {device_id} disconnected normally")
+            # Bug 1 fix: use %-format for structured logging
+            logger.info("Device %s disconnected normally", device_id)
         except Exception as e:
-            logger.error(f"Error handling connection for {device_id}: {e}")
+            # Bug 1 fix: use %-format for structured logging
+            logger.error("Error handling connection for %s: %s", device_id, e)
         finally:
             await self.disconnect(device_id)
     
-    async def _handle_message(self, device_id: str, data: str):
+    async def _handle_message(self, device_id: str, data: str) -> None:
         """处理接收到的消息（PR-5 normalization boundary）。
 
         All raw ingress is normalized to a :class:`NormalizedIngressEvent`
@@ -222,8 +255,8 @@ class WebSocketManager:
         try:
             # Pre-dispatch: handle P2P mesh messages before AIP parsing
             # (mesh types may not exist in v3 MessageType enum)
-            raw = json.loads(data)
-            msg_type = raw.get("type", "")
+            raw: Dict[str, Any] = json.loads(data)
+            msg_type: str = raw.get("type", "")
 
             if msg_type in ("peer_announce", "peer_exchange", "mesh_topology"):
                 await self._handle_mesh_message(device_id, msg_type, raw)
@@ -251,16 +284,18 @@ class WebSocketManager:
                 await self._safe_callback(self.on_message, device_id, message)
 
         except Exception as e:
-            logger.error(f"Failed to handle message from {device_id}: {e}")
+            # Bug 1 fix: use %-format for structured logging
+            logger.error("Failed to handle message from %s: %s", device_id, e)
             error_msg = create_error_message(device_id, str(e))
             await self.send_message(device_id, error_msg)
 
-    async def _handle_mesh_message(self, device_id: str, msg_type: str, raw: dict):
+    async def _handle_mesh_message(self, device_id: str, msg_type: str, raw: Dict[str, Any]) -> None:
         """Handle P2P mesh overlay messages (peer_announce / peer_exchange / mesh_topology)"""
         try:
             from core.mesh_coordinator import get_mesh_coordinator
             mesh = get_mesh_coordinator()
 
+            response: Dict[str, Any]
             if msg_type == "peer_announce":
                 # PR-28: Extract tailscale_ip if present in announce
                 payload = raw.get("payload") or {}
@@ -290,9 +325,10 @@ class WebSocketManager:
         except ImportError:
             logger.debug("mesh_coordinator not available, ignoring mesh message")
         except Exception as e:
-            logger.error(f"Failed to handle mesh message from {device_id}: {e}")
+            # Bug 1 fix: use %-format for structured logging
+            logger.error("Failed to handle mesh message from %s: %s", device_id, e)
 
-    async def _handle_heartbeat(self, device_id: str, message: AIPMessage):
+    async def _handle_heartbeat(self, device_id: str, message: AIPMessage) -> None:
         """处理心跳消息"""
         ack = AIPMessage(
             type=MessageType.DEVICE_HEARTBEAT_ACK,
@@ -301,7 +337,7 @@ class WebSocketManager:
         )
         await self.send_message(device_id, ack)
     
-    async def _heartbeat_checker(self):
+    async def _heartbeat_checker(self) -> None:
         """心跳检测任务"""
         while self._running:
             try:
@@ -313,24 +349,27 @@ class WebSocketManager:
                 for device_id in list(self.connections.keys()):
                     conn = self.connections.get(device_id)
                     if conn and conn.last_heartbeat < timeout_threshold:
-                        logger.warning(f"Device {device_id} heartbeat timeout")
+                        # Bug 1 fix: use %-format for structured logging
+                        logger.warning("Device %s heartbeat timeout", device_id)
                         await self.disconnect(device_id)
                         
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                logger.error(f"Heartbeat checker error: {e}")
+                # Bug 1 fix: use %-format for structured logging
+                logger.error("Heartbeat checker error: %s", e)
     
-    async def _safe_callback(self, callback: Callable, *args):
+    async def _safe_callback(self, callback: Callable, *args: Any) -> None:
         """安全调用回调函数"""
         try:
             result = callback(*args)
             if asyncio.iscoroutine(result):
                 await result
         except Exception as e:
-            logger.error(f"Callback error: {e}")
+            # Bug 1 fix: use %-format for structured logging
+            logger.error("Callback error: %s", e)
     
-    def get_connected_devices(self) -> list:
+    def get_connected_devices(self) -> List[str]:
         """获取所有已连接设备"""
         return list(self.connections.keys())
     
