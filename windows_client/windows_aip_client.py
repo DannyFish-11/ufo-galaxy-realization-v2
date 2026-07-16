@@ -36,6 +36,7 @@ Version: 2.0.0
 import asyncio
 import json
 import logging
+import logging.handlers
 import sys
 import os
 import socket
@@ -44,6 +45,23 @@ import uuid
 from typing import Any, Dict, Optional
 
 logger = logging.getLogger("windows-aip-client")
+
+# Bug-fix: Add rotating file handler (max 5 MB, keep 3 backups) to prevent unbounded log growth.
+_LOG_PATH = os.path.join(os.path.expanduser("~"), ".galaxy", "logs", "windows_aip_client.log")
+def _setup_logging() -> None:
+    """Configure rotating log files to prevent unbounded disk usage."""
+    os.makedirs(os.path.dirname(_LOG_PATH), exist_ok=True)
+    handler = logging.handlers.RotatingFileHandler(
+        _LOG_PATH, maxBytes=5 * 1024 * 1024, backupCount=3, encoding="utf-8"
+    )
+    handler.setFormatter(logging.Formatter(
+        "%(asctime)s %(levelname)s %(name)s %(message)s"
+    ))
+    root = logging.getLogger()
+    if not any(isinstance(h, logging.handlers.RotatingFileHandler) for h in root.handlers):
+        root.addHandler(handler)
+
+_setup_logging()
 
 
 # ============================================================================
@@ -200,10 +218,49 @@ class WindowsAIPClient:
     PROTOCOL_VERSION = "3.0"
     HEARTBEAT_INTERVAL = 30  # 秒
 
+    # P27 修复：device_id 持久化存储路径（存放在用户数据目录下）。
+    _DEVICE_ID_FILE = os.path.join(
+        os.path.expanduser("~"), ".galaxy", "device_id.json"
+    )
+
+    @classmethod
+    def _load_persistent_device_id(cls) -> Optional[str]:
+        """从持久化存储加载 device_id，确保重启后不变。"""
+        try:
+            if os.path.exists(cls._DEVICE_ID_FILE):
+                with open(cls._DEVICE_ID_FILE, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    did = data.get("device_id", "")
+                    if did:
+                        return did
+        except Exception:
+            pass
+        return None
+
+    @classmethod
+    def _save_persistent_device_id(cls, device_id: str) -> None:
+        """持久化存储 device_id。"""
+        try:
+            os.makedirs(os.path.dirname(cls._DEVICE_ID_FILE), exist_ok=True)
+            with open(cls._DEVICE_ID_FILE, "w", encoding="utf-8") as f:
+                json.dump({"device_id": device_id, "ts": time.time()}, f)
+        except Exception as e:
+            logger.warning(f"持久化 device_id 失败: {e}")
+
     def __init__(self, host: str = "127.0.0.1", port: int = 8000, device_id: str = None):
         self.host = host
         self.port = port
-        self.device_id = device_id or f"windows_{socket.gethostname()}_{uuid.uuid4().hex[:6]}"
+        # P27 修复：优先使用传入值 > 持久化值 > 新生成（带持久化）。
+        if device_id:
+            self.device_id = device_id
+            self._save_persistent_device_id(device_id)
+        else:
+            persisted = self._load_persistent_device_id()
+            if persisted:
+                self.device_id = persisted
+            else:
+                self.device_id = f"windows_{socket.gethostname()}_{uuid.uuid4().hex[:6]}"
+                self._save_persistent_device_id(self.device_id)
         self._ws = None
         self._running = False
         self._on_event_stream = None
