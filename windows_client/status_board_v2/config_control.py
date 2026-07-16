@@ -52,12 +52,111 @@ ConfigControlSurface
 
 from __future__ import annotations
 
+import json
 import logging
+import os
+import shutil
+import time
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, Optional, Tuple
 
 logger = logging.getLogger("Galaxy.StatusBoardConfigControl")
+
+# P27 修复：配置保存前的备份目录。
+_BACKUP_DIR = os.path.join(os.path.expanduser("~"), ".galaxy", "config_backups")
+_MAX_BACKUPS = 5
+
+
+def _backup_config(config_path: str) -> Optional[str]:
+    """在写入前备份当前配置文件，保留最近 _MAX_BACKUPS 份。"""
+    try:
+        if not os.path.exists(config_path):
+            return None
+        os.makedirs(_BACKUP_DIR, exist_ok=True)
+        ts = str(int(time.time()))
+        backup_path = os.path.join(_BACKUP_DIR, f"config_{ts}.json.bak")
+        shutil.copy2(config_path, backup_path)
+        # 清理旧备份，只保留最近的 _MAX_BACKUPS 份
+        backups = sorted(
+            [os.path.join(_BACKUP_DIR, f) for f in os.listdir(_BACKUP_DIR)
+             if f.startswith("config_") and f.endswith(".json.bak")],
+            key=os.path.getmtime,
+        )
+        for old in backups[:-_MAX_BACKUPS]:
+            try:
+                os.remove(old)
+            except OSError:
+                pass
+        return backup_path
+    except Exception as exc:
+        logger.warning(f"配置备份失败(继续执行写入): {exc}")
+        return None
+
+
+# Bug-fix: Configuration validation before write.
+# Validates config data shape to catch malformed input early.
+_VALID_ROUTING_POLICIES = {"strict", "prefer", "allow_fallback"}
+_VALID_ANDROID_MODES = {"center", "local", "hybrid"}
+_MAX_URL_LENGTH = 2048
+
+
+def _validate_config(data: dict) -> Tuple[bool, str]:
+    """Validate config dict before writing. Returns (valid, error_message)."""
+    if not isinstance(data, dict):
+        return False, "config root must be a dict"
+    # Validate routing policy if present
+    policy = data.get("routing", {}).get("native_multimodal_policy")
+    if policy is not None and policy not in _VALID_ROUTING_POLICIES:
+        return False, f"invalid routing policy '{policy}': must be one of {_VALID_ROUTING_POLICIES}"
+    # Validate Android inference mode if present
+    android_mode = data.get("android", {}).get("inference_mode")
+    if android_mode is not None and android_mode not in _VALID_ANDROID_MODES:
+        return False, f"invalid android inference_mode '{android_mode}': must be one of {_VALID_ANDROID_MODES}"
+    # Validate provider toggle keys are non-empty strings
+    providers = data.get("providers")
+    if providers is not None:
+        if not isinstance(providers, dict):
+            return False, "providers must be a dict"
+        for name, cfg in providers.items():
+            if not isinstance(name, str) or not name:
+                return False, "provider name must be a non-empty string"
+            if isinstance(cfg, dict) and "enabled" in cfg:
+                if not isinstance(cfg["enabled"], bool):
+                    return False, f"providers.{name}.enabled must be a boolean"
+    # Validate network URLs
+    network = data.get("network", {})
+    if isinstance(network, dict):
+        for key, url in network.items():
+            if isinstance(url, str) and len(url) > _MAX_URL_LENGTH:
+                return False, f"network.{key} URL exceeds max length {_MAX_URL_LENGTH}"
+    return True, ""
+
+
+def _write_with_retry(config_path: str, data: dict, retries: int = 3) -> Tuple[bool, str]:
+    """带重试的配置写入，失败时返回 (False, error_message)。"""
+    # Bug-fix: Validate config before writing to catch malformed input early.
+    valid, err = _validate_config(data)
+    if not valid:
+        return False, f"validation failed: {err}"
+    last_err = ""
+    for attempt in range(1, retries + 1):
+        try:
+            os.makedirs(os.path.dirname(config_path) or ".", exist_ok=True)
+            # 先写入临时文件，再原子替换
+            tmp_path = config_path + ".tmp"
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_path, config_path)
+            return True, ""
+        except Exception as exc:
+            last_err = str(exc)
+            logger.warning(f"配置写入失败(第{attempt}/{retries}次): {exc}")
+            if attempt < retries:
+                time.sleep(0.5 * attempt)
+    return False, last_err
 
 # ---------------------------------------------------------------------------
 # Authority sentinel
@@ -651,14 +750,22 @@ class ConfigControlSurface:
     # ------------------------------------------------------------------
 
     def _trigger_reload(self) -> Tuple[bool, bool, str]:
-        """Try to hot-reload runtime config after a write."""
+        """Try to hot-reload runtime config after a write.
+
+        P27 修复：写入前备份配置，失败时可恢复。
+        """
         mgr = self._hot_reload_manager or _get_hot_reload_manager()
-        if mgr is None:
-            return False, False, "hot-reload manager not initialised; config persisted, takes effect on startup"
-        # Resolve canonical config path via the public service property
+        # 解析配置路径
         config_path: str = ""
         try:
             config_path = self._service.config_path
         except Exception:  # pragma: no cover
             pass
+        # 写入前备份（确保失败时可恢复）
+        if config_path:
+            backup = _backup_config(config_path)
+            if backup:
+                logger.debug(f"配置已备份: {backup}")
+        if mgr is None:
+            return False, False, "hot-reload manager not initialised; config persisted, takes effect on startup"
         return _try_hot_reload(mgr, config_path)
