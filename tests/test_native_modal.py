@@ -113,6 +113,21 @@ def test_on_tier_changed_A_deactivates(monkeypatch):
     assert nm.is_native_active() is False
 
 
+def test_deactivate_during_activation_wins_no_resurrect(monkeypatch):
+    # 竞态:激活进行到一半被 deactivate(切回 A 档)抢先 → 慢半拍的激活【不得】
+    # 把原生装回来。用 reachable() 里触发 deactivate 来确定性复现"代次已变"。
+    _reset(monkeypatch)
+
+    class _RaceBackend(_FakeBackend):
+        def reachable(self, timeout=2.0):
+            nm.deactivate()  # 模拟激活期间用户切回 A 档
+            return True
+
+    nm.activate(_RaceBackend(), background=False)
+    assert nm.is_native_active() is False  # 代次已变 → 放弃提交,保持"回落桥"
+    assert so.native_speech_backend_registered() is False
+
+
 def test_on_tier_changed_B_gated_off_during_tests(monkeypatch):
     # 测试运行期(PYTEST_CURRENT_TEST 存在)自动激活被禁 → 不触发真实装包
     _reset(monkeypatch)

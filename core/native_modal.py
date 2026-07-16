@@ -174,6 +174,10 @@ def _pip_install(packages: List[str]) -> bool:
 # ── 档位联动协调器 ────────────────────────────────────────────────────────────
 _active_backend: Optional[MiniCPMNativeBackend] = None
 _activating = False
+# 代次令牌:每次 activate/deactivate 自增。后台激活线程只在"自己那一代还有效"时
+# 才提交注册——期间若被 deactivate(切回 A 档)抢先,代次已变,线程放弃提交,
+# 避免"切回 A 档后,慢半拍的后台线程又把原生装回来"的竞态。
+_gen = 0
 _lock = threading.Lock()
 
 
@@ -193,7 +197,7 @@ def activate(backend: Optional[MiniCPMNativeBackend] = None, *, background: bool
     """
     be = backend or MiniCPMNativeBackend()
 
-    def _do() -> None:
+    def _do(my_gen: int) -> None:
         global _active_backend, _activating
         try:
             if not be.ensure_deps():
@@ -206,6 +210,11 @@ def activate(backend: Optional[MiniCPMNativeBackend] = None, *, background: bool
                     be.base_url,
                 )
                 return
+            # 提交前再确认这一代仍有效:期间没被 deactivate/重激活抢先。
+            with _lock:
+                if my_gen != _gen:
+                    logger.info("B 档原生:激活期间已切换代次,放弃提交(避免切回 A 档后又装回原生)")
+                    return
             # 就绪 → 注册原生说 + 开门控;原生听由 modality_bridge 主动查 get_active_backend()。
             try:
                 from core.speech_output import register_native_speech_backend
@@ -222,20 +231,22 @@ def activate(backend: Optional[MiniCPMNativeBackend] = None, *, background: bool
 
     global _activating
     with _lock:
-        if _active_backend is not None:
-            return  # 已激活
+        if _active_backend is not None or _activating:
+            return  # 已激活 or 后台激活进行中——别再起一条线程重复装包/探测
         _activating = True
+        my_gen = _gen
     if background:
-        threading.Thread(target=_do, name="minicpm-activate", daemon=True).start()
+        threading.Thread(target=_do, name="minicpm-activate", args=(my_gen,), daemon=True).start()
     else:
-        _do()
+        _do(my_gen)
 
 
 def deactivate() -> None:
     """切回 A 档:注销原生后端、关门控 → 协商层判定听=ASR桥、说=TTS桥。"""
-    global _active_backend
+    global _active_backend, _gen
     with _lock:
         _active_backend = None
+        _gen += 1  # 令任何在途的后台激活线程失效(它提交前会发现代次已变)
     try:
         from core.speech_output import register_native_speech_backend
 

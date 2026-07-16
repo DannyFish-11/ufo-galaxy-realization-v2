@@ -287,14 +287,130 @@ def demote_current_engine(reason: str = "", failed_engine: Any = None) -> Option
     return _get_engine()
 
 
+def _dispatch_speech(coro: Any) -> None:
+    """把一段发声协程调度上运行中的事件循环;无循环则同步兜底执行。"""
+    try:
+        loop = asyncio.get_running_loop()
+        loop.create_task(coro)  # 非阻塞:后台朗读
+    except RuntimeError:
+        # 无运行中的事件循环:同步兜底(尽量不长阻塞)。
+        try:
+            asyncio.run(coro)
+        except Exception:  # noqa: BLE001
+            pass
+
+
+async def _speak_via_tts_engine(spoken: str, source: str = "") -> None:
+    """A 档 TTS 引擎链发声(分句流式 / 整段批处理),含失败降级换引擎重试一次。
+
+    这是"说"的桥接实现,也是【原生说失败后的兜底】:原生后端返回 False / 抛异常时
+    由 :func:`_run_native_speech` 回落到这里,确保绝不因原生失败而彻底哑火。
+    """
+    engine = _get_engine()
+    if engine is None:
+        return
+
+    # 播放前后把"正在朗读"同步到桌面三态覆盖层(u_speaking)——此前 TTS 播放与
+    # 覆盖层完全脱节,三态动画不随"AI 说话"运转。finally 确保异常/提前返回也复位。
+    try:
+        from core.lumiv_websocket_bridge import set_ai_speaking as _set_speaking
+    except Exception:  # noqa: BLE001
+        _set_speaking = None  # type: ignore
+    global _active_speaker
+    if _streaming_enabled():
+        # 分句流式：第一句就绪即开口,感知延迟 ≈ 第一句合成时长;可被打断。
+        from core.streaming_speech import StreamingSpeaker
+
+        # 引擎经 holder 引用:合成运行期失败 → demote 换引擎 → 同句重试一次。
+        holder = {"engine": engine}
+
+        async def _synth(chunk: str) -> str:
+            try:
+                return await holder["engine"].synthesize(chunk)
+            except Exception as exc:  # noqa: BLE001
+                new_engine = demote_current_engine(str(exc), failed_engine=holder["engine"])
+                if new_engine is None:
+                    raise
+                holder["engine"] = new_engine
+                return await new_engine.synthesize(chunk)
+
+        async def _play(path: str) -> None:
+            await holder["engine"]._play_audio(path)
+            _rm(path)
+
+        async def _stop() -> None:
+            await holder["engine"].stop()
+
+        def _rm(path: str) -> None:
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+
+        # discard:被打断时清理已合成但没播的临时 mp3,避免每次 barge-in 泄漏文件。
+        speaker = StreamingSpeaker(
+            _synth,
+            _play,
+            stop=_stop,
+            on_speaking=_set_speaking,
+            discard=_rm,
+        )
+        _active_speaker = speaker
+        try:
+            await speaker.speak(spoken)
+            # StreamingSpeaker 对每句的合成/播放失败都内部吞掉(debug)后跳过,
+            # 缺 edge-tts / 无音频设备时 speak() 会"成功"返回但一句没播——
+            # 从外面看就是彻底静默。这里兜底:整段零句播出且不是被打断,升告警。
+            if speaker.chunks_spoken == 0 and not getattr(speaker, "_interrupted", False):
+                _log_speak_failure(
+                    "流式语音输出",
+                    RuntimeError(
+                        "整段一句都未播出——每句合成/播放均失败。"
+                        "常见原因:未安装 edge-tts(pip install edge-tts)、"
+                        "无法访问微软 TTS 服务、或无音频设备"
+                    ),
+                )
+        except Exception as exc:  # noqa: BLE001
+            _log_speak_failure("流式语音输出", exc)
+        finally:
+            if _active_speaker is speaker:
+                _active_speaker = None
+        return
+
+    # 回退：整段批处理（GALAXY_TTS_STREAMING=0）。失败同样降级换引擎重试一次。
+    if _set_speaking is not None:
+        _set_speaking(True)
+    try:
+        await engine.synthesize_and_play(spoken)
+    except Exception as exc:  # noqa: BLE001
+        new_engine = demote_current_engine(str(exc), failed_engine=engine)
+        if new_engine is None:
+            _log_speak_failure("语音输出", exc)
+        else:
+            try:
+                await new_engine.synthesize_and_play(spoken)
+            except Exception as exc2:  # noqa: BLE001
+                _log_speak_failure("语音输出", exc2)
+    finally:
+        if _set_speaking is not None:
+            _set_speaking(False)
+
+
 async def _run_native_speech(backend: Callable[[str, str], Any], text: str, source: str) -> None:
-    """执行原生发声;后端返回 False 或抛异常都如实告警(不静默丢句)。"""
+    """执行原生发声;后端返回 False 或抛异常都如实告警,并【回落 TTS 兜底】。
+
+    绝不因原生说失败(server 掉线/未发声)而让用户听不到——契约要求"由 A 档 TTS
+    兜底逻辑接管",这里如实兑现:原生没出声就当场走 TTS 引擎链再念一遍。
+    """
     try:
         ok = await backend(text, source)
-        if not ok:
-            _log_speak_failure("原生语音输出", RuntimeError("原生语音后端未发声(返回 False)"))
+        if ok:
+            return
+        _log_speak_failure("原生语音输出", RuntimeError("原生语音后端未发声(返回 False),回落 TTS"))
     except Exception as exc:  # noqa: BLE001
         _log_speak_failure("原生语音输出", exc)
+    # 原生没出声 → 兜底走 TTS,绝不哑火。
+    await _speak_via_tts_engine(text, source)
 
 
 def _maybe_speak_native(text: str, source: str) -> bool:
@@ -351,107 +467,9 @@ def speak_response(text: str, *, source: str = "") -> None:
     if _maybe_speak_native(spoken, source):
         return
 
-    engine = _get_engine()
-    if engine is None:
-        return
-
-    async def _run() -> None:
-        # 播放前后把"正在朗读"同步到桌面三态覆盖层(u_speaking)——此前 TTS 播放
-        # 与覆盖层完全脱节：_speaking 只在相位事件里被动带一手且 MANIFEST 一进入
-        # 就被强制置 False，而实际播放发生在那之后，覆盖层永远等不到真实信号，
-        # 三态动画不随"AI 说话"运转。finally 确保异常/提前返回也一定复位。
-        try:
-            from core.lumiv_websocket_bridge import set_ai_speaking as _set_speaking
-        except Exception:
-            _set_speaking = None  # type: ignore
-        global _active_speaker
-        if _streaming_enabled():
-            # 分句流式：第一句就绪即开口，感知延迟 ≈ 第一句合成时长；可被打断。
-            from core.streaming_speech import StreamingSpeaker
-
-            # 引擎经 holder 引用:合成运行期失败 → demote 换引擎 → 同句重试一次。
-            holder = {"engine": engine}
-
-            async def _synth(chunk: str) -> str:
-                try:
-                    return await holder["engine"].synthesize(chunk)
-                except Exception as exc:  # noqa: BLE001
-                    new_engine = demote_current_engine(str(exc), failed_engine=holder["engine"])
-                    if new_engine is None:
-                        raise
-                    holder["engine"] = new_engine
-                    return await new_engine.synthesize(chunk)
-
-            async def _play(path: str) -> None:
-                await holder["engine"]._play_audio(path)
-                _rm(path)
-
-            async def _stop() -> None:
-                await holder["engine"].stop()
-
-            def _rm(path: str) -> None:
-                try:
-                    os.remove(path)
-                except OSError:
-                    pass
-
-            # discard:被打断时清理已合成但没播的临时 mp3,避免每次 barge-in 泄漏文件。
-            speaker = StreamingSpeaker(
-                _synth,
-                _play,
-                stop=_stop,
-                on_speaking=_set_speaking,
-                discard=_rm,
-            )
-            _active_speaker = speaker
-            try:
-                await speaker.speak(spoken)
-                # StreamingSpeaker 对每句的合成/播放失败都内部吞掉(debug)后跳过,
-                # 缺 edge-tts / 无音频设备时 speak() 会"成功"返回但一句没播——
-                # 从外面看就是彻底静默。这里兜底:整段零句播出且不是被打断,升告警。
-                if speaker.chunks_spoken == 0 and not getattr(speaker, "_interrupted", False):
-                    _log_speak_failure(
-                        "流式语音输出",
-                        RuntimeError(
-                            "整段一句都未播出——每句合成/播放均失败。"
-                            "常见原因:未安装 edge-tts(pip install edge-tts)、"
-                            "无法访问微软 TTS 服务、或无音频设备"
-                        ),
-                    )
-            except Exception as exc:  # noqa: BLE001
-                _log_speak_failure("流式语音输出", exc)
-            finally:
-                if _active_speaker is speaker:
-                    _active_speaker = None
-            return
-
-        # 回退：整段批处理（GALAXY_TTS_STREAMING=0）。失败同样降级换引擎重试一次。
-        if _set_speaking is not None:
-            _set_speaking(True)
-        try:
-            await engine.synthesize_and_play(spoken)
-        except Exception as exc:  # noqa: BLE001
-            new_engine = demote_current_engine(str(exc), failed_engine=engine)
-            if new_engine is None:
-                _log_speak_failure("语音输出", exc)
-            else:
-                try:
-                    await new_engine.synthesize_and_play(spoken)
-                except Exception as exc2:  # noqa: BLE001
-                    _log_speak_failure("语音输出", exc2)
-        finally:
-            if _set_speaking is not None:
-                _set_speaking(False)
-
-    try:
-        loop = asyncio.get_running_loop()
-        loop.create_task(_run())  # 非阻塞:后台朗读
-    except RuntimeError:
-        # 无运行中的事件循环:同步兜底(尽量不长阻塞)。
-        try:
-            asyncio.run(_run())
-        except Exception:  # noqa: BLE001
-            pass
+    # A 档 / 原生未就绪 → 走 TTS 引擎链(分句流式或整段批处理,含降级换引擎)。
+    # 抽成模块级 _speak_via_tts_engine 后,原生说失败也能回落到同一条路,绝不哑火。
+    _dispatch_speech(_speak_via_tts_engine(spoken, source))
 
 
 def begin_incremental_speech(

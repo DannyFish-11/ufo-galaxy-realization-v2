@@ -95,3 +95,65 @@ def test_native_backend_failure_is_reported_not_silent(monkeypatch):
     monkeypatch.setattr(so, "_log_speak_failure", lambda kind, exc: warned.append(kind))
     assert so._maybe_speak_native("你好", "chat") is True
     assert warned and "原生" in warned[0]
+
+
+# ── 关键:原生说失败 → 回落 TTS 兜底,绝不哑火 ───────────────────────────────
+
+
+def test_native_failure_falls_back_to_tts(monkeypatch):
+    # 原生后端返回 False → _run_native_speech 必须回落到 TTS 引擎链(不让用户听不到)
+    import asyncio
+
+    _reset()
+
+    async def _backend(text, source):
+        return False
+
+    fell_back = []
+    monkeypatch.setattr(so, "_log_speak_failure", lambda kind, exc: None)
+
+    async def _fake_tts(spoken, source=""):
+        fell_back.append((spoken, source))
+
+    monkeypatch.setattr(so, "_speak_via_tts_engine", _fake_tts)
+    asyncio.run(so._run_native_speech(_backend, "你好", "voice"))
+    assert fell_back == [("你好", "voice")]  # 原生没出声 → TTS 兜底真的被调用
+
+
+def test_native_exception_falls_back_to_tts(monkeypatch):
+    # 原生后端抛异常(server 掉线)→ 同样回落 TTS 兜底
+    import asyncio
+
+    _reset()
+
+    async def _backend(text, source):
+        raise RuntimeError("server down")
+
+    fell_back = []
+    monkeypatch.setattr(so, "_log_speak_failure", lambda kind, exc: None)
+
+    async def _fake_tts(spoken, source=""):
+        fell_back.append(spoken)
+
+    monkeypatch.setattr(so, "_speak_via_tts_engine", _fake_tts)
+    asyncio.run(so._run_native_speech(_backend, "在吗", "chat"))
+    assert fell_back == ["在吗"]
+
+
+def test_native_success_does_not_fall_back(monkeypatch):
+    # 原生说成功 → 绝不再走 TTS(否则重复出声两遍)
+    import asyncio
+
+    _reset()
+
+    async def _backend(text, source):
+        return True
+
+    called = []
+
+    async def _fake_tts(spoken, source=""):
+        called.append(spoken)
+
+    monkeypatch.setattr(so, "_speak_via_tts_engine", _fake_tts)
+    asyncio.run(so._run_native_speech(_backend, "好的", "voice"))
+    assert called == []  # 原生已出声,不重复
