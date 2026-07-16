@@ -41,8 +41,15 @@ from fastapi import FastAPI, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from nodes.common.cors_config import get_cors_origins
+from nodes.common.base_node import (
+    setup_logging, setup_signal_handlers, node_metrics,
+    DEFAULT_REQUEST_TIMEOUT, DEFAULT_TASK_TIMEOUT, ErrorResponse
+)
+import signal
 
-logger = logging.getLogger("Node_01_OneAPI")
+
+logger = setup_logging("Node_01_OneAPI")
+setup_signal_handlers(logger)
 
 # ============ API 配置 (从环境变量读取) ============
 # --- 系统级聚合器接入配置（全局生效）---
@@ -232,7 +239,7 @@ def call_openrouter(messages: List[Dict], model: str = "openai/gpt-3.5-turbo", m
             "https://openrouter.ai/api/v1/chat/completions",
             headers={"Authorization": f"Bearer {OPENROUTER_API_KEY}", "Content-Type": "application/json"},
             json={"model": model, "messages": messages, "max_tokens": max_tokens},
-            timeout=60,
+            timeout=DEFAULT_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         data = response.json()
@@ -257,7 +264,7 @@ def call_zhipu(messages: List[Dict], model: str = "glm-4-flash", max_tokens: int
             "https://open.bigmodel.cn/api/paas/v4/chat/completions",
             headers={"Authorization": f"Bearer {ZHIPU_API_KEY}", "Content-Type": "application/json"},
             json={"model": model, "messages": messages, "max_tokens": max_tokens},
-            timeout=60,
+            timeout=DEFAULT_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         data = response.json()
@@ -282,7 +289,7 @@ def call_groq(messages: List[Dict], model: str = "llama-3.3-70b-versatile", max_
             "https://api.groq.com/openai/v1/chat/completions",
             headers={"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"},
             json={"model": model, "messages": messages, "max_tokens": max_tokens},
-            timeout=60,
+            timeout=DEFAULT_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         data = response.json()
@@ -310,7 +317,7 @@ def call_local_llm(
             f"{LOCAL_LLM_URL}/v1/chat/completions",
             headers={"Content-Type": "application/json"},
             json={"model": model, "messages": messages, "max_tokens": max_tokens, "temperature": temperature},
-            timeout=120,  # 本地推理可能较慢
+            timeout=DEFAULT_TASK_TIMEOUT,  # 本地推理可能较慢
         )
         response.raise_for_status()
         data = response.json()
@@ -339,7 +346,7 @@ def call_together(
             "https://api.together.xyz/v1/chat/completions",
             headers={"Authorization": f"Bearer {TOGETHER_API_KEY}", "Content-Type": "application/json"},
             json={"model": model, "messages": messages, "max_tokens": max_tokens},
-            timeout=60,
+            timeout=DEFAULT_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         data = response.json()
@@ -364,7 +371,7 @@ def call_perplexity(messages: List[Dict], model: str = "sonar-pro", max_tokens: 
             "https://api.perplexity.ai/chat/completions",
             headers={"Authorization": f"Bearer {PERPLEXITY_API_KEY}", "Content-Type": "application/json"},
             json={"model": model, "messages": messages, "max_tokens": max_tokens},
-            timeout=60,
+            timeout=DEFAULT_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         data = response.json()
@@ -436,7 +443,7 @@ def call_claude(messages: List[Dict], model: str = "claude-3-5-sonnet-20241022",
                 "Content-Type": "application/json",
             },
             json=payload,
-            timeout=60,
+            timeout=DEFAULT_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         data = response.json()
@@ -460,7 +467,7 @@ def get_weather(city: str, units: str = "metric") -> Dict:
         response = requests.get(
             "https://api.openweathermap.org/data/2.5/weather",
             params={"q": city, "appid": OPENWEATHER_API_KEY, "units": units, "lang": "zh_cn"},
-            timeout=10,
+            timeout=DEFAULT_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         data = response.json()
@@ -488,7 +495,7 @@ def web_search(query: str, count: int = 10) -> Dict:
             "https://api.search.brave.com/res/v1/web/search",
             headers={"X-Subscription-Token": BRAVE_API_KEY},
             params={"q": query, "count": count},
-            timeout=10,
+            timeout=DEFAULT_REQUEST_TIMEOUT,
         )
         response.raise_for_status()
         data = response.json()
@@ -714,7 +721,9 @@ async def chat_completions(request: ChatRequest, authorization: str = Header(Non
         else:
             raise HTTPException(status_code=400, detail=f"Unknown provider: {provider}")
 
+    node_metrics.increment("chat_requests_total")
     if "error" in result:
+        node_metrics.increment("chat_errors_total")
         raise HTTPException(status_code=500, detail=result["error"])
 
     return {
@@ -734,7 +743,9 @@ async def chat_completions(request: ChatRequest, authorization: str = Header(Non
 async def api_weather(request: WeatherRequest):
     """获取天气"""
     result = get_weather(request.city, request.units)
+    node_metrics.increment("chat_requests_total")
     if "error" in result:
+        node_metrics.increment("chat_errors_total")
         raise HTTPException(status_code=500, detail=result["error"])
     return result
 
@@ -743,7 +754,9 @@ async def api_weather(request: WeatherRequest):
 async def api_search(request: SearchRequest):
     """网页搜索"""
     result = web_search(request.query, request.count)
+    node_metrics.increment("chat_requests_total")
     if "error" in result:
+        node_metrics.increment("chat_errors_total")
         raise HTTPException(status_code=500, detail=result["error"])
     return result
 
@@ -793,13 +806,16 @@ async def mcp_call(request: Dict[str, Any]):
 async def generate_video(prompt: str, image_url: Optional[str] = None):
     """视频生成接口 - 使用 Pixverse"""
     result = call_pixverse(prompt, image_url)
+    node_metrics.increment("chat_requests_total")
     if "error" in result:
+        node_metrics.increment("chat_errors_total")
         raise HTTPException(status_code=500, detail=result["error"])
     return result
 
 
 if __name__ == "__main__":
     import uvicorn
+    setup_signal_handlers(logger)
 
     try:
         from core.port_config import get_node_port
