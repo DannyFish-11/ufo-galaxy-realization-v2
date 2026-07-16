@@ -73,6 +73,52 @@ def resolve_audio_out() -> str:
     return "tts_bridge"
 
 
+# ── 视频（看/抽帧）：连续视频 → 视觉路 ─────────────────────────────────────────
+# 抽帧默认帧率(env 可覆盖)。native 连续视频送更密的帧;frames_bridge 只抽稀疏
+# 静帧喂静态视觉(当前档位有视觉但无原生视频);unavailable 不抽(连静态视觉都没有)。
+_VIDEO_FPS_NATIVE = float(os.getenv("GALAXY_VIDEO_FPS_NATIVE", "") or 4.0)
+_VIDEO_FPS_BRIDGE = float(os.getenv("GALAXY_VIDEO_FPS_BRIDGE", "") or 1.0)
+
+
+def resolve_video_in() -> str:
+    """当前档位的视频通路：native / frames_bridge / unavailable。委托统一协商层。
+
+    - native        —— GALAXY_NATIVE_VIDEO 开 + 模型原生吃连续视频
+    - frames_bridge —— 有静态视觉、无原生视频 → 抽帧当静态图喂视觉(当前笔记本现实)
+    - unavailable   —— 当前档位连静态视觉都没有 → 抽帧毫无意义,不该抽
+    """
+    try:
+        from core.modality_capability import negotiate
+
+        mode = negotiate().video_in.mode
+        if mode == "native":
+            return "native"
+        if mode == "bridge":
+            return "frames_bridge"
+        return "unavailable"
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("resolve_video_in 回退 frames_bridge: %s", exc)
+    return "frames_bridge"
+
+
+def resolve_video_sampling(requested_fps: Optional[float] = None):
+    """把 video_in 三态落成【抽帧决策】：返回 (should_sample, fps, mode)。
+
+    上层视频抽帧循环(vision_sampler 等)据此自适配、零 per-model 分支:
+      - unavailable    → (False, 0.0, mode):当前档位没有视觉,直接别抽,省算力;
+      - frames_bridge  → (True, 稀疏 fps, mode):抽静帧喂静态视觉(今天真能用的);
+      - native         → (True, 更密 fps, mode):模型吃连续视频,送更密的帧。
+    显式 requested_fps>0 时优先尊重调用方(硬要某帧率),否则按 mode 取默认帧率。
+    """
+    mode = resolve_video_in()
+    if mode == "unavailable":
+        return (False, 0.0, mode)
+    if requested_fps is not None and requested_fps > 0:
+        return (True, float(requested_fps), mode)
+    fps = _VIDEO_FPS_NATIVE if mode == "native" else _VIDEO_FPS_BRIDGE
+    return (True, fps, mode)
+
+
 # ── ASR 桥：base64 音频 → 文字 ────────────────────────────────────────────────
 _asr_singleton = None
 _asr_lock = threading.Lock()

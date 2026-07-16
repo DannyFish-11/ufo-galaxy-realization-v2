@@ -115,7 +115,7 @@ async def _fetch_frame(
 
 async def run_sampling_session(
     device_id: str,
-    fps: float = 1.0,
+    fps: Optional[float] = None,
     duration: float = 10.0,
     prompt: Optional[str] = None,
     mode: Optional[str] = None,
@@ -132,9 +132,13 @@ async def run_sampling_session(
 
     Args:
         device_id: The target device identifier used to fetch frames.
-        fps:       Frames per second to sample (default 1.0).  Values above
-                   the Node_95 capture rate are silently clamped by the
-                   upstream receiver.
+        fps:       Frames per second to sample.  ``None`` (default) lets the
+                   unified modality negotiator auto-pick the rate from the
+                   active tier's ``video_in`` state — denser for native video,
+                   sparse stills for the frames-bridge, and *no sampling at all*
+                   when the tier has no vision.  Pass an explicit ``fps > 0`` to
+                   override.  Values above the Node_95 capture rate are silently
+                   clamped by the upstream receiver.
         duration:  Total sampling window in seconds (default 10.0).
         prompt:    Optional instruction passed to the runtime shell.  Falls back to a
                     built-in observe-and-suggest prompt when omitted.
@@ -153,7 +157,31 @@ async def run_sampling_session(
     """
     effective_prompt = prompt or _DEFAULT_PROMPT
     node_url = _node_95_url()
-    interval = max(1.0 / max(fps, _MIN_FPS), 0.0)
+
+    # ── 自适配抽帧决策(统一模态协商层驱动，零 per-model 分支)──────────────────
+    # 当前档位没有视觉 → 抽帧毫无意义,直接不抽,省算力/带宽;有视觉则按 native /
+    # frames_bridge 取合适帧率(native 连续视频送更密,bridge 抽稀疏静帧喂视觉)。
+    # 显式传入 fps>0 时尊重调用方;fps=None(默认)则完全交给协商层自适配。
+    try:
+        from core.modality_bridge import resolve_video_sampling
+
+        should_sample, resolved_fps, video_mode = resolve_video_sampling(fps)
+    except Exception as exc:  # noqa: BLE001 — 协商层异常绝不能拖垮采样,退回旧默认
+        logger.debug("VisionSampler: 视频协商不可用,退回默认帧率 — %s", exc)
+        should_sample, resolved_fps, video_mode = (True, fps or 1.0, "frames_bridge")
+
+    if not should_sample:
+        logger.info("VisionSampler: 当前档位无视觉能力(video=%s),跳过抽帧", video_mode)
+        return {
+            "success": False,
+            "frames_sampled": 0,
+            "openclawd_response": None,
+            "command_result": None,
+            "video_mode": video_mode,
+            "reason": "当前档位无视觉能力,抽帧被跳过(自适配)",
+        }
+
+    interval = max(1.0 / max(resolved_fps, _MIN_FPS), 0.0)
 
     frames_sampled = 0
     images: List[Any] = []  # List[MultiModalImage]
@@ -345,6 +373,8 @@ async def run_sampling_session(
         "openclawd_response": runtime_response,
         "runtime_response": runtime_response,
         "command_result": command_result,
+        "video_mode": video_mode,
+        "sampled_fps": resolved_fps,
         "streaming_role": "derived_snapshot_bridge_from_continuous_stream",
         "stream_source_authority": "NODE_95_URL",
     }
