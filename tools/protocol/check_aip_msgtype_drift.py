@@ -27,7 +27,7 @@ AIP v3 消息类型跨仓漂移检查器 —— 把"单一真相源"从口号变
                       客户端发出去 server 不认。列出 客户端值 → v2 应有值。
   3. V2_MISSING    —— 客户端定义了某 wire 值,v2 既无同值、也不在"客户端专有
                       扩展白名单"里 —— 要么 v2 该补、要么客户端该删。
-  4. CLIENT_EXT    —— 客户端专有扩展(client→面板/client 内部,server 无需识别),
+  4. CLIENT_EXT    —— 客户端专有扩展(client→面板/client 内部 UI),server 无需识别,
                       在白名单里,属正常。
 
 用法
@@ -170,7 +170,12 @@ def main() -> int:
     for name, path in clients.items():
         if name == "wearos":
             wearos_settings = os.path.join(args.wearos, "settings.gradle.kts")
-            if os.path.isfile(wearos_settings) and "shared-protocol" in open(wearos_settings, encoding="utf-8").read():
+            uses_shared_protocol = False
+            if os.path.isfile(wearos_settings):
+                with open(wearos_settings, encoding="utf-8") as _f:
+                    if "shared-protocol" in _f.read():
+                        uses_shared_protocol = True
+            if uses_shared_protocol:
                 print(f"[{name}] 复用 android 的 :shared-protocol 模块(settings.gradle.kts 里 project(\":shared-protocol\") "
                       f"指向 ../ufo-galaxy-android/shared-protocol),wire 值与上面的 android 检查结果完全一致,跳过重复检查。")
             else:
