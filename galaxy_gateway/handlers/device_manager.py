@@ -45,9 +45,9 @@ class DeviceManager:
         device_id = device_info.device_id
 
         if device_id in self.devices:
-            logger.info(f"Device {device_id} re-registered, updating info")
+            logger.info("Device %s re-registered, updating info", device_id)
         else:
-            logger.info(f"New device registered: {device_id}")
+            logger.info("New device registered: %s", device_id)
 
         # ── SSOT guardrail: write-through to UDM FIRST ──
         # Derive a plain capability list from the DeviceCapability bitmask.
@@ -78,7 +78,7 @@ class DeviceManager:
     def unregister_device(self, device_id: str) -> bool:
         """注销设备（同步到统一设备管理器）。"""
         if device_id not in self.devices:
-            logger.warning(f"Device {device_id} not found for unregistration")
+            logger.warning("Device %s not found for unregistration", device_id)
             return False
 
         # ── SSOT guardrail: remove from UDM first ──
@@ -90,7 +90,7 @@ class DeviceManager:
         self.device_status.pop(device_id, None)
         self.device_last_seen.pop(device_id, None)
 
-        logger.info(f"Device unregistered: {device_id}")
+        logger.info("Device unregistered: %s", device_id)
         return True
 
     def update_device_status(self, device_id: str, status: str):
@@ -181,13 +181,13 @@ class DeviceManager:
                 )
                 if len(validated) != len(reported_capabilities):
                     logger.info(
-                        f"设备 {message.device_id} 能力校验: "
-                        f"{len(reported_capabilities)} 声明 → {len(validated)} 通过"
+                        "Device %s capability validation: %d declared → %d passed",
+                        message.device_id, len(reported_capabilities), len(validated),
                     )
                 # 将校验后的能力写回 payload
                 device_info_data["validated_capabilities"] = validated
             except Exception as e:
-                logger.debug(f"设备能力校验跳过: {e}")
+                logger.debug("Device capability validation skipped: %s", e)
         
         # 构建 DeviceInfo
         device_info = DeviceInfo(
