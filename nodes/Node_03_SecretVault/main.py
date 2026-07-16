@@ -12,7 +12,7 @@ import secrets
 from datetime import datetime, timedelta
 from typing import Dict, Any, Optional, List
 
-logger = logging.getLogger("Node_03_SecretVault")
+logger = setup_logging("Node_03_SecretVault")
 
 # 可选依赖：优雅降级
 try:
@@ -33,6 +33,11 @@ except BaseException as e:
     HAS_CRYPTO = False
     Fernet = None
     logger.warning(f"cryptography 不可用: {e}，加密功能将降级")
+
+from nodes.common.base_node import (
+    setup_logging, setup_signal_handlers, node_metrics, ErrorResponse
+)
+import signal
 
 try:
     from nodes.common.cors_config import get_cors_origins
@@ -136,6 +141,7 @@ class SecretVault:
         self._secrets[key] = secret
         self._save_secrets()
         self._log_access("set", key, True)
+        node_metrics.increment("secrets_set_total")
         return secret
 
     def get_secret(self, key: str, decrypt: bool = True) -> Optional[str]:
@@ -321,4 +327,5 @@ async def decrypt_value(data: Dict[str, str]):
 
 if __name__ == "__main__":
     import uvicorn
+    setup_signal_handlers(logger)
     uvicorn.run(app, host="0.0.0.0", port=8003)
