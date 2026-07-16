@@ -10,6 +10,7 @@ B 档 MiniCPM-o 官方 server 原生听/说后端 + 档位联动。
 from __future__ import annotations
 
 import asyncio
+import os
 
 import pytest
 
@@ -21,14 +22,31 @@ from core.native_modal import MiniCPMNativeBackend
 
 @pytest.fixture(autouse=True)
 def _isolate_tier_state(tmp_path, monkeypatch):
-    """把档位持久化重定向到 tmp + 清相关 env，避免 save_tier('B') 污染真实
-    runtime/model_state.json 与全套后续测试(GALAXY_MODEL_TIER/OLLAMA_MODEL)。"""
+    """把档位持久化重定向到 tmp + 清相关 env,避免 save_tier('B') 污染真实
+    runtime/model_state.json 与全套后续测试(GALAXY_MODEL_TIER/OLLAMA_MODEL)。
+
+    关键:save_tier / activate 会【直接】写 os.environ(GALAXY_MODEL_TIER /
+    OLLAMA_MODEL / GALAXY_NATIVE_AUDIO)——这些不经 monkeypatch,pytest 不会自动
+    还原。故这里在 teardown 兜底快照还原,并复位 native_modal / speech_output 的
+    全局态,确保本模块【绝不】把"原生说已选 + 门控已开"泄漏进后续用例(如 TTS
+    覆盖层测试会因此以为该走原生而彻底跳过 TTS)。"""
     monkeypatch.setattr(mc, "_STATE_FILE", tmp_path / "runtime" / "model_state.json")
     monkeypatch.setattr(mc, "_LEGACY_TIER_FILE", tmp_path / ".galaxy_tier")
     monkeypatch.setattr(mc, "_LEGACY_MODEL_FILE", tmp_path / ".galaxy_model")
-    for k in ("GALAXY_MODEL_TIER", "OLLAMA_MODEL"):
+    watched = ("GALAXY_MODEL_TIER", "OLLAMA_MODEL", "GALAXY_NATIVE_AUDIO")
+    saved = {k: os.environ.get(k) for k in watched}
+    for k in watched:
         monkeypatch.delenv(k, raising=False)
-    yield
+    try:
+        yield
+    finally:
+        nm.deactivate()  # 复位 _active_backend / _gen + 注销原生说 + 关门控
+        so._native_speech_backend = None
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
 
 
 class _FakeBackend:

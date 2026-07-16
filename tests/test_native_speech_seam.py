@@ -9,11 +9,31 @@
 
 from __future__ import annotations
 
+import os
+
+import pytest
+
 import core.speech_output as so
 
 
 def _reset():
     so._native_speech_backend = None
+
+
+@pytest.fixture(autouse=True)
+def _hermetic_native_state():
+    """铁律:本模块【绝不】把"原生说后端 + GALAXY_NATIVE_AUDIO 门控"泄漏到后续
+    用例。任何一个测试注册了原生说 / 开了门控,teardown 一律复位——否则 TTS 覆盖层
+    测试会误判"该走原生"而彻底跳过 TTS(CI 里 got [False] 的根因类）。"""
+    saved = os.environ.get("GALAXY_NATIVE_AUDIO")
+    try:
+        yield
+    finally:
+        so._native_speech_backend = None
+        if saved is None:
+            os.environ.pop("GALAXY_NATIVE_AUDIO", None)
+        else:
+            os.environ["GALAXY_NATIVE_AUDIO"] = saved
 
 
 def teardown_function():
