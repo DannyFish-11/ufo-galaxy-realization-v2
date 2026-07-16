@@ -108,8 +108,8 @@ class ExternalMCPAdapter(MCPAdapter):
         self._tools_cache = None
         
     def get_tools(self) -> List[Dict[str, Any]]:
-        """获取工具列表"""
-        if self._tools_cache:
+        """获取工具列表 - 修复：空列表是合法缓存值，用 is not None 判断"""
+        if self._tools_cache is not None:
             return self._tools_cache
             
         # 通过 manus-mcp-cli 获取工具列表
@@ -125,10 +125,15 @@ class ExternalMCPAdapter(MCPAdapter):
             if result.returncode == 0:
                 self._tools_cache = json.loads(result.stdout)
                 return self._tools_cache
+            else:
+                # 命令执行失败，缓存空列表避免重复请求
+                self._tools_cache = []
         except Exception as exc:
             logger.warning("Exception suppressed: %s", exc)
+            # 出错时缓存空列表，避免重复触发请求
+            self._tools_cache = []
             
-        return []
+        return self._tools_cache
         
     async def call_tool(self, tool: str, params: Dict[str, Any]) -> Any:
         """调用外部 MCP 工具"""
