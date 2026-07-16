@@ -47,18 +47,25 @@ For the full configuration authority model see docs/CONFIGURATION_AUTHORITY.md.
 日期: 2026-01-23
 """
 
+__all__ = [
+    "SystemManager",
+    "NodeConfig",
+    "ConfigManager",
+]
+
 import os
 import sys
 import time
 import json
 import logging
+from logging.handlers import RotatingFileHandler
 import signal
 import subprocess
 import asyncio
 import httpx
 from typing import Any, Dict, List, Set, Optional
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 from dataclasses import dataclass, asdict
 from enum import Enum
 
@@ -71,6 +78,23 @@ CYAN = "\033[96m"
 RESET = "\033[0m"
 
 logger = logging.getLogger("Galaxy.SystemManager")
+
+# Add log rotation (PR: RotatingFileHandler for system_manager)
+_LOG_DIR = Path(__file__).parent / "logs"
+_LOG_DIR.mkdir(exist_ok=True)
+if not any(isinstance(h, RotatingFileHandler) for h in logger.handlers):
+    _rotating_handler = RotatingFileHandler(
+        str(_LOG_DIR / "system_manager.log"),
+        maxBytes=10 * 1024 * 1024,  # 10MB per file
+        backupCount=3,
+        encoding="utf-8",
+    )
+    _rotating_handler.setFormatter(logging.Formatter(
+        "%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+        datefmt="%H:%M:%S",
+    ))
+    logger.addHandler(_rotating_handler)
+    logger.setLevel(logging.INFO)
 
 # =============================================================================
 # Configuration - 从 unified_config.json 加载
@@ -174,7 +198,13 @@ class ConfigManager:
 
             return nodes_by_group
 
+        except json.JSONDecodeError as e:
+            logger.error("配置文件 %s JSON 解析失败 (行 %d, 列 %d): %s",
+                         cls.CONFIG_FILE, e.lineno, e.colno, e.msg)
+            print(f"{RED}❌ 配置文件 JSON 解析失败: {e}{RESET}")
+            return cls._get_default_nodes()
         except Exception as e:
+            logger.error("加载节点配置失败: %s", e, exc_info=True)
             print(f"{RED}❌ Error loading config: {e}{RESET}")
             return cls._get_default_nodes()
     
@@ -209,16 +239,19 @@ NODES = ConfigManager.load_nodes()
 
 class SystemManager:
     """系统管理器"""
-    
+
     def __init__(self, project_root: Path = None):
         self.project_root = project_root or Path(__file__).parent
         self.nodes_dir = self.project_root / "nodes"
         self.log_dir = self.project_root / "logs"
         self.log_dir.mkdir(exist_ok=True)
-        
+
         self.processes: Dict[str, subprocess.Popen] = {}
         self.node_status: Dict[str, str] = {}
         self.nodes_config = self._flatten_nodes()
+        # Reusable HTTP client with connection pooling (PR: avoid creating new client per call)
+        limits = httpx.Limits(max_connections=20, max_keepalive_connections=10)
+        self._http_client = httpx.AsyncClient(limits=limits, timeout=httpx.Timeout(5.0))
         
         # ===== 集成：初始化能力管理器和连接管理器 =====
         try:
@@ -297,14 +330,30 @@ class SystemManager:
             # ===== 集成：注册连接到连接管理器 =====
             if self.connection_manager:
                 try:
-                    asyncio.create_task(self._register_node_connection(config))
+                    import threading
+                    loop = asyncio.get_event_loop()
+                    if loop.is_running():
+                        loop.create_task(self._register_node_connection(config))
+                    else:
+                        threading.Thread(
+                            target=lambda: asyncio.run(self._register_node_connection(config)),
+                            daemon=True,
+                        ).start()
                 except Exception as e:
                     print(f"{YELLOW}⚠️  连接注册失败 (非致命): {e}{RESET}")
             
             # ===== 集成：注册节点能力 =====
             if self.capability_manager:
                 try:
-                    asyncio.create_task(self._register_node_capabilities(config))
+                    import threading
+                    loop = asyncio.get_event_loop()
+                    if loop.is_running():
+                        loop.create_task(self._register_node_capabilities(config))
+                    else:
+                        threading.Thread(
+                            target=lambda: asyncio.run(self._register_node_capabilities(config)),
+                            daemon=True,
+                        ).start()
                 except Exception as e:
                     print(f"{YELLOW}⚠️  能力注册失败 (非致命): {e}{RESET}")
             
@@ -382,6 +431,8 @@ class SystemManager:
 
         SECURITY: 若配置了 HEALTH_CHECK_TOKEN 环境变量，会在请求头中
         携带 X-Health-Token 进行认证。被检查节点可选择性验证此 token。
+
+        PR: Reuses the shared httpx.AsyncClient to avoid connection overhead.
         """
         url = f"http://localhost:{config.port}{config.health_check_path}"
 
@@ -392,11 +443,10 @@ class SystemManager:
             headers["X-Health-Token"] = health_token
 
         try:
-            async with httpx.AsyncClient(timeout=timeout) as client:
-                response = await client.get(url, headers=headers)
-                response.raise_for_status()
-                self.node_status[config.id] = "healthy"
-                return True
+            response = await self._http_client.get(url, headers=headers, timeout=timeout)
+            response.raise_for_status()
+            self.node_status[config.id] = "healthy"
+            return True
         except httpx.HTTPStatusError as exc:
             # 401/403 表示认证失败 — 记录但不视为节点不健康
             if exc.response.status_code in (401, 403):
@@ -407,6 +457,10 @@ class SystemManager:
             return False
         except Exception:
             return False
+
+    async def close(self) -> None:
+        """Close the reusable HTTP client. Call on shutdown."""
+        await self._http_client.aclose()
     
     async def wait_for_node(self, config: NodeConfig, max_wait: int = 30) -> bool:
         """等待节点启动"""
@@ -429,8 +483,10 @@ class SystemManager:
         self.node_status[config.id] = "timeout"
         return False
     
-    async def start_group(self, group: str, wait: bool = True):
+    async def start_group(self, group: str, wait: bool = True, _visited: set = None):
         """启动一组节点"""
+        if _visited is None:
+            _visited = set()
         if group not in NODES:
             print(f"{RED}❌ 未知的节点组: {group}{RESET}")
             return
@@ -447,6 +503,9 @@ class SystemManager:
                 # 先启动依赖节点
                 for dep in config.dependencies:
                     dep_id = dep.replace("Node_", "").split("_")[0]
+                    if dep_id in _visited:  # 防止循环依赖无限递归
+                        continue
+                    _visited.add(dep_id)
                     if dep_id in self.nodes_config and dep_id not in self.processes:
                         self.start_node(self.nodes_config[dep_id])
                         await asyncio.sleep(1)
@@ -537,7 +596,7 @@ class SystemManager:
     
     async def check_all_nodes(self):
         """检查所有节点状态"""
-        print(f"\n{BLUE}[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 节点状态检查{RESET}")
+        print(f"\n{BLUE}[{datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}] 节点状态检查{RESET}")
         print(f"{'-'*80}")
         
         all_configs = list(self.nodes_config.values())
@@ -565,10 +624,10 @@ class SystemManager:
         print(f"{'-'*80}")
         print(f"{GREEN}健康: {healthy_count}{RESET} | {RED}不健康: {unhealthy_count}{RESET} | {YELLOW}未运行: {not_running}{RESET}")
     
-    async def generate_report(self) -> Dict:
+    async def generate_report(self) -> Dict[str, Any]:
         """生成系统报告"""
         report = {
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "nodes": {},
             "summary": {
                 "total": 0,
@@ -606,16 +665,22 @@ class SystemManager:
 # CLI
 # =============================================================================
 
+# Node group choices (extracted constant to avoid repetition)
+NODE_GROUP_CHOICES: list[str] = [
+    "core", "tools", "physical", "intelligence", "monitoring",
+    "advanced", "orchestration", "multimodal", "academic", "all",
+]
+
+
 async def main():
     """主函数"""
     import argparse
-    
+
     parser = argparse.ArgumentParser(description="Galaxy 系统管理器 v2.0")
     parser.add_argument("command", choices=["start", "stop", "status", "monitor", "report"],
                        help="命令")
-    parser.add_argument("--group", "-g", 
-                       choices=["core", "tools", "physical", "intelligence", "monitoring",
-                               "advanced", "orchestration", "multimodal", "academic", "all"],
+    parser.add_argument("--group", "-g",
+                       choices=NODE_GROUP_CHOICES,
                        default="all", help="节点组")
     parser.add_argument("--interval", "-i", type=int, default=30,
                        help="监控间隔（秒）")
@@ -651,11 +716,6 @@ async def main():
         report = await manager.generate_report()
         print(json.dumps(report, indent=2, ensure_ascii=False))
 
+
 if __name__ == "__main__":
-    print(f"""
-{CYAN}╔═══════════════════════════════════════════════════════════════╗
-║   Galaxy System Manager v2.0                             ║
-║   102 Nodes | Unified Config | Port Conflict Fixed            ║
-╚═══════════════════════════════════════════════════════════════╝{RESET}
-""")
     asyncio.run(main())
