@@ -162,6 +162,15 @@ func (s *Sandbox) Execute(ctx context.Context, code CodePayload, cfg SandboxConf
 	}
 	containerID := resp.ID
 
+	// Ensure container is always cleaned up, even if attach/start fails
+	defer func() {
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if err := s.cli.ContainerRemove(cleanupCtx, containerID, container.RemoveOptions{Force: true}); err != nil {
+			log.Printf("[Sandbox] failed to cleanup container %s: %v", containerID, err)
+		}
+	}()
+
 	// Attach to capture output
 	attachResp, err := s.cli.ContainerAttach(ctx, containerID, container.AttachOptions{
 		Stream: true,
