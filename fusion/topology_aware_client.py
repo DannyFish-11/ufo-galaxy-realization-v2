@@ -42,7 +42,7 @@ from .topology_manager import TopologyManager, RoutingStrategy
 logger = logging.getLogger(__name__)
 
 
-class TopologyAwareConstellationClient(ConstellationClient if CONSTELLATION_AVAILABLE else object):
+class TopologyAwareConstellationClient(ConstellationClient):
     """
     拓扑感知的 ConstellationClient
     
@@ -93,9 +93,8 @@ class TopologyAwareConstellationClient(ConstellationClient if CONSTELLATION_AVAI
             enable_topology: 是否启用拓扑功能
             default_routing_strategy: 默认路由策略
         """
-        # 调用父类初始化 (如果可用)
-        if CONSTELLATION_AVAILABLE:
-            super().__init__(config, task_name)
+        # 调用父类初始化 (ConstellationClient 始终可用: 真实或 mock)
+        super().__init__(config, task_name)
         
         self.enable_topology = enable_topology
         self.topology_manager: Optional[TopologyManager] = None
@@ -123,7 +122,7 @@ class TopologyAwareConstellationClient(ConstellationClient if CONSTELLATION_AVAI
         Returns:
             初始化结果字典
         """
-        # 调用父类初始化 (如果可用)
+        # 调用父类初始化 (ConstellationClient 始终可用: 真实或 mock)
         if CONSTELLATION_AVAILABLE:
             result = await super().initialize()
         else:
