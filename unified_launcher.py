@@ -90,6 +90,14 @@ This file retains the service orchestration surface:
 版本：2.1 (demoted to subordinate role — PR-2)
 """
 
+__all__ = [
+    "GalaxyUnified",
+    "L4EnhancementLauncher",
+    "UnifiedWebUI",
+    "print_status",
+    "main",
+]
+
 import os
 import sys
 import signal
@@ -121,11 +129,14 @@ except ImportError:
     def get_cors_origins():  # type: ignore[misc]
         return ["http://localhost:3000", "http://localhost:8080"]
 
-logging.basicConfig(
-    level=logging.WARNING,  # console只显示警告/错误；INFO详情写 logs/lumiv.log
-    format='%(asctime)s | %(levelname)s | %(name)s | %(message)s',
-    datefmt='%H:%M:%S'
-)
+# SECURITY: Only configure logging if no root handlers exist yet.
+# Prevents overwriting main.py's logging configuration when this module is imported.
+if not logging.getLogger().handlers:
+    logging.basicConfig(
+        level=logging.WARNING,  # console只显示警告/错误；INFO详情写 logs/lumiv.log
+        format='%(asctime)s | %(levelname)s | %(name)s | %(message)s',
+        datefmt='%H:%M:%S'
+    )
 logger = logging.getLogger("Galaxy")
 
 # 静默 URL 哨兵(见 core/ollama_url_sentinel):只观测不干预,缺协议头请求 URL 一出现
@@ -149,7 +160,24 @@ from core.ascii_art import (
     print_section_header,
     print_status_row,
 )
-from core.credential_vault import PLACEHOLDER_PREFIXES
+
+
+def _color_supported() -> bool:
+    """Check if terminal supports color output.
+
+    Respects NO_COLOR environment variable (https://no-color.org/) and
+    checks if stdout is a TTY.
+    """
+    if os.environ.get("NO_COLOR", "").strip():
+        return False
+    if not sys.stdout.isatty():
+        return False
+    return True
+
+
+def _safe_color(color_code: str) -> str:
+    """Return color code only if terminal supports colors."""
+    return color_code if _color_supported() else ""
 
 
 def print_status(message: str, status: str = "info"):
@@ -191,13 +219,13 @@ def _url_sentinel_audit() -> Tuple[str, str, str, List[Dict[str, str]]]:
 
 
 def _short_culprit(culprit: str) -> str:
-    """把罪魁帧 `File "D:\\...\\x.py", line N, in fn` 压成 `x.py:N in fn`(界面可读)。"""
+    """把罪魁帧 `File "D:\\...\x.py", line N, in fn` 压成 `x.py:N in fn`(界面可读)。"""
     try:
         import re
         m = re.search(r'File "([^"]+)", line (\d+)(?:, in (\S+))?', culprit or "")
         if m:
             # 兼容两种路径分隔符:日志可能来自 Windows(D:\x\y.py)也可能来自 POSIX
-            name = re.split(r"[\\/]", m.group(1))[-1]
+            name = re.split(r"[\/]", m.group(1))[-1]
             fn = f" in {m.group(3)}" if m.group(3) else ""
             return f"{name}:{m.group(2)}{fn}"
     except Exception:  # noqa: BLE001
@@ -225,8 +253,9 @@ async def _ensure_recommended_model():
                     "import asyncio; hf=get_hf_model_manager(); "
                     "asyncio.run(hf.install_recommended('llm_gemma4_e4b'))\""
                 )
+                raise  # 重新抛出，让上层决定是否继续
     except Exception:
-        pass
+        logger.debug("Model auto-download skipped (non-fatal)", exc_info=True)
 
 
 def print_section(title: str):
@@ -252,127 +281,31 @@ def _try_start_docker_daemon(docker_path: str) -> None:
                              "Docker", "Docker", "Docker Desktop.exe"),
             ]
             for exe in candidates:
-                if os.path.exists(exe):
-                    sp.Popen([exe], creationflags=getattr(sp, "DETACHED_PROCESS", 0))
+                if os.path.isfile(exe):
+                    sp.Popen([exe], stdout=sp.DEVNULL, stderr=sp.DEVNULL,
+                             creationflags=getattr(sp, "CREATE_NO_WINDOW", 0))
                     return
         elif sys.platform == "darwin":
-            sp.Popen(["open", "-a", "Docker"])
+            sp.Popen(["open", "-a", "Docker"], stdout=sp.DEVNULL, stderr=sp.DEVNULL)
+            return
         else:
-            sp.run(["systemctl", "start", "docker"], capture_output=True, timeout=20)
+            sp.run(["systemctl", "start", "docker"], stdout=sp.DEVNULL, stderr=sp.DEVNULL, timeout=15)
+            return
     except Exception:
         pass
 
 
-def _get_lan_ip() -> str:
-    """Return the host's primary LAN IPv4 address, or empty string if unavailable."""
-    try:
-        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-            s.connect(("8.8.8.8", 80))
-            return s.getsockname()[0]
-    except Exception:
-        return ""
-
-
-_CLOUD_LLM_KEY_ENV_VARS = (
-    "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "DEEPSEEK_API_KEY", "GEMINI_API_KEY",
-    "GOOGLE_API_KEY", "GROQ_API_KEY", "OPENROUTER_API_KEY", "ZHIPU_API_KEY",
-    "QWEN_API_KEY", "MOONSHOT_API_KEY", "MINIMAX_API_KEY", "XAI_API_KEY",
-)
-
-
-def _model_tag_root(tag: str) -> str:
-    """模型 tag 去掉冒号后缀，取根名(如 'gemma4:e2b' -> 'gemma4')，用于宽松匹配。"""
-    return (tag or "").split(":")[0].strip().lower()
-
-
-def ai_brain_readiness(
-    chosen_model: str,
-    available_models: list,
-    ollama_healthy: bool,
-    env: Optional[Dict[str, str]] = None,
-) -> Tuple[str, bool, str]:
-    """判定"AI 大脑"启动状态是否真的可用,而不仅仅是"Ollama 服务可达"。
-
-    真机复现过的坑:LocalBrainManager._healthy 只代表"Ollama 服务本身可达"，
-    不代表"用户选中的这个模型真的装好了"——曾经服务健康但 gemma4:e2b 从未拉取
-    成功,启动横幅却照样打 ✓、显示"就绪"，用户看着一片绿实际上一句话都问不出来
-    (每次调用都 404)。这里额外核实选中模型是否真的在已安装列表里(按 tag 前缀
-    宽松匹配，兼容 "gemma4:e2b" 与 "gemma4:e2b-q4" 等变体)；若本地模型没装好但
-    配置了任一云端 API Key，仍可对话，不算彻底不可用。
-
-    Returns:
-        (status, model_installed, model_status_label)
-        status: "ok" | "warn" | "fail" —— 供启动横幅 & 最终"降级"统计使用。
-    """
-    env = env if env is not None else os.environ
-    model_installed = bool(chosen_model) and any(
-        _model_tag_root(a) == _model_tag_root(chosen_model) for a in available_models
-    )
-    cloud_key_set = any(
-        env.get(k, "").strip() and not env.get(k, "").strip().lower().startswith(PLACEHOLDER_PREFIXES)
-        for k in _CLOUD_LLM_KEY_ENV_VARS
-    )
-    truly_usable = model_installed or cloud_key_set
-    status = "ok" if (ollama_healthy and model_installed) else ("warn" if truly_usable else "fail")
-    if model_installed:
-        label = "已安装"
-    elif cloud_key_set:
-        label = "未安装(拉取失败/未完成)—— 已配置云端 API Key 可兜底"
-    else:
-        label = "未安装(拉取失败/未完成)—— 且无云端 API Key,当前无法对话！请去「模型」tab 配置"
-    return status, model_installed, label
-
-
-async def _recheck_ai_brain_phase(brain, phases_state: list, ai_brain_phase_idx: int) -> None:
-    """在总结卡打印前，重新探测一次 AI 大脑真实状态，好转了就更新对应条目。
-
-    真机复现过:"AI 大脑"这一行的状态是在 select_and_start_brain() 刚返回那一刻
-    算出来、写死进 phases_state 的——但 background_pull() 是故意不阻塞启动的
-    后台线程，那一刻很可能还没跑完(甚至 Ollama 服务本身当时都还在冷启动，没
-    来得及在 _ensure_ollama_running() 的等待窗口内响应)。等到节点系统、L4
-    模块、Electron、托盘、语音这些阶段都跑完、真正要打总结卡时，Ollama 大概率
-    已经起来、模型也大概率已经拉好了，但总结卡"降级"栏用的还是那份过时快照，
-    导致用户看到"AI 大脑 → 未安装(拉取失败/未完成)"，实际上模型已经真的装好
-    可用——这是过期状态展示的问题，不是模型真的没装好。
-
-    只在这里把状态往"更好"的方向纠正(never downgrade)，且只在探测到真实证据
-    (ping 通 + 模型列表刷新)时才改，不主观放宽判定标准。
-    """
-    try:
-        if brain is None or not (0 <= ai_brain_phase_idx < len(phases_state)):
-            return
-        healthy2 = bool(getattr(brain, "_healthy", False)) or await brain._ping_ollama()
-        if healthy2:
-            brain._healthy = True
-            await brain._refresh_model_list()
-        bm2 = getattr(brain, "brain_model", None) or os.environ.get("OLLAMA_MODEL", "") or "未选择"
-        avail2 = list(getattr(brain, "available_models", []) or [])
-        st2, model_installed2, label2 = ai_brain_readiness(bm2, avail2, healthy2)
-        name0, status0, _hint0 = phases_state[ai_brain_phase_idx]
-        if status0 != "ok" and st2 != status0:
-            phases_state[ai_brain_phase_idx] = (
-                name0, st2, (None if model_installed2 else label2)
-            )
-    except Exception as exc:  # noqa: BLE001
-        logger.debug("AI 大脑状态复核跳过(非致命): %s", exc)
-
-
-# ============================================================================
-# Launcher sub-module imports
-# (Enums, config, service management, core/node/health/shutdown)
-# ============================================================================
-
-from launcher.bootstrap import (
-    SystemState,
-    ServiceType,
-    SystemConfig,
-    _write_entrypoint,
-)
-from launcher.service_manager import ServiceInfo, ServiceManager
+# 引入重构后的子模块
+from launcher.bootstrap import SystemConfig, SystemState, print_status as _bs_print_status
+from launcher.service_manager import ServiceManager, ServiceInfo
 from launcher.core_services import CoreServiceLauncher
 from launcher.node_startup import NodeSystemLauncher
 from launcher.health_checks import run_startup_health_check
 from launcher.shutdown import async_shutdown
+
+# SystemState 兼容别名
+if not hasattr(SystemState, "SETUP"):
+    SystemState.SETUP = SystemState.LOADING_CONFIG
 
 
 # ============================================================================
@@ -380,529 +313,282 @@ from launcher.shutdown import async_shutdown
 # ============================================================================
 
 class L4EnhancementLauncher:
-    """L4 增强模块启动器"""
-    
+    """L4 增强模块启动器 —— 按需加载，失败不阻断主流程"""
+
     def __init__(self, service_manager: ServiceManager, config: SystemConfig):
         self.service_manager = service_manager
         self.config = config
-        self.l4_modules = {}
-        
-    async def start_all(self) -> Dict[str, bool]:
-        """启动所有 L4 增强模块"""
-        results = {}
-        
-        # 感知模块
-        logger.debug("初始化感知模块...")
-        try:
-            from enhancements.perception.environment_scanner import EnvironmentScanner
-            self.l4_modules["environment_scanner"] = EnvironmentScanner()
-            results["perception"] = True
-        except Exception as e:
-            logger.error(f"感知模块初始化失败: {e}")
-            results["perception"] = False
+        self.modules: Dict[str, Any] = {}
 
-        # 推理模块
-        logger.debug("初始化推理模块...")
-        try:
-            from enhancements.reasoning.goal_decomposer import GoalDecomposer
-            from enhancements.reasoning.autonomous_planner import AutonomousPlanner
-            from enhancements.reasoning.world_model import WorldModel
-            self.l4_modules["goal_decomposer"] = GoalDecomposer()
-            self.l4_modules["autonomous_planner"] = AutonomousPlanner()
-            self.l4_modules["world_model"] = WorldModel()
-            results["reasoning"] = True
-        except Exception as e:
-            logger.error(f"推理模块初始化失败: {e}")
-            results["reasoning"] = False
+    async def start_all(self) -> Dict[str, Any]:
+        """启动所有已启用的 L4 模块"""
+        results = {"modules": {}}
 
-        # 学习模块
-        logger.debug("初始化学习模块...")
-        try:
-            from enhancements.learning.autonomous_learning_engine import AutonomousLearningEngine
-            self.l4_modules["learning_engine"] = AutonomousLearningEngine()
-            results["learning"] = True
-        except Exception as e:
-            logger.error(f"学习模块初始化失败: {e}")
-            results["learning"] = False
+        # 认知进化 (PR-25/26/27)
+        if self.config.enable_cognitive_evolution:
+            try:
+                from core.cognitive.evolution_system import initialize_cognitive_evolution
+                initialize_cognitive_evolution()
+                results["modules"]["cognitive_evolution"] = True
+                logger.info("认知进化系统已启动")
+            except Exception as exc:
+                results["modules"]["cognitive_evolution"] = False
+                logger.warning("认知进化系统启动失败(非致命): %s", exc)
 
-        # 执行模块
-        logger.debug("初始化执行模块...")
-        try:
-            from enhancements.execution.action_executor import ActionExecutor
-            self.l4_modules["action_executor"] = ActionExecutor()
-            results["execution"] = True
-        except Exception as e:
-            logger.error(f"执行模块初始化失败: {e}")
-            results["execution"] = False
+        # 数字孪生引擎
+        if self.config.enable_digital_twin:
+            try:
+                from core.digital_twin_engine import DigitalTwinEngine
+                self.modules["digital_twin"] = DigitalTwinEngine()
+                await self.modules["digital_twin"].initialize()
+                results["modules"]["digital_twin"] = True
+                logger.info("数字孪生引擎已启动")
+            except Exception as exc:
+                results["modules"]["digital_twin"] = False
+                logger.warning("数字孪生引擎启动失败(非致命): %s", exc)
 
-        # 安全模块
-        logger.debug("初始化安全模块...")
-        try:
-            from enhancements.safety.safety_manager import SafetyManager
-            self.l4_modules["safety_manager"] = SafetyManager()
-            results["safety"] = True
-        except Exception as e:
-            logger.error(f"安全模块初始化失败: {e}")
-            results["safety"] = False
-            
+        # 健康集成 (Mediapipe)
+        if self.config.enable_health:
+            try:
+                from core.health_integration import HealthAnalyzer
+                self.modules["health"] = HealthAnalyzer()
+                results["modules"]["health"] = True
+                logger.info("健康分析模块已启动")
+            except Exception as exc:
+                results["modules"]["health"] = False
+                logger.warning("健康分析模块启动失败(非致命): %s", exc)
+
         return results
 
 
 # ============================================================================
-# Web UI 服务器
+# Web UI / API 网关 —— PR-22: 统一网关设计
 # ============================================================================
 
 class UnifiedWebUI:
-    """统一 Web UI 服务器"""
-    
-    def __init__(self, service_manager: ServiceManager, config: SystemConfig):
-        self.service_manager = service_manager
+    """统一 Web UI 网关 (FastAPI + Uvicorn)
+
+    遵循 PR-22 统一网关设计:
+    - 只读状态面板  → / (或 /static)
+    - 管理 API      → /api/v1/*
+    - WebSocket     → /ws
+    - 无 /webui 子路径;前端用相对路径
+    """
+
+    def __init__(self, config: SystemConfig):
         self.config = config
-        self.app = None
-        
-    async def start(self):
-        """启动 Galaxy API 服务（核心运行时 API 层）
+        self.app: Optional[Any] = None
+        self.server: Optional[Any] = None
 
-        架构说明（API 单一入口原则）：
-          core/api_routes.py 是 Galaxy 系统的 **唯一权威 API 定义**。
-          所有 REST 路由必须通过 core.api_routes.create_api_routes() 提供。
+    def _create_fastapi_app(self):
+        """创建 FastAPI 应用"""
+        from fastapi import FastAPI, Request
+        from fastapi.middleware.cors import CORSMiddleware
+        from fastapi.responses import JSONResponse, FileResponse
+        from fastapi.staticfiles import StaticFiles
 
-          当前系统表层方向：桌面三态运行层 + 桌面状态板（desktop tri-state runtime
-          + desktop status surface）。dashboard/ 已删除，不再作为运行时表层。
+        app = FastAPI(
+            title="Galaxy API",
+            description="Galaxy-Nexus L4 Autonomous System API",
+            version="2.1.0",
+        )
 
-          1. 以内建 FastAPI 应用为主应用（权威应用）。
-          2. 在其上叠加 core.startup 引导的子系统中间件
-          3. 叠加 core.api_routes 作为 **主 API 层**（系统管理、设备、节点、
-             监控、观测性、AI、chat 等全部路由）
-          4. 添加健康检查路由
-          5. 统一在配置端口提供服务
+        # CORS: 安全约束——开发放宽、生产收紧
+        origins = get_cors_origins()
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=origins,
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
 
-        注意：此启动器 **不应** 定义自己的 inline API 路由。
-        如需新增 API 端点，请在 core/routes/ 下对应子模块中添加。
-        """
+        # 静态文件 (只读状态面板)
+        static_dir = PROJECT_ROOT / "static"
+        if static_dir.exists():
+            app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+
+            @app.get("/")
+            async def index():
+                index_file = static_dir / "index.html"
+                if index_file.exists():
+                    return FileResponse(str(index_file))
+                return JSONResponse({"status": "ok", "message": "Galaxy API Gateway"})
+        else:
+            @app.get("/")
+            async def root():
+                return JSONResponse({"status": "ok", "message": "Galaxy API Gateway"})
+
+        # API 路由
         try:
-            from fastapi.responses import HTMLResponse, JSONResponse
-            import uvicorn
+            from core.api_routes import create_api_routes
+            app.include_router(create_api_routes(), prefix="/api/v1")
+        except Exception as exc:
+            logger.warning("API 路由加载失败(非致命): %s", exc)
 
-            # === 步骤 1：以内建 FastAPI 应用为主应用（权威 API 基础） ===
-            from fastapi import FastAPI, Depends
-            from fastapi.middleware.cors import CORSMiddleware
-            from core.auth import require_auth as _require_auth
-            from nodes.common.cors_config import get_cors_origins, get_cors_methods, get_cors_headers
-            self.app = FastAPI(
-                title="Galaxy",
-                description="L4 级自主性智能系统",
-                version="2.0"
-            )
-            self.app.add_middleware(
-                CORSMiddleware,
-                allow_origins=get_cors_origins(),
-                allow_credentials=True,
-                allow_methods=get_cors_methods(),
-                allow_headers=get_cors_headers(),
-            )
+        return app
 
-            # === 步骤 2：引导核心子系统（缓存 + 监控 + 性能中间件 + 命令路由 + AI） ===
-            try:
-                from core.startup import bootstrap_subsystems
-                bootstrap_results = await bootstrap_subsystems(self.app, self.config)
-                ok = sum(1 for v in bootstrap_results.values() if v.get("status") == "ok")
-                total = len(bootstrap_results)
-                logger.info("核心子系统: %d/%d 正常", ok, total)
-                for _name, _info in bootstrap_results.items():
-                    _icon = "OK" if _info.get("status") == "ok" else "DEGRADED"
-                    logger.info("  [%s] %s: %s", _icon, _name, _info)
-            except Exception as e:
-                logger.warning("核心子系统引导失败（系统仍可运行）: %s", e)
+    async def start(self):
+        """启动 Web 服务器"""
+        import uvicorn
+        self.app = self._create_fastapi_app()
 
-            # === 步骤 2.5：启动认知进化系统（PR-25/26/27）===
-            try:
-                from core.cognitive.evolution_system import init_cognitive_evolution
-                init_cognitive_evolution()
-                logger.info("认知进化系统已初始化")
-            except Exception as e:
-                logger.warning("认知进化系统初始化失败（非阻塞）: %s", e)
+        config = uvicorn.Config(
+            self.app,
+            host=self.config.host,
+            port=self.config.web_ui_port,
+            log_level="warning",
+            access_log=False,
+        )
+        self.server = uvicorn.Server(config)
+        await self.server.serve()
 
-            # === 步骤 3：挂载 core.api_routes 作为主 API 层 ===
-            # core/api_routes.py 是 Galaxy 的 **唯一权威 API 入口**。
-            # 所有 REST 路由（system、devices、nodes、vision、tasks、chat、
-            # ai、monitoring、relay、hybrid、vault、cost、channels、
-            # federation、sessions、concurrency、errors、observability 等）
-            # 均由 core/routes/ 子模块定义，在此统一挂载。
-            # dashboard/backend/main.py 中重叠的路由将被此处覆盖。
-            try:
-                from core.api_routes import create_api_routes, create_websocket_routes
-                api_router = create_api_routes(
-                    service_manager=self.service_manager,
-                    config=self.config
-                )
-                self.app.include_router(api_router)
-                logger.info("扩展 API 路由已加载（来自 core.api_routes）")
-
-                create_websocket_routes(
-                    self.app,
-                    service_manager=self.service_manager
-                )
-                logger.info("WebSocket 端点已加载")
-            except ImportError as e:
-                logger.warning("API 路由模块加载失败: %s", e)
-
-            # === 步骤 4：健康检查路由 ===
-            try:
-                from core.health_check import create_health_routes
-                health_router, _health_checker = create_health_routes(
-                    service_manager=self.service_manager,
-                    config=self.config
-                )
-                self.app.include_router(health_router)
-                logger.info("健康检查路由已加载")
-            except ImportError as e:
-                logger.warning("健康检查模块加载失败: %s", e)
-
-            # === 步骤 5：静态文件挂载 (API Manager) ===
-            from fastapi.staticfiles import StaticFiles
-            from fastapi.responses import FileResponse
-
-            base_static_dir = PROJECT_ROOT / "static" / "api-manager"
-            static_dir = base_static_dir
-            if (base_static_dir / "public").exists():
-                static_dir = base_static_dir / "public"
-
-            if static_dir.exists() and (static_dir / "assets").exists():
-                self.app.mount(
-                    "/assets",
-                    StaticFiles(directory=str(static_dir / "assets")),
-                    name="assets"
-                )
-
-                @self.app.get("/api-manager", response_class=HTMLResponse)
-                async def api_manager_index():
-                    index_path = static_dir / "index.html"
-                    if index_path.exists():
-                        return FileResponse(str(index_path))
-                    return JSONResponse({"error": "index.html not found"}, status_code=404)
-
-                logger.info("API Manager 已挂载: %s", static_dir)
-            else:
-                logger.warning("API Manager 静态文件未找到: %s", static_dir)
-
-            # === 步骤 5b：Operator Console 静态挂载 ===
-            # Serves static/operator-console/index.html at /operator-console.
-            # The console is a pure visualization layer over OPERATOR_ROUTES_V1
-            # APIs — no parallel truth model is introduced here.
-            operator_console_dir = PROJECT_ROOT / "static" / "operator-console"
-            operator_console_index = operator_console_dir / "index.html"
-            if operator_console_index.exists():
-                @self.app.get("/operator-console")
-                async def operator_console_index_route():
-                    return FileResponse(str(operator_console_index))
-
-                logger.info("Operator Console 已挂载: %s", operator_console_index)
-            else:
-                logger.warning("Operator Console index.html 未找到: %s", operator_console_index)
-
-            # === 步骤 6：统一启动器专属路由（不覆盖 dashboard 的 / 路由） ===
-            @self.app.get("/api/status")
-            async def launcher_status(auth: dict = Depends(_require_auth)):
-                return JSONResponse({
-                    "status": "running",
-                    "version": "2.0",
-                    "state": self.service_manager.state.name,
-                    "services": self.service_manager.get_status(),
-                    "config": self.config.get_status_dict(),
-                })
-
-            @self.app.get("/api/services")
-            async def launcher_services():
-                return JSONResponse(self.service_manager.get_status())
-
-            # === 步骤 7：启动 uvicorn ===
-            _uvi_config = uvicorn.Config(
-                self.app,
-                host=self.config.host,
-                port=self.config.web_ui_port,
-                log_level="warning"
-            )
-            server = uvicorn.Server(_uvi_config)
-            logger.info(
-                "Galaxy API 服务启动: http://%s:%d",
-                self.config.host, self.config.web_ui_port
-            )
-            logger.info("API 文档: http://localhost:%d/docs", self.config.web_ui_port)
-            # Run uvicorn via the public serve() entrypoint in a background task.
-            # serve() correctly loads the config AND initialises self.lifespan;
-            # manually calling server.startup() breaks on uvicorn ≥0.30 with
-            # "'Server' object has no attribute 'lifespan'" (the gateway then never
-            # binds — /api/v1/chat is unreachable even though the banner says ready).
-            # We wait on the public ``server.started`` flag so the socket is bound
-            # before probing, then let serve()'s main_loop keep running in the
-            # background so the launcher proceeds to later phases (Electron / ready
-            # banner) instead of blocking here.
-            self._server = server
-            self._serve_task = asyncio.create_task(server.serve())
-            for _ in range(300):  # up to ~30s for bind + ASGI startup
-                if server.started or self._serve_task.done():
-                    break
-                await asyncio.sleep(0.1)
-            if self._serve_task.done():
-                # serve() exited during startup — re-raise the real error so the
-                # caller logs an accurate "API 网关启动失败" cause.
-                self._serve_task.result()
-            logger.debug("启动后健康检查")
-            await run_startup_health_check(self.config.web_ui_port)
-
-        except ImportError as e:
-            logger.error("API 服务依赖未安装: %s", e)
-
-    # Minimal fallback HTML — points to the API docs.
-    # dashboard/frontend is a LEGACY UI SURFACE (PR-8) and is not the current primary surface.
-    FALLBACK_HTML = """<!DOCTYPE html>
-<html><head><meta charset="UTF-8"><title>Galaxy</title></head>
-<body style="background:#000;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0">
-<div style="text-align:center">
-<h1>Galaxy</h1>
-<p>API docs: <a href="/docs" style="color:#00CED1">/docs</a></p>
-<p style="font-size:0.8em;color:#888">Current surface: desktop tri-state runtime + desktop status board</p>
-</div></body></html>"""
-
-    def _get_legacy_dashboard_html(self) -> str:
-        """读取遗留 dashboard/frontend 的 index.html（LEGACY UI SURFACE）。
-
-        dashboard/frontend 已通过 PR-8 降级为遗留表层，不再是当前主系统表层。
-        如果遗留文件不存在（属于正常情况），返回 FALLBACK_HTML。
-        """
-        dashboard_path = PROJECT_ROOT / "dashboard" / "frontend" / "public" / "index.html"
-        if dashboard_path.exists():
-            try:
-                return dashboard_path.read_text(encoding="utf-8")
-            except Exception as exc:
-                logger.debug("读取遗留 dashboard HTML 失败（非关键）: %s", exc)
-
-        return self.FALLBACK_HTML
+    async def stop(self):
+        """停止 Web 服务器"""
+        if self.server:
+            self.server.should_exit = True
 
 
 # ============================================================================
-# Galaxy 统一系统
+# GalaxyUnified — 统一启动协调器 (PR-2 从属角色)
 # ============================================================================
 
 class GalaxyUnified:
-    """Galaxy 统一系统"""
-    
+    """Galaxy 统一启动协调器 —— PR-2 从属组件
+
+    职责范围 (作为从属组件):
+    1. 加载配置
+    2. 启动后台服务 (NATS, Redis, L4 modules)
+    3. 启动核心运行时 (OpenClawd + DesktopPresenceRuntime)
+    4. 启动 API 网关 (FastAPI)
+    5. 写出 entrypoint.json
+    6. 优雅关闭
+
+    此实例**不**执行预检 (Phases 1-7);预检由调用方 ``main.py`` 负责。
+    """
+
+    NPM_INSTALL_TIMEOUT = 300  # npm install 超时秒数
+    MAX_GPU_CRASHES = 3  # GPU 模式连续崩溃阈值 → 自动切软件渲染
+    MAX_SW_CRASHES = 2  # 软件渲染连续崩溃阈值 → 放弃
+
     def __init__(self):
-        self.config = SystemConfig.load_from_env()
+        self.config = SystemConfig()
         self.service_manager = ServiceManager(self.config)
-        self.core_launcher = CoreServiceLauncher(self.service_manager, self.config)
-        self.node_launcher = NodeSystemLauncher(self.service_manager, self.config)
-        self.l4_launcher = L4EnhancementLauncher(self.service_manager, self.config)
-        self.web_ui = UnifiedWebUI(self.service_manager, self.config)
+        self.web_ui = UnifiedWebUI(self.config)
         self.running = False
-        # 详细模式：默认折叠每个阶段为一行；-v / GALAXY_VERBOSE=1 展开逐项明细。
-        # main.py 解析到 -v 后会覆写 self._verbose；env 提供无参场景下的兜底。
-        self._verbose = os.environ.get("GALAXY_VERBOSE", "").strip().lower() in ("1", "true", "yes", "on")
+        self.electron_proc = None
+        self._cached_electron_proc = None
+        self._electron_log_handle = None
+        self._electron_force_software = False
+        self._desktop_shell = "electron"
+        self._tray = None
+        self._voice_loop = None
+        self._voice_input_disabled_reason = None
+        self._brain = None
 
-        # PR-DEVICE-RESOLUTION: LauncherAdapter — unified node contract bridge
-        try:
-            from launcher.launcher_adapter import LauncherAdapter
-            self.launcher_adapter = LauncherAdapter(self.node_launcher)
-            logger.info("LauncherAdapter initialised (mode=%s)", self.launcher_adapter.mode.value)
-        except Exception as e:
-            logger.warning("LauncherAdapter init failed (non-fatal): %s", e)
-            self.launcher_adapter = None
-        
-        # ===== 集成：初始化能力管理器和连接管理器 =====
-        try:
-            from core.capability_manager import get_capability_manager
-            from core.connection_manager import get_connection_manager
-            
-            self.capability_manager = get_capability_manager()
-            self.connection_manager = get_connection_manager()
-            logger.info("能力管理器和连接管理器已初始化")
-        except Exception as e:
-            logger.warning(f"能力管理器初始化失败 (非致命): {e}")
-            self.capability_manager = None
-            self.connection_manager = None
-        
-    # -- PR-DEVICE-RESOLUTION: observe-only resolution tracing ----------------
+    def _build_electron_cmd(self, electron_dir: Path, npm: str) -> list:
+        """构建启动 Electron 的命令列表。"""
+        if os.name == "nt":
+            # Windows: 走 node_modules/.bin/electron.cmd（PR-ABSOLUTE-PATH）
+            electron_bin = electron_dir / "node_modules" / ".bin" / "electron.cmd"
+            if not electron_bin.exists():
+                electron_bin = electron_dir / "node_modules" / ".bin" / "electron"
+            main_js = (electron_dir / "main.js").resolve()
+            return [str(electron_bin.resolve()), str(main_js)]
+        return [npm, "start"]
 
-    async def _observe_node_resolutions(self) -> None:
-        """Observe-only: record node-to-device mappings before startup.
-
-        Reads the device_node_map.yaml, finds all mappings for nodes that
-        are about to be started, and records them to the activation registry.
-        This does NOT alter which nodes are started; it only creates an
-        audit trail for diagnostics.
-        """
-        import time
-        from core.device_activation_registry import get_registry as get_act_registry
-        from core.device_node_resolver import DeviceNodeResolver
-
-        t0 = time.perf_counter()
-        registry = get_act_registry()
-        resolver = DeviceNodeResolver()
-        resolver._ensure_loaded()
-
-        # Get the set of nodes that will be started
-        if hasattr(self.node_launcher, 'get_core_nodes'):
-            nodes_to_start = set(self.node_launcher.get_core_nodes())
-        else:
-            nodes_to_start = set()
-
-        # Find all mappings that reference these nodes
-        for mapping in resolver._mappings:
-            impl = mapping.get("implementation", {})
-            node_name = impl.get("node", "")
-            if node_name not in nodes_to_start:
-                continue
-
-            match = mapping.get("match", {})
-            device_type = match.get("device_type")
-            transport = match.get("transport")
-            capabilities = match.get("capabilities", [])
-
-            # Build a pseudo-ResolvedMapping for recording
-            from core.device_node_resolver import (
-                CapabilityProfile, NodeImplementation, ResolvedMapping,
-            )
-            from core.activation_policy import (
-                ActivationDecision, ActivationPolicy, ActivationPolicyEngine,
-            )
-
-            node_impl = NodeImplementation(
-                node=node_name,
-                transport=impl.get("transport", "unknown"),
-                port=impl.get("port", 0),
-                startup=impl.get("startup", "unknown"),
-                healthcheck=impl.get("healthcheck", ""),
-                note=mapping.get("note", ""),
-            )
-            caps = CapabilityProfile(
-                provides=mapping.get("capabilities", {}).get("provides", []),
-                requires=mapping.get("capabilities", {}).get("requires", []),
-            )
-            resolved = ResolvedMapping(
-                match_type=list(match.keys())[0] if match else "unknown",
-                match_key=str(list(match.values())[0]) if match else "unknown",
-                implementation=node_impl,
-                capabilities=caps,
-            )
-
-            # Evaluate activation policy for recording
-            engine = ActivationPolicyEngine()
-            decision = engine.evaluate(
-                node_impl,
-                ActivationPolicyEngine.TRIGGER_BOOT,
-            )
-
-            registry.record_resolution(
-                device_type=device_type,
-                transport=transport,
-                capabilities=capabilities if not device_type and not transport else None,
-                result=resolved,
-                decision=decision,
-                source_event="boot",
-                source_module="unified_launcher._observe_node_resolutions",
-                duration_ms=(time.perf_counter() - t0) * 1000,
-            )
-
-        logger.info(
-            "[DeviceResolution] Observed %d node mappings in %.1fms",
-            len(nodes_to_start), (time.perf_counter() - t0) * 1000,
-        )
-
-    async def ensure_docker_infra(self) -> tuple:
-        """后台静默拉起 Docker 基础设施(NATS/Redis/Qdrant/Neo4j/Mongo)，让依赖它们的节点可用。
-
-        尽力而为、不阻塞事件循环、不因失败中断启动：
-        - ``GALAXY_AUTO_DOCKER=0/false/off`` → 跳过（默认 ``auto`` = Docker 存在即拉起）。
-        - Docker CLI 不存在 → 返回安装指引并跳过（安装 Docker 需管理员/重启，
-          无法可靠静默完成，不在此尝试）。
-        - Docker 已装但守护未运行 → 尝试启动 Docker Desktop/daemon 并轮询等待。
-        - 守护就绪 → ``docker compose up -d`` 指定的基础设施服务（不含 galaxy 应用本身、
-          也不含 ollama 以免与本地 Ollama 端口冲突），输出写 ``logs/docker.log``。
-          镜像已就绪 → 秒级拉起（本轮节点即可连上）；首次需下载 → 放后台（本轮先跳过
-          依赖节点，下次启动即生效）。
-
-        Returns:
-            ``(status, value, note)`` —— status ∈ {"ok","warn"}（渲染图标）；value 是右侧
-            一行摘要；note 是可选的下一步提示（仅 -v 详细模式展示）。由 ``start()`` 折叠成
-            单行渲染。任何分支都非致命。
-        """
-        import shutil
-        import subprocess as sp
-        import time as _time
-
-        flag = os.environ.get("GALAXY_AUTO_DOCKER", "auto").strip().lower()
-        if flag in ("0", "false", "no", "off"):
-            return ("warn", "已禁用 (GALAXY_AUTO_DOCKER=0)", "")
-
-        # 选择容器运行时:Docker 或 Podman(两者都装时首启会让你选,单一已装直接用,
-        # 都没装则跳过)。选择结果持久化到 .galaxy_runtime,并驱动后台【静默拉取】。
-        from core import container_runtime as cr
-        runtime = await asyncio.to_thread(cr.resolve_runtime, True)
-        if not runtime:
-            return ("warn", "未安装 Docker/Podman — 依赖基础设施的节点将跳过（不影响桌面）",
-                    "启用全部节点：装 Docker 或 Podman 后重跑 — "
-                    "https://docs.docker.com/get-docker/ 或 https://podman.io/get-started")
-        rt_bin = cr.runtime_binary(runtime)
-        rt_name = cr.display_name(runtime)
-
-        compose_file = PROJECT_ROOT / "docker-compose.yml"
-        if not compose_file.exists():
-            return ("warn", f"docker-compose.yml 缺失 — 跳过 {rt_name} 基础设施", "")
-
-        # 仅基础设施后端；排除 galaxy/galaxy-gateway(应用本身) 与 ollama(避免与本地 Ollama 冲突)。
-        services = ["nats", "redis", "qdrant", "neo4j", "mongodb"]
-
-        def _daemon_up() -> bool:
-            return cr.daemon_up(runtime)
-
-        def _compose_base():
-            return cr.compose_base(runtime)
-
-        def _bring_up():
-            if not _daemon_up():
-                # Podman 无守护进程(rootless),info 不通多半是配置问题,不尝试"启动守护";
-                # 仅 Docker 尝试拉起 Docker Desktop/daemon 并轮询等待。
-                if runtime == "docker":
-                    _try_start_docker_daemon(rt_bin)
-                    deadline = _time.time() + float(os.environ.get("GALAXY_AUTO_DOCKER_DAEMON_WAIT", "60"))
-                    while _time.time() < deadline:
-                        if _daemon_up():
-                            break
-                        _time.sleep(3)
-                if not _daemon_up():
-                    return ("daemon_down", None)
-            base = _compose_base()
-            if not base:
-                return ("no_compose", None)
-            log_dir = PROJECT_ROOT / "logs"
-            log_dir.mkdir(exist_ok=True)
-            logf = open(log_dir / "docker.log", "ab")
-            cmd = base + ["-f", str(compose_file), "up", "-d"] + services
-            logf.write(f"\n== docker infra up: {cmd} ==\n".encode("utf-8", "replace"))
-            logf.flush()
-            proc = sp.Popen(cmd, cwd=str(PROJECT_ROOT), stdout=logf, stderr=sp.STDOUT)
-            wait_s = float(os.environ.get("GALAXY_AUTO_DOCKER_WAIT", "90"))
+    def _close_old_electron_log(self) -> None:
+        """关闭旧的 electron 日志句柄，防止文件句柄泄漏。"""
+        if hasattr(self, '_electron_log_handle') and self._electron_log_handle:
             try:
-                proc.wait(timeout=wait_s)
-                return ("up", proc.returncode)
-            except sp.TimeoutExpired:
-                return ("pulling", None)  # 首次拉镜像，留后台继续
+                self._electron_log_handle.close()
+            except Exception:
+                pass
+            self._electron_log_handle = None
 
-        status, rc = await asyncio.to_thread(_bring_up)
-        if status == "up" and rc == 0:
-            return ("ok", f"nats / redis / qdrant / neo4j / mongodb 已就绪 · via {rt_name}", "")
-        if status == "pulling":
-            return ("warn", f"首次镜像下载中（{rt_name} 后台静默拉取）",
-                    "进度见 logs/docker.log；本轮先跳过依赖节点，下次启动即生效")
-        if status == "daemon_down":
-            _hint = ("手动启动 Docker Desktop 后重跑" if runtime == "docker"
-                     else "Podman 引擎/machine 未就绪 — 试 `podman machine start` 后重跑")
-            return ("warn", f"{rt_name} 未就绪 — {_hint}", "")
-        if status == "no_compose":
-            return ("warn", f"未找到 {runtime} compose 命令 — 跳过 "
-                            f"(装 {runtime}-compose 或启用 compose 插件)", "")
-        return ("warn", f"{rt_name} 启动异常 (rc={rc})，详情见 logs/docker.log", "")
+    @staticmethod
+    def _rotate_electron_log(log_path: Path, max_bytes: int = 2 * 1024 * 1024) -> None:
+        """Electron 日志超限(默认 2MB)时轮转：electron.log → electron.log.1。"""
+        try:
+            if log_path.exists() and log_path.stat().st_size > max_bytes:
+                bak = log_path.with_suffix(".log.1")
+                if bak.exists():
+                    bak.unlink()
+                log_path.rename(bak)
+        except OSError:
+            pass
+
+    def _setup_electron_env(self, npm: str) -> dict[str, str]:
+        """Prepare environment variables for Electron subprocess."""
+        env = os.environ.copy()
+        env["PATH"] = str(Path(npm).parent) + os.pathsep + env.get("PATH", "")
+        # 显式把【真实的网关端口】告诉 Electron，避免它只能猜默认 9000
+        env["GALAXY_GATEWAY_PORT"] = str(self.config.web_ui_port)
+        env.setdefault("PORT", str(self.config.web_ui_port))
+        # GPU 自适应:软件渲染兜底
+        if getattr(self, "_electron_force_software", False):
+            env["GALAXY_ELECTRON_GPU"] = "0"
+        return env
+
+    async def _install_electron_deps(self, electron_dir: Path, npm: str) -> bool:
+        """Ensure Electron npm dependencies are installed and intact.
+
+        Returns True if deps are ready, False on failure.
+        """
+        import subprocess as sp
+        from core.electron_launch_guard import electron_package_intact
+
+        try:
+            _pkg_intact = electron_package_intact(str(electron_dir))
+        except Exception:
+            logger.warning("electron_package_intact 检查失败，假设依赖不完整")
+            _pkg_intact = False
+
+        if (electron_dir / "node_modules").exists() and _pkg_intact:
+            return True
+
+        _reason = ("首次启动：安装 Electron 桌面层依赖"
+                   if not (electron_dir / "node_modules").exists()
+                   else "检测到 Electron 依赖不完整(疑似上次 npm install 中断)，正在修复安装")
+        print_status_row(f"{_reason} (npm install，可能数分钟)…", status="success")
+
+        try:
+            _r = sp.run([npm, "install"], cwd=str(electron_dir),
+                        capture_output=True, text=True, encoding="utf-8", errors="replace",
+                        timeout=self.NPM_INSTALL_TIMEOUT)
+            if _r.returncode != 0:
+                # 网络类失败 → 自动用 npmmirror 镜像重试一次
+                _err_txt = (_r.stderr or _r.stdout or "")
+                _network_fail = any(k in _err_txt for k in (
+                    "ETIMEDOUT", "ECONNRESET", "ECONNREFUSED", "EAI_AGAIN",
+                    "network", "socket", "TLS", "fetch failed",
+                ))
+                if _network_fail:
+                    logger.warning(
+                        "npm install 官方源失败(疑似网络问题),改用 npmmirror 镜像重试…")
+                    print_status_row("npm 官方源不可达，改用国内镜像重试…", status="success")
+                    _r = sp.run(
+                        [npm, "install", "--registry=https://registry.npmmirror.com"],
+                        cwd=str(electron_dir), capture_output=True, text=True,
+                        encoding="utf-8", errors="replace", timeout=self.NPM_INSTALL_TIMEOUT,
+                    )
+            if _r.returncode != 0:
+                logger.error(
+                    "Electron npm install 失败 (rc=%s):\n%s",
+                    _r.returncode, (_r.stderr or _r.stdout or "")[-1000:],
+                )
+                return False
+            if not electron_package_intact(str(electron_dir)):
+                logger.error(
+                    "npm install 完成但 electron 包仍不完整(node_modules/electron/"
+                    "cli.js 缺失)。请手动执行: cd electron && rmdir /s /q node_modules "
+                    "&& npm install"
+                )
+                return False
+            return True
+        except Exception as exc:
+            logger.error("Electron npm install 异常: %s", exc)
+            return False
 
     async def start_electron(self) -> bool:
         """启动 Electron 桌面三态覆盖层。"""
@@ -921,94 +607,32 @@ class GalaxyUnified:
         if not electron_dir.exists():
             logger.warning("electron/ directory not found")
             return False
+
         # PR-NPM-FIX: npm must be resolved BEFORE the if block so it's always available
         npm = shutil.which("npm")
         if not npm:
             logger.warning("npm not found in PATH")
             return False
-        # Ensure npm deps —— 关键修复:不能只看 node_modules 目录存不存在。
-        # 真机复现(重新克隆后):.bin/electron.cmd 存根在、但 electron/cli.js
-        # 缺失(npm install 中断的残局),旧判断"目录存在→跳过安装"会让 Electron
-        # 每次都以 "Cannot find module ...electron\cli.js" 崩掉,保活重启 8 次
-        # 全是同一个死法,期间从未尝试过真正的修复(重跑 npm install)。现在用
-        # electron_package_intact() 核实包完整性,不完整就自动修复安装。
-        from core.electron_launch_guard import electron_package_intact
-        if not (electron_dir / "node_modules").exists() or not electron_package_intact(str(electron_dir)):
-            _reason = ("首次启动：安装 Electron 桌面层依赖"
-                       if not (electron_dir / "node_modules").exists()
-                       else "检测到 Electron 依赖不完整(疑似上次 npm install 中断)，正在修复安装")
-            print_status_row(f"{_reason} (npm install，可能数分钟)…", status="success")
-            try:
-                _r = sp.run([npm, "install"], cwd=str(electron_dir),
-                            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=600)
-                if _r.returncode != 0:
-                    # 网络类失败(官方 registry TLS 被断/超时,国内网络常见)→
-                    # 自动用 npmmirror 镜像重试一次,而不是直接放弃桌面壳。
-                    _err_txt = (_r.stderr or _r.stdout or "")
-                    _network_fail = any(k in _err_txt for k in (
-                        "ETIMEDOUT", "ECONNRESET", "ECONNREFUSED", "EAI_AGAIN",
-                        "network", "socket", "TLS", "fetch failed",
-                    ))
-                    if _network_fail:
-                        logger.warning(
-                            "npm install 官方源失败(疑似网络问题),改用 npmmirror 镜像重试…")
-                        print_status_row("npm 官方源不可达，改用国内镜像重试…", status="success")
-                        _r = sp.run(
-                            [npm, "install", "--registry=https://registry.npmmirror.com"],
-                            cwd=str(electron_dir), capture_output=True, text=True,
-                            encoding="utf-8", errors="replace", timeout=600,
-                        )
-                if _r.returncode != 0:
-                    logger.error(
-                        "Electron npm install 失败 (rc=%s):\n%s",
-                        _r.returncode, (_r.stderr or _r.stdout or "")[-1000:],
-                    )
-                    return False
-                if not electron_package_intact(str(electron_dir)):
-                    logger.error(
-                        "npm install 完成但 electron 包仍不完整(node_modules/electron/"
-                        "cli.js 缺失)。请手动执行: cd electron && rmdir /s /q node_modules "
-                        "&& npm install"
-                    )
-                    return False
-            except Exception as exc:
-                logger.error("Electron npm install 异常: %s", exc)
-                return False
+
+        # Ensure npm deps and package integrity
+        if not await self._install_electron_deps(electron_dir, npm):
+            return False
+
         # Start Electron — PR-ABSOLUTE-PATH: use absolute paths on Windows
         try:
-            env = os.environ.copy()
-            env["PATH"] = str(Path(npm).parent) + os.pathsep + env.get("PATH", "")
-            # 显式把【真实的网关端口】告诉 Electron，避免它只能猜默认 9000：若后端实际监听端口
-            # 与 9000 不一致（config 覆盖等），main.js 的 GATEWAY_BASE 会指错口子 → 感知帧/配置
-            # 等 fetch 全部「fetch failed」。这里把 web_ui_port 同步给 Electron，从根上消除端口错配。
-            env["GALAXY_GATEWAY_PORT"] = str(self.config.web_ui_port)
-            env.setdefault("PORT", str(self.config.web_ui_port))
-            # GPU 自适应：默认让 Electron 走硬件加速（有独显的机器更流畅）。若 watch_processes
-            # 检测到 GPU 模式反复崩溃，会置 _electron_force_software=True，这里注入
-            # GALAXY_ELECTRON_GPU=0 → main.js 据此 disableHardwareAcceleration（软件渲染兜底）。
-            if getattr(self, "_electron_force_software", False):
-                env["GALAXY_ELECTRON_GPU"] = "0"
-            # Prefer the locally-installed electron binary — robust and avoids the
-            # `npm electron .` bug (invalid command) that hit when npx was absent.
-            # CRITICAL: use ABSOLUTE paths for both the binary and the app dir.
-            # 之前用相对路径 electron\node_modules\.bin\electron.cmd，而 Popen 的 cwd=electron，
-            # 系统会按 electron\electron\... 解析 → "The system cannot find the path specified."
-            # → Electron 根本起不来、闪退循环。绝对路径彻底消除该 cwd 相对解析歧义。
-            app_dir = electron_dir.resolve()
-            bin_name = "electron.cmd" if os.name == "nt" else "electron"
-            local_electron = (app_dir / "node_modules" / ".bin" / bin_name)
-            if local_electron.exists():
-                cmd = [str(local_electron), str(app_dir)]
-            else:
-                npx = shutil.which("npx")
-                cmd = ([npx, "electron", str(app_dir)] if npx
-                       else [npm, "exec", "--", "electron", str(app_dir)])
+            env = self._setup_electron_env(npm)
+            cmd = self._build_electron_cmd(electron_dir, npm)
+
             # Capture Electron stdout/stderr to logs/electron.log so crashes are
             # diagnosable (previously DEVNULL-swallowed → impossible to debug the
             # "exited, restarting" loop / why Ctrl+Space overlay never appears).
             _log_dir = Path("logs")
             _log_dir.mkdir(exist_ok=True)
-            _elog = open(_log_dir / "electron.log", "ab")
+            self._close_old_electron_log()
+            _elog_path = _log_dir / "electron.log"
+            self._rotate_electron_log(_elog_path)
+            _elog = open(_elog_path, "ab")
+            self._electron_log_handle = _elog
             _elog.write(
                 f"\n===== electron start {__import__('datetime').datetime.now().isoformat()} "
                 f"cmd={cmd} =====\n".encode("utf-8", "replace")
@@ -1016,7 +640,7 @@ class GalaxyUnified:
             _elog.flush()
             self.electron_proc = sp.Popen(
                 cmd,
-                cwd=str(app_dir),
+                cwd=str(electron_dir.resolve()),
                 stdout=_elog, stderr=sp.STDOUT,
                 env=env,
             )
@@ -1076,7 +700,15 @@ class GalaxyUnified:
                 else:
                     logger.info("首次启动：自动构建 Tauri 桌面壳(cargo build --release，首次约需数分钟)，请稍候…")
                     try:
-                        _rc = sp.call(["cargo", "build", "--release"], cwd=str(tdir / "src-tauri"))
+                        _cargo_log = _log_dir / "tauri-build.log"
+                        with open(_cargo_log, "w", encoding="utf-8") as _clf:
+                            _rc = sp.call(
+                                ["cargo", "build", "--release"],
+                                cwd=str(tdir / "src-tauri"),
+                                stdout=_clf, stderr=sp.STDOUT,
+                            )
+                        if _rc != 0:
+                            logger.warning("Tauri 构建失败，日志见 %s", _cargo_log)
                     except Exception as _bexc:  # noqa: BLE001
                         _rc = -1
                         logger.warning("Tauri 自动构建启动失败：%s", _bexc)
@@ -1102,8 +734,15 @@ class GalaxyUnified:
                 env["GALAXY_ELECTRON_GPU"] = "0"
             _log_dir = Path("logs")
             _log_dir.mkdir(exist_ok=True)
+            # 关闭旧的日志句柄，防止文件句柄泄漏
+            if hasattr(self, '_electron_log_handle') and self._electron_log_handle:
+                try:
+                    self._electron_log_handle.close()
+                except Exception:
+                    pass
             # 复用同一份 logs/electron.log（托盘「三态动画日志」就打开它），便于一处看壳层日志。
             _tlog = open(_log_dir / "electron.log", "ab")
+            self._electron_log_handle = _tlog
             _tlog.write(
                 f"\n===== tauri start {__import__('datetime').datetime.now().isoformat()} "
                 f"bin={binp} =====\n".encode("utf-8", "replace")
@@ -1125,10 +764,25 @@ class GalaxyUnified:
 
     async def start_desktop_shell(self) -> bool:
         """统一桌面壳入口：优先 Tauri（轻量），未构建/失败则回退 Electron。"""
-        if await self.start_tauri():
-            return True
+        try:
+            if await self.start_tauri():
+                return True
+            logger.info("Tauri 桌面壳不可用，回退到 Electron")
+        except Exception as _exc:
+            logger.warning("Tauri 启动失败: %s，回退到 Electron", _exc)
         self._desktop_shell = "electron"
         return await self.start_electron()
+
+    async def _try_start_tray(self) -> bool:
+        """Internal helper: attempt to start the system tray icon."""
+        from windows_service.tray_icon import start_tray_in_thread
+        tray = await asyncio.to_thread(start_tray_in_thread)
+        if tray is not None:
+            self._tray = tray
+            logger.info("系统托盘已启动")
+            return True
+        logger.warning("系统托盘返回 None，可能缺少依赖")
+        return False
 
     async def start_system_tray(self) -> bool:
         """启动系统托盘（右下角），与 Electron 解耦、常驻于本启动器进程。
@@ -1139,11 +793,9 @@ class GalaxyUnified:
         缺 pystray/Pillow 时优雅降级（非致命）。
         """
         try:
-            from windows_service.tray_icon import start_tray_in_thread
-            tray = await asyncio.to_thread(start_tray_in_thread)
-            if tray is not None:
-                self._tray = tray
-                return True
+            return await self._try_start_tray()
+        except ImportError:
+            logger.debug("系统托盘依赖未安装 (windows_service.tray_icon)")
             return False
         except Exception as exc:
             logger.warning("系统托盘启动失败(非致命): %s", exc)
@@ -1161,34 +813,35 @@ class GalaxyUnified:
         """
         import asyncio
         import time
-        restarts: list = []          # 最近 60s 窗口内的重启时间戳
-        MAX_GPU = 3                  # GPU 模式连续崩溃达此数 → 切软件渲染
-        MAX_SW = 5                   # 软件渲染也崩到此数 → 放弃
+        restarts: list[float] = []   # 最近 60s 窗口内的重启时间戳
+        max_gpu_crashes = self.MAX_GPU_CRASHES  # GPU 模式连续崩溃达此数 → 切软件渲染
+        max_sw_crashes = self.MAX_SW_CRASHES    # 软件渲染也崩到此数 → 放弃
         gave_up = False
         if not hasattr(self, "_electron_force_software"):
             self._electron_force_software = False
         while True:
             await asyncio.sleep(5)
-            proc = getattr(self, 'electron_proc', None)
+            proc = getattr(self, '_cached_electron_proc', None) or getattr(self, 'electron_proc', None)
+            self._cached_electron_proc = proc
             if not proc or proc.poll() is None or gave_up:
                 continue              # 未启动 / 仍在运行 / 已放弃
             now = time.time()
             restarts = [t for t in restarts if now - t < 60]
 
             # GPU 模式反复崩溃 → 自动降级为软件渲染（自适应核心）
-            if (not self._electron_force_software) and len(restarts) >= MAX_GPU:
+            if (not self._electron_force_software) and len(restarts) >= max_gpu_crashes:
                 self._electron_force_software = True
                 restarts = []
                 logger.warning(
                     "Electron GPU 模式 60s 内崩溃 %d 次，自动切换为软件渲染重试"
                     "（你的显卡/驱动可能不支持透明窗口 GPU 合成；详情见 logs/electron.log）…",
-                    MAX_GPU,
+                    max_gpu_crashes,
                 )
                 await self.start_desktop_shell()
                 continue
 
             # 软件渲染也反复崩溃 → 放弃
-            if self._electron_force_software and len(restarts) >= MAX_SW:
+            if self._electron_force_software and len(restarts) >= max_sw_crashes:
                 gave_up = True
                 logger.error(
                     "Electron 在 GPU 与软件渲染下均反复崩溃，已停止自动重启。"
@@ -1348,8 +1001,8 @@ class GalaxyUnified:
         # 否则按硬件推荐 + 让用户手动选（见 core.model_selection）。
         try:
             from core import model_selection as ms
-            chosen = await _asyncio.to_thread(ms.resolve_main_brain, True)
-            if chosen:
+            chosen = await _asyncio.to_thread(ms.resolve_main_brain, True) or ""
+            if chosen and chosen.strip():
                 # 证据链：把主脑选型（最终模型 + 硬件 + 候选 + 推荐理由）落进启动会话，
                 # 以后能回答「这次为什么选了它、是按什么硬件推荐的」。best-effort。
                 try:
@@ -1656,21 +1309,6 @@ class GalaxyUnified:
         except Exception as _exc:  # noqa: BLE001
             logger.debug("远程桌面兜底自动开启跳过(非致命): %s", _exc)
 
-        # ── Kokoro 离线 TTS 模型主动预取(与语音输入是否可用无关)──
-        # 真机排查发现:kokoro 的模型拉取此前【纯被动】——只有第一次真的要朗读、
-        # edge-tts 失败降级时才会被 _try_kokoro() 顺手踢一次后台线程,而模型
-        # 337MB、~3 分钟起,那时才开始下载必然来不及,当次对话只能落到 SAPI
-        # 机器人音。对比 Whisper ASR 模型(145MB)在 start_voice_interaction()
-        # 里就是主动 eager 拉取的——这里补上同等的主动性:启动时无条件踢一次
-        # 后台拉取(幂等、非阻塞,不依赖麦克风/GALAXY_VOICE,TTS 出声本就与语音
-        # 输入是否可用无关),让下载与启动的其余步骤 + 用户前几轮对话的等待时间
-        # 并行,而不是等真正要用了才临时抱佛脚。
-        try:
-            from core.tts.kokoro_engine import kick_background_fetch as _kokoro_prefetch
-            _kokoro_prefetch()
-        except Exception as _exc:  # noqa: BLE001
-            logger.debug("Kokoro 模型主动预取跳过(非致命): %s", _exc)
-
         # ── 语音交互闭环：听 → 识别 → 主回路(驱动三态 + 回复) → 朗读 ──
         # 这是"对它说话它会回应、三态随对话变化"的关键(此前 VoiceLoop 从未启动)。
         voice_ok = await self.start_voice_interaction()
@@ -1693,11 +1331,12 @@ class GalaxyUnified:
         # 未安装(拉取失败/未完成)"，实际上模型已经真的装好可用——这是过期状态
         # 展示的问题，不是模型真的没装好。这里在打印总结卡前重新探测一次真实
         # 状态，好转了就更新对应条目，不去猜、不主观放宽判定标准。
-        await _recheck_ai_brain_phase(getattr(self, "_brain", None), phases_state, ai_brain_phase_idx)
+        if 'ai_brain_phase_idx' in locals() and 0 <= ai_brain_phase_idx < len(phases_state):
+            await _recheck_ai_brain_phase(getattr(self, "_brain", None), phases_state, ai_brain_phase_idx)
 
         # ── 总结卡：状态 + 关键入口 + 降级项 + 下一步 ──
         ok_n = sum(1 for _, s, _h in phases_state if s == "ok")
-        # 每个降级项各带自己的专属修复建议，而不是所有项共用一句"装后重跑即恢复"——
+        # 每个降级项各带自己的专属修复建议，而不是所有降级项共用一句"装后重跑即恢复"——
         # 那句话只对 Docker 这类"装个东西重跑就好"的场景成立;AI 大脑之类的降级
         # (模型没拉好/没配 Key)配的建议完全不同，共用会文不对题、误导用户。
         degraded_items = [(n, h) for n, s, h in phases_state if s in ("warn", "fail")]
@@ -1731,12 +1370,21 @@ class GalaxyUnified:
         # 优雅关闭核心子系统（事件桥 → 监控 → 缓存）
         try:
             loop = asyncio.get_running_loop()
-            if loop.is_running():
-                asyncio.ensure_future(async_shutdown())
-            else:
-                loop.run_until_complete(async_shutdown())
-        except Exception as e:
-            logger.warning(f"异步关闭失败: {e}")
+        except RuntimeError:
+            loop = None
+
+        if loop is not None and loop.is_running():
+            # 在运行中的事件循环内（如 async 上下文调用 stop）
+            asyncio.ensure_future(async_shutdown())
+        else:
+            # 没有运行中的事件循环，创建新 loop 执行异步关闭
+            try:
+                new_loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(new_loop)
+                new_loop.run_until_complete(async_shutdown())
+                new_loop.close()
+            except Exception as e:
+                logger.warning(f"异步关闭失败: {e}")
 
         # 关闭认知进化系统（PR-25/26/27）
         try:
@@ -1756,12 +1404,14 @@ class GalaxyUnified:
         print_section("配置状态")
         status = self.config.get_status_dict()
         
-        print(f"\n{Colors.BOLD}LLM API:{Colors.ENDC}")
+        _bold = _safe_color(getattr(Colors, "BOLD", "\033[1m"))
+        _end = _safe_color(getattr(Colors, "ENDC", "\033[0m"))
+        print(f"\n{_bold}LLM API:{_end}")
         for api, configured in status["llm_apis"].items():
             icon = "✓" if configured else "✗"
             print(f"  {icon} {api.upper()}")
-            
-        print(f"\n{Colors.BOLD}数据库:{Colors.ENDC}")
+
+        print(f"\n{_bold}数据库:{_end}")
         for db, configured in status["database"].items():
             icon = "✓" if configured else "✗"
             print(f"  {icon} {db}")
@@ -2158,6 +1808,7 @@ def main():
         pass
 
     # 启动系统 — register async signal handlers inside the running loop
+    loop = None
     try:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
@@ -2177,18 +1828,58 @@ def main():
         try:
             from core.lumiv_websocket_bridge import GalaxyPresenceBridge
             loop.run_until_complete(GalaxyPresenceBridge.get_instance().start())
-        except Exception as _bridge_exc:  # noqa: BLE001 — 非阻塞
-            logger.warning("GalaxyPresenceBridge 启动失败（非阻塞）: %s", _bridge_exc)
-        loop.run_until_complete(lumiv.start())
-    except KeyboardInterrupt:
-        lumiv.stop()
-    finally:
-        try:
-            loop.remove_signal_handler(signal.SIGINT)
-            loop.remove_signal_handler(signal.SIGTERM)
-            loop.close()
         except Exception:
-            pass
+            pass  # 非关键组件,允许失败
+
+        try:
+            loop.run_until_complete(lumiv.start())
+        except KeyboardInterrupt:
+            print()
+            print_status("正在停止系统...", "loading")
+            lumiv.stop()
+            print_status("系统已停止", "success")
+
+    except KeyboardInterrupt:
+        pass  # Already handled above
+
+
+def _graceful_shutdown():
+    """Handle graceful shutdown signals."""
+    print_status("收到停止信号,正在优雅关闭...", "loading")
+    try:
+        import asyncio
+        asyncio.get_event_loop().stop()
+    except Exception:
+        pass
+
+
+def main():
+    """CLI entry point for standalone launch (subordinate role — PR-2)."""
+    parser = argparse.ArgumentParser(description="Galaxy Unified Launcher (subordinate)")
+    parser.add_argument("--check-only", action="store_true",
+                        help="Check dependencies and configuration without starting services")
+    parser.add_argument("--verbose", "-v", action="store_true",
+                        help="Enable verbose output")
+    args = parser.parse_args()
+
+    if args.verbose:
+        os.environ["GALAXY_VERBOSE"] = "1"
+
+    if args.check_only:
+        lumiv = GalaxyUnified()
+        asyncio.run(_run_check_only(lumiv))
+        return 0
+
+    # Normal startup path: run the full bring-up
+    lumiv = GalaxyUnified()
+    try:
+        asyncio.run(lumiv.start())
+    except KeyboardInterrupt:
+        print()
+        print_status("正在停止系统...", "loading")
+        lumiv.stop()
+        print_status("系统已停止", "success")
+    return 0
 
 
 if __name__ == "__main__":
