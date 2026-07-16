@@ -212,6 +212,18 @@ def generate_topology():
         except KeyError:
             base_port = 8000 + int(node_name.split('_')[1])
 
+        # 从环境变量或配置读取资源配额，提供层级默认值
+        import os
+        _default_max_load = {"core": 100, "cognitive": 200, "perception": 300}
+        _max_load_env = os.environ.get("FUSION_MAX_LOAD")
+        if _max_load_env:
+            try:
+                _max_load_map = json.loads(_max_load_env)
+                if isinstance(_max_load_map, dict):
+                    _default_max_load = {**_default_max_load, **_max_load_map}
+            except (json.JSONDecodeError, TypeError):
+                pass
+
         node = {
             "id": node_id,
             "name": node_display_name,
@@ -223,7 +235,7 @@ def generate_topology():
             "neighbors": [],  # 第二遍填充
             "metadata": {
                 "priority": "critical" if layer == "core" else "high" if layer == "cognitive" else "normal",
-                "max_load": 100 if layer == "core" else 200 if layer == "cognitive" else 300
+                "max_load": _default_max_load.get(layer, 300)
             }
         }
         
