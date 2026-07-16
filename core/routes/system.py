@@ -364,10 +364,8 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             port = str(request.url.port or 9000)
 
         def _is_configured(key_name: str) -> bool:
-            from core.credential_vault import PLACEHOLDER_PREFIXES
-
             val = os.getenv(key_name, "")
-            return bool(val and not val.lower().startswith(PLACEHOLDER_PREFIXES) and not val.startswith("sk-YOUR"))
+            return bool(val and not val.startswith("your-") and not val.startswith("sk-YOUR"))
 
         # 模型 tab / 设置 tab 需要"每个 env key 是否已配置"来渲染状态,以及少量
         # 非敏感值(地址/模型名)用于回填。密钥值一律不下发(只给布尔),地址与
