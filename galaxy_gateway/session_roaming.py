@@ -230,11 +230,11 @@ class SessionRoamingManager:
                         )
                         self._sessions[sid] = session
                     except Exception as e:
-                        logger.warning(f"[SessionRoaming] 跳过低效会话: {e}")
+                        logger.warning("[SessionRoaming] Skipped invalid session: %s", e)
                 self._device_session_map = data.get("device_session_map", {})
-                logger.info(f"[SessionRoaming] 从磁盘加载 {len(self._sessions)} 个会话")
+                logger.info("[SessionRoaming] Loaded %d sessions from disk", len(self._sessions))
         except Exception as e:
-            logger.warning(f"[SessionRoaming] 从磁盘加载会话失败: {e}")
+            logger.warning("[SessionRoaming] Failed to load sessions from disk: %s", e)
 
     def _save_sessions_to_disk(self):
         """将会话数据持久化到磁盘 JSON 文件。"""
@@ -252,7 +252,7 @@ class SessionRoamingManager:
             tmp_file.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
             tmp_file.replace(PERSISTENCE_FILE)
         except Exception as e:
-            logger.warning(f"[SessionRoaming] 持久化到磁盘失败: {e}")
+            logger.warning("[SessionRoaming] Persist to disk failed: %s", e)
 
     # ------------------------------------------------------------------
     # 会话生命周期
@@ -288,7 +288,7 @@ class SessionRoamingManager:
         self._sessions[session_id] = session
         self._device_session_map[device_id] = session_id
         self._save_sessions_to_disk()
-        logger.info(f"[SessionRoaming] 会话创建: session_id={session_id} device={device_id}")
+        logger.info("[SessionRoaming] Session created: session_id=%s device=%s", session_id, device_id)
         return session
 
     def get_session(self, session_id: str) -> Optional[Session]:
@@ -306,7 +306,7 @@ class SessionRoamingManager:
         """向会话添加一轮对话"""
         session = self._sessions.get(session_id)
         if not session:
-            logger.warning(f"[SessionRoaming] 会话不存在: {session_id}")
+            logger.warning("[SessionRoaming] Session not found: %s", session_id)
             return
         session.context.history.append(ConversationTurn(role=role, content=content))
         session.last_active = time.time()
@@ -331,7 +331,7 @@ class SessionRoamingManager:
         if self._device_session_map.get(session.device_id) == session_id:
             del self._device_session_map[session.device_id]
         self._save_sessions_to_disk()
-        logger.info(f"[SessionRoaming] 会话关闭: session_id={session_id}")
+        logger.info("[SessionRoaming] Session closed: session_id=%s", session_id)
 
     # ------------------------------------------------------------------
     # 会话迁移
@@ -356,17 +356,17 @@ class SessionRoamingManager:
         """
         session = self._sessions.get(session_id)
         if not session:
-            logger.warning(f"[SessionRoaming] 迁移失败，会话不存在: {session_id}")
+            logger.warning("[SessionRoaming] Migration failed, session not found: %s", session_id)
             return False
 
         if session.state == SessionState.CLOSED:
-            logger.warning(f"[SessionRoaming] 迁移失败，会话已关闭: {session_id}")
+            logger.warning("[SessionRoaming] Migration failed, session closed: %s", session_id)
             return False
 
         old_device_id = session.device_id
         logger.info(
-            f"[SessionRoaming] 开始迁移: session_id={session_id} "
-            f"{old_device_id} -> {target_device_id}"
+            "[SessionRoaming] Starting migration: session_id=%s %s -> %s",
+            session_id, old_device_id, target_device_id,
         )
 
         session.state = SessionState.MIGRATING
@@ -406,7 +406,7 @@ class SessionRoamingManager:
 
             logger.info(
                 f"[SessionRoaming] 迁移成功: session_id={session_id} "
-                f"-> device={target_device_id}"
+                
             )
 
             # 触发回调
@@ -416,12 +416,12 @@ class SessionRoamingManager:
                     if asyncio.iscoroutine(result):
                         await result
                 except Exception as e:
-                    logger.error(f"[SessionRoaming] 迁移回调异常: {e}")
+                    logger.error("[SessionRoaming] Migration callback exception: %s", e)
 
             return True
 
         except Exception as e:
-            logger.error(f"[SessionRoaming] 迁移异常: {e}")
+            logger.error("[SessionRoaming] Migration exception: %s", e)
             # 异常回滚：恢复原始设备 ID 和状态
             session.device_id = original_device_id
             session.state = SessionState.ACTIVE
@@ -481,9 +481,9 @@ class SessionRoamingManager:
             tmp_file = snapshot_file.with_suffix(".tmp")
             tmp_file.write_text(json.dumps(snapshot, ensure_ascii=False, indent=2), encoding="utf-8")
             tmp_file.replace(snapshot_file)
-            logger.debug(f"[SessionRoaming] 快照持久化到磁盘: {snapshot_file}")
+            logger.debug("[SessionRoaming] Snapshot persisted to disk: %s", snapshot_file)
         except Exception as e:
-            logger.warning(f"[SessionRoaming] 快照持久化失败: {e}")
+            logger.warning("[SessionRoaming] Snapshot persist failed: %s", e)
 
     def load_snapshot(self, session_id: str) -> Optional[Dict]:
         """从磁盘加载会话快照。"""
@@ -493,7 +493,7 @@ class SessionRoamingManager:
                 return json.loads(snapshot_file.read_text(encoding="utf-8"))
             return None
         except Exception as e:
-            logger.warning(f"[SessionRoaming] 加载快照失败: {e}")
+            logger.warning("[SessionRoaming] Load snapshot failed: %s", e)
             return None
 
     # ------------------------------------------------------------------
@@ -520,7 +520,7 @@ class SessionRoamingManager:
             )
             return bool(result and result.get("success", True))
         except Exception as e:
-            logger.warning(f"[SessionRoaming] 推送失败: device={device_id} error={e}")
+            logger.warning("[SessionRoaming] Push failed: device=%s error=%s", device_id, e)
             return False
 
     # ------------------------------------------------------------------
