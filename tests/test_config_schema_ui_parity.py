@@ -23,7 +23,7 @@ SONAR_API_KEY/VLLM_URL)补进 CONFIG_SCHEMA。
    provider/设置项而忘了同步 CONFIG_SCHEMA,这个测试会先炸,而不是等用户在
    真机上点"保存"才发现。
 2. 端到端复现:直接用 TestClient 打 POST /api/config,验证这三个 key 现在
-   能保存成功(不再 400)。
+能保存成功(不再 400)。
 """
 
 from __future__ import annotations
@@ -94,25 +94,10 @@ class TestPostConfigEndToEnd:
     """直接打 POST /api/config,复现并验证修复。"""
 
     def _client(self, tmp_path, monkeypatch):
-        import core.config_store as config_store_module
         import core.routes.config as config_module
 
         # 隔离真实 .env,避免测试写脏仓库根目录的 .env。
         monkeypatch.setattr(config_module, "ENV_FILE", tmp_path / ".env.test")
-        # 隔离真实 runtime/secrets.env:此前这里漏了这一步 —— POST /api/config
-        # 里凡是分类为 secret 的 key(DEEPSEEK_API_KEY/OPENROUTER_API_KEY/...)会经
-        # ConfigService().set_secret() 落到进程级单例 ConfigStore(core/config_store.py
-        # 的 get_config_store()),而该单例默认路径就是仓库真实的
-        # runtime/secrets.env——测试假密钥(sk-ds-test 等)会真的写进本地这份文件,
-        # 污染真实的密钥库状态。改为进程级单例注入一个指向 tmp_path 的 ConfigStore。
-        monkeypatch.setattr(
-            config_store_module,
-            "_singleton",
-            config_store_module.ConfigStore(
-                config_path=tmp_path / "config.json.test",
-                secrets_path=tmp_path / "secrets.env.test",
-            ),
-        )
 
         app = FastAPI()
         app.include_router(config_module.router)
