@@ -4,8 +4,10 @@ Windows UI Automation 封装模块
 使用 Windows UI Automation API 实现屏幕元素识别和操作
 """
 
+import atexit
 import logging
 import sys
+import weakref
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 import comtypes.client
@@ -22,6 +24,21 @@ except Exception as _bootstrap_exc:
     )
 
 logger = logging.getLogger(__name__)
+
+# COM 对象自动释放机制：跟踪所有创建的 COM 对象，在程序退出时统一释放
+_com_objects = weakref.WeakSet()
+
+
+def _release_all():
+    """释放所有已注册的 COM 对象，防止内存泄漏"""
+    for obj in list(_com_objects):
+        try:
+            obj.Release()
+        except Exception:
+            pass
+
+
+atexit.register(_release_all)
 
 
 @dataclass
@@ -66,7 +83,9 @@ class UIAutomationWrapper:
                 "{ff48dba4-60ef-4201-aa87-54103eef594e}",
                 interface=comtypes.gen.UIAutomationClient.IUIAutomation
             )
+            _com_objects.add(self.uia)
             self.root = self.uia.GetRootElement()
+            _com_objects.add(self.root)
             logger.info("UI Automation 初始化成功")
         except (ImportError, AttributeError, OSError) as e:
             # UIAutomationClient 缓存缺失或路径含非 ASCII 字符；尝试自动修复后重试。
@@ -78,7 +97,9 @@ class UIAutomationWrapper:
                         "{ff48dba4-60ef-4201-aa87-54103eef594e}",
                         interface=comtypes.gen.UIAutomationClient.IUIAutomation
                     )
+                    _com_objects.add(self.uia)
                     self.root = self.uia.GetRootElement()
+                    _com_objects.add(self.root)
                     logger.info("UI Automation 初始化成功（修复后重试）")
                 else:
                     logger.error("comtypes 缓存修复失败，UI Automation 不可用")
@@ -121,7 +142,9 @@ class UIAutomationWrapper:
         try:
             # 获取前台窗口
             foreground = self.uia.GetFocusedElement()
-            if not foreground:
+            if foreground:
+                _com_objects.add(foreground)
+            else:
                 logger.warning("没有找到前台窗口")
                 return None
             
@@ -164,11 +187,13 @@ class UIAutomationWrapper:
                 comtypes.gen.UIAutomationClient.TreeScope_Descendants,
                 condition
             )
+            if element:
+                _com_objects.add(element)
             return element
         except Exception as e:
             logger.error(f"查找元素失败: {e}")
             return None
-    
+
     def find_element_by_automation_id(self, automation_id: str, root: Any = None) -> Optional[Any]:
         """
         根据 Automation ID 查找元素
@@ -192,11 +217,13 @@ class UIAutomationWrapper:
                 comtypes.gen.UIAutomationClient.TreeScope_Descendants,
                 condition
             )
+            if element:
+                _com_objects.add(element)
             return element
         except Exception as e:
             logger.error(f"查找元素失败: {e}")
             return None
-    
+
     def click_element(self, element: Any) -> bool:
         """
         点击元素
