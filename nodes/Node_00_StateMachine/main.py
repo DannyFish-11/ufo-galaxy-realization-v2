@@ -12,7 +12,7 @@ import asyncio
 import logging
 import uuid
 from typing import Dict, Optional, List, Any
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from contextlib import asynccontextmanager
 from enum import Enum
 
@@ -21,6 +21,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 import uvicorn
 from nodes.common.cors_config import get_cors_origins
+import signal
+
+from nodes.common.base_node import (
+    setup_logging, setup_signal_handlers, node_metrics,
+    DEFAULT_LOCK_TIMEOUT, DEFAULT_HEARTBEAT_INTERVAL, ErrorResponse
+)
+
 
 # Optional Redis import
 try:
@@ -41,11 +48,8 @@ REDIS_URL = os.getenv("REDIS_URL", f"redis://localhost:{get_service_port('redis'
 USE_MEMORY_STORE = os.getenv("USE_MEMORY_STORE", "true").lower() == "true"
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 
-logging.basicConfig(
-    level=getattr(logging, LOG_LEVEL),
-    format=f"[Node {NODE_ID}] %(asctime)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger(__name__)
+logger = setup_logging(f"Node_{NODE_ID}_{NODE_NAME}", level=LOG_LEVEL)
+setup_signal_handlers(logger)
 
 # =============================================================================
 # Models
@@ -54,7 +58,7 @@ logger = logging.getLogger(__name__)
 class LockRequest(BaseModel):
     node_id: str = Field(..., description="ID of the requesting node")
     resource_id: str = Field(..., description="ID of the resource to lock")
-    timeout_seconds: int = Field(default=30, ge=1, le=300)
+    timeout_seconds: int = Field(default=DEFAULT_LOCK_TIMEOUT, ge=1, le=300)
     reason: str = Field(default="", description="Reason for lock")
 
 class LockResponse(BaseModel):
@@ -98,7 +102,7 @@ class MemoryStore:
     async def acquire_lock(self, resource_id: str, node_id: str, timeout_seconds: int) -> Optional[str]:
         """Acquire a lock on a resource."""
         async with self._lock:
-            now = datetime.now()
+            now = datetime.now(timezone.utc)
             
             # Check existing lock
             if resource_id in self.locks:
@@ -137,7 +141,7 @@ class MemoryStore:
     async def get_locks(self) -> Dict[str, Dict]:
         """Get all active locks."""
         async with self._lock:
-            now = datetime.now()
+            now = datetime.now(timezone.utc)
             active = {}
             
             for resource_id, lock in list(self.locks.items()):
@@ -159,7 +163,7 @@ class MemoryStore:
                 "ip_address": registration.ip_address,
                 "capabilities": registration.capabilities,
                 "status": "online",
-                "last_heartbeat": datetime.now().isoformat()
+                "last_heartbeat": datetime.now(timezone.utc).isoformat()
             }
     
     async def get_nodes(self) -> Dict[str, Dict]:
@@ -171,7 +175,7 @@ class MemoryStore:
         """Update node heartbeat."""
         async with self._lock:
             if node_id in self.nodes:
-                self.nodes[node_id]["last_heartbeat"] = datetime.now().isoformat()
+                self.nodes[node_id]["last_heartbeat"] = datetime.now(timezone.utc).isoformat()
                 self.nodes[node_id]["status"] = "online"
                 return True
             return False
@@ -289,7 +293,7 @@ async def node_status():
         "redis_available": redis_client is not None,
         "lock_count": len(locks),
         "nodes_registered": len(nodes),
-        "timestamp": datetime.now().isoformat()
+        "timestamp": datetime.now(timezone.utc).isoformat()
     }
 
 @app.post("/lock/acquire", response_model=LockResponse)
@@ -302,8 +306,9 @@ async def acquire_lock(request: LockRequest):
     )
     
     if token:
-        expires_at = datetime.now() + timedelta(seconds=request.timeout_seconds)
+        expires_at = datetime.now(timezone.utc) + timedelta(seconds=request.timeout_seconds)
         logger.info(f"Lock acquired: {request.resource_id} by {request.node_id}")
+        node_metrics.increment("locks_acquired_total")
         return LockResponse(
             success=True,
             token=token,
@@ -312,6 +317,7 @@ async def acquire_lock(request: LockRequest):
         )
     else:
         logger.warning(f"Lock denied: {request.resource_id} for {request.node_id}")
+        node_metrics.increment("locks_denied_total")
         return LockResponse(
             success=False,
             message="Resource is locked by another node"
@@ -363,7 +369,7 @@ async def export_state():
     """
     async with store._lock:
         state_copy = dict(store.state)
-    return {"state": state_copy, "timestamp": datetime.now().isoformat()}
+    return {"state": state_copy, "timestamp": datetime.now(timezone.utc).isoformat()}
 
 @app.post("/state/import")
 async def import_state(payload: Dict[str, Any]):
