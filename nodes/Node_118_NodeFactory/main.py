@@ -18,17 +18,21 @@ import importlib
 import subprocess
 from nodes.common.cors_config import get_cors_origins
 
+from nodes.common.base_node import (
+    setup_logging, setup_signal_handlers, node_metrics, ErrorResponse
+)
+import signal
+
 try:
     from nodes.common.cors_config import get_cors_origins
 except ImportError:
     def get_cors_origins():
         return ["*"]
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = setup_logging("Node_118_NodeFactory")
 
 app = FastAPI(title="Node 118 - NodeFactory", version="2.0.0")
-app.add_middleware(CORSMiddleware, allow_origins=get_cors_origins(), allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(CORSMiddleware, allow_origins=get_cors_origins(), allow_credentials=True, allow_methods=["*"], allow_headers=["*"]))
 
 
 class NodeType(str, Enum):
@@ -384,7 +388,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="{blueprint.name}", version="1.0.0")
-app.add_middleware(CORSMiddleware, allow_origins=get_cors_origins(), allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(CORSMiddleware, allow_origins=get_cors_origins(), allow_credentials=True, allow_methods=["*"], allow_headers=["*"]))
 
 # Capabilities: {", ".join(blueprint.capabilities)}
 
@@ -613,4 +617,5 @@ async def get_blueprint_code(blueprint_id: str):
 
 if __name__ == "__main__":
     import uvicorn
+    setup_signal_handlers(logger)
     uvicorn.run(app, host="0.0.0.0", port=8118)
