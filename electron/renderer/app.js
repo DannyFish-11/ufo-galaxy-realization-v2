@@ -7,6 +7,36 @@
  * 纯粹渲染层：WebSocket 事件 → depth_factor → WebGL 渲染。
  */
 
+/** Idle depth threshold — below this the shader is not run (saves CPU). */
+const IDLE_DEPTH_THRESHOLD = 0.015;
+/** Frame-rate cap in silent/idle mode (fps). */
+const IDLE_FPS = 12;
+/** Frame-rate cap in active/transition mode (fps). */
+const ACTIVE_FPS = 30;
+/** Max internal render resolution (longest edge in px). */
+const MAX_RENDER_RES = 800;
+/** Spring tension for depth smoothing. */
+const SPRING_TENSION = 50;
+/** Spring friction for depth smoothing. */
+const SPRING_FRICTION = 14;
+/** Orchestration-band upper speed (depth units per second). */
+const CHOREO_UP_SPEED = 0.34;
+/** Orchestration-band lower speed (depth units per second). */
+const CHOREO_DOWN_SPEED = 0.55;
+/** Island fade-in start depth. */
+const ISLAND_START_DEPTH = 0.10;
+/** Island fade-out end depth. */
+const ISLAND_END_DEPTH = 0.90;
+
+/**
+ * Galaxy Desktop Presence Renderer
+ *
+ * Responsibilities: receive state events from DesktopPresenceRuntime,
+ * render tri-state visual effects.
+ *
+ * Does NO state machine, NO AI decision, NO backend simulation.
+ * Pure renderer: WebSocket events -> depth_factor -> WebGL render.
+ */
 class GalaxyRenderer {
   constructor() {
     this.canvas = document.getElementById('overlay');
@@ -14,24 +44,25 @@ class GalaxyRenderer {
     this.time = 0;
     this.lastFrame = 0;
 
-    // 当前渲染状态（由后端驱动）。默认 silent(0.05) → 启动即显示暖香槟辉光(第一态)，
-    // 后端 presence 事件到达后再平滑过渡到 liminal/manifest。
+    // Current render state (driven by backend). Default silent(0.05) ->
+    // show warm champagne glow on startup, then smoothly transition to
+    // liminal/manifest as backend presence events arrive.
     this.depth = 0.05;
     this.intent = 0.0;
     this.speaking = false;
     this.phase = 'static';
 
-    // WebGL 是否可用；不可用时走 DOM 兜底渲染
+    // WebGL availability flag; falls back to DOM rendering when false
     this.webglOK = false;
     this.fallbackOrb = null;
     this.wakeHint = null;
-    this._idleCleared = false;  // 静默时只清屏一次的标记
+    this._idleCleared = false;  // mark: clear screen only once in idle
 
-    // Spring 物理（只用于平滑 depth 变化，不做状态切换）
+    // Spring physics (depth smoothing only, no state switching)
     this.currentDepth = 0.05;
     this.springV = 0;
 
-    // 灵动岛
+    // Dynamic island DOM element references
     this.islandEl = document.getElementById('island');
     this.islandText = document.getElementById('islandText');
   }
@@ -39,7 +70,13 @@ class GalaxyRenderer {
   async init() {
     // DPI 自适应
     this._resize();
-    window.addEventListener('resize', () => this._resize());
+    /** @type {function(): void} */
+    this._boundResize = () => this._resize();
+    window.addEventListener('resize', this._boundResize);
+    // Bug-fix: Remove resize listener on page unload to prevent memory leak
+    window.addEventListener('beforeunload', () => {
+      window.removeEventListener('resize', this._boundResize);
+    });
 
     // 初始化 WebGL —— 关键加固：笔记本/无独显/驱动不支持 WebGL2 时，getContext 或
     // shader 编译会抛错。此前没有 try/catch → 整个渲染循环不启动 → 覆盖层永久空白，
@@ -77,12 +114,15 @@ class GalaxyRenderer {
     }
   }
 
-  _wsConnect(url) {
+  _wsConnect(url, reconnectDelay) {
+    const delay = reconnectDelay || 3000;
+    const MAX_RECONNECT_DELAY = 30000;
     try {
       const ws = new WebSocket(url);
 
       ws.onopen = () => {
         console.log('[Galaxy] WebSocket connected');
+        this._reconnectAttempt = 0;
         ws.send(JSON.stringify({ type: 'register', client: 'desktop-presence', version: '2.0.0' }));
       };
 
@@ -96,13 +136,17 @@ class GalaxyRenderer {
       };
 
       ws.onclose = () => {
-        console.log('[Galaxy] WebSocket closed, retrying...');
-        setTimeout(() => this._wsConnect(url), 3000);
+        this._reconnectAttempt = (this._reconnectAttempt || 0) + 1;
+        const nextDelay = Math.min(delay * 1.5, MAX_RECONNECT_DELAY);
+        console.log(`[Galaxy] WebSocket closed, reconnecting in ${nextDelay}ms (attempt ${this._reconnectAttempt})...`);
+        setTimeout(() => this._wsConnect(url, nextDelay), nextDelay);
       };
 
       ws.onerror = () => {};
     } catch (e) {
       console.error('[Galaxy] WebSocket failed:', e);
+      const nextDelay = Math.min(delay * 1.5, MAX_RECONNECT_DELAY);
+      setTimeout(() => this._wsConnect(url, nextDelay), nextDelay);
     }
   }
 
@@ -142,9 +186,9 @@ class GalaxyRenderer {
     const target = this.depth;
     const gap = target - this.currentDepth;
 
-    // 编排带内的大跨度跳变 → 匀速穿越（intent 最多提速 ~1.8x）
-    const CHOREO_UP = 0.34;    // 上行速度（depth/秒）：0.05→0.50 约 1.3s，回收窗口约 0.45s 可见
-    const CHOREO_DOWN = 0.55;  // 下行（回到静默）稍快
+    // Orchestration band: constant-speed traversal (intent boosts up to ~1.8x)
+    const CHOREO_UP = CHOREO_UP_SPEED;    // upward speed (depth/sec): 0.05->0.50 ~1.3s
+    const CHOREO_DOWN = CHOREO_DOWN_SPEED;  // downward (return to silent) slightly faster
     const inBand =
       Math.max(this.currentDepth, target) > 0.10 &&
       Math.min(this.currentDepth, target) < 0.90;
@@ -181,7 +225,8 @@ class GalaxyRenderer {
     const transitioning = Math.abs(this.springV) > 0.0015
         || Math.abs(this.currentDepth - this.depth) > 0.01;
     const lively = this.currentDepth > 0.30 || transitioning;
-    const minFrameMs = 1000 / (lively ? 30 : 12);
+    // Use extracted constants for frame-rate capping
+    const minFrameMs = 1000 / (lively ? ACTIVE_FPS : IDLE_FPS);
     if (now - this.lastFrame < minFrameMs) return;
     const dt = Math.min((now - this.lastFrame) / 1000, 0.05);
     this.lastFrame = now;
@@ -328,8 +373,8 @@ class GalaxyRenderer {
     // 限制内部渲染分辨率：着色器开销 ∝ 像素数。软件渲染下 1920x1080(≈2.1M 像素/帧)
     // 会卡死；把长边压到 ≤960 像素(并忽略 devicePixelRatio)后开销降到 ~1/4~1/5，
     // 氛围模糊视觉放大铺满全屏几乎无损。CSS 尺寸仍是全屏。
-    const MAX = 800;
-    const scale = Math.min(1, MAX / Math.max(w, h, 1));
+    // Use extracted constant for max render resolution
+    const scale = Math.min(1, MAX_RENDER_RES / Math.max(w, h, 1));
     this.canvas.width  = Math.max(1, Math.round(w * scale));
     this.canvas.height = Math.max(1, Math.round(h * scale));
     this.canvas.style.width  = w + 'px';
