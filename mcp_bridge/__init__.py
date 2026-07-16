@@ -24,6 +24,6 @@ Galaxy - MCP 多语言桥接层
 桥接规范文档见：mcp_bridge/BRIDGE_SPEC.md
 """
 
-from .bridge import MCPBridgeSpec, load_bridge_server, MCPBridgeLoader, get_bridge_loader
+from .bridge import MCPBridgeSpec, load_bridge_server, MCPBridgeLoader, get_bridge_loader, get_metrics
 
-__all__ = ["MCPBridgeSpec", "load_bridge_server", "MCPBridgeLoader", "get_bridge_loader"]
+__all__ = ["MCPBridgeSpec", "load_bridge_server", "MCPBridgeLoader", "get_bridge_loader", "get_metrics"]
