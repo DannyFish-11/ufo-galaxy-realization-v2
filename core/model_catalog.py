@@ -392,6 +392,14 @@ def save_tier(key: str, *, main_brain: Optional[str] = None) -> str:
     else:
         chosen = _read_state().get("main_brain", "")
     _write_state(key, chosen)
+    # 档位联动:切 B 档 → 激活 MiniCPM-o 官方 server 原生听/说(依赖后台自动装、
+    # server 探测就绪才注册);切 A 档 → 注销回落桥。best-effort,绝不拖垮切档。
+    try:
+        from core.native_modal import on_tier_changed
+
+        on_tier_changed(key)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("档位原生后端联动跳过(不影响切档): %s", exc)
     return chosen
 
 

@@ -172,9 +172,25 @@ def _decode_audio_to_pcm(audio_bytes: bytes):
 
 
 def transcribe_b64(audio_b64: str, *, mime: str = "audio/webm", language: str = "zh") -> Optional[str]:
-    """base64 音频 → 文字（听的桥接实现）。任何环节不可用则返回 None（优雅降级）。"""
+    """base64 音频 → 文字（听的实现）。任何环节不可用则返回 None（优雅降级）。
+
+    收口:B 档原生后端激活时,优先让【全模态模型自己听懂】音频(而非 Whisper 转写)
+    ——这是"原生听"落到消费文本的循环上的形态。server 不可达/失败则回落 Whisper,
+    绝不因原生失败而丢掉这段音频。A 档(无原生后端)直接走 Whisper,行为不变。
+    """
     if not audio_b64:
         return None
+    try:
+        from core.native_modal import get_active_backend
+
+        be = get_active_backend()
+        if be is not None:
+            native_text = be.understand_audio(audio_b64, mime=mime, language=language)
+            if native_text:
+                return native_text
+            # 原生返回空 → 回落 Whisper,不静默丢句
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("原生听不可用,回落 Whisper: %s", exc)
     asr = _get_asr()
     if asr is None:
         return None
