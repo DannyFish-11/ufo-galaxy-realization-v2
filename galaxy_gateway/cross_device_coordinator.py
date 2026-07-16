@@ -947,6 +947,14 @@ class CrossDeviceCoordinator:
                 asyncio.gather(*tasks, return_exceptions=True), timeout=30
             )
 
+            # 检查并记录异常结果 (return_exceptions=True 会将异常作为对象返回)
+            for idx, r in enumerate(results):
+                if isinstance(r, Exception):
+                    logger.error(
+                        "Media control subtask %d/%d raised exception: %s",
+                        idx + 1, len(results), r,
+                    )
+
             success_count = sum(1 for r in results if isinstance(r, dict) and r.get("success"))
 
             return {
@@ -998,6 +1006,14 @@ class CrossDeviceCoordinator:
             results = await asyncio.wait_for(
                 asyncio.gather(*tasks, return_exceptions=True), timeout=30
             )
+
+            # 检查并记录异常结果 (return_exceptions=True 会将异常作为对象返回)
+            for idx, r in enumerate(results):
+                if isinstance(r, Exception):
+                    logger.error(
+                        "Notification subtask %d/%d raised exception: %s",
+                        idx + 1, len(results), r,
+                    )
 
             success_count = sum(1 for r in results if isinstance(r, dict) and r.get("success"))
 
