@@ -5,9 +5,8 @@ Node 02: Tasker - 任务调度器
 """
 
 import logging  # auto: ensure module logger is defined
-logger = logging.getLogger(__name__)
+logger = setup_logging("Node_02_Tasker")
 
-import os
 import json
 import asyncio
 import uuid
@@ -19,6 +18,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import heapq
 from nodes.common.cors_config import get_cors_origins
+from nodes.common.base_node import (
+    setup_logging, setup_signal_handlers, node_metrics,
+    DEFAULT_MAX_RETRIES, DEFAULT_HEARTBEAT_INTERVAL, ErrorResponse
+)
+import signal
+
 
 app = FastAPI(title="Node 02 - Tasker", version="2.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=get_cors_origins(), allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
@@ -50,7 +55,7 @@ class Task(BaseModel):
     result: Optional[Any] = None
     error: Optional[str] = None
     retry_count: int = 0
-    max_retries: int = 3
+    max_retries: int = DEFAULT_MAX_RETRIES
 
 class TaskManager:
     def __init__(self):
@@ -105,6 +110,7 @@ class TaskManager:
                 scheduled_at=scheduled_at
             )
             self.tasks[task.id] = task
+            node_metrics.increment("tasks_created_total")
 
             if scheduled_at and scheduled_at > datetime.now():
                 # 定时任务
@@ -318,4 +324,5 @@ async def startup():
 
 if __name__ == "__main__":
     import uvicorn
+    setup_signal_handlers(logger)
     uvicorn.run(app, host="0.0.0.0", port=8002)
