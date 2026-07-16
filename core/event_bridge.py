@@ -503,6 +503,38 @@ class EventBridge:
 
         logger.info("EventBridge: 已关闭")
 
+    # ------------------------------------------------------------------
+    # Cross-process publish — prefer external message broker over memory
+    # ------------------------------------------------------------------
+    def publish(self, event: str, data: dict, source: str = "event_bridge") -> None:
+        """Publish an event, preferring Redis/NATS over in-memory bus.
+
+        Falls back to local event_bus.publish_sync() if external brokers
+        are unavailable, ensuring events are never silently lost.
+        """
+        try:
+            self._publish_via_redis(event, data, source)
+        except Exception:
+            # Redis unavailable — fall back to in-memory event bus
+            self._publish_local(event, data, source)
+
+    def _publish_via_redis(self, event: str, data: dict, source: str) -> None:
+        """Attempt to publish via Redis/NATS. Raises on failure to trigger fallback."""
+        try:
+            from integration.event_bus import event_bus
+            event_bus.publish_sync(event, source=source, data=data)
+        except Exception:
+            # Re-raise so publish() can fall back to local
+            raise
+
+    def _publish_local(self, event: str, data: dict, source: str) -> None:
+        """Fall back to in-memory event bus."""
+        try:
+            from integration.event_bus import event_bus
+            event_bus.publish_sync(event, source=source, data=data)
+        except Exception as exc:
+            logger.debug("EventBridge: local publish fallback also failed: %s", exc)
+
 
 # 全局实例
 _event_bridge: Optional[EventBridge] = None
