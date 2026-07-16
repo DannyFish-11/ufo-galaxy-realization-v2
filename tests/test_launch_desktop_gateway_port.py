@@ -4,8 +4,13 @@ import launch_desktop as ld
 
 
 def test_gateway_health_url_uses_resolved_port(monkeypatch):
-    monkeypatch.setattr(ld, "resolve_gateway_port", lambda: 9321)
+    called = {"n": 0}
+    def _resolve():
+        called["n"] += 1
+        return 9321
+    monkeypatch.setattr(ld, "resolve_gateway_port", _resolve)
     assert ld.get_gateway_health_url().endswith(":9321/health")
+    assert called["n"] >= 1
 
 
 def test_start_gateway_backend_passes_resolved_port(monkeypatch, tmp_path):

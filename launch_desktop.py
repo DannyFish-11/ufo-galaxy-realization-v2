@@ -88,12 +88,8 @@ _proc_electron = None
 _shutting_down = False
 
 
-def get_gateway_port() -> int:
-    return resolve_gateway_port()
-
-
 def get_gateway_health_url() -> str:
-    return f"http://{GATEWAY_HOST}:{get_gateway_port()}/health"
+    return f"http://{GATEWAY_HOST}:{resolve_gateway_port()}/health"
 
 # ───────────────────────────────────────────────────────────────────────────
 # 模型配置 — 用户可选择的本地模型
@@ -454,7 +450,7 @@ def _signal_handler(signum, frame):
 def start_gateway_backend():
     """委托 main.py 启动后端。"""
     env = os.environ.copy()
-    gateway_port = get_gateway_port()
+    gateway_port = resolve_gateway_port()
     env["GALAXY_GATEWAY_PORT"] = str(gateway_port)
     env["PORT"] = str(gateway_port)
     env["PYTHONUNBUFFERED"] = "1"
@@ -699,7 +695,7 @@ def main():
         kill_proc(_proc_gateway, "Gateway")
         sys.exit(1)
     ok("Gateway 就绪 ✓")
-    gateway_port = get_gateway_port()
+    gateway_port = resolve_gateway_port()
     logger.info("  WebSocket: ws://%s:%d/ws/desktop-presence", GATEWAY_HOST, gateway_port)
     logger.info("  REST API:  http://%s:%d/api/v1/", GATEWAY_HOST, gateway_port)
 

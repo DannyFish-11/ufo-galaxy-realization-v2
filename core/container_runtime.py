@@ -453,9 +453,10 @@ def resolve_runtime(interactive: bool = True) -> str:
         return avail[0]
 
     if not interactive:
-        # 非交互场景：禁止按数组顺序静默默认。
-        # 若之前有已保存但当前不可用的选择，回退到推荐运行时（有明确策略且可记录来源）；
-        # 否则要求用户先显式选择（通过 setup / GUI），避免无感切换。
+        # 非交互场景：禁止按数组顺序静默默认。若之前有已保存但当前不可用的选择，回退到推荐
+        # 运行时（有明确策略且可记录来源）；否则要求用户先显式选择（通过 setup / GUI）。
+        # English: in headless mode, we refuse order-based silent defaulting when both runtimes
+        # are available and no explicit saved choice exists.
         if saved in _RUNTIMES and saved not in avail:
             fallback = _RECOMMENDED if _RECOMMENDED in avail else avail[0]
             save_choice(fallback, source="fallback-saved-unavailable")
@@ -536,7 +537,7 @@ def display_name(rt: str) -> str:
     return rt.capitalize() if rt in _RUNTIMES else "容器运行时"
 
 
-def _run_cmd(cmd: List[str], timeout: int = 10) -> Dict[str, Any]:
+def _run_runtime_cmd(cmd: List[str], timeout: int = 10) -> Dict[str, Any]:
     try:
         p = subprocess.run(
             cmd,
@@ -558,8 +559,36 @@ def _run_cmd(cmd: List[str], timeout: int = 10) -> Dict[str, Any]:
         return {"ok": False, "returncode": -2, "stdout": "", "stderr": str(exc)}
 
 
+def inspect_single_runtime(rt: str) -> Dict[str, Any]:
+    path = detect_runtimes().get(rt)
+    installed = bool(path)
+    version = _run_runtime_cmd([path, "--version"], timeout=8) if installed else None
+    info = _run_runtime_cmd([path, "info"], timeout=12) if installed else None
+    compose = compose_base(rt) if installed else None
+    compose_probe = _run_runtime_cmd(compose + ["version"], timeout=8) if compose else None
+    machine = None
+    if rt == "podman" and installed:
+        machine = _run_runtime_cmd([path, "machine", "list", "--format", "json"], timeout=8)
+    return {
+        "runtime": rt,
+        "installed": installed,
+        "path": path,
+        "version": (version or {}).get("stdout", ""),
+        "daemon_ready": bool((info or {}).get("ok")),
+        "daemon_error": None if (info or {}).get("ok") else (info or {}).get("stderr", ""),
+        "compose_command": compose or [],
+        "compose_ready": bool((compose_probe or {}).get("ok")),
+        "compose_error": None if (compose_probe or {}).get("ok") else (compose_probe or {}).get("stderr", ""),
+        "podman_machine_status_raw": (machine or {}).get("stdout", ""),
+    }
+
+
 def inspect_runtime_state() -> Dict[str, Any]:
-    """提供可序列化的运行时状态快照，供 GUI/launcher 统一展示。"""
+    """Serializable runtime snapshot used by launcher/Electron.
+
+    Includes install/version/daemon/compose readiness for both Docker and Podman,
+    plus resolved selection source (env/saved/single-installed/none).
+    """
     det = detect_runtimes()
     saved_record = load_choice_record()
     saved = saved_record.get("runtime") if saved_record else ""
@@ -631,6 +660,6 @@ def test_runtime(rt: str) -> Dict[str, Any]:
         return {"ok": False, "error": f"invalid runtime: {rt}"}
     if not shutil.which(rt):
         return {"ok": False, "error": f"{rt} not installed"}
-    state = inspect_runtime_state()["runtimes"].get(rt, {})
+    state = inspect_single_runtime(rt)
     ok = bool(state.get("daemon_ready")) and bool(state.get("compose_ready"))
     return {"ok": ok, "runtime": rt, "details": state}

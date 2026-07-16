@@ -37,9 +37,9 @@ def test_none_installed_returns_empty(monkeypatch):
     assert cr.resolve_runtime(interactive=True) == ""
 
 
-def test_both_installed_noninteractive_defaults_to_docker_first(monkeypatch):
+def test_both_installed_noninteractive_requires_explicit_choice(monkeypatch):
     monkeypatch.setattr(cr.shutil, "which", lambda name: f"/usr/bin/{name}" if name in ("docker", "podman") else None)
-    # 非交互 + 双安装 + 无显式已保存选择：拒绝静默默认，要求显式选择
+    # In headless mode we must not silently pick by list order when both are installed.
     assert cr.resolve_runtime(interactive=False) == ""
 
 
@@ -55,6 +55,7 @@ def test_saved_choice_used_when_no_env(monkeypatch, tmp_path):
     monkeypatch.setattr(cr.shutil, "which", lambda name: f"/usr/bin/{name}" if name in ("docker", "podman") else None)
     (tmp_path / ".galaxy_runtime").write_text('{"runtime":"podman","source":"test"}', encoding="utf-8")
     monkeypatch.setattr(cr, "_CHOICE_FILE", tmp_path / ".galaxy_runtime")
+    assert cr.load_choice_record()["runtime"] == "podman"
     assert cr.resolve_runtime(interactive=False) == "podman"
 
 
@@ -70,7 +71,7 @@ def test_fallback_when_saved_runtime_becomes_unavailable(monkeypatch, tmp_path):
             else ("/usr/bin/docker" if name == "docker-compose" else None)
         ),
     )
-    # 已保存 docker 不可用，且仅 podman 可用 -> 自动回退 podman
+    # Saved docker is unavailable, and only podman exists -> fallback to podman.
     assert cr.resolve_runtime(interactive=False) == "podman"
 
 

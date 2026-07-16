@@ -6,6 +6,7 @@ import { getBackendUrl } from '@/lib/api';
 const RECONNECT_BASE_INTERVAL = 1000;
 const RECONNECT_MAX_INTERVAL = 30000;
 const RECONNECT_MAX_ATTEMPTS = 10;
+const RECONNECT_COOLDOWN_MS = 60000;
 
 interface UseWebSocketReturn {
   connected: boolean;
@@ -62,6 +63,10 @@ export function useWebSocket(): UseWebSocketReturn {
         // P26+P27 修复：指数退避重连，无上限
         if (reconnectAttemptsRef.current >= RECONNECT_MAX_ATTEMPTS) {
           console.warn('[Panel] WebSocket 重连达到上限，进入离线状态');
+          reconnectTimerRef.current = setTimeout(() => {
+            reconnectAttemptsRef.current = 0;
+            connect();
+          }, RECONNECT_COOLDOWN_MS);
           return;
         }
         const interval = Math.min(

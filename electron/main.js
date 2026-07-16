@@ -79,7 +79,7 @@ const IPC_HTTP_PORT = parseInt(process.env.GALAXY_IPC_PORT || '9231', 10);
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 function resolveGatewayPort() {
     const fromEnv = process.env.GALAXY_GATEWAY_PORT || process.env.PORT || '';
-    const envPort = parseInt(String(fromEnv), 10);
+    const envPort = parseInt(fromEnv, 10);
     if (Number.isFinite(envPort) && envPort > 0) return envPort;
     try {
         const ep = path.join(PROJECT_ROOT, 'runtime', 'entrypoint.json');
@@ -169,6 +169,12 @@ let backendLastLogTail = '';
 const BACKEND_HEALTH_TIMEOUT_MS = 2500;
 const BACKEND_START_TIMEOUT_MS = 90000;
 const BACKEND_POLL_INTERVAL_MS = 1000;
+const BACKEND_START_ARGS = ['--backend', '--skip-check', '--skip-model-download', '--no-interactive'];
+// Base64 payload cap: 15,000,000 bytes (~15 MB decimal), to avoid oversized frame pressure.
+const MAX_PERCEPTION_PAYLOAD_SIZE = 15_000_000;
+const PERCEPTION_CB_FAIL_THRESHOLD = 3;
+const PERCEPTION_CB_BASE_DELAY_MS = 2_000;
+const PERCEPTION_CB_MAX_DELAY_MS = 60_000;
 
 function _pythonExec() {
     return process.env.GALAXY_PYTHON_EXECUTABLE || process.env.PYTHON || (process.platform === 'win32' ? 'python' : 'python3');
@@ -203,7 +209,7 @@ async function ensureGatewayOnline(autoStart = true) {
         if (nowHealthy) return { ok: true, reused: true };
         const py = _pythonExec();
         const script = path.join(PROJECT_ROOT, 'launch_desktop.py');
-        const args = [script, '--backend', '--skip-check', '--skip-model-download', '--no-interactive'];
+        const args = [script, ...BACKEND_START_ARGS];
         const env = { ...process.env, GALAXY_GATEWAY_PORT: String(GATEWAY_PORT), PORT: String(GATEWAY_PORT) };
         try {
             const proc = spawn(py, args, { cwd: PROJECT_ROOT, env, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -251,6 +257,10 @@ function backendStatusSnapshot() {
         lastError: backendLastError || '',
         logTail: backendLastLogTail || '',
     };
+}
+
+function _isValidPerceptionBase64(data) {
+    return typeof data === 'string' && data.length > 0 && data.length <= MAX_PERCEPTION_PAYLOAD_SIZE;
 }
 
 function createWindow() {
@@ -937,7 +947,7 @@ ipcMain.on('galaxy:desktop-perception', async (_event, payload) => {
     if (_perceptionCircuitOpenUntil > now) return;
     try {
         if (payload.type === 'frame' && payload.image_base64) {
-            if (typeof payload.image_base64 !== 'string' || payload.image_base64.length > 15_000_000) return;
+            if (!_isValidPerceptionBase64(payload.image_base64)) return;
             await fetch(`${GATEWAY_BASE}/api/perception/desktop/frame`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -948,7 +958,7 @@ ipcMain.on('galaxy:desktop-perception', async (_event, payload) => {
                 }),
             });
         } else if (payload.type === 'audio' && payload.audio_base64) {
-            if (typeof payload.audio_base64 !== 'string' || payload.audio_base64.length > 15_000_000) return;
+            if (!_isValidPerceptionBase64(payload.audio_base64)) return;
             await fetch(`${GATEWAY_BASE}/api/perception/desktop/audio`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -972,8 +982,8 @@ ipcMain.on('galaxy:desktop-perception', async (_event, payload) => {
         // 各打一次，并带累计次数，既能看见问题又不淹没真正的报错。
         _perceptionFailCount++;
         _perceptionConsecutiveFails++;
-        if (_perceptionConsecutiveFails >= 3) {
-            const backoff = Math.min(60_000, 2_000 * Math.pow(2, _perceptionCircuitTrips));
+        if (_perceptionConsecutiveFails >= PERCEPTION_CB_FAIL_THRESHOLD) {
+            const backoff = Math.min(PERCEPTION_CB_MAX_DELAY_MS, PERCEPTION_CB_BASE_DELAY_MS * Math.pow(2, _perceptionCircuitTrips));
             _perceptionCircuitTrips++;
             _perceptionCircuitOpenUntil = Date.now() + backoff;
             _perceptionConsecutiveFails = 0;
@@ -1119,7 +1129,7 @@ ipcMain.handle('galaxy:get-settings', () => {
 // 稍后重试本该就能成功。这里跟 GET 一样加重试，把这类瞬时不可达吸收掉。
 ipcMain.handle('galaxy:set-config', async (_, config) => {
     if (!config || typeof config !== 'object' || Array.isArray(config)) {
-        return { success: false, error: '配置格式无效：必须是对象' };
+        return { success: false, error: '配置格式无效 / Invalid config payload: expected object' };
     }
     for (const [k, v] of Object.entries(config)) {
         if (typeof k !== 'string' || !k.trim()) {

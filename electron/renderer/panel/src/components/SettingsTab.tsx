@@ -33,10 +33,15 @@ interface GalaxyAPI {
   // 明细)据此失效自己的缓存重新拉一次,而不是要求用户手动切走再切回来。
   onConfigReady?: (callback: (kind: 'config' | 'settings') => void) => () => void;
   saveConfig: () => Promise<{ success: boolean }>;
+  /** 读取 Docker/Podman 安装/就绪/compose 与已选择状态。 */
   getRuntimeStatus?: () => Promise<RuntimeStatusPayload>;
+  /** 对指定容器运行时执行可用性测试（引擎+compose）。 */
   testRuntime?: (runtime: 'docker' | 'podman') => Promise<{ ok: boolean; error?: string; details?: RuntimeItem }>;
+  /** 保存并应用运行时选择。 */
   saveRuntime?: (runtime: 'docker' | 'podman') => Promise<{ ok: boolean; error?: string }>;
+  /** 获取当前网关连接状态（用于离线提示/重试按钮）。 */
   getBackendStatus?: () => Promise<{ ok: boolean; healthy: boolean; baseUrl: string; managed: boolean; lastError?: string }>;
+  /** 尝试从主进程拉起本地后端网关。 */
   startBackend?: () => Promise<{ ok: boolean; error?: string; baseUrl: string }>;
 }
 
@@ -58,6 +63,7 @@ interface RuntimeStatusPayload {
   requires_explicit_choice?: boolean;
   runtimes?: Record<'docker' | 'podman', RuntimeItem>;
 }
+const DEFAULT_BACKEND_BASE = 'http://localhost:9000';
 
 // 浏览器预览兜底(无 galaxyAPI 时):直连后端完整明细端点。
 // 真 bug 修复:此前这里是裸 fetch('/api/config/all')——相对路径解析到【页面自身
@@ -437,7 +443,7 @@ export default function SettingsTab() {
       if (!window.galaxyAPI?.getRuntimeStatus) return;
       const state = await window.galaxyAPI.getRuntimeStatus();
       setRuntimeStatus(state);
-      const selected = (state?.selected || state?.saved_choice || 'docker') as 'docker' | 'podman';
+      const selected = (state?.selected || state?.saved_choice || '') as 'docker' | 'podman';
       if (selected === 'docker' || selected === 'podman') setRuntimeSelection(selected);
     } catch (e) {
       setToast(`运行时检测失败：${e instanceof Error ? e.message : ''}`);
@@ -1003,7 +1009,7 @@ export default function SettingsTab() {
           <span className={`runtime-pill ${backendStatus?.healthy ? 'ok' : 'off'}`}>
             网关 {backendStatus?.healthy ? '已连接' : '离线'}
           </span>
-          <span className="runtime-meta runtime-gateway-url">{backendStatus?.baseUrl || 'http://localhost:9000'}</span>
+          <span className="runtime-meta runtime-gateway-url">{backendStatus?.baseUrl || DEFAULT_BACKEND_BASE}</span>
           {!backendStatus?.healthy && (
             <button className="connector-btn cfg" type="button" onClick={startBackendFromPanel} disabled={runtimeBusy}>
               重试启动网关
