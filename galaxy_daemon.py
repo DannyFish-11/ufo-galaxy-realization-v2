@@ -102,14 +102,15 @@ class GalaxyDaemon:
     def _monitor(self):
         """Non-blocking pipe read with drain on exit."""
         import selectors
-        if not self.process or not self.process.stdout:
+        proc = self.process  # 保存本地引用，防止 run() 替换 self.process 后出现竞态
+        if not proc or not proc.stdout:
             return
         sel = selectors.DefaultSelector()
-        sel.register(self.process.stdout, selectors.EVENT_READ)
+        sel.register(proc.stdout, selectors.EVENT_READ)
         try:
             while True:
                 # Check if process exited
-                ret = self.process.poll()
+                ret = proc.poll()
                 if ret is not None:
                     break
                 events = sel.select(timeout=1.0)
@@ -121,8 +122,8 @@ class GalaxyDaemon:
                         break
         finally:
             sel.close()
-            if self.process.stdout:
-                self.process.stdout.close()
+            if proc.stdout:
+                proc.stdout.close()
 
     def _should_restart(self) -> bool:
         # M1 fixed: use timestamp list for accurate restart rate limiting
@@ -145,12 +146,13 @@ class GalaxyDaemon:
         while True:
             try:
                 self.process = self._start()
+                self.restart_count += 1
                 self.logger.info(f"Galaxy PID: {self.process.pid}")
                 self._monitor()
                 code = self.process.wait()
                 self.logger.warning(f"Galaxy exited (code: {code})")
                 self._notify(
-                    f"Galaxy 异常退出 (code {code})，第 {self.restart_count + 1} 次重启",
+                    f"Galaxy 异常退出 (code {code})，第 {self.restart_count} 次重启",
                     severity="warning",
                     category="crash_restart",
                 )
