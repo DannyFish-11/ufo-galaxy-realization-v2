@@ -117,6 +117,14 @@ class NodeClient:
         """H1 fixed: close the underlying HTTP connection pool."""
         await self.client.aclose()
 
+    async def __aenter__(self):
+        """H1 fixed: async context manager entry."""
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """H1 fixed: ensure client is closed on exit."""
+        await self.aclose()
+
     async def post(self, endpoint: str, data: Dict[str, Any]) -> Dict[str, Any]:
         """POST 请求"""
         try:
