@@ -5,6 +5,7 @@ import { getBackendUrl } from '@/lib/api';
 // P26 修复：指数退避参数（与主窗口 app.js 保持一致）
 const RECONNECT_BASE_INTERVAL = 1000;
 const RECONNECT_MAX_INTERVAL = 30000;
+const RECONNECT_MAX_ATTEMPTS = 10;
 
 interface UseWebSocketReturn {
   connected: boolean;
@@ -59,6 +60,10 @@ export function useWebSocket(): UseWebSocketReturn {
         wsRef.current = null;
 
         // P26+P27 修复：指数退避重连，无上限
+        if (reconnectAttemptsRef.current >= RECONNECT_MAX_ATTEMPTS) {
+          console.warn('[Panel] WebSocket 重连达到上限，进入离线状态');
+          return;
+        }
         const interval = Math.min(
           RECONNECT_BASE_INTERVAL * Math.pow(2, reconnectAttemptsRef.current),
           RECONNECT_MAX_INTERVAL

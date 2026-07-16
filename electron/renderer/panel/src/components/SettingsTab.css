@@ -420,3 +420,65 @@
 .node-mode-btn { font-size: 11px; padding: 1px 8px; border-radius: var(--r-pill); border: 1px solid var(--border-subtle); background: transparent; color: var(--text-muted); cursor: pointer; }
 .node-mode-btn.active { color: var(--text-primary); background: rgba(230,192,123,0.10); border-color: rgba(230,192,123,0.3); }
 .node-roster-head { flex-wrap: wrap; }
+
+/* ── 容器运行时管理 ─────────────────────────────────────────── */
+.runtime-manager {
+  margin: 0 0 var(--lg);
+  padding: var(--md);
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-md);
+}
+.runtime-manager-head { display: flex; align-items: baseline; gap: var(--sm); flex-wrap: wrap; }
+.runtime-manager-title { font-size: 14px; font-weight: 700; color: var(--text-primary); }
+.runtime-manager-sub { font-size: 12px; color: var(--text-muted); }
+.runtime-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 8px;
+  margin-top: var(--sm);
+}
+.runtime-card {
+  display: block;
+  background: var(--surface-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-md);
+  padding: 8px 10px;
+  cursor: pointer;
+}
+.runtime-card.active { border-color: rgba(230,192,123,0.45); }
+.runtime-card.disabled { opacity: 0.7; cursor: default; }
+.runtime-card-row { display: flex; align-items: center; gap: 8px; }
+.runtime-name { font-size: 13px; color: var(--text-primary); font-weight: 600; text-transform: capitalize; }
+.runtime-pill {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: var(--r-pill);
+}
+.runtime-pill.ok { color: #7ee0a8; background: rgba(126,224,168,0.12); }
+.runtime-pill.off { color: #e08a8a; background: rgba(224,138,138,0.12); }
+.runtime-meta { font-size: 11px; color: var(--text-muted); margin-top: 4px; word-break: break-word; }
+.runtime-warning {
+  margin-top: 8px;
+  font-size: 11px;
+  color: #e6c07b;
+  background: rgba(230,192,123,0.08);
+  border: 1px solid rgba(230,192,123,0.25);
+  border-radius: var(--r-sm);
+  padding: 6px 8px;
+}
+.runtime-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+.runtime-gateway {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+.runtime-gateway-url { font-family: var(--font-mono); }
