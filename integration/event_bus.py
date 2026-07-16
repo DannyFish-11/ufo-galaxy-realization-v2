@@ -7,6 +7,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import threading
 import uuid
 import weakref
@@ -15,6 +16,72 @@ from datetime import datetime, timezone
 from enum import Enum, auto
 from typing import Any, Callable, Dict, List, Optional, Set
 
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+
+LOG_FORMAT: str = "%(asctime)s [%(levelname)s] %(name)s - %(message)s"
+DEFAULT_LOG_LEVEL: str = os.environ.get("INTEGRATION_LOG_LEVEL", "INFO")
+EVENT_QUEUE_MAX_SIZE: int = int(os.environ.get("INTEGRATION_EVENT_QUEUE_SIZE", "5000"))
+EVENT_HISTORY_MAXLEN: int = int(os.environ.get("INTEGRATION_EVENT_HISTORY_SIZE", "1000"))
+
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
+
+logging.basicConfig(level=getattr(logging, DEFAULT_LOG_LEVEL.upper(), logging.INFO), format=LOG_FORMAT)
+
+# ---------------------------------------------------------------------------
+# Safe serialization for events with circular references
+# ---------------------------------------------------------------------------
+
+class SafeJSONEncoder(json.JSONEncoder):
+    """JSON encoder that handles circular references and non-serializable types safely."""
+
+    def __init__(self, **kwargs: Any) -> None:
+        # Track seen objects to detect circular references
+        self._seen_ids: Set[int] = set()
+        super().__init__(**kwargs)
+
+    def default(self, obj: Any) -> Any:
+        """Handle non-serializable objects and circular references."""
+        obj_id: int = id(obj)
+        if obj_id in self._seen_ids:
+            return "[Circular Reference]"
+        if isinstance(obj, (set, frozenset)):
+            return list(obj)
+        if isinstance(obj, bytes):
+            return obj.decode('utf-8', errors='replace')
+        if hasattr(obj, 'isoformat'):
+            return obj.isoformat()
+        if hasattr(obj, '__dict__'):
+            self._seen_ids.add(obj_id)
+            try:
+                return {k: v for k, v in obj.__dict__.items() if not k.startswith('_')}
+            finally:
+                self._seen_ids.discard(obj_id)
+        try:
+            return str(obj)
+        except Exception:
+            return "[Unserializable Object]"
+
+
+def safe_json_dumps(obj: Any, **kwargs: Any) -> str:
+    """Serialize object to JSON string safely, handling circular references.
+
+    Args:
+        obj: Object to serialize.
+        **kwargs: Additional arguments passed to json.dumps.
+
+    Returns:
+        JSON string representation.
+    """
+    return json.dumps(obj, cls=SafeJSONEncoder, **kwargs)
+
+
+# ---------------------------------------------------------------------------
+# Event type enum
+# ---------------------------------------------------------------------------
 
 class EventType(Enum):
     """事件类型枚举"""
@@ -22,7 +89,7 @@ class EventType(Enum):
     GOAL_SUBMITTED = auto()           # 用户提交目标
     COMMAND_RECEIVED = auto()         # 接收到命令
     USER_INPUT = auto()               # 用户输入
-    
+
     # L4 → UI 事件
     GOAL_DECOMPOSITION_STARTED = auto()   # 目标分解开始
     GOAL_DECOMPOSITION_COMPLETED = auto() # 目标分解完成
@@ -33,12 +100,12 @@ class EventType(Enum):
     ACTION_EXECUTION_COMPLETED = auto()   # 动作执行完成
     TASK_COMPLETED = auto()               # 任务完成
     ERROR_OCCURRED = auto()               # 错误发生
-    
+
     # 硬件触发 → UI 事件
     HARDWARE_TRIGGER_DETECTED = auto()    # 硬件触发检测
     STATE_TRANSITION = auto()             # 状态转换
     WAKEUP_SIGNAL = auto()                # 唤醒信号
-    
+
     # 命令路由事件
     COMMAND_DISPATCHED = auto()           # 命令已分发
     COMMAND_PROGRESS = auto()             # 命令执行进度
@@ -113,6 +180,10 @@ class EventType(Enum):
     PERSONA_STATE_UPDATED = auto()        # PersonaState 已更新（session_id + delta）
 
 
+# ---------------------------------------------------------------------------
+# Event dataclass
+# ---------------------------------------------------------------------------
+
 @dataclass
 class UIGalaxyEvent:
     """UI-Galaxy事件数据类"""
@@ -120,10 +191,10 @@ class UIGalaxyEvent:
     source: str                          # 事件来源 (ui/l4/hardware)
     data: Dict[str, Any] = field(default_factory=dict)
     timestamp: datetime = field(default_factory=datetime.now)
-    event_id: str = field(default_factory=lambda: f"evt_{datetime.now().timestamp()}")
-    
+    event_id: str = field(default_factory=lambda: f"evt_{uuid.uuid4().hex}")
+
     def to_dict(self) -> Dict[str, Any]:
-        """转换为字典"""
+        """转换为字典（使用安全序列化器处理循环引用）"""
         return {
             "event_id": self.event_id,
             "event_type": self.event_type.name,
@@ -131,54 +202,62 @@ class UIGalaxyEvent:
             "data": self.data,
             "timestamp": self.timestamp.isoformat()
         }
-    
-    def to_json(self) -> str:
-        """转换为JSON字符串"""
-        return json.dumps(self.to_dict(), default=str)
 
+    def to_json(self) -> str:
+        """转换为JSON字符串（使用安全序列化器）"""
+        return safe_json_dumps(self.to_dict(), default=str)
+
+
+# ---------------------------------------------------------------------------
+# EventBus
+# ---------------------------------------------------------------------------
 
 class EventBus:
     """
     Galaxy 事件总线
     实现发布-订阅模式，支持同步和异步回调
     """
-    
+
     _instance: Optional['EventBus'] = None
     _lock = threading.Lock()
 
-    def __new__(cls):
+    def __new__(cls) -> 'EventBus':
         if cls._instance is None:
             with cls._lock:
                 if cls._instance is None:
                     cls._instance = super().__new__(cls)
                     cls._instance._initialized = False
         return cls._instance
-    
-    def __init__(self):
-        if self._initialized:
+
+    def __init__(self) -> None:
+        if getattr(self, '_initialized', False):
             return
-        
+
         self._initialized = True
-        self._subscribers: Dict[EventType, Set[Callable]] = {event_type: set() for event_type in EventType}
-        self._async_subscribers: Dict[EventType, Set[Callable]] = {event_type: set() for event_type in EventType}
+        self._subscribers: Dict[EventType, Set[Callable]] = {
+            event_type: set() for event_type in EventType
+        }
+        self._async_subscribers: Dict[EventType, Set[Callable]] = {
+            event_type: set() for event_type in EventType
+        }
         from collections import deque
-        self._event_history: deque = deque(maxlen=1000)
-        self._max_history = 1000
-        self._logger = logging.getLogger("EventBus")
-        
+        self._event_history: deque = deque(maxlen=EVENT_HISTORY_MAXLEN)
+        self._max_history: int = EVENT_HISTORY_MAXLEN
+        self._logger: logging.Logger = logging.getLogger("EventBus")
+
         # 事件队列（有界，防止 OOM；满时丢弃最旧事件）
-        self._event_queue: asyncio.Queue = asyncio.Queue(maxsize=5000)
+        self._event_queue: asyncio.Queue = asyncio.Queue(maxsize=EVENT_QUEUE_MAX_SIZE)
         self._processing_task: Optional[asyncio.Task] = None
-        self._running = False
-    
-    async def start(self):
+        self._running: bool = False
+
+    async def start(self) -> None:
         """启动事件总线"""
         if not self._running:
             self._running = True
             self._processing_task = asyncio.create_task(self._process_events())
-            self._logger.info("事件总线已启动")
-    
-    async def stop(self):
+            self._logger.info("Event bus started")
+
+    async def stop(self) -> None:
         """停止事件总线"""
         if self._running:
             self._running = False
@@ -188,47 +267,55 @@ class EventBus:
                     await self._processing_task
                 except asyncio.CancelledError:
                     pass
-            self._logger.info("事件总线已停止")
-    
-    async def _process_events(self):
+            self._logger.info("Event bus stopped")
+
+    async def _process_events(self) -> None:
         """处理事件队列"""
         while self._running:
             try:
-                event = await asyncio.wait_for(self._event_queue.get(), timeout=1.0)
+                event: UIGalaxyEvent = await asyncio.wait_for(
+                    self._event_queue.get(),
+                    timeout=1.0
+                )
                 await self._dispatch_event(event)
             except asyncio.TimeoutError:
                 continue
-            except Exception as e:
-                self._logger.error(f"事件处理错误: {e}")
-    
-    async def _dispatch_event(self, event: UIGalaxyEvent):
+            except Exception as exc:
+                self._logger.error("Event processing error: %s", exc)
+
+    async def _dispatch_event(self, event: UIGalaxyEvent) -> None:
         """分发事件到所有订阅者"""
         # 同步订阅者
         for callback in self._subscribers.get(event.event_type, set()):
             try:
                 callback(event)
-            except Exception as e:
-                self._logger.error(f"同步回调错误: {e}")
-        
+            except Exception as exc:
+                self._logger.error("Sync callback error: %s", exc)
+
         # 异步订阅者
         for async_callback in self._async_subscribers.get(event.event_type, set()):
             try:
                 await async_callback(event)
-            except Exception as e:
-                self._logger.error(f"异步回调错误: {e}")
+            except Exception as exc:
+                self._logger.error("Async callback error: %s", exc)
 
-    def _dispatch_sync_callbacks(self, event: UIGalaxyEvent):
+    def _dispatch_sync_callbacks(self, event: UIGalaxyEvent) -> None:
         """仅调用同步回调（无事件循环时使用）"""
         for callback in self._subscribers.get(event.event_type, set()):
             try:
                 callback(event)
-            except Exception as e:
-                self._logger.error(f"同步回调错误: {e}")
-    
-    def subscribe(self, event_type: EventType, callback: Callable, async_callback: bool = False):
+            except Exception as exc:
+                self._logger.error("Sync callback error: %s", exc)
+
+    def subscribe(
+        self,
+        event_type: EventType,
+        callback: Callable,
+        async_callback: bool = False
+    ) -> None:
         """
         订阅事件
-        
+
         Args:
             event_type: 事件类型
             callback: 回调函数
@@ -238,20 +325,25 @@ class EventBus:
             self._async_subscribers[event_type].add(callback)
         else:
             self._subscribers[event_type].add(callback)
-        
-        self._logger.debug(f"订阅 {event_type.name}, 异步={async_callback}")
-    
-    def unsubscribe(self, event_type: EventType, callback: Callable, async_callback: bool = False):
+
+        self._logger.debug("Subscribed to %s, async=%s", event_type.name, async_callback)
+
+    def unsubscribe(
+        self,
+        event_type: EventType,
+        callback: Callable,
+        async_callback: bool = False
+    ) -> None:
         """取消订阅"""
         if async_callback:
             self._async_subscribers[event_type].discard(callback)
         else:
             self._subscribers[event_type].discard(callback)
-    
-    def publish(self, event: UIGalaxyEvent, async_dispatch: bool = True):
+
+    def publish(self, event: UIGalaxyEvent, async_dispatch: bool = True) -> None:
         """
         发布事件
-        
+
         Args:
             event: 要发布的事件
             async_dispatch: 是否异步分发
@@ -259,7 +351,7 @@ class EventBus:
         # 记录事件历史 —— deque(maxlen=self._max_history) 已经在 append 时自动
         # 淘汰最老的一条，不需要（也不能）手动再切片一次:deque 不支持 slice
         # 索引，这里之前的手动裁剪一旦触发就会炸
-        # "TypeError: sequence index must be integer, not 'slice'"。
+        # "TypeError: sequence index must be integer, not 'slice'".
         self._event_history.append(event)
 
         if async_dispatch and self._running:
@@ -267,27 +359,43 @@ class EventBus:
             try:
                 self._event_queue.put_nowait(event)
             except asyncio.QueueFull:
-                self._logger.warning(f"事件队列已满，丢弃事件: {event.event_type.name}")
+                self._logger.warning("Event queue full, dropping event: %s", event.event_type.name)
         else:
-            # 同步分发: 优先尝试在运行中的事件循环创建 task, 无循环时直接调用同步回调
+            # 同步分发: 线程安全地检测是否有运行中的事件循环
             try:
-                loop = asyncio.get_running_loop()
-                loop.create_task(self._dispatch_event(event))
+                loop: Optional[asyncio.AbstractEventLoop] = asyncio._get_running_loop()
             except RuntimeError:
+                loop = None
+
+            if loop is not None:
+                try:
+                    loop.create_task(self._dispatch_event(event))
+                except Exception as exc:
+                    self._logger.debug("Cannot create async dispatch task: %s", exc)
+                    self._dispatch_sync_callbacks(event)
+            else:
                 # 没有运行中的事件循环 — 直接调用同步回调
                 self._dispatch_sync_callbacks(event)
-    
-    def publish_sync(self, event_type: EventType, source: str, data: Dict[str, Any] = None):
+
+    def publish_sync(
+        self,
+        event_type: EventType,
+        source: str,
+        data: Optional[Dict[str, Any]] = None
+    ) -> None:
         """同步发布事件（快捷方法）"""
-        event = UIGalaxyEvent(
+        event: UIGalaxyEvent = UIGalaxyEvent(
             event_type=event_type,
             source=source,
             data=data or {}
         )
         self.publish(event)
-    
-    def get_event_history(self, event_type: Optional[EventType] = None,
-                          limit: int = 100) -> List[UIGalaxyEvent]:
+
+    def get_event_history(
+        self,
+        event_type: Optional[EventType] = None,
+        limit: int = 100
+    ) -> List[UIGalaxyEvent]:
         """获取事件历史
 
         真机复现过一个每 5 分钟必炸一次的
@@ -301,8 +409,8 @@ class EventBus:
         if event_type:
             events = [e for e in events if e.event_type == event_type]
         return events[-limit:]
-    
-    def clear_history(self):
+
+    def clear_history(self) -> None:
         """清空事件历史"""
         self._event_history.clear()
 
@@ -315,7 +423,7 @@ event_bus = EventBus()
 # M2 统一事件 Schema 校验与发布
 # ============================================================================
 
-_m2_logger = logging.getLogger("EventBus.M2")
+_m2_logger: logging.Logger = logging.getLogger("EventBus.M2")
 
 # 缓存加载的 JSON Schema（懒加载）
 _m2_schema: Optional[Dict[str, Any]] = None
@@ -328,7 +436,7 @@ def _load_m2_schema() -> Optional[Dict[str, Any]]:
     if _m2_schema is not None:
         return _m2_schema
 
-    schema_path = os.path.join(
+    schema_path: str = os.path.join(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
         "contracts",
         "event_schema.json",
@@ -338,7 +446,7 @@ def _load_m2_schema() -> Optional[Dict[str, Any]]:
             _m2_schema = json.load(fh)
         return _m2_schema
     except Exception as exc:
-        _m2_logger.warning("M2 schema 文件加载失败: %s", exc)
+        _m2_logger.warning("M2 schema file load failed: %s", exc)
         return None
 
 
@@ -364,32 +472,39 @@ def validate_m2_event(event_dict: Dict[str, Any]) -> bool:
         True  校验通过
         False 校验失败（已记录日志）
     """
-    required = {"event_id", "event_type", "timestamp", "source", "payload"}
-    missing = required - set(event_dict.keys())
+    required: Set[str] = {"event_id", "event_type", "timestamp", "source", "payload"}
+    missing: Set[str] = required - set(event_dict.keys())
     if missing:
-        _m2_logger.warning("M2 事件缺少必填字段: %s | event=%s", missing, event_dict.get("event_id", "<unknown>"))
+        _m2_logger.warning(
+            "M2 event missing required fields: %s | event=%s",
+            missing, event_dict.get("event_id", "<unknown>")
+        )
         return False
 
-    if not isinstance(event_dict.get("source"), dict) or not event_dict["source"].get("device_id"):
-        _m2_logger.warning("M2 事件 source.device_id 缺失 | event_id=%s", event_dict.get("event_id"))
+    source: Any = event_dict.get("source")
+    if not isinstance(source, dict) or not source.get("device_id"):
+        _m2_logger.warning(
+            "M2 event source.device_id missing | event_id=%s",
+            event_dict.get("event_id")
+        )
         return False
 
     if _is_jsonschema_available():
-        schema = _load_m2_schema()
+        schema: Optional[Dict[str, Any]] = _load_m2_schema()
         if schema is not None:
             try:
                 import jsonschema
                 jsonschema.validate(instance=event_dict, schema=schema)
             except jsonschema.ValidationError as exc:
                 _m2_logger.warning(
-                    "M2 事件 schema 校验失败: %s | event_id=%s event_type=%s",
+                    "M2 event schema validation failed: %s | event_id=%s event_type=%s",
                     exc.message,
                     event_dict.get("event_id"),
                     event_dict.get("event_type"),
                 )
                 return False
             except Exception as exc:
-                _m2_logger.warning("M2 schema 校验异常: %s", exc)
+                _m2_logger.warning("M2 schema validation exception: %s", exc)
                 return False
 
     return True
@@ -480,10 +595,10 @@ def publish_m2_event(
         )
         event_bus.publish(m2_legacy_event)
     except Exception as exc:
-        _m2_logger.debug("M2 事件写入 EventBus 失败（非致命）: %s", exc)
+        _m2_logger.debug("M2 event write to EventBus failed (non-fatal): %s", exc)
 
     _m2_logger.debug(
-        "M2 事件已发布: event_type=%s event_id=%s",
+        "M2 event published: event_type=%s event_id=%s",
         event_dict.get("event_type"),
         event_dict.get("event_id"),
     )
@@ -495,20 +610,20 @@ class UIProgressCallback:
     UI进度回调类
     用于L4主循环向UI报告进度
     """
-    
-    def __init__(self):
-        self._logger = logging.getLogger("UIProgressCallback")
-    
-    def on_goal_decomposition_started(self, goal_description: str):
+
+    def __init__(self) -> None:
+        self._logger: logging.Logger = logging.getLogger("UIProgressCallback")
+
+    def on_goal_decomposition_started(self, goal_description: str) -> None:
         """目标分解开始"""
         event_bus.publish_sync(
             EventType.GOAL_DECOMPOSITION_STARTED,
             "l4",
             {"goal_description": goal_description}
         )
-        self._logger.info(f"目标分解开始: {goal_description}")
-    
-    def on_goal_decomposition_completed(self, goal_description: str, subtasks: List[Dict]):
+        self._logger.info("Goal decomposition started: %s", goal_description)
+
+    def on_goal_decomposition_completed(self, goal_description: str, subtasks: List[Dict]) -> None:
         """目标分解完成"""
         event_bus.publish_sync(
             EventType.GOAL_DECOMPOSITION_COMPLETED,
@@ -519,17 +634,17 @@ class UIProgressCallback:
                 "subtask_count": len(subtasks)
             }
         )
-        self._logger.info(f"目标分解完成: {len(subtasks)} 个子任务")
-    
-    def on_plan_generation_started(self, goal_description: str):
+        self._logger.info("Goal decomposition completed: %d subtasks", len(subtasks))
+
+    def on_plan_generation_started(self, goal_description: str) -> None:
         """计划生成开始"""
         event_bus.publish_sync(
             EventType.PLAN_GENERATION_STARTED,
             "l4",
             {"goal_description": goal_description}
         )
-    
-    def on_plan_generation_completed(self, goal_description: str, actions: List[Dict]):
+
+    def on_plan_generation_completed(self, goal_description: str, actions: List[Dict]) -> None:
         """计划生成完成"""
         event_bus.publish_sync(
             EventType.PLAN_GENERATION_COMPLETED,
@@ -540,9 +655,9 @@ class UIProgressCallback:
                 "action_count": len(actions)
             }
         )
-        self._logger.info(f"计划生成完成: {len(actions)} 个动作")
-    
-    def on_action_execution_started(self, action_id: str, action_command: str):
+        self._logger.info("Plan generation completed: %d actions", len(actions))
+
+    def on_action_execution_started(self, action_id: str, action_command: str) -> None:
         """动作执行开始"""
         event_bus.publish_sync(
             EventType.ACTION_EXECUTION_STARTED,
@@ -552,8 +667,8 @@ class UIProgressCallback:
                 "action_command": action_command
             }
         )
-    
-    def on_action_execution_progress(self, action_id: str, progress: float, message: str = ""):
+
+    def on_action_execution_progress(self, action_id: str, progress: float, message: str = "") -> None:
         """动作执行进度更新"""
         event_bus.publish_sync(
             EventType.ACTION_EXECUTION_PROGRESS,
@@ -564,8 +679,8 @@ class UIProgressCallback:
                 "message": message
             }
         )
-    
-    def on_action_execution_completed(self, action_id: str, success: bool, result: Dict):
+
+    def on_action_execution_completed(self, action_id: str, success: bool, result: Dict) -> None:
         """动作执行完成"""
         event_bus.publish_sync(
             EventType.ACTION_EXECUTION_COMPLETED,
@@ -576,8 +691,8 @@ class UIProgressCallback:
                 "result": result
             }
         )
-    
-    def on_task_completed(self, goal_description: str, success: bool, summary: Dict):
+
+    def on_task_completed(self, goal_description: str, success: bool, summary: Dict) -> None:
         """任务完成"""
         event_bus.publish_sync(
             EventType.TASK_COMPLETED,
@@ -588,9 +703,9 @@ class UIProgressCallback:
                 "summary": summary
             }
         )
-        self._logger.info(f"任务完成: {goal_description}, 成功={success}")
-    
-    def on_error(self, error_message: str, error_details: Dict = None):
+        self._logger.info("Task completed: %s, success=%s", goal_description, success)
+
+    def on_error(self, error_message: str, error_details: Optional[Dict] = None) -> None:
         """错误发生"""
         event_bus.publish_sync(
             EventType.ERROR_OCCURRED,
@@ -600,7 +715,7 @@ class UIProgressCallback:
                 "error_details": error_details or {}
             }
         )
-        self._logger.error(f"错误: {error_message}")
+        self._logger.error("Error: %s", error_message)
 
 
 # 全局进度回调实例
