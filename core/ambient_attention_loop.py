@@ -95,11 +95,20 @@ class AmbientDecision:
 
 @dataclass
 class AmbientObservation:
-    """一拍观察的输入快照。"""
+    """一拍观察的输入快照。
+
+    frame_b64 是【主帧】(屏幕优先、否则摄像头)——供门控/记忆/路由沿用,保持兼容。
+    screen_b64 / camera_b64 是【分路】原始帧:决策脑同时把两路都发给模型(融合看),
+    修复"在场循环每拍只看一路视觉"的缺陷。两者可同时存在(屏幕+摄像头都在采)。
+    """
 
     frame_b64: Optional[str] = None
     frame_mime: str = "image/jpeg"
     frame_source: str = ""
+    screen_b64: Optional[str] = None
+    screen_mime: str = "image/jpeg"
+    camera_b64: Optional[str] = None
+    camera_mime: str = "image/jpeg"
     audio_b64: Optional[str] = None
     audio_mime: str = "audio/webm"
     audio_transcript: Optional[str] = None  # 听:能力驱动桥接转写(asr_bridge)后的文字
@@ -171,14 +180,41 @@ class LLMRouterDecider:
             text_lines.append(f"（麦克风此刻听到：「{obs.audio_transcript}」）")
         elif obs.audio_b64:
             text_lines.append("（麦克风此刻有新的声音输入。）")
+
+        # 融合看:屏幕 + 摄像头两路都发给模型(此前只发一路)。仅当统一模态协商层
+        # 判定当前模型【看得见】(vision 可用)时才附图——换到无视觉模型自动省掉图像,
+        # 不给瞎子发图、不白烧 token。协商层不可用时保守按"能看"处理,不回退视觉。
+        images: List[tuple] = []
+        if self._vision_usable():
+            if obs.screen_b64:
+                images.append(("屏幕截图", obs.screen_b64, obs.screen_mime))
+            if obs.camera_b64:
+                images.append(("摄像头画面", obs.camera_b64, obs.camera_mime))
+            # 兼容:调用方只塞了 frame_b64(未分路)时,仍发主帧。
+            if not images and obs.frame_b64:
+                images.append(("画面", obs.frame_b64, obs.frame_mime))
+
+        if len(images) > 1:
+            text_lines.append("（以下依次是：" + "、".join(lbl for lbl, _, _ in images) + "）")
         text_lines.append("现在，请判断此刻该 SPEAK / SILENT / DELEGATE。")
         text = "\n".join(text_lines)
 
-        if obs.frame_b64:
+        if images:
             content: List[Dict[str, Any]] = [{"type": "text", "text": text}]
-            content.append(self._image_part(obs.frame_b64, obs.frame_mime))
+            for _lbl, b64, mime in images:
+                content.append(self._image_part(b64, mime))
             return [{"role": "user", "content": content}]
         return [{"role": "user", "content": text}]
+
+    @staticmethod
+    def _vision_usable() -> bool:
+        """当前模型是否看得见(经统一模态协商层)。协商不可用时保守返回 True,不回退视觉。"""
+        try:
+            from core.modality_capability import negotiate
+
+            return negotiate().vision_in.usable
+        except Exception:  # noqa: BLE001
+            return True
 
     async def decide(self, obs: AmbientObservation) -> AmbientDecision:
         router = self._get_router()
@@ -383,11 +419,15 @@ class AmbientAttentionLoop:
         self.cooldown_s = (
             cooldown_s if cooldown_s is not None else _float_env("GALAXY_AMBIENT_COOLDOWN_S", _DEFAULT_COOLDOWN_S)
         )
-        self._gate = FrameGate(
+        _thr = (
             diff_threshold
             if diff_threshold is not None
             else _float_env("GALAXY_AMBIENT_DIFF_THRESHOLD", _DEFAULT_DIFF_THRESHOLD)
         )
+        # 屏幕与摄像头【各一个】门控:任一路变化足够大就值得惊动模型。此前只有一个
+        # 门控盯"主帧"(屏幕优先),摄像头单独变化(如用户走进画面)根本不会触发。
+        self._gate = FrameGate(_thr)
+        self._cam_gate = FrameGate(_thr)
         self.session_id = session_id
 
         self._task: Optional[asyncio.Task] = None
@@ -448,16 +488,23 @@ class AmbientAttentionLoop:
             logger.debug("Ambient: snapshot_media 失败: %s", exc)
             return None
 
-        frame_b64 = media.get("screen_b64") or media.get("camera_b64") or media.get("image_b64")
-        frame_mime = media.get("screen_mime") if media.get("screen_b64") else media.get("camera_mime", "image/jpeg")
-        frame_source = "desktop_screen" if media.get("screen_b64") else "desktop_camera"
+        # 分路取帧:屏幕、摄像头各自原始帧(可同时存在)。主帧(frame_b64)屏幕优先,
+        # 供门控指纹的主记录/记忆/路由沿用,保持既有行为兼容。
+        screen_b64 = media.get("screen_b64")
+        camera_b64 = media.get("camera_b64") or media.get("image_b64")
+        frame_b64 = screen_b64 or camera_b64
+        frame_mime = media.get("screen_mime") if screen_b64 else media.get("camera_mime", "image/jpeg")
+        frame_source = "desktop_screen" if screen_b64 else "desktop_camera"
         audio_b64 = media.get("audio_b64")
 
         # 门控更新必须【每拍都做】,不能被冷却提前 return 跳过——否则冷却期内
         # _gate 的 prev_sig / 音频哈希都停在冷却开始前那一帧,冷却一结束,新帧
         # 会跟一个 20 秒前的旧帧比对,几乎必然超阈值 → 冷却刚过就无条件触发一次
         # 模型调用,与屏幕当前是否真的变化无关。故先更新门控,再判冷却。
-        frame_changed = self._gate.changed(frame_b64)
+        # 屏幕、摄像头【两路各自门控】,任一路变化足够大即算"值得看一眼"。
+        screen_changed = self._gate.changed(screen_b64)
+        camera_changed = self._cam_gate.changed(camera_b64)
+        frame_changed = screen_changed or camera_changed
         audio_new = False
         if audio_b64:
             ah = hashlib.sha1(audio_b64.encode("utf-8", "ignore")).hexdigest()[:16]
@@ -486,6 +533,10 @@ class AmbientAttentionLoop:
             frame_b64=frame_b64,
             frame_mime=frame_mime or "image/jpeg",
             frame_source=frame_source,
+            screen_b64=screen_b64,
+            screen_mime=media.get("screen_mime", "image/jpeg"),
+            camera_b64=camera_b64,
+            camera_mime=media.get("camera_mime", "image/jpeg"),
             audio_b64=audio_for_obs,
             audio_mime=media.get("audio_mime", "audio/webm"),
             audio_transcript=None,  # 由 tick() 异步补上

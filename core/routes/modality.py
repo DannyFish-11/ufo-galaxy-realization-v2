@@ -33,5 +33,6 @@ async def modality_plan(tier: Optional[str] = None) -> Dict[str, Any]:
             "bridges": {"asr": asr_bridge_available(), "tts": tts_bridge_available()},
         }
     except Exception as exc:  # noqa: BLE001 — 观测端点不该因协商异常而 500
-        logger.debug("modality plan 协商失败: %s", exc)
-        return {"success": False, "error": str(exc)}
+        # 安全:异常详情只进服务端日志,不回传给客户端(CodeQL: information exposure)。
+        logger.warning("modality plan 协商失败: %s", exc)
+        return {"success": False, "error": "modality negotiation failed"}
