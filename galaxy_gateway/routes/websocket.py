@@ -22,9 +22,20 @@ PR-GATEWAY-FIX: 同时提供 core/api_routes.py 所需的兼容导出,
 实际连接管理委托给 galaxy_gateway.websocket_handler。
 """
 
+from __future__ import annotations
+
+import json
 import logging
+from typing import Any, Dict, Optional
+
+from fastapi import FastAPI, WebSocket
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Constants (Bug 16 — extracted magic numbers)
+# ---------------------------------------------------------------------------
+_MAX_WS_MESSAGE_SIZE_BYTES: int = 2 * 1024 * 1024  # Bug 2 fix: 2 MiB limit
 
 try:
     from galaxy_gateway.websocket_handler import (
@@ -119,7 +130,17 @@ async def _handle_android_ws(
     )
     try:
         while True:
-            message = await websocket.receive_json()
+            # Bug 2 fix: receive text first to enforce size limit before JSON parse
+            raw_text = await websocket.receive_text()
+            msg_size = len(raw_text.encode("utf-8"))
+            if msg_size > _MAX_WS_MESSAGE_SIZE_BYTES:
+                logger.warning(
+                    "WebSocket message from %s exceeds size limit (%d > %d bytes), closing",
+                    device_id, msg_size, _MAX_WS_MESSAGE_SIZE_BYTES,
+                )
+                await websocket.close(code=1009, reason="Message too large")
+                break
+            message = json.loads(raw_text)
             if not isinstance(message, dict):
                 continue
             # NOTE: do NOT inject the path device_id into the payload — the
@@ -238,4 +259,3 @@ def create_device_websocket_routes(app, service_manager=None):
             await manager.handle_device_connection(websocket, device_id)
         else:
             await websocket.close(code=1011, reason="GatewayWSManager not available")
-
