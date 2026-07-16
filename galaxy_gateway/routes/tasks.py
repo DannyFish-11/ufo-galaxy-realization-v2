@@ -19,11 +19,21 @@ from galaxy_gateway.dependencies import get_task_orchestrator, get_websocket_man
 from galaxy_gateway.orchestrator import TaskPriority
 from galaxy_gateway.protocol import AIPMessage, MessageType
 
+import os
+
 try:
     from core.auth import require_auth as _require_auth
 except ImportError:
+    # SECURITY FIX: 默认拒绝访问，除非明确配置 GALAXY_DEV_MODE=true
+    _DEV_MODE = os.getenv("GALAXY_DEV_MODE", "false").lower() == "true"
+
     async def _require_auth():  # type: ignore[misc]
-        return {"authenticated": True, "dev_mode": True}
+        if _DEV_MODE:
+            return {"authenticated": True, "dev_mode": True}
+        raise HTTPException(
+            status_code=503,
+            detail="Auth module unavailable and GALAXY_DEV_MODE is not enabled",
+        )
 
 logger = logging.getLogger(__name__)
 
