@@ -55,6 +55,7 @@ logger = logging.getLogger(__name__)
 
 GATEWAY_RATE_LIMIT = int(os.getenv("GATEWAY_RATE_LIMIT", "100"))   # requests per minute per client
 GATEWAY_TIMEOUT = int(os.getenv("GATEWAY_TIMEOUT", "30"))          # seconds
+GATEWAY_MAX_BODY_SIZE = int(os.getenv("GATEWAY_MAX_BODY_SIZE", "10485760"))  # 10 MB default
 NODE_REGISTRY_URL = os.getenv("NODE_REGISTRY_URL", "")
 
 START_TIME = datetime.now()
@@ -373,6 +374,37 @@ app.add_middleware(
 )
 
 
+# Body size limit middleware (CWE-400: DoS protection)
+@app.middleware("http")
+async def limit_body_size(request: Request, call_next):
+    MAX_BODY_SIZE = 10 * 1024 * 1024  # 10MB
+    body = await request.body()
+    if len(body) > MAX_BODY_SIZE:
+        return JSONResponse(
+            {"error": "Payload too large", "max_size_mb": 10},
+            status_code=413,
+        )
+    return await call_next(request)
+
+
+# Request body size limit middleware
+@app.middleware("http")
+async def body_size_limit_middleware(request: Request, call_next):
+    if request.method in ("POST", "PUT", "PATCH"):
+        content_length = request.headers.get("content-length")
+        if content_length:
+            if int(content_length) > GATEWAY_MAX_BODY_SIZE:
+                return JSONResponse(
+                    status_code=413,
+                    content={
+                        "error": "Request body too large",
+                        "max_size": GATEWAY_MAX_BODY_SIZE,
+                        "received": int(content_length),
+                    },
+                )
+    return await call_next(request)
+
+
 # Rate limiting middleware
 @app.middleware("http")
 async def rate_limit_middleware(request: Request, call_next):
@@ -381,9 +413,10 @@ async def rate_limit_middleware(request: Request, call_next):
     if path in ("/health", "/status", "/metrics"):
         return await call_next(request)
 
-    client_ip = request.client.host if request.client else "unknown"
+    # Bug fix: 使用用户ID或Token作为限流键，避免代理后所有客户端共享同一IP配额
+    client_key = _get_rate_limit_key(request)
     limit = GATEWAY_RATE_LIMIT
-    if not rate_limiter.is_allowed(client_ip, limit):
+    if not rate_limiter.is_allowed(client_key, limit):
         gateway.record_rate_limited()
         return JSONResponse(
             status_code=429,
@@ -391,11 +424,43 @@ async def rate_limit_middleware(request: Request, call_next):
                 "error": "Rate limit exceeded",
                 "limit": limit,
                 "window": "1 minute",
-                "client": client_ip,
+                "client_key": client_key,
             },
             headers={"Retry-After": "60"},
         )
     return await call_next(request)
+
+
+def _get_rate_limit_key(request: Request) -> str:
+    """获取限流键：优先使用用户标识，避免代理后所有客户端共享同一IP配额"""
+    # 1. 优先使用 Authorization header 中的 token 前缀
+    auth_header = request.headers.get("authorization", "")
+    if auth_header and auth_header.lower().startswith("bearer "):
+        token = auth_header[7:].strip()
+        if token:
+            # 使用 token 前 8 位作为匿名标识
+            return f"token:{token[:8]}"
+    
+    # 2. 使用 X-User-ID header
+    user_id = request.headers.get("x-user-id", "")
+    if user_id:
+        return f"user:{user_id}"
+    
+    # 3. 使用 X-API-Key header
+    api_key = request.headers.get("x-api-key", "")
+    if api_key:
+        return f"apikey:{api_key[:8]}"
+    
+    # 4. 回退到 X-Forwarded-For 中的真实客户端IP（考虑代理）
+    x_forwarded_for = request.headers.get("x-forwarded-for", "")
+    if x_forwarded_for:
+        # 取第一个IP（最原始的客户端IP）
+        original_ip = x_forwarded_for.split(",")[0].strip()
+        if original_ip:
+            return f"ip:{original_ip}"
+    
+    # 5. 最后回退到直接连接的客户端IP
+    return f"ip:{request.client.host if request.client else 'unknown'}"
 
 # =============================================================================
 # Routes
