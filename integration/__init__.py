@@ -9,7 +9,11 @@ from .event_bus import (
     UIGalaxyEvent,
     UIProgressCallback,
     event_bus,
-    ui_progress_callback
+    ui_progress_callback,
+    build_m2_event,
+    publish_m2_event,
+    validate_m2_event,
+    safe_json_dumps,
 )
 
 __all__ = [
@@ -18,5 +22,9 @@ __all__ = [
     'UIGalaxyEvent',
     'UIProgressCallback',
     'event_bus',
-    'ui_progress_callback'
+    'ui_progress_callback',
+    'build_m2_event',
+    'publish_m2_event',
+    'validate_m2_event',
+    'safe_json_dumps',
 ]
