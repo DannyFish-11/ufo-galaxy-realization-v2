@@ -89,11 +89,11 @@ class MessageHandler:
     def register_task_handler(self, task_type: str, handler: Callable):
         """注册任务处理器"""
         self.task_handlers[task_type] = handler
-        logger.info(f"Registered task handler for: {task_type}")
+        logger.info("Registered task handler for: %s", task_type)
     
     async def handle_message(self, device_id: str, message: AIPMessage) -> Optional[AIPMessage]:
         """处理消息并返回响应"""
-        logger.debug(f"Handling message from {device_id}: {message.type}")
+        logger.debug("Handling message from %s: %s", device_id, message.type)
         
         try:
             handler = self._get_handler(message.type)
@@ -115,10 +115,10 @@ class MessageHandler:
                         response.payload.setdefault("route_mode", route_mode)
                 return response
             else:
-                logger.warning(f"No handler for message type: {message.type}")
+                logger.warning("No handler for message type: %s", message.type)
                 return None
         except Exception as e:
-            logger.error(f"Error handling message: {e}")
+            logger.error("Error handling message: %s", e)
             return create_error_message(device_id, str(e), message.message_id)
     
     def _get_handler(self, message_type: MessageType) -> Optional[Callable]:
@@ -252,14 +252,14 @@ class MessageHandler:
             task_info["results"] = message.results
             task_info["completed_at"] = datetime.now(timezone.utc)
             
-            logger.info(f"Task {task_id} completed with status: {task_info['status']}")
+            logger.info("Task %s completed with status: %s", task_id, task_info["status"])
             
             # 如果有回调，执行回调
             if "callback" in task_info and task_info["callback"]:
                 try:
                     await task_info["callback"](task_id, message)
                 except Exception as e:
-                    logger.error(f"Task callback error: {e}")
+                    logger.error("Task callback error: %s", e)
 
         # M2 并行发布 — task.lifecycle (completed / failed)
         _ts = message.task_status or TaskStatus.COMPLETED
@@ -289,7 +289,7 @@ class MessageHandler:
     async def _handle_command_result(self, device_id: str, message: AIPMessage) -> Optional[AIPMessage]:
         """处理命令结果"""
         for result in message.results:
-            logger.info(f"Command {result.command_id} result: {result.status}")
+            logger.info("Command %s result: %s", result.command_id, result.status)
 
         # ── 并行闭环：将子任务结果记录到共享 ParallelGroupTracker ──
         try:
@@ -302,13 +302,13 @@ class MessageHandler:
     
     async def _handle_screen_content(self, device_id: str, message: AIPMessage) -> Optional[AIPMessage]:
         """处理屏幕内容"""
-        logger.debug(f"Received screen content from {device_id}")
+        logger.debug("Received screen content from %s", device_id)
         # 可以在这里进行 GUI 分析
         return None
     
     async def _handle_error(self, device_id: str, message: AIPMessage) -> Optional[AIPMessage]:
         """处理错误消息"""
-        logger.error(f"Error from device {device_id}: {message.error}")
+        logger.error("Error from device %s: %s", device_id, message.error)
         return None
 
     # ------------------------------------------------------------------
@@ -319,7 +319,7 @@ class MessageHandler:
         """处理任务提交（task_submit / task_execute）"""
         task_id = message.task_id or str(uuid.uuid4())
         task_type = message.payload.get("task_type", "generic")
-        logger.info(f"Task submit from {device_id}: task_id={task_id}, type={task_type}")
+        logger.info("Task submit from %s: task_id=%s, type=%s", device_id, task_id, task_type)
 
         self.create_task(task_id, device_id, task_type)
 
@@ -349,7 +349,7 @@ class MessageHandler:
     async def _handle_task_cancel(self, device_id: str, message: AIPMessage) -> AIPMessage:
         """处理任务取消"""
         task_id = message.task_id
-        logger.info(f"Task cancel from {device_id}: task_id={task_id}")
+        logger.info("Task cancel from %s: task_id=%s", device_id, task_id)
 
         if task_id and task_id in self.pending_tasks:
             self.pending_tasks[task_id]["status"] = TaskStatus.COMPLETED
@@ -383,7 +383,7 @@ class MessageHandler:
 
     async def _handle_agent_ping(self, device_id: str, message: AIPMessage) -> AIPMessage:
         """处理 agent_ping，返回 heartbeat_ack"""
-        logger.debug(f"Agent ping from {device_id}")
+        logger.debug("Agent ping from %s", device_id)
         return AIPMessage(
             type=MessageType.DEVICE_HEARTBEAT_ACK,
             device_id=device_id,
@@ -396,7 +396,7 @@ class MessageHandler:
 
     async def _handle_forward_ack(self, device_id: str, message: AIPMessage) -> AIPMessage:
         """通用转发处理：记录日志并返回 ACK，后续可扩展为实际转发逻辑"""
-        logger.info(f"Forward message {message.type.value} from {device_id}")
+        logger.info("Forward message %s from %s", message.type.value, device_id)
         return AIPMessage(
             type=MessageType.COMMAND_RESULT,
             device_id=device_id,
@@ -416,7 +416,7 @@ class MessageHandler:
         """处理设备能力上报"""
         capabilities = message.payload.get("capabilities", [])
         supported_actions = message.payload.get("supported_actions", [])
-        logger.info(f"Capability report from {device_id}: actions={supported_actions}")
+        logger.info("Capability report from %s: actions=%s", device_id, supported_actions)
 
         self.device_manager.update_device_status(device_id, "online")
 
@@ -430,7 +430,7 @@ class MessageHandler:
     async def _handle_diagnostics_payload(self, device_id: str, message: AIPMessage) -> AIPMessage:
         """处理诊断数据上报"""
         error_type = message.payload.get("error_type")
-        logger.info(f"Diagnostics from {device_id}: error_type={error_type}")
+        logger.info("Diagnostics from %s: error_type=%s", device_id, error_type)
 
         return AIPMessage(
             type=MessageType.DIAGNOSTICS_PAYLOAD_ACK,
@@ -445,7 +445,7 @@ class MessageHandler:
 
     async def _handle_vision_request(self, device_id: str, message: AIPMessage) -> AIPMessage:
         """处理视觉分析请求"""
-        logger.info(f"Vision request from {device_id}")
+        logger.info("Vision request from %s", device_id)
 
         return AIPMessage(
             type=MessageType.VISION_RESULT,
