@@ -11,7 +11,7 @@ import secrets
 from datetime import datetime, timedelta
 from typing import Dict, Any, Optional, List
 
-logger = logging.getLogger("Node_05_Auth")
+logger = setup_logging("Node_05_Auth")
 
 # 可选依赖：优雅降级
 try:
@@ -32,6 +32,11 @@ except ImportError:
     HAS_FASTAPI = False
     logger.warning("fastapi/pydantic 未安装，HTTP API 不可用")
 
+from nodes.common.base_node import (
+    setup_logging, setup_signal_handlers, node_metrics, ErrorResponse
+)
+import signal
+
 try:
     from nodes.common.cors_config import get_cors_origins
 except ImportError:
@@ -47,6 +52,7 @@ else:
 # JWT配置
 JWT_SECRET = os.getenv("AUTH_JWT_SECRET", secrets.token_urlsafe(32))
 JWT_ALGORITHM = "HS256"
+# JWT_EXPIRE_DAYS already configurable via AUTH_JWT_EXPIRE_DAYS env var
 JWT_EXPIRE_DAYS = int(os.getenv("AUTH_JWT_EXPIRE_DAYS", "7"))
 
 security = HTTPBearer() if HAS_FASTAPI else None
@@ -168,6 +174,7 @@ class AuthManager:
 
         user.last_login = datetime.now()
         self._save_users()
+        node_metrics.increment("auth_success_total")
         return user
 
     def create_token(self, user: User) -> Dict[str, str]:
@@ -367,4 +374,5 @@ async def verify_token_endpoint(current_user: TokenData = Depends(get_current_us
 
 if __name__ == "__main__":
     import uvicorn
+    setup_signal_handlers(logger)
     uvicorn.run(app, host="0.0.0.0", port=8005)
