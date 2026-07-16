@@ -1,12 +1,30 @@
-import os, subprocess, json
+"""
+Node 07: Git - Git版本控制
+============================
+提供Git仓库管理、分支操作、提交历史、差异比较功能
+"""
+
+import logging
+logger = setup_logging("Node_07_Git")
+
+import os
+import subprocess
+import json
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from nodes.common.cors_config import get_cors_origins
+from nodes.common.base_node import (
+    setup_logging, setup_signal_handlers, node_metrics,
+    DEFAULT_GIT_TIMEOUT, DEFAULT_REQUEST_TIMEOUT, ErrorResponse
+)
+import signal
+
 
 app = FastAPI(title='Node 07 - Git', version='3.0.0', description='Complete Git operations with branch, tag, log, and diff support')
-app.add_middleware(CORSMiddleware, allow_origins=['*'], allow_credentials=True, allow_methods=['*'], allow_headers=['*'])
+app.add_middleware(CORSMiddleware, allow_origins=get_cors_origins(), allow_credentials=True, allow_methods=['*'], allow_headers=['*']))
 
 class GitRequest(BaseModel):
     repo_path: str
@@ -18,7 +36,7 @@ class GitRequest(BaseModel):
     remote: Optional[str] = 'origin'
     files: Optional[List[str]] = None
 
-def run_git(repo_path: str, args: list, timeout: int = 60) -> dict:
+def run_git(repo_path: str, args: list, timeout: int = DEFAULT_GIT_TIMEOUT) -> dict:
     """执行 Git 命令"""
     try:
         if not os.path.exists(repo_path):
@@ -82,7 +100,7 @@ async def clone(url: str, path: str, branch: Optional[str] = None, depth: Option
     if depth:
         args.extend(['--depth', str(depth)])
     
-    result = subprocess.run(args, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=300)
+    result = subprocess.run(args, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=DEFAULT_REQUEST_TIMEOUT)
     return {
         'success': result.returncode == 0,
         'path': path,
@@ -139,7 +157,7 @@ async def push(request: GitRequest):
         args.append(request.remote)
     if request.branch:
         args.append(request.branch)
-    return run_git(request.repo_path, args, timeout=300)
+    return run_git(request.repo_path, args, timeout=DEFAULT_REQUEST_TIMEOUT)
 
 @app.post('/pull')
 async def pull(request: GitRequest):
@@ -149,7 +167,7 @@ async def pull(request: GitRequest):
         args.append(request.remote)
     if request.branch:
         args.append(request.branch)
-    return run_git(request.repo_path, args, timeout=300)
+    return run_git(request.repo_path, args, timeout=DEFAULT_REQUEST_TIMEOUT)
 
 @app.post('/fetch')
 async def fetch(request: GitRequest):
@@ -157,7 +175,7 @@ async def fetch(request: GitRequest):
     args = ['fetch']
     if request.remote:
         args.append(request.remote)
-    return run_git(request.repo_path, args, timeout=300)
+    return run_git(request.repo_path, args, timeout=DEFAULT_REQUEST_TIMEOUT)
 
 @app.post('/branch/list')
 async def list_branches(request: GitRequest):
@@ -331,4 +349,5 @@ async def mcp_call(request: dict):
 
 if __name__ == '__main__':
     import uvicorn
+    setup_signal_handlers(logger)
     uvicorn.run(app, host='0.0.0.0', port=8007)
