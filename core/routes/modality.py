@@ -36,3 +36,37 @@ async def modality_plan(tier: Optional[str] = None) -> Dict[str, Any]:
         # 安全:异常详情只进服务端日志,不回传给客户端(CodeQL: information exposure)。
         logger.warning("modality plan 协商失败: %s", exc)
         return {"success": False, "error": "modality negotiation failed"}
+
+
+@router.get("/matrix")
+async def modality_matrix() -> Dict[str, Any]:
+    """所有档位 × 全模态的协商矩阵——A 档/B 档各模态怎么走一目了然。
+
+    直接回答"两档都要考虑":同一份自适配逻辑,A 档(Gemma:说走 TTS 桥)与
+    B 档(MiniCPM-o:说原生)每个模态的 native/bridge/unavailable 并排呈现。
+    """
+    try:
+        from core.model_catalog import all_tiers, load_tier
+        from core.modality_capability import asr_bridge_available, negotiate, tts_bridge_available
+
+        active = load_tier()
+        tiers = []
+        for t in all_tiers():
+            key = getattr(t, "key", "") or getattr(t, "name", "")
+            tiers.append(
+                {
+                    "tier": key,
+                    "label": getattr(t, "label", "") or getattr(t, "name", ""),
+                    "active": key == active,
+                    "plan": negotiate(tier=key).to_dict(),
+                }
+            )
+        return {
+            "success": True,
+            "active_tier": active,
+            "tiers": tiers,
+            "bridges": {"asr": asr_bridge_available(), "tts": tts_bridge_available()},
+        }
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("modality matrix 协商失败: %s", exc)
+        return {"success": False, "error": "modality matrix failed"}

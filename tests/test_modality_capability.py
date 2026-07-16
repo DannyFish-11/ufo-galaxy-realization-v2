@@ -123,6 +123,20 @@ def test_plan_to_dict_shape():
     assert d["vision_in"]["mode"] == "native" and d["vision_in"]["usable"] is True
 
 
+def test_modality_matrix_endpoint_lists_both_tiers():
+    import asyncio
+
+    import core.routes.modality as route
+
+    out = asyncio.run(route.modality_matrix())
+    assert out["success"] is True
+    keys = {t["tier"] for t in out["tiers"]}
+    assert {"A", "B"} <= keys  # 两档都在
+    for t in out["tiers"]:
+        assert set(t["plan"]) >= {"vision_in", "audio_in", "audio_out", "video_in"}
+    assert sum(1 for t in out["tiers"] if t["active"]) == 1  # 恰一个 active
+
+
 def test_model_catalog_video_capability_field():
     # video 能力字段确实进了 catalog 的能力矩阵(一个不落)
     from core.model_catalog import ModelCapability
