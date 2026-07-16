@@ -40,7 +40,16 @@ New routes belong in ``galaxy_gateway/routes/``.
 Lifecycle/bootstrap logic lives in ``galaxy_gateway/bootstrap/lifecycle.py``.
 Service dependency helpers live in ``galaxy_gateway/dependencies.py``.
 The Bearer-auth middleware lives in ``galaxy_gateway/middleware.py``.
+
+Middleware stack (executes in LIFO order — first registered runs last)
+----------------------------------------------------------------------
+1. SecurityHeadersMiddleware — adds security headers to all responses
+2. RequestIdMiddleware — assigns UUID request IDs for tracing
+3. BearerAuthMiddleware — optional bearer token authentication
+4. CORSMiddleware — CORS handling for cross-origin requests
 """
+
+from __future__ import annotations
 
 import logging
 import os
@@ -52,7 +61,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from nodes.common.cors_config import get_cors_origins, get_cors_methods, get_cors_headers
 # ── New sub-modules (extracted from this file) ──
 from galaxy_gateway.bootstrap.lifecycle import lifespan
-from galaxy_gateway.middleware import BearerAuthMiddleware  # re-exported for compat
+from galaxy_gateway.middleware import (
+    BearerAuthMiddleware,
+    SecurityHeadersMiddleware,
+    RequestIdMiddleware,
+)
 from galaxy_gateway.routes import (
     health_router,
     devices_router,
@@ -89,6 +102,27 @@ heartbeat_scheduler: Optional[Any] = None
 
 
 # ============================================================================
+# Route prefix validation helper (Bug 5 fix)
+# ============================================================================
+
+def _validate_router_prefix(router: Any, name: str) -> None:
+    """Validate that a router has a proper URL prefix (Bug 5 fix).
+
+    Routes under ``/api/`` MUST have a prefix to prevent accidental
+    top-level path collisions.  Logs a warning if the prefix is missing.
+    """
+    # Safe access — not all routers expose .prefix (e.g. plain APIRouter)
+    prefix: str = getattr(router, "prefix", "") or ""
+    routes: list = getattr(router, "routes", [])
+    if not prefix and routes:
+        # Only warn for routers that have actual routes but no prefix
+        logger.warning(
+            "Router '%s' has no URL prefix — consider adding one to avoid path collisions",
+            name,
+        )
+
+
+# ============================================================================
 # FastAPI application — thin composition layer
 # ============================================================================
 
@@ -99,34 +133,47 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# ── Middleware ────────────────────────────────────────────────────────────────
+# ── Middleware (Bug 6 — order is documented above; LIFO execution) ──────────
+# CORSMiddleware registered FIRST → executes LAST on request path
 app.add_middleware(
     CORSMiddleware,
     allow_origins=get_cors_origins(),
     allow_credentials=True,
     allow_methods=get_cors_methods(),
     allow_headers=get_cors_headers(),
+    max_age=86400,  # Bug 3 fix: cache preflight for 24 hours
 )
 # Bearer token auth (no-op unless GALAXY_AUTH_ENABLED=true)
 app.add_middleware(BearerAuthMiddleware)
+# Request ID assignment (Bug 7 fix: UUID-based)
+app.add_middleware(RequestIdMiddleware)
+# Security headers (Bug 8 fix: X-Content-Type-Options, X-Frame-Options, etc.)
+app.add_middleware(SecurityHeadersMiddleware)
 
 
-# ── REST routers ──────────────────────────────────────────────────────────────
-app.include_router(health_router)
-app.include_router(devices_router)
-app.include_router(tasks_router)
-app.include_router(sessions_router)
-app.include_router(chat_router)
-app.include_router(llm_router)
+# ── REST routers (Bug 5 fix: validate prefixes) ─────────────────────────────
+_routers = [
+    (health_router, "health_router"),
+    (devices_router, "devices_router"),
+    (tasks_router, "tasks_router"),
+    (sessions_router, "sessions_router"),
+    (chat_router, "chat_router"),
+    (llm_router, "llm_router"),
+]
+
+for _router, _name in _routers:
+    _validate_router_prefix(_router, _name)
+    app.include_router(_router)
 
 # 接线(审计 KEEP-WIRE):/sync/status 跨设备同步质量诊断端点——模块一直存在
 # 但从未被挂载(孤儿路由)。fastapi 缺失时模块自身优雅降级(router=None)。
 try:
     from galaxy_gateway.routes.sync_status import router as _sync_status_router
     if _sync_status_router is not None:
+        _validate_router_prefix(_sync_status_router, "sync_status_router")
         app.include_router(_sync_status_router)
-        logger.info("Sync status route mounted: GET /sync/status")
-except Exception as _sync_exc:  # noqa: BLE001 — 诊断端点缺席不阻断网关
+        logger.debug("Sync status route mounted: GET /sync/status")
+except (ImportError, ModuleNotFoundError, AttributeError) as _sync_exc:
     logger.warning("sync_status 路由挂载跳过: %s", _sync_exc)
 
 
@@ -136,61 +183,86 @@ register_websocket_routes(app)
 
 # ── Optional sub-service routers (may be absent in minimal deployments) ──────
 
+# Helper: safely include an optional router with prefix validation
+def _try_include_router(
+    import_path: str,
+    router_attr: str,
+    log_msg: str,
+    log_exc_msg: str,
+) -> None:
+    """Try to import and include a router; log on success or skip on failure."""
+    try:
+        mod = __import__(import_path, fromlist=[router_attr])
+        router = getattr(mod, router_attr)
+        if router is not None:
+            _name = getattr(router, "name", router_attr)
+            _validate_router_prefix(router, _name)
+            app.include_router(router)
+            logger.debug(log_msg)
+    except (ImportError, ModuleNotFoundError, AttributeError) as _err:
+        logger.debug(log_exc_msg, _err)
+
+
 try:
     from core.routes.ai import create_router as _create_ai_router
     app.include_router(_create_ai_router(), tags=["ai-agents"])
-    logger.info("AI Agent 路由已挂载 (/api/v1/agents/*, /api/v1/ai/*)")
-except Exception as _ai_err:
-    logger.warning("AI Agent 路由挂载跳过: %s", _ai_err)
+    logger.debug("AI Agent 路由已挂载 (/api/v1/agents/*, /api/v1/ai/*)")
+except (ImportError, ModuleNotFoundError, AttributeError) as _ai_err:
+    logger.debug("AI Agent 路由挂载跳过: %s", _ai_err)
 
 try:
     from galaxy_gateway.routes.linux_agent import router as _linux_agent_router
+    _validate_router_prefix(_linux_agent_router, "linux_agent_router")
     app.include_router(_linux_agent_router)
-    logger.info("Linux Agent 路由已挂载 (/api/v1/agents/linux/*)")
-except Exception as _la_err:
-    logger.warning("Linux Agent 路由挂载跳过: %s", _la_err)
+    logger.debug("Linux Agent 路由已挂载 (/api/v1/agents/linux/*)")
+except (ImportError, ModuleNotFoundError, AttributeError) as _la_err:
+    logger.debug("Linux Agent 路由挂载跳过: %s", _la_err)
 
 try:
     from galaxy_gateway.routes.sandbox import router as _sandbox_router
+    _validate_router_prefix(_sandbox_router, "sandbox_router")
     app.include_router(_sandbox_router)
-    logger.info("Sandbox 路由已挂载 (/api/v1/agents/sandbox/*)")
-except Exception as _sb_err:
-    logger.warning("Sandbox 路由挂载跳过: %s", _sb_err)
+    logger.debug("Sandbox 路由已挂载 (/api/v1/agents/sandbox/*)")
+except (ImportError, ModuleNotFoundError, AttributeError) as _sb_err:
+    logger.debug("Sandbox 路由挂载跳过: %s", _sb_err)
 
 try:
     from .gateway_service import router as _gateway_v5_router
+    _validate_router_prefix(_gateway_v5_router, "gateway_v5_router")
     app.include_router(_gateway_v5_router, tags=["gateway-v5"])
-    logger.info("Gateway v5.0 routes mounted")
-except Exception as _gw5_err:
-    logger.warning("Gateway v5.0 routes not mounted (optional): %s", _gw5_err)  # PR-LOG-LEVEL: optional component → warning not error
+    logger.debug("Gateway v5.0 routes mounted")
+except (ImportError, ModuleNotFoundError, AttributeError) as _gw5_err:
+    logger.debug("Gateway v5.0 routes not mounted (optional): %s", _gw5_err)  # PR-LOG-LEVEL: optional component → debug not error
 
 try:
     from .api.config import router as _client_config_router
+    _validate_router_prefix(_client_config_router, "client_config_router")
     app.include_router(_client_config_router)
-    logger.info("Client config discovery route mounted: GET /api/v1/config")
-except Exception as _cfg_err:
-    logger.warning("Client config route mount skipped: %s", _cfg_err)
+    logger.debug("Client config discovery route mounted: GET /api/v1/config")
+except (ImportError, ModuleNotFoundError, AttributeError) as _cfg_err:
+    logger.debug("Client config route mount skipped: %s", _cfg_err)
 
 try:
     from .api.pairing import router as _pairing_router
+    _validate_router_prefix(_pairing_router, "pairing_router")
     app.include_router(_pairing_router)
-    logger.info("Device pairing routes mounted: /api/v1/pairing/*")
-except Exception as _pair_err:
-    logger.warning("Device pairing routes mount skipped: %s", _pair_err)
+    logger.debug("Device pairing routes mounted: /api/v1/pairing/*")
+except (ImportError, ModuleNotFoundError, AttributeError) as _pair_err:
+    logger.debug("Device pairing routes mount skipped: %s", _pair_err)
 
 
 # ============================================================================
 # Main entry point
 # ============================================================================
 
-def main():
+def main() -> None:
     """Start the Galaxy Gateway with uvicorn."""
     import uvicorn
 
     try:
         from core.port_config import get_service_port
         _default_gw_port = str(get_service_port("gateway"))
-    except Exception:
+    except (ImportError, ModuleNotFoundError, AttributeError):
         _default_gw_port = "8765"
 
     host = os.getenv("HOST", "127.0.0.1")
