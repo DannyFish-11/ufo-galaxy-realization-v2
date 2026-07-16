@@ -462,9 +462,7 @@ def resolve_runtime(interactive: bool = True) -> str:
             save_choice(fallback, source="fallback-saved-unavailable")
             logger.warning("已从不可用的 %s 回退到 %s", saved, fallback)
             return fallback
-        logger.warning(
-            "检测到 Docker 与 Podman 同时可用，但无显式已保存选择；非交互启动拒绝静默默认，请先完成显式选择"
-        )
+        logger.warning("检测到 Docker 与 Podman 同时可用，但无显式已保存选择；非交互启动拒绝静默默认，请先完成显式选择")
         return ""
 
     chosen = interactive_select(avail)
