@@ -17,6 +17,9 @@ import (
 	"github.com/google/uuid"
 )
 
+// configVersion is incremented on each hot-reload.
+var configVersion int64
+
 // Config holds all worker configuration.
 type Config struct {
 	NATSURL        string
@@ -30,7 +33,13 @@ type Config struct {
 	WorkerVersion  string
 }
 
+// Version returns the current config generation (increments on hot-reload).
+func Version() int64 {
+	return configVersion
+}
+
 // Load reads configuration from environment variables.
+// Call this on SIGHUP to hot-reload configuration.
 func Load() *Config {
 	hostname, _ := os.Hostname()
 
@@ -46,6 +55,13 @@ func Load() *Config {
 		WorkerVersion: "1.0.0",
 	}
 	return c
+}
+
+// Reload atomically updates the current configuration.
+func Reload() *Config {
+	cfg := Load()
+	configVersion++
+	return cfg
 }
 
 func envOr(key, fallback string) string {
