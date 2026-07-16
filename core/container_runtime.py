@@ -598,13 +598,18 @@ def inspect_runtime_state() -> Dict[str, Any]:
     for rt in _RUNTIMES:
         path = det.get(rt)
         installed = bool(path)
-        version = _run_cmd([path, "--version"], timeout=8) if installed else None
-        info = _run_cmd([path, "info"], timeout=12) if installed else None
+        # 修复(F821,随 #1520 合入):这里引用的 _run_cmd 从未存在过——真实的
+        # 命令探测助手叫 _run_runtime_cmd(见上方定义,inspect_single_runtime 用的
+        # 就是它)。名字写错导致 inspect_runtime_state() 只要有任一运行时已安装
+        # 就 NameError 崩溃,启动器/Electron 拿不到运行时快照;flake8 F821 也把
+        # 整个 lint gate 拦死。
+        version = _run_runtime_cmd([path, "--version"], timeout=8) if installed else None
+        info = _run_runtime_cmd([path, "info"], timeout=12) if installed else None
         compose = compose_base(rt) if installed else None
-        compose_probe = _run_cmd(compose + ["version"], timeout=8) if compose else None
+        compose_probe = _run_runtime_cmd(compose + ["version"], timeout=8) if compose else None
         machine = None
         if rt == "podman" and installed:
-            machine = _run_cmd([path, "machine", "list", "--format", "json"], timeout=8)
+            machine = _run_runtime_cmd([path, "machine", "list", "--format", "json"], timeout=8)
         runtimes[rt] = {
             "runtime": rt,
             "installed": installed,
