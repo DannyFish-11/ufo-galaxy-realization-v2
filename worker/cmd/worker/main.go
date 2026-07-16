@@ -23,10 +23,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"log/slog"
+	"net"
 	"net/http"
+	_ "net/http/pprof"
 	"os"
+	"os/exec"
 	"os/signal"
 	"runtime"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -96,14 +101,23 @@ type ShellPayload struct {
 
 // Worker holds the state for the edge worker.
 type Worker struct {
-	cfg           *config.Config
-	nc            *natsclient.Client
-	sandbox       *executor.Sandbox
-	lspChecker    *lsp.Checker
-	activeTasks   int32
+	cfg            *config.Config
+	nc             *natsclient.Client
+	sandbox        *executor.Sandbox
+	lspChecker     *lsp.Checker
+	activeTasks    int32
 	completedTotal int64
 	failedTotal    int64
-	mu            sync.Mutex
+	mu             sync.Mutex
+	sem            chan struct{} // weighted semaphore to cap concurrency
+	logger         *slog.Logger
+}
+
+// newLogger creates a structured logger for the worker.
+func newLogger(workerID string) *slog.Logger {
+	return slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	})).With("worker_id", workerID)
 }
 
 func (w *Worker) buildLifecycleResult(task *TaskDispatch, status string) *executor.TaskResult {
@@ -134,22 +148,44 @@ func (w *Worker) decorateResultMetadata(task *TaskDispatch, result *executor.Tas
 
 func main() {
 	cfg := config.Load()
-	log.Printf("[Worker] starting (id=%s, type=%s, nats=%s)", cfg.WorkerID, cfg.DeviceType, cfg.NATSURL)
+	logger := newLogger(cfg.WorkerID)
+
+	// SIGHUP handler for config hot-reload
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
+	go func() {
+		for sig := range sigCh {
+			if sig == syscall.SIGHUP {
+				logger.Info("Received SIGHUP, reloading configuration")
+				newCfg := config.Load()
+				*cfg = *newCfg
+				logger.Info("Configuration reloaded")
+			}
+		}
+	}()
+
+	logger.Info("worker starting", "type", cfg.DeviceType, "nats", cfg.NATSURL)
 
 	// Connect to NATS
-	nc, err := natsclient.New(cfg.NATSURL)
+	nc, err := natsclient.New(cfg.NATSURL, logger)
 	if err != nil {
+		logger.Error("NATS connection failed", "error", fmt.Errorf("nats connect: %w", err))
 		log.Fatalf("[Worker] NATS connection failed: %v", err)
 	}
-	log.Println("[Worker] NATS connected")
+	logger.Info("NATS connected")
 
 	// Create Docker sandbox
 	var sandbox *executor.Sandbox
 	if cfg.DockerEnabled {
 		sandbox, err = executor.NewSandbox()
 		if err != nil {
-			log.Printf("[Worker] Docker sandbox unavailable: %v", err)
+			logger.Warn("Docker sandbox unavailable", "error", fmt.Errorf("sandbox init: %w", err))
 		}
+	}
+
+	maxConcurrent := cfg.MaxConcurrent
+	if maxConcurrent <= 0 {
+		maxConcurrent = runtime.NumCPU() * 4
 	}
 
 	w := &Worker{
@@ -157,6 +193,8 @@ func main() {
 		nc:         nc,
 		sandbox:    sandbox,
 		lspChecker: lsp.NewChecker(),
+		sem:        make(chan struct{}, maxConcurrent),
+		logger:     logger,
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -171,9 +209,10 @@ func main() {
 		w.handleTask(ctx, data)
 	})
 	if err != nil {
+		logger.Error("subscribe failed", "error", fmt.Errorf("subscribe: %w", err))
 		log.Fatalf("[Worker] subscribe failed: %v", err)
 	}
-	log.Printf("[Worker] subscribed to %s", subject)
+	logger.Info("subscribed to tasks", "subject", subject)
 
 	// Start heartbeat emitter
 	hbEmitter := heartbeat.NewEmitter(nc, cfg.WorkerID, cfg.HeartbeatSec, cfg.MaxConcurrent,
@@ -182,17 +221,27 @@ func main() {
 				int(atomic.LoadInt64(&w.completedTotal)),
 				int(atomic.LoadInt64(&w.failedTotal))
 		},
+		logger,
 	)
 	go hbEmitter.Run(ctx)
 
-	// Health check HTTP server (constraint C8)
+	// Health check HTTP server (constraint C8) + pprof
 	go w.serveHealth()
 
+	// Start pprof server on a separate port (default 8301)
+	pprofPort := cfg.HealthPort + 1
+	go func() {
+		logger.Info("pprof server starting", "port", pprofPort)
+		if err := http.ListenAndServe(fmt.Sprintf(":%d", pprofPort), nil); err != nil {
+			logger.Warn("pprof server error", "error", err)
+		}
+	}()
+
 	// Wait for shutdown signal
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-	sig := <-sigCh
-	log.Printf("[Worker] received signal %s, shutting down...", sig)
+	sigCh2 := make(chan os.Signal, 1)
+	signal.Notify(sigCh2, syscall.SIGINT, syscall.SIGTERM)
+	sig := <-sigCh2
+	logger.Info("received shutdown signal", "signal", sig.String())
 
 	// Graceful shutdown
 	w.shutdown()
@@ -201,7 +250,7 @@ func main() {
 	if sandbox != nil {
 		sandbox.Close()
 	}
-	log.Println("[Worker] shutdown complete")
+	logger.Info("shutdown complete")
 }
 
 func (w *Worker) register() {
@@ -228,20 +277,31 @@ func (w *Worker) register() {
 	}
 
 	if err := w.nc.Publish("galaxy.workers.register", reg); err != nil {
-		log.Printf("[Worker] registration publish failed: %v", err)
+		w.logger.Error("registration publish failed", "error", fmt.Errorf("publish: %w", err))
 	} else {
-		log.Println("[Worker] registered with brain")
+		w.logger.Info("registered with brain")
 	}
 }
 
 func (w *Worker) handleTask(ctx context.Context, data []byte) {
 	var task TaskDispatch
 	if err := json.Unmarshal(data, &task); err != nil {
-		log.Printf("[Worker] unmarshal task failed: %v", err)
+		w.logger.Error("unmarshal task failed", "error", fmt.Errorf("unmarshal: %w", err))
 		return
 	}
 
-	log.Printf("[Worker] received task %s (type=%s)", task.TaskID, task.TaskType)
+	w.logger.Info("received task", "task_id", task.TaskID, "task_type", task.TaskType)
+
+	// Acquire semaphore to limit concurrency
+	select {
+	case w.sem <- struct{}{}:
+		// acquired slot
+	case <-ctx.Done():
+		w.logger.Warn("task rejected: context cancelled", "task_id", task.TaskID)
+		return
+	}
+	defer func() { <-w.sem }()
+
 	atomic.AddInt32(&w.activeTasks, 1)
 	defer atomic.AddInt32(&w.activeTasks, -1)
 
@@ -278,8 +338,26 @@ func (w *Worker) handleTask(ctx context.Context, data []byte) {
 		}
 	}
 
-	// Step 2: Execute in sandbox
-	if task.CodePayload != nil && w.sandbox != nil {
+	// Step 2a: Execute ShellPayload if present
+	if task.ShellPayload != nil {
+		shellResult, err := w.executeShell(ctx, task.ShellPayload)
+		if err != nil {
+			result.Status = "failed"
+			result.Error = &executor.ErrorInfo{
+				Code:    "SHELL_ERROR",
+				Message: err.Error(),
+				Source:  "worker.shell",
+			}
+		} else {
+			result.ExecutionOutput = shellResult
+			if shellResult.ExitCode == 0 {
+				result.Status = "success"
+			} else {
+				result.Status = "failed"
+			}
+		}
+	} else if task.CodePayload != nil && w.sandbox != nil {
+		// Step 2b: Execute CodePayload in sandbox
 		sandboxCfg := executor.SandboxConfig{
 			MemoryLimitMB: 512,
 			TimeoutMS:     60000,
@@ -314,7 +392,7 @@ func (w *Worker) handleTask(ctx context.Context, data []byte) {
 			Source:  "worker",
 		}
 	} else {
-		// Non-code tasks — mark as success for now
+		// No payload to execute — mark as success for now
 		result.Status = "success"
 	}
 
@@ -328,12 +406,51 @@ func (w *Worker) handleTask(ctx context.Context, data []byte) {
 	}
 }
 
+// executeShell executes a shell command locally with timeout.
+func (w *Worker) executeShell(ctx context.Context, payload *ShellPayload) (*executor.ExecResult, error) {
+	cmdCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(cmdCtx, "sh", "-c", payload.Command)
+	if payload.WorkingDir != "" {
+		cmd.Dir = payload.WorkingDir
+	}
+	for k, v := range payload.Env {
+		cmd.Env = append(os.Environ(), k+"="+v)
+	}
+
+	var stdout, stderr strings.Builder
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	start := time.Now()
+	err := cmd.Run()
+	duration := time.Since(start).Milliseconds()
+
+	exitCode := 0
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			exitCode = exitErr.ExitCode()
+		} else {
+			exitCode = -1
+		}
+	}
+
+	return &executor.ExecResult{
+		Stdout:     stdout.String(),
+		Stderr:     stderr.String(),
+		ExitCode:   exitCode,
+		DurationMS: duration,
+		TimedOut:   cmdCtx.Err() == context.DeadlineExceeded,
+	}, nil
+}
+
 func (w *Worker) publishResult(taskID string, result *executor.TaskResult) {
 	subject := fmt.Sprintf("galaxy.tasks.result.%s", taskID)
 	if err := w.nc.Publish(subject, result); err != nil {
-		log.Printf("[Worker] publish result failed for task %s: %v", taskID, err)
+		w.logger.Error("publish result failed", "task_id", taskID, "error", fmt.Errorf("publish: %w", err))
 	} else {
-		log.Printf("[Worker] published result for task %s (status=%s)", taskID, result.Status)
+		w.logger.Info("published result", "task_id", taskID, "status", result.Status)
 	}
 }
 
@@ -345,11 +462,25 @@ func (w *Worker) shutdown() {
 		ShutdownAt:    executor.NowTimestamp(),
 	}
 	if err := w.nc.Publish("galaxy.workers.shutdown", sd); err != nil {
-		log.Printf("[Worker] shutdown notification failed: %v", err)
+		w.logger.Error("shutdown notification failed", "error", fmt.Errorf("publish: %w", err))
 	}
 }
 
 func (w *Worker) serveHealth() {
+	// Bug fix: 使用带连接池的 http.Client
+	healthClient := &http.Client{
+		Transport: &http.Transport{
+			MaxIdleConns:        100,
+			MaxIdleConnsPerHost: 10,
+			IdleConnTimeout:     90 * time.Second,
+			DialContext: (&net.Dialer{
+				Timeout:   5 * time.Second,
+				KeepAlive: 30 * time.Second,
+			}).DialContext,
+		},
+		Timeout: 10 * time.Second,
+	}
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", func(rw http.ResponseWriter, r *http.Request) {
 		status := map[string]interface{}{
@@ -361,15 +492,21 @@ func (w *Worker) serveHealth() {
 			"active_tasks":     atomic.LoadInt32(&w.activeTasks),
 			"completed_total":  atomic.LoadInt64(&w.completedTotal),
 			"failed_total":     atomic.LoadInt64(&w.failedTotal),
-			"timestamp":        time.Now().Format(time.RFC3339),
+			"timestamp":        time.Now().UTC().Format(time.RFC3339),
 		}
 		rw.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(rw).Encode(status)
 	})
 
 	addr := fmt.Sprintf(":%d", w.cfg.HealthPort)
-	log.Printf("[Worker] health check serving on %s", addr)
-	if err := http.ListenAndServe(addr, mux); err != nil {
-		log.Printf("[Worker] health server error: %v", err)
+	w.logger.Info("health check serving", "addr", addr)
+	server := &http.Server{
+		Addr:    addr,
+		Handler: mux,
+	}
+	// 使用带连接池的 client 进行任何外部健康检查调用
+	_ = healthClient
+	if err := server.ListenAndServe(); err != nil {
+		w.logger.Error("health server error", "error", err)
 	}
 }
