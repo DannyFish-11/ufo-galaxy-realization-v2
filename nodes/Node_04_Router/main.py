@@ -12,7 +12,8 @@ Node 04: Global Router
 """
 
 import logging  # auto: ensure module logger is defined
-logger = logging.getLogger(__name__)
+logger = setup_logging("Node_04_Router")
+setup_signal_handlers(logger)
 
 
 import os
@@ -20,7 +21,7 @@ import json
 import asyncio
 import time
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any, List, Set
 from dataclasses import dataclass, field
 from enum import Enum
@@ -31,6 +32,18 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from nodes.common.cors_config import get_cors_origins
+from nodes.common.base_node import (
+    setup_logging, setup_signal_handlers, node_metrics,
+    DEFAULT_HEALTH_CHECK_INTERVAL, DEFAULT_HEARTBEAT_INTERVAL, ErrorResponse
+)
+import signal
+
+
+try:
+    import psutil
+    PSUTIL_AVAILABLE = True
+except ImportError:
+    PSUTIL_AVAILABLE = False
 
 # ── Phase C: NATS heartbeat background task ──
 _hb_task: Optional[asyncio.Task] = None
@@ -89,6 +102,8 @@ class NodeInfo:
     port: int
     status: NodeStatus = NodeStatus.UNKNOWN
     last_heartbeat: datetime = None
+    last_health_check: datetime = None  # 健康检查时间戳
+    health_check_ttl: int = 60  # 健康检查有效期（秒）
     metadata: Dict[str, Any] = field(default_factory=dict)
     load: float = 0.0  # 0-1
     capabilities: List[str] = field(default_factory=list)
@@ -96,6 +111,19 @@ class NodeInfo:
     @property
     def endpoint(self) -> str:
         return f"http://{self.host}:{self.port}"
+    
+    @property
+    def is_healthy_fresh(self) -> bool:
+        """检查健康状态是否在有效期内"""
+        if self.status != NodeStatus.HEALTHY:
+            return False
+        if self.last_health_check is None:
+            return False
+        try:
+            age = (datetime.now(timezone.utc) - self.last_health_check.replace(tzinfo=timezone.utc) if self.last_health_check.tzinfo is None else self.last_health_check).total_seconds()
+            return age <= self.health_check_ttl
+        except (TypeError, ValueError):
+            return False
 
 # =============================================================================
 # Router Core
@@ -106,7 +134,7 @@ class GlobalRouter:
     
     def __init__(self):
         self.nodes: Dict[str, NodeInfo] = {}
-        self.health_check_interval = 30  # seconds
+        self.health_check_interval = DEFAULT_HEALTH_CHECK_INTERVAL  # from env or default 30s
         self._init_static_nodes()
         
     def _init_static_nodes(self):
@@ -208,7 +236,8 @@ class GlobalRouter:
             node = self.nodes[node_id]
             node.host = host
             node.port = port
-            node.last_heartbeat = datetime.now()
+            node.last_heartbeat = datetime.now(timezone.utc)
+            node.last_health_check = datetime.now(timezone.utc)
             node.status = NodeStatus.HEALTHY
             if metadata:
                 node.metadata.update(metadata)
@@ -221,7 +250,8 @@ class GlobalRouter:
                 host=host,
                 port=port,
                 status=NodeStatus.HEALTHY,
-                last_heartbeat=datetime.now(),
+                last_heartbeat=datetime.now(timezone.utc),
+                last_health_check=datetime.now(timezone.utc),
                 metadata=metadata or {}
             )
             self.nodes[node_id] = node
@@ -231,7 +261,8 @@ class GlobalRouter:
     def heartbeat(self, node_id: str, load: float = 0.0) -> bool:
         """节点心跳"""
         if node_id in self.nodes:
-            self.nodes[node_id].last_heartbeat = datetime.now()
+            self.nodes[node_id].last_heartbeat = datetime.now(timezone.utc)
+            self.nodes[node_id].last_health_check = datetime.now(timezone.utc)
             self.nodes[node_id].load = load
             self.nodes[node_id].status = NodeStatus.HEALTHY
             return True
@@ -248,12 +279,15 @@ class GlobalRouter:
                 response = await client.get(f"{node.endpoint}/health")
                 if response.status_code == 200:
                     node.status = NodeStatus.HEALTHY
-                    node.last_heartbeat = datetime.now()
+                    node.last_heartbeat = datetime.now(timezone.utc)
+                    node.last_health_check = datetime.now(timezone.utc)
                 else:
                     node.status = NodeStatus.DEGRADED
+                    node.last_health_check = datetime.now(timezone.utc)
         except Exception as exc:
-            logger.debug("Fallback triggered: %s", exc)
+            logger.debug("Health check failed for %s: %s", node_id, exc)
             node.status = NodeStatus.UNHEALTHY
+            node.last_health_check = datetime.now(timezone.utc)
             
         return node.status
         
@@ -271,10 +305,10 @@ class GlobalRouter:
         }
         
     def discover_by_capability(self, capability: str) -> List[NodeInfo]:
-        """按能力发现节点"""
+        """按能力发现节点（只返回健康状态在有效期内的节点）"""
         return [
             node for node in self.nodes.values()
-            if capability in node.capabilities and node.status == NodeStatus.HEALTHY
+            if capability in node.capabilities and node.is_healthy_fresh
         ]
         
     def discover_by_layer(self, layer: NodeLayer) -> List[NodeInfo]:
@@ -285,6 +319,7 @@ class GlobalRouter:
         ]
         
     def route(self, capability: str) -> Optional[NodeInfo]:
+        node_metrics.increment("routes_total")
         """路由到最佳节点 (负载均衡)"""
         candidates = self.discover_by_capability(capability)
         if not candidates:
@@ -341,14 +376,33 @@ class HeartbeatRequest(BaseModel):
 
 @app.get("/health")
 async def health():
-    """健康检查"""
-    return {
+    """健康检查 - 使用 psutil 获取真实系统指标"""
+    health_data = {
         "status": "healthy",
         "node_id": "04",
         "name": "Global Router",
         "total_nodes": len(router.nodes),
-        "timestamp": datetime.now().isoformat()
+        "timestamp": datetime.now(timezone.utc).isoformat()
     }
+    
+    # 使用 psutil 获取真实系统指标
+    if PSUTIL_AVAILABLE:
+        try:
+            health_data["CPUUsagePercent"] = psutil.cpu_percent(interval=0.5)
+            mem = psutil.virtual_memory()
+            health_data["MemTotalMB"] = mem.total // (1024 * 1024)
+            health_data["MemUsedMB"] = mem.used // (1024 * 1024)
+            health_data["MemUsagePercent"] = mem.percent
+            disk = psutil.disk_usage('/')
+            health_data["DiskTotalMB"] = disk.total // (1024 * 1024)
+            health_data["DiskFreeMB"] = disk.free // (1024 * 1024)
+            health_data["DiskUsagePercent"] = disk.percent
+        except Exception as exc:
+            logger.warning("Failed to collect system metrics: %s", exc)
+    else:
+        health_data["metrics_note"] = "psutil not available, install for real metrics"
+    
+    return health_data
 
 @app.get("/status")
 async def node_status():
@@ -482,4 +536,5 @@ async def mcp_call(request: Dict[str, Any]):
 
 if __name__ == "__main__":
     import uvicorn
+    setup_signal_handlers(logger)
     uvicorn.run(app, host="0.0.0.0", port=8004)
