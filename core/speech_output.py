@@ -48,6 +48,39 @@ _last_ts = 0.0
 _active_speaker: Optional[Any] = None  # 当前 StreamingSpeaker（供 barge-in 打断）
 _runtime_warned = False  # 运行期合成/播放失败首次升 WARNING(此后降 debug 防刷屏)
 
+# ── 原生语音输出("说"按档自适配)──────────────────────────────────────────────
+# 说的通路由统一模态协商层(core.modality_capability)按【当前档位】决定:
+#   A 档(Gemma:说=TTS 桥)     → resolve_audio_out()=="tts_bridge" → 走下方 TTS 引擎链
+#   B 档(MiniCPM-o:说=原生)   → resolve_audio_out()=="native"     → 走【原生语音后端】
+# 原生后端是【可插拔】的:B 档全模态模型在支持音频输出的服务端上跑起来后,注册一个
+# backend(text, source)->awaitable[bool] 即接入;未注册时(当前默认,Ollama 不吐音频)
+# _maybe_speak_native() 恒返回 False,行为与既有【完全一致】,零回归。
+_native_speech_backend: Optional[Callable[[str, str], Any]] = None
+
+
+def register_native_speech_backend(fn: Callable[[str, str], Any]) -> None:
+    """注册原生语音后端(B 档全模态模型直接发声时用)。
+
+    fn(text, source) 返回 awaitable[bool]:True=已由原生后端发声。约定:后端若无法
+    发声应返回 False 或抛异常,本模块会如实告警(不静默丢句)。未注册=当前默认,一律 TTS。
+    """
+    global _native_speech_backend
+    _native_speech_backend = fn
+
+
+def native_speech_backend_registered() -> bool:
+    return _native_speech_backend is not None
+
+
+def _native_audio_out_selected() -> bool:
+    """统一协商层是否判定当前档位【说=原生】。异常一律按非原生(走 TTS),不影响朗读。"""
+    try:
+        from core.modality_bridge import resolve_audio_out
+
+        return resolve_audio_out() == "native"
+    except Exception:  # noqa: BLE001
+        return False
+
 
 def _log_speak_failure(kind: str, exc: BaseException) -> None:
     """朗读运行期失败:首次 WARNING(用户看得见"为什么不说话"),后续 debug。"""
@@ -254,6 +287,39 @@ def demote_current_engine(reason: str = "", failed_engine: Any = None) -> Option
     return _get_engine()
 
 
+async def _run_native_speech(backend: Callable[[str, str], Any], text: str, source: str) -> None:
+    """执行原生发声;后端返回 False 或抛异常都如实告警(不静默丢句)。"""
+    try:
+        ok = await backend(text, source)
+        if not ok:
+            _log_speak_failure("原生语音输出", RuntimeError("原生语音后端未发声(返回 False)"))
+    except Exception as exc:  # noqa: BLE001
+        _log_speak_failure("原生语音输出", exc)
+
+
+def _maybe_speak_native(text: str, source: str) -> bool:
+    """当前档位判定【说=原生】且原生后端已注册 → 调度原生发声,返回 True(跳过 TTS)。
+
+    否则返回 False(走 TTS 桥)。这是 core.modality_capability 在"说"这条路上的真实
+    消费:换档/换模型自动切换原生 vs 桥,零 per-model 分支。原生后端未注册(当前默认)
+    时恒 False → 与既有 TTS 行为完全一致,零回归。
+    """
+    backend = _native_speech_backend
+    if backend is None or not _native_audio_out_selected():
+        return False
+    try:
+        loop = asyncio.get_running_loop()
+        loop.create_task(_run_native_speech(backend, text, source))
+        return True
+    except RuntimeError:
+        # 无运行中的事件循环:同步兜底执行原生发声。
+        try:
+            asyncio.run(_run_native_speech(backend, text, source))
+            return True
+        except Exception:  # noqa: BLE001
+            return False
+
+
 def speak_response(text: str, *, source: str = "") -> None:
     """默认朗读一段回复。非阻塞、去重、降级安全;永不抛出影响主流程。
 
@@ -278,6 +344,13 @@ def speak_response(text: str, *, source: str = "") -> None:
     _last_text, _last_ts = text, now
 
     spoken = text[: _max_chars()]
+
+    # 说的通路按【当前档位】自适配:B 档(说=原生)且原生后端已注册 → 原生发声,跳过
+    # TTS;A 档 / 原生后端未就绪 → 落到下面的 TTS 引擎链。原生后端未注册时(当前默认)
+    # 本调用恒 False,与既有行为完全一致。
+    if _maybe_speak_native(spoken, source):
+        return
+
     engine = _get_engine()
     if engine is None:
         return
