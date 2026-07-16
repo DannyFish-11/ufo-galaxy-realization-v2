@@ -18,6 +18,18 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
 
+// Error boundary helper — catches panics and converts them to error results.
+// This prevents a single command failure from crashing the entire overlay.
+fn catch_boundary<F, R>(label: &str, f: F) -> Result<R, String>
+where
+    F: FnOnce() -> Result<R, String>,
+{
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)) {
+        Ok(r) => r,
+        Err(_) => Err(format!("[boundary] {} panicked", label)),
+    }
+}
+
 use serde_json::{json, Value};
 use tauri::{
     AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, State, WebviewUrl,
@@ -404,12 +416,15 @@ fn start_native_screen_capture(app: AppHandle) {
 // ─────────────────────────────── 面板数据轮询（5s）───────────────────────────────
 // 等价 main.js 的 setInterval：从网关拉真实聚合数据并推给可见的面板窗口。
 
+// P27 修复：面板轮询间隔与 electron/main.js 统一为 30s（断线兜底对账）。
+const PANEL_FEED_POLL_INTERVAL_SECS: u64 = 30;
+
 fn start_panel_feed_poll(app: AppHandle) {
     let base = app.state::<AppState>().gateway_base.clone();
     let client = app.state::<AppState>().http.clone();
     tauri::async_runtime::spawn(async move {
         loop {
-            tokio::time::sleep(Duration::from_secs(5)).await;
+            tokio::time::sleep(Duration::from_secs(PANEL_FEED_POLL_INTERVAL_SECS)).await;
             let visible = app
                 .get_webview_window("panel")
                 .map(|w| w.is_visible().unwrap_or(false))
@@ -435,17 +450,19 @@ fn start_panel_feed_poll(app: AppHandle) {
 // ─────────────────────────────── Tauri commands（对应 preload 的 11 个方法）───────────────────────────────
 
 #[tauri::command]
-fn get_backend_url(state: State<'_, AppState>) -> String {
-    state.gateway_base.clone()
+fn get_backend_url(state: State<'_, AppState>) -> Result<String, String> {
+    catch_boundary("get_backend_url", || Ok(state.gateway_base.clone()))
 }
 
 #[tauri::command]
-fn get_window_size(window: WebviewWindow) -> Value {
-    let (w, h) = window
-        .inner_size()
-        .map(|s| (s.width, s.height))
-        .unwrap_or((1920, 1080));
-    json!({ "width": w, "height": h })
+fn get_window_size(window: WebviewWindow) -> Result<Value, String> {
+    catch_boundary("get_window_size", || {
+        let (w, h) = window
+            .inner_size()
+            .map(|s| (s.width, s.height))
+            .unwrap_or((1920, 1080));
+        Ok(json!({ "width": w, "height": h }))
+    })
 }
 
 #[tauri::command]
@@ -535,8 +552,11 @@ fn schedule_settings_refresh(app: AppHandle) {
         if let Ok(resp) = http.get(format!("{base}/api/config/all")).send().await {
             if resp.status().is_success() {
                 if let Ok(v) = resp.json::<Value>().await {
-                    *app.state::<AppState>().settings_cache.lock().unwrap() = v;
-                    let _ = app.emit("galaxy:config-ready", "settings");
+                    // P26 修复：async 上下文中用 try_lock 避免阻塞运行时
+                    if let Ok(mut cache) = app.state::<AppState>().settings_cache.try_lock() {
+                        *cache = v;
+                        let _ = app.emit("galaxy:config-ready", "settings");
+                    }
                 }
             }
         }
@@ -578,8 +598,12 @@ async fn set_config(app: AppHandle, state: State<'_, AppState>, config: Value) -
     {
         Ok(resp) if resp.status().is_success() => {
             // 合并进缓存并广播 config-update（对齐 Electron 的 BrowserWindow.getAllWindows().send）。
+            // P26 修复：async 上下文中用 try_lock 避免阻塞运行时。
             let merged = {
-                let mut cache = state.config_cache.lock().unwrap();
+                let mut cache = match state.config_cache.try_lock() {
+                    Ok(c) => c,
+                    Err(_) => return Ok(json!({ "success": false, "error": "config cache locked, retry later" })),
+                };
                 if let (Some(obj), Some(patch)) = (cache.as_object_mut(), config.as_object()) {
                     for (k, v) in patch {
                         obj.insert(k.clone(), v.clone());
@@ -592,11 +616,12 @@ async fn set_config(app: AppHandle, state: State<'_, AppState>, config: Value) -
             // 同步更新完整明细缓存里对应项的 value（保持 ConfigItem 形状，等价 electron），
             // 否则设置 tab 下次读缓存会拿到旧值/undefined。
             {
-                let mut sc = state.settings_cache.lock().unwrap();
-                if let (Some(sobj), Some(patch)) = (sc.as_object_mut(), config.as_object()) {
-                    for (k, v) in patch {
-                        if let Some(item) = sobj.get_mut(k).and_then(|it| it.as_object_mut()) {
-                            item.insert("value".to_string(), v.clone());
+                if let Ok(mut sc) = state.settings_cache.try_lock() {
+                    if let (Some(sobj), Some(patch)) = (sc.as_object_mut(), config.as_object()) {
+                        for (k, v) in patch {
+                            if let Some(item) = sobj.get_mut(k).and_then(|it| it.as_object_mut()) {
+                                item.insert("value".to_string(), v.clone());
+                            }
                         }
                     }
                 }
@@ -604,7 +629,14 @@ async fn set_config(app: AppHandle, state: State<'_, AppState>, config: Value) -
             let _ = app.emit("galaxy:config-update", merged);
             Ok(json!({ "success": true }))
         }
-        Ok(_) => Ok(json!({ "success": false, "error": "Backend rejected config" })),
+        Ok(mut resp) => {
+            // P26 修复：透传后端错误详情。
+            let detail = resp.json::<Value>().await.ok()
+                .and_then(|b| b.get("detail").or_else(|| b.get("error")).cloned())
+                .map(|v| v.to_string())
+                .unwrap_or_else(|| "Backend rejected config".into());
+            Ok(json!({ "success": false, "error": detail }))
+        }
         Err(e) => Ok(json!({ "success": false, "error": e.to_string() })),
     }
 }
@@ -661,7 +693,12 @@ fn main() {
         perception_interval_ms,
         perception_enabled: AtomicBool::new(false),
         overlay_awake: AtomicBool::new(false),
-        http: reqwest::Client::new(),
+        http: reqwest::Client::builder()
+            .connect_timeout(Duration::from_secs(5))
+            .timeout(Duration::from_secs(30))
+            .pool_idle_timeout(Duration::from_secs(60))
+            .build()
+            .unwrap_or_else(|_| reqwest::Client::new()),
         config_cache: Mutex::new(json!({})),
         settings_cache: Mutex::new(json!({})),
         config_refresh_inflight: AtomicBool::new(false),
@@ -762,5 +799,8 @@ fn main() {
             Ok(())
         })
         .run(tauri::generate_context!())
-        .expect("error while running Galaxy overlay (Tauri)");
+        .unwrap_or_else(|e| {
+            eprintln!("[FATAL] Galaxy overlay (Tauri) failed to start: {e}");
+            std::process::exit(1);
+        });
 }
