@@ -8,7 +8,7 @@ package natsclient
 import (
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/nats-io/nats.go"
@@ -16,21 +16,22 @@ import (
 
 // Client manages the NATS connection and JetStream context.
 type Client struct {
-	nc  *nats.Conn
-	js  nats.JetStreamContext
-	url string
+	nc     *nats.Conn
+	js     nats.JetStreamContext
+	url    string
+	logger *slog.Logger
 }
 
 // New creates a NATS client and connects to the server.
-func New(url string) (*Client, error) {
+func New(url string, logger *slog.Logger) (*Client, error) {
 	opts := []nats.Option{
 		nats.MaxReconnects(-1),
 		nats.ReconnectWait(2 * time.Second),
 		nats.DisconnectErrHandler(func(_ *nats.Conn, err error) {
-			log.Printf("[NATS] disconnected: %v", err)
+			logger.Warn("NATS disconnected", "error", fmt.Errorf("disconnect: %w", err))
 		}),
 		nats.ReconnectHandler(func(_ *nats.Conn) {
-			log.Println("[NATS] reconnected")
+			logger.Info("NATS reconnected")
 		}),
 	}
 
@@ -45,7 +46,7 @@ func New(url string) (*Client, error) {
 		return nil, fmt.Errorf("jetstream init: %w", err)
 	}
 
-	return &Client{nc: nc, js: js, url: url}, nil
+	return &Client{nc: nc, js: js, url: url, logger: logger}, nil
 }
 
 // Publish serializes data as JSON and publishes to a JetStream subject.
@@ -55,15 +56,29 @@ func (c *Client) Publish(subject string, data interface{}) error {
 		return fmt.Errorf("marshal: %w", err)
 	}
 	_, err = c.js.Publish(subject, payload)
-	return err
+	if err != nil {
+		return fmt.Errorf("jetstream publish %s: %w", subject, err)
+	}
+	return nil
+}
+
+// safeHandler wraps the user handler with panic recovery.
+func safeHandler(handler func([]byte)) func(*nats.Msg) {
+	return func(msg *nats.Msg) {
+		// Bug fix: NATS handler panic 崩溃保护
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("[NATS] handler panic recovered: %v", r)
+			}
+		}()
+		handler(msg.Data)
+		msg.Ack()
+	}
 }
 
 // Subscribe creates a durable JetStream subscription with a message handler.
 func (c *Client) Subscribe(subject, durable string, handler func([]byte)) (*nats.Subscription, error) {
-	sub, err := c.js.Subscribe(subject, func(msg *nats.Msg) {
-		handler(msg.Data)
-		msg.Ack()
-	}, nats.Durable(durable))
+	sub, err := c.js.Subscribe(subject, safeHandler(handler), nats.Durable(durable))
 	if err != nil {
 		return nil, fmt.Errorf("subscribe %s: %w", subject, err)
 	}
@@ -72,10 +87,7 @@ func (c *Client) Subscribe(subject, durable string, handler func([]byte)) (*nats
 
 // QueueSubscribe creates a durable queue subscription for load balancing.
 func (c *Client) QueueSubscribe(subject, queue, durable string, handler func([]byte)) (*nats.Subscription, error) {
-	sub, err := c.js.QueueSubscribe(subject, queue, func(msg *nats.Msg) {
-		handler(msg.Data)
-		msg.Ack()
-	}, nats.Durable(durable))
+	sub, err := c.js.QueueSubscribe(subject, queue, safeHandler(handler), nats.Durable(durable))
 	if err != nil {
 		return nil, fmt.Errorf("queue subscribe %s: %w", subject, err)
 	}
