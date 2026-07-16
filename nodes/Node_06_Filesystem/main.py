@@ -5,9 +5,8 @@ Node 06: Filesystem - 文件系统操作
 """
 
 import logging  # auto: ensure module logger is defined
-logger = logging.getLogger(__name__)
+logger = setup_logging("Node_06_Filesystem")
 
-import os
 import io
 import json
 import shutil
@@ -23,6 +22,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 from nodes.common.cors_config import get_cors_origins
+from nodes.common.base_node import (
+    setup_logging, setup_signal_handlers, node_metrics,
+    DEFAULT_MAX_FILE_SIZE, ErrorResponse
+)
+import signal
+
 
 app = FastAPI(title="Node 06 - Filesystem", version="2.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=get_cors_origins(), allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
@@ -45,7 +50,7 @@ class FilesystemManager:
     def __init__(self):
         self.base_dir = Path(BASE_DIR).resolve()
         self.allowed_extensions = os.getenv("FILESYSTEM_ALLOWED_EXTENSIONS", "*").split(",")
-        self.max_file_size = int(os.getenv("FILESYSTEM_MAX_FILE_SIZE", "104857600"))  # 100MB
+        self.max_file_size = int(os.getenv("FILESYSTEM_MAX_FILE_SIZE", str(DEFAULT_MAX_FILE_SIZE)))  # from env or default 100MB
 
     def _resolve_path(self, path: str) -> Path:
         """解析并验证路径"""
@@ -295,6 +300,7 @@ class WriteFileRequest(BaseModel):
 @app.post("/write")
 async def write_file(request: WriteFileRequest):
     """写入文件"""
+    node_metrics.increment("files_written_total")
     return fs_manager.write_file(request.path, request.content.encode(), request.append)
 
 @app.post("/upload")
@@ -307,6 +313,7 @@ async def upload_file(path: str = "", file: UploadFile = File(...)):
 @app.delete("/delete/{path:path}")
 async def delete_file(path: str):
     """删除文件或目录"""
+    node_metrics.increment("files_deleted_total")
     return {"success": fs_manager.delete_file(path)}
 
 @app.post("/mkdir")
@@ -355,4 +362,5 @@ async def extract_archive(archive_path: str, output_path: str = ""):
 
 if __name__ == "__main__":
     import uvicorn
+    setup_signal_handlers(logger)
     uvicorn.run(app, host="0.0.0.0", port=8006)
