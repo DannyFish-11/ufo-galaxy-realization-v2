@@ -1,7 +1,7 @@
 """
 core/agent/intent_router.py
 ============================
-意图路由器 — 判定"聊天 vs 任务执行"
+意图路由器 -- 判定"聊天 vs 任务执行"
 
 支持两级分类：
   1. 规则引擎（快速、零延迟）
@@ -9,7 +9,7 @@ core/agent/intent_router.py
 
 输出标准化 IntentResult（Pydantic 模型）：
   - mode: "chat_only" | "task_execute" | "hybrid"
-  - confidence: 0.0 – 1.0
+  - confidence: 0.0 - 1.0
   - task_hint: 任务简述（task_execute / hybrid 时填充）
   - raw_intent: 底层意图标签（复用 ai_intent.ParsedIntent）
 """
@@ -20,56 +20,19 @@ import asyncio
 import logging
 import re
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Final, List, Optional, Tuple
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator
 
 logger = logging.getLogger("Galaxy.Agent.IntentRouter")
 
-# ──────────────────────────────────────────────────────────────────────────────
-# 数据模型
-# ──────────────────────────────────────────────────────────────────────────────
+# ------------------------------------------------------------------------------
+# Constants
+# ------------------------------------------------------------------------------
 
-
-class IntentMode:
-    CHAT_ONLY = "chat_only"
-    TASK_EXECUTE = "task_execute"
-    HYBRID = "hybrid"
-
-
-class IntentResult(BaseModel):
-    """标准化意图路由结果。"""
-
-    mode: str = IntentMode.CHAT_ONLY
-    """处理模式：chat_only / task_execute / hybrid"""
-
-    confidence: float = Field(default=0.5, ge=0.0, le=1.0)
-    """分类置信度"""
-
-    task_hint: str = ""
-    """任务简述（task_execute / hybrid 时非空）"""
-
-    raw_intent: str = "chat"
-    """底层意图标签（来自 ai_intent.ParsedIntent.intent 或规则推断）"""
-
-    method: str = "rules"
-    """分类方法：rules / llm / rules+llm"""
-
-    latency_ms: float = 0.0
-    """分类耗时（毫秒）"""
-
-    def is_execution(self) -> bool:
-        """是否需要进入执行链路（task_execute 或 hybrid）。"""
-        return self.mode in (IntentMode.TASK_EXECUTE, IntentMode.HYBRID)
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# 规则引擎
-# ──────────────────────────────────────────────────────────────────────────────
-
-# 高置信度任务执行关键词（命中即为 task_execute）
-_TASK_KW_HIGH: List[str] = [
-    # 中文 — 设备控制
+# High-confidence task execution keywords (hit means task_execute)
+_TASK_KW_HIGH: Final[List[str]] = [
+    # Chinese -- device control
     "打开",
     "关闭",
     "启动",
@@ -118,7 +81,7 @@ _TASK_KW_HIGH: List[str] = [
     "跨设备",
     "同步剪贴板",
     "设备间",
-    # 中文 — 任务/工具
+    # Chinese -- task/tool
     "帮我写",
     "帮我生成",
     "帮我分析",
@@ -143,7 +106,7 @@ _TASK_KW_HIGH: List[str] = [
     "部署",
     "构建",
     "测试",
-    # 中文 — 通用任务动词（带明确宾语场景）
+    # Chinese -- generic task verbs (with explicit object context)
     "做一个",
     "做个",
     "做一份",
@@ -168,7 +131,7 @@ _TASK_KW_HIGH: List[str] = [
     "实现一个",
     "实现功能",
     "完成任务",
-    # 英文
+    # English
     "open ",
     "close ",
     "launch ",
@@ -204,7 +167,7 @@ _TASK_KW_HIGH: List[str] = [
     "deploy ",
     "build ",
     "commit ",
-    # 英文 — 通用任务动词
+    # English -- generic task verbs
     "write a ",
     "write me ",
     "create a ",
@@ -228,9 +191,9 @@ _TASK_KW_HIGH: List[str] = [
     "complete ",
 ]
 
-# 低置信度任务词（结合上下文判断，单独出现可能是聊天）
-# 注意：末尾空格是有意为之，防止"please" 匹配 "displeased" 等词的部分字符串
-_TASK_KW_LOW: List[str] = [
+# Low-confidence task keywords (context-dependent, alone may be chat)
+# Note: trailing space is intentional to prevent partial matches
+_TASK_KW_LOW: Final[List[str]] = [
     "帮我",
     "我想",
     "能不能",
@@ -242,8 +205,8 @@ _TASK_KW_LOW: List[str] = [
     "please ",
 ]
 
-# 强聊天指示词（命中则倾向 chat_only，除非同时有高置信度任务词）
-_CHAT_KW: List[str] = [
+# Strong chat indicators (hit tends toward chat_only, unless high-confidence task word also hit)
+_CHAT_KW: Final[List[str]] = [
     "你好",
     "hi",
     "hello",
@@ -266,78 +229,182 @@ _CHAT_KW: List[str] = [
     "陪我",
 ]
 
+# Classification thresholds
+_RULE_CONFIDENCE_HIGH: Final[float] = 0.9
+_RULE_CONFIDENCE_MEDIUM: Final[float] = 0.75
+_RULE_CONFIDENCE_LOW: Final[float] = 0.55
+_RULE_CONFIDENCE_MINIMAL: Final[float] = 0.65
+
+# Message length thresholds
+_SHORT_MESSAGE_THRESHOLD: Final[int] = 4
+_LONG_MESSAGE_THRESHOLD: Final[int] = 10
+
+# LLM classification defaults
+_DEFAULT_LLM_TIMEOUT: Final[float] = 8.0
+_DEFAULT_LLM_CONFIDENCE: Final[float] = 0.7
+_DEFAULT_LLM_CONFIDENCE_THRESHOLD: Final[float] = 0.6
+
+# ------------------------------------------------------------------------------
+# Data models
+# ------------------------------------------------------------------------------
+
+
+class IntentMode:
+    """Intent mode constants."""
+
+    CHAT_ONLY: Final[str] = "chat_only"
+    TASK_EXECUTE: Final[str] = "task_execute"
+    HYBRID: Final[str] = "hybrid"
+
+
+class IntentResult(BaseModel):
+    """Standardized intent routing result.
+
+    Attributes:
+        mode: Processing mode -- chat_only / task_execute / hybrid.
+        confidence: Classification confidence score [0.0, 1.0].
+        task_hint: Brief task description (non-empty for task_execute/hybrid).
+        raw_intent: Underlying intent label.
+        method: Classification method used -- rules / llm / rules+llm.
+        latency_ms: Classification latency in milliseconds.
+    """
+
+    mode: str = IntentMode.CHAT_ONLY
+    """处理模式：chat_only / task_execute / hybrid"""
+
+    confidence: float = Field(default=0.5, ge=0.0, le=1.0)
+    """分类置信度 [0.0, 1.0]"""
+
+    task_hint: str = Field(default="", max_length=256)
+    """任务简述（task_execute / hybrid 时非空）"""
+
+    raw_intent: str = "chat"
+    """底层意图标签（来自 ai_intent.ParsedIntent.intent 或规则推断）"""
+
+    method: str = "rules"
+    """分类方法：rules / llm / rules+llm"""
+
+    latency_ms: float = Field(default=0.0, ge=0.0)
+    """分类耗时（毫秒）"""
+
+    @validator("mode")
+    def mode_must_be_valid(cls, v: str) -> str:
+        """Validate mode is one of the allowed values."""
+        if v not in (IntentMode.CHAT_ONLY, IntentMode.TASK_EXECUTE, IntentMode.HYBRID):
+            raise ValueError(f"Invalid mode: {v}")
+        return v
+
+    @validator("confidence")
+    def confidence_in_range(cls, v: float) -> float:
+        """Ensure confidence is within valid range."""
+        return max(0.0, min(1.0, v))
+
+    def is_execution(self) -> bool:
+        """Return True if mode requires execution path (task_execute or hybrid)."""
+        return self.mode in (IntentMode.TASK_EXECUTE, IntentMode.HYBRID)
+
+
+# ------------------------------------------------------------------------------
+# Rule engine
+# ------------------------------------------------------------------------------
+
 
 def _classify_by_rules(message: str) -> IntentResult:
-    """基于关键词规则快速分类意图。"""
+    """Classify intent based on keyword rules (fast, zero-latency).
+
+    Classification logic:
+      1. High-confidence task keyword + chat keyword -> hybrid (0.75)
+      2. High-confidence task keyword only -> task_execute (0.9)
+      3. Short message (< 4 chars) -> chat_only (0.9)
+      4. Chat keyword without low-confidence task keyword -> chat_only (0.85)
+      5. Low-confidence task keyword -> task_execute (0.65)
+      6. Long message (>= 10 chars) -> task_execute (0.55)
+      7. Default -> chat_only (0.7)
+
+    Args:
+        message: The user message to classify.
+
+    Returns:
+        IntentResult with classification result.
+    """
     msg = message.lower().strip()
 
-    high_hit = any(kw in msg for kw in _TASK_KW_HIGH)
-    chat_hit = any(kw in msg for kw in _CHAT_KW)
+    high_hit: bool = any(kw in msg for kw in _TASK_KW_HIGH)
+    chat_hit: bool = any(kw in msg for kw in _CHAT_KW)
 
-    # 缓存第一个命中的任务关键词（避免重复遍历）
-    task_kw = next((kw for kw in _TASK_KW_HIGH if kw in msg), "").strip()
+    # Cache first matched task keyword (avoid repeated iteration)
+    task_kw: str = next((kw for kw in _TASK_KW_HIGH if kw in msg), "").strip()
 
-    # ① 高置信度任务词优先判定（即使消息极短，如"截图"、"截屏"）
+    # Case 1: Both high-confidence task word and chat word hit -> hybrid
     if high_hit and chat_hit:
-        # 同时命中任务词和聊天词 → hybrid
         return IntentResult(
             mode=IntentMode.HYBRID,
-            confidence=0.75,
+            confidence=_RULE_CONFIDENCE_MEDIUM,
             task_hint=task_kw,
             raw_intent="hybrid",
             method="rules",
         )
 
+    # Case 2: High-confidence task word only -> task_execute
     if high_hit:
         return IntentResult(
             mode=IntentMode.TASK_EXECUTE,
-            confidence=0.9,
+            confidence=_RULE_CONFIDENCE_HIGH,
             task_hint=task_kw,
             raw_intent="task_execute",
             method="rules",
         )
 
-    # ② 极短消息（无高置信度任务词）→ 聊天
-    if len(msg) < 4:
-        return IntentResult(mode=IntentMode.CHAT_ONLY, confidence=0.9, method="rules")
+    # Case 3: Very short message (no high-confidence task word) -> chat
+    if len(msg) < _SHORT_MESSAGE_THRESHOLD:
+        return IntentResult(
+            mode=IntentMode.CHAT_ONLY,
+            confidence=_RULE_CONFIDENCE_HIGH,
+            method="rules",
+        )
 
-    # ③ 低置信度任务词检查（消息已 >= 4 字符）
-    low_hit = any(kw in msg for kw in _TASK_KW_LOW)
+    # Case 4: Chat keyword without low-confidence task keyword
+    low_hit: bool = any(kw in msg for kw in _TASK_KW_LOW)
 
     if chat_hit and not low_hit:
-        return IntentResult(mode=IntentMode.CHAT_ONLY, confidence=0.85, method="rules")
+        return IntentResult(
+            mode=IntentMode.CHAT_ONLY,
+            confidence=0.85,
+            method="rules",
+        )
 
+    # Case 5: Low-confidence task word -> task_execute (uncertain)
     if low_hit:
-        # 弱任务信号 → 倾向任务执行（如 "帮我…"、"help me…"），但不够确定
-        # 使用 task_execute 而非 chat_only，以触发 Agent 创建链路
         task_kw_low = next((kw for kw in _TASK_KW_LOW if kw in msg), "").strip()
         return IntentResult(
             mode=IntentMode.TASK_EXECUTE,
-            confidence=0.65,
+            confidence=_RULE_CONFIDENCE_MINIMAL,
             task_hint=task_kw_low,
             raw_intent="task_execute",
             method="rules",
         )
 
-    # 无明确信号 → 对于较长的消息（>= 10 字符）默认进入任务执行链，
-    # 对于极短的模糊消息保持聊天模式。
-    # 设计原则：默认执行（task_execute），仅纯问答/闲聊保留 chat_only。
-    if len(msg) >= 10:
+    # Case 6: No clear signal -- for longer messages (>= 10 chars) default to task_execute,
+    # for very short ambiguous messages stay in chat mode.
+    if len(msg) >= _LONG_MESSAGE_THRESHOLD:
         return IntentResult(
             mode=IntentMode.TASK_EXECUTE,
-            confidence=0.55,
+            confidence=_RULE_CONFIDENCE_LOW,
             task_hint="",
             raw_intent="task_execute",
             method="rules",
         )
+
+    # Default: chat_only
     return IntentResult(mode=IntentMode.CHAT_ONLY, confidence=0.7, method="rules")
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-# LLM 增强分类（可选）
-# ──────────────────────────────────────────────────────────────────────────────
+# ------------------------------------------------------------------------------
+# LLM-enhanced classification (optional)
+# ------------------------------------------------------------------------------
 
-_LLM_CLASSIFY_PROMPT = """\
+# LLM classification prompt template
+_LLM_CLASSIFY_PROMPT: Final[str] = """\
 请判断下面这条用户消息的处理模式，只需返回 JSON，格式如下：
 {"mode": "<chat_only|task_execute|hybrid>", "confidence": <0.0-1.0>, "task_hint": "<简短任务描述或空字符串>", "intent": "<意图标签>"}
 
@@ -354,9 +421,18 @@ _LLM_CLASSIFY_PROMPT = """\
 async def _classify_by_llm(
     message: str,
     llm_router: Any,
-    timeout: float = 8.0,
+    timeout: float = _DEFAULT_LLM_TIMEOUT,
 ) -> Optional[IntentResult]:
-    """使用 LLM 增强意图分类（返回 None 表示 LLM 不可用或超时）。"""
+    """Use LLM to enhance intent classification (returns None if LLM unavailable or times out).
+
+    Args:
+        message: User message to classify.
+        llm_router: LLM router instance with chat capability.
+        timeout: Maximum time to wait for LLM response in seconds.
+
+    Returns:
+        IntentResult from LLM classification, or None if failed.
+    """
     try:
         import json as _json
 
@@ -366,13 +442,13 @@ async def _classify_by_llm(
             {"role": "user", "content": prompt},
         ]
 
-        # 兼容两种路由器接口
+        # Compatible with two router interfaces
         if hasattr(llm_router, "chat"):
             raw = await asyncio.wait_for(
                 llm_router.chat(messages, temperature=0.0, max_tokens=128),
                 timeout=timeout,
             )
-            # LLMResponse 或 dict
+            # LLMResponse or dict
             if hasattr(raw, "content"):
                 text = raw.content
             elif isinstance(raw, dict):
@@ -382,9 +458,10 @@ async def _classify_by_llm(
         else:
             return None
 
-        # 提取 JSON
+        # Extract JSON
         match = re.search(r"\{.*\}", text, re.DOTALL)
         if not match:
+            logger.debug("No JSON found in LLM classification response")
             return None
         data = _json.loads(match.group())
 
@@ -394,28 +471,44 @@ async def _classify_by_llm(
 
         return IntentResult(
             mode=mode,
-            confidence=float(data.get("confidence", 0.7)),
+            confidence=float(data.get("confidence", _DEFAULT_LLM_CONFIDENCE)),
             task_hint=str(data.get("task_hint", "")),
             raw_intent=str(data.get("intent", "chat")),
             method="llm",
         )
     except asyncio.TimeoutError:
-        logger.warning("LLM 意图分类超时 (%.1fs)", timeout)
+        logger.warning("LLM intent classification timeout (%.1fs)", timeout)
         return None
+    except asyncio.CancelledError:
+        raise  # Always propagate cancellation
     except Exception as exc:
-        logger.debug("LLM 意图分类异常: %s", exc)
+        logger.debug("LLM intent classification exception: %s", exc)
         return None
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-# 主路由器类
-# ──────────────────────────────────────────────────────────────────────────────
+# ------------------------------------------------------------------------------
+# Main router class
+# ------------------------------------------------------------------------------
 
 
 class IntentRouter:
-    """意图路由器：规则优先，LLM 增强低置信度场景。"""
+    """Intent router: rules-first, LLM enhancement for low-confidence scenarios.
+
+    The router first applies fast keyword-based classification. If the rule-based
+    confidence is below a threshold and LLM is available, it falls back to LLM
+    classification for a second opinion.
+
+    Attributes:
+        _llm_router: Optional LLM router for enhanced classification.
+    """
 
     def __init__(self, llm_router: Optional[Any] = None) -> None:
+        """Initialize IntentRouter.
+
+        Args:
+            llm_router: LLM router instance for LLM-enhanced classification.
+                        May be None if LLM enhancement is not available.
+        """
         self._llm_router = llm_router
 
     async def route(
@@ -423,41 +516,46 @@ class IntentRouter:
         message: str,
         context: Optional[List[Dict[str, str]]] = None,
         use_llm: bool = True,
-        llm_confidence_threshold: float = 0.6,
+        llm_confidence_threshold: float = _DEFAULT_LLM_CONFIDENCE_THRESHOLD,
     ) -> IntentResult:
-        """
-        路由意图。
+        """Route intent through rules-first, optionally LLM-enhanced classification.
 
         Args:
-            message: 用户输入
-            context: 对话历史（可选）
-            use_llm: 是否允许 LLM 增强（规则置信度不足时）
-            llm_confidence_threshold: 低于此置信度触发 LLM 复核
+            message: User input message.
+            context: Conversation history (optional).
+            use_llm: Whether to allow LLM enhancement when rule confidence is low.
+            llm_confidence_threshold: Trigger LLM review when rule confidence is below this value.
 
         Returns:
-            IntentResult
+            IntentResult with classification mode, confidence, and metadata.
         """
         t0 = time.monotonic()
 
-        # 步骤 1：规则分类
-        rule_result = _classify_by_rules(message)
+        # Step 1: Rule-based classification
+        rule_result: IntentResult = _classify_by_rules(message)
         logger.debug(
-            "规则分类: mode=%s confidence=%.2f",
+            "Rule classification: mode=%s confidence=%.2f",
             rule_result.mode,
             rule_result.confidence,
         )
 
-        # 步骤 2：若规则置信度不足 + LLM 可用 → LLM 增强
-        final = rule_result
-        if use_llm and self._llm_router is not None and rule_result.confidence < llm_confidence_threshold:
-            llm_result = await _classify_by_llm(message, self._llm_router)
+        # Step 2: If rule confidence is low + LLM available -> LLM enhancement
+        final: IntentResult = rule_result
+        if (
+            use_llm
+            and self._llm_router is not None
+            and rule_result.confidence < llm_confidence_threshold
+        ):
+            llm_result: Optional[IntentResult] = await _classify_by_llm(
+                message, self._llm_router
+            )
             if llm_result is not None:
-                # LLM 覆盖置信度较低的规则结果
+                # LLM overrides lower-confidence rule results
                 if llm_result.confidence > rule_result.confidence:
                     llm_result.method = "rules+llm"
                     final = llm_result
                     logger.debug(
-                        "LLM 分类覆盖规则: mode=%s confidence=%.2f",
+                        "LLM classification overrides rules: mode=%s confidence=%.2f",
                         final.mode,
                         final.confidence,
                     )
