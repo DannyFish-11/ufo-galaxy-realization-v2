@@ -59,13 +59,20 @@ _LEGACY_MODEL_FILE = PROJECT_ROOT / ".galaxy_model"
 # ---------------------------------------------------------------------------
 @dataclass(frozen=True)
 class ModelCapability:
-    vision: bool = False  # 看
+    vision: bool = False  # 看（原生图像/静帧理解）
     audio_in: bool = False  # 听（原生音频理解）
     audio_out: bool = False  # 说（原生语音合成）
     tools: bool = False  # 工具调用
+    video: bool = False  # 看视频（原生连续帧/视频流理解，区别于单张静帧 vision）
 
     def to_dict(self) -> Dict[str, bool]:
-        return {"vision": self.vision, "audio_in": self.audio_in, "audio_out": self.audio_out, "tools": self.tools}
+        return {
+            "vision": self.vision,
+            "audio_in": self.audio_in,
+            "audio_out": self.audio_out,
+            "tools": self.tools,
+            "video": self.video,
+        }
 
 
 @dataclass(frozen=True)
@@ -247,24 +254,37 @@ class EffectiveIO:
     audio_in: str  # "native" | "asr_bridge"
     audio_out: str  # "native" | "tts_bridge"
     tools: bool
+    video: str = "none"  # "native" | "frames_bridge" | "none"（视频：原生 / 抽帧走静帧 / 无）
 
     def to_dict(self) -> Dict[str, object]:
-        return {"vision": self.vision, "audio_in": self.audio_in, "audio_out": self.audio_out, "tools": self.tools}
+        return {
+            "vision": self.vision,
+            "audio_in": self.audio_in,
+            "audio_out": self.audio_out,
+            "tools": self.tools,
+            "video": self.video,
+        }
 
 
 def effective_io(model_tags: List[str]) -> EffectiveIO:
-    """对给定活跃模型集合求有效 IO：某能力档内任一模型原生支持即 native，否则桥接。"""
+    """对给定活跃模型集合求有效 IO：某能力档内任一模型原生支持即 native，否则桥接。
+
+    video：任一模型原生支持连续帧 → native；否则若有静帧视觉能力 → frames_bridge
+    （把视频抽成静帧走 vision 通路）；连静帧都没有 → none。
+    """
     specs = [get_model(t) for t in model_tags]
     specs = [s for s in specs if s is not None]
     any_vision = any(s.caps.vision for s in specs)
     any_audio_in = any(s.caps.audio_in for s in specs)
     any_audio_out = any(s.caps.audio_out for s in specs)
     any_tools = any(s.caps.tools for s in specs)
+    any_video = any(getattr(s.caps, "video", False) for s in specs)
     return EffectiveIO(
         vision="native" if any_vision else "none",
         audio_in="native" if any_audio_in else "asr_bridge",
         audio_out="native" if any_audio_out else "tts_bridge",
         tools=any_tools,
+        video="native" if any_video else ("frames_bridge" if any_vision else "none"),
     )
 
 

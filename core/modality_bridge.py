@@ -33,31 +33,41 @@ logger = logging.getLogger("Galaxy.ModalityBridge")
 
 
 def _native_audio_serving_enabled() -> bool:
-    """服务层是否真的能喂原生音频。默认关（Ollama 不支持音频输入）。"""
-    return str(os.getenv("GALAXY_NATIVE_AUDIO", "")).strip().lower() in ("1", "true", "yes", "on")
+    """服务层是否真的能喂原生音频。默认关（Ollama 不支持音频输入）。
+
+    收口:统一读 core.modality_capability 的门控,不再各处各自读环境变量。
+    """
+    try:
+        from core.modality_capability import _native_audio_serving_enabled as _gate
+
+        return _gate()
+    except Exception:  # noqa: BLE001
+        return str(os.getenv("GALAXY_NATIVE_AUDIO", "")).strip().lower() in ("1", "true", "yes", "on")
 
 
 def resolve_audio_in() -> str:
-    """当前档位的听通路：native / asr_bridge。"""
-    try:
-        from core.model_catalog import active_effective_io
+    """当前档位的听通路：native / asr_bridge。
 
-        io = active_effective_io()
-        if io.audio_in == "native" and _native_audio_serving_enabled():
-            return "native"
+    收口:委托给统一协商层 core.modality_capability.negotiate(),本函数只把三态
+    映射回历史返回值(native / asr_bridge)以兼容既有调用方(ambient/voice loop)。
+    unavailable(连 ASR 都没有)也归为 asr_bridge——上层 transcribe_b64 会因 ASR
+    不可用返回 None,行为与旧版一致。
+    """
+    try:
+        from core.modality_capability import negotiate
+
+        return "native" if negotiate().audio_in.mode == "native" else "asr_bridge"
     except Exception as exc:  # noqa: BLE001
         logger.debug("resolve_audio_in 回退 asr_bridge: %s", exc)
     return "asr_bridge"
 
 
 def resolve_audio_out() -> str:
-    """当前档位的说通路：native / tts_bridge。"""
+    """当前档位的说通路：native / tts_bridge。委托统一协商层,映射回历史返回值。"""
     try:
-        from core.model_catalog import active_effective_io
+        from core.modality_capability import negotiate
 
-        io = active_effective_io()
-        if io.audio_out == "native" and _native_audio_serving_enabled():
-            return "native"
+        return "native" if negotiate().audio_out.mode == "native" else "tts_bridge"
     except Exception as exc:  # noqa: BLE001
         logger.debug("resolve_audio_out 回退 tts_bridge: %s", exc)
     return "tts_bridge"

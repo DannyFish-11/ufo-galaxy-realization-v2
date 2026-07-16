@@ -313,6 +313,7 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     from core.routes import models as models_route
     from core.routes import monitoring, nodes
     from core.routes import computer_use as computer_use_route
+    from core.routes import modality as modality_route
     from core.routes import perception as perception_routes
     from core.routes import relay
     from core.routes import remote_desktop as remote_desktop_routes
@@ -388,6 +389,7 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     router.include_router(models_route.router)
     router.include_router(ui_act_route.router)
     router.include_router(computer_use_route.router)
+    router.include_router(modality_route.router)
     if protocols:
         router.include_router(protocols.create_router(service_manager=service_manager, config=config))
     if observability:
