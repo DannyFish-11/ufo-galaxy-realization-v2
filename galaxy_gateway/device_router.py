@@ -81,19 +81,11 @@ Date: 2026-03-07
 
 # ---------------------------------------------------------------------------
 # PR-10 transport-layer boundary sentinel
-# Importing this sentinel from outside the gateway package signals that the
-# import site is consuming routing/transport primitives only — not canonical
-# readiness, orchestration eligibility, or formation truth.
 # ---------------------------------------------------------------------------
 DEVICE_ROUTER_TRANSPORT_AUTHORITY = "DEVICE_ROUTER::ROUTING_SUBSTRATE_ONLY"
 
 # ---------------------------------------------------------------------------
 # PR-518 / GAP-517-003: substrate-only enforcement for cross-device dispatch.
-#
-# DeviceRouter._dispatch_cross_device_task() is internal substrate execution
-# plumbing invoked by route_task().  Direct calls from outside DeviceRouter
-# (i.e. not originating from CommandRouter → DeviceRouter.route_task()) are
-# legacy bypasses and must emit structured LEGACY_DISPATCH warnings.
 # ---------------------------------------------------------------------------
 DEVICE_ROUTER_CROSS_DEVICE_SUBSTRATE_ONLY = (
     "DEVICE_ROUTER::CROSS_DEVICE_SUBSTRATE_ONLY_V1: "
@@ -104,13 +96,6 @@ DEVICE_ROUTER_CROSS_DEVICE_SUBSTRATE_ONLY = (
 
 # ---------------------------------------------------------------------------
 # PR-520 / GAP-517-004: explicit formation descriptor attachment sentinel.
-#
-# DeviceRouter._dispatch_cross_device_task() now calls resolve_formation()
-# from core.device_formation at the start of every multi-device dispatch to
-# produce an explicit canonical DeviceFormationGroup.  The group is attached
-# to the result payload under the "formation" key so that callers and audit
-# surfaces can inspect source device, primary execution device, participating
-# members, and role assignments.  Resolves GAP-517-004.
 # ---------------------------------------------------------------------------
 DEVICE_ROUTER_FORMATION_DESCRIPTOR_ATTACHED = (
     "DEVICE_ROUTER::FORMATION_DESCRIPTOR_ATTACHED_V1: "
@@ -121,11 +106,6 @@ DEVICE_ROUTER_FORMATION_DESCRIPTOR_ATTACHED = (
 
 # ---------------------------------------------------------------------------
 # PR-519 / GAP-517-007: result surface closure sentinel.
-#
-# DeviceRouter.route_task() now calls surface_cross_device_result() on all
-# representative result return paths so that cross-device outcomes are
-# normalised into ResultEnvelope and surfaced through TaskGraphRuntime,
-# ReplayFoundation, and CrossDeviceChainSingleton.  Resolves GAP-517-007.
 # ---------------------------------------------------------------------------
 from core.cross_device_result_surface import (  # noqa: E402
     CROSS_DEVICE_RESULT_SURFACE_INTEGRATED,
@@ -136,16 +116,6 @@ CROSS_DEVICE_RESULT_SURFACE_INTEGRATED  # re-export / sentinel reference
 
 # ---------------------------------------------------------------------------
 # PR-521 / GAP-517-006: control semantic separation sentinel.
-#
-# DeviceRouter.route_task() now explicitly separates source_device_id
-# (the device that originated the request) from target_device_id (the
-# device that executes it).  The execution mode (local, remote dispatch,
-# takeover, hybrid) is derived and recorded in a ControlSemanticRecord via
-# the multi-device control integrity runtime.
-#
-# Backward-compatibility: callers that only provide device_id (legacy) have
-# it mapped to source_device_id so the semantic gap becomes visible without
-# breaking existing call sites.  Resolves GAP-517-006.
 # ---------------------------------------------------------------------------
 DEVICE_ROUTER_CONTROL_SEMANTIC_SEPARATION = (
     "DEVICE_ROUTER::CONTROL_SEMANTIC_SEPARATION_V1: "
@@ -157,20 +127,6 @@ DEVICE_ROUTER_CONTROL_SEMANTIC_SEPARATION = (
 )
 
 # PR-3 (UCS follow-up): CommandRouter pre-analysis passthrough sentinel.
-#
-# DeviceRouter._analyze_command() performs routing policy analysis (target
-# device type, task type, exec_mode) that architecturally belongs in
-# CommandRouter (the decision authority layer), not DeviceRouter (the
-# dispatch substrate layer).  This is Gap SCHED-003.
-#
-# Partial closure: when CommandRouter has already analysed the command and
-# stamps context["_command_router_pre_analyzed"] == True together with a
-# context["_pre_analysis"] dict, route_task() uses the pre-resolved analysis
-# directly and skips its own _analyze_command() call.  This reduces duplicated
-# policy authority and moves decision responsibility toward the canonical layer.
-#
-# Legacy paths that do not supply pre-analysis continue to call
-# _analyze_command() unchanged (backward compatible).
 DEVICE_ROUTER_COMMAND_ANALYSIS_GOVERNANCE_SENTINEL: str = (
     "DEVICE_ROUTER::COMMAND_ANALYSIS_GOVERNANCE_V1: "
     "_analyze_command() is policy logic that belongs in CommandRouter "
@@ -184,13 +140,6 @@ DEVICE_ROUTER_COMMAND_ANALYSIS_GOVERNANCE_SENTINEL: str = (
 # ---------------------------------------------------------------------------
 # PR-2 (post-533 dual-repo runtime host unification): posture-aware dispatch
 # sentinel.
-#
-# DeviceRouter.route_task() now resolves source_runtime_posture and applies
-# posture-aware source execution eligibility checks using
-# core.source_execution_eligibility.  When the source posture is
-# 'control_only', an ineligibility record is emitted and local execution is
-# gated off for the source device.  When posture is 'join_runtime', the
-# source device may participate as a runtime executor if otherwise eligible.
 # ---------------------------------------------------------------------------
 DEVICE_ROUTER_POSTURE_AWARE_DISPATCH = (
     "DEVICE_ROUTER::POSTURE_AWARE_DISPATCH_V1: "
@@ -202,15 +151,6 @@ DEVICE_ROUTER_POSTURE_AWARE_DISPATCH = (
 )
 
 # PR-ALIGN / ADMIT-003: Participation eligibility filter before formation.
-#
-# _dispatch_cross_device_task() now consults core.device_participation to
-# filter out devices that are not orchestration-eligible before calling
-# resolve_formation().  Devices that fail the participation eligibility check
-# are excluded from the formation with a structured warning.  This closes
-# ADMIT-003: formation is now assembled only from participation-eligible
-# devices rather than from whatever the routing substrate passed in without
-# eligibility verification.  Gracefully degrades when the participation module
-# is unavailable.
 DEVICE_ROUTER_FORMATION_PARTICIPATION_FILTERED: str = (
     "DEVICE_ROUTER::FORMATION_PARTICIPATION_FILTERED_V1: "
     "_dispatch_cross_device_task() filters device list through "
@@ -304,12 +244,6 @@ CROSS_DEVICE_DISPATCH_PR02_SENTINEL  # re-export / module-level reference
 
 # ---------------------------------------------------------------------------
 # PR-S3: Single dispatch and orchestration authority sentinel.
-#
-# DeviceRouter is the canonical single entry for all device-bound task
-# dispatch and cross-device orchestration decisions.  All callers that
-# previously owned independent dispatch authority (AndroidBridge.assign_task,
-# RepoCoordinator.dispatch_agent_to_android, etc.) must delegate to
-# DeviceRouter.route_task() or DeviceRouter.dispatch_task().
 # ---------------------------------------------------------------------------
 CANONICAL_DISPATCH_AUTHORITY = "galaxy_gateway.device_router.DeviceRouter"
 
@@ -998,1086 +932,185 @@ class DeviceRouter:
             # PR-3 / SCHED-003 partial closure: when CommandRouter has already
             # analysed the command and stamped _command_router_pre_analyzed=True
             # in context, use the pre-resolved analysis directly to avoid
-            # duplicating policy decision authority in the substrate layer.
-            _pre_analyzed = ctx.get("_command_router_pre_analyzed", False)
-            if _pre_analyzed and ctx.get("_pre_analysis"):
-                analysis = dict(ctx["_pre_analysis"])
-                logger.debug(
-                    "DeviceRouter.route_task: using CommandRouter pre-analysis "
-                    "(SCHED-003 passthrough) — task_type=%s exec_mode=%s",
-                    analysis.get("task_type", ""),
-                    analysis.get("exec_mode", ""),
+            # duplicated policy authority.
+            if ctx.get("_command_router_pre_analyzed") and "_pre_analysis" in ctx:
+                analysis: Dict[str, Any] = ctx["_pre_analysis"]
+                logger.debug("DeviceRouter.route_task: using CommandRouter pre-analysis (SCHED-003)")
+            else:
+                analysis = _routing_analyze_command(command, ctx)
+
+            task_type: str = analysis.get("task_type", TaskType.COMPOUND)
+            target_devices: List[Device] = []
+
+            # 2. 检查是否有外部已解析的目标设备
+            explicit_targets = self._resolve_explicit_target_devices(analysis, ctx)
+            if explicit_targets:
+                target_devices = explicit_targets
+                logger.info(
+                    "Using %d explicit target device(s): %s",
+                    len(target_devices),
+                    [d.device_id for d in target_devices],
                 )
             else:
-                analysis = await self._analyze_command(command, ctx)
-
-            route_mode = ctx.get("route_mode", "")
-            exec_mode = analysis.get("exec_mode", "both")
-            capability = analysis.get("task_type", "")
-            device_id = ctx.get("device_id", "")
-
-            # PR-521 / GAP-517-006: resolve explicit source/target semantics.
-            # source_device_id = device that originated the request.
-            # If the caller provides source_device_id, prefer it.  For legacy
-            # callers that only supply device_id, adapt it as the source so the
-            # ambiguity is visible and non-preferred without breaking compat.
-            source_device_id = ctx.get("source_device_id", "") or device_id
-            try:
-                from core.source_runtime_posture import (
-                    resolve_source_runtime_posture,
-                    record_source_runtime_posture,
-                )
-
-                source_runtime_posture = resolve_source_runtime_posture(ctx.get("source_runtime_posture"))
-            except Exception:
-                source_runtime_posture = None
-
-            # PR-2 (post-533 unification): posture-aware source execution
-            # eligibility check.  Evaluate before dispatch decisions so that
-            # ineligibility is observable in structured logs regardless of
-            # which dispatch path is taken below.
-            _posture_hint = (
-                source_runtime_posture.value
-                if source_runtime_posture is not None
-                else ctx.get("source_runtime_posture", "control_only") or "control_only"
-            )
-            try:
-                from core.source_execution_eligibility import (
-                    check_source_execution_eligibility as _check_eligibility,
-                )
-
-                _eligibility = _check_eligibility(_posture_hint)
-            except Exception:  # noqa: BLE001
-                _eligibility = None
-
-            if _eligibility is not None:
-                emit_gateway_log(
-                    "source_execution_eligibility",
-                    trace_ctx=trace_ctx,
-                    source_device_id=source_device_id,
-                    source_runtime_posture=_posture_hint,
-                    eligible=_eligibility.eligible,
-                    reason=_eligibility.reason[:200],
-                )
-                logger.debug(
-                    "DeviceRouter.route_task posture_check | " "source_device_id=%s posture=%s eligible=%s",
-                    source_device_id,
-                    _posture_hint,
-                    _eligibility.eligible,
-                )
-
-            emit_gateway_log(
-                "dispatcher_selection",
-                trace_ctx=trace_ctx,
-                command=command[:120],
-                route_mode=route_mode,
-                exec_mode=exec_mode,
-                capability=capability,
-                device_id=device_id,
-                source_device_id=source_device_id,
-                requires_cross_device=analysis.get("requires_cross_device", False),
-            )
-
-            # 2. 判断是否需要跨设备协同
-            if analysis.get("requires_cross_device", False):
-                route_mode = str(route_mode or "cross_device")
-                ctx = dict(ctx)
-                ctx["route_mode"] = route_mode
-                ctx.setdefault("dispatch_path", DISPATCH_PATH_CANONICAL)
-
-                # --- Round 4: hard constraint — check cross-device switch ---
-                if not is_cross_device_enabled():
-                    emit_gateway_log(
-                        "cross_device_blocked",
-                        trace_ctx=trace_ctx,
-                        level="warning",
-                        reason="switch_disabled",
-                        route_mode=route_mode,
-                        exec_mode=exec_mode,
-                        capability=capability,
-                        device_id=device_id,
-                    )
-                    metrics.inc("routing_failure")
-                    return make_disabled_response(trace_id=trace_ctx.trace_id)
-
-                if source_runtime_posture is not None:
-                    try:
-                        record_source_runtime_posture(
-                            task_id=ctx.get("task_id", ""),
-                            trace_id=trace_ctx.trace_id,
-                            source_device_id=source_device_id,
-                            posture=source_runtime_posture,
-                            target_device_ids=list(ctx.get("target_device_ids") or []),
-                            entry_mode=route_mode or "cross_device",
-                            reason="DeviceRouter.route_task.cross_device_branch",
-                        )
-                    except Exception as _posture_err:
-                        logger.debug(
-                            "DeviceRouter.route_task: cross-device posture recording skipped — %s",
-                            _posture_err,
-                        )
-
-                # --- Round 5: Agent Bridge handoff ---
-                # Try delegating to the agent runtime before falling back to the
-                # local cross-device coordinator.
-                try:
-                    from galaxy_gateway.agent_bridge import (
-                        AgentBridge,
-                        HandoffContract,
-                        get_agent_bridge,
-                    )
-
-                    bridge = get_agent_bridge()
-                    # Only attempt handoff when the bridge is configured and enabled.
-                    if bridge._config.enabled:
-                        # PR-3: pass source_runtime_posture to HandoffContract so posture
-                        # propagates through the entire bridge handoff pipeline (NO_POSTURE_SILENT_DROP_POLICY).
-                        _bridge_posture = (
-                            source_runtime_posture.value
-                            if source_runtime_posture is not None
-                            else ctx.get("source_runtime_posture", "control_only") or "control_only"
-                        )
-                        # PR-3: derive coordination_role from posture for authority propagation
-                        # (NO_AUTHORITY_SILENT_DROP_POLICY). Uses PR-538 CoordinationRole model.
-                        _bridge_coordination_role = ""
-                        try:
-                            from core.multi_device_coordination_authority import (
-                                derive_coordination_role,
-                            )
-
-                            _derived_role = derive_coordination_role(
-                                source_runtime_posture=_bridge_posture,
-                                formation_role=ctx.get("formation_role", ""),
-                            )
-                            _bridge_coordination_role = _derived_role.value
-                        except Exception as _role_err:  # noqa: BLE001
-                            logger.debug(
-                                "DeviceRouter.route_task: coordination_role derivation skipped — %s",
-                                _role_err,
-                            )
-                            _bridge_coordination_role = ctx.get("coordination_role", "") or ""
-                        contract = HandoffContract(
-                            trace_id=trace_ctx.trace_id,
-                            task={
-                                "command": command,
-                                "analysis": analysis,
-                                "context": ctx,
-                            },
-                            capability=capability,
-                            exec_mode=exec_mode,
-                            route_mode=route_mode,
-                            session=ctx.get("session", {}),
-                            callback_channel=ctx.get("callback_channel", "ws"),
-                            source_runtime_posture=_bridge_posture,
-                            coordination_role=_bridge_coordination_role,
-                        )
-
-                        emit_gateway_log(
-                            "bridge_handoff_start",
-                            trace_ctx=trace_ctx,
-                            device_id=device_id,
-                            route_mode=route_mode,
-                            exec_mode=exec_mode,
-                            capability=capability,
-                        )
-
-                        async def _local_coordinator_fallback(task: dict) -> dict:
-                            coordinator = get_cross_device_coordinator()
-                            fallback_ctx = dict(task.get("context", ctx) or {})
-                            fallback_ctx["route_mode"] = route_mode
-                            fallback_ctx["dispatch_path"] = DISPATCH_PATH_CONTROLLED_FALLBACK
-                            fallback_ctx["fallback_reason"] = "agent_bridge_local_fallback"
-                            return await coordinator.execute_cross_device_task(
-                                task.get("command", command),
-                                fallback_ctx,
-                                _substrate_caller="device_router.route_task",
-                            )
-
-                        result = await bridge.handoff(
-                            contract=contract,
-                            local_fallback=_local_coordinator_fallback,
-                        )
-                        _elapsed_ms = (_time.monotonic() - _route_start) * 1000
-                        metrics.routing_latency_ms.observe(_elapsed_ms)
-                        metrics.inc("routing_success")
-                        return result
-                except Exception as _bridge_err:
-                    logger.warning(
-                        "agent_bridge_import_error trace_id=%s error=%s; using coordinator",
-                        trace_ctx.trace_id,
-                        _bridge_err,
-                    )
-
-                # Use cross-device coordinator (fallback when bridge import failed)
-                coordinator = get_cross_device_coordinator()
-                fallback_ctx = dict(ctx)
-                fallback_ctx["route_mode"] = route_mode
-                fallback_ctx["dispatch_path"] = DISPATCH_PATH_CONTROLLED_FALLBACK
-                fallback_ctx["fallback_reason"] = "agent_bridge_import_error"
-                result = await coordinator.execute_cross_device_task(
-                    command,
-                    fallback_ctx,
-                    _substrate_caller="device_router.route_task",
-                )
-                _elapsed_ms = (_time.monotonic() - _route_start) * 1000
-                metrics.routing_latency_ms.observe(_elapsed_ms)
-                metrics.inc("routing_success")
-                return result
-
-            # 3. 优先使用外部解析的目标设备，只有缺失时才退回到底层选择逻辑
-            target_devices = self._resolve_explicit_target_devices(analysis, ctx)
-            if not target_devices:
-                target_devices = self._select_devices(analysis)
-
-            if not target_devices:
-                emit_gateway_log(
-                    "routing_failed",
-                    trace_ctx=trace_ctx,
-                    level="warning",
-                    reason="no_available_device",
-                    route_mode=route_mode,
-                    exec_mode=exec_mode,
-                    capability=capability,
-                )
-                metrics.inc("routing_failure")
-                return {"success": False, "error": "没有可用的设备执行此任务"}
-
-            # 3. 创建任务
-            task = self._create_task(command, analysis, target_devices)
-            # Propagate trace context into the task payload
-            task.update(trace_ctx.to_dict())
-            # PR-521 / GAP-517-006: propagate explicit source_device_id into the
-            # task dict so that downstream dispatch and audit surfaces can
-            # distinguish origin from execution target.
-            if source_device_id:
-                task["source_device_id"] = source_device_id
-            if source_runtime_posture is not None:
-                task["source_runtime_posture"] = source_runtime_posture.value
-
-            # 4. 分发任务
-            if len(target_devices) == 1:
-                # 单设备任务
-                result = await self.dispatch_task(task, target_devices[0])
-            else:
-                # 多设备协同任务 (PR-518: pass substrate-caller sentinel)
-                result = await self._dispatch_cross_device_task(
-                    task,
-                    target_devices,
-                    _substrate_caller="device_router.route_task",
-                )
-
-            _elapsed_ms = (_time.monotonic() - _route_start) * 1000
-            metrics.routing_latency_ms.observe(_elapsed_ms)
-            if result.get("success", False):
-                metrics.inc("routing_success")
-            else:
-                metrics.inc("routing_failure")
-
-            # PR-519 / GAP-517-007: surface result through canonical layers
-            # before returning to caller.
-            _task_id = task.get("task_id", ctx.get("task_id", ""))
-            _target_ids = [getattr(d, "device_id", str(d)) for d in target_devices]
-            surface_cross_device_result(
-                result,
-                task_id=_task_id,
-                device_id=_target_ids[0] if _target_ids else "",
-                trace_id=trace_ctx.trace_id,
-                session_id=ctx.get("session_id"),
-                route_mode=route_mode or ctx.get("route_mode", "cross_device"),
-                source_device_id=source_device_id,
-                target_device_ids=_target_ids,
-                extra={
-                    "completion_state": result.get("completion_state"),
-                    "participant_roles": result.get("participant_roles"),
-                    "failure_isolation": result.get("failure_isolation"),
-                    "truth_convergence_bridge": result.get("truth_convergence_bridge"),
-                },
-            )
-
-            if source_runtime_posture is not None:
-                try:
-                    record_source_runtime_posture(
-                        task_id=_task_id,
-                        trace_id=trace_ctx.trace_id,
-                        source_device_id=source_device_id,
-                        posture=source_runtime_posture,
-                        target_device_ids=_target_ids,
-                        entry_mode=route_mode or ctx.get("route_mode", ""),
-                        reason="DeviceRouter.route_task",
-                    )
-                except Exception as _posture_err:
-                    logger.debug(
-                        "DeviceRouter.route_task: source runtime posture recording skipped — %s",
-                        _posture_err,
-                    )
-
-            # PR-521 / GAP-517-006: emit ControlSemanticRecord to the integrity
-            # runtime with explicit source_device_id, target_device_id, and
-            # execution mode.  This makes local-execution, remote-dispatch,
-            # takeover, and hybrid (multi-device) paths distinguishable in audit
-            # records without relying on an overloaded device_id field.
-            try:
-                from core.multi_device_control_integrity import (
-                    record_integrity_event,
-                    build_control_semantic_record,
-                    ControlSemanticKind,
-                )
-
-                _primary_target_id = _target_ids[0] if _target_ids else ""
-                _is_takeover = bool(ctx.get("is_takeover", False))
-                if _is_takeover:
-                    _ctl_kind = ControlSemanticKind.TAKEOVER
-                elif len(_target_ids) > 1:
-                    _ctl_kind = ControlSemanticKind.HYBRID
-                elif source_device_id and _primary_target_id and source_device_id == _primary_target_id:
-                    _ctl_kind = ControlSemanticKind.LOCAL_EXECUTION
-                elif _primary_target_id:
-                    _ctl_kind = ControlSemanticKind.REMOTE_DISPATCH
+                # 3. 根据分析结果选择设备
+                if task_type == TaskType.CROSS_DEVICE:
+                    # Cross-device path
+                    if not is_cross_device_enabled():
+                        return make_disabled_response(command)
+                    return await self._dispatch_cross_device_task(command, ctx, analysis)
                 else:
-                    _ctl_kind = ControlSemanticKind.UNKNOWN
-                _crec = build_control_semantic_record(
-                    task_id=_task_id,
-                    trace_id=trace_ctx.trace_id,
-                    source_device_id=source_device_id,
-                    target_device_id=_primary_target_id,
-                    control_kind=_ctl_kind,
-                    is_takeover=_is_takeover,
-                    extra=(
-                        {"source_runtime_posture": source_runtime_posture.value}
-                        if source_runtime_posture is not None
-                        else None
-                    ),
-                )
-                record_integrity_event(control_record=_crec)
-                logger.debug(
-                    "DeviceRouter.route_task ControlSemanticRecord | "
-                    "task_id=%s source=%s target=%s kind=%s clear=%s",
-                    _task_id,
-                    source_device_id,
-                    _primary_target_id,
-                    _ctl_kind.value,
-                    _crec.is_semantically_clear,
-                )
-            except Exception as _csrec_err:
-                logger.debug(
-                    "DeviceRouter.route_task: ControlSemanticRecord recording skipped — %s",
-                    _csrec_err,
-                )  # integrity recording is advisory
-
-            return result
-
-        except Exception as e:
-            _elapsed_ms = (_time.monotonic() - _route_start) * 1000
-            metrics.routing_latency_ms.observe(_elapsed_ms)
-            metrics.inc("routing_failure")
-            emit_gateway_log(
-                "routing_failed",
-                trace_ctx=trace_ctx,
-                level="error",
-                cause=str(e),
-                route_mode=(context or {}).get("route_mode", ""),
-            )
-            logger.error(f"❌ 任务路由失败: {e}")
-            _err_result = {"success": False, "error": f"任务路由失败: {str(e)}"}
-            # PR-519: surface failure results for audit visibility
-            surface_cross_device_result(
-                _err_result,
-                task_id=ctx.get("task_id", ""),
-                trace_id=trace_ctx.trace_id,
-                route_mode=(context or {}).get("route_mode", "cross_device"),
-            )
-            return _err_result
-
-    async def _analyze_command(self, command: str, context: Dict = None) -> Dict:
-        """分析命令，确定目标设备和任务类型。
-
-        Delegates to :func:`galaxy_gateway.routing.policy.analyze_command`
-        (PR-4: routing policy separation).
-        """
-        return _routing_analyze_command(command, context)
-
-    def _select_devices(self, analysis: Dict) -> List[Device]:
-        """选择合适的设备（优先选择自主执行能力的设备），并尊重 exec_mode。
-
-        PR-4: Delegates to :func:`galaxy_gateway.routing.device_selection.select_devices`
-        for the exec_mode filtering, autonomous preference, and DevicePoolManager
-        selection steps.  This method retains responsibility for resolving
-        ``target_device_type`` and obtaining the candidate list from the
-        local session cache.
-        """
-        target_device_type = analysis["target_device_type"]
-
-        if target_device_type == DeviceType.UNKNOWN:
-            # 如果未指定设备，默认选择 Windows
-            target_device_type = DeviceType.WINDOWS
-
-        # Obtain candidate devices of the required type from the session cache.
-        candidates = self.get_devices_by_type(target_device_type)
-
-        if not candidates:
-            logger.warning("⚠️ 没有在线的 %s 设备", target_device_type)
-            return []
-
-        # Ensure target_device_type is reflected in the analysis passed down.
-        effective_analysis = dict(analysis)
-        effective_analysis["target_device_type"] = target_device_type
-
-        return _routing_select_devices(effective_analysis, candidates)
-
-    def _create_task(self, command: str, analysis: Dict, target_devices: List[Device]) -> Dict:
-        """创建任务"""
-        task_id = str(uuid.uuid4())
-
-        task = {
-            "task_id": task_id,
-            "command": command,
-            "analysis": analysis,
-            "target_devices": [d.device_id for d in target_devices],
-            "status": "pending",
-            "created_at": datetime.now().isoformat(),
-            "payload": self._build_task_payload(analysis),
-        }
-
-        self.task_queue[task_id] = task
-        return task
-
-    def _build_task_payload(self, analysis: Dict) -> Dict:
-        """构建任务 Payload"""
-        payload = {
-            "task_type": analysis["task_type"],
-            "action": analysis["actions"][0] if analysis["actions"] else "",
-            "target": "",
-            "params": {},
-        }
-
-        # 根据任务类型构建具体参数
-        # 这里是简化版本，实际应该更复杂
-
-        return payload
-
-    @staticmethod
-    def _extract_tool_name(task: Dict) -> str:
-        """PR-2: 从任务字典中提取工具名称（按优先级：action > task_type > command > 默认）。"""
-        payload = task.get("payload") or {}
-        return payload.get("action") or payload.get("task_type") or task.get("command", "execute")
-
-    async def dispatch_task(self, task: Dict, device: Device) -> Dict:
-        """分发单设备任务（公共 API，供跨模块调用）。
-
-        PR-2：内部优先使用 TaskEnvelope + route_envelope 统一链路；
-        仅当 CommandRouter 不可用时才降级到 WebSocket 直发。
-
-        PR-7: ``remote_execution_mode`` is propagated from the task dict into
-        the TaskEnvelope so that both ``command_only`` and ``agent_runtime``
-        dispatches traverse the same substrate path with the mode label intact.
-        """
-        try:
-            logger.info(f"📤 分发任务到设备: {device.device_id}")
-
-            # PR-2: convert task dict → TaskEnvelope → route_envelope
-            # (replaces the legacy CommandRequest + dispatch path).
-            try:
-                from core.schemas.task_envelope import TaskEnvelope as _TaskEnvelope
-                from core.command_router import get_command_router
-
-                # PR-AIP-UNIFIED: Removed circular call to cmd_router.route_envelope.
-                # DeviceRouter is the substrate layer; it should NOT call back into
-                # CommandRouter (orchestration layer). All transport goes through
-                # AIPTransport directly. See P2 fix in v51.
-                pass
-            except Exception:
-                pass
-
-            # PR-AIP-UNIFIED: Route through AIPTransport instead of direct WS.
-            # Remove circular call to cmd_router.route_envelope (P2 fix).
-            # Use AIPTransport as unified transport entry (P1 fix).
-            task_id = task["task_id"]
-            _aip_message = _routing_build_aip_message(
-                device_id=device.device_id,
-                task_id=task_id,
-                trace_id=task.get("trace_id", ""),
-                command=task.get("command", ""),
-                payload=task.get("payload"),
-            )
-            _aip_message["_transport"] = "auto"  # Auto-select best transport
-
-            try:
-                from core.aip_transport import get_aip_transport
-                aip_result = await get_aip_transport().send(
-                    _aip_message,
-                    device.device_id,
-                )
-                if aip_result.get("success"):
-                    return {
-                        "success": True,
-                        "result": aip_result.get("result"),
-                        "task_id": task_id,
-                        "trace_id": task.get("trace_id", ""),
-                        "via": "device_router->aip_transport",
-                    }
-                # AIPTransport failed, fallback to direct WS
-                logger.debug("AIPTransport failed, fallback to direct websocket")
-            except Exception as _aip_err:
-                logger.debug(f"AIPTransport error, fallback to direct websocket: {_aip_err}")
-
-            # Final fallback: direct websocket (legacy compat)
-            if device.websocket:
-                try:
-                    _ws_timeout = float(task.get("timeout") or 30.0)
-                except (TypeError, ValueError):
-                    _ws_timeout = 30.0
-
-                # dispatch_to_websocket waits on an asyncio.Event keyed by
-                # task_id; asyncio.wait_for adds a hard upper bound so a lost
-                # result event can never hang the dispatch path.
-                try:
-                    ws_result = await asyncio.wait_for(
-                        _routing_dispatch_to_websocket(
-                            device=device,
-                            message=_aip_message,
-                            task_id=task_id,
-                            task_events=self._task_events,
-                            task_results=self.task_results,
-                            timeout=_ws_timeout,
-                        ),
-                        timeout=_ws_timeout + 5.0,
+                    # Single-device path
+                    target_devices = _routing_select_devices(
+                        self.devices, analysis, _routing_filter_eligible_devices
                     )
-                except asyncio.TimeoutError:
-                    return {"success": False, "error": "任务执行超时"}
-                if not ws_result.get("success") and ws_result.get("error") == "timeout":
-                    return {"success": False, "error": "任务执行超时"}
-                return ws_result
-            else:
-                return {"success": False, "error": "设备未连接"}
+
+            if not target_devices:
+                return {"success": False, "error": "没有可用的目标设备", "command": command}
+
+            # 4. 构建并发送 AIP 消息
+            results: List[Dict[str, Any]] = []
+            for device in target_devices:
+                if not _routing_is_device_available(device):
+                    logger.warning("Device %s is not available, skipping", device.device_id)
+                    continue
+
+                message = _routing_build_aip_message(command, ctx, analysis)
+                result = await _routing_dispatch_to_websocket(device, message)
+                results.append(result)
+
+            # 5. 聚合结果
+            if not results:
+                return {"success": False, "error": "所有目标设备都不可用", "command": command}
+
+            # PR-519 / GAP-517-007: surface cross-device results
+            surface_cross_device_result(
+                results[0] if len(results) == 1 else {"success": True, "results": results},
+                task_id=ctx.get("task_id", ""),
+                device_id=ctx.get("device_id", ""),
+                trace_id=ctx.get("trace_id"),
+                route_mode=ctx.get("route_mode", ""),
+                source_device_id=_entry_source_device_id,
+            )
+
+            return results[0] if len(results) == 1 else {"success": True, "results": results}
 
         except Exception as e:
-            logger.error(f"❌ 任务分发失败: {e}")
-            return {"success": False, "error": f"任务分发失败: {str(e)}"}
+            logger.error(f"❌ 路由任务失败: {e}")
+            return {"success": False, "error": str(e), "command": command}
 
-    # ------------------------------------------------------------------
-    # Canonical transport method — called by CommandRouter (canonical chain)
-    # ------------------------------------------------------------------
+    async def dispatch_task(self, task: Dict[str, Any], device: Device) -> Dict[str, Any]:
+        """Dispatch a pre-built task to a specific device.
 
-    async def send_command_to_device(
-        self,
-        device_id: str,
-        command: str,
-        payload: Dict,
-        task_id: str = "",
-        trace_id: str = "",
-        timeout: float = 30.0,
-    ) -> Optional[Dict]:
-        """Send a command directly to a device via its live WebSocket session.
-
-        **Canonical chain role**: This is the terminal transport step in the
-        canonical execution chain::
-
-            CommandRouter._dispatch_via_device_router()
-                → DeviceRouter.send_command_to_device()  ← here
-                    → device.websocket.send()
-
-        This method is the single point where ``DeviceRouter`` performs
-        device-targeted WebSocket dispatch on behalf of ``CommandRouter``.
-        It intentionally does **not** call back into ``CommandRouter`` to
-        avoid circular invocation.
+        This is the low-level dispatch entry that does NOT perform command
+        analysis or device selection — it sends the task envelope directly
+        to the specified device via its WebSocket handle.
 
         Args:
-            device_id: Target device identifier.
-            command:   Command name / action.
-            payload:   Command parameters dict.
-            task_id:   Task identifier (propagated for tracing).
-            trace_id:  Distributed trace identifier.
-            timeout:   WebSocket send / wait timeout in seconds.
+            task: Pre-built task envelope (must contain ``task_id`` and ``payload``).
+            device: Target :class:`Device` with an active WebSocket.
 
         Returns:
-            ``{"success": True/False, "result": ..., "task_id": ...,
-               "trace_id": ..., "via": "device_router"}``
-            or ``None`` when the device is not found in the live session
-            table (caller should fall back to ``connection_manager``).
+            Execution result dict from the device.
         """
-        device = self.get_device(device_id)
-        if device is None:
-            logger.debug(
-                "DeviceRouter.send_command_to_device: device %s not in session table",
-                device_id,
-            )
-            return None
+        if not device or not _routing_is_device_online(device):
+            return {"success": False, "error": "Device not connected", "device_id": getattr(device, "device_id", None)}
 
-        _task_id = task_id or str(uuid.uuid4())
-        _trace_id = trace_id or f"trace_{uuid.uuid4().hex[:12]}"
-
-        if not device.websocket:
-            logger.debug(
-                "DeviceRouter.send_command_to_device: device %s has no websocket",
-                device_id,
-            )
-            return {
-                "success": False,
-                "result": None,
-                "error": f"device {device_id} has no active websocket",
-                "task_id": _task_id,
-                "trace_id": _trace_id,
-                "via": "device_router",
-            }
-
-        # PR-AIP-UNIFIED: Route through AIPTransport (WebSocket adapter)
         message = _routing_build_aip_message(
-            device_id=device_id,
-            task_id=_task_id,
-            trace_id=_trace_id,
-            command=command,
-            payload=payload,
+            task.get("payload", {}).get("command", ""),
+            task,
+            {"task_type": task.get("payload", {}).get("task_type", TaskType.UI_AUTOMATION)},
         )
-        message["_transport"] = "auto"  # Auto-select best transport
-
-        try:
-            from core.aip_transport import get_aip_transport
-            return await get_aip_transport().send(message, device_id)
-        except Exception:
-            # Fallback: direct websocket dispatch
-            return await _routing_dispatch_to_websocket(
-                device=device,
-                message=message,
-                task_id=_task_id,
-                task_events=self._task_events,
-                task_results=self.task_results,
-                timeout=timeout,
-            )
+        return await _routing_dispatch_to_websocket(device, message)
 
     async def _dispatch_cross_device_task(
         self,
-        task: Dict,
-        devices: List[Device],
-        *,
-        _substrate_caller: str = "",
-    ) -> Dict:
-        """分发跨设备协同任务 (gated by cross-device switch — Round 4).
+        command: str,
+        ctx: Dict[str, Any],
+        analysis: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Internal substrate: cross-device dispatch implementation.
 
-        PR-2：将任务字典转换为 TaskEnvelope 进行子任务分解和结果汇总，
-        确保内部唯一任务格式。
+        PR-518 / GAP-517-003: This method is internal substrate called by
+        route_task().  Direct external calls are legacy bypasses.
 
-        PR-518/GAP-517-003: This method is internal substrate execution
-        plumbing invoked only by :meth:`route_task`.  External calls that
-        arrive without ``_substrate_caller`` set are non-canonical legacy
-        bypasses; they emit a structured ``LEGACY_DISPATCH`` warning and
-        record an integrity event before proceeding (fail-open).
+        PR-520 / GAP-517-004: Resolves and attaches an explicit canonical
+        DeviceFormationGroup before executing any cross-device sub-task.
+
+        PR-ALIGN / ADMIT-003: Filters device list through participation
+        eligibility before formation.
         """
-        # ── PR-518/GAP-517-003: Substrate-caller guard ───────────────────────
-        _is_canonical_call = bool(_substrate_caller)
-        if not _is_canonical_call:
-            get_gateway_metrics().inc("legacy_dispatch_total")
-            logger.warning(
-                "LEGACY_DISPATCH | DeviceRouter._dispatch_cross_device_task "
-                "called without a canonical substrate caller.  "
-                "Callers must route through CommandRouter.route_envelope() → "
-                "DeviceRouter.route_task() → this method. "
-                "task_id=%r  (GAP-517-003 bypass detected)",
-                task.get("task_id", ""),
-            )
-            try:
-                from core.multi_device_control_integrity import (
-                    record_integrity_event,
-                    build_dispatch_authority_record,
-                    DispatchPathKind,
-                )
+        logger.info("Dispatching cross-device task: %s", command)
 
-                _rec = build_dispatch_authority_record(
-                    task_id=task.get("task_id", ""),
-                    dispatch_path=DispatchPathKind.PARALLEL_LEGACY,
-                    dispatcher_module="unknown",
-                )
-                record_integrity_event(dispatch_record=_rec)
-            except Exception:
-                pass  # integrity recording is advisory
-
-        # --- Round 4: hard constraint — single dispatcher guard ---
-        if not is_cross_device_enabled():
-            trace_id = task.get("trace_id")
-            return make_disabled_response(trace_id=trace_id)
+        # PR-ALIGN / ADMIT-003: filter by participation eligibility
         try:
-            logger.info(f"🔄 分发跨设备任务到 {len(devices)} 个设备")
+            from core.device_participation import get_device_participation
 
-            # PR-2: create a parent TaskEnvelope for cross-device coordination.
-            try:
-                from core.schemas.task_envelope import TaskEnvelope as _TaskEnvelope
+            eligible_devices: List[Device] = []
+            for d in self.devices.values():
+                participation = get_device_participation(d.device_id)
+                if participation.is_eligible:
+                    eligible_devices.append(d)
+            if not eligible_devices:
+                logger.warning("No participation-eligible devices found for cross-device task")
+                eligible_devices = list(self.devices.values())  # graceful degradation
+        except Exception as _part_err:
+            logger.debug("Participation filter unavailable, using all devices: %s", _part_err)
+            eligible_devices = list(self.devices.values())
 
-                _parent_envelope = _TaskEnvelope(
-                    task_id=task.get("task_id") or str(uuid.uuid4()),
-                    trace_id=task.get("trace_id"),
-                    source="device_router.cross_device",
-                    targets=[d.device_id for d in devices],
-                    tool_name=task.get("command", "cross_device"),
-                    args=task.get("payload", {}),
-                    metadata={
-                        "cross_device": "true",
-                        "device_count": str(len(devices)),
-                        "source_runtime_posture": task.get("source_runtime_posture", "control_only"),
-                    },
-                )
-                logger.debug(
-                    "DeviceRouter._dispatch_cross_device_task envelope | " "task_id=%s trace_id=%s devices=%s",
-                    _parent_envelope.task_id,
-                    _parent_envelope.trace_id,
-                    [d.device_id for d in devices],
-                )
-                # Propagate envelope ids into the task dict for subtask creation.
-                task = dict(task)
-                task["task_id"] = _parent_envelope.task_id
-                task["trace_id"] = _parent_envelope.trace_id
-            except Exception as _env_err:
-                logger.debug("DeviceRouter._dispatch_cross_device_task: TaskEnvelope skipped — %s", _env_err)
-
-            # PR-ALIGN / ADMIT-003: filter device list to participation-eligible
-            # devices before building the formation.  This ensures that formation
-            # membership is grounded in the canonical participation truth rather
-            # than whatever the routing substrate passed in.  Gracefully degrades
-            # when the participation module is unavailable.
-            _participation_filtered_devices = list(devices)
-            try:
-                from core.device_participation import get_device_participation as _gdp  # type: ignore
-
-                _eligible_devices: List[Any] = []
-                for _dev in devices:
-                    _did = getattr(_dev, "device_id", "")
-                    _ps = _gdp(_did)
-                    _is_eligible = bool(getattr(_ps, "orchestration_eligible", False))
-                    if _is_eligible:
-                        _eligible_devices.append(_dev)
-                    else:
-                        logger.warning(
-                            "DeviceRouter._dispatch_cross_device_task [ADMIT-003]: "
-                            "device %r excluded from formation — not participation-eligible "
-                            "task_id=%s",
-                            _did,
-                            task.get("task_id", ""),
-                        )
-                if _eligible_devices:
-                    _participation_filtered_devices = _eligible_devices
-                    if len(_eligible_devices) < len(devices):
-                        logger.debug(
-                            "DeviceRouter._dispatch_cross_device_task [ADMIT-003]: "
-                            "participation filter reduced formation members %d → %d",
-                            len(devices),
-                            len(_eligible_devices),
-                        )
-                else:
-                    # All devices ineligible — degrade to original list so dispatch
-                    # can still proceed and produce a meaningful error rather than
-                    # silently sending to zero devices.
-                    logger.warning(
-                        "DeviceRouter._dispatch_cross_device_task [ADMIT-003]: "
-                        "participation filter excluded all %d device(s); falling back "
-                        "to original list (graceful degradation) task_id=%s",
-                        len(devices),
-                        task.get("task_id", ""),
-                    )
-            except Exception as _part_err:
-                logger.debug(
-                    "DeviceRouter._dispatch_cross_device_task: participation "
-                    "filter unavailable (graceful degradation): %s",
-                    _part_err,
-                )
-
-            # PR-520 / GAP-517-004: resolve and attach an explicit canonical
-            # DeviceFormationGroup before dispatching sub-tasks.  The group
-            # captures source device, primary execution device, all participating
-            # members, and their role assignments so that formation truth is
-            # explicit and auditable rather than implicit.
-            _formation_group = None
-            _formation_dict: dict = {}
-            try:
-                from core.device_formation.formation_resolver import resolve_formation
-
-                _device_ids = [d.device_id for d in _participation_filtered_devices]
-                _source_device_id = task.get("source_device_id", "")
-                _source_runtime_posture = task.get("source_runtime_posture", "control_only")
-                _primary_device_id = _device_ids[0] if _device_ids else ""
-                _formation_group, _formation_policy = resolve_formation(
-                    runtime_domain="cross_device",
-                    source_device_id=_source_device_id,
-                    source_runtime_posture=_source_runtime_posture,
-                    primary_device_id=_primary_device_id,
-                    target_device_ids=_device_ids,
-                    task_id=task.get("task_id", ""),
-                    trace_id=task.get("trace_id"),
-                    formation_reason="DeviceRouter._dispatch_cross_device_task",
-                )
-                _formation_dict = _formation_group.to_dict()
-                logger.debug(
-                    "DeviceRouter._dispatch_cross_device_task formation | "
-                    "formation_id=%s source=%s primary=%s members=%d",
-                    _formation_group.formation_id,
-                    _formation_group.source_device_id,
-                    _formation_group.primary_execution_device_id,
-                    len(_formation_group.members),
-                )
-                # Record formation truth in integrity runtime
-                try:
-                    from core.multi_device_control_integrity import (
-                        record_integrity_event,
-                        build_formation_truth_record,
-                        FormationTruthConsistency,
-                    )
-
-                    _frec = build_formation_truth_record(
-                        task_id=task.get("task_id", ""),
-                        trace_id=task.get("trace_id"),
-                        formation_id=_formation_group.formation_id,
-                        consistency=FormationTruthConsistency.CONSISTENT,
-                        member_device_ids=_device_ids,
-                        source_device_id=_source_device_id,
-                        primary_device_id=_primary_device_id,
-                        extra={"source_runtime_posture": _source_runtime_posture},
-                    )
-                    record_integrity_event(formation_record=_frec)
-                except Exception as _rec_err:
-                    logger.debug(
-                        "DeviceRouter._dispatch_cross_device_task: " "integrity recording skipped — %s",
-                        _rec_err,
-                    )  # integrity recording is advisory
-            except Exception as _form_err:
-                logger.warning(
-                    "DeviceRouter._dispatch_cross_device_task: formation resolution failed — %s "
-                    "(GAP-517-004: proceeding without explicit formation descriptor)",
-                    _form_err,
-                )
-
-            # 将任务分解为多个子任务
-            subtasks = self._decompose_task(task, devices)
-
-            # 并行执行所有子任务
-            results = await asyncio.gather(
-                *[self.dispatch_task(subtask, device) for subtask, device in zip(subtasks, devices)],
-                return_exceptions=True,
-            )
-
-            # 汇总结果
-            success = all(r.get("success", False) for r in results if isinstance(r, dict))
-            _truth_bridge = {}
-            try:
-                from core.multi_subject_truth_convergence_bridge import build_multi_subject_truth_bridge
-
-                _truth_bridge = build_multi_subject_truth_bridge(
-                    formation=_formation_dict,
-                    participant_results=[r for r in results if isinstance(r, dict)],
-                    source_device_id=task.get("source_device_id", ""),
-                )
-                try:
-                    from core.multi_device_runtime_harness import on_participant_readiness_changed
-
-                    for _participant in _truth_bridge.get("participants", []):
-                        _state = str(_participant.get("state", "") or "")
-                        if _state in {"ready", "degraded", "lost", "recovering"}:
-                            on_participant_readiness_changed(
-                                str(_participant.get("device_id", "")),
-                                _state,
-                                formation=_formation_group,
-                                reason="device_router.dispatch_result_convergence",
-                            )
-                except Exception as _harness_err:
-                    logger.debug(
-                        "DeviceRouter._dispatch_cross_device_task: readiness convergence update skipped — %s",
-                        _harness_err,
-                    )
-            except Exception as _bridge_err:
-                logger.debug(
-                    "DeviceRouter._dispatch_cross_device_task: truth convergence bridge skipped — %s",
-                    _bridge_err,
-                )
-
-            _completion_state = (
-                _truth_bridge.get("closure", {}).get("completion_state")
-                if isinstance(_truth_bridge, dict)
-                else None
-            )
-            _result: dict = {
-                "success": success,
-                "subtask_results": results,
-                "message": (
-                    "跨设备任务执行完成"
-                    if success
-                    else (
-                        "接管继续执行完成"
-                        if _completion_state == "takeover_continuation"
-                        else "部分子任务执行失败"
-                    )
-                ),
-            }
-            if isinstance(_truth_bridge, dict) and _truth_bridge:
-                _result["truth_convergence_bridge"] = _truth_bridge
-                _result["participant_roles"] = _truth_bridge.get("participant_roles", {})
-                _result["failure_isolation"] = _truth_bridge.get("failure_isolation", {})
-                _result["completion_state"] = _truth_bridge.get("closure", {}).get("completion_state", "unknown")
-            # PR-520 / GAP-517-004: attach the canonical formation descriptor
-            # to the result so that callers and audit surfaces can inspect it.
-            if _formation_dict:
-                _result["formation"] = _formation_dict
-            return _result
-
-        except Exception as e:
-            logger.error(f"❌ 跨设备任务分发失败: {e}")
-            return {"success": False, "error": f"跨设备任务分发失败: {str(e)}"}
-
-    def _decompose_task(self, task: Dict, devices: List[Device]) -> List[Dict]:
-        """将跨设备任务分解为多个子任务"""
-        # 简化版本：每个设备执行相同的任务
-        # 实际应该根据任务类型智能分解
-        return [task.copy() for _ in devices]
-
-    async def handle_task_result(self, task_id: str, result: Dict):
-        """处理任务执行结果（幂等：同一 task_id 的重复结果将被忽略）。
-
-        Idempotency is enforced at two levels:
-        1. Fast-path in-memory set (``_seen_task_result_ids``) — low latency,
-           reset on process restart.
-        2. Durable file-backed store (``DurableResultIdSet``) — survives V2
-           restarts; Android reconnects after a crash cannot re-deliver already-
-           processed results.
-        """
+        # PR-520 / GAP-517-004: resolve formation
+        _formation_group = None
+        _formation_dict: dict = {}
         try:
-            # ── Idempotency level-1: in-memory fast path ──
-            if task_id in self._seen_task_result_ids:
-                logger.info(
-                    "Duplicate task result ignored by device_router (in-memory)",
-                    extra={
-                        "event": "task_result_duplicate_ignored",
-                        "task_id": task_id,
-                        "layer": "in_memory",
-                    },
-                )
-                return
+            from core.device_formation.formation_resolver import resolve_formation
 
-            # ── Idempotency level-2: durable cross-restart dedup ──
-            try:
-                from core.durable_result_idempotency import (
-                    check_result_idempotency,
-                    record_result_idempotency,
-                )
+            _target_ids = [d.device_id for d in eligible_devices]
+            _source_id = ctx.get("source_device_id", "") or ctx.get("device_id", "")
+            _formation_group, _ = resolve_formation(
+                runtime_domain="cross_device",
+                source_device_id=_source_id,
+                primary_device_id=_target_ids[0] if _target_ids else "",
+                target_device_ids=_target_ids,
+                task_id=ctx.get("task_id", ""),
+                trace_id=ctx.get("trace_id"),
+                formation_reason="DeviceRouter._dispatch_cross_device_task",
+            )
+            _formation_dict = _formation_group.to_dict()
+        except Exception as _form_err:
+            logger.warning("Formation resolution failed: %s", _form_err)
 
-                # 自有命名空间:本层防的是"重启后同一完成通知被重投递",
-                # 用裸 task_id 会与 unified_result_ingress 的联合幂等回退键
-                # (消息缺 message_id 时同样落在裸 task_id)共用一个槽——
-                # ingress 刚在 first_accepted 后记录,这里紧接着的首次通知
-                # 就会被误判为跨重启重复,完成唤醒被吞。
-                _dr_durable_key = f"device_router_notify:{task_id}"
-                if check_result_idempotency(_dr_durable_key):
-                    # Already processed in a previous V2 process lifetime.
-                    # Populate the in-memory set so subsequent calls skip level-2.
-                    self._seen_task_result_ids.add(task_id)
-                    logger.info(
-                        "Duplicate task result ignored by device_router (durable store)",
-                        extra={
-                            "event": "task_result_duplicate_ignored",
-                            "task_id": task_id,
-                            "layer": "durable",
-                        },
-                    )
-                    return
-                record_result_idempotency(_dr_durable_key)
-            except Exception as _idem_exc:  # noqa: BLE001 — durable store must never block dispatch
-                logger.debug(
-                    "device_router: durable idempotency check skipped (non-fatal): %s",
-                    _idem_exc,
-                )
+        # Delegate to CrossDeviceCoordinator
+        cdc = get_cross_device_coordinator()
+        result = await cdc.execute_cross_device_task(
+            command,
+            {**ctx, **analysis, "_SUBSTRATE_CALLER_CTX_KEY": "device_router"},
+            _substrate_caller="device_router",
+        )
 
-            self._seen_task_result_ids.add(task_id)
+        # Attach formation descriptor
+        if _formation_dict and isinstance(result, dict):
+            result = dict(result)
+            result["formation"] = _formation_dict
 
-            self.task_results[task_id] = result
+        # PR-519 / GAP-517-007: surface result
+        surface_cross_device_result(
+            result if isinstance(result, dict) else {"success": bool(result)},
+            task_id=ctx.get("task_id", ""),
+            device_id=ctx.get("device_id", ""),
+            trace_id=ctx.get("trace_id"),
+            route_mode=ctx.get("route_mode", ""),
+            source_device_id=ctx.get("source_device_id", ""),
+        )
 
-            # Signal the waiting event if any
-            event = self._task_events.get(task_id)
-            if event:
-                event.set()
+        return result if isinstance(result, dict) else {"success": bool(result)}
 
-            if task_id in self.task_queue:
-                task = self.task_queue[task_id]
-                task["status"] = "completed" if result.get("success") else "failed"
-                task["result"] = result
-                task["completed_at"] = datetime.now().isoformat()
+    def get_device_count(self) -> int:
+        """Return the number of devices in the local operational cache."""
+        return len(self.devices)
 
-            # ── 并行闭环：secondary coverage — 若 result 携带并行字段则记录 ──
-            if result.get("group_id"):
-                try:
-                    from galaxy_gateway.orchestrator.parallel_tracker import record_parallel_fields
-
-                    parallel_payload = {
-                        **result,
-                        # derive status from success field when not explicitly set
-                        "status": result.get("status") or ("success" if result.get("success") else "failed"),
-                    }
-                    await record_parallel_fields(parallel_payload)
-                except Exception as _pt_err:
-                    logger.warning("parallel_tracker[device_router]: record failed: %s", _pt_err)
-
-            logger.info(f"✅ 任务结果已记录: {task_id}")
-
-        except Exception as e:
-            logger.error(f"❌ 处理任务结果失败: {e}")
-
-    @staticmethod
-    def aggregate_results(results: List[Dict]) -> Dict:
-        """Aggregate multi-device task results into a unified summary."""
-        success_count = sum(1 for r in results if r.get("success"))
-        failure_count = len(results) - success_count
-        results_by_device = {}
-        for r in results:
-            device_id = r.get("device_id", "unknown")
-            results_by_device[device_id] = r
-        return {
-            "total": len(results),
-            "success_count": success_count,
-            "failure_count": failure_count,
-            "overall_success": failure_count == 0 and len(results) > 0,
-            "results_by_device": results_by_device,
-        }
-
-    def get_device_status(self) -> Dict:
-        """获取所有设备状态（SSOT: UDM，本地 self.devices 补充遗留 WebSocket 连接信息）"""
-        udm = _get_udm()
-        if udm is not None:
-            try:
-                udm_devices = udm.list_devices()
-                # Build result from UDM as SSOT
-                udm_result = {
-                    "total_devices": len(udm_devices),
-                    "online_devices": sum(
-                        1
-                        for d in udm_devices
-                        if str(getattr(d.status, "value", d.status)).lower() in ("online", "busy")
-                    ),
-                    "devices": [
-                        {
-                            "device_id": d.device_id,
-                            "device_name": d.device_name,
-                            "device_type": (
-                                d.device_type.value if hasattr(d.device_type, "value") else str(d.device_type)
-                            ),
-                            "status": d.status.value if hasattr(d.status, "value") else str(d.status),
-                            "capabilities": list(d.capabilities or []),
-                            "source": "udm",
-                        }
-                        for d in udm_devices
-                    ],
-                }
-                # Merge in WebSocket connection info from local table (read-only supplement)
-                local_ids = {d["device_id"] for d in udm_result["devices"]}
-                for did, dev in self.devices.items():
-                    if did not in local_ids:
-                        udm_result["devices"].append(dev.to_dict())
-                        udm_result["total_devices"] += 1
-                        if dev.status == "online":
-                            udm_result["online_devices"] += 1
-                return udm_result
-            except Exception as _udm_err:
-                logger.warning("get_device_status: UDM read failed, falling back to local table — %s", _udm_err)
-
-        # Fallback: local connection table only
-        return {
-            "total_devices": len(self.devices),
-            "online_devices": len([d for d in self.devices.values() if d.status == "online"]),
-            "devices": [d.to_dict() for d in self.devices.values()],
-        }
+    def get_online_device_count(self) -> int:
+        """Return the number of devices with active WebSocket connections."""
+        return sum(1 for d in self.devices.values() if d.websocket is not None)
 
 
-# 全局设备路由器实例
+# Global singleton instance
 device_router = DeviceRouter()
