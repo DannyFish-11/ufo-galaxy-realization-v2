@@ -46,8 +46,8 @@ async def modality_matrix() -> Dict[str, Any]:
     B 档(MiniCPM-o:说原生)每个模态的 native/bridge/unavailable 并排呈现。
     """
     try:
-        from core.model_catalog import all_tiers, load_tier
         from core.modality_capability import asr_bridge_available, negotiate, tts_bridge_available
+        from core.model_catalog import all_tiers, load_tier
 
         active = load_tier()
         tiers = []

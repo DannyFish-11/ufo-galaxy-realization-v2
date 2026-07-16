@@ -66,9 +66,7 @@ def test_fallback_when_saved_runtime_becomes_unavailable(monkeypatch, tmp_path):
         cr.shutil,
         "which",
         lambda name: (
-            "/usr/bin/podman"
-            if name == "podman"
-            else ("/usr/bin/docker" if name == "docker-compose" else None)
+            "/usr/bin/podman" if name == "podman" else ("/usr/bin/docker" if name == "docker-compose" else None)
         ),
     )
     # Saved docker is unavailable, and only podman exists -> fallback to podman.

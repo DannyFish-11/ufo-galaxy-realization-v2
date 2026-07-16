@@ -304,16 +304,16 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     from core.routes import ai, channels, chat
     from core.routes import command as cmd_routes
     from core.routes import compat
+    from core.routes import computer_use as computer_use_route
     from core.routes import config as config_route
     from core.routes import cost, devices
     from core.routes import diagnostics as diagnostics_routes
     from core.routes import federation
     from core.routes import health as health_routes
     from core.routes import hybrid
+    from core.routes import modality as modality_route
     from core.routes import models as models_route
     from core.routes import monitoring, nodes
-    from core.routes import computer_use as computer_use_route
-    from core.routes import modality as modality_route
     from core.routes import perception as perception_routes
     from core.routes import relay
     from core.routes import remote_desktop as remote_desktop_routes

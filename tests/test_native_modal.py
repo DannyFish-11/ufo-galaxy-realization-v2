@@ -11,9 +11,24 @@ from __future__ import annotations
 
 import asyncio
 
+import pytest
+
+import core.model_catalog as mc
 import core.native_modal as nm
 import core.speech_output as so
 from core.native_modal import MiniCPMNativeBackend
+
+
+@pytest.fixture(autouse=True)
+def _isolate_tier_state(tmp_path, monkeypatch):
+    """把档位持久化重定向到 tmp + 清相关 env，避免 save_tier('B') 污染真实
+    runtime/model_state.json 与全套后续测试(GALAXY_MODEL_TIER/OLLAMA_MODEL)。"""
+    monkeypatch.setattr(mc, "_STATE_FILE", tmp_path / "runtime" / "model_state.json")
+    monkeypatch.setattr(mc, "_LEGACY_TIER_FILE", tmp_path / ".galaxy_tier")
+    monkeypatch.setattr(mc, "_LEGACY_MODEL_FILE", tmp_path / ".galaxy_model")
+    for k in ("GALAXY_MODEL_TIER", "OLLAMA_MODEL"):
+        monkeypatch.delenv(k, raising=False)
+    yield
 
 
 class _FakeBackend:

@@ -19,8 +19,8 @@ Podman 与 Docker 的 CLI 基本兼容:``podman info`` / ``podman compose`` (或
 
 from __future__ import annotations
 
-import logging
 import json
+import logging
 import os
 import shutil
 import subprocess
