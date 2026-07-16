@@ -29,7 +29,24 @@ from typing import Any, Dict, Optional
 logger = logging.getLogger("Galaxy.CollabMode")
 
 # 合法团队模式（与 TeamStrategy 对齐）
-VALID_TEAM_MODES = {"parallel", "specialized", "swarm", "critic", "pipeline"}
+VALID_TEAM_MODES = {"parallel", "specialized", "swarm", "critic", "pipeline", "moa"}
+
+
+def _moa_enabled() -> bool:
+    """MoA 分级升级是否启用(默认开;GALAXY_MOA_ENABLED=0 关)。"""
+    raw = os.environ.get("GALAXY_MOA_ENABLED")
+    if raw is None or raw.strip() == "":
+        return True
+    return raw.strip().lower() in ("1", "true", "yes", "on")
+
+
+def _moa_threshold() -> float:
+    """升级到 MoA 的复杂度门槛(默认 0.85——只有真正的重任务才付多层延迟/成本)。"""
+    try:
+        return float(os.environ.get("GALAXY_MOA_COMPLEXITY", "0.85"))
+    except (TypeError, ValueError):
+        return 0.85
+
 
 # 关键词 → 模式（按优先级顺序判定，命中即返回）
 # 质量敏感 → critic（做/审分离）
@@ -115,6 +132,25 @@ _SPLIT_KW = [
     "几个部分",
     "分工",
 ]
+# 极致深度/严谨 → moa（多层协作:本地扇出→逐层精炼→强模型聚合;延迟与成本最高,
+# 只在用户明确要"深/全/严"或复杂度极高时启用）
+_MOA_KW = [
+    "深入研究",
+    "深度研究",
+    "深度分析",
+    "彻底分析",
+    "全面分析",
+    "仔细想",
+    "深思熟虑",
+    "多角度论证",
+    "多方论证",
+    "反复推敲",
+    "严谨论证",
+    "deep dive",
+    "deep research",
+    "研究报告",
+    "详尽调研",
+]
 
 
 def _norm_mode(mode: Optional[str]) -> Optional[str]:
@@ -150,7 +186,10 @@ def select_collaboration_mode(
     def _hit(keywords) -> bool:
         return any(k.lower() in msg for k in keywords)
 
-    # ── 2. 关键词信号（质量 > 多步 > 创意 > 分头）──────────────────────────
+    # ── 2. 关键词信号（深度 > 质量 > 多步 > 创意 > 分头）───────────────────
+    # MoA 关键词优先级最高:用户明确要"深/全/严"就是在主动要求付出多层延迟换质量。
+    if _moa_enabled() and _hit(_MOA_KW):
+        return {"mode": "moa", "reason": "深度/严谨关键词 → MoA 多层协作", "source": "keyword"}
     if _hit(_CRITIC_KW):
         return {"mode": "critic", "reason": "质量敏感关键词 → 做/审分离", "source": "keyword"}
     if _hit(_PIPELINE_KW):
@@ -168,7 +207,9 @@ def select_collaboration_mode(
     if targets and len(targets) > 5:
         return {"mode": "swarm", "reason": "目标>5 → 群体", "source": "keyword"}
 
-    # ── 4. 复杂度兜底 ────────────────────────────────────────────────────
+    # ── 4. 复杂度兜底(分级:极高→MoA > 高→critic > 中→specialized > 低→parallel)──
+    if _moa_enabled() and complexity_score >= _moa_threshold():
+        return {"mode": "moa", "reason": f"极高复杂度({complexity_score:.2f}) → MoA 多层协作", "source": "complexity"}
     if complexity_score >= 0.7:
         # 高复杂度默认走 critic：用大模型审小模型，兼顾质量与成本
         return {"mode": "critic", "reason": f"高复杂度({complexity_score:.2f}) → 做/审分离", "source": "complexity"}

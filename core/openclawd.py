@@ -639,6 +639,38 @@ _MEMORY_BUILTIN_TOOLS: List[Dict] = [
 # PR-HITL: agent-callable "ask the human" tool.  Lets the LLM decide, during its
 # own reasoning, to ask a human a question and block for the answer via the real
 # decision loop (request_human_decision → device notification → human_input).
+# computer use 闭环:让模型能把"多步桌面 GUI 操作"整体委托给内部自主循环
+# (core.computer_use_loop:感知→规划→安全门→执行→再感知),而不是自己在
+# ReAct 里一步步盲调 node__ 工具(每步之间拿不到新鲜屏幕)。
+_COMPUTER_USE_BUILTIN_TOOLS: List[Dict] = [
+    {
+        "type": "function",
+        "function": {
+            "name": "computer_use__run",
+            "description": (
+                "在本机桌面上自主完成一个多步 GUI 操作任务(打开应用、点击、输入、"
+                "拖拽等)。内部闭环:每步都重新截取屏幕→视觉模型决策→执行→再看结果,"
+                "直到完成或明确失败。适用于'帮我打开X并做Y'这类需要实际操作界面的任务;"
+                "纯问答/纯信息检索不要用。返回 {success, stop_reason, message, steps}。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "instruction": {
+                        "type": "string",
+                        "description": "要完成的桌面操作任务(自然语言,越具体越好)",
+                    },
+                    "max_steps": {
+                        "type": "integer",
+                        "description": "步数上限(默认 15,最大 50)",
+                    },
+                },
+                "required": ["instruction"],
+            },
+        },
+    },
+]
+
 _ASK_HUMAN_BUILTIN_TOOLS: List[Dict] = [
     {
         "type": "function",
@@ -6913,6 +6945,15 @@ class OpenClawd:
         # ── Agent-callable human-decision tool (PR-HITL) ─────────────────────
         tools.extend(_ASK_HUMAN_BUILTIN_TOOLS)
 
+        # ── computer use 闭环工具(仅开关开启时暴露,避免广告死工具) ────────
+        try:
+            from core.computer_use_loop import computer_use_enabled
+
+            if computer_use_enabled():
+                tools.extend(_COMPUTER_USE_BUILTIN_TOOLS)
+        except Exception as _cu_exc:  # noqa: BLE001
+            logger.debug("computer_use__run 工具收集跳过: %s", _cu_exc)
+
         # ── 记忆召回工具(JIT 检索;仅在统一记忆启用时暴露,避免广告死工具) ──
         try:
             from core.memory import get_unified_memory
@@ -6949,6 +6990,7 @@ class OpenClawd:
             "engineer__",
             "resource__",
             "ask_human__",
+            "computer_use__",
         )
         _is_inline_only = tool_name.startswith(_INLINE_ONLY_PREFIXES)
 
@@ -7181,6 +7223,11 @@ class OpenClawd:
                 # Agent-callable human-decision tool (PR-HITL): ask_human__request
                 action = tool_name[len("ask_human__") :]
                 return await self._dispatch_ask_human_tool(action, arguments)
+
+            elif tool_name.startswith("computer_use__"):
+                # computer use 自主闭环: computer_use__run
+                action = tool_name[len("computer_use__") :]
+                return await self._dispatch_computer_use_tool(action, arguments)
 
             else:
                 return {"success": False, "error": f"未知工具前缀: {tool_name}"}
@@ -7707,6 +7754,30 @@ class OpenClawd:
                 }
         except Exception as exc:
             logger.warning("_dispatch_resource_tool '%s' failed: %s", action, exc)
+            return {"success": False, "error": str(exc)}
+
+    async def _dispatch_computer_use_tool(self, action: str, arguments: dict) -> dict:
+        """Dispatch ``computer_use__*`` — 把多步桌面 GUI 任务整体委托给内部自主闭环。
+
+        闭环本体在 core.computer_use_loop(感知→规划→安全门→执行→再感知);
+        这里只做参数校验与结果透传。失败/中止都如实返回 stop_reason,不吞。
+        """
+        if action != "run":
+            return {"success": False, "error": f"Unknown computer_use action: {action!r} (valid: run)"}
+        instruction = str(arguments.get("instruction") or "").strip()
+        if not instruction:
+            return {"success": False, "error": "computer_use__run requires 'instruction'"}
+        try:
+            max_steps = int(arguments.get("max_steps") or 0) or None
+        except (TypeError, ValueError):
+            max_steps = None
+        try:
+            from core.computer_use_loop import run_computer_use_task
+
+            result = await run_computer_use_task(instruction, max_steps=max_steps)
+            return {"success": bool(result.get("success")), "result": result}
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("_dispatch_computer_use_tool failed: %s", exc)
             return {"success": False, "error": str(exc)}
 
     async def _dispatch_ask_human_tool(self, action: str, arguments: dict) -> dict:

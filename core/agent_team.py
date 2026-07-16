@@ -9,6 +9,10 @@ Agent Team 协作引擎
 4. CRITIC (做/审分离) — executor(本地小模型)产出 → critic(开源大模型)审核，
    不通过则打回重做，最多 N 轮。"大小模型配合"的核心落地。
 5. PIPELINE (流水线) — A→B→C 顺序交接，前一步产出为后一步输入，各步绑定合适的脑。
+6. MOA (Mixture of Agents 多层协作) — 本地 proposer 层扇出(persona 差异保多样性,
+   零 token 成本) → 后续层每个成员读【上一层全部候选】纠错/精炼 → 独立 aggregator
+   (最强云端模型,整次 MoA 云端只花这一次)聚合终稿。分级升级见
+   core.collaboration_mode_policy(深度关键词或复杂度 ≥ GALAXY_MOA_COMPLEXITY)。
 
 孪生模型集成:
 - 每个 Team 成员自动创建数字孪生（默认 LOOSE 耦合）
@@ -61,6 +65,7 @@ class TeamStrategy(Enum):
     SWARM = "swarm"
     CRITIC = "critic"  # 做/审分离
     PIPELINE = "pipeline"  # 流水线交接
+    MOA = "moa"  # Mixture of Agents 多层协作(见 _execute_moa)
 
 
 class TeamStatus(Enum):
@@ -313,6 +318,8 @@ class AgentTeam:
                 result = await self._execute_critic(task, context)
             elif self.strategy == TeamStrategy.PIPELINE:
                 result = await self._execute_pipeline(task, context)
+            elif self.strategy == TeamStrategy.MOA:
+                result = await self._execute_moa(task, context)
             else:
                 raise ValueError(f"未知策略: {self.strategy}")
 
@@ -784,6 +791,147 @@ class AgentTeam:
             synthesized=prev_output or "流水线未产出结果。",
         )
 
+    # ─────── 策略 6: MOA (Mixture of Agents 多层协作) ───────
+
+    async def _execute_moa(self, task: str, context: Optional[Dict]) -> TeamResult:
+        """MoA 多层协作:proposer 层扇出 → 精炼层(读全部前层产出) → 聚合器终稿。
+
+        与 PARALLEL(单层并行+综合)的区别:MoA 是【多层】的——第 2 层起,每个
+        成员的输入都带着【上一层全部候选产出】,在其基础上纠错/补全/精炼,信息
+        逐层提升;最后由独立的 aggregator 成员(建库时绑定最强云端模型,见
+        TeamManager._create_members 的 MOA 分支)做终稿,而不是交给路由器随机选。
+
+        成本结构(本地+云端组合的关键):proposer/精炼层成员建库时优先绑定本地
+        provider(ollama/hf_local,零 token 成本,靠 persona 差异保证多样性),
+        云端只在 aggregator 这【一次】调用上花钱。
+
+        层数由 GALAXY_MOA_LAYERS 控制(默认 2 = proposer→聚合;3 = 中间加一轮
+        精炼)。任何一层全灭则携带已有产出提前进入聚合,绝不空手抛错。
+        """
+        import os as _os
+
+        soul_pfx = _soul_prefix((context or {}).get("soul", ""))
+        try:
+            n_layers = max(2, min(4, int(_os.environ.get("GALAXY_MOA_LAYERS", "2"))))
+        except (TypeError, ValueError):
+            n_layers = 2
+
+        proposers = [m for m in self.members if not m.role_in_team.startswith("aggregator")]
+        aggregator = self._member_by_role("aggregator")
+        if not proposers:
+            return TeamResult(
+                team_id=self.team_id,
+                strategy="moa",
+                task=task,
+                member_results=[],
+                synthesized="无可用 proposer 成员",
+            )
+
+        member_results: List[MemberResult] = []
+        prev_outputs: List[MemberResult] = []
+
+        def _candidates_text(results: List[MemberResult]) -> str:
+            return "\n\n".join(
+                f"--- 候选 {i+1} · {r.member.agent_name} ({r.member.provider}:{r.member.model}) ---\n{r.result}"
+                for i, r in enumerate(results)
+            )
+
+        # ── 第 1..N-1 层:proposer 扇出 / 精炼(每层都并行,层间串行)──────
+        for layer in range(1, n_layers):
+
+            async def _call(member: TeamMember, _layer=layer) -> MemberResult:
+                if _layer == 1:
+                    sys = soul_pfx + (
+                        f"你是 {member.agent_name}({member.role_in_team})。"
+                        f"请以你的独特视角【独立】完成任务,给出完整回答。"
+                    )
+                    user = task
+                else:
+                    sys = soul_pfx + (
+                        f"你是 {member.agent_name}({member.role_in_team}),现在是多层协作的第 {_layer} 层。"
+                        f"请仔细阅读上一层全部候选回答:指出其中的共识、冲突与错误,"
+                        f"在其基础上产出一份【更准确、更完整】的改进版回答(直接给终稿,不要点评格式)。"
+                    )
+                    user = f"原始任务:\n{task}\n\n上一层候选回答:\n{_candidates_text(prev_outputs)}"
+                msgs = [{"role": "system", "content": sys}, {"role": "user", "content": user}]
+                if _layer == 1 and context:
+                    msgs[0]["content"] += f"\n\n上下文:\n{json.dumps(context, ensure_ascii=False)}"
+                try:
+                    return await asyncio.wait_for(self._call_member_with_tools(member, msgs), timeout=90.0)
+                except asyncio.TimeoutError:
+                    return MemberResult(
+                        member=member, result="", latency_ms=90000, success=False, error="成员执行超时 (90s)"
+                    )
+
+            raw = await asyncio.gather(*[_call(m) for m in proposers], return_exceptions=True)
+            layer_results: List[MemberResult] = []
+            for i, r in enumerate(raw):
+                if isinstance(r, Exception):
+                    layer_results.append(MemberResult(member=proposers[i], result="", success=False, error=str(r)))
+                else:
+                    layer_results.append(r)
+            # 标注层号(用副本,不改共享 TeamMember)
+            for r in layer_results:
+                r.member = _dc_replace(r.member, role_in_team=f"L{layer}:{r.member.role_in_team}")
+            member_results.extend(layer_results)
+
+            successful = [r for r in layer_results if r.success and r.result]
+            if successful:
+                prev_outputs = successful
+            elif not prev_outputs:
+                # 第一层就全灭 → 没有任何候选可聚合
+                return TeamResult(
+                    team_id=self.team_id,
+                    strategy="moa",
+                    task=task,
+                    member_results=member_results,
+                    synthesized="所有 proposer 执行失败,无法产出。",
+                )
+            # 某一层全灭但已有上层产出 → 携带上层产出直接进聚合
+
+        # ── 最后一层:aggregator 终稿 ─────────────────────────────────────
+        if len(prev_outputs) == 1 and aggregator is None:
+            synthesized = prev_outputs[0].result
+        elif aggregator is not None:
+            agg_msgs = [
+                {
+                    "role": "system",
+                    "content": soul_pfx
+                    + (
+                        f"你是 {aggregator.agent_name}(最终聚合器)。综合全部候选回答的正确部分、"
+                        f"化解冲突、剔除错误,产出一份最全面准确的最终回答(直接给终稿)。"
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": f"原始任务:\n{task}\n\n候选回答:\n{_candidates_text(prev_outputs)}",
+                },
+            ]
+            try:
+                agg_res = await asyncio.wait_for(self._call_member_with_tools(aggregator, agg_msgs), timeout=120.0)
+            except asyncio.TimeoutError:
+                agg_res = MemberResult(
+                    member=aggregator, result="", latency_ms=120000, success=False, error="聚合器超时 (120s)"
+                )
+            agg_res.member = _dc_replace(aggregator, role_in_team=f"L{n_layers}:aggregator")
+            member_results.append(agg_res)
+            # 聚合器失败 → 退回既有综合逻辑兜底,绝不因最后一步丢掉全部产出
+            synthesized = (
+                agg_res.result
+                if agg_res.success and agg_res.result
+                else await self._synthesize_results(task, prev_outputs, "综合以上各方回答，给出最全面准确的回答。")
+            )
+        else:
+            synthesized = await self._synthesize_results(task, prev_outputs, "综合以上各方回答，给出最全面准确的回答。")
+
+        return TeamResult(
+            team_id=self.team_id,
+            strategy="moa",
+            task=task,
+            member_results=member_results,
+            synthesized=synthesized,
+        )
+
     def _member_by_role(self, role: str) -> Optional[TeamMember]:
         """按角色名（前缀匹配）取成员。"""
         for m in self.members:
@@ -1072,7 +1220,103 @@ class TeamManager:
                     )
                 )
 
+        elif strategy == TeamStrategy.MOA:
+            members.extend(self._create_moa_members(providers, complexity_score, _task_type, _pick_model))
+
         return members
+
+    def _create_moa_members(self, providers: list, complexity_score: float, task_type, pick_model) -> List[TeamMember]:
+        """MoA 成员池:本地 proposer(免费扇出) + 最强云端 aggregator(一次花钱)。
+
+        成本结构是 MoA 落地的关键——proposer/精炼层的扇出全部绑定【本地】
+        provider(ollama/hf_local,source_type=local/hf_local,零 token 成本),
+        多样性靠 persona 差异(同一个本地模型也能通过不同视角产出不同候选);
+        本地不可用时才用最便宜的云端补足。aggregator 独立一个成员,绑定可用的
+        【最强云端】模型(偏好序 anthropic>openai>deepseek>google>qwen),
+        没有云端时退回本地——整次 MoA 云端只花这一次调用。
+        """
+        moa_members: List[TeamMember] = []
+        import os as _os
+
+        try:
+            n_proposers = max(2, min(5, int(_os.environ.get("GALAXY_MOA_PROPOSERS", "3"))))
+        except (TypeError, ValueError):
+            n_proposers = 3
+
+        def _usable(prov_name: str) -> bool:
+            return self._router.adapters.get(prov_name) is not None
+
+        local = [
+            (n, c) for n, c in providers if getattr(c, "source_type", "api") in ("local", "hf_local") and _usable(n)
+        ]
+        cloud = [
+            (n, c) for n, c in providers if getattr(c, "source_type", "api") not in ("local", "hf_local") and _usable(n)
+        ]
+
+        # proposer 池:本地优先,persona 差异保多样性;本地为空才用云端补
+        personas = [
+            ("严谨分析者", "从严谨、系统、注重事实与逻辑的角度作答"),
+            ("创造性思考者", "从发散、创新、寻找非常规切入点的角度作答"),
+            ("批判性审视者", "从挑毛病、找边界条件与反例的角度作答"),
+            ("务实执行者", "从可落地、可操作、成本效率的角度作答"),
+            ("领域研究员", "从领域最佳实践与已知先例的角度作答"),
+        ]
+        pool = local or cloud
+        for i in range(n_proposers):
+            if not pool:
+                break
+            prov_name, prov_cfg = pool[i % len(pool)]
+            p_name, p_role = personas[i % len(personas)]
+            agent_id = f"agent_{uuid.uuid4().hex[:8]}"
+            if self._factory:
+                try:
+                    agent = self._factory.create_from_template("research")
+                    agent_id = agent.id
+                except Exception as exc:
+                    logger.warning("Exception suppressed: %s", exc)
+            moa_members.append(
+                TeamMember(
+                    agent_id=agent_id,
+                    agent_name=f"{p_name}-{prov_name}",
+                    provider=prov_name,
+                    model=pick_model(prov_name, prov_cfg),
+                    role_in_team=f"proposer:{p_role}",
+                    template="research",
+                )
+            )
+
+        # aggregator:最强云端优先(偏好序),无云端退回本地
+        _agg_pref = ["anthropic", "openai", "deepseek", "google", "qwen", "moonshot", "zhipu"]
+        agg_pair = None
+        cloud_by_name = dict(cloud)
+        for name in _agg_pref:
+            if name in cloud_by_name:
+                agg_pair = (name, cloud_by_name[name])
+                break
+        if agg_pair is None and cloud:
+            agg_pair = cloud[0]
+        if agg_pair is None and local:
+            agg_pair = local[0]
+        if agg_pair is not None:
+            prov_name, prov_cfg = agg_pair
+            agent_id = f"agent_{uuid.uuid4().hex[:8]}"
+            if self._factory:
+                try:
+                    agent = self._factory.create_from_template("coordinator")
+                    agent_id = agent.id
+                except Exception as exc:
+                    logger.warning("Exception suppressed: %s", exc)
+            moa_members.append(
+                TeamMember(
+                    agent_id=agent_id,
+                    agent_name=f"聚合器-{prov_name}",
+                    provider=prov_name,
+                    model=pick_model(prov_name, prov_cfg),
+                    role_in_team="aggregator",
+                    template="coordinator",
+                )
+            )
+        return moa_members
 
     def _make_role_member(
         self,
