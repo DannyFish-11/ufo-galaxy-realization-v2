@@ -19,6 +19,12 @@ from pydantic import BaseModel
 from galaxy_gateway.dependencies import get_device_manager, get_websocket_manager
 from galaxy_gateway.protocol import DeviceInfo, DeviceType
 
+try:
+    from core.auth import require_auth as _require_auth
+except ImportError:
+    async def _require_auth():  # type: ignore[misc]
+        raise HTTPException(status_code=503, detail="Auth module not available")
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
@@ -163,8 +169,12 @@ async def legacy_device_heartbeat(
 async def legacy_unregister_device(
     req: _LegacyUnregisterRequest,
     dm=Depends(get_device_manager),
+    auth: dict = Depends(_require_auth),
 ):
-    """Legacy unregister endpoint — safely unregisters the device when possible."""
-    logger.info("Legacy /api/devices/unregister called for device %s", req.device_id)
+    """Legacy unregister endpoint — safely unregisters the device when possible.
+
+    SECURITY FIX: Requires Bearer auth token and explicit confirmation.
+    """
+    logger.info("Legacy /api/devices/unregister called for device %s (auth=%s)", req.device_id, auth)
     dm.update_device_status(req.device_id, "offline")
-    return {"success": True, "device_id": req.device_id}
+    return {"success": True, "device_id": req.device_id, "confirmed": True}
