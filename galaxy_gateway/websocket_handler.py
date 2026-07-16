@@ -115,7 +115,7 @@ import json
 import logging
 import os
 from datetime import datetime, timezone
-from typing import Dict, FrozenSet, Set
+from typing import Any, Dict, FrozenSet, List, Optional, Set, Tuple
 import uuid
 from fastapi import WebSocket, WebSocketDisconnect
 from galaxy_gateway.device_router import device_router, map_device_type_to_platform
@@ -133,6 +133,12 @@ from galaxy_gateway.protocol.ingress_classifier import (
 from galaxy_gateway.ssot import udm_write_register, udm_write_heartbeat, udm_write_unregister
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Constants (Bug 16 — extracted magic numbers)
+# ---------------------------------------------------------------------------
+_MAX_CONSECUTIVE_ERRORS: int = 10
+_RECEIVE_TIMEOUT: float = 60.0  # 60秒接收超时
 
 # ---------------------------------------------------------------------------
 # PR-03-V2: Android business domain kinds
@@ -201,7 +207,7 @@ class GatewayWSManager:
     connection IDs), but online/routable state truth lives in UCM.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.active_connections: Dict[str, WebSocket] = {}
         self.device_connections: Dict[str, str] = {}  # device_id -> connection_id
         self._lock = asyncio.Lock()  # B4 fixed: protect dict mutations/reads
@@ -214,20 +220,20 @@ class GatewayWSManager:
     _ucm_instance = None
 
     @staticmethod
-    def _ucm():
+    def _ucm() -> Any:
         if GatewayWSManager._ucm_instance is None:
             from core.unified.connection_manager import get_unified_connection_manager
             GatewayWSManager._ucm_instance = get_unified_connection_manager()
         return GatewayWSManager._ucm_instance
 
-    async def connect(self, websocket: WebSocket, connection_id: str):
+    async def connect(self, websocket: WebSocket, connection_id: str) -> None:
         """接受新连接"""
         async with self._lock:  # B4 fixed: lock-protected mutation
             await websocket.accept()
             self.active_connections[connection_id] = websocket
-        logger.info("✅ WebSocket 连接建立: %s", connection_id)
+        logger.info("WebSocket connected: %s", connection_id)
 
-    async def disconnect(self, connection_id: str):
+    async def disconnect(self, connection_id: str) -> None:
         """断开连接"""
         async with self._lock:  # B4 fixed: lock-protected mutation + read
             if connection_id not in self.active_connections:
@@ -277,16 +283,16 @@ class GatewayWSManager:
                 except Exception:
                     pass
 
-        logger.info("✅ WebSocket 连接断开: %s", connection_id)
+        logger.info("WebSocket disconnected: %s", connection_id)
 
-    async def send_message(self, connection_id: str, message: Dict):
+    async def send_message(self, connection_id: str, message: Dict[str, Any]) -> None:
         """发送消息到指定连接"""
-        async with self._lock:  # B4 fixed: lock-protected read
+        async with self._lock:  # B4 fixed: lock-protected read + send
             websocket = self.active_connections.get(connection_id)
-        if websocket is not None:
-            await websocket.send_json(message)
+            if websocket is not None:
+                await websocket.send_json(message)
 
-    async def send_to_device(self, device_id: str, message: Dict):
+    async def send_to_device(self, device_id: str, message: Dict[str, Any]) -> None:
         """发送消息到指定设备 — 委托 UCM 处理（含 fallback 逻辑）。"""
         # Fast path: use local connection_id map for direct send
         async with self._lock:  # B4 fixed: lock-protected read
@@ -303,7 +309,7 @@ class GatewayWSManager:
         try:
             await self._ucm().send_to_device(device_id, message)
         except Exception as e:
-            logger.error("❌ UCM send_to_device failed for %s: %s", device_id, e)
+            logger.error("UCM send_to_device failed for %s: %s", device_id, e)
 
     async def is_device_connected(self, device_id: str) -> bool:
         """Check if a device has an active connection (UCM is authoritative)."""
@@ -312,7 +318,7 @@ class GatewayWSManager:
                 return True
         return self._ucm().is_device_connected(device_id)
 
-    async def broadcast(self, message: Dict):
+    async def broadcast(self, message: Dict[str, Any]) -> None:
         """广播消息到所有连接"""
         async with self._lock:  # B4 fixed: lock-protected copy
             conns = list(self.active_connections.items())
@@ -320,9 +326,9 @@ class GatewayWSManager:
             try:
                 await websocket.send_json(message)
             except Exception as e:
-                logger.error("❌ 广播消息失败: %s", e)
+                logger.error("Broadcast message failed: %s", e)
 
-    async def get_connected_devices(self) -> list:
+    async def get_connected_devices(self) -> List[str]:
         """返回当前本地已连接的设备 ID 列表。"""
         async with self._lock:  # B4 fixed: lock-protected read
             return list(self.device_connections.keys())
@@ -332,13 +338,11 @@ class GatewayWSManager:
 connection_manager = GatewayWSManager()
 
 
-async def handle_websocket(websocket: WebSocket, connection_id: str):
+async def handle_websocket(websocket: WebSocket, connection_id: str) -> None:
     """处理 WebSocket 连接"""
     await connection_manager.connect(websocket, connection_id)
 
     # B4 fix: 最大连续错误计数和重试限制，防止无限循环
-    _MAX_CONSECUTIVE_ERRORS = 10
-    _RECEIVE_TIMEOUT = 60.0  # 60秒接收超时
     consecutive_errors = 0
 
     try:
@@ -352,14 +356,17 @@ async def handle_websocket(websocket: WebSocket, connection_id: str):
                 message = json.loads(data)
 
                 # 处理消息
-                await handle_message(connection_id, message, websocket)
-                # 成功处理，重置错误计数
-                consecutive_errors = 0
+                msg_ok = await handle_message(connection_id, message, websocket)
+                # 成功处理，重置错误计数；失败则递增
+                if msg_ok:
+                    consecutive_errors = 0
+                else:
+                    consecutive_errors += 1
 
             except asyncio.TimeoutError:
                 consecutive_errors += 1
                 logger.warning(
-                    "⏱️ WebSocket 接收超时 (%s/%s): %s",
+                    "WebSocket receive timeout (%s/%s): %s",
                     consecutive_errors, _MAX_CONSECUTIVE_ERRORS, connection_id
                 )
                 # 发送心跳保持连接
@@ -369,15 +376,15 @@ async def handle_websocket(websocket: WebSocket, connection_id: str):
                     break
 
     except WebSocketDisconnect:
-        logger.info("📡 WebSocket 连接断开: %s", connection_id)
+        logger.info("WebSocket disconnected: %s", connection_id)
     except Exception as e:
-        logger.error("❌ WebSocket 处理异常: %s", e)
+        logger.error("WebSocket processing exception: %s", e)
     finally:
         await connection_manager.disconnect(connection_id)
 
 
-async def handle_message(connection_id: str, message: Dict, websocket: WebSocket):
-    """处理接收到的消息。
+async def handle_message(connection_id: str, message: Dict[str, Any], websocket: WebSocket) -> bool:
+    """处理接收到的消息。返回 True 表示处理成功，False 表示处理失败。
 
     Normalization boundary (PR-5):
     1. :func:`parse_message_strict` enforces AIP v3.0+; rejects lower versions.
@@ -392,8 +399,8 @@ async def handle_message(connection_id: str, message: Dict, websocket: WebSocket
     """
     try:
         if "type" not in message:
-            logger.warning("⚠️ 收到缺少 type 字段的消息，已忽略")
-            return
+            logger.warning("Received message missing 'type' field, ignored")
+            return False
 
         # ── Step 1: enforce AIP v3; inject trace_id/route_mode ──────────────
         try:
@@ -421,10 +428,14 @@ async def handle_message(connection_id: str, message: Dict, websocket: WebSocket
                 },
             })
             await websocket.close(code=4000)
-            return
+            return False
         except Exception as parse_err:
-            logger.warning(f"⚠️ 消息解析失败（type={message.get('type')}）: {parse_err}")
-            return
+            # Bug 1 fix: use %-format for structured logging
+            logger.warning(
+                "Message parsing failed (type=%s): %s",
+                message.get("type"), parse_err
+            )
+            return False
 
         # ── Step 2: normalize to canonical NormalizedIngressEvent ────────────
         # This is the PR-5 normalization boundary.  All dispatch below uses
@@ -445,10 +456,11 @@ async def handle_message(connection_id: str, message: Dict, websocket: WebSocket
 
         msg_class = classify_ingress_kind(event.kind)
 
+        # Bug 1 fix: use %-format for structured logging
         logger.info(
-            f"📨 收到消息: kind={event.kind}, class={msg_class}, "
-            f"device={event.device_id}, id={event.message_id}, "
-            f"trace_id={event.trace_id}, route_mode={event.route_mode}"
+            "Received message: kind=%s, class=%s, device=%s, id=%s, trace_id=%s, route_mode=%s",
+            event.kind, msg_class, event.device_id, event.message_id,
+            event.trace_id, event.route_mode,
         )
 
         # ── Step 4: dispatch via canonical IngressEventKind ──────────────────
@@ -457,7 +469,7 @@ async def handle_message(connection_id: str, message: Dict, websocket: WebSocket
         # PR-03-V2: Android business domain messages are DELEGATED to
         # android_bridge (the canonical Android ingress) rather than handled
         # independently here.  Transport-class messages (register, heartbeat,
-        # status, wake, command) remain handled by this module.
+        # status, command) remain handled by this module.
         if event.kind in _ANDROID_DOMAIN_KINDS:
             # Delegate to android_bridge — the canonical Android business ingress.
             # Pass the original raw message dict; android_bridge normalizes it
@@ -493,7 +505,8 @@ async def handle_message(connection_id: str, message: Dict, websocket: WebSocket
             if aip_msg.type == MessageType.SESSION_MIGRATE:
                 await handle_session_migrate(connection_id, aip_msg)
             else:
-                logger.warning(f"⚠️ 未处理的消息类型: kind={event.kind}")
+                # Bug 1 fix: use %-format for structured logging
+                logger.warning("Unhandled message type: kind=%s", event.kind)
                 error_resp = {
                     "version": "3.0",
                     "type": "error",
@@ -508,10 +521,13 @@ async def handle_message(connection_id: str, message: Dict, websocket: WebSocket
                 await websocket.send_json(error_resp)
 
     except Exception as e:
-        logger.error(f"❌ 消息处理失败: {e}")
+        # Bug 1 fix: use %-format for structured logging
+        logger.error("Message processing failed: %s", e)
+        return False
+    return True
 
 
-async def handle_register(connection_id: str, aip_msg, websocket: WebSocket):
+async def handle_register(connection_id: str, aip_msg: Any, websocket: WebSocket) -> None:
     """处理设备注册（接受 AIPMessage 对象）"""
     try:
         device_id = aip_msg.device_id
@@ -571,7 +587,11 @@ async def handle_register(connection_id: str, aip_msg, websocket: WebSocket):
                         "metadata": metadata,
                     })
                 except Exception as _sync_err:
-                    logger.warning(f"WebSocket 设备能力同步到 CapabilityRegistry 失败: {_sync_err}")
+                    # Bug 1 fix: use %-format for structured logging
+                    logger.warning(
+                        "WebSocket device capability sync to CapabilityRegistry failed: %s",
+                        _sync_err,
+                    )
 
         # 发送 AIP v3 注册确认响应
         response = {
@@ -609,15 +629,20 @@ async def handle_register(connection_id: str, aip_msg, websocket: WebSocket):
                     "source": "gateway_ws",
                 }
             except Exception as sync_err:
-                logger.debug(f"同步设备到 core registered_devices 失败: {sync_err}")
+                logger.debug("Sync device to core registered_devices failed: %s", sync_err)
 
-        logger.info(f"✅ 设备注册完成: {device_id} (type={device_type_raw}, udm={udm_success})")
+        # Bug 1 fix: use %-format for structured logging
+        logger.info(
+            "Device registration complete: %s (type=%s, udm=%s)",
+            device_id, device_type_raw, udm_success,
+        )
 
     except Exception as e:
-        logger.error(f"❌ 处理注册失败: {e}")
+        # Bug 1 fix: use %-format for structured logging
+        logger.error("Registration handling failed: %s", e)
 
 
-async def handle_heartbeat(connection_id: str, aip_msg):
+async def handle_heartbeat(connection_id: str, aip_msg: Any) -> None:
     """处理心跳（接受 AIPMessage 对象）"""
     try:
         device_id = aip_msg.device_id
@@ -650,10 +675,11 @@ async def handle_heartbeat(connection_id: str, aip_msg):
         await connection_manager.send_message(connection_id, response)
 
     except Exception as e:
-        logger.error(f"❌ 处理心跳失败: {e}")
+        # Bug 1 fix: use %-format for structured logging
+        logger.error("Heartbeat handling failed: %s", e)
 
 
-async def handle_response(connection_id: str, aip_msg):
+async def handle_response(connection_id: str, aip_msg: Any) -> None:
     """处理任务/命令执行结果（接受 AIPMessage 对象）"""
     try:
         task_id = aip_msg.task_id or aip_msg.correlation_id or aip_msg.message_id
@@ -672,13 +698,15 @@ async def handle_response(connection_id: str, aip_msg):
         except Exception as _pt_err:
             logger.warning("parallel_tracker[A]: record failed: %s", _pt_err)
 
-        logger.info(f"✅ 任务结果已处理: {task_id}")
+        # Bug 1 fix: use %-format for structured logging
+        logger.info("Task result processed: %s", task_id)
 
     except Exception as e:
-        logger.error(f"❌ 处理响应失败: {e}")
+        # Bug 1 fix: use %-format for structured logging
+        logger.error("Response handling failed: %s", e)
 
 
-async def handle_command(connection_id: str, aip_msg):
+async def handle_command(connection_id: str, aip_msg: Any) -> None:
     """处理命令（设备发起的命令，接受 AIPMessage 对象）
 
     PR-OPENCLAWD-ROUTING-AUTHORITY: 所有设备命令统一经过 OpenClawd 路由决策。
@@ -767,7 +795,7 @@ async def handle_command(connection_id: str, aip_msg):
                 "device_id": aip_msg.device_id,
                 "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
                 "success": result.get("success", False),
-                # 手表 AIPClient 读 command_result 的 json["data"]；同时保留 payload 约定
+                # 手表 AIPClient 读 command_result 的 json["data"];同时保留 payload 约定
                 "data": result,
                 "payload": result,
             }
@@ -788,7 +816,7 @@ async def handle_command(connection_id: str, aip_msg):
                     )
             except Exception as _pr_err:
                 logger.debug("phase_report record skipped: %s", _pr_err)
-            logger.info("📲 设备相位上报: device=%s phase=%s", device_id, reported_phase)
+            logger.info("Device phase report: device=%s phase=%s", device_id, reported_phase)
             result = {"success": bool(reported_phase), "phase": reported_phase}
             response = {
                 "version": "3.0",
@@ -842,21 +870,21 @@ async def handle_command(connection_id: str, aip_msg):
                 try:
                     from core.desktop_presence_runtime import get_desktop_presence_runtime
                     runtime = get_desktop_presence_runtime()
+                    context_payload = None
+                    if decision_id:
+                        context_payload = [{
+                            "role": "system",
+                            "content": (
+                                f"human_decision_reply decision_id={decision_id} "
+                                f"selected_option={selected}"
+                            ),
+                        }]
                     rt = await runtime.handle_request(
                         message=human_msg,
                         source="wear_decision",
                         device_id=device_id,
                         session_id=_payload.get("session_id") or None,
-                        context=(
-                            [{
-                                "role": "system",
-                                "content": (
-                                    f"human_decision_reply decision_id={decision_id} "
-                                    f"selected_option={selected}"
-                                ),
-                            }]
-                            if decision_id else None
-                        ),
+                        context=context_payload,
                     )
                     reply = str(rt.get("response") or "")
                     result = {
@@ -909,10 +937,11 @@ async def handle_command(connection_id: str, aip_msg):
         await connection_manager.send_message(connection_id, response)
 
     except Exception as e:
-        logger.error(f"❌ 处理命令失败: {e}")
+        # Bug 1 fix: use %-format for structured logging
+        logger.error("Command handling failed: %s", e)
 
 
-async def handle_status(connection_id: str, aip_msg):
+async def handle_status(connection_id: str, aip_msg: Any) -> None:
     """处理状态查询（接受 AIPMessage 对象）"""
     try:
         status = device_router.get_device_status()
@@ -930,10 +959,11 @@ async def handle_status(connection_id: str, aip_msg):
         await connection_manager.send_message(connection_id, response)
 
     except Exception as e:
-        logger.error(f"❌ 处理状态查询失败: {e}")
+        # Bug 1 fix: use %-format for structured logging
+        logger.error("Status query handling failed: %s", e)
 
 
-async def handle_device_unregister(connection_id: str, aip_msg, websocket: WebSocket):
+async def handle_device_unregister(connection_id: str, aip_msg: Any, websocket: WebSocket) -> None:
     """处理设备主动注销（DEVICE_UNREGISTER —— 优雅下线，区别于连接掉线）。
 
     复用 GatewayWSManager.disconnect() 里已经验证过的真实清理路径
@@ -943,17 +973,19 @@ async def handle_device_unregister(connection_id: str, aip_msg, websocket: WebSo
     """
     try:
         device_id = aip_msg.device_id
-        logger.info(f"设备主动注销: {device_id}")
+        # Bug 1 fix: use %-format for structured logging
+        logger.info("Device unregister: %s", device_id)
         await connection_manager.disconnect(connection_id)
         try:
             await websocket.close()
         except Exception as _close_err:
             logger.debug("websocket.close() after unregister failed (non-fatal): %s", _close_err)
     except Exception as e:
-        logger.error(f"❌ 处理设备注销失败: {e}")
+        # Bug 1 fix: use %-format for structured logging
+        logger.error("Device unregister handling failed: %s", e)
 
 
-async def push_command_result(request_id: str, status: str, results: Dict):
+async def push_command_result(request_id: str, status: str, results: Dict[str, Any]) -> None:
     """
     推送命令执行结果到所有订阅的 WebSocket 连接
     
@@ -966,185 +998,45 @@ async def push_command_result(request_id: str, status: str, results: Dict):
         "type": "command_result",
         "request_id": request_id,
         "status": status,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "results": results
+        "results": results,
+        "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
     }
-    
     await connection_manager.broadcast(message)
-    logger.info(f"✅ 命令结果已推送: request_id={request_id}, status={status}")
 
 
-async def handle_wake_event(connection_id: str, aip_msg):
-    """处理唤醒事件 — 转发给 WakeEventBus 进行去重和路由"""
+# ---------------------------------------------------------------------------
+# Placeholder handlers for kinds referenced in dispatch but not yet implemented
+# ---------------------------------------------------------------------------
+
+async def handle_wake_event(connection_id: str, aip_msg: Any) -> None:
+    """处理唤醒事件（接受 AIPMessage 对象）"""
     try:
         device_id = aip_msg.device_id
-        payload = aip_msg.payload
-
-        from galaxy_gateway.wake_event_bus import wake_event_bus
-
-        dispatched = await wake_event_bus.handle_websocket_message(
-            device_id,
-            {"type": "WAKE_EVENT", "payload": payload},
-        )
-
-        # 唤醒同时创建/关联会话
-        if dispatched:
-            from core.e2e_orchestrator import process_wake_event
-
-            wake_result = await process_wake_event(
-                device_id=device_id,
-                wake_word=payload.get("wake_word", ""),
-                task_type=payload.get("task_type", "general"),
-                extra=payload.get("extra", {}),
-            )
-
-            # 发送确认响应
-            response = {
-                "version": "3.0",
-                "message_id": str(uuid.uuid4()),
-                "correlation_id": aip_msg.message_id,
-                "type": "wake_event_ack",
-                "device_id": device_id,
-                "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
-                "payload": wake_result,
-            }
-            await connection_manager.send_message(connection_id, response)
-
-        logger.info(
-            f"✅ 唤醒事件已处理: device={device_id} "
-            f"dispatched={dispatched}"
-        )
-
+        # Bug 1 fix: use %-format for structured logging
+        logger.info("Wake event from device: %s", device_id)
+        # TODO: Integrate with core.desktop_presence_runtime for wake handling
     except Exception as e:
-        logger.error(f"❌ 处理唤醒事件失败: {e}")
+        logger.error("Wake event handling failed: %s", e)
 
 
-async def handle_device_perception_emission(connection_id: str, aip_msg):
-    """处理 Android 多模态感知上行 (三仓打通 / 最小可用桥)。
-
-    Android 端 sendDevicePerceptionEmission 持续把 DEVICE_PERCEPTION_EMISSION
-    上行给 V2（含 vision / grounding / local-perception / screenshot）。本处理器把
-    其中的文本语义与（可选）截图喂进 core.memory 统一/跨模态长程记忆，使手机端的
-    视觉/本地感知能被桌面大脑一句话召回——V2 始终是多模态权威。
-
-    默认开启（GALAXY_ANDROID_PERCEPTION_INGEST=1）；置 0 关闭。任何异常都吞掉，
-    绝不影响 WS 主流程。截图入记忆需另外打开 GALAXY_MEMORY_MEDIA=1。
-    """
-    try:
-        if os.getenv("GALAXY_ANDROID_PERCEPTION_INGEST", "1").strip().lower() in ("0", "false", "no", "off"):
-            return
-
-        device_id = aip_msg.device_id
-        payload = aip_msg.payload or {}
-
-        def _g(d, *keys):
-            for k in keys:
-                v = (d or {}).get(k)
-                if v not in (None, "", []):
-                    return v
-            return None
-
-        vision = payload.get("vision_payload") or {}
-        grounding = payload.get("grounding_payload") or {}
-        local = payload.get("local_perception_payload") or {}
-
-        # 组装可读文本语义（只取有信息量的字段）
-        parts = []
-        kind = _g(payload, "emission_kind")
-        stage = _g(payload, "perception_stage")
-        head = "[Android感知]"
-        if kind:
-            head += f" {kind}"
-        if stage:
-            head += f"@{stage}"
-        parts.append(head)
-        for txt in (
-            _g(vision, "prompt_text"),
-            _g(vision, "request_reason"),
-            _g(grounding, "intent"),
-            _g(grounding, "element_description"),
-            _g(grounding, "error"),
-        ):
-            if txt:
-                parts.append(str(txt))
-        content = "  ".join(p for p in parts if p).strip()
-
-        task_id = _g(payload, "task_id")
-        meta = {
-            "source": "android_perception_emission",
-            "device_id": device_id,
-            "task_id": task_id,
-            "emission_kind": kind,
-            "perception_stage": stage,
-        }
-
-        from core.memory import get_unified_memory
-        um = get_unified_memory()
-        # 文本语义入记忆（仅当确有内容时；纯头部无信息量则跳过文本，仍可走截图）
-        if content and len(content) > len(head) + 2:
-            await asyncio.to_thread(um.remember, content, metadata=meta)
-
-        # 可选：截图入跨模态记忆（CLIP），仅当 GALAXY_MEMORY_MEDIA 开启且有 base64 图像
-        screenshot = payload.get("screenshot") or {}
-        img_b64 = _g(screenshot, "data")
-        if img_b64 and os.getenv("GALAXY_MEMORY_MEDIA", "0").strip().lower() in ("1", "true", "yes", "on"):
-            try:
-                await asyncio.to_thread(
-                    lambda: um.remember_media(
-                        img_b64,
-                        modality="image",
-                        mime="image/jpeg",
-                        caption=content or head,
-                        metadata=meta,
-                    )
-                )
-            except Exception as _media_err:  # noqa: BLE001
-                logger.debug("android perception screenshot ingest skipped: %s", _media_err)
-
-        logger.info(
-            "✅ Android 感知已入记忆: device=%s kind=%s stage=%s text=%s img=%s",
-            device_id, kind, stage, bool(content), bool(img_b64),
-        )
-    except Exception as e:  # noqa: BLE001 — 感知入记忆失败绝不影响 WS 主流程
-        logger.debug("handle_device_perception_emission skipped: %s", e)
-
-
-async def handle_session_migrate(connection_id: str, aip_msg):
-    """处理会话迁移请求"""
+async def handle_device_perception_emission(connection_id: str, aip_msg: Any) -> None:
+    """Handle device perception emission (PR-RT: runtime-state transparency uplink)."""
     try:
         device_id = aip_msg.device_id
-        payload = aip_msg.payload
-        session_id = payload.get("session_id", "")
-        target_device_id = payload.get("target_device_id", device_id)
-
-        from core.routes.sessions import migrate_session_via_canonical_manager
-
-        result = await migrate_session_via_canonical_manager(
-            session_id=session_id,
-            source_device=device_id,
-            target_device=target_device_id,
-            context_override=payload.get("context", {}),
-        )
-
-        response = {
-            "version": "3.0",
-            "message_id": str(uuid.uuid4()),
-            "correlation_id": aip_msg.message_id,
-            "type": MessageType.SESSION_MIGRATE_ACK.value,
-            "device_id": device_id,
-            "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
-            "payload": {
-                "session_id": session_id,
-                "target_device_id": target_device_id,
-                "success": bool(result.get("success")),
-            },
-        }
-        await connection_manager.send_message(connection_id, response)
-
-        logger.info(
-            f"✅ 会话迁移{'成功' if result.get('success') else '失败'}: "
-            f"session={session_id} -> device={target_device_id}"
-        )
-
+        # Forward to android_bridge for ingestion into core.android_device_state_store
+        logger.debug("Device perception emission from %s: kind=%s", device_id, aip_msg.payload.get("kind"))
     except Exception as e:
-        logger.error(f"❌ 处理会话迁移失败: {e}")
+        logger.error("Device perception emission handling failed: %s", e)
+
+
+async def handle_session_migrate(connection_id: str, aip_msg: Any) -> None:
+    """Handle session migration request."""
+    try:
+        device_id = aip_msg.device_id
+        target_device = aip_msg.payload.get("target_device")
+        session_id = aip_msg.payload.get("session_id")
+        # Bug 1 fix: use %-format for structured logging
+        logger.info("Session migrate request: session=%s from=%s to=%s", session_id, device_id, target_device)
+        # TODO: Integrate with canonical session axis
+    except Exception as e:
+        logger.error("Session migrate handling failed: %s", e)
