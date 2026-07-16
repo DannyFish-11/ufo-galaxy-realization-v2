@@ -20,12 +20,14 @@ Podman 与 Docker 的 CLI 基本兼容:``podman info`` / ``podman compose`` (或
 from __future__ import annotations
 
 import logging
+import json
 import os
 import shutil
 import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger("Galaxy.ContainerRuntime")
 
@@ -68,18 +70,60 @@ def _env_choice() -> str:
 def load_choice() -> str:
     try:
         if _CHOICE_FILE.exists():
-            return _CHOICE_FILE.read_text(encoding="utf-8").strip().lower()
+            raw = _CHOICE_FILE.read_text(encoding="utf-8").strip()
+            if not raw:
+                return ""
+            try:
+                data = json.loads(raw)
+                if isinstance(data, dict):
+                    rt = str(data.get("runtime", "")).strip().lower()
+                    return rt if rt in _RUNTIMES else ""
+            except json.JSONDecodeError:
+                pass
+            rt = raw.lower()
+            return rt if rt in _RUNTIMES else ""
     except Exception:  # noqa: BLE001
         pass
     return ""
 
 
-def save_choice(rt: str) -> None:
+def load_choice_record() -> Dict[str, Any]:
+    """读取持久化的运行时选择记录（兼容旧版纯文本）。"""
+    try:
+        if not _CHOICE_FILE.exists():
+            return {}
+        raw = _CHOICE_FILE.read_text(encoding="utf-8").strip()
+        if not raw:
+            return {}
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError:
+            data = {"runtime": raw.lower(), "source": "legacy", "selected_at": None}
+        if not isinstance(data, dict):
+            return {}
+        rt = str(data.get("runtime", "")).strip().lower()
+        if rt not in _RUNTIMES:
+            return {}
+        return {
+            "runtime": rt,
+            "source": str(data.get("source", "unknown") or "unknown"),
+            "selected_at": data.get("selected_at"),
+        }
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def save_choice(rt: str, source: str = "unknown") -> None:
     """持久化选择并写 GALAXY_CONTAINER_RUNTIME,让后续启动无需再问。"""
     if rt not in _RUNTIMES:
         return
     try:
-        _CHOICE_FILE.write_text(rt, encoding="utf-8")
+        payload = {
+            "runtime": rt,
+            "source": source,
+            "selected_at": datetime.now(timezone.utc).isoformat(),
+        }
+        _CHOICE_FILE.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
     except Exception:  # noqa: BLE001
         pass
     os.environ["GALAXY_CONTAINER_RUNTIME"] = rt
@@ -388,13 +432,15 @@ def resolve_runtime(interactive: bool = True) -> str:
     """
     env = _env_choice()
     if env in _RUNTIMES and shutil.which(env):
-        save_choice(env)
+        save_choice(env, source="env")
         return env
 
     saved = load_choice()
     if saved in _RUNTIMES and shutil.which(saved):
         os.environ["GALAXY_CONTAINER_RUNTIME"] = saved
         return saved
+    if saved in _RUNTIMES and not shutil.which(saved):
+        logger.warning("已保存运行时 %s 当前不可用，尝试回退到其它可用运行时", saved)
 
     avail = available_runtimes()
     if not avail:
@@ -403,12 +449,27 @@ def resolve_runtime(interactive: bool = True) -> str:
             return interactive_install_guide()
         return ""
     if len(avail) == 1:
-        save_choice(avail[0])
+        save_choice(avail[0], source="single-installed")
         return avail[0]
 
-    chosen = interactive_select(avail) if interactive else avail[0]
+    if not interactive:
+        # 非交互场景：禁止按数组顺序静默默认。若之前有已保存但当前不可用的选择，回退到推荐
+        # 运行时（有明确策略且可记录来源）；否则要求用户先显式选择（通过 setup / GUI）。
+        # English: in headless mode, we refuse order-based silent defaulting when both runtimes
+        # are available and no explicit saved choice exists.
+        if saved in _RUNTIMES and saved not in avail:
+            fallback = _RECOMMENDED if _RECOMMENDED in avail else avail[0]
+            save_choice(fallback, source="fallback-saved-unavailable")
+            logger.warning("已从不可用的 %s 回退到 %s", saved, fallback)
+            return fallback
+        logger.warning(
+            "检测到 Docker 与 Podman 同时可用，但无显式已保存选择；非交互启动拒绝静默默认，请先完成显式选择"
+        )
+        return ""
+
+    chosen = interactive_select(avail)
     if chosen:
-        save_choice(chosen)
+        save_choice(chosen, source="interactive-select")
     return chosen
 
 
@@ -474,3 +535,131 @@ def compose_base(rt: str) -> Optional[List[str]]:
 
 def display_name(rt: str) -> str:
     return rt.capitalize() if rt in _RUNTIMES else "容器运行时"
+
+
+def _run_runtime_cmd(cmd: List[str], timeout: int = 10) -> Dict[str, Any]:
+    try:
+        p = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout,
+        )
+        return {
+            "ok": p.returncode == 0,
+            "returncode": p.returncode,
+            "stdout": (p.stdout or "").strip(),
+            "stderr": (p.stderr or "").strip(),
+        }
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "returncode": -1, "stdout": "", "stderr": "timeout"}
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "returncode": -2, "stdout": "", "stderr": str(exc)}
+
+
+def inspect_single_runtime(rt: str) -> Dict[str, Any]:
+    path = detect_runtimes().get(rt)
+    installed = bool(path)
+    version = _run_runtime_cmd([path, "--version"], timeout=8) if installed else None
+    info = _run_runtime_cmd([path, "info"], timeout=12) if installed else None
+    compose = compose_base(rt) if installed else None
+    compose_probe = _run_runtime_cmd(compose + ["version"], timeout=8) if compose else None
+    machine = None
+    if rt == "podman" and installed:
+        machine = _run_runtime_cmd([path, "machine", "list", "--format", "json"], timeout=8)
+    return {
+        "runtime": rt,
+        "installed": installed,
+        "path": path,
+        "version": (version or {}).get("stdout", ""),
+        "daemon_ready": bool((info or {}).get("ok")),
+        "daemon_error": None if (info or {}).get("ok") else (info or {}).get("stderr", ""),
+        "compose_command": compose or [],
+        "compose_ready": bool((compose_probe or {}).get("ok")),
+        "compose_error": None if (compose_probe or {}).get("ok") else (compose_probe or {}).get("stderr", ""),
+        "podman_machine_status_raw": (machine or {}).get("stdout", ""),
+    }
+
+
+def inspect_runtime_state() -> Dict[str, Any]:
+    """Serializable runtime snapshot used by launcher/Electron.
+
+    Includes install/version/daemon/compose readiness for both Docker and Podman,
+    plus resolved selection source (env/saved/single-installed/none).
+    """
+    det = detect_runtimes()
+    saved_record = load_choice_record()
+    saved = saved_record.get("runtime") if saved_record else ""
+    env = _env_choice()
+    avail = available_runtimes()
+    runtimes: Dict[str, Any] = {}
+    for rt in _RUNTIMES:
+        path = det.get(rt)
+        installed = bool(path)
+        version = _run_cmd([path, "--version"], timeout=8) if installed else None
+        info = _run_cmd([path, "info"], timeout=12) if installed else None
+        compose = compose_base(rt) if installed else None
+        compose_probe = _run_cmd(compose + ["version"], timeout=8) if compose else None
+        machine = None
+        if rt == "podman" and installed:
+            machine = _run_cmd([path, "machine", "list", "--format", "json"], timeout=8)
+        runtimes[rt] = {
+            "runtime": rt,
+            "installed": installed,
+            "path": path,
+            "version": (version or {}).get("stdout", ""),
+            "daemon_ready": bool((info or {}).get("ok")),
+            "daemon_error": None if (info or {}).get("ok") else (info or {}).get("stderr", ""),
+            "compose_command": compose or [],
+            "compose_ready": bool((compose_probe or {}).get("ok")),
+            "compose_error": None if (compose_probe or {}).get("ok") else (compose_probe or {}).get("stderr", ""),
+            "podman_machine_status_raw": (machine or {}).get("stdout", ""),
+        }
+
+    selected = ""
+    selected_source = "none"
+    if env in avail:
+        selected = env
+        selected_source = "env"
+    elif saved in avail:
+        selected = saved
+        selected_source = "saved"
+    elif len(avail) == 1:
+        selected = avail[0]
+        selected_source = "single-installed"
+
+    return {
+        "ok": True,
+        "env_choice": env if env in _RUNTIMES else "",
+        "saved_choice": saved if saved in _RUNTIMES else "",
+        "saved_source": (saved_record or {}).get("source", ""),
+        "saved_selected_at": (saved_record or {}).get("selected_at"),
+        "available": avail,
+        "selected": selected,
+        "selected_source": selected_source,
+        "requires_explicit_choice": len(avail) > 1 and not selected,
+        "runtimes": runtimes,
+    }
+
+
+def set_runtime_choice(rt: str, source: str = "manual") -> Dict[str, Any]:
+    rt = (rt or "").strip().lower()
+    if rt not in _RUNTIMES:
+        return {"ok": False, "error": f"invalid runtime: {rt}"}
+    if not shutil.which(rt):
+        return {"ok": False, "error": f"{rt} not installed"}
+    save_choice(rt, source=source)
+    return {"ok": True, "runtime": rt, "state": inspect_runtime_state()}
+
+
+def test_runtime(rt: str) -> Dict[str, Any]:
+    rt = (rt or "").strip().lower()
+    if rt not in _RUNTIMES:
+        return {"ok": False, "error": f"invalid runtime: {rt}"}
+    if not shutil.which(rt):
+        return {"ok": False, "error": f"{rt} not installed"}
+    state = inspect_single_runtime(rt)
+    ok = bool(state.get("daemon_ready")) and bool(state.get("compose_ready"))
+    return {"ok": ok, "runtime": rt, "details": state}

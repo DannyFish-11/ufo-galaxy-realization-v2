@@ -33,7 +33,37 @@ interface GalaxyAPI {
   // 明细)据此失效自己的缓存重新拉一次,而不是要求用户手动切走再切回来。
   onConfigReady?: (callback: (kind: 'config' | 'settings') => void) => () => void;
   saveConfig: () => Promise<{ success: boolean }>;
+  /** 读取 Docker/Podman 安装/就绪/compose 与已选择状态。 */
+  getRuntimeStatus?: () => Promise<RuntimeStatusPayload>;
+  /** 对指定容器运行时执行可用性测试（引擎+compose）。 */
+  testRuntime?: (runtime: 'docker' | 'podman') => Promise<{ ok: boolean; error?: string; details?: RuntimeItem }>;
+  /** 保存并应用运行时选择。 */
+  saveRuntime?: (runtime: 'docker' | 'podman') => Promise<{ ok: boolean; error?: string }>;
+  /** 获取当前网关连接状态（用于离线提示/重试按钮）。 */
+  getBackendStatus?: () => Promise<{ ok: boolean; healthy: boolean; baseUrl: string; managed: boolean; lastError?: string }>;
+  /** 尝试从主进程拉起本地后端网关。 */
+  startBackend?: () => Promise<{ ok: boolean; error?: string; baseUrl: string }>;
 }
+
+interface RuntimeItem {
+  installed: boolean;
+  version: string;
+  daemon_ready: boolean;
+  daemon_error?: string | null;
+  compose_ready: boolean;
+  compose_error?: string | null;
+  compose_command?: string[];
+}
+interface RuntimeStatusPayload {
+  ok: boolean;
+  selected?: string;
+  selected_source?: string;
+  saved_choice?: string;
+  saved_source?: string;
+  requires_explicit_choice?: boolean;
+  runtimes?: Record<'docker' | 'podman', RuntimeItem>;
+}
+const DEFAULT_BACKEND_BASE = 'http://localhost:9000';
 
 // 浏览器预览兜底(无 galaxyAPI 时):直连后端完整明细端点。
 // 真 bug 修复:此前这里是裸 fetch('/api/config/all')——相对路径解析到【页面自身
@@ -358,6 +388,10 @@ export default function SettingsTab() {
   const [csecret, setCsecret] = useState('');
   // 节点启停方式:子进程(默认,轻)或 容器(跑进所选 Docker/Podman,首次 build 慢)。
   const [nodeMode, setNodeMode] = useState<'subprocess' | 'container'>('subprocess');
+  const [runtimeStatus, setRuntimeStatus] = useState<RuntimeStatusPayload | null>(null);
+  const [runtimeSelection, setRuntimeSelection] = useState<'docker' | 'podman'>('docker');
+  const [runtimeBusy, setRuntimeBusy] = useState(false);
+  const [backendStatus, setBackendStatus] = useState<{ healthy: boolean; baseUrl: string; managed: boolean; lastError?: string } | null>(null);
 
   // ── Load config via shared cache ─────────────────────────────────
 
@@ -403,6 +437,40 @@ export default function SettingsTab() {
 
   const refreshConnectors = useCallback(
     () => fetchConnectors().then((c) => { if (c) setConnectors(c); }), []);
+
+  const refreshRuntimeStatus = useCallback(async () => {
+    try {
+      if (!window.galaxyAPI?.getRuntimeStatus) return;
+      const state = await window.galaxyAPI.getRuntimeStatus();
+      setRuntimeStatus(state);
+      const selected = (state?.selected || state?.saved_choice || '') as 'docker' | 'podman';
+      if (selected === 'docker' || selected === 'podman') setRuntimeSelection(selected);
+    } catch (e) {
+      setToast(`运行时检测失败：${e instanceof Error ? e.message : ''}`);
+    }
+  }, []);
+
+  const refreshBackendStatus = useCallback(async () => {
+    try {
+      if (!window.galaxyAPI?.getBackendStatus) return;
+      const st = await window.galaxyAPI.getBackendStatus();
+      if (st?.ok) setBackendStatus({
+        healthy: Boolean(st.healthy),
+        baseUrl: st.baseUrl,
+        managed: Boolean(st.managed),
+        lastError: st.lastError || '',
+      });
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshRuntimeStatus();
+    refreshBackendStatus();
+    const t = setInterval(refreshBackendStatus, 10000);
+    return () => clearInterval(t);
+  }, [refreshRuntimeStatus, refreshBackendStatus]);
 
   // ── Listen for backend config updates ────────────────────────────
 
@@ -501,6 +569,51 @@ export default function SettingsTab() {
       showToast(`${svc} 凭据保存出错：${e instanceof Error ? e.message : ''}`);
     }
   }, [cid, csecret, refreshConnectors, showToast]);
+
+  const testSelectedRuntime = useCallback(async () => {
+    if (!window.galaxyAPI?.testRuntime) return;
+    setRuntimeBusy(true);
+    try {
+      const res = await window.galaxyAPI.testRuntime(runtimeSelection);
+      if (res?.ok) showToast(`${runtimeSelection} 运行时检测通过`);
+      else showToast(`运行时检测失败：${res?.error || '未知错误'}`);
+      await refreshRuntimeStatus();
+    } catch (e) {
+      showToast(`运行时检测异常：${e instanceof Error ? e.message : ''}`);
+    } finally {
+      setRuntimeBusy(false);
+    }
+  }, [runtimeSelection, refreshRuntimeStatus, showToast]);
+
+  const saveSelectedRuntime = useCallback(async () => {
+    if (!window.galaxyAPI?.saveRuntime) return;
+    setRuntimeBusy(true);
+    try {
+      const res = await window.galaxyAPI.saveRuntime(runtimeSelection);
+      if (res?.ok) showToast(`已保存并应用运行时：${runtimeSelection}`);
+      else showToast(`保存运行时失败：${res?.error || '未知错误'}`);
+      await refreshRuntimeStatus();
+    } catch (e) {
+      showToast(`保存运行时异常：${e instanceof Error ? e.message : ''}`);
+    } finally {
+      setRuntimeBusy(false);
+    }
+  }, [runtimeSelection, refreshRuntimeStatus, showToast]);
+
+  const startBackendFromPanel = useCallback(async () => {
+    if (!window.galaxyAPI?.startBackend) return;
+    setRuntimeBusy(true);
+    try {
+      const res = await window.galaxyAPI.startBackend();
+      if (res?.ok) showToast('网关已就绪');
+      else showToast(`网关启动失败：${res?.error || '未知错误'}`);
+      await refreshBackendStatus();
+    } catch (e) {
+      showToast(`网关启动异常：${e instanceof Error ? e.message : ''}`);
+    } finally {
+      setRuntimeBusy(false);
+    }
+  }, [refreshBackendStatus, showToast]);
 
   // ── Value change handler ─────────────────────────────────────────
 
@@ -833,6 +946,83 @@ export default function SettingsTab() {
     );
   };
 
+  const renderRuntimeManager = () => {
+    if (!runtimeStatus) return null;
+    const runtimes = runtimeStatus.runtimes || ({} as Record<'docker' | 'podman', RuntimeItem>);
+    const options: Array<'docker' | 'podman'> = ['docker', 'podman'];
+    const selected = runtimeSelection;
+    const noneInstalled = options.every((rt) => !runtimes[rt]?.installed);
+    return (
+      <div className="runtime-manager">
+        <div className="runtime-manager-head">
+          <span className="runtime-manager-title">容器运行时</span>
+          <span className="runtime-manager-sub">
+            已选：{runtimeStatus.selected || '未选择'} · 来源：{runtimeStatus.selected_source || 'none'}
+          </span>
+        </div>
+        <div className="runtime-grid">
+          {options.map((rt) => {
+            const s = runtimes[rt];
+            const installed = Boolean(s?.installed);
+            return (
+              <label key={rt} className={`runtime-card ${selected === rt ? 'active' : ''} ${installed ? '' : 'disabled'}`}>
+                <div className="runtime-card-row">
+                  <input
+                    type="radio"
+                    name="runtime-choice"
+                    checked={selected === rt}
+                    disabled={!installed}
+                    onChange={() => setRuntimeSelection(rt)}
+                  />
+                  <span className="runtime-name">{rt}</span>
+                  <span className={`runtime-pill ${installed ? 'ok' : 'off'}`}>{installed ? '已安装' : '未安装'}</span>
+                </div>
+                <div className="runtime-meta">版本：{s?.version || '—'}</div>
+                <div className="runtime-meta">
+                  引擎：{s?.daemon_ready ? '就绪' : '未就绪'}{s?.daemon_error ? ` · ${s.daemon_error}` : ''}
+                </div>
+                <div className="runtime-meta">
+                  Compose：{s?.compose_ready ? '可用' : '不可用'}{s?.compose_error ? ` · ${s.compose_error}` : ''}
+                </div>
+              </label>
+            );
+          })}
+        </div>
+        {runtimeStatus.requires_explicit_choice && (
+          <div className="runtime-warning">检测到 Docker 与 Podman 同时可用，请先显式保存选择后再启动容器模式。</div>
+        )}
+        {noneInstalled && (
+          <div className="runtime-warning">未检测到 Docker/Podman。请先安装其一，再点击“检测/刷新”。</div>
+        )}
+        <div className="runtime-actions">
+          <button className="connector-btn cfg" type="button" onClick={refreshRuntimeStatus} disabled={runtimeBusy}>
+            检测/刷新
+          </button>
+          <button className="connector-btn on" type="button" onClick={testSelectedRuntime} disabled={runtimeBusy || !runtimes[selected]?.installed}>
+            测试运行时
+          </button>
+          <button className="connector-btn on" type="button" onClick={saveSelectedRuntime} disabled={runtimeBusy || !runtimes[selected]?.installed}>
+            保存并应用
+          </button>
+        </div>
+        <div className="runtime-gateway">
+          <span className={`runtime-pill ${backendStatus?.healthy ? 'ok' : 'off'}`}>
+            网关 {backendStatus?.healthy ? '已连接' : '离线'}
+          </span>
+          <span className="runtime-meta runtime-gateway-url">{backendStatus?.baseUrl || DEFAULT_BACKEND_BASE}</span>
+          {!backendStatus?.healthy && (
+            <button className="connector-btn cfg" type="button" onClick={startBackendFromPanel} disabled={runtimeBusy}>
+              重试启动网关
+            </button>
+          )}
+          {!backendStatus?.healthy && backendStatus?.lastError && (
+            <div className="runtime-warning">{backendStatus.lastError}</div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   // ── 节点名单台(端口与节点页):125 个节点,按类型分组、编号排序、显示状态 ──
   const renderNodeRoster = () => {
     if (!roster) {
@@ -987,6 +1177,7 @@ export default function SettingsTab() {
             </span>
             {loading && <span className="settings-sync-dot" title="正在后台同步…" />}
           </h2>
+          {activeCategory === 'ports' && renderRuntimeManager()}
           {activeCategory === 'ports' && renderConnectors()}
           {activeCategory === 'ports' && renderNodeRoster()}
           <div className="settings-list">{renderCategoryItems()}</div>

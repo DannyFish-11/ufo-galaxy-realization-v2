@@ -72,10 +72,18 @@ call venv\Scripts\activate.bat
 
 :: 检查配置文件
 if not exist ".env" (
-    echo   [!]  配置文件                       .env 不存在
-    echo   [i]  提示                           请复制 .env.example 为 .env 并填写 API 密钥
-    pause
-    exit /b 1
+    echo   [i]  首次启动                       未检测到 .env，进入配置向导...
+    python main.py --setup
+    if errorlevel 1 (
+        echo   [X]  配置向导执行失败，请检查日志后重试
+        pause
+        exit /b 1
+    )
+    if not exist ".env" (
+        echo   [X]  配置未完成                  .env 仍不存在，已取消启动
+        pause
+        exit /b 1
+    )
 )
 
 :: ══════════════════════════════════════════════════════════════

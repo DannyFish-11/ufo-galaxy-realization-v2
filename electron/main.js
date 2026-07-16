@@ -1,5 +1,7 @@
 const { app, BrowserWindow, globalShortcut, ipcMain, dialog, screen } = require('electron');
 const path = require('path');
+const fs = require('fs');
+const { spawn, spawnSync } = require('child_process');
 
 // 应用图标：Windows 用多尺寸 .ico（任务栏/窗口才正确显示），其余平台用 .png。
 const ICON_PATH = path.join(
@@ -74,7 +76,27 @@ process.on('unhandledRejection', (reason) => {
 const IPC_HTTP_PORT = parseInt(process.env.GALAXY_IPC_PORT || '9231', 10);
 // 配置 API 由统一网关 (unified_launcher / core.routes) 提供，监听 PORT(默认 9000)，
 // 而非本进程的 IPC 接收端。此前误指向 9229 导致配置读写永远 404。
-const GATEWAY_PORT = parseInt(process.env.GALAXY_GATEWAY_PORT || process.env.PORT || '9000', 10);
+const PROJECT_ROOT = path.resolve(__dirname, '..');
+function resolveGatewayPort() {
+    const fromEnv = process.env.GALAXY_GATEWAY_PORT || process.env.PORT || '';
+    const envPort = parseInt(fromEnv, 10);
+    if (Number.isFinite(envPort) && envPort > 0) return envPort;
+    try {
+        const ep = path.join(PROJECT_ROOT, 'runtime', 'entrypoint.json');
+        if (fs.existsSync(ep)) {
+            const raw = fs.readFileSync(ep, 'utf-8');
+            const data = JSON.parse(raw);
+            const base = String(data?.api_base || '');
+            const m = base.match(/:(\d+)(?:\/|$)/);
+            if (m) {
+                const p = parseInt(m[1], 10);
+                if (Number.isFinite(p) && p > 0) return p;
+            }
+        }
+    } catch (_e) {}
+    return 9000;
+}
+const GATEWAY_PORT = resolveGatewayPort();
 const GATEWAY_BASE = `http://localhost:${GATEWAY_PORT}`;
 let ipcHttpServer = null;
 
@@ -138,6 +160,108 @@ async function resolvePerceptionConsent() {
 let mainWindow = null;
 let panelWindow = null;
 let isPanelVisible = false;
+let managedBackendProcess = null;
+let managedBackendOwned = false;
+let backendStartPromise = null;
+let backendLastError = '';
+let backendLastLogTail = '';
+
+const BACKEND_HEALTH_TIMEOUT_MS = 2500;
+const BACKEND_START_TIMEOUT_MS = 90000;
+const BACKEND_POLL_INTERVAL_MS = 1000;
+const BACKEND_START_ARGS = ['--backend', '--skip-check', '--skip-model-download', '--no-interactive'];
+// Base64 payload cap: 15,000,000 bytes (~15 MB decimal), to avoid oversized frame pressure.
+const MAX_PERCEPTION_PAYLOAD_SIZE = 15_000_000;
+const PERCEPTION_CB_FAIL_THRESHOLD = 3;
+const PERCEPTION_CB_BASE_DELAY_MS = 2_000;
+const PERCEPTION_CB_MAX_DELAY_MS = 60_000;
+
+function _pythonExec() {
+    return process.env.GALAXY_PYTHON_EXECUTABLE || process.env.PYTHON || (process.platform === 'win32' ? 'python' : 'python3');
+}
+
+async function _gatewayHealthy(timeoutMs = BACKEND_HEALTH_TIMEOUT_MS) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    try {
+        const r = await fetch(`${GATEWAY_BASE}/health`, { signal: ctrl.signal });
+        return r.ok;
+    } catch (_e) {
+        return false;
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
+async function ensureGatewayOnline(autoStart = true) {
+    const alreadyHealthy = await _gatewayHealthy();
+    if (alreadyHealthy) {
+        backendLastError = '';
+        return { ok: true, reused: true };
+    }
+    if (!autoStart) {
+        backendLastError = `网关不可达: ${GATEWAY_BASE}`;
+        return { ok: false, error: backendLastError };
+    }
+    if (backendStartPromise) return backendStartPromise;
+    backendStartPromise = (async () => {
+        const nowHealthy = await _gatewayHealthy();
+        if (nowHealthy) return { ok: true, reused: true };
+        const py = _pythonExec();
+        const script = path.join(PROJECT_ROOT, 'launch_desktop.py');
+        const args = [script, ...BACKEND_START_ARGS];
+        const env = { ...process.env, GALAXY_GATEWAY_PORT: String(GATEWAY_PORT), PORT: String(GATEWAY_PORT) };
+        try {
+            const proc = spawn(py, args, { cwd: PROJECT_ROOT, env, stdio: ['ignore', 'pipe', 'pipe'] });
+            managedBackendProcess = proc;
+            managedBackendOwned = true;
+            backendLastError = '';
+            const _collect = (chunk) => {
+                const line = String(chunk || '');
+                backendLastLogTail = (backendLastLogTail + line).slice(-6000);
+            };
+            proc.stdout?.on('data', _collect);
+            proc.stderr?.on('data', _collect);
+            proc.on('exit', (code, signal) => {
+                if (!managedBackendOwned) return;
+                if (!(code === 0 || signal === 'SIGTERM')) {
+                    backendLastError = `后端进程退出 code=${code} signal=${signal || ''}`.trim();
+                }
+            });
+
+            const start = Date.now();
+            while (Date.now() - start < BACKEND_START_TIMEOUT_MS) {
+                if (await _gatewayHealthy()) {
+                    return { ok: true, reused: false, started: true };
+                }
+                if (proc.exitCode !== null) break;
+                await new Promise((r) => setTimeout(r, BACKEND_POLL_INTERVAL_MS));
+            }
+            backendLastError = `网关启动超时或异常退出: ${GATEWAY_BASE}`;
+            return { ok: false, error: backendLastError, logTail: backendLastLogTail };
+        } catch (e) {
+            backendLastError = `拉起后端失败: ${e && e.message ? e.message : String(e)}`;
+            return { ok: false, error: backendLastError };
+        } finally {
+            backendStartPromise = null;
+        }
+    })();
+    return backendStartPromise;
+}
+
+function backendStatusSnapshot() {
+    return {
+        baseUrl: GATEWAY_BASE,
+        managed: managedBackendOwned,
+        pid: managedBackendProcess && managedBackendProcess.pid ? managedBackendProcess.pid : null,
+        lastError: backendLastError || '',
+        logTail: backendLastLogTail || '',
+    };
+}
+
+function _isValidPerceptionBase64(data) {
+    return typeof data === 'string' && data.length > 0 && data.length <= MAX_PERCEPTION_PAYLOAD_SIZE;
+}
 
 function createWindow() {
     // ── 覆盖层尺寸：用主显示器实际 bounds，而非 fullscreen:true ──
@@ -253,6 +377,42 @@ app.whenReady().then(async () => {
     // 解析感知授权（首次弹框 → 持久化；env 可强制覆盖）。在创建窗口/放行权限前确定。
     await resolvePerceptionConsent();
 
+    // 统一 CSP：开发/生产分别约束，避免 renderer 无 CSP 或 unsafe-eval 警告。
+    try {
+        const { session } = require('electron');
+        const devCsp = [
+            "default-src 'self'",
+            "script-src 'self'",
+            "style-src 'self' 'unsafe-inline'",
+            `connect-src 'self' ${GATEWAY_BASE} ws://localhost:${GATEWAY_PORT} ws://127.0.0.1:${GATEWAY_PORT} http://localhost:* ws://localhost:*`,
+            "img-src 'self' data: blob:",
+            "font-src 'self' data:",
+            "media-src 'self' blob:",
+            "object-src 'none'",
+            "base-uri 'none'",
+            "frame-ancestors 'none'",
+        ].join('; ');
+        const prodCsp = [
+            "default-src 'self'",
+            "script-src 'self'",
+            "style-src 'self' 'unsafe-inline'",
+            `connect-src 'self' ${GATEWAY_BASE} ws://localhost:${GATEWAY_PORT} ws://127.0.0.1:${GATEWAY_PORT}`,
+            "img-src 'self' data: blob:",
+            "font-src 'self' data:",
+            "media-src 'self' blob:",
+            "object-src 'none'",
+            "base-uri 'none'",
+            "frame-ancestors 'none'",
+        ].join('; ');
+        session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+            const headers = details.responseHeaders || {};
+            headers['Content-Security-Policy'] = [app.isPackaged ? prodCsp : devCsp];
+            callback({ responseHeaders: headers });
+        });
+    } catch (e) {
+        console.warn('[Main] 设置 CSP 失败:', e && e.message);
+    }
+
     // 媒体权限：Electron 默认拒绝 getUserMedia。授权后放行摄像头/麦克风/屏幕权限。
     try {
         const { session } = require('electron');
@@ -283,6 +443,21 @@ app.whenReady().then(async () => {
         }, { useSystemPicker: false });
     } catch (e) {
         console.warn('[Main] 设置屏幕采集处理器失败（旧版 Electron 可忽略）:', e && e.message);
+    }
+
+    const gatewayReady = await ensureGatewayOnline(true);
+    if (!gatewayReady.ok) {
+        console.error('[Main] 网关不可达:', gatewayReady.error || `${GATEWAY_BASE} not ready`);
+        try {
+            await dialog.showMessageBox({
+                type: 'warning',
+                title: 'Galaxy 网关未就绪',
+                message: '后端网关未成功连接',
+                detail:
+                    `${gatewayReady.error || `无法连接 ${GATEWAY_BASE}`}\n\n` +
+                    '你可以在设置页点击“重试启动网关”再次尝试，并检查 logs/gateway.log。',
+            });
+        } catch (_e) {}
     }
 
     createWindow();
@@ -650,6 +825,11 @@ app.on('will-quit', () => {
         ipcHttpServer.close();
         console.log('[IPC] HTTP receiver stopped');
     }
+    if (managedBackendOwned && managedBackendProcess && managedBackendProcess.exitCode === null) {
+        try {
+            managedBackendProcess.kill('SIGTERM');
+        } catch (_e) {}
+    }
     globalShortcut.unregisterAll();
 });
 
@@ -668,7 +848,75 @@ ipcMain.handle('get-window-size', () => {
     return { width: 1920, height: 1080 };
 });
 
+ipcMain.handle('galaxy:get-backend-url', () => GATEWAY_BASE);
+
+ipcMain.handle('galaxy:get-backend-status', async () => {
+    const healthy = await _gatewayHealthy();
+    return { ok: true, healthy, ...backendStatusSnapshot() };
+});
+
+ipcMain.handle('galaxy:start-backend', async () => {
+    const res = await ensureGatewayOnline(true);
+    return { ...res, ...backendStatusSnapshot() };
+});
+
+const _RUNTIME_BRIDGE_SCRIPT = `
+import json, sys
+from core import container_runtime as cr
+action = sys.argv[1] if len(sys.argv) > 1 else "status"
+payload = {}
+if len(sys.argv) > 2:
+    try:
+        payload = json.loads(sys.argv[2])
+    except Exception:
+        payload = {}
+if action == "status":
+    out = cr.inspect_runtime_state()
+elif action == "test":
+    out = cr.test_runtime(str(payload.get("runtime", "")))
+elif action == "save":
+    out = cr.set_runtime_choice(str(payload.get("runtime", "")), source="electron-panel")
+else:
+    out = {"ok": False, "error": f"unknown action: {action}"}
+print(json.dumps(out, ensure_ascii=False))
+`;
+function _runRuntimeBridge(action, payload = {}) {
+    const py = _pythonExec();
+    const out = spawnSync(py, ['-c', _RUNTIME_BRIDGE_SCRIPT, action, JSON.stringify(payload || {})], {
+        cwd: PROJECT_ROOT,
+        encoding: 'utf-8',
+        timeout: 20000,
+    });
+    if (out.error) {
+        return { ok: false, error: out.error.message || String(out.error) };
+    }
+    if (out.status !== 0) {
+        return { ok: false, error: (out.stderr || '').trim() || `python exited with ${out.status}` };
+    }
+    const lines = String(out.stdout || '').split('\n').map((s) => s.trim()).filter(Boolean);
+    const tail = lines.length ? lines[lines.length - 1] : '{}';
+    try {
+        return JSON.parse(tail);
+    } catch (_e) {
+        return { ok: false, error: 'runtime bridge output parse failed' };
+    }
+}
+ipcMain.handle('galaxy:get-runtime-status', async () => _runRuntimeBridge('status'));
+ipcMain.handle('galaxy:test-runtime', async (_event, runtime) => {
+    if (!['docker', 'podman'].includes(String(runtime || ''))) {
+        return { ok: false, error: 'invalid runtime' };
+    }
+    return _runRuntimeBridge('test', { runtime });
+});
+ipcMain.handle('galaxy:save-runtime', async (_event, runtime) => {
+    if (!['docker', 'podman'].includes(String(runtime || ''))) {
+        return { ok: false, error: 'invalid runtime' };
+    }
+    return _runRuntimeBridge('save', { runtime });
+});
+
 ipcMain.on('set-ignore-mouse', (event, ignore) => {
+    if (typeof ignore !== 'boolean') return;
     if (mainWindow) {
         mainWindow.setIgnoreMouseEvents(ignore, { forward: true });
     }
@@ -687,10 +935,19 @@ ipcMain.handle('galaxy:perception-config', () => ({
 }));
 
 // 渲染层采到的帧/音频 → 转发到网关的桌面感知接收端
+let _perceptionFailCount = 0;
+let _perceptionFailLogAt = 0;
+let _perceptionConsecutiveFails = 0;
+let _perceptionCircuitTrips = 0;
+let _perceptionCircuitOpenUntil = 0;
 ipcMain.on('galaxy:desktop-perception', async (_event, payload) => {
     if (!perceptionEnabled || !payload) return;
+    if (typeof payload !== 'object') return;
+    const now = Date.now();
+    if (_perceptionCircuitOpenUntil > now) return;
     try {
         if (payload.type === 'frame' && payload.image_base64) {
+            if (!_isValidPerceptionBase64(payload.image_base64)) return;
             await fetch(`${GATEWAY_BASE}/api/perception/desktop/frame`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -701,6 +958,7 @@ ipcMain.on('galaxy:desktop-perception', async (_event, payload) => {
                 }),
             });
         } else if (payload.type === 'audio' && payload.audio_base64) {
+            if (!_isValidPerceptionBase64(payload.audio_base64)) return;
             await fetch(`${GATEWAY_BASE}/api/perception/desktop/audio`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -709,12 +967,28 @@ ipcMain.on('galaxy:desktop-perception', async (_event, payload) => {
                     mime: payload.mime || 'audio/webm',
                 }),
             });
+        } else {
+            return;
         }
+        if (_perceptionConsecutiveFails > 0 || _perceptionCircuitOpenUntil > 0) {
+            console.log('[Perception] forward 已恢复，自动退出退避模式');
+        }
+        _perceptionConsecutiveFails = 0;
+        _perceptionCircuitTrips = 0;
+        _perceptionCircuitOpenUntil = 0;
     } catch (e) {
         // 后端未就绪/网络抖动等非致命；丢弃本帧即可。
         // 限流日志：每帧都打会把 electron.log 刷爆（摄像头每 2s 一帧）。只在【首次】和【每 30s】
         // 各打一次，并带累计次数，既能看见问题又不淹没真正的报错。
         _perceptionFailCount++;
+        _perceptionConsecutiveFails++;
+        if (_perceptionConsecutiveFails >= PERCEPTION_CB_FAIL_THRESHOLD) {
+            const backoff = Math.min(PERCEPTION_CB_MAX_DELAY_MS, PERCEPTION_CB_BASE_DELAY_MS * Math.pow(2, _perceptionCircuitTrips));
+            _perceptionCircuitTrips++;
+            _perceptionCircuitOpenUntil = Date.now() + backoff;
+            _perceptionConsecutiveFails = 0;
+            console.warn(`[Perception] 连续失败触发退避，暂停发送 ${Math.round(backoff / 1000)}s`);
+        }
         const _now = Date.now();
         if (_now - _perceptionFailLogAt > 30000) {
             console.warn(`[Perception] forward 失败（已累计 ${_perceptionFailCount} 帧）：` +
@@ -724,8 +998,6 @@ ipcMain.on('galaxy:desktop-perception', async (_event, payload) => {
         }
     }
 });
-let _perceptionFailCount = 0;
-let _perceptionFailLogAt = 0;
 
 // ═══════════════════════════════════════════
 // Configuration Management — Python Backend
@@ -856,6 +1128,17 @@ ipcMain.handle('galaxy:get-settings', () => {
 // 误以为"这个 Key 存不进去/这套东西坏了"，实际上只是碰上了启动期的窗口，
 // 稍后重试本该就能成功。这里跟 GET 一样加重试，把这类瞬时不可达吸收掉。
 ipcMain.handle('galaxy:set-config', async (_, config) => {
+    if (!config || typeof config !== 'object' || Array.isArray(config)) {
+        return { success: false, error: '配置格式无效 / Invalid config payload: expected object' };
+    }
+    for (const [k, v] of Object.entries(config)) {
+        if (typeof k !== 'string' || !k.trim()) {
+            return { success: false, error: '配置键无效' };
+        }
+        if (!['string', 'number', 'boolean'].includes(typeof v)) {
+            return { success: false, error: `配置值类型无效: ${k}` };
+        }
+    }
     try {
         const response = await fetchWithRetry(`${GATEWAY_BASE}/api/config`, {
             method: 'POST',

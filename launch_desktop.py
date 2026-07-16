@@ -67,15 +67,14 @@ from pathlib import Path
 from typing import Optional
 
 from core.ascii_art import print_banner, print_section_header, print_status_row
+from core.electron_launch_guard import resolve_gateway_port
 
 # ---------------------------------------------------------------------------
 # 常量配置
 # ---------------------------------------------------------------------------
 PROJECT_ROOT = Path(__file__).parent.absolute()
 ELECTRON_DIR = PROJECT_ROOT / "electron"
-GATEWAY_PORT = int(os.getenv("PORT", "8765"))
 GATEWAY_HOST = os.getenv("HOST", "127.0.0.1")
-GATEWAY_HEALTH_URL = f"http://{GATEWAY_HOST}:{GATEWAY_PORT}/health"
 GATEWAY_READY_TIMEOUT = 90
 HEALTH_CHECK_INTERVAL = 1.0
 ENV_FILE = PROJECT_ROOT / ".env"
@@ -87,6 +86,10 @@ logger = logging.getLogger("Galaxy.Launcher")
 _proc_gateway = None
 _proc_electron = None
 _shutting_down = False
+
+
+def get_gateway_health_url() -> str:
+    return f"http://{GATEWAY_HOST}:{resolve_gateway_port()}/health"
 
 # ───────────────────────────────────────────────────────────────────────────
 # 模型配置 — 用户可选择的本地模型
@@ -393,7 +396,7 @@ def phase1_ensure_dependencies(status: dict, args) -> bool:
 
 def gateway_is_ready() -> bool:
     try:
-        with urllib.request.urlopen(GATEWAY_HEALTH_URL, timeout=2) as resp:
+        with urllib.request.urlopen(get_gateway_health_url(), timeout=2) as resp:
             return resp.status == 200
     except Exception:
         return False
@@ -447,6 +450,9 @@ def _signal_handler(signum, frame):
 def start_gateway_backend():
     """委托 main.py 启动后端。"""
     env = os.environ.copy()
+    gateway_port = resolve_gateway_port()
+    env["GALAXY_GATEWAY_PORT"] = str(gateway_port)
+    env["PORT"] = str(gateway_port)
     env["PYTHONUNBUFFERED"] = "1"
     gateway_log = LOGS_DIR / "gateway.log"
     gateway_log.parent.mkdir(exist_ok=True)
@@ -455,7 +461,7 @@ def start_gateway_backend():
     _proc = None
     try:
         _proc = subprocess.Popen(
-            [sys.executable, str(PROJECT_ROOT / "main.py")],
+            [sys.executable, str(PROJECT_ROOT / "main.py"), "--host", GATEWAY_HOST, "--port", str(gateway_port)],
             cwd=str(PROJECT_ROOT), env=env,
             stdout=_gateway_stdout, stderr=subprocess.STDOUT,
         )
@@ -630,7 +636,7 @@ def main():
     # ── 模式：只启动前端 ──
     if args.frontend:
         if not gateway_is_ready():
-            logger.error("Gateway 未在 %s 响应", GATEWAY_HEALTH_URL)
+            logger.error("Gateway 未在 %s 响应", get_gateway_health_url())
             sys.exit(1)
         global _proc_electron
         _proc_electron = start_desktop_shell()
@@ -689,8 +695,9 @@ def main():
         kill_proc(_proc_gateway, "Gateway")
         sys.exit(1)
     ok("Gateway 就绪 ✓")
-    logger.info("  WebSocket: ws://%s:%d/ws/desktop-presence", GATEWAY_HOST, GATEWAY_PORT)
-    logger.info("  REST API:  http://%s:%d/api/v1/", GATEWAY_HOST, GATEWAY_PORT)
+    gateway_port = resolve_gateway_port()
+    logger.info("  WebSocket: ws://%s:%d/ws/desktop-presence", GATEWAY_HOST, gateway_port)
+    logger.info("  REST API:  http://%s:%d/api/v1/", GATEWAY_HOST, gateway_port)
 
     # Phase 4: 启动 Electron
     banner("Phase 4: 启动三态桌面覆盖层")
