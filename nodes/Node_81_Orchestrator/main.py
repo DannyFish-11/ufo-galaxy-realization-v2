@@ -38,6 +38,12 @@ import uvicorn
 import httpx
 from nodes.common.cors_config import get_cors_origins
 
+from nodes.common.base_node import (
+    setup_logging, setup_signal_handlers, node_metrics,
+    DEFAULT_REQUEST_TIMEOUT, DEFAULT_MAX_RETRIES, ErrorResponse
+)
+import signal
+
 
 def _safe_condition(condition: str, context: dict) -> bool:
     """Safely evaluate a simple condition string without eval().
@@ -100,14 +106,11 @@ NODE_SERVICES = {
 }
 
 # 超时配置
-DEFAULT_TIMEOUT = int(os.getenv("DEFAULT_TIMEOUT", "30"))
-MAX_RETRIES = int(os.getenv("MAX_RETRIES", "3"))
+DEFAULT_TIMEOUT = int(os.getenv("DEFAULT_TIMEOUT", str(DEFAULT_REQUEST_TIMEOUT)))
+MAX_RETRIES = int(os.getenv("MAX_RETRIES", str(DEFAULT_MAX_RETRIES)))
 
-logging.basicConfig(
-    level=getattr(logging, LOG_LEVEL),
-    format=f"[Node {NODE_ID}] %(asctime)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger(__name__)
+logger = setup_logging(f"Node_{NODE_ID}_{NODE_NAME}", level=LOG_LEVEL)
+setup_signal_handlers(logger)
 
 # =============================================================================
 # Models
@@ -690,4 +693,5 @@ async def list_workflows():
 # =============================================================================
 
 if __name__ == "__main__":
+    setup_signal_handlers(logger)
     uvicorn.run(app, host="0.0.0.0", port=8081)
