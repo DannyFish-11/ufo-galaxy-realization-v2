@@ -22,6 +22,7 @@ Galaxy Fusion - Unified Orchestrator (Reinforced & Production Grade)
 """
 
 import warnings as _warnings
+
 _warnings.warn(
     "fusion.unified_orchestrator 已废弃，请迁移到 galaxy_gateway.orchestrator.GalaxyOrchestrator",
     DeprecationWarning,
@@ -30,54 +31,101 @@ _warnings.warn(
 
 import asyncio
 import logging
-from typing import Dict, List, Optional, Any, Tuple
+import os
+import signal
+import time
 from dataclasses import dataclass, field
 from enum import Enum
-import time
+from typing import Any, Dict, List, Optional, Tuple
 
-from .topology_manager import TopologyManager, RoutingStrategy, NodeInfo
-from .node_executor import ExecutionPool, ExecutionResult
-
-# 配置日志
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger("UnifiedOrchestrator")
+from .node_executor import ExecutionPool, ExecutionResult, sanitize_error_message
+from .topology_manager import NodeInfo, RoutingStrategy, TopologyManager
 
 # ---------------------------------------------------------------------------
-# PR-3: Execution Spine Integration — facade authority sentinel
+# Constants
 # ---------------------------------------------------------------------------
 
-#: Affirms that UnifiedOrchestrator is a deprecated execution facade.
-#: Primary dispatch authority belongs to CommandRouter via the canonical
-#: execution spine (core.execution_spine → CommandRouter.route_envelope).
-#: This module is retained for backward compatibility only.
 UNIFIED_ORCHESTRATOR_FACADE_AUTHORITY: str = "UNIFIED_ORCHESTRATOR_FACADE_V1"
-
-# ---------------------------------------------------------------------------
-# PR-6: Task Graph Runtime — contributor sentinel
-# ---------------------------------------------------------------------------
-
-#: Affirms that UnifiedOrchestrator is a task graph contributor.
-#: Its execution results are projected onto the unified TaskGraphRuntime via
-#: ``core.task_graph_runtime.project_workflow_to_graph``.
 UNIFIED_ORCHESTRATOR_GRAPH_CONTRIBUTOR: str = "UNIFIED_ORCHESTRATOR_GRAPH_CONTRIBUTOR_V1"
-
-# ---------------------------------------------------------------------------
-# PR-A: Canonical Task Spine — facade demotion sentinel
-# ---------------------------------------------------------------------------
-
-#: Affirms that UnifiedOrchestrator is a facade/planner helper under the
-#: PR-A canonical execution spine.  All system-level dispatch MUST go through
-#: CanonicalTask → TaskEnvelope → CommandRouter.route_envelope().
-#: This module is registered in core.legacy_dispatch_registry as FACADE_ONLY.
 UNIFIED_ORCHESTRATOR_CANONICAL_TASK_FACADE: str = (
     "UNIFIED_ORCHESTRATOR::CANONICAL_TASK_FACADE_V1: "
     "This module is a planner/facade helper only. "
     "System-level dispatch authority belongs to CommandRouter.route_envelope()."
 )
 
+# Task worker queue timeout in seconds
+TASK_WORKER_TIMEOUT_SECONDS: float = 1.0
+# Load delta applied to a node during task execution
+NODE_LOAD_DELTA: float = 10.0
+# Retry backoff multiplier in seconds
+RETRY_BACKOFF_SECONDS: float = 0.5
+# Adaptive balancing threshold for forcing load-balanced routing
+ADAPTIVE_BALANCING_THRESHOLD: float = 0.7
+# Default task reliability requirement
+DEFAULT_MIN_RELIABILITY: float = 0.95
+# Graceful shutdown timeout in seconds
+GRACEFUL_SHUTDOWN_TIMEOUT_SECONDS: int = int(os.environ.get("FUSION_SHUTDOWN_TIMEOUT", "10"))
+
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
+
+_LOG_FORMAT: str = "%(asctime)s [%(levelname)s] %(name)s - %(message)s"
+logging.basicConfig(level=logging.INFO, format=_LOG_FORMAT)
+logger = logging.getLogger("UnifiedOrchestrator")
+
+# ---------------------------------------------------------------------------
+# Prometheus metrics
+# ---------------------------------------------------------------------------
+
+try:
+    from prometheus_client import Counter, Histogram, Gauge
+    PROMETHEUS_AVAILABLE = True
+except ImportError:
+    Counter = Histogram = Gauge = None  # type: ignore
+    PROMETHEUS_AVAILABLE = False
+
+if PROMETHEUS_AVAILABLE:
+    _TASK_COUNTER: Optional[Counter] = Counter(
+        "fusion_orchestrator_tasks_total",
+        "Total tasks processed",
+        ["status", "task_type"]
+    )
+    _TASK_LATENCY: Optional[Histogram] = Histogram(
+        "fusion_orchestrator_task_latency_ms",
+        "Task execution latency in milliseconds",
+        ["task_type"]
+    )
+    _QUEUE_SIZE_GAUGE: Optional[Gauge] = Gauge(
+        "fusion_orchestrator_queue_size",
+        "Current task queue size"
+    )
+else:
+    _TASK_COUNTER = None
+    _TASK_LATENCY = None
+    _QUEUE_SIZE_GAUGE = None
+
+
+def _record_task_metric(status: str, task_type: str, latency_ms: float) -> None:
+    """Record task processing metrics."""
+    if _TASK_COUNTER is not None:
+        _TASK_COUNTER.labels(status=status, task_type=task_type).inc()
+    if _TASK_LATENCY is not None:
+        _TASK_LATENCY.labels(task_type=task_type).observe(latency_ms)
+
+
+def _record_queue_size(size: int) -> None:
+    """Record current queue size metric."""
+    if _QUEUE_SIZE_GAUGE is not None:
+        _QUEUE_SIZE_GAUGE.set(size)
+
+
+# ---------------------------------------------------------------------------
+# Enums and dataclasses
+# ---------------------------------------------------------------------------
 
 class TaskPriority(Enum):
-    """任务优先级"""
+    """Task priority levels."""
     CRITICAL = 0
     HIGH = 1
     NORMAL = 2
@@ -85,11 +133,11 @@ class TaskPriority(Enum):
 
 
 class TaskType(Enum):
-    """任务类型"""
-    PERCEPTION = "perception"      # 感知任务（数据采集）
-    COGNITIVE = "cognitive"        # 认知任务（分析处理）
-    COORDINATION = "coordination"  # 协调任务（系统管理）
-    HYBRID = "hybrid"              # 混合任务（跨层级）
+    """Task type enumeration."""
+    PERCEPTION = "perception"       # 感知任务（数据采集）
+    COGNITIVE = "cognitive"         # 认知任务（分析处理）
+    COORDINATION = "coordination"   # 协调任务（系统管理）
+    HYBRID = "hybrid"               # 混合任务（跨层级）
 
 
 @dataclass
@@ -99,27 +147,27 @@ class Task:
     description: str
     task_type: TaskType
     priority: TaskPriority = TaskPriority.NORMAL
-    
+
     # 任务需求
     required_capabilities: List[str] = field(default_factory=list)
     preferred_domain: Optional[str] = None
     preferred_layer: Optional[str] = None
-    
+
     # 任务约束
     max_latency_ms: Optional[int] = None
-    min_reliability: float = 0.95
-    
+    min_reliability: float = DEFAULT_MIN_RELIABILITY
+
     # 任务数据
     input_data: Dict[str, Any] = field(default_factory=dict)
     context: Dict[str, Any] = field(default_factory=dict)
-    
+
     # 执行状态
     status: str = "pending"
     assigned_nodes: List[str] = field(default_factory=list)
     execution_path: List[str] = field(default_factory=list)
     result: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
-    
+
     # 时间戳
     created_at: float = field(default_factory=time.time)
     started_at: Optional[float] = None
@@ -128,7 +176,7 @@ class Task:
 
 @dataclass
 class ExecutionPlan:
-    """执行计划"""
+    """Execution plan data class."""
     task_id: str
     nodes: List[str]                    # 执行节点序列
     routing_strategy: RoutingStrategy
@@ -139,97 +187,132 @@ class ExecutionPlan:
 class UnifiedOrchestrator:
     """
     统一编排引擎
-    
+
     这是融合系统的核心，负责任务分析、分解、路由和执行管理。
     """
-    
+
     def __init__(
         self,
         topology_manager: TopologyManager,
         execution_pool: ExecutionPool,
         enable_predictive_routing: bool = True,
         enable_adaptive_balancing: bool = True
-    ):
-        self.topology = topology_manager
-        self.execution_pool = execution_pool
-        self.enable_predictive_routing = enable_predictive_routing
-        self.enable_adaptive_balancing = enable_adaptive_balancing
-        
+    ) -> None:
+        self.topology: TopologyManager = topology_manager
+        self.execution_pool: ExecutionPool = execution_pool
+        self.enable_predictive_routing: bool = enable_predictive_routing
+        self.enable_adaptive_balancing: bool = enable_adaptive_balancing
+
         # 任务管理
         self.tasks: Dict[str, Task] = {}
-        self.task_queue = asyncio.Queue()
-        self.is_running = False
-        self._worker_task = None
-        
+        self.task_queue: asyncio.Queue = asyncio.Queue()
+        self.is_running: bool = False
+        self._worker_task: Optional[asyncio.Task] = None
+        self._shutdown_event: asyncio.Event = asyncio.Event()
+
         # 性能统计
-        self.stats = {
+        self.stats: Dict[str, Any] = {
             "total_tasks": 0,
             "completed_tasks": 0,
             "failed_tasks": 0,
             "average_latency_ms": 0.0
         }
-        
-        logger.info("🚀 UnifiedOrchestrator initialized")
 
-    async def start(self):
+        logger.info("UnifiedOrchestrator initialized")
+
+    async def start(self) -> None:
         """启动编排引擎"""
         if self.is_running:
             return
-        
-        logger.info("🚀 Starting UnifiedOrchestrator worker...")
-        self.is_running = True
-        self._worker_task = asyncio.create_task(self._task_worker())
-        logger.info("✅ UnifiedOrchestrator worker is now running")
 
-    async def stop(self):
-        """停止编排引擎并清理资源"""
+        logger.info("Starting UnifiedOrchestrator worker...")
+        self.is_running = True
+        self._shutdown_event.clear()
+        self._worker_task = asyncio.create_task(self._task_worker())
+        logger.info("UnifiedOrchestrator worker is now running")
+
+    async def stop(self) -> None:
+        """停止编排引擎并清理资源 (graceful shutdown)"""
         if not self.is_running:
             return
-        
-        logger.info("🛑 Stopping UnifiedOrchestrator...")
+
+        logger.info("Stopping UnifiedOrchestrator (graceful shutdown)...")
         self.is_running = False
+        self._shutdown_event.set()
+
         if self._worker_task:
             self._worker_task.cancel()
             try:
-                await self._worker_task
-            except asyncio.CancelledError:
+                await asyncio.wait_for(self._worker_task, timeout=GRACEFUL_SHUTDOWN_TIMEOUT_SECONDS)
+            except (asyncio.CancelledError, asyncio.TimeoutError):
                 pass
-        
+
+        # 取消并等待所有子任务，防止子任务泄漏
+        pending = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
+        if pending:
+            for task in pending:
+                task.cancel()
+            await asyncio.gather(*pending, return_exceptions=True)
+
         # 清理执行池资源
         if hasattr(self.execution_pool, 'close_all'):
             await self.execution_pool.close_all()
-            
-        logger.info("✅ UnifiedOrchestrator stopped and resources cleaned")
+
+        logger.info("UnifiedOrchestrator stopped and resources cleaned")
+
+    def register_signal_handlers(self) -> None:
+        """Register OS signal handlers for graceful shutdown.
+
+        Should be called from the main thread running the event loop.
+        """
+        try:
+            loop: asyncio.AbstractEventLoop = asyncio.get_running_loop()
+            for sig in (signal.SIGINT, signal.SIGTERM):
+                loop.add_signal_handler(sig, lambda s=sig: asyncio.create_task(self._handle_signal(s)))
+            logger.info("Signal handlers registered for graceful shutdown")
+        except (NotImplementedError, RuntimeError) as exc:
+            logger.debug("Signal handler registration skipped: %s", exc)
+
+    async def _handle_signal(self, sig: signal.Signals) -> None:
+        """Handle OS shutdown signals gracefully."""
+        logger.info("Received signal %s, initiating graceful shutdown...", sig.name)
+        await self.stop()
 
     async def submit_task(self, task: Task) -> str:
         """提交任务到异步处理队列"""
         self.tasks[task.task_id] = task
         await self.task_queue.put(task.task_id)
         self.stats["total_tasks"] += 1
-        logger.info(f"📥 Task submitted: {task.task_id} ({task.description})")
+        _record_queue_size(self.task_queue.qsize())
+        logger.info("Task submitted: %s (%s)", task.task_id, task.description)
         return task.task_id
 
-    async def _task_worker(self):
+    async def _task_worker(self) -> None:
         """后台任务处理循环"""
         while self.is_running:
             try:
                 # 等待任务，带超时以便检查 is_running 状态
-                task_id = await asyncio.wait_for(self.task_queue.get(), timeout=1.0)
+                task_id: str = await asyncio.wait_for(
+                    self.task_queue.get(),
+                    timeout=TASK_WORKER_TIMEOUT_SECONDS
+                )
                 task = self.tasks.get(task_id)
                 if task:
                     # 异步执行任务，不阻塞循环
                     asyncio.create_task(self.execute_task(task))
                 self.task_queue.task_done()
+                _record_queue_size(self.task_queue.qsize())
             except asyncio.TimeoutError:
                 continue
-            except Exception as e:
-                logger.error(f"❌ Error in task worker loop: {e}", exc_info=True)
+            except Exception as exc:
+                logger.error("Error in task worker loop: %s", exc, exc_info=True)
 
     async def execute_task(self, task: Task) -> Dict[str, Any]:
         """执行任务的完整生命周期"""
-        start_time = time.time()
+        start_time: float = time.time()
         task.status = "analyzing"
         task.started_at = start_time
+        task_type_value: str = task.task_type.value if isinstance(task.task_type, TaskType) else str(task.task_type)
 
         # ── PR-508: Register task in TaskGraphRuntime ────────────────────────
         try:
@@ -247,19 +330,19 @@ class UnifiedOrchestrator:
             )
             _tgr_uo.register_node(_uo_node)
             _tgr_uo.transition(task.task_id, _GNS_uo.ADMITTED)
-        except Exception:
-            pass
+        except Exception as _exc:
+            logger.debug("TaskGraphRuntime registration skipped: %s", _exc)
 
         try:
             # 1. 任务分解 (Emergent Capability #1)
-            logger.info(f"🔍 Analyzing task: {task.task_id}")
-            subtasks = await self._decompose_task(task)
-            
+            logger.info("Analyzing task: %s", task.task_id)
+            subtasks: List[Dict[str, Any]] = await self._decompose_task(task)
+
             # 2. 规划与路由 (Emergent Capability #2)
-            logger.info(f"📋 Planning execution for {len(subtasks)} subtask(s)")
-            execution_plans = []
+            logger.info("Planning execution for %d subtask(s)", len(subtasks))
+            execution_plans: List[Tuple[Dict[str, Any], ExecutionPlan]] = []
             for subtask in subtasks:
-                plan = await self._generate_execution_plan(subtask)
+                plan: Optional[ExecutionPlan] = await self._generate_execution_plan(subtask)
                 if plan:
                     execution_plans.append((subtask, plan))
                 else:
@@ -272,17 +355,28 @@ class UnifiedOrchestrator:
                     GraphNodeState as _GNS_uo2,
                 )
                 _get_tgr_uo2().transition(task.task_id, _GNS_uo2.PLANNED)
-            except Exception:
-                pass
-            
+            except Exception as _exc:
+                logger.debug("TaskGraphRuntime transition to PLANNED skipped: %s", _exc)
+
             # 3. 执行 (Emergent Capability #3)
             task.status = "executing"
-            results = []
+
+            # ── PR-508: Lifecycle: admitted → running ──────────────────────────
+            try:
+                from core.task_graph_runtime import (
+                    get_task_graph_runtime as _get_tgr_uo_run,
+                    GraphNodeState as _GNS_uo_run,
+                )
+                _get_tgr_uo_run().transition(task.task_id, _GNS_uo_run.RUNNING)
+            except Exception as _exc:
+                logger.debug("TaskGraphRuntime transition to RUNNING skipped: %s", _exc)
+
+            results: List[Any] = []
 
             # ── PR-508: Fanout for multi-subtask execution ───────────────────
-            _subtask_ids: list = []
+            _subtask_ids: List[str] = []
             for subtask, plan in execution_plans:
-                _st_id = subtask.get("task_id") or f"{task.task_id}:sub:{len(_subtask_ids)}"
+                _st_id: str = subtask.get("task_id") or f"{task.task_id}:sub:{len(_subtask_ids)}"
                 _subtask_ids.append(_st_id)
 
             if len(_subtask_ids) > 1:
@@ -303,59 +397,60 @@ class UnifiedOrchestrator:
                         child_task_ids=_subtask_ids,
                         contributor=_WCK_fo.UNIFIED_ORCHESTRATOR,
                     )
-                except Exception:
-                    pass
+                except Exception as _exc:
+                    logger.debug("TaskGraphRuntime fanout registration skipped: %s", _exc)
 
             for (subtask, plan), _st_id in zip(execution_plans, _subtask_ids):
                 # 智能选择节点
-                node_id = plan.nodes[0]
+                node_id: str = plan.nodes[0]
                 task.execution_path.append(node_id)
-                
-                logger.info(f"⚡ Executing subtask on node: {node_id}")
-                
+
+                logger.info("Executing subtask on node: %s", node_id)
+
                 # 更新节点负载
-                self.topology.update_load(node_id, 10)
-                
+                self.topology.update_load(node_id, NODE_LOAD_DELTA)
+
                 # 真实执行逻辑，包含重试
-                res = await self._execute_with_retry(node_id, subtask, subtask_id=_st_id)
-                
+                res: ExecutionResult = await self._execute_with_retry(node_id, subtask, subtask_id=_st_id)
+
                 # 释放节点负载
-                self.topology.update_load(node_id, -10)
-                
+                self.topology.update_load(node_id, -NODE_LOAD_DELTA)
+
                 if res.success:
                     results.append(res.data)
                 else:
-                    raise Exception(f"Subtask failed on {node_id}: {res.error}")
+                    sanitized_error: str = sanitize_error_message(res.error) or "Unknown error"
+                    raise Exception(f"Subtask failed on {node_id}: {sanitized_error}")
 
             # 4. 结果聚合
             task.result = await self._aggregate_results(task, results)
             task.status = "completed"
             task.completed_at = time.time()
 
-            # ── PR-508: Lifecycle: planned → running → completed ─────────────
+            # ── PR-508: Lifecycle: running → completed ──────────────────────
             try:
                 from core.task_graph_runtime import (
                     get_task_graph_runtime as _get_tgr_uo3,
                     GraphNodeState as _GNS_uo3,
                 )
-                _t3 = _get_tgr_uo3()
-                _t3.transition(task.task_id, _GNS_uo3.RUNNING)
-                _t3.transition(task.task_id, _GNS_uo3.COMPLETED)
-            except Exception:
-                pass
-            
+                _get_tgr_uo3().transition(task.task_id, _GNS_uo3.COMPLETED)
+            except Exception as _exc:
+                logger.debug("TaskGraphRuntime transition to COMPLETED skipped: %s", _exc)
+
             # 更新统计
-            latency = (task.completed_at - start_time) * 1000
+            latency: float = (task.completed_at - start_time) * 1000
             self._update_stats(latency)
-            
-            logger.info(f"✅ Task completed: {task.task_id} in {latency:.1f}ms")
+
+            logger.info("Task completed: %s in %.1fms", task.task_id, latency)
+            _record_task_metric("completed", task_type_value, latency)
             return task.result
 
-        except Exception as e:
+        except Exception as exc:
             task.status = "failed"
-            task.error = str(e)
+            task.error = sanitize_error_message(str(exc))
             self.stats["failed_tasks"] += 1
-            logger.error(f"❌ Task failed: {task.task_id} - {e}")
+            latency = (time.time() - start_time) * 1000
+            logger.error("Task failed: %s - %s", task.task_id, task.error)
             # ── PR-508: Lifecycle: failed ────────────────────────────────────
             try:
                 from core.task_graph_runtime import (
@@ -363,23 +458,37 @@ class UnifiedOrchestrator:
                     GraphNodeState as _GNS_uo4,
                 )
                 _get_tgr_uo4().transition(task.task_id, _GNS_uo4.FAILED)
-            except Exception:
-                pass
-            return {"status": "failed", "error": str(e)}
+            except Exception as _exc:
+                logger.debug("TaskGraphRuntime transition to FAILED skipped: %s", _exc)
+            _record_task_metric("failed", task_type_value, latency)
+            return {"status": "failed", "error": task.error}
 
-    async def _execute_with_retry(self, node_id: str, subtask: Dict[str, Any], retries: int = 2, subtask_id: str = "") -> ExecutionResult:
+    async def _execute_with_retry(
+        self,
+        node_id: str,
+        subtask: Dict[str, Any],
+        retries: int = 2,
+        subtask_id: str = ""
+    ) -> ExecutionResult:
         """带重试机制的执行逻辑"""
-        _eff_subtask_id = subtask_id or subtask.get("task_id") or f"subtask:{node_id}"
+        _eff_subtask_id: str = subtask_id or subtask.get("task_id") or f"subtask:{node_id}"
+        res: ExecutionResult = ExecutionResult(
+            node_id=node_id,
+            success=False,
+            error="No attempts made",
+            latency_ms=0.0,
+            timestamp=time.time()
+        )
         for attempt in range(retries + 1):
             res = await self.execution_pool.execute_on_node(
-                node_id, 
-                command="process", 
+                node_id,
+                command="process",
                 params={"description": subtask.get("description")}
             )
             if res.success:
                 return res
             if attempt < retries:
-                logger.warning(f"⚠️ Attempt {attempt+1} failed on {node_id}, retrying...")
+                logger.warning("Attempt %d failed on %s, retrying...", attempt + 1, node_id)
                 # ── PR-508: Register retry in TaskGraphRuntime ───────────────
                 try:
                     from core.task_graph_runtime import (
@@ -387,7 +496,7 @@ class UnifiedOrchestrator:
                         WorkflowContributorKind as _WCK_rt,
                         GraphNode as _GN_rt,
                     )
-                    _retry_id = f"{_eff_subtask_id}:retry:{attempt + 1}"
+                    _retry_id: str = f"{_eff_subtask_id}:retry:{attempt + 1}"
                     _tgr_rt = _get_tgr_rt()
                     _tgr_rt.register_node(_GN_rt(
                         task_id=_retry_id,
@@ -401,14 +510,14 @@ class UnifiedOrchestrator:
                         reason="subtask_failure",
                         contributor=_WCK_rt.UNIFIED_ORCHESTRATOR,
                     )
-                except Exception:
-                    pass
-                await asyncio.sleep(0.5 * (attempt + 1))
+                except Exception as _exc:
+                    logger.debug("TaskGraphRuntime retry registration skipped: %s", _exc)
+                await asyncio.sleep(RETRY_BACKOFF_SECONDS * (attempt + 1))
         return res
 
     async def _decompose_task(self, task: Task) -> List[Dict[str, Any]]:
         """将复杂任务分解为跨层级子任务序列 (真实逻辑)"""
-        subtasks = []
+        subtasks: List[Dict[str, Any]] = []
         if task.task_type == TaskType.HYBRID:
             # 跨层级流水线：感知 -> 认知 -> 核心
             subtasks.append({
@@ -418,13 +527,13 @@ class UnifiedOrchestrator:
                 "capabilities": task.required_capabilities or ["camera"],
             })
             subtasks.append({
-                "description": f"[Cognitive] Analyze data",
+                "description": "[Cognitive] Analyze data",
                 "layer": "cognitive",
                 "domain": task.preferred_domain or "nlu",
                 "capabilities": ["analysis", "processing"],
             })
             subtasks.append({
-                "description": f"[Core] Coordination",
+                "description": "[Core] Coordination",
                 "layer": "core",
                 "domain": "task_management",
                 "capabilities": ["coordination", "decision"],
@@ -440,6 +549,7 @@ class UnifiedOrchestrator:
         return subtasks
 
     def _get_default_layer(self, task_type: TaskType) -> str:
+        """Get the default layer for a given task type."""
         return {
             TaskType.PERCEPTION: "perception",
             TaskType.COGNITIVE: "cognitive",
@@ -448,24 +558,24 @@ class UnifiedOrchestrator:
 
     async def _generate_execution_plan(self, subtask: Dict[str, Any]) -> Optional[ExecutionPlan]:
         """生成执行计划，选择最优节点 (真实逻辑)"""
-        strategy = self._select_routing_strategy(subtask)
-        target_node = self.topology.find_best_node(
+        strategy: RoutingStrategy = self._select_routing_strategy(subtask)
+        target_node: Optional[str] = self.topology.find_best_node(
             domain=subtask.get("domain"),
             layer=subtask.get("layer"),
             capabilities=subtask.get("capabilities", []),
             strategy=strategy
         )
-        
+
         if not target_node:
             # 降级策略：如果指定域没找到，尝试在全域寻找具备能力的节点
             target_node = self.topology.find_best_node(
                 capabilities=subtask.get("capabilities", []),
                 strategy=RoutingStrategy.LOAD_BALANCED
             )
-            
+
         if not target_node:
             return None
-            
+
         return ExecutionPlan(
             task_id=subtask.get("description", "unknown"),
             nodes=[target_node],
@@ -477,11 +587,11 @@ class UnifiedOrchestrator:
     def _select_routing_strategy(self, subtask: Dict[str, Any]) -> RoutingStrategy:
         """自适应选择路由策略 (真实逻辑)"""
         if self.enable_adaptive_balancing:
-            stats = self.topology.get_topology_stats()
-            # 如果系统整体负载超过 70%，强制开启负载均衡模式
-            if stats.get("average_load", 0) > 0.7:
+            stats: Dict[str, Any] = self.topology.get_topology_stats()
+            # 如果系统整体负载超过阈值，强制开启负载均衡模式
+            if stats.get("average_load", 0) > ADAPTIVE_BALANCING_THRESHOLD:
                 return RoutingStrategy.LOAD_BALANCED
-        
+
         # 默认优先考虑域亲和性，以减少跨域数据传输开销
         if subtask.get("domain"):
             return RoutingStrategy.DOMAIN_AFFINITY
@@ -489,13 +599,13 @@ class UnifiedOrchestrator:
 
     async def _aggregate_results(self, task: Task, results: List[Any]) -> Dict[str, Any]:
         """聚合子任务结果 (真实逻辑)"""
-        combined_data = {}
+        combined_data: Dict[str, Any] = {}
         for i, res in enumerate(results):
             if isinstance(res, dict):
                 combined_data.update(res)
             else:
                 combined_data[f"step_{i}"] = res
-                
+
         return {
             "task_id": task.task_id,
             "status": "success",
@@ -504,11 +614,11 @@ class UnifiedOrchestrator:
             "total_steps": len(results)
         }
 
-    def _update_stats(self, latency_ms: float):
+    def _update_stats(self, latency_ms: float) -> None:
         """更新系统统计数据"""
         self.stats["completed_tasks"] += 1
-        n = self.stats["completed_tasks"]
-        curr_avg = self.stats["average_latency_ms"]
+        n: int = self.stats["completed_tasks"]
+        curr_avg: float = self.stats["average_latency_ms"]
         self.stats["average_latency_ms"] = (curr_avg * (n - 1) + latency_ms) / n
 
     def get_stats(self) -> Dict[str, Any]:
