@@ -42,8 +42,8 @@ def run(cmd: list, desc: str) -> bool:
 def install_file(req_file: str, desc: str) -> bool:
     """安装指定的 requirements 文件。"""
     if not Path(req_file).exists():
-        print(f"  跳过: {req_file} 不存在")
-        return True  # 不阻塞
+        print(f"  ✗ 错误: {req_file} 不存在")
+        return False
     return run(
         [sys.executable, "-m", "pip", "install", "-r", req_file, "--quiet"],
         desc,
