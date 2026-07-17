@@ -369,7 +369,9 @@ class TailscaleP2PAdapter(TransportAdapter):
         if not shutil.which("tailscale"):
             return None, ""
         try:
-            result = subprocess.run(
+            # async 路径:tailscaled 卡住时同步 run 会冻事件循环最长 10s,放线程
+            result = await asyncio.to_thread(
+                subprocess.run,
                 ["tailscale", "status", "--json"],
                 capture_output=True,
                 text=True,
@@ -396,7 +398,8 @@ class TailscaleP2PAdapter(TransportAdapter):
         if not shutil.which("tailscale"):
             return
         try:
-            result = subprocess.run(
+            result = await asyncio.to_thread(
+                subprocess.run,
                 ["tailscale", "status", "--json"],
                 capture_output=True,
                 text=True,

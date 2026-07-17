@@ -37,6 +37,7 @@ router = APIRouter(prefix="/api/v1/agents/sandbox", tags=["sandbox"])
 # ── 资源限制 ──
 try:
     import resource as _resource
+
     _RESOURCE_AVAILABLE = True
 except ImportError:
     _resource = None
@@ -44,37 +45,102 @@ except ImportError:
 
 # ── 危险命令黑名单 ──
 DANGEROUS_PATTERNS = [
-    "rm -rf", "rm -rf /", "dd if=", "mkfs", "format", "fdisk",
-    ":(){ :|:& };:",           # fork bomb
-    "chmod 777 /",             # 根目录权限破坏
-    "> /dev/sda", ">/dev/sda", # 磁盘覆写
-    "mv / /dev/null",          # 根目录移动
-    "shutdown", "reboot", "halt", "poweroff",
-    "curl http", "wget http",   # 网络下载（需审查）
-    "nc -l", "nc -lp",          # netcat 监听
-    "telnet", "ssh", "scp", "sftp",
-    "/etc/passwd", "/etc/shadow", "/etc/hosts",
-    "iptables -F", "ufw disable",
-    "userdel", "groupdel",
-    "kill -9 -1", "kill -9 1",
+    "rm -rf",
+    "rm -rf /",
+    "dd if=",
+    "mkfs",
+    "format",
+    "fdisk",
+    ":(){ :|:& };:",  # fork bomb
+    "chmod 777 /",  # 根目录权限破坏
+    "> /dev/sda",
+    ">/dev/sda",  # 磁盘覆写
+    "mv / /dev/null",  # 根目录移动
+    "shutdown",
+    "reboot",
+    "halt",
+    "poweroff",
+    "curl http",
+    "wget http",  # 网络下载（需审查）
+    "nc -l",
+    "nc -lp",  # netcat 监听
+    "telnet",
+    "ssh",
+    "scp",
+    "sftp",
+    "/etc/passwd",
+    "/etc/shadow",
+    "/etc/hosts",
+    "iptables -F",
+    "ufw disable",
+    "userdel",
+    "groupdel",
+    "kill -9 -1",
+    "kill -9 1",
 ]
 
 SAFE_COMMAND_WHITELIST = [
-    "ls", "cat", "echo", "pwd", "whoami", "uname", "df", "du",
-    "free", "top", "ps", "grep", "awk", "sed", "head", "tail",
-    "find", "wc", "sort", "uniq", "cut", "tr", "xargs",
-    "mkdir", "touch", "cp", "mv", "rm", "chmod", "chown",
-    "git", "docker ps", "docker images", "systemctl status",
-    "nginx -t", "nginx -v", "python3", "pip", "node", "npm",
-    "tar", "gzip", "gunzip", "zip", "unzip",
-    "ping", "curl -I", "wget --spider", "netstat", "ss",
-    "journalctl", "dmesg", "lsof", "strace",
+    "ls",
+    "cat",
+    "echo",
+    "pwd",
+    "whoami",
+    "uname",
+    "df",
+    "du",
+    "free",
+    "top",
+    "ps",
+    "grep",
+    "awk",
+    "sed",
+    "head",
+    "tail",
+    "find",
+    "wc",
+    "sort",
+    "uniq",
+    "cut",
+    "tr",
+    "xargs",
+    "mkdir",
+    "touch",
+    "cp",
+    "mv",
+    "rm",
+    "chmod",
+    "chown",
+    "git",
+    "docker ps",
+    "docker images",
+    "systemctl status",
+    "nginx -t",
+    "nginx -v",
+    "python3",
+    "pip",
+    "node",
+    "npm",
+    "tar",
+    "gzip",
+    "gunzip",
+    "zip",
+    "unzip",
+    "ping",
+    "curl -I",
+    "wget --spider",
+    "netstat",
+    "ss",
+    "journalctl",
+    "dmesg",
+    "lsof",
+    "strace",
 ]
 
 
 # ============================================================================
 # Pydantic 模型
 # ============================================================================
+
 
 class SandboxExecuteRequest(BaseModel):
     code: str = Field(..., description="要执行的代码")
@@ -97,23 +163,24 @@ class SandboxExecuteResponse(BaseModel):
     exit_code: int
     execution_time_ms: float
     language: str
-    safe: bool                          # 是否通过安全检查
-    blocked_reason: Optional[str]       # 如果不安全，原因
+    safe: bool  # 是否通过安全检查
+    blocked_reason: Optional[str]  # 如果不安全，原因
     timestamp: str
 
 
 class SandboxValidateResponse(BaseModel):
-    safe: bool                          # 是否安全
-    risk_level: str                     # "safe" | "low" | "medium" | "high" | "blocked"
-    blocked: bool                       # 是否被黑名单阻止
-    blocked_reason: Optional[str]       # 阻止原因
-    warnings: List[str]                 # 警告列表
-    recommended_action: str             # 建议操作
+    safe: bool  # 是否安全
+    risk_level: str  # "safe" | "low" | "medium" | "high" | "blocked"
+    blocked: bool  # 是否被黑名单阻止
+    blocked_reason: Optional[str]  # 阻止原因
+    warnings: List[str]  # 警告列表
+    recommended_action: str  # 建议操作
 
 
 # ============================================================================
 # 安全检查引擎
 # ============================================================================
+
 
 def check_command_safety(command: str) -> SandboxValidateResponse:
     """
@@ -161,7 +228,7 @@ def check_command_safety(command: str) -> SandboxValidateResponse:
     if warnings:
         risk_level = "medium" if len(warnings) <= 1 else "high"
         return SandboxValidateResponse(
-            safe=True,              # 技术上允许，但有警告
+            safe=True,  # 技术上允许，但有警告
             risk_level=risk_level,
             blocked=False,
             blocked_reason=None,
@@ -206,6 +273,7 @@ def _set_resource_limits(memory_mb: int, cpu_sec: Optional[int]):
 # ============================================================================
 # 路由
 # ============================================================================
+
 
 @router.get("/status")
 async def sandbox_status():
@@ -285,10 +353,12 @@ async def sandbox_execute(req: SandboxExecuteRequest):
                 input=req.stdin or "",
             )
             if _RESOURCE_AVAILABLE:
-                _run_kwargs["preexec_fn"] = lambda: _set_resource_limits(
-                    req.memory_limit_mb, req.cpu_limit_seconds
-                )
-            result = subprocess.run(cmd, **_run_kwargs)
+                _run_kwargs["preexec_fn"] = lambda: _set_resource_limits(req.memory_limit_mb, req.cpu_limit_seconds)
+            # async 处理器里同步 subprocess.run 会把【整个网关事件循环】冻住
+            # req.timeout 秒(用户可控!)——期间所有请求/WS 全部停摆。放线程跑。
+            import asyncio as _asyncio
+
+            result = await _asyncio.to_thread(subprocess.run, cmd, **_run_kwargs)
 
             elapsed = (datetime.now(timezone.utc) - start_time).total_seconds() * 1000
 

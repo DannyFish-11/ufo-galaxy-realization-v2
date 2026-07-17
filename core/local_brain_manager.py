@@ -470,10 +470,12 @@ class LocalBrainManager:
             except Exception as exc:
                 logger.debug("Ollama cleanup delete failed: %s", exc)
 
-            # 查找并终止 ollama 进程
+            # 查找并终止 ollama 进程。注意:stop() 是 async——同步 subprocess.run
+            # 会把整个事件循环冻住最长 10s(WS 心跳/面板/语音全停),放线程里跑。
             try:
                 if sys.platform.startswith("win"):
-                    subprocess.run(
+                    await asyncio.to_thread(
+                        subprocess.run,
                         ["taskkill", "/F", "/IM", "ollama.exe"],
                         capture_output=True,
                         timeout=10,
@@ -481,8 +483,13 @@ class LocalBrainManager:
                         errors="replace",
                     )
                 else:
-                    subprocess.run(
-                        ["pkill", "-f", "ollama"], capture_output=True, timeout=10, encoding="utf-8", errors="replace"
+                    await asyncio.to_thread(
+                        subprocess.run,
+                        ["pkill", "-f", "ollama"],
+                        capture_output=True,
+                        timeout=10,
+                        encoding="utf-8",
+                        errors="replace",
                     )
             except Exception as e:
                 logger.debug(f"停止 Ollama 进程时出错: {e}")
@@ -823,7 +830,10 @@ class LocalBrainManager:
                 return False
 
             elif system == "Linux":
-                result = subprocess.run(
+                # async 路径里的长安装(最长 300s)必须放线程:否则首次自动装
+                # Ollama 期间整个事件循环冻结,桌面 UI/WS/语音全部假死几分钟。
+                result = await asyncio.to_thread(
+                    subprocess.run,
                     ["sh", "-c", "curl -fsSL https://ollama.com/install.sh | sh"],
                     capture_output=True,
                     text=True,
@@ -834,7 +844,8 @@ class LocalBrainManager:
                 return result.returncode == 0
 
             elif system == "Darwin":  # macOS
-                result = subprocess.run(
+                result = await asyncio.to_thread(
+                    subprocess.run,
                     ["brew", "install", "ollama"],
                     capture_output=True,
                     text=True,
@@ -885,10 +896,11 @@ class LocalBrainManager:
         """检测硬件画像"""
         profile = HardwareProfile()
 
-        # 检测 GPU
+        # 检测 GPU(async 路径,nvidia-smi 偶发卡顿最长 10s——放线程,别冻循环)
         try:
             if shutil.which("nvidia-smi"):
-                result = subprocess.run(
+                result = await asyncio.to_thread(
+                    subprocess.run,
                     [
                         "nvidia-smi",
                         "--query-gpu=name,memory.total,memory.used,memory.free,compute_cap",

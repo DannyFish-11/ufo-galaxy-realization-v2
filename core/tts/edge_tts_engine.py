@@ -229,7 +229,9 @@ class EdgeTTSEngine:
                 # 需要先把MP3转成WAV
                 if self._command_exists("ffmpeg"):
                     wav_path = mp3_path.replace(".mp3", "_temp.wav")
-                    subprocess.run(
+                    # async 播放路径里同步转码会冻事件循环——放线程跑
+                    await asyncio.to_thread(
+                        subprocess.run,
                         ["ffmpeg", "-y", "-i", mp3_path, wav_path],
                         capture_output=True,
                         check=True,
