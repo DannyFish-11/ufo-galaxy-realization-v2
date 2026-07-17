@@ -158,7 +158,9 @@ class TailscaleManager:
             return None
 
         try:
-            result = subprocess.run(
+            # async 检测循环:tailscaled 卡住时同步 run 冻事件循环最长 10s,放线程
+            result = await asyncio.to_thread(
+                subprocess.run,
                 ["tailscale", "status", "--json"],
                 capture_output=True,
                 text=True,

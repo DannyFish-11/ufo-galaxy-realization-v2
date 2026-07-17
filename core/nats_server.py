@@ -85,7 +85,17 @@ class EmbeddedNATSServer:
             return False
 
     async def _install(self) -> bool:
-        """自动安装nats-server"""
+        """自动安装nats-server。
+
+        整个安装体(curl/brew/urllib 下载/解压)都是同步阻塞操作,最长 120s——
+        放线程跑,否则启动路径上事件循环冻结,面板/WS 全部假死。
+        """
+        import asyncio
+
+        return await asyncio.to_thread(self._install_sync)
+
+    def _install_sync(self) -> bool:
+        """同步安装体(仅经 _install 的 to_thread 调用)。"""
         import platform
 
         system = platform.system().lower()
