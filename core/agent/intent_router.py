@@ -339,7 +339,7 @@ def _classify_by_rules(message: str) -> IntentResult:
 
 _LLM_CLASSIFY_PROMPT = """\
 请判断下面这条用户消息的处理模式，只需返回 JSON，格式如下：
-{"mode": "<chat_only|task_execute|hybrid>", "confidence": <0.0-1.0>, "task_hint": "<简短任务描述或空字符串>", "intent": "<意图标签>"}
+{{"mode": "<chat_only|task_execute|hybrid>", "confidence": <0.0-1.0>, "task_hint": "<简短任务描述或空字符串>", "intent": "<意图标签>"}}
 
 规则：
 - chat_only：纯聊天、问答、闲聊，不需要调用任何工具或设备

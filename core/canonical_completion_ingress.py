@@ -131,7 +131,9 @@ class CanonicalCompletionIngress:
             # No running loop: fall back to get_event_loop() which may return the
             # default loop or create one.  Callers in sync context are responsible
             # for setting the event loop before registering dispatches.
-            loop = asyncio.get_running_loop()
+            # 修复:原来这里误写成再调一次 get_running_loop()——它在无运行循环时
+            # 还是抛 RuntimeError,回退分支形同虚设,同步上下文注册必崩。
+            loop = asyncio.get_event_loop()
 
         fut: asyncio.Future = loop.create_future()
 

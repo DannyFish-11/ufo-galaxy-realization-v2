@@ -90,11 +90,18 @@ def shutdown_cognitive_evolution() -> None:
         _shutdown_event.set()
 
     # Cancel maintenance task
+    # 修复:原来 asyncio.get_event_loop().run_until_complete(...) 有两种必炸:
+    # ① 从运行中的循环里调 → "loop already running" RuntimeError;
+    # ② 拿到的默认循环 ≠ 任务所属循环 → "task attached to a different loop"。
+    # 正确做法:cancel 后只在【任务自己的循环空闲】时才同步收尾;循环还在跑
+    # 就让它自行处理取消,不同步阻塞等待。
     if _maintenance_task is not None and not _maintenance_task.done():
         _maintenance_task.cancel()
         try:
-            asyncio.get_event_loop().run_until_complete(asyncio.wait_for(_maintenance_task, timeout=2.0))
-        except (asyncio.CancelledError, asyncio.TimeoutError):
+            task_loop = _maintenance_task.get_loop()
+            if not task_loop.is_running() and not task_loop.is_closed():
+                task_loop.run_until_complete(asyncio.wait_for(_maintenance_task, timeout=2.0))
+        except (asyncio.CancelledError, asyncio.TimeoutError, RuntimeError):
             pass
 
     _initialized = False

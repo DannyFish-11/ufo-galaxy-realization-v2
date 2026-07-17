@@ -1088,13 +1088,16 @@ def _derive_live_state(device_id: str) -> AndroidNetworkParticipationState:
     execution_active = False
 
     # --- Read from attached_runtime_session_registry ---
+    # 修复:此前 import 的 get_registry 在目标模块根本不存在(实际导出是
+    # get_session_registry / 模块级 lookup_session_by_device),ImportError 被
+    # 下面的 except 静默吞掉——这整段"从会话注册表读活性"从未生效,
+    # websocket_connected/registration_ack_success 恒为 False。
     try:
         from core.attached_runtime_session_registry import (
-            get_registry,
+            lookup_session_by_device,
         )
 
-        registry = get_registry()
-        entry = registry.lookup_session_by_device(device_id)
+        entry = lookup_session_by_device(device_id)
         if entry is not None:
             websocket_connected = True
             registration_ack_success = True

@@ -10,9 +10,9 @@ Migrated from nodes/Node_38_BLE/main.py
 - 自动扫描 + 连接管理
 
 UUID 定义 (Galaxy BLE Service):
-- Service:          0000aip3-0000-1000-8000-00805f9b34fb
-- TX (write):       0000aip3-0001-1000-8000-00805f9b34fb
-- RX (notify):      0000aip3-0002-1000-8000-00805f9b34fb
+- Service:          0000a1b3-0000-1000-8000-00805f9b34fb
+- TX (write):       0000a1b3-0001-1000-8000-00805f9b34fb
+- RX (notify):      0000a1b3-0002-1000-8000-00805f9b34fb
 - CCCD:             00002902-0000-1000-8000-00805f9b34fb
 """
 
@@ -36,9 +36,13 @@ except ImportError:
     logger.warning("bleak not installed, BLE adapter disabled. pip install bleak")
 
 # Galaxy AIP v3 BLE UUIDs
-AIP_SERVICE_UUID = "0000aip3-0000-1000-8000-00805f9b34fb"
-TX_CHAR_UUID = "0000aip3-0001-1000-8000-00805f9b34fb"  # 写入
-RX_CHAR_UUID = "0000aip3-0002-1000-8000-00805f9b34fb"  # 通知
+# 修复:原 "0000aip3-..." 中 'i'/'p' 不是十六进制字符,是【非法 UUID】——任何
+# BLE 栈(bleak/Android)解析即抛异常,扫描/连接必崩。改用合法十六进制近似
+# 记形 a1b3("aip3" 的可读替身)。注意:对端(Android/WearOS)若也内置了旧
+# 非法常量,同样从未能工作,需同步对齐为本值。
+AIP_SERVICE_UUID = "0000a1b3-0000-1000-8000-00805f9b34fb"
+TX_CHAR_UUID = "0000a1b3-0001-1000-8000-00805f9b34fb"  # 写入
+RX_CHAR_UUID = "0000a1b3-0002-1000-8000-00805f9b34fb"  # 通知
 CCCD_UUID = "00002902-0000-1000-8000-00805f9b34fb"
 
 # BLE 约束

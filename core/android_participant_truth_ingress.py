@@ -738,6 +738,14 @@ def extract_participant_truth_envelope(
             result_success = True
         elif rk in ("failure", "failed", "error"):
             result_success = False
+        else:
+            # 修复:result 类消息若以 status 字段承载失败语义(payload.status 或
+            # 顶层 status = failed/error/failure),此前被完全忽略 → result_success
+            # 停留 None,下游 `is not False` 判定把【失败当成功】收账。只认显式
+            # 失败词:中性/成功 status 不改变语义,不会误伤。
+            st = str(payload.get("status") or message.get("status") or "").strip().lower()
+            if st in ("failure", "failed", "error"):
+                result_success = False
 
     # result_payload
     raw_result = payload.get("result") or payload.get("data")

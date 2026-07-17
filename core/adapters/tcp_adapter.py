@@ -217,18 +217,26 @@ class TCPAdapter(TransportAdapter):
         zc = zeroconf.Zeroconf()
 
         try:
-            # 浏览器方式发现
-            browser = zeroconf.ServiceBrowser(
-                zc,
-                GALAXY_SERVICE_TYPE,
-                handlers=[
-                    lambda zc, type, name, state: (
-                        found.update({name: state.addresses[0] if hasattr(state, "addresses") else ""})
-                        if state
-                        else None
-                    )
-                ],
-            )
+            # 浏览器方式发现。
+            # 修复(双重死):① zeroconf 以【关键字】(zeroconf/service_type/name/
+            # state_change) 调用 handler,原位置参数 lambda 每次事件都 TypeError;
+            # ② 第四参是 ServiceStateChange 枚举而非 ServiceInfo,原代码
+            # hasattr(state,"addresses") 恒 False → 即便回调能跑也只存空串。
+            # 正确做法:Added 事件时用 get_service_info 拉取真实地址。
+            def _on_change(zeroconf_obj, service_type, name, state_change):  # noqa: ANN001
+                try:
+                    if getattr(state_change, "name", "") not in ("Added", "Updated"):
+                        return
+                    info = zeroconf_obj.get_service_info(service_type, name, timeout=2000)
+                    if info is None:
+                        return
+                    addrs = info.parsed_addresses() if hasattr(info, "parsed_addresses") else []
+                    if addrs:
+                        found[name] = addrs[0]
+                except Exception as cb_exc:  # noqa: BLE001
+                    logger.debug("mDNS handler error: %s", cb_exc)
+
+            browser = zeroconf.ServiceBrowser(zc, GALAXY_SERVICE_TYPE, handlers=[_on_change])
             await asyncio.sleep(timeout)
             browser.cancel()
         except Exception as e:
@@ -244,16 +252,31 @@ class TCPAdapter(TransportAdapter):
             return
 
         try:
+            import socket
+
+            # 修复:原来把枚举 IPVersion.AllV4 当 IP 地址列表传给 ServiceInfo
+            # ("自动获取 IP"并不是该参数的语义),注册要么直接抛异常被吞、要么
+            # 注册出无效记录——本机服务从未真正可被发现。这里用 UDP connect
+            # 技巧探测本机对外 IP,按契约传【打包后的字节地址】。
+            probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            try:
+                probe.connect(("8.8.8.8", 80))
+                local_ip = probe.getsockname()[0]
+            except Exception:  # noqa: BLE001 — 无外网路由时退回 hostname 解析
+                local_ip = socket.gethostbyname(socket.gethostname())
+            finally:
+                probe.close()
+
             zc = zeroconf.Zeroconf()
             info = zeroconf.ServiceInfo(
                 GALAXY_SERVICE_TYPE,
                 f"{device_id}.{GALAXY_SERVICE_TYPE}",
-                addresses=[zeroconf.IPVersion.AllV4],  # 自动获取 IP
+                addresses=[socket.inet_aton(local_ip)],
                 port=port or self._local_port,
                 properties={"device_id": device_id, "version": "3.0"},
             )
             zc.register_service(info)
-            logger.info("mDNS service registered: %s on port %d", device_id, port or self._local_port)
+            logger.info("mDNS service registered: %s (%s) on port %d", device_id, local_ip, port or self._local_port)
         except Exception as e:
             logger.warning("mDNS register failed: %s", e)
 

@@ -298,10 +298,16 @@ class TransportPathInfo:
 
 @dataclass
 class TopologySnapshot:
-    """Point-in-time snapshot of the canonical topology."""
+    """Point-in-time snapshot of the canonical topology.
+
+    ``nodes`` 承载逐节点 JSON-safe 明细(TopologyNode.to_dict()):
+    capability_network_runtime_policy 等消费方按 node_id/state 做路由过滤,
+    此前该明细不存在,消费方拿到的恒是空集,拓扑过滤静默失效。
+    """
 
     total_nodes: int = 0
     total_edges: int = 0
+    nodes: List[Dict[str, Any]] = field(default_factory=list)
     nodes_by_kind: Dict[str, int] = field(default_factory=dict)
     nodes_by_state: Dict[str, int] = field(default_factory=dict)
     edges_by_kind: Dict[str, int] = field(default_factory=dict)
@@ -315,6 +321,7 @@ class TopologySnapshot:
             "authority": self.authority,
             "total_nodes": self.total_nodes,
             "total_edges": self.total_edges,
+            "nodes": [dict(n) for n in self.nodes],
             "nodes_by_kind": dict(self.nodes_by_kind),
             "nodes_by_state": dict(self.nodes_by_state),
             "edges_by_kind": dict(self.edges_by_kind),
@@ -952,6 +959,10 @@ class NetworkTopologyRuntime:
         return TopologySnapshot(
             total_nodes=len(nodes),
             total_edges=len(edges),
+            # 修复:nodes 字段(文档声明 List[Dict],供 planner/policy 消费)
+            # 此前从未被填充,恒为空列表 → capability_network_runtime_policy 等
+            # 消费方拿不到任何节点状态,拓扑过滤静默失效。
+            nodes=[n.to_dict() for n in nodes],
             nodes_by_kind=nodes_by_kind,
             nodes_by_state=nodes_by_state,
             edges_by_kind=edges_by_kind,

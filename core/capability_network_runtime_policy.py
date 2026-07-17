@@ -719,7 +719,10 @@ def query_routable_executors(
         topology_runtime = get_network_topology_runtime()
         topo_snap = topology_runtime.snapshot()
         for node in topo_snap.nodes:
-            topology_states[node.node_id] = node.state.value if hasattr(node.state, "value") else str(node.state)
+            # 修复:snapshot().nodes 是 List[Dict](TopologyNode.to_dict()),
+            # 原来按属性访问 node.node_id/node.state 会 AttributeError 被吞,
+            # 拓扑状态恒为空 → 路由过滤静默失效。
+            topology_states[str(node.get("node_id", ""))] = str(node.get("state", ""))
     except Exception as exc:
         logger.debug("query_routable_executors: topology runtime unavailable: %s", exc)
 
@@ -812,7 +815,10 @@ def query_capable_device_executors(
         topology_runtime = get_network_topology_runtime()
         topo_snap = topology_runtime.snapshot()
         for node in topo_snap.nodes:
-            topology_states[node.node_id] = node.state.value if hasattr(node.state, "value") else str(node.state)
+            # 修复:snapshot().nodes 是 List[Dict](TopologyNode.to_dict()),
+            # 原来按属性访问 node.node_id/node.state 会 AttributeError 被吞,
+            # 拓扑状态恒为空 → 路由过滤静默失效。
+            topology_states[str(node.get("node_id", ""))] = str(node.get("state", ""))
     except Exception as exc:
         logger.debug("query_capable_device_executors: topology runtime unavailable: %s", exc)
 

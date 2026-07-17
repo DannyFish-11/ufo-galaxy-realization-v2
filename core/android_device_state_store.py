@@ -801,11 +801,13 @@ class _AndroidDeviceStateStore:
             "snapshot_reconciliation": dict(self._snapshot_reconciliation),
             "execution_events": [e.to_dict() for e in self._execution_events[-self._MAX_EVENTS :]],
         }
+        # 修复:tmp_path 必须在 try 外先置 None——若 os.makedirs 先抛异常,
+        # except 分支引用 tmp_path 会 NameError,把真实的持久化错误吞成新崩溃。
+        tmp_path: Optional[str] = None
         try:
             directory = os.path.dirname(path)
             if directory:
                 os.makedirs(directory, exist_ok=True)
-            tmp_path: Optional[str] = None
             with tempfile.NamedTemporaryFile(
                 "w",
                 encoding="utf-8",

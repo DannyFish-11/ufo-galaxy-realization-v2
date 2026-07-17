@@ -279,11 +279,25 @@ class CacheManager:
 _cache_instance: Optional[CacheManager] = None
 
 
+_cache_init_lock: Optional[asyncio.Lock] = None
+
+
 async def get_cache(redis_url: str = "") -> CacheManager:
-    """获取全局缓存实例"""
-    global _cache_instance
-    if _cache_instance is None:
-        _cache_instance = CacheManager(redis_url)
-        backend = await _cache_instance.initialize()
-        logger.info(f"缓存已初始化: {backend}")
+    """获取全局缓存实例。
+
+    修复竞态:原来先把实例发布到全局、再 await initialize()——并发首调时
+    另一个协程会拿到【未初始化】的实例直接用。现在初始化完成后才发布,
+    并用 asyncio.Lock 防止并发双初始化。
+    """
+    global _cache_instance, _cache_init_lock
+    if _cache_instance is not None:
+        return _cache_instance
+    if _cache_init_lock is None:
+        _cache_init_lock = asyncio.Lock()
+    async with _cache_init_lock:
+        if _cache_instance is None:
+            candidate = CacheManager(redis_url)
+            backend = await candidate.initialize()
+            logger.info(f"缓存已初始化: {backend}")
+            _cache_instance = candidate
     return _cache_instance

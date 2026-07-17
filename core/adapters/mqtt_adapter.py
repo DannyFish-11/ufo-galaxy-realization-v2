@@ -52,6 +52,15 @@ class MQTTAdapter(TransportAdapter):
             self._client.username_pw_set(self._username, self._password)
         self._client.on_connect = self._on_connect
         self._client.on_disconnect = self._on_disconnect
+        # 修复:原来只建客户端、挂回调,从不 connect/loop_start——_on_connect
+        # 永不触发,_connected 恒 False,send() 永远报 "MQTT not connected",
+        # 整个适配器名存实亡。connect_async + loop_start 非阻塞、断线自动重连,
+        # broker 不在也只是后台静默重试(优雅降级,不炸初始化)。
+        try:
+            self._client.connect_async(self._broker, self._port)
+            self._client.loop_start()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("MQTT connect_async 失败(适配器降级不可用): %s", exc)
 
     def _on_connect(self, client, userdata, flags, rc):
         self._connected = rc == 0
