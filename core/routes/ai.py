@@ -148,6 +148,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 "PARALLEL": TeamStrategy.PARALLEL,
                 "SPECIALIZED": TeamStrategy.SPECIALIZED,
                 "SWARM": TeamStrategy.SWARM,
+                "MOA": TeamStrategy.MOA,
             }
             strategy = strategy_map.get(req.strategy.upper(), TeamStrategy.SPECIALIZED)
 

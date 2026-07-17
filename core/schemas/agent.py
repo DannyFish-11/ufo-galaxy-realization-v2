@@ -88,6 +88,7 @@ class TeamStrategyEnum(str, Enum):
     SWARM = "swarm"  # 群体智能 — 批量同类 Agent 投票/合并
     CRITIC = "critic"  # 做/审分离 — executor(本地小模型)产出，critic(开源大模型)审核可打回
     PIPELINE = "pipeline"  # 流水线 — A→B→C 顺序交接，前一步产出为后一步输入
+    MOA = "moa"  # Mixture of Agents — 多层协作：本地 proposer 层扇出 → 后层读全部前层产出精炼 → 强模型聚合
 
 
 class TeamMemberSchema(BaseModel):

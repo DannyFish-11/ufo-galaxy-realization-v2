@@ -54,6 +54,10 @@ def resolve_electron_ipc_port(environ: Optional[Dict[str, str]] = None) -> int:
 _ELECTRON_PORT = resolve_electron_ipc_port()
 _ELECTRON_IPC_URL = f"http://127.0.0.1:{_ELECTRON_PORT}/ipc/presence-state"
 
+# 单个 WS 客户端 send_json 的封顶时长:一个卡死/龟速的客户端绝不能拖垮
+# 对其它客户端的广播(尤其是"说话中=True"这种瞬时脉冲)。超时即判死、清理。
+_WS_SEND_TIMEOUT_S: float = 2.0
+
 
 # ── DesktopPresenceMode → depth_factor 映射 ──
 # STATIC(休息)    → 0.00-0.05  (Silent 呼吸光环)
@@ -363,8 +367,15 @@ class GalaxyPresenceBridge:
         WS 广播对空 clients 集合是纯本地 no-op),改成【总是两条都推】,不再依赖谁先成功。
         """
         msg = self._build_message(speaking_override=speaking_override)
-        await self._try_ipc_http(msg)
-        await self._ws_broadcast(msg)
+        # 两条通道【并发】推,互不阻塞:IPC 探测最长 1s(对着可能不存在的 Electron),
+        # 绝不能挡在 WS 广播前面——否则面板/覆盖层那条直连 WS 要等 IPC 超时才更新,
+        # "说话中=True"这类瞬时脉冲会被拖过消费端时间窗(全量 CI 里 tts 覆盖层偶发
+        # 只收到 False 的根因)。return_exceptions 保证一条挂了不连累另一条。
+        await asyncio.gather(
+            self._try_ipc_http(msg),
+            self._ws_broadcast(msg),
+            return_exceptions=True,
+        )
 
     async def _try_ipc_http(self, msg: Dict[str, Any]) -> bool:
         """尝试 HTTP POST 到 Electron。返回是否成功。"""
@@ -382,25 +393,37 @@ class GalaxyPresenceBridge:
             return False
 
     async def _ws_broadcast(self, msg: Dict[str, Any]) -> None:
-        """WebSocket fallback 广播。"""
-        dead: list = []
+        """WebSocket 广播——【并发】发给所有客户端,单个客户端封顶超时。
+
+        此前是逐个 `await ws.send_json`:一个卡死/龟速客户端(如全量测试里前面
+        用例遗留、事件循环已换的僵尸连接)会顺序阻塞其后所有健康客户端,让"说话中"
+        脉冲迟迟到不了真正在看的覆盖层。改为并发发送 + 每客户端 _WS_SEND_TIMEOUT_S
+        封顶,超时/报错即判死清理,互不拖累。
+        """
         async with self._lock:
             clients = list(self._clients)
-        for ws in clients:
+        if not clients:
+            return
+
+        async def _send(ws: Any) -> Optional[Any]:
             try:
-                await ws.send_json(msg)
-            except Exception:
-                dead.append(ws)
+                await asyncio.wait_for(ws.send_json(msg), timeout=_WS_SEND_TIMEOUT_S)
+                return None
+            except Exception:  # noqa: BLE001 — 含 TimeoutError:慢/死客户端一律判死
+                return ws
+
+        results = await asyncio.gather(*(_send(ws) for ws in clients), return_exceptions=True)
+        dead = [r for r in results if r is not None and not isinstance(r, BaseException)]
         if dead:
             async with self._lock:
                 for ws in dead:
                     self._clients.discard(ws)
 
     async def _send_to(self, websocket: WebSocket) -> None:
-        """向单个客户端发送当前状态。"""
+        """向单个客户端发送当前状态(封顶超时:注册时若客户端卡死不阻塞调用方)。"""
         try:
-            await websocket.send_json(self._build_message())
-        except Exception as exc:
+            await asyncio.wait_for(websocket.send_json(self._build_message()), timeout=_WS_SEND_TIMEOUT_S)
+        except Exception as exc:  # noqa: BLE001 — 含 TimeoutError
             logger.debug("Send to single client failed: %s", exc)
 
     def _build_message(self, speaking_override: Optional[bool] = None) -> Dict[str, Any]:

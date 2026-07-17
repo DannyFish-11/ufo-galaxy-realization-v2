@@ -1,0 +1,240 @@
+"""core/modality_capability.py — 统一模态能力协商层（自适配的唯一入口）
+=========================================================================
+
+**问题**：全模态 I/O(看/听/说/看视频/桌面操作)散在各处各自判断"当前模型能不能
+原生做某模态",一旦换模型就得到处改 if。有些模型有音频、有些没有,靠散落的开关
+根本管不住。
+
+**解法**：把"某模态该走原生还是桥接还是不可用"收成【一次运行时协商】。所有循环
+(voice / ambient / computer_use / ingest / 请求注入)都问本层,而不是各自写死。
+换模型 → 协商结果自动变 → 全链路自适配,不留一个硬编码分支。
+
+三态(每个模态)：
+  native       —— 当前档位有模型原生支持该模态,且服务层确实能喂进去
+  bridge       —— 模型不原生支持,但有桥可替(听→ASR、说→TTS、视频→抽静帧)
+  unavailable  —— 原生没有、桥也没有 → 如实降级并说清原因(绝不假装能干)
+
+能力来源(唯一真相源)：core.model_catalog 的 EffectiveIO(每个模型声明 vision/
+audio_in/audio_out/video 原生能力),叠加"服务现实"门控(见 _native_serving_*):
+即便模型声明支持,Ollama /api/chat 还没有音频输入字段,故原生音频/视频要显式开
+GALAXY_NATIVE_AUDIO / GALAXY_NATIVE_VIDEO(默认关,上了真正的全模态服务端再开)。
+桥可用性(ASR/TTS 是否装了)也一并纳入,缺桥则如实报 unavailable。
+
+self-contained:纯读能力 + 环境门控 + 轻量 import 探测,无重型副作用;
+negotiate() 可注入 effective_io 便于单测(不加载真实模型)。
+"""
+
+from __future__ import annotations
+
+import logging
+import os
+from dataclasses import dataclass
+from typing import Any, Dict, Optional
+
+logger = logging.getLogger("Galaxy.ModalityCapability")
+
+# 模态名(稳定标识,面板/日志/测试共用)
+VISION_IN = "vision_in"  # 看静帧(摄像头/屏幕)
+AUDIO_IN = "audio_in"  # 听
+AUDIO_OUT = "audio_out"  # 说
+VIDEO_IN = "video_in"  # 看视频(连续帧/流)
+
+_MODES = ("native", "bridge", "unavailable")
+
+
+def _env_on(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None or raw.strip() == "":
+        return default
+    return raw.strip().lower() in ("1", "true", "yes", "on")
+
+
+# ── 服务现实门控:模型"声明支持"≠"服务端真能喂进去" ────────────────────────
+def _native_audio_serving_enabled() -> bool:
+    """原生音频(听/说)服务是否就绪。默认关——Ollama /api/chat 无音频字段;
+    上了 vLLM-Omni / MiniCPM-o server 再开 GALAXY_NATIVE_AUDIO。"""
+    return _env_on("GALAXY_NATIVE_AUDIO", False)
+
+
+def _native_video_serving_enabled() -> bool:
+    """原生视频(连续帧/流)服务是否就绪。默认关;上了支持视频的全模态服务再开。"""
+    return _env_on("GALAXY_NATIVE_VIDEO", False)
+
+
+# ── 桥可用性探测(轻量 import,不加载模型) ──────────────────────────────────
+def asr_bridge_available() -> bool:
+    """听的桥(音频→文字)是否可用:装了 faster-whisper 或 funasr 即可。"""
+    import importlib.util as _u
+
+    return any(_u.find_spec(m) is not None for m in ("faster_whisper", "funasr"))
+
+
+def tts_bridge_available() -> bool:
+    """说的桥(文字→语音)是否可用:edge-tts / pyttsx3 / Windows SAPI 任一即可。
+
+    Windows 上即便没装任何三方包,系统自带 SAPI 也能合成,故 Windows 恒 True。
+    """
+    if os.name == "nt":
+        return True
+    import importlib.util as _u
+
+    return any(_u.find_spec(m) is not None for m in ("edge_tts", "pyttsx3", "kokoro_onnx"))
+
+
+# ── 协商结果 ─────────────────────────────────────────────────────────────────
+@dataclass(frozen=True)
+class ModalityResolution:
+    """单个模态的协商结果。"""
+
+    modality: str
+    mode: str  # native | bridge | unavailable
+    reason: str
+    native_capable: bool = False  # 模型是否【声明】原生支持(与服务是否就绪分开)
+
+    @property
+    def usable(self) -> bool:
+        return self.mode in ("native", "bridge")
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "modality": self.modality,
+            "mode": self.mode,
+            "reason": self.reason,
+            "native_capable": self.native_capable,
+            "usable": self.usable,
+        }
+
+
+@dataclass(frozen=True)
+class ModalityPlan:
+    """一次协商产出的全模态计划——所有循环据此决定各模态怎么走。"""
+
+    vision_in: ModalityResolution
+    audio_in: ModalityResolution
+    audio_out: ModalityResolution
+    video_in: ModalityResolution
+    tier: str = ""
+
+    def get(self, modality: str) -> ModalityResolution:
+        return {
+            VISION_IN: self.vision_in,
+            AUDIO_IN: self.audio_in,
+            AUDIO_OUT: self.audio_out,
+            VIDEO_IN: self.video_in,
+        }[modality]
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "tier": self.tier,
+            VISION_IN: self.vision_in.to_dict(),
+            AUDIO_IN: self.audio_in.to_dict(),
+            AUDIO_OUT: self.audio_out.to_dict(),
+            VIDEO_IN: self.video_in.to_dict(),
+        }
+
+
+def _resolve_audio_in(effio, *, asr_ok: bool) -> ModalityResolution:
+    native = getattr(effio, "audio_in", "asr_bridge") == "native"
+    if native and _native_audio_serving_enabled():
+        return ModalityResolution(AUDIO_IN, "native", "模型原生听 + 全模态服务已开", True)
+    if asr_ok:
+        why = "模型原生听但服务未开(GALAXY_NATIVE_AUDIO)→ ASR 转写" if native else "模型不原生听 → ASR 转写"
+        return ModalityResolution(AUDIO_IN, "bridge", why, native)
+    return ModalityResolution(AUDIO_IN, "unavailable", "无原生音频服务、也未装 ASR(faster-whisper/funasr)", native)
+
+
+def _resolve_audio_out(effio, *, tts_ok: bool) -> ModalityResolution:
+    native = getattr(effio, "audio_out", "tts_bridge") == "native"
+    if native and _native_audio_serving_enabled():
+        return ModalityResolution(AUDIO_OUT, "native", "模型原生说 + 全模态服务已开", True)
+    if tts_ok:
+        why = "模型原生说但服务未开(GALAXY_NATIVE_AUDIO)→ TTS 合成" if native else "模型不原生说 → TTS 合成"
+        return ModalityResolution(AUDIO_OUT, "bridge", why, native)
+    return ModalityResolution(AUDIO_OUT, "unavailable", "无原生语音服务、也无可用 TTS", native)
+
+
+def _resolve_vision_in(effio) -> ModalityResolution:
+    if getattr(effio, "vision", "none") == "native":
+        return ModalityResolution(VISION_IN, "native", "模型原生看图(摄像头/屏幕静帧直接进上下文)", True)
+    return ModalityResolution(VISION_IN, "unavailable", "当前档位无视觉模型(换含视觉的模型即自动启用)", False)
+
+
+def _resolve_video_in(effio) -> ModalityResolution:
+    v = getattr(effio, "video", "none")
+    if v == "native" and _native_video_serving_enabled():
+        return ModalityResolution(VIDEO_IN, "native", "模型原生理解连续帧 + 视频服务已开", True)
+    if v in ("native", "frames_bridge"):
+        native = v == "native"
+        why = "视频服务未开(GALAXY_NATIVE_VIDEO)→ 抽静帧走视觉" if native else "模型不原生看视频 → 抽静帧走视觉"
+        return ModalityResolution(VIDEO_IN, "bridge", why, native)
+    return ModalityResolution(VIDEO_IN, "unavailable", "当前档位无视觉能力,无法从视频抽帧理解", False)
+
+
+def negotiate(
+    *,
+    effio: Any = None,
+    tier: Optional[str] = None,
+    asr_available: Optional[bool] = None,
+    tts_available: Optional[bool] = None,
+) -> ModalityPlan:
+    """协商当前(或指定)档位的全模态计划。
+
+    Args:
+        effio: 直接注入 EffectiveIO(测试用);None 则从 model_catalog 取当前/指定档位。
+        tier: 指定档位 key;None 用当前已选档位。
+        asr_available/tts_available: 覆盖桥可用性探测(测试用)。
+    """
+    if effio is None:
+        try:
+            from core.model_catalog import active_effective_io, tier_effective_io
+
+            effio = tier_effective_io(tier) if tier else active_effective_io()
+        except Exception as exc:  # noqa: BLE001 — 能力源不可用不能让协商崩,给最保守计划
+            logger.debug("模态能力源不可用,按最保守计划协商: %s", exc)
+            effio = None
+
+    if effio is None:
+        # 最保守:无能力信息 → 视觉/视频不可用,听说尽量走桥
+        asr_ok = asr_available if asr_available is not None else asr_bridge_available()
+        tts_ok = tts_available if tts_available is not None else tts_bridge_available()
+
+        class _Empty:
+            vision = "none"
+            audio_in = "asr_bridge"
+            audio_out = "tts_bridge"
+            video = "none"
+
+        effio = _Empty()
+
+    asr_ok = asr_available if asr_available is not None else asr_bridge_available()
+    tts_ok = tts_available if tts_available is not None else tts_bridge_available()
+
+    return ModalityPlan(
+        vision_in=_resolve_vision_in(effio),
+        audio_in=_resolve_audio_in(effio, asr_ok=asr_ok),
+        audio_out=_resolve_audio_out(effio, tts_ok=tts_ok),
+        video_in=_resolve_video_in(effio),
+        tier=tier or "",
+    )
+
+
+MODALITY_CAPABILITY_AUTHORITY: str = (
+    "MODALITY_CAPABILITY_V1: core/modality_capability.py | 全模态自适配协商唯一入口. "
+    "negotiate() → ModalityPlan(vision_in/audio_in/audio_out/video_in), 每模态三态 "
+    "native/bridge/unavailable. 能力源=model_catalog.EffectiveIO, 服务门控="
+    "GALAXY_NATIVE_AUDIO/GALAXY_NATIVE_VIDEO, 桥探测=faster-whisper/funasr/TTS. "
+    "所有循环(voice/ambient/computer_use/ingest)据此自适配,不写死 per-model 分支."
+)
+
+__all__ = [
+    "VISION_IN",
+    "AUDIO_IN",
+    "AUDIO_OUT",
+    "VIDEO_IN",
+    "ModalityResolution",
+    "ModalityPlan",
+    "negotiate",
+    "asr_bridge_available",
+    "tts_bridge_available",
+    "MODALITY_CAPABILITY_AUTHORITY",
+]

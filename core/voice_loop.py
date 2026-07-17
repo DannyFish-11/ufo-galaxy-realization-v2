@@ -109,20 +109,11 @@ class VoiceLoop:
             # 语音(麦克风)是可选功能；依赖缺失时明确记录错误并给出修复命令
             err_msg = str(exc)
             if "faster-whisper" in err_msg or "faster_whisper" in err_msg:
-                logger.error(
-                    "语音依赖缺失: faster-whisper 未安装. "
-                    "运行: pip install faster-whisper 后重启"
-                )
+                logger.error("语音依赖缺失: faster-whisper 未安装. " "运行: pip install faster-whisper 后重启")
             elif "sounddevice" in err_msg:
-                logger.error(
-                    "语音依赖缺失: sounddevice 未安装. "
-                    "运行: pip install sounddevice 后重启"
-                )
+                logger.error("语音依赖缺失: sounddevice 未安装. " "运行: pip install sounddevice 后重启")
             elif "edge-tts" in err_msg or "edge_tts" in err_msg:
-                logger.error(
-                    "语音依赖缺失: edge-tts 未安装. "
-                    "运行: pip install edge-tts 后重启"
-                )
+                logger.error("语音依赖缺失: edge-tts 未安装. " "运行: pip install edge-tts 后重启")
             else:
                 logger.error("语音依赖缺失: %s. 运行: pip install faster-whisper", exc)
             raise
