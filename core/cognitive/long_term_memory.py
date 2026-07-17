@@ -154,6 +154,11 @@ class LongTermMemory:
         with self._lock:
             if namespace not in self._store:
                 self._store[namespace] = {}
+            # 修复:覆盖写时必须先移除旧的插入序元组,否则 ① 淘汰会弹出旧元组、
+            # 误删【刚刷新】的同名条目(热键越新越先被杀);② _insertion_order
+            # 在覆盖密集的负载下无界增长。
+            if key in self._store[namespace]:
+                self._insertion_order = [t for t in self._insertion_order if not (t[1] == namespace and t[2] == key)]
             self._store[namespace][key] = entry
             self._insertion_order.append((entry.timestamp, namespace, key))
             self._evict_if_needed()
@@ -224,6 +229,8 @@ class LongTermMemory:
             ns = self._store.get(namespace, {})
             if key in ns:
                 del ns[key]
+                # 同步清插入序,避免陈腐元组挤占淘汰配额/误伤未来同名新条目
+                self._insertion_order = [t for t in self._insertion_order if not (t[1] == namespace and t[2] == key)]
                 return True
         return False
 
@@ -231,6 +238,7 @@ class LongTermMemory:
         """Remove all entries in *namespace*. Returns the number removed."""
         with self._lock:
             ns = self._store.pop(namespace, {})
+            self._insertion_order = [t for t in self._insertion_order if t[1] != namespace]
         return len(ns)
 
     @property

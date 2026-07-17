@@ -443,6 +443,8 @@ class AuditEventSemantics:
 
     _MAX_RING: int = 256
 
+    _MAX_INDEXED_TASKS = 512  # _by_task 索引上限(按插入序淘汰最老任务)
+
     def __init__(self) -> None:
         self._ring: Deque[AuditEventRecord] = deque(maxlen=self._MAX_RING)
         self._by_task: Dict[str, List[AuditEventRecord]] = {}
@@ -468,6 +470,11 @@ class AuditEventSemantics:
         self._ring.append(record)
         if record.task_id:
             self._by_task.setdefault(record.task_id, []).append(record)
+            # 修复无界泄漏:环形缓冲有 cap,但 _by_task 索引把每个 task 的记录
+            # 永久钉住(长跑进程每任务 2-4 条,数万任务后内存持续膨胀)。按插入
+            # 序保留最近 _MAX_INDEXED_TASKS 个任务,老任务整键淘汰。
+            while len(self._by_task) > self._MAX_INDEXED_TASKS:
+                self._by_task.pop(next(iter(self._by_task)), None)
         # Write to durable store when attached
         if self._audit_store is not None:
             try:

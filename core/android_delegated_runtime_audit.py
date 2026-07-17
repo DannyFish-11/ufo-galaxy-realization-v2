@@ -327,6 +327,8 @@ class AndroidDelegatedRuntimeAuditRecorder:
 
     _MAX_RING: int = 512
 
+    _MAX_INDEXED_KEYS = 512  # 二级索引上限(按插入序淘汰最老键)
+
     def __init__(self) -> None:
         self._ring: Deque[AndroidDelegatedAuditRecord] = deque(maxlen=self._MAX_RING)
         self._by_task: Dict[str, List[AndroidDelegatedAuditRecord]] = {}
@@ -349,8 +351,13 @@ class AndroidDelegatedRuntimeAuditRecorder:
             self._ring.append(record)
             if record.task_id:
                 self._by_task.setdefault(record.task_id, []).append(record)
+                # 修复无界泄漏:ring 有 maxlen 但二级索引把记录永久钉住。
+                while len(self._by_task) > self._MAX_INDEXED_KEYS:
+                    self._by_task.pop(next(iter(self._by_task)), None)
             if record.session_id:
                 self._by_session.setdefault(record.session_id, []).append(record)
+                while len(self._by_session) > self._MAX_INDEXED_KEYS:
+                    self._by_session.pop(next(iter(self._by_session)), None)
 
             # Forward to shared AuditEventSemantics ring
             semantics, AuditEventRecord = _get_shared_semantics()

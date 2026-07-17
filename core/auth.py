@@ -101,9 +101,12 @@ def validate_auth_config() -> None:
         if auth in ("0", "false", "no", ""):
             raise RuntimeError("Cannot disable authentication in production mode")
 
-    if is_auth_enabled() and not os.getenv("GALAXY_API_TOKEN"):
+    # 修复:轮换清单 GALAXY_API_TOKENS 是文档支持的等价配置(get_active_tokens
+    # 完整支持)。此前只查 GALAXY_API_TOKEN——按文档流程完成密钥轮换(只留
+    # GALAXY_API_TOKENS)后,启动校验反而 RuntimeError 拒绝启动。
+    if is_auth_enabled() and not os.getenv("GALAXY_API_TOKEN") and not os.getenv("GALAXY_API_TOKENS", "").strip():
         raise RuntimeError(
-            "GALAXY_AUTH_ENABLED=true but GALAXY_API_TOKEN is not set. "
+            "GALAXY_AUTH_ENABLED=true but neither GALAXY_API_TOKEN nor GALAXY_API_TOKENS is set. "
             "Set a secure token or disable auth with GALAXY_AUTH_ENABLED=false"
         )
 
@@ -343,18 +346,16 @@ async def require_auth(
     if not is_auth_enabled():
         return {"authenticated": True, "device_id": x_device_id, "auth_enabled": False}
 
-    active_tokens = get_active_tokens()
-
-    # Security: dev mode bypass removed — all requests require valid tokens
-    if not active_tokens:
-        logger.error(
-            "Protected endpoint accessed but no active API tokens are configured. "
-            "Set GALAXY_API_TOKEN or GALAXY_API_TOKENS."
-        )
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=("Server is not configured for authentication. " "Set GALAXY_API_TOKEN environment variable."),
-            headers={"WWW-Authenticate": "Bearer"},
+    # Security: dev mode bypass removed — all requests require valid tokens。
+    # 修复:此前 env token 为空(未配置/已过期)就直接 401,抢在 verify_api_token
+    # 之前——但 verify_api_token 明确支持【配对发放的每设备 token】在无共享 env
+    # token 时独立生效(见其注释),这里的预判把合法设备 token 全部拒了。改为
+    # 只记日志提示,真正的判定交给 verify_api_token(设备 token→env token 顺序)。
+    if not get_active_tokens():
+        logger.warning(
+            "Protected endpoint accessed with no active shared API tokens configured; "
+            "falling through to per-device token verification. "
+            "Set GALAXY_API_TOKEN or GALAXY_API_TOKENS for shared-token auth."
         )
 
     # Normal auth flow: validate Bearer token

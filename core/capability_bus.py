@@ -351,6 +351,7 @@ class CapabilityBus:
         self._entries: Dict[str, CapabilityBusEntry] = {}
         self._lock = threading.Lock()
         self._seeded_from_node_registry: bool = False
+        self._bg_tasks: set = set()  # 在飞后台发布任务强引用(防 GC + 取回异常)
 
     # PR-AIPV3-CAP: AIP v3 capability report emission
 
@@ -375,7 +376,18 @@ class CapabilityBus:
 
             nats = get_nats_bus()
             if nats.is_connected():
-                asyncio.get_running_loop().create_task(nats.publish_capability_report(msg))
+                # 修复 fire-and-forget:不留引用的 task 可能在完成前被 GC,发布
+                # 异常也永远无人取回(只剩 GC 期迟到的 "never retrieved" 警告)。
+                # 持引用 + 完成回调取回异常,失败如实记日志。
+                _task = asyncio.get_running_loop().create_task(nats.publish_capability_report(msg))
+                self._bg_tasks.add(_task)
+
+                def _done(t: "asyncio.Task") -> None:
+                    self._bg_tasks.discard(t)
+                    if not t.cancelled() and t.exception() is not None:
+                        logger.warning("capability report publish failed: %s", t.exception())
+
+                _task.add_done_callback(_done)
             else:
                 logger.debug("AIPV3-CAP CAPABILITY_REPORT: %s", msg.model_dump_json(exclude_none=True))
         except Exception as exc:

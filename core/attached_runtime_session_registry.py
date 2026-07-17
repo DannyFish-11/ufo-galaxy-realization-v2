@@ -838,6 +838,11 @@ class AttachedSessionRegistry:
         elif self._active_by_device.get(entry.device_id) == entry.entry_id and not entry.is_active():
             # Remove stale active pointer
             del self._active_by_device[entry.device_id]
+        # 修复:reconnect/reattach 允许换 session_id(文档参数),此前这里从不
+        # 刷新 _entry_by_session——新 id 查不到、旧 id 还幽灵命中改名后的条目。
+        # 现补上新 id 的索引;旧键的幽灵命中由 get_by_session_id 的一致性校验拦截。
+        if entry.session_id:
+            self._entry_by_session[entry.session_id] = entry.entry_id
         if entry.runtime_attachment_session_id:
             self._entry_by_attachment_id[entry.runtime_attachment_session_id] = entry.entry_id
 
@@ -1002,6 +1007,10 @@ class AttachedSessionRegistry:
             return None
         entry = self._get_by_entry_id(entry_id)
         if entry is None:
+            return None
+        # 一致性校验:条目可能已被 reconnect 换成新 session_id,旧键指向的
+        # entry_id 不应再以旧 id 命中(幽灵解析)。
+        if entry.session_id != session_id:
             return None
         if active_only and not entry.is_active():
             return None

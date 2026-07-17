@@ -393,10 +393,30 @@ def ingest_android_handoff_response(
     # Determine whether to clear the pending entry after resolution.
     is_terminal = envelope.is_terminal
 
+    # COMPLETION_RESULT_DRIVEN_POLICY(前置):终局响应必须【无条件】转发给
+    # CanonicalCompletionIngress——它维护独立的 Future 注册表(register_pending_
+    # dispatch 的等待方,生产上的唯一模式),与本模块的 callback 注册表无关。
+    # 修复:此前该转发放在函数尾部,回调注册表 miss / resolve 失败的两个提前
+    # return 会跳过它 → 等待 Future 的派发方在终局响应已到达的情况下仍然
+    # 一路挂到超时。
+    def _notify_completion_if_terminal() -> None:
+        if not is_terminal:
+            return
+        try:
+            from core.canonical_completion_ingress import get_canonical_completion_ingress
+
+            get_canonical_completion_ingress().notify(envelope)
+        except Exception as _cci_exc:  # noqa: BLE001
+            logger.debug(
+                "handoff_v2 ingress: canonical_completion_ingress.notify failed (non-fatal): %s",
+                _cci_exc,
+            )
+
     try:
         callback = _runtime.resolve(envelope, clear=is_terminal)
     except Exception as exc:
         logger.error("handoff_v2 ingress: runtime.resolve failed: %s", exc)
+        _notify_completion_if_terminal()
         return HandoffV2ResponseOutcome(
             envelope=envelope,
             was_correlated=False,
@@ -409,6 +429,7 @@ def ingest_android_handoff_response(
             f"task_id={envelope.task_id!r} device_id={envelope.device_id!r}"
         )
         logger.debug("handoff_v2 ingress miss: %s", reject_reason)
+        _notify_completion_if_terminal()
         return HandoffV2ResponseOutcome(
             envelope=envelope,
             was_correlated=False,
@@ -437,16 +458,8 @@ def ingest_android_handoff_response(
 
     # COMPLETION_RESULT_DRIVEN_POLICY: forward terminal responses to
     # CanonicalCompletionIngress so asyncio.Future awaiters are resolved.
-    if is_terminal:
-        try:
-            from core.canonical_completion_ingress import get_canonical_completion_ingress
-
-            get_canonical_completion_ingress().notify(envelope)
-        except Exception as _cci_exc:
-            logger.debug(
-                "handoff_v2 ingress: canonical_completion_ingress.notify failed (non-fatal): %s",
-                _cci_exc,
-            )
+    # (相关性命中路径——miss/异常路径已在上方前置转发,保证所有终局响应必达。)
+    _notify_completion_if_terminal()
 
     return HandoffV2ResponseOutcome(
         envelope=envelope,

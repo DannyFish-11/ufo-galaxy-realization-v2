@@ -681,9 +681,26 @@ class AndroidParticipantSessionRuntime:
         return None
 
     def list_active(self) -> List[AndroidParticipantSessionRecord]:
-        """Return all non-terminal records, newest-first."""
+        """Return the newest record per session, filtered to non-terminal, newest-first.
+
+        修复:ring 是"每次推进追加一条"的历史,原实现逐条过滤非 terminal,
+        会把【后来已终局】会话的旧 execution 相位记录继续当"活跃会话"返回
+        (消费方 android_network_participation 等据此误判设备仍在执行)。
+        正确语义:每个 session 只看最新一条(ring 为 newest-first,首见即最新),
+        其相位活跃才算活跃;无 session_id 的孤条保持逐条判定。
+        """
         with self._lock:
-            return [r for r in self._ring if r.phase.is_active()]
+            seen: set = set()
+            out: List[AndroidParticipantSessionRecord] = []
+            for r in self._ring:
+                sid = r.session_id or ""
+                if sid:
+                    if sid in seen:
+                        continue  # 已见过该会话更新的记录
+                    seen.add(sid)
+                if r.phase.is_active():
+                    out.append(r)
+            return out
 
     def snapshot(self) -> AndroidParticipantSessionSnapshot:
         """Return a point-in-time snapshot."""

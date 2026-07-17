@@ -796,7 +796,11 @@ class AndroidDelegatedRuntimeLifecycleCoordinator:
             Optional session_id override (extracted from *message* if absent).
         """
         try:
-            _session_id = session_id or message.get("session_id") or message.get("payload", {}).get("session_id") or ""
+            # payload 键存在但值为 null 时 .get("payload", {}) 返回 None(默认值
+            # 只对缺键生效)→ AttributeError → 整条生命周期事件被丢而网关已 ACK。
+            _session_id = (
+                session_id or message.get("session_id") or (message.get("payload") or {}).get("session_id") or ""
+            )
             device_id = message.get("device_id", "")
             phase_before = ""
             phase_after = ""
@@ -915,7 +919,11 @@ class AndroidDelegatedRuntimeLifecycleCoordinator:
         """
         try:
             _device_id = device_id or message.get("device_id", "")
-            _session_id = session_id or message.get("session_id") or message.get("payload", {}).get("session_id") or ""
+            # payload 键存在但值为 null 时 .get("payload", {}) 返回 None(默认值
+            # 只对缺键生效)→ AttributeError → 整条生命周期事件被丢而网关已 ACK。
+            _session_id = (
+                session_id or message.get("session_id") or (message.get("payload") or {}).get("session_id") or ""
+            )
             phase_before = ""
             phase_after = ""
             was_transitioned = False
@@ -1039,7 +1047,11 @@ class AndroidDelegatedRuntimeLifecycleCoordinator:
             Optional session_id override.
         """
         try:
-            _session_id = session_id or message.get("session_id") or message.get("payload", {}).get("session_id") or ""
+            # payload 键存在但值为 null 时 .get("payload", {}) 返回 None(默认值
+            # 只对缺键生效)→ AttributeError → 整条生命周期事件被丢而网关已 ACK。
+            _session_id = (
+                session_id or message.get("session_id") or (message.get("payload") or {}).get("session_id") or ""
+            )
             phase_before = ""
             phase_after = ""
             was_transitioned = False

@@ -716,12 +716,21 @@ class PatternMiner:
     # ── Event bus callbacks ─────────────────────────────────────────
 
     def _on_task_done(self, event: Any) -> None:
-        """Trigger incremental mining on task completion."""
+        """Trigger incremental mining on task completion.
+
+        修复节流失效:_last_mine_time 只被(从不自动调用的)mine_full 更新,
+        mine_incremental 不更新它 → elif 恒真(基线 0.0),每个任务事件都触发
+        全量增量挖掘(拉 50 条记录 + 4 种算法),"攒 5 条或每 10 分钟"从未生效。
+        两个触发分支现在都刷新 _last_mine_time 并清零计数。
+        """
         self._pending_records += 1
         if self._pending_records >= 5:
             self._pending_records = 0
+            self._last_mine_time = time.time()
             self.mine_incremental()
         elif time.time() - self._last_mine_time > self._mine_interval_s:
+            self._pending_records = 0
+            self._last_mine_time = time.time()
             self.mine_incremental()
 
     def _on_task_failed(self, event: Any) -> None:

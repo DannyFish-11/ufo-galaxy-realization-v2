@@ -657,7 +657,9 @@ def _has_attr(module_path: str, attr_name: str) -> bool:
 
 def _file_exists(relative_path: str) -> bool:
     """Return True when *relative_path* exists relative to the project root."""
-    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    # 修复:本文件从 core/ 迁到 core/audit_layer/ 后,两层 dirname 只到 <repo>/core,
+    # 所有仓库根相对探测(tests/*、.github/*、core/*.py)恒 False。需三层。
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     return os.path.isfile(os.path.join(project_root, relative_path))
 
 
@@ -675,7 +677,9 @@ def _module_file_exists(dotted_module_path: str) -> bool:
     distinguishing it from a genuinely absent module gives a more accurate
     maturity picture.
     """
-    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    # 修复:本文件从 core/ 迁到 core/audit_layer/ 后,两层 dirname 只到 <repo>/core,
+    # 所有仓库根相对探测(tests/*、.github/*、core/*.py)恒 False。需三层。
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     file_path = os.path.join(project_root, dotted_module_path.replace(".", os.sep) + ".py")
     return os.path.isfile(file_path)
 
