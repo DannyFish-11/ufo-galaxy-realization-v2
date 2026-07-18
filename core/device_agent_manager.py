@@ -405,19 +405,26 @@ class IoTDeviceAgent(BaseDeviceAgent):
 
     async def connect(self) -> bool:
         try:
+            # 修复:子方法此前吞掉传输失败(缺 paho/httpx、无地址、连不上)后
+            # connect() 仍无条件置 ONLINE → 死设备被标在线,路由把任务派过去。
+            # 现在按子方法的真实连接结果决定 is_connected/状态。
             if self.protocol == "mqtt":
-                await self._connect_mqtt()
+                ok = await self._connect_mqtt()
             elif self.protocol == "http":
-                await self._connect_http()
-            self.is_connected = True
-            self.device_info.status = DeviceStatus.ONLINE
-            return True
+                ok = await self._connect_http()
+            else:
+                ok = False
+            self.is_connected = bool(ok)
+            self.device_info.status = DeviceStatus.ONLINE if ok else DeviceStatus.OFFLINE
+            return bool(ok)
         except Exception as e:
             logger.error(f"Failed to connect IoT device: {e}")
+            self.is_connected = False
+            self.device_info.status = DeviceStatus.OFFLINE
             return False
 
-    async def _connect_mqtt(self):
-        """通过 MQTT 连接"""
+    async def _connect_mqtt(self) -> bool:
+        """通过 MQTT 连接。返回是否真正连上(缺依赖/失败均 False)。"""
         try:
             import paho.mqtt.client as mqtt
 
@@ -426,26 +433,36 @@ class IoTDeviceAgent(BaseDeviceAgent):
             self.mqtt_client = mqtt.Client()
             self.mqtt_client.connect(broker, port)
             self.mqtt_client.loop_start()
+            return True
         except ImportError:
             logger.warning("paho-mqtt not installed")
+            return False
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"IoT device {self.device_id}: MQTT connection failed: {e}")
+            return False
 
-    async def _connect_http(self):
-        """通过 HTTP 连接"""
+    async def _connect_http(self) -> bool:
+        """通过 HTTP 连接。返回是否真正连上。"""
         try:
             import httpx
 
-            address = self.device_info.address or self.device_info.metadata.get("http_url", "")
+            # 修复:DeviceInfo 没有 address 字段(self.device_info.address 会
+            # AttributeError),HTTP 地址一直在 metadata.http_url 里。
+            address = self.device_info.metadata.get("http_url", "")
             if not address:
                 logger.warning(f"IoT device {self.device_id}: no HTTP address configured")
-                return
+                return False
             async with httpx.AsyncClient(timeout=10.0) as client:
                 resp = await client.get(address)
                 resp.raise_for_status()
                 logger.info(f"IoT device {self.device_id}: HTTP connection OK (status {resp.status_code})")
+            return True
         except ImportError:
             logger.warning("httpx not installed, HTTP connection skipped")
+            return False
         except Exception as e:
             logger.warning(f"IoT device {self.device_id}: HTTP connection failed: {e}")
+            return False
 
     async def disconnect(self) -> bool:
         if self.mqtt_client:

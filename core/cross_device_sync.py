@@ -240,7 +240,10 @@ async def _async_push_phase_to_all_devices(
     for (did, _), result in zip(sorted_devices, results):
         if isinstance(result, Exception):
             failed += 1
-            _latency_tracker.get(did).record(0, success=False)
+            # 修复三重计数:_push_to_one_device 内部每次尝试(含重试)已 record 了
+            # 成败,这里再 record 一次是纯重复,还用假 latency=0 污染画像——一次
+            # 逻辑推送失败被记成 3 次失败,设备被误判 unhealthy(+600 惩罚),要
+            # 连续 3 次成功才恢复。外层只统计,不再重复 record。
             logger.debug("CrossDeviceSync: push to %s failed: %s", did, result)
         elif result is True:
             sent += 1

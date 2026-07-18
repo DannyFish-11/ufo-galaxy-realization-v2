@@ -242,9 +242,14 @@ class ConnectionManager:
         # 停止心跳
         await self._stop_heartbeat(connection_id)
 
-        # 关闭客户端
+        # 关闭客户端。修复:aclose() 后必须从 self.clients 移除——否则关掉的
+        # httpx.AsyncClient 仍留在字典里,后续 get/复用拿到已关闭客户端,请求
+        # 直接抛 "client has been closed"。
         if connection_id in self.clients:
-            await self.clients[connection_id].aclose()
+            try:
+                await self.clients[connection_id].aclose()
+            finally:
+                self.clients.pop(connection_id, None)
 
         # 更新状态
         conn_info.state = ConnectionState.CLOSED if graceful else ConnectionState.DISCONNECTED

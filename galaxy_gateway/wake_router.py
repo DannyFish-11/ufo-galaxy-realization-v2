@@ -517,7 +517,9 @@ class WakeRouter:
         # 从 core.device_communication 补充心跳/消息时间
         try:
             from core.device_communication import device_comm
-            for device_id, conn in device_comm._connections.items():
+            # 修复契约漂移:DeviceCommunication 存的是 self.connections(公开),
+            # 不存在 _connections——原来这里 AttributeError 被下面的 except 吞掉。
+            for device_id, conn in device_comm.connections.items():
                 if device_id not in devices:
                     devices[device_id] = {
                         "capabilities": [],

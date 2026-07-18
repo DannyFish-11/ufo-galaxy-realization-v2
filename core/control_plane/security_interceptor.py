@@ -190,6 +190,10 @@ class ApprovalRegistry:
     shared across interceptor instances, and queried independently.
     """
 
+    # 已解决(终态)请求的保留上限——供 waiter 在 event 触发后读取一次结果,
+    # 之后即可淘汰。防止 _pending 在长跑进程里无界膨胀(每次审批只增不减)。
+    _MAX_RESOLVED_RETAINED = 256
+
     def __init__(self) -> None:
         # request_id → (ApprovalRequest, asyncio.Event, denied_flag)
         self._pending: Dict[str, tuple] = {}
@@ -200,10 +204,20 @@ class ApprovalRegistry:
     # Internal helpers called by SecurityInterceptor
     # ------------------------------------------------------------------
 
+    def _prune_resolved(self) -> None:
+        """淘汰最老的已终态请求,保留数不超过上限(PENDING 永不淘汰)。"""
+        resolved_ids = [rid for rid, (req, _e, _d) in self._pending.items() if req.status != ApprovalStatus.PENDING]
+        excess = len(resolved_ids) - self._MAX_RESOLVED_RETAINED
+        for rid in resolved_ids[:excess] if excess > 0 else []:
+            self._pending.pop(rid, None)
+
     def _register(self, request: ApprovalRequest) -> asyncio.Event:
         """Register a new pending request and return its resolution event."""
         event = asyncio.Event()
         self._pending[request.request_id] = (request, event, [False])
+        # 修复无界泄漏:_resolve 只置终态、从不移除,_pending 随每次审批只增不减。
+        # 登记新请求时顺手淘汰过量的已终态旧请求(dict 保持插入序,先进先淘汰)。
+        self._prune_resolved()
         return event
 
     def _resolve(
