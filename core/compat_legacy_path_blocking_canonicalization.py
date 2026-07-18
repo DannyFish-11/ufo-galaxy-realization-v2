@@ -829,6 +829,18 @@ class CompatLegacyPathBlockingEnforcer:
         """Return a copy of the decision history."""
         return list(self._decision_history)
 
+    def has_active_bypass(self) -> bool:
+        """治理信号:是否存在【活跃的 compat/legacy 旁路】(旁路回归)。
+
+        供 post_graduation_governance 的 compat_bypass 维度探针直接调用。判据取本
+        模块自算的显式健康位 blocking_canonicalization_healthy(不健康即有活跃旁路)。
+        异常保守返回 False。
+        """
+        try:
+            return not bool(getattr(self.snapshot(), "blocking_canonicalization_healthy", True))
+        except Exception:  # noqa: BLE001
+            return False
+
     def snapshot(self, recent_n: int = 20) -> CompatLegacyBlockingSnapshot:
         """Build a :class:`CompatLegacyBlockingSnapshot` from current history."""
         history = self._decision_history

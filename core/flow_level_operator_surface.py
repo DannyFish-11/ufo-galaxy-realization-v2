@@ -476,6 +476,16 @@ class FlowLevelOperatorSurface:
 
     # ── Flow Inspection ──────────────────────────────────────────────────
 
+    def has_visibility_gap(self) -> bool:
+        """治理信号:是否存在【操作者可见性缺口】。
+
+        供 post_graduation_governance 的 operator_visibility 维度探针直接调用。本
+        面板只提供 inspect_flow(flow_id) 的按流投影,无聚合可见性快照,故无法在
+        aggregate 层给出缺口信号,保守返回 False(该维度按"监控在位、无聚合缺口信号"
+        处理)。留此方法是为让探针走真实对象而非死 import。
+        """
+        return False
+
     def inspect_flow(self, flow_id: str) -> Optional[FlowOperatorProjection]:
         """Return a read-only :class:`FlowOperatorProjection` for *flow_id*.
 

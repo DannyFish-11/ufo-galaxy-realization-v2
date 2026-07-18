@@ -1044,6 +1044,19 @@ class FlowAwareConvergenceCoordinator:
             items = list(self._artifacts)
             return items[-max_count:] if len(items) > max_count else items
 
+    def has_quarantined_results(self) -> bool:
+        """治理信号:是否存在【被隔离的结果】(收敛回归)。
+
+        供 post_graduation_governance 的 result_convergence 维度探针直接调用。
+        判据取真实快照 decision_counts 中的隔离类决策(如
+        quarantine_result_due_to_flow_mismatch)。异常保守返回 False。
+        """
+        try:
+            counts = getattr(self.build_snapshot(), "decision_counts", {}) or {}
+            return any("quarantine" in str(k) and int(v) > 0 for k, v in counts.items())
+        except Exception:  # noqa: BLE001
+            return False
+
     def build_snapshot(self) -> FlowConvergenceSnapshot:
         """Return a :class:`FlowConvergenceSnapshot` of current coordinator
         state."""

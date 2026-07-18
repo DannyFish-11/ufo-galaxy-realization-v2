@@ -1206,6 +1206,20 @@ class FlowTruthAlignmentRuntime:
         with self._lock:
             return [a for a in self._ring if a.delegated_flow_id == delegated_flow_id]
 
+    def has_unresolved_contracts(self) -> bool:
+        """治理信号:是否存在【未解决的真值对齐问题】。
+
+        供 delegated_flow_post_graduation_governance 的 truth_alignment 维度探针
+        直接调用(此前该探针假想的方法名根本不存在,维度形同虚设)。判据取本模块
+        真实快照:decision_counts 中出现"冲突"类真值决策(如
+        quarantine_due_to_posture_conflict)即视为对齐回归。异常一律保守返回 False。
+        """
+        try:
+            counts = getattr(self.build_snapshot(), "decision_counts", {}) or {}
+            return any("conflict" in str(k) and int(v) > 0 for k, v in counts.items())
+        except Exception:  # noqa: BLE001
+            return False
+
     def build_snapshot(self) -> FlowTruthAlignmentSnapshot:
         """Build and return a :class:`FlowTruthAlignmentSnapshot`."""
         with self._lock:
