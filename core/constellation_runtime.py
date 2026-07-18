@@ -655,76 +655,113 @@ class ConstellationRuntime:
         )
 
         evolver = self._get_evolver()
-        completed = 0
-        failed = 0
+        if evolver is not None and hasattr(evolver, "reset"):
+            # 每次编排给 evolver 一份干净的重试预算(它是被缓存的长生命周期单例,
+            # 不重置则 _replan_counts 随请求累积泄漏)。
+            evolver.reset()
 
-        for layer_idx, layer_task_ids in enumerate(layers):
-            tasks_to_run = []
-            for tid in layer_task_ids:
-                task = task_map.get(tid)
-                if task is None:
-                    continue
-                deps_ok = all(
-                    task_map.get(dep_id) is not None and task_map[dep_id].status == SubTaskStatus.SUCCESS
-                    for dep_id in (task.depends_on or [])
-                    if dep_id in task_map
-                )
-                if deps_ok:
-                    tasks_to_run.append(task)
-                else:
-                    task.status = SubTaskStatus.SKIPPED
+        def _rebuild_task_map():
+            return {st.task_id: st for st in decomposition.subtasks}
+
+        def _deps_satisfied(task, tmap):
+            return all(
+                tmap.get(dep_id) is not None and tmap[dep_id].status == SubTaskStatus.SUCCESS
+                for dep_id in (task.depends_on or [])
+                if dep_id in tmap
+            )
+
+        # 就绪驱动的定点调度循环(取代此前的前向单遍层扫描)。
+        # 关键修复:evolver.on_task_failed 会把失败任务及其下游【重置为 PENDING】
+        # 以便重跑,但原来的 `for layer in layers` 前向单遍永远不会回头重跑这些
+        # 被重置的任务——DAG 演化 replan 形同虚设,后续层依赖它的任务被误判
+        # "前置依赖失败,已跳过",最终结果里还留着 status=pending、error 为空的
+        # 任务,操作者看不到真实失败,重试也从未发生。
+        # 现在每一轮都从(可能已演化的)decomposition 重新推导"就绪任务"
+        # (PENDING 且依赖全 SUCCESS),直到没有任何就绪任务可跑为止,自然覆盖
+        # 重置→重跑;replan 次数由 evolver 按 max_replan_attempts 收口,保证终止。
+        task_map = _rebuild_task_map()
+        # 轮数安全上限:每轮至少推进一个任务(→SUCCESS/FAILED)或耗尽一次重试,
+        # 单任务重试次数有界,故总执行数 ≤ N*(max_replan+1);留足余量兜底防死循环。
+        max_rounds = max(1, len(decomposition.subtasks)) * (self._max_replan_attempts + 2) + 10
+        rounds = 0
+
+        while rounds < max_rounds:
+            rounds += 1
+            ready = [
+                task
+                for task in decomposition.subtasks
+                if task.status == SubTaskStatus.PENDING and _deps_satisfied(task, task_map)
+            ]
+            if not ready:
+                break
+
+            round_results = await asyncio.gather(
+                *[orchestrator._execute_subtask(task, orch_request) for task in ready],
+                return_exceptions=True,
+            )
+
+            for task, res in zip(ready, round_results):
+                if isinstance(res, Exception):
+                    task.status = SubTaskStatus.FAILED
+                    task.error = str(res)
+
+                if task.status == SubTaskStatus.SUCCESS:
+                    self._ledger_append(
+                        ledger,
+                        "TASK_COMPLETED",
+                        trace_id=trace_id,
+                        task_id=task.task_id,
+                        source="constellation_runtime",
+                    )
+                elif task.status == SubTaskStatus.FAILED:
+                    self._ledger_append(
+                        ledger,
+                        "TASK_FAILED",
+                        trace_id=trace_id,
+                        task_id=task.task_id,
+                        source="constellation_runtime",
+                        payload={"error": task.error},
+                    )
+                    # DAG evolution: replan on failure(可能把该任务+下游重置为
+                    # PENDING → 下一轮重新就绪重跑;超出重试次数则由 evolver 落
+                    # 终态 FAILED,不再就绪,循环自然收敛)。
+                    if evolver:
+                        decomposition = evolver.on_task_failed(
+                            decomposition,
+                            failed_task_id=task.task_id,
+                            error=task.error,
+                            context={"trace_id": trace_id},
+                        )
+                        self._ledger_append(
+                            ledger,
+                            "DAG_EVOLVED",
+                            trace_id=trace_id,
+                            task_id=request_id,
+                            source="constellation_runtime",
+                            payload={"trigger": "task_failed", "task_id": task.task_id},
+                        )
+            # 演化可能改动状态/结构,刷新映射后进入下一轮
+            task_map = _rebuild_task_map()
+
+        # 循环收敛后仍处 PENDING 的任务 = 被失败上游永久阻塞、始终没就绪,
+        # 如实标 SKIPPED(前置依赖失败),不再留下"假 pending"。
+        for task in decomposition.subtasks:
+            if task.status == SubTaskStatus.PENDING:
+                task.status = SubTaskStatus.SKIPPED
+                if not task.error:
                     task.error = "前置依赖失败，已跳过"
-                    failed += 1
 
-            if tasks_to_run:
-                layer_results = await asyncio.gather(
-                    *[orchestrator._execute_subtask(task, orch_request) for task in tasks_to_run],
-                    return_exceptions=True,
-                )
-
-                for task, res in zip(tasks_to_run, layer_results):
-                    if isinstance(res, Exception):
-                        task.status = SubTaskStatus.FAILED
-                        task.error = str(res)
-
-                    if task.status == SubTaskStatus.SUCCESS:
-                        completed += 1
-                        self._ledger_append(
-                            ledger,
-                            "TASK_COMPLETED",
-                            trace_id=trace_id,
-                            task_id=task.task_id,
-                            source="constellation_runtime",
-                        )
-                    elif task.status == SubTaskStatus.FAILED:
-                        failed += 1
-                        self._ledger_append(
-                            ledger,
-                            "TASK_FAILED",
-                            trace_id=trace_id,
-                            task_id=task.task_id,
-                            source="constellation_runtime",
-                            payload={"error": task.error},
-                        )
-                        # DAG evolution: replan on failure
-                        if evolver:
-                            decomposition = evolver.on_task_failed(
-                                decomposition,
-                                failed_task_id=task.task_id,
-                                error=task.error,
-                                context={"trace_id": trace_id},
-                            )
-                            self._ledger_append(
-                                ledger,
-                                "DAG_EVOLVED",
-                                trace_id=trace_id,
-                                task_id=request_id,
-                                source="constellation_runtime",
-                                payload={"trigger": "task_failed", "task_id": task.task_id},
-                            )
-
+        # 最终计数一律从【真实末态】统计——重试成功的任务不会被历史失败重复计入
+        # (原来 failed 是过程累加,重试成功也仍计一次失败,数字失真)。
+        completed = sum(1 for t in decomposition.subtasks if t.status == SubTaskStatus.SUCCESS)
+        failed = sum(1 for t in decomposition.subtasks if t.status in (SubTaskStatus.FAILED, SubTaskStatus.SKIPPED))
+        result.subtasks = decomposition.subtasks
+        result.total_subtasks = len(decomposition.subtasks)
         result.completed_subtasks = completed
         result.failed_subtasks = failed
+
+        if rounds >= max_rounds:
+            logger.warning("[%s] DAG 执行达到轮数上限 %d,可能存在无法收敛的演化循环", trace_id, max_rounds)
 
         if failed == 0:
             result.status = OrchestrationStatus.SUCCESS

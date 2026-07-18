@@ -100,6 +100,12 @@ class DAGEvolver:
         # Track how many times each task has been replanned
         self._replan_counts: Dict[str, int] = {}
 
+    def reset(self) -> None:
+        """清空重试计数。重试预算是【单次编排】语义,而 ConstellationRuntime 把
+        evolver 缓存为长生命周期单例——不重置则 _replan_counts 随每次编排的 uuid
+        任务无限累积(内存泄漏)。每次编排开始调用一次,给该请求一份干净的预算。"""
+        self._replan_counts.clear()
+
     # ------------------------------------------------------------------
     # Hook: task failed → replan sub-graph
     # ------------------------------------------------------------------
