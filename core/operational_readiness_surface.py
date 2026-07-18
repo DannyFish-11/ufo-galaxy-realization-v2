@@ -1160,9 +1160,11 @@ def _build_android_standard(
         {
             "condition_id": "gateway_transport",
             "label": "Gateway transport + Android bridge",
-            "module": "galaxy_gateway.routes.websocket + galaxy_gateway.android.bridge",
+            # 真实模块是 galaxy_gateway.android_bridge(下划线);android.bridge 不存在,
+            # 会让该就绪条件恒判定结构缺失。
+            "module": "galaxy_gateway.routes.websocket + galaxy_gateway.android_bridge",
             "structural_present": _module_available("galaxy_gateway.routes.websocket")
-            and _module_available("galaxy_gateway.android.bridge"),
+            and _module_available("galaxy_gateway.android_bridge"),
             "current_signal": bool(device_evidence.get("android_device_count", 0)),
         },
         {

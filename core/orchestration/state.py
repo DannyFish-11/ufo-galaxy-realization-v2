@@ -72,7 +72,10 @@ class ContinuumStateAdapter:
         """Return (and lazily initialise) the ContinuumOrchestrator on *openclawd_instance*."""
         if getattr(openclawd_instance, "_continuum_orchestrator", None) is None:
             try:
-                from core.continuum_orchestrator import ContinuumOrchestrator
+                # 正确路径是子包 core.continuum.orchestrator;core.continuum_orchestrator
+                # 模块并不存在,原 import 抛 ModuleNotFoundError 被下方 except 吞掉 →
+                # get_orchestrator 恒返回 None,整个 Continuum 编排通路被静默禁用。
+                from core.continuum.orchestrator import ContinuumOrchestrator
 
                 openclawd_instance._continuum_orchestrator = ContinuumOrchestrator()
             except Exception as exc:

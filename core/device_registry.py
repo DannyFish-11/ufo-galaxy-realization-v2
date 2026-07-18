@@ -592,7 +592,10 @@ class DeviceRegistry:
         """
         now = time.time()
 
-        for device in self.devices.values():
+        # 先快照成 list:循环内 await self._emit_event(...) 会让出事件循环,期间并发的
+        # register()/unregister() 可能改动 self.devices → "dictionary changed size during
+        # iteration"。设备对象仍是同一引用,状态改写照样落到真实对象上。
+        for device in list(self.devices.values()):
             if device.status == DeviceStatus.ONLINE:
                 if now - device.last_heartbeat > timeout:
                     device.status = DeviceStatus.OFFLINE
