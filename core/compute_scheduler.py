@@ -264,7 +264,11 @@ class ComputeScheduler:
         from core.hardware_compute_profiler import get_hardware_profiler
 
         profiler = get_hardware_profiler()
-        profile = profiler.profile_sync()
+        # 修复:profile_sync 缓存过期(>30s)时会跑 _profile_gpus(nvidia-smi 子进程)
+        # + _profile_cpu,在这个 async 方法里同步调会阻塞事件循环。放线程跑。
+        import asyncio as _asyncio
+
+        profile = await _asyncio.to_thread(profiler.profile_sync)
         cfg = self.config
 
         # ── No GPU available -> pure CPU fallback ──

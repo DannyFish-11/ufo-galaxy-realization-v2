@@ -292,6 +292,9 @@ class DeviceActivationRegistry:
         source_event: str = "unknown",
     ) -> None:
         """Record a resolution error (no result, no decision)."""
+        # 修复重复计数:record_resolution(result=None, decision=None) 内部已
+        # 因"无结果且无决策"把 _error_count +1(见 record_resolution),这里再
+        # +1 会让每次 record_error 计成两次错误,error_count 指标翻倍虚高。
         self.record_resolution(
             device_type=device_type,
             transport=transport,
@@ -300,7 +303,6 @@ class DeviceActivationRegistry:
             trace_id=trace_id,
             source_event=f"{source_event}:ERROR:{error}",
         )
-        self._error_count += 1
 
     # -- public: querying ----------------------------------------------------
 
