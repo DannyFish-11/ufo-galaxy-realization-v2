@@ -150,7 +150,9 @@ class OllamaBackend(LocalModelBackend):
         try:
             import httpx
 
-            resp = httpx.get(f"{self.base_url}/api/tags", timeout=3.0)
+            # async 方法里同步 httpx.get 会阻塞事件循环(最长 3s)——用 AsyncClient。
+            async with httpx.AsyncClient(timeout=3.0) as client:
+                resp = await client.get(f"{self.base_url}/api/tags")
             return resp.status_code == 200
         except Exception:
             return False

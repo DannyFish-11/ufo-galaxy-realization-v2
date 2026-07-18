@@ -278,14 +278,13 @@ class LocalBrainManager:
 
         # Priority 2: Ollama (most stable, easiest setup)
         if "ollama" in available:
-            # Check if Ollama is actually running (快速探测)
+            # Check if Ollama is actually running (快速探测)。async 方法里同步
+            # httpx.get 会阻塞事件循环(最长 3s)——用 AsyncClient。
             try:
                 import httpx
 
-                resp = httpx.get(
-                    f"{self._hardened_base_url('_auto_select_backend')}/api/tags",
-                    timeout=3.0,
-                )
+                async with httpx.AsyncClient(timeout=3.0) as client:
+                    resp = await client.get(f"{self._hardened_base_url('_auto_select_backend')}/api/tags")
                 if resp.status_code == 200:
                     logger.info("自动选择 ollama 后端 (Ollama 正在运行)")
                     return "ollama"
