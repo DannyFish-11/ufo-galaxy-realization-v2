@@ -33,7 +33,7 @@ from __future__ import annotations
 import json
 import logging
 import time
-from collections import defaultdict
+from collections import Counter, defaultdict
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -71,9 +71,16 @@ class ActionQuality:
     success_count: int = 0
     failure_count: int = 0
     avg_duration_ms: float = 0.0
-    failure_reasons: Dict[str, int] = field(default_factory=lambda: defaultdict(int))
+    # 用 Counter:既支持 [k]+=1(缺失键返回 0),又提供 .most_common()。原来是
+    # defaultdict(int),.most_common() 不存在;且从磁盘 **aq_data 反序列化后会退化成
+    # 普通 dict,[k]+=1 对新键直接 KeyError。__post_init__ 统一把它强制为 Counter。
+    failure_reasons: Dict[str, int] = field(default_factory=Counter)
     last_failed: float = 0.0
     trend: str = "stable"  # improving, degrading, stable
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.failure_reasons, Counter):
+            self.failure_reasons = Counter(self.failure_reasons or {})
 
     def record(self, success: bool, duration_ms: int, error: str = "") -> None:
         self.total_executions += 1

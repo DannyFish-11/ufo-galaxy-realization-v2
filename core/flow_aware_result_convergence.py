@@ -878,6 +878,9 @@ def decide_convergence(ctx: ResultConvergenceContext) -> ResultConvergenceArtifa
 
 _COORDINATOR_BUFFER_SIZE = 1024
 _MAX_PARALLEL_GROUPS = 512
+# 每流 dedup 状态(_flow_absorbed / _flow_final_absorbed)按 FIFO 上限裁剪,
+# 否则每见一个新 flow_id 就多一条、只增不删,长跑进程无界泄漏。
+_MAX_TRACKED_FLOWS = 4096
 
 
 class FlowAwareConvergenceCoordinator:
@@ -931,6 +934,9 @@ class FlowAwareConvergenceCoordinator:
         self._flow_absorbed: Dict[str, set] = {}
         # Per-flow final-absorbed flag: flow_id → bool
         self._flow_final_absorbed: Dict[str, bool] = {}
+        # FIFO 顺序 + 去重集,用于按 _MAX_TRACKED_FLOWS 上限淘汰最旧 flow 的 dedup 状态
+        self._flow_order: List[str] = []
+        self._flow_seen: set = set()
         # Parallel aggregation records: group_id → ParallelFlowAggregationRecord
         self._parallel_groups: Dict[str, ParallelFlowAggregationRecord] = {}
         # Insertion order for parallel group eviction
@@ -1117,12 +1123,14 @@ class FlowAwareConvergenceCoordinator:
                 ConvergenceDecisionKind.quarantine_result_due_to_flow_mismatch,
             )
         ):
+            self._track_flow(ctx.flow_id)
             if ctx.flow_id not in self._flow_absorbed:
                 self._flow_absorbed[ctx.flow_id] = set()
             self._flow_absorbed[ctx.flow_id].add(ctx.result_id)
 
         # Track final-absorbed per flow
         if decision is ConvergenceDecisionKind.promote_final_as_canonical:
+            self._track_flow(ctx.flow_id)
             self._flow_final_absorbed[ctx.flow_id] = True
 
         # Update parallel group record
@@ -1201,6 +1209,24 @@ class FlowAwareConvergenceCoordinator:
                 "FlowAwareConvergenceCoordinator: evicted oldest " "parallel group_id=%s",
                 oldest,
             )
+
+    def _track_flow(self, flow_id: str) -> None:
+        """Register a flow_id in FIFO order (on first sight) and evict the
+        oldest flows' per-flow dedup state once past ``_MAX_TRACKED_FLOWS``.
+
+        Without this, ``_flow_absorbed`` and ``_flow_final_absorbed`` grow one
+        entry per distinct flow_id forever — an unbounded leak in a long-running
+        process. Mirrors the parallel-group eviction policy.
+        """
+        if not flow_id or flow_id in self._flow_seen:
+            return
+        self._flow_seen.add(flow_id)
+        self._flow_order.append(flow_id)
+        while len(self._flow_order) > _MAX_TRACKED_FLOWS:
+            oldest = self._flow_order.pop(0)
+            self._flow_seen.discard(oldest)
+            self._flow_absorbed.pop(oldest, None)
+            self._flow_final_absorbed.pop(oldest, None)
 
 
 # ===========================================================================

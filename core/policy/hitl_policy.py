@@ -308,6 +308,9 @@ class HITLPolicy:
             expires_at=time.time() + self._timeout_seconds,
         )
         with self._lock:
+            # 顺带清理已过期且无人裁决的陈旧请求:decide() 是唯一的其它移除点,过期
+            # 而无人处理的请求永不会被 decide() 移除 → _pending 无界泄漏。
+            self._prune_expired_locked()
             self._pending[req.request_id] = req
 
         logger.info(
@@ -407,6 +410,17 @@ class HITLPolicy:
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+
+    def _prune_expired_locked(self) -> None:
+        """Drop expired, still-undecided pending requests.
+
+        Caller must hold ``self._lock``. ``decide()`` is the only other remover,
+        so a request that expired without any human action would otherwise
+        remain in ``_pending`` forever — an unbounded leak.
+        """
+        stale = [rid for rid, r in self._pending.items() if r.decision is None and r.is_expired()]
+        for rid in stale:
+            self._pending.pop(rid, None)
 
     def _classify(self, action: str, context: Dict[str, Any]) -> bool:
         """Return ``True`` if the action is considered high-risk."""
