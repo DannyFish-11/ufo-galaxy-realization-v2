@@ -85,6 +85,11 @@ class AdaptiveSemaphore:
 
         self._semaphore = asyncio.Semaphore(self._limit)
         self._lock = asyncio.Lock()
+        # 容量欠账:multiplicative-decrease 无法从 asyncio.Semaphore 强行收回已被
+        # 持有的令牌,故把差额记为欠账 —— 之后的 release 被"吸收"而非归还,直到还清。
+        # 绝不替换 self._semaphore 对象(替换会孤立正阻塞在 acquire() 的任务,并让其
+        # 配对的 release 落到新对象上把计数搞乱)。
+        self._debt: int = 0
 
         self._latency_samples: List[float] = []
         self._error_flags: List[int] = []  # 1 = error, 0 = ok
@@ -103,7 +108,12 @@ class AdaptiveSemaphore:
         return self
 
     async def __aexit__(self, exc_type, exc, tb) -> None:
-        self._semaphore.release()
+        # 有欠账时吸收该令牌(跳过 release)以收缩实际容量;读改 _debt 之间没有 await,
+        # 在单线程事件循环上对调整逻辑保持原子。
+        if self._debt > 0:
+            self._debt -= 1
+        else:
+            self._semaphore.release()
 
     # ------------------------------------------------------------------
     # Record observation and trigger AIMD
@@ -159,16 +169,29 @@ class AdaptiveSemaphore:
                 self._total_adjustments += 1
 
     def _adjust_semaphore(self, new_limit: int) -> None:
-        """Resize the underlying semaphore by adding/removing tokens."""
+        """Resize live capacity by granting/absorbing tokens WITHOUT replacing
+        the underlying asyncio.Semaphore.
+
+        Replacing the object would orphan any coroutine already blocked in
+        ``acquire()`` on the old instance and corrupt the counter when its
+        paired ``release()`` lands on the new instance. Instead we grant tokens
+        via ``release()`` on increase, and record an absorb-debt on decrease
+        (paid off by skipping future releases in ``__aexit__``).
+        """
         delta = new_limit - self._limit
         if delta > 0:
+            # Additive increase: first cancel outstanding debt (restores a
+            # token lazily on the next release), then grant the remainder now.
             for _ in range(delta):
-                self._semaphore.release()
+                if self._debt > 0:
+                    self._debt -= 1
+                else:
+                    self._semaphore.release()
         elif delta < 0:
-            # We cannot "take back" tokens from an asyncio.Semaphore, so we
-            # track the debt and prevent release() calls until balanced.
-            # Simplest safe approach: recreate the semaphore.
-            self._semaphore = asyncio.Semaphore(new_limit)
+            # Multiplicative decrease: cannot reclaim held tokens, so record
+            # the shortfall as debt; the next ``-delta`` releases are absorbed
+            # instead of returned, shrinking capacity as in-flight calls finish.
+            self._debt += -delta
         self._limit = new_limit
 
     @staticmethod

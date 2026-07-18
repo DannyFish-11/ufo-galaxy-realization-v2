@@ -8574,13 +8574,19 @@ class OpenClawd:
 
             # 判断是否需要团队协作 (复杂度驱动)
             tools = self._collect_tools()
-            cv = router._compute_complexity_vector(
-                [{"role": "user", "content": message}],
-                tools if tools else None,
-            )
+            # PR-3: 通过统一入口 compute_complexity_vector() 计算复杂度向量。直接调用
+            # 私有 _compute_complexity_vector() 在 UnifiedLLMRouter 上并不存在(它只暴露
+            # 公有代理方法),会抛 AttributeError;与本文件其它站点(见 ~8326、~8690)
+            # 保持一致的守卫写法,并对 cv 为空做保护。
+            cv = None
+            _cv_msgs = [{"role": "user", "content": message}]
+            if hasattr(router, "compute_complexity_vector"):
+                cv = router.compute_complexity_vector(_cv_msgs, tools if tools else None)
+            elif hasattr(router, "_compute_complexity_vector"):
+                cv = router._compute_complexity_vector(_cv_msgs, tools if tools else None)
             targets = intent.targets if intent else []
             is_complex = (
-                cv.weighted_score >= 0.6
+                (cv is not None and cv.weighted_score >= 0.6)
                 or len(targets) > 2
                 or (intent and intent.intent in ("workflow", "batch_task", "multi_device"))
             )
