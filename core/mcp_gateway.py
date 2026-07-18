@@ -451,3 +451,14 @@ class MCPDynamicGateway:
 
 # ── Module-level singleton (constraint C1) ─────────────────────────────────
 mcp_gateway = MCPDynamicGateway.get_instance()
+
+
+def get_mcp_gateway() -> MCPDynamicGateway:
+    """返回进程级 MCP 网关单例。
+
+    修复:canonical_dispatcher / openclawd / github_installer 三处生产消费方都
+    `from core.mcp_gateway import get_mcp_gateway`,但本模块从未定义该函数——
+    ImportError 被各自的 try/except 吞掉,这三处的 MCP 网关能力(GitHub 工具注册/
+    动态工具生成等)一直静默失效。补上这个既有单例的标准访问器。
+    """
+    return MCPDynamicGateway.get_instance()

@@ -139,6 +139,11 @@ class CircuitBreaker:
                  otherwise invoke *fallback* (if set) or raise
                  :class:`CircuitOpenError`.
         """
+        # 修复:fallback 绝不能在持锁时 await——它是任意 async 可调用(文档说明
+        # 返回"降级/缓存结果",可能做慢 I/O),持锁 await 会让同一 breaker 上所有并发
+        # call()/reset()/trip() 在正是熔断保护期被串行阻塞。与主执行路径(下方显式
+        # 出锁再 await fn)的既定意图一致:锁内只定夺"是否走 fallback",出锁再 await。
+        run_fallback = False
         async with self._lock:
             state = await self._current_state()
 
@@ -147,19 +152,27 @@ class CircuitBreaker:
                 if self._fallback is not None:
                     self._total_fallbacks += 1
                     logger.debug("CircuitBreaker[%s] OPEN — invoking fallback", self.target)
-                    return await self._fallback(*args, **kwargs)
-                raise CircuitOpenError(self.target, self._opened_at)
+                    run_fallback = True
+                else:
+                    raise CircuitOpenError(self.target, self._opened_at)
 
-            if state == CircuitState.HALF_OPEN:
+            elif state == CircuitState.HALF_OPEN:
                 if self._half_open_calls >= self._half_open_probes:
                     self._total_calls += 1
                     if self._fallback is not None:
                         self._total_fallbacks += 1
-                        return await self._fallback(*args, **kwargs)
-                    raise CircuitOpenError(self.target, self._opened_at)
-                self._half_open_calls += 1
+                        run_fallback = True
+                    else:
+                        raise CircuitOpenError(self.target, self._opened_at)
+                else:
+                    self._half_open_calls += 1
+                    self._total_calls += 1
+            else:
+                self._total_calls += 1
 
-            self._total_calls += 1
+        if run_fallback:
+            # 出锁后再执行 fallback,慢/挂的 fallback 不再拖住整个 breaker。
+            return await self._fallback(*args, **kwargs)
 
         # Execute outside the lock to avoid blocking metric readers
         try:

@@ -370,6 +370,23 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     )
 
     # Exempt routes: no auth required (health, docs, observability, device registration)
+    # 修复路由遮蔽:devices 路由含 catch-all GET /api/v1/devices/{device_id}
+    # (正则 ^/api/v1/devices/[^/]+$),而 Starlette 按注册顺序、无特异性排序匹配。
+    # 若单段字面量端点(/devices/health、/readiness、/cross-device-ready、
+    # /participation)注册在其后,会被 {device_id} 抢先匹配、以 device_id="health"
+    # 落到 get_device→404,四个文档化列表端点永久不可达。故先注册这些字面量路由。
+    try:
+        from core.routes.device_health import router as _device_health_router
+
+        router.include_router(_device_health_router)
+    except Exception as _e:  # noqa: BLE001
+        logger.warning("设备健康路由加载失败（可选）: %s", _e)
+    try:
+        from core.routes import device_readiness as _device_readiness_routes
+
+        router.include_router(_device_readiness_routes.create_router())
+    except Exception as _e:  # noqa: BLE001
+        logger.warning("设备就绪路由加载失败（可选）: %s", _e)
     router.include_router(devices.create_router(service_manager=service_manager, config=config))
     router.include_router(vision.create_router(service_manager=service_manager, config=config))
     router.include_router(perception_routes.create_router(service_manager=service_manager, config=config))
@@ -421,13 +438,8 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
         router.include_router(security_policy_routes.create_router())
     except Exception as _e:
         logger.warning("安全策略路由加载失败（可选）: %s", _e)
-    # Control Plane Phase 5: device health & circuit-breaker routes
-    try:
-        from core.routes.device_health import router as device_health_router
-
-        router.include_router(device_health_router)
-    except Exception as _e:
-        logger.warning("设备健康路由加载失败（可选）: %s", _e)
+    # Control Plane Phase 5 设备健康 & PR 设备就绪/参与路由已【提前】在 devices
+    # catch-all 之前注册(见上方路由遮蔽修复),此处不再重复注册。
     # PR-4 Status Board V2: read-only RuntimeProjection endpoint
     try:
         from core.routes import projection as projection_routes
@@ -435,13 +447,6 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
         router.include_router(projection_routes.create_router())
     except Exception as _e:
         logger.warning("投影路由加载失败（可选）: %s", _e)
-    # Read-only device readiness & participation inspection endpoints
-    try:
-        from core.routes import device_readiness as device_readiness_routes
-
-        router.include_router(device_readiness_routes.create_router())
-    except Exception as _e:
-        logger.warning("设备就绪路由加载失败（可选）: %s", _e)
     # PR1114 follow-up: unified operational readiness / clone-to-use acceptance surfaces
     try:
         from core.routes import operational_readiness as operational_readiness_routes

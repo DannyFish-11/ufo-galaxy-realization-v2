@@ -28,6 +28,7 @@ not be treated as canonical runtime authority.
 cache.  It is no longer consulted by canonical list/detail surfaces.
 """
 
+import asyncio
 import json
 import logging
 import os
@@ -172,13 +173,16 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """一键启动单个节点。mode=subprocess(默认,阶段2a)| container(阶段3,跑进
         所选 Docker/Podman;首次 build 慢,按需逐个起防本机过载)。"""
         try:
+            # container_start_node/start_node 是同步函数,内部 subprocess.run 做
+            # 容器 build(timeout 高达 1800s)——在 async 处理器里直调会把整个
+            # uvicorn 事件循环冻住最长 30 分钟,期间所有 HTTP/WS 全停。放线程跑。
             if mode == "container":
                 from core.node_lifecycle import container_start_node
 
-                return JSONResponse(container_start_node(node))
+                return JSONResponse(await asyncio.to_thread(container_start_node, node))
             from core.node_lifecycle import start_node
 
-            return JSONResponse(start_node(node))
+            return JSONResponse(await asyncio.to_thread(start_node, node))
         except Exception as e:  # noqa: BLE001
             return JSONResponse({"ok": False, "error": str(e)}, status_code=200)
 
@@ -186,13 +190,15 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     async def node_stop(node: str, mode: str = "subprocess"):
         """一键停止单个节点。mode=container 时停并删该节点容器。"""
         try:
+            # 同步 subprocess(容器 stop/rm、taskkill,timeout 至 30s)——async 处理器
+            # 里直调会冻事件循环,放线程跑。
             if mode == "container":
                 from core.node_lifecycle import container_stop_node
 
-                return JSONResponse(container_stop_node(node))
+                return JSONResponse(await asyncio.to_thread(container_stop_node, node))
             from core.node_lifecycle import stop_node
 
-            return JSONResponse(stop_node(node))
+            return JSONResponse(await asyncio.to_thread(stop_node, node))
         except Exception as e:  # noqa: BLE001
             return JSONResponse({"ok": False, "error": str(e)}, status_code=200)
 
