@@ -1467,6 +1467,27 @@ def execute_governed_operator_action(
                 logger.debug("retry_admission: governance gate unavailable: %s", exc)
             outcome = OperatorActionOrchestrationOutcome.success.value
 
+            # Flow-scoped retry:targeting 一个 device 时派发 Android
+            # retry_delegated_execution。此段原先是文件后半段一个【重复的】
+            # `elif retry_admission` 分支 —— 因 action_kind 相同永远被本分支遮蔽、
+            # 成为死代码,flow 级 Android 重试从未真正执行。现并入本分支。
+            if flow_id:
+                affected_entity_ids.append(flow_id)
+                if device_id:
+                    spec = build_android_directed_action_spec(
+                        action_kind=AndroidDirectedActionKind.retry_delegated_execution.value,
+                        device_id=device_id,
+                        operator_action_id=action_id,
+                        operator_user_id=operator_user_id,
+                        target_flow_id=flow_id,
+                    )
+                    android_dispatch_id = spec.android_dispatch_id
+                    android_dispatched_at = spec.dispatched_at
+                    downstream_effects.append(f"android_retry_execution_dispatched:dispatch_id={android_dispatch_id}")
+                    outcome = OperatorActionOrchestrationOutcome.accepted_pending.value
+                else:
+                    downstream_effects.append(f"retry_admission_requested:flow_id={flow_id}")
+
         # ── request_capability_revalidation ───────────────────────────────
         elif action_kind == OperatorActionKind.request_capability_revalidation.value:
             try:
@@ -1769,28 +1790,6 @@ def execute_governed_operator_action(
                 affected_entity_ids.append(flow_id)
             downstream_effects.append(f"dependency_failure_escalated:entity={task_id or flow_id or 'unknown'}")
             outcome = OperatorActionOrchestrationOutcome.success.value
-
-        # ── retry_admission with flow ─────────────────────────────────────
-        elif action_kind == OperatorActionKind.retry_admission.value:
-            if flow_id:
-                affected_entity_ids.append(flow_id)
-                if device_id:
-                    spec = build_android_directed_action_spec(
-                        action_kind=AndroidDirectedActionKind.retry_delegated_execution.value,
-                        device_id=device_id,
-                        operator_action_id=action_id,
-                        operator_user_id=operator_user_id,
-                        target_flow_id=flow_id,
-                    )
-                    android_dispatch_id = spec.android_dispatch_id
-                    android_dispatched_at = spec.dispatched_at
-                    downstream_effects.append(f"android_retry_execution_dispatched:dispatch_id={android_dispatch_id}")
-                    outcome = OperatorActionOrchestrationOutcome.accepted_pending.value
-                else:
-                    downstream_effects.append(f"retry_admission_requested:flow_id={flow_id}")
-                    outcome = OperatorActionOrchestrationOutcome.success.value
-            else:
-                outcome = OperatorActionOrchestrationOutcome.success.value
 
         else:
             outcome = OperatorActionOrchestrationOutcome.unsupported.value

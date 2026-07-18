@@ -83,8 +83,13 @@ async def _validate_mcp_server(server_id: str, loader: Any) -> Dict[str, Any]:
             errors.append(f"工具缺少有效 name 字段: {tool!r:.100}")
             continue
         tool_count += 1
-        # schema 检查（input_schema 必须是 dict 或 None）
-        schema = tool.get("input_schema") if isinstance(tool, dict) else getattr(tool, "input_schema", None)
+        # schema 检查(schema 必须是 dict 或 None)。MCPLoader.list_tools 发出的键是
+        # MCP 协议标准的 camelCase "inputSchema";原来读 snake_case "input_schema" 恒为
+        # None → 这段类型校验形同虚设。优先读 inputSchema,兼容 snake_case 兜底。
+        if isinstance(tool, dict):
+            schema = tool.get("inputSchema", tool.get("input_schema"))
+        else:
+            schema = getattr(tool, "inputSchema", getattr(tool, "input_schema", None))
         if schema is not None and not isinstance(schema, dict):
             errors.append(f"工具 {name} 的 input_schema 类型非法: {type(schema)}")
 

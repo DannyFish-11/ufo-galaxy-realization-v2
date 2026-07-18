@@ -618,14 +618,18 @@ def apply_android_participation_signal(
             method = "on_participant_dropped"
 
         elif kind == AndroidMeshParticipantSignalKind.human_input:
-            # WearOS 用户输入 — 转发到 OpenClawd 的认知闭环
+            # WearOS 用户输入 — 转发到 OpenClawd 的认知闭环。
+            # AndroidMeshParticipantSignal 没有 `payload` 字段(载荷在 result_payload,
+            # 见 task_completed 分支的 signal.result_payload);原来的 signal.payload 会
+            # 抛 AttributeError。用 result_payload 为主、metadata 兜底。
+            _hi = signal.result_payload or signal.metadata or {}
             coordinator.on_participant_result(
                 device_id=signal.device_id,
                 result={
                     "type": "human_input",
-                    "input": signal.payload.get("input", ""),
-                    "decision": signal.payload.get("decision", ""),
-                    "timestamp": signal.payload.get("timestamp", ""),
+                    "input": _hi.get("input", ""),
+                    "decision": _hi.get("decision", ""),
+                    "timestamp": _hi.get("timestamp", ""),
                 },
             )
             method = "on_participant_result"
