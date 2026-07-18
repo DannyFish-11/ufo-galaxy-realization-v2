@@ -75,6 +75,9 @@ class CircuitBreaker:
             if self.last_failure_time and (time.time() - self.last_failure_time) > self.recovery_timeout:
                 self.state = CircuitState.HALF_OPEN
                 self._half_open_calls = 0
+                # 每个探测周期都从零起算成功数;否则上一次探测积累的 success_count
+                # 会带入本轮,使熔断器在不足 half_open_max_calls 次新成功时就提前闭合。
+                self.success_count = 0
                 logger.info(f"Circuit breaker [{self.name}]: OPEN → HALF_OPEN")
                 return True
             return False
@@ -104,6 +107,7 @@ class CircuitBreaker:
         if self.state == CircuitState.HALF_OPEN:
             self.state = CircuitState.OPEN
             self._half_open_calls = 0
+            self.success_count = 0  # 探测失败回退 OPEN,清零本轮已累计的成功数
             logger.warning(f"Circuit breaker [{self.name}]: HALF_OPEN → OPEN")
         elif self.state == CircuitState.CLOSED and self.failure_count >= self.failure_threshold:
             self.state = CircuitState.OPEN

@@ -972,7 +972,16 @@ class MultiDeviceGovernanceEvaluator:
         if _COORDINATION_AVAILABLE and _get_coordination_runtime is not None:
             try:
                 runtime = _get_coordination_runtime()
-                records = list(getattr(runtime, "records", {}).values())
+                # CoordinationRoleRuntime 把记录存在 _records(历史环形缓冲),并无
+                # `records` 属性 —— 此前 getattr(runtime,"records",{}) 恒取默认 {},探针
+                # 永远看不到任何参与者(治理盲区)。改用公有 snapshot() 读取全部记录,
+                # 再按 device_id 去重取最新角色(缓冲累积历史,直接遍历会重复计数)。
+                _n = len(runtime)
+                _all_records = runtime.snapshot(max_recent=_n) if _n else []
+                _latest_by_device: Dict[str, Any] = {}
+                for _rec in _all_records:  # snapshot 为 newest-last,后写即最新角色
+                    _latest_by_device[getattr(_rec, "device_id", "")] = _rec
+                records = list(_latest_by_device.values())
                 for rec in records:
                     role_val = getattr(rec, "coordination_role", None)
                     if role_val is None:

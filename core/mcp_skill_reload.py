@@ -158,14 +158,25 @@ async def reload_mcp(server_id: str) -> Dict[str, Any]:
         _set_status(key, loaded=False, error=error)
         return {"server_id": server_id, "loaded": False, "error": error}
 
-    # 重新加载（先卸载再加载）
+    # 重新加载(原地热重载:stop 再 start,保持同一 server_id 与配置;start() 会
+    # 重新拉起子进程并跑 _initialize 刷新工具/资源)。MCPLoader 的真实 API 是
+    # load/unload/start/stop —— 此前探测的 unload_server/reload_server/load_server
+    # 均不存在,在 hasattr 守卫下整段静默空转,却仍在后续返回 loaded=True,即热重载
+    # 从未真正发生。
     try:
-        if hasattr(loader, "unload_server"):
-            loader.unload_server(server_id)
-        if hasattr(loader, "reload_server"):
-            await loader.reload_server(server_id)
-        elif hasattr(loader, "load_server"):
-            await loader.load_server(server_id)
+        if server_id not in getattr(loader, "servers", {}):
+            error = f"MCP 服务器未注册,无法热重载: {server_id}"
+            _set_status(key, loaded=False, error=error)
+            logger.warning(error)
+            return {"server_id": server_id, "loaded": False, "error": error}
+        await loader.stop(server_id)
+        started = await loader.start(server_id)
+        if not started:
+            srv = loader.servers.get(server_id)
+            error = f"MCP 重启失败: {getattr(srv, 'error', '') or 'start returned False'}"
+            _set_status(key, loaded=False, error=error)
+            logger.warning("MCP 热重载失败 %s: %s", server_id, error)
+            return {"server_id": server_id, "loaded": False, "error": error}
     except Exception as e:
         logger.debug("Fallback triggered: %s", e)
         error = f"MCP 加载失败: {e}"
