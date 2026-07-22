@@ -8117,9 +8117,7 @@ class OpenClawd:
                         _consecutive_same[tc_name] = _consecutive_same.get(tc_name, 1) + 1
                         if _consecutive_same[tc_name] >= 3:
                             logger.warning(f"连续调用同一工具 {tc_name} 达 3 次，疑似幻觉循环，终止")
-                            _answer_remaining_tool_calls(
-                                f"[系统] 检测到重复调用 {tc_name}，请直接给出最终回答"
-                            )
+                            _answer_remaining_tool_calls(f"[系统] 检测到重复调用 {tc_name}，请直接给出最终回答")
                             break
                     else:
                         _consecutive_same.clear()
