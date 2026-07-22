@@ -234,11 +234,22 @@ class HuggingFaceModelManager:
             quantization: 量化级别 (q4/q5/q8/none)
             force: 强制重新下载
         """
-        registry_key = f"{model_id}:{format.value}:{quantization}"
+        # 去重查缓存:注册表以【裸 model_id】为键(见 ModelRegistry.register 用
+        # entry.model_id、以及本文件其它 registry.get(model_id) 调用),原来却用组合键
+        # f"{model_id}:{format}:{quant}" 查询,永远查不到 → 每次都重复下载。改为按
+        # model_id 查,并仅当已存条目正是同一 format+quant 变体时才复用(避免把 q4 当 q5)。
+        def _norm(v):
+            return v.value if hasattr(v, "value") else v
 
         # 检查是否已存在
-        existing = self.registry.get(registry_key)
-        if existing and existing.is_local and not force:
+        existing = self.registry.get(model_id)
+        if (
+            existing
+            and existing.is_local
+            and not force
+            and _norm(existing.format) == format.value
+            and existing.quantization == quantization
+        ):
             logger.info("Model already downloaded: %s", model_id)
             existing.last_used = time.time()
             existing.use_count += 1

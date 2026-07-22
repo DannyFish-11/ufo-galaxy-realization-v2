@@ -4034,14 +4034,13 @@ class OpenClawd:
             except Exception as exc:
                 _logger.warning("Exception suppressed: %s", exc)
 
-        # PR-001: Sync dispatcher context so per-call dispatch() calls inherit
-        # the current request's device/session/trace without needing explicit kwargs.
-        _dispatcher = getattr(self, "_capability_dispatcher", None)
-        if _dispatcher is not None:
-            _dispatcher.device_id = self._current_device_id
-            _dispatcher.session_id = session_id or ""
-            _dispatcher.trace_id = trace_id or ""
-
+        # PR-001 修复(并发污染):此前把本次请求的 device/session/trace 写到【共享单例】
+        # dispatcher 的实例字段上。OpenClawd 是进程级单例,并发请求会互相覆盖这些字段,
+        # 且写入点与后续读取点之间隔着 await → 请求 A 可能读到请求 B 的身份。经核实,唯一
+        # 的 dispatch() 调用点(见下方 ~7001)已在【每次调用】显式传入 device_id/session_id/
+        # trace_id 覆盖参数,dispatcher 实例字段从不被读取。故这段共享写入是纯粹的并发隐患
+        # 且毫无收益,直接删除。
+        #
         # Priority order is explicit:
         #   1. session_identity.conversation_session_id (canonical ingress bridge)
         #   2. session_id argument (legacy caller field, now treated as conversation ID)
@@ -8054,6 +8053,17 @@ class OpenClawd:
                     assistant_msg["tool_calls"] = response.tool_calls
                 messages.append(assistant_msg)
 
+                def _answer_remaining_tool_calls(note: str) -> None:
+                    # 保证本条 assistant 消息里【每一个】tool_call 都有配对的 tool 响应。
+                    # 提前 break 内层循环(限频/重复检测)会把后续兄弟 tool_call 落下,
+                    # 下一轮 chat_with_tools 就会因 "tool_calls 必须被逐一 tool 消息响应"
+                    # 报错。这里对所有尚未响应的 tool_call_id 补一条同样的系统提示。幂等。
+                    _answered = {m.get("tool_call_id") for m in messages if m.get("role") == "tool"}
+                    for _sib in response.tool_calls:
+                        _sid = _sib.get("id", "")
+                        if _sid and _sid not in _answered:
+                            messages.append({"role": "tool", "tool_call_id": _sid, "content": note})
+
                 for tc in response.tool_calls:
                     tc_func = tc.get("function", {})
                     tc_name = tc_func.get("name", "")
@@ -8097,12 +8107,8 @@ class OpenClawd:
                     _total_tool_calls += 1
                     if _total_tool_calls > _MAX_TOOL_CALLS:
                         logger.warning(f"ReAct 工具调用总次数超限 ({_MAX_TOOL_CALLS})，强制终止")
-                        messages.append(
-                            {
-                                "role": "tool",
-                                "tool_call_id": tc_id,
-                                "content": f"[系统] 工具调用次数已达上限 ({_MAX_TOOL_CALLS})，请直接给出最终回答",
-                            }
+                        _answer_remaining_tool_calls(
+                            f"[系统] 工具调用次数已达上限 ({_MAX_TOOL_CALLS})，请直接给出最终回答"
                         )
                         break
 
@@ -8111,12 +8117,8 @@ class OpenClawd:
                         _consecutive_same[tc_name] = _consecutive_same.get(tc_name, 1) + 1
                         if _consecutive_same[tc_name] >= 3:
                             logger.warning(f"连续调用同一工具 {tc_name} 达 3 次，疑似幻觉循环，终止")
-                            messages.append(
-                                {
-                                    "role": "tool",
-                                    "tool_call_id": tc_id,
-                                    "content": f"[系统] 检测到重复调用 {tc_name}，请直接给出最终回答",
-                                }
+                            _answer_remaining_tool_calls(
+                                f"[系统] 检测到重复调用 {tc_name}，请直接给出最终回答"
                             )
                             break
                     else:
