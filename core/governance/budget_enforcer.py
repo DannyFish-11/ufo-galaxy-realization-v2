@@ -52,7 +52,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import date
+from datetime import datetime, timezone
 from typing import List  # auto: missing import
 from typing import Dict, Optional
 
@@ -226,7 +226,9 @@ class BudgetEnforcer:
     # ------------------------------------------------------------------
 
     def _today(self) -> str:
-        return date.today().isoformat()
+        # 用 UTC:每日预算计数键喂给 BudgetStatus.date_utc,契约就是 UTC。原来的
+        # date.today() 取本地时区,会在本地午夜(而非 UTC 午夜)错误滚动,并与 date_utc 不符。
+        return datetime.now(timezone.utc).date().isoformat()
 
     def _session_counter(self, session_id: str) -> _Counter:
         if session_id not in self._session:
