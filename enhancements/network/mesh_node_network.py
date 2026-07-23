@@ -67,6 +67,11 @@ class Message:
     payload: Dict[str, Any]
     timestamp: str
     priority: int = 5  # 1-10, 10 最高
+    hops: int = 0  # 已转发跳数(防转发环路/自转发死循环)
+
+
+#: 消息最大转发跳数,超过即丢弃(防路由环)
+MAX_FORWARD_HOPS = 8
 
 
 class MeshNodeNetwork:
@@ -350,11 +355,20 @@ class MeshNodeNetwork:
     
     async def _forward_message(self, message: Message):
         """转发消息"""
+        # 防死循环:简化实现把消息 put 回【本节点自己的】message_queue,消费循环取出后
+        # 目标仍非本节点 → 再次进入本方法 → 无限自转发(烧 CPU、日志爆炸)。加跳数上限:
+        # 每次转发 hops+1,超过 MAX_FORWARD_HOPS 即丢弃告警。真实跨节点发送接入后,
+        # 该计数同样防御多节点路由环。
+        if message.hops >= MAX_FORWARD_HOPS:
+            logger.warning(f"丢弃消息(超过最大转发跳数 {MAX_FORWARD_HOPS}): {message.id} -> {message.target}")
+            return
+        message.hops += 1
+
         # 查找路由
         next_hop = self.routing_table.get(message.target)
-        
+
         if next_hop:
-            logger.info(f"转发消息: {message.id} -> {next_hop}")
+            logger.info(f"转发消息: {message.id} -> {next_hop} (hop {message.hops})")
             # 这里应该实际发送到下一跳节点
             # 简化版本：直接添加到队列
             await self.message_queue.put(message)
