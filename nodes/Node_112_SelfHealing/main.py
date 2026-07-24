@@ -604,6 +604,12 @@ class SelfHealingEngine:
     
     async def _detect_fault(self, check: HealthCheck):
         """检测故障"""
+        # 去重:同一 target 已有未解决的故障时不再新建。_detect_fault 在
+        # consecutive_failures>=3 时每轮失败都会被调用,若不去重会为持续故障不断新建
+        # Fault(faults 无界增长)并反复触发恢复(恢复风暴)。
+        for _existing in self.faults.values():
+            if _existing.target == check.target and not _existing.is_resolved:
+                return
         fault = Fault(
             fault_id=str(uuid.uuid4()),
             fault_type=self._determine_fault_type(check),
