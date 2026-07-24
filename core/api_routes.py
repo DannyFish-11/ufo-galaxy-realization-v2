@@ -344,6 +344,17 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
         from core.routes import opencode as opencode_routes
     except ImportError:
         opencode_routes = None
+    # 治理路由（/api/v1/governance/*）—— 之前定义了 create_router() 但从未挂载，
+    # 导致所有治理端点 404。可选加载。
+    try:
+        from core.routes import governance as governance_routes
+    except ImportError:
+        governance_routes = None
+    # 弹性/断路器路由（/api/v1/resilience/*）—— 同样定义了但从未挂载。可选加载。
+    try:
+        from core.routes import resilience as resilience_routes
+    except ImportError:
+        resilience_routes = None
 
     router = APIRouter()
 
@@ -368,6 +379,11 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     router.include_router(
         remote_desktop_routes.create_router(service_manager=service_manager, config=config), dependencies=_auth_deps
     )
+    # 治理与弹性路由:此前从未挂载(端点 404),补齐注册。均为运维/治理面,需鉴权。
+    if governance_routes is not None:
+        router.include_router(governance_routes.create_router(), dependencies=_auth_deps)
+    if resilience_routes is not None:
+        router.include_router(resilience_routes.create_router(), dependencies=_auth_deps)
 
     # Exempt routes: no auth required (health, docs, observability, device registration)
     # 修复路由遮蔽:devices 路由含 catch-all GET /api/v1/devices/{device_id}
