@@ -756,9 +756,9 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
             # Prefer the canonical singleton from llm_manager / system
             llm_router = None
             try:
-                from core.llm_manager import get_llm_manager
+                from core.llm_manager import llm_manager as _llm_manager_singleton
 
-                llm_router = get_llm_manager()
+                llm_router = _llm_manager_singleton
             except Exception as exc:
                 logger.warning("Exception suppressed: %s", exc)
 
