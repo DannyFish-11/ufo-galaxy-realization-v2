@@ -543,7 +543,11 @@ async def parse_code(request: ParseCodeRequest) -> Dict[str, Any]:
 @app.post("/understand_code")
 async def understand_code(request: UnderstandCodeRequest) -> Dict[str, Any]:
     """理解代码"""
-    result = code_understanding.understand(request.code, request.language, request.question)
+    # understand() 内部 _answer_question 走同步 httpx.post(长超时),直接在事件循环里
+    # 跑会冻结整个节点。卸载到线程。
+    result = await asyncio.to_thread(
+        code_understanding.understand, request.code, request.language, request.question
+    )
     return {
         "success": True,
         **result

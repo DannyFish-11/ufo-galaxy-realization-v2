@@ -539,7 +539,10 @@ async def detect_errors(request: DetectErrorsRequest) -> Dict[str, Any]:
 @app.post("/diagnose_error")
 async def diagnose_error(request: DiagnoseErrorRequest) -> Dict[str, Any]:
     """诊断错误"""
-    diagnosis = error_diagnoser.diagnose(request.code, request.error, request.language)
+    # diagnose 内部走同步 httpx.post(_llm_diagnose,长超时),卸载到线程避免冻结事件循环。
+    diagnosis = await asyncio.to_thread(
+        error_diagnoser.diagnose, request.code, request.error, request.language
+    )
     
     return {
         "success": True,
@@ -549,7 +552,8 @@ async def diagnose_error(request: DiagnoseErrorRequest) -> Dict[str, Any]:
 @app.post("/auto_fix")
 async def auto_fix(request: AutoFixRequest) -> Dict[str, Any]:
     """自动修复"""
-    fix = auto_fixer.fix(request.code, request.error, request.language)
+    # fix 内部走同步 httpx.post(_llm_fix),卸载到线程。
+    fix = await asyncio.to_thread(auto_fixer.fix, request.code, request.error, request.language)
     
     if fix:
         return {
@@ -565,7 +569,7 @@ async def auto_fix(request: AutoFixRequest) -> Dict[str, Any]:
 @app.post("/analyze_performance")
 async def analyze_performance(request: AnalyzePerformanceRequest) -> Dict[str, Any]:
     """性能分析"""
-    analysis = performance_analyzer.analyze(request.code, request.language)
+    analysis = await asyncio.to_thread(performance_analyzer.analyze, request.code, request.language)
     
     return {
         "success": True,
@@ -575,7 +579,9 @@ async def analyze_performance(request: AnalyzePerformanceRequest) -> Dict[str, A
 @app.post("/optimize_code")
 async def optimize_code(request: OptimizeCodeRequest) -> Dict[str, Any]:
     """优化代码"""
-    optimized_code = code_optimizer.optimize(request.code, request.target, request.language)
+    optimized_code = await asyncio.to_thread(
+        code_optimizer.optimize, request.code, request.target, request.language
+    )
     
     return {
         "success": True,
