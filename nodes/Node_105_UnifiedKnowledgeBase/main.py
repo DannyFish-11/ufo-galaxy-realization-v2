@@ -218,11 +218,14 @@ class UnifiedKnowledgeBase:
         
         if not os.path.exists(clone_dir):
             try:
-                result = subprocess.run(
+                # git clone(超时最长 300s)是同步阻塞调用,在 async 方法里直接跑会冻结
+                # 整个节点事件循环达 5 分钟。卸载到线程。
+                result = await asyncio.to_thread(
+                    subprocess.run,
                     ['git', 'clone', '--depth', '1', repo_url, clone_dir],
                     capture_output=True,
                     text=True,
-                    timeout=300
+                    timeout=300,
                 )
                 if result.returncode != 0:
                     raise ValueError(f"克隆仓库失败: {result.stderr}")
