@@ -613,6 +613,10 @@ def _map_barrier_posture(raw: Any) -> MeshBarrierPosture:
     raw_str = raw.value if hasattr(raw, "value") else str(raw).lower().strip()
     mapping = {
         "no_barrier": MeshBarrierPosture.NO_BARRIER,
+        # 'best_effort' 是生产方(core.device_formation BARRIER_POSTURES)四个稳定
+        # 值之一,语义为"不阻塞、有可用结果即完成",等价于 NO_BARRIER。此前缺失
+        # 该条目会落到默认的 UNKNOWN。
+        "best_effort": MeshBarrierPosture.NO_BARRIER,
         "wait_primary": MeshBarrierPosture.WAIT_PRIMARY,
         "wait_all": MeshBarrierPosture.WAIT_ALL,
         "wait_merge_owner": MeshBarrierPosture.WAIT_MERGE_OWNER,
