@@ -6,6 +6,7 @@ import logging  # auto: ensure module logger is defined
 logger = logging.getLogger(__name__)
 
 import os, time
+import asyncio
 from datetime import datetime
 from typing import Optional
 from fastapi import FastAPI, HTTPException
@@ -44,9 +45,13 @@ async def connect(request: ConnectRequest):
         return {"success": False, "error": "pymavlink not installed. Run: pip install pymavlink"}
     
     try:
-        conn = pymavlink.mavlink_connection(request.connection_string, baud=request.baud)
-        conn.wait_heartbeat(timeout=10)
-        
+        def _open_connection():
+            c = pymavlink.mavlink_connection(request.connection_string, baud=request.baud)
+            c.wait_heartbeat(timeout=10)  # blocks up to 10s
+            return c
+
+        conn = await asyncio.to_thread(_open_connection)
+
         conn_id = f"mav_{len(connections)}"
         connections[conn_id] = conn
         
@@ -108,22 +113,22 @@ async def get_telemetry(connection_id: str):
     
     try:
         conn = connections[connection_id]
-        
-        msg = conn.recv_match(type='GLOBAL_POSITION_INT', blocking=True, timeout=5)
-        position = None
-        if msg:
-            position = {"lat": msg.lat / 1e7, "lon": msg.lon / 1e7, "alt": msg.alt / 1000, "relative_alt": msg.relative_alt / 1000}
-        
-        msg = conn.recv_match(type='ATTITUDE', blocking=True, timeout=5)
-        attitude = None
-        if msg:
-            attitude = {"roll": msg.roll, "pitch": msg.pitch, "yaw": msg.yaw}
-        
-        msg = conn.recv_match(type='SYS_STATUS', blocking=True, timeout=5)
-        battery = None
-        if msg:
-            battery = {"voltage": msg.voltage_battery / 1000, "current": msg.current_battery / 100, "remaining": msg.battery_remaining}
-        
+
+        def _read_telemetry():
+            # Three blocking recv_match calls (up to 5s each) — run off the loop.
+            position = attitude = battery = None
+            m = conn.recv_match(type='GLOBAL_POSITION_INT', blocking=True, timeout=5)
+            if m:
+                position = {"lat": m.lat / 1e7, "lon": m.lon / 1e7, "alt": m.alt / 1000, "relative_alt": m.relative_alt / 1000}
+            m = conn.recv_match(type='ATTITUDE', blocking=True, timeout=5)
+            if m:
+                attitude = {"roll": m.roll, "pitch": m.pitch, "yaw": m.yaw}
+            m = conn.recv_match(type='SYS_STATUS', blocking=True, timeout=5)
+            if m:
+                battery = {"voltage": m.voltage_battery / 1000, "current": m.current_battery / 100, "remaining": m.battery_remaining}
+            return position, attitude, battery
+
+        position, attitude, battery = await asyncio.to_thread(_read_telemetry)
         return {"success": True, "position": position, "attitude": attitude, "battery": battery}
     except Exception as e:
         return {"success": False, "error": str(e)}
