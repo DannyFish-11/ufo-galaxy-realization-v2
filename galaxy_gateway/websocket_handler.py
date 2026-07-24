@@ -368,6 +368,20 @@ async def handle_websocket(websocket: WebSocket, connection_id: str):
                 except Exception:
                     break
 
+            except json.JSONDecodeError as e:
+                # 单个畸形 JSON 帧不应拆掉整条连接:此前它会冒泡到外层 except
+                # 直接退出,绕过 _MAX_CONSECUTIVE_ERRORS 容错。计入连续错误、回一条
+                # 错误帧并继续,连续超限才优雅退出。
+                consecutive_errors += 1
+                logger.warning(
+                    "⚠️ WebSocket 收到畸形 JSON (%s/%s): %s",
+                    consecutive_errors, _MAX_CONSECUTIVE_ERRORS, e
+                )
+                try:
+                    await websocket.send_json({"type": "error", "error": "invalid_json"})
+                except Exception:
+                    break
+
     except WebSocketDisconnect:
         logger.info("📡 WebSocket 连接断开: %s", connection_id)
     except Exception as e:
