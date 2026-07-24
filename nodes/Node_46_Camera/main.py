@@ -6,6 +6,7 @@ import logging  # auto: ensure module logger is defined
 logger = logging.getLogger(__name__)
 
 import os
+import asyncio
 import base64
 import threading
 from datetime import datetime
@@ -33,7 +34,7 @@ app = FastAPI(title="Node 46 - Camera", version="2.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=get_cors_origins(), allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
 # State
-recording_state: Dict[str, Any] = {"active": False, "writer": None, "capture": None}
+recording_state: Dict[str, Any] = {"active": False, "writer": None, "capture": None, "thread": None}
 stream_capture: Optional[Any] = None
 
 class CaptureRequest(BaseModel):
@@ -146,6 +147,7 @@ async def record_start(request: RecordStartRequest):
                     writer.write(frame)
 
         t = threading.Thread(target=record_loop, daemon=True)
+        recording_state["thread"] = t
         t.start()
         return {"success": True, "output_path": request.output_path}
     except Exception as e:
@@ -156,6 +158,12 @@ async def record_stop():
     if not recording_state["active"]:
         return {"success": False, "error": "No active recording"}
     recording_state["active"] = False
+    # 等待录制线程真正退出后再释放 writer/capture，
+    # 否则线程可能正处于 writer.write()/cap.read() 中，释放会造成 use-after-free 崩溃
+    t = recording_state.get("thread")
+    if t is not None:
+        await asyncio.to_thread(t.join, 5.0)
+        recording_state["thread"] = None
     if recording_state["writer"]:
         recording_state["writer"].release()
         recording_state["writer"] = None
