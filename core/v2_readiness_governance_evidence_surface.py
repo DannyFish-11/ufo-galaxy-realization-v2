@@ -507,19 +507,21 @@ def _probe_post_graduation_governance() -> EvidenceDimensionEntry:
     test_ref = "tests/test_pr11_v2_delegated_flow_post_graduation_governance.py"
     try:
         from core.delegated_flow_post_graduation_governance import (
-            evaluate_post_graduation_governance,
+            evaluate_delegated_flow_governance,
         )
 
-        report = evaluate_post_graduation_governance()
+        report = evaluate_delegated_flow_governance()
         verdict = getattr(report, "verdict", "")
         dimensions_raw: Dict[str, Any] = {}
         if hasattr(report, "dimensions"):
+            # report.dimensions is a Dict[str, DimensionGovernanceResult];
+            # iterate its values so d is the result object, not the str key.
             dimensions_raw = {
                 d.dimension.value if hasattr(d, "dimension") else str(i): {
                     "status": d.status.value if hasattr(d.status, "value") else str(d.status),
                     "violation": getattr(d, "violation_description", ""),
                 }
-                for i, d in enumerate(report.dimensions)
+                for i, d in enumerate(report.dimensions.values())
             }
         summary = f"PostGraduationGovernanceEvaluator verdict={verdict!r}; {len(dimensions_raw)} dimensions"
         return EvidenceDimensionEntry(
@@ -552,11 +554,13 @@ def _probe_android_evaluator_artifacts() -> EvidenceDimensionEntry:
     test_ref = "tests/test_pr03_v2_android_bridge_canonical_ingress.py"
     try:
         from core.android_evaluator_artifact_ingress import (
-            get_android_evaluator_artifact_registry,
+            get_evaluator_artifact_registry,
         )
 
-        registry = get_android_evaluator_artifact_registry()
-        snapshot = registry.snapshot() if hasattr(registry, "snapshot") else []
+        registry = get_evaluator_artifact_registry()
+        # Registry exposes list_recent(n) -> List[artifact]; there is no
+        # snapshot() method returning a list of artifacts.
+        snapshot = registry.list_recent(1000) if hasattr(registry, "list_recent") else []
         kind_counts: Dict[str, int] = {}
         for artifact in snapshot:
             k = getattr(artifact, "kind", None)
@@ -792,12 +796,14 @@ def _probe_participant_session_truth() -> EvidenceDimensionEntry:
     test_ref = "tests/test_android_delegated_runtime_structural_consolidation.py"
     try:
         from core.android_participant_session_state import (
-            get_participant_session_registry,
+            get_participant_session_runtime,
         )
 
-        registry = get_participant_session_registry()
-        snap = registry.snapshot() if hasattr(registry, "snapshot") else []
-        total = len(snap)
+        runtime = get_participant_session_runtime()
+        # snapshot() returns an AndroidParticipantSessionSnapshot dataclass
+        # (not a list); read its total_count rather than len().
+        snap = runtime.snapshot() if hasattr(runtime, "snapshot") else None
+        total = getattr(snap, "total_count", 0) if snap is not None else 0
         summary = f"ParticipantSessionRegistry: {total} session record(s)"
         return EvidenceDimensionEntry(
             dimension_id=dim_id,
