@@ -580,7 +580,7 @@ async def handle_register(connection_id: str, aip_msg, websocket: WebSocket):
             "correlation_id": aip_msg.message_id,
             "type": MessageType.DEVICE_REGISTER_ACK.value,
             "device_id": device_id,
-            "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "payload": {
                 "status": "registered" if success else "failed",
                 "message": "设备注册成功" if success else "设备注册失败",
@@ -643,7 +643,7 @@ async def handle_heartbeat(connection_id: str, aip_msg):
             "correlation_id": aip_msg.message_id,
             "type": MessageType.DEVICE_HEARTBEAT_ACK.value,
             "device_id": device_id,
-            "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "payload": {"status": "ok"},
         }
 
@@ -705,7 +705,7 @@ async def handle_command(connection_id: str, aip_msg):
                 "correlation_id": aip_msg.message_id,
                 "type": MessageType.COMMAND_RESULT.value,
                 "device_id": aip_msg.device_id,
-                "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "payload": result,
             }
             await connection_manager.send_message(connection_id, response)
@@ -724,7 +724,7 @@ async def handle_command(connection_id: str, aip_msg):
                 "correlation_id": aip_msg.message_id,
                 "type": MessageType.COMMAND_RESULT.value,
                 "device_id": aip_msg.device_id,
-                "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "payload": result,
             }
             await connection_manager.send_message(connection_id, response)
@@ -765,7 +765,7 @@ async def handle_command(connection_id: str, aip_msg):
                 "correlation_id": aip_msg.message_id,
                 "type": MessageType.COMMAND_RESULT.value,
                 "device_id": aip_msg.device_id,
-                "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "success": result.get("success", False),
                 # 手表 AIPClient 读 command_result 的 json["data"]；同时保留 payload 约定
                 "data": result,
@@ -796,7 +796,7 @@ async def handle_command(connection_id: str, aip_msg):
                 "correlation_id": aip_msg.message_id,
                 "type": MessageType.COMMAND_RESULT.value,
                 "device_id": aip_msg.device_id,
-                "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "success": result["success"],
                 "data": result,
                 "payload": result,
@@ -875,7 +875,7 @@ async def handle_command(connection_id: str, aip_msg):
                 "correlation_id": aip_msg.message_id,
                 "type": MessageType.COMMAND_RESULT.value,
                 "device_id": aip_msg.device_id,
-                "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "success": result.get("success", False),
                 "data": result,
                 "payload": result,
@@ -902,7 +902,7 @@ async def handle_command(connection_id: str, aip_msg):
             "correlation_id": aip_msg.message_id,
             "type": MessageType.COMMAND_RESULT.value,
             "device_id": aip_msg.device_id,
-            "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "payload": result,
         }
 
@@ -923,7 +923,7 @@ async def handle_status(connection_id: str, aip_msg):
             "correlation_id": aip_msg.message_id,
             "type": MessageType.DEVICE_STATUS.value,
             "device_id": aip_msg.device_id,
-            "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "payload": status,
         }
 
@@ -1005,7 +1005,7 @@ async def handle_wake_event(connection_id: str, aip_msg):
                 "correlation_id": aip_msg.message_id,
                 "type": "wake_event_ack",
                 "device_id": device_id,
-                "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "payload": wake_result,
             }
             await connection_manager.send_message(connection_id, response)
@@ -1132,7 +1132,7 @@ async def handle_session_migrate(connection_id: str, aip_msg):
             "correlation_id": aip_msg.message_id,
             "type": MessageType.SESSION_MIGRATE_ACK.value,
             "device_id": device_id,
-            "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "payload": {
                 "session_id": session_id,
                 "target_device_id": target_device_id,

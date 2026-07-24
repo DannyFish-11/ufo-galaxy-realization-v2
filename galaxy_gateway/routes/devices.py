@@ -74,6 +74,20 @@ async def get_connected_devices(wsm=Depends(get_websocket_manager)):
     }
 
 
+@router.get("/api/devices/list")
+async def legacy_list_devices(dm=Depends(get_device_manager)):
+    """Legacy device-list endpoint — maps to current ``GET /api/devices``.
+
+    Must be registered BEFORE the ``/api/devices/{device_id}`` param route:
+    Starlette matches in registration order with no specificity sorting, so a
+    literal ``/api/devices/list`` placed after the catch-all was captured as
+    device_id="list" and became unreachable.
+    """
+    logger.info("Legacy /api/devices/list called")
+    devices = dm.to_dict()
+    return {"devices": devices, "total": len(devices) if isinstance(devices, list) else 0}
+
+
 @router.get("/api/devices/{device_id}")
 async def get_device(
     device_id: str,
@@ -138,14 +152,6 @@ async def legacy_register_device(
         "message": "设备注册成功",
         "server_version": "3.0.0",
     }
-
-
-@router.get("/api/devices/list")
-async def legacy_list_devices(dm=Depends(get_device_manager)):
-    """Legacy device-list endpoint — maps to current ``GET /api/devices``."""
-    logger.info("Legacy /api/devices/list called")
-    devices = dm.to_dict()
-    return {"devices": devices, "total": len(devices) if isinstance(devices, list) else 0}
 
 
 @router.post("/api/devices/heartbeat")
