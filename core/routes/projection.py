@@ -5137,9 +5137,9 @@ def _get_continuum_state_with_source() -> Tuple[Optional["ContinuumState"], str,
 
     try:
         # Fallback: desktop presence runtime if available.
-        from core.desktop_presence_runtime import get_presence_runtime
+        from core.desktop_presence_runtime import get_desktop_presence_runtime
 
-        runtime = get_presence_runtime()
+        runtime = get_desktop_presence_runtime()
         if runtime is not None and hasattr(runtime, "get_continuum_state"):
             state = runtime.get_continuum_state()
             if state is not None:
