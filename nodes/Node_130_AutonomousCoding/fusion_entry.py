@@ -55,7 +55,7 @@ def execute(action: str, params: dict = None) -> dict:
                 "status": "running",
                 "available_actions": [
                     "generate_code", "fix_bug", "write_tests",
-                    "optimize", "refactor", "analyze",
+                    "optimize", "refactor", "document",
                 ],
             }
 
@@ -106,5 +106,11 @@ def execute(action: str, params: dict = None) -> dict:
 
 
 def analyze(params: dict = None) -> dict:
-    """Convenience wrapper for code analysis."""
-    return execute("analyze", params)
+    """Convenience wrapper for code analysis.
+
+    The underlying engine has no dedicated analysis task type; map to the
+    closest supported capability (REFACTOR, which inspects/rewrites code)
+    rather than dispatching an "analyze" action that task_type_map cannot
+    resolve and that always failed with "Unknown action".
+    """
+    return execute("refactor", params)
