@@ -1,10 +1,30 @@
 import os, subprocess, json
+import re
 import asyncio
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+
+# Only these remote transports are allowed for clone. git's local-command
+# transports (ext::, fd::, file://) can execute arbitrary commands on the
+# server, so a user-supplied clone URL using them is an RCE vector.
+_SAFE_URL_SCHEMES = ("https://", "http://", "git://", "ssh://")
+_SCP_LIKE = re.compile(r"^[A-Za-z0-9_.-]+@[A-Za-z0-9_.-]+:")
+
+
+def _validate_clone_url(url: str) -> Optional[str]:
+    """Return an error string if the clone URL is unsafe, else None."""
+    u = (url or "").strip()
+    if not u or u.startswith("-"):
+        return "invalid repository URL"
+    low = u.lower()
+    if "::" in u or low.startswith(("ext::", "fd::", "file://")):
+        return "unsupported/unsafe URL transport"
+    if not (low.startswith(_SAFE_URL_SCHEMES) or _SCP_LIKE.match(u)):
+        return "URL must use http(s)://, git://, ssh:// or user@host:path"
+    return None
 
 app = FastAPI(title='Node 07 - Git', version='3.0.0', description='Complete Git operations with branch, tag, log, and diff support')
 app.add_middleware(CORSMiddleware, allow_origins=['*'], allow_credentials=True, allow_methods=['*'], allow_headers=['*'])
@@ -89,12 +109,19 @@ async def init_repo(path: str, bare: bool = False):
 @app.post('/clone')
 async def clone(url: str, path: str, branch: Optional[str] = None, depth: Optional[int] = None):
     """克隆仓库"""
-    args = ['clone', url, path]
+    url_error = _validate_clone_url(url)
+    if url_error:
+        raise HTTPException(status_code=400, detail=url_error)
+
+    # Put options first, then '--' so the URL/path can never be parsed as
+    # options (option injection), and only the validated transports are used.
+    args = ['clone']
     if branch:
         args.extend(['-b', branch])
     if depth:
         args.extend(['--depth', str(depth)])
-    
+    args.extend(['--', url, path])
+
     result = await asyncio.to_thread(
         subprocess.run, args,
         capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=300,
