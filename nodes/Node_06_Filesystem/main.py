@@ -53,8 +53,12 @@ class FilesystemManager:
         path = path.lstrip("/")
         full_path = (self.base_dir / path).resolve()
 
-        # 安全检查：确保路径在基础目录内
-        if not str(full_path).startswith(str(self.base_dir)):
+        # 安全检查:必须落在 base_dir 内。原来用无分隔符的 str.startswith 前缀判断,
+        # base=/data/fs 时 /data/fs_evil/... 会被误判为"在内部" → 沙箱逃逸(可读写/
+        # 删除外部文件)。改用按路径分量的 relative_to 判定,兄弟同前缀目录不再命中。
+        try:
+            full_path.relative_to(self.base_dir)
+        except ValueError:
             raise HTTPException(status_code=403, detail="Access denied: path outside base directory")
 
         return full_path
@@ -234,12 +238,32 @@ class FilesystemManager:
         if not archive_full_path.exists():
             raise HTTPException(status_code=404, detail="Archive not found")
 
+        # 无过滤的 extractall 存在归档成员路径穿越(zip-slip / tar-slip):成员名
+        # 形如 "../../etc/cron.d/x" 或含绝对路径/符号链接时会写到 output_dir 之外。
+        # 逐成员校验解析后的目标必须落在 output_dir 内,越界即拒绝。
+        dest = output_full_path.resolve()
+
+        def _safe_target(member_name: str) -> Path:
+            target = (dest / member_name).resolve()
+            try:
+                target.relative_to(dest)
+            except ValueError:
+                raise HTTPException(status_code=403, detail=f"Archive member escapes target dir: {member_name}")
+            return target
+
         if zipfile.is_zipfile(archive_full_path):
             with zipfile.ZipFile(archive_full_path, 'r') as zf:
-                zf.extractall(output_full_path)
+                for name in zf.namelist():
+                    _safe_target(name)
+                zf.extractall(dest)
         elif tarfile.is_tarfile(archive_full_path):
             with tarfile.open(archive_full_path, "r:*") as tf:
-                tf.extractall(output_full_path)
+                for member in tf.getmembers():
+                    # 拒绝穿越,同时拒绝指向外部的符号/硬链接
+                    _safe_target(member.name)
+                    if member.issym() or member.islnk():
+                        _safe_target(member.linkname)
+                tf.extractall(dest)
         else:
             raise HTTPException(status_code=400, detail="Unknown archive format")
 

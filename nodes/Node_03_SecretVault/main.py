@@ -46,11 +46,43 @@ if HAS_FASTAPI:
 else:
     app = None
 
-# 主密钥（从环境变量读取）
-if HAS_CRYPTO:
-    MASTER_KEY = os.getenv("SECRETVAULT_MASTER_KEY", Fernet.generate_key().decode())
-else:
-    MASTER_KEY = os.getenv("SECRETVAULT_MASTER_KEY", secrets.token_urlsafe(32))
+# 主密钥解析:严禁每次启动随机生成 —— 加密后的 secrets 会持久化,换了主密钥重启后
+# 全部解密抛 InvalidToken,数据永久丢失。优先级:
+#   1) 环境变量 SECRETVAULT_MASTER_KEY(生产推荐)
+#   2) 持久化的密钥文件 SECRETVAULT_KEY_FILE(默认与 vault 同目录),存在则复用
+#   3) 都没有才生成一次,并【落盘】到密钥文件(0600)供后续重启复用
+def _resolve_master_key() -> str:
+    env_key = os.getenv("SECRETVAULT_MASTER_KEY")
+    if env_key:
+        return env_key
+    vault_file = os.getenv("SECRETVAULT_FILE", "/tmp/secretvault.json")
+    key_file = os.getenv("SECRETVAULT_KEY_FILE", os.path.join(os.path.dirname(vault_file) or ".", ".secretvault.key"))
+    try:
+        if os.path.exists(key_file):
+            with open(key_file, "r", encoding="utf-8") as f:
+                persisted = f.read().strip()
+            if persisted:
+                return persisted
+    except OSError as e:
+        logger.warning(f"读取主密钥文件失败({key_file}): {e}")
+    # 生成一次并持久化
+    new_key = Fernet.generate_key().decode() if (HAS_CRYPTO and Fernet) else secrets.token_urlsafe(32)
+    try:
+        os.makedirs(os.path.dirname(key_file) or ".", exist_ok=True)
+        # 先建 0600 空文件再写,避免密钥以宽松权限短暂落盘
+        fd = os.open(key_file, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(new_key)
+        logger.warning(
+            "SECRETVAULT_MASTER_KEY 未设置,已生成并持久化到 %s(请在生产用环境变量固定主密钥)",
+            key_file,
+        )
+    except OSError as e:
+        logger.error(f"主密钥持久化失败({key_file}): {e};本次启动的密钥不会跨重启保留")
+    return new_key
+
+
+MASTER_KEY = _resolve_master_key()
 
 if HAS_FASTAPI:
     class Secret(BaseModel):
@@ -107,11 +139,15 @@ class SecretVault:
         self._access_log = self._access_log[-1000:]
 
     def encrypt(self, value: str) -> str:
-        """加密值"""
+        """加密值(降级模式无 _fernet 时明确报错,避免 NoneType.encrypt 崩溃)"""
+        if self._fernet is None:
+            raise HTTPException(status_code=503, detail="加密不可用:cryptography 未安装(SecretVault 降级模式)")
         return self._fernet.encrypt(value.encode()).decode()
 
     def decrypt(self, encrypted_value: str) -> str:
-        """解密值"""
+        """解密值(降级模式无 _fernet 时明确报错)"""
+        if self._fernet is None:
+            raise HTTPException(status_code=503, detail="解密不可用:cryptography 未安装(SecretVault 降级模式)")
         return self._fernet.decrypt(encrypted_value.encode()).decode()
 
     def set_secret(self, key: str, value: str, encrypted: bool = True, 
