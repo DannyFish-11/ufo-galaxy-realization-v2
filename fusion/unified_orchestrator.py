@@ -315,13 +315,15 @@ class UnifiedOrchestrator:
                 
                 # 更新节点负载
                 self.topology.update_load(node_id, 10)
-                
-                # 真实执行逻辑，包含重试
-                res = await self._execute_with_retry(node_id, subtask, subtask_id=_st_id)
-                
-                # 释放节点负载
-                self.topology.update_load(node_id, -10)
-                
+
+                # 真实执行逻辑，包含重试。用 try/finally 确保无论执行是否抛异常
+                # 都释放负载——此前 _execute_with_retry 抛异常会跳过下面的 -10，
+                # 导致该节点负载计数只增不减、最终被误判为过载而不再被调度。
+                try:
+                    res = await self._execute_with_retry(node_id, subtask, subtask_id=_st_id)
+                finally:
+                    self.topology.update_load(node_id, -10)
+
                 if res.success:
                     results.append(res.data)
                 else:

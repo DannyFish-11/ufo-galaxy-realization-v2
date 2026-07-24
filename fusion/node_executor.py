@@ -97,7 +97,9 @@ class ExecutionPool:
                         return ExecutionResult(
                             node_id=node_id,
                             success=success,
-                            data=res_json.get("data"),
+                            # 网关 /api/v1/nodes/call 成功时把节点输出放在 "result"
+                            # 键下(不是 "data"),此前读 "data" 永远拿到 None。
+                            data=res_json.get("result", res_json.get("data")),
                             error=res_json.get("error"),
                             latency_ms=latency,
                             timestamp=time.time()
