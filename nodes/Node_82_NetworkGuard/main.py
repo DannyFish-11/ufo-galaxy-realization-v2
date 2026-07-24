@@ -17,6 +17,7 @@ Node 82: Network Guard - 网络监控与防护
 """
 
 import os
+import asyncio
 import platform
 import socket
 import psutil
@@ -352,8 +353,10 @@ async def root():
 
 @app.get("/health")
 async def health():
-    internet = guard.check_internet()
-    
+    # blocking socket connect (up to 3s) — offload so health checks under
+    # load don't serialize behind the event loop.
+    internet = await asyncio.to_thread(guard.check_internet)
+
     return {
         "status": "healthy",
         "internet_connected": internet,
@@ -396,7 +399,9 @@ async def scan_ports(host: str, ports: List[int]):
     if len(ports) > 100:
         raise HTTPException(status_code=400, detail="Too many ports (max 100)")
     
-    results = guard.scan_ports(host, ports)
+    # scan_port does a blocking socket connect per port (up to 100); run off
+    # the event loop so the node keeps serving other requests while scanning.
+    results = await asyncio.to_thread(guard.scan_ports, host, ports)
     open_ports = [r for r in results if r.is_open]
     
     return {
@@ -410,9 +415,11 @@ async def scan_ports(host: str, ports: List[int]):
 @app.get("/internet")
 async def check_internet():
     """检查互联网连接"""
-    connected = guard.check_internet()
-    public_ip = guard.get_public_ip() if connected else None
-    
+    # check_internet does a blocking socket connect; get_public_ip a blocking
+    # HTTP request — offload both so /internet doesn't stall the loop.
+    connected = await asyncio.to_thread(guard.check_internet)
+    public_ip = await asyncio.to_thread(guard.get_public_ip) if connected else None
+
     return {
         "connected": connected,
         "public_ip": public_ip,
@@ -422,7 +429,8 @@ async def check_internet():
 @app.get("/bandwidth")
 async def get_bandwidth():
     """获取带宽使用"""
-    usage = guard.get_bandwidth_usage()
+    # get_bandwidth_usage sleeps 1s to sample throughput — offload it.
+    usage = await asyncio.to_thread(guard.get_bandwidth_usage)
     return usage
 
 @app.get("/tailscale")
