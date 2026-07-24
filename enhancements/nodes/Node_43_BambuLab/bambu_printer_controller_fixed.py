@@ -219,8 +219,8 @@ class BambuLabDriver(PrinterDriver):
                     serial=self._serial
                 )
                 
-                # 连接并获取初始状态
-                self._client.connect()
+                # 连接并获取初始状态(阻塞网络调用,放线程池避免冻结事件循环)
+                await asyncio.to_thread(self._client.connect)
                 self._connected = True
                 
                 # 启动状态更新循环
@@ -257,7 +257,8 @@ class BambuLabDriver(PrinterDriver):
             
             self._mqtt_client.on_message = self._on_mqtt_message
             
-            self._mqtt_client.connect(self._host, 8883, 60)
+            # 阻塞网络连接,放线程池避免冻结事件循环
+            await asyncio.to_thread(self._mqtt_client.connect, self._host, 8883, 60)
             self._mqtt_client.subscribe(f"device/{self._serial}/report")
             self._mqtt_client.loop_start()
             
