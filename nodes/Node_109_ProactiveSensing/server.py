@@ -11,8 +11,9 @@ from pydantic import BaseModel, Field
 from typing import Dict, List, Optional, Any
 import uvicorn
 
-# 添加项目根目录到路径
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# 添加项目根目录到路径。dirname^2 只到 nodes/(错),下面 `from nodes.common` /
+# `from core` 需要仓库根(nodes/ 的父目录)在 sys.path 上,故需 dirname^3。
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from nodes.common.cors_config import get_cors_origins
 from core.proactive_sensing_engine import (
