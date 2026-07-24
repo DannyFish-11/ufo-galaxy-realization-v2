@@ -122,7 +122,14 @@ class ShellService:
         self._running_processes: Dict[int, asyncio.subprocess.Process] = {}
         self._process_info: Dict[int, ProcessInfo] = {}
         logger.info(f"ShellService initialized with workspace: {self.workspace_root}")
-    
+
+    def _prune_process_info(self, cap: int = 500) -> None:
+        # _process_info 只更新状态、从不删除(只有 _running_processes 在 finally 清理)
+        # → 无界泄漏。按插入顺序保留最近 cap 条。
+        if len(self._process_info) > cap:
+            for _pid in list(self._process_info.keys())[: len(self._process_info) - cap]:
+                self._process_info.pop(_pid, None)
+
     def _is_command_safe(self, command: str, shell_mode: bool = True) -> bool:
         """Check if command is safe to execute.
 
@@ -214,6 +221,7 @@ class ShellService:
                 status="running",
                 started_at=start_time.isoformat()
             )
+            self._prune_process_info()
             
             try:
                 stdout, stderr = await asyncio.wait_for(
@@ -358,6 +366,7 @@ class ShellService:
                 status="running",
                 started_at=datetime.now().isoformat()
             )
+            self._prune_process_info()
             
             return {
                 "success": True,

@@ -221,7 +221,10 @@ class OllamaClient:
     async def delete_model(self, model: str) -> bool:
         """删除模型"""
         try:
-            response = await self.http_client.delete(
+            # httpx 的 .delete() 不接受 json= / 请求体参数(会 TypeError)。带 body 的
+            # DELETE 必须用 .request("DELETE", ...)。
+            response = await self.http_client.request(
+                "DELETE",
                 f"{self.base_url}/api/delete",
                 json={"name": model}
             )
