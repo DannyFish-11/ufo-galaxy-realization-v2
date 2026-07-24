@@ -837,17 +837,24 @@ def from_cross_device_routing_summary(
         )
 
     try:
+        # Attribute names must match CrossDeviceAssignmentSummary's real fields
+        # (core.cross_device_policy.assignment_summary). Previously these read
+        # primary_device_id / multi_device_required / merge_confirmation_required
+        # / routing_posture — none of which exist on the summary — so every
+        # value silently fell back to its default and the derived MeshSession
+        # lost the primary executor, cross-device flag, confirmation flag and
+        # routing posture.
         source_id = _safe_str(getattr(summary, "source_device_id", None))
-        primary_id = _safe_str(getattr(summary, "primary_device_id", None))
+        primary_id = _safe_str(getattr(summary, "primary_execution_device_id", None))
         mesh_id = _safe_str(getattr(summary, "mesh_id", None)) or _safe_str(
             getattr(summary, "session_id", None)
         ) or None
-        multi_req = bool(getattr(summary, "multi_device_required", False))
-        merge_req = bool(getattr(summary, "merge_confirmation_required", False))
+        multi_req = bool(getattr(summary, "is_cross_device", False))
+        merge_req = bool(getattr(summary, "confirmation_required_before_expansion", False))
         merge_owner = _safe_str(getattr(summary, "merge_owner_device_id", None)) or None
 
-        # Derive barrier/merge from routing posture
-        routing_posture = getattr(summary, "routing_posture", None)
+        # Derive barrier/merge from routing posture (field is 'posture', a str)
+        routing_posture = getattr(summary, "posture", None)
         posture_str = (
             routing_posture.value
             if hasattr(routing_posture, "value")
