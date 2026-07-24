@@ -65,7 +65,9 @@ def _build_team(strategy: str) -> StrategyBuilder:
     def _builder(llm_router: Any, factory: Any) -> wf.Workflow:
         from core.agent_team import TeamManager
 
-        manager = TeamManager(agent_factory=_agent_factory(llm_router, factory))
+        # 修复:此前漏传 llm_router → TeamManager._router=None,_create_members
+        # 直接退化成"无路由默认单成员",统一 Workflow 路径下所有团队策略名存实亡。
+        manager = TeamManager(agent_factory=_agent_factory(llm_router, factory), llm_router=llm_router)
         return wf.from_team_manager(manager, strategy, name=f"team:{strategy}")
 
     return _builder
@@ -75,7 +77,7 @@ def _build_single(llm_router: Any, factory: Any) -> wf.Workflow:
     # single：用单成员团队作最接近单 agent 的一站式入口。
     from core.agent_team import TeamManager
 
-    manager = TeamManager(agent_factory=_agent_factory(llm_router, factory))
+    manager = TeamManager(agent_factory=_agent_factory(llm_router, factory), llm_router=llm_router)
     return wf.from_team_manager(manager, "specialized", member_count=1, name="single")
 
 

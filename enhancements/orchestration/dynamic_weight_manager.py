@@ -20,7 +20,7 @@ from typing import Dict, List, Optional, Any, Callable, Tuple
 from dataclasses import dataclass, field, asdict
 from enum import Enum
 from datetime import datetime, timedelta
-from collections import defaultdict
+from collections import defaultdict, deque
 import heapq
 import random
 
@@ -62,10 +62,16 @@ class NodeMetrics:
     requests_per_second: float = 0.0 # 每秒请求数
     error_rate: float = 0.0          # 错误率 (0-100)
     avg_response_time: float = 0.0   # 平均响应时间 (ms)
+    reachable: bool = True           # 健康检查是否可达(失败/非200 时为 False)
     last_updated: datetime = field(default_factory=datetime.now)
-    
+
     def health_score(self) -> float:
         """计算健康分数 (0-100)"""
+        # 节点不可达(健康检查失败/非 200)直接判 0 分 → OFFLINE。
+        # 否则 cpu/memory/disk 等默认 0 会被当作"完美",把不可达节点的分数
+        # 抬到 ~60(DEGRADED),导致死节点永远进不了 UNHEALTHY/OFFLINE、仍被派活。
+        if not self.reachable:
+            return 0.0
         # 各指标权重
         weights = {
             'cpu': 0.2,
@@ -352,14 +358,16 @@ class DynamicWeightManager:
                         return NodeMetrics(
                             node_id=node.node_id,
                             error_rate=100,
-                            network_latency=latency
+                            network_latency=latency,
+                            reachable=False,
                         )
         except Exception as e:
             logger.warning(f"Health check failed for {node.node_id}: {e}")
             return NodeMetrics(
                 node_id=node.node_id,
                 error_rate=100,
-                network_latency=9999
+                network_latency=9999,
+                reachable=False,
             )
     
     def get_node_weights(self) -> Dict[str, float]:
@@ -588,8 +596,10 @@ class SmartTaskDistributor:
         # 任务队列
         self._task_queue: List[Tuple[int, str, Dict]] = []  # (priority, task_id, task_info)
         
-        # 任务分配历史
-        self._assignment_history: Dict[str, List[str]] = defaultdict(list)  # node_id -> [task_ids]
+        # 任务分配历史:每个节点保留最近若干条(有界,防止无限增长);
+        # 累计总数单独用整数计数器保存,避免因裁剪历史而丢失真实统计。
+        self._assignment_history: Dict[str, "deque[str]"] = defaultdict(lambda: deque(maxlen=1000))
+        self._assignment_counts: Dict[str, int] = defaultdict(int)  # node_id -> 累计分配数
     
     async def distribute_task(
         self,
@@ -622,8 +632,9 @@ class SmartTaskDistributor:
         # 生成分配 ID
         assignment_id = f"{task_id}_{node.node_id}_{int(time.time())}"
         
-        # 记录历史
+        # 记录历史(有界)+ 累计计数
         self._assignment_history[node.node_id].append(task_id)
+        self._assignment_counts[node.node_id] += 1
         
         logger.info(f"Task {task_id} assigned to {node.node_id} ({node.name})")
         
@@ -642,11 +653,9 @@ class SmartTaskDistributor:
     def get_distribution_stats(self) -> Dict[str, Any]:
         """获取分配统计"""
         return {
-            'total_assignments': sum(len(tasks) for tasks in self._assignment_history.values()),
-            'assignments_per_node': {
-                node_id: len(tasks)
-                for node_id, tasks in self._assignment_history.items()
-            },
+            # 用累计计数器(不受历史裁剪影响)统计真实总数
+            'total_assignments': sum(self._assignment_counts.values()),
+            'assignments_per_node': dict(self._assignment_counts),
             'load_balancer_stats': self.load_balancer.get_statistics()
         }
 

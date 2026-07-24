@@ -327,18 +327,26 @@ class StatusMonitor:
 
 class FeedbackCollector:
     """反馈收集器"""
-    
+
+    MAX_FEEDBACKS = 5000  # 上限,防止 feedbacks 无界增长(长跑内存泄漏)
+
     def __init__(self, monitor: StatusMonitor):
         """
         初始化反馈收集器
-        
+
         Args:
             monitor: 状态监控器实例
         """
         self.monitor = monitor
         self.feedbacks: List[Dict] = []
-        
+
         logger.info("FeedbackCollector 初始化完成")
+
+    def _record_feedback(self, feedback: Dict) -> None:
+        """追加反馈并按 FIFO 限制总量。"""
+        self.feedbacks.append(feedback)
+        if len(self.feedbacks) > self.MAX_FEEDBACKS:
+            del self.feedbacks[: len(self.feedbacks) - self.MAX_FEEDBACKS]
     
     def collect_action_feedback(self, action_id: str, success: bool, 
                                duration: float, output: Any, 
@@ -363,7 +371,7 @@ class FeedbackCollector:
             'error': error
         }
         
-        self.feedbacks.append(feedback)
+        self._record_feedback(feedback)
         
         # 记录事件
         level = MonitorLevel.INFO if success else MonitorLevel.ERROR
@@ -397,7 +405,7 @@ class FeedbackCollector:
             'state': state
         }
         
-        self.feedbacks.append(feedback)
+        self._record_feedback(feedback)
         
         # 更新设备状态
         self.monitor.update_device_status(
@@ -427,7 +435,7 @@ class FeedbackCollector:
             'data': data or {}
         }
         
-        self.feedbacks.append(feedback)
+        self._record_feedback(feedback)
         
         # 记录事件
         self.monitor.log_event(

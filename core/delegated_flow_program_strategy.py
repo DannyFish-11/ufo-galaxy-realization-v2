@@ -738,9 +738,11 @@ def _get_result_convergence():  # type: ignore[return]
     operational even when the result convergence module is unavailable.
     """
     try:
-        from core.flow_aware_result_convergence import get_result_convergence
+        from core.flow_aware_result_convergence import (
+            get_flow_aware_convergence_coordinator,
+        )
 
-        return get_result_convergence()
+        return get_flow_aware_convergence_coordinator()
     except Exception:
         return None
 
@@ -752,9 +754,9 @@ def _get_continuity_coordinator():  # type: ignore[return]
     operational even when the continuity coordinator module is unavailable.
     """
     try:
-        from core.flow_continuity_coordinator import get_continuity_coordinator
+        from core.flow_continuity_coordinator import get_flow_continuity_coordinator
 
-        return get_continuity_coordinator()
+        return get_flow_continuity_coordinator()
     except Exception:
         return None
 
@@ -767,10 +769,10 @@ def _get_compat_blocking():  # type: ignore[return]
     """
     try:
         from core.compat_legacy_path_blocking_canonicalization import (
-            get_compat_blocking,
+            get_blocking_enforcer,
         )
 
-        return get_compat_blocking()
+        return get_blocking_enforcer()
     except Exception:
         return None
 

@@ -1034,8 +1034,10 @@ class GalaxyOrchestrator:
             subtask_id = subtask.get("subtask_id")
             logger.info(f"执行子任务: {subtask_id}")
 
-            # 检查依赖
+            # 检查依赖。注意:此前用 continue 只跳过内层 dep 循环,随后仍会落到
+            # 下面执行该子任务(且重复追加结果)。改为置标志 + break,再跳过外层子任务。
             dependencies = subtask.get("dependencies", [])
+            dep_failed = False
             for dep_id in dependencies:
                 dep_result = next((r for r in results if r.get("subtask_id") == dep_id), None)
                 if not dep_result or not dep_result.get("success"):
@@ -1044,7 +1046,11 @@ class GalaxyOrchestrator:
                         "success": False,
                         "error": f"依赖任务失败: {dep_id}"
                     })
-                    continue
+                    dep_failed = True
+                    break
+            if dep_failed:
+                subtask["status"] = "failed"
+                continue
 
             # 找到合适的设备
             device_id = self.device_manager.find_device_for_task(subtask)

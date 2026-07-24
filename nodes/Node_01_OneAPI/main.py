@@ -639,13 +639,10 @@ async def list_models():
     return {"object": "list", "data": models}
 
 
-@app.post("/v1/chat/completions")
-async def chat_completions(request: ChatRequest, authorization: str = Header(None)):
-    """聊天补全 - OpenAI 兼容格式"""
-    model = request.model
-    messages = [m.dict() if hasattr(m, "dict") else m for m in request.messages]
-    max_tokens = request.max_tokens
-
+def _route_chat_sync(model: str, messages: List[Dict], max_tokens: int, temperature: float) -> Dict:
+    """同步的提供商路由 + 调用(全部 call_* 都是 requests.post 阻塞调用)。
+    由异步端点经 asyncio.to_thread 调度,避免在事件循环里跑阻塞网络 I/O 冻结整个节点。
+    """
     # 自动选择提供商
     if model == "auto" or "/" not in model:
         # 智能路由策略
@@ -653,7 +650,7 @@ async def chat_completions(request: ChatRequest, authorization: str = Header(Non
 
         # 1. 尝试本地 LLM
         if LOCAL_LLM_ENABLED and LOCAL_LLM_PRIORITY == 1:
-            result = call_local_llm(messages, max_tokens=max_tokens, temperature=request.temperature)
+            result = call_local_llm(messages, max_tokens=max_tokens, temperature=temperature)
             if "error" not in result:
                 # 本地成功，直接返回
                 pass
@@ -685,7 +682,7 @@ async def chat_completions(request: ChatRequest, authorization: str = Header(Non
             result = call_claude(messages, max_tokens=max_tokens)
         elif LOCAL_LLM_ENABLED:
             # 所有云端都不可用，使用本地
-            result = call_local_llm(messages, max_tokens=max_tokens, temperature=request.temperature)
+            result = call_local_llm(messages, max_tokens=max_tokens, temperature=temperature)
         else:
             raise HTTPException(status_code=503, detail="No LLM provider configured")
     else:
@@ -698,7 +695,7 @@ async def chat_completions(request: ChatRequest, authorization: str = Header(Non
             model_name = model
 
         if provider == "local":
-            result = call_local_llm(messages, model_name, max_tokens, request.temperature)
+            result = call_local_llm(messages, model_name, max_tokens, temperature)
         elif provider == "openrouter":
             result = call_openrouter(messages, model_name, max_tokens)
         elif provider == "zhipu":
@@ -713,6 +710,19 @@ async def chat_completions(request: ChatRequest, authorization: str = Header(Non
             result = call_claude(messages, model_name, max_tokens)
         else:
             raise HTTPException(status_code=400, detail=f"Unknown provider: {provider}")
+
+    return result
+
+
+@app.post("/v1/chat/completions")
+async def chat_completions(request: ChatRequest, authorization: str = Header(None)):
+    """聊天补全 - OpenAI 兼容格式"""
+    model = request.model
+    messages = [m.dict() if hasattr(m, "dict") else m for m in request.messages]
+    max_tokens = request.max_tokens
+
+    # 阻塞式提供商调用卸载到线程,避免冻结节点事件循环。
+    result = await asyncio.to_thread(_route_chat_sync, model, messages, max_tokens, request.temperature)
 
     if "error" in result:
         raise HTTPException(status_code=500, detail=result["error"])
@@ -733,7 +743,7 @@ async def chat_completions(request: ChatRequest, authorization: str = Header(Non
 @app.post("/tools/weather")
 async def api_weather(request: WeatherRequest):
     """获取天气"""
-    result = get_weather(request.city, request.units)
+    result = await asyncio.to_thread(get_weather, request.city, request.units)
     if "error" in result:
         raise HTTPException(status_code=500, detail=result["error"])
     return result
@@ -742,7 +752,7 @@ async def api_weather(request: WeatherRequest):
 @app.post("/tools/search")
 async def api_search(request: SearchRequest):
     """网页搜索"""
-    result = web_search(request.query, request.count)
+    result = await asyncio.to_thread(web_search, request.query, request.count)
     if "error" in result:
         raise HTTPException(status_code=500, detail=result["error"])
     return result
@@ -771,20 +781,16 @@ async def mcp_call(request: Dict[str, Any]):
         model = params.get("model", "auto")
         max_tokens = params.get("max_tokens", 1000)
 
-        if model == "auto" or "/" not in model:
-            if GROQ_API_KEY:
-                return call_groq(messages, max_tokens=max_tokens)
-            elif ZHIPU_API_KEY:
-                return call_zhipu(messages, max_tokens=max_tokens)
-            elif OPENROUTER_API_KEY:
-                return call_openrouter(messages, max_tokens=max_tokens)
-            elif CLAUDE_API_KEY:
-                return call_claude(messages, max_tokens=max_tokens)
-        return {"error": "No provider available"}
+        # 复用统一路由:既支持 model=="auto" 也支持显式 "provider/model"。原来对含 "/"
+        # 的显式 model 没有任何分支,`if ... or "/" not in model` 直接跳过,永远落到
+        # "No provider available"。阻塞式 call_* 卸载到线程避免冻结事件循环。
+        return await asyncio.to_thread(
+            _route_chat_sync, model, messages, max_tokens, float(params.get("temperature", 0.7))
+        )
     elif tool == "weather":
-        return get_weather(params.get("city", "Beijing"))
+        return await asyncio.to_thread(get_weather, params.get("city", "Beijing"))
     elif tool == "search":
-        return web_search(params.get("query", ""))
+        return await asyncio.to_thread(web_search, params.get("query", ""))
     else:
         raise HTTPException(status_code=400, detail=f"Unknown tool: {tool}")
 

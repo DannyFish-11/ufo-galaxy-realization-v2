@@ -234,6 +234,8 @@ class ErrorTracker:
         self._by_category: Dict[str, int] = defaultdict(int)
         self._by_severity: Dict[str, int] = defaultdict(int)
         self._recent_errors: Dict[str, List[float]] = defaultdict(list)  # category → timestamps
+        # 保留窗口:错误率查询的窗口一般在秒~分钟级,保留 1 小时足够,又能封住内存。
+        self._RECENT_ERROR_RETENTION_S: float = 3600.0
         self._handlers: Dict[ErrorCategory, List[Callable]] = defaultdict(list)
 
     def record(self, error: GalaxyError, handled: bool = False, recovered: bool = False, recovery_action: str = ""):
@@ -247,7 +249,14 @@ class ErrorTracker:
         self._records.append(record)
         self._by_category[error.category.value] += 1
         self._by_severity[error.severity.value] += 1
-        self._recent_errors[error.category.value].append(error.timestamp)
+        bucket = self._recent_errors[error.category.value]
+        bucket.append(error.timestamp)
+        # 修复无界泄漏:_recent_errors 每类只用于算"最近窗口"错误率(仅 > cutoff 的
+        # 时间戳有意义),但原来只增不删 → 长跑进程里每类列表无限膨胀、算率还要遍历
+        # 整条陈旧列表。按保留窗口(_RECENT_ERROR_RETENTION_S)就地裁掉过老时间戳。
+        _retention_cutoff = error.timestamp - self._RECENT_ERROR_RETENTION_S
+        if bucket and bucket[0] < _retention_cutoff:
+            self._recent_errors[error.category.value] = [t for t in bucket if t >= _retention_cutoff]
 
         # 根据严重性记录日志
         log_method = {

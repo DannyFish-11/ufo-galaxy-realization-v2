@@ -239,11 +239,14 @@ class MAVLinkDriver(DroneDriver):
             
             logger.info(f"正在连接MAVLink: {connection_string}")
             
-            # 创建连接
-            self.master = mavutil.mavlink_connection(connection_string)
-            
-            # 等待心跳
-            self.master.wait_heartbeat()
+            # 创建连接(阻塞,放线程池,避免冻结事件循环)
+            self.master = await asyncio.to_thread(mavutil.mavlink_connection, connection_string)
+
+            # 等待心跳:带超时(此前无 timeout,无心跳会永久阻塞),且阻塞调用放线程池
+            hb = await asyncio.to_thread(self.master.wait_heartbeat, timeout=30)
+            if hb is None:
+                logger.error("MAVLink 心跳超时(30s),连接失败")
+                return False
             logger.info(f"收到心跳来自 system {self.master.target_system}")
             
             self.target_system = self.master.target_system
@@ -523,20 +526,26 @@ class MAVLinkDriver(DroneDriver):
         # 设置任务数量
         self.master.waypoint_count_send(len(waypoints))
         
-        # 等待请求并发送每个航点
+        # 等待请求并发送每个航点。若某个航点未收到 MISSION_REQUEST(超时),
+        # 此前会静默跳过、循环结束仍报"上传完成/成功",实际任务残缺。改为直接失败。
+        # recv_match(blocking=True) 是阻塞调用,放线程池避免冻结事件循环。
         for i, wp in enumerate(waypoints):
-            msg = self.master.recv_match(type='MISSION_REQUEST', blocking=True, timeout=5)
-            if msg:
-                self.master.mav.mission_item_send(
-                    self.target_system,
-                    self.target_component,
-                    i,
-                    mavutil.mavlink.MAV_FRAME_GLOBAL_RELATIVE_ALT,
-                    mavutil.mavlink.MAV_CMD_NAV_WAYPOINT,
-                    0, 0, 0, 0, 0, 0,
-                    wp.lat, wp.lon, wp.alt
-                )
-        
+            msg = await asyncio.to_thread(
+                self.master.recv_match, type='MISSION_REQUEST', blocking=True, timeout=5
+            )
+            if not msg:
+                logger.error(f"航点 {i} 未收到 MISSION_REQUEST(5s 超时),任务上传失败")
+                return False
+            self.master.mav.mission_item_send(
+                self.target_system,
+                self.target_component,
+                i,
+                mavutil.mavlink.MAV_FRAME_GLOBAL_RELATIVE_ALT,
+                mavutil.mavlink.MAV_CMD_NAV_WAYPOINT,
+                0, 0, 0, 0, 0, 0,
+                wp.lat, wp.lon, wp.alt
+            )
+
         logger.info("航点上传完成")
         return True
     
@@ -775,25 +784,41 @@ class UniversalDroneController:
             "action": "rtl"
         }
     
-    async def move(self, direction: str, distance: float = 5.0) -> Dict[str, Any]:
-        """移动控制"""
-        velocity_map = {
-            "forward": (distance, 0, 0),
-            "backward": (-distance, 0, 0),
-            "left": (0, -distance, 0),
-            "right": (0, distance, 0),
-            "up": (0, 0, -distance),
-            "down": (0, 0, distance)
+    async def move(self, direction: str, distance: float = 5.0, speed: float = 2.0) -> Dict[str, Any]:
+        """移动指定距离(米)。
+
+        driver.move_velocity 接收的是【速度】(m/s)而非距离;此前把 distance 直接
+        当速度传入,会让无人机以数值等于 distance 的速度【持续】飞行,而不是飞固定
+        距离。这里以 speed(m/s)朝目标方向飞 distance/speed 秒后停止(悬停),
+        真正实现"飞 distance 米"。
+        """
+        direction_unit = {
+            "forward": (1.0, 0.0, 0.0),
+            "backward": (-1.0, 0.0, 0.0),
+            "left": (0.0, -1.0, 0.0),
+            "right": (0.0, 1.0, 0.0),
+            "up": (0.0, 0.0, -1.0),
+            "down": (0.0, 0.0, 1.0),
         }
-        
-        vx, vy, vz = velocity_map.get(direction, (0, 0, 0))
-        success = await self.driver.move_velocity(vx, vy, vz)
-        
+        ux, uy, uz = direction_unit.get(direction, (0.0, 0.0, 0.0))
+        if (ux, uy, uz) == (0.0, 0.0, 0.0):
+            return {"status": "error", "action": "move", "message": f"未知方向: {direction}"}
+
+        speed = abs(speed) or 2.0
+        duration = abs(distance) / speed
+
+        success = await self.driver.move_velocity(ux * speed, uy * speed, uz * speed)
+        if success:
+            await asyncio.sleep(duration)
+            # 到达后停止(悬停),否则会以该速度持续飞行
+            await self.driver.move_velocity(0.0, 0.0, 0.0)
+
         return {
             "status": "success" if success else "error",
             "action": "move",
             "direction": direction,
-            "distance": distance
+            "distance": distance,
+            "speed": speed,
         }
     
     async def goto(self, lat: float, lon: float, alt: float = None) -> Dict[str, Any]:

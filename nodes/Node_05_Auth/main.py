@@ -78,7 +78,8 @@ class TokenData(BaseModel):
 class AuthManager:
     def __init__(self):
         self._users: Dict[str, User] = {}
-        self._refresh_tokens: Dict[str, str] = {}  # token -> username
+        self._refresh_tokens: Dict[str, tuple] = {}  # token -> (username, expires_at)
+        self._refresh_ttl = timedelta(days=int(os.getenv("AUTH_REFRESH_EXPIRE_DAYS", "30")))
         self._failed_attempts: Dict[str, List[datetime]] = {}
         self._load_users()
 
@@ -124,15 +125,27 @@ class AuthManager:
         attempts = self._failed_attempts.get(username, [])
         # 保留最近5分钟内的失败记录
         attempts = [a for a in attempts if now - a < timedelta(minutes=5)]
-        self._failed_attempts[username] = attempts
+        # 无近期失败则删除该键,避免未认证流量用任意用户名把字典撑到无界。
+        if attempts:
+            self._failed_attempts[username] = attempts
+        else:
+            self._failed_attempts.pop(username, None)
         # 5分钟内超过5次失败则锁定
         return len(attempts) < 5
 
     def _record_failed_attempt(self, username: str):
         """记录失败登录"""
-        if username not in self._failed_attempts:
-            self._failed_attempts[username] = []
-        self._failed_attempts[username].append(datetime.now())
+        now = datetime.now()
+        self._failed_attempts.setdefault(username, []).append(now)
+        # 顺带清理其它已无近期(5min)失败的用户名键,防止 _record 被未认证流量用随机
+        # 用户名反复调用而无界增长(authenticate 对不存在的用户也会记一次失败)。
+        cutoff = now - timedelta(minutes=5)
+        stale = [
+            u for u, ats in self._failed_attempts.items()
+            if u != username and not any(a >= cutoff for a in ats)
+        ]
+        for u in stale:
+            self._failed_attempts.pop(u, None)
 
     def create_user(self, username: str, password: str, email: Optional[str] = None,
                    role: str = "user", permissions: List[str] = None) -> User:
@@ -181,9 +194,14 @@ class AuthManager:
         }
         access_token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
-        # 创建刷新令牌
+        # 创建刷新令牌(带过期时间;顺带清理已过期令牌,避免只增不删无界泄漏 ——
+        # 未被用来刷新、也未登出的令牌原来永远滞留)。
+        now = datetime.now()
+        expired = [t for t, (_u, exp) in self._refresh_tokens.items() if now > exp]
+        for t in expired:
+            self._refresh_tokens.pop(t, None)
         refresh_token = secrets.token_urlsafe(32)
-        self._refresh_tokens[refresh_token] = user.username
+        self._refresh_tokens[refresh_token] = (user.username, now + self._refresh_ttl)
 
         return {
             "access_token": access_token,
@@ -209,8 +227,13 @@ class AuthManager:
 
     def refresh_access_token(self, refresh_token: str) -> Optional[Dict[str, str]]:
         """刷新访问令牌"""
-        username = self._refresh_tokens.get(refresh_token)
-        if not username:
+        entry = self._refresh_tokens.get(refresh_token)
+        if not entry:
+            return None
+        username, exp = entry
+        # 过期即失效并清理
+        if datetime.now() > exp:
+            self._refresh_tokens.pop(refresh_token, None)
             return None
 
         user = self._users.get(username)

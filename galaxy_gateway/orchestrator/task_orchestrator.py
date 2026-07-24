@@ -875,16 +875,22 @@ class MultiDeviceOrchestrator(TaskOrchestrator):
         trace_id = trace_id or f"trace_{_uuid_lib.uuid4().hex[:12]}"
         runtime_session_id = runtime_session_id or f"session_{_uuid_lib.uuid4().hex[:12]}"
 
-        # Build lightweight subtask objects that compile_subtasks_to_graph understands
+        # Build lightweight subtask objects that compile_subtasks_to_graph understands.
+        # Pre-generate every task_id so a sequential depends_on can reference the
+        # PREVIOUS subtask's *actual* id. Previously task_id was
+        # "subtask_{idx}_{random}" but depends_on used "subtask_{idx-1}" (no random
+        # suffix), so the dependency never matched a real id and sequential
+        # ordering was silently dropped.
         import types
+        task_ids = [f"subtask_{idx}_{_uuid_lib.uuid4().hex[:8]}" for idx in range(len(device_ids))]
         subtasks = []
         for idx, device_id in enumerate(device_ids):
             st = types.SimpleNamespace(
-                task_id=f"subtask_{idx}_{_uuid_lib.uuid4().hex[:8]}",
+                task_id=task_ids[idx],
                 name=f"task_on_{device_id}",
                 description=user_request,
                 device_id=device_id,
-                depends_on=[f"subtask_{idx - 1}"] if coordination_mode == "sequential" and idx > 0 else [],
+                depends_on=[task_ids[idx - 1]] if coordination_mode == "sequential" and idx > 0 else [],
             )
             subtasks.append(st)
 

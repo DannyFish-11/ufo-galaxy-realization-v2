@@ -119,6 +119,8 @@ class NodeCapabilityLoader:
             return
         self._actions: Dict[str, CapabilityAction] = {}
         self._node_actions: Dict[str, List[str]] = {}
+        # 持有后台任务强引用:事件循环仅保留弱引用,未持引用的 create_task 可能在完成前被 GC。
+        self._bg_tasks: set = set()
         self._initialized = True
 
     # ── Discovery ──
@@ -362,7 +364,9 @@ class NodeCapabilityLoader:
             )
             nats = get_nats_bus()
             if nats.is_connected():
-                asyncio.get_running_loop().create_task(nats.publish_capability_report(msg))
+                _task = asyncio.get_running_loop().create_task(nats.publish_capability_report(msg))
+                self._bg_tasks.add(_task)
+                _task.add_done_callback(self._bg_tasks.discard)
             else:
                 logger.debug("AIPV3-NODE CAPABILITY_REPORT: %s", msg.model_dump_json(exclude_none=True))
         except Exception as exc:

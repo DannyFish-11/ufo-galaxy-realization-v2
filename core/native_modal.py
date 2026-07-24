@@ -210,24 +210,32 @@ def activate(backend: Optional[MiniCPMNativeBackend] = None, *, background: bool
                     be.base_url,
                 )
                 return
-            # 提交前再确认这一代仍有效:期间没被 deactivate/重激活抢先。
+            # 原子提交:代次复核 + 注册原生说 + 开门控(env) + 落 _active_backend
+            # 全部在同一把锁内完成。此前代次复核与随后的 register/env/commit 分处锁外,
+            # 并发 deactivate 可在其间插入,导致 A 档残留已注册后端 + GALAXY_NATIVE_AUDIO=1。
+            committed = False
             with _lock:
                 if my_gen != _gen:
                     logger.info("B 档原生:激活期间已切换代次,放弃提交(避免切回 A 档后又装回原生)")
                     return
-            # 就绪 → 注册原生说 + 开门控;原生听由 modality_bridge 主动查 get_active_backend()。
-            try:
-                from core.speech_output import register_native_speech_backend
+                try:
+                    from core.speech_output import register_native_speech_backend
 
-                register_native_speech_backend(lambda text, source="": be.speak(text, source))
-            except Exception as exc:  # noqa: BLE001
-                logger.debug("注册原生说后端失败(仍可只用原生听): %s", exc)
-            os.environ["GALAXY_NATIVE_AUDIO"] = "1"
-            with _lock:
+                    register_native_speech_backend(lambda text, source="": be.speak(text, source))
+                except Exception as exc:  # noqa: BLE001
+                    logger.debug("注册原生说后端失败(仍可只用原生听): %s", exc)
+                os.environ["GALAXY_NATIVE_AUDIO"] = "1"
                 _active_backend = be
-            logger.info("B 档原生全模态已就绪:听/说走 MiniCPM server(%s)", be.base_url)
+                committed = True
+            if committed:
+                logger.info("B 档原生全模态已就绪:听/说走 MiniCPM server(%s)", be.base_url)
         finally:
-            _activating = False
+            # 仅当本线程仍是当前代次时才清 _activating。若已被 deactivate/重激活
+            # 推进代次,则 _activating 归新激活所有(或 deactivate 已清),勿覆盖它——
+            # 否则在途旧线程收尾会把新激活的 _activating=True 清掉,造成新激活提前 return。
+            with _lock:
+                if my_gen == _gen:
+                    _activating = False
 
     global _activating
     with _lock:
@@ -243,10 +251,13 @@ def activate(backend: Optional[MiniCPMNativeBackend] = None, *, background: bool
 
 def deactivate() -> None:
     """切回 A 档:注销原生后端、关门控 → 协商层判定听=ASR桥、说=TTS桥。"""
-    global _active_backend, _gen
+    global _active_backend, _gen, _activating
     with _lock:
         _active_backend = None
         _gen += 1  # 令任何在途的后台激活线程失效(它提交前会发现代次已变)
+        # 清 _activating:在途激活已因代次推进作废,若不清,B→A→B 快速换档时
+        # 下一次 activate() 会因残留的 _activating=True 提前 return,B 档永不激活。
+        _activating = False
     try:
         from core.speech_output import register_native_speech_backend
 

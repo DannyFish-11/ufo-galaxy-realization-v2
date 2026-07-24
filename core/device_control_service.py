@@ -301,7 +301,13 @@ class DeviceControlService:
                     response = await client.post(f"{self.node_urls['desktop']}/open_app", json={"app_path": app_path})
                     result = response.json()
                 else:
-                    result = {"success": True, "message": f"App {app_name} not configured"}
+                    # 修复:未配置的 app 之前返回 success=True("已打开"的假象),
+                    # 上层据此汇报成功、不再兜底 → 用户以为打开了实际没打开。
+                    result = {
+                        "success": False,
+                        "message": f"App {app_name} not configured",
+                        "error": "app_not_configured",
+                    }
                 logger.info("Windows open_app (node fallback): %s -> %s", app_name, result)
                 return result
 

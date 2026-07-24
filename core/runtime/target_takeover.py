@@ -517,9 +517,9 @@ def _try_policy_alignment() -> Optional[Dict[str, Any]]:
     Returns the serialised alignment dict or ``None`` on any failure.
     """
     try:
-        from core.routes.projection import _assemble_policy_alignment  # type: ignore[attr-defined]
+        from core.routes.projection import _assemble_policy_alignment_payload  # type: ignore[attr-defined]
 
-        return _assemble_policy_alignment()
+        return _assemble_policy_alignment_payload()
     except Exception as exc:
         logger.debug("Suppressed: %s", exc)
     return None

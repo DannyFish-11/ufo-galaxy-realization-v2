@@ -29,6 +29,7 @@ class IntentType(Enum):
     INFORMATION_QUERY = "information_query"    # 信息查询
     MEDIA_GENERATION = "media_generation"      # 媒体生成
     CROSS_DEVICE_TASK = "cross_device_task"    # 跨设备任务
+    GENERAL_CHAT = "general_chat"              # 普通对话(AI 意图映射引用了此成员,原枚举缺失会 AttributeError)
     UNKNOWN = "unknown"
 
 class TargetDevice(Enum):

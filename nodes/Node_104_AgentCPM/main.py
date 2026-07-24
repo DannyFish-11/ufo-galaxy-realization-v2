@@ -99,9 +99,15 @@ def _get_cached(key: str) -> Optional[Dict]:
 
 def _set_cache(key: str, result: Dict):
     """写入缓存"""
+    now = datetime.now()
+    # 顺带清理已过期项:_get_cached 只在【重新读到同一 key】时才删过期项,写入后再不
+    # 被读到的 key 会永久滞留 → 缓存无界增长。
+    expired = [k for k, v in _result_cache.items() if now >= v["expires_at"]]
+    for k in expired:
+        _result_cache.pop(k, None)
     _result_cache[key] = {
         "result": result,
-        "expires_at": datetime.now() + timedelta(seconds=CACHE_TTL)
+        "expires_at": now + timedelta(seconds=CACHE_TTL)
     }
 
 # AgentDock 工具调用
@@ -638,9 +644,10 @@ async def cancel_task(task_id: str):
     if status == "pending":
         # 未启动，直接标记取消
         tasks[task_id]["status"] = "cancelled"
-    else:
-        # 运行中，通过取消令牌集合通知后台协程
-        cancelled_tasks.add(task_id)
+    # 无论 pending 还是 running,都加入取消集合:后台 worker 靠 cancelled_tasks 判定取消,
+    # 且会把 status 覆盖为 "running"。pending 任务若只改 status,被 worker 抢先取走后
+    # status 会被覆盖、且检查不到取消 → 照常跑完。加入集合可确保被识别为已取消。
+    cancelled_tasks.add(task_id)
 
     logger.info(f"任务取消请求已接受: {task_id}")
     return {

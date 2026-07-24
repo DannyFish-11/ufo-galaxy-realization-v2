@@ -592,7 +592,10 @@ class DeviceRegistry:
         """
         now = time.time()
 
-        for device in self.devices.values():
+        # 先快照成 list:循环内 await self._emit_event(...) 会让出事件循环,期间并发的
+        # register()/unregister() 可能改动 self.devices → "dictionary changed size during
+        # iteration"。设备对象仍是同一引用,状态改写照样落到真实对象上。
+        for device in list(self.devices.values()):
             if device.status == DeviceStatus.ONLINE:
                 if now - device.last_heartbeat > timeout:
                     device.status = DeviceStatus.OFFLINE
@@ -1058,9 +1061,14 @@ class DeviceRegistry:
 # 全局实例
 # ============================================================================
 
-device_registry = DeviceRegistry()
+# 统一单例:让 DeviceRegistry.get_instance()、模块级 device_registry、
+# get_device_registry() 三条访问路径返回【同一个】对象。原来这里直接
+# `DeviceRegistry()` 另建实例,而 get_instance() 又惰性创建第二个实例 ——
+# 两套注册表 split-brain,设备在其一注册后在另一处不可见。改为经 get_instance()
+# 登记,使模块级实例即为 _instance 单例。
+device_registry = DeviceRegistry.get_instance()
 
 
 def get_device_registry() -> "DeviceRegistry":
     """Return the process-wide DeviceRegistry singleton."""
-    return device_registry
+    return DeviceRegistry.get_instance()

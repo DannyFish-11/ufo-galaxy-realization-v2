@@ -128,7 +128,9 @@ def test_tests():
         capture_output=True, text=True, timeout=60,
         cwd=os.path.dirname(os.path.dirname(__file__))
     )
-    passed = "passed" in result.stdout
+    # Judge by pytest's exit code, not a stdout substring: "5 passed, 3 failed"
+    # also contains "passed", so the old check reported failures as success.
+    passed = result.returncode == 0
     check("pytest (Phase 2-5 + Agent Migration)", passed,
           result.stdout.strip().split("\n")[-1] if not passed else "")
 

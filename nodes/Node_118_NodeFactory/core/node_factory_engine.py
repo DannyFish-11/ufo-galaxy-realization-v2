@@ -393,6 +393,7 @@ python server.py
         
         template = self.templates["engine"]
         code = template.format(
+            node_number=node_spec.node_number,
             node_name=node_spec.node_name,
             description=node_spec.description
         )

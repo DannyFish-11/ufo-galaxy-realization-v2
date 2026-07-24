@@ -20,7 +20,7 @@ import json
 import re
 import logging
 from typing import List, Dict, Optional
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 import httpx
 from pydantic import BaseModel
 
@@ -266,9 +266,33 @@ class AcademicMemoryManager:
             
             # 过滤论文笔记（包含 "📄" 的）
             paper_memos = [m for m in memos if "📄" in m.get("content", "")]
-            
-            logger.info(f"找到 {len(paper_memos)} 条最近的论文笔记")
-            return paper_memos[:days]
+
+            # 按【时间窗口】过滤最近 days 天内的笔记。
+            # 之前写成 paper_memos[:days]，把"天数"当成"条数"用——
+            # days=7 只会取前 7 条，而不是最近 7 天的全部笔记。
+            cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+
+            def _within_window(memo: Dict) -> bool:
+                ts = memo.get("createTime") or memo.get("displayTime")
+                if ts:
+                    try:
+                        dt = datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
+                        if dt.tzinfo is None:
+                            dt = dt.replace(tzinfo=timezone.utc)
+                        return dt >= cutoff
+                    except (ValueError, TypeError):
+                        pass
+                epoch = memo.get("createdTs", memo.get("createTs"))
+                if epoch is not None:
+                    try:
+                        return datetime.fromtimestamp(float(epoch), tz=timezone.utc) >= cutoff
+                    except (ValueError, TypeError, OSError):
+                        pass
+                return True  # 无可解析时间戳时保守保留
+
+            recent = [m for m in paper_memos if _within_window(m)]
+            logger.info(f"找到 {len(recent)} 条最近 {days} 天的论文笔记")
+            return recent
         
         except Exception as e:
             logger.error(f"获取最近论文失败: {e}")
@@ -424,8 +448,9 @@ class AcademicMemoryManager:
         if not target_kw:
             return []
 
-        # 获取所有论文笔记
-        all_memos = await self.get_recent_papers(days=100)
+        # 获取所有论文笔记（用足够宽的时间窗口近似"全部"，
+        # get_recent_papers 的 days 现在表示时间窗口而非条数）
+        all_memos = await self.get_recent_papers(days=36500)
         recommendations = []
 
         for memo in all_memos:

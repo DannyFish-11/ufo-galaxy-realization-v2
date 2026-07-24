@@ -67,15 +67,23 @@ def _parse_field(field: str, min_val: int, max_val: int) -> List[int]:
 
 
 def _cron_matches(cron_expr: str, dt: datetime) -> bool:
-    """Check if a datetime matches the cron expression (minute hour dow)."""
+    """Check if a datetime matches the cron expression (minute hour dow).
+
+    Day-of-week follows the standard cron convention (Sunday=0 .. Saturday=6,
+    with 7 also meaning Sunday), NOT Python's datetime.weekday() (Monday=0).
+    """
     parts = cron_expr.strip().split()
     if len(parts) < 3:
         return False
     minute_field, hour_field, dow_field = parts[0], parts[1], parts[2]
     minutes = _parse_field(minute_field, 0, 59)
     hours = _parse_field(hour_field, 0, 23)
-    dows = _parse_field(dow_field, 0, 6)
-    return dt.minute in minutes and dt.hour in hours and dt.weekday() in dows
+    dows = set(_parse_field(dow_field, 0, 7))
+    if 7 in dows:  # cron treats 7 as Sunday, same as 0
+        dows.discard(7)
+        dows.add(0)
+    cron_dow = dt.isoweekday() % 7  # Sun=0..Sat=6, matching cron convention
+    return dt.minute in minutes and dt.hour in hours and cron_dow in dows
 
 
 # ---------------------------------------------------------------------------
@@ -171,7 +179,12 @@ async def _scheduler_loop() -> None:
                 continue
             cron = job.get("cron", "")
             if cron and _cron_matches(cron, now):
-                asyncio.create_task(_run_job(job))
+                # The loop wakes every 30s but cron granularity is 1 minute,
+                # so guard against firing the same job twice within one minute.
+                fire_key = (now.year, now.month, now.day, now.hour, now.minute)
+                if job.get("_last_fire_key") != fire_key:
+                    job["_last_fire_key"] = fire_key
+                    asyncio.create_task(_run_job(job))
         await asyncio.sleep(30)
 
 

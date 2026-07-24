@@ -856,6 +856,9 @@ class AgentFactory:
 
         # 检查是否需要分裂
         if len(agent.task_queue) > agent.config.split_threshold and agent.depth < agent.config.max_depth:
+            # 快照:split_agent 会把父队列清空分给子代;若全部子代失败,靠这份
+            # 快照恢复父队列才能真正"回退串行执行"(否则回退分支恒不可达)。
+            tasks_snapshot = list(agent.task_queue)
             children = await self.split_agent(agent_id)
             if children:
                 # 通过消息总线向子 Agent 分发任务
@@ -888,14 +891,30 @@ class AgentFactory:
                         "error": f"Parallel execution timed out after {self.TASK_TIMEOUT_SECONDS * 2}s",
                         "children": [c.id for c in children],
                     }
-                # 收集执行结果，区分成功和失败
+
+                # 收集执行结果，区分成功和失败。
+                # 修复:_run_agent 从不抛异常——逐任务失败装在 results[].error 里
+                # 正常返回 dict,原来只认 BaseException,子任务全军覆没也被计成
+                # success_count,上层误判成功、回退永不触发。
+                def _child_failed(r) -> bool:
+                    if isinstance(r, BaseException):
+                        return True
+                    if isinstance(r, dict):
+                        inner = r.get("results")
+                        if isinstance(inner, list) and inner:
+                            return all(isinstance(x, dict) and "error" in x for x in inner)
+                    return False
+
                 child_results = []
                 success_count = 0
                 fail_count = 0
                 for i, child in enumerate(children):
                     r = results[i]
-                    if isinstance(r, BaseException):
-                        result_payload = {"error": str(r), "error_type": type(r).__name__}
+                    if _child_failed(r):
+                        if isinstance(r, BaseException):
+                            result_payload = {"error": str(r), "error_type": type(r).__name__}
+                        else:
+                            result_payload = r
                         fail_count += 1
                         agent.metrics["tasks_failed"] += 1
                         logger.warning(f"子 Agent {child.id} 执行失败: {r}")
@@ -913,9 +932,12 @@ class AgentFactory:
                     )
                     await self.message_bus.send(result_msg)
 
-                # 如果所有子 Agent 都失败，回退到父 Agent 串行执行
-                if fail_count == len(children) and agent.task_queue:
+                # 如果所有子 Agent 都失败，回退到父 Agent 串行执行。
+                # 修复:split_agent 已把父队列清空,原条件 `and agent.task_queue`
+                # 恒假、回退不可达——从分裂前快照恢复队列再回退。
+                if fail_count == len(children) and tasks_snapshot:
                     logger.warning(f"所有子 Agent 均失败，回退到父 Agent {agent_id} 串行执行")
+                    agent.task_queue = list(tasks_snapshot)
                     agent.state = AgentState.WORKING
                     fallback_result = await self._run_agent(agent_id)
                     return {

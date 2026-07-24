@@ -100,6 +100,8 @@ class NewsQuery(BaseModel):
 class NewsAggregatorService:
     """新闻聚合服务"""
     
+    MAX_ARTICLES = 5000  # bound the article cache to avoid unbounded growth
+
     def __init__(self):
         self.http_client = httpx.AsyncClient(timeout=30)
         self.feeds: Dict[str, List[RSSFeed]] = {}
@@ -196,7 +198,13 @@ class NewsAggregatorService:
             key=lambda x: x.published if x.published else "",
             reverse=True
         )
-        
+
+        # 限制缓存规模：只保留最新的 MAX_ARTICLES 篇，并据此重建 article_cache，
+        # 避免 article_cache 随每次抓取无限增长
+        if len(self.articles) > self.MAX_ARTICLES:
+            self.articles = self.articles[: self.MAX_ARTICLES]
+            self.article_cache = {a.id: a for a in self.articles}
+
         logger.info(f"Total articles: {len(self.articles)}")
     
     def search_articles(self, query: NewsQuery) -> List[NewsArticle]:

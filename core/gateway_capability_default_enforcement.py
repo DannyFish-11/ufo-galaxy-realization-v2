@@ -150,7 +150,9 @@ _COMMAND_CAPABILITY_MAP: Dict[str, List[str]] = {
     # Audio
     "record_audio": ["microphone"],
     "listen": ["microphone"],
-    "speak": ["microphone"],
+    # speak 是语音合成【输出】,需要扬声器而非麦克风;原来映射到 microphone 会在
+    # 仅有扬声器的设备上错误拦截 TTS。DeviceCapability 枚举含 SPEAKER="speaker"。
+    "speak": ["speaker"],
     "transcribe": ["microphone"],
     # Screen / display
     "screen_click": ["screen", "touch"],

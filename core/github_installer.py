@@ -869,20 +869,46 @@ def _publish_install_truth(payload: Dict[str, Any]) -> None:
         logger.warning("Exception suppressed: %s", exc)
 
 
+def _run_async_blocking(async_fn, *args, timeout: float = 30):
+    """在同步函数里安全执行一个协程,兼容"当前线程正跑着事件循环"的情形。
+
+    原来用 ``run_coroutine_threadsafe(coro, get_running_loop()).result()``:当本函数
+    正是在该 loop 的线程上被(同步)调用时,``.result()`` 阻塞的正是 loop 线程自身 →
+    loop 无法推进这个协程 → 自死锁(直到 30s 超时)。run_coroutine_threadsafe 只适用于
+    把协程投递到【另一个线程】里运行的 loop。
+
+    修复:无运行 loop 时直接 asyncio.run;已有运行 loop 时,在【独立线程】用新 loop
+    执行,绝不阻塞当前 loop 线程。
+    """
+    import asyncio
+    import threading
+
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(async_fn(*args))
+
+    box: dict = {}
+
+    def _worker() -> None:
+        try:
+            box["result"] = asyncio.run(async_fn(*args))
+        except Exception as _e:  # noqa: BLE001
+            box["error"] = _e
+
+    t = threading.Thread(target=_worker, daemon=True)
+    t.start()
+    t.join(timeout)
+    if "error" in box:
+        raise box["error"]
+    return box.get("result")
+
+
 def _unregister_mcp_tool(name: str) -> bool:
     try:
-        import asyncio
-
         from core.mcp_loader import mcp_loader
 
-        async def _do_unload():
-            return await mcp_loader.unload(name)
-
-        try:
-            loop = asyncio.get_running_loop()
-            asyncio.run_coroutine_threadsafe(_do_unload(), loop).result(timeout=30)
-        except RuntimeError:
-            asyncio.run(_do_unload())
+        _run_async_blocking(mcp_loader.unload, name)
         return True
     except Exception as exc:
         logger.debug("MCP unregister '%s': %s", name, exc)
@@ -891,18 +917,9 @@ def _unregister_mcp_tool(name: str) -> bool:
 
 def _unregister_skill(name: str) -> bool:
     try:
-        import asyncio
-
         from core.skill_loader import skill_loader
 
-        async def _do_unload():
-            return await skill_loader.unload(name)
-
-        try:
-            loop = asyncio.get_running_loop()
-            asyncio.run_coroutine_threadsafe(_do_unload(), loop).result(timeout=30)
-        except RuntimeError:
-            asyncio.run(_do_unload())
+        _run_async_blocking(skill_loader.unload, name)
         return True
     except Exception as exc:
         logger.debug("Skill unregister '%s': %s", name, exc)

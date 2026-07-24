@@ -305,7 +305,21 @@ class SSHExecutor:
         try:
             self._connect(client)
             escaped = content.replace("'", "'\"'\"'")
-            client.exec_command(f"mkdir -p '$(dirname {path})' && printf '%s' '{escaped}' > '{path}' && chmod {mode} '{path}'")
+            # exec_command returns immediately without waiting; block on the
+            # remote exit status so (a) the write completes before client.close()
+            # tears the connection down (otherwise a large write can be
+            # truncated) and (b) we report real success instead of always True.
+            _stdin, stdout, stderr = client.exec_command(
+                f"mkdir -p '$(dirname {path})' && printf '%s' '{escaped}' > '{path}' && chmod {mode} '{path}'"
+            )
+            exit_status = stdout.channel.recv_exit_status()
+            if exit_status != 0:
+                logger.warning(
+                    "remote write_file failed (exit %s): %s",
+                    exit_status,
+                    stderr.read().decode(errors="replace").strip(),
+                )
+                return False
             return True
         except Exception:
             return False

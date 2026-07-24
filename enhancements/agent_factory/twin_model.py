@@ -419,11 +419,19 @@ class TwinModelManager:
             
             for key, values in modified_keys.items():
                 if len(values) >= 2:
-                    # 简单趋势预测
-                    trend = "increasing" if values[-1] > values[-2] else "decreasing"
+                    last, prev = values[-1], values[-2]
+                    # 仅对数值型做趋势比较:values 是任意快照值,对非数值/混合类型
+                    # 用 '>' 会抛 TypeError 直接让 predict_behavior 崩溃。
+                    if (isinstance(last, (int, float)) and not isinstance(last, bool)
+                            and isinstance(prev, (int, float)) and not isinstance(prev, bool)):
+                        trend = "increasing" if last > prev else "decreasing"
+                    elif last == prev:
+                        trend = "stable"
+                    else:
+                        trend = "changed"
                     prediction["predicted_changes"][key] = {
                         "trend": trend,
-                        "last_value": values[-1]
+                        "last_value": last
                     }
             
             predictions.append(prediction)

@@ -616,8 +616,23 @@ class AttachedRuntimeReuseBindingRuntime:
         return list(reversed(self._buf))
 
     def list_eligible(self) -> List[AttachedRuntimeReuseBindingRecord]:
-        """Return all eligible records, newest-first."""
-        return [r for r in reversed(self._buf) if r.reuse_eligibility_status == ReuseEligibilityStatus.eligible]
+        """Return bindings whose NEWEST record is eligible, newest-first.
+
+        修复:ring 是"追加新记录、旧记录不删"的历史。原实现逐条过滤,已被后续
+        ineligible 记录(如断连 invalidate)取代的旧 eligible 副本仍被当作有效
+        复用绑定返回——复用调度会挑中一个实际上已失效的绑定。正确语义:每个
+        reuse_binding_id 只看最新一条(reversed 首见即最新)。
+        """
+        seen: set = set()
+        out: List[AttachedRuntimeReuseBindingRecord] = []
+        for r in reversed(self._buf):
+            bid = r.identity.reuse_binding_id
+            if bid in seen:
+                continue
+            seen.add(bid)
+            if r.reuse_eligibility_status == ReuseEligibilityStatus.eligible:
+                out.append(r)
+        return out
 
     def get_latest_for_session(self, session_id: str) -> Optional[AttachedRuntimeReuseBindingRecord]:
         """Return the most recent record for *session_id*, or ``None``."""

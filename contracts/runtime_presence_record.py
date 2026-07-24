@@ -278,7 +278,11 @@ def from_registered_runtime_device(device: Any) -> RuntimePresenceRecord:
                 )
                 transport = RuntimeTransport.normalise(transport_str)
 
-            raw_state = getattr(conn, "connection_state", None)
+            # RuntimeConnectionSummary's field is 'state' (not 'connection_state').
+            # Reading the wrong name left connection_state = 'disconnected', so
+            # routable (= online and connection_state == 'connected') was always
+            # False — a connected device was never treated as routable.
+            raw_state = getattr(conn, "state", None)
             if raw_state is not None:
                 connection_state = (
                     raw_state.value

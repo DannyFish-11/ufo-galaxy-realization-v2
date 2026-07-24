@@ -218,11 +218,14 @@ class UnifiedKnowledgeBase:
         
         if not os.path.exists(clone_dir):
             try:
-                result = subprocess.run(
+                # git clone(超时最长 300s)是同步阻塞调用,在 async 方法里直接跑会冻结
+                # 整个节点事件循环达 5 分钟。卸载到线程。
+                result = await asyncio.to_thread(
+                    subprocess.run,
                     ['git', 'clone', '--depth', '1', repo_url, clone_dir],
                     capture_output=True,
                     text=True,
-                    timeout=300
+                    timeout=300,
                 )
                 if result.returncode != 0:
                     raise ValueError(f"克隆仓库失败: {result.stderr}")
@@ -565,6 +568,16 @@ async def stats():
 @app.delete("/clear")
 async def clear():
     """清空知识库"""
+    # 同时从向量后端删除每个文档,否则 knowledge_entries 清空了但向量库仍保留全部
+    # 文档(无界增长,且 search_vector 会返回已删条目的孤儿命中)。后端只有
+    # delete_document,故先按 id 逐个删除,再清 dict。
+    backend = getattr(kb, "_backend", None)
+    if backend is not None:
+        for _doc_id in list(kb.knowledge_entries.keys()):
+            try:
+                backend.delete_document(_doc_id)
+            except Exception as exc:
+                logger.warning(f"向量后端删除失败 {_doc_id}: {exc}")
     kb.knowledge_entries.clear()
     kb._save_knowledge()
     return {"success": True, "message": "知识库已清空"}

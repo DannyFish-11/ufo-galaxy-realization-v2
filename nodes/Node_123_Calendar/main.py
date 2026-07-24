@@ -176,6 +176,18 @@ async def list_events(start: Optional[datetime] = None, end: Optional[datetime] 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# 注意:字面量路由 /events/upcoming 必须注册在参数路由 /events/{event_id} 之前 ——
+# Starlette 按注册顺序匹配、无特异性排序,否则 /events/upcoming 会被 /events/{event_id}
+# 以 event_id="upcoming" 抢先命中,upcoming 端点永远不可达。
+@app.get("/events/upcoming")
+async def get_upcoming_events(days: int = 7):
+    """获取即将发生的事件"""
+    try:
+        events = calendar_manager.get_upcoming_events(days)
+        return {"events": events}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/events/{event_id}")
 async def get_event(event_id: str):
     """获取事件详情"""
@@ -199,15 +211,6 @@ async def delete_event(event_id: str):
     if not success:
         raise HTTPException(status_code=404, detail="Event not found")
     return {"success": True}
-
-@app.get("/events/upcoming")
-async def get_upcoming_events(days: int = 7):
-    """获取即将发生的事件"""
-    try:
-        events = calendar_manager.get_upcoming_events(days)
-        return {"events": events}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/conflicts")
 async def check_conflicts(start: datetime, end: datetime, exclude_id: Optional[str] = None):

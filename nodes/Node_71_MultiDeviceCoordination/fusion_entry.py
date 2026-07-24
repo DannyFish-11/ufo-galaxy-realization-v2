@@ -8,11 +8,30 @@ Node_71_MultiDeviceCoordination - 融合入口
 import os
 import sys
 import json
+import asyncio
 import logging
 import traceback
 import importlib.util
 
 logger = logging.getLogger("Node_71_MultiDeviceCoordination")
+
+
+def _run_coro(coro):
+    """Run a coroutine from this sync entry point safely.
+
+    asyncio.run() manages loop creation/teardown correctly (unlike manually
+    churning a new_event_loop per call). If a loop is already running in this
+    thread — e.g. execute() called from within an async context — running a
+    loop here would raise "Cannot run the event loop while another loop is
+    running", so offload to a worker thread with its own loop.
+    """
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+    import concurrent.futures
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        return pool.submit(asyncio.run, coro).result(timeout=120)
 
 # 节点目录（绝对路径）
 _node_dir = os.path.dirname(os.path.abspath(__file__))
@@ -87,14 +106,9 @@ def execute(action: str, params: dict = None) -> dict:
         if hasattr(service, method_name):
             method = getattr(service, method_name)
             if callable(method):
-                import asyncio
                 import inspect
                 if inspect.iscoroutinefunction(method):
-                    loop = asyncio.new_event_loop()
-                    try:
-                        result = loop.run_until_complete(method(**params))
-                    finally:
-                        loop.close()
+                    result = _run_coro(method(**params))
                 else:
                     result = method(**params)
                 return {
@@ -109,14 +123,9 @@ def execute(action: str, params: dict = None) -> dict:
             if hasattr(service, prefixed):
                 method = getattr(service, prefixed)
                 if callable(method):
-                    import asyncio
                     import inspect
                     if inspect.iscoroutinefunction(method):
-                        loop = asyncio.new_event_loop()
-                        try:
-                            result = loop.run_until_complete(method(**params))
-                        finally:
-                            loop.close()
+                        result = _run_coro(method(**params))
                     else:
                         result = method(**params)
                     return {

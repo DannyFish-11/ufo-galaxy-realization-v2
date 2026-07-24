@@ -297,6 +297,10 @@ class FractalAgent:
                 role=self._choose_role_for_subtask(subtask),
                 parent_id=self.id,
             )
+            # 传递配置的递归深度上限:MAX_DEPTH 不是构造参数,FractalExecutor 只在【根】
+            # agent 上用实例属性覆盖它(root_agent.MAX_DEPTH = max_depth)。子 agent 若不
+            # 继承,会退回类默认值 4,导致整棵子树比配置的深度多递归几层。
+            child.MAX_DEPTH = self.MAX_DEPTH
             self.children[child.id] = child
             child_agents.append((child, subtask))
 

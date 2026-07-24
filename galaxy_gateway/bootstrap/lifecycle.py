@@ -203,8 +203,8 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
 
     # 4. Tailscale Manager — optional VPN tunnel monitoring
     try:
-        from core.tailscale_manager import get_tailscale_manager  # noqa: PLC0415
-        _ts_mgr = get_tailscale_manager()
+        from core.tailscale_manager import TailscaleManager  # noqa: PLC0415
+        _ts_mgr = TailscaleManager()  # singleton via __new__; no get_tailscale_manager accessor exists
         await _ts_mgr.initialize()
         if _ts_mgr.is_available():
             logger.info("Tailscale: available at %s", _ts_mgr.get_tailscale_ip())

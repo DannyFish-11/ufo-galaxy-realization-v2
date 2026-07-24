@@ -647,7 +647,9 @@ def _build_registration_kinds() -> List[RegistrationKindInfo]:
         RegistrationKindInfo(
             kind=RegistrationKind.GATEWAY_ANDROID_BRIDGE,
             display_name="Android Bridge (gateway-side integration)",
-            canonical_module="galaxy_gateway.android.bridge",
+            # 真实模块是 galaxy_gateway.android_bridge(下划线);galaxy_gateway.android.bridge
+            # 并不存在 → 就绪/注册探针恒判定该桥缺失,给出错误的未就绪信号。
+            canonical_module="galaxy_gateway.android_bridge",
             path_tier=PathTier.CROSS_DEVICE,
             description=(
                 "Gateway-side Android runtime integration bridge. "

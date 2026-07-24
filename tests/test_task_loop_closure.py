@@ -83,7 +83,13 @@ def mock_llm_router():
             output_tokens=10,
         )
     )
-    router._compute_complexity_vector = MagicMock(return_value=MagicMock(weighted_score=0.2))
+    # handle_agent_task 现在优先走公有代理 compute_complexity_vector()(UnifiedLLMRouter
+    # 契约),私有 _compute_complexity_vector 仅作 MultiLLMRouter 降级。MagicMock 上
+    # hasattr 恒 True,必须两个都配置成返回真实 weighted_score,否则公有路径拿到裸
+    # Mock,`weighted_score >= 0.6` 抛 TypeError。
+    _cv = MagicMock(weighted_score=0.2)
+    router.compute_complexity_vector = MagicMock(return_value=_cv)
+    router._compute_complexity_vector = MagicMock(return_value=_cv)
     return router
 
 

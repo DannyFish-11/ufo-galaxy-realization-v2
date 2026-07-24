@@ -195,6 +195,12 @@ class APIManager:
 
     def _parse_config(self):
         """解析配置"""
+        # 修复:重解析前必须清空——原来只做增量覆盖,update_config/set_api_key
+        # 禁用或删除的 provider 条目仍以旧 api_key、enabled=True 残留在
+        # self.models,call_llm 继续拿被吊销的旧 key 发请求,直到进程重启。
+        self.models.clear()
+        self.tools.clear()
+        self.nodes.clear()
         # 解析 OneAPI 模型
         oneapi = self.config.get("oneapi", {})
         if oneapi.get("enabled"):

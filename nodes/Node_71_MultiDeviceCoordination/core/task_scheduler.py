@@ -553,36 +553,25 @@ class TaskScheduler:
         # 检查并发限制
         if len(self._running) >= self.config.max_concurrent_tasks:
             return
-        
-        # 获取下一个任务
-        task = self._queue.peek()
-        if not task:
+
+        # 按优先级顺序扫描队列,调度第一个【依赖就绪 + 有可用设备】的任务。
+        # 此前只 peek() 队首:若队首依赖未就绪就 dequeue+enqueue 后 return,导致后面
+        # 已就绪的任务被队首永久阻塞(head-of-line 阻塞 / 活锁);队首无可用设备时同样
+        # 直接 return,后面能分配到别的设备的任务也被卡住。
+        for task in self._queue.snapshot():
+            if not self._resolver.is_ready(task.task_id):
+                continue
+            device = self._selector.select(
+                task,
+                task.scheduling_strategy,
+                excluded=set()
+            )
+            if not device:
+                continue
+            # 命中:从队列移除并分配
+            self._queue.remove(task.task_id)
+            await self._assign_task(task, device)
             return
-        
-        # 检查依赖
-        if not self._resolver.is_ready(task.task_id):
-            # 依赖未满足，跳过
-            self._queue.dequeue()
-            # 重新入队等待
-            self._queue.enqueue(task)
-            return
-        
-        # 选择设备
-        device = self._selector.select(
-            task,
-            task.scheduling_strategy,
-            excluded=set()
-        )
-        
-        if not device:
-            # 没有可用设备，等待
-            return
-        
-        # 从队列移除
-        self._queue.dequeue()
-        
-        # 分配任务
-        await self._assign_task(task, device)
     
     async def _assign_task(self, task: Task, device: Device) -> bool:
         """分配任务到设备"""
@@ -591,7 +580,10 @@ class TaskScheduler:
         task.scheduled_at = time.time()
         
         device.current_task = task.task_id
-        device.assigned_tasks.append(task.task_id)
+        # 幂等追加:重试路径 _retry_task 会再次调用 _assign_task 而未先清理上一次的
+        # 分配,原来无条件 append 会让同一 task_id 在 assigned_tasks 里重复堆积。
+        if task.task_id not in device.assigned_tasks:
+            device.assigned_tasks.append(task.task_id)
         device.state = DeviceState.BUSY
         
         self._running[task.task_id] = task

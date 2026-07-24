@@ -77,6 +77,9 @@ class Decision:
 class MetaCognitionEngine:
     """元认知引擎 - 思维追踪、决策评估和认知优化"""
 
+    # 历史上限:进程级单例的 thought/decision 历史只增不删会无界泄漏,按上限裁剪。
+    _MAX_HISTORY = 5000
+
     def __init__(self):
         self.thought_history: List[Thought] = []
         self.decision_history: List[Decision] = []
@@ -93,6 +96,8 @@ class MetaCognitionEngine:
             biases_detected=self._detect_biases(content, context),
         )
         self.thought_history.append(thought)
+        if len(self.thought_history) > self._MAX_HISTORY:
+            self.thought_history = self.thought_history[-self._MAX_HISTORY :]
         return thought
 
     def track_decision(
@@ -110,6 +115,8 @@ class MetaCognitionEngine:
             confidence=max(0.0, min(1.0, confidence)),
         )
         self.decision_history.append(decision)
+        if len(self.decision_history) > self._MAX_HISTORY:
+            self.decision_history = self.decision_history[-self._MAX_HISTORY :]
         return decision
 
     def evaluate_decision(self, decision_id: str, outcome: str) -> dict:

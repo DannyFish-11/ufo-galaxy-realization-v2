@@ -524,9 +524,15 @@ def _derive_memory_bias_impl(
         from core.cognitive.pattern_miner import get_pattern_miner as _get_pm
 
         _pm = _get_pm()
+        # 修复死代码:原来 task_type=""、hour=None 全空条件 → _match_score 恒 0,
+        # match_patterns 只留 score>0 → 永远返回 [],连续性加成从未生效。本层
+        # 没有任务上下文,但【当前小时】是真实可用的查询条件——时间型模式
+        # (cond.hour 命中 +0.3)正是"系统学到用户作息习惯"的连续性信号。
+        from datetime import datetime as _dt
+
         _patterns = _pm.match_patterns(
             task_type="",
-            hour=None,
+            hour=_dt.now().hour,
             min_activation=0.2,
             limit=10,
         )

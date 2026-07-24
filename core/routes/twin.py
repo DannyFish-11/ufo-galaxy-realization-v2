@@ -143,9 +143,13 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             from core.device_communication import device_comm
 
             async def state_fetcher():
-                conn = device_comm.get_connection(twin.device_id)
-                if conn:
-                    return conn.get("last_state", {})
+                # 修复契约漂移:DeviceCommunication 无 get_connection 方法、存的是
+                # DeviceConnection 对象(非 dict)。原代码 AttributeError 直接崩掉
+                # 孪生耦合的状态拉取。用真实 API 取连接;device_comm 不持有设备
+                # 状态快照,故连接在线时返回空状态(如实,不臆造),否则 {}。
+                conn = device_comm.connections.get(twin.device_id)
+                if conn is not None:
+                    return getattr(conn, "last_state", {}) or {}
                 return {}
 
             from core.digital_twin_engine import CouplingMode

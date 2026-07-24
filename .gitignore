@@ -49,6 +49,7 @@ env/
 # Per-machine persisted choices (main-brain model / container runtime) — 本机状态，非源码
 .galaxy_model
 .galaxy_runtime
+.galaxy_revoked_tokens.json
 
 # Logs
 *.log

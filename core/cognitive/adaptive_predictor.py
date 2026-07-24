@@ -396,7 +396,14 @@ class AdaptivePredictor:
             tm = get_task_memory()
             recent = tm.get_recent_summaries(n=20)
             task_lower = (task or "").lower()
-            similar = [s for s in recent if task_type and s.task_type == task_type or task_lower in s.task.lower()]
+            # 修复:原表达式按 (task_type and 匹配) or (task_lower in ...) 解析,
+            # task 为空时 "" in 任意串 恒 True → 所有近期任务都算"相似",超时
+            # 建议被完全无关任务的时长污染。显式括号 + 空串守卫。
+            similar = [
+                s
+                for s in recent
+                if (task_type and s.task_type == task_type) or (task_lower and task_lower in s.task.lower())
+            ]
             durations = [s.duration_ms for s in similar if s.duration_ms > 0]
             if durations:
                 avg = sum(durations) / len(durations)

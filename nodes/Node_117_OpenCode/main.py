@@ -220,7 +220,11 @@ class OpenCodeEngine:
         )
         
         self.executions[execution.execution_id] = execution
-        
+        # 有界:executions 只增不删(供状态/统计查询),长跑进程无界泄漏。保留最近 1000 条。
+        if len(self.executions) > 1000:
+            for _k in list(self.executions.keys())[: len(self.executions) - 1000]:
+                self.executions.pop(_k, None)
+
         # 确定工作目录
         if sandbox_id and sandbox_id in self.sandboxes:
             working_dir = self.sandboxes[sandbox_id].working_dir

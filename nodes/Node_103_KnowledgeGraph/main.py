@@ -577,7 +577,9 @@ async def find_path(request: FindPathRequest) -> Dict[str, Any]:
 @app.post("/reason")
 async def reason(request: ReasonRequest) -> Dict[str, Any]:
     """推理"""
-    result = reasoning_engine.reason(request.facts, request.question)
+    # reason() 内部 _llm_reason 走同步 httpx.post(超时最长 30s),直接在事件循环里跑
+    # 会冻结整个节点。卸载到线程。
+    result = await asyncio.to_thread(reasoning_engine.reason, request.facts, request.question)
     
     return {
         "success": True,

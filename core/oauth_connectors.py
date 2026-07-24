@@ -243,7 +243,11 @@ async def handle_callback(service: str, code: str, state: str) -> Dict[str, Any]
     entry = data.get(service, {})
     if not code:
         return {"ok": False, "error": "缺少 code"}
-    if state and entry.get("_state") and state != entry["_state"]:
+    # 修复 CSRF 绕过:原条件 `if state and entry.get("_state") and ...` 在【传入 state
+    # 为空】时整体短路、跳过校验——攻击者只要省略 state 就能绕过 CSRF 防护。正确做法:
+    # 只要我们发起流程时存了 _state,回调就【必须】带上非空且匹配的 state,否则拒绝。
+    stored_state = entry.get("_state")
+    if stored_state and (not state or state != stored_state):
         return {"ok": False, "error": "state 校验失败(可能是过期或 CSRF)"}
     try:
         import httpx

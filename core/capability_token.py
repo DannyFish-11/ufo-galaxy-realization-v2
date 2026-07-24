@@ -142,8 +142,12 @@ def _save_revoked() -> None:
 
 
 def revoke(jti: str) -> None:
+    # 修复死锁:原来在持有 _revoked_lock(非重入)的情况下调 _load_revoked(),
+    # 冷缓存(进程内首次访问)时 _load_revoked 会再次 with _revoked_lock → 卡死。
+    # 先在锁外确保缓存加载(它自己拿锁),再持锁做纯内存修改。
+    revoked = _load_revoked()
     with _revoked_lock:
-        _load_revoked().add(jti)
+        revoked.add(jti)
     _save_revoked()
     logger.info("能力令牌已撤销 jti=%s", jti)
 

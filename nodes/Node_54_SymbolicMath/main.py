@@ -289,6 +289,8 @@ class SymbolicEngine:
 class VerificationPipeline:
     """Three-layer verification pipeline."""
     
+    MAX_AUDIT_TRAIL = 10000
+
     def __init__(self):
         self.engine = SymbolicEngine()
         self.audit_trail: List[FormulaRecord] = []
@@ -362,7 +364,10 @@ class VerificationPipeline:
             domain=request.domain.value
         )
         self.audit_trail.append(record)
-        
+        if len(self.audit_trail) > self.MAX_AUDIT_TRAIL:
+            # Drop oldest entries to bound memory (FIFO)
+            del self.audit_trail[: len(self.audit_trail) - self.MAX_AUDIT_TRAIL]
+
         return VerificationResult(
             valid=valid,
             simplified_form=simplified,

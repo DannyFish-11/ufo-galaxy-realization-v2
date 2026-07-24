@@ -160,6 +160,20 @@ class WebRTCState:
 
 state = WebRTCState()
 
+
+def _bgr_to_pil(frame: np.ndarray) -> Image.Image:
+    """Build a PIL Image from a stored frame.
+
+    Frames are decoded as BGR (format="bgr24", OpenCV convention, kept that
+    way for the ingress bridge). PIL's Image.fromarray expects RGB, so feeding
+    it BGR directly swaps the red/blue channels. Reverse the channel axis for
+    the PIL/JPEG/PNG encode path only.
+    """
+    if frame.ndim == 3 and frame.shape[2] == 3:
+        return Image.fromarray(np.ascontiguousarray(frame[:, :, ::-1]))
+    return Image.fromarray(frame)
+
+
 # ============================================================================
 # API 模型
 # ============================================================================
@@ -441,7 +455,7 @@ async def get_latest_frame(request: FrameRequest):
     # 转换格式
     if request.format == "jpeg":
         # 转换为 JPEG
-        img = Image.fromarray(frame)
+        img = _bgr_to_pil(frame)
         buffered = io.BytesIO()
         img.save(buffered, format="JPEG", quality=90)
         img_bytes = buffered.getvalue()
@@ -449,7 +463,7 @@ async def get_latest_frame(request: FrameRequest):
     
     elif request.format == "png":
         # 转换为 PNG
-        img = Image.fromarray(frame)
+        img = _bgr_to_pil(frame)
         buffered = io.BytesIO()
         img.save(buffered, format="PNG")
         img_bytes = buffered.getvalue()
@@ -457,7 +471,7 @@ async def get_latest_frame(request: FrameRequest):
     
     elif request.format == "base64":
         # 直接返回 base64
-        img = Image.fromarray(frame)
+        img = _bgr_to_pil(frame)
         buffered = io.BytesIO()
         img.save(buffered, format="JPEG", quality=90)
         img_bytes = buffered.getvalue()
@@ -493,7 +507,7 @@ async def stream_mjpeg(device_id: str):
             
             if frame is not None:
                 # 转换为 JPEG
-                img = Image.fromarray(frame)
+                img = _bgr_to_pil(frame)
                 buffered = io.BytesIO()
                 img.save(buffered, format="JPEG", quality=85)
                 img_bytes = buffered.getvalue()

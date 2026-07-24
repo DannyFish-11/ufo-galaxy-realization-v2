@@ -275,6 +275,13 @@ if _SESSION_STATE_AVAILABLE:
         "session_snapshot": AndroidParticipantSessionSignal.execution_progressed,
         "readiness_assessment": AndroidParticipantSessionSignal.execution_progressed,
         "runtime_state": AndroidParticipantSessionSignal.execution_progressed,
+        # 修复:AndroidParticipantTruthKind 后加的三个枚举值此前漏在映射表外,
+        # 对账成功(was_reconciled=True)的 reconciliation_signal 也会落成
+        # "unknown_truth_kind" no-op,会话相位永不推进。保守映射为非终局信号
+        # (终局成败仍由 ingress 自身的相位→确认信号映射收账,不在此越权)。
+        "reconciliation_signal": AndroidParticipantSessionSignal.reconciliation_started,
+        "governance_artifact": AndroidParticipantSessionSignal.execution_progressed,
+        "recovery_state": AndroidParticipantSessionSignal.execution_progressed,
     }
 
 

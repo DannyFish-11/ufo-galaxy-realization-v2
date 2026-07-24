@@ -428,7 +428,12 @@ class SmartOrchestrator:
     async def _run_workflow(self, execution: WorkflowExecution):
         """运行工作流"""
         workflow = self.workflows[execution.workflow_id]
-        
+
+        # on_error=="retry" 靠 `continue` 重跑同一步(current_step 不前进),没有上限就会
+        # 无限重试(每轮 0.5s 轮询,永远卡死)。用每步重试计数 + 上限约束。
+        max_step_retries = 3
+        retry_counts: Dict[str, int] = {}
+
         try:
             while execution.current_step:
                 step = workflow.steps.get(execution.current_step)
@@ -464,8 +469,14 @@ class SmartOrchestrator:
                     elif step.on_error == "skip":
                         pass
                     elif step.on_error == "retry":
-                        continue
-                
+                        retry_counts[step.step_id] = retry_counts.get(step.step_id, 0) + 1
+                        if retry_counts[step.step_id] <= max_step_retries:
+                            continue
+                        # 超过重试上限 → 按失败抛出,避免无限重试同一步
+                        raise Exception(
+                            f"Step {step.step_id} failed after {max_step_retries} retries: {task.error}"
+                        )
+
                 # 保存结果
                 execution.step_results[step.step_id] = task.result
                 execution.completed_steps.append(step.step_id)

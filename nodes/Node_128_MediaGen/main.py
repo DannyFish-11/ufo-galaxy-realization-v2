@@ -211,7 +211,7 @@ class MediaGenService:
         # Fallback: 静音 WAV
         import wave, struct
         wav_path = file_path.replace(".mp3", ".wav")
-        with wave.open(wav_path, "w", encoding='utf-8') as wf:
+        with wave.open(wav_path, "w") as wf:
             wf.setnchannels(1)
             wf.setsampwidth(2)
             wf.setframerate(16000)

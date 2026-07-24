@@ -92,15 +92,24 @@ class DaemonNotifier:
     async def _try_websocket(self, payload: Dict[str, Any]) -> bool:
         """Send notification to all connected Android/Wear OS devices."""
         try:
+            # android_bridge has no module global _CONNECTED_DEVICES; the live
+            # transport cache is the AndroidBridge singleton's _devices dict
+            # (device_id -> AndroidDevice). Build a fresh device_id -> websocket
+            # map each call so we don't cache a stale connection set.
             if self._android_bridge is None:
-                from galaxy_gateway.android_bridge import _CONNECTED_DEVICES
-                self._android_bridge = _CONNECTED_DEVICES
+                from galaxy_gateway.android_bridge import android_bridge as _bridge
+                self._android_bridge = _bridge
 
-            if not self._android_bridge:
+            devices = {
+                did: dev.websocket
+                for did, dev in getattr(self._android_bridge, "_devices", {}).items()
+                if getattr(dev, "connected", False) and getattr(dev, "websocket", None) is not None
+            }
+            if not devices:
                 return False
 
             sent = 0
-            for device_id, conn in list(self._android_bridge.items()):
+            for device_id, conn in list(devices.items()):
                 try:
                     # PR-AIP-UNIFIED: Route daemon notifications through AIPTransport
                     # instead of direct websocket access.

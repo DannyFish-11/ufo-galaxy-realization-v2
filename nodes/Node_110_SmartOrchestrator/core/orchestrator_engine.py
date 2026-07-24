@@ -184,7 +184,8 @@ class SmartOrchestrator:
 """
             
             # 调用 Node_01
-            response = requests.post(
+            response = await asyncio.to_thread(  # 阻塞 HTTP 卸载出事件循环
+                requests.post,
                 f"{self.node_01_url}/api/v1/chat",
                 json={
                     "messages": [
@@ -232,7 +233,8 @@ class SmartOrchestrator:
         更新节点能力信息（调用 Node_67 获取健康状态）
         """
         try:
-            response = requests.get(
+            response = await asyncio.to_thread(  # 阻塞 HTTP 卸载出事件循环
+                requests.get,
                 f"{self.node_67_url}/api/v1/health",
                 timeout=10
             )
@@ -323,7 +325,8 @@ class SmartOrchestrator:
         """
         try:
             # 调用 Node_02 执行任务
-            response = requests.post(
+            response = await asyncio.to_thread(  # 阻塞 HTTP 卸载出事件循环
+                requests.post,
                 f"{self.node_02_url}/api/v1/tasks",
                 json={
                     "task_id": execution_plan.task_id,
@@ -371,7 +374,8 @@ class SmartOrchestrator:
                 "timestamp": datetime.now().isoformat()
             }
             
-            response = requests.post(
+            response = await asyncio.to_thread(  # 阻塞 HTTP 卸载出事件循环
+                requests.post,
                 f"{self.node_103_url}/api/v1/knowledge/add",
                 json=knowledge_entry,
                 timeout=10

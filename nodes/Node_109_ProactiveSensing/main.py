@@ -391,8 +391,9 @@ class ProactiveSensingEngine:
         
         logger.info(f"Event detected: {event.event_type} from {event.source}")
         
-        # 调用事件处理器
-        handlers = self._event_handlers.get(event.event_type, [])
+        # 调用事件处理器。用副本:.get 返回的是注册表里的【实际列表】,直接 extend 会把
+        # 通配 "*" 处理器永久追加进该事件类型的列表 → 每次 emit 都增长并重复调用。
+        handlers = list(self._event_handlers.get(event.event_type, []))
         handlers.extend(self._event_handlers.get("*", []))
         for handler in handlers:
             try:

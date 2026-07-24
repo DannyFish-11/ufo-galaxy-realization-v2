@@ -6,6 +6,7 @@ Node 50: Transformer - 真实的自然语言理解 (NLU)
 """
 import os
 import json
+import asyncio
 import requests
 from datetime import datetime
 from typing import Dict, Any, Optional, List
@@ -233,12 +234,14 @@ class NLUTools:
         ]
     
     async def call_tool(self, tool: str, params: dict):
-        if tool == "understand": return self.understand(params.get("text", ""), params.get("context"))
-        elif tool == "decompose": return self.decompose_task(params.get("text", ""), params.get("available_tools"))
-        elif tool == "dialog": return self.dialog(params.get("user_input", ""), params.get("history"), params.get("system_prompt"))
-        elif tool == "extract_command": return self.extract_command(params.get("text", ""))
-        elif tool == "extract_intent": return self.understand(params.get("text", ""))
-        elif tool == "extract_entities": return self.understand(params.get("text", ""))
+        # Each branch reaches call_llm -> blocking requests.post; offload so
+        # the async /mcp/call handler does not block the event loop.
+        if tool == "understand": return await asyncio.to_thread(self.understand, params.get("text", ""), params.get("context"))
+        elif tool == "decompose": return await asyncio.to_thread(self.decompose_task, params.get("text", ""), params.get("available_tools"))
+        elif tool == "dialog": return await asyncio.to_thread(self.dialog, params.get("user_input", ""), params.get("history"), params.get("system_prompt"))
+        elif tool == "extract_command": return await asyncio.to_thread(self.extract_command, params.get("text", ""))
+        elif tool == "extract_intent": return await asyncio.to_thread(self.understand, params.get("text", ""))
+        elif tool == "extract_entities": return await asyncio.to_thread(self.understand, params.get("text", ""))
         return {"error": f"Unknown tool: {tool}"}
 
 tools = NLUTools()
@@ -261,25 +264,27 @@ async def list_tools():
 
 @app.post("/understand")
 async def api_understand(request: NLURequest):
-    result = tools.understand(request.text, request.context)
+    # tools.understand -> call_llm -> blocking requests.post (up to 4x30s);
+    # run off the event loop so the node keeps serving other requests.
+    result = await asyncio.to_thread(tools.understand, request.text, request.context)
     if "error" in result and not result.get("fallback"): raise HTTPException(status_code=500, detail=result["error"])
     return result
 
 @app.post("/decompose")
 async def api_decompose(request: TaskRequest):
-    result = tools.decompose_task(request.text, request.available_tools)
+    result = await asyncio.to_thread(tools.decompose_task, request.text, request.available_tools)
     if "error" in result and not result.get("fallback"): raise HTTPException(status_code=500, detail=result["error"])
     return result
 
 @app.post("/dialog")
 async def api_dialog(request: DialogRequest):
-    result = tools.dialog(request.user_input, request.history, request.system_prompt)
+    result = await asyncio.to_thread(tools.dialog, request.user_input, request.history, request.system_prompt)
     if "error" in result and "response" not in result: raise HTTPException(status_code=500, detail=result["error"])
     return result
 
 @app.post("/extract_command")
 async def api_extract_command(request: NLURequest):
-    return tools.extract_command(request.text)
+    return await asyncio.to_thread(tools.extract_command, request.text)
 
 @app.post("/mcp/call")
 async def mcp_call(request: dict):

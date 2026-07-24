@@ -7,6 +7,7 @@ import io
 import json
 import logging
 import os
+import re
 import subprocess
 from dataclasses import dataclass
 from enum import Enum
@@ -318,7 +319,18 @@ class AutonomousCodingEngine:
             content = result["choices"][0]["message"]["content"].strip()
             if "```" in content:
                 parts = content.split("```")
-                content = parts[1].lstrip("python\n").rstrip("`") if len(parts) > 1 else content
+                if len(parts) > 1:
+                    block = parts[1]
+                    # 去掉可选的语言标识首行(```python / ```js / ```c++ …):取第一个换行
+                    # 之后的内容。原来用 lstrip("python\n") 是【字符集】剥离,会把代码里以
+                    # p/y/t/h/o/n 开头的首字符也吃掉(如 "print" → "rint"),且对非 python
+                    # 语言标签无效。
+                    if "\n" in block:
+                        first_line, rest = block.split("\n", 1)
+                        _fl = first_line.strip()
+                        if _fl == "" or re.fullmatch(r"[A-Za-z0-9_+#.-]+", _fl):
+                            block = rest
+                    content = block.strip().rstrip("`").strip()
             return content
         except Exception as e:
             logger.debug(f"LLM 代码生成失败: {e}")

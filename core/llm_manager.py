@@ -59,6 +59,9 @@ class LLMManager:
     def __init__(self, config_path: str = "config.json") -> None:
         self._config_path = config_path
         self._router = self._get_router()
+        # 持有后台任务强引用:asyncio 事件循环只保留弱引用,未持引用的 create_task
+        # 可能在完成前被 GC。完成后自动从集合移除。
+        self._bg_tasks: set = set()
         logger.info(
             "LLMManager (legacy) initialized — delegating to UnifiedLLMRouter",
             extra={"event": "init"},
@@ -151,8 +154,11 @@ class LLMManager:
             try:
                 try:
                     loop = asyncio.get_running_loop()
-                    # There is a running event loop — schedule as a task.
-                    loop.create_task(backend.refresh_providers())
+                    # There is a running event loop — schedule as a task and hold a
+                    # strong reference so it isn't GC'd before completion.
+                    _task = loop.create_task(backend.refresh_providers())
+                    self._bg_tasks.add(_task)
+                    _task.add_done_callback(self._bg_tasks.discard)
                 except RuntimeError:
                     # No running event loop — create a new one for this call.
                     asyncio.run(backend.refresh_providers())

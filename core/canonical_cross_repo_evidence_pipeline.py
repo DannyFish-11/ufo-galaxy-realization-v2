@@ -725,10 +725,13 @@ except Exception as exc:
     _EVALUATOR_AUTHORITY_SENTINEL = ""
     _ArtifactKind = None  # type: ignore[assignment]
 
-# Source 3: participant_lifecycle_truth — AndroidParticipantSessionRegistry
+# Source 3: participant_lifecycle_truth — AndroidParticipantSessionRuntime
+# 修复:此前 import 的 get_participant_session_registry 在目标模块不存在
+# (实际导出是 get_participant_session_runtime),ImportError 被吞 → 该证据源
+# 永远 unavailable。
 try:
     from core.android_participant_session_state import (
-        get_participant_session_registry as _get_session_registry,  # type: ignore[import]
+        get_participant_session_runtime as _get_session_registry,  # type: ignore[import]
     )
 
     _SESSION_REGISTRY_AVAILABLE = True
@@ -1002,8 +1005,10 @@ def _probe_participant_lifecycle_truth() -> IngestionSourceEntry:
 
     try:
         registry = _get_session_registry()
-        sessions = registry.snapshot() if hasattr(registry, "snapshot") else []
-        total = len(sessions)
+        # snapshot() 返回 AndroidParticipantSessionSnapshot 数据类(无 __len__),
+        # 直接 len() 会 TypeError 被 except 吞成 unavailable——用其 total_count。
+        snap = registry.snapshot() if hasattr(registry, "snapshot") else None
+        total = int(getattr(snap, "total_count", 0) or 0)
         summary = f"ParticipantSessionRegistry: {total} session record(s)"
 
         return IngestionSourceEntry(
@@ -1204,7 +1209,11 @@ class CanonicalCrossRepoEvidencePipeline:
             and re_entry.status == IngestionStatus.present
         ):
             # Both present — check for operational-vs-compliant conflict
-            rdv_status = (rdv_entry.raw_evidence or {}).get("participant_status", "")
+            # 修复:生产方 AndroidParticipantEvidenceResult.to_dict() 的键是
+            # participant_status_raw,此前读 participant_status 恒取空串,
+            # 冲突检测永不触发(死代码)。兼容读两个键。
+            _rdv_raw = rdv_entry.raw_evidence or {}
+            rdv_status = _rdv_raw.get("participant_status_raw", "") or _rdv_raw.get("participant_status", "")
             re_counts = (re_entry.raw_evidence or {}).get("artifact_counts_by_kind", {})
             if rdv_status == "ready" and not re_counts:
                 conflict_notes.append(

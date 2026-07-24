@@ -328,14 +328,25 @@ class SelfHealingEngine:
             return {"success": False, "error": str(e)}
     
     async def _switch_backup(self, node_id: str) -> Dict[str, Any]:
-        """切换到备用节点"""
-        logger.info(f"Switching to backup for {node_id}")
-        return {"success": True, "action": "switch_backup", "message": f"Switched to backup for {node_id}"}
-    
+        """切换到备用节点(尚无备用编排后端 —— 不能谎报成功,否则 heal_node 以为已恢复
+        而不再升级,故障其实还在)。"""
+        logger.warning(f"switch_backup requested for {node_id} but no backup orchestration backend is wired")
+        return {
+            "success": False,
+            "action": "switch_backup",
+            "error": "not_implemented",
+            "message": f"No backup orchestration available for {node_id}",
+        }
+
     async def _scale_down(self, node_id: str) -> Dict[str, Any]:
-        """降级处理"""
-        logger.info(f"Scaling down {node_id}")
-        return {"success": True, "action": "scale_down", "message": f"Scaled down {node_id}"}
+        """降级处理(尚无扩缩容后端 —— 同理不谎报成功)。"""
+        logger.warning(f"scale_down requested for {node_id} but no scaling backend is wired")
+        return {
+            "success": False,
+            "action": "scale_down",
+            "error": "not_implemented",
+            "message": f"No scaling backend available for {node_id}",
+        }
     
     async def _notify_admin(self, node_id: str) -> Dict[str, Any]:
         """通知管理员"""

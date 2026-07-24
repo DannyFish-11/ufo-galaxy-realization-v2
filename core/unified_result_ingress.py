@@ -73,7 +73,7 @@ import time
 from collections.abc import Collection
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, FrozenSet, Optional
+from typing import Any, Dict, FrozenSet, List, Optional
 
 from core.continuity_adjudication import (
     adjudicate_continuity_legality_gate,
@@ -613,12 +613,17 @@ class UnifiedResultIngress:
         # Replay session state: keyed by "{device_id}:{session_id}".
         # Tracks max_seq and seen item_ids per replay session for ordering enforcement.
         self._replay_session_state: Dict[str, Dict[str, Any]] = {}
+        # FIFO 淘汰:每个 replay 会话一条(内含 seen_ids 集合也在增长),只增不删会
+        # 无界泄漏。超过上限剔除最旧会话(与 flow_aware_result_convergence 惯例一致)。
+        self._replay_session_order: List[str] = []
+        self._MAX_REPLAY_SESSIONS = 1024
         self._replay_session_lock = threading.Lock()
 
     def reset_replay_session_state(self) -> None:
         """Clear all tracked replay session state (test isolation helper)."""
         with self._replay_session_lock:
             self._replay_session_state.clear()
+            self._replay_session_order.clear()
 
     # ------------------------------------------------------------------
     # Public API
@@ -1522,6 +1527,10 @@ class UnifiedResultIngress:
             if state is None:
                 state = {"max_seq": -1, "seen_ids": set(), "item_count": 0}
                 self._replay_session_state[session_key] = state
+                self._replay_session_order.append(session_key)
+                while len(self._replay_session_order) > self._MAX_REPLAY_SESSIONS:
+                    _oldest = self._replay_session_order.pop(0)
+                    self._replay_session_state.pop(_oldest, None)
 
             max_seq_before = state["max_seq"]
             seen_ids: set = state["seen_ids"]

@@ -442,27 +442,38 @@ class MultiDeviceCoordinator:
             # 执行子任务
             total_subtasks = len(task.subtasks) or 1
             completed = 0
-            
+            failed = 0
+
             for subtask in task.subtasks:
                 device_id = subtask.get("device_id")
                 action = subtask.get("action")
                 params = subtask.get("params", {})
-                
+
                 # 真正发送命令到设备
                 result = await self._send_command(device_id, action, params)
-                
+
                 subtask["result"] = result
-                subtask["completed"] = True
-                
-                completed += 1
-                task.progress = completed / total_subtasks
-            
-            task.state = TaskState.COMPLETED
+                # 尊重子任务成功标志:此前无条件置 completed=True 并最终报 COMPLETED,
+                # 即使所有设备命令都失败(_send_command 返回 {"success": False, ...})也算
+                # "成功",导致失败被静默吞掉、上层拿到错误的成功结果。
+                _ok = bool(result.get("success", False)) if isinstance(result, dict) else bool(result)
+                subtask["completed"] = _ok
+                if _ok:
+                    completed += 1
+                else:
+                    failed += 1
+                task.progress = (completed + failed) / total_subtasks
+
             task.completed_at = datetime.now()
             task.progress = 1.0
-            
-            logger.info(f"Task {task_id} completed successfully")
-            return True
+            if failed == 0:
+                task.state = TaskState.COMPLETED
+                logger.info(f"Task {task_id} completed successfully ({completed}/{total_subtasks})")
+                return True
+            task.state = TaskState.FAILED
+            task.results["error"] = f"{failed}/{total_subtasks} subtask(s) failed"
+            logger.warning(f"Task {task_id} failed: {failed}/{total_subtasks} subtask(s) failed")
+            return False
             
         except Exception as e:
             logger.debug("Fallback triggered: %s", e)

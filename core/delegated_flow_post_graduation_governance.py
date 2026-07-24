@@ -634,9 +634,9 @@ def _get_readiness_gate():  # type: ignore[return]
 def _get_truth_ownership():  # type: ignore[return]
     """Import and return the FlowLevelTruthOwnership singleton."""
     try:
-        from core.flow_level_truth_ownership import get_truth_ownership
+        from core.flow_level_truth_ownership import get_flow_truth_alignment_runtime
 
-        return get_truth_ownership()
+        return get_flow_truth_alignment_runtime()
     except Exception:  # noqa: BLE001
         return None
 
@@ -644,9 +644,9 @@ def _get_truth_ownership():  # type: ignore[return]
 def _get_result_convergence():  # type: ignore[return]
     """Import and return the FlowAwareResultConvergence singleton."""
     try:
-        from core.flow_aware_result_convergence import get_result_convergence
+        from core.flow_aware_result_convergence import get_flow_aware_convergence_coordinator
 
-        return get_result_convergence()
+        return get_flow_aware_convergence_coordinator()
     except Exception:  # noqa: BLE001
         return None
 
@@ -654,9 +654,9 @@ def _get_result_convergence():  # type: ignore[return]
 def _get_operator_surface():  # type: ignore[return]
     """Import and return the FlowLevelOperatorSurface singleton."""
     try:
-        from core.flow_level_operator_surface import get_operator_surface
+        from core.flow_level_operator_surface import get_flow_level_operator_surface
 
-        return get_operator_surface()
+        return get_flow_level_operator_surface()
     except Exception:  # noqa: BLE001
         return None
 
@@ -666,10 +666,10 @@ def _get_compat_blocking():  # type: ignore[return]
     singleton."""
     try:
         from core.compat_legacy_path_blocking_canonicalization import (
-            get_compat_blocking,
+            get_blocking_enforcer,
         )
 
-        return get_compat_blocking()
+        return get_blocking_enforcer()
     except Exception:  # noqa: BLE001
         return None
 
@@ -677,9 +677,9 @@ def _get_compat_blocking():  # type: ignore[return]
 def _get_continuity_coordinator():  # type: ignore[return]
     """Import and return the FlowContinuityCoordinator singleton."""
     try:
-        from core.flow_continuity_coordinator import get_continuity_coordinator
+        from core.flow_continuity_coordinator import get_flow_continuity_coordinator
 
-        return get_continuity_coordinator()
+        return get_flow_continuity_coordinator()
     except Exception:  # noqa: BLE001
         return None
 

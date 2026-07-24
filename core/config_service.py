@@ -498,7 +498,11 @@ class ConfigService:
         unavailable = [p.provider_id for p in v.provider_statuses if p.enabled and not p.has_key]
         if unavailable:
             lines.append(f"Enabled but key missing: {', '.join(unavailable)}")
-        lines.append(f"OneAPI state: {v.oneapi_state}")
+        # 修复:OneAPI state 行原来【无条件】追加,永远让 lines 非空 → 下面
+        # "Configuration OK" 分支成为死代码,健康配置也被描述成有问题。仅在
+        # OneAPI 未就绪(非 configured)时才作为一条缺失项列出。
+        if v.oneapi_state != "configured":
+            lines.append(f"OneAPI state: {v.oneapi_state}")
         if not lines:
             return "Configuration OK — all enabled providers have keys."
         return "\n".join(lines)

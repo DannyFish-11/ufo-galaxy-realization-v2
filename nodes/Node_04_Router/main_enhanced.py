@@ -508,7 +508,10 @@ async def invoke_tool(request: ToolInvokeRequest):
 @app.post("/tools/execute")
 async def execute_tool(request: ToolExecuteRequest):
     """直接执行指定工具"""
-    result = registry.execute_tool(
+    # registry.execute_tool 内部走同步 subprocess.run(最长 30s)+ 全盘 os.walk,直接在
+    # 事件循环里跑会冻结整个节点。卸载到线程。
+    result = await asyncio.to_thread(
+        registry.execute_tool,
         request.tool_name,
         request.action,
         request.params

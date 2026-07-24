@@ -120,7 +120,10 @@ class NodeHeartbeatSender:
                 capabilities=caps,
                 registered_at=TimestampModel(seconds=int(datetime.now(timezone.utc).timestamp())),
             )
-            result = await nats_bus.publish_worker_registration(reg)
+            # 正确方法名是 publish_legacy_worker_registration(WorkerRegistrationModel);
+            # 原来的 publish_worker_registration 在 nats_bus 上并不存在,AttributeError 被
+            # 下方 except 吞掉 → 节点注册静默失败。
+            result = await nats_bus.publish_legacy_worker_registration(reg)
             if result.get("success"):
                 logger.info(
                     "NodeHeartbeatSender[%s]: registered (device_type=%s)",
@@ -156,7 +159,8 @@ class NodeHeartbeatSender:
             from core.schemas.contracts import WorkerShutdownModel
 
             if nats_bus.is_connected():
-                await nats_bus.publish_worker_shutdown(
+                # 同上:正确方法名是 publish_legacy_worker_shutdown(WorkerShutdownModel)。
+                await nats_bus.publish_legacy_worker_shutdown(
                     WorkerShutdownModel(
                         worker_id=self._worker_id,
                         reason="heartbeat_stopped",

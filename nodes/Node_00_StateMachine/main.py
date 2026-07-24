@@ -211,8 +211,12 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning(f"Redis not available ({e}), using memory store")
             redis_client = None
-            use_memory = True
-    
+        # Redis 存储后端尚未实现(没有 RedisStore),store 只能用 MemoryStore。
+        # 此前 Redis 连接【成功】时 store 从未被赋值(仍为 None),导致随后的
+        # store.register_node() 及所有端点对 None 解引用崩溃。故无论 Redis 是否
+        # 连上,存储一律走 MemoryStore(redis_client 仅作可选连接,shutdown 时关闭)。
+        use_memory = True
+
     if use_memory:
         logger.info("Using in-memory store")
         store = MemoryStore()

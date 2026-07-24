@@ -108,30 +108,50 @@ class ProcessManager:
         command: List[str],
         restart_policy: str = "always",
         max_restarts: int = 10,
-        restart_window: int = 3600
+        restart_window: int = 3600,
+        log_dir: Optional[Path] = None,
     ):
         self.name = name
         self.command = command
         self.restart_policy = restart_policy
         self.max_restarts = max_restarts
         self.restart_window = restart_window
-        
+        self.log_dir = log_dir
+
         self.process: Optional[subprocess.Popen] = None
         self.restart_times: List[datetime] = []
         self.status = ServiceStatus(name=name, state=DaemonState.STOPPED)
-        
+
     def start(self) -> bool:
         """Start the managed process"""
         try:
             logger.info(f"Starting {self.name}...")
             self.status.state = DaemonState.STARTING
-            
-            self.process = subprocess.Popen(
-                self.command,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                cwd=os.environ.get('GALAXY_HOME', '/opt/galaxy')
-            )
+
+            # 子进程输出去向:此前用 stdout/stderr=subprocess.PIPE 但从不读取——子服务
+            # 写满 ~64KB 管道缓冲后 write 阻塞,整个服务卡死(长跑守护进程必踩)。改为
+            # 写进日志文件(无日志目录则 DEVNULL,绝不再用不排水的 PIPE)。
+            if self.log_dir is not None:
+                logf = open(self.log_dir / f"{self.name}.log", "ab")
+            else:
+                logf = None
+            # cwd 防御:GALAXY_HOME 未设且 /opt/galaxy 不存在时 Popen 直接
+            # FileNotFoundError,所有子服务启动失败。目录不存在则回退当前目录。
+            cwd = os.environ.get('GALAXY_HOME', '/opt/galaxy')
+            if not os.path.isdir(cwd):
+                logger.warning("GALAXY_HOME %s does not exist; using current directory", cwd)
+                cwd = None
+            try:
+                self.process = subprocess.Popen(
+                    self.command,
+                    stdout=logf if logf is not None else subprocess.DEVNULL,
+                    stderr=subprocess.STDOUT if logf is not None else subprocess.DEVNULL,
+                    cwd=cwd,
+                )
+            finally:
+                # 父进程关闭自己的句柄(子进程已持有 dup fd),避免每次重启泄漏 fd
+                if logf is not None:
+                    logf.close()
             
             self.status.state = DaemonState.RUNNING
             self.status.last_heartbeat = datetime.now()
@@ -238,6 +258,9 @@ class GalaxyDaemon:
         Args:
             config_path: Path to daemon configuration file
         """
+        # 记住配置路径:SIGHUP 热重载必须用它重读,否则 _reload_config 会把用户
+        # 配置整体丢回内置默认值。
+        self._config_path = config_path
         self.config = self._load_config(config_path)
         self.state = DaemonState.INITIALIZING
         self.start_time: Optional[datetime] = None
@@ -310,11 +333,15 @@ class GalaxyDaemon:
         main loop to avoid signal-handler race conditions with file I/O.
         """
         import signal as _signal_module
+        # SIGHUP 在 Windows 上不存在,无条件取属性会让 handler 本身 AttributeError
+        # (即使 SIGHUP 从未注册,构造 dict 时求值就炸)。用 getattr 防御。
         signals = {
             _signal_module.SIGTERM: "SIGTERM",
             _signal_module.SIGINT: "SIGINT",
-            _signal_module.SIGHUP: "SIGHUP"
         }
+        _sighup = getattr(_signal_module, "SIGHUP", None)
+        if _sighup is not None:
+            signals[_sighup] = "SIGHUP"
         signal_name = signals.get(signum, f"Signal {signum}")
         logger.info("Received %s", signal_name)
         # Set atomic flag — main loop will process it safely
@@ -337,8 +364,34 @@ class GalaxyDaemon:
     def _reload_config(self):
         """Reload daemon configuration"""
         logger.info("Reloading configuration...")
-        self.config = self._load_config(None)
+        # 用启动时的配置路径重读;原来传 None 会把用户配置整体丢回内置默认值。
+        self.config = self._load_config(self._config_path)
         logger.info("Configuration reloaded")
+
+    def _resolve_log_dir(self) -> Optional[Path]:
+        """Resolve a writable log directory with graceful fallback.
+
+        优先级:GALAXY_LOG_DIR 环境变量 → /var/log/galaxy → ~/.galaxy/logs。
+        原来硬编码 mkdir /var/log/galaxy,非 root 运行直接 PermissionError,
+        整个守护进程启动失败。全部失败返回 None(子服务输出走 DEVNULL)。
+        """
+        candidates: List[Path] = []
+        env_dir = os.environ.get("GALAXY_LOG_DIR")
+        if env_dir:
+            candidates.append(Path(env_dir))
+        candidates.append(Path("/var/log/galaxy"))
+        try:
+            candidates.append(Path.home() / ".galaxy" / "logs")
+        except (RuntimeError, OSError):
+            pass
+        for cand in candidates:
+            try:
+                cand.mkdir(parents=True, exist_ok=True)
+                return cand
+            except (PermissionError, OSError) as exc:
+                logger.warning("Log dir %s unavailable: %s", cand, exc)
+        logger.warning("No writable log directory found; child service output goes to DEVNULL")
+        return None
     
     def start(self) -> bool:
         """Start the daemon and all managed services"""
@@ -348,16 +401,17 @@ class GalaxyDaemon:
             self.start_time = datetime.now()
             self._running = True
             
-            # Create log directory
-            Path("/var/log/galaxy").mkdir(parents=True, exist_ok=True)
-            
+            # Create log directory (带降级,见 _resolve_log_dir)
+            log_dir = self._resolve_log_dir()
+
             # Start all services
             for name, service_config in self.config["services"].items():
                 pm = ProcessManager(
                     name=name,
                     command=service_config["command"],
                     restart_policy=service_config.get("restart_policy", "always"),
-                    max_restarts=service_config.get("max_restarts", 10)
+                    max_restarts=service_config.get("max_restarts", 10),
+                    log_dir=log_dir,
                 )
                 self.processes[name] = pm
                 pm.start()
@@ -444,7 +498,10 @@ class GalaxyDaemon:
                 # Fallback: minimal metrics without psutil
                 if self.start_time:
                     metrics.uptime_seconds = (datetime.now() - self.start_time).total_seconds()
-                self.health_history.append(metrics)
+                # 正确容器是 health_metrics(有界 deque);原来写的 health_history
+                # 属性根本不存在 → AttributeError 被外层 except 吞掉,psutil 缺失时
+                # 指标从不落地。
+                self.health_metrics.append(metrics)
                 return metrics
 
             # CPU usage

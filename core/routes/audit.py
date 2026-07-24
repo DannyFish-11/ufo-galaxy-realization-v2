@@ -255,12 +255,16 @@ def create_router() -> APIRouter:
             stage_last: Dict[str, str] = {}
             for node in nodes:
                 stage = node["stage"]
+                # 修复:节点 dict 来自 TraceEvent.model_dump(),键是 event_id(无 id
+                # 别名),原来读 node["id"] 对每个非空 trace 都 KeyError → 被 except
+                # 吞成 HTTP 500,graph 端点 100% 挂。上面 edges 用 ev.event_id 是对的。
+                node_id = node["event_id"]
                 if stage in stage_last:
-                    inferred_edge = {"source": stage_last[stage], "target": node["id"], "inferred": True}
+                    inferred_edge = {"source": stage_last[stage], "target": node_id, "inferred": True}
                     # Only add if not already present
                     if inferred_edge not in edges:
                         edges.append(inferred_edge)
-                stage_last[stage] = node["id"]
+                stage_last[stage] = node_id
 
             return JSONResponse(
                 content={

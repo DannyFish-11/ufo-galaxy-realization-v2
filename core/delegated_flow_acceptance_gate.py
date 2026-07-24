@@ -887,7 +887,9 @@ class DelegatedFlowAcceptanceGate:
             if hasattr(snapshot, "to_dict"):
                 evidence = snapshot.to_dict()
 
-            total_artifacts = evidence.get("total_artifacts", 0)
+            # 修复键漂移:FlowTruthAlignmentSnapshot.to_dict() 发的是 total_decisions,
+            # 不是 total_artifacts——原来恒读 0,truth 维度永远"零证据/unknown"。
+            total_artifacts = evidence.get("total_decisions", evidence.get("total_artifacts", 0))
             decision_counts = evidence.get("decision_counts", {})
             block_count = decision_counts.get("block_due_to_compat_influence", 0) + decision_counts.get(
                 "reject_due_to_canonical_terminal", 0
@@ -982,7 +984,10 @@ class DelegatedFlowAcceptanceGate:
 
             total_decisions = evidence.get("total_artifacts", 0)
             decision_counts = evidence.get("decision_counts", {})
-            quarantine_count = decision_counts.get("quarantine", 0)
+            # 修复键漂移:收敛决策的隔离键是 quarantine_result_due_to_flow_mismatch
+            # (按枚举 .value keyed),不是裸 "quarantine"——原来恒读 0,隔离永不计入。
+            # 用子串求和,对未来新增的隔离类决策也稳健。
+            quarantine_count = sum(v for k, v in decision_counts.items() if "quarantine" in str(k))
 
             if total_decisions == 0:
                 return DimensionEvidenceResult(
@@ -1129,10 +1134,15 @@ class DelegatedFlowAcceptanceGate:
             if hasattr(snapshot, "to_dict"):
                 evidence = snapshot.to_dict()
 
-            quarantine_count = evidence.get("quarantine_count", 0)
-            block_dispatch_count = evidence.get("block_dispatch_count", 0)
-            block_truth_count = evidence.get("block_truth_count", 0)
-            total_records = evidence.get("total_records", 0)
+            # 修复键漂移:CompatLegacyBlockingSnapshot.to_dict() 的键是 total_evaluations
+            # 与 by_decision.{quarantine_due_to_ambiguous_contract / block_due_to_legacy_dispatch /
+            # block_due_to_compat_truth_influence},不是 *_count/total_records——原来全读 0,
+            # compat 维度永远"零记录/unknown",隔离/阻断证据一律丢失。
+            _by_decision = evidence.get("by_decision", {}) or {}
+            quarantine_count = _by_decision.get("quarantine_due_to_ambiguous_contract", 0)
+            block_dispatch_count = _by_decision.get("block_due_to_legacy_dispatch", 0)
+            block_truth_count = _by_decision.get("block_due_to_compat_truth_influence", 0)
+            total_records = evidence.get("total_evaluations", 0)
 
             if total_records == 0:
                 return DimensionEvidenceResult(

@@ -1101,11 +1101,15 @@ class DelegatedFlowRecoveryCoordinator:
             flow_store = getattr(bundle, "flow_entity_store", None)
             if flow_store is None:
                 return False
-            snapshots = flow_store.load()
-            if not snapshots:
+            # 修复:load() 返回 (envelope, objects) 二元组——原来把元组当实体列表:
+            # 元组恒真、any() 迭代的是 envelope 和 list 两个对象而非实体,带
+            # flow_id 时恒 False → 重启后持久化检查点永远"检测不到",恢复静默
+            # 落到 redispatch/resume,丢弃已持久化的执行进度。
+            _envelope, entities = flow_store.load()
+            if not entities:
                 return False
             if ctx.flow_id:
-                return any(getattr(s, "delegated_flow_id", None) == ctx.flow_id for s in snapshots)
+                return any(getattr(s, "delegated_flow_id", None) == ctx.flow_id for s in entities)
             return True
         except Exception:
             return False
@@ -1120,9 +1124,24 @@ class DelegatedFlowRecoveryCoordinator:
         with self._lock:
             self._active_attempts[flow_id] = attempt_id
 
-    def _deregister_attempt(self, flow_id: str) -> None:
-        """Remove the active attempt registration for *flow_id*."""
+    def _try_register_attempt(self, flow_id: str, attempt_id: str) -> bool:
+        """原子化"无则登记":已有活跃尝试时返回 False(修 decide→register 间的
+        TOCTOU——两个近乎同时的触发都通过查重后并发跑两路恢复)。"""
         with self._lock:
+            if flow_id in self._active_attempts:
+                return False
+            self._active_attempts[flow_id] = attempt_id
+            return True
+
+    def _deregister_attempt(self, flow_id: str, attempt_id: str = "") -> None:
+        """Remove the active attempt registration for *flow_id*.
+
+        传入 attempt_id 时只有【属主】才能注销——否则抑制/完结一个重复尝试会把
+        真正在跑的恢复的登记也拆掉,守卫窗口提前打开。
+        """
+        with self._lock:
+            if attempt_id and self._active_attempts.get(flow_id) != attempt_id:
+                return
             self._active_attempts.pop(flow_id, None)
 
     # ------------------------------------------------------------------
@@ -1357,17 +1376,21 @@ class DelegatedFlowRecoveryCoordinator:
                 artifact_id=artifact.artifact_id,
             )
         else:
+            # 原子登记:decide() 的查重与这里的登记之间存在窗口(TOCTOU),两个
+            # 近乎同时的触发(如 session_reconnect 与 android_binding_lost)都可能
+            # 通过查重。输掉登记竞态的一方按"抑制重复"落账,绝不并发跑两路恢复。
+            won_registration = True
+            if ctx.flow_id:
+                won_registration = self._try_register_attempt(ctx.flow_id, attempt_id)
             attempt = RecoveryAttemptRecord(
                 attempt_id=attempt_id,
                 flow_id=ctx.flow_id,
                 flow_lineage_id=ctx.flow_lineage_id,
                 trigger=ctx.trigger,
-                state=RecoveryAttemptState.in_progress,
+                state=(RecoveryAttemptState.in_progress if won_registration else RecoveryAttemptState.suppressed),
                 action_decided=artifact.action,
                 artifact_id=artifact.artifact_id,
             )
-            if ctx.flow_id:
-                self._register_attempt(ctx.flow_id, attempt_id)
 
         self._record_attempt(attempt)
         return attempt, artifact
@@ -1397,7 +1420,7 @@ class DelegatedFlowRecoveryCoordinator:
         -------
         RecoveryAttemptRecord or None if not found.
         """
-        self._deregister_attempt(flow_id)
+        self._deregister_attempt(flow_id, attempt_id)
         with self._lock:
             for rec in reversed(list(self._attempt_log)):
                 if rec.attempt_id == attempt_id:
@@ -1420,7 +1443,7 @@ class DelegatedFlowRecoveryCoordinator:
         -------
         RecoveryAttemptRecord or None if not found.
         """
-        self._deregister_attempt(flow_id)
+        self._deregister_attempt(flow_id, attempt_id)
         with self._lock:
             for rec in reversed(list(self._attempt_log)):
                 if rec.attempt_id == attempt_id:

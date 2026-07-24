@@ -129,13 +129,17 @@ class ResultCache:
         self.ttl_seconds = ttl_seconds
         self._cache: Dict[str, Dict] = {}
     
-    def _make_key(self, query: str, source: str) -> str:
-        """Create cache key."""
-        return hashlib.md5(f"{source}:{query}".encode()).hexdigest()
-    
-    def get(self, query: str, source: str) -> Optional[List[SearchResult]]:
+    def _make_key(self, query: str, source: str, max_results: int = 0) -> str:
+        """Create cache key.
+
+        max_results is part of the key: otherwise a request for more results
+        after a smaller one returns the smaller cached set.
+        """
+        return hashlib.md5(f"{source}:{max_results}:{query}".encode()).hexdigest()
+
+    def get(self, query: str, source: str, max_results: int = 0) -> Optional[List[SearchResult]]:
         """Get cached results if valid."""
-        key = self._make_key(query, source)
+        key = self._make_key(query, source, max_results)
         
         if key not in self._cache:
             return None
@@ -149,9 +153,9 @@ class ResultCache:
         
         return entry['results']
     
-    def set(self, query: str, source: str, results: List[SearchResult]):
+    def set(self, query: str, source: str, results: List[SearchResult], max_results: int = 0):
         """Cache search results."""
-        key = self._make_key(query, source)
+        key = self._make_key(query, source, max_results)
         self._cache[key] = {
             'timestamp': datetime.now(),
             'results': results
@@ -224,7 +228,7 @@ class SearchIntegrator:
         (Google Custom Search, Bing API, etc.)
         """
         # Check cache
-        cached = self.cache.get(query, "web")
+        cached = self.cache.get(query, "web", max_results)
         if cached:
             self._stats['cache_hits'] += 1
             return cached
@@ -236,7 +240,7 @@ class SearchIntegrator:
             # In production, replace with actual API call
             results = self._simulate_web_search(query, max_results)
             
-            self.cache.set(query, "web", results)
+            self.cache.set(query, "web", results, max_results)
             self._stats['api_calls']['web'] += 1
             
             return results
@@ -294,7 +298,7 @@ class SearchIntegrator:
         Uses the ArXiv API to search for papers.
         """
         # Check cache
-        cached = self.cache.get(query, "arxiv")
+        cached = self.cache.get(query, "arxiv", max_results)
         if cached:
             self._stats['cache_hits'] += 1
             return cached
@@ -323,7 +327,7 @@ class SearchIntegrator:
                 xml_content = await response.text()
                 results = self._parse_arxiv_response(xml_content)
                 
-                self.cache.set(query, "arxiv", results)
+                self.cache.set(query, "arxiv", results, max_results)
                 self._stats['api_calls']['arxiv'] += 1
                 
                 return results
@@ -388,7 +392,7 @@ class SearchIntegrator:
         Uses the GitHub Search API.
         """
         # Check cache
-        cached = self.cache.get(query, "github")
+        cached = self.cache.get(query, "github", max_results)
         if cached:
             self._stats['cache_hits'] += 1
             return cached
@@ -419,7 +423,7 @@ class SearchIntegrator:
                 data = await response.json()
                 results = self._parse_github_response(data, search_type)
                 
-                self.cache.set(query, "github", results)
+                self.cache.set(query, "github", results, max_results)
                 self._stats['api_calls']['github'] += 1
                 
                 return results

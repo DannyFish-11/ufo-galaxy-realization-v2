@@ -71,6 +71,12 @@ class TaskManager:
                     data = json.load(f)
                     for task_data in data.get("tasks", []):
                         task = Task(**task_data)
+                        # 崩溃前处于 RUNNING 的任务:重启后已没有协程在跑,若原样保留
+                        # 会永久卡在 RUNNING。重置为 PENDING 重新入队(交由重试上限约束),
+                        # 让它恢复执行而非僵死。
+                        if task.status == TaskStatus.RUNNING:
+                            task.status = TaskStatus.PENDING
+                            task.started_at = None
                         self.tasks[task.id] = task
                         if task.status == TaskStatus.PENDING:
                             heapq.heappush(self.task_queue, (task.priority, task.created_at, task.id))
@@ -147,8 +153,16 @@ class TaskManager:
                 result = await handler(**task.params)
             else:
                 result = handler(**task.params)
+            # 执行期间若被 cancel_task 标记为 CANCELLED(同步 handler 或取消发生在
+            # 无 await 点),保留 CANCELLED,绝不覆盖为 COMPLETED。
+            if task.status == TaskStatus.CANCELLED:
+                return task
             task.result = result
             task.status = TaskStatus.COMPLETED
+        except asyncio.CancelledError:
+            # 被 cancel_task 中断:状态与持久化已由取消方写入,直接透传取消。
+            task.status = TaskStatus.CANCELLED
+            raise
         except Exception as e:
             logger.debug("Fallback triggered: %s", e)
             task.retry_count += 1
@@ -158,6 +172,8 @@ class TaskManager:
             else:
                 task.status = TaskStatus.FAILED
                 task.error = str(e)
+        finally:
+            self.running_tasks.pop(task_id, None)
 
         task.completed_at = datetime.now()
         await self._persist_tasks()
@@ -170,7 +186,9 @@ class TaskManager:
                 if self.task_queue:
                     _, _, task_id = heapq.heappop(self.task_queue)
                     if task_id in self.tasks and self.tasks[task_id].status == TaskStatus.PENDING:
-                        asyncio.create_task(self.execute_task(task_id))
+                        # 存入 running_tasks 才能被 cancel_task 真正中断;此前该字典从不填充,
+                        # 返回的 Task 被丢弃 → RUNNING 任务无法被取消。
+                        self.running_tasks[task_id] = asyncio.create_task(self.execute_task(task_id))
             await asyncio.sleep(0.1)
 
     def get_task(self, task_id: str) -> Optional[Task]:
@@ -193,6 +211,10 @@ class TaskManager:
                     if task_id in self.scheduled_tasks:
                         self.scheduled_tasks[task_id].cancel()
                         del self.scheduled_tasks[task_id]
+                    # 真正中断正在执行的协程(此前只改状态、协程继续跑并覆盖回 COMPLETED)。
+                    running = self.running_tasks.get(task_id)
+                    if running is not None and not running.done():
+                        running.cancel()
                     await self._persist_tasks()
                     return True
         return False

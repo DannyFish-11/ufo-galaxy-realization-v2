@@ -398,7 +398,9 @@ async def analyze_screen(request: AnalyzeScreenRequest) -> Dict[str, Any]:
             # 上传图片并获取 URL
             if request.image_path:
                 # 使用manus-upload-file 上传（subprocess 已在模块级导入）
-                result = subprocess.run(
+                # 阻塞子进程（timeout=60），放到线程池避免冻结事件循环
+                result = await asyncio.to_thread(
+                    subprocess.run,
                     ["manus-upload-file", request.image_path],
                     capture_output=True,
                     text=True, encoding="utf-8", errors="replace",
@@ -412,8 +414,9 @@ async def analyze_screen(request: AnalyzeScreenRequest) -> Dict[str, Any]:
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
                     tmp.write(image_data)
                     tmp_path = tmp.name
-                
-                result = subprocess.run(
+
+                result = await asyncio.to_thread(
+                    subprocess.run,
                     ["manus-upload-file", tmp_path],
                     capture_output=True,
                     text=True, encoding="utf-8", errors="replace",
@@ -421,19 +424,21 @@ async def analyze_screen(request: AnalyzeScreenRequest) -> Dict[str, Any]:
                 )
                 image_url = result.stdout.strip()
                 os.unlink(tmp_path)
-            
-            # 调用 Qwen3-VL
-            response = qwen_client.chat.completions.create(
-                model="qwen/qwen3-vl-32b-instruct",
-                messages=[{
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": request.query},
-                        {"type": "image_url", "image_url": {"url": image_url}}
-                    ]
-                }],
-                temperature=0.2,
-                max_tokens=2048
+
+            # 调用 Qwen3-VL（同步 SDK 的 HTTP 调用是阻塞的，放到线程池）
+            response = await asyncio.to_thread(
+                lambda: qwen_client.chat.completions.create(
+                    model="qwen/qwen3-vl-32b-instruct",
+                    messages=[{
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": request.query},
+                            {"type": "image_url", "image_url": {"url": image_url}}
+                        ]
+                    }],
+                    temperature=0.2,
+                    max_tokens=2048
+                )
             )
             
             return {
@@ -449,9 +454,12 @@ async def analyze_screen(request: AnalyzeScreenRequest) -> Dict[str, Any]:
                 return {"success": False, "error": "Gemini not available"}
             
             image = load_image(request.image_path, request.image_base64)
-            response = llm_client.models.generate_content(
-                model="gemini-2.0-flash-exp",
-                contents=[request.query, image]
+            # Gemini SDK 的 generate_content 是同步阻塞 HTTP 调用，放到线程池
+            response = await asyncio.to_thread(
+                lambda: llm_client.models.generate_content(
+                    model="gemini-2.0-flash-exp",
+                    contents=[request.query, image]
+                )
             )
             
             return {

@@ -632,10 +632,11 @@ def evaluate_device_lifecycle_stage(device_id: str) -> DeviceLifecycleRecord:
 
     # 1. 从 attached_runtime_session_registry 读取
     try:
-        from core.attached_runtime_session_registry import get_registry  # noqa: PLC0415
+        from core.attached_runtime_session_registry import lookup_session_by_device  # noqa: PLC0415
 
-        registry = get_registry()
-        entry = registry.lookup_session_by_device(device_id)
+        # lookup_session_by_device is a module-level helper (device_id, *, registry=None)
+        # that defaults to the singleton registry — not a method on the registry object.
+        entry = lookup_session_by_device(device_id)
         if entry is not None:
             websocket_connected = True
             registration_ack_success = True

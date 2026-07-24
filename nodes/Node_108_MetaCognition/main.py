@@ -295,9 +295,18 @@ class MetaCognitionEngine:
                     f"Reply with ONLY a JSON object: {{\"score\": 0.X}}\n\n"
                     f"Input: {text[:500]}"
                 )
-                loop = asyncio.get_running_loop()
-                if not loop.is_running():
-                    result = loop.run_until_complete(self._llm_analyze(prompt, None))
+                # get_running_loop() raises if there is no loop, and if it
+                # returns the loop IS running — so the old `if not
+                # loop.is_running()` was never true and this LLM path was dead
+                # code. Intent is non-blocking best-effort: run only when we are
+                # NOT already inside an event loop (safe to block briefly).
+                try:
+                    asyncio.get_running_loop()
+                    _in_loop = True
+                except RuntimeError:
+                    _in_loop = False
+                if not _in_loop:
+                    result = asyncio.run(self._llm_analyze(prompt, None))
                     if result and "score" in result:
                         llm_score = float(result["score"])
                         return max(0.0, min(1.0, (rule_score + llm_score) / 2))
@@ -343,9 +352,18 @@ class MetaCognitionEngine:
                     f"Each item: {{\"prediction\": \"...\", \"probability\": 0.X}}\n\n"
                     f"Context: {json.dumps(comprehension)[:800]}\n\nJSON array:"
                 )
-                loop = asyncio.get_running_loop()
-                if not loop.is_running():
-                    result = loop.run_until_complete(self._llm_analyze(prompt, None))
+                # get_running_loop() raises if there is no loop, and if it
+                # returns the loop IS running — so the old `if not
+                # loop.is_running()` was never true and this LLM path was dead
+                # code. Intent is non-blocking best-effort: run only when we are
+                # NOT already inside an event loop (safe to block briefly).
+                try:
+                    asyncio.get_running_loop()
+                    _in_loop = True
+                except RuntimeError:
+                    _in_loop = False
+                if not _in_loop:
+                    result = asyncio.run(self._llm_analyze(prompt, None))
                     if isinstance(result, list) and len(result) > 0:
                         return result
             except Exception as exc:
@@ -397,9 +415,18 @@ class MetaCognitionEngine:
                     f"Reply as JSON: {{\"insights\": [\"...\", ...]}}\n\n"
                     f"Observations: {json.dumps(observations)[:500]}"
                 )
-                loop = asyncio.get_running_loop()
-                if not loop.is_running():
-                    result = loop.run_until_complete(self._llm_analyze(prompt, None))
+                # get_running_loop() raises if there is no loop, and if it
+                # returns the loop IS running — so the old `if not
+                # loop.is_running()` was never true and this LLM path was dead
+                # code. Intent is non-blocking best-effort: run only when we are
+                # NOT already inside an event loop (safe to block briefly).
+                try:
+                    asyncio.get_running_loop()
+                    _in_loop = True
+                except RuntimeError:
+                    _in_loop = False
+                if not _in_loop:
+                    result = asyncio.run(self._llm_analyze(prompt, None))
                     if result and "insights" in result and len(result["insights"]) > 0:
                         return result["insights"]
             except Exception as exc:
@@ -425,9 +452,18 @@ class MetaCognitionEngine:
                     f"Reply as JSON: {{\"actions\": [\"...\", ...]}}\n\n"
                     f"Insights: {json.dumps(insights)[:500]}"
                 )
-                loop = asyncio.get_running_loop()
-                if not loop.is_running():
-                    result = loop.run_until_complete(self._llm_analyze(prompt, None))
+                # get_running_loop() raises if there is no loop, and if it
+                # returns the loop IS running — so the old `if not
+                # loop.is_running()` was never true and this LLM path was dead
+                # code. Intent is non-blocking best-effort: run only when we are
+                # NOT already inside an event loop (safe to block briefly).
+                try:
+                    asyncio.get_running_loop()
+                    _in_loop = True
+                except RuntimeError:
+                    _in_loop = False
+                if not _in_loop:
+                    result = asyncio.run(self._llm_analyze(prompt, None))
                     if result and "actions" in result and len(result["actions"]) > 0:
                         return result["actions"]
             except Exception as exc:

@@ -5,8 +5,10 @@ Node 14: FFmpeg - 视频处理节点
 """
 import os
 import json
+import asyncio
 import subprocess
 import tempfile
+from functools import partial
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 from pathlib import Path
@@ -181,14 +183,17 @@ async def node_status():
 async def convert_video(request: ConvertRequest):
     """转换视频"""
     try:
-        result = ffmpeg_manager.convert(
-            request.input_path, 
-            request.output_path,
-            format=request.format,
-            video_codec=request.video_codec,
-            audio_codec=request.audio_codec,
-            resolution=request.resolution,
-            bitrate=request.bitrate
+        result = await asyncio.to_thread(
+            partial(
+                ffmpeg_manager.convert,
+                request.input_path,
+                request.output_path,
+                format=request.format,
+                video_codec=request.video_codec,
+                audio_codec=request.audio_codec,
+                resolution=request.resolution,
+                bitrate=request.bitrate,
+            )
         )
         return result
     except Exception as e:
@@ -198,11 +203,12 @@ async def convert_video(request: ConvertRequest):
 async def clip_video(request: ClipRequest):
     """剪辑视频"""
     try:
-        result = ffmpeg_manager.clip(
+        result = await asyncio.to_thread(
+            ffmpeg_manager.clip,
             request.input_path,
             request.output_path,
             request.start_time,
-            request.duration
+            request.duration,
         )
         return result
     except Exception as e:
@@ -212,10 +218,11 @@ async def clip_video(request: ClipRequest):
 async def extract_audio(request: ExtractAudioRequest):
     """提取音频"""
     try:
-        result = ffmpeg_manager.extract_audio(
+        result = await asyncio.to_thread(
+            ffmpeg_manager.extract_audio,
             request.input_path,
             request.output_path,
-            request.audio_format
+            request.audio_format,
         )
         return result
     except Exception as e:
@@ -225,7 +232,9 @@ async def extract_audio(request: ExtractAudioRequest):
 async def screenshot(input_path: str, output_path: str, timestamp: str = "00:00:01"):
     """视频截图"""
     try:
-        result = ffmpeg_manager.screenshot(input_path, output_path, timestamp)
+        result = await asyncio.to_thread(
+            ffmpeg_manager.screenshot, input_path, output_path, timestamp
+        )
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -234,7 +243,7 @@ async def screenshot(input_path: str, output_path: str, timestamp: str = "00:00:
 async def get_media_info(input_path: str):
     """获取媒体信息"""
     try:
-        info = ffmpeg_manager.get_media_info(input_path)
+        info = await asyncio.to_thread(ffmpeg_manager.get_media_info, input_path)
         return info
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

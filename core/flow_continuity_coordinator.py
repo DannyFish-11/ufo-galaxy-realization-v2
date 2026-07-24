@@ -896,6 +896,16 @@ class FlowContinuityCoordinator:
                     return artifact
         return None
 
+    def has_replay_contract_gap(self) -> bool:
+        """治理信号:是否存在【连续性/重放契约缺口】。
+
+        供 post_graduation_governance 的 continuity_replay 维度探针直接调用。本
+        协调器当前无显式的"契约缺口"健康位,decision_counts 里的 stale/rejected 属
+        正常的连续性策略执行(非缺口),故不臆造回归信号,保守返回 False(该维度按
+        "监控在位、无显式缺口信号"处理)。留此方法是为让探针走真实对象而非死 import。
+        """
+        return False
+
     def build_snapshot(self) -> ContinuityCoordinatorSnapshot:
         """Return a lightweight snapshot for operator diagnostics."""
         with self._lock:

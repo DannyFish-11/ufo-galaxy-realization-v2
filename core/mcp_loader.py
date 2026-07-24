@@ -524,13 +524,16 @@ class MCPLoader:
             params=params or {},
         )
 
-        try:
-            # 发送请求
+        def _blocking_roundtrip() -> str:
+            # 阻塞式 stdin.write/flush + stdout.readline 必须在线程中执行，
+            # 否则会冻结整个 asyncio 事件循环（readline 可能无限阻塞）。
             server.process.stdin.write((request.to_json() + "\n").encode())
             server.process.stdin.flush()
+            return server.process.stdout.readline().decode()
 
-            # 读取响应
-            response_line = server.process.stdout.readline().decode()
+        try:
+            # 发送请求 + 读取响应（阻塞 I/O 卸载到线程）
+            response_line = await asyncio.to_thread(_blocking_roundtrip)
             if response_line:
                 return MCPResponse.from_json(response_line)
 
@@ -599,8 +602,12 @@ class MCPLoader:
             "params": params or {},
         }
 
-        server.process.stdin.write((json.dumps(notification) + "\n").encode())
-        server.process.stdin.flush()
+        def _blocking_write() -> None:
+            # 阻塞式 stdin.write/flush 卸载到线程，避免冻结事件循环。
+            server.process.stdin.write((json.dumps(notification) + "\n").encode())
+            server.process.stdin.flush()
+
+        await asyncio.to_thread(_blocking_write)
 
     async def _refresh_tools(self, server_id: str):
         """刷新工具列表"""

@@ -82,6 +82,7 @@ surfaces it in the response so the runtime shell can log it against
 """
 
 import asyncio as _asyncio_module
+import contextvars
 import logging
 import time
 import uuid
@@ -779,6 +780,69 @@ def _resolve_intent_name_for_inference(parsed_intent: object, intent_type: str) 
     return ""
 
 
+# ---------------------------------------------------------------------------
+# PR-CTXVAR: 每请求身份的 contextvars 隔离
+# ---------------------------------------------------------------------------
+# OpenClawd 是进程级单例;此前 process() 把每请求身份(下方 7 个 _current_* 字段)
+# 写在【普通实例属性】上,而写点与读点(_dispatch_tool_call、事件上报等)之间隔着
+# 大量 await → 并发请求互相覆盖,请求 A 可能读到请求 B 的身份(串号)。
+#
+# 修复:字段改由 ContextVar 承载,每个 asyncio 任务(= 每个请求)只看到自己写入的
+# 值;wait_for / create_task / asyncio.to_thread 在创建时复制上下文,子任务自然继承
+# 父请求身份。类上用数据描述符保持 `self._current_x` 的读写语法与 getattr 行为完全
+# 不变,openclawd 内 20+ 个既有站点与外部测试套件均无需改动。
+#
+# 默认值对齐既有读点契约:device/session/control/runtime_attach 为 ""(读点形如
+# `getattr(self, "_current_device_id", "")`),trace/posture/hint 为 None(读点形如
+# `getattr(self, "_current_trace_id", None)` 或 or-链)。
+#
+# 注意:裸 loop.run_in_executor 不复制 contextvars(asyncio.to_thread 会);当前
+# 全部读点都在 async 主链或 to_thread 内,无该路径。新增读点请勿经裸 executor 读取。
+
+_CTX_CURRENT_TRACE_ID: "contextvars.ContextVar[Any]" = contextvars.ContextVar(
+    "openclawd_current_trace_id", default=None
+)
+_CTX_CURRENT_SESSION_ID: "contextvars.ContextVar[Any]" = contextvars.ContextVar(
+    "openclawd_current_session_id", default=""
+)
+_CTX_CURRENT_DEVICE_ID: "contextvars.ContextVar[Any]" = contextvars.ContextVar(
+    "openclawd_current_device_id", default=""
+)
+_CTX_CURRENT_CONTROL_SESSION_ID: "contextvars.ContextVar[Any]" = contextvars.ContextVar(
+    "openclawd_current_control_session_id", default=""
+)
+_CTX_CURRENT_RUNTIME_ATTACHMENT_SESSION_ID: "contextvars.ContextVar[Any]" = contextvars.ContextVar(
+    "openclawd_current_runtime_attachment_session_id", default=""
+)
+_CTX_CURRENT_SOURCE_RUNTIME_POSTURE: "contextvars.ContextVar[Any]" = contextvars.ContextVar(
+    "openclawd_current_source_runtime_posture", default=None
+)
+_CTX_CURRENT_COGNITIVE_EXECUTION_HINT: "contextvars.ContextVar[Any]" = contextvars.ContextVar(
+    "openclawd_current_cognitive_execution_hint", default=None
+)
+
+
+class _ContextIdentityField:
+    """ContextVar 数据描述符:让 ``self._current_x`` 读写落到上下文局部存储。
+
+    数据描述符(定义了 ``__set__``)优先于实例 ``__dict__``,因此
+    ``oc._current_x = v`` 不会在实例上创建普通属性,而是写入当前上下文。
+    """
+
+    __slots__ = ("_var",)
+
+    def __init__(self, var: "contextvars.ContextVar[Any]") -> None:
+        self._var = var
+
+    def __get__(self, obj: Any, objtype: Any = None) -> Any:
+        if obj is None:
+            return self
+        return self._var.get()
+
+    def __set__(self, obj: Any, value: Any) -> None:
+        self._var.set(value)
+
+
 class OpenClawd:
     """Subject Core — Cognition, Execution Branching, and Manifestation
 
@@ -959,6 +1023,17 @@ class OpenClawd:
     # LLM function calling APIs typically recommend ≤ 128 tools to avoid
     # context overflow; keep this value in sync with that constraint.
     NODE_DYNAMIC_TOOL_LIMIT: int = 128
+
+    # ── PR-CTXVAR: 每请求身份(上下文局部,见 class 定义前的说明块) ─────────
+    # process() 打戳、_dispatch_tool_call 等读取的 7 个身份字段。数据描述符使
+    # `self._current_x` 读写落到 ContextVar,并发请求彼此隔离、子任务自动继承。
+    _current_trace_id = _ContextIdentityField(_CTX_CURRENT_TRACE_ID)
+    _current_session_id = _ContextIdentityField(_CTX_CURRENT_SESSION_ID)
+    _current_device_id = _ContextIdentityField(_CTX_CURRENT_DEVICE_ID)
+    _current_control_session_id = _ContextIdentityField(_CTX_CURRENT_CONTROL_SESSION_ID)
+    _current_runtime_attachment_session_id = _ContextIdentityField(_CTX_CURRENT_RUNTIME_ATTACHMENT_SESSION_ID)
+    _current_source_runtime_posture = _ContextIdentityField(_CTX_CURRENT_SOURCE_RUNTIME_POSTURE)
+    _current_cognitive_execution_hint = _ContextIdentityField(_CTX_CURRENT_COGNITIVE_EXECUTION_HINT)
 
     def __init__(self):
         self._initialized = False
@@ -4000,7 +4075,9 @@ class OpenClawd:
         except Exception as exc:
             _logger.warning("Exception suppressed: %s", exc)
 
-        # PR-8: store trace/session on self so _dispatch_tool_call can read them.
+        # PR-8: stamp trace/session so _dispatch_tool_call can read them.
+        # PR-CTXVAR: 这些字段是 ContextVar 数据描述符(见类定义前说明)——写入只落在
+        # 当前请求的上下文,并发请求彼此隔离,经 wait_for/create_task 派生的子任务继承。
         self._current_trace_id = trace_id
         self._current_session_id = session_id
         self._current_device_id = device_id or ""
@@ -4034,14 +4111,13 @@ class OpenClawd:
             except Exception as exc:
                 _logger.warning("Exception suppressed: %s", exc)
 
-        # PR-001: Sync dispatcher context so per-call dispatch() calls inherit
-        # the current request's device/session/trace without needing explicit kwargs.
-        _dispatcher = getattr(self, "_capability_dispatcher", None)
-        if _dispatcher is not None:
-            _dispatcher.device_id = self._current_device_id
-            _dispatcher.session_id = session_id or ""
-            _dispatcher.trace_id = trace_id or ""
-
+        # PR-001 修复(并发污染):此前把本次请求的 device/session/trace 写到【共享单例】
+        # dispatcher 的实例字段上。OpenClawd 是进程级单例,并发请求会互相覆盖这些字段,
+        # 且写入点与后续读取点之间隔着 await → 请求 A 可能读到请求 B 的身份。经核实,唯一
+        # 的 dispatch() 调用点(见下方 ~7001)已在【每次调用】显式传入 device_id/session_id/
+        # trace_id 覆盖参数,dispatcher 实例字段从不被读取。故这段共享写入是纯粹的并发隐患
+        # 且毫无收益,直接删除。
+        #
         # Priority order is explicit:
         #   1. session_identity.conversation_session_id (canonical ingress bridge)
         #   2. session_id argument (legacy caller field, now treated as conversation ID)
@@ -8054,6 +8130,17 @@ class OpenClawd:
                     assistant_msg["tool_calls"] = response.tool_calls
                 messages.append(assistant_msg)
 
+                def _answer_remaining_tool_calls(note: str) -> None:
+                    # 保证本条 assistant 消息里【每一个】tool_call 都有配对的 tool 响应。
+                    # 提前 break 内层循环(限频/重复检测)会把后续兄弟 tool_call 落下,
+                    # 下一轮 chat_with_tools 就会因 "tool_calls 必须被逐一 tool 消息响应"
+                    # 报错。这里对所有尚未响应的 tool_call_id 补一条同样的系统提示。幂等。
+                    _answered = {m.get("tool_call_id") for m in messages if m.get("role") == "tool"}
+                    for _sib in response.tool_calls:
+                        _sid = _sib.get("id", "")
+                        if _sid and _sid not in _answered:
+                            messages.append({"role": "tool", "tool_call_id": _sid, "content": note})
+
                 for tc in response.tool_calls:
                     tc_func = tc.get("function", {})
                     tc_name = tc_func.get("name", "")
@@ -8097,12 +8184,8 @@ class OpenClawd:
                     _total_tool_calls += 1
                     if _total_tool_calls > _MAX_TOOL_CALLS:
                         logger.warning(f"ReAct 工具调用总次数超限 ({_MAX_TOOL_CALLS})，强制终止")
-                        messages.append(
-                            {
-                                "role": "tool",
-                                "tool_call_id": tc_id,
-                                "content": f"[系统] 工具调用次数已达上限 ({_MAX_TOOL_CALLS})，请直接给出最终回答",
-                            }
+                        _answer_remaining_tool_calls(
+                            f"[系统] 工具调用次数已达上限 ({_MAX_TOOL_CALLS})，请直接给出最终回答"
                         )
                         break
 
@@ -8111,13 +8194,7 @@ class OpenClawd:
                         _consecutive_same[tc_name] = _consecutive_same.get(tc_name, 1) + 1
                         if _consecutive_same[tc_name] >= 3:
                             logger.warning(f"连续调用同一工具 {tc_name} 达 3 次，疑似幻觉循环，终止")
-                            messages.append(
-                                {
-                                    "role": "tool",
-                                    "tool_call_id": tc_id,
-                                    "content": f"[系统] 检测到重复调用 {tc_name}，请直接给出最终回答",
-                                }
-                            )
+                            _answer_remaining_tool_calls(f"[系统] 检测到重复调用 {tc_name}，请直接给出最终回答")
                             break
                     else:
                         _consecutive_same.clear()
@@ -8574,13 +8651,19 @@ class OpenClawd:
 
             # 判断是否需要团队协作 (复杂度驱动)
             tools = self._collect_tools()
-            cv = router._compute_complexity_vector(
-                [{"role": "user", "content": message}],
-                tools if tools else None,
-            )
+            # PR-3: 通过统一入口 compute_complexity_vector() 计算复杂度向量。直接调用
+            # 私有 _compute_complexity_vector() 在 UnifiedLLMRouter 上并不存在(它只暴露
+            # 公有代理方法),会抛 AttributeError;与本文件其它站点(见 ~8326、~8690)
+            # 保持一致的守卫写法,并对 cv 为空做保护。
+            cv = None
+            _cv_msgs = [{"role": "user", "content": message}]
+            if hasattr(router, "compute_complexity_vector"):
+                cv = router.compute_complexity_vector(_cv_msgs, tools if tools else None)
+            elif hasattr(router, "_compute_complexity_vector"):
+                cv = router._compute_complexity_vector(_cv_msgs, tools if tools else None)
             targets = intent.targets if intent else []
             is_complex = (
-                cv.weighted_score >= 0.6
+                (cv is not None and cv.weighted_score >= 0.6)
                 or len(targets) > 2
                 or (intent and intent.intent in ("workflow", "batch_task", "multi_device"))
             )

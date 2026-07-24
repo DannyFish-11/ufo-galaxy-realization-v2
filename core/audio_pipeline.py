@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from typing import Any, Dict, Optional
 
 logger = logging.getLogger("Galaxy.AudioPipeline")
@@ -87,6 +88,10 @@ _DEFAULT_PROMPT = "请听这段音频并简要描述/转写其内容（说话人
 class AudioPipeline:
     """原生音频理解：把音频字节送给音频能力模型，返回文本理解/转写。"""
 
+    # 探测到的本地音频模型 tag 的缓存有效期(秒)。到期后重探,以便及时反映
+    # pull 新模型 / 删模型 / 换档等变化,而不是永久沿用首次探测的旧 tag。
+    _OLLAMA_AUDIO_MODEL_TTL_S: float = 300.0
+
     def __init__(self, config: Optional[Dict] = None):
         self.config = config or {}
         # Gemini（与 VisionPipeline 同源 key）
@@ -111,7 +116,10 @@ class AudioPipeline:
 
         self.ollama_base = resolve_ollama_base_url(self.config.get("ollama_base"))
         self.local_audio_enabled = os.getenv("GALAXY_LOCAL_AUDIO", "1").strip().lower() in ("1", "true", "yes", "on")
+        # 探测到的本地音频模型 tag 带 TTL 缓存:换档/pull 新模型/删模型后需重探,
+        # 否则会永久沿用旧 tag。到期后 _call_ollama_audio 会重新探测并采用新结果。
         self._ollama_audio_model: Optional[str] = None
+        self._ollama_audio_model_ts: float = 0.0
         self._client = None
 
     def available(self) -> bool:
@@ -187,10 +195,16 @@ class AudioPipeline:
     async def _call_ollama_audio(self, audio_base64: str, mime: str, prompt: str) -> Optional[str]:
         """经 Ollama 的 OpenAI 兼容端点把音频送本地 MiniCPM-o（input_audio content block）。"""
         try:
-            model = self._ollama_audio_model or await self._detect_ollama_audio_model()
+            now = time.monotonic()
+            model = self._ollama_audio_model
+            # 缓存为空或已过 TTL → 重探,并采用最新结果(可能变更/清空),
+            # 从而在 pull/删模型/换档后不再沿用旧 tag。
+            if not model or (now - self._ollama_audio_model_ts) > self._OLLAMA_AUDIO_MODEL_TTL_S:
+                model = await self._detect_ollama_audio_model()
+                self._ollama_audio_model = model
+                self._ollama_audio_model_ts = now
             if not model:
                 return None
-            self._ollama_audio_model = model
             client = await self._get_client()
             payload = build_openai_audio_payload(audio_base64, mime, prompt, model)
             resp = await client.post(

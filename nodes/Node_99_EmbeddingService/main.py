@@ -51,6 +51,7 @@ _start_time = datetime.now()
 
 # In-process embedding cache (fallback when Redis is unavailable)
 _local_cache: Dict[str, List[float]] = {}
+_LOCAL_CACHE_MAX = 10000  # bound the fallback cache to avoid unbounded growth
 
 app = FastAPI(title=f"Node {NODE_ID} - {NODE_NAME}", version="1.0.0")
 app.add_middleware(
@@ -107,6 +108,10 @@ def _cache_set(key: str, vector: List[float]) -> None:
         except Exception as exc:
             logger.warning("Exception suppressed: %s", exc)
     _local_cache[key] = vector
+    # Bound the in-process fallback cache (FIFO: drop oldest insertions).
+    if len(_local_cache) > _LOCAL_CACHE_MAX:
+        for old_key in list(_local_cache.keys())[: len(_local_cache) - _LOCAL_CACHE_MAX]:
+            _local_cache.pop(old_key, None)
 
 # ---------------------------------------------------------------------------
 # OpenAI embedding helper

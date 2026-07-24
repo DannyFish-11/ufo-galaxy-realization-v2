@@ -9,6 +9,7 @@ import time
 from typing import Dict, List, Any, Optional, Callable
 from dataclasses import dataclass, field
 from enum import Enum
+from collections import deque
 
 logger = logging.getLogger(__name__)
 
@@ -91,8 +92,9 @@ class SafetyManager:
         self.thresholds = thresholds or SafetyThresholds()
         self.safety_rules: Dict[str, SafetyRule] = {}
         self.recovery_actions: Dict[str, RecoveryAction] = {}
-        self.violations: List[SafetyViolation] = []
-        self.recovery_history: List[Dict] = []
+        # bounded (auto-evict oldest) — these accumulate for the process lifetime
+        self.violations: "deque[SafetyViolation]" = deque(maxlen=10000)
+        self.recovery_history: "deque[Dict]" = deque(maxlen=10000)
 
         # 初始化默认安全规则
         self._initialize_default_rules()
@@ -219,7 +221,9 @@ class SafetyManager:
         device_state = context.get("device_state", {})
         battery = device_state.get("battery", 100.0)
         
-        min_battery = context.get("min_battery", 20.0)
+        # 优先 context 覆盖,否则用【配置的】阈值,而不是写死的 20.0
+        # (与 _check_altitude 用 self.thresholds.max_altitude 的方式一致)。
+        min_battery = context.get("min_battery", self.thresholds.min_battery)
         
         if battery < min_battery:
             return False, f"电池电量过低: {battery}% (最低要求: {min_battery}%)"
@@ -293,25 +297,37 @@ class SafetyManager:
         
         logger.info(f"选择恢复策略: {recovery_strategy.value}")
         
+        # 统一返回 {"recovered": bool, "strategy": str, "result": Any}。
+        # recovered 由显式成功标志决定,而不是 result 的真假值——否则:
+        #  - 成功但返回假值的 RETRY/FALLBACK 会被误判为失败;
+        #  - ABORT/MANUAL 返回真值 dict 会被误判为"已恢复成功"(其实是中止/待人工)。
         if recovery_strategy == RecoveryStrategy.RETRY:
-            return await self._retry_action(context)
-        
+            ok, result = await self._retry_action(context)
+            return {"recovered": ok, "strategy": RecoveryStrategy.RETRY.value, "result": result}
+
         elif recovery_strategy == RecoveryStrategy.FALLBACK:
-            return await self._execute_fallback(context)
-        
+            ok, result = await self._execute_fallback(context)
+            return {"recovered": ok, "strategy": RecoveryStrategy.FALLBACK.value, "result": result}
+
         elif recovery_strategy == RecoveryStrategy.SKIP:
             logger.info("跳过当前动作")
-            return {"status": "skipped", "reason": str(error)}
-        
+            # 跳过属于"已按策略处置",视为已恢复(有意跳过)。
+            return {"recovered": True, "strategy": RecoveryStrategy.SKIP.value,
+                    "result": {"status": "skipped", "reason": str(error)}}
+
         elif recovery_strategy == RecoveryStrategy.ABORT:
             logger.critical("中止执行")
-            return {"status": "aborted", "reason": str(error)}
-        
+            # 中止不是恢复。
+            return {"recovered": False, "strategy": RecoveryStrategy.ABORT.value,
+                    "result": {"status": "aborted", "reason": str(error)}}
+
         elif recovery_strategy == RecoveryStrategy.MANUAL:
             logger.warning("需要手动介入")
-            return {"status": "manual_required", "reason": str(error)}
-        
-        return None
+            # 需要人工介入不是自动恢复。
+            return {"recovered": False, "strategy": RecoveryStrategy.MANUAL.value,
+                    "result": {"status": "manual_required", "reason": str(error)}}
+
+        return {"recovered": False, "strategy": "none", "result": None}
     
     def _determine_recovery_strategy(self, error: Exception, context: Dict[str, Any]) -> RecoveryStrategy:
         """确定恢复策略"""
@@ -333,23 +349,27 @@ class SafetyManager:
         else:
             return RecoveryStrategy.RETRY
     
-    async def _retry_action(self, context: Dict[str, Any]) -> Optional[Any]:
-        """重试动作"""
+    async def _retry_action(self, context: Dict[str, Any]) -> tuple[bool, Any]:
+        """重试动作。
+
+        返回 (succeeded, result)。用显式成功标志而非 result 的真假值判定,
+        否则动作成功但返回假值(None/空/0)会被误判为恢复失败。
+        """
         max_retries = context.get("max_retries", 3)
         retry_delay = context.get("retry_delay", 1.0)
         action_function = context.get("action_function")
-        
+
         if not action_function:
             logger.error("未提供动作函数，无法重试")
-            return None
-        
+            return False, None
+
         for attempt in range(1, max_retries + 1):
             logger.info(f"重试 {attempt}/{max_retries}...")
-            
+
             try:
                 result = await action_function()
                 logger.info("重试成功")
-                
+
                 # 记录恢复历史
                 self.recovery_history.append({
                     "timestamp": time.time(),
@@ -357,17 +377,17 @@ class SafetyManager:
                     "attempts": attempt,
                     "success": True
                 })
-                
-                return result
-            
+
+                return True, result
+
             except Exception as e:
                 logger.warning(f"重试 {attempt} 失败: {e}")
-                
+
                 if attempt < max_retries:
                     await asyncio.sleep(retry_delay)
                 else:
                     logger.error("所有重试都失败")
-                    
+
                     # 记录恢复历史
                     self.recovery_history.append({
                         "timestamp": time.time(),
@@ -376,34 +396,34 @@ class SafetyManager:
                         "success": False,
                         "error": str(e)
                     })
-        
-        return None
+
+        return False, None
     
-    async def _execute_fallback(self, context: Dict[str, Any]) -> Optional[Any]:
-        """执行后备方案"""
+    async def _execute_fallback(self, context: Dict[str, Any]) -> tuple[bool, Any]:
+        """执行后备方案。返回 (succeeded, result)（成功标志与返回值解耦）。"""
         fallback_function = context.get("fallback_function")
-        
+
         if not fallback_function:
             logger.warning("未提供后备方案函数")
-            return None
-        
+            return False, None
+
         try:
             logger.info("执行后备方案...")
             result = await fallback_function()
             logger.info("后备方案执行成功")
-            
+
             # 记录恢复历史
             self.recovery_history.append({
                 "timestamp": time.time(),
                 "strategy": RecoveryStrategy.FALLBACK.value,
                 "success": True
             })
-            
-            return result
-        
+
+            return True, result
+
         except Exception as e:
             logger.error(f"后备方案执行失败: {e}")
-            
+
             # 记录恢复历史
             self.recovery_history.append({
                 "timestamp": time.time(),
@@ -411,8 +431,8 @@ class SafetyManager:
                 "success": False,
                 "error": str(e)
             })
-            
-            return None
+
+            return False, None
     
     def get_violations(self, level: Optional[SafetyLevel] = None, limit: int = 100) -> List[SafetyViolation]:
         """获取违规列表"""
@@ -425,7 +445,7 @@ class SafetyManager:
     
     def get_recovery_history(self, limit: int = 100) -> List[Dict]:
         """获取恢复历史"""
-        return self.recovery_history[-limit:]
+        return list(self.recovery_history)[-limit:]
     
     def get_summary(self) -> Dict[str, Any]:
         """获取安全摘要"""
@@ -461,7 +481,7 @@ class ErrorHandler:
             safety_manager: 安全管理器实例
         """
         self.safety_manager = safety_manager
-        self.error_history: List[Dict] = []
+        self.error_history: "deque[Dict]" = deque(maxlen=10000)  # bounded
         
         logger.info("ErrorHandler 初始化完成")
     
@@ -490,27 +510,32 @@ class ErrorHandler:
         }
         self.error_history.append(error_record)
         
-        # 尝试恢复
-        recovery_result = await self.safety_manager.handle_error(error, context)
-        
-        if recovery_result:
-            logger.info(f"错误恢复成功: {action_id}")
+        # 尝试恢复。handle_error 现在返回 {"recovered": bool, "strategy", "result"};
+        # 用显式 recovered 判定,而不是返回值真假(ABORT/MANUAL 返回真值 dict 但
+        # 并非恢复;成功但返回假值的 RETRY 也不该被判为失败)。
+        recovery = await self.safety_manager.handle_error(error, context)
+        recovery = recovery or {"recovered": False, "strategy": "none", "result": None}
+
+        if recovery.get("recovered"):
+            logger.info(f"错误恢复成功: {action_id} (strategy={recovery.get('strategy')})")
             return {
                 "success": True,
                 "status": "recovered",
-                "recovery_result": recovery_result
+                "strategy": recovery.get("strategy"),
+                "recovery_result": recovery.get("result"),
             }
         else:
-            logger.error(f"错误恢复失败: {action_id}")
+            logger.error(f"错误恢复失败: {action_id} (strategy={recovery.get('strategy')})")
             return {
                 "success": False,
-                "status": "recovery_failed",
-                "error": str(error)
+                "status": recovery.get("strategy") or "recovery_failed",
+                "error": str(error),
+                "recovery_result": recovery.get("result"),
             }
     
     def get_error_history(self, limit: int = 100) -> List[Dict]:
         """获取错误历史"""
-        return self.error_history[-limit:]
+        return list(self.error_history)[-limit:]
     
     def get_error_statistics(self) -> Dict[str, Any]:
         """获取错误统计"""

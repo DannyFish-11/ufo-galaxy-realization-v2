@@ -26,6 +26,7 @@ core.hardware_aware_multimodal_router — 硬件感知多模态优先路由器
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import time
@@ -360,7 +361,8 @@ class HardwareAwareMultimodalRouter:
         # 来之前就被实例化(单例、启动早期常见),之后就会【永久】判定 Ollama
         # 不可用,整个进程生命周期都跳过本地、直接落到 HF/API —— 这里跟着同一
         # 60s 缓存周期一起刷新,而不是只信构造时那一次性探测。
-        self._ollama_available = self._check_ollama()
+        # _check_ollama 是同步探测(socket/httpx),放线程,别在 async 里阻塞循环。
+        self._ollama_available = await asyncio.to_thread(self._check_ollama)
 
         models: Dict[str, List[Dict]] = {"llm": [], "vlm": [], "asr": [], "embedding": []}
 
@@ -370,7 +372,9 @@ class HardwareAwareMultimodalRouter:
                 import httpx
 
                 base = _ollama_base_url()
-                resp = httpx.get(f"{base}/api/tags", timeout=3.0)
+                # async 方法里同步 httpx.get 会阻塞事件循环——用 AsyncClient。
+                async with httpx.AsyncClient(timeout=3.0) as client:
+                    resp = await client.get(f"{base}/api/tags")
                 if resp.status_code == 200:
                     for m in resp.json().get("models", []):
                         models["llm"].append(

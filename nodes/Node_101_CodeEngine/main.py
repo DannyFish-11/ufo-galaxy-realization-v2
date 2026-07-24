@@ -426,13 +426,16 @@ class CodeReviewer:
         
         # 2. 使用 pylint 检查（如果可用）
         if language == "python":
+            # 写入临时文件。用 try/finally 保证清理:原来 os.unlink 只在成功路径执行,
+            # 一旦 subprocess/json.loads 抛异常(pylint 缺失、超时等)就跳到 except 而
+            # 漏删,临时文件随每次审查泄漏。
+            import tempfile
+            temp_file = None
             try:
-                # 写入临时文件
-                import tempfile
                 with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
                     f.write(code)
                     temp_file = f.name
-                
+
                 # 运行 pylint
                 result = subprocess.run(
                     ['pylint', temp_file, '--output-format=json'],
@@ -440,7 +443,7 @@ class CodeReviewer:
                     text=True, encoding="utf-8", errors="replace",
                     timeout=10
                 )
-                
+
                 # 解析结果
                 if result.stdout:
                     pylint_issues = json.loads(result.stdout)
@@ -451,12 +454,15 @@ class CodeReviewer:
                             "line": issue.get("line", 0),
                             "severity": "medium"
                         })
-                
-                # 删除临时文件
-                os.unlink(temp_file)
-            
+
             except Exception as e:
                 pass  # pylint 不可用或执行失败
+            finally:
+                if temp_file and os.path.exists(temp_file):
+                    try:
+                        os.unlink(temp_file)
+                    except OSError:
+                        pass
         
         # 3. 使用 LLM 审查（如果可用）
         if DEEPSEEK_API_KEY:
@@ -543,7 +549,11 @@ async def parse_code(request: ParseCodeRequest) -> Dict[str, Any]:
 @app.post("/understand_code")
 async def understand_code(request: UnderstandCodeRequest) -> Dict[str, Any]:
     """理解代码"""
-    result = code_understanding.understand(request.code, request.language, request.question)
+    # understand() 内部 _answer_question 走同步 httpx.post(长超时),直接在事件循环里
+    # 跑会冻结整个节点。卸载到线程。
+    result = await asyncio.to_thread(
+        code_understanding.understand, request.code, request.language, request.question
+    )
     return {
         "success": True,
         **result

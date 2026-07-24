@@ -1,9 +1,30 @@
 import os, subprocess, json
+import re
+import asyncio
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+
+# Only these remote transports are allowed for clone. git's local-command
+# transports (ext::, fd::, file://) can execute arbitrary commands on the
+# server, so a user-supplied clone URL using them is an RCE vector.
+_SAFE_URL_SCHEMES = ("https://", "http://", "git://", "ssh://")
+_SCP_LIKE = re.compile(r"^[A-Za-z0-9_.-]+@[A-Za-z0-9_.-]+:")
+
+
+def _validate_clone_url(url: str) -> Optional[str]:
+    """Return an error string if the clone URL is unsafe, else None."""
+    u = (url or "").strip()
+    if not u or u.startswith("-"):
+        return "invalid repository URL"
+    low = u.lower()
+    if "::" in u or low.startswith(("ext::", "fd::", "file://")):
+        return "unsupported/unsafe URL transport"
+    if not (low.startswith(_SAFE_URL_SCHEMES) or _SCP_LIKE.match(u)):
+        return "URL must use http(s)://, git://, ssh:// or user@host:path"
+    return None
 
 app = FastAPI(title='Node 07 - Git', version='3.0.0', description='Complete Git operations with branch, tag, log, and diff support')
 app.add_middleware(CORSMiddleware, allow_origins=['*'], allow_credentials=True, allow_methods=['*'], allow_headers=['*'])
@@ -18,12 +39,12 @@ class GitRequest(BaseModel):
     remote: Optional[str] = 'origin'
     files: Optional[List[str]] = None
 
-def run_git(repo_path: str, args: list, timeout: int = 60) -> dict:
-    """执行 Git 命令"""
+def _run_git_blocking(repo_path: str, args: list, timeout: int = 60) -> dict:
+    """执行 Git 命令(阻塞;经 run_git 在线程池中调用)"""
     try:
         if not os.path.exists(repo_path):
             return {'success': False, 'error': f'Repository path does not exist: {repo_path}'}
-        
+
         result = subprocess.run(
             ['git'] + args,
             cwd=repo_path,
@@ -42,10 +63,22 @@ def run_git(repo_path: str, args: list, timeout: int = 60) -> dict:
     except Exception as e:
         return {'success': False, 'error': str(e)}
 
+
+async def run_git(repo_path: str, args: list, timeout: int = 60) -> dict:
+    """异步包装:把阻塞的 git 子进程放到线程池,避免冻结事件循环。
+
+    所有 Git 端点(clone/push/pull 最长 300s)此前在 async def 内直接跑
+    subprocess.run,单次慢操作会阻塞整个节点的事件循环。
+    """
+    return await asyncio.to_thread(_run_git_blocking, repo_path, args, timeout)
+
 @app.get('/health')
 async def health():
     """健康检查"""
-    git_version = subprocess.run(['git', '--version'], capture_output=True, text=True, encoding="utf-8", errors="replace")
+    git_version = await asyncio.to_thread(
+        subprocess.run, ['git', '--version'],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+    )
     return {
         'status': 'healthy',
         'node_id': '07',
@@ -70,19 +103,29 @@ async def init_repo(path: str, bare: bool = False):
     args = ['init']
     if bare:
         args.append('--bare')
-    result = run_git(path, args)
+    result = await run_git(path, args)
     return result
 
 @app.post('/clone')
 async def clone(url: str, path: str, branch: Optional[str] = None, depth: Optional[int] = None):
     """克隆仓库"""
-    args = ['clone', url, path]
+    url_error = _validate_clone_url(url)
+    if url_error:
+        raise HTTPException(status_code=400, detail=url_error)
+
+    # Put options first, then '--' so the URL/path can never be parsed as
+    # options (option injection), and only the validated transports are used.
+    args = ['clone']
     if branch:
         args.extend(['-b', branch])
     if depth:
         args.extend(['--depth', str(depth)])
-    
-    result = subprocess.run(args, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=300)
+    args.extend(['--', url, path])
+
+    result = await asyncio.to_thread(
+        subprocess.run, args,
+        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=300,
+    )
     return {
         'success': result.returncode == 0,
         'path': path,
@@ -93,7 +136,7 @@ async def clone(url: str, path: str, branch: Optional[str] = None, depth: Option
 @app.post('/status')
 async def status(request: GitRequest):
     """获取仓库状态"""
-    result = run_git(request.repo_path, ['status', '--porcelain'])
+    result = await run_git(request.repo_path, ['status', '--porcelain'])
     if result['success']:
         # 解析 porcelain 格式
         lines = result['output'].split('\n') if result['output'] else []
@@ -110,9 +153,9 @@ async def status(request: GitRequest):
 async def add_files(request: GitRequest):
     """添加文件到暂存区"""
     if request.files:
-        return run_git(request.repo_path, ['add'] + request.files)
+        return await run_git(request.repo_path, ['add'] + request.files)
     else:
-        return run_git(request.repo_path, ['add', '-A'])
+        return await run_git(request.repo_path, ['add', '-A'])
 
 @app.post('/commit')
 async def commit(request: GitRequest):
@@ -122,14 +165,14 @@ async def commit(request: GitRequest):
     
     # 先添加所有文件
     if request.files:
-        add_result = run_git(request.repo_path, ['add'] + request.files)
+        add_result = await run_git(request.repo_path, ['add'] + request.files)
     else:
-        add_result = run_git(request.repo_path, ['add', '-A'])
+        add_result = await run_git(request.repo_path, ['add', '-A'])
     
     if not add_result['success']:
         return add_result
     
-    return run_git(request.repo_path, ['commit', '-m', request.message])
+    return await run_git(request.repo_path, ['commit', '-m', request.message])
 
 @app.post('/push')
 async def push(request: GitRequest):
@@ -139,7 +182,7 @@ async def push(request: GitRequest):
         args.append(request.remote)
     if request.branch:
         args.append(request.branch)
-    return run_git(request.repo_path, args, timeout=300)
+    return await run_git(request.repo_path, args, timeout=300)
 
 @app.post('/pull')
 async def pull(request: GitRequest):
@@ -149,7 +192,7 @@ async def pull(request: GitRequest):
         args.append(request.remote)
     if request.branch:
         args.append(request.branch)
-    return run_git(request.repo_path, args, timeout=300)
+    return await run_git(request.repo_path, args, timeout=300)
 
 @app.post('/fetch')
 async def fetch(request: GitRequest):
@@ -157,12 +200,12 @@ async def fetch(request: GitRequest):
     args = ['fetch']
     if request.remote:
         args.append(request.remote)
-    return run_git(request.repo_path, args, timeout=300)
+    return await run_git(request.repo_path, args, timeout=300)
 
 @app.post('/branch/list')
 async def list_branches(request: GitRequest):
     """列出所有分支"""
-    result = run_git(request.repo_path, ['branch', '-a'])
+    result = await run_git(request.repo_path, ['branch', '-a'])
     if result['success']:
         branches = [b.strip().lstrip('* ') for b in result['output'].split('\n') if b.strip()]
         result['branches'] = branches
@@ -173,33 +216,33 @@ async def create_branch(request: GitRequest):
     """创建分支"""
     if not request.branch:
         raise HTTPException(status_code=400, detail='branch name required')
-    return run_git(request.repo_path, ['branch', request.branch])
+    return await run_git(request.repo_path, ['branch', request.branch])
 
 @app.post('/branch/delete')
 async def delete_branch(request: GitRequest):
     """删除分支"""
     if not request.branch:
         raise HTTPException(status_code=400, detail='branch name required')
-    return run_git(request.repo_path, ['branch', '-d', request.branch])
+    return await run_git(request.repo_path, ['branch', '-d', request.branch])
 
 @app.post('/checkout')
 async def checkout(request: GitRequest):
     """切换分支或恢复文件"""
     if not request.branch:
         raise HTTPException(status_code=400, detail='branch name required')
-    return run_git(request.repo_path, ['checkout', request.branch])
+    return await run_git(request.repo_path, ['checkout', request.branch])
 
 @app.post('/merge')
 async def merge(request: GitRequest):
     """合并分支"""
     if not request.branch:
         raise HTTPException(status_code=400, detail='branch name required')
-    return run_git(request.repo_path, ['merge', request.branch])
+    return await run_git(request.repo_path, ['merge', request.branch])
 
 @app.post('/log')
 async def get_log(request: GitRequest, limit: int = 10):
     """获取提交日志"""
-    result = run_git(request.repo_path, ['log', f'-{limit}', '--pretty=format:%H|%an|%ae|%ad|%s', '--date=iso'])
+    result = await run_git(request.repo_path, ['log', f'-{limit}', '--pretty=format:%H|%an|%ae|%ad|%s', '--date=iso'])
     if result['success']:
         commits = []
         for line in result['output'].split('\n'):
@@ -224,12 +267,12 @@ async def get_diff(request: GitRequest, cached: bool = False):
         args.append('--cached')
     if request.files:
         args.extend(request.files)
-    return run_git(request.repo_path, args)
+    return await run_git(request.repo_path, args)
 
 @app.post('/tag/list')
 async def list_tags(request: GitRequest):
     """列出所有标签"""
-    result = run_git(request.repo_path, ['tag', '-l'])
+    result = await run_git(request.repo_path, ['tag', '-l'])
     if result['success']:
         tags = [t.strip() for t in result['output'].split('\n') if t.strip()]
         result['tags'] = tags
@@ -243,19 +286,19 @@ async def create_tag(request: GitRequest):
     args = ['tag', request.tag]
     if request.message:
         args.extend(['-a', '-m', request.message])
-    return run_git(request.repo_path, args)
+    return await run_git(request.repo_path, args)
 
 @app.post('/tag/delete')
 async def delete_tag(request: GitRequest):
     """删除标签"""
     if not request.tag:
         raise HTTPException(status_code=400, detail='tag name required')
-    return run_git(request.repo_path, ['tag', '-d', request.tag])
+    return await run_git(request.repo_path, ['tag', '-d', request.tag])
 
 @app.post('/remote/list')
 async def list_remotes(request: GitRequest):
     """列出远程仓库"""
-    result = run_git(request.repo_path, ['remote', '-v'])
+    result = await run_git(request.repo_path, ['remote', '-v'])
     if result['success']:
         remotes = {}
         for line in result['output'].split('\n'):
@@ -273,7 +316,7 @@ async def add_remote(request: GitRequest):
     """添加远程仓库"""
     if not request.remote or not request.url:
         raise HTTPException(status_code=400, detail='remote name and url required')
-    return run_git(request.repo_path, ['remote', 'add', request.remote, request.url])
+    return await run_git(request.repo_path, ['remote', 'add', request.remote, request.url])
 
 @app.post('/stash')
 async def stash_changes(request: GitRequest):
@@ -281,12 +324,12 @@ async def stash_changes(request: GitRequest):
     args = ['stash']
     if request.message:
         args.extend(['save', request.message])
-    return run_git(request.repo_path, args)
+    return await run_git(request.repo_path, args)
 
 @app.post('/stash/pop')
 async def stash_pop(request: GitRequest):
     """恢复暂存的更改"""
-    return run_git(request.repo_path, ['stash', 'pop'])
+    return await run_git(request.repo_path, ['stash', 'pop'])
 
 @app.post('/reset')
 async def reset(request: GitRequest, hard: bool = False):
@@ -296,7 +339,7 @@ async def reset(request: GitRequest, hard: bool = False):
         args.append('--hard')
     if request.branch:
         args.append(request.branch)
-    return run_git(request.repo_path, args)
+    return await run_git(request.repo_path, args)
 
 @app.post('/mcp/call')
 async def mcp_call(request: dict):

@@ -474,8 +474,12 @@ class TailscaleP2PAdapter(TransportAdapter):
 
         try:
             while True:
-                len_bytes = await asyncio.wait_for(reader.read(4), timeout=_READ_TIMEOUT)
-                if len(len_bytes) < 4:
+                # 修复:StreamReader.read(n) 只保证【至多】n 字节——大消息跨 TCP 分段
+                # 时返回不足 n,原代码把"半包"当成断连,消息被静默丢弃。readexactly
+                # 才是长度前缀帧协议的正确读法(不足时抛 IncompleteReadError=真断连)。
+                try:
+                    len_bytes = await asyncio.wait_for(reader.readexactly(4), timeout=_READ_TIMEOUT)
+                except asyncio.IncompleteReadError:
                     break
 
                 msg_len = int.from_bytes(len_bytes, "big")
@@ -483,8 +487,9 @@ class TailscaleP2PAdapter(TransportAdapter):
                     logger.warning("Oversized message from %s: %d bytes", peer_addr, msg_len)
                     break
 
-                payload_bytes = await asyncio.wait_for(reader.read(msg_len), timeout=_READ_TIMEOUT)
-                if len(payload_bytes) < msg_len:
+                try:
+                    payload_bytes = await asyncio.wait_for(reader.readexactly(msg_len), timeout=_READ_TIMEOUT)
+                except asyncio.IncompleteReadError:
                     break
 
                 message = json.loads(payload_bytes.decode("utf-8"))

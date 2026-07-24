@@ -26,7 +26,6 @@ from __future__ import annotations
 import json
 import logging
 import time
-from collections import defaultdict
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -42,14 +41,18 @@ class DeviceUsage:
 
     device_id: str
     device_type: str = ""
-    actions_used: Dict[str, int] = field(default_factory=lambda: defaultdict(int))
+    # 普通 dict + .get 式自增:defaultdict(lambda) 会让 dataclasses.asdict 抛
+    # "first argument must be callable or None"(asdict 用 type(obj)(pairs) 重建,
+    # lambda 工厂丢失)→ to_dict()/_save() 永远失败被吞,偏好从不落盘;且从 JSON
+    # reload 后本来就是普通 dict,+= 对新键 KeyError。
+    actions_used: Dict[str, int] = field(default_factory=dict)
     success_count: int = 0
     failure_count: int = 0
     last_used: float = 0.0
     preferred: bool = False
 
     def record(self, action: str, success: bool) -> None:
-        self.actions_used[action] += 1
+        self.actions_used[action] = self.actions_used.get(action, 0) + 1
         if success:
             self.success_count += 1
         else:
@@ -70,7 +73,8 @@ class UserPreferences:
     """[{time_context, command_keywords, matched_action, frequency}]"""
 
     # Frequently used capabilities (sorted by frequency)
-    frequent_capabilities: Dict[str, int] = field(default_factory=lambda: defaultdict(int))
+    # 普通 dict(理由同 DeviceUsage.actions_used:defaultdict 会炸 asdict、reload 退化)
+    frequent_capabilities: Dict[str, int] = field(default_factory=dict)
 
     # Time-of-day patterns
     time_patterns: Dict[str, List[str]] = field(default_factory=dict)
@@ -189,8 +193,8 @@ class UserPreferenceMemory:
                 self._prefs.command_patterns.sort(key=lambda x: x["frequency"], reverse=True)
                 self._prefs.command_patterns = self._prefs.command_patterns[: self.MAX_PATTERNS]
 
-        # Update frequent capabilities
-        self._prefs.frequent_capabilities[matched_action] += 1
+        # Update frequent capabilities(.get 式自增,reload 后是普通 dict,+= 会 KeyError)
+        self._prefs.frequent_capabilities[matched_action] = self._prefs.frequent_capabilities.get(matched_action, 0) + 1
         self._prefs.last_updated = time.time()
         self._save()
 

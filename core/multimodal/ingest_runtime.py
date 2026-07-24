@@ -155,7 +155,10 @@ def start_ingest_bus(
         audio_pipeline = AudioIngestPipeline()
         audio_pipeline.add_callback(bus.update_audio)
         _schedule_pipeline(audio_pipeline, "audio")
-        audio_available = True
+        # 修复(误报"已启用"):构造 AudioIngestPipeline 成功只代表 Python 对象建好了,
+        # 不代表 sounddevice 已装、能真正采集音频。如实取 audio_pipeline.is_available
+        # (sounddevice 是否可导入),不再无条件 True 去骗健康标志。与下方 video 一致。
+        audio_available = audio_pipeline.is_available
     except Exception as _audio_err:
         logger.debug("AudioIngestPipeline unavailable (non-fatal): %s", _audio_err)
 

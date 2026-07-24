@@ -16,6 +16,7 @@ Version: 5.0.0
 
 import asyncio
 import json
+import uuid
 import logging
 from datetime import datetime
 from typing import Dict, List, Optional, Any, Set
@@ -40,7 +41,7 @@ try:
     from knowledge_graph import KnowledgeGraph, Entity, EntityType, Relationship, RelationshipType
     from emergence_detector import EmergenceDetector, EmergenceType
     from search_integrator import SearchIntegrator
-    from feedback_loop import FeedbackLoop
+    from feedback_loop import FeedbackLoop, FeedbackEntry, FeedbackType
 except ImportError:
     # For standalone testing
     import sys
@@ -55,7 +56,7 @@ except ImportError:
     from knowledge_graph import KnowledgeGraph, Entity, EntityType, Relationship, RelationshipType
     from emergence_detector import EmergenceDetector, EmergenceType
     from search_integrator import SearchIntegrator
-    from feedback_loop import FeedbackLoop
+    from feedback_loop import FeedbackLoop, FeedbackEntry, FeedbackType
 
 # Configure logging
 logging.basicConfig(
@@ -229,15 +230,16 @@ class LearningNodeState:
                 'timestamp': datetime.now().isoformat()
             })
             
-            # Check for emergence
-            for pattern in data:
-                emergence = self.emergence_detector.check_pattern_emergence(pattern)
-                if emergence:
-                    await self._broadcast({
-                        'type': 'emergence_detected',
-                        'emergence': emergence,
-                        'timestamp': datetime.now().isoformat()
-                    })
+            # Check for emergence. EmergenceDetector exposes async
+            # detect_emergence(patterns, context) -> List[EmergentBehavior];
+            # there is no per-pattern check_pattern_emergence method.
+            behaviors = await self.emergence_detector.detect_emergence(data)
+            for behavior in behaviors:
+                await self._broadcast({
+                    'type': 'emergence_detected',
+                    'emergence': behavior.to_dict() if hasattr(behavior, 'to_dict') else str(behavior),
+                    'timestamp': datetime.now().isoformat()
+                })
         
         self.engine.on_stage(LearningStage.OBSERVE, on_observe)
         self.engine.on_stage(LearningStage.ANALYZE, on_analyze)
@@ -487,17 +489,30 @@ async def submit_feedback(request: FeedbackRequest):
     Feedback is used to improve future learning cycles.
     """
     try:
-        feedback_record = await state.feedback_loop.submit_feedback(
-            target_type=request.target_type,
-            target_id=request.target_id,
-            rating=request.rating,
-            comment=request.comment,
-            metadata={'timestamp': datetime.now().isoformat()}
-        )
-        
+        # FeedbackLoop exposes add_feedback(FeedbackEntry) (sync), not an async
+        # submit_feedback(**kwargs). Build the entry from the request; map the
+        # -1..1 rating to a FeedbackType and use |rating| as confidence.
+        rating = request.rating
+        if rating > 0.33:
+            ftype = FeedbackType.POSITIVE
+        elif rating < -0.33:
+            ftype = FeedbackType.NEGATIVE
+        else:
+            ftype = FeedbackType.NEUTRAL
+        feedback_id = str(uuid.uuid4())
+        state.feedback_loop.add_feedback(FeedbackEntry(
+            feedback_id=feedback_id,
+            feedback_type=ftype,
+            source="api",
+            target=f"{request.target_type}:{request.target_id}",
+            content=request.comment or "",
+            confidence=abs(rating),
+            metadata={'timestamp': datetime.now().isoformat(), 'rating': rating},
+        ))
+
         return {
             'success': True,
-            'feedback_id': feedback_record.get('id'),
+            'feedback_id': feedback_id,
             'message': 'Feedback recorded successfully'
         }
         
@@ -541,10 +556,13 @@ async def get_recent_emergence(limit: int = 10):
         if not state.emergence_detector:
             return {'error': 'Emergence detector not initialized'}
         
-        events = state.emergence_detector.get_recent_events(limit=limit)
+        # EmergenceDetector has get_detected_behaviors() (no get_recent_events)
+        # and stores them in _detected_behaviors (no _emergence_history).
+        behaviors = state.emergence_detector.get_detected_behaviors()[:limit]
+        events = [b.to_dict() if hasattr(b, 'to_dict') else str(b) for b in behaviors]
         return {
             'events': events,
-            'total_events': len(state.emergence_detector._emergence_history)
+            'total_events': len(state.emergence_detector._detected_behaviors)
         }
         
     except Exception as e:

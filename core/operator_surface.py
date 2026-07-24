@@ -2110,12 +2110,16 @@ class OperatorSurface:
                     action_kind,
                     exc,
                 )
-                # Fallback: return accepted with degraded disposition rather
-                # than failing the operator action entirely.
+                # 治理安全:PR-4 编排正是治理/管控约束的实际执行点。它抛错意味着我们
+                # 无法确认约束真的生效 —— 对【需审批/受管控】的动作必须 fail-closed
+                # (accepted=False + 明确 error),否则静默返回 accepted=True 会造成治理绕过
+                # (操作员看到"已接受",实则什么都没被治理/执行)。仅非受控手动动作保留降级接受。
+                _governed = bool(action_policy.get("requires_approval", False))
                 return OperatorActionResult(
                     action_id=action_id,
                     action_kind=action_kind,
-                    accepted=True,
+                    accepted=not _governed,
+                    error=(f"PR-4 orchestration failed for governed action: {exc}" if _governed else ""),
                     runtime_result={
                         "_source": "operator_action_layer_fallback",
                         "policy": OPERATOR_ACTION_LAYER_POLICY,
@@ -2123,7 +2127,11 @@ class OperatorSurface:
                         "approval_gated": action_policy.get("requires_approval", False),
                         "approval_token_present": bool(request.approval_token),
                         "operator_notes": request.action_notes,
-                        "disposition": "governed_intervention_recorded_fallback",
+                        "disposition": (
+                            "governed_intervention_failed_closed"
+                            if _governed
+                            else "governed_intervention_recorded_fallback"
+                        ),
                         "governance_basis": dict(availability.get("state_basis") or {}),
                         "pr4_orchestration_error": str(exc),
                     },

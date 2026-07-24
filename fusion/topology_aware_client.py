@@ -350,13 +350,15 @@ class TopologyAwareConstellationClient(ConstellationClient if CONSTELLATION_AVAI
         # 方式 2：通过 HTTP 直接发送到节点 API
         node_info = self.get_node_info(node_id) if self.topology_manager else None
         if node_info:
-            port = node_info.get("port")
-            host = node_info.get("host", "localhost")
-            if port:
+            # NodeInfo.to_dict() (asdict) exposes 'api_url' — there are no
+            # 'port'/'host' keys, so the old node_info.get('port') was always
+            # None and this whole HTTP fallback never ran. Use api_url directly.
+            api_url = node_info.get("api_url")
+            if api_url:
                 try:
                     import httpx
                     async with httpx.AsyncClient(timeout=15) as client:
-                        url = f"http://{host}:{port}/api/task"
+                        url = api_url.rstrip("/") + "/api/task"
                         response = await client.post(url, json=task)
                         if response.status_code < 400:
                             logger.info(f"✅ Task sent via HTTP to {node_id} ({url})")

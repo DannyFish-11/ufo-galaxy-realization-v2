@@ -78,6 +78,30 @@ async def _run_cmd(cmd: str, timeout: float = 10.0) -> str:
         return ""
 
 
+async def _run_cmd_input(argv: List[str], input_text: str, timeout: float = 10.0) -> bool:
+    """执行系统命令并通过 stdin 传入数据（无 shell，避免管道/引号注入问题）。"""
+    try:
+        process = await asyncio.create_subprocess_exec(
+            *argv,
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        _, stderr = await asyncio.wait_for(
+            process.communicate(input=input_text.encode()), timeout=timeout
+        )
+        if process.returncode != 0:
+            logger.warning(f"Command failed: {argv} -> {stderr.decode().strip()}")
+            return False
+        return True
+    except asyncio.TimeoutError:
+        logger.error(f"Command timeout: {argv}")
+        return False
+    except Exception as e:
+        logger.error(f"Command error: {argv} -> {e}")
+        return False
+
+
 # ========================= 请求模型 =========================
 
 class ClickRequest(BaseModel):
@@ -332,9 +356,10 @@ async def clipboard(req: ClipboardRequest):
         content = await _run_cmd("xclip -selection clipboard -o")
         return {"success": True, "action": "clipboard_get", "content": content}
     elif req.action == "set" and req.content:
-        # 使用 echo + pipe 设置剪贴板
-        await _run_cmd(f"echo -n '{req.content}' | xclip -selection clipboard")
-        return {"success": True, "action": "clipboard_set", "content_length": len(req.content)}
+        # 通过 stdin 把内容喂给 xclip（_run_cmd 用 create_subprocess_exec，
+        # 不经过 shell，故 shell 管道 "| xclip" 不会被解释——必须直接写 stdin）
+        ok = await _run_cmd_input(["xclip", "-selection", "clipboard"], req.content)
+        return {"success": ok, "action": "clipboard_set", "content_length": len(req.content)}
     else:
         return {"success": False, "error": "Invalid clipboard action"}
 

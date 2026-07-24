@@ -6,7 +6,7 @@ Node 09: Sandbox - 安全的代码沙箱执行环境
 健康检查始终立即返回 HTTP 200，可用语言列表在启动时预计算并缓存。
 """
 
-import os, subprocess, tempfile, shutil, signal
+import os, subprocess, tempfile, signal
 import re
 import logging
 from contextlib import asynccontextmanager
@@ -64,18 +64,73 @@ LANGUAGE_CONFIG = {
     "perl": {"ext": ".pl", "cmd": ["perl"], "version_check": ["perl", "--version"]},
     "lua": {"ext": ".lua", "cmd": ["lua"], "version_check": ["lua", "-v"]},
     "go": {"ext": ".go", "cmd": ["go", "run"], "version_check": ["go", "version"]},
+    # 编译型语言:原来把 "&&" 当 argv 元素塞进 cmd(如 ["rustc","-o","/tmp/rust_out","&&",...]),
+    # 但走的是非 shell 的 argv 执行 → "&&" 和输出路径被当成源文件参数传给编译器,编译型语言
+    # 必然执行失败却仍被列为"可用";且 /tmp/xxx_out 是固定共享路径,并发会互相覆盖。
+    # 改为独立的 compile(编译到本次 tmpdir 内的唯一二进制)+ run 两阶段模板。
     "rust": {
         "ext": ".rs",
-        "cmd": ["rustc", "-o", "/tmp/rust_out", "&&", "/tmp/rust_out"],
+        "compile": ["rustc", "{src}", "-o", "{out}"],
+        "run": ["{out}"],
         "version_check": ["rustc", "--version"],
     },
-    "c": {"ext": ".c", "cmd": ["gcc", "-o", "/tmp/c_out", "&&", "/tmp/c_out"], "version_check": ["gcc", "--version"]},
+    "c": {
+        "ext": ".c",
+        "compile": ["gcc", "{src}", "-o", "{out}"],
+        "run": ["{out}"],
+        "version_check": ["gcc", "--version"],
+    },
     "cpp": {
         "ext": ".cpp",
-        "cmd": ["g++", "-o", "/tmp/cpp_out", "&&", "/tmp/cpp_out"],
+        "compile": ["g++", "{src}", "-o", "{out}"],
+        "run": ["{out}"],
         "version_check": ["g++", "--version"],
     },
 }
+
+
+def _prepare_run_command(config, entry_file, tmpdir, args, timeout, env=None, source_content=None):
+    """构造实际执行命令。编译型语言(config 含 'compile')先编译到 tmpdir 内的唯一
+    二进制,编译失败返回 (None, 错误字典);解释型语言直接 cmd + 入口文件。
+    返回 (run_cmd, compile_error_or_None)。
+
+    编译源码通过 ``source_content`` 字符串写入【服务端固定命名】路径,全程不让用户
+    可控的文件名进入编译命令行或路径表达式(CodeQL: uncontrolled command line / path)。
+    """
+    if "compile" in config:
+        out_bin = os.path.join(tmpdir, "prog")
+        fixed_src = os.path.join(tmpdir, "source" + config.get("ext", ""))
+        # 编译型语言必须由调用方提供源【内容字符串】(execute_code 传 request.code,
+        # execute_files 从 request.files 取)。绝不从用户可控文件名读盘,以彻底杜绝
+        # 用户数据进入路径表达式 / 编译命令行(CodeQL: uncontrolled command line / path)。
+        if source_content is None:
+            return None, {
+                "success": False,
+                "stdout": "",
+                "stderr": "compiled language requires source_content",
+                "return_code": 2,
+                "stage": "compile",
+            }
+        with open(fixed_src, "w", encoding="utf-8") as _wf:
+            _wf.write(source_content)
+        compile_cmd = [tok.format(src=fixed_src, out=out_bin) for tok in config["compile"]]
+        comp = subprocess.run(
+            compile_cmd, capture_output=True, text=True, timeout=timeout, cwd=tmpdir, env=env
+        )
+        if comp.returncode != 0:
+            return None, {
+                "success": False,
+                "stdout": comp.stdout,
+                "stderr": comp.stderr,
+                "return_code": comp.returncode,
+                "stage": "compile",
+            }
+        run_cmd = [tok.format(out=out_bin) for tok in config["run"]]
+    else:
+        run_cmd = list(config["cmd"]) + [entry_file]
+    if args:
+        run_cmd = run_cmd + list(args)
+    return run_cmd, None
 
 # 危险命令黑名单
 DANGEROUS_PATTERNS = [
@@ -228,16 +283,19 @@ async def execute_code(request: ExecuteRequest):
         with open(code_file, "w", encoding="utf-8") as f:
             f.write(request.code)
 
-        cmd = config["cmd"] + [code_file]
-        if request.args:
-            cmd.extend(request.args)
-
         # 准备环境变量
         env = os.environ.copy()
         if request.env:
             env.update(request.env)
 
         try:
+            cmd, compile_err = _prepare_run_command(
+                config, code_file, tmpdir, request.args, request.timeout, env, source_content=request.code
+            )
+            if compile_err is not None:
+                compile_err["language"] = lang
+                return compile_err
+
             # 设置资源限制的预执行函数
             def preexec_fn():
                 set_resource_limits(request.memory_limit_mb or 256, request.cpu_limit_seconds)
@@ -318,9 +376,24 @@ async def execute_files(request: FileExecuteRequest):
                 f.write(content)
 
         entry_file = _resolved_in_tmp(request.entry_point)
-        cmd = config["cmd"] + [entry_file]
+        # 编译型语言的源码内容从 request.files 直接取字符串(而非按用户文件名读盘),
+        # 避免用户可控路径进入编译流程(CodeQL: uncontrolled path)。按基名匹配兜底。
+        _entry_content = request.files.get(request.entry_point)
+        if _entry_content is None:
+            _bn = os.path.basename(request.entry_point or "")
+            _entry_content = next(
+                (c for n, c in request.files.items() if os.path.basename(n) == _bn), None
+            )
 
         try:
+            cmd, compile_err = _prepare_run_command(
+                config, entry_file, tmpdir, None, request.timeout, os.environ.copy(),
+                source_content=_entry_content,
+            )
+            if compile_err is not None:
+                compile_err["language"] = lang
+                return compile_err
+
             result = subprocess.run(
                 cmd, capture_output=True, text=True, timeout=request.timeout, input=request.stdin, cwd=tmpdir
             )

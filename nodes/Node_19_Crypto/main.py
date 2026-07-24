@@ -245,8 +245,15 @@ async def hmac_verify(request: VerifyRequest, key: str, algorithm: str = "sha256
 async def encrypt(request: EncryptRequest):
     """加密数据"""
     try:
-        encrypted = crypto_manager.encrypt(request.data, request.key)
-        return {"encrypted": encrypted}
+        # 未提供 key 时显式生成并【一并返回】。原来 CryptoManager.encrypt 内部
+        # `key = key or generate_key()` 自动生成的 key 被丢弃、从不返回 → 调用方拿到
+        # 密文却没有 key,数据永远无法解密。
+        key = request.key or crypto_manager.generate_key()
+        encrypted = crypto_manager.encrypt(request.data, key)
+        resp = {"encrypted": encrypted}
+        if not request.key:
+            resp["key"] = key  # 调用方必须保存此自动生成的 key 才能解密
+        return resp
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

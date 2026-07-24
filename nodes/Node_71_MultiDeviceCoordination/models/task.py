@@ -423,6 +423,10 @@ class TaskQueue:
     def peek(self) -> Optional[Task]:
         """查看队首"""
         return self._queue[0] if self._queue else None
+
+    def snapshot(self) -> List[Task]:
+        """按优先级顺序返回队列快照(浅拷贝),供调度器扫描而不改动队列。"""
+        return list(self._queue)
     
     def remove(self, task_id: str) -> Optional[Task]:
         """移除指定任务"""

@@ -219,8 +219,8 @@ class BambuLabDriver(PrinterDriver):
                     serial=self._serial
                 )
                 
-                # 连接并获取初始状态
-                self._client.connect()
+                # 连接并获取初始状态(阻塞网络调用,放线程池避免冻结事件循环)
+                await asyncio.to_thread(self._client.connect)
                 self._connected = True
                 
                 # 启动状态更新循环
@@ -257,7 +257,8 @@ class BambuLabDriver(PrinterDriver):
             
             self._mqtt_client.on_message = self._on_mqtt_message
             
-            self._mqtt_client.connect(self._host, 8883, 60)
+            # 阻塞网络连接,放线程池避免冻结事件循环
+            await asyncio.to_thread(self._mqtt_client.connect, self._host, 8883, 60)
             self._mqtt_client.subscribe(f"device/{self._serial}/report")
             self._mqtt_client.loop_start()
             
@@ -580,13 +581,19 @@ class OctoPrintDriver(PrinterDriver):
                     return True
                 else:
                     logger.error(f"OctoPrint连接失败: {resp.status}")
+                    await self._session.close()
+                    self._session = None
                     return False
-                    
+
         except ImportError:
             logger.error("aiohttp未安装，请运行: pip install aiohttp")
             return False
         except Exception as e:
             logger.error(f"OctoPrint连接失败: {e}")
+            # 关闭已创建的 session,否则失败路径会泄漏 aiohttp ClientSession
+            if self._session is not None and not self._session.closed:
+                await self._session.close()
+            self._session = None
             return False
     
     async def disconnect(self) -> bool:
@@ -794,7 +801,9 @@ class UniversalPrinterController:
         self.driver: PrinterDriver = None
         self._status_callbacks: List[Callable] = []
         self._error_callbacks: List[Callable] = []
-        
+        self._monitoring = False
+        self._monitoring_task: Optional[asyncio.Task] = None
+
         if driver_type == "bambu":
             self.driver = BambuLabDriver()
         elif driver_type == "octoprint":
@@ -807,16 +816,22 @@ class UniversalPrinterController:
         success = await self.driver.connect(connection_params)
         
         if success:
-            # 启动状态监控
-            asyncio.create_task(self._monitoring_loop())
-        
+            # 启动状态监控(保留 task 引用,便于断开时停止)
+            self._monitoring = True
+            self._monitoring_task = asyncio.create_task(self._monitoring_loop())
+
         return {
             "status": "success" if success else "error",
             "driver": self.driver_type
         }
-    
+
     async def disconnect(self) -> Dict[str, Any]:
         """断开连接"""
+        # 停止监控循环,否则它会 while True 永远轮询已断开的驱动
+        self._monitoring = False
+        if self._monitoring_task is not None:
+            self._monitoring_task.cancel()
+            self._monitoring_task = None
         success = await self.driver.disconnect()
         return {
             "status": "success" if success else "error"
@@ -880,7 +895,7 @@ class UniversalPrinterController:
     
     async def _monitoring_loop(self):
         """监控循环"""
-        while True:
+        while self._monitoring:
             try:
                 state = await self.driver.get_state()
                 

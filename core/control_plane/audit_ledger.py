@@ -410,7 +410,10 @@ class AuditLedger:
                 continue
             results.append(ev)
         if limit is not None:
-            results = results[:limit]
+            # 修复:_events 按插入序、newest last(见 docstring)。results[:limit]
+            # 保留的是【最旧】N 条,与"cap 返回条数"的直觉(要最近的)相反——
+            # 取尾部 limit 条才是最新的。
+            results = results[-limit:]
         return results
 
     def get_by_id(self, event_id: str) -> Optional[TraceEvent]:

@@ -873,17 +873,11 @@ if __name__ == "__main__":
 try:
     from academic_extension import academic_manager, PaperNote, CitationNetwork
     HAS_ACADEMIC = True
-except ImportError:
-    HAS_ACADEMIC = False
-    academic_manager = None
-    from pydantic import BaseModel as _AcademicBase
-    class PaperNote(_AcademicBase):
-        paper_id: str = ""
-        title: str = ""
-    class CitationNetwork(_AcademicBase):
-        paper_id: str = ""
-    logging.getLogger("Node_80_MemorySystem").warning("academic_extension 未安装，学术功能不可用")
 
+    # 学术功能路由：仅在 academic_extension 成功导入时注册，
+    # 使用真实的 academic_manager。之前这些路由被错误地放进 except 分支，
+    # 结果是：导入成功时根本不注册（功能不可达），导入失败时才注册但
+    # academic_manager 为 None，每次调用都 AttributeError。
     @app.post("/academic/paper_note")
     async def save_academic_paper_note(paper: PaperNote):
         """保存论文笔记"""
@@ -1001,4 +995,13 @@ except ImportError:
         }
 
 except ImportError:
+    HAS_ACADEMIC = False
+    academic_manager = None
+    from pydantic import BaseModel as _AcademicBase
+    class PaperNote(_AcademicBase):
+        paper_id: str = ""
+        title: str = ""
+    class CitationNetwork(_AcademicBase):
+        paper_id: str = ""
+    logging.getLogger("Node_80_MemorySystem").warning("academic_extension 未安装，学术功能不可用")
     logger.info("academic_extension 模块未安装，学术功能路由已跳过")

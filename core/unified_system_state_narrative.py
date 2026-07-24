@@ -323,7 +323,7 @@ def _build_overall_runtime_state() -> NarrativeDimension:
     is_canonical = False
 
     try:
-        from core.runtime_readiness_matrix import ReadinessMatrix, ReadinessVerdict
+        from core.runtime_readiness_matrix import ReadinessMatrix, MatrixVerdict
 
         matrix = ReadinessMatrix()
         verdict = matrix.evaluate()
@@ -332,7 +332,7 @@ def _build_overall_runtime_state() -> NarrativeDimension:
         degraded = getattr(verdict, "degraded_dimensions", []) or []
         notes = getattr(verdict, "notes", []) or []
 
-        ready_value = ReadinessVerdict.READY.value if hasattr(ReadinessVerdict, "READY") else "READY"
+        ready_value = MatrixVerdict.READY.value if hasattr(MatrixVerdict, "READY") else "READY"
         if verdict_str == ready_value:
             state = "operable"
             explanation = "All readiness dimensions are satisfied; the system is currently operable."
@@ -811,20 +811,20 @@ def _build_autonomy_participation_state() -> NarrativeDimension:
     try:
         from core.device_autonomy_evidence import (
             DEVICE_AUTONOMY_EVIDENCE_AUTHORITY,
-            build_device_autonomy_summary,
+            build_device_autonomy_report,
         )
 
-        summary = build_device_autonomy_summary()
+        summary = build_device_autonomy_report()
         state = summary.get("overall_class", "unknown")
         explanation = summary.get("explanation", "Device autonomy evidence summary.")
         evidence = dict(summary)
-        trace.append("fallback:core.device_autonomy_evidence.build_device_autonomy_summary()")
+        trace.append("fallback:core.device_autonomy_evidence.build_device_autonomy_report()")
         is_canonical = True
 
         return NarrativeDimension(
             dimension=DIM_AUTONOMY_PARTICIPATION_STATE,
             state=state,
-            source="core.device_autonomy_evidence.build_device_autonomy_summary",
+            source="core.device_autonomy_evidence.build_device_autonomy_report",
             is_canonical_truth=is_canonical,
             explanation=explanation,
             evidence_basis=evidence,
@@ -965,10 +965,10 @@ def _build_recovery_degradation_blockage() -> NarrativeDimension:
     # Delegated flow recovery
     try:
         from core.delegated_flow_recovery_coordinator import (
-            get_recovery_coordinator,
+            get_delegated_flow_recovery_coordinator,
         )
 
-        coord = get_recovery_coordinator()
+        coord = get_delegated_flow_recovery_coordinator()
         recovery_state = coord.get_recovery_state() if hasattr(coord, "get_recovery_state") else {}
         if recovery_state:
             evidence["delegated_flow_recovery"] = dict(recovery_state)
@@ -994,9 +994,9 @@ def _build_recovery_degradation_blockage() -> NarrativeDimension:
 
     # Runtime restart recovery
     try:
-        from core.runtime_restart_recovery import get_recovery_surface
+        from core.runtime_restart_recovery import get_recovery_coordinator
 
-        recovery_surface = get_recovery_surface()
+        recovery_surface = get_recovery_coordinator()
         restart_state = recovery_surface.get_restart_state() if hasattr(recovery_surface, "get_restart_state") else {}
         if restart_state:
             evidence["restart_recovery_state"] = dict(restart_state)
