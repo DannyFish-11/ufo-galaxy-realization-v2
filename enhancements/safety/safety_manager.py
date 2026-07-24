@@ -9,6 +9,7 @@ import time
 from typing import Dict, List, Any, Optional, Callable
 from dataclasses import dataclass, field
 from enum import Enum
+from collections import deque
 
 logger = logging.getLogger(__name__)
 
@@ -91,8 +92,9 @@ class SafetyManager:
         self.thresholds = thresholds or SafetyThresholds()
         self.safety_rules: Dict[str, SafetyRule] = {}
         self.recovery_actions: Dict[str, RecoveryAction] = {}
-        self.violations: List[SafetyViolation] = []
-        self.recovery_history: List[Dict] = []
+        # bounded (auto-evict oldest) — these accumulate for the process lifetime
+        self.violations: "deque[SafetyViolation]" = deque(maxlen=10000)
+        self.recovery_history: "deque[Dict]" = deque(maxlen=10000)
 
         # 初始化默认安全规则
         self._initialize_default_rules()
@@ -443,7 +445,7 @@ class SafetyManager:
     
     def get_recovery_history(self, limit: int = 100) -> List[Dict]:
         """获取恢复历史"""
-        return self.recovery_history[-limit:]
+        return list(self.recovery_history)[-limit:]
     
     def get_summary(self) -> Dict[str, Any]:
         """获取安全摘要"""
@@ -479,7 +481,7 @@ class ErrorHandler:
             safety_manager: 安全管理器实例
         """
         self.safety_manager = safety_manager
-        self.error_history: List[Dict] = []
+        self.error_history: "deque[Dict]" = deque(maxlen=10000)  # bounded
         
         logger.info("ErrorHandler 初始化完成")
     
@@ -533,7 +535,7 @@ class ErrorHandler:
     
     def get_error_history(self, limit: int = 100) -> List[Dict]:
         """获取错误历史"""
-        return self.error_history[-limit:]
+        return list(self.error_history)[-limit:]
     
     def get_error_statistics(self) -> Dict[str, Any]:
         """获取错误统计"""
