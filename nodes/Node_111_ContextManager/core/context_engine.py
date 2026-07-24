@@ -8,6 +8,7 @@ Node_111_ContextManager - 上下文管理引擎
 4. 知识积累 - 持续积累领域知识
 """
 
+import asyncio
 import json
 import logging
 import requests
@@ -248,7 +249,8 @@ class ContextManager:
         """搜索相关上下文"""
         try:
             # 调用 Node_20 (Qdrant) 进行向量搜索
-            response = requests.post(
+            response = await asyncio.to_thread(  # 阻塞 HTTP 卸载出事件循环
+                requests.post,
                 f"{self.node_20_url}/api/v1/search",
                 json={
                     "collection": "context_embeddings",
@@ -364,7 +366,8 @@ class ContextManager:
         try:
             content = " ".join([msg["content"] for msg in messages])
             
-            response = requests.post(
+            response = await asyncio.to_thread(  # 阻塞 HTTP 卸载出事件循环
+                requests.post,
                 f"{self.node_20_url}/api/v1/embed",
                 json={
                     "collection": "context_embeddings",
@@ -385,7 +388,8 @@ class ContextManager:
     async def _update_user_profile(self, user_id: str, messages: List[Dict[str, str]]):
         """更新用户画像（调用 Node_73 Learning）"""
         try:
-            response = requests.post(
+            response = await asyncio.to_thread(  # 阻塞 HTTP 卸载出事件循环
+                requests.post,
                 f"{self.node_73_url}/api/v1/learn",
                 json={"user_id": user_id, "interactions": messages},
                 timeout=10
