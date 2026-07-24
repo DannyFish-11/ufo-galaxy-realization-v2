@@ -62,10 +62,16 @@ class NodeMetrics:
     requests_per_second: float = 0.0 # 每秒请求数
     error_rate: float = 0.0          # 错误率 (0-100)
     avg_response_time: float = 0.0   # 平均响应时间 (ms)
+    reachable: bool = True           # 健康检查是否可达(失败/非200 时为 False)
     last_updated: datetime = field(default_factory=datetime.now)
-    
+
     def health_score(self) -> float:
         """计算健康分数 (0-100)"""
+        # 节点不可达(健康检查失败/非 200)直接判 0 分 → OFFLINE。
+        # 否则 cpu/memory/disk 等默认 0 会被当作"完美",把不可达节点的分数
+        # 抬到 ~60(DEGRADED),导致死节点永远进不了 UNHEALTHY/OFFLINE、仍被派活。
+        if not self.reachable:
+            return 0.0
         # 各指标权重
         weights = {
             'cpu': 0.2,
@@ -352,14 +358,16 @@ class DynamicWeightManager:
                         return NodeMetrics(
                             node_id=node.node_id,
                             error_rate=100,
-                            network_latency=latency
+                            network_latency=latency,
+                            reachable=False,
                         )
         except Exception as e:
             logger.warning(f"Health check failed for {node.node_id}: {e}")
             return NodeMetrics(
                 node_id=node.node_id,
                 error_rate=100,
-                network_latency=9999
+                network_latency=9999,
+                reachable=False,
             )
     
     def get_node_weights(self) -> Dict[str, float]:
