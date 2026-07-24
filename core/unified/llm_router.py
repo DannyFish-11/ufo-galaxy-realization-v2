@@ -731,12 +731,16 @@ class UnifiedLLMRouter:
         for idx, provider in enumerate(_effective_order):
             _preferred = provider or effective_preferred
             try:
+                # MultiLLMRouter.chat 的强制提供商参数名是 `provider`;此前传
+                # `preferred_provider=` 被 **kwargs 静默吞掉 → 本循环的策略优先
+                # 顺序/逐级降级完全不生效,backend 每次都自主路由(且首轮即"成功",
+                # used_provider 记录也失真)。
                 result = await self._backend.chat(
                     messages=enriched_messages,
                     task_type=task_type_str,
                     max_tokens=request.max_tokens,
                     temperature=request.temperature,
-                    preferred_provider=_preferred,
+                    provider=_preferred,
                 )
                 used_provider = provider or "unknown"
                 is_fallback = idx > 0

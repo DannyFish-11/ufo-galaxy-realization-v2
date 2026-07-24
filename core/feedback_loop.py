@@ -132,12 +132,25 @@ class FeedbackLoop:
             except Exception as exc:
                 logger.debug("Feedback load failed: %s", exc)
 
+    @staticmethod
+    def _quality_to_dict(aq: ActionQuality) -> Dict[str, Any]:
+        """Serialize ActionQuality with a JSON-safe failure_reasons.
+
+        dataclasses.asdict 递归到 Counter 时用 `type(obj)(键值对生成器)` 重建 ——
+        Counter(可迭代对象) 是"逐元素计数"语义,产出 {(key,value): 1} 的垃圾映射,
+        tuple 键随后让 json.dump 抛 TypeError(被吞) → 反馈从不落盘。
+        这里显式把 failure_reasons 覆盖为普通 dict。
+        """
+        d = asdict(aq)
+        d["failure_reasons"] = dict(aq.failure_reasons)
+        return d
+
     def _save(self) -> None:
         try:
             self._path.parent.mkdir(parents=True, exist_ok=True)
             data = {
                 "history": [e.to_dict() for e in self._history[-self.MAX_HISTORY :]],
-                "action_quality": {k: asdict(v) for k, v in self._action_quality.items()},
+                "action_quality": {k: self._quality_to_dict(v) for k, v in self._action_quality.items()},
             }
             with open(self._path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
