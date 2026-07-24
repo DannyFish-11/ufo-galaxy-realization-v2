@@ -94,18 +94,25 @@ def _validate_takeover_request(message: Dict[str, Any]) -> tuple[bool, str]:
     if not source_device_id:
         return False, "missing_source_device_id"
 
-    # Check if source_device is registered in UDM
+    # Check if source_device is registered + online in UDM.
+    # 安全修复:此前 import 的 get_udm 在 core.unified.device_manager 里【不存在】
+    # (真实访问器是 get_unified_device_manager),ImportError 被 except 吞掉后直接
+    # return True → 来源设备校验被【永久绕过】,任何带非空 source_device_id 的接管请求
+    # 都能通过。设备接管是特权操作,改为:用正确访问器,且【失败关闭】—— 无法确认
+    # 来源设备已注册且在线时一律拒绝。
     try:
-        from core.unified.device_manager import get_udm
+        from core.unified.device_manager import get_unified_device_manager
 
-        udm = get_udm()
+        udm = get_unified_device_manager()
         device = udm.get_device(source_device_id)
-        if device is None:
-            return False, f"source_device {source_device_id} not registered in UDM"
-        if getattr(device, "status", "").lower() not in ("online", "active", "busy"):
-            return False, f"source_device {source_device_id} status is {getattr(device, 'status', 'unknown')}"
     except Exception as exc:
-        logger.debug("takeover_request: UDM validation skipped: %s", exc)
+        logger.warning("takeover_request: UDM validation unavailable, rejecting: %s", exc)
+        return False, "udm_validation_unavailable"
+
+    if device is None:
+        return False, f"source_device {source_device_id} not registered in UDM"
+    if getattr(device, "status", "").lower() not in ("online", "active", "busy"):
+        return False, f"source_device {source_device_id} status is {getattr(device, 'status', 'unknown')}"
 
     return True, ""
 
