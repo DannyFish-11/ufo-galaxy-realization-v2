@@ -6,7 +6,7 @@ Node 09: Sandbox - 安全的代码沙箱执行环境
 健康检查始终立即返回 HTTP 200，可用语言列表在启动时预计算并缓存。
 """
 
-import os, subprocess, tempfile, shutil, signal
+import os, subprocess, tempfile, signal
 import re
 import logging
 from contextlib import asynccontextmanager
@@ -100,12 +100,17 @@ def _prepare_run_command(config, entry_file, tmpdir, args, timeout, env=None, so
     if "compile" in config:
         out_bin = os.path.join(tmpdir, "prog")
         fixed_src = os.path.join(tmpdir, "source" + config.get("ext", ""))
-        # 源内容缺省时才读文件;用 basename(公认的路径 sanitizer)+ tmpdir 归一,
-        # 确保即便 entry_file 含用户成分也不构成路径注入。
+        # 编译型语言必须由调用方提供源【内容字符串】(execute_code 传 request.code,
+        # execute_files 从 request.files 取)。绝不从用户可控文件名读盘,以彻底杜绝
+        # 用户数据进入路径表达式 / 编译命令行(CodeQL: uncontrolled command line / path)。
         if source_content is None:
-            _safe_src = os.path.join(tmpdir, os.path.basename(entry_file))
-            with open(_safe_src, "r", encoding="utf-8") as _sf:
-                source_content = _sf.read()
+            return None, {
+                "success": False,
+                "stdout": "",
+                "stderr": "compiled language requires source_content",
+                "return_code": 2,
+                "stage": "compile",
+            }
         with open(fixed_src, "w", encoding="utf-8") as _wf:
             _wf.write(source_content)
         compile_cmd = [tok.format(src=fixed_src, out=out_bin) for tok in config["compile"]]
