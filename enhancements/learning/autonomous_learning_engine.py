@@ -894,6 +894,9 @@ class AutonomousLearningEngine:
         self._cycles: List[LearningCycle] = []
         self._observations: List[LearningObservation] = []
         self._experiments: List[LearningExperiment] = []
+        # 上限:_learning_loop 是永续循环,每轮都 extend/append 这三个列表。
+        # 无上限会内存泄漏,故按 FIFO 保留最近若干条(persistence 才是长期存储)。
+        self._max_in_memory = 5000
         self._running = False
         self._task: Optional[asyncio.Task] = None
 
@@ -963,6 +966,8 @@ class AutonomousLearningEngine:
                 observations = await self._observe_stage()
                 cycle.observations = observations
                 self._observations.extend(observations)
+                if len(self._observations) > self._max_in_memory:
+                    del self._observations[: len(self._observations) - self._max_in_memory]
                 await self._trigger_callbacks(LearningStage.OBSERVE, observations)
                 
                 # Stage 2: ANALYZE
@@ -978,6 +983,8 @@ class AutonomousLearningEngine:
                 experiments = await self._experiment_stage(patterns)
                 cycle.experiments = experiments
                 self._experiments.extend(experiments)
+                if len(self._experiments) > self._max_in_memory:
+                    del self._experiments[: len(self._experiments) - self._max_in_memory]
                 await self._trigger_callbacks(LearningStage.EXPERIMENT, experiments)
                 
                 # Stage 4: VALIDATE
@@ -995,6 +1002,8 @@ class AutonomousLearningEngine:
                 # Complete cycle
                 cycle.end_time = datetime.now()
                 self._cycles.append(cycle)
+                if len(self._cycles) > self._max_in_memory:
+                    del self._cycles[: len(self._cycles) - self._max_in_memory]
 
                 # Persist cycle data
                 if self._persistence:
