@@ -65,6 +65,38 @@ def _try_emit_event(event_type_name: str, data: dict) -> None:
         logger.warning("Exception suppressed: %s", exc)
 
 
+def _run_async_blocking(async_fn, *args, timeout: float = 60):
+    """在同步函数里安全执行协程,兼容"当前线程正跑着事件循环"的情形。
+
+    原来用 ``run_coroutine_threadsafe(coro, get_running_loop()).result()``:若本函数是
+    在该 loop 的线程上被同步调用,``.result()`` 阻塞的正是 loop 线程自身 → loop 无法
+    推进协程 → 自死锁。修复:无运行 loop 时 asyncio.run;已有运行 loop 时在独立线程
+    用新 loop 执行,绝不阻塞当前 loop 线程。
+    """
+    import asyncio
+    import threading
+
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(async_fn(*args))
+
+    box: dict = {}
+
+    def _worker() -> None:
+        try:
+            box["result"] = asyncio.run(async_fn(*args))
+        except Exception as _e:  # noqa: BLE001
+            box["error"] = _e
+
+    t = threading.Thread(target=_worker, daemon=True)
+    t.start()
+    t.join(timeout)
+    if "error" in box:
+        raise box["error"]
+    return box.get("result")
+
+
 class MCPDynamicGateway:
     """Enhanced MCP gateway with dynamic tool generation and hot-reload.
 
@@ -372,18 +404,14 @@ class MCPDynamicGateway:
             ``{"success": bool, "name": str, ...}``
         """
         try:
-            import asyncio
-
             from core.mcp_loader import mcp_loader
 
             async def _load():
                 return await mcp_loader.load(name=name, command=command)
 
-            try:
-                loop = asyncio.get_running_loop()
-                result = asyncio.run_coroutine_threadsafe(_load(), loop).result(timeout=60)
-            except RuntimeError:
-                result = asyncio.run(_load())
+            # 用安全执行器,避免 run_coroutine_threadsafe(...).result() 在 loop 线程上
+            # 自死锁(见 _run_async_blocking 说明)。
+            result = _run_async_blocking(_load, timeout=60)
 
             if result.get("success"):
                 self._generated_tools[name] = {
