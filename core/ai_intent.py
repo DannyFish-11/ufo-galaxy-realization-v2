@@ -621,7 +621,12 @@ class SemanticSearch:
     def __init__(self, qdrant_url: str = ""):
         self._index: Dict[str, Dict[str, Any]] = {}
         self._qdrant_client = None
-        self._collection_name = os.environ.get("KB_COLLECTION", "galaxy_docs")
+        # Fallback must match the shared vector-backend factory
+        # (core.vector_backend defaults KB_COLLECTION to 'galaxy_knowledge').
+        # Previously this defaulted to 'galaxy_docs', so when KB_COLLECTION was
+        # unset ai_intent searched a different collection than where
+        # UnifiedMemory/the vector backend stored documents → empty results.
+        self._collection_name = os.environ.get("KB_COLLECTION", "galaxy_knowledge")
         self._qdrant_url = qdrant_url or os.environ.get("QDRANT_URL", "")
         self._qdrant_ready = False
         # 延迟引入，避免循环依赖
