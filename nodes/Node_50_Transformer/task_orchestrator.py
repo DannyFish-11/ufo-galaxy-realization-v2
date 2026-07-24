@@ -31,7 +31,16 @@ from dataclasses import dataclass, asdict
 from enum import Enum
 import websockets
 
-from enhanced_nlu_engine import TaskStep, TargetDevice
+try:
+    from enhanced_nlu_engine import TaskStep, TargetDevice
+except ModuleNotFoundError:
+    # Top-level absolute import only resolves when this node's own directory is
+    # on sys.path (standalone run). Imported as a package it raises
+    # ModuleNotFoundError — add the module's directory and retry.
+    import os as _os
+    import sys as _sys
+    _sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+    from enhanced_nlu_engine import TaskStep, TargetDevice
 
 @dataclass
 class DeviceInfo:

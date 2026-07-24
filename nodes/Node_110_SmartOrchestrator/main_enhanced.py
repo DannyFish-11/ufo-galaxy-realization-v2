@@ -1,8 +1,8 @@
 import os
 import httpx
-from core.orchestrator_engine import OrchestratorEngine
+from core.orchestrator_engine import SmartOrchestrator
 
-class QwenEnhancedOrchestrator(OrchestratorEngine):
+class QwenEnhancedOrchestrator(SmartOrchestrator):
     """
     使用 Qwen-Think-Max 增强的智能编排器
     """
