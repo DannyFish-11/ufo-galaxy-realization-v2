@@ -1095,14 +1095,16 @@ class AutonomousLearningEngine:
                     train_set = observations[:split_idx]
                     test_set = observations[split_idx:]
 
-                    # Validate: check if the pattern's confidence holds on test set
-                    if test_set:
-                        # Count how many test observations match the pattern's conditions
-                        matches = sum(
-                            1 for obs in test_set
-                            if isinstance(obs, dict) and obs.get("matches_pattern", True)
-                        )
-                        validation_rate = matches / len(test_set)
+                    # Validate: check if the pattern's confidence holds on test set.
+                    # pattern.observations are observation IDs (List[str]), not dicts,
+                    # so the old isinstance(obs, dict) check never matched and
+                    # validation_rate was always 0 (every experiment failed → nothing
+                    # deployed). Only score over dict observations if any are present;
+                    # otherwise fall back to the pattern's own confidence.
+                    dict_obs = [obs for obs in test_set if isinstance(obs, dict)]
+                    if dict_obs:
+                        matches = sum(1 for obs in dict_obs if obs.get("matches_pattern", True))
+                        validation_rate = matches / len(dict_obs)
                     else:
                         validation_rate = pattern.confidence
 
