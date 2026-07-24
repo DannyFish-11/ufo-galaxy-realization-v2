@@ -237,6 +237,16 @@ async def double_click(request: DoubleClickRequest) -> Dict[str, Any]:
 @app.get("/supported_providers")
 async def get_supported_providers():
     """获取支持的 VLM 提供商列表"""
+    # engine 在 AndroidVLMEngine 导入失败时为 None(见模块级 `engine = ... if ... else None`),
+    # 直接解引用会 500。降级模式下如实返回,不崩溃。
+    if engine is None:
+        return {
+            "providers": SUPPORTED_VLM_PROVIDERS,
+            "current": None,
+            "claude_configured": False,
+            "gpt4v_configured": False,
+            "degraded": True,
+        }
     return {
         "providers": SUPPORTED_VLM_PROVIDERS,
         "current": engine.vlm_provider,

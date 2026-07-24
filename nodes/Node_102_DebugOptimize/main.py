@@ -150,10 +150,15 @@ class ErrorDetector:
                         elif isinstance(node.ctx, ast.Load):
                             used_vars.add(node.id)
                 
-                # 内置函数和关键字
-                builtins = set(dir(__builtins__))
-                
-                undefined_vars = used_vars - defined_vars - builtins
+                # 内置函数和关键字。不能用 dir(__builtins__):在【被导入的模块】里
+                # __builtins__ 是 builtins 模块的 __dict__(dict),dir() 返回的是 dict 的
+                # 方法名而非内置函数名 → print/len/range 等被误报为未定义。用 builtins
+                # 模块本身 + keyword 关键字表,结果与运行上下文无关。
+                import builtins as _bi
+                import keyword as _kw
+                builtin_names = set(dir(_bi)) | set(_kw.kwlist)
+
+                undefined_vars = used_vars - defined_vars - builtin_names
                 for var in undefined_vars:
                     errors.append(Error(
                         type="NameError",
