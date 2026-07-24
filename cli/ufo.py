@@ -550,7 +550,10 @@ def main():
     # mcp load
     mcp_load_parser = mcp_subparsers.add_parser("load", help="加载 MCP 服务器")
     mcp_load_parser.add_argument("name", help="服务器名称")
-    mcp_load_parser.add_argument("command", help="启动命令")
+    # dest 必须避开顶层 subparsers 的 dest="command",否则该位置参数会覆盖
+    # args.command(本应为 "mcp"),导致 `args.command == "mcp"` 判假、mcp 分支
+    # 永不执行。metavar 保持 CLI 显示为 "command",用户侧不变。
+    mcp_load_parser.add_argument("start_command", metavar="command", help="启动命令")
     mcp_load_parser.add_argument("--env", "-e", help="环境变量 (JSON 格式)")
     
     # mcp list
@@ -588,7 +591,7 @@ def main():
     elif args.command == "mcp":
         if args.mcp_command == "load":
             env = json.loads(args.env) if args.env else None
-            asyncio.run(mcp_load(args.name, args.command, env))
+            asyncio.run(mcp_load(args.name, args.start_command, env))
         elif args.mcp_command == "list":
             asyncio.run(mcp_list())
         elif args.mcp_command == "tools":
