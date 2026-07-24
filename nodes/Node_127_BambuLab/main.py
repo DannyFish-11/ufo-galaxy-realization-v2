@@ -2,6 +2,8 @@
 Node 127: BambuLab - 拓竹 3D 打印机控制
 """
 import os, json
+import time
+import asyncio
 from datetime import datetime
 from typing import Optional, Dict, Any
 from fastapi import FastAPI, HTTPException
@@ -54,15 +56,15 @@ async def get_status():
     if not PRINTER_IP:
         return {"success": False, "error": "Printer not configured"}
     
-    try:
+    def _poll_status():
         client = get_mqtt_client()
         status = {"connected": False}
-        
+
         def on_connect(c, userdata, flags, rc):
             if rc == 0:
                 status["connected"] = True
                 c.subscribe(f"device/{SERIAL_NUMBER}/report")
-        
+
         def on_message(c, userdata, msg):
             try:
                 data = json.loads(msg.payload.decode())
@@ -70,16 +72,19 @@ async def get_status():
             except (json.JSONDecodeError, ValueError):
                 pass
             c.disconnect()
-        
+
         client.on_connect = on_connect
         client.on_message = on_message
         client.connect(PRINTER_IP, 8883, 60)
         client.loop_start()
-        
-        import time
         time.sleep(3)
         client.loop_stop()
-        
+        return status
+
+    try:
+        # connect + 3s wait + loop_stop are blocking; run off the event loop
+        # so the node keeps serving other requests while polling the printer.
+        status = await asyncio.to_thread(_poll_status)
         return {"success": True, "status": status}
     except Exception as e:
         return {"success": False, "error": str(e)}
