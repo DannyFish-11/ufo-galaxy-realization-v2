@@ -96,7 +96,13 @@ def _prepare_run_command(config, entry_file, tmpdir, args, timeout, env=None):
     """
     if "compile" in config:
         out_bin = os.path.join(tmpdir, "prog")
-        compile_cmd = [tok.format(src=entry_file, out=out_bin) for tok in config["compile"]]
+        # 编译输入与输出都用【服务端固定命名】的路径,切断用户可控文件名(execute_files
+        # 的 request.entry_point)流入编译命令行(CodeQL: uncontrolled command line)。
+        # entry_file 的内容已在磁盘,复制到固定名 source<ext> 后编译该固定名即可。
+        fixed_src = os.path.join(tmpdir, "source" + config.get("ext", ""))
+        if os.path.realpath(entry_file) != os.path.realpath(fixed_src):
+            shutil.copyfile(entry_file, fixed_src)
+        compile_cmd = [tok.format(src=fixed_src, out=out_bin) for tok in config["compile"]]
         comp = subprocess.run(
             compile_cmd, capture_output=True, text=True, timeout=timeout, cwd=tmpdir, env=env
         )
