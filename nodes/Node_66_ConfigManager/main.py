@@ -311,6 +311,14 @@ def load_config(req: LoadConfigRequest):
         raise HTTPException(status_code=400, detail=str(e))
 
 
+# 字面量路由 /config/export 必须注册在 catch-all /config/{key:path} 之前 ——
+# {key:path} 会吞掉 "export"(key="export"),否则 /config/export 永远不可达。
+@app.get("/config/export")
+def export_config():
+    """导出全部配置为 JSON"""
+    return {"config": service.export_all(), "count": len(service._config_data)}
+
+
 @app.get("/config/{key:path}")
 def get_config(key: str):
     """获取配置值"""
@@ -357,12 +365,6 @@ def reload_config():
         return {"success": True, "path": service._last_file_path, "keys": service.list_keys()}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
-
-
-@app.get("/config/export")
-def export_config():
-    """导出全部配置为 JSON"""
-    return {"config": service.export_all(), "count": len(service._config_data)}
 
 
 @app.post("/mcp/call")
