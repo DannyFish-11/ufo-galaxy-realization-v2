@@ -30,6 +30,7 @@ import time
 import uuid
 import heapq
 import logging
+import threading
 from typing import Dict, List, Optional, Set, Any, Callable, Tuple
 from dataclasses import dataclass, field
 from enum import Enum, auto
@@ -179,9 +180,13 @@ class RoundRobinBalancer(LoadBalancer):
     
     def __init__(self):
         self._counter = 0
-        self._lock = asyncio.Lock()
-    
-    async def select_device(
+        # sync lock: the LoadBalancer ABC and every other balancer expose
+        # select_device as a *sync* method, and _schedule_task calls it without
+        # await. Making this one async returned an un-awaited coroutine that was
+        # assigned as the "device_id", breaking round-robin scheduling entirely.
+        self._lock = threading.Lock()
+
+    def select_device(
         self,
         task: TaskInfo,
         available_devices: List[DeviceInfo],
@@ -189,8 +194,8 @@ class RoundRobinBalancer(LoadBalancer):
     ) -> Optional[str]:
         if not available_devices:
             return None
-        
-        async with self._lock:
+
+        with self._lock:
             device = available_devices[self._counter % len(available_devices)]
             self._counter += 1
             return device.device_id
@@ -834,28 +839,33 @@ class CrossDeviceScheduler:
         else:
             task.state = TaskState.FAILED
             self._stats['failed'] += 1
-            
-            # Check for retry
-            if task.retry_count < task.max_retries:
-                task.retry_count += 1
-                task.state = TaskState.PENDING
-                # Re-queue the task
-                prioritized = PrioritizedTask(task)
-                try:
-                    self._queues[task.priority].put_nowait(prioritized)
-                    logger.info(f"Task {task_id} re-queued for retry ({task.retry_count}/{task.max_retries})")
-                    return
-                except asyncio.QueueFull:
-                    logger.error(f"Could not re-queue task {task_id}, queue full")
-        
-        # Update device metrics
+
+        # Release the device's active slot and record this attempt for EVERY
+        # outcome. This must run before any retry re-queue return, otherwise the
+        # retry path skipped record_task_completion and the device's active_tasks
+        # leaked +1 per retry (the schedule path did +1 but nothing did -1),
+        # eventually making the device look permanently busy.
         if task.assigned_device:
             metrics = self._device_metrics.get(task.assigned_device)
             if metrics:
                 metrics.record_task_completion(success, response_time or 0)
                 self._balancer.update_metrics(task.assigned_device, metrics)
-        
-        # Notify callbacks
+
+        # Retry handling (after the slot has been released above).
+        if not success and task.retry_count < task.max_retries:
+            task.retry_count += 1
+            task.state = TaskState.PENDING
+            task.assigned_device = None  # re-schedule assigns a fresh device (+1)
+            prioritized = PrioritizedTask(task)
+            try:
+                self._queues[task.priority].put_nowait(prioritized)
+                logger.info(f"Task {task_id} re-queued for retry ({task.retry_count}/{task.max_retries})")
+                return
+            except asyncio.QueueFull:
+                logger.error(f"Could not re-queue task {task_id}, queue full")
+                task.state = TaskState.FAILED
+
+        # Notify callbacks (final outcome only)
         await self._notify_task_complete(task_id, success, result, error_message)
         
         logger.debug(f"Task {task_id} completed: success={success}")
