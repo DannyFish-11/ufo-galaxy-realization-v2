@@ -276,9 +276,12 @@ class ToolWrapperEngine:
         # 推断工具类型
         tool_type = ToolType.CLI  # 默认 CLI
         
-        # 推断安装方法和命令
-        install_method = InstallMethod.CURL_SCRIPT
-        install_command = f"curl -fsSL https://{tool_name.lower()}.dev/install.sh | bash"
+        # 安全:绝不再从任意工具名拼出 `curl -fsSL https://<toolname>.dev/install.sh | bash`
+        # 再交给 sh 执行 —— <toolname>.dev 可被任何人注册,等于对攻击者控制的域名做远程代码
+        # 执行(RCE)。改用系统包管理器按【包名】安装:最坏情况是包不存在、安装失败,而不会
+        # 拉取并执行任意远程脚本。
+        install_method = InstallMethod.PACKAGE_MANAGER
+        install_command = self._package_manager_install_command(tool_name)
         
         return ToolKnowledge(
             tool_name=tool_name,
@@ -308,10 +311,55 @@ class ToolWrapperEngine:
         except (FileNotFoundError, subprocess.TimeoutExpired):
             return False
     
+    def _package_manager_install_command(self, tool_name: str) -> str:
+        """按当前系统可用的包管理器构造【按包名】安装命令(工具名经 shlex 转义)。
+
+        找不到包管理器时返回空串,``_install_tool`` 会据此拒绝执行。
+        """
+        import shutil
+
+        pkg = shlex.quote(tool_name)
+        if shutil.which("apt-get"):
+            return f"apt-get install -y {pkg}"
+        if shutil.which("dnf"):
+            return f"dnf install -y {pkg}"
+        if shutil.which("yum"):
+            return f"yum install -y {pkg}"
+        if shutil.which("brew"):
+            return f"brew install {pkg}"
+        if shutil.which("apk"):
+            return f"apk add {pkg}"
+        return ""
+
+    @staticmethod
+    def _install_command_is_safe(command: str) -> bool:
+        """防御性拦截:拒绝空命令,以及把远程内容管道进 shell 执行的模式
+        (curl/wget ... | sh/bash),避免任何 code path 触发远程代码执行。
+        """
+        if not command or not command.strip():
+            return False
+        low = command.lower()
+        if "|" in command and ("curl" in low or "wget" in low) and ("sh" in low or "bash" in low):
+            return False
+        return True
+
     def _install_tool(self, tool_knowledge: ToolKnowledge) -> ExecutionResult:
         """安装工具"""
         start_time = time.time()
-        
+
+        if not self._install_command_is_safe(tool_knowledge.install_command):
+            return ExecutionResult(
+                success=False,
+                stdout="",
+                stderr=(
+                    "Refused unsafe/empty install command: "
+                    "远程脚本管道执行(curl|bash)或空命令已被拒绝,请改用包管理器或手动安装。"
+                ),
+                return_code=126,
+                execution_time=0.0,
+                command=tool_knowledge.install_command,
+            )
+
         try:
             # 执行安装命令（显式使用 sh -c 以支持管道，但命令来自已知配置，非用户输入）
             result = subprocess.run(

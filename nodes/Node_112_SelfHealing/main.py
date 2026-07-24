@@ -821,8 +821,20 @@ class SelfHealingEngine:
         # 查找相关的健康检查
         for check in self.health_checks.values():
             if check.target == fault.target:
-                status = await self.run_health_check(check.check_id)
-                return status in [HealthStatus.HEALTHY, HealthStatus.DEGRADED]
+                # 用【只读】探测 _perform_check,而非 run_health_check:后者会累加
+                # consecutive_failures 并在 >=3 时再次 _detect_fault → "验证恢复"本身
+                # 触发新一轮故障+恢复(自触发风暴)。验证只判定当前状态,成功时清零计数。
+                try:
+                    status = await self._perform_check(check)
+                except Exception as e:
+                    logger.error(f"Recovery verification probe failed for {check.check_id}: {e}")
+                    return False
+                check.last_check = datetime.now()
+                check.last_status = status
+                healthy = status in [HealthStatus.HEALTHY, HealthStatus.DEGRADED]
+                if healthy:
+                    check.consecutive_failures = 0
+                return healthy
 
         # 没有注册健康检查时，无法确认目标是否真的恢复。NOTIFY 动作本身
         # 就是"结果"（消息是否送达由 handler 自己的返回值体现），可以信任

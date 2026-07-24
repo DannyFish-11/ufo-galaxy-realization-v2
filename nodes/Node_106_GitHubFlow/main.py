@@ -180,7 +180,11 @@ class GitHubFlow:
     def __init__(self, github_token: Optional[str] = None, kb_url: str = "http://localhost:8105"):
         self.github = GitHubClient(github_token)
         self.kb_url = kb_url
-        self.use_mock = not bool(github_token)  # 有 token 时使用真实模式
+        # 与实际客户端保持同一事实来源:GitHubClient 会读 GITHUB_TOKEN 环境变量,而
+        # 本类原来只看构造参数 github_token。由于 `flow = GitHubFlow()` 无参构造,
+        # 即使环境里有 token,flow.use_mock 也恒为 True → 流程层所有 mock 分支短路,
+        # 真实 API 永远走不到(与内层客户端脑裂)。改为直接复用客户端解析后的判定。
+        self.use_mock = self.github.use_mock
 
         print(f"✅ GitHub 工作流已初始化 (Mock 模式: {self.use_mock})")
     
