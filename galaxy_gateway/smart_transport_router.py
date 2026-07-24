@@ -128,8 +128,12 @@ class SmartTransportRouter:
         }
         
         # Tailscale 配置
-        self.tailscale_enabled = os.getenv("TAILSCALE_ENABLED", "false").lower() == "true"
-        self.tailscale_domain = os.getenv("TAILSCALE_DOMAIN", "")
+        # Canonical env names (GALAXY_TAILSCALE_*) — the rest of the system
+        # (api/config, webrtc_proxy, system_mode, operational_enablement_audit)
+        # uses these. The un-prefixed TAILSCALE_ENABLED / TAILSCALE_DOMAIN this
+        # router previously read were a dead switch nothing set.
+        self.tailscale_enabled = os.getenv("GALAXY_TAILSCALE_ENABLED", "").strip().lower() in ("1", "true", "yes")
+        self.tailscale_domain = os.getenv("GALAXY_TAILSCALE_HOST", "").strip()
 
         # 可选传输通道开关（只有在明确启用时才返回直连 Node 端点）
         self.webrtc_enabled = os.getenv("GALAXY_ENABLE_WEBRTC", "false").lower() == "true"
