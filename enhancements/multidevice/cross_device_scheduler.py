@@ -415,15 +415,11 @@ class AdaptiveBalancer(LoadBalancer):
         # Adapt strategy based on conditions
         self._adapt_strategy(device_metrics)
         
-        # Use current strategy
+        # Use current strategy. All balancers (incl. RoundRobinBalancer) now
+        # expose a *sync* select_device — the old special-case ran
+        # loop.run_until_complete() on the already-running loop, which raises
+        # "This event loop is already running".
         balancer = self.balancers[self.current_strategy]
-        if isinstance(balancer, RoundRobinBalancer):
-            # RoundRobinBalancer uses async method
-            import asyncio
-            loop = asyncio.get_running_loop()
-            return loop.run_until_complete(
-                balancer.select_device(task, available_devices, device_metrics)
-            )
         return balancer.select_device(task, available_devices, device_metrics)
     
     def _adapt_strategy(self, device_metrics: Dict[str, DeviceMetrics]) -> None:
