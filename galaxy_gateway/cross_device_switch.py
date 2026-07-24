@@ -72,10 +72,14 @@ def is_cross_device_enabled() -> bool:
     Reads ``GALAXY_CROSS_DEVICE_ENABLED`` at call-time so the switch can be
     toggled without restarting the process (useful for tests).
 
-    Default: **enabled** (returns ``True`` when the variable is absent).
+    Default: **disabled** (opt-in). Cross-device routing is only enabled on an
+    explicit ``1 / true / yes``. This matches the mode/presence/health layers
+    (system_mode, desktop_presence_runtime, system_orchestrator), which all
+    treat the variable as opt-in — previously this guard defaulted *enabled*,
+    admitting requests the rest of the system considered disabled (fail-open).
     """
-    raw = os.getenv("GALAXY_CROSS_DEVICE_ENABLED", "1").strip().lower()
-    return raw not in ("0", "false", "no")
+    raw = os.getenv("GALAXY_CROSS_DEVICE_ENABLED", "").strip().lower()
+    return raw in ("1", "true", "yes")
 
 
 def guard_cross_device(trace_id: Optional[str] = None) -> None:
