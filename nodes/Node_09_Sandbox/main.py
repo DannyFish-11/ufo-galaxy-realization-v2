@@ -89,19 +89,25 @@ LANGUAGE_CONFIG = {
 }
 
 
-def _prepare_run_command(config, entry_file, tmpdir, args, timeout, env=None):
+def _prepare_run_command(config, entry_file, tmpdir, args, timeout, env=None, source_content=None):
     """构造实际执行命令。编译型语言(config 含 'compile')先编译到 tmpdir 内的唯一
     二进制,编译失败返回 (None, 错误字典);解释型语言直接 cmd + 入口文件。
     返回 (run_cmd, compile_error_or_None)。
+
+    编译源码通过 ``source_content`` 字符串写入【服务端固定命名】路径,全程不让用户
+    可控的文件名进入编译命令行或路径表达式(CodeQL: uncontrolled command line / path)。
     """
     if "compile" in config:
         out_bin = os.path.join(tmpdir, "prog")
-        # 编译输入与输出都用【服务端固定命名】的路径,切断用户可控文件名(execute_files
-        # 的 request.entry_point)流入编译命令行(CodeQL: uncontrolled command line)。
-        # entry_file 的内容已在磁盘,复制到固定名 source<ext> 后编译该固定名即可。
         fixed_src = os.path.join(tmpdir, "source" + config.get("ext", ""))
-        if os.path.realpath(entry_file) != os.path.realpath(fixed_src):
-            shutil.copyfile(entry_file, fixed_src)
+        # 源内容缺省时才读文件;用 basename(公认的路径 sanitizer)+ tmpdir 归一,
+        # 确保即便 entry_file 含用户成分也不构成路径注入。
+        if source_content is None:
+            _safe_src = os.path.join(tmpdir, os.path.basename(entry_file))
+            with open(_safe_src, "r", encoding="utf-8") as _sf:
+                source_content = _sf.read()
+        with open(fixed_src, "w", encoding="utf-8") as _wf:
+            _wf.write(source_content)
         compile_cmd = [tok.format(src=fixed_src, out=out_bin) for tok in config["compile"]]
         comp = subprocess.run(
             compile_cmd, capture_output=True, text=True, timeout=timeout, cwd=tmpdir, env=env
@@ -279,7 +285,7 @@ async def execute_code(request: ExecuteRequest):
 
         try:
             cmd, compile_err = _prepare_run_command(
-                config, code_file, tmpdir, request.args, request.timeout, env
+                config, code_file, tmpdir, request.args, request.timeout, env, source_content=request.code
             )
             if compile_err is not None:
                 compile_err["language"] = lang
@@ -365,10 +371,19 @@ async def execute_files(request: FileExecuteRequest):
                 f.write(content)
 
         entry_file = _resolved_in_tmp(request.entry_point)
+        # 编译型语言的源码内容从 request.files 直接取字符串(而非按用户文件名读盘),
+        # 避免用户可控路径进入编译流程(CodeQL: uncontrolled path)。按基名匹配兜底。
+        _entry_content = request.files.get(request.entry_point)
+        if _entry_content is None:
+            _bn = os.path.basename(request.entry_point or "")
+            _entry_content = next(
+                (c for n, c in request.files.items() if os.path.basename(n) == _bn), None
+            )
 
         try:
             cmd, compile_err = _prepare_run_command(
-                config, entry_file, tmpdir, None, request.timeout, os.environ.copy()
+                config, entry_file, tmpdir, None, request.timeout, os.environ.copy(),
+                source_content=_entry_content,
             )
             if compile_err is not None:
                 compile_err["language"] = lang
