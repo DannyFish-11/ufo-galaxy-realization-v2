@@ -1034,7 +1034,10 @@ class CrossDeviceCoordinator:
 
         # 解析源设备
         if "手机" in command_lower or "android" in command_lower:
-            if command_lower.index("手机") < len(command_lower) // 2:
+            # 用实际出现的标记词定位;此前无条件 index("手机"),命令只含 "android"
+            # 不含"手机"时会 ValueError 崩溃。
+            marker = "手机" if "手机" in command_lower else "android"
+            if command_lower.index(marker) < len(command_lower) // 2:
                 source_type = DeviceType.ANDROID
             else:
                 target_type = DeviceType.ANDROID
