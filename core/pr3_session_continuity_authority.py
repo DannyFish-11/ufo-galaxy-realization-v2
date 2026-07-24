@@ -952,28 +952,28 @@ def build_pr3_convergence_audit_snapshot() -> PR3ConvergenceAuditSnapshot:
     # ── Flow continuity coordinator ────────────────────────────────────────
     try:
         from core.flow_continuity_coordinator import (
-            FLOW_CONTINUITY_COORDINATOR_IS_AUTHORITY,
+            FLOW_CONTINUITY_COORDINATOR_AUTHORITY,
             get_flow_continuity_coordinator,
         )
 
         _coord = get_flow_continuity_coordinator()
         snap.continuity_coordinator_loaded = _coord is not None
         if snap.continuity_coordinator_loaded:
-            policies_affirmed.append(FLOW_CONTINUITY_COORDINATOR_IS_AUTHORITY[:80])
+            policies_affirmed.append(FLOW_CONTINUITY_COORDINATOR_AUTHORITY[:80])
     except Exception as exc:
         errors.append(f"flow_continuity_coordinator unavailable: {exc}")
 
     # ── Session registry ───────────────────────────────────────────────────
     try:
         from core.attached_runtime_session_registry import (
-            ATTACHED_SESSION_REGISTRY_IS_AUTHORITY,
+            ATTACHED_RUNTIME_SESSION_REGISTRY_AUTHORITY,
             get_session_registry,
         )
 
         _registry = get_session_registry()
         snap.session_registry_loaded = _registry is not None
         if snap.session_registry_loaded:
-            policies_affirmed.append(ATTACHED_SESSION_REGISTRY_IS_AUTHORITY[:80])
+            policies_affirmed.append(ATTACHED_RUNTIME_SESSION_REGISTRY_AUTHORITY[:80])
     except Exception as exc:
         errors.append(f"attached_runtime_session_registry unavailable: {exc}")
 
