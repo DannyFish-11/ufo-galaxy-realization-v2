@@ -107,6 +107,15 @@ class AutonomousLearningEngine:
         self.exploration_rate: float = 0.2
         self._experience_buffer: List[Experience] = []
         self._buffer_size = 1000
+        # Strong refs to fire-and-forget tasks so the event loop does not
+        # garbage-collect them mid-run (see asyncio.create_task docs).
+        self._bg_tasks: set = set()
+
+    def _spawn_bg(self, coro) -> None:
+        """Schedule a background task and retain a strong reference to it."""
+        task = asyncio.create_task(coro)
+        self._bg_tasks.add(task)
+        task.add_done_callback(self._bg_tasks.discard)
     
     def record_experience(self, experience_type: ExperienceType,
                           context: Dict[str, Any], action: str,
@@ -133,7 +142,7 @@ class AutonomousLearningEngine:
         logger.info(f"Recorded experience: {experience.experience_id} ({experience_type.value})")
         
         # 触发增量学习
-        asyncio.create_task(self._incremental_learn(experience))
+        self._spawn_bg(self._incremental_learn(experience))
         
         return experience.experience_id
     
@@ -287,9 +296,9 @@ class AutonomousLearningEngine:
         
         # 根据学习类型执行学习
         if learning_type == LearningType.REINFORCEMENT:
-            asyncio.create_task(self._reinforcement_learning(session))
+            self._spawn_bg(self._reinforcement_learning(session))
         elif learning_type == LearningType.INCREMENTAL:
-            asyncio.create_task(self._batch_incremental_learning(session))
+            self._spawn_bg(self._batch_incremental_learning(session))
         
         return session.session_id
     
