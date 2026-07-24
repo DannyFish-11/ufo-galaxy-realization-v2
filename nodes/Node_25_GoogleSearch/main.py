@@ -268,8 +268,14 @@ def load_config_from_env() -> NodeConfig:
         api_config=api_cfg
     )
 
-async def main():
-    """异步主函数，用于设置和运行节点"""
+def main():
+    """主函数,用于设置和运行节点。
+
+    必须是【同步】函数:main() 里没有任何 await,末尾的 node.run() → uvicorn.run()
+    会自建/接管事件循环。若把 main 设为 async 再用 asyncio.run(main()) 运行,uvicorn
+    就是在【已运行的事件循环里】再启动一个 → RuntimeError: asyncio.run() cannot be
+    called from a running event loop → 节点直接启动失败、从不提供服务。
+    """
     try:
         # 1. 加载配置
         config = load_config_from_env()
@@ -277,9 +283,7 @@ async def main():
         # 2. 创建节点实例
         node = GoogleSearchNode(config)
 
-        # 3. 启动服务 (这是一个阻塞调用)
-        # 在实际的异步应用中，我们可能会用更复杂的方式来管理服务的生命周期
-        # 但对于uvicorn.run()，它会接管事件循环
+        # 3. 启动服务 (这是一个阻塞调用,uvicorn 接管事件循环)
         node.run()
 
     except Exception as e:
@@ -301,8 +305,7 @@ if __name__ == "__main__":
     logging.info("            Galaxy - Google Search Node      ")
     logging.info("==================================================")
     
-    # 使用asyncio.run来运行异步主函数
-    # 注意：uvicorn.run()本身是阻塞的，所以这里实际上不会在main()返回后继续执行
-    # 这种结构是为了保持异步代码的一致性
-    asyncio.run(main())
+    # 直接调用同步 main():uvicorn.run() 自身阻塞并接管事件循环。
+    # 绝不能用 asyncio.run(main()) 包裹 —— 会导致 uvicorn 在已运行的 loop 里再起 loop 而崩溃。
+    main()
 
