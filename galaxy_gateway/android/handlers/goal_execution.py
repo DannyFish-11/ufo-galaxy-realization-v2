@@ -823,9 +823,11 @@ async def handle_parallel_subtask(
         all_device_ids = [
             did
             for did, d in ucm.get_all_devices().items()
+            # Android 设备判定:类型为 ANDROID/MOBILE/PHONE 或 id 前缀 android_。
+            # 此前多了一个 `or d.get("online")`,会把【所有在线设备】(含 Windows PC)
+            # 都算成 Android,使并行子任务扇出到非 Android 设备。
             if d.get("device_type", "").upper() in ("ANDROID", "MOBILE", "PHONE")
             or did.startswith("android_")
-            or d.get("online")
         ]
         logger.debug("PARALLEL_SUBTASK: 发现 %d 台 Android 设备", len(all_device_ids))
     except Exception as ucm_err:
