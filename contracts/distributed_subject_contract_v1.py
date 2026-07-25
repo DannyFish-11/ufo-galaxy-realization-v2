@@ -348,9 +348,9 @@ DISTRIBUTED_SUBJECT_CONTRACT_V1_FIELDS: List[SubjectContractField] = [
         dimension=SubjectContractDimension.CONTINUITY,
         label=ContractFieldLabel.CANONICAL,
         description=(
-            "Classification of the continuity context: online_session, "
-            "resumed_session, handoff_session, replay_session, "
-            "parallel_subtask, or no_continuity."
+            "Classification of the dispatch-to-session execution continuity "
+            "context, per DispatchContinuityClass: persistent, request_scoped, "
+            "transfer_scoped, or ephemeral."
         ),
         v2_anchor="contracts/dispatch_continuity.py:DispatchContinuityClass",
         android_anchor="AndroidContinuityIntegration.kt",
