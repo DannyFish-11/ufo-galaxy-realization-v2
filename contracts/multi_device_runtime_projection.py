@@ -84,7 +84,6 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
-
 # ---------------------------------------------------------------------------
 # PR-8 canonical authority markers
 # ---------------------------------------------------------------------------
@@ -144,25 +143,17 @@ class RuntimeProjectionDeviceEntry(BaseModel):
     """
 
     device_id: str = Field(description="Unique device identifier.")
-    platform: Optional[str] = Field(
-        default=None, description="Device platform (e.g. 'android', 'windows', 'macos')."
-    )
+    platform: Optional[str] = Field(default=None, description="Device platform (e.g. 'android', 'windows', 'macos').")
     form_factor: Optional[str] = Field(
         default=None, description="Device form factor (e.g. 'phone', 'tablet', 'desktop')."
     )
-    status: Optional[str] = Field(
-        default=None, description="Current device status (e.g. 'online', 'offline')."
-    )
+    status: Optional[str] = Field(default=None, description="Current device status (e.g. 'online', 'offline').")
     connection_state: Optional[str] = Field(
         default=None,
         description="Current connection state (e.g. 'connected', 'disconnected').",
     )
-    runtime_capable: bool = Field(
-        default=True, description="Whether the device is capable of hosting a runtime."
-    )
-    health_score: Optional[float] = Field(
-        default=None, ge=0.0, le=1.0, description="Health score [0, 1]."
-    )
+    runtime_capable: bool = Field(default=True, description="Whether the device is capable of hosting a runtime.")
+    health_score: Optional[float] = Field(default=None, ge=0.0, le=1.0, description="Health score [0, 1].")
     source_runtime_posture: str = Field(
         default="control_only",
         description=(
@@ -193,21 +184,11 @@ class RuntimeProjectionHostEntry(BaseModel):
     """
 
     host_id: str = Field(description="Unique identifier for this runtime host.")
-    device_id: Optional[str] = Field(
-        default=None, description="Underlying device ID."
-    )
-    status: Optional[str] = Field(
-        default=None, description="Host lifecycle status."
-    )
-    execution_mode: Optional[str] = Field(
-        default=None, description="Current execution mode."
-    )
-    accepts_handoff: bool = Field(
-        default=False, description="Whether the host accepts incoming handoffs."
-    )
-    can_delegate: bool = Field(
-        default=False, description="Whether the host can delegate to other runtimes."
-    )
+    device_id: Optional[str] = Field(default=None, description="Underlying device ID.")
+    status: Optional[str] = Field(default=None, description="Host lifecycle status.")
+    execution_mode: Optional[str] = Field(default=None, description="Current execution mode.")
+    accepts_handoff: bool = Field(default=False, description="Whether the host accepts incoming handoffs.")
+    can_delegate: bool = Field(default=False, description="Whether the host can delegate to other runtimes.")
     source_runtime_posture: str = Field(
         default="control_only",
         description=(
@@ -233,21 +214,11 @@ class RuntimeProjectionMeshSessionEntry(BaseModel):
     session_id: str = Field(description="Unique mesh session identifier.")
     mesh_id: Optional[str] = Field(default=None, description="Mesh/body identifier.")
     status: Optional[str] = Field(default=None, description="Session lifecycle status.")
-    source_device_id: Optional[str] = Field(
-        default=None, description="Device that initiated the session."
-    )
-    primary_device_id: Optional[str] = Field(
-        default=None, description="Device executing primarily."
-    )
-    participant_count: int = Field(
-        default=0, description="Number of participants in this session."
-    )
-    multi_device_required: bool = Field(
-        default=False, description="Whether multi-device is required."
-    )
-    merge_policy: Optional[str] = Field(
-        default=None, description="Result merge policy."
-    )
+    source_device_id: Optional[str] = Field(default=None, description="Device that initiated the session.")
+    primary_device_id: Optional[str] = Field(default=None, description="Device executing primarily.")
+    participant_count: int = Field(default=0, description="Number of participants in this session.")
+    multi_device_required: bool = Field(default=False, description="Whether multi-device is required.")
+    merge_policy: Optional[str] = Field(default=None, description="Result merge policy.")
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -268,15 +239,9 @@ class RuntimeProjectionDispatchEntry(BaseModel):
         default=None, description="Dispatch mode (e.g. 'local', 'remote_handoff', 'staged_mesh')."
     )
     status: Optional[str] = Field(default=None, description="Dispatch result status.")
-    source_device_id: Optional[str] = Field(
-        default=None, description="Originating device ID."
-    )
-    target_device_id: Optional[str] = Field(
-        default=None, description="Target device ID, if applicable."
-    )
-    mesh_session_id: Optional[str] = Field(
-        default=None, description="Associated mesh session ID."
-    )
+    source_device_id: Optional[str] = Field(default=None, description="Originating device ID.")
+    target_device_id: Optional[str] = Field(default=None, description="Target device ID, if applicable.")
+    mesh_session_id: Optional[str] = Field(default=None, description="Associated mesh session ID.")
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -293,12 +258,8 @@ class RuntimeProjectionHandoffEntry(BaseModel):
     """
 
     handoff_id: str = Field(description="Unique handoff envelope identifier.")
-    source_device_id: Optional[str] = Field(
-        default=None, description="Source device ID."
-    )
-    target_device_id: Optional[str] = Field(
-        default=None, description="Target device ID."
-    )
+    source_device_id: Optional[str] = Field(default=None, description="Source device ID.")
+    target_device_id: Optional[str] = Field(default=None, description="Target device ID.")
     task_id: Optional[str] = Field(default=None, description="Associated task ID.")
     session_id: Optional[str] = Field(default=None, description="Associated session ID.")
     metadata: Dict[str, Any] = Field(default_factory=dict)
@@ -317,13 +278,9 @@ class RuntimeProjectionTakeoverEntry(BaseModel):
     """
 
     result_id: str = Field(description="Unique takeover result identifier.")
-    status: Optional[str] = Field(
-        default=None, description="Takeover execution status."
-    )
+    status: Optional[str] = Field(default=None, description="Takeover execution status.")
     device_id: Optional[str] = Field(default=None, description="Target device ID.")
-    handoff_id: Optional[str] = Field(
-        default=None, description="Associated handoff envelope ID."
-    )
+    handoff_id: Optional[str] = Field(default=None, description="Associated handoff envelope ID.")
     session_id: Optional[str] = Field(default=None, description="Associated session ID.")
     task_id: Optional[str] = Field(default=None, description="Associated task ID.")
     metadata: Dict[str, Any] = Field(default_factory=dict)
@@ -341,12 +298,8 @@ class RuntimeProjectionCoordinatorEntry(BaseModel):
     :class:`~contracts.mesh_session_coordinator.MeshSessionCoordinatorSummary`.
     """
 
-    coordinator_id: Optional[str] = Field(
-        default=None, description="Coordinator instance identifier."
-    )
-    session_id: Optional[str] = Field(
-        default=None, description="Session being coordinated."
-    )
+    coordinator_id: Optional[str] = Field(default=None, description="Coordinator instance identifier.")
+    session_id: Optional[str] = Field(default=None, description="Session being coordinated.")
     mesh_id: Optional[str] = Field(default=None, description="Mesh identifier.")
     status: Optional[str] = Field(default=None, description="Coordinator status.")
     participant_count: int = Field(default=0)
@@ -373,9 +326,7 @@ class RuntimeProjectionResultEntry(BaseModel):
     status: Optional[str] = Field(default=None, description="Overall merge status.")
     result_unit_count: int = Field(default=0, description="Number of result units merged.")
     merge_policy: Optional[str] = Field(default=None, description="Merge policy applied.")
-    session_id: Optional[str] = Field(
-        default=None, description="Associated mesh session ID."
-    )
+    session_id: Optional[str] = Field(default=None, description="Associated mesh session ID.")
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -471,9 +422,7 @@ class MultiDeviceRuntimeProjection(BaseModel):
     # PR-35
     source_dispatches: List[RuntimeProjectionDispatchEntry] = Field(
         default_factory=list,
-        description=(
-            "Projection entries for active/recent source dispatch decisions (PR-35)."
-        ),
+        description=("Projection entries for active/recent source dispatch decisions (PR-35)."),
     )
     # PR-31
     handoff_summaries: List[RuntimeProjectionHandoffEntry] = Field(
@@ -483,23 +432,17 @@ class MultiDeviceRuntimeProjection(BaseModel):
     # PR-34
     takeover_summaries: List[RuntimeProjectionTakeoverEntry] = Field(
         default_factory=list,
-        description=(
-            "Projection entries for recent local takeover results (PR-34)."
-        ),
+        description=("Projection entries for recent local takeover results (PR-34)."),
     )
     # PR-37
     coordinator_summaries: List[RuntimeProjectionCoordinatorEntry] = Field(
         default_factory=list,
-        description=(
-            "Projection entries for active mesh session coordinators (PR-37)."
-        ),
+        description=("Projection entries for active mesh session coordinators (PR-37)."),
     )
     # PR-36
     merged_results: List[RuntimeProjectionResultEntry] = Field(
         default_factory=list,
-        description=(
-            "Projection entries for cross-runtime merged result summaries (PR-36)."
-        ),
+        description=("Projection entries for cross-runtime merged result summaries (PR-36)."),
     )
     # PR-27 (optional)
     governance_snapshot: Optional[Dict[str, Any]] = Field(
@@ -675,13 +618,17 @@ def project_runtime_devices(
                 platform=d.get("platform"),
                 form_factor=d.get("form_factor"),
                 status=d.get("status"),
+                # Canonical RegisteredRuntimeDevice.to_dict() nests the transport
+                # state under "connection" (RuntimeConnectionSummary.state), NOT
+                # "connection_summary".  Check the flat field first, then the
+                # canonical "connection" key, then the legacy "connection_summary"
+                # alias — mirroring from_registered_runtime_device() so the bulk
+                # builder and the single-device adapter agree.
                 connection_state=d.get("connection_state")
-                or (_safe_dict(d.get("connection_summary", {})).get("state")),
+                or _safe_dict(d.get("connection") or d.get("connection_summary") or {}).get("state"),
                 runtime_capable=bool(d.get("runtime_capable", True)),
                 health_score=d.get("health_score"),
-                source_runtime_posture=str(
-                    d.get("source_runtime_posture", "control_only") or "control_only"
-                ),
+                source_runtime_posture=str(d.get("source_runtime_posture", "control_only") or "control_only"),
                 is_runtime_host=bool(d.get("is_runtime_host", False)),
                 metadata=_safe_dict(d.get("metadata", {})),
             )
@@ -789,11 +736,18 @@ def project_runtime_hosts(
                 device_id=d.get("device_id"),
                 status=d.get("status"),
                 execution_mode=d.get("execution_mode"),
-                accepts_handoff=bool(caps.get("accepts_handoff", d.get("accepts_handoff", False))),
-                can_delegate=bool(caps.get("can_delegate", d.get("can_delegate", False))),
-                source_runtime_posture=str(
-                    d.get("source_runtime_posture", "control_only") or "control_only"
+                # Canonical LocalRuntimeHostCapabilities expresses "accepts a
+                # cross-device handoff" as `supports_remote_handoff_receive`
+                # (see contracts.local_runtime_host); the flat `accepts_handoff`
+                # key is a projection-only alias no producer emits.  Fall back to
+                # the canonical capability so canonical hosts project truthfully.
+                accepts_handoff=bool(
+                    caps.get(
+                        "accepts_handoff", caps.get("supports_remote_handoff_receive", d.get("accepts_handoff", False))
+                    )
                 ),
+                can_delegate=bool(caps.get("can_delegate", d.get("can_delegate", False))),
+                source_runtime_posture=str(d.get("source_runtime_posture", "control_only") or "control_only"),
                 metadata=_safe_dict(d.get("metadata", {})),
             )
             result.append(entry)
@@ -914,8 +868,7 @@ def project_handoffs(
                 source_device_id=source.get("device_id") or d.get("source_device_id"),
                 target_device_id=target.get("device_id") or d.get("target_device_id"),
                 task_id=d.get("task_id") or _safe_dict(d.get("task", {})).get("task_id"),
-                session_id=d.get("session_id")
-                or _safe_dict(d.get("session_context", {})).get("session_id"),
+                session_id=d.get("session_id") or _safe_dict(d.get("session_context", {})).get("session_id"),
                 metadata=_safe_dict(d.get("metadata", {})),
             )
             result.append(entry)
