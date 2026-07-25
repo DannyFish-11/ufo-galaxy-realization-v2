@@ -410,7 +410,11 @@ async def handle_goal_execution(
     2. 通过 DesktopPresenceRuntime 处理
     3. 返回 task_assign（Android 据此执行本地 goal）
     """
-    payload = message.get("payload", {})
+    # get()'s {} default only applies when the key is absent; a present-but-None
+    # (or non-dict) payload from an Android sender would make payload.get(...) an
+    # AttributeError and crash this handler.  Normalise to a dict, and guard a
+    # present-but-None goal below (None.strip() would likewise crash).
+    payload = message.get("payload") if isinstance(message.get("payload"), dict) else {}
     device_id = message.get("device_id") or payload.get("device_id", "unknown")
     raw_session_id = payload.get("session_id") or message.get("session_id") or ""
     # 跨设备统一上下文:不再把所有无 session 的手机目标塞进单一全局 "android_default"
@@ -426,7 +430,7 @@ async def handle_goal_execution(
         session_id = raw_session_id or "android_default"
     trace_id = payload.get("trace_id") or message.get("trace_id") or f"trace_{uuid.uuid4().hex[:12]}"
     task_id = payload.get("task_id") or message.get("task_id") or str(uuid.uuid4())
-    goal = payload.get("goal", "").strip()
+    goal = (payload.get("goal") or "").strip()
 
     if not goal:
         return MessageBuilder.error(
@@ -637,7 +641,11 @@ async def handle_parallel_subtask(
     5. 向通过就绪检查的设备发送独立的 task_assign（包含 subtask_index）
     6. 返回 fan-out 结果（异步，不等待设备执行完成）
     """
-    payload = message.get("payload", {})
+    # get()'s {} default only applies when the key is absent; a present-but-None
+    # (or non-dict) payload from an Android sender would make payload.get(...) an
+    # AttributeError and crash this handler.  Normalise to a dict, and guard a
+    # present-but-None goal below (None.strip() would likewise crash).
+    payload = message.get("payload") if isinstance(message.get("payload"), dict) else {}
     device_id = message.get("device_id") or payload.get("device_id", "unknown")
     raw_session_id = payload.get("session_id") or message.get("session_id") or ""
     # 跨设备统一上下文:不再把所有无 session 的手机目标塞进单一全局 "android_default"
@@ -653,7 +661,7 @@ async def handle_parallel_subtask(
         session_id = raw_session_id or "android_default"
     trace_id = payload.get("trace_id") or message.get("trace_id") or f"trace_{uuid.uuid4().hex[:12]}"
     task_id = payload.get("task_id") or message.get("task_id") or str(uuid.uuid4())
-    goal = payload.get("goal", "").strip()
+    goal = (payload.get("goal") or "").strip()
     group_id = payload.get("group_id") or f"group_{uuid.uuid4().hex[:8]}"
     constraints = payload.get("constraints", [])
     max_steps = payload.get("max_steps", 10)
@@ -1060,7 +1068,9 @@ async def handle_goal_execution_result(bridge: "AndroidBridge", websocket: Any, 
     - 记录到 TaskMemory（供 LLM 上下文注入）
     - 触发 OpenClawd 反馈（如果有对话反馈路径）
     """
-    payload = message.get("payload", {})
+    # Normalise a present-but-None/non-dict payload to {} so payload.get(...)
+    # below can't raise AttributeError (get's default only covers absent keys).
+    payload = message.get("payload") if isinstance(message.get("payload"), dict) else {}
     device_id = message.get("device_id") or payload.get("device_id", "unknown")
     task_id = payload.get("task_id") or message.get("correlation_id") or "unknown"
     trace_id = payload.get("trace_id") or message.get("trace_id") or ""
