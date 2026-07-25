@@ -1217,6 +1217,26 @@ def build_runtime_session_snapshot(
         if coordinator_state is not None:
             try:
                 d = _safe_dict(coordinator_state)
+                # Producer MeshSessionCoordinatorState.to_dict() nests the barrier
+                # under "barrier_state" (MeshBarrierState.status is the enum, value
+                # "waiting" means devices are blocking at the barrier); the compact
+                # MeshSessionCoordinatorSummary emits a flat "barrier_status".  The
+                # legacy read looked for "barrier"/".blocking", which no producer
+                # emits, so barrier_active was always False.  Read the canonical
+                # shapes here.
+                _barrier_dict = _safe_dict(d.get("barrier_state") or d.get("barrier") or {})
+                _barrier_status = (
+                    _safe_str(
+                        d.get("barrier_status") or _barrier_dict.get("status") or _barrier_dict.get("barrier_status")
+                    )
+                    .strip()
+                    .lower()
+                )
+                # Producer emits the event log as "coordination_events"; the compact
+                # summary carries none.  "events"/"event_count" are legacy aliases.
+                _event_count = _safe_int(
+                    len(_safe_list(d.get("coordination_events") or d.get("events") or [])) or d.get("event_count") or 0
+                )
                 coordinator_block = RuntimeSessionSnapshotCoordinatorState(
                     coordinator_id=_safe_str(d.get("coordinator_id") or d.get("state_id")) or None,
                     coordinator_status=_safe_str(d.get("status") or d.get("coordinator_status")) or None,
@@ -1228,9 +1248,10 @@ def build_runtime_session_snapshot(
                     ),
                     barrier_active=_safe_bool(
                         d.get("barrier_active")
-                        or (d.get("barrier") is not None and _safe_bool(d.get("barrier", {}).get("blocking")))
+                        or (_barrier_status == "waiting")
+                        or _safe_bool(_barrier_dict.get("blocking"))
                     ),
-                    event_count=_safe_int(len(_safe_list(d.get("events") or [])) or d.get("event_count")),
+                    event_count=_event_count,
                     metadata=dict(d.get("metadata") or {}),
                 )
             except Exception as exc:
@@ -1242,9 +1263,21 @@ def build_runtime_session_snapshot(
             try:
                 d = _safe_dict(merged_result)
                 units = _safe_list(d.get("result_units") or [])
-                auth_ids = _extract_unit_ids_by_status(units, {"authoritative", "confirmed", "merged"})
-                stale_ids = _extract_unit_ids_by_status(units, {"stale", "superseded", "rejected"})
-                pending_ids = _extract_unit_ids_by_status(units, {"pending", "partial", "in_progress"})
+                # Producer RuntimeResultUnit.status emits the RuntimeResultStatus
+                # enum (succeeded/failed/partial/blocked/skipped/timeout/unknown).
+                # The legacy sets ({authoritative,confirmed,merged} etc.) matched
+                # NONE of those values, so all three buckets were always empty.
+                # Map the real outcome enum onto the snapshot's authoritative /
+                # stale / pending buckets, keeping the legacy aliases for compat:
+                #   succeeded            -> authoritative (confirmed-good result)
+                #   failed/blocked/
+                #   skipped/timeout      -> stale (superseded / non-authoritative)
+                #   partial/unknown      -> pending (incomplete / undetermined)
+                auth_ids = _extract_unit_ids_by_status(units, {"succeeded", "authoritative", "confirmed", "merged"})
+                stale_ids = _extract_unit_ids_by_status(
+                    units, {"failed", "blocked", "skipped", "timeout", "stale", "superseded", "rejected"}
+                )
+                pending_ids = _extract_unit_ids_by_status(units, {"partial", "unknown", "pending", "in_progress"})
                 result_block = RuntimeSessionSnapshotResultState(
                     merge_id=_safe_str(d.get("merge_id") or d.get("result_id")) or None,
                     merge_status=_safe_str(d.get("status") or d.get("merge_status")) or None,
