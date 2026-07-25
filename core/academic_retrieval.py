@@ -278,7 +278,10 @@ class AcademicRetriever:
             )
             logger.info(
                 "Paper ingested into Knowledge Core: %s (entry_id=%s)",
-                paper.get("title", "")[:60],
+                # str()-coerce: an external API can return a null title, and
+                # None[:60] here would raise into the except below — reporting a
+                # successful ingest (entry_id already returned) as a failure ("").
+                str(paper.get("title") or "")[:60],
                 entry_id,
             )
             return entry_id
