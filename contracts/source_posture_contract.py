@@ -429,7 +429,14 @@ def build_source_posture_field(
     SourcePostureContractField
         A validated field model.  Never raises.
     """
-    resolved = resolve_source_posture_value(posture_hint)
+    # Honour the caller-supplied *default*: an absent/unrecognised posture_hint
+    # must resolve to it, not the hardcoded CONTROL_ONLY. resolve_source_posture_value
+    # takes an enum default, while our *default* is its string value.
+    try:
+        default_value = SourcePostureValue(default)
+    except (ValueError, TypeError):
+        default_value = SourcePostureValue.CONTROL_ONLY
+    resolved = resolve_source_posture_value(posture_hint, default=default_value)
     try:
         return SourcePostureContractField(source_runtime_posture=resolved.value)
     except (ValueError, TypeError):

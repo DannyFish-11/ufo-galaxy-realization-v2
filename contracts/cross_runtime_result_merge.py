@@ -1554,10 +1554,11 @@ def merge_runtime_results(
             for _u in units:
                 if _u.status == RuntimeResultStatus.succeeded:
                     _primary = _u
-                    break
-                if _u.role == RuntimeResultRole.fallback and _u.status == RuntimeResultStatus.succeeded:
-                    _primary = _u
-                    _fallback_applied = True
+                    # role==fallback 的判定原本放在这条 succeeded 判断【之后】的
+                    # 单独 if 里,但任何 succeeded 单元都被这里先 break 掉,那条
+                    # 永不可达、fallback_applied 永远设不上。合并到此处。
+                    if _u.role == RuntimeResultRole.fallback:
+                        _fallback_applied = True
                     break
             if _primary:
                 _merged_output = _primary.output

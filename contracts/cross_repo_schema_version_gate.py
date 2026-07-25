@@ -377,7 +377,9 @@ def _build_legacy_safe_result_identity(
         "status": normalized_status,
         "device_id": _extract_text_field(message, "device_id"),
         "trace_id": _extract_text_field(message, "trace_id"),
-        "payload_present": isinstance(payload_mapping, Mapping),
+        # 检查【原始】payload,而非 payload_mapping —— 后者在缺失时已回退成 {},
+        # 恒为 Mapping,导致 payload_present 永远为 True。
+        "payload_present": isinstance(payload, Mapping),
     }
 
 
