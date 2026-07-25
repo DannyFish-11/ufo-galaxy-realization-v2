@@ -701,9 +701,7 @@ class RuntimeSessionSnapshot(BaseModel):
     # Device and host state
     runtime_devices: List[Dict[str, Any]] = Field(
         default_factory=list,
-        description=(
-            "Compact entries for all registered runtime devices in this session."
-        ),
+        description=("Compact entries for all registered runtime devices in this session."),
     )
     runtime_hosts: List[Dict[str, Any]] = Field(
         default_factory=list,
@@ -1187,9 +1185,7 @@ def build_runtime_session_snapshot(
                     dispatch_status=_safe_str(d.get("status") or d.get("dispatch_status")) or None,
                     target_device_ids=[
                         _safe_str(t)
-                        for t in _safe_list(
-                            d.get("target_device_ids") or d.get("selected_target_device_ids") or []
-                        )
+                        for t in _safe_list(d.get("target_device_ids") or d.get("selected_target_device_ids") or [])
                     ],
                     plan_id=_safe_str(d.get("plan_id")) or None,
                     reason=_safe_str(d.get("reason") or d.get("outcome_reason") or ""),
@@ -1234,9 +1230,7 @@ def build_runtime_session_snapshot(
                         d.get("barrier_active")
                         or (d.get("barrier") is not None and _safe_bool(d.get("barrier", {}).get("blocking")))
                     ),
-                    event_count=_safe_int(
-                        len(_safe_list(d.get("events") or [])) or d.get("event_count")
-                    ),
+                    event_count=_safe_int(len(_safe_list(d.get("events") or [])) or d.get("event_count")),
                     metadata=dict(d.get("metadata") or {}),
                 )
             except Exception as exc:
@@ -1271,10 +1265,9 @@ def build_runtime_session_snapshot(
                 d = _safe_dict(recovery_state)
                 recovery_block = RuntimeSessionSnapshotRecoveryState(
                     reconciliation_id=_safe_str(d.get("reconciliation_id") or d.get("recovery_id")) or None,
-                    recovery_status=_safe_str(d.get("status") or d.get("overall_status") or d.get("recovery_status")) or None,
-                    incident_count=_safe_int(
-                        d.get("incident_count") or len(_safe_list(d.get("incidents") or []))
-                    ),
+                    recovery_status=_safe_str(d.get("status") or d.get("overall_status") or d.get("recovery_status"))
+                    or None,
+                    incident_count=_safe_int(d.get("incident_count") or len(_safe_list(d.get("incidents") or []))),
                     replay_required=_safe_bool(d.get("replay_required")),
                     resume_allowed=_safe_bool(d.get("resume_allowed")),
                     merge_confirmation_required=_safe_bool(d.get("merge_confirmation_required")),

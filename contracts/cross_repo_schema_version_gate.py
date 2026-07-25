@@ -366,7 +366,6 @@ def _build_legacy_safe_result_identity(
     message: Mapping[str, Any],
 ) -> Dict[str, Any]:
     payload = message.get("payload")
-    payload_mapping = payload if isinstance(payload, Mapping) else {}
     raw_task_id = _extract_text_field(message, "task_id", "goal_id")
     if not raw_task_id and normalized_type == "goal_execution_result":
         raw_task_id = _extract_text_field(message, "correlation_id")
@@ -441,9 +440,8 @@ def evaluate_android_uplink_schema_gate(
     }
 
     if not observed_schema_version:
-        if (
-            compatibility_mode == "strict_reject"
-            and _can_degrade_missing_schema_for_legacy_result(normalized_type, message)
+        if compatibility_mode == "strict_reject" and _can_degrade_missing_schema_for_legacy_result(
+            normalized_type, message
         ):
             return _build_legacy_safe_result_degrade_decision(
                 normalized_type=normalized_type,
@@ -659,7 +657,9 @@ def verify_cross_repo_schema_gate(
     if not isinstance(participation_truth, Mapping):
         issues.append("participation_truth_consumption must be a mapping.")
     else:
-        missing_participation_truth = sorted(k for k in REQUIRED_PARTICIPATION_TRUTH_FIELDS if k not in participation_truth)
+        missing_participation_truth = sorted(
+            k for k in REQUIRED_PARTICIPATION_TRUTH_FIELDS if k not in participation_truth
+        )
         if missing_participation_truth:
             issues.append(f"participation_truth_consumption is missing required fields: {missing_participation_truth}.")
 
@@ -680,7 +680,9 @@ def verify_cross_repo_schema_gate(
                 k for k in REQUIRED_ACCEPTANCE_CLOSURE_SEMANTIC_FIELDS if k not in acceptance
             )
             if missing_acceptance_semantics:
-                issues.append(f"acceptance_closure_truth is missing required semantic fields: {missing_acceptance_semantics}.")
+                issues.append(
+                    f"acceptance_closure_truth is missing required semantic fields: {missing_acceptance_semantics}."
+                )
         else:
             issues.append("acceptance_closure_truth must be a mapping.")
 
@@ -688,7 +690,9 @@ def verify_cross_repo_schema_gate(
         if not isinstance(diagnostics_snapshot, Mapping):
             issues.append("truth_acceptance_closure_contract.diagnostics_snapshot must be a mapping.")
         else:
-            missing_diagnostics = sorted(k for k in REQUIRED_DIAGNOSTICS_SNAPSHOT_FIELDS if k not in diagnostics_snapshot)
+            missing_diagnostics = sorted(
+                k for k in REQUIRED_DIAGNOSTICS_SNAPSHOT_FIELDS if k not in diagnostics_snapshot
+            )
             if missing_diagnostics:
                 issues.append(f"diagnostics_snapshot is missing required fields: {missing_diagnostics}.")
 
