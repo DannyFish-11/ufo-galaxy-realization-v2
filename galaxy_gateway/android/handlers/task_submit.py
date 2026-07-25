@@ -53,12 +53,16 @@ async def handle_task_submit(
     Gateway 内部通过 DesktopPresenceRuntime → OpenClawd 处理，
     然后返回 task_assign（Step 6: Gateway → Android）。
     """
-    payload = message.get("payload", {})
+    # get()'s {} default only applies when the key is absent; a present-but-None
+    # (or non-dict) payload from an Android sender would make payload.get(...)
+    # an AttributeError and crash this Step-3 handler.  Normalise to a dict.
+    payload = message.get("payload") if isinstance(message.get("payload"), dict) else {}
     device_id = message.get("device_id") or payload.get("device_id", "unknown")
     session_id = payload.get("session_id") or message.get("session_id") or "android_default"
     trace_id = message.get("trace_id") or f"trace_{uuid.uuid4().hex[:12]}"
     task_id = payload.get("task_id") or message.get("task_id") or str(uuid.uuid4())
-    task_text = payload.get("task_text", "").strip()
+    # Likewise guard a present-but-None task_text: None.strip() would crash.
+    task_text = (payload.get("task_text") or "").strip()
 
     if not task_text:
         return MessageBuilder.error(

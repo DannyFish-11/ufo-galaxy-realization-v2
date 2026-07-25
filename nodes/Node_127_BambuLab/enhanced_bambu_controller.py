@@ -135,8 +135,24 @@ class EnhancedBambuController:
         progress = print_data.get("mc_percent", 0)
         current_layer = print_data.get("layer_num", 0)
         total_layers = print_data.get("total_layer_num", 0)
-        print_time = print_data.get("mc_remaining_time", 0)
         remaining_time = print_data.get("mc_remaining_time", 0)
+        # Bambu 的 print 报文只提供剩余时间 mc_remaining_time 与进度 mc_percent,
+        # 没有独立的"已打印时间"字段。此前 print_time 也读 mc_remaining_time,
+        # 使"已打印时间"恒等于"剩余时间"(明显错误)。剩余时间对应剩余的
+        # (100 - progress)%,故按进度反推已打印时间:
+        #   elapsed ≈ remaining * progress / (100 - progress)
+        try:
+            _progress_pct = float(progress or 0)
+        except (TypeError, ValueError):
+            _progress_pct = 0.0
+        try:
+            _remaining = float(remaining_time or 0)
+        except (TypeError, ValueError):
+            _remaining = 0.0
+        if 0 < _progress_pct < 100:
+            print_time = int(round(_remaining * _progress_pct / (100 - _progress_pct)))
+        else:
+            print_time = 0
         
         # 解析文件信息
         file_name = print_data.get("gcode_file", "")
