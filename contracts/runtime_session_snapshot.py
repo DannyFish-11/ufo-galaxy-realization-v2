@@ -792,6 +792,9 @@ class RuntimeSessionSnapshot(BaseModel):
             mesh_session_id=self.mesh_session_id,
             source_device_id=self.source_device_id,
             primary_device_id=self.primary_device_id,
+            # to_identity 之前漏掉了 source_runtime_posture(两个模型都有该字段),
+            # 导致身份块丢失该 posture(coordination_role 不在 snapshot 上,无法转发)。
+            source_runtime_posture=self.source_runtime_posture,
             created_at=self.created_at,
             updated_at=self.updated_at,
             metadata=dict(self.metadata),
@@ -1275,7 +1278,10 @@ def build_runtime_session_snapshot(
                     replay_required=_safe_bool(d.get("replay_required")),
                     resume_allowed=_safe_bool(d.get("resume_allowed")),
                     merge_confirmation_required=_safe_bool(d.get("merge_confirmation_required")),
-                    has_barrier=_safe_bool(d.get("has_barrier")),
+                    # 生产方 RuntimeReconciliationState 发的是嵌套 barrier_state
+                    # (RecoveryBarrierState,含 blocking 标志),没有扁平的 has_barrier
+                    # 键——此前 d.get("has_barrier") 恒为 None。取 barrier_state.blocking。
+                    has_barrier=_safe_bool(_safe_dict(d.get("barrier_state") or {}).get("blocking")),
                     reason=_safe_str(d.get("reason") or ""),
                     metadata=dict(d.get("metadata") or {}),
                 )
