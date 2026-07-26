@@ -160,6 +160,10 @@ class UnifiedOrchestrator:
         self.task_queue = asyncio.Queue()
         self.is_running = False
         self._worker_task = None
+        # Strong refs to in-flight execute_task() tasks.  asyncio only keeps a
+        # weak ref to bare create_task() results, so a fire-and-forget task can
+        # be garbage-collected before it finishes; retain until each completes.
+        self._inflight_tasks: set = set()
         
         # 性能统计
         self.stats = {
@@ -217,8 +221,11 @@ class UnifiedOrchestrator:
                 task_id = await asyncio.wait_for(self.task_queue.get(), timeout=1.0)
                 task = self.tasks.get(task_id)
                 if task:
-                    # 异步执行任务，不阻塞循环
-                    asyncio.create_task(self.execute_task(task))
+                    # 异步执行任务，不阻塞循环。保留强引用直至完成,避免任务被 GC
+                    # 提前回收(事件循环只持有弱引用)。
+                    _exec = asyncio.create_task(self.execute_task(task))
+                    self._inflight_tasks.add(_exec)
+                    _exec.add_done_callback(self._inflight_tasks.discard)
                 self.task_queue.task_done()
             except asyncio.TimeoutError:
                 continue
