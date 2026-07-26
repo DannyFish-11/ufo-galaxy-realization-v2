@@ -279,6 +279,13 @@ class ConnectionManager:
         config = self.configs[connection_id]
 
         conn_info.state = ConnectionState.RECONNECTING
+        # Reset the retry budget at the START of each reconnect() invocation.
+        # retry_count is only otherwise zeroed inside connect() on success, so a
+        # reconnect() that exhausts all attempts leaves retry_count == max_retries;
+        # a later reconnect() (endpoint recovered) would then find the while-guard
+        # immediately false and return False without a single attempt — the
+        # connection would be stuck in ERROR forever.
+        conn_info.retry_count = 0
 
         while conn_info.retry_count < config.max_retries:
             # 计算退避延迟
