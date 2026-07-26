@@ -256,6 +256,17 @@ class SmartOrchestrator:
         self.is_running = False
         self._lock = asyncio.Lock()
         self._task_handlers: Dict[str, Callable] = {}
+        # Strong refs to fire-and-forget background tasks.  asyncio keeps only a
+        # weak reference to a bare create_task() result, so a discarded task can
+        # be garbage-collected mid-execution; retain until each finishes.
+        self._bg_tasks: set = set()
+
+    def _spawn_bg(self, coro) -> "asyncio.Task":
+        """Schedule *coro* as a tracked background task (GC-safe)."""
+        t = asyncio.create_task(coro)
+        self._bg_tasks.add(t)
+        t.add_done_callback(self._bg_tasks.discard)
+        return t
     
     def register_node(self, node: NodeCapability) -> bool:
         """注册执行节点"""
@@ -349,8 +360,8 @@ class SmartOrchestrator:
                     
                     logger.info(f"Task {task.task_id} assigned to node {node_id}")
                     
-                    # 执行任务
-                    asyncio.create_task(self._execute_task(task))
+                    # 执行任务（保留强引用,避免任务被 GC 提前回收）
+                    self._spawn_bg(self._execute_task(task))
                 else:
                     # 没有可用节点，放回队列
                     heapq.heappush(self.task_queue, task)
@@ -420,8 +431,8 @@ class SmartOrchestrator:
         
         self.executions[execution.execution_id] = execution
         
-        # 启动工作流执行
-        asyncio.create_task(self._run_workflow(execution))
+        # 启动工作流执行（保留强引用,避免任务被 GC 提前回收）
+        self._spawn_bg(self._run_workflow(execution))
         
         return execution.execution_id
     
@@ -458,11 +469,20 @@ class SmartOrchestrator:
                 )
                 
                 await self.submit_task(task)
-                
-                # 等待任务完成
+
+                # 等待任务完成,并强制执行 task.timeout。此前该字段被声明却从未生效:
+                # 若某步骤的 task_type 匹配不到任何已注册节点,任务会永远停留在
+                # QUEUED,此循环便无限空转、整个工作流永久挂起。用事件循环单调时钟
+                # 设定截止时间,超时则将任务判失败并跳出。
+                _timeout_s = max(1, int(getattr(task, "timeout", 300) or 300))
+                _deadline = asyncio.get_event_loop().time() + _timeout_s
                 while task.status not in [TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.CANCELLED]:
+                    if asyncio.get_event_loop().time() > _deadline:
+                        task.status = TaskStatus.FAILED
+                        task.error = f"step timed out after {_timeout_s}s (no terminal status)"
+                        break
                     await asyncio.sleep(0.5)
-                
+
                 if task.status == TaskStatus.FAILED:
                     if step.on_error == "fail":
                         raise Exception(f"Step {step.step_id} failed: {task.error}")

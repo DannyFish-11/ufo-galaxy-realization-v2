@@ -26,7 +26,7 @@ import hashlib
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass, asdict
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -52,7 +52,8 @@ default_db_path = "/app/data/galaxy_memory.db"
 if not os.path.isdir("/app/data"):
     default_db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "data", "galaxy_memory.db")
 DB_PATH = os.getenv("MEMORY_DB_PATH", default_db_path)
-MAX_SHORT_TERM_SIZE = 100  # 短期记忆最大条目数
+MAX_SHORT_TERM_SIZE = 100  # 短期记忆最大条目数（每会话）
+MAX_SHORT_TERM_SESSIONS = 1000  # 短期记忆最大会话数（LRU 淘汰，防止无界增长）
 
 # ============================================================================
 # 数据模型
@@ -401,22 +402,35 @@ db = MemoryDatabase(DB_PATH)
 class ShortTermMemory:
     """短期记忆（会话级别）"""
     
-    def __init__(self, max_size: int = MAX_SHORT_TERM_SIZE):
+    def __init__(self, max_size: int = MAX_SHORT_TERM_SIZE, max_sessions: int = MAX_SHORT_TERM_SESSIONS):
         self.max_size = max_size
-        self.memory: Dict[str, List[Experience]] = defaultdict(list)
-    
+        self.max_sessions = max_sessions
+        # OrderedDict 作 LRU:每条经验按 session 存储并限长,但 session 本身也要
+        # 有上限——此前 defaultdict 从不淘汰 session,长期运行下每个新 session_id
+        # 都会永久占用内存(无界增长)。超过 max_sessions 时淘汰最久未使用的会话。
+        self.memory: "OrderedDict[str, List[Experience]]" = OrderedDict()
+
     def add(self, session_id: str, experience: Experience):
         """添加经验"""
+        if session_id in self.memory:
+            self.memory.move_to_end(session_id)
+        else:
+            self.memory[session_id] = []
+            while len(self.memory) > self.max_sessions:
+                self.memory.popitem(last=False)  # 淘汰最旧会话
         self.memory[session_id].append(experience)
-        
-        # 限制大小
+
+        # 限制单会话大小
         if len(self.memory[session_id]) > self.max_size:
             self.memory[session_id] = self.memory[session_id][-self.max_size:]
-    
+
     def get(self, session_id: str, limit: int = 10) -> List[Experience]:
         """获取经验"""
+        if session_id not in self.memory:
+            return []
+        self.memory.move_to_end(session_id)
         return self.memory[session_id][-limit:]
-    
+
     def clear(self, session_id: str):
         """清空会话记忆"""
         if session_id in self.memory:

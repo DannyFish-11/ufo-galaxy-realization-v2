@@ -156,13 +156,34 @@ async def critical_path(request: PlanRequest):
     
     project_duration = max(earliest_finish.values())
     
+    # Backward pass (CPM latest start/finish).  The previous version set every
+    # task's latest_finish to project_duration, ignoring successor dependencies,
+    # so only the last task(s) ever showed zero slack and the critical path
+    # dropped genuinely-critical predecessors.  Compute successors (inverting the
+    # dependency edges) and propagate latest_finish = min(latest_start[succ]).
+    successors: Dict[str, List[str]] = {tid: [] for tid in tasks}
+    for tid, task in tasks.items():
+        for dep in task.dependencies:
+            if dep in successors:
+                successors[dep].append(tid)
+
     latest_finish = {}
     latest_start = {}
-    
+
+    def calc_latest(tid):
+        if tid in latest_start:
+            return latest_start[tid]
+        succ = successors[tid]
+        if not succ:
+            latest_finish[tid] = project_duration
+        else:
+            latest_finish[tid] = min(calc_latest(s) for s in succ)
+        latest_start[tid] = latest_finish[tid] - tasks[tid].duration
+        return latest_start[tid]
+
     for tid in tasks:
-        latest_finish[tid] = project_duration
-        latest_start[tid] = project_duration - tasks[tid].duration
-    
+        calc_latest(tid)
+
     critical = [tid for tid in tasks if earliest_start[tid] == latest_start[tid]]
     
     return {"success": True, "project_duration": project_duration, "critical_path": critical, "earliest_start": earliest_start, "earliest_finish": earliest_finish}

@@ -404,7 +404,18 @@ class SmartOrchestrator:
         
         # 更新节点能力
         await self._update_node_capabilities()
-        
+
+        # _update_node_capabilities() swallows probe failures and can leave
+        # node_capabilities empty; max() over an empty sequence raises ValueError
+        # (surfaced as a 500).  Degrade gracefully instead of crashing.
+        if not self.node_capabilities:
+            return {
+                "task_id": task_id,
+                "optimized": False,
+                "reason": "no_node_capabilities_available",
+                "steps": plan.steps,
+            }
+
         # 重新分配节点
         optimized_steps = []
         for step in plan.steps:
