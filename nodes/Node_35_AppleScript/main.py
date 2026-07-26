@@ -5,6 +5,7 @@ Node 35: AppleScript - macOS Automation
 import logging  # auto: ensure module logger is defined
 logger = logging.getLogger(__name__)
 
+import asyncio
 import os
 import sys
 import subprocess
@@ -95,7 +96,8 @@ async def execute_file(request: ExecuteFileRequest):
     if not os.path.exists(request.file_path):
         return {"success": False, "error": f"File not found: {request.file_path}"}
     try:
-        result = subprocess.run(
+        result = await asyncio.to_thread(
+            subprocess.run,
             ["osascript", request.file_path],
             capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=request.timeout
         )

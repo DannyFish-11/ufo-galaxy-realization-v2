@@ -7,6 +7,7 @@ Notion API 集成
 工具: create_page, query_database, update_page
 """
 
+import asyncio
 import os
 import requests
 from datetime import datetime
@@ -140,7 +141,8 @@ class NotionTools:
             if isinstance(properties, dict):
                 page_data["properties"].update(properties)
             
-            response = requests.post(
+            response = await asyncio.to_thread(
+                requests.post,
                 url,
                 headers=self._get_headers(),
                 json=page_data,
@@ -180,7 +182,8 @@ class NotionTools:
             if sorts:
                 query_data["sorts"] = sorts
             
-            response = requests.post(
+            response = await asyncio.to_thread(
+                requests.post,
                 url,
                 headers=self._get_headers(),
                 json=query_data,
@@ -228,7 +231,8 @@ class NotionTools:
                 "properties": properties
             }
             
-            response = requests.patch(
+            response = await asyncio.to_thread(
+                requests.patch,
                 url,
                 headers=self._get_headers(),
                 json=update_data,
@@ -259,7 +263,8 @@ class NotionTools:
         try:
             url = f"{self.base_url}/pages/{page_id}"
             
-            response = requests.get(
+            response = await asyncio.to_thread(
+                requests.get,
                 url,
                 headers=self._get_headers(),
                 timeout=15

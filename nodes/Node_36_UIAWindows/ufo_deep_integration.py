@@ -552,7 +552,7 @@ class UFODeepIntegration:
             # 验证进程名只含安全字符
             if not re.match(r'^[a-zA-Z0-9_.\-]+$', process_name):
                 return {"success": False, "error": f"Invalid process name: {process_name!r}"}
-            subprocess.run(["taskkill", "/f", "/im", process_name], capture_output=True)
+            await asyncio.to_thread(subprocess.run, ["taskkill", "/f", "/im", process_name], capture_output=True)
             return {"success": True, "process": process_name}
         except Exception as e:
             return {"success": False, "error": str(e)}

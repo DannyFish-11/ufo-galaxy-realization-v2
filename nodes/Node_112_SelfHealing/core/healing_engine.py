@@ -8,6 +8,7 @@ Node_112_SelfHealing - 节点自愈引擎
 4. 故障预测 - 预测潜在故障（集成 Node_73）
 """
 
+import asyncio
 import logging
 import requests
 from typing import Dict, List, Any, Optional
@@ -80,7 +81,7 @@ class SelfHealingEngine:
     async def get_health_status(self) -> Dict[str, Any]:
         """获取系统健康状态（调用 Node_67）"""
         try:
-            response = requests.get(f"{self.node_67_url}/api/v1/health", timeout=10)
+            response = await asyncio.to_thread(requests.get, f"{self.node_67_url}/api/v1/health", timeout=10)
             
             if response.status_code == 200:
                 health_data = response.json()
@@ -138,7 +139,8 @@ class SelfHealingEngine:
             
             node = self.node_health[node_id]
             
-            response = requests.post(
+            response = await asyncio.to_thread(
+                requests.post,
                 f"{self.node_65_url}/api/v1/logs/analyze",
                 json={"node_id": node_id, "time_range": "last_1h", "log_level": ["ERROR", "CRITICAL"]},
                 timeout=30
@@ -289,7 +291,8 @@ class SelfHealingEngine:
     async def _restart_node(self, node_id: str) -> Dict[str, Any]:
         """重启节点（通过 Node_02）"""
         try:
-            response = requests.post(
+            response = await asyncio.to_thread(
+                requests.post,
                 f"{self.node_02_url}/api/v1/tasks",
                 json={"action": "restart_node", "node_id": node_id},
                 timeout=60
@@ -306,7 +309,8 @@ class SelfHealingEngine:
     async def _reload_config(self, node_id: str) -> Dict[str, Any]:
         """重新加载配置"""
         try:
-            response = requests.post(
+            response = await asyncio.to_thread(
+                requests.post,
                 f"{self.node_02_url}/api/v1/tasks",
                 json={"action": "reload_config", "node_id": node_id},
                 timeout=30
@@ -318,7 +322,8 @@ class SelfHealingEngine:
     async def _clear_cache(self, node_id: str) -> Dict[str, Any]:
         """清理缓存"""
         try:
-            response = requests.post(
+            response = await asyncio.to_thread(
+                requests.post,
                 f"{self.node_02_url}/api/v1/tasks",
                 json={"action": "clear_cache", "node_id": node_id},
                 timeout=30
@@ -367,7 +372,8 @@ class SelfHealingEngine:
                 for node_id, node in self.node_health.items()
             ]
             
-            response = requests.post(
+            response = await asyncio.to_thread(
+                requests.post,
                 f"{self.node_73_url}/api/v1/predict",
                 json={"model": "failure_prediction", "data": historical_data},
                 timeout=30
