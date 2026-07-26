@@ -25,6 +25,10 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Strong refs to fire-and-forget tasks so the event loop's weak ref can't let
+# them be garbage-collected mid-execution.
+_BACKGROUND_TASKS: set = set()
+
 # ---------------------------------------------------------------------------
 # Registration completeness tracking
 # ---------------------------------------------------------------------------
@@ -188,7 +192,9 @@ def _schedule_pending_delivery_replay_on_canonical_reconnect(
                 exc,
             )
 
-    asyncio.create_task(_flush())
+    _bt = asyncio.create_task(_flush())
+    _BACKGROUND_TASKS.add(_bt)
+    _bt.add_done_callback(_BACKGROUND_TASKS.discard)
     return buffered_count
 
 

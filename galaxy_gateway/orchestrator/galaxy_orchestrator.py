@@ -699,6 +699,8 @@ class GalaxyOrchestrator:
 
         # 运行状态
         self.is_running = False
+        # 后台循环任务的强引用(防 GC)+ 可取消句柄
+        self._bg_tasks: list = []
 
         # 统计信息
         self.stats = {
@@ -728,13 +730,19 @@ class GalaxyOrchestrator:
         self.stats["start_time"] = time.time()
         logger.info("GalaxyOrchestrator 已启动")
 
-        # 启动后台任务
-        asyncio.create_task(self._heartbeat_loop())
-        asyncio.create_task(self._task_processor_loop())
+        # 启动后台任务。保留强引用(事件循环只持弱引用),并给 stop() 一个可取消的句柄。
+        self._bg_tasks = [
+            asyncio.create_task(self._heartbeat_loop()),
+            asyncio.create_task(self._task_processor_loop()),
+        ]
 
     async def stop(self):
         """停止调度器"""
         self.is_running = False
+        # 取消后台循环任务并清引用(循环本身也会因 is_running=False 协作退出)。
+        for _t in self._bg_tasks:
+            _t.cancel()
+        self._bg_tasks = []
         logger.info("GalaxyOrchestrator 已停止")
 
     def _publish_event(self, event_type, data: dict):

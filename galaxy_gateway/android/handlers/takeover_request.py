@@ -42,6 +42,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Strong refs to fire-and-forget tasks (event loop only holds a weak ref).
+_BACKGROUND_TASKS: set = set()
+
 # Lifecycle coordinator — handles session-state reduction, tracking, and audit.
 try:
     from core.android_delegated_runtime_lifecycle_coordinator import (
@@ -145,7 +148,9 @@ def _emit_aip_v3_takeover_request(
         )
         nats = get_nats_bus()
         if nats.is_connected():
-            asyncio.get_running_loop().create_task(nats.publish_takeover_request(msg))
+            _bt = asyncio.get_running_loop().create_task(nats.publish_takeover_request(msg))
+            _BACKGROUND_TASKS.add(_bt)
+            _bt.add_done_callback(_BACKGROUND_TASKS.discard)
         else:
             logger.debug("AIPV3 takeover_request: %s", msg.model_dump_json(exclude_none=True))
     except Exception:

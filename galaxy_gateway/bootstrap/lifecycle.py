@@ -20,6 +20,9 @@ from fastapi import FastAPI
 
 logger = logging.getLogger(__name__)
 
+# Strong refs to fire-and-forget tasks (event loop only holds a weak ref).
+_BACKGROUND_TASKS: set = set()
+
 
 async def init_gateway_core_services(app: FastAPI):
     """创建并启动 Gateway 的【必需】核心服务并写入 ``app.state``。
@@ -188,7 +191,9 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
                 logger.info("NodeCapability: loaded %d nodes", len(result))
             except Exception as _cl_err:
                 logger.debug("NodeCapability background load failed: %s", _cl_err, exc_info=True)  # H4 fixed
-        asyncio.create_task(_load_capabilities_bg())  # L3 fixed: use asyncio directly
+        _bt_cap = asyncio.create_task(_load_capabilities_bg())  # L3 fixed: use asyncio directly
+        _BACKGROUND_TASKS.add(_bt_cap)
+        _bt_cap.add_done_callback(_BACKGROUND_TASKS.discard)
         app.state.capability_loader = _loader
     except Exception as _cl_err:
         logger.debug("NodeCapability init skipped (non-fatal): %s", _cl_err, exc_info=True)  # H4 fixed
@@ -249,7 +254,9 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
                             logger.info("VoiceWake: 'Galaxy' detected → LIMINAL via handle_request")
                     except Exception as _we:
                         logger.debug("VoiceWake: handle_request failed: %s", _we)
-                asyncio.create_task(_wake_request())  # L3 fixed: use asyncio directly
+                _bt_wake = asyncio.create_task(_wake_request())  # L3 fixed: use asyncio directly
+                _BACKGROUND_TASKS.add(_bt_wake)
+                _bt_wake.add_done_callback(_BACKGROUND_TASKS.discard)
 
             started = _vw.start(callback=_on_wake_word)
             if started:
