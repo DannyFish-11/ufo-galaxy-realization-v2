@@ -537,6 +537,16 @@ class MeshSessionLifecycleCoordinator:
         except Exception as exc:
             logger.warning("terminate_session: failed to mark_terminal for %s: %s", session_id, exc)
 
+        # Evict the terminated record from the in-memory map.  _sessions had no
+        # removal path, so a process-wide singleton that terminates many sessions
+        # (swarm_coordinator calls this on every dispatch_team) accumulated a
+        # permanent record — each holding a full session snapshot — forever.
+        # The persistence store retains the terminal marker for any audit/recovery
+        # needs; the live in-memory map only needs non-terminal sessions.
+        if record is not None:
+            with self._lock:
+                self._sessions.pop(session_id, None)
+
         return record
 
     # ------------------------------------------------------------------

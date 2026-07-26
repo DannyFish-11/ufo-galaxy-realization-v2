@@ -86,6 +86,7 @@ import logging
 import os
 import threading
 import time
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
@@ -243,11 +244,30 @@ class MeshSessionPersistenceStore:
         ``data/mesh_sessions/`` relative to the repository root.
     """
 
+    #: Max snapshots kept in the in-memory hot cache.  The durable file is the
+    #: source of truth (load() falls back to _read_record on a cache miss), so
+    #: evicting cold/terminal entries here only trims memory — nothing is lost.
+    _MAX_MEMORY_CACHE: int = 512
+
     def __init__(self, store_dir: Optional[str] = None) -> None:
         self._store_dir = store_dir or _DEFAULT_STORE_DIR
         self._lock = threading.Lock()
-        self._memory_cache: Dict[str, SnapshotRecord] = {}
+        # OrderedDict + LRU eviction: previously a plain dict that only ever
+        # gained entries (save/load/mark_terminal all inserted, and terminal
+        # sessions were never removed), so it grew without bound over a long-
+        # running process.  load() reloads from the durable file on a miss.
+        self._memory_cache: "OrderedDict[str, SnapshotRecord]" = OrderedDict()
         self._ensure_dir()
+
+    def _cache_put(self, session_id: str, record: "SnapshotRecord") -> None:
+        """Insert/refresh *record* in the bounded LRU memory cache.
+
+        Caller must hold ``self._lock``.
+        """
+        self._memory_cache[session_id] = record
+        self._memory_cache.move_to_end(session_id)
+        while len(self._memory_cache) > self._MAX_MEMORY_CACHE:
+            self._memory_cache.popitem(last=False)
 
     # ------------------------------------------------------------------
     # Public interface
@@ -287,7 +307,7 @@ class MeshSessionPersistenceStore:
                     version=version,
                 )
                 self._write_record(record)
-                self._memory_cache[session_id] = record
+                self._cache_put(session_id, record)
                 logger.debug(
                     "Persisted mesh session snapshot: session_id=%s status=%s v=%d",
                     session_id,
@@ -318,7 +338,7 @@ class MeshSessionPersistenceStore:
                     return self._memory_cache[session_id]
                 record = self._read_record(session_id)
                 if record is not None:
-                    self._memory_cache[session_id] = record
+                    self._cache_put(session_id, record)
                 return record
         except Exception as exc:
             logger.warning("load: failed to load session %s: %s", session_id, exc)
@@ -399,7 +419,7 @@ class MeshSessionPersistenceStore:
             )
             with self._lock:
                 self._write_record(updated)
-                self._memory_cache[session_id] = updated
+                self._cache_put(session_id, updated)
             return True
         except Exception as exc:
             logger.warning("mark_terminal: failed for %s: %s", session_id, exc)
