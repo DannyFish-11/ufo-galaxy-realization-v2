@@ -22,6 +22,10 @@ import asyncio
 import logging
 from typing import Any, Awaitable, Callable, List, Optional
 
+# RUF006: retain fire-and-forget create_task results so the event loop's weak
+# reference can't let them be garbage-collected mid-execution.
+_BACKGROUND_TASKS: set = set()
+
 logger = logging.getLogger("Galaxy.StreamingSpeech")
 
 # 句末标点（中英）+ 换行 —— 在这些位置切句，便于"说一句合成下一句"。
@@ -373,7 +377,9 @@ class IncrementalSpeaker:
         if self._stop is None:
             return
         try:
-            asyncio.get_running_loop().create_task(self._stop())
+            _bt = asyncio.get_running_loop().create_task(self._stop())
+            _BACKGROUND_TASKS.add(_bt)
+            _bt.add_done_callback(_BACKGROUND_TASKS.discard)
         except RuntimeError:
             pass
 

@@ -29,6 +29,10 @@ from typing import Any, Callable, Dict, List, Optional
 
 import httpx
 
+# RUF006: retain fire-and-forget create_task results so the event loop's weak
+# reference can't let them be garbage-collected mid-execution.
+_BACKGROUND_TASKS: set = set()
+
 logger = logging.getLogger("ConnectionManager")
 
 
@@ -356,7 +360,9 @@ class ConnectionManager:
                 conn_info.state = ConnectionState.DISCONNECTED
 
                 # 触发重连
-                asyncio.create_task(self.reconnect(connection_id))
+                _bt = asyncio.create_task(self.reconnect(connection_id))
+                _BACKGROUND_TASKS.add(_bt)
+                _bt.add_done_callback(_BACKGROUND_TASKS.discard)
                 break
 
     async def _start_heartbeat(self, connection_id: str):

@@ -15,6 +15,10 @@ import shutil
 import subprocess
 from typing import Any, Callable, Dict, List, Optional
 
+# RUF006: retain fire-and-forget create_task results so the event loop's weak
+# reference can't let them be garbage-collected mid-execution.
+_BACKGROUND_TASKS: set = set()
+
 logger = logging.getLogger("Galaxy.Tailscale")
 
 # PR-AIPV3: Unified AIP v3 emission
@@ -264,7 +268,9 @@ class TailscaleManager:
             )
             nats = get_nats_bus()
             if nats.is_connected():
-                asyncio.get_running_loop().create_task(nats.publish_state_event(msg))
+                _bt = asyncio.get_running_loop().create_task(nats.publish_state_event(msg))
+                _BACKGROUND_TASKS.add(_bt)
+                _bt.add_done_callback(_BACKGROUND_TASKS.discard)
             else:
                 logger.debug("AIPV3-TAILSCALE STATE_EVENT: %s", msg.model_dump_json(exclude_none=True))
         except Exception as exc:

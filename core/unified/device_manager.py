@@ -59,6 +59,10 @@ from typing import Any, Dict, List, Optional  # noqa: E402  哨兵权威声明�
 from .exceptions import DeviceManagerError  # noqa: E402  哨兵权威声明置顶是本仓设计习语
 from .models import UnifiedDevice, UnifiedDeviceStatus, UnifiedDeviceType  # noqa: E402  哨兵权威声明置顶是本仓设计习语
 
+# RUF006: retain fire-and-forget create_task results so the event loop's weak
+# reference can't let them be garbage-collected mid-execution.
+_BACKGROUND_TASKS: set = set()
+
 logger = logging.getLogger("Galaxy.Unified.DeviceManager")
 
 # Default heartbeat-timeout and grace-period constants (seconds).
@@ -477,7 +481,9 @@ class UnifiedDeviceManager:
             # because register_device() is a sync method.
             try:
                 loop = asyncio.get_running_loop()
-                loop.create_task(dwc.on_device_registered(device))
+                _bt = loop.create_task(dwc.on_device_registered(device))
+                _BACKGROUND_TASKS.add(_bt)
+                _bt.add_done_callback(_BACKGROUND_TASKS.discard)
                 logger.debug(
                     "Scheduled Worker registration for device %s",
                     device.device_id,
@@ -510,7 +516,9 @@ class UnifiedDeviceManager:
 
             try:
                 loop = asyncio.get_running_loop()
-                loop.create_task(dwc.on_device_unregistered(device_id))
+                _bt = loop.create_task(dwc.on_device_unregistered(device_id))
+                _BACKGROUND_TASKS.add(_bt)
+                _bt.add_done_callback(_BACKGROUND_TASKS.discard)
                 logger.debug(
                     "Scheduled Worker unregistration for device %s",
                     device_id,
@@ -542,7 +550,9 @@ class UnifiedDeviceManager:
 
             try:
                 loop = asyncio.get_running_loop()
-                loop.create_task(dwc.on_device_heartbeat(device_id))
+                _bt = loop.create_task(dwc.on_device_heartbeat(device_id))
+                _BACKGROUND_TASKS.add(_bt)
+                _bt.add_done_callback(_BACKGROUND_TASKS.discard)
             except RuntimeError:
                 pass
         except Exception as exc:

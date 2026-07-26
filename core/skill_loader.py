@@ -36,6 +36,10 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
+# RUF006: retain fire-and-forget create_task results so the event loop's weak
+# reference can't let them be garbage-collected mid-execution.
+_BACKGROUND_TASKS: set = set()
+
 logger = logging.getLogger("Galaxy.Skill")
 
 
@@ -202,8 +206,12 @@ class SkillLoader:
                 pass
             _payload = {"skill_id": skill_id, "event": event}
             if loop and loop.is_running():
-                loop.create_task(broadcast_event("skill_update", _payload))
-                loop.create_task(broadcast_event("capability_update", {"source": "skill_loader", **_payload}))
+                _bt = loop.create_task(broadcast_event("skill_update", _payload))
+                _BACKGROUND_TASKS.add(_bt)
+                _bt.add_done_callback(_BACKGROUND_TASKS.discard)
+                _bt = loop.create_task(broadcast_event("capability_update", {"source": "skill_loader", **_payload}))
+                _BACKGROUND_TASKS.add(_bt)
+                _bt.add_done_callback(_BACKGROUND_TASKS.discard)
         except Exception as exc:
             logger.warning("Exception suppressed: %s", exc)
 

@@ -16,6 +16,10 @@ import logging
 import os
 from typing import Any, Dict, Optional, Set
 
+# RUF006: retain fire-and-forget create_task results so the event loop's weak
+# reference can't let them be garbage-collected mid-execution.
+_BACKGROUND_TASKS: set = set()
+
 try:
     from fastapi import WebSocket, WebSocketDisconnect
 except ImportError:
@@ -170,7 +174,9 @@ class GalaxyPresenceBridge:
         self._current_mode = "static"
         self._current_depth = MODE_DEPTH_MAP["static"]
         self._intent = 0.0
-        asyncio.create_task(self._broadcast_state())
+        _bt = asyncio.create_task(self._broadcast_state())
+        _BACKGROUND_TASKS.add(_bt)
+        _bt.add_done_callback(_BACKGROUND_TASKS.discard)
 
     def _on_phase_liminal(self, event: Any) -> None:
         p = self._payload_of(event)
@@ -179,13 +185,17 @@ class GalaxyPresenceBridge:
         # intent 从 payload 中提取，如果没有则默认 0.5
         self._intent = p.get("intent_strength", 0.5)
         self._speaking = p.get("speaking", self._speaking)
-        asyncio.create_task(self._broadcast_state())
+        _bt = asyncio.create_task(self._broadcast_state())
+        _BACKGROUND_TASKS.add(_bt)
+        _bt.add_done_callback(_BACKGROUND_TASKS.discard)
 
     def _on_phase_manifest(self, payload: Dict[str, Any]) -> None:
         self._current_mode = "manifest"
         self._current_depth = MODE_DEPTH_MAP["manifest"]
         self._intent = 1.0
-        asyncio.create_task(self._broadcast_state())
+        _bt = asyncio.create_task(self._broadcast_state())
+        _BACKGROUND_TASKS.add(_bt)
+        _bt.add_done_callback(_BACKGROUND_TASKS.discard)
 
     def _on_intent_update(self, event: Any) -> None:
         """意图强度持续更新 — Liminal 态下微调 depth。"""
@@ -197,7 +207,9 @@ class GalaxyPresenceBridge:
         # depth 在 0.15-0.85 之间随 intent 线性映射
         self._current_depth = 0.15 + intent * 0.70
         self._speaking = p.get("speaking", False)
-        asyncio.create_task(self._broadcast_state())
+        _bt = asyncio.create_task(self._broadcast_state())
+        _BACKGROUND_TASKS.add(_bt)
+        _bt.add_done_callback(_BACKGROUND_TASKS.discard)
 
     @staticmethod
     def _payload_of(event: Any) -> Dict[str, Any]:
@@ -242,7 +254,9 @@ class GalaxyPresenceBridge:
         except Exception:  # noqa: BLE001
             return
         try:
-            asyncio.create_task(self._debounced_feed_push())
+            _bt = asyncio.create_task(self._debounced_feed_push())
+            _BACKGROUND_TASKS.add(_bt)
+            _bt.add_done_callback(_BACKGROUND_TASKS.discard)
         except Exception:  # noqa: BLE001
             pass
 
@@ -319,7 +333,9 @@ class GalaxyPresenceBridge:
         self._ambient_seeing = bool(p.get("has_frame"))
         self._ambient_hearing = bool(p.get("has_audio"))
         self._ambient_ts = _t.time()
-        asyncio.create_task(self._broadcast_state())
+        _bt = asyncio.create_task(self._broadcast_state())
+        _BACKGROUND_TASKS.add(_bt)
+        _bt.add_done_callback(_BACKGROUND_TASKS.discard)
 
     def _on_ambient_decision(self, event: Any) -> None:
         """自发注意力：三选一决策（speak/silent/delegate）+ 理由。"""
@@ -329,7 +345,9 @@ class GalaxyPresenceBridge:
         self._ambient_action = str(p.get("action", ""))
         self._ambient_rationale = str(p.get("rationale") or p.get("utterance") or p.get("task") or "")
         self._ambient_ts = _t.time()
-        asyncio.create_task(self._broadcast_state())
+        _bt = asyncio.create_task(self._broadcast_state())
+        _BACKGROUND_TASKS.add(_bt)
+        _bt.add_done_callback(_BACKGROUND_TASKS.discard)
 
     # ── WebSocket 客户端管理 ──
 
@@ -494,7 +512,9 @@ def _schedule(coro) -> None:
     """在当前事件循环里调度协程；无运行循环时同步兜底跑一次。"""
     try:
         loop = asyncio.get_running_loop()
-        loop.create_task(coro)
+        _bt = loop.create_task(coro)
+        _BACKGROUND_TASKS.add(_bt)
+        _bt.add_done_callback(_BACKGROUND_TASKS.discard)
     except RuntimeError:
         try:
             asyncio.run(coro)

@@ -105,6 +105,10 @@ from core.desktop_presence_system import (
 )
 from core.multimodal.perception_source_registry import STREAM_CAPABLE_SOURCE_TYPES
 
+# RUF006: retain fire-and-forget create_task results so the event loop's weak
+# reference can't let them be garbage-collected mid-execution.
+_BACKGROUND_TASKS: set = set()
+
 logger = logging.getLogger("Galaxy.Runtime")
 _STREAMING_BACKBONE_CONTRACT: Optional[Dict[str, Any]] = None
 
@@ -1767,7 +1771,9 @@ class DesktopPresenceRuntime:
                 logger.debug("主动感知目标执行失败（非致命）：%s", exc)
 
         try:
-            loop.create_task(_run())
+            _bt = loop.create_task(_run())
+            _BACKGROUND_TASKS.add(_bt)
+            _bt.add_done_callback(_BACKGROUND_TASKS.discard)
             logger.info("主动感知目标已派发执行：%s", goal)
         except RuntimeError:
             pass

@@ -69,6 +69,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+# RUF006: retain fire-and-forget create_task results so the event loop's weak
+# reference can't let them be garbage-collected mid-execution.
+_BACKGROUND_TASKS: set = set()
+
 logger = logging.getLogger("Galaxy.GitHubInstaller")
 
 # ── Constants ─────────────────────────────────────────────────────────────────
@@ -864,7 +868,9 @@ def _publish_install_truth(payload: Dict[str, Any]) -> None:
         except RuntimeError:
             asyncio.run(_do_broadcast())
             return
-        loop.create_task(_do_broadcast())
+        _bt = loop.create_task(_do_broadcast())
+        _BACKGROUND_TASKS.add(_bt)
+        _bt.add_done_callback(_BACKGROUND_TASKS.discard)
     except Exception as exc:
         logger.warning("Exception suppressed: %s", exc)
 

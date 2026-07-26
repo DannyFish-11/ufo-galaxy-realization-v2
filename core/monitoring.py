@@ -23,6 +23,10 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Callable, Coroutine, Dict, List, Optional
 
+# RUF006: retain fire-and-forget create_task results so the event loop's weak
+# reference can't let them be garbage-collected mid-execution.
+_BACKGROUND_TASKS: set = set()
+
 logger = logging.getLogger("Galaxy.Monitoring")
 
 
@@ -358,7 +362,9 @@ class AlertManager:
         if self._on_alert:
             try:
                 if asyncio.iscoroutinefunction(self._on_alert):
-                    asyncio.create_task(self._on_alert(alert))
+                    _bt = asyncio.create_task(self._on_alert(alert))
+                    _BACKGROUND_TASKS.add(_bt)
+                    _bt.add_done_callback(_BACKGROUND_TASKS.discard)
                 else:
                     self._on_alert(alert)
             except Exception as e:

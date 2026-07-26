@@ -9,6 +9,10 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
+# RUF006: retain fire-and-forget create_task results so the event loop's weak
+# reference can't let them be garbage-collected mid-execution.
+_BACKGROUND_TASKS: set = set()
+
 logger = logging.getLogger("Galaxy.LocalBrain")
 
 
@@ -365,7 +369,9 @@ class LocalBrainManager:
                 self.available_models,
             )
             # 后台显式加载选定模型进内存(Ollama 惰性加载,ping 通≠模型可用)。
-            asyncio.create_task(self._warm_up_ollama_model())
+            _bt = asyncio.create_task(self._warm_up_ollama_model())
+            _BACKGROUND_TASKS.add(_bt)
+            _bt.add_done_callback(_BACKGROUND_TASKS.discard)
             return True
 
         # 2. Ollama not running, try to start
@@ -398,7 +404,9 @@ class LocalBrainManager:
                         self.available_models,
                     )
                     # 后台显式加载模型进内存(serve 刚起,更需要主动预载)。
-                    asyncio.create_task(self._warm_up_ollama_model())
+                    _bt = asyncio.create_task(self._warm_up_ollama_model())
+                    _BACKGROUND_TASKS.add(_bt)
+                    _bt.add_done_callback(_BACKGROUND_TASKS.discard)
                     return True
 
         # PR-I1: Auto-install Ollama —— 仅当命令确实不存在时才尝试，

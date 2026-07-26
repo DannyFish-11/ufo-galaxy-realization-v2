@@ -65,6 +65,10 @@ import time
 import uuid
 from typing import Any, Dict, List, Optional
 
+# RUF006: retain fire-and-forget create_task results so the event loop's weak
+# reference can't let them be garbage-collected mid-execution.
+_BACKGROUND_TASKS: set = set()
+
 _logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -285,7 +289,9 @@ def _emit_aip_v3_mesh_events(
                     trace_id=trace_id,
                     role="participant",
                 )
-                loop.create_task(nats.publish_mesh_join(msg))
+                _bt = loop.create_task(nats.publish_mesh_join(msg))
+                _BACKGROUND_TASKS.add(_bt)
+                _bt.add_done_callback(_BACKGROUND_TASKS.discard)
 
         elif event_type == "mesh_leave":
             for did in device_ids:
@@ -296,7 +302,9 @@ def _emit_aip_v3_mesh_events(
                     trace_id=trace_id,
                     reason="session_finalized",
                 )
-                loop.create_task(nats.publish_mesh_leave(msg))
+                _bt = loop.create_task(nats.publish_mesh_leave(msg))
+                _BACKGROUND_TASKS.add(_bt)
+                _bt.add_done_callback(_BACKGROUND_TASKS.discard)
 
         elif event_type == "mesh_result":
             if participant_results:
@@ -313,7 +321,9 @@ def _emit_aip_v3_mesh_events(
                     subtask_results=subtask_results,
                     participant_count=len(participant_results),
                 )
-                loop.create_task(nats.publish_mesh_result(msg))
+                _bt = loop.create_task(nats.publish_mesh_result(msg))
+                _BACKGROUND_TASKS.add(_bt)
+                _bt.add_done_callback(_BACKGROUND_TASKS.discard)
 
         elif event_type == "coord_sync":
             _import_coordinator_contracts()
@@ -336,7 +346,9 @@ def _emit_aip_v3_mesh_events(
                 barrier_status=barrier_status,
                 participant_statuses=participant_statuses,
             )
-            loop.create_task(nats.publish_coord_sync(msg))
+            _bt = loop.create_task(nats.publish_coord_sync(msg))
+            _BACKGROUND_TASKS.add(_bt)
+            _bt.add_done_callback(_BACKGROUND_TASKS.discard)
 
     except Exception as exc:
         _logger.debug("_emit_aip_v3_mesh_events: emission failed (non-fatal): %s", exc)
@@ -399,8 +411,8 @@ def _dispatch_remote_barrier_requests(
     for device_id in waiting_device_ids:
         try:
             if convergence.is_remote(device_id):
-                # Fire-and-forget as a background task
-                loop.create_task(
+                # Fire-and-forget as a background task (retained so it can't be GC'd).
+                _bt = loop.create_task(
                     convergence.request_participant_action(
                         session_id=session_id,
                         device_id=device_id,
@@ -409,6 +421,8 @@ def _dispatch_remote_barrier_requests(
                         timeout_ms=30_000,
                     )
                 )
+                _BACKGROUND_TASKS.add(_bt)
+                _bt.add_done_callback(_BACKGROUND_TASKS.discard)
                 dispatched += 1
                 _log_event(
                     "barrier_remote_dispatched",
@@ -459,7 +473,9 @@ def _emit_mesh_heartbeat_leave(coordinator_state: Any, device_id: str) -> None:
         )
         nats = get_nats_bus()
         if nats.is_connected():
-            asyncio.get_running_loop().create_task(nats.publish_mesh_leave(msg))
+            _bt = asyncio.get_running_loop().create_task(nats.publish_mesh_leave(msg))
+            _BACKGROUND_TASKS.add(_bt)
+            _bt.add_done_callback(_BACKGROUND_TASKS.discard)
             _logger.info(
                 "[MeshHeartbeat] Participant %s timed out, MESH_LEAVE emitted",
                 device_id,
