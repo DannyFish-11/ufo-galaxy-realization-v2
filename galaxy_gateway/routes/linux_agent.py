@@ -305,12 +305,22 @@ class SSHExecutor:
         try:
             self._connect(client)
             escaped = content.replace("'", "'\"'\"'")
+            # Escape the path the same way as the content — it is interpolated
+            # into several single-quoted shell words below, so an unescaped
+            # single quote in the path would break the command / allow injection.
+            escaped_path = path.replace("'", "'\"'\"'")
             # exec_command returns immediately without waiting; block on the
             # remote exit status so (a) the write completes before client.close()
             # tears the connection down (otherwise a large write can be
             # truncated) and (b) we report real success instead of always True.
+            # NOTE: $(dirname ...) must sit inside DOUBLE quotes to be expanded;
+            # the previous single-quoted '$(dirname ...)' was taken literally, so
+            # the real parent dir was never created (a junk dir named
+            # "$(dirname <path>)" was made in the remote CWD instead).
             _stdin, stdout, stderr = client.exec_command(
-                f"mkdir -p '$(dirname {path})' && printf '%s' '{escaped}' > '{path}' && chmod {mode} '{path}'"
+                f"mkdir -p \"$(dirname '{escaped_path}')\" && "
+                f"printf '%s' '{escaped}' > '{escaped_path}' && "
+                f"chmod {mode} '{escaped_path}'"
             )
             exit_status = stdout.channel.recv_exit_status()
             if exit_status != 0:

@@ -935,5 +935,15 @@ class MultiDeviceOrchestrator(TaskOrchestrator):
             )
             task.commands = [command]
             await self._send_task_to_device(task)
-        
+            # Populate the declared Dict[str, CommandResult] return.  The
+            # broadcast is fire-and-forget (the real outcome arrives later via
+            # the task lifecycle), so the synchronously-knowable per-device
+            # result is "dispatched, outcome pending" (ResultStatus.NONE).
+            # Previously `results` was returned empty regardless of dispatch.
+            results[device_id] = CommandResult(
+                command_id=getattr(command, "command_id", "") or task.task_id,
+                status=ResultStatus.NONE,
+                result={"dispatched": True, "task_id": task.task_id},
+            )
+
         return results
