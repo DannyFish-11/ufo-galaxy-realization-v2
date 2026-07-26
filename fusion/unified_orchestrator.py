@@ -319,17 +319,22 @@ class UnifiedOrchestrator:
                 task.execution_path.append(node_id)
                 
                 logger.info(f"⚡ Executing subtask on node: {node_id}")
-                
-                # 更新节点负载
-                self.topology.update_load(node_id, 10)
+
+                # 标记节点忙碌 / 执行后恢复。TopologyManager.update_load 的语义是
+                # 【设置绝对归一化负载 (0.0-1.0)】,不是增量。此前传 +10 / -10 当作
+                # 增减量,会把负载先设成 10、执行后设成 -10;而 find_best_node 的
+                # LOAD_BALANCED 走 min(load),负载 -10 的节点反而永远最优、被反复选中
+                # ——负载均衡被彻底反转。改为:保存原负载 → 临时抬升(封顶 1.0)→
+                # finally 恢复原值,既能反映执行期忙碌,又不破坏 [0,1] 契约。
+                _prior_load = self.topology.get_load(node_id)
+                self.topology.update_load(node_id, min(1.0, _prior_load + 0.1))
 
                 # 真实执行逻辑，包含重试。用 try/finally 确保无论执行是否抛异常
-                # 都释放负载——此前 _execute_with_retry 抛异常会跳过下面的 -10，
-                # 导致该节点负载计数只增不减、最终被误判为过载而不再被调度。
+                # 都恢复原负载,避免节点负载被永久抬高而最终被误判为过载不再调度。
                 try:
                     res = await self._execute_with_retry(node_id, subtask, subtask_id=_st_id)
                 finally:
-                    self.topology.update_load(node_id, -10)
+                    self.topology.update_load(node_id, _prior_load)
 
                 if res.success:
                     results.append(res.data)
