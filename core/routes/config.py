@@ -741,12 +741,21 @@ async def update_config(req: ConfigUpdateRequest):
         pass
 
     # 若改动涉及模型 API（llm 类），热刷新 LLM 路由器，让新填的 key 即时生效（无需重启）。
+    # 根因修复(真机"保存悬挂"):此前这里同步 await refresh_llm_router()——内部对
+    # Ollama/OneAPI 等做 2~5s/个的真实网络探测,离线机器上整体轻松 >8s,而 Electron
+    # 主进程 fetchWithRetry 单次尝试 8s 即 abort 重发,保存请求永远答不完:面板卡死
+    # 在「保存中…/仍在保存中,后端可能仍在启动…」直到 60s 预算耗尽;每次 abort 的
+    # 断开连接还连锁触发后端 "Cannot call write() when UVStream is closing" 刷屏。
+    # 保存路由必须快速返回:此刻配置已落盘、已进 os.environ(持久化真相已成立),
+    # 慢的网络探测改为后台调度;需要探测结果的 verify-provider 端点自己有界等待
+    # (wait_llm_router_refresh),新 key 依然"保存后即可验证",不牺牲功能。
     refreshed = None
     if any(CONFIG_SCHEMA.get(k, {}).get("category") == "llm" for k in final):
         try:
-            from core.multi_llm_router import refresh_llm_router
+            from core.multi_llm_router import schedule_llm_router_refresh
 
-            refreshed = await refresh_llm_router()
+            schedule_llm_router_refresh()
+            refreshed = "scheduled"
         except Exception:
             refreshed = None
 

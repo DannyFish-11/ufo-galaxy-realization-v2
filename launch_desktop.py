@@ -502,6 +502,18 @@ def start_electron_frontend() -> Optional[subprocess.Popen]:
         rc, _, err = run([npm, "install"], cwd=ELECTRON_DIR, timeout=300)
         if rc != 0:
             raise RuntimeError(f"npm install 失败: {err[:200]}")
+        # 启动前核实到【运行时二进制】——真机根因:"依赖残缺后补齐"只重跑了
+        # npm install,但 electron 包目录已存在时 npm 会跳过 postinstall,
+        # dist/electron.exe 永远补不回来 → electron.cmd 启动即打印
+        # "Electron failed to install correctly" 退出,表现为闪退循环。
+        # repair_electron_binary 直接跑包自带 install.js(官方源失败换 npmmirror)补二进制;
+        # 仍失败则给出可照抄执行的确切修复指令,而不是放任 Electron 去崩。
+        if not electron_package_intact(str(ELECTRON_DIR)):
+            from core.electron_launch_guard import (
+                electron_binary_fix_hint, repair_electron_binary,
+            )
+            if not repair_electron_binary(str(ELECTRON_DIR)):
+                raise RuntimeError("Electron 依赖修复失败:\n" + electron_binary_fix_hint("electron"))
 
     npx = shutil.which("npx") or npm
     env = os.environ.copy()

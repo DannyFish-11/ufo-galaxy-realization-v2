@@ -102,9 +102,27 @@ class TestElectronPackageIntact:
         # 故意不创建 cli.js
         assert electron_package_intact(str(tmp_path)) is False
 
+    def test_binary_missing_is_not_intact(self, tmp_path):
+        """真机残局复刻("依赖残缺后补齐"仍闪退循环):js 文件齐全,但 postinstall
+        下载的 dist/electron.exe 运行时二进制缺失 —— electron.cmd 启动即打印
+        "Electron failed to install correctly" 退出。必须判不完整,否则启动器
+        会放任它进入 GPU 崩 3 次→软件渲染崩 5 次→放弃的死循环。"""
+        pkg = tmp_path / "node_modules" / "electron"
+        pkg.mkdir(parents=True)
+        (pkg / "package.json").write_text("{}")
+        (pkg / "cli.js").write_text("// cli")
+        # 故意不创建 path.txt / dist/electron.exe
+        assert electron_package_intact(str(tmp_path)) is False
+        # path.txt 在但二进制文件本体缺失 → 同样不完整
+        (pkg / "path.txt").write_text("electron.exe")
+        assert electron_package_intact(str(tmp_path)) is False
+
     def test_complete_install_is_intact(self, tmp_path):
         pkg = tmp_path / "node_modules" / "electron"
         pkg.mkdir(parents=True)
         (pkg / "package.json").write_text("{}")
         (pkg / "cli.js").write_text("// cli")
+        (pkg / "path.txt").write_text("electron.exe")
+        (pkg / "dist").mkdir()
+        (pkg / "dist" / "electron.exe").write_text("bin")
         assert electron_package_intact(str(tmp_path)) is True

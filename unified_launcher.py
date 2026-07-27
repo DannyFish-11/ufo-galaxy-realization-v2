@@ -653,6 +653,11 @@ class UnifiedWebUI:
 
         except ImportError as e:
             logger.error("API 服务依赖未安装: %s", e)
+            # 同族诚实性修复:此前这里吞掉 ImportError 正常返回,调用方
+            # launch_web_ui 的 try/except 看不到失败,启动横幅照打 "✓ API 网关"
+            # —— 而 fastapi/uvicorn 缺失时网关根本没起。重新抛出,让横幅走
+            # except 分支如实显示 "API 网关 · 启动失败"。
+            raise
 
     # Minimal fallback HTML — points to the API docs.
     # dashboard/frontend is a LEGACY UI SURFACE (PR-8) and is not the current primary surface.
@@ -965,12 +970,18 @@ class GalaxyUnified:
                     )
                     return False
                 if not electron_package_intact(str(electron_dir)):
-                    logger.error(
-                        "npm install 完成但 electron 包仍不完整(node_modules/electron/"
-                        "cli.js 缺失)。请手动执行: cd electron && rmdir /s /q node_modules "
-                        "&& npm install"
+                    # 根因:electron 包目录已存在("残缺后补齐"场景)时,npm install 会
+                    # 【跳过 postinstall】,不会补下 dist/electron.exe 运行时二进制——
+                    # 光重跑 npm install 永远修不好,必须单独跑包自带的 install.js。
+                    from core.electron_launch_guard import (
+                        electron_binary_fix_hint, repair_electron_binary,
                     )
-                    return False
+                    if not repair_electron_binary(str(electron_dir.resolve())):
+                        logger.error(
+                            "npm install 后 electron 包仍不完整,已停止启动桌面壳。\n%s",
+                            electron_binary_fix_hint("electron"),
+                        )
+                        return False
             except Exception as exc:
                 logger.error("Electron npm install 异常: %s", exc)
                 return False
@@ -985,9 +996,16 @@ class GalaxyUnified:
             env.setdefault("PORT", str(self.config.web_ui_port))
             # GPU 自适应：默认让 Electron 走硬件加速（有独显的机器更流畅）。若 watch_processes
             # 检测到 GPU 模式反复崩溃，会置 _electron_force_software=True，这里注入
-            # GALAXY_ELECTRON_GPU=0 → main.js 据此 disableHardwareAcceleration（软件渲染兜底）。
+            # GALAXY_ELECTRON_GPU=0 → main.js 据此禁用硬件加速 + --disable-gpu
+            # + --disable-gpu-compositing（真正的纯软件渲染兜底）。
             if getattr(self, "_electron_force_software", False):
                 env["GALAXY_ELECTRON_GPU"] = "0"
+            # 第三级降级：软件渲染也反复崩溃(无独显 Windows 上透明分层窗口本身出问题)
+            # 时置 _electron_basic_window=True → main.js 改用【不透明 basic 小窗】承载
+            # 三态覆盖层——功能保留、只丢透明特效，而不是彻底放弃桌面壳。
+            if getattr(self, "_electron_basic_window", False):
+                env["GALAXY_ELECTRON_GPU"] = "0"
+                env["GALAXY_ELECTRON_BASIC"] = "1"
             # Prefer the locally-installed electron binary — robust and avoids the
             # `npm electron .` bug (invalid command) that hit when npx was absent.
             # CRITICAL: use ABSOLUTE paths for both the binary and the app dir.
@@ -1100,6 +1118,9 @@ class GalaxyUnified:
             env.setdefault("GALAXY_IPC_PORT", "9231")
             if getattr(self, "_electron_force_software", False):
                 env["GALAXY_ELECTRON_GPU"] = "0"
+            if getattr(self, "_electron_basic_window", False):
+                env["GALAXY_ELECTRON_GPU"] = "0"
+                env["GALAXY_ELECTRON_BASIC"] = "1"
             _log_dir = Path("logs")
             _log_dir.mkdir(exist_ok=True)
             # 复用同一份 logs/electron.log（托盘「三态动画日志」就打开它），便于一处看壳层日志。
@@ -1149,24 +1170,53 @@ class GalaxyUnified:
             logger.warning("系统托盘启动失败(非致命): %s", exc)
             return False
 
+    def _electron_log_excerpt(self, max_lines: int = 8) -> str:
+        """取 logs/electron.log 尾部的错误摘要，直接打进主日志。
+
+        真机排查痛点：每次降级/放弃都只说"详情见 logs/electron.log"，用户根本
+        不会去翻——而崩溃根因(gpu-process-gone 原因、Cannot find module、
+        Electron failed to install correctly…)其实就躺在那个文件尾部。这里把
+        尾部 8KB 里带错误特征的行摘出来，守护日志自己说清楚"为什么崩"。
+        """
+        try:
+            p = Path("logs") / "electron.log"
+            if not p.exists():
+                return "(logs/electron.log 不存在 —— Electron 可能根本没被拉起)"
+            with open(p, "rb") as f:
+                f.seek(max(0, p.stat().st_size - 8192))
+                tail = f.read().decode("utf-8", "replace")
+            keys = ("error", "Error", "ERROR", "FATAL", "gone", "Cannot find module",
+                    "GPU", "gpu", "crash", "Unable", "failed", "Failed", "退出", "失败")
+            lines = [ln.strip() for ln in tail.splitlines()
+                     if ln.strip() and any(k in ln for k in keys)]
+            picked = lines[-max_lines:] if lines else [ln for ln in tail.splitlines() if ln.strip()][-max_lines:]
+            return "\n    ".join(picked) if picked else "(electron.log 为空)"
+        except Exception as exc:  # noqa: BLE001 —— 摘要失败绝不能反过来搞挂守护循环
+            return f"(读取 electron.log 失败: {exc})"
+
     async def watch_processes(self):
-        """进程保活 + GPU 自适应：监控 Electron，崩溃时自动重启。
+        """进程保活 + 渲染模式三级自适应：监控 Electron，崩溃时自动重启。
 
         按机器实际情况自适应渲染模式（无需用户手动判断有没有 GPU）：
         - 默认 GPU（硬件加速）模式启动；
-        - 若 GPU 模式 60s 内崩溃 >= MAX_GPU 次（常见于笔记本双显卡/驱动不支持透明窗口
-          GPU 合成）→ 自动切换为软件渲染重试；
-        - 若软件渲染也 60s 内崩溃 >= MAX_SW 次 → 停止自动重启并给出指引。
-        Electron 的 stdout/stderr 写入 logs/electron.log（含 *-process-gone 崩溃原因）。
+        - 若 GPU 模式 60s 内崩溃 >= MAX_GPU 次（常见于无独显/驱动不支持透明窗口
+          GPU 合成）→ 自动切换为软件渲染（--disable-gpu + --disable-gpu-compositing）重试；
+        - 若软件渲染也 60s 内崩溃 >= MAX_SW 次 → 第三级降级：不透明 basic 窗口
+          （丢透明特效、保留覆盖层功能），而不是直接放弃；
+        - basic 窗口也 60s 内崩溃 >= MAX_BASIC 次 → 才停止自动重启并给出指引。
+        每次降级/放弃都把 logs/electron.log 尾部错误摘要打进主日志（见 _electron_log_excerpt）。
         """
         import asyncio
         import time
         restarts: list = []          # 最近 60s 窗口内的重启时间戳
         MAX_GPU = 3                  # GPU 模式连续崩溃达此数 → 切软件渲染
-        MAX_SW = 5                   # 软件渲染也崩到此数 → 放弃
+        MAX_SW = 5                   # 软件渲染也崩到此数 → 降级不透明 basic 窗口
+        MAX_BASIC = 5                # basic 窗口也崩到此数 → 放弃
         gave_up = False
         if not hasattr(self, "_electron_force_software"):
             self._electron_force_software = False
+        if not hasattr(self, "_electron_basic_window"):
+            self._electron_basic_window = False
         while True:
             await asyncio.sleep(5)
             proc = getattr(self, 'electron_proc', None)
@@ -1181,25 +1231,42 @@ class GalaxyUnified:
                 restarts = []
                 logger.warning(
                     "Electron GPU 模式 60s 内崩溃 %d 次，自动切换为软件渲染重试"
-                    "（你的显卡/驱动可能不支持透明窗口 GPU 合成；详情见 logs/electron.log）…",
-                    MAX_GPU,
+                    "（你的显卡/驱动可能不支持透明窗口 GPU 合成）。"
+                    "崩溃摘要(logs/electron.log 尾部)：\n    %s",
+                    MAX_GPU, self._electron_log_excerpt(),
                 )
                 await self.start_desktop_shell()
                 continue
 
-            # 软件渲染也反复崩溃 → 放弃
-            if self._electron_force_software and len(restarts) >= MAX_SW:
+            # 软件渲染也反复崩溃 → 第三级降级：不透明 basic 窗口（保功能、丢透明特效）。
+            # 根因：无独显 Windows 上透明分层窗口本身(而不只是 GPU 合成)可能就是崩溃点，
+            # 此前直接放弃 → 覆盖层整个没了；现在换不透明小窗再试，外壳尽量活着。
+            if (self._electron_force_software and not self._electron_basic_window
+                    and len(restarts) >= MAX_SW):
+                self._electron_basic_window = True
+                restarts = []
+                logger.warning(
+                    "Electron 软件渲染仍 60s 内崩溃 %d 次，降级为【不透明 basic 窗口】重试"
+                    "（覆盖层功能保留，仅无透明特效）。崩溃摘要(logs/electron.log 尾部)：\n    %s",
+                    MAX_SW, self._electron_log_excerpt(),
+                )
+                await self.start_desktop_shell()
+                continue
+
+            # basic 窗口也反复崩溃 → 放弃（此时多半不是渲染问题，摘要里通常能看出真因）
+            if self._electron_basic_window and len(restarts) >= MAX_BASIC:
                 gave_up = True
                 logger.error(
-                    "Electron 在 GPU 与软件渲染下均反复崩溃，已停止自动重启。"
-                    "崩溃详情见 logs/electron.log；后端与 API 仍在 "
-                    "http://localhost:%d 正常运行（Ctrl+Alt+Space 覆盖层暂不可用）。",
-                    self.config.web_ui_port,
+                    "Electron 在 GPU/软件渲染/不透明 basic 窗口下均反复崩溃，已停止自动重启。"
+                    "后端与 API 仍在 http://localhost:%d 正常运行（Ctrl+Alt+Space 覆盖层暂不可用）。"
+                    "崩溃摘要(logs/electron.log 尾部)：\n    %s",
+                    self.config.web_ui_port, self._electron_log_excerpt(),
                 )
                 continue
 
             restarts.append(now)
-            _mode = "软件渲染" if self._electron_force_software else "GPU"
+            _mode = ("basic 窗口" if self._electron_basic_window
+                     else "软件渲染" if self._electron_force_software else "GPU")
             logger.warning(
                 "Electron 已退出，重启中（%s 模式，60s 内第 %d 次；详情见 logs/electron.log）…",
                 _mode, len(restarts),
@@ -1210,17 +1277,43 @@ class GalaxyUnified:
         """加载配置并初始化服务管理器。"""
         self.service_manager.state = SystemState.LOADING_CONFIG
 
-    async def start_nats(self):
-        """启动 NATS 消息总线。"""
+    async def start_nats(self) -> dict:
+        """启动 NATS 消息总线。返回结构化真实结果(供启动横幅如实展示)。
+
+        诚实性修复(所有者 Windows 真机日志实证):此前 EmbeddedNATSServer.start()
+        返回 False(如 [WinError 4551] WDAC 拦截 nats-server.exe)被本函数静默吞掉;
+        接着 bus.connect() 按约定 C7【返回 {"success": False} 而非抛异常】,也被
+        无视返回值地 await 掉 —— 调用方的 try/except 永远走不到 except 分支,
+        启动横幅于是在 NATS 根本没起来时照打 "✓ 消息总线 nats://localhost:4222"。
+        现在:显式核验每一步结果,失败时带原因/修复指引返回,由横幅降级展示。
+
+        Returns:
+            {"ok": bool, "url": str, "error": str, "hint": str, "disabled": bool}
+        """
         from core.nats_server import EmbeddedNATSServer
         from core.nats_bus import get_nats_bus
+        # 显式关闭(install_windows.ps1 默认写入 GALAXY_NATS_ENABLED=false):
+        # 不再明知配置为关仍去拉起二进制,横幅如实标注"按配置未启用"。
+        if os.environ.get("GALAXY_NATS_ENABLED", "").strip().lower() in ("false", "0", "no", "off"):
+            return {"ok": False, "url": "", "error": "", "hint": "", "disabled": True}
         nats_url = os.environ.get("GALAXY_NATS_URL")
+        embedded_error = ""
+        embedded_hint = ""
         if not nats_url:
             server = EmbeddedNATSServer()
             if await server.start():
-                return
+                return {"ok": True, "url": os.environ.get("GALAXY_NATS_URL", "nats://localhost:4222"),
+                        "error": "", "hint": "", "disabled": False}
+            embedded_error = getattr(server, "last_error", "") or "内置 nats-server 启动失败"
+            embedded_hint = getattr(server, "last_error_hint", "")
         bus = get_nats_bus()
-        await bus.connect()
+        result = await bus.connect()
+        if isinstance(result, dict) and result.get("success") and bus.is_connected():
+            return {"ok": True, "url": os.environ.get("GALAXY_NATS_URL", nats_url or "nats://localhost:4222"),
+                    "error": "", "hint": "", "disabled": False}
+        _conn_err = (result.get("error", "") if isinstance(result, dict) else str(result)) or "NATS 连接失败"
+        return {"ok": False, "url": "", "error": embedded_error or _conn_err,
+                "hint": embedded_hint, "disabled": False}
 
     async def start_tailscale(self):
         """启动 Tailscale 网络。返回真实 Tailscale IP（供显示）。"""
@@ -1472,16 +1565,39 @@ class GalaxyUnified:
               hint="装 Docker/Podman 后重跑即恢复" if d_status != "ok" else None)
 
         # ── 消息总线 ──
+        # 诚实性修复(所有者 Windows 真机日志实证):旧代码"try: await start_nats()
+        # 不抛异常 == 成功"—— 但 NATSBus.connect() 按 C7 约定失败时返回
+        # {"success": False} 而非抛异常,EmbeddedNATSServer.start() 失败也只
+        # return False,于是 nats-server.exe 被 WDAC([WinError 4551])拦截、
+        # 根本没起来时,横幅仍打 "✓ 消息总线 nats://localhost:4222"(假绿)。
+        # 现在按 start_nats() 的结构化真实结果降级展示:原因 + 影响 + 专属修复指引。
         bus_details: List[Tuple[str, str, str]] = []
+        bus_hint: Optional[str] = None
         try:
-            await self.start_nats()
-            nats_host = os.environ.get("GALAXY_NATS_HOST", "localhost")
-            nats_port = os.environ.get("GALAXY_NATS_PORT", "4222")
-            bus_details.append(("NATS Bus", f"nats://{nats_host}:{nats_port}", "ok"))
-            nats_ok, bus_value = True, f"nats://{nats_host}:{nats_port}"
-        except Exception as exc:
-            bus_details.append(("NATS Bus", f"{exc}", "warn"))
-            nats_ok, bus_value = False, "NATS 未就绪"
+            _nats_res = await self.start_nats()
+        except Exception as exc:  # noqa: BLE001
+            _nats_res = {"ok": False, "url": "", "error": str(exc), "hint": "", "disabled": False}
+        if _nats_res.get("ok"):
+            nats_ok, bus_value = True, _nats_res.get("url") or "已连接"
+            bus_details.append(("NATS Bus", bus_value, "ok"))
+        elif _nats_res.get("disabled"):
+            # 按配置显式关闭 —— 是配置意图而非故障,但仍如实标注降级与影响。
+            nats_ok = False
+            bus_value = "未启用(GALAXY_NATS_ENABLED=false)· 降级:进程内总线,跨设备分发不可用"
+            bus_details.append(("NATS Bus", "按配置未启用(GALAXY_NATS_ENABLED=false)", "warn"))
+            bus_details.append(("影响", "跨设备任务分发/集群 mesh 不可用;单机进程内 Agent 总线不受影响", "info"))
+            bus_hint = "如需跨设备:设 GALAXY_NATS_ENABLED=true 并确保 nats-server 可运行"
+        else:
+            nats_ok = False
+            _err = _nats_res.get("error") or "未知原因"
+            bus_value = f"未启动 · {_err[:80]} · 降级:进程内总线(单机可用,跨设备分发不可用)"
+            bus_details.append(("NATS Bus", f"未启动:{_err}", "warn"))
+            bus_details.append(("影响", "跨设备任务分发/集群 mesh 不可用;单机进程内 Agent 总线不受影响", "info"))
+            bus_hint = _nats_res.get("hint") or (
+                "检查 nats-server 是否可运行(手动执行 nats-server -v 验证);"
+                "单机使用可设 GALAXY_NATS_ENABLED=false 明确关闭此项"
+            )
+            bus_details.append(("修复", bus_hint, "info"))
         try:
             ts_ip = await self.start_tailscale()
             bus_details.append(("Tailscale", ts_ip or "已连接", "ok"))
@@ -1500,7 +1616,9 @@ class GalaxyUnified:
                 pass
         except Exception:
             bus_details.append(("Tailscale", "未安装 (LAN 直连模式)", "warn"))
-        _emit("消息总线", bus_value, "ok" if nats_ok else "warn", details=bus_details)
+        # 降级时把该项【专属】修复指引挂到总结卡(hint),不再无提示地一笔带过。
+        _emit("消息总线", bus_value, "ok" if nats_ok else "warn", details=bus_details,
+              hint=bus_hint if not nats_ok else None)
 
         # ── AI 大脑（含主脑模型选择）──
         try:

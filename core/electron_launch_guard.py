@@ -123,9 +123,82 @@ def electron_package_intact(electron_dir: str) -> bool:
     尝试过真正的修复动作(重跑 npm install)。
 
     这里检查 electron 包的两个关键文件都在,任何一个缺失都视为"需要修复安装"。
+
+    真机复现第二种残局("依赖残缺后补齐"仍崩溃循环的根因):js 文件都齐了,但
+    postinstall 下载的 **运行时二进制**(node_modules/electron/dist/electron.exe,
+    由 path.txt 指路)缺失——npm install 中断在下载阶段、或网络被断的典型残局。
+    此时 electron.cmd 一启动就打印 "Electron failed to install correctly" 立即退出:
+    表现正是"启动后立即退出"的闪退循环,且 GPU/软件渲染怎么切都一样崩(根本没
+    走到渲染);更坑的是 electron 包目录已存在时,重跑 npm install 会【跳过
+    postinstall】,永远补不回二进制。故完整性必须核到 path.txt 指向的真实二进制。
     """
     pkg = os.path.join(electron_dir, "node_modules", "electron")
-    return os.path.isfile(os.path.join(pkg, "package.json")) and os.path.isfile(os.path.join(pkg, "cli.js"))
+    if not (os.path.isfile(os.path.join(pkg, "package.json")) and os.path.isfile(os.path.join(pkg, "cli.js"))):
+        return False
+    path_txt = os.path.join(pkg, "path.txt")
+    if not os.path.isfile(path_txt):
+        return False
+    try:
+        with open(path_txt, encoding="utf-8") as f:
+            rel = f.read().strip()
+        return bool(rel) and os.path.isfile(os.path.join(pkg, "dist", rel))
+    except OSError:
+        return False
+
+
+def repair_electron_binary(electron_dir: str) -> bool:
+    """electron 包 js 齐、但运行时二进制缺失时,直接跑包自带的 install.js 补下二进制。
+
+    为什么不能靠 npm install:包目录已存在时 npm 会跳过 postinstall(见
+    electron_package_intact 的说明),二进制永远补不回来。install.js 就是 electron
+    的 postinstall 脚本,单独跑它即可只补二进制。先官方源,失败再换 npmmirror 镜像
+    (国内网络最常见的下载失败因)。返回修复后的完整性检查结果。
+    """
+    import shutil
+    import subprocess
+
+    if electron_package_intact(electron_dir):
+        return True
+    node = shutil.which("node")
+    pkg = os.path.join(electron_dir, "node_modules", "electron")
+    install_js = os.path.join(pkg, "install.js")
+    if not node or not os.path.isfile(install_js):
+        return False
+    for mirror in (None, "https://npmmirror.com/mirrors/electron/"):
+        env = os.environ.copy()
+        if mirror:
+            env["ELECTRON_MIRROR"] = mirror
+        _log(
+            "检测到 Electron 运行时二进制缺失,正在补下载(node electron/install.js"
+            + (", npmmirror 镜像" if mirror else "")
+            + ",可能数分钟)…"
+        )
+        try:
+            subprocess.run([node, install_js], cwd=pkg, env=env, timeout=900)
+        except Exception:  # noqa: BLE001 —— 尽力而为,以复检结果为准
+            pass
+        if electron_package_intact(electron_dir):
+            _log("Electron 二进制补下载成功 ✓")
+            return True
+    return False
+
+
+def electron_binary_fix_hint(electron_dir: str = "electron") -> str:
+    """自动修复失败时,给用户一条【可直接照抄执行】的修复指令(而不是让用户猜)。"""
+    win = os.name == "nt"
+    rm = r"rmdir /s /q node_modules\electron" if win else "rm -rf node_modules/electron"
+    setm = (
+        "set ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/&& "
+        if win
+        else "ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ "
+    )
+    return (
+        "Electron 运行时二进制缺失/损坏(node_modules/electron/dist 未下载完整),自动修复未成功。\n"
+        f"手动修复(任选其一,在 {electron_dir}/ 目录下执行):\n"
+        "  1. node node_modules/electron/install.js\n"
+        f"  2. 网络受限用镜像: {setm}node node_modules/electron/install.js\n"
+        f"  3. 彻底重装该包: {rm} && npm install"
+    )
 
 
 def tauri_build_prereqs_hint():

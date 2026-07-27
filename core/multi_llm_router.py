@@ -3925,3 +3925,49 @@ async def refresh_llm_router() -> Dict[str, Any]:
     """便捷函数：刷新全局 LLM 路由器的提供商列表"""
     router = get_llm_router()
     return await router.refresh_providers()
+
+
+# ── 后台刷新调度(保存配置路由的快速返回依赖此处)──────────────────────────
+# 根因(Windows 真机日志实证):POST /api/config 此前同步 await refresh_llm_router()
+# ——内部对 Ollama/OneAPI 等做 2~5s/个的真实网络探测,离线机器上整个刷新轻松
+# 超过 8s。而 Electron 主进程 fetchWithRetry 的单次尝试硬上限恰是 8s(abort 后
+# 2.5s 重试、60s 总预算)——于是保存请求永远在"后端还没答完就被掐断重发"里
+# 打转:面板卡在「保存中…/仍在保存中」直至 60s 预算耗尽报错;每次 abort 都留下
+# 一个已断开的连接,后端稍后写响应体就炸出 "Cannot call write() when UVStream
+# is closing"(与断开写错误连锁,时间线完全吻合)。
+# 修复:保存路由只【调度】刷新立即返回;需要刷新结果的端点(verify-provider)
+# 用 wait_llm_router_refresh() 有界等待,两边都不会无限悬挂。
+_refresh_task: Optional["asyncio.Task"] = None
+
+
+def schedule_llm_router_refresh() -> "asyncio.Task":
+    """在后台调度一次路由器热刷新(去重:已有进行中的任务则直接复用)。"""
+    global _refresh_task
+    if _refresh_task is not None and not _refresh_task.done():
+        return _refresh_task
+
+    async def _run():
+        try:
+            return await refresh_llm_router()
+        except Exception as exc:  # noqa: BLE001 — 后台任务,异常只记日志不上抛
+            logger.warning("LLM 路由后台刷新失败(下次保存/探测会重试): %s", exc)
+            return None
+
+    _refresh_task = asyncio.get_running_loop().create_task(_run())
+    return _refresh_task
+
+
+async def wait_llm_router_refresh(timeout: float = 8.0) -> bool:
+    """有界等待进行中的后台刷新完成;无进行中任务视为已完成。
+
+    返回 True=刷新已完成(或本就没有待完成的刷新);False=超时仍未完成
+    (shield 保护任务本体继续在后台跑完,不因等待方超时而被取消)。
+    """
+    task = _refresh_task
+    if task is None or task.done():
+        return True
+    try:
+        await asyncio.wait_for(asyncio.shield(task), timeout)
+        return True
+    except asyncio.TimeoutError:
+        return False

@@ -249,7 +249,14 @@ async def verify_provider(req: ProviderVerifyRequest) -> Dict[str, Any]:
     此前保存只代表写进了 .env,Key 错的/网络不通的要等到真正对话失败才暴露,
     用户没法判断"到底好了没有"。试调成本≈零(max_tokens=1),15s 封顶。
     """
-    from core.multi_llm_router import PROVIDER_REGISTRY, get_llm_router
+    from core.multi_llm_router import PROVIDER_REGISTRY, get_llm_router, wait_llm_router_refresh
+
+    # 保存配置(POST /api/config)现在只【后台调度】路由刷新就立即返回(否则同步
+    # 网络探测 >8s 会撞上 Electron 的单次尝试超时,保存悬挂——见 config.py 注释)。
+    # 这里是刷新结果的真正消费方:有界等待进行中的刷新完成,保证"保存后立刻
+    # 验证"仍能看到新 key 对应的 adapter;8s 等不到就按当前快照如实作答,
+    # 不无限悬挂(前端对本请求另有 12s 超时)。
+    await wait_llm_router_refresh(timeout=8.0)
 
     router_ = get_llm_router()
 
