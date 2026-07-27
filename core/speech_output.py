@@ -22,6 +22,10 @@ import os
 import time
 from typing import Any, Callable, Optional
 
+# RUF006: retain fire-and-forget create_task results so the event loop's weak
+# reference can't let them be garbage-collected mid-execution.
+_BACKGROUND_TASKS: set = set()
+
 logger = logging.getLogger("Galaxy.SpeechOutput")
 
 # 真流式请求上下文里已经有 IncrementalSpeaker 在边生成边念时,请求收尾处
@@ -291,7 +295,9 @@ def _dispatch_speech(coro: Any) -> None:
     """把一段发声协程调度上运行中的事件循环;无循环则同步兜底执行。"""
     try:
         loop = asyncio.get_running_loop()
-        loop.create_task(coro)  # 非阻塞:后台朗读
+        _bt = loop.create_task(coro)  # 非阻塞:后台朗读
+        _BACKGROUND_TASKS.add(_bt)
+        _bt.add_done_callback(_BACKGROUND_TASKS.discard)
     except RuntimeError:
         # 无运行中的事件循环:同步兜底(尽量不长阻塞)。
         try:
@@ -425,7 +431,9 @@ def _maybe_speak_native(text: str, source: str) -> bool:
         return False
     try:
         loop = asyncio.get_running_loop()
-        loop.create_task(_run_native_speech(backend, text, source))
+        _bt = loop.create_task(_run_native_speech(backend, text, source))
+        _BACKGROUND_TASKS.add(_bt)
+        _bt.add_done_callback(_BACKGROUND_TASKS.discard)
         return True
     except RuntimeError:
         # 无运行中的事件循环:同步兜底执行原生发声。
@@ -565,7 +573,9 @@ def interrupt_speech() -> None:
         return
     try:
         loop = asyncio.get_running_loop()
-        loop.create_task(speaker.interrupt())
+        _bt = loop.create_task(speaker.interrupt())
+        _BACKGROUND_TASKS.add(_bt)
+        _bt.add_done_callback(_BACKGROUND_TASKS.discard)
     except RuntimeError:
         try:
             asyncio.run(speaker.interrupt())

@@ -661,9 +661,15 @@ class NetworkGraphRuntime:
                     field_truth_grades={"topology_view": TRUTH_GRADE_RECOVERABLE},
                     extra={"recovered_at": recovered_wallclock},
                 )
+                # Per-item safe enum parse: one corrupt persisted value must not
+                # abort the entire recovery (raw constructor raises ValueError).
+                try:
+                    role = NetworkNodeRole(str(item.get("role") or NetworkNodeRole.UNKNOWN.value))
+                except ValueError:
+                    role = NetworkNodeRole.UNKNOWN
                 self._nodes[node_id] = NetworkNode(
                     node_id=node_id,
-                    role=NetworkNodeRole(str(item.get("role") or NetworkNodeRole.UNKNOWN.value)),
+                    role=role,
                     host=str(item.get("host") or ""),
                     port=int(item.get("port") or 0),
                     transport_hints=dict(item.get("transport_hints") or {}),
@@ -690,11 +696,16 @@ class NetworkGraphRuntime:
                     field_truth_grades={"topology_view": TRUTH_GRADE_RECOVERABLE},
                     extra={"recovered_at": recovered_wallclock},
                 )
+                # Per-item safe enum parse (same rationale as node roles above).
+                try:
+                    kind = NetworkEdgeKind(str(item.get("kind") or NetworkEdgeKind.FABRIC_LINK.value))
+                except ValueError:
+                    kind = NetworkEdgeKind.FABRIC_LINK
                 self._edges[edge_id] = NetworkEdge(
                     edge_id=edge_id,
                     source_node_id=str(item.get("source_node_id") or ""),
                     target_node_id=str(item.get("target_node_id") or ""),
-                    kind=NetworkEdgeKind(str(item.get("kind") or NetworkEdgeKind.FABRIC_LINK.value)),
+                    kind=kind,
                     metadata=metadata,
                     created_at=recovered_monotonic,
                 )

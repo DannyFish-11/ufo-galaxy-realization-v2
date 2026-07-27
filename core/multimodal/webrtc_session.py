@@ -17,6 +17,10 @@ import numpy as np
 
 from .signal_quality import SignalQuality
 
+# RUF006: retain fire-and-forget create_task results so the event loop's weak
+# reference can't let them be garbage-collected mid-execution.
+_BACKGROUND_TASKS: set = set()
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -129,7 +133,9 @@ class WebRTCCameraSession:
             @self._pc.on("track")  # type: ignore[misc]
             async def on_track(track):
                 if track.kind == "video":
-                    asyncio.create_task(self._receive_video(track))
+                    _bt = asyncio.create_task(self._receive_video(track))
+                    _BACKGROUND_TASKS.add(_bt)
+                    _bt.add_done_callback(_BACKGROUND_TASKS.discard)
 
             @self._pc.on("connectionstatechange")  # type: ignore[misc]
             async def on_state_change():

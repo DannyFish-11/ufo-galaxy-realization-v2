@@ -20,6 +20,12 @@ from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger("Galaxy.CrossDeviceSync")
 
+# Retains fire-and-forget phase-sync tasks.  asyncio.get_event_loop().create_task
+# only keeps a WEAK reference to the task, so a bare create_task(...) whose result
+# is discarded can be garbage-collected before it runs, silently dropping the
+# cross-device phase broadcast.  Hold a strong ref until the task finishes.
+_BACKGROUND_PHASE_SYNC_TASKS: set = set()
+
 try:
     from core.schemas.aip_v3 import StateEventMsg  # noqa: F401
 
@@ -150,7 +156,7 @@ def emit_cross_device_phase_sync(
     """
     try:
         loop = asyncio.get_running_loop()
-        loop.create_task(
+        task = loop.create_task(
             _async_push_phase_to_all_devices(
                 old_phase=old_phase,
                 new_phase=new_phase,
@@ -159,6 +165,10 @@ def emit_cross_device_phase_sync(
                 trace_id=trace_id,
             )
         )
+        # Keep a strong reference until the task completes so it can't be GC'd
+        # mid-flight (the loop only holds a weak ref to the task).
+        _BACKGROUND_PHASE_SYNC_TASKS.add(task)
+        task.add_done_callback(_BACKGROUND_PHASE_SYNC_TASKS.discard)
     except RuntimeError:
         logger.debug("CrossDeviceSync: no event loop, skipping push")
 

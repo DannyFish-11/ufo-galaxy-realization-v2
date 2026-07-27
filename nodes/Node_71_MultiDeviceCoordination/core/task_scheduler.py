@@ -39,6 +39,10 @@ from models.task import (
     SchedulingStrategy
 )
 
+# RUF006: retain fire-and-forget create_task results so the event loop's weak
+# reference can't let them be garbage-collected mid-execution.
+_BACKGROUND_TASKS: set = set()
+
 logger = logging.getLogger(__name__)
 
 
@@ -596,7 +600,9 @@ class TaskScheduler:
         ))
         
         # 启动任务执行
-        asyncio.create_task(self._execute_task(task, device))
+        _bt = asyncio.create_task(self._execute_task(task, device))
+        _BACKGROUND_TASKS.add(_bt)
+        _bt.add_done_callback(_BACKGROUND_TASKS.discard)
         
         return True
     

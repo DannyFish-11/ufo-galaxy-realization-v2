@@ -27,6 +27,10 @@ from enum import Enum, auto
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Type
 
+# RUF006: retain fire-and-forget create_task results so the event loop's weak
+# reference can't let them be garbage-collected mid-execution.
+_BACKGROUND_TASKS: set = set()
+
 logger = logging.getLogger("NodeRegistry")
 
 
@@ -501,7 +505,9 @@ class NodeRegistry:
 
             loop = _asyncio.get_running_loop()
             if loop.is_running():
-                loop.create_task(capability_manager.update_node_status(node_id, cap_status))
+                _bt = loop.create_task(capability_manager.update_node_status(node_id, cap_status))
+                _BACKGROUND_TASKS.add(_bt)
+                _bt.add_done_callback(_BACKGROUND_TASKS.discard)
         except Exception as e:
             logger.debug(f"能力状态更新失败 (非致命): {e}")
 

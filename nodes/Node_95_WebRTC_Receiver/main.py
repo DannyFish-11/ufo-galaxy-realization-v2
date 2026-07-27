@@ -43,6 +43,10 @@ from aiortc import RTCPeerConnection, RTCSessionDescription, RTCIceCandidate, Vi
 from aiortc.contrib.media import MediaRecorder
 import av
 
+# RUF006: retain fire-and-forget create_task results so the event loop's weak
+# reference can't let them be garbage-collected mid-execution.
+_BACKGROUND_TASKS: set = set()
+
 # 配置日志
 logging.basicConfig(
     level=logging.INFO,
@@ -338,7 +342,9 @@ async def handle_offer(device_id: str, websocket: WebSocket, message: dict):
     async def on_track(track):
         logger.info(f"[{device_id}] Track received: {track.kind}")
         if track.kind == "video":
-            asyncio.create_task(receiver.on_track(track))
+            _bt = asyncio.create_task(receiver.on_track(track))
+            _BACKGROUND_TASKS.add(_bt)
+            _bt.add_done_callback(_BACKGROUND_TASKS.discard)
     
     # 监听 ICE 连接状态
     @pc.on("iceconnectionstatechange")

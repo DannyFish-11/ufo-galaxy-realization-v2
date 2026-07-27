@@ -582,7 +582,7 @@ async def list_models():
     # 本地 LLM 模型
     if LOCAL_LLM_ENABLED:
         try:
-            resp = requests.get(f"{LOCAL_LLM_URL}/v1/models", timeout=2)
+            resp = await asyncio.to_thread(requests.get, f"{LOCAL_LLM_URL}/v1/models", timeout=2)
             if resp.status_code == 200:
                 local_models = resp.json().get("data", [])
                 for model in local_models:

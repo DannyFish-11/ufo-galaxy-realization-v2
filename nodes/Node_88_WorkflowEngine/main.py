@@ -357,7 +357,10 @@ class WorkflowEngine:
 
         elif stype == "log":
             msg = self._resolve(params.get("message", ""), ctx)
-            level = params.get("level", "info").lower()
+            # str()-coerce: a step defined with params {"level": null} would make
+            # the "info" default (only used for an ABSENT key) a None.lower() crash
+            # that fails the whole workflow execution.
+            level = str(params.get("level") or "info").lower()
             getattr(logger, level, logger.info)(f"[workflow log] {msg}")
             return None
 

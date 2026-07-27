@@ -52,13 +52,17 @@ async def handle_state_event(
     event_action = message.get("event_action", "")
     payload = message.get("payload", {}) if isinstance(message.get("payload"), dict) else {}
 
-    # Log the state event
+    # Log the state event.  Coerce session_id to str before slicing: get()'s ""
+    # default only applies when the key is absent, so a present-but-None (or
+    # non-string) session_id from an external sender would make ""[:8] a
+    # None[:8] TypeError and tear down the whole handler (no phase update, no ack).
+    session_id_short = str(message.get("session_id") or "")[:8]
     logger.info(
         "StateEvent: received %s/%s from %s (session=%s)",
         event_category,
         event_action,
         device_id,
-        message.get("session_id", "")[:8],
+        session_id_short,
     )
 
     # Handle phase category

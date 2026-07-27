@@ -17,6 +17,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from nodes.common.cors_config import get_cors_origins
 
+# RUF006: retain fire-and-forget create_task results so the event loop's weak
+# reference can't let them be garbage-collected mid-execution.
+_BACKGROUND_TASKS: set = set()
+
 try:
     from core.port_config import get_node_port
     PORT = get_node_port("Node_75_DataPipeline")
@@ -265,7 +269,9 @@ async def pipeline_run(request: PipelineRunRequest):
     pipeline["current_step"] = 0
     pipeline["error"] = None
 
-    asyncio.create_task(_execute_pipeline(request.pipeline_id))
+    _bt = asyncio.create_task(_execute_pipeline(request.pipeline_id))
+    _BACKGROUND_TASKS.add(_bt)
+    _bt.add_done_callback(_BACKGROUND_TASKS.discard)
     return {
         "success": True,
         "pipeline_id": request.pipeline_id,

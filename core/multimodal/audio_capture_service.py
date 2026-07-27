@@ -45,6 +45,10 @@ from .multimodal_events import (
 )
 from .signal_quality import SignalQuality
 
+# RUF006: retain fire-and-forget create_task results so the event loop's weak
+# reference can't let them be garbage-collected mid-execution.
+_BACKGROUND_TASKS: set = set()
+
 logger = logging.getLogger(__name__)
 
 # Latency threshold above which a quality-degraded event is emitted (ms)
@@ -247,7 +251,9 @@ class AudioCaptureService:
             if asyncio.iscoroutinefunction(self.on_voice_input):
                 try:
                     # 在事件循环线程里调用:直接 create_task。
-                    asyncio.get_running_loop().create_task(self.on_voice_input(text))  # noqa: RUF006
+                    _bt = asyncio.get_running_loop().create_task(self.on_voice_input(text))  # noqa: RUF006
+                    _BACKGROUND_TASKS.add(_bt)
+                    _bt.add_done_callback(_BACKGROUND_TASKS.discard)
                 except RuntimeError:
                     # 在 worker 线程里调用(无运行中的事件循环):跨线程安全调度
                     # 到 start() 时捕获的主循环。

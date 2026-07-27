@@ -43,6 +43,10 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
 
+# RUF006: retain fire-and-forget create_task results so the event loop's weak
+# reference can't let them be garbage-collected mid-execution.
+_BACKGROUND_TASKS: set = set()
+
 logger = logging.getLogger("Galaxy.StateSyncBus")
 
 # PR-AIPV3: AIP v3 unified message emission
@@ -221,7 +225,9 @@ class StateSynchronizationBus:
             )
             nats = get_nats_bus()
             if nats.is_connected():
-                asyncio.get_running_loop().create_task(nats.publish_state_event(msg))
+                _bt = asyncio.get_running_loop().create_task(nats.publish_state_event(msg))
+                _BACKGROUND_TASKS.add(_bt)
+                _bt.add_done_callback(_BACKGROUND_TASKS.discard)
         except Exception as exc:
             logger.warning("Exception suppressed: %s", exc)
 

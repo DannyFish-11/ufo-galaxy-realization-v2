@@ -134,6 +134,9 @@ from galaxy_gateway.ssot import udm_write_register, udm_write_heartbeat, udm_wri
 
 logger = logging.getLogger(__name__)
 
+# Strong refs to fire-and-forget tasks (event loop only holds a weak ref).
+_BACKGROUND_TASKS: set = set()
+
 # ---------------------------------------------------------------------------
 # PR-03-V2: Android business domain kinds
 #
@@ -256,7 +259,9 @@ class GatewayWSManager:
                     except RuntimeError:
                         pass
                     if loop is not None and loop.is_running():
-                        loop.create_task(ucm.unregister_connection(device_id))
+                        _bt = loop.create_task(ucm.unregister_connection(device_id))
+                        _BACKGROUND_TASKS.add(_bt)
+                        _bt.add_done_callback(_BACKGROUND_TASKS.discard)
                     else:
                         ucm.mark_offline(device_id)
                 except Exception as _ucm_err:

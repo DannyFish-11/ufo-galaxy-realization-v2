@@ -18,6 +18,10 @@ from pydantic import BaseModel
 import uuid
 from nodes.common.cors_config import get_cors_origins
 
+# RUF006: retain fire-and-forget create_task results so the event loop's weak
+# reference can't let them be garbage-collected mid-execution.
+_BACKGROUND_TASKS: set = set()
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -152,7 +156,9 @@ class ExternalToolWrapper:
         # 检查工具可用性（延迟到事件循环可用时）
         try:
             asyncio.get_running_loop()
-            asyncio.create_task(self._check_all_tools())
+            _bt = asyncio.create_task(self._check_all_tools())
+            _BACKGROUND_TASKS.add(_bt)
+            _bt.add_done_callback(_BACKGROUND_TASKS.discard)
         except RuntimeError:
             pass  # 无事件循环时跳过，待服务器启动后手动调用
     

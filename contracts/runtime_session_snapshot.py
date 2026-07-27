@@ -701,9 +701,7 @@ class RuntimeSessionSnapshot(BaseModel):
     # Device and host state
     runtime_devices: List[Dict[str, Any]] = Field(
         default_factory=list,
-        description=(
-            "Compact entries for all registered runtime devices in this session."
-        ),
+        description=("Compact entries for all registered runtime devices in this session."),
     )
     runtime_hosts: List[Dict[str, Any]] = Field(
         default_factory=list,
@@ -792,6 +790,9 @@ class RuntimeSessionSnapshot(BaseModel):
             mesh_session_id=self.mesh_session_id,
             source_device_id=self.source_device_id,
             primary_device_id=self.primary_device_id,
+            # to_identity 之前漏掉了 source_runtime_posture(两个模型都有该字段),
+            # 导致身份块丢失该 posture(coordination_role 不在 snapshot 上,无法转发)。
+            source_runtime_posture=self.source_runtime_posture,
             created_at=self.created_at,
             updated_at=self.updated_at,
             metadata=dict(self.metadata),
@@ -1184,9 +1185,7 @@ def build_runtime_session_snapshot(
                     dispatch_status=_safe_str(d.get("status") or d.get("dispatch_status")) or None,
                     target_device_ids=[
                         _safe_str(t)
-                        for t in _safe_list(
-                            d.get("target_device_ids") or d.get("selected_target_device_ids") or []
-                        )
+                        for t in _safe_list(d.get("target_device_ids") or d.get("selected_target_device_ids") or [])
                     ],
                     plan_id=_safe_str(d.get("plan_id")) or None,
                     reason=_safe_str(d.get("reason") or d.get("outcome_reason") or ""),
@@ -1218,6 +1217,26 @@ def build_runtime_session_snapshot(
         if coordinator_state is not None:
             try:
                 d = _safe_dict(coordinator_state)
+                # Producer MeshSessionCoordinatorState.to_dict() nests the barrier
+                # under "barrier_state" (MeshBarrierState.status is the enum, value
+                # "waiting" means devices are blocking at the barrier); the compact
+                # MeshSessionCoordinatorSummary emits a flat "barrier_status".  The
+                # legacy read looked for "barrier"/".blocking", which no producer
+                # emits, so barrier_active was always False.  Read the canonical
+                # shapes here.
+                _barrier_dict = _safe_dict(d.get("barrier_state") or d.get("barrier") or {})
+                _barrier_status = (
+                    _safe_str(
+                        d.get("barrier_status") or _barrier_dict.get("status") or _barrier_dict.get("barrier_status")
+                    )
+                    .strip()
+                    .lower()
+                )
+                # Producer emits the event log as "coordination_events"; the compact
+                # summary carries none.  "events"/"event_count" are legacy aliases.
+                _event_count = _safe_int(
+                    len(_safe_list(d.get("coordination_events") or d.get("events") or [])) or d.get("event_count") or 0
+                )
                 coordinator_block = RuntimeSessionSnapshotCoordinatorState(
                     coordinator_id=_safe_str(d.get("coordinator_id") or d.get("state_id")) or None,
                     coordinator_status=_safe_str(d.get("status") or d.get("coordinator_status")) or None,
@@ -1229,11 +1248,10 @@ def build_runtime_session_snapshot(
                     ),
                     barrier_active=_safe_bool(
                         d.get("barrier_active")
-                        or (d.get("barrier") is not None and _safe_bool(d.get("barrier", {}).get("blocking")))
+                        or (_barrier_status == "waiting")
+                        or _safe_bool(_barrier_dict.get("blocking"))
                     ),
-                    event_count=_safe_int(
-                        len(_safe_list(d.get("events") or [])) or d.get("event_count")
-                    ),
+                    event_count=_event_count,
                     metadata=dict(d.get("metadata") or {}),
                 )
             except Exception as exc:
@@ -1245,9 +1263,21 @@ def build_runtime_session_snapshot(
             try:
                 d = _safe_dict(merged_result)
                 units = _safe_list(d.get("result_units") or [])
-                auth_ids = _extract_unit_ids_by_status(units, {"authoritative", "confirmed", "merged"})
-                stale_ids = _extract_unit_ids_by_status(units, {"stale", "superseded", "rejected"})
-                pending_ids = _extract_unit_ids_by_status(units, {"pending", "partial", "in_progress"})
+                # Producer RuntimeResultUnit.status emits the RuntimeResultStatus
+                # enum (succeeded/failed/partial/blocked/skipped/timeout/unknown).
+                # The legacy sets ({authoritative,confirmed,merged} etc.) matched
+                # NONE of those values, so all three buckets were always empty.
+                # Map the real outcome enum onto the snapshot's authoritative /
+                # stale / pending buckets, keeping the legacy aliases for compat:
+                #   succeeded            -> authoritative (confirmed-good result)
+                #   failed/blocked/
+                #   skipped/timeout      -> stale (superseded / non-authoritative)
+                #   partial/unknown      -> pending (incomplete / undetermined)
+                auth_ids = _extract_unit_ids_by_status(units, {"succeeded", "authoritative", "confirmed", "merged"})
+                stale_ids = _extract_unit_ids_by_status(
+                    units, {"failed", "blocked", "skipped", "timeout", "stale", "superseded", "rejected"}
+                )
+                pending_ids = _extract_unit_ids_by_status(units, {"partial", "unknown", "pending", "in_progress"})
                 result_block = RuntimeSessionSnapshotResultState(
                     merge_id=_safe_str(d.get("merge_id") or d.get("result_id")) or None,
                     merge_status=_safe_str(d.get("status") or d.get("merge_status")) or None,
@@ -1268,14 +1298,16 @@ def build_runtime_session_snapshot(
                 d = _safe_dict(recovery_state)
                 recovery_block = RuntimeSessionSnapshotRecoveryState(
                     reconciliation_id=_safe_str(d.get("reconciliation_id") or d.get("recovery_id")) or None,
-                    recovery_status=_safe_str(d.get("status") or d.get("overall_status") or d.get("recovery_status")) or None,
-                    incident_count=_safe_int(
-                        d.get("incident_count") or len(_safe_list(d.get("incidents") or []))
-                    ),
+                    recovery_status=_safe_str(d.get("status") or d.get("overall_status") or d.get("recovery_status"))
+                    or None,
+                    incident_count=_safe_int(d.get("incident_count") or len(_safe_list(d.get("incidents") or []))),
                     replay_required=_safe_bool(d.get("replay_required")),
                     resume_allowed=_safe_bool(d.get("resume_allowed")),
                     merge_confirmation_required=_safe_bool(d.get("merge_confirmation_required")),
-                    has_barrier=_safe_bool(d.get("has_barrier")),
+                    # 生产方 RuntimeReconciliationState 发的是嵌套 barrier_state
+                    # (RecoveryBarrierState,含 blocking 标志),没有扁平的 has_barrier
+                    # 键——此前 d.get("has_barrier") 恒为 None。取 barrier_state.blocking。
+                    has_barrier=_safe_bool(_safe_dict(d.get("barrier_state") or {}).get("blocking")),
                     reason=_safe_str(d.get("reason") or ""),
                     metadata=dict(d.get("metadata") or {}),
                 )

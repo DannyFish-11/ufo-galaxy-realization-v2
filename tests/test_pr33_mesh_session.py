@@ -74,11 +74,16 @@ def _make_routing_summary(
 ) -> Any:
     m = MagicMock()
     m.source_device_id = source_device_id
-    m.primary_device_id = primary_device_id
+    # Canonical CrossDeviceAssignmentSummary attribute names.  The adapter reads
+    # primary_execution_device_id / posture / is_cross_device /
+    # confirmation_required_before_expansion — NOT the old primary_device_id /
+    # routing_posture / multi_device_required / merge_confirmation_required,
+    # which do not exist on the real summary dataclass.
+    m.primary_execution_device_id = primary_device_id
     m.mesh_id = mesh_id
-    m.routing_posture = routing_posture
-    m.multi_device_required = multi_req
-    m.merge_confirmation_required = merge_req
+    m.posture = routing_posture
+    m.is_cross_device = multi_req
+    m.confirmation_required_before_expansion = merge_req
     m.assigned_device_ids = assigned_device_ids or []
     m.fallback_device_ids = fallback_device_ids or []
     m.merge_owner_device_id = None

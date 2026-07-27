@@ -29,6 +29,10 @@ from typing import Any, Callable, Dict, List, Optional
 
 import httpx
 
+# RUF006: retain fire-and-forget create_task results so the event loop's weak
+# reference can't let them be garbage-collected mid-execution.
+_BACKGROUND_TASKS: set = set()
+
 logger = logging.getLogger("ConnectionManager")
 
 
@@ -279,6 +283,13 @@ class ConnectionManager:
         config = self.configs[connection_id]
 
         conn_info.state = ConnectionState.RECONNECTING
+        # Reset the retry budget at the START of each reconnect() invocation.
+        # retry_count is only otherwise zeroed inside connect() on success, so a
+        # reconnect() that exhausts all attempts leaves retry_count == max_retries;
+        # a later reconnect() (endpoint recovered) would then find the while-guard
+        # immediately false and return False without a single attempt — the
+        # connection would be stuck in ERROR forever.
+        conn_info.retry_count = 0
 
         while conn_info.retry_count < config.max_retries:
             # 计算退避延迟
@@ -349,7 +360,9 @@ class ConnectionManager:
                 conn_info.state = ConnectionState.DISCONNECTED
 
                 # 触发重连
-                asyncio.create_task(self.reconnect(connection_id))
+                _bt = asyncio.create_task(self.reconnect(connection_id))
+                _BACKGROUND_TASKS.add(_bt)
+                _bt.add_done_callback(_BACKGROUND_TASKS.discard)
                 break
 
     async def _start_heartbeat(self, connection_id: str):

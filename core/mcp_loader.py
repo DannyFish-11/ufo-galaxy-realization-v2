@@ -39,6 +39,10 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+# RUF006: retain fire-and-forget create_task results so the event loop's weak
+# reference can't let them be garbage-collected mid-execution.
+_BACKGROUND_TASKS: set = set()
+
 logger = logging.getLogger("Galaxy.MCP")
 
 # C阶段 2C: 工具调用守护（可选依赖，默认不启用）
@@ -288,8 +292,12 @@ class MCPLoader:
                 pass
             _payload = {"server_id": server_id, "event": event}
             if loop and loop.is_running():
-                loop.create_task(broadcast_event("mcp_update", _payload))
-                loop.create_task(broadcast_event("capability_update", {"source": "mcp_loader", **_payload}))
+                _bt = loop.create_task(broadcast_event("mcp_update", _payload))
+                _BACKGROUND_TASKS.add(_bt)
+                _bt.add_done_callback(_BACKGROUND_TASKS.discard)
+                _bt = loop.create_task(broadcast_event("capability_update", {"source": "mcp_loader", **_payload}))
+                _BACKGROUND_TASKS.add(_bt)
+                _bt.add_done_callback(_BACKGROUND_TASKS.discard)
         except Exception as exc:
             logger.warning("MCP broadcast event failed: %s", exc)
 

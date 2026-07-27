@@ -31,6 +31,10 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
+# RUF006: retain fire-and-forget create_task results so the event loop's weak
+# reference can't let them be garbage-collected mid-execution.
+_BACKGROUND_TASKS: set = set()
+
 logger = logging.getLogger("Galaxy.Federation")
 
 try:
@@ -216,7 +220,9 @@ class GalaxyFederation:
             if peer.backoff_until > now:
                 logger.debug(f"Skipping heartbeat to {peer.url} (backoff until {peer.backoff_until:.1f})")
                 continue
-            asyncio.create_task(self._ping_peer(peer, payload))
+            _bt = asyncio.create_task(self._ping_peer(peer, payload))
+            _BACKGROUND_TASKS.add(_bt)
+            _bt.add_done_callback(_BACKGROUND_TASKS.discard)
 
     async def _ping_peer(self, peer: PeerInstance, payload: Dict) -> None:
         """向单个 peer 发送心跳"""

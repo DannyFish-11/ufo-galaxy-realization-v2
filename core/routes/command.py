@@ -51,6 +51,10 @@ from core.routes._shared import (
 )
 from core.schemas.task_envelope import envelope_from_command_request
 
+# RUF006: retain fire-and-forget create_task results so the event loop's weak
+# reference can't let them be garbage-collected mid-execution.
+_BACKGROUND_TASKS: set = set()
+
 try:
     from core.auth import require_auth
 except ImportError:
@@ -352,7 +356,9 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                         }
                     )
 
-            asyncio.create_task(execute_async())
+            _bt = asyncio.create_task(execute_async())
+            _BACKGROUND_TASKS.add(_bt)
+            _bt.add_done_callback(_BACKGROUND_TASKS.discard)
 
             return JSONResponse(
                 {

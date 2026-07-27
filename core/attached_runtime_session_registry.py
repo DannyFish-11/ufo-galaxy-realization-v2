@@ -823,6 +823,15 @@ class AttachedSessionRegistry:
 
     def _push(self, entry: AttachedSessionRegistryEntry) -> None:
         """Append *entry* to the ring buffer and update lookup indices."""
+        # The ring buffer is a bounded deque(maxlen) that silently FIFO-evicts,
+        # but _entry_by_session / _entry_by_attachment_id gain a key per entry
+        # and were never pruned → they grow without bound as distinct session /
+        # attachment ids churn over a long-lived process.  Capture the entry
+        # about to be evicted so we can drop its now-dangling index keys below.
+        evicted: Optional[AttachedSessionRegistryEntry] = None
+        if self._capacity > 0 and len(self._buffer) == self._capacity:
+            evicted = self._buffer[0]
+
         self._buffer.append(entry)
         if entry.is_active():
             self._active_by_device[entry.device_id] = entry.entry_id
@@ -830,6 +839,22 @@ class AttachedSessionRegistry:
             self._entry_by_session[entry.session_id] = entry.entry_id
         if entry.runtime_attachment_session_id:
             self._entry_by_attachment_id[entry.runtime_attachment_session_id] = entry.entry_id
+
+        # Prune the evicted entry's index keys, but ONLY if they still point at
+        # it (a newer entry may have re-used the same id above — never drop that).
+        if evicted is not None:
+            self._prune_indices_for(evicted)
+
+    def _prune_indices_for(self, entry: AttachedSessionRegistryEntry) -> None:
+        """Remove index keys that still point at *entry* (an evicted record)."""
+        sid = entry.session_id
+        if sid and self._entry_by_session.get(sid) == entry.entry_id:
+            del self._entry_by_session[sid]
+        aid = entry.runtime_attachment_session_id
+        if aid and self._entry_by_attachment_id.get(aid) == entry.entry_id:
+            del self._entry_by_attachment_id[aid]
+        if self._active_by_device.get(entry.device_id) == entry.entry_id:
+            del self._active_by_device[entry.device_id]
 
     def _update_indices(self, entry: AttachedSessionRegistryEntry) -> None:
         """Refresh lookup indices after an in-place buffer replacement."""

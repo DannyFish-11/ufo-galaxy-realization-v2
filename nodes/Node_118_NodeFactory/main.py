@@ -359,7 +359,9 @@ class NodeFactory:
         instance = self.instances[instance_id]
         
         if instance.state == NodeState.RUNNING:
-            asyncio.create_task(self.stop_instance(instance_id))
+            _bt = asyncio.create_task(self.stop_instance(instance_id))
+            _BACKGROUND_TASKS.add(_bt)
+            _bt.add_done_callback(_BACKGROUND_TASKS.discard)
         
         del self.instances[instance_id]
         logger.info(f"Deleted instance: {instance_id}")
@@ -379,6 +381,10 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from nodes.common.cors_config import get_cors_origins
+
+# RUF006: retain fire-and-forget create_task results so the event loop's weak
+# reference can't let them be garbage-collected mid-execution.
+_BACKGROUND_TASKS: set = set()
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

@@ -522,7 +522,10 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                     did
                     for did in connection_manager.online_device_ids()
                     if did in registered_devices
-                    and registered_devices[did].get("device_type", "").startswith("android")
+                    # str()-coerce: a present-but-None device_type would make
+                    # None.startswith(...) raise and (via the surrounding except)
+                    # silently reset the whole android_online count to 0.
+                    and str(registered_devices[did].get("device_type") or "").startswith("android")
                 ]
             )
         except Exception as exc:

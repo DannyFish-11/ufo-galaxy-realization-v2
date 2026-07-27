@@ -27,8 +27,44 @@
 
 import logging
 import uuid
-from typing import Optional, Callable, Dict, Any, Set, Tuple
+from collections import OrderedDict
+from typing import Optional, Callable, Dict
 from datetime import datetime, timezone
+
+# Bounds for the in-memory idempotency caches / pending-task registry so a
+# long-lived gateway does not grow them without limit (they were previously
+# plain set()/dict() that only ever gained entries).
+_SEEN_ID_CACHE_MAXLEN = 50000
+_PENDING_TASKS_MAXLEN = 20000
+
+
+class _BoundedSeenSet:
+    """Membership cache with FIFO eviction, exposing the ``in`` / ``add`` API.
+
+    Used for idempotency dedup where only recent keys need to be remembered;
+    the oldest keys are evicted once ``maxlen`` is exceeded so memory stays
+    bounded.
+    """
+
+    __slots__ = ("_maxlen", "_data")
+
+    def __init__(self, maxlen: int):
+        self._maxlen = maxlen
+        self._data: "OrderedDict" = OrderedDict()
+
+    def __contains__(self, key) -> bool:
+        return key in self._data
+
+    def add(self, key) -> None:
+        if key in self._data:
+            self._data.move_to_end(key)
+            return
+        self._data[key] = None
+        while len(self._data) > self._maxlen:
+            self._data.popitem(last=False)
+
+    def __len__(self) -> int:
+        return len(self._data)
 
 from ..protocol import (
     AIPMessage, MessageType, TaskStatus, ResultStatus,
@@ -72,10 +108,12 @@ class MessageHandler:
     def __init__(self, device_manager: DeviceManager):
         self.device_manager = device_manager
         self.task_handlers: Dict[str, Callable] = {}
-        self.pending_tasks: Dict[str, dict] = {}  # task_id -> task_info
-        # Idempotency: seen task-result IDs and parallel subtask keys.
-        self._seen_task_result_ids: Set[str] = set()
-        self._seen_parallel_keys: Set[Tuple[str, int]] = set()  # (group_id, subtask_index)
+        # OrderedDict + LRU eviction so the registry stays bounded (entries were
+        # inserted on submit and never deleted → unbounded growth).
+        self.pending_tasks: "OrderedDict[str, dict]" = OrderedDict()  # task_id -> task_info
+        # Idempotency: seen task-result IDs and parallel subtask keys (bounded).
+        self._seen_task_result_ids = _BoundedSeenSet(_SEEN_ID_CACHE_MAXLEN)
+        self._seen_parallel_keys = _BoundedSeenSet(_SEEN_ID_CACHE_MAXLEN)  # (group_id, subtask_index)
         # PR-S6: emit legacy guardrail — MessageHandler is the legacy chain B
         # ingress.  Canonical ingress is websocket_handler → DeviceRouter (chain A).
         try:
@@ -474,6 +512,11 @@ class MessageHandler:
             "callback": callback
         }
         self.pending_tasks[task_id] = task_info
+        self.pending_tasks.move_to_end(task_id)
+        # LRU eviction: drop the oldest pending-task entries once over the cap so
+        # the registry can't grow without bound on a long-lived gateway.
+        while len(self.pending_tasks) > _PENDING_TASKS_MAXLEN:
+            self.pending_tasks.popitem(last=False)
         return task_info
     
     def get_task(self, task_id: str) -> Optional[dict]:

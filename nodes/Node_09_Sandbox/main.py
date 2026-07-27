@@ -6,6 +6,7 @@ Node 09: Sandbox - 安全的代码沙箱执行环境
 健康检查始终立即返回 HTTP 200，可用语言列表在启动时预计算并缓存。
 """
 
+import asyncio
 import os, subprocess, tempfile, signal
 import re
 import logging
@@ -300,7 +301,8 @@ async def execute_code(request: ExecuteRequest):
             def preexec_fn():
                 set_resource_limits(request.memory_limit_mb or 256, request.cpu_limit_seconds)
 
-            result = subprocess.run(
+            result = await asyncio.to_thread(
+                subprocess.run,
                 cmd,
                 capture_output=True,
                 text=True,
@@ -394,7 +396,8 @@ async def execute_files(request: FileExecuteRequest):
                 compile_err["language"] = lang
                 return compile_err
 
-            result = subprocess.run(
+            result = await asyncio.to_thread(
+                subprocess.run,
                 cmd, capture_output=True, text=True, timeout=request.timeout, input=request.stdin, cwd=tmpdir
             )
 
@@ -470,7 +473,9 @@ async def list_languages():
     languages = []
     for lang, config in LANGUAGE_CONFIG.items():
         try:
-            result = subprocess.run(config["version_check"], capture_output=True, text=True, timeout=5)
+            result = await asyncio.to_thread(
+                subprocess.run, config["version_check"], capture_output=True, text=True, timeout=5
+            )
             version = result.stdout.strip() if result.returncode == 0 else "unknown"
             available = result.returncode == 0
         except Exception as exc:

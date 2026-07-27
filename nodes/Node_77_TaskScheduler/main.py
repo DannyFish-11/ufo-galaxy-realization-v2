@@ -101,6 +101,10 @@ _jobs: Dict[str, Dict[str, Any]] = {}
 _history: List[Dict[str, Any]] = []
 _scheduler_running = False
 _scheduler_task: Optional[asyncio.Task] = None
+# Strong refs to in-flight fired-job tasks.  asyncio keeps only a weak reference
+# to a bare create_task() result, so a fired scheduled job could be GC'd before
+# it finishes — silently dropping the execution (the scheduler's core purpose).
+_bg_tasks: set = set()
 
 
 async def _run_job(job: Dict[str, Any]) -> None:
@@ -184,7 +188,11 @@ async def _scheduler_loop() -> None:
                 fire_key = (now.year, now.month, now.day, now.hour, now.minute)
                 if job.get("_last_fire_key") != fire_key:
                     job["_last_fire_key"] = fire_key
-                    asyncio.create_task(_run_job(job))
+                    # Retain a strong ref until the fired job completes so it
+                    # cannot be garbage-collected mid-execution.
+                    _t = asyncio.create_task(_run_job(job))
+                    _bg_tasks.add(_t)
+                    _t.add_done_callback(_bg_tasks.discard)
         await asyncio.sleep(30)
 
 
@@ -331,7 +339,9 @@ async def job_run_now(job_id: str):
     job = _jobs.get(job_id)
     if not job:
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
-    asyncio.create_task(_run_job(job))
+    _t = asyncio.create_task(_run_job(job))
+    _bg_tasks.add(_t)
+    _t.add_done_callback(_bg_tasks.discard)
     return {"success": True, "job_id": job_id, "message": "Job triggered for immediate execution"}
 
 

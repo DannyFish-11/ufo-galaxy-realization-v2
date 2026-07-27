@@ -112,6 +112,10 @@ class EventType(Enum):
     # Persona / Spirit Engine 事件 (PR-3)
     PERSONA_STATE_UPDATED = auto()        # PersonaState 已更新（session_id + delta）
 
+    # DAG 节点生命周期（core.task_graph._emit_node_event 的目标通道；
+    # 追加在枚举末尾以保持既有成员的 auto() 数值不变）
+    TASK_LIFECYCLE = auto()               # DAG 节点状态变化 (pending/running/done/failed/...)
+
 
 @dataclass
 class UIGalaxyEvent:

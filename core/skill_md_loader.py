@@ -33,6 +33,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+# RUF006: retain fire-and-forget create_task results so the event loop's weak
+# reference can't let them be garbage-collected mid-execution.
+_BACKGROUND_TASKS: set = set()
+
 logger = logging.getLogger("Galaxy.SkillMD")
 
 # Strict allowlist of commands permitted in SKILL.md execution
@@ -306,7 +310,9 @@ class SkillMDLoader:
             self._inject_skill_to_registry(skill_id)
             try:
                 loop = asyncio.get_running_loop()
-                loop.create_task(self._refresh_capability_registry(skill_id, "load"))
+                _bt = loop.create_task(self._refresh_capability_registry(skill_id, "load"))
+                _BACKGROUND_TASKS.add(_bt)
+                _bt.add_done_callback(_BACKGROUND_TASKS.discard)
             except RuntimeError:
                 logger.debug("SKILL.md load capability refresh skipped: no running event loop")
             except Exception as exc:
@@ -489,7 +495,9 @@ class SkillMDLoader:
 
         try:
             loop = asyncio.get_running_loop()
-            loop.create_task(self._refresh_capability_registry(skill_id, "unload"))
+            _bt = loop.create_task(self._refresh_capability_registry(skill_id, "unload"))
+            _BACKGROUND_TASKS.add(_bt)
+            _bt.add_done_callback(_BACKGROUND_TASKS.discard)
         except RuntimeError:
             logger.debug("SKILL.md unload capability refresh skipped: no running event loop")
         except Exception as exc:

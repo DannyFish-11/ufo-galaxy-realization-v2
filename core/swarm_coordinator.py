@@ -102,6 +102,10 @@ import time
 import uuid
 from typing import Any, Dict, List, Optional
 
+# RUF006: retain fire-and-forget create_task results so the event loop's weak
+# reference can't let them be garbage-collected mid-execution.
+_BACKGROUND_TASKS: set = set()
+
 logger = logging.getLogger("Galaxy.SwarmCoordinator")
 
 
@@ -537,7 +541,9 @@ class SwarmCoordinator:
                     session_id=session_id,
                 )
                 if nats.is_connected():
-                    loop.create_task(nats.publish_task_assign(msg))
+                    _bt = loop.create_task(nats.publish_task_assign(msg))
+                    _BACKGROUND_TASKS.add(_bt)
+                    _bt.add_done_callback(_BACKGROUND_TASKS.discard)
                 else:
                     logger.debug("AIPV3-SWARM TASK_ASSIGN: %s", msg.model_dump_json(exclude_none=True))
         except Exception as exc:
@@ -582,7 +588,9 @@ class SwarmCoordinator:
                     session_id=session_id,
                 )
                 if nats.is_connected():
-                    loop.create_task(nats.publish_task_result(msg))
+                    _bt = loop.create_task(nats.publish_task_result(msg))
+                    _BACKGROUND_TASKS.add(_bt)
+                    _bt.add_done_callback(_BACKGROUND_TASKS.discard)
                 else:
                     logger.debug("AIPV3-SWARM TASK_RESULT: %s", msg.model_dump_json(exclude_none=True))
         except Exception as exc:

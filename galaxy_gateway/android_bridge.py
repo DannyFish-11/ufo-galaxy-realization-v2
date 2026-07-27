@@ -184,6 +184,17 @@ except ImportError:  # pragma: no cover
 
 logger = logging.getLogger(__name__)
 
+# Strong refs to fire-and-forget tasks (event loop only holds a weak ref, so a
+# discarded create_task result can be GC'd mid-execution).
+_BACKGROUND_TASKS: set = set()
+
+
+def _track_bg_task(_t):
+    """Retain *_t* until it finishes so it can't be garbage-collected mid-run."""
+    _BACKGROUND_TASKS.add(_t)
+    _t.add_done_callback(_BACKGROUND_TASKS.discard)
+    return _t
+
 # =============================================================================
 # PR-3: Execution Spine Integration — bridge dispatch authority sentinel
 
@@ -1750,9 +1761,9 @@ class AndroidBridge:
                     },
                 }
                 try:
-                    asyncio.create_task(get_aip_transport().send(_phase_msg, device_id))
+                    _track_bg_task(asyncio.create_task(get_aip_transport().send(_phase_msg, device_id)))
                 except Exception:
-                    asyncio.create_task(websocket.send_json({
+                    _track_bg_task(asyncio.create_task(websocket.send_json({
                         "type": "state_event",
                         "event_category": "phase",
                         "event_action": current_phase,
@@ -1766,7 +1777,7 @@ class AndroidBridge:
                         "sync_type": "cross_device_reconnect_sync",
                     },
                     "phase": current_phase,
-                }))
+                })))
                 logger.info(
                     "CrossDeviceSync: phase=%s pushed to reconnected device=%s",
                     current_phase, device_id,

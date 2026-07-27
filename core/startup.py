@@ -1127,6 +1127,38 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
         logger.warning("启动恢复跳过（降级）: %s", _exc)
 
     # ====================================================================
+    # 20b. 可持久化 DAG 续跑重派（Feature ① 闭环）
+    # Step 20 的恢复协调器只产出续跑视图（resume_snapshot）；真正的重派入口
+    # TaskGraphRuntime.resume_pending_dispatch 由这里接线。仅在
+    # GALAXY_DURABLE_EXEC 开启时执行（默认关 = 零行为变化）；重派统一走
+    # canonical 路径 CommandRouter.route_envelope，且逐节点先过 ② 派发幂等
+    # 守卫——崩溃前已派发过的节点绝不二次触发副作用。
+    # ====================================================================
+    try:
+        from core.task_graph_runtime import durable_exec_enabled
+
+        if durable_exec_enabled():
+            from core.task_graph_resume_dispatch import resume_durable_task_graph
+
+            _resume_result = await resume_durable_task_graph()
+            results["task_graph_resume_dispatch"] = {
+                "status": "ok",
+                "resumed": len(_resume_result.get("resumed", [])),
+                "failed": len(_resume_result.get("failed", [])),
+                "deduplicated": len(_resume_result.get("deduplicated", [])),
+            }
+            logger.info(
+                "可持久化 DAG 续跑重派完成: resumed=%d failed=%d deduplicated=%d",
+                len(_resume_result.get("resumed", [])),
+                len(_resume_result.get("failed", [])),
+                len(_resume_result.get("deduplicated", [])),
+            )
+    except Exception as _exc:
+        logger.debug("Fallback triggered: %s", _exc)
+        results["task_graph_resume_dispatch"] = {"status": "degraded", "error": str(_exc)}
+        logger.warning("可持久化 DAG 续跑重派跳过（降级）: %s", _exc)
+
+    # ====================================================================
     # 21. 持久化结果幂等性存储初始化（Durable Result Idempotency Store）
     # Eagerly initialise the durable result-ID dedup store so that
     # duplicate result handling is safe immediately after startup.

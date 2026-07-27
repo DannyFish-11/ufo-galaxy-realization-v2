@@ -74,6 +74,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
@@ -213,6 +214,13 @@ class MeshSessionLifecycleCoordinator:
         :func:`~core.mesh.mesh_session_persistence.get_persistence_store` is used.
     """
 
+    # Cap on terminal records kept queryable in the in-memory map.  Terminal
+    # sessions must remain visible after terminate_session (callers query them
+    # via get_record / find_sessions_for_device(only_non_terminal=False)), but
+    # without a bound the process-wide singleton leaks one record per
+    # terminated session (swarm_coordinator terminates one per dispatch_team).
+    _MAX_TERMINAL_RETAINED: int = 512
+
     def __init__(
         self,
         store: Optional[Any] = None,
@@ -220,6 +228,9 @@ class MeshSessionLifecycleCoordinator:
         self._store = store  # resolved lazily to avoid import-time side effects
         self._sessions: Dict[str, MeshSessionLifecycleRecord] = {}
         self._lock = threading.Lock()
+        # Terminal records retained in _sessions (insertion-ordered so the
+        # oldest terminal record is evicted first once the cap is reached).
+        self._terminal_retained: "OrderedDict[str, None]" = OrderedDict()
 
     # ------------------------------------------------------------------
     # Persistence store accessor (lazy)
@@ -536,6 +547,21 @@ class MeshSessionLifecycleCoordinator:
             store.mark_terminal(session_id, status=outcome)
         except Exception as exc:
             logger.warning("terminate_session: failed to mark_terminal for %s: %s", session_id, exc)
+
+        # Bounded terminal retention.  Terminal records must stay queryable
+        # (get_record after termination; find_sessions_for_device with
+        # only_non_terminal=False), so they are NOT evicted immediately —
+        # instead at most _MAX_TERMINAL_RETAINED terminal records are kept and
+        # the oldest is evicted beyond that.  The persistence store retains the
+        # durable terminal marker for anything evicted from memory.
+        if record is not None:
+            with self._lock:
+                if session_id in self._sessions:
+                    self._terminal_retained[session_id] = None
+                    self._terminal_retained.move_to_end(session_id)
+                    while len(self._terminal_retained) > self._MAX_TERMINAL_RETAINED:
+                        oldest_sid, _ = self._terminal_retained.popitem(last=False)
+                        self._sessions.pop(oldest_sid, None)
 
         return record
 

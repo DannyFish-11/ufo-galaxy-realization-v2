@@ -757,9 +757,7 @@ class MergedRuntimeResult(BaseModel):
             "task_id": self.task_id,
             "session_id": self.session_id,
             "merge_policy": (
-                self.merge_policy.value
-                if isinstance(self.merge_policy, ResultMergePolicy)
-                else str(self.merge_policy)
+                self.merge_policy.value if isinstance(self.merge_policy, ResultMergePolicy) else str(self.merge_policy)
             ),
             "success": self.success,
             "partial": self.partial,
@@ -967,9 +965,8 @@ def from_local_takeover_result(
         _trace_id: Optional[str] = d.get("trace_id")
         _task_id: Optional[str] = d.get("task_id")
         _session_id: Optional[str] = d.get("session_id")
-        _device_id: Optional[str] = (
-            (d.get("metadata") or {}).get("device_id")
-            or (d.get("session_context") or {}).get("device_id")
+        _device_id: Optional[str] = (d.get("metadata") or {}).get("device_id") or (d.get("session_context") or {}).get(
+            "device_id"
         )
         _runtime_id: Optional[str] = d.get("runtime_session_id")
 
@@ -987,9 +984,7 @@ def from_local_takeover_result(
             trace_id=_trace_id,
             task_id=_task_id,
             execution_path="remote_handoff",
-            governance_snapshot_ref=(
-                str(_gov.get("snapshot_id", "")) if _gov and _gov.get("snapshot_id") else None
-            ),
+            governance_snapshot_ref=(str(_gov.get("snapshot_id", "")) if _gov and _gov.get("snapshot_id") else None),
             policy_alignment_ref=(
                 str(_policy.get("alignment_id", "")) if _policy and _policy.get("alignment_id") else None
             ),
@@ -1095,9 +1090,7 @@ def from_source_dispatch_result(
             trace_id=_trace_id,
             task_id=_task_id,
             execution_path=str(_mode),
-            governance_snapshot_ref=(
-                str(_gov.get("snapshot_id", "")) if _gov and _gov.get("snapshot_id") else None
-            ),
+            governance_snapshot_ref=(str(_gov.get("snapshot_id", "")) if _gov and _gov.get("snapshot_id") else None),
             policy_alignment_ref=(
                 str(_policy.get("alignment_id", "")) if _policy and _policy.get("alignment_id") else None
             ),
@@ -1470,15 +1463,11 @@ def merge_runtime_results(
                 )
             if _primary is None:
                 # Try non-fallback succeeded units before falling back
-                non_fallback_succeeded = [
-                    u for u in succeeded_units if u.role != RuntimeResultRole.fallback
-                ]
+                non_fallback_succeeded = [u for u in succeeded_units if u.role != RuntimeResultRole.fallback]
                 _primary = non_fallback_succeeded[0] if non_fallback_succeeded else None
             if _primary is None:
                 # Use a succeeded fallback unit if available, and mark fallback_applied
-                _primary = next(
-                    (u for u in succeeded_units if u.role == RuntimeResultRole.fallback), None
-                )
+                _primary = next((u for u in succeeded_units if u.role == RuntimeResultRole.fallback), None)
                 if _primary:
                     _fallback_applied = True
             if _primary is None and fallback_units:
@@ -1522,9 +1511,7 @@ def merge_runtime_results(
         elif merge_policy == ResultMergePolicy.all_required:
             if failed_units:
                 _success = False
-                _errors.extend(
-                    f"unit_failed:{u.result_unit_id}:{u.error or u.reason}" for u in failed_units
-                )
+                _errors.extend(f"unit_failed:{u.result_unit_id}:{u.error or u.reason}" for u in failed_units)
             else:
                 _success = True
                 _primary = succeeded_units[0] if succeeded_units else None
@@ -1540,9 +1527,7 @@ def merge_runtime_results(
                 _primary_unit_id = _primary.result_unit_id
                 if failed_units:
                     _partial = True
-                    _errors.extend(
-                        f"unit_failed:{u.result_unit_id}:{u.error or u.reason}" for u in failed_units
-                    )
+                    _errors.extend(f"unit_failed:{u.result_unit_id}:{u.error or u.reason}" for u in failed_units)
             else:
                 _success = False
                 _partial = True
@@ -1554,10 +1539,11 @@ def merge_runtime_results(
             for _u in units:
                 if _u.status == RuntimeResultStatus.succeeded:
                     _primary = _u
-                    break
-                if _u.role == RuntimeResultRole.fallback and _u.status == RuntimeResultStatus.succeeded:
-                    _primary = _u
-                    _fallback_applied = True
+                    # role==fallback 的判定原本放在这条 succeeded 判断【之后】的
+                    # 单独 if 里,但任何 succeeded 单元都被这里先 break 掉,那条
+                    # 永不可达、fallback_applied 永远设不上。合并到此处。
+                    if _u.role == RuntimeResultRole.fallback:
+                        _fallback_applied = True
                     break
             if _primary:
                 _merged_output = _primary.output
@@ -1567,9 +1553,7 @@ def merge_runtime_results(
                     _partial = True
             else:
                 # Attempt fallback units explicitly
-                _primary = next(
-                    (u for u in fallback_units if u.status == RuntimeResultStatus.succeeded), None
-                )
+                _primary = next((u for u in fallback_units if u.status == RuntimeResultStatus.succeeded), None)
                 if _primary:
                     _merged_output = _primary.output
                     _success = True
@@ -1600,18 +1584,15 @@ def merge_runtime_results(
         # outputs or many units this may be expensive; consider hashing if
         # performance becomes a concern.
         if len(succeeded_units) > 1 and merge_policy not in (
-            ResultMergePolicy.all_required, ResultMergePolicy.best_effort
+            ResultMergePolicy.all_required,
+            ResultMergePolicy.best_effort,
         ):
             outputs = [
-                json.dumps(u.output, sort_keys=True, default=str)
-                for u in succeeded_units
-                if u.output is not None
+                json.dumps(u.output, sort_keys=True, default=str) for u in succeeded_units if u.output is not None
             ]
             unique_outputs = set(outputs)
             if len(unique_outputs) > 1:
-                _conflicts.append(
-                    f"conflicting_outputs_from_{len(succeeded_units)}_succeeded_units"
-                )
+                _conflicts.append(f"conflicting_outputs_from_{len(succeeded_units)}_succeeded_units")
 
         return build_merged_runtime_result(
             merge_id=_id,
@@ -1686,24 +1667,26 @@ def build_result_merge_summary(
         _trace = trace_id if trace_id is not None else (result.trace_id if result else None)
         _task = task_id if task_id is not None else (result.task_id if result else None)
         _session = session_id if session_id is not None else (result.session_id if result else None)
-        _policy = merge_policy if merge_policy is not None else (
-            result.merge_policy if result else ResultMergePolicy.unknown
+        _policy = (
+            merge_policy if merge_policy is not None else (result.merge_policy if result else ResultMergePolicy.unknown)
         )
         _success = success if success is not None else (result.success if result else False)
         _partial = partial if partial is not None else (result.partial if result else False)
-        _fallback = fallback_applied if fallback_applied is not None else (
-            result.fallback_applied if result else False
-        )
+        _fallback = fallback_applied if fallback_applied is not None else (result.fallback_applied if result else False)
         _reason = merge_reason if merge_reason is not None else (result.merge_reason if result else None)
 
         if result:
             _units = result.result_units or []
             _unit_c = unit_count if unit_count is not None else len(_units)
-            _succ_c = succeeded_unit_count if succeeded_unit_count is not None else sum(
-                1 for u in _units if u.status == RuntimeResultStatus.succeeded
+            _succ_c = (
+                succeeded_unit_count
+                if succeeded_unit_count is not None
+                else sum(1 for u in _units if u.status == RuntimeResultStatus.succeeded)
             )
-            _fail_c = failed_unit_count if failed_unit_count is not None else sum(
-                1 for u in _units if u.status == RuntimeResultStatus.failed
+            _fail_c = (
+                failed_unit_count
+                if failed_unit_count is not None
+                else sum(1 for u in _units if u.status == RuntimeResultStatus.failed)
             )
             _conf_c = conflict_count if conflict_count is not None else len(result.conflicts)
             _err_c = error_count if error_count is not None else len(result.errors)

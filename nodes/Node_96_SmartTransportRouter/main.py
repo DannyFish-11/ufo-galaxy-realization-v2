@@ -22,6 +22,10 @@ from fastapi import FastAPI, HTTPException, status
 from pydantic import BaseModel
 import uvicorn
 
+# RUF006: retain fire-and-forget create_task results so the event loop's weak
+# reference can't let them be garbage-collected mid-execution.
+_BACKGROUND_TASKS: set = set()
+
 # --- 1. 日志配置 ---
 # 配置日志记录器，用于输出程序运行信息和错误
 logging.basicConfig(
@@ -343,7 +347,9 @@ async def startup_event():
     )
     router = SmartTransportRouter(config=default_config)
     # 在后台运行节点的主循环
-    asyncio.create_task(router.run())
+    _bt = asyncio.create_task(router.run())
+    _BACKGROUND_TASKS.add(_bt)
+    _bt.add_done_callback(_BACKGROUND_TASKS.discard)
     logger.info("FastAPI 应用启动，路由器已初始化并运行")
 
 @app.get("/health", summary="健康检查接口", tags=["Monitoring"])

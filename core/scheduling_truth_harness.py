@@ -315,7 +315,7 @@ class SchedulingTruthHarness:
 
             # Check if already registered
             try:
-                existing = tgr.get_task(task_id)
+                existing = tgr.get_node_by_task_id(task_id)
                 if existing is not None:
                     logger.debug("ensure_task_registered: task %s already registered", task_id)
                     return True
@@ -324,7 +324,9 @@ class SchedulingTruthHarness:
 
             # Register the task
             try:
-                tgr.register_task(canonical_task)
+                from core.task_graph_runtime import WorkflowContributorKind
+
+                tgr.register_canonical_task(canonical_task, contributor=WorkflowContributorKind.SCHEDULER)
                 logger.debug(
                     "ensure_task_registered: registered task %s in TaskGraphRuntime",
                     task_id,
@@ -438,12 +440,12 @@ class SchedulingTruthHarness:
             notes.append("TaskGraphRuntime unavailable — registration cannot be verified")
         else:
             try:
-                existing = tgr.get_task(task_id) if task_id else None
+                existing = tgr.get_node_by_task_id(task_id) if task_id else None
                 task_registered = existing is not None
                 if not task_registered and task_id:
                     notes.append(f"task {task_id!r} not yet registered in TaskGraphRuntime")
             except Exception as exc:
-                notes.append(f"TaskGraphRuntime.get_task() error: {exc}")
+                notes.append(f"TaskGraphRuntime.get_node_by_task_id() error: {exc}")
 
         # 2. Check routable-executor query
         routable_ids = self.query_routable_executors(canonical_task, candidate_device_ids=candidate_device_ids)

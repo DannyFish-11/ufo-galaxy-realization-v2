@@ -288,10 +288,7 @@ class MeshParticipantCoordinationState(BaseModel):
     )
     ready: Optional[bool] = Field(
         default=None,
-        description=(
-            "Whether the device has confirmed readiness for its assignment.  "
-            "None = not yet confirmed."
-        ),
+        description=("Whether the device has confirmed readiness for its assignment.  " "None = not yet confirmed."),
     )
     status: MeshParticipantStatus = Field(
         default=MeshParticipantStatus.unknown,
@@ -338,16 +335,12 @@ class MeshAssignmentState(BaseModel):
     capability_required: Optional[str] = Field(
         default=None,
         description=(
-            "Optional capability key required to execute this subtask "
-            "(e.g. 'screen', 'camera', 'microphone')."
+            "Optional capability key required to execute this subtask " "(e.g. 'screen', 'camera', 'microphone')."
         ),
     )
     handoff_id: Optional[str] = Field(
         default=None,
-        description=(
-            "Optional handoff envelope ID (PR-31) used to transmit this "
-            "assignment to the target device."
-        ),
+        description=("Optional handoff envelope ID (PR-31) used to transmit this " "assignment to the target device."),
     )
     result_unit_id: Optional[str] = Field(
         default=None,
@@ -495,10 +488,7 @@ class MeshSessionCoordinatorState(BaseModel):
     )
     session_id: Optional[str] = Field(
         default=None,
-        description=(
-            "Identifier of the :class:`~contracts.mesh_session.MeshSession` "
-            "being coordinated."
-        ),
+        description=("Identifier of the :class:`~contracts.mesh_session.MeshSession` " "being coordinated."),
     )
     mesh_id: Optional[str] = Field(
         default=None,
@@ -509,10 +499,7 @@ class MeshSessionCoordinatorState(BaseModel):
     )
     trace_id: Optional[str] = Field(
         default=None,
-        description=(
-            "Optional execution trace identifier (PR-25) linking this "
-            "coordinator to a trace chain."
-        ),
+        description=("Optional execution trace identifier (PR-25) linking this " "coordinator to a trace chain."),
     )
     task_id: Optional[str] = Field(
         default=None,
@@ -536,10 +523,7 @@ class MeshSessionCoordinatorState(BaseModel):
     )
     merge_owner_device_id: Optional[str] = Field(
         default=None,
-        description=(
-            "Device ID responsible for aggregating and merging distributed "
-            "subtask results."
-        ),
+        description=("Device ID responsible for aggregating and merging distributed " "subtask results."),
     )
     pending_device_ids: List[str] = Field(
         default_factory=list,
@@ -556,8 +540,7 @@ class MeshSessionCoordinatorState(BaseModel):
     coordination_events: List[MeshCoordinationEvent] = Field(
         default_factory=list,
         description=(
-            "Lightweight log of coordination events.  Advisory only — "
-            "consumers should not depend on completeness."
+            "Lightweight log of coordination events.  Advisory only — " "consumers should not depend on completeness."
         ),
     )
     result_merge_summary: Optional[Dict[str, Any]] = Field(
@@ -861,7 +844,12 @@ def from_mesh_session(
                 a = a if hasattr(a, "items") else {}
             subtask_id = _safe_str(a.get("subtask_id", "") if isinstance(a, dict) else getattr(a, "subtask_id", ""))
             device_id_a = _safe_str(a.get("device_id", "") if isinstance(a, dict) else getattr(a, "device_id", ""))
-            capability = _safe_str(a.get("capability_required", "") if isinstance(a, dict) else getattr(a, "capability_required", "")) or None
+            capability = (
+                _safe_str(
+                    a.get("capability_required", "") if isinstance(a, dict) else getattr(a, "capability_required", "")
+                )
+                or None
+            )
             a_state = MeshAssignmentState(
                 subtask_id=subtask_id or f"subtask_{uuid.uuid4().hex[:10]}",
                 device_id=device_id_a,
@@ -870,13 +858,22 @@ def from_mesh_session(
             )
             assignments.append(a_state)
 
-        # Determine barrier state from session barrier_posture
-        barrier_posture = _safe_str(session_data.get("barrier_posture", ""))
-        barrier_status = MeshBarrierStatus.unknown
-        if "hard" in barrier_posture or "soft" in barrier_posture:
-            barrier_status = MeshBarrierStatus.open
-        elif "none" in barrier_posture:
+        # Determine barrier state from session barrier_posture.  Producer
+        # MeshSession emits the MeshBarrierPosture enum (no_barrier / wait_primary
+        # / wait_all / wait_merge_owner / soft_barrier / unknown).  NONE of those
+        # values contain "hard" or "none", so the old substring checks were dead
+        # branches and every wait_*/no_barrier posture fell through to UNKNOWN.
+        # Map the real enum values (keeping the legacy hard/none aliases tolerant).
+        barrier_posture = _safe_str(session_data.get("barrier_posture", "")).strip().lower()
+        if barrier_posture in ("no_barrier", "none", "not_required"):
             barrier_status = MeshBarrierStatus.not_required
+        elif barrier_posture in ("", "unknown"):
+            barrier_status = MeshBarrierStatus.unknown
+        else:
+            # soft_barrier / wait_primary / wait_all / wait_merge_owner (and any
+            # legacy hard/soft alias): a barrier is configured but not yet
+            # blocking at initial coordinator build time.
+            barrier_status = MeshBarrierStatus.open
         barrier_state = MeshBarrierState(status=barrier_status)
 
         return MeshSessionCoordinatorState(
@@ -895,16 +892,11 @@ def from_mesh_session(
         )
     except Exception as exc:
         _logger.warning(
-            "from_mesh_session: failed to build coordinator from session, "
-            "returning minimal state: %s",
+            "from_mesh_session: failed to build coordinator from session, " "returning minimal state: %s",
             exc,
         )
         try:
-            session_id_fallback = (
-                mesh_session.session_id
-                if hasattr(mesh_session, "session_id")
-                else None
-            )
+            session_id_fallback = mesh_session.session_id if hasattr(mesh_session, "session_id") else None
         except Exception:
             session_id_fallback = None
         return MeshSessionCoordinatorState(session_id=session_id_fallback)
@@ -1033,9 +1025,7 @@ def update_coordinator_with_takeover_result(
 
         # Update per-participant status
         if device_id:
-            new_status = (
-                MeshParticipantStatus.completed if success else MeshParticipantStatus.failed
-            )
+            new_status = MeshParticipantStatus.completed if success else MeshParticipantStatus.failed
             new_participants = []
             for p in updated.participants:
                 if p.device_id == device_id:
@@ -1063,9 +1053,7 @@ def update_coordinator_with_takeover_result(
         new_assignments = []
         for a in updated.assignments:
             if a.device_id == device_id:
-                new_a_status = (
-                    MeshAssignmentStatus.completed if success else MeshAssignmentStatus.failed
-                )
+                new_a_status = MeshAssignmentStatus.completed if success else MeshAssignmentStatus.failed
                 a = a.model_copy(update={"status": new_a_status, "updated_at": time.time()})
             new_assignments.append(a)
         updated.assignments = new_assignments

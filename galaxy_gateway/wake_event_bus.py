@@ -24,6 +24,9 @@ from typing import Dict, List, Optional, Callable, Any
 
 logger = logging.getLogger("UFO-Galaxy.WakeEventBus")
 
+# Strong refs to fire-and-forget tasks (event loop only holds a weak ref).
+_BACKGROUND_TASKS: set = set()
+
 # 导入 WakeRouter 类型（延迟导入避免循环引用）
 # from galaxy_gateway.wake_router import WakeEvent, WakeTaskType, wake_router
 
@@ -194,7 +197,9 @@ class WakeEventBus:
             loop = asyncio.get_running_loop()
             if loop.is_running():
                 # 事件循环正在运行，使用 create_task 调度
-                loop.create_task(self.publish(raw_event))
+                _bt = loop.create_task(self.publish(raw_event))
+                _BACKGROUND_TASKS.add(_bt)
+                _bt.add_done_callback(_BACKGROUND_TASKS.discard)
             else:
                 # 事件循环存在但未运行，使用线程池提交（避免 asyncio.run 在有循环的线程中崩溃）
                 self._get_executor().submit(self._run_publish_in_new_loop, raw_event)

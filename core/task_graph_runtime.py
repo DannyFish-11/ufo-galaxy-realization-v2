@@ -183,6 +183,11 @@ __all__ = [
 # ---------------------------------------------------------------------------
 
 MAX_RESULT_SUMMARY_LENGTH: int = 200
+
+# Feature ①: upper bound (JSON chars) for envelope args retained on a GraphNode
+# for restart re-dispatch.  Larger payloads are not retained — the node then
+# resumes ownership-only instead of bloating every durable checkpoint write.
+_RESUME_ARGS_MAX_JSON_CHARS: int = 32768
 """Maximum length for result_summary string stored on a GraphNode."""
 
 MAX_ERROR_LENGTH: int = 400
@@ -1905,6 +1910,28 @@ def envelope_to_graph_node(
         targets = getattr(envelope, "targets", None) or []
         device_id = targets[0] if targets else ""
 
+    # Feature ①: retain the re-dispatch payload so a durable-exec restart can
+    # rebuild a faithful envelope — GraphNode otherwise drops args/timeout and
+    # resume would re-run tools with empty parameters.  Only JSON-safe args of
+    # bounded size are retained (the per-transition checkpoint json.dumps the
+    # whole node map; an unserialisable or huge payload would silently disable
+    # durability for every node).  Nodes without a retained payload are
+    # ownership-only on resume: never re-dispatched with wrong args.
+    metadata: Dict[str, Any] = {}
+    args = getattr(envelope, "args", None)
+    if isinstance(args, dict) and args:
+        try:
+            if len(json.dumps(args, ensure_ascii=False)) <= _RESUME_ARGS_MAX_JSON_CHARS:
+                metadata["resume_args"] = args
+        except (TypeError, ValueError):
+            pass
+    _timeout = getattr(envelope, "timeout", None)
+    if isinstance(_timeout, (int, float)) and _timeout > 0:
+        metadata["resume_timeout"] = float(_timeout)
+    _priority = getattr(envelope, "priority", None)
+    if isinstance(_priority, int) and 1 <= _priority <= 10:
+        metadata["resume_priority"] = _priority
+
     return GraphNode(
         task_id=task_id,
         trace_id=trace_id,
@@ -1914,6 +1941,7 @@ def envelope_to_graph_node(
         state=GraphNodeState.QUEUED,
         contributor=contributor,
         depends_on=list(depends_on or []),
+        metadata=metadata,
     )
 
 

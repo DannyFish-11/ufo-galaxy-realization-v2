@@ -14,6 +14,7 @@ mcp/call) are intentionally kept here so Node_34 remains self-contained and can 
 deployed independently.  If consolidation is ever needed, those endpoints should be
 ported to Node_33 first, and Node_34 refocused exclusively on scrcpy screen mirroring.
 """
+import asyncio
 import os
 import subprocess
 import shutil
@@ -154,7 +155,7 @@ async def screenshot(request: ScreenshotRequest):
     cmd.extend(["exec-out", "screencap", "-p"])
     
     try:
-        result = subprocess.run(cmd, capture_output=True, timeout=10)
+        result = await asyncio.to_thread(subprocess.run, cmd, capture_output=True, timeout=10)
         if result.returncode == 0 and result.stdout:
             with open(output_path, "wb") as f:
                 f.write(result.stdout)

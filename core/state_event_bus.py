@@ -54,6 +54,10 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Set, Union  # noqa
 
+# RUF006: retain fire-and-forget create_task results so the event loop's weak
+# reference can't let them be garbage-collected mid-execution.
+_BACKGROUND_TASKS: set = set()
+
 logger = logging.getLogger("Galaxy.StateEventBus")
 
 
@@ -345,7 +349,9 @@ class StateEventBus:
                     if asyncio.iscoroutinefunction(token.callback):
                         try:
                             loop = asyncio.get_running_loop()
-                            loop.create_task(token.callback(event))  # type: ignore[arg-type]
+                            _bt = loop.create_task(token.callback(event))  # type: ignore[arg-type]
+                            _BACKGROUND_TASKS.add(_bt)
+                            _bt.add_done_callback(_BACKGROUND_TASKS.discard)
                         except RuntimeError:
                             # No running loop — skip async subscriber gracefully.
                             logger.debug(

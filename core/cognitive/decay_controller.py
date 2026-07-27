@@ -47,6 +47,10 @@ from typing import Any, Dict, Optional
 
 from core.cognitive.continuous_state import CognitiveState, get_cognitive_state
 
+# RUF006: retain fire-and-forget create_task results so the event loop's weak
+# reference can't let them be garbage-collected mid-execution.
+_BACKGROUND_TASKS: set = set()
+
 logger = logging.getLogger("Galaxy.Cognitive.Decay")
 
 _COGNITIVE_DECAY_EVENT = "cognitive.decay"
@@ -145,7 +149,9 @@ class DecayController:
         )
         try:
             loop = asyncio.get_running_loop()
-            loop.create_task(self._async_decay_sequence(task_id=task_id, trace_id=trace_id))
+            _bt = loop.create_task(self._async_decay_sequence(task_id=task_id, trace_id=trace_id))
+            _BACKGROUND_TASKS.add(_bt)
+            _bt.add_done_callback(_BACKGROUND_TASKS.discard)
         except RuntimeError:
             # No running event loop — apply a single synchronous decay step
             self._sync_decay_step(task_id=task_id, trace_id=trace_id)

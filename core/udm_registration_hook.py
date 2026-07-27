@@ -26,6 +26,10 @@ import logging
 import time
 from typing import Any, Dict, List, Optional
 
+# RUF006: retain fire-and-forget create_task results so the event loop's weak
+# reference can't let them be garbage-collected mid-execution.
+_BACKGROUND_TASKS: set = set()
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -192,7 +196,9 @@ class UDMRegistrationHook:
             from core.state_event_bus import StateEventType, subscribe
 
             def _on_device_event(event_type, payload):
-                asyncio.create_task(self._handle_device_event(payload))
+                _bt = asyncio.create_task(self._handle_device_event(payload))
+                _BACKGROUND_TASKS.add(_bt)
+                _bt.add_done_callback(_BACKGROUND_TASKS.discard)
 
             subscribe(StateEventType.DEVICE_UPDATED, _on_device_event)
             self._listening = True

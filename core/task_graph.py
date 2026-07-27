@@ -49,6 +49,10 @@ from collections import defaultdict, deque
 from enum import Enum
 from typing import Any, Callable, Coroutine, Dict, List, Optional, Set
 
+# RUF006: retain fire-and-forget create_task results so the event loop's weak
+# reference can't let them be garbage-collected mid-execution.
+_BACKGROUND_TASKS: set = set()
+
 logger = logging.getLogger("Galaxy.TaskGraph")
 
 # PR-AIPV3-DAG: AIP v3 unified message models for cross-device task dispatch
@@ -361,7 +365,9 @@ class TaskGraph:
 
             nats = get_nats_bus()
             if nats.is_connected():
-                asyncio.get_running_loop().create_task(nats.publish_task_assign(msg))
+                _bt = asyncio.get_running_loop().create_task(nats.publish_task_assign(msg))
+                _BACKGROUND_TASKS.add(_bt)
+                _bt.add_done_callback(_BACKGROUND_TASKS.discard)
             else:
                 # Log the AIP v3 message for local debugging / tracing
                 logger.debug("AIPV3-DAG TASK_ASSIGN: %s", msg.model_dump_json(exclude_none=True))
@@ -401,7 +407,9 @@ class TaskGraph:
 
             nats = get_nats_bus()
             if nats.is_connected():
-                asyncio.get_running_loop().create_task(nats.publish_task_result(msg))
+                _bt = asyncio.get_running_loop().create_task(nats.publish_task_result(msg))
+                _BACKGROUND_TASKS.add(_bt)
+                _bt.add_done_callback(_BACKGROUND_TASKS.discard)
             else:
                 logger.debug("AIPV3-DAG TASK_RESULT: %s", msg.model_dump_json(exclude_none=True))
         except Exception as exc:

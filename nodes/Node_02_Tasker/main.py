@@ -20,6 +20,10 @@ from pydantic import BaseModel
 import heapq
 from nodes.common.cors_config import get_cors_origins
 
+# RUF006: retain fire-and-forget create_task results so the event loop's weak
+# reference can't let them be garbage-collected mid-execution.
+_BACKGROUND_TASKS: set = set()
+
 app = FastAPI(title="Node 02 - Tasker", version="2.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=get_cors_origins(), allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
@@ -336,7 +340,9 @@ async def list_handlers():
 @app.on_event("startup")
 async def startup():
     """启动后台任务处理"""
-    asyncio.create_task(task_manager.process_queue())
+    _bt = asyncio.create_task(task_manager.process_queue())
+    _BACKGROUND_TASKS.add(_bt)
+    _bt.add_done_callback(_BACKGROUND_TASKS.discard)
 
 if __name__ == "__main__":
     import uvicorn
