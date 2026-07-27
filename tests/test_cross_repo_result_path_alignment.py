@@ -261,13 +261,21 @@ class TestCanonicalGoalResultPath:
 
             return _wrapped
 
+        # 断言漂移修正(路由机制随生产演进):compat 归一层现在在派发之前就把
+        # legacy 别名 "goal_result" 重写为规范类型 "goal_execution_result"
+        # (galaxy_gateway/protocol/compat.py:194),消息随后按
+        # MessageType.GOAL_EXECUTION_RESULT 查处理器表——GOAL_RESULT 槽位
+        # 不再被查询。契约(goal_result 必须落到 goal_execution_result 处理器、
+        # 而非 handle_unregistered)不变,监听点与期望类型随规范化更新。
+        bridge._message_handlers[MessageType.GOAL_EXECUTION_RESULT] = _wrap(_spy_handler)
         bridge._message_handlers[MessageType.GOAL_RESULT] = _wrap(_spy_handler)
 
         msg = _v3_goal_result(device_id, str(uuid.uuid4()), status="error")
         await bridge.handle_message(ws, msg)
 
-        assert called_with == ["goal_result"], (
-            "goal_result was not routed to the expected handler — " "it likely hit handle_unregistered instead."
+        assert called_with == ["goal_execution_result"], (
+            "goal_result was not routed to the goal_execution_result handler — "
+            "it likely hit handle_unregistered instead."
         )
 
 

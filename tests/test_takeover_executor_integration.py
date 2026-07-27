@@ -82,6 +82,19 @@ class TestSendTakeoverRequestCoordinatorIntegration:
     the outbound request is recorded as a canonical orchestrated lifecycle
     event (session state transition + audit), not a bare message send."""
 
+    @pytest.fixture(autouse=True)
+    def _enable_cross_device(self):
+        # 断言漂移修正:生产契约已演进 —— galaxy_gateway/cross_device_switch.py
+        # 的 is_cross_device_enabled 默认值由"默认开启(fail-open)"改为
+        # "默认关闭、显式 opt-in"(见其 docstring)。本类验证的是协调器联动路径,
+        # 故显式打开跨设备门;门控本身由 test_android_takeover_protocol.py 的
+        # TestTakeoverModeGate 覆盖。
+        with patch(
+            "galaxy_gateway.android_bridge._is_cross_device_enabled",
+            return_value=True,
+        ):
+            yield
+
     def _make_bridge(self) -> Any:
         from galaxy_gateway.android_bridge import AndroidBridge
 
@@ -562,6 +575,16 @@ class TestCoordinatorOutcomeFields:
 class TestSendResilientToCoordinatorFailure:
     """Verify that send_takeover_request returns the send result even when
     the lifecycle coordinator call raises an exception."""
+
+    @pytest.fixture(autouse=True)
+    def _enable_cross_device(self):
+        # 断言漂移修正:同上 —— 跨设备开关已演进为默认关闭(opt-in),
+        # 本类验证协调器异常韧性,需显式打开门以走到发送路径。
+        with patch(
+            "galaxy_gateway.android_bridge._is_cross_device_enabled",
+            return_value=True,
+        ):
+            yield
 
     def _make_bridge(self) -> Any:
         from galaxy_gateway.android_bridge import AndroidBridge

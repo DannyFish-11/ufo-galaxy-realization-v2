@@ -117,10 +117,19 @@ class WhisperASR:
         if not self.model_size:
             self.model_size = self._auto_select_model()
 
-        # 国内镜像：HF_ENDPOINT 未设时默认用 hf-mirror.com（无需科学上网）
-        # 用户可在 .env 中覆盖: HF_ENDPOINT=https://huggingface.co
-        if not os.environ.get("HF_ENDPOINT"):
-            os.environ["HF_ENDPOINT"] = os.environ.get("GALAXY_HF_ENDPOINT", "https://hf-mirror.com")
+        # 下载源可靠化(所有者 Windows 真机日志:hf-mirror.com HEAD 3s 超时 ×
+        # 指数重试 5 次 × 多个模型文件,控制台刷屏、启动被拖住)——加载前先做
+        # ≤2s 的源健康探测,在 hf-mirror.com / huggingface.co 间择优;全不可达
+        # 则 local_files_only=True 只用本地缓存:已缓存照常加载,未缓存快速失败,
+        # 由上层(start_voice_interaction)诚实降级,而不是让重试刷屏阻塞启动。
+        _hf_ok = True
+        try:
+            from core.hf_endpoint import pick_endpoint
+
+            _hf_ok = bool(pick_endpoint())
+        except Exception:  # 探测模块不可用 → 保守沿用旧默认(不改变行为)
+            if not os.environ.get("HF_ENDPOINT"):
+                os.environ["HF_ENDPOINT"] = os.environ.get("GALAXY_HF_ENDPOINT", "https://hf-mirror.com")
 
         # 固定缓存到项目 runtime/whisper_models/，避免重复下载
         if not self.model_dir:
@@ -152,7 +161,8 @@ class WhisperASR:
         }
         if self.model_dir:
             load_kwargs["download_root"] = self.model_dir
-            load_kwargs["local_files_only"] = False
+            # 源不可达时只用本地缓存(见上):有缓存正常加载;无缓存快速报错降级。
+            load_kwargs["local_files_only"] = not _hf_ok
 
         self.model = WhisperModel(self.model_size, **load_kwargs)
         self._device = device

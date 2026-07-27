@@ -69,6 +69,31 @@ def kick_background_fetch() -> None:
         _fetch_started = True
 
     def _fetch() -> None:
+        # 下载源可靠化(所有者 Windows 真机日志):hf-mirror.com 不可达时,
+        # hf_hub_download 会对每个文件 HEAD 3s 超时 × 指数重试 5 次,与
+        # faster-whisper 叠加把控制台刷屏。先做 ≤2s 的源健康探测(进程级缓存,
+        # 全不可达负缓存 5 分钟),不通就本次跳过预取、允许下次(源恢复后)再试
+        # ——模型缺失走懒加载降级,绝不阻塞启动刷屏。
+        try:
+            from core.hf_endpoint import pick_endpoint
+
+            _ep_ok = bool(pick_endpoint())
+        except Exception:  # 探测模块不可用 → 保守按可达处理(沿用旧行为)
+            _ep_ok = True
+        if not _ep_ok:
+            global _fetch_started
+            with _fetch_lock:
+                _fetch_started = False  # 幂等标记回滚:源恢复后 available() 可再触发
+            logger.warning(
+                "Kokoro 模型拉取失败(HF 下载源不可达,本次跳过预取、不做多轮重试刷屏):"
+                "网络恢复后自动再试;或手动下载 %s 与 %s 放到 %s"
+                "(HF 镜像可设 HF_ENDPOINT=https://hf-mirror.com,来源仓库 %s)",
+                _model_file(),
+                _VOICES_FILE,
+                _model_dir(),
+                _HF_REPO,
+            )
+            return
         try:
             from huggingface_hub import hf_hub_download
 

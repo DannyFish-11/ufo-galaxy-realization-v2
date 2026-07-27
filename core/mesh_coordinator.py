@@ -17,6 +17,7 @@ MeshCoordinator — 设备协同网络层
 """
 
 import asyncio
+import json
 import logging
 import time
 from dataclasses import dataclass, field
@@ -81,7 +82,16 @@ class PeerEntry:
 
 @dataclass
 class MeshSendResult:
-    """DEPRECATED: mesh.send() 已删除，此类保留用于向后兼容"""
+    """Overlay 发送结果 — MeshCoordinator.send() 的返回值。
+
+    历史注:send() 曾在"传输移交 AIPTransport"重构中被删除,但
+    POST /api/v1/mesh/send(core/routes/hybrid.py)、注入的
+    _p2p_send/_relay_send/_ws_send 回调、_check_direct_viability、
+    _stats 计数器与 get_topology 的 _last_overlay_dispatch 均仍依赖
+    该 overlay 发送路径(端点当时会以 AttributeError 500)。send()
+    已作为 overlay/拓扑增益路径恢复——它从属于 canonical 传输层级
+    (direct WS 主、relay 备、mesh 仅 overlay),不承担 canonical 路由。
+    """
 
     success: bool
     via: ConnectionType
@@ -267,6 +277,145 @@ class MeshCoordinator:
                 return False, True, "direct_probe_failed"
             return True, True, ""
         return True, False, ""
+
+    async def send(
+        self,
+        target_device: str,
+        payload: Dict[str, Any],
+        payload_type: str = "task",
+        source_device: str = "",
+    ) -> MeshSendResult:
+        """Overlay 发送 — P2P 直连优先,Relay / WS 依次回退。
+
+        这是 POST /api/v1/mesh/send 背后的 overlay dispatch 入口(见
+        MeshSendResult docstring 的历史注)。选路规则:
+
+        1. direct viable(peer 已注册、标记可直连、p2p 回调已配置、
+           必要时 probe 健康探测通过)→ _p2p_send;
+        2. 否则(或 direct 发送失败)回退 _relay_send;
+        3. 再否则回退 _ws_send;
+        4. 均未配置 → 失败(no_send_path_configured)。
+
+        每次调用记录 _last_overlay_dispatch,供 get_topology 的
+        loop_baseline.overlay_coordination 做机器可验证的闭环判定。
+        """
+        start = time.time()
+        peer = self._peers.get(target_device)
+        self._stats["total_sent"] += 1
+
+        direct_viable, health_checked, viability_reason = await self._check_direct_viability(target_device, peer)
+
+        envelope = {
+            "type": "mesh_message",
+            "source_device": source_device,
+            "target_device": target_device,
+            "payload_type": payload_type,
+            "payload": payload,
+        }
+
+        direct_attempted = False
+        fallback_reason = ""
+
+        if direct_viable:
+            direct_attempted = True
+            self._stats["direct_attempted"] += 1
+            try:
+                ok = await self._p2p_send(target_device, json.dumps(envelope).encode("utf-8"))
+            except Exception as exc:
+                logger.warning("Mesh direct send to %s failed: %s", target_device, exc)
+                ok = False
+            if ok:
+                self._stats["via_direct"] += 1
+                result = MeshSendResult(
+                    success=True,
+                    via=ConnectionType.DIRECT,
+                    target_device=target_device,
+                    latency_ms=(time.time() - start) * 1000,
+                    direct_attempted=True,
+                    direct_health_checked=health_checked,
+                    route_decision="direct",
+                )
+                self._record_overlay_dispatch(result, source_device, payload_type)
+                return result
+            fallback_reason = "direct_send_failed"
+        else:
+            self._stats["direct_unavailable"] += 1
+            fallback_reason = viability_reason
+
+        if self._relay_send:
+            self._stats["fallback_relay"] += 1
+            try:
+                relay_result = await self._relay_send(source_device, target_device, payload_type, payload)
+            except Exception as exc:
+                logger.warning("Mesh relay send to %s failed: %s", target_device, exc)
+                relay_result = {"status": "failed", "error": str(exc)}
+            status = str((relay_result or {}).get("status", ""))
+            ok = bool((relay_result or {}).get("success")) or status in ("forwarded", "delivered", "replied")
+            if ok:
+                self._stats["via_relay"] += 1
+            result = MeshSendResult(
+                success=ok,
+                via=ConnectionType.RELAY,
+                target_device=target_device,
+                latency_ms=(time.time() - start) * 1000,
+                error="" if ok else str((relay_result or {}).get("error") or status or "relay_failed"),
+                direct_attempted=direct_attempted,
+                direct_health_checked=health_checked,
+                fallback_used=True,
+                fallback_reason=fallback_reason,
+                route_decision="relay_fallback" if direct_attempted else "relay",
+            )
+            self._record_overlay_dispatch(result, source_device, payload_type)
+            return result
+
+        if self._ws_send:
+            self._stats["fallback_ws"] += 1
+            try:
+                ok = await self._ws_send(target_device, envelope)
+            except Exception as exc:
+                logger.warning("Mesh WS fallback send to %s failed: %s", target_device, exc)
+                ok = False
+            result = MeshSendResult(
+                success=bool(ok),
+                via=ConnectionType.RELAY,
+                target_device=target_device,
+                latency_ms=(time.time() - start) * 1000,
+                error="" if ok else "ws_fallback_failed",
+                direct_attempted=direct_attempted,
+                direct_health_checked=health_checked,
+                fallback_used=True,
+                fallback_reason=fallback_reason,
+                route_decision="ws_fallback",
+            )
+            self._record_overlay_dispatch(result, source_device, payload_type)
+            return result
+
+        result = MeshSendResult(
+            success=False,
+            via=ConnectionType.UNKNOWN,
+            target_device=target_device,
+            latency_ms=(time.time() - start) * 1000,
+            error="no_send_path_configured",
+            direct_attempted=direct_attempted,
+            direct_health_checked=health_checked,
+            fallback_reason=fallback_reason,
+            route_decision="none",
+        )
+        self._record_overlay_dispatch(result, source_device, payload_type)
+        return result
+
+    def _record_overlay_dispatch(self, result: MeshSendResult, source_device: str, payload_type: str) -> None:
+        """记录最近一次 overlay dispatch,供 get_topology 闭环判定消费。"""
+        self._last_overlay_dispatch = {
+            "available": True,
+            "success": result.success,
+            "via": result.via.value,
+            "source_device": source_device,
+            "target_device": result.target_device,
+            "payload_type": payload_type,
+            "route_decision": result.route_decision,
+            "timestamp": time.time(),
+        }
 
     # ================================================================
     # Peer 探测

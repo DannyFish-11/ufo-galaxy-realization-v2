@@ -197,10 +197,16 @@ class TestMeshCoordinatorSentinels(unittest.TestCase):
             f"Expected MESH:: prefix, got: {MESH_TRANSPORT_ROLE!r}",
         )
 
-    def test_17_mesh_orchestration_excluded(self):
+    def test_17_mesh_orchestration_not_excluded(self):
+        # 断言漂移修正:core/mesh_coordinator.py 的 PR-4 哨兵已显式修订
+        # ("PR-4 transport role sentinels (FIXED)"):mesh 定位为跨设备场景的
+        # PRIMARY transport(MESH_TRANSPORT_ROLE="MESH::PRIMARY_TRANSPORT",
+        # 本类 test_16 亦验证该前缀),编排不再排除 mesh,
+        # MESH_ORCHESTRATION_EXCLUDED 权威值为 False。旧断言基于修订前
+        # "mesh 被排除在编排之外"的旧契约。
         from core.mesh_coordinator import MESH_ORCHESTRATION_EXCLUDED
 
-        self.assertIs(MESH_ORCHESTRATION_EXCLUDED, True)
+        self.assertIs(MESH_ORCHESTRATION_EXCLUDED, False)
 
 
 class TestDeviceReadinessHierarchySentinel(unittest.TestCase):

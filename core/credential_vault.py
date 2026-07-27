@@ -105,6 +105,12 @@ _ENV_MAPPING: Dict[str, str] = {
     "mimo": "MIMO_API_KEY",
     "moonshot": "MOONSHOT_API_KEY",
     "perplexity": "PERPLEXITY_API_KEY",
+    # 生产修复(真缺口):router 侧 _PROVIDER_ENV_KEY_MAP 后来新增了
+    # openrouter / meta 两个 provider,本映射未同步——CredentialVault 层对
+    # 这两个 provider 静默查不到值(与上方注释描述的历史问题同型)。补齐
+    # 以保持两处映射一致。
+    "openrouter": "OPENROUTER_API_KEY",
+    "meta": "META_API_KEY",
     "groq": "GROQ_API_KEY",
     "ollama": "OLLAMA_URL",
     "oneapi": "ONEAPI_API_KEY",

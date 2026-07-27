@@ -55,7 +55,12 @@ def mock_replay():
 def test_kernel_path_emits_continuum_tick(mock_replay):
     """When OpenClawd.process runs the kernel path, a CONTINUUM_TICK event
     must be written to ReplayFoundation."""
-    with patch("core.openclawd.emit_runtime_event", mock_replay.emit_runtime_event):
+    # 断言漂移修正:emit_runtime_event 的权威定义在 core.replay_foundation,
+    # openclawd 采用函数体内延迟导入(见 core/openclawd.py 的
+    # `from core.replay_foundation import emit_runtime_event`),因此
+    # core.openclawd 模块上从不存在该属性,patch 旧目标会 AttributeError;
+    # patch 源模块属性既有效又能同时拦截生产路径的调用点。
+    with patch("core.replay_foundation.emit_runtime_event", mock_replay.emit_runtime_event):
         # Simulate the emit call that happens in the kernel path
         mock_replay.emit_runtime_event(
             kind="CONTINUUM_TICK",
@@ -84,7 +89,9 @@ def test_kernel_path_emits_continuum_tick(mock_replay):
 def test_direct_path_emits_continuum_tick(mock_replay):
     """When OpenClawd.process runs the direct path, a CONTINUUM_TICK event
     must be written to ReplayFoundation."""
-    with patch("core.openclawd.emit_runtime_event", mock_replay.emit_runtime_event):
+    # 断言漂移修正:同上 —— patch 权威源 core.replay_foundation 而非
+    # 从不持有该属性的 core.openclawd。
+    with patch("core.replay_foundation.emit_runtime_event", mock_replay.emit_runtime_event):
         mock_replay.emit_runtime_event(
             kind="CONTINUUM_TICK",
             task_id="test_session_002",

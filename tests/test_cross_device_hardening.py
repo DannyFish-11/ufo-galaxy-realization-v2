@@ -690,19 +690,23 @@ class TestWebRTCGatewayHealth:
         assert "ws_signaling_path" in info
         assert "{device_id}" in info["gateway_ws_path"]
 
+    # 断言漂移(依赖版本演进):FastAPI 0.137+ 的 include_router 为懒挂载,
+    # app.routes 中出现无 .path 的 _IncludedRouter;结构内省统一走
+    # tests/route_introspection.route_paths(项目既有助手,双版本兼容)。
+
     def test_webrtc_endpoint_rest_route_exists(self):
         """GET /api/v1/webrtc/endpoint route must exist in the gateway app."""
         from galaxy_gateway.app import app as gateway_app
+        from tests.route_introspection import route_paths
 
-        routes = [r.path for r in gateway_app.routes]  # type: ignore[attr-defined]
-        assert "/api/v1/webrtc/endpoint" in routes
+        assert "/api/v1/webrtc/endpoint" in route_paths(gateway_app)
 
     def test_webrtc_ws_route_exists(self):
         """WebSocket /ws/webrtc/{device_id} route must exist in the gateway app."""
         from galaxy_gateway.app import app as gateway_app
+        from tests.route_introspection import route_paths
 
-        routes = [r.path for r in gateway_app.routes]  # type: ignore[attr-defined]
-        assert "/ws/webrtc/{device_id}" in routes
+        assert "/ws/webrtc/{device_id}" in route_paths(gateway_app)
 
 
 # ---------------------------------------------------------------------------

@@ -258,6 +258,15 @@ class NATSBus:
         self._js: Optional[Any] = None  # JetStreamContext
         self._connected = False
         self._noop = False  # test/conformance no-op mode: publish succeeds without NATS
+        # 进程内降级总线(所有者 Windows 真机 WinError 4551 实证):nats-server 被
+        # 智能应用控制/WDAC 拦截、或未安装且自动安装失败时,不能让"总线整个失效"
+        # ——单机场景里发布者和订阅者本来就在同一进程,纯 Python 内存分发即可
+        # 保住全部单机语义(此前每次 publish 都反复触发 auto-connect 重试并失败)。
+        # _local_mode=True 后 publish/subscribe 走 _local_subs 内存匹配分发,
+        # 不再碰网络;仅跨设备分发不可用,由启动横幅如实展示。
+        self._local_mode = False
+        self._local_reason = ""
+        self._local_subs: list = []  # [(subject_pattern, callback), ...]
         self._embedded: Optional[Any] = None  # EmbeddedNATSServer instance
         self._subscriptions: list = []
         self._subscription_metadata: Dict[int, Dict[str, str]] = {}
@@ -331,6 +340,11 @@ class NATSBus:
         """
         if self._connected:
             return {"success": True, "already_connected": True}
+
+        # 已切进程内降级总线:不再尝试网络连接/拉起 embedded server(避免每个
+        # 后来的调用方都重演一遍注定失败的启动 + 刷错);内存总线即"可用"。
+        if getattr(self, "_local_mode", False):
+            return {"success": True, "local": True, "reason": self._local_reason}
 
         target = url or self._url
 
@@ -1032,12 +1046,72 @@ class NATSBus:
         """Check if NATS connection is alive."""
         return self._connected and self._nc is not None and self._nc.is_connected
 
+    # ── 进程内降级总线(单机模式) ────────────────────────────────────────────
+    # 根因(所有者 Windows 真机日志):nats-server.exe 被智能应用控制(WinError
+    # 4551)拦截/未安装时,旧行为是每次 publish/subscribe 都再走一遍
+    # auto-connect → 再启一次注定失败的 embedded server → 刷错误日志,
+    # 且单机内的消息也全部丢失。启用本模式后改为纯 Python 内存 pub/sub:
+    # 单机语义完整保留(同进程内订阅者照常收到消息),零网络、零重试刷屏。
+
+    def enable_local_fallback(self, reason: str = "") -> None:
+        """切换到进程内内存总线(诚实降级:单机正常,跨设备分发不可用)。"""
+        # getattr 防御:既有测试用 __new__ 绕过 __init__ 构造 NATSBus,
+        # 新增属性可能不存在——按未启用处理并补建,不让旧测试路径炸 AttributeError。
+        if not getattr(self, "_local_mode", False):
+            self._local_mode = True
+            self._local_reason = reason or "NATS 不可用"
+            if not hasattr(self, "_local_subs"):
+                self._local_subs = []
+            logger.info("NATSBus: 已切换进程内总线(单机模式正常)— %s", self._local_reason)
+
+    def is_local_mode(self) -> bool:
+        """当前是否运行在进程内降级总线上。"""
+        return bool(getattr(self, "_local_mode", False))
+
+    @staticmethod
+    def _subject_matches(pattern: str, subject: str) -> bool:
+        """NATS 通配符匹配:``*`` 匹配单个 token,``>`` 匹配其后全部 token。"""
+        p_tokens = pattern.split(".")
+        s_tokens = subject.split(".")
+        for i, pt in enumerate(p_tokens):
+            if pt == ">":
+                return len(s_tokens) >= i  # ">" 吞掉剩余全部(至少 0 个)
+            if i >= len(s_tokens):
+                return False
+            if pt != "*" and pt != s_tokens[i]:
+                return False
+        return len(p_tokens) == len(s_tokens)
+
+    def _local_publish(self, subject: str, data: dict) -> dict:
+        """内存分发:把消息投给所有匹配的本进程订阅者(与 NATS 回调同签名)。"""
+        delivered = 0
+        for pattern, cb in list(self._local_subs):
+            if not self._subject_matches(pattern, subject):
+                continue
+            try:
+                if asyncio.iscoroutinefunction(cb):
+                    asyncio.get_running_loop().create_task(cb(data))
+                else:
+                    cb(data)
+                delivered += 1
+                self._stats["received"] += 1
+            except RuntimeError:
+                # 无运行中事件循环(同步上下文)→ 只投同步回调,协程回调丢弃并计错
+                self._stats["errors"] += 1
+            except Exception as exc:  # noqa: BLE001
+                self._stats["errors"] += 1
+                logger.debug("NATSBus(local): handler error on %s — %s", subject, exc)
+        self._stats["published"] += 1
+        return {"success": True, "seq": 0, "local": True, "delivered": delivered}
+
     def get_stats(self) -> dict:
         """Return bus statistics."""
         subscription_metadata = getattr(self, "_subscription_metadata", {})
         return {
             "connected": self.is_connected(),
             "noop_mode": bool(getattr(self, "_noop", False)),
+            "local_mode": bool(getattr(self, "_local_mode", False)),
+            "local_reason": getattr(self, "_local_reason", ""),
             "url": self._url,
             "embedded": self._embedded is not None,
             "subscriptions": len(self._subscriptions),
@@ -1074,6 +1148,10 @@ class NATSBus:
             self._stats["published"] += 1
             return {"success": True, "seq": 0, "noop": True}
 
+        # 进程内降级总线:不碰网络、不再反复 auto-connect 刷错,内存直投。
+        if getattr(self, "_local_mode", False):
+            return self._local_publish(subject, data)
+
         # Auto-connect if not connected
         if not self._connected or self._js is None:
             if not await self._ensure_connected():
@@ -1103,6 +1181,15 @@ class NATSBus:
 
         PR-NATS-CORE: Auto-connects if not connected. No no-op mode.
         """
+        # 进程内降级总线:订阅登记进内存表,由 _local_publish 匹配分发。
+        if getattr(self, "_local_mode", False):
+            self._local_subs.append((subject, callback))
+            logger.debug("NATSBus(local): subscribed to %s", subject)
+            result = {"success": True, "subject": subject, "durable": durable, "local": True}
+            if return_subscription:
+                result["subscription"] = None
+            return result
+
         # Auto-connect if not connected
         if not self._connected or self._js is None:
             if not await self._ensure_connected():

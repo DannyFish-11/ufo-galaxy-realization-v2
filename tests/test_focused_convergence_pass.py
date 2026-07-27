@@ -484,10 +484,17 @@ class TestDTraceability:
         dim = narrative.get_dimension(DIM_AUTONOMY_PARTICIPATION_STATE)
         assert dim is not None
         # Should mention evidence or posture in the explanation
+        # 断言漂移:core/unified_system_state_narrative.py 的 no_android_devices
+        # 分支措辞已演进为 "No Android devices have active state snapshots.
+        # Autonomy/participation tier cannot be determined without active device
+        # sessions."——语义仍是"缺证据无法判定自治层级",只是不再含
+        # evidence/posture/unavailable 字面。接受该规范措辞("cannot be
+        # determined" 即证据缺失的表达)。
         assert (
             "evidence" in dim.explanation.lower()
             or "posture" in dim.explanation.lower()
             or "unavailable" in dim.explanation.lower()
+            or "cannot be determined" in dim.explanation.lower()
         )
 
     def test_recovery_state_explains_revalidation(self):

@@ -328,15 +328,31 @@ class OperationalReadinessReport:
 
 def collect_app_route_paths(app: Any) -> Set[str]:
     """Return route paths registered on a FastAPI/Starlette app."""
+    # 生产修复(真 bug,框架演进适配):新版 FastAPI 的 include_router 不再把
+    # 子路由平铺进 app.router.routes,而是挂一个 _IncludedRouter 包装对象
+    # (无 .path,子路由在 original_router.routes,前缀在 include_context.prefix)。
+    # 旧实现只读顶层 .path,结果只剩 /docs /openapi.json 等文档路由——
+    # 运营就绪面(operational-readiness)看不到任何真实业务路由,路由存在性
+    # 验证整体失真。这里递归展开嵌套 router 并拼接前缀。
     router = getattr(app, "router", None)
     routes = getattr(router, "routes", None)
     if routes is None:
         return set()
     paths: Set[str] = set()
-    for route in routes:
-        path = getattr(route, "path", None)
-        if isinstance(path, str) and path:
-            paths.add(path)
+
+    def _walk(route_list: Any, prefix: str) -> None:
+        for route in route_list or []:
+            path = getattr(route, "path", None)
+            if isinstance(path, str) and path:
+                paths.add(f"{prefix}{path}" if prefix else path)
+                continue
+            nested = getattr(route, "original_router", None)
+            if nested is not None:
+                ctx = getattr(route, "include_context", None)
+                nested_prefix = str(getattr(ctx, "prefix", "") or "")
+                _walk(getattr(nested, "routes", None), f"{prefix}{nested_prefix}")
+
+    _walk(routes, "")
     return paths
 
 

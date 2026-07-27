@@ -260,9 +260,16 @@ class TestDimensionEntries:
 
     def test_operator_control_plane_dimension_is_partially_established(self, report: ComprehensiveAuditReport) -> None:
         entry = next(d for d in report.dimension_entries if d.dimension == AuditDimension.OPERATOR_CONTROL_PLANE_APIS)
+        # 断言漂移:该维度标签由生产探针动态判定(comprehensive_joint_dual_repo_
+        # audit._audit_operator_control_plane:有 gap → PARTIALLY,无 gap →
+        # STRONGLY)。当年的 gap(缺统一面板聚合端点、operator 面只读无 action
+        # 端点)此后已被补齐——operator 路由现含 /api/v1/operator/board/
+        # operable-truth、/api/v1/operator/action、/api/v1/operator/dispatch 等
+        # (见 core/routes/operator.py),探针不再报 gap,故标签升级为
+        # STRONGLY_ESTABLISHED,测试期望随实际证据状态更新。
         assert (
-            entry.label == AuditEvidenceLabel.PARTIALLY_ESTABLISHED
-        ), f"Operator/control-plane expected PARTIALLY_ESTABLISHED; got {entry.label}"
+            entry.label == AuditEvidenceLabel.STRONGLY_ESTABLISHED
+        ), f"Operator/control-plane expected STRONGLY_ESTABLISHED; got {entry.label}"
 
     def test_desktop_shell_dimension_is_partially_established(self, report: ComprehensiveAuditReport) -> None:
         entry = next(

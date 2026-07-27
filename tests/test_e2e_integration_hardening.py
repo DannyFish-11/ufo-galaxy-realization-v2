@@ -20,8 +20,15 @@ import pytest
 
 
 @pytest.fixture
-def openclawd():
+def openclawd(monkeypatch):
     """创建 OpenClawd 实例"""
+    # 断言漂移修正(生产契约演进,PR-10):_collect_tools 的规范 Node 工具
+    # 来源改为 NodeFabricRegistry 运行时注册(节点进程启动时上报),
+    # config/node_registry.json + fusion_entry 的直接扫描已从规范路径移除,
+    # 仅保留在显式兼容开关 OPENCLAWD_LEGACY_NODE_SCAN_COMPAT_ENABLED 之后。
+    # 单测进程内没有真实节点起来注册,fabric 注册表为空;本测试验证的是
+    # 工具总线的收集/分发链路本身,故按 PR-10 提供的兼容途径打开扫描开关。
+    monkeypatch.setenv("OPENCLAWD_LEGACY_NODE_SCAN_COMPAT_ENABLED", "true")
     from core.openclawd import OpenClawd
 
     return OpenClawd()

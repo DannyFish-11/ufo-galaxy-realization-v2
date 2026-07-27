@@ -867,6 +867,26 @@ class DesktopPresenceRuntime:
             except Exception:  # noqa: BLE001
                 _manifest_sink = None
 
+        # 生产修复(真 bug):chat 路由等调用方会把 runtime_attachment_session_id /
+        # control_session_id / session_identity 等会话标识经 **kwargs 传进
+        # handle_request;这些键已被 build_canonical_session_identity 归一,并在
+        # 下方 _dispatch 调用里以显式关键字转发。若不先从 kwargs 去重,同名键
+        # 会触发 "got multiple values for keyword argument 'runtime_attachment_
+        # session_id'" 的 TypeError,整个请求以 Runtime error 失败(聚合日志、
+        # OpenClawd 回复全部丢失)。以显式转发的规范值为准,丢弃调用方原始值。
+        for _dup_key in (
+            "control_session_id",
+            "runtime_attachment_session_id",
+            "session_identity",
+            "cognitive_execution_hint",
+            "desktop_native_ingress_backbone",
+            "presence_mode",
+            "presence_runtime_hint",
+            "stream_runtime_status",
+            "is_operator_request",
+        ):
+            kwargs.pop(_dup_key, None)
+
         lane_snapshot = None
         try:
             lane_manager = get_session_execution_lane_manager()

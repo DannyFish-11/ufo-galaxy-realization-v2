@@ -274,11 +274,25 @@ class OpenCodeEngine:
         # 路径写死成 /usr/local/bin/opencode,调用方拿到 success:True 却
         # 可能根本没有这个二进制。现在真的跑安装命令,并且用 --version
         # 核实二进制确实能跑起来,而不是只信退出码。
-        install_command = "curl -fsSL https://opencode.dev/install.sh | bash"
-
+        # 生产修复(shell 安全契约,P1/P2 硬化):此前用
+        # "curl … | bash" 单串命令 + shell=True 起子进程,违反本仓库
+        # "活跃代码禁止 shell=True" 的安全基线(经 shell 解释的整串命令
+        # 是注入面,且与 Node_116 等已完成的硬化不一致)。改为显式两步
+        # 等价管道:先 curl 拉脚本,再把脚本文本经 stdin 交给 bash,
+        # 全程 argv 形式、不经 shell 解释。
         try:
+            fetch = subprocess.run(
+                ["curl", "-fsSL", "https://opencode.dev/install.sh"],
+                capture_output=True, text=True, timeout=120,
+            )
+            if fetch.returncode != 0:
+                return {
+                    "success": False,
+                    "error": (fetch.stderr or fetch.stdout or "安装脚本下载失败").strip()[:500],
+                }
+
             result = subprocess.run(
-                install_command, shell=True, capture_output=True,
+                ["bash"], input=fetch.stdout, capture_output=True,
                 text=True, timeout=300,
             )
             if result.returncode != 0:

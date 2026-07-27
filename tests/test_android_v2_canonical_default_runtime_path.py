@@ -36,6 +36,7 @@ E) User-visible default output (desktop_presence_runtime integration)
      on the canonical default path without any manual activation
 """
 
+import asyncio
 import time
 from typing import Any, Dict, Optional
 from unittest.mock import MagicMock, patch
@@ -410,9 +411,17 @@ class TestGroupEUserVisibleDefaultOutput:
 
         # Build a minimal runtime and call handle_request with a trivial payload.
         # We only need to verify that android_presence_runtime appears in the result.
+        # 断言漂移(调用方式随生产契约演进):handle_request 已演进为
+        # async 方法、签名为 (message: str, *, source: str, ...)——旧写法
+        # 同步传 dict 只会拿回未 await 的 coroutine,`in` 判断直接 TypeError。
+        # 按现契约以 asyncio.run 驱动完整生命周期后再断言结果字段。
         try:
             runtime = DesktopPresenceRuntime()
-            result = runtime.handle_request({"source": "test_canonical_default"})
+            result = asyncio.run(
+                runtime.handle_request(
+                    "canonical default probe", source="test_canonical_default"
+                )
+            )
         except Exception as exc:
             pytest.skip(f"handle_request failed with non-fatal error: {exc}")
 
@@ -431,9 +440,15 @@ class TestGroupEUserVisibleDefaultOutput:
         except Exception as exc:
             pytest.skip(f"DesktopPresenceRuntime unavailable: {exc}")
 
+        # 断言漂移:同上——handle_request 已是 async(message: str, *, source),
+        # 旧的同步 dict 调用返回 coroutine;改为 asyncio.run 驱动。
         try:
             runtime = DesktopPresenceRuntime()
-            result = runtime.handle_request({"source": "test_canonical_path_kind"})
+            result = asyncio.run(
+                runtime.handle_request(
+                    "canonical path kind probe", source="test_canonical_path_kind"
+                )
+            )
         except Exception as exc:
             pytest.skip(f"handle_request failed with non-fatal error: {exc}")
 

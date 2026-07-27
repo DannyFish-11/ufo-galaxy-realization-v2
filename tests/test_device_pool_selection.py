@@ -263,7 +263,17 @@ class TestConstellationRuntimeUsesPool:
         mock_orch._execute_subtask = AsyncMock(return_value={"success": True, "result": "ok", "tool": "noop"})
         rt._smart_orchestrator = mock_orch
 
-        with patch("core.device_pool_manager.get_device_pool_manager", return_value=pool):
+        # 断言漂移修正(前置条件随生产契约演进):ConstellationRuntime 现在在
+        # 调度前有参与层门控(_check_scheduling_gate → core.device_participation.
+        # get_orchestration_ready_devices):无 orchestration-ready 设备时直接
+        # BLOCKED(no_orchestration_ready_devices),根本走不到设备池选择。
+        # 本测试只在 DevicePoolManager 注册了设备,没有 UDM 参与层数据;它验证
+        # 的是"调度阶段必须咨询设备池",故把参与层候选打桩为非空,让执行
+        # 进入调度;门控行为由 constellation_runtime 的门控测试专门覆盖。
+        with patch(
+            "core.device_participation.get_orchestration_ready_devices",
+            return_value=["cr_dev_1"],
+        ), patch("core.device_pool_manager.get_device_pool_manager", return_value=pool):
             original_select = pool.select_device
             select_calls = []
 

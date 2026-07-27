@@ -520,9 +520,18 @@ print(fib(20))
 
 def test_13_capability_registry():
     """测试应用能力注册表"""
-    from core.hybrid_executor import AppCapability, CapabilityRegistry, ExecutionLevel
+    # 断言漂移:Phase-A 整合中生产类已改名 CapabilityRegistry →
+    # AppExecutionCapabilityRegistry(见 core/hybrid_executor.py 的
+    # APP_EXECUTION_CAPABILITY_REGISTRY_RENAMED 哨兵),以与
+    # core.agent.capability_registry.CapabilityRegistry(MCP/Skill/Node 能力
+    # 注册表)区分。测试随生产命名更新;行为契约不变。
+    from core.hybrid_executor import (
+        AppCapability,
+        AppExecutionCapabilityRegistry,
+        ExecutionLevel,
+    )
 
-    registry = CapabilityRegistry()
+    registry = AppExecutionCapabilityRegistry()
 
     # 默认注册的应用
     apps = registry.list_apps()
@@ -595,7 +604,9 @@ async def test_14_proxy_relay_chain():
 def test_15_module_imports():
     """验证所有新模块可正常导入"""
     from core.hybrid_executor import (
-        CapabilityRegistry,
+        # 断言漂移:同 test_13 —— Phase-A 整合改名 CapabilityRegistry →
+        # AppExecutionCapabilityRegistry。
+        AppExecutionCapabilityRegistry,
         ExecutionLevel,
         HybridExecutionArbiter,
         get_hybrid_arbiter,

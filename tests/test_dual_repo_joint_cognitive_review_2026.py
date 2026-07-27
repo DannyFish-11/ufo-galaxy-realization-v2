@@ -357,6 +357,14 @@ class TestStrictDualRepoTotalReview:
         assert probes["chat_is_adapter_surface"] is True
         assert probes["ws_device_canonical"] is True
         assert probes["ws_webrtc_media_only"] is True
-        assert probes["default_multimodal_off"] is True
-        assert probes["v2_has_device_perception_emission"] is False
+        # 断言漂移(证据探针如实反映仓库现状,期望随生产事实更新):
+        # 1) config.json 已把 enable_multimodal_ingest 改为 true(PR-Q4:原生
+        #    多模态输入默认开启,"NOT deprecated"),default_multimodal_off
+        #    探针如实返回 False;
+        # 2) DEVICE_PERCEPTION_EMISSION 已在 V2 注册(galaxy_gateway/protocol/
+        #    aip_v3.py MessageType 与 normalized_ingress_event.IngressEventKind,
+        #    由 handle_device_perception_emission 消费),当年"感知上行缺失"
+        #    的 gap 已闭合,探针如实返回 True。
+        assert probes["default_multimodal_off"] is False
+        assert probes["v2_has_device_perception_emission"] is True
         assert probes["cross_repo_ref_mismatch"] is True

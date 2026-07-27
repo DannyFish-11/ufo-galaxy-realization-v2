@@ -286,6 +286,15 @@ if not logging.getLogger().handlers:
         datefmt="%H:%M:%S",
         handlers=[handler, _console],
     )
+    # 修 logging 双写(所有者 Windows 真机日志:HF 下载重试等每条日志打印两遍)。
+    # 根因:huggingface_hub 在 import 时给自己的库根 logger("huggingface_hub")
+    # 挂了一个裸 StreamHandler,却不关 propagate —— 同一条 WARNING 先经它自己的
+    # handler 打一遍,再冒泡到根 logger 的控制台 handler 又打一遍(双 handler)。
+    # 这里预先关掉其向根 logger 的冒泡(它自带的 handler 仍保证控制台可见一次),
+    # 并补挂本文件 handler,让这些日志照旧落进 logs/lumiv.log 不丢证据。
+    _hf_logger = logging.getLogger("huggingface_hub")
+    _hf_logger.propagate = False
+    _hf_logger.addHandler(handler)
 logger = logging.getLogger("Galaxy")
 
 # 静默 URL 哨兵:给 httpx 加一层【只观测、不干预】的薄壳,任何缺 http(s):// 协议头的

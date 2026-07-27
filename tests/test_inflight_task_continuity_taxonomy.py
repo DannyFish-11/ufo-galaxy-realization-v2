@@ -1099,11 +1099,18 @@ class TestGroupAA_TaskContinuityProbeNotOptimistic:
 
 
 class TestGroupAB_AllDimensions:
-    def test_AB01_all_dimensions_has_ten_entries(self):
+    def test_AB01_all_dimensions_has_eighteen_entries(self):
+        # 断言漂移修正:验收维度分类法持续扩展,all_dimensions() 的 docstring
+        # (core/system_final_acceptance_verdict.py)完整记录了从 5 → 18 维的
+        # 演进史("Return all eighteen dimensions in canonical evaluation
+        # order")。旧断言 11 停留在 PR-08(human_intervention)时代;当前权威
+        # 计数为 18(至 identity_authorship_binding)。同时校验枚举成员全量收录,
+        # 避免只对数字硬编码。
         from core.system_final_acceptance_verdict import AcceptanceDimensionId
 
         dims = AcceptanceDimensionId.all_dimensions()
-        assert len(dims) == 11
+        assert len(dims) == 18
+        assert set(dims) == set(AcceptanceDimensionId)
 
     def test_AB02_all_dimensions_no_duplicates(self):
         from core.system_final_acceptance_verdict import AcceptanceDimensionId

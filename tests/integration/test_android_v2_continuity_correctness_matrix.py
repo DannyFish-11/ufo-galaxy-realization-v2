@@ -393,12 +393,19 @@ class TestAndroidV2ContinuityCorrectnessMatrix:
 
         first_future = asyncio.get_running_loop().create_future()
         bridge._pending_responses[task_id] = first_future
-        await bridge.handle_message(
-            ws,
-            _v3("task_result", device_id, task_id=task_id, status="completed", schema_version="1"),
-        )
+        first_msg = _v3("task_result", device_id, task_id=task_id, status="completed", schema_version="1")
+        await bridge.handle_message(ws, first_msg)
         assert first_future.done()
-        assert check_result_idempotency(task_id) is True
+        # 断言漂移(联合幂等键设计):统一 ingress 的 _record_idempotency 在
+        # first_accepted 后记录的是联合幂等键 event.idempotency_key 与
+        # completion lineage key,不再补记裸 task_id(裸 task_id 仅在 ingress
+        # 不可用走 legacy 链时补记,见 galaxy_gateway/android/handlers/
+        # task_lifecycle.py "Durable idempotency: deferred record" 段)。本消息
+        # 未携带 idempotency_key,AIP compat 层确定性注入
+        # idempotency_key=f"idem_{task_id}"(galaxy_gateway/protocol/compat.py),
+        # 故守卫生效的证据是该派生键已被持久记录;重复抑制本身由下方第二条
+        # 消息(注入同一派生键)的断言验证。
+        assert check_result_idempotency(f"idem_{task_id}") is True
 
         second_future = asyncio.get_running_loop().create_future()
         bridge._pending_responses[task_id] = second_future

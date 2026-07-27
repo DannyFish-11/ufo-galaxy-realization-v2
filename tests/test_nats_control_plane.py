@@ -49,6 +49,13 @@ def _make_mock_nats_bus(connected: bool = True) -> MagicMock:
     bus.publish_heartbeat = AsyncMock(return_value={"success": True, "seq": 3})
     bus.publish_worker_registration = AsyncMock(return_value={"success": True, "seq": 4})
     bus.publish_worker_shutdown = AsyncMock(return_value={"success": True, "seq": 5})
+    # 断言漂移修正:nats_bus 上的真实方法名是 publish_legacy_worker_registration /
+    # publish_legacy_worker_shutdown(见 core/nats_bus.py);nats_heartbeat 原先调用
+    # 不存在的 publish_worker_registration,AttributeError 被吞掉导致注册静默失败,
+    # 生产端已改为调用 legacy 方法名(见 core/nats_heartbeat.py 注释)。若不显式
+    # 提供 AsyncMock,MagicMock 自动生成的同名属性不可 await。
+    bus.publish_legacy_worker_registration = AsyncMock(return_value={"success": True, "seq": 4})
+    bus.publish_legacy_worker_shutdown = AsyncMock(return_value={"success": True, "seq": 5})
     bus.publish_event = AsyncMock(return_value={"success": True, "seq": 4})
     bus._subscribe = AsyncMock(return_value={"success": True})
     bus.subscribe = AsyncMock(return_value={"success": True})
@@ -220,7 +227,8 @@ class TestNodeHeartbeatSender:
             result = await sender.register()
 
         assert result.get("success") is True
-        mock_bus.publish_worker_registration.assert_awaited_once()
+        # 生产端注册走的是 legacy 方法名(核对 core/nats_heartbeat.py register())
+        mock_bus.publish_legacy_worker_registration.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_register_includes_capabilities(self):
@@ -236,7 +244,7 @@ class TestNodeHeartbeatSender:
         with patch("core.nats_bus.nats_bus", mock_bus):
             await sender.register()
 
-        registration = mock_bus.publish_worker_registration.call_args[0][0]
+        registration = mock_bus.publish_legacy_worker_registration.call_args[0][0]
         assert hasattr(registration, "model_dump")
         payload = registration.model_dump(mode="json", exclude_none=True)
         cap_names = [c["name"] for c in payload.get("capabilities", [])]
@@ -254,8 +262,8 @@ class TestNodeHeartbeatSender:
         with patch("core.nats_bus.nats_bus", mock_bus):
             await sender.stop()
 
-        mock_bus.publish_worker_shutdown.assert_awaited_once()
-        shutdown = mock_bus.publish_worker_shutdown.call_args[0][0]
+        mock_bus.publish_legacy_worker_shutdown.assert_awaited_once()
+        shutdown = mock_bus.publish_legacy_worker_shutdown.call_args[0][0]
         assert shutdown.worker_id == "node-stop-test"
         assert shutdown.reason == "heartbeat_stopped"
 

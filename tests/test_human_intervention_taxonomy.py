@@ -734,13 +734,24 @@ class TestAcceptanceDimensionIntegration:
         # Must not be unresolved due to misconfiguration (that would mean
         # zero-evidence returned autonomous_closure, which violates the policy).
         # It should be pending (module present, contract wired, no live evidence).
-        from core.system_final_acceptance_verdict import DimensionStatus
-
-        assert item.status != DimensionStatus.unresolved, (
-            "human_intervention dimension is unresolved — this likely means the "
-            "zero-evidence probe returned autonomous_closure (contract "
-            "misconfiguration) or the module is unavailable.  "
-            f"gap_description: {item.gap_description}"
+        # 断言漂移:验收语义已收紧——生产评估器(system_final_acceptance_verdict.
+        # _evaluate_human_intervention)现在对"结构探针成功但无运行时证据"的
+        # 情形也返回 unresolved,并显式注明 "Structural probe success is not
+        # credited as acceptance closure"(证据优先原则)。本测试真正要守护的
+        # 是:零证据探针不得返回 autonomous_closure(契约错配)、模块必须可用。
+        # 这两类失败在 evidence_summary 里有可区分的标记,按其断言。
+        summary = (item.evidence_summary or "")
+        assert "misconfiguration" not in summary.lower(), (
+            "human_intervention zero-evidence probe returned autonomous_closure "
+            f"(contract misconfiguration): {summary}"
+        )
+        assert "not importable" not in summary.lower(), (
+            f"human_intervention taxonomy module unavailable: {summary}"
+        )
+        linkage = item.evidence_linkage or {}
+        assert linkage.get("zero_evidence_probe_is_autonomous") is False, (
+            "zero-evidence probe must be conservative (non-autonomous); "
+            f"evidence_linkage: {linkage}"
         )
 
 

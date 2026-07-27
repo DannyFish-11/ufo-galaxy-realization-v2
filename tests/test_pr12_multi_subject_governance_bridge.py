@@ -52,7 +52,13 @@ def test_bridge_sentinel_and_takeover_continuation():
 
 
 @pytest.mark.asyncio
-async def test_device_router_attaches_truth_bridge_for_partial_cross_device():
+async def test_device_router_attaches_truth_bridge_for_partial_cross_device(monkeypatch):
+    # 断言漂移(测试环境补偿):跨设备开关默认值已由 fail-open(默认启用)改为
+    # opt-in(默认禁用,见 galaxy_gateway/cross_device_switch.py docstring),
+    # DeviceRouter._dispatch_cross_device_task 在开关关闭时直接返回
+    # cross_device_disabled 结构化错误。本测试验证的是 truth bridge 附加路径,
+    # 故显式开启;开关行为本身由 test_cross_device_switch.py 覆盖。
+    monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", "1")
     from galaxy_gateway.device_router import DeviceRouter
 
     router = DeviceRouter()

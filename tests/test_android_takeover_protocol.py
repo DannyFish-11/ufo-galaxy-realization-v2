@@ -481,6 +481,19 @@ class TestInitReExport:
 
 class TestSendTakeoverRequest:
 
+    @pytest.fixture(autouse=True)
+    def _enable_cross_device(self):
+        # 断言漂移修正:生产契约已演进 —— cross_device_switch.is_cross_device_enabled
+        # (galaxy_gateway/cross_device_switch.py) 的默认值从"默认开启(fail-open)"
+        # 改为"默认关闭、显式 opt-in"(见其 docstring,与 system_mode/presence 层对齐)。
+        # 本类只验证 send_takeover_request 的发送路径本身,故显式打开跨设备门;
+        # 门控(关闭时返回 blocked dict)由下方 TestTakeoverModeGate 专门覆盖。
+        with patch(
+            "galaxy_gateway.android_bridge._is_cross_device_enabled",
+            return_value=True,
+        ):
+            yield
+
     def _make_bridge(self) -> Any:
         from galaxy_gateway.android_bridge import AndroidBridge
 

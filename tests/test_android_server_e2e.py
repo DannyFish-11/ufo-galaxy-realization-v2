@@ -382,28 +382,38 @@ class TestFullE2EPipeline:
         }
 
         # ── Step 5: Dispatch tool call to device via AndroidBridge ──
-        # patch send_to_device so we can inspect the dispatched message
+        # 断言漂移修正(派发链路随生产契约演进,PR-S3 / PR-AIP-UNIFIED):
+        # 设备经规范注册后会进入 DeviceRouter.devices,AndroidBridge.assign_task
+        # 现在优先委派 DeviceRouter.dispatch_task,由统一传输层 AIPTransport
+        # 发送 AIP v3 "command" 信封(galaxy_gateway/routing/dispatch.py
+        # build_aip_message);bridge.send_to_device + MessageBuilder.task_assign
+        # 只是 DeviceRouter 不可用时的兜底。观测点移到 AIPTransport.send,
+        # 断言随规范信封形态更新(task_type 位于 payload 内)。
         sent: Dict[str, Any] = {}
 
-        async def _mock_send(device_id, message, **kwargs):
-            sent.update(message)
-            return {"success": True}
-
-        bridge.send_to_device = _mock_send
+        class _MockTransport:
+            async def send(self, message, device_id_arg, **kwargs):
+                sent.update(message)
+                return {"success": True, "result": {"ok": True}}
 
         task_id = str(uuid.uuid4())
-        result = await bridge.assign_task(
-            device_id=device_id,
-            task_id=task_id,
-            task_type="screenshot",
-            payload=mock_tool_call["arguments"],
-        )
+        with patch(
+            "core.aip_transport.get_aip_transport", return_value=_MockTransport()
+        ):
+            result = await bridge.assign_task(
+                device_id=device_id,
+                task_id=task_id,
+                task_type="screenshot",
+                payload=mock_tool_call["arguments"],
+            )
 
-        # assign_task calls send_to_device; verify the dispatched message
-        assert sent.get("type") == "task_assign"
+        # assign_task delegates to DeviceRouter → AIPTransport; verify the
+        # canonical AIP command envelope
+        assert sent.get("type") == "command"
         assert sent.get("device_id") == device_id
         assert sent.get("task_id") == task_id
-        assert sent.get("task_type") == "screenshot"
+        assert (sent.get("payload") or {}).get("task_type") == "screenshot"
+        assert result.get("success") is True
 
     @pytest.mark.asyncio
     async def test_capability_report_without_prior_register_still_syncs(self, bridge, fresh_registry):

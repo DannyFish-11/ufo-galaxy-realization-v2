@@ -31,10 +31,21 @@ class TestGalaxyUnifiedHealthProbeOrder:
         from unified_launcher import UnifiedWebUI
 
         src = inspect.getsource(UnifiedWebUI.start)
-        pos_startup = src.find("await server.startup()")
+        # 断言漂移:生产实现已弃用手工 `await server.startup()` +
+        # `await server.main_loop()` 两段式(uvicorn ≥0.30 下 startup() 因
+        # lifespan 未初始化而崩,见 unified_launcher.py 内注释),改为后台
+        # 任务跑公开入口 server.serve(),并轮询公开的 server.started 标志
+        # 等到 socket 真正绑定后才做健康探测。本测试守护的契约不变——
+        # "HTTP 探测必须发生在 uvicorn 绑定之后"——按新实现的标记重排:
+        # serve() 起任务 → 等待 server.started → run_startup_health_check。
+        # 用带上下文的标记避免命中实现前的解释性注释文本
+        pos_serve = src.find("asyncio.create_task(server.serve())")
+        pos_started_wait = src.find("if server.started")
         pos_health = src.find("await run_startup_health_check(")
-        pos_loop = src.find("await server.main_loop()")
-        assert 0 < pos_startup < pos_health < pos_loop
+        assert 0 < pos_serve < pos_started_wait < pos_health
+        # 旧的手工两段式不得复活
+        assert "await server.startup()" not in src
+        assert "await server.main_loop()" not in src
 
 
 class TestPreflightApiTokenPolicy:

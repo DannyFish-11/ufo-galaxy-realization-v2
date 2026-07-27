@@ -129,6 +129,16 @@ def _start_mock_node95(received: List[str]) -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
+@pytest.fixture(autouse=True)
+def _enable_cross_device(monkeypatch):
+    # 断言漂移(测试环境补偿):跨设备开关默认值已由 fail-open(默认启用)
+    # 改为 opt-in(默认禁用),/ws/webrtc 信令端点在开关关闭时立即以 4001
+    # 关闭连接(cross_device_blocked)。本文件测试的是信令/TURN 行为而非
+    # 开关本身,故显式开启开关;开关行为由 test_cross_device_switch.py 覆盖。
+    monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", "1")
+    yield
+
+
 @pytest.fixture()
 def mock_node95(monkeypatch):
     received: List[str] = []

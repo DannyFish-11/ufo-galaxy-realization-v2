@@ -307,8 +307,20 @@ def test_get_active_nodes_includes_optional(ndj_nodes):
 def test_get_active_nodes_sorted(ndj_nodes):
     launcher = _make_launcher(ndj_nodes)
     active = launcher.get_active_nodes()
-    # sorted by (priority, name) — just check no obvious out-of-order core nodes
-    assert active == sorted(active, key=lambda x: (launcher.node_configs.get(x, {}).get("priority", 99), x))
+    # 断言依据:生产排序契约是 PR-SORT-NUMERIC —— (priority, 节点编号, 名字),
+    # 编号取名字第 2 段("Node_10_Slack" → 10),避免字符串序把 Node_107 排到
+    # Node_10 之前。旧断言用 (priority, 名字字符串) 镜像,与生产契约不符;
+    # 此处镜像与 launcher.get_active_nodes 相同的数字键。
+    def _mirror_key(x):
+        cfg = launcher.node_configs.get(x, {})
+        priority = cfg.get("priority", 99) if isinstance(cfg, dict) else 99
+        try:
+            num = int(x.split("_")[1])
+        except (ValueError, IndexError):
+            num = 999
+        return (priority, num, x)
+
+    assert active == sorted(active, key=_mirror_key)
 
 
 # 24. get_core_nodes returns only core-group nodes

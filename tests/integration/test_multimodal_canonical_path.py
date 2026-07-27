@@ -1026,7 +1026,14 @@ class TestAmbientIngestRemainsGated:
 
     def test_multimodal_ingest_runtime_does_not_start_without_activation(self):
         """get_ingest_bus() must return None when the bus has not been started."""
-        from core.multimodal.ingest_runtime import get_ingest_bus
+        from core.multimodal.ingest_runtime import get_ingest_bus, stop_ingest_bus
+
+        # 测试隔离修正(非生产 bug):_ingest_bus 是进程级单例;同进程内先跑
+        # 的其它集成用例(如 android bridge 生命周期用例经 handle_message 触发
+        # 激活)会合法地 start_ingest_bus,导致本用例在合批运行时读到残留
+        # 实例——单跑必绿、合跑必红的顺序依赖。本用例守护的契约是"未显式
+        # 激活时 get_ingest_bus() 为 None",故先复位单例再断言。
+        stop_ingest_bus()
 
         bus = get_ingest_bus()
         assert bus is None, (

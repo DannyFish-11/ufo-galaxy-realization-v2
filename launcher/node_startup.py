@@ -250,11 +250,16 @@ class NodeSystemLauncher:
             priority = cfg.get("priority", 99) if isinstance(cfg, dict) else 99
             # PR-SORT-NUMERIC: extract node number for proper numeric ordering
             # e.g., "Node_01" → 1, "Node_10" → 10 (avoids "Node_10" < "Node_2" in string sort)
+            # 生产修复(真 bug):节点名形如 "Node_10_Slack",此前取
+            # split("_")[-1] 拿到的是后缀词("Slack"),int() 必然失败、全部
+            # 落到 999——数字排序从未生效,同优先级内实际按 dict 插入序输出
+            # (稳定排序掩盖了问题),启动顺序不确定。节点编号在第 2 段
+            # (split("_")[1]),按其取数;再以完整名字符串兜底保证全序确定。
             try:
-                num = int(name.split("_")[-1])
+                num = int(name.split("_")[1])
             except (ValueError, IndexError):
                 num = 999
-            return (priority, num)
+            return (priority, num, name)
 
         return sorted(eligible, key=_sort_key)
 

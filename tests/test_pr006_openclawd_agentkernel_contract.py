@@ -455,7 +455,11 @@ class TestCanonicalRuntimeComposition:
         captured: Dict[str, Any] = {}
 
         class _MockBackend:
-            async def chat(self, messages, task_type, max_tokens, temperature, preferred_provider):
+            # 断言漂移:UnifiedLLMRouter.chat 调用后端的强制提供商参数已由
+            # preferred_provider= 更名为 provider=(见 core/unified/llm_router.py
+            # chat() 内注释:旧名被 MultiLLMRouter.chat 的 **kwargs 静默吞掉,
+            # 策略降级不生效,属生产侧已修复的真 bug)。mock 后端签名随之对齐。
+            async def chat(self, messages, task_type, max_tokens, temperature, provider):
                 captured["task_type"] = task_type
                 return {
                     "content": "ok",
@@ -468,6 +472,13 @@ class TestCanonicalRuntimeComposition:
         unified_router._backend = _MockBackend()
         unified_router._policy = {}
         unified_router._telemetry = get_routing_telemetry()
+        # 断言漂移(白盒构造随生产演进补齐):本测试用 object.__new__ 绕过单例
+        # __init__ 手工装配实例;PR-6 之后 UnifiedLLMRouter.__init__ 新增了
+        # L1/L2/L3 认知权威的懒加载槽位(_l1/_l2/_l3_authority),chat() 路径
+        # 的 _enrich_l3_context 会直接读取它们,手工装配也必须同步补齐。
+        unified_router._l1_authority = None
+        unified_router._l2_authority = None
+        unified_router._l3_authority = None
         unified_router._initialized = True
 
         await unified_router.chat_raw(
