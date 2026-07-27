@@ -31,6 +31,10 @@ from typing import Dict, Optional, Type
 from fastapi import FastAPI, HTTPException
 import uvicorn
 
+# RUF006: retain fire-and-forget create_task results so the event loop's weak
+# reference can't let them be garbage-collected mid-execution.
+_BACKGROUND_TASKS: set = set()
+
 # --- 常量定义 ---
 DEFAULT_OUTPUT_DIR = os.getenv("MEDIA_GEN_OUTPUT_DIR", "./media_gen_output")
 DEFAULT_LOG_LEVEL = "INFO"
@@ -122,7 +126,9 @@ class MediaGenService:
         self.tasks[task.task_id] = task
         self.logger.info(f"接收到新的生成任务: {task.task_id} (类型: {media_type.value})")
         # 异步执行任务
-        asyncio.create_task(self._process_task(task.task_id))
+        _bt = asyncio.create_task(self._process_task(task.task_id))
+        _BACKGROUND_TASKS.add(_bt)
+        _bt.add_done_callback(_BACKGROUND_TASKS.discard)
         return task
 
     async def _process_task(self, task_id: str):

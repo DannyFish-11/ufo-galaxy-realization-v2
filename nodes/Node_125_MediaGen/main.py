@@ -166,7 +166,9 @@ class MediaGenService:
         logger.info(f"已接受新任务 {task.task_id} ({media_type.value})。")
         
         # 异步执行任务
-        asyncio.create_task(self._process_task(task.task_id))
+        _bt = asyncio.create_task(self._process_task(task.task_id))
+        _BACKGROUND_TASKS.add(_bt)
+        _bt.add_done_callback(_BACKGROUND_TASKS.discard)
         return task.task_id
 
     async def _process_task(self, task_id: str):
@@ -382,6 +384,10 @@ async def main():
 # HTTP 健康检查服务器
 # ---------------------------------------------------------------------------
 import threading as _threading
+
+# RUF006: retain fire-and-forget create_task results so the event loop's weak
+# reference can't let them be garbage-collected mid-execution.
+_BACKGROUND_TASKS: set = set()
 try:
     from fastapi import FastAPI as _FastAPI
     import uvicorn as _uvicorn

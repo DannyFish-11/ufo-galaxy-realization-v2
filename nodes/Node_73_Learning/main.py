@@ -26,6 +26,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import uvicorn
 
+# RUF006: retain fire-and-forget create_task results so the event loop's weak
+# reference can't let them be garbage-collected mid-execution.
+_BACKGROUND_TASKS: set = set()
+
 # ---------------------------------------------------------------------------
 # Port / CORS config (optional dependencies)
 # ---------------------------------------------------------------------------
@@ -184,7 +188,9 @@ class LearningService:
         job = TrainingJob(job_id=job_id, model_name=model_name, dataset=dataset, hyperparams=hyperparams)
         self._jobs[job_id] = job
         # Run asynchronously in background
-        asyncio.create_task(self._run_training(job))
+        _bt = asyncio.create_task(self._run_training(job))
+        _BACKGROUND_TASKS.add(_bt)
+        _bt.add_done_callback(_BACKGROUND_TASKS.discard)
         return job
 
     async def _run_training(self, job: TrainingJob):
@@ -284,7 +290,9 @@ class LearningService:
         if len(self._results) > self._max_results:
             self._results = self._results[-self._max_results:]
         # Run asynchronously in background
-        asyncio.create_task(self._run_inference_task(result))
+        _bt = asyncio.create_task(self._run_inference_task(result))
+        _BACKGROUND_TASKS.add(_bt)
+        _bt.add_done_callback(_BACKGROUND_TASKS.discard)
         return result
 
     async def _run_inference_task(self, result: InferenceResult):
