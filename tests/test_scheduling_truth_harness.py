@@ -129,23 +129,23 @@ class TestSchedulingTruthHarness:
 
         harness = SchedulingTruthHarness()
         mock_tgr = MagicMock()
-        mock_tgr.get_task.return_value = None
-        mock_tgr.register_task.return_value = None
+        mock_tgr.get_node_by_task_id.return_value = None
+        mock_tgr.register_canonical_task.return_value = None
         harness._task_graph_runtime = mock_tgr
         result = harness.ensure_task_registered(_make_task("new-task"))
         assert result is True
-        mock_tgr.register_task.assert_called_once()
+        mock_tgr.register_canonical_task.assert_called_once()
 
     def test_ensure_task_already_registered(self):
         from core.scheduling_truth_harness import SchedulingTruthHarness
 
         harness = SchedulingTruthHarness()
         mock_tgr = MagicMock()
-        mock_tgr.get_task.return_value = {"task_id": "existing"}
+        mock_tgr.get_node_by_task_id.return_value = {"task_id": "existing"}
         harness._task_graph_runtime = mock_tgr
         result = harness.ensure_task_registered(_make_task("existing"))
         assert result is True
-        mock_tgr.register_task.assert_not_called()
+        mock_tgr.register_canonical_task.assert_not_called()
 
     def test_query_routable_executors_no_policy(self):
         from core.scheduling_truth_harness import SchedulingTruthHarness
@@ -177,7 +177,7 @@ class TestSchedulingTruthHarness:
 
         harness = SchedulingTruthHarness()
         mock_tgr = MagicMock()
-        mock_tgr.get_task.return_value = None
+        mock_tgr.get_node_by_task_id.return_value = None
         harness._task_graph_runtime = mock_tgr
         result = harness.assert_convergence(_make_task("unregistered-task"))
         # Should note that task is not registered
