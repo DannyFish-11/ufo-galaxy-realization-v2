@@ -79,7 +79,9 @@ class ClientDisconnectGuardMiddleware:
                     client_gone = True
                     logger.debug(
                         "客户端提前断开,丢弃响应写入 (%s %s): %s",
-                        scope.get("method"), scope.get("path"), exc,
+                        scope.get("method"),
+                        scope.get("path"),
+                        exc,
                     )
                     return
                 raise
@@ -92,7 +94,9 @@ class ClientDisconnectGuardMiddleware:
             if is_client_disconnect_error(exc):
                 logger.debug(
                     "客户端提前断开,请求提前终止 (%s %s): %s",
-                    scope.get("method"), scope.get("path"), exc,
+                    scope.get("method"),
+                    scope.get("path"),
+                    exc,
                 )
                 return
             raise

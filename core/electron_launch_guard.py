@@ -168,8 +168,11 @@ def repair_electron_binary(electron_dir: str) -> bool:
         env = os.environ.copy()
         if mirror:
             env["ELECTRON_MIRROR"] = mirror
-        _log("检测到 Electron 运行时二进制缺失,正在补下载(node electron/install.js"
-             + (", npmmirror 镜像" if mirror else "") + ",可能数分钟)…")
+        _log(
+            "检测到 Electron 运行时二进制缺失,正在补下载(node electron/install.js"
+            + (", npmmirror 镜像" if mirror else "")
+            + ",可能数分钟)…"
+        )
         try:
             subprocess.run([node, install_js], cwd=pkg, env=env, timeout=900)
         except Exception:  # noqa: BLE001 —— 尽力而为,以复检结果为准
@@ -184,8 +187,11 @@ def electron_binary_fix_hint(electron_dir: str = "electron") -> str:
     """自动修复失败时,给用户一条【可直接照抄执行】的修复指令(而不是让用户猜)。"""
     win = os.name == "nt"
     rm = r"rmdir /s /q node_modules\electron" if win else "rm -rf node_modules/electron"
-    setm = ("set ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/&& "
-            if win else "ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ ")
+    setm = (
+        "set ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/&& "
+        if win
+        else "ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ "
+    )
     return (
         "Electron 运行时二进制缺失/损坏(node_modules/electron/dist 未下载完整),自动修复未成功。\n"
         f"手动修复(任选其一,在 {electron_dir}/ 目录下执行):\n"

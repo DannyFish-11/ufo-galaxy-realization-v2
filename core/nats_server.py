@@ -43,9 +43,7 @@ class EmbeddedNATSServer:
                     "Install nats-server manually or set GALAXY_NATS_ENABLED=false"
                 )
                 self.last_error = "nats-server 未安装且自动安装失败"
-                self.last_error_hint = (
-                    "手动安装 nats-server(https://nats.io)或设 GALAXY_NATS_ENABLED=false 关闭"
-                )
+                self.last_error_hint = "手动安装 nats-server(https://nats.io)或设 GALAXY_NATS_ENABLED=false 关闭"
                 return False
 
         # 启动
