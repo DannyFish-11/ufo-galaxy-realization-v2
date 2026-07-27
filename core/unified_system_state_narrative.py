@@ -323,7 +323,7 @@ def _build_overall_runtime_state() -> NarrativeDimension:
     is_canonical = False
 
     try:
-        from core.runtime_readiness_matrix import ReadinessMatrix, MatrixVerdict
+        from core.runtime_readiness_matrix import MatrixVerdict, ReadinessMatrix
 
         matrix = ReadinessMatrix()
         verdict = matrix.evaluate()
