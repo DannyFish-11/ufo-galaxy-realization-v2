@@ -91,7 +91,11 @@ async function fetchConfig(): Promise<FrontendConfig> {
       '读取配置',
     );
   }
-  const r = await fetchWithTimeout('/api/config', {}, 15000);
+  // 浏览器预览兜底:面板经 loadFile 以 file:// origin 加载,相对路径 '/api/config'
+  // 会解析成 file:///api/config、100% 失败(SettingsTab 同类 bug 早已改为
+  // getBackendUrl,这里当时漏改)。
+  const base = await getBackendUrl();
+  const r = await fetchWithTimeout(`${base}/api/config`, {}, 15000);
   if (!r.ok) throw new Error(`/api/config ${r.status}`);
   return r.json();
 }
@@ -133,7 +137,8 @@ async function saveConfig(changed: Record<string, string>): Promise<{ success: b
   // 浏览器预览兜底路径(无 galaxyAPI,无 Electron 中间层/重试预算):这里的
   // fetchWithTimeout(...20000) 保持不变——没有 main.js 的重试层,后端未起来时
   // fetch() 会直接 ECONNREFUSED(近乎瞬时),20s 绰绰有余,与本 bug 无关。
-  const r = await fetchWithTimeout('/api/config', {
+  const base = await getBackendUrl();
+  const r = await fetchWithTimeout(`${base}/api/config`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ config: changed }),
