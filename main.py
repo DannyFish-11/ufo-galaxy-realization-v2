@@ -13,6 +13,15 @@ import os
 # (不覆盖已存在的真实 shell/系统环境变量，尊重用户显式导出的优先级更高)。
 try:
     from dotenv import dotenv_values
+    # 密钥库注水:设置面板把 API Key 等 secret 写进 runtime/secrets.env(而非
+    # .env,见 core/config_store.py),此前重启后无人把它注回 os.environ ——
+    # 直读 os.getenv 的路径(含面板"已配置"角标)统统看不到,表现为"Key 存了,
+    # 重启后又显示未配置"。与 .env 同一套纪律先行加载(非空、非 # 毒值、不
+    # 覆盖已存在键 —— shell 显式导出仍最高;面板保存的最新真值先到先得)。
+    _secrets_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "runtime", "secrets.env")
+    for _k, _v in (dotenv_values(_secrets_path) or {}).items():
+        if _v and not _v.lstrip().startswith("#") and _k not in os.environ:
+            os.environ[_k] = _v
     _env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
     # 关键:不能用 load_dotenv() 整个灌进去——设置面板自动生成的 .env 会把
     # 【全部】schema 键写成 KEY=(空值)。空字符串一旦进了 os.environ,就会把
