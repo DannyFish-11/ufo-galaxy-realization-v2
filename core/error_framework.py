@@ -373,6 +373,47 @@ def error_boundary(
     return decorator
 
 
+# ───────────────────── 客户端断开识别 ─────────────────────
+
+# 根因(Windows 真机日志):面板保存请求被 Electron 主进程的 8s 单次尝试超时
+# (AbortController)提前中断后,BaseHTTPMiddleware 仍继续向已关闭的 transport
+# 写响应体,winloop 抛 "RuntimeError: Cannot call write() when UVStream is
+# closing",被通用异常处理器记为「[internal] 未处理的异常 (recovery=abort)」
+# 连刷 5+ 次——但客户端提前断开是正常网络事件,不是内部错误,不应制造恐慌。
+# 这里集中定义「明确的断开特征」,供异常处理器与 ASGI 发送护栏共用一份判定,
+# 刻意保持窄匹配,避免吞掉真实的内部 RuntimeError。
+_CLIENT_DISCONNECT_RUNTIME_MARKERS = (
+    "uvstream is closing",  # winloop/uvloop: Cannot call write() when UVStream is closing
+    "cannot call write()",  # 同上前缀变体 / write after write_eof()
+    "handler is closed",  # uvloop: unable to perform operation ... handler is closed
+    "client disconnected",  # uvicorn h11/httptools 的断开文案
+)
+
+
+def is_client_disconnect_error(exc: BaseException) -> bool:
+    """判断异常是否为「客户端提前断开连接」类瞬态传输错误。
+
+    命中条件(任一):
+      1. starlette 的 ClientDisconnect(读请求体时客户端已断开);
+      2. ConnectionResetError / BrokenPipeError(OS 层连接被对端重置);
+      3. RuntimeError 且消息含明确的 transport 已关闭特征(见上表)。
+    只匹配确定无疑的断开特征——其余异常一律不视为断开,不吞真实错误。
+    """
+    try:
+        from starlette.requests import ClientDisconnect
+
+        if isinstance(exc, ClientDisconnect):
+            return True
+    except ImportError:  # starlette 不可用的极端环境:退化为仅按类型/消息判定
+        pass
+    if isinstance(exc, (ConnectionResetError, BrokenPipeError)):
+        return True
+    if isinstance(exc, RuntimeError):
+        msg = str(exc).lower()
+        return any(marker in msg for marker in _CLIENT_DISCONNECT_RUNTIME_MARKERS)
+    return False
+
+
 # ───────────────────── FastAPI 集成 ─────────────────────
 
 
@@ -489,6 +530,22 @@ def create_error_handlers(app):
 
     @app.exception_handler(Exception)
     async def generic_error_handler(request: Request, exc: Exception):
+        # 已知瞬态错误:客户端提前断开(保存请求被前端超时中断等)后向已关闭
+        # transport 写响应触发的 RuntimeError/ClientDisconnect。这是正常网络
+        # 事件,不记入 ErrorTracker、不再按「[internal] 未处理的异常
+        # (recovery=abort)」告警刷屏,静默降级为 debug 日志。
+        if is_client_disconnect_error(exc):
+            from starlette.responses import Response as _PlainResponse
+
+            logger.debug(
+                "客户端提前断开(%s %s),丢弃响应: %s",
+                request.method,
+                request.url.path,
+                exc,
+            )
+            # 客户端已不在,响应体写不出去;返回空响应仅为满足处理器契约。
+            return _PlainResponse(status_code=204)
+
         ufo_err = GalaxyError(
             message=f"未处理的异常: {exc}",
             category=ErrorCategory.INTERNAL,

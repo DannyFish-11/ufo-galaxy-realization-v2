@@ -21,11 +21,25 @@ if (process.platform === 'win32') {
 // 策略：默认【开启】硬件加速（有独显的机器走 GPU、更流畅）；只有当启动器在检测到
 // GPU 模式反复崩溃后注入 GALAXY_ELECTRON_GPU=0 时，才禁用硬件加速（软件渲染兜底）。
 // 这样按机器实际情况自适应，无需用户手动判断有没有 GPU。
-if (['0', 'false', 'no', 'off'].includes(
-        String(process.env.GALAXY_ELECTRON_GPU || '').trim().toLowerCase())) {
+const SOFTWARE_RENDER = ['0', 'false', 'no', 'off'].includes(
+    String(process.env.GALAXY_ELECTRON_GPU || '').trim().toLowerCase());
+// 第三级降级：GALAXY_ELECTRON_BASIC=1 时放弃透明特效，用不透明小窗承载三态覆盖层
+// （由启动器在"软件渲染也反复崩溃"后注入 —— 功能保留，只丢透明合成）。
+const BASIC_MODE = ['1', 'true', 'yes', 'on'].includes(
+    String(process.env.GALAXY_ELECTRON_BASIC || '').trim().toLowerCase());
+if (SOFTWARE_RENDER || BASIC_MODE) {
     try {
+        // 根因修复（真机日志：切"软件渲染"后 60s 内又崩 5 次 → 放弃）：
+        // app.disableHardwareAcceleration() 只是关掉渲染层的硬件加速，Chromium 仍会
+        // 拉起 GPU 进程做窗口【合成】(compositing)。在无独显的 Windows 上，透明窗口 +
+        // GPU 合成正是崩溃点 —— 所以之前的"软件渲染模式"其实没退出 GPU 合成路径，
+        // 崩的还是同一个地方。必须同时追加 --disable-gpu 与 --disable-gpu-compositing
+        // 命令行开关（等价于用户手动 electron --disable-gpu），才是真正的纯软件渲染。
         app.disableHardwareAcceleration();
-        console.error('[Main] 硬件加速已禁用（软件渲染模式，GALAXY_ELECTRON_GPU=0）');
+        app.commandLine.appendSwitch('disable-gpu');
+        app.commandLine.appendSwitch('disable-gpu-compositing');
+        console.error('[Main] 已禁用硬件加速 + GPU 合成（纯软件渲染' +
+            (BASIC_MODE ? '，且启用不透明 basic 窗口降级' : '，GALAXY_ELECTRON_GPU=0') + '）');
     } catch (_e) { /* older electron may not support; non-fatal */ }
 }
 
@@ -263,16 +277,28 @@ function _isValidPerceptionBase64(data) {
     return typeof data === 'string' && data.length > 0 && data.length <= MAX_PERCEPTION_PAYLOAD_SIZE;
 }
 
+// 覆盖层几何：透明模式=整块主屏；basic 模式=右下角不透明小窗（不遮桌面）。
+// setOverlayPhase 的重定位也复用这里，保证两处几何永远一致。
+function _overlayBounds() {
+    let b = { x: 0, y: 0, width: 1920, height: 1080 };
+    try {
+        b = screen.getPrimaryDisplay().bounds;
+    } catch (e) { /* app 未就绪时兜底；实际调用都在 whenReady 后 */ }
+    if (BASIC_MODE) {
+        // 不透明窗口若还整屏覆盖会把桌面全挡死，故收缩为右下角挂件尺寸。
+        const W = Math.min(460, b.width), H = Math.min(280, b.height);
+        return { x: b.x + b.width - W - 16, y: b.y + b.height - H - 16, width: W, height: H };
+    }
+    return b;
+}
+
 function createWindow() {
     // ── 覆盖层尺寸：用主显示器实际 bounds，而非 fullscreen:true ──
     // 关键修复（「唤不起来/打不开」根因之一）：在 Windows 上 transparent:true 与
     // fullscreen:true 同时开启极易出问题——尤其笔记本双显卡/混合输出，OS 独占全屏与
     // 透明合成冲突，窗口经常【全黑】或【根本不显示】。改成「无边框 + 覆盖整块屏幕 bounds」
     // 的覆盖层（视觉上等同全屏，但不触发 OS 独占全屏），是透明置顶覆盖层的稳健做法。
-    let bounds = { x: 0, y: 0, width: 1920, height: 1080 };
-    try {
-        bounds = screen.getPrimaryDisplay().bounds;
-    } catch (e) { /* app 未就绪时兜底；createWindow 实际在 whenReady 后调用 */ }
+    const bounds = _overlayBounds();
 
     mainWindow = new BrowserWindow({
         x: bounds.x,
@@ -281,17 +307,20 @@ function createWindow() {
         height: bounds.height,
         icon: ICON_PATH,
         frame: false,
-        transparent: true,
+        // 第三级降级根因：透明窗口在部分无独显 Windows 上连纯软件渲染都撑不住
+        //（DWM 分层窗口路径本身出问题）。BASIC 模式改用不透明窗口 —— 三态覆盖层
+        // 功能全部保留，只丢"透明特效"这一层，绝不因此放弃整个桌面壳。
+        transparent: !BASIC_MODE,
         alwaysOnTop: true,
         fullscreen: false,          // 见上：不用 OS 独占全屏，改用 bounds 覆盖
         skipTaskbar: true,
-        hasShadow: false,
+        hasShadow: BASIC_MODE,
         resizable: false,
         movable: false,
         closable: true,
         focusable: true,
         show: false,
-        backgroundColor: '#00000000',
+        backgroundColor: BASIC_MODE ? '#0b0d14' : '#00000000',
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
@@ -757,7 +786,9 @@ function setOverlayPhase(awake) {
             // 幂等地「显示并置顶」：重定位到主屏 bounds（防止被移到屏外）、显示、全工作区可见、
             // 顶到 screen-saver 层。即使本来就可见，再调用一次也只是确保它在最前、看得见。
             try {
-                mainWindow.setBounds(screen.getPrimaryDisplay().bounds);
+                // 复用 _overlayBounds()：basic(不透明)模式是右下角小窗，不能在唤醒时
+                // 被错误地拉成整屏不透明把桌面全挡死。
+                mainWindow.setBounds(_overlayBounds());
             } catch (e) { /* ignore */ }
             mainWindow.show();
             mainWindow.setAlwaysOnTop(true, 'screen-saver');

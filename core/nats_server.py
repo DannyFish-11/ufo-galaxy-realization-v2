@@ -23,6 +23,12 @@ class EmbeddedNATSServer:
         self.port = port
         self.process = None
         self.data_dir = Path.home() / ".lumiv" / "nats"
+        # 诚实性修复(所有者 Windows 真机实证):start() 失败时只 return False,
+        # 具体原因(如 WinError 4551 被 WDAC 拦截)只进日志,调用方无从得知、
+        # 启动横幅照打 ✓。这里把"失败原因 + 专属修复指引"暴露成实例属性,
+        # 供 unified_launcher 启动横幅如实降级展示。
+        self.last_error: str = ""
+        self.last_error_hint: str = ""
 
     async def start(self) -> bool:
         """启动内置NATS服务器"""
@@ -35,6 +41,10 @@ class EmbeddedNATSServer:
                 logger.warning(
                     "nats-server not available — cross-device bus disabled. "
                     "Install nats-server manually or set GALAXY_NATS_ENABLED=false"
+                )
+                self.last_error = "nats-server 未安装且自动安装失败"
+                self.last_error_hint = (
+                    "手动安装 nats-server(https://nats.io)或设 GALAXY_NATS_ENABLED=false 关闭"
                 )
                 return False
 
@@ -63,6 +73,7 @@ class EmbeddedNATSServer:
                 if self.process.poll() is not None:
                     stderr = self.process.stderr.read().decode() if self.process.stderr else ""
                     logger.error("NATS server exited: %s", stderr[:200])
+                    self.last_error = f"nats-server 进程启动后立即退出 {stderr[:200]}".strip()
                     return False
                 # 测试连接
                 try:
@@ -74,6 +85,7 @@ class EmbeddedNATSServer:
                     continue
             else:
                 logger.error("NATS server failed to start within 15s")
+                self.last_error = "nats-server 15 秒内未就绪(端口未接受连接)"
                 return False
 
             os.environ["GALAXY_NATS_URL"] = f"nats://localhost:{self.port}"
@@ -82,6 +94,19 @@ class EmbeddedNATSServer:
 
         except Exception as exc:
             logger.error("Failed to start NATS server: %s", exc)
+            # 根因(所有者 Windows 真机日志):Popen 抛 [WinError 4551]"应用程序
+            # 控制策略已阻止此文件"—— Windows 智能应用控制(Smart App Control)/
+            # WDAC 拦截了未签名的 nats-server.exe,二进制根本没被允许执行。
+            # 此前该原因只进日志就 return False,启动横幅仍打 "✓ 消息总线"。
+            self.last_error = str(exc) or repr(exc)
+            _msg = str(exc)
+            if getattr(exc, "winerror", None) == 4551 or "WinError 4551" in _msg or "应用程序控制策略" in _msg:
+                _exe = shutil.which("nats-server") or str(Path.home() / ".lumiv" / "bin" / "nats-server.exe")
+                self.last_error_hint = (
+                    "Windows 智能应用控制(Smart App Control)/WDAC 拦截了未签名的 nats-server.exe。"
+                    f"修复:Windows 安全中心 → 应用和浏览器控制 → 允许 {_exe} 运行后重启;"
+                    "或单机使用保持 GALAXY_NATS_ENABLED=false(系统自动降级为进程内总线,仅跨设备分发不可用)"
+                )
             return False
 
     async def _install(self) -> bool:

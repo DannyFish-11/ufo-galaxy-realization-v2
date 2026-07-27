@@ -450,13 +450,14 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
     try:
         from core.performance import (
             CachingMiddleware,
+            ClientDisconnectGuardMiddleware,
             RateLimitMiddleware,
             RequestTimerMiddleware,
             ResponseCompressor,
         )
 
         # 中间件按添加的逆序执行（最后添加的最先执行）
-        # 执行顺序：Timer → RateLimit → Compress → Cache → Handler
+        # 执行顺序：DisconnectGuard → Timer → RateLimit → Compress → Cache → Handler
 
         if cache:
             default_ttl = int(os.environ.get("REDIS_HTTP_CACHE_TTL", "30"))
@@ -476,7 +477,14 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
         app.add_middleware(RequestTimerMiddleware, slow_threshold_ms=slow_threshold)
         logger.info("请求计时中间件已加载")
 
-        results["performance"] = {"status": "ok", "middlewares": 4 if cache else 3}
+        # 最后添加 = 最外层执行:客户端断开写保护必须包住整条 BaseHTTPMiddleware
+        # 链(压缩/缓存/计时都会向 transport 写响应体),否则客户端提前断开后
+        # winloop 的 "Cannot call write() when UVStream is closing" 会作为未处理
+        # 异常刷屏(Windows 真机日志实证,详见 ClientDisconnectGuardMiddleware)。
+        app.add_middleware(ClientDisconnectGuardMiddleware)
+        logger.info("客户端断开写保护中间件已加载(最外层)")
+
+        results["performance"] = {"status": "ok", "middlewares": 5 if cache else 4}
     except Exception as e:
         logger.debug("Fallback triggered: %s", e)
         results["performance"] = {"status": "degraded", "error": str(e)}

@@ -666,6 +666,25 @@ class SystemOrchestrator:
                     detail="npm install timed out after 120s",
                 )
 
+        # 拉起前核实到【运行时二进制】——真机根因("依赖残缺后补齐"仍闪退循环):
+        # electron 包目录已存在时 npm install 会【跳过 postinstall】,缺失的
+        # dist/electron.exe 永远补不回来,electron 启动即打印 "Electron failed to
+        # install correctly" 退出。repair_electron_binary 直接跑包自带 install.js
+        # (官方源失败换 npmmirror 镜像)补二进制;仍失败则降级并给出可照抄执行的
+        # 确切修复指令,而不是拉起一个必然立即退出的进程进崩溃循环。
+        if not electron_package_intact(electron_dir):
+            from core.electron_launch_guard import (
+                electron_binary_fix_hint,
+                repair_electron_binary,
+            )
+
+            if not repair_electron_binary(electron_dir):
+                return PhaseResult(
+                    phase=StartupPhase.DESKTOP_SURFACE,
+                    status=PhaseStatus.DEGRADED,
+                    detail=electron_binary_fix_hint("electron"),
+                )
+
         # Launch Electron as detached subprocess
         try:
             env = os.environ.copy()

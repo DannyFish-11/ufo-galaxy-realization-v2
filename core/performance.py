@@ -36,6 +36,69 @@ logger = logging.getLogger("Galaxy.Performance")
 
 
 # ============================================================================
+# 0. 客户端断开写保护(纯 ASGI,必须位于中间件链最外层)
+# ============================================================================
+
+
+class ClientDisconnectGuardMiddleware:
+    """吞掉「客户端提前断开」后的响应写失败——挂在中间件链最外层的纯 ASGI 护栏。
+
+    根因(Windows 真机日志实证):面板保存 API Key 时,Electron 主进程的
+    fetchWithRetry 单次尝试 8s 即 abort 断开重试,而后端 POST /api/config 此前
+    要同步等 LLM 路由网络探测(>8s)才返回——BaseHTTPMiddleware 链(压缩/缓存/
+    计时等)在客户端已断开后仍向 transport 写响应体,winloop 抛
+    "RuntimeError: Cannot call write() when UVStream is closing" 连刷 5+ 次,
+    还被通用异常处理器记成内部错误制造恐慌。
+
+    此护栏包裹底层 send:仅当异常命中 core.error_framework.
+    is_client_disconnect_error() 的【明确断开特征】时静默降级为 debug 日志并
+    丢弃后续写入;其余异常原样上抛,不吞真实错误。必须用纯 ASGI 实现(而非
+    BaseHTTPMiddleware),否则它自己也会经由 send 写响应、重蹈覆辙。
+    """
+
+    def __init__(self, app: ASGIApp):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        client_gone = False
+
+        async def guarded_send(message):
+            nonlocal client_gone
+            if client_gone:
+                return  # transport 已确认关闭,静默丢弃剩余帧,不再触发写异常
+            try:
+                await send(message)
+            except Exception as exc:  # noqa: BLE001 — 仅窄匹配断开特征,其余照抛
+                from core.error_framework import is_client_disconnect_error
+
+                if is_client_disconnect_error(exc):
+                    client_gone = True
+                    logger.debug(
+                        "客户端提前断开,丢弃响应写入 (%s %s): %s",
+                        scope.get("method"), scope.get("path"), exc,
+                    )
+                    return
+                raise
+
+        try:
+            await self.app(scope, receive, guarded_send)
+        except Exception as exc:  # noqa: BLE001 — 同上,窄匹配
+            from core.error_framework import is_client_disconnect_error
+
+            if is_client_disconnect_error(exc):
+                logger.debug(
+                    "客户端提前断开,请求提前终止 (%s %s): %s",
+                    scope.get("method"), scope.get("path"), exc,
+                )
+                return
+            raise
+
+
+# ============================================================================
 # 1. 响应压缩中间件
 # ============================================================================
 
