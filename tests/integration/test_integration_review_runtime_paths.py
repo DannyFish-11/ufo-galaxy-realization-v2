@@ -418,9 +418,7 @@ class TestTaskResultFailureStatus:
             f"'failed' (normalize_status maps error→failed). Got status={raw_status!r}.  "
             "The center must be able to distinguish failures from 'completed'."
         )
-        assert raw_status != "completed", (
-            "failure results must never be silently accepted as success"
-        )
+        assert raw_status != "completed", "failure results must never be silently accepted as success"
 
     @pytest.mark.asyncio
     async def test_task_result_cancelled_status_resolves_future_with_cancelled_status(self, bridge: Any) -> None:

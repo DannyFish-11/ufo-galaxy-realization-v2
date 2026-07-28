@@ -56,6 +56,12 @@ const GALAXY_API_SHIM: &str = r#"
     platform: '__PLATFORM__',
     getConfig: function () { return invoke('get_config'); },
     getSettings: function () { return invoke('get_settings'); },
+    getBackendStatus: function () { return invoke('get_backend_status'); },
+    startBackend: function () { return invoke('start_backend'); },
+    getRuntimeStatus: function () { return invoke('get_runtime_status'); },
+    testRuntime: function (runtime) { return invoke('test_runtime', { runtime: String(runtime || '') }); },
+    saveRuntime: function (runtime) { return invoke('save_runtime', { runtime: String(runtime || '') }); },
+    getConfigSaveTimeoutMs: function () { return invoke('get_config_save_timeout_ms'); },
     setConfig: function (config) { return invoke('set_config', { config: config }); },
     onConfigUpdate: function (cb) { var un = null; listen('galaxy:config-update', cb).then(function (f) { un = f; }); return function () { if (un) un(); }; },
     onConfigReady: function (cb) { var un = null; listen('galaxy:config-ready', cb).then(function (f) { un = f; }); return function () { if (un) un(); }; },
@@ -569,10 +575,14 @@ fn toggle_panel_cmd(app: AppHandle) {
 #[tauri::command]
 async fn set_config(app: AppHandle, state: State<'_, AppState>, config: Value) -> Result<Value, String> {
     let base = state.gateway_base.clone();
+    // 后端 ConfigUpdateRequest 的体格式是 {"config": {KEY: VALUE}}(见
+    // core/routes/config.py)——此前这里直接 .json(&config) 发裸 {KEY: VALUE},
+    // FastAPI 校验必 422,Tauri 壳下保存 API Key 100% 失败("Backend rejected
+    // config")。Electron 的 IPC 层(main.js galaxy:set-config)一直是包壳发送的。
     match state
         .http
         .post(format!("{base}/api/config"))
-        .json(&config)
+        .json(&json!({ "config": config }))
         .send()
         .await
     {
@@ -616,6 +626,188 @@ async fn save_config(state: State<'_, AppState>) -> Result<Value, String> {
         Ok(resp) => Ok(json!({ "success": resp.status().is_success() })),
         Err(e) => Ok(json!({ "success": false, "error": e.to_string() })),
     }
+}
+
+// ─────────────── Electron 对齐补全:后端状态 / 拉起 / 容器运行时桥 ───────────────
+// 此前 Tauri 壳缺 6 个 galaxyAPI 方法(getBackendStatus/startBackend/
+// getRuntimeStatus/testRuntime/saveRuntime/getConfigSaveTimeoutMs),面板对应
+// 功能(网关离线横幅/重试启动网关/容器运行时选择)在 Tauri 下静默降级或失效。
+// 逐一按 electron/main.js 的语义补齐。
+
+/// 与 electron/main.js 对齐:CONFIG_FETCH_BUDGET_MS(60s)+ATTEMPT(8s)+MARGIN(10s)。
+#[tauri::command]
+fn get_config_save_timeout_ms() -> u64 {
+    78000
+}
+
+#[tauri::command]
+async fn get_backend_status(state: State<'_, AppState>) -> Result<Value, String> {
+    let base = state.gateway_base.clone();
+    let healthy = matches!(
+        state
+            .http
+            .get(format!("{base}/health"))
+            .timeout(std::time::Duration::from_millis(2500))
+            .send()
+            .await,
+        Ok(resp) if resp.status().is_success()
+    );
+    Ok(json!({ "ok": true, "healthy": healthy }))
+}
+
+/// 仓库根定位:从可执行文件路径向上找 main.py(开发态 target/{debug,release} 深四层),
+/// 兜底当前目录。
+fn project_root() -> std::path::PathBuf {
+    let mut candidates: Vec<std::path::PathBuf> = Vec::new();
+    if let Ok(exe) = std::env::current_exe() {
+        let mut p = exe.as_path();
+        while let Some(parent) = p.parent() {
+            candidates.push(parent.to_path_buf());
+            p = parent;
+        }
+    }
+    if let Ok(cwd) = std::env::current_dir() {
+        candidates.push(cwd);
+    }
+    for c in &candidates {
+        if c.join("main.py").is_file() && c.join("electron").is_dir() {
+            return c.clone();
+        }
+    }
+    std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
+}
+
+fn python_exec() -> String {
+    for var in ["GALAXY_PYTHON_EXECUTABLE", "PYTHON"] {
+        if let Ok(v) = std::env::var(var) {
+            if !v.trim().is_empty() {
+                return v.trim().to_string();
+            }
+        }
+    }
+    if cfg!(windows) { "python".into() } else { "python3".into() }
+}
+
+/// 拉起后端(等价 electron ensureGatewayOnline 的 spawn 部分)并轮询 /health
+/// 直至就绪或超时(90s,对齐 BACKEND_START_TIMEOUT_MS)。
+#[tauri::command]
+async fn start_backend(state: State<'_, AppState>) -> Result<Value, String> {
+    let base = state.gateway_base.clone();
+    let probe = |client: reqwest::Client, base: String| async move {
+        matches!(
+            client
+                .get(format!("{base}/health"))
+                .timeout(std::time::Duration::from_millis(2500))
+                .send()
+                .await,
+            Ok(r) if r.status().is_success()
+        )
+    };
+    if probe(state.http.clone(), base.clone()).await {
+        return Ok(json!({ "ok": true, "healthy": true, "already_running": true }));
+    }
+
+    let root = project_root();
+    let port = base.rsplit(':').next().unwrap_or("9000").to_string();
+    let spawn_res = std::process::Command::new(python_exec())
+        .args([
+            "launch_desktop.py",
+            "--backend",
+            "--skip-check",
+            "--skip-model-download",
+            "--no-interactive",
+        ])
+        .current_dir(&root)
+        .env("GALAXY_GATEWAY_PORT", &port)
+        .env("PORT", &port)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn();
+    if let Err(e) = spawn_res {
+        return Ok(json!({ "ok": false, "error": format!("spawn failed: {e}") }));
+    }
+
+    // 轮询至 90s(1.5s 间隔),与 Electron 的启动预算一致。
+    for _ in 0..60 {
+        tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+        if probe(state.http.clone(), base.clone()).await {
+            return Ok(json!({ "ok": true, "healthy": true }));
+        }
+    }
+    Ok(json!({ "ok": false, "healthy": false, "error": "backend did not become healthy within 90s" }))
+}
+
+/// 与 electron/main.js 的 _RUNTIME_BRIDGE_SCRIPT 逐字一致(共享 core.container_runtime)。
+const RUNTIME_BRIDGE_SCRIPT: &str = r#"
+import json, sys
+from core import container_runtime as cr
+action = sys.argv[1] if len(sys.argv) > 1 else "status"
+payload = {}
+if len(sys.argv) > 2:
+    try:
+        payload = json.loads(sys.argv[2])
+    except Exception:
+        payload = {}
+if action == "status":
+    out = cr.inspect_runtime_state()
+elif action == "test":
+    out = cr.test_runtime(str(payload.get("runtime", "")))
+elif action == "save":
+    out = cr.set_runtime_choice(str(payload.get("runtime", "")), source="tauri-panel")
+else:
+    out = {"ok": False, "error": f"unknown action: {action}"}
+print(json.dumps(out, ensure_ascii=False))
+"#;
+
+fn run_runtime_bridge(action: &str, payload: Value) -> Value {
+    let out = std::process::Command::new(python_exec())
+        .args(["-c", RUNTIME_BRIDGE_SCRIPT, action, &payload.to_string()])
+        .current_dir(project_root())
+        .output();
+    match out {
+        Err(e) => json!({ "ok": false, "error": e.to_string() }),
+        Ok(o) if !o.status.success() => {
+            let err = String::from_utf8_lossy(&o.stderr).trim().to_string();
+            json!({ "ok": false, "error": if err.is_empty() { format!("python exited with {:?}", o.status.code()) } else { err } })
+        }
+        Ok(o) => {
+            let stdout = String::from_utf8_lossy(&o.stdout);
+            let tail = stdout.lines().map(str::trim).filter(|l| !l.is_empty()).last().unwrap_or("{}");
+            serde_json::from_str(tail)
+                .unwrap_or_else(|_| json!({ "ok": false, "error": "runtime bridge output parse failed" }))
+        }
+    }
+}
+
+#[tauri::command]
+async fn get_runtime_status() -> Result<Value, String> {
+    Ok(tauri::async_runtime::spawn_blocking(|| run_runtime_bridge("status", json!({})))
+        .await
+        .unwrap_or_else(|e| json!({ "ok": false, "error": e.to_string() })))
+}
+
+#[tauri::command]
+async fn test_runtime(runtime: String) -> Result<Value, String> {
+    if !["docker", "podman"].contains(&runtime.as_str()) {
+        return Ok(json!({ "ok": false, "error": "invalid runtime" }));
+    }
+    Ok(tauri::async_runtime::spawn_blocking(move || {
+        run_runtime_bridge("test", json!({ "runtime": runtime }))
+    })
+    .await
+    .unwrap_or_else(|e| json!({ "ok": false, "error": e.to_string() })))
+}
+
+#[tauri::command]
+async fn save_runtime(runtime: String) -> Result<Value, String> {
+    if !["docker", "podman"].contains(&runtime.as_str()) {
+        return Ok(json!({ "ok": false, "error": "invalid runtime" }));
+    }
+    Ok(tauri::async_runtime::spawn_blocking(move || {
+        run_runtime_bridge("save", json!({ "runtime": runtime }))
+    })
+    .await
+    .unwrap_or_else(|e| json!({ "ok": false, "error": e.to_string() })))
 }
 
 // ─────────────────────────────── 入口 ───────────────────────────────
@@ -690,6 +882,12 @@ fn main() {
             get_settings,
             set_config,
             save_config,
+            get_backend_status,
+            start_backend,
+            get_runtime_status,
+            test_runtime,
+            save_runtime,
+            get_config_save_timeout_ms,
             toggle_panel_cmd
         ])
         .setup(|app| {

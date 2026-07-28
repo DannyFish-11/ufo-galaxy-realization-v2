@@ -139,8 +139,7 @@ def register_autostart(
 
     except PermissionError as exc:
         logger.error(
-            "Permission denied writing to registry. "
-            "Try running as administrator: %s",
+            "Permission denied writing to registry. " "Try running as administrator: %s",
             exc,
         )
         return False

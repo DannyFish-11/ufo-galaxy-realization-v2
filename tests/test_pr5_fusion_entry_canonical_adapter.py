@@ -399,9 +399,7 @@ class TestNodesRouteAdapterRefactor:
             # calling _load_node / _execute_node directly.",裸子串匹配把注释
             # 也算成"直接调用",属误报。契约本身(不 import/不调用这两个
             # 内部助手)未变——先剥掉 # 注释再匹配活跃代码。
-            active_src = "\n".join(
-                line.split("#", 1)[0] for line in src.splitlines()
-            )
+            active_src = "\n".join(line.split("#", 1)[0] for line in src.splitlines())
             assert "_load_node" not in active_src and "_execute_node" not in active_src
         except ImportError:
             pytest.skip("fastapi not available")

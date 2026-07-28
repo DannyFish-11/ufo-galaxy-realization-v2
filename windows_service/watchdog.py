@@ -27,7 +27,7 @@ PID_FILE = Path.home() / ".galaxy" / "watchdog.pid"
 GALAXY_PID_FILE = Path.home() / ".galaxy" / "galaxy.pid"
 HEARTBEAT_FILE = Path.home() / ".galaxy" / "heartbeat"
 TIMEOUT_SECONDS = 60  # 60 seconds without heartbeat = dead
-CHECK_INTERVAL = 10   # Check every 10 seconds
+CHECK_INTERVAL = 10  # Check every 10 seconds
 
 
 def run_watchdog():
@@ -66,9 +66,7 @@ def run_watchdog():
             continue
 
         if elapsed > TIMEOUT_SECONDS:
-            logger.error(
-                "Galaxy unresponsive for %.0fs, killing and restarting", elapsed
-            )
+            logger.error("Galaxy unresponsive for %.0fs, killing and restarting", elapsed)
             _kill_galaxy()
             time.sleep(2)
             _restart_galaxy()

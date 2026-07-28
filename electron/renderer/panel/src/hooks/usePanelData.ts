@@ -4,7 +4,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { getBackendUrl } from '@/lib/api';
+import { subscribePresence } from '@/lib/presenceSocket';
 import { _mapPhaseToken } from './usePhase';
 import type { Phase } from '@/types/phase';
 
@@ -330,36 +330,21 @@ export function usePanelData(): UsePanelDataReturn {
     if (cleanup) handlerRef.current = cleanup;
     setLoading(false);
 
-    // 推代替拉（主通道）:直连后端 /ws/desktop-presence,消费 panel_feed 推送帧。
-    // 后端在任意状态事件(设备/任务/技能/mesh…)后防抖推送【整份 feed】——
+    // 推代替拉（主通道）:经共享单例连接消费 panel_feed 推送帧(收敛修复:
+    // 此前这里自建第二条 WebSocket 连同一端点,与 useWebSocket 的连接并存,
+    // 后端每次广播发两遍;现在两个消费方共用 lib/presenceSocket 一条连接,
+    // 各按帧类型自取)。后端在任意状态事件后防抖推送【整份 feed】——
     // 事件→UI 毫秒级;Electron 主进程的慢轮询(已降频 30s)只作断线兜底。
-    let ws: WebSocket | null = null;
-    let wsRetry: ReturnType<typeof setTimeout> | undefined;
-    let disposed = false;
-    const connectWs = async () => {
-      try {
-        const base = await getBackendUrl();
-        if (disposed) return;
-        ws = new WebSocket(base.replace(/^http/, 'ws') + '/ws/desktop-presence');
-        ws.onmessage = (ev) => {
-          try {
-            const msg = JSON.parse(ev.data);
-            if (msg?.type === 'panel_feed' && msg.feed) handleState(msg.feed);
-          } catch { /* 非 JSON / 其它帧类型忽略(state_event 由 useWebSocket 消费) */ }
-        };
-        ws.onclose = () => { if (!disposed) wsRetry = setTimeout(connectWs, 3000); };
-        ws.onerror = () => { try { ws?.close(); } catch { /* noop */ } };
-      } catch { if (!disposed) wsRetry = setTimeout(connectWs, 3000); }
-    };
-    connectWs();
+    const unsubscribePresence = subscribePresence((msg) => {
+      if (msg?.type === 'panel_feed' && msg.feed) handleState(msg.feed);
+      // 其它帧类型(state_event 等)由 useWebSocket 消费,这里忽略
+    });
 
     return () => {
-      // 取消 IPC 订阅 + 关闭 WS 推送通道
+      // 取消 IPC 订阅 + 退订共享 WS 通道
       if (handlerRef.current) handlerRef.current();
       handlerRef.current = null;
-      disposed = true;
-      if (wsRetry) clearTimeout(wsRetry);
-      try { ws?.close(); } catch { /* noop */ }
+      unsubscribePresence();
     };
   }, []);
 

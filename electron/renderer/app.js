@@ -72,8 +72,13 @@ class GalaxyRenderer {
       window.galaxyAPI.onBackendState((payload) => this._onStateEvent(payload));
       console.log('[Galaxy] IPC backend connected');
     } else {
-      // 浏览器预览模式：fallback 到 WebSocket
-      this._wsConnect('ws://localhost:9000/ws/desktop-presence');
+      // 浏览器预览模式：fallback 到 WebSocket。
+      // 端口不再写死 9000：优先注入的全局值，其次 ?gwport= 查询参数，最后才是默认口
+      // （main.js/preload 有完整的 GALAXY_GATEWAY_PORT 解析链，这里此前完全无视它）。
+      const gwPort = (typeof window !== 'undefined' && window.GALAXY_GATEWAY_PORT)
+        || new URLSearchParams(location.search).get('gwport')
+        || 9000;
+      this._wsConnect(`ws://localhost:${gwPort}/ws/desktop-presence`);
     }
   }
 
