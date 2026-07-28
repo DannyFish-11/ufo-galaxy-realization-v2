@@ -615,8 +615,15 @@ class CanonicalSessionTruthRuntime:
         """
         self._snapshot_store = store
 
-    def record(self, rec: CanonicalSessionTruthRecord) -> CanonicalSessionTruthRecord:
+    def record(self, rec: CanonicalSessionTruthRecord, persist: bool = True) -> CanonicalSessionTruthRecord:
         """Add *rec* to the ring buffer and return it.
+
+        persist
+            When ``False``, the record is admitted to the in-memory ring buffer
+            but NOT written back to the durable audit/snapshot stores.  Used by
+            :func:`restore_session_truth_from_snapshot` — those records were
+            *loaded from* the snapshot, so re-appending them re-persists every
+            record on every restart (unbounded snapshot/audit growth + dupes).
 
         Ownership admission gate
         ------------------------
@@ -672,8 +679,9 @@ class CanonicalSessionTruthRuntime:
                 self._control_only_count += 1
             if rec.merge_success:
                 self._success_count += 1
-        # Write to durable store outside the lock to avoid potential deadlock
-        if self._audit_store is not None and _append_truth_audit_record is not None:
+        # Write to durable store outside the lock to avoid potential deadlock.
+        # persist=False(恢复回放)时跳过 —— 记录本就是从持久层读出来的。
+        if persist and self._audit_store is not None and _append_truth_audit_record is not None:
             try:
                 _append_truth_audit_record(
                     rec.to_dict(),
@@ -686,7 +694,7 @@ class CanonicalSessionTruthRuntime:
                     _exc,
                 )
         # Write to snapshot store for cross-restart recovery
-        if self._snapshot_store is not None:
+        if persist and self._snapshot_store is not None:
             try:
                 self._snapshot_store.append(rec.to_dict())
             except Exception as _exc:  # noqa: BLE001

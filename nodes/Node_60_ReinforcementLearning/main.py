@@ -8,6 +8,7 @@ logger = logging.getLogger(__name__)
 import os
 import math
 import random
+import collections
 import asyncio
 import logging
 from datetime import datetime
@@ -56,7 +57,9 @@ class RLAgent:
         self.episodes_completed = 0
         self.total_steps = 0
         self.total_reward = 0.0
-        self.episode_rewards: List[float] = []
+        # 有界:只有最近 ~100 条被读(get_stats 切 [-100:]),deque(maxlen) 防每次
+        # /episode 无界增长(长期运行 OOM)。切片/append/clear 语义不变。
+        self.episode_rewards: collections.deque = collections.deque(maxlen=200)
         self.policy_weights: Dict[str, float] = {}
 
     def _state_key(self, state: Any) -> str:
@@ -109,10 +112,9 @@ class RLAgent:
         return policy
 
     def get_stats(self) -> Dict[str, Any]:
-        avg_reward = (
-            sum(self.episode_rewards[-100:]) / len(self.episode_rewards[-100:])
-            if self.episode_rewards else 0.0
-        )
+        # deque 不支持切片([-100:] 会 TypeError),先物化为 list 再取尾窗。
+        _recent = list(self.episode_rewards)[-100:]
+        avg_reward = (sum(_recent) / len(_recent)) if _recent else 0.0
         return {
             "episodes_completed": self.episodes_completed,
             "total_steps": self.total_steps,

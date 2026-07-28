@@ -387,8 +387,10 @@ async def route_new_message(message: Dict[str, Any]):
     if not router:
         raise HTTPException(status_code=503, detail="Router not initialized.")
 
-    # 将字符串优先级转换为枚举成员
-    priority_str = message.get("priority", "LOW").upper()
+    # 将字符串优先级转换为枚举成员。message 是裸 dict(无 pydantic 校验),
+    # priority 若给成非字符串(如 int 3)或 null,.upper() 直接 AttributeError → 500。
+    # 强制转字符串后再规整。
+    priority_str = str(message.get("priority") or "LOW").upper()
     try:
         message["priority"] = MessagePriority[priority_str]
     except KeyError:

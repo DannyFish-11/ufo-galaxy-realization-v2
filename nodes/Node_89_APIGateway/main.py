@@ -17,7 +17,7 @@ import time
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 from contextlib import asynccontextmanager
-from collections import defaultdict, deque
+from collections import OrderedDict, defaultdict, deque
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request, Response
@@ -88,26 +88,57 @@ class MCPCallRequest(BaseModel):
 # =============================================================================
 
 class RateLimiter:
-    """Simple sliding-window in-memory rate limiter."""
+    """Simple sliding-window in-memory rate limiter.
+
+    内存有界:每个见过的 client_ip 都会在字典里留一条窗口,而客户端一去不返
+    (或伪造大量源 IP)时,其 key 永不再被访问、窗口从不被清理 → 无界增长。
+    两道防线:(1) 每次 is_allowed 惰性清扫一批过期(空窗)key;(2) key 总数
+    硬上限,超出时按最久未活动优先驱逐(全空、否则最旧)。
+    """
+
+    _MAX_CLIENTS = 50000
+    _SWEEP_EVERY = 256  # 每 N 次调用做一轮过期清扫(摊销成本)
 
     def __init__(self):
-        # client_key -> deque of request timestamps
-        self._windows: Dict[str, deque] = defaultdict(deque)
+        # client_key -> deque of request timestamps(有序:近似 LRU,新 key 追加在尾)
+        self._windows: "OrderedDict[str, deque]" = OrderedDict()
+        self._calls = 0
+
+    def _sweep_expired(self, cutoff: float) -> None:
+        stale = [k for k, w in self._windows.items() if not w or w[-1] < cutoff]
+        for k in stale:
+            self._windows.pop(k, None)
+
+    def _enforce_cap(self) -> None:
+        while len(self._windows) > self._MAX_CLIENTS:
+            self._windows.popitem(last=False)  # 驱逐最久未活动的
 
     def is_allowed(self, client_key: str, limit: int) -> bool:
         now = time.monotonic()
-        window = self._windows[client_key]
         cutoff = now - 60.0
+        self._calls += 1
+        if self._calls % self._SWEEP_EVERY == 0:
+            self._sweep_expired(cutoff)
+        window = self._windows.get(client_key)
+        if window is None:
+            window = deque()
+            self._windows[client_key] = window
+        else:
+            self._windows.move_to_end(client_key)  # 触达即刷新 LRU 位置
         while window and window[0] < cutoff:
             window.popleft()
         if len(window) >= limit:
             return False
         window.append(now)
+        self._enforce_cap()
         return True
 
     def remaining(self, client_key: str, limit: int) -> int:
         now = time.monotonic()
-        window = self._windows[client_key]
+        # get 而非 defaultdict 索引,避免只读查询凭空建 key。
+        window = self._windows.get(client_key)
+        if not window:
+            return limit
         cutoff = now - 60.0
         count = sum(1 for t in window if t >= cutoff)
         return max(0, limit - count)

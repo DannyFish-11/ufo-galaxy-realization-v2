@@ -404,17 +404,19 @@ PROVIDER_MODEL_MAP: Dict[str, Dict[TaskType, str]] = {
         TaskType.GENERAL: "gemini-3.5-flash",
     },
     "meta": {
-        # Muse Spark 1.1(2026-07-09,Meta Superintelligence Labs):Llama 后继,
-        # Meta Model API 首发唯一模型。多模态推理+agentic(工具/电脑使用/编码),
-        # 1M ctx,OpenAI SDK 兼容(api.meta.ai/v1),$1.25/$4.25 每 M tokens。
-        TaskType.REASONING: "muse-spark-1.1",
-        TaskType.FAST_RESPONSE: "muse-spark-1.1",
-        TaskType.CODING: "muse-spark-1.1",
-        TaskType.CREATIVE: "muse-spark-1.1",
-        TaskType.ANALYSIS: "muse-spark-1.1",
-        TaskType.PLANNING: "muse-spark-1.1",
-        TaskType.AGENT_CONTROL: "muse-spark-1.1",
-        TaskType.GENERAL: "muse-spark-1.1",
+        # 对齐 PROVIDER_REGISTRY['meta'] 的真实模型名(api.llama.com/compat/v1)。
+        # 此前全部映射到 "muse-spark-1.1" —— registry 注释已明确它【并非真实模型】,
+        # 而 map 对每个 TaskType 都有值、消费方永远取 map 值(不落到 default_model),
+        # 于是每个走 meta 的请求都拿假模型名去请求 → 400/404、provider 被判 DOWN。
+        # 重档用 Maverick(旗舰),快档用 Scout(轻量)。
+        TaskType.REASONING: "Llama-4-Maverick-17B-128E-Instruct-FP8",
+        TaskType.FAST_RESPONSE: "Llama-4-Scout-17B-16E-Instruct-FP8",
+        TaskType.CODING: "Llama-4-Maverick-17B-128E-Instruct-FP8",
+        TaskType.CREATIVE: "Llama-4-Maverick-17B-128E-Instruct-FP8",
+        TaskType.ANALYSIS: "Llama-4-Maverick-17B-128E-Instruct-FP8",
+        TaskType.PLANNING: "Llama-4-Maverick-17B-128E-Instruct-FP8",
+        TaskType.AGENT_CONTROL: "Llama-4-Maverick-17B-128E-Instruct-FP8",
+        TaskType.GENERAL: "Llama-4-Scout-17B-16E-Instruct-FP8",
     },
     "xai": {
         TaskType.REASONING: "grok-4.5",
@@ -465,14 +467,17 @@ PROVIDER_MODEL_MAP: Dict[str, Dict[TaskType, str]] = {
         TaskType.PLANNING: "glm-5.1",
     },
     "minimax": {
-        TaskType.REASONING: "minimax-m2.7",
-        TaskType.FAST_RESPONSE: "minimax-m2.7",
-        TaskType.CODING: "minimax-m2.7",
-        TaskType.CREATIVE: "minimax-m2.7",
-        TaskType.ANALYSIS: "minimax-m2.7",
-        TaskType.PLANNING: "minimax-m2.7",
-        TaskType.AGENT_CONTROL: "minimax-m2.7",
-        TaskType.GENERAL: "minimax-m2.7",
+        # 对齐 PROVIDER_REGISTRY['minimax'].models(大小写敏感的官方 id):
+        # 此前用小写 "minimax-m2.7"(registry 里根本没有此拼写)→ 请求即 404。
+        # 重档 MiniMax-M3(default),快档 MiniMax-M2.7。
+        TaskType.REASONING: "MiniMax-M3",
+        TaskType.FAST_RESPONSE: "MiniMax-M2.7",
+        TaskType.CODING: "MiniMax-M3",
+        TaskType.CREATIVE: "MiniMax-M3",
+        TaskType.ANALYSIS: "MiniMax-M3",
+        TaskType.PLANNING: "MiniMax-M3",
+        TaskType.AGENT_CONTROL: "MiniMax-M3",
+        TaskType.GENERAL: "MiniMax-M2.7",
     },
     "step": {
         TaskType.REASONING: "step-3.7-flash",
@@ -2238,7 +2243,17 @@ class MultiLLMRouter:
         last_user_msg = ""
         for m in reversed(messages):
             if m.get("role") == "user":
-                last_user_msg = m.get("content", "").lower()
+                # content 可能是 str,也可能是 OpenAI-vision 的分段 list
+                # ([{type:text,...},{type:image_url,...}])——本 router 明确支持后者。
+                # 直接 .lower() 会在 list 上 AttributeError,把整个 chat() 在路由前
+                # 就打断(多模态 ambient 决策因此每次静默丢失画面输入)。先归一化。
+                _content = m.get("content", "")
+                if isinstance(_content, str):
+                    last_user_msg = _content.lower()
+                elif isinstance(_content, list):
+                    last_user_msg = " ".join(
+                        p.get("text", "") for p in _content if isinstance(p, dict) and p.get("type") == "text"
+                    ).lower()
                 break
 
         # 加权关键词 → 任务类型 (keyword, weight)

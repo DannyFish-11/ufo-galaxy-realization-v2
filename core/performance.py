@@ -225,16 +225,26 @@ class RateLimiter:
             current_count = len(self._windows[key])
             remaining = self.max_requests - current_count
 
+            # 逻辑修复:此前窗口硬顶(max_requests)只在【同时】1 秒内突发数
+            # ≥ burst 时才拒绝 —— 稳定发送(如 100 条均摊到 60s、每秒远不到 burst)
+            # 永远落到下面的 append+return True,窗口上限形同虚设,限流实际不生效。
+            # 正确语义:窗口顶与突发顶【各自独立】,任一超限即拒。
             if current_count >= self.max_requests:
-                # 检查突发容量
-                recent_burst = sum(1 for t in self._windows[key] if t > now - 1)
-                if recent_burst >= self.burst:
-                    return False, {
-                        "remaining": 0,
-                        "limit": self.max_requests,
-                        "reset_at": window_start + self.window_seconds,
-                        "retry_after": int(self.window_seconds - (now - self._windows[key][0])) + 1,
-                    }
+                return False, {
+                    "remaining": 0,
+                    "limit": self.max_requests,
+                    "reset_at": window_start + self.window_seconds,
+                    "retry_after": int(self.window_seconds - (now - self._windows[key][0])) + 1,
+                }
+
+            recent_burst = sum(1 for t in self._windows[key] if t > now - 1)
+            if recent_burst >= self.burst:
+                return False, {
+                    "remaining": max(0, remaining),
+                    "limit": self.max_requests,
+                    "reset_at": now + 1.0,
+                    "retry_after": 1,
+                }
 
             self._windows[key].append(now)
             return True, {

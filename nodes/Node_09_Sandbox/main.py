@@ -438,8 +438,11 @@ async def run_tests(code: str, tests: List[Dict[str, Any]], language: str = "pyt
     """运行测试用例"""
     results = []
     for i, test in enumerate(tests):
-        stdin = test.get("input", "")
-        expected_output = test.get("expected", "")
+        # present-but-None 防护:test.get(k, default) 的默认值只在键【缺失】时生效,
+        # 键存在但值为 null 时返回 None,后面 .strip() 直接 AttributeError → 整个
+        # /test 500。强制转字符串。
+        stdin = str(test.get("input") or "")
+        expected_output = str(test.get("expected") or "")
 
         exec_result = await execute_code(ExecuteRequest(code=code, language=language, stdin=stdin, timeout=10))
 
