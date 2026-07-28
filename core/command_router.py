@@ -1317,21 +1317,46 @@ class CommandRouter:
         _tool_name_for_hitl = (envelope.tool_name or "").lower()
         if self._is_high_risk_command(_tool_name_for_hitl):
             _env_meta = envelope.metadata or {}
-            if not _env_meta.get("_hitl_approved"):
-                logger.debug(
-                    "route_envelope: high-risk tool_name=%r detected; "
-                    "_hitl_required will be stamped if not pre-approved",
+            _env_args = getattr(envelope, "args", None) or {}
+            _hitl_ok = bool(_env_meta.get("_hitl_approved")) or bool(_env_args.get("_hitl_approved"))
+            if not _hitl_ok:
+                # 安全修复(fail-open):此前这里只把 _hitl_required 盖进 metadata、
+                # 并不阻断,真正的阻断门在 _execute_command(仅本地路径)。而高危
+                # 命令若走 executor_target_type=android_device/node_service/go_worker,
+                # route_envelope 会在下方 2431/2448 直接分叉到 _route_cross_device_
+                # envelope / _route_worker_envelope,【绕过】那道阻断门 → 跨设备/worker
+                # 上的高危命令无需批准即执行。改为在【分叉前】统一阻断:高危且未
+                # 携带 _hitl_approved 时立即返回 HITL_APPROVAL_REQUIRED。
+                logger.warning(
+                    "route_envelope: high-risk tool_name=%r without _hitl_approved — blocked (HITL required)",
                     envelope.tool_name,
                 )
-                # stamp _hitl_required into metadata so downstream can detect it
-                envelope = envelope.model_copy(
-                    update={
-                        "metadata": {
-                            **_env_meta,
-                            "_hitl_required": True,
-                        }
-                    }
-                )
+                try:
+                    self._emit_audit(
+                        "HITL_REQUIRED",
+                        trace_id=getattr(envelope, "trace_id", "") or "",
+                        task_id=getattr(envelope, "task_id", "") or "",
+                        device_id=(envelope.targets[0] if getattr(envelope, "targets", None) else ""),
+                        message=(
+                            f"HITL approval required for high-risk tool "
+                            f"'{envelope.tool_name}' (pre-dispatch, all paths)"
+                        ),
+                        payload={"tool_name": envelope.tool_name},
+                    )
+                except Exception as _audit_exc:  # noqa: BLE001
+                    logger.debug("route_envelope HITL audit emit skipped: %s", _audit_exc)
+                return {
+                    "success": False,
+                    "result": None,
+                    "task_id": getattr(envelope, "task_id", "") or "",
+                    "trace_id": getattr(envelope, "trace_id", "") or "",
+                    "error_code": "HITL_APPROVAL_REQUIRED",
+                    "error_message": (
+                        f"High-risk command '{envelope.tool_name}' requires HITL approval. "
+                        "Include _hitl_approved=True in payload/metadata after obtaining approval."
+                    ),
+                    "requires_hitl": True,
+                }
         try:
             from core.task_memory import get_task_memory
 
@@ -1360,7 +1385,15 @@ class CommandRouter:
             # empty targets — device selection is performed by the DeviceRouter
             # substrate inside _route_cross_device_envelope().
             _early_meta = envelope.metadata or {}
-            if _early_meta.get("cross_device") == "true":
+            # 跨设备信号有两种:metadata.cross_device=="true",或一等公民字段
+            # executor_target_type ∈ {android_device, node_service}(其目标由
+            # DeviceRouter substrate 在 _route_cross_device_envelope 内选择,故允许
+            # 空 targets)。此前只认前者,导致【仅】用 executor_target_type 表达
+            # 跨设备意图、且未显式列 targets 的信封被误判为无目标而走进本地
+            # 池选择/报错分支。用 .value 判定(str(enum) 带类名前缀会漏判)。
+            _ett_early = getattr(envelope, "executor_target_type", None)
+            _ett_early_val = getattr(_ett_early, "value", "") if _ett_early is not None else ""
+            if _early_meta.get("cross_device") == "true" or _ett_early_val in ("android_device", "node_service"):
                 pass  # targets resolved by substrate; skip pool/error check
             else:
                 # PR-3: When required_capabilities are present but no explicit target is
@@ -1509,7 +1542,8 @@ class CommandRouter:
                     _meta_pf = envelope.metadata or {}
                     _is_cross_device_hint = _meta_pf.get("cross_device") == "true" or (
                         envelope.executor_target_type is not None
-                        and str(envelope.executor_target_type) in ("android_device", "node_service")
+                        # .value:(str,Enum) 的 str() 带类名前缀,in 检查恒 False。
+                        and getattr(envelope.executor_target_type, "value", "") in ("android_device", "node_service")
                     )
                     if not _is_cross_device_hint:
                         logger.debug(
@@ -2059,7 +2093,18 @@ class CommandRouter:
                 elif _v3_meta.get("cross_device") == "true":
                     _v3_exec_mode = "cross_device"
                 elif envelope.executor_target_type is not None:
-                    _v3_exec_mode = str(envelope.executor_target_type)
+                    # (str, Enum) 上 str(member) 返回 'ExecutorTargetType.android_device'
+                    # (类名前缀),不是 'android_device' —— 用 .value。且 android_device/
+                    # node_service 都是跨设备派发,必须映射为 'cross_device' 才能命中
+                    # 下游 slot-authority 的 require_cd 集(cross_device/handoff/takeover/
+                    # wake_routed);否则跨设备就绪门被静默绕过。go_worker 保留其值
+                    # (走 worker 域,本就不应触发 cross-device 就绪校验)。
+                    _ett = envelope.executor_target_type
+                    _ett_val = getattr(_ett, "value", str(_ett))
+                    if _ett_val in ("android_device", "node_service"):
+                        _v3_exec_mode = "cross_device"
+                    else:
+                        _v3_exec_mode = _ett_val
                 else:
                     _v3_exec_mode = "cross_device"
                 _v3_required_caps: Optional[List[str]] = (
