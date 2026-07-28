@@ -390,7 +390,18 @@ def _assemble_formation_facet() -> MultiDeviceTruthDomainFacet:
     try:
         from core.device_formation.formation_resolver import resolve_formation  # type: ignore
 
-        formation_group = resolve_formation()
+        # resolve_formation() 的签名是 -> tuple[DeviceFormationGroup, FormationPolicy]
+        # (formation_resolver.py:79),返回的是 (group, policy) 二元组,不是单个 group。
+        # 此前直接把这个元组当 group 用:tuple 既没有 to_dict / model_dump、也不是
+        # dict,于是一路落到最后那个 else 分支,产出
+        #     {"formation_id": str(getattr(tuple, "formation_id", "unknown"))}
+        # → formation_id 恒为 "unknown",整个编队 facet 是空的,却仍被标成
+        # authority_tier='primary' 对外发布 —— 下游拿到的是一份"权威的空数据"。
+        _formation_result = resolve_formation()
+        if isinstance(_formation_result, tuple):
+            formation_group = _formation_result[0] if _formation_result else None
+        else:
+            formation_group = _formation_result
         if formation_group is not None:
             if hasattr(formation_group, "to_dict"):
                 data = formation_group.to_dict()
