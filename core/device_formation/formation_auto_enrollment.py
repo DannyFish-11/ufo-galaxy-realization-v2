@@ -293,6 +293,13 @@ class FormationAutoEnrollmentManager:
             entry.is_active = False
             entry.last_updated_at = time.time()
 
+            # 主执行设备被移除后必须重派,否则编队会处于"还有活跃成员、却没有任何
+            # 主执行设备"的状态。角色是在 enroll 时按当时的活跃数一次性定下来的
+            # (_derive_formation_role:仅当活跃数为 0 时给 PRIMARY_EXECUTION,否则
+            # SUPPORT),此处只把 is_active 置 False、从不重算 —— 于是第一台设备退出
+            # 后,剩下的 SUPPORT 永远不会被提升,编队从此群龙无首。
+            self._promote_primary_if_needed_locked()
+
             if self._coordinator is not None:
                 try:
                     decision = self._coordinator.on_participant_lost(
@@ -409,6 +416,34 @@ class FormationAutoEnrollmentManager:
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+
+    def _promote_primary_if_needed_locked(self) -> None:
+        """若活跃成员里已无主执行设备,则提升一个健康度最高的顶上。
+
+        必须在持有锁的情况下调用。没有活跃成员时什么也不做(编队本就空了,
+        不需要造一个主执行设备出来)。
+        """
+        try:
+            from .formation_role import FormationRole
+
+            primary_value = FormationRole.PRIMARY_EXECUTION.value
+        except Exception:  # noqa: BLE001
+            primary_value = "primary_execution_device"
+
+        active = [p for p in self._participants.values() if p.is_active]
+        if not active:
+            return
+        if any(str(p.role) == primary_value for p in active):
+            return
+        # 选健康度最高的顶上;健康度相同时按 device_id 定序,保证结果可复现
+        promoted = sorted(active, key=lambda p: (-float(getattr(p, "health_score", 0.0) or 0.0), p.device_id))[0]
+        promoted.role = primary_value
+        promoted.last_updated_at = time.time()
+        logger.info(
+            "formation_auto_enrollment: promoted new primary device_id=%s formation_id=%s",
+            promoted.device_id,
+            self._formation_id,
+        )
 
     def _derive_formation_role(self, existing_active_count: int) -> str:
         """Derive a conservative formation role from participant count."""
