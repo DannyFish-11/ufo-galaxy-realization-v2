@@ -761,14 +761,22 @@ async def update_config(req: ConfigUpdateRequest):
 
         _cs = None
         for _k, _v in final.items():
-            if _classify(_k) == "secret" and str(_v).strip():
-                try:
-                    if _cs is None:
-                        _cs = _CS()
+            if _classify(_k) != "secret":
+                continue
+            try:
+                if _cs is None:
+                    _cs = _CS()
+                if str(_v).strip():
                     _cs.set_secret(_k, str(_v))
-                    _secrets_persisted.add(_k)
-                except Exception as _e:  # noqa: BLE001 — 失败则保留 .env 回落
-                    logger.debug("密钥写入 secrets.env 失败(回落 .env): %s", _e)
+                else:
+                    # 空值 = 用户在面板上【清空】了这个密钥。此前这里用
+                    # `and str(_v).strip()` 直接把空值跳过了,secrets.env 里的旧值
+                    # 就一直留着;而启动时 secrets.env 会被灌回进程环境,于是"删掉
+                    # 的密钥重启又活过来"。清空必须真的落到密钥库里去删。
+                    _cs.delete_secret(_k)
+                _secrets_persisted.add(_k)
+            except Exception as _e:  # noqa: BLE001 — 失败则保留 .env 回落
+                logger.debug("密钥写入/删除 secrets.env 失败(回落 .env): %s", _e)
     except Exception as exc:  # noqa: BLE001 — ConfigService 不可用 → 全部回落 .env
         logger.debug("密钥收敛不可用(降级为 .env 持久化): %s", exc)
 
