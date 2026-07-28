@@ -26,7 +26,7 @@ import hashlib
 import re
 import time
 from pathlib import Path
-from typing import Iterable, Iterator, NamedTuple
+from typing import Iterator, NamedTuple
 
 from core.log_paths import crash_dir, crash_latest_path, log_root
 
@@ -37,9 +37,14 @@ __all__ = [
     "CRASH_PATTERNS",
 ]
 
-#: 崩溃/致命特征(大小写不敏感)。命中即视为崩溃块的起点。
+#: 崩溃/致命特征总目录(大小写不敏感),供外部查阅本聚合器"认得哪些崩溃"。
 #: 覆盖:Python traceback、通用 fatal/crash、Electron/Chromium 崩溃、
 #: Windows 应用控制拦截(WinError 4551,真机出现过)、进程非零退出。
+#:
+#: 注意:命中本目录**不等于**就是崩溃锚点。真正的判定见 :func:`_is_crash_anchor`
+#: —— 结构性特征(traceback、WinError…)可以出现在行内任意位置就算数;而
+#: FATAL/CRITICAL/crash 这类普通英文词必须出现在日志的级别字段位置,
+#: 否则一句提到 "CRITICAL" 的建议文案就会被当成崩溃(真机踩过)。
 CRASH_PATTERNS: tuple[str, ...] = (
     r"Traceback \(most recent call last\)",
     r"\bFATAL\b",
@@ -55,10 +60,63 @@ CRASH_PATTERNS: tuple[str, ...] = (
     r"exited with code [1-9]",
 )
 
-_CRASH_RE = re.compile("|".join(CRASH_PATTERNS), re.IGNORECASE)
+#: 只要出现就足以判定崩溃的**结构性**特征——它们本身就是崩溃现场的形状,
+#: 不可能出现在正常叙述里。
+_STRUCTURAL_RE = re.compile(
+    "|".join(
+        (
+            r"Traceback \(most recent call last\)",
+            r"Unhandled (exception|rejection)",
+            r"未处理的异常",
+            r"GPU process (exited|crashed)",
+            r"renderer process (gone|crashed)",
+            r"did-fail-load",
+            r"WinError \d+",
+            r"Segmentation fault",
+            r"exited with code [1-9]",
+        )
+    ),
+    re.IGNORECASE,
+)
 
-#: 单个崩溃块最多保留的行数(含起始行)。
+#: FATAL/CRITICAL/crash 这类**普通英文词**只有出现在日志的"级别字段"位置才算数
+#: (``... | CRITICAL | ...``、``CRITICAL:``、行首)。
+#:
+#: 为什么必须加这道闸(真机实证):预检输出里有一句纯建议文案——
+#: "GALAXY_REQUIRE_API_TOKEN=true makes a missing token **CRITICAL** even with
+#: auth off" ——它被 ``\bCRITICAL\b`` 命中,于是聚合视图把一条建议当成崩溃锚点,
+#: 真正的崩溃反倒被当作它的"上下文"吞进块里;而同一个崩溃在另一个日志里锚在
+#: 正确的 ``| CRITICAL |`` 行上,两边指纹不同 → **同一个崩溃出现了两次**。
+_LEVEL_TOKEN_RE = re.compile(
+    r"(?:^|\||\[)\s*(?:FATAL|CRITICAL|CRASH(?:ED|ING)?)\b\s*(?:\||:|\])",
+    re.IGNORECASE,
+)
+
+#: 级别字段明确是 INFO/DEBUG/TRACE 的行,**永远不做崩溃锚点**。
+#:
+#: 真机实证:``| INFO | 注册安全规则: 高度限制检查 (critical)`` 和
+#: ``| INFO | Crash aggregation: 4 block(s) -> ...``(聚合器自己的记账行!)
+#: 都曾被判成崩溃。一条 INFO 按定义就不是崩溃记录,这条规则同时也用来判定
+#: "崩溃现场到哪儿结束"——日志回到正常流水,现场就结束了。
+_BENIGN_LEVEL_RE = re.compile(r"\|\s*(?:INFO|DEBUG|TRACE)\s*\|", re.IGNORECASE)
+
+
+def _is_crash_anchor(line: str) -> bool:
+    """该行是否可以作为崩溃块的起点。"""
+    if _BENIGN_LEVEL_RE.search(line):
+        return False
+    return bool(_STRUCTURAL_RE.search(line) or _LEVEL_TOKEN_RE.search(line))
+
+
+#: 单个崩溃块最多保留的行数(含起始行)。traceback 往往很长,给足。
 MAX_LINES_PER_BLOCK = 40
+
+#: 非 traceback 类(单行错误)崩溃块保留的后续上下文行数。
+#:
+#: 真机实证:此前不分类型一律取 40 行,结果一条 ``nats-server.zip 解压失败``
+#: 后面跟了 39 行毫不相干的 INFO 流水(节点启动、健康检查…),聚合视图里
+#: 真正有用的就头一行。单行错误给少量上下文即可。
+CONTEXT_LINES_SINGLE = 6
 
 #: 每个源日志最多提取的崩溃块数(取最近的)。
 MAX_BLOCKS_PER_SOURCE = 5
@@ -110,6 +168,25 @@ def _read_tail_lines(path: Path) -> list[str]:
         return fh.read().splitlines()
 
 
+def _collect_block(lines: list[str], idx: int) -> list[str]:
+    """从锚点行 ``idx`` 起,截出崩溃现场。
+
+    两条收尾规则,都是为了让块里**只有现场**、没有流水:
+
+    1. traceback 类给到 [MAX_LINES_PER_BLOCK] 行(调用栈本来就长);
+       单行错误类只给 [CONTEXT_LINES_SINGLE] 行上下文。
+    2. 一旦遇到级别为 INFO/DEBUG/TRACE 的行,说明日志已经回到正常流水,
+       崩溃现场就此结束——立即收尾,不再往下吞。
+    """
+    limit = MAX_LINES_PER_BLOCK if _STRUCTURAL_RE.search(lines[idx]) else 1 + CONTEXT_LINES_SINGLE
+    block = [lines[idx]]
+    for nxt in lines[idx + 1 : idx + limit]:
+        if _BENIGN_LEVEL_RE.search(nxt):
+            break
+        block.append(nxt)
+    return block
+
+
 def scan_source(path: Path, root: Path | None = None) -> list[CrashBlock]:
     """扫描单个日志文件,提取其中的崩溃块(最近 [MAX_BLOCKS_PER_SOURCE] 个)。"""
     root = root or log_root()
@@ -134,8 +211,8 @@ def scan_source(path: Path, root: Path | None = None) -> list[CrashBlock]:
     idx = 0
     total = len(lines)
     while idx < total:
-        if _CRASH_RE.search(lines[idx]):
-            block = lines[idx : idx + MAX_LINES_PER_BLOCK]
+        if _is_crash_anchor(lines[idx]):
+            block = _collect_block(lines, idx)
             blocks.append(
                 CrashBlock(
                     source=source,

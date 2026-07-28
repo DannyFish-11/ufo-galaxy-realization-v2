@@ -111,7 +111,11 @@ function resolveGatewayPort() {
     return 9000;
 }
 const GATEWAY_PORT = resolveGatewayPort();
-const GATEWAY_BASE = `http://localhost:${GATEWAY_PORT}`;
+// 刻意用 127.0.0.1 而不是 localhost:网关(uvicorn)绑的是 `0.0.0.0`,那是
+// **仅 IPv4** 的监听。而 Windows 上 `localhost` 会先解析到 IPv6 的 ::1,
+// 走到那一侧只会 ECONNREFUSED。127.0.0.1 直指 IPv4 环回,不给解析顺序留活口。
+const GATEWAY_HOST = '127.0.0.1';
+const GATEWAY_BASE = `http://${GATEWAY_HOST}:${GATEWAY_PORT}`;
 let ipcHttpServer = null;
 
 // 桌面连续感知（摄像头/麦克风/屏幕）。
@@ -207,6 +211,36 @@ async function _gatewayHealthy(timeoutMs = BACKEND_HEALTH_TIMEOUT_MS) {
     }
 }
 
+// 端口上是否已经有人在监听(纯 TCP 连通性,不关心对方是不是我们的网关)。
+// 这是"该不该再拉一套后端"的唯一可靠判据:端口被占时再 spawn 一套必然抢不到,
+// 只会白白多跑一整套系统然后以 10048 崩掉。
+function _portOccupied(timeoutMs = 1200) {
+    return new Promise((resolve) => {
+        const net = require('net');
+        const sock = new net.Socket();
+        let settled = false;
+        const done = (v) => { if (!settled) { settled = true; sock.destroy(); resolve(v); } };
+        sock.setTimeout(timeoutMs);
+        sock.once('connect', () => done(true));
+        sock.once('timeout', () => done(false));
+        sock.once('error', () => done(false));
+        sock.connect(GATEWAY_PORT, GATEWAY_HOST);
+    });
+}
+
+// 端口有人监听时,耐心等它把 /health 服务起来。
+// 为什么需要"耐心":真机上后端起来后还会继续跑 Podman 拉镜像、下载 NATS、
+// 把本地大模型载进内存(无独显时纯 CPU 推理)——这些阶段会把机器压满,
+// 单次 2.5s 的探测超时根本不能证明"网关不存在"。
+async function _waitForGateway(budgetMs) {
+    const start = Date.now();
+    while (Date.now() - start < budgetMs) {
+        if (await _gatewayHealthy()) return true;
+        await new Promise((r) => setTimeout(r, BACKEND_POLL_INTERVAL_MS));
+    }
+    return false;
+}
+
 async function ensureGatewayOnline(autoStart = true) {
     const alreadyHealthy = await _gatewayHealthy();
     if (alreadyHealthy) {
@@ -221,6 +255,26 @@ async function ensureGatewayOnline(autoStart = true) {
     backendStartPromise = (async () => {
         const nowHealthy = await _gatewayHealthy();
         if (nowHealthy) return { ok: true, reused: true };
+
+        // ── 端口已被占用 → 绝不再拉第二套后端 ──
+        // 真机实证(所有者 Windows 日志):这里原本不做任何检查,单次 /health 探测
+        // 失败就 spawn `launch_desktop.py --backend`,而它会把 **整个 main.py**
+        // 再拉起一遍去抢同一个 9000 端口,结果必然是
+        // `[Errno 10048] ... 通常每个套接字地址只允许使用一次` —— 第二套系统白跑
+        // 一遍再自杀,而真正健康的第一套后端始终好好地在那儿。
+        // 端口上有人监听 = 已经有网关(或别的进程)拥有它,此时唯一正确的动作是等,
+        // 不是再造一个必然失败的竞争者。
+        if (await _portOccupied()) {
+            const ok = await _waitForGateway(BACKEND_START_TIMEOUT_MS);
+            if (ok) return { ok: true, reused: true };
+            backendLastError =
+                `端口 ${GATEWAY_PORT} 已被占用,但 ${GATEWAY_BASE}/health 在 ` +
+                `${Math.round(BACKEND_START_TIMEOUT_MS / 1000)}s 内始终未就绪。` +
+                '已【跳过】重复拉起后端(再起一套只会因端口冲突失败)。' +
+                '若该端口被其它程序占用,请换端口或结束占用进程后重试。';
+            return { ok: false, error: backendLastError, portBusy: true };
+        }
+
         const py = _pythonExec();
         const script = path.join(PROJECT_ROOT, 'launch_desktop.py');
         const args = [script, ...BACKEND_START_ARGS];
@@ -475,21 +529,25 @@ app.whenReady().then(async () => {
     }
 
     const gatewayReady = await ensureGatewayOnline(true);
+
+    // 先把窗口建起来,再提示 —— 顺序不能反。
+    // 原先是 `await dialog.showMessageBox(...)` 挡在 createWindow() 前面:
+    // 那个模态框要等用户点掉才 resolve,没人点(比如覆盖层还没显示、用户压根
+    // 没看见它)就永远卡在这儿,三态覆盖层一个窗口都建不出来。
+    // 网关没就绪是**可降级**状态,不该连壳都不给。
+    createWindow();
+
     if (!gatewayReady.ok) {
         console.error('[Main] 网关不可达:', gatewayReady.error || `${GATEWAY_BASE} not ready`);
-        try {
-            await dialog.showMessageBox({
-                type: 'warning',
-                title: 'Galaxy 网关未就绪',
-                message: '后端网关未成功连接',
-                detail:
-                    `${gatewayReady.error || `无法连接 ${GATEWAY_BASE}`}\n\n` +
-                    '你可以在设置页点击“重试启动网关”再次尝试，并检查 logs/gateway.log。',
-            });
-        } catch (_e) {}
+        dialog.showMessageBox({
+            type: 'warning',
+            title: 'Galaxy 网关未就绪',
+            message: '后端网关未成功连接',
+            detail:
+                `${gatewayReady.error || `无法连接 ${GATEWAY_BASE}`}\n\n` +
+                '你可以在设置页点击“重试启动网关”再次尝试，并检查 logs/gateway.log。',
+        }).catch(() => {});
     }
-
-    createWindow();
 
     // ── IPC HTTP 接收端 ──
     // Python 后端 POST /ipc/presence-state → 转发到前端 via ipcMain

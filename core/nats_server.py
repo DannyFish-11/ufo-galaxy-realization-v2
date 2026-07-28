@@ -153,6 +153,18 @@ class EmbeddedNATSServer:
                 nats_dir = Path.home() / ".lumiv" / "bin"
                 nats_dir.mkdir(parents=True, exist_ok=True)
                 nats_exe = nats_dir / "nats-server.exe"
+
+                # 已经装过就直接复用,不要再下一遍。
+                # 真机实证:~/.lumiv/bin 在用户主目录里,重新克隆仓库也不会清掉,
+                # 于是 nats-server.exe 明明躺在那儿,每次启动仍照常走完整下载流程
+                # ——白等 30s("[PHASE-TIMING] 消息总线 30.44s" 基本全耗在这),
+                # 末了还因为目标文件已存在而抛 WinError 183 刷一条 ERROR。
+                # 入口处的 shutil.which("nats-server") 看不到它,只是因为
+                # ~/.lumiv/bin 本来就不在 PATH 上——那不代表"没装"。
+                if nats_exe.is_file() and nats_exe.stat().st_size > 0:
+                    os.environ["PATH"] = str(nats_dir) + os.pathsep + os.environ.get("PATH", "")
+                    logger.info("nats-server 已安装,复用 %s(跳过下载)", nats_exe)
+                    return True
                 # PR-NATS-CN: 使用国内镜像源加速下载，支持超时重试
                 tag = "v2.10.24"  # 固定已知可用版本，避免API调用
                 zip_name = f"nats-server-{tag}-windows-amd64.zip"
@@ -221,7 +233,18 @@ class EmbeddedNATSServer:
                                 if name.endswith("nats-server.exe"):
                                     z.extract(name, nats_dir)
                                     extracted = nats_dir / name
-                                    extracted.rename(nats_exe)
+                                    # os.replace 而不是 Path.rename:后者在 Windows 上
+                                    # 只要目标已存在就抛 [WinError 183] 当文件已存在时,
+                                    # 无法创建该文件(真机实证)——POSIX 的 rename 会静默
+                                    # 覆盖,这个差异让整段解压在 Windows 上必然失败。
+                                    # os.replace 两个平台都是"原子覆盖"。
+                                    os.replace(extracted, nats_exe)
+                                    # 顺手清掉解压出来的中间目录
+                                    # (nats-server-<tag>-windows-amd64/),
+                                    # 否则每次安装都往 ~/.lumiv/bin 里堆一层空壳目录。
+                                    parent = extracted.parent
+                                    if parent != nats_dir:
+                                        shutil.rmtree(parent, ignore_errors=True)
                                     break
                         zip_path.unlink(missing_ok=True)
                     except Exception as e:  # noqa: BLE001

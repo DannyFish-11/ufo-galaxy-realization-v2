@@ -79,12 +79,92 @@ def resolve_gateway_port() -> int:
         return 9000
 
 
+_STILL_ACTIVE = 259  # Windows GetExitCodeProcess:进程仍在运行时的返回码
+
+
+def _pid_alive_windows(pid: int) -> bool:
+    """Windows 上【只读】判断 pid 是否仍在运行。
+
+    为什么不能用 ``os.kill(pid, 0)``(真机 16:12 那次启动的根因):
+    CPython 在 Windows 上的 ``os.kill`` 并不是发信号——除 CTRL_C_EVENT/
+    CTRL_BREAK_EVENT 外,它走的是 ``OpenProcess`` + **TerminateProcess(handle, sig)**。
+    也就是说 ``os.kill(pid, 0)`` 会把目标进程**以退出码 0 直接杀掉**,而不是探活。
+    这一个语义错误在所有者的 Windows 真机上同时炸出两种故障:
+
+    1. pid 已失效 → ``OpenProcess`` 报 ``[WinError 87] 参数错误``,该错误在
+       ``os.kill`` 里被包成 **SystemError**(<built-in function kill> returned a
+       result with an exception set),而 SystemError 不是 OSError 的子类,
+       原来的 ``except (OSError, ValueError)`` 接不住 → 异常一路上抛,
+       Phase 6 桌面壳阶段整个崩掉 → "Startup validation failed" CRITICAL、
+       系统降级启动。
+    2. pid 仍有效 → 刚刚拉起的 Electron 被 TerminateProcess 当场杀掉,
+       而函数还返回 True 说"它在跑"。
+
+    正解:``OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION)`` 拿只读句柄,
+    再用 ``GetExitCodeProcess`` 看是否 STILL_ACTIVE。这条路径不会碰进程状态,
+    且能正确把"已退出但句柄尚未回收"的僵留 pid 判为**已死**——旧实现在这种
+    情况下 OpenProcess 是成功的,于是把死壳误报成活壳(见保活器空转的根因)。
+
+    已知边角:进程若恰好以退出码 259 结束,会与 STILL_ACTIVE 撞值而被判成活着。
+    这是 Win32 API 本身的固有歧义;对桌面壳(Electron/npm)而言实际不会发生,
+    且即便发生,后果也只是本轮少重启一次,不会像旧实现那样误杀进程。
+    """
+    import ctypes
+    from ctypes import wintypes
+
+    process_query_limited_information = 0x1000
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    # 必须显式声明签名:ctypes 默认按 C int 处理返回值,而 64 位 Windows 上
+    # HANDLE 是 64 位——不声明会把句柄**截断**,后续 GetExitCodeProcess/
+    # CloseHandle 拿到的是坏句柄(既查不到状态,也漏掉句柄)。
+    kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.GetExitCodeProcess.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
+    kernel32.GetExitCodeProcess.restype = wintypes.BOOL
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel32.CloseHandle.restype = wintypes.BOOL
+
+    handle = kernel32.OpenProcess(process_query_limited_information, False, pid)
+    if not handle:
+        return False
+    try:
+        code = wintypes.DWORD()
+        if not kernel32.GetExitCodeProcess(handle, ctypes.byref(code)):
+            return False
+        return code.value == _STILL_ACTIVE
+    finally:
+        kernel32.CloseHandle(handle)
+
+
+def _pid_alive(pid: int) -> bool:
+    """跨平台【只读】探活:活着返回 True。任何不确定一律当作已死(宁可多起一次壳,
+    也不要把死锁当活锁——后者会让保活重启彻底空转)。"""
+    if pid <= 0:
+        return False
+    try:
+        if os.name == "nt":
+            return _pid_alive_windows(pid)
+        os.kill(pid, 0)  # POSIX 分支:0 号信号确实是标准探活语义
+        return True
+    except Exception:  # noqa: BLE001
+        # 一律吞掉,原因见下。这里绝不能只接 OSError:
+        # - Windows: OpenProcess 的错误会被包成 SystemError(非 OSError);
+        # - POSIX:  锁文件里若是个超大数字,os.kill 抛的是 **OverflowError**
+        #           ("Python int too large to convert to C long")——同样不是
+        #           OSError,同样会一路上抛把启动预检判死。
+        # 探活失败一律按"已死"处理:大不了多起一次壳,总好过把死锁当活锁。
+        return False
+
+
 def already_running() -> bool:
     """检查是否已有另一条启动路径持有存活的桌面壳锁。
 
     调用方应在做任何"是否要启动"的判断(乃至 npm install 探测)之前先调用这个函数,
     是则直接跳过,避免重复起第二个 Electron/Tauri 子进程。
     死进程留下的陈旧锁会被自动清理。
+
+    本函数【绝不抛异常】:它被 Phase 6 等启动关键路径直接调用,一旦上抛就会把
+    整个启动预检判为失败(真机实证)。任何异常都按"没有存活的壳"处理。
     """
     path = lock_path()
     if not os.path.exists(path):
@@ -92,14 +172,28 @@ def already_running() -> bool:
     try:
         with open(path, encoding="utf-8") as f:
             existing_pid = int(f.read().strip())
-        os.kill(existing_pid, 0)  # 存活则不抛异常;POSIX/Windows 均可用
-        return True
     except (OSError, ValueError):
-        try:
-            os.remove(path)
-        except OSError:
-            pass
+        clear_lock()
         return False
+    if _pid_alive(existing_pid):
+        return True
+    clear_lock()
+    return False
+
+
+def clear_lock() -> None:
+    """删除桌面壳锁。
+
+    保活器在**观察到自己拉起的壳进程已退出**时必须调用它:否则陈旧锁会让
+    ``start_tauri()`` 的 ``already_running()`` 早退分支返回 True,
+    ``start_desktop_shell()` 随之短路,**根本不会再去拉 Electron**——真机上
+    13 条"Electron 已退出,重启中"对应的 electron.log 里只有一个启动标记,
+    GPU→软件渲染→basic 三级降级全程空转,就是这么来的。
+    """
+    try:
+        os.remove(lock_path())
+    except OSError:
+        pass
 
 
 def write_lock(pid: int) -> None:
