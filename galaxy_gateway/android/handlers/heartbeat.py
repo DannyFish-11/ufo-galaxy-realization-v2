@@ -36,8 +36,9 @@ async def handle_heartbeat(
     # Step 2 — update local transport cache.
     async with bridge._lock:
         if device_id in bridge._devices:
-            bridge._devices[device_id].last_heartbeat = time.time()
-            bridge._devices[device_id].connected = True
+            # 根因：_devices 为 transport cache（SSOT 在 UDM，上方已 _patch_*_to_udm）；
+            # 传输层心跳字段写入封装到 AndroidDevice.mark_heartbeat()，避免下标直写。
+            bridge._devices[device_id].mark_heartbeat()
             bridge._sync_device_router_session(
                 device_id,
                 connected=True,
@@ -73,8 +74,9 @@ async def handle_device_status(
     # Step 2 — update local transport cache.
     async with bridge._lock:
         if device_id in bridge._devices:
-            bridge._devices[device_id].last_heartbeat = time.time()
-            bridge._devices[device_id].connected = True
+            # 根因：_devices 为 transport cache（SSOT 在 UDM，上方已 _patch_*_to_udm）；
+            # 传输层心跳字段写入封装到 AndroidDevice.mark_heartbeat()，避免下标直写。
+            bridge._devices[device_id].mark_heartbeat()
             bridge._sync_device_router_session(
                 device_id,
                 connected=True,
@@ -158,8 +160,9 @@ async def handle_agent_status(
 
     async with bridge._lock:
         if device_id in bridge._devices:
-            bridge._devices[device_id].last_heartbeat = time.time()
-            bridge._devices[device_id].connected = True
+            # 根因：_devices 为 transport cache（SSOT 在 UDM，上方已 _patch_*_to_udm）；
+            # 传输层心跳字段写入封装到 AndroidDevice.mark_heartbeat()，避免下标直写。
+            bridge._devices[device_id].mark_heartbeat()
             bridge._sync_device_router_session(device_id, connected=True)
 
     return {

@@ -423,12 +423,16 @@ def _probe_delegated_flow_readiness() -> EvidenceDimensionEntry:
         verdict = getattr(report, "verdict", "")
         dimensions_raw: Dict[str, Any] = {}
         if hasattr(report, "dimensions"):
+            # 根因修复:report.dimensions 是 Dict[str, DimensionReadinessResult]。
+            # 直接 enumerate(dict) 会迭代出 str 键,导致后续 d.status/d.dimension
+            # 抛 "'str' object has no attribute 'status'",探针被打成 unavailable。
+            # 必须遍历 .values() 才能拿到结果对象(与 post_graduation 探针一致)。
             dimensions_raw = {
                 d.dimension.value if hasattr(d, "dimension") else str(i): {
                     "status": d.status.value if hasattr(d.status, "value") else str(d.status),
                     "gap": getattr(d, "gap_description", ""),
                 }
-                for i, d in enumerate(report.dimensions)
+                for i, d in enumerate(report.dimensions.values())
             }
         evidence_status = "present"
         summary = f"DelegatedFlowReadinessGate verdict={verdict!r}; {len(dimensions_raw)} dimensions evaluated"
@@ -469,12 +473,16 @@ def _probe_delegated_flow_acceptance() -> EvidenceDimensionEntry:
         verdict = getattr(report, "verdict", "")
         dimensions_raw: Dict[str, Any] = {}
         if hasattr(report, "dimensions"):
+            # 根因修复:report.dimensions 是 Dict[str, DimensionEvidenceResult]。
+            # 与 readiness 探针相同的缺陷 —— enumerate(dict) 迭代出 str 键,
+            # d.status 抛 "'str' object has no attribute 'status'" 使探针 unavailable。
+            # 遍历 .values() 取结果对象。
             dimensions_raw = {
                 d.dimension.value if hasattr(d, "dimension") else str(i): {
                     "status": d.status.value if hasattr(d.status, "value") else str(d.status),
                     "gap": getattr(d, "gap_description", ""),
                 }
-                for i, d in enumerate(report.dimensions)
+                for i, d in enumerate(report.dimensions.values())
             }
         summary = f"DelegatedFlowAcceptanceGate verdict={verdict!r}; {len(dimensions_raw)} dimensions evaluated"
         return EvidenceDimensionEntry(
@@ -609,9 +617,14 @@ def _probe_takeover_tracking() -> EvidenceDimensionEntry:
         from core.takeover_tracking import get_takeover_tracking_runtime
 
         runtime = get_takeover_tracking_runtime()
-        snap = runtime.snapshot() if hasattr(runtime, "snapshot") else []
-        total = len(snap)
-        accepted = sum(1 for r in snap if getattr(r, "was_accepted", False))
+        # 根因修复:snapshot() 返回 TakeoverTrackingSnapshot 数据类(字段 records/
+        # total_count),不是 list。原代码 len(snap) / 迭代 snap 抛
+        # "object of type 'TakeoverTrackingSnapshot' has no len()",探针被打成
+        # unavailable。改为读取 .records / .total_count。
+        snap = runtime.snapshot() if hasattr(runtime, "snapshot") else None
+        records = list(getattr(snap, "records", []) or []) if snap is not None else []
+        total = getattr(snap, "total_count", len(records)) if snap is not None else 0
+        accepted = sum(1 for r in records if getattr(r, "was_accepted", False))
         rejected = total - accepted
         summary = f"TakeoverTrackingRuntime: {total} record(s); " f"{accepted} accepted, {rejected} rejected/unknown"
         return EvidenceDimensionEntry(
@@ -751,17 +764,26 @@ def _probe_compat_legacy_blocking() -> EvidenceDimensionEntry:
     code_ref = "core.compat_legacy_path_blocking_canonicalization"
     test_ref = "tests/test_pr10_v2_delegated_flow_acceptance_gate.py"
     try:
+        # 根因修复:模块并不导出 get_compat_blocking_snapshot,原 import 抛
+        # "cannot import name 'get_compat_blocking_snapshot'",探针被打成
+        # unavailable。真实入口是 build_blocking_canonicalization_snapshot,返回
+        # CompatLegacyBlockingSnapshot(字段 total_evaluations / blocking_
+        # canonicalization_healthy / invisible_flow_count / blocked_* 等)。
         from core.compat_legacy_path_blocking_canonicalization import (
-            get_compat_blocking_snapshot,
+            build_blocking_canonicalization_snapshot,
         )
 
-        snap = get_compat_blocking_snapshot()
-        has_active_bypass = getattr(snap, "has_active_bypass", None)
-        total_vectors = getattr(snap, "total_vectors_evaluated", 0)
-        blocked = getattr(snap, "blocked_vector_count", 0)
+        snap = build_blocking_canonicalization_snapshot()
+        total_vectors = getattr(snap, "total_evaluations", 0)
+        blocked = getattr(snap, "blocked_compat_truth_count", 0) + getattr(snap, "blocked_legacy_dispatch_count", 0)
+        healthy = getattr(snap, "blocking_canonicalization_healthy", None)
+        invisible_flow = getattr(snap, "invisible_flow_count", 0)
+        # 有不可见(未被拦截)的 compat/legacy 流即视为存在活跃绕过风险。
+        has_active_bypass = bool(invisible_flow) if invisible_flow is not None else None
         summary = (
-            f"CompatLegacyPathBlocking: {total_vectors} vector(s) evaluated; "
-            f"active_bypass={has_active_bypass}; blocked={blocked}"
+            f"CompatLegacyPathBlocking: {total_vectors} evaluation(s); "
+            f"healthy={healthy}; blocked={blocked}; invisible_flow={invisible_flow}; "
+            f"active_bypass={has_active_bypass}"
         )
         return EvidenceDimensionEntry(
             dimension_id=dim_id,
@@ -773,7 +795,9 @@ def _probe_compat_legacy_blocking() -> EvidenceDimensionEntry:
             test_reference=test_ref,
             raw_evidence={
                 "has_active_bypass": has_active_bypass,
-                "total_vectors": total_vectors,
+                "blocking_canonicalization_healthy": healthy,
+                "total_evaluations": total_vectors,
+                "invisible_flow_count": invisible_flow,
                 "blocked": blocked,
             },
         )
