@@ -29,7 +29,13 @@ if [[ -f .frontend.pid ]]; then
 fi
 
 # Kill any remaining processes
-pkill -f "python.*galaxy_gateway" 2>/dev/null && ok "Backend process killed" || true
+# 后端实际进程是 `python main.py`(unified_launcher 在同进程内)——旧模式
+# "python.*galaxy_gateway" 匹配不到任何东西,后端从来没被这里杀掉过。
+# 用仓库路径限定,避免误杀别的项目的 main.py。
+_repo_dir="$(cd "$(dirname "$0")" && pwd)"
+pkill -f "python.*${_repo_dir}/main\.py" 2>/dev/null && ok "Backend process killed" || \
+  pkill -f "python.*main\.py --host" 2>/dev/null && ok "Backend process killed" || true
+pkill -f "python.*galaxy_gateway" 2>/dev/null || true
 pkill -f "electron.*galaxy" 2>/dev/null && ok "Electron process killed" || true
 
 ok "All Galaxy processes stopped."

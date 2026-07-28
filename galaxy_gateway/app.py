@@ -191,7 +191,9 @@ def main():
         from core.port_config import get_service_port
         _default_gw_port = str(get_service_port("gateway"))
     except Exception:
-        _default_gw_port = "8765"
+        # 与全仓库统一口(9000)保持一致 —— 旧兜底 8765 是历史残留:port_config
+        # 导入失败时网关会静默绑到 8765,而所有客户端(Electron/面板)都在拨 9000。
+        _default_gw_port = "9000"
 
     host = os.getenv("HOST", "127.0.0.1")
     port = int(os.getenv("PORT", _default_gw_port))

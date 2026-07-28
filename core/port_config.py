@@ -51,7 +51,7 @@ _DEFAULT_INFRASTRUCTURE_PORTS: Dict[str, int] = {
     "state_machine": 9000,
     "gateway": 9000,  # Galaxy Gateway (unified port — WS + REST + WebRTC proxy)
     "dashboard_backend": 8080,  # Same as dashboard (unified port)
-    "websocket": 9000,  # WebSocket served through Galaxy Gateway on 8765
+    "websocket": 9000,  # WebSocket served through Galaxy Gateway (unified port)
     "websocket_http": 8081,
     "health_monitor": 9100,  # Avoid conflict with gateway
     "device_api": 8766,

@@ -18,7 +18,9 @@ Environment="GALAXY_MODE=production"
 Environment="USE_LOCAL_BRAIN_FIRST=true"
 
 # Main executable
-ExecStart=/usr/bin/python3 -m main --gpu-opt --persistent-models all
+# 注意:main.py 的 argparse 不认识 --gpu-opt / --persistent-models(旧参数)。
+# 传了会 exit 2,叠加 Restart=always 变成 10 秒一次的无限重启环。
+ExecStart=/usr/bin/python3 -m main
 
 # PR-D4: Automatic restart configuration (always-on)
 Restart=always

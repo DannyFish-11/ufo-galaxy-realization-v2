@@ -569,10 +569,14 @@ fn toggle_panel_cmd(app: AppHandle) {
 #[tauri::command]
 async fn set_config(app: AppHandle, state: State<'_, AppState>, config: Value) -> Result<Value, String> {
     let base = state.gateway_base.clone();
+    // 后端 ConfigUpdateRequest 的体格式是 {"config": {KEY: VALUE}}(见
+    // core/routes/config.py)——此前这里直接 .json(&config) 发裸 {KEY: VALUE},
+    // FastAPI 校验必 422,Tauri 壳下保存 API Key 100% 失败("Backend rejected
+    // config")。Electron 的 IPC 层(main.js galaxy:set-config)一直是包壳发送的。
     match state
         .http
         .post(format!("{base}/api/config"))
-        .json(&config)
+        .json(&json!({ "config": config }))
         .send()
         .await
     {

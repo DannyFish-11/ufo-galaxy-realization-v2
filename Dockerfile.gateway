@@ -31,7 +31,6 @@ COPY --chown=galaxy:galaxy config/ ./config/
 COPY --chown=galaxy:galaxy nodes/ ./nodes/
 COPY --chown=galaxy:galaxy enhancements/ ./enhancements/
 COPY --chown=galaxy:galaxy galaxy_gateway/ ./galaxy_gateway/
-COPY --chown=galaxy:galaxy dashboard/ ./dashboard/
 COPY --chown=galaxy:galaxy daemon/ ./daemon/
 COPY --chown=galaxy:galaxy requirements.txt .
 

@@ -302,7 +302,10 @@ services:
       dockerfile: Dockerfile.gateway
     container_name: galaxy-gateway
     ports:
-      - "9000:9000"
+      # 宿主机 9000 已被 galaxy-core 占用(本 profile 的主入口);网关容器内仍
+      # 监听 9000,宿主侧映射到 9010 作为备用直连口。三个服务同发 "9000:9000"
+      # 时 --profile full 根本起不来(端口冲突,compose up 直接失败)。
+      - "9010:9000"
     env_file:
       - .env
     environment:
@@ -329,7 +332,9 @@ services:
     profiles: [core, full]
     command: ["python", "main.py"]
     ports:
-      - "9000:9000"  # Admin UI only — use galaxy-core:9000 for all API/client connections
+      # 上方注释早已声明 8299 是刻意选择(9000 归 galaxy-core),但映射一直写着
+      # 9000:9000 —— 与 galaxy-core/galaxy-gateway 三方抢同一宿主端口。
+      - "8299:9000"  # Admin UI only — use galaxy-core:9000 for all API/client connections
     env_file:
       - .env
     environment:
