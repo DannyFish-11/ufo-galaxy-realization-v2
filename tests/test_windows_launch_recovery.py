@@ -144,6 +144,28 @@ def test_probe_port_bindable_detects_occupied_port():
     assert _probe_port_bindable("127.0.0.1", port) == ""
 
 
+def test_probe_port_does_not_invent_wildcard_bind():
+    """host 为空时不得凭空绑到全网卡(CodeQL:Binding a socket to all interfaces)。
+
+    探测的意义是"预测 uvicorn 那次 bind 会不会成功",所以应当绑调用方给的那个
+    地址;没给地址就退回环回口,而不是替调用方决定去监听 0.0.0.0。
+    """
+    import inspect
+
+    import unified_launcher
+
+    src = inspect.getsource(unified_launcher._probe_port_bindable)
+    code = "\n".join(ln for ln in src.splitlines() if not ln.strip().startswith("#"))
+    body = code.split('"""')[-1]  # 去掉 docstring,只看真正的代码
+    assert "0.0.0.0" not in body, "端口预检不应出现全网卡字面量"
+
+    # 空 host 仍要能正确识别环回口上的占用
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as busy:
+        busy.bind(("127.0.0.1", 0))
+        busy.listen(1)
+        assert unified_launcher._probe_port_bindable("", busy.getsockname()[1])
+
+
 # ── 3. Electron:端口被占时绝不再拉一套后端 ────────────────────────────
 
 

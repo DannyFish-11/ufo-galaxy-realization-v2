@@ -296,10 +296,16 @@ def _probe_port_bindable(host: str, port: int) -> str:
 
     刻意**不设** SO_REUSEADDR:在 Windows 上它的语义是"允许强抢已被占用的
     端口",打开反而会让探测通过、真正 bind 时才炸,与本函数的目的正好相反。
+
+    ``host`` 应当就是随后交给 uvicorn 的那个监听地址——只有绑同一个地址,
+    探测结果才真的能预测 uvicorn 会不会成功。故这里**不**替调用方臆造默认
+    监听地址:``host`` 为空时退回只探环回口,足以覆盖本函数唯一要防的场景
+    (本机已经有一个 Galaxy 占着这个端口),也不会凭空开出一个全网卡绑定。
     """
+    bind_host = (host or "").strip() or "127.0.0.1"
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.bind((host or "0.0.0.0", int(port)))
+            s.bind((bind_host, int(port)))
         return ""
     except OSError as exc:
         return f"{exc.__class__.__name__}: {exc}"
