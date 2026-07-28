@@ -574,19 +574,27 @@ def create_oauth_router() -> APIRouter:
 
     @router.get("/api/v1/connectors/{service}/callback")
     async def connector_callback(service: str, code: str = "", state: str = ""):
-        """OAuth 回调:用 code 换 token 存本机,返回一个可自动关闭的提示页。"""
+        """OAuth 回调:用 code 换 token 存本机,返回一个可自动关闭的提示页。
+
+        安全:本端点在开放路由组(IdP 重定向不可能带 Bearer 头),所有插进
+        HTML 的值(路径参数 service、上游返回的 account/error)一律 html.escape,
+        防反射型 XSS(CodeQL 告警确认过:未转义的 service 可注入脚本)。
+        """
+        import html as _html
+
         from fastapi.responses import HTMLResponse
 
         from core.oauth_connectors import handle_callback
 
         res = await handle_callback(service, code, state)
         ok = bool(res.get("ok"))
-        account = res.get("account")
+        svc = _html.escape(str(service))
+        account = _html.escape(str(res.get("account") or ""))
         if ok:
-            msg = f"{service} 已连接（{account}），可关闭本页" if account else f"{service} 连接成功,可关闭本页"
+            msg = f"{svc} 已连接（{account}），可关闭本页" if account else f"{svc} 连接成功,可关闭本页"
         else:
-            msg = f"连接失败:{res.get('error')}"
-        html = (
+            msg = f"连接失败:{_html.escape(str(res.get('error') or ''))}"
+        page = (
             "<!doctype html><meta charset='utf-8'><body style='font-family:system-ui;"
             "background:#11131c;color:#eaf6ff;display:flex;align-items:center;"
             "justify-content:center;height:100vh;margin:0'><div style='text-align:center'>"
@@ -594,6 +602,6 @@ def create_oauth_router() -> APIRouter:
             "<p style='opacity:.6'>本窗口 3 秒后自动关闭</p></div>"
             "<script>setTimeout(()=>window.close(),3000)</script></body>"
         )
-        return HTMLResponse(html)
+        return HTMLResponse(page)
 
     return router
