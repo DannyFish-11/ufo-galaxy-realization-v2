@@ -149,7 +149,17 @@ class DecayController:
         )
         try:
             loop = asyncio.get_running_loop()
+            # 单飞:trigger_decay 由【每个】任务完成事件触发,原来每次都新起一条
+            # 4 秒(8 步×0.5s)衰减序列且互不取消 —— 高吞吐下大量重叠序列并发改写
+            # 同一份认知状态,进程退出时留下一堆 "Task was destroyed but it is
+            # pending"(CI 实证)。_active_decay_task 字段本为单飞而设却从未接线。
+            # 新触发前取消上一条未完成的衰减(衰减本就是幂等的"从当前值继续衰减",
+            # 重启序列即可),全程只有一条在跑。
+            _prev = self._active_decay_task
+            if _prev is not None and not _prev.done():
+                _prev.cancel()
             _bt = loop.create_task(self._async_decay_sequence(task_id=task_id, trace_id=trace_id))
+            self._active_decay_task = _bt
             _BACKGROUND_TASKS.add(_bt)
             _bt.add_done_callback(_BACKGROUND_TASKS.discard)
         except RuntimeError:
