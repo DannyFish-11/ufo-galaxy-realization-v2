@@ -66,9 +66,12 @@ from typing import Optional
 
 logger = logging.getLogger("Galaxy.DurableDispatchIdempotency")
 
+# 同 durable_result_idempotency:必须认 GALAXY_DATA_DIR(本仓既有数据目录约定),
+# 否则运维改了数据目录时,这份派发去重集合仍留在源码树里,与其它持久化状态劈成
+# 两处;容器里源码树常是只读/临时的,集合丢失后重启会重放已派发过的任务。
 _DEFAULT_DISPATCH_ID_STORE_PATH = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "data",
+    os.environ.get("GALAXY_DATA_DIR")
+    or os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data"),
     "dispatch_idempotency_set.json",
 )
 
