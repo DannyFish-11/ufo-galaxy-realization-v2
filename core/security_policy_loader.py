@@ -319,8 +319,20 @@ def load_security_policy(path: Optional[str] = None) -> SecurityPolicy:
             return policy
 
     # All loads failed — return failsafe default
+    #
+    # 必须把 failsafe 策略【装进】_policy_instance,不能只 return。
+    # get_security_policy() 返回的就是 _policy_instance(第 412 行),而这里
+    # 之前只 return、不赋值 —— 所有策略文件都加载失败时 _policy_instance
+    # 永远是 None。消费端 core/openclawd.py:9482 的写法是
+    #     sec = get_security_policy()
+    #     if sec is not None:   # ← None 时整段危险命令校验被直接跳过
+    # 于是"全部加载失败"这条本该最严格的路径,反而变成了彻底放行:
+    # deny_all_dangerous 的 failsafe 被构造出来却从未生效,是 fail-open。
     logger.critical("All security policy files failed to load! Using failsafe defaults (deny all dangerous).")
-    return _create_failsafe_policy()
+    _policy_instance = _create_failsafe_policy()
+    _policy_load_time = time.time()
+    _policy_file_path = ""
+    return _policy_instance
 
 
 def _try_load_file(path: str) -> Optional[SecurityPolicy]:
