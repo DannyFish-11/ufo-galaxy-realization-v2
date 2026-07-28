@@ -25,21 +25,23 @@ class WebSocketAdapter(TransportAdapter):
         self._ws = ws_manager
 
     def _get_ws(self) -> Optional[Any]:
-        """取 WebSocketManager 实例。
+        """取 WebSocketManager 实例 —— 只认构造时显式注入的那个。
 
-        原来这里 import 的是 ``galaxy_gateway.connection_manager`` —— 这个模块
-        根本不存在(实测 ImportError),异常又被静默吞掉,于是任何不显式传
-        ``ws_manager`` 构造出来的适配器都永远是"不可用"状态。真正发布实例的
-        地方是 bootstrap/lifecycle.py:94/102:``app.state.websocket_manager``
-        与模块级兼容全局 ``galaxy_gateway.app.websocket_manager``。
+        这里【刻意不做】任何隐式兜底解析:
+
+        1. 原代码兜底 import 的是 ``galaxy_gateway.connection_manager``,这个模块
+           根本不存在(实测 ImportError),异常还被静默吞掉。也就是说这条兜底自古
+           以来就没生效过,适配器在不显式注入时一直是完全惰性的 —— 现在的行为与
+           那时【一致】,只是不再靠一个必然失败的 import 去实现。
+        2. 真正发布实例的位置是 bootstrap/lifecycle.py:94/102,但接上它没有意义:
+           WebSocketManager.connect() 的唯一调用方是同文件的 handle_connection(),
+           而 handle_connection() 全仓无人调用,所以 manager.connections 恒为空,
+           这条传输永远投递不出去。给一个收不到任何连接的 manager 建立隐式连线,
+           只会让调用方误以为 websocket 这条路可用。
+
+        因此:要用这条传输,请在构造时显式传入 ws_manager(调用方自己清楚它是否
+        真的能投递);不显式传就保持惰性。
         """
-        if self._ws is None:
-            try:
-                import galaxy_gateway.app as _gw_app
-
-                self._ws = getattr(_gw_app, "websocket_manager", None)
-            except Exception as exc:  # noqa: BLE001
-                logger.debug("WebSocket manager 尚不可用: %s", exc)
         return self._ws
 
     async def send(self, message: Dict[str, Any], target: str) -> Dict[str, Any]:
