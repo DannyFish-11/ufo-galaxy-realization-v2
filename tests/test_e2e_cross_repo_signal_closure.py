@@ -244,30 +244,34 @@ def _stamp_schema_gate_metadata(msg: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _make_handoff_result_message(handoff_id: str = "", device_id: str = "test-device") -> Dict[str, Any]:
-    return _stamp_schema_gate_metadata({
-        "type": "handoff_result",
-        "device_id": device_id,
-        "message_id": str(uuid.uuid4()),
-        "payload": {
-            "handoff_id": handoff_id or f"hev2_{uuid.uuid4().hex[:12]}",
-            "response_kind": "result",
-            "result_payload": {"output": "execution_done"},
-        },
-    })
+    return _stamp_schema_gate_metadata(
+        {
+            "type": "handoff_result",
+            "device_id": device_id,
+            "message_id": str(uuid.uuid4()),
+            "payload": {
+                "handoff_id": handoff_id or f"hev2_{uuid.uuid4().hex[:12]}",
+                "response_kind": "result",
+                "result_payload": {"output": "execution_done"},
+            },
+        }
+    )
 
 
 def _make_handoff_failure_message(handoff_id: str = "", device_id: str = "test-device") -> Dict[str, Any]:
-    return _stamp_schema_gate_metadata({
-        "type": "handoff_failure",
-        "device_id": device_id,
-        "message_id": str(uuid.uuid4()),
-        "payload": {
-            "handoff_id": handoff_id or f"hev2_{uuid.uuid4().hex[:12]}",
-            "response_kind": "failure",
-            "error_code": "execution_error",
-            "error": "device ran out of resources",
-        },
-    })
+    return _stamp_schema_gate_metadata(
+        {
+            "type": "handoff_failure",
+            "device_id": device_id,
+            "message_id": str(uuid.uuid4()),
+            "payload": {
+                "handoff_id": handoff_id or f"hev2_{uuid.uuid4().hex[:12]}",
+                "response_kind": "failure",
+                "error_code": "execution_error",
+                "error": "device ran out of resources",
+            },
+        }
+    )
 
 
 # ===========================================================================

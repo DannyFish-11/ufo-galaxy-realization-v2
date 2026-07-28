@@ -417,11 +417,7 @@ class TestGroupEUserVisibleDefaultOutput:
         # 按现契约以 asyncio.run 驱动完整生命周期后再断言结果字段。
         try:
             runtime = DesktopPresenceRuntime()
-            result = asyncio.run(
-                runtime.handle_request(
-                    "canonical default probe", source="test_canonical_default"
-                )
-            )
+            result = asyncio.run(runtime.handle_request("canonical default probe", source="test_canonical_default"))
         except Exception as exc:
             pytest.skip(f"handle_request failed with non-fatal error: {exc}")
 
@@ -444,11 +440,7 @@ class TestGroupEUserVisibleDefaultOutput:
         # 旧的同步 dict 调用返回 coroutine;改为 asyncio.run 驱动。
         try:
             runtime = DesktopPresenceRuntime()
-            result = asyncio.run(
-                runtime.handle_request(
-                    "canonical path kind probe", source="test_canonical_path_kind"
-                )
-            )
+            result = asyncio.run(runtime.handle_request("canonical path kind probe", source="test_canonical_path_kind"))
         except Exception as exc:
             pytest.skip(f"handle_request failed with non-fatal error: {exc}")
 

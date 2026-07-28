@@ -740,18 +740,15 @@ class TestAcceptanceDimensionIntegration:
         # credited as acceptance closure"(证据优先原则)。本测试真正要守护的
         # 是:零证据探针不得返回 autonomous_closure(契约错配)、模块必须可用。
         # 这两类失败在 evidence_summary 里有可区分的标记,按其断言。
-        summary = (item.evidence_summary or "")
+        summary = item.evidence_summary or ""
         assert "misconfiguration" not in summary.lower(), (
             "human_intervention zero-evidence probe returned autonomous_closure "
             f"(contract misconfiguration): {summary}"
         )
-        assert "not importable" not in summary.lower(), (
-            f"human_intervention taxonomy module unavailable: {summary}"
-        )
+        assert "not importable" not in summary.lower(), f"human_intervention taxonomy module unavailable: {summary}"
         linkage = item.evidence_linkage or {}
         assert linkage.get("zero_evidence_probe_is_autonomous") is False, (
-            "zero-evidence probe must be conservative (non-autonomous); "
-            f"evidence_linkage: {linkage}"
+            "zero-evidence probe must be conservative (non-autonomous); " f"evidence_linkage: {linkage}"
         )
 
 

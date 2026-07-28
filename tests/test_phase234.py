@@ -603,9 +603,7 @@ async def test_14_proxy_relay_chain():
 
 def test_15_module_imports():
     """验证所有新模块可正常导入"""
-    from core.hybrid_executor import (
-        # 断言漂移:同 test_13 —— Phase-A 整合改名 CapabilityRegistry →
-        # AppExecutionCapabilityRegistry。
+    from core.hybrid_executor import (  # 断言漂移:同 test_13 —— Phase-A 整合改名 CapabilityRegistry →; AppExecutionCapabilityRegistry。
         AppExecutionCapabilityRegistry,
         ExecutionLevel,
         HybridExecutionArbiter,

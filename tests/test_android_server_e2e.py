@@ -397,9 +397,7 @@ class TestFullE2EPipeline:
                 return {"success": True, "result": {"ok": True}}
 
         task_id = str(uuid.uuid4())
-        with patch(
-            "core.aip_transport.get_aip_transport", return_value=_MockTransport()
-        ):
+        with patch("core.aip_transport.get_aip_transport", return_value=_MockTransport()):
             result = await bridge.assign_task(
                 device_id=device_id,
                 task_id=task_id,

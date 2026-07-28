@@ -307,6 +307,7 @@ def test_get_active_nodes_includes_optional(ndj_nodes):
 def test_get_active_nodes_sorted(ndj_nodes):
     launcher = _make_launcher(ndj_nodes)
     active = launcher.get_active_nodes()
+
     # 断言依据:生产排序契约是 PR-SORT-NUMERIC —— (priority, 节点编号, 名字),
     # 编号取名字第 2 段("Node_10_Slack" → 10),避免字符串序把 Node_107 排到
     # Node_10 之前。旧断言用 (priority, 名字字符串) 镜像,与生产契约不符;

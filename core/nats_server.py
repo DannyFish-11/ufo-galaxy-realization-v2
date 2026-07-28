@@ -184,9 +184,9 @@ class EmbeddedNATSServer:
                         expected = ""
                         try:
                             # 官方 release 附带 SHA256SUMS(每行 "<hash>  <文件名>")
-                            for line in _http_get(f"{base}/SHA256SUMS", timeout=10).decode(
-                                "utf-8", "replace"
-                            ).splitlines():
+                            for line in (
+                                _http_get(f"{base}/SHA256SUMS", timeout=10).decode("utf-8", "replace").splitlines()
+                            ):
                                 parts = line.split()
                                 if len(parts) >= 2 and parts[-1].lstrip("*./") == zip_name:
                                     expected = parts[0].lower()
@@ -198,7 +198,9 @@ class EmbeddedNATSServer:
                             if actual != expected:
                                 logger.error(
                                     "nats-server 校验失败(源 %s): sha256 %s != 官方 %s,弃用该源",
-                                    mirror, actual, expected,
+                                    mirror,
+                                    actual,
+                                    expected,
                                 )
                                 continue  # 内容不符 → 换下一个源
                             logger.info("nats-server sha256 校验通过(官方 SHA256SUMS)")

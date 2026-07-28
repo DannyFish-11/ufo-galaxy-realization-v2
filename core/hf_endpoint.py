@@ -87,7 +87,9 @@ def pick_endpoint(timeout: float = 2.0, force: bool = False) -> str:
                 if ep != cands[0]:
                     logger.warning(
                         "HF 下载源 %s 不可达,已自动切换到 %s(%.0fs 内探测择优)",
-                        cands[0], ep, timeout,
+                        cands[0],
+                        ep,
+                        timeout,
                     )
                 os.environ["HF_ENDPOINT"] = ep
                 _cache.update(ts=time.monotonic(), endpoint=ep)
@@ -97,7 +99,8 @@ def pick_endpoint(timeout: float = 2.0, force: bool = False) -> str:
         logger.warning(
             "HF 下载源均不可达(%s),%d 分钟内跳过模型下载/预取,只用本地缓存;"
             "网络恢复后自动重试(可设 HF_ENDPOINT 指向可达镜像)",
-            " / ".join(cands), int(_NEG_CACHE_TTL // 60),
+            " / ".join(cands),
+            int(_NEG_CACHE_TTL // 60),
         )
         _cache.update(ts=time.monotonic(), endpoint="")
         return ""

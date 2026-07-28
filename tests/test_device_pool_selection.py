@@ -270,10 +270,13 @@ class TestConstellationRuntimeUsesPool:
         # 本测试只在 DevicePoolManager 注册了设备,没有 UDM 参与层数据;它验证
         # 的是"调度阶段必须咨询设备池",故把参与层候选打桩为非空,让执行
         # 进入调度;门控行为由 constellation_runtime 的门控测试专门覆盖。
-        with patch(
-            "core.device_participation.get_orchestration_ready_devices",
-            return_value=["cr_dev_1"],
-        ), patch("core.device_pool_manager.get_device_pool_manager", return_value=pool):
+        with (
+            patch(
+                "core.device_participation.get_orchestration_ready_devices",
+                return_value=["cr_dev_1"],
+            ),
+            patch("core.device_pool_manager.get_device_pool_manager", return_value=pool),
+        ):
             original_select = pool.select_device
             select_calls = []
 
