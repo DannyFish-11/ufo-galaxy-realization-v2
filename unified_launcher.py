@@ -1270,11 +1270,21 @@ class GalaxyUnified:
             # basic 窗口也反复崩溃 → 放弃（此时多半不是渲染问题，摘要里通常能看出真因）
             if self._electron_basic_window and len(restarts) >= MAX_BASIC:
                 gave_up = True
+                # 崩溃即刻汇入统一崩溃专区:用户从托盘「💥 崩溃日志」一行点开就能
+                # 看到本次崩溃(不必等到手动触发聚合,也不必自己去翻 electron.log)。
+                _crash_hint = ""
+                try:
+                    from core.crash_log_aggregator import aggregate_crashes
+
+                    _crash_path, _crash_n = aggregate_crashes()
+                    _crash_hint = f"（已汇入崩溃专区 {_crash_path}，共 {_crash_n} 处）"
+                except Exception as _agg_exc:  # noqa: BLE001 — 聚合失败不影响主流程
+                    logger.debug("崩溃聚合失败(不影响运行): %s", _agg_exc)
                 logger.error(
                     "Electron 在 GPU/软件渲染/不透明 basic 窗口下均反复崩溃，已停止自动重启。"
                     "后端与 API 仍在 http://localhost:%d 正常运行（Ctrl+Alt+Space 覆盖层暂不可用）。"
-                    "崩溃摘要(logs/electron.log 尾部)：\n    %s",
-                    self.config.web_ui_port, self._electron_log_excerpt(),
+                    "%s崩溃摘要(logs/electron.log 尾部)：\n    %s",
+                    self.config.web_ui_port, _crash_hint, self._electron_log_excerpt(),
                 )
                 continue
 

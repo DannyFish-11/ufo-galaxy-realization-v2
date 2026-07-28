@@ -35,6 +35,37 @@ from typing import Callable
 
 logger = logging.getLogger("Galaxy.Tray")
 
+
+# ---------------------------------------------------------------------------
+# 统一日志根 / 崩溃专区路径
+# ---------------------------------------------------------------------------
+# 托盘可能在未把项目根加入 sys.path 的环境下被单独拉起(windows_service 场景),
+# 故用带回退的薄封装:能导入 core.log_paths 就用唯一事实来源,导不到也不让
+# 日志入口失效(回退到与其默认值一致的 <项目根>/logs)。
+def _log_root() -> Path:
+    """统一日志根目录(唯一事实来源:core.log_paths.log_root)。"""
+    try:
+        from core.log_paths import log_root
+
+        return log_root()
+    except Exception:  # noqa: BLE001 — 托盘入口不能因导入失败而不可用
+        fallback = Path(__file__).resolve().parent.parent / "logs"
+        fallback.mkdir(parents=True, exist_ok=True)
+        return fallback
+
+
+def _crash_latest_path() -> Path:
+    """崩溃聚合视图路径(与 core.log_paths.crash_latest_path 一致)。"""
+    try:
+        from core.log_paths import crash_latest_path
+
+        return crash_latest_path()
+    except Exception:  # noqa: BLE001
+        d = _log_root() / "crashes"
+        d.mkdir(parents=True, exist_ok=True)
+        return d / "latest.log"
+
+
 # ---------------------------------------------------------------------------
 # 可选依赖 —— pystray 和 Pillow
 # ---------------------------------------------------------------------------
@@ -374,42 +405,68 @@ class GalaxyTray:
         logger.error("Could not open any config URL")
 
     def _open_logs(self, icon: pystray.Icon, item: pystray.MenuItem) -> None:
-        """在文件资源管理器中打开日志目录。"""
-        log_dir = os.path.join(os.path.expanduser("~"), ".galaxy", "logs")
+        """在文件资源管理器中打开【统一日志根目录】。
+
+        统一前的真 bug:此处硬编码 ``~/.galaxy/logs``,而启动器/覆盖层/节点全部
+        写在项目内 ``logs/`` —— 用户从托盘点进来看到的是个几乎空的目录,真正的
+        日志在另一个地方,排障时白跑一趟。现改为读 :func:`core.log_paths.log_root`
+        这一唯一事实来源(尊重 GALAXY_LOG_DIR),与所有写入方指向同一处。
+        """
+        log_dir = str(_log_root())
         os.makedirs(log_dir, exist_ok=True)
         if sys.platform == "win32":
             os.startfile(log_dir)  # type: ignore[attr-defined]
         else:
             webbrowser.open(f"file://{log_dir}")
 
-    def _open_overlay_log(self, icon: pystray.Icon, item: pystray.MenuItem) -> None:
-        """直接打开三态覆盖层(Electron)的日志文件 logs/electron.log。
+    def _open_crash_log(self, icon: pystray.Icon, item: pystray.MenuItem) -> None:
+        """【崩溃日志专区】—— 托盘单独一行,一键打开全系统崩溃聚合视图。
 
-        覆盖层「打不开/三态不显示」的报错都写在这里（GPU 崩溃、WebGL 初始化失败、
-        did-fail-load、渲染层 console 等）。单独开一栏，方便用户一眼定位、排查。
-        日志不存在时（覆盖层还没跑过）先建一个带说明的占位文件，保证点开总有东西看。
+        统一前的痛点:崩溃分散在多个文件(覆盖层 GPU 崩溃在 electron.log、后端
+        未处理异常在 lumiv.log、服务层在 windows_service.log、节点在 nodes/*.log),
+        而托盘只有一个"三态动画日志"入口、只能看覆盖层那一份 —— 真机出问题时
+        用户要自己挨个翻文件、还得辨认哪几行才是崩溃。
+
+        现在:点这一行即时触发 :func:`core.crash_log_aggregator.aggregate_crashes`
+        扫描统一日志根下的全部日志,把崩溃片段(traceback / fatal / GPU 崩溃 /
+        WinError / 未处理异常等)跨来源去重后汇总到 ``logs/crashes/latest.log``
+        并直接打开。源日志只读不改,单一入口一眼定位。
         """
-        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        log_path = os.path.join(project_root, "logs", "electron.log")
         try:
-            os.makedirs(os.path.dirname(log_path), exist_ok=True)
-            if not os.path.exists(log_path):
-                with open(log_path, "w", encoding="utf-8") as f:
-                    f.write(
-                        "（暂无三态覆盖层日志）\n"
-                        "Electron 覆盖层尚未启动或还没产生输出。\n"
-                        "运行 `python main.py` 拉起桌面层后，覆盖层的崩溃/WebGL/加载报错会写到这里。\n"
-                    )
-            if sys.platform == "win32":
-                os.startfile(log_path)  # type: ignore[attr-defined]
-            elif sys.platform == "darwin":
-                subprocess.Popen(["open", log_path])
-            else:
-                subprocess.Popen(["xdg-open", log_path])
-            logger.info("Opened overlay log: %s", log_path)
+            from core.crash_log_aggregator import aggregate_crashes
+
+            log_path, count = aggregate_crashes()
+            logger.info("Crash aggregation: %d block(s) -> %s", count, log_path)
         except Exception as exc:
-            logger.error("Failed to open overlay log: %s", exc)
-            self._show_notification("三态动画日志", f"无法打开日志：{log_path}\n{exc}")
+            # 聚合失败不能让入口失效:退化为直接打开崩溃目录里已有的聚合文件,
+            # 再不行就打开崩溃目录本身,保证这一行永远"点得开"。
+            logger.error("Crash aggregation failed: %s", exc)
+            try:
+                log_path = _crash_latest_path()
+                if not log_path.exists():
+                    log_path.parent.mkdir(parents=True, exist_ok=True)
+                    log_path.write_text(
+                        "（崩溃聚合暂不可用）\n"
+                        f"聚合器执行失败：{exc}\n"
+                        "可直接查看同目录及上级日志根中的各源日志。\n",
+                        encoding="utf-8",
+                    )
+            except Exception as inner:
+                self._show_notification("崩溃日志", f"无法打开崩溃日志：{inner}")
+                return
+
+        try:
+            target = str(log_path)
+            if sys.platform == "win32":
+                os.startfile(target)  # type: ignore[attr-defined]
+            elif sys.platform == "darwin":
+                subprocess.Popen(["open", target])
+            else:
+                subprocess.Popen(["xdg-open", target])
+            logger.info("Opened crash log: %s", target)
+        except Exception as exc:
+            logger.error("Failed to open crash log: %s", exc)
+            self._show_notification("崩溃日志", f"无法打开崩溃日志：{log_path}\n{exc}")
 
     def _toggle_remote_desktop(self, icon: pystray.Icon, item: pystray.MenuItem) -> None:
         """开/关【兜底远程桌面(VNC)】——人类手动接管通道,仅 Tailscale 私网内、默认关。
@@ -500,9 +557,15 @@ class GalaxyTray:
             pystray.MenuItem("Show Panel (F12)", self._open_gui, default=True),
             pystray.MenuItem("Wake Overlay (Ctrl+Alt+Space)", self._wake_overlay),
             pystray.MenuItem("Hide Overlay (Ctrl+Alt+H)", self._hide_overlay),
-            pystray.MenuItem("三态动画日志 (Overlay Log)", self._open_overlay_log),
             pystray.MenuItem("Config Panel", self._open_config),
-            pystray.MenuItem("View Logs", self._open_logs),
+            pystray.Menu.SEPARATOR,
+            # ── 日志区(所有者要求:崩溃日志单独一行,统一入口)──
+            # 上一行 = 崩溃专区(跨全部日志聚合去重,排障首选);
+            # 下一行 = 统一日志根目录(看全部原始日志)。
+            # 此前的"三态动画日志"只覆盖 Electron 一份、且与 View Logs 指向两个
+            # 不同根目录,已合并进这两行,不再各开各的。
+            pystray.MenuItem("💥 崩溃日志 (Crash Log)", self._open_crash_log),
+            pystray.MenuItem("View Logs (统一日志目录)", self._open_logs),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("远程桌面接管 (VNC 兜底, 开/关)", self._toggle_remote_desktop),
             pystray.MenuItem("Restart Service", self._restart_service),
