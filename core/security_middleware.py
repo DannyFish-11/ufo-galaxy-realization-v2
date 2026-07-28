@@ -128,9 +128,13 @@ class AuditLogger:
 class IPBlockList:
     """IP 黑名单管理"""
 
+    #: 每积累这么多次失败请求,做一遍全表摊还清理(见 _sweep)。
+    _SWEEP_EVERY = 256
+
     def __init__(self):
         self._blocked: Set[str] = set()
         self._auto_block: Dict[str, List[float]] = defaultdict(list)
+        self._since_sweep = 0
         self._threshold = 50  # 1 分钟内的最大失败请求数
         self._window = 60  # 检测窗口（秒）
         self._block_duration = 300  # 自动封禁时长（秒）
@@ -160,6 +164,21 @@ class IPBlockList:
 
         return False
 
+    def _sweep(self, now: float) -> None:
+        """摊还清理:删掉窗口内已无记录的 IP 键,以及已过期的自动封禁。
+
+        ``_auto_block`` 是 defaultdict(list),每个曾经失败过一次的 IP 都会留下一个
+        键。原来只在列表【内部】按时间窗剪时间戳,列表被剪空后那个键仍然留着 ——
+        于是每见过一个不同的客户端 IP 就永久多一条,面向公网时这是一条无上限的
+        内存增长(扫描器/爬虫会贡献海量一次性 IP)。同理 ``_auto_blocked`` 里过期
+        的条目也只在该 IP 恰好被再次 is_blocked() 时才删,不再来访就一直留着。
+        """
+        cutoff = now - self._window
+        for _ip in [k for k, v in self._auto_block.items() if not v or v[-1] <= cutoff]:
+            del self._auto_block[_ip]
+        for _ip in [k for k, exp in self._auto_blocked.items() if exp <= now]:
+            del self._auto_blocked[_ip]
+
     def record_failure(self, ip: str):
         """记录失败请求"""
         now = time.time()
@@ -167,15 +186,26 @@ class IPBlockList:
 
         # 清理过期记录
         cutoff = now - self._window
-        self._auto_block[ip] = [t for t in self._auto_block[ip] if t > cutoff]
+        kept = [t for t in self._auto_block[ip] if t > cutoff]
 
         # 检查是否超过阈值
-        if len(self._auto_block[ip]) >= self._threshold:
+        if len(kept) >= self._threshold:
             self._auto_blocked[ip] = now + self._block_duration
-            self._auto_block[ip].clear()
+            self._auto_block.pop(ip, None)  # 已封禁,窗口记录不必再留
             logger.warning(
                 f"[安全] IP 自动封禁 {self._block_duration}s: {ip} " f"({self._threshold} 次失败请求/{self._window}s)"
             )
+        elif kept:
+            self._auto_block[ip] = kept
+        else:
+            # 窗口内已无记录 → 连键一起删,别留空列表占位
+            self._auto_block.pop(ip, None)
+
+        # 摊还全表清理:每积累 _SWEEP_EVERY 次失败做一遍,单次成本可忽略
+        self._since_sweep += 1
+        if self._since_sweep >= self._SWEEP_EVERY:
+            self._since_sweep = 0
+            self._sweep(now)
 
     def get_blocked_list(self) -> Dict:
         now = time.time()
