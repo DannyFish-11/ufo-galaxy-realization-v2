@@ -859,7 +859,12 @@ class AndroidBridge:
                 transport="websocket",
             )
         except Exception as exc:
-            logger.debug(
+            # 这里用 DEBUG 曾把一个真实缺陷藏了很久:ensure_live_session 里给只读
+            # 属性 device_type 赋值必抛 AttributeError,每次心跳后的会话同步都在
+            # 失败,而正常日志级别下一个字都看不见。会话同步失败会让 websocket
+            # 句柄停在旧 socket 上(命令发不到设备),这不是"无所谓"的事,升到
+            # WARNING,让下次再坏能被看见。
+            logger.warning(
                 "android_bridge: device_router session sync failed (non-fatal): device_id=%s error=%s",
                 device_id,
                 exc,
