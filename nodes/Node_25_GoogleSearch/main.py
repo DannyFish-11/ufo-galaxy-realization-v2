@@ -21,13 +21,37 @@ except ImportError:
     google_search = None  # type: ignore
     _GOOGLESEARCH_AVAILABLE = False
 
+
+def _node_log_file(name: str) -> str:
+    """节点日志的统一落点 ``<统一日志根>/nodes/<name>``。
+
+    真 bug 修复:此前直接 ``logging.FileHandler("node_25_google_search.log")`` 用裸文件名,日志会写到
+    **进程当前工作目录** —— 从项目根启动、从节点目录启动、被服务拉起时落点各不
+    相同,排障时经常"日志不见了"。现统一到 core.log_paths 的日志根下 nodes/ 子目录。
+    """
+    try:
+        from core.log_paths import node_log_dir
+
+        return str(node_log_dir() / name)
+    except Exception:  # noqa: BLE001 — 日志落点问题不能阻断节点启动
+        import os as _os
+
+        d = _os.path.join(
+            _os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))),
+            "logs",
+            "nodes",
+        )
+        _os.makedirs(d, exist_ok=True)
+        return _os.path.join(d, name)
+
+
 # 配置日志记录器
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - [%(levelname)s] - %(message)s",
     handlers=[
         logging.StreamHandler(),
-        logging.FileHandler("node_25_google_search.log")
+        logging.FileHandler(_node_log_file("node_25_google_search.log"), encoding="utf-8")
     ]
 )
 

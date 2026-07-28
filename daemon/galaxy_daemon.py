@@ -379,6 +379,16 @@ class GalaxyDaemon:
         env_dir = os.environ.get("GALAXY_LOG_DIR")
         if env_dir:
             candidates.append(Path(env_dir))
+        # 统一日志根优先于系统级 /var/log(所有者要求"日志集中一处"):
+        # 项目内 logs/ 是启动器/覆盖层/节点/服务的共同落点,守护进程也写这里,
+        # 排障时只需看一个地方。/var/log/galaxy 与 ~/.galaxy/logs 仅作兜底保留
+        # (统一根不可写的受限环境),不再是首选。
+        try:
+            from core.log_paths import log_root
+
+            candidates.append(log_root())
+        except Exception:  # noqa: BLE001 — 守护进程日志目录探测不能因导入失败中断
+            pass
         candidates.append(Path("/var/log/galaxy"))
         try:
             candidates.append(Path.home() / ".galaxy" / "logs")

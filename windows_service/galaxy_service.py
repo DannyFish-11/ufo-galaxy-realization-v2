@@ -32,6 +32,26 @@ import time
 
 logger = logging.getLogger("Galaxy.WindowsService")
 
+
+def _unified_log_root() -> str:
+    """统一日志根(唯一事实来源:core.log_paths.log_root)。
+
+    Windows 服务可能在项目根未进 sys.path 的环境下运行,故带回退:导不到
+    core.log_paths 时退回与其默认值一致的 ``<项目根>/logs``,绝不退回旧的
+    ``~/.galaxy/logs`` —— 那正是把日志劈成两个根的来源。
+    """
+    try:
+        from core.log_paths import log_root
+
+        return str(log_root())
+    except Exception:  # noqa: BLE001 — 服务日志配置不能因导入失败而中断启动
+        from pathlib import Path
+
+        fallback = Path(__file__).resolve().parent.parent / "logs"
+        fallback.mkdir(parents=True, exist_ok=True)
+        return str(fallback)
+
+
 # ---------------------------------------------------------------------------
 # pywin32 导入（仅在 Windows 运行时加载）
 # ---------------------------------------------------------------------------
@@ -161,7 +181,11 @@ if _HAVE_PYWIN32:
             env["GALAXY_SERVICE_MODE"] = "true"
             env["USE_LOCAL_BRAIN_FIRST"] = "true"
             env["ENABLE_MULTIMODAL"] = "true"
-            env["GALAXY_LOG_DIR"] = os.path.join(os.path.expanduser("~"), ".galaxy", "logs")
+            # 统一日志根(所有者要求"日志集中一处"):此前这里给子进程注入
+            # ~/.galaxy/logs,而启动器/覆盖层/节点写的是项目内 logs/ —— 同一次
+            # 运行的日志被劈成两个根,排障要两头找。改为传 core.log_paths 的
+            # 唯一根;若父进程已显式设过 GALAXY_LOG_DIR 则尊重之(不覆盖用户配置)。
+            env["GALAXY_LOG_DIR"] = os.environ.get("GALAXY_LOG_DIR") or str(_unified_log_root())
 
             cmd = [
                 sys.executable,
@@ -478,13 +502,14 @@ def _customize_service(service_class: type) -> None:
 
 if __name__ == "__main__":
     # 确保日志可写
-    _log_dir = os.path.join(os.path.expanduser("~"), ".galaxy", "logs")
+    # 统一日志根:与启动器/覆盖层/节点写同一处,不再单独用 ~/.galaxy/logs。
+    _log_dir = str(_unified_log_root())
     os.makedirs(_log_dir, exist_ok=True)
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
         handlers=[
-            logging.FileHandler(os.path.join(_log_dir, "windows_service.log")),
+            logging.FileHandler(os.path.join(_log_dir, "windows_service.log"), encoding="utf-8"),
             logging.StreamHandler(),
         ],
     )
