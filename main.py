@@ -474,10 +474,15 @@ def phase0_env_check() -> dict:
     status["api_keys_configured"] = api_count
 
     # npm
-    npm_ok = shutil.which("npm") is not None
+    # 用 which 解析出的**绝对路径**去调用,不能传裸 "npm"。
+    # Windows 上 npm 实际是 `npm.cmd`,而 CreateProcess 不套用 PATHEXT ——
+    # 裸 "npm" 必抛 FileNotFoundError,被下面的 except 吞掉后打出一个
+    # 没有版本号的 "✓ npm"。真机日志里 Node.js 有版本、npm 没有,就是这个指纹。
+    npm_exe = shutil.which("npm")
+    npm_ok = npm_exe is not None
     if npm_ok:
         try:
-            rc = sp.run(["npm", "--version"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=5)
+            rc = sp.run([npm_exe, "--version"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=5)
             npm_ver = rc.stdout.strip() if rc.returncode == 0 else "?"
             print_item("npm", "ok", npm_ver)
         except Exception:

@@ -379,7 +379,15 @@ def phase1_ensure_dependencies(status: dict, args) -> bool:
     # 1.4 Electron 依赖
     if not status["electron_deps_ok"]:
         logger.info("  cd electron && npm install ...")
-        rc, out, err = run(["npm", "install"], cwd=ELECTRON_DIR, timeout=120, capture=True)
+        # 同 start_electron_frontend():必须用 which 解析出的绝对路径。
+        # Windows 上 npm 是 `npm.cmd`,CreateProcess 不套用 PATHEXT,裸 "npm"
+        # 会让 run() 返回 (-2, "command not found"),报成"依赖安装失败"——
+        # 而 npm 其实好端端装着。
+        _npm = shutil.which("npm")
+        if not _npm:
+            rc, out, err = -2, "", "npm 未安装或不在 PATH"
+        else:
+            rc, out, err = run([_npm, "install"], cwd=ELECTRON_DIR, timeout=120, capture=True)
         if rc == 0:
             ok("Electron 依赖安装完成 ✓")
             status["electron_deps_ok"] = True

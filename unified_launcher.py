@@ -287,6 +287,24 @@ def _get_lan_ip() -> str:
         return ""
 
 
+def _probe_port_bindable(host: str, port: int) -> str:
+    """试绑一次端口。可绑返回空串;不可绑返回人话原因。
+
+    只做一次真实的 bind/close,不留监听——这是判断"端口是不是已经被占了"
+    最直接也最可靠的办法(比连一下看通不通准确:后者对只绑了 IPv4 或正在
+    启动中的服务会误判)。
+
+    刻意**不设** SO_REUSEADDR:在 Windows 上它的语义是"允许强抢已被占用的
+    端口",打开反而会让探测通过、真正 bind 时才炸,与本函数的目的正好相反。
+    """
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind((host or "0.0.0.0", int(port)))
+        return ""
+    except OSError as exc:
+        return f"{exc.__class__.__name__}: {exc}"
+
+
 _CLOUD_LLM_KEY_ENV_VARS = (
     "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "DEEPSEEK_API_KEY", "GEMINI_API_KEY",
     "GOOGLE_API_KEY", "GROQ_API_KEY", "OPENROUTER_API_KEY", "ZHIPU_API_KEY",
@@ -638,6 +656,22 @@ class UnifiedWebUI:
                 log_level="warning"
             )
             server = uvicorn.Server(_uvi_config)
+
+            # ── 绑定前先自检端口 ──
+            # 端口被占时,uvicorn 是在后台任务里 `sys.exit(1)`,真机上的表现是:
+            # 一条无上下文的 `ERROR: [Errno 10048] ...`,加一段横跨 winloop/asyncio
+            # 的双层 traceback,末尾还挂一条 `Task exception was never retrieved`
+            # —— 用户完全看不出"这只是端口被另一个 Galaxy 占着"。
+            # 提前用一次普通 bind 探明,把它变成一句能直接照做的话。
+            _bind_err = _probe_port_bindable(self.config.host, self.config.web_ui_port)
+            if _bind_err:
+                raise RuntimeError(
+                    f"API 网关端口 {self.config.web_ui_port} 无法绑定({_bind_err})。"
+                    "最常见原因是**已经有一个 Galaxy 在运行**(请勿重复启动),"
+                    "或该端口被其它程序占用。"
+                    f"可用 `python main.py --port <其它端口>` 换端口启动。"
+                )
+
             logger.info(
                 "Galaxy API 服务启动: http://%s:%d",
                 self.config.host, self.config.web_ui_port
@@ -654,6 +688,12 @@ class UnifiedWebUI:
             # banner) instead of blocking here.
             self._server = server
             self._serve_task = asyncio.create_task(server.serve())
+            # serve() 若在我们取回结果前就异常收场(端口竞态、ASGI 启动失败…),
+            # asyncio 会在任务被回收时打印 "Task exception was never retrieved"
+            # 加一段裸 traceback —— 真机日志里那条噪声就是这么来的。
+            # 挂一个吞掉未取回异常的回调:真正的失败下面 result() 会照常抛出,
+            # 这里只负责保证"没人取"这件事不会再变成刷屏。
+            self._serve_task.add_done_callback(lambda t: t.cancelled() or t.exception())
             for _ in range(300):  # up to ~30s for bind + ASGI startup
                 if server.started or self._serve_task.done():
                     break
@@ -661,7 +701,17 @@ class UnifiedWebUI:
             if self._serve_task.done():
                 # serve() exited during startup — re-raise the real error so the
                 # caller logs an accurate "API 网关启动失败" cause.
-                self._serve_task.result()
+                try:
+                    self._serve_task.result()
+                except SystemExit as exc:
+                    # uvicorn 在启动失败时走的是 `sys.exit(1)`,抛出的 SystemExit
+                    # 继承自 BaseException —— 下面所有 `except Exception` 都接不住,
+                    # 它会一路穿透启动器把整个进程带走(真机上就是那段裸 traceback)。
+                    # 转成普通异常,交给既有的失败分支如实汇报。
+                    raise RuntimeError(
+                        f"API 网关启动失败:uvicorn 以退出码 {exc.code} 中止"
+                        f"(端口 {self.config.web_ui_port},详见上方日志)。"
+                    ) from exc
             logger.debug("启动后健康检查")
             await run_startup_health_check(self.config.web_ui_port)
 
@@ -1137,7 +1187,7 @@ class GalaxyUnified:
                 env["GALAXY_ELECTRON_BASIC"] = "1"
             _log_dir = Path("logs")
             _log_dir.mkdir(exist_ok=True)
-            # 复用同一份 logs/electron.log（托盘「三态动画日志」就打开它），便于一处看壳层日志。
+            # 复用同一份 logs/electron.log（托盘「View Logs」目录下），便于一处看壳层日志。
             _tlog = open(_log_dir / "electron.log", "ab")
             _tlog.write(
                 f"\n===== tauri start {__import__('datetime').datetime.now().isoformat()} "
@@ -1236,6 +1286,19 @@ class GalaxyUnified:
             proc = getattr(self, 'electron_proc', None)
             if not proc or proc.poll() is None or gave_up:
                 continue              # 未启动 / 仍在运行 / 已放弃
+            # 我们【亲眼看到】自己拉起的壳进程已经退出 —— 立刻把锁清掉。
+            # 不清会怎样(真机实证):锁里那个 pid 已死,但 Windows 上 pid 会被系统
+            # 回收给无关进程,already_running() 就把陌生进程当成"壳还活着",
+            # start_tauri() 早退返回 True → start_desktop_shell() 短路 →
+            # 下面的 start_desktop_shell() 根本不会去拉 Electron。真机上 13 条
+            # "Electron 已退出,重启中"对应的 electron.log 里只有一个启动标记,
+            # GPU→软件渲染→basic 三级降级全程空转,正是这么来的。
+            # 自己的孩子自己收尸,是这里唯一能 100% 确定锁已失效的时刻。
+            try:
+                from core.electron_launch_guard import clear_lock
+                clear_lock()
+            except Exception as exc:  # noqa: BLE001 —— 清锁失败不该挡住重启
+                logger.debug("清理桌面壳锁失败(不影响重启): %s", exc)
             now = time.time()
             restarts = [t for t in restarts if now - t < 60]
 
@@ -1872,7 +1935,8 @@ class GalaxyUnified:
                 ("面板", f"http://localhost:{port}"),
                 ("文档", f"http://localhost:{port}/docs"),
                 ("唤醒", "Ctrl+Alt+Space    隐藏 Ctrl+Alt+H"),
-                ("日志", "托盘 →「三态动画日志」"),
+                ("崩溃", "托盘 →「💥 崩溃日志」(全仓崩溃已合并去重)"),
+                ("日志", "托盘 →「View Logs(统一日志目录)」"),
             ],
             degraded=degraded_items or None,
             hints=[("停止", "Ctrl+C"), ("详细", "python main.py -v")],

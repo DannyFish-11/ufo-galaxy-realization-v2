@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import logging
 import os
+import shutil
 import subprocess
 import sys
 import threading
@@ -59,10 +60,10 @@ def _unified_log_root() -> str:
 _HAVE_PYWIN32 = False
 if sys.platform == "win32":
     try:
+        import servicemanager
         import win32event
         import win32service
         import win32serviceutil
-        import servicemanager
 
         _HAVE_PYWIN32 = True
     except ImportError:
@@ -279,9 +280,17 @@ if _HAVE_PYWIN32:
                     logger.info("Electron node_modules not found -- run 'npm install' in electron/")
                     return
 
+            # 必须用 which 解析出的绝对路径:Windows 上 npm 是 `npm.cmd`,
+            # 而 CreateProcess 不套用 PATHEXT —— 裸 "npm" 在这条(纯 Windows 的)
+            # 服务路径上必然 FileNotFoundError,Electron 永远拉不起来。
+            npm_exe = shutil.which("npm")
+            if not npm_exe:
+                logger.info("npm not in PATH -- skip Electron spawn")
+                return
+
             try:
                 self._electron_process = subprocess.Popen(
-                    ["npm", "start"],
+                    [npm_exe, "start"],
                     cwd=electron_dir,
                     env=env,
                     stdout=subprocess.PIPE,
@@ -356,8 +365,9 @@ if _HAVE_PYWIN32:
 
         def _monitor(self) -> None:
             """后台监控 —— 检测子进程崩溃并自动重启。"""
-            import psutil
             import gc
+
+            import psutil
 
             process = psutil.Process(self._process.pid) if self._process else None
 

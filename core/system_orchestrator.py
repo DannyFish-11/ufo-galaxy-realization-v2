@@ -685,6 +685,19 @@ class SystemOrchestrator:
                     detail=electron_binary_fix_hint("electron"),
                 )
 
+        # 拉起用的必须是 shutil.which 解析出来的**绝对路径**,不能是裸 "npm"。
+        # 真机实证(同一次启动里自相矛盾的两行):Phase 0 打了 `✓ npm`,Phase 6 却报
+        # `DEGRADED — npm not found`。根因是 Windows 上 npm 实际叫 `npm.cmd`,
+        # 而 CreateProcess **不套用 PATHEXT** —— 裸 "npm" 必然 FileNotFoundError,
+        # 于是被下面的 except 判成"没装 Node.js",给出一个完全错误的诊断。
+        # 上面 npm install 那两处早就用的是 npm_path,只有这里漏了。
+        if not npm_path:
+            return PhaseResult(
+                phase=StartupPhase.DESKTOP_SURFACE,
+                status=PhaseStatus.DEGRADED,
+                detail="Electron GUI skipped (npm not in PATH — Node.js installed but npm missing)",
+            )
+
         # Launch Electron as detached subprocess
         try:
             env = os.environ.copy()
@@ -697,7 +710,7 @@ class SystemOrchestrator:
 
             # Use shell=False for security; npm start will run electron .
             process = subprocess.Popen(
-                ["npm", "start"],
+                [npm_path, "start"],
                 cwd=electron_dir,
                 env=env,
                 stdout=subprocess.PIPE,
@@ -728,11 +741,14 @@ class SystemOrchestrator:
                 data={"electron_pid": process.pid},
             )
 
-        except FileNotFoundError:
+        except FileNotFoundError as exc:
+            # 走到这里说明 shutil.which 找到的那个 npm 路径**自己**起不来
+            # (被删/权限/损坏),而不是"没装 Node.js" —— 如实说出真正缺的东西,
+            # 别再给用户一个去装 Node.js 的错误指引(它明明装着)。
             return PhaseResult(
                 phase=StartupPhase.DESKTOP_SURFACE,
                 status=PhaseStatus.DEGRADED,
-                detail="npm not found -- install Node.js to enable GUI",
+                detail=f"无法执行 npm({npm_path}): {exc}",
             )
         except Exception as exc:
             return PhaseResult(
