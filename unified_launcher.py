@@ -85,12 +85,18 @@ if sys.platform == "win32":
 try:
     from dotenv import dotenv_values as _dotenv_values
     import os as _os
-    for _k, _v in (_dotenv_values(
-        _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), ".env")
-    ) or {}).items():
-        # 值以 # 开头 = dotenv 把「空值+行内注释」整段当值(毒值),视同未配置
-        if _v and not _v.lstrip().startswith("#") and _k not in _os.environ:
-            _os.environ[_k] = _v
+    _root = _os.path.dirname(_os.path.abspath(__file__))
+    # 与 .env 同一套纪律加载【密钥库】runtime/secrets.env:设置面板把 API Key
+    # 这类 secret 写进它(而非 .env,见 core/config_store.py),但此前重启后
+    # 没有任何代码把它注回 os.environ —— 直接读 os.getenv 的路径(含面板的
+    # "已配置"角标 _is_configured)全都看不到,表现为"Key 存了,重启后面板
+    # 又显示未配置"。加载序 = 先到先得:secrets.env 先加载(面板保存的最新
+    # 真值优先);shell/系统显式导出的环境变量始终最高(两者都不覆盖已存在键)。
+    for _env_file in ("runtime/secrets.env", ".env"):
+        for _k, _v in (_dotenv_values(_os.path.join(_root, _env_file)) or {}).items():
+            # 值以 # 开头 = dotenv 把「空值+行内注释」整段当值(毒值),视同未配置
+            if _v and not _v.lstrip().startswith("#") and _k not in _os.environ:
+                _os.environ[_k] = _v
 except Exception:
     pass
 
@@ -1544,6 +1550,31 @@ class GalaxyUnified:
         except Exception:  # noqa: BLE001
             pass
 
+        # ── API 网关（第一阶段:先开门,再热身）──
+        # 真机复现过的一整类症状的根因:9000 端口的 HTTP 服务此前排在容器探测、
+        # NATS、AI 大脑、逐节点拉起、L4 之后才绑定 —— 容器引擎坏掉(如 Windows
+        # WDAC/WinError 4551 拦 podman)时前面能干等 150s+,而 Electron 面板是
+        # 立刻打开的,用户此时点「保存 API 密钥」,请求打到还没绑定的端口,重试
+        # 60s 后报"无法连接后端(已重试多次)…后端可能仍在启动中"。
+        # /api/config、/health 对后续任何阶段【零依赖】(容器/NATS/Ollama 全部
+        # 可降级),所以把网关绑定提到最前:面板秒级可用,其余阶段照原顺序热身。
+        try:
+            await self.launch_web_ui()
+            # 端口发现文件同步提前:Electron 在 GALAXY_GATEWAY_PORT/PORT 未设时
+            # 读 runtime/entrypoint.json 定位后端 —— 此前它在启动序列末尾才写,
+            # 面板整个启动期都读不到;绑定成功即写(幂等,末尾照写覆盖)。
+            self._write_entrypoint_json()
+            _emit("API 网关", f"http://localhost:{port}", "ok", details=[
+                ("FastAPI + Uvicorn", f"http://{host}:{port}", "ok"),
+                ("WebSocket", f"ws://localhost:{port}/ws", "ok"),
+                ("API 文档", f"http://localhost:{port}/docs", "ok"),
+                ("健康检查", "/health", "ok"),
+                ("状态面板", f"http://localhost:{port}/api/v1/projection/operability-contract", "ok"),
+            ])
+        except Exception as exc:
+            _emit("API 网关", "启动失败", "fail")
+            logger.error(f"API gateway: {exc}")
+
         # ── 核心服务 ──
         try:
             from launcher.core_services import CoreServiceLauncher
@@ -1740,19 +1771,7 @@ class GalaxyUnified:
             _emit("L4 增强模块", "启动失败", "fail")
             logger.error(f"L4 modules: {exc}")
 
-        # ── API 网关 ──
-        try:
-            await self.launch_web_ui()
-            _emit("API 网关", f"http://localhost:{port}", "ok", details=[
-                ("FastAPI + Uvicorn", f"http://{host}:{port}", "ok"),
-                ("WebSocket", f"ws://localhost:{port}/ws", "ok"),
-                ("API 文档", f"http://localhost:{port}/docs", "ok"),
-                ("健康检查", "/health", "ok"),
-                ("状态面板", f"http://localhost:{port}/api/v1/projection/operability-contract", "ok"),
-            ])
-        except Exception as exc:
-            _emit("API 网关", "启动失败", "fail")
-            logger.error(f"API gateway: {exc}")
+        # (API 网关已在第一阶段绑定 —— 见 start() 开头「先开门,再热身」。)
 
         # ── 桌面前端 (三态覆盖层：优先 Tauri，未构建则回退 Electron) ──
         electron_ok = await self.start_desktop_shell()
