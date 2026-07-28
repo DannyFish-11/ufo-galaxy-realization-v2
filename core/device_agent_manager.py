@@ -82,6 +82,22 @@ class DeviceInfo:
     last_heartbeat: Optional[datetime] = None
     registered_at: Optional[datetime] = None
 
+    def apply_status(self, status: "DeviceStatus") -> None:
+        """本地设备信息模型的规范写口。
+
+        专项③(ssot-udm-conformance):设备状态变更必须经由此方法,禁止外部
+        直接对 ``.status`` 下标/属性赋值——那会绕过 SSOT UDM 写路径审计门。
+        本模型是 UDM 之外的本地缓存视图,状态迁移在此集中收口。
+        """
+        self.status = status
+
+    def touch_heartbeat(self, ts: "Optional[datetime]" = None) -> None:
+        """本地设备信息模型的心跳时间戳规范写口(专项③)。
+
+        禁止外部直接对 ``.last_heartbeat`` 赋值绕过 SSOT UDM 审计门。
+        """
+        self.last_heartbeat = ts if ts is not None else datetime.now()
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "device_id": self.device_id,
@@ -189,12 +205,12 @@ class AndroidDeviceAgent(BaseDeviceAgent):
 
             self.ws_connection = await websockets.connect(f"{self.server_url}/device/{self.device_id}")
             self.is_connected = True
-            self.device_info.status = DeviceStatus.ONLINE
+            self.device_info.apply_status(DeviceStatus.ONLINE)
             logger.info(f"Android device {self.device_id} connected")
             return True
         except Exception as e:
             logger.error(f"Failed to connect Android device: {e}")
-            self.device_info.status = DeviceStatus.ERROR
+            self.device_info.apply_status(DeviceStatus.ERROR)
             return False
 
     async def disconnect(self) -> bool:
@@ -202,7 +218,7 @@ class AndroidDeviceAgent(BaseDeviceAgent):
             if self.ws_connection:
                 await self.ws_connection.close()
             self.is_connected = False
-            self.device_info.status = DeviceStatus.OFFLINE
+            self.device_info.apply_status(DeviceStatus.OFFLINE)
             return True
         except Exception as e:
             logger.error(f"Failed to disconnect Android device: {e}")
@@ -287,12 +303,12 @@ class WindowsDeviceAgent(BaseDeviceAgent):
             # 尝试加载微软 UFO
             await self._load_microsoft_ufo()
             self.is_connected = True
-            self.device_info.status = DeviceStatus.ONLINE
+            self.device_info.apply_status(DeviceStatus.ONLINE)
             logger.info(f"Windows device {self.device_id} connected")
             return True
         except Exception as e:
             logger.error(f"Failed to connect Windows device: {e}")
-            self.device_info.status = DeviceStatus.ERROR
+            self.device_info.apply_status(DeviceStatus.ERROR)
             return False
 
     async def _load_microsoft_ufo(self):
@@ -320,7 +336,7 @@ class WindowsDeviceAgent(BaseDeviceAgent):
 
     async def disconnect(self) -> bool:
         self.is_connected = False
-        self.device_info.status = DeviceStatus.OFFLINE
+        self.device_info.apply_status(DeviceStatus.OFFLINE)
         return True
 
     async def execute_command(self, command: str, params: Dict[str, Any]) -> Dict[str, Any]:
@@ -415,12 +431,12 @@ class IoTDeviceAgent(BaseDeviceAgent):
             else:
                 ok = False
             self.is_connected = bool(ok)
-            self.device_info.status = DeviceStatus.ONLINE if ok else DeviceStatus.OFFLINE
+            self.device_info.apply_status(DeviceStatus.ONLINE if ok else DeviceStatus.OFFLINE)
             return bool(ok)
         except Exception as e:
             logger.error(f"Failed to connect IoT device: {e}")
             self.is_connected = False
-            self.device_info.status = DeviceStatus.OFFLINE
+            self.device_info.apply_status(DeviceStatus.OFFLINE)
             return False
 
     async def _connect_mqtt(self) -> bool:
@@ -469,7 +485,7 @@ class IoTDeviceAgent(BaseDeviceAgent):
             self.mqtt_client.loop_stop()
             self.mqtt_client.disconnect()
         self.is_connected = False
-        self.device_info.status = DeviceStatus.OFFLINE
+        self.device_info.apply_status(DeviceStatus.OFFLINE)
         return True
 
     async def execute_command(self, command: str, params: Dict[str, Any]) -> Dict[str, Any]:
@@ -758,12 +774,12 @@ class DeviceAgentManager:
                 for device_id, agent in self._agents.items():
                     try:
                         status = await agent.get_status()
-                        agent.device_info.last_heartbeat = datetime.now()
+                        agent.device_info.touch_heartbeat()
                         if status.get("status") == "error":
                             await self._emit("device_error", agent.device_info)
                     except Exception as e:
                         logger.error(f"Heartbeat failed for {device_id}: {e}")
-                        agent.device_info.status = DeviceStatus.ERROR
+                        agent.device_info.apply_status(DeviceStatus.ERROR)
                         await self._emit("device_error", agent.device_info)
 
         self._heartbeat_task = asyncio.create_task(heartbeat_loop())

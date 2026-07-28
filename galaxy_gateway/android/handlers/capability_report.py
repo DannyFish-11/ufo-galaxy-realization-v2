@@ -191,7 +191,7 @@ async def handle_capability_report(bridge: "AndroidBridge", websocket: Any, mess
     async with bridge._lock:
         if device_id in bridge._devices:
             bridge._devices[device_id].supported_actions = list(supported_actions)
-            bridge._devices[device_id].last_heartbeat = time.time()
+            bridge._devices[device_id].touch_heartbeat()
 
     if device_id:
         try:

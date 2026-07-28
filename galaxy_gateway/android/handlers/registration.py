@@ -888,7 +888,7 @@ async def handle_device_register(
         async with bridge._lock:
             device = AndroidDevice.from_registration(message)
             device.websocket = websocket
-            bridge._devices[device_id] = device
+            bridge.put_local_device(device_id, device)
 
         bridge._sync_device_router_session(device_id, websocket=websocket, connected=True)
 
@@ -1487,7 +1487,7 @@ async def handle_device_reconnect(
             else:
                 device = AndroidDevice.from_registration(message)
                 device.websocket = websocket
-                bridge._devices[device_id] = device
+                bridge.put_local_device(device_id, device)
 
         bridge._sync_device_router_session(device_id, websocket=websocket, connected=True)
 

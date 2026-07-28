@@ -1623,6 +1623,16 @@ class AndroidBridge:
 
         return result
 
+    def put_local_device(self, device_id: str, device: AndroidDevice) -> None:
+        """写入/替换本地传输-会话缓存条目的规范写口(专项③ ssot-udm-conformance)。
+
+        ``_devices`` 仅为 transport/session operational cache,规范设备注册由
+        UnifiedDeviceManager 通过 ``_write_registration_to_udm`` 承担;调用方须
+        先完成 UDM 写入再更新本地缓存。此处集中收口本地缓存的下标写入,禁止
+        外部对 ``bridge._devices[...]`` 直接下标赋值绕过 SSOT UDM 写路径审计门。
+        """
+        self._devices[device_id] = device
+
     def get_device(self, device_id: str) -> Optional[AndroidDevice]:
         """获取设备的传输/会话层缓存条目（transport cache view）."""
         return self._devices.get(device_id)
@@ -1731,7 +1741,7 @@ class AndroidBridge:
                 return False
             device.websocket = websocket
             device.connected = True
-            device.last_heartbeat = time.time()
+            device.touch_heartbeat()
 
         self._patch_reconnect_to_udm(device_id)
         self._sync_device_router_session(device_id, websocket=websocket, connected=True)

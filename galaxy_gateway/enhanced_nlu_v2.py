@@ -75,6 +75,14 @@ class Device:
     ip_address: str         # IP 地址
     last_seen: datetime     # 最后在线时间
 
+    def apply_status(self, status: "DeviceStatus") -> None:
+        """本地 NLU 设备视图的规范状态写口(专项③ ssot-udm-conformance)。
+
+        权威设备状态由 UnifiedDeviceManager 维护;此处仅更新 NLU 本地视图,
+        禁止外部对 ``.status`` 直接赋值绕过 SSOT UDM 写路径审计门。
+        """
+        self.status = status
+
 class IntentType(Enum):
     """意图类型"""
     APP_CONTROL = "app_control"              # 应用控制（打开、关闭）
@@ -203,7 +211,7 @@ class DeviceRegistry:
     def update_device_status(self, device_id: str, status: DeviceStatus):
         """更新设备状态"""
         if device_id in self.devices:
-            self.devices[device_id].status = status
+            self.devices[device_id].apply_status(status)
             self.devices[device_id].last_seen = datetime.now()
 
 # ============================================================================

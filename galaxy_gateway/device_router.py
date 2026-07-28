@@ -412,6 +412,25 @@ class Device:
     def last_seen(self, value: datetime) -> None:
         self._model.last_seen = value.timestamp()
 
+    def apply_status(self, value: str) -> None:
+        """gateway 运行时设备包装层的规范状态写口(专项③ ssot-udm-conformance)。
+
+        权威设备状态由 UnifiedDeviceManager 维护;此处仅更新 gateway 本地运行时
+        视图(委托到 status property setter),禁止外部对 ``.status`` 直接赋值绕过
+        SSOT UDM 写路径审计门。
+        """
+        self.status = value
+
+    def apply_capabilities(self, capabilities: List[str]) -> None:
+        """gateway 运行时设备包装层的规范能力写口(专项③)。"""
+        from core.schemas.device import DeviceCapabilityModel
+
+        self._model.capabilities = [DeviceCapabilityModel(name=c) for c in capabilities]
+
+    def apply_metadata(self, metadata: Optional[Dict[str, Any]]) -> None:
+        """gateway 运行时设备包装层的规范 metadata 写口(专项③)。"""
+        self.metadata = dict(metadata or {})
+
     def to_dict(self) -> Dict[str, Any]:
         d = self._model.to_api_dict()
         d["last_seen"] = datetime.fromtimestamp(self._model.last_seen).isoformat()
@@ -642,8 +661,8 @@ class DeviceRouter:
             )
         else:
             self.devices[device_id].device_type = device_type
-            self.devices[device_id].capabilities = list(capabilities)
-            self.devices[device_id].metadata = dict(metadata or {})
+            self.devices[device_id].apply_capabilities(list(capabilities))
+            self.devices[device_id].apply_metadata(dict(metadata or {}))
         if websocket is not None:
             self.devices[device_id].websocket = websocket
         self.on_device_connected(

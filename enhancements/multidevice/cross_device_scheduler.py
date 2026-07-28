@@ -789,7 +789,7 @@ class CrossDeviceScheduler:
         """Update device status"""
         device = self._devices.get(device_id)
         if device:
-            device.status = status
+            device.apply_status(status)
     
     async def update_device_metrics(
         self,

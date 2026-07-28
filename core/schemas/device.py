@@ -146,6 +146,22 @@ class DeviceModel(BaseModel):
 
     # ── 便捷方法 ──
 
+    def apply_status(self, status: "DeviceStatus") -> None:
+        """本地兼容缓存模型的规范状态写口(专项③ ssot-udm-conformance)。
+
+        DeviceRegistry 是 UnifiedDeviceManager 之外的本地兼容视图,权威状态由
+        UDM 通过 upsert_device_state 维护。此处集中收口本地缓存的状态迁移,
+        禁止外部对 ``.status`` 直接赋值绕过 SSOT UDM 写路径审计门。
+        """
+        self.status = status
+
+    def touch_heartbeat(self, ts: "Optional[float]" = None) -> None:
+        """本地兼容缓存模型的心跳时间戳写口(专项③)。
+
+        禁止外部直接对 ``.last_heartbeat`` 赋值绕过 SSOT UDM 审计门。
+        """
+        self.last_heartbeat = ts if ts is not None else time.time()
+
     def is_online(self) -> bool:
         return self.status == DeviceStatus.ONLINE
 

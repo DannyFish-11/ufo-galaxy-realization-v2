@@ -29,6 +29,14 @@ class DeviceInfo:
     status: str  # "online", "offline", "busy"
     capabilities: List[str]
 
+    def apply_status(self, status: str) -> None:
+        """本地编排设备表的规范状态写口(专项③ ssot-udm-conformance)。
+
+        权威设备状态由 UnifiedDeviceManager 维护;此处仅更新 Node_50 本地
+        编排视图,禁止外部对 ``.status`` 直接赋值绕过 SSOT UDM 写路径审计门。
+        """
+        self.status = status
+
 class TaskStatus(Enum):
     """任务状态"""
     PENDING = "pending"
@@ -177,7 +185,7 @@ class TaskOrchestrator:
                 }
         
         # 标记设备为忙碌
-        device.status = "busy"
+        device.apply_status("busy")
         
         try:
             # 发送命令到设备
@@ -200,7 +208,7 @@ class TaskOrchestrator:
             }
         finally:
             # 恢复设备状态
-            device.status = "online"
+            device.apply_status("online")
     
     def _select_best_device(self, action: str) -> Optional[DeviceInfo]:
         """根据动作选择最佳设备"""

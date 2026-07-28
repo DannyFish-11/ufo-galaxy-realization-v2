@@ -358,14 +358,14 @@ class DeviceManager:
                 if time_since_last > self.heartbeat_timeout:
                     # Device is offline
                     if device.status != DeviceStatus.OFFLINE:
-                        device.status = DeviceStatus.OFFLINE
+                        device.apply_status(DeviceStatus.OFFLINE)
                         health.record_missed_heartbeat()
                         offline_devices.append(device_id)
                         logger.warning(f"Device {device_id} is offline")
                 elif time_since_last > self.heartbeat_interval * 2:
                     # Device may be having issues
                     if device.status == DeviceStatus.ONLINE:
-                        device.status = DeviceStatus.DEGRADED
+                        device.apply_status(DeviceStatus.DEGRADED)
                         health.record_missed_heartbeat()
                         logger.warning(f"Device {device_id} is degraded")
         
@@ -527,8 +527,8 @@ class DeviceManager:
                 )
 
             # Update local state after successful UDM write
-            device.status = request.status
-            device.last_heartbeat = time.time()
+            device.apply_status(request.status)
+            device.touch_heartbeat()
             
             # Update health record
             health = self.health_records.get(device_id)
@@ -663,9 +663,9 @@ class DeviceManager:
                 return None
             
             if request.device_name:
-                device.device_name = request.device_name
+                device.apply_device_name(request.device_name)
             if request.capabilities:
-                device.capabilities = DeviceCapabilities(**request.capabilities)
+                device.apply_capabilities(DeviceCapabilities(**request.capabilities))
             if request.tags is not None:
                 # Update tags
                 for tag in device.tags:

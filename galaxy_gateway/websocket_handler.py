@@ -647,7 +647,9 @@ async def handle_heartbeat(connection_id: str, aip_msg):
             device = device_router.get_device(device_id)
             if device:
                 device.last_seen = datetime.now()
-                device.status = "online"
+                # 专项③:经运行时包装层规范写口更新本地视图,权威状态已由
+                # udm_write_heartbeat 写入 SSOT UDM。
+                device.apply_status("online")
 
         # ── Presence backbone: update UCM heartbeat / last_seen ──
         try:

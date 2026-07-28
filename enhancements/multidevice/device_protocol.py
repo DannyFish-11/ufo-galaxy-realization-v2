@@ -229,6 +229,27 @@ class DeviceInfo:
     last_heartbeat: float = field(default_factory=time.time)
     status: DeviceStatus = DeviceStatus.ONLINE
 
+    def apply_status(self, status: "DeviceStatus") -> None:
+        """本地设备信息模型的规范状态写口(专项③ ssot-udm-conformance)。
+
+        权威状态由 UnifiedDeviceManager 通过 upsert_device_state 维护;此处
+        集中收口本地视图的状态迁移,禁止外部对 ``.status`` 直接赋值绕过
+        SSOT UDM 写路径审计门。
+        """
+        self.status = status
+
+    def touch_heartbeat(self, ts: "Optional[float]" = None) -> None:
+        """本地设备信息模型的心跳时间戳写口(专项③)。"""
+        self.last_heartbeat = ts if ts is not None else time.time()
+
+    def apply_device_name(self, device_name: str) -> None:
+        """本地设备信息模型的显示名规范写口(专项③)。"""
+        self.device_name = device_name
+
+    def apply_capabilities(self, capabilities: "DeviceCapabilities") -> None:
+        """本地设备信息模型的能力集规范写口(专项③)。"""
+        self.capabilities = capabilities
+
     def to_dict(self) -> Dict[str, Any]:
         data = asdict(self)
         data['device_type'] = self.device_type.value

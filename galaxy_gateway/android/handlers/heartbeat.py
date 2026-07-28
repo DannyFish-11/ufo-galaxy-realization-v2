@@ -36,7 +36,7 @@ async def handle_heartbeat(
     # Step 2 — update local transport cache.
     async with bridge._lock:
         if device_id in bridge._devices:
-            bridge._devices[device_id].last_heartbeat = time.time()
+            bridge._devices[device_id].touch_heartbeat()
             bridge._devices[device_id].connected = True
             bridge._sync_device_router_session(
                 device_id,
@@ -73,7 +73,7 @@ async def handle_device_status(
     # Step 2 — update local transport cache.
     async with bridge._lock:
         if device_id in bridge._devices:
-            bridge._devices[device_id].last_heartbeat = time.time()
+            bridge._devices[device_id].touch_heartbeat()
             bridge._devices[device_id].connected = True
             bridge._sync_device_router_session(
                 device_id,
@@ -158,7 +158,7 @@ async def handle_agent_status(
 
     async with bridge._lock:
         if device_id in bridge._devices:
-            bridge._devices[device_id].last_heartbeat = time.time()
+            bridge._devices[device_id].touch_heartbeat()
             bridge._devices[device_id].connected = True
             bridge._sync_device_router_session(device_id, connected=True)
 

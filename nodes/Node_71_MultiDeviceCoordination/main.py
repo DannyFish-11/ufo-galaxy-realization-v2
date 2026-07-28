@@ -89,6 +89,14 @@ class Device:
     current_task: Optional[str] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
 
+    def touch_heartbeat(self, ts: "Optional[datetime]" = None) -> None:
+        """Node_71 本地协调设备表的心跳时间戳规范写口(专项③)。
+
+        权威心跳由 UnifiedDeviceManager 维护;此处仅更新 Node_71 本地协调视图,
+        禁止外部对 ``.last_heartbeat`` 直接赋值绕过 SSOT UDM 写路径审计门。
+        """
+        self.last_heartbeat = ts if ts is not None else datetime.now()
+
     def to_unified_model(self) -> DeviceModel:
         """转换为统一 DeviceModel。"""
         from core.schemas.device import DeviceCapabilityModel
@@ -338,7 +346,7 @@ class MultiDeviceCoordinator:
             return False
 
         self.devices[device_id].state = state
-        self.devices[device_id].last_heartbeat = datetime.now()
+        self.devices[device_id].touch_heartbeat()
         return True
     
     def heartbeat(self, device_id: str) -> bool:
@@ -347,7 +355,7 @@ class MultiDeviceCoordinator:
             return False
         
         device = self.devices[device_id]
-        device.last_heartbeat = datetime.now()
+        device.touch_heartbeat()
         if device.state == DeviceState.OFFLINE:
             device.state = DeviceState.IDLE
         return True

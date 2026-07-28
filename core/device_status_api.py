@@ -141,6 +141,14 @@ class DeviceState:
     # 扩展数据
     extra_data: Dict[str, Any] = field(default_factory=dict)
 
+    def touch_heartbeat(self, ts: "Optional[str]" = None) -> None:
+        """本地设备状态视图的心跳时间戳规范写口(专项③ ssot-udm-conformance)。
+
+        权威心跳由 UnifiedDeviceManager 维护;此处仅更新本地状态视图,
+        禁止外部直接对 ``.last_heartbeat`` 赋值绕过 SSOT UDM 写路径审计门。
+        """
+        self.last_heartbeat = ts if ts is not None else datetime.now().isoformat()
+
     def to_dict(self) -> Dict[str, Any]:
         result = asdict(self)
         result["category"] = self.category.value
@@ -307,7 +315,7 @@ class DeviceStatusManager:
                 setattr(device, key, status_update[key])
 
         # 更新心跳时间
-        device.last_heartbeat = datetime.now().isoformat()
+        device.touch_heartbeat()
 
         # 更新扩展数据
         if "extra_data" in status_update:
