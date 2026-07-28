@@ -150,14 +150,20 @@ def test_probe_port_detects_wildcard_holder_without_binding_wildcard():
     这条是"只探环回口"这个设计成立的前提:只要不开 SO_REUSEADDR,通配绑定
     与具体地址绑定在同一端口上互斥,所以环回探测足以覆盖真机那个场景
     (Electron 拉起第二套后端去抢已被占用的 9000)。
+
+    这里的通配 bind 是**刻意**的,也是本用例的全部意义所在——不真的造一个
+    uvicorn 那种形态的占用者,就无从验证这个前提,只能靠"我认为"。
+    CodeQL 会就此报 py/bind-socket-all-network-interfaces:属实,但已把实际
+    暴露面压到零 —— 端口号取 0(临时端口)、**刻意不 listen**(端口占用在
+    bind() 时就已成立,不 listen 则永远不可能被任何人连上)、且随 with 立即
+    关闭。仅限测试进程内存活数毫秒。
     """
     from unified_launcher import _probe_port_bindable
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as wildcard:
-        wildcard.bind(("0.0.0.0", 0))  # 模拟 uvicorn 的真实监听形态
-        wildcard.listen(1)
+        wildcard.bind(("0.0.0.0", 0))  # 模拟 uvicorn 的真实占用形态(见上:不 listen)
         port = wildcard.getsockname()[1]
-        assert _probe_port_bindable(port), "通配监听占着的端口必须被判为不可绑"
+        assert _probe_port_bindable(port), "通配绑定占着的端口必须被判为不可绑"
 
 
 def test_probe_port_never_binds_all_interfaces():
