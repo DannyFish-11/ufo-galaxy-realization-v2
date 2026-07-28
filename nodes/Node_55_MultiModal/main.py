@@ -9,6 +9,7 @@ import os
 import base64
 import io
 import statistics
+from collections import OrderedDict
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 from fastapi import FastAPI, HTTPException
@@ -51,8 +52,25 @@ app.add_middleware(CORSMiddleware, allow_origins=get_cors_origins(), allow_crede
 
 _ERR_NO_TRANSFORMERS = "transformers not installed. Run: pip install transformers torch"
 
-# Cached pipelines
-_pipelines: Dict[str, Any] = {}
+# Cached pipelines —— 有界 LRU。cache_key=f"{task}:{model}",task/model 都来自
+# 请求体,不设上限时每个不同组合都会常驻一整个 HF 模型(数百 MB~GB 显存/内存),
+# 面对多样请求会 OOM。超过上限时驱逐最久未用,并主动释放显存。
+_PIPELINE_CACHE_MAX = int(os.getenv("NODE55_PIPELINE_CACHE_MAX", "4"))
+_pipelines: "OrderedDict[str, Any]" = OrderedDict()
+
+
+def _evict_pipeline_if_needed() -> None:
+    while len(_pipelines) > _PIPELINE_CACHE_MAX:
+        _old_key, _old_pipe = _pipelines.popitem(last=False)
+        try:
+            del _old_pipe
+            import gc as _gc
+
+            _gc.collect()
+            if TORCH_AVAILABLE and torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except Exception:  # noqa: BLE001 — 释放失败不影响主流程
+            pass
 
 AVAILABLE_MODELS = [
     {"name": "text-generation", "type": "text", "description": "Generate text from prompt", "requires": ["transformers"]},
@@ -134,7 +152,7 @@ async def process(request: ProcessRequest):
         task = request.task
         params = request.params or {}
 
-        # Build or retrieve pipeline
+        # Build or retrieve pipeline（有界 LRU）
         cache_key = f"{task}:{request.model or 'default'}"
         if cache_key not in _pipelines:
             kwargs = {"task": task}
@@ -142,7 +160,11 @@ async def process(request: ProcessRequest):
                 kwargs["model"] = request.model
             if TORCH_AVAILABLE:
                 kwargs["device"] = 0 if torch.cuda.is_available() else -1
+            # 先构建(可能抛错,失败则不进缓存),成功再登记并按需驱逐。
             _pipelines[cache_key] = hf_pipeline(**kwargs)
+            _evict_pipeline_if_needed()
+        else:
+            _pipelines.move_to_end(cache_key)  # 命中即刷新 LRU 位置
 
         pipe = _pipelines[cache_key]
 
@@ -171,6 +193,9 @@ async def embed(request: EmbedRequest):
         cache_key = f"embed:{model_name}"
         if cache_key not in _pipelines:
             _pipelines[cache_key] = hf_pipeline("feature-extraction", model=model_name)
+            _evict_pipeline_if_needed()
+        else:
+            _pipelines.move_to_end(cache_key)
 
         pipe = _pipelines[cache_key]
 

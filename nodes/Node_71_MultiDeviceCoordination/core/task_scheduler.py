@@ -707,21 +707,33 @@ class TaskScheduler:
         """重试任务"""
         task.retry_count += 1
         task.state = TaskState.RETRYING
-        
+
         # 更新统计
         self._stats["retries"] += 1
-        
+
+        # 竞态修复:重试要 await sleep(delay),期间任务若仍留在 _running 且带着
+        # 上一轮的旧 started_at,_monitor_loop 的 _check_timeouts 会把它【误判超时】、
+        # 走 _handle_timeout 清理并置 TIMEOUT;sleep 结束后这里又 _assign_task 重新
+        # 加回 —— 状态错乱、双重处理。在等待前把任务移出 _running、清理设备占用、
+        # 清空 started_at,让它在重试窗口内不被超时检查看到。
+        self._running.pop(task.task_id, None)
+        device.current_task = None
+        if task.task_id in device.assigned_tasks:
+            device.assigned_tasks.remove(task.task_id)
+        device.state = DeviceState.IDLE
+        task.started_at = None
+
         self._emit_event(SchedulerEvent(
             event_type=SchedulerEventType.TASK_RETRY,
             task=task,
             device=device,
             message=f"Task {task.task_id} retrying ({task.retry_count}/{task.retry_policy.max_retries})"
         ))
-        
+
         # 等待重试延迟
         delay = task.get_next_retry_delay()
         await asyncio.sleep(delay)
-        
+
         # 重新执行
         task.state = TaskState.PENDING
         await self._assign_task(task, device)
@@ -778,6 +790,10 @@ class TaskScheduler:
         timed_out = []
         
         for task_id, task in self._running.items():
+            # 只对【真正在跑】的任务判超时。RETRYING/PENDING/ASSIGNED 等中间态
+            # 的 started_at 可能是旧值,不应据此误判超时(见 _retry_task 竞态修复)。
+            if task.state != TaskState.RUNNING:
+                continue
             if task.started_at:
                 elapsed = current_time - task.started_at
                 if elapsed > (task.timeout or self.config.task_timeout):

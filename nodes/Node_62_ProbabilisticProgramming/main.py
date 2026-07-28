@@ -51,14 +51,22 @@ async def sample_distribution(request: SampleRequest):
     samples = []
     dist = request.distribution.lower()
     params = request.params
-    
+
+    # n_samples<1 → 空 samples → 后面 sum/len 除零 500;先校验。
+    if request.n_samples < 1:
+        raise HTTPException(status_code=400, detail="n_samples must be >= 1")
+
     for _ in range(request.n_samples):
         if dist == "normal" or dist == "gaussian":
             s = random.gauss(params.get("mean", 0), params.get("std", 1))
         elif dist == "uniform":
             s = random.uniform(params.get("low", 0), params.get("high", 1))
         elif dist == "exponential":
-            s = random.expovariate(1 / params.get("scale", 1))
+            # scale=0 → 1/0 ZeroDivisionError;scale<0 → expovariate 报错。
+            _scale = params.get("scale", 1)
+            if _scale <= 0:
+                raise HTTPException(status_code=400, detail="exponential scale must be > 0")
+            s = random.expovariate(1 / _scale)
         elif dist == "poisson":
             lam = params.get("lambda", 1)
             s = sum(1 for _ in range(int(lam * 10)) if random.random() < lam / (lam * 10))
@@ -83,17 +91,25 @@ async def metropolis_hastings(request: MCMCRequest):
     samples = []
     current = 0
     
-    def target_pdf(x):
-        return math.exp(-0.5 * ((x - request.target_mean) / request.target_std)**2)
-    
+    if request.n_samples < 1 or request.burn_in < 0:
+        raise HTTPException(status_code=400, detail="n_samples must be >= 1 and burn_in >= 0")
+    if request.target_std <= 0:
+        raise HTTPException(status_code=400, detail="target_std must be > 0")
+
+    # 在【对数空间】算接受比,避免链条长期远离均值时 target_pdf(x) 下溢到 0.0、
+    # 导致 target_pdf(proposal)/target_pdf(current) 触发 ZeroDivisionError(整个
+    # /mcmc 500)。log p(x) = -0.5*((x-mean)/std)^2;acceptance = exp(min(0, Δlogp))。
+    def log_target_pdf(x):
+        return -0.5 * ((x - request.target_mean) / request.target_std) ** 2
+
     for i in range(request.n_samples + request.burn_in):
         proposal = current + random.gauss(0, 1)
-        acceptance = min(1, target_pdf(proposal) / target_pdf(current))
+        acceptance = math.exp(min(0.0, log_target_pdf(proposal) - log_target_pdf(current)))
         if random.random() < acceptance:
             current = proposal
         if i >= request.burn_in:
             samples.append(current)
-    
+
     mean = sum(samples) / len(samples)
     variance = sum((x - mean)**2 for x in samples) / len(samples)
     
