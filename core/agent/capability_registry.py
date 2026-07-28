@@ -622,6 +622,19 @@ class CapabilityRegistry:
             for item in new_items.values():
                 self._normalize_capability_plane_metadata(item)
 
+            # 不能整份替换:refresh() 只重载 mcp / skill / gateway / autonomous 四个
+            # 源,而节点能力是 NodeFabricRegistry 在节点同步后走 inject_item() 写进来的
+            # (见本模块顶部说明第 16 行),四个 loader 一个都不会重新产出它们。此前
+            # 直接 self._items = new_items,于是每刷新一次就把所有 inject_item() 注册
+            # 过的能力(节点能力、以及桌面运行时等同样走注入口的能力)悄悄抹掉 ——
+            # 不报错、不告警,只是能力表凭空少一批。
+            #
+            # 语义:loader 重新产出的名字以本次刷新为准(覆盖旧值);loader 没产出的
+            # 名字保留原有条目(它们本来就不归 loader 管)。
+            _preserved = {name: item for name, item in self._items.items() if name not in new_items}
+            if _preserved:
+                logger.debug("CapabilityRegistry: 刷新保留 %d 项非 loader 来源能力(如节点注入)", len(_preserved))
+            new_items.update(_preserved)
             self._items = new_items
             self._last_refresh = time.monotonic()
             logger.info(
