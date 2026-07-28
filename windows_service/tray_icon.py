@@ -56,9 +56,9 @@ except ImportError:
 
 # 状态指示圆点颜色 (R, G, B) —— 仅在非 running 状态时叠加到渐变球右下角
 _STATUS_COLORS = {
-    "running": (0, 200, 100),    # 鲜绿 — 正常运行
-    "warning": (255, 200, 0),    # 琥珀黄 — 警告/降级
-    "error": (255, 60, 60),      # 红色 — 错误/停止
+    "running": (0, 200, 100),  # 鲜绿 — 正常运行
+    "warning": (255, 200, 0),  # 琥珀黄 — 警告/降级
+    "error": (255, 60, 60),  # 红色 — 错误/停止
     "offline": (128, 128, 128),  # 灰色 — 离线
 }
 
@@ -66,11 +66,11 @@ _STATUS_COLORS = {
 # 与 core/ascii_art.py 的 _ANCHOR_COLORS 保持一致；优先复用其 _interp_rgb 作为
 # 单一真相来源，导入失败时用此本地副本兜底，保证托盘渐变与横幅色调精确一致。
 _BANNER_ANCHORS = [
-    (  0, 225, 253),  # aurora cyan
-    ( 41, 156, 255),  # tech blue
-    (109,  92, 255),  # indigo
-    (184,  61, 245),  # neon purple
-    (255,  46, 147),  # cyber pink
+    (0, 225, 253),  # aurora cyan
+    (41, 156, 255),  # tech blue
+    (109, 92, 255),  # indigo
+    (184, 61, 245),  # neon purple
+    (255, 46, 147),  # cyber pink
 ]
 
 
@@ -81,6 +81,7 @@ def _banner_gradient_rgb(t: float) -> tuple:
     """
     try:
         from core.ascii_art import _interp_rgb
+
         return _interp_rgb(t)
     except Exception:
         anchors = _BANNER_ANCHORS
@@ -98,6 +99,7 @@ def _banner_gradient_rgb(t: float) -> tuple:
             int(b1 + (b2 - b1) * frac),
         )
 
+
 # 状态 -> 提示文本
 _STATUS_TOOLTIPS = {
     "running": "Galaxy V2 AI -- Running",
@@ -113,7 +115,7 @@ _STATUS_TOOLTIPS = {
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _BRAND_ICON_CANDIDATES = (
     _REPO_ROOT / "electron" / "assets" / "icon-256.png",  # 高分辨率，缩放质量最好
-    _REPO_ROOT / "electron" / "assets" / "tray-64.png",   # 托盘专用尺寸兜底
+    _REPO_ROOT / "electron" / "assets" / "tray-64.png",  # 托盘专用尺寸兜底
     _REPO_ROOT / "electron" / "assets" / "icon.png",
 )
 
@@ -203,6 +205,7 @@ def create_icon_image(
 # 托盘图标构建
 # ---------------------------------------------------------------------------
 
+
 class GalaxyTray:
     """Galaxy V2 系统托盘控制器。
 
@@ -261,11 +264,11 @@ class GalaxyTray:
         成功返回 True；Electron 未运行（连接被拒）返回 False。
         """
         import urllib.request
+
         port = os.environ.get("GALAXY_IPC_PORT", "9231")
         url = f"http://127.0.0.1:{port}{path}"
         try:
-            req = urllib.request.Request(url, data=b"{}", method="POST",
-                                         headers={"Content-Type": "application/json"})
+            req = urllib.request.Request(url, data=b"{}", method="POST", headers={"Content-Type": "application/json"})
             with urllib.request.urlopen(req, timeout=timeout) as resp:
                 return resp.getcode() == 200
         except Exception:
@@ -294,6 +297,7 @@ class GalaxyTray:
             try:
                 sys.path.insert(0, project_root)
                 from core.electron_launch_guard import electron_package_intact
+
                 electron_ready = electron_package_intact(electron_dir)
             except Exception:
                 electron_ready = os.path.isdir(os.path.join(electron_dir, "node_modules"))
@@ -301,8 +305,9 @@ class GalaxyTray:
         if electron_ready:
             try:
                 if sys.platform == "win32":
-                    subprocess.Popen(["npm", "start"], cwd=electron_dir, shell=True,
-                                     creationflags=subprocess.CREATE_NO_WINDOW)
+                    subprocess.Popen(
+                        ["npm", "start"], cwd=electron_dir, shell=True, creationflags=subprocess.CREATE_NO_WINDOW
+                    )
                 else:
                     subprocess.Popen(["npm", "start"], cwd=electron_dir)
                 logger.info("Electron GUI launched from %s", electron_dir)
@@ -310,15 +315,16 @@ class GalaxyTray:
             except Exception as exc:
                 logger.error("Failed to launch GUI: %s", exc)
 
-        # 3) 最终兜底:桌面壳不可用 → 浏览器打开 Web 面板(后端始终在跑)
+        # 3) 最终兜底:桌面壳不可用 → 浏览器打开 Web 面板(后端始终在跑)。
+        # 注:网关根路径 / 没有注册任何路由(裸打开是 404),指向真实存在的
+        # 运维台页面。
         port = os.environ.get("GALAXY_GATEWAY_PORT", "") or os.environ.get("GALAXY_PORT", "") or "9000"
-        panel_url = f"http://localhost:{port}"
+        panel_url = f"http://localhost:{port}/operator-console"
         try:
             webbrowser.open(panel_url, new=1, autoraise=True)
             self._show_notification(
                 "Galaxy",
-                "桌面壳未就绪(electron 依赖未装好),已用浏览器打开面板。\n"
-                "修复:在 electron/ 目录执行 npm install。",
+                "桌面壳未就绪(electron 依赖未装好),已用浏览器打开面板。\n" "修复:在 electron/ 目录执行 npm install。",
             )
             logger.info("Desktop shell unavailable — opened web panel %s", panel_url)
         except Exception as exc:
@@ -348,11 +354,15 @@ class GalaxyTray:
             self._show_notification("Galaxy", "覆盖层未就绪（Electron 可能未运行）")
 
     def _open_config(self, icon: pystray.Icon, item: pystray.MenuItem) -> None:
-        """在浏览器中打开配置面板。"""
+        """在浏览器中打开配置面板。
+
+        修复:此前硬编码 16201/8080 两个端口 —— 网关从来不在那里(统一口 9000),
+        每个链接都指向无人监听的地址。按标准端口解析链取真实网关口。
+        """
+        port = os.environ.get("GALAXY_GATEWAY_PORT", "") or os.environ.get("GALAXY_PORT", "") or "9000"
         urls = [
-            "http://localhost:16201/api-manager/",
-            "http://localhost:8080/api-manager/",
-            "http://127.0.0.1:16201/api-manager/",
+            f"http://localhost:{port}/api-manager",
+            f"http://127.0.0.1:{port}/api-manager",
         ]
         for url in urls:
             try:
@@ -399,9 +409,7 @@ class GalaxyTray:
             logger.info("Opened overlay log: %s", log_path)
         except Exception as exc:
             logger.error("Failed to open overlay log: %s", exc)
-            self._show_notification(
-                "三态动画日志", f"无法打开日志：{log_path}\n{exc}"
-            )
+            self._show_notification("三态动画日志", f"无法打开日志：{log_path}\n{exc}")
 
     def _toggle_remote_desktop(self, icon: pystray.Icon, item: pystray.MenuItem) -> None:
         """开/关【兜底远程桌面(VNC)】——人类手动接管通道,仅 Tailscale 私网内、默认关。
@@ -412,6 +420,7 @@ class GalaxyTray:
         """
         try:
             from core.remote_desktop import get_remote_desktop_manager
+
             mgr = get_remote_desktop_manager()
             if mgr.is_running():
                 mgr.disable()

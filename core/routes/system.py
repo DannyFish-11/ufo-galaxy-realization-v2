@@ -38,7 +38,7 @@ import logging
 import os
 from datetime import datetime
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
 from core.routes._shared import (
@@ -351,82 +351,10 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             return JSONResponse(status)
         return JSONResponse({"error": "config not available"})
 
-    @router.get("/api/config")
-    async def get_frontend_config(request: Request = None):
-        """
-        返回前端所需的非敏感配置。
-        注意：敏感 Key (如 OPENAI_API_KEY) 不应直接返回，除非在受控的本地环境。
-        """
-        host = "localhost"
-        port = "9000"
-        if request:
-            host = request.url.hostname or "localhost"
-            port = str(request.url.port or 9000)
-
-        def _is_configured(key_name: str) -> bool:
-            from core.credential_vault import PLACEHOLDER_PREFIXES
-
-            val = os.getenv(key_name, "")
-            return bool(val and not val.lower().startswith(PLACEHOLDER_PREFIXES) and not val.startswith("sk-YOUR"))
-
-        # 模型 tab / 设置 tab 需要"每个 env key 是否已配置"来渲染状态,以及少量
-        # 非敏感值(地址/模型名)用于回填。密钥值一律不下发(只给布尔),地址与
-        # 模型名等非敏感项回填明文。以下均为对既有响应的"增量"字段,不改动
-        # api_base_url / ws_url / status(test_routes_import.test_api_config 依赖之)。
-        _SECRET_MODEL_KEYS = [
-            "OPENAI_API_KEY",
-            "ANTHROPIC_API_KEY",
-            "DEEPSEEK_API_KEY",
-            "GEMINI_API_KEY",
-            "GOOGLE_API_KEY",
-            "META_API_KEY",  # 修复:面板列了 Meta、schema/router 都有它,唯独这里漏登记 → 永远显示"未配置"
-            "GROQ_API_KEY",
-            "OPENROUTER_API_KEY",
-            "PERPLEXITY_API_KEY",
-            "SONAR_API_KEY",
-            "XAI_API_KEY",
-            "ZHIPU_API_KEY",
-            "QWEN_API_KEY",
-            "DASHSCOPE_API_KEY",
-            "MOONSHOT_API_KEY",
-            "MINIMAX_API_KEY",
-            "STEP_API_KEY",
-            "MIMO_API_KEY",
-            "MISTRAL_API_KEY",
-            "AGNES_API_KEY",
-            "HF_API_TOKEN",
-            "ONEAPI_API_KEY",
-            "DEEPSEEK_OCR2_API_KEY",
-        ]
-        _NON_SECRET_MODEL_KEYS = [
-            "OLLAMA_URL",
-            "OLLAMA_MODEL",
-            "ONEAPI_URL",
-            "LOCAL_VLLM_URL",
-            "VLLM_URL",
-            "OPENAI_API_BASE",
-        ]
-        config_data = {
-            "api_base_url": f"http://{host}:{port}",
-            "ws_url": f"ws://{host}:{port}/ws",
-            "status": {
-                "openai": _is_configured("OPENAI_API_KEY"),
-                "deepseek": _is_configured("DEEPSEEK_API_KEY"),
-                "anthropic": _is_configured("ANTHROPIC_API_KEY"),
-                "gemini": _is_configured("GEMINI_API_KEY"),
-                "groq": _is_configured("GROQ_API_KEY"),
-                "openrouter": _is_configured("OPENROUTER_API_KEY"),
-                "perplexity": _is_configured("SONAR_API_KEY") or _is_configured("PERPLEXITY_API_KEY"),
-                "oneapi": _is_configured("ONEAPI_API_KEY"),
-                "ocr": _is_configured("DEEPSEEK_OCR2_API_KEY"),
-                "ollama": bool(os.getenv("OLLAMA_URL")),
-            },
-            # 每个密钥 env key 是否已配置(不下发密钥值本身)
-            "configured": {k: _is_configured(k) for k in _SECRET_MODEL_KEYS},
-            # 非敏感项(地址/模型名)明文回填
-            "values": {k: os.getenv(k, "") for k in _NON_SECRET_MODEL_KEYS},
-        }
-        return JSONResponse(config_data)
+    # 注:GET /api/config(面板角标读端点)已迁至 core/routes/config.py 的开放
+    # 路由组 —— 本 system 路由组整组挂 require_auth,而同路径写端点 POST
+    # /api/config 是开放的,生产模式下曾造成"写得进、读不出"(保存成功、
+    # 角标永远 401 显示未配置)。读写现已同权。
 
     @router.get("/api/v1/system/mcp")
     async def system_mcp():

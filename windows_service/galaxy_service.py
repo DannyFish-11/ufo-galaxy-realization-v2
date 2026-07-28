@@ -63,10 +63,10 @@ SERVICE_DESCRIPTION = (
 )
 
 # 重启退避配置（毫秒）
-_RESTART_DELAY_MS = 5000          # 首次重启延迟 5 秒
-_MAX_RESTARTS = 999999            # PR-D3: Permanent retry (essentially unlimited)
-_RESTART_DELAY_INITIAL_S = 5      # PR-D3: 初始延迟5秒
-_RESTART_DELAY_MAX_S = 300        # PR-D3: 最大延迟5分钟
+_RESTART_DELAY_MS = 5000  # 首次重启延迟 5 秒
+_MAX_RESTARTS = 999999  # PR-D3: Permanent retry (essentially unlimited)
+_RESTART_DELAY_INITIAL_S = 5  # PR-D3: 初始延迟5秒
+_RESTART_DELAY_MAX_S = 300  # PR-D3: 最大延迟5分钟
 _RESTART_RESET_PERIOD_MS = 86400_000  # 24 小时重置计数
 
 # 停止超时（秒）
@@ -143,9 +143,7 @@ if _HAVE_PYWIN32:
             self._spawn_galaxy()
 
             # 启动崩溃监控线程
-            self._monitor_thread = threading.Thread(
-                target=self._monitor, name="GalaxyMonitor", daemon=True
-            )
+            self._monitor_thread = threading.Thread(target=self._monitor, name="GalaxyMonitor", daemon=True)
             self._monitor_thread.start()
 
             # 阻塞直到收到停止信号
@@ -163,9 +161,7 @@ if _HAVE_PYWIN32:
             env["GALAXY_SERVICE_MODE"] = "true"
             env["USE_LOCAL_BRAIN_FIRST"] = "true"
             env["ENABLE_MULTIMODAL"] = "true"
-            env["GALAXY_LOG_DIR"] = os.path.join(
-                os.path.expanduser("~"), ".galaxy", "logs"
-            )
+            env["GALAXY_LOG_DIR"] = os.path.join(os.path.expanduser("~"), ".galaxy", "logs")
 
             cmd = [
                 sys.executable,
@@ -220,16 +216,44 @@ if _HAVE_PYWIN32:
                 self._spawn_electron(project_root, env)
 
         def _spawn_electron(self, project_root: str, env: dict) -> None:
-            """Launch Electron three-state GUI as a detached sibling process."""
+            """Launch Electron three-state GUI as a detached sibling process.
+
+            对齐其余 4 条 Electron 拉起路径的防护(此前本路径是唯一一条【裸奔】
+            的:无防重锁 → 与 unified_launcher/launch_desktop 并发时双开覆盖层;
+            无端口注入 → Electron 只能猜 9000;无包完整性检查 → node_modules
+            目录存在但残缺时启动必炸)。防护失败不阻断拉起(服务模式尽力而为)。
+            """
             electron_dir = os.path.join(project_root, "electron")
             if not os.path.isdir(electron_dir):
                 logger.info("Electron directory not found -- GUI not started")
                 return
 
-            # Skip if node_modules is missing (npm install hasn't been run)
-            if not os.path.isdir(os.path.join(electron_dir, "node_modules")):
-                logger.info("Electron node_modules not found -- run 'npm install' in electron/")
-                return
+            # 防重锁 + 端口注入 + 包完整性(与其它拉起路径同一套 guard)
+            try:
+                sys.path.insert(0, project_root)
+                from core.electron_launch_guard import (
+                    already_running,
+                    electron_package_intact,
+                    resolve_gateway_port,
+                    write_lock,
+                )
+
+                if already_running():
+                    logger.info("Electron already running (pid lock) -- skip duplicate spawn")
+                    return
+                if not electron_package_intact(electron_dir):
+                    logger.info("Electron package incomplete -- run 'npm install' in electron/")
+                    return
+                _gw_port = str(resolve_gateway_port())
+                env = dict(env)
+                env.setdefault("GALAXY_GATEWAY_PORT", _gw_port)
+                env.setdefault("PORT", _gw_port)
+            except Exception as _guard_exc:  # noqa: BLE001 — guard 不可用则退回旧行为
+                logger.warning("electron_launch_guard unavailable (%s) -- spawning unguarded", _guard_exc)
+                write_lock = None  # type: ignore[assignment]
+                if not os.path.isdir(os.path.join(electron_dir, "node_modules")):
+                    logger.info("Electron node_modules not found -- run 'npm install' in electron/")
+                    return
 
             try:
                 self._electron_process = subprocess.Popen(
@@ -252,6 +276,12 @@ if _HAVE_PYWIN32:
                     name="ElectronOutput",
                 ).start()
 
+                # 写入 pid 防重锁,让其余拉起路径感知本次拉起(guard 可用时)
+                try:
+                    if write_lock is not None:
+                        write_lock(self._electron_process.pid)
+                except Exception as _lock_exc:  # noqa: BLE001
+                    logger.debug("write_lock skipped: %s", _lock_exc)
                 logger.info("Electron GUI started (pid=%d)", self._electron_process.pid)
 
             except FileNotFoundError:
@@ -340,9 +370,7 @@ if _HAVE_PYWIN32:
                 # Also kill the Electron process (it will be restarted with Galaxy)
                 self._kill_electron_process(graceful=True)
 
-                logger.warning(
-                    "Galaxy process exited with code %d, preparing restart...", ret
-                )
+                logger.warning("Galaxy process exited with code %d, preparing restart...", ret)
                 servicemanager.LogMsg(
                     servicemanager.EVENTLOG_WARNING_TYPE,
                     0,
@@ -361,7 +389,7 @@ if _HAVE_PYWIN32:
 
                 # PR-D3: Exponential backoff: 5s -> 10s -> 20s -> 40s -> ... -> 300s(max)
                 delay = min(
-                    _RESTART_DELAY_INITIAL_S * (2 ** self._restart_count),
+                    _RESTART_DELAY_INITIAL_S * (2**self._restart_count),
                     _RESTART_DELAY_MAX_S,
                 )
                 logger.info("Restarting in %ds (attempt %d)", delay, self._restart_count)
@@ -375,9 +403,7 @@ if _HAVE_PYWIN32:
                     process = psutil.Process(self._process.pid) if self._process else None
 
         @staticmethod
-        def _pipe_logger(
-            process: subprocess.Popen[str], log_path: str
-        ) -> None:
+        def _pipe_logger(process: subprocess.Popen[str], log_path: str) -> None:
             """将子进程 stdout 写入日志文件。"""
             try:
                 with open(log_path, "a", encoding="utf-8") as fh:
@@ -440,9 +466,7 @@ def _customize_service(service_class: type) -> None:
                 lpCommand=None,
                 lpsaActions=actions,
             )
-            win32service.ChangeServiceConfig2(
-                hs, win32service.SERVICE_CONFIG_FAILURE_ACTIONS, failure_actions
-            )
+            win32service.ChangeServiceConfig2(hs, win32service.SERVICE_CONFIG_FAILURE_ACTIONS, failure_actions)
             logger.info("Service failure actions configured (auto-restart on crash)")
         finally:
             win32service.CloseService(hs)

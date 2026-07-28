@@ -8,7 +8,8 @@ import os
 from pathlib import Path
 from typing import Any, Dict
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 logger = logging.getLogger("Galaxy.API.Config")
@@ -597,6 +598,86 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
 
 class ConfigUpdateRequest(BaseModel):
     config: Dict[str, str]
+
+
+# 面板角标读端点(自 core/routes/system.py 迁入)。迁移原因 —— 鉴权对称性:
+# 它原先挂在 system 路由组(整组 Depends(require_auth)),而同路径的写端点
+# POST /api/config 在本开放路由组 —— 生产模式(GALAXY_MODE=production 强制
+# 开鉴权)下变成"写得进、读不出":Key 保存成功,面板角标读取却 401,永远显示
+# "未配置"。读的是掩码状态(布尔 + 非敏感地址),密级不高于写端点,读写必须同权。
+_SECRET_MODEL_KEYS = [
+    "OPENAI_API_KEY",
+    "ANTHROPIC_API_KEY",
+    "DEEPSEEK_API_KEY",
+    "GEMINI_API_KEY",
+    "GOOGLE_API_KEY",
+    "META_API_KEY",
+    "GROQ_API_KEY",
+    "OPENROUTER_API_KEY",
+    "PERPLEXITY_API_KEY",
+    "SONAR_API_KEY",
+    "XAI_API_KEY",
+    "ZHIPU_API_KEY",
+    "QWEN_API_KEY",
+    "DASHSCOPE_API_KEY",
+    "MOONSHOT_API_KEY",
+    "MINIMAX_API_KEY",
+    "STEP_API_KEY",
+    "MIMO_API_KEY",
+    "MISTRAL_API_KEY",
+    "AGNES_API_KEY",
+    "HF_API_TOKEN",
+    "ONEAPI_API_KEY",
+    "DEEPSEEK_OCR2_API_KEY",
+]
+_NON_SECRET_MODEL_KEYS = [
+    "OLLAMA_URL",
+    "OLLAMA_MODEL",
+    "ONEAPI_URL",
+    "LOCAL_VLLM_URL",
+    "VLLM_URL",
+    "OPENAI_API_BASE",
+]
+
+
+@router.get("")
+async def get_frontend_config(request: Request = None):
+    """返回前端所需的非敏感配置(密钥只给"是否已配置"布尔,不下发值)。"""
+    host = "localhost"
+    port = "9000"
+    if request:
+        host = request.url.hostname or "localhost"
+        port = str(request.url.port or 9000)
+
+    def _is_configured(key_name: str) -> bool:
+        from core.credential_vault import PLACEHOLDER_PREFIXES
+
+        val = os.getenv(key_name, "")
+        return bool(val and not val.lower().startswith(PLACEHOLDER_PREFIXES) and not val.startswith("sk-YOUR"))
+
+    return JSONResponse(
+        {
+            "api_base_url": f"http://{host}:{port}",
+            # 此前指向 ws://…/ws —— 该端点已被移除且有测试钉死"必须不存在"
+            # (tests/test_pr1_canonical_device_ingress.py),字段却仍在广播幻影
+            # 地址。改为真实存在的桌面在场通道。
+            "ws_url": f"ws://{host}:{port}/ws/desktop-presence",
+            "status": {
+                "openai": _is_configured("OPENAI_API_KEY"),
+                "deepseek": _is_configured("DEEPSEEK_API_KEY"),
+                "anthropic": _is_configured("ANTHROPIC_API_KEY"),
+                "gemini": _is_configured("GEMINI_API_KEY"),
+                "groq": _is_configured("GROQ_API_KEY"),
+                "openrouter": _is_configured("OPENROUTER_API_KEY"),
+                "perplexity": _is_configured("SONAR_API_KEY") or _is_configured("PERPLEXITY_API_KEY"),
+                "oneapi": _is_configured("ONEAPI_API_KEY"),
+                "ocr": _is_configured("DEEPSEEK_OCR2_API_KEY"),
+                "ollama": bool(os.getenv("OLLAMA_URL")),
+            },
+            "configured": {k: _is_configured(k) for k in _SECRET_MODEL_KEYS},
+            "values": {k: os.getenv(k, "") for k in _NON_SECRET_MODEL_KEYS},
+        }
+    )
 
 
 @router.get("/all")

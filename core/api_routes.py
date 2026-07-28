@@ -418,6 +418,9 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     router.include_router(compat.create_router(service_manager=service_manager, config=config))
     router.include_router(twin.create_router(service_manager=service_manager, config=config))
     router.include_router(sessions.create_router(service_manager=service_manager, config=config))
+    # OAuth 连接器的浏览器导航端点(authorize 弹窗 / IdP 回调)——不可能携带
+    # Bearer 头,必须免鉴权,否则生产模式下授权流程结构性死锁。见 nodes.py。
+    router.include_router(nodes.create_oauth_router())
     router.include_router(config_route.router)
     router.include_router(models_route.router)
     router.include_router(ui_act_route.router)

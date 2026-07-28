@@ -224,46 +224,11 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         except Exception as e:  # noqa: BLE001
             return JSONResponse({"ok": False, "error": str(e)}, status_code=200)
 
-    @router.get("/api/v1/connectors/{service}/authorize")
-    async def connector_authorize(service: str):
-        """一键授权:302 跳到服务的 OAuth 授权页(带 redirect_uri + state)。"""
-        from fastapi.responses import RedirectResponse
-
-        try:
-            from core.oauth_connectors import build_authorize_url
-
-            url, err = build_authorize_url(service)
-            if err == "needs_config":
-                return JSONResponse({"ok": False, "error": "needs_config"}, status_code=200)
-            if err or not url:
-                return JSONResponse({"ok": False, "error": err or "无法生成授权链接"}, status_code=200)
-            return RedirectResponse(url)
-        except Exception as e:  # noqa: BLE001
-            return JSONResponse({"ok": False, "error": str(e)}, status_code=200)
-
-    @router.get("/api/v1/connectors/{service}/callback")
-    async def connector_callback(service: str, code: str = "", state: str = ""):
-        """OAuth 回调:用 code 换 token 存本机,返回一个可自动关闭的提示页。"""
-        from fastapi.responses import HTMLResponse
-
-        from core.oauth_connectors import handle_callback
-
-        res = await handle_callback(service, code, state)
-        ok = bool(res.get("ok"))
-        account = res.get("account")
-        if ok:
-            msg = f"{service} 已连接（{account}），可关闭本页" if account else f"{service} 连接成功,可关闭本页"
-        else:
-            msg = f"连接失败:{res.get('error')}"
-        html = (
-            "<!doctype html><meta charset='utf-8'><body style='font-family:system-ui;"
-            "background:#11131c;color:#eaf6ff;display:flex;align-items:center;"
-            "justify-content:center;height:100vh;margin:0'><div style='text-align:center'>"
-            f"<h2>{'✓' if ok else '✗'} {msg}</h2>"
-            "<p style='opacity:.6'>本窗口 3 秒后自动关闭</p></div>"
-            "<script>setTimeout(()=>window.close(),3000)</script></body>"
-        )
-        return HTMLResponse(html)
+    # 注:GET /connectors/{service}/authorize 与 /callback 已迁至
+    # create_oauth_router()(开放路由组)。两者都是【浏览器导航】端点 ——
+    # authorize 由面板弹窗直接打开、callback 由 Google/GitHub 等身份提供方
+    # 重定向而来,均不可能携带 Bearer 头;留在本鉴权组里意味着生产模式
+    # (强制鉴权)下整条 OAuth 连接器授权流程结构性死锁(弹窗 401、回调 401)。
 
     @router.post("/api/v1/connectors/{service}/disconnect")
     async def connector_disconnect(service: str):
@@ -576,5 +541,59 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 },
                 status_code=status_code,
             )
+
+    return router
+
+
+def create_oauth_router() -> APIRouter:
+    """OAuth 连接器的【浏览器导航】端点 —— 必须挂在开放路由组。
+
+    authorize 由面板弹窗直接打开、callback 由身份提供方(Google/GitHub/...)
+    重定向而来,两者都不可能携带 Bearer 头;若随 nodes 主路由组一起挂
+    require_auth,生产模式(强制鉴权)下整条授权流程结构性死锁。
+    XHR 类连接器端点(list/credentials/disconnect)仍留在鉴权组。
+    """
+    router = APIRouter()
+
+    @router.get("/api/v1/connectors/{service}/authorize")
+    async def connector_authorize(service: str):
+        """一键授权:302 跳到服务的 OAuth 授权页(带 redirect_uri + state)。"""
+        from fastapi.responses import RedirectResponse
+
+        try:
+            from core.oauth_connectors import build_authorize_url
+
+            url, err = build_authorize_url(service)
+            if err == "needs_config":
+                return JSONResponse({"ok": False, "error": "needs_config"}, status_code=200)
+            if err or not url:
+                return JSONResponse({"ok": False, "error": err or "无法生成授权链接"}, status_code=200)
+            return RedirectResponse(url)
+        except Exception as e:  # noqa: BLE001
+            return JSONResponse({"ok": False, "error": str(e)}, status_code=200)
+
+    @router.get("/api/v1/connectors/{service}/callback")
+    async def connector_callback(service: str, code: str = "", state: str = ""):
+        """OAuth 回调:用 code 换 token 存本机,返回一个可自动关闭的提示页。"""
+        from fastapi.responses import HTMLResponse
+
+        from core.oauth_connectors import handle_callback
+
+        res = await handle_callback(service, code, state)
+        ok = bool(res.get("ok"))
+        account = res.get("account")
+        if ok:
+            msg = f"{service} 已连接（{account}），可关闭本页" if account else f"{service} 连接成功,可关闭本页"
+        else:
+            msg = f"连接失败:{res.get('error')}"
+        html = (
+            "<!doctype html><meta charset='utf-8'><body style='font-family:system-ui;"
+            "background:#11131c;color:#eaf6ff;display:flex;align-items:center;"
+            "justify-content:center;height:100vh;margin:0'><div style='text-align:center'>"
+            f"<h2>{'✓' if ok else '✗'} {msg}</h2>"
+            "<p style='opacity:.6'>本窗口 3 秒后自动关闭</p></div>"
+            "<script>setTimeout(()=>window.close(),3000)</script></body>"
+        )
+        return HTMLResponse(html)
 
     return router
