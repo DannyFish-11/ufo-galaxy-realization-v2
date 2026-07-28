@@ -93,13 +93,34 @@ class DeviceState:
 
 
 @dataclass
-class RegisteredDevice:
+class TwinDeviceRegistration:
+    """数字孪生本地设备登记记录。
+
+    专项③ anti-drift:本类不是规范单设备读契约。类名去除 "RegisteredDevice"
+    平行 Schema 语义,避免与唯一规范单设备读契约
+    :class:`contracts.registered_runtime_device.RegisteredRuntimeDevice` 漂移;
+    需要对外读投影时,经 :meth:`to_registered_runtime_device` 锚定到规范契约。
+    保留向后兼容别名 ``RegisteredDevice``。
+    """
     device_id: str
     name: str
     device_type: str
     config: Dict[str, Any]
     registered_at: str = field(default_factory=lambda: datetime.utcnow().isoformat())
     last_seen: Optional[str] = None
+
+    def to_registered_runtime_device(self):
+        """投影到唯一规范单设备读契约 RegisteredRuntimeDevice(专项③ anti-drift 锚定)。"""
+        from contracts.registered_runtime_device import build_registered_runtime_device
+
+        return build_registered_runtime_device(
+            device_id=self.device_id,
+            device_name=self.name,
+        )
+
+
+# 向后兼容别名:现有 RegisteredDevice(...) 调用与类型注解保持不变。
+RegisteredDevice = TwinDeviceRegistration
 
 # ---------------------------------------------------------------------------
 # Digital Twin service
