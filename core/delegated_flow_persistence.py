@@ -464,7 +464,24 @@ class _GenericDurableStore(Generic[_T]):
                 try:
                     with os.fdopen(fd, "w", encoding="utf-8") as fh:
                         fh.write(payload)
+                        # rename 之前必须把数据真正落盘。os.replace 只保证【目录项】
+                        # 的替换是原子的,不保证文件【内容】已经到磁盘 —— 崩溃/断电时
+                        # 完全可能出现"新名字已生效、数据块还在页缓存里没写下去",
+                        # 于是重启后读到一个截断甚至 0 字节的快照。而这个类对外宣称的
+                        # 正是原子持久化,那种情况下宣称不成立。
+                        fh.flush()
+                        os.fsync(fh.fileno())
                     os.replace(tmp_path, self._store_path)
+                    # 再 fsync 一次目录,确保"改名"这件事本身也落盘;否则崩溃后可能
+                    # 退回旧名字。目录 fsync 在个别平台不支持,失败不致命。
+                    try:
+                        dir_fd = os.open(store_dir, os.O_RDONLY)
+                        try:
+                            os.fsync(dir_fd)
+                        finally:
+                            os.close(dir_fd)
+                    except OSError:
+                        pass
                 except Exception:
                     try:
                         os.unlink(tmp_path)
