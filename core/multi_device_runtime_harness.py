@@ -241,7 +241,7 @@ class RuntimeHarnessResult:
 # ---------------------------------------------------------------------------
 
 
-class MultiDeviceRuntimeHarness:
+class MultiDeviceCoherenceHarness:
     """Integration harness wiring mesh persistence, formation rebalance,
     and scheduling truth into a single coherent multi-device runtime surface.
 
@@ -658,12 +658,35 @@ class MultiDeviceRuntimeHarness:
             runtime_decision=runtime_decision,
         )
 
+    def to_canonical_projection(self):
+        """返回本 harness 运行时读侧的规范投影(专项③ anti-drift 锚定)。
+
+        本类是编排/集成 harness,不是顶层多设备读模型。其对外“多设备运行时读
+        视图”一律锚定到唯一规范契约
+        :class:`contracts.multi_device_runtime_projection.MultiDeviceRuntimeProjection`,
+        不再自建平行的顶层多设备读模型。
+        """
+        from contracts.multi_device_runtime_projection import (
+            build_multi_device_runtime_projection,
+        )
+
+        return build_multi_device_runtime_projection()
+
+
+# ---------------------------------------------------------------------------
+# 专项③ anti-drift:类定义名去除 "MultiDeviceRuntime" 平行读模型语义前缀,
+# 明确本类为编排 harness(而非顶层多设备读投影);读侧投影统一锚定到规范契约
+# MultiDeviceRuntimeProjection(见 to_canonical_projection)。保留向后兼容别名,
+# 现有 import MultiDeviceRuntimeHarness 不受影响。
+# ---------------------------------------------------------------------------
+MultiDeviceRuntimeHarness = MultiDeviceCoherenceHarness
+
 
 # ---------------------------------------------------------------------------
 # Module-level singleton management
 # ---------------------------------------------------------------------------
 
-_harness_singleton: Optional[MultiDeviceRuntimeHarness] = None
+_harness_singleton: Optional[MultiDeviceCoherenceHarness] = None
 _harness_lock = threading.Lock()
 
 

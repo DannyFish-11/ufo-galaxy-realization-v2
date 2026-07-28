@@ -12,7 +12,6 @@ from typing import Any, Dict, List, Optional
 
 from galaxy_gateway.android.capabilities import DeviceCapability
 
-
 # DeviceType / DevicePlatform — imported from canonical SSOT
 from core.device_types import (  # noqa: E402
     AIPDeviceType as DeviceType,
@@ -87,6 +86,7 @@ class UIElement:
 @dataclass
 class AndroidDevice:
     """安卓设备信息"""
+
     device_id: str
     device_type: DeviceType = DeviceType.ANDROID_PHONE
     platform: DevicePlatform = DevicePlatform.ANDROID
@@ -115,6 +115,16 @@ class AndroidDevice:
     # 任务状态
     current_task_id: Optional[str] = None
     pending_tasks: List[str] = field(default_factory=list)
+
+    def touch_heartbeat(self, ts: "Optional[float]" = None) -> None:
+        """本地传输/会话缓存条目的心跳时间戳规范写口(专项③ ssot-udm-conformance)。
+
+        ``AndroidBridge._devices`` 只是 transport/session operational cache,规范
+        设备状态(含权威 last_heartbeat)由 UnifiedDeviceManager 维护并已由各
+        handler 通过 ``bridge._patch_*_to_udm`` 写入。此处集中收口本地缓存的
+        心跳刷新,禁止外部对 ``.last_heartbeat`` 直接赋值绕过 SSOT UDM 审计门。
+        """
+        self.last_heartbeat = ts if ts is not None else time.time()
 
     def to_dict(self) -> Dict[str, Any]:
         return {

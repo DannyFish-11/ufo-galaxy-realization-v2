@@ -113,11 +113,7 @@ def get_all_devices_with_registration_gaps() -> Dict[str, List[str]]:
     enumerate *all* partially-registered devices without knowing their IDs
     upfront.
     """
-    return {
-        device_id: list(gaps)
-        for device_id, gaps in _device_registration_gaps.items()
-        if gaps
-    }
+    return {device_id: list(gaps) for device_id, gaps in _device_registration_gaps.items() if gaps}
 
 
 def _schedule_pending_delivery_replay_on_canonical_reconnect(
@@ -142,8 +138,7 @@ def _schedule_pending_delivery_replay_on_canonical_reconnect(
         )
     except Exception as exc:  # pragma: no cover - non-fatal integration absence
         logger.debug(
-            "handle_device_register: canonical reconnect replay unavailable "
-            "device_id=%s error=%s",
+            "handle_device_register: canonical reconnect replay unavailable " "device_id=%s error=%s",
             device_id,
             exc,
         )
@@ -157,6 +152,7 @@ def _schedule_pending_delivery_replay_on_canonical_reconnect(
         try:
             # PR-AIP-UNIFIED: Wrap send through AIPTransport instead of direct WS
             from core.aip_transport import get_aip_transport
+
             async def _aip_send(msg_dict):
                 msg_dict["_transport"] = "auto"
                 msg_dict["version"] = "3.0"
@@ -178,16 +174,14 @@ def _schedule_pending_delivery_replay_on_canonical_reconnect(
                 _aip_send,
             )
             logger.info(
-                "handle_device_register: canonical reconnect replay complete "
-                "device_id=%s delivered=%d skipped=%d",
+                "handle_device_register: canonical reconnect replay complete " "device_id=%s delivered=%d skipped=%d",
                 device_id,
                 delivered,
                 skipped,
             )
         except Exception as exc:  # pragma: no cover - best-effort replay path
             logger.warning(
-                "handle_device_register: canonical reconnect replay failed "
-                "device_id=%s error=%s",
+                "handle_device_register: canonical reconnect replay failed " "device_id=%s error=%s",
                 device_id,
                 exc,
             )
@@ -256,9 +250,7 @@ def _apply_pending_lifecycle_reconnect_decisions(
             "action": action,
             "reason": reason,
             "delivery_replay_scheduled": bool(delivery_replay_scheduled),
-            "diagnostic_trace": (
-                f"reconnect:{continuity_outcome}:{decision}:{record.owner.value}:{record.task_id}"
-            ),
+            "diagnostic_trace": (f"reconnect:{continuity_outcome}:{decision}:{record.owner.value}:{record.task_id}"),
         }
         classification = policy_decision.classification
         evidence["continuity_adjudication_classification"] = classification
@@ -393,9 +385,11 @@ class DispatchBlockedByRegistrationGapError(RuntimeError):
             "dispatching tasks to this device."
         )
 
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _extract_runtime_attachment_session_id(message: Dict[str, Any]) -> str:
     """Extract the canonical runtime attachment session identity from a message.
@@ -489,45 +483,30 @@ def _evaluate_conversation_continuity_runtime_gate(
                 history_visible = False
 
         evidence = ConversationContinuityEvidence(
-            session_confirmed=bool(
-                message.get("session_confirmed", payload.get("session_confirmed", False))
-            ) or (
-                reconnect_outcome == "continuity_resume" and registry_entry is not None
-            ),
+            session_confirmed=bool(message.get("session_confirmed", payload.get("session_confirmed", False)))
+            or (reconnect_outcome == "continuity_resume" and registry_entry is not None),
             history_visible=history_visible,
-            state_present=bool(
-                message.get("state_present", payload.get("state_present", False))
-            ) or (
-                reconnect_outcome == "continuity_resume" or registry_entry is not None
-            ),
-            rebind_completed=bool(
-                message.get("rebind_completed", payload.get("rebind_completed", False))
-            ) or (
-                reconnect_outcome == "continuity_resume"
-                and bool(runtime_attachment_session_id)
-            ),
-            task_continuity_ok=bool(
-                message.get("task_continuity_ok", payload.get("task_continuity_ok", False))
-            ),
+            state_present=bool(message.get("state_present", payload.get("state_present", False)))
+            or (reconnect_outcome == "continuity_resume" or registry_entry is not None),
+            rebind_completed=bool(message.get("rebind_completed", payload.get("rebind_completed", False)))
+            or (reconnect_outcome == "continuity_resume" and bool(runtime_attachment_session_id)),
+            task_continuity_ok=bool(message.get("task_continuity_ok", payload.get("task_continuity_ok", False))),
             process_death_observed=bool(
                 message.get("process_death_observed", payload.get("process_death_observed", False))
             ),
             partial_recovery_only=bool(
                 message.get("partial_recovery_only", payload.get("partial_recovery_only", False))
-            ) or bool(registration_gaps),
+            )
+            or bool(registration_gaps),
             conversation_session_id=conversation_session_id,
             evaluated_context="android_device_register",
         )
         verdict = build_conversation_continuity_verdict(evidence)
         effective_outcome = reconnect_outcome
-        if (
-            reconnect_outcome == "continuity_resume"
-            and verdict.continuity_class
-            in {
-                ConversationContinuityClass.continuity_lost,
-                ConversationContinuityClass.state_restored_rebind_required,
-            }
-        ):
+        if reconnect_outcome == "continuity_resume" and verdict.continuity_class in {
+            ConversationContinuityClass.continuity_lost,
+            ConversationContinuityClass.state_restored_rebind_required,
+        }:
             effective_outcome = "new_attachment"
 
         return {
@@ -720,10 +699,7 @@ def _evaluate_ingress_identity(
     if websocket_device_id and message_device_id and websocket_device_id != message_device_id:
         return {
             "matched": False,
-            "reason": (
-                "device_id mismatch between WebSocket ingress path and "
-                "device_register payload"
-            ),
+            "reason": ("device_id mismatch between WebSocket ingress path and " "device_register payload"),
         }
     return {"matched": True, "reason": ""}
 
@@ -779,9 +755,11 @@ def _decorate_registration_boundary(
         },
     }
 
+
 # ---------------------------------------------------------------------------
 # Role derivation helpers
 # ---------------------------------------------------------------------------
+
 
 def _derive_body_mesh_roles(capabilities: int) -> List[Any]:
     """Derive :class:`~core.mesh.body_mesh_registry.DeviceRole` values from a
@@ -806,9 +784,18 @@ def _derive_body_mesh_roles(capabilities: int) -> List[Any]:
 
     if has(capabilities, DC.SENSOR_CAMERA) or has(capabilities, DC.SENSOR_MIC) or has(capabilities, DC.SENSOR_MOTION):
         roles.append(DeviceRole.PERCEPTION)
-    if has(capabilities, DC.INPUT_TOUCH) or has(capabilities, DC.INPUT_KEYBOARD) or has(capabilities, DC.GUI_WRITE) or has(capabilities, DC.SYSTEM_SHELL):
+    if (
+        has(capabilities, DC.INPUT_TOUCH)
+        or has(capabilities, DC.INPUT_KEYBOARD)
+        or has(capabilities, DC.GUI_WRITE)
+        or has(capabilities, DC.SYSTEM_SHELL)
+    ):
         roles.append(DeviceRole.ACTION)
-    if has(capabilities, DC.GUI_READ) or has(capabilities, DC.GUI_SCREENSHOT) or has(capabilities, DC.SYSTEM_NOTIFICATION):
+    if (
+        has(capabilities, DC.GUI_READ)
+        or has(capabilities, DC.GUI_SCREENSHOT)
+        or has(capabilities, DC.SYSTEM_NOTIFICATION)
+    ):
         roles.append(DeviceRole.PRESENCE)
 
     if not roles:
@@ -817,9 +804,7 @@ def _derive_body_mesh_roles(capabilities: int) -> List[Any]:
     return roles
 
 
-async def handle_device_register(
-    bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]
-) -> Dict[str, Any]:
+async def handle_device_register(bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]) -> Dict[str, Any]:
     """处理设备注册，失败时向网关日志输出结构化错误。
 
     Registration flow (PR-2):
@@ -888,7 +873,7 @@ async def handle_device_register(
         async with bridge._lock:
             device = AndroidDevice.from_registration(message)
             device.websocket = websocket
-            bridge._devices[device_id] = device
+            bridge.put_local_device(device_id, device)
 
         bridge._sync_device_router_session(device_id, websocket=websocket, connected=True)
 
@@ -900,16 +885,15 @@ async def handle_device_register(
             logger.debug(
                 "handle_device_register: runtime_attachment_session_id absent in "
                 "message, generated fallback: device_id=%s attachment_id=%s",
-                device_id, inbound_attachment_id,
+                device_id,
+                inbound_attachment_id,
             )
 
         # PR-C: extract Android durable continuity identity fields so reconnect
         # and session-resume decisions can validate cross-restart stable identity.
         inbound_durable_session_id, inbound_continuity_epoch = _extract_durable_continuity_fields(message)
         _raw_runtime_posture = (
-            message.get("source_runtime_posture")
-            or (message.get("payload") or {}).get("source_runtime_posture")
-            or ""
+            message.get("source_runtime_posture") or (message.get("payload") or {}).get("source_runtime_posture") or ""
         )
         _inbound_runtime_posture = str(_raw_runtime_posture or "").strip().lower()
         if _inbound_runtime_posture not in {"join_runtime", "control_only"}:
@@ -928,13 +912,16 @@ async def handle_device_register(
             logger.debug(
                 "handle_device_register: durable continuity fields present: "
                 "device_id=%s durable_session_id=%s continuity_epoch=%s",
-                device_id, inbound_durable_session_id, inbound_continuity_epoch,
+                device_id,
+                inbound_durable_session_id,
+                inbound_continuity_epoch,
             )
 
         # PR-G: emit device lifecycle (attach) so the observability sink records
         # the registration event in the production path.
         try:
             from core.runtime.runtime_observability_sink import emit_device_lifecycle_event
+
             emit_device_lifecycle_event(
                 device_id,
                 event_kind="attach",
@@ -949,6 +936,7 @@ async def handle_device_register(
             device = bridge._devices.get(device_id)
             if device and device.tailscale_ip:
                 from core.mesh_coordinator import get_mesh_coordinator
+
                 mesh = get_mesh_coordinator()
                 mesh.register_peer(
                     device_id=device_id,
@@ -956,7 +944,8 @@ async def handle_device_register(
                 )
                 logger.debug(
                     "PR-28: Device %s tailscale_ip=%s synced to MeshCoordinator",
-                    device_id, device.tailscale_ip,
+                    device_id,
+                    device.tailscale_ip,
                 )
         except Exception:
             pass
@@ -971,6 +960,7 @@ async def handle_device_register(
                 create_durable_session,
                 activate_durable_session,
             )
+
             _mesh_session = build_mesh_session(
                 source_device_id=device_id,
                 primary_device_id=device_id,
@@ -984,12 +974,14 @@ async def handle_device_register(
                 activate_durable_session(_record.session_id)
                 logger.info(
                     "Mesh session created+activated for device: device_id=%s session_id=%s",
-                    device_id, _record.session_id,
+                    device_id,
+                    _record.session_id,
                 )
         except Exception as _mesh_exc:
             logger.debug(
                 "android_bridge: mesh session create/activate non-fatal: device_id=%s error=%s",
-                device_id, _mesh_exc,
+                device_id,
+                _mesh_exc,
             )
 
         # PR-C / PR-G / canonical reconnect: register or resume in the authoritative
@@ -1021,6 +1013,7 @@ async def handle_device_register(
                 reconnect_session,
                 register_session,
             )
+
             # Capture classification result before attempting the session operation
             # so that _reconnect_outcome always reflects the classify decision even
             # if the subsequent reconnect_session / register_session call raises.
@@ -1045,9 +1038,11 @@ async def handle_device_register(
                     "attached_runtime_session_registry: continuity_resume via device_register: "
                     "device_id=%s runtime_session_id=%s runtime_attachment_session_id=%s "
                     "durable_session_id=%s continuity_epoch=%s",
-                    device_id, _reg_entry.runtime_session_id,
+                    device_id,
+                    _reg_entry.runtime_session_id,
                     _reg_entry.runtime_attachment_session_id,
-                    _reg_entry.durable_session_id, _reg_entry.continuity_epoch,
+                    _reg_entry.durable_session_id,
+                    _reg_entry.continuity_epoch,
                 )
             else:
                 _reg_entry = register_session(
@@ -1062,14 +1057,17 @@ async def handle_device_register(
                     "attached_runtime_session_registry: new_attachment via device_register: "
                     "device_id=%s runtime_session_id=%s runtime_attachment_session_id=%s "
                     "durable_session_id=%s continuity_epoch=%s",
-                    device_id, _reg_entry.runtime_session_id,
+                    device_id,
+                    _reg_entry.runtime_session_id,
                     _reg_entry.runtime_attachment_session_id,
-                    _reg_entry.durable_session_id, _reg_entry.continuity_epoch,
+                    _reg_entry.durable_session_id,
+                    _reg_entry.continuity_epoch,
                 )
         except Exception as _reg_exc:
             logger.debug(
                 "android_bridge: attached_runtime_session_registry non-fatal: device_id=%s error=%s",
-                device_id, _reg_exc,
+                device_id,
+                _reg_exc,
             )
             record_registration_gap(device_id, "attached_runtime_session_registry")
 
@@ -1080,9 +1078,9 @@ async def handle_device_register(
         # runtime_attachment_session_id(双权威分歧的根源)。
         try:
             from core.attached_runtime_session import attach_runtime_session
+
             _canonical_attachment_id = (
-                _reg_entry.runtime_attachment_session_id
-                if _reg_entry is not None else inbound_attachment_id
+                _reg_entry.runtime_attachment_session_id if _reg_entry is not None else inbound_attachment_id
             )
             _attach_record = attach_runtime_session(
                 device_id,
@@ -1093,12 +1091,15 @@ async def handle_device_register(
             )
             logger.info(
                 "attach_runtime_session: device_id=%s state=%s runtime_attachment_session_id=%s",
-                device_id, _attach_record.attachment_state, _attach_record.runtime_attachment_session_id,
+                device_id,
+                _attach_record.attachment_state,
+                _attach_record.runtime_attachment_session_id,
             )
         except Exception as _attach_exc:
             logger.debug(
                 "android_bridge: attach_runtime_session non-fatal: device_id=%s error=%s",
-                device_id, _attach_exc,
+                device_id,
+                _attach_exc,
             )
             record_registration_gap(device_id, "attach_runtime_session")
 
@@ -1108,21 +1109,27 @@ async def handle_device_register(
         _roles = []
         try:
             from core.mesh.body_mesh_registry import get_body_mesh_registry
+
             _cap_flags = message.get("capabilities", device.capabilities)
             _roles = _derive_body_mesh_roles(_cap_flags)
             get_body_mesh_registry().register(
                 device_id,
                 roles=_roles,
-                metadata={"registration_trigger": "android_device_register", "platform": device.platform.value if device.platform else None},
+                metadata={
+                    "registration_trigger": "android_device_register",
+                    "platform": device.platform.value if device.platform else None,
+                },
             )
             logger.info(
                 "BodyMeshRegistry: registered device_id=%s roles=%s",
-                device_id, [r.value for r in _roles],
+                device_id,
+                [r.value for r in _roles],
             )
         except Exception as _mesh_exc:
             logger.debug(
                 "android_bridge: BodyMeshRegistry registration non-fatal: device_id=%s error=%s",
-                device_id, _mesh_exc,
+                device_id,
+                _mesh_exc,
             )
 
         # D4 / CROSS-004: project registered Android device capabilities into the
@@ -1131,9 +1138,7 @@ async def handle_device_register(
         try:
             from core.capability_assimilation import assimilate_device
 
-            _capability_names = _normalize_assimilation_capabilities(
-                message.get("capabilities", device.capabilities)
-            )
+            _capability_names = _normalize_assimilation_capabilities(message.get("capabilities", device.capabilities))
             assimilate_device(
                 device_id,
                 capabilities=_capability_names,
@@ -1169,6 +1174,7 @@ async def handle_device_register(
         else:
             try:
                 from core.mesh.mesh_auto_enrollment import notify_device_registered
+
                 notify_device_registered(
                     device_id,
                     roles=_roles,
@@ -1178,25 +1184,31 @@ async def handle_device_register(
             except Exception as _ae_exc:
                 logger.debug(
                     "android_bridge: auto_enrollment notify non-fatal: device_id=%s error=%s",
-                    device_id, _ae_exc,
+                    device_id,
+                    _ae_exc,
                 )
 
         logger.info(
-            "Android device registered: device_id=%s model=%s platform=%s "
-            "runtime_attachment_session_id=%s",
-            device_id, device.model, device.platform, inbound_attachment_id,
+            "Android device registered: device_id=%s model=%s platform=%s " "runtime_attachment_session_id=%s",
+            device_id,
+            device.model,
+            device.platform,
+            inbound_attachment_id,
         )
 
         # PR-CROSS-DEVICE-SYNC: Push current desktop phase to newly registered device
         # so Android immediately knows the current state without waiting for next transition.
         try:
             from core.desktop_presence_runtime import get_desktop_presence_runtime
+
             dpr = get_desktop_presence_runtime()
-            current_phase = dpr.get_current_phase() if hasattr(dpr, 'get_current_phase') else 'silent'
+            current_phase = dpr.get_current_phase() if hasattr(dpr, "get_current_phase") else "silent"
             if current_phase and device.websocket is not None:
                 import json, time
+
                 # PR-AIP-UNIFIED: Route through AIPTransport
                 from core.aip_transport import get_aip_transport
+
                 _phase_msg = {
                     "type": "state_event",
                     "event_category": "phase",
@@ -1208,29 +1220,33 @@ async def handle_device_register(
                 try:
                     await get_aip_transport().send(_phase_msg, device_id)
                 except Exception:
-                    await device.websocket.send_json({
-                        "type": "state_event",
-                        "event_category": "phase",
-                        "event_action": current_phase,
-                        "device_id": "v2_desktop",
-                    "timestamp": int(time.time() * 1000),
-                    "aip_version": "3.0",
-                    "payload": {
-                        "from_phase": "unknown",
-                        "to_phase": current_phase,
-                        "source": "desktop_presence_runtime",
-                        "sync_type": "cross_device_initial_sync",
-                    },
-                    "phase": current_phase,
-                })
+                    await device.websocket.send_json(
+                        {
+                            "type": "state_event",
+                            "event_category": "phase",
+                            "event_action": current_phase,
+                            "device_id": "v2_desktop",
+                            "timestamp": int(time.time() * 1000),
+                            "aip_version": "3.0",
+                            "payload": {
+                                "from_phase": "unknown",
+                                "to_phase": current_phase,
+                                "source": "desktop_presence_runtime",
+                                "sync_type": "cross_device_initial_sync",
+                            },
+                            "phase": current_phase,
+                        }
+                    )
                 logger.info(
                     "CrossDeviceSync: initial phase=%s pushed to newly registered device=%s",
-                    current_phase, device_id,
+                    current_phase,
+                    device_id,
                 )
         except Exception as _phase_exc:
             logger.debug(
                 "CrossDeviceSync: initial phase push non-fatal: device_id=%s error=%s",
-                device_id, _phase_exc,
+                device_id,
+                _phase_exc,
             )
 
         _gaps = get_registration_gaps(device_id)
@@ -1239,7 +1255,8 @@ async def handle_device_register(
                 "Device registration partially attached: device_id=%s gaps=%s — "
                 "device is registered at transport level but downstream steps failed; "
                 "dispatch reliability may be reduced",
-                device_id, _gaps,
+                device_id,
+                _gaps,
             )
 
         _conversation_continuity = _evaluate_conversation_continuity_runtime_gate(
@@ -1249,18 +1266,14 @@ async def handle_device_register(
             registry_entry=_reg_entry,
             registration_gaps=_gaps,
         )
-        _reconnect_outcome = str(
-            _conversation_continuity.get("continuity_outcome", _reconnect_outcome)
-        )
+        _reconnect_outcome = str(_conversation_continuity.get("continuity_outcome", _reconnect_outcome))
 
         _recovery_replay_buffered_count = 0
         _recovery_replay_scheduled = False
         if _reconnect_outcome == "continuity_resume":
-            _recovery_replay_buffered_count = (
-                _schedule_pending_delivery_replay_on_canonical_reconnect(
-                    device_id=device_id,
-                    websocket=websocket,
-                )
+            _recovery_replay_buffered_count = _schedule_pending_delivery_replay_on_canonical_reconnect(
+                device_id=device_id,
+                websocket=websocket,
             )
             _recovery_replay_scheduled = _recovery_replay_buffered_count > 0
         _pending_lifecycle_decisions = _apply_pending_lifecycle_reconnect_decisions(
@@ -1268,13 +1281,9 @@ async def handle_device_register(
             continuity_outcome=_reconnect_outcome,
             delivery_replay_scheduled=_recovery_replay_scheduled,
         )
-        _pending_lifecycle_summary = _summarize_pending_lifecycle_decisions(
+        _pending_lifecycle_summary = _summarize_pending_lifecycle_decisions(_pending_lifecycle_decisions)
+        _pending_lifecycle_classification_summary = _summarize_pending_lifecycle_adjudication_classifications(
             _pending_lifecycle_decisions
-        )
-        _pending_lifecycle_classification_summary = (
-            _summarize_pending_lifecycle_adjudication_classifications(
-                _pending_lifecycle_decisions
-            )
         )
 
         ack = MessageBuilder.device_register_ack(
@@ -1294,9 +1303,7 @@ async def handle_device_register(
         if _conversation_continuity.get("applied"):
             ack["conversation_continuity_runtime_gate"] = {
                 "applied": True,
-                "outcome_overridden": bool(
-                    _conversation_continuity.get("outcome_overridden")
-                ),
+                "outcome_overridden": bool(_conversation_continuity.get("outcome_overridden")),
                 "evidence": _conversation_continuity.get("evidence") or {},
                 "verdict": _conversation_continuity.get("verdict") or {},
             }
@@ -1332,6 +1339,7 @@ async def handle_device_register(
                 AndroidParticipationTransitionSignal,
                 list_participation_transition_history,
             )
+
             _reg_posture = ""
             if _reg_entry is not None:
                 _reg_posture = getattr(_reg_entry, "posture", "") or ""
@@ -1360,14 +1368,12 @@ async def handle_device_register(
             record_participation_state(_participation_state)
             ack["network_participation_tier"] = _participation_state.tier.value
             _network_participation_tier = _participation_state.tier.value
-            ack["network_participation_transition_history"] = (
-                list_participation_transition_history(device_id, limit=5)
-            )
+            ack["network_participation_transition_history"] = list_participation_transition_history(device_id, limit=5)
         except Exception as _npe:
             logger.debug(
-                "registration: network_participation_tier derivation non-fatal: "
-                "device_id=%s error=%s",
-                device_id, _npe,
+                "registration: network_participation_tier derivation non-fatal: " "device_id=%s error=%s",
+                device_id,
+                _npe,
             )
 
         # 统一设备生命周期状态：在注册 ack 成功时更新生命周期阶段。
@@ -1377,6 +1383,7 @@ async def handle_device_register(
                 transition_device_lifecycle,
                 DeviceLifecycleTransitionEvent,
             )
+
             _lc_is_fully_attached = len(_gaps) == 0
             _lc_event = (
                 DeviceLifecycleTransitionEvent.registration_fully_attached
@@ -1394,9 +1401,9 @@ async def handle_device_register(
             ack["device_lifecycle_stage"] = _lc_record.stage.value
         except Exception as _lce:
             logger.debug(
-                "registration: device_lifecycle_stage derivation non-fatal: "
-                "device_id=%s error=%s",
-                device_id, _lce,
+                "registration: device_lifecycle_stage derivation non-fatal: " "device_id=%s error=%s",
+                device_id,
+                _lce,
             )
 
         _decorate_registration_boundary(
@@ -1413,14 +1420,24 @@ async def handle_device_register(
         return ack
 
     except Exception as exc:
-        _SENSITIVE_FIELDS = frozenset({
-            "websocket", "image_base64", "token", "password",
-            "credential", "secret", "auth", "api_key",
-        })
+        _SENSITIVE_FIELDS = frozenset(
+            {
+                "websocket",
+                "image_base64",
+                "token",
+                "password",
+                "credential",
+                "secret",
+                "auth",
+                "api_key",
+            }
+        )
         safe_payload = {k: v for k, v in message.items() if k not in _SENSITIVE_FIELDS}
         logger.error(
             "Device registration failed: device_id=%s error=%s payload=%s",
-            device_id, exc, safe_payload,
+            device_id,
+            exc,
+            safe_payload,
         )
         return MessageBuilder.device_register_ack(
             device_id=device_id or "unknown",
@@ -1429,9 +1446,7 @@ async def handle_device_register(
         )
 
 
-async def handle_device_reconnect(
-    bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]
-) -> Dict[str, Any]:
+async def handle_device_reconnect(bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]) -> Dict[str, Any]:
     """Handle an explicit ``device_reconnect`` wire message.
 
     .. warning::
@@ -1476,9 +1491,7 @@ async def handle_device_reconnect(
     try:
         # PR-G: extract canonical attachment identity from the reconnect message.
         inbound_attachment_id = _extract_runtime_attachment_session_id(message)
-        inbound_durable_session_id, inbound_continuity_epoch = _extract_durable_continuity_fields(
-            message
-        )
+        inbound_durable_session_id, inbound_continuity_epoch = _extract_durable_continuity_fields(message)
 
         # Update local transport/session cache so the bridge sees the new socket.
         async with bridge._lock:
@@ -1487,7 +1500,7 @@ async def handle_device_reconnect(
             else:
                 device = AndroidDevice.from_registration(message)
                 device.websocket = websocket
-                bridge._devices[device_id] = device
+                bridge.put_local_device(device_id, device)
 
         bridge._sync_device_router_session(device_id, websocket=websocket, connected=True)
 
@@ -1500,6 +1513,7 @@ async def handle_device_reconnect(
                 reconnect_session,
                 register_session,
             )
+
             outcome, existing_entry = classify_reconnect_outcome(
                 device_id,
                 runtime_attachment_session_id=inbound_attachment_id,
@@ -1508,9 +1522,9 @@ async def handle_device_reconnect(
             )
         except Exception as _cls_exc:
             logger.debug(
-                "handle_device_reconnect: classify_reconnect_outcome non-fatal: "
-                "device_id=%s error=%s",
-                device_id, _cls_exc,
+                "handle_device_reconnect: classify_reconnect_outcome non-fatal: " "device_id=%s error=%s",
+                device_id,
+                _cls_exc,
             )
 
         resolved_attachment_id = inbound_attachment_id
@@ -1534,16 +1548,16 @@ async def handle_device_reconnect(
                 )
             except Exception as _rec_exc:
                 logger.debug(
-                    "handle_device_reconnect: reconnect_session non-fatal: "
-                    "device_id=%s error=%s",
-                    device_id, _rec_exc,
+                    "handle_device_reconnect: reconnect_session non-fatal: " "device_id=%s error=%s",
+                    device_id,
+                    _rec_exc,
                 )
         else:
             # new_attachment: treat as a fresh registration
             logger.info(
-                "handle_device_reconnect: new_attachment: device_id=%s "
-                "runtime_attachment_session_id=%s",
-                device_id, resolved_attachment_id,
+                "handle_device_reconnect: new_attachment: device_id=%s " "runtime_attachment_session_id=%s",
+                device_id,
+                resolved_attachment_id,
             )
             try:
                 register_session(
@@ -1556,14 +1570,15 @@ async def handle_device_reconnect(
                 )
             except Exception as _reg_exc:
                 logger.debug(
-                    "handle_device_reconnect: register_session non-fatal: "
-                    "device_id=%s error=%s",
-                    device_id, _reg_exc,
+                    "handle_device_reconnect: register_session non-fatal: " "device_id=%s error=%s",
+                    device_id,
+                    _reg_exc,
                 )
 
         # Also update the attached_runtime_session record so both stores align.
         try:
             from core.attached_runtime_session import attach_runtime_session
+
             attach_runtime_session(
                 device_id,
                 source_runtime_posture="join_runtime",
@@ -1573,9 +1588,9 @@ async def handle_device_reconnect(
             )
         except Exception as _attach_exc:
             logger.debug(
-                "handle_device_reconnect: attach_runtime_session non-fatal: "
-                "device_id=%s error=%s",
-                device_id, _attach_exc,
+                "handle_device_reconnect: attach_runtime_session non-fatal: " "device_id=%s error=%s",
+                device_id,
+                _attach_exc,
             )
 
         _pending_lifecycle_decisions = _apply_pending_lifecycle_reconnect_decisions(
@@ -1591,9 +1606,7 @@ async def handle_device_reconnect(
             "continuity_outcome": outcome,
             "runtime_attachment_session_id": resolved_attachment_id,
             "pending_lifecycle_decision_count": len(_pending_lifecycle_decisions),
-            "pending_lifecycle_decision_summary": _summarize_pending_lifecycle_decisions(
-                _pending_lifecycle_decisions
-            ),
+            "pending_lifecycle_decision_summary": _summarize_pending_lifecycle_decisions(_pending_lifecycle_decisions),
             "continuity_adjudication_summary": _summarize_pending_lifecycle_adjudication_classifications(
                 _pending_lifecycle_decisions
             ),
@@ -1606,7 +1619,8 @@ async def handle_device_reconnect(
     except Exception as exc:
         logger.error(
             "Device reconnect failed: device_id=%s error=%s",
-            device_id, exc,
+            device_id,
+            exc,
         )
         return {
             "type": "reconnect_ack",
@@ -1617,15 +1631,14 @@ async def handle_device_reconnect(
         }
 
 
-async def handle_unregistered(
-    bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]
-) -> Dict[str, Any]:
+async def handle_unregistered(bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]) -> Dict[str, Any]:
     """通用处理器 — 记录日志并返回 ACK，防止消息被静默丢弃"""
     msg_type = message.get("type", "unknown")
     device_id = message.get("device_id", "unknown")
     logger.info(
         "Unhandled message type '%s' from device '%s', returning ACK",
-        msg_type, device_id,
+        msg_type,
+        device_id,
     )
     return {
         "type": "ack",

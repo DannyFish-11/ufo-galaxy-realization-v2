@@ -80,9 +80,7 @@ WEBSOCKET_HANDLER_TRANSPORT_AUTHORITY = "WEBSOCKET_HANDLER::TRANSPORT_SUBSTRATE_
 # it enters any runtime handler.  Downstream handlers consume the canonical
 # event; they must not re-parse raw type strings or AIP version fields.
 # ---------------------------------------------------------------------------
-INGRESS_NORMALIZATION_AUTHORITY = (
-    "WEBSOCKET_HANDLER::INGRESS_NORMALIZED_TO_AIP_V3_CANONICAL_BEFORE_DISPATCH"
-)
+INGRESS_NORMALIZATION_AUTHORITY = "WEBSOCKET_HANDLER::INGRESS_NORMALIZED_TO_AIP_V3_CANONICAL_BEFORE_DISPATCH"
 
 # ---------------------------------------------------------------------------
 # PR-03-V2 Android business ingress delegation authority sentinel
@@ -149,47 +147,49 @@ _BACKGROUND_TASKS: set = set()
 # WAKE_EVENT, COMMAND) remain handled by websocket_handler as transport-level
 # or routing concerns.
 # ---------------------------------------------------------------------------
-_ANDROID_DOMAIN_KINDS: FrozenSet[str] = frozenset({
-    # Task lifecycle results
-    IngressEventKind.TASK_RESULT,
-    IngressEventKind.COMMAND_RESULT,
-    IngressEventKind.PARALLEL_RESULT,
-    # Goal execution results
-    IngressEventKind.GOAL_EXECUTION_RESULT,
-    # Android-initiated control messages
-    IngressEventKind.TASK_SUBMIT,
-    IngressEventKind.TASK_CANCEL,
-    IngressEventKind.GOAL_EXECUTION,
-    IngressEventKind.PARALLEL_SUBTASK,
-    # Delegated execution lifecycle
-    IngressEventKind.DELEGATED_EXECUTION_SIGNAL,
-    # Handoff protocol uplink results (PR-02-V2 / PR-03-V2)
-    IngressEventKind.HANDOFF_ACK,
-    IngressEventKind.HANDOFF_RESULT,
-    IngressEventKind.HANDOFF_FAILURE,
-    IngressEventKind.HANDOFF_ENVELOPE_V2_RESULT,
-    # Capability / diagnostics reporting
-    IngressEventKind.CAPABILITY_REPORT,
-    IngressEventKind.AGENT_STATUS,
-    # P2P mesh overlay
-    IngressEventKind.FILE_TRANSFER,
-    IngressEventKind.PEER_ANNOUNCE,
-    IngressEventKind.PEER_EXCHANGE,
-    IngressEventKind.MESH_TOPOLOGY,
-    # Android Runtime-State Transparency Uplink (PR-RT)
-    # These carry structured Android runtime-state projections into V2 and must
-    # be routed through android_bridge so the gateway path absorbs them via
-    # core.android_device_state_store.  Absent from this set they would fall
-    # through to the catch-all, miss the store, and return no ACK.
-    IngressEventKind.DEVICE_STATE_SNAPSHOT,
-    IngressEventKind.DEVICE_EXECUTION_EVENT,
-    # Android transport acks / operator-action results / ping — delegate to
-    # android_bridge so they are accepted gracefully (generic-forward / no-op)
-    # instead of hitting the catch-all and returning an error response.
-    IngressEventKind.ACK,
-    IngressEventKind.OPERATOR_ACTION_RESULT,
-    IngressEventKind.PING,
-})
+_ANDROID_DOMAIN_KINDS: FrozenSet[str] = frozenset(
+    {
+        # Task lifecycle results
+        IngressEventKind.TASK_RESULT,
+        IngressEventKind.COMMAND_RESULT,
+        IngressEventKind.PARALLEL_RESULT,
+        # Goal execution results
+        IngressEventKind.GOAL_EXECUTION_RESULT,
+        # Android-initiated control messages
+        IngressEventKind.TASK_SUBMIT,
+        IngressEventKind.TASK_CANCEL,
+        IngressEventKind.GOAL_EXECUTION,
+        IngressEventKind.PARALLEL_SUBTASK,
+        # Delegated execution lifecycle
+        IngressEventKind.DELEGATED_EXECUTION_SIGNAL,
+        # Handoff protocol uplink results (PR-02-V2 / PR-03-V2)
+        IngressEventKind.HANDOFF_ACK,
+        IngressEventKind.HANDOFF_RESULT,
+        IngressEventKind.HANDOFF_FAILURE,
+        IngressEventKind.HANDOFF_ENVELOPE_V2_RESULT,
+        # Capability / diagnostics reporting
+        IngressEventKind.CAPABILITY_REPORT,
+        IngressEventKind.AGENT_STATUS,
+        # P2P mesh overlay
+        IngressEventKind.FILE_TRANSFER,
+        IngressEventKind.PEER_ANNOUNCE,
+        IngressEventKind.PEER_EXCHANGE,
+        IngressEventKind.MESH_TOPOLOGY,
+        # Android Runtime-State Transparency Uplink (PR-RT)
+        # These carry structured Android runtime-state projections into V2 and must
+        # be routed through android_bridge so the gateway path absorbs them via
+        # core.android_device_state_store.  Absent from this set they would fall
+        # through to the catch-all, miss the store, and return no ACK.
+        IngressEventKind.DEVICE_STATE_SNAPSHOT,
+        IngressEventKind.DEVICE_EXECUTION_EVENT,
+        # Android transport acks / operator-action results / ping — delegate to
+        # android_bridge so they are accepted gracefully (generic-forward / no-op)
+        # instead of hitting the catch-all and returning an error response.
+        IngressEventKind.ACK,
+        IngressEventKind.OPERATOR_ACTION_RESULT,
+        IngressEventKind.PING,
+    }
+)
 
 
 class GatewayWSManager:
@@ -220,6 +220,7 @@ class GatewayWSManager:
     def _ucm():
         if GatewayWSManager._ucm_instance is None:
             from core.unified.connection_manager import get_unified_connection_manager
+
             GatewayWSManager._ucm_instance = get_unified_connection_manager()
         return GatewayWSManager._ucm_instance
 
@@ -276,6 +277,7 @@ class GatewayWSManager:
                 # is a mirror only; UDM (SSOT) already reflects the offline state.
                 try:
                     from core.routes._shared import registered_devices as core_registered_devices
+
                     if device_id in core_registered_devices:
                         core_registered_devices[device_id]["status"] = "offline"  # COMPAT_MIRROR_WRITE
                         core_registered_devices[device_id]["online"] = False  # COMPAT_MIRROR_WRITE
@@ -350,10 +352,7 @@ async def handle_websocket(websocket: WebSocket, connection_id: str):
         while consecutive_errors < _MAX_CONSECUTIVE_ERRORS:
             try:
                 # 接收消息（带超时）
-                data = await asyncio.wait_for(
-                    websocket.receive_text(),
-                    timeout=_RECEIVE_TIMEOUT
-                )
+                data = await asyncio.wait_for(websocket.receive_text(), timeout=_RECEIVE_TIMEOUT)
                 message = json.loads(data)
 
                 # 处理消息
@@ -364,8 +363,7 @@ async def handle_websocket(websocket: WebSocket, connection_id: str):
             except asyncio.TimeoutError:
                 consecutive_errors += 1
                 logger.warning(
-                    "⏱️ WebSocket 接收超时 (%s/%s): %s",
-                    consecutive_errors, _MAX_CONSECUTIVE_ERRORS, connection_id
+                    "⏱️ WebSocket 接收超时 (%s/%s): %s", consecutive_errors, _MAX_CONSECUTIVE_ERRORS, connection_id
                 )
                 # 发送心跳保持连接
                 try:
@@ -378,10 +376,7 @@ async def handle_websocket(websocket: WebSocket, connection_id: str):
                 # 直接退出,绕过 _MAX_CONSECUTIVE_ERRORS 容错。计入连续错误、回一条
                 # 错误帧并继续,连续超限才优雅退出。
                 consecutive_errors += 1
-                logger.warning(
-                    "⚠️ WebSocket 收到畸形 JSON (%s/%s): %s",
-                    consecutive_errors, _MAX_CONSECUTIVE_ERRORS, e
-                )
+                logger.warning("⚠️ WebSocket 收到畸形 JSON (%s/%s): %s", consecutive_errors, _MAX_CONSECUTIVE_ERRORS, e)
                 try:
                     await websocket.send_json({"type": "error", "error": "invalid_json"})
                 except Exception:
@@ -429,16 +424,18 @@ async def handle_message(connection_id: str, message: Dict, websocket: WebSocket
                     "reason": str(ver_err),
                 },
             )
-            await websocket.send_json({
-                "version": "3.0",
-                "type": "error",
-                "payload": {
-                    "error": "protocol_version_rejected",
-                    "detail": str(ver_err),
-                    "required": "AIP v3.0+",
-                    "received": raw_version,
-                },
-            })
+            await websocket.send_json(
+                {
+                    "version": "3.0",
+                    "type": "error",
+                    "payload": {
+                        "error": "protocol_version_rejected",
+                        "detail": str(ver_err),
+                        "required": "AIP v3.0+",
+                        "received": raw_version,
+                    },
+                }
+            )
             await websocket.close(code=4000)
             return
         except Exception as parse_err:
@@ -483,13 +480,15 @@ async def handle_message(connection_id: str, message: Dict, websocket: WebSocket
             # independently (double-normalisation is idempotent for v3 dicts).
             try:
                 from galaxy_gateway.android_bridge import android_bridge as _android_bridge
+
                 bridge_response = await _android_bridge.handle_message(websocket, message)
                 if bridge_response:
                     await websocket.send_json(bridge_response)
             except Exception as _bridge_err:
                 logger.error(
                     "android_bridge delegation failed: kind=%s error=%s",
-                    event.kind, _bridge_err,
+                    event.kind,
+                    _bridge_err,
                 )
         elif event.kind == IngressEventKind.DEVICE_REGISTER:
             await handle_register(connection_id, aip_msg, websocket)
@@ -535,7 +534,9 @@ async def handle_register(connection_id: str, aip_msg, websocket: WebSocket):
     try:
         device_id = aip_msg.device_id
         device_info = aip_msg.payload.get("device_info", {})
-        device_type_raw = (aip_msg.device_type.value if aip_msg.device_type else None) or device_info.get("device_type", "unknown")
+        device_type_raw = (aip_msg.device_type.value if aip_msg.device_type else None) or device_info.get(
+            "device_type", "unknown"
+        )
         capabilities = device_info.get("capabilities", [])
         metadata = device_info.get("metadata", {})
         device_name = device_info.get("name", device_info.get("model", f"Device-{device_id[:8]}"))
@@ -582,13 +583,16 @@ async def handle_register(connection_id: str, aip_msg, websocket: WebSocket):
                 # 同步设备能力到 CapabilityRegistry
                 try:
                     from core.routes.devices import _sync_device_to_capability_registry
-                    _sync_device_to_capability_registry({
-                        "device_id": device_id,
-                        "device_type": device_type_raw,
-                        "device_name": device_name,
-                        "capabilities": capabilities,
-                        "metadata": metadata,
-                    })
+
+                    _sync_device_to_capability_registry(
+                        {
+                            "device_id": device_id,
+                            "device_type": device_type_raw,
+                            "device_name": device_name,
+                            "capabilities": capabilities,
+                            "metadata": metadata,
+                        }
+                    )
                 except Exception as _sync_err:
                     logger.warning(f"WebSocket 设备能力同步到 CapabilityRegistry 失败: {_sync_err}")
 
@@ -615,6 +619,7 @@ async def handle_register(connection_id: str, aip_msg, websocket: WebSocket):
         if success and udm_success:
             try:
                 from core.routes._shared import registered_devices as core_registered_devices
+
                 core_registered_devices[device_id] = {  # COMPAT_MIRROR_WRITE
                     "device_id": device_id,
                     "device_type": device_type_raw,
@@ -647,7 +652,9 @@ async def handle_heartbeat(connection_id: str, aip_msg):
             device = device_router.get_device(device_id)
             if device:
                 device.last_seen = datetime.now()
-                device.status = "online"
+                # 专项③:经运行时包装层规范写口更新本地视图,权威状态已由
+                # udm_write_heartbeat 写入 SSOT UDM。
+                device.apply_status("online")
 
         # ── Presence backbone: update UCM heartbeat / last_seen ──
         try:
@@ -687,6 +694,7 @@ async def handle_response(connection_id: str, aip_msg):
 
         try:
             from galaxy_gateway.orchestrator.parallel_tracker import record_parallel_fields
+
             await record_parallel_fields(parallel_payload)
         except Exception as _pt_err:
             logger.warning("parallel_tracker[A]: record failed: %s", _pt_err)
@@ -760,6 +768,7 @@ async def handle_command(connection_id: str, aip_msg):
             else:
                 try:
                     from core.desktop_presence_runtime import get_desktop_presence_runtime
+
                     runtime = get_desktop_presence_runtime()
                     rt = await runtime.handle_request(
                         message=transcript,
@@ -800,11 +809,10 @@ async def handle_command(connection_id: str, aip_msg):
             reported_phase = str(_payload.get("phase") or "").strip()
             try:
                 from core.routes._shared import registered_devices as _reg
+
                 if device_id in _reg and reported_phase:
                     _reg[device_id]["reported_phase"] = reported_phase  # COMPAT_MIRROR_WRITE
-                    _reg[device_id]["reported_phase_at"] = (
-                        datetime.now(timezone.utc).isoformat()
-                    )
+                    _reg[device_id]["reported_phase_at"] = datetime.now(timezone.utc).isoformat()
             except Exception as _pr_err:
                 logger.debug("phase_report record skipped: %s", _pr_err)
             logger.info("📲 设备相位上报: device=%s phase=%s", device_id, reported_phase)
@@ -844,6 +852,7 @@ async def handle_command(connection_id: str, aip_msg):
                     from core.interaction.pending_decision_registry import (
                         get_pending_decision_registry,
                     )
+
                     resolved = get_pending_decision_registry().resolve(
                         decision_id,
                         selected_option=selected or None,
@@ -860,6 +869,7 @@ async def handle_command(connection_id: str, aip_msg):
             else:
                 try:
                     from core.desktop_presence_runtime import get_desktop_presence_runtime
+
                     runtime = get_desktop_presence_runtime()
                     rt = await runtime.handle_request(
                         message=human_msg,
@@ -867,14 +877,16 @@ async def handle_command(connection_id: str, aip_msg):
                         device_id=device_id,
                         session_id=_payload.get("session_id") or None,
                         context=(
-                            [{
-                                "role": "system",
-                                "content": (
-                                    f"human_decision_reply decision_id={decision_id} "
-                                    f"selected_option={selected}"
-                                ),
-                            }]
-                            if decision_id else None
+                            [
+                                {
+                                    "role": "system",
+                                    "content": (
+                                        f"human_decision_reply decision_id={decision_id} " f"selected_option={selected}"
+                                    ),
+                                }
+                            ]
+                            if decision_id
+                            else None
                         ),
                     )
                     reply = str(rt.get("response") or "")
@@ -975,7 +987,7 @@ async def handle_device_unregister(connection_id: str, aip_msg, websocket: WebSo
 async def push_command_result(request_id: str, status: str, results: Dict):
     """
     推送命令执行结果到所有订阅的 WebSocket 连接
-    
+
     Args:
         request_id: 请求 ID
         status: 命令状态
@@ -986,9 +998,9 @@ async def push_command_result(request_id: str, status: str, results: Dict):
         "request_id": request_id,
         "status": status,
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        "results": results
+        "results": results,
     }
-    
+
     await connection_manager.broadcast(message)
     logger.info(f"✅ 命令结果已推送: request_id={request_id}, status={status}")
 
@@ -1029,10 +1041,7 @@ async def handle_wake_event(connection_id: str, aip_msg):
             }
             await connection_manager.send_message(connection_id, response)
 
-        logger.info(
-            f"✅ 唤醒事件已处理: device={device_id} "
-            f"dispatched={dispatched}"
-        )
+        logger.info(f"✅ 唤醒事件已处理: device={device_id} " f"dispatched={dispatched}")
 
     except Exception as e:
         logger.error(f"❌ 处理唤醒事件失败: {e}")
@@ -1098,6 +1107,7 @@ async def handle_device_perception_emission(connection_id: str, aip_msg):
         }
 
         from core.memory import get_unified_memory
+
         um = get_unified_memory()
         # 文本语义入记忆（仅当确有内容时；纯头部无信息量则跳过文本，仍可走截图）
         if content and len(content) > len(head) + 2:
@@ -1122,7 +1132,11 @@ async def handle_device_perception_emission(connection_id: str, aip_msg):
 
         logger.info(
             "✅ Android 感知已入记忆: device=%s kind=%s stage=%s text=%s img=%s",
-            device_id, kind, stage, bool(content), bool(img_b64),
+            device_id,
+            kind,
+            stage,
+            bool(content),
+            bool(img_b64),
         )
     except Exception as e:  # noqa: BLE001 — 感知入记忆失败绝不影响 WS 主流程
         logger.debug("handle_device_perception_emission skipped: %s", e)

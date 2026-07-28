@@ -128,7 +128,7 @@ class TestDeviceLifecycleEmits:
         mock_device = MagicMock(spec=AndroidDevice)
         mock_device.connected = True
         mock_device.websocket = mock_ws
-        bridge._devices[device_id] = mock_device
+        bridge.put_local_device(device_id, mock_device)
 
         with patch.object(bridge, "_sync_device_router_session"), patch.object(bridge, "_patch_disconnect_to_udm"):
             _run_async(bridge.disconnect_device(device_id))
@@ -154,8 +154,8 @@ class TestDeviceLifecycleEmits:
         mock_device = MagicMock(spec=AndroidDevice)
         mock_device.websocket = None
         mock_device.connected = False
-        mock_device.last_heartbeat = 0.0
-        bridge._devices[device_id] = mock_device
+        mock_device.configure_mock(last_heartbeat=0.0)
+        bridge.put_local_device(device_id, mock_device)
 
         mock_ws = MagicMock()
         with patch.object(bridge, "_patch_reconnect_to_udm"), patch.object(bridge, "_sync_device_router_session"):

@@ -251,10 +251,10 @@ class TestCapabilitySync:
 
         mock_device = MagicMock()
         mock_device.device_id = "fallback_phone"
-        mock_device.device_name = "Fallback Phone"
+        mock_device.configure_mock(device_name="Fallback Phone")
         mock_device.device_type = "android"
-        mock_device.capabilities = ["screen", "keyboard"]
-        mock_device.metadata = {}
+        mock_device.configure_mock(capabilities=["screen", "keyboard"])
+        mock_device.configure_mock(metadata={})
 
         mock_dr = MagicMock()
         mock_dr.list_devices.return_value = {"fallback_phone": mock_device}
@@ -280,10 +280,10 @@ class TestCapabilitySync:
 
         mock_device = MagicMock()
         mock_device.device_id = "dr_dict_phone"
-        mock_device.device_name = "DR Dict Phone"
+        mock_device.configure_mock(device_name="DR Dict Phone")
         mock_device.device_type = "android"
-        mock_device.capabilities = ["touch"]
-        mock_device.metadata = {}
+        mock_device.configure_mock(capabilities=["touch"])
+        mock_device.configure_mock(metadata={})
 
         mock_dr = MagicMock()
         mock_dr.list_devices.return_value = {"dr_dict_phone": mock_device}
@@ -315,10 +315,10 @@ class TestCapabilitySync:
 
         mock_device = MagicMock()
         mock_device.device_id = device_id
-        mock_device.device_name = "Cap Sync Test"
+        mock_device.configure_mock(device_name="Cap Sync Test")
         mock_device.device_type = "android"
-        mock_device.capabilities = ["nfc"]
-        mock_device.metadata = {}
+        mock_device.configure_mock(capabilities=["nfc"])
+        mock_device.configure_mock(metadata={})
 
         mock_dr = MagicMock()
         mock_dr.list_devices.return_value = {device_id: mock_device}
@@ -350,10 +350,10 @@ class TestCapabilitySync:
 
         mock_device = MagicMock()
         mock_device.device_id = "oc_test_device"
-        mock_device.device_name = "OpenClawd Test Device"
+        mock_device.configure_mock(device_name="OpenClawd Test Device")
         mock_device.device_type = "windows"
-        mock_device.capabilities = ["screen", "keyboard"]
-        mock_device.metadata = {}
+        mock_device.configure_mock(capabilities=["screen", "keyboard"])
+        mock_device.configure_mock(metadata={})
 
         mock_dr = MagicMock()
         mock_dr.list_devices.return_value = {"oc_test_device": mock_device}

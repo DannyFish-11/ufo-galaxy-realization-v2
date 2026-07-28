@@ -14,6 +14,7 @@ Node_71 是一个 **编排 / 协调消费者（orchestration / coordination cons
 
 功能: 多设备协同控制、任务分配和状态同步
 """
+
 import os
 import json
 import asyncio
@@ -33,7 +34,9 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Node 71 - MultiDeviceCoordination", version="2.1.0")
-app.add_middleware(CORSMiddleware, allow_origins=get_cors_origins(), allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(
+    CORSMiddleware, allow_origins=get_cors_origins(), allow_credentials=True, allow_methods=["*"], allow_headers=["*"]
+)
 
 
 # 统一设备类型 — 从 core.device_types 导入（单一事实来源）
@@ -53,6 +56,7 @@ from nodes.Node_71_MultiDeviceCoordination.core.canonical_device_view_adapter im
 
 class DeviceState(str, Enum):
     """设备状态 — Node_71 扩展状态（含 IDLE/MAINTENANCE），向下兼容 DeviceStatus。"""
+
     ONLINE = "online"
     OFFLINE = "offline"
     BUSY = "busy"
@@ -63,6 +67,7 @@ class DeviceState(str, Enum):
 
 class TaskState(str, Enum):
     """任务状态"""
+
     PENDING = "pending"
     ASSIGNED = "assigned"
     RUNNING = "running"
@@ -78,6 +83,7 @@ class Device:
     内部委托到 DeviceModel（Pydantic V2 统一模型），
     但保留 state/endpoint 等 Node_71 特有字段。
     """
+
     device_id: str
     name: str
     device_type: DeviceType
@@ -89,9 +95,18 @@ class Device:
     current_task: Optional[str] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
 
+    def touch_heartbeat(self, ts: "Optional[datetime]" = None) -> None:
+        """Node_71 本地协调设备表的心跳时间戳规范写口(专项③)。
+
+        权威心跳由 UnifiedDeviceManager 维护;此处仅更新 Node_71 本地协调视图,
+        禁止外部对 ``.last_heartbeat`` 直接赋值绕过 SSOT UDM 写路径审计门。
+        """
+        self.last_heartbeat = ts if ts is not None else datetime.now()
+
     def to_unified_model(self) -> DeviceModel:
         """转换为统一 DeviceModel。"""
         from core.schemas.device import DeviceCapabilityModel
+
         # 映射 DeviceState → DeviceStatus
         status_map = {
             DeviceState.ONLINE: DeviceStatus.ONLINE,
@@ -141,6 +156,7 @@ class Device:
 @dataclass
 class CoordinatedTask:
     """协调任务"""
+
     task_id: str
     name: str
     description: str
@@ -158,6 +174,7 @@ class CoordinatedTask:
 @dataclass
 class DeviceGroup:
     """设备组"""
+
     group_id: str
     name: str
     device_ids: List[str]
@@ -194,9 +211,7 @@ class MultiDeviceCoordinator:
         self.device_control_url = self._resolve_node_url(
             "Node_92_AutoControl", "DEVICE_CONTROL_URL", "http://localhost:8092"
         )
-        self.auto_control_url = self._resolve_node_url(
-            "Node_92_AutoControl", "NODE_92_URL", "http://localhost:8092"
-        )
+        self.auto_control_url = self._resolve_node_url("Node_92_AutoControl", "NODE_92_URL", "http://localhost:8092")
 
         # HTTP 客户端
         self._client: Optional[httpx.AsyncClient] = None
@@ -206,7 +221,8 @@ class MultiDeviceCoordinator:
         """Resolve a node URL: registry → env var → default"""
         try:
             from core.node_registry import NodeRegistry
-            registry = NodeRegistry.get_instance() if hasattr(NodeRegistry, 'get_instance') else None
+
+            registry = NodeRegistry.get_instance() if hasattr(NodeRegistry, "get_instance") else None
             if registry:
                 node = registry.get_node(node_id)
                 if node and node.config.get("url"):
@@ -338,106 +354,102 @@ class MultiDeviceCoordinator:
             return False
 
         self.devices[device_id].state = state
-        self.devices[device_id].last_heartbeat = datetime.now()
+        self.devices[device_id].touch_heartbeat()
         return True
-    
+
     def heartbeat(self, device_id: str) -> bool:
         """设备心跳"""
         if device_id not in self.devices:
             return False
-        
+
         device = self.devices[device_id]
-        device.last_heartbeat = datetime.now()
+        device.touch_heartbeat()
         if device.state == DeviceState.OFFLINE:
             device.state = DeviceState.IDLE
         return True
-    
+
     def create_group(self, name: str, device_ids: List[str]) -> str:
         """创建设备组"""
-        group = DeviceGroup(
-            group_id=str(uuid.uuid4()),
-            name=name,
-            device_ids=device_ids
-        )
+        group = DeviceGroup(group_id=str(uuid.uuid4()), name=name, device_ids=device_ids)
         self.groups[group.group_id] = group
         logger.info(f"Created device group: {group.group_id} ({name})")
         return group.group_id
-    
-    async def create_task(self, name: str, description: str,
-                          required_devices: List[str],
-                          subtasks: List[Dict[str, Any]] = None) -> str:
+
+    async def create_task(
+        self, name: str, description: str, required_devices: List[str], subtasks: List[Dict[str, Any]] = None
+    ) -> str:
         """创建协调任务"""
         task = CoordinatedTask(
             task_id=str(uuid.uuid4()),
             name=name,
             description=description,
             required_devices=required_devices,
-            subtasks=subtasks or []
+            subtasks=subtasks or [],
         )
-        
+
         self.tasks[task.task_id] = task
         await self._task_queue.put(task.task_id)
         logger.info(f"Created coordinated task: {task.task_id} ({name})")
         return task.task_id
-    
+
     async def assign_task(self, task_id: str) -> bool:
         """分配任务到设备"""
         if task_id not in self.tasks:
             return False
-        
+
         task = self.tasks[task_id]
-        
+
         # 查找可用设备
         available_devices = self._find_available_devices(task.required_devices)
-        
+
         if len(available_devices) < len(task.required_devices):
             logger.warning(f"Not enough devices for task {task_id}")
             return False
-        
+
         # 分配设备
         task.assigned_devices = available_devices
         task.state = TaskState.ASSIGNED
-        
+
         # 更新设备状态
         for device_id in available_devices:
             self.devices[device_id].state = DeviceState.BUSY
             self.devices[device_id].current_task = task_id
-        
+
         logger.info(f"Assigned task {task_id} to devices: {available_devices}")
         return True
-    
+
     def _find_available_devices(self, requirements: List[str]) -> List[str]:
         """查找可用设备"""
         available = []
-        
+
         for req in requirements:
             for device in self.devices.values():
                 if device.state != DeviceState.IDLE:
                     continue
-                
+
                 # 检查是否匹配（按 ID 或类型）
                 if device.device_id == req or device.device_type.value == req:
                     if device.device_id not in available:
                         available.append(device.device_id)
                         break
-        
+
         return available
-    
+
     async def execute_task(self, task_id: str) -> bool:
         """执行协调任务 - 真正调用设备控制"""
         if task_id not in self.tasks:
             return False
-        
+
         task = self.tasks[task_id]
-        
+
         if task.state != TaskState.ASSIGNED:
             # 先分配任务
             if not await self.assign_task(task_id):
                 return False
-        
+
         task.state = TaskState.RUNNING
         task.started_at = datetime.now()
-        
+
         try:
             # 执行子任务
             total_subtasks = len(task.subtasks) or 1
@@ -474,26 +486,25 @@ class MultiDeviceCoordinator:
             task.results["error"] = f"{failed}/{total_subtasks} subtask(s) failed"
             logger.warning(f"Task {task_id} failed: {failed}/{total_subtasks} subtask(s) failed")
             return False
-            
+
         except Exception as e:
             logger.debug("Fallback triggered: %s", e)
             task.state = TaskState.FAILED
             task.results["error"] = str(e)
             logger.error(f"Task {task_id} failed: {e}")
             return False
-        
+
         finally:
             # 释放设备
             for device_id in task.assigned_devices:
                 if device_id in self.devices:
                     self.devices[device_id].state = DeviceState.IDLE
                     self.devices[device_id].current_task = None
-    
-    async def _send_command(self, device_id: str, action: str,
-                            params: Dict[str, Any]) -> Dict[str, Any]:
+
+    async def _send_command(self, device_id: str, action: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """
         发送命令到设备 - 真正调用设备控制服务
-        
+
         支持的操作:
         - click: 点击
         - input: 输入
@@ -504,12 +515,12 @@ class MultiDeviceCoordinator:
         """
         if device_id not in self.devices:
             return {"success": False, "error": "Device not found"}
-        
+
         device = self.devices[device_id]
-        
+
         try:
             client = await self._get_client()
-            
+
             # 根据操作类型调用不同的 API
             if action == "click":
                 response = await client.post(
@@ -519,20 +530,16 @@ class MultiDeviceCoordinator:
                         "platform": device.device_type.value,
                         "x": params.get("x", 0),
                         "y": params.get("y", 0),
-                        "clicks": params.get("clicks", 1)
-                    }
+                        "clicks": params.get("clicks", 1),
+                    },
                 )
-            
+
             elif action == "input":
                 response = await client.post(
                     f"{self.auto_control_url}/input",
-                    json={
-                        "device_id": device_id,
-                        "platform": device.device_type.value,
-                        "text": params.get("text", "")
-                    }
+                    json={"device_id": device_id, "platform": device.device_type.value, "text": params.get("text", "")},
                 )
-            
+
             elif action == "scroll":
                 response = await client.post(
                     f"{self.auto_control_url}/scroll",
@@ -540,94 +547,82 @@ class MultiDeviceCoordinator:
                         "device_id": device_id,
                         "platform": device.device_type.value,
                         "direction": params.get("direction", "down"),
-                        "amount": params.get("amount", 500)
-                    }
+                        "amount": params.get("amount", 500),
+                    },
                 )
-            
+
             elif action == "screenshot":
                 response = await client.post(
                     f"{self.auto_control_url}/screenshot",
-                    json={
-                        "device_id": device_id,
-                        "platform": device.device_type.value
-                    }
+                    json={"device_id": device_id, "platform": device.device_type.value},
                 )
-            
+
             elif action == "open_app":
                 response = await client.post(
                     f"{self.auto_control_url}/open_app",
                     json={
                         "device_id": device_id,
                         "platform": device.device_type.value,
-                        "app_name": params.get("app_name", "")
-                    }
+                        "app_name": params.get("app_name", ""),
+                    },
                 )
-            
+
             elif action == "press_key":
                 response = await client.post(
                     f"{self.auto_control_url}/press_key",
-                    json={
-                        "device_id": device_id,
-                        "platform": device.device_type.value,
-                        "key": params.get("key", "")
-                    }
+                    json={"device_id": device_id, "platform": device.device_type.value, "key": params.get("key", "")},
                 )
-            
+
             else:
                 # 通用命令
                 response = await client.post(
                     f"{self.auto_control_url}/execute",
-                    json={
-                        "device_id": device_id,
-                        "action": action,
-                        "params": params
-                    }
+                    json={"device_id": device_id, "action": action, "params": params},
                 )
-            
+
             result = response.json()
             logger.info(f"Command sent to {device_id}: {action} -> {result.get('success', False)}")
             return result
-        
+
         except Exception as e:
             logger.error(f"Failed to send command to {device_id}: {e}")
             return {"success": False, "error": str(e)}
-    
+
     async def cancel_task(self, task_id: str) -> bool:
         """取消任务"""
         if task_id not in self.tasks:
             return False
-        
+
         task = self.tasks[task_id]
         task.state = TaskState.CANCELLED
-        
+
         # 释放设备
         for device_id in task.assigned_devices:
             if device_id in self.devices:
                 self.devices[device_id].state = DeviceState.IDLE
                 self.devices[device_id].current_task = None
-        
+
         return True
-    
-    async def broadcast_to_group(self, group_id: str, action: str,
-                                 params: Dict[str, Any]) -> Dict[str, Any]:
+
+    async def broadcast_to_group(self, group_id: str, action: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """广播命令到设备组"""
         if group_id not in self.groups:
             return {"success": False, "error": "Group not found"}
-        
+
         group = self.groups[group_id]
         results = {}
-        
+
         for device_id in group.device_ids:
             if device_id in self.devices:
                 result = await self._send_command(device_id, action, params)
                 results[device_id] = result
-        
+
         return {"success": True, "results": results}
-    
+
     async def execute_parallel(self, commands: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
         并行执行多个设备命令
-        
+
         示例:
         commands = [
             {"device_id": "phone_1", "action": "open_app", "params": {"app_name": "微信"}},
@@ -641,59 +636,63 @@ class MultiDeviceCoordinator:
             action = cmd.get("action")
             params = cmd.get("params", {})
             tasks.append(self._send_command(device_id, action, params))
-        
+
         results = await asyncio.gather(*tasks, return_exceptions=True)
-        
+
         return {
             "success": True,
             "results": {
-                cmd["device_id"]: result if not isinstance(result, Exception) else {"success": False, "error": str(result)}
+                cmd["device_id"]: (
+                    result if not isinstance(result, Exception) else {"success": False, "error": str(result)}
+                )
                 for cmd, result in zip(commands, results)
-            }
+            },
         }
-    
+
     def get_device(self, device_id: str) -> Optional[Device]:
         """获取设备"""
         return self.devices.get(device_id)
-    
-    def list_devices(self, device_type: Optional[DeviceType] = None,
-                     state: Optional[DeviceState] = None) -> List[Device]:
+
+    def list_devices(
+        self, device_type: Optional[DeviceType] = None, state: Optional[DeviceState] = None
+    ) -> List[Device]:
         """列出设备"""
         devices = list(self.devices.values())
-        
+
         if device_type:
             devices = [d for d in devices if d.device_type == device_type]
         if state:
             devices = [d for d in devices if d.state == state]
-        
+
         return devices
-    
+
     def get_task(self, task_id: str) -> Optional[CoordinatedTask]:
         """获取任务"""
         return self.tasks.get(task_id)
-    
+
     def list_tasks(self, state: Optional[TaskState] = None) -> List[CoordinatedTask]:
         """列出任务"""
         tasks = list(self.tasks.values())
-        
+
         if state:
             tasks = [t for t in tasks if t.state == state]
-        
+
         return tasks
-    
+
     def get_status(self) -> Dict[str, Any]:
         """获取状态"""
         return {
             "devices": len(self.devices),
-            "online_devices": sum(1 for d in self.devices.values() if d.state in [DeviceState.ONLINE, DeviceState.IDLE]),
+            "online_devices": sum(
+                1 for d in self.devices.values() if d.state in [DeviceState.ONLINE, DeviceState.IDLE]
+            ),
             "busy_devices": sum(1 for d in self.devices.values() if d.state == DeviceState.BUSY),
             "tasks": len(self.tasks),
             "running_tasks": sum(1 for t in self.tasks.values() if t.state == TaskState.RUNNING),
             "groups": len(self.groups),
             "devices_by_type": {
-                dt.value: sum(1 for d in self.devices.values() if d.device_type == dt)
-                for dt in DeviceType
-            }
+                dt.value: sum(1 for d in self.devices.values() if d.device_type == dt) for dt in DeviceType
+            },
         }
 
 
@@ -748,7 +747,7 @@ async def register_device(request: RegisterDeviceRequest):
         capabilities=request.capabilities,
         endpoint=request.endpoint,
         metadata=request.metadata,
-        state=DeviceState.IDLE
+        state=DeviceState.IDLE,
     )
     coordinator.register_device(device)
     return {"success": True, "device_id": device.device_id}
@@ -786,10 +785,7 @@ async def unregister_device(device_id: str):
 @app.post("/tasks")
 async def create_task(request: CreateTaskRequest):
     task_id = await coordinator.create_task(
-        request.name,
-        request.description,
-        request.required_devices,
-        request.subtasks
+        request.name, request.description, request.required_devices, request.subtasks
     )
     return {"task_id": task_id}
 
@@ -846,8 +842,7 @@ async def execute_parallel(request: ExecuteParallelRequest):
 async def execute_on_all_devices(action: str, params: Dict[str, Any] = {}):
     """在所有设备上执行相同命令"""
     commands = [
-        {"device_id": device_id, "action": action, "params": params}
-        for device_id in coordinator.devices.keys()
+        {"device_id": device_id, "action": action, "params": params} for device_id in coordinator.devices.keys()
     ]
     result = await coordinator.execute_parallel(commands)
     return result
@@ -855,4 +850,5 @@ async def execute_on_all_devices(action: str, params: Dict[str, Any] = {}):
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8071)

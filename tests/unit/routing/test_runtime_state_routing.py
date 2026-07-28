@@ -273,8 +273,8 @@ def _make_gateway_device(device_id: str, status: str = "online"):
     """Return a minimal Device-like object for device_selection tests."""
     device = MagicMock()
     device.device_id = device_id
-    device.status = status
-    device.metadata = {}
+    device.configure_mock(status=status)
+    device.configure_mock(metadata={})
     return device
 
 

@@ -224,7 +224,7 @@ class TestDeviceRouterSwitchOff:
 
         router = DeviceRouter()
         device = Device("dev1", "android_phone", ["tap"])
-        device.status = "online"
+        device.apply_status("online")
         router.devices["dev1"] = device
 
         # Patch analysis to return a local (non-cross-device) task

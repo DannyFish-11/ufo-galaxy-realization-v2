@@ -648,7 +648,7 @@ class TestHeartbeatTimeoutCleanup:
         assert device.connected is True
 
         # Back-date the last_heartbeat so it looks stale
-        device.last_heartbeat = time.time() - 300.0  # 300s ago
+        device.touch_heartbeat(time.time() - 300.0)  # 300s ago,专项③:经 AndroidDevice 规范写口
 
         # Run cleanup with a 60s timeout — device should be evicted
         await bridge.cleanup_stale_devices(timeout_seconds=60.0)

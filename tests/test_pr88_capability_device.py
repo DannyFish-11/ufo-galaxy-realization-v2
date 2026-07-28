@@ -413,8 +413,8 @@ class TestDeviceRegistrationCapabilitySync:
 
         # 构造包含 capabilities 列表的设备 mock
         mock_device = MagicMock()
-        mock_device.capabilities = ["screen", "keyboard"]
-        mock_device.device_name = "OpenClawd Test Device"
+        mock_device.configure_mock(capabilities=["screen", "keyboard"])
+        mock_device.configure_mock(device_name="OpenClawd Test Device")
         mock_device.device_type = "windows"
 
         mock_registry = MagicMock()

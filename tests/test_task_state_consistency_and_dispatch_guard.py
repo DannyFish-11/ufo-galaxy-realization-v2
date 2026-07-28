@@ -327,7 +327,7 @@ class TestAssignTaskRegistrationGapBlock:
         d = MagicMock(spec=AndroidDevice)
         d.connected = True
         d.websocket = ws
-        b._devices["gap-device"] = d
+        b.put_local_device("gap-device", d)
         return b
 
     @pytest.mark.asyncio
@@ -406,7 +406,7 @@ class TestAssignTaskAllowedWhenNoGaps:
         d = MagicMock(spec=AndroidDevice)
         d.connected = True
         d.websocket = ws
-        b._devices["clean-device"] = d
+        b.put_local_device("clean-device", d)
         return b
 
     @pytest.mark.asyncio
@@ -516,7 +516,7 @@ class TestGapClearedAllowsDispatch:
         d = MagicMock(spec=AndroidDevice)
         d.connected = True
         d.websocket = ws
-        b._devices["recover-device"] = d
+        b.put_local_device("recover-device", d)
         return b
 
     @pytest.mark.asyncio

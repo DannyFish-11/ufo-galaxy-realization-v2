@@ -55,10 +55,10 @@ class TestHeartbeatTimeout(unittest.IsolatedAsyncioTestCase):
 
     async def test_device_goes_offline_after_timeout(self):
         udm = _fresh_udm()
-        dev = _make_device("hb-dev-1")
+        # 专项③:通过构造入参设置过期心跳(register_device 保留 last_heartbeat),
+        # 避免直接下标写 udm._devices 绕过 SSOT UDM 写路径审计门。
+        dev = _make_device("hb-dev-1", last_heartbeat=datetime.now(timezone.utc) - timedelta(seconds=120))
         udm.register_device(dev)
-        # Simulate heartbeat that is well past the threshold (set AFTER registration).
-        udm._devices["hb-dev-1"].last_heartbeat = datetime.now(timezone.utc) - timedelta(seconds=120)
 
         offline = await udm.check_heartbeat_timeouts(timeout_secs=60.0, grace_secs=10.0)
 
@@ -69,10 +69,9 @@ class TestHeartbeatTimeout(unittest.IsolatedAsyncioTestCase):
 
     async def test_device_stays_online_within_grace(self):
         udm = _fresh_udm()
-        dev = _make_device("hb-dev-2")
+        # Last heartbeat 50 s ago — within timeout+grace(60+10=70)。专项③:经构造入参设置。
+        dev = _make_device("hb-dev-2", last_heartbeat=datetime.now(timezone.utc) - timedelta(seconds=50))
         udm.register_device(dev)
-        # Last heartbeat 50 s ago — within timeout+grace(60+10=70)
-        udm._devices["hb-dev-2"].last_heartbeat = datetime.now(timezone.utc) - timedelta(seconds=50)
 
         offline = await udm.check_heartbeat_timeouts(timeout_secs=60.0, grace_secs=10.0)
 
@@ -83,9 +82,9 @@ class TestHeartbeatTimeout(unittest.IsolatedAsyncioTestCase):
 
     async def test_device_recovers_on_heartbeat_after_offline(self):
         udm = _fresh_udm()
-        dev = _make_device("hb-dev-3")
+        # 专项③:经构造入参设置过期心跳。
+        dev = _make_device("hb-dev-3", last_heartbeat=datetime.now(timezone.utc) - timedelta(seconds=200))
         udm.register_device(dev)
-        udm._devices["hb-dev-3"].last_heartbeat = datetime.now(timezone.utc) - timedelta(seconds=200)
 
         await udm.check_heartbeat_timeouts(timeout_secs=60.0, grace_secs=10.0)
 
@@ -103,9 +102,9 @@ class TestHeartbeatTimeout(unittest.IsolatedAsyncioTestCase):
         udm = _fresh_udm()
         dev = _make_device("hb-dev-4")
         udm.register_device(dev)
-        # Manually mark offline first.
-        udm._devices["hb-dev-4"].status = UnifiedDeviceStatus.OFFLINE
-        udm._devices["hb-dev-4"].last_heartbeat = datetime.now(timezone.utc) - timedelta(seconds=200)
+        # Manually mark offline first — 专项③:经 UDM 规范写口 update_device_status,
+        # 已离线设备不会被 check_heartbeat_timeouts 再次列出(与心跳新旧无关)。
+        udm.update_device_status("hb-dev-4", UnifiedDeviceStatus.OFFLINE)
 
         offline = await udm.check_heartbeat_timeouts(timeout_secs=60.0, grace_secs=10.0)
 
@@ -162,8 +161,8 @@ class TestDeviceRegistrationDedup(unittest.TestCase):
         udm = _fresh_udm()
         dev1 = _make_device("dup-dev-4")
         udm.register_device(dev1)
-        # Manually mark offline to simulate a reconnect scenario.
-        udm._devices["dup-dev-4"].status = UnifiedDeviceStatus.OFFLINE
+        # Manually mark offline to simulate a reconnect scenario — 专项③:经 UDM 规范写口。
+        udm.update_device_status("dup-dev-4", UnifiedDeviceStatus.OFFLINE)
 
         dev2 = _make_device("dup-dev-4")
         udm.register_device(dev2)

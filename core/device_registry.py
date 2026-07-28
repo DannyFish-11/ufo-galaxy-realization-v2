@@ -398,7 +398,7 @@ class DeviceRegistry:
         device = self.devices.get(device_id)
         if device:
             device.last_seen = time.time()
-            device.status = DeviceStatus.ONLINE
+            device.apply_status(DeviceStatus.ONLINE)
             return device
 
         # 创建新设备
@@ -475,10 +475,12 @@ class DeviceRegistry:
                     udm_dev = udm.get_device(did)
                     if udm_dev is not None:
                         try:
-                            self.devices[did].status = DeviceStatus(
-                                udm_dev.status.value
-                                if hasattr(udm_dev.status, "value")
-                                else str(udm_dev.status).lower()
+                            self.devices[did].apply_status(
+                                DeviceStatus(
+                                    udm_dev.status.value
+                                    if hasattr(udm_dev.status, "value")
+                                    else str(udm_dev.status).lower()
+                                )
                             )
                         except ValueError:
                             pass
@@ -538,11 +540,11 @@ class DeviceRegistry:
         device.last_seen = now
 
         if heartbeat:
-            device.last_heartbeat = now
+            device.touch_heartbeat(now)
 
         if status:
             old_status = device.status
-            device.status = status
+            device.apply_status(status)
 
             # 触发状态变化事件
             if old_status != status:
@@ -598,7 +600,7 @@ class DeviceRegistry:
         for device in list(self.devices.values()):
             if device.status == DeviceStatus.ONLINE:
                 if now - device.last_heartbeat > timeout:
-                    device.status = DeviceStatus.OFFLINE
+                    device.apply_status(DeviceStatus.OFFLINE)
                     await self._emit_event("offline", device)
                     logger.warning("DeviceRegistry: local cache marks device offline: %s", device.device_id)
                     # Wire heartbeat-miss lifecycle event into multi-device runtime harness.
