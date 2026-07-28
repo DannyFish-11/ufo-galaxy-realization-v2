@@ -48,8 +48,8 @@ def _make_udm_device(device_id: str, status: str = "online", capabilities=None):
     """Return a minimal mock UnifiedDevice-like object."""
     device = MagicMock()
     device.device_id = device_id
-    device.status = status
-    device.capabilities = capabilities if capabilities is not None else ["touch", "screen"]
+    device.configure_mock(status=status)
+    device.configure_mock(capabilities=capabilities if capabilities is not None else ["touch", "screen"])
     device.device_type = "android"
     return device
 

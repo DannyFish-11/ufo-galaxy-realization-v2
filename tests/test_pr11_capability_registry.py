@@ -73,7 +73,7 @@ def _make_fake_device(device_id: str, capabilities: List[str]):
         cap_objects.append(cap_mock)
     device = MagicMock()
     device.device_id = device_id
-    device.capabilities = cap_objects
+    device.configure_mock(capabilities=cap_objects)
     return device
 
 

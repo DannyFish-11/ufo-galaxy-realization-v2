@@ -113,11 +113,11 @@ def _make_device(
 
     device = MagicMock()
     device.device_id = device_id
-    device.device_name = device_name
+    device.configure_mock(device_name=device_name)
     device.online = online
-    device.status = status
+    device.configure_mock(status=status)
     device.connection = conn
-    device.capabilities = cap_profile
+    device.configure_mock(capabilities=cap_profile)
     device.autonomy = autonomy
 
     # to_dict
@@ -568,10 +568,10 @@ class TestCrossDeviceCoordinatorCanonicalHelpers:
         fake_router_device = MagicMock()
         fake_router_device.device_id = "r1"
         fake_router_device.device_type = "android"
-        fake_router_device.device_name = "Phone"
-        fake_router_device.capabilities = []
+        fake_router_device.configure_mock(device_name="Phone")
+        fake_router_device.configure_mock(capabilities=[])
         fake_router_device.websocket = object()  # non-None → connected
-        fake_router_device.metadata = {}
+        fake_router_device.configure_mock(metadata={})
 
         with patch("galaxy_gateway.cross_device_coordinator.device_router") as mock_router:
             mock_router.devices = {"r1": fake_router_device}

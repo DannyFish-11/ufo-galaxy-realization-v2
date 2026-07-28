@@ -43,7 +43,7 @@ async def test_task_cancel_updates_canonical_task_graph_and_task_queue():
 
     task_id = "canon_cancel_1"
     bridge = _make_bridge()
-    bridge._devices["android_1"] = SimpleNamespace(current_task_id=task_id)
+    bridge._devices.update({"android_1": SimpleNamespace(current_task_id=task_id)})
 
     task = build_canonical_task(task_id=task_id, register=True)
     get_canonical_task_runtime().update_lifecycle(task_id, TaskLifecycle.RUNNING)

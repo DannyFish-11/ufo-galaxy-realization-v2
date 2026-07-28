@@ -829,6 +829,15 @@ class DeviceDiscovery:
             
             await asyncio.sleep(30)
     
+    def add_device(self, device: Device) -> None:
+        """将已发现设备登记进本地发现表(规范写口)。
+
+        专项③(ssot-udm-conformance):发现表 ``_devices`` 是 Node_71 发现层的
+        本地缓存,权威设备状态由 UnifiedDeviceManager 维护。此方法为登记入口,
+        禁止外部对 ``discovery._devices[...]`` 直接下标赋值绕过 SSOT UDM 审计门。
+        """
+        self._devices[device.device_id] = device
+
     def get_device(self, device_id: str) -> Optional[Device]:
         """获取设备"""
         return self._devices.get(device_id)

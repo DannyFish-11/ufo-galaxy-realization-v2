@@ -231,7 +231,7 @@ class TestDeviceDiscovery:
             name="Test Device",
             device_type=DeviceType.SENSOR
         )
-        discovery._devices[device.device_id] = device
+        discovery.add_device(device)
         
         result = discovery.get_device("test-device-001")
         
@@ -251,8 +251,8 @@ class TestDeviceDiscovery:
             device_type=DeviceType.CAMERA
         )
         
-        discovery._devices[device1.device_id] = device1
-        discovery._devices[device2.device_id] = device2
+        discovery.add_device(device1)
+        discovery.add_device(device2)
         
         devices = discovery.get_all_devices()
         
@@ -271,8 +271,8 @@ class TestDeviceDiscovery:
             device_type=DeviceType.CAMERA
         )
         
-        discovery._devices[device1.device_id] = device1
-        discovery._devices[device2.device_id] = device2
+        discovery.add_device(device1)
+        discovery.add_device(device2)
         
         sensors = discovery.get_devices_by_type(DeviceType.SENSOR)
         
@@ -288,7 +288,7 @@ class TestDeviceDiscovery:
             name="Device 1",
             device_type=DeviceType.SENSOR
         )
-        discovery._devices[device.device_id] = device
+        discovery.add_device(device)
         
         assert discovery.count() == 1
 

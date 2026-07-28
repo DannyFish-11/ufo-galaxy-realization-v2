@@ -30,7 +30,7 @@ from galaxy_gateway.device_router import Device, DeviceRouter
 def _make_device(device_id: str, device_type: str = "android_phone") -> Device:
     """Create a minimal Device whose status is always 'online'."""
     device = Device(device_id=device_id, device_type=device_type, capabilities=[])
-    device.status = "online"
+    device.apply_status("online")
     return device
 
 

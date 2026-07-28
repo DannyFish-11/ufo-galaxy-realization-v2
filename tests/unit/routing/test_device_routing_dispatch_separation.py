@@ -93,9 +93,9 @@ def _make_device(device_id: str, status: str = "online", websocket=None):
     """Build a minimal Device-like object for tests."""
     device = MagicMock()
     device.device_id = device_id
-    device.status = status
+    device.configure_mock(status=status)
     device.websocket = websocket
-    device.metadata = {}
+    device.configure_mock(metadata={})
     return device
 
 
@@ -215,7 +215,7 @@ class TestHealthPolicy:
         from galaxy_gateway.routing.health_policy import is_device_online
 
         device = MagicMock()
-        device.status = MagicMock()
+        device.configure_mock(status=MagicMock())
         device.status.value = "online"
         assert is_device_online(device) is True
 
@@ -869,7 +869,7 @@ class TestDeviceRouterDelegation:
 
         router = self._fresh_router()
         device = Device("dev-sel", "android_phone", [])
-        device.status = "online"
+        device.apply_status("online")
         router.devices["dev-sel"] = device
 
         analysis = {

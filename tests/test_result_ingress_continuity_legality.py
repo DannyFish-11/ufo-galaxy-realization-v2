@@ -339,7 +339,7 @@ class TestGroupC_ValidContinuityTruthChainRuns:
 
         async def _inner() -> Any:
             bridge = _make_bridge()
-            bridge._devices["dev-c4"] = MagicMock()
+            bridge._devices.update({"dev-c4": MagicMock()})
             bridge._devices["dev-c4"].current_task_id = "t-c4"
             msg = _make_message(task_id="t-c4", device_id="dev-c4")
 

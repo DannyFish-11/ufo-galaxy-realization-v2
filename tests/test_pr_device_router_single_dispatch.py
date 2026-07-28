@@ -178,7 +178,7 @@ class TestAndroidBridgeAssignTaskFallback:
         fake_ws = MagicMock()
         fake_ws.send_json = AsyncMock()
         fake_device.websocket = fake_ws
-        bridge._devices["android_fallback"] = fake_device
+        bridge.put_local_device("android_fallback", fake_device)
 
         sent_messages = []
 
@@ -526,7 +526,7 @@ class TestAndroidBridgeAssignTaskLocalState:
         fake_device = MagicMock(spec=AndroidDevice)
         fake_device.connected = True
         fake_device.current_task_id = None
-        bridge._devices["state_test_device"] = fake_device
+        bridge.put_local_device("state_test_device", fake_device)
 
         # Router has no device — forces fallback
         mock_router = MagicMock()
