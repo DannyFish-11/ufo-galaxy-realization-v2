@@ -1069,6 +1069,10 @@ class AttachedSessionRegistry:
         entry = self._get_by_entry_id(entry_id)
         if entry is None:
             return None
+        # 幽灵命中一致性校验(与 get_by_session_id 对齐):条目可能已被 reconnect
+        # 换成新的 attachment id,旧键指向的 entry_id 不应再以旧 attachment id 命中。
+        if entry.runtime_attachment_session_id != runtime_attachment_session_id:
+            return None
         if active_only and not entry.is_active():
             return None
         return entry

@@ -190,8 +190,9 @@ async def handle_capability_report(bridge: "AndroidBridge", websocket: Any, mess
 
     async with bridge._lock:
         if device_id in bridge._devices:
-            bridge._devices[device_id].supported_actions = list(supported_actions)
-            bridge._devices[device_id].touch_heartbeat()
+            # 根因：_devices 为 transport cache（SSOT 在 UDM）；transport handle
+            # 的 supported_actions/心跳字段写入封装到 AndroidDevice.update_supported_actions()。
+            bridge._devices[device_id].update_supported_actions(list(supported_actions))
 
     if device_id:
         try:

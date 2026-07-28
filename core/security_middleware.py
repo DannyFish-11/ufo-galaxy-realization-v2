@@ -74,12 +74,25 @@ class AuditLogger:
         self._error_count = 0
         self._total_count = 0
 
+    # 聚合字典基数上限:by_path/by_ip 的 key 是请求 path 和 client_ip,面对
+    # 404 探测(随机路径)或大量/伪造源 IP 会无界增长(内存泄漏)。get_stats
+    # 只展示 top-10,故只需保留高频项:超过上限时丢弃当前最低频的一批。
+    _MAX_AGG_KEYS = 10000
+
+    @staticmethod
+    def _bump_bounded(counter: Dict, key, cap: int) -> None:
+        counter[key] += 1
+        if len(counter) > cap:
+            # 丢弃最低频的 ~10%,摊销清理成本(top-N 统计不受影响)。
+            for k, _ in sorted(counter.items(), key=lambda kv: kv[1])[: max(1, cap // 10)]:
+                counter.pop(k, None)
+
     def record(self, entry: AuditEntry):
         """记录审计日志"""
         self._entries.append(entry)
-        self._by_path[entry.path] += 1
-        self._by_status[entry.status_code] += 1
-        self._by_ip[entry.client_ip] += 1
+        self._bump_bounded(self._by_path, entry.path, self._MAX_AGG_KEYS)
+        self._by_status[entry.status_code] += 1  # 状态码基数天然有限,不设上限
+        self._bump_bounded(self._by_ip, entry.client_ip, self._MAX_AGG_KEYS)
         self._total_count += 1
 
         if entry.status_code >= 400:

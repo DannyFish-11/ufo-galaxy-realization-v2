@@ -19,7 +19,9 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-async def handle_heartbeat(bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]) -> Dict[str, Any]:
+async def handle_heartbeat(
+    bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]
+) -> Dict[str, Any]:
     """处理心跳，未注册设备仍回 ACK 并输出警告。
 
     Heartbeat flow (PR-2):
@@ -34,8 +36,9 @@ async def handle_heartbeat(bridge: "AndroidBridge", websocket: Any, message: Dic
     # Step 2 — update local transport cache.
     async with bridge._lock:
         if device_id in bridge._devices:
-            bridge._devices[device_id].touch_heartbeat()
-            bridge._devices[device_id].connected = True
+            # 根因：_devices 为 transport cache（SSOT 在 UDM，上方已 _patch_*_to_udm）；
+            # 传输层心跳字段写入封装到 AndroidDevice.mark_heartbeat()，避免下标直写。
+            bridge._devices[device_id].mark_heartbeat()
             bridge._sync_device_router_session(
                 device_id,
                 connected=True,
@@ -49,7 +52,9 @@ async def handle_heartbeat(bridge: "AndroidBridge", websocket: Any, message: Dic
     return MessageBuilder.heartbeat_ack(device_id)
 
 
-async def handle_device_status(bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]) -> Dict[str, Any]:
+async def handle_device_status(
+    bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]
+) -> Dict[str, Any]:
     """处理设备状态上报（battery, cpu, memory 等）。
 
     Status update flow (PR-2):
@@ -69,8 +74,9 @@ async def handle_device_status(bridge: "AndroidBridge", websocket: Any, message:
     # Step 2 — update local transport cache.
     async with bridge._lock:
         if device_id in bridge._devices:
-            bridge._devices[device_id].touch_heartbeat()
-            bridge._devices[device_id].connected = True
+            # 根因：_devices 为 transport cache（SSOT 在 UDM，上方已 _patch_*_to_udm）；
+            # 传输层心跳字段写入封装到 AndroidDevice.mark_heartbeat()，避免下标直写。
+            bridge._devices[device_id].mark_heartbeat()
             bridge._sync_device_router_session(
                 device_id,
                 connected=True,
@@ -78,8 +84,7 @@ async def handle_device_status(bridge: "AndroidBridge", websocket: Any, message:
 
     logger.info(
         "Device status update: device_id=%s status=%s",
-        device_id,
-        status_payload,
+        device_id, status_payload,
     )
 
     return {
@@ -92,14 +97,18 @@ async def handle_device_status(bridge: "AndroidBridge", websocket: Any, message:
     }
 
 
-async def handle_agent_ping(bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]) -> Dict[str, Any]:
+async def handle_agent_ping(
+    bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]
+) -> Dict[str, Any]:
     """处理 agent_ping 请求，返回 heartbeat_ack"""
     device_id = message.get("device_id")
     logger.debug("Agent ping from %s", device_id)
     return MessageBuilder.heartbeat_ack(device_id)
 
 
-async def handle_agent_status(bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]) -> Dict[str, Any]:
+async def handle_agent_status(
+    bridge: "AndroidBridge", websocket: Any, message: Dict[str, Any]
+) -> Dict[str, Any]:
     """处理 agent_status（readiness/posture 证据）.
 
     Android posture gating: if the status payload carries a
@@ -121,7 +130,10 @@ async def handle_agent_status(bridge: "AndroidBridge", websocket: Any, message: 
         # target selection gates on actual posture rather than the default set
         # at registration time.
         if isinstance(status_payload, dict):
-            _posture_hint = status_payload.get("source_runtime_posture") or status_payload.get("posture")
+            _posture_hint = (
+                status_payload.get("source_runtime_posture")
+                or status_payload.get("posture")
+            )
             if _posture_hint:
                 try:
                     from core.attached_runtime_session_registry import (
@@ -140,15 +152,17 @@ async def handle_agent_status(bridge: "AndroidBridge", websocket: Any, message: 
                     )
                 except Exception as _posture_exc:
                     logger.debug(
-                        "android_bridge: update_session_posture non-fatal:" " device_id=%s error=%s",
+                        "android_bridge: update_session_posture non-fatal:"
+                        " device_id=%s error=%s",
                         device_id,
                         _posture_exc,
                     )
 
     async with bridge._lock:
         if device_id in bridge._devices:
-            bridge._devices[device_id].touch_heartbeat()
-            bridge._devices[device_id].connected = True
+            # 根因：_devices 为 transport cache（SSOT 在 UDM，上方已 _patch_*_to_udm）；
+            # 传输层心跳字段写入封装到 AndroidDevice.mark_heartbeat()，避免下标直写。
+            bridge._devices[device_id].mark_heartbeat()
             bridge._sync_device_router_session(device_id, connected=True)
 
     return {

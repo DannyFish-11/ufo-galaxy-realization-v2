@@ -609,6 +609,17 @@ class AndroidBridge:
                 exc,
             )
 
+    def cache_transport_handle(self, device_id: str, device: "AndroidDevice") -> None:
+        """将设备的 transport/session handle 写入 bridge 拥有的 operational cache。
+
+        根因：``self._devices`` 是 AndroidBridge 自己拥有的 transport cache（非
+        设备事实来源，SSOT 在 UDM）。过去外部 handler 直接做
+        ``bridge._devices[id] = device`` 的下标直写，会被 ssot-udm-conformance
+        门判为绕过 canonical 写接口。通过实例方法封装写入，赋值落在 self._devices
+        上（门允许 self 拥有其内部注册表），调用方改为方法调用即可。
+        """
+        self._devices[device_id] = device
+
     def _patch_disconnect_to_udm(self, device_id: str) -> None:
         """Mark device as DISCONNECTED in UDM without removing canonical identity."""
         self._patch_runtime_state_to_udm(

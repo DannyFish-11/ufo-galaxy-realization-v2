@@ -8048,6 +8048,12 @@ class OpenClawd:
         tool_records: List[ToolCallRecord] = []
         last_response = None
         total_tokens = 0
+        # 是否因触顶 max_iterations 而终止(区别于"无工具调用自然完成"或限频/
+        # 重复检测提前中止)。此前 _react_loop 从不返回该键,handle_chat 的
+        # result.get("hit_max_iterations", False) 恒 False —— 观测面永远看不到
+        # "agent 卡在迭代上限没跑完"这一真实终止原因。for-else 精确捕获:
+        # 循环跑满 max_iterations 且【无任何 break】即触顶。
+        hit_max_iterations = False
 
         # Phase 9: 频率限制计数器
         _total_tool_calls = 0
@@ -8068,6 +8074,7 @@ class OpenClawd:
         async def _inner_loop():
             nonlocal last_response, total_tokens
             nonlocal _total_tool_calls, _last_tool_name
+            nonlocal hit_max_iterations
 
             for iteration in range(max_iterations):
                 # 任务成本账本:记一轮 ReAct(账本故障绝不反噬)
@@ -8250,6 +8257,10 @@ class OpenClawd:
                             "content": _clipped,
                         }
                     )
+            else:
+                # for 循环跑满 max_iterations 且无任何 break(自然完成/限频/重复
+                # 都是 break)→ 触顶迭代上限。
+                hit_max_iterations = True
 
         try:
             await _asyncio.wait_for(_inner_loop(), timeout=timeout)
@@ -8269,6 +8280,7 @@ class OpenClawd:
             "model": last_response.model if last_response else "",
             "total_tokens": total_tokens,
             "timeout": timed_out,
+            "hit_max_iterations": hit_max_iterations,
         }
 
     # ========================================================================

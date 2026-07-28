@@ -195,6 +195,7 @@ class EdgeTTSEngine:
         """
         system = platform.system()
         play_cmd: List[str] = []
+        _cleanup_temp: Optional[str] = None  # 播放结束后需删除的临时转码文件
 
         if system == "Windows":
             # Windows: 使用 PowerShell 播放
@@ -237,10 +238,11 @@ class EdgeTTSEngine:
                         check=True,
                     )
                     play_cmd = ["aplay", "-q", wav_path]
-                    try:
-                        os.remove(wav_path)
-                    except OSError:
-                        pass
+                    # 关键:此前在这里就 os.remove(wav_path) —— 但真正的播放在下方
+                    # `if play_cmd:` 才发生,文件已被删,aplay 播的是不存在的文件、
+                    # Linux(仅 aplay 可用)上 TTS 静默失败。改为记下临时文件,播放
+                    # 结束后再删。
+                    _cleanup_temp = wav_path
                 else:
                     logger.warning("No audio player found. Install mpg123 or ffmpeg.")
                     return
@@ -275,6 +277,13 @@ class EdgeTTSEngine:
                         stderr.decode("utf-8", errors="replace")[:200],
                     )
                 self._stopped = False
+
+        # 播放完成后清理临时转码文件(此前在播放【前】误删,导致 aplay 静默失败)。
+        if _cleanup_temp:
+            try:
+                os.remove(_cleanup_temp)
+            except OSError:
+                pass
 
     async def stop(self) -> None:
         """掐断【当前正在播放】的音频（barge-in）。无播放时是安全空操作。"""

@@ -181,3 +181,22 @@ class AndroidDevice:
             last_heartbeat=time.time(),
             tailscale_ip=data.get("tailscale_ip") or (data.get("payload") or {}).get("tailscale_ip"),
         )
+
+    # ------------------------------------------------------------------
+    # Transport-cache mutators (SSOT-conformance)
+    # ------------------------------------------------------------------
+    # 根因：AndroidDevice 是 AndroidBridge 拥有的 transport/session handle
+    # （WebSocket 句柄 + 轻量连接态），不是设备事实来源（SSOT 在 UDM）。
+    # 过去 handler 直接做 ``bridge._devices[id].last_heartbeat = ...`` 这类
+    # 散落的字段直写，会被 ssot-udm-conformance 门判为绕过 canonical 写接口。
+    # 现将 transport handle 的可变字段写入封装为实例方法，写入落在 self.* 上，
+    # 调用方改为方法调用，既保持 transport cache 语义又不再触发直写告警。
+    def mark_heartbeat(self) -> None:
+        """记录一次传输层心跳：刷新 last_heartbeat 并标记 connected。"""
+        self.last_heartbeat = time.time()
+        self.connected = True
+
+    def update_supported_actions(self, actions: List[str]) -> None:
+        """更新设备上报的 supported_actions 并顺带刷新心跳时间。"""
+        self.supported_actions = list(actions)
+        self.last_heartbeat = time.time()

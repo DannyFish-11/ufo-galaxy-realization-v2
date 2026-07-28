@@ -290,7 +290,9 @@ def restore_session_truth_from_snapshot(
             from core.canonical_session_truth import CanonicalSessionTruthRecord
 
             rec = CanonicalSessionTruthRecord.from_dict(rd)
-            runtime.record(rec)
+            # persist=False:这些记录就是从快照里读出来的,再经默认 record() 回写
+            # 会把整份快照(和审计流)在每次重启时重复追加一遍 → 无界膨胀 + 重复。
+            runtime.record(rec, persist=False)
             restored += 1
         except Exception as exc:
             logger.debug(
