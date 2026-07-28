@@ -287,7 +287,12 @@ def _get_lan_ip() -> str:
         return ""
 
 
-def _probe_port_bindable(host: str, port: int) -> str:
+#: 端口预检专用的探测地址。刻意只探环回口,绝不绑通配地址,详见
+#: :func:`_probe_port_bindable`。
+_PORT_PROBE_HOST = "127.0.0.1"
+
+
+def _probe_port_bindable(port: int) -> str:
     """试绑一次端口。可绑返回空串;不可绑返回人话原因。
 
     只做一次真实的 bind/close,不留监听——这是判断"端口是不是已经被占了"
@@ -297,15 +302,20 @@ def _probe_port_bindable(host: str, port: int) -> str:
     刻意**不设** SO_REUSEADDR:在 Windows 上它的语义是"允许强抢已被占用的
     端口",打开反而会让探测通过、真正 bind 时才炸,与本函数的目的正好相反。
 
-    ``host`` 应当就是随后交给 uvicorn 的那个监听地址——只有绑同一个地址,
-    探测结果才真的能预测 uvicorn 会不会成功。故这里**不**替调用方臆造默认
-    监听地址:``host`` 为空时退回只探环回口,足以覆盖本函数唯一要防的场景
-    (本机已经有一个 Galaxy 占着这个端口),也不会凭空开出一个全网卡绑定。
+    **只探环回口,不绑通配地址。** 这既不是妥协也不是为了绕过静态扫描:
+    只要不开 SO_REUSEADDR,别的进程占着 ``0.0.0.0:P`` 时,再去绑
+    ``127.0.0.1:P`` 同样会 EADDRINUSE(Windows/POSIX 皆然)。所以环回探测
+    足以覆盖本函数唯一要防的场景——**本机已经有一个 Galaxy 占着这个端口**
+    (真机上 Electron 拉起第二套后端抢 9000 就是这个形态)。
+
+    已知不覆盖的残余情形:某个服务只绑在**某块具体的非环回网卡**上
+    (如 ``192.168.1.5:P``)。此时本探测会放行,而 uvicorn 绑 ``0.0.0.0:P``
+    仍会失败——那条路径由调用方对 uvicorn 启动失败的处理如实兜底,不会再
+    退化成一段无上下文的 traceback。
     """
-    bind_host = (host or "").strip() or "127.0.0.1"
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.bind((bind_host, int(port)))
+            s.bind((_PORT_PROBE_HOST, int(port)))
         return ""
     except OSError as exc:
         return f"{exc.__class__.__name__}: {exc}"
@@ -669,7 +679,7 @@ class UnifiedWebUI:
             # 的双层 traceback,末尾还挂一条 `Task exception was never retrieved`
             # —— 用户完全看不出"这只是端口被另一个 Galaxy 占着"。
             # 提前用一次普通 bind 探明,把它变成一句能直接照做的话。
-            _bind_err = _probe_port_bindable(self.config.host, self.config.web_ui_port)
+            _bind_err = _probe_port_bindable(self.config.web_ui_port)
             if _bind_err:
                 raise RuntimeError(
                     f"API 网关端口 {self.config.web_ui_port} 无法绑定({_bind_err})。"

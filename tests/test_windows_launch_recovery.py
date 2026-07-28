@@ -137,33 +137,47 @@ def test_probe_port_bindable_detects_occupied_port():
         busy.bind(("127.0.0.1", 0))
         busy.listen(1)
         port = busy.getsockname()[1]
-        reason = _probe_port_bindable("127.0.0.1", port)
+        reason = _probe_port_bindable(port)
         assert reason, "端口已被占用时必须返回失败原因"
 
     # 占用者关闭后同一端口应重新可绑
-    assert _probe_port_bindable("127.0.0.1", port) == ""
+    assert _probe_port_bindable(port) == ""
 
 
-def test_probe_port_does_not_invent_wildcard_bind():
-    """host 为空时不得凭空绑到全网卡(CodeQL:Binding a socket to all interfaces)。
+def test_probe_port_detects_wildcard_holder_without_binding_wildcard():
+    """别人占着 0.0.0.0:P 时,只探环回口也必须能识别出来。
 
-    探测的意义是"预测 uvicorn 那次 bind 会不会成功",所以应当绑调用方给的那个
-    地址;没给地址就退回环回口,而不是替调用方决定去监听 0.0.0.0。
+    这条是"只探环回口"这个设计成立的前提:只要不开 SO_REUSEADDR,通配绑定
+    与具体地址绑定在同一端口上互斥,所以环回探测足以覆盖真机那个场景
+    (Electron 拉起第二套后端去抢已被占用的 9000)。
+    """
+    from unified_launcher import _probe_port_bindable
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as wildcard:
+        wildcard.bind(("0.0.0.0", 0))  # 模拟 uvicorn 的真实监听形态
+        wildcard.listen(1)
+        port = wildcard.getsockname()[1]
+        assert _probe_port_bindable(port), "通配监听占着的端口必须被判为不可绑"
+
+
+def test_probe_port_never_binds_all_interfaces():
+    """端口预检自身绝不绑通配地址(CodeQL:Binding a socket to all interfaces)。
+
+    真要防的是"本机已有一个 Galaxy 占着这个端口",环回探测就够;为此开一个
+    全网卡绑定既无必要也是真实的攻击面。
     """
     import inspect
 
     import unified_launcher
 
-    src = inspect.getsource(unified_launcher._probe_port_bindable)
-    code = "\n".join(ln for ln in src.splitlines() if not ln.strip().startswith("#"))
-    body = code.split('"""')[-1]  # 去掉 docstring,只看真正的代码
-    assert "0.0.0.0" not in body, "端口预检不应出现全网卡字面量"
+    body = inspect.getsource(unified_launcher._probe_port_bindable).split('"""')[-1]
+    assert "0.0.0.0" not in body, "端口预检代码体内不应出现通配监听地址"
 
-    # 空 host 仍要能正确识别环回口上的占用
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as busy:
-        busy.bind(("127.0.0.1", 0))
-        busy.listen(1)
-        assert unified_launcher._probe_port_bindable("", busy.getsockname()[1])
+    # bind 的地址必须来自那个写死为环回口的常量,而不是任何可能为空/通配的变量
+    bind_lines = [ln.strip() for ln in body.splitlines() if ".bind(" in ln]
+    assert len(bind_lines) == 1, f"预期恰好一处 bind,实际 {bind_lines}"
+    assert "_PORT_PROBE_HOST" in bind_lines[0], f"bind 地址应为 _PORT_PROBE_HOST:{bind_lines[0]}"
+    assert unified_launcher._PORT_PROBE_HOST == "127.0.0.1"
 
 
 # ── 3. Electron:端口被占时绝不再拉一套后端 ────────────────────────────
