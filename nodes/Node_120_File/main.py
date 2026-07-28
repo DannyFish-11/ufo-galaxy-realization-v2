@@ -513,12 +513,20 @@ class FileService:
             # 沙箱外之后再往里写。裸 extractall 会照单全收,直接绕过本节点赖以
             # 立身的 WORKSPACE_ROOT 沙箱(_safe_path 只校验了 archive/output_dir
             # 这两个入参,管不到归档【内部】的成员名)。
-            _root = output_dir.resolve()
+            # 用 os.path.realpath + 前缀比对(而不是 pathlib 的 parents 判断):
+            # 二者语义等价,但这是静态分析器(CodeQL py/path-injection)能识别的
+            # 标准消毒形态 —— 用 parents 判断会被判成"未消毒的路径拼接"。
+            _root_real = os.path.realpath(str(output_dir))
+            _root_prefix = _root_real + os.sep
 
             def _is_inside(member_name: str) -> bool:
-                """成员解析后的落点是否仍在 output_dir 内。"""
-                target = (_root / member_name).resolve()
-                return target == _root or _root in target.parents
+                """成员解析后的落点是否仍在 output_dir 内。
+
+                realpath 会一并展开 ``..`` 与符号链接,故绝对路径成员、``../``
+                穿越、以及经由已存在符号链接的逃逸都会在这里被判出界。
+                """
+                target = os.path.realpath(os.path.join(_root_real, member_name))
+                return target == _root_real or target.startswith(_root_prefix)
 
             if archive.suffix == '.zip':
                 with zipfile.ZipFile(archive, 'r') as zf:
