@@ -8,6 +8,7 @@ Node_74_DigitalTwin: 数字孪生节点 (FastAPI)
 """
 
 import logging  # auto: ensure module logger is defined
+
 logger = logging.getLogger(__name__)
 
 
@@ -34,6 +35,7 @@ import uvicorn
 
 try:
     from core.port_config import get_service_port
+
     PORT = get_service_port("node_74") or 8074
 except Exception as exc:
     logger.debug("Fallback triggered: %s", exc)
@@ -41,6 +43,7 @@ except Exception as exc:
 
 try:
     from nodes.common.cors_config import get_cors_origins
+
     CORS_ORIGINS = get_cors_origins()
 except Exception as exc:
     logger.debug("Fallback triggered: %s", exc)
@@ -50,9 +53,9 @@ except Exception as exc:
 # Environment variables
 # ---------------------------------------------------------------------------
 
-DEVICE_ID           = os.getenv("DEVICE_ID", "Device_001")
+DEVICE_ID = os.getenv("DEVICE_ID", "Device_001")
 SIMULATION_INTERVAL = float(os.getenv("SIMULATION_INTERVAL", "5.0"))
-MAX_HISTORY_LENGTH  = int(os.getenv("MAX_HISTORY_LENGTH", "1000"))
+MAX_HISTORY_LENGTH = int(os.getenv("MAX_HISTORY_LENGTH", "1000"))
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -68,16 +71,17 @@ logger = logging.getLogger("Node_74_DigitalTwin")
 # Enums & Data classes
 # ---------------------------------------------------------------------------
 
+
 class ServiceStatus(Enum):
     INITIALIZING = "initializing"
-    RUNNING      = "running"
-    STOPPED      = "stopped"
-    ERROR        = "error"
+    RUNNING = "running"
+    STOPPED = "stopped"
+    ERROR = "error"
 
 
 class DeviceStatus(Enum):
-    ONLINE      = "online"
-    OFFLINE     = "offline"
+    ONLINE = "online"
+    OFFLINE = "offline"
     MAINTENANCE = "maintenance"
 
 
@@ -102,6 +106,7 @@ class TwinDeviceRegistration:
     需要对外读投影时,经 :meth:`to_registered_runtime_device` 锚定到规范契约。
     保留向后兼容别名 ``RegisteredDevice``。
     """
+
     device_id: str
     name: str
     device_type: str
@@ -125,6 +130,7 @@ RegisteredDevice = TwinDeviceRegistration
 # ---------------------------------------------------------------------------
 # Digital Twin service
 # ---------------------------------------------------------------------------
+
 
 class DigitalTwinService:
     """数字孪生主服务"""
@@ -263,15 +269,18 @@ class DigitalTwinService:
 # Pydantic request models
 # ---------------------------------------------------------------------------
 
+
 class UpdateTwinRequest(BaseModel):
     temperature: Optional[float] = None
     humidity: Optional[float] = None
     status: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
 
+
 class SimulateRequest(BaseModel):
     steps: int = 5
     interval: float = 0.1  # fast simulation by default
+
 
 class RegisterDeviceRequest(BaseModel):
     device_id: str
@@ -279,15 +288,18 @@ class RegisterDeviceRequest(BaseModel):
     device_type: str = "sensor_node"
     config: Dict[str, Any] = {}
 
+
 class MCPCallRequest(BaseModel):
     tool: str
     params: Dict[str, Any] = {}
+
 
 # ---------------------------------------------------------------------------
 # FastAPI app (module-level)
 # ---------------------------------------------------------------------------
 
 _svc = DigitalTwinService()
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -296,6 +308,7 @@ async def lifespan(app: FastAPI):
     yield
     await _svc.stop()
     logger.info("Node_74_DigitalTwin FastAPI 关闭")
+
 
 app = FastAPI(
     title="Node_74_DigitalTwin",
@@ -312,6 +325,7 @@ app.add_middleware(
 )
 
 # -- routes ------------------------------------------------------------------
+
 
 @app.get("/health")
 def health():
@@ -411,7 +425,9 @@ async def mcp_call(req: MCPCallRequest):
             _svc.reset_twin()
             return {"result": "ok"}
         elif req.tool == "register_device":
-            dev = _svc.register_device(p["device_id"], p["name"], p.get("device_type","sensor_node"), p.get("config",{}))
+            dev = _svc.register_device(
+                p["device_id"], p["name"], p.get("device_type", "sensor_node"), p.get("config", {})
+            )
             return {"result": asdict(dev)}
         elif req.tool == "list_devices":
             return {"result": [asdict(d) for d in _svc.list_devices()]}
@@ -427,4 +443,5 @@ async def mcp_call(req: MCPCallRequest):
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=PORT)

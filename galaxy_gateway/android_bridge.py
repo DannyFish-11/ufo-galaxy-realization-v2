@@ -135,15 +135,17 @@ except Exception as _schema_gate_import_exc:
 # message types are buffered; interactive/GUI/control messages are timing-sensitive
 # and must NOT be re-delivered after a reconnect because the window for their
 # execution would have long passed.
-_BUFFERABLE_MESSAGE_TYPES: frozenset = frozenset({
-    "task_assign",
-    "task_execute",
-    "task_submit",
-    "goal_execution",
-    "action_execute",
-    "action_sequence_execute",
-    "system_command",
-})
+_BUFFERABLE_MESSAGE_TYPES: frozenset = frozenset(
+    {
+        "task_assign",
+        "task_execute",
+        "task_submit",
+        "goal_execution",
+        "action_execute",
+        "action_sequence_execute",
+        "system_command",
+    }
+)
 
 # =============================================================================
 # OpenClawd 记忆回流 — 顶层导入使测试可以通过 patch() 注入 mock
@@ -194,6 +196,7 @@ def _track_bg_task(_t):
     _BACKGROUND_TASKS.add(_t)
     _t.add_done_callback(_BACKGROUND_TASKS.discard)
     return _t
+
 
 # =============================================================================
 # PR-3: Execution Spine Integration — bridge dispatch authority sentinel
@@ -423,12 +426,15 @@ class AndroidBridge:
                     }
                     # PR-AIP-UNIFIED: Route through AIPTransport
                     from core.aip_transport import get_aip_transport
+
                     _msg = {**liquid_msg, "_transport": "auto"}
                     try:
                         result = await get_aip_transport().send(_msg, target)
                         if result.get("success"):
                             results[target] = True
-                            logger.info("LiquidIsland: msg '%s' routed to active device %s via AIPTransport", msg_type, target)
+                            logger.info(
+                                "LiquidIsland: msg '%s' routed to active device %s via AIPTransport", msg_type, target
+                            )
                         else:
                             raise Exception("AIPTransport send failed")
                     except Exception:
@@ -460,6 +466,7 @@ class AndroidBridge:
                         }
                         # PR-AIP-UNIFIED: Route through AIPTransport
                         from core.aip_transport import get_aip_transport
+
                         _msg = {**liquid_msg, "_transport": "auto"}
                         try:
                             result = await get_aip_transport().send(_msg, did)
@@ -488,6 +495,7 @@ class AndroidBridge:
         """
         # 使用已有的 cross_device_sync 引擎（adaptive async concurrent）
         from core.cross_device_sync import emit_cross_device_phase_sync  # noqa: PLC0415
+
         emit_cross_device_phase_sync(
             old_phase=old_phase,
             new_phase=new_phase,
@@ -549,7 +557,8 @@ class AndroidBridge:
         except Exception as exc:
             logger.warning(
                 "android_bridge: UDM registration write failed (non-fatal): device_id=%s error=%s",
-                device_id, exc,
+                device_id,
+                exc,
             )
 
     def _patch_runtime_state_to_udm(
@@ -561,6 +570,7 @@ class AndroidBridge:
         """Patch canonical runtime state in UnifiedDeviceManager."""
         try:
             from core.unified.device_manager import UnifiedDeviceManager
+
             udm = UnifiedDeviceManager()
             result = udm.upsert_device_state(device_id, patch, source=source)
             if result is None:
@@ -571,27 +581,32 @@ class AndroidBridge:
         except Exception as exc:
             logger.warning(
                 "android_bridge: UDM state patch failed (non-fatal): device_id=%s error=%s",
-                device_id, exc,
+                device_id,
+                exc,
             )
 
     def _patch_heartbeat_to_udm(self, device_id: str) -> None:
         """Record heartbeat in UDM canonical state (updates last_heartbeat + keeps ONLINE)."""
         try:
             from core.unified.device_manager import UnifiedDeviceManager
+
             UnifiedDeviceManager().heartbeat(device_id)
         except Exception as exc:
             logger.debug(
                 "android_bridge: UDM heartbeat patch failed (non-fatal): device_id=%s error=%s",
-                device_id, exc,
+                device_id,
+                exc,
             )
 
         try:
             from core.unified.connection_manager import get_unified_connection_manager
+
             get_unified_connection_manager().update_heartbeat(device_id)
         except Exception as exc:
             logger.debug(
                 "android_bridge: UCM heartbeat patch failed (non-fatal): device_id=%s error=%s",
-                device_id, exc,
+                device_id,
+                exc,
             )
 
     def _patch_disconnect_to_udm(self, device_id: str) -> None:
@@ -604,11 +619,13 @@ class AndroidBridge:
 
         try:
             from core.unified.connection_manager import get_unified_connection_manager
+
             get_unified_connection_manager().mark_offline(device_id)
         except Exception as exc:
             logger.debug(
                 "android_bridge: UCM mark_offline failed (non-fatal): device_id=%s error=%s",
-                device_id, exc,
+                device_id,
+                exc,
             )
 
         # PR-B: Terminate any active/pending mesh sessions associated with this
@@ -618,6 +635,7 @@ class AndroidBridge:
                 get_lifecycle_coordinator,
                 terminate_durable_session,
             )
+
             _coord = get_lifecycle_coordinator()
             _session_ids = _coord.find_sessions_for_device(device_id)
             for _sid in _session_ids:
@@ -628,12 +646,14 @@ class AndroidBridge:
                 )
                 logger.info(
                     "Mesh session terminated on device disconnect: device_id=%s session_id=%s",
-                    device_id, _sid,
+                    device_id,
+                    _sid,
                 )
         except Exception as _mesh_exc:
             logger.debug(
                 "android_bridge: mesh session terminate non-fatal: device_id=%s error=%s",
-                device_id, _mesh_exc,
+                device_id,
+                _mesh_exc,
             )
 
         # V2 lifecycle mainline: detach attached session in AttachedSessionRegistry
@@ -644,6 +664,7 @@ class AndroidBridge:
                 detach_session,
                 InvalidationReason,
             )
+
             _entry = lookup_session_by_device(device_id)
             if _entry is not None:
                 detach_session(
@@ -654,12 +675,14 @@ class AndroidBridge:
                 logger.info(
                     "AttachedSessionRegistry: session detached on device disconnect: "
                     "device_id=%s runtime_session_id=%s",
-                    device_id, _entry.runtime_session_id,
+                    device_id,
+                    _entry.runtime_session_id,
                 )
         except Exception as _asr_exc:
             logger.debug(
                 "android_bridge: attached session detach non-fatal: device_id=%s error=%s",
-                device_id, _asr_exc,
+                device_id,
+                _asr_exc,
             )
 
         # PR-A: Notify multi-device runtime harness of the device disconnect so
@@ -670,6 +693,7 @@ class AndroidBridge:
                 on_participant_readiness_changed,
                 DeviceHealthEvent,
             )
+
             on_device_health_changed(
                 DeviceHealthEvent(
                     device_id=device_id,
@@ -678,14 +702,12 @@ class AndroidBridge:
                     event_type="disconnect",
                 )
             )
-            on_participant_readiness_changed(
-                device_id, "lost", reason="android_disconnect"
-            )
+            on_participant_readiness_changed(device_id, "lost", reason="android_disconnect")
         except Exception as _harn_exc:
             logger.debug(
-                "android_bridge: harness disconnect notification failed (non-fatal): "
-                "device_id=%s error=%s",
-                device_id, _harn_exc,
+                "android_bridge: harness disconnect notification failed (non-fatal): " "device_id=%s error=%s",
+                device_id,
+                _harn_exc,
             )
 
         # Invalidate V2-side Android snapshot truth immediately on disconnect so
@@ -696,9 +718,9 @@ class AndroidBridge:
             invalidate_device_state_snapshot(device_id)
         except Exception as _snapshot_exc:
             logger.debug(
-                "android_bridge: snapshot invalidation on disconnect failed (non-fatal): "
-                "device_id=%s error=%s",
-                device_id, _snapshot_exc,
+                "android_bridge: snapshot invalidation on disconnect failed (non-fatal): " "device_id=%s error=%s",
+                device_id,
+                _snapshot_exc,
             )
 
         # 统一设备生命周期状态：WebSocket 断开时将设备生命周期重置为 unregistered。
@@ -707,15 +729,16 @@ class AndroidBridge:
                 transition_device_lifecycle,
                 DeviceLifecycleTransitionEvent,
             )
+
             transition_device_lifecycle(
                 device_id,
                 DeviceLifecycleTransitionEvent.websocket_disconnected,
             )
         except Exception as _lc_disc_exc:
             logger.debug(
-                "android_bridge: device_lifecycle disconnect transition non-fatal: "
-                "device_id=%s error=%s",
-                device_id, _lc_disc_exc,
+                "android_bridge: device_lifecycle disconnect transition non-fatal: " "device_id=%s error=%s",
+                device_id,
+                _lc_disc_exc,
             )
 
     def _patch_reconnect_to_udm(self, device_id: str) -> None:
@@ -728,12 +751,14 @@ class AndroidBridge:
 
         try:
             from core.unified.connection_manager import get_unified_connection_manager
+
             ucm = get_unified_connection_manager()
             ucm.update_heartbeat(device_id)
         except Exception as exc:
             logger.debug(
                 "android_bridge: UCM reconnect patch failed (non-fatal): device_id=%s error=%s",
-                device_id, exc,
+                device_id,
+                exc,
             )
 
         # PR-A: Notify multi-device runtime harness of the device reconnect so
@@ -744,6 +769,7 @@ class AndroidBridge:
                 on_participant_readiness_changed,
                 DeviceHealthEvent,
             )
+
             on_device_health_changed(
                 DeviceHealthEvent(
                     device_id=device_id,
@@ -752,14 +778,12 @@ class AndroidBridge:
                     event_type="reconnect",
                 )
             )
-            on_participant_readiness_changed(
-                device_id, "ready", reason="android_reconnect"
-            )
+            on_participant_readiness_changed(device_id, "ready", reason="android_reconnect")
         except Exception as _harn_exc:
             logger.debug(
-                "android_bridge: harness reconnect notification failed (non-fatal): "
-                "device_id=%s error=%s",
-                device_id, _harn_exc,
+                "android_bridge: harness reconnect notification failed (non-fatal): " "device_id=%s error=%s",
+                device_id,
+                _harn_exc,
             )
 
     def _sync_device_router_session(
@@ -858,17 +882,21 @@ class AndroidBridge:
 
         try:
             from core.unified.connection_manager import get_unified_connection_manager
+
             ucm = get_unified_connection_manager()
         except Exception as ucm_err:
             logger.warning(
-                "PARALLEL_SUBTASK fan-out: UCM 不可用，跳过 fan-out | error=%s", ucm_err,
+                "PARALLEL_SUBTASK fan-out: UCM 不可用，跳过 fan-out | error=%s",
+                ucm_err,
             )
             return {"fanout": 0, "failed": len(device_ids), "device_ids": [], "errors": [str(ucm_err)]}
 
         # --- Import the unified dispatch readiness gate (additive; non-fatal if unavailable) ---
         _readiness_gate_fn = None
         try:
-            from core.unified_dispatch_readiness_gate import evaluate_dispatch_readiness as _readiness_gate_fn  # noqa: N812
+            from core.unified_dispatch_readiness_gate import (
+                evaluate_dispatch_readiness as _readiness_gate_fn,
+            )  # noqa: N812
         except Exception as _gate_import_err:
             logger.debug(
                 "PARALLEL_SUBTASK fan-out: unified readiness gate unavailable "
@@ -941,7 +969,9 @@ class AndroidBridge:
                     results["fanout"] += 1
                     results["device_ids"].append(did)
                     logger.debug(
-                        "PARALLEL_SUBTASK fan-out → device_id=%s subtask_index=%s", did, idx,
+                        "PARALLEL_SUBTASK fan-out → device_id=%s subtask_index=%s",
+                        did,
+                        idx,
                     )
                 else:
                     results["failed"] += 1
@@ -951,12 +981,16 @@ class AndroidBridge:
                 results["failed"] += 1
                 results["errors"].append(f"device {did}: {fan_err}")
                 logger.warning(
-                    "PARALLEL_SUBTASK fan-out → device_id=%s failed: %s", did, fan_err,
+                    "PARALLEL_SUBTASK fan-out → device_id=%s failed: %s",
+                    did,
+                    fan_err,
                 )
 
         logger.info(
             "PARALLEL_SUBTASK fan-out 完成: fanout=%s failed=%s total=%s",
-            results["fanout"], results["failed"], len(device_ids),
+            results["fanout"],
+            results["failed"],
+            len(device_ids),
         )
         return results
 
@@ -969,8 +1003,10 @@ class AndroidBridge:
 
         def _wrap(fn):
             """Wrap a standalone handler function as a bound-style coroutine."""
+
             async def _wrapped_handler(websocket, message):
                 return await fn(self, websocket, message)
+
             return _wrapped_handler
 
         # PR-AUTH-UNIFIED:客户端 onOpen 首帧 auth 的服务端应答者
@@ -1005,9 +1041,7 @@ class AndroidBridge:
         # Bounded compat path: generic-forward is an explicit allowlist gate,
         # not an open fallback for unclassified message semantics.
         for _compat_message_type in get_generic_forward_compat_allowlist():
-            self._message_handlers[MessageType(_compat_message_type)] = _wrap(
-                handle_generic_forward
-            )
+            self._message_handlers[MessageType(_compat_message_type)] = _wrap(handle_generic_forward)
         self._message_handlers[MessageType.FILE_TRANSFER] = _wrap(handle_file_transfer)
         self._message_handlers[MessageType.PEER_ANNOUNCE] = _wrap(handle_peer_announce)
         self._message_handlers[MessageType.PEER_EXCHANGE] = _wrap(handle_peer_exchange)
@@ -1037,9 +1071,7 @@ class AndroidBridge:
         self._message_handlers[MessageType.VISION_REQUEST] = _wrap(handle_vision_request)
 
         # PR-16: Android delegated execution signal canonical ingress
-        self._message_handlers[MessageType.DELEGATED_EXECUTION_SIGNAL] = _wrap(
-            handle_delegated_execution_signal
-        )
+        self._message_handlers[MessageType.DELEGATED_EXECUTION_SIGNAL] = _wrap(handle_delegated_execution_signal)
 
         # PR-02-V2: Android HandoffEnvelopeV2 uplink responses — canonical ingress
         # All three uplink wire types (ack / result / failure) plus the unified
@@ -1048,30 +1080,22 @@ class AndroidBridge:
         self._message_handlers[MessageType.HANDOFF_ACK] = _wrap(handle_handoff_v2_result)
         self._message_handlers[MessageType.HANDOFF_RESULT] = _wrap(handle_handoff_v2_result)
         self._message_handlers[MessageType.HANDOFF_FAILURE] = _wrap(handle_handoff_v2_result)
-        self._message_handlers[MessageType.HANDOFF_ENVELOPE_V2_RESULT] = _wrap(
-            handle_handoff_v2_result
-        )
+        self._message_handlers[MessageType.HANDOFF_ENVELOPE_V2_RESULT] = _wrap(handle_handoff_v2_result)
 
         # Android Takeover Protocol: uplink takeover_response from Android
         self._message_handlers[MessageType.TAKEOVER_REQUEST] = _wrap(handle_takeover_request)
         self._message_handlers[MessageType.TAKEOVER_RESPONSE] = _wrap(handle_takeover_response)
 
         # PR-7-V2: Android reconciliation signal canonical ingress
-        self._message_handlers[MessageType.RECONCILIATION_SIGNAL] = _wrap(
-            handle_reconciliation_signal
-        )
+        self._message_handlers[MessageType.RECONCILIATION_SIGNAL] = _wrap(handle_reconciliation_signal)
 
         # PR-RT: Android Runtime-State Transparency Uplink handlers
         # DEVICE_STATE_SNAPSHOT — periodic full Android runtime-state snapshot
         # DEVICE_EXECUTION_EVENT — per-step execution phase event
         # Both are absorbed via core.android_device_state_store and made
         # available to V2 operator surfaces.
-        self._message_handlers[MessageType.DEVICE_STATE_SNAPSHOT] = _wrap(
-            handle_device_state_snapshot
-        )
-        self._message_handlers[MessageType.DEVICE_EXECUTION_EVENT] = _wrap(
-            handle_device_execution_event
-        )
+        self._message_handlers[MessageType.DEVICE_STATE_SNAPSHOT] = _wrap(handle_device_state_snapshot)
+        self._message_handlers[MessageType.DEVICE_EXECUTION_EVENT] = _wrap(handle_device_execution_event)
 
         # Android Lifecycle / Governance Uplink Reports
         # readiness/governance/strategy are canonical policy inputs and must
@@ -1081,12 +1105,8 @@ class AndroidBridge:
             MessageType.DEVICE_GOVERNANCE_REPORT,
             MessageType.DEVICE_STRATEGY_REPORT,
         ):
-            self._message_handlers[_android_report_type] = _wrap(
-                handle_evaluator_artifact_report
-            )
-        self._message_handlers[MessageType.DEVICE_ACCEPTANCE_REPORT] = _wrap(
-            handle_device_acceptance_report
-        )
+            self._message_handlers[_android_report_type] = _wrap(handle_evaluator_artifact_report)
+        self._message_handlers[MessageType.DEVICE_ACCEPTANCE_REPORT] = _wrap(handle_device_acceptance_report)
 
         # Catch-all: 为所有未注册的消息类型添加通用日志处理器
         for msg_type in MessageType:
@@ -1120,15 +1140,17 @@ class AndroidBridge:
             if not websocket:
                 return False
 
-            await websocket.send_json({
-                "type": "decision_request",
-                "payload": {
-                    **decision_context,
-                    "decision_id": str(uuid.uuid4()),
-                    "timestamp": time.time(),
-                    "source": "openclawd",
+            await websocket.send_json(
+                {
+                    "type": "decision_request",
+                    "payload": {
+                        **decision_context,
+                        "decision_id": str(uuid.uuid4()),
+                        "timestamp": time.time(),
+                        "source": "openclawd",
+                    },
                 }
-            })
+            )
             return True
         except Exception:
             return False
@@ -1150,10 +1172,12 @@ class AndroidBridge:
         device_id_pre = message.get("device_id", "unknown") if isinstance(message, dict) else "unknown"
         try:
             from galaxy_gateway.protocol.compat import normalise_to_v3_dict
+
             message = normalise_to_v3_dict(message)
         except Exception as norm_err:
             logger.warning(
-                "android_bridge: failed to normalise message via compat: %s", norm_err,
+                "android_bridge: failed to normalise message via compat: %s",
+                norm_err,
                 extra={
                     "event": "aip_normalise_error",
                     "device_id": device_id_pre,
@@ -1286,9 +1310,9 @@ class AndroidBridge:
     # 公共 API
     # =========================================================================
 
-    async def send_to_device(self, device_id: str, message: Dict[str, Any],
-                             wait_response: bool = False,
-                             timeout: float = 30.0) -> Optional[Dict[str, Any]]:
+    async def send_to_device(
+        self, device_id: str, message: Dict[str, Any], wait_response: bool = False, timeout: float = 30.0
+    ) -> Optional[Dict[str, Any]]:
         """发送消息到设备.
 
         Return values
@@ -1318,9 +1342,9 @@ class AndroidBridge:
             if msg_type in _BUFFERABLE_MESSAGE_TYPES:
                 await _pending_delivery_buffer.enqueue(device_id, message)
                 logger.warning(
-                    "send_to_device: device_id=%s offline — message buffered for "
-                    "redelivery on reconnect (type=%s)",
-                    device_id, msg_type,
+                    "send_to_device: device_id=%s offline — message buffered for " "redelivery on reconnect (type=%s)",
+                    device_id,
+                    msg_type,
                 )
                 return {"buffered": True, "device_id": device_id, "type": msg_type}
             logger.warning("Device not connected: %s", device_id)
@@ -1329,6 +1353,7 @@ class AndroidBridge:
         try:
             # PR-AIP-UNIFIED: Route through AIPTransport
             from core.aip_transport import get_aip_transport
+
             _msg = {**message, "_transport": "auto"}
             try:
                 result = await get_aip_transport().send(_msg, device_id)
@@ -1369,42 +1394,50 @@ class AndroidBridge:
             logger.error("Failed to send message to %s: %s", device_id, e)
             return None
 
-    async def click(self, device_id: str, x: int, y: int,
-                    element_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    async def click(self, device_id: str, x: int, y: int, element_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """PR-S3 Android GUI action adapter — translate click to AIP protocol and send."""
         msg = MessageBuilder.gui_click(device_id, x, y, element_id)
         return await self.send_to_device(device_id, msg, wait_response=True)
 
-    async def swipe(self, device_id: str, start_x: int, start_y: int,
-                    end_x: int, end_y: int, duration_ms: int = 300) -> Optional[Dict[str, Any]]:
+    async def swipe(
+        self, device_id: str, start_x: int, start_y: int, end_x: int, end_y: int, duration_ms: int = 300
+    ) -> Optional[Dict[str, Any]]:
         """PR-S3 Android GUI action adapter — translate swipe to AIP protocol and send."""
         msg = MessageBuilder.gui_swipe(device_id, start_x, start_y, end_x, end_y, duration_ms)
         return await self.send_to_device(device_id, msg, wait_response=True)
 
-    async def input_text(self, device_id: str, text: str,
-                         element_id: Optional[str] = None,
-                         clear_first: bool = False) -> Optional[Dict[str, Any]]:
+    async def input_text(
+        self, device_id: str, text: str, element_id: Optional[str] = None, clear_first: bool = False
+    ) -> Optional[Dict[str, Any]]:
         """Android GUI action adapter — translate text input to AIP protocol and send."""
         msg = MessageBuilder.gui_input(device_id, text, element_id, clear_first)
         return await self.send_to_device(device_id, msg, wait_response=True)
 
-    async def screenshot(self, device_id: str, quality: int = 80,
-                         scale: float = 1.0) -> Optional[Dict[str, Any]]:
+    async def screenshot(self, device_id: str, quality: int = 80, scale: float = 1.0) -> Optional[Dict[str, Any]]:
         """Android GUI action adapter — translate screenshot request to AIP protocol and send."""
         msg = MessageBuilder.gui_screenshot(device_id, quality, scale)
         return await self.send_to_device(device_id, msg, wait_response=True, timeout=60.0)
 
-    async def query_elements(self, device_id: str,
-                             text: Optional[str] = None,
-                             class_name: Optional[str] = None,
-                             view_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    async def query_elements(
+        self,
+        device_id: str,
+        text: Optional[str] = None,
+        class_name: Optional[str] = None,
+        view_id: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
         """Android GUI action adapter — translate element query to AIP protocol and send."""
         msg = MessageBuilder.gui_element_query(device_id, text, class_name, view_id)
         return await self.send_to_device(device_id, msg, wait_response=True)
 
-    async def assign_task(self, device_id: str, task_id: str, task_type: str,
-                          payload: Dict[str, Any], priority: int = 5,
-                          timeout: int = 300) -> Optional[Dict[str, Any]]:
+    async def assign_task(
+        self,
+        device_id: str,
+        task_id: str,
+        task_type: str,
+        payload: Dict[str, Any],
+        priority: int = 5,
+        timeout: int = 300,
+    ) -> Optional[Dict[str, Any]]:
         """分配任务到设备 — delegates dispatch authority to DeviceRouter (PR-S3).
 
         Dispatch chain (canonical path):
@@ -1442,13 +1475,15 @@ class AndroidBridge:
                 get_registration_gaps,
                 DispatchBlockedByRegistrationGapError,
             )
+
             _gaps = get_registration_gaps(device_id)
             if _gaps:
                 logger.warning(
                     "AndroidBridge.assign_task: DISPATCH BLOCKED — device_id=%s has "
                     "incomplete registration attachment gaps=%s; raising "
                     "DispatchBlockedByRegistrationGapError",
-                    device_id, _gaps,
+                    device_id,
+                    _gaps,
                 )
                 raise DispatchBlockedByRegistrationGapError(device_id, _gaps)
         except DispatchBlockedByRegistrationGapError:
@@ -1472,8 +1507,7 @@ class AndroidBridge:
                 self._devices[device_id].current_task_id = task_id
 
         logger.debug(
-            "AndroidBridge.assign_task: device_id=%s task_id=%s task_type=%s "
-            "trace_id=%s orchestrator_dispatch=%s",
+            "AndroidBridge.assign_task: device_id=%s task_id=%s task_type=%s " "trace_id=%s orchestrator_dispatch=%s",
             device_id,
             task_id,
             task_type,
@@ -1483,6 +1517,7 @@ class AndroidBridge:
 
         try:
             from galaxy_gateway.device_router import device_router as _device_router
+
             router_device = _device_router.devices.get(device_id)
             if router_device is not None:
                 task_dict = {
@@ -1494,24 +1529,31 @@ class AndroidBridge:
                     },
                 }
                 logger.debug(
-                    "AndroidBridge.assign_task: routing via DeviceRouter "
-                    "device_id=%s task_id=%s trace_id=%s",
-                    device_id, task_id, _trace_id,
+                    "AndroidBridge.assign_task: routing via DeviceRouter " "device_id=%s task_id=%s trace_id=%s",
+                    device_id,
+                    task_id,
+                    _trace_id,
                 )
                 return await _device_router.dispatch_task(task_dict, router_device)
         except Exception as _router_err:
             logger.warning(
-                "AndroidBridge.assign_task: DeviceRouter dispatch failed, "
-                "falling back to send_to_device — %s", _router_err
+                "AndroidBridge.assign_task: DeviceRouter dispatch failed, " "falling back to send_to_device — %s",
+                _router_err,
             )
 
         logger.debug(
-            "AndroidBridge.assign_task: fallback to send_to_device "
-            "device_id=%s task_id=%s trace_id=%s",
-            device_id, task_id, _trace_id,
+            "AndroidBridge.assign_task: fallback to send_to_device " "device_id=%s task_id=%s trace_id=%s",
+            device_id,
+            task_id,
+            _trace_id,
         )
         msg = MessageBuilder.task_assign(
-            device_id, task_id, task_type, payload, priority, timeout,
+            device_id,
+            task_id,
+            task_type,
+            payload,
+            priority,
+            timeout,
             trace_id=_trace_id,
         )
         return await self.send_to_device(device_id, msg, wait_response=True, timeout=float(timeout))
@@ -1617,8 +1659,9 @@ class AndroidBridge:
                 )
             except Exception as _exc:  # noqa: BLE001
                 logger.debug(
-                    "send_takeover_request: coordinator notification failed "
-                    "(non-fatal): takeover_id=%s exc=%s", takeover_id, _exc
+                    "send_takeover_request: coordinator notification failed " "(non-fatal): takeover_id=%s exc=%s",
+                    takeover_id,
+                    _exc,
                 )
 
         return result
@@ -1658,8 +1701,7 @@ class AndroidBridge:
             保留本地 ``_devices`` 仅用于 WebSocket 句柄查找（transport cache）。
             外部调用者应迁移至 UDM 查询。
         """
-        return [d for d in self._devices.values()
-                if d.platform == DevicePlatform.ANDROID and d.connected]
+        return [d for d in self._devices.values() if d.platform == DevicePlatform.ANDROID and d.connected]
 
     async def disconnect_device(self, device_id: str):
         """断开设备连接。
@@ -1674,11 +1716,12 @@ class AndroidBridge:
                 self._devices[device_id].connected = False
                 self._devices[device_id].websocket = None
                 # PR-CROSS-DEVICE-SYNC: clear synced_phase on disconnect
-                if hasattr(self._devices[device_id], 'synced_phase'):
+                if hasattr(self._devices[device_id], "synced_phase"):
                     self._devices[device_id].synced_phase = {}
                 # PR-CROSS-DEVICE-SYNC: clear latency profile for adaptive sync
                 try:
                     from core.cross_device_sync import forget_device
+
                     forget_device(device_id)
                 except Exception:
                     pass
@@ -1690,6 +1733,7 @@ class AndroidBridge:
         # the disconnect event in the production path.
         try:
             from core.runtime.runtime_observability_sink import emit_device_lifecycle_event
+
             emit_device_lifecycle_event(
                 device_id,
                 event_kind="detach",
@@ -1749,12 +1793,15 @@ class AndroidBridge:
         # PR-CROSS-DEVICE-SYNC: push current phase to reconnected device
         try:
             from core.desktop_presence_runtime import get_desktop_presence_runtime
+
             dpr = get_desktop_presence_runtime()
-            current_phase = dpr.get_current_phase() if hasattr(dpr, 'get_current_phase') else 'silent'
+            current_phase = dpr.get_current_phase() if hasattr(dpr, "get_current_phase") else "silent"
             if current_phase and websocket is not None:
                 import json, time as _time
+
                 # PR-AIP-UNIFIED: Route phase sync through AIPTransport
                 from core.aip_transport import get_aip_transport
+
                 _phase_msg = {
                     "type": "state_event",
                     "event_category": "phase",
@@ -1773,29 +1820,37 @@ class AndroidBridge:
                 try:
                     _track_bg_task(asyncio.create_task(get_aip_transport().send(_phase_msg, device_id)))
                 except Exception:
-                    _track_bg_task(asyncio.create_task(websocket.send_json({
-                        "type": "state_event",
-                        "event_category": "phase",
-                        "event_action": current_phase,
-                        "device_id": "v2_desktop",
-                        "timestamp": int(_time.time() * 1000),
-                        "aip_version": "3.0",
-                        "payload": {
-                        "from_phase": "unknown",
-                        "to_phase": current_phase,
-                        "source": "desktop_presence_runtime",
-                        "sync_type": "cross_device_reconnect_sync",
-                    },
-                    "phase": current_phase,
-                })))
+                    _track_bg_task(
+                        asyncio.create_task(
+                            websocket.send_json(
+                                {
+                                    "type": "state_event",
+                                    "event_category": "phase",
+                                    "event_action": current_phase,
+                                    "device_id": "v2_desktop",
+                                    "timestamp": int(_time.time() * 1000),
+                                    "aip_version": "3.0",
+                                    "payload": {
+                                        "from_phase": "unknown",
+                                        "to_phase": current_phase,
+                                        "source": "desktop_presence_runtime",
+                                        "sync_type": "cross_device_reconnect_sync",
+                                    },
+                                    "phase": current_phase,
+                                }
+                            )
+                        )
+                    )
                 logger.info(
                     "CrossDeviceSync: phase=%s pushed to reconnected device=%s",
-                    current_phase, device_id,
+                    current_phase,
+                    device_id,
                 )
         except Exception as _phase_exc:
             logger.debug(
                 "CrossDeviceSync: reconnect phase push non-fatal: device_id=%s error=%s",
-                device_id, _phase_exc,
+                device_id,
+                _phase_exc,
             )
 
         # V2 lifecycle mainline: reconnect attached session in AttachedSessionRegistry
@@ -1806,6 +1861,7 @@ class AndroidBridge:
                 reconnect_session,
                 get_session_registry,
             )
+
             # First try the active pointer; fall back to the most-recent
             # non-terminal entry (e.g. detached after a prior disconnect).
             _entry = lookup_session_by_device(device_id)
@@ -1823,12 +1879,15 @@ class AndroidBridge:
                 logger.info(
                     "AttachedSessionRegistry: session reconnected: "
                     "device_id=%s runtime_session_id=%s reconnect_count=%d",
-                    device_id, _updated.runtime_session_id, _updated.reconnect_count,
+                    device_id,
+                    _updated.runtime_session_id,
+                    _updated.reconnect_count,
                 )
         except Exception as _asr_exc:
             logger.debug(
                 "android_bridge: attached session reconnect non-fatal: device_id=%s error=%s",
-                device_id, _asr_exc,
+                device_id,
+                _asr_exc,
             )
 
         # V2 lifecycle mainline: restore any suspended mesh sessions associated
@@ -1838,6 +1897,7 @@ class AndroidBridge:
                 get_lifecycle_coordinator,
                 restore_durable_session,
             )
+
             _coord = get_lifecycle_coordinator()
             _session_ids = _coord.find_sessions_for_device(device_id)
             for _sid in _session_ids:
@@ -1846,12 +1906,14 @@ class AndroidBridge:
                     restore_durable_session(_sid)
                     logger.info(
                         "Mesh session restored on device reconnect: device_id=%s session_id=%s",
-                        device_id, _sid,
+                        device_id,
+                        _sid,
                     )
         except Exception as _mesh_exc:
             logger.debug(
                 "android_bridge: mesh session restore non-fatal: device_id=%s error=%s",
-                device_id, _mesh_exc,
+                device_id,
+                _mesh_exc,
             )
 
         logger.info("设备重连成功: %s", device_id)
@@ -1862,6 +1924,7 @@ class AndroidBridge:
         try:
             # PR-AIP-UNIFIED: Route buffer flush through AIPTransport
             from core.aip_transport import get_aip_transport
+
             async def _aip_send(msg: Dict[str, Any]) -> None:
                 msg["_transport"] = "auto"
                 msg["version"] = "3.0"
@@ -1881,21 +1944,23 @@ class AndroidBridge:
             _delivered, _skipped = await _pending_delivery_buffer.flush(device_id, _aip_send)
             if _delivered or _skipped:
                 logger.info(
-                    "android_bridge: reconnect buffer flush — device_id=%s "
-                    "delivered=%d skipped(expired)=%d",
-                    device_id, _delivered, _skipped,
+                    "android_bridge: reconnect buffer flush — device_id=%s " "delivered=%d skipped(expired)=%d",
+                    device_id,
+                    _delivered,
+                    _skipped,
                 )
         except Exception as _buf_exc:
             logger.warning(
-                "android_bridge: reconnect buffer flush failed (non-fatal): "
-                "device_id=%s error=%s",
-                device_id, _buf_exc,
+                "android_bridge: reconnect buffer flush failed (non-fatal): " "device_id=%s error=%s",
+                device_id,
+                _buf_exc,
             )
 
         # PR-G: emit device lifecycle (reconnect) so the observability sink records
         # the reconnect event in the production path.
         try:
             from core.runtime.runtime_observability_sink import emit_device_lifecycle_event
+
             emit_device_lifecycle_event(
                 device_id,
                 event_kind="reconnect",
@@ -1925,12 +1990,14 @@ class AndroidBridge:
             else:
                 healthy += 1
                 status = "healthy"
-            device_details.append({
-                "device_id": d.device_id,
-                "model": d.model,
-                "status": status,
-                "last_heartbeat_ago_s": round(now - d.last_heartbeat, 1) if d.last_heartbeat else None,
-            })
+            device_details.append(
+                {
+                    "device_id": d.device_id,
+                    "model": d.model,
+                    "status": status,
+                    "last_heartbeat_ago_s": round(now - d.last_heartbeat, 1) if d.last_heartbeat else None,
+                }
+            )
         return {
             "total": len(self._devices),
             "healthy": healthy,

@@ -1522,6 +1522,7 @@ class DeviceRouter:
 
             try:
                 from core.aip_transport import get_aip_transport
+
                 aip_result = await get_aip_transport().send(
                     _aip_message,
                     device.device_id,
@@ -1651,6 +1652,7 @@ class DeviceRouter:
 
         try:
             from core.aip_transport import get_aip_transport
+
             return await get_aip_transport().send(message, device_id)
         except Exception:
             # Fallback: direct websocket dispatch
@@ -1905,9 +1907,7 @@ class DeviceRouter:
                 )
 
             _completion_state = (
-                _truth_bridge.get("closure", {}).get("completion_state")
-                if isinstance(_truth_bridge, dict)
-                else None
+                _truth_bridge.get("closure", {}).get("completion_state") if isinstance(_truth_bridge, dict) else None
             )
             _result: dict = {
                 "success": success,
@@ -1915,11 +1915,7 @@ class DeviceRouter:
                 "message": (
                     "跨设备任务执行完成"
                     if success
-                    else (
-                        "接管继续执行完成"
-                        if _completion_state == "takeover_continuation"
-                        else "部分子任务执行失败"
-                    )
+                    else ("接管继续执行完成" if _completion_state == "takeover_continuation" else "部分子任务执行失败")
                 ),
             }
             if isinstance(_truth_bridge, dict) and _truth_bridge:

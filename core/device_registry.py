@@ -475,11 +475,13 @@ class DeviceRegistry:
                     udm_dev = udm.get_device(did)
                     if udm_dev is not None:
                         try:
-                            self.devices[did].apply_status(DeviceStatus(
-                                udm_dev.status.value
-                                if hasattr(udm_dev.status, "value")
-                                else str(udm_dev.status).lower()
-                            ))
+                            self.devices[did].apply_status(
+                                DeviceStatus(
+                                    udm_dev.status.value
+                                    if hasattr(udm_dev.status, "value")
+                                    else str(udm_dev.status).lower()
+                                )
+                            )
                         except ValueError:
                             pass
             except Exception as exc:

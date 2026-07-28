@@ -12,7 +12,6 @@ from typing import Any, Dict, List, Optional
 
 from galaxy_gateway.android.capabilities import DeviceCapability
 
-
 # DeviceType / DevicePlatform — imported from canonical SSOT
 from core.device_types import (  # noqa: E402
     AIPDeviceType as DeviceType,
@@ -87,6 +86,7 @@ class UIElement:
 @dataclass
 class AndroidDevice:
     """安卓设备信息"""
+
     device_id: str
     device_type: DeviceType = DeviceType.ANDROID_PHONE
     platform: DevicePlatform = DevicePlatform.ANDROID

@@ -51,13 +51,14 @@ from galaxy_gateway.protocol.aip_v3 import (
 )
 from core.device_types import DeviceType, DeviceStatus
 
-
 # =============================================================================
 # Legacy v2.0 MessageType — 保留 IntEnum 以支持 v2 二进制协议的序列化/反序列化
 # =============================================================================
 
+
 class LegacyMessageType(IntEnum):
     """AIP v2.0 Message Types (binary protocol only, use V3MessageType for new code)"""
+
     DEVICE_REGISTER = 0x01
     DEVICE_UNREGISTER = 0x02
     DEVICE_HEARTBEAT = 0x03
@@ -152,8 +153,10 @@ MessageType = V3MessageType
 # Task & Device data classes（保留 dataclass 接口以兼容现有代码）
 # =============================================================================
 
+
 class TaskPriority(IntEnum):
     """Task Priority Levels"""
+
     CRITICAL = 0
     HIGH = 1
     NORMAL = 2
@@ -163,6 +166,7 @@ class TaskPriority(IntEnum):
 
 class TaskState(IntEnum):
     """Task Execution States"""
+
     PENDING = 0
     SCHEDULED = 1
     RUNNING = 2
@@ -174,6 +178,7 @@ class TaskState(IntEnum):
 
 class ErrorCode(IntEnum):
     """AIP Error Codes"""
+
     SUCCESS = 0
     INVALID_MESSAGE = 1
     DEVICE_NOT_FOUND = 2
@@ -190,6 +195,7 @@ class ErrorCode(IntEnum):
 @dataclass
 class DeviceCapabilities:
     """Device Capability Information"""
+
     cpu_cores: int = 1
     memory_gb: float = 1.0
     storage_gb: float = 10.0
@@ -205,7 +211,7 @@ class DeviceCapabilities:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'DeviceCapabilities':
+    def from_dict(cls, data: Dict[str, Any]) -> "DeviceCapabilities":
         known = {f.name for f in cls.__dataclass_fields__.values()}
         return cls(**{k: v for k, v in data.items() if k in known})
 
@@ -213,6 +219,7 @@ class DeviceCapabilities:
 @dataclass
 class DeviceInfo:
     """Device Information Structure"""
+
     device_id: str
     device_type: DeviceType
     device_name: str
@@ -252,33 +259,32 @@ class DeviceInfo:
 
     def to_dict(self) -> Dict[str, Any]:
         data = asdict(self)
-        data['device_type'] = self.device_type.value
-        data['capabilities'] = self.capabilities.to_dict()
-        data['status'] = self.status.value
+        data["device_type"] = self.device_type.value
+        data["capabilities"] = self.capabilities.to_dict()
+        data["status"] = self.status.value
         return data
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'DeviceInfo':
+    def from_dict(cls, data: Dict[str, Any]) -> "DeviceInfo":
         data = data.copy()
-        raw_dt = data.get('device_type', 'unknown')
+        raw_dt = data.get("device_type", "unknown")
         if isinstance(raw_dt, int):
             _int_to_dt = {v: k for k, v in _V2_DEVICE_TYPE_INT.items()}
             raw_dt = _int_to_dt.get(raw_dt, DeviceType.UNKNOWN.value)
-        data['device_type'] = DeviceType(raw_dt)
-        data['capabilities'] = DeviceCapabilities.from_dict(
-            data.get('capabilities', {})
-        )
-        raw_st = data.get('status', 'online')
+        data["device_type"] = DeviceType(raw_dt)
+        data["capabilities"] = DeviceCapabilities.from_dict(data.get("capabilities", {}))
+        raw_st = data.get("status", "online")
         if isinstance(raw_st, int):
             _int_to_st = {v: k for k, v in _V2_DEVICE_STATUS_INT.items()}
             raw_st = _int_to_st.get(raw_st, DeviceStatus.UNKNOWN.value)
-        data['status'] = DeviceStatus(raw_st)
+        data["status"] = DeviceStatus(raw_st)
         return cls(**data)
 
 
 @dataclass
 class TaskInfo:
     """Task Information Structure"""
+
     task_id: str
     task_type: str
     priority: TaskPriority
@@ -297,21 +303,22 @@ class TaskInfo:
 
     def to_dict(self) -> Dict[str, Any]:
         data = asdict(self)
-        data['priority'] = self.priority.value
-        data['state'] = self.state.value
+        data["priority"] = self.priority.value
+        data["state"] = self.state.value
         return data
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'TaskInfo':
+    def from_dict(cls, data: Dict[str, Any]) -> "TaskInfo":
         data = data.copy()
-        data['priority'] = TaskPriority(data.get('priority', 2))
-        data['state'] = TaskState(data.get('state', 0))
+        data["priority"] = TaskPriority(data.get("priority", 2))
+        data["state"] = TaskState(data.get("state", 0))
         return cls(**data)
 
 
 # =============================================================================
 # AIPMessage — v3.0 Pydantic 消息 + v2.0 二进制兼容层
 # =============================================================================
+
 
 class AIPMessage(V3AIPMessage):
     """
@@ -333,7 +340,7 @@ class AIPMessage(V3AIPMessage):
         return self.model_dump_json()
 
     @classmethod
-    def from_json(cls, data: Union[str, dict]) -> 'AIPMessage':
+    def from_json(cls, data: Union[str, dict]) -> "AIPMessage":
         """从 JSON 反序列化（推荐接口）"""
         if isinstance(data, str):
             data = json.loads(data)
@@ -349,31 +356,24 @@ class AIPMessage(V3AIPMessage):
         v2_msg_type = _V3_TO_V2_MSG_TYPE.get(v3_type_str, 0x40)
 
         full_payload = {
-            'payload': self.payload,
-            'timestamp': self.timestamp.isoformat() if isinstance(self.timestamp, datetime) else str(self.timestamp),
-            'source_device': self.device_id,
-            'target_device': None,
-            'correlation_id': self.correlation_id,
+            "payload": self.payload,
+            "timestamp": self.timestamp.isoformat() if isinstance(self.timestamp, datetime) else str(self.timestamp),
+            "source_device": self.device_id,
+            "target_device": None,
+            "correlation_id": self.correlation_id,
         }
-        payload_bytes = json.dumps(full_payload, ensure_ascii=False).encode('utf-8')
+        payload_bytes = json.dumps(full_payload, ensure_ascii=False).encode("utf-8")
         payload_length = len(payload_bytes)
 
-        header = struct.pack(
-            '>IHHII',
-            self._V2_MAGIC,
-            self._V2_VERSION,
-            v2_msg_type,
-            payload_length,
-            0
-        )
+        header = struct.pack(">IHHII", self._V2_MAGIC, self._V2_VERSION, v2_msg_type, payload_length, 0)
 
         checksum = hashlib.crc32(payload_bytes) & 0xFFFFFFFF
-        footer = struct.pack('>II', checksum, 0)
+        footer = struct.pack(">II", checksum, 0)
 
         return header + payload_bytes + footer
 
     @classmethod
-    def from_bytes(cls, data: bytes) -> 'AIPMessage':
+    def from_bytes(cls, data: bytes) -> "AIPMessage":
         """
         Legacy v2.0 二进制反序列化
 
@@ -382,9 +382,7 @@ class AIPMessage(V3AIPMessage):
         if len(data) < cls._V2_HEADER_SIZE + cls._V2_FOOTER_SIZE:
             raise ProtocolError("Message too short")
 
-        magic, version, msg_type_val, payload_length, sequence = struct.unpack(
-            '>IHHII', data[:cls._V2_HEADER_SIZE]
-        )
+        magic, version, msg_type_val, payload_length, sequence = struct.unpack(">IHHII", data[: cls._V2_HEADER_SIZE])
 
         if magic != cls._V2_MAGIC:
             raise ProtocolError(f"Invalid magic: {hex(magic)}")
@@ -396,12 +394,12 @@ class AIPMessage(V3AIPMessage):
         payload_end = payload_start + payload_length
         payload_bytes = data[payload_start:payload_end]
 
-        stored_checksum = struct.unpack('>I', data[payload_end:payload_end + 4])[0]
+        stored_checksum = struct.unpack(">I", data[payload_end : payload_end + 4])[0]
         calculated_checksum = hashlib.crc32(payload_bytes) & 0xFFFFFFFF
         if stored_checksum != calculated_checksum:
             raise ProtocolError("Checksum mismatch")
 
-        full_payload = json.loads(payload_bytes.decode('utf-8'))
+        full_payload = json.loads(payload_bytes.decode("utf-8"))
 
         v3_type_str = _V2_TO_V3_MSG_TYPE.get(msg_type_val, "command")
         try:
@@ -409,13 +407,13 @@ class AIPMessage(V3AIPMessage):
         except ValueError:
             v3_type = V3MessageType.COMMAND
 
-        source = full_payload.get('source_device', '')
+        source = full_payload.get("source_device", "")
 
         return cls(
             type=v3_type,
             device_id=source or "unknown",
-            payload=full_payload.get('payload', {}),
-            correlation_id=full_payload.get('correlation_id'),
+            payload=full_payload.get("payload", {}),
+            correlation_id=full_payload.get("correlation_id"),
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -425,12 +423,14 @@ class AIPMessage(V3AIPMessage):
 
 class ProtocolError(Exception):
     """Protocol-related error"""
+
     pass
 
 
 # =============================================================================
 # Protocol Validator — v3.0 JSON 消息验证
 # =============================================================================
+
 
 class ProtocolValidator:
     """AIP v3.0 Protocol Validator"""
@@ -458,7 +458,7 @@ class ProtocolValidator:
     @staticmethod
     def _validate_register(payload: Dict[str, Any]) -> tuple:
         """验证设备注册 payload"""
-        required = ['device_id', 'device_type', 'device_name']
+        required = ["device_id", "device_type", "device_name"]
         for f in required:
             if f not in payload:
                 return False, f"Missing required field: {f}"
@@ -467,7 +467,7 @@ class ProtocolValidator:
     @staticmethod
     def _validate_task_submit(payload: Dict[str, Any]) -> tuple:
         """验证任务提交 payload"""
-        required = ['task_id', 'task_type', 'payload']
+        required = ["task_id", "task_type", "payload"]
         for f in required:
             if f not in payload:
                 return False, f"Missing required field: {f}"
@@ -476,7 +476,7 @@ class ProtocolValidator:
     @staticmethod
     def _validate_heartbeat(payload: Dict[str, Any]) -> tuple:
         """验证心跳 payload"""
-        if 'device_id' not in payload:
+        if "device_id" not in payload:
             return False, "Missing required field: device_id"
         return True, None
 
@@ -484,6 +484,7 @@ class ProtocolValidator:
 # =============================================================================
 # Message Builder — 构建 AIP v3.0 消息
 # =============================================================================
+
 
 class MessageBuilder:
     """Builder for AIP Messages (v3.0)"""
@@ -499,11 +500,7 @@ class MessageBuilder:
             return cls._sequence_counter
 
     @classmethod
-    async def build_register(
-        cls,
-        device_info: DeviceInfo,
-        source_device: Optional[str] = None
-    ) -> AIPMessage:
+    async def build_register(cls, device_info: DeviceInfo, source_device: Optional[str] = None) -> AIPMessage:
         """Build device registration message"""
         return AIPMessage(
             type=V3MessageType.DEVICE_REGISTER,
@@ -517,15 +514,10 @@ class MessageBuilder:
         device_id: str,
         status: DeviceStatus,
         metrics: Optional[Dict[str, Any]] = None,
-        source_device: Optional[str] = None
+        source_device: Optional[str] = None,
     ) -> AIPMessage:
         """Build heartbeat message"""
-        payload = {
-            'device_id': device_id,
-            'status': status.value,
-            'timestamp': time.time(),
-            'metrics': metrics or {}
-        }
+        payload = {"device_id": device_id, "status": status.value, "timestamp": time.time(), "metrics": metrics or {}}
         return AIPMessage(
             type=V3MessageType.DEVICE_HEARTBEAT,
             device_id=source_device or device_id,
@@ -533,11 +525,7 @@ class MessageBuilder:
         )
 
     @classmethod
-    async def build_task_submit(
-        cls,
-        task_info: TaskInfo,
-        source_device: Optional[str] = None
-    ) -> AIPMessage:
+    async def build_task_submit(cls, task_info: TaskInfo, source_device: Optional[str] = None) -> AIPMessage:
         """Build task submission message"""
         return AIPMessage(
             type=V3MessageType.TASK_SUBMIT,
@@ -553,15 +541,15 @@ class MessageBuilder:
         success: bool,
         result: Optional[Dict[str, Any]] = None,
         error_message: Optional[str] = None,
-        source_device: Optional[str] = None
+        source_device: Optional[str] = None,
     ) -> AIPMessage:
         """Build task result message"""
         payload = {
-            'task_id': task_id,
-            'success': success,
-            'result': result,
-            'error_message': error_message,
-            'timestamp': time.time()
+            "task_id": task_id,
+            "success": success,
+            "result": result,
+            "error_message": error_message,
+            "timestamp": time.time(),
         }
         return AIPMessage(
             type=V3MessageType.TASK_RESULT,
@@ -576,14 +564,14 @@ class MessageBuilder:
         error_code: ErrorCode,
         error_message: str,
         original_msg_type: Optional[V3MessageType] = None,
-        source_device: Optional[str] = None
+        source_device: Optional[str] = None,
     ) -> AIPMessage:
         """Build error message"""
         payload = {
-            'error_code': error_code.value,
-            'error_code_name': error_code.name,
-            'error_message': error_message,
-            'original_msg_type': original_msg_type.value if original_msg_type else None
+            "error_code": error_code.value,
+            "error_code_name": error_code.name,
+            "error_message": error_message,
+            "original_msg_type": original_msg_type.value if original_msg_type else None,
         }
         return AIPMessage(
             type=V3MessageType.ERROR,
@@ -594,17 +582,10 @@ class MessageBuilder:
 
     @classmethod
     async def build_broadcast(
-        cls,
-        broadcast_type: str,
-        data: Dict[str, Any],
-        source_device: Optional[str] = None
+        cls, broadcast_type: str, data: Dict[str, Any], source_device: Optional[str] = None
     ) -> AIPMessage:
         """Build broadcast message"""
-        payload = {
-            'broadcast_type': broadcast_type,
-            'data': data,
-            'timestamp': time.time()
-        }
+        payload = {"broadcast_type": broadcast_type, "data": data, "timestamp": time.time()}
         return AIPMessage(
             type=V3MessageType.COORD_BROADCAST,
             device_id=source_device or "system",
@@ -615,6 +596,7 @@ class MessageBuilder:
 # =============================================================================
 # Protocol Handler & Router — 抽象消息处理
 # =============================================================================
+
 
 class ProtocolHandler(ABC):
     """Abstract base class for protocol handlers"""
@@ -638,11 +620,7 @@ class MessageRouter:
         self.default_handler: Optional[ProtocolHandler] = None
         self.middleware: List[Callable[[AIPMessage], AIPMessage]] = []
 
-    def register_handler(
-        self,
-        msg_type: V3MessageType,
-        handler: ProtocolHandler
-    ) -> None:
+    def register_handler(self, msg_type: V3MessageType, handler: ProtocolHandler) -> None:
         """Register handler for message type"""
         if msg_type not in self.handlers:
             self.handlers[msg_type] = []
@@ -686,25 +664,25 @@ class MessageRouter:
 
 __all__ = [
     # v3.0 types (primary)
-    'MessageType',
-    'V3MessageType',
-    'AIPMessage',
-    'V3AIPMessage',
+    "MessageType",
+    "V3MessageType",
+    "AIPMessage",
+    "V3AIPMessage",
     # Data structures
-    'DeviceType',
-    'DeviceStatus',
-    'TaskPriority',
-    'TaskState',
-    'ErrorCode',
-    'DeviceCapabilities',
-    'DeviceInfo',
-    'TaskInfo',
+    "DeviceType",
+    "DeviceStatus",
+    "TaskPriority",
+    "TaskState",
+    "ErrorCode",
+    "DeviceCapabilities",
+    "DeviceInfo",
+    "TaskInfo",
     # Protocol utilities
-    'ProtocolError',
-    'ProtocolValidator',
-    'MessageBuilder',
-    'ProtocolHandler',
-    'MessageRouter',
+    "ProtocolError",
+    "ProtocolValidator",
+    "MessageBuilder",
+    "ProtocolHandler",
+    "MessageRouter",
     # Legacy v2.0 (for binary wire compat only)
-    'LegacyMessageType',
+    "LegacyMessageType",
 ]
