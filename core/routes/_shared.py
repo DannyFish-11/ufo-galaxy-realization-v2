@@ -160,14 +160,25 @@ class RouteConnectionPool:
         # 同步到统一连接管理器（不再重复 accept）
         ucm = self._unified()
         ucm._websockets[device_id] = websocket
+        import time as _time
         from datetime import datetime as _dt
 
         from core.unified.models import UnifiedConnectionInfo, UnifiedConnectionState
 
+        # routable/last_seen 必须显式给,不能靠默认值:
+        # UnifiedConnectionInfo.routable 的默认是 False(core/unified/models.py:121),
+        # 而这里是直接 new 出 info 塞进 _connections、绕开了 UCM.register_connection
+        # (那条正路会置 routable=True,见 connection_manager.py:118)。结果是这条
+        # 兼容 /ws/device 入口注册出来的设备:state=CONNECTED、socket 也活着,却
+        # routable=False。本文件自己第 134/145 行读的 get_presence_view() 算的是
+        #     "online": connected and info.routable
+        # 于是设备恒报离线 —— socket 明明连着,在线态却永远是 False。
         ucm._connections[device_id] = UnifiedConnectionInfo(
             device_id=device_id,
             state=UnifiedConnectionState.CONNECTED,
             connected_at=_dt.utcnow(),
+            last_seen=_time.time(),
+            routable=True,
         )
         await self.broadcast_status(
             {"type": "device_connected", "device_id": device_id, "timestamp": datetime.now().isoformat()}
