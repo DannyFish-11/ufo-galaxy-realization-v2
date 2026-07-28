@@ -512,7 +512,17 @@ class TestDispatchCrossDeviceParticipationFilter(unittest.TestCase):
 
         from unittest.mock import AsyncMock as AM
 
-        with patch("core.device_participation.get_device_participation", side_effect=_gdp):
+        # 断言漂移修正:生产契约已演进 —— galaxy_gateway/cross_device_switch.py
+        # 的 is_cross_device_enabled 默认值由"默认开启(fail-open)"改为
+        # "默认关闭、显式 opt-in";_dispatch_cross_device_task 在入口处
+        # (device_router.py "single dispatcher guard")先查此门,关闭时直接
+        # 返回 disabled 响应,resolve_formation 根本不会被调用。本测试验证
+        # 的是参与资格过滤(formation 输入),故显式打开跨设备门;门控行为
+        # 本身由 cross_device_switch 的专门测试覆盖。
+        with patch(
+            "galaxy_gateway.device_router.is_cross_device_enabled",
+            return_value=True,
+        ), patch("core.device_participation.get_device_participation", side_effect=_gdp):
             from core.device_formation.formation_resolver import (
                 DEFAULT_LOCAL_FORMATION_POLICY,
                 EMPTY_FORMATION_GROUP,

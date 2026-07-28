@@ -1078,10 +1078,15 @@ class TestConcurrentMutationConflictContract(unittest.TestCase):
             self.skipTest("core.system_final_acceptance_verdict not available")
 
         all_dims = AcceptanceDimensionId.all_dimensions()
+        # 断言漂移:PR-13 落地时验收维度注册表共 16 项;此后 PR-14
+        # (temporal_semantics)与 PR-16(identity_authorship_binding)各新增
+        # 一项,core.system_final_acceptance_verdict.AcceptanceDimensionId 现为
+        # 18 项。本测试真正守护的是 concurrent_mutation_conflict 已注册
+        # (AM01),数量随注册表演进更新为 18。
         self.assertEqual(
             len(all_dims),
-            16,
-            f"Expected 16 dimensions, got {len(all_dims)}: " f"{[d.value for d in all_dims]}",
+            18,
+            f"Expected 18 dimensions, got {len(all_dims)}: " f"{[d.value for d in all_dims]}",
         )
 
     # -----------------------------------------------------------------------

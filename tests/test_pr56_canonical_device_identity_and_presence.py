@@ -204,7 +204,13 @@ def _make_mock_rrd(
     conn_mock.transport = transport_mock
     conn_state_mock = MagicMock()
     conn_state_mock.value = connection_state
-    conn_mock.connection_state = conn_state_mock
+    # 断言漂移(mock 形状陈旧):真实契约 RuntimeConnectionSummary 的字段名是
+    # `state` 而非 `connection_state`(contracts/registered_runtime_device.py:250),
+    # 生产适配器 from_registered_runtime_device 已修为读取 conn.state(见
+    # contracts/runtime_presence_record.py 中的注释)。此前 mock 只设
+    # connection_state,MagicMock 自动属性把 conn.state 变成 MagicMock,
+    # 泄漏进记录构造导致校验异常、整体退化为默认记录。按真实契约修正字段名。
+    conn_mock.state = conn_state_mock
     m.connection = conn_mock
 
     # session presence

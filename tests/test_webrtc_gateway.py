@@ -195,6 +195,15 @@ class TestWebRTCEndpointREST:
 
 class TestWebRTCWebSocketProxy:
 
+    @pytest.fixture(autouse=True)
+    def _enable_cross_device(self, monkeypatch):
+        # 断言漂移(测试环境补偿):跨设备开关默认值已由 fail-open(默认启用)
+        # 改为 opt-in(默认禁用),开关关闭时 /ws/webrtc 信令端点会以 4001
+        # 立即关闭(cross_device_blocked),代理转发根本不会发生。本类测试
+        # 的是代理转发行为,故显式开启;开关本身由 test_cross_device_switch.py 覆盖。
+        monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", "1")
+        yield
+
     def test_proxy_relays_message_to_node95(self, test_client, mock_node95):
         with test_client.websocket_connect("/ws/webrtc/phone_a") as ws:
             payload = json.dumps({"type": "offer", "sdp": "v=0..."})

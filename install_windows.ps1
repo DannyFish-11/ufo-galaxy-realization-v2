@@ -60,7 +60,9 @@ if (-not (Test-Path $EnvFile)) {
     @"
 GALAXY_API_TOKEN=$Token
 GALAXY_AUTH_ENABLED=$AuthEnabled
-GALAXY_NATS_ENABLED=false
+# NATS 消息总线默认开启(所有者明确指令):启动时尝试拉起内置 nats-server,
+# 失败(如 Windows 智能应用控制拦截)自动降级为进程内总线,单机功能不受影响。
+GALAXY_NATS_ENABLED=true
 GALAXY_DESKTOP_GUI_ENABLED=false
 "@ | Out-File -FilePath $EnvFile -Encoding UTF8
     Write-Host "  ✓ .env 已创建" -ForegroundColor Green

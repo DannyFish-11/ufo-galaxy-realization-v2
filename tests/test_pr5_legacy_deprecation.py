@@ -457,7 +457,13 @@ class TestE2EOrchestratorGuardrails:
         )
 
         with patch("core.e2e_pipeline.get_pipeline", return_value=mock_pipeline):
-            with caplog.at_level(logging.WARNING, logger="Galaxy.E2EOrchestrator"):
+            # 断言漂移:PR-R9-CLEAN 已把 e2e_orchestrator 的旁路守护日志从
+            # WARNING("LEGACY PATH GUARDRAIL")降级为 DEBUG("LEGACY
+            # [E2EOrchestrator]: use_constellation=False …"),理由是 legacy
+            # 路径仍可用(见 core/e2e_orchestrator.py process_user_input 内
+            # 注释)。守护契约不变——显式旁路必须留下可观测痕迹;随生产
+            # 级别与前缀更新断言。
+            with caplog.at_level(logging.DEBUG, logger="Galaxy.E2EOrchestrator"):
                 from core.e2e_orchestrator import process_user_input
 
                 await process_user_input(
@@ -465,11 +471,11 @@ class TestE2EOrchestratorGuardrails:
                     use_constellation=False,
                 )
 
-        guardrail_msgs = [r.message for r in caplog.records if "LEGACY PATH GUARDRAIL" in r.message]
-        assert guardrail_msgs, "process_user_input must log LEGACY PATH GUARDRAIL warning when use_constellation=False"
+        guardrail_msgs = [r.message for r in caplog.records if "LEGACY [E2EOrchestrator]" in r.message]
+        assert guardrail_msgs, "process_user_input must log the LEGACY bypass marker when use_constellation=False"
         assert any(
             "use_constellation=False" in m for m in guardrail_msgs
-        ), "The guardrail warning must mention use_constellation=False"
+        ), "The guardrail log must mention use_constellation=False"
 
     @pytest.mark.asyncio
     async def test_use_constellation_true_does_not_log_guardrail_warning(self, caplog):

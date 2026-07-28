@@ -930,9 +930,12 @@ class TestAuthoritativeContractConsumptionPath:
         assert mocked_get.called
         assert contract["raw_signals"]["android_network_participation_tier"] == authoritative_state.tier.value
         decision = contract["derived_state"]["android_network_participation"]
-        assert decision["evidence"]["source"].startswith(
-            "core.android_network_participation.get_participation_state_for_device"
-        )
+        # 断言漂移:生产端 SSOT 收敛后,build_v2_unified_state_contract 的权威
+        # 消费路径改经 core.v2_android_truth_ssot.build_v2_android_truth_block
+        # (其内部仍消费 get_participation_state_for_device——上方 mocked_get.called
+        # 断言依旧成立),evidence.source 因而上报 SSOT 模块名而非底层 accessor
+        # (见 core/v2_unified_state_contract.py 第 380-401 行的 "SSOT path")。
+        assert decision["evidence"]["source"].startswith("core.v2_android_truth_ssot")
         unified_mode_model = contract["derived_state"]["unified_mode_model"]["evidence"]
         assert unified_mode_model["execution_location"] == "android_delegated"
         assert unified_mode_model["participation_layer"] == "dispatch_eligible"

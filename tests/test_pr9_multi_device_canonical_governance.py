@@ -875,7 +875,13 @@ class TestScenarioDelegatedParticipantWithoutEvidence:
         mock_record.device_id = "device-delegated-1"
 
         mock_runtime = MagicMock()
-        mock_runtime.records = {"device-delegated-1": mock_record}
+        # 断言漂移(mock 形状陈旧):真实 CoordinationRoleRuntime 并无 `records`
+        # 属性,生产探针已修为经公有 snapshot() 枚举参与者并按 device_id 去重
+        # (见 core/multi_device_canonical_governance.py 参与者发现段的中文注释);
+        # 旧 mock 只设 .records,探针经 len(runtime)/snapshot() 读到空列表,
+        # 参与者计数恒为 0。按真实运行时接口补 __len__ 与 snapshot()。
+        mock_runtime.__len__ = lambda self: 1
+        mock_runtime.snapshot.return_value = [mock_record]
 
         with (
             patch.object(_mod, "_COORDINATION_AVAILABLE", True),

@@ -83,6 +83,24 @@ DEVICE_WS_INGRESS_SURFACE_REGISTRY = [
         "handler": "_handle_android_ws",
         "classification": "compat",
     },
+    # 生产修复(登记表完整性缺口):/ws/webrtc/{device_id} 是本模块实际挂载的
+    # 活跃 WS 入口(见下方 webrtc_signaling_ws → proxy_webrtc_signaling),
+    # 却从未登记在本表——表声称枚举全部 WS ingress 面,漏项使联合认知审查
+    # (core/dual_repo_joint_cognitive_review_2026 的 ws_webrtc_media_only
+    # 探针)无法证明"该口仅承载媒体信令、不承载任务/业务 ingress"这一
+    # 事实。按事实补登,classification=media(媒体面,非 canonical/compat
+    # 业务面)。
+    {
+        "path": "/ws/webrtc/{device_id}",
+        "method": "WS",
+        "auth": "AIP_TOKEN",
+        "description": (
+            "WebRTC signaling proxy — media-only surface (no task/business "
+            "ingress); delegates to proxy_webrtc_signaling"
+        ),
+        "handler": "proxy_webrtc_signaling",
+        "classification": "media",
+    },
 ]
 # /ws/master 已拆除(幻影门):其 handler GatewayWSManager.handle_master_
 # connection 全仓不存在,注册函数 create_device_websocket_routes 也无人

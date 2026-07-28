@@ -201,8 +201,15 @@ class TestLegacyWebSocketPaths:
         """/ws/device/{device_id} accepts connections and handles heartbeats."""
         self._connect_and_ping(gw_client, "/ws/device/{device_id}")
 
-    def test_ws_ufo3_path(self, gw_client):
+    def test_ws_ufo3_path(self, gw_client, monkeypatch):
         """/ws/ufo3/{device_id} accepts connections and handles heartbeats."""
+        # 断言漂移修正(生产契约演进,PR-1):legacy 协议面默认禁用——
+        # /ws/ufo3/{device_id} 在未设 GALAXY_ENABLE_LEGACY_PROTOCOLS=1 时
+        # 直接以 1008 关闭(见 galaxy_gateway/routes/websocket.py 的
+        # websocket_ufo3_compat),避免无人使用的历史入口成为常开攻击面。
+        # 本测试验证的是 legacy 兼容路径开启后仍能委派规范处理器,故显式
+        # 按契约开启开关;默认拒绝行为由 PR-1 相关测试覆盖。
+        monkeypatch.setenv("GALAXY_ENABLE_LEGACY_PROTOCOLS", "1")
         self._connect_and_ping(gw_client, "/ws/ufo3/{device_id}")
 
     def test_ws_android_with_device_id(self, gw_client):

@@ -71,9 +71,13 @@ def _make_ws() -> MagicMock:
 class TestIsEnabled:
     """is_cross_device_enabled() reflects GALAXY_CROSS_DEVICE_ENABLED."""
 
-    def test_default_is_enabled(self, monkeypatch):
+    def test_default_is_disabled(self, monkeypatch):
+        # 断言漂移:生产端已把跨设备开关默认值从 fail-open(默认启用)
+        # 改为 opt-in(默认禁用),与 system_mode / desktop_presence_runtime /
+        # system_orchestrator 各层保持一致(见 cross_device_switch.py 文档
+        # 字符串)。旧断言基于已废弃的 fail-open 默认值,故随之更新。
         monkeypatch.delenv("GALAXY_CROSS_DEVICE_ENABLED", raising=False)
-        assert is_cross_device_enabled() is True
+        assert is_cross_device_enabled() is False
 
     def test_explicit_1_is_enabled(self, monkeypatch):
         monkeypatch.setenv("GALAXY_CROSS_DEVICE_ENABLED", "1")

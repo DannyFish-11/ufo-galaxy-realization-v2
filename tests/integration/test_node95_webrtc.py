@@ -32,6 +32,19 @@ except ImportError as _e:
 
 import json
 
+# 环境缺失记录(归因 c):本文件是需要 live Node_95 WebRTC 服务
+# (localhost:8095)的手工集成测试 —— 文件头已声明 "marked ``manual`` so
+# that it is skipped in standard CI runs",但此前只有底部 wrapper
+# (test_node95_webrtc_live_suite)带 manual/skip 标记,顶层三个 test_*
+# 协程(test_http_api / test_websocket_connection / test_offer_handling)
+# 本是 run_all_tests 的手工步骤,却被 pytest(asyncio auto mode)照常收集,
+# 在无 live 服务的环境必然 ConnectionRefused。按文件既有意图统一打
+# module 级 manual+skip 标记;手工运行入口仍是 `python …/test_node95_webrtc.py`。
+pytestmark = [
+    pytest.mark.manual,
+    pytest.mark.skip(reason="Requires a live Node_95 WebRTC service on localhost:8095 — run manually"),
+]
+
 NODE_95_URL = "http://localhost:8095"
 NODE_95_WS = "ws://localhost:8095"
 

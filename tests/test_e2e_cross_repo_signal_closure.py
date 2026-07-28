@@ -224,8 +224,27 @@ def _make_handoff_ack_message(handoff_id: str = "", device_id: str = "test-devic
     }
 
 
+# 断言漂移修正(消息构造随生产契约演进,PR-46):跨仓 schema/version 门
+# (contracts/cross_repo_schema_version_gate)对 handoff_result / handoff_failure
+# 属 STRICT 类型——缺 schema_version 元数据即 reject(不给 legacy 降级),
+# handle_handoff_v2_result 在进入 ingest 之前就会拦截。真实 Android 上行现已
+# 携带 schema_version 与 completion_closure_contract_version;工厂随契约补上。
+def _stamp_schema_gate_metadata(msg: Dict[str, Any]) -> Dict[str, Any]:
+    try:
+        from contracts.cross_repo_schema_version_gate import (
+            ANDROID_COMPLETION_CLOSURE_CONTRACT_VERSION,
+            ANDROID_COMPLETION_CLOSURE_UPLINK_SCHEMA_VERSION,
+        )
+
+        msg["schema_version"] = ANDROID_COMPLETION_CLOSURE_UPLINK_SCHEMA_VERSION
+        msg["completion_closure_contract_version"] = ANDROID_COMPLETION_CLOSURE_CONTRACT_VERSION
+    except Exception:
+        pass
+    return msg
+
+
 def _make_handoff_result_message(handoff_id: str = "", device_id: str = "test-device") -> Dict[str, Any]:
-    return {
+    return _stamp_schema_gate_metadata({
         "type": "handoff_result",
         "device_id": device_id,
         "message_id": str(uuid.uuid4()),
@@ -234,11 +253,11 @@ def _make_handoff_result_message(handoff_id: str = "", device_id: str = "test-de
             "response_kind": "result",
             "result_payload": {"output": "execution_done"},
         },
-    }
+    })
 
 
 def _make_handoff_failure_message(handoff_id: str = "", device_id: str = "test-device") -> Dict[str, Any]:
-    return {
+    return _stamp_schema_gate_metadata({
         "type": "handoff_failure",
         "device_id": device_id,
         "message_id": str(uuid.uuid4()),
@@ -248,7 +267,7 @@ def _make_handoff_failure_message(handoff_id: str = "", device_id: str = "test-d
             "error_code": "execution_error",
             "error": "device ran out of resources",
         },
-    }
+    })
 
 
 # ===========================================================================

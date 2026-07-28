@@ -215,9 +215,32 @@ class TestTaskResult:
     async def test_task_result_resolves_pending_future(self):
         """task_result should resolve a pending Future registered for that task_id."""
         loop = asyncio.get_running_loop()
-        task_id = "task-future-001"
+        # 测试隔离修正(非生产 bug):task_lifecycle 的耐久幂等守卫是跨进程/
+        # 跨重启持久化的(data/result_idempotency_set.json)。固定 task_id
+        # 在第一次成功运行后会被记为已处理("idem_task-future-001"),后续
+        # 任何运行都被当作跨重启重复而抑制,Future 不再解析——纯粹的
+        # 跨运行状态污染。与本文件其它用例同型,改用每次唯一的 task_id。
+        import uuid as _uuid
+
+        task_id = f"task-future-{_uuid.uuid4().hex[:8]}"
         future = loop.create_future()
         self.bridge._pending_responses[task_id] = future
+
+        # 断言漂移修正(前置条件随生产契约演进):PR-V1-RESULT 在
+        # handle_task_result 前加了连续性合法性预检
+        # (_check_result_ingress_continuity_legality,TERMINAL_RESULT_INGESTION
+        # 路径)——来自从未注册/无会话谱系设备的结果会被 verdict=reject 拦在
+        # 真相链之前,Future 自然不再被解析。本测试验证的是"合法结果解析
+        # 挂起的 Future",故先按规范路径注册设备,与本文件上一个用例
+        # (android-tr-001)同型。
+        await self.bridge.handle_message(
+            _make_ws(),
+            {
+                "type": MessageType.DEVICE_REGISTER.value,
+                "device_id": "android-tr-002",
+                "platform": "android",
+            },
+        )
 
         result_msg = {
             "type": MessageType.TASK_RESULT.value,

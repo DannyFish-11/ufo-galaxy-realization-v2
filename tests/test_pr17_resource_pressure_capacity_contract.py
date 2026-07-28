@@ -1004,7 +1004,10 @@ class TestResourcePressureCapacityContract(unittest.TestCase):
         except ImportError as e:
             self.skipTest(f"system_final_acceptance_verdict unavailable: {e}")
 
-        self.assertEqual(len(AcceptanceDimensionId.all_dimensions()), 16)
+        # 断言漂移:PR-17 落地时注册表为 16 项;此后 temporal_semantics(PR-14
+        # 后并入)与 identity_authorship_binding 两个维度加入注册表,现为 18 项。
+        # 本测试真正守护的是 resource_pressure_capacity 已注册(AL01)。
+        self.assertEqual(len(AcceptanceDimensionId.all_dimensions()), 18)
 
     # -----------------------------------------------------------------------
     # Group AM — Probe returns pending for correct baseline

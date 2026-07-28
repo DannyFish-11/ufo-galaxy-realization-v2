@@ -312,7 +312,15 @@ class TestDeviceCommandViaCommandRouter:
 
     @pytest.mark.asyncio
     async def test_send_gateway_command_calls_route_command(self):
-        """send_gateway_command() 必须调用 CommandRouter.route_command()，并包含 trace 字段。"""
+        """send_gateway_command() 必须经 CommandRouter 统一链路发出命令，并包含 trace 字段。
+
+        断言漂移:PR-1 之后 send_gateway_command 的统一入口从
+        CommandRouter.route_command(...) 演进为构造 TaskEnvelope 后调用
+        CommandRouter.route_envelope(envelope)(链路:OpenClawd → TaskEnvelope
+        → route_envelope → gateway/device_router,见 core/openclawd.py
+        send_gateway_command 文档字符串)。契约不变——命令必须走 CommandRouter
+        规范路由并携带 trace 字段;监听点与断言随新签名更新。
+        """
         from core.openclawd import OpenClawd
 
         clawd = OpenClawd.__new__(OpenClawd)
@@ -327,7 +335,7 @@ class TestDeviceCommandViaCommandRouter:
         }
 
         mock_cr = MagicMock()
-        mock_cr.route_command = AsyncMock(return_value=mock_cr_result)
+        mock_cr.route_envelope = AsyncMock(return_value=mock_cr_result)
 
         with patch("core.command_router.get_command_router", return_value=mock_cr):
             result = await clawd.send_gateway_command(
@@ -336,13 +344,16 @@ class TestDeviceCommandViaCommandRouter:
                 payload={},
             )
 
-        mock_cr.route_command.assert_called_once()
-        call_kwargs = mock_cr.route_command.call_args.kwargs
-        assert call_kwargs.get("device_id") == "device_trace_test"
-        assert call_kwargs.get("command") == "take_screenshot"
+        mock_cr.route_envelope.assert_called_once()
+        envelope = mock_cr.route_envelope.call_args.args[0]
+        assert "device_trace_test" in list(getattr(envelope, "targets", []) or [])
+        assert getattr(envelope, "tool_name", "") == "take_screenshot"
         # trace 字段必须存在
         assert "command_id" in result
         assert "task_id" in result
+        assert getattr(envelope, "trace_id", "")
+        assert result["success"] is True
+        assert result.get("via") == "command_router"
 
 
 # ──────────────────────────────────────────────────────────────────────────────

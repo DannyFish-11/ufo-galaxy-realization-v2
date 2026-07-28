@@ -1112,8 +1112,15 @@ class TestIntegrationFullLifecycle:
         tid = _uid()
 
         lc.on_handoff_dispatched(session_id=sid, device_id="dev", contract_id="cid")
-        lc.on_takeover_requested(session_id=sid, takeover_id=tid)
-        lc.on_takeover_response(session_id=sid, takeover_id=tid, accepted=True)
+        # 断言漂移修正:生产端引入所有权转移证明质量门
+        # (core.ownership_transfer_proof_quality, PR16_V2)——takeover_response
+        # 缺 device_id 时所有权收敛裁决为 degraded_incomplete_evidence
+        # (diagnosis=missing_device_id),proof_class 非 confirmed_strong,
+        # 协调器判 accepted_effective=False(force_revalidate_suspend),会话
+        # 停留在 handoff_dispatched。本用例验证的是"成功路径",故按新契约
+        # 补全 device_id 证据;证据不足路径由该门自身的测试覆盖。
+        lc.on_takeover_requested(session_id=sid, takeover_id=tid, device_id="dev")
+        lc.on_takeover_response(session_id=sid, takeover_id=tid, device_id="dev", accepted=True)
 
         # After takeover accepted, session should be in takeover_accepted
         rec = get_participant_session(sid)

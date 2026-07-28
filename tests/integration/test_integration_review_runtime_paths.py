@@ -407,10 +407,19 @@ class TestTaskResultFailureStatus:
         assert future.done()
         resolved = future.result()
         raw_status = resolved.get("status", "")
-        assert raw_status == "error", (
-            f"CLOSED: task_result status=error must be preserved in the resolved Future. "
-            f"Got status={raw_status!r}.  "
-            "The center must be able to distinguish 'error' from 'completed'."
+        # 断言漂移:统一 ingress 引入了集中式状态归一
+        # (core/unified_result_ingress.normalize_status:"failed / error →
+        # 'failed'"),规范状态词表为 {completed, failed, cancelled, degraded},
+        # "error" 是 Android 侧同义词,统一收敛为 "failed"。本测试真正守护的
+        # 契约——失败结果不得被吞成 "completed"——不受影响;期望值随规范
+        # 词表更新为 "failed"。
+        assert raw_status == "failed", (
+            f"CLOSED: task_result status=error must resolve as canonical failure status "
+            f"'failed' (normalize_status maps error→failed). Got status={raw_status!r}.  "
+            "The center must be able to distinguish failures from 'completed'."
+        )
+        assert raw_status != "completed", (
+            "failure results must never be silently accepted as success"
         )
 
     @pytest.mark.asyncio

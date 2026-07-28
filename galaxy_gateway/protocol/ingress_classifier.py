@@ -151,6 +151,23 @@ _KIND_TO_CLASS: Dict[str, str] = {
     # is the appropriate semantic class.
     IngressEventKind.DEVICE_STATE_SNAPSHOT: IngressMessageClass.TRANSPORT,
     IngressEventKind.DEVICE_EXECUTION_EVENT: IngressMessageClass.TRANSPORT,
+
+    # 生产修复(真缺口):device_perception_emission 已在
+    # normalized_ingress_event.IngressEventKind 与 aip_v3.MessageType 注册
+    # (Android 端持续感知流上行,由 handle_device_perception_emission 消费),
+    # 但本分类表漏登记,导致其被归为 UNKNOWN——按 UNKNOWN 处理的入站消息
+    # 无法进入正确的语义通道。它承载的是连续感知/状态投影数据(非任务结果),
+    # 与 DEVICE_STATE_SNAPSHOT 同型,归 TRANSPORT。
+    IngressEventKind.DEVICE_PERCEPTION_EMISSION: IngressMessageClass.TRANSPORT,
+
+    # 生产修复(同一缺口):ack / operator_action_result / ping 也已在
+    # IngressEventKind 注册("previously dropped (UNKNOWN → error response);
+    # now recognised and routed to graceful handling"),但分类表同样漏登记。
+    # ack/ping 为传输层确认与保活 → TRANSPORT;operator_action_result 承载
+    # 操作员动作的终态执行结果 → EXECUTION。
+    IngressEventKind.ACK:                    IngressMessageClass.TRANSPORT,
+    IngressEventKind.PING:                   IngressMessageClass.TRANSPORT,
+    IngressEventKind.OPERATOR_ACTION_RESULT: IngressMessageClass.EXECUTION,
 }
 
 

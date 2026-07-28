@@ -1104,7 +1104,10 @@ class TestTemporalSemanticsContract(unittest.TestCase):
             self.skipTest("core.system_final_acceptance_verdict not available")
 
         dims = AcceptanceDimensionId.all_dimensions()
-        self.assertEqual(len(dims), 17)
+        # 断言漂移:PR-14 落地时注册表为 17 项;此后 identity_authorship_binding
+        # 维度并入(见 core.system_final_acceptance_verdict.AcceptanceDimensionId),
+        # 现为 18 项。本测试真正守护的是 temporal_semantics 已注册(AI01)。
+        self.assertEqual(len(dims), 18)
 
     # -----------------------------------------------------------------------
     # Group AJ — AcceptanceDimensionId probe returns pending

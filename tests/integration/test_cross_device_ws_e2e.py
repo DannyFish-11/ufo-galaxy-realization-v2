@@ -281,12 +281,19 @@ class TestAndroidReportTypesNowHandled:
         assert rpt_ack is not None
         assert rpt_ack.get("type") == "device_acceptance_report_ack"
         assert rpt_ack.get("acceptance_evidence_ingested") is True
-        assert rpt_ack.get("mapped_android_proof_class") == "confirmed_strong"
+        # 断言漂移修正:治理加固后,Android 侧 device_accepted_for_graduation
+        # 报告不再直接映射 confirmed_strong/trusted,而是降级为
+        # advisory_pending_confirmation/provisional —— 报告在 V2 完成 canonical
+        # confirmation 之前仅为 advisory(见 core/android_acceptance_evidence_store.py
+        # _map_acceptance_tag 的 mapping_reason:"remains advisory until V2
+        # performs canonical confirmation",canonical_confirmation_required=True)。
+        assert rpt_ack.get("mapped_android_proof_class") == "advisory_pending_confirmation"
 
         stored = get_latest_device_acceptance_evidence_dict(did)
         assert stored.get("acceptance_tag") == "device_accepted_for_graduation"
-        assert stored.get("mapped_android_proof_class") == "confirmed_strong"
-        assert stored.get("mapped_evidence_trust_level") == "trusted"
+        assert stored.get("mapped_android_proof_class") == "advisory_pending_confirmation"
+        assert stored.get("mapped_evidence_trust_level") == "provisional"
+        assert stored.get("canonical_confirmation_required") is True
         assert stored.get("snapshot_id") == "accept-snap-001"
         assert stored.get("dimension_states") == {
             "governance": "pass",

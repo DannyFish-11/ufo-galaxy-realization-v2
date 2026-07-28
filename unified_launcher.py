@@ -1,47 +1,5 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# PR-WIN-ENCODING: Inherit UTF-8 from main.py; defensive re-config if run standalone.
-import sys
-if sys.platform == "win32":
-    try:
-        import io
-        if hasattr(sys.stdout, "buffer"):
-            sys.stdout = io.TextIOWrapper(
-                sys.stdout.buffer, encoding="utf-8", errors="replace", line_buffering=True
-            )
-            sys.stderr = io.TextIOWrapper(
-                sys.stderr.buffer, encoding="utf-8", errors="replace", line_buffering=True
-            )
-        import os
-        os.environ["PYTHONIOENCODING"] = "utf-8:replace"
-    except Exception:
-        pass
-
-# PR-DOTENV: 与上面的 UTF-8 设置同一模式——继承 main.py 已加载的 .env(正常路径
-# 是 main.py 直接调用本文件的 GalaxyUnified,同进程共享 os.environ);若本文件被
-# 单独运行(python unified_launcher.py，绕过 main.py)，这里防御性地自己再加载
-# 一遍，确保任何 provider API Key 都能从 .env 正确进入 os.environ。
-# 与 main.py 同一关键约束:只加载【非空】值——设置面板自动生成的 .env 会把全部
-# schema 键写成 KEY=(空值),空字符串进入 os.environ 会把代码默认值顶掉(真机
-# 复现:OLLAMA_URL="" 导致拿空 URL ping Ollama、明明在跑却判"未响应")。
-# 不覆盖已存在的真实 shell/系统环境变量。
-try:
-    from dotenv import dotenv_values as _dotenv_values
-    import os as _os
-    _root = _os.path.dirname(_os.path.abspath(__file__))
-    # 与 .env 同一套纪律加载【密钥库】runtime/secrets.env:设置面板把 API Key
-    # 这类 secret 写进它(而非 .env,见 core/config_store.py),但此前重启后
-    # 没有任何代码把它注回 os.environ —— 直接读 os.getenv 的路径(含面板的
-    # "已配置"角标 _is_configured)全都看不到,表现为"Key 存了,重启后面板
-    # 又显示未配置"。加载序 = 先到先得:secrets.env 先加载(面板保存的最新
-    # 真值优先);shell/系统显式导出的环境变量始终最高(两者都不覆盖已存在键)。
-    for _env_file in ("runtime/secrets.env", ".env"):
-        for _k, _v in (_dotenv_values(_os.path.join(_root, _env_file)) or {}).items():
-            # 值以 # 开头 = dotenv 把「空值+行内注释」整段当值(毒值),视同未配置
-            if _v and not _v.lstrip().startswith("#") and _k not in _os.environ:
-                _os.environ[_k] = _v
-except Exception:
-    pass
 """
 Galaxy - 统一启动器 (Subordinate Launcher Component — PR-2)
 ===========================================================
@@ -95,6 +53,52 @@ This file retains the service orchestration surface:
 日期：2026-02-06
 版本：2.1 (demoted to subordinate role — PR-2)
 """
+# 生产修复(真 bug,文档字符串失位):win32 编码块与 dotenv 预载块曾被插到
+# 模块文档字符串之前,使其不再是 module docstring(ast.get_docstring/__doc__
+# 均为 None),PR-2 的"从属启动器"角色声明随之从模块元数据中消失。现将
+# 文档字符串移回文件头部(可执行序言之前),恢复其 docstring 身份。
+# PR-WIN-ENCODING: Inherit UTF-8 from main.py; defensive re-config if run standalone.
+import sys
+if sys.platform == "win32":
+    try:
+        import io
+        if hasattr(sys.stdout, "buffer"):
+            sys.stdout = io.TextIOWrapper(
+                sys.stdout.buffer, encoding="utf-8", errors="replace", line_buffering=True
+            )
+            sys.stderr = io.TextIOWrapper(
+                sys.stderr.buffer, encoding="utf-8", errors="replace", line_buffering=True
+            )
+        import os
+        os.environ["PYTHONIOENCODING"] = "utf-8:replace"
+    except Exception:
+        pass
+
+# PR-DOTENV: 与上面的 UTF-8 设置同一模式——继承 main.py 已加载的 .env(正常路径
+# 是 main.py 直接调用本文件的 GalaxyUnified,同进程共享 os.environ);若本文件被
+# 单独运行(python unified_launcher.py，绕过 main.py)，这里防御性地自己再加载
+# 一遍，确保任何 provider API Key 都能从 .env 正确进入 os.environ。
+# 与 main.py 同一关键约束:只加载【非空】值——设置面板自动生成的 .env 会把全部
+# schema 键写成 KEY=(空值),空字符串进入 os.environ 会把代码默认值顶掉(真机
+# 复现:OLLAMA_URL="" 导致拿空 URL ping Ollama、明明在跑却判"未响应")。
+# 不覆盖已存在的真实 shell/系统环境变量。
+try:
+    from dotenv import dotenv_values as _dotenv_values
+    import os as _os
+    _root = _os.path.dirname(_os.path.abspath(__file__))
+    # 与 .env 同一套纪律加载【密钥库】runtime/secrets.env:设置面板把 API Key
+    # 这类 secret 写进它(而非 .env,见 core/config_store.py),但此前重启后
+    # 没有任何代码把它注回 os.environ —— 直接读 os.getenv 的路径(含面板的
+    # "已配置"角标 _is_configured)全都看不到,表现为"Key 存了,重启后面板
+    # 又显示未配置"。加载序 = 先到先得:secrets.env 先加载(面板保存的最新
+    # 真值优先);shell/系统显式导出的环境变量始终最高(两者都不覆盖已存在键)。
+    for _env_file in ("runtime/secrets.env", ".env"):
+        for _k, _v in (_dotenv_values(_os.path.join(_root, _env_file)) or {}).items():
+            # 值以 # 开头 = dotenv 把「空值+行内注释」整段当值(毒值),视同未配置
+            if _v and not _v.lstrip().startswith("#") and _k not in _os.environ:
+                _os.environ[_k] = _v
+except Exception:
+    pass
 
 import os
 import sys
@@ -132,6 +136,10 @@ logging.basicConfig(
     format='%(asctime)s | %(levelname)s | %(name)s | %(message)s',
     datefmt='%H:%M:%S'
 )
+# 修 logging 双写(与 main.py 同一处理,兜住 unified_launcher 被单独作为入口的
+# 场景):huggingface_hub 自带一个裸 StreamHandler 且不关 propagate,同一条日志
+# 会经"它自己的 handler + 根 logger 控制台 handler"打两遍;关掉冒泡即只打一遍。
+logging.getLogger("huggingface_hub").propagate = False
 logger = logging.getLogger("Galaxy")
 
 # 静默 URL 哨兵(见 core/ollama_url_sentinel):只观测不干预,缺协议头请求 URL 一出现
@@ -1298,9 +1306,11 @@ class GalaxyUnified:
         """
         from core.nats_server import EmbeddedNATSServer
         from core.nats_bus import get_nats_bus
-        # 显式关闭(install_windows.ps1 默认写入 GALAXY_NATS_ENABLED=false):
-        # 不再明知配置为关仍去拉起二进制,横幅如实标注"按配置未启用"。
+        # 显式关闭(用户在 .env 写 GALAXY_NATS_ENABLED=false 时才走这里;默认已改回
+        # 开启——所有者明确指令:默认路径是"尝试启动→成功",不许拿关闭当回避)。
+        # 关闭时同样切进程内总线:单机语义完整,只是不再尝试拉起 nats-server。
         if os.environ.get("GALAXY_NATS_ENABLED", "").strip().lower() in ("false", "0", "no", "off"):
+            get_nats_bus().enable_local_fallback("GALAXY_NATS_ENABLED=false(按配置显式关闭)")
             return {"ok": False, "url": "", "error": "", "hint": "", "disabled": True}
         nats_url = os.environ.get("GALAXY_NATS_URL")
         embedded_error = ""
@@ -1318,8 +1328,12 @@ class GalaxyUnified:
             return {"ok": True, "url": os.environ.get("GALAXY_NATS_URL", nats_url or "nats://localhost:4222"),
                     "error": "", "hint": "", "disabled": False}
         _conn_err = (result.get("error", "") if isinstance(result, dict) else str(result)) or "NATS 连接失败"
+        # 真解决(所有者不接受"未启用"回避):nats-server 起不来(WDAC 拦截/未安装
+        # 等)时自动降级为进程内纯 Python 总线——单机 publish/subscribe 全部照常,
+        # 不再让后续每次总线调用重演失败重试刷错;横幅语气为"单机模式正常"。
+        bus.enable_local_fallback(embedded_error or _conn_err)
         return {"ok": False, "url": "", "error": embedded_error or _conn_err,
-                "hint": embedded_hint, "disabled": False}
+                "hint": embedded_hint, "disabled": False, "local_fallback": True}
 
     async def start_tailscale(self):
         """启动 Tailscale 网络。返回真实 Tailscale IP（供显示）。"""
@@ -1612,18 +1626,20 @@ class GalaxyUnified:
             nats_ok, bus_value = True, _nats_res.get("url") or "已连接"
             bus_details.append(("NATS Bus", bus_value, "ok"))
         elif _nats_res.get("disabled"):
-            # 按配置显式关闭 —— 是配置意图而非故障,但仍如实标注降级与影响。
+            # 按配置显式关闭 —— 是配置意图而非故障;单机模式正常,如实标注影响。
             nats_ok = False
-            bus_value = "未启用(GALAXY_NATS_ENABLED=false)· 降级:进程内总线,跨设备分发不可用"
+            bus_value = "单机模式正常(进程内总线)· NATS 按配置关闭,跨设备分发不可用"
             bus_details.append(("NATS Bus", "按配置未启用(GALAXY_NATS_ENABLED=false)", "warn"))
-            bus_details.append(("影响", "跨设备任务分发/集群 mesh 不可用;单机进程内 Agent 总线不受影响", "info"))
+            bus_details.append(("影响", "跨设备任务分发/集群 mesh 不可用;单机进程内总线正常工作", "info"))
             bus_hint = "如需跨设备:设 GALAXY_NATS_ENABLED=true 并确保 nats-server 可运行"
         else:
+            # 诚实降级但语气为"单机模式正常"(所有者指令):NATS 起不来不是单机
+            # 故障——进程内总线已自动接管全部单机语义,失败原因与放行指引照展示。
             nats_ok = False
             _err = _nats_res.get("error") or "未知原因"
-            bus_value = f"未启动 · {_err[:80]} · 降级:进程内总线(单机可用,跨设备分发不可用)"
+            bus_value = f"单机模式正常(进程内总线)· NATS 未启动:{_err[:60]},仅跨设备分发不可用"
             bus_details.append(("NATS Bus", f"未启动:{_err}", "warn"))
-            bus_details.append(("影响", "跨设备任务分发/集群 mesh 不可用;单机进程内 Agent 总线不受影响", "info"))
+            bus_details.append(("降级", "已自动切换进程内总线 —— 单机功能全部正常;仅跨设备任务分发/集群 mesh 不可用", "info"))
             bus_hint = _nats_res.get("hint") or (
                 "检查 nats-server 是否可运行(手动执行 nats-server -v 验证);"
                 "单机使用可设 GALAXY_NATS_ENABLED=false 明确关闭此项"

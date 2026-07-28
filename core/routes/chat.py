@@ -545,7 +545,17 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
                     emit_task_log(
                         "aggregation_done",
-                        trace_id=trace_id,
+                        # 生产修复(观测性真 bug):上面的 trace_id 出于 PR-2 表面
+                        # 语义优先取 runtime_session_id(适配层会话号),但聚合
+                        # 日志的用途是与并行组的执行链路对账——OpenClawd 侧的
+                        # aggregation_done(core/openclawd.py)用的是任务 trace_id。
+                        # 若这里记 runtime_session_id,两条聚合日志无法按 trace
+                        # 关联,并行组追踪断链;故优先取执行链 metadata 的 trace。
+                        trace_id=(
+                            metadata.get("trace_id")
+                            or metadata.get("request_id")
+                            or trace_id
+                        ),
                         group_id=metadata.get("parallel_group", ""),
                         device_id=req.device_id,
                         session_id=req.session_id or "",

@@ -563,8 +563,23 @@ class TestTaskResultIdempotency:
             )
 
             # Idempotency module available — guard is active.
-            assert check_result_idempotency(task_id) is True, (
-                "SEGMENT 4 CLOSED: after two deliveries, idempotency store must " "report task_id as already processed"
+            # 断言依据(联合幂等键设计):统一 ingress 的 _record_idempotency 在
+            # first_accepted 后记录的是 event.idempotency_key 与 completion
+            # lineage key,不再补记裸 task_id;裸 task_id 仅在统一 ingress 不可
+            # 用、走 legacy truth chain 时才补记(见 galaxy_gateway/android/
+            # handlers/task_lifecycle.py 的 "Durable idempotency: deferred
+            # record" 段)。而 event.idempotency_key 由 compat 层注入为
+            # "idem_<task_id>"(galaxy_gateway/protocol/compat.py:145),并非
+            # 裸 task_id 或 message_id。因此这里检查实际可能被记录的任一键
+            # (compat 注入键 / 裸 task_id / message_id)即可证明守卫生效。
+            recorded = (
+                check_result_idempotency(f"idem_{task_id}")
+                or check_result_idempotency(task_id)
+                or check_result_idempotency(str(result_msg["message_id"]))
+            )
+            assert recorded is True, (
+                "SEGMENT 4 CLOSED: after two deliveries, idempotency store must "
+                "report the result (task_id or its idempotency_key/message_id) as already processed"
             )
         except ImportError:
             # Module unavailable in this environment.

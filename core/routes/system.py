@@ -506,11 +506,19 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             nats_enabled = False
             fabric_strict = False
 
-        # Cross-device switch may override the fabric config at runtime
+        # Cross-device switch may override the fabric config at runtime — but
+        # only when GALAXY_CROSS_DEVICE_ENABLED is *explicitly* set.  The
+        # switch module became opt-in (unset → disabled); applying it
+        # unconditionally would clobber the mode-derived value from
+        # resolve_fabric_config (GALAXY_SYSTEM_MODE=desktop-cross-device
+        # implies enabled when the variable is absent), contradicting this
+        # endpoint's documented derivation ("GALAXY_CROSS_DEVICE_ENABLED 或
+        # GALAXY_SYSTEM_MODE 派生") and system_mode's own precedence.
         try:
-            from galaxy_gateway.cross_device_switch import is_cross_device_enabled
+            if os.getenv("GALAXY_CROSS_DEVICE_ENABLED") is not None:
+                from galaxy_gateway.cross_device_switch import is_cross_device_enabled
 
-            cross_device_on = is_cross_device_enabled()
+                cross_device_on = is_cross_device_enabled()
         except Exception as exc:
             logger.debug("Suppressed: %s", exc)
 

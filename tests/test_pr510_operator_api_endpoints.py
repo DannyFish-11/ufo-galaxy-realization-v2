@@ -123,7 +123,21 @@ class TestA_ModuleStructure(unittest.TestCase):
 
         router = create_router()
         paths = [r.path for r in router.routes]
-        self.assertEqual(len(paths), 6, f"Expected 6 routes, got: {paths}")
+        # 断言漂移:PR-510 落地时 operator 路由恰为 6 条;此后 operator 控制面
+        # 持续扩展(flows/devices/dispatch/board 等,现已 30+ 条)。精确计数
+        # 断言只反映当年快照,不是本测试要守护的契约;真正的契约是 PR-510
+        # 的 6 条原始端点必须仍然存在(操作面向后兼容)。
+        pr510_original_routes = {
+            "/api/v1/operator/snapshot",
+            "/api/v1/operator/actions/availability",
+            "/api/v1/operator/inspect/task/{task_id}",
+            "/api/v1/operator/inspect/route/{task_id}",
+            "/api/v1/operator/inspect/executor/{node_id}",
+            "/api/v1/operator/inspect/failure/{task_id}",
+        }
+        missing = pr510_original_routes - set(paths)
+        self.assertFalse(missing, f"PR-510 original routes missing: {missing}; got: {paths}")
+        self.assertGreaterEqual(len(paths), 6, f"Expected at least 6 routes, got: {paths}")
 
     def test_A05_snapshot_route_present(self) -> None:
         from core.routes.operator import create_router
