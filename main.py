@@ -759,6 +759,20 @@ def phase2_ensure_deps(env_status: dict) -> bool:
     #     - 完整                        → 跳过
     #   npm install 本身是幂等的:该下的下、已在的跳过,既是"正常下载"也是"补齐"。
     npm_cmd = shutil.which("npm")
+    # env_status 是 Phase 0 拍的快照,而 Phase 1 的编排器 Phase 6(DESKTOP_SURFACE)
+    # 就在 Phase 0 和这里【中间】跑过一次 npm install。照着两个阶段前的旧快照判断,
+    # 依赖明明已经装好了也会再整装一遍(实测重复消耗 ~20s 纯等待,且这段是阻塞在
+    # 网关 bind 之前的)。完整性判定只是几次 os.path.isfile,重新取一次实时状态的
+    # 代价可忽略;失败路径完全不变——Phase 6 装失败/被跳过时这里照样判 False 并
+    # 跑下面那套三镜像重试(比 Phase 6 的更抗弱网),补齐能力一点没少。
+    if npm_cmd and not env_status.get("electron_deps_ok"):
+        try:
+            from core.electron_launch_guard import electron_package_intact
+            if electron_package_intact(str(ELECTRON_DIR)):
+                env_status["electron_deps_ok"] = True
+                print_item("Electron 依赖已就绪(启动早期阶段已装好)", "ok")
+        except Exception:  # noqa: BLE001
+            pass  # 复检本身出错 → 保持原判断,照常走安装
     if npm_cmd and not env_status.get("electron_deps_ok"):
         _node_modules_exists = (ELECTRON_DIR / "node_modules").exists()
         if _node_modules_exists:
@@ -829,28 +843,22 @@ def phase2_ensure_deps(env_status: dict) -> bool:
                 models = [line.split()[0] for line in rc.stdout.strip().split("\n")[1:] if line.strip()]
                 print_item(f"Ollama 模型: {len(models)} 个", "ok", ", ".join(models[:3]))
             else:
-                # 按【实际硬件】挑推荐模型再拉，而不是写死 12B：无独显的笔记本只会拉轻量的
-                # gemma4:e2b（不会白下 8GB 的大模型）。仅探测、不持久化，Phase 5 仍可改选。
-                try:
-                    from core import model_selection as _ms
-                    rec_model = _ms.recommend()
-                except Exception:
-                    rec_model = "gemma4:e2b"
-                print_item("未检测到本地模型，正在下载推荐模型...", "ok", rec_model)
-                # 弱网加固:①流式输出让 ollama 自带进度条可见(此前 capture
-                # 导致几 GB 的下载全程无声,"看着像卡死");②超时放宽到 1h——
-                # 600s 在弱网下必然误杀大模型下载(ollama pull 本身断点续传,
-                # 超时后重跑会从断点继续,但不该让正常慢速下载被误判失败)。
-                try:
-                    rc2 = sp.run(["ollama", "pull", rec_model], timeout=3600).returncode
-                except sp.TimeoutExpired:
-                    rc2 = -1
-                    print_item("模型下载超 1h 未完成", "warn",
-                               f"ollama pull {rec_model} 支持断点续传,重跑即从断点继续")
-                if rc2 == 0:
-                    print_item(f"模型 {rec_model} 下载完成", "ok")
-                elif rc2 != -1:
-                    print_item("模型下载失败", "warn", f"ollama pull {rec_model} 手动重试")
+                # 这里【只报告、不下载】。模型拉取由 Phase 5「AI 大脑」统一负责
+                # (unified_launcher._phase5 → core.model_selection.background_pull),
+                # 那条路径在每个维度上都严格更优,曾经放在这里的阻塞式 ollama pull
+                # 属于纯粹重复且更差的一份:
+                #   · 拉的模型不对——这里拉 recommend() 的硬件推荐值,而 Phase 5 拉
+                #     resolve_main_brain() 的【用户实际选定】值;两者不同时,用户要
+                #     先等一个自己根本不用的模型下完。
+                #   · 阻塞网关——timeout=3600 且位于 bind 之前,首启机器上网关最长
+                #     一小时不监听,用户连「保存 API Key」都做不了(真机反馈过的
+                #     "后端未启动"就是这一类)。Phase 5 走后台线程,不挡启动。
+                #   · 时序更早、更容易空放一枪——Phase 5 特意把 start_local_brain()
+                #     排在拉取之前以确保 Ollama 真已就绪(见其 docstring 记录的竞态),
+                #     而这里比它还早,ollama serve 往往尚未绑定端口。
+                #   · 缺少 Phase 5 已有的 /api/show 残缺 manifest 核实、HuggingFace
+                #     回退、版本不兼容诊断。
+                print_item("未检测到本地模型", "warn", "将由 Phase 5「AI 大脑」按所选主脑后台拉取(不阻塞启动)")
         except Exception as exc:
             print_item(f"Ollama 模型检查失败: {exc}", "warn")
 

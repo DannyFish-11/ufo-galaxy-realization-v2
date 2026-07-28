@@ -1595,7 +1595,18 @@ class GalaxyUnified:
     async def start(self):
         """启动 Galaxy 后端 — 板块式输出。"""
         await self.setup()
-        self.service_manager = ServiceManager(self.config)
+        # 这里【不能】再 new 一个 ServiceManager。__init__ 已经建好一个,并且把
+        # core_launcher / node_launcher / l4_launcher / web_ui 全部绑在【那一个】
+        # 上了;在这里替换 self.service_manager 只会换掉自己这一份引用,web_ui
+        # 仍指向旧实例 —— 而 /api/status、/api/services 这两个端点正是 web_ui
+        # 里的闭包(见 UnifiedWebUI 步骤 6)。于是启动过程中 CoreServiceLauncher
+        # (launcher/core_services.py:28/43/61)和 NodeSystemLauncher
+        # (launcher/node_startup.py:586)注册进去的服务全落在新实例上,而两个查询
+        # 端点读的是那个再也收不到任何注册的旧实例:services 恒为空、state 也永远
+        # 停在 setup() 写的 LOADING_CONFIG。config 在 __init__(第 711 行)之后不
+        # 会被换对象(main.py 只是改它的 host/port 字段),所以这次 new 的入参与
+        # __init__ 那次完全相同 —— 纯粹是一份多余且有害的副本,删掉即让全系统
+        # 收敛到同一个 ServiceManager。
 
         # ── 启动阶段渲染（clig.dev：默认每阶段折叠一行，-v 展开逐项明细）──
         from core import cli_render as r

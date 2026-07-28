@@ -205,6 +205,23 @@ class _FakeSub:
 class TestVcvarsBuildEnv:
     """vcvars64 完整构建环境加载:PATH+LIB+INCLUDE 一并灌进 os.environ(修 LNK1181)。"""
 
+    @pytest.fixture(autouse=True)
+    def _isolate_os_environ(self):
+        """把整个 os.environ 快照/还原。
+
+        被测函数 _windows_setup_msvc_build_env 的职责就是把 vcvars dump 灌进
+        os.environ,所以它会把假 dump 里的 ``PATH=C:\\vc\\bin`` 写成进程真实
+        PATH。不还原的话,同一 pytest 进程里后续所有 shutil.which()/子进程查找
+        全部失效(实测会连锁打挂几十个用例)。monkeypatch 只能保护它显式改过的
+        键,这里改的键由假 dump 决定,故必须整体快照。
+        """
+        saved = dict(os.environ)
+        try:
+            yield
+        finally:
+            os.environ.clear()
+            os.environ.update(saved)
+
     def test_applies_full_env_and_confirms_cl(self, monkeypatch):
         import shutil
 
