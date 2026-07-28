@@ -83,6 +83,10 @@ class EventType(str, Enum):
     DEVICE_CIRCUIT_OPEN = "device_circuit_open"
     DEVICE_CIRCUIT_HALF_OPEN = "device_circuit_half_open"
     DEVICE_CIRCUIT_CLOSED = "device_circuit_closed"
+    # 隔离是设备健康里唯一【粘性、且只能由运维解除】的状态
+    # (device_health_registry.py:201 会发这个事件),此前审计侧没有对应枚举,
+    # 桥接层查表落空后直接静默丢弃 —— 于是最需要留痕的那个状态反而没有审计证据。
+    DEVICE_QUARANTINED = "device_quarantined"
     TASK_RETRY_SCHEDULED = "task_retry_scheduled"
     TASK_RETRY_SUCCEEDED = "task_retry_succeeded"
     TASK_RETRY_FAILED = "task_retry_failed"
