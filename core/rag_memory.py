@@ -491,7 +491,14 @@ class RAGMemory:
 
             memory = get_conversation_memory()
             return await memory.get_context(session_id, max_turns)
-        except Exception:
+        except Exception as exc:
+            # 空列表与"这是个全新会话"完全无法区分:桥接一旦坏掉,调用方会以为
+            # 对话没有历史而照常作答,而不是发现记忆读取失败了。
+            logger.warning(
+                "获取对话上下文失败(session_id=%s): %s;按空上下文返回",
+                session_id,
+                exc,
+            )
             return []
 
     # ================================================================

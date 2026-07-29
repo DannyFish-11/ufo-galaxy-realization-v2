@@ -399,11 +399,17 @@ class SchedulingTruthHarness:
                     if isinstance(result, dict):
                         return list(result.get("routable_ids", []))
                     return []
-                except Exception:
+                except Exception as exc:
+                    # 两条查询路径都失败时返回 [] 等于"一台可路由执行器都没有",
+                    # 与真实的空结果无法区分,静默会让调度看起来只是"没设备"。
+                    logger.warning(
+                        "query_routable_executors: 两种查询变体均失败(%s);按空结果返回",
+                        exc,
+                    )
                     return []
 
         except Exception as exc:
-            logger.debug("query_routable_executors: error: %s", exc)
+            logger.warning("query_routable_executors: 查询失败(%s);按空结果返回", exc)
             return []
 
     def assert_convergence(

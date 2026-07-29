@@ -124,8 +124,15 @@ def save_choice(rt: str, source: str = "unknown") -> None:
             "selected_at": datetime.now(timezone.utc).isoformat(),
         }
         _CHOICE_FILE.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as exc:  # noqa: BLE001
+        # 本进程仍然可用(下面照样写 os.environ),但"让后续启动无需再问"这个
+        # 承诺已经不成立了 —— 用户下次启动会被重新问一遍却不知道为什么。
+        logger.warning(
+            "容器运行时选择未能持久化到 %s(%s):本次运行不受影响,"
+            "但下次启动会重新询问",
+            _CHOICE_FILE,
+            exc,
+        )
     os.environ["GALAXY_CONTAINER_RUNTIME"] = rt
 
 

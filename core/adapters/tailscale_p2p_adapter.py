@@ -109,6 +109,8 @@ class TailscaleP2PAdapter(TransportAdapter):
         # Health check task
         self._health_task: Optional[asyncio.Task] = None
         self._running = False
+        # peer 缓存刷新是否正处于连续失败状态(用于日志去重,避免周期循环刷屏)
+        self._peer_refresh_failing = False
 
     # ── TransportAdapter interface ──────────────────────────────────
 
@@ -354,10 +356,26 @@ class TailscaleP2PAdapter(TransportAdapter):
                     logger.debug("Health check: purged %s connection to %s", reason, did)
 
             # Refresh peer cache
+            #
+            # 此前这里是裸 except: pass。刷新一旦持续失败,_peer_cache 就会永久
+            # 停在旧内容上,而上层看到的仍是一份"正常的"peer 列表 —— 于是按早已
+            # 失效的 tailnet 地址去建连。循环是周期性的,不能每轮都刷日志:
+            # 首次失败告警一次,恢复时再说一句,中间降到 debug。
             try:
                 await self._refresh_peer_cache()
-            except Exception:
-                pass
+                if self._peer_refresh_failing:
+                    self._peer_refresh_failing = False
+                    logger.warning("Tailscale peer cache refresh recovered")
+            except Exception as exc:
+                if not self._peer_refresh_failing:
+                    self._peer_refresh_failing = True
+                    logger.warning(
+                        "Tailscale peer cache refresh FAILED (%s); cache is now stale "
+                        "and will not update until this recovers (further occurrences at debug)",
+                        exc,
+                    )
+                else:
+                    logger.debug("Tailscale peer cache refresh still failing: %s", exc)
 
     # ── Internal: Tailscale discovery ───────────────────────────────
 

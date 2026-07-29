@@ -482,6 +482,8 @@ class NetworkTopologyRuntime:
         self._my_device_id: str = ""
         self._my_position: NetworkPosition = NetworkPosition()
         self._running = False
+        # 自我探测是否正处于连续失败状态(用于日志去重,避免周期循环刷屏)
+        self._self_discovery_failing = False
         self._probe_task: Optional[asyncio.Task] = None
 
     # ── Node management ───────────────────────────────────────────────────
@@ -1348,14 +1350,30 @@ class NetworkTopologyRuntime:
                 break
             if not self._running:
                 break
+            # 此前是裸 except: pass。自我探测一旦持续失败,_my_position 就永久
+            # 停在旧值上,而 PR-28 的"按 topology 推荐最佳传输"照样拿这份陈旧
+            # 位置去决策 —— 看起来一切正常,选出来的路径却是基于过时网络位置的。
+            # 周期循环不能每轮刷屏:首次失败告警一次,恢复时再说一句。
             try:
                 new_pos = await self._discover_self()
                 new_pos.device_id = self._my_device_id
                 with self._rw_lock:
                     self._my_position = new_pos
                     self._positions[self._my_device_id] = new_pos
-            except Exception:
-                pass
+                if self._self_discovery_failing:
+                    self._self_discovery_failing = False
+                    logger.warning("Network topology self-discovery recovered")
+            except Exception as exc:
+                if not self._self_discovery_failing:
+                    self._self_discovery_failing = True
+                    logger.warning(
+                        "Network topology self-discovery FAILED (%s); position is now "
+                        "stale and transport selection will keep using it "
+                        "(further occurrences at debug)",
+                        exc,
+                    )
+                else:
+                    logger.debug("Network topology self-discovery still failing: %s", exc)
 
 
 # ---------------------------------------------------------------------------
