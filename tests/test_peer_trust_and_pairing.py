@@ -353,6 +353,31 @@ class TestPairingFlow:
             == "require_approval"
         )
 
+    def test_internal_errors_do_not_leak_exception_text(self, client, monkeypatch):
+        """CodeQL: Information exposure through an exception。
+
+        配对是信任链入口,内部异常文本(可能含文件路径、模块名、密钥文件位置)
+        绝不能回给调用方;但要留下 error_code,让人能凭它去服务端日志定位。
+        """
+        import core.peer_trust as pt
+
+        secret = "/very/secret/path/.galaxy_mesh_key"
+        monkeypatch.setattr(pt, "get_peer_trust_book", lambda: (_ for _ in ()).throw(RuntimeError(f"{secret} 打不开")))
+        r = client.get("/api/v1/pair/peers")
+        assert r.status_code == 500
+        assert secret not in r.text
+        assert "RuntimeError" not in r.text
+        assert r.json()["error_code"] == "pair_list_peers"
+
+    def test_card_rejection_reason_carries_no_exception_text(self, client):
+        """from_link 的 reason 会被原样回传,同样不能带异常文本。"""
+        r = client.post("/api/v1/pair/claim", json={"link": "galaxy://pair?c=@@@bad@@@&s=@@@"})
+        assert r.status_code == 400
+        body = r.text
+        assert "Traceback" not in body and "Error:" not in body
+        # 仍要给出可行动的原因,而不是一句无信息的"失败"
+        assert r.json()["error"]
+
     def test_trust_can_be_raised_and_revoked(self, client):
         card = client.get("/api/v1/pair/card").json()
         did = client.post("/api/v1/pair/claim", json={"code": card["code"]}).json()["peer"]["device_id"]

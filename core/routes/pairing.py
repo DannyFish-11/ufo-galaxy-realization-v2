@@ -48,6 +48,30 @@ def _scopes_for_trust(trust: str) -> List[str]:
     return list(_TRUST_SCOPES.get(str(trust).lower(), _TRUST_SCOPES["unknown"]))
 
 
+def _server_error(where: str, exc: Exception) -> JSONResponse:
+    """把内部异常转成脱敏响应:完整异常只进服务端日志。
+
+    起因是 CodeQL 的 "Information exposure through an exception":原先这里
+    直接 ``str(exc)`` 回给调用方,而异常文本可能带出文件路径、内部模块名、
+    密钥文件位置等。配对接口尤其敏感 —— 它就是信任链的入口。
+
+    与仓库既有做法一致(见 core/routes/models.py::verify_provider:
+    "分类成用户能行动的脱敏文案;完整异常只进服务端日志")。
+
+    仍返回一个稳定的 ``error_code``,让调用方能据此分支处理、并凭它去
+    服务端日志里定位对应那条 ERROR —— 脱敏不等于让人无从排查。
+    """
+    logger.error("配对接口内部错误 [%s]: %s", where, exc, exc_info=True)
+    return JSONResponse(
+        {
+            "success": False,
+            "error": "内部错误,请查看服务端日志",
+            "error_code": where,
+        },
+        status_code=500,
+    )
+
+
 class ClaimRequest(BaseModel):
     #: 二选一:配对链接(galaxy://pair?...)或 6 位短码
     link: Optional[str] = None
@@ -105,8 +129,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 }
             )
         except Exception as exc:  # noqa: BLE001
-            logger.warning("出示本机名片失败: %s", exc)
-            return JSONResponse({"success": False, "error": str(exc)}, status_code=500)
+            return _server_error("pair_card", exc)
 
     @router.post("/api/v1/pair/claim")
     async def claim_peer(req: ClaimRequest):
@@ -178,8 +201,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 }
             )
         except Exception as exc:  # noqa: BLE001
-            logger.warning("配对失败: %s", exc)
-            return JSONResponse({"success": False, "error": str(exc)}, status_code=500)
+            return _server_error("pair_claim", exc)
 
     @router.get("/api/v1/pair/peers")
     async def list_peers():
@@ -189,7 +211,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             peers = [p.to_dict() for p in get_peer_trust_book().list_peers()]
             return JSONResponse({"success": True, "count": len(peers), "peers": peers})
         except Exception as exc:  # noqa: BLE001
-            return JSONResponse({"success": False, "error": str(exc)}, status_code=500)
+            return _server_error("pair_list_peers", exc)
 
     @router.get("/api/v1/pair/peers/{device_id}")
     async def get_peer(device_id: str):
@@ -212,7 +234,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 )
             return JSONResponse({"success": True, "registered": True, "peer": rec.to_dict()})
         except Exception as exc:  # noqa: BLE001
-            return JSONResponse({"success": False, "error": str(exc)}, status_code=500)
+            return _server_error("pair_get_peer", exc)
 
     @router.post("/api/v1/pair/trust")
     async def set_trust(req: TrustRequest):
@@ -235,7 +257,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 }
             )
         except Exception as exc:  # noqa: BLE001
-            return JSONResponse({"success": False, "error": str(exc)}, status_code=500)
+            return _server_error("pair_set_trust", exc)
 
     @router.delete("/api/v1/pair/peers/{device_id}")
     async def remove_peer(device_id: str):
@@ -245,7 +267,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             removed = get_peer_trust_book().remove(device_id)
             return JSONResponse({"success": True, "removed": removed, "device_id": device_id})
         except Exception as exc:  # noqa: BLE001
-            return JSONResponse({"success": False, "error": str(exc)}, status_code=500)
+            return _server_error("pair_remove_peer", exc)
 
     @router.post("/api/v1/pair/check")
     async def check_intent(req: CheckRequest):
@@ -268,6 +290,6 @@ def create_router(service_manager=None, config=None) -> APIRouter:
                 }
             )
         except Exception as exc:  # noqa: BLE001
-            return JSONResponse({"success": False, "error": str(exc)}, status_code=500)
+            return _server_error("pair_check", exc)
 
     return router

@@ -143,7 +143,10 @@ def from_link(link: str, *, now: Optional[float] = None) -> CardVerdict:
     try:
         parsed = urlparse(str(link).strip())
     except Exception as exc:  # noqa: BLE001
-        return CardVerdict(False, f"链接无法解析: {exc}")
+        # reason 会被配对接口原样回给调用方,因此不能带异常文本
+        # (CodeQL: Information exposure through an exception)。细节只进日志。
+        logger.debug("配对链接解析失败: %s", exc, exc_info=True)
+        return CardVerdict(False, "链接格式无法解析")
     if parsed.scheme != CARD_SCHEME or (parsed.netloc or parsed.path.strip("/")) != CARD_HOST:
         return CardVerdict(False, f"不是配对链接(期望 {CARD_SCHEME}://{CARD_HOST})")
     q = parse_qs(parsed.query)
@@ -168,7 +171,9 @@ def from_link(link: str, *, now: Optional[float] = None) -> CardVerdict:
             nonce=str(data.get("nonce", "") or ""),
         )
     except Exception as exc:  # noqa: BLE001
-        return CardVerdict(False, f"名片内容损坏: {exc}")
+        # 同上:不把异常文本带进对外 reason
+        logger.debug("名片内容解码失败: %s", exc, exc_info=True)
+        return CardVerdict(False, "名片内容损坏")
     if not card.device_id:
         return CardVerdict(False, "名片缺少 device_id")
     if card.is_expired(now):
