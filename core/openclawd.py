@@ -8061,11 +8061,9 @@ class OpenClawd:
         _consecutive_same: Dict[str, int] = {}  # 连续同名工具计数
         _last_tool_name = ""
 
-        # 无进展检测器:补上"连续同名"计数器看不见的三种卡死形态
-        # (同名同参隔开重复 / 两工具交替打转 / 反复撞同一个错误)。
         from core.react_progress import ProgressTracker as _ProgressTracker
 
-        _progress = _ProgressTracker()
+        _progress = _ProgressTracker()  # 无进展检测,详见该模块文档
 
         # 真流式:这里是【答案生成点】——消费端(/chat/stream)若在请求上下文里挂了
         # TokenStream,只在这一处显式取出并传给路由层,让最终回答边生成边流出。
@@ -8234,19 +8232,12 @@ class OpenClawd:
 
                     # 构造结构化记录
                     layer = ToolCallRecord.classify_layer(tc_name)
-                    # 结果分类:不再是"成/败"二元。
-                    # 旧写法 `result.get("success", True)` 有两个问题:
-                    #  1. **默认 True** —— 处理器万一没带 success 键就被判成功。
-                    #     (静态审计过:当前 14 个字面量返回点都带,但这是靠自觉,
-                    #     没有任何东西拦着下一个处理器忘掉;而"其实没干成"一旦
-                    #     伪装成"干成了",会一路流进对话、记忆和学习层。)
-                    #  2. 分不出"工具根本不存在"和"网络抖了一下",循环于是无从
-                    #     判断该重试、该换路、还是该升级给人。
+                    # 结果分类(取代旧的 `result.get("success", True)` 二元判定;
+                    # 为什么必须分类、为什么不能默认判成功,见 core/react_progress.py)
                     from core.react_progress import ToolOutcome, classify_tool_outcome
 
                     _outcome = classify_tool_outcome(result)
                     if _outcome is ToolOutcome.CONTRACT_VIOLATION:
-                        # 点名违约的处理器,而不是默默放行。
                         logger.warning(
                             "工具 %s 的返回体不含 success 键(违反 _dispatch_tool_call 返回契约),按失败处理",
                             tc_name,
@@ -8256,11 +8247,8 @@ class OpenClawd:
                         result.get("result", result.get("error", "")) if isinstance(result, dict) else result
                     )
 
-                    # 无进展检测:上面的"连续同名"计数器只拦得住 A A A。
-                    # 这里补上它看不见的三种卡死形态 —— 同名同参隔开重复、
-                    # 两个工具交替打转(A B A B)、参数在变但反复撞同一个错误。
-                    # 不补的话,这三种只能靠 20 次总限频兜底:那意味着白烧
-                    # 20 次真实工具调用和十几轮 LLM 才停得下来。
+                    # 无进展检测:补上"连续同名"计数器看不见的三种卡死形态
+                    # (同名同参隔开重复 / A B A B 交替 / 反复撞同一错误)。
                     _prog = _progress.record(
                         tc_name,
                         tc_args,
