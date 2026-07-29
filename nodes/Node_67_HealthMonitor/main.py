@@ -357,6 +357,17 @@ class HealthMonitor:
         if success:
             health.status = NodeStatus.RECOVERING
             health.failure_count = 0
+            # 恢复成功后必须把 recovery_attempts 也清零 —— 它记的是"本轮故障重试了
+            # 几次",而不是"这个节点一生尝试过几次"。此前只清 failure_count,
+            # recovery_attempts 从初始化之后就单调递增、永不复位,于是它喂给的三处
+            # 逻辑会一起劣化:
+            #   1. 第 360 行:累计到 MAX_FAILURES 后,下一次失败直接进安全模式并
+            #      永久停摆 —— 哪怕中间已经成功自愈过很多次;
+            #   2. 第 331 行:action_index 取 min(recovery_attempts, ...),超过 3 次
+            #      之后永远直接上最激进的恢复动作,不再从轻量动作试起;
+            #   3. 第 335 行:backoff = BACKOFF_BASE * 2**recovery_attempts,指数退避
+            #      无上限地膨胀 —— 累计 20 次后退避约为基值的一百万倍,等于再也不重试。
+            health.recovery_attempts = 0
         elif health.recovery_attempts >= MAX_FAILURES:
             health.in_safe_mode = True
             health.status = NodeStatus.SAFE_MODE
