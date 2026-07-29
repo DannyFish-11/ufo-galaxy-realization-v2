@@ -256,14 +256,43 @@ class AutonomousPlanner:
         """根据反馈更新计划"""
         logger.info(f"根据反馈更新计划: {feedback}")
         
-        # 简单实现：如果某个动作失败，使用应急计划
+        # 如果某个动作失败，用它的应急动作替换掉。
+        #
+        # 此前这里只打一行日志就 return,替换动作与执行顺序的更新都停留在注释里 ——
+        # _generate_contingency_plans() 为每个动作生成的备用方案(见第 198-208 行)
+        # 因此从来没有被真正使用过:写进 plan.contingency_plans 就再也没人动它。
         if 'failed_action_id' in feedback:
             failed_id = feedback['failed_action_id']
-            if failed_id in plan.contingency_plans:
-                logger.info(f"使用应急计划替换失败的动作: {failed_id}")
-                # 替换失败的动作
-                # 实际实现中需要更新执行顺序等
-        
+            fallback_actions = plan.contingency_plans.get(failed_id) or []
+            if fallback_actions:
+                logger.info(
+                    "使用应急计划替换失败的动作: %s -> %s",
+                    failed_id,
+                    [a.id for a in fallback_actions],
+                )
+                # 1) 动作列表:把失败动作替换为它的备用动作(保持原位置)
+                new_actions: List[Action] = []
+                for act in plan.actions:
+                    if act.id == failed_id:
+                        new_actions.extend(fallback_actions)
+                    else:
+                        new_actions.append(act)
+                plan.actions = new_actions
+
+                # 2) 执行顺序:同样在原位置展开,顺序语义才不会错乱
+                new_order: List[str] = []
+                for aid in plan.execution_order:
+                    if aid == failed_id:
+                        new_order.extend(a.id for a in fallback_actions)
+                    else:
+                        new_order.append(aid)
+                plan.execution_order = new_order
+
+                # 3) 该动作的应急方案已消耗,移除以避免同一动作反复回退成死循环
+                plan.contingency_plans.pop(failed_id, None)
+            else:
+                logger.info("动作 %s 失败,但没有可用的应急计划", failed_id)
+
         return plan
 
 
