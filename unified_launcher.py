@@ -1863,10 +1863,21 @@ class GalaxyUnified:
                                for n, ok in modules.items()])
             else:
                 # 无逐模块明细时不假装全绿；按整体结果如实显示。
-                started = bool(result)
-                _emit("L4 增强模块",
-                      "后台增强层已就绪" if started else "未启用（可选）",
-                      "ok" if started else "warn")
+                # 诚实性:bool(result) 只说明"7 个对象构造成功",与"自主循环
+                # 在不在跑"毫无关系 —— L4EnhancementLauncher 把它们放进
+                # self.l4_modules 之后,全仓**没有任何地方再读这个字典**。
+                # 真正驱动 L4 循环的 GalaxyMainLoopL4 只有 integration/
+                # websocket_server.py 一个入口,而那是个独立脚本,主启动链
+                # 不拉它。所以此处绝不能打"已就绪"让人以为它在工作。
+                #
+                # 系统真正的自主性由「常驻注意力循环 → OpenClawd ReAct」承担
+                # (见 core/ambient_attention_loop.py,已默认开启),与本层无关。
+                loaded = len(getattr(l4, "l4_modules", {}) or {})
+                _emit(
+                    "L4 增强模块",
+                    (f"已加载 {loaded} 个组件 · 未接入主循环（自主性由常驻注意力循环承担）"
+                     if result else "未启用（可选）"),
+                    "warn")
         except Exception as exc:
             _emit("L4 增强模块", "启动失败", "fail")
             logger.error(f"L4 modules: {exc}")
