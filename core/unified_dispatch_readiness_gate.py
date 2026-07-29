@@ -172,6 +172,10 @@ class DispatchReadinessStatus(str, Enum):
     BLOCKED_CAPABILITY
         Device does not satisfy the required capability / action constraints
         for this dispatch request.
+    BLOCKED_PEER_TRUST
+        The peer is explicitly ``blocked`` in ``core.peer_trust``.  Dispatch is
+        refused before any other check — a blacklisted peer must not receive
+        work regardless of how healthy its registration or transport looks.
     BLOCKED_SESSION_VALIDITY
         Session identity is invalid, stale, or conflicts with an active
         session for this device.
@@ -212,6 +216,7 @@ class DispatchReadinessStatus(str, Enum):
     BLOCKED_STALE_ATTACHMENT = "blocked_stale_attachment"
     BLOCKED_TRANSPORT = "blocked_transport"
     BLOCKED_CAPABILITY = "blocked_capability"
+    BLOCKED_PEER_TRUST = "blocked_peer_trust"
     BLOCKED_SESSION_VALIDITY = "blocked_session_validity"
     BLOCKED_CROSS_DEVICE_ELIGIBILITY = "blocked_cross_device_eligibility"
     BLOCKED_OPERATIONAL_SUPPORT = "blocked_operational_support"
@@ -279,6 +284,10 @@ class DispatchReadinessResult:
     device_type: Optional[str] = None
     operational_support_status: Optional[str] = None
     operational_support_reason: str = ""
+    #: 该对端在 core.peer_trust 中的信任级别(blocked/unknown/ask/friend/trusted)。
+    #: 即使未拦截也一并带出,让调用方(尤其是要不要人确认的执行策略层)拿到判据,
+    #: 不必再查一次。信任层不可用时保持 "unknown"。
+    peer_trust: str = "unknown"
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -296,6 +305,7 @@ class DispatchReadinessResult:
             "device_type": self.device_type,
             "operational_support_status": self.operational_support_status,
             "operational_support_reason": self.operational_support_reason,
+            "peer_trust": self.peer_trust,
             "authority": UNIFIED_DISPATCH_READINESS_GATE_AUTHORITY,
         }
 
@@ -391,6 +401,52 @@ def _evaluate_impl(
         notes.append(f"execution_mode={execution_mode!r}")
 
     # ----------------------------------------------------------------
+    # Gate 0: Peer trust check (core.peer_trust)
+    #
+    # 必须排在所有检查之前:一台被显式 blocked 的设备,不论它注册得多完整、
+    # 传输多健康,都不该收到任何派发。放在后面等于"先验证一台已经被拉黑的
+    # 设备是否健康",既浪费也容易在某条早退分支里被绕过。
+    #
+    # 这里只拦 blocked(硬拒绝)。ask / friend / unknown 属于"要不要人确认"的
+    # 范畴,那是执行策略层(requires_confirmation)的职责,不是派发就绪的职责 ——
+    # 在这里把 ask 也拦掉会让所有未登记设备直接不可派发,属于越权。
+    # ----------------------------------------------------------------
+    trust_value = "unknown"
+    try:
+        from core.peer_trust import TrustLevel, get_peer_trust_book
+
+        _book = get_peer_trust_book()
+        _level = _book.trust_of(device_id)
+        trust_value = _level.value
+        if _level is TrustLevel.BLOCKED:
+            logger.warning(
+                "UnifiedDispatchReadinessGate: BLOCKED_PEER_TRUST device_id=%r —— 该对端已被显式拉黑,拒绝派发",
+                device_id,
+            )
+            return DispatchReadinessResult(
+                device_id=device_id,
+                dispatch_ready=False,
+                registered=False,
+                status=DispatchReadinessStatus.BLOCKED_PEER_TRUST.value,
+                reason=(
+                    f"Peer trust for device_id={device_id!r} is 'blocked'. "
+                    "Dispatch is refused regardless of registration or transport state. "
+                    "Raise the trust level via the pairing API to re-enable."
+                ),
+                peer_trust=trust_value,
+                blocking_notes=notes + ["peer_trust=blocked"],
+            )
+    except Exception as exc:  # noqa: BLE001
+        # 信任层不可用时**放行**并告警:这一层是在既有链路上加固,不是新的
+        # 单点故障源;它自己坏掉不该让整个 Mesh 停止派发。但必须可见,
+        # 否则"拉黑不再生效"会完全无声。
+        logger.warning(
+            "UnifiedDispatchReadinessGate: 对端信任检查失败(%s):device_id=%r 按未拉黑继续(fail-open)",
+            exc,
+            device_id,
+        )
+
+    # ----------------------------------------------------------------
     # Gate 1: Registration gap check
     # Must be evaluated early because a gap means attachment steps failed
     # and subsequent checks may not have reliable data.
@@ -414,6 +470,7 @@ def _evaluate_impl(
             ),
             registration_gaps=gaps,
             blocking_notes=notes,
+            peer_trust=trust_value,
         )
 
     # ----------------------------------------------------------------
@@ -435,6 +492,7 @@ def _evaluate_impl(
             status=DispatchReadinessStatus.NOT_REGISTERED.value,
             reason="Device is not registered in UDM.",
             blocking_notes=notes,
+            peer_trust=trust_value,
         )
 
     support_result = _check_device_operational_support(
@@ -453,6 +511,7 @@ def _evaluate_impl(
             device_type=support_result["device_type"],
             operational_support_status=support_result["support_tier"],
             operational_support_reason=support_result["reason"],
+            peer_trust=trust_value,
         )
 
     # ----------------------------------------------------------------
@@ -476,6 +535,7 @@ def _evaluate_impl(
             device_type=support_result["device_type"],
             operational_support_status=support_result["support_tier"],
             operational_support_reason=support_result["reason"],
+            peer_trust=trust_value,
         )
 
     # ----------------------------------------------------------------
@@ -507,6 +567,7 @@ def _evaluate_impl(
             device_type=support_result["device_type"],
             operational_support_status=support_result["support_tier"],
             operational_support_reason=support_result["reason"],
+            peer_trust=trust_value,
         )
 
     # ----------------------------------------------------------------
@@ -535,6 +596,7 @@ def _evaluate_impl(
                 device_type=support_result["device_type"],
                 operational_support_status=support_result["support_tier"],
                 operational_support_reason=support_result["reason"],
+                peer_trust=trust_value,
             )
 
     # ----------------------------------------------------------------
@@ -562,6 +624,7 @@ def _evaluate_impl(
                 device_type=support_result["device_type"],
                 operational_support_status=support_result["support_tier"],
                 operational_support_reason=support_result["reason"],
+                peer_trust=trust_value,
             )
 
     # ----------------------------------------------------------------
@@ -587,6 +650,7 @@ def _evaluate_impl(
         device_type=support_result["device_type"],
         operational_support_status=support_result["support_tier"],
         operational_support_reason=support_result["reason"],
+        peer_trust=trust_value,
     )
 
 
