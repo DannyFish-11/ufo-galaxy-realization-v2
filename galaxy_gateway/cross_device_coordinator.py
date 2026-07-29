@@ -714,7 +714,28 @@ class CrossDeviceCoordinator:
             if not source_result.get("success"):
                 return {"success": False, "error": "获取剪贴板内容失败"}
 
-            clipboard_content = source_result.get("data", {}).get("clipboard", "")
+            # dispatch_task 从不产出 "data" 键 —— 全文 grep device_router.py 无一处
+            # 写 "data";规范信封用的是 "result"(galaxy_gateway/routing/dispatch.py
+            # 第 145/204/225 行,以及第 200 行直接回传设备自己的 result dict)。
+            # 原来写成 source_result.get("data", {}) 永远拿到空 dict,于是
+            # clipboard_content 恒为空串 —— 剪贴板同步"成功"了,但同步过去的是空内容,
+            # 而且因为上一步 success 为真,不会有任何报错。
+            _payload = source_result.get("result")
+            if _payload is None:
+                _payload = source_result.get("data")  # 兼容:万一有实现走 data 键
+            if isinstance(_payload, dict):
+                clipboard_content = _payload.get("clipboard", "") or ""
+            elif isinstance(_payload, str):
+                clipboard_content = _payload  # 设备直接回传文本
+            else:
+                clipboard_content = ""
+            if not clipboard_content:
+                logger.warning(
+                    "剪贴板同步:源设备 %s 未返回可用内容(result=%r),不做空内容覆盖",
+                    source_device_id,
+                    _payload,
+                )
+                return {"success": False, "error": "源设备未返回剪贴板内容"}
 
             # 步骤 2: 将内容设置到目标设备剪贴板
             target_task = {
