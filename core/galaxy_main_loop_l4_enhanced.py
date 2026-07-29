@@ -397,10 +397,48 @@ class GalaxyMainLoopL4:
             return
         self._last_scan_at = now
         try:
-            await asyncio.to_thread(self.environment_scanner.scan_and_register_all)
+            # scan_and_register_all() 返回 Dict[str, DiscoveredTool],此前【返回值被
+            # 直接丢弃】。而 AutonomousPlanner 是以零参数构造的(_safe_init),
+            # available_resources 恒为空列表 —— 其 _create_action_for_subtask() 在
+            # `if not matching_resources: return None`(autonomous_planner.py:107-109)
+            # 处对每个子任务都返回 None,于是【每一个计划都是空的】,L4 从来没有真正
+            # 规划出过任何动作。感知阶段辛苦扫出来的工具,规划阶段一件也看不到。
+            discovered = await asyncio.to_thread(self.environment_scanner.scan_and_register_all)
             logger.debug("环境扫描完成")
+            self._sync_planner_resources(discovered)
         except Exception as exc:  # pragma: no cover - defensive
             logger.warning("环境扫描失败（非致命）: %s", exc)
+
+    def _sync_planner_resources(self, discovered: Optional[Dict[str, Any]]) -> None:
+        """把环境扫描发现的工具映射为规划器可用的 Resource 列表。
+
+        DiscoveredTool(name/capabilities/metadata)与 Resource 字段基本对齐,
+        缺失项按保守默认填充。规划器不可用或扫描无结果时不做任何事。
+        """
+        if self.planner is None or not discovered:
+            return
+        try:
+            from enhancements.reasoning.autonomous_planner import Resource, ResourceType
+        except Exception:  # pragma: no cover - 规划模块不可用时静默跳过
+            return
+        resources = []
+        for _key, tool in dict(discovered).items():
+            try:
+                resources.append(
+                    Resource(
+                        id=str(getattr(tool, "name", _key) or _key),
+                        type=ResourceType.TOOL,
+                        name=str(getattr(tool, "name", _key) or _key),
+                        capabilities=list(getattr(tool, "capabilities", []) or []),
+                        availability=1.0,
+                        metadata=dict(getattr(tool, "metadata", {}) or {}),
+                    )
+                )
+            except Exception:  # noqa: BLE001 - 单个工具映射失败不应中断整体
+                continue
+        if resources:
+            self.planner.available_resources = resources
+            logger.info("规划器资源已更新: %d 项(来自环境扫描)", len(resources))
 
     async def _process_goal(self, pending: PendingGoal) -> None:
         """处理单个目标: 分解 → 规划 → 执行 → 完成通知 + 历史记录。"""
