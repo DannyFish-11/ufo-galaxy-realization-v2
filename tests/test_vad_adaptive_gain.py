@@ -17,8 +17,34 @@ from core.multimodal.vad import VADConfig, VoiceActivityDetector
 
 
 def _chunk(amp: float, n: int = 1600) -> np.ndarray:
-    """恒定幅度块:RMS == amp(便于精确控制"能量")。"""
+    """恒定幅度块:RMS == amp(便于精确控制"能量")。
+
+    .. warning:: 这是**恒定直流**,方差为 0。用它当"底噪/静音"是准确的,
+        但**不能拿它冒充语音** —— 人声必然有音节起伏。需要模拟说话请用
+        :func:`_speech_chunk`。
+    """
     return np.ones(n, dtype=np.float32) * amp
+
+
+_SPEECH_RNG = np.random.default_rng(7)
+
+
+def _speech_chunk(amp: float, i: int, n: int = 1600) -> np.ndarray:
+    """带音节起伏的类语音块(RMS 在 amp 附近按包络波动)。
+
+    为什么需要它:VAD 现在用**能量平稳性**区分"有人在持续说话"与"稳态噪声"
+    (风扇/空调)—— 这是打破"自我投毒 ↔ 噪声底棘轮"两个反向 bug 的关键判据。
+    恒定幅度信号变异系数为 0,按任何合理定义都不是人说话,会被(正确地)判为
+    稳态噪声。用它做"持续说话"的回归 fixture 只会测出假象。
+
+    实测对照(同样 18s 持续输入、同样断言):
+      - 恒定幅度  → 后段判活率 0%(被当噪声拒掉,符合预期)
+      - 本函数    → 后段判活率 93%(持续说话全程判住,Bug A 的保护完好)
+    """
+    env = 0.35 + 0.65 * abs(np.sin(i * 0.7))  # 逐帧音节强弱
+    x = _SPEECH_RNG.standard_normal(n).astype(np.float32)
+    x = x / np.sqrt(np.mean(x**2))
+    return (x * amp * env).astype(np.float32)
 
 
 def test_low_gain_speech_below_fixed_threshold_now_triggers():
@@ -88,12 +114,18 @@ def test_sustained_speech_does_not_self_poison_noise_floor():
     自适应门限(噪声底 × 3)变得不可企及,VAD 从此永久停止判活,与真机反馈
     "20s 内收到 199 块音频但 VAD 从未判定为说话"完全吻合。现在只把确认静音的
     帧计入噪声底,持续说话应该【从头到尾】保持判活,不会中途"熄火"。
+
+    .. note:: **fixture 已从恒定幅度改为带音节起伏的类语音**(断言一字未改)。
+        原 fixture 喂的是 ``np.ones(n) * amp`` —— 一个 18 秒纹丝不动的恒定直流,
+        变异系数为 0。VAD 现已用能量平稳性区分"持续说话"与"稳态噪声"
+        (风扇/空调),恒定直流会被正确判为噪声,用它冒充语音测不出真东西。
+        换成真实语音包络后实测:后 60 帧判活率 93%,Bug A 的保护完好无损。
     """
     vad = VoiceActivityDetector(config=VADConfig(min_speech_frames=1))
     for _ in range(20):  # 2s 静音,建立噪声底(RMS≈0.0008)
         vad.process_frame(_chunk(0.0008))
 
-    results = [vad.process_frame(_chunk(0.006)).is_speaking for _ in range(180)]  # 18s 持续说话
+    results = [vad.process_frame(_speech_chunk(0.006, i)).is_speaking for i in range(180)]  # 18s 持续说话
 
     # 旧 bug 下,大约 frame 75 起(噪声底被语音自身喂饱之后)会连续判非说话;
     # 这里断言窗口填满之后(> noise_window_frames 帧)依然持续判活。
