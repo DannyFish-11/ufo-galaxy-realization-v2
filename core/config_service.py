@@ -179,6 +179,18 @@ class ConfigService:
         self._store.write_secret(key, value)
         logger.info("Secret written: %s", key)
 
+    def delete_secret(self, key: str) -> bool:
+        """从 ``runtime/secrets.env`` 删除一个密钥,返回是否确实删掉了。
+
+        ``set_secret`` 明确要求非空值,所以"清空密钥"无法用它表达;没有本方法时,
+        面板上把密钥清空只会写到 ``.env``,secrets.env 里的旧值仍在,启动时又被
+        灌回环境 —— 用户看到的就是"删掉的 key 重启又回来了"。
+        """
+        removed = self._store.delete_secret(key)
+        if removed:
+            logger.info("Secret removed: %s", key)
+        return removed
+
     def set_provider_api_key(self, provider: str, api_key: str) -> None:
         """
         Store the API key for *provider* in ``runtime/secrets.env``.

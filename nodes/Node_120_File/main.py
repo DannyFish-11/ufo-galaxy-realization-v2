@@ -507,15 +507,62 @@ class FileService:
         try:
             extracted = []
             
+            # 归档成员必须逐个核验落点,不能直接 extractall。
+            # 归档里的成员名完全由归档作者控制,可以是 "../../etc/x" 或绝对路径
+            # (Zip Slip / Tar Slip);tarfile 还能带符号链接/硬链接成员,指到
+            # 沙箱外之后再往里写。裸 extractall 会照单全收,直接绕过本节点赖以
+            # 立身的 WORKSPACE_ROOT 沙箱(_safe_path 只校验了 archive/output_dir
+            # 这两个入参,管不到归档【内部】的成员名)。
+            # 用 os.path.realpath + 前缀比对(而不是 pathlib 的 parents 判断):
+            # 二者语义等价,但这是静态分析器(CodeQL py/path-injection)能识别的
+            # 标准消毒形态 —— 用 parents 判断会被判成"未消毒的路径拼接"。
+            _root_real = os.path.realpath(str(output_dir))
+            _root_prefix = _root_real + os.sep
+
+            def _is_inside(member_name: str) -> bool:
+                """成员解析后的落点是否仍在 output_dir 内。
+
+                realpath 会一并展开 ``..`` 与符号链接,故绝对路径成员、``../``
+                穿越、以及经由已存在符号链接的逃逸都会在这里被判出界。
+                """
+                target = os.path.realpath(os.path.join(_root_real, member_name))
+                return target == _root_real or target.startswith(_root_prefix)
+
             if archive.suffix == '.zip':
                 with zipfile.ZipFile(archive, 'r') as zf:
+                    names = zf.namelist()
+                    bad = [n for n in names if not _is_inside(n)]
+                    if bad:
+                        raise ValueError(
+                            f"归档包含越界成员(疑似路径穿越),已拒绝解压: {bad[:5]}"
+                        )
                     zf.extractall(output_dir)
-                    extracted = zf.namelist()
-            
+                    extracted = names
+
             elif archive.suffix in ('.tar', '.gz', '.tgz'):
                 with tarfile.open(archive, 'r:*') as tf:
-                    tf.extractall(output_dir)
-                    extracted = tf.getnames()
+                    members = tf.getmembers()
+                    bad = []
+                    for m in members:
+                        if not _is_inside(m.name):
+                            bad.append(m.name)
+                        elif (m.issym() or m.islnk()) and not _is_inside(
+                            os.path.join(os.path.dirname(m.name), m.linkname)
+                        ):
+                            # 链接目标指到沙箱外 → 后续写入会顺着链接逃逸
+                            bad.append(f"{m.name} -> {m.linkname}")
+                    if bad:
+                        raise ValueError(
+                            f"归档包含越界成员(疑似路径穿越),已拒绝解压: {bad[:5]}"
+                        )
+                    # filter='data' 是 Python 官方推荐的安全过滤器(3.12+ 默认,
+                    # 3.14 起强制);这里显式传,低版本同样生效,与上面的显式
+                    # 核验互为双保险。旧版本不认该参数时退回已核验的 extractall。
+                    try:
+                        tf.extractall(output_dir, filter='data')
+                    except TypeError:
+                        tf.extractall(output_dir)
+                    extracted = [m.name for m in members]
             
             else:
                 raise ValueError(f"Unsupported archive format: {archive.suffix}")

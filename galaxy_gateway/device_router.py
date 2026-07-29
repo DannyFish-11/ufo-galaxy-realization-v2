@@ -412,6 +412,27 @@ class Device:
     def last_seen(self, value: datetime) -> None:
         self._model.last_seen = value.timestamp()
 
+    def apply_device_type(self, value: str) -> None:
+        """设备类型的规范写口。
+
+        ``device_type`` 只有 getter(第 386-388 行)、没有 setter,直接
+        ``device.device_type = x`` 会抛
+        ``AttributeError: property 'device_type' ... has no setter``。
+        用 ``resolve_device_type`` 归一成 DeviceType 枚举后写进底层 model ——
+        必须走它,因为 getter 读的是 ``self._model.device_type.value``,直接塞
+        字符串会让 getter 崩在 ``.value`` 上;这也是 DeviceModel 自己的
+        ``_coerce_device_type`` 校验器用的同一个解析函数。
+
+        无法识别的取值保持原有类型不变(宁可留着旧的规范类型,也不要把设备
+        标成未知而影响路由)。
+        """
+        from core.device_types import resolve_device_type
+
+        try:
+            self._model.device_type = resolve_device_type(str(value))
+        except Exception:  # noqa: BLE001
+            pass
+
     def apply_status(self, value: str) -> None:
         """gateway 运行时设备包装层的规范状态写口(专项③ ssot-udm-conformance)。
 
@@ -660,9 +681,23 @@ class DeviceRouter:
                 metadata=metadata,
             )
         else:
-            self.devices[device_id].device_type = device_type
-            self.devices[device_id].apply_capabilities(list(capabilities))
-            self.devices[device_id].apply_metadata(dict(metadata or {}))
+            # 身份字段刷新单独兜异常:这三行是"顺带更新",而下面的 websocket
+            # 重挂与 on_device_connected 才是本函数的正事(会话保活)。此前第一行
+            # 直接给只读属性 device_type 赋值,必抛 AttributeError,把后面全部带走
+            # —— 而唯一调用方 AndroidBridge._sync_device_router_session 又是
+            # except Exception + logger.debug,于是每次心跳后的会话同步都在静默
+            # 失败:socket 换了之后 devices[id].websocket 永远还指着旧句柄,
+            # on_device_connected 的 transport/session_id 也从不更新。
+            try:
+                self.devices[device_id].apply_device_type(device_type)
+                self.devices[device_id].apply_capabilities(list(capabilities))
+                self.devices[device_id].apply_metadata(dict(metadata or {}))
+            except Exception as _exc:  # noqa: BLE001
+                logger.warning(
+                    "ensure_live_session: 身份字段刷新失败(不影响会话保活) device_id=%s error=%s",
+                    device_id,
+                    _exc,
+                )
         if websocket is not None:
             self.devices[device_id].websocket = websocket
         self.on_device_connected(
@@ -1864,11 +1899,21 @@ class DeviceRouter:
                 )
 
             # 将任务分解为多个子任务
-            subtasks = self._decompose_task(task, devices)
+            # 用【参与度过滤后】的设备列表来分解与分发。此前这两处都还在用原始的
+            # devices:ADMIT-003 的过滤结果只被第 1847 行拿去组编队,分发环节完全没用上,
+            # 于是出现两个后果 ——
+            #   1. 被判定为不可参与的设备照样收到子任务(过滤形同虚设);
+            #   2. 编队成员(按过滤后列表组建)与实际干活的设备(原始列表)对不上,
+            #      后续按 formation 做结果收敛/归因时就会错位。
+            # _participation_filtered_devices 在第 1791 行已无条件初始化为 list(devices),
+            # 且仅在存在合格设备时才收窄(全不合格时第 1810-1820 行退回原列表),
+            # 所以这里始终是一个非空且语义正确的列表。
+            _dispatch_devices = _participation_filtered_devices
+            subtasks = self._decompose_task(task, _dispatch_devices)
 
             # 并行执行所有子任务
             results = await asyncio.gather(
-                *[self.dispatch_task(subtask, device) for subtask, device in zip(subtasks, devices)],
+                *[self.dispatch_task(subtask, device) for subtask, device in zip(subtasks, _dispatch_devices)],
                 return_exceptions=True,
             )
 

@@ -435,11 +435,20 @@ class UnifiedConnectionManager:
         result: Dict[str, Any] = {}
 
         # 本地已注册 WebSocket 连接
+        #
+        # 在线与否必须【读 routable】,不能写死 True。mark_offline() 的语义就是
+        # "软下线":刻意保留 _connections 条目(留住 last_seen 历史),只把
+        # routable 置 False、state 置 DISCONNECTED(见第 193-204 行)。此前这里
+        # 无脑遍历 _connections 并硬编码 status="online"/online=True,等于把
+        # mark_offline 的效果完全抹掉 —— 心跳超时被软下线的设备,在
+        # get_all_devices() 里照样是在线,调用方据此继续往一个已经不可路由的
+        # 设备派活。
         for device_id, info in self._connections.items():
+            _routable = bool(getattr(info, "routable", True))
             result[device_id] = {
                 "device_id": device_id,
-                "status": "online",
-                "online": True,
+                "status": "online" if _routable else "offline",
+                "online": _routable,
                 "source": "unified_ws",
                 "connected_at": info.connected_at.isoformat() if info.connected_at else None,
                 **info.metadata,

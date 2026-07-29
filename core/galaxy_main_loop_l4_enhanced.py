@@ -102,12 +102,13 @@ except Exception as _e:  # pragma: no cover
     _CODER_AVAILABLE = False
 
 try:
-    from enhancements.execution.action_executor import ActionExecutor
+    from enhancements.execution.action_executor import ActionExecutor, ExecutionStatus
 
     _EXECUTOR_AVAILABLE = True
 except Exception as _e:  # pragma: no cover
     logger.warning("动作执行模块不可用: %s", _e)
     ActionExecutor = None  # type: ignore[assignment]
+    ExecutionStatus = None  # type: ignore[assignment]
     _EXECUTOR_AVAILABLE = False
 
 try:
@@ -396,10 +397,48 @@ class GalaxyMainLoopL4:
             return
         self._last_scan_at = now
         try:
-            await asyncio.to_thread(self.environment_scanner.scan_and_register_all)
+            # scan_and_register_all() 返回 Dict[str, DiscoveredTool],此前【返回值被
+            # 直接丢弃】。而 AutonomousPlanner 是以零参数构造的(_safe_init),
+            # available_resources 恒为空列表 —— 其 _create_action_for_subtask() 在
+            # `if not matching_resources: return None`(autonomous_planner.py:107-109)
+            # 处对每个子任务都返回 None,于是【每一个计划都是空的】,L4 从来没有真正
+            # 规划出过任何动作。感知阶段辛苦扫出来的工具,规划阶段一件也看不到。
+            discovered = await asyncio.to_thread(self.environment_scanner.scan_and_register_all)
             logger.debug("环境扫描完成")
+            self._sync_planner_resources(discovered)
         except Exception as exc:  # pragma: no cover - defensive
             logger.warning("环境扫描失败（非致命）: %s", exc)
+
+    def _sync_planner_resources(self, discovered: Optional[Dict[str, Any]]) -> None:
+        """把环境扫描发现的工具映射为规划器可用的 Resource 列表。
+
+        DiscoveredTool(name/capabilities/metadata)与 Resource 字段基本对齐,
+        缺失项按保守默认填充。规划器不可用或扫描无结果时不做任何事。
+        """
+        if self.planner is None or not discovered:
+            return
+        try:
+            from enhancements.reasoning.autonomous_planner import Resource, ResourceType
+        except Exception:  # pragma: no cover - 规划模块不可用时静默跳过
+            return
+        resources = []
+        for _key, tool in dict(discovered).items():
+            try:
+                resources.append(
+                    Resource(
+                        id=str(getattr(tool, "name", _key) or _key),
+                        type=ResourceType.TOOL,
+                        name=str(getattr(tool, "name", _key) or _key),
+                        capabilities=list(getattr(tool, "capabilities", []) or []),
+                        availability=1.0,
+                        metadata=dict(getattr(tool, "metadata", {}) or {}),
+                    )
+                )
+            except Exception:  # noqa: BLE001 - 单个工具映射失败不应中断整体
+                continue
+        if resources:
+            self.planner.available_resources = resources
+            logger.info("规划器资源已更新: %d 项(来自环境扫描)", len(resources))
 
     async def _process_goal(self, pending: PendingGoal) -> None:
         """处理单个目标: 分解 → 规划 → 执行 → 完成通知 + 历史记录。"""
@@ -449,10 +488,21 @@ class GalaxyMainLoopL4:
             # 3. 计划执行
             if self.executor is not None and plan is not None:
                 context = await self._execute_plan(plan)
-                completed = list(getattr(context, "completed_actions", []) or [])
-                failed = list(getattr(context, "failed_actions", []) or [])
-                success = len(failed) == 0
-                actions_count = max(actions_count, len(completed) + len(failed))
+                # ExecutionContext 上【没有】 completed_actions / failed_actions 这两个
+                # 字段(见 enhancements/execution/action_executor.py:41-49,它只有
+                # results: List[ExecutionResult])。原来用 getattr(..., []) 去读,两个
+                # 都恒为空列表 —— 于是 failed 恒空、success = len(failed) == 0 恒为 True:
+                # 无论计划实际执行成功还是全线失败,这个主循环都把目标记成成功,
+                # actions_count 也永远不增长。自主循环的成败统计因此完全失真。
+                _results = list(getattr(context, "results", []) or [])
+                _failed_statuses = {
+                    ExecutionStatus.FAILED,
+                    ExecutionStatus.CANCELLED,
+                    ExecutionStatus.TIMEOUT,
+                }
+                failed = [r for r in _results if getattr(r, "status", None) in _failed_statuses]
+                success = bool(_results) and not failed
+                actions_count = max(actions_count, len(_results))
             else:
                 # 执行器不可用 — 降级为已接收/已规划状态
                 success = True

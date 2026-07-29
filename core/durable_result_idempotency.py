@@ -70,9 +70,15 @@ logger = logging.getLogger("Galaxy.DurableResultIdempotency")
 # Default persistence path
 # ---------------------------------------------------------------------------
 
+# GALAXY_DATA_DIR 是本仓既有的数据目录约定(delegated_flow_persistence、
+# task_lifecycle_persistence、replay_audit_persistence、mesh/* 等都遵守)。
+# 这里此前把路径写死在【源码树】的 data/ 下,不认这个环境变量 —— 于是运维把
+# GALAXY_DATA_DIR 指到别处时,状态会被劈成两处:别的模块写新目录,这份幂等集合
+# 仍写源码树。容器化部署里源码树往往是只读或临时的,这份去重集合就此丢失,
+# 重启后已处理过的结果会被当成新结果重放。
 _DEFAULT_RESULT_ID_STORE_PATH = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "data",
+    os.environ.get("GALAXY_DATA_DIR")
+    or os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data"),
     "result_idempotency_set.json",
 )
 

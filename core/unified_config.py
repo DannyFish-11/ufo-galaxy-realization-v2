@@ -188,9 +188,26 @@ class UnifiedConfig:
                 logger.error(f"加载环境变量文件失败: {e}")
 
         # 同时加载系统环境变量
+        #
+        # 白名单只用来决定"哪些【新】键值得从环境里【引入】配置",不能用它来决定
+        # 优先级 —— 环境变量是最高优先级层,凡是环境里已经给了值的键,都必须压过
+        # 上面刚从 .env 文件读进来的那一份。
+        #
+        # 此前只有命中这 7 个前缀的键才会被环境覆盖,于是出现了不对称:
+        #   OPENAI_API_KEY  命中前缀 → 取环境值(正确)
+        #   QWEN_API_KEY    不命中   → 保留文件里的旧值(错误)
+        # qwen/zhipu/moonshot/minimax/step/mimo/groq/perplexity/xai/mistral 这些
+        # 供应商的键一个都不在白名单里,于是"改了环境变量却不生效、始终用着文件里
+        # 那个过期密钥",而 OpenAI 却是好的 —— 同一套配置里两种行为。
+        _env_upper = {k.upper(): v for k, v in os.environ.items()}
         for key, value in os.environ.items():
             if key.upper().startswith(("OPENAI", "ANTHROPIC", "GEMINI", "DEEPSEEK", "LLM", "API", "MCP")):
                 self._config[key.lower()] = value
+        # 文件里已有的键:环境若也给了值,一律以环境为准(不受白名单限制)。
+        for _cfg_key in list(self._config.keys()):
+            _env_val = _env_upper.get(_cfg_key.upper())
+            if _env_val is not None:
+                self._config[_cfg_key] = _env_val
 
     def _flatten_dict(self, d: Dict, parent_key: str = "", sep: str = "_") -> Dict:
         """展平字典"""

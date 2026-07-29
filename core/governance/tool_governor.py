@@ -121,6 +121,20 @@ class _TokenBucket:
         self._tokens: float = self.capacity
         self._last_refill: float = time.monotonic()
 
+    def retune(self, rate_per_minute: int) -> None:
+        """把桶的速率改成 *rate_per_minute*(同一工具换了风险档时用)。
+
+        先按【旧】速率把这段时间该补的令牌补上再换档,避免换档瞬间凭空多给或
+        少给额度;当前令牌数按新容量夹一下,收紧档位时立刻生效而不是等漏完。
+        """
+        now = time.monotonic()
+        elapsed = now - self._last_refill
+        self._tokens = min(self.capacity, self._tokens + elapsed * self.rate)
+        self._last_refill = now
+        self.capacity = max(float(rate_per_minute), 1.0)
+        self.rate = rate_per_minute / 60.0
+        self._tokens = min(self._tokens, self.capacity)
+
     def consume(self) -> bool:
         """Attempt to consume one token; return True on success."""
         now = time.monotonic()
@@ -187,9 +201,18 @@ class ToolGovernor:
 
     def _get_bucket(self, tool_name: str, rate_per_minute: int) -> _TokenBucket:
         """Return (or lazily create) the token bucket for *tool_name*."""
-        if tool_name not in self._buckets:
-            self._buckets[tool_name] = _TokenBucket(rate_per_minute)
-        return self._buckets[tool_name]
+        bucket = self._buckets.get(tool_name)
+        if bucket is None:
+            bucket = _TokenBucket(rate_per_minute)
+            self._buckets[tool_name] = bucket
+        elif bucket.capacity != max(float(rate_per_minute), 1.0):
+            # 桶此前只按 tool_name 缓存,rate_per_minute 在首次创建后就再也不看了。
+            # 而 risk_tier 是 check() 的【每次调用】参数,同一个工具完全可以这次按
+            # moderate、下次按 critical 来评估 —— 于是"首次见到的那个档位的限额"
+            # 会一直沿用下去:先以宽松档跑过一次,之后即便按 critical 评估,critical
+            # 的严格限额也永远不会生效,这道限流形同虚设。这里按当前档位重新调速。
+            bucket.retune(rate_per_minute)
+        return bucket
 
     def _emit_audit(self, decision: ToolDecision) -> None:
         """Record the decision in the in-memory log and optionally ledger."""

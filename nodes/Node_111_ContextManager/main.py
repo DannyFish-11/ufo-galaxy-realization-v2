@@ -196,6 +196,17 @@ class ContextManager:
                 parent.children_ids.remove(context_id)
         
         del self.contexts[context_id]
+
+        # 删掉的若正是当前活动上下文,必须把指针一并清掉,否则 active_context_id
+        # 会指向一个已不存在的 id(悬空指针)。pop_context() 第 313 行是
+        # `self.contexts[self.active_context_id].is_active = False`,没有存在性判断
+        # (同函数第 318 行对 previous_id 反而判了),于是下一次 POST /contexts/pop
+        # 直接抛 KeyError → HTTP 500。栈里的同名残留也一并清掉,避免 pop 出一个
+        # 已删除的 id。
+        if self.active_context_id == context_id:
+            self.active_context_id = None
+        self._context_stack = [cid for cid in self._context_stack if cid != context_id]
+
         logger.info(f"Deleted context: {context_id}")
         return True
     
@@ -309,7 +320,9 @@ class ContextManager:
         if not self._context_stack:
             return None
         
-        if self.active_context_id:
+        # 存在性判断不能少:active_context_id 可能指向一个已被删除的上下文
+        # (下面第 318 行对 previous_id 就是这么判的,这里原本漏了)。
+        if self.active_context_id and self.active_context_id in self.contexts:
             self.contexts[self.active_context_id].is_active = False
         
         previous_id = self._context_stack.pop()

@@ -275,6 +275,39 @@ class ConfigStore:
             except OSError as exc:
                 raise ConfigStoreError(f"Cannot write runtime/secrets.env: {exc}") from exc
 
+    def delete_secret(self, key: str) -> bool:
+        """从 ``runtime/secrets.env`` 中【删除】一个键,返回是否确实删掉了。
+
+        为什么需要它:``write_secret`` 明确拒绝空值(密钥不能是空串),所以"把
+        密钥清空"这个动作没法用写接口表达。缺了删除口,面板上清空密钥就只能改到
+        ``.env``,而 ``runtime/secrets.env`` 里的旧值原封不动 —— 启动时那份又会被
+        重新灌回进程环境,于是密钥"删了又活过来"。
+
+        文件不存在或键本来就不在,均返回 False(幂等,不报错)。
+        """
+        with self._lock:
+            if not self._secrets_path.exists():
+                return False
+            try:
+                with open(self._secrets_path, encoding="utf-8") as fh:
+                    existing = self._parse_dotenv(fh.read())
+            except OSError:
+                return False
+            if key not in existing:
+                return False
+            existing.pop(key, None)
+            header = (
+                "runtime/secrets.env — Galaxy secret configuration.\n"
+                "DO NOT commit this file. Managed by core.config_store."
+            )
+            try:
+                with open(self._secrets_path, "w", encoding="utf-8") as fh:
+                    fh.write(self._render_dotenv(existing, header=header))
+                logger.info("runtime/secrets.env updated (key removed: %s)", key)
+                return True
+            except OSError as exc:
+                raise ConfigStoreError(f"Cannot write runtime/secrets.env: {exc}") from exc
+
     def write_secrets(self, data: Dict[str, str]) -> None:
         """
         Batch-write *data* to ``runtime/secrets.env``, merging with existing content.

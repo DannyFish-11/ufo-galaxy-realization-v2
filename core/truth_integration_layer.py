@@ -451,8 +451,19 @@ def resolve_all_device_truth() -> List[CanonicalDeviceTruth]:
     ucm = _get_ucm()
     if ucm is not None:
         try:
-            for entry in ucm.get_all_devices():
-                did = entry.get("device_id") if isinstance(entry, dict) else getattr(entry, "device_id", None)
+            # UCM.get_all_devices() 返回的是 Dict[device_id, info](见
+            # core/unified/connection_manager.py:429)。直接 for 一个 dict 拿到的是
+            # 【键】,也就是 device_id 字符串 —— 而下面那两条取 id 的分支
+            # (entry.get(...) / getattr(entry, "device_id")) 对字符串都取不到东西:
+            # isinstance(str, dict) 为假,str 也没有 device_id 属性,于是 did 恒为
+            # None,UCM 一台设备都贡献不进来。同仓 goal_execution.py:833 用的就是
+            # .items(),这里按同样的写法取。
+            _ucm_devices = ucm.get_all_devices() or {}
+            _items = _ucm_devices.items() if isinstance(_ucm_devices, dict) else ((None, e) for e in _ucm_devices)
+            for _key, entry in _items:
+                did = _key
+                if not did:
+                    did = entry.get("device_id") if isinstance(entry, dict) else getattr(entry, "device_id", None)
                 if did and did not in device_ids:
                     device_ids.append(did)
         except Exception as exc:

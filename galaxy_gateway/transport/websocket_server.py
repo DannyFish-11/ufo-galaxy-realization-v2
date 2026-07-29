@@ -40,7 +40,14 @@ logger = logging.getLogger(__name__)
 class DeviceConnection(BaseModel):
     """设备连接信息"""
     device_id: str
-    websocket: WebSocket
+    # M4 把活跃 socket 对象移到模块级 _websocket_sockets 里单独存放,本字段随之
+    # 不再由 connect() 填充 —— 但当时忘了把它改成可选,于是 connect() 里那次
+    # DeviceConnection(...) 构造必抛 pydantic ValidationError:
+    #     websocket  Field required
+    # 而该构造位于 `try: await websocket.accept()` 块内,异常被下面的
+    # `except Exception` 接住、记成 "Failed to accept connection" 并 return False。
+    # 结果 self.connections 永远是空的。改为可选并默认 None,与 M4 的设计对齐。
+    websocket: Optional[WebSocket] = None
     connected_at: datetime
     last_heartbeat: datetime
     is_active: bool = True
@@ -143,8 +150,12 @@ class WebSocketManager:
             conn = self.connections[device_id]
             conn.is_active = False
             
+            # socket 对象由 M4 移到 _websocket_sockets 单独存放,conn.websocket 已
+            # 不再被 connect() 填充,这里必须从那里取,否则关的是 None。
+            _sock = _websocket_sockets.get(device_id) or conn.websocket
             try:
-                await conn.websocket.close()
+                if _sock is not None:
+                    await _sock.close()
             except Exception:
                 pass
             
@@ -168,7 +179,14 @@ class WebSocketManager:
         
         try:
             data = message.model_dump_json()
-            await conn.websocket.send_text(data)
+            # 同上:真正可用的 socket 在 _websocket_sockets 里(M4)。此前读
+            # conn.websocket 恒为 None,发送必抛 AttributeError 并被下面的 except
+            # 记成 "Failed to send message",随即 disconnect —— 半吊子重构的另一半。
+            _sock = _websocket_sockets.get(device_id) or conn.websocket
+            if _sock is None:
+                logger.warning(f"No live socket for device: {device_id}")
+                return False
+            await _sock.send_text(data)
             logger.debug(f"Sent message to {device_id}: {message.type}")
             return True
         except Exception as e:

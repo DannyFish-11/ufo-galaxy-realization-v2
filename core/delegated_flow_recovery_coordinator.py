@@ -1029,7 +1029,13 @@ class DelegatedFlowRecoveryCoordinator:
             runtime = self._flow_entity_runtime()
             if runtime is None:
                 return ""
-            record = runtime.get(ctx.flow_id)
+            # DelegatedFlowEntityRuntime 上没有 get(),真实按流 id 查询的接口叫
+            # get_by_flow_id()(另有 get_by_contract / get_by_lineage)。此前写的
+            # runtime.get(...) 必抛 AttributeError,又被本函数末尾那个
+            # `except Exception: return ""` 一并吞掉 —— 于是流阶段【永远】查不到,
+            # 恒返回空串:上层据此认为没有阶段证据,require_review 那条分支因此
+            # 从来不会被触发,等于这段审阅门控是死代码。
+            record = runtime.get_by_flow_id(ctx.flow_id)
             if record is None:
                 return ""
             phase = getattr(record, "phase", None)

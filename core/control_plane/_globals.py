@@ -100,6 +100,11 @@ def _wire_health_audit_callback(registry: DeviceHealthRegistry) -> None:
         "DEVICE_CIRCUIT_OPEN": EventType.DEVICE_CIRCUIT_OPEN,
         "DEVICE_CIRCUIT_HALF_OPEN": EventType.DEVICE_CIRCUIT_HALF_OPEN,
         "DEVICE_CIRCUIT_CLOSED": EventType.DEVICE_CIRCUIT_CLOSED,
+        # 之前漏了这条:registry 确实会发 DEVICE_QUARANTINED
+        # (device_health_registry.py:201),但表里没有,下面 `if ev_type is None:
+        # return` 就把它静默丢掉了。隔离是设备健康里唯一粘性、且需要运维介入才能
+        # 解除的状态,恰恰最该留审计证据,却成了唯一没有证据的那个。
+        "DEVICE_QUARANTINED": EventType.DEVICE_QUARANTINED,
     }
 
     def _callback(event_name: str, device_id: str, **kwargs) -> None:

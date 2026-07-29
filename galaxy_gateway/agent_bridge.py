@@ -81,6 +81,24 @@ from typing import Any, Awaitable, Callable, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
+# handoff 的传输层异常集合。
+#
+# 这条链路用的是 httpx.AsyncClient(见 _post_json 里的 httpx 分支),而 httpx 的
+# 异常【既不是 OSError 也不是 RuntimeError 的子类】——
+#   ConnectError/ReadTimeout/ConnectTimeout/RemoteProtocolError 一路继承到
+#   httpx.HTTPError -> Exception,与 OSError 分支毫无关系。
+# 原来的 except (asyncio.TimeoutError, OSError, RuntimeError) 因此接不住它们:
+# agent runtime 连不上的时候异常直接穿出去,而这恰恰是 local_fallback 存在的场景 ——
+# 于是那条兜底路径实际上永远走不到。httpx 未安装时该链路会退回 urllib(抛 OSError),
+# 所以两种形态都要覆盖。
+_HANDOFF_TRANSPORT_ERRORS: tuple = (asyncio.TimeoutError, OSError, RuntimeError)
+try:  # pragma: no cover - 取决于 httpx 是否安装
+    import httpx as _httpx
+
+    _HANDOFF_TRANSPORT_ERRORS = _HANDOFF_TRANSPORT_ERRORS + (_httpx.HTTPError,)
+except Exception:  # noqa: BLE001 - 没装 httpx 时保持原有元组即可
+    pass
+
 # ---------------------------------------------------------------------------
 # Architecture role declaration
 # ---------------------------------------------------------------------------
@@ -442,7 +460,7 @@ class AgentBridge:
                 trace_id,
                 elapsed_ms,
             )
-        except (asyncio.TimeoutError, OSError, RuntimeError) as exc:
+        except _HANDOFF_TRANSPORT_ERRORS as exc:
             elapsed = time.monotonic() - t_start
             elapsed_ms = elapsed * 1000
             self.metrics.record_latency(elapsed)

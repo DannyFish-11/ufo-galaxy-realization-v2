@@ -138,21 +138,50 @@ class LogQuery(BaseModel):
 class MerkleTree:
     """Simple Merkle tree for tamper detection."""
     
+    #: 叶子数上限。超过后把现有叶子折叠成一个 checkpoint 根,作为新的首个叶子 ——
+    #: 根仍然由全部历史推导而来(链式防篡改不断),但内存有界。
+    MAX_LEAVES = 4096
+
     def __init__(self):
         self.leaves: List[str] = []
-        self.root: Optional[str] = None
-    
+        self._root: Optional[str] = None
+        self._dirty: bool = False
+
+    @property
+    def root(self) -> Optional[str]:
+        """当前 Merkle 根(惰性计算)。"""
+        if self._dirty:
+            self._update_root()
+            self._dirty = False
+        return self._root
+
     def add_leaf(self, data: str) -> str:
         """Add a leaf and return its hash."""
         leaf_hash = hashlib.sha256(data.encode()).hexdigest()
         self.leaves.append(leaf_hash)
-        self._update_root()
+
+        # 不在这里重算根:_update_root 每次都要 copy 整个叶子表并自底向上重建整棵
+        # 树(O(n)),而 add_leaf 位于【每条审计日志写入】的热路径上,累计成本
+        # O(n²)。审计量一大,写日志本身就会被自己的完整性计算拖垮。改为置脏标记,
+        # 真正读 root 时(get_root)再算一次 —— 读远少于写,语义完全不变。
+        self._dirty = True
+
+        # 叶子表原本只增不减:审计日志是持续写入的,这等于一条无上限的内存增长。
+        # 折叠成 checkpoint:把当前全部叶子算出一个根,用它当新表的第一个叶子,
+        # 后续叶子接在其后。根依然由全部历史推导得出(篡改任一历史条目都会让
+        # checkpoint 变化,从而让最终根变化),防篡改链不断,但内存封顶。
+        if len(self.leaves) >= self.MAX_LEAVES:
+            self._update_root()
+            self._dirty = False
+            checkpoint = self._root
+            self.leaves = [checkpoint] if checkpoint else []
+
         return leaf_hash
-    
+
     def _update_root(self):
         """Recalculate Merkle root."""
         if not self.leaves:
-            self.root = None
+            self._root = None
             return
         
         current_level = self.leaves.copy()
@@ -166,7 +195,7 @@ class MerkleTree:
                 next_level.append(combined)
             current_level = next_level
         
-        self.root = current_level[0] if current_level else None
+        self._root = current_level[0] if current_level else None
     
     def verify(self, data: str, leaf_hash: str) -> bool:
         """Verify that data matches its leaf hash."""
