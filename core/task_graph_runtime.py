@@ -914,12 +914,10 @@ class TaskGraphRuntime:
                 n_loaded += 1
             except Exception as exc:  # noqa: BLE001
                 logger.debug("task_graph_runtime: 跳过损坏节点记录: %s", exc)
-        # 边的处理此前与节点【不对称】:节点损坏会记 debug 并计数,边损坏则是
-        # 裸 except: pass —— 一个字都不留,末尾那句汇总也只报节点数。于是一次
-        # 丢了依赖边的续跑看上去完全成功,而重建出来的 DAG 少了 depends_on,
-        # 任务会以错误的顺序执行(或在前置根本没跑完时就启动)。这里补齐计数与告警。
-        n_edges = 0
-        n_edges_bad = 0
+        # 边此前是裸 except: pass(节点则有 debug + 计数)。丢边不报错,只是让
+        # 重建的 DAG 少了 depends_on —— 任务会以错误顺序执行,比丢节点更隐蔽,
+        # 故用 warning 而非 debug。
+        n_edges = n_edges_bad = 0
         for ed in data.get("edges", []) or []:
             try:
                 edge = GraphEdge.from_dict(ed) if hasattr(GraphEdge, "from_dict") else None
@@ -932,7 +930,6 @@ class TaskGraphRuntime:
                 n_edges_bad += 1
                 logger.debug("task_graph_runtime: 跳过损坏边记录: %s", exc)
         if n_edges_bad:
-            # 丢边会改变执行顺序,比丢节点更隐蔽 —— 必须是 warning 而不是 debug。
             logger.warning(
                 "task_graph_runtime: 检查点中有 %d 条边无法重建(已重建 %d 条);续跑的 DAG 依赖关系可能不完整 ← %s",
                 n_edges_bad,
