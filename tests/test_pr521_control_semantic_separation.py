@@ -494,9 +494,24 @@ class TestRouteTaskEnvelopeMetadata(unittest.IsolatedAsyncioTestCase):
 # ===========================================================================
 
 
+@unittest.skip(
+    "过时:该契约已随 PR-AIP-UNIFIED(P2 fix)迁到 CommandRouter 层。"
+    "DeviceRouter 是substrate 层,不再回调 CommandRouter —— device_router.py:1537-1541 "
+    "把原来的 route_envelope 调用显式改成了 pass,所以 dispatch_task 既不构造 "
+    "TaskEnvelope 也不调用 route_envelope,本用例的两处 patch 永远不会被触发,"
+    "断言 dispatch_task 成功也就无从谈起(设备无 websocket 时如实返回『设备未连接』"
+    "本就是正确行为)。"
+    "该 metadata 契约并未丢失,现由 CommandRouter 承担:core/command_router.py "
+    "第 2407/2409 行写入 source_device_id / target_device_id,第 2961-2962 行再读回 "
+    "context。若要继续守护这条契约,应在 CommandRouter 层新增用例,而不是在此处。"
+)
 class TestDispatchTaskEnvelopeMetadata(unittest.IsolatedAsyncioTestCase):
     """dispatch_task() includes source_device_id and target_device_id in its
-    TaskEnvelope metadata."""
+    TaskEnvelope metadata.
+
+    历史用例:断言的是 PR-AIP-UNIFIED 之前的设计(DeviceRouter 自行构造信封并
+    调 route_envelope)。保留类体作为该设计的记录,不删除。
+    """
 
     def _make_router(self):
         from galaxy_gateway.device_router import DeviceRouter
