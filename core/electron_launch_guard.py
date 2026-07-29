@@ -75,7 +75,14 @@ def resolve_gateway_port() -> int:
         from core.port_config import get_service_port
 
         return get_service_port("unified_launcher")
-    except Exception:
+    except Exception as exc:  # noqa: BLE001
+        # core.port_config 在本仓库内恒可导入,走到这里是真实读取错误(如
+        # config/unified_ports.yaml 损坏)。仍退回内置默认值,但必须留痕:
+        # 若网关实际监听的不是 9000,桌面壳会连到一个空端口,而此前毫无线索。
+        _logger.warning(
+            "网关端口解析失败(%s):退回内置默认值 9000;若网关实际不在 9000,桌面壳将连不上",
+            exc,
+        )
         return 9000
 
 

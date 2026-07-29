@@ -914,15 +914,35 @@ class TaskGraphRuntime:
                 n_loaded += 1
             except Exception as exc:  # noqa: BLE001
                 logger.debug("task_graph_runtime: 跳过损坏节点记录: %s", exc)
+        # 边此前是裸 except: pass(节点则有 debug + 计数)。丢边不报错,只是让
+        # 重建的 DAG 少了 depends_on —— 任务会以错误顺序执行,比丢节点更隐蔽,
+        # 故用 warning 而非 debug。
+        n_edges = n_edges_bad = 0
         for ed in data.get("edges", []) or []:
             try:
                 edge = GraphEdge.from_dict(ed) if hasattr(GraphEdge, "from_dict") else None
                 if edge is not None and edge.edge_id:
                     self._edges[edge.edge_id] = edge
-            except Exception:  # noqa: BLE001
-                pass
+                    n_edges += 1
+                else:
+                    n_edges_bad += 1
+            except Exception as exc:  # noqa: BLE001
+                n_edges_bad += 1
+                logger.debug("task_graph_runtime: 跳过损坏边记录: %s", exc)
+        if n_edges_bad:
+            logger.warning(
+                "task_graph_runtime: 检查点中有 %d 条边无法重建(已重建 %d 条);续跑的 DAG 依赖关系可能不完整 ← %s",
+                n_edges_bad,
+                n_edges,
+                self._state_path,
+            )
         if n_loaded:
-            logger.info("task_graph_runtime: 从检查点重建 %d 个节点(续跑基础) ← %s", n_loaded, self._state_path)
+            logger.info(
+                "task_graph_runtime: 从检查点重建 %d 个节点 / %d 条边(续跑基础) ← %s",
+                n_loaded,
+                n_edges,
+                self._state_path,
+            )
 
     def completed_task_ids(self) -> List[str]:
         """已到终态且成功(COMPLETED)的 task_id —— 续跑时应跳过。"""

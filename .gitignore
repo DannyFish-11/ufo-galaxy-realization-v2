@@ -50,6 +50,12 @@ env/
 .galaxy_model
 .galaxy_runtime
 .galaxy_revoked_tokens.json
+# Mesh 主密钥 —— capability_token 的签名密钥,同时也是 agent_card 的名片签名密钥。
+# 此前只忽略了撤销表却漏了密钥本身:该文件由 core/capability_token.py 首次签发时
+# 自动生成(0600),泄露等于任何人都能伪造能力令牌与配对名片。绝不入库。
+.galaxy_mesh_key
+# 对端信任档案(peer_trust)与配对产生的本机运行时数据
+data/peer_trust.json
 
 # Logs
 *.log

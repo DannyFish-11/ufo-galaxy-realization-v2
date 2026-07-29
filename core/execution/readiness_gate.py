@@ -510,6 +510,48 @@ class ExecutionReadinessGate:
             (policy is not None and policy.requires_confirmation) or hitl_result.get("requires_confirmation", False)
         )
 
+        # 对端信任豁免(core.peer_trust)
+        #
+        # 配对时把一台设备设为 trusted、或给 friend 配上匹配的 auto_accept 模式,
+        # 本身就是一次**显式的、有记录的人工授权**。若每次动作仍然弹确认,
+        # 这个授权就等于没有意义 —— 分级信任存在的全部价值就是"只问该问的"。
+        #
+        # 三条刻意的边界:
+        #   1. 只豁免 policy 侧的 requires_confirmation。hitl_result 自己要求确认时
+        #      **不豁免** —— HITL 是独立的、针对具体动作的刹车,不该被一个
+        #      针对设备的长期设置覆盖掉。
+        #   2. 只在 target_type == "device" 时才把 target_ref 当设备用。该字段可能是
+        #      app 名/窗口标题/URL(见 intent_profile.target_ref 的定义),
+        #      拿 app 名去查对端信任是张冠李戴。
+        #   3. 豁免必然写进 notes,便于事后审计"这次为什么没问我"。
+        trust_waived = False
+        if requires_confirmation and not hitl_result.get("requires_confirmation", False):
+            _target_type = str(getattr(intent_profile, "target_type", "") or "").strip().lower()
+            if _target_type == "device" and eff_target_ref:
+                try:
+                    from core.peer_trust import PermissionResult, check_peer
+
+                    _intent_key = eff_intent_id or eff_action_level or ""
+                    if check_peer(eff_target_ref, _intent_key) is PermissionResult.ALLOWED:
+                        trust_waived = True
+                        requires_confirmation = False
+                        extra_notes.append(
+                            f"peer_trust waived confirmation for device={eff_target_ref!r} intent={_intent_key!r}"
+                        )
+                        logger.info(
+                            "对端信任豁免人工确认:device=%s intent=%s(配对时已显式授权)",
+                            eff_target_ref,
+                            _intent_key,
+                        )
+                except Exception as exc:  # noqa: BLE001
+                    # 信任层故障时**保持要确认**(fail-closed):这里的失败方向与
+                    # 派发门相反 —— 派发门失败放行是为了不让整个 Mesh 停摆,
+                    # 而这里失败放行等于绕过人工确认,必须保守。
+                    logger.warning(
+                        "对端信任豁免检查失败(%s):保持要求人工确认(fail-closed)",
+                        exc,
+                    )
+
         if requires_confirmation:
             confirm_notes = list(extra_notes)
             if policy is not None and policy.requires_confirmation:
@@ -536,7 +578,11 @@ class ExecutionReadinessGate:
         return ReadinessResult(
             ready=True,
             status=ReadinessStatus.READY.value,
-            reason="execution is ready; all readiness gates passed",
+            reason=(
+                "execution is ready; confirmation waived by peer trust"
+                if trust_waived
+                else "execution is ready; all readiness gates passed"
+            ),
             requires_confirmation=False,
             policy_band=policy_band_str,
             blocked_by=BlockedBy.NONE.value,

@@ -133,9 +133,18 @@ class LocalBrainManager:
             from core.ollama_endpoint import normalize_ollama_url
 
             return normalize_ollama_url(raw)
-        except Exception:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
             if raw.startswith(("http://", "https://")):
                 return raw.rstrip("/")
+            # 到这里说明 raw 既不带协议头、规范化又失败了 —— 会被悄悄改指本机。
+            # 如果用户配的是一台远程 Ollama(比如写成 "10.0.0.5:11434" 少了协议头),
+            # 之前会静默查本机、报"模型没装",线索为零。
+            logger.warning(
+                "Ollama URL 规范化失败(raw=%r, %s):退回 http://localhost:11434;"
+                "若你配的是远程 Ollama,请补上 http:// 前缀",
+                raw,
+                exc,
+            )
             return "http://localhost:11434"
 
     @ollama_url.setter
