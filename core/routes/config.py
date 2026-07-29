@@ -831,8 +831,7 @@ async def update_config(req: ConfigUpdateRequest):
         # UnifiedConfig 就继续上报启动时的旧值,而保存接口照样返回成功 ——
         # 正是"名义最高优先级、实际全程失效"的原样复发,且无从排查。
         logger.warning(
-            "配置已落盘,但 UnifiedConfig.reload() 失败(%s):"
-            "该单例将继续上报进程启动时的旧值,直到重启",
+            "配置已落盘,但 UnifiedConfig.reload() 失败(%s):该单例将继续上报进程启动时的旧值,直到重启",
             exc,
         )
 
