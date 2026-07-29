@@ -53,6 +53,7 @@ class AndroidMemoryBackflow:
 
     # ── 持久化 ──────────────────────────────────────────────────────────
     def _load(self) -> None:
+        n_bad = 0
         try:
             if not os.path.exists(self._path):
                 return
@@ -67,7 +68,18 @@ class AndroidMemoryBackflow:
                         if tid:
                             self._index[tid] = e  # 后写覆盖
                     except Exception:
+                        # 此前是裸 continue:损坏行被静默丢弃,而下面那句只报
+                        # 载入成功的条数 —— 一个半数损坏的文件看起来和完整文件
+                        # 一模一样,调用方无从知道记忆缺了一块。
+                        n_bad += 1
                         continue
+            if n_bad:
+                logger.warning(
+                    "Android 回流记忆:%d 行损坏已跳过(成功载入 %d 条): %s",
+                    n_bad,
+                    len(self._index),
+                    self._path,
+                )
             logger.info("Android 回流记忆载入 %d 条: %s", len(self._index), self._path)
         except Exception as exc:  # noqa: BLE001
             logger.debug("android backflow load skipped: %s", exc)
