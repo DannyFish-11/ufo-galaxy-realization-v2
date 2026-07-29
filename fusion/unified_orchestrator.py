@@ -429,19 +429,30 @@ class UnifiedOrchestrator:
                 "description": f"[Perception] {task.description}",
                 "layer": "perception",
                 "domain": task.preferred_domain or "vision",
-                "capabilities": task.required_capabilities or ["camera"],
+                # 能力名必须来自 topology 里【真实声明】的词汇表,否则
+                # TopologyManager 按能力筛选时一个节点也匹配不到。
+                # config/topology.json 实际声明的 18 项能力是:
+                #   authentication / general / http / image_processing /
+                #   information_retrieval / knowledge_management / lock_management /
+                #   media_processing / memory / network / nlu / orchestration /
+                #   routing / search / security / state_management /
+                #   text_processing / vision
+                # 而这里原本硬编码的 camera / analysis / processing / coordination /
+                # decision 五个,没有任何一个在表里(实测交集为空)—— 于是 HYBRID
+                # 分解出来的三个子任务全都找不到可执行节点,整条 fusion 任务必然失败。
+                "capabilities": task.required_capabilities or ["vision"],
             })
             subtasks.append({
                 "description": f"[Cognitive] Analyze data",
                 "layer": "cognitive",
                 "domain": task.preferred_domain or "nlu",
-                "capabilities": ["analysis", "processing"],
+                "capabilities": ["nlu", "text_processing"],
             })
             subtasks.append({
                 "description": f"[Core] Coordination",
                 "layer": "core",
                 "domain": "task_management",
-                "capabilities": ["coordination", "decision"],
+                "capabilities": ["orchestration"],
             })
         else:
             # 单层级任务
