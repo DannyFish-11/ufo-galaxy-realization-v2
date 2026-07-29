@@ -372,12 +372,40 @@ class ActionExecutor:
             device_id = action.device_id
             
             # 更新设备状态
+            #
+            # update_entity_state(entity_id, new_state: EntityState) 要的是
+            # EntityState 枚举,不是 dict(world_model.py:89)。此前这里直接传一个
+            # {'last_action': ..., 'output': ...} 字典进去,后果不是"没生效"而是
+            # 【先污染再报错】:
+            #   第 93 行 entities[id].state = new_state  ← state 被写成了 dict
+            #   第 95 行 new_state.value                 ← dict 没有 .value,抛 AttributeError
+            # 异常被本函数末尾的 except 吞成一条 warning,但实体的 state 已经是 dict 了。
+            # 此后任何读 .state.value 的地方(get_entities_by_state、query_state、
+            # _record_event 等)都会连带出错。
+            #
+            # 正确做法:状态用枚举,动作元数据写进 Entity.properties(world_model.py:41)。
+            entity = None
+            if hasattr(world_model, 'get_entity'):
+                try:
+                    entity = world_model.get_entity(device_id)
+                except Exception:  # noqa: BLE001
+                    entity = None
+            if entity is not None and hasattr(entity, 'properties'):
+                try:
+                    entity.properties.update({
+                        'last_action': action.command,
+                        'last_update': time.time(),
+                        'output': output,
+                    })
+                except Exception:  # noqa: BLE001
+                    pass
             if hasattr(world_model, 'update_entity_state'):
-                world_model.update_entity_state(device_id, {
-                    'last_action': action.command,
-                    'last_update': time.time(),
-                    'output': output
-                })
+                try:
+                    from enhancements.reasoning.world_model import EntityState as _ES
+
+                    world_model.update_entity_state(device_id, _ES.ACTIVE)
+                except Exception:  # noqa: BLE001 - world_model 不可用时不影响执行主流程
+                    pass
             
             logger.debug(f"更新世界模型: {device_id}")
         
