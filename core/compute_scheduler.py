@@ -44,8 +44,17 @@ logger = logging.getLogger("Galaxy.ComputeScheduler")
 
 
 # PR-D8: GPU temperature protection helper
+_gpu_temp_probe_warned = False
+
+
 async def _check_gpu_temperature() -> bool:
-    """Check GPU temperature. Returns False if overheated (>85C)."""
+    """Check GPU temperature. Returns False if overheated (>85C).
+
+    探测失败时放行(无读数就无法判定过热),但**只**在第一次失败时告警一次:
+    否则 NVML 初始化失败会让整套温控在有 GPU 的机器上永久静默失效,
+    而调用方看到的仍是一个正常的 True。
+    """
+    global _gpu_temp_probe_warned
     try:
         import pynvml
 
@@ -56,7 +65,14 @@ async def _check_gpu_temperature() -> bool:
             logger.warning("GPU temperature %dC > 85C, pausing inference", temp)
             return False  # Pause
         return True
-    except Exception:
+    except Exception as exc:
+        if not _gpu_temp_probe_warned:
+            _gpu_temp_probe_warned = True
+            logger.warning(
+                "GPU temperature probe unavailable (%s); thermal protection is INACTIVE "
+                "for this process (further occurrences suppressed)",
+                exc,
+            )
         return True
 
 

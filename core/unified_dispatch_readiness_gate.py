@@ -604,8 +604,11 @@ def _check_registration_gaps(device_id: str) -> List[str]:
 
         return get_registration_gaps(device_id)
     except Exception as exc:
-        logger.debug(
-            "UnifiedDispatchReadinessGate: registration gap check unavailable for " "device_id=%r: %s",
+        # 该模块在本仓库内恒可导入,因此走到这里就是真实运行期错误,不是"模块缺失"。
+        # 返回空列表等于"无登记缺口",是放行侧降级 —— 必须让运维看见。
+        logger.warning(
+            "UnifiedDispatchReadinessGate: registration gap check FAILED for "
+            "device_id=%r (%s); treating as no gaps (fail-open)",
             device_id,
             exc,
         )
@@ -629,7 +632,12 @@ def _check_udm_registration(device_id: str) -> Dict[str, Any]:
             result["device_type"] = getattr(device, "device_type", None)
         return result
     except Exception as exc:
-        logger.warning("Exception suppressed: %s", exc)
+        logger.warning(
+            "UnifiedDispatchReadinessGate: UDM lookup FAILED for device_id=%r (%s); "
+            "falling back to device_readiness",
+            device_id,
+            exc,
+        )
     # Fallback: try device_readiness (composes UDM internally)
     try:
         from core.device_readiness import get_device_readiness
@@ -656,13 +664,14 @@ def _check_transport_alive(device_id: str) -> bool:
         conn = get_connection_summary(device_id)
         return conn.websocket_connected or conn.ucm_connected
     except Exception as exc:
-        logger.debug(
-            "UnifiedDispatchReadinessGate: transport check unavailable for " "device_id=%r: %s",
+        # core.device_readiness 在本仓库内恒可导入 —— 走到这里是真实运行期错误。
+        # 仍然放行(避免整条派发链因探测故障而死锁),但必须显式可见。
+        logger.warning(
+            "UnifiedDispatchReadinessGate: transport check FAILED for device_id=%r "
+            "(%s); assuming transport alive (fail-open)",
             device_id,
             exc,
         )
-        # Conservative default: assume transport alive when check unavailable
-        # (prevents infinite block when the readiness module is not yet loaded)
         return True
 
 
@@ -764,8 +773,9 @@ def _check_attachment_validity(
                 return result
 
     except Exception as exc:
-        logger.debug(
-            "UnifiedDispatchReadinessGate: attachment check unavailable for " "device_id=%r: %s",
+        logger.warning(
+            "UnifiedDispatchReadinessGate: attachment check FAILED for device_id=%r "
+            "(%s); passing through as registry_unavailable (fail-open)",
             device_id,
             exc,
         )
@@ -800,7 +810,12 @@ def _check_capabilities(device_id: str, required: List[str]) -> Dict[str, Any]:
             elif isinstance(caps_raw, dict):
                 device_caps = [str(k).lower() for k, v in caps_raw.items() if v]
         except Exception as exc:
-            logger.warning("Exception suppressed: %s", exc)
+            logger.warning(
+                "UnifiedDispatchReadinessGate: UCM capability lookup FAILED for "
+                "device_id=%r (%s); capability list left empty",
+                device_id,
+                exc,
+            )
         if not device_caps:
             # If capability list is empty, treat as satisfied (no info = don't block)
             return result
@@ -809,8 +824,9 @@ def _check_capabilities(device_id: str, required: List[str]) -> Dict[str, Any]:
         result["present"] = [c for c in required if c.lower() in device_caps]
         result["satisfied"] = len(missing) == 0
     except Exception as exc:
-        logger.debug(
-            "UnifiedDispatchReadinessGate: capability check error for device_id=%r: %s",
+        logger.warning(
+            "UnifiedDispatchReadinessGate: capability check FAILED for device_id=%r "
+            "(%s); treating required capabilities as satisfied (fail-open)",
             device_id,
             exc,
         )
@@ -825,12 +841,13 @@ def _check_cross_device_eligibility(device_id: str) -> bool:
 
         return is_device_cross_device_ready(device_id)
     except Exception as exc:
-        logger.debug(
-            "UnifiedDispatchReadinessGate: cross-device eligibility check " "unavailable for device_id=%r: %s",
+        # 同上:模块恒可导入,走到这里是真实错误。不阻断跨设备派发,但要可见。
+        logger.warning(
+            "UnifiedDispatchReadinessGate: cross-device eligibility check FAILED "
+            "for device_id=%r (%s); not blocking dispatch (fail-open)",
             device_id,
             exc,
         )
-        # When check unavailable, do not block cross-device dispatch
         return True
 
 
@@ -847,7 +864,16 @@ def _check_device_operational_support(
             raw_device_type=raw_device_type,
         ).to_dict()
         return verdict
-    except Exception:
+    except Exception as exc:
+        # 这里是收紧侧降级(dispatch_target_capable=False 会拦下派发)。
+        # 之前完全静默,导致"设备莫名不可派发"无从排查 —— 必须留痕。
+        logger.warning(
+            "UnifiedDispatchReadinessGate: operational-support classification FAILED "
+            "for device_id=%r raw_device_type=%r (%s); marking not dispatch-capable",
+            device_id,
+            raw_device_type,
+            exc,
+        )
         return {
             "device_type": str(raw_device_type or "unknown"),
             "support_tier": "unknown",

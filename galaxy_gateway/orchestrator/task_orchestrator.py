@@ -402,11 +402,94 @@ class TaskOrchestrator:
                 except Exception:
                     pass
 
+    # ── 连通性视图 ────────────────────────────────────────────────────────
+    #
+    # 生产实况:注入本类的 WebSocketManager 虽然被 bootstrap/lifecycle.py 完整
+    # 装配并 start(),但它的 connections 永远是空的 —— 唯一会调用
+    # WebSocketManager.connect() 的是同文件的 handle_connection(),而 PR-25 之后
+    # 全部设备 WS 入口(/ws/device/{device_id} 及各 compat 面)都收敛到
+    # routes/websocket.py::_handle_android_ws → android_bridge,没有任何路由再走
+    # handle_connection。于是 get_connected_devices() 恒为 []、
+    # is_device_connected() 恒为 False,_select_device() 对每个任务都返回 None,
+    # broadcast_command() 也永远广播给零台设备 —— 而 routes/tasks.py 仍在对外
+    # 暴露这些端点。
+    #
+    # 修法不是把 handle_connection 挂成第二个 ingress(那会直接违反 PR-25
+    # "exactly one canonical ingress"),而是让编排器去读真正的权威在线视图。
+    # 按 android_bridge.get_android_devices() 里 PR-UDM-UNIFY 的既定方向,
+    # 权威来源是 UDM;WebSocketManager 的视图继续保留并取并集,这样测试里
+    # 注入的假 manager 仍然有效,真实部署里也能看到设备。
+
+    def _authoritative_online_ids(self) -> List[str]:
+        """UDM 中处于 ONLINE/BUSY 的设备 id。UDM 不可用时返回空列表。"""
+        try:
+            from core.unified.device_manager import get_unified_device_manager
+
+            return [
+                str(d.device_id)
+                for d in get_unified_device_manager().get_online_devices()
+                if getattr(d, "device_id", None)
+            ]
+        except Exception as exc:
+            logger.warning(
+                "TaskOrchestrator: UDM online-device lookup failed (%s); "
+                "falling back to transport view only",
+                exc,
+            )
+            return []
+
+    def _connected_device_ids(self) -> List[str]:
+        """传输层视图 ∪ UDM 权威在线视图(保序去重)。"""
+        ordered: Dict[str, None] = {}
+        try:
+            for dev in self.websocket_manager.get_connected_devices() or []:
+                ordered.setdefault(str(dev), None)
+        except Exception as exc:
+            logger.warning("TaskOrchestrator: transport connected-device view failed: %s", exc)
+        for device_id in self._authoritative_online_ids():
+            ordered.setdefault(device_id, None)
+        return list(ordered)
+
+    def _device_type_of(self, device_id: str) -> Optional[str]:
+        """设备类型小写字面量;查不到返回 None。"""
+        getter = getattr(self.websocket_manager, "get_device_type", None)
+        if callable(getter):
+            try:
+                dtype = getter(device_id)
+                if dtype:
+                    return str(dtype).lower()
+            except Exception as exc:
+                logger.debug("TaskOrchestrator: transport device-type lookup failed for %r: %s", device_id, exc)
+        try:
+            from core.unified.device_manager import get_unified_device_manager
+
+            device = get_unified_device_manager().get_device(device_id)
+            # UnifiedDevice 用了 use_enum_values,device_type 已是 str;
+            # 但对直接塞进枚举的调用方也要能正确取到 .value。
+            raw = getattr(device, "device_type", None) if device is not None else None
+            if raw is None:
+                return None
+            return str(getattr(raw, "value", raw)).lower()
+        except Exception as exc:
+            logger.debug("TaskOrchestrator: UDM device-type lookup failed for %r: %s", device_id, exc)
+            return None
+
+    def _is_device_connected(self, device_id: str) -> bool:
+        """单设备连通性:传输层说通就算通,否则回退 UDM 权威视图。"""
+        try:
+            if self.websocket_manager.is_device_connected(device_id):
+                return True
+        except Exception as exc:
+            logger.warning(
+                "TaskOrchestrator: transport connectivity probe failed for %r: %s", device_id, exc
+            )
+        return device_id in self._authoritative_online_ids()
+
     async def _select_device(self, task: Task) -> Optional[str]:
         """选择执行任务的设备（优先选择自主执行能力的设备）"""
         # 如果已指定设备
         if task.assigned_device:
-            if self.websocket_manager.is_device_connected(task.assigned_device):
+            if self._is_device_connected(task.assigned_device):
                 # 显式指定设备的任务同样【占用】该设备,必须一并计数。
                 # 计数原本只在下面的自动选设备分支(第 472 行)里 +1,而释放是在
                 # execute 的 finally 里对【任何】有 assigned_device 的任务无条件调用
@@ -423,7 +506,7 @@ class TaskOrchestrator:
                 logger.warning(f"Assigned device {task.assigned_device} not connected")
 
         # 获取所有在线设备
-        connected_devices = self.websocket_manager.get_connected_devices()
+        connected_devices = self._connected_device_ids()
         if not connected_devices:
             return None
 
@@ -462,10 +545,17 @@ class TaskOrchestrator:
         elif any(kw in request_lower for kw in ("windows", "电脑", "桌面", "desktop")):
             preferred_type = "windows"
 
-        if preferred_type and hasattr(self.websocket_manager, "get_device_type"):
+        # 类型偏好此前挂在 hasattr(self.websocket_manager, "get_device_type") 上,
+        # 而 WebSocketManager 从来没有这个方法(其 DeviceConnection 模型里也没有
+        # device_type 字段,见 transport/websocket_server.py:40-53),所以这一段
+        # 一直是死代码 —— "安卓/手机/windows/桌面" 这些关键词的设备类型偏好
+        # 从未生效过。改为查真实类型来源:先问 manager(测试可注入),再回退
+        # UDM(UnifiedDeviceType 的取值就是 "android"/"windows",与上面
+        # preferred_type 的词表是同一套字面量)。
+        if preferred_type:
             typed_devices = [
                 d for d in preferred
-                if self.websocket_manager.get_device_type(d) == preferred_type
+                if self._device_type_of(d) == preferred_type
             ]
             if typed_devices:
                 preferred = typed_devices
@@ -937,7 +1027,7 @@ class MultiDeviceOrchestrator(TaskOrchestrator):
     async def broadcast_command(self, command: Command) -> Dict[str, CommandResult]:
         """向所有设备广播命令"""
         results = {}
-        connected_devices = self.websocket_manager.get_connected_devices()
+        connected_devices = self._connected_device_ids()
         
         for device_id in connected_devices:
             task = await self.submit_task(

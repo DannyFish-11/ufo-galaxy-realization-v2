@@ -253,7 +253,28 @@ class AutonomousPlanner:
             logger.warning(f"更新决策权重失败: {e}")
 
     def update_plan(self, plan: Plan, feedback: Dict) -> Plan:
-        """根据反馈更新计划"""
+        """根据反馈更新计划。
+
+        .. note:: **当前全仓没有调用方** —— 这不是遗漏,是有意保留现状。
+
+            ``_generate_contingency_plans()`` 会为每个动作生成备用方案,
+            但没有任何执行链路在失败后回来调用本方法,所以 ``contingency_plans``
+            生成之后无人消费。天然的接入点是
+            ``core/galaxy_main_loop_l4_enhanced.py::_process_goal()`` 第 3 步
+            ``_execute_plan()`` 之后 —— 那里已经能拿到 ``ExecutionResult.action_id``
+            和失败状态,数据是齐的。
+
+            没有直接接上去的原因是:``ActionExecutor.execute_plan()`` 总是从
+            ``execution_order`` 的**第 0 项**重头跑(见 action_executor.py:100),
+            不支持从失败点续跑。因此"替换动作后重新执行"会把已经成功的动作
+            连同副作用再跑一遍。要真正接通,需要先给执行器加上部分重放
+            (partial re-execution)能力,并明确动作的幂等性约定 —— 那是一个
+            设计决策,不是修个缺陷,故不在此擅自展开。
+
+            本方法自身的替换逻辑是完整且安全的:替换保持原位置、执行顺序同步
+            展开、用过的应急方案会被 pop 掉(因此同一动作不会反复回退成死循环),
+            接通时可以直接依赖。
+        """
         logger.info(f"根据反馈更新计划: {feedback}")
         
         # 如果某个动作失败，用它的应急动作替换掉。

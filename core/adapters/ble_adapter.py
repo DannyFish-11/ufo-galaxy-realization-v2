@@ -105,7 +105,25 @@ class BLEAdapter(TransportAdapter):
         results = {}
         for device_id in list(self._clients.keys()):
             results[device_id] = await self.send(message, device_id)
-        return {"success": True, "via": "ble", "results": results}
+        # 整体成败必须由各条投递的【真实结果】推导,不能无条件报成功。
+        # 这与 websocket_adapter 此前那个"投递失败被当成成功"是同一类缺陷:
+        # results 里逐设备的 success 已经拿到了,却被丢在一边不看 —— 上层据此
+        # 认为广播已送达,于是不重试、也不改走别的传输,失败的那些无声丢失。
+        # 语义:有目标且【全部】成功才算成功;无目标视为成功(没有要送的东西)。
+        _failed = [d for d, r in results.items() if not (r or {}).get("success")]
+        if _failed:
+            logger.warning(
+                "BLE broadcast: %d/%d target(s) failed: %s",
+                len(_failed),
+                len(results),
+                _failed[:5],
+            )
+        return {
+            "success": not _failed,
+            "via": "ble",
+            "results": results,
+            "failed_targets": _failed,
+        }
 
     async def close(self) -> None:
         for client in list(self._clients.values()):

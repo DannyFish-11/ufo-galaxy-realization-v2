@@ -826,8 +826,14 @@ async def update_config(req: ConfigUpdateRequest):
         from core.unified_config import config as _unified_cfg
 
         _unified_cfg.reload()
-    except Exception:
-        pass
+    except Exception as exc:  # noqa: BLE001
+        # 这里静默 pass 等于让上面那段注释描述的修复悄悄失效:reload 一失败,
+        # UnifiedConfig 就继续上报启动时的旧值,而保存接口照样返回成功 ——
+        # 正是"名义最高优先级、实际全程失效"的原样复发,且无从排查。
+        logger.warning(
+            "配置已落盘,但 UnifiedConfig.reload() 失败(%s):该单例将继续上报进程启动时的旧值,直到重启",
+            exc,
+        )
 
     # 若改动涉及模型 API（llm 类），热刷新 LLM 路由器，让新填的 key 即时生效（无需重启）。
     # 根因修复(真机"保存悬挂"):此前这里同步 await refresh_llm_router()——内部对
