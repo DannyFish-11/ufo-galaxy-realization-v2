@@ -1899,11 +1899,21 @@ class DeviceRouter:
                 )
 
             # 将任务分解为多个子任务
-            subtasks = self._decompose_task(task, devices)
+            # 用【参与度过滤后】的设备列表来分解与分发。此前这两处都还在用原始的
+            # devices:ADMIT-003 的过滤结果只被第 1847 行拿去组编队,分发环节完全没用上,
+            # 于是出现两个后果 ——
+            #   1. 被判定为不可参与的设备照样收到子任务(过滤形同虚设);
+            #   2. 编队成员(按过滤后列表组建)与实际干活的设备(原始列表)对不上,
+            #      后续按 formation 做结果收敛/归因时就会错位。
+            # _participation_filtered_devices 在第 1791 行已无条件初始化为 list(devices),
+            # 且仅在存在合格设备时才收窄(全不合格时第 1810-1820 行退回原列表),
+            # 所以这里始终是一个非空且语义正确的列表。
+            _dispatch_devices = _participation_filtered_devices
+            subtasks = self._decompose_task(task, _dispatch_devices)
 
             # 并行执行所有子任务
             results = await asyncio.gather(
-                *[self.dispatch_task(subtask, device) for subtask, device in zip(subtasks, devices)],
+                *[self.dispatch_task(subtask, device) for subtask, device in zip(subtasks, _dispatch_devices)],
                 return_exceptions=True,
             )
 
