@@ -23,7 +23,7 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any, Callable, Set, Tuple, AsyncIterator
 from dataclasses import dataclass, field, asdict
 from enum import Enum, auto
-from collections import deque
+from collections import OrderedDict, deque
 try:
     import numpy as np
     NUMPY_AVAILABLE = True
@@ -412,12 +412,18 @@ class PatternRecognizer:
     semantic, and anomaly detection.
     """
     
-    def __init__(self, min_confidence: float = 0.6, max_buffer_size: int = 5000):
+    def __init__(self, min_confidence: float = 0.6, max_buffer_size: int = 5000, max_patterns: int = 2000):
         self.min_confidence = min_confidence
         self.vectorizer = TfidfVectorizer(max_features=500, stop_words='english') if SKLEARN_AVAILABLE else None
         self.pca = PCA(n_components=min(50, 100)) if SKLEARN_AVAILABLE else None
         self.clusterer = DBSCAN(eps=0.5, min_samples=3) if SKLEARN_AVAILABLE else None
-        self._patterns: Dict[str, DiscoveredPattern] = {}
+        # 有界:模式 id 里嵌了 datetime.now().timestamp()(见 _recognize_* 各处的
+        # id=f"semantic_{label}_{...timestamp()}"),所以每次识别都产生【全新】的键,
+        # 永远不会覆盖旧键。而 recognize_patterns 是在学习循环里被反复调用的,
+        # 原来的普通 dict 只增不减 —— 这是一条没有上限的内存增长。
+        # 用 OrderedDict 做 FIFO 上限,超出时淘汰最早的模式。
+        self._patterns: "OrderedDict[str, DiscoveredPattern]" = OrderedDict()
+        self._max_patterns: int = max_patterns
         self._observation_buffer: deque = deque(maxlen=max_buffer_size)
         self._fitted_vectorizer = False  # 避免重复 fit
         if not SKLEARN_AVAILABLE:
@@ -466,6 +472,9 @@ class PatternRecognizer:
         # Store patterns
         for pattern in patterns:
             self._patterns[pattern.id] = pattern
+            self._patterns.move_to_end(pattern.id)
+        while len(self._patterns) > self._max_patterns:
+            self._patterns.popitem(last=False)  # 淘汰最早的模式
         
         logger.info(f"Recognized {len(patterns)} patterns from {len(observations)} observations")
         return patterns
