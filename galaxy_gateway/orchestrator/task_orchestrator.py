@@ -407,6 +407,17 @@ class TaskOrchestrator:
         # 如果已指定设备
         if task.assigned_device:
             if self.websocket_manager.is_device_connected(task.assigned_device):
+                # 显式指定设备的任务同样【占用】该设备,必须一并计数。
+                # 计数原本只在下面的自动选设备分支(第 472 行)里 +1,而释放是在
+                # execute 的 finally 里对【任何】有 assigned_device 的任务无条件调用
+                # release_device_task() —— 于是显式指定的任务只减不加。
+                # release 里的 `if current > 0` 只能防止计数变负,防不住它把同一台
+                # 设备上另一个并发任务的计数偷偷减掉:计数被低估后,最少负载选择
+                # 会把新任务继续往这台已经很忙的设备上堆。
+                async with self._device_count_lock:
+                    self._device_task_counts[task.assigned_device] = (
+                        self._device_task_counts.get(task.assigned_device, 0) + 1
+                    )
                 return task.assigned_device
             else:
                 logger.warning(f"Assigned device {task.assigned_device} not connected")
