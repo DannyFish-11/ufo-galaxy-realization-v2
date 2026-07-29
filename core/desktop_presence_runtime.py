@@ -1442,11 +1442,19 @@ class DesktopPresenceRuntime:
 
         Unknown sources fall back to OpenClawd with a warning so requests are
         never silently dropped.
+
+        .. note:: ``"ambient"`` 是系统**自己**的自主通道 —— 常驻注意力循环
+            (:mod:`core.ambient_attention_loop`)判定 DELEGATE 时,就是以这个
+            来源走本正门进来的。它此前不在已知来源表里,于是每一次自发行动
+            都会打一条 "unknown source" 警告(功能上靠兜底分支恰好走对了地方,
+            参数与白名单分支完全一致)。常驻循环默认开启后,这条警告会变成
+            **每次自主行动都刷一条**的噪音,且把主体自己的通道标成了外来调用者。
         """
         if source in (
             "chat",
             "voice",
             "openclawd",
+            "ambient",
             "android_vision",
             "vision_sampler",
             "operator",

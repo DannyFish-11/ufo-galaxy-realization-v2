@@ -512,10 +512,10 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "description": "分句流式朗读（边生成边说 · 默认开）",
     },
     "GALAXY_AMBIENT_LOOP": {
-        "default": "false",
+        "default": "true",
         "type": "boolean",
         "category": "behavior",
-        "description": "自发在场（持续看/听、自己判断何时开口 · 需桌面感知）",
+        "description": "自发在场（持续看/听、自己判断何时开口 · 默认开 · 需桌面感知授权）",
     },
     "GALAXY_NATIVE_AUDIO": {
         "default": "false",
