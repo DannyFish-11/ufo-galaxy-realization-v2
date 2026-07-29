@@ -627,7 +627,7 @@ async def execute_workflow(request: WorkflowRequest, background_tasks: Backgroun
         shaped = wrap_as_orchestration_response(cr_result)
         cr_status = TaskStatus.COMPLETED if cr_result.get("success") else TaskStatus.FAILED
         now = datetime.now().isoformat()
-        return WorkflowResult(
+        cr_workflow = WorkflowResult(
             workflow_id=shaped["task_id"],
             status=cr_status,
             tasks=[
@@ -642,6 +642,15 @@ async def execute_workflow(request: WorkflowRequest, background_tasks: Backgroun
             started_at=now,
             completed_at=now,
         )
+        # 主路径也必须登记到 orchestrator.workflows。工作流只在降级路径的
+        # execute_workflow() 里被写入(第 390 行),而这条 ConstellationRuntime 主路径
+        # 直接构造结果就返回了 —— 于是它返回的 workflow_id 在任何查询接口里都不存在:
+        #   GET /workflow/{id} → orchestrator.workflows.get(...) 落空 → 404
+        #   GET /workflows     → 列不出来
+        #   GET /status        → active_workflows 计数也不含它
+        # 即"刚拿到的 id 立刻查不到",而且主路径才是默认路径,降级路径反而正常。
+        orchestrator.workflows[cr_workflow.workflow_id] = cr_workflow
+        return cr_workflow
     except Exception as cr_exc:
         logger.warning(
             "ConstellationRuntime 不可用，回退到本地工作流引擎: %s", cr_exc
