@@ -176,9 +176,40 @@ async def health():
     }
 
 
+def _expire_silences() -> int:
+    """把静默期已过的告警放回 ACTIVE,返回本次恢复的条数。
+
+    /alert/{id}/silence 会写入 silenced_until(第 271 行),但此前【全模块没有任何
+    地方读它】—— 于是 duration_minutes 这个参数形同虚设:一旦静默,告警就永远停在
+    SILENCED,再也不会回到 ACTIVE。对告警系统来说这是"静音键按下去弹不起来",
+    后续同类故障静默无声,比误报更危险。
+
+    这里在所有读取路径入口做惰性到期检查(无需后台定时器):时间一过,状态自动
+    回到 ACTIVE,并清掉 silenced_until。
+    """
+    now = datetime.now()
+    restored = 0
+    for alert in _alerts.values():
+        until = alert.get("silenced_until")
+        if not until or alert.get("status") != AlertStatus.SILENCED:
+            continue
+        try:
+            if now >= datetime.fromisoformat(until):
+                alert["status"] = AlertStatus.ACTIVE
+                alert["silenced_until"] = None
+                restored += 1
+        except (TypeError, ValueError):
+            # 时间戳损坏时保守放回 ACTIVE:宁可多报,不可把告警永久静音掉
+            alert["status"] = AlertStatus.ACTIVE
+            alert["silenced_until"] = None
+            restored += 1
+    return restored
+
+
 @app.get("/status")
 async def status():
     uptime = (datetime.now() - _start_time).total_seconds()
+    _expire_silences()
     active = sum(1 for a in _alerts.values() if a["status"] == AlertStatus.ACTIVE)
     return {
         "status": "running",
@@ -202,6 +233,7 @@ async def status():
 @app.get("/alerts")
 async def list_alerts(status_filter: Optional[str] = None, severity: Optional[str] = None):
     """List all alerts with optional filters."""
+    _expire_silences()  # 先让到期静默恢复,否则按 status 过滤会漏掉已该复活的告警
     alerts = list(_alerts.values())
     if status_filter:
         alerts = [a for a in alerts if a["status"] == status_filter]
