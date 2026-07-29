@@ -8061,6 +8061,10 @@ class OpenClawd:
         _consecutive_same: Dict[str, int] = {}  # 连续同名工具计数
         _last_tool_name = ""
 
+        from core.react_progress import ProgressTracker as _ProgressTracker
+
+        _progress = _ProgressTracker()  # 无进展检测,详见该模块文档
+
         # 真流式:这里是【答案生成点】——消费端(/chat/stream)若在请求上下文里挂了
         # TokenStream,只在这一处显式取出并传给路由层,让最终回答边生成边流出。
         # 内部辅助 LLM 调用(意图分类/决策解析等)不传 sink,内部推理绝不漏进用户气泡。
@@ -8196,7 +8200,8 @@ class OpenClawd:
                         )
                         break
 
-                    # 连续同一工具检查
+                    # 连续同一工具检查(保留:这是最廉价、也最常见的一种打转,
+                    # 且能在**派发之前**就拦下,省掉一次真实工具调用)
                     if tc_name == _last_tool_name:
                         _consecutive_same[tc_name] = _consecutive_same.get(tc_name, 1) + 1
                         if _consecutive_same[tc_name] >= 3:
@@ -8227,8 +8232,29 @@ class OpenClawd:
 
                     # 构造结构化记录
                     layer = ToolCallRecord.classify_layer(tc_name)
-                    status = ToolCallStatus.SUCCESS if result.get("success", True) else ToolCallStatus.ERROR
-                    result_str = str(result.get("result", result.get("error", "")))
+                    # 结果分类(取代旧的 `result.get("success", True)` 二元判定;
+                    # 为什么必须分类、为什么不能默认判成功,见 core/react_progress.py)
+                    from core.react_progress import ToolOutcome, classify_tool_outcome
+
+                    _outcome = classify_tool_outcome(result)
+                    if _outcome is ToolOutcome.CONTRACT_VIOLATION:
+                        logger.warning(
+                            "工具 %s 的返回体不含 success 键(违反 _dispatch_tool_call 返回契约),按失败处理",
+                            tc_name,
+                        )
+                    status = ToolCallStatus.SUCCESS if _outcome.is_success else ToolCallStatus.ERROR
+                    result_str = str(
+                        result.get("result", result.get("error", "")) if isinstance(result, dict) else result
+                    )
+
+                    # 无进展检测:补上"连续同名"计数器看不见的三种卡死形态
+                    # (同名同参隔开重复 / A B A B 交替 / 反复撞同一错误)。
+                    _prog = _progress.record(
+                        tc_name,
+                        tc_args,
+                        _outcome,
+                        error=(result.get("error", "") if isinstance(result, dict) else ""),
+                    )
                     tool_records.append(
                         ToolCallRecord(
                             tool_name=tc_name,
@@ -8236,7 +8262,11 @@ class OpenClawd:
                             arguments=tc_args,
                             result=result_str[:2000],
                             status=status,
-                            error=result.get("error") if not result.get("success", True) else None,
+                            error=(
+                                (result.get("error") if isinstance(result, dict) else str(result))
+                                if not _outcome.is_success
+                                else None
+                            ),
                             latency_ms=round(elapsed_ms, 1),
                             iteration=iteration,
                         )
@@ -8257,6 +8287,14 @@ class OpenClawd:
                             "content": _clipped,
                         }
                     )
+
+                    # 判定卡死则早停:结果已经如实回喂给模型,再补一条系统提示
+                    # 说明"为什么不让你继续",然后把本轮剩余 tool_call 补齐响应
+                    # (维持 tool_calls 必须逐一被 tool 消息响应的不变量)。
+                    if _prog.stuck:
+                        logger.warning("ReAct 无进展早停 [%s]: %s", _prog.kind, _prog.reason)
+                        _answer_remaining_tool_calls(_prog.reason)
+                        break
             else:
                 # for 循环跑满 max_iterations 且无任何 break(自然完成/限频/重复
                 # 都是 break)→ 触顶迭代上限。

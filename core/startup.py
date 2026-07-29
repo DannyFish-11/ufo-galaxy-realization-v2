@@ -833,8 +833,9 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
     # ====================================================================
     # 给三态 SILENT 补上"自发注意力":持续消费桌面感知(摄像头/屏幕/麦克风),
     # 帧差门控放行后让主脑做 SPEAK/SILENT/DELEGATE 三选一,把系统从"对话驱动"
-    # 升级为"在场主体"。默认关闭(GALAXY_AMBIENT_LOOP=1 开启),不破坏既有行为;
-    # 隐私跟随现有感知授权。
+    # 升级为"在场主体"。**默认开启**(GALAXY_AMBIENT_LOOP=0 显式关闭);
+    # 隐私边界仍是那一次桌面感知授权 —— 未授权则 store 里没有帧,门控在零模型
+    # 开销处直接跳过,循环等于空转,不会因"默认开"而多看你一眼。
     try:
         from core.ambient_attention_loop import ambient_loop_enabled, get_ambient_loop
 
@@ -845,7 +846,7 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
             logger.info("常驻注意力循环已启动（自发在场）")
         else:
             results["ambient_attention_loop"] = {"status": "disabled"}
-            logger.info("常驻注意力循环未启用（GALAXY_AMBIENT_LOOP=1 开启）")
+            logger.info("常驻注意力循环已被显式关闭（GALAXY_AMBIENT_LOOP=0）")
     except Exception as e:
         logger.debug("Fallback triggered: %s", e)
         results["ambient_attention_loop"] = {"status": "degraded", "error": str(e)}

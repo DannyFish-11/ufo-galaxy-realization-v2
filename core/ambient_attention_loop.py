@@ -812,5 +812,21 @@ def reset_ambient_loop() -> None:
 
 
 def ambient_loop_enabled() -> bool:
-    """总开关：默认关（不破坏既有行为），GALAXY_AMBIENT_LOOP=1 开启。"""
-    return _bool_env("GALAXY_AMBIENT_LOOP", False)
+    """总开关：**默认开**;``GALAXY_AMBIENT_LOOP=0`` 显式关闭。
+
+    为什么可以默认开(所有者指令 + 实测支撑):
+
+    - **不新增任何采集**。本循环只消费 :class:`DesktopPerceptionStore` 里
+      已有的帧/音频,而那些帧本身受 Electron 首次启动的感知授权对话框把关。
+      用户没授权 → store 里没有帧 → 门控在**零模型开销**处直接跳过
+      (回归用例 ``test_no_perception_gates_out_no_decider_call`` 锁定了
+      "无感知 → 决策脑一次都不会被调用")。所以"默认开"不等于"默认看你的屏幕",
+      隐私边界仍然是那一次授权。
+    - **静止画面不花钱**。门控是帧差 + 音频新鲜度 + 冷却 + 场景去重,画面没变
+      的每一拍都免费跳过,不惊动主脑(``test_static_frame_gates_out_after_first``)。
+    - **默认关的代价是功能等于不存在**:三态里的 SILENT 本该是"在场但不表达",
+      默认关之后它退化成"睡着"——自发在场这个器官装上了却从不通电。
+
+    仍然保留显式关闭:``GALAXY_AMBIENT_LOOP=0/false/no/off``。
+    """
+    return _bool_env("GALAXY_AMBIENT_LOOP", True)
