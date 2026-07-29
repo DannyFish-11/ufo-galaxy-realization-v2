@@ -313,6 +313,10 @@ class AIPTransport:
         遍历所有可用适配器发送，不依赖 NATS。
         如果提供 targets，逐个发送到目标设备。
         如果没有 targets，调用各适配器的 broadcast 方法。
+
+        返回的 success 反映真实投递结果：只要有一路成功即为 True；
+        全部失败（或一个适配器都没有）时为 False，并附 failed 列表，
+        避免调用方把"全军覆没"当成广播成功。
         """
         msg_dict = self._to_dict(message)
         results = {}
@@ -332,7 +336,22 @@ class AIPTransport:
                     logger.warning("Broadcast via '%s' failed: %s", ttype, e)
                     results[ttype] = {"success": False, "error": str(e)}
 
-        return {"success": True, "results": results}
+        failed = [k for k, r in results.items() if not (r or {}).get("success")]
+        ok = len(results) - len(failed)
+        if failed:
+            logger.warning(
+                "Broadcast: %d/%d route(s) failed: %s",
+                len(failed),
+                len(results),
+                failed[:5],
+            )
+        return {
+            "success": ok > 0,
+            "sent": ok,
+            "total": len(results),
+            "failed": failed,
+            "results": results,
+        }
 
     # -- 自动传输选择 ------------------------------------------------------
 

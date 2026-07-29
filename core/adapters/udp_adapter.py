@@ -108,14 +108,24 @@ class UDPAdapter(TransportAdapter):
 
             # 也发送给所有已知 peer
             results = {"broadcast": True}
+            failed: list[str] = []
             for device_id, (host, port) in self._peers.items():
                 try:
                     await loop.run_in_executor(None, self._socket.sendto, packet, (host, port))
                     results[device_id] = True
-                except Exception:
+                except Exception as exc:
+                    logger.warning("UDP unicast to peer '%s' (%s:%d) failed: %s", device_id, host, port, exc)
                     results[device_id] = False
+                    failed.append(device_id)
 
-            return {"success": True, "via": "udp", "results": results}
+            # 子网广播已经发出（上面若失败会走 except 分支），因此 success 为 True；
+            # 但已知 peer 的单播失败必须显式暴露，否则调用方无从察觉漏发。
+            return {
+                "success": True,
+                "via": "udp",
+                "results": results,
+                "failed_peers": failed,
+            }
 
         except Exception as e:
             logger.warning("UDP broadcast failed: %s", e)
