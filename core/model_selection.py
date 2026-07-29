@@ -101,7 +101,10 @@ def _default_tag() -> str:
         from core.model_catalog import default_model
 
         return default_model()
-    except Exception:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
+        # 这个字面量是唯一真相源 default_model() 的副本,只在真相源读不到时兜底。
+        # 副本迟早会和真相源漂移(改了目录却忘了改这里),静默退回等于悄悄换了主脑。
+        logger.warning("读取默认主脑失败(%s):退回内置副本 gemma4:12b,可能与模型目录不一致", exc)
         return "gemma4:12b"
 
 
