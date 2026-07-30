@@ -19,6 +19,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 import httpx
 
 from core.credential_vault import PLACEHOLDER_PREFIXES
+from core.model_openness import treat_as_open_source as _treat_as_open_source
 
 logger = logging.getLogger("Galaxy.LLMRouter")
 
@@ -95,7 +96,7 @@ class ProviderConfig:
         """该 provider 现在是否该被当作候选。
 
         修复:status 字段一旦被打成 DOWN(连续 5 次失败),此前【没有任何自愈
-        路径】——route()/route_multimodal_first()/route_with_cost_policy() 等
+        路径】——route()/route_multimodal_first()/select_brain_for_task() 等
         十几处候选筛选全部一律排除 DOWN,而重新变回候选的唯一办法是成功调用
         一次；但 DOWN 的 provider 永远不会被选为候选,自然也永远没机会成功调用，
         于是一旦 DOWN 就【整个进程生命周期】卡死,除非手动触发 refresh_llm_router()
@@ -206,7 +207,9 @@ TASK_ROUTING_PREFERENCES: Dict[TaskType, List[str]] = {
     # 2026-05-29: 新增 minimax/step/mimo 三个国产提供商
     # 2026-07-10: 新增 meta(Muse Spark 1.1,agentic/多模态/1M ctx)——
     # 定位在专有兜底梯队,agentic 任务(AGENT_CONTROL/CODING/PLANNING)优先级靠前
-    TaskType.REASONING: ["ollama", "anthropic", "openai", "meta", "deepseek", "google", "qwen", "step"],
+    # xai 补入:策略层 YAML 的 reasoning 一直有它,执行层这张表却没有 —— 两份真相里
+    # 只存在于一侧的 provider,在另一条路上等于不存在。已加守卫测试防止再漂。
+    TaskType.REASONING: ["ollama", "anthropic", "openai", "meta", "deepseek", "google", "qwen", "step", "xai"],
     TaskType.FAST_RESPONSE: ["ollama", "deepseek", "mimo", "agnes", "groq", "google", "openai", "zhipu", "moonshot"],
     TaskType.CODING: ["ollama", "deepseek", "qwen", "anthropic", "openai", "meta", "step", "mimo", "moonshot"],
     TaskType.CREATIVE: ["ollama", "openai", "anthropic", "mistral", "deepseek", "minimax"],
@@ -292,6 +295,17 @@ def reorder_open_source_first(provider_order: List[str]) -> List[str]:
 
     纯函数、无副作用，便于单测。未知提供商按"开源"处理（更符合本仓库以开源
     自托管/聚合为主的现状），不会被错误地降级到专有兜底之后。
+
+    刻意保持 **provider 粗粒度**，不改成按模型判
+    ------------------------------------------------
+    "按模型区分开闭源"这件事落在 ``_score()``（见 core/model_openness.py），不落在这里，
+    原因是本函数是**预排序**：调用它时具体型号还没选出来（型号由后面的
+    ``select_model_by_complexity()`` 按复杂度决定），此处没有可判的模型。真正的细判在
+    ``_score()`` 里做，那时型号已知。
+
+    因此别把这里"顺手改成"按模型判——那需要把型号解析器传进来，而它与本函数在
+    ``route()`` 里的调用位置（候选还是一串纯 provider 名）不匹配。两处对**未登记**
+    provider 的结论一致（都按开源），所以粗粒度预排序 + 细粒度打分不会互相打架。
     """
     open_src = [p for p in provider_order if p not in PROPRIETARY_PROVIDERS]
     proprietary = [p for p in provider_order if p in PROPRIETARY_PROVIDERS]
@@ -382,12 +396,12 @@ PROVIDER_MODEL_MAP: Dict[str, Dict[TaskType, str]] = {
         TaskType.GENERAL: "gpt-5.6-terra",
     },
     "anthropic": {
-        TaskType.REASONING: "claude-opus-4-8-20250529",
+        TaskType.REASONING: "claude-opus-5",
         TaskType.FAST_RESPONSE: "claude-sonnet-5",
         TaskType.CODING: "claude-sonnet-5",
-        TaskType.CREATIVE: "claude-opus-4-8-20250529",
-        TaskType.ANALYSIS: "claude-opus-4-8-20250529",
-        TaskType.PLANNING: "claude-opus-4-8-20250529",
+        TaskType.CREATIVE: "claude-opus-5",
+        TaskType.ANALYSIS: "claude-opus-5",
+        TaskType.PLANNING: "claude-opus-5",
         TaskType.AGENT_CONTROL: "claude-sonnet-5",
         TaskType.GENERAL: "claude-sonnet-5",
     },
@@ -449,22 +463,22 @@ PROVIDER_MODEL_MAP: Dict[str, Dict[TaskType, str]] = {
         TaskType.GENERAL: "deepseek-v4-pro",
     },
     "qwen": {
-        TaskType.REASONING: "qwen3.7-max",
-        TaskType.CODING: "qwen3.7-coder",
+        TaskType.REASONING: "qwen3.8-max",
+        TaskType.CODING: "qwen3.8-coder",
         TaskType.FAST_RESPONSE: "qwen-flash",
-        TaskType.GENERAL: "qwen3.7-max",
-        TaskType.ANALYSIS: "qwen3.7-max",
-        TaskType.PLANNING: "qwen3.7-max",
-        TaskType.AGENT_CONTROL: "qwen3.7-max",
+        TaskType.GENERAL: "qwen3.8-max",
+        TaskType.ANALYSIS: "qwen3.8-max",
+        TaskType.PLANNING: "qwen3.8-max",
+        TaskType.AGENT_CONTROL: "qwen3.8-max",
     },
     "zhipu": {
-        TaskType.REASONING: "glm-5.1",
-        TaskType.GENERAL: "glm-5.1",
-        TaskType.ANALYSIS: "glm-5.1",
-        TaskType.CODING: "glm-5.1",
+        TaskType.REASONING: "glm-5.2",
+        TaskType.GENERAL: "glm-5.2",
+        TaskType.ANALYSIS: "glm-5.2",
+        TaskType.CODING: "glm-5.2",
         TaskType.FAST_RESPONSE: "glm-5.1-flash",
-        TaskType.CREATIVE: "glm-5.1",
-        TaskType.PLANNING: "glm-5.1",
+        TaskType.CREATIVE: "glm-5.2",
+        TaskType.PLANNING: "glm-5.2",
     },
     "minimax": {
         # 对齐 PROVIDER_REGISTRY['minimax'].models(大小写敏感的官方 id):
@@ -502,10 +516,10 @@ PROVIDER_MODEL_MAP: Dict[str, Dict[TaskType, str]] = {
     "moonshot": {
         # Kimi K2 系取代老 moonshot-v1-*:k2.6=最新最强(代码/agent);
         # k2.5=原生多模态 256K 长上下文(2026-01 开源权重)。
-        TaskType.GENERAL: "kimi-k2.6",
-        TaskType.CODING: "kimi-k2.6",
-        TaskType.ANALYSIS: "kimi-k2.5",
-        TaskType.FAST_RESPONSE: "kimi-k2.5",
+        TaskType.GENERAL: "kimi-k3",
+        TaskType.CODING: "kimi-k3",
+        TaskType.ANALYSIS: "kimi-k2.6",
+        TaskType.FAST_RESPONSE: "kimi-k2.6",
     },
     "agnes": {
         # 免费全模态,默认走 2.5-flash;直连路径据此解析出具体模型串。
@@ -1476,7 +1490,7 @@ PROVIDER_REGISTRY: List[Dict[str, Any]] = [
         "env_key": "ANTHROPIC_API_KEY",
         "protocol": "anthropic",
         "base_url": "https://api.anthropic.com/v1",
-        "models": ["claude-opus-4-8-20250529", "claude-sonnet-5", "claude-haiku-4-5-20251001"],
+        "models": ["claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5-20251001"],
         "default_model": "claude-sonnet-5",
         "cost_in": 0.003,
         "cost_out": 0.015,
@@ -1559,8 +1573,8 @@ PROVIDER_REGISTRY: List[Dict[str, Any]] = [
         "env_key": "QWEN_API_KEY",
         "alt_env": ["DASHSCOPE_API_KEY"],
         "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-        "models": ["qwen3.7-max", "qwen3.7-coder", "qwen3-235b-a22b"],
-        "default_model": "qwen3.7-max",
+        "models": ["qwen3.8-max", "qwen3.8-coder", "qwen-flash", "qwen3.7-max", "qwen3.7-coder", "qwen3-235b-a22b"],
+        "default_model": "qwen3.8-max",
         "cost_in": 0.0025,
         "cost_out": 0.0075,
         "extra": {"multimodal": True},
@@ -1569,8 +1583,8 @@ PROVIDER_REGISTRY: List[Dict[str, Any]] = [
         "name": "zhipu",
         "env_key": "ZHIPU_API_KEY",
         "base_url": "https://open.bigmodel.cn/api/paas/v4",
-        "models": ["glm-5.1", "glm-5.1-flash", "glm-4-plus"],
-        "default_model": "glm-5.1",
+        "models": ["glm-5.2", "glm-5.1", "glm-5.1-flash", "glm-4-plus"],
+        "default_model": "glm-5.2",
         "cost_in": 0.001,
         "cost_out": 0.001,
         "extra": {"multimodal": True},
@@ -1611,8 +1625,8 @@ PROVIDER_REGISTRY: List[Dict[str, Any]] = [
         "name": "moonshot",
         "env_key": "MOONSHOT_API_KEY",
         "base_url": "https://api.moonshot.cn/v1",
-        "models": ["kimi-k2.6", "kimi-k2.5", "moonshot-v1-128k"],
-        "default_model": "kimi-k2.6",
+        "models": ["kimi-k3", "kimi-k2.6", "kimi-k2.5", "moonshot-v1-128k"],
+        "default_model": "kimi-k3",
         "cost_in": 0.002,
         "cost_out": 0.002,
     },
@@ -2538,9 +2552,21 @@ class MultiLLMRouter:
         max_cost = max((self.providers[n].cost_per_1k_output for n in candidates), default=0.0) or 1.0
         max_lat = max((self.providers[n].latency_avg_ms for n in candidates), default=0.0) or 1.0
 
+        # 实测表现(L3 bandit 的历史统计)。此前这条打分【完全没接】bandit——它只吃
+        # 手工维护的 PROVIDER_QUALITY_TIER,而 bandit 全仓只在 route() 里被调用一处。
+        # 于是 agent 团队选脑(agent_team → select_brain_for_role → 本函数)走的这条路,
+        # 拿不到任何真实成功率/延迟/成本反馈,全凭手写档位。所有者原话:「这玩意不应该
+        # 交给智能路由自己选吗」——接上之后,手写档位退化为【冷启动先验】,有实测数据时
+        # 由实测修正它。
+        _bstats, _btotal = self._bandit_stats(task_type)
+        try:
+            observed_weight = float(_os.environ.get("GALAXY_ROUTE_OBSERVED_WEIGHT", "1.0"))
+        except ValueError:
+            observed_weight = 1.0
+
         def _score(name: str) -> float:
             cfg = self.providers[name]
-            quality = _provider_quality_tier(name)  # 1..3
+            quality = _provider_quality_tier(name)  # 1..3(冷启动先验)
             # 任务相关度：在该任务偏好表里 = 更贴合
             task_fit = 1.0 if name in task_pref else 0.6
             # 主：质量 × (0.5+复杂度) —— 越难越看重质量
@@ -2550,8 +2576,30 @@ class MultiLLMRouter:
             # 条件：仅任务需要及时响应时计入延迟
             if needs_timely:
                 score -= latency_weight * (cfg.latency_avg_ms / max_lat)
+            # 实测修正:_bandit_score 的利用项是"成功率 − 延迟/成本/啰嗦惩罚",落在
+            # [0,1]；以 0.5 为中线,好于中线加分、差于中线减分。
+            # 没试过的 provider(+inf)【不参与】——这里与 route() 里的乐观初始化刻意不同:
+            # route() 只有顺序这一个信号,把没试过的排前面才有机会被探索;而本函数已有
+            # 静态档位当先验,再让 +inf 压过一切,等于让"从未试过"直接抢走一整个 agent
+            # 的活,一次坏选择的代价远高于少探索一次。
+            if _btotal:  # 0 = 样本不足(_bandit_stats 已判);此时完全按静态先验走
+                b = self._bandit_score(name, _bstats, _btotal)
+                if b != float("inf"):
+                    score += observed_weight * (min(1.0, b) - 0.5)
             # 平局打破：开源/本地 + 显式本地偏好
-            if name in OPEN_SOURCE_PROVIDERS:
+            #
+            # 按【模型】判开源,不按 provider 猜(见 core/model_openness.py)。原先这里
+            # 是 `name in OPEN_SOURCE_PROVIDERS`,与 reorder_open_source_first() 对
+            # "未登记"的处理正好相反(那边注释明写未知按开源处理、这边不给加分),同一个
+            # provider 排序时算开源、打分时算非开源。改走同一个判定入口消除该矛盾;
+            # 顺带修正 moonshot 这种一家兼有两种权重状态的:kimi-k2.* 是开放权重,
+            # moonshot-v1-* 是闭源,而整家被登记成开源,后者一直在白拿这份加分。
+            if _treat_as_open_source(
+                name,
+                self.select_model_by_complexity(name, task_type, complexity_score),
+                open_source_providers=frozenset(OPEN_SOURCE_PROVIDERS),
+                proprietary_providers=frozenset(PROPRIETARY_PROVIDERS),
+            ):
                 score += 0.15
             if prefer_local and name in ("ollama", "hf_local"):
                 score += 0.5
@@ -2837,116 +2885,17 @@ class MultiLLMRouter:
             reason=("native_multimodal_first: tier=3 advisory " "no_providers_available degraded_to=no_op"),
         )
 
-    def route_with_cost_policy(
-        self,
-        task_type: TaskType,
-        complexity_score: float = 0.5,
-        cost_weight: float = 0.3,
-        llm_hint: Optional[Dict[str, Any]] = None,
-    ) -> RoutingDecision:
-        """
-        组合策略路由：任务类型 + 成本效益加权评分。
-
-        规则选择具有最高权威性；LLM 微调仅允许在规则选定的候选集内
-        调整/追加约束（不可替换规则选定的 provider/model）。
-
-        Args:
-            task_type:        任务类型（来自规则引擎，权威）
-            complexity_score: 复杂度评分
-            cost_weight:      成本权重 0.0-1.0（默认 0.3，越高越偏向低成本提供商）
-            llm_hint:         LLM 微调建议（可选）。格式：
-                              {"preferred_provider": "...", "model_override": "...", "temperature": ...}
-                              注意：preferred_provider 仅在规则候选列表内有效（否则忽略）；
-                              model_override 仅在规则已选提供商内有效。
-
-        Returns:
-            RoutingDecision（规则主导，LLM 建议在守护轨道内应用）
-        """
-        # ── 1. 规则主路由 ─────────────────────────────────────────────────────
-        preferred_order = TASK_ROUTING_PREFERENCES.get(task_type, [])
-
-        # 计算每个候选提供商的综合得分（任务适配度 + 成本效益）
-        candidates: List[Dict[str, Any]] = []
-        for rank, provider_name in enumerate(preferred_order):
-            if provider_name not in self.providers:
-                continue
-            prov = self.providers[provider_name]
-            if not prov.is_available():
-                continue
-
-            model = self.select_model_by_complexity(provider_name, task_type, complexity_score)
-
-            # 任务适配得分（按 TASK_ROUTING_PREFERENCES 排名越前分越高）
-            task_score = max(0.0, 1.0 - rank * 0.2)
-
-            # 成本效益得分（成本越低分越高）
-            avg_cost = (prov.cost_per_1k_input + prov.cost_per_1k_output) / 2
-            # 归一化成本得分：假设 0.01 $/1k 作为参考上限
-            cost_score = max(0.0, 1.0 - min(avg_cost / 0.01, 1.0))
-
-            # 综合得分 = 任务适配 * (1-cost_weight) + 成本效益 * cost_weight
-            composite = task_score * (1.0 - cost_weight) + cost_score * cost_weight
-
-            candidates.append(
-                {
-                    "provider": provider_name,
-                    "model": model,
-                    "composite": composite,
-                    "task_score": task_score,
-                    "cost_score": cost_score,
-                }
-            )
-
-        if not candidates:
-            # 无候选 → 回退到原始 route()
-            return self.route(task_type, complexity_score=complexity_score)
-
-        # 按综合得分排序，取最优
-        candidates.sort(key=lambda x: x["composite"], reverse=True)
-        best = candidates[0]
-        selected_provider = best["provider"]
-        selected_model = best["model"]
-
-        # ── 2. LLM 微调（仅允许在规则守护轨道内调整）────────────────────────
-        if llm_hint:
-            hint_provider = llm_hint.get("preferred_provider", "")
-            hint_model = llm_hint.get("model_override", "")
-
-            # 微调规则 A: 仅允许从规则候选列表中的提供商中替换（不允许引入规则列表外的提供商）
-            rule_providers = {c["provider"] for c in candidates}
-            if hint_provider and hint_provider in rule_providers:
-                # 在规则列表内找到对应候选，更新选择
-                for c in candidates:
-                    if c["provider"] == hint_provider:
-                        selected_provider = c["provider"]
-                        selected_model = c["model"]
-                        logger.info("LLM 微调建议已采纳（规则守护）: provider=%s", hint_provider)
-                        break
-            elif hint_provider:
-                logger.debug(
-                    "LLM 微调建议已拒绝（提供商不在规则列表内）: %s not in %s",
-                    hint_provider,
-                    rule_providers,
-                )
-
-            # 微调规则 B: 模型覆盖仅允许在规则选定的提供商内切换
-            if hint_model and selected_provider in self.providers:
-                allowed_models = self.providers[selected_provider].models
-                if hint_model in allowed_models:
-                    selected_model = hint_model
-                    logger.info("LLM 微调建议已采纳（模型守护）: model=%s", hint_model)
-                else:
-                    logger.debug("LLM 微调建议已拒绝（模型不在该提供商允许列表内）: %s", hint_model)
-
-        reason = f"策略路由: 任务类型 [{task_type.value}] " f"复杂度 {complexity_score:.2f} 成本权重 {cost_weight:.2f}"
-        alternatives = [f"{c['provider']}:{c['model']}" for c in candidates if c["provider"] != selected_provider]
-        return RoutingDecision(
-            provider=selected_provider,
-            model=selected_model,
-            reason=reason,
-            alternatives=alternatives,
-        )
-
+    # route_with_cost_policy() 已删除(约 110 行)。
+    #
+    # 依据:① 全仓零外部引用(无测试/文档/治理哨兵提及);② 它的成本策略已被
+    # UnifiedLLMRouter + config/llm_routing_policy.yaml 真实承担 —— 那边按任务类型
+    # 配 cost_budget.max_cost_per_1k_tokens,_check_cost_budget() 在
+    # core/unified/llm_router.py:788 被真实调用,经 openclawd.py:1263 进入;
+    # ③ 它的打分是 select_brain_for_task() 的较弱重复(没有质量档、没有实测表现、
+    # 没有按模型判开闭源)。把它接上等于造出第二套互相竞争的成本策略 —— 正是本轮
+    # 合并 7 份重复助手要消除的那类漂移。
+    # 它独有的 llm_hint 护栏(LLM 建议只能在规则选定候选集内生效)在统一层已有等价
+    # 实现(llm_router.py:257-261 只在已知优先级内重排)。
     # ───────── Identity injection helper ─────────
 
     def _inject_identity_to_messages(self, messages: List[Dict]) -> List[Dict]:
@@ -3252,21 +3201,42 @@ class MultiLLMRouter:
         explore = explore_c * math.sqrt(math.log(max(total, 1) + 1.0) / n)
         return exploit + explore
 
+    BANDIT_MIN_SAMPLES: int = 5
+
+    def _bandit_stats(
+        self, task_type: Optional[TaskType] = None, *, min_samples: Optional[int] = None
+    ) -> Tuple[Dict[str, Dict[str, float]], int]:
+        """取 bandit 统计,带两级样本回退:任务级不足 → 退全量历史;全量也不足 → 返回空。
+
+        这段回退逻辑原本只长在 ``_bandit_reorder`` 里。``select_brain_for_task`` 接实测
+        表现时我把它**抄了一遍**,还把 5 写成了字面量,而这边是 ``min_samples`` 参数 ——
+        两处一旦不同步就会出现"重排认为样本够、打分认为不够"的分裂。提成一个方法,
+        阈值收敛到 ``BANDIT_MIN_SAMPLES`` 一处。
+
+        Returns:
+            ``(stats, total)``;``total == 0`` 表示样本不足,调用方应退回各自的静态行为。
+        """
+        floor = self.BANDIT_MIN_SAMPLES if min_samples is None else min_samples
+        stats = self._provider_stats(task_type)
+        total = int(sum(s["calls"] for s in stats.values()))
+        if total < floor:
+            stats = self._provider_stats(None)
+            total = int(sum(s["calls"] for s in stats.values()))
+            if total < floor:
+                return {}, 0
+        return stats, total
+
     def _bandit_reorder(
-        self, candidates: List[str], task_type: Optional[TaskType] = None, *, min_samples: int = 5
+        self, candidates: List[str], task_type: Optional[TaskType] = None, *, min_samples: Optional[int] = None
     ) -> List[str]:
         """按 UCB1 打分对候选 provider 列表做自适应重排(表现好的上浮,同时保留探索)。
         冷启动零回归:GALAXY_BANDIT_ROUTING=false 关闭;任务级样本不足退回全量历史,
         全量也不足(< min_samples)则原样返回。稳定排序,同分保持传入顺序。"""
         if not candidates or os.environ.get("GALAXY_BANDIT_ROUTING", "true").lower() == "false":
             return candidates
-        stats = self._provider_stats(task_type)
-        total = int(sum(s["calls"] for s in stats.values()))
-        if total < min_samples:
-            stats = self._provider_stats(None)
-            total = int(sum(s["calls"] for s in stats.values()))
-            if total < min_samples:
-                return list(candidates)
+        stats, total = self._bandit_stats(task_type, min_samples=min_samples)
+        if not total:
+            return list(candidates)
         scored = [self._bandit_score(n, stats, total) for n in candidates]
         # sorted 稳定:同分保持原相对顺序;-score 让高分(含 +inf 未试过)排前。
         order = sorted(range(len(candidates)), key=lambda i: -scored[i])

@@ -239,9 +239,17 @@ def _resolve_provider_order(
     policy: Dict[str, Any],
     telemetry: RoutingTelemetry,
     preferred_provider: Optional[str] = None,
+    provider_rates: Optional[Dict[str, float]] = None,
+    tool_capable: Optional[Dict[str, bool]] = None,
 ) -> Tuple[List[str], Optional[Dict[str, Any]]]:
     """
     按策略为给定任务类型返回提供商顺序列表和对应的 SLO/预算约束。
+
+    Args:
+        provider_rates: ``provider → 每 1k token 实际单价(USD)``。给了就据此做**成本
+            降级**;不给(或某家不在表里)则该家不参与成本降级 —— 单价未知不等于超预算。
+        tool_capable: ``provider → 是否支持工具调用``。给了就据此执行策略里的
+            ``constraints.require_tools``;查不到的一律当作支持(保守放行,不错杀)。
 
     Returns:
         (ordered_provider_list, slo_dict_or_None)
@@ -270,6 +278,66 @@ def _resolve_provider_order(
                 ok.append(p)
         priorities = ok + degraded
 
+    # 成本降级:超出本任务 cost_budget 的提供商往后排。
+    #
+    # 策略 YAML 对 global_slo.max_cost_per_1k_tokens 的注释写着"超过此值触发降级",
+    # 但在此之前**没有任何东西会降级** —— cost_budget 整体是装饰性的(详见
+    # _check_cost_budget 的说明)。这里按 SLO 降级那一套完全相同的做法补上:只重排,
+    # 不删除。贵的那家仍然可用,只是不再优先;真到只剩它,照样会被调用。
+    #
+    # 单价未知的一律**不罚**:PROVIDER_REGISTRY 里 openrouter 这类聚合器单价写 0
+    # (真实成本随所选底层模型浮动),把"查不到"当成"超预算"会错杀。
+    # 与 SLO 降级的一处**有意的不对称**:显式指定的 provider 豁免成本降级,但不豁免 SLO
+    # 降级。理由是两者的性质不同 —— SLO 降级的依据是"这家实测正在坏"(高延迟/低成功率),
+    # 那是覆盖显式选择的正当理由;成本只是默认偏好,调用方既然点名要这家,预算不该悄悄把
+    # 它挪到队尾。不写下来的话,下一个人会以为这是漏掉了。
+    if provider_rates:
+        ceiling = _cost_ceiling(task_type, policy)
+        if ceiling != float("inf"):
+            affordable, pricey = [], []
+            for p in priorities:
+                rate = provider_rates.get(p)
+                if rate is not None and rate > ceiling and p != preferred_provider:
+                    pricey.append(p)
+                else:
+                    affordable.append(p)
+            if pricey:
+                logger.info(
+                    "Cost degradation for task_type=%s: %s exceed %.4f USD/1k, deprioritised",
+                    task_type,
+                    pricey,
+                    ceiling,
+                )
+            priorities = affordable + pricey
+
+    # constraints.require_tools:不支持工具调用的提供商往后排。
+    #
+    # 这个字段在策略 YAML 的"字段说明"里明写着是可选约束之一,agent_control 也确实设了
+    # require_tools: true,但在此之前**全仓库没有任何地方读它**(grep 零命中)。
+    #
+    # 今天还没被违反 —— registry 里唯一 supports_tools=False 的是 perplexity,而它不在
+    # agent_control 的 priorities 里。所以这是个**潜在**缺口而非现行故障。但它离故障只有
+    # 一次 YAML 编辑的距离:perplexity 是搜索型 provider,往 agent 任务里加它相当自然,
+    # 加完之后工具调用会静默失败,而策略里那句 require_tools: true 全程无声。
+    #
+    # 同样只重排不删除:排最后仍可能被调用,但至少不会白费第一次尝试,而且现在会有告警。
+    if tool_capable and (rule.get("constraints") or {}).get("require_tools"):
+        capable, incapable = [], []
+        for p in priorities:
+            # 查不到的当作支持:registry 的 supports_tools 默认就是 True,把"不知道"
+            # 当成"不支持"会把绝大多数 provider 误伤。
+            if tool_capable.get(p, True):
+                capable.append(p)
+            else:
+                incapable.append(p)
+        if incapable:
+            logger.warning(
+                "task_type=%s 要求工具调用(require_tools),但 %s 不支持 —— 已排到末位",
+                task_type,
+                incapable,
+            )
+        priorities = capable + incapable
+
     # 合并 fallback（去重保序）
     seen = set(priorities)
     for p in fallback:
@@ -280,22 +348,41 @@ def _resolve_provider_order(
     return priorities, slo
 
 
+def _cost_ceiling(task_type: str, policy: Dict[str, Any]) -> float:
+    """本任务类型允许的每 1k token 上限(USD)。任务级优先,否则用全局,再否则无上限。"""
+    rule = policy.get("task_routing", {}).get(task_type, {})
+    budget = rule.get("cost_budget") or {}
+    global_budget = policy.get("global_slo", {})
+    return float(
+        budget.get(
+            "max_cost_per_1k_tokens",
+            global_budget.get("max_cost_per_1k_tokens", float("inf")),
+        )
+    )
+
+
 def _check_cost_budget(
     estimated_cost: float,
     task_type: str,
     policy: Dict[str, Any],
 ) -> bool:
-    """返回 True 表示费用在预算内，False 表示超预算。"""
-    task_routing = policy.get("task_routing", {})
-    rule = task_routing.get(task_type, {})
-    budget = rule.get("cost_budget") or {}
-    global_budget = policy.get("global_slo", {})
+    """返回 True 表示费用在预算内，False 表示超预算。
 
-    max_cost = budget.get(
-        "max_cost_per_1k_tokens",
-        global_budget.get("max_cost_per_1k_tokens", float("inf")),
-    )
-    return estimated_cost <= max_cost
+    这个函数本身一直是对的,而且 tests/test_pr6_block6.py 用手挑的数值(0.10/0.20 对
+    0.15 的上限)单测过它。**出问题的是喂给它的东西**:调用方
+    ``_estimate_cost_per_1k()`` 原先返回的就是本任务的 ``cost_budget
+    .max_cost_per_1k_tokens`` —— 也就是上限自己。于是这里恒等于 ``x <= x``,在任何
+    (任务, 提供商) 组合下都判"在预算内",整个成本预算层是个空转:
+
+    * 上面那句超预算告警**不可达**;
+    * 记进遥测的 ``cost_usd`` 是 ``tokens/1000 × 上限``,同一任务下每家完全相同 ——
+      免费的 ollama 与 0.003/1k 的 anthropic 被记成一样贵(reasoning 下都是 0.15)。
+
+    "单元测试过了、集成起来是空的"正是这个 bug 能活下来的原因:单测只证明了函数,没有
+    证明接线。现在 ``_estimate_cost_per_1k()`` 改为取**该提供商的真实单价**,这里才有
+    意义。
+    """
+    return estimated_cost <= _cost_ceiling(task_type, policy)
 
 
 # ============================================================================
@@ -635,14 +722,61 @@ class UnifiedLLMRouter:
             policy=self._policy,
             telemetry=self._telemetry,
             preferred_provider=preferred_provider,
+            provider_rates=self._provider_rates(),
+            tool_capable=self._tool_capable(),
         )
 
-    def _estimate_cost_per_1k(self, provider: str, task_type_str: str) -> float:
-        """从策略中读取估算的每 1k token 成本（若无配置则返回 0）。"""
-        task_routing = self._policy.get("task_routing", {})
-        rule = task_routing.get(task_type_str, {})
-        budget = rule.get("cost_budget") or {}
-        return float(budget.get("max_cost_per_1k_tokens", 0.0))
+    def _tool_capable(self) -> Dict[str, bool]:
+        """``provider → 是否支持工具调用``,取自执行层 registry 的 ``supports_tools``。"""
+        caps: Dict[str, bool] = {}
+        providers = getattr(self._backend, "providers", None)
+        if not isinstance(providers, dict):
+            return caps
+        for name, cfg in providers.items():
+            val = getattr(cfg, "supports_tools", None)
+            if isinstance(val, bool):
+                caps[str(name)] = val
+        return caps
+
+    def _provider_rates(self) -> Dict[str, float]:
+        """``provider → 每 1k token 单价(USD)``,取自执行层 registry 的真实报价。
+
+        单价就在 ``core.multi_llm_router.PROVIDER_REGISTRY`` 每家的 ``cost_in`` /
+        ``cost_out`` 里,经 ``ProviderConfig.cost_per_1k_input/output`` 暴露 ——
+        统一层此前完全没用它,自己拿"预算上限"当"实际成本"(见
+        ``_check_cost_budget`` 的说明)。
+
+        取**输出单价**作为该家的代表单价:输出恒贵于输入,拿它跟上限比是保守的一侧,
+        不会把超预算的一家漏判成便宜。单价为 0 的两类都合理地不被罚 —— ollama 本地
+        确实免费,openrouter 这类聚合器写 0 是因为真实成本随所选底层模型浮动。
+        """
+        rates: Dict[str, float] = {}
+        backend = self._backend
+        providers = getattr(backend, "providers", None)
+        if not isinstance(providers, dict):
+            return rates
+        for name, cfg in providers.items():
+            out = getattr(cfg, "cost_per_1k_output", None)
+            inp = getattr(cfg, "cost_per_1k_input", None)
+            rate = out if out is not None else inp
+            if rate is not None:
+                try:
+                    rates[str(name)] = float(rate)
+                except (TypeError, ValueError):
+                    continue
+        return rates
+
+    def _estimate_cost_per_1k(self, provider: str, task_type_str: str) -> Optional[float]:
+        """该提供商的每 1k token 单价(USD);查不到返回 ``None``。
+
+        原实现忽略 ``provider`` 参数,返回的是本任务 ``cost_budget`` 的**上限**,于是
+        ``_check_cost_budget(上限, ...)`` 恒为真、成本层全程空转,而遥测里每家的成本
+        都被记成同一个数(免费的 ollama 与 anthropic 一样贵)。
+
+        返回 ``None`` 而不是 0.0 或上限,是为了让调用方能区分"这家免费"和"查不到单价"
+        —— 两者都返回 0 的话,预算判定又会变成一句无意义的恒真。
+        """
+        return self._provider_rates().get(provider)
 
     # ------------------------------------------------------------------
     # 公开接口
@@ -779,18 +913,27 @@ class UnifiedLLMRouter:
             model = getattr(result, "model", "unknown")
             usage = getattr(result, "usage", {})
 
-        # 估算成本（基于 token 用量）
+        # 估算成本（基于 token 用量与该提供商的真实单价）
         total_tokens = usage.get("total_tokens", 0) if isinstance(usage, dict) else getattr(usage, "total_tokens", 0)
         cost_per_1k = self._estimate_cost_per_1k(provider_name, task_type_str)
-        estimated_cost = (total_tokens / 1000.0) * cost_per_1k
+        estimated_cost = (total_tokens / 1000.0) * cost_per_1k if cost_per_1k is not None else 0.0
 
         # 预算检查（超限记录警告，但不中断已完成的调用）
-        if self._policy and not _check_cost_budget(cost_per_1k, task_type_str, self._policy):
-            logger.warning(
-                "LLM cost budget exceeded for task_type=%s provider=%s cost_per_1k=%.4f",
-                task_type_str,
+        if self._policy and cost_per_1k is not None:
+            if not _check_cost_budget(cost_per_1k, task_type_str, self._policy):
+                logger.warning(
+                    "LLM cost budget exceeded for task_type=%s provider=%s cost_per_1k=%.4f ceiling=%.4f",
+                    task_type_str,
+                    provider_name,
+                    cost_per_1k,
+                    _cost_ceiling(task_type_str, self._policy),
+                )
+        elif self._policy:
+            # 单价查不到时如实说"没评估",而不是当成通过 —— 后者正是原实现的毛病:
+            # 判定永远为真,于是看日志的人以为预算一直守着。
+            logger.debug(
+                "Cost budget not evaluated for provider=%s (单价未知,未参与预算判定)",
                 provider_name,
-                cost_per_1k,
             )
 
         # 记录遥测

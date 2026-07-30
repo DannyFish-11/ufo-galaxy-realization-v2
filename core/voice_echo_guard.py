@@ -58,7 +58,6 @@ from __future__ import annotations
 
 import difflib
 import logging
-import os
 import re
 import threading
 import time
@@ -84,20 +83,13 @@ _SUPPRESS_STREAK_WARN = 5
 _PUNCT_RE = re.compile(r"[\s,。、;:!?…—~·\"'“”‘’()()《》【】\[\]{}<>/\\|+*=&%$#@^_`,.;:!?~-]+")
 
 
-def _flag(name: str, default: str = "1") -> bool:
-    return os.getenv(name, default).strip().lower() not in ("0", "false", "no", "off")
+# 统一走 core.config_flags —— 这里原先是 5 份逐字相同的本地 _flag 副本,
+# 其中一个真 bug(空值把开关打开)因此要修 5 遍。详见该模块 docstring。
+from core.config_flags import flag as _flag  # noqa: E402  (保留 _flag 名字以免动全部调用点)
+from core.config_flags import num as _num  # noqa: E402
 
-
-def _num(name: str, default: float) -> float:
-    """读数值型环境变量;非法值退回默认并告警(不静默吞掉配置错误)。"""
-    raw = os.getenv(name)
-    if raw is None or not raw.strip():
-        return default
-    try:
-        return float(raw)
-    except ValueError:
-        logger.warning("%s=%r 不是合法数值,已退回默认值 %s", name, raw, default)
-        return default
+# _num 原为本地副本(两处,措辞略有差异)。它本来就正确处理了「空值视同未设置」,
+# 而同文件的 _flag 漏了这一步 —— 那正是「空值把开关打开」那个 bug 的来源。一并收敛。
 
 
 def enabled() -> bool:

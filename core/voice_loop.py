@@ -226,7 +226,32 @@ class VoiceLoop:
         return True
 
     async def _duplex_downlink(self, session, DuplexEventType) -> None:  # noqa: N803
-        """消费下行事件:播音频、推面板、用户开口即让服务端停当前回复。"""
+        """消费下行事件:播音频、推面板、按"先压音后决定"处理用户开口。
+
+        为什么不是"一听见用户出声就 cancel"
+        -----------------------------------
+        最初就是那么写的,但那把回合制那边刚修好的毛病又犯了一遍:用户"嗯"一声也会把
+        模型的回复整个取消掉。服务端 VAD 只告诉你"有人在出声",它分不出这是抢话还是
+        积极倾听 —— 那是 ``classify_barge_in`` 的活。
+
+        改成两段式,与人的实际反应一致:
+
+        1. ``USER_SPEECH_STARTED`` → **压音**(ducking)。低延迟、听感自然,而且是
+           **非承诺性**的:压低不等于放弃,还能回来。
+        2. ``FINAL_TRANSCRIPT`` → 这时才知道用户到底说了什么:
+           - 应答("嗯""对")→ **恢复音量继续说**,不打扰模型;
+           - 真打断 → 让服务端 ``response.cancel``(只停本地播放没用,模型那边还在
+             继续生成、token 照烧)。
+
+        没有 ducking(播放器不可用/开关关掉)时退回原行为:开口即 cancel。
+        """
+        from core.voice_dialog_policy import (
+            BARGE_IN_BACKCHANNEL,
+            backchannel_tolerance_enabled,
+            get_dialog_policy,
+        )
+        from core.voice_duplex_session import ducking_enabled
+
         try:
             async for ev in session.events():
                 if ev.type is DuplexEventType.ASSISTANT_AUDIO_DELTA and ev.audio_b64:
@@ -234,12 +259,29 @@ class VoiceLoop:
 
                     self._duplex_player.play(base64.b64decode(ev.audio_b64))
                 elif ev.type is DuplexEventType.USER_SPEECH_STARTED:
-                    # 双工下的 barge-in:让【服务端】停止当前回复。只停本地播放没用 ——
-                    # 模型那边还在继续生成,token 照烧、上下文照涨。
-                    await session.interrupt()
+                    if ducking_enabled() and self._duplex_player is not None:
+                        self._duplex_player.duck()
+                    else:
+                        await session.interrupt()
                 elif ev.type is DuplexEventType.FINAL_TRANSCRIPT and ev.text:
                     self._emit_panel("user", ev.text)
+                    kind = (
+                        get_dialog_policy().classify_barge_in(ev.text)
+                        if backchannel_tolerance_enabled()
+                        else "interrupt"
+                    )
+                    if kind == BARGE_IN_BACKCHANNEL:
+                        logger.info("双工:应答(非打断),恢复音量继续说: %s", ev.text[:20])
+                        if self._duplex_player is not None:
+                            self._duplex_player.unduck()
+                    else:
+                        await session.interrupt()
+                        if self._duplex_player is not None:
+                            self._duplex_player.unduck()
                 elif ev.type is DuplexEventType.RESPONSE_DONE:
+                    # 一个回合结束,音量必须回到正常 —— 否则下一段回复会一直是压着的
+                    if self._duplex_player is not None:
+                        self._duplex_player.unduck()
                     logger.debug("双工:一个回复回合结束")
                 elif ev.type is DuplexEventType.SESSION_CLOSED:
                     return
@@ -551,13 +593,31 @@ class VoiceLoop:
         }
 
         try:
-            # 1. ASR
-            if self.asr is None:
-                from core.asr import WhisperASR
+            # 1. 听 —— 走 modality_bridge 这个"听的收口":B 档原生后端激活时先让全模态
+            #    模型自己听懂,拿不到再回落 ASR。
+            #
+            #    此前这里是直接 self.asr.transcribe(...),完全绕过收口。后果是 B 档最核心
+            #    的那件事没生效:切到 B 档后【说】确实走原生(speech_output 认
+            #    register_native_speech_backend),而【听】永远是 Whisper —— 一半原生一半
+            #    桥,且没有任何报错,用户以为模型在听,其实模型压根没收到音频。
+            #
+            #    ASR 的构造放进 fallback 里惰性执行:原生这条路走通时,Whisper 模型根本
+            #    不必加载(那是几百 MB 的权重和可观的启动时间)。
+            def _asr_fallback(pcm, sr, lang):
+                if self.asr is None:
+                    from core.asr import WhisperASR
 
-                self.asr = WhisperASR(model_size=self.model_size)
+                    self.asr = WhisperASR(model_size=self.model_size)
+                return self.asr.transcribe(pcm, sample_rate=sr, language=lang)
 
-            text = self.asr.transcribe(audio_np, sample_rate=sample_rate, language=self.language)
+            from core.modality_bridge import transcribe_pcm
+
+            text = transcribe_pcm(
+                audio_np,
+                sample_rate=sample_rate,
+                language=self.language,
+                fallback=_asr_fallback,
+            )
             result["asr_text"] = text
             logger.info("ASR: %s", text)
 

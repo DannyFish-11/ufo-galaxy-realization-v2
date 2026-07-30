@@ -535,6 +535,172 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "category": "behavior",
         "description": "开口/委托后冷却(秒,防话痨)",
     },
+    # --- 边说边听(自回声抑制 / 打断策略 / 系统播放声 / 双工)---
+    #
+    # 这一组开关此前【只存在于代码里】:功能真做了也真在跑,但既不在本 schema 里、
+    # 也不在面板前端的 CONFIG_KEYS 注册表里 —— 面板设置页不显示它们,而 set_config
+    # 还会把它们当 unknown_keys 拒掉(见下方 set_config)。用户想开只能手改 .env 或
+    # 导出环境变量,等于"写了没接"。两边同时登记才算真正接进面板。
+    #
+    # 每一项的 default 都与代码里的实际默认值逐个核对过(改默认值时两处必须一起改,
+    # 否则面板显示的"默认"是假的):
+    #   GALAXY_AEC                        → acoustic_echo_canceller.py::aec_enabled
+    #   GALAXY_VOICE_ECHO_GUARD           → voice_echo_guard.py::echo_guard_enabled
+    #   GALAXY_VOICE_BACKCHANNEL_TOLERANCE→ voice_dialog_policy.py::backchannel_tolerance_enabled
+    #   GALAXY_SYSTEM_AUDIO_CAPTURE       → system_audio_capture_service.py::capture_enabled
+    #   GALAXY_VOICE_DUPLEX / _DUCKING    → voice_duplex_session.py::duplex_enabled / ducking_enabled
+    "GALAXY_AEC": {
+        "default": "true",
+        "type": "boolean",
+        "category": "behavior",
+        "description": "回声消除（把喇叭放出去的声音从麦克风里减掉,防止 AI 听见自己说话 · 默认开）",
+    },
+    "GALAXY_VOICE_ECHO_GUARD": {
+        "default": "true",
+        "type": "boolean",
+        "category": "behavior",
+        "description": "自回声文字闸门（识别结果与刚念过的话高度重合时判为自己的回声、不当用户输入 · 默认开）",
+    },
+    "GALAXY_VOICE_BACKCHANNEL_TOLERANCE": {
+        "default": "true",
+        "type": "boolean",
+        "category": "behavior",
+        "description": "应答不打断（用户只是嗯/对/好时继续说,只有真插话才停 · 关则一出词就打断 · 默认开）",
+    },
+    "GALAXY_SYSTEM_AUDIO_CAPTURE": {
+        "default": "true",
+        "type": "boolean",
+        "category": "behavior",
+        "description": "采集本机播放声（回声消除的参考信号来源,也让 AI 能听见电脑在放什么 · 默认开）",
+    },
+    "GALAXY_SYSTEM_AUDIO_TO_PERCEPTION": {
+        "default": "true",
+        "type": "boolean",
+        "category": "behavior",
+        "description": "把本机播放声送进感知（关掉则只用于回声消除、不进模型 · 默认开）",
+    },
+    "GALAXY_VOICE_DUPLEX": {
+        "default": "false",
+        "type": "boolean",
+        "category": "behavior",
+        "description": "全双工语音（边说边听,需 provider 支持 realtime 语音通道 · 默认关）",
+    },
+    "GALAXY_VOICE_DUCKING": {
+        "default": "true",
+        "type": "boolean",
+        "category": "behavior",
+        "description": "用户开口先压低音量而不是立刻掐断（等听清是应答还是真打断再决定 · 默认开）",
+    },
+    # 以下为细调参数:默认值已经是实测调过的,一般不需要动。
+    "GALAXY_VOICE_DUCK_GAIN": {
+        "default": "0.25",
+        "type": "number",
+        "category": "behavior",
+        "description": "压低音量时的音量倍数(0~1,0.25≈−12dB:明显压下去但仍听得见)",
+    },
+    "GALAXY_VOICE_HOLD_S": {
+        "default": "90.0",
+        "type": "number",
+        "category": "behavior",
+        "description": "用户说“等一下/让我想想”后的静候时长(秒)",
+    },
+    "GALAXY_VOICE_ECHO_SIM": {
+        "default": "0.62",
+        "type": "number",
+        "category": "behavior",
+        "description": "自回声判定的重合度阈值(0~1,调高=更少误判成回声、更容易漏掉回声)",
+    },
+    "GALAXY_VOICE_ECHO_TAIL_S": {
+        "default": "6.0",
+        "type": "number",
+        "category": "behavior",
+        "description": "念完后仍防自回声的拖尾时长(秒)",
+    },
+    "GALAXY_VOICE_ECHO_MIN_CHARS": {
+        "default": "4",
+        "type": "number",
+        "category": "behavior",
+        "description": "短于这个字数的识别结果不做自回声判定(太短判不准)",
+    },
+    "GALAXY_VOICE_ECHO_MIN_BLOCK": {
+        "default": "4",
+        "type": "number",
+        "category": "behavior",
+        "description": "自回声判定要求的最短连续重合字数(防止零散字符碰巧凑出高重合度)",
+    },
+    "GALAXY_AEC_TAIL_MS": {
+        "default": "128.0",
+        "type": "number",
+        "category": "behavior",
+        "description": "回声消除的滤波器长度(毫秒,覆盖房间混响拖尾;房间空旷可调大)",
+    },
+    "GALAXY_AEC_MU": {
+        "default": "0.35",
+        "type": "number",
+        "category": "behavior",
+        "description": "回声消除的收敛步长(大=收敛快但易失稳,小=稳但慢)",
+    },
+    "GALAXY_AEC_MAX_DELAY_MS": {
+        "default": "400.0",
+        "type": "number",
+        "category": "behavior",
+        "description": "喇叭到麦克风的最大补偿延迟(毫秒)",
+    },
+    "GALAXY_AEC_DTD_MARGIN_DB": {
+        "default": "6.0",
+        "type": "number",
+        "category": "behavior",
+        "description": "双讲检测余量(dB,调高=更不容易把用户说话误判成回声)",
+    },
+    "GALAXY_REALTIME_PROVIDER": {
+        "default": "openai_realtime",
+        "type": "select",
+        "category": "behavior",
+        "description": "全双工语音的 provider（仅在全双工开启时生效）",
+        "options": ["openai_realtime", "gemini_live"],
+    },
+    "GALAXY_REALTIME_MODEL": {
+        "default": "",
+        "type": "string",
+        "category": "behavior",
+        "description": "全双工语音的模型名(留空=按 provider 取默认)",
+    },
+    "GALAXY_REALTIME_VOICE": {
+        "default": "",
+        "type": "string",
+        "category": "behavior",
+        "description": "全双工语音的音色(留空=按 provider 取默认)",
+    },
+    "GALAXY_REALTIME_URL": {
+        "default": "",
+        "type": "string",
+        "category": "behavior",
+        "description": "全双工语音的 WebSocket 地址(留空=按 provider 自动组装;走聚合器时才需手填)",
+    },
+    "GALAXY_NATIVE_REALTIME_PATH": {
+        "default": "/v1/realtime",
+        "type": "string",
+        "category": "behavior",
+        "description": (
+            "本地全模态 server 上 realtime 端点的路径。B 档原生就绪且没配云端 key 时,"
+            "双工会自动指向本地 server 的这个路径试一次流式;试不通会安静退回原生回合制"
+            "(听/说仍是原生)。你的 server 路径不是默认的 /v1/realtime 时改这里"
+        ),
+    },
+    # 这一项是**密钥**。登记它是安全的:core/config_schema.py::classify_key() 按后缀
+    # 启发式判定,凡以 _API_KEY / _TOKEN / _SECRET / _PASSWORD 结尾的一律归为 "secret",
+    # 而 update_config() 对 secret 走 ConfigService.set_secret() → runtime/secrets.env,
+    # 不会明文落 .env(已实测 classify_key("GALAXY_REALTIME_API_KEY") == "secret")。
+    #
+    # 我先前一度以为"必须同时加进 _SECRET_MODEL_KEYS 才不会明文落盘",据此在测试里留了
+    # 一条绊线。那个前提是错的:_SECRET_MODEL_KEYS 只决定面板「模型」tab 的"已配置"
+    # 角标读哪些键,与写入分流无关。绊线已改为直接断言 classify_key 的分流结果。
+    "GALAXY_REALTIME_API_KEY": {
+        "default": "",
+        "type": "string",
+        "category": "behavior",
+        "description": "全双工语音专用 API Key(留空=退回该 provider 的通用 key,如 OPENAI_API_KEY)",
+    },
     # --- WebRTC & Network ---
     "GALAXY_ENABLE_WEBRTC_DATA_CHANNEL": {
         "default": "false",

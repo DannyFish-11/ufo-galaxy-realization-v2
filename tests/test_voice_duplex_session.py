@@ -163,10 +163,14 @@ class TestAdapterRegistry:
         assert get_adapter("openai_realtime").name == "openai_realtime"
 
     def test_unimplemented_provider_fails_loudly(self):
-        """Gemini Live 的帧形状不同,没实现就不假装支持 —— 静默退回会让用户以为在用
-        Gemini,实际上发的是 OpenAI 的帧。"""
+        """未实现的 provider 必须显式抛错,不能静默退回某个默认实现 —— 那会让用户
+        以为在用 A、实际发的是 B 的帧。
+
+        (这条原先拿 ``gemini_live`` 当"未实现"的例子;它现在已经实现了,故换成一个
+        真正未实现的名字。)
+        """
         with pytest.raises(ValueError, match="未实现"):
-            get_adapter("gemini_live")
+            get_adapter("anthropic_realtime")
 
 
 # ── 2. 完整会话流程:跑在本地【真】WebSocket 服务端上 ──────────────────────
@@ -666,3 +670,401 @@ class TestUnexpectedDisconnectIsNotSilent:
         finally:
             server.close()
             await server.wait_closed()
+
+
+# ── 5. ducking(压低音量继续说)────────────────────────────────────────────
+
+
+class TestDucking:
+    """把 PR #1541 里"ducking 做不到"那句话纠正过来。
+
+    那句话对**旧的文件式 TTS 路径**成立(edge-tts 的 volume 是合成时参数,``_play_audio``
+    只是播一个文件,``stop()`` 只能整段掐断)。但双工路径的 ``PcmPlayer`` 是本仓库自己写的
+    回调驱动缓冲 —— 音频线程来取数时乘一个增益即可,压音完全做得到。结论下得过宽了。
+
+    压音的价值不只是"温和":它是**非承诺性**的。服务端 VAD 只能告诉你"有人在出声",
+    分不出抢话与积极倾听;先压低、等最终转写到了再决定,比一听见声音就取消整个回复正确。
+    """
+
+    def _player(self):
+        """带假 stream 的播放器(本环境无音频设备),驱动**真正的** ``_fill``。"""
+        from core.voice_duplex_session import PcmPlayer
+
+        p = PcmPlayer(sample_rate=16000)
+        p._stream = object()
+        p._np = np
+        p._buf = np.zeros(0, dtype=np.float32)
+        return p
+
+    def _render(self, player, blocks, block=160, duck_at=None, unduck_at=None):
+        out = []
+        for i in range(blocks):
+            if duck_at is not None and i == duck_at:
+                player.duck()
+            if unduck_at is not None and i == unduck_at:
+                player.unduck()
+            buf = np.zeros((block, 1), dtype=np.float32)
+            player._fill(buf, block)
+            out.append(buf[:, 0].copy())
+        return np.concatenate(out)
+
+    def test_duck_lowers_the_volume(self):
+        from core.voice_duplex_session import duck_gain
+
+        p = self._player()
+        p.play(pcm16_from_float(np.ones(16000, dtype=np.float32)))
+        sig = self._render(p, 40, duck_at=5)
+        tail = sig[25 * 160 :]  # 爬坡早已结束
+        assert abs(float(np.abs(tail).mean()) - duck_gain()) < 0.02
+
+    def test_unduck_restores_full_volume(self):
+        p = self._player()
+        p.play(pcm16_from_float(np.ones(16000, dtype=np.float32)))
+        sig = self._render(p, 60, duck_at=5, unduck_at=30)
+        tail = sig[50 * 160 :]
+        assert abs(float(np.abs(tail).mean()) - 1.0) < 0.02
+
+    def test_gain_change_is_ramped_not_stepped(self):
+        """幅度突变在听感上就是"啪"的一声爆音。瞬切时最大单样本跳变约 0.75;
+        50ms 爬坡下应当小两个数量级。"""
+        p = self._player()
+        p.play(pcm16_from_float(np.ones(16000, dtype=np.float32)))
+        sig = self._render(p, 60, duck_at=10, unduck_at=40)
+        assert float(np.abs(np.diff(sig)).max()) < 0.02
+
+    def test_ramp_completes_within_the_configured_time(self):
+        from core.voice_duplex_session import _DUCK_RAMP_MS, duck_gain
+
+        p = self._player()
+        p.play(pcm16_from_float(np.ones(16000, dtype=np.float32)))
+        # 爬坡时长内应基本到位(留一格余量)
+        blocks = int(_DUCK_RAMP_MS / 10.0) + 2
+        sig = self._render(p, blocks, duck_at=0)
+        assert abs(float(np.abs(sig[-160:]).mean()) - duck_gain()) < 0.05
+
+    def test_ramp_is_spread_across_blocks_not_finished_in_one(self):
+        """这一条才真正钉住**跨块**的爬坡上限 —— 上面那条"跳变要小"只测到了块【内】的
+        线性插值:把跨块上限去掉后,一块之内 linspace 依然会把 1.0 平滑插到 0.25,
+        单样本跳变仍然很小,用例照样通过。反向验证时(拆掉上限、64 例全绿)才暴露出来。
+
+        真正的判据是**爬坡有没有花够时间**:50ms 爬坡 + 10ms 的块 = 一块最多走 20%,
+        所以一块之后增益应当还在 0.8 附近,远没到 0.25。
+        """
+        p = self._player()
+        p.play(pcm16_from_float(np.ones(16000, dtype=np.float32)))
+        p.duck()
+        buf = np.zeros((160, 1), dtype=np.float32)
+        p._fill(buf, 160)  # 只走一块(10ms)
+        gain = p.status()["gain"]
+        assert gain > 0.5, f"一块(10ms)之后增益已降到 {gain} —— 跨块爬坡上限没生效,爬坡过快"
+
+    def test_status_exposes_ducking_state(self):
+        """压音是"听得见但不明显"的行为 —— 不摊出来就无从判断到底压了没有、是否忘了恢复。"""
+        p = self._player()
+        assert p.status()["ducked"] is False
+        p.duck()
+        st = p.status()
+        assert st["ducked"] is True and st["target_gain"] < 1.0 and st["duck_events"] == 1
+        p.unduck()
+        assert p.status()["ducked"] is False
+
+    def test_duck_is_idempotent_in_counting(self):
+        p = self._player()
+        p.duck()
+        p.duck()
+        assert p.status()["duck_events"] == 1, "重复压音不该重复计数"
+
+    def test_defaults(self, monkeypatch):
+        from core.voice_duplex_session import duck_gain, ducking_enabled
+
+        monkeypatch.delenv("GALAXY_VOICE_DUCKING", raising=False)
+        monkeypatch.delenv("GALAXY_VOICE_DUCK_GAIN", raising=False)
+        assert ducking_enabled() is True
+        assert duck_gain() == pytest.approx(0.25)
+
+    def test_bad_gain_falls_back(self, monkeypatch, caplog):
+        from core.voice_duplex_session import duck_gain
+
+        monkeypatch.setenv("GALAXY_VOICE_DUCK_GAIN", "loud")
+        with caplog.at_level("WARNING"):
+            assert duck_gain() == pytest.approx(0.25)
+        assert "不是合法数值" in caplog.text
+
+    def test_gain_is_clamped(self, monkeypatch):
+        from core.voice_duplex_session import duck_gain
+
+        monkeypatch.setenv("GALAXY_VOICE_DUCK_GAIN", "5")
+        assert duck_gain() == 1.0
+        monkeypatch.setenv("GALAXY_VOICE_DUCK_GAIN", "-1")
+        assert duck_gain() == 0.0
+
+
+class TestDuplexBargeInUsesTheClassifier:
+    """双工路径此前对**任何** ``USER_SPEECH_STARTED`` 都直接 ``response.cancel`` ——
+    等于把回合制那边刚修好的毛病又犯了一遍:用户"嗯"一声也会把整个回复取消掉。
+
+    服务端 VAD 只知道"有人在出声",分不出抢话与积极倾听 —— 那是 ``classify_barge_in``
+    的活。改成两段式:开口先压音(非承诺),最终转写到了再决定继续还是取消。
+    """
+
+    @staticmethod
+    def _loop_with_fakes():
+        from core.voice_loop import VoiceLoop
+
+        loop = VoiceLoop(object(), speak_responses=False)
+
+        class _FakePlayer:
+            def __init__(self):
+                self.ducked_calls = 0
+                self.unducked_calls = 0
+
+            def duck(self):
+                self.ducked_calls += 1
+
+            def unduck(self):
+                self.unducked_calls += 1
+
+        class _FakeSession:
+            def __init__(self, events):
+                self._events = events
+                self.interrupts = 0
+
+            async def interrupt(self):
+                self.interrupts += 1
+
+            async def events(self):
+                for e in self._events:
+                    yield e
+
+        loop._duplex_player = _FakePlayer()
+        return loop, _FakePlayer, _FakeSession
+
+    def _run(self, transcript):
+        from core.voice_duplex_session import DuplexEvent, DuplexEventType
+
+        loop, _FP, _FS = self._loop_with_fakes()
+        session = _FS(
+            [
+                DuplexEvent(DuplexEventType.USER_SPEECH_STARTED),
+                DuplexEvent(DuplexEventType.FINAL_TRANSCRIPT, text=transcript),
+                DuplexEvent(DuplexEventType.SESSION_CLOSED),
+            ]
+        )
+        asyncio.run(loop._duplex_downlink(session, DuplexEventType))
+        return loop._duplex_player, session
+
+    def test_speech_start_ducks_instead_of_cancelling(self):
+        player, session = self._run("嗯")
+        assert player.ducked_calls == 1, "用户开口应先压音"
+        assert session.interrupts == 0, "光是出声还不该取消模型回复"
+
+    def test_backchannel_resumes_full_volume_and_never_cancels(self):
+        player, session = self._run("嗯")
+        assert session.interrupts == 0
+        assert player.unducked_calls >= 1, "判定为应答后应恢复音量"
+
+    def test_real_interruption_cancels_on_the_server(self):
+        player, session = self._run("不是这个我要另一个")
+        assert session.interrupts == 1, "真打断必须让服务端停止生成"
+
+    def test_falls_back_to_cancel_when_ducking_is_off(self, monkeypatch):
+        monkeypatch.setenv("GALAXY_VOICE_DUCKING", "0")
+        player, session = self._run("嗯")
+        assert player.ducked_calls == 0
+        assert session.interrupts == 1, "关掉 ducking 应退回原来的「开口即取消」"
+
+
+# ── 6. Gemini Live 适配器 ──────────────────────────────────────────────────
+
+
+class TestGeminiLiveFrames:
+    """补上第二个 provider,双工层不再只绑一家。
+
+    两家不只是字段名不同,是**结构不同**:配置帧的位置与时机(setup 必须是连接后第一帧)、
+    音频上行的载体(realtimeInput.mediaChunks,采样率写在 mimeType 里)、下行 parts 的
+    **混合数组**(同一个 parts 里既可能是音频也可能是文本)、回合边界的表达
+    (turnComplete/interrupted 标志而非独立事件)、鉴权方式(key 在 URL query,没有
+    Authorization 头)。所以是两份实现,不是参数化的一份。
+    """
+
+    def setup_method(self):
+        from core.voice_duplex_session import GeminiLiveAdapter
+
+        self.a = GeminiLiveAdapter()
+        self.cfg = DuplexSessionConfig(
+            url="wss://x", api_key="k", model="gemini-2.0-flash-exp", voice="Puck", provider="gemini_live"
+        )
+
+    def test_setup_frame_shape(self):
+        f = self.a.session_update(self.cfg)
+        assert "setup" in f, "Gemini 的配置帧叫 setup,不是 session.update"
+        assert f["setup"]["model"].startswith("models/"), "model 必须带 models/ 前缀"
+        assert f["setup"]["generationConfig"]["responseModalities"] == ["AUDIO"]
+
+    def test_model_prefix_not_doubled(self):
+        cfg = DuplexSessionConfig(url="w", api_key="k", model="models/gemini-x", provider="gemini_live")
+        assert self.a.session_update(cfg)["setup"]["model"] == "models/gemini-x"
+
+    def test_audio_frame_carries_rate_in_mimetype(self):
+        """采样率写在 mimeType 里 —— Gemini 没有像 OpenAI 那样在 session 里统一声明格式。"""
+        f = self.a.audio_frame(b"\x01\x02")
+        chunk = f["realtimeInput"]["mediaChunks"][0]
+        assert "rate=16000" in chunk["mimeType"]
+        assert base64.b64decode(chunk["data"]) == b"\x01\x02"
+
+    def test_text_frame_is_a_single_turn_complete(self):
+        """Gemini 一帧即可(turnComplete 就等于"说完了该你了"),
+        不需要 OpenAI 那种 create item + response.create 两步。"""
+        frames = self.a.text_frame("你好")
+        assert len(frames) == 1
+        assert frames[0]["clientContent"]["turnComplete"] is True
+
+    def test_interrupt_is_an_empty_completed_turn(self):
+        """Gemini 没有显式 cancel 帧,靠新的用户输入打断 —— 机制不同,不能照抄
+        OpenAI 的 response.cancel。"""
+        f = self.a.interrupt_frame()
+        assert f["clientContent"]["turns"] == []
+        assert f["clientContent"]["turnComplete"] is True
+
+    def test_no_auth_header(self):
+        """Gemini 的 key 在 URL query 里。若照抄 OpenAI 加 Authorization 头,握手会被拒。"""
+        assert self.a.headers(self.cfg) == {}
+
+    @pytest.mark.parametrize(
+        "raw,expected",
+        [
+            ({"setupComplete": {}}, DuplexEventType.SESSION_OPEN),
+            ({"serverContent": {"turnComplete": True}}, DuplexEventType.RESPONSE_DONE),
+            ({"serverContent": {"interrupted": True}}, DuplexEventType.USER_SPEECH_STARTED),
+            ({"error": {"message": "quota"}}, DuplexEventType.ERROR),
+        ],
+    )
+    def test_control_frames(self, raw, expected):
+        assert self.a.decode(raw).type is expected
+
+    def test_audio_part_decoded(self):
+        ev = self.a.decode(
+            {"serverContent": {"modelTurn": {"parts": [{"inlineData": {"mimeType": "audio/pcm", "data": "QUJD"}}]}}}
+        )
+        assert ev.type is DuplexEventType.ASSISTANT_AUDIO_DELTA
+        assert base64.b64decode(ev.audio_b64) == b"ABC"
+
+    def test_text_part_decoded(self):
+        ev = self.a.decode({"serverContent": {"modelTurn": {"parts": [{"text": "你好"}]}}})
+        assert ev.type is DuplexEventType.ASSISTANT_TEXT_DELTA and ev.text == "你好"
+
+    def test_mixed_parts_prefer_audio(self):
+        """parts 是混合数组。音频要优先 —— 它才是必须立刻播出去的那个。"""
+        ev = self.a.decode(
+            {"serverContent": {"modelTurn": {"parts": [{"text": "旁白"}, {"inlineData": {"data": "QUJD"}}]}}}
+        )
+        assert ev.type is DuplexEventType.ASSISTANT_AUDIO_DELTA
+
+    def test_input_transcription_becomes_final_transcript(self):
+        ev = self.a.decode({"serverContent": {"inputTranscription": {"text": "帮我订机票"}}})
+        assert ev.type is DuplexEventType.FINAL_TRANSCRIPT and ev.text == "帮我订机票"
+
+    def test_unknown_frames_ignored(self):
+        assert self.a.decode({"weird": 1}) is None
+        assert self.a.decode({"serverContent": {}}) is None
+
+
+class TestProviderSelection:
+    def test_both_adapters_registered(self):
+        assert get_adapter("openai_realtime").name == "openai_realtime"
+        assert get_adapter("gemini_live").name == "gemini_live"
+
+    def test_unknown_provider_still_fails_loudly(self):
+        """静默退回默认实现会让用户以为在用 A、实际发的是 B 的帧。"""
+        with pytest.raises(ValueError, match="未实现"):
+            get_adapter("anthropic_realtime")
+
+    def test_session_picks_adapter_from_config(self):
+        """写死默认适配器会让 GALAXY_REALTIME_PROVIDER 形同虚设。"""
+        cfg = DuplexSessionConfig(url="wss://x", api_key="k", provider="gemini_live")
+        assert DuplexSession(cfg).adapter.name == "gemini_live"
+
+    def test_from_env_builds_gemini_config(self, monkeypatch):
+        monkeypatch.setenv("GALAXY_REALTIME_PROVIDER", "gemini_live")
+        monkeypatch.setenv("GALAXY_REALTIME_API_KEY", "gk")
+        monkeypatch.delenv("GALAXY_REALTIME_URL", raising=False)
+        monkeypatch.delenv("GALAXY_REALTIME_MODEL", raising=False)
+        monkeypatch.delenv("GALAXY_REALTIME_VOICE", raising=False)
+        cfg = DuplexSessionConfig.from_env()
+        assert cfg is not None
+        assert cfg.provider == "gemini_live"
+        assert "BidiGenerateContent" in cfg.url and "key=gk" in cfg.url
+        assert cfg.model.startswith("gemini-")
+        assert cfg.voice == "Puck"
+
+    def test_from_env_gemini_missing_key_names_the_right_vars(self, monkeypatch, caplog):
+        monkeypatch.setenv("GALAXY_REALTIME_PROVIDER", "gemini_live")
+        for v in ("GALAXY_REALTIME_API_KEY", "GOOGLE_API_KEY", "GALAXY_REALTIME_URL"):
+            monkeypatch.delenv(v, raising=False)
+        with caplog.at_level("WARNING"):
+            assert DuplexSessionConfig.from_env() is None
+        assert "GOOGLE_API_KEY" in caplog.text, "缺 key 的提示要点名该 provider 的变量"
+
+
+class _FakeGeminiServer:
+    """说 Gemini Live 帧形状的本地服务端。与 OpenAI 那个同一套方法,不是 mock。"""
+
+    def __init__(self) -> None:
+        self.received: list = []
+        self._server = None
+        self.url = ""
+
+    async def __aenter__(self):
+        async def _handler(ws):
+            async for raw in ws:
+                msg = json.loads(raw)
+                self.received.append(msg)
+                if "setup" in msg:
+                    await ws.send(json.dumps({"setupComplete": {}}))
+                elif "realtimeInput" in msg:
+                    await ws.send(json.dumps({"serverContent": {"inputTranscription": {"text": "今天天气怎么样"}}}))
+                    await ws.send(
+                        json.dumps(
+                            {
+                                "serverContent": {
+                                    "modelTurn": {
+                                        "parts": [{"inlineData": {"data": base64.b64encode(b"\x00\x01" * 8).decode()}}]
+                                    }
+                                }
+                            }
+                        )
+                    )
+                    await ws.send(json.dumps({"serverContent": {"turnComplete": True}}))
+
+        self._server = await websockets.serve(_handler, "127.0.0.1", 0)
+        self.url = f"ws://127.0.0.1:{self._server.sockets[0].getsockname()[1]}"
+        return self
+
+    async def __aexit__(self, *_exc):
+        if self._server is not None:
+            self._server.close()
+            await self._server.wait_closed()
+
+    def keys(self) -> list:
+        return [k for m in self.received for k in m]
+
+
+class TestGeminiFullSessionOverRealWebSocket:
+    @pytest.mark.asyncio
+    async def test_end_to_end(self):
+        async with _FakeGeminiServer() as server:
+            cfg = DuplexSessionConfig(url=server.url, api_key="k", provider="gemini_live")
+            sess = DuplexSession(cfg)
+            assert await sess.connect() is True
+            try:
+                await _drain(sess, DuplexEventType.SESSION_OPEN)
+                assert "setup" in server.keys(), "建连后第一帧必须是 setup"
+
+                await sess.send_audio(pcm16_from_float(np.zeros(160, dtype=np.float32) + 0.1))
+                events = await _drain(sess, DuplexEventType.RESPONSE_DONE)
+                kinds = [e.type for e in events]
+                assert DuplexEventType.FINAL_TRANSCRIPT in kinds
+                assert DuplexEventType.ASSISTANT_AUDIO_DELTA in kinds
+                assert "realtimeInput" in server.keys()
+            finally:
+                await sess.close()

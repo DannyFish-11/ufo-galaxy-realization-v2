@@ -26,8 +26,10 @@ TTS 整段合成播放。每一步都要等上一步结束,所以"同一时刻�
 * **真实 provider 连接在本仓库的测试环境里无法验证**(没有 key、没有出网)。可验证的是
   协议编解码(抽成纯函数)、会话状态机、以及跑在**本地真 WebSocket 服务端**上的完整
   会话流程 —— 那不是 mock,是真的建连、真的收发帧。
-* 只实现了 OpenAI Realtime 的帧格式适配器。Gemini Live 的 ``bidiGenerateContent`` 帧形状
-  不同,留了 ``ProtocolAdapter`` 接口但**没有**实现 —— 没实现就不假装支持。
+* 已实现两个适配器:OpenAI Realtime 与 Gemini Live(``BidiGenerateContent``)。两家不只是
+  字段名不同,是**结构不同** —— 配置帧的位置与时机、音频上行的载体、下行 parts 的混合
+  数组、回合边界的表达、鉴权方式(Gemini 的 key 在 URL query 里)全都不一样,所以是两份
+  实现而不是参数化的一份。未登记的 provider 名显式抛错,**绝不**静默退回某个默认实现。
 """
 
 from __future__ import annotations
@@ -52,13 +54,174 @@ _BACKGROUND_TASKS: set = set()
 _EVENT_QUEUE_MAX = 256
 
 
-def _flag(name: str, default: str = "0") -> bool:
-    return os.getenv(name, default).strip().lower() not in ("0", "false", "no", "off")
+# 统一走 core.config_flags —— 这里原先是 5 份逐字相同的本地 _flag 副本,
+# 其中一个真 bug(空值把开关打开)因此要修 5 遍。详见该模块 docstring。
+from core.config_flags import flag as _flag  # noqa: E402  (保留 _flag 名字以免动全部调用点)
+
+#: 本地全模态 server 上 realtime 端点的路径。默认取 OpenAI 兼容的惯例 ``/v1/realtime``
+#: —— 本仓库接的本地服务(ollama、oneapi、hf_local)清一色是 OpenAI 兼容的 ``/v1``,
+#: MiniCPM-o 官方 server 若也照这个惯例就能直接用。**不确定就让它去试**:路径不对时
+#: 连接会失败,而失败是安全的(见 ``native_realtime_url`` 的说明)。
+_NATIVE_REALTIME_PATH_DEFAULT = "/v1/realtime"
+
+
+def _native_audio_on() -> bool:
+    """B 档原生听/说是否已就绪。收口读 ``core.modality_capability``,不各处自己读环境变量。"""
+    try:
+        from core.modality_capability import _native_audio_serving_enabled as _gate
+
+        return bool(_gate())
+    except Exception:  # noqa: BLE001
+        return _flag("GALAXY_NATIVE_AUDIO", False)
+
+
+def native_realtime_url() -> str:
+    """由本地全模态 server 的地址推导出 realtime 的 ws 地址;推不出返回 ""。
+
+    为什么是"推导 + 去试",而不是等人确认协议
+    ----------------------------------------
+    B 档切过去后 ``core.native_modal`` 会把 MiniCPM-o server 拉起来(地址在
+    ``GALAXY_MINICPM_SERVER_URL``,默认 ``http://localhost:32550``)。它到底有没有
+    OpenAI 兼容的 realtime 端点,只有那台机器上才知道 —— 在这里猜没有意义,**编造帧
+    协议更是错的**。
+
+    但"不确定"不等于"什么都不能做":这条链路上的失败是**安全且已被处理**的 ——
+    ``open_duplex_session()`` 连不上会返回 None,``voice_loop`` 收到 None 就回落回合制,
+    而回合制现在听/说都走原生(见 ``core.modality_bridge.transcribe_pcm`` 与
+    ``speech_output`` 的原生后端)。所以最坏情况是"没拿到流式,但仍然全原生",不是坏掉。
+
+    于是这里的做法是:**自动去试一次**。试通了就是真流式双工,试不通就安静退回原生回合
+    制,并在日志里说清下一步怎么办。两种服务器都覆盖到了,一行协议也没有编。
+
+    可调:
+
+    * ``GALAXY_NATIVE_REALTIME_PATH`` —— 路径不是 ``/v1/realtime`` 时改这里;
+    * ``GALAXY_REALTIME_URL`` —— 整个地址自己给(优先级最高,本函数就不参与了);
+    * 若该 server 用的是**自己的帧格式**而非 OpenAI 兼容,那就不是改地址能解决的,需要
+      按 ``ProtocolAdapter`` 再写一个适配器(6 个方法,不碰传输层)。
+    """
+    try:
+        from core.native_modal import _server_url  # 复用同一个地址来源,避免两处漂移
+
+        base = (_server_url() or "").strip()
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("取本地 server 地址失败: %s", exc)
+        return ""
+    if not base:
+        return ""
+    path = (os.getenv("GALAXY_NATIVE_REALTIME_PATH") or _NATIVE_REALTIME_PATH_DEFAULT).strip()
+    if not path.startswith("/"):
+        path = "/" + path
+    scheme_map = {"http": "ws", "https": "wss", "ws": "ws", "wss": "wss"}
+    try:
+        from urllib.parse import urlsplit
+
+        parts = urlsplit(base)
+        scheme = scheme_map.get((parts.scheme or "http").lower(), "ws")
+        netloc = parts.netloc or parts.path  # 允许 "localhost:32550" 这种没有 scheme 的写法
+        if not netloc:
+            return ""
+        return f"{scheme}://{netloc}{path}"
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("推导本地 realtime 地址失败: %s", exc)
+        return ""
+
+
+def safe_endpoint(url: str) -> str:
+    """把 realtime URL 收敛成**可以安全打日志**的 ``scheme://host:port``。
+
+    为什么必须有这个函数
+    --------------------
+    realtime 的 URL 是**带凭据的**:本模块 Gemini 那一支就是
+
+        wss://generativelanguage.googleapis.com/ws/...BidiGenerateContent?key={key}
+
+    —— API key 直接拼在 query 里。所以任何"把 url 原样打出来"的日志都是明文泄露密钥。
+    我自己就在加"本地端点免 key"那段时踩了这个坑(CodeQL alert 1025 指的正是那一行),
+    而且它不只是静态分析的洁癖:本地网关用 query 带 token 很常见,用户把
+    ``GALAXY_REALTIME_URL`` 设成那种形式时,日志就会把 token 原样记下来。
+
+    只保留 scheme/host/port:诊断要回答的是"连的是哪台机器",这三样就够了;path / query /
+    fragment / userinfo 一律丢掉 —— 它们才是凭据可能藏身的地方。
+    """
+    from urllib.parse import urlsplit
+
+    try:
+        parts = urlsplit(url)
+        host = (parts.hostname or "").strip()
+        if not host:
+            return "(无效地址)"
+        scheme = (parts.scheme or "ws").strip()
+        port = parts.port  # 解析失败会抛 ValueError,一并被下面接住
+    except Exception as exc:  # noqa: BLE001 —— 打日志不该成为崩溃来源
+        logger.debug("解析 realtime URL 失败: %s", exc)
+        return "(无效地址)"
+    return f"{scheme}://{host}:{port}" if port else f"{scheme}://{host}"
+
+
+def is_local_endpoint(url: str) -> bool:
+    """这个 realtime 端点是不是**本机/本网**的服务(因而不需要云端 API key)。
+
+    为什么需要这个判断
+    ------------------
+    ``from_env()`` 原先无条件要求 key,拿不到就返回 None 并告警"缺少 API key"。但本地
+    服务根本没有 key 这个概念 —— B 档切换后 ``core.native_modal`` 会把 MiniCPM-o 官方
+    server 拉起来(默认 ``localhost:32550``),这时:
+
+        GALAXY_REALTIME_URL=ws://localhost:32550/...   # 指向本地
+        GALAXY_NATIVE_AUDIO=1                          # 原生听/说已就绪
+        (没有云端 key)
+
+    旧逻辑一律判"缺 key → 退回回合制",于是**本地服务配好了也起不来**,而且日志把人引去
+    配云端 key —— 那是完全无关的一件事。这是纯逻辑错误,与任何 provider 的协议无关。
+
+    判据取"回环 / 私网 / .local",也就是"这台机器或这个局域网里的服务"。刻意**不**用
+    "只要显式设了 URL 就免 key":那样会把指向云端的自定义 URL 也放过去,拿空 key 建连换
+    一个 401,反而更难查。
+    """
+    from urllib.parse import urlsplit
+
+    try:
+        host = (urlsplit(url).hostname or "").strip().lower()
+    except Exception as exc:  # noqa: BLE001 —— URL 畸形不该让调用方崩
+        logger.debug("解析 realtime URL 失败(按非本地处理): %s", exc)
+        return False
+    if not host:
+        return False
+    if host in ("localhost", "::1") or host.endswith(".local"):
+        return True
+    try:
+        import ipaddress
+
+        return ipaddress.ip_address(host).is_loopback or ipaddress.ip_address(host).is_private
+    except ValueError:
+        return False  # 不是 IP 字面量,又不在上面的名字里 → 当作远端
 
 
 def duplex_enabled() -> bool:
     """双工语音是否启用。**默认关闭** —— 它需要 realtime provider 与 key。"""
     return _flag("GALAXY_VOICE_DUPLEX", "0")
+
+
+def ducking_enabled() -> bool:
+    """用户开口时是否压低音量(而不是立刻掐断)。双工路径默认开启。
+
+    默认开启的理由:立刻掐断在用户只是"嗯"了一声时是错的,而压音是**非承诺性**的 ——
+    先压低(低延迟、听感自然),等最终转写到了再决定是真打断还是继续说。
+    """
+    return _flag("GALAXY_VOICE_DUCKING", "1")
+
+
+def duck_gain() -> float:
+    """压音时的增益(0~1)。默认 0.25(约 −12 dB):明显压下去但仍听得见。"""
+    raw = os.getenv("GALAXY_VOICE_DUCK_GAIN", "").strip()
+    if not raw:
+        return 0.25
+    try:
+        return max(0.0, min(1.0, float(raw)))
+    except ValueError:
+        logger.warning("GALAXY_VOICE_DUCK_GAIN=%r 不是合法数值,已退回 0.25", raw)
+        return 0.25
 
 
 class DuplexEventType(str, Enum):
@@ -105,24 +268,138 @@ class DuplexSessionConfig:
     #: 服务端 VAD 的静音判定阈值(毫秒)。双工下回合边界由服务端判,不再靠本地攒够时长。
     silence_ms: int = 500
 
+    #: provider 名(决定用哪个 ProtocolAdapter)
+    provider: str = "openai_realtime"
+
     @classmethod
     def from_env(cls) -> Optional["DuplexSessionConfig"]:
-        """从环境变量构造;缺 key 或缺 url 时返回 None 并**说明缺什么**。
+        """从配置构造;缺 key 或缺 url 时返回 None 并**说明缺什么**。
 
         返回 None 而不是抛异常:双工默认关闭,缺配置是预期情形而非错误。但原因要能
         从日志里看到 —— 否则"开了开关却没生效"完全无从排查。
+
+        provider 由 ``GALAXY_REALTIME_PROVIDER`` 选,默认 ``openai_realtime``。两家的
+        默认 URL、默认模型、鉴权方式都不同(Gemini 的 key 在 URL query 里,没有
+        Authorization 头),所以要分开组。
+
+        密钥为什么不用 ``os.getenv``
+        ----------------------------
+        原先这里是 ``os.getenv("GALAXY_REALTIME_API_KEY") or os.getenv("OPENAI_API_KEY")``,
+        有两个真问题:
+
+        1. **只覆盖第三层。** 本仓库解析云端 key 的权威顺序是
+           面板/Dashboard → CredentialVault → 环境变量;裸 ``os.getenv`` 跳过前两层。
+           ``GALAXY_SECRET_BACKEND=vault`` 时 key 只在 vault 里,双工层会直接瞎掉,
+           而系统其余部分照常工作 —— 这种"只有一处瞎了"最难排查。
+        2. **不过滤占位符。** ``main.py`` 启动时会把 ``.env``(含
+           ``your_openai_api_key_here`` 这种未编辑模板)灌进 ``os.environ``。于是双工层
+           把模板文字当真 key,拿去连 ``wss://api.openai.com/v1/realtime``,换来一个
+           401 —— 而正确行为是认出"这不是真 key",安静退回回合制。路由器一直是过滤的
+           (``PLACEHOLDER_PREFIXES``),只有这里漏了。
+
+        现在统一走 ``core.secret_resolution.resolve_secret()``,与路由器同序、共用同一份
+        占位符判据。**非密钥项**(provider/url/model/voice)仍读环境变量:它们不是
+        secret,面板保存后会经 ``main.py`` 注回 ``os.environ``,没有 vault 那一层。
         """
-        key = (os.getenv("GALAXY_REALTIME_API_KEY") or os.getenv("OPENAI_API_KEY") or "").strip()
-        url = (os.getenv("GALAXY_REALTIME_URL") or "").strip()
-        model = (os.getenv("GALAXY_REALTIME_MODEL") or "gpt-4o-realtime-preview").strip()
-        if not url:
-            url = f"wss://api.openai.com/v1/realtime?model={model}"
-        if not key:
-            logger.warning(
-                "双工语音已开启但缺少 API key(GALAXY_REALTIME_API_KEY 或 OPENAI_API_KEY)," "本次退回回合制语音链路。"
+        from core.secret_resolution import resolve_secret
+
+        provider = (os.getenv("GALAXY_REALTIME_PROVIDER") or "openai_realtime").strip()
+        # configured_url 是**用户配的那个值本身**,下面永远不会被重新赋值。
+        # url 会:Gemini 那一支在缺 URL 时会拿 key 现拼一个(?key=…)。所以凡是要**打日志**
+        # 的地方一律用 configured_url,绝不用 url —— 详见下面本地分支处的说明。
+        configured_url = (os.getenv("GALAXY_REALTIME_URL") or "").strip()
+        url = configured_url
+        model = (os.getenv("GALAXY_REALTIME_MODEL") or "").strip()
+
+        if provider == "gemini_live":
+            # 专用键优先于通用键:专门给双工配的那把先用,没配才退回该家的通用 key。
+            key = resolve_secret("GALAXY_REALTIME_API_KEY", "GOOGLE_API_KEY", "GEMINI_API_KEY")
+            model = model or "gemini-2.0-flash-exp"
+            voice = (os.getenv("GALAXY_REALTIME_VOICE") or "Puck").strip()
+            if not url and key:
+                url = (
+                    "wss://generativelanguage.googleapis.com/ws/"
+                    "google.ai.generativelanguage.v1alpha.GenerativeService."
+                    f"BidiGenerateContent?key={key}"
+                )
+            missing = "GALAXY_REALTIME_API_KEY 或 GOOGLE_API_KEY"
+        else:
+            key = resolve_secret("GALAXY_REALTIME_API_KEY", "OPENAI_API_KEY")
+            model = model or "gpt-4o-realtime-preview"
+            voice = (os.getenv("GALAXY_REALTIME_VOICE") or "alloy").strip()
+            if not url:
+                url = f"wss://api.openai.com/v1/realtime?model={model}"
+            missing = "GALAXY_REALTIME_API_KEY 或 OPENAI_API_KEY"
+
+        # 没显式配地址、也没有可用的云端 key、而 B 档原生已就绪
+        # → 自动指向本地全模态 server 试一次流式。
+        #
+        # 三个条件缺一不可,顺序也要紧:
+        #
+        # * **没显式配 URL** —— 明示的意图不能被自动化覆盖;
+        # * **没有可用 key** —— 这一条我第一版漏了,把推导放在了解析 key 之前,结果
+        #   「原生开着 + 配了云端 realtime key + 没配 URL」的人会被劫持到本地,配好的
+        #   云端能力平白丢掉。是自查测试把这个顺序问题抓出来的;
+        # * **原生已就绪** —— 否则本地根本没有 server 在跑。
+        #
+        # 试不通是安全的:连接失败 → open_duplex_session() 返回 None → voice_loop 回落
+        # 回合制,而回合制现在听/说都走原生。详见 native_realtime_url() 的说明。
+        if not configured_url and not key and _native_audio_on():
+            derived = native_realtime_url()
+            if derived:
+                configured_url = derived
+                url = derived
+                logger.info(
+                    "双工语音:未配 GALAXY_REALTIME_URL 且无云端 key,但 B 档原生已就绪 —— "
+                    "自动尝试本地全模态 server 的 realtime 端点(%s)。该 server 若没有这个"
+                    "端点或路径不同,连接会失败并安静退回**原生回合制**(听/说仍是原生,"
+                    "不是 Whisper/TTS 桥);路径不同可用 GALAXY_NATIVE_REALTIME_PATH 指定。",
+                    safe_endpoint(derived),
+                )
+
+        if not key and is_local_endpoint(url):
+            # 本地服务不需要 key。B 档切过去之后 core.native_modal 会把 MiniCPM-o
+            # 官方 server 拉起来(默认 localhost:32550),这条路径正是给它用的。
+            #
+            # 这里打的是 configured_url 而**不是** url,两层理由:
+            #
+            # 1. 数据流上 url 是被 key 污染过的(Gemini 分支 ?key={key}),而
+            #    configured_url 只来自用户配的那个环境变量,从不由 key 拼成。我上一版写的是
+            #    safe_endpoint(url) —— 以为脱敏函数就够了,CodeQL 照报(alert 1026)。它是
+            #    对的:静态分析没有理由相信一个函数把密钥清干净了,把 secret 喂进一个"返回值
+            #    会被打印"的函数,这条边只会更明显。这个道理我在 scripts/verify_provider_apis.py
+            #    的注释里已经写过一遍,这次又犯了同一个错。正确做法是**让被打印的值根本不来自
+            #    key**,而不是指望脱敏。
+            # 2. 能走到这条分支就说明 url 来自 configured_url:key 为空时 Gemini 那支不会
+            #    现拼(它要求 `not url and key`),OpenAI 那支拼出来的是 api.openai.com、不是
+            #    本地地址。所以这两个值在此处本来就相等,用 configured_url 反而更直接。
+            #
+            # 仍然过 safe_endpoint:只留 scheme://host:port。运行期的实际风险是用户把
+            # GALAXY_REALTIME_URL 设成 ws://gateway/rt?token=… 这种形式,那是真会泄的。
+            logger.info(
+                "双工语音:realtime 端点是本地服务(%s),无需 API key。",
+                safe_endpoint(configured_url),
             )
+            return cls(url=url, api_key="", model=model, voice=voice, provider=provider)
+
+        if not key:
+            # 区分"没填"与"填的是占位符" —— 后者用户以为自己配好了,不说清会白查很久。
+            from core.secret_resolution import describe_source
+
+            sources = {n: describe_source(n) for n in ("GALAXY_REALTIME_API_KEY", missing.split(" 或 ")[-1])}
+            if "placeholder" in sources.values():
+                logger.warning(
+                    "双工语音已开启,但 API key 是【未编辑的占位符模板】(%s),不是真密钥;"
+                    "本次退回回合制语音链路。请在面板「模型」tab 填入真实 key。",
+                    sources,
+                )
+            else:
+                logger.warning("双工语音已开启但缺少 API key(%s),本次退回回合制语音链路。", missing)
+            # 这里原先还有一句「补充:本地原生听/说已就绪…」的提示。加上自动推导之后它变成了
+            # 死代码:原生就绪且没有 key 时,上面已经把地址指向本地并 return,根本走不到这里。
+            # 留着一句永远不会打印、却声称在帮人排查的日志,比没有更坏 —— 删掉。
             return None
-        return cls(url=url, api_key=key, model=model)
+        return cls(url=url, api_key=key, model=model, voice=voice, provider=provider)
 
 
 # ── 协议适配:全部是纯函数,不碰网络,可完整单测 ────────────────────────────
@@ -131,8 +408,8 @@ class DuplexSessionConfig:
 class ProtocolAdapter:
     """provider 帧格式适配器。
 
-    只有 OpenAI Realtime 一个实现。Gemini Live 的 ``bidiGenerateContent`` 帧形状不同,
-    接口留在这里,但**没有实现** —— 没实现就不假装支持。
+    已实现:``OpenAIRealtimeAdapter``、``GeminiLiveAdapter``。新增 provider 时要在
+    ``_ADAPTERS`` 里登记 —— 未登记的名字显式抛错,绝不静默退回默认实现。
     """
 
     name = "abstract"
@@ -251,10 +528,132 @@ class OpenAIRealtimeAdapter(ProtocolAdapter):
         return None
 
 
+class GeminiLiveAdapter(ProtocolAdapter):
+    """Gemini Live(``BidiGenerateContent``)的帧格式。
+
+    与 OpenAI Realtime 的差别不只是字段名,是**结构不同**:
+
+    - 配置不叫 ``session.update`` 而是连接后的**第一帧** ``setup``,且必须先发完它再发
+      任何音频 —— 顺序错了服务端会直接断开;
+    - 音频上行走 ``realtimeInput.mediaChunks[]``,每块带自己的 ``mimeType``(采样率写在
+      mime 里,如 ``audio/pcm;rate=16000``),不是像 OpenAI 那样在 session 里统一声明;
+    - 下行是 ``serverContent.modelTurn.parts[]`` 的**混合数组** —— 同一个 parts 里既可能
+      是 ``inlineData``(音频)也可能是 ``text``,得逐个 part 分派,而不是一个 part 一种事件;
+    - 回合边界由 ``serverContent.turnComplete`` / ``interrupted`` 标志给出,不是独立的
+      事件类型。
+
+    鉴权也不同:Gemini 走 URL 上的 ``?key=``,没有 Authorization 头。
+    """
+
+    name = "gemini_live"
+
+    def headers(self, cfg: DuplexSessionConfig) -> Dict[str, str]:
+        # key 在 URL query 里(见 from_env 组 URL 的地方),不走请求头
+        return {}
+
+    def session_update(self, cfg: DuplexSessionConfig) -> Dict[str, Any]:
+        setup: Dict[str, Any] = {
+            "model": f"models/{cfg.model}" if not cfg.model.startswith("models/") else cfg.model,
+            "generationConfig": {
+                "responseModalities": ["AUDIO"],
+                "speechConfig": {"voiceConfig": {"prebuiltVoiceConfig": {"voiceName": cfg.voice}}},
+            },
+        }
+        if cfg.instructions:
+            setup["systemInstruction"] = {"parts": [{"text": cfg.instructions}]}
+        return {"setup": setup}
+
+    def audio_frame(self, pcm16: bytes) -> Dict[str, Any]:
+        return {
+            "realtimeInput": {
+                "mediaChunks": [
+                    {
+                        "mimeType": "audio/pcm;rate=16000",
+                        "data": base64.b64encode(pcm16).decode("ascii"),
+                    }
+                ]
+            }
+        }
+
+    def text_frame(self, text: str) -> List[Dict[str, Any]]:
+        # Gemini 一帧即可:clientContent 带 turnComplete 就等于"说完了,该你了",
+        # 不需要 OpenAI 那种 create item + response.create 的两步。
+        return [
+            {
+                "clientContent": {
+                    "turns": [{"role": "user", "parts": [{"text": text}]}],
+                    "turnComplete": True,
+                }
+            }
+        ]
+
+    def interrupt_frame(self) -> Dict[str, Any]:
+        """Gemini 没有显式的 cancel 帧 —— 它靠**新的用户输入**打断当前回合。
+
+        发一个 ``turnComplete`` 的空 turn 即表示"我要说话了",服务端据此中止当前生成。
+        这与 OpenAI 的 ``response.cancel`` 语义等价,但机制不同,不能照抄。
+        """
+        return {"clientContent": {"turns": [], "turnComplete": True}}
+
+    def decode(self, msg: Dict[str, Any]) -> Optional[DuplexEvent]:
+        if msg.get("setupComplete") is not None:
+            return DuplexEvent(DuplexEventType.SESSION_OPEN, raw=msg)
+
+        err = msg.get("error")
+        if err:
+            detail = err.get("message") if isinstance(err, dict) else str(err)
+            return DuplexEvent(DuplexEventType.ERROR, error=str(detail or "unknown"), raw=msg)
+
+        sc = msg.get("serverContent")
+        if not isinstance(sc, dict):
+            logger.debug("Gemini Live:未识别的服务端帧(已忽略): %s", list(msg)[:3])
+            return None
+
+        # 被用户打断 —— 对齐成"用户开口"
+        if sc.get("interrupted"):
+            return DuplexEvent(DuplexEventType.USER_SPEECH_STARTED, raw=msg)
+        if sc.get("turnComplete"):
+            return DuplexEvent(DuplexEventType.RESPONSE_DONE, raw=msg)
+
+        turn = sc.get("modelTurn")
+        if isinstance(turn, dict):
+            # parts 是混合数组:音频优先(它才是要立刻播的),其次文本
+            for part in turn.get("parts") or []:
+                if not isinstance(part, dict):
+                    continue
+                inline = part.get("inlineData")
+                if isinstance(inline, dict) and inline.get("data"):
+                    return DuplexEvent(
+                        DuplexEventType.ASSISTANT_AUDIO_DELTA,
+                        audio_b64=str(inline.get("data")),
+                        raw=msg,
+                    )
+            for part in turn.get("parts") or []:
+                if isinstance(part, dict) and part.get("text"):
+                    return DuplexEvent(DuplexEventType.ASSISTANT_TEXT_DELTA, text=str(part["text"]), raw=msg)
+
+        # 用户语音的转写(Gemini 把它放在 inputTranscription 里)
+        it = sc.get("inputTranscription")
+        if isinstance(it, dict) and it.get("text"):
+            return DuplexEvent(DuplexEventType.FINAL_TRANSCRIPT, text=str(it["text"]), raw=msg)
+
+        logger.debug("Gemini Live:serverContent 里没有可识别的内容(已忽略)")
+        return None
+
+
+#: 已实现的适配器。新增 provider 时在这里登记 —— 未登记的显式抛错,
+#: **绝不**静默退回某个默认实现(那会让用户以为在用 A、实际发的是 B 的帧)。
+_ADAPTERS = {
+    OpenAIRealtimeAdapter.name: OpenAIRealtimeAdapter,
+    GeminiLiveAdapter.name: GeminiLiveAdapter,
+}
+
+
 def get_adapter(name: str = "openai_realtime") -> ProtocolAdapter:
-    if name == "openai_realtime":
-        return OpenAIRealtimeAdapter()
-    raise ValueError(f"未实现的双工 provider 适配器: {name}(目前只有 openai_realtime)")
+    cls = _ADAPTERS.get(name)
+    if cls is None:
+        raise ValueError(f"未实现的双工 provider 适配器: {name}(已实现: {', '.join(sorted(_ADAPTERS))})")
+    return cls()
 
 
 # ── 会话 ─────────────────────────────────────────────────────────────────────
@@ -278,7 +677,9 @@ class DuplexSession:
 
     def __init__(self, config: DuplexSessionConfig, adapter: Optional[ProtocolAdapter] = None) -> None:
         self.config = config
-        self.adapter = adapter or get_adapter()
+        # 适配器按 config.provider 选 —— 写死默认值会让 GALAXY_REALTIME_PROVIDER
+        # 形同虚设:用户以为在用 Gemini,实际发的是 OpenAI 的帧。
+        self.adapter = adapter or get_adapter(config.provider)
         self._ws: Any = None
         self._reader: Optional[asyncio.Task] = None
         self._queue: asyncio.Queue = asyncio.Queue(maxsize=_EVENT_QUEUE_MAX)
@@ -563,6 +964,9 @@ UplinkHook = Callable[[bytes], Any]
 #: 会把事件循环连带上行一起卡住。
 _PLAYER_BUFFER_SEC = 2.0
 
+#: ducking 的增益爬坡时长(毫秒)。瞬间切换会有爆音,50ms 是听感上"干净且够快"的常用值。
+_DUCK_RAMP_MS = 50.0
+
 
 class PcmPlayer:
     """下行原始 PCM 的播放器(回调驱动,``play()`` 绝不阻塞)。
@@ -595,10 +999,39 @@ class PcmPlayer:
         self.blocks_played = 0
         self.blocks_dropped = 0
         self.samples_underrun = 0  # 缓冲空、只能输出静音的样本数(可听为卡顿)
+        # ── ducking(压音)──
+        self._gain = 1.0  # 当前增益
+        self._target_gain = 1.0  # 目标增益
+        self.duck_events = 0
 
     @property
     def _max_samples(self) -> int:
         return int(_PLAYER_BUFFER_SEC * self.sample_rate)
+
+    @property
+    def _ramp_samples(self) -> int:
+        """增益爬坡长度(样本)。**不能瞬间切换** —— 幅度突变在听感上是"啪"的一声爆音。"""
+        return max(1, int(self.sample_rate * _DUCK_RAMP_MS / 1000.0))
+
+    # ── ducking ───────────────────────────────────────────────────────────
+
+    def duck(self, gain: Optional[float] = None) -> None:
+        """压低音量(不停止播放)。用户开口时用,比整段掐断温和得多。"""
+        g = duck_gain() if gain is None else float(gain)
+        with self._lock:
+            if self._target_gain != g:
+                self.duck_events += 1
+            self._target_gain = max(0.0, min(1.0, g))
+
+    def unduck(self) -> None:
+        """恢复原音量。"""
+        with self._lock:
+            self._target_gain = 1.0
+
+    @property
+    def ducked(self) -> bool:
+        with self._lock:
+            return self._target_gain < 1.0
 
     def start(self) -> bool:
         if self._stream is not None:
@@ -611,17 +1044,10 @@ class PcmPlayer:
             self._buf = np.zeros(0, dtype=np.float32)
 
             def _cb(outdata, frames, _time_info, status) -> None:  # noqa: ANN001
-                # 音频线程:只做取数与补静音,绝不做 IO / 日志 / 加重锁
+                # 音频线程:只调 _fill(取数 + 增益 + 补静音),绝不做 IO / 日志 / 加重锁
                 if status:
                     pass
-                with self._lock:
-                    have = min(frames, self._buf.size)
-                    if have:
-                        outdata[:have, 0] = self._buf[:have]
-                        self._buf = self._buf[have:]
-                    if have < frames:
-                        outdata[have:, 0] = 0.0
-                        self.samples_underrun += frames - have
+                self._fill(outdata, frames)
 
             self._stream = sd.OutputStream(
                 samplerate=self.sample_rate,
@@ -637,6 +1063,33 @@ class PcmPlayer:
             logger.warning("双工下行播放器不可用(模型的回复将听不到): %s", exc)
             self._stream = None
             return False
+
+    def _fill(self, outdata: Any, frames: int) -> None:
+        """填一个输出块:取数 → 施加增益爬坡 → 不足补静音。
+
+        抽成方法(而不是留在 ``start()`` 的闭包里)是为了**让测试驱动真正的这段代码**。
+        本环境没有音频设备,若把逻辑埋在只有 ``sd.OutputStream`` 才会调用的闭包里,测试
+        就只能另写一份等价实现去测 —— 那测的是副本不是本体,两边一旦漂移就完全测不出来。
+        """
+        np = self._np
+        with self._lock:
+            have = min(frames, self._buf.size)
+            if have:
+                outdata[:have, 0] = self._buf[:have]
+                self._buf = self._buf[have:]
+            if have < frames:
+                outdata[have:, 0] = 0.0
+                self.samples_underrun += frames - have
+
+            # 增益爬坡:本块最多向目标靠拢 frames/ramp_n,再在块内线性插值。
+            # 一步切到目标会产生幅度突变,听感上就是"啪"的一声爆音。
+            g0 = self._gain
+            delta = self._target_gain - g0
+            max_delta = frames / self._ramp_samples
+            g1 = self._target_gain if abs(delta) <= max_delta else g0 + (max_delta if delta > 0 else -max_delta)
+            if have and not (g0 == 1.0 and g1 == 1.0):
+                outdata[:have, 0] *= np.linspace(g0, g1, have, endpoint=False, dtype=np.float32)
+            self._gain = g1
 
     def play(self, pcm16: bytes) -> bool:
         """把一块 PCM 追加到播放缓冲。**不阻塞**、永不抛出。"""
@@ -678,6 +1131,8 @@ class PcmPlayer:
     def status(self) -> Dict[str, Any]:
         with self._lock:
             buffered = int(self._buf.size) if self._buf is not None else 0
+            gain = round(self._gain, 4)
+            target = round(self._target_gain, 4)
         return {
             "available": self._stream is not None,
             "unavailable_reason": self._unavailable_reason or None,
@@ -685,4 +1140,10 @@ class PcmPlayer:
             "blocks_dropped": self.blocks_dropped,
             "buffered_samples": buffered,
             "samples_underrun": self.samples_underrun,
+            # ducking 的实时状态:压音是"听得见但不明显"的行为,不摊出来就无从判断
+            # "到底压了没有""是不是忘了恢复"
+            "gain": gain,
+            "target_gain": target,
+            "ducked": target < 1.0,
+            "duck_events": self.duck_events,
         }

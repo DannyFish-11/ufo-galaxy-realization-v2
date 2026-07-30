@@ -70,7 +70,6 @@ AEC 在**信号层**把扬声器正在播的内容从麦克风信号里减掉。
 from __future__ import annotations
 
 import logging
-import os
 import threading
 from dataclasses import dataclass, field
 from typing import Any, Deque, Dict, Optional
@@ -81,19 +80,13 @@ logger = logging.getLogger("Galaxy.AEC")
 _EPS = 1e-10
 
 
-def _flag(name: str, default: str = "1") -> bool:
-    return os.getenv(name, default).strip().lower() not in ("0", "false", "no", "off")
+# 统一走 core.config_flags —— 这里原先是 5 份逐字相同的本地 _flag 副本,
+# 其中一个真 bug(空值把开关打开)因此要修 5 遍。详见该模块 docstring。
+from core.config_flags import flag as _flag  # noqa: E402  (保留 _flag 名字以免动全部调用点)
+from core.config_flags import num as _num  # noqa: E402
 
-
-def _num(name: str, default: float) -> float:
-    raw = os.getenv(name)
-    if raw is None or not raw.strip():
-        return default
-    try:
-        return float(raw)
-    except ValueError:
-        logger.warning("%s=%r 不是合法数值,已退回默认 %s", name, raw, default)
-        return default
+# _num 原为本地副本(两处,措辞略有差异)。它本来就正确处理了「空值视同未设置」,
+# 而同文件的 _flag 漏了这一步 —— 那正是「空值把开关打开」那个 bug 的来源。一并收敛。
 
 
 def enabled() -> bool:
