@@ -79,6 +79,24 @@ _DEFAULT_VAULT_URL = "http://localhost:8003"
 #: detection logic without duplicating the list.
 PLACEHOLDER_PREFIXES: tuple = ("your_", "your-", "change_me", "todo", "<", "example", "xxx")
 
+
+def is_placeholder(value: Optional[str]) -> bool:
+    """``value`` 是不是 ``.env.example`` / ``secrets.example.env`` 里未编辑的模板值。
+
+    「已配置」在整个仓库里必须只有一个定义。此前这份表在 vault 里**只用在环境变量
+    兜底那一层**:``get_credential()`` 的内存层与远端后端层原样返回,
+    ``list_credential_keys()`` 也原样列出。于是 ``POST /api/v1/vault/credentials``
+    把一串 ``your_deepseek_api_key_here`` 存进来之后:
+
+      * ``MultiLLMRouter._get_key()`` 的第 2 层(vault)会把它当真密钥返回 —— 而第 1 层
+        (面板/UnifiedConfig)和第 3 层(环境变量)都是过滤过的,唯独中间这层没有;
+      * provider 因此被注册成"可用",面板显示"已连接",真实调用必然 401。
+
+    这正是本仓库反复修的那类「看起来已保存,实际用不了」。收口成一个函数,三层共用。
+    """
+    return bool(value) and str(value).strip().lower().startswith(PLACEHOLDER_PREFIXES)
+
+
 # 支持的凭证键名 -> 对应的环境变量名
 #
 # 之前只覆盖 8 个 provider，漏了 google/xai/mistral/qwen/zhipu/minimax/step/
@@ -231,16 +249,24 @@ class CredentialVault:
           2. SecretVault HTTP backend（若 GALAXY_SECRET_BACKEND=vault）
           3. 环境变量回退
         """
+        # 三层一律过占位符。未编辑的模板值不是凭证——不管它是从哪一层来的。
+        # 此前只有第 3 层过滤,前两层原样返回,详见 is_placeholder() 的说明。
         # 1. 内存 Vault
         if key_name in self._credentials:
             value = self._credentials[key_name]
-            self._record_audit("get", key_name, actor=actor, token=None)
-            return value
+            if is_placeholder(value):
+                logger.warning(
+                    "凭证 '%s' 存的是未编辑的模板值,按未配置处理(请填入真实密钥)",
+                    key_name,
+                )
+            else:
+                self._record_audit("get", key_name, actor=actor, token=None)
+                return value
 
         # 2. Remote SecretVault backend
         if self._backend is not None:
             remote = self._backend.get(key_name)
-            if remote:
+            if remote and not is_placeholder(remote):
                 # Cache locally for subsequent calls
                 self._credentials[key_name] = remote
                 self._record_audit("get_vault", key_name, actor=actor, token=None)
@@ -250,7 +276,7 @@ class CredentialVault:
         env_key = _ENV_MAPPING.get(key_name, "")
         if env_key:
             value = os.environ.get(env_key, "")
-            if value and not value.lower().startswith(PLACEHOLDER_PREFIXES):
+            if value and not is_placeholder(value):
                 self._record_audit("get_env", key_name, actor=actor, token=None)
                 return value
 
@@ -265,13 +291,17 @@ class CredentialVault:
         return False
 
     def list_credential_keys(self) -> List[str]:
-        """列出所有已存储的凭证键名（不返回值）"""
-        vault_keys = list(self._credentials.keys())
-        env_keys = [
-            k
-            for k, v in _ENV_MAPPING.items()
-            if os.environ.get(v, "") and not os.environ.get(v, "").lower().startswith(PLACEHOLDER_PREFIXES)
-        ]
+        """列出所有已存储的凭证键名（不返回值）
+
+        内存层同样要过占位符:这个列表是面板判断"哪些 provider 已配置"的依据之一,
+        把一个存着 ``your_..._here`` 的键列进来,面板就会显示"已连接"——而
+        ``get_credential()`` 现在对它返回 None,两边会自相矛盾。环境变量那半边
+        本来就过滤了,这里补齐,让两半用同一个判据。
+        """
+        # 注意 ``is_placeholder("")`` 是 False(空值不是占位符),所以非空判断不能省——
+        # 少了它会把「环境变量存在但为空」也列成已配置。
+        vault_keys = [k for k, v in self._credentials.items() if v and not is_placeholder(v)]
+        env_keys = [k for k, v in _ENV_MAPPING.items() if (_ev := os.environ.get(v, "")) and not is_placeholder(_ev)]
         all_keys = sorted(set(vault_keys + env_keys))
         return all_keys
 

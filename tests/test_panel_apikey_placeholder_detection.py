@@ -56,8 +56,43 @@ class TestIsConfiguredRecognizesUnderscorePlaceholder:
         assert data["configured"]["OPENAI_API_KEY"] is True
 
 
+@pytest.fixture()
+def only_env_layer(monkeypatch):
+    """把 ``_get_key()`` 三层解析链的前两层清空,只留环境变量那一层。
+
+    ``MultiLLMRouter._get_key()`` 的优先级是 **面板/UnifiedConfig > CredentialVault >
+    环境变量**。这条测试要断言的是"环境变量里的占位符不会被当成真密钥",但它此前
+    只 monkeypatch 了环境变量,前两层原样留着 —— 于是在任何配了真 DeepSeek key 的
+    机器上(以及本仓库的 ``runtime/secrets.env`` 存在时)它都会假红:
+
+        _get_key('deepseek') -> 'sk-test-galaxy-...'   # 来自第 1 层,行为完全正确
+
+    那不是被测代码有问题,是断言只控制了链的最后一环、却对整条链的结果下判断。
+    这里连前两层一起隔离,测试才名副其实。
+
+    第 1 层的存储形态要留意:``.env`` / ``runtime/secrets.env`` 经 ``_load_env()``
+    是按**扁平小写**键存进 ``_config`` 的(``DEEPSEEK_API_KEY`` → ``deepseek_api_key``),
+    ``get("api_keys.DEEPSEEK_API_KEY")`` 靠"取最后一段"的兜底才命中 —— 所以要清的是
+    那个扁平键,清 ``api_keys`` 子字典没有用。
+    """
+    from core.credential_vault import reset_vault
+    from core.unified_config import config as uc
+
+    backing = uc._backend._config
+    removed = {}
+    for k in list(backing):
+        if k.lower() in {"deepseek_api_key", "deepseek"}:
+            removed[k] = backing.pop(k)
+    reset_vault()
+    try:
+        yield
+    finally:
+        backing.update(removed)
+        reset_vault()
+
+
 class TestMultiLLMRouterRejectsUnderscorePlaceholder:
-    def test_get_key_rejects_underscore_placeholder_from_env(self, monkeypatch):
+    def test_get_key_rejects_underscore_placeholder_from_env(self, monkeypatch, only_env_layer):
         from core.multi_llm_router import MultiLLMRouter
 
         monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
@@ -68,6 +103,95 @@ class TestMultiLLMRouterRejectsUnderscorePlaceholder:
             f"路由器把未编辑的占位符 'your_deepseek_api_key_here' 当成真实密钥返回: {val!r}——"
             "provider 会被注册并真的拿这串模板文字去发请求"
         )
+
+    def test_a_real_key_in_env_still_comes_through(self, monkeypatch, only_env_layer):
+        """反面:隔离前两层之后,真 key 必须照样取得到。
+
+        没有这条,上面那条可以靠"把整层弄坏、什么都取不到"通过 —— 那是"因为错误的
+        理由而通过"。
+        """
+        from core.multi_llm_router import MultiLLMRouter
+
+        monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-real-looking-deepseek-key-0987654321")
+        assert MultiLLMRouter()._get_key("deepseek") == "sk-real-looking-deepseek-key-0987654321"
+
+
+@pytest.fixture()
+def isolated_vault(monkeypatch):
+    """一个空 vault,且把它的环境变量兜底层也清掉。
+
+    ``get_credential()`` 在内存层拿到占位符时会**继续往下找**(占位符不该盖住真值),
+    所以只清 vault 是不够的:全量套件里别的测试会把 ``runtime/secrets.env`` 灌进
+    ``os.environ``,于是这里断言"应为 None"时会拿到环境变量里那个真 key。单跑绿、
+    合并跑红的差别就出在这。三层一起隔离,断言才稳定。
+    """
+    from core.credential_vault import _ENV_MAPPING, get_vault, reset_vault
+
+    reset_vault()
+    monkeypatch.delenv(_ENV_MAPPING.get("deepseek", "DEEPSEEK_API_KEY"), raising=False)
+    try:
+        yield get_vault()
+    finally:
+        reset_vault()
+
+
+class TestCredentialVaultRejectsPlaceholders:
+    """CredentialVault 是三层解析链里唯一没过占位符的一层(修复前)。
+
+    ``_get_key()`` 的第 1 层(面板/UnifiedConfig)和第 3 层(环境变量)都拿
+    ``PLACEHOLDER_PREFIXES`` 过滤过,唯独中间的 vault 层是 ``if val: return val``。
+    而 ``POST /api/v1/vault/credentials`` 会把请求体里的任意 value 原样
+    ``set_credential()`` 进去 —— 于是把示例文件里的 ``your_deepseek_api_key_here``
+    存进 vault 之后,它会**盖过**第 3 层的过滤被当成真密钥返回,provider 被注册成
+    "可用",面板显示"已连接",真实调用必然 401。这正是本文件开头写的那个真机反馈
+    (「还是不能正常地保存和使用」)在剩下那一层上的同一个 bug。
+    """
+
+    def test_placeholder_stored_in_vault_is_not_served_as_a_credential(self, isolated_vault):
+        isolated_vault.set_credential("deepseek", "your_deepseek_api_key_here")
+        assert isolated_vault.get_credential("deepseek") is None, "vault 把未编辑的模板值当成真凭证发了出去"
+
+    def test_placeholder_in_vault_is_not_listed_as_configured(self, isolated_vault):
+        isolated_vault.set_credential("deepseek", "your_deepseek_api_key_here")
+        assert "deepseek" not in isolated_vault.list_credential_keys(), (
+            "占位符被列进已配置键名——面板会据此显示'已连接',而 get_credential() " "对同一个键返回 None,两边自相矛盾"
+        )
+
+    def test_a_real_credential_is_still_served_and_listed(self, isolated_vault):
+        """反面:过滤不能把真凭证一起误伤。"""
+        isolated_vault.set_credential("deepseek", "sk-real-looking-key-13579")
+        assert isolated_vault.get_credential("deepseek") == "sk-real-looking-key-13579"
+        assert "deepseek" in isolated_vault.list_credential_keys()
+
+    def test_router_layer2_no_longer_leaks_a_placeholder(self, monkeypatch, only_env_layer, isolated_vault):
+        """端到端:占位符存在 vault 里,``_get_key()`` 也不该拿它去注册 provider。"""
+        from core.multi_llm_router import MultiLLMRouter
+
+        monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+        isolated_vault.set_credential("deepseek", "your_deepseek_api_key_here")
+        val = MultiLLMRouter()._get_key("deepseek")
+        assert val in (None, ""), f"vault 层把占位符漏成了真密钥: {val!r}"
+
+    def test_write_endpoint_rejects_a_placeholder_instead_of_pretending_to_save(self, isolated_vault):
+        """写入口当场退回,而不是收下再说。
+
+        收下的话,调用方拿到 success=True、面板显示"已保存",但读出来是 None、
+        真实调用一路 401 —— 用户完全看不出问题出在"粘的是模板文字"。
+        """
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+
+        from core.routes.vault import create_router
+
+        app = FastAPI()
+        app.include_router(create_router())
+        with TestClient(app) as c:
+            r = c.post(
+                "/api/v1/vault/credentials",
+                json={"key_name": "deepseek", "value": "your_deepseek_api_key_here"},
+            )
+            assert r.status_code == 400, f"占位符被收下了(status={r.status_code}): {r.text}"
+            assert "deepseek" not in isolated_vault.list_credential_keys()
 
 
 class TestOneApiFallbackRejectsUnderscorePlaceholder:
