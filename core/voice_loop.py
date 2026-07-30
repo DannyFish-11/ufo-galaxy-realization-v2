@@ -183,12 +183,26 @@ class VoiceLoop:
         except Exception as _exc:  # noqa: BLE001 — 门失灵绝不能让助手变聋
             logger.warning("反自激励门不可用,按用户输入继续处理: %s", _exc)
 
-        # barge-in：用户开口时若 AI 正在朗读，立刻掐断——"你一说话它就闭嘴"。
-        # ASR 出词即视为用户已开口（句级打断）；集中式朗读走 speech_output。
+        # ── barge-in:朗读期间用户出声,分"应答"与"真打断"两种处理 ──────────
+        # 原先是"ASR 一出词就掐断"。但人在听别人说话时会一直出声("嗯""对""好""哦")
+        # —— 那是积极倾听,不是抢话。全当打断的结果是 AI 每讲两句就被"嗯"一声掐断,
+        # 对话根本进行不下去。所以:应答 → 继续说、且不送大脑;真打断 → 立刻掐断。
         try:
             from core.speech_output import interrupt_speech, is_speaking
+            from core.voice_dialog_policy import (
+                BARGE_IN_BACKCHANNEL,
+                backchannel_tolerance_enabled,
+            )
 
             if is_speaking():
+                from core.voice_dialog_policy import get_dialog_policy as _gp
+
+                kind = _gp().classify_barge_in(text) if backchannel_tolerance_enabled() else "interrupt"
+                if kind == BARGE_IN_BACKCHANNEL:
+                    # 继续说下去,也不把这声"嗯"当成一个用户回合送进大脑 ——
+                    # 那会让 AI 对一句语义空的应答另起一段回复。
+                    logger.info("应答(非打断),继续朗读: %s", text[:20])
+                    return
                 interrupt_speech()
                 logger.info("Barge-in: 用户开口，打断 AI 朗读")
         except Exception as _exc:  # noqa: BLE001
