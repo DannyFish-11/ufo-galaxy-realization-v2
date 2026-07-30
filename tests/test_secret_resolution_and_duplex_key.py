@@ -40,10 +40,36 @@ PLACEHOLDER = "your_" + "openai_api_key_here"
 
 
 @pytest.fixture(autouse=True)
-def _clean_env(monkeypatch):
-    """把相关键从环境里摘干净,避免真实 .env 注入影响判断。"""
+def _isolate_all_three_layers(monkeypatch):
+    """把**三层**都摘干净,不只是环境变量。
+
+    为什么必须连面板/vault 一起摘(这条 fixture 的第一版只摘了 env,在 CI 全量跑时挂了
+    6 条)
+    ----------------------------------------------------------------------------------
+    ``resolve_secret`` 的顺序是 **面板 → vault → env**,只摘 env 等于只摘了最后一层。
+    实际发生的事:``tests/test_round2_fix_behaviors.py`` 里有
+
+        monkeypatch.setenv("OPENAI_API_KEY", "FROM_ENV_OPENAI")
+
+    ``monkeypatch`` 会在那条测试结束时把**环境变量**还原,但面板层背后的
+    ``UnifiedConfig`` 单例(经 ``core.unified_config.config._backend`` 委派)是惰性加载的
+    —— 它恰好在那个环境下首次加载,把 ``FROM_ENV_OPENAI`` 缓存进自己的 ``_config``,而这个
+    缓存活到进程结束。于是本文件后面每次 ``resolve_secret(..., "OPENAI_API_KEY")`` 都从
+    **第一层**拿到 ``FROM_ENV_OPENAI``,根本走不到我 setenv 的那一层。已实测复现:删掉
+    环境变量后 ``_from_env`` 返回 ``""``,而 ``_from_panel`` 仍返回 ``FROM_ENV_OPENAI``。
+
+    单独跑本文件全绿、全量跑挂 6 条,就是这么来的 —— 典型的顺序依赖,而且错在测试这边:
+    要验第三层就必须先把前两层按住,否则测的到底是哪一层完全不确定。
+
+    需要验前两层的测试(``test_panel_layer_beats_env`` 等)自己再 ``setattr`` 覆盖回去
+    即可 —— 后设的赢。
+    """
+    import core.secret_resolution as mod
+
     for k in ("GALAXY_REALTIME_API_KEY", "OPENAI_API_KEY", "GOOGLE_API_KEY", "GEMINI_API_KEY"):
         monkeypatch.delenv(k, raising=False)
+    monkeypatch.setattr(mod, "_from_panel", lambda _k: "")
+    monkeypatch.setattr(mod, "_from_vault", lambda _k: "")
     yield
 
 
@@ -283,6 +309,58 @@ class TestPlaceholderDiagnosticIsActionable:
             assert PLACEHOLDER not in rec.getMessage(), "日志把配置值原样打出来了"
 
 
-def test_env_fixture_really_cleaned():
-    """自查:上面的 autouse fixture 真的把键摘掉了,否则整组测试都在受真实 .env 影响。"""
-    assert os.environ.get("OPENAI_API_KEY") in (None, "")
+class TestTheFixtureItselfIsLoadBearing:
+    """自查:上面那条 autouse fixture 真的在起作用。
+
+    一条只摘了 env 的 fixture 看起来和摘了三层的一模一样(本文件单独跑都是全绿),差别
+    只在全量跑时才暴露。所以这里明确断言"前两层被按住了",让这个前提本身可验证 ——
+    否则下一个人很容易把 setattr 那两行当成多余的删掉。
+    """
+
+    def test_env_keys_are_cleaned(self):
+        assert os.environ.get("OPENAI_API_KEY") in (None, "")
+
+    def test_panel_layer_is_neutralised(self):
+        import core.secret_resolution as mod
+
+        assert mod._from_panel("OPENAI_API_KEY") == "", "面板层没被按住 —— 本文件的三层测试会测错层"
+
+    def test_vault_layer_is_neutralised(self):
+        import core.secret_resolution as mod
+
+        assert mod._from_vault("OPENAI_API_KEY") == "", "vault 层没被按住"
+
+    def test_a_leftover_panel_value_would_have_won(self, monkeypatch):
+        """把当初的故障原样复现一遍:面板层残留值会盖掉环境变量。
+
+        这条证明的不是"实现有 bug"(面板优先本来就是设计),而是**只摘 env 的 fixture
+        挡不住它** —— 也就是 CI 上那 6 条为什么会挂。
+        """
+        import core.secret_resolution as mod
+
+        monkeypatch.setattr(mod, "_from_panel", lambda k: "FROM_ENV_OPENAI" if k == "OPENAI_API_KEY" else "")
+        monkeypatch.setenv("OPENAI_API_KEY", REAL_LOOKING)
+        assert resolve_secret("GALAXY_REALTIME_API_KEY", "OPENAI_API_KEY") == "FROM_ENV_OPENAI"
+
+    def test_the_singleton_cache_is_the_real_culprit(self):
+        """把成因钉在**经过核实**的那条路径上。
+
+        缓存不在 ``core.unified_config.config`` 自己身上 —— 它是个
+        ``UnifiedConfigManager``,真正持有 ``_config`` 字典的是它委派的后端
+        ``UnifiedConfig``(而 ``UnifiedConfig`` 本身是单例)。所以路径是
+        ``uc.config._backend._config``。
+
+        我这条测试的第一版直接断言 ``hasattr(uc.config, "_config")`` 就挂了 —— 当时是照着
+        污染源那个测试里的 ``cfg._config`` 想当然推的,没核实运行期的 ``config`` 到底是哪个
+        类。写"成因"的测试尤其不能想当然:说错了成因,下一个人就会照着错的方向去修。
+
+        这个缓存本身不是 bug(``main.py`` 启动时本就先注入 ``.env`` 再加载配置),但它意味着
+        ``monkeypatch.delenv`` **管不到面板层** —— 这正是必须显式按住前两层的原因。
+        """
+        import core.unified_config as uc
+
+        assert hasattr(uc, "config"), "模块级单例不在了,本测试的成因说明需要重核"
+        backend = getattr(uc.config, "_backend", None)
+        assert backend is not None, "UnifiedConfigManager 不再委派后端?成因说明需要重核"
+        assert hasattr(backend, "_config"), f"后端 {type(backend).__name__} 没有 _config 缓存了?成因说明需要重核"
+        assert isinstance(backend._config, dict)
