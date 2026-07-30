@@ -49,11 +49,117 @@ def _isolate_all_three_layers(monkeypatch):
         "GALAXY_REALTIME_URL",
         "GALAXY_REALTIME_PROVIDER",
         "GALAXY_NATIVE_AUDIO",
+        "GALAXY_NATIVE_REALTIME_PATH",
+        "GALAXY_MINICPM_SERVER_URL",
     ):
         monkeypatch.delenv(k, raising=False)
     monkeypatch.setattr(mod, "_from_panel", lambda _k: "")
     monkeypatch.setattr(mod, "_from_vault", lambda _k: "")
     yield
+
+
+class TestAutoPointsAtTheLocalNativeServer:
+    """B 档原生就绪时,自动去试本地全模态 server 的 realtime 端点。
+
+    为什么是"推导 + 去试"而不是等人确认协议
+    --------------------------------------
+    MiniCPM-o server 到底有没有 OpenAI 兼容的 realtime 端点,只有那台机器上才知道。在代码
+    里猜没有意义,**编造帧协议更是错的**。
+
+    但"不确定"不等于什么都不能做:这条链路上的失败是**安全且已被处理**的 ——
+    ``open_duplex_session()`` 连不上返回 None,``voice_loop`` 收到 None 就回落回合制,而
+    回合制现在听/说都走原生。所以最坏情况是"没拿到流式,但仍然全原生",不是坏掉。
+
+    于是:自动试一次。通了就是真流式双工,不通就安静退回原生回合制。两种服务器都覆盖,
+    一行协议也没编。
+    """
+
+    def test_derives_ws_url_from_the_server_address(self, monkeypatch):
+        from core.voice_duplex_session import native_realtime_url
+
+        monkeypatch.setenv("GALAXY_MINICPM_SERVER_URL", "http://localhost:32550")
+        assert native_realtime_url() == "ws://localhost:32550/v1/realtime"
+
+    def test_https_maps_to_wss(self, monkeypatch):
+        from core.voice_duplex_session import native_realtime_url
+
+        monkeypatch.setenv("GALAXY_MINICPM_SERVER_URL", "https://box.local:8443")
+        assert native_realtime_url() == "wss://box.local:8443/v1/realtime"
+
+    def test_path_is_overridable(self, monkeypatch):
+        """server 不按 OpenAI 惯例时,改路径就行,不必动代码。"""
+        from core.voice_duplex_session import native_realtime_url
+
+        monkeypatch.setenv("GALAXY_MINICPM_SERVER_URL", "http://localhost:32550")
+        monkeypatch.setenv("GALAXY_NATIVE_REALTIME_PATH", "audio/stream")  # 没有前导斜杠也要认
+        assert native_realtime_url() == "ws://localhost:32550/audio/stream"
+
+    def test_reuses_the_same_address_source_as_native_modal(self):
+        """地址只能有一个来源,否则两处会漂。"""
+        import inspect
+
+        import core.voice_duplex_session as mod
+
+        assert "from core.native_modal import _server_url" in inspect.getsource(mod.native_realtime_url)
+
+    def test_auto_used_when_native_on_and_no_explicit_url(self, monkeypatch):
+        monkeypatch.setenv("GALAXY_NATIVE_AUDIO", "1")
+        monkeypatch.setenv("GALAXY_MINICPM_SERVER_URL", "http://localhost:32550")
+        cfg = DuplexSessionConfig.from_env()
+        assert cfg is not None, "B 档原生就绪却没去试本地流式"
+        assert cfg.url == "ws://localhost:32550/v1/realtime"
+        assert cfg.api_key == "", "本地端点不该要 key"
+
+    def test_explicit_url_always_wins(self, monkeypatch):
+        """用户显式配了就完全不走推导 —— 自动化不能覆盖明示的意图。"""
+        monkeypatch.setenv("GALAXY_NATIVE_AUDIO", "1")
+        monkeypatch.setenv("GALAXY_REALTIME_URL", "ws://192.168.5.5:1234/rt")
+        cfg = DuplexSessionConfig.from_env()
+        assert cfg is not None and cfg.url == "ws://192.168.5.5:1234/rt"
+
+    def test_not_used_when_native_is_off(self, monkeypatch):
+        """A 档行为必须一字不变:没 key 没 URL → 仍然退回回合制。"""
+        monkeypatch.delenv("GALAXY_NATIVE_AUDIO", raising=False)
+        assert DuplexSessionConfig.from_env() is None
+
+    def test_cloud_key_path_is_untouched_by_the_derivation(self, monkeypatch):
+        """原生开着、但用户配了云端 key 且没配 URL —— 不能把云端那条路抢走。
+
+        这条是防回归的:推导只在"没有显式 URL"时介入,而云端默认 URL 是在 provider 分支里
+        才拼的。若推导抢先,配了 OPENAI_API_KEY 的人会莫名其妙连到本地。
+        """
+        monkeypatch.setenv("GALAXY_NATIVE_AUDIO", "1")
+        monkeypatch.setenv("GALAXY_MINICPM_SERVER_URL", "http://localhost:32550")
+        monkeypatch.setenv("GALAXY_REALTIME_URL", "wss://api.openai.com/v1/realtime")
+        monkeypatch.setenv("OPENAI_API_KEY", REAL_LOOKING)
+        cfg = DuplexSessionConfig.from_env()
+        assert cfg is not None
+        assert cfg.url == "wss://api.openai.com/v1/realtime"
+        assert cfg.api_key == REAL_LOOKING
+
+    def test_failure_to_derive_is_not_fatal(self, monkeypatch):
+        import core.voice_duplex_session as mod
+
+        monkeypatch.setenv("GALAXY_NATIVE_AUDIO", "1")
+        monkeypatch.setattr(mod, "native_realtime_url", lambda: "")
+        assert DuplexSessionConfig.from_env() is None  # 安静退回,不抛
+
+    def test_the_fallback_chain_is_intact(self):
+        """核实本方案赖以成立的前提:连不上 → 返回 None → 调用方回落回合制。
+
+        没有这条,"试不通也安全"就只是我的说法,不是被验证过的事实。
+        """
+        import ast
+        import inspect
+
+        import core.voice_duplex_session as duplex
+        import core.voice_loop as loop
+
+        d = ast.unparse(ast.parse(inspect.getsource(duplex.open_duplex_session)))
+        assert "if not await sess.connect():" in d and "return None" in d, "连接失败不再返回 None"
+
+        loop_src = inspect.getsource(loop)
+        assert "if session is None:" in loop_src and "return False" in loop_src, "调用方不再回落回合制"
 
 
 class TestLocalEndpointJudgement:
@@ -194,20 +300,22 @@ class TestUrlIsNeverLoggedInFull:
         """
         import ast
         import inspect
+        import re
 
         import core.voice_duplex_session as mod
 
         tree = ast.parse(inspect.getsource(mod))
         fn = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "from_env")
-        # configured_url 只许被赋值一次(来自环境变量),之后不得被重新赋值
-        assigns = [
-            t.id
-            for n in ast.walk(fn)
-            if isinstance(n, ast.Assign)
-            for t in n.targets
-            if isinstance(t, ast.Name) and t.id == "configured_url"
-        ]
-        assert len(assigns) == 1, f"configured_url 被重新赋值了 {len(assigns)} 次 —— 它必须保持未被污染"
+        # configured_url 可以被赋值多次(环境变量 / 本地推导),但**每一次的右值都不许沾 key**。
+        # 我第一版断言的是"只许赋值一次" —— 那是把手段当成了目的:加了本地地址推导之后它
+        # 合法地变成两次,断言就假报了。真正要守的性质是"不来自 key",直接断言这个。
+        for n in ast.walk(fn):
+            if not isinstance(n, ast.Assign):
+                continue
+            if not any(isinstance(t, ast.Name) and t.id == "configured_url" for t in n.targets):
+                continue
+            rhs = ast.unparse(n.value)
+            assert not re.search(r"\bkey\b", rhs), f"configured_url 被 key 污染了: {rhs}"
 
         for node in ast.walk(fn):
             if not isinstance(node, ast.Call):
@@ -306,24 +414,81 @@ class TestLocalEndpointBuildsConfigWithoutKey:
 class TestDiagnosticNoLongerMisleads:
     """原生已就绪时,日志不能只说"缺 key" —— 那会让人以为语音整个是瞎的。"""
 
-    def test_native_active_adds_the_clarifying_line(self, monkeypatch, caplog):
+    def test_native_active_now_auto_points_local_instead_of_just_warning(self, monkeypatch, caplog):
+        """原先这里断言的是一句「补充:本地原生听/说已就绪…」的提示。
+
+        加上自动推导之后那句变成了死代码 —— 原生就绪且没 key 时,地址已经被指向本地并
+        返回了配置,根本走不到那条告警。所以这条测试改成断言**新的真实行为**:不再是
+        「告诉你怎么手动配」,而是直接替你接上。
+        """
         import logging
 
         monkeypatch.setenv("GALAXY_NATIVE_AUDIO", "1")
         with caplog.at_level(logging.INFO, logger="Galaxy.VoiceDuplex"):
-            assert DuplexSessionConfig.from_env() is None
+            cfg = DuplexSessionConfig.from_env()
+        assert cfg is not None, "原生就绪时应自动指向本地,而不是退回并只给一句提示"
+        assert is_local_endpoint(cfg.url)
         joined = " ".join(r.getMessage() for r in caplog.records)
-        assert "本地原生听/说已就绪" in joined, f"没有说明原生其实是通的: {joined}"
-        assert "GALAXY_REALTIME_URL" in joined, "没有告诉用户怎么把双工也指到本地"
+        assert "自动尝试本地全模态 server" in joined
+        assert "原生回合制" in joined, "没说清试不通时会退回到哪里"
 
-    def test_no_such_line_when_native_is_off(self, monkeypatch, caplog):
-        """对照组:原生没开就不该冒出这句,否则是另一种误导。"""
+    def test_no_auto_local_when_native_is_off(self, monkeypatch, caplog):
+        """对照组:原生没开就不该自动指本地(那台 server 根本没在跑)。"""
         import logging
 
         with caplog.at_level(logging.INFO, logger="Galaxy.VoiceDuplex"):
             assert DuplexSessionConfig.from_env() is None
         joined = " ".join(r.getMessage() for r in caplog.records)
-        assert "本地原生听/说已就绪" not in joined
+        assert "自动尝试本地全模态 server" not in joined
+
+    def test_the_dead_hint_is_really_gone(self):
+        """那句死掉的提示必须真的删掉 —— 留着一句永远不会打印、却声称在帮人排查的日志,
+        比没有更坏。
+
+        注意必须比对**剥掉注释后**的代码:我在原处留了一条注释解释「这里原先有一句…」,
+        直接扫源码会命中那条注释,断言就永远失败。这个坑本轮已经踩到第五次了。
+        """
+        import ast
+        import inspect
+        import textwrap
+        import tokenize
+        from io import StringIO
+
+        import core.voice_duplex_session as mod
+
+        src = textwrap.dedent(inspect.getsource(mod.DuplexSessionConfig.from_env))
+        # 先按 token 去掉注释(ast.unparse 会丢注释,但它保不住 # 之外的东西,双保险)
+        out = []
+        for tok in tokenize.generate_tokens(StringIO(src).readline):
+            if tok.type == tokenize.COMMENT:
+                continue
+            out.append(tok)
+        stripped = tokenize.untokenize(out)
+        tree = ast.parse(stripped)
+        for node in ast.walk(tree):
+            body = getattr(node, "body", None)
+            if isinstance(body, list) and body:
+                first = body[0]
+                if isinstance(first, ast.Expr) and isinstance(first.value, ast.Constant):
+                    if isinstance(first.value.value, str):
+                        body.pop(0)
+        code = ast.unparse(tree)
+        assert "补充:本地原生听/说已就绪" not in code, "那句死掉的提示还在代码里"
+
+    def test_the_stripper_used_above_actually_strips(self):
+        """自证上一条的剥离真的有效 —— 否则它可能只是恒真。"""
+        import ast
+
+        tree = ast.parse('def f():\n    """doc 补充"""\n    x = 1  # 补充\n')
+        for node in ast.walk(tree):
+            body = getattr(node, "body", None)
+            if isinstance(body, list) and body:
+                first = body[0]
+                if isinstance(first, ast.Expr) and isinstance(first.value, ast.Constant):
+                    if isinstance(first.value.value, str):
+                        body.pop(0)
+        code = ast.unparse(tree)
+        assert "补充" not in code and "x = 1" in code
 
 
 class TestTransportIsSharedNotPerProvider:

@@ -58,6 +58,74 @@ _EVENT_QUEUE_MAX = 256
 # 其中一个真 bug(空值把开关打开)因此要修 5 遍。详见该模块 docstring。
 from core.config_flags import flag as _flag  # noqa: E402  (保留 _flag 名字以免动全部调用点)
 
+#: 本地全模态 server 上 realtime 端点的路径。默认取 OpenAI 兼容的惯例 ``/v1/realtime``
+#: —— 本仓库接的本地服务(ollama、oneapi、hf_local)清一色是 OpenAI 兼容的 ``/v1``,
+#: MiniCPM-o 官方 server 若也照这个惯例就能直接用。**不确定就让它去试**:路径不对时
+#: 连接会失败,而失败是安全的(见 ``native_realtime_url`` 的说明)。
+_NATIVE_REALTIME_PATH_DEFAULT = "/v1/realtime"
+
+
+def _native_audio_on() -> bool:
+    """B 档原生听/说是否已就绪。收口读 ``core.modality_capability``,不各处自己读环境变量。"""
+    try:
+        from core.modality_capability import _native_audio_serving_enabled as _gate
+
+        return bool(_gate())
+    except Exception:  # noqa: BLE001
+        return _flag("GALAXY_NATIVE_AUDIO", False)
+
+
+def native_realtime_url() -> str:
+    """由本地全模态 server 的地址推导出 realtime 的 ws 地址;推不出返回 ""。
+
+    为什么是"推导 + 去试",而不是等人确认协议
+    ----------------------------------------
+    B 档切过去后 ``core.native_modal`` 会把 MiniCPM-o server 拉起来(地址在
+    ``GALAXY_MINICPM_SERVER_URL``,默认 ``http://localhost:32550``)。它到底有没有
+    OpenAI 兼容的 realtime 端点,只有那台机器上才知道 —— 在这里猜没有意义,**编造帧
+    协议更是错的**。
+
+    但"不确定"不等于"什么都不能做":这条链路上的失败是**安全且已被处理**的 ——
+    ``open_duplex_session()`` 连不上会返回 None,``voice_loop`` 收到 None 就回落回合制,
+    而回合制现在听/说都走原生(见 ``core.modality_bridge.transcribe_pcm`` 与
+    ``speech_output`` 的原生后端)。所以最坏情况是"没拿到流式,但仍然全原生",不是坏掉。
+
+    于是这里的做法是:**自动去试一次**。试通了就是真流式双工,试不通就安静退回原生回合
+    制,并在日志里说清下一步怎么办。两种服务器都覆盖到了,一行协议也没有编。
+
+    可调:
+
+    * ``GALAXY_NATIVE_REALTIME_PATH`` —— 路径不是 ``/v1/realtime`` 时改这里;
+    * ``GALAXY_REALTIME_URL`` —— 整个地址自己给(优先级最高,本函数就不参与了);
+    * 若该 server 用的是**自己的帧格式**而非 OpenAI 兼容,那就不是改地址能解决的,需要
+      按 ``ProtocolAdapter`` 再写一个适配器(6 个方法,不碰传输层)。
+    """
+    try:
+        from core.native_modal import _server_url  # 复用同一个地址来源,避免两处漂移
+
+        base = (_server_url() or "").strip()
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("取本地 server 地址失败: %s", exc)
+        return ""
+    if not base:
+        return ""
+    path = (os.getenv("GALAXY_NATIVE_REALTIME_PATH") or _NATIVE_REALTIME_PATH_DEFAULT).strip()
+    if not path.startswith("/"):
+        path = "/" + path
+    scheme_map = {"http": "ws", "https": "wss", "ws": "ws", "wss": "wss"}
+    try:
+        from urllib.parse import urlsplit
+
+        parts = urlsplit(base)
+        scheme = scheme_map.get((parts.scheme or "http").lower(), "ws")
+        netloc = parts.netloc or parts.path  # 允许 "localhost:32550" 这种没有 scheme 的写法
+        if not netloc:
+            return ""
+        return f"{scheme}://{netloc}{path}"
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("推导本地 realtime 地址失败: %s", exc)
+        return ""
+
 
 def safe_endpoint(url: str) -> str:
     """把 realtime URL 收敛成**可以安全打日志**的 ``scheme://host:port``。
@@ -263,6 +331,32 @@ class DuplexSessionConfig:
                 url = f"wss://api.openai.com/v1/realtime?model={model}"
             missing = "GALAXY_REALTIME_API_KEY 或 OPENAI_API_KEY"
 
+        # 没显式配地址、也没有可用的云端 key、而 B 档原生已就绪
+        # → 自动指向本地全模态 server 试一次流式。
+        #
+        # 三个条件缺一不可,顺序也要紧:
+        #
+        # * **没显式配 URL** —— 明示的意图不能被自动化覆盖;
+        # * **没有可用 key** —— 这一条我第一版漏了,把推导放在了解析 key 之前,结果
+        #   「原生开着 + 配了云端 realtime key + 没配 URL」的人会被劫持到本地,配好的
+        #   云端能力平白丢掉。是自查测试把这个顺序问题抓出来的;
+        # * **原生已就绪** —— 否则本地根本没有 server 在跑。
+        #
+        # 试不通是安全的:连接失败 → open_duplex_session() 返回 None → voice_loop 回落
+        # 回合制,而回合制现在听/说都走原生。详见 native_realtime_url() 的说明。
+        if not configured_url and not key and _native_audio_on():
+            derived = native_realtime_url()
+            if derived:
+                configured_url = derived
+                url = derived
+                logger.info(
+                    "双工语音:未配 GALAXY_REALTIME_URL 且无云端 key,但 B 档原生已就绪 —— "
+                    "自动尝试本地全模态 server 的 realtime 端点(%s)。该 server 若没有这个"
+                    "端点或路径不同,连接会失败并安静退回**原生回合制**(听/说仍是原生,"
+                    "不是 Whisper/TTS 桥);路径不同可用 GALAXY_NATIVE_REALTIME_PATH 指定。",
+                    safe_endpoint(derived),
+                )
+
         if not key and is_local_endpoint(url):
             # 本地服务不需要 key。B 档切过去之后 core.native_modal 会把 MiniCPM-o
             # 官方 server 拉起来(默认 localhost:32550),这条路径正是给它用的。
@@ -301,14 +395,9 @@ class DuplexSessionConfig:
                 )
             else:
                 logger.warning("双工语音已开启但缺少 API key(%s),本次退回回合制语音链路。", missing)
-            if os.environ.get("GALAXY_NATIVE_AUDIO") == "1":
-                # 这一句是为了不误导:此时本地原生听/说其实**已经通了**(B 档
-                # native_modal 注册的那条),缺的只是"真流式双工"这一层。只说"缺 key"会让
-                # 人以为语音整个是瞎的,跑去折腾云端配置。
-                logger.info(
-                    "补充:本地原生听/说已就绪(GALAXY_NATIVE_AUDIO=1),回合制语音走的是原生通路而非 "
-                    "Whisper/TTS 桥。若要用本地服务跑双工,把 GALAXY_REALTIME_URL 指向它即可(本地端点免 key)。"
-                )
+            # 这里原先还有一句「补充:本地原生听/说已就绪…」的提示。加上自动推导之后它变成了
+            # 死代码:原生就绪且没有 key 时,上面已经把地址指向本地并 return,根本走不到这里。
+            # 留着一句永远不会打印、却声称在帮人排查的日志,比没有更坏 —— 删掉。
             return None
         return cls(url=url, api_key=key, model=model, voice=voice, provider=provider)
 

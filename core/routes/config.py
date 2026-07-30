@@ -677,6 +677,16 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "category": "behavior",
         "description": "全双工语音的 WebSocket 地址(留空=按 provider 自动组装;走聚合器时才需手填)",
     },
+    "GALAXY_NATIVE_REALTIME_PATH": {
+        "default": "/v1/realtime",
+        "type": "string",
+        "category": "behavior",
+        "description": (
+            "本地全模态 server 上 realtime 端点的路径。B 档原生就绪且没配云端 key 时,"
+            "双工会自动指向本地 server 的这个路径试一次流式;试不通会安静退回原生回合制"
+            "(听/说仍是原生)。你的 server 路径不是默认的 /v1/realtime 时改这里"
+        ),
+    },
     # 这一项是**密钥**。登记它是安全的:core/config_schema.py::classify_key() 按后缀
     # 启发式判定,凡以 _API_KEY / _TOKEN / _SECRET / _PASSWORD 结尾的一律归为 "secret",
     # 而 update_config() 对 secret 走 ConfigService.set_secret() → runtime/secrets.env,

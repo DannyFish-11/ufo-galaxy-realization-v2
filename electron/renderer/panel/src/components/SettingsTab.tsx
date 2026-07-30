@@ -213,6 +213,9 @@ const CONFIG_KEYS: Record<string, string[]> = {
     'GALAXY_VOICE_ECHO_MIN_CHARS', 'GALAXY_VOICE_ECHO_MIN_BLOCK',
     'GALAXY_AEC_TAIL_MS', 'GALAXY_AEC_MU', 'GALAXY_AEC_MAX_DELAY_MS', 'GALAXY_AEC_DTD_MARGIN_DB',
     'GALAXY_REALTIME_PROVIDER', 'GALAXY_REALTIME_MODEL', 'GALAXY_REALTIME_VOICE', 'GALAXY_REALTIME_URL',
+    // 本地全模态 server 的 realtime 路径。B 档原生就绪且没配云端 key 时,双工会自动指向
+    // 本地 server 的这个路径试一次流式;server 路径不是默认 /v1/realtime 时在这里改。
+    'GALAXY_NATIVE_REALTIME_PATH',
     // 密钥项。后端 classify_key() 按 _API_KEY 后缀判为 secret,会走 set_secret() 落
     // runtime/secrets.env,不明文进 .env —— 所以在这里列出来是安全的。
     'GALAXY_REALTIME_API_KEY',
