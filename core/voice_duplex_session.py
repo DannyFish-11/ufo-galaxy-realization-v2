@@ -26,8 +26,10 @@ TTS 整段合成播放。每一步都要等上一步结束,所以"同一时刻�
 * **真实 provider 连接在本仓库的测试环境里无法验证**(没有 key、没有出网)。可验证的是
   协议编解码(抽成纯函数)、会话状态机、以及跑在**本地真 WebSocket 服务端**上的完整
   会话流程 —— 那不是 mock,是真的建连、真的收发帧。
-* 只实现了 OpenAI Realtime 的帧格式适配器。Gemini Live 的 ``bidiGenerateContent`` 帧形状
-  不同,留了 ``ProtocolAdapter`` 接口但**没有**实现 —— 没实现就不假装支持。
+* 已实现两个适配器:OpenAI Realtime 与 Gemini Live(``BidiGenerateContent``)。两家不只是
+  字段名不同,是**结构不同** —— 配置帧的位置与时机、音频上行的载体、下行 parts 的混合
+  数组、回合边界的表达、鉴权方式(Gemini 的 key 在 URL query 里)全都不一样,所以是两份
+  实现而不是参数化的一份。未登记的 provider 名显式抛错,**绝不**静默退回某个默认实现。
 """
 
 from __future__ import annotations
@@ -126,24 +128,47 @@ class DuplexSessionConfig:
     #: 服务端 VAD 的静音判定阈值(毫秒)。双工下回合边界由服务端判,不再靠本地攒够时长。
     silence_ms: int = 500
 
+    #: provider 名(决定用哪个 ProtocolAdapter)
+    provider: str = "openai_realtime"
+
     @classmethod
     def from_env(cls) -> Optional["DuplexSessionConfig"]:
         """从环境变量构造;缺 key 或缺 url 时返回 None 并**说明缺什么**。
 
         返回 None 而不是抛异常:双工默认关闭,缺配置是预期情形而非错误。但原因要能
         从日志里看到 —— 否则"开了开关却没生效"完全无从排查。
+
+        provider 由 ``GALAXY_REALTIME_PROVIDER`` 选,默认 ``openai_realtime``。两家的
+        默认 URL、默认模型、鉴权方式都不同(Gemini 的 key 在 URL query 里,没有
+        Authorization 头),所以要分开组。
         """
-        key = (os.getenv("GALAXY_REALTIME_API_KEY") or os.getenv("OPENAI_API_KEY") or "").strip()
+        provider = (os.getenv("GALAXY_REALTIME_PROVIDER") or "openai_realtime").strip()
         url = (os.getenv("GALAXY_REALTIME_URL") or "").strip()
-        model = (os.getenv("GALAXY_REALTIME_MODEL") or "gpt-4o-realtime-preview").strip()
-        if not url:
-            url = f"wss://api.openai.com/v1/realtime?model={model}"
+        model = (os.getenv("GALAXY_REALTIME_MODEL") or "").strip()
+
+        if provider == "gemini_live":
+            key = (os.getenv("GALAXY_REALTIME_API_KEY") or os.getenv("GOOGLE_API_KEY") or "").strip()
+            model = model or "gemini-2.0-flash-exp"
+            voice = (os.getenv("GALAXY_REALTIME_VOICE") or "Puck").strip()
+            if not url and key:
+                url = (
+                    "wss://generativelanguage.googleapis.com/ws/"
+                    "google.ai.generativelanguage.v1alpha.GenerativeService."
+                    f"BidiGenerateContent?key={key}"
+                )
+            missing = "GALAXY_REALTIME_API_KEY 或 GOOGLE_API_KEY"
+        else:
+            key = (os.getenv("GALAXY_REALTIME_API_KEY") or os.getenv("OPENAI_API_KEY") or "").strip()
+            model = model or "gpt-4o-realtime-preview"
+            voice = (os.getenv("GALAXY_REALTIME_VOICE") or "alloy").strip()
+            if not url:
+                url = f"wss://api.openai.com/v1/realtime?model={model}"
+            missing = "GALAXY_REALTIME_API_KEY 或 OPENAI_API_KEY"
+
         if not key:
-            logger.warning(
-                "双工语音已开启但缺少 API key(GALAXY_REALTIME_API_KEY 或 OPENAI_API_KEY)," "本次退回回合制语音链路。"
-            )
+            logger.warning("双工语音已开启但缺少 API key(%s),本次退回回合制语音链路。", missing)
             return None
-        return cls(url=url, api_key=key, model=model)
+        return cls(url=url, api_key=key, model=model, voice=voice, provider=provider)
 
 
 # ── 协议适配:全部是纯函数,不碰网络,可完整单测 ────────────────────────────
@@ -152,8 +177,8 @@ class DuplexSessionConfig:
 class ProtocolAdapter:
     """provider 帧格式适配器。
 
-    只有 OpenAI Realtime 一个实现。Gemini Live 的 ``bidiGenerateContent`` 帧形状不同,
-    接口留在这里,但**没有实现** —— 没实现就不假装支持。
+    已实现:``OpenAIRealtimeAdapter``、``GeminiLiveAdapter``。新增 provider 时要在
+    ``_ADAPTERS`` 里登记 —— 未登记的名字显式抛错,绝不静默退回默认实现。
     """
 
     name = "abstract"
@@ -272,10 +297,132 @@ class OpenAIRealtimeAdapter(ProtocolAdapter):
         return None
 
 
+class GeminiLiveAdapter(ProtocolAdapter):
+    """Gemini Live(``BidiGenerateContent``)的帧格式。
+
+    与 OpenAI Realtime 的差别不只是字段名,是**结构不同**:
+
+    - 配置不叫 ``session.update`` 而是连接后的**第一帧** ``setup``,且必须先发完它再发
+      任何音频 —— 顺序错了服务端会直接断开;
+    - 音频上行走 ``realtimeInput.mediaChunks[]``,每块带自己的 ``mimeType``(采样率写在
+      mime 里,如 ``audio/pcm;rate=16000``),不是像 OpenAI 那样在 session 里统一声明;
+    - 下行是 ``serverContent.modelTurn.parts[]`` 的**混合数组** —— 同一个 parts 里既可能
+      是 ``inlineData``(音频)也可能是 ``text``,得逐个 part 分派,而不是一个 part 一种事件;
+    - 回合边界由 ``serverContent.turnComplete`` / ``interrupted`` 标志给出,不是独立的
+      事件类型。
+
+    鉴权也不同:Gemini 走 URL 上的 ``?key=``,没有 Authorization 头。
+    """
+
+    name = "gemini_live"
+
+    def headers(self, cfg: DuplexSessionConfig) -> Dict[str, str]:
+        # key 在 URL query 里(见 from_env 组 URL 的地方),不走请求头
+        return {}
+
+    def session_update(self, cfg: DuplexSessionConfig) -> Dict[str, Any]:
+        setup: Dict[str, Any] = {
+            "model": f"models/{cfg.model}" if not cfg.model.startswith("models/") else cfg.model,
+            "generationConfig": {
+                "responseModalities": ["AUDIO"],
+                "speechConfig": {"voiceConfig": {"prebuiltVoiceConfig": {"voiceName": cfg.voice}}},
+            },
+        }
+        if cfg.instructions:
+            setup["systemInstruction"] = {"parts": [{"text": cfg.instructions}]}
+        return {"setup": setup}
+
+    def audio_frame(self, pcm16: bytes) -> Dict[str, Any]:
+        return {
+            "realtimeInput": {
+                "mediaChunks": [
+                    {
+                        "mimeType": "audio/pcm;rate=16000",
+                        "data": base64.b64encode(pcm16).decode("ascii"),
+                    }
+                ]
+            }
+        }
+
+    def text_frame(self, text: str) -> List[Dict[str, Any]]:
+        # Gemini 一帧即可:clientContent 带 turnComplete 就等于"说完了,该你了",
+        # 不需要 OpenAI 那种 create item + response.create 的两步。
+        return [
+            {
+                "clientContent": {
+                    "turns": [{"role": "user", "parts": [{"text": text}]}],
+                    "turnComplete": True,
+                }
+            }
+        ]
+
+    def interrupt_frame(self) -> Dict[str, Any]:
+        """Gemini 没有显式的 cancel 帧 —— 它靠**新的用户输入**打断当前回合。
+
+        发一个 ``turnComplete`` 的空 turn 即表示"我要说话了",服务端据此中止当前生成。
+        这与 OpenAI 的 ``response.cancel`` 语义等价,但机制不同,不能照抄。
+        """
+        return {"clientContent": {"turns": [], "turnComplete": True}}
+
+    def decode(self, msg: Dict[str, Any]) -> Optional[DuplexEvent]:
+        if msg.get("setupComplete") is not None:
+            return DuplexEvent(DuplexEventType.SESSION_OPEN, raw=msg)
+
+        err = msg.get("error")
+        if err:
+            detail = err.get("message") if isinstance(err, dict) else str(err)
+            return DuplexEvent(DuplexEventType.ERROR, error=str(detail or "unknown"), raw=msg)
+
+        sc = msg.get("serverContent")
+        if not isinstance(sc, dict):
+            logger.debug("Gemini Live:未识别的服务端帧(已忽略): %s", list(msg)[:3])
+            return None
+
+        # 被用户打断 —— 对齐成"用户开口"
+        if sc.get("interrupted"):
+            return DuplexEvent(DuplexEventType.USER_SPEECH_STARTED, raw=msg)
+        if sc.get("turnComplete"):
+            return DuplexEvent(DuplexEventType.RESPONSE_DONE, raw=msg)
+
+        turn = sc.get("modelTurn")
+        if isinstance(turn, dict):
+            # parts 是混合数组:音频优先(它才是要立刻播的),其次文本
+            for part in turn.get("parts") or []:
+                if not isinstance(part, dict):
+                    continue
+                inline = part.get("inlineData")
+                if isinstance(inline, dict) and inline.get("data"):
+                    return DuplexEvent(
+                        DuplexEventType.ASSISTANT_AUDIO_DELTA,
+                        audio_b64=str(inline.get("data")),
+                        raw=msg,
+                    )
+            for part in turn.get("parts") or []:
+                if isinstance(part, dict) and part.get("text"):
+                    return DuplexEvent(DuplexEventType.ASSISTANT_TEXT_DELTA, text=str(part["text"]), raw=msg)
+
+        # 用户语音的转写(Gemini 把它放在 inputTranscription 里)
+        it = sc.get("inputTranscription")
+        if isinstance(it, dict) and it.get("text"):
+            return DuplexEvent(DuplexEventType.FINAL_TRANSCRIPT, text=str(it["text"]), raw=msg)
+
+        logger.debug("Gemini Live:serverContent 里没有可识别的内容(已忽略)")
+        return None
+
+
+#: 已实现的适配器。新增 provider 时在这里登记 —— 未登记的显式抛错,
+#: **绝不**静默退回某个默认实现(那会让用户以为在用 A、实际发的是 B 的帧)。
+_ADAPTERS = {
+    OpenAIRealtimeAdapter.name: OpenAIRealtimeAdapter,
+    GeminiLiveAdapter.name: GeminiLiveAdapter,
+}
+
+
 def get_adapter(name: str = "openai_realtime") -> ProtocolAdapter:
-    if name == "openai_realtime":
-        return OpenAIRealtimeAdapter()
-    raise ValueError(f"未实现的双工 provider 适配器: {name}(目前只有 openai_realtime)")
+    cls = _ADAPTERS.get(name)
+    if cls is None:
+        raise ValueError(f"未实现的双工 provider 适配器: {name}(已实现: {', '.join(sorted(_ADAPTERS))})")
+    return cls()
 
 
 # ── 会话 ─────────────────────────────────────────────────────────────────────
@@ -299,7 +446,9 @@ class DuplexSession:
 
     def __init__(self, config: DuplexSessionConfig, adapter: Optional[ProtocolAdapter] = None) -> None:
         self.config = config
-        self.adapter = adapter or get_adapter()
+        # 适配器按 config.provider 选 —— 写死默认值会让 GALAXY_REALTIME_PROVIDER
+        # 形同虚设:用户以为在用 Gemini,实际发的是 OpenAI 的帧。
+        self.adapter = adapter or get_adapter(config.provider)
         self._ws: Any = None
         self._reader: Optional[asyncio.Task] = None
         self._queue: asyncio.Queue = asyncio.Queue(maxsize=_EVENT_QUEUE_MAX)
