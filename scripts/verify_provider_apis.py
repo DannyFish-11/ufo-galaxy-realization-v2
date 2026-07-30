@@ -12,8 +12,8 @@
 
 1. **静态层**(``--offline`` 即可,不需要网络)
    面板 schema(``CONFIG_SCHEMA``)、面板「模型」tab 的输入框清单(``ModelsTab.tsx``)、
-   密钥落盘名单(``_SECRET_MODEL_KEYS``)、路由器的 ``PROVIDER_REGISTRY`` —— 四份清单
-   互相之间有没有漂移。
+   面板「已配置」角标名单(``_SECRET_MODEL_KEYS``)、路由器的 ``PROVIDER_REGISTRY``
+   —— 四份清单互相之间有没有漂移。
 2. **密钥解析层**
    走**路由器自己的** ``_get_key()``(Dashboard/面板 → CredentialVault → 环境变量,
    并过滤占位符),而不是另写一遍 ``os.getenv``。这样这一步验的就是生产路径本身:
@@ -156,15 +156,34 @@ def static_audit() -> Tuple[List[str], Dict[str, Any]]:
             if k not in CONFIG_SCHEMA:
                 problems.append(f"{name}: {k} 不在 CONFIG_SCHEMA —— 面板存不进去(POST /api/config 会 400)")
             if k.endswith("_API_KEY") and k not in _SECRET_MODEL_KEYS:
-                problems.append(f"{name}: {k} 不在 _SECRET_MODEL_KEYS —— 会被【明文】写进 .env")
+                # 这条原先写的是"会被【明文】写进 .env",那是错的 —— 落盘去向由
+                # core.config_schema.classify_key() 的后缀启发式决定(以 _API_KEY 结尾
+                # 一律判 "secret" → set_secret() → runtime/secrets.env),跟这份名单无关。
+                # 这份名单在全仓库只有一个用处:core/routes/config.py:833 的
+                # "configured" 映射,也就是面板「模型」tab 上那个"已配置"角标。
+                # 漏进这里的后果是**填了 key 面板却不亮绿标**,用户会以为没生效而重复填。
+                problems.append(f"{name}: {k} 不在 _SECRET_MODEL_KEYS —— 面板「已配置」角标不会亮")
         primary = spec.get("env_key")
         if primary and panel and primary not in panel:
             problems.append(f"{name}: {primary} 在面板「模型」tab 里没有输入框 —— 用户没法填")
 
+    # 这些值全是**计数**(int),一个密钥值都不含。
+    #
+    # 但字段名曾经叫 "secret_keys",于是 CodeQL 的
+    # py/clear-text-logging-sensitive-data 把下面 main() 里那句 print 判成 high:
+    # 该规则的敏感源启发式会匹配**字符串下标本身** —— ``detail["secret_keys"]`` 里的
+    # "secret" 一词就足以让它认定"这个表达式是个 secret",再看到它流进 print 就报
+    # "logs sensitive data (secret) as clear text"(告警文案里的 (secret) 分类正是由
+    # secret 这个词触发的)。值是 ``len(...)`` 这一事实,规则并不看。
+    #
+    # 我为此改了三轮**密钥值**的输出(去掉长度、不再打上游响应体、只传布尔),告警一动
+    # 没动 —— 因为被标的那个表达式里从来就没有密钥值。真正的修法是把名字改准:这里数的
+    # 是"面板『已配置』角标的名单",不是"一批 secret"。原名既招静态分析误判,本身也在
+    # 撒谎(见上面对 _SECRET_MODEL_KEYS 实际用途的说明)。
     detail = {
         "registry_providers": len(PROVIDER_REGISTRY),
         "config_schema_keys": len(CONFIG_SCHEMA),
-        "secret_keys": len(_SECRET_MODEL_KEYS),
+        "configured_badge_keys": len(_SECRET_MODEL_KEYS),
         "panel_input_keys": len(panel),
     }
     return problems, detail
@@ -288,7 +307,7 @@ def main() -> int:
     print("═" * 78)
     print(
         f"  registry {detail['registry_providers']} 家 · CONFIG_SCHEMA {detail['config_schema_keys']} 键 · "
-        f"密钥名单 {detail['secret_keys']} · 面板输入框 {detail['panel_input_keys']}"
+        f"已配置角标名单 {detail['configured_badge_keys']} · 面板输入框 {detail['panel_input_keys']}"
     )
     if static_problems:
         for p in static_problems:
