@@ -33,6 +33,17 @@ _SENTENCE_END = "。！？；…!?;\n"
 _MIN_CHUNK_CHARS = 6  # 太短的碎片（如单独一个"好。"）并入邻句，避免频繁启停播放器
 
 
+def _note_spoken(text: str) -> None:
+    """把"这句已经变成声音"登记到反自激励门。懒导入 + 全吞异常:本模块是纯播放层,
+    不能因为门不可用就影响朗读。"""
+    try:
+        from core.voice_echo_guard import note_utterance
+
+        note_utterance(text)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("反自激励登记跳过(非致命): %s", exc)
+
+
 def split_into_speakable_chunks(text: str, *, min_chars: int = _MIN_CHUNK_CHARS) -> List[str]:
     """把一段文字切成"可朗读的句子块"。
 
@@ -429,6 +440,10 @@ class IncrementalSpeaker:
                     continue
                 if not self._speaking:
                     self._mark_speaking(True)
+                # 反自激励:这句【此刻】开始变成声音,登记它。边生成边念这条路不经
+                # speak_response(文本是逐 token 喂进来的),故必须在这里单独登记,
+                # 否则 /chat/stream 的朗读会被麦克风采回、转写成"用户输入"喂回大脑。
+                _note_spoken(text)
                 # 恰在这句开始播放的此刻回调其文本(锁步:文字与语音同刻上屏)。
                 if self._on_sentence_start is not None:
                     try:

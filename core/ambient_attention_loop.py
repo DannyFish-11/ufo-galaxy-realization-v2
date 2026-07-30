@@ -379,11 +379,26 @@ class FrameGate:
 # 常驻注意力循环
 # ---------------------------------------------------------------------------
 def _ai_is_speaking() -> bool:
-    """AI 当前是否正在朗读（反自激励门控用）。降级安全:取不到就当没在说。"""
+    """AI 是否正在(或刚刚)朗读（反自激励门控用）。降级安全:取不到就当没在说。
+
+    两个来源取并集,因为单靠 ``is_speaking()`` 挡不住:它只反映
+    ``speech_output._active_speaker``,而那个变量只在【流式】朗读路径上被设置——
+    整段批处理(``GALAXY_TTS_STREAMING=0``)和原生发声两条路径都不设它,那两种模式
+    下 ``is_speaking()`` 恒为 False,本门形同虚设。``voice_echo_guard`` 登记在
+    "文字真的变成声音"的那一刻,三条发声路径一视同仁;它还带一段尾巴时间,能覆盖
+    "声音已播完、但麦克风侧那段缓冲刚转写出来"的滞后窗口。
+    """
     try:
         from core.speech_output import is_speaking
 
-        return bool(is_speaking())
+        if bool(is_speaking()):
+            return True
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        from core.voice_echo_guard import recently_spoke
+
+        return bool(recently_spoke())
     except Exception:  # noqa: BLE001
         return False
 

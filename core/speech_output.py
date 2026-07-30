@@ -469,6 +469,17 @@ def speak_response(text: str, *, source: str = "") -> None:
 
     spoken = text[: _max_chars()]
 
+    # 反自激励:登记"这段话即将从扬声器出去"。麦克风必然把它采回来、被 VAD 判成
+    # "有人说话"、被 Whisper 转写成文字送进语音闭环;登记在此处(而不是某条具体
+    # 发声路径里)是因为下面三条路——原生发声 / 整段批处理 / 分句流式——都从这里
+    # 分叉,登记一次就三条全覆盖。判定见 core.voice_echo_guard。
+    try:
+        from core.voice_echo_guard import note_utterance as _note_utterance
+
+        _note_utterance(spoken)
+    except Exception as _exc:  # noqa: BLE001 — 登记失败最多漏挡一句回声,不能影响朗读
+        logger.debug("反自激励登记跳过(非致命): %s", _exc)
+
     # 说的通路按【当前档位】自适配:B 档(说=原生)且原生后端已注册 → 原生发声,跳过
     # TTS;A 档 / 原生后端未就绪 → 落到下面的 TTS 引擎链。原生后端未注册时(当前默认)
     # 本调用恒 False,与既有行为完全一致。

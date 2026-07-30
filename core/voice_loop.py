@@ -161,6 +161,28 @@ class VoiceLoop:
 
         logger.info("Voice input: %s", text)
 
+        # ── 反自激励门(必须在 barge-in 之前)──────────────────────────────
+        # 扬声器放出去的 TTS 会被同一间屋子的麦克风重新采回来、被 VAD 判成"有人在
+        # 说话"、被 Whisper 转写成文字流到这里。若不在此拦住,下面两件事都会发生:
+        #   1. barge-in 把 AI 自己的朗读掐断(它把自己的回声当成"用户开口了");
+        #   2. AI 自己说的话被当作用户输入送进大脑 → 对自己作答 → 自言自语闭环。
+        # 判的是"这段文字是不是我刚说过的话"而不是"此刻是否在朗读",所以真正的
+        # barge-in(用户说的是别的内容)完全不受影响。见 core.voice_echo_guard。
+        try:
+            from core.voice_echo_guard import VERDICT_SELF_ECHO, classify_asr_text
+
+            verdict, score, reason = classify_asr_text(text)
+            if verdict == VERDICT_SELF_ECHO:
+                logger.info(
+                    "反自激励:丢弃 AI 自己的回声(重合=%.2f, %s): %s",
+                    score,
+                    reason,
+                    text[:40],
+                )
+                return  # 不打断、不处理——它本来就是我们自己在说话
+        except Exception as _exc:  # noqa: BLE001 — 门失灵绝不能让助手变聋
+            logger.warning("反自激励门不可用,按用户输入继续处理: %s", _exc)
+
         # barge-in：用户开口时若 AI 正在朗读，立刻掐断——"你一说话它就闭嘴"。
         # ASR 出词即视为用户已开口（句级打断）；集中式朗读走 speech_output。
         try:
