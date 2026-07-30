@@ -182,6 +182,48 @@ class TestUrlIsNeverLoggedInFull:
                     offenders.append(f"line {node.lineno}: logger.{f.attr}(..., {name})")
         assert not offenders, "日志里直接传了 URL(可能带凭据),应先过 safe_endpoint(): " + "; ".join(offenders)
 
+    def test_logged_value_is_not_derived_from_the_key(self):
+        """结构性:本地分支打的必须是 configured_url,而不是可能被 key 拼过的 url。
+
+        我上一版写的是 ``safe_endpoint(url)``,以为脱敏函数就够了 —— CodeQL 照报
+        (alert 1026),而且它是对的:``key → url → safe_endpoint(url) → 返回值 → logger``
+        这条数据流摆在那里,静态分析没有理由相信某个函数把密钥清干净了。同一个道理我在
+        scripts/verify_provider_apis.py 的注释里已经写过一遍,这次又犯了同一个错。
+
+        所以这条不测"脱没脱敏",而是直接钉住**被打印的值不来自 key** 这个更强的性质。
+        """
+        import ast
+        import inspect
+
+        import core.voice_duplex_session as mod
+
+        tree = ast.parse(inspect.getsource(mod))
+        fn = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "from_env")
+        # configured_url 只许被赋值一次(来自环境变量),之后不得被重新赋值
+        assigns = [
+            t.id
+            for n in ast.walk(fn)
+            if isinstance(n, ast.Assign)
+            for t in n.targets
+            if isinstance(t, ast.Name) and t.id == "configured_url"
+        ]
+        assert len(assigns) == 1, f"configured_url 被重新赋值了 {len(assigns)} 次 —— 它必须保持未被污染"
+
+        for node in ast.walk(fn):
+            if not isinstance(node, ast.Call):
+                continue
+            f = node.func
+            if isinstance(f, ast.Attribute) and isinstance(f.value, ast.Name) and f.value.id == "logger":
+                rendered = ast.unparse(node)
+                assert "safe_endpoint(url)" not in rendered, "日志里又用回了被 key 污染的 url"
+
+    def test_configured_url_and_url_agree_on_the_local_branch(self, monkeypatch):
+        """核实上面那条注释里的推理:走到本地分支时两者本来就相等,所以换用不丢信息。"""
+        monkeypatch.setenv("GALAXY_REALTIME_URL", "ws://localhost:32550/v1/realtime")
+        cfg = DuplexSessionConfig.from_env()
+        assert cfg is not None
+        assert cfg.url == "ws://localhost:32550/v1/realtime"
+
     def test_the_guard_would_catch_a_regression(self):
         """反向证明上面那条真的会抓人 —— 否则它可能只是恒真。"""
         import ast

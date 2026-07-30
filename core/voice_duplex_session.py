@@ -236,7 +236,11 @@ class DuplexSessionConfig:
         from core.secret_resolution import resolve_secret
 
         provider = (os.getenv("GALAXY_REALTIME_PROVIDER") or "openai_realtime").strip()
-        url = (os.getenv("GALAXY_REALTIME_URL") or "").strip()
+        # configured_url 是**用户配的那个值本身**,下面永远不会被重新赋值。
+        # url 会:Gemini 那一支在缺 URL 时会拿 key 现拼一个(?key=…)。所以凡是要**打日志**
+        # 的地方一律用 configured_url,绝不用 url —— 详见下面本地分支处的说明。
+        configured_url = (os.getenv("GALAXY_REALTIME_URL") or "").strip()
+        url = configured_url
         model = (os.getenv("GALAXY_REALTIME_MODEL") or "").strip()
 
         if provider == "gemini_live":
@@ -262,11 +266,25 @@ class DuplexSessionConfig:
         if not key and is_local_endpoint(url):
             # 本地服务不需要 key。B 档切过去之后 core.native_modal 会把 MiniCPM-o
             # 官方 server 拉起来(默认 localhost:32550),这条路径正是给它用的。
-            # 只打 scheme://host:port —— realtime URL 可能在 query 里带凭据
-            # (本模块 Gemini 那一支就是 ?key=…),原样打出来就是明文泄露。
+            #
+            # 这里打的是 configured_url 而**不是** url,两层理由:
+            #
+            # 1. 数据流上 url 是被 key 污染过的(Gemini 分支 ?key={key}),而
+            #    configured_url 只来自用户配的那个环境变量,从不由 key 拼成。我上一版写的是
+            #    safe_endpoint(url) —— 以为脱敏函数就够了,CodeQL 照报(alert 1026)。它是
+            #    对的:静态分析没有理由相信一个函数把密钥清干净了,把 secret 喂进一个"返回值
+            #    会被打印"的函数,这条边只会更明显。这个道理我在 scripts/verify_provider_apis.py
+            #    的注释里已经写过一遍,这次又犯了同一个错。正确做法是**让被打印的值根本不来自
+            #    key**,而不是指望脱敏。
+            # 2. 能走到这条分支就说明 url 来自 configured_url:key 为空时 Gemini 那支不会
+            #    现拼(它要求 `not url and key`),OpenAI 那支拼出来的是 api.openai.com、不是
+            #    本地地址。所以这两个值在此处本来就相等,用 configured_url 反而更直接。
+            #
+            # 仍然过 safe_endpoint:只留 scheme://host:port。运行期的实际风险是用户把
+            # GALAXY_REALTIME_URL 设成 ws://gateway/rt?token=… 这种形式,那是真会泄的。
             logger.info(
                 "双工语音:realtime 端点是本地服务(%s),无需 API key。",
-                safe_endpoint(url),
+                safe_endpoint(configured_url),
             )
             return cls(url=url, api_key="", model=model, voice=voice, provider=provider)
 
