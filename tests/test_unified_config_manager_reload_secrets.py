@@ -28,7 +28,7 @@ def test_reload_calls_load_from_config_store():
         def _load_env(self):
             calls.append("_load_env")
 
-    mgr = UnifiedConfigManager.__new__(UnifiedConfigManager)
+    mgr = object.__new__(UnifiedConfigManager)
     mgr._backend = _FakeBackend()
 
     mgr.reload()
@@ -65,7 +65,7 @@ def test_reload_actually_refreshes_secret_from_config_store(tmp_path, monkeypatc
     # 覆盖掉刚从隔离 ConfigStore 里读到的 "sk-real-saved-key"。
     monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
 
-    backend = UnifiedConfig.__new__(UnifiedConfig)
+    backend = object.__new__(UnifiedConfig)
     backend._config = {}
     backend.project_root = tmp_path
     backend.config_file = tmp_path / "config.json.static"
@@ -73,7 +73,7 @@ def test_reload_actually_refreshes_secret_from_config_store(tmp_path, monkeypatc
     backend._callbacks = {}
     backend._initialized = True
 
-    mgr = UnifiedConfigManager.__new__(UnifiedConfigManager)
+    mgr = object.__new__(UnifiedConfigManager)
     mgr._backend = backend
 
     assert mgr.get("deepseek_api_key", "") == ""

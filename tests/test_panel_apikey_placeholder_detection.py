@@ -74,18 +74,33 @@ def only_env_layer(monkeypatch):
     是按**扁平小写**键存进 ``_config`` 的(``DEEPSEEK_API_KEY`` → ``deepseek_api_key``),
     ``get("api_keys.DEEPSEEK_API_KEY")`` 靠"取最后一段"的兜底才命中 —— 所以要清的是
     那个扁平键,清 ``api_keys`` 子字典没有用。
+
+    做成**工厂**而不是写死 deepseek:同一个坑不止一处。CI 上不止一个测试文件会把假
+    Key 灌进那份 ``_config`` 缓存(实测同一轮里同时看得到 ``sk-ant-already-persisted``、
+    ``sk-fallback``、``sk-oneapi-x`` 这些来自不同文件的值)。与其逐个去追污染源、
+    追漏一个就再红一次,不如让**每一条依赖解析链的断言自己隔离自己的那几层** ——
+    这样不管谁污染都不受影响。
     """
     from core.credential_vault import reset_vault
     from core.unified_config import config as uc
 
     backing = uc._backend._config
     removed = {}
-    for k in list(backing):
-        if k.lower() in {"deepseek_api_key", "deepseek"}:
-            removed[k] = backing.pop(k)
-    reset_vault()
+
+    def _isolate(*providers: str) -> None:
+        """清掉这些 provider 在第 1 层的所有键形,并清空第 2 层。"""
+        wanted = set()
+        for p in providers:
+            low = p.lower()
+            wanted |= {low, f"{low}_api_key", f"{low}_url", f"{low}_base_url"}
+        for k in list(backing):
+            if k.lower() in wanted:
+                removed[k] = backing.pop(k)
+        reset_vault()
+
+    _isolate("deepseek")  # 默认隔离 deepseek(多数用例用它);需要别的就再调一次
     try:
-        yield
+        yield _isolate
     finally:
         backing.update(removed)
         reset_vault()
@@ -201,7 +216,12 @@ class TestOneApiFallbackRejectsUnderscorePlaceholder:
     'your_oneapi_api_key_here',这里锁定它不会被注册成"可用 provider"。
     """
 
-    def test_underscore_placeholder_env_fallback_not_registered(self, monkeypatch):
+    def test_underscore_placeholder_env_fallback_not_registered(self, monkeypatch, only_env_layer):
+        # 前两层必须一起隔离。CI 上实测:别的测试文件会把 'sk-oneapi-x' 灌进
+        # UnifiedConfig 的 _config 缓存(那层还原不了 os.environ 的快照),于是
+        # _get_key("oneapi") 在第 1 层就命中真值、压根走不到这条要测的 env 兜底,
+        # 断言假红。单跑绿、合并跑红的差别全在这里。
+        only_env_layer("oneapi")
         from core.multi_llm_router import MultiLLMRouter
 
         monkeypatch.delenv("ONEAPI_API_KEY", raising=False)
@@ -213,7 +233,8 @@ class TestOneApiFallbackRejectsUnderscorePlaceholder:
             "未编辑的占位符 'your_oneapi_api_key_here' 被当成真实密钥," "OneAPI provider 被错误注册"
         )
 
-    def test_real_looking_env_fallback_still_registers(self, monkeypatch):
+    def test_real_looking_env_fallback_still_registers(self, monkeypatch, only_env_layer):
+        only_env_layer("oneapi")
         from core.multi_llm_router import MultiLLMRouter
 
         monkeypatch.delenv("ONEAPI_API_KEY", raising=False)

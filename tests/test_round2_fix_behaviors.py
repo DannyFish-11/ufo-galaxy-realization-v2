@@ -98,7 +98,7 @@ class TestEnvOverridesFileForAllProviders:
             "QWEN_API_KEY=FROM_FILE_STALE\nOPENAI_API_KEY=FROM_FILE\nZHIPU_API_KEY=FILE_ONLY\n",
             encoding="utf-8",
         )
-        cfg = uc.UnifiedConfig.__new__(uc.UnifiedConfig)
+        cfg = object.__new__(uc.UnifiedConfig)
         cfg._config = {}
         cfg.env_file = env_file
         cfg._load_env()

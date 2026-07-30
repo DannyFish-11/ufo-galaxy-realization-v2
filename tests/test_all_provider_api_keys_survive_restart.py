@@ -116,7 +116,7 @@ def fresh_env_and_config(tmp_path):
 
         load_dotenv(dotenv_path=str(env_path), override=True)
 
-        cfg = uc.UnifiedConfig.__new__(uc.UnifiedConfig)
+        cfg = object.__new__(uc.UnifiedConfig)
         cfg._config = {}
         cfg._callbacks = {}
         cfg.project_root = tmp_path

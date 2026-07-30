@@ -266,7 +266,7 @@ class TestCapabilityRegistryRegisterValidation:
         """Return a fresh CapabilityRegistry instance for testing."""
         from core.agent.capability_registry import CapabilityRegistry
 
-        reg = CapabilityRegistry.__new__(CapabilityRegistry)
+        reg = object.__new__(CapabilityRegistry)
         reg._initialized = False
         reg.__init__()
         return reg
@@ -316,7 +316,7 @@ class TestCapabilityRegistryInjectMCPTool:
     def _fresh_registry(self):
         from core.agent.capability_registry import CapabilityRegistry
 
-        reg = CapabilityRegistry.__new__(CapabilityRegistry)
+        reg = object.__new__(CapabilityRegistry)
         reg._initialized = False
         reg.__init__()
         return reg
@@ -358,7 +358,7 @@ class TestCapabilityRegistryInjectSkill:
     def _fresh_registry(self):
         from core.agent.capability_registry import CapabilityRegistry
 
-        reg = CapabilityRegistry.__new__(CapabilityRegistry)
+        reg = object.__new__(CapabilityRegistry)
         reg._initialized = False
         reg.__init__()
         return reg

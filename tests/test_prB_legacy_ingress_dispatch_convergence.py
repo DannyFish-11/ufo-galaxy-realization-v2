@@ -111,7 +111,7 @@ class TestDeviceOrchestratorSpineRouting(unittest.TestCase):
     def _make_orchestrator(self):
         from core.device_orchestrator import DeviceOrchestrator
 
-        orch = DeviceOrchestrator.__new__(DeviceOrchestrator)
+        orch = object.__new__(DeviceOrchestrator)
         return orch
 
     def test_09_send_command_calls_route_envelope_when_router_available(self):
