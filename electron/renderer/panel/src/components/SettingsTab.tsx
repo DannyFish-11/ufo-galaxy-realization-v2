@@ -216,6 +216,9 @@ const CONFIG_KEYS: Record<string, string[]> = {
     // 本地全模态 server 的 realtime 路径。B 档原生就绪且没配云端 key 时,双工会自动指向
     // 本地 server 的这个路径试一次流式;server 路径不是默认 /v1/realtime 时在这里改。
     'GALAXY_NATIVE_REALTIME_PATH',
+    // B 档本地全模态 server 与模态通路。此前两边都没登记 —— 功能在跑但只能手改 .env。
+    'GALAXY_MINICPM_SERVER_URL', 'GALAXY_NATIVE_MODAL_AUTO',
+    'GALAXY_AMBIENT_ASR_SIZE', 'GALAXY_VIDEO_FPS_NATIVE', 'GALAXY_VIDEO_FPS_BRIDGE',
     // 密钥项。后端 classify_key() 按 _API_KEY 后缀判为 secret,会走 set_secret() 落
     // runtime/secrets.env,不明文进 .env —— 所以在这里列出来是安全的。
     'GALAXY_REALTIME_API_KEY',

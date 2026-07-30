@@ -279,6 +279,11 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
     # ── Phase B: NATS ↔ WebSocket gateway adapter ──
     try:
         from core.nats_bus import nats_bus
+        # GALAXY_NATS_URL 可能内嵌凭据(nats://user:pass@host:4222 是本仓库唯一的 NATS
+        # 鉴权通道 —— nats.connect() 没有传独立的 user/password/token 参数),所以下面
+        # 打日志时一律过 safe_endpoint,只留 host:port。
+        from core.url_redaction import safe_endpoint
+
         nats_url = os.getenv("GALAXY_NATS_URL", "nats://localhost:4222")
         await nats_bus.connect()
         if nats_bus.is_connected():
@@ -289,12 +294,12 @@ async def lifespan(app: FastAPI):  # noqa: C901  (acceptable complexity for a bo
             )
             await adapter.start()
             app.state.nats_adapter = adapter
-            logger.info("NATS Gateway Adapter started (%s)", nats_url)
+            logger.info("NATS Gateway Adapter started (%s)", safe_endpoint(nats_url))
         else:
             logger.warning(
                 "NATS Gateway Adapter: NATS unavailable (%s) — running in no-op / "
                 "single-machine mode. Start NATS with: nats-server -p 4222",
-                nats_url,
+                safe_endpoint(nats_url),
             )
     except Exception as e:
         logger.warning("NATS Gateway Adapter init error (non-fatal): %s", e, exc_info=True)  # H4 fixed

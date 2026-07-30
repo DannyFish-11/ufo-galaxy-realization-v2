@@ -57,6 +57,7 @@ _EVENT_QUEUE_MAX = 256
 # 统一走 core.config_flags —— 这里原先是 5 份逐字相同的本地 _flag 副本,
 # 其中一个真 bug(空值把开关打开)因此要修 5 遍。详见该模块 docstring。
 from core.config_flags import flag as _flag  # noqa: E402  (保留 _flag 名字以免动全部调用点)
+from core.config_flags import num as _num  # noqa: E402
 
 #: 本地全模态 server 上 realtime 端点的路径。默认取 OpenAI 兼容的惯例 ``/v1/realtime``
 #: —— 本仓库接的本地服务(ollama、oneapi、hf_local)清一色是 OpenAI 兼容的 ``/v1``,
@@ -116,47 +117,31 @@ def native_realtime_url() -> str:
     try:
         from urllib.parse import urlsplit
 
-        parts = urlsplit(base)
-        scheme = scheme_map.get((parts.scheme or "http").lower(), "ws")
-        netloc = parts.netloc or parts.path  # 允许 "localhost:32550" 这种没有 scheme 的写法
-        if not netloc:
+        from core.url_redaction import normalise_base_url
+
+        # 必须先补 scheme 再 urlsplit。原先这里写的是 `parts.netloc or parts.path`,想着
+        # 「允许 localhost:32550 这种没有 scheme 的写法」—— 那是错的:
+        #
+        #   urlsplit("localhost:32550")  → scheme='localhost'  netloc=''  path='32550'
+        #
+        # 于是主机名整个丢掉,推出来的是 ws://32550/v1/realtime。而 192.168.1.7:9000 因为
+        # 点分数字不是合法 scheme,反倒落进 path 里侥幸可用 —— 同一类输入两种行为,坏掉的
+        # 恰好是最常见的那种写法。这个地址是用户在面板里手填的,填不带 scheme 很正常。
+        parts = urlsplit(normalise_base_url(base))
+        if not parts.netloc:
             return ""
-        return f"{scheme}://{netloc}{path}"
+        scheme = scheme_map.get((parts.scheme or "http").lower(), "ws")
+        return f"{scheme}://{parts.netloc}{path}"
     except Exception as exc:  # noqa: BLE001
         logger.debug("推导本地 realtime 地址失败: %s", exc)
         return ""
 
 
-def safe_endpoint(url: str) -> str:
-    """把 realtime URL 收敛成**可以安全打日志**的 ``scheme://host:port``。
-
-    为什么必须有这个函数
-    --------------------
-    realtime 的 URL 是**带凭据的**:本模块 Gemini 那一支就是
-
-        wss://generativelanguage.googleapis.com/ws/...BidiGenerateContent?key={key}
-
-    —— API key 直接拼在 query 里。所以任何"把 url 原样打出来"的日志都是明文泄露密钥。
-    我自己就在加"本地端点免 key"那段时踩了这个坑(CodeQL alert 1025 指的正是那一行),
-    而且它不只是静态分析的洁癖:本地网关用 query 带 token 很常见,用户把
-    ``GALAXY_REALTIME_URL`` 设成那种形式时,日志就会把 token 原样记下来。
-
-    只保留 scheme/host/port:诊断要回答的是"连的是哪台机器",这三样就够了;path / query /
-    fragment / userinfo 一律丢掉 —— 它们才是凭据可能藏身的地方。
-    """
-    from urllib.parse import urlsplit
-
-    try:
-        parts = urlsplit(url)
-        host = (parts.hostname or "").strip()
-        if not host:
-            return "(无效地址)"
-        scheme = (parts.scheme or "ws").strip()
-        port = parts.port  # 解析失败会抛 ValueError,一并被下面接住
-    except Exception as exc:  # noqa: BLE001 —— 打日志不该成为崩溃来源
-        logger.debug("解析 realtime URL 失败: %s", exc)
-        return "(无效地址)"
-    return f"{scheme}://{host}:{port}" if port else f"{scheme}://{host}"
+# 脱敏助手已移到 core/url_redaction.py —— 它不是语音特有的:nats_bus / credential_vault
+# 同样需要(那两处的 URL 才是真·唯一鉴权通道)。让它们 import 语音模块显然不对,而各自
+# 再抄一份就会重演"复制粘贴的助手修一处修不到其它处"(本仓库刚因 5 份逐字相同的 _flag()
+# 吃过一次亏)。这里保留同名再导出,既有调用点与测试一行不用改。
+from core.url_redaction import safe_endpoint  # noqa: E402,F401
 
 
 def is_local_endpoint(url: str) -> bool:
@@ -213,15 +198,13 @@ def ducking_enabled() -> bool:
 
 
 def duck_gain() -> float:
-    """压音时的增益(0~1)。默认 0.25(约 −12 dB):明显压下去但仍听得见。"""
-    raw = os.getenv("GALAXY_VOICE_DUCK_GAIN", "").strip()
-    if not raw:
-        return 0.25
-    try:
-        return max(0.0, min(1.0, float(raw)))
-    except ValueError:
-        logger.warning("GALAXY_VOICE_DUCK_GAIN=%r 不是合法数值,已退回 0.25", raw)
-        return 0.25
+    """压音时的增益(0~1)。默认 0.25(约 −12 dB):明显压下去但仍听得见。
+
+    走 ``config_flags.num`` —— 它做的正是这里原先手写的三件事:空值视同未设置、非法值
+    告警并退回默认、按 lo/hi 夹紧。这是那次「合并 7 份重复助手」漏掉的第 8 份:当时收敛了
+    5 个 ``_flag`` 和 2 个 ``_num``,这一个因为不叫 ``_num`` 而躲过了搜索。
+    """
+    return _num("GALAXY_VOICE_DUCK_GAIN", 0.25, lo=0.0, hi=1.0)
 
 
 class DuplexEventType(str, Enum):

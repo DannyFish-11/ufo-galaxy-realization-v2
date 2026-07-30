@@ -134,7 +134,11 @@ class _SecretVaultBackend:
 
     def __init__(self, base_url: str = "") -> None:
         self._base_url = (base_url or os.environ.get("SECRETVAULT_URL", _DEFAULT_VAULT_URL)).rstrip("/")
-        logger.info("SecretVault HTTP backend initialised at %s", self._base_url)
+        # SECRETVAULT_URL 是用户可配的地址,可能带 token —— 而这里恰恰是**密钥库**,
+        # 最不该把凭据写进日志的地方。只打 host:port。
+        from core.url_redaction import safe_endpoint
+
+        logger.info("SecretVault HTTP backend initialised at %s", safe_endpoint(self._base_url))
 
     def get(self, key_name: str) -> Optional[str]:
         """Fetch a secret from Node_03; returns None on error."""
