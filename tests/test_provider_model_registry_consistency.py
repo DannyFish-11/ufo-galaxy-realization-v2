@@ -283,19 +283,30 @@ class TestVerifyScriptNeverLeaksSecrets:
 
     def test_verdict_returns_only_constants(self):
         m = self._mod()
-        assert m._verdict("") == "未配置"
-        assert m._verdict("your_openai_api_key_here") == "占位符"
-        assert m._verdict(self.FAKE_SHORT) == "已配置"
+        assert m._verdict(present=False, placeholder=False) == "未配置"
+        assert m._verdict(present=True, placeholder=True) == "占位符"
+        assert m._verdict(present=True, placeholder=False) == "已配置"
 
-    def test_verdict_output_contains_no_length_information(self):
-        """判别长度泄露的唯一有效方式:两把**长度不同**的 key 必须得到完全相同的输出。
+    def test_verdict_cannot_leak_length_because_it_never_sees_the_key(self):
+        """第三版把入参降成布尔 —— 密钥字符串根本不进这个函数。
 
-        只断言"输出里没有 key 本身"是挡不住长度的。
+        前两版被 CodeQL 判 high 的根因分别是"输出长度"和"签名仍收密钥字符串"。签名只收
+        布尔之后,"长度泄露"在类型上就不可能了,这比断言输出里没有长度更强。
         """
+        import inspect
+
         m = self._mod()
-        assert len(self.FAKE_SHORT) != len(self.FAKE_LONG)
-        assert m._verdict(self.FAKE_SHORT) == m._verdict(self.FAKE_LONG)
-        assert str(len(self.FAKE_SHORT)) not in m._verdict(self.FAKE_SHORT)
+        sig = inspect.signature(m._verdict)
+        assert list(sig.parameters) == ["present", "placeholder"], f"签名回退了: {sig}"
+        for p in sig.parameters.values():
+            assert p.kind is inspect.Parameter.KEYWORD_ONLY
+        # 两把长度不同的 key 走到同一组布尔 → 同一个输出
+        short_bools = (bool(self.FAKE_SHORT), m.is_placeholder(self.FAKE_SHORT))
+        long_bools = (bool(self.FAKE_LONG), m.is_placeholder(self.FAKE_LONG))
+        assert short_bools == long_bools
+        assert m._verdict(present=short_bools[0], placeholder=short_bools[1]) == m._verdict(
+            present=long_bools[0], placeholder=long_bools[1]
+        )
 
     def test_explain_returns_fixed_wording_only(self):
         """诊断措辞必须来自固定表,不含任何上游内容。"""
@@ -326,6 +337,24 @@ class TestVerifyScriptNeverLeaksSecrets:
         code = self._code_only(REPO_ROOT / "scripts/verify_provider_apis.py")
         assert "_scrub" not in code
         assert "len(value)" not in code, "还有地方把密钥长度写进输出"
+
+    def test_the_secret_string_never_enters_a_printed_function(self):
+        """密钥字符串不许作为实参进入 _verdict —— 那条"密钥 → 函数 → 打印"的边必须断开。
+
+        这正是第二版没修掉的地方:当时只把返回值改成常量,签名仍收密钥字符串。
+        """
+        code = self._code_only(REPO_ROOT / "scripts/verify_provider_apis.py")
+        assert "_verdict(api_key)" not in code, "密钥又被直接传进 _verdict 了"
+        assert "present=bool(api_key)" in code
+
+    def test_printed_field_is_not_named_key(self):
+        """打印的字段名不叫 key —— CodeQL 的敏感判据之一是**名字**,叫 key 的字段被打印
+        就会被判明文记录密钥,哪怕值只是个常量。"""
+        code = self._code_only(REPO_ROOT / "scripts/verify_provider_apis.py")
+        # ast.unparse 会把字符串常量统一成单引号,所以这里按单引号比对(第一版按双引号
+        # 写,断言必然落空 —— 比对 unparse 结果时得用它的规范化形式)。
+        assert "'key': _verdict" not in code
+        assert "'configured': _verdict" in code
 
     def test_no_credential_shaped_literals_in_this_file(self):
         """自查:本文件不许再出现形似真密钥的字面量(gitleaks generic-api-key)。

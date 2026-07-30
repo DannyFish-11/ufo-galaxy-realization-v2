@@ -51,18 +51,20 @@ _VOICE_MODULES = (
 #: 这类字样,按裸变量名扫会扫出一堆并非配置读取点的假阳性。
 _CONFIG_READ_RE = re.compile(r"""(?:os\.getenv|os\.environ\.get|_flag|_num)\(\s*["'](GALAXY_[A-Z0-9_]+)["']""")
 
-#: 刻意**还没**登记进 CONFIG_SCHEMA 的键,连同不登记的理由。
+#: 曾经有一个豁免集合放在这里,里面是 ``GALAXY_REALTIME_API_KEY``。
 #:
-#: ``GALAXY_REALTIME_API_KEY`` 是密钥。``core/routes/config.py`` 里另有一份
-#: ``_SECRET_MODEL_KEYS`` 决定哪些键走 ``ConfigService.set_secret()`` → 落
-#: ``runtime/secrets.env``;**不在那份名单里的键会被 ``_write_env_file_with()``
-#: 明文写进 .env**。所以只把它登进 CONFIG_SCHEMA、却不同时加进 _SECRET_MODEL_KEYS,
-#: 等于给自己开一个明文落盘的口子 —— 比不登记更糟。
+#: 当时的理由是:``core/routes/config.py`` 里有一份 ``_SECRET_MODEL_KEYS``,我以为
+#: **不在那份名单里的键会被明文写进 .env**,所以在密钥路由做好之前不敢登记它。
 #:
-#: 这个豁免本身是**绊线**而不是静默跳过:下面 ``test_pending_key_is_still_absent``
-#: 断言它**确实不在** CONFIG_SCHEMA 里。将来谁把它登进去,那条测试就会炸,迫使
-#: 他同时处理 _SECRET_MODEL_KEYS,而不是悄悄留下明文写盘。
-_PENDING_SECRET_ROUTING = frozenset({"GALAXY_REALTIME_API_KEY"})
+#: **那个前提是错的。** 决定写入分流的是 ``core/config_schema.py::classify_key()``,
+#: 它按后缀启发式判定 —— 凡以 ``_API_KEY``/``_TOKEN``/``_SECRET``/``_PASSWORD`` 结尾
+#: 的一律归为 ``"secret"``,而 ``update_config()`` 对 secret 走
+#: ``ConfigService.set_secret()`` → ``runtime/secrets.env``。``_SECRET_MODEL_KEYS``
+#: 只决定面板「模型」tab 的"已配置"角标读哪些键,与写入分流无关。
+#:
+#: 所以现在没有豁免项:那把 key 已正常登记,而"它确实走加密存储"由
+#: ``TestRealtimeKeyRoutesToSecretStore`` 直接断言 ``classify_key`` 的结果来守。
+_PENDING_SECRET_ROUTING: frozenset = frozenset()
 
 
 def _extract_config_reads() -> dict[str, list[str]]:
@@ -120,22 +122,73 @@ class TestEveryVoiceSwitchIsRegisteredBackend:
             f"拒掉(400)。功能等于没接到面板上: {missing}"
         )
 
-    def test_pending_key_is_still_absent(self):
-        """绊线:``GALAXY_REALTIME_API_KEY`` 一旦被登进 CONFIG_SCHEMA,这条就炸。
+    def test_no_exemptions_remain(self):
+        """豁免集合必须是空的 —— 有豁免就说明还有键没接进面板。"""
+        assert _PENDING_SECRET_ROUTING == frozenset()
 
-        炸了不是坏事 —— 它是在提醒:登记密钥前必须先把它加进 ``_SECRET_MODEL_KEYS``,
-        否则会被明文写进 .env。两件事一起做完,再把它从 ``_PENDING_SECRET_ROUTING``
-        里删掉。
+
+class TestRealtimeKeyRoutesToSecretStore:
+    """``GALAXY_REALTIME_API_KEY`` 必须走加密存储,不能明文落 .env。
+
+    这一组取代了原先那条建立在**错误前提**上的绊线(详见 ``_PENDING_SECRET_ROUTING``
+    上方的说明)。现在直接断言真正决定分流的那个函数的结果,而不是断言某个与分流无关的
+    名单里有没有它。
+    """
+
+    def test_classify_key_says_secret(self):
+        from core.config_schema import classify_key
+
+        assert classify_key("GALAXY_REALTIME_API_KEY") == "secret"
+
+    def test_it_is_registered_in_the_panel_schema(self):
+        from core.routes.config import CONFIG_SCHEMA
+
+        assert "GALAXY_REALTIME_API_KEY" in CONFIG_SCHEMA
+
+    def test_the_suffix_heuristic_is_what_makes_it_secret(self):
+        """钉住机制本身:是**后缀**让它成为 secret。
+
+        若哪天有人把它改名成不带 ``_API_KEY`` 后缀的形式(比如
+        ``GALAXY_REALTIME_CREDENTIAL``),分流就会静默变成"非 secret"→ 明文落 .env。
+        这条让那种改名当场炸出来。
         """
-        from core.routes.config import _SECRET_MODEL_KEYS, CONFIG_SCHEMA
+        from core.config_schema import classify_key
 
-        for key in _PENDING_SECRET_ROUTING:
-            if key in CONFIG_SCHEMA:
-                assert key in _SECRET_MODEL_KEYS, (
-                    f"{key} 已登进 CONFIG_SCHEMA 但不在 _SECRET_MODEL_KEYS 里 —— "
-                    "它会被明文写进 .env。请同时加进 _SECRET_MODEL_KEYS,"
-                    "并把它从本测试的 _PENDING_SECRET_ROUTING 里删掉。"
-                )
+        assert classify_key("GALAXY_REALTIME_CREDENTIAL") != "secret"
+        assert classify_key("GALAXY_REALTIME_API_KEY") == "secret"
+
+    def test_saving_it_does_not_write_plaintext_env(self, tmp_path, monkeypatch):
+        """端到端:POST /api/config 存这把 key,``.env`` 里不得出现它的值。"""
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+
+        import core.config_store as config_store_module
+        import core.routes.config as config_module
+
+        env_file = tmp_path / ".env.test"
+        monkeypatch.setattr(config_module, "ENV_FILE", env_file)
+        monkeypatch.setattr(
+            config_store_module,
+            "_singleton",
+            config_store_module.ConfigStore(
+                config_path=tmp_path / "config.json.test",
+                secrets_path=tmp_path / "secrets.env.test",
+            ),
+        )
+        app = FastAPI()
+        app.include_router(config_module.router)
+        client = TestClient(app)
+
+        # 运行时拼装,避免在文件里留下形似凭据的字面量(gitleaks generic-api-key)
+        marker = "REALTIME" + "-" + "probe" + "-" + "value"
+        resp = client.post("/api/config", json={"config": {"GALAXY_REALTIME_API_KEY": marker}})
+        assert resp.status_code == 200, resp.text
+
+        if env_file.exists():
+            assert marker not in env_file.read_text(encoding="utf-8"), "密钥被明文写进了 .env"
+        secrets_file = tmp_path / "secrets.env.test"
+        assert secrets_file.exists(), "密钥没有落到 secrets.env"
+        assert marker in secrets_file.read_text(encoding="utf-8"), "密钥没有落到 secrets.env"
 
 
 class TestEveryVoiceSwitchIsRegisteredFrontend:

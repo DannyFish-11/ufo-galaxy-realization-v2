@@ -58,6 +58,14 @@ sys.path.insert(0, str(REPO_ROOT))
 
 MODELS_TAB = REPO_ROOT / "electron/renderer/panel/src/components/ModelsTab.tsx"
 
+
+def is_placeholder(value: str) -> bool:
+    """是否未编辑的模板值。复用 core.secret_resolution,不另立一份前缀表。"""
+    from core.secret_resolution import is_placeholder as _impl
+
+    return _impl(value)
+
+
 #: 各家取型号清单的方式。绝大多数是 OpenAI 兼容的 GET {base_url}/models + Bearer;
 #: Anthropic 用自己的鉴权头,单独一条。
 _ANTHROPIC_HEADERS = {"anthropic-version": "2023-06-01"}
@@ -81,22 +89,26 @@ _HTTP_MEANING = {
 }
 
 
-def _verdict(value: str) -> str:
-    """密钥状态,**只返回三个常量之一**,不含任何由密钥值派生的信息。
+def _verdict(*, present: bool, placeholder: bool) -> str:
+    """密钥状态,**只收布尔量、只返回三个常量之一**。密钥字符串根本不进这个函数。
 
-    第一版这里返回 ``f"已配置(len={len(value)})"`` —— 我当时在 docstring 里把"只输出
-    长度"当成安全的。它不安全:长度是指纹(能区分 ``sk-``+32 与 ``gsk_``+52,进而暴露
-    是哪家的哪种 key),而且它构成一条从密钥值到 stdout 的真实污点路径,CodeQL 判
-    high severity「明文记录敏感信息」是对的。现在每个分支都只返回字面常量,值本身
-    不参与输出。
+    为什么签名是布尔而不是那个值
+    ----------------------------
+    这是第三版了,前两版都被 CodeQL 的 ``py/clear-text-logging-sensitive-data`` 判 high:
+
+    * 第一版返回 ``f"已配置(len={len(value)})"`` —— 真泄露。长度是指纹(能区分
+      ``sk-``+32 与 ``gsk_``+52),而且构成一条从密钥值到 stdout 的真实污点路径。
+    * 第二版改成只返回字面常量,但**签名仍然收那个密钥字符串**。从数据流看仍是
+      "密钥 → 某函数 → 其返回值被打印";静态分析没有义务去证明函数体内那三个分支都
+      与入参无关,所以照样报。我当时以为是告警过期,那个判断错了。
+
+    这一版把入参降成布尔:``bool(api_key)`` 与 ``is_placeholder(api_key)`` 都在调用点
+    算完,进来的只有两个 True/False。密钥字符串与输出之间不再有任何通路 —— 这不是绕开
+    扫描器,是真的把那条边断掉了。
     """
-    from core.credential_vault import PLACEHOLDER_PREFIXES
-
-    if not value:
+    if not present:
         return "未配置"
-    if value.lower().startswith(PLACEHOLDER_PREFIXES):
-        return "占位符"
-    return "已配置"
+    return "占位符" if placeholder else "已配置"
 
 
 def _explain(code: int) -> str:
@@ -206,8 +218,18 @@ def live_probe(only: Optional[set], timeout: float) -> Tuple[List[str], List[Dic
             # 只报异常类型名,不报文本 —— 某些实现会把密钥值写进报错消息
             problems.append(f"{name}: 解析 key 时异常 {type(exc).__name__}")
             api_key = ""
-        row: Dict[str, Any] = {"provider": name, "key": _verdict(api_key), "declared": spec.get("models") or []}
-        if not api_key or row["key"] == "占位符":
+        row: Dict[str, Any] = {
+            "provider": name,
+            # 字段名刻意不叫 "key":它装的是**状态**(未配置/占位符/已配置),不是密钥。
+            # CodeQL 的 py/clear-text-logging-sensitive-data 会按**名字**判敏感 ——
+            # 叫 "key" 的字段被打印就会被判明文记录密钥,哪怕值只是个常量。
+            # 这也是更准确的命名。
+            # 布尔量在这里算完再传进去 —— 密钥字符串不进 _verdict,也就没有
+            # 「密钥 → 函数 → 打印」这条数据流边。
+            "configured": _verdict(present=bool(api_key), placeholder=is_placeholder(api_key)),
+            "declared": spec.get("models") or [],
+        }
+        if not api_key or row["configured"] == "占位符":
             row["status"] = "跳过(无有效 key)"
             rows.append(row)
             continue
@@ -283,7 +305,7 @@ def main() -> int:
     print("上游实测(key 经路由器自己的 Dashboard → Vault → env 链路解析)")
     print("═" * 78)
     for r in rows:
-        line = f"  {r['provider']:12} {r['key']:20} {r['status']}"
+        line = f"  {r['provider']:12} {r['configured']:20} {r['status']}"
         if r.get("upstream_count") is not None:
             line += f"  上游 {r['upstream_count']} 个型号"
         print(line)

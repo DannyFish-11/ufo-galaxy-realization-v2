@@ -133,7 +133,7 @@ class DuplexSessionConfig:
 
     @classmethod
     def from_env(cls) -> Optional["DuplexSessionConfig"]:
-        """从环境变量构造;缺 key 或缺 url 时返回 None 并**说明缺什么**。
+        """从配置构造;缺 key 或缺 url 时返回 None 并**说明缺什么**。
 
         返回 None 而不是抛异常:双工默认关闭,缺配置是预期情形而非错误。但原因要能
         从日志里看到 —— 否则"开了开关却没生效"完全无从排查。
@@ -141,13 +141,35 @@ class DuplexSessionConfig:
         provider 由 ``GALAXY_REALTIME_PROVIDER`` 选,默认 ``openai_realtime``。两家的
         默认 URL、默认模型、鉴权方式都不同(Gemini 的 key 在 URL query 里,没有
         Authorization 头),所以要分开组。
+
+        密钥为什么不用 ``os.getenv``
+        ----------------------------
+        原先这里是 ``os.getenv("GALAXY_REALTIME_API_KEY") or os.getenv("OPENAI_API_KEY")``,
+        有两个真问题:
+
+        1. **只覆盖第三层。** 本仓库解析云端 key 的权威顺序是
+           面板/Dashboard → CredentialVault → 环境变量;裸 ``os.getenv`` 跳过前两层。
+           ``GALAXY_SECRET_BACKEND=vault`` 时 key 只在 vault 里,双工层会直接瞎掉,
+           而系统其余部分照常工作 —— 这种"只有一处瞎了"最难排查。
+        2. **不过滤占位符。** ``main.py`` 启动时会把 ``.env``(含
+           ``your_openai_api_key_here`` 这种未编辑模板)灌进 ``os.environ``。于是双工层
+           把模板文字当真 key,拿去连 ``wss://api.openai.com/v1/realtime``,换来一个
+           401 —— 而正确行为是认出"这不是真 key",安静退回回合制。路由器一直是过滤的
+           (``PLACEHOLDER_PREFIXES``),只有这里漏了。
+
+        现在统一走 ``core.secret_resolution.resolve_secret()``,与路由器同序、共用同一份
+        占位符判据。**非密钥项**(provider/url/model/voice)仍读环境变量:它们不是
+        secret,面板保存后会经 ``main.py`` 注回 ``os.environ``,没有 vault 那一层。
         """
+        from core.secret_resolution import resolve_secret
+
         provider = (os.getenv("GALAXY_REALTIME_PROVIDER") or "openai_realtime").strip()
         url = (os.getenv("GALAXY_REALTIME_URL") or "").strip()
         model = (os.getenv("GALAXY_REALTIME_MODEL") or "").strip()
 
         if provider == "gemini_live":
-            key = (os.getenv("GALAXY_REALTIME_API_KEY") or os.getenv("GOOGLE_API_KEY") or "").strip()
+            # 专用键优先于通用键:专门给双工配的那把先用,没配才退回该家的通用 key。
+            key = resolve_secret("GALAXY_REALTIME_API_KEY", "GOOGLE_API_KEY", "GEMINI_API_KEY")
             model = model or "gemini-2.0-flash-exp"
             voice = (os.getenv("GALAXY_REALTIME_VOICE") or "Puck").strip()
             if not url and key:
@@ -158,7 +180,7 @@ class DuplexSessionConfig:
                 )
             missing = "GALAXY_REALTIME_API_KEY 或 GOOGLE_API_KEY"
         else:
-            key = (os.getenv("GALAXY_REALTIME_API_KEY") or os.getenv("OPENAI_API_KEY") or "").strip()
+            key = resolve_secret("GALAXY_REALTIME_API_KEY", "OPENAI_API_KEY")
             model = model or "gpt-4o-realtime-preview"
             voice = (os.getenv("GALAXY_REALTIME_VOICE") or "alloy").strip()
             if not url:
@@ -166,7 +188,18 @@ class DuplexSessionConfig:
             missing = "GALAXY_REALTIME_API_KEY 或 OPENAI_API_KEY"
 
         if not key:
-            logger.warning("双工语音已开启但缺少 API key(%s),本次退回回合制语音链路。", missing)
+            # 区分"没填"与"填的是占位符" —— 后者用户以为自己配好了,不说清会白查很久。
+            from core.secret_resolution import describe_source
+
+            sources = {n: describe_source(n) for n in ("GALAXY_REALTIME_API_KEY", missing.split(" 或 ")[-1])}
+            if "placeholder" in sources.values():
+                logger.warning(
+                    "双工语音已开启,但 API key 是【未编辑的占位符模板】(%s),不是真密钥;"
+                    "本次退回回合制语音链路。请在面板「模型」tab 填入真实 key。",
+                    sources,
+                )
+            else:
+                logger.warning("双工语音已开启但缺少 API key(%s),本次退回回合制语音链路。", missing)
             return None
         return cls(url=url, api_key=key, model=model, voice=voice, provider=provider)
 

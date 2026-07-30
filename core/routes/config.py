@@ -677,6 +677,20 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "category": "behavior",
         "description": "全双工语音的 WebSocket 地址(留空=按 provider 自动组装;走聚合器时才需手填)",
     },
+    # 这一项是**密钥**。登记它是安全的:core/config_schema.py::classify_key() 按后缀
+    # 启发式判定,凡以 _API_KEY / _TOKEN / _SECRET / _PASSWORD 结尾的一律归为 "secret",
+    # 而 update_config() 对 secret 走 ConfigService.set_secret() → runtime/secrets.env,
+    # 不会明文落 .env(已实测 classify_key("GALAXY_REALTIME_API_KEY") == "secret")。
+    #
+    # 我先前一度以为"必须同时加进 _SECRET_MODEL_KEYS 才不会明文落盘",据此在测试里留了
+    # 一条绊线。那个前提是错的:_SECRET_MODEL_KEYS 只决定面板「模型」tab 的"已配置"
+    # 角标读哪些键,与写入分流无关。绊线已改为直接断言 classify_key 的分流结果。
+    "GALAXY_REALTIME_API_KEY": {
+        "default": "",
+        "type": "string",
+        "category": "behavior",
+        "description": "全双工语音专用 API Key(留空=退回该 provider 的通用 key,如 OPENAI_API_KEY)",
+    },
     # --- WebRTC & Network ---
     "GALAXY_ENABLE_WEBRTC_DATA_CHANNEL": {
         "default": "false",
