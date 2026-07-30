@@ -61,6 +61,13 @@ async def test_speak_response_toggles_overlay_speaking_during_playback(monkeypat
     import core.speech_output as so
     from core.lumiv_websocket_bridge import GalaxyPresenceBridge
 
+    # 从一个**干净新建**的 bridge 开始,不接手别人留下的那个。
+    # 这条断言验的是"广播真的到达了覆盖层",而 bridge 是进程级单例 —— 别的测试文件
+    # 会往它身上挂桩(实测 tests/test_presence_bridge_functions.py 把 _ws_broadcast 换成
+    # 写进局部 list 的 lambda 且不还原),接手它就等于把 True 脉冲广播进一个没人看的
+    # 列表,只剩 register_client() 里 _send_to() 直接发的那一帧 False —— 正是
+    # "got [False]" 的由来。那边已加还原,这里再自保一次:两头都不依赖对方守规矩。
+    GalaxyPresenceBridge._instance = None
     bridge = GalaxyPresenceBridge.get_instance()
     bridge._loop = asyncio.get_running_loop()
     ws = _FakeWS()

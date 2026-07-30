@@ -24,6 +24,60 @@ from typing import Any, Dict
 from unittest.mock import MagicMock, patch
 
 # ---------------------------------------------------------------------------
+# 静默基线:presence_verdict 是【五个】状态族共同推导出来的
+# ---------------------------------------------------------------------------
+
+
+def _quiescent_builder(builder, **overrides):
+    """把 builder 的五个族读取器全部按住成静默默认值,只放开指定的那一族。
+
+    为什么需要它
+    ------------
+    ``presence_verdict`` 不是某一族的函数,而是五族联合推导:
+
+        expressing : fam1.dominant_tristate=="manifest" 或 fam2.shell_state=="fullagent"
+        active     : fam1=="liminal" / fam2=="sidesheet" / fam4.manifest_pressure>0.4 / fam3 相位非 passive
+        background : fam4.is_running / fam5.local_loop_ready_count>0 / fam2=="island" / fam4.tick_count>0
+        dormant    : 以上都不成立
+
+    E02/E03/E05 原先只 patch 了**自己那一族**,却断言基线必须是 "dormant" —— 而其余四族
+    读的是真实单例。全量套件里前面的测试只要启动过认知场(fam4.is_running / tick_count>0)、
+    注册过安卓设备(fam5.local_loop_ready_count>0)或改过 shell 状态,基线就变成
+    "background",断言随之假红。单跑绿、合并跑红的差别全在这里。
+
+    佐证:结构完全相同的 E04 **没有**红 —— 因为它恰好 patch 的就是 fam4。这正好指认
+    污染落在认知场那一族。
+
+    五个 Snapshot 的 dataclass 默认值本来就是静默的(silent / dormant / "" / 0.0 / False /
+    0),所以无参构造即是"什么都没发生"的基线。这样每条测试才真的只在验证它自己声称的
+    那件事:**改这一族**会不会改变 verdict。
+    """
+    import contextlib
+
+    from core.desktop_existence_surface import (
+        AndroidPresenceSignals,
+        CognitiveFieldSnapshot,
+        ContinuumPostureSnapshot,
+        ShellClothingSnapshot,
+        SubjectLifecycleSnapshot,
+    )
+
+    defaults = {
+        "_read_subject_lifecycle": SubjectLifecycleSnapshot(),
+        "_read_shell_clothing": ShellClothingSnapshot(),
+        "_read_continuum_posture": ContinuumPostureSnapshot(),
+        "_read_cognitive_field": CognitiveFieldSnapshot(),
+        "_read_android_signals": AndroidPresenceSignals(),
+    }
+    defaults.update(overrides)
+
+    stack = contextlib.ExitStack()
+    for name, value in defaults.items():
+        stack.enter_context(patch.object(builder, name, return_value=value))
+    return stack
+
+
+# ---------------------------------------------------------------------------
 # A. Payload model — structure & serialisation
 # ---------------------------------------------------------------------------
 
@@ -579,10 +633,10 @@ class TestRegressionSafety(unittest.TestCase):
         silent_snap = SubjectLifecycleSnapshot(dominant_tristate="silent", active_session_count=0)
         manifest_snap = SubjectLifecycleSnapshot(dominant_tristate="manifest", active_session_count=1)
 
-        with patch.object(builder, "_read_subject_lifecycle", return_value=silent_snap):
+        with _quiescent_builder(builder, _read_subject_lifecycle=silent_snap):
             dormant_result = builder.build()
 
-        with patch.object(builder, "_read_subject_lifecycle", return_value=manifest_snap):
+        with _quiescent_builder(builder, _read_subject_lifecycle=manifest_snap):
             expressing_result = builder.build()
 
         self.assertEqual(dormant_result.existence_projection.presence_verdict, "dormant")
@@ -600,10 +654,10 @@ class TestRegressionSafety(unittest.TestCase):
         dormant_snap = ShellClothingSnapshot(shell_state="dormant")
         fullagent_snap = ShellClothingSnapshot(shell_state="fullagent")
 
-        with patch.object(builder, "_read_shell_clothing", return_value=dormant_snap):
+        with _quiescent_builder(builder, _read_shell_clothing=dormant_snap):
             dormant_result = builder.build()
 
-        with patch.object(builder, "_read_shell_clothing", return_value=fullagent_snap):
+        with _quiescent_builder(builder, _read_shell_clothing=fullagent_snap):
             expressing_result = builder.build()
 
         self.assertEqual(dormant_result.existence_projection.presence_verdict, "dormant")
@@ -621,10 +675,10 @@ class TestRegressionSafety(unittest.TestCase):
         stopped_snap = CognitiveFieldSnapshot(is_running=False, tick_count=0)
         running_snap = CognitiveFieldSnapshot(is_running=True, tick_count=10)
 
-        with patch.object(builder, "_read_cognitive_field", return_value=stopped_snap):
+        with _quiescent_builder(builder, _read_cognitive_field=stopped_snap):
             stopped_result = builder.build()
 
-        with patch.object(builder, "_read_cognitive_field", return_value=running_snap):
+        with _quiescent_builder(builder, _read_cognitive_field=running_snap):
             running_result = builder.build()
 
         self.assertEqual(stopped_result.existence_projection.presence_verdict, "dormant")
@@ -642,10 +696,10 @@ class TestRegressionSafety(unittest.TestCase):
         no_android = AndroidPresenceSignals(total_devices_with_snapshot=0, local_loop_ready_count=0)
         android_ready = AndroidPresenceSignals(total_devices_with_snapshot=1, local_loop_ready_count=1)
 
-        with patch.object(builder, "_read_android_signals", return_value=no_android):
+        with _quiescent_builder(builder, _read_android_signals=no_android):
             no_android_result = builder.build()
 
-        with patch.object(builder, "_read_android_signals", return_value=android_ready):
+        with _quiescent_builder(builder, _read_android_signals=android_ready):
             android_result = builder.build()
 
         self.assertEqual(no_android_result.existence_projection.presence_verdict, "dormant")
