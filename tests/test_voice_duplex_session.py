@@ -666,3 +666,205 @@ class TestUnexpectedDisconnectIsNotSilent:
         finally:
             server.close()
             await server.wait_closed()
+
+
+# ── 5. ducking(压低音量继续说)────────────────────────────────────────────
+
+
+class TestDucking:
+    """把 PR #1541 里"ducking 做不到"那句话纠正过来。
+
+    那句话对**旧的文件式 TTS 路径**成立(edge-tts 的 volume 是合成时参数,``_play_audio``
+    只是播一个文件,``stop()`` 只能整段掐断)。但双工路径的 ``PcmPlayer`` 是本仓库自己写的
+    回调驱动缓冲 —— 音频线程来取数时乘一个增益即可,压音完全做得到。结论下得过宽了。
+
+    压音的价值不只是"温和":它是**非承诺性**的。服务端 VAD 只能告诉你"有人在出声",
+    分不出抢话与积极倾听;先压低、等最终转写到了再决定,比一听见声音就取消整个回复正确。
+    """
+
+    def _player(self):
+        """带假 stream 的播放器(本环境无音频设备),驱动**真正的** ``_fill``。"""
+        from core.voice_duplex_session import PcmPlayer
+
+        p = PcmPlayer(sample_rate=16000)
+        p._stream = object()
+        p._np = np
+        p._buf = np.zeros(0, dtype=np.float32)
+        return p
+
+    def _render(self, player, blocks, block=160, duck_at=None, unduck_at=None):
+        out = []
+        for i in range(blocks):
+            if duck_at is not None and i == duck_at:
+                player.duck()
+            if unduck_at is not None and i == unduck_at:
+                player.unduck()
+            buf = np.zeros((block, 1), dtype=np.float32)
+            player._fill(buf, block)
+            out.append(buf[:, 0].copy())
+        return np.concatenate(out)
+
+    def test_duck_lowers_the_volume(self):
+        from core.voice_duplex_session import duck_gain
+
+        p = self._player()
+        p.play(pcm16_from_float(np.ones(16000, dtype=np.float32)))
+        sig = self._render(p, 40, duck_at=5)
+        tail = sig[25 * 160 :]  # 爬坡早已结束
+        assert abs(float(np.abs(tail).mean()) - duck_gain()) < 0.02
+
+    def test_unduck_restores_full_volume(self):
+        p = self._player()
+        p.play(pcm16_from_float(np.ones(16000, dtype=np.float32)))
+        sig = self._render(p, 60, duck_at=5, unduck_at=30)
+        tail = sig[50 * 160 :]
+        assert abs(float(np.abs(tail).mean()) - 1.0) < 0.02
+
+    def test_gain_change_is_ramped_not_stepped(self):
+        """幅度突变在听感上就是"啪"的一声爆音。瞬切时最大单样本跳变约 0.75;
+        50ms 爬坡下应当小两个数量级。"""
+        p = self._player()
+        p.play(pcm16_from_float(np.ones(16000, dtype=np.float32)))
+        sig = self._render(p, 60, duck_at=10, unduck_at=40)
+        assert float(np.abs(np.diff(sig)).max()) < 0.02
+
+    def test_ramp_completes_within_the_configured_time(self):
+        from core.voice_duplex_session import _DUCK_RAMP_MS, duck_gain
+
+        p = self._player()
+        p.play(pcm16_from_float(np.ones(16000, dtype=np.float32)))
+        # 爬坡时长内应基本到位(留一格余量)
+        blocks = int(_DUCK_RAMP_MS / 10.0) + 2
+        sig = self._render(p, blocks, duck_at=0)
+        assert abs(float(np.abs(sig[-160:]).mean()) - duck_gain()) < 0.05
+
+    def test_ramp_is_spread_across_blocks_not_finished_in_one(self):
+        """这一条才真正钉住**跨块**的爬坡上限 —— 上面那条"跳变要小"只测到了块【内】的
+        线性插值:把跨块上限去掉后,一块之内 linspace 依然会把 1.0 平滑插到 0.25,
+        单样本跳变仍然很小,用例照样通过。反向验证时(拆掉上限、64 例全绿)才暴露出来。
+
+        真正的判据是**爬坡有没有花够时间**:50ms 爬坡 + 10ms 的块 = 一块最多走 20%,
+        所以一块之后增益应当还在 0.8 附近,远没到 0.25。
+        """
+        p = self._player()
+        p.play(pcm16_from_float(np.ones(16000, dtype=np.float32)))
+        p.duck()
+        buf = np.zeros((160, 1), dtype=np.float32)
+        p._fill(buf, 160)  # 只走一块(10ms)
+        gain = p.status()["gain"]
+        assert gain > 0.5, f"一块(10ms)之后增益已降到 {gain} —— 跨块爬坡上限没生效,爬坡过快"
+
+    def test_status_exposes_ducking_state(self):
+        """压音是"听得见但不明显"的行为 —— 不摊出来就无从判断到底压了没有、是否忘了恢复。"""
+        p = self._player()
+        assert p.status()["ducked"] is False
+        p.duck()
+        st = p.status()
+        assert st["ducked"] is True and st["target_gain"] < 1.0 and st["duck_events"] == 1
+        p.unduck()
+        assert p.status()["ducked"] is False
+
+    def test_duck_is_idempotent_in_counting(self):
+        p = self._player()
+        p.duck()
+        p.duck()
+        assert p.status()["duck_events"] == 1, "重复压音不该重复计数"
+
+    def test_defaults(self, monkeypatch):
+        from core.voice_duplex_session import duck_gain, ducking_enabled
+
+        monkeypatch.delenv("GALAXY_VOICE_DUCKING", raising=False)
+        monkeypatch.delenv("GALAXY_VOICE_DUCK_GAIN", raising=False)
+        assert ducking_enabled() is True
+        assert duck_gain() == pytest.approx(0.25)
+
+    def test_bad_gain_falls_back(self, monkeypatch, caplog):
+        from core.voice_duplex_session import duck_gain
+
+        monkeypatch.setenv("GALAXY_VOICE_DUCK_GAIN", "loud")
+        with caplog.at_level("WARNING"):
+            assert duck_gain() == pytest.approx(0.25)
+        assert "不是合法数值" in caplog.text
+
+    def test_gain_is_clamped(self, monkeypatch):
+        from core.voice_duplex_session import duck_gain
+
+        monkeypatch.setenv("GALAXY_VOICE_DUCK_GAIN", "5")
+        assert duck_gain() == 1.0
+        monkeypatch.setenv("GALAXY_VOICE_DUCK_GAIN", "-1")
+        assert duck_gain() == 0.0
+
+
+class TestDuplexBargeInUsesTheClassifier:
+    """双工路径此前对**任何** ``USER_SPEECH_STARTED`` 都直接 ``response.cancel`` ——
+    等于把回合制那边刚修好的毛病又犯了一遍:用户"嗯"一声也会把整个回复取消掉。
+
+    服务端 VAD 只知道"有人在出声",分不出抢话与积极倾听 —— 那是 ``classify_barge_in``
+    的活。改成两段式:开口先压音(非承诺),最终转写到了再决定继续还是取消。
+    """
+
+    @staticmethod
+    def _loop_with_fakes():
+        from core.voice_loop import VoiceLoop
+
+        loop = VoiceLoop(object(), speak_responses=False)
+
+        class _FakePlayer:
+            def __init__(self):
+                self.ducked_calls = 0
+                self.unducked_calls = 0
+
+            def duck(self):
+                self.ducked_calls += 1
+
+            def unduck(self):
+                self.unducked_calls += 1
+
+        class _FakeSession:
+            def __init__(self, events):
+                self._events = events
+                self.interrupts = 0
+
+            async def interrupt(self):
+                self.interrupts += 1
+
+            async def events(self):
+                for e in self._events:
+                    yield e
+
+        loop._duplex_player = _FakePlayer()
+        return loop, _FakePlayer, _FakeSession
+
+    def _run(self, transcript):
+        from core.voice_duplex_session import DuplexEvent, DuplexEventType
+
+        loop, _FP, _FS = self._loop_with_fakes()
+        session = _FS(
+            [
+                DuplexEvent(DuplexEventType.USER_SPEECH_STARTED),
+                DuplexEvent(DuplexEventType.FINAL_TRANSCRIPT, text=transcript),
+                DuplexEvent(DuplexEventType.SESSION_CLOSED),
+            ]
+        )
+        asyncio.run(loop._duplex_downlink(session, DuplexEventType))
+        return loop._duplex_player, session
+
+    def test_speech_start_ducks_instead_of_cancelling(self):
+        player, session = self._run("嗯")
+        assert player.ducked_calls == 1, "用户开口应先压音"
+        assert session.interrupts == 0, "光是出声还不该取消模型回复"
+
+    def test_backchannel_resumes_full_volume_and_never_cancels(self):
+        player, session = self._run("嗯")
+        assert session.interrupts == 0
+        assert player.unducked_calls >= 1, "判定为应答后应恢复音量"
+
+    def test_real_interruption_cancels_on_the_server(self):
+        player, session = self._run("不是这个我要另一个")
+        assert session.interrupts == 1, "真打断必须让服务端停止生成"
+
+    def test_falls_back_to_cancel_when_ducking_is_off(self, monkeypatch):
+        monkeypatch.setenv("GALAXY_VOICE_DUCKING", "0")
+        player, session = self._run("嗯")
+        assert player.ducked_calls == 0
+        assert session.interrupts == 1, "关掉 ducking 应退回原来的「开口即取消」"
