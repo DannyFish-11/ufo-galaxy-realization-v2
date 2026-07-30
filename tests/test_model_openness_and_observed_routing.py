@@ -481,3 +481,55 @@ class TestBanditSampleFloorIsNotDuplicated:
         r.call_history = []
         cands = ["a", "b", "c"]
         assert r._bandit_reorder(list(cands), TaskType.GENERAL) == cands
+
+
+class TestDeadCostPolicyRemoved:
+    """``route_with_cost_policy()`` 已删除,并且不该被重新加回来。
+
+    删除依据(当时逐条查证过):
+
+    1. **全仓零外部引用** —— 没有测试、文档或治理哨兵提及它;
+    2. **成本策略已由统一层真实承担** —— ``config/llm_routing_policy.yaml`` 按任务类型
+       配 ``cost_budget.max_cost_per_1k_tokens``,``_check_cost_budget()`` 在
+       ``core/unified/llm_router.py:788`` 被真实调用,经 ``openclawd.py:1263`` 进入;
+    3. **它的打分是 ``select_brain_for_task()`` 的较弱重复** —— 没有质量档、没有实测
+       表现、没有按模型判开闭源。
+
+    我一度打算"把它接上"。查清第 2 点后反过来了:接上等于造出**第二套互相竞争的成本
+    策略**,正是本轮合并 7 份重复助手要消除的那类漂移。
+    """
+
+    def test_the_method_is_gone(self):
+        from core.multi_llm_router import MultiLLMRouter
+
+        assert not hasattr(MultiLLMRouter, "route_with_cost_policy")
+
+    def test_the_unified_layer_really_owns_cost_policy(self):
+        """删除的前提必须成立:统一层的成本策略是真的在跑,不是另一处死代码。
+
+        没有这条,上面那个删除就只是"删了个我说没用的东西"。
+        """
+        import inspect
+
+        from core.unified import llm_router as unified
+
+        assert hasattr(unified, "_check_cost_budget"), "统一层没有成本预算检查 —— 删除前提不成立"
+        # 必须有真实调用点,而不只是定义
+        src = inspect.getsource(unified)
+        assert src.count("_check_cost_budget(") >= 2, "_check_cost_budget 只有定义没有调用"
+
+    def test_the_policy_file_exists_and_defines_cost_budgets(self):
+        from pathlib import Path
+
+        policy = Path(__file__).resolve().parent.parent / "config/llm_routing_policy.yaml"
+        assert policy.exists(), "策略文件不存在 —— 删除前提不成立"
+        text = policy.read_text(encoding="utf-8")
+        assert "cost_budget" in text and "max_cost_per_1k_tokens" in text
+
+    def test_removal_is_documented_in_place(self):
+        """删掉的地方要留下"为什么删"—— 否则后人看到统一层之外没有成本策略会又加一个。"""
+        from pathlib import Path
+
+        src = (Path(__file__).resolve().parent.parent / "core/multi_llm_router.py").read_text(encoding="utf-8")
+        assert "route_with_cost_policy() 已删除" in src
+        assert "llm_routing_policy.yaml" in src, "没写清成本策略现在归谁"

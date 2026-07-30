@@ -96,7 +96,7 @@ class ProviderConfig:
         """该 provider 现在是否该被当作候选。
 
         修复:status 字段一旦被打成 DOWN(连续 5 次失败),此前【没有任何自愈
-        路径】——route()/route_multimodal_first()/route_with_cost_policy() 等
+        路径】——route()/route_multimodal_first()/select_brain_for_task() 等
         十几处候选筛选全部一律排除 DOWN,而重新变回候选的唯一办法是成功调用
         一次；但 DOWN 的 provider 永远不会被选为候选,自然也永远没机会成功调用，
         于是一旦 DOWN 就【整个进程生命周期】卡死,除非手动触发 refresh_llm_router()
@@ -2883,116 +2883,17 @@ class MultiLLMRouter:
             reason=("native_multimodal_first: tier=3 advisory " "no_providers_available degraded_to=no_op"),
         )
 
-    def route_with_cost_policy(
-        self,
-        task_type: TaskType,
-        complexity_score: float = 0.5,
-        cost_weight: float = 0.3,
-        llm_hint: Optional[Dict[str, Any]] = None,
-    ) -> RoutingDecision:
-        """
-        组合策略路由：任务类型 + 成本效益加权评分。
-
-        规则选择具有最高权威性；LLM 微调仅允许在规则选定的候选集内
-        调整/追加约束（不可替换规则选定的 provider/model）。
-
-        Args:
-            task_type:        任务类型（来自规则引擎，权威）
-            complexity_score: 复杂度评分
-            cost_weight:      成本权重 0.0-1.0（默认 0.3，越高越偏向低成本提供商）
-            llm_hint:         LLM 微调建议（可选）。格式：
-                              {"preferred_provider": "...", "model_override": "...", "temperature": ...}
-                              注意：preferred_provider 仅在规则候选列表内有效（否则忽略）；
-                              model_override 仅在规则已选提供商内有效。
-
-        Returns:
-            RoutingDecision（规则主导，LLM 建议在守护轨道内应用）
-        """
-        # ── 1. 规则主路由 ─────────────────────────────────────────────────────
-        preferred_order = TASK_ROUTING_PREFERENCES.get(task_type, [])
-
-        # 计算每个候选提供商的综合得分（任务适配度 + 成本效益）
-        candidates: List[Dict[str, Any]] = []
-        for rank, provider_name in enumerate(preferred_order):
-            if provider_name not in self.providers:
-                continue
-            prov = self.providers[provider_name]
-            if not prov.is_available():
-                continue
-
-            model = self.select_model_by_complexity(provider_name, task_type, complexity_score)
-
-            # 任务适配得分（按 TASK_ROUTING_PREFERENCES 排名越前分越高）
-            task_score = max(0.0, 1.0 - rank * 0.2)
-
-            # 成本效益得分（成本越低分越高）
-            avg_cost = (prov.cost_per_1k_input + prov.cost_per_1k_output) / 2
-            # 归一化成本得分：假设 0.01 $/1k 作为参考上限
-            cost_score = max(0.0, 1.0 - min(avg_cost / 0.01, 1.0))
-
-            # 综合得分 = 任务适配 * (1-cost_weight) + 成本效益 * cost_weight
-            composite = task_score * (1.0 - cost_weight) + cost_score * cost_weight
-
-            candidates.append(
-                {
-                    "provider": provider_name,
-                    "model": model,
-                    "composite": composite,
-                    "task_score": task_score,
-                    "cost_score": cost_score,
-                }
-            )
-
-        if not candidates:
-            # 无候选 → 回退到原始 route()
-            return self.route(task_type, complexity_score=complexity_score)
-
-        # 按综合得分排序，取最优
-        candidates.sort(key=lambda x: x["composite"], reverse=True)
-        best = candidates[0]
-        selected_provider = best["provider"]
-        selected_model = best["model"]
-
-        # ── 2. LLM 微调（仅允许在规则守护轨道内调整）────────────────────────
-        if llm_hint:
-            hint_provider = llm_hint.get("preferred_provider", "")
-            hint_model = llm_hint.get("model_override", "")
-
-            # 微调规则 A: 仅允许从规则候选列表中的提供商中替换（不允许引入规则列表外的提供商）
-            rule_providers = {c["provider"] for c in candidates}
-            if hint_provider and hint_provider in rule_providers:
-                # 在规则列表内找到对应候选，更新选择
-                for c in candidates:
-                    if c["provider"] == hint_provider:
-                        selected_provider = c["provider"]
-                        selected_model = c["model"]
-                        logger.info("LLM 微调建议已采纳（规则守护）: provider=%s", hint_provider)
-                        break
-            elif hint_provider:
-                logger.debug(
-                    "LLM 微调建议已拒绝（提供商不在规则列表内）: %s not in %s",
-                    hint_provider,
-                    rule_providers,
-                )
-
-            # 微调规则 B: 模型覆盖仅允许在规则选定的提供商内切换
-            if hint_model and selected_provider in self.providers:
-                allowed_models = self.providers[selected_provider].models
-                if hint_model in allowed_models:
-                    selected_model = hint_model
-                    logger.info("LLM 微调建议已采纳（模型守护）: model=%s", hint_model)
-                else:
-                    logger.debug("LLM 微调建议已拒绝（模型不在该提供商允许列表内）: %s", hint_model)
-
-        reason = f"策略路由: 任务类型 [{task_type.value}] " f"复杂度 {complexity_score:.2f} 成本权重 {cost_weight:.2f}"
-        alternatives = [f"{c['provider']}:{c['model']}" for c in candidates if c["provider"] != selected_provider]
-        return RoutingDecision(
-            provider=selected_provider,
-            model=selected_model,
-            reason=reason,
-            alternatives=alternatives,
-        )
-
+    # route_with_cost_policy() 已删除(约 110 行)。
+    #
+    # 依据:① 全仓零外部引用(无测试/文档/治理哨兵提及);② 它的成本策略已被
+    # UnifiedLLMRouter + config/llm_routing_policy.yaml 真实承担 —— 那边按任务类型
+    # 配 cost_budget.max_cost_per_1k_tokens,_check_cost_budget() 在
+    # core/unified/llm_router.py:788 被真实调用,经 openclawd.py:1263 进入;
+    # ③ 它的打分是 select_brain_for_task() 的较弱重复(没有质量档、没有实测表现、
+    # 没有按模型判开闭源)。把它接上等于造出第二套互相竞争的成本策略 —— 正是本轮
+    # 合并 7 份重复助手要消除的那类漂移。
+    # 它独有的 llm_hint 护栏(LLM 建议只能在规则选定候选集内生效)在统一层已有等价
+    # 实现(llm_router.py:257-261 只在已知优先级内重排)。
     # ───────── Identity injection helper ─────────
 
     def _inject_identity_to_messages(self, messages: List[Dict]) -> List[Dict]:
