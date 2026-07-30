@@ -27,4 +27,15 @@ pytest>=7.4.4
 pytest-asyncio>=0.23.3
 pytest-cov>=4.1.0
 pytest-mock>=3.12.0
+# 真 bug 修复(CI 排查):没有它,**挂死的测试永远不会中止**。
+#
+# 实测:`test` 作业连续多次在跑到 99% 时静默卡住 —— 单条测试进去就再没出来,直到
+# runner 整体被回收(GitHub 打出 "The runner has received a shutdown signal"),于是
+# 整轮 4 万多条测试**一个结论都拿不到**,既看不到失败清单,也看不到卡在哪。main 自己
+# 也有同样签名(某次 test 作业卡 64 分钟被杀,同 run 其它 16 个作业全绿)。
+#
+# 装上之后,超时的那条会被打断并如实报成 failure,**整轮继续跑完** —— 这才拿得到完整
+# 的失败清单,traceback 也直接指出卡在哪一行。已实测两种真实挂法(等永不释放的锁、
+# 长 sleep)都能被打断且不影响后续用例。
+pytest-timeout>=2.3.0
 coverage>=7.4.0
