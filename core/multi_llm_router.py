@@ -1619,6 +1619,9 @@ PROVIDER_REGISTRY: List[Dict[str, Any]] = [
     {
         "name": "perplexity",
         "env_key": "PERPLEXITY_API_KEY",
+        # SONAR_API_KEY 是面板公开的别名,"已配置"角标本就认它;缺了这行会导致
+        # 面板亮绿标而路由器不读 → 密钥静默失效(见 tests/test_panel_api_key_routing.py)
+        "alt_env": ["SONAR_API_KEY"],
         "base_url": "https://api.perplexity.ai",
         "models": ["sonar-pro", "sonar-deep-research", "sonar-reasoning-pro", "sonar"],
         "default_model": "sonar-pro",
