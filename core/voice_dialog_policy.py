@@ -16,10 +16,22 @@
    ("我去查,稍等")并把重活丢后台,结果回来再说——对话不被推理堵死。
 5. **捧哏节奏**:后台任务跑着时,按节奏给一两声短填充("嗯,我在看"),
    不让对话死寂;有 hold 时不出声。
+6. **barge-in 分类**(``classify_barge_in``):朗读期间用户出声,分"应答"与"真打断"。
+   人在听别人说话时会一直出声("嗯""对""好""哦")—— 那是积极倾听,不是抢话。原先
+   "一出词就掐断"的行为让 AI 每讲两句就被"嗯"一声打断,对话进行不下去。
 
-纯逻辑、零重依赖、全部可单测。诚实边界:真·全双工(同一时刻边说边听)需要
-回声消除+双工模型,本政策做的是"委托+语义回合+填充"三件套——编排层能拿到的
-全双工体感,不假装是模型级全双工。
+诚实边界(逐条,不含糊)
+------------------------
+* **回声消除已经有了。** ``core/multimodal/acoustic_echo_canceller.py`` 在信号层做
+  AEC(实测合成路径 27 dB ERLE),参考信号来自系统播放声回环采集。所以"同一时刻边说
+  边听"的**听**这一半现在是通的:麦克风可以在朗读期间一直开着,而且能分清谁在说。
+* **说的那一半仍是半双工。** 用户真打断时 AI 的反应是**停下来**,不是边说边接话。
+  再往前需要双工模型通路(持续上行 + 持续下行的连接),那不是政策层的事。
+* **"压低音量继续说"(ducking)做不了。** 现有播放层没有运行期音量控制:edge-tts 的
+  ``volume`` 是**合成时**参数(烤进生成的音频里),``_play_audio(path)`` 只是播一个
+  文件,``engine.stop()` 只能整段掐断。要做 ducking 得先把播放层换成能在播放中调音量
+  的实现 —— 那是另一件事,这里不假装支持,``classify_barge_in`` 只返回"应答/打断"两
+  种,不返回一个没人能兑现的 duck。
 """
 
 from __future__ import annotations
@@ -179,8 +191,80 @@ _RESUME_PATTERNS = (
 _DEFAULT_HOLD_S = 90.0
 
 
+# ── barge-in 分类 ─────────────────────────────────────────────────────────────
+#: 用户在 AI 朗读期间出声的两种性质
+BARGE_IN_BACKCHANNEL = "backchannel"  # 应答/积极倾听 —— 不该打断
+BARGE_IN_INTERRUPT = "interrupt"  # 真的要抢话 —— 立刻掐断
+
+#: 纯应答词。必须是**语义空**的:含任何实义内容都不算应答。
+#: 刻意不含"继续"—— 它是 hold 的恢复口令,归 check_resume_command 管。
+#:
+#: 顺序**无关**:下面会按长度降序排一次再用。剥离时短词先匹配会咬掉长词的前缀 ——
+#: 例如先剥 "ok" 会把 "okay" 变成 "ay",于是 "okay" 被误判成打断(实测踩到)。
+#: 靠手工把长词写在前面太脆,新增一个词就可能悄悄破功,故程序化排序。
+_BACKCHANNEL_TOKENS_RAW = (
+    "嗯嗯",
+    "嗯",
+    "呃",
+    "哦",
+    "噢",
+    "喔",
+    "唔",
+    "啊",
+    "对对",
+    "对",
+    "是的",
+    "是",
+    "好的",
+    "好",
+    "行",
+    "可以",
+    "没错",
+    "明白",
+    "懂了",
+    "知道了",
+    "了解",
+    "ok",
+    "okay",
+    "yeah",
+    "yep",
+    "yes",
+    "uhhuh",
+    "mhm",
+    "right",
+    "sure",
+    "gotit",
+    "isee",
+)
+
+#: 按长度降序:剥离时长词先匹配,避免短词咬掉长词的前缀。
+_BACKCHANNEL_TOKENS = tuple(sorted(_BACKCHANNEL_TOKENS_RAW, key=len, reverse=True))
+
+#: 永远算打断的词(与 _HOLD_PATTERNS 一起用)
+_STOP_WORDS = ("停", "别念", "别说", "闭嘴", "打住", "stop", "shutup", "waitwait")
+
+#: 超过这个长度就不可能是纯应答了
+_MAX_BACKCHANNEL_CHARS = 6
+
+_BACKCHANNEL_STRIP = re.compile(r"[\s,。、;:!?…—~·\"'“”‘’()()《》【】\[\]{}<>/\\|+*=&%$#@^_`,.;:!?~-]+")
+
+
+def normalize_for_backchannel(text: str) -> str:
+    """归一化:去标点空白、英文转小写。ASR 的标点极不稳定,不能参与判断。"""
+    return _BACKCHANNEL_STRIP.sub("", (text or "")).lower()
+
+
+def backchannel_tolerance_enabled() -> bool:
+    """是否启用"应答不打断"(默认开启)。
+
+    默认开启是因为反面明显更糟:用户说一声"嗯"就把 AI 的话掐断,是个谁都能立刻察觉的
+    毛病。设 ``GALAXY_VOICE_BACKCHANNEL_TOLERANCE=0`` 可退回"一出词就打断"的旧行为。
+    """
+    return _flag("GALAXY_VOICE_BACKCHANNEL_TOLERANCE", "1")
+
+
 class DialogPolicy:
-    """会话级政策状态(hold 窗口 + 捧哏/致谢轮换)。"""
+    """会话级政策状态(hold 窗口 + 捧哏/致谢轮换 + barge-in 分类)。"""
 
     def __init__(self) -> None:
         self._hold_until: float = 0.0
@@ -210,6 +294,49 @@ class DialogPolicy:
 
     def is_holding(self) -> bool:
         return time.monotonic() < self._hold_until
+
+    # barge-in 语义 ----------------------------------------------------------
+
+    def classify_barge_in(self, text: str) -> str:
+        """AI 正在朗读时用户出声了 —— 这是"打断"还是"应答"?返回
+        ``BARGE_IN_BACKCHANNEL`` 或 ``BARGE_IN_INTERRUPT``。
+
+        为什么需要分开
+        --------------
+        原先的 barge-in 是"ASR 一出词就掐断朗读"。但人在听别人说话时会一直出声
+        ——"嗯""对""好""哦" —— 那是**积极倾听**,不是要抢话。把这些当打断,结果是
+        AI 每讲两句就被"嗯"一声打断,对话根本进行不下去。这是"边说边听"体验里最刺眼
+        的一处,也是纯政策层就能修的一处。
+
+        判据(刻意保守,宁可判成打断也不要吃掉用户真的要说的话):
+        - 归一化后必须**完全由**应答词构成 —— 含任何实义内容即判打断;
+        - 且长度不超过 ``_MAX_BACKCHANNEL_CHARS``;
+        - 且不含任何停止/hold 类词("停""别说了")—— 那些永远是打断。
+
+        注意本方法**只回答分类**,不关心 AI 此刻是否真在朗读。调用方要先确认在朗读
+        中再问 —— AI 没在说话时,"嗯"是一个(弱)用户回合,不是应答。
+        """
+        # hold / stop 类模式要拿【原始小写文本】去比对,不能用归一化后的文本:
+        # _HOLD_PATTERNS 里有 6 个含空格的多词模式("hold on"/"let me think"/"be quiet"…),
+        # 而归一化会把空格去掉,那些模式于是永远匹配不到 —— 一个恒为假的 any()。
+        # 目前它还不构成行为缺陷(那些句子都会因"含实义内容"落到 interrupt),但只要将来
+        # 加进一个短的、恰好全由应答词组成的多词 hold 口令,这道闸门就会静默失效。
+        raw = (text or "").strip().lower()
+        if any(p in raw for p in _HOLD_PATTERNS) or any(p in raw for p in _STOP_WORDS):
+            return BARGE_IN_INTERRUPT
+
+        t = normalize_for_backchannel(text)
+        if not t:
+            return BARGE_IN_INTERRUPT
+        if len(t) > _MAX_BACKCHANNEL_CHARS:
+            return BARGE_IN_INTERRUPT
+        # 归一化后的文本也过一遍 stop 词:ASR 可能把"别 说 了"断开,去空格后才连成词
+        if any(p in t for p in _STOP_WORDS):
+            return BARGE_IN_INTERRUPT
+        rest = t
+        for token in _BACKCHANNEL_TOKENS:
+            rest = rest.replace(token, "")
+        return BARGE_IN_BACKCHANNEL if not rest.strip() else BARGE_IN_INTERRUPT
 
     # 委托分类 ----------------------------------------------------------------
     # heavy = 需要搜索/工具/多步执行的任务型回合;quick = 闲聊/短问答。

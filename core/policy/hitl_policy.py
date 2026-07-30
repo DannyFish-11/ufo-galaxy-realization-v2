@@ -356,10 +356,22 @@ class HITLPolicy:
             reason:      Human-readable rationale.
 
         Returns:
-            The :class:`HITLDecision`, or ``None`` if request not found.
+            The :class:`HITLDecision`, or ``None`` if request not found — including
+            when another caller已经把它裁决掉了(见下面的并发说明)。
+
+        并发
+        ----
+        ``pop`` 在**同一次持锁**内完成"查到 + 摘走",两件事不能分开做。此前是先
+        ``get``、释放锁、走完整段裁决、再取锁 ``pop``:两个线程可以都拿到同一个非
+        None 的 ``req``,于是同一条审批被裁决两次 —— history 里落两条记录、事件发两
+        次,而 ``req.decision`` 取决于哪个线程最后写,不确定。若两次裁决方向相反
+        (面板点了通过、接口同时调了拒绝,或者用户双击),最终结果就是随机的。
+
+        改成 ``pop`` 之后,摘到 ``req`` 即等于**独占地领走**了这条审批;第二个线程
+        拿到 None,如实返回"没有这条待审批",不会重复记账。
         """
         with self._lock:
-            req = self._pending.get(request_id)
+            req = self._pending.pop(request_id, None)
 
         if req is None:
             logger.warning("HITLPolicy.decide: unknown request_id=%s", request_id)
@@ -377,7 +389,7 @@ class HITLPolicy:
         req.decision = decision
 
         with self._lock:
-            self._pending.pop(request_id, None)
+            # 这条已在上面 pop 时领走,此处只需记账
             self._history.append(decision)
             if len(self._history) > 500:
                 self._history = self._history[-500:]
