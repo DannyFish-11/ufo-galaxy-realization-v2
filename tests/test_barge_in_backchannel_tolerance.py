@@ -26,6 +26,7 @@ import asyncio
 import pytest
 
 from core.voice_dialog_policy import (
+    _HOLD_PATTERNS,
     BARGE_IN_BACKCHANNEL,
     BARGE_IN_INTERRUPT,
     backchannel_tolerance_enabled,
@@ -33,6 +34,9 @@ from core.voice_dialog_policy import (
     normalize_for_backchannel,
     reset_dialog_policy,
 )
+
+#: 含空格的多词 hold 模式 —— 正是那处死代码修复所针对的一组
+_MULTIWORD_HOLD_PATTERNS = [p for p in _HOLD_PATTERNS if " " in p]
 
 
 @pytest.fixture(autouse=True)
@@ -195,3 +199,58 @@ class TestRealCallPathOnVoiceLoop:
         interrupted, processed = self._run("嗯", monkeypatch)
         assert interrupted == 1
         assert processed == 1
+
+
+class TestHoldPatternsAreActuallyChecked:
+    """守住一处死代码修复。
+
+    ``_HOLD_PATTERNS`` 里有 6 个**含空格**的多词模式("hold on"/"let me think"/"be quiet"…)。
+    原先 ``classify_barge_in`` 拿**归一化后**(已去空格)的文本去比对它们,于是那 6 条永远
+    匹配不到 —— 一个恒为假的 ``any()``。
+
+    当时并不构成行为缺陷(那些句子都会因"含实义内容"落到 interrupt),但只要将来加进一个
+    **短的、恰好全由应答词组成**的多词 hold 口令,这道闸门就会静默失效。改成 hold/stop 类
+    模式用原始小写文本比对。
+    """
+
+    @pytest.mark.parametrize("pattern", _MULTIWORD_HOLD_PATTERNS)
+    def test_multiword_hold_patterns_match(self, pattern):
+        assert get_dialog_policy().classify_barge_in(pattern) == BARGE_IN_INTERRUPT
+
+    def test_every_hold_pattern_is_classified_as_interrupt(self):
+        """全量枚举:任何 hold 口令都不能被当成应答。"""
+        from core.voice_dialog_policy import _HOLD_PATTERNS
+
+        policy = get_dialog_policy()
+        wrong = [p for p in _HOLD_PATTERNS if policy.classify_barge_in(p) != BARGE_IN_INTERRUPT]
+        assert not wrong, f"这些 hold 口令被误判成应答: {wrong}"
+
+    @pytest.mark.parametrize("text", ["别 说 了", "闭 嘴", "打 住"])
+    def test_stop_words_still_caught_when_asr_splits_them(self, text):
+        """ASR 可能把口令断开成带空格的形式,去空格后才连成词 —— 归一化那一遍要兜住。"""
+        assert get_dialog_policy().classify_barge_in(text) == BARGE_IN_INTERRUPT
+
+    def test_a_hypothetical_backchannel_shaped_hold_command_would_be_caught(self):
+        """这条是为**将来**立的防线,也是这组里**唯一能真正判别修复在不在**的用例。
+
+        判别条件很挑:那个假想口令必须【含空格】(否则归一化前后一样,老代码也能匹配)
+        且【归一化后完全由应答词组成】(否则会因"含实义内容"落到 interrupt —— 老代码
+        照样通过,用例就白测了)。
+
+        "好 的" 正好满足:含空格,而 "好的" 本身就是应答词表里的一项。所以:
+        - 修复前:hold 检查拿去空格的 "好的" 比 "好 的",匹配不到 → 落到应答分支 →
+          判成 backchannel(**用户的 hold 口令被无视**);
+        - 修复后:hold 检查用原始文本,"好 的" 命中 → interrupt。
+
+        (这个坑我先前用 "好 了" 试过,但 "了" 不在应答词表里,于是两种实现都返回
+        interrupt,用例通过却毫无判别力 —— 反向验证时才暴露出来。)
+        """
+        import core.voice_dialog_policy as mod
+        from core.voice_dialog_policy import DialogPolicy
+
+        original = mod._HOLD_PATTERNS
+        try:
+            mod._HOLD_PATTERNS = original + ("好 的",)
+            assert DialogPolicy().classify_barge_in("好 的") == BARGE_IN_INTERRUPT
+        finally:
+            mod._HOLD_PATTERNS = original

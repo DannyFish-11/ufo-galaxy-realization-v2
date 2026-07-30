@@ -316,12 +316,22 @@ class DialogPolicy:
         注意本方法**只回答分类**,不关心 AI 此刻是否真在朗读。调用方要先确认在朗读
         中再问 —— AI 没在说话时,"嗯"是一个(弱)用户回合,不是应答。
         """
+        # hold / stop 类模式要拿【原始小写文本】去比对,不能用归一化后的文本:
+        # _HOLD_PATTERNS 里有 6 个含空格的多词模式("hold on"/"let me think"/"be quiet"…),
+        # 而归一化会把空格去掉,那些模式于是永远匹配不到 —— 一个恒为假的 any()。
+        # 目前它还不构成行为缺陷(那些句子都会因"含实义内容"落到 interrupt),但只要将来
+        # 加进一个短的、恰好全由应答词组成的多词 hold 口令,这道闸门就会静默失效。
+        raw = (text or "").strip().lower()
+        if any(p in raw for p in _HOLD_PATTERNS) or any(p in raw for p in _STOP_WORDS):
+            return BARGE_IN_INTERRUPT
+
         t = normalize_for_backchannel(text)
         if not t:
             return BARGE_IN_INTERRUPT
         if len(t) > _MAX_BACKCHANNEL_CHARS:
             return BARGE_IN_INTERRUPT
-        if any(p in t for p in _HOLD_PATTERNS) or any(p in t for p in _STOP_WORDS):
+        # 归一化后的文本也过一遍 stop 词:ASR 可能把"别 说 了"断开,去空格后才连成词
+        if any(p in t for p in _STOP_WORDS):
             return BARGE_IN_INTERRUPT
         rest = t
         for token in _BACKCHANNEL_TOKENS:
