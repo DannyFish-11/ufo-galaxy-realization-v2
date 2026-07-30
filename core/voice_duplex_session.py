@@ -59,6 +59,38 @@ _EVENT_QUEUE_MAX = 256
 from core.config_flags import flag as _flag  # noqa: E402  (保留 _flag 名字以免动全部调用点)
 
 
+def safe_endpoint(url: str) -> str:
+    """把 realtime URL 收敛成**可以安全打日志**的 ``scheme://host:port``。
+
+    为什么必须有这个函数
+    --------------------
+    realtime 的 URL 是**带凭据的**:本模块 Gemini 那一支就是
+
+        wss://generativelanguage.googleapis.com/ws/...BidiGenerateContent?key={key}
+
+    —— API key 直接拼在 query 里。所以任何"把 url 原样打出来"的日志都是明文泄露密钥。
+    我自己就在加"本地端点免 key"那段时踩了这个坑(CodeQL alert 1025 指的正是那一行),
+    而且它不只是静态分析的洁癖:本地网关用 query 带 token 很常见,用户把
+    ``GALAXY_REALTIME_URL`` 设成那种形式时,日志就会把 token 原样记下来。
+
+    只保留 scheme/host/port:诊断要回答的是"连的是哪台机器",这三样就够了;path / query /
+    fragment / userinfo 一律丢掉 —— 它们才是凭据可能藏身的地方。
+    """
+    from urllib.parse import urlsplit
+
+    try:
+        parts = urlsplit(url)
+        host = (parts.hostname or "").strip()
+        if not host:
+            return "(无效地址)"
+        scheme = (parts.scheme or "ws").strip()
+        port = parts.port  # 解析失败会抛 ValueError,一并被下面接住
+    except Exception as exc:  # noqa: BLE001 —— 打日志不该成为崩溃来源
+        logger.debug("解析 realtime URL 失败: %s", exc)
+        return "(无效地址)"
+    return f"{scheme}://{host}:{port}" if port else f"{scheme}://{host}"
+
+
 def is_local_endpoint(url: str) -> bool:
     """这个 realtime 端点是不是**本机/本网**的服务(因而不需要云端 API key)。
 
@@ -230,9 +262,11 @@ class DuplexSessionConfig:
         if not key and is_local_endpoint(url):
             # 本地服务不需要 key。B 档切过去之后 core.native_modal 会把 MiniCPM-o
             # 官方 server 拉起来(默认 localhost:32550),这条路径正是给它用的。
+            # 只打 scheme://host:port —— realtime URL 可能在 query 里带凭据
+            # (本模块 Gemini 那一支就是 ?key=…),原样打出来就是明文泄露。
             logger.info(
                 "双工语音:realtime 端点是本地服务(%s),无需 API key。",
-                url,
+                safe_endpoint(url),
             )
             return cls(url=url, api_key="", model=model, voice=voice, provider=provider)
 

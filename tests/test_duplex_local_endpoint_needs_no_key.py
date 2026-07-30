@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import pytest
 
-from core.voice_duplex_session import DuplexSessionConfig, is_local_endpoint
+from core.voice_duplex_session import DuplexSessionConfig, is_local_endpoint, safe_endpoint
 
 REAL_LOOKING = "7" * 40
 
@@ -88,6 +88,125 @@ class TestLocalEndpointJudgement:
     def test_malformed_never_raises(self, url):
         """URL 畸形不该让调用方崩,也不该被误判成本地(免 key 是放宽,不能靠猜)。"""
         assert is_local_endpoint(url if url is not None else "") is False
+
+
+class TestUrlIsNeverLoggedInFull:
+    """realtime URL 是**带凭据的**,任何日志都只许打 ``scheme://host:port``。
+
+    本模块 Gemini 那一支的 URL 形如::
+
+        wss://generativelanguage.googleapis.com/ws/...BidiGenerateContent?key={key}
+
+    —— API key 直接拼在 query 里。我自己在加"本地端点免 key"那段时把整个 url 打进了
+    INFO 日志(CodeQL alert 1025 指的就是那一行),这是实打实的明文泄露,不是误报:本地
+    网关用 query 带 token 很常见,用户一旦把 GALAXY_REALTIME_URL 设成那种形式就会中招。
+    """
+
+    def test_query_string_is_dropped(self):
+        got = safe_endpoint("wss://example.com/ws/x?key=" + REAL_LOOKING)
+        assert REAL_LOOKING not in got
+        assert "?" not in got and "key=" not in got
+        assert got == "wss://example.com"
+
+    def test_userinfo_is_dropped(self):
+        """``wss://user:pass@host/`` 这种把凭据放在 userinfo 里的形式同样要丢掉。"""
+        got = safe_endpoint("wss://user:" + REAL_LOOKING + "@example.com:8443/ws")
+        assert REAL_LOOKING not in got
+        assert "@" not in got
+        assert got == "wss://example.com:8443"
+
+    def test_path_is_dropped(self):
+        assert safe_endpoint("ws://localhost:32550/v1/realtime") == "ws://localhost:32550"
+
+    def test_port_is_kept(self):
+        """端口要留 —— 诊断"连的是哪台机器"时它是有用信息,且不含凭据。"""
+        assert safe_endpoint("ws://127.0.0.1:32550/x") == "ws://127.0.0.1:32550"
+
+    @pytest.mark.parametrize("bad", ["", "not a url", "://///", "ws://host:notaport/"])
+    def test_malformed_never_raises(self, bad):
+        assert safe_endpoint(bad) == "(无效地址)"
+
+    def test_the_real_gemini_url_shape_is_scrubbed(self):
+        """用本模块真实构造的那种形状验一遍,而不是我编的例子。"""
+        gemini = (
+            "wss://generativelanguage.googleapis.com/ws/"
+            "google.ai.generativelanguage.v1alpha.GenerativeService."
+            f"BidiGenerateContent?key={REAL_LOOKING}"
+        )
+        got = safe_endpoint(gemini)
+        assert REAL_LOOKING not in got
+        assert got == "wss://generativelanguage.googleapis.com"
+
+    def test_local_branch_log_does_not_contain_the_full_url(self, monkeypatch, caplog):
+        """端到端:走本地免 key 那条分支时,日志里不许出现 query。"""
+        import logging
+
+        monkeypatch.setenv("GALAXY_REALTIME_URL", "ws://localhost:32550/v1/realtime?token=" + REAL_LOOKING)
+        with caplog.at_level(logging.INFO, logger="Galaxy.VoiceDuplex"):
+            cfg = DuplexSessionConfig.from_env()
+        assert cfg is not None
+        joined = " ".join(r.getMessage() for r in caplog.records)
+        assert REAL_LOOKING not in joined, f"日志把 URL 里的凭据打出来了: {joined}"
+        assert "token=" not in joined
+
+    def test_no_log_call_in_the_module_takes_a_raw_url(self):
+        """结构性守卫:本模块任何日志调用都不许直接把 url 类变量当参数。
+
+        只修我踩的那一行是不够的 —— 下一个人加日志时会照样写 ``logger.info("...", url)``。
+        这条按 AST 检查所有 logger 调用的实参,凡是名字像 url/endpoint/uri 的一律不许直接传,
+        必须先过 ``safe_endpoint()``。
+        """
+        import ast
+        import inspect
+        import re
+
+        import core.voice_duplex_session as mod
+
+        urlish = re.compile(r"(url|endpoint|uri)$", re.I)
+        tree = ast.parse(inspect.getsource(mod))
+        offenders = []
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            f = node.func
+            if not (
+                isinstance(f, ast.Attribute)
+                and isinstance(f.value, ast.Name)
+                and f.value.id == "logger"
+                and f.attr in ("debug", "info", "warning", "error", "exception")
+            ):
+                continue
+            for arg in node.args[1:]:
+                name = arg.id if isinstance(arg, ast.Name) else (arg.attr if isinstance(arg, ast.Attribute) else None)
+                if name and urlish.search(name):
+                    offenders.append(f"line {node.lineno}: logger.{f.attr}(..., {name})")
+        assert not offenders, "日志里直接传了 URL(可能带凭据),应先过 safe_endpoint(): " + "; ".join(offenders)
+
+    def test_the_guard_would_catch_a_regression(self):
+        """反向证明上面那条真的会抓人 —— 否则它可能只是恒真。"""
+        import ast
+        import re
+
+        urlish = re.compile(r"(url|endpoint|uri)$", re.I)
+        bad = ast.parse('logger.info("endpoint is %s", url)\n')
+        found = [
+            a.id
+            for n in ast.walk(bad)
+            if isinstance(n, ast.Call)
+            for a in n.args[1:]
+            if isinstance(a, ast.Name) and urlish.search(a.id)
+        ]
+        assert found == ["url"], "守卫的检测逻辑本身失效了"
+
+    def test_the_config_itself_still_keeps_the_full_url(self, monkeypatch):
+        """对照:脱敏只针对**日志**,配置对象里必须是完整 URL —— 否则连都连不上。
+
+        没有这条,一个"把 url 整个截断"的实现也能让上面那些断言变绿。
+        """
+        full = "ws://localhost:32550/v1/realtime?token=" + REAL_LOOKING
+        monkeypatch.setenv("GALAXY_REALTIME_URL", full)
+        cfg = DuplexSessionConfig.from_env()
+        assert cfg is not None and cfg.url == full
 
 
 class TestLocalEndpointBuildsConfigWithoutKey:
