@@ -199,6 +199,16 @@ class ToolPermissionChecker:
             tool_name=tool_name,
         )
 
+    def requires_confirmation_for(self, tool_name: str) -> bool:
+        """只读查询:这个工具需不需要人类确认。
+
+        **不能**为了这个问题去调 ``check()`` —— 那会 ``_record_call``,把一次
+        纯粹的"问一下"计入频率账,几次查询就能把工具自己的调用配额吃光。
+        查询与计费必须分开。
+        """
+        policy = self._find_policy(tool_name)
+        return bool(policy and policy.requires_confirmation)
+
     def _find_policy(self, tool_name: str) -> Optional[ToolPermissionPolicy]:
         """查找匹配的策略（精确匹配优先，再 glob 匹配）"""
         best: Optional[ToolPermissionPolicy] = None
@@ -232,6 +242,73 @@ class ToolPermissionChecker:
     def reset_counters(self):
         """重置频率计数器"""
         self._call_counts.clear()
+
+
+# ============================================================================
+# 单次工具调用的超时预算
+# ============================================================================
+
+#: 机器工具的默认预算。
+DEFAULT_TOOL_TIMEOUT_S = 30.0
+
+#: 等人的工具,在"等人"之外还要留给周边工作的余量。
+HUMAN_WAIT_MARGIN_S = 20.0
+
+#: 上限。再长也不该让一次工具调用把整个 ReAct 回合钉死。
+MAX_TOOL_TIMEOUT_S = 1800.0
+
+#: 会阻塞等待人类应答的工具前缀。
+_HUMAN_BLOCKING_PREFIXES = ("ask_human__",)
+
+
+def tool_call_timeout_s(
+    tool_name: str,
+    arguments: Optional[Dict] = None,
+    *,
+    checker: Optional["ToolPermissionChecker"] = None,
+    base_s: float = DEFAULT_TOOL_TIMEOUT_S,
+) -> float:
+    """一次工具调用该给多少秒。
+
+    30 秒对机器工具是合理的,对**等人的工具**是错的 —— 人不可能在 30 秒内
+    感到手腕震动、抬腕、看清、再点下去。一刀切的结果是:
+
+    - ``ask_human__request`` 明明接受 ``timeout_s`` 最大 3600,却在 30 秒
+      被外层掐断,声明的超时形同虚设;
+    - 高风险工具的确认闸刚把决策推到手表上,30 秒后就被取消 —— 用户的手指
+      落下时,已经没有人在等这个答案了。
+
+    所以按两类分开算:
+
+    1. ``ask_human__*``:调用方自己声明了等多久,按它 + 余量;
+    2. 需要确认的高风险工具:确认闸会先去问人,按确认超时 + 余量。
+
+    其余一律 ``base_s``。做成**纯函数**(检查器可注入),便于单测。
+    """
+    args = arguments or {}
+
+    if tool_name.startswith(_HUMAN_BLOCKING_PREFIXES):
+        try:
+            declared = float(args.get("timeout_s") or 60.0)
+        except (TypeError, ValueError):
+            declared = 60.0
+        # 与 _dispatch_ask_human_tool 里的钳位保持一致,避免两处对不上。
+        declared = max(5.0, min(3600.0, declared))
+        return min(MAX_TOOL_TIMEOUT_S, declared + HUMAN_WAIT_MARGIN_S)
+
+    active = checker if checker is not None else get_tool_permission_checker()
+    try:
+        # 只读查询,不走 check() —— 后者会把这次"问一下"计入频率账。
+        needs_confirm = active.requires_confirmation_for(tool_name)
+    except Exception:  # noqa: BLE001 — 判不出来就按机器工具给,不放大预算
+        needs_confirm = False
+
+    if needs_confirm:
+        from core.interaction.high_risk_confirmation import _timeout_s as _confirm_timeout
+
+        return min(MAX_TOOL_TIMEOUT_S, _confirm_timeout() + HUMAN_WAIT_MARGIN_S)
+
+    return base_s
 
 
 def _risk_order(level: ToolRiskLevel) -> int:

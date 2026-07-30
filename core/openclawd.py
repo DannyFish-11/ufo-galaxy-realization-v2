@@ -7124,13 +7124,31 @@ class OpenClawd:
                     logger.warning(f"工具调用被拒绝: {tool_name} — {check.reason}")
                     return {"success": False, "error": f"权限拒绝: {check.reason}"}
                 if check.requires_confirmation:
-                    return {
-                        "success": False,
-                        "needs_confirmation": True,
-                        "tool": tool_name,
-                        "risk_level": check.risk_level,
-                        "error": f"操作 [{tool_name}] 需要用户确认（风险等级: {check.risk_level}）",
-                    }
+                    # 以前这里直接返回"需要用户确认"就结束了 —— 而全仓没有任何
+                    # 机制能取得这个确认,等于 DANGEROUS/CRITICAL 工具永远执行不了。
+                    # 现在接到既有 HITL 通路上问手腕上的那个人;一律 fail closed。
+                    from core.interaction.high_risk_confirmation import confirm_high_risk_tool
+
+                    confirmation = await confirm_high_risk_tool(
+                        tool_name=tool_name,
+                        risk_level=str(check.risk_level),
+                        session_id=getattr(self, "_current_session_id", ""),
+                        device_id=getattr(self, "_current_device_id", ""),
+                    )
+                    if not confirmation.approved:
+                        return {
+                            "success": False,
+                            "needs_confirmation": True,
+                            "tool": tool_name,
+                            "risk_level": check.risk_level,
+                            "error": (f"操作 [{tool_name}] 未获用户确认:{confirmation.reason}"),
+                        }
+                    logger.info(
+                        "[AUDIT] 高风险工具经用户确认后放行: %s (风险=%s, decision_id=%s)",
+                        tool_name,
+                        check.risk_level,
+                        confirmation.decision_id,
+                    )
             except Exception as e:
                 logger.debug(f"权限检查异常（放行）: {e}")
 
@@ -8221,13 +8239,20 @@ class OpenClawd:
                         pass
 
                     # 执行工具 (带计时 + 单工具超时)
+                    #
+                    # 超时预算不再是写死的 30 秒。30 秒对机器工具合理,对**等人的
+                    # 工具**是错的:人不可能在 30 秒内感到手腕震动、抬腕、看清、
+                    # 再点下去。写死的后果是 ask_human__request 声明的 timeout_s
+                    # 形同虚设,而高风险工具的确认闸刚把决策推上手表就被取消 ——
+                    # 用户手指落下时已经没人在等那个答案了。详见 tool_call_timeout_s。
+                    from core.tool_permissions import tool_call_timeout_s
+
+                    _budget_s = tool_call_timeout_s(tc_name, tc_args)
                     t0 = _time.time()
                     try:
-                        result = await _asyncio.wait_for(
-                            self._dispatch_tool_call(tc_name, tc_args), timeout=30.0  # 单个工具调用最多 30 秒
-                        )
+                        result = await _asyncio.wait_for(self._dispatch_tool_call(tc_name, tc_args), timeout=_budget_s)
                     except _asyncio.TimeoutError:
-                        result = {"success": False, "error": f"工具 {tc_name} 执行超时 (30s)"}
+                        result = {"success": False, "error": f"工具 {tc_name} 执行超时 ({_budget_s:.0f}s)"}
                     elapsed_ms = (_time.time() - t0) * 1000
 
                     # 构造结构化记录

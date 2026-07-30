@@ -219,12 +219,35 @@ class TestToolDispatchTimeout:
     """验证工具分发有超时保护"""
 
     def test_react_loop_has_wait_for(self, openclawd):
-        """_react_loop 内部使用 asyncio.wait_for 包裹工具调用"""
+        """_react_loop 内部使用 asyncio.wait_for 包裹工具调用。
+
+        这条原本还断言字面量 ``timeout=30``。写死 30 秒被实测证明是个 bug:
+        它对机器工具合理,对**等人的工具**是错的 —— ``ask_human__request``
+        声明的 timeout_s(最大 3600)会被外层在 30 秒掐断,高风险工具的
+        确认闸刚把决策推上手表也会被取消,用户手指落下时已经没人在等了。
+
+        所以断言改成守**不变量**而不是守那个魔数:必须有 wait_for、超时必须
+        由预算函数算出、且预算必须有上界(不能变成无界等待)。这比"源码里
+        出现过 30 这个数字"严格。
+        """
         import inspect
 
         source = inspect.getsource(openclawd._react_loop)
         assert "wait_for" in source, "_react_loop 应使用 asyncio.wait_for 保护工具调用"
-        assert "timeout=30" in source or "timeout=30.0" in source, "_react_loop 应有 30s 单工具超时"
+        assert "tool_call_timeout_s" in source, "单工具超时应由预算函数算出,而不是写死"
+        assert "timeout=None" not in source, "工具调用不得无界等待"
+
+    def test_tool_timeout_budget_is_bounded(self):
+        """预算函数不能给出无界(或荒谬大)的超时 —— 那等于没有超时保护。"""
+        from core.tool_permissions import MAX_TOOL_TIMEOUT_S, tool_call_timeout_s
+
+        for tool, args in (
+            ("mcp__windows-local__screenshot", None),
+            ("node__Node_122_Shell__system_command", None),
+            ("ask_human__request", {"timeout_s": 99999}),
+        ):
+            budget = tool_call_timeout_s(tool, args)
+            assert 0 < budget <= MAX_TOOL_TIMEOUT_S, f"{tool} 的超时预算 {budget} 越界"
 
 
 # ============================================================================
