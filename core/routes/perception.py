@@ -58,6 +58,18 @@ class DesktopListen(BaseModel):
     prompt: str = ""
 
 
+def _internal_error(where: str, exc: Exception) -> Dict[str, Any]:
+    """内部错误的统一回法:细节只进服务端日志,不回给调用方。
+
+    直接把 ``str(exc)`` 回出去会泄露文件路径、模块名等实现细节(CodeQL 的
+    "Information exposure through an exception")。这里回一个稳定的 ``error_code``
+    让客户端能分支处理,真正的堆栈用 ``exc_info=True`` 留在日志里 —— 排查能力不打折,
+    但不经由 HTTP 响应外泄。
+    """
+    logger.error("桌面感知接口内部错误 [%s]: %s", where, exc, exc_info=True)
+    return {"success": False, "error": "内部错误,请查看服务端日志", "error_code": where}
+
+
 def create_router(service_manager=None, config=None) -> APIRouter:
     """Create desktop perception ingest routes."""
     router = APIRouter(prefix="/api/perception/desktop", tags=["perception"])
@@ -132,8 +144,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             store.update_system_audio(audio.audio_base64, mime=audio.mime)
             return {"success": True, "stored": "system_audio"}
         except Exception as exc:  # noqa: BLE001
-            logger.debug("system audio ingest failed: %s", exc)
-            return {"success": False, "error": str(exc)}
+            return _internal_error("system_audio_ingest", exc)
 
     @router.get("/system_audio/probe")
     async def probe_system_audio():
@@ -147,8 +158,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
 
             return {"success": True, **probe()}
         except Exception as exc:  # noqa: BLE001
-            logger.warning("系统播放声采集探测失败: %s", exc)
-            return {"success": False, "available": False, "error": str(exc)}
+            return {**_internal_error("system_audio_probe", exc), "available": False}
 
     @router.get("/status")
     async def perception_status():

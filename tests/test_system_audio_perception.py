@@ -329,3 +329,46 @@ class TestRoutes:
         assert "system_audio_received" in store_status
         assert "system_audio_fresh" in store_status
         assert "system_audio_age_sec" in store_status
+
+
+class TestInternalErrorsDoNotLeakImplementationDetail:
+    """把 ``str(exc)`` 回给调用方会泄露文件路径、模块名等实现细节
+    (CodeQL "Information exposure through an exception")。
+
+    响应里只能有稳定的 ``error_code``;真正的堆栈用 ``exc_info=True`` 留在服务端日志里 ——
+    排查能力不打折,但不经由 HTTP 响应外泄。
+    """
+
+    _SECRETY = "/home/somebody/private/module.py 内部细节"
+
+    def test_ingest_error_response_carries_no_exception_text(self, client, monkeypatch, caplog):
+        import core.perception.desktop_perception_store as store_mod
+
+        def _boom():
+            raise RuntimeError(self._SECRETY)
+
+        monkeypatch.setattr(store_mod, "get_desktop_perception_store", _boom)
+        with caplog.at_level("ERROR"):
+            body = client.post("/api/perception/desktop/system_audio", json={"audio_base64": "A"}).json()
+
+        assert body["success"] is False
+        assert body["error_code"] == "system_audio_ingest"
+        assert self._SECRETY not in str(body)
+        assert "/home/" not in str(body)
+        assert self._SECRETY in caplog.text, "细节必须仍然留在服务端日志里,否则等于丢了排查能力"
+
+    def test_probe_error_response_carries_no_exception_text(self, client, monkeypatch, caplog):
+        import core.multimodal.system_audio_ingest as ingest_mod
+
+        def _boom():
+            raise RuntimeError(self._SECRETY)
+
+        monkeypatch.setattr(ingest_mod, "probe", _boom)
+        with caplog.at_level("ERROR"):
+            body = client.get("/api/perception/desktop/system_audio/probe").json()
+
+        assert body["success"] is False
+        assert body["available"] is False, "探测失败必须明确回不可用,不能含糊"
+        assert body["error_code"] == "system_audio_probe"
+        assert self._SECRETY not in str(body)
+        assert self._SECRETY in caplog.text
