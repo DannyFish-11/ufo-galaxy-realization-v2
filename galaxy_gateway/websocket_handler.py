@@ -830,6 +830,47 @@ async def handle_command(connection_id: str, aip_msg):
             }
             await connection_manager.send_message(connection_id, response)
             return
+        elif command_text == "interruptibility":
+            # WearOS sendInterruptibility → command="interruptibility"
+            # {score, band, reasons, confidence, device, timestamp}。
+            #
+            # 手表回答的是「现在能不能打扰他」,**不**交出身体数据 —— 心率/运动/
+            # 睡眠只在手表本地参与运算(见 galaxy-wearos 的 com.galaxy.wear.sensing)。
+            # 这里落进登记处,供常驻注意力循环把「克制是美德」从祈使句变成
+            # 可测量的输入。
+            snapshot = None
+            try:
+                from core.interruptibility_registry import get_interruptibility_registry
+
+                snapshot = get_interruptibility_registry().record(_payload, device_id=device_id)
+            except Exception as _int_err:  # noqa: BLE001 — 登记失败不该影响 WS 主流程
+                logger.debug("interruptibility record skipped: %s", _int_err)
+
+            if snapshot is None:
+                # 拒收的唯一原因是 band 不认识(协议漂移),registry 已 warning。
+                result = {"success": False, "error": "unrecognised interruptibility band"}
+            else:
+                logger.info(
+                    "⌚ 可打扰性上报: device=%s band=%s score=%.2f conf=%.2f",
+                    device_id,
+                    snapshot.band,
+                    snapshot.score,
+                    snapshot.confidence,
+                )
+                result = {"success": True, "band": snapshot.band}
+            response = {
+                "version": "3.0",
+                "message_id": str(uuid.uuid4()),
+                "correlation_id": aip_msg.message_id,
+                "type": MessageType.COMMAND_RESULT.value,
+                "device_id": aip_msg.device_id,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "success": result["success"],
+                "data": result,
+                "payload": result,
+            }
+            await connection_manager.send_message(connection_id, response)
+            return
         elif command_text == "human_input":
             # WearOS sendHumanInput → command="human_input"
             # {decision_id, selected_option?, voice_input?}. 人在回路(HITL)的决策回复。
