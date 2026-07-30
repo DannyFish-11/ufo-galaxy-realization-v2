@@ -593,13 +593,31 @@ class VoiceLoop:
         }
 
         try:
-            # 1. ASR
-            if self.asr is None:
-                from core.asr import WhisperASR
+            # 1. 听 —— 走 modality_bridge 这个"听的收口":B 档原生后端激活时先让全模态
+            #    模型自己听懂,拿不到再回落 ASR。
+            #
+            #    此前这里是直接 self.asr.transcribe(...),完全绕过收口。后果是 B 档最核心
+            #    的那件事没生效:切到 B 档后【说】确实走原生(speech_output 认
+            #    register_native_speech_backend),而【听】永远是 Whisper —— 一半原生一半
+            #    桥,且没有任何报错,用户以为模型在听,其实模型压根没收到音频。
+            #
+            #    ASR 的构造放进 fallback 里惰性执行:原生这条路走通时,Whisper 模型根本
+            #    不必加载(那是几百 MB 的权重和可观的启动时间)。
+            def _asr_fallback(pcm, sr, lang):
+                if self.asr is None:
+                    from core.asr import WhisperASR
 
-                self.asr = WhisperASR(model_size=self.model_size)
+                    self.asr = WhisperASR(model_size=self.model_size)
+                return self.asr.transcribe(pcm, sample_rate=sr, language=lang)
 
-            text = self.asr.transcribe(audio_np, sample_rate=sample_rate, language=self.language)
+            from core.modality_bridge import transcribe_pcm
+
+            text = transcribe_pcm(
+                audio_np,
+                sample_rate=sample_rate,
+                language=self.language,
+                fallback=_asr_fallback,
+            )
             result["asr_text"] = text
             logger.info("ASR: %s", text)
 

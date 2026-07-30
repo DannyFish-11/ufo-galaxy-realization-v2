@@ -217,6 +217,98 @@ def _decode_audio_to_pcm(audio_bytes: bytes):
         return None
 
 
+def _pcm_to_wav_b64(audio_np, sample_rate: int) -> Optional[str]:
+    """float32 [-1,1] 单声道 PCM → base64 的 16-bit WAV。
+
+    原生后端的 ``understand_audio`` 收的是 base64 的**容器化**音频,而语音循环手里是裸
+    PCM(numpy)。WAV 是最省事的容器:标准库 ``wave`` 就能封,不引入任何依赖,也不需要
+    PyAV 那条重编码路径。
+    """
+    try:
+        import io
+        import wave
+
+        import numpy as np
+
+        arr = np.asarray(audio_np)
+        if arr.size == 0:
+            return None
+        # float32 [-1,1] → int16。先夹紧,避免溢出回绕把削顶变成刺耳的爆音。
+        if arr.dtype.kind == "f":
+            arr = (np.clip(arr, -1.0, 1.0) * 32767.0).astype(np.int16)
+        else:
+            arr = arr.astype(np.int16)
+        buf = io.BytesIO()
+        with wave.open(buf, "wb") as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(int(sample_rate))
+            wf.writeframes(arr.tobytes())
+        return base64.b64encode(buf.getvalue()).decode("ascii")
+    except Exception as exc:  # noqa: BLE001 —— 封装失败只该导致回落,不该中断这句话
+        logger.debug("PCM 封 WAV 失败(回落 ASR): %s", exc)
+        return None
+
+
+def transcribe_pcm(
+    audio_np,
+    *,
+    sample_rate: int = 16000,
+    language: str = "zh",
+    fallback=None,
+) -> Optional[str]:
+    """裸 PCM(numpy float32)→ 文字。**原生优先,失败回落 ASR。**
+
+    为什么需要这个入口
+    ------------------
+    ``transcribe_b64()`` 是本模块指定的"听的收口",它已经正确地"先让全模态模型自己听懂,
+    不行再 Whisper"。但它收的是 base64 容器化音频,而 ``core/voice_loop.py`` 手里是裸
+    PCM —— 于是语音循环**绕过了收口**,直接 ``self.asr.transcribe(audio_np, ...)``。
+
+    后果是 B 档最核心的那件事没生效:切到 B 档后 ``native_modal`` 把 MiniCPM-o server
+    拉起来、注册了原生听/说,**说**那一头确实走原生(``speech_output`` 认
+    ``register_native_speech_backend``),而**听**永远是 Whisper。一半原生一半桥,而且没有
+    任何报错 —— 用户以为自己在用全模态模型听,其实模型压根没收到音频。
+
+    Args:
+        fallback: 回落用的转写函数 ``(audio_np, sample_rate, language) -> str``。
+            调用方(如 voice_loop)传自己那个已按 ``model_size`` 配好的 ASR 实例进来,
+            这样接上原生只是在**前面加一次尝试**,既有行为一字不改;不传则用本模块的单例。
+
+    Returns:
+        文字;都拿不到时返回 None(与 ``transcribe_b64`` 一致 —— 听不清是预期情形)。
+    """
+    if audio_np is None:
+        return None
+
+    # 1) 原生听:让全模态模型自己听懂这段音频
+    try:
+        from core.native_modal import get_active_backend
+
+        be = get_active_backend()
+        if be is not None:
+            wav_b64 = _pcm_to_wav_b64(audio_np, sample_rate)
+            if wav_b64:
+                native_text = be.understand_audio(wav_b64, mime="audio/wav", language=language)
+                if native_text and native_text.strip():
+                    return native_text.strip()
+                # 原生返回空 → 回落 ASR,不静默丢句(与 transcribe_b64 同一约定)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("原生听不可用,回落 ASR: %s", exc)
+
+    # 2) 回落:调用方的 ASR 优先,其次本模块单例
+    try:
+        if fallback is not None:
+            return (fallback(audio_np, sample_rate, language) or "").strip() or None
+        asr = _get_asr()
+        if asr is None:
+            return None
+        return (asr.transcribe(audio_np, sample_rate=sample_rate, language=language) or "").strip() or None
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("转写失败: %s", exc)
+        return None
+
+
 def transcribe_b64(audio_b64: str, *, mime: str = "audio/webm", language: str = "zh") -> Optional[str]:
     """base64 音频 → 文字（听的实现）。任何环节不可用则返回 None（优雅降级）。
 
