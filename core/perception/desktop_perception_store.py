@@ -16,6 +16,32 @@ core/perception/desktop_perception_store.py
 
 设计原则：轻量、线程安全（简单锁）、永不抛出影响主流程；不持久化、不落盘。
 默认 TTL 10s；GALAXY_DESKTOP_PERCEPTION_TTL 可调。
+
+隐私急停（privacy pause）
+------------------------
+本类是**全部**桌面感知数据的唯一进出口，因此隐私闸门只能落在这里：写入口只有
+``update_frame`` / ``update_audio`` 两个，而读出口有五个
+（``has_fresh_frame`` / ``latest_frame_snapshot`` / ``take_fresh_audio_for_autoinject``
+/ ``snapshot_media`` / ``build_multimodal_context``），下游消费方至少四处
+（ambient_attention_loop、computer_use_loop、session_memory_facade、
+multimodal/ingest_runtime）。闸门若放在任一消费方，其余几路照旧能看到屏幕 ——
+那是**假的**隐私模式。
+
+急停语义（刻意比"停掉某个循环"更强）：
+* ``pause()`` 之后**拒收**新的帧/音频（在写入口就挡掉，数据根本不进内存）；
+* 同时**立即清空**已缓存的帧、音频与屏幕结构 —— 否则消费方还能读到暂停前
+  那一帧，"暂停"名不副实；
+* 五条读路径全部返回空，构成第二道防线（即便某条路径将来新增了缓存）；
+* ``epoch`` 在每次 pause/resume 时自增。消费方（如 ambient 循环的 ``FrameGate``）
+  据此丢弃自己的帧差指纹。这一条的动机是**隐私**而非性能：若保留暂停前的指纹，
+  恢复后的新帧会与它做差，等于让智能体推断出"被遮住那段时间里画面变了多少"。
+  用户主动遮起来的内容不该以差异信号的形式渗出，故跨隐私边界不携带视觉状态。
+  代价是恢复后的第一拍必然判为"有变化"（FrameGate 对第一帧的既定语义），
+  这是刻意接受的。
+
+默认状态由 ``GALAXY_PERCEPTION_PRIVACY_DEFAULT`` 决定：默认 ``active``（放行）；
+设为 ``paused``/``1``/``true`` 则进程一起来就处于隐私暂停（隐私优先部署）。
+闸门本身**始终生效**，不藏在任何 feature flag 之后。
 """
 
 from __future__ import annotations
@@ -38,6 +64,12 @@ def _default_ttl() -> float:
 
 def _is_screen_source(source: str) -> bool:
     return "screen" in (source or "").lower()
+
+
+def _privacy_default_paused() -> bool:
+    """进程启动时是否直接处于隐私暂停(隐私优先部署)。默认放行。"""
+    raw = os.getenv("GALAXY_PERCEPTION_PRIVACY_DEFAULT", "").strip().lower()
+    return raw in ("paused", "pause", "1", "true", "yes", "on")
 
 
 class DesktopPerceptionStore:
@@ -68,6 +100,87 @@ class DesktopPerceptionStore:
         self._audio_received: int = 0
         # 自动注入去重：已被对话自动注入消费过的音频时间戳，避免同一片段反复转写
         self._audio_autoinject_consumed_ts: float = 0.0
+        # ── 隐私急停 ──
+        self._paused: bool = _privacy_default_paused()
+        self._paused_at: float = time.time() if self._paused else 0.0
+        self._pause_reason: str = "privacy_default" if self._paused else ""
+        #: 每次 pause/resume 自增,供消费方重置帧差指纹(见模块 docstring)
+        self._epoch: int = 0
+        #: 暂停期间被拒收的写入次数(诊断用:证明闸门真的在挡)
+        self._rejected_frames: int = 0
+        self._rejected_audio: int = 0
+        if self._paused:
+            logger.warning("桌面感知处于隐私暂停(GALAXY_PERCEPTION_PRIVACY_DEFAULT):启动即不采集")
+
+    # ── 隐私急停 ──────────────────────────────────────────────────────────
+
+    def _wipe_unlocked(self) -> None:
+        """清空全部已缓存的感知数据。调用方必须已持有锁。
+
+        暂停时不清缓存,消费方仍能读到暂停前那一帧 —— 那不叫暂停。
+        """
+        self._cam_b64 = None
+        self._cam_ts = 0.0
+        self._scr_b64 = None
+        self._scr_ts = 0.0
+        self._screen_meta = None
+        self._audio_b64 = None
+        self._audio_ts = 0.0
+
+    def pause(self, reason: str = "user") -> Dict[str, Any]:
+        """立即切断感知:拒收后续帧/音频,并清空已缓存内容。幂等。"""
+        with self._lock:
+            already = self._paused
+            self._paused = True
+            if not already:
+                self._paused_at = time.time()
+                self._pause_reason = str(reason or "user")
+                self._epoch += 1
+            self._wipe_unlocked()
+            status = self._privacy_status_unlocked()
+        if not already:
+            logger.warning("桌面感知已暂停(隐私急停):reason=%s;已清空缓存帧与音频", reason)
+        return status
+
+    def resume(self, reason: str = "user") -> Dict[str, Any]:
+        """恢复感知。epoch 自增,消费方据此重置帧差指纹,避免"一恢复就误触发"。"""
+        with self._lock:
+            already = not self._paused
+            self._paused = False
+            if not already:
+                self._pause_reason = ""
+                self._paused_at = 0.0
+                self._epoch += 1
+            status = self._privacy_status_unlocked()
+        if not already:
+            logger.warning("桌面感知已恢复:reason=%s epoch=%s", reason, status["epoch"])
+        return status
+
+    @property
+    def paused(self) -> bool:
+        with self._lock:
+            return self._paused
+
+    @property
+    def epoch(self) -> int:
+        """pause/resume 世代号。变化即表示感知连续性已断,消费方应重置状态。"""
+        with self._lock:
+            return self._epoch
+
+    def _privacy_status_unlocked(self) -> Dict[str, Any]:
+        return {
+            "paused": self._paused,
+            "reason": self._pause_reason,
+            "paused_at": self._paused_at or None,
+            "paused_for_sec": round(time.time() - self._paused_at, 2) if self._paused_at else None,
+            "epoch": self._epoch,
+            "rejected_frames": self._rejected_frames,
+            "rejected_audio": self._rejected_audio,
+        }
+
+    def privacy_status(self) -> Dict[str, Any]:
+        with self._lock:
+            return self._privacy_status_unlocked()
 
     @classmethod
     def get_instance(cls) -> "DesktopPerceptionStore":
@@ -87,7 +200,14 @@ class DesktopPerceptionStore:
         source: str = "desktop_camera",
         screen: Optional[Dict[str, Any]] = None,
     ) -> None:
-        """按 source 分槽存放：含 'screen' → 屏幕槽（含结构化 screen 上下文）；否则摄像头槽。"""
+        """按 source 分槽存放：含 'screen' → 屏幕槽（含结构化 screen 上下文）；否则摄像头槽。
+
+        隐私暂停期间**拒收**:数据在写入口就被挡掉,根本不进内存。
+        """
+        with self._lock:
+            if self._paused:
+                self._rejected_frames += 1
+                return
         if not image_b64:
             # 即便没有像素帧，也允许只更新结构化屏幕上下文（如纯 UIA 树）。
             if screen is not None:
@@ -113,6 +233,11 @@ class DesktopPerceptionStore:
                     self._screen_meta = screen
 
     def update_audio(self, audio_b64: str, *, mime: str = "audio/webm") -> None:
+        """隐私暂停期间拒收(同 update_frame)。"""
+        with self._lock:
+            if self._paused:
+                self._rejected_audio += 1
+                return
         if not audio_b64:
             return
         with self._lock:
@@ -127,15 +252,22 @@ class DesktopPerceptionStore:
         return ts > 0.0 and (time.time() - ts) <= self.ttl_sec
 
     def has_fresh_frame(self) -> bool:
-        """摄像头或屏幕任一有新鲜帧即为 True。"""
+        """摄像头或屏幕任一有新鲜帧即为 True。隐私暂停时恒为 False。"""
         with self._lock:
+            if self._paused:
+                return False
             return (bool(self._cam_b64) and self._fresh(self._cam_ts)) or (
                 bool(self._scr_b64) and self._fresh(self._scr_ts)
             )
 
     def latest_frame_snapshot(self) -> Tuple[Optional[str], str, str]:
-        """返回最近一帧（摄像头或屏幕，取更新的那张）的 (b64, mime, source)，供「现在看一下」用。"""
+        """返回最近一帧（摄像头或屏幕，取更新的那张）的 (b64, mime, source)，供「现在看一下」用。
+
+        隐私暂停时返回空帧 —— "现在看一下"在暂停期间必须看不到东西。
+        """
         with self._lock:
+            if self._paused:
+                return None, "image/jpeg", "desktop_camera"
             if self._scr_ts >= self._cam_ts and self._scr_b64:
                 return self._scr_b64, self._scr_mime, "desktop_screen"
             if self._cam_b64:
@@ -150,14 +282,32 @@ class DesktopPerceptionStore:
         返回 ``(audio_b64, mime)``；没有可用音频则返回 ``(None, None)``。
         """
         with self._lock:
+            if self._paused:
+                return None, None
             if self._audio_b64 and self._fresh(self._audio_ts) and self._audio_ts > self._audio_autoinject_consumed_ts:
                 self._audio_autoinject_consumed_ts = self._audio_ts
                 return self._audio_b64, self._audio_mime
         return None, None
 
     def snapshot_media(self) -> Dict[str, Any]:
-        """返回当前最新【摄像头/屏幕/音频】快照（仅新鲜项有值），供统一记忆层等消费。"""
+        """返回当前最新【摄像头/屏幕/音频】快照（仅新鲜项有值），供统一记忆层等消费。
+
+        隐私暂停时全部字段为空(保留键名,调用方无需改判空逻辑)。
+        """
         with self._lock:
+            if self._paused:
+                return {
+                    "image_b64": None,
+                    "image_mime": self._cam_mime,
+                    "camera_b64": None,
+                    "camera_mime": self._cam_mime,
+                    "screen_b64": None,
+                    "screen_mime": self._scr_mime,
+                    "screen_meta": None,
+                    "audio_b64": None,
+                    "audio_mime": self._audio_mime,
+                    "privacy_paused": True,
+                }
             cam_fresh = bool(self._cam_b64) and self._fresh(self._cam_ts)
             scr_fresh = bool(self._scr_b64) and self._fresh(self._scr_ts)
             aud_fresh = bool(self._audio_b64) and self._fresh(self._audio_ts)
@@ -189,6 +339,7 @@ class DesktopPerceptionStore:
                 "screen_meta_present": self._screen_meta is not None,
                 "audio_fresh": self._fresh(self._audio_ts),
                 "audio_age_sec": round(now - self._audio_ts, 2) if self._audio_ts else None,
+                "privacy": self._privacy_status_unlocked(),
             }
 
     def build_multimodal_context(self, existing: Optional[Any] = None) -> Optional[Any]:
@@ -209,6 +360,10 @@ class DesktopPerceptionStore:
             return None
 
         with self._lock:
+            # 这条是【每次对话请求】的隐性注入路径:漏掉它,模型仍会在每一轮
+            # 对话里看到屏幕与摄像头,隐私暂停就形同虚设。
+            if self._paused:
+                return None
             cam_fresh = bool(self._cam_b64) and self._fresh(self._cam_ts)
             scr_fresh = bool(self._scr_b64) and self._fresh(self._scr_ts)
             aud_fresh = bool(self._audio_b64) and self._fresh(self._audio_ts)

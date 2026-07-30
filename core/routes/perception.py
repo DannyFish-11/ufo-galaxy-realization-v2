@@ -61,7 +61,18 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         try:
             from core.perception.desktop_perception_store import get_desktop_perception_store
 
-            get_desktop_perception_store().update_frame(
+            store = get_desktop_perception_store()
+            # 隐私暂停期间 update_frame 会拒收。若照旧回 stored="frame",采集端
+            # 会以为帧已存进去而继续按原节奏推送 —— 必须如实告知它被丢弃了,
+            # 客户端才能据此降低推送频率或提示用户"感知已暂停"。
+            if store.paused:
+                return {
+                    "success": False,
+                    "stored": None,
+                    "privacy_paused": True,
+                    "reason": "感知已被隐私暂停,本帧未被接收",
+                }
+            store.update_frame(
                 frame.image_base64,
                 mime=frame.mime,
                 source=frame.source,
@@ -78,7 +89,15 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         try:
             from core.perception.desktop_perception_store import get_desktop_perception_store
 
-            get_desktop_perception_store().update_audio(audio.audio_base64, mime=audio.mime)
+            store = get_desktop_perception_store()
+            if store.paused:  # 同 /frame:拒收要如实上报,不能假装存了
+                return {
+                    "success": False,
+                    "stored": None,
+                    "privacy_paused": True,
+                    "reason": "感知已被隐私暂停,本段音频未被接收",
+                }
+            store.update_audio(audio.audio_base64, mime=audio.mime)
             return {"success": True, "stored": "audio"}
         except Exception as exc:  # noqa: BLE001
             logger.debug("audio ingest failed: %s", exc)
@@ -93,6 +112,69 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             return {"success": True, "store": get_desktop_perception_store().status()}
         except Exception as exc:  # noqa: BLE001
             return {"success": False, "error": str(exc)}
+
+    # ── 隐私急停 ──────────────────────────────────────────────────────────
+    #
+    # 一个调用立刻切断全部桌面感知,不经配置文件、不需重启。对应桌宠"双击暂停"
+    # 那类交互:用户要的是"立刻别看了",而不是"改个配置等它生效"。
+    #
+    # 闸门落在 DesktopPerceptionStore(唯一进出口),因此这两个端点一按,
+    # ambient 循环、computer_use_loop、session_memory_facade、
+    # multimodal/ingest_runtime 四个消费方同时失明,没有绕行路径。
+
+    @router.post("/privacy/pause")
+    async def privacy_pause(reason: str = "user"):
+        """立即暂停感知:拒收后续帧/音频,并清空已缓存内容。幂等。"""
+        try:
+            from core.perception.desktop_perception_store import get_desktop_perception_store
+
+            status = get_desktop_perception_store().pause(reason=reason)
+            return {
+                "success": True,
+                "privacy": status,
+                "note": "已停止采集并清空缓存;四个消费方(环境循环/电脑操作/会话记忆/多模态注入)同时失明",
+            }
+        except Exception as exc:  # noqa: BLE001
+            logger.error("隐私暂停失败", exc_info=True)
+            return {
+                "success": False,
+                "error": "内部错误,请查看服务端日志",
+                "error_code": "privacy_pause",
+                "detail": type(exc).__name__,
+            }
+
+    @router.post("/privacy/resume")
+    async def privacy_resume(reason: str = "user"):
+        """恢复感知。世代号自增,消费方会据此重置帧差门控。幂等。"""
+        try:
+            from core.perception.desktop_perception_store import get_desktop_perception_store
+
+            status = get_desktop_perception_store().resume(reason=reason)
+            return {"success": True, "privacy": status}
+        except Exception as exc:  # noqa: BLE001
+            logger.error("隐私恢复失败", exc_info=True)
+            return {
+                "success": False,
+                "error": "内部错误,请查看服务端日志",
+                "error_code": "privacy_resume",
+                "detail": type(exc).__name__,
+            }
+
+    @router.get("/privacy")
+    async def privacy_state():
+        """当前隐私状态(供面板/桌宠显示"感知已暂停"及被拒计数)。"""
+        try:
+            from core.perception.desktop_perception_store import get_desktop_perception_store
+
+            return {"success": True, "privacy": get_desktop_perception_store().privacy_status()}
+        except Exception as exc:  # noqa: BLE001
+            logger.error("读取隐私状态失败", exc_info=True)
+            return {
+                "success": False,
+                "error": "内部错误,请查看服务端日志",
+                "error_code": "privacy_state",
+                "detail": type(exc).__name__,
+            }
 
     @router.post("/analyze")
     async def analyze_now(req: DesktopAnalyze):
