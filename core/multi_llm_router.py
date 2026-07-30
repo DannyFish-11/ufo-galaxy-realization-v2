@@ -1619,13 +1619,8 @@ PROVIDER_REGISTRY: List[Dict[str, Any]] = [
     {
         "name": "perplexity",
         "env_key": "PERPLEXITY_API_KEY",
-        # SONAR_API_KEY 是面板里公开的**别名**(CONFIG_SCHEMA 的描述就写着
-        # "Perplexity Sonar API Key (alias)",Sonar 是 Perplexity 的模型家族名)。
-        # core/routes/config.py 的"已配置"角标本来就认它:
-        #   "perplexity": _is_configured("SONAR_API_KEY") or _is_configured("PERPLEXITY_API_KEY")
-        # 但这里此前没有 alt_env —— 于是用户只填 SONAR_API_KEY 时,**面板亮绿标说
-        # 已配置,路由器却根本不读它**,provider 永远不注册,那把密钥静默失效。
-        # UI 说通了而实际没通,是最坏的一种不一致。
+        # SONAR_API_KEY 是面板公开的别名,"已配置"角标本就认它;缺了这行会导致
+        # 面板亮绿标而路由器不读 → 密钥静默失效(见 tests/test_panel_api_key_routing.py)
         "alt_env": ["SONAR_API_KEY"],
         "base_url": "https://api.perplexity.ai",
         "models": ["sonar-pro", "sonar-deep-research", "sonar-reasoning-pro", "sonar"],
