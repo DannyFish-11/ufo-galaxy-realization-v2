@@ -1,13 +1,20 @@
 """
 core/routes/perception.py
 =========================
-桌面端连续感知接收路由（摄像头 / 麦克风 / 屏幕）。
+桌面端连续感知接收路由（摄像头 / 麦克风 / 屏幕 / 系统播放声）。
 
 电脑端 Electron 壳用 getUserMedia 采集帧后 POST 到这里：
 - POST /api/perception/desktop/frame    —— 存最新摄像头/屏幕帧（隐蔽上下文）
 - POST /api/perception/desktop/audio    —— 存最新麦克风音频片段
+- POST /api/perception/desktop/system_audio      —— 存最新系统播放声片段
+- GET  /api/perception/desktop/system_audio/probe —— 本机能否回环采集 + 不能的原因
 - POST /api/perception/desktop/analyze  —— 「现在看一下」：把帧原生送模型分析
 - GET  /api/perception/desktop/status   —— 存储/新鲜度诊断
+
+系统播放声这一路**只能在电脑端本机采集**：getUserMedia 只给输入设备，拿不到系统
+输出；getDisplayMedia 要每次手动选窗口、跨浏览器支持残缺，做不成常驻感知。所以它
+走 WASAPI loopback（Windows）/ PulseAudio .monitor（Linux），见
+``core/multimodal/system_audio_ingest.py``。这是能力差异，不是性能优化。
 
 frame/audio 只更新进程内 DesktopPerceptionStore，由 OpenClawd.process() 在下一次
 真实请求时按 TTL 取用、作为原生多模态上下文注入（模型真正「看到」摄像头）。
@@ -102,6 +109,46 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         except Exception as exc:  # noqa: BLE001
             logger.debug("audio ingest failed: %s", exc)
             return {"success": False, "error": str(exc)}
+
+    @router.post("/system_audio")
+    async def ingest_system_audio(audio: DesktopAudio):
+        """接收最新【系统播放声】片段(扬声器输出的回环采集)→ 存入独立槽位。
+
+        与 /audio 分开是因为语义不同:麦克风是"用户说了什么",系统声是"用户此刻在
+        听什么"。混进同一槽会互相覆盖,而且模型再也分不出这段声音是人说的还是屏幕
+        里放的 —— 那恰恰是它最需要区分的一件事。
+        """
+        try:
+            from core.perception.desktop_perception_store import get_desktop_perception_store
+
+            store = get_desktop_perception_store()
+            if store.paused:  # 同 /frame:拒收要如实上报,不能假装存了
+                return {
+                    "success": False,
+                    "stored": None,
+                    "privacy_paused": True,
+                    "reason": "感知已被隐私暂停,本段系统播放声未被接收",
+                }
+            store.update_system_audio(audio.audio_base64, mime=audio.mime)
+            return {"success": True, "stored": "system_audio"}
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("system audio ingest failed: %s", exc)
+            return {"success": False, "error": str(exc)}
+
+    @router.get("/system_audio/probe")
+    async def probe_system_audio():
+        """本机能否做系统播放声采集,以及不能的话**为什么**。
+
+        采集端(电脑端壳)先问这里再决定是否启动回环采集线程;不可用时 reason_text
+        是一句可直接展示给用户的修复指引,而不是静默的 false。
+        """
+        try:
+            from core.multimodal.system_audio_ingest import probe
+
+            return {"success": True, **probe()}
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("系统播放声采集探测失败: %s", exc)
+            return {"success": False, "available": False, "error": str(exc)}
 
     @router.get("/status")
     async def perception_status():

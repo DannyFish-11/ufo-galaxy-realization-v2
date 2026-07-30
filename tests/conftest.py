@@ -86,3 +86,20 @@ def _reset_session_registry():
     except ImportError:
         pass
     yield
+
+
+# 反自激励门是带【时间状态】的进程单例:任何测试只要走过一次朗读路径
+# (speak_response / IncrementalSpeaker),就会往门里登记一段"刚说过的话",而它在留存
+# 窗口内(默认 6 秒 + 按文本长度估算的朗读耗时)会让所有以 recently_spoke() 为条件的
+# 门判定为"AI 正在说话"。于是后续测试里 ambient 感知的音频通路会被静默跳过 —— 单文件
+# 跑全绿、整套跑失败,而且失败点离真正的污染源很远。这里逐测试清零,消除顺序依赖。
+@pytest.fixture(autouse=True)
+def _reset_voice_echo_guard():
+    """Auto-use: 每个测试前清空反自激励门的"刚说过的话",避免跨测试污染。"""
+    try:
+        from core.voice_echo_guard import reset_echo_guard
+
+        reset_echo_guard()
+    except ImportError:
+        pass
+    yield

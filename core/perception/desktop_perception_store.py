@@ -3,15 +3,23 @@ core/perception/desktop_perception_store.py
 ============================================
 桌面端连续感知的「最新帧」存储（隐蔽上下文来源）。
 
-电脑端壳（Tauri / Electron）在【第一态】持续原生采集 **摄像头 / 屏幕 / 麦克风**，
-以 base64 帧 POST 到网关 /api/perception/desktop/*。本模块是这些帧的进程内最新值
-存储（单例），带 TTL 新鲜度判定，并把三路【一体化】合并成单个 MultiModalContext：
+电脑端壳（Tauri / Electron）在【第一态】持续原生采集 **摄像头 / 屏幕 / 麦克风 /
+系统播放声**，以 base64 帧 POST 到网关 /api/perception/desktop/*。本模块是这些帧的
+进程内最新值存储（单例），带 TTL 新鲜度判定，并把四路【一体化】合并成单个
+MultiModalContext：
 
 - 摄像头帧（source=desktop_camera）与屏幕帧（source=desktop_screen）分槽存放，互不覆盖；
   屏幕帧还可附带结构化 screen 上下文（如前台窗口 UIA 树）。
+- 麦克风（source=desktop_microphone）与系统播放声（source=desktop_system_audio）同样
+  **分槽**。这不是冗余：麦克风回答"用户说了什么"，系统声回答"用户此刻在听什么"
+  （视频、网课、游戏、会议的声音）。合成一槽会互相覆盖，而且一旦混流就再也分不出
+  "这段声音是人说的还是扬声器放的"——那正是模型最需要区分的一件事。
+  系统播放声只能在电脑端本机采集（浏览器的 getUserMedia 拿不到系统输出），
+  见 ``core/multimodal/system_audio_ingest.py``。
 - 当一次正常请求进入 OpenClawd.process() 且本身不带图像时，把【新鲜】的摄像头帧 +
-  屏幕帧 + 屏幕结构 + 音频一起作为原生多模态上下文注入——模型同时「看到摄像头、看到
-  屏幕、听到麦克风」，即第一态的连续原生多模态一体化感知。
+  屏幕帧 + 屏幕结构 + 麦克风 + 系统声一起作为原生多模态上下文注入——模型同时
+  「看到摄像头、看到屏幕、听到用户、听到用户在听的东西」，即第一态的连续原生多模态
+  一体化感知。
 - 不新鲜（超过 TTL）的项不会被注入，避免把过期画面/声音喂给模型。
 
 设计原则：轻量、线程安全（简单锁）、永不抛出影响主流程；不持久化、不落盘。
@@ -20,9 +28,10 @@ core/perception/desktop_perception_store.py
 隐私急停（privacy pause）
 ------------------------
 本类是**全部**桌面感知数据的唯一进出口，因此隐私闸门只能落在这里：写入口只有
-``update_frame`` / ``update_audio`` 两个，而读出口有五个
+``update_frame`` / ``update_audio`` / ``update_system_audio`` 三个，而读出口有六个
 （``has_fresh_frame`` / ``latest_frame_snapshot`` / ``take_fresh_audio_for_autoinject``
-/ ``snapshot_media`` / ``build_multimodal_context``），下游消费方至少四处
+/ ``take_fresh_system_audio_for_autoinject`` / ``snapshot_media``
+/ ``build_multimodal_context``），下游消费方至少四处
 （ambient_attention_loop、computer_use_loop、session_memory_facade、
 multimodal/ingest_runtime）。闸门若放在任一消费方，其余几路照旧能看到屏幕 ——
 那是**假的**隐私模式。
@@ -31,7 +40,9 @@ multimodal/ingest_runtime）。闸门若放在任一消费方，其余几路照�
 * ``pause()`` 之后**拒收**新的帧/音频（在写入口就挡掉，数据根本不进内存）；
 * 同时**立即清空**已缓存的帧、音频与屏幕结构 —— 否则消费方还能读到暂停前
   那一帧，"暂停"名不副实；
-* 五条读路径全部返回空，构成第二道防线（即便某条路径将来新增了缓存）；
+* 六条读路径全部返回空，构成第二道防线（即便某条路径将来新增了缓存）；
+* 系统播放声走**同一道**闸门，不另开旁路 —— 它比麦克风更敏感：等于把用户正在听的
+  一切内容（会议、私信语音、视频）完整送出去；
 * ``epoch`` 在每次 pause/resume 时自增。消费方（如 ambient 循环的 ``FrameGate``）
   据此丢弃自己的帧差指纹。这一条的动机是**隐私**而非性能：若保留暂停前的指纹，
   恢复后的新帧会与它做差，等于让智能体推断出"被遮住那段时间里画面变了多少"。
@@ -90,16 +101,25 @@ class DesktopPerceptionStore:
         self._scr_mime: str = "image/jpeg"
         self._scr_ts: float = 0.0
         self._screen_meta: Optional[Dict[str, Any]] = None
-        # audio (麦克风)
+        # audio (麦克风：听人说话)
         self._audio_b64: Optional[str] = None
         self._audio_mime: str = "audio/webm"
         self._audio_ts: float = 0.0
+        # system audio (系统播放声：听"用户正在听什么"——视频/游戏/网课的声音)
+        # 与麦克风【分槽】,不是冗余:两者语义完全不同。麦克风回答"用户说了什么",
+        # 系统声回答"用户此刻在听什么"。混在一槽里会互相覆盖,而且一旦混流就再也
+        # 分不出"这段声音是人说的还是扬声器放的"。
+        self._sys_audio_b64: Optional[str] = None
+        self._sys_audio_mime: str = "audio/webm"
+        self._sys_audio_ts: float = 0.0
         # counters (diagnostics)
         self._cam_received: int = 0
         self._scr_received: int = 0
         self._audio_received: int = 0
+        self._sys_audio_received: int = 0
         # 自动注入去重：已被对话自动注入消费过的音频时间戳，避免同一片段反复转写
         self._audio_autoinject_consumed_ts: float = 0.0
+        self._sys_audio_autoinject_consumed_ts: float = 0.0
         # ── 隐私急停 ──
         self._paused: bool = _privacy_default_paused()
         self._paused_at: float = time.time() if self._paused else 0.0
@@ -109,6 +129,7 @@ class DesktopPerceptionStore:
         #: 暂停期间被拒收的写入次数(诊断用:证明闸门真的在挡)
         self._rejected_frames: int = 0
         self._rejected_audio: int = 0
+        self._rejected_system_audio: int = 0
         if self._paused:
             logger.warning("桌面感知处于隐私暂停(GALAXY_PERCEPTION_PRIVACY_DEFAULT):启动即不采集")
 
@@ -126,6 +147,8 @@ class DesktopPerceptionStore:
         self._screen_meta = None
         self._audio_b64 = None
         self._audio_ts = 0.0
+        self._sys_audio_b64 = None
+        self._sys_audio_ts = 0.0
 
     def pause(self, reason: str = "user") -> Dict[str, Any]:
         """立即切断感知:拒收后续帧/音频,并清空已缓存内容。幂等。"""
@@ -176,6 +199,7 @@ class DesktopPerceptionStore:
             "epoch": self._epoch,
             "rejected_frames": self._rejected_frames,
             "rejected_audio": self._rejected_audio,
+            "rejected_system_audio": self._rejected_system_audio,
         }
 
     def privacy_status(self) -> Dict[str, Any]:
@@ -249,6 +273,24 @@ class DesktopPerceptionStore:
             self._audio_ts = time.time()
             self._audio_received += 1
 
+    def update_system_audio(self, audio_b64: str, *, mime: str = "audio/webm") -> None:
+        """存最新一段【系统播放声】(扬声器输出的回环采集)。
+
+        隐私暂停期间拒收 —— 系统声比麦克风更敏感:它等于把用户正在听的一切内容
+        (会议、私信语音、视频)完整送出去,所以必须走同一道闸门,而不是另开一条
+        绕过隐私急停的旁路。判定与写入同一次持锁(理由见 ``update_frame``)。
+        """
+        with self._lock:
+            if self._paused:
+                self._rejected_system_audio += 1
+                return
+            if not audio_b64:
+                return
+            self._sys_audio_b64 = audio_b64
+            self._sys_audio_mime = mime or "audio/webm"
+            self._sys_audio_ts = time.time()
+            self._sys_audio_received += 1
+
     # ── 读取 / 新鲜度 ───────────────────────────────────────────────────────
 
     def _fresh(self, ts: float) -> bool:
@@ -292,6 +334,26 @@ class DesktopPerceptionStore:
                 return self._audio_b64, self._audio_mime
         return None, None
 
+    def take_fresh_system_audio_for_autoinject(self):
+        """取一段「新鲜且未被自动注入消费过」的**系统播放声**。
+
+        与麦克风那条各自独立去重:两路的到达节奏不同,共用一个消费水位会让先到的
+        那路把后到的那路一起标记为"已消费",另一路从此永远取不到东西。
+
+        返回 ``(audio_b64, mime)``;隐私暂停或无可用音频则返回 ``(None, None)``。
+        """
+        with self._lock:
+            if self._paused:
+                return None, None
+            if (
+                self._sys_audio_b64
+                and self._fresh(self._sys_audio_ts)
+                and self._sys_audio_ts > self._sys_audio_autoinject_consumed_ts
+            ):
+                self._sys_audio_autoinject_consumed_ts = self._sys_audio_ts
+                return self._sys_audio_b64, self._sys_audio_mime
+        return None, None
+
     def snapshot_media(self) -> Dict[str, Any]:
         """返回当前最新【摄像头/屏幕/音频】快照（仅新鲜项有值），供统一记忆层等消费。
 
@@ -309,11 +371,14 @@ class DesktopPerceptionStore:
                     "screen_meta": None,
                     "audio_b64": None,
                     "audio_mime": self._audio_mime,
+                    "system_audio_b64": None,
+                    "system_audio_mime": self._sys_audio_mime,
                     "privacy_paused": True,
                 }
             cam_fresh = bool(self._cam_b64) and self._fresh(self._cam_ts)
             scr_fresh = bool(self._scr_b64) and self._fresh(self._scr_ts)
             aud_fresh = bool(self._audio_b64) and self._fresh(self._audio_ts)
+            sys_fresh = bool(self._sys_audio_b64) and self._fresh(self._sys_audio_ts)
             return {
                 # 兼容旧字段名（image_* 指摄像头帧）+ 新增 screen_* 字段
                 "image_b64": self._cam_b64 if cam_fresh else None,
@@ -325,6 +390,8 @@ class DesktopPerceptionStore:
                 "screen_meta": self._screen_meta if scr_fresh else None,
                 "audio_b64": self._audio_b64 if aud_fresh else None,
                 "audio_mime": self._audio_mime,
+                "system_audio_b64": self._sys_audio_b64 if sys_fresh else None,
+                "system_audio_mime": self._sys_audio_mime,
             }
 
     def status(self) -> Dict[str, Any]:
@@ -335,6 +402,7 @@ class DesktopPerceptionStore:
                 "camera_received": self._cam_received,
                 "screen_received": self._scr_received,
                 "audio_received": self._audio_received,
+                "system_audio_received": self._sys_audio_received,
                 "camera_fresh": self._fresh(self._cam_ts),
                 "camera_age_sec": round(now - self._cam_ts, 2) if self._cam_ts else None,
                 "screen_fresh": self._fresh(self._scr_ts),
@@ -342,6 +410,8 @@ class DesktopPerceptionStore:
                 "screen_meta_present": self._screen_meta is not None,
                 "audio_fresh": self._fresh(self._audio_ts),
                 "audio_age_sec": round(now - self._audio_ts, 2) if self._audio_ts else None,
+                "system_audio_fresh": self._fresh(self._sys_audio_ts),
+                "system_audio_age_sec": (round(now - self._sys_audio_ts, 2) if self._sys_audio_ts else None),
                 "privacy": self._privacy_status_unlocked(),
             }
 
@@ -370,13 +440,15 @@ class DesktopPerceptionStore:
             cam_fresh = bool(self._cam_b64) and self._fresh(self._cam_ts)
             scr_fresh = bool(self._scr_b64) and self._fresh(self._scr_ts)
             aud_fresh = bool(self._audio_b64) and self._fresh(self._audio_ts)
+            sys_fresh = bool(self._sys_audio_b64) and self._fresh(self._sys_audio_ts)
             meta_fresh = self._screen_meta is not None and self._fresh(self._scr_ts)
-            if not (cam_fresh or scr_fresh or aud_fresh or meta_fresh):
+            if not (cam_fresh or scr_fresh or aud_fresh or sys_fresh or meta_fresh):
                 return None
             cam = (self._cam_b64, self._cam_mime) if cam_fresh else (None, None)
             scr = (self._scr_b64, self._scr_mime) if scr_fresh else (None, None)
             screen_meta = self._screen_meta if meta_fresh else None
             aud = (self._audio_b64, self._audio_mime) if aud_fresh else (None, None)
+            sysaud = (self._sys_audio_b64, self._sys_audio_mime) if sys_fresh else (None, None)
 
         # 若调用方已带图像，尊重之，不注入（避免覆盖显式上传）
         existing_images = list(getattr(existing, "images", []) or []) if existing is not None else []
@@ -392,12 +464,29 @@ class DesktopPerceptionStore:
         audio = []
         if aud[0]:
             audio.append(MultiModalAudio(mime=aud[1] or "audio/webm", data=aud[0], source="desktop_microphone"))
+        if sysaud[0]:
+            # source 必须与麦克风那条区分开:模型要能判断"这段是人在说话"还是
+            # "这段是屏幕里在放的声音",两者混成同一个 source 就无从分辨了。
+            audio.append(
+                MultiModalAudio(
+                    mime=sysaud[1] or "audio/webm",
+                    data=sysaud[0],
+                    source="desktop_system_audio",
+                )
+            )
 
         metadata = {
             "injected_by": "desktop_perception_store",
             "ambient": True,
             "modalities": [
-                m for m, on in (("camera", bool(cam[0])), ("screen", bool(scr[0])), ("audio", bool(aud[0]))) if on
+                m
+                for m, on in (
+                    ("camera", bool(cam[0])),
+                    ("screen", bool(scr[0])),
+                    ("audio", bool(aud[0])),
+                    ("system_audio", bool(sysaud[0])),
+                )
+                if on
             ],
         }
         screen = screen_meta
