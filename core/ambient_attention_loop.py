@@ -114,6 +114,10 @@ class AmbientObservation:
     audio_transcript: Optional[str] = None  # 听:能力驱动桥接转写(asr_bridge)后的文字
     screen_meta: Optional[Dict[str, Any]] = None
     recent_memory: List[str] = field(default_factory=list)
+    #: 手表报上来的「现在能不能打扰他」(见 core/interruptibility_registry)。
+    #: 空串 = 没有可用证据 —— 注意「没有证据」既不构成放行、也不构成阻拦,
+    #: 此时循环的行为与接手表之前完全一致。
+    interruptibility_note: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -180,6 +184,11 @@ class LLMRouterDecider:
             text_lines.append(f"（麦克风此刻听到：「{obs.audio_transcript}」）")
         elif obs.audio_b64:
             text_lines.append("（麦克风此刻有新的声音输入。）")
+
+        # 可打扰性:把「克制是美德」从祈使句变成可测量的输入。
+        # 没有可用证据时是空串 —— 不写模棱两可的话进提示词。
+        if obs.interruptibility_note:
+            text_lines.append(obs.interruptibility_note)
 
         # 融合看:屏幕 + 摄像头两路都发给模型(此前只发一路)。仅当统一模态协商层
         # 判定当前模型【看得见】(vision 可用)时才附图——换到无视觉模型自动省掉图像,
@@ -403,6 +412,62 @@ def _ai_is_speaking() -> bool:
         return False
 
 
+def _interruptibility_note() -> str:
+    """手表报的「现在能不能打扰他」,取一行提示词;拿不到就空串。
+
+    登记处不可用(没装手表、模块导入失败)时返回空串,循环行为与接手表
+    之前完全一致 —— **没有证据既不放行也不阻拦**。
+    """
+    try:
+        from core.interruptibility_registry import get_interruptibility_registry
+
+        return get_interruptibility_registry().prompt_line()
+    except Exception:  # noqa: BLE001 — 可打扰性是增强项,永远不该拖垮本拍
+        return ""
+
+
+def _interruptibility_blocked() -> bool:
+    """此刻是否**明确**不宜主动开口(手表 band=blocked)。
+
+    只有明确的 BLOCKED 才是 True。UNKNOWN / 陈旧 / 没有手表一律 False。
+    """
+    try:
+        from core.interruptibility_registry import get_interruptibility_registry
+
+        return get_interruptibility_registry().is_blocked()
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _apply_interruptibility_gate(decision: AmbientDecision) -> AmbientDecision:
+    """手表说「明确别打扰」时,把 SPEAK 降级为 SILENT。
+
+    这是提示词之外的**硬闸**:提示词只是建议,模型可能无视它;
+    用户开着勿扰或正在睡觉时,主动开口是不可接受的失败模式。
+
+    刻意**不拦 DELEGATE**:委托是后台静默干活,不发出声音、不占用户注意力,
+    正是"此刻别说话"时最该做的事。拦掉它等于把"别吵我"误读成"别干活"。
+
+    也刻意**不拦用户显式发起的请求** —— 那条路根本不经过本函数
+    (走 handle_request 正门)。这里管的只有自发注意力。
+
+    降级是**有界延迟**而非丢弃:循环每一拍都会重新判断,勿扰一解除,
+    同样的情形会重新有机会 SPEAK。
+    """
+    if decision.action != AmbientAction.SPEAK:
+        return decision
+    if not _interruptibility_blocked():
+        return decision
+    logger.info("Ambient SPEAK 被可打扰性硬闸降级为 SILENT(手表报告 blocked)")
+    return AmbientDecision(
+        action=AmbientAction.SILENT,
+        # 保留原本要说的话在理由里:事后查日志能看出"它本来想说什么、
+        # 为什么没说",而不是凭空少了一拍。
+        rationale=f"手表报告此刻不宜打扰,原判 SPEAK 已降级(原拟发言:{decision.utterance[:60]})",
+        salient=False,
+    )
+
+
 def _bool_env(name: str, default: bool) -> bool:
     raw = os.getenv(name)
     if raw is None:
@@ -598,6 +663,7 @@ class AmbientAttentionLoop:
             audio_transcript=None,  # 由 tick() 异步补上
             screen_meta=media.get("screen_meta"),
             recent_memory=list(self._recent_rationales[-_RECENT_MEMORY_N:]),
+            interruptibility_note=_interruptibility_note(),
         )
 
     async def _transcribe_async(self, obs: AmbientObservation) -> None:
@@ -649,6 +715,8 @@ class AmbientAttentionLoop:
         except Exception as exc:  # noqa: BLE001 — 决策不可致命
             logger.debug("Ambient decide 异常,视为 SILENT: %s", exc)
             decision = AmbientDecision(action=AmbientAction.SILENT, rationale=f"决策异常: {exc}")
+
+        decision = _apply_interruptibility_gate(decision)
 
         self.decisions += 1
         await self._route(decision, obs)
