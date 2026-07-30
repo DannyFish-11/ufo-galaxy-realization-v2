@@ -450,6 +450,23 @@ class DuplexSession:
                 logger.warning("双工下行读循环异常结束: %s", exc)
         finally:
             self._connected = False
+            if not self._closing:
+                # 服务端**正常**关闭连接时,上面的 async for 会安静地结束、不抛异常。
+                # 若这里什么都不做,后果是完全静默的:上行的 send_audio 从此每次返回
+                # False(没人看返回值),用户的声音再也传不上去;而下行消费方还在
+                # await 一个永远不会再有事件的队列上,任务就此挂死。症状是"助手突然
+                # 不理人了",日志里一点线索都没有。
+                #
+                # 所以:升 WARNING,并**补发** SESSION_CLOSED —— 消费方靠它退出循环。
+                self.last_error = self.last_error or "server_closed_connection"
+                logger.warning(
+                    "双工会话已断开(服务端关闭连接),语音上行已失效。"
+                    "已发出 SESSION_CLOSED;调用方应重建会话或退回回合制。"
+                )
+                try:
+                    await self._emit(DuplexEvent(DuplexEventType.SESSION_CLOSED))
+                except Exception as exc:  # noqa: BLE001
+                    logger.debug("补发 SESSION_CLOSED 失败(忽略): %s", exc)
 
     @staticmethod
     def _note_spoken(text: str) -> None:

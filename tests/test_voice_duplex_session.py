@@ -595,3 +595,74 @@ class TestPcmPlayerNeverBlocks:
             assert p.play(one_sec) is True
         assert p.status()["buffered_samples"] <= int(_PLAYER_BUFFER_SEC * 16000)
         assert p.status()["blocks_dropped"] > 0, "超上限时应有丢弃计数,不能静默"
+
+
+class TestUnexpectedDisconnectIsNotSilent:
+    """服务端**正常**关闭连接时,``async for`` 会安静地结束、不抛异常。若那里什么都不做,
+    后果完全静默:上行 ``send_audio`` 从此每次返回 False(没人看返回值),用户的声音再也
+    传不上去;而下行消费方还在 await 一个永远不会再有事件的队列上,任务就此挂死。
+    症状是"助手突然不理人了",日志里一点线索都没有。
+    """
+
+    @staticmethod
+    async def _session_that_gets_closed():
+        async def handler(ws):
+            await ws.send(json.dumps({"type": "session.created"}))
+            await asyncio.sleep(0.05)
+            await ws.close()  # 服务端正常关闭
+
+        server = await websockets.serve(handler, "127.0.0.1", 0)
+        port = server.sockets[0].getsockname()[1]
+        sess = DuplexSession(DuplexSessionConfig(url=f"ws://127.0.0.1:{port}", api_key="k"))
+        assert await sess.connect() is True
+        return sess, server
+
+    @pytest.mark.asyncio
+    async def test_consumer_is_released_instead_of_hanging(self):
+        sess, server = await self._session_that_gets_closed()
+        seen: list = []
+
+        async def _consume():
+            async for ev in sess.events():
+                seen.append(ev.type)
+
+        task = asyncio.ensure_future(_consume())
+        try:
+            # 不补发 SESSION_CLOSED 的话这里会超时 —— 消费方挂死
+            await asyncio.wait_for(task, timeout=3.0)
+        except asyncio.TimeoutError:
+            task.cancel()
+            raise AssertionError("下行消费方挂死:断连后没有收到 SESSION_CLOSED")
+        finally:
+            server.close()
+            await server.wait_closed()
+        assert DuplexEventType.SESSION_CLOSED in seen
+
+    @pytest.mark.asyncio
+    async def test_disconnect_is_logged_and_recorded(self, caplog):
+        sess, server = await self._session_that_gets_closed()
+        try:
+            with caplog.at_level("WARNING"):
+                for _ in range(30):
+                    if not sess.connected:
+                        break
+                    await asyncio.sleep(0.05)
+            assert sess.connected is False
+            assert sess.status()["last_error"], "断连必须留下可排查的痕迹"
+            assert "已断开" in caplog.text, "断连必须升 WARNING,不能静默"
+        finally:
+            server.close()
+            await server.wait_closed()
+
+    @pytest.mark.asyncio
+    async def test_uplink_after_disconnect_reports_failure(self):
+        sess, server = await self._session_that_gets_closed()
+        try:
+            for _ in range(30):
+                if not sess.connected:
+                    break
+                await asyncio.sleep(0.05)
+            assert await sess.send_audio(b"\x00\x01") is False
+        finally:
+            server.close()
+            await server.wait_closed()
