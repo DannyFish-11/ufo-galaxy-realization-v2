@@ -27,6 +27,11 @@
 * 隐私暂停期间**连采集本身都停**(见 ``_privacy_paused``):不只是"采了不用",而是
   不往任何缓冲里放。AEC 参考信号也一并断掉 —— 代价是暂停期间没有回声消除,但暂停期间
   本来就不该有音频进上行通路。
+* **跨越隐私边界的待送缓冲一律作废**(见 ``_drop_buffer_if_privacy_changed``)。光靠
+  "下一块到来时看见 paused 再清"是不够的,实测过的真实泄露路径:采了几秒 → 用户按暂停
+  (``pause()`` 只清感知库自己的缓存,碰不到本服务的待送缓冲)→ 用户恢复 → 下一块到来时
+  ``paused`` 已经是 False,那段**暂停之前**攒的音频就被原样送进了感知库。改用感知库的
+  ``epoch`` 世代号判断,"暂停过"这件事在恢复之后依然可见。
 
 降级永远安全:探测不可用 → ``start()`` 如实返回 False 并说明原因,绝不抛出、绝不
 影响麦克风链路。
@@ -121,12 +126,19 @@ class SystemAudioCaptureService:
         # 攒给感知库的 PCM 片段(逐块 append,定时编码)
         self._pcm: List[Any] = []
         self._pcm_samples = 0
-        self._last_snapshot_ts = 0.0
+        # 初始化成"现在"而不是 0.0:留 0.0 的话 (time.time() - 0) 恒大于任何 snapshot_sec,
+        # 于是**第一块**永远立刻触发一次快照,无视配置的间隔。生产路径上 start() 会重设
+        # 它所以看不出来,但这条隐含依赖很脆 —— 任何不经 start() 直接喂块的调用方
+        # (含测试)都会撞上,而且症状是"间隔配置好像没生效"。
+        self._last_snapshot_ts = time.time()
         # 观测
         self.blocks_captured = 0
         self.blocks_dropped_paused = 0
         self.snapshots_pushed = 0
         self.ref_pushed = 0
+        self.buffers_dropped_epoch = 0
+        #: 上次见到的隐私世代号。初始化成当前值,避免首块就误丢一次空缓冲。
+        self._epoch = self._privacy_epoch()
 
     # ── 生命周期 ──────────────────────────────────────────────────────────
 
@@ -243,8 +255,51 @@ class SystemAudioCaptureService:
             logger.debug("读取隐私状态失败,按【已暂停】处理(fail-closed): %s", exc)
             return True
 
+    @staticmethod
+    def _privacy_epoch() -> int:
+        """感知库的 pause/resume 世代号。取不到返回 -1(会被当作"变了"→丢缓冲)。"""
+        try:
+            from core.perception.desktop_perception_store import (
+                get_desktop_perception_store,
+            )
+
+            return int(get_desktop_perception_store().epoch)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("读取隐私世代号失败,按【已变化】处理: %s", exc)
+            return -1
+
+    def _drop_buffer_if_privacy_changed(self) -> bool:
+        """隐私世代变过就丢掉待送缓冲。返回是否丢弃了。
+
+        为什么光靠"下一块到来时看见 paused 再清"不够 —— 实测过的真实泄露路径:
+        采了几秒 → 用户按暂停(``pause()`` 只清感知库自己的缓存,**碰不到**本服务的
+        待送缓冲)→ 用户恢复 → 下一块到来时 ``paused`` 已经是 False,于是那段
+        **暂停之前**攒的音频被原样编码送进感知库。若暂停期间回环流本就没有新块
+        (比如扬声器静音),连"看见 paused"的机会都没有。
+
+        改用世代号:``epoch`` 在每次 pause/resume 都自增,所以"暂停过"这件事即便在
+        恢复之后也依然可见 —— 这正是 ``epoch`` 当初为 ambient 帧差指纹设计的用途,
+        同一个机制在这里同样适用。
+        """
+        now_epoch = self._privacy_epoch()
+        with self._lock:
+            if now_epoch == self._epoch:
+                return False
+            had = self._pcm_samples > 0
+            self._epoch = now_epoch
+            self._pcm = []
+            self._pcm_samples = 0
+            if had:
+                self.buffers_dropped_epoch += 1
+        if had:
+            logger.info("隐私世代变化(epoch=%s),已丢弃待送的系统声缓冲", now_epoch)
+        return had
+
     def _on_block(self, mono: Any) -> None:
         """每个回环块:先隐私闸门,再喂 AEC 参考,再攒给感知库。"""
+        # 跨越过隐私边界的缓冲一律作废(理由见 _drop_buffer_if_privacy_changed)
+        self._drop_buffer_if_privacy_changed()
+
         if self._privacy_paused():
             with self._lock:
                 self.blocks_dropped_paused += 1
@@ -324,6 +379,8 @@ class SystemAudioCaptureService:
                 "ref_pushed": self.ref_pushed,
                 "snapshots_pushed": self.snapshots_pushed,
                 "buffered_samples": self._pcm_samples,
+                "buffers_dropped_epoch": self.buffers_dropped_epoch,
+                "privacy_epoch": self._epoch,
             }
 
 

@@ -321,3 +321,96 @@ class TestBlockFanoutHonoursPrivacyAndBounds:
         svc = self._svc()
         for bad in (None, "garbage", np.zeros(0)):
             svc._on_block(bad)  # type: ignore[arg-type]
+
+
+class TestBufferNeverCrossesThePrivacyBoundary:
+    """实测过的真实泄露:``pause()`` 只清感知库自己的缓存,**碰不到**采集服务的待送缓冲。
+    于是"采几秒 → 暂停 → 恢复"之后,那段**暂停之前**攒的音频会被原样送进感知库。
+    若暂停期间回环流本就没有新块(扬声器静音),连"看见 paused 再清"的机会都没有。
+
+    修复用感知库的 ``epoch`` 世代号:它在每次 pause/resume 都自增,所以"暂停过"这件事
+    在恢复之后依然可见 —— 这正是 ``epoch`` 当初为 ambient 帧差指纹设计的用途。
+    """
+
+    def _svc(self, snapshot_sec):
+        from core.multimodal.system_audio_capture_service import (
+            SystemAudioCaptureService,
+        )
+
+        return SystemAudioCaptureService(sample_rate=SR, snapshot_sec=snapshot_sec)
+
+    def test_audio_buffered_before_a_pause_is_not_delivered_after_resume(self):
+        from core.perception.desktop_perception_store import (
+            get_desktop_perception_store,
+        )
+
+        store = get_desktop_perception_store()
+        store.resume("test-setup")
+        svc = self._svc(snapshot_sec=10**6)  # 永不自动送出,只攒
+        block = np.ones(BLK, dtype=np.float32) * 0.1
+        for _ in range(5):
+            svc._on_block(block)
+        assert svc.status()["buffered_samples"] > 0, "前提:暂停前确实攒了音频"
+
+        store.pause("user")
+        store.resume("user")
+
+        svc.snapshot_sec = 0.0  # 现在每块都会送
+        before = store.status()["system_audio_received"]
+        svc._on_block(block)
+        after = store.status()["system_audio_received"]
+
+        assert svc.status()["buffers_dropped_epoch"] >= 1, "跨越隐私边界的缓冲没有被丢弃"
+        # 送出去的那一段只能是"恢复之后"这一块,不含暂停前的 5 块
+        assert after == before + 1
+        assert svc.status()["buffered_samples"] == 0
+
+    def test_pause_alone_also_invalidates_the_buffer(self):
+        """只暂停、还没恢复时也要作废 —— epoch 已经变了。"""
+        from core.perception.desktop_perception_store import (
+            get_desktop_perception_store,
+        )
+
+        store = get_desktop_perception_store()
+        store.resume("test-setup")
+        svc = self._svc(snapshot_sec=10**6)
+        for _ in range(3):
+            svc._on_block(np.ones(BLK, dtype=np.float32) * 0.1)
+        store.pause("user")
+        try:
+            svc._on_block(np.ones(BLK, dtype=np.float32) * 0.1)
+            assert svc.status()["buffered_samples"] == 0
+            assert svc.status()["buffers_dropped_epoch"] >= 1
+        finally:
+            store.resume("test")
+
+    def test_no_spurious_drop_on_the_first_block(self):
+        """世代号初始化成当前值,首块不该白丢一次(否则每次新建服务都少一段音频)。"""
+        from core.perception.desktop_perception_store import (
+            get_desktop_perception_store,
+        )
+
+        get_desktop_perception_store().resume("test-setup")
+        svc = self._svc(snapshot_sec=10**6)
+        svc._on_block(np.ones(BLK, dtype=np.float32) * 0.1)
+        assert svc.status()["buffers_dropped_epoch"] == 0
+        assert svc.status()["buffered_samples"] == BLK
+
+    def test_unreadable_epoch_is_treated_as_changed(self, monkeypatch):
+        """读不到世代号时按【已变化】处理(丢缓冲)—— 与 fail-closed 的隐私判定一致。"""
+        import core.perception.desktop_perception_store as store_mod
+        from core.perception.desktop_perception_store import (
+            get_desktop_perception_store,
+        )
+
+        get_desktop_perception_store().resume("test-setup")
+        svc = self._svc(snapshot_sec=10**6)
+        svc._on_block(np.ones(BLK, dtype=np.float32) * 0.1)
+        assert svc.status()["buffered_samples"] > 0
+
+        def _boom():
+            raise RuntimeError("injected")
+
+        monkeypatch.setattr(store_mod, "get_desktop_perception_store", _boom)
+        svc._on_block(np.ones(BLK, dtype=np.float32) * 0.1)
+        assert svc.status()["buffered_samples"] == 0

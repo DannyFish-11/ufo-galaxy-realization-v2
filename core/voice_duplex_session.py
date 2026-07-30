@@ -37,6 +37,7 @@ import base64
 import json
 import logging
 import os
+import threading
 import time
 from dataclasses import dataclass, field
 from enum import Enum
@@ -541,12 +542,27 @@ def float_from_pcm16(data: bytes) -> Any:
 UplinkHook = Callable[[bytes], Any]
 
 
-class PcmPlayer:
-    """下行原始 PCM 的播放器。
+#: 下行播放缓冲上限(秒)。满了丢**最旧**的:过期音频没有价值,而让 play() 等待
+#: 会把事件循环连带上行一起卡住。
+_PLAYER_BUFFER_SEC = 2.0
 
+
+class PcmPlayer:
+    """下行原始 PCM 的播放器(回调驱动,``play()`` 绝不阻塞)。
+
+    为什么不能用 ``OutputStream.write()``
+    -------------------------------------
     双工下行是**连续的 PCM 流**,不是一个个音频文件,所以现有 TTS 引擎那套
     ``_play_audio(path)`` 用不上 —— 为每个 20ms 的音频块写一个临时文件再播,延迟和
-    IO 开销都不可接受。这里直接开一条 ``sounddevice`` 输出流往里写。
+    IO 开销都不可接受。
+
+    但直接用 ``stream.write()`` 也不行:按 sounddevice 的契约它**会阻塞**到所有帧都写进
+    设备缓冲为止。而 ``play()`` 是从 ``_duplex_downlink`` 里调的,跑在事件循环上 ——
+    一阻塞,同一个循环上的**上行**也跟着停。那就等于用一个"实时"播放器把双工性质亲手
+    毁掉:模型说话时用户的声音传不上去,退化成半双工。
+
+    所以改成**回调驱动**:``sounddevice`` 的音频线程主动来取,``play()`` 只是往一个有界
+    环形缓冲里追加,纯内存操作、不等待任何人。这也是音频输出的标准做法。
 
     没有 sounddevice / 没有输出设备时**如实不可用**并记一次 WARNING,不静默假装在播 ——
     "以为在说话其实一点声音都没有"是最难排查的一类症状。
@@ -556,18 +572,48 @@ class PcmPlayer:
         self.sample_rate = int(sample_rate)
         self._stream: Any = None
         self._unavailable_reason = ""
+        self._lock = threading.Lock()
+        self._buf: Any = None  # numpy 1-D 待播样本
+        self._np: Any = None
         self.blocks_played = 0
         self.blocks_dropped = 0
+        self.samples_underrun = 0  # 缓冲空、只能输出静音的样本数(可听为卡顿)
+
+    @property
+    def _max_samples(self) -> int:
+        return int(_PLAYER_BUFFER_SEC * self.sample_rate)
 
     def start(self) -> bool:
         if self._stream is not None:
             return True
         try:
+            import numpy as np
             import sounddevice as sd
 
-            self._stream = sd.OutputStream(samplerate=self.sample_rate, channels=1, dtype="float32")
+            self._np = np
+            self._buf = np.zeros(0, dtype=np.float32)
+
+            def _cb(outdata, frames, _time_info, status) -> None:  # noqa: ANN001
+                # 音频线程:只做取数与补静音,绝不做 IO / 日志 / 加重锁
+                if status:
+                    pass
+                with self._lock:
+                    have = min(frames, self._buf.size)
+                    if have:
+                        outdata[:have, 0] = self._buf[:have]
+                        self._buf = self._buf[have:]
+                    if have < frames:
+                        outdata[have:, 0] = 0.0
+                        self.samples_underrun += frames - have
+
+            self._stream = sd.OutputStream(
+                samplerate=self.sample_rate,
+                channels=1,
+                dtype="float32",
+                callback=_cb,
+            )
             self._stream.start()
-            logger.info("双工下行播放器已启动(sr=%d)", self.sample_rate)
+            logger.info("双工下行播放器已启动(回调驱动, sr=%d)", self.sample_rate)
             return True
         except Exception as exc:  # noqa: BLE001
             self._unavailable_reason = str(exc)
@@ -576,23 +622,34 @@ class PcmPlayer:
             return False
 
     def play(self, pcm16: bytes) -> bool:
-        """播一块 PCM。永不抛出;不可用时计数丢弃。"""
+        """把一块 PCM 追加到播放缓冲。**不阻塞**、永不抛出。"""
         if not pcm16:
             return False
-        if self._stream is None:
+        if self._stream is None or self._np is None:
             self.blocks_dropped += 1
             return False
         try:
-            self._stream.write(float_from_pcm16(pcm16).reshape(-1, 1))
+            np = self._np
+            samples = float_from_pcm16(pcm16)
+            with self._lock:
+                self._buf = np.concatenate((self._buf, samples))
+                # 有界:生产快于消费时丢最旧的,而不是让 play() 等下去
+                extra = self._buf.size - self._max_samples
+                if extra > 0:
+                    self._buf = self._buf[extra:]
+                    self.blocks_dropped += 1
             self.blocks_played += 1
             return True
         except Exception as exc:  # noqa: BLE001
             self.blocks_dropped += 1
-            logger.debug("双工下行播放失败(丢弃本块): %s", exc)
+            logger.debug("双工下行入缓冲失败(丢弃本块): %s", exc)
             return False
 
     def stop(self) -> None:
         stream, self._stream = self._stream, None
+        with self._lock:
+            if self._np is not None:
+                self._buf = self._np.zeros(0, dtype=self._np.float32)
         if stream is None:
             return
         try:
@@ -602,9 +659,13 @@ class PcmPlayer:
             logger.debug("关闭双工播放器失败(忽略): %s", exc)
 
     def status(self) -> Dict[str, Any]:
+        with self._lock:
+            buffered = int(self._buf.size) if self._buf is not None else 0
         return {
             "available": self._stream is not None,
             "unavailable_reason": self._unavailable_reason or None,
             "blocks_played": self.blocks_played,
             "blocks_dropped": self.blocks_dropped,
+            "buffered_samples": buffered,
+            "samples_underrun": self.samples_underrun,
         }

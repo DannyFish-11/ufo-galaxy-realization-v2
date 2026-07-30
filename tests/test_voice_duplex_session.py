@@ -533,3 +533,65 @@ class TestVoiceLoopWiring:
         assert calls == [1], "start() 没有调用双工路径 —— 接线断了"
         assert loop.asr is None, "双工启动后仍初始化了 ASR,说明 start() 没有就此返回"
         assert loop.tts is None
+
+
+# ── 4. 下行播放器:绝不阻塞事件循环 ────────────────────────────────────────
+
+
+class TestPcmPlayerNeverBlocks:
+    """为什么单独立一组:``OutputStream.write()`` 按 sounddevice 的契约**会阻塞**到帧写完
+    为止,而 ``play()`` 是从 ``_duplex_downlink`` 里调的、跑在事件循环上 —— 一阻塞,同一个
+    循环上的**上行**也跟着停,等于用一个"实时"播放器把双工性质亲手毁掉,退化成半双工。
+    所以实现改成回调驱动:``play()`` 只往有界缓冲追加,纯内存操作。
+    """
+
+    def test_play_is_pure_buffer_append_no_blocking_write(self):
+        """实现里不该出现 ``stream.write(``。这是白盒断言,但它守的是一条从外面测不出来
+        的性质(本环境没有音频设备,阻塞与否无法直接观测)。"""
+        import inspect
+
+        from core.voice_duplex_session import PcmPlayer
+
+        src = inspect.getsource(PcmPlayer)
+        # 只看真正的调用形式,不看 docstring 里对 stream.write() 的说明性提及
+        assert "self._stream.write(" not in src, "播放器又用回了阻塞式 write —— 会卡住事件循环"
+        assert "callback=_cb" in src, "播放器应是回调驱动"
+
+    def test_play_without_a_device_counts_drops_and_returns_false(self):
+        from core.voice_duplex_session import PcmPlayer
+
+        p = PcmPlayer(sample_rate=16000)
+        assert p.start() is False  # 本环境没有 sounddevice
+        assert p.play(b"\x00\x01" * 100) is False
+        st = p.status()
+        assert st["available"] is False
+        assert st["unavailable_reason"]
+        assert st["blocks_dropped"] == 1
+
+    def test_empty_block_is_a_noop(self):
+        from core.voice_duplex_session import PcmPlayer
+
+        p = PcmPlayer()
+        assert p.play(b"") is False
+        assert p.status()["blocks_dropped"] == 0
+
+    def test_stop_is_safe_without_start(self):
+        from core.voice_duplex_session import PcmPlayer
+
+        PcmPlayer().stop()
+
+    def test_buffer_is_bounded_and_drops_oldest(self, monkeypatch):
+        """生产快于消费时必须丢**最旧**的,而不是让 play() 等下去。用一个假 stream 绕过
+        "本环境没有音频设备",单独检验缓冲策略。"""
+        from core.voice_duplex_session import _PLAYER_BUFFER_SEC, PcmPlayer
+
+        p = PcmPlayer(sample_rate=16000)
+        p._stream = object()  # 假装设备可用
+        p._np = np
+        p._buf = np.zeros(0, dtype=np.float32)
+
+        one_sec = pcm16_from_float(np.zeros(16000, dtype=np.float32) + 0.1)
+        for _ in range(int(_PLAYER_BUFFER_SEC) + 3):
+            assert p.play(one_sec) is True
+        assert p.status()["buffered_samples"] <= int(_PLAYER_BUFFER_SEC * 16000)
+        assert p.status()["blocks_dropped"] > 0, "超上限时应有丢弃计数,不能静默"
