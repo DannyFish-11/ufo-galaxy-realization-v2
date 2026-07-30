@@ -203,19 +203,23 @@ class DesktopPerceptionStore:
         """按 source 分槽存放：含 'screen' → 屏幕槽（含结构化 screen 上下文）；否则摄像头槽。
 
         隐私暂停期间**拒收**:数据在写入口就被挡掉,根本不进内存。
+
+        判定与写入必须在**同一次持锁**内完成。此前分成两次持锁(先查 paused、
+        释放锁、再取锁写入),中间存在 TOCTOU 空隙:用户按下暂停的瞬间若有一帧
+        正在途中,pause() 会在空隙里完成"置位 + 清缓存",随后这一帧落在 wipe
+        之后 —— 暂停期间读闸门还挡得住,但**一恢复就能读出来**,而那恰恰是
+        用户想遮住的那一帧。已用受控交错实测复现过。
         """
         with self._lock:
             if self._paused:
                 self._rejected_frames += 1
                 return
-        if not image_b64:
-            # 即便没有像素帧，也允许只更新结构化屏幕上下文（如纯 UIA 树）。
-            if screen is not None:
-                with self._lock:
+            if not image_b64:
+                # 即便没有像素帧，也允许只更新结构化屏幕上下文（如纯 UIA 树）。
+                if screen is not None:
                     self._screen_meta = screen
                     self._scr_ts = time.time()
-            return
-        with self._lock:
+                return
             if _is_screen_source(source):
                 self._scr_b64 = image_b64
                 self._scr_mime = mime or "image/jpeg"
@@ -233,14 +237,13 @@ class DesktopPerceptionStore:
                     self._screen_meta = screen
 
     def update_audio(self, audio_b64: str, *, mime: str = "audio/webm") -> None:
-        """隐私暂停期间拒收(同 update_frame)。"""
+        """隐私暂停期间拒收。判定与写入同一次持锁(理由见 update_frame)。"""
         with self._lock:
             if self._paused:
                 self._rejected_audio += 1
                 return
-        if not audio_b64:
-            return
-        with self._lock:
+            if not audio_b64:
+                return
             self._audio_b64 = audio_b64
             self._audio_mime = mime or "audio/webm"
             self._audio_ts = time.time()

@@ -222,7 +222,18 @@ class PeerTrustBook:
     ) -> PeerRecord:
         did = str(device_id)
         with self._lock:
-            rec = self._peers.get(did) or PeerRecord(device_id=did, paired_at=time.time())
+            rec = self._peers.get(did)
+            if rec is None:
+                # 新建档案时的初始信任必须取 _default_trust(),不能用 PeerRecord
+                # 的 dataclass 默认值(unknown)。两者是"未指定信任算几级"的两个
+                # 不同真相源:未登记对端走 _default_trust()(默认 ask,可配),
+                # 而 dataclass 默认是 unknown —— 比 ask 低。
+                #
+                # 后果:调 POST /api/v1/pair/trust 只传 device_id(比如只想改备注)
+                # 就会把该对端从 default_trust 悄悄**降级**成 unknown。若部署方把
+                # GALAXY_PEER_DEFAULT_TRUST 设成 friend,原本 allowed 的意图会变成
+                # require_approval —— 只想加个备注却动了权限。已实测复现。
+                rec = PeerRecord(device_id=did, trust=_default_trust().value, paired_at=time.time())
             if name is not None:
                 rec.name = str(name)
             if trust is not None:

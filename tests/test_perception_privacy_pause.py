@@ -149,6 +149,78 @@ class TestPauseWipesCache:
         assert snap["audio_b64"] is None
 
 
+class TestNoTocTouGapAtThePauseBoundary:
+    """判定与写入必须在同一次持锁内。
+
+    此前 update_frame 分两次持锁(先查 paused、释放、再取锁写入),中间有 TOCTOU
+    空隙:用户按下暂停的瞬间若有一帧正在途中,pause() 会在空隙里完成"置位 + 清缓存",
+    随后这一帧落在 wipe **之后** —— 暂停期间读闸门还挡得住,但**一恢复就能读出来**,
+    而那恰恰是用户想遮住的那一帧。
+    """
+
+    @staticmethod
+    def _run_with_pause_injected_between_lock_acquisitions(store, write):
+        """把 pause() 注入到被测写入过程的第一次"释放锁"之后。
+
+        若实现是两次持锁,这个位置就落在判定与写入之间,能确定性复现竞态;
+        若实现是单次持锁,pause() 只会发生在整个写入完成之后(随即被 wipe 清掉)。
+        """
+        real = store._lock
+
+        class _Hook:
+            def __init__(self) -> None:
+                self.releases = 0
+                self.armed = True
+
+            def __enter__(self):
+                real.acquire()
+                return self
+
+            def __exit__(self, *exc):
+                real.release()
+                self.releases += 1
+                if self.armed and self.releases == 1:
+                    self.armed = False
+                    store._lock = real  # 让 pause 用真锁(此刻锁空闲)
+                    store.pause(reason="race-probe")
+                    store._lock = hook
+                return False
+
+            def acquire(self, *a, **k):
+                return real.acquire(*a, **k)
+
+            def release(self):
+                return real.release()
+
+        hook = _Hook()
+        store._lock = hook
+        try:
+            write()
+        finally:
+            store._lock = real
+
+    def test_frame_in_flight_does_not_survive_the_pause(self):
+        from core.perception.desktop_perception_store import DesktopPerceptionStore
+
+        s = DesktopPerceptionStore()
+        self._run_with_pause_injected_between_lock_acquisitions(
+            s, lambda: s.update_frame("RACED-FRAME", source="desktop_screen")
+        )
+        assert s.paused is True
+        assert s._scr_b64 is None, "暂停边界上不能留下在途的帧"
+        s.resume()
+        assert s.snapshot_media()["screen_b64"] is None, "恢复后更不能读到那一帧"
+
+    def test_audio_in_flight_does_not_survive_the_pause(self):
+        from core.perception.desktop_perception_store import DesktopPerceptionStore
+
+        s = DesktopPerceptionStore()
+        self._run_with_pause_injected_between_lock_acquisitions(s, lambda: s.update_audio("RACED-AUDIO"))
+        assert s._audio_b64 is None
+        s.resume()
+        assert s.snapshot_media()["audio_b64"] is None
+
+
 class TestEpochCrossesPrivacyBoundary:
     def test_epoch_increments_on_pause_and_resume(self, store):
         e0 = store.epoch
