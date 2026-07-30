@@ -74,6 +74,35 @@ class TestTimeoutIsConfigured:
             f"timeout_method={method!r} —— thread 方式会杀掉整个进程," "又回到「整轮没有结论」那个老问题上;应为 signal"
         )
 
+    def test_faulthandler_backstop_is_set(self, ini):
+        """不依赖信号的兜底诊断。
+
+        per-test 超时**本地实测有效**,但在 CI 上没救回来:作业仍挂死在 92%,日志逐字节停住
+        四十多分钟,**一条 Timeout 行都没有**。原因可能是挂点不在 pytest_runtest_protocol
+        覆盖范围内(pytest-timeout 只挂这一个钩子),也可能卡在不响应信号递送的 C 调用里。
+
+        faulthandler 走独立看门狗线程、不经过信号,所以上面那条不管为什么失灵,它都照样能打出
+        **每个线程**的完整堆栈(实测精确到文件与行号)。它只 dump 不终止 —— 终止由作业级
+        timeout-minutes 负责。
+        """
+        raw = ini.get("pytest", "faulthandler_timeout", fallback="")
+        assert raw, "没有 faulthandler_timeout —— per-test 超时一旦失灵就再没有任何线索"
+        assert int(raw) >= 60, f"faulthandler_timeout={raw}s 太紧,会在正常慢用例上刷无用堆栈"
+
+    def test_ci_test_job_has_a_hard_ceiling(self):
+        """作业级硬上限:挂死时至少得到一个明确的「作业超时」。
+
+        没有它,挂死的作业会一直耗到 runner 被回收(实测有 64 分钟的),GitHub 只丢下一句
+        "The runner has received a shutdown signal" —— 既没有失败清单,也没有任何线索。
+        """
+        import yaml
+
+        ci = yaml.safe_load((REPO_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
+        job = ci["jobs"]["test"]
+        assert "timeout-minutes" in job, "test 作业没有 timeout-minutes,挂死时会耗到 runner 被回收"
+        # 正常全量约 20 分钟;上限要留足余量,但不能大到失去意义。
+        assert 30 <= int(job["timeout-minutes"]) <= 90, f"timeout-minutes={job['timeout-minutes']} 不在合理区间"
+
     def test_not_hidden_in_addopts(self, ini):
         """必须是 ini 选项,不能塞进 addopts。
 
