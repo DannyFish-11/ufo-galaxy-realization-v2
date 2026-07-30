@@ -207,7 +207,9 @@ TASK_ROUTING_PREFERENCES: Dict[TaskType, List[str]] = {
     # 2026-05-29: 新增 minimax/step/mimo 三个国产提供商
     # 2026-07-10: 新增 meta(Muse Spark 1.1,agentic/多模态/1M ctx)——
     # 定位在专有兜底梯队,agentic 任务(AGENT_CONTROL/CODING/PLANNING)优先级靠前
-    TaskType.REASONING: ["ollama", "anthropic", "openai", "meta", "deepseek", "google", "qwen", "step"],
+    # xai 补入:策略层 YAML 的 reasoning 一直有它,执行层这张表却没有 —— 两份真相里
+    # 只存在于一侧的 provider,在另一条路上等于不存在。已加守卫测试防止再漂。
+    TaskType.REASONING: ["ollama", "anthropic", "openai", "meta", "deepseek", "google", "qwen", "step", "xai"],
     TaskType.FAST_RESPONSE: ["ollama", "deepseek", "mimo", "agnes", "groq", "google", "openai", "zhipu", "moonshot"],
     TaskType.CODING: ["ollama", "deepseek", "qwen", "anthropic", "openai", "meta", "step", "mimo", "moonshot"],
     TaskType.CREATIVE: ["ollama", "openai", "anthropic", "mistral", "deepseek", "minimax"],
