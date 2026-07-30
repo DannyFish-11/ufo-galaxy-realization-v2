@@ -54,8 +54,9 @@ _BACKGROUND_TASKS: set = set()
 _EVENT_QUEUE_MAX = 256
 
 
-def _flag(name: str, default: str = "0") -> bool:
-    return os.getenv(name, default).strip().lower() not in ("0", "false", "no", "off")
+# 统一走 core.config_flags —— 这里原先是 5 份逐字相同的本地 _flag 副本,
+# 其中一个真 bug(空值把开关打开)因此要修 5 遍。详见该模块 docstring。
+from core.config_flags import flag as _flag  # noqa: E402  (保留 _flag 名字以免动全部调用点)
 
 
 def duplex_enabled() -> bool:
