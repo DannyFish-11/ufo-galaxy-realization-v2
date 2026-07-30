@@ -87,6 +87,10 @@ class VoiceLoop:
         self._turn_seq: int = 0
         # 委托模式:后台任务句柄(防 GC;stop 时取消)。
         self._bg_tasks: set = set()
+        # 双工模式状态(未启用时全为 None)
+        self._duplex: Optional[Any] = None
+        self._duplex_player: Optional[Any] = None
+        self._duplex_loop: Optional[asyncio.AbstractEventLoop] = None
 
     async def start(self) -> None:
         """启动语音闭环。
@@ -120,6 +124,12 @@ class VoiceLoop:
 
         logger.info("Starting VoiceLoop...")
 
+        # 0. 双工优先:开关打开且会话建得起来 → 走持续上下行链路,不再初始化
+        #    ASR/TTS(那是回合制的部件)。建不起来则如实退回回合制,原因已在
+        #    open_duplex_session 里记过日志。
+        if await self._try_start_duplex(AudioCaptureConfig, AudioCaptureService):
+            return
+
         # 1. 初始化 ASR
         self.asr = WhisperASR(model_size=self.model_size)
         logger.info("ASR initialized: %s", self.asr)
@@ -145,6 +155,107 @@ class VoiceLoop:
         await self.capture.start()
         self._running = True
         logger.info("VoiceLoop started — listening for voice input")
+
+    # ── 双工路径 ──────────────────────────────────────────────────────────
+
+    async def _try_start_duplex(self, AudioCaptureConfig, AudioCaptureService) -> bool:  # noqa: N803
+        """尝试用双工会话取代回合制链路。返回是否真的启动了双工。
+
+        为什么是"取代"而不是"并存":同一个麦克风的音频不能既攒着等 Whisper 整段转写、
+        又实时流给 realtime 服务端 —— 两条路都要独占回合边界的判定权。所以这里二选一。
+
+        上行刻意复用 ``AudioCaptureService``:AEC 挂在 ``AudioIngestPipeline._process_chunk``
+        里,走这条路上行的音频**已经过回声消除**。双工比回合制更需要这一点 —— 回合制下
+        AI 说话时采到的回声最终会被丢掉,双工下那些字节会实时进模型,不消回声等于让模型
+        一直听见自己在说话。
+        """
+        try:
+            from core.voice_duplex_session import (
+                DuplexEventType,
+                PcmPlayer,
+                duplex_enabled,
+                open_duplex_session,
+                pcm16_from_float,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("双工模块不可用,走回合制: %s", exc)
+            return False
+
+        if not duplex_enabled():
+            return False
+        session = await open_duplex_session()
+        if session is None:
+            return False
+
+        self._duplex = session
+        self._duplex_player = PcmPlayer(sample_rate=self.sample_rate)
+        self._duplex_player.start()
+
+        # 上行:复用采集服务(因此复用 AEC),把每块样本转成 PCM16 发上去
+        capture = AudioCaptureService(
+            config=AudioCaptureConfig(
+                sample_rate=self.sample_rate,
+                chunk_duration_ms=self.chunk_duration_ms,
+            )
+        )
+
+        def _uplink(state, _quality) -> None:
+            try:
+                pcm = pcm16_from_float(state.samples)
+                if not pcm:
+                    return
+                loop = self._duplex_loop
+                if loop is None:
+                    return
+                # 采集回调跑在采集线程/事件循环回调里,发送是 async → 跨线程安全调度
+                asyncio.run_coroutine_threadsafe(session.send_audio(pcm), loop)
+            except Exception as exc:  # noqa: BLE001 — 上行单块失败不能影响采集
+                logger.debug("双工上行单块失败(跳过): %s", exc)
+
+        self._duplex_loop = asyncio.get_running_loop()
+        capture.add_asr_callback(_uplink)
+        self.capture = capture
+        await capture.start()
+
+        task = asyncio.ensure_future(self._duplex_downlink(session, DuplexEventType))
+        self._bg_tasks.add(task)
+        task.add_done_callback(self._bg_tasks.discard)
+
+        self._running = True
+        logger.info("VoiceLoop 已以【双工】模式启动(持续上行 + 持续下行)")
+        return True
+
+    async def _duplex_downlink(self, session, DuplexEventType) -> None:  # noqa: N803
+        """消费下行事件:播音频、推面板、用户开口即让服务端停当前回复。"""
+        try:
+            async for ev in session.events():
+                if ev.type is DuplexEventType.ASSISTANT_AUDIO_DELTA and ev.audio_b64:
+                    import base64
+
+                    self._duplex_player.play(base64.b64decode(ev.audio_b64))
+                elif ev.type is DuplexEventType.USER_SPEECH_STARTED:
+                    # 双工下的 barge-in:让【服务端】停止当前回复。只停本地播放没用 ——
+                    # 模型那边还在继续生成,token 照烧、上下文照涨。
+                    await session.interrupt()
+                elif ev.type is DuplexEventType.FINAL_TRANSCRIPT and ev.text:
+                    self._emit_panel("user", ev.text)
+                elif ev.type is DuplexEventType.RESPONSE_DONE:
+                    logger.debug("双工:一个回复回合结束")
+                elif ev.type is DuplexEventType.SESSION_CLOSED:
+                    return
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("双工下行消费异常结束: %s", exc)
+
+    @staticmethod
+    def _emit_panel(role: str, text: str) -> None:
+        try:
+            from core.lumiv_websocket_bridge import emit_conversation
+
+            emit_conversation(role, text, source="voice")
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("emit_conversation 跳过(非致命): %s", exc)
 
     async def _on_voice_input(self, text: str) -> None:
         """处理语音识别结果。
@@ -388,6 +499,23 @@ class VoiceLoop:
             except Exception as exc:
                 logger.debug("Error stopping capture: %s", exc)
 
+        # 双工资源的生命周期必须与回路对称:漏掉这里会留一条活着的 WebSocket 连接和
+        # 一条打开的音频输出流 —— 前者继续计费/占额度,后者占着音频设备不放。
+        player, self._duplex_player = self._duplex_player, None
+        if player is not None:
+            try:
+                player.stop()
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("关闭双工播放器失败(忽略): %s", exc)
+
+        session, self._duplex = self._duplex, None
+        if session is not None:
+            try:
+                await session.close()
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("关闭双工会话失败(忽略): %s", exc)
+
+        self._duplex_loop = None
         logger.info("VoiceLoop stopped")
 
     async def say(self, text: str) -> None:
