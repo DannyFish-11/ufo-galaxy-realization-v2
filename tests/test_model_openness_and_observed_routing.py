@@ -226,7 +226,10 @@ class TestObservedPerformanceReachesBrainSelection:
 
         src = inspect.getsource(MultiLLMRouter.select_brain_for_task)
         assert "_bandit_score" in src, "选脑打分没有读 bandit —— 实测表现没接进来"
-        assert "_provider_stats" in src, "选脑打分没有取历史统计"
+        # 取历史统计走 _bandit_stats(它内部才调 _provider_stats)。第一版这里断言的是
+        # _provider_stats,把"抄了一遍回退逻辑"那个写法钉死了 —— 后来把重复逻辑提成
+        # _bandit_stats 时这条就炸了。炸得对:它确实在承重。改断言到正确的那一层。
+        assert "_bandit_stats" in src, "选脑打分没有取历史统计"
 
     def test_score_uses_per_model_openness_not_provider_set(self):
         """必须比对**去掉注释后**的源码。
@@ -416,3 +419,65 @@ class TestObservedSignalActuallyChangesTheWinner:
         r, TaskType = self._router(self._hist("beta_vendor", calls=2, successes=2))
         d = r.select_brain_for_task(TaskType.GENERAL, complexity_score=0.6)
         assert d.provider == "alpha_vendor", "样本不足时不应被少量历史带偏"
+
+
+class TestBanditSampleFloorIsNotDuplicated:
+    """样本阈值只能有一处 —— 否则"重排认为够、打分认为不够"会分裂。
+
+    接实测表现时我把 ``_bandit_reorder`` 的两级回退**抄了一遍**,还把 5 写成字面量,
+    而那边是 ``min_samples`` 参数。这组钉住去重后的形态。
+    """
+
+    def test_threshold_lives_in_one_place(self):
+        from core.multi_llm_router import MultiLLMRouter
+
+        assert MultiLLMRouter.BANDIT_MIN_SAMPLES == 5
+
+    def test_no_hardcoded_five_in_either_consumer(self):
+        """反向验证:两处都不许再出现裸的 5 当阈值。"""
+        import inspect
+        import re as _re
+
+        from core.multi_llm_router import MultiLLMRouter
+
+        for fn in (MultiLLMRouter.select_brain_for_task, MultiLLMRouter._bandit_reorder):
+            code = _re.sub(r"#.*$", "", inspect.getsource(fn), flags=_re.M)
+            assert not _re.search(r"<\s*5\b|>=\s*5\b", code), f"{fn.__name__} 里还有硬编码的样本阈值 5"
+
+    def test_both_consumers_go_through_the_shared_helper(self):
+        import inspect
+
+        from core.multi_llm_router import MultiLLMRouter
+
+        for fn in (MultiLLMRouter.select_brain_for_task, MultiLLMRouter._bandit_reorder):
+            assert "_bandit_stats" in inspect.getsource(fn), f"{fn.__name__} 没走共享的统计取数"
+
+    def test_helper_returns_zero_total_when_samples_insufficient(self):
+        from core.multi_llm_router import MultiLLMRouter, TaskType
+
+        r = MultiLLMRouter.__new__(MultiLLMRouter)
+        r.call_history = [
+            {"provider": "x", "task_type": "general", "success": True, "latency_ms": 1, "cost": 0, "tokens_out": 1}
+        ]
+        stats, total = r._bandit_stats(TaskType.GENERAL)
+        assert (stats, total) == ({}, 0), "样本不足时必须返回 ({}, 0),让调用方退回静态行为"
+
+    def test_helper_returns_stats_when_samples_sufficient(self):
+        from core.multi_llm_router import MultiLLMRouter, TaskType
+
+        r = MultiLLMRouter.__new__(MultiLLMRouter)
+        r.call_history = [
+            {"provider": "x", "task_type": "general", "success": True, "latency_ms": 1, "cost": 0, "tokens_out": 1}
+            for _ in range(5)
+        ]
+        stats, total = r._bandit_stats(TaskType.GENERAL)
+        assert total == 5 and "x" in stats
+
+    def test_reorder_still_falls_back_to_original_order(self):
+        """去重不能改掉 _bandit_reorder 原有的冷启动语义:样本不足原样返回。"""
+        from core.multi_llm_router import MultiLLMRouter, TaskType
+
+        r = MultiLLMRouter.__new__(MultiLLMRouter)
+        r.call_history = []
+        cands = ["a", "b", "c"]
+        assert r._bandit_reorder(list(cands), TaskType.GENERAL) == cands

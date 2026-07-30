@@ -2556,11 +2556,7 @@ class MultiLLMRouter:
         # 拿不到任何真实成功率/延迟/成本反馈,全凭手写档位。所有者原话:「这玩意不应该
         # 交给智能路由自己选吗」——接上之后,手写档位退化为【冷启动先验】,有实测数据时
         # 由实测修正它。
-        _bstats = self._provider_stats(task_type)
-        _btotal = int(sum(s["calls"] for s in _bstats.values()))
-        if _btotal < 5:  # 与 _bandit_reorder 的 min_samples 同口径
-            _bstats = self._provider_stats(None)
-            _btotal = int(sum(s["calls"] for s in _bstats.values()))
+        _bstats, _btotal = self._bandit_stats(task_type)
         try:
             observed_weight = float(_os.environ.get("GALAXY_ROUTE_OBSERVED_WEIGHT", "1.0"))
         except ValueError:
@@ -2584,7 +2580,7 @@ class MultiLLMRouter:
             # route() 只有顺序这一个信号,把没试过的排前面才有机会被探索;而本函数已有
             # 静态档位当先验,再让 +inf 压过一切,等于让"从未试过"直接抢走一整个 agent
             # 的活,一次坏选择的代价远高于少探索一次。
-            if _btotal >= 5:
+            if _btotal:  # 0 = 样本不足(_bandit_stats 已判);此时完全按静态先验走
                 b = self._bandit_score(name, _bstats, _btotal)
                 if b != float("inf"):
                     score += observed_weight * (min(1.0, b) - 0.5)
@@ -3302,21 +3298,42 @@ class MultiLLMRouter:
         explore = explore_c * math.sqrt(math.log(max(total, 1) + 1.0) / n)
         return exploit + explore
 
+    BANDIT_MIN_SAMPLES: int = 5
+
+    def _bandit_stats(
+        self, task_type: Optional[TaskType] = None, *, min_samples: Optional[int] = None
+    ) -> Tuple[Dict[str, Dict[str, float]], int]:
+        """取 bandit 统计,带两级样本回退:任务级不足 → 退全量历史;全量也不足 → 返回空。
+
+        这段回退逻辑原本只长在 ``_bandit_reorder`` 里。``select_brain_for_task`` 接实测
+        表现时我把它**抄了一遍**,还把 5 写成了字面量,而这边是 ``min_samples`` 参数 ——
+        两处一旦不同步就会出现"重排认为样本够、打分认为不够"的分裂。提成一个方法,
+        阈值收敛到 ``BANDIT_MIN_SAMPLES`` 一处。
+
+        Returns:
+            ``(stats, total)``;``total == 0`` 表示样本不足,调用方应退回各自的静态行为。
+        """
+        floor = self.BANDIT_MIN_SAMPLES if min_samples is None else min_samples
+        stats = self._provider_stats(task_type)
+        total = int(sum(s["calls"] for s in stats.values()))
+        if total < floor:
+            stats = self._provider_stats(None)
+            total = int(sum(s["calls"] for s in stats.values()))
+            if total < floor:
+                return {}, 0
+        return stats, total
+
     def _bandit_reorder(
-        self, candidates: List[str], task_type: Optional[TaskType] = None, *, min_samples: int = 5
+        self, candidates: List[str], task_type: Optional[TaskType] = None, *, min_samples: Optional[int] = None
     ) -> List[str]:
         """按 UCB1 打分对候选 provider 列表做自适应重排(表现好的上浮,同时保留探索)。
         冷启动零回归:GALAXY_BANDIT_ROUTING=false 关闭;任务级样本不足退回全量历史,
         全量也不足(< min_samples)则原样返回。稳定排序,同分保持传入顺序。"""
         if not candidates or os.environ.get("GALAXY_BANDIT_ROUTING", "true").lower() == "false":
             return candidates
-        stats = self._provider_stats(task_type)
-        total = int(sum(s["calls"] for s in stats.values()))
-        if total < min_samples:
-            stats = self._provider_stats(None)
-            total = int(sum(s["calls"] for s in stats.values()))
-            if total < min_samples:
-                return list(candidates)
+        stats, total = self._bandit_stats(task_type, min_samples=min_samples)
+        if not total:
+            return list(candidates)
         scored = [self._bandit_score(n, stats, total) for n in candidates]
         # sorted 稳定:同分保持原相对顺序;-score 让高分(含 +inf 未试过)排前。
         order = sorted(range(len(candidates)), key=lambda i: -scored[i])
