@@ -25,8 +25,12 @@
 
 安全
 ----
-**绝不打印任何密钥值。** 只输出"是否已配置 / 长度 / 是否占位符"。也不把 key 写进
-任何文件或日志。
+**绝不打印任何密钥值,也不打印任何由它派生的信息(含长度)。** 状态只有
+"未配置 / 占位符 / 已配置"三种。
+
+**上游响应体一律不输出。** 多家的鉴权失败响应会把收到的 key 原样写在 message 里,
+而"响应体里可能有什么"由上游决定、无法穷举,所以不做"洗一洗再打印",直接不打印:
+诊断只用 HTTP 状态码 + 一张固定措辞表,异常只报类型名。
 
 用法
 ----
@@ -42,7 +46,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
 import sys
 import urllib.error
@@ -68,15 +71,54 @@ def _panel_keys() -> set:
     return set(re.findall(r"\b(?:key|extraKey)\s*:\s*'([A-Z][A-Z0-9_]*)'", src))
 
 
-def _mask(value: str) -> str:
-    """只描述,不泄露。"""
+#: HTTP 状态 → **固定措辞**的解释。上游响应体一律不输出(见 ``_fetch_models``),
+#: 因此这张表是唯一的诊断来源。它比原始 JSON 更好用:直接说该去改什么。
+_HTTP_MEANING = {
+    401: "鉴权被拒 —— key 无效/过期,或这家不认这个 key",
+    403: "鉴权通过但无权限 —— 账号未开通该能力,或余额/配额问题",
+    404: "端点不存在 —— base_url 或路径不对",
+    429: "被限流 —— 稍后重试",
+}
+
+
+def _verdict(value: str) -> str:
+    """密钥状态,**只返回三个常量之一**,不含任何由密钥值派生的信息。
+
+    第一版这里返回 ``f"已配置(len={len(value)})"`` —— 我当时在 docstring 里把"只输出
+    长度"当成安全的。它不安全:长度是指纹(能区分 ``sk-``+32 与 ``gsk_``+52,进而暴露
+    是哪家的哪种 key),而且它构成一条从密钥值到 stdout 的真实污点路径,CodeQL 判
+    high severity「明文记录敏感信息」是对的。现在每个分支都只返回字面常量,值本身
+    不参与输出。
+    """
     from core.credential_vault import PLACEHOLDER_PREFIXES
 
     if not value:
         return "未配置"
     if value.lower().startswith(PLACEHOLDER_PREFIXES):
-        return f"占位符(len={len(value)})"
-    return f"已配置(len={len(value)})"
+        return "占位符"
+    return "已配置"
+
+
+def _explain(code: int) -> str:
+    """把 HTTP 状态翻成固定措辞。**不含任何来自上游响应体的内容。**
+
+    为什么不是"洗一洗再打印"
+    ------------------------
+    我上一版是把上游响应体经一个 ``_scrub(text, secret)`` 洗掉密钥再打印。那个修复
+    方向是对的(多家的鉴权失败响应确实会把收到的 key 原样回显在 message 里),但做法
+    有两个问题:
+
+    1. **安全上依赖正则完备。** 只要哪家的回显形式没被我的模式覆盖,密钥就照样被打
+       出来。而"响应体里可能有什么"是上游决定的,我无法穷举。
+    2. **它把密钥显式喂进了一个其返回值会被打印的函数。** 从数据流看就是
+       ``secret → _scrub → return → print``,CodeQL 判 high severity 是合理的 ——
+       静态分析没有理由相信 ``str.replace`` 一定清干净了。我第一版反而让这条边更明显。
+
+    所以改成**根本不输出响应体**:诊断只用状态码 + 上面那张固定表。这样既不依赖正则
+    完备,也不存在从密钥到输出的通路。丢掉的信息很有限 —— 状态码本身就已经指明该改
+    什么了,而原始 JSON 往往只是同一句话的啰嗦版。
+    """
+    return _HTTP_MEANING.get(code, "上游返回了非 2xx")
 
 
 def static_audit() -> Tuple[List[str], Dict[str, Any]]:
@@ -129,14 +171,17 @@ def _fetch_models(base_url: str, api_key: str, *, protocol: Optional[str], timeo
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             payload = json.loads(resp.read().decode("utf-8", "replace"))
     except urllib.error.HTTPError as exc:
-        body = exc.read(400).decode("utf-8", "replace").replace("\n", " ")
-        return f"HTTP {exc.code}", body[:200]
+        # 刻意【不读也不返回】响应体:它可能带着被回显的密钥。诊断改用状态码 + 固定表。
+        return f"HTTP {exc.code}", _explain(exc.code)
     except Exception as exc:  # noqa: BLE001 —— 网络/DNS/代理各种异常一律如实报出
-        return "连接失败", f"{type(exc).__name__}: {str(exc)[:200]}"
+        # 只报异常【类型名】(URLError/SSLError/timeout…),不报异常文本 ——
+        # 某些实现会把带密钥的 URL 或请求头写进 str(exc)。
+        return "连接失败", type(exc).__name__
     # OpenAI 兼容与 Anthropic 都是 {"data": [{"id": ...}, ...]}
     items = payload.get("data") if isinstance(payload, dict) else None
     if not isinstance(items, list):
-        return "响应无法解析", json.dumps(payload)[:200]
+        # 同理不回传 payload 本身
+        return "响应无法解析", "响应缺少 data 数组"
     ids = [it.get("id") for it in items if isinstance(it, dict) and it.get("id")]
     return "OK", sorted(ids)
 
@@ -158,17 +203,19 @@ def live_probe(only: Optional[set], timeout: float) -> Tuple[List[str], List[Dic
         try:
             api_key = router._get_key(name) or ""
         except Exception as exc:  # noqa: BLE001
-            problems.append(f"{name}: 解析 key 时异常 {type(exc).__name__}: {exc}")
+            # 只报异常类型名,不报文本 —— 某些实现会把密钥值写进报错消息
+            problems.append(f"{name}: 解析 key 时异常 {type(exc).__name__}")
             api_key = ""
-        row: Dict[str, Any] = {"provider": name, "key": _mask(api_key), "declared": spec.get("models") or []}
-        if not api_key or "占位符" in row["key"]:
+        row: Dict[str, Any] = {"provider": name, "key": _verdict(api_key), "declared": spec.get("models") or []}
+        if not api_key or row["key"] == "占位符":
             row["status"] = "跳过(无有效 key)"
             rows.append(row)
             continue
         status, result = _fetch_models(spec["base_url"], api_key, protocol=spec.get("protocol"), timeout=timeout)
         row["status"] = status
         if status != "OK":
-            row["error"] = result
+            # result 此时已是【固定措辞】(见 _explain / 异常类型名),不含任何上游响应体
+            row["error"] = str(result)
             problems.append(f"{name}: {status} —— {result}")
             rows.append(row)
             continue
