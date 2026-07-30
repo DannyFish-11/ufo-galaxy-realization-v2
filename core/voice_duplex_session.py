@@ -59,6 +59,45 @@ _EVENT_QUEUE_MAX = 256
 from core.config_flags import flag as _flag  # noqa: E402  (保留 _flag 名字以免动全部调用点)
 
 
+def is_local_endpoint(url: str) -> bool:
+    """这个 realtime 端点是不是**本机/本网**的服务(因而不需要云端 API key)。
+
+    为什么需要这个判断
+    ------------------
+    ``from_env()`` 原先无条件要求 key,拿不到就返回 None 并告警"缺少 API key"。但本地
+    服务根本没有 key 这个概念 —— B 档切换后 ``core.native_modal`` 会把 MiniCPM-o 官方
+    server 拉起来(默认 ``localhost:32550``),这时:
+
+        GALAXY_REALTIME_URL=ws://localhost:32550/...   # 指向本地
+        GALAXY_NATIVE_AUDIO=1                          # 原生听/说已就绪
+        (没有云端 key)
+
+    旧逻辑一律判"缺 key → 退回回合制",于是**本地服务配好了也起不来**,而且日志把人引去
+    配云端 key —— 那是完全无关的一件事。这是纯逻辑错误,与任何 provider 的协议无关。
+
+    判据取"回环 / 私网 / .local",也就是"这台机器或这个局域网里的服务"。刻意**不**用
+    "只要显式设了 URL 就免 key":那样会把指向云端的自定义 URL 也放过去,拿空 key 建连换
+    一个 401,反而更难查。
+    """
+    from urllib.parse import urlsplit
+
+    try:
+        host = (urlsplit(url).hostname or "").strip().lower()
+    except Exception as exc:  # noqa: BLE001 —— URL 畸形不该让调用方崩
+        logger.debug("解析 realtime URL 失败(按非本地处理): %s", exc)
+        return False
+    if not host:
+        return False
+    if host in ("localhost", "::1") or host.endswith(".local"):
+        return True
+    try:
+        import ipaddress
+
+        return ipaddress.ip_address(host).is_loopback or ipaddress.ip_address(host).is_private
+    except ValueError:
+        return False  # 不是 IP 字面量,又不在上面的名字里 → 当作远端
+
+
 def duplex_enabled() -> bool:
     """双工语音是否启用。**默认关闭** —— 它需要 realtime provider 与 key。"""
     return _flag("GALAXY_VOICE_DUPLEX", "0")
@@ -188,6 +227,15 @@ class DuplexSessionConfig:
                 url = f"wss://api.openai.com/v1/realtime?model={model}"
             missing = "GALAXY_REALTIME_API_KEY 或 OPENAI_API_KEY"
 
+        if not key and is_local_endpoint(url):
+            # 本地服务不需要 key。B 档切过去之后 core.native_modal 会把 MiniCPM-o
+            # 官方 server 拉起来(默认 localhost:32550),这条路径正是给它用的。
+            logger.info(
+                "双工语音:realtime 端点是本地服务(%s),无需 API key。",
+                url,
+            )
+            return cls(url=url, api_key="", model=model, voice=voice, provider=provider)
+
         if not key:
             # 区分"没填"与"填的是占位符" —— 后者用户以为自己配好了,不说清会白查很久。
             from core.secret_resolution import describe_source
@@ -201,6 +249,14 @@ class DuplexSessionConfig:
                 )
             else:
                 logger.warning("双工语音已开启但缺少 API key(%s),本次退回回合制语音链路。", missing)
+            if os.environ.get("GALAXY_NATIVE_AUDIO") == "1":
+                # 这一句是为了不误导:此时本地原生听/说其实**已经通了**(B 档
+                # native_modal 注册的那条),缺的只是"真流式双工"这一层。只说"缺 key"会让
+                # 人以为语音整个是瞎的,跑去折腾云端配置。
+                logger.info(
+                    "补充:本地原生听/说已就绪(GALAXY_NATIVE_AUDIO=1),回合制语音走的是原生通路而非 "
+                    "Whisper/TTS 桥。若要用本地服务跑双工,把 GALAXY_REALTIME_URL 指向它即可(本地端点免 key)。"
+                )
             return None
         return cls(url=url, api_key=key, model=model, voice=voice, provider=provider)
 
