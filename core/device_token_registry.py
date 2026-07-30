@@ -22,6 +22,21 @@ UI 能填、``/api/v1/config`` 也不吐 token,更没有"给某台设备发一�
 - 存储路径默认在仓库【之外】(``~/.galaxy/device_tokens.json``),不进 git;可用
   ``GALAXY_DEVICE_TOKEN_STORE`` 覆盖。
 
+保留期(为什么需要)
+--------------------
+``issue()`` 对同一 device_id 每次都**新增**一条记录(轮换),``revoke_device()`` 只把
+``revoked`` 置 True、从不删除,而 ``_persist()`` 每次把**全表**重写一遍。所以一台反复
+重装/换机的设备会永久留下 N 条记录:存储文件单调增长,每次发放的落盘开销也随总条数
+线性上升。已吊销记录的留存价值只有**审计**(``list_devices`` 要能显示曾被吊销),过了
+保留期就该清掉。
+
+- ``GALAXY_DEVICE_TOKEN_RETENTION_DAYS``(默认 30):已吊销记录保留多久。
+- ``GALAXY_DEVICE_TOKEN_MAX_RECORDS``(默认 512):记录总条数上限。
+
+淘汰**只动已吊销的记录,永不淘汰未吊销的** —— 删掉一条还在用的记录等于悄悄把那台设备
+踢下线,症状是"设备突然连不上、日志里什么都没有",比存储增长严重得多。若活跃记录本身
+就超过上限,如实升 WARNING 让人看见,不自作主张删 working 凭证。
+
 本模块只管"凭证的发放/校验/吊销/枚举",不含配对流程/智能体准入(那是上层
 端点的职责)——保持单一职责,便于单测。
 """
@@ -40,6 +55,45 @@ from typing import Any, Dict, List, Optional
 logger = logging.getLogger("Galaxy.DeviceTokenRegistry")
 
 _STORE_SCHEMA_VERSION = 1
+
+#: 已吊销记录的默认保留期(天)。留一段时间是为了**审计**:``list_devices`` 要能显示
+#: "这台设备的凭证在什么时候被吊销过"。过了保留期就没有留存价值了。
+_DEFAULT_RETENTION_DAYS = 30.0
+
+#: 记录总条数的硬上限。见 ``_prune_unlocked`` 里为什么这个上限**永远不会**淘汰
+#: 未吊销的记录。
+_DEFAULT_MAX_RECORDS = 512
+
+
+def _retention_seconds() -> float:
+    """已吊销记录的保留时长(秒)。设为 0 表示吊销即刻可清。"""
+    raw = os.environ.get("GALAXY_DEVICE_TOKEN_RETENTION_DAYS", "").strip()
+    if not raw:
+        return _DEFAULT_RETENTION_DAYS * 86400.0
+    try:
+        return max(0.0, float(raw)) * 86400.0
+    except ValueError:
+        logger.warning(
+            "GALAXY_DEVICE_TOKEN_RETENTION_DAYS=%r 不是合法数值,已退回默认 %s 天",
+            raw,
+            _DEFAULT_RETENTION_DAYS,
+        )
+        return _DEFAULT_RETENTION_DAYS * 86400.0
+
+
+def _max_records() -> int:
+    raw = os.environ.get("GALAXY_DEVICE_TOKEN_MAX_RECORDS", "").strip()
+    if not raw:
+        return _DEFAULT_MAX_RECORDS
+    try:
+        return max(1, int(raw))
+    except ValueError:
+        logger.warning(
+            "GALAXY_DEVICE_TOKEN_MAX_RECORDS=%r 不是合法整数,已退回默认 %s",
+            raw,
+            _DEFAULT_MAX_RECORDS,
+        )
+        return _DEFAULT_MAX_RECORDS
 
 
 def _default_store_path() -> Path:
@@ -98,6 +152,79 @@ class DeviceTokenRegistry:
                 h = rec.get("token_sha256")
                 if isinstance(h, str) and h:
                     self._by_hash[h] = rec
+            # 进程重启是清理过期吊销记录的自然时机(不必等到下一次发放)
+            self._prune_unlocked()
+
+    # ── 保留期 / 上限 ─────────────────────────────────────────────────────
+
+    def _prune_unlocked(self) -> int:
+        """清掉过了保留期的【已吊销】记录并收敛到上限。返回清掉的条数。
+
+        调用方必须已持有锁。
+
+        为什么原先会无界增长:``issue()`` 对同一 device_id 每次都新增一条记录(轮换),
+        ``revoke_device()`` 只把 ``revoked`` 置 True、从不删除,而 ``_persist()`` 每次
+        都把**全表**重写一遍。于是一台反复重装/换机的设备会永久留下 N 条记录,存储文件
+        单调增长,每次发放的落盘开销也随总条数线性上升。
+
+        **淘汰只动已吊销的记录,永不淘汰未吊销的。** 删掉一条还在用的记录等于悄悄把那台
+        设备踢下线,而且症状是"设备突然连不上、日志里什么都没有"—— 那比存储增长严重得多。
+        因此当活跃记录本身就超过上限时,这里如实升 WARNING 让人看见,而不是自作主张挑一
+        条working 凭证删掉。
+        """
+        now = time.time()
+        retention = _retention_seconds()
+        removed = 0
+
+        # 1) 过了保留期的已吊销记录
+        for h, rec in list(self._by_hash.items()):
+            if not rec.get("revoked"):
+                continue
+            revoked_at = rec.get("revoked_at")
+            if not isinstance(revoked_at, (int, float)):
+                # 吊销时间缺失(手改过存储/老版本数据)→ 按 issued_at 兜底,取不到就当刚吊销
+                revoked_at = rec.get("issued_at")
+            if not isinstance(revoked_at, (int, float)):
+                continue
+            if now - revoked_at >= retention:
+                del self._by_hash[h]
+                removed += 1
+
+        # 2) 仍超上限 → 继续淘汰最老的【已吊销】记录
+        cap = _max_records()
+        if len(self._by_hash) > cap:
+            revoked = [
+                (rec.get("revoked_at") or rec.get("issued_at") or 0.0, h)
+                for h, rec in self._by_hash.items()
+                if rec.get("revoked")
+            ]
+            revoked.sort()
+            for _ts, h in revoked:
+                if len(self._by_hash) <= cap:
+                    break
+                del self._by_hash[h]
+                removed += 1
+
+        if len(self._by_hash) > cap:
+            # 只剩活跃记录还是超上限 —— 不动它们,如实报警
+            logger.warning(
+                "设备 token 记录数 %d 已超上限 %d,且余下全部为【未吊销】记录 —— "
+                "不会自动淘汰在用凭证(那会让设备突然掉线)。请吊销不再使用的设备,"
+                "或调高 GALAXY_DEVICE_TOKEN_MAX_RECORDS。",
+                len(self._by_hash),
+                cap,
+            )
+        if removed:
+            logger.info("清理设备 token 记录:已清 %d 条(过保留期或超上限的已吊销记录)", removed)
+        return removed
+
+    def prune(self) -> int:
+        """对外的清理入口(供运维/测试显式触发)。返回清掉的条数,必要时落盘。"""
+        with self._lock:
+            removed = self._prune_unlocked()
+            if removed:
+                self._persist()
+        return removed
 
     def _persist(self) -> None:
         """原子落盘:临时文件 + os.replace,避免写坏半个文件。"""
@@ -149,6 +276,9 @@ class DeviceTokenRegistry:
         }
         with self._lock:
             self._by_hash[rec["token_sha256"]] = rec
+            # 发放是唯一的增长点,所以清理挂在这里:每次新增顺手收一次,记录数就不会
+            # 随重装/换机次数单调增长(_persist 每次重写全表,条数还直接决定落盘开销)。
+            self._prune_unlocked()
             self._persist()
         logger.info("为设备发放 token: device_id=%s type=%s name=%s", device_id, device_type, name)
         return raw
