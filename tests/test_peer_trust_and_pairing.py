@@ -205,6 +205,79 @@ class TestActuallyWiredIn:
         assert r.status != DispatchReadinessStatus.BLOCKED_PEER_TRUST.value
 
 
+class TestUpsertDoesNotSilentlyDowngradeTrust:
+    """新建档案的初始信任必须取 _default_trust(),不能用 dataclass 默认值。
+
+    两者是"未指定信任算几级"的两个不同真相源:未登记对端走 _default_trust()
+    (默认 ask,可配),而 PeerRecord 的 dataclass 默认是 unknown —— 比 ask 低。
+    于是调 POST /api/v1/pair/trust 只传 device_id(例如只想改备注)就会把该对端
+    悄悄降级。若部署方把默认设成 friend,原本 allowed 的意图会变成 require_approval。
+    """
+
+    @pytest.mark.parametrize("default_trust", ["blocked", "unknown", "ask", "friend", "trusted"])
+    def test_note_only_upsert_preserves_effective_trust(self, default_trust, tmp_path, monkeypatch):
+        import core.peer_trust as pt
+
+        # 每个参数一份独立存储 —— 否则上一轮落盘的记录会让本轮走"已存在"分支,
+        # 根本测不到新建路径(第一版探针就是这么自欺的)。
+        monkeypatch.setenv("GALAXY_DATA_DIR", str(tmp_path / default_trust))
+        monkeypatch.setenv("GALAXY_PEER_DEFAULT_TRUST", default_trust)
+        pt.reset_peer_trust_book()
+        book = pt.get_peer_trust_book()
+
+        before = book.trust_of("dev").value
+        assert before == default_trust  # 前提:未登记对端按配置的默认值处理
+        book.upsert("dev", note="只想加个备注")
+        assert book.trust_of("dev").value == before, "只改备注不该动权限"
+
+    def test_explicit_trust_still_wins(self, tmp_path, monkeypatch):
+        import core.peer_trust as pt
+
+        monkeypatch.setenv("GALAXY_DATA_DIR", str(tmp_path))
+        monkeypatch.setenv("GALAXY_PEER_DEFAULT_TRUST", "friend")
+        pt.reset_peer_trust_book()
+        book = pt.get_peer_trust_book()
+        book.upsert("dev", trust="blocked")
+        assert book.trust_of("dev").value == "blocked"
+        book.upsert("dev", note="事后改备注")
+        assert book.trust_of("dev").value == "blocked", "备注更新不能把 blocked 冲掉"
+
+
+class TestPairingCodeRegistryIsBounded:
+    """短码表必须有上限。
+
+    GET /api/v1/pair/card 每调用一次就签发一个 10 分钟有效的短码;只清过期、
+    不限总数的话,任何反复拉名片的客户端都会让这张表持续膨胀(实测 5000 次
+    签发即积压 5000 条)。与 IPBlockList、学习引擎模式表同类。
+    """
+
+    def test_active_codes_are_capped(self):
+        from core.agent_card import PairingCodeRegistry, create_agent_card, to_link
+
+        reg = PairingCodeRegistry(max_active=32)
+        link = to_link(create_agent_card("d"))
+        codes = [reg.issue(link)[0] for _ in range(500)]
+        assert reg.active_count() <= 32
+        assert reg.evicted > 0, "应当发生过淘汰"
+
+    def test_newest_survives_and_oldest_is_evicted(self):
+        from core.agent_card import PairingCodeRegistry, create_agent_card, to_link
+
+        reg = PairingCodeRegistry(max_active=8)
+        link = to_link(create_agent_card("d"))
+        codes = [reg.issue(link)[0] for _ in range(64)]
+        assert reg.resolve(codes[-1]) is not None, "最新签发的必须可兑换"
+        assert reg.resolve(codes[0]) is None, "最旧的应已被挤掉"
+
+    def test_cap_does_not_break_single_use_semantics(self):
+        from core.agent_card import PairingCodeRegistry, create_agent_card, to_link
+
+        reg = PairingCodeRegistry(max_active=8)
+        code, _ = reg.issue(to_link(create_agent_card("d")))
+        assert reg.resolve(code) is not None
+        assert reg.resolve(code) is None
+
+
 class TestHitlWaiver:
     """信任豁免人工确认 —— 这是分级信任的"便利性"落点:只问该问的。
 

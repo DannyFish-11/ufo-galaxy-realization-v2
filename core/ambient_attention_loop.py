@@ -341,6 +341,16 @@ class FrameGate:
         self._prev_sig: Optional[Any] = None
         self._prev_b64: Optional[str] = None
 
+    def reset(self) -> None:
+        """丢弃上一帧指纹,让下一帧被当作"第一帧"。
+
+        用于跨越隐私边界(暂停→恢复)后:留着暂停前的指纹去比恢复后的新帧,
+        等于泄露"被遮住那段时间里画面变了多少"。注意这会让恢复后的第一拍
+        必然判定为"有变化"(第一帧的既定语义),这是刻意接受的代价。
+        """
+        self._prev_sig = None
+        self._prev_b64 = None
+
     def changed(self, frame_b64: Optional[str]) -> bool:
         if not frame_b64:
             return False
@@ -434,6 +444,9 @@ class AmbientAttentionLoop:
         self._running = False
         self._last_action_ts = 0.0
         self._last_audio_hash = ""
+        #: 上次见到的感知世代号;与 store.epoch 不一致即表示中间发生过隐私暂停,
+        #: 需重置帧差门控(见 _gather_observation)。初值 -1 保证首拍必对齐一次。
+        self._perception_epoch: int = -1
         self._recent_rationales: List[str] = []
         self.ticks = 0
         self.decisions = 0
@@ -482,10 +495,38 @@ class AmbientAttentionLoop:
     def _gather_observation(self) -> Optional[AmbientObservation]:
         """从感知库读一份快照（只读，不消费对话音频）；被门控挡下返回 None。"""
         store = self._get_store()
+
+        # 隐私世代号:pause/resume 会让它自增。世代一变说明中间发生过隐私暂停,
+        # 此时把两路帧差指纹与音频哈希一并清掉。
+        #
+        # 理由是【隐私】,不是省一次模型调用 —— 恰恰相反:FrameGate 对第一帧本就
+        # 返回 True(见 changed() 的"第一帧视为变化"),所以 reset 之后恢复的
+        # 第一拍一定会触发一次。这是可接受的(恢复后重新看一眼环境本就合理)。
+        #
+        # 真正的问题在于:若保留暂停前那枚指纹,恢复后的新帧会跟它做差 ——
+        # 等于让智能体能推断出"我被遮住的那段时间里屏幕变化了多少"。用户主动
+        # 遮起来的内容,不该以差异信号的形式渗出来。故跨隐私边界不携带视觉状态。
+        try:
+            epoch = store.epoch
+            if epoch != self._perception_epoch:
+                self._perception_epoch = epoch
+                self._gate.reset()
+                self._cam_gate.reset()
+                self._last_audio_hash = ""
+                logger.info("Ambient: 感知世代变更(epoch=%s),已重置帧差门控与音频哈希", epoch)
+        except AttributeError:
+            # 老版本 store 没有 epoch —— 不因此中断本拍
+            pass
+
         try:
             media = store.snapshot_media()
         except Exception as exc:  # noqa: BLE001
             logger.debug("Ambient: snapshot_media 失败: %s", exc)
+            return None
+
+        # 隐私暂停期间 snapshot_media 全空,这一拍直接跳过,连门控都不用更新
+        # (没有新数据可比),也不该把"空"当成"画面变了"。
+        if media.get("privacy_paused"):
             return None
 
         # 分路取帧:屏幕、摄像头各自原始帧(可同时存在)。主帧(frame_b64)屏幕优先,

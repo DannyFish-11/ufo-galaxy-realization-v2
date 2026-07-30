@@ -40,6 +40,7 @@ import os
 import secrets
 import threading
 import time
+from collections import OrderedDict
 from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import parse_qs, urlencode, urlparse
@@ -188,19 +189,43 @@ class _CodeEntry:
     expires_at: float
 
 
+#: 同时有效的短码上限。超出后按签发顺序淘汰最旧的。
+#:
+#: 必须有上限:``GET /api/v1/pair/card`` 每调用一次就签发一个 10 分钟有效的短码,
+#: 只清过期、不限总数的话,任何反复拉取名片的客户端(或轮询的面板)都会让这张表
+#: 持续膨胀 —— 实测连续签发 5000 次即积压 5000 条。这与仓库里 IPBlockList、
+#: 学习引擎模式表所修的是同一类无界集合问题。
+MAX_ACTIVE_PAIRING_CODES = 256
+
+
 class PairingCodeRegistry:
     """短码 → 配对链接 的短时映射(仅内存,进程重启即失效)。
 
     刻意不落盘:短码是**一次性、分钟级**的引导凭证,落盘只会延长它的暴露窗口。
+    容量有上限(见 MAX_ACTIVE_PAIRING_CODES),满了按签发顺序淘汰最旧的。
     """
 
-    def __init__(self) -> None:
+    def __init__(self, max_active: int = MAX_ACTIVE_PAIRING_CODES) -> None:
         self._lock = threading.RLock()
-        self._codes: Dict[str, _CodeEntry] = {}
+        # OrderedDict:按插入顺序维护,便于满容量时 FIFO 淘汰最旧的一条
+        self._codes: "OrderedDict[str, _CodeEntry]" = OrderedDict()
+        self._max_active = max(1, int(max_active))
+        #: 因容量上限被挤掉的短码数(诊断用:证明淘汰真的在发生)
+        self.evicted = 0
 
     def _sweep_unlocked(self, now: float) -> None:
         for code in [c for c, e in self._codes.items() if e.expires_at <= now]:
             self._codes.pop(code, None)
+
+    def _enforce_cap_unlocked(self) -> None:
+        """先清过期,仍超容量则淘汰最旧的。
+
+        被淘汰的短码随即失效 —— 这是刻意的:短码是引导凭证,宁可让用户重新拉一次
+        名片,也不能让这张表无界增长。
+        """
+        while len(self._codes) > self._max_active:
+            self._codes.popitem(last=False)
+            self.evicted += 1
 
     def issue(self, link: str, *, ttl_s: float = DEFAULT_CODE_TTL_S, now: Optional[float] = None) -> Tuple[str, float]:
         t = now if now is not None else time.time()
@@ -211,6 +236,7 @@ class PairingCodeRegistry:
                 if code not in self._codes:
                     expires = t + float(ttl_s)
                     self._codes[code] = _CodeEntry(link=link, expires_at=expires)
+                    self._enforce_cap_unlocked()
                     return code, expires
             raise RuntimeError("配对短码生成失败:连续 64 次碰撞")
 
