@@ -107,6 +107,11 @@ from core.schemas.contracts import (  # noqa: E402  哨兵权威声明置顶是�
     WorkerShutdownModel,
 )
 
+# GALAXY_NATS_URL 是**带凭据的**:nats.connect(target, ...) 没有传任何 user/password/token
+# 参数,也就是说本仓库里 NATS 鉴权只能靠 nats://user:pass@host:4222 这种 URL 内嵌形式。
+# 所以任何把它原样打进日志的地方都是明文泄露 —— 一律先过 safe_endpoint 只留 host:port。
+from core.url_redaction import safe_endpoint  # noqa: E402
+
 # NATS import — may not be installed
 try:
     import nats
@@ -283,7 +288,7 @@ class NATSBus:
             if ts_url:
                 self._url = ts_url
                 self._auto_local = True
-                logger.info("NATSBus: auto-configured Tailscale URL: %s", ts_url)
+                logger.info("NATSBus: auto-configured Tailscale URL: %s", safe_endpoint(ts_url))
             elif _HAS_NATS:
                 self._url = "nats://localhost:4222"
                 self._auto_local = True
@@ -357,7 +362,7 @@ class NATSBus:
                 target = os.environ.get("GALAXY_NATS_URL", "nats://localhost:4222")
                 self._url = target
                 self._auto_local = False
-                logger.info("NATSBus: using embedded NATS server at %s", target)
+                logger.info("NATSBus: using embedded NATS server at %s", safe_endpoint(target))
             else:
                 logger.error("NATSBus: embedded NATS server failed to start")
                 return {"success": False, "error": "Embedded NATS server failed to start"}

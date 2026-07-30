@@ -44,7 +44,27 @@ _VOICE_MODULES = (
     "core/multimodal/system_audio_capture_service.py",
     "core/multimodal/system_audio_ingest.py",
     "core/multimodal/audio_ingest.py",
+    # 2026-07-30 补入。这份清单是**手工维护**的,而它一旦漏掉某个模块,那个模块里的
+    # 配置键就静默地不受本守卫保护 —— 正是这么漏掉了 5 个键:
+    #   GALAXY_MINICPM_SERVER_URL(B 档本地全模态 server 的地址,整条原生链路的入口)
+    #   GALAXY_NATIVE_MODAL_AUTO(切 B 档是否自动激活)
+    #   GALAXY_AMBIENT_ASR_SIZE / GALAXY_VIDEO_FPS_NATIVE / GALAXY_VIDEO_FPS_BRIDGE
+    # 它们两边都没登记,功能在跑但用户只能手改 .env —— 与本文件当初要防的那 21 个语音
+    # 开关是同一类缺口,只是换了个模块藏身。
+    "core/native_modal.py",
+    "core/modality_bridge.py",
+    "core/modality_capability.py",
 )
+
+#: 明确豁免:**不该出现在面板上**的键,连同理由。
+#:
+#: 与"暂时不登记"不同 —— 这些是部署环境标记,不是用户设置项,登上面板反而是错的。
+#: 写成显式集合而非静默跳过:任何人要加豁免都得在这里写下理由。
+_NOT_USER_SETTINGS = {
+    # 测试期标记。core/native_modal.py 用它(连同 PYTEST_CURRENT_TEST)禁止 save_tier('B')
+    # 的单测触发真实后台 pip 安装。由运行环境设置,不是用户在面板上调的东西。
+    "GALAXY_ENV",
+}
 
 #: 只匹配**真正的读取调用**,不匹配 docstring / 日志文案里对变量名的提及。
 #: 这些模块的 docstring 和 warning 文案里大量出现 "GALAXY_VOICE_ECHO_GUARD=0 复核"
@@ -114,7 +134,9 @@ class TestEveryVoiceSwitchIsRegisteredBackend:
 
         found = _extract_config_reads()
         missing = {
-            key: mods for key, mods in found.items() if key not in CONFIG_SCHEMA and key not in _PENDING_SECRET_ROUTING
+            key: mods
+            for key, mods in found.items()
+            if key not in CONFIG_SCHEMA and key not in _PENDING_SECRET_ROUTING and key not in _NOT_USER_SETTINGS
         }
         assert not missing, (
             "以下配置键在代码里被读取,但 core/routes/config.py::CONFIG_SCHEMA 里没有 —— "
@@ -125,6 +147,27 @@ class TestEveryVoiceSwitchIsRegisteredBackend:
     def test_no_exemptions_remain(self):
         """豁免集合必须是空的 —— 有豁免就说明还有键没接进面板。"""
         assert _PENDING_SECRET_ROUTING == frozenset()
+
+    def test_not_user_settings_entries_are_still_actually_read(self):
+        """豁免的键必须还在被代码读取 —— 否则它是过期条目,该删掉而不是留着遮蔽。
+
+        豁免集合最危险的失效方式不是"漏了谁",而是**留着一条早已无用的豁免**:后来某个
+        同名键真的需要上面板时,它会被静默放行。
+        """
+        found = _extract_config_reads()
+        stale = sorted(k for k in _NOT_USER_SETTINGS if k not in found)
+        assert not stale, f"豁免集合里有已经没人读的键,应删除: {stale}"
+
+    def test_not_user_settings_stays_small_and_justified(self):
+        """豁免不是垃圾桶。数量必须小,且每一条在源码里都有紧邻的理由说明。"""
+        from pathlib import Path as _P
+
+        assert len(_NOT_USER_SETTINGS) <= 3, "豁免项变多了 —— 先确认每一条都真的不该上面板"
+        src = _P(__file__).read_text(encoding="utf-8")
+        block = src.split("_NOT_USER_SETTINGS = {", 1)[1].split("}", 1)[0]
+        for key in _NOT_USER_SETTINGS:
+            assert key in block, f"{key} 不在豁免声明块里?"
+        assert "#" in block, "豁免块里没有任何理由说明"
 
 
 class TestRealtimeKeyRoutesToSecretStore:
@@ -196,7 +239,9 @@ class TestEveryVoiceSwitchIsRegisteredFrontend:
         found = _extract_config_reads()
         panel_keys = _extract_settings_tab_keys()
         missing = {
-            key: mods for key, mods in found.items() if key not in panel_keys and key not in _PENDING_SECRET_ROUTING
+            key: mods
+            for key, mods in found.items()
+            if key not in panel_keys and key not in _PENDING_SECRET_ROUTING and key not in _NOT_USER_SETTINGS
         }
         assert not missing, (
             "以下配置键在代码里被读取,但 SettingsTab.tsx 的 CONFIG_KEYS 里没列 —— "
@@ -227,6 +272,14 @@ class TestSchemaEntriesAreHonest:
             ("GALAXY_AEC_MU", "0.35"),
             ("GALAXY_AEC_MAX_DELAY_MS", "400.0"),
             ("GALAXY_AEC_DTD_MARGIN_DB", "6.0"),
+            # B 档本地全模态 server 与模态通路(2026-07-30 补登记)。默认值逐个对着
+            # 代码核过:native_modal._DEFAULT_SERVER_URL / _auto_activation_allowed()
+            # 的"默认允许" / modality_bridge 里的 "base"、4.0、1.0。
+            ("GALAXY_MINICPM_SERVER_URL", "http://localhost:32550"),
+            ("GALAXY_NATIVE_MODAL_AUTO", "true"),
+            ("GALAXY_AMBIENT_ASR_SIZE", "base"),
+            ("GALAXY_VIDEO_FPS_NATIVE", "4.0"),
+            ("GALAXY_VIDEO_FPS_BRIDGE", "1.0"),
         ],
     )
     def test_default_matches_the_code(self, key, expected):

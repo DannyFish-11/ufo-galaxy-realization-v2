@@ -677,6 +677,43 @@ CONFIG_SCHEMA: Dict[str, Dict[str, Any]] = {
         "category": "behavior",
         "description": "全双工语音的 WebSocket 地址(留空=按 provider 自动组装;走聚合器时才需手填)",
     },
+    # ── B 档本地全模态 server(core/native_modal.py)────────────────────────────
+    # 这三项此前**两边都没登记**:功能在跑,但用户只能手改 .env —— 与之前那 21 个语音
+    # 开关是同一类缺口。漏掉的原因是面板守卫测试的模块清单里没有 native_modal.py /
+    # modality_bridge.py(已一并补进去)。
+    "GALAXY_MINICPM_SERVER_URL": {
+        "default": "http://localhost:32550",
+        "type": "string",
+        "category": "behavior",
+        "description": (
+            "B 档 MiniCPM-o 官方 server 的地址。原生听/说与双工的本地 realtime 地址都由它推导;"
+            "可以不带 scheme(localhost:32550 也认)"
+        ),
+    },
+    "GALAXY_NATIVE_MODAL_AUTO": {
+        "default": "true",
+        "type": "boolean",
+        "category": "behavior",
+        "description": ("切到 B 档时自动激活原生后端(后台补装客户端依赖 + 探测 server)。" "关掉则只能手动激活"),
+    },
+    "GALAXY_AMBIENT_ASR_SIZE": {
+        "default": "base",
+        "type": "string",
+        "category": "behavior",
+        "description": "环境聆听转写用的 Whisper 模型规格(tiny/base/small/medium/large)",
+    },
+    "GALAXY_VIDEO_FPS_NATIVE": {
+        "default": "4.0",
+        "type": "string",
+        "category": "behavior",
+        "description": "原生视频通路的抽帧帧率(模型原生吃连续视频时用,默认 4 fps)",
+    },
+    "GALAXY_VIDEO_FPS_BRIDGE": {
+        "default": "1.0",
+        "type": "string",
+        "category": "behavior",
+        "description": "抽帧桥接通路的帧率(模型不吃连续视频、只能喂稀疏图片时用,默认 1 fps)",
+    },
     "GALAXY_NATIVE_REALTIME_PATH": {
         "default": "/v1/realtime",
         "type": "string",
