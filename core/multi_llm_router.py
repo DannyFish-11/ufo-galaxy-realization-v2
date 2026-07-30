@@ -19,6 +19,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 import httpx
 
 from core.credential_vault import PLACEHOLDER_PREFIXES
+from core.model_openness import treat_as_open_source as _treat_as_open_source
 
 logger = logging.getLogger("Galaxy.LLMRouter")
 
@@ -292,6 +293,17 @@ def reorder_open_source_first(provider_order: List[str]) -> List[str]:
 
     纯函数、无副作用，便于单测。未知提供商按"开源"处理（更符合本仓库以开源
     自托管/聚合为主的现状），不会被错误地降级到专有兜底之后。
+
+    刻意保持 **provider 粗粒度**，不改成按模型判
+    ------------------------------------------------
+    "按模型区分开闭源"这件事落在 ``_score()``（见 core/model_openness.py），不落在这里，
+    原因是本函数是**预排序**：调用它时具体型号还没选出来（型号由后面的
+    ``select_model_by_complexity()`` 按复杂度决定），此处没有可判的模型。真正的细判在
+    ``_score()`` 里做，那时型号已知。
+
+    因此别把这里"顺手改成"按模型判——那需要把型号解析器传进来，而它与本函数在
+    ``route()`` 里的调用位置（候选还是一串纯 provider 名）不匹配。两处对**未登记**
+    provider 的结论一致（都按开源），所以粗粒度预排序 + 细粒度打分不会互相打架。
     """
     open_src = [p for p in provider_order if p not in PROPRIETARY_PROVIDERS]
     proprietary = [p for p in provider_order if p in PROPRIETARY_PROVIDERS]
@@ -2538,9 +2550,25 @@ class MultiLLMRouter:
         max_cost = max((self.providers[n].cost_per_1k_output for n in candidates), default=0.0) or 1.0
         max_lat = max((self.providers[n].latency_avg_ms for n in candidates), default=0.0) or 1.0
 
+        # 实测表现(L3 bandit 的历史统计)。此前这条打分【完全没接】bandit——它只吃
+        # 手工维护的 PROVIDER_QUALITY_TIER,而 bandit 全仓只在 route() 里被调用一处。
+        # 于是 agent 团队选脑(agent_team → select_brain_for_role → 本函数)走的这条路,
+        # 拿不到任何真实成功率/延迟/成本反馈,全凭手写档位。所有者原话:「这玩意不应该
+        # 交给智能路由自己选吗」——接上之后,手写档位退化为【冷启动先验】,有实测数据时
+        # 由实测修正它。
+        _bstats = self._provider_stats(task_type)
+        _btotal = int(sum(s["calls"] for s in _bstats.values()))
+        if _btotal < 5:  # 与 _bandit_reorder 的 min_samples 同口径
+            _bstats = self._provider_stats(None)
+            _btotal = int(sum(s["calls"] for s in _bstats.values()))
+        try:
+            observed_weight = float(_os.environ.get("GALAXY_ROUTE_OBSERVED_WEIGHT", "1.0"))
+        except ValueError:
+            observed_weight = 1.0
+
         def _score(name: str) -> float:
             cfg = self.providers[name]
-            quality = _provider_quality_tier(name)  # 1..3
+            quality = _provider_quality_tier(name)  # 1..3(冷启动先验)
             # 任务相关度：在该任务偏好表里 = 更贴合
             task_fit = 1.0 if name in task_pref else 0.6
             # 主：质量 × (0.5+复杂度) —— 越难越看重质量
@@ -2550,8 +2578,30 @@ class MultiLLMRouter:
             # 条件：仅任务需要及时响应时计入延迟
             if needs_timely:
                 score -= latency_weight * (cfg.latency_avg_ms / max_lat)
+            # 实测修正:_bandit_score 的利用项是"成功率 − 延迟/成本/啰嗦惩罚",落在
+            # [0,1]；以 0.5 为中线,好于中线加分、差于中线减分。
+            # 没试过的 provider(+inf)【不参与】——这里与 route() 里的乐观初始化刻意不同:
+            # route() 只有顺序这一个信号,把没试过的排前面才有机会被探索;而本函数已有
+            # 静态档位当先验,再让 +inf 压过一切,等于让"从未试过"直接抢走一整个 agent
+            # 的活,一次坏选择的代价远高于少探索一次。
+            if _btotal >= 5:
+                b = self._bandit_score(name, _bstats, _btotal)
+                if b != float("inf"):
+                    score += observed_weight * (min(1.0, b) - 0.5)
             # 平局打破：开源/本地 + 显式本地偏好
-            if name in OPEN_SOURCE_PROVIDERS:
+            #
+            # 按【模型】判开源,不按 provider 猜(见 core/model_openness.py)。原先这里
+            # 是 `name in OPEN_SOURCE_PROVIDERS`,与 reorder_open_source_first() 对
+            # "未登记"的处理正好相反(那边注释明写未知按开源处理、这边不给加分),同一个
+            # provider 排序时算开源、打分时算非开源。改走同一个判定入口消除该矛盾;
+            # 顺带修正 moonshot 这种一家兼有两种权重状态的:kimi-k2.* 是开放权重,
+            # moonshot-v1-* 是闭源,而整家被登记成开源,后者一直在白拿这份加分。
+            if _treat_as_open_source(
+                name,
+                self.select_model_by_complexity(name, task_type, complexity_score),
+                open_source_providers=frozenset(OPEN_SOURCE_PROVIDERS),
+                proprietary_providers=frozenset(PROPRIETARY_PROVIDERS),
+            ):
                 score += 0.15
             if prefer_local and name in ("ollama", "hf_local"):
                 score += 0.5
