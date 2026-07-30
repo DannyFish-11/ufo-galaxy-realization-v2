@@ -202,6 +202,16 @@ class AudioIngestPipeline:
         self._running = True
         self._quality = SignalQuality.ok()
 
+        # AEC 要有参考信号才有意义,而参考信号来自系统播放声回环采集。在这里顺手确保
+        # 它起来,避免出现"AEC 装上了但没人喂参考"这种写了没接的状态 —— 那种状态下
+        # AEC 会永远走 reference_silent 旁通,且毫无声响。不可用时它自己会记 WARNING。
+        try:
+            from core.multimodal.system_audio_capture_service import ensure_started
+
+            ensure_started(self.config.sample_rate)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("回环采集自启跳过(麦克风链路不受影响): %s", exc)
+
         try:
             with sd.InputStream(
                 samplerate=self.config.sample_rate,
@@ -260,9 +270,29 @@ class AudioIngestPipeline:
             self._running = False
             logger.info("Audio ingest stopped")
 
+    def _cancel_echo(self, chunk: np.ndarray) -> np.ndarray:
+        """把扬声器正在放的内容从麦克风信号里减掉(AEC)。降级安全,永不抛出。
+
+        必须发生在 **VAD 之前**:AI 朗读期间麦克风采到的回声会让 VAD 一直判"有人在
+        说话",整段音频被攒起来送去转写,ASR 拿到的是"用户语音 + AI 语音"的混合波形。
+        在这里减掉,下游 VAD / 特征提取 / ASR 全部受益,不必各自处理。
+
+        参考信号由 ``system_audio_capture_service`` 的回环采集提供;没有参考信号时
+        AEC 自己会走 ``reference_silent`` 旁通、原样返回,所以这条路径在没有回环设备的
+        机器上完全无害。
+        """
+        try:
+            from core.multimodal.acoustic_echo_canceller import get_echo_canceller
+
+            return get_echo_canceller(self.config.sample_rate).process(chunk)
+        except Exception as exc:  # noqa: BLE001 — 上行通路绝不能因 AEC 断掉
+            logger.debug("AEC 跳过(本块原样通过): %s", exc)
+            return chunk
+
     async def _process_chunk(self, chunk: np.ndarray) -> None:
         """Update VAD + features and invoke registered callbacks."""
         now = time.monotonic()
+        chunk = self._cancel_echo(chunk)
         vad_state = self._vad.process_frame(chunk)
         state = extract_audio_features(chunk, vad_state, self._last_update_ts, self.config.sample_rate)
         self._last_update_ts = now

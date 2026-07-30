@@ -160,6 +160,37 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         except Exception as exc:  # noqa: BLE001
             return {**_internal_error("system_audio_probe", exc), "available": False}
 
+    @router.get("/audio/echo_cancellation")
+    async def echo_cancellation_status():
+        """回声消除与回环采集的实时状态。
+
+        这条接口存在的理由是**可观测性**:AEC 在没有参考信号时会静默走旁通 ——
+        不报错、不打日志、回声照旧。光看现象根本分不清"AEC 没装上"、"回环采集没起来"、
+        还是"装上了但还没收敛"。这里把三者分开摊出来:
+
+        - ``capture.running`` / ``capture.unavailable_reason`` —— 参考信号有没有源头;
+        - ``aec.blocks_bypassed`` + ``last_bypass_reason`` —— 有没有在旁通,为什么;
+        - ``aec.erle_db`` —— 真实抑制了多少 dB。这是唯一的硬指标,>6dB 才算在起作用。
+        """
+        out: Dict[str, Any] = {"success": True}
+        try:
+            from core.multimodal.acoustic_echo_canceller import get_echo_canceller
+
+            out["aec"] = get_echo_canceller().snapshot()
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("读取 AEC 状态失败: %s", exc)
+            out["aec"] = {"available": False}
+        try:
+            from core.multimodal.system_audio_capture_service import (
+                get_system_audio_capture,
+            )
+
+            out["capture"] = get_system_audio_capture().status()
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("读取回环采集状态失败: %s", exc)
+            out["capture"] = {"running": False}
+        return out
+
     @router.get("/status")
     async def perception_status():
         """返回桌面感知存储的新鲜度/计数诊断。"""
