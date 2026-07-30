@@ -185,7 +185,12 @@ const CATEGORIES: CategoryDef[] = [
   { key: 'slo', label: '服务水平', icon: '📊', advanced: true },
 ];
 
-// ── Config Key Registry (105 items) ─────────────────────────────────
+// ── Config Key Registry ─────────────────────────────────────────────
+//
+// 标题里原先写着「(105 items)」,而实际是 99 项 —— 又一个手写死的数字漂掉了。
+// 上面 CATEGORIES 那段注释已经为同类问题下过结论(每个分类的项数改为渲染时从
+// CONFIG_KEYS[cat.key].length 现算,不再留第二份要手工同步的数字),这里照同一个
+// 结论办:直接不写数字。要数就数数组。
 
 const CONFIG_KEYS: Record<string, string[]> = {
   behavior: [
@@ -193,6 +198,21 @@ const CONFIG_KEYS: Record<string, string[]> = {
     'GALAXY_SPEAK', 'GALAXY_TTS_ENGINE', 'GALAXY_ASR_ENGINE', 'GALAXY_VOICE_EAGERNESS',
     'GALAXY_VOICE_DELEGATE', 'GALAXY_VOICE_BACKCHANNEL', 'GALAXY_TTS_STREAMING', 'GALAXY_AMBIENT_LOOP',
     'GALAXY_NATIVE_AUDIO', 'GALAXY_AMBIENT_INTERVAL_S', 'GALAXY_AMBIENT_COOLDOWN_S',
+    // 边说边听:开关先行,细调参数排在后面。
+    //
+    // 这一组此前【只存在于后端代码里】——功能真在跑,但既没登记进
+    // core/routes/config.py::CONFIG_SCHEMA,也不在本注册表里。两边缺任何一边这一项
+    // 都不会出现在设置页:后端缺 → /api/config/all 不返回它,前端渲染成"未从后端加载";
+    // 前端缺 → 后端认识它但这里不列出,页面上根本没有它的位置。而且 set_config 会把
+    // 未登记的键当 unknown_keys 拒掉,所以前端硬塞也存不进去。
+    'GALAXY_AEC', 'GALAXY_VOICE_ECHO_GUARD', 'GALAXY_VOICE_BACKCHANNEL_TOLERANCE',
+    'GALAXY_SYSTEM_AUDIO_CAPTURE', 'GALAXY_SYSTEM_AUDIO_TO_PERCEPTION',
+    'GALAXY_VOICE_DUPLEX', 'GALAXY_VOICE_DUCKING',
+    'GALAXY_VOICE_DUCK_GAIN', 'GALAXY_VOICE_HOLD_S',
+    'GALAXY_VOICE_ECHO_SIM', 'GALAXY_VOICE_ECHO_TAIL_S',
+    'GALAXY_VOICE_ECHO_MIN_CHARS', 'GALAXY_VOICE_ECHO_MIN_BLOCK',
+    'GALAXY_AEC_TAIL_MS', 'GALAXY_AEC_MU', 'GALAXY_AEC_MAX_DELAY_MS', 'GALAXY_AEC_DTD_MARGIN_DB',
+    'GALAXY_REALTIME_PROVIDER', 'GALAXY_REALTIME_MODEL', 'GALAXY_REALTIME_VOICE', 'GALAXY_REALTIME_URL',
   ],
   ports: [
     'GATEWAY_PORT', 'UFO_NODE_HOST', 'NODE_92_URL', 'NODE_45_URL', 'NODE_33_URL',
@@ -263,6 +283,17 @@ function formatLabel(key: string): string {
 
 // ── Sub-components ──────────────────────────────────────────────────
 
+/** 推拉开关。
+ *
+ * 用的是 App.css 里那份 `.switch` / `.switch-knob` —— 与 MeshView 的 NATS Worker
+ * 开关【同一套类名、同一份样式】,而不是各自长得差不多的两份实现。此前
+ * SettingsTab.css 里另有一个 `.settings-toggle`(白滑块 + accent 底、无描边),
+ * 和 worker 那个(描边轨道 + 滑块变绿)并排放在同一个面板里能看出不一致。
+ * 统一到 worker 那份:轨道带描边、开启时轨道转绿且滑块也转绿。
+ *
+ * 轨道用 <button> 而非 <div>:原生按钮自带键盘激活与焦点管理,不必手写
+ * onKeyDown 去补 Enter/Space —— 少一处会和浏览器默认行为不一致的自造轮子。
+ */
 function ToggleSwitch({
   value,
   onChange,
@@ -271,19 +302,15 @@ function ToggleSwitch({
   onChange: (v: boolean) => void;
 }) {
   return (
-    <div
-      className={`settings-toggle ${value ? 'on' : ''}`}
+    <button
+      type="button"
+      className={`switch${value ? ' on' : ''}`}
       onClick={() => onChange(!value)}
       role="switch"
       aria-checked={value}
-      tabIndex={0}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          onChange(!value);
-        }
-      }}
-    />
+    >
+      <span className="switch-knob" />
+    </button>
   );
 }
 

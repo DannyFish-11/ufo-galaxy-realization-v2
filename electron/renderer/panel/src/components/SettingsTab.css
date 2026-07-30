@@ -207,32 +207,10 @@
 }
 
 /* ── 开关 ─────────────────────────────────────────────────── */
-.settings-toggle {
-  width: 40px;
-  height: 22px;
-  border-radius: var(--r-pill);
-  background: rgba(255, 255, 255, 0.12);
-  position: relative;
-  cursor: pointer;
-  transition: background var(--fast) var(--ease);
-}
-.settings-toggle::after {
-  content: '';
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 18px;
-  height: 18px;
-  border-radius: var(--r-pill);
-  background: #fff;
-  transition: transform var(--fast) var(--ease);
-}
-.settings-toggle.on {
-  background: var(--accent);
-}
-.settings-toggle.on::after {
-  transform: translateX(18px);
-}
+/* 这里原先有一份 `.settings-toggle`(40×22、白滑块、accent 底、无描边)。它和
+   App.css 里 worker 启停用的 `.switch`(38×22、描边轨道、滑块由灰转绿)是两份
+   长得差不多但并不一致的实现,并排出现在同一个面板里看得出来。已删除,
+   ToggleSwitch 改用 `.switch` / `.switch-knob` —— 全面板一种推拉开关。 */
 
 /* ── 底栏 ─────────────────────────────────────────────────── */
 .settings-footer {
