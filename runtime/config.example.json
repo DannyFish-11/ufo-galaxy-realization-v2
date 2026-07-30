@@ -9,7 +9,7 @@
     },
     "anthropic": {
       "enabled": false,
-      "model": "claude-opus-4-8-20250529"
+      "model": "claude-opus-5"
     },
     "gemini": {
       "enabled": false,
@@ -27,11 +27,11 @@
     },
     "qwen": {
       "enabled": false,
-      "model": "qwen3.7-max"
+      "model": "qwen3.8-max"
     },
     "zhipu": {
       "enabled": false,
-      "model": "glm-5.1"
+      "model": "glm-5.2"
     },
     "minimax": {
       "enabled": false,
