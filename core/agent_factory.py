@@ -17,6 +17,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional
 
+from core.atomic_json import atomic_write_json
+
 try:
     from core.monitoring import CircuitBreaker
 except ImportError:
@@ -1388,8 +1390,7 @@ class AgentFactory:
                     "last_active": agent.last_active,
                     "metrics": agent.metrics,
                 }
-            with open(self.STATE_FILE, "w", encoding="utf-8") as f:
-                json.dump(state, f, indent=2, ensure_ascii=False)
+            atomic_write_json(self.STATE_FILE, state, indent=2, ensure_ascii=False)
         except Exception as e:
             logger.warning(f"Agent 状态持久化失败: {e}")
 

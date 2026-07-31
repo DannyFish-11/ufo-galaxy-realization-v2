@@ -34,6 +34,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import uvicorn
+from core.atomic_json import atomic_write_json
 
 # ---------------------------------------------------------------------------
 # Port / CORS config (optional dependencies)
@@ -198,8 +199,7 @@ class ConfigManagerService:
         """保存配置到文件"""
         os.makedirs(os.path.dirname(os.path.abspath(file_path)), exist_ok=True)
         if fmt == "json":
-            with open(file_path, "w", encoding="utf-8") as f:
-                json.dump(self._config_data, f, indent=2, ensure_ascii=False)
+            atomic_write_json(file_path, self._config_data, indent=2, ensure_ascii=False)
         elif fmt == "yaml":
             if yaml is None:
                 raise RuntimeError("PyYAML 未安装")

@@ -43,6 +43,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from core.atomic_json import atomic_write_json
+
 logger = logging.getLogger("Galaxy.ModelCatalog")
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -332,12 +334,10 @@ def _read_state() -> Dict[str, str]:
 
 def _write_state(tier: str, main_brain: str) -> None:
     """写【一条】统一记录,并派生导出运行时 env(GALAXY_MODEL_TIER / OLLAMA_MODEL)。"""
-    import json
-
     rec = {"tier": (tier or "").strip().upper(), "main_brain": (main_brain or "").strip()}
     try:
         _STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-        _STATE_FILE.write_text(json.dumps(rec, ensure_ascii=False), encoding="utf-8")
+        atomic_write_json(_STATE_FILE, rec, indent=None, ensure_ascii=False)
     except Exception as exc:  # noqa: BLE001
         logger.debug("保存模型状态失败(非致命): %s", exc)
     if rec["tier"]:

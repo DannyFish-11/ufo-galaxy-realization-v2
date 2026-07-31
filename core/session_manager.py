@@ -27,6 +27,8 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
+from core.atomic_json import atomic_write_json
+
 logger = logging.getLogger("Galaxy.SessionManager")
 
 # 持久化路径
@@ -879,8 +881,7 @@ class SessionManager:
                 "user_active_session": self._user_active_session,
                 "session_aliases": self._session_aliases,
             }
-            with open(_SESSION_FILE, "w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
+            atomic_write_json(_SESSION_FILE, data, ensure_ascii=False, indent=2)
         except Exception as e:
             logger.debug(f"会话持久化失败: {e}")
 

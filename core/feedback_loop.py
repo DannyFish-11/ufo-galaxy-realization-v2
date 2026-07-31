@@ -38,6 +38,8 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from core.atomic_json import atomic_write_json
+
 logger = logging.getLogger("Galaxy.FeedbackLoop")
 
 DEFAULT_FEEDBACK_PATH = Path.home() / ".galaxy" / "feedback_history.json"
@@ -152,8 +154,7 @@ class FeedbackLoop:
                 "history": [e.to_dict() for e in self._history[-self.MAX_HISTORY :]],
                 "action_quality": {k: self._quality_to_dict(v) for k, v in self._action_quality.items()},
             }
-            with open(self._path, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2, ensure_ascii=False)
+            atomic_write_json(self._path, data, indent=2, ensure_ascii=False)
         except Exception as exc:
             logger.debug("Feedback save failed: %s", exc)
 

@@ -33,6 +33,8 @@ from enum import Enum
 from fnmatch import fnmatch
 from typing import Any, Dict, List, Optional
 
+from core.atomic_json import atomic_write_json
+
 logger = logging.getLogger("Galaxy.AutonomyPolicy")
 
 
@@ -116,8 +118,7 @@ class GrantStore:
 
     def _save_always(self) -> None:
         try:
-            with open(self._path, "w", encoding="utf-8") as f:
-                json.dump({"always": self._always}, f, ensure_ascii=False, indent=2)
+            atomic_write_json(self._path, {"always": self._always}, ensure_ascii=False, indent=2)
         except Exception as exc:  # noqa: BLE001
             logger.warning("授权记录持久化失败(session 内仍生效): %s", exc)
 

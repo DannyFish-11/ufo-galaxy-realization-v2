@@ -20,6 +20,8 @@ from typing import Any, Dict, List
 
 import httpx
 
+from core.atomic_json import atomic_write_json
+
 logger = logging.getLogger("APIManager")
 
 
@@ -356,8 +358,7 @@ class APIManager:
         """保存配置"""
         try:
             os.makedirs(os.path.dirname(self.config_path), exist_ok=True)
-            with open(self.config_path, "w", encoding="utf-8") as f:
-                json.dump(self.config, f, indent=2, ensure_ascii=False)
+            atomic_write_json(self.config_path, self.config, indent=2, ensure_ascii=False)
             logger.info(f"配置已保存: {self.config_path}")
         except Exception as e:
             logger.error(f"保存配置失败: {e}")

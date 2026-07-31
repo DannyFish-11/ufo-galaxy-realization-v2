@@ -18,6 +18,7 @@ from typing import Dict, List, Any, Optional
 from dataclasses import dataclass, asdict
 from collections import defaultdict
 import statistics
+from core.atomic_json import atomic_write_json
 
 @dataclass
 class UserAction:
@@ -222,8 +223,7 @@ class SelfLearningSystem:
             "optimized_parameters": self.optimized_parameters
         }
         
-        with open(self.persist_file, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
+        atomic_write_json(self.persist_file, data, indent=2, ensure_ascii=False)
     
     def _load_data(self):
         """从文件加载数据"""
@@ -259,8 +259,7 @@ class SelfLearningSystem:
             "suggestions": self.get_personalized_suggestions()
         }
         
-        with open(output_file, "w", encoding="utf-8") as f:
-            json.dump(report, f, indent=2, ensure_ascii=False)
+        atomic_write_json(output_file, report, indent=2, ensure_ascii=False)
         
         print(f"✅ 学习报告已导出到: {output_file}")
 

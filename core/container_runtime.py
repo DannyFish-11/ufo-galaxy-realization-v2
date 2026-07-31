@@ -29,6 +29,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from core.atomic_json import atomic_write_json
+
 logger = logging.getLogger("Galaxy.ContainerRuntime")
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -123,7 +125,8 @@ def save_choice(rt: str, source: str = "unknown") -> None:
             "source": source,
             "selected_at": datetime.now(timezone.utc).isoformat(),
         }
-        _CHOICE_FILE.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        # indent=None 保持与原 json.dumps 默认一致(紧凑单行),落盘内容不变。
+        atomic_write_json(_CHOICE_FILE, payload, indent=None, ensure_ascii=False)
     except Exception as exc:  # noqa: BLE001
         # 本进程仍然可用(下面照样写 os.environ),但"让后续启动无需再问"这个
         # 承诺已经不成立了 —— 用户下次启动会被重新问一遍却不知道为什么。

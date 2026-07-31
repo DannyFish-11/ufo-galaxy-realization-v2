@@ -39,6 +39,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from core.atomic_json import atomic_write_json
+
 logger = logging.getLogger("Galaxy.HFModelManager")
 
 # PR-MODEL-DL: background download tracking --------------------------------
@@ -166,8 +168,7 @@ class ModelRegistry:
                     "tags": entry.tags,
                     "description": entry.description,
                 }
-            with open(self.registry_file, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2, ensure_ascii=False)
+            atomic_write_json(self.registry_file, data, indent=2, ensure_ascii=False)
         except Exception as exc:
             logger.warning("Failed to save model registry: %s", exc)
 

@@ -23,6 +23,8 @@ from fastapi import APIRouter, Header, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from core.atomic_json import atomic_write_json
+
 logger = logging.getLogger("Galaxy.MarketAPI")
 
 router = APIRouter()
@@ -50,8 +52,7 @@ def _load_published_skills() -> List[Dict[str, Any]]:
 def _save_published_skills(skills: List[Dict[str, Any]]):
     """持久化已发布技能到文件"""
     os.makedirs(_MARKET_STORE_DIR, exist_ok=True)
-    with open(_MARKET_STORE_FILE, "w", encoding="utf-8") as f:
-        json.dump(skills, f, ensure_ascii=False, indent=2)
+    atomic_write_json(_MARKET_STORE_FILE, skills, ensure_ascii=False, indent=2)
 
 
 # 运行时缓存

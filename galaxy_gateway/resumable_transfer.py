@@ -23,6 +23,7 @@ from typing import Dict, List, Any, Optional, Callable
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
+from core.atomic_json import atomic_write_json
 
 # Default state directory uses app-private path under system temp to avoid hijacking
 DEFAULT_STATE_DIR = os.path.join(tempfile.gettempdir(), 'galaxy_transfer_states')
@@ -238,8 +239,7 @@ class ResumableTransferManager:
         """保存会话状态"""
         state_file = os.path.join(self.state_dir, f"{session.session_id}.json")
         
-        with open(state_file, 'w', encoding='utf-8') as f:
-            json.dump(session.to_dict(), f, indent=2)
+        atomic_write_json(state_file, session.to_dict(), indent=2)
     
     def delete_session(self, session_id: str):
         """删除会话"""

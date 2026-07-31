@@ -36,6 +36,8 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from core.atomic_json import atomic_write_json
+
 logger = logging.getLogger("Galaxy.IdentityMemory")
 
 DEFAULT_IDENTITY_PATH = Path.home() / ".galaxy" / "agent_identity.json"
@@ -148,8 +150,7 @@ class AgentIdentityMemory:
         """Save identity to disk."""
         try:
             self._path.parent.mkdir(parents=True, exist_ok=True)
-            with open(self._path, "w", encoding="utf-8") as f:
-                json.dump(self._identity.to_dict(), f, indent=2, ensure_ascii=False)
+            atomic_write_json(self._path, self._identity.to_dict(), indent=2, ensure_ascii=False)
         except Exception as exc:
             logger.debug("Identity save failed: %s", exc)
 

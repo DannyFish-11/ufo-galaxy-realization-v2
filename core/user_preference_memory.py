@@ -30,6 +30,8 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from core.atomic_json import atomic_write_json
+
 logger = logging.getLogger("Galaxy.UserPref")
 
 DEFAULT_PREF_PATH = Path.home() / ".galaxy" / "user_preferences.json"
@@ -124,8 +126,7 @@ class UserPreferenceMemory:
     def _save(self) -> None:
         try:
             self._path.parent.mkdir(parents=True, exist_ok=True)
-            with open(self._path, "w", encoding="utf-8") as f:
-                json.dump(self._prefs.to_dict(), f, indent=2, ensure_ascii=False)
+            atomic_write_json(self._path, self._prefs.to_dict(), indent=2, ensure_ascii=False)
         except Exception as exc:
             logger.debug("User pref save failed: %s", exc)
 

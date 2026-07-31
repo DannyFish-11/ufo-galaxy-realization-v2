@@ -33,6 +33,7 @@ from nodes.common.cors_config import get_cors_origins
 # =============================================================================
 
 from core.port_config import get_service_port, get_node_port
+from core.atomic_json import atomic_write_json
 
 NODE_ID = os.getenv("NODE_ID", "69")
 NODE_NAME = os.getenv("NODE_NAME", "BackupRestore")
@@ -416,8 +417,7 @@ class BackupService:
                 with gzip.open(backup_path, "wt", encoding="utf-8") as f:
                     json.dump(backup_data, f)
             else:
-                with open(backup_path, "w", encoding='utf-8') as f:
-                    json.dump(backup_data, f)
+                atomic_write_json(backup_path, backup_data)
             
             # Calculate checksum and size
             checksum = self._calculate_checksum(backup_path)

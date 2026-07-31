@@ -25,6 +25,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 import uvicorn
+from core.atomic_json import atomic_write_json
 
 # ---------------------------------------------------------------------------
 # Port / CORS config (optional dependencies)
@@ -136,8 +137,7 @@ class KnowledgeBaseService:
                 d = dataclasses.asdict(entry)
                 d["status"] = d["status"].value
                 data[eid] = d
-            with open(self.config.kb_file_path, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2, ensure_ascii=False)
+            atomic_write_json(self.config.kb_file_path, data, indent=2, ensure_ascii=False)
         except Exception as e:
             logger.error(f"保存知识库失败: {e}")
 

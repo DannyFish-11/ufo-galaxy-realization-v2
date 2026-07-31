@@ -19,7 +19,6 @@
 """
 
 import asyncio
-import json
 import logging
 from dataclasses import dataclass
 from datetime import datetime
@@ -28,6 +27,8 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 import httpx
+
+from core.atomic_json import atomic_write_json
 
 # RUF006: retain fire-and-forget create_task results so the event loop's weak
 # reference can't let them be garbage-collected mid-execution.
@@ -468,8 +469,7 @@ class ConnectionManager:
                 "connections": [conn.to_dict() for conn in self.connections.values()],
             }
 
-            with open(self.state_file, "w", encoding="utf-8") as f:
-                json.dump(state, f, indent=2, ensure_ascii=False)
+            atomic_write_json(self.state_file, state, indent=2, ensure_ascii=False)
 
             logger.debug("连接状态已保存")
 

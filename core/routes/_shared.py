@@ -40,6 +40,8 @@ from typing import TYPE_CHECKING, Any, Dict, List, Set
 
 from fastapi import WebSocket
 
+from core.atomic_json import atomic_write_json
+
 if TYPE_CHECKING:  # 仅类型检查用,运行时不导入(避免与 UCM 循环导入)
     from core.unified.connection_manager import UnifiedConnectionManager
 
@@ -73,8 +75,7 @@ def _save_registered_devices(devices: Dict[str, Dict[str, Any]]) -> None:
     """Persist device registry to disk (best-effort, non-blocking intent)."""
     try:
         os.makedirs(_DEVICE_REGISTRY_FILE.parent, exist_ok=True)
-        with open(_DEVICE_REGISTRY_FILE, "w", encoding="utf-8") as f:
-            json.dump(devices, f, ensure_ascii=False, indent=2, default=str)
+        atomic_write_json(_DEVICE_REGISTRY_FILE, devices, ensure_ascii=False, indent=2, default=str)
     except Exception as e:
         logger.warning(f"Failed to save device registry: {e}")
 

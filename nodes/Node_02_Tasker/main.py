@@ -19,6 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import heapq
 from nodes.common.cors_config import get_cors_origins
+from core.atomic_json import atomic_write_json
 
 # RUF006: retain fire-and-forget create_task results so the event loop's weak
 # reference can't let them be garbage-collected mid-execution.
@@ -91,8 +92,7 @@ class TaskManager:
         """持久化任务"""
         persist_file = os.getenv("TASKER_PERSIST_FILE", "/tmp/tasker_tasks.json")
         try:
-            with open(persist_file, 'w', encoding='utf-8') as f:
-                json.dump({"tasks": [t.dict() for t in self.tasks.values()]}, f, default=str)
+            atomic_write_json(persist_file, {'tasks': [t.dict() for t in self.tasks.values()]}, default=str)
         except Exception as e:
             print(f"Failed to persist tasks: {e}")
 
