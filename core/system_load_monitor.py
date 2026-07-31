@@ -170,6 +170,10 @@ class SystemLoadMonitor:
         self._running = False
         self._monitor_task: Optional[asyncio.Task] = None
 
+        # /proc 网络统计的告警去重:这个采样函数每 10 秒调一次,持续性故障
+        # 若每次都打日志会把其它信息刷没。首次 WARNING,之后 DEBUG。
+        self._proc_net_warned = False
+
     def get_cpu_stats(self) -> CPUStats:
         """获取 CPU 统计"""
         stats = CPUStats()
@@ -394,11 +398,31 @@ class SystemLoadMonitor:
             # 统计连接数
             with open("/proc/net/tcp", "r", encoding="utf-8") as f:
                 stats.connections_count = len(f.readlines()) - 1
-            with open("/proc/net/tcp6", "r", encoding="utf-8") as f:
-                stats.connections_count += len(f.readlines()) - 1
+
+            # IPv6 是**可选**的:内核关掉 IPv6(容器里很常见)时 /proc/net/tcp6
+            # 根本不存在。原来它和上面几个读在同一个 try 里,一缺就跳去 except
+            # 打一条 ERROR —— 而这个函数每 10 秒被采样一次,于是一条无害的配置
+            # 差异会**永久刷屏**,真正的错误反而被淹掉。实测容器里 3 分钟刷了 13 条。
+            #
+            # IPv6 不存在不是错误,单独 try 掉即可;IPv4 的计数照常有效。
+            try:
+                with open("/proc/net/tcp6", "r", encoding="utf-8") as f:
+                    stats.connections_count += len(f.readlines()) - 1
+            except FileNotFoundError:
+                pass  # 内核未启用 IPv6 —— 正常,不记日志
 
         except Exception as e:
-            logger.error(f"Error reading network stats from /proc: {e}")
+            # 真正意外的失败仍要报,但**只报一次**:这是个每 10 秒调用一次的
+            # 采样函数,持续性故障(权限不足、/proc 未挂载)照原样打会把日志刷爆,
+            # 让人看不见别的东西。首次 WARNING 讲清楚,之后降到 DEBUG。
+            if not self._proc_net_warned:
+                self._proc_net_warned = True
+                logger.warning(
+                    "读取 /proc 网络统计失败(仅首次告警,后续降为 DEBUG;" "网络指标将缺失,不影响其它功能): %s",
+                    e,
+                )
+            else:
+                logger.debug("Error reading network stats from /proc: %s", e)
 
         return stats
 

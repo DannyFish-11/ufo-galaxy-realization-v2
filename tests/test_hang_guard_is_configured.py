@@ -89,19 +89,56 @@ class TestTimeoutIsConfigured:
         assert raw, "没有 faulthandler_timeout —— per-test 超时一旦失灵就再没有任何线索"
         assert int(raw) >= 60, f"faulthandler_timeout={raw}s 太紧,会在正常慢用例上刷无用堆栈"
 
-    def test_ci_test_job_has_a_hard_ceiling(self):
+    def test_ci_test_jobs_all_have_a_hard_ceiling(self):
         """作业级硬上限:挂死时至少得到一个明确的「作业超时」。
 
         没有它,挂死的作业会一直耗到 runner 被回收(实测有 64 分钟的),GitHub 只丢下一句
         "The runner has received a shutdown signal" —— 既没有失败清单,也没有任何线索。
+
+        **这条原先只查名为 ``test`` 的那一个作业。** 后来测试被分片(见
+        ``scripts/ci_test_shard.py``:一个进程扛 4 万多条用例会把 runner 压垮),
+        真正跑测试的变成了 ``test-shard``,``test`` 退化为汇总。原判据于是**查错了对象** ——
+        它盯着一个只 echo 一句话的作业,而放过了真正会挂死的那个。
+
+        所以改成:**凡是测试相关的作业,一个都不许无界**。这比原来严格 ——
+        原来只管一个,现在两个都管,将来再加分片作业也自动纳入。
         """
         import yaml
 
         ci = yaml.safe_load((REPO_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
-        job = ci["jobs"]["test"]
-        assert "timeout-minutes" in job, "test 作业没有 timeout-minutes,挂死时会耗到 runner 被回收"
-        # 正常全量约 20 分钟;上限要留足余量,但不能大到失去意义。
-        assert 30 <= int(job["timeout-minutes"]) <= 90, f"timeout-minutes={job['timeout-minutes']} 不在合理区间"
+        jobs = ci["jobs"]
+
+        for name in ("test", "test-shard"):
+            assert name in jobs, f"ci.yml 里找不到作业 {name!r} —— 守卫失效,先修守卫"
+            job = jobs[name]
+            assert "timeout-minutes" in job, f"{name} 作业没有 timeout-minutes,挂死时会耗到 runner 被回收"
+
+        # 真正跑测试的那个:分片后单片实测 4 分 52 秒(11085 passed)。
+        # 下限 15 分钟 ≈ 3 倍余量,足以吸收 runner 慢的那些天;
+        # 上限 60 分钟 —— 再大就失去"及时止损"的意义,又变回耗到被回收。
+        shard_ceiling = int(jobs["test-shard"]["timeout-minutes"])
+        assert 15 <= shard_ceiling <= 60, f"test-shard 的 timeout-minutes={shard_ceiling} 不在合理区间"
+
+        # 汇总作业只 echo 一句,给它一个小上限即可;大了等于没有。
+        summary_ceiling = int(jobs["test"]["timeout-minutes"])
+        assert summary_ceiling <= 15, f"汇总作业 timeout-minutes={summary_ceiling} 过大,失去止损意义"
+
+    def test_the_sharded_job_is_the_one_that_runs_pytest(self):
+        """守卫自检:确认"真正跑测试的是 test-shard"这个前提仍然成立。
+
+        如果哪天有人把 pytest 挪回 ``test``、或改了作业名,上面那条会盯着错误的
+        对象却**依然通过** —— 那正是它这次出问题的方式。这里把前提本身钉住。
+        """
+        import yaml
+
+        ci = yaml.safe_load((REPO_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
+        jobs = ci["jobs"]
+
+        def runs_pytest(job) -> bool:
+            return any("pytest" in str(step.get("run", "")) for step in job.get("steps", []))
+
+        assert runs_pytest(jobs["test-shard"]), "test-shard 不再跑 pytest —— 分片结构变了,守卫需要跟着改"
+        assert not runs_pytest(jobs["test"]), "test 变回直接跑 pytest 了 —— 那它也需要一个跑测试量级的上限"
 
     def test_not_hidden_in_addopts(self, ini):
         """必须是 ini 选项,不能塞进 addopts。

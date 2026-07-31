@@ -133,6 +133,10 @@ chroma/
 runtime/config.json
 runtime/secrets.env
 runtime/task_allocation_truth.json
+# 主脑选择等本机持久化状态（unified_launcher 启动时写)。漏了这条的后果是:
+# 任何人跑一次 main.py,工作区就多一个未跟踪文件 —— 与上面那句"runtime/ 里
+# 只提交 *.example.* 模板"的既定意图矛盾。实跑一次启动才发现的。
+runtime/model_state.json
 data/runtime/delegated_runtime_execution_tracker.json
 learning_data.db
 audit/wiring_report_*.json

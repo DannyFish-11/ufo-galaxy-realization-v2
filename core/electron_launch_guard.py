@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 
 _LOCK_FILENAME = ".electron.pid"
 _logger = logging.getLogger(__name__)
@@ -245,6 +246,69 @@ def electron_package_intact(electron_dir: str) -> bool:
         return bool(rel) and os.path.isfile(os.path.join(pkg, "dist", rel))
     except OSError:
         return False
+
+
+#: npm 暂存目录的命名形态:``.<包名>-<随机后缀>``,例如
+#: ``.decompress-response-HCi3ZryO``。npm 安装时先把包重命名到这种临时目录再落位。
+_NPM_STAGING_RE = re.compile(r"^\.[^/\\]+-[A-Za-z0-9_]{6,}$")
+
+#: npm 自己的点开头**正常**条目,绝不能删。
+_NPM_KEEP_DOTTED = frozenset({".bin", ".cache", ".package-lock.json", ".modules.yaml", ".yarn-integrity"})
+
+
+def purge_npm_staging_dirs(node_modules_dir: str) -> int:
+    """清掉 npm 中断留下的暂存目录,返回删除个数。
+
+    真机复现:上一次 ``npm install`` 被打断后,``node_modules`` 里会残留形如
+    ``.decompress-response-HCi3ZryO`` 的暂存目录。下一次 install 想把同名包
+    重命名到**同一个**暂存名时,目标已存在且非空,于是::
+
+        npm error ENOTEMPTY: directory not empty, rename
+        '.../node_modules/decompress-response' ->
+        '.../node_modules/.decompress-response-HCi3ZryO'
+
+    关键在于**重跑 npm install 修不好它** —— 每次都会撞上同一个残留目录、
+    报同一个错。而启动器的"依赖不完整就自动修复安装"逻辑正是靠重跑 install,
+    于是陷入"检测到不完整 → 重装 → ENOTEMPTY → 仍不完整"的死循环,
+    桌面覆盖层永远起不来。必须先把残留清掉,install 才有可能成功。
+
+    只删**匹配暂存命名形态**的目录,并显式保留 ``.bin`` 等 npm 正常条目 ——
+    宁可漏删一个残留(下次再清),也不能误删 ``.bin`` 把整个安装弄坏。
+    """
+    import shutil as _shutil
+
+    if not os.path.isdir(node_modules_dir):
+        return 0
+
+    removed = 0
+    for name in os.listdir(node_modules_dir):
+        if not name.startswith("."):
+            continue
+        if name in _NPM_KEEP_DOTTED:
+            continue
+        if not _NPM_STAGING_RE.match(name):
+            continue
+        target = os.path.join(node_modules_dir, name)
+        if not os.path.isdir(target):
+            continue
+        try:
+            _shutil.rmtree(target)
+            removed += 1
+            _log(f"已清理 npm 残留暂存目录: {name}")
+        except OSError as exc:
+            _log(f"清理 npm 残留暂存目录失败(跳过): {name} — {exc}")
+    return removed
+
+
+def is_npm_stale_dir_error(output: str) -> bool:
+    """npm 的失败输出是否属于"残留目录挡路"这一类。
+
+    命中时正确的动作是**清残留后重试**,而不是像网络类失败那样换镜像 ——
+    换多少个镜像都绕不过本地文件系统里那个挡路的目录。
+    """
+    if not output:
+        return False
+    return any(k in output for k in ("ENOTEMPTY", "EEXIST", "directory not empty"))
 
 
 def repair_electron_binary(electron_dir: str) -> bool:
