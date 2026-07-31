@@ -59,7 +59,17 @@ This file retains the service orchestration surface:
 # 文档字符串移回文件头部(可执行序言之前),恢复其 docstring 身份。
 # PR-WIN-ENCODING: Inherit UTF-8 from main.py; defensive re-config if run standalone.
 import sys
-if sys.platform == "win32":
+
+
+def _configure_windows_console() -> None:
+    """Windows 控制台 UTF-8。正常路径由 main.py 先做好(同进程),这里只在本
+    文件被单独当脚本运行时兜底 —— 见下方 ``__name__`` 守卫。
+
+    以前这段是无条件模块级代码,于是 ``import unified_launcher`` 会重写调用方
+    的 sys.stdout/sys.stderr 并改写进程环境变量。import 不该有这种越权副作用。
+    """
+    if sys.platform != "win32":
+        return
     try:
         import io
         if hasattr(sys.stdout, "buffer"):
@@ -82,23 +92,41 @@ if sys.platform == "win32":
 # schema 键写成 KEY=(空值),空字符串进入 os.environ 会把代码默认值顶掉(真机
 # 复现:OLLAMA_URL="" 导致拿空 URL ping Ollama、明明在跑却判"未响应")。
 # 不覆盖已存在的真实 shell/系统环境变量。
-try:
-    from dotenv import dotenv_values as _dotenv_values
-    import os as _os
-    _root = _os.path.dirname(_os.path.abspath(__file__))
-    # 与 .env 同一套纪律加载【密钥库】runtime/secrets.env:设置面板把 API Key
-    # 这类 secret 写进它(而非 .env,见 core/config_store.py),但此前重启后
-    # 没有任何代码把它注回 os.environ —— 直接读 os.getenv 的路径(含面板的
-    # "已配置"角标 _is_configured)全都看不到,表现为"Key 存了,重启后面板
-    # 又显示未配置"。加载序 = 先到先得:secrets.env 先加载(面板保存的最新
-    # 真值优先);shell/系统显式导出的环境变量始终最高(两者都不覆盖已存在键)。
-    for _env_file in ("runtime/secrets.env", ".env"):
-        for _k, _v in (_dotenv_values(_os.path.join(_root, _env_file)) or {}).items():
-            # 值以 # 开头 = dotenv 把「空值+行内注释」整段当值(毒值),视同未配置
-            if _v and not _v.lstrip().startswith("#") and _k not in _os.environ:
-                _os.environ[_k] = _v
-except Exception:
-    pass
+def _load_env_files_into_environ() -> None:
+    """与 main.py::load_env_files_into_environ 同一套纪律的防御性加载。
+
+    **只在本文件被当作脚本直接运行时调用**(见下方 ``__name__`` 守卫)。正常
+    路径是 main.py 先加载好 .env 再 ``from unified_launcher import GalaxyUnified``
+    (同进程共享 os.environ),此时这里什么都不用做。
+
+    以前这段是无条件的模块级代码,于是"import 一下 unified_launcher"就把本机
+    .env 灌满整个进程 —— 与 main.py 那处同一个坑:测试里任何一次 import 都会
+    污染后续全部用例(MEMORY_DB_PATH 指向容器路径、各家 API_KEY 凭空出现),
+    而 CI 上没有 .env 所以永远看不到,只砸本机开发者。上面那段注释写的本来就
+    是"若本文件被单独运行,防御性地自己再加载一遍",代码只是没照着写。
+
+    加载纪律三条(都是真机复现过的坑):只加载【非空】值(空字符串会顶掉代码
+    默认值,真机症状:OLLAMA_URL="" → 拿空 URL ping Ollama、明明在跑却判
+    "未响应");值以 # 开头视同未配置(dotenv 会把「空值+行内注释」整段当值);
+    不覆盖已存在键(shell 显式导出最高,secrets.env 先于 .env 先到先得)。
+    """
+    try:
+        from dotenv import dotenv_values as _dotenv_values
+        import os as _os
+
+        _root = _os.path.dirname(_os.path.abspath(__file__))
+        for _env_file in ("runtime/secrets.env", ".env"):
+            for _k, _v in (_dotenv_values(_os.path.join(_root, _env_file)) or {}).items():
+                if _v and not _v.lstrip().startswith("#") and _k not in _os.environ:
+                    _os.environ[_k] = _v
+    except Exception:
+        pass
+
+
+# ── 单独运行时的进程级配置(正常路径由 main.py 完成,同进程共享) ──────────
+if __name__ == "__main__":
+    _configure_windows_console()
+    _load_env_files_into_environ()
 
 import os
 import sys

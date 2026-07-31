@@ -11,35 +11,63 @@ import os
 # os.environ(而不是全部经过 core.unified_config 的间接路径)——统统读不到，
 # 表现为"存了，重启后又没了"。这里在进程最早期加载 .env，且 override=False
 # (不覆盖已存在的真实 shell/系统环境变量，尊重用户显式导出的优先级更高)。
-try:
-    from dotenv import dotenv_values
-    # 密钥库注水:设置面板把 API Key 等 secret 写进 runtime/secrets.env(而非
-    # .env,见 core/config_store.py),此前重启后无人把它注回 os.environ ——
-    # 直读 os.getenv 的路径(含面板"已配置"角标)统统看不到,表现为"Key 存了,
-    # 重启后又显示未配置"。与 .env 同一套纪律先行加载(非空、非 # 毒值、不
-    # 覆盖已存在键 —— shell 显式导出仍最高;面板保存的最新真值先到先得)。
-    _secrets_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "runtime", "secrets.env")
-    for _k, _v in (dotenv_values(_secrets_path) or {}).items():
-        if _v and not _v.lstrip().startswith("#") and _k not in os.environ:
-            os.environ[_k] = _v
-    _env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
-    # 关键:不能用 load_dotenv() 整个灌进去——设置面板自动生成的 .env 会把
-    # 【全部】schema 键写成 KEY=(空值)。空字符串一旦进了 os.environ,就会把
-    # 代码里的默认值顶掉:os.environ.get("OLLAMA_URL", "http://localhost:11434")
-    # 在 OLLAMA_URL="" 存在时返回的是 ""，不是默认值!真机复现过的一整串症状
-    # 都源于此——LocalBrainManager 拿着空 URL ping Ollama(报"Request URL is
-    # missing an 'http://' or 'https://' protocol"、Ollama 明明在跑却判"服务
-    # 未响应/模型未就绪")、Redis "must specify scheme"、NATS "invalid
-    # hostname"。这里改为只加载【非空】值,空值视同未配置,让代码默认值生效。
-    # 另一类毒值:python-dotenv 会把「KEY=   # 注释」这种【空值+行内注释】整段
-    # 注释当成值(实测 1.2.2:OLLAMA_URL= # e.g. http://... → '# e.g. http://...'),
-    # 经 normalize 补协议头后变成 http://#... 的怪 URL,骗过全部 startswith 检查。
-    # 值以 # 开头一律视同未配置(合法配置值不可能以 # 开头)。
-    for _k, _v in (dotenv_values(_env_path) or {}).items():
-        if _v and not _v.lstrip().startswith("#") and _k not in os.environ:
-            os.environ[_k] = _v
-except Exception:
-    pass
+
+
+def load_env_files_into_environ(root: str = "") -> None:
+    """把 runtime/secrets.env 与 .env 的【非空、非毒值】键注入 os.environ。
+
+    只在 main.py **作为脚本运行**时调用(见下方 ``__name__`` 守卫),不在
+    ``import main`` 时执行 —— 这是刻意的:
+
+    进程级 ``os.environ`` 是全局可变状态。一旦"import 这个模块"本身就带来
+    全局副作用,任何 ``import main`` 的地方(测试里有 4 处只为读一个常量)
+    都会把开发者本机 .env 里的真实值灌满整个进程,并且**再也退不回去**
+    ——后续所有代码看到的都是被污染的环境。实测后果:跟着 INSTALL.md 走完
+    (bootstrap 会生成 .env)再跑 pytest,会多出 8 条与本次改动毫无关系的
+    失败(MEMORY_DB_PATH 指向容器路径导致建库失败 2 条;各家 API_KEY 凭空
+    出现导致"缺 key 时不应入候选池"类断言失败 6 条),且顺序依赖、难复现。
+    CI 上没有 .env 所以永远看不到 —— 只砸本机开发者。
+
+    加载纪律(三条,都是真机复现过的坑,不能放松):
+    1. **只加载非空值**。设置面板自动生成的 .env 会把【全部】schema 键写成
+       ``KEY=``(空值)。空字符串一旦进 os.environ 就会顶掉代码默认值:
+       ``os.environ.get("OLLAMA_URL", "http://localhost:11434")`` 在
+       ``OLLAMA_URL=""`` 存在时返回 ``""`` 而不是默认值。真机症状一整串都源于
+       此 —— LocalBrainManager 拿空 URL ping Ollama(报 "Request URL is missing
+       an 'http://' or 'https://' protocol"、Ollama 明明在跑却判"服务未响应/
+       模型未就绪")、Redis "must specify scheme"、NATS "invalid hostname"。
+       所以这里不能用 ``load_dotenv()`` 整个灌进去。
+    2. **值以 # 开头一律视同未配置**。python-dotenv 会把「KEY=   # 注释」这种
+       【空值 + 行内注释】整段注释当成值(实测 1.2.2:``OLLAMA_URL= # e.g.
+       http://...`` → ``'# e.g. http://...'``),经 normalize 补协议头后变成
+       ``http://#...`` 的怪 URL,骗过全部 startswith 检查。合法配置值不可能
+       以 # 开头。
+    3. **不覆盖已存在的键**。shell/系统显式导出的优先级最高;secrets.env 先于
+       .env 加载(面板保存的最新真值先到先得)。
+
+    密钥库(runtime/secrets.env)必须一起加载:设置面板把 API Key 这类 secret
+    写进它而非 .env(见 core/config_store.py),此前重启后无人把它注回
+    os.environ —— 直读 os.getenv 的路径(含面板"已配置"角标)统统看不到,
+    表现为"Key 存了,重启后又显示未配置"。
+
+    ``root`` 只为测试留的注入点(默认= main.py 所在目录,即仓库根)。生产路径
+    永远用默认值 —— 没有它就只能靠"在仓库根真造一个 .env"来验证这三条纪律,
+    那会踩到开发者自己的 .env。
+    """
+    try:
+        from dotenv import dotenv_values
+
+        _root = root or os.path.dirname(os.path.abspath(__file__))
+        for _rel in ("runtime/secrets.env", ".env"):
+            for _k, _v in (dotenv_values(os.path.join(_root, _rel)) or {}).items():
+                if _v and not _v.lstrip().startswith("#") and _k not in os.environ:
+                    os.environ[_k] = _v
+    except Exception:
+        pass
+
+
+# 调用点见下方「进程级配置的唯一调用点」—— 与 Windows 控制台、HF 端点合在
+# 一个 __main__ 守卫里,仍在其余 import 之前。
 
 # ── 第三方库的已知噪音告警降噪 ─────────────────────────────────────────────
 # 真机启动日志里有几条来自【第三方依赖】的 UserWarning,与 Galaxy 自身无关、
@@ -55,7 +83,14 @@ try:
 except Exception:
     pass
 
-if sys.platform == "win32":
+def configure_windows_console() -> None:
+    """Windows 控制台 UTF-8 + 进程优先级。
+
+    与 .env 加载同理,只在**作为脚本运行**时调用:被 import 时重写调用方的
+    sys.stdout/sys.stderr、抬高整个进程的调度优先级,都是越权行为。
+    """
+    if sys.platform != "win32":
+        return
     # Set console to UTF-8 mode (Python 3.7+)
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -82,22 +117,42 @@ if sys.platform == "win32":
     except Exception:
         pass
 
-# ── HuggingFace 下载:必须在任何 HF 库(transformers/sentence_transformers/
-#    huggingface_hub/faster_whisper)被 import 之前设置,否则 HF_ENDPOINT 被库缓存,
-#    镜像不生效 → 退回 huggingface.co,在国内被墙 → 每个文件 5 次重试 ×指数退避 →
-#    嵌入器/Whisper 加载能卡 4 分钟,把 /chat/stream 拖到 270s(实测)。
-# 这里在进程最早期把端点指向国内镜像并把超时/重试压到最小,让"连不上"秒失败降级,
-# 而不是卡几分钟。可用 GALAXY_HF_MIRROR=0 关闭镜像。
-try:
-    os.environ.setdefault("HF_ENDPOINT", os.environ.get("GALAXY_HF_ENDPOINT", "https://hf-mirror.com"))
-    if os.environ.get("GALAXY_HF_MIRROR", "1").strip().lower() in ("0", "false", "no", "off"):
-        os.environ.pop("HF_ENDPOINT", None)
-    # 快速失败:单次 etag/连接超时压到 3s,避免默认 10s×5 次重试的长时间阻塞。
-    os.environ.setdefault("HF_HUB_ETAG_TIMEOUT", "3")
-    os.environ.setdefault("HF_HUB_DOWNLOAD_TIMEOUT", "10")
-    os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
-except Exception:
-    pass
+
+def configure_huggingface_endpoint() -> None:
+    """把 HF 端点指向国内镜像,并把超时/重试压到最小。
+
+    **必须在任何 HF 库(transformers/sentence_transformers/huggingface_hub/
+    faster_whisper)被 import 之前设置**,否则 HF_ENDPOINT 被库缓存、镜像不生效
+    → 退回 huggingface.co,在国内被墙 → 每个文件 5 次重试 × 指数退避 → 嵌入器/
+    Whisper 加载能卡 4 分钟,把 /chat/stream 拖到 270s(实测)。所以调用点仍在
+    本文件最顶端、其余 import 之前 —— 只是加了 ``__main__`` 守卫。
+
+    守卫的理由与 .env 那处相同:``import main`` 不该把**整个进程**的 HuggingFace
+    端点悄悄改掉。测试进程里尤其不该 —— 一次无关的 import 就让后续所有用例对着
+    一个镜像站解析下载地址,而且退不回去。
+
+    可用 GALAXY_HF_MIRROR=0 关闭镜像。
+    """
+    try:
+        os.environ.setdefault("HF_ENDPOINT", os.environ.get("GALAXY_HF_ENDPOINT", "https://hf-mirror.com"))
+        if os.environ.get("GALAXY_HF_MIRROR", "1").strip().lower() in ("0", "false", "no", "off"):
+            os.environ.pop("HF_ENDPOINT", None)
+        # 快速失败:单次 etag/连接超时压到 3s,避免默认 10s×5 次重试的长时间阻塞。
+        os.environ.setdefault("HF_HUB_ETAG_TIMEOUT", "3")
+        os.environ.setdefault("HF_HUB_DOWNLOAD_TIMEOUT", "10")
+        os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
+    except Exception:
+        pass
+
+
+# ── 进程级配置的唯一调用点 ────────────────────────────────────────────────
+# 三件事都必须发生在其余 import 之前(.env 要早于任何读 os.environ 的代码,
+# HF 端点要早于任何 HF 库),所以调用点只能待在文件顶端。守卫保证它们只在
+# `python main.py` 时发生 —— `import main` 不产生任何全局副作用。
+if __name__ == "__main__":
+    load_env_files_into_environ()
+    configure_windows_console()
+    configure_huggingface_endpoint()
 
 """
 Galaxy-Nexus 星枢 — System Orchestrator
