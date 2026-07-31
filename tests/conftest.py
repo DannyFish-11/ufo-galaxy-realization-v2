@@ -6,8 +6,11 @@ Shared fixtures and configuration for all tests.
 """
 
 import asyncio
+import atexit
 import os
+import shutil
 import sys
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -24,6 +27,39 @@ os.environ.setdefault("PYTHONPATH", str(PROJECT_ROOT))
 # Auth is secure-by-default (GALAXY_AUTH_ENABLED=true): provide a test token so
 # gateway lifespan auth validation passes (DEV_MODE no longer bypasses auth).
 os.environ.setdefault("GALAXY_API_TOKEN", "galaxy-test-token")
+
+
+# ---------------------------------------------------------------------------
+# 把"会落盘的运行时数据"整体引到临时目录
+# ---------------------------------------------------------------------------
+# 有两条持久化路径会在跑测试时改写【被 git 跟踪的文件】：
+#
+#   1. CapabilityManager.register_capability() → config/capabilities.json
+#      默认目录基于 __file__ 算,是仓库绝对路径,换 CWD 躲不掉。
+#   2. KnowledgeBaseSystem.add_knowledge()    → knowledge_db/knowledge_entries.json
+#      默认目录是 CWD 相对的 "./knowledge_db",而测试从仓库根启动。
+#
+# 后果不只是 git status 变脏：capabilities.json 会被测试期间注册的能力覆盖,
+# 谁先跑就写谁的,本地跑完一次全套再 commit 就可能把测试产物提交进去
+# （knowledge_db/knowledge_entries.json 就是这么进的仓库）。
+#
+# 这里在【模块级】设置,而不是用 fixture：CapabilityManager 是进程单例,config_dir
+# 在第一次构造时就固定了,而那次构造可能发生在任何一个测试的 import 期间 —— 等到
+# fixture 跑已经晚了。
+_RUNTIME_TMP = tempfile.mkdtemp(prefix="galaxy-test-runtime-")
+atexit.register(shutil.rmtree, _RUNTIME_TMP, ignore_errors=True)
+
+# 能力配置：把仓库里的真实 capabilities.json 拷进临时目录,这样 _load_capabilities()
+# 读到的内容与生产完全一致,只有【写】被引开。不拷的话能力表会从空开始,行为就变了。
+_TMP_CONFIG_DIR = Path(_RUNTIME_TMP) / "config"
+_TMP_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+_REAL_CAPABILITIES = PROJECT_ROOT / "config" / "capabilities.json"
+if _REAL_CAPABILITIES.is_file():
+    shutil.copy2(_REAL_CAPABILITIES, _TMP_CONFIG_DIR / "capabilities.json")
+
+# 这两个是硬设而非 setdefault：隔离不能被外部环境里一个残留的变量悄悄取消掉。
+os.environ["GALAXY_CONFIG_DIR"] = str(_TMP_CONFIG_DIR)
+os.environ["GALAXY_KNOWLEDGE_DIR"] = str(Path(_RUNTIME_TMP) / "knowledge_db")
 
 
 @pytest.fixture(scope="session")

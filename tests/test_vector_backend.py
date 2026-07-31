@@ -165,7 +165,7 @@ def test_get_shared_backend_returns_same_instance():
 # ---------------------------------------------------------------------------
 
 
-def test_knowledge_base_system_local_mode(monkeypatch):
+def test_knowledge_base_system_local_mode(monkeypatch, tmp_path):
     """Node_72 KnowledgeBaseSystem should work in local mode without vector libs."""
     monkeypatch.setenv("KB_VECTOR_BACKEND", "local")
     # Reset shared backend singleton
@@ -175,7 +175,9 @@ def test_knowledge_base_system_local_mode(monkeypatch):
 
     from nodes.Node_72_KnowledgeBase.knowledge_base_system import KnowledgeBaseSystem
 
-    kb = KnowledgeBaseSystem()
+    # 显式给独立的持久化目录：不给的话两个 kb 测试共用同一个目录,search() 会捞到
+    # 对方留下的条目,断言就依赖跑的顺序了。
+    kb = KnowledgeBaseSystem(persist_directory=str(tmp_path / "kb"))
     entry_id = kb.add_knowledge("Python is a programming language.", {"category": "tech"})
     assert entry_id
 
@@ -189,7 +191,7 @@ def test_knowledge_base_system_local_mode(monkeypatch):
     vb_module._shared_backend = None  # cleanup
 
 
-def test_knowledge_base_system_delete(monkeypatch):
+def test_knowledge_base_system_delete(monkeypatch, tmp_path):
     monkeypatch.setenv("KB_VECTOR_BACKEND", "local")
     import core.vector_backend as vb_module
 
@@ -197,7 +199,7 @@ def test_knowledge_base_system_delete(monkeypatch):
 
     from nodes.Node_72_KnowledgeBase.knowledge_base_system import KnowledgeBaseSystem
 
-    kb = KnowledgeBaseSystem()
+    kb = KnowledgeBaseSystem(persist_directory=str(tmp_path / "kb"))
     eid = kb.add_knowledge("delete me", {})
     assert kb.delete_knowledge(eid) is True
     assert kb.delete_knowledge(eid) is False  # second delete returns False
