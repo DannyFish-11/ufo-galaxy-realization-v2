@@ -146,6 +146,11 @@ class DispatchResult:
     # Optional pass-through fields from legacy paths
     needs_confirmation: bool = False
 
+    #: 触发确认的风险等级(dangerous / critical)。只在 needs_confirmation 时有意义。
+    #: 带上它,是为了让"问人"那一步能如实告诉用户这是多危险的操作 ——
+    #: 否则只能把整句错误信息当风险等级塞进提示里,用户看到的会是一团乱码。
+    risk_level: str = ""
+
     # PR-530: spine-observability correlation fields.
     # ``trace_id`` links this dispatch result back to the originating request
     # that entered OpenClawd (same value as OpenClawd._current_trace_id /
@@ -272,7 +277,31 @@ class CanonicalDispatcher:
         # --- permission check ------------------------------------------------
         perm_result = self._check_permission(tool_name, _session_id, _device_id)
         if perm_result is not None:
-            return perm_result
+            if not perm_result.needs_confirmation:
+                return perm_result
+            # 「需要用户确认」以前是一堵墙:返回这句话之后,全仓没有任何机制
+            # 能够真正取得这个确认,于是 DANGEROUS/CRITICAL 级工具永远执行不了。
+            # 现在把它接到既有的 HITL 通路上 —— 问一下手腕上的那个人。
+            # 一律 fail closed:只有明确点了"批准"才继续。
+            from core.interaction.high_risk_confirmation import confirm_high_risk_tool
+
+            confirmation = await confirm_high_risk_tool(
+                tool_name=tool_name,
+                risk_level=perm_result.risk_level or "unknown",
+                session_id=_session_id,
+                device_id=_device_id,
+            )
+            if not confirmation.approved:
+                return DispatchResult(
+                    success=False,
+                    error=f"操作 [{tool_name}] 未获用户确认:{confirmation.reason}",
+                    needs_confirmation=True,
+                    tool_name=tool_name,
+                    layer=layer,
+                    arguments=arguments,
+                    trace_id=_trace_id,
+                )
+            logger.info("[AUDIT] 高风险工具经用户确认后放行: %s (session=%s)", tool_name, _session_id)
 
         # --- emit pre-dispatch observability event ---------------------------
         self._emit_invoked_event(tool_name, _trace_id, _session_id)
@@ -353,6 +382,7 @@ class CanonicalDispatcher:
                         f"操作 [{tool_name}] 需要用户确认" f"（风险等级: {getattr(check, 'risk_level', 'unknown')}）"
                     ),
                     needs_confirmation=True,
+                    risk_level=str(getattr(check, "risk_level", "") or "unknown"),
                     tool_name=tool_name,
                     layer=CapabilityLayer.classify(tool_name),
                 )
