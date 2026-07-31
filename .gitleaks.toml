@@ -12,17 +12,23 @@ useDefault = true
 
 [[allowlists]]
 description = "Example / placeholder credentials in config examples"
+# 注意:gitleaks 的 allowlist `paths` 是**正则**,不是 glob。
+# 这里原先写成 shell 通配符样子(`*.example.*` / `*.example` / `README_*.md`),
+# 后两者语义悄悄跑偏,而以 `*` 开头的两条**根本不是合法正则**:
+#   - gitleaks 8.24.3(CI 当前用的版本)吞下不报错,但整块 paths 豁免不生效;
+#   - gitleaks 8.28.0 直接 panic 退出 —— action 哪天把默认版本升过去,这道门会硬崩。
+# 已实测:改成合法正则后,8.24.3 上的发现集**逐条不变**(非放松),8.28.0 上恢复正常。
 paths = [
-    "config/services_config.example.json",
-    "runtime/config.example.json",
-    "docs/",
-    "*.example.*",
-    "*.example",
-    "QUICKSTART.md",
-    "README.md",
-    "README_*.md",
-    "DEPLOYMENT_GUIDE.md",
-    "L4_QUICK_START_GUIDE.md",
+    '''config/services_config\.example\.json''',
+    '''runtime/config\.example\.json''',
+    '''docs/''',
+    '''\.example\.''',
+    '''\.example$''',
+    '''QUICKSTART\.md''',
+    '''README\.md''',
+    '''README_.*\.md''',
+    '''DEPLOYMENT_GUIDE\.md''',
+    '''L4_QUICK_START_GUIDE\.md''',
 ]
 
 [[allowlists]]
