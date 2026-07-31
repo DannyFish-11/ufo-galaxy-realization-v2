@@ -72,7 +72,11 @@ def _get_backend():
 class KnowledgeBaseSystem:
     """知识库系统（Node 72）"""
 
-    def __init__(self, persist_directory: str = "./knowledge_db"):
+    def __init__(self, persist_directory: Optional[str] = None):
+        # 解析优先级：显式参数 > GALAXY_KNOWLEDGE_DIR 环境变量 > ./knowledge_db。
+        # 默认值是【CWD 相对】的,而测试从仓库根目录启动,于是 add_knowledge() 的落盘
+        # 会写进仓库里的 knowledge_db/。环境变量这一层让测试把它引到临时目录。
+        persist_directory = persist_directory or os.environ.get("GALAXY_KNOWLEDGE_DIR") or "./knowledge_db"
         self.persist_directory = persist_directory
         os.makedirs(persist_directory, exist_ok=True)
         self._persist_file = os.path.join(persist_directory, "knowledge_entries.json")

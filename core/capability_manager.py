@@ -58,6 +58,7 @@ OpenClaw 风格的能力注册、发现和调用系统（兼容层）。
 import asyncio
 import json
 import logging
+import os
 from dataclasses import asdict, dataclass, field, fields
 from datetime import datetime
 from enum import Enum
@@ -171,7 +172,13 @@ class CapabilityManager:
         if self._initialized:
             return
 
-        self.config_dir = config_dir or Path(__file__).parent.parent / "config"
+        # config_dir 解析优先级：显式参数 > GALAXY_CONFIG_DIR 环境变量 > 仓库内 config/。
+        # 环境变量这一层是给测试用的：register_capability() 会同步落盘,而默认路径是
+        # 【仓库绝对路径】(基于 __file__ 而非 CWD),所以跑测试必然改写被 git 跟踪的
+        # config/capabilities.json —— 换工作目录也躲不掉。测试在 conftest 里把这个变量
+        # 指向临时目录(并预先拷入真实的 capabilities.json,保证读到的内容不变)。
+        _env_config_dir = os.environ.get("GALAXY_CONFIG_DIR")
+        self.config_dir = config_dir or Path(_env_config_dir or Path(__file__).parent.parent / "config")
         self.config_file = self.config_dir / "capabilities.json"
 
         # 能力索引：capability_name -> Capability
