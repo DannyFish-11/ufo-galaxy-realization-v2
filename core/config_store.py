@@ -47,6 +47,7 @@ import threading
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+from core.atomic_json import atomic_write_json
 from core.config_schema import (
     SECRET_KEYS,
     ConfigDefaults,
@@ -228,9 +229,9 @@ class ConfigStore:
         with self._lock:
             self._config_path.parent.mkdir(parents=True, exist_ok=True)
             try:
-                with open(self._config_path, "w", encoding="utf-8") as fh:
-                    json.dump(data, fh, indent=2, ensure_ascii=False)
-                    fh.write("\n")
+                # 原子写。trailing_newline 保留原本 fh.write("\n") 的行为,
+                # 使落盘内容字节级不变 —— 改造持久化不该顺手改文件内容。
+                atomic_write_json(self._config_path, data, trailing_newline=True)
                 logger.info("runtime/config.json written (%d top-level keys)", len(data))
             except OSError as exc:
                 raise ConfigStoreError(f"Cannot write runtime/config.json: {exc}") from exc

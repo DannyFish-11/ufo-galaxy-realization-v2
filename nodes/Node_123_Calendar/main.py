@@ -12,6 +12,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from nodes.common.cors_config import get_cors_origins
+from core.atomic_json import atomic_write_json
 
 app = FastAPI(title="Node 123 - Calendar", version="2.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=get_cors_origins(), allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
@@ -64,8 +65,7 @@ class CalendarManager:
     def _save_events(self):
         """保存事件"""
         try:
-            with open(CALENDAR_FILE, 'w', encoding='utf-8') as f:
-                json.dump({"events": [e.dict() for e in self.events.values()]}, f, default=str)
+            atomic_write_json(CALENDAR_FILE, {'events': [e.dict() for e in self.events.values()]}, default=str)
         except Exception as e:
             print(f"Failed to save events: {e}")
 

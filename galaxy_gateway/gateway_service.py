@@ -35,15 +35,46 @@ from fastapi import APIRouter
 # APIRouter 供主网关 app.py 挂载（Phase 5 集成）
 router = APIRouter(prefix="/api/v5", tags=["gateway-v5"])
 
-# 独立运行时的 FastAPI 应用（保留向后兼容）
-app = FastAPI(title="Galaxy Gateway v5.0", version="5.0.0")
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=get_cors_origins(),
-    allow_credentials=True,
-    allow_methods=get_cors_methods(),
-    allow_headers=get_cors_headers()
-)
+# 独立运行时的 FastAPI 应用（保留向后兼容）——**惰性构造**。
+#
+# 生产里被服务的只有 galaxy_gateway.app:app(见 Dockerfile.gateway 的 CMD),
+# 而本模块唯一的生产消费者 galaxy_gateway/app.py 只取上面的 ``router``。
+# 这个独立 app 因此在正常运行中从不被使用。
+#
+# 它在模块级构造时的真实代价不是 FastAPI() 本身(实测 0.1ms),而是
+# ``add_middleware`` 的 **参数在导入时就被求值**:get_cors_origins() 会一路走到
+# port_config.instance(),把 130 个节点 + 25 个基础服务的端口配置整个加载一遍 ——
+# 实测 267ms,全部花在一个没人服务的对象上。
+#
+# 用 PEP 562 的模块级 __getattr__ 改成首次访问时才建:``uvicorn
+# galaxy_gateway.gateway_service:app`` 这种用法照旧可用(uvicorn 取模块属性时会
+# 触发构造),而只 import router 的路径一分钱不花。
+def _build_standalone_app() -> FastAPI:
+    """构造独立运行用的 app。只有真的要单独跑本服务时才会被调用。"""
+    standalone = FastAPI(title="Galaxy Gateway v5.0", version="5.0.0")
+    standalone.add_middleware(
+        CORSMiddleware,
+        allow_origins=get_cors_origins(),
+        allow_credentials=True,
+        allow_methods=get_cors_methods(),
+        allow_headers=get_cors_headers(),
+    )
+    # 路由注册在模块底部定义(那里才拿得到各 _impl 函数),此处按名字晚绑定调用。
+    _register_standalone_routes(standalone)
+    return standalone
+
+
+_standalone_app: Optional[FastAPI] = None
+
+
+def __getattr__(name: str):
+    """PEP 562:让 ``gateway_service.app`` 在首次访问时才真正构造。"""
+    if name == "app":
+        global _standalone_app
+        if _standalone_app is None:
+            _standalone_app = _build_standalone_app()
+        return _standalone_app
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 # ============================================================================
 # 配置
@@ -111,11 +142,31 @@ class NodeClient:
 
     def __init__(self, base_url: str):
         self.base_url = base_url
-        self.client = httpx.AsyncClient(timeout=60.0)
+        self._client: Optional[httpx.AsyncClient] = None
+
+    @property
+    def client(self) -> httpx.AsyncClient:
+        """惰性构造底层 httpx 客户端。
+
+        原先是在 ``__init__`` 里直接建的,而模块底部会在 **import 时**构造 4 个
+        NodeClient 单例 —— 于是每次 import 本模块都要建 4 个连接池。实测这一项占
+        ``gateway_service`` 导入耗时的 388ms(4 × ~97ms),而网关进程在真正发出
+        第一个节点请求之前,这些池子一个都用不上。
+
+        单例本身是对的(避免每次健康检查新建客户端),要改的只是**建的时机**。
+        """
+        if self._client is None:
+            self._client = httpx.AsyncClient(timeout=60.0)
+        return self._client
 
     async def aclose(self) -> None:
-        """H1 fixed: close the underlying HTTP connection pool."""
-        await self.client.aclose()
+        """H1 fixed: close the underlying HTTP connection pool.
+
+        走 ``_client`` 而不是 ``client`` 属性:从没用过的客户端不该为了关闭而被建出来。
+        """
+        if self._client is not None:
+            await self._client.aclose()
+            self._client = None
 
     async def post(self, endpoint: str, data: Dict[str, Any]) -> Dict[str, Any]:
         """POST 请求"""
@@ -162,7 +213,9 @@ _all_clients = [memory_client, code_client, debug_client, knowledge_client]
 async def _close_all_clients():
     for c in _all_clients:
         try:
-            await c.client.aclose()
+            # 用 c.aclose() 而非 c.client.aclose():后者会触发惰性属性,
+            # 把一个从未使用过的连接池**建出来只为了关掉它**。
+            await c.aclose()
         except Exception:
             pass
 
@@ -416,14 +469,22 @@ async def _stats_impl() -> Dict[str, Any]:
 
 
 # ── 注册到独立 app（原有路径，向后兼容）──
-app.get("/health")(_health_impl)
-app.post("/learn_from_experience")(_learn_impl)
-app.post("/generate_code")(_generate_code_impl)
-app.post("/debug_code")(_debug_code_impl)
-app.post("/optimize_code")(_optimize_code_impl)
-app.post("/reason")(_reason_impl)
-app.post("/autonomous_programming")(_auto_program_impl)
-app.get("/stats")(_stats_impl)
+#
+# 这几行原本在模块级直接执行。它们必须挪进 _register_standalone_routes():
+# 只要模块体里出现一次 `app`,PEP 562 的 __getattr__ 就会被触发、把独立 app 立刻
+# 建出来 —— 惰性化会当场失效,等于白改。
+#
+# 注意这里注册的是**根路径**(/health、/stats…),与 router 的 /api/v5 前缀是
+# 两个不同的路径面,所以不能用 include_router(router) 代替这一段。
+def _register_standalone_routes(standalone: FastAPI) -> None:
+    standalone.get("/health")(_health_impl)
+    standalone.post("/learn_from_experience")(_learn_impl)
+    standalone.post("/generate_code")(_generate_code_impl)
+    standalone.post("/debug_code")(_debug_code_impl)
+    standalone.post("/optimize_code")(_optimize_code_impl)
+    standalone.post("/reason")(_reason_impl)
+    standalone.post("/autonomous_programming")(_auto_program_impl)
+    standalone.get("/stats")(_stats_impl)
 
 # ── 注册到 APIRouter（供主网关挂载，路径带 /api/v5 前缀）──
 router.get("/health")(_health_impl)
@@ -441,4 +502,8 @@ router.get("/stats")(_stats_impl)
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=get_service_port("state_machine"))
+
+    # 注意:这里必须显式调用 _build_standalone_app(),不能写裸 `app`。
+    # PEP 562 的模块级 __getattr__ 只在【从模块外部】取属性时触发;模块自身代码里的
+    # 裸名字走的是 globals(),取不到就直接 NameError。flake8 的 F821 正是这么抓到的。
+    uvicorn.run(_build_standalone_app(), host="0.0.0.0", port=get_service_port("state_machine"))

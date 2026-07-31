@@ -35,6 +35,8 @@ from dataclasses import dataclass
 from fnmatch import fnmatch
 from typing import Any, Dict, List, Optional
 
+from core.atomic_json import atomic_write_json
+
 logger = logging.getLogger("Galaxy.CapabilityToken")
 
 _TOKEN_PREFIX = "v1"
@@ -135,8 +137,7 @@ def _load_revoked() -> set:
 
 def _save_revoked() -> None:
     try:
-        with open(_revoked_path(), "w", encoding="utf-8") as f:
-            json.dump({"revoked": sorted(_load_revoked())}, f, ensure_ascii=False, indent=2)
+        atomic_write_json(_revoked_path(), {"revoked": sorted(_load_revoked())}, ensure_ascii=False, indent=2)
     except Exception as exc:  # noqa: BLE001
         logger.warning("撤销表持久化失败: %s", exc)
 

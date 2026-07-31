@@ -65,6 +65,8 @@ import uuid
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
+from core.atomic_json import atomic_write_json
+
 logger = logging.getLogger("Galaxy.DeviceRegistry")
 
 # ---------------------------------------------------------------------------
@@ -964,8 +966,8 @@ class DeviceRegistry:
                 "saved_at": time.time(),
             }
 
-            with open(self.storage_path, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2, ensure_ascii=False)
+            # 原子写:设备注册表损坏会让所有已配对设备失联。
+            atomic_write_json(self.storage_path, data)
         except Exception as e:
             logger.error("DeviceRegistry._save: failed — %s", e)
 

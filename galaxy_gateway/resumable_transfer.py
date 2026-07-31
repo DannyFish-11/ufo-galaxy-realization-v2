@@ -23,6 +23,7 @@ from typing import Dict, List, Any, Optional, Callable
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
+from core.atomic_json import atomic_write_json
 
 # Default state directory uses app-private path under system temp to avoid hijacking
 DEFAULT_STATE_DIR = os.path.join(tempfile.gettempdir(), 'galaxy_transfer_states')
@@ -150,7 +151,27 @@ class ResumableTransferManager:
         
         # 确保状态目录存在
         os.makedirs(state_dir, exist_ok=True)
-    
+
+    def _state_path(self, session_id: str) -> str:
+        """由 session_id 推出状态文件路径，并强制它落在 state_dir 之内。
+
+        session_id 是**调用方传进来的**（``create_session(session_id=...)``），
+        而原先三处都直接 ``os.path.join(self.state_dir, f"{session_id}.json")`` ——
+        传一个 ``../../etc/x`` 就能写到目录外。目前仓库里没有把 HTTP 请求参数接到
+        这个类的生产调用方，所以不是当下可远程触达的漏洞；但"能不能被利用"取决于
+        将来谁来接它，而不该取决于运气。
+
+        这里做的是结果校验而非字符过滤：先 realpath 解析（吃掉 ``..``、符号链接），
+        再确认解析结果仍在 state_dir 之内。黑名单式地过滤 ``..`` 挡不住符号链接和
+        编码变体，结果校验能。
+        """
+        root = os.path.realpath(self.state_dir)
+        candidate = os.path.realpath(os.path.join(root, f"{session_id}.json"))
+        if candidate != root and not candidate.startswith(root + os.sep):
+            raise ValueError(f"非法的 session_id（会逃出状态目录）: {session_id!r}")
+        return candidate
+
+
     # ========================================================================
     # 会话管理
     # ========================================================================
@@ -221,7 +242,7 @@ class ResumableTransferManager:
         if session_id in self.sessions:
             return self.sessions[session_id]
         
-        state_file = os.path.join(self.state_dir, f"{session_id}.json")
+        state_file = self._state_path(session_id)
         
         if not os.path.exists(state_file):
             return None
@@ -236,17 +257,16 @@ class ResumableTransferManager:
     
     def _save_session(self, session: TransferSession):
         """保存会话状态"""
-        state_file = os.path.join(self.state_dir, f"{session.session_id}.json")
+        state_file = self._state_path(session.session_id)
         
-        with open(state_file, 'w', encoding='utf-8') as f:
-            json.dump(session.to_dict(), f, indent=2)
+        atomic_write_json(state_file, session.to_dict(), indent=2)
     
     def delete_session(self, session_id: str):
         """删除会话"""
         if session_id in self.sessions:
             del self.sessions[session_id]
         
-        state_file = os.path.join(self.state_dir, f"{session_id}.json")
+        state_file = self._state_path(session_id)
         if os.path.exists(state_file):
             os.remove(state_file)
     

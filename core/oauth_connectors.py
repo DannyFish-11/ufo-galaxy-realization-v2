@@ -32,6 +32,8 @@ import secrets as _secrets
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from core.atomic_json import atomic_write_json
+
 logger = logging.getLogger("Galaxy.OAuthConnectors")
 
 _ROOT = Path(__file__).resolve().parent.parent
@@ -153,7 +155,8 @@ def _load() -> Dict[str, Any]:
 def _save(data: Dict[str, Any]) -> None:
     try:
         _STORE.parent.mkdir(parents=True, exist_ok=True)
-        _STORE.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        # 这里存的是各家 OAuth 的令牌，写坏等于所有已授权连接器一起掉线。
+        atomic_write_json(_STORE, data, indent=2, ensure_ascii=False)
     except Exception as exc:  # noqa: BLE001
         logger.debug("写 oauth_connectors.json 失败: %s", exc)
 

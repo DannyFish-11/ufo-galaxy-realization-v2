@@ -21,6 +21,7 @@ from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
+from core.atomic_json import atomic_write_json
 
 
 class ModelProvider(Enum):
@@ -457,8 +458,7 @@ class OpenCodeEngine:
                 config_data["api_key"] = self.config.api_key
             
             # 写入文件
-            with open(config_path, "w", encoding='utf-8') as f:
-                json.dump(config_data, f, indent=2)
+            atomic_write_json(config_path, config_data, indent=2)
             
             return True
         except Exception as exc:

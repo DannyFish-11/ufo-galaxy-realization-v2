@@ -69,6 +69,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from core.atomic_json import atomic_write_json
+
 # RUF006: retain fire-and-forget create_task results so the event loop's weak
 # reference can't let them be garbage-collected mid-execution.
 _BACKGROUND_TASKS: set = set()
@@ -242,7 +244,7 @@ class _ManifestStore:
 
     def _save(self, data: Dict[str, Any]) -> None:
         self._install_dir.mkdir(parents=True, exist_ok=True)
-        self._path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+        atomic_write_json(self._path, data, indent=2, ensure_ascii=False)
 
     def get_all(self) -> Dict[str, Any]:
         return self._load().get("addons", {})

@@ -5,6 +5,7 @@ Node 03: SecretVault - 密钥管理
 """
 import os
 import json
+from core.atomic_json import atomic_write_json
 import base64
 import hashlib
 import logging
@@ -121,8 +122,14 @@ class SecretVault:
         """保存密钥到文件"""
         vault_file = os.getenv("SECRETVAULT_FILE", "/tmp/secretvault.json")
         try:
-            with open(vault_file, 'w', encoding='utf-8') as f:
-                json.dump({"secrets": {k: v.dict() for k, v in self._secrets.items()}}, f, default=str)
+            # 原子写:这是密钥库。写到一半被打断会把整份密钥连同旧值一起废掉
+            # (open(w) 先清空再写),而它恰恰是最不该丢的那份数据。
+            atomic_write_json(
+                vault_file,
+                {"secrets": {k: v.dict() for k, v in self._secrets.items()}},
+                indent=None,
+                default=str,
+            )
         except Exception as e:
             print(f"Failed to save secrets: {e}")
 

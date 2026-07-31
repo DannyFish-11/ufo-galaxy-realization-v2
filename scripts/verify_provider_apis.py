@@ -247,6 +247,9 @@ def live_probe(only: Optional[set], timeout: float) -> Tuple[List[str], List[Dic
             # 「密钥 → 函数 → 打印」这条数据流边。
             "configured": _verdict(present=bool(api_key), placeholder=is_placeholder(api_key)),
             "declared": spec.get("models") or [],
+            # 双工(语音实时)型号单独列一栏。它走的是 Realtime/Live WebSocket,
+            # 与文本型号是两套接口、两套下线节奏 —— 合在一起报会看不出是哪一面漂了。
+            "declared_realtime": spec.get("realtime_models") or [],
         }
         if not api_key or row["configured"] == "占位符":
             row["status"] = "跳过(无有效 key)"
@@ -268,6 +271,20 @@ def live_probe(only: Optional[set], timeout: float) -> Tuple[List[str], List[Dic
             problems.append(
                 f"{name}: registry 里这些型号上游不认(实际调用会 404): {missing}"
                 f" —— 上游示例: {sorted(upstream)[:6]}"
+            )
+        # 双工型号:同一份上游清单,单独比对、单独措辞。
+        #
+        # 注意一个已知的误报可能:部分家的 /models(尤其走 OpenAI 兼容面的)不会把
+        # Realtime/Live 专用型号列进来。此时这里会报"上游不认",但真实原因是
+        # **该型号不从这个端点公布**,而不是型号没了。所以措辞里明确提示要人工确认,
+        # 不直接断言 404 —— 宁可让人多看一眼,也不要给一个会误导的确定结论。
+        missing_rt = [m for m in row["declared_realtime"] if m not in upstream]
+        row["missing_upstream_realtime"] = missing_rt
+        if missing_rt:
+            problems.append(
+                f"{name}: 双工型号未出现在上游 /models 清单里: {missing_rt}"
+                " —— 可能已下线,也可能只是该端点不公布 Realtime/Live 型号,"
+                "请对照官方 Realtime/Live 文档人工确认"
             )
         rows.append(row)
     return problems, rows

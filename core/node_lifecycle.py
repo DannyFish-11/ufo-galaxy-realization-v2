@@ -24,6 +24,8 @@ import sys
 from pathlib import Path
 from typing import Dict, Optional, Tuple
 
+from core.atomic_json import atomic_write_json
+
 logger = logging.getLogger("Galaxy.NodeLifecycle")
 
 _ROOT = Path(__file__).resolve().parent.parent
@@ -44,7 +46,8 @@ def _load_pids() -> Dict[str, int]:
 def _save_pids(pids: Dict[str, int]) -> None:
     try:
         _PID_FILE.parent.mkdir(parents=True, exist_ok=True)
-        _PID_FILE.write_text(json.dumps(pids), encoding="utf-8")
+        # PID 表写坏会让下次启动认不出还活着的节点进程，进而重复拉起。
+        atomic_write_json(_PID_FILE, pids, indent=None)
     except Exception as exc:  # noqa: BLE001
         logger.debug("写 node_pids.json 失败: %s", exc)
 

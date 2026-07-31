@@ -24,6 +24,7 @@ import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from core.atomic_json import atomic_write_json
 
 try:
     from nodes.common.cors_config import get_cors_origins
@@ -204,8 +205,7 @@ def _compute_metrics(predictions: List[str], references: List[str], metrics: Lis
 def _save_result(eval_id: str, data: Dict[str, Any]):
     path = Path(EVAL_STORAGE_PATH) / f"{eval_id}.json"
     try:
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
+        atomic_write_json(path, data, indent=2, ensure_ascii=False)
     except Exception as e:
         logger.error(f"Could not save eval result {eval_id}: {e}")
 

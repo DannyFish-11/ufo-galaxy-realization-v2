@@ -21,6 +21,7 @@ import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from core.atomic_json import atomic_write_json
 
 try:
     from nodes.common.cors_config import get_cors_origins
@@ -122,8 +123,7 @@ def _load_registry():
 
 def _save_registry():
     try:
-        with open(_REGISTRY_FILE, "w", encoding="utf-8") as f:
-            json.dump(_plugin_registry, f, indent=2, ensure_ascii=False)
+        atomic_write_json(_REGISTRY_FILE, _plugin_registry, indent=2, ensure_ascii=False)
     except Exception as e:
         logger.error(f"Could not save registry: {e}")
 

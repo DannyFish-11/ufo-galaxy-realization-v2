@@ -162,3 +162,7 @@ runtime/node_pids.json
 
 # OAuth 连接器 token/凭据本机存储(勿入库)
 runtime/oauth_connectors.json
+
+# 插件注册表是【运行时产物】：Node_115_PluginManager 启动时会把内置插件写进来，
+# 跑测试同样会生成。它不是源码，误提交会让每台机器的本地状态互相覆盖。
+plugins/registry.json

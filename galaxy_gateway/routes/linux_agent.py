@@ -42,6 +42,7 @@ from typing import Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
+from core.atomic_json import atomic_write_json
 
 # PR-SANDBOX-INTEGRATION: 导入沙箱安全检查
 try:
@@ -154,8 +155,7 @@ class ServerRegistry:
     def _save(self):
         """保存到 JSON 文件。"""
         try:
-            with open(SERVERS_FILE, "w", encoding="utf-8") as f:
-                json.dump({"servers": self._servers}, f, ensure_ascii=False, indent=2)
+            atomic_write_json(SERVERS_FILE, {'servers': self._servers}, ensure_ascii=False, indent=2)
         except Exception as e:
             logger.error("Failed to save server registry: %s", e)
 

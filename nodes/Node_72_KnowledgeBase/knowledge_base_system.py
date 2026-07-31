@@ -35,6 +35,7 @@ import time
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 import hashlib
+from core.atomic_json import atomic_write_json
 
 logger = logging.getLogger("Galaxy.KnowledgeBase72")
 
@@ -260,8 +261,7 @@ class KnowledgeBaseSystem:
                 for e in self.knowledge_entries.values()
             ]
         }
-        with open(output_file, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
+        atomic_write_json(output_file, data, indent=2, ensure_ascii=False)
 
     def import_knowledge(self, input_file: str):
         """从 JSON 文件导入知识库"""

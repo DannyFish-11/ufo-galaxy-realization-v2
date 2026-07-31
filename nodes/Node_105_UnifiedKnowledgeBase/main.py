@@ -27,6 +27,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import subprocess
 from nodes.common.cors_config import get_cors_origins
+from core.atomic_json import atomic_write_json
 
 logger = logging.getLogger("Galaxy.Node105KB")
 
@@ -135,8 +136,7 @@ class UnifiedKnowledgeBase:
         kb_file = os.path.join(self.persist_dir, "knowledge.json")
         try:
             data = [asdict(entry) for entry in self.knowledge_entries.values()]
-            with open(kb_file, 'w', encoding='utf-8') as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
+            atomic_write_json(kb_file, data, ensure_ascii=False, indent=2)
         except Exception as e:
             logger.warning(f"保存知识失败: {e}")
     

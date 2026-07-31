@@ -47,6 +47,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Union
 
+from core.atomic_json import atomic_write_json
+
 logger = logging.getLogger("Galaxy.Config")
 
 
@@ -358,8 +360,7 @@ class UnifiedConfig:
             if skills:
                 config_data["skills"] = skills
 
-            with open(self.config_file, "w", encoding="utf-8") as f:
-                json.dump(config_data, f, indent=2, ensure_ascii=False)
+            atomic_write_json(self.config_file, config_data, indent=2, ensure_ascii=False)
 
             logger.info(f"配置已保存: {self.config_file}")
         except Exception as e:
