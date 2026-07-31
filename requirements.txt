@@ -34,7 +34,12 @@ qdrant-client>=1.6.0
 # ============================================================================
 openai>=1.0.0
 anthropic>=0.7.0
-google-generativeai>=0.3.0
+# google-generativeai 已移除:该 SDK 于 2025-08-31 被官方弃用(继任为统一的
+# google-genai),而本仓库【从未真正使用它】—— Gemini 走的是原生 REST
+# (generativelanguage.googleapis.com)与 Live 的 BidiGenerateContent WebSocket,
+# 全仓唯一的引用点是 scripts/check_dependencies.py 里的一条可选依赖登记。
+# 因此这里不是迁移,是删掉一个装了也没人 import 的包。
+# 将来若要用官方 SDK,应直接引入 google-genai,而不是恢复这一行。
 tiktoken>=0.5.0
 
 # ============================================================================

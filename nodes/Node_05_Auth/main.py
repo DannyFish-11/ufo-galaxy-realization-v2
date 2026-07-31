@@ -5,6 +5,7 @@ Node 05: Auth - 认证服务
 """
 import os
 import json
+from core.atomic_json import atomic_write_json
 import hashlib
 import logging
 import secrets
@@ -102,8 +103,13 @@ class AuthManager:
         """保存用户数据"""
         users_file = os.getenv("AUTH_USERS_FILE", "/tmp/auth_users.json")
         try:
-            with open(users_file, 'w', encoding='utf-8') as f:
-                json.dump({"users": {k: v.dict() for k, v in self._users.items()}}, f, default=str)
+            # 原子写:用户表损坏等于所有人登不进来。
+            atomic_write_json(
+                users_file,
+                {"users": {k: v.dict() for k, v in self._users.items()}},
+                indent=None,
+                default=str,
+            )
         except Exception as e:
             print(f"Failed to save users: {e}")
 

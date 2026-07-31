@@ -65,6 +65,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
+from core.atomic_json import atomic_write_json
+
 logger = logging.getLogger("CapabilityManager")
 
 # ---------------------------------------------------------------------------
@@ -601,8 +603,9 @@ class CapabilityManager:
 
             data = {"version": "1.0.0", "timestamp": datetime.now().isoformat(), "capabilities": capabilities_list}
 
-            with open(self.config_file, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2, ensure_ascii=False)
+            # 原子写:能力表是被 CapabilityResolver 读的权威数据,写到一半被打断
+            # 会留下半个 JSON,下次启动直接加载失败 —— 而 open(w) 连旧值都保不住。
+            atomic_write_json(self.config_file, data)
 
             logger.debug(f"已保存 {len(capabilities_list)} 个能力到配置文件")
 

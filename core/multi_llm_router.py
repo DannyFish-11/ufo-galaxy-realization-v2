@@ -1481,6 +1481,12 @@ PROVIDER_REGISTRY: List[Dict[str, Any]] = [
         "base_key": "openai_base",
         "models": ["gpt-5.6", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5", "gpt-4o"],
         "default_model": "gpt-5.6",
+        # 双工(语音实时)型号。与上面的文本型号分开列：两者走的是不同接口
+        # (Realtime WebSocket vs Chat Completions),上游的下线节奏也不同 ——
+        # 此前 voice_duplex_session 把型号写死在代码里、不在本 registry 中,
+        # 于是 verify_provider_apis.py 的上游比对完全覆盖不到它,漂移无人发现。
+        "realtime_models": ["gpt-realtime"],
+        "default_realtime_model": "gpt-realtime",
         "cost_in": 0.005,
         "cost_out": 0.015,
         "extra": {"multimodal": True},
@@ -1503,6 +1509,13 @@ PROVIDER_REGISTRY: List[Dict[str, Any]] = [
         "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
         "models": ["gemini-3.5-flash", "gemini-3.5-pro", "gemini-2.5-pro"],
         "default_model": "gemini-3.5-flash",
+        # Live API(BidiGenerateContent)的原生音频型号,同样与文本型号分开维护。
+        "realtime_models": ["gemini-2.5-flash-native-audio-preview-12-2025"],
+        "default_realtime_model": "gemini-2.5-flash-native-audio-preview-12-2025",
+        # Live API 的 WebSocket 接口版本。官方文档现给 v1beta;v1alpha 仅用于
+        # affective dialog / proactive audio 等尚未升级的特性。做成字段而非写死,
+        # 是因为这个版本号历史上换过,写死在 URL 里会再次悄悄过期。
+        "realtime_api_version": "v1beta",
         "cost_in": 0.00125,
         "cost_out": 0.005,
         "extra": {"multimodal": True},

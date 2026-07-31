@@ -4,8 +4,18 @@
 
 FROM python:3.11-slim AS builder
 WORKDIR /build
-COPY requirements.txt .
-RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
+# 只装 core 依赖(约 26 行),不装完整的 requirements.txt(192 行)。
+#
+# 本镜像的 CMD 只跑 `uvicorn galaxy_gateway.app:app`,而该 app 的导入树实测不需要
+# core 之外的任何东西 —— 用只装 requirements-core.txt 的干净 venv 验证过:22 条路由
+# 全部挂载,与完整依赖环境逐条一致,AI Agent / Linux Agent / Sandbox / Gateway v5 /
+# pairing 这些条件挂载的路由一个都没降级(它们包在 try/except 里,缺依赖会静默跳过,
+# 所以这里是按"路由是否真的挂上"验的,不是只看 import 没报错)。
+#
+# 换掉的是 PyQt5、pyqtwebengine、opencv、pymavlink、bambulabs-api、docker SDK 等
+# 一大批与网关无关的重包 —— 它们只是镜像体积、构建时间和攻击面。
+COPY requirements-core.txt .
+RUN pip install --no-cache-dir --prefix=/install -r requirements-core.txt
 
 FROM python:3.11-slim
 WORKDIR /app
@@ -32,7 +42,7 @@ COPY --chown=galaxy:galaxy nodes/ ./nodes/
 COPY --chown=galaxy:galaxy enhancements/ ./enhancements/
 COPY --chown=galaxy:galaxy galaxy_gateway/ ./galaxy_gateway/
 COPY --chown=galaxy:galaxy daemon/ ./daemon/
-COPY --chown=galaxy:galaxy requirements.txt .
+COPY --chown=galaxy:galaxy requirements-core.txt .
 
 USER galaxy
 

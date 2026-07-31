@@ -38,7 +38,9 @@ OPTIONAL_DEPS = {
     "pymongo": "pymongo",
     "anthropic": "anthropic",
     "openai": "openai",
-    "google.generativeai": "google-generativeai",
+    # google.generativeai 已从登记表移除:SDK 于 2025-08-31 官方弃用,且本仓库
+    # 的 Gemini 集成走原生 REST / Live WebSocket,不经过它。留在这里只会让这份
+    # 「可选依赖」清单显得它仍是受支持的接入方式。
     "sentence_transformers": "sentence-transformers",
     "selenium": "selenium",
     "docker": "docker",

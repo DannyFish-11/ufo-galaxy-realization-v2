@@ -65,6 +65,44 @@ from core.config_flags import num as _num  # noqa: E402
 #: 连接会失败,而失败是安全的(见 ``native_realtime_url`` 的说明)。
 _NATIVE_REALTIME_PATH_DEFAULT = "/v1/realtime"
 
+#: 兜底的实时型号 / Live 接口版本。**只在 PROVIDER_REGISTRY 取不到时才用**。
+#:
+#: 这两个值曾经是直接写死在 _resolve() 里的,后果是:它们不在 PROVIDER_REGISTRY 里,
+#: 而 scripts/verify_provider_apis.py 的"上游认账型号 vs registry 型号"比对只看
+#: registry —— 于是双工型号成了唯一没有漂移守卫的一条线,直到线上连不上才会发现。
+#: 现在以 registry 为准,这里只作为 import 失败时的最后一道兜底(宁可用旧值连一次,
+#: 也不要因为取不到配置就让整条语音链路直接不可用)。
+_REALTIME_FALLBACK_MODEL = {
+    "openai": "gpt-realtime",
+    "google": "gemini-2.5-flash-native-audio-preview-12-2025",
+}
+_REALTIME_FALLBACK_API_VERSION = "v1beta"
+
+
+def _registry_spec(provider_name: str) -> Dict[str, Any]:
+    """从 PROVIDER_REGISTRY 取某家的 spec;取不到返回空 dict(调用方走兜底)。"""
+    try:
+        from core.multi_llm_router import PROVIDER_REGISTRY
+
+        for spec in PROVIDER_REGISTRY:
+            if spec.get("name") == provider_name:
+                return spec
+    except Exception as exc:  # pragma: no cover - 仅在 registry 不可用时触发
+        logger.debug("读取 PROVIDER_REGISTRY 失败,实时型号走兜底: %s", type(exc).__name__)
+    return {}
+
+
+def _registry_realtime_model(provider_name: str) -> str:
+    """该家的默认实时(双工)型号。"""
+    spec = _registry_spec(provider_name)
+    return str(spec.get("default_realtime_model") or _REALTIME_FALLBACK_MODEL.get(provider_name, ""))
+
+
+def _registry_realtime_api_version(provider_name: str) -> str:
+    """Live API 的接口版本(仅 Gemini 用)。"""
+    spec = _registry_spec(provider_name)
+    return str(spec.get("realtime_api_version") or _REALTIME_FALLBACK_API_VERSION)
+
 
 def _native_audio_on() -> bool:
     """B 档原生听/说是否已就绪。收口读 ``core.modality_capability``,不各处自己读环境变量。"""
@@ -297,18 +335,19 @@ class DuplexSessionConfig:
         if provider == "gemini_live":
             # 专用键优先于通用键:专门给双工配的那把先用,没配才退回该家的通用 key。
             key = resolve_secret("GALAXY_REALTIME_API_KEY", "GOOGLE_API_KEY", "GEMINI_API_KEY")
-            model = model or "gemini-2.0-flash-exp"
+            model = model or _registry_realtime_model("google")
             voice = (os.getenv("GALAXY_REALTIME_VOICE") or "Puck").strip()
             if not url and key:
+                api_version = _registry_realtime_api_version("google")
                 url = (
                     "wss://generativelanguage.googleapis.com/ws/"
-                    "google.ai.generativelanguage.v1alpha.GenerativeService."
+                    f"google.ai.generativelanguage.{api_version}.GenerativeService."
                     f"BidiGenerateContent?key={key}"
                 )
             missing = "GALAXY_REALTIME_API_KEY 或 GOOGLE_API_KEY"
         else:
             key = resolve_secret("GALAXY_REALTIME_API_KEY", "OPENAI_API_KEY")
-            model = model or "gpt-4o-realtime-preview"
+            model = model or _registry_realtime_model("openai")
             voice = (os.getenv("GALAXY_REALTIME_VOICE") or "alloy").strip()
             if not url:
                 url = f"wss://api.openai.com/v1/realtime?model={model}"
