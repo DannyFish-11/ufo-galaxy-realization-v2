@@ -11,8 +11,8 @@ Galaxy 系统统一连接管理器（单例）。
   - 维护 last_seen / routable 在线态（presence backbone）
 
 所有旧 ConnectionManager 实现（core/routes/_shared.py、
-galaxy_gateway/websocket_handler.py、integration/websocket_server.py）
-均应委托此类处理实际的连接状态与消息发送。
+galaxy_gateway/websocket_handler.py）均应委托此类处理实际的连接状态与消息发送。
+（integration/websocket_server.py 曾是第三处,已因零引用删除。）
 """
 
 from __future__ import annotations

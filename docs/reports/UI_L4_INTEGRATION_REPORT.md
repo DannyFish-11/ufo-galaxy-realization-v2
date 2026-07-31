@@ -368,7 +368,7 @@ def complete_animation(self, animation_id: str, success: bool = True):
 | Windows客户端 | `windows_client/windows_client_integrated.py` | 550 | PyQt6 UI集成 |
 | Android客户端 | `android_client/MainActivityIntegrated.kt` | 600 | Kotlin UI集成 |
 | 状态机集成 | `system_integration/state_machine_ui_integration.py` | 500 | 状态机和硬件触发 |
-| WebSocket服务器 | `integration/websocket_server.py` | 550 | 后端通信服务 |
+| WebSocket服务器 | `integration/websocket_server.py` | 550 | 后端通信服务 |  ← 已删除(零引用)
 | 集成测试 | `tests/test_integration.py` | 450 | 完整测试套件 |
 | **总计** | **7个文件** | **~3450行** | **完整集成方案** |
 
@@ -448,7 +448,7 @@ python -m pytest tests/test_integration.py -v
 
 ```bash
 # 1. 启动WebSocket服务器
-python integration/websocket_server.py
+# 该文件已删除(全仓零导入、零测试依赖)。WebSocket 服务由 galaxy_gateway 提供。
 
 # 2. 启动Windows客户端
 python windows_client/windows_client_integrated.py
@@ -493,7 +493,7 @@ private const val HTTP_URL = "http://your-server:8080/api"
 
 ```bash
 # 启动WebSocket和HTTP服务器
-python integration/websocket_server.py
+# 该文件已删除(全仓零导入、零测试依赖)。WebSocket 服务由 galaxy_gateway 提供。
 ```
 
 ---
