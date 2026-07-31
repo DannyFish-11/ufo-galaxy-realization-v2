@@ -17,10 +17,12 @@ peer 信任表、会话快照……)。它们此前多数是这么写的::
 自 Python 3.3 起也是覆盖式原子替换。读者要么看到完整的旧内容,要么看到完整的新内容,
 不存在中间态。
 
-本模块把这套逻辑收敛成一个函数。实现原样沿用 ``core.runtime_truth_governance``
-里那份已经在跑的版本(含陈旧临时文件清扫),额外加了 ``fsync``:
-``os.replace`` 只保证"替换"这一步原子,不保证新内容已经落到盘上;不 fsync 的话,
-断电仍可能得到一个"替换成功但内容是空洞"的文件。
+本模块把这套逻辑收敛成一个函数。骨架取自 ``core.runtime_truth_governance`` 里那份
+已经在跑的实现,但有两处刻意的不同:
+
+* 加了 ``fsync`` —— ``os.replace`` 只保证"替换"这一步原子,不保证新内容已经落到盘上;
+  不 fsync 的话,断电仍可能得到一个"替换成功但内容是空洞"的文件。
+* **不做**目录清扫(原因见下方 TMP_PREFIX 处的说明)。
 """
 
 from __future__ import annotations
@@ -28,31 +30,24 @@ from __future__ import annotations
 import json
 import os
 import tempfile
-import time
 from typing import Any
 
-#: 临时文件前缀。带上固定前缀才能在崩溃后把遗留的碎片认出来并清掉。
+#: 临时文件前缀。带上固定前缀,便于人工识别崩溃后遗留的碎片。
 TMP_PREFIX = ".tmp-atomic-"
 
-#: 超过这个秒数的临时文件视为上次崩溃的残留,写入前顺手清掉,避免无限堆积。
-STALE_TMP_SECONDS = 6 * 60 * 60
-
-
-def sweep_stale_tmp_files(directory: str, *, max_age: float = STALE_TMP_SECONDS) -> None:
-    """清掉目录里遗留的过期临时文件。任何失败都吞掉 —— 清扫是尽力而为,不能反过来
-    让真正的写入失败。"""
-    try:
-        for name in os.listdir(directory):
-            if not (name.startswith(TMP_PREFIX) and name.endswith(".json")):
-                continue
-            candidate = os.path.join(directory, name)
-            try:
-                if time.time() - os.path.getmtime(candidate) > max_age:
-                    os.remove(candidate)
-            except OSError:
-                pass
-    except OSError:
-        pass
+# 关于"顺手清扫目录里过期临时文件"这件事 —— 刻意不做。
+#
+# 初版照搬了 runtime_truth_governance 里的实现，它在每次写入前会 os.listdir 目标目录、
+# 把超时的 .tmp-atomic-*.json 逐个 os.remove。在那个模块里只有一个调用点，尚可接受；
+# 提升为全仓通用助手后，等于把一个【删除原语】连同调用方传入的路径一次性铺到 30 多个
+# 调用点上，其中不少路径来自环境变量（SECRETVAULT_FILE、AUTH_USERS_FILE 等）。
+#
+# 而它取代的 open(path, "w") 从不删除任何东西 —— 这是我引入的能力扩张，不是原有行为。
+# 收益也很薄：本函数在 finally 里已经清掉自己的临时文件，只有"写到一半进程被杀"才会
+# 留下碎片，属于罕见情况，且碎片带固定前缀、可离线清理。
+#
+# 结论：写入函数就只做写入。需要清扫的话应当是一个显式的、单独调用的维护动作，
+# 而不是每次落盘的隐式副作用。
 
 
 def atomic_write_json(
@@ -86,7 +81,6 @@ def atomic_write_json(
     path = os.fspath(path)
     directory = os.path.dirname(path) or "."
     os.makedirs(directory, exist_ok=True)
-    sweep_stale_tmp_files(directory)
 
     # 临时文件必须和目标【同目录】:os.replace 跨文件系统会失败,而 /tmp 与目标
     # 往往不在同一个挂载点上。

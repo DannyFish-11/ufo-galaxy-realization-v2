@@ -9,7 +9,7 @@ import os
 
 import pytest
 
-from core.atomic_json import TMP_PREFIX, atomic_write_json, sweep_stale_tmp_files
+from core.atomic_json import TMP_PREFIX, atomic_write_json
 
 
 def test_writes_readable_json(tmp_path):
@@ -63,19 +63,25 @@ def test_overwrite_is_complete_not_appended(tmp_path):
     assert json.loads(target.read_text(encoding="utf-8")) == {"k": 1}
 
 
-def test_sweep_removes_only_stale_tmp_files(tmp_path):
-    fresh = tmp_path / f"{TMP_PREFIX}fresh.json"
-    stale = tmp_path / f"{TMP_PREFIX}stale.json"
-    unrelated = tmp_path / "keep-me.json"
-    for p in (fresh, stale, unrelated):
+def test_write_never_deletes_neighbouring_files(tmp_path):
+    """写入函数只写自己那个文件，绝不删除目录里的任何东西。
+
+    初版实现会在每次写入前清扫目录里过期的 .tmp-atomic-*.json —— 那等于给三十多个
+    调用点各加了一个删除原语，而它取代的 open(path,"w") 从不删除任何东西。这条测试
+    把"写就只是写"钉死，防止那个隐式副作用被重新引入。
+    """
+    target = tmp_path / "state.json"
+    neighbours = [
+        tmp_path / f"{TMP_PREFIX}leftover.json",  # 看起来像本模块的临时文件
+        tmp_path / "unrelated.json",
+        tmp_path / "notes.txt",
+    ]
+    for p in neighbours:
         p.write_text("{}", encoding="utf-8")
+    old = os.path.getmtime(neighbours[0]) - 10 * 60 * 60
+    os.utime(neighbours[0], (old, old))  # 即便"过期"也不该被碰
 
-    # 把 stale 的 mtime 推到很久以前
-    old = os.path.getmtime(stale) - 10 * 60 * 60
-    os.utime(stale, (old, old))
+    atomic_write_json(target, {"k": 1})
 
-    sweep_stale_tmp_files(str(tmp_path))
-
-    assert fresh.exists(), "未过期的临时文件不该被清掉"
-    assert not stale.exists(), "过期的临时文件应被清掉"
-    assert unrelated.exists(), "非临时文件绝不能被碰"
+    for p in neighbours:
+        assert p.exists(), f"写入不该删除目录里的其它文件: {p.name}"
