@@ -63,7 +63,7 @@ class TestPolicyLoader:
 
         monkeypatch.setattr(policy_loader, "_POLICIES_DIR", tmp_path)
         # 重置单例
-        policy_loader._loader = policy_loader.PolicyLoader.__new__(policy_loader.PolicyLoader)
+        policy_loader._loader = object.__new__(policy_loader.PolicyLoader)
         policy_loader._loader._initialized = False
         policy_loader._loader.__init__()
         policy_loader._loader._cache.clear()

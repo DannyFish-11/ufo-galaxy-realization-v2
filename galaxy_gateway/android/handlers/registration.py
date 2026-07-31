@@ -932,20 +932,34 @@ async def handle_device_register(bridge: "AndroidBridge", websocket: Any, messag
             pass
 
         # PR-28: Sync tailscale_ip to MeshCoordinator + TailscaleP2PAdapter
+        #
+        # 这里刻意用 ``_cached_device`` 而不是复用 ``device``:Python 没有块级作用域,
+        # 在这个 try 里写 ``device = ...`` 会把上面第 874 行那个「本次注册刚建出来的」
+        # 对象**换掉**,而且一路泄漏到函数剩下的三百行 —— 能力同化(device.capabilities)、
+        # 角色分配(device.platform)、注册日志(device.model)、跨设备相位推送
+        # (device.websocket.send_json)全都跟着换。两种真实后果:
+        #   * 缓存里没有这个 id 时(调用方自带 bridge / 缓存被换实现),``.get()`` 返回
+        #     None,``device.model`` 这行没有 try 兜着,直接把整个注册打成 success=False
+        #     —— 而 UDM 的规范写入在第 870 行**已经成功了**,设备状态就此撕裂;
+        #   * 缓存里有、但不是同一个对象时,后续全作用在别的连接上。第 874-876 行是在
+        #     ``bridge._lock`` 内建的,这里的读**不在锁内**,同一 device_id 的重复
+        #     register(弱网重连的典型形态)会在两者之间替换缓存条目,于是第 1223 行
+        #     会把相位 send_json 到**另一条 websocket** 上。
+        # 这个 block 只需要缓存条目上的 tailscale_ip,拿完就该扔,不该动 ``device``。
         try:
-            device = bridge._devices.get(device_id)
-            if device and device.tailscale_ip:
+            _cached_device = bridge._devices.get(device_id)
+            if _cached_device and _cached_device.tailscale_ip:
                 from core.mesh_coordinator import get_mesh_coordinator
 
                 mesh = get_mesh_coordinator()
                 mesh.register_peer(
                     device_id=device_id,
-                    tailscale_ip=device.tailscale_ip,
+                    tailscale_ip=_cached_device.tailscale_ip,
                 )
                 logger.debug(
                     "PR-28: Device %s tailscale_ip=%s synced to MeshCoordinator",
                     device_id,
-                    device.tailscale_ip,
+                    _cached_device.tailscale_ip,
                 )
         except Exception:
             pass

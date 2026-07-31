@@ -283,7 +283,7 @@ class TestNodeFailover(unittest.TestCase):
     def test_failover_method_exists(self):
         from core.node_registry import NodeRegistry
 
-        registry = NodeRegistry.__new__(NodeRegistry)
+        registry = object.__new__(NodeRegistry)
         registry._initialized = False
         registry.__init__()
         self.assertTrue(hasattr(registry, "_failover_call"))

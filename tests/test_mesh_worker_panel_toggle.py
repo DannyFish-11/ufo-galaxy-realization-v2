@@ -24,14 +24,47 @@ from fastapi.testclient import TestClient
 
 @pytest.fixture()
 def client():
+    """必须用 ``with TestClient(...)``,不能是裸的 ``TestClient(app)``。
+
+    这条被验证的行为是「fire-and-forget:端点立刻返回,真正的启动在后台任务里跑」,
+    所以断言全都落在**后台任务跑完之后**的 running/starting/last_error 上。而裸构造的
+    TestClient 是**每次请求现开一个 anyio portal**,请求一结束 portal 就关,
+    ``asyncio.create_task()`` 起的后台任务**当场被取消**。实测两种用法的差别:
+
+        TestClient(app)        POST 0.36s / 6.58s(不稳定)  task cancelled=True   last_error=None
+        with TestClient(app)   POST 0.01s                   task cancelled=False  last_error='nats_unavailable'
+
+    两种失败形态都出自这一个原因:portal 退出时有时会等后台任务走到取消点,于是
+    「端点必须秒回」那条耗时断言被记到 6.58s 上;有时干脆取消得干净利落,于是
+    last_error 永远等不到。生产侧(uvicorn 长生命周期事件循环)没有这个问题 ——
+    这纯粹是验证方式不成立,不是被测代码的毛病。上下文管理器让 portal 覆盖整个
+    client 生命周期,后台任务才真的能跑完。
+    """
     from core.routes.hybrid import create_router
     from core.worker_runtime import reset_worker_runtime
 
     reset_worker_runtime()
     app = FastAPI()
     app.include_router(create_router())
-    yield TestClient(app)
+    with TestClient(app) as c:
+        yield c
     reset_worker_runtime()
+
+
+def _wait_until(predicate, *, budget_s: float = 30.0, tick_s: float = 0.05) -> bool:
+    """轮询等一个条件成立,返回是否等到。
+
+    预算刻意给到 30s(原先是 50×0.05 = **2.5s**)。真实的冷启动链路要走完 NATS 连接
+    失败 → 嵌入式服务器拉起尝试 → 落地 last_error,本机实测就要 ~6.5s,CI 上只会更慢
+    —— 2.5s 根本等不到后台任务收尾,断言拿到的是**中途状态**。这不是"放宽标准":
+    「端点必须秒回」由 POST 自己的耗时断言把关,和这里等后台跑完是两件事。
+    """
+    deadline = time.monotonic() + budget_s
+    while time.monotonic() < deadline:
+        if predicate():
+            return True
+        time.sleep(tick_s)
+    return predicate()
 
 
 class TestWorkerStatusEndpoint:
@@ -70,10 +103,7 @@ class TestWorkerToggleEndpoint:
         assert elapsed < 1.0, f"toggle 端点耗时 {elapsed:.2f}s——是否又变回同步阻塞了?"
 
         # 等后台任务跑完(本机没有 nats-server,预期最终失败并落地 last_error)。
-        for _ in range(50):
-            if not get_worker_runtime().starting:
-                break
-            time.sleep(0.05)
+        assert _wait_until(lambda: not get_worker_runtime().starting), "后台启动任务在预算内没有收尾"
         wr = get_worker_runtime()
         assert wr.running is False
         assert wr.starting is False
@@ -96,10 +126,7 @@ class TestWorkerToggleEndpoint:
         assert body["started"] is False
 
         # 等后台任务把 mock bus 的连接/订阅链路真正跑完。
-        for _ in range(50):
-            if get_worker_runtime().running:
-                break
-            time.sleep(0.05)
+        assert _wait_until(lambda: get_worker_runtime().running), "后台启动任务在预算内没有把 worker 拉起来"
         wr = get_worker_runtime()
         assert wr.running is True
         assert wr.starting is False
@@ -115,11 +142,14 @@ class TestWorkerToggleEndpoint:
     def test_toggle_while_already_starting_does_not_spawn_duplicate_task(self):
         """连点两下(第二次请求在第一次的后台任务还没跑完时打进来)不应重复发起启动。
 
-        注意:这里不用共享的 ``client`` fixture——它不是以 context manager 方式
-        使用 TestClient,Starlette 因而给【每次请求各开一个独立事件循环】,一次
-        request 内起的后台任务会在该请求返回前就被那个临时循环跑到底,天然测不出
-        "第二次请求打进来时第一个后台任务仍在飞"这个场景。本测试用 `with TestClient(...)`
-        换成【一个跨请求持久的事件循环】,才能真正制造出两次 POST 之间的重叠窗口。
+        这里自建 client 而不复用共享 fixture,是因为要往 runtime 里塞一个**故意慢的**
+        mock bus,得在第一次 POST **之前**装好——共享 fixture 在 yield 之前就 reset 过
+        runtime,拿不到这个插入点。
+
+        (历史注记:这段原先解释的是"共享 fixture 没用 context manager,所以每请求一个
+        临时事件循环,造不出重叠窗口"。那个观察是对的,但当时只在这一条测试里就地绕过去了,
+        没回头修夹具 —— 于是同一个坑继续把 ``test_enable_returns_immediately_with_starting_true``
+        坑在 CI 上。夹具现已统一改成 ``with TestClient(...)``,那条描述不再成立。)
         """
         import asyncio
 
@@ -153,10 +183,7 @@ class TestWorkerToggleEndpoint:
                 assert body2.get("already_starting") is True
 
                 wr = get_worker_runtime()
-                for _ in range(50):
-                    if not wr.starting:
-                        break
-                    time.sleep(0.05)
+                _wait_until(lambda: not wr.starting)
                 # 无论最终成功与否,只应该有一个后台任务在跑过——这里只断言状态收敛,
                 # 没有遗留的"starting 永远 True"这类卡死态。
                 assert wr.starting is False

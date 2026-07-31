@@ -83,11 +83,26 @@ def test_ui_files():
 
     project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
-    # 服务端 Dashboard UI
-    dashboard_ui = os.path.join(project_root, "dashboard", "frontend", "public", "index.html")
-    assert os.path.exists(dashboard_ui), "服务端 Dashboard UI: 不存在"
-    size = os.path.getsize(dashboard_ui)
-    print(f"✅ 服务端 Dashboard UI: {size} 字节")
+    # 桌面 UI 产物。
+    #
+    # 这里原先断言的是 dashboard/frontend/public/index.html —— 那个目录早在
+    # "dashboard 整体退役删除" 那次提交里就被删光了,断言却留着,于是这条测试成了
+    # 一条**必然失败**的死断言。它之所以没在本地被发现,是因为文件顶上的
+    # pytest.importorskip("sklearn") 在没装 sklearn 的机器上把整个文件跳过了 ——
+    # CI 装了 sklearn,才真跑起来并撞上它。
+    #
+    # 改成断言**现在真实存在的**两个产物,而不是删掉了事:
+    #   * electron/renderer/index.html            —— 桌面覆盖层
+    #   * electron/renderer/panel/dist/index.html —— 面板的构建产物
+    # 后者尤其值得守:Electron 主进程是从 dist/ 加载面板的(不是从 src/),这份构建
+    # 产物是 git 跟踪的 —— 漏提交它,面板就会静默停在旧版本上,没有任何报错。
+    ui_artifacts = [
+        ("桌面覆盖层", os.path.join(project_root, "electron", "renderer", "index.html")),
+        ("面板构建产物", os.path.join(project_root, "electron", "renderer", "panel", "dist", "index.html")),
+    ]
+    for label, path in ui_artifacts:
+        assert os.path.exists(path), f"{label}: 不存在 ({os.path.relpath(path, project_root)})"
+        print(f"✅ {label}: {os.path.getsize(path)} 字节")
 
     # 安卓端 UI (optional - may not exist in this repo)
     android_root = os.path.abspath(os.path.join(project_root, "..", "galaxy-android"))

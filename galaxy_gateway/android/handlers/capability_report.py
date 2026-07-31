@@ -188,11 +188,24 @@ async def handle_capability_report(bridge: "AndroidBridge", websocket: Any, mess
         len(capability_schemas),
     )
 
-    async with bridge._lock:
-        if device_id in bridge._devices:
-            # 根因：_devices 为 transport cache（SSOT 在 UDM）；transport handle
-            # 的 supported_actions/心跳字段写入封装到 AndroidDevice.update_supported_actions()。
-            bridge._devices[device_id].update_supported_actions(list(supported_actions))
+    # 根因：_devices 为 transport cache（SSOT 在 UDM）；transport handle
+    # 的 supported_actions/心跳字段写入封装到 AndroidDevice.update_supported_actions()。
+    #
+    # 这条腿必须是**非致命**的。它写的是明确声明为「非事实来源」的 transport cache，
+    # 而紧随其后的 _sync_supported_actions_to_capability_authority() 写的才是权威能力面。
+    # 此前它是本函数里唯一没有 try 兜的一条腿，又恰好排在最前面 —— 于是缓存写一旦抛异常，
+    # 权威写连同后面所有步骤会被一起吞掉，设备的能力就此在权威面上「不存在」，而调用方
+    # 只会看到一个异常，完全看不出权威面没被写。非权威的写不该给权威的写当门槛。
+    try:
+        async with bridge._lock:
+            if device_id in bridge._devices:
+                bridge._devices[device_id].update_supported_actions(list(supported_actions))
+    except Exception as cache_exc:
+        logger.warning(
+            "capability_report: transport cache 更新失败（非致命，权威能力面照写）: device_id=%s error=%s",
+            device_id,
+            cache_exc,
+        )
 
     if device_id:
         try:

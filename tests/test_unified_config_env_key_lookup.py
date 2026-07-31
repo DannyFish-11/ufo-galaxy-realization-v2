@@ -51,7 +51,7 @@ def _isolate_os_environ():
 def _make_cfg(env_content: str, tmp_path: Path) -> UnifiedConfig:
     env_file = tmp_path / ".env"
     env_file.write_text(env_content, encoding="utf-8")
-    cfg = UnifiedConfig.__new__(UnifiedConfig)
+    cfg = object.__new__(UnifiedConfig)
     cfg._config = {}
     cfg._callbacks = {}
     cfg.project_root = tmp_path

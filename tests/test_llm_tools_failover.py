@@ -28,7 +28,7 @@ class _FakeTelemetry:
 
 def _router(backend_chat):
     """构造一个只挂了必要桩的 UnifiedLLMRouter,避开 __init__ 的后端加载/网络探测。"""
-    r = UnifiedLLMRouter.__new__(UnifiedLLMRouter)
+    r = object.__new__(UnifiedLLMRouter)
 
     class _B:
         async def chat(self, **kwargs):

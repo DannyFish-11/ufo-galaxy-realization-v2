@@ -86,19 +86,37 @@ def fresh_env_and_config(tmp_path):
     做快照/精确恢复(而不是只清理"已知的" _EXPECTED 键)，避免残留污染到本
     进程里运行的其它测试(真实复现过:遗留的 DEEPSEEK_API_KEY 等会让同一
     pytest 会话里其它文件的"未配置应为空"断言拿到脏数据)。
+
+    **还原 os.environ 并不够。** 这个 fixture 会把一整套假 Key 灌进 os.environ,
+    在这期间只要有任何代码碰了**真正的** UnifiedConfig 单例、触发它的 ``_load_env()``,
+    这批假 Key 就会被**烤进它的 ``_config`` 缓存**——那份缓存是独立于 os.environ 的
+    另一层,上面的 ``os.environ.clear()/update()`` 完全够不着它。实测泄漏(本 fixture
+    跑完之后,在别的文件里查):
+
+        os.environ["ONEAPI_API_KEY"]           -> 已正确还原
+        uc.get("api_keys.ONEAPI_API_KEY")      -> 'sk-oneapi-x'   ← 从缓存里出来的
+        MultiLLMRouter()._get_key("oneapi")    -> 'sk-oneapi-x'
+
+    后果:同一会话里 ``test_panel_apikey_placeholder_detection.py`` 的
+    ``test_underscore_placeholder_env_fallback_not_registered`` 会拿到这个残留值、
+    把 OneAPI provider 注册起来,于是那条断言假红(单跑绿、合并跑红)。所以这里连
+    ``_backend._config`` 一起快照/还原。
     """
     env_path = tmp_path / ".env"
     env_path.write_text(ALL_ENV_CONTENT, encoding="utf-8")
 
+    import core.unified_config as uc
+
     env_snapshot = dict(os.environ)
+    # uc.config 是 UnifiedConfigManager,真正装配置的缓存在它委托的 _backend 上。
+    _backend = getattr(uc.config, "_backend", None)
+    cache_snapshot = dict(_backend._config) if _backend is not None else None
     try:
         from dotenv import load_dotenv
 
         load_dotenv(dotenv_path=str(env_path), override=True)
 
-        import core.unified_config as uc
-
-        cfg = uc.UnifiedConfig.__new__(uc.UnifiedConfig)
+        cfg = object.__new__(uc.UnifiedConfig)
         cfg._config = {}
         cfg._callbacks = {}
         cfg.project_root = tmp_path
@@ -114,6 +132,9 @@ def fresh_env_and_config(tmp_path):
     finally:
         os.environ.clear()
         os.environ.update(env_snapshot)
+        if cache_snapshot is not None and _backend is not None:
+            _backend._config.clear()
+            _backend._config.update(cache_snapshot)
 
 
 class TestAllProviderKeysResolveAfterRestart:

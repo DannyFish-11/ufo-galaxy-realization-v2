@@ -47,10 +47,22 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         if not key_name or not value:
             raise HTTPException(status_code=400, detail="key_name and value are required")
         try:
-            from core.credential_vault import get_vault
+            from core.credential_vault import get_vault, is_placeholder
 
+            # 当场退回,不要收下再说。收下的话调用方看到 success=True、面板显示"已连接",
+            # 但 get_credential() 会把它当未配置返回 None,真实调用则一路 401 ——
+            # 用户完全看不出问题出在"粘的是模板文字"。
+            if is_placeholder(value):
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"'{key_name}' 的值看起来是示例文件里未编辑的模板占位符,不是真实密钥。" "请填入实际的 API key。"
+                    ),
+                )
             get_vault().set_credential(key_name, value)
             return JSONResponse({"success": True, "key_name": key_name})
+        except HTTPException:
+            raise
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 

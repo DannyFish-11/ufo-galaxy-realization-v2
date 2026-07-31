@@ -24,6 +24,31 @@ from core.lumiv_websocket_bridge import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _restore_bridge_singleton():
+    """跑完把 ``GalaxyPresenceBridge`` 单例还原掉 —— 本文件会往它身上挂桩。
+
+    ``_fresh()`` 每次都重建单例,所以**本文件内部**互不干扰;问题出在**跑完之后**:
+    单例停在最后一条用例留下的那个实例上,而它的 ``_try_ipc_http`` / ``_ws_broadcast``
+    已经被换成了写进**局部 list** 的 lambda。下一个文件 ``get_instance()`` 拿到的就是它,
+    于是它的每一次广播都掉进一个再也没人看的列表里。
+
+    实测受害者:``tests/test_tts_speaking_overlay_sync.py`` 的
+    ``test_speak_response_toggles_overlay_speaking_during_playback`` ——
+    ``覆盖层应先后收到 speaking=True/False; got [False]``。那唯一的 ``False`` 帧是
+    ``register_client()`` 里 ``_send_to()`` **直接**发的,没走 ``_ws_broadcast``;真正
+    要验的 ``True`` 脉冲则全被泄漏的 lambda 吞掉。它单跑一直是绿的,只在全量套件里红。
+
+    置 ``_instance = None`` 而不是逐个恢复方法:下一个使用者会拿到一个干净新建的实例,
+    不必去猜本文件到底挂了哪几个桩。
+    """
+    GalaxyPresenceBridge._instance = None
+    try:
+        yield
+    finally:
+        GalaxyPresenceBridge._instance = None
+
+
 def _fresh():
     GalaxyPresenceBridge._instance = None
     b = GalaxyPresenceBridge.get_instance()
