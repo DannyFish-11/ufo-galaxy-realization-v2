@@ -205,8 +205,67 @@ class DevicePoolManager:
             return 100.0
         return state.health_score
 
+    #: UDM 状态里明确表示"这台设备现在收不了活"的那几个值。
+    #:
+    #: 只列**否决**项而不是列"允许"项,是刻意的:``UnifiedDeviceStatus`` 将来加了
+    #: 新值(比如某种"部分可用"),默认应当是**不否决**、交给下面的健康登记表判断,
+    #: 而不是被一个写死的白名单悄悄挡在门外。宁可漏否决,不可误否决 ——
+    #: 误否决的症状是"明明设备在线却调度不到它",极难归因。
+    _UDM_NOT_DISPATCHABLE = frozenset({"offline", "error", "disconnected"})
+
+    @classmethod
+    def _udm_vetoes(cls, device_id: str) -> bool:
+        """UDM(SSOT)是否明确否决这台设备。
+
+        **这是 P3-3 读路径统一的落点。** 池子的写路径早就 write-through 到 UDM 了
+        (见 ``_udm_write_register``),但**读路径从来没问过 UDM** —— 于是两边会分叉:
+
+            pool.register_device("dev-A")          # UDM: ONLINE, 池子: 有记录
+            udm.update_device_status("dev-A", OFFLINE)   # 唯一合法的状态写路径
+            udm.get_online_devices()               # → []          UDM 知道它离线了
+            pool.list_devices(eligible_only=True)  # → ['dev-A']   池子不知道
+            pool.select_device()                   # → 'dev-A'     照样派活过去
+
+        实测复现过上面这四行。后果是任务被派到系统**明知已离线**的设备上,而
+        `core/unified/device_manager.py` 顶部的架构声明本来就写着:
+        device_pool_manager 是"调度层,不得作为平行真相源"。写路径遵守了,读路径没有。
+
+        判据(**只否决,不批准**):
+
+        * UDM 里这台设备的状态在 ``_UDM_NOT_DISPATCHABLE`` 里 → 否决;
+        * UDM 里**查不到**这台设备 → **不否决**。这是刻意的降级路径:
+          ``register_device`` 的 write-through 是 best-effort(UDM 写失败时仍保留
+          本地池记录以维持调度,见其 docstring)。这种情况下再把它否决掉,等于
+          "UDM 一抖动,整个调度停摆";
+        * UDM 本身不可用(import 失败 / 抛异常)→ **不否决**,同上。
+
+        一句话:**UDM 明确说不行才不行;UDM 没话说,就轮不到它否决。**
+        """
+        try:
+            from core.unified.device_manager import get_unified_device_manager
+
+            device = get_unified_device_manager().get_device(device_id)
+        except Exception as exc:  # pragma: no cover - UDM 不可用是降级路径
+            logger.debug("DevicePoolManager: UDM 查询不可用,不否决 %s: %s", device_id, exc)
+            return False
+
+        if device is None:
+            return False
+
+        status = getattr(device, "status", None)
+        # status 可能是 Enum 也可能已经是 str —— 统一按值比较,别依赖具体类型。
+        status_value = getattr(status, "value", status)
+        return str(status_value).lower() in cls._UDM_NOT_DISPATCHABLE
+
     def _is_eligible(self, device_id: str) -> bool:
-        """Return True if the device can accept new tasks."""
+        """Return True if the device can accept new tasks.
+
+        两道关卡,顺序有意义:先问 SSOT(设备**存在且愿意收活**吗),再问本地健康
+        登记表(熔断 / 隔离这类**调度层**的判断)。前者是全系统真相,后者是池子
+        自己的经验 —— 真相优先。
+        """
+        if self._udm_vetoes(device_id):
+            return False
         if self._health_registry is None:
             return True
         return self._health_registry.is_eligible(device_id)
