@@ -1024,6 +1024,18 @@ class GalaxyUnified:
                        else "检测到 Electron 依赖不完整(疑似上次 npm install 中断)，正在修复安装")
             print_status_row(f"{_reason} (npm install，可能数分钟)…", status="success")
             try:
+                # 修复安装前先清 npm 中断留下的暂存目录(.<包名>-<随机后缀>)。
+                # 不清的话 install 会撞 ENOTEMPTY:目标暂存名已存在且非空 ——
+                # 而"依赖不完整就重跑 install"的修复逻辑每次都撞同一个残留,
+                # 于是"检测到不完整 → 重装 → ENOTEMPTY → 仍不完整"死循环,
+                # 桌面覆盖层永远起不来。实测复现见 purge_npm_staging_dirs 文档。
+                from core.electron_launch_guard import (
+                    is_npm_stale_dir_error, purge_npm_staging_dirs,
+                )
+                _purged = purge_npm_staging_dirs(str(electron_dir / "node_modules"))
+                if _purged:
+                    logger.info("已清理 %d 个 npm 残留暂存目录后再安装", _purged)
+
                 _r = sp.run([npm, "install"], cwd=str(electron_dir),
                             capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=600)
                 if _r.returncode != 0:
@@ -1043,6 +1055,18 @@ class GalaxyUnified:
                             cwd=str(electron_dir), capture_output=True, text=True,
                             encoding="utf-8", errors="replace", timeout=600,
                         )
+                if _r.returncode != 0 and is_npm_stale_dir_error(_r.stderr or _r.stdout or ""):
+                    # 仍被残留目录挡住(嵌套 node_modules 里也可能有,或本轮又被打断)。
+                    # 换镜像绕不过本地文件系统,唯一确定能解开的办法是整个删掉
+                    # node_modules 重建 —— 它完全可由 package.json 重建,删除无损。
+                    logger.warning("npm install 仍被残留目录挡住(ENOTEMPTY),整体重建 node_modules…")
+                    print_status_row("检测到残留目录挡路，正在重建 node_modules…", status="success")
+                    import shutil as _shutil
+                    _shutil.rmtree(str(electron_dir / "node_modules"), ignore_errors=True)
+                    _r = sp.run([npm, "install"], cwd=str(electron_dir),
+                                capture_output=True, text=True, encoding="utf-8",
+                                errors="replace", timeout=600)
+
                 if _r.returncode != 0:
                     logger.error(
                         "Electron npm install 失败 (rc=%s):\n%s",

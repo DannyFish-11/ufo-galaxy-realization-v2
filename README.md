@@ -15,7 +15,7 @@
 ```
 用户桌面
     │
-    │ Ctrl+Space 唤醒
+    │ Ctrl+Alt+Space 唤醒
     │
     ▼
 ┌─────────────────────────────────────────────┐
@@ -35,7 +35,7 @@
             ▼
 ┌─────────────────────────────────────────────┐
 │          Galaxy Gateway (FastAPI)            │
-│  端口: 8765                                  │
+│  端口: 9000                                  │
 │                                              │
 │  REST API: /api/v1/*                         │
 │  WebSocket: /ws/desktop-presence             │
@@ -72,7 +72,8 @@ Electron 覆盖层/面板只是运行时外壳(runtime shell);OpenClawd 作为�
 | **MANIFEST** | 完全显形，结果显示 | AI 返回结果 | CRT 扫描线效果 + 结果面板 |
 
 快捷键：
-- `Ctrl+Space` — 唤醒 AI (SILENT → LIMINAL)
+- `Ctrl+Alt+Space` — 唤醒 AI (SILENT → LIMINAL)
+- `Ctrl+Alt+H` — 隐藏覆盖层
 - `F12` — 打开/关闭控制面板
 - `Esc` — 关闭结果 (MANIFEST → SILENT)
 
@@ -110,12 +111,12 @@ Electron 覆盖层/面板只是运行时外壳(runtime shell);OpenClawd 作为�
 注册你的服务器（华为云/阿里云/任何 Linux），通过对话远程操作：
 ```bash
 # 注册服务器
-curl -X POST http://localhost:8765/api/v1/agents/linux/servers \
+curl -X POST http://localhost:9000/api/v1/agents/linux/servers \
   -H "Content-Type: application/json" \
   -d '{"name":"华为云","host":"IP","port":22,"user":"root","key_path":"~/.ssh/id_rsa"}'
 
 # 远程执行命令
-curl -X POST http://localhost:8765/api/v1/agents/linux/servers/ID/execute \
+curl -X POST http://localhost:9000/api/v1/agents/linux/servers/ID/execute \
   -d '{"command":"uname -a && df -h"}'
 ```
 支持：SSH 密钥/密码认证、远程文件读写、系统信息查看、批量操作。
@@ -299,7 +300,7 @@ OLLAMA_URL=http://localhost:11434
 # === 系统配置 ===
 GALAXY_SYSTEM_MODE=desktop-local
 GALAXY_LOG_LEVEL=INFO
-PORT=8765
+PORT=9000
 
 # === AI 搜索 ===
 TAVILY_API_KEY=tvly-your-key
@@ -330,7 +331,7 @@ SSH_KEY_PATH=/home/you/.ssh/id_rsa
 | `/api/v1/agents/linux/*` | 9 | **远程服务器操作** (新增) |
 | `/api/v1/agents/sandbox/*` | 3 | **沙箱安全执行** (新增) |
 
-WebSocket: `ws://localhost:8765/ws/desktop-presence`
+WebSocket: `ws://localhost:9000/ws/desktop-presence`
 
 ---
 
