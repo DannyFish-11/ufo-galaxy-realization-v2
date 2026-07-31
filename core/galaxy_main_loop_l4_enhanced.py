@@ -10,8 +10,12 @@ L4 是一套自主认知增强循环（感知 → 目标分解 → 规划 → �
 集成点:
     UI → L4:   ``GalaxyMainLoopL4.receive_goal()`` 接收外部目标并入队
     L4 → UI:   通过 ``integration.event_bus`` 发布进度事件
-    服务端:    ``integration/websocket_server.py`` 通过 ``get_galaxy_loop()``
-               获取单例并调用 ``start()/stop()/get_status()/get_task_history()``
+    服务端:    **当前没有**。原先由 ``integration/websocket_server.py`` 通过
+               ``get_galaxy_loop()`` 驱动,但那个文件全仓零导入、零测试依赖,
+               只在几份历史报告里被当作独立入口提及,已删除。
+               因此本模块现在**只被测试与 scripts/validate_runtime.py 的
+               可导入性断言触及,生产路径不可达** —— 如实记在这里,免得
+               下一个人以为它在跑。
 
 设计原则:
     - 每个 L4 组件均以"可选降级"方式加载（try/except ImportError），

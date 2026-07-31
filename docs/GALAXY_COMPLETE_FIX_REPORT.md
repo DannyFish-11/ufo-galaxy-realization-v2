@@ -304,7 +304,7 @@ VLLM_URL=http://vllm:8000
 ```
 /mnt/okcomputer/output/galaxy_integration/
 ├── integration/event_bus.py
-├── integration/websocket_server.py
+├── integration/websocket_server.py  ← 已删除(零引用)
 ├── core/galaxy_main_loop_l4_enhanced.py
 ├── windows_client/windows_client_integrated.py
 ├── android_client/MainActivityIntegrated.kt

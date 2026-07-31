@@ -73,7 +73,7 @@
 | `ConnectionManager` | `core/connection_manager.py` | 核心连接管理 |
 | `ConnectionManager` | `core/routes/_shared.py` | 路由共享连接（同名！） |
 | `ConnectionManager` | `galaxy_gateway/websocket_handler.py` | Gateway WebSocket |
-| `ConnectionManager` | `integration/websocket_server.py` | 集成层 |
+| `ConnectionManager` | `integration/websocket_server.py` | 集成层 |  ← 已删除(零引用)
 | `DeviceManager` | `enhancements/multidevice/device_manager.py` | 增强层设备管理 |
 | `DeviceManager` | `galaxy_gateway/handlers/device_manager.py` | Gateway设备管理 |
 | `DeviceManager` | `galaxy_gateway/orchestrator.py` | 编排器内嵌设备管理 |

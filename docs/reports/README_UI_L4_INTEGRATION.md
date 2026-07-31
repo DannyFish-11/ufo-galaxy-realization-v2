@@ -49,7 +49,7 @@ pip install -r /path/to/galaxy-realization/requirements.txt
 
 ```bash
 # 启动WebSocket和HTTP服务器
-python integration/websocket_server.py
+# 该文件已删除(全仓零导入、零测试依赖)。WebSocket 服务由 galaxy_gateway 提供。
 
 # 服务器将在以下地址运行:
 # WebSocket: ws://0.0.0.0:8080
