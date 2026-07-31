@@ -422,7 +422,12 @@ jobs:
         run: |
           python scripts/ci_test_shard.py --shard ${{ matrix.shard }} --of 4 > /tmp/shard_files.txt
           echo "本片 $(wc -l < /tmp/shard_files.txt) 个测试文件"
-          xargs -a /tmp/shard_files.txt python -m pytest -v -m "not slow and not manual"
+          # -x:参数超长时**直接报错**,而不是默默拆成多次 pytest 调用。
+          # 拆开跑会产生多份互相独立的汇总(session 级 fixture 也会重跑),
+          # 前一份的失败很容易被后一份的 "all passed" 淹掉 —— 那是假绿。
+          # 当前 262 个文件约 10KB,离 ARG_MAX 很远;加 -x 是为了将来文件数
+          # 涨上去时**响亮地失败**,而不是悄悄换一种语义。
+          xargs -a /tmp/shard_files.txt -x python -m pytest -v -m "not slow and not manual"
 
   # 汇总作业:**刻意仍叫 test**。
   #
@@ -433,6 +438,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: test-shard
     if: always()
+    # 汇总作业本身只 echo 一句,正常几秒完事。仍然给上限:任何作业都不该无界 ——
+    # needs 卡住时它会一直挂着,又回到"耗到 runner 被回收"那个老问题上。
+    timeout-minutes: 5
     permissions:
       contents: read
     steps:
