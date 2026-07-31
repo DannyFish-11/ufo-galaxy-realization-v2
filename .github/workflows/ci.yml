@@ -377,16 +377,21 @@ jobs:
           fi
           echo "✅ V4 correctly present in $HANDLER for multi-step orchestration."
 
-  test:
+  test-shard:
     runs-on: ubuntu-latest
     # 硬性上限。此前挂死时这个作业会一直耗到 runner 被回收(实测有 64 分钟的),
     # GitHub 只丢下一句 "The runner has received a shutdown signal",既没有失败清单
     # 也没有任何线索。设了之后至少得到一个明确的"作业超时",而且
     # pytest.ini 的 faulthandler_timeout 会在此之前把挂点的线程堆栈打进日志。
-    # 正常全量约 20 分钟,60 分钟留了 3 倍余量。
-    timeout-minutes: 60
+    # 分片后单片实测约 5~6 分钟(全量约 20 分钟 ÷ 4),25 分钟留了 4 倍余量。
+    timeout-minutes: 25
     permissions:
       contents: read
+    strategy:
+      # 一片红不该取消其它片 —— 要的是**完整**的失败清单,不是"第一个坏消息"。
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -394,8 +399,53 @@ jobs:
           python-version: "3.11"
       - name: Install dependencies
         run: pip install -r requirements.txt -r requirements-dev.txt
-      - name: Run tests
-        run: python -m pytest tests/ -v -m "not slow and not manual"
+      # ── 为什么要分片(实测证据,不是猜)────────────────────────────────
+      # 上面那条 timeout-minutes 与 pytest.ini 里的 pytest-timeout /
+      # faulthandler 都**没能**救回这个作业:连续 5 次跑到 ~99% 时 runner 被
+      # 回收,一条 Timeout 行都没有。日志时间戳给出了原因 —— 同一文件里两条
+      # 相邻的纯结构断言(读源码比字符串,本该毫秒级):
+      #
+      #     02:15:08  test_delegation_helpers_are_not_public_api  PASSED [99%]
+      #     02:27:09  ##[error] runner has received a shutdown signal
+      #
+      # 中间隔了 12 分钟 —— 机器在换页。一个进程扛 4 万多条用例累积的内存,
+      # 到尾部把 runner 压垮。
+      #
+      # 已有的两套机制救不回来是因为**它们都是 per-test 的**,而停顿发生在两条
+      # 用例**之间**(两条各自都 PASSED),没有任何单条用例超时。所以对症的修法
+      # 不是再加一个计时器,而是让单个进程少扛一点。
+      #
+      # 切法与完整性保证见 scripts/ci_test_shard.py;
+      # tests/test_ci_test_shard.py 守住"并集=全集、两两不相交"——
+      # 分片最怕的不是慢,是悄悄漏掉一批用例还显示绿灯。
+      - name: Run tests (shard ${{ matrix.shard }}/4)
+        run: |
+          python scripts/ci_test_shard.py --shard ${{ matrix.shard }} --of 4 > /tmp/shard_files.txt
+          echo "本片 $(wc -l < /tmp/shard_files.txt) 个测试文件"
+          xargs -a /tmp/shard_files.txt python -m pytest -v -m "not slow and not manual"
+
+  # 汇总作业:**刻意仍叫 test**。
+  #
+  # 把原来的 test 直接改成 matrix 会让检查名变成 "test (1)".."test (4)" ——
+  # 分支保护里若要求一个叫 "test" 的检查,就会永远等不到它,PR 卡死无法合并。
+  # 保留这个同名作业,既拿到分片的收益,又不动任何已有的保护规则。
+  test:
+    runs-on: ubuntu-latest
+    needs: test-shard
+    if: always()
+    permissions:
+      contents: read
+    steps:
+      - name: 汇总分片结果
+        run: |
+          echo "分片整体结果: ${{ needs.test-shard.result }}"
+          # 任一分片未成功即判红。不能只看 failure —— cancelled / skipped
+          # 同样意味着"没有跑完",当成通过就是假绿。
+          if [ "${{ needs.test-shard.result }}" != "success" ]; then
+            echo "::error::有分片未成功(${{ needs.test-shard.result }}),详见各 test-shard 作业"
+            exit 1
+          fi
+          echo "全部 4 个分片通过"
 
   android-v2-contract-compatibility:
     # Cross-repo Android ↔ V2 schema/contract drift gate.
