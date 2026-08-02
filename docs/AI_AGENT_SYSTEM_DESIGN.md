@@ -39,7 +39,7 @@ Galaxy's Agent System implements an L4-autonomy multi-agent architecture with th
 | Fractal Agent | `core/fractal_agent.py` | Recursive task decomposition |
 | Agent Manifest | `core/agent_manifest.py` | Serializable deployment package for edge devices |
 | System Integration | `core/system_integration.py` | Unified capability registry |
-| Agent Context | `core/agent_context.py` | Passive context loading from AGENTS.md |
+| Agent Context | `core/agent/policy_loader.py` | Passive context loading (SOUL.md / AGENTS.md / USER.md) |
 
 ---
 

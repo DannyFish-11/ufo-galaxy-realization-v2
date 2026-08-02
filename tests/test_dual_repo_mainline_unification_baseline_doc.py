@@ -126,7 +126,6 @@ def test_appendices_exist_and_are_referenced_by_main_doc() -> None:
         "core/v2_unified_state_contract.py",
         "LocalExecutionModeGate.kt",
         "RuntimeController.kt",
-        "core/transport_hierarchy.py",
         "core/nats_bus.py",
         "core/master_brain.py",
         "core/unified_panel_aggregation.py",

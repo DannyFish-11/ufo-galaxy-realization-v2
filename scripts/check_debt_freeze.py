@@ -62,37 +62,37 @@ APPROVED_SHIM_ZONES = {
 
 # Known shim files outside approved zones (grandfathered; not flagged as NEW)
 KNOWN_SHIM_FILES = {
-    "galaxy_main_loop_l4.py",                             # root tombstone
-    "galaxy_gateway/aip_protocol_v2.py",                  # hard-raise guard
-    "core/routes/compat.py",                              # route compat layer
-    "core/orchestration_authority/legacy_paths.py",       # legacy orchestration registry
-    "core/capability_orchestrator.py",                    # deprecation wrapper
-    "core/production_baseline.py",                        # baseline compat
-    "core/command_router.py",                             # has compat shim section
-    "galaxy_gateway/routes/devices.py",                   # device compat shim note
-    "galaxy_gateway/protocol/compat.py",                  # AIP v2→v3 compat
+    "galaxy_main_loop_l4.py",  # root tombstone
+    "galaxy_gateway/aip_protocol_v2.py",  # hard-raise guard
+    "core/routes/compat.py",  # route compat layer
+    "core/orchestration_authority/legacy_paths.py",  # legacy orchestration registry
+    "core/capability_orchestrator.py",  # deprecation wrapper
+    "core/production_baseline.py",  # baseline compat
+    "core/command_router.py",  # has compat shim section
+    "galaxy_gateway/routes/devices.py",  # device compat shim note
+    "galaxy_gateway/protocol/compat.py",  # AIP v2→v3 compat
     # Additional known pre-existing shims/facades (grandfathered — Batch PR-5)
-    "core/legacy_purge_registry.py",                      # read-only purge catalogue
-    "core/architecture_status_report.py",                 # arch shim → tools/architecture/
-    "core/architecture_completion.py",                    # arch shim → tools/architecture/
-    "core/architecture_invariants.py",                    # arch shim → tools/architecture/
-    "core/architecture_live_status.py",                   # arch shim → tools/architecture/
-    "core/architecture_diagnostics.py",                   # arch shim → tools/architecture/
-    "core/architecture_truth_guards.py",                  # arch shim → tools/architecture/
-    "core/scenario_harness.py",                           # arch shim → tools/architecture/
-    "core/unified/config_manager.py",                     # compatibility facade
-    "galaxy_gateway/task_decomposer.py",                  # legacy; copy in galaxy_gateway/legacy/
-    "galaxy_gateway/capability_registry.py",              # legacy; copy in galaxy_gateway/legacy/
-    "galaxy_gateway/task_router.py",                      # legacy; → galaxy_gateway/routing/
-    "galaxy_gateway/handlers/message_handler.py",         # legacy chain-B dispatcher
+    "core/legacy_purge_registry.py",  # read-only purge catalogue
+    "core/architecture_status_report.py",  # arch shim → tools/architecture/
+    "core/architecture_completion.py",  # arch shim → tools/architecture/
+    "core/architecture_invariants.py",  # arch shim → tools/architecture/
+    "core/architecture_live_status.py",  # arch shim → tools/architecture/
+    "core/architecture_diagnostics.py",  # arch shim → tools/architecture/
+    "core/architecture_truth_guards.py",  # arch shim → tools/architecture/
+    "core/scenario_harness.py",  # arch shim → tools/architecture/
+    "core/unified/config_manager.py",  # compatibility facade
+    "galaxy_gateway/task_decomposer.py",  # legacy; copy in galaxy_gateway/legacy/
+    "galaxy_gateway/capability_registry.py",  # legacy; copy in galaxy_gateway/legacy/
+    "galaxy_gateway/task_router.py",  # legacy; → galaxy_gateway/routing/
+    "galaxy_gateway/handlers/message_handler.py",  # legacy chain-B dispatcher
     # PR-3 convergence — shims identified during session/continuity/authority unification
-    "core/runtime_closure_audit.py",                      # PR-3 runtime closure audit shim
-    "core/legacy_system_decommission.py",                 # PR-3 legacy system decommission shim
-    "core/llm/execution_authority.py",                    # PR-3 LLM execution authority compat
-    "core/schemas/ugcp/shared.py",                        # PR-3 UGCP shared schema compat
-    "galaxy_gateway/session_roaming.py",                  # PR-3 session roaming compat
-    "galaxy_gateway/enhanced_nlu_v2.py",                  # PR-3 enhanced NLU v2 compat
-    "galaxy_gateway/smart_transport_router.py",           # PR-3 smart transport router compat
+    "core/runtime_closure_audit.py",  # PR-3 runtime closure audit shim
+    "core/legacy_system_decommission.py",  # PR-3 legacy system decommission shim
+    "core/llm/execution_authority.py",  # PR-3 LLM execution authority compat
+    "core/schemas/ugcp/shared.py",  # PR-3 UGCP shared schema compat
+    "galaxy_gateway/session_roaming.py",  # PR-3 session roaming compat
+    "galaxy_gateway/enhanced_nlu_v2.py",  # PR-3 enhanced NLU v2 compat
+    "galaxy_gateway/smart_transport_router.py",  # PR-3 smart transport router compat
 }
 
 # Approved files that may contain `except ImportError` fallback definitions
@@ -125,7 +125,7 @@ APPROVED_IMPORT_FALLBACK_FILES = {
     "galaxy_gateway/routes/llm.py",
     "galaxy_gateway/routes/chat.py",
     # PR-3 convergence — unified_governance_semantics has a guarded optional dependency
-    "core/unified_governance_semantics.py",               # PR-3: guarded optional dependency
+    "core/unified_governance_semantics.py",  # PR-3: guarded optional dependency
     # projection 路由桥接为合法可选依赖兜底（projection_surface_bridge 不可用时降级 sentinel）
     "core/routes/projection.py",
 }
@@ -149,8 +149,7 @@ def _rel(path: Path) -> str:
 
 
 def _is_in_approved_shim_zone(rel_path: str) -> bool:
-    return any(rel_path.startswith(zone + "/") or rel_path.startswith(zone + "\\")
-               for zone in APPROVED_SHIM_ZONES)
+    return any(rel_path.startswith(zone + "/") or rel_path.startswith(zone + "\\") for zone in APPROVED_SHIM_ZONES)
 
 
 def _has_shim_indicators(content: str) -> bool:
@@ -216,14 +215,14 @@ def _has_inline_fallback_definition(source: str) -> bool:
 # Check 1 — New root-level placeholder Markdown files
 # ---------------------------------------------------------------------------
 
+
 def check_root_md_placeholders() -> list[str]:
     violations: list[str] = []
     for md_file in REPO_ROOT.glob("*.md"):
         size = md_file.stat().st_size
         if size < ROOT_MD_SIZE_LIMIT and md_file.name not in KNOWN_ROOT_PLACEHOLDERS:
             violations.append(
-                f"  NEW root placeholder MD: {md_file.name} ({size} bytes) — "
-                f"move content to docs/reports/ instead"
+                f"  NEW root placeholder MD: {md_file.name} ({size} bytes) — " f"move content to docs/reports/ instead"
             )
     return violations
 
@@ -231,6 +230,7 @@ def check_root_md_placeholders() -> list[str]:
 # ---------------------------------------------------------------------------
 # Check 2 — New compat shims outside approved zones
 # ---------------------------------------------------------------------------
+
 
 def check_compat_shims_outside_approved_zones() -> list[str]:
     violations: list[str] = []
@@ -262,6 +262,7 @@ def check_compat_shims_outside_approved_zones() -> list[str]:
 # Check 3 — New forbidden except ImportError fallback definitions
 # ---------------------------------------------------------------------------
 
+
 def check_import_error_fallbacks() -> list[str]:
     violations: list[str] = []
     scan_dirs = ["core", "galaxy_gateway", "launcher", "integration", "dashboard"]
@@ -292,6 +293,7 @@ def check_import_error_fallbacks() -> list[str]:
 # Check 4 — Oversized YAML files (informational)
 # ---------------------------------------------------------------------------
 
+
 def check_yaml_size() -> list[str]:
     warnings: list[str] = []
     for yaml_file in REPO_ROOT.rglob("*.yml"):
@@ -318,6 +320,7 @@ def check_yaml_size() -> list[str]:
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 def main() -> int:
     strict = "--strict" in sys.argv

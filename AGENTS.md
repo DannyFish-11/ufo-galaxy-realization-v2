@@ -94,9 +94,27 @@ Galaxy 是一个 L4 级自主性智能系统，支持：
 - `DELETE /api/v1/devices/{id}` - 注销设备
 
 ### MCP 管理
-- `GET /api/v1/mcp/servers` - 列出服务器
-- `POST /api/v1/mcp/load` - 加载服务器
-- `POST /api/v1/mcp/call` - 调用工具
+- `GET /api/v1/protocols/mcp` - 列出服务器
+- `POST /api/v1/protocols/mcp/load` - 加载服务器
+- `DELETE /api/v1/protocols/mcp/{name}` - 卸载服务器
+- `GET /api/v1/protocols/mcp/{name}/tools` - 列出工具
+- `POST /api/v1/protocols/mcp/{name}/call` - 调用工具
+- `POST /api/v1/protocols/mcp/{name}/reload` - 重载服务器
+
+> 前缀是 `/api/v1/protocols/`，不是 `/api/v1/mcp/`。本节原先写的 `/api/v1/mcp/*`
+> 三条**从未存在过** —— 声明它们的 `core/api_loader.py` 是一份未挂载的重复实现
+> （定义了 `APIRouter()`，但全仓没有任何 `include_router()` 引用它），已删除。
+> 真正提供这些端点的是 `core/routes/protocols.py`，由 `core/api_routes.py` 挂载；
+> 两者底层都调用同一个 `core.mcp_loader`。
+
+### 技能管理
+- `GET /api/v1/protocols/skills` - 列出技能
+- `POST /api/v1/protocols/skills/load` - 加载技能
+- `POST /api/v1/protocols/skills/{name}/execute` - 执行技能
+- `DELETE /api/v1/protocols/skills/{name}` - 卸载技能
+- `POST /api/v1/protocols/skills/{name}/reload` - 重载技能
+
+只读概览另有 `GET /api/v1/system/mcp` 与 `GET /api/v1/system/skills`。
 
 ### WebSocket
 - `/ws/device/{device_id}` - 设备连接
@@ -136,7 +154,7 @@ cp .env.example .env
 
 ### 添加 MCP 服务器
 1. 在 WebUI 中加载 MCP 服务器
-2. 或通过 API: `POST /api/v1/mcp/load`
+2. 或通过 API: `POST /api/v1/protocols/mcp/load`（注意前缀是 `/protocols/`）
 
 ### 添加技能
 1. 创建 `skills/your_skill/SKILL.md`

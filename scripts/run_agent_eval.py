@@ -53,17 +53,19 @@ def main() -> int:
     d = report.to_dict()
 
     print(json.dumps(d, ensure_ascii=False, indent=2))
-    print(f"\n通过率 {report.pass_rate:.0%} | 平均分 {report.avg_score:.3f} | "
-          f"{report.passed}/{report.total} 通过")
+    print(f"\n通过率 {report.pass_rate:.0%} | 平均分 {report.avg_score:.3f} | " f"{report.passed}/{report.total} 通过")
 
     if args.baseline and os.path.exists(args.baseline):
         try:
             base_d = json.load(open(args.baseline, encoding="utf-8"))
             base = EvalReport(
-                total=base_d["total"], passed=base_d["passed"],
-                avg_score=base_d["avg_score"], pass_rate=base_d["pass_rate"],
+                total=base_d["total"],
+                passed=base_d["passed"],
+                avg_score=base_d["avg_score"],
+                pass_rate=base_d["pass_rate"],
             )
             from core.eval.scorer import CaseScore
+
             base.scores = [CaseScore(c["id"], c["score"], c["passed"]) for c in base_d.get("cases", [])]
             regs = report.regressions_vs(base)
             print(f"回归项({len(regs)}): {regs}" if regs else "无回归 ✅")

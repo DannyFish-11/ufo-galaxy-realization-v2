@@ -11,12 +11,12 @@ Usage:
     python scripts/smoke_test.py --port 9000      # custom port
 """
 
-import sys
-import os
-import json
-import time
 import argparse
 import importlib
+import json
+import os
+import sys
+import time
 
 # Add project root
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -109,8 +109,11 @@ def test_http(host: str, port: int):
     for path, expected_status in endpoints:
         try:
             r = httpx.get(f"{base}{path}", timeout=5.0)
-            check(f"GET {path}", r.status_code == expected_status,
-                  f"status={r.status_code}" if r.status_code != expected_status else "")
+            check(
+                f"GET {path}",
+                r.status_code == expected_status,
+                f"status={r.status_code}" if r.status_code != expected_status else "",
+            )
         except httpx.ConnectError:
             check(f"GET {path}", False, "connection refused")
         except Exception as e:
@@ -121,28 +124,36 @@ def test_tests():
     """Run core unit tests."""
     print("\n=== Unit Tests ===")
     import subprocess
+
     result = subprocess.run(
-        [sys.executable, "-m", "pytest", "tests/test_phase234.py",
-         "tests/test_phase5_mesh.py", "tests/test_agent_migration.py",
-         "-v", "--tb=line", "-q"],
-        capture_output=True, text=True, timeout=60,
-        cwd=os.path.dirname(os.path.dirname(__file__))
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "tests/test_phase234.py",
+            "tests/test_phase5_mesh.py",
+            "tests/test_agent_migration.py",
+            "-v",
+            "--tb=line",
+            "-q",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        cwd=os.path.dirname(os.path.dirname(__file__)),
     )
     # Judge by pytest's exit code, not a stdout substring: "5 passed, 3 failed"
     # also contains "passed", so the old check reported failures as success.
     passed = result.returncode == 0
-    check("pytest (Phase 2-5 + Agent Migration)", passed,
-          result.stdout.strip().split("\n")[-1] if not passed else "")
+    check("pytest (Phase 2-5 + Agent Migration)", passed, result.stdout.strip().split("\n")[-1] if not passed else "")
 
 
 def main():
     parser = argparse.ArgumentParser(description="Galaxy Smoke Test")
     parser.add_argument("--host", default="localhost")
     parser.add_argument("--port", type=int, default=8080)
-    parser.add_argument("--skip-http", action="store_true",
-                        help="Skip HTTP endpoint tests")
-    parser.add_argument("--skip-tests", action="store_true",
-                        help="Skip running pytest")
+    parser.add_argument("--skip-http", action="store_true", help="Skip HTTP endpoint tests")
+    parser.add_argument("--skip-tests", action="store_true", help="Skip running pytest")
     args = parser.parse_args()
 
     print("=" * 50)

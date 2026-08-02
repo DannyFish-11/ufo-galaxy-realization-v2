@@ -911,5 +911,5 @@ galaxy_gateway/android/handlers/diagnostics.py (Android 端诊断信号入口)
 *本文档由 V2 仓库双仓审计系统生成，版本 V4，以 PR #993、#1041、#1042、#1043 合并定义为基线。本文档可随两仓代码变化更新，所有结论应以真实代码为最终权威。*
 
 *文档路径：`audit/DUAL_REPO_CENTERED_DISTRIBUTED_SYSTEM_AUDIT_V4_ZH.md`*
-*对应 contract：`core/dual_repo_centered_system_audit_contract.py`*
+*对应 contract：~~`core/dual_repo_centered_system_audit_contract.py`~~ —— 该模块已删除（一次性审计产物，生产面零引用；其基线钉的 PR #993/#1041/#1042/#1043 均已合并）。本文档保留为历史记录，不再有可执行的配套模块。*
 *对应测试：`tests/test_dual_repo_centered_system_audit.py`*

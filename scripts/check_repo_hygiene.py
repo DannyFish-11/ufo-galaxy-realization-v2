@@ -64,22 +64,52 @@ _GLOBAL_PATTERNS: List[ForbiddenPattern] = [
     ForbiddenPattern("*.swp", CATEGORY_TEMP, "Vim swap files must not be committed"),
     ForbiddenPattern("*.swo", CATEGORY_TEMP, "Vim swap files must not be committed"),
     # Cache directories (match_type="path_part" checks any directory segment)
-    ForbiddenPattern("__pycache__", CATEGORY_CACHE, "Python cache directories must not be committed", match_type="path_part"),
-    ForbiddenPattern(".pytest_cache", CATEGORY_CACHE, "pytest cache directories must not be committed", match_type="path_part"),
-    ForbiddenPattern(".mypy_cache", CATEGORY_CACHE, "mypy cache directories must not be committed", match_type="path_part"),
-    ForbiddenPattern(".ruff_cache", CATEGORY_CACHE, "ruff cache directories must not be committed", match_type="path_part"),
+    ForbiddenPattern(
+        "__pycache__", CATEGORY_CACHE, "Python cache directories must not be committed", match_type="path_part"
+    ),
+    ForbiddenPattern(
+        ".pytest_cache", CATEGORY_CACHE, "pytest cache directories must not be committed", match_type="path_part"
+    ),
+    ForbiddenPattern(
+        ".mypy_cache", CATEGORY_CACHE, "mypy cache directories must not be committed", match_type="path_part"
+    ),
+    ForbiddenPattern(
+        ".ruff_cache", CATEGORY_CACHE, "ruff cache directories must not be committed", match_type="path_part"
+    ),
     ForbiddenPattern("node_modules", CATEGORY_BUILD, "npm node_modules must not be committed", match_type="path_part"),
-    ForbiddenPattern(".cache", CATEGORY_CACHE, "Generic cache directories must not be committed", match_type="path_part"),
+    ForbiddenPattern(
+        ".cache", CATEGORY_CACHE, "Generic cache directories must not be committed", match_type="path_part"
+    ),
 ]
 
 # Stricter patterns enforced only inside nodes/
 _NODES_ONLY_PATTERNS: List[ForbiddenPattern] = [
     # Log files — only forbidden inside nodes/; root-level logs/ already in .gitignore
-    ForbiddenPattern("*.log", CATEGORY_LOG, "Log files are runtime artifacts that must not be committed inside node directories", nodes_only=True),
+    ForbiddenPattern(
+        "*.log",
+        CATEGORY_LOG,
+        "Log files are runtime artifacts that must not be committed inside node directories",
+        nodes_only=True,
+    ),
     # Databases — SQLite/runtime state files
-    ForbiddenPattern("*.db", CATEGORY_RUNTIME_DB, "Runtime database files must not be committed inside node directories", nodes_only=True),
-    ForbiddenPattern("*.sqlite", CATEGORY_RUNTIME_DB, "Runtime database files must not be committed inside node directories", nodes_only=True),
-    ForbiddenPattern("*.sqlite3", CATEGORY_RUNTIME_DB, "Runtime database files must not be committed inside node directories", nodes_only=True),
+    ForbiddenPattern(
+        "*.db",
+        CATEGORY_RUNTIME_DB,
+        "Runtime database files must not be committed inside node directories",
+        nodes_only=True,
+    ),
+    ForbiddenPattern(
+        "*.sqlite",
+        CATEGORY_RUNTIME_DB,
+        "Runtime database files must not be committed inside node directories",
+        nodes_only=True,
+    ),
+    ForbiddenPattern(
+        "*.sqlite3",
+        CATEGORY_RUNTIME_DB,
+        "Runtime database files must not be committed inside node directories",
+        nodes_only=True,
+    ),
 ]
 
 ALL_PATTERNS: List[ForbiddenPattern] = _GLOBAL_PATTERNS + _NODES_ONLY_PATTERNS
@@ -180,9 +210,11 @@ def _git_ignored_paths(root: Path) -> frozenset:
     """
     try:
         out = subprocess.run(
-            ["git", "-C", str(root), "ls-files", "-z", "--others",
-             "--ignored", "--exclude-standard", "--directory"],
-            capture_output=True, text=True, timeout=30, check=True,
+            ["git", "-C", str(root), "ls-files", "-z", "--others", "--ignored", "--exclude-standard", "--directory"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=True,
         ).stdout
     except Exception:
         return frozenset()
@@ -309,13 +341,11 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     if args.json:
         import json
+
         data = {
             "ok": report.ok,
             "violation_count": len(report.violations),
-            "violations": [
-                {"path": v.rel_path, "category": v.category, "reason": v.reason}
-                for v in report.violations
-            ],
+            "violations": [{"path": v.rel_path, "category": v.category, "reason": v.reason} for v in report.violations],
         }
         print(json.dumps(data, indent=2))
     else:

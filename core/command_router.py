@@ -131,6 +131,10 @@ class GatewayErrorCode(str, Enum):
     HITL_DENIED = "HITL_DENIED"  # HITL approval denied by operator
     CAPABILITY_MISMATCH = "CAPABILITY_MISMATCH"  # PR-1 P0: target lacks required capabilities
     V3_SLOT_BLOCKED = "V3_SLOT_BLOCKED"  # PR-V3: canonical dispatch slot authority blocked all targets
+    # PR-V1-DISPATCH: V1 统一会话连续性合法性权威在下发口拒绝(会话已失效/被顶替)。
+    # 与 V3_SLOT_BLOCKED 刻意分开:那条是"没有可用执行槽位",这条是"身份已经不合法",
+    # 调用方的处置完全不同(前者可等可重试,后者必须重新建立会话)。
+    CONTINUITY_LEGALITY_REJECTED = "CONTINUITY_LEGALITY_REJECTED"
 
 
 @dataclass
@@ -520,7 +524,14 @@ COMMAND_ROUTER_TARGET_ADMISSIBILITY_VALIDATED: str = (
 #   targets fail the check the dispatch proceeds with originals (graceful
 #   degradation) rather than silently dropping.
 #
-# Both gates degrade gracefully when their backing modules are unavailable —
+# Gate C — V1 continuity legality (ONLINE_DISPATCH_ACCEPTANCE)
+#   Submits the envelope's continuity identity to
+#   core.unified_continuity_legality_authority — the single canonical authority
+#   for "is this action legal with respect to session continuity".  Gate A asks
+#   a different question ("does this source have the posture to execute"), so
+#   the two are complementary, not redundant.
+#
+# All three gates degrade gracefully when their backing modules are unavailable —
 # the import is wrapped in try/except, the constraint check is skipped, and
 # the trace entry records the skip reason so gaps remain observable rather
 # than invisible.
@@ -551,6 +562,15 @@ SESSION_TRUTH_POSTURE_DISPATCH_FILTER_APPLIED: str = (
     "_constraint_chain_trace for reviewability. "
     "control_only sources that attempt non-cross-device local dispatch "
     "are flagged in the trace; join_runtime sources pass without restriction."
+)
+
+# ── Gate C: V1 unified continuity legality at dispatch ingress ───────────────
+# 实现与完整说明都在 core/dispatch_continuity_gate.py（拆出去的理由见那个模块的
+# docstring）。这里只做**再导出**，保持既有导入点 `from core.command_router import
+# DISPATCH_CONTINUITY_LEGALITY_GATE_APPLIED` 不变。
+from core.dispatch_continuity_gate import (  # noqa: E402,F401
+    DISPATCH_CONTINUITY_LEGALITY_ENFORCEMENT_ENV,
+    DISPATCH_CONTINUITY_LEGALITY_GATE_APPLIED,
 )
 
 
@@ -1204,6 +1224,38 @@ class CommandRouter:
             return payload
 
     # ------------------------------------------------------------------
+    # Gate C — V1 统一会话连续性合法性（下发口）
+    # ------------------------------------------------------------------
+    # 实现在 core/dispatch_continuity_gate.py。拆出去的理由见那个模块的
+    # docstring：这段逻辑写在这里会把本文件从 5456 行推到 5651 行，而本文件的
+    # File Complexity Budget 上限是 3000 行（早已超标被 grandfather 住）。
+    # "基线本来就红"不是继续把它推高的理由。
+    #
+    # 下面两个方法保留为**薄委托**：它们是已有测试与外部调用方看得见的入口，
+    # 搬家不应该顺手改签名。
+
+    @staticmethod
+    def _build_dispatch_continuity_context(envelope: "TaskEnvelope") -> Any:
+        """见 :func:`core.dispatch_continuity_gate.build_dispatch_continuity_context`。"""
+        from core.dispatch_continuity_gate import build_dispatch_continuity_context
+
+        return build_dispatch_continuity_context(envelope)
+
+    @staticmethod
+    def _evaluate_dispatch_continuity_legality(
+        envelope: "TaskEnvelope",
+        trace: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        """见 :func:`core.dispatch_continuity_gate.evaluate_dispatch_continuity_legality`。"""
+        from core.dispatch_continuity_gate import evaluate_dispatch_continuity_legality
+
+        return evaluate_dispatch_continuity_legality(
+            envelope,
+            trace,
+            error_code=GatewayErrorCode.CONTINUITY_LEGALITY_REJECTED.value,
+        )
+
+    # ------------------------------------------------------------------
     # 统一网关命令路径（PR-1: route_envelope 为主入口）
     # ------------------------------------------------------------------
 
@@ -1511,6 +1563,11 @@ class CommandRouter:
             "posture_filter_applied": False,
             "posture_eligible": None,
             "posture_value": None,
+            # Gate C — V1 continuity legality (ONLINE_DISPATCH_ACCEPTANCE)
+            "continuity_legality_applied": False,
+            "continuity_legality_verdict": None,
+            "continuity_legality_blocked": False,
+            "continuity_legality_reason": "",
         }
 
         # ── Gate A: Posture-aware session-truth filter ────────────────────────
@@ -1653,6 +1710,14 @@ class CommandRouter:
                     )
                 except Exception as exc:
                     logger.warning("Exception suppressed: %s", exc)
+
+        # ── Gate C: V1 unified continuity legality ────────────────────────────
+        # 见 DISPATCH_CONTINUITY_LEGALITY_GATE_APPLIED 哨兵的完整说明。
+        # 位置刻意选在 lifecycle mark_running **之前** —— 被拒的命令不该在生命周期
+        # 里留下一条 running 记录,否则 orchestrator 会等一个永远不会来的结果。
+        _continuity_block = self._evaluate_dispatch_continuity_legality(envelope, _constraint_chain_trace)
+        if _continuity_block is not None:
+            return _continuity_block
 
         # ── PR-5 Cap 1: lifecycle transition created → running ───────────────
         try:

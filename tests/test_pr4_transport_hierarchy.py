@@ -97,71 +97,6 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 
-class TestTransportHierarchyModule(unittest.TestCase):
-    """Tests 1–12: core/transport_hierarchy.py sentinels and helpers."""
-
-    def test_01_authority_importable(self):
-        from core.transport_hierarchy import TRANSPORT_HIERARCHY_AUTHORITY
-
-        self.assertIsInstance(TRANSPORT_HIERARCHY_AUTHORITY, str)
-        self.assertIn("TRANSPORT_HIERARCHY", TRANSPORT_HIERARCHY_AUTHORITY)
-
-    def test_02_role_direct_ws_is_primary(self):
-        from core.transport_hierarchy import TRANSPORT_ROLE_DIRECT_WS
-
-        self.assertEqual(TRANSPORT_ROLE_DIRECT_WS, "primary")
-
-    def test_03_role_relay_is_fallback(self):
-        from core.transport_hierarchy import TRANSPORT_ROLE_RELAY
-
-        self.assertEqual(TRANSPORT_ROLE_RELAY, "fallback")
-
-    def test_04_role_mesh_is_overlay(self):
-        from core.transport_hierarchy import TRANSPORT_ROLE_MESH
-
-        self.assertEqual(TRANSPORT_ROLE_MESH, "overlay")
-
-    def test_05_mesh_orchestration_excluded(self):
-        from core.transport_hierarchy import MESH_ORCHESTRATION_AUTHORITY_EXCLUDED
-
-        self.assertIs(MESH_ORCHESTRATION_AUTHORITY_EXCLUDED, True)
-
-    def test_06_role_for_path_direct_ws(self):
-        from core.transport_hierarchy import transport_role_for_path
-
-        self.assertEqual(transport_role_for_path("direct_ws"), "primary")
-
-    def test_07_role_for_path_ucm(self):
-        from core.transport_hierarchy import transport_role_for_path
-
-        self.assertEqual(transport_role_for_path("ucm"), "primary")
-
-    def test_08_role_for_path_relay(self):
-        from core.transport_hierarchy import transport_role_for_path
-
-        self.assertEqual(transport_role_for_path("relay"), "fallback")
-
-    def test_09_role_for_path_mesh_direct(self):
-        from core.transport_hierarchy import transport_role_for_path
-
-        self.assertEqual(transport_role_for_path("mesh_direct"), "overlay")
-
-    def test_10_role_for_path_mesh_relay(self):
-        from core.transport_hierarchy import transport_role_for_path
-
-        self.assertEqual(transport_role_for_path("mesh_relay"), "overlay")
-
-    def test_11_role_for_path_none(self):
-        from core.transport_hierarchy import transport_role_for_path
-
-        self.assertEqual(transport_role_for_path("none"), "none")
-
-    def test_12_role_for_path_unknown(self):
-        from core.transport_hierarchy import transport_role_for_path
-
-        self.assertEqual(transport_role_for_path("totally_unknown_path"), "unknown")
-
-
 class TestProxyRelaySentinel(unittest.TestCase):
     """Tests 13–14: core/proxy_relay.py transport role sentinel."""
 
@@ -207,20 +142,6 @@ class TestMeshCoordinatorSentinels(unittest.TestCase):
         from core.mesh_coordinator import MESH_ORCHESTRATION_EXCLUDED
 
         self.assertIs(MESH_ORCHESTRATION_EXCLUDED, False)
-
-
-class TestDeviceReadinessHierarchySentinel(unittest.TestCase):
-    """Tests 18–19: TRANSPORT_HIERARCHY_ENFORCED in device_readiness."""
-
-    def test_18_transport_hierarchy_enforced_in_all(self):
-        import core.device_readiness as dr
-
-        self.assertIn("TRANSPORT_HIERARCHY_ENFORCED", dr.__all__)
-
-    def test_19_transport_hierarchy_enforced_is_true(self):
-        from core.device_readiness import TRANSPORT_HIERARCHY_ENFORCED
-
-        self.assertIs(TRANSPORT_HIERARCHY_ENFORCED, True)
 
 
 class TestRoutabilitySummaryFields(unittest.TestCase):
@@ -412,3 +333,9 @@ class TestRoutabilitySummaryHierarchyLogic(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# 已删除依赖 core/transport_hierarchy.py 的用例 —— 该模块只有 transport_role_for_path()，
+# 生产面零引用；传输角色的实际决策在 core/capability_network_runtime_policy.py（12 处
+# 活引用）与 core/network_topology_runtime.py 的 assimilate_transport_hierarchy_record()。
+# 保留的用例测的是 proxy_relay / mesh_coordinator / device_readiness，仍在。

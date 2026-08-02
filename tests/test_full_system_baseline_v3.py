@@ -72,7 +72,6 @@ def _can_import(name: str) -> bool:
 
 
 _BASELINE_AVAILABLE = _can_import("core.full_system_baseline_v3")
-_GATE_AVAILABLE = _can_import("core.full_system_evidence_closure_gate")
 
 pytestmark = pytest.mark.skipif(
     not _BASELINE_AVAILABLE,
@@ -383,135 +382,10 @@ class TestGroupD_BaselineReport:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.skipif(
-    not _GATE_AVAILABLE,
-    reason="core.full_system_evidence_closure_gate not importable",
-)
-class TestGroupE_EvidenceClosureGate:
-    def test_E01_evaluate_returns_closure_gate_result(self) -> None:
-        from core.full_system_evidence_closure_gate import (
-            ClosureGateResult,
-            ClosureLevel,
-            evaluate_evidence_closure_gate,
-        )
-
-        result = evaluate_evidence_closure_gate(ClosureLevel.standard)
-        assert isinstance(result, ClosureGateResult)
-
-    def test_E02_standard_gate_fails_when_android_absent(self) -> None:
-        from core.full_system_evidence_closure_gate import (
-            ClosureLevel,
-            evaluate_evidence_closure_gate,
-        )
-
-        report = build_v3_baseline_report()
-        if not report.android_evidence_present:
-            result = evaluate_evidence_closure_gate(ClosureLevel.standard)
-            assert result.gate_passed is False
-            # At least one fail reason must mention android
-            assert any("android" in r.lower() or "cross-repo" in r.lower() for r in result.fail_reasons)
-
-    def test_E03_minimum_gate_does_not_fail_on_android_absence_alone(self) -> None:
-        """minimum level: android evidence absence alone should not be a fail reason.
-        The minimum gate only fails if subsystems are below implemented_but_not_closed."""
-        from core.full_system_evidence_closure_gate import (
-            ClosureLevel,
-            evaluate_evidence_closure_gate,
-        )
-
-        report = build_v3_baseline_report()
-        result = evaluate_evidence_closure_gate(ClosureLevel.minimum)
-        # At minimum level, android absence should not be a fail reason
-        android_fail = any("android" in r.lower() and "evidence" in r.lower() for r in result.fail_reasons)
-        assert not android_fail
-
-    def test_E04_strict_gate_fails_when_verdict_not_closed(self) -> None:
-        from core.full_system_evidence_closure_gate import (
-            ClosureLevel,
-            evaluate_evidence_closure_gate,
-        )
-
-        report = build_v3_baseline_report()
-        if report.overall_verdict.value != "closed_and_evidenced":
-            result = evaluate_evidence_closure_gate(ClosureLevel.strict)
-            assert result.gate_passed is False
-
-    def test_E05_closure_gate_result_json_roundtrip(self) -> None:
-        from core.full_system_evidence_closure_gate import (
-            ClosureLevel,
-            evaluate_evidence_closure_gate,
-        )
-
-        result = evaluate_evidence_closure_gate(ClosureLevel.standard)
-        j = result.to_json()
-        parsed = json.loads(j)
-        assert "gate_passed" in parsed
-        assert "closure_level" in parsed
-        assert "verdict" in parsed
-        assert "fail_reasons" in parsed
-
-    def test_E06_standard_gate_fails_when_android_evidence_detected_but_not_closure_grade(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        import core.full_system_baseline_v3 as baseline_mod
-        from core.full_system_evidence_closure_gate import (
-            ClosureLevel,
-            evaluate_evidence_closure_gate,
-        )
-
-        synthetic = V3BaselineReport(
-            overall_verdict=V3BaselineVerdict.partially_closed_blocking_gaps,
-            subsystems=_make_subsystems([SubsystemState.implemented_but_not_closed] * 12),
-            android_evidence_present=True,
-            android_evidence_state={
-                "detected": True,
-                "complete": False,
-                "fresh": True,
-                "authority_clear": True,
-                "routine_cross_repo_delivery": True,
-                "closure_grade": False,
-                "closure_blocking_reasons": ["android_evidence_not_complete"],
-            },
-        )
-        monkeypatch.setattr(baseline_mod, "build_v3_baseline_report", lambda: synthetic)
-        result = evaluate_evidence_closure_gate(ClosureLevel.standard)
-        assert result.gate_passed is False
-        assert any("closure-grade" in reason for reason in result.fail_reasons)
-
-    def test_E07_standard_gate_fails_when_overall_verdict_not_closure_grade(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        import core.full_system_baseline_v3 as baseline_mod
-        from core.full_system_evidence_closure_gate import (
-            ClosureLevel,
-            evaluate_evidence_closure_gate,
-        )
-
-        synthetic = V3BaselineReport(
-            overall_verdict=V3BaselineVerdict.partially_closed_blocking_gaps,
-            subsystems=_make_subsystems([SubsystemState.implemented_but_not_closed] * 12),
-            android_evidence_present=True,
-            android_evidence_state={
-                "detected": True,
-                "complete": True,
-                "fresh": True,
-                "authority_clear": True,
-                "routine_cross_repo_delivery": True,
-                "closure_grade": True,
-                "closure_blocking_reasons": [],
-            },
-        )
-        monkeypatch.setattr(baseline_mod, "build_v3_baseline_report", lambda: synthetic)
-        result = evaluate_evidence_closure_gate(ClosureLevel.standard)
-        assert result.gate_passed is False
-        assert any("standard level requires closure-grade baseline verdict" in reason for reason in result.fail_reasons)
-
-
-# ---------------------------------------------------------------------------
-# Group F — Singleton behaviour
-# ---------------------------------------------------------------------------
+# TestGroupE_EvidenceClosureGate 已删除：它测的是
+# core/full_system_evidence_closure_gate.py —— 一份一次性审计产物（生产面零引用），
+# 已随本轮清理一并删除。本文件其余部分测的是 core/full_system_baseline_v3.py，
+# 那个模块仍在，不受影响。
 
 
 class TestGroupF_Singleton:

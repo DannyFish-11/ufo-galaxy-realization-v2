@@ -130,7 +130,7 @@ V2 当前的真实中心权威可以直接按模块落点表述：
 | 任务链 | `core/canonical_execution_chain.py`、`core/task_result_canonical_truth_chain.py` | command router、device router、result ingress | 真主链 |
 | 路由 / 调度 / dispatch | `core/runtime/source_dispatch_orchestrator.py`、`core/command_router.py`、`galaxy_gateway/device_router.py` | OpenClawd / gateway / Android | 真主链 |
 | 设备接入 / registration / participation | `galaxy_gateway/routes/websocket.py`、`galaxy_gateway/android/handlers/registration.py`、`core/unified/device_manager.py` | gateway / projection / readiness / operator | 真主链，旁边仍有 compat 层 |
-| WebSocket / Mesh / relay / NATS | `galaxy_gateway/routes/websocket.py`、`core/transport_hierarchy.py`、`core/mesh_coordinator.py`、`core/nats_bus.py` | device router / mesh / worker domain | WS 主链；Mesh overlay；relay fallback；NATS 可选层 |
+| WebSocket / Mesh / relay / NATS | `galaxy_gateway/routes/websocket.py`、~~`core/transport_hierarchy.py`~~（已删除）、`core/capability_network_runtime_policy.py`、`core/mesh_coordinator.py`、`core/nats_bus.py` | device router / mesh / worker domain | WS 主链；Mesh overlay；relay fallback；NATS 可选层 |
 | 结果链 / 真值链 / 验收链 | `core/unified_result_ingress.py`、`core/task_result_canonical_truth_chain.py`、`core/routes/projection.py` | projection / operator / acceptance | 主链已形成，验收统一仍需加固 |
 | projection / operator / status board | `core/operator_surface.py`、`core/routes/operator.py`、`core/routes/projection.py`、`core/unified_panel_aggregation.py`、`windows_client/status_board_v2/device_surface.py` | operator-console / board / desktop | 消费面丰富，但仍存在多聚合层并存 |
 | desktop shell | `core/desktop_presence_runtime.py`、`desktop_projection/*.py`、`static/operator-console/index.html` | Windows 壳 / board / projection | 有显现骨架，但未成完整产品壳 |
@@ -204,7 +204,7 @@ V2 当前的真实中心权威可以直接按模块落点表述：
    - 风险：后续修复 Android/V2 状态时容易再造一层 reducer 或新 contract
 
 3. **transport 层已有 direct / relay / mesh / worker-domain 机制，但默认治理策略仍未完全统一**
-   - 代码：`core/transport_hierarchy.py`、`core/mesh_coordinator.py`、`core/nats_bus.py`、`core/master_brain.py`、Android `TailscaleAdapter.kt` / WebRTC 相关路径
+   - 代码：~~`core/transport_hierarchy.py`~~（已删除）、`core/mesh_coordinator.py`、`core/nats_bus.py`、`core/master_brain.py`、Android `TailscaleAdapter.kt` / WebRTC 相关路径
    - 现状：WS 是当前主链；Mesh 与 direct P2P 存在；NATS / MasterBrain 存在 worker-domain 路径；Android 还有 Tailscale / WebRTC 侧能力
    - 风险：若后续直接做“统一网络层”，很容易忽视当前主链和已有 optional/overlay 语义
 

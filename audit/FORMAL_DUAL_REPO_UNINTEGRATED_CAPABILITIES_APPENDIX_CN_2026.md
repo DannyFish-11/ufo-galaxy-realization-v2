@@ -24,7 +24,7 @@
 
 | 能力 | 代码位置 | 当前使用方式 | 为什么还没真正一体化 | 风险 |
 | --- | --- | --- | --- | --- |
-| Direct WS / relay / mesh role hierarchy | `core/transport_hierarchy.py`、`core/mesh_coordinator.py` | 已区分 `primary / fallback / overlay` | 真实消费策略仍分散在 dispatch / mesh / Android runtime / gateway | 后续再造“统一网络层”时误把 overlay 当主链 |
+| Direct WS / relay / mesh role hierarchy | ~~`core/transport_hierarchy.py`~~（已删除：生产面零引用，角色决策实际在 `core/capability_network_runtime_policy.py`）、`core/mesh_coordinator.py` | 已区分 `primary / fallback / overlay` | 真实消费策略仍分散在 dispatch / mesh / Android runtime / gateway | 后续再造“统一网络层”时误把 overlay 当主链 |
 | NATS worker-domain transport | `core/nats_bus.py`、`core/master_brain.py` | opt-in、`GALAXY_MASTER_BRAIN_ENABLED`、`GALAXY_NATS_URL`，且 NATS 连接失败可 local-only 退化 | 不属于当前 Android ↔ V2 默认主链 | 后续修 transport 时误把 NATS 升为默认主链 |
 | Android direct / mesh-side transport | Android `TailscaleAdapter.kt`、`WebRTCSignalingClient.kt`、`IceCandidateManager.kt`、`TurnConfig.kt` | Android 侧已有 direct path / signaling 能力 | V2 主链仍以 WS ingress 为主 | 后续做 P2P/mesh 时绕开现有 Android transport 能力重造 |
 
