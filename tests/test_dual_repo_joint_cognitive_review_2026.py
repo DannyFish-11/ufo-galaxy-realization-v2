@@ -244,67 +244,10 @@ class TestPerAreaProbeResults:
 # ---------------------------------------------------------------------------
 
 
-class TestDeepestCognitionAuditStage6to10:
-    """Verify Stage 6-10 checks integrated into deepest_dual_repo_cognition_audit."""
-
-    def test_stage6_check_importable(self) -> None:
-        from core.deepest_dual_repo_cognition_audit import check_stage6_master_brain_nats_lifecycle
-
-        result = check_stage6_master_brain_nats_lifecycle()
-        assert result.passed, f"Stage 6 check failed: {result.failure_detail}"
-
-    def test_stage7_check_importable(self) -> None:
-        from core.deepest_dual_repo_cognition_audit import (
-            check_stage7_distributed_execution_result_correlation,
-        )
-
-        result = check_stage7_distributed_execution_result_correlation()
-        assert result.passed, f"Stage 7 check failed: {result.failure_detail}"
-
-    def test_stage8_check_importable(self) -> None:
-        from core.deepest_dual_repo_cognition_audit import check_stage8_master_brain_state_persistence
-
-        result = check_stage8_master_brain_state_persistence()
-        assert result.passed, f"Stage 8 check failed: {result.failure_detail}"
-
-    def test_stage9_check_importable(self) -> None:
-        from core.deepest_dual_repo_cognition_audit import check_stage9_temporal_conditional_real
-
-        result = check_stage9_temporal_conditional_real()
-        assert result.passed, f"Stage 9 check failed: {result.failure_detail}"
-
-    def test_stage10_check_importable(self) -> None:
-        from core.deepest_dual_repo_cognition_audit import check_stage10_scheduling_truth_harness
-
-        result = check_stage10_scheduling_truth_harness()
-        assert result.passed, f"Stage 10 check failed: {result.failure_detail}"
-
-    def test_stage6_to_10_included_in_audit_snapshot(self) -> None:
-        """Stage 6-10 check names must appear in the full audit snapshot."""
-        from core.deepest_dual_repo_cognition_audit import build_cognition_audit_snapshot
-
-        snapshot = build_cognition_audit_snapshot()
-        check_names = {c["check_name"] for c in snapshot["checks"]}
-        expected = {
-            "stage6_master_brain_nats_lifecycle",
-            "stage7_distributed_execution_result_correlation",
-            "stage8_master_brain_state_persistence",
-            "stage9_temporal_conditional_real",
-            "stage10_scheduling_truth_harness",
-        }
-        missing = expected - check_names
-        assert not missing, f"Stage 6-10 checks missing from audit snapshot: {missing}"
-
-    def test_system_verdict_updated_for_stage6_to_10(self) -> None:
-        """SYSTEM_VERDICT must reference Stage 6-10 hardening."""
-        from core.deepest_dual_repo_cognition_audit import SYSTEM_VERDICT
-
-        assert "STAGE6_TO_10" in SYSTEM_VERDICT, f"SYSTEM_VERDICT must reflect Stage 6-10 hardening: {SYSTEM_VERDICT!r}"
-
-
-# ---------------------------------------------------------------------------
-# complete_joint_system_review android_audited_ref is current
-# ---------------------------------------------------------------------------
+# TestDeepestCognitionAuditStage6to10 已删除：它测的是
+# core/deepest_dual_repo_cognition_audit.py —— 一份一次性审计产物（生产面零引用），
+# 已随本轮清理一并删除。本文件其余部分测的是
+# core/dual_repo_joint_cognitive_review_2026.py，那个模块仍在。
 
 
 class TestCompleteJointSystemReviewRefUpdated:

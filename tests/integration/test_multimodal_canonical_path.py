@@ -26,7 +26,6 @@ All assertions are grounded in current merged code only:
   - core/routing_observability.py     (RoutingDecisionEvent)
   - galaxy_gateway/android/handlers/vision.py  (Android vision handler)
   - core/android_device_state_store.py  (DeviceStateSnapshot)
-  - core/five_domain_implementation_review.py  (domain review)
   - tests/integration/stubs/multimodal_perception_stub.py  (image stub)
   - tests/integration/stubs/llm_contract_stub.py  (LLM contract stub)
 
@@ -97,10 +96,6 @@ Test classes
    correctly reported as config-gated (SAFE_DEFAULT, enable_multimodal_ingest
    =False).  This test prevents overclaiming always-on ambient multimodal.
 
-10. TestFiveDomainReviewUpgrade
-    Proves that this test file's existence upgrades the MULTIMODAL_CANONICAL_PATH
-    domain in five_domain_implementation_review from
-    INFRASTRUCTURE_PRESENT_NOT_YET_E2E_PROVEN → PARTIALLY_ESTABLISHED.
 
 Non-goals
 ---------
@@ -116,9 +111,7 @@ import asyncio
 import pathlib
 import sys
 from typing import Any, Dict
-from unittest.mock import AsyncMock, MagicMock, patch
-
-import pytest
+from unittest.mock import patch
 
 REPO_ROOT = pathlib.Path(__file__).parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT))
@@ -1078,53 +1071,3 @@ class TestAmbientIngestRemainsGated:
 # ---------------------------------------------------------------------------
 # 10. Five-Domain Review Upgrade
 # ---------------------------------------------------------------------------
-
-
-class TestFiveDomainReviewUpgrade:
-    """Prove that this test file's existence upgrades the MULTIMODAL_CANONICAL_PATH
-    domain in five_domain_implementation_review.
-
-    When tests/integration/test_multimodal_canonical_path.py exists, the
-    five_domain_implementation_review must detect it and upgrade the domain
-    from INFRASTRUCTURE_PRESENT_NOT_YET_E2E_PROVEN → PARTIALLY_ESTABLISHED.
-
-    Evidence: core/five_domain_implementation_review.py (_test_file_exists,
-              mm_e2e_test_candidates, evidence_strength conditional)
-    """
-
-    def test_this_test_file_is_detected_by_review(self):
-        """five_domain_implementation_review must detect this file as e2e proof."""
-        from core.five_domain_implementation_review import (
-            EvidenceStrength,
-            ReviewDomain,
-            build_five_domain_review,
-        )
-
-        review = build_five_domain_review()
-        mm_entry = next(e for e in review.domain_entries if e.domain == ReviewDomain.MULTIMODAL_CANONICAL_PATH)
-        assert mm_entry.evidence_strength == EvidenceStrength.PARTIALLY_ESTABLISHED, (
-            f"MULTIMODAL_CANONICAL_PATH evidence_strength must be "
-            f"PARTIALLY_ESTABLISHED now that the e2e test file exists, "
-            f"got: {mm_entry.evidence_strength!r}.  "
-            f"This proves the five_domain_review correctly tracks test coverage."
-        )
-
-    def test_mm_e2e_test_candidate_list_includes_this_file(self):
-        """mm_e2e_test_candidates in five_domain_review must include this test module."""
-        review_src = (REPO_ROOT / "core" / "five_domain_implementation_review.py").read_text(encoding="utf-8")
-        assert "test_multimodal_canonical_path" in review_src, (
-            "five_domain_implementation_review.py must list "
-            "'test_multimodal_canonical_path' in mm_e2e_test_candidates"
-        )
-
-    def test_review_domain_enum_includes_multimodal(self):
-        """ReviewDomain enum must include MULTIMODAL_CANONICAL_PATH."""
-        from core.five_domain_implementation_review import ReviewDomain
-
-        assert hasattr(ReviewDomain, "MULTIMODAL_CANONICAL_PATH"), "ReviewDomain must include MULTIMODAL_CANONICAL_PATH"
-
-    def test_evidence_strength_partially_established_exists(self):
-        """EvidenceStrength must include PARTIALLY_ESTABLISHED."""
-        from core.five_domain_implementation_review import EvidenceStrength
-
-        assert hasattr(EvidenceStrength, "PARTIALLY_ESTABLISHED"), "EvidenceStrength must include PARTIALLY_ESTABLISHED"
