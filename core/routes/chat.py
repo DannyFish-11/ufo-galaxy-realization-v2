@@ -350,9 +350,19 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     """Create chat routes router."""
     router = APIRouter()
 
-    from core.unified import get_unified_llm_router
-
-    get_unified_llm_router()  # 统一 LLM 路由器入口（委派到 MultiLLMRouter）
+    # 这里原先有一句 ``get_unified_llm_router()`` —— 返回值**直接丢弃**,本模块
+    # 没有任何一个处理函数用到它,纯粹是一次预热。
+    #
+    # 代价却不小:它一路走到 MultiLLMRouter.__init__ → _discover_providers(),
+    # 那里为了探测本机 Ollama 会发同步阻塞的 httpx.get(默认地址 timeout=2s,
+    # 命中后再拉一次模型列表 timeout=3s)。也就是说**拼路由表的时候要去连一次网**,
+    # 最坏 5 秒,而且发生在 uvicorn 绑端口之前 —— 表现为"服务起了半天没反应",
+    # 没有任何日志指向真正的原因。本机没装 Ollama 时它是瞬间的 connection refused,
+    # 所以一直没被注意到;端口被防火墙丢包、或 OLLAMA_URL 指向一台关着的机器时,
+    # 这 5 秒就是实打实的。
+    #
+    # 删掉不改变任何行为:get_unified_llm_router 是纯粹的单例 getter,没有别的
+    # 副作用,真正需要它的调用方自己会去取(并付那一次的构造代价)。
 
     @router.post("/api/v1/chat")
     async def chat(req: ChatRequest):

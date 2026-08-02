@@ -91,6 +91,8 @@ class VoiceLoop:
         self._duplex: Optional[Any] = None
         self._duplex_player: Optional[Any] = None
         self._duplex_loop: Optional[asyncio.AbstractEventLoop] = None
+        # 双工↔统一主体的接线(见 core.duplex_presence_bridge);未启用双工时为 None
+        self._duplex_bridge: Optional[Any] = None
 
     async def start(self) -> None:
         """启动语音闭环。
@@ -191,6 +193,14 @@ class VoiceLoop:
         self._duplex_player = PcmPlayer(sample_rate=self.sample_rate)
         self._duplex_player.start()
 
+        # 把这条实时通路接回统一主体:三态持续在场(A1)、中心可叫停(A2)、
+        # 轮次进同一份会话记忆(A3)。接线失败不影响双工本身 —— 见
+        # core.duplex_presence_bridge 的模块说明。
+        from core.duplex_presence_bridge import DuplexPresenceBridge
+
+        self._duplex_bridge = DuplexPresenceBridge(session, source="voice_duplex")
+        await self._duplex_bridge.open()
+
         # 上行:复用采集服务(因此复用 AEC),把每块样本转成 PCM16 发上去
         capture = AudioCaptureService(
             config=AudioCaptureConfig(
@@ -258,6 +268,11 @@ class VoiceLoop:
                     import base64
 
                     self._duplex_player.play(base64.b64decode(ev.audio_b64))
+                elif ev.type is DuplexEventType.ASSISTANT_TEXT_DELTA and ev.text:
+                    # A3:助手侧文本按增量累积,回合结束时整段落进会话记忆。
+                    # 这里只累积不落盘 —— 它在下行热路径上。
+                    if self._duplex_bridge is not None:
+                        self._duplex_bridge.note_assistant_delta(ev.text)
                 elif ev.type is DuplexEventType.USER_SPEECH_STARTED:
                     if ducking_enabled() and self._duplex_player is not None:
                         self._duplex_player.duck()
@@ -278,12 +293,24 @@ class VoiceLoop:
                         await session.interrupt()
                         if self._duplex_player is not None:
                             self._duplex_player.unduck()
+                        # A3:只有**真正的发言**才进记忆。应答("嗯""对")在上面那个
+                        # 分支里,它们不是内容——把它们也记下来会污染上下文,让主体
+                        # 以为用户说了一堆没有信息量的话。
+                        if self._duplex_bridge is not None:
+                            await self._duplex_bridge.note_user_turn(ev.text)
                 elif ev.type is DuplexEventType.RESPONSE_DONE:
                     # 一个回合结束,音量必须回到正常 —— 否则下一段回复会一直是压着的
                     if self._duplex_player is not None:
                         self._duplex_player.unduck()
+                    if self._duplex_bridge is not None:
+                        await self._duplex_bridge.note_assistant_done()
                     logger.debug("双工:一个回复回合结束")
                 elif ev.type is DuplexEventType.SESSION_CLOSED:
+                    # 会话可能是**对端**断的(网络掉线/服务端超时),不一定走 stop()。
+                    # 那种情况下若不在这里收在场,主体就永远停在 LIMINAL —— 实时通路
+                    # 早断了,外壳还在呼吸。bridge.close() 幂等,与 stop() 的调用不冲突。
+                    if self._duplex_bridge is not None:
+                        await self._duplex_bridge.close()
                     return
         except asyncio.CancelledError:
             raise
@@ -556,6 +583,16 @@ class VoiceLoop:
                 await session.close()
             except Exception as exc:  # noqa: BLE001
                 logger.debug("关闭双工会话失败(忽略): %s", exc)
+
+        # 常驻在场的生命周期必须与双工会话对称。漏掉这里的后果是主体**永远停在
+        # LIMINAL**:语音早就停了,外壳还在呼吸,200ms 的 continuum tick 也一直在跑。
+        # 放在 session.close() 之后:先断实时通路,再宣告主体回到静默。
+        bridge, self._duplex_bridge = self._duplex_bridge, None
+        if bridge is not None:
+            try:
+                await bridge.close()
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("关闭双工接线失败(忽略): %s", exc)
 
         self._duplex_loop = None
         logger.info("VoiceLoop stopped")

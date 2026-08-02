@@ -42,13 +42,32 @@ logger = logging.getLogger(__name__)
 NODE_ID = "115"
 NODE_NAME = "PluginManager"
 
-PLUGIN_REGISTRY_PATH = os.getenv("PLUGIN_REGISTRY_PATH", "./plugins")
+# 插件注册表落盘位置。
+#
+# 原先是 ``os.getenv("PLUGIN_REGISTRY_PATH", "./plugins")`` —— 一个**相对 CWD**
+# 的默认值。两个后果:
+#
+#   1. 文件落在哪取决于你从哪个目录启动。正常从仓库根启动 = 写进**仓库目录**,
+#      于是这个纯运行时产物变成 git 里的一个未跟踪脏文件;本会话早先就有一次
+#      ``git add -A`` 把 plugins/registry.json 顺手提交了进去(已从索引移除并加进
+#      .gitignore)。.gitignore 挡住的是"被提交",挡不住"写错地方"。
+#   2. 换个目录启动就读不到上次的注册表 —— 表现为插件列表莫名回到内置三条,
+#      看不出是路径问题。
+#
+# 改用仓库既有的 GALAXY_DATA_DIR 约定(peer_trust / delegated_flow_persistence /
+# mesh 持久化都认它),并把兜底值锚在**本文件的位置**而不是 CWD,这样"从哪启动"
+# 不再改变数据位置。PLUGIN_REGISTRY_PATH 仍然优先,显式配置不受影响。
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+PLUGIN_REGISTRY_PATH = os.getenv("PLUGIN_REGISTRY_PATH", "").strip() or str(
+    Path(os.getenv("GALAXY_DATA_DIR", "").strip() or (_REPO_ROOT / "data")) / "plugins"
+)
 PLUGIN_STORE_URL = os.getenv("PLUGIN_STORE_URL", "")
 
 _start_time = datetime.now()
 
-# Ensure storage directory exists
-Path(PLUGIN_REGISTRY_PATH).mkdir(parents=True, exist_ok=True)
+# 目录**不在 import 期建**。建目录是文件系统副作用,不该由"导入一个模块"触发 ——
+# 只是 collect 一下测试、或者 import 进来读个常量,都不该在磁盘上留下东西。
+# 真正要写的时候 atomic_write_json 自己会 makedirs;读的时候 exists() 判空即可。
 _REGISTRY_FILE = Path(PLUGIN_REGISTRY_PATH) / "registry.json"
 
 app = FastAPI(title=f"Node {NODE_ID} - {NODE_NAME}", version="1.0.0")

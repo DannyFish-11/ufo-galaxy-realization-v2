@@ -161,6 +161,48 @@ async def record_session_turn(
         except Exception as exc:  # noqa: BLE001 — 跨模态记忆写入失败不影响主流程
             logger.debug("cross-modal memory write skipped: %s", exc)
 
+    # ── 预判式上下文注入(ACI):告知轮次已落库,并在助手轮次后安排预取 ──
+    #
+    # 放在这里而不是 handle_request 里,是因为轮次写入是**唯一**的收敛点:文字对话、
+    # 实时双工、跨设备回流全都经过它。挂在请求路径上就会漏掉双工(它根本不走
+    # handle_request)。
+    #
+    # 两件事:
+    #   1. note_turn_recorded —— 让 ACI 把该会话的既有预判作废(上下文含最近轮次,
+    #      轮次一变旧的就少一轮),同时给"请求在飞"计数收尾。
+    #   2. role == "assistant" 时安排下一轮的预取 —— 助手轮次落库 = 这一轮真的结束了,
+    #      从此刻到用户下一句之间就是那段空档。
+    # 全程 best-effort,永不影响对话。
+    # ── 焦点栈:用户发言驱动"当前在做什么 / 被搁下的还有哪些" ──
+    # 与 ACI 挂在同一处、同样的理由:轮次写入是唯一收敛点(文字、双工、跨设备回流
+    # 全经过它)。只看用户轮次 —— 助手的回复不改变"在做哪件事"。
+    if role == "user":
+        try:
+            from core.focus_stack import get_focus_stack
+
+            get_focus_stack(conversation_session_id).observe(content)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("焦点栈更新跳过(非致命): %s", exc)
+
+    try:
+        from core.anticipatory_context import get_anticipatory_context
+
+        _aci = get_anticipatory_context()
+        _aci.note_turn_recorded(conversation_session_id, role)
+        if role == "assistant":
+            _last_user = ""
+            for _turn in reversed(get_session_context(conversation_session_id, max_turns=6)):
+                if _turn.get("role") == "user":
+                    _last_user = str(_turn.get("content") or "")
+                    break
+            _aci.schedule_after_turn(
+                conversation_session_id,
+                last_user_query=_last_user,
+                last_assistant_text=content,
+            )
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("ACI 轮次钩子跳过(非致命): %s", exc)
+
 
 def get_session_context(
     conversation_session_id: str,
@@ -253,6 +295,42 @@ def get_unified_context(
     4. Event chain (current session)
 
     OpenClawd should call this instead of querying individual memory modules.
+
+    预判式上下文注入(ACI)
+    ----------------------
+    本函数是**同步**的,却要串行跑完 BM25 检索 + 会话历史 + 任务史 + 事件链 +
+    向量召回 —— 整段压在请求路径上。ACI 会在上一轮结束后的空档里把它预先算好;
+    这里先问一次缓存,命中就直接返回,那段耗时从请求路径上消失。
+
+    命中判定在 :mod:`core.anticipatory_context` 里,四道闸(同会话/轮次未变/
+    词法足够接近/一次性)。任何一道不过都是 miss,走下面的原路现算 —— 也就是说
+    ACI 关掉或猜错时,本函数的行为与它存在之前**逐字节相同**。
+    """
+    try:
+        from core.anticipatory_context import get_anticipatory_context
+
+        aci = get_anticipatory_context()
+        aci.note_context_requested(session_id)
+        prefetched = aci.take(session_id, query)
+        if prefetched is not None:
+            return prefetched
+    except Exception as exc:  # noqa: BLE001 — ACI 失灵绝不能让记忆读不出来
+        logger.debug("ACI 取用跳过(非致命): %s", exc)
+
+    return build_unified_context_uncached(session_id, query, depth, max_turns)
+
+
+def build_unified_context_uncached(
+    session_id: str,
+    query: str = "",
+    depth: str = "auto",
+    max_turns: int = 10,
+) -> List[Dict[str, str]]:
+    """真正的组装体 —— 不查 ACI 缓存,永远现算。
+
+    从 :func:`get_unified_context` 里拆出来,是因为 ACI 的预取协程需要一个
+    **不会递归进缓存**的入口:它调用的若还是带缓存的那个,预取自己就会去消费
+    自己上一次的预取结果,缓存永远填不满、命中率永远是零。
     """
     messages: List[Dict[str, str]] = []
 
@@ -294,6 +372,23 @@ def get_unified_context(
                 )
         except Exception as exc:
             logger.warning("Exception suppressed: %s", exc)
+
+    # 1c. 焦点栈 —— 放在轮次历史**之前**。
+    #
+    # 轮次历史是扁平的时间流,读到"行了,继续"时,模型只能自己从十几轮里推断这是要
+    # 继续哪件事。焦点栈把结构显式化(当前在做什么、被搁下的还有哪些、各搁了多久),
+    # 先给结构再给流水,"继续"就有了确定的指代。
+    #
+    # 只有栈里真有结构可讲时才输出(见 as_context_message):栈里只有一件事的时候
+    # 把它复述一遍是纯噪声,轮次历史里已经有了。
+    try:
+        from core.focus_stack import get_focus_stack
+
+        _focus_msg = get_focus_stack(session_id).as_context_message()
+        if _focus_msg:
+            messages.append(_focus_msg)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("焦点栈上下文跳过(非致命): %s", exc)
 
     # 2. Short-term conversation context
     try:
