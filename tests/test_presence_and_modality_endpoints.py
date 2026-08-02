@@ -113,6 +113,86 @@ class TestAmbientPresenceEndpoints:
         assert runtime.ambient_presence_snapshot()["active"] == 0, "钩子失败也必须停下来"
 
 
+@pytest.fixture()
+def fake_devices(monkeypatch):
+    """把**两个**设备源都换掉,返回一个"装设备"的函数。
+
+    必须两个都换 —— 这是真跑之后才补上的隔离:``core.routes._shared.registered_devices``
+    在模块 import 时就从仓库里那份 git 跟踪的 ``data/registered_devices.json`` 载入了
+    272 台真实设备。只换 UDM 的话,用例会看见 274 台,断言 ``device_count == 2``
+    当场垮掉,而且垮得莫名其妙(失败信息只说 274 != 2,不会说多出来的是仓库数据)。
+    """
+    from core.routes import _shared
+
+    monkeypatch.setattr(_shared, "registered_devices", {}, raising=False)
+
+    def _install(udm_devices=(), legacy=None):
+        class _UDM:
+            def list_devices(self):
+                return list(udm_devices)
+
+        monkeypatch.setattr(
+            "core.unified.device_manager.get_unified_device_manager",
+            lambda: _UDM(),
+        )
+        if legacy is not None:
+            monkeypatch.setattr(_shared, "registered_devices", dict(legacy), raising=False)
+
+    return _install
+
+
+class TestDeviceSourceMerge:
+    """设备源必须与 ``GET /api/v1/devices`` 同源同策略 —— 真跑抓到的坑。
+
+    第一版只读 UDM(它自称统一设备管理器、文档里是 SSOT)。真把服务跑起来一看:
+
+        GET /api/v1/devices   → 272 台
+        UDM.list_devices()    → 0 台
+
+    UDM 只在设备**运行时真连上来**时才被写入,冷启动是空的;那 272 台来自开机从
+    磁盘载入的 registered_devices。只读 UDM = 对每一台持久化设备视而不见,整个
+    设备维在生产里永远不会拦下任何东西 —— 门恒透明,功能存在但不生效,而且没有
+    任何报错。
+    """
+
+    def test_legacy_cache_devices_are_visible(self, fake_devices):
+        from core.modality_capability import iter_known_devices
+
+        fake_devices(udm_devices=(), legacy={"persisted-1": {"capabilities": ["camera"]}})
+
+        found = iter_known_devices()
+        assert [d["device_id"] for d in found] == ["persisted-1"]
+
+    def test_udm_takes_precedence_over_legacy_for_the_same_id(self, fake_devices):
+        """同一个 device_id 两边都有时,以 UDM 为主 —— 与规范端点一致。"""
+        from core.modality_capability import DeviceModalityGate, iter_known_devices
+        from core.unified.models import UnifiedDevice
+
+        fake_devices(
+            udm_devices=(UnifiedDevice(device_id="dev-1", capabilities=["camera", "microphone"]),),
+            legacy={"dev-1": {"capabilities": ["screen"]}},
+        )
+
+        found = iter_known_devices()
+        assert len(found) == 1
+        gate = DeviceModalityGate.from_device(found[0])
+        assert "camera" in gate.capabilities, "UDM 的条目该覆盖兼容缓存,而不是相反"
+
+    def test_both_sources_are_unioned(self, fake_devices):
+        from core.modality_capability import iter_known_devices
+        from core.unified.models import UnifiedDevice
+
+        fake_devices(
+            udm_devices=(UnifiedDevice(device_id="live", capabilities=["camera"]),),
+            legacy={"persisted": {"capabilities": ["microphone"]}},
+        )
+
+        assert sorted((d["device_id"] if isinstance(d, dict) else d.device_id) for d in iter_known_devices()) == [
+            "live",
+            "persisted",
+        ]
+
+
 class TestModalityDeviceEndpoints:
     def test_plan_without_device_is_unchanged(self, client):
         """不传 device_id 时结果与加入设备维之前一致(device_id 为空串)。"""
@@ -137,7 +217,7 @@ class TestModalityDeviceEndpoints:
         assert body["plan"]["vision_in"]["mode"] == "unavailable"
         assert body["plan"]["vision_in"]["limited_by"] == "device"
 
-    def test_device_matrix_answers_which_device_can_do_what(self, client, monkeypatch):
+    def test_device_matrix_answers_which_device_can_do_what(self, client, fake_devices):
         """跨设备派发挑设备时问的就是这张表 —— 没有它只能派出去再等超时。
 
         ``capable`` 是**三维合起来**的答案("这台设备端到端能不能做"),所以它同时
@@ -150,18 +230,11 @@ class TestModalityDeviceEndpoints:
         """
         from core.unified.models import UnifiedDevice
 
-        devices = [
-            UnifiedDevice(device_id="phone", capabilities=["camera", "microphone", "speaker", "screen"]),
-            UnifiedDevice(device_id="watch", capabilities=["microphone", "speaker"]),
-        ]
-
-        class _UDM:
-            def list_devices(self):
-                return devices
-
-        monkeypatch.setattr(
-            "core.unified.device_manager.get_unified_device_manager",
-            lambda: _UDM(),
+        fake_devices(
+            udm_devices=(
+                UnifiedDevice(device_id="phone", capabilities=["camera", "microphone", "speaker", "screen"]),
+                UnifiedDevice(device_id="watch", capabilities=["microphone", "speaker"]),
+            )
         )
         baseline = client.get("/api/v1/modality/plan").json()["plan"]
         body = client.get("/api/v1/modality/devices").json()
@@ -184,7 +257,7 @@ class TestModalityDeviceEndpoints:
         # 无论后端如何,手表都不可能进"能看"的名单 —— 这条与环境无关。
         assert "watch" not in body["capable"]["vision_in"]
 
-    def test_matrix_distinguishes_no_hardware_from_no_declaration(self, client, monkeypatch):
+    def test_matrix_distinguishes_no_hardware_from_no_declaration(self, client, fake_devices):
         """ "设备没这个硬件"和"没人填过它的能力表"必须分得开。
 
         混在一起会让人以为设备坏了。前者靠 plan 里的 unavailable,后者靠
@@ -192,14 +265,7 @@ class TestModalityDeviceEndpoints:
         """
         from core.unified.models import UnifiedDevice
 
-        class _UDM:
-            def list_devices(self):
-                return [UnifiedDevice(device_id="unfilled", capabilities=[])]
-
-        monkeypatch.setattr(
-            "core.unified.device_manager.get_unified_device_manager",
-            lambda: _UDM(),
-        )
+        fake_devices(udm_devices=(UnifiedDevice(device_id="unfilled", capabilities=[]),))
         body = client.get("/api/v1/modality/devices").json()
         row = body["devices"][0]
 

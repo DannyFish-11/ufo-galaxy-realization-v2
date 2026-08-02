@@ -160,11 +160,29 @@ class ModalityPlan:
 
 #: 各模态所需的设备能力(同义词都列上 —— 各注册方用词不统一,而这里判"没有"就要
 #: 关掉一个模态,宁可多认几个别名,也不能因为写法不同就误判成"这台设备没有麦克风")。
+#:
+#: **AUDIO_OUT 刻意不在这里** —— 这是真机实测改的,不是遗漏。
+#:
+#: 第一版给它配了 ``("speaker","audio_out","tts","audio")``,因为 speaker 看上去
+#: 就是 microphone 的对偶。把服务跑起来对着**全部 272 台已注册设备**一测:
+#:
+#:     被设备维拦掉「说」: 73 台   ← 即"申报了模态能力"的全部 73 台,一台不剩
+#:     样本能力表: ['camera', 'screen', 'touch']
+#:
+#: 因为这批设备实际用到的词汇只有 ``screen / touch / camera / microphone /
+#: keyboard`` —— **从来没有任何一台申报过音频输出能力**。于是那道门不可能有真阳性,
+#: 只能产出假阴性:凡是说了句人话的设备,"说"就被一刀切掉。一台有摄像头有屏幕的
+#: 手机当然有扬声器,只是没人往能力表里写。
+#:
+#: 这正是本模块头一再强调的"未知不设卡"——只不过这一次"未知"不是某台设备没填,
+#: 而是**整套词汇根本没有表达这件事的词**。没有能力表达 = 没有证据 = 不设卡。
+#: 等注册方真的开始上报 speaker/audio_out 了,再把它加回来(那时才会有真阳性)。
 _REQUIRED_DEVICE_CAPABILITY = {
     VISION_IN: ("camera", "screen", "display", "screen_capture", "vision"),
     AUDIO_IN: ("microphone", "mic", "audio_in", "audio"),
-    AUDIO_OUT: ("speaker", "audio_out", "tts", "audio"),
-    VIDEO_IN: ("camera", "video", "screen_capture"),
+    # 屏幕也是视频源(录屏/投屏),与 VISION_IN 保持一致 —— 此前只认 screen_capture
+    # 而不认 screen,导致"有屏幕没摄像头"的设备被判为完全不能处理视频。
+    VIDEO_IN: ("camera", "video", "screen", "display", "screen_capture"),
 }
 
 #: 模态词汇表:设备报的能力里出现过其中任何一个,才说明它"在用这套词汇说话",
@@ -215,11 +233,15 @@ class DeviceModalityGate:
     def allows(self, modality: str) -> bool:
         """这台设备是否具备该模态所需的硬件。
 
-        设备没报能力、或报的东西完全不在模态词汇里 → 一律放行(未知不设卡)。
+        三种情况一律放行(未知不设卡):设备没报能力、报的东西完全不在模态词汇里、
+        以及**该模态压根不受设备门控**(如 AUDIO_OUT,原因见
+        ``_REQUIRED_DEVICE_CAPABILITY``)。
         """
         if not self.speaks_vocabulary:
             return True
-        required = _REQUIRED_DEVICE_CAPABILITY.get(modality, ())
+        required = _REQUIRED_DEVICE_CAPABILITY.get(modality)
+        if not required:
+            return True  # 不在门控表里 = 没有判据 = 不拦
         return any(c in self.capabilities for c in required)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -230,15 +252,61 @@ class DeviceModalityGate:
         }
 
 
-def _lookup_device(device_id: str) -> Any:
-    """按 device_id 去 UDM 查设备。查不到/UDM 不可用都返回 None。"""
-    if not device_id:
-        return None
+def iter_known_devices() -> List[Any]:
+    """列出**运行时真正认得的**全部设备,与 ``GET /api/v1/devices`` 同源同策略。
+
+    为什么不能只读 UDM(真机实测)
+    -----------------------------
+    第一版这里只问 ``UnifiedDeviceManager``,理由是它自称统一设备管理器、文档里
+    是 SSOT。真把服务跑起来一看:
+
+        GET /api/v1/devices        → 272 台(capabilities 形如 ['screen','touch'])
+        UDM.list_devices()         → 0 台
+
+    因为 UDM 只在设备**运行时真连上来**时才被 ``register_device()`` 写入;冷启动
+    时它是空的,而那 272 台来自开机从磁盘载入的 ``registered_devices``(它在
+    ``core.routes._shared`` 里被标为 legacy compat cache,但它才是持久化的那份)。
+    规范的设备列表端点是**两个源合并**的 —— 只读 UDM 等于对每一台持久化设备
+    视而不见,整个设备维在生产里永远不会拦下任何东西:门恒透明,功能存在但不生效。
+
+    所以这里照抄 ``core/routes/devices.py::list_devices`` 的合并策略:
+    **UDM 为主,registered_devices 补充 UDM 中不存在的条目**。任何一侧不可用都
+    只是少一部分候选,不抛异常。
+
+    返回的元素既可能是 ``UnifiedDevice``,也可能是 dict —— ``DeviceModalityGate.
+    from_device`` 两种都认,调用方不必区分。
+    """
+    merged: Dict[str, Any] = {}
+    try:
+        from core.routes._shared import registered_devices
+
+        for did, info in (registered_devices or {}).items():
+            if isinstance(info, dict):
+                merged[str(did)] = {**info, "device_id": str(did)}
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("iter_known_devices: 兼容缓存不可用: %s", exc)
+
     try:
         from core.unified.device_manager import get_unified_device_manager
 
         for dev in get_unified_device_manager().list_devices() or []:
-            if str(getattr(dev, "device_id", "") or "") == device_id:
+            did = str(getattr(dev, "device_id", "") or "")
+            if did:
+                merged[did] = dev  # UDM 为主,覆盖同 ID 的兼容缓存条目
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("iter_known_devices: UDM 不可用: %s", exc)
+
+    return [merged[k] for k in sorted(merged)]
+
+
+def _lookup_device(device_id: str) -> Any:
+    """按 device_id 查设备。查不到/设备源不可用都返回 None(→ 门透明)。"""
+    if not device_id:
+        return None
+    try:
+        for dev in iter_known_devices():
+            did = dev.get("device_id") if isinstance(dev, dict) else getattr(dev, "device_id", "")
+            if str(did or "") == device_id:
                 return dev
     except Exception as exc:  # noqa: BLE001 — 设备源不可用只意味着不做门控
         logger.debug("设备能力查询失败,按不设卡处理 device_id=%s: %s", device_id, exc)
@@ -252,6 +320,8 @@ def _apply_device_gate(res: ModalityResolution, gate: DeviceModalityGate) -> Mod
     """
     if not res.usable or gate.allows(res.modality):
         return res
+    if res.modality not in _REQUIRED_DEVICE_CAPABILITY:
+        return res  # 该模态不受设备门控(见 _REQUIRED_DEVICE_CAPABILITY 里 AUDIO_OUT 的说明)
     required = "/".join(_REQUIRED_DEVICE_CAPABILITY.get(res.modality, ())[:2])
     return ModalityResolution(
         res.modality,
@@ -370,18 +440,11 @@ def devices_capable_of(modality: str, *, tier: Optional[str] = None) -> List[str
     "没说过做不做",看 :func:`device_modality_matrix` 里的 ``gating_active``。
     """
     out: List[str] = []
-    try:
-        from core.unified.device_manager import get_unified_device_manager
-
-        devices = get_unified_device_manager().list_devices() or []
-    except Exception as exc:  # noqa: BLE001 — 设备源不可用时返回空,调用方自行退回本机
-        logger.debug("devices_capable_of: 设备源不可用: %s", exc)
-        return []
-
-    for dev in devices:
+    for dev in iter_known_devices():
         try:
             if negotiate(tier=tier, device=dev).get(modality).usable:
-                out.append(str(getattr(dev, "device_id", "") or ""))
+                did = dev.get("device_id") if isinstance(dev, dict) else getattr(dev, "device_id", "")
+                out.append(str(did or ""))
         except Exception as exc:  # noqa: BLE001 — 单台设备协商失败不影响其余
             logger.debug("devices_capable_of: 设备协商失败 %s: %s", getattr(dev, "device_id", "?"), exc)
     return sorted(d for d in out if d)
@@ -389,24 +452,17 @@ def devices_capable_of(modality: str, *, tier: Optional[str] = None) -> List[str
 
 def device_modality_matrix(*, tier: Optional[str] = None) -> Dict[str, Any]:
     """所有已注册设备 × 全模态的协商结果。供面板与派发决策共用。"""
-    try:
-        from core.unified.device_manager import get_unified_device_manager
-
-        devices = get_unified_device_manager().list_devices() or []
-    except Exception as exc:  # noqa: BLE001
-        logger.debug("device_modality_matrix: 设备源不可用: %s", exc)
-        devices = []
-
     rows: List[Dict[str, Any]] = []
-    for dev in devices:
+    for dev in iter_known_devices():
         try:
             gate = DeviceModalityGate.from_device(dev)
+            _get = dev.get if isinstance(dev, dict) else (lambda k, d="": getattr(dev, k, d))
             rows.append(
                 {
                     "device_id": gate.device_id,
-                    "device_name": str(getattr(dev, "device_name", "") or ""),
-                    "device_type": str(getattr(dev, "device_type", "") or ""),
-                    "online": bool(getattr(dev, "is_online", lambda: False)()),
+                    "device_name": str(_get("device_name", "") or ""),
+                    "device_type": str(_get("device_type", "") or ""),
+                    "online": bool(_get("online", False)),
                     "gate": gate.to_dict(),
                     "plan": negotiate(tier=tier, device=dev).to_dict(),
                 }
@@ -439,6 +495,7 @@ __all__ = [
     "ModalityPlan",
     "negotiate",
     "DeviceModalityGate",
+    "iter_known_devices",
     "devices_capable_of",
     "device_modality_matrix",
     "asr_bridge_available",

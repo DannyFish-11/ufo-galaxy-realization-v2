@@ -72,14 +72,32 @@ class TestDeviceGating:
             plan.get(m).mode == "native" for m in ("vision_in", "audio_in", "audio_out", "video_in")
         ), plan.to_dict()
 
-    def test_headless_device_loses_audio(self, omni):
-        """只有屏幕、没有麦克风喇叭的设备(比如一块信息屏)。"""
+    def test_screen_only_device_loses_listening_but_not_speaking(self, omni):
+        """只有屏幕的设备(比如一块信息屏):听被关掉,说**不**被关掉。
+
+        "说"不受设备门控是**真机实测**得出的结论,不是遗漏。全部 272 台已注册设备
+        用到的能力词汇只有 screen/touch/camera/microphone/keyboard —— 从来没有
+        任何一台申报过音频输出。给 audio_out 配 speaker 判据的第一版,在真跑里把
+        "说"给**申报了模态能力的全部 73 台设备**一刀切掉了,一个真阳性都没有。
+        没有词可以表达 = 没有证据 = 不设卡。详见 _REQUIRED_DEVICE_CAPABILITY。
+        """
         panel = {"device_id": "panel-1", "capabilities": ["screen"]}
         plan = _negotiate(omni, panel)
 
         assert plan.vision_in.mode == "native"
         assert plan.audio_in.mode == "unavailable"
-        assert plan.audio_out.mode == "unavailable"
+        assert plan.audio_in.limited_by == "device"
+        assert plan.audio_out.mode == "native", "说不受设备门控 —— 词汇里没有表达它的词"
+
+    def test_audio_out_is_never_gated_by_device(self, omni):
+        """把这条单独钉死:任何设备申报组合都不该让"说"变成设备限制。
+
+        若日后有人把 speaker 加回 _REQUIRED_DEVICE_CAPABILITY,这条会立刻变红,
+        提醒他先去确认注册方**真的开始上报**音频输出能力了 —— 否则又是一刀切。
+        """
+        for caps in (["screen"], ["camera", "screen", "touch"], ["microphone"], ["keyboard", "touch"]):
+            plan = _negotiate(omni, {"device_id": "d", "capabilities": caps})
+            assert plan.audio_out.limited_by != "device", f"caps={caps} 让「说」被设备门控拦了"
 
     def test_gate_only_narrows_never_widens(self, monkeypatch):
         """设备再全能,也不能把模型/服务判死的模态救活。"""

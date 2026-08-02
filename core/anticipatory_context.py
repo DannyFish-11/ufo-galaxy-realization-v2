@@ -232,10 +232,18 @@ class AnticipatoryContext:
         self._slots: Dict[str, _SessionSlot] = {}
         self._tasks: set = set()
         self._stats: Dict[str, int] = {
-            "prefetch_scheduled": 0,
-            "prefetch_completed": 0,
+            # 计数单位必须写清楚。真跑时看到 scheduled=2 / completed=4,还以为
+            # "完成得比安排的还多" —— 其实一次 schedule 会预取 1~2 条(每条预判一次),
+            # 两个数根本不同量纲。改名把单位钉在名字里。
+            "prefetch_runs_scheduled": 0,  # 安排过几次预取(每轮对话结束最多一次)
+            "prefetch_entries_cached": 0,  # 真正存进缓存的条目数(一次预取可产出多条)
             "prefetch_skipped_busy": 0,
             "prefetch_failed": 0,
+            # take() 被调用但**会话 ID 为空**的次数。这条是真跑逼出来的:原先这种
+            # 情况直接 return None 且不计数,于是"门根本没被调用"和"门被调用了但
+            # 调用方没给会话 ID"在统计上完全一样 —— 而后者是接线错误,前者不是。
+            # 排查时这两种要花完全不同的力气去查,不能混。
+            "take_without_session": 0,
             "hit_exact": 0,
             "hit_lexical": 0,
             "hit_continuation": 0,
@@ -291,7 +299,10 @@ class AnticipatoryContext:
 
         本方法在请求热路径上被调用,只做集合运算,不做任何 I/O。
         """
-        if not aci_enabled() or not session_id:
+        if not aci_enabled():
+            return None
+        if not session_id:
+            self._stats["take_without_session"] += 1
             return None
         slot = self._slots.get(session_id)
         if slot is None or not slot.entries:
@@ -411,7 +422,7 @@ class AnticipatoryContext:
             # 那会绕过下面"有请求在飞就放弃"的闸门。
             return None
 
-        self._stats["prefetch_scheduled"] += 1
+        self._stats["prefetch_runs_scheduled"] += 1
         task = loop.create_task(self._prefetch(session_id, queries))
         self._tasks.add(task)
         task.add_done_callback(self._tasks.discard)
@@ -460,7 +471,7 @@ class AnticipatoryContext:
             max_per = _env_int("GALAXY_ACI_MAX_PER_SESSION", _DEFAULT_MAX_PER_SESSION)
             if len(slot.entries) > max_per:
                 slot.entries = slot.entries[-max_per:]
-            self._stats["prefetch_completed"] += 1
+            self._stats["prefetch_entries_cached"] += 1
 
     @staticmethod
     def _load_context(session_id: str, query: str) -> List[Dict[str, str]]:
