@@ -139,15 +139,12 @@ def test_unrelated_process_is_not_killed_when_pid_is_reused(stop_sandbox):
         assert r.returncode == 0, f"stop.sh 非零退出: {r.stderr}"
 
         time.sleep(0.3)
-        assert victim.poll() is None, (
-            "无关进程被误杀 —— PID 归属校验失效。\n"
-            f"stop.sh 输出:\n{r.stdout}\n{r.stderr}"
-        )
+        assert victim.poll() is None, "无关进程被误杀 —— PID 归属校验失效。\n" f"stop.sh 输出:\n{r.stdout}\n{r.stderr}"
 
         combined = r.stdout + r.stderr
-        assert "拒绝 kill" in combined or "不属于本仓库" in combined, (
-            f"未给出拒绝理由，用户无法判断发生了什么:\n{combined}"
-        )
+        assert (
+            "拒绝 kill" in combined or "不属于本仓库" in combined
+        ), f"未给出拒绝理由，用户无法判断发生了什么:\n{combined}"
     finally:
         victim.terminate()
         try:
@@ -183,8 +180,7 @@ def test_owned_process_is_actually_killed(stop_sandbox):
             time.sleep(0.1)
 
         assert victim.poll() is not None, (
-            "属于本仓库的进程没有被停掉 —— 归属校验过严，功能被砍。\n"
-            f"stop.sh 输出:\n{r.stdout}\n{r.stderr}"
+            "属于本仓库的进程没有被停掉 —— 归属校验过严，功能被砍。\n" f"stop.sh 输出:\n{r.stdout}\n{r.stderr}"
         )
     finally:
         if victim.poll() is None:  # pragma: no cover
