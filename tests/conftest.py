@@ -118,7 +118,29 @@ _REAL_CAPABILITIES = PROJECT_ROOT / "config" / "capabilities.json"
 if _REAL_CAPABILITIES.is_file():
     shutil.copy2(_REAL_CAPABILITIES, _TMP_CONFIG_DIR / "capabilities.json")
 
-# 这两个是硬设而非 setdefault：隔离不能被外部环境里一个残留的变量悄悄取消掉。
+# Android 设备状态 store：默认落在 tempfile.gettempdir()/galaxy_android_device_state_store.json，
+# 也就是【整机共享的一个固定路径】，而且跨进程、跨测试轮次长期残留。
+#
+# 后果不只是脏文件。core.dual_repo_system_completeness_review 的 cross_repo_evidence
+# 档位是这么判的：
+#
+#     runtime_cross_repo_activated = get_device_ecosystem_summary()["total_devices_with_snapshot"] > 0
+#     label = complete if not gaps else evidence_gap
+#
+# 只要曾经有任意一条设备快照落过盘，那个 gap 就消失、档位升到 complete，于是
+# tests/test_final_integrated_audit_verdict.py::...::test_I03_cross_repo_evidence_gap_consistent
+# （断言必须是 evidence_gap）失败 —— 而且是**永久**失败：污染写进了 /tmp，之后每个
+# 新进程读到的都是脏值，重跑、换分支都不会自愈，除非有人手动删文件。
+#
+# 这也是它在 CI 上表现为"顺序依赖"的原因：runner 的 /tmp 是干净的，所以要等同一分片里
+# 某个先跑的测试写进快照，后面的 I03 才翻档。谁先跑取决于分片怎么切 —— 于是新增一个
+# 测试文件就可能让它红/绿翻转，而真正的原因和那个新文件毫无关系。
+#
+# 该模块本身已经支持 ANDROID_DEVICE_STATE_STORE_PATH 覆盖，所以这里不必改生产代码，
+# 把它引到本次会话的临时目录即可。
+os.environ["ANDROID_DEVICE_STATE_STORE_PATH"] = str(Path(_RUNTIME_TMP) / "android_device_state_store.json")
+
+# 以上几个都是硬设而非 setdefault：隔离不能被外部环境里一个残留的变量悄悄取消掉。
 os.environ["GALAXY_CONFIG_DIR"] = str(_TMP_CONFIG_DIR)
 os.environ["GALAXY_KNOWLEDGE_DIR"] = str(Path(_RUNTIME_TMP) / "knowledge_db")
 

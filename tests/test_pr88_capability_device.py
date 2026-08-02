@@ -420,7 +420,28 @@ class TestDeviceRegistrationCapabilitySync:
         mock_registry = MagicMock()
         mock_registry.list_devices.return_value = {"oc_test_device": mock_device}
 
-        with patch("core.device_registry.DeviceRegistry.get_instance", return_value=mock_registry):
+        # sync_device_capabilities() 有两个设备来源，且是【优先级】关系：
+        #
+        #     Priority A: UnifiedDeviceManager
+        #     Fallback B: DeviceRegistry   ← 本测试 mock 的是这个
+        #
+        # 而 B 只在 A 返回空时才会被走到。UDM 是 __new__ 单例、进程级共享，任何
+        # 先跑过的测试只要往里注册过设备，A 就非空 —— 本测试的 mock 会被整个跳过，
+        # 同步的是那台残留设备（capabilities 通常为空），count 变 0。
+        #
+        # 这是实测出来的：单跑 tests/test_pr20_cross_repo_acceptance_chain.py 之后
+        # UDM 里会留下一台 pr20-* 设备且 capabilities=[]，本测试随即失败。它在 CI 上
+        # 表现为"顺序依赖"，但根子是这里【只控制了回退源、没控制优先源】——
+        # 也就是说此前它绿是侥幸，测的并不是它以为在测的那条路。
+        #
+        # 所以把 A 也显式置空，让 B 真正被执行。断言本身不动。
+        empty_udm = MagicMock()
+        empty_udm.list_devices.return_value = []
+
+        with (
+            patch("core.unified.device_manager.get_unified_device_manager", return_value=empty_udm),
+            patch("core.device_registry.DeviceRegistry.get_instance", return_value=mock_registry),
+        ):
             oc = OpenClawd()
             count = oc.sync_device_capabilities()
 

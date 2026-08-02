@@ -45,6 +45,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+import zlib
 from pathlib import Path
 from typing import List
 
@@ -67,13 +68,31 @@ def all_test_files(tests_dir: Path = TESTS_DIR) -> List[str]:
 def shard(files: List[str], index: int, total: int) -> List[str]:
     """取第 ``index`` 份(1-based),共 ``total`` 份。
 
-    轮转分配:第 i 个文件归第 ``i % total`` 份。
+    **按文件路径的哈希分配**,而不是按排序后的下标轮转。
+
+    为什么不是轮转
+    --------------
+    轮转(``i % total``)的分配依赖文件在【排序后列表里的下标】。新增一个测试文件,
+    排在它后面的每个文件下标都 +1,于是**四个分片整体重排** —— 实测新增一个
+    ``tests/test_atomic_json.py`` 就让分片 3 的 262 个文件从第 21 项起全部换掉。
+
+    后果不是"慢",是**归因失效**:某个 PR 只要增删一个测试文件,就等于把所有测试
+    重新掷一次骰子,潜伏的顺序依赖会随机地红或绿,而红的那条与该 PR 的改动可能
+    毫无关系。本仓库刚因此吃过一次亏 —— 一条读全局状态的审计断言,被无关的新增
+    测试文件推到了污染源后面。
+
+    哈希分配下,新增文件只影响它自己落到哪一片,其余文件的归属**一律不动**,
+    分片失败因此可归因。
+
+    用 ``zlib.crc32`` 而不是内置 ``hash()``:后者对 str 加了进程级随机盐
+    (PYTHONHASHSEED),同一份文件清单在两个进程里会切出不同的分片 —— 那会让
+    "本地复现 CI 的某一片"变成不可能。crc32 是确定性的、跨进程跨版本稳定。
     """
     if total < 1:
         raise ValueError(f"分片总数必须 >= 1,收到 {total}")
     if not 1 <= index <= total:
         raise ValueError(f"分片序号必须在 1..{total} 内,收到 {index}")
-    return [f for i, f in enumerate(files) if i % total == (index - 1)]
+    return [f for f in files if zlib.crc32(f.encode("utf-8")) % total == (index - 1)]
 
 
 def main() -> int:
