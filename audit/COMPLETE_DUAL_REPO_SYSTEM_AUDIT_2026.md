@@ -657,7 +657,7 @@ Wired in Python bridge: `handle_delegated_execution_signal` dispatches to `andro
 
 **Verdict: REAL/HOT-PATH**.
 
-#### Android Transport (A1/TRANSPORT) — `core/transport_hierarchy.py` + WS transport layer
+#### Android Transport (A1/TRANSPORT) — ~~`core/transport_hierarchy.py`~~（已删除） + `core/capability_network_runtime_policy.py` + WS transport layer
 
 FastAPI WebSocket endpoint in `galaxy_gateway/app.py`, OkHttp WS in `GalaxyWebSocketClient.kt`. Both confirmed live.
 

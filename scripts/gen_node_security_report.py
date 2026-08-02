@@ -62,9 +62,7 @@ NODES_DIR = REPO_ROOT / "nodes"
 def discover_nodes(nodes_dir: Path = NODES_DIR) -> list[str]:
     """Return sorted list of node directory names under *nodes_dir*."""
     return sorted(
-        p.name
-        for p in nodes_dir.iterdir()
-        if p.is_dir() and p.name.startswith("Node_") and (p / "main.py").exists()
+        p.name for p in nodes_dir.iterdir() if p.is_dir() and p.name.startswith("Node_") and (p / "main.py").exists()
     )
 
 
@@ -81,9 +79,7 @@ def _count_requirements(node_name: str) -> dict[str, int]:
     for label, path in [("node_direct", node_req), ("root_direct", root_req)]:
         if path.exists():
             lines = [
-                ln.strip()
-                for ln in path.read_text().splitlines()
-                if ln.strip() and not ln.strip().startswith("#")
+                ln.strip() for ln in path.read_text().splitlines() if ln.strip() and not ln.strip().startswith("#")
             ]
             counts[label] = len(lines)
         else:
@@ -249,9 +245,7 @@ def build_node_report(
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
-    )
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument(
         "--nodes",
         nargs="*",
@@ -392,9 +386,7 @@ def main(argv: list[str] | None = None) -> int:
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "total_nodes": len(reports),
         "nodes_with_sbom": sum(1 for r in reports if r["sbom"]["present"]),
-        "nodes_with_verified_signature": sum(
-            1 for r in reports if r["signature"].get("verified", False)
-        ),
+        "nodes_with_verified_signature": sum(1 for r in reports if r["signature"].get("verified", False)),
         "nodes_with_hash_locked_deps": sum(1 for r in reports if r["hash_locked"]),
         "nodes": [
             {

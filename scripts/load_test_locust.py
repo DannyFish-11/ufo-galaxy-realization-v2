@@ -66,6 +66,7 @@ _COMMANDS = ["ping", "status", "echo", "get_info"]
 # User behaviour
 # ---------------------------------------------------------------------------
 
+
 class GalaxyApiUser(HttpUser):
     """Simulates a client that dispatches commands and checks metrics."""
 
@@ -229,6 +230,7 @@ class GalaxyApiUser(HttpUser):
 # CI smoke validation hook
 # ---------------------------------------------------------------------------
 
+
 @events.quitting.add_listener
 def on_quitting(environment: Environment, **kwargs) -> None:  # type: ignore[misc]
     """Fail the CI run if the measured error rate exceeds the threshold."""
@@ -245,8 +247,7 @@ def on_quitting(environment: Environment, **kwargs) -> None:  # type: ignore[mis
 
     error_rate = failures / total
     print(
-        f"[load-test] total={total} failures={failures} "
-        f"error_rate={error_rate:.2%} threshold={_FAILURE_RATE:.2%}"
+        f"[load-test] total={total} failures={failures} " f"error_rate={error_rate:.2%} threshold={_FAILURE_RATE:.2%}"
     )
     if error_rate > _FAILURE_RATE:
         print(f"[load-test] FAIL: error rate {error_rate:.2%} exceeds threshold {_FAILURE_RATE:.2%}")

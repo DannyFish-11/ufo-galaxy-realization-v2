@@ -26,20 +26,17 @@ BOUNDARY_RULES: list[tuple[str, str, str]] = [
     (
         "core",
         "galaxy_gateway",
-        "core/ must not import from galaxy_gateway/ "
-        "(gateway depends on core, not the reverse)",
+        "core/ must not import from galaxy_gateway/ " "(gateway depends on core, not the reverse)",
     ),
     (
         "core",
         "dashboard",
-        "core/ must not import from dashboard/ "
-        "(dashboard is a consumer of core, not a dependency)",
+        "core/ must not import from dashboard/ " "(dashboard is a consumer of core, not a dependency)",
     ),
     (
         "core",
         "enhancements",
-        "core/ must not import from enhancements/ "
-        "(enhancements layer sits above core)",
+        "core/ must not import from enhancements/ " "(enhancements layer sits above core)",
     ),
 ]
 
@@ -75,26 +72,19 @@ def main() -> int:
             continue
         for py_file in sorted(src_path.rglob("*.py")):
             # Skip __pycache__ and virtual envs
-            if any(
-                part in py_file.parts
-                for part in ("__pycache__", ".venv", "venv", "node_modules")
-            ):
+            if any(part in py_file.parts for part in ("__pycache__", ".venv", "venv", "node_modules")):
                 continue
             for mod in _collect_imports(py_file):
                 if mod == forbidden_prefix:
                     rel = py_file.relative_to(repo_root)
-                    violations.append(
-                        f"  {rel}: imports '{forbidden_prefix}' — {description}"
-                    )
+                    violations.append(f"  {rel}: imports '{forbidden_prefix}' — {description}")
 
     if violations:
         label = "❌" if strict else "⚠️ "
         print(f"\n{label} Import boundary violations detected:\n")
         for v in violations:
             print(v)
-        print(
-            f"\n{'Failing CI (--strict mode).' if strict else 'Warning only — pass --strict to fail CI.'}"
-        )
+        print(f"\n{'Failing CI (--strict mode).' if strict else 'Warning only — pass --strict to fail CI.'}")
         return 1 if strict else 0
     else:
         print("✅ No import boundary violations detected.")

@@ -25,6 +25,7 @@ Usage
 With ``--warn-only`` the script always exits 0 but still prints violations.
 This matches the ``warning mode`` convention used by other guardrail scripts.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -130,9 +131,7 @@ def _check_no_new_py_sources_in_legacy_archive() -> List[str]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        description="Non-regression guard for PR-8 legacy cleanup."
-    )
+    parser = argparse.ArgumentParser(description="Non-regression guard for PR-8 legacy cleanup.")
     parser.add_argument(
         "--warn-only",
         action="store_true",

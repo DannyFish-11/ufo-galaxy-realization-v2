@@ -88,8 +88,8 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 # Patterns that indicate a call is going through the canonical router
 CANONICAL_CALL_PATTERNS = frozenset(
     [
-        "route_request",           # EntrypointRouter.route_request()
-        "get_entrypoint_router",   # obtaining the singleton
+        "route_request",  # EntrypointRouter.route_request()
+        "get_entrypoint_router",  # obtaining the singleton
     ]
 )
 
@@ -126,7 +126,7 @@ class BypassFinding:
     file: str
     line: int
     col: int
-    kind: str       # "direct_handler_call" | "direct_submit" | "forbidden_v2_import"
+    kind: str  # "direct_handler_call" | "direct_submit" | "forbidden_v2_import"
     detail: str
 
 
@@ -249,9 +249,9 @@ def scan_repo(repo_root: Path) -> List[BypassFinding]:
 
     for root, dirs, files in os.walk(repo_root):
         dirs[:] = [
-            d for d in dirs
-            if not d.startswith(".")
-            and d not in ("__pycache__", "node_modules", ".git", "venv", ".venv")
+            d
+            for d in dirs
+            if not d.startswith(".") and d not in ("__pycache__", "node_modules", ".git", "venv", ".venv")
         ]
         for fname in files:
             if not fname.endswith(".py"):

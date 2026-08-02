@@ -62,6 +62,17 @@ bash start.sh          # Linux/macOS
 .\start.bat           # Windows
 ```
 
+停止：
+
+```bash
+bash stop.sh           # Linux/macOS
+.\stop.bat            # Windows
+```
+
+> 两个停止脚本都会先核对 PID 文件里的进程**确实属于本仓库**再终止 ——
+> 陈旧的 PID 文件里那个号码可能早已被系统回收并分配给别的进程，
+> 不校验就直接 kill 等于在杀无关进程。
+
 系统启动后访问：
 - 🌐 **API 文档**: http://localhost:9000/docs
 - 📊 **状态板**: http://localhost:9000/api/status

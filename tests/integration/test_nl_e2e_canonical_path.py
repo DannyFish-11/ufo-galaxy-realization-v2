@@ -71,10 +71,8 @@ Test classes
 7. TestUnifiedPanelReflectsNLExecution
    Proves unified panel can be built after NL execution (PR-1 integration).
 
-8. TestFiveDomainReviewUpgrade
-   Proves that adding this test file upgrades the NL domain score in
-   five_domain_implementation_review.py from PARTIALLY_ESTABLISHED to
-   a state where nl_e2e_found == True.
+8. TestLLMContractStub
+   The LLM contract stub used by this file must be importable and usable.
 
 Non-goals
 ---------
@@ -785,50 +783,14 @@ class TestUnifiedPanelReflectsNLExecution:
 # ---------------------------------------------------------------------------
 
 
-class TestFiveDomainReviewUpgrade:
-    """Prove adding this test file upgrades the NL domain detection in
-    five_domain_implementation_review.py.
+class TestLLMContractStub:
+    """LLM 契约桩必须可用 —— 本条与已删除的 five_domain_implementation_review 无关。
 
-    The _test_file_exists() check in five_domain_implementation_review uses
-    _try_import() which resolves to the importable module path
-    'tests.integration.test_nl_e2e_canonical_path'.
-    Once this file exists, nl_e2e_found will be True and the gap will close.
+    （历史注记：它原先挂在 ``TestFiveDomainReviewUpgrade`` 类下。那个类的其余三条
+    断言的是"本测试文件的存在会把 five_domain_implementation_review 里 NL 域的
+    evidence_strength 提级"——测的是那份审计产物自己的记账，不是系统行为。
+    审计产物已删，那三条随之删除；这一条是真测试，移出来保留。）
     """
-
-    def test_nl_e2e_canonical_path_module_importable(self):
-        """tests.integration.test_nl_e2e_canonical_path must be importable."""
-        import importlib
-
-        mod = importlib.import_module("tests.integration.test_nl_e2e_canonical_path")
-        assert mod is not None, (
-            "tests.integration.test_nl_e2e_canonical_path must be importable so "
-            "five_domain_implementation_review can detect it"
-        )
-
-    def test_five_domain_review_nl_e2e_found(self):
-        """five_domain_implementation_review._test_file_exists must return True for
-        the NL e2e module path once this file exists."""
-        from core.five_domain_implementation_review import _test_file_exists
-
-        result = _test_file_exists("tests.integration.test_nl_e2e_canonical_path")
-        assert result is True, (
-            "five_domain_implementation_review._test_file_exists must return True "
-            "for 'tests.integration.test_nl_e2e_canonical_path' — this upgrades "
-            "the NL domain from PARTIALLY_ESTABLISHED"
-        )
-
-    def test_nl_domain_review_has_no_e2e_gap_after_this_file(self):
-        """After this test file is added, the NL domain review must NOT report
-        the 'NL END-TO-END CI PROOF MISSING' gap (since nl_e2e_found becomes True)."""
-        from core.five_domain_implementation_review import _review_natural_language_canonical_path
-
-        entry = _review_natural_language_canonical_path()
-        # The gap must no longer be listed since nl_e2e_found is now True
-        gap_texts = " ".join(entry.gap_items).lower()
-        assert "nl end-to-end ci proof missing" not in gap_texts, (
-            "The 'NL END-TO-END CI PROOF MISSING' gap must be resolved once "
-            "tests/integration/test_nl_e2e_canonical_path.py exists"
-        )
 
     def test_llm_contract_stub_importable(self):
         """The LLM contract stub must be importable."""

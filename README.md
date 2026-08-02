@@ -375,7 +375,7 @@ WebSocket: `ws://localhost:9000/ws/desktop-presence`
 | Electron 入口 | `electron/main.js` | 桌面主进程 |
 | 三态管理 | `electron/renderer/app.js` | SILENT/LIMINAL/MANIFEST |
 | NLU 引擎 | `galaxy_gateway/enhanced_nlu_v2.py` | Gemma 4 / MiniCPM + 级联回退 |
-| 上下文压缩 | `core/context_compressor.py` | 突破 128K 限制 |
+| 长上下文/记忆 | `core/memory/` | 统一记忆层（原 `core/context_compressor.py` 已删除，见下） |
 | 沙箱 | `galaxy_gateway/routes/sandbox.py` | 安全检查 |
 | Linux Agent | `galaxy_gateway/routes/linux_agent.py` | 远程服务器 |
 | 事件总线 | `core/state_event_bus.py` | 三态事件发布订阅 |

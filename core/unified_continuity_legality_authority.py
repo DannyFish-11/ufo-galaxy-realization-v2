@@ -478,6 +478,25 @@ _IDENTITY_STRICT_PATHS = frozenset(
 )
 
 # Paths that evaluate signal guard dimensions
+# 维度 5/6（stale_runtime / stale_attachment）只适用于**恢复类**路径。
+#
+# 依据是 core.flow_continuity_coordinator.decide_stale_identity() 自己的场景声明：
+#   "Android presents an identity ... that V2 no longer holds a live record for"
+# 那问的是"你拿着一个我已经不认的身份来续"，属于重连/重放/恢复语义。
+#
+# 下发路径（ONLINE_DISPATCH_ACCEPTANCE）不成立：那里"没有活记录"最常见的原因是
+# **会话是新的**，而不是陈旧。实测（真实 CommandRouter + 真实注册表，未打桩）：
+#   metadata={"source_device_id": "<从未注册过的设备>", "session_id": "s-probe"}
+#   → dim=stale_runtime_rejection verdict=reject
+#     reason="stale identity: session_state='' tracking_phase='' flow_phase=''"
+# 三个状态字段全是空串 —— 也就是"查无此会话"被判成了"会话已陈旧"，
+# 首次派发会被误杀。
+#
+# 下发路径真正需要的那条保护并没有丢：维度 1（runtime_session_continuity，
+# 走 _check_session_identity）仍然对 terminal 态 / attachment id 不匹配判 REJECT，
+# 那才是审计要求拦住的"会话已被顶替仍在派发命令"。
+_STALE_DIMENSION_PATHS = _IDENTITY_STRICT_PATHS - frozenset({ContinuityLegalityPath.ONLINE_DISPATCH_ACCEPTANCE})
+
 _SIGNAL_GUARD_PATHS = frozenset(
     {
         ContinuityLegalityPath.ONLINE_SIGNAL_INGESTION,
@@ -639,7 +658,8 @@ class UnifiedContinuityLegalityAuthority:
             dimension_outcomes.append(outcome)
 
         # ── Dimension 5 & 6: Stale runtime + stale attachment rejection ────
-        if path in _IDENTITY_STRICT_PATHS:
+        # 见 _STALE_DIMENSION_PATHS 的说明：下发路径不适用这两个维度。
+        if path in _STALE_DIMENSION_PATHS:
             stale_rt = self._check_stale_runtime(ctx)
             if stale_rt is not None:
                 dimension_outcomes.append(stale_rt)

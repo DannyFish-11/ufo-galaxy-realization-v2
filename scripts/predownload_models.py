@@ -40,6 +40,7 @@ def _log(level: str, msg: str) -> None:
 def _apply_mirror() -> None:
     try:
         from core.memory._hf_mirror import ensure_hf_mirror
+
         ep = ensure_hf_mirror()
         if ep:
             _log("INFO", f"HuggingFace 端点: {ep}")
@@ -80,6 +81,7 @@ def _predownload_crossmodal() -> None:
         model = os.getenv("GALAXY_CLIP_MODEL", "clip-ViT-B-32").strip()
         try:
             from sentence_transformers import SentenceTransformer  # type: ignore
+
             _log("INFO", f"预下载 CLIP 模型: {model}…")
             SentenceTransformer(model)
             _log("OK", f"CLIP 模型已就绪: {model}")
@@ -90,6 +92,7 @@ def _predownload_crossmodal() -> None:
         model = os.getenv("GALAXY_CLAP_MODEL", "laion/clap-htsat-unfused").strip()
         try:
             from transformers import ClapModel, ClapProcessor  # type: ignore
+
             _log("INFO", f"预下载 CLAP 模型: {model}…")
             ClapModel.from_pretrained(model)
             ClapProcessor.from_pretrained(model)

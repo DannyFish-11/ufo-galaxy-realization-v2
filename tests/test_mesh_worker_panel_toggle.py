@@ -88,19 +88,36 @@ class TestWorkerToggleEndpoint:
     def test_enable_returns_immediately_with_starting_true(self, client):
         """POST toggle 必须立即返回(不阻塞在 NATS 冷启动链路上):starting=True。
 
-        「NATS 不可达」由**注入一个诚实地连不上的 bus** 来构造,不再依赖"本机恰好
-        没装 nats-server"。后者是个会自我毁灭的前提:``core.nats_server`` 在连不上时
-        会自动下载 nats-server 并拉起一个**脱离进程长期存活**的常驻服务 —— 所以第一次
-        跑这条用例就把前提破坏掉了,之后每个新进程都连得上、``running`` 变 True、断言
-        永久红,重跑换分支都不自愈。(conftest 现在统一设 ``GALAXY_NATS_ENABLED=false``
-        堵住了那条副作用;这里再注入一次,让本用例的前提**写在自己身上**,不靠全局配置。)
+        本用例的前提是「NATS 不可达」。此前它**依赖环境**来满足这个前提 ——
+        注释写的是"本机没有 nats-server,预期最终失败并落地 last_error"。
+        这在 CI 分片里塌了:同分片先跑的用例起过内嵌 nats-server 且没关掉
+        (CI 日志末尾有 `Terminate orphan process: pid (3159) (nats-server)`),
+        于是 NATS 真的可达、worker 真的起来了,`wr.running is False` 报红。
+
+        触发它的是分片重排 —— 新增测试文件后 ci_test_shard.py 的文件集合一变,
+        哪些用例落在同一分片、以什么顺序跑就都变了。也就是说这个缺陷一直在,
+        只是此前没被排到一起。
+
+        更糟的是这个前提会**自我毁灭**:``core.nats_server`` 在连不上时会自动下载
+        nats-server 并拉起一个**脱离调用进程长期存活**的常驻服务。所以第一次跑就把
+        "本机没有 NATS"这个前提亲手破坏掉了 —— 此后每个新进程都连得上,断言永久红,
+        重跑、换分支都不自愈,除非有人手动杀进程。
+
+        两条修法都做,互不替代:
+          * conftest 统一设 ``GALAXY_NATS_ENABLED=false``,堵住"测试往机器上装东西、
+            留常驻进程"这条整机级副作用(见 tests/conftest.py 与
+            tests/test_nats_disable_switch.py);
+          * 本用例再注入一个明确报告"未连接"的 bus,把前提**写在自己身上**,
+            不依赖全局配置也不依赖执行顺序(与下方 test_enable_with_mock_bus_starts
+            注入已连接 bus 是同一套做法)。
         """
         from core.worker_runtime import get_worker_runtime
 
-        unavailable_bus = MagicMock()
-        unavailable_bus.is_connected = MagicMock(return_value=False)
-        unavailable_bus.connect = AsyncMock()  # 连了,但连完仍然 is_connected() == False
-        get_worker_runtime()._nats = unavailable_bus
+        # 前提固化:bus 永远连不上 → start() 必然落到 nats_unavailable 分支。
+        unreachable_bus = MagicMock()
+        unreachable_bus.is_connected = MagicMock(return_value=False)
+        unreachable_bus.connect = AsyncMock()  # 连了,但连完仍然 is_connected() == False
+        get_worker_runtime()._nats = unreachable_bus
 
         t0 = time.monotonic()
         r = client.post("/api/v1/mesh/worker/toggle", json={"enable": True})

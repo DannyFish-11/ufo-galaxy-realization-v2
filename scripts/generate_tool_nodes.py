@@ -29,7 +29,6 @@ TOOL_NODES = {
     "23": ("Time", "时间工具", "pytz", ["now", "format", "parse", "timezone"]),
     "24": ("Weather", "天气查询", "requests", ["get_weather", "forecast"]),
     "25": ("GoogleSearch", "Google 搜索", "googlesearch-python", ["search", "image_search"]),
-    
     # Layer 3: Physical (Node 35-48)
     "35": ("AppleScript", "macOS 自动化", "pyobjc", ["run_script", "get_app"]),
     "36": ("UIAWindows", "Windows UI 自动化", "pywinauto", ["click", "type_text", "find_window"]),
@@ -45,7 +44,6 @@ TOOL_NODES = {
     "46": ("Camera", "摄像头", "opencv-python", ["capture", "stream", "detect"]),
     "47": ("Audio", "音频采集", "sounddevice", ["record", "play", "list_devices"]),
     "48": ("Serial", "串口通信", "pyserial", ["connect", "read", "write"]),
-    
     # Layer 1: Quantum & Logic (Node 53, 55, 57, 59-63)
     "53": ("GraphLogic", "知识图谱", "networkx", ["add_node", "add_edge", "query", "shortest_path"]),
     "55": ("Simulation", "蒙特卡洛模拟", "numpy", ["simulate", "sample", "estimate"]),
@@ -60,17 +58,17 @@ TOOL_NODES = {
 
 def generate_main_py(node_id: str, name: str, description: str, library: str, tools: list) -> str:
     """生成 main.py 代码"""
-    
+
     # 生成工具列表字符串
     tool_items = []
     for t in tools:
-        tool_items.append(f'''            {{
+        tool_items.append(f"""            {{
                 "name": "{t}",
                 "description": "{name} - {t} 操作",
                 "parameters": {{}}
-            }}''')
+            }}""")
     tool_list_str = ",\n".join(tool_items)
-    
+
     # 生成工具方法
     tool_methods = []
     for t in tools:
@@ -232,8 +230,8 @@ def generate_dockerfile(node_id: str, library: str) -> str:
     pip_install = library
     if library in ["hashlib", "sqlite3"]:
         pip_install = ""  # 内置库
-        
-    return f'''FROM python:3.11-slim
+
+    return f"""FROM python:3.11-slim
 
 WORKDIR /app
 
@@ -245,21 +243,21 @@ COPY main.py .
 EXPOSE 80{node_id}
 
 CMD ["python", "main.py"]
-'''
+"""
 
 
 def main():
     """生成所有节点"""
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     nodes_dir = os.path.join(base_dir, "nodes")
-    
+
     generated = 0
     skipped = 0
-    
+
     for node_id, (name, desc, lib, tools) in TOOL_NODES.items():
         node_dir = os.path.join(nodes_dir, f"Node_{node_id}_{name}")
         os.makedirs(node_dir, exist_ok=True)
-        
+
         # 生成 main.py
         main_path = os.path.join(node_dir, "main.py")
         if not os.path.exists(main_path):
@@ -271,14 +269,14 @@ def main():
         else:
             print(f"Skipped (exists): Node_{node_id}_{name}/main.py")
             skipped += 1
-            
+
         # 生成 Dockerfile
         dockerfile_path = os.path.join(node_dir, "Dockerfile")
         if not os.path.exists(dockerfile_path):
             dockerfile = generate_dockerfile(node_id, lib)
             with open(dockerfile_path, "w") as f:
                 f.write(dockerfile)
-            
+
     print(f"\n✅ Generated: {generated} nodes")
     print(f"⏭️  Skipped: {skipped} nodes (already exist)")
     print(f"📦 Total: {len(TOOL_NODES)} nodes configured")

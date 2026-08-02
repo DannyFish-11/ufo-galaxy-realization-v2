@@ -65,9 +65,9 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 # PR-5: packaging audit integration
-PACKAGING_POLICY_ACTIVE       = "active"
-PACKAGING_POLICY_OPTIONAL     = "optional"
-PACKAGING_POLICY_SKIP         = "skip"
+PACKAGING_POLICY_ACTIVE = "active"
+PACKAGING_POLICY_OPTIONAL = "optional"
+PACKAGING_POLICY_SKIP = "skip"
 PACKAGING_POLICY_UNREGISTERED = "unregistered"
 
 # ---------------------------------------------------------------------------
@@ -82,8 +82,8 @@ PROJECT_ROOT = _SCRIPT_DIR.parent
 # Constants
 # ---------------------------------------------------------------------------
 
-_RUNNABLE_MIN_LINES = 100   # nodes with fewer lines are classified as stubs
-_RICH_MIN_LINES     = 300   # nodes with ≥300 lines are considered well-implemented
+_RUNNABLE_MIN_LINES = 100  # nodes with fewer lines are classified as stubs
+_RICH_MIN_LINES = 300  # nodes with ≥300 lines are considered well-implemented
 
 # Valid startup_policy values in node_dependencies.json
 _VALID_STARTUP_POLICIES = frozenset({"active", "optional", "skip"})
@@ -101,20 +101,20 @@ _STATUS_PATTERNS = re.compile(
 
 # File suffixes / names that are runtime-generated artifacts (hygiene check)
 _HYGIENE_SUFFIXES = frozenset({".pid", ".log", ".tmp", ".lock", ".cache"})
-_HYGIENE_NAMES   = frozenset({"__pycache__"})
+_HYGIENE_NAMES = frozenset({"__pycache__"})
 
 # Check category keys (used in NodeAuditEntry.checks dict)
-CHECK_SOURCE_COMPLETENESS  = "source_completeness"
-CHECK_SYNTAX_SAFETY        = "syntax_safety"
-CHECK_PACKAGING            = "packaging"
-CHECK_REGISTRY_GOVERNANCE  = "registry_governance"
-CHECK_RUNTIME_CONTRACT     = "runtime_contract"
-CHECK_HYGIENE              = "hygiene"
+CHECK_SOURCE_COMPLETENESS = "source_completeness"
+CHECK_SYNTAX_SAFETY = "syntax_safety"
+CHECK_PACKAGING = "packaging"
+CHECK_REGISTRY_GOVERNANCE = "registry_governance"
+CHECK_RUNTIME_CONTRACT = "runtime_contract"
+CHECK_HYGIENE = "hygiene"
 
 # Check result values
-CHECK_PASS    = "pass"
-CHECK_WARN    = "warn"
-CHECK_FAIL    = "fail"
+CHECK_PASS = "pass"
+CHECK_WARN = "warn"
+CHECK_FAIL = "fail"
 CHECK_UNKNOWN = "unknown"
 
 # ---------------------------------------------------------------------------
@@ -122,26 +122,26 @@ CHECK_UNKNOWN = "unknown"
 # ---------------------------------------------------------------------------
 
 # Optional baseline (minimum required to be a well-governed optional node)
-OPT_CHECK_REGISTRY_PRESENT = "registry_present"   # in ndj with startup_policy=optional
-OPT_CHECK_HAS_MAIN_PY      = "has_main_py"        # main.py exists
-OPT_CHECK_HAS_FUSION_ENTRY = "has_fusion_entry"   # fusion_entry.py exists
-OPT_CHECK_SYNTAX_OK        = "syntax_ok"           # py_compile passes
-OPT_CHECK_HAS_README       = "has_readme"          # README.md exists
-OPT_CHECK_HYGIENE_CLEAN    = "hygiene_clean"       # no runtime artifacts
+OPT_CHECK_REGISTRY_PRESENT = "registry_present"  # in ndj with startup_policy=optional
+OPT_CHECK_HAS_MAIN_PY = "has_main_py"  # main.py exists
+OPT_CHECK_HAS_FUSION_ENTRY = "has_fusion_entry"  # fusion_entry.py exists
+OPT_CHECK_SYNTAX_OK = "syntax_ok"  # py_compile passes
+OPT_CHECK_HAS_README = "has_readme"  # README.md exists
+OPT_CHECK_HYGIENE_CLEAN = "hygiene_clean"  # no runtime artifacts
 
 # Promotion-gap checks (what an optional node needs to reach active)
-PROMO_CHECK_HAS_DOCKERFILE  = "has_dockerfile"
+PROMO_CHECK_HAS_DOCKERFILE = "has_dockerfile"
 PROMO_CHECK_HAS_REQUIREMENTS = "has_requirements"
-PROMO_CHECK_HAS_HEALTH      = "has_health_endpoint"
-PROMO_CHECK_HAS_STATUS      = "has_status_endpoint"
+PROMO_CHECK_HAS_HEALTH = "has_health_endpoint"
+PROMO_CHECK_HAS_STATUS = "has_status_endpoint"
 
 # Optional baseline result — aggregated across all OPT_CHECK_* keys
-OPT_BASELINE_PASS    = "pass"     # all optional-baseline checks pass
+OPT_BASELINE_PASS = "pass"  # all optional-baseline checks pass
 OPT_BASELINE_PARTIAL = "partial"  # some optional-baseline checks warn/fail
-OPT_BASELINE_FAIL    = "fail"     # one or more optional-baseline checks fail
+OPT_BASELINE_FAIL = "fail"  # one or more optional-baseline checks fail
 
 # Promotion readiness result
-PROMO_READY     = "ready"     # all promotion-gap checks pass
+PROMO_READY = "ready"  # all promotion-gap checks pass
 PROMO_NEAR_READY = "near_ready"  # ≤1 gap
 PROMO_NOT_READY = "not_ready"  # ≥2 gaps
 
@@ -150,20 +150,23 @@ PROMO_NOT_READY = "not_ready"  # ≥2 gaps
 # Data model
 # ---------------------------------------------------------------------------
 
+
 class NodeTier:
     """Node quality tiers used in the audit."""
-    NOMINAL      = "nominal"           # directory exists
-    RUNNABLE     = "runnable"          # has main.py + non-trivial implementation
-    ORCHESTRATED = "orchestrated"      # listed in node_dependencies.json
-    STUB         = "stub"              # main.py < 100 lines or clearly placeholder
+
+    NOMINAL = "nominal"  # directory exists
+    RUNNABLE = "runnable"  # has main.py + non-trivial implementation
+    ORCHESTRATED = "orchestrated"  # listed in node_dependencies.json
+    STUB = "stub"  # main.py < 100 lines or clearly placeholder
 
 
 class RecommendedAction:
     """Recommended disposition for each node."""
-    KEEP    = "keep"     # healthy, orchestrated, no issues
-    REPAIR  = "repair"   # has issues but useful role; should be fixed
+
+    KEEP = "keep"  # healthy, orchestrated, no issues
+    REPAIR = "repair"  # has issues but useful role; should be fixed
     ARCHIVE = "archive"  # not orchestrated but non-trivial; preserve for reference
-    DELETE  = "delete"   # placeholder / stub / duplicate with no unique value
+    DELETE = "delete"  # placeholder / stub / duplicate with no unique value
 
 
 @dataclass
@@ -193,12 +196,12 @@ class NodePackagingStatus:
         ``requirements.txt``; ``"pass"`` when fully covered.
     """
 
-    has_dockerfile:  bool = False
+    has_dockerfile: bool = False
     has_requirements: bool = False
-    missing:         List[str] = field(default_factory=list)
-    policy_class:    str = PACKAGING_POLICY_UNREGISTERED
-    status:          str = CHECK_UNKNOWN
-    severity:        str = CHECK_UNKNOWN
+    missing: List[str] = field(default_factory=list)
+    policy_class: str = PACKAGING_POLICY_UNREGISTERED
+    status: str = CHECK_UNKNOWN
+    severity: str = CHECK_UNKNOWN
 
     def to_dict(self) -> Dict:
         return asdict(self)
@@ -210,32 +213,32 @@ class NodeAuditEntry:
     path: str
 
     # Structural signals
-    has_main_py:      bool = False
-    has_dockerfile:   bool = False
-    has_readme:       bool = False
+    has_main_py: bool = False
+    has_dockerfile: bool = False
+    has_readme: bool = False
     has_fusion_entry: bool = False
     has_requirements: bool = False
-    extra_py_files:   List[str] = field(default_factory=list)
+    extra_py_files: List[str] = field(default_factory=list)
 
     # Implementation depth
-    main_py_lines:    int = 0
+    main_py_lines: int = 0
 
     # Config signals
-    in_node_dependencies:  bool = False
-    config_port:           Optional[int] = None
-    config_group:          Optional[str] = None
-    config_priority:       Optional[int] = None
-    config_deps:           List[str] = field(default_factory=list)
-    config_startup_policy: Optional[str] = None   # PR-2: explicit startup_policy value
-    policy_valid:          Optional[bool] = None  # PR-2: True/False/None (not in config)
+    in_node_dependencies: bool = False
+    config_port: Optional[int] = None
+    config_group: Optional[str] = None
+    config_priority: Optional[int] = None
+    config_deps: List[str] = field(default_factory=list)
+    config_startup_policy: Optional[str] = None  # PR-2: explicit startup_policy value
+    policy_valid: Optional[bool] = None  # PR-2: True/False/None (not in config)
 
     # Docker / orchestration signals
-    in_docker_compose:    bool = False
+    in_docker_compose: bool = False
 
     # PR-2: Syntax safety
-    syntax_ok:         Optional[bool] = None   # None = not applicable (no main.py)
-    fusion_syntax_ok:  Optional[bool] = None   # None = not applicable (no fusion_entry.py)
-    syntax_error:      Optional[str]  = None   # first error message if syntax fails
+    syntax_ok: Optional[bool] = None  # None = not applicable (no main.py)
+    fusion_syntax_ok: Optional[bool] = None  # None = not applicable (no fusion_entry.py)
+    syntax_error: Optional[str] = None  # first error message if syntax fails
 
     # PR-2: Runtime contract (static inspection only)
     has_health_endpoint: bool = False
@@ -252,12 +255,12 @@ class NodeAuditEntry:
 
     # PR-8: Optional-node governance (populated only when startup_policy=optional)
     optional_baseline_checks: Dict[str, str] = field(default_factory=dict)
-    optional_baseline_result: str = ""         # pass / partial / fail / "" (n/a)
+    optional_baseline_result: str = ""  # pass / partial / fail / "" (n/a)
     promotion_gap_checks: Dict[str, str] = field(default_factory=dict)
-    promotion_readiness: str = ""              # ready / near_ready / not_ready / ""
+    promotion_readiness: str = ""  # ready / near_ready / not_ready / ""
 
     # Classification
-    tier:   str = NodeTier.NOMINAL
+    tier: str = NodeTier.NOMINAL
     action: str = RecommendedAction.ARCHIVE
 
     # Notes
@@ -274,44 +277,44 @@ class NodeAuditReport:
     project_root: str
 
     # Counts
-    nominal_count:      int = 0
-    runnable_count:     int = 0
+    nominal_count: int = 0
+    runnable_count: int = 0
     orchestrated_count: int = 0
-    stub_count:         int = 0
+    stub_count: int = 0
 
     # Recommendation counts
-    keep_count:    int = 0
-    repair_count:  int = 0
+    keep_count: int = 0
+    repair_count: int = 0
     archive_count: int = 0
-    delete_count:  int = 0
+    delete_count: int = 0
 
     # Config drift
     in_config_not_on_disk: List[str] = field(default_factory=list)
     on_disk_not_in_config: List[str] = field(default_factory=list)
-    reserved_nodes:        List[str] = field(default_factory=list)
-    duplicate_roles:       List[str] = field(default_factory=list)
-    numbering_gaps:        List[int] = field(default_factory=list)
-    missing_main_py:       List[str] = field(default_factory=list)
+    reserved_nodes: List[str] = field(default_factory=list)
+    duplicate_roles: List[str] = field(default_factory=list)
+    numbering_gaps: List[int] = field(default_factory=list)
+    missing_main_py: List[str] = field(default_factory=list)
 
     # PR-2: Failure category aggregates
-    port_conflicts:           List[str] = field(default_factory=list)
-    syntax_error_nodes:       List[str] = field(default_factory=list)
-    missing_packaging_nodes:  List[str] = field(default_factory=list)
-    hygiene_violation_nodes:  List[str] = field(default_factory=list)
-    policy_violation_nodes:   List[str] = field(default_factory=list)
+    port_conflicts: List[str] = field(default_factory=list)
+    syntax_error_nodes: List[str] = field(default_factory=list)
+    missing_packaging_nodes: List[str] = field(default_factory=list)
+    hygiene_violation_nodes: List[str] = field(default_factory=list)
+    policy_violation_nodes: List[str] = field(default_factory=list)
     missing_required_files_nodes: List[str] = field(default_factory=list)
 
     # PR-5: Packaging-specific aggregate lists (separate from the combined list above)
-    missing_dockerfile_nodes:   List[str] = field(default_factory=list)
+    missing_dockerfile_nodes: List[str] = field(default_factory=list)
     missing_requirements_nodes: List[str] = field(default_factory=list)
 
     # PR-8: Optional-node governance aggregates
-    optional_count:             int = 0
-    optional_baseline_pass:     List[str] = field(default_factory=list)
-    optional_baseline_partial:  List[str] = field(default_factory=list)
-    optional_baseline_fail:     List[str] = field(default_factory=list)
-    optional_promotion_ready:   List[str] = field(default_factory=list)
-    optional_promotion_near:    List[str] = field(default_factory=list)
+    optional_count: int = 0
+    optional_baseline_pass: List[str] = field(default_factory=list)
+    optional_baseline_partial: List[str] = field(default_factory=list)
+    optional_baseline_fail: List[str] = field(default_factory=list)
+    optional_promotion_ready: List[str] = field(default_factory=list)
+    optional_promotion_near: List[str] = field(default_factory=list)
     optional_promotion_not_ready: List[str] = field(default_factory=list)
 
     nodes: List[NodeAuditEntry] = field(default_factory=list)
@@ -325,6 +328,7 @@ class NodeAuditReport:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _load_node_dependencies(project_root: Path) -> Dict:
     """Load and return the 'nodes' dict from node_dependencies.json."""
@@ -387,6 +391,7 @@ def _git_tracked_paths(repo_root: Path) -> frozenset:
     if _GIT_TRACKED_CACHE is None:
         try:
             import subprocess
+
             out = subprocess.run(
                 ["git", "ls-files"],
                 cwd=str(repo_root),
@@ -394,9 +399,7 @@ def _git_tracked_paths(repo_root: Path) -> frozenset:
                 text=True,
                 timeout=30,
             )
-            _GIT_TRACKED_CACHE = frozenset(
-                line.strip() for line in out.stdout.splitlines() if line.strip()
-            )
+            _GIT_TRACKED_CACHE = frozenset(line.strip() for line in out.stdout.splitlines() if line.strip())
         except Exception:
             _GIT_TRACKED_CACHE = frozenset()
     return _GIT_TRACKED_CACHE
@@ -416,9 +419,7 @@ def _check_hygiene(node_dir: Path) -> List[str]:
         repo_root = node_dir.parent.parent
         tracked = _git_tracked_paths(repo_root)
         for child in node_dir.iterdir():
-            is_artifact = (
-                child.name in _HYGIENE_NAMES or child.suffix in _HYGIENE_SUFFIXES
-            )
+            is_artifact = child.name in _HYGIENE_NAMES or child.suffix in _HYGIENE_SUFFIXES
             if not is_artifact:
                 continue
             rel = child.relative_to(repo_root).as_posix()
@@ -544,15 +545,9 @@ def _build_optional_governance(entry: NodeAuditEntry) -> None:
     # --- optional baseline ---
     baseline: Dict[str, str] = {}
 
-    baseline[OPT_CHECK_REGISTRY_PRESENT] = (
-        CHECK_PASS if entry.in_node_dependencies else CHECK_FAIL
-    )
-    baseline[OPT_CHECK_HAS_MAIN_PY] = (
-        CHECK_PASS if entry.has_main_py else CHECK_FAIL
-    )
-    baseline[OPT_CHECK_HAS_FUSION_ENTRY] = (
-        CHECK_PASS if entry.has_fusion_entry else CHECK_FAIL
-    )
+    baseline[OPT_CHECK_REGISTRY_PRESENT] = CHECK_PASS if entry.in_node_dependencies else CHECK_FAIL
+    baseline[OPT_CHECK_HAS_MAIN_PY] = CHECK_PASS if entry.has_main_py else CHECK_FAIL
+    baseline[OPT_CHECK_HAS_FUSION_ENTRY] = CHECK_PASS if entry.has_fusion_entry else CHECK_FAIL
     # syntax: pass if all applicable files compiled ok; unknown if no py files
     if entry.syntax_ok is False or entry.fusion_syntax_ok is False:
         baseline[OPT_CHECK_SYNTAX_OK] = CHECK_FAIL
@@ -561,12 +556,8 @@ def _build_optional_governance(entry: NodeAuditEntry) -> None:
     else:
         baseline[OPT_CHECK_SYNTAX_OK] = CHECK_UNKNOWN
 
-    baseline[OPT_CHECK_HAS_README] = (
-        CHECK_PASS if entry.has_readme else CHECK_FAIL
-    )
-    baseline[OPT_CHECK_HYGIENE_CLEAN] = (
-        CHECK_PASS if not entry.hygiene_violations else CHECK_FAIL
-    )
+    baseline[OPT_CHECK_HAS_README] = CHECK_PASS if entry.has_readme else CHECK_FAIL
+    baseline[OPT_CHECK_HYGIENE_CLEAN] = CHECK_PASS if not entry.hygiene_violations else CHECK_FAIL
 
     # aggregate baseline result
     baseline_values = list(baseline.values())
@@ -581,10 +572,10 @@ def _build_optional_governance(entry: NodeAuditEntry) -> None:
 
     # --- promotion gap ---
     gap: Dict[str, str] = {}
-    gap[PROMO_CHECK_HAS_DOCKERFILE]    = CHECK_PASS if entry.has_dockerfile       else CHECK_FAIL
-    gap[PROMO_CHECK_HAS_REQUIREMENTS]  = CHECK_PASS if entry.has_requirements     else CHECK_FAIL
-    gap[PROMO_CHECK_HAS_HEALTH]        = CHECK_PASS if entry.has_health_endpoint  else CHECK_FAIL
-    gap[PROMO_CHECK_HAS_STATUS]        = CHECK_PASS if entry.has_status_endpoint  else CHECK_FAIL
+    gap[PROMO_CHECK_HAS_DOCKERFILE] = CHECK_PASS if entry.has_dockerfile else CHECK_FAIL
+    gap[PROMO_CHECK_HAS_REQUIREMENTS] = CHECK_PASS if entry.has_requirements else CHECK_FAIL
+    gap[PROMO_CHECK_HAS_HEALTH] = CHECK_PASS if entry.has_health_endpoint else CHECK_FAIL
+    gap[PROMO_CHECK_HAS_STATUS] = CHECK_PASS if entry.has_status_endpoint else CHECK_FAIL
 
     fail_count = sum(1 for v in gap.values() if v == CHECK_FAIL)
     if fail_count == 0:
@@ -708,6 +699,7 @@ def _classify(entry: NodeAuditEntry) -> None:
 # Audit engine
 # ---------------------------------------------------------------------------
 
+
 def run_audit(project_root: Path) -> NodeAuditReport:
     nodes_dir = project_root / "nodes"
     if not nodes_dir.exists():
@@ -722,10 +714,7 @@ def run_audit(project_root: Path) -> NodeAuditReport:
     )
 
     # --- Enumerate nominal nodes ---
-    node_dirs = sorted(
-        d for d in nodes_dir.iterdir()
-        if d.is_dir() and d.name.startswith("Node_")
-    )
+    node_dirs = sorted(d for d in nodes_dir.iterdir() if d.is_dir() and d.name.startswith("Node_"))
     nodes_on_disk = {d.name for d in node_dirs}
     nodes_in_config = set(node_deps.keys())
 
@@ -733,9 +722,7 @@ def run_audit(project_root: Path) -> NodeAuditReport:
     report.in_config_not_on_disk = sorted(nodes_in_config - nodes_on_disk)
     report.on_disk_not_in_config = sorted(nodes_on_disk - nodes_in_config)
     report.reserved_nodes = sorted(n for n in nodes_on_disk if "Reserved" in n)
-    report.missing_main_py = sorted(
-        d.name for d in node_dirs if not (d / "main.py").exists()
-    )
+    report.missing_main_py = sorted(d.name for d in node_dirs if not (d / "main.py").exists())
 
     # PR-2: Port conflict detection across registry entries
     report.port_conflicts = _detect_port_conflicts(node_deps)
@@ -748,9 +735,7 @@ def run_audit(project_root: Path) -> NodeAuditReport:
             role = m.group(1)
             role_map.setdefault(role, []).append(name)
     report.duplicate_roles = sorted(
-        f"{role}: {', '.join(sorted(holders))}"
-        for role, holders in role_map.items()
-        if len(holders) > 1
+        f"{role}: {', '.join(sorted(holders))}" for role, holders in role_map.items() if len(holders) > 1
     )
 
     # Numbering gaps
@@ -778,7 +763,8 @@ def run_audit(project_root: Path) -> NodeAuditReport:
                 lines = 0
 
         extra_py = [
-            f.name for f in node_dir.iterdir()
+            f.name
+            for f in node_dir.iterdir()
             if f.suffix == ".py" and f.name not in ("main.py", "__init__.py", "fusion_entry.py")
         ]
 
@@ -853,65 +839,40 @@ def run_audit(project_root: Path) -> NodeAuditReport:
     report.nodes = entries
 
     # --- Aggregate counts ---
-    report.nominal_count      = len(entries)
-    report.runnable_count     = sum(1 for e in entries if e.tier in (NodeTier.RUNNABLE, NodeTier.ORCHESTRATED))
+    report.nominal_count = len(entries)
+    report.runnable_count = sum(1 for e in entries if e.tier in (NodeTier.RUNNABLE, NodeTier.ORCHESTRATED))
     report.orchestrated_count = sum(1 for e in entries if e.tier == NodeTier.ORCHESTRATED)
-    report.stub_count         = sum(1 for e in entries if e.tier == NodeTier.STUB)
-    report.keep_count         = sum(1 for e in entries if e.action == RecommendedAction.KEEP)
-    report.repair_count       = sum(1 for e in entries if e.action == RecommendedAction.REPAIR)
-    report.archive_count      = sum(1 for e in entries if e.action == RecommendedAction.ARCHIVE)
-    report.delete_count       = sum(1 for e in entries if e.action == RecommendedAction.DELETE)
+    report.stub_count = sum(1 for e in entries if e.tier == NodeTier.STUB)
+    report.keep_count = sum(1 for e in entries if e.action == RecommendedAction.KEEP)
+    report.repair_count = sum(1 for e in entries if e.action == RecommendedAction.REPAIR)
+    report.archive_count = sum(1 for e in entries if e.action == RecommendedAction.ARCHIVE)
+    report.delete_count = sum(1 for e in entries if e.action == RecommendedAction.DELETE)
 
     # PR-2: Failure category aggregates
-    report.syntax_error_nodes = sorted(
-        e.name for e in entries
-        if e.syntax_ok is False or e.fusion_syntax_ok is False
-    )
+    report.syntax_error_nodes = sorted(e.name for e in entries if e.syntax_ok is False or e.fusion_syntax_ok is False)
     # PR-5: missing_packaging_nodes now covers nodes missing EITHER file
     # (previously only nodes missing BOTH were included)
-    report.missing_packaging_nodes = sorted(
-        e.name for e in entries
-        if not e.has_dockerfile or not e.has_requirements
-    )
+    report.missing_packaging_nodes = sorted(e.name for e in entries if not e.has_dockerfile or not e.has_requirements)
     # PR-5: fine-grained per-file packaging aggregates
-    report.missing_dockerfile_nodes = sorted(
-        e.name for e in entries if not e.has_dockerfile
-    )
-    report.missing_requirements_nodes = sorted(
-        e.name for e in entries if not e.has_requirements
-    )
-    report.hygiene_violation_nodes = sorted(
-        e.name for e in entries if e.hygiene_violations
-    )
-    report.policy_violation_nodes = sorted(
-        e.name for e in entries if e.policy_valid is False
-    )
+    report.missing_dockerfile_nodes = sorted(e.name for e in entries if not e.has_dockerfile)
+    report.missing_requirements_nodes = sorted(e.name for e in entries if not e.has_requirements)
+    report.hygiene_violation_nodes = sorted(e.name for e in entries if e.hygiene_violations)
+    report.policy_violation_nodes = sorted(e.name for e in entries if e.policy_valid is False)
     report.missing_required_files_nodes = sorted(
-        e.name for e in entries
-        if not e.has_main_py or not e.has_fusion_entry or not e.has_readme
+        e.name for e in entries if not e.has_main_py or not e.has_fusion_entry or not e.has_readme
     )
 
     # PR-8: optional-node governance aggregates
     opt_nodes = [e for e in entries if e.config_startup_policy == "optional"]
     report.optional_count = len(opt_nodes)
-    report.optional_baseline_pass = sorted(
-        e.name for e in opt_nodes if e.optional_baseline_result == OPT_BASELINE_PASS
-    )
+    report.optional_baseline_pass = sorted(e.name for e in opt_nodes if e.optional_baseline_result == OPT_BASELINE_PASS)
     report.optional_baseline_partial = sorted(
         e.name for e in opt_nodes if e.optional_baseline_result == OPT_BASELINE_PARTIAL
     )
-    report.optional_baseline_fail = sorted(
-        e.name for e in opt_nodes if e.optional_baseline_result == OPT_BASELINE_FAIL
-    )
-    report.optional_promotion_ready = sorted(
-        e.name for e in opt_nodes if e.promotion_readiness == PROMO_READY
-    )
-    report.optional_promotion_near = sorted(
-        e.name for e in opt_nodes if e.promotion_readiness == PROMO_NEAR_READY
-    )
-    report.optional_promotion_not_ready = sorted(
-        e.name for e in opt_nodes if e.promotion_readiness == PROMO_NOT_READY
-    )
+    report.optional_baseline_fail = sorted(e.name for e in opt_nodes if e.optional_baseline_result == OPT_BASELINE_FAIL)
+    report.optional_promotion_ready = sorted(e.name for e in opt_nodes if e.promotion_readiness == PROMO_READY)
+    report.optional_promotion_near = sorted(e.name for e in opt_nodes if e.promotion_readiness == PROMO_NEAR_READY)
+    report.optional_promotion_not_ready = sorted(e.name for e in opt_nodes if e.promotion_readiness == PROMO_NOT_READY)
 
     return report
 
@@ -919,6 +880,7 @@ def run_audit(project_root: Path) -> NodeAuditReport:
 # ---------------------------------------------------------------------------
 # Markdown report generator
 # ---------------------------------------------------------------------------
+
 
 def _render_markdown(report: NodeAuditReport) -> str:
     lines: List[str] = []
@@ -963,11 +925,11 @@ def _render_markdown(report: NodeAuditReport) -> str:
 
     categories = [
         (CHECK_SOURCE_COMPLETENESS, "Source completeness (main.py / fusion_entry.py / README.md)"),
-        (CHECK_SYNTAX_SAFETY,       "Syntax safety (py_compile check)"),
-        (CHECK_PACKAGING,           "Packaging (Dockerfile / requirements.txt)"),
+        (CHECK_SYNTAX_SAFETY, "Syntax safety (py_compile check)"),
+        (CHECK_PACKAGING, "Packaging (Dockerfile / requirements.txt)"),
         (CHECK_REGISTRY_GOVERNANCE, "Registry governance (node_dependencies.json + policy)"),
-        (CHECK_RUNTIME_CONTRACT,    "Runtime contract (health / status endpoint)"),
-        (CHECK_HYGIENE,             "Hygiene (no runtime artifacts)"),
+        (CHECK_RUNTIME_CONTRACT, "Runtime contract (health / status endpoint)"),
+        (CHECK_HYGIENE, "Hygiene (no runtime artifacts)"),
     ]
     a("| Category | Failing | Warning |")
     a("|----------|---------|---------|")
@@ -1078,8 +1040,10 @@ def _render_markdown(report: NodeAuditReport) -> str:
     # ── Packaging Coverage (PR-5) ────────────────────────────────────────────
     a("## Packaging Coverage")
     a("")
-    a("> **Canonical source of truth:** `scripts/node_audit.py` — `tools/check_node_packaging.sh` is a "
-      "thin companion that defers to this report.")
+    a(
+        "> **Canonical source of truth:** `scripts/node_audit.py` — `tools/check_node_packaging.sh` is a "
+        "thin companion that defers to this report."
+    )
     a("")
 
     # --- Nodes missing Dockerfile ---
@@ -1170,9 +1134,7 @@ def _render_markdown(report: NodeAuditReport) -> str:
     a("### Optional-Node Baseline Status")
     a("")
     if opt_nodes:
-        _bicon = {
-            CHECK_PASS: "✓", CHECK_FAIL: "✗", CHECK_UNKNOWN: "?", CHECK_WARN: "~"
-        }
+        _bicon = {CHECK_PASS: "✓", CHECK_FAIL: "✗", CHECK_UNKNOWN: "?", CHECK_WARN: "~"}
         a("| Node | Baseline | Promotion | reg | main | fusion | syn | readme | hyg | docker | req | health | status |")
         a("|------|----------|-----------|-----|------|--------|-----|--------|-----|--------|-----|--------|--------|")
         for e in opt_nodes:
@@ -1230,7 +1192,6 @@ def _render_markdown(report: NodeAuditReport) -> str:
         a("_All optional nodes meet the optional baseline._")
     a("")
 
-
     a("## Node Inventory")
     a("")
     a("| Node | Lines | Group | Port | Policy | Tier | Action | src | syn | pkg | reg | rt | hyg |")
@@ -1256,13 +1217,17 @@ def _render_markdown(report: NodeAuditReport) -> str:
         )
 
     a("")
-    a("**Column key:** src=source_completeness · syn=syntax_safety · pkg=packaging · "
-      "reg=registry_governance · rt=runtime_contract · hyg=hygiene")
+    a(
+        "**Column key:** src=source_completeness · syn=syntax_safety · pkg=packaging · "
+        "reg=registry_governance · rt=runtime_contract · hyg=hygiene"
+    )
     a("**Icon key:** ✓=pass · ~=warn · ✗=fail · ?=unknown")
     a("")
     a("---")
-    a("*This report is generated by `scripts/node_audit.py` (canonical governance engine). "
-      "Re-run after node changes to refresh.*")
+    a(
+        "*This report is generated by `scripts/node_audit.py` (canonical governance engine). "
+        "Re-run after node changes to refresh.*"
+    )
 
     return "\n".join(lines)
 
@@ -1271,10 +1236,9 @@ def _render_markdown(report: NodeAuditReport) -> str:
 # CLI entrypoint
 # ---------------------------------------------------------------------------
 
+
 def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Run the Galaxy node-system audit and emit a canonical report."
-    )
+    parser = argparse.ArgumentParser(description="Run the Galaxy node-system audit and emit a canonical report.")
     parser.add_argument(
         "--output",
         default=str(PROJECT_ROOT / "docs" / "node_audit_report.json"),
@@ -1337,16 +1301,12 @@ def main() -> int:
 
     if args.strict:
         _critical_checks = [
-            ("port conflicts",    report.port_conflicts),
+            ("port conflicts", report.port_conflicts),
             ("policy violations", report.policy_violation_nodes),
-            ("registry drift",    report.in_config_not_on_disk),
-            ("syntax errors",     report.syntax_error_nodes),
+            ("registry drift", report.in_config_not_on_disk),
+            ("syntax errors", report.syntax_error_nodes),
         ]
-        failure_lines = [
-            f"  {label}: {nodes}"
-            for label, nodes in _critical_checks
-            if nodes
-        ]
+        failure_lines = [f"  {label}: {nodes}" for label, nodes in _critical_checks if nodes]
         if failure_lines:
             print("\n\u274c Governance-critical failures detected (--strict mode):")
             print("\n".join(failure_lines))

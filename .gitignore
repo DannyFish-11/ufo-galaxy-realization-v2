@@ -143,9 +143,18 @@ audit/wiring_report_*.json
 electron/node_modules/
 electron/renderer/panel/node_modules/
 
-# npm lockfiles are not tracked in this repo
-package-lock.json
-electron/package-lock.json
+# npm lockfiles —— 现在必须入库（B10）
+#
+# 此前这里是 `package-lock.json` + `electron/package-lock.json` 两条忽略规则，
+# 注释写着 "npm lockfiles are not tracked in this repo"。后果是三处
+# package.json 全无 lock：每次 `npm install` 都可能拉到不同的传递依赖树，
+# 构建不可复现，供应链上任何一个上游发新版都会静默改变产物。
+#
+# 这同时卡死了 panel 的 dist 一致性门（B22/P14）：没有 lock，重建产物的内容
+# 哈希会随依赖漂移而变，那个门必然假红，于是根本立不起来。
+#
+# 现已生成并提交 lock，CI 用 `npm ci`（严格按 lock 安装）而非 `npm install`。
+# 仍然忽略 node_modules（见上方两条）。
 
 # SQLite sidecar files (WAL mode)
 *.db-shm

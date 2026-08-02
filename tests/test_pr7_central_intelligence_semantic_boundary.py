@@ -37,41 +37,9 @@ from __future__ import annotations
 
 import pytest
 
-from core.central_intelligence_layer import (
-    ANDROID_FIRST_CLASS_RUNTIME_HOST_POLICY,
-    CENTRAL_INTELLIGENCE_LAYER_AUTHORITY,
-    CENTRAL_INTELLIGENCE_LAYER_PR7_SENTINEL,
-    CI_LAYER_SURFACE_REGISTRY,
-    KERNEL_IS_NOT_SECOND_AUTHORITY_POLICY,
-    OPENCLAWD_IS_CENTRAL_INTELLIGENCE_CORE_POLICY,
-    ORCHESTRATOR_COORDINATOR_SPINE_SCOPE_POLICY,
-    PLANNER_IS_NOT_SECOND_AUTHORITY_POLICY,
-    TEAM_IS_NOT_SECOND_AUTHORITY_POLICY,
-    CILayerBoundaryReport,
-    CILayerRole,
-    CILayerSurface,
-    build_ci_layer_boundary_report,
-    classify_ci_surface,
-    get_ci_layer_registry,
-    get_surfaces_by_ci_role,
-)
-
 # ---------------------------------------------------------------------------
 # 1. Module sentinels
 # ---------------------------------------------------------------------------
-
-
-def test_authority_sentinel_format():
-    assert CENTRAL_INTELLIGENCE_LAYER_AUTHORITY.startswith("CENTRAL_INTELLIGENCE_LAYER_AUTHORITY::")
-    assert "core.central_intelligence_layer" in CENTRAL_INTELLIGENCE_LAYER_AUTHORITY
-    assert "central-intelligence" in CENTRAL_INTELLIGENCE_LAYER_AUTHORITY.lower()
-
-
-def test_pr7_sentinel_format():
-    assert CENTRAL_INTELLIGENCE_LAYER_PR7_SENTINEL.startswith("CENTRAL_INTELLIGENCE_LAYER_PR7_SENTINEL::")
-    assert "PR7" in CENTRAL_INTELLIGENCE_LAYER_PR7_SENTINEL
-    assert "central-intelligence-semantic-boundary-v1" in CENTRAL_INTELLIGENCE_LAYER_PR7_SENTINEL
-    assert "core.central_intelligence_layer" in CENTRAL_INTELLIGENCE_LAYER_PR7_SENTINEL
 
 
 # ---------------------------------------------------------------------------
@@ -79,70 +47,9 @@ def test_pr7_sentinel_format():
 # ---------------------------------------------------------------------------
 
 
-def test_policy_sentinels_are_non_empty_strings():
-    for sentinel in [
-        OPENCLAWD_IS_CENTRAL_INTELLIGENCE_CORE_POLICY,
-        KERNEL_IS_NOT_SECOND_AUTHORITY_POLICY,
-        PLANNER_IS_NOT_SECOND_AUTHORITY_POLICY,
-        TEAM_IS_NOT_SECOND_AUTHORITY_POLICY,
-        ORCHESTRATOR_COORDINATOR_SPINE_SCOPE_POLICY,
-        ANDROID_FIRST_CLASS_RUNTIME_HOST_POLICY,
-    ]:
-        assert isinstance(sentinel, str) and len(sentinel) > 0
-
-
-def test_openclawd_policy_mentions_central_intelligence():
-    lower = OPENCLAWD_IS_CENTRAL_INTELLIGENCE_CORE_POLICY.lower()
-    assert "openclawd" in lower
-    assert "central intelligence" in lower
-
-
-def test_kernel_policy_mentions_not_second_authority():
-    lower = KERNEL_IS_NOT_SECOND_AUTHORITY_POLICY.lower()
-    assert "agentkernel" in lower
-    assert "advisory" in lower
-    assert "openclawd" in lower
-
-
-def test_planner_policy_mentions_not_second_authority():
-    lower = PLANNER_IS_NOT_SECOND_AUTHORITY_POLICY.lower()
-    assert "executionplanner" in lower
-    assert "agentkernel" in lower
-
-
-def test_team_policy_mentions_not_second_authority():
-    lower = TEAM_IS_NOT_SECOND_AUTHORITY_POLICY.lower()
-    assert "teammanager" in lower
-    assert "executionplanner" in lower
-
-
-def test_orchestrator_policy_mentions_scope_constraint():
-    lower = ORCHESTRATOR_COORDINATOR_SPINE_SCOPE_POLICY.lower()
-    assert "unifiedorchestrationspine" in lower
-    assert "per-request" in lower
-
-
-def test_android_policy_mentions_first_class():
-    lower = ANDROID_FIRST_CLASS_RUNTIME_HOST_POLICY.lower()
-    assert "android" in lower
-    assert "first-class" in lower
-    assert "devicerouter" in lower
-
-
 # ---------------------------------------------------------------------------
 # 3. CILayerRole enum
 # ---------------------------------------------------------------------------
-
-
-def test_ci_layer_role_enum_has_all_four_roles():
-    expected = {
-        "central_intelligence_main_layer",
-        "expert_capability_sub_layer",
-        "sub_domain_coordinator",
-        "facade_compat_helper",
-    }
-    actual = {role.value for role in CILayerRole}
-    assert expected == actual
 
 
 # ---------------------------------------------------------------------------
@@ -150,67 +57,9 @@ def test_ci_layer_role_enum_has_all_four_roles():
 # ---------------------------------------------------------------------------
 
 
-def test_ci_layer_surface_to_dict_has_required_keys():
-    surface = CILayerSurface(
-        surface_id="test_surface",
-        module_path="test.module.TestClass",
-        surface_name="Test Surface",
-        ci_role=CILayerRole.facade_compat_helper,
-        is_central_intelligence=False,
-        may_not_claim_independent_authority=True,
-        notes="test notes",
-    )
-    d = surface.to_dict()
-    for key in [
-        "surface_id",
-        "module_path",
-        "surface_name",
-        "ci_role",
-        "is_central_intelligence",
-        "may_not_claim_independent_authority",
-        "notes",
-    ]:
-        assert key in d
-
-
-def test_ci_layer_surface_is_central_intelligence_false_for_non_ci():
-    surface = CILayerSurface(
-        surface_id="x",
-        module_path="x.y",
-        surface_name="X",
-        ci_role=CILayerRole.expert_capability_sub_layer,
-        is_central_intelligence=False,
-        may_not_claim_independent_authority=True,
-        notes="",
-    )
-    assert surface.is_central_intelligence is False
-
-
 # ---------------------------------------------------------------------------
 # 5. CILayerBoundaryReport dataclass
 # ---------------------------------------------------------------------------
-
-
-def test_ci_layer_boundary_report_to_dict_has_required_keys():
-    report = CILayerBoundaryReport(
-        total_surfaces=10,
-        central_intelligence_count=2,
-        expert_sub_layer_count=4,
-        sub_domain_coordinator_count=2,
-        facade_compat_helper_count=2,
-        constrained_surfaces=["a", "b"],
-    )
-    d = report.to_dict()
-    for key in [
-        "total_surfaces",
-        "central_intelligence_count",
-        "expert_sub_layer_count",
-        "sub_domain_coordinator_count",
-        "facade_compat_helper_count",
-        "constrained_surfaces",
-        "generated_at",
-    ]:
-        assert key in d
 
 
 # ---------------------------------------------------------------------------
@@ -218,35 +67,9 @@ def test_ci_layer_boundary_report_to_dict_has_required_keys():
 # ---------------------------------------------------------------------------
 
 
-def test_ci_layer_registry_is_non_empty():
-    registry = get_ci_layer_registry()
-    assert len(registry) > 0
-
-
-def test_ci_layer_registry_all_entries_are_ci_layer_surfaces():
-    for surface in get_ci_layer_registry():
-        assert isinstance(surface, CILayerSurface)
-
-
-def test_ci_layer_registry_surface_ids_are_unique():
-    registry = get_ci_layer_registry()
-    ids = [s.surface_id for s in registry]
-    assert len(ids) == len(set(ids))
-
-
 # ---------------------------------------------------------------------------
 # 7. classify_ci_surface()
 # ---------------------------------------------------------------------------
-
-
-def test_classify_ci_surface_returns_surface_for_known_id():
-    surface = classify_ci_surface("openclawd")
-    assert surface is not None
-    assert surface.surface_id == "openclawd"
-
-
-def test_classify_ci_surface_returns_none_for_unknown_id():
-    assert classify_ci_surface("does_not_exist_xyz") is None
 
 
 # ---------------------------------------------------------------------------
@@ -254,53 +77,9 @@ def test_classify_ci_surface_returns_none_for_unknown_id():
 # ---------------------------------------------------------------------------
 
 
-def test_get_surfaces_by_ci_role_returns_only_matching_role():
-    ci_surfaces = get_surfaces_by_ci_role(CILayerRole.central_intelligence_main_layer)
-    for s in ci_surfaces:
-        assert s.ci_role == CILayerRole.central_intelligence_main_layer
-
-
-def test_get_surfaces_by_ci_role_expert_sub_layer_not_empty():
-    expert_surfaces = get_surfaces_by_ci_role(CILayerRole.expert_capability_sub_layer)
-    assert len(expert_surfaces) > 0
-
-
-def test_get_surfaces_by_ci_role_facade_compat_not_empty():
-    facades = get_surfaces_by_ci_role(CILayerRole.facade_compat_helper)
-    assert len(facades) > 0
-
-
 # ---------------------------------------------------------------------------
 # 9. build_ci_layer_boundary_report()
 # ---------------------------------------------------------------------------
-
-
-def test_build_ci_layer_boundary_report_totals_match_registry():
-    report = build_ci_layer_boundary_report()
-    total = (
-        report.central_intelligence_count
-        + report.expert_sub_layer_count
-        + report.sub_domain_coordinator_count
-        + report.facade_compat_helper_count
-    )
-    assert total == report.total_surfaces
-    assert report.total_surfaces == len(CI_LAYER_SURFACE_REGISTRY)
-
-
-def test_build_ci_layer_boundary_report_constrained_surfaces_subset_of_ids():
-    report = build_ci_layer_boundary_report()
-    registry_ids = {s.surface_id for s in CI_LAYER_SURFACE_REGISTRY}
-    for sid in report.constrained_surfaces:
-        assert sid in registry_ids
-
-
-def test_build_ci_layer_boundary_report_generated_at_is_recent():
-    import time
-
-    before = time.time()
-    report = build_ci_layer_boundary_report()
-    after = time.time()
-    assert before <= report.generated_at <= after
 
 
 # ---------------------------------------------------------------------------
@@ -308,66 +87,9 @@ def test_build_ci_layer_boundary_report_generated_at_is_recent():
 # ---------------------------------------------------------------------------
 
 
-def test_central_intelligence_main_layer_has_exactly_two_surfaces():
-    ci_surfaces = get_surfaces_by_ci_role(CILayerRole.central_intelligence_main_layer)
-    assert len(ci_surfaces) == 2
-
-
-def test_central_intelligence_main_layer_includes_openclawd():
-    openclawd = classify_ci_surface("openclawd")
-    assert openclawd is not None
-    assert openclawd.ci_role == CILayerRole.central_intelligence_main_layer
-    assert openclawd.is_central_intelligence is True
-    assert openclawd.may_not_claim_independent_authority is False
-
-
-def test_central_intelligence_main_layer_includes_desktop_presence_runtime():
-    dpr = classify_ci_surface("desktop_presence_runtime")
-    assert dpr is not None
-    assert dpr.ci_role == CILayerRole.central_intelligence_main_layer
-    assert dpr.is_central_intelligence is True
-    assert dpr.may_not_claim_independent_authority is False
-
-
 # ---------------------------------------------------------------------------
 # 11. Expert capability sub-layers — AgentKernel / ExecutionPlanner / Team
 # ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize(
-    "surface_id",
-    [
-        "agent_kernel",
-        "execution_planner",
-        "team_manager",
-        "agent_team",
-    ],
-)
-def test_expert_capability_sub_layer_classification(surface_id):
-    surface = classify_ci_surface(surface_id)
-    assert surface is not None, f"{surface_id} not found in registry"
-    assert surface.ci_role == CILayerRole.expert_capability_sub_layer
-    assert surface.is_central_intelligence is False
-    assert surface.may_not_claim_independent_authority is True
-
-
-def test_agent_kernel_notes_mention_advisory():
-    kernel = classify_ci_surface("agent_kernel")
-    assert kernel is not None
-    assert "advisory" in kernel.notes.lower()
-    assert "openclawd" in kernel.notes.lower()
-
-
-def test_execution_planner_notes_mention_agentkernel():
-    planner = classify_ci_surface("execution_planner")
-    assert planner is not None
-    assert "agentkernel" in planner.notes.lower()
-
-
-def test_team_manager_notes_mention_executionplanner():
-    tm = classify_ci_surface("team_manager")
-    assert tm is not None
-    assert "executionplanner" in tm.notes.lower()
 
 
 # ---------------------------------------------------------------------------
@@ -375,61 +97,9 @@ def test_team_manager_notes_mention_executionplanner():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize(
-    "surface_id",
-    [
-        "unified_orchestration_spine",
-        "device_orchestrator",
-        "swarm_coordinator",
-    ],
-)
-def test_sub_domain_coordinator_is_not_central_intelligence(surface_id):
-    surface = classify_ci_surface(surface_id)
-    assert surface is not None, f"{surface_id} not found in registry"
-    assert surface.ci_role == CILayerRole.sub_domain_coordinator
-    assert surface.is_central_intelligence is False
-    assert surface.may_not_claim_independent_authority is True
-
-
-def test_unified_orchestration_spine_notes_mention_not_per_request():
-    spine = classify_ci_surface("unified_orchestration_spine")
-    assert spine is not None
-    lower = spine.notes.lower()
-    assert "per-request" in lower or "per request" in lower
-
-
 # ---------------------------------------------------------------------------
 # 13. Facade/compat/helper layers are NOT central intelligence
 # ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize(
-    "surface_id",
-    [
-        "e2e_orchestrator",
-        "repo_coordinator",
-        "system_orchestrator",
-    ],
-)
-def test_facade_compat_helper_is_not_central_intelligence(surface_id):
-    surface = classify_ci_surface(surface_id)
-    assert surface is not None, f"{surface_id} not found in registry"
-    assert surface.ci_role == CILayerRole.facade_compat_helper
-    assert surface.is_central_intelligence is False
-    assert surface.may_not_claim_independent_authority is True
-
-
-def test_e2e_orchestrator_notes_mention_facade():
-    e2e = classify_ci_surface("e2e_orchestrator")
-    assert e2e is not None
-    assert "facade" in e2e.notes.lower()
-
-
-def test_system_orchestrator_notes_mention_startup():
-    so = classify_ci_surface("system_orchestrator")
-    assert so is not None
-    lower = so.notes.lower()
-    assert "startup" in lower
 
 
 # ---------------------------------------------------------------------------
@@ -497,18 +167,6 @@ def test_pr7_side_path_entries_not_in_minimal_mainline(module_name):
 # ---------------------------------------------------------------------------
 
 
-def test_android_policy_is_non_empty_string():
-    assert isinstance(ANDROID_FIRST_CLASS_RUNTIME_HOST_POLICY, str)
-    assert len(ANDROID_FIRST_CLASS_RUNTIME_HOST_POLICY) > 0
-
-
-def test_android_policy_mentions_device_router():
-    assert "DeviceRouter" in ANDROID_FIRST_CLASS_RUNTIME_HOST_POLICY
-
-
-def test_android_policy_mentions_android():
-    assert "Android" in ANDROID_FIRST_CLASS_RUNTIME_HOST_POLICY
-
-
-def test_android_policy_mentions_first_class():
-    assert "first-class" in ANDROID_FIRST_CLASS_RUNTIME_HOST_POLICY
+# 已删除依赖 core/central_intelligence_layer.py 的用例 —— 该模块是纯命名 / 语义边界
+# 声明层（只产出标签，不做运行时判定），生产面零引用，已删除。
+# 保留的用例测的是 core/canonical_execution_chain.py，仍在。

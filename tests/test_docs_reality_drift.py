@@ -39,10 +39,20 @@ def _readme() -> str:
 
 
 def _authoritative_port() -> int:
-    """代码里的权威默认端口。"""
-    src = (REPO / "core" / "deployment_baseline.py").read_text(encoding="utf-8")
-    m = re.search(r"web_ui_port\s*=\s*(\d+)", src)
-    assert m, "未能从 deployment_baseline.py 读出默认端口,守卫自身失效"
+    """代码里的权威默认端口 —— 取自 ``launcher/bootstrap.py`` 的配置**定义处**。
+
+    此前这里读的是 ``core/deployment_baseline.py``。那个来源本来就不对：
+    该模块只是在自己的基线检查里**又赋了一遍**同样的值
+    （``config.web_ui_port = 9000``），真正的默认值定义在
+    ``launcher/bootstrap.py`` 的配置 dataclass 字段上（``web_ui_port: int = 9000``）。
+    读"复述者"而不是"定义者"，那两处一旦分叉，守卫会跟着错误的一方走。
+
+    该模块已作为空转的观测报告模块删除，这条守卫随之指回定义处 —— 顺带把这个
+    间接层去掉了。
+    """
+    src = (REPO / "launcher" / "bootstrap.py").read_text(encoding="utf-8")
+    m = re.search(r"^\s*web_ui_port\s*:\s*int\s*=\s*(\d+)", src, re.MULTILINE)
+    assert m, "未能从 launcher/bootstrap.py 读出 web_ui_port 默认值,守卫自身失效"
     return int(m.group(1))
 
 

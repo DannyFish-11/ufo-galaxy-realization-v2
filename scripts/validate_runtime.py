@@ -71,9 +71,10 @@ sys.path.insert(0, str(PROJECT_ROOT))
 # Result helpers
 # ---------------------------------------------------------------------------
 
+
 class CheckResult(NamedTuple):
     name: str
-    status: str          # "PASS" | "FAIL" | "WARN"
+    status: str  # "PASS" | "FAIL" | "WARN"
     detail: str = ""
 
 
@@ -109,6 +110,7 @@ def _print_result(r: CheckResult) -> None:
 # ---------------------------------------------------------------------------
 # 1. Authoritative startup path
 # ---------------------------------------------------------------------------
+
 
 def check_startup_path() -> None:
     _section("1. Authoritative Startup Path")
@@ -180,6 +182,7 @@ def check_startup_path() -> None:
 # 2. Core authority chain imports
 # ---------------------------------------------------------------------------
 
+
 def check_authority_chain() -> None:
     _section("2. Core Authority Chain Imports")
 
@@ -204,10 +207,11 @@ def check_authority_chain() -> None:
     # Check layout registry classifies canonical dirs correctly
     try:
         from core.repo_layout_registry import (
+            is_active_desktop_status_directory,
             is_active_runtime_directory,
             is_legacy_directory,
-            is_active_desktop_status_directory,
         )
+
         checks = [
             ("core/ is active_runtime", is_active_runtime_directory("core")),
             ("launcher/ is active_runtime", is_active_runtime_directory("launcher")),
@@ -229,6 +233,7 @@ def check_authority_chain() -> None:
 # ---------------------------------------------------------------------------
 # 3. Node registry consistency
 # ---------------------------------------------------------------------------
+
 
 def check_node_registry() -> None:
     _section("3. Node Registry Consistency")
@@ -276,9 +281,7 @@ def check_node_registry() -> None:
     r = _record(
         f"total nodes ({total})",
         total >= 100,
-        f"active={counts.get('active', 0)}, "
-        f"optional={counts.get('optional', 0)}, "
-        f"skip={counts.get('skip', 0)}",
+        f"active={counts.get('active', 0)}, " f"optional={counts.get('optional', 0)}, " f"skip={counts.get('skip', 0)}",
     )
     _print_result(r)
 
@@ -297,6 +300,7 @@ def check_node_registry() -> None:
 # ---------------------------------------------------------------------------
 # 4. Legacy surface isolation
 # ---------------------------------------------------------------------------
+
 
 def check_legacy_isolation() -> None:
     _section("4. Legacy Surface Isolation")
@@ -329,6 +333,7 @@ def check_legacy_isolation() -> None:
 # ---------------------------------------------------------------------------
 # 5. Critical docs exist
 # ---------------------------------------------------------------------------
+
 
 def check_docs() -> None:
     _section("5. Critical Documentation Files")
@@ -369,6 +374,7 @@ def check_purge_hardening() -> None:
     # 6b. Canonical L4 runtime module must be importable
     try:
         from core.galaxy_main_loop_l4_enhanced import GalaxyMainLoopL4  # type: ignore[import]
+
         r = _record(
             "core.galaxy_main_loop_l4_enhanced: canonical L4 module importable",
             True,
@@ -388,6 +394,7 @@ def check_purge_hardening() -> None:
             PURGE_REGISTRY,
             purge_registry_summary,
         )
+
         summary = purge_registry_summary()
         r = _record(
             "core.legacy_purge_registry importable",
@@ -403,11 +410,13 @@ def check_purge_hardening() -> None:
         )
         _print_result(r)
     except Exception as exc:
-        _print_result(_record(
-            "core.legacy_purge_registry importable",
-            False,
-            f"import failed: {exc}",
-        ))
+        _print_result(
+            _record(
+                "core.legacy_purge_registry importable",
+                False,
+                f"import failed: {exc}",
+            )
+        )
 
     # 6c. docs/LEGACY_PURGE_HARDENING.md exists (also checked in section 5,
     #     but we verify content here)
@@ -421,11 +430,14 @@ def check_purge_hardening() -> None:
         )
         _print_result(r)
     else:
-        _print_result(_record(
-            "docs/LEGACY_PURGE_HARDENING.md content",
-            False,
-            "File not found; skipping content check",
-        ))
+        _print_result(
+            _record(
+                "docs/LEGACY_PURGE_HARDENING.md content",
+                False,
+                "File not found; skipping content check",
+            )
+        )
+
 
 # ---------------------------------------------------------------------------
 # 7. Startup tier model
@@ -439,15 +451,16 @@ def check_startup_tier_model() -> None:
     # 7a. core.startup_tier_model is importable
     try:
         from core.startup_tier_model import (  # type: ignore[import]
+            ACTIVE_NODE_READINESS_BASELINE_DEFINED,
             STARTUP_TIER_MODEL_AUTHORITY,
             STARTUP_TIER_MODEL_GROUNDED_IN_EXISTING_GOVERNANCE,
-            ACTIVE_NODE_READINESS_BASELINE_DEFINED,
             TIER_CORE,
-            TIER_STANDARD,
             TIER_FULL,
+            TIER_STANDARD,
             build_readiness_baseline,
             check_tier_model_metadata,
         )
+
         r = _record(
             "core.startup_tier_model importable",
             True,
@@ -455,11 +468,13 @@ def check_startup_tier_model() -> None:
         )
         _print_result(r)
     except Exception as exc:
-        _print_result(_record(
-            "core.startup_tier_model importable",
-            False,
-            str(exc)[:120],
-        ))
+        _print_result(
+            _record(
+                "core.startup_tier_model importable",
+                False,
+                str(exc)[:120],
+            )
+        )
         return
 
     # 7b. Sentinels set
@@ -489,6 +504,7 @@ def check_startup_tier_model() -> None:
     # 7d. NodeSystemLauncher exposes tier helpers
     try:
         from launcher.node_startup import NodeSystemLauncher  # type: ignore[import]
+
         r = _record(
             "NodeSystemLauncher.STARTUP_TIER_CORE == 'Core'",
             NodeSystemLauncher.STARTUP_TIER_CORE == TIER_CORE,
@@ -515,11 +531,13 @@ def check_startup_tier_model() -> None:
         )
         _print_result(r)
     except Exception as exc:
-        _print_result(_record(
-            "NodeSystemLauncher tier helpers",
-            False,
-            str(exc)[:120],
-        ))
+        _print_result(
+            _record(
+                "NodeSystemLauncher tier helpers",
+                False,
+                str(exc)[:120],
+            )
+        )
 
     # 7e. Readiness baseline is coherent
     try:
@@ -546,9 +564,9 @@ def check_startup_tier_model() -> None:
             "Core-tier nodes have no readiness gaps",
             baseline.is_core_complete(),
             (
-                f"Core nodes with gaps: "
-                f"{[n for n in baseline.readiness_gaps if n in baseline.core_tier]}"
-                if not baseline.is_core_complete() else ""
+                f"Core nodes with gaps: " f"{[n for n in baseline.readiness_gaps if n in baseline.core_tier]}"
+                if not baseline.is_core_complete()
+                else ""
             ),
         )
         _print_result(r)
@@ -560,11 +578,13 @@ def check_startup_tier_model() -> None:
         )
         _print_result(r)
     except Exception as exc:
-        _print_result(_record(
-            "readiness baseline coherence",
-            False,
-            str(exc)[:120],
-        ))
+        _print_result(
+            _record(
+                "readiness baseline coherence",
+                False,
+                str(exc)[:120],
+            )
+        )
 
     # 7f. Canonical doc exists
     tier_doc = PROJECT_ROOT / "docs" / "STARTUP_TIER_MODEL.md"
@@ -614,6 +634,7 @@ def check_runtime_acceptance() -> None:
     # 8b. OpenClawd._collect_tools method is present
     try:
         from core.openclawd import OpenClawd  # type: ignore[import]
+
         has_method = callable(getattr(OpenClawd, "_collect_tools", None))
         r = _record(
             "acceptance: OpenClawd._collect_tools() is present",
@@ -635,6 +656,7 @@ def check_runtime_acceptance() -> None:
             CanonicalDispatcher,
             CapabilityLayer,
         )
+
         test_cases = [
             ("mcp__server__tool", CapabilityLayer.MCP),
             ("mcp__gateway__tool", CapabilityLayer.MCP_GW),
@@ -646,11 +668,13 @@ def check_runtime_acceptance() -> None:
             got = CapabilityLayer.classify(tool_name)
             if got != expected_layer:
                 all_ok = False
-                _print_result(_record(
-                    f"acceptance: CanonicalDispatcher.classify({tool_name!r})",
-                    False,
-                    f"expected {expected_layer.value!r}, got {got.value!r}",
-                ))
+                _print_result(
+                    _record(
+                        f"acceptance: CanonicalDispatcher.classify({tool_name!r})",
+                        False,
+                        f"expected {expected_layer.value!r}, got {got.value!r}",
+                    )
+                )
         if all_ok:
             r = _record(
                 "acceptance: CanonicalDispatcher classifies all canonical prefixes",
@@ -669,6 +693,7 @@ def check_runtime_acceptance() -> None:
     # 8d. Phase-A sentinel: scheduler canonical tool naming
     try:
         from core.scheduler import SCHEDULER_CANONICAL_TOOL_NAMING_PRIMARY  # type: ignore[import]
+
         r = _record(
             "acceptance: SCHEDULER_CANONICAL_TOOL_NAMING_PRIMARY sentinel present",
             bool(SCHEDULER_CANONICAL_TOOL_NAMING_PRIMARY),
@@ -686,6 +711,7 @@ def check_runtime_acceptance() -> None:
     # 8e. Phase-A sentinel: hybrid executor rename
     try:
         from core.hybrid_executor import APP_EXECUTION_CAPABILITY_REGISTRY_RENAMED  # type: ignore[import]
+
         r = _record(
             "acceptance: APP_EXECUTION_CAPABILITY_REGISTRY_RENAMED sentinel present",
             bool(APP_EXECUTION_CAPABILITY_REGISTRY_RENAMED),
@@ -725,11 +751,12 @@ def check_callable_node_baseline() -> None:
     # 9a. Module importable + sentinel
     try:
         from core.callable_node_baseline import (  # type: ignore[import]
-            CALLABLE_NODE_BASELINE_ESTABLISHED,
             CALLABLE_ARCHITECTURAL_CLASSES,
-            is_callable_by_openclawd,
+            CALLABLE_NODE_BASELINE_ESTABLISHED,
             get_callable_node_names,
+            is_callable_by_openclawd,
         )
+
         r = _record(
             "core.callable_node_baseline importable",
             True,
@@ -742,11 +769,13 @@ def check_callable_node_baseline() -> None:
         )
         _print_result(r)
     except Exception as exc:
-        _print_result(_record(
-            "core.callable_node_baseline importable",
-            False,
-            str(exc)[:120],
-        ))
+        _print_result(
+            _record(
+                "core.callable_node_baseline importable",
+                False,
+                str(exc)[:120],
+            )
+        )
         return
 
     # 9b. CALLABLE_ARCHITECTURAL_CLASSES is non-empty
@@ -760,6 +789,7 @@ def check_callable_node_baseline() -> None:
     # 9c. is_callable_by_openclawd semantics
     try:
         from core.nodes.node_fabric_registry import NodeArchitecturalClass  # type: ignore[import]
+
         cases = [
             (NodeArchitecturalClass.CAPABILITY_NODE, True),
             (NodeArchitecturalClass.SERVICE_NODE, False),
@@ -772,11 +802,13 @@ def check_callable_node_baseline() -> None:
             got = is_callable_by_openclawd(arch_cls)
             if got != expected:
                 all_ok = False
-                _print_result(_record(
-                    f"is_callable_by_openclawd({arch_cls.value})",
-                    False,
-                    f"expected {expected}, got {got}",
-                ))
+                _print_result(
+                    _record(
+                        f"is_callable_by_openclawd({arch_cls.value})",
+                        False,
+                        f"expected {expected}, got {got}",
+                    )
+                )
         if all_ok:
             r = _record(
                 "is_callable_by_openclawd() semantics correct for all 5 classes",
@@ -811,13 +843,17 @@ def check_callable_node_baseline() -> None:
     # 9e. NodeArchitecturalClass accessible from node_fabric_registry
     try:
         from core.nodes.node_fabric_registry import (  # type: ignore[import]
-            NodeArchitecturalClass,
             _CAPABILITY_SYNC_ELIGIBLE,
+            NodeArchitecturalClass,
         )
+
         members = {c.value for c in NodeArchitecturalClass}
         expected_members = {
-            "capability_node", "service_node", "legacy_orchestrator_node",
-            "experimental_node", "archived_node",
+            "capability_node",
+            "service_node",
+            "legacy_orchestrator_node",
+            "experimental_node",
+            "archived_node",
         }
         ok = expected_members.issubset(members)
         r = _record(
@@ -863,9 +899,8 @@ def check_callable_startup_integration() -> None:
     try:
         import importlib.util as _ilu
         import sys as _sys
-        _launcher_path = (
-            Path(__file__).parent.parent / "launcher" / "node_startup.py"
-        )
+
+        _launcher_path = Path(__file__).parent.parent / "launcher" / "node_startup.py"
         _spec = _ilu.spec_from_file_location("_node_startup_check", _launcher_path)
         _mod = _ilu.module_from_spec(_spec)
         _spec.loader.exec_module(_mod)  # type: ignore[union-attr]
@@ -877,32 +912,40 @@ def check_callable_startup_integration() -> None:
         )
         _print_result(r)
     except Exception as exc:
-        _print_result(_record(
-            "launcher.node_startup importable",
-            False,
-            str(exc)[:120],
-        ))
+        _print_result(
+            _record(
+                "launcher.node_startup importable",
+                False,
+                str(exc)[:120],
+            )
+        )
         return
 
     # 10b/c/d. get_callable_node_classification()
     try:
         launcher_cls = getattr(_mod, "NodeSystemLauncher", None)
         if launcher_cls is None:
-            _print_result(_record(
-                "NodeSystemLauncher class accessible",
-                False,
-                "NodeSystemLauncher not found in launcher.node_startup",
-            ))
+            _print_result(
+                _record(
+                    "NodeSystemLauncher class accessible",
+                    False,
+                    "NodeSystemLauncher not found in launcher.node_startup",
+                )
+            )
             return
-        r = _record("NodeSystemLauncher.get_callable_node_classification method present",
-                    hasattr(launcher_cls, "get_callable_node_classification"))
+        r = _record(
+            "NodeSystemLauncher.get_callable_node_classification method present",
+            hasattr(launcher_cls, "get_callable_node_classification"),
+        )
         _print_result(r)
     except Exception as exc:
-        _print_result(_record(
-            "NodeSystemLauncher.get_callable_node_classification accessible",
-            False,
-            str(exc)[:120],
-        ))
+        _print_result(
+            _record(
+                "NodeSystemLauncher.get_callable_node_classification accessible",
+                False,
+                str(exc)[:120],
+            )
+        )
 
 
 def _summarise(strict: bool) -> int:
@@ -933,10 +976,7 @@ def _summarise(strict: bool) -> int:
 
 def _to_json() -> Dict:
     return {
-        "checks": [
-            {"name": r.name, "status": r.status, "detail": r.detail}
-            for r in _results
-        ],
+        "checks": [{"name": r.name, "status": r.status, "detail": r.detail} for r in _results],
         "summary": {
             "total": len(_results),
             "passed": sum(1 for r in _results if r.status == "PASS"),
@@ -972,6 +1012,7 @@ def check_spine_observability() -> None:
         from core.capabilities.canonical_dispatcher import (  # type: ignore[import]
             CANONICAL_DISPATCHER_SPINE_HARDENED,
         )
+
         r = _record(
             "spine: CANONICAL_DISPATCHER_SPINE_HARDENED sentinel present",
             bool(CANONICAL_DISPATCHER_SPINE_HARDENED),
@@ -989,15 +1030,14 @@ def check_spine_observability() -> None:
     # 10b. DispatchResult carries trace_id + request_id
     try:
         from core.capabilities.canonical_dispatcher import DispatchResult  # type: ignore[import]
+
         dr = DispatchResult(success=True, trace_id="t1", request_id="r1")
         has_trace = hasattr(dr, "trace_id") and dr.trace_id == "t1"
         has_request = hasattr(dr, "request_id") and dr.request_id == "r1"
         d = dr.to_dict()
         in_dict = "trace_id" in d and "request_id" in d
         ok = has_trace and has_request and in_dict
-        detail = "" if ok else (
-            f"trace_id={has_trace} request_id={has_request} in_dict={in_dict}"
-        )
+        detail = "" if ok else (f"trace_id={has_trace} request_id={has_request} in_dict={in_dict}")
         r = _record(
             "spine: DispatchResult carries trace_id + request_id in to_dict()",
             ok,
@@ -1015,6 +1055,7 @@ def check_spine_observability() -> None:
     # 10c. OpenClawd spine observability hardened sentinel
     try:
         from core.openclawd import OPENCLAWD_SPINE_OBSERVABILITY_HARDENED  # type: ignore[import]
+
         r = _record(
             "spine: OPENCLAWD_SPINE_OBSERVABILITY_HARDENED sentinel present",
             bool(OPENCLAWD_SPINE_OBSERVABILITY_HARDENED),
@@ -1032,6 +1073,7 @@ def check_spine_observability() -> None:
     # 10d. CommandRouter correlation hardened sentinel
     try:
         from core.command_router import COMMAND_ROUTER_CORRELATION_HARDENED  # type: ignore[import]
+
         r = _record(
             "spine: COMMAND_ROUTER_CORRELATION_HARDENED sentinel present",
             bool(COMMAND_ROUTER_CORRELATION_HARDENED),
@@ -1051,14 +1093,15 @@ def check_spine_observability() -> None:
         from core.capabilities.canonical_dispatcher import (  # type: ignore[import]
             CapabilityLayer,
         )
+
         cases = [
-            ("mcp__srv__tool",      CapabilityLayer.MCP),
-            ("mcp__gateway__tool",  CapabilityLayer.MCP_GW),
-            ("skill__my_skill",     CapabilityLayer.SKILL),
-            ("node__n1__ping",      CapabilityLayer.NODE),
-            ("device__d1__act",     CapabilityLayer.DEVICE),
-            ("github__install",     CapabilityLayer.GITHUB),
-            ("unknown_prefix",      CapabilityLayer.UNKNOWN),
+            ("mcp__srv__tool", CapabilityLayer.MCP),
+            ("mcp__gateway__tool", CapabilityLayer.MCP_GW),
+            ("skill__my_skill", CapabilityLayer.SKILL),
+            ("node__n1__ping", CapabilityLayer.NODE),
+            ("device__d1__act", CapabilityLayer.DEVICE),
+            ("github__install", CapabilityLayer.GITHUB),
+            ("unknown_prefix", CapabilityLayer.UNKNOWN),
         ]
         failures = []
         for name, expected in cases:
@@ -1105,15 +1148,16 @@ def check_outward_runtime_truth() -> None:
     # 11a. Import
     try:
         from core.outward_runtime_truth import (
+            NO_PARALLEL_OUTWARD_ASSEMBLY_POLICY,
+            NO_SECONDARY_SOURCE_AS_PRIMARY_TRUTH_POLICY,
             OUTWARD_RUNTIME_TRUTH_AUTHORITY,
             OUTWARD_RUNTIME_TRUTH_LAYER_POSITION,
-            NO_SECONDARY_SOURCE_AS_PRIMARY_TRUTH_POLICY,
-            NO_PARALLEL_OUTWARD_ASSEMBLY_POLICY,
             OUTWARD_SURFACE_MUST_PREFER_COMPILED_TRUTH_POLICY,
-            compile_outward_truth,
             OutwardRuntimeTruthSnapshot,
+            compile_outward_truth,
             reset_outward_runtime_truth_runtime,
         )
+
         r = _record(
             "outward_runtime_truth: module importable",
             True,
@@ -1182,6 +1226,7 @@ def check_outward_runtime_truth() -> None:
     # 11f. Projection routes integration sentinel
     try:
         import importlib.util as _ilu
+
         _proj_path = Path(__file__).parent.parent / "core" / "routes" / "projection.py"
         _spec = _ilu.spec_from_file_location("_proj_check_ort", _proj_path)
         _mod = _ilu.module_from_spec(_spec)
@@ -1226,19 +1271,20 @@ def check_node_lifecycle_governor() -> None:
 
     try:
         from core.node_lifecycle_governor import (
+            NO_WILD_GROWTH_POLICY,
+            NODE_LIFECYCLE_GOVERNANCE_PIPELINE_DEFINED,
             NODE_LIFECYCLE_GOVERNOR_AUTHORITY,
             NODE_LIFECYCLE_GOVERNOR_LAYER_POSITION,
-            NODE_LIFECYCLE_GOVERNANCE_PIPELINE_DEFINED,
             NODE_MUST_PASS_LIFECYCLE_GATES_POLICY,
-            NO_WILD_GROWTH_POLICY,
             PROMOTION_REQUIRES_CAPABILITY_REGISTRATION_POLICY,
-            NodeLifecycleStage,
             NodeGovernanceRecord,
             NodeLifecycleGovernor,
+            NodeLifecycleStage,
             get_node_lifecycle_governor,
-            reset_node_lifecycle_governor,
             govern_node,
+            reset_node_lifecycle_governor,
         )
+
         r = _record("node_lifecycle_governor: module importable", True)
         _print_result(r)
     except Exception as exc:
@@ -1342,243 +1388,9 @@ def check_node_lifecycle_governor() -> None:
 # ---------------------------------------------------------------------------
 
 
-def check_deployment_baseline() -> None:
-    """PR-531: Verify that the deployment baseline is checkable in code.
-
-    Checks:
-    a. ``core.deployment_baseline`` is importable.
-    b. Authority and policy sentinels are non-empty.
-    c. :func:`~core.deployment_baseline.check_runtime_baseline` returns a
-       :class:`~core.deployment_baseline.DeploymentBaselineReport`.
-    d. CORE_RUNTIME baseline_met is True (all core checks pass).
-    e. DeploymentEnvironment tiers are defined.
-    """
-    _section("13. Deployment Baseline (PR-531)")
-
-    try:
-        from core.deployment_baseline import (
-            DEPLOYMENT_BASELINE_AUTHORITY,
-            DEPLOYMENT_BASELINE_LAYER_POSITION,
-            DEPLOYMENT_BASELINE_CONVERGENCE_DEFINED,
-            CORE_RUNTIME_MUST_BE_CHECKABLE_POLICY,
-            ENVIRONMENT_TIERS_MUST_MAP_TO_STARTUP_TIERS_POLICY,
-            DeploymentEnvironment,
-            DeploymentBaselineReport,
-            check_runtime_baseline,
-            reset_deployment_baseline_runtime,
-        )
-        r = _record("deployment_baseline: module importable", True)
-        _print_result(r)
-    except Exception as exc:
-        r = _record("deployment_baseline: module importable", False, str(exc)[:120])
-        _print_result(r)
-        return
-
-    # 13b. Sentinels
-    r = _record(
-        "deployment_baseline: DEPLOYMENT_BASELINE_AUTHORITY non-empty",
-        bool(DEPLOYMENT_BASELINE_AUTHORITY),
-    )
-    _print_result(r)
-    r = _record(
-        "deployment_baseline: LAYER_POSITION == 15",
-        DEPLOYMENT_BASELINE_LAYER_POSITION == 15,
-    )
-    _print_result(r)
-    for name, val in [
-        ("DEPLOYMENT_BASELINE_CONVERGENCE_DEFINED", DEPLOYMENT_BASELINE_CONVERGENCE_DEFINED),
-        ("CORE_RUNTIME_MUST_BE_CHECKABLE_POLICY", CORE_RUNTIME_MUST_BE_CHECKABLE_POLICY),
-        ("ENVIRONMENT_TIERS_MUST_MAP_TO_STARTUP_TIERS_POLICY", ENVIRONMENT_TIERS_MUST_MAP_TO_STARTUP_TIERS_POLICY),
-    ]:
-        r = _record(f"deployment_baseline: {name} non-empty", bool(val))
-        _print_result(r)
-
-    # 13c. DeploymentEnvironment tiers
-    for tier in ("CORE_RUNTIME", "STANDARD_DEV", "FULL_PRODUCTION"):
-        r = _record(
-            f"deployment_baseline: DeploymentEnvironment.{tier} defined",
-            hasattr(DeploymentEnvironment, tier),
-        )
-        _print_result(r)
-
-    # 13d. check_runtime_baseline() returns a report
-    try:
-        reset_deployment_baseline_runtime()
-        report = check_runtime_baseline(DeploymentEnvironment.CORE_RUNTIME)
-        r = _record(
-            "deployment_baseline: check_runtime_baseline(CORE_RUNTIME) returns report",
-            isinstance(report, DeploymentBaselineReport),
-            f"baseline_met={getattr(report, 'baseline_met', '?')}",
-        )
-        _print_result(r)
-        r = _record(
-            "deployment_baseline: CORE_RUNTIME baseline_met is True",
-            getattr(report, "baseline_met", False),
-            f"passed={getattr(report, 'passed_count', '?')} "
-            f"failed={getattr(report, 'failed_count', '?')}",
-        )
-        _print_result(r)
-    except Exception as exc:
-        r = _record(
-            "deployment_baseline: check_runtime_baseline() callable", False, str(exc)[:120]
-        )
-        _print_result(r)
-
-
 # ---------------------------------------------------------------------------
 # 14. Capability Utilization Observability (PR-531)
 # ---------------------------------------------------------------------------
-
-
-def check_capability_utilization_observability() -> None:
-    """PR-531: Verify that capability utilization observability is present.
-
-    Checks:
-    a. ``core.capability_utilization_observability`` is importable.
-    b. Authority and foundation sentinels are non-empty.
-    c. :func:`~core.capability_utilization_observability.record_capability_call`
-       is callable without error.
-    d. :func:`~core.capability_utilization_observability.get_utilization_report`
-       returns a valid report after a recorded call.
-    e. :func:`~core.capability_utilization_observability.get_all_utilization_reports`
-       returns a :class:`~core.capability_utilization_observability.UtilizationSummary`.
-    f. :data:`OBSERVABILITY_DOES_NOT_BLOCK_DISPATCH_POLICY` sentinel present.
-    """
-    _section("14. Capability Utilization Observability (PR-531)")
-
-    try:
-        from core.capability_utilization_observability import (
-            CAPABILITY_UTILIZATION_OBSERVABILITY_AUTHORITY,
-            CAPABILITY_UTILIZATION_OBSERVABILITY_LAYER_POSITION,
-            CAPABILITY_UTILIZATION_FOUNDATIONS_ESTABLISHED,
-            OBSERVABILITY_DOES_NOT_BLOCK_DISPATCH_POLICY,
-            UTILIZATION_DATA_IS_ADVISORY_POLICY,
-            record_capability_call,
-            record_failure,
-            get_utilization_report,
-            get_all_utilization_reports,
-            UtilizationReport,
-            UtilizationSummary,
-            reset_capability_utilization_observability,
-        )
-        r = _record("capability_utilization_observability: module importable", True)
-        _print_result(r)
-    except Exception as exc:
-        r = _record(
-            "capability_utilization_observability: module importable",
-            False,
-            str(exc)[:120],
-        )
-        _print_result(r)
-        return
-
-    # 14b. Sentinels
-    r = _record(
-        "capability_utilization_observability: AUTHORITY non-empty",
-        bool(CAPABILITY_UTILIZATION_OBSERVABILITY_AUTHORITY),
-    )
-    _print_result(r)
-    r = _record(
-        "capability_utilization_observability: LAYER_POSITION == 15",
-        CAPABILITY_UTILIZATION_OBSERVABILITY_LAYER_POSITION == 15,
-    )
-    _print_result(r)
-    for name, val in [
-        ("FOUNDATIONS_ESTABLISHED", CAPABILITY_UTILIZATION_FOUNDATIONS_ESTABLISHED),
-        ("OBSERVABILITY_DOES_NOT_BLOCK_DISPATCH_POLICY", OBSERVABILITY_DOES_NOT_BLOCK_DISPATCH_POLICY),
-        ("UTILIZATION_DATA_IS_ADVISORY_POLICY", UTILIZATION_DATA_IS_ADVISORY_POLICY),
-    ]:
-        r = _record(f"capability_utilization_observability: {name} non-empty", bool(val))
-        _print_result(r)
-
-    # 14c. record_capability_call() fire-and-forget
-    try:
-        reset_capability_utilization_observability()
-        record_capability_call(
-            "node::_validate_test::action",
-            caller="validate_runtime",
-            success=True,
-            latency_ms=1.5,
-        )
-        r = _record(
-            "capability_utilization_observability: record_capability_call() non-raising",
-            True,
-        )
-        _print_result(r)
-    except Exception as exc:
-        r = _record(
-            "capability_utilization_observability: record_capability_call() non-raising",
-            False,
-            str(exc)[:120],
-        )
-        _print_result(r)
-        return
-
-    # 14d. get_utilization_report()
-    try:
-        report = get_utilization_report("node::_validate_test::action")
-        r = _record(
-            "capability_utilization_observability: get_utilization_report() returns UtilizationReport",
-            isinstance(report, UtilizationReport),
-            f"total_calls={getattr(report, 'total_calls', '?')}",
-        )
-        _print_result(r)
-        r = _record(
-            "capability_utilization_observability: report.total_calls == 1",
-            getattr(report, "total_calls", 0) == 1,
-        )
-        _print_result(r)
-    except Exception as exc:
-        r = _record(
-            "capability_utilization_observability: get_utilization_report()",
-            False,
-            str(exc)[:120],
-        )
-        _print_result(r)
-
-    # 14e. record_failure() and failure domain tracking
-    try:
-        record_failure(
-            "node::_validate_test::action",
-            caller="validate_runtime",
-            failure_domain="NODE_UNAVAILABLE",
-        )
-        report2 = get_utilization_report("node::_validate_test::action")
-        r = _record(
-            "capability_utilization_observability: failure_count tracked",
-            getattr(report2, "failure_count", 0) == 1,
-            f"failure_count={getattr(report2, 'failure_count', '?')}",
-        )
-        _print_result(r)
-        r = _record(
-            "capability_utilization_observability: failure_domains tracked",
-            "NODE_UNAVAILABLE" in getattr(report2, "failure_domains", {}),
-        )
-        _print_result(r)
-    except Exception as exc:
-        r = _record(
-            "capability_utilization_observability: failure tracking",
-            False,
-            str(exc)[:120],
-        )
-        _print_result(r)
-
-    # 14f. get_all_utilization_reports()
-    try:
-        summary = get_all_utilization_reports()
-        r = _record(
-            "capability_utilization_observability: get_all_utilization_reports() returns UtilizationSummary",
-            isinstance(summary, UtilizationSummary),
-            f"total_tracked={getattr(summary, 'total_tracked_capabilities', '?')}",
-        )
-        _print_result(r)
-    except Exception as exc:
-        r = _record(
-            "capability_utilization_observability: get_all_utilization_reports()",
-            False,
-            str(exc)[:120],
-        )
-        _print_result(r)
 
 
 def check_runtime_invariant_enforcement() -> None:
@@ -1602,13 +1414,14 @@ def check_runtime_invariant_enforcement() -> None:
         from core.runtime_invariant_enforcement import (
             RUNTIME_INVARIANT_ENFORCEMENT_IS_AUTHORITY,
             RUNTIME_INVARIANT_ENFORCEMENT_PR8_SENTINEL,
-            get_invariant_registry,
-            get_cross_repo_assumption_registry,
-            get_violated_invariants,
-            get_unvalidated_assumptions,
-            is_enforcement_posture_acceptable,
             build_enforcement_snapshot,
+            get_cross_repo_assumption_registry,
+            get_invariant_registry,
+            get_unvalidated_assumptions,
+            get_violated_invariants,
+            is_enforcement_posture_acceptable,
         )
+
         r = _record(
             "runtime_invariant_enforcement: module importable",
             bool(RUNTIME_INVARIANT_ENFORCEMENT_IS_AUTHORITY),
@@ -1729,8 +1542,6 @@ def check_runtime_invariant_enforcement() -> None:
         _print_result(r)
 
 
-
-
 # ---------------------------------------------------------------------------
 # 16. V6 Center Authority Boundary (PR-V6)
 # ---------------------------------------------------------------------------
@@ -1768,21 +1579,24 @@ def check_center_authority_boundary() -> None:
             V2_OWNS_CONTINUITY_LEGALITY_TRUTH_POLICY,
             V2_OWNS_DISPATCH_READINESS_TRUTH_POLICY,
             V2_OWNS_ORCHESTRATION_TRUTH_POLICY,
-            evaluate_center_authority_boundary,
-            assert_center_authority_intact,
             CenterAuthorityBoundaryReport,
+            assert_center_authority_intact,
+            evaluate_center_authority_boundary,
         )
+
         r = _record(
             "v6_authority_boundary: core.center_authority_boundary importable",
             True,
         )
         _print_result(r)
     except Exception as exc:
-        _print_result(_record(
-            "v6_authority_boundary: core.center_authority_boundary importable",
-            False,
-            str(exc)[:120],
-        ))
+        _print_result(
+            _record(
+                "v6_authority_boundary: core.center_authority_boundary importable",
+                False,
+                str(exc)[:120],
+            )
+        )
         return
 
     # 16b. Authority sentinel
@@ -1821,16 +1635,17 @@ def check_center_authority_boundary() -> None:
         r = _record(
             "v6_authority_boundary: evaluate_center_authority_boundary() returns report",
             isinstance(report, CenterAuthorityBoundaryReport),
-            f"all_domains_intact={report.all_domains_intact} "
-            f"degraded={report.degraded_domains}",
+            f"all_domains_intact={report.all_domains_intact} " f"degraded={report.degraded_domains}",
         )
         _print_result(r)
     except Exception as exc:
-        _print_result(_record(
-            "v6_authority_boundary: evaluate_center_authority_boundary() callable",
-            False,
-            str(exc)[:120],
-        ))
+        _print_result(
+            _record(
+                "v6_authority_boundary: evaluate_center_authority_boundary() callable",
+                False,
+                str(exc)[:120],
+            )
+        )
         return
 
     # 16f. assert_center_authority_intact() — warn-only if degraded
@@ -1857,33 +1672,36 @@ def check_center_authority_boundary() -> None:
     # 16g. Phase 7 startup integration: SystemOrchestrator exposes
     #      authority_boundary_status in its READINESS_SUMMARY phase data.
     try:
-        from core.system_orchestrator import SystemOrchestrator, StartupPhase
+        from core.system_orchestrator import StartupPhase, SystemOrchestrator
+
         orch = SystemOrchestrator(continue_on_failure=True)
         summary = orch.run_startup_sequence()
-        phase7_results = [
-            rr for rr in summary.phase_results
-            if rr.phase == StartupPhase.READINESS_SUMMARY
-        ]
-        has_boundary_data = (
-            bool(phase7_results)
-            and "authority_boundary_status" in phase7_results[0].data
-        )
+        phase7_results = [rr for rr in summary.phase_results if rr.phase == StartupPhase.READINESS_SUMMARY]
+        has_boundary_data = bool(phase7_results) and "authority_boundary_status" in phase7_results[0].data
         r = _record(
             "v6_authority_boundary: Phase 7 surfaces authority_boundary_status in data",
             has_boundary_data,
             (
-                f"authority_boundary_status="
-                f"{phase7_results[0].data.get('authority_boundary_status', 'missing')}"
-                if phase7_results else "Phase 7 result not found"
+                f"authority_boundary_status=" f"{phase7_results[0].data.get('authority_boundary_status', 'missing')}"
+                if phase7_results
+                else "Phase 7 result not found"
             ),
         )
         _print_result(r)
     except Exception as exc:
-        _print_result(_record(
-            "v6_authority_boundary: Phase 7 startup integration",
-            False,
-            str(exc)[:120],
-        ))
+        _print_result(
+            _record(
+                "v6_authority_boundary: Phase 7 startup integration",
+                False,
+                str(exc)[:120],
+            )
+        )
+
+
+# 注：check_deployment_baseline / check_capability_utilization_observability 两项
+# 已随 core/deployment_baseline.py 与 core/capability_utilization_observability.py
+# 一并移除 —— 那两个模块是"把系统状态整理成报告"的观测面，缺席不产生任何错误行为，
+# 生产面除本校验器外零引用。
 
 
 def main() -> int:
@@ -1920,8 +1738,6 @@ def main() -> int:
     check_spine_observability()
     check_outward_runtime_truth()
     check_node_lifecycle_governor()
-    check_deployment_baseline()
-    check_capability_utilization_observability()
     check_runtime_invariant_enforcement()
     check_center_authority_boundary()
 
