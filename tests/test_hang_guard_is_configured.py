@@ -27,6 +27,7 @@
 from __future__ import annotations
 
 import configparser
+import re
 from pathlib import Path
 
 import pytest
@@ -197,7 +198,30 @@ class TestTimeoutIsConfigured:
         就是再次退回「整轮没有结论」,而且这次连守卫都在替它背书。
 
         现状(逐个作业核过)只有 ``-p no:warnings``,与超时无关,故这条应当通过。
+
+        ── 允许 ``--timeout-method=`` 的理由(本条曾是一刀切禁令)────────────────
+        本守卫原本禁掉任何含 ``--timeout`` 的命令行。它的**本意**是"别把挂死保护
+        关掉",而 ``--timeout-method=`` 改的是**打断机制**、不改超时秒数,不构成
+        "关掉"。
+
+        必须放行它,是因为 Windows 上 ``timeout_method = signal``(pytest.ini 的
+        取值,基于实测选出)**根本无法工作** —— signal 方式依赖 SIGALRM,而 Windows
+        没有这个信号。仓库首次在 windows-latest 上跑 CI 立刻撞到:
+
+            AttributeError: module 'signal' has no attribute 'SIGALRM'
+            (pytest_timeout.py:324 → INTERNALERROR → no tests ran)
+
+        也就是说:不放行的话,Windows 作业连一条用例都跑不了 —— 那才是真正的
+        "保护归零"。放行 method、继续禁 ``--timeout=<秒数>`` 覆盖与 ``no:timeout``
+        卸载,才是这条规则的准确表达。
+
+        仍然禁掉的:
+          * ``--timeout=0`` / ``--timeout=<任何秒数>`` —— 会覆盖 ini 里的 120s
+          * ``-p no:timeout`` —— 直接卸掉插件
         """
+        # ``--timeout-method=...`` 放行；``--timeout=...``(含 =0)与 no:timeout 仍禁。
+        _DISARM = re.compile(r"--timeout(?!-method)\b|no:timeout")
+
         offenders: list[str] = []
         for wf in sorted((REPO_ROOT / ".github/workflows").glob("*.yml")):
             text = wf.read_text(encoding="utf-8")
@@ -205,10 +229,37 @@ class TestTimeoutIsConfigured:
                 stripped = line.strip()
                 if stripped.startswith("#"):
                     continue
-                if "--timeout" in stripped or "no:timeout" in stripped:
+                if _DISARM.search(stripped):
                     offenders.append(f"{wf.name}:{lineno}: {stripped}")
 
         assert not offenders, "有 CI 作业在命令行上关掉/覆盖了 per-test 超时:\n" + "\n".join(offenders)
+
+    def test_timeout_method_override_is_only_used_where_the_platform_forces_it(self):
+        """放行 ``--timeout-method=`` 之后,防止它被随手用在 Linux 作业上。
+
+        Windows 上是**没得选**(无 SIGALRM);Linux 上 signal 方式是实测选出来的
+        (能打断单条并让整轮跑完拿到完整失败清单,thread 会杀掉整个进程)。
+        所以这个覆盖只应出现在 windows runner 的作业里。
+        """
+        import yaml
+
+        ci_path = REPO_ROOT / ".github/workflows/ci.yml"
+        ci = yaml.safe_load(ci_path.read_text(encoding="utf-8"))
+
+        offenders: list[str] = []
+        for job_name, job in ci.get("jobs", {}).items():
+            runs_on = str(job.get("runs-on", ""))
+            for step in job.get("steps", []):
+                run = str(step.get("run", ""))
+                if "--timeout-method" in run and "windows" not in runs_on.lower():
+                    offenders.append(f"{job_name} (runs-on: {runs_on})")
+
+        assert (
+            not offenders
+        ), (
+            "非 Windows 作业使用了 --timeout-method 覆盖 —— Linux 上应沿用 pytest.ini "
+            "实测选出的 signal 方式:\n" + "\n".join(offenders)
+        )
 
 
 #: 丢给子进程去跑的迷你套件:两种真实挂法,前后各夹一条正常用例。
