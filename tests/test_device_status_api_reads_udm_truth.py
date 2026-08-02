@@ -126,25 +126,26 @@ async def test_udm_back_online_is_reflected_too(manager):
     assert manager.get_device_status("dsa-flap")["is_online"] is True, "UDM 判回在线,展示面却卡在离线"
 
 
-def test_device_unknown_to_udm_keeps_local_value(manager):
+async def test_device_unknown_to_udm_keeps_local_value(manager):
     """降级路径:UDM 里没有这台设备时,保持本地值,不凭空改成离线。
 
     write-through 是 best-effort(UDM 写失败时仍保留本地记录以维持展示)。
     这时把它改成离线,等于制造一条 UDM 从没说过的假信息。
+
+    构造方式:正常注册(本地缓存与 UDM 都有),再把它**只从 UDM 注销**。这样
+    留下的正是要测的那个状态 —— 本地有记录、UDM 查不到 —— 而且全程只用公开
+    API。第一版我图省事直接写 ``manager._devices[id] = ...``,被
+    ``scripts/audit_udm_write_paths.py`` 如实判为"绕过 SSOT 的直写"并让
+    ssot-udm-conformance 门变红。**那个门抓对了**:测试也不该示范绕过写路径的
+    写法,否则就是在给后来者背书。
     """
-    ghost = DeviceState(
-        device_id="dsa-ghost-never-in-udm",
-        device_name="ghost",
-        device_type="android",
-        category=DeviceCategory.MOBILE,
-        is_online=True,
-    )
-    manager._devices[ghost.device_id] = ghost  # 刻意绕过 register,模拟 UDM 里没有
-    try:
-        manager._apply_udm_truth()
-        assert manager._devices[ghost.device_id].is_online is True, "UDM 里查不到的设备被凭空判成了离线"
-    finally:
-        manager._devices.pop(ghost.device_id, None)
+    device_id = "dsa-unknown-to-udm"
+    _register(manager, device_id)
+    assert manager.get_device_status(device_id)["is_online"] is True, "前置条件不成立"
+
+    get_unified_device_manager().unregister_device(device_id)
+
+    assert manager.get_device_status(device_id)["is_online"] is True, "UDM 里查不到的设备被凭空判成了离线"
 
 
 async def test_udm_unavailable_does_not_wipe_the_display(manager, monkeypatch):
