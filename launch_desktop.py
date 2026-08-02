@@ -1,7 +1,21 @@
 #!/usr/bin/env python3
 # PR-WIN-ENCODING: Force UTF-8 on Windows for CJK console output.
 import sys
-if sys.platform == "win32":
+
+
+def _configure_windows_console() -> None:
+    """Windows 下把控制台切到 UTF-8(CJK 日志不再乱码/抛 UnicodeEncodeError)。
+
+    **只在本文件被当作脚本运行时调用**(见下方 ``__name__`` 守卫)。
+
+    以前这段是无条件的模块级代码,于是 ``import launch_desktop``(测试里
+    tests/test_launch_desktop_gateway_port.py 就这么干)会重写**调用方**的
+    sys.stdout/sys.stderr 并改写进程环境变量 —— 在 pytest 进程里就是把 pytest
+    自己的输出流换掉。与 main.py / unified_launcher.py 同一类越权,同一种修法:
+    import 不产生全局副作用,脚本模式行为不变。
+    """
+    if sys.platform != "win32":
+        return
     try:
         import io
         if hasattr(sys.stdout, "buffer"):
@@ -15,6 +29,10 @@ if sys.platform == "win32":
         os.environ["PYTHONIOENCODING"] = "utf-8:replace"
     except Exception:
         pass
+
+
+if __name__ == "__main__":
+    _configure_windows_console()
 """
 UFO Galaxy — 系统化完整启动器 (Systematic Launcher)
 ====================================================

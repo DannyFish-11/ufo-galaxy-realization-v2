@@ -83,18 +83,34 @@ jobs:
           # Full history needed for accurate baseline comparison
           fetch-depth: 0
 
+      # gitleaks-action@v2 **不接受 `args` 输入**。原先这里传了 6 个 flag,
+      # runner 每次都打一句 `##[warning]Unexpected input(s) 'args', valid inputs
+      # are ['']`,然后**把它们全部丢掉**,自己拼命令:
+      #
+      #   gitleaks detect --redact -v --exit-code=2 --report-format=sarif
+      #     --report-path=results.sarif --log-level=debug
+      #     --log-opts=--no-merges --first-parent <sha>^..<sha>
+      #
+      # 逐条对照原意与实际:
+      #   --config .gitleaks.toml  丢掉,但**碰巧无害** —— gitleaks 会自动发现
+      #                            源码根目录下的 .gitleaks.toml(日志可见
+      #                            "using existing gitleaks config")。
+      #   --redact / --exit-code   丢掉,但 action 自己也传了等价的。
+      #   --log-opts=""            丢掉,实际用的是 --no-merges --first-parent。
+      #   --no-git                 **丢掉,且这条改变了语义** —— 原意是扫**工作树**,
+      #                            实际扫的是**提交区间**。
+      #
+      # 最后那条有实际操作后果,写在这里免得下一个人再踩:扫的既然是提交区间,
+      # 那么"在后续提交里把泄漏的那行删掉"**清不掉这道门** —— 坏行仍在历史某个
+      # 提交的 diff 里。必须改写那个提交本身(amend / squash)。
+      #
+      # 这里保留 action 的默认行为(扫提交区间),因为它其实比原意更严:
+      # 提交过又删掉的密钥**依然是泄漏了**,只扫工作树会漏掉这一类。
+      # 把失效的 args 删掉,是为了不让配置继续撒谎。
       - name: Run gitleaks
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          args: >-
-            detect
-            --config .gitleaks.toml
-            --redact
-            --no-git
-            --exit-code 1
-            --log-opts=""
 
   # ---------------------------------------------------------------------------
   # C1. Structural guardrail — import boundary enforcement

@@ -1111,17 +1111,42 @@ class DualRepoSystemCompletenessReviewer:
         # flowed at runtime (not just that the structural wire path exists).
         # The dimension name explicitly asks for "real cross-repo evidence flow"
         # — structural completeness alone is insufficient.
+        #
+        # 这条判据原先读的是 **进程内存**:
+        #
+        #     eco = get_device_ecosystem_summary()
+        #     runtime_cross_repo_activated = eco["total_devices_with_snapshot"] > 0
+        #
+        # 也就是说,只要同一个进程里有人调用过 ``absorb_device_state_snapshot()``,
+        # 系统就宣布"真实跨仓证据流已经发生"。实测(干净进程 → evidence_gap;
+        # 塞入一个**假**快照后 → complete)证明:**任何一条无关测试的夹具数据都能
+        # 把这个治理结论翻成 complete**。CI 分片里正是如此 —— 同一分片内先跑的
+        # 测试往 store 里写过快照,自评随即变成 complete,而
+        # ``test_I03_cross_repo_evidence_gap_consistent`` 如实报红。
+        #
+        # 这直接违反本模块自己的设计原则第 2 条:"Fail-conservative — never
+        # silently optimistic"。进程内瞬时状态**任何代码路径都能写**,不具备
+        # 「证据」应有的可持久、可追溯属性,不能作为治理结论的依据。
+        #
+        # 改为以 ``core.android_participant_evidence_ingress`` 的落盘产物为准:
+        # 它读的是 Android 侧生成的 ``android_participant_evidence.json``,带
+        # schema 校验与时效检查(过期视同缺失),没跑过真实跨仓流程就不可能凭空
+        # 出现。判为"已激活"只认 ready / recovered 两个状态 —— degraded /
+        # unavailable / missing_evidence / malformed_evidence 一律不算,保守优先。
         runtime_cross_repo_activated = False
         runtime_activation_check_available = False
         try:
-            from core.android_device_state_store import (
-                get_device_ecosystem_summary as _get_eco_summary,  # type: ignore[import]
+            from core.android_participant_evidence_ingress import (  # type: ignore[import]
+                AndroidParticipantStatus,
+                ingest_android_participant_evidence,
             )
 
             runtime_activation_check_available = True
-            eco = _get_eco_summary()
-            devices_with_snapshot = eco.get("total_devices_with_snapshot", 0)
-            runtime_cross_repo_activated = devices_with_snapshot > 0
+            evidence_result = ingest_android_participant_evidence()
+            runtime_cross_repo_activated = evidence_result.status in (
+                AndroidParticipantStatus.ready,
+                AndroidParticipantStatus.recovered,
+            )
         except Exception as exc:
             logger.warning("Exception suppressed: %s", exc)
 

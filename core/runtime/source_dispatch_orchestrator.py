@@ -1883,9 +1883,14 @@ def _try_android_bridge_dispatch(
         from galaxy_gateway.android_bridge import android_bridge as _bridge  # type: ignore[attr-defined]
 
         # Check whether the device is in the Android transport cache.
-        # _devices is the operational transport session cache (NOT a canonical
-        # truth source); it only contains currently-connected Android devices.
-        if device_id not in _bridge._devices:
+        # This asks about *transport liveness* only (is there a live Android
+        # WebSocket session right now) — NOT about canonical device truth,
+        # which lives in UDM.  See AndroidBridge.has_transport_session.
+        #
+        # 这里原先直接读 ``_bridge._devices``。判断本身没错,错的是伸手进别人的
+        # 私有属性:那个字段一旦改名或换结构,本模块会在运行时才炸,而且炸在一个
+        # 与它无关的地方。改用 bridge 提供的公开读口。
+        if not _bridge.has_transport_session(device_id):
             return {
                 "success": False,
                 "skipped_reason": "device_not_in_android_bridge",

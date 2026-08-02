@@ -22,7 +22,6 @@ Tests covering:
 15. ExecutionState.to_dict() / from_dict() round-trip.
 16. EntryPath, TaskStatus, PresencePhase, ExecutionStatus enums.
 17. core/legacy_adapters/__init__.py — adapters importable.
-18. LegacyConnectionManagerAdapter — delegates to unified (method delegation).
 19. LegacyDeviceAgentManagerAdapter — get_device delegates to unified.
 20. LegacyDeviceAgentManagerAdapter — heartbeat delegates to unified.
 21. state_event_bus.emit_state() — accepts DeviceState and publishes event.
@@ -370,35 +369,10 @@ class TestStateSchema:
 class TestLegacyAdapters:
     def test_package_importable(self):
         from core.legacy_adapters import (
-            LegacyConnectionManagerAdapter,
             LegacyDeviceAgentManagerAdapter,
         )
 
-        assert LegacyConnectionManagerAdapter is not None
         assert LegacyDeviceAgentManagerAdapter is not None
-
-    def test_connection_manager_adapter_get_connection_delegates(self):
-        from core.legacy_adapters.connection_manager_adapter import LegacyConnectionManagerAdapter
-
-        adapter = LegacyConnectionManagerAdapter()
-        mock_unified = MagicMock()
-        mock_unified.get_connection.return_value = {"id": "c1"}
-        adapter._unified = mock_unified
-
-        result = adapter.get_connection("c1")
-        mock_unified.get_connection.assert_called_once_with("c1")
-        assert result == {"id": "c1"}
-
-    def test_connection_manager_adapter_get_stats_delegates(self):
-        from core.legacy_adapters.connection_manager_adapter import LegacyConnectionManagerAdapter
-
-        adapter = LegacyConnectionManagerAdapter()
-        mock_unified = MagicMock()
-        mock_unified.get_stats.return_value = {"total": 5}
-        adapter._unified = mock_unified
-
-        stats = adapter.get_stats()
-        assert stats == {"total": 5}
 
     def test_device_agent_manager_adapter_get_device_delegates(self):
         from core.legacy_adapters.device_agent_manager_adapter import (
@@ -652,7 +626,6 @@ class TestImportSanity:
         import importlib
 
         mod = importlib.import_module("core.legacy_adapters")
-        assert hasattr(mod, "LegacyConnectionManagerAdapter")
         assert hasattr(mod, "LegacyDeviceAgentManagerAdapter")
 
     def test_state_event_bus_emit_state(self):

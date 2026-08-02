@@ -43,8 +43,48 @@ def ini() -> configparser.ConfigParser:
 
 class TestTimeoutIsConfigured:
     def test_plugin_is_installed(self):
-        """没装插件的话,下面那些 ini 键只是几行注释而已 —— 一点作用都没有。"""
-        pytest.importorskip("pytest_timeout", reason="pytest-timeout 未安装 —— 挂死的测试将永不中止")
+        """没装插件的话,下面那些 ini 键只是几行注释而已 —— 一点作用都没有。
+
+        **这条原先写成 ``pytest.importorskip``,也就是插件不在时它自己「跳过」。**
+        那正好是它要防的失效模式:插件一旦从环境里消失(比如某个作业不再装
+        requirements-dev.txt、或依赖解析出岔),挂死保护静默归零,而这条守卫
+        report 一个绿色的 SKIPPED —— 没有人会去看跳过的测试。
+
+        改成硬断言。跑测试的环境就该按 requirements-dev.txt 装齐:仓库里所有
+        真正跑 pytest 的 CI 作业都装了(逐个作业核过),本机 `pip install -r
+        requirements-dev.txt` 也一样。这与「刻意用 ini 键而非 addopts」并不冲突
+        —— 那条是为了让缺插件的环境**仍然跑得起来**;这条是让缺插件这件事
+        **响亮地报出来**。一条清晰失败 ≠ pytest 起不来。
+        """
+        try:
+            import pytest_timeout  # noqa: F401
+        except ImportError:  # pragma: no cover - 只有环境坏掉时才走到
+            pytest.fail(
+                "pytest-timeout 未安装 —— 挂死的测试将永不中止,整轮 CI 会退回到"
+                "「一个结论都拿不到」。请 `pip install -r requirements-dev.txt`。"
+                "(不要把这条改回 importorskip:跳过等于把护栏失效伪装成绿灯)"
+            )
+
+    def test_timeout_is_armed_in_this_very_session(self, pytestconfig):
+        """查**本次运行实际生效的值**,而不是只读 pytest.ini 的文本。
+
+        上面几条都是读文件、比字符串 —— 它们证明"配置写对了",证明不了"这一轮
+        真的带着它在跑"。两者能分开:命令行 ``--timeout=0`` 会把 ini 覆盖掉,
+        ``-p no:timeout`` 会把插件整个关掉,pyproject 里的配置块也可能抢走优先级。
+        任何一种发生,文本仍然完美,保护却已经没了。
+
+        这条从 ``pytestconfig`` 取本次会话的有效值,是唯一能分辨这两者的判据。
+        """
+        assert pytestconfig.pluginmanager.hasplugin("timeout"), (
+            "pytest-timeout 插件在本次会话里没有注册(是不是命令行加了 `-p no:timeout`?)" " —— 挂死的测试将永不中止"
+        )
+
+        effective = pytestconfig.getini("timeout")
+        assert effective, f"本次会话的有效 timeout 是 {effective!r} —— 等于没有超时保护"
+        assert float(effective) >= 90, f"本次会话有效 timeout={effective}s 太紧,最慢的真实用例已有 30s,会误伤"
+
+        method = pytestconfig.getini("timeout_method")
+        assert method == "signal", f"本次会话有效 timeout_method={method!r} —— thread 会杀掉整个进程,又拿不到完整清单"
 
     def test_plugin_is_declared_in_dev_requirements(self):
         """CI 靠 requirements-dev.txt 装它。本机碰巧装了不算数。"""
@@ -149,6 +189,27 @@ class TestTimeoutIsConfigured:
         addopts = ini.get("pytest", "addopts", fallback="")
         assert "--timeout" not in addopts, "--timeout 写进 addopts 会让没装插件的环境直接跑不起来"
 
+    def test_no_ci_job_disarms_the_timeout_on_the_command_line(self):
+        """命令行能悄悄把 ini 里配好的超时关掉,而所有读文件的守卫都察觉不到。
+
+        ``--timeout=0`` 覆盖 ini 值;``-p no:timeout`` 直接卸掉插件。任一出现,
+        pytest.ini 依旧完美、上面那些断言依旧全绿,而挂死保护已经归零 —— 症状
+        就是再次退回「整轮没有结论」,而且这次连守卫都在替它背书。
+
+        现状(逐个作业核过)只有 ``-p no:warnings``,与超时无关,故这条应当通过。
+        """
+        offenders: list[str] = []
+        for wf in sorted((REPO_ROOT / ".github/workflows").glob("*.yml")):
+            text = wf.read_text(encoding="utf-8")
+            for lineno, line in enumerate(text.splitlines(), 1):
+                stripped = line.strip()
+                if stripped.startswith("#"):
+                    continue
+                if "--timeout" in stripped or "no:timeout" in stripped:
+                    offenders.append(f"{wf.name}:{lineno}: {stripped}")
+
+        assert not offenders, "有 CI 作业在命令行上关掉/覆盖了 per-test 超时:\n" + "\n".join(offenders)
+
 
 #: 丢给子进程去跑的迷你套件:两种真实挂法,前后各夹一条正常用例。
 #: 用它来证明「挂住的那条被打断」且「整轮继续跑完」。
@@ -200,7 +261,9 @@ class TestItActuallyInterruptsAHang:
         )
 
     def test_a_hang_is_interrupted_and_reported(self, tmp_path):
-        pytest.importorskip("pytest_timeout")
+        # 不用 importorskip:插件缺失正是本文件要抓的失效模式,跳过等于放行。
+        # 缺失时由 test_plugin_is_installed 给出那条带修复指引的失败,这里跟着红,
+        # 两条一起指向同一件事。
         r = self._run(tmp_path, "signal")
         assert "Timeout" in r.stdout, f"挂住的用例没有被超时打断:\n{r.stdout[-2000:]}"
         assert "test_hangs_on_a_lock" in r.stdout
@@ -212,7 +275,6 @@ class TestItActuallyInterruptsAHang:
         thread 方式会 dump 线程栈然后杀掉整个进程,``test_after`` 根本不会被执行,于是
         又回到「整轮拿不到完整清单」那个老问题上。
         """
-        pytest.importorskip("pytest_timeout")
         r = self._run(tmp_path, "signal")
         assert "test_after" in r.stdout, f"超时之后整轮被掐断了,后续用例没跑:\n{r.stdout[-2000:]}"
         assert (
