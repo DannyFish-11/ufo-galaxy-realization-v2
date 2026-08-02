@@ -171,10 +171,9 @@ class TestGateObject:
         assert gate.allows("vision_in") is False
 
     def test_lookup_by_device_id(self, monkeypatch):
+        import core.modality_capability as mod
         from core.modality_capability import DeviceModalityGate
         from core.unified.models import UnifiedDevice
-
-        import core.modality_capability as mod
 
         monkeypatch.setattr(
             mod,

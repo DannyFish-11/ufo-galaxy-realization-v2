@@ -953,3 +953,34 @@ def get_unified_device_manager() -> "UnifiedDeviceManager":
     直接委托给类自身的 __new__ 单例机制，避免双重 cache 导致的测试隔离问题。
     """
     return UnifiedDeviceManager()
+
+
+def reset_unified_device_manager() -> None:
+    """重置进程级 UnifiedDeviceManager(测试用)。
+
+    为什么需要一个公开入口 —— ``_instance = None`` 是不够的
+    ------------------------------------------------------------
+    仓库里十几处测试直接写 ``UnifiedDeviceManager._instance = None`` 来做隔离。
+    那只丢掉了设备字典,**漏掉了 UDM 写到进程外的东西**:``register_device`` 会把
+    ``device__{device_id}__{capability}`` 推进进程级单例 ``CapabilityAuthority``
+    (见 ``_sync_capabilities_to_authority``),还会把设备登记进 NATS worker 面。
+    丢掉 UDM 单例不会连带清掉那些条目。
+
+    后果是典型的顺序依赖:A 用例注册了一台带 ``camera`` 的设备,把
+    ``device__dev-1__camera`` 留在能力面上;B 用例断言"没有任何设备提供 camera",
+    单独跑全绿,排在 A 后面就红 —— 而失败信息指向 B,真正的原因在 A。本会话已经
+    在三个不同的地方(/tmp 设备快照、常驻 nats-server、反自激励门)见过同一个形状。
+
+    所以这里走**正规注销路径**逐台清:``unregister_device`` 本来就负责把能力从
+    CapabilityBus 与 CapabilityAuthority 上摘掉、把设备从 worker 面移除。清完再
+    丢单例。任何一台清理失败都不阻止其余的清理与最终的单例重置 —— 隔离动作
+    半途而废比彻底不做更糟。
+    """
+    instance = UnifiedDeviceManager._instance
+    if instance is not None:
+        for device_id in list(getattr(instance, "_devices", {}) or {}):
+            try:
+                instance.unregister_device(device_id)
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("reset_unified_device_manager: 注销 %s 失败(继续): %s", device_id, exc)
+    UnifiedDeviceManager._instance = None

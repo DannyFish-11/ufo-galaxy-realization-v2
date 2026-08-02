@@ -116,7 +116,7 @@ class TestHitPaths:
         assert aci.stats()["hit_lexical"] == 1
 
     def test_pure_continuation_hits_the_topic_continuity_entry(self, aci):
-        """"继续"没有实词,按 Jaccard 必然 miss —— 但它恰恰最该命中。"""
+        """ "继续"没有实词,按 Jaccard 必然 miss —— 但它恰恰最该命中。"""
         asyncio.run(_prefetch(aci, "s1", last_user_query="帮我看看那份季度报告"))
         assert aci.take("s1", "继续") is not None
         assert aci.stats()["hit_continuation"] == 1

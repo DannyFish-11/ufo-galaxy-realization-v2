@@ -24,6 +24,7 @@ PROJECT_ROOT = Path(__file__).parent.parent.absolute()
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+
 @pytest.fixture(autouse=True)
 def _nats_enabled_for_control_plane_tests(monkeypatch):
     """本文件测的就是 NATS **启用**时的控制面行为,所以在这里显式打开开关。
