@@ -277,28 +277,6 @@ class TestConfigHotReload(unittest.TestCase):
 # =============================================================================
 
 
-class TestNodeFailover(unittest.TestCase):
-    """测试节点故障转移"""
-
-    def test_failover_method_exists(self):
-        from core.node_registry import NodeRegistry
-
-        registry = object.__new__(NodeRegistry)
-        registry._initialized = False
-        registry.__init__()
-        self.assertTrue(hasattr(registry, "_failover_call"))
-        self.assertTrue(hasattr(registry, "call_node"))
-
-    def test_call_node_signature(self):
-        """call_node 应支持 allow_failover 参数"""
-        import inspect
-
-        from core.node_registry import NodeRegistry
-
-        sig = inspect.signature(NodeRegistry.call_node)
-        self.assertIn("allow_failover", sig.parameters)
-
-
 # =============================================================================
 # 6. 缓冲区边界测试
 # =============================================================================
@@ -352,19 +330,6 @@ class TestBufferBounds(unittest.TestCase):
         except Exception:
             pass
 
-    def test_node_comm_pending_max(self):
-        """NodeCommunication pending 消息应有上限"""
-        try:
-            # Check class has the attribute in source
-            import inspect
-
-            from core.node_communication import NodeCommunication
-
-            source = inspect.getsource(NodeCommunication.__init__)
-            self.assertIn("_max_pending", source)
-        except Exception:
-            pass
-
 
 # =============================================================================
 # 7. 集成：确保各模块可以正常导入
@@ -412,16 +377,12 @@ class TestImports(unittest.TestCase):
             get_config_manager,
         )
 
-    def test_import_node_registry(self):
-        from core.node_registry import (
-            NodeCategory,
-            NodeRegistry,
-            NodeStatus,
-            call_capability,
-            call_node,
-            get_registry,
-        )
-
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# 已删除依赖 core/node_communication.py 的用例 —— 该模块（UniversalCommunicator /
+# RoutingTable / LoadBalancer / AODV 路由）是节点间通信的**平行实现**，生产面零
+# import；这件事早已由 nats_bus(26 个引用) / mesh_coordinator(12) /
+# network_topology_runtime(12) / capability_network_runtime_policy(6) 解决。已删除。

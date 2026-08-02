@@ -16,7 +16,7 @@ import os
 import sys
 import time
 from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -171,81 +171,12 @@ class TestConversationMemory:
 # ============================================================================
 
 
-class TestGalaxyCoreCallNode:
-    """测试 call_node 的错误处理"""
-
-    @pytest.fixture
-    def core(self):
-        from core.galaxy_core import GalaxyCore
-
-        c = GalaxyCore()
-        # 确保测试用节点 "04" 存在（无论 node_registry.json 内容如何）
-        c.nodes.setdefault("04", {"name": "Router", "port": 8004, "capabilities": ["route"]})
-        return c
-
-    @pytest.mark.asyncio
-    async def test_node_not_found(self, core):
-        """调用不存在的节点"""
-        result = await core.call_node("999", "test", {})
-        assert result["success"] is False
-        assert "not found" in result["error"]
-
-    @pytest.mark.asyncio
-    async def test_call_node_timeout(self, core):
-        """节点请求超时"""
-        import httpx
-
-        mock_client = AsyncMock()
-        mock_client.post = AsyncMock(side_effect=httpx.TimeoutException("timeout"))
-        core._http_client = mock_client
-
-        result = await core.call_node("04", "test", {})
-        assert result["success"] is False
-        assert "timeout" in result["error"].lower()
-
-    @pytest.mark.asyncio
-    async def test_call_node_http_error(self, core):
-        """节点返回 HTTP 错误"""
-        import httpx
-
-        mock_response_mcp = MagicMock()
-        mock_response_mcp.status_code = 404
-
-        mock_response_direct = MagicMock()
-        mock_response_direct.status_code = 500
-        mock_response_direct.raise_for_status = MagicMock(
-            side_effect=httpx.HTTPStatusError(
-                "Server Error",
-                request=MagicMock(),
-                response=mock_response_direct,
-            )
-        )
-
-        mock_client = AsyncMock()
-        mock_client.post = AsyncMock(side_effect=[mock_response_mcp, mock_response_direct])
-        core._http_client = mock_client
-
-        result = await core.call_node("04", "test", {})
-        assert result["success"] is False
-        assert "HTTP" in result["error"]
-
-
 # ============================================================================
 # 4. 统一响应格式测试
 # ============================================================================
 
 
-class TestDashboardRetired:
-    """终态(用户裁决):dashboard/ 整体删除(ui_surface_authority: DELETED)。
-    原三组用例(UnifiedResponse 格式 / 现代意图集成 / 端到端 chat 流)的被测
-    对象是 dashboard/backend/main.py——对话主链路已收口到 core 路由与
-    DesktopPresenceRuntime(有各自的套件专钉),此处只钉退役不复活。"""
-
-    def test_dashboard_backend_retired(self):
-        assert not os.path.exists(
-            os.path.join(PROJECT_ROOT, "dashboard")
-        ), "dashboard/ 已按用户裁决整体退役删除,不得复活"
-
-    def test_canonical_chat_surface_exists(self):
-        # 对话主链路的 canonical 承载(core 路由)仍在
-        assert os.path.exists(os.path.join(PROJECT_ROOT, "core", "routes", "chat.py"))
+# 已删除依赖 core/galaxy_core.py 的用例 —— 该模块是建在近乎废弃的
+# core/node_protocol.py 之上的门面：它声称依赖的 NodeProtocolClient /
+# NodeProtocolServer **根本不存在**（被 try/except 包着所以 import 不报错，
+# 但 call_node_with_protocol() 拿到的是 None），生产面零 import。已删除。

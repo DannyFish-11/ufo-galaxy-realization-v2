@@ -51,7 +51,6 @@ GRANDFATHERED: dict[str, int] = {
     "core/decision_timeline.py": 1100,
     "core/task_graph.py": 1100,
     "core/vision_pipeline.py": 1100,
-    "core/node_communication.py": 1100,
     "core/windows_execution_arbiter.py": 1100,
     "core/runtime_governance/snapshot.py": 1150,
     "core/runtime/source_dispatch_orchestrator.py": 1100,
