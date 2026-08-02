@@ -291,7 +291,11 @@ from .device_health import (
     get_device_health_scorer,
     reset_device_health_scorer,
 )
-from .device_manager import UnifiedDeviceManager, get_unified_device_manager
+from .device_manager import (
+    UnifiedDeviceManager,
+    get_unified_device_manager,
+    reset_unified_device_manager,
+)
 
 # PR-1: entrypoint router
 from .entrypoint_router import (
@@ -415,6 +419,7 @@ __all__ = [
     "get_unified_connection_manager",
     "UnifiedDeviceManager",
     "get_unified_device_manager",
+    "reset_unified_device_manager",
     "UnifiedConfigManager",
     "get_unified_config_manager",
     "UnifiedLLMRouter",

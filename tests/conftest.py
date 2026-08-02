@@ -167,6 +167,29 @@ os.environ["ANDROID_DEVICE_STATE_STORE_PATH"] = str(Path(_RUNTIME_TMP) / "androi
 _TMP_DATA_DIR = Path(_RUNTIME_TMP) / "data"
 _TMP_DATA_DIR.mkdir(parents=True, exist_ok=True)
 
+# 跨设备消息总线：测试期间一律关掉。
+#
+# 与上面那条 /tmp store 是同一类污染，但更重：core.nats_server.EmbeddedNATSServer
+# 在连不上 NATS 时会**自动下载 nats-server 二进制**装进 ~/.lumiv/bin，再拉起一个
+# 监听 0.0.0.0:4222、**脱离测试进程长期存活**的常驻服务。也就是说跑一次测试会给这台
+# 机器留下一个装好的二进制 + 一个常驻进程 + 一个被占的端口。
+#
+# 直接后果是 tests/test_mesh_worker_panel_toggle.py::TestWorkerToggleEndpoint::
+# test_enable_returns_immediately_with_starting_true 的**永久红**：它断言 NATS 不可达
+# 时 WorkerRuntime 必须如实落地 last_error（running 保持 False）。第一次跑的时候本机
+# 确实没有 NATS —— 但那一次跑**自己**把服务器装上并拉起了；从此每个新进程都连得上，
+# running 变 True，断言恒挂。重跑、换分支、清 workspace 都不自愈，除非有人手动杀进程。
+#
+# 它在 CI 上表现为"某个分片偶发失败"：runner 是干净的，所以要等同一分片里某条更早的
+# 用例先把服务器拉起来，后面这条才翻红 —— 于是重新分片就能让红绿翻转，而真正的原因
+# 和分片毫无关系。（和 I03 那条一模一样的套路。）
+#
+# core.nats_server / core.nats_bus 现在真正认这个开关（此前只有 unified_launcher 认，
+# 提示文案却一直在教用户设它），关掉后总线降级为进程内内存 pub/sub：同进程内的
+# publish/subscribe 语义完整保留，只是不再有网络、不再装东西、不再留常驻进程。
+# 确需验证开关本身的用例（test_clone_to_use_startup_hardening 等）自己 monkeypatch 覆盖。
+os.environ["GALAXY_NATS_ENABLED"] = "false"
+
 # 以上几个都是硬设而非 setdefault：隔离不能被外部环境里一个残留的变量悄悄取消掉。
 os.environ["GALAXY_CONFIG_DIR"] = str(_TMP_CONFIG_DIR)
 os.environ["GALAXY_KNOWLEDGE_DIR"] = str(Path(_RUNTIME_TMP) / "knowledge_db")

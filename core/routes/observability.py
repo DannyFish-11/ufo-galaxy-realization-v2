@@ -46,12 +46,13 @@ Routes:
   GET /api/v1/observability/execution/schema         - 统一执行 schema 元数据 (PR-7)
   GET /api/v1/observability/execution/recent-events  - 最近统一执行事件 (PR-7)
   GET /api/v1/observability/execution/trace/{id}     - 统一 trace 上下文查询 (PR-7)
+  GET /api/v1/observability/context-layer            - ACI 命中统计 + 焦点栈快照
 """
 
 import logging
 import os
 import time as _time
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Query
 from fastapi.responses import JSONResponse
@@ -285,6 +286,50 @@ def create_router(service_manager=None, config=None) -> APIRouter:  # noqa: ARG0
         except Exception as exc:
             logger.warning("observability/stats error: %s", exc)
             return JSONResponse({"error": str(exc)}, status_code=500)
+
+    # ── 上下文层:预判式注入(ACI)与焦点栈 ────────────────────────────────
+    #
+    # 这两样都是**静默生效**的:命中就快一点、上下文里多一段结构,不命中就什么都
+    # 不发生。也就是说它们坏掉时的表现是"没坏,只是没效果" —— 若不把内部计数暴露
+    # 出来,ACI 的命中率可以永远是 0、焦点栈可以一条都没记下,而系统看起来完全正常,
+    # 谁也不会去查。真跑一遍就发现了这个盲区:轮次确实进了服务端,但从外面无法
+    # 判断这两条链路到底有没有在工作。
+
+    @router.get("/api/v1/observability/context-layer")
+    async def observability_context_layer(session_id: str = ""):
+        """预判式上下文注入(ACI)命中统计 + 指定会话的焦点栈快照。
+
+        ``hit_rate`` 长期贴近 0 说明预判没猜中(或预取一直被跳过,看
+        ``prefetch_skipped_busy``);``prefetch_completed`` 长期为 0 说明预取压根
+        没跑起来。两种都不会报错,只能靠这里看出来。
+
+        ``session_id`` 省略时只返回 ACI 统计,不带焦点栈。
+        """
+        payload: Dict[str, Any] = {}
+        try:
+            from core.anticipatory_context import get_anticipatory_context
+
+            payload["aci"] = get_anticipatory_context().stats()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("observability/context-layer: ACI 统计不可用: %s", exc)
+            payload["aci"] = {"error": "unavailable"}
+
+        if session_id:
+            try:
+                from core.focus_stack import focus_stack_enabled, get_focus_stack
+
+                stack = get_focus_stack(session_id)
+                payload["focus_stack"] = {
+                    "enabled": focus_stack_enabled(),
+                    "session_id": session_id,
+                    **stack.snapshot(),
+                    "context_message": (stack.as_context_message() or {}).get("content", ""),
+                }
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("observability/context-layer: 焦点栈快照不可用: %s", exc)
+                payload["focus_stack"] = {"error": "unavailable"}
+
+        return JSONResponse(payload)
 
     # ── Phase E: NATS Bus health ──────────────────────────────────────────
 

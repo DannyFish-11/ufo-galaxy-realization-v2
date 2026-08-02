@@ -94,20 +94,29 @@ class TestWorkerToggleEndpoint:
         (CI 日志末尾有 `Terminate orphan process: pid (3159) (nats-server)`),
         于是 NATS 真的可达、worker 真的起来了,`wr.running is False` 报红。
 
-        触发它的是分片重排 —— 本轮新增了一个测试文件,ci_test_shard.py 按文件切分,
-        文件集合一变,哪些用例落在同一分片、以什么顺序跑就都变了。也就是说这个
-        缺陷一直在,只是此前没被排到一起。
+        触发它的是分片重排 —— 新增测试文件后 ci_test_shard.py 的文件集合一变,
+        哪些用例落在同一分片、以什么顺序跑就都变了。也就是说这个缺陷一直在,
+        只是此前没被排到一起。
 
-        修法是让用例**自己钉死前提**,而不是指望环境:注入一个明确报告
-        "未连接"的 bus(与下方 test_enable_with_mock_bus_starts 注入已连接
-        bus 是同一套做法)。这样它对执行顺序、对机器上有没有 nats-server 都免疫。
+        更糟的是这个前提会**自我毁灭**:``core.nats_server`` 在连不上时会自动下载
+        nats-server 并拉起一个**脱离调用进程长期存活**的常驻服务。所以第一次跑就把
+        "本机没有 NATS"这个前提亲手破坏掉了 —— 此后每个新进程都连得上,断言永久红,
+        重跑、换分支都不自愈,除非有人手动杀进程。
+
+        两条修法都做,互不替代:
+          * conftest 统一设 ``GALAXY_NATS_ENABLED=false``,堵住"测试往机器上装东西、
+            留常驻进程"这条整机级副作用(见 tests/conftest.py 与
+            tests/test_nats_disable_switch.py);
+          * 本用例再注入一个明确报告"未连接"的 bus,把前提**写在自己身上**,
+            不依赖全局配置也不依赖执行顺序(与下方 test_enable_with_mock_bus_starts
+            注入已连接 bus 是同一套做法)。
         """
         from core.worker_runtime import get_worker_runtime
 
         # 前提固化:bus 永远连不上 → start() 必然落到 nats_unavailable 分支。
         unreachable_bus = MagicMock()
         unreachable_bus.is_connected = MagicMock(return_value=False)
-        unreachable_bus.connect = AsyncMock()
+        unreachable_bus.connect = AsyncMock()  # 连了,但连完仍然 is_connected() == False
         get_worker_runtime()._nats = unreachable_bus
 
         t0 = time.monotonic()

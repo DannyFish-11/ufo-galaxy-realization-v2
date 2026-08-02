@@ -92,6 +92,7 @@ Usage::
 
 from __future__ import annotations
 
+import inspect
 import logging
 import os
 import time
@@ -273,13 +274,34 @@ class RuntimeSession:
         """启动后台 continuum 状态推送循环。"""
         if self._tick_running:
             return
-        self._tick_running = True
-        try:
-            import asyncio
+        import asyncio
 
+        # 先确认有在跑的事件循环,再造协程对象。
+        #
+        # 原写法是直接 ``create_task(self._continuum_tick_loop())``:参数在调用前
+        # 就被求值,协程对象**已经建出来了**,create_task 才抛 RuntimeError(no
+        # running event loop)。except 吞掉异常,那个协程对象却再也没人 await ——
+        # 每次都留一条 "coroutine was never awaited" 的 RuntimeWarning 和一份没释放的
+        # 帧。advance() 在同步上下文里被调用是正常路径(常驻在场的开关、测试),
+        # 所以这不是罕见分支。
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return  # 没有事件循环就不跑 tick;_tick_running 本来就是 False
+        try:
             self._tick_task = asyncio.create_task(self._continuum_tick_loop())
         except Exception:
             self._tick_running = False
+            return
+        # **必须在建任务之后置位**,而且必须置位。
+        #
+        # 引入上面那道 running-loop 守卫时,这一行被顺手删掉了 —— 于是
+        # _continuum_tick_loop 的 ``while self._tick_running and ...`` 第一次判断
+        # 就是假,循环体一拍都不跑:continuum.state 与 intent.update 全都不再发射,
+        # 而 tick_task 看上去还好端端地存在着。常驻在场"驱动外壳呼吸"这件事
+        # 因此变成空壳,却没有任何报错。tests/test_task_cost_ledger.py 的
+        # test_liminal_tick_emits_intent_update 抓到了它。
+        self._tick_running = True
 
     def _stop_continuum_tick(self) -> None:
         """停止后台 continuum 状态推送循环。"""
@@ -972,7 +994,10 @@ class DesktopPresenceRuntime:
             rsession.advance(TriState.SILENT)
             self._update_presence_mode(
                 tri_state=rsession.tristate.value,
-                task_active=False,
+                # 本次请求结束 ≠ 主体无事。若有常驻在场(如双工语音会话开着),
+                # 主体仍然在场,不能把外壳按回静默 —— 否则每次穿插的文字问答
+                # 结束都会把语音在场"顺手关掉"。
+                task_active=bool(self._ambient_registry()),
                 sensing_active=self._has_active_stream_source(),
                 execution_active=False,
                 user_interaction=source in {"chat", "voice", "operator"},
@@ -1411,6 +1436,178 @@ class DesktopPresenceRuntime:
         session = RuntimeSession(source=source)
         self._active_sessions[session.runtime_session_id] = session
         return session
+
+    # ------------------------------------------------------------------
+    # 常驻在场(ambient presence)
+    # ------------------------------------------------------------------
+    #
+    # 为什么需要它 —— 三态不是"每次请求走一遍的相位循环"
+    # -------------------------------------------------------------------
+    # ``handle_request`` 建的 RuntimeSession 是**一次请求**的生命周期:
+    # SILENT→LIMINAL→MANIFEST→SILENT,请求一完就丢弃。这对"你问一句、它答一句"
+    # 是对的,但它把三态窄化成了**回合制的副产品**。
+    #
+    # 有一整类在场是**持续**的,不属于任何一次请求:实时全双工语音会话一旦建立,
+    # 主体就一直在听、一直可以随时开口 —— 从会话建立到挂断,它自始至终"在场"。
+    # 用请求相位去描述它有两种错法,而且都试过:
+    #
+    #   * 每个语音回合翻一次 LIMINAL→MANIFEST→SILENT。``advance()`` 不做去重,
+    #     每次翻转都会发一次状态事件**并向所有已连设备广播一次跨设备相位同步**,
+    #     而广播侧没有节流 —— 于是外壳每说一句就闪一次,手机/手表跟着抖。而且语义
+    #     本身就是错的:会话没结束,主体并没有"回到静默"。
+    #   * 干脆不接。那就是现在的样子:双工开着的时候,外壳显示的是 SILENT ——
+    #     主体明明在听,壳子说它睡着了。
+    #
+    # 所以引入**常驻在场**:一条不属于任何请求的长命 RuntimeSession,开一次
+    # LIMINAL 就**一直保持**,直到显式关闭才回 SILENT。中间不翻转、不闪烁;
+    # 200ms 的 continuum tick 在 LIMINAL 期持续跑,把认知强度实时喂给外壳 ——
+    # 这正是"持续、在场、实时、连贯"该有的形状。
+    #
+    # 它复用 ``_active_sessions``,所以 ``presence_summary()`` / 跨设备同步 /
+    # Android 参与视图**全部自动**反映常驻在场,不需要另开一条并行的状态通路
+    # (再开一条就又是两个主体了)。
+    #
+    # ``on_halt`` 是 A2 的承载点:统一主体不允许存在一条**中心叫不停**的旁路。
+    # 谁开常驻在场,谁就要把"怎么把我停掉"一并交给中心。
+
+    def _ambient_registry(self) -> Dict[str, Dict[str, Any]]:
+        """常驻在场登记表(惰性建)。
+
+        用 getattr 惰性建而不是在 ``__init__`` 里初始化:仓库里有测试用
+        ``__new__`` 绕过 ``__init__`` 构造轻量 stub,那些实例上不会有这个属性。
+        """
+        registry = getattr(self, "_ambient_presences", None)
+        if registry is None:
+            registry = {}
+            self._ambient_presences = registry
+        return registry
+
+    def open_ambient_presence(
+        self,
+        source: str,
+        *,
+        reason: str = "",
+        on_halt: Optional[Any] = None,
+    ) -> str:
+        """开启一段常驻在场,返回句柄(即 ``runtime_session_id``)。
+
+        Args:
+            source: 在场来源标签,如 ``"voice_duplex"``。会成为 RuntimeSession.source,
+                因此出现在状态事件与跨设备同步的 ``request_source`` 字段里。
+            reason: 人可读的原因,仅用于观测(``ambient_presence_snapshot``/日志)。
+            on_halt: 可选的叫停钩子(同步或协程均可)。中心调用
+                :meth:`halt_ambient_presence` 时会执行它。**强烈建议传** ——
+                不传等于在中心背后开了一条它管不着的常驻通路。
+
+        Returns:
+            句柄字符串。重复调用会开出彼此独立的多段在场(例如桌面双工 + 手机双工)。
+        """
+        session = self._create_session(source)
+        self._ambient_registry()[session.runtime_session_id] = {
+            "session": session,
+            "source": source,
+            "reason": reason,
+            "on_halt": on_halt,
+            "opened_at": time.time(),
+        }
+        # 一次性进入阈限,并**保持**。这里不会反复 advance —— 常驻在场的整个
+        # 意义就是不翻转。
+        session.advance(TriState.LIMINAL)
+        self._update_presence_mode(
+            tri_state=session.tristate.value,
+            task_active=True,
+            sensing_active=True,
+            execution_active=False,
+            user_interaction=True,
+        )
+        logger.info(
+            "常驻在场开启 | handle=%s source=%s reason=%s(三态保持 LIMINAL 直至关闭)",
+            session.runtime_session_id,
+            source,
+            reason or "-",
+        )
+        return session.runtime_session_id
+
+    def close_ambient_presence(self, handle: str) -> bool:
+        """关闭一段常驻在场:回到 SILENT 并注销。幂等 —— 未知句柄返回 False。"""
+        entry = self._ambient_registry().pop(handle, None)
+        if entry is None:
+            return False
+        session: RuntimeSession = entry["session"]
+        # 常驻在场没有"表达"阶段可言(它不是一次请求),直接回静默。
+        session.advance(TriState.SILENT)
+        self._active_sessions.pop(handle, None)
+        self._update_presence_mode(
+            tri_state=session.tristate.value,
+            task_active=bool(self._active_sessions),
+            sensing_active=self._has_active_stream_source(),
+            execution_active=False,
+            user_interaction=False,
+            result_committed=True,
+        )
+        logger.info("常驻在场关闭 | handle=%s source=%s", handle, entry.get("source"))
+        return True
+
+    async def halt_ambient_presence(self, handle: Optional[str] = None, *, reason: str = "") -> Dict[str, Any]:
+        """由**中心**叫停常驻在场(A2)。
+
+        ``handle`` 为 None 时叫停全部 —— 这是"主体收声"这一动作在运行时上的落点
+        (面板的紧急停止、切换到专注模式、跨设备把在场让给另一台设备,都走这里)。
+
+        与 :meth:`close_ambient_presence` 的区别:后者是**持有方**自己收摊(会话
+        自然结束),前者是**中心**从外面把它按停,因此要先执行持有方登记的
+        ``on_halt`` 钩子(去关那条 WebSocket / 停那个采集),再回收在场。
+
+        钩子失败不阻止回收:中心说停就是停,不能因为一个钩子抛异常就让在场
+        赖着不走 —— 那正是"中心管不着"的翻版。失败会如实记进返回值。
+        """
+        registry = self._ambient_registry()
+        handles = [handle] if handle is not None else list(registry.keys())
+        halted: List[str] = []
+        errors: Dict[str, str] = {}
+        for h in handles:
+            entry = registry.get(h)
+            if entry is None:
+                continue
+            hook = entry.get("on_halt")
+            if hook is not None:
+                try:
+                    outcome = hook()
+                    if inspect.isawaitable(outcome):
+                        await outcome
+                except Exception as exc:  # noqa: BLE001
+                    errors[h] = str(exc)
+                    logger.warning("常驻在场叫停钩子失败(仍继续回收) handle=%s: %s", h, exc)
+            self.close_ambient_presence(h)
+            halted.append(h)
+        if halted:
+            logger.info("中心叫停常驻在场 | count=%d reason=%s", len(halted), reason or "-")
+        return {"halted": halted, "errors": errors, "reason": reason}
+
+    def ambient_presence_snapshot(self) -> Dict[str, Any]:
+        """只读快照:当前有哪些常驻在场、各自开了多久、是否可被中心叫停。
+
+        ``haltable`` 为 False 的条目就是"中心管不着的旁路",面板上应当显眼 ——
+        它不是配置问题,是接线漏了。
+        """
+        registry = self._ambient_registry()
+        now = time.time()
+        entries = [
+            {
+                "handle": h,
+                "source": e.get("source", ""),
+                "reason": e.get("reason", ""),
+                "tristate": e["session"].tristate.value,
+                "uptime_s": round(max(0.0, now - float(e.get("opened_at") or now)), 3),
+                "haltable": e.get("on_halt") is not None,
+            }
+            for h, e in registry.items()
+        ]
+        return {
+            "active": len(entries),
+            "entries": entries,
+            "all_haltable": all(item["haltable"] for item in entries) if entries else True,
+        }
 
     async def _dispatch(
         self,
@@ -2755,6 +2952,9 @@ class DesktopPresenceRuntime:
                 "dominant_tristate": dominant,
                 "desktop_presence_system": presence_system,
                 "realtime_streaming_backbone": stream_backbone,
+                # 常驻在场:与请求相位并列的另一种在场。没有这一项,面板无法区分
+                # "dominant=liminal 是因为有人正在提问" 和 "……是因为语音会话一直开着"。
+                "ambient_presence": self.ambient_presence_snapshot(),
             }
         except Exception as _err:
             logger.debug("DesktopPresenceRuntime.presence_summary failed (non-fatal): %s", _err)
@@ -2769,6 +2969,8 @@ class DesktopPresenceRuntime:
                     active_session_count=0,
                 ),
                 "realtime_streaming_backbone": self.realtime_streaming_backbone_summary(),
+                # 键形与成功分支保持一致,消费方不必写两套取值分支。
+                "ambient_presence": {"active": 0, "entries": [], "all_haltable": True},
             }
 
 

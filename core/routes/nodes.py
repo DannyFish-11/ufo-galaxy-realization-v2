@@ -75,11 +75,32 @@ def create_router(service_manager=None, config=None) -> APIRouter:
     """Create node and agent routes router."""
     router = APIRouter()
 
-    from core.llm.route_authority import get_llm_route_authority
     from core.scheduler import AutonomousScheduler
 
     scheduler = AutonomousScheduler(nodes_root)
-    llm_router = get_llm_route_authority().execution_router
+
+    # LLM router 惰性取,不在【路由构建期】建。
+    #
+    # 原先这里是 ``llm_router = get_llm_route_authority().execution_router``,
+    # 一行看着人畜无害,实际会一路走到 MultiLLMRouter.__init__ →
+    # _discover_providers(),而那里为了探测本机 Ollama 会发**同步阻塞**的
+    # httpx.get:先 /api/tags 探默认地址(timeout=2s),命中后再拉一次模型列表
+    # (timeout=3s)。也就是说**每次 create_api_routes() 都要在拼路由表的时候
+    # 去连一次网**,最坏加 5 秒。
+    #
+    # 本机没装 Ollama 时它表现为瞬间的 connection refused,所以一直没人注意;
+    # 但只要那个端口是被防火墙丢包(而不是拒绝)、或者 OLLAMA_URL 指向局域网里一台
+    # 关着的机器,这 5 秒就实打实压在启动路径上 —— 而且是在 uvicorn 绑端口**之前**,
+    # 表现为"服务起了半天没反应",没有任何日志指向真正的原因。
+    #
+    # 路由构建期只该拼路由表。真正需要 router 的只有下面三个处理函数,让它们在
+    # 被调用时再取:那时已经在事件循环里、已经对外服务了,探测代价由那一次请求
+    # 承担,而不是由整个进程的启动承担。get_llm_route_authority() 内部有缓存,
+    # 所以只有第一次真正付出这个代价。
+    def _llm_router():
+        from core.llm.route_authority import get_llm_route_authority
+
+        return get_llm_route_authority().execution_router
 
     class AutonomousRequest(BaseModel):
         instruction: str
@@ -417,7 +438,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
             execution_context["executor"] = node_executor
 
             try:
-                plan_result = await scheduler.plan_and_execute(req.instruction, llm_router, execution_context)
+                plan_result = await scheduler.plan_and_execute(req.instruction, _llm_router(), execution_context)
                 return plan_result
             except ValueError as ve:
                 logger.warning(f"LLM not configured, falling back to rule-based: {ve}")
@@ -455,7 +476,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """列出所有可用 Agent 模板"""
         from core.agent_factory import get_agent_factory
 
-        factory = get_agent_factory(llm_router)
+        factory = get_agent_factory(_llm_router())
         return JSONResponse(
             {
                 "templates": factory.list_templates(),
@@ -468,7 +489,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """Agent 工厂状态"""
         from core.agent_factory import get_agent_factory
 
-        factory = get_agent_factory(llm_router)
+        factory = get_agent_factory(_llm_router())
         return JSONResponse(factory.get_status())
 
     @router.post("/api/v1/agent/create")
@@ -476,7 +497,7 @@ def create_router(service_manager=None, config=None) -> APIRouter:
         """统一 Agent 创建接口"""
         from core.agent_factory import get_agent_factory
 
-        factory = get_agent_factory(llm_router)
+        factory = get_agent_factory(_llm_router())
         try:
             result = factory.create_unified(
                 agent_type=req.agent_type,

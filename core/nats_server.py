@@ -27,6 +27,28 @@ _NATS_MIRRORS = (
 )
 
 
+def nats_disabled_by_config() -> bool:
+    """``GALAXY_NATS_ENABLED`` 是否被显式关掉。
+
+    这个开关此前是**只写不认**的:``unified_launcher`` 会读它,而
+    :meth:`EmbeddedNATSServer.start` 与 :meth:`core.nats_bus.NATSBus.connect`
+    都不读 —— 于是任何绕过启动器直接用总线的调用方(HTTP 端点、后台任务、测试)
+    仍然会走完"自动下载 nats-server → 拉起监听 0.0.0.0:4222 的常驻进程"这条链路。
+    本文件里两处提示文案却明写着"设 GALAXY_NATS_ENABLED=false 显式关闭此尝试",
+    是**承诺了但没实现**的开关。
+
+    这不只是配置洁癖。``EmbeddedNATSServer`` 装出来的二进制落在 ``~/.lumiv/bin``、
+    拉起的进程**脱离调用进程长期存活**、还占着整机的 4222 端口 —— 也就是说它是一个
+    **整机级、跨进程、跨会话的持久副作用**。测试套件里只要有任何一条用例碰到总线,
+    第一次跑就会把它装上并常驻;此后每个新进程连得上 NATS,凡是断言"本机没有 NATS"
+    的用例就**永久变红**,重跑、换分支都不自愈(tests/test_mesh_worker_panel_toggle.py
+    的 test_enable_returns_immediately_with_starting_true 就是这么红的)。
+
+    所以把开关补成真的:关掉时既不装也不拉,由调用方降级到进程内总线。
+    """
+    return str(os.getenv("GALAXY_NATS_ENABLED", "")).strip().lower() in ("false", "0", "no", "off")
+
+
 def _http_get(url: str, timeout: int = 20) -> bytes:
     import urllib.request
 
@@ -127,6 +149,14 @@ class EmbeddedNATSServer:
 
     async def start(self) -> bool:
         """启动内置NATS服务器"""
+        # 显式关闭时连 data_dir 都不建 —— 这条路径的每一步(建目录、装二进制、
+        # 拉常驻进程)都是整机级持久副作用,关掉就该一步都不做。
+        if nats_disabled_by_config():
+            self.last_error = "GALAXY_NATS_ENABLED=false(按配置显式关闭)"
+            self.last_error_hint = "已按配置跳过内置 NATS;如需跨设备请设 GALAXY_NATS_ENABLED=true"
+            logger.info("内置 NATS 按配置关闭(GALAXY_NATS_ENABLED=false),不安装也不启动")
+            return False
+
         self.data_dir.mkdir(parents=True, exist_ok=True)
 
         # 检查nats-server
