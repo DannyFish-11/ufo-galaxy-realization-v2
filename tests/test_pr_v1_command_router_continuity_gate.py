@@ -499,3 +499,103 @@ class TestGateOrdering:
         assert result["error_code"] == GatewayErrorCode.CONTINUITY_LEGALITY_REJECTED.value
         trace = result.get("_constraint_chain_trace") or {}
         assert trace.get("posture_eligible") is True, "前提:Gate A 确实放行了这个来源"
+
+
+# ---------------------------------------------------------------------------
+# 13 — 陈旧维度只属于恢复路径（真实运行时探针抓到的误杀）
+# ---------------------------------------------------------------------------
+
+
+class TestStaleDimensionDoesNotFalsePositiveOnDispatch:
+    """「查无此会话」≠「会话已陈旧」。
+
+    这条是**真实运行时探针**抓出来的，不是推演：用真 CommandRouter + 真会话注册表
+    （全程不打桩）派发一个从未注册过的设备，Gate C 判了 reject：
+
+        dim=stale_runtime_rejection  verdict=reject
+        reason="stale identity: session_state='' tracking_phase='' flow_phase=''"
+
+    三个状态字段全是空串 —— 也就是"没有任何记录"被判成了"记录已过期"，
+    **首次派发会被误杀**。
+
+    根因是接入 Gate C 时把 ``ONLINE_DISPATCH_ACCEPTANCE`` 一并带进了维度 5/6。
+    但 ``flow_continuity_coordinator.decide_stale_identity()`` 自己的场景声明是
+    「Android 提交了一个 V2 已不再持有记录的身份」—— 那是重连/重放/恢复语义，
+    下发路径不成立。
+
+    修法是把下发路径移出该维度；下发真正需要的保护在维度 1
+    （terminal 态 / attachment id 不匹配），下面一并断言它没丢。
+    """
+
+    def test_unknown_session_on_dispatch_is_allowed(self) -> None:
+        from core.unified_continuity_legality_authority import evaluate_continuity_legality
+
+        report = evaluate_continuity_legality(
+            ContinuityLegalityPath.ONLINE_DISPATCH_ACCEPTANCE,
+            CommandRouter._build_dispatch_continuity_context(
+                _make_envelope({"source_device_id": "never-seen-dev", "session_id": "s-brand-new"})
+            ),
+        )
+        assert report.verdict is ContinuityLegalityVerdict.ALLOW, (
+            "从未注册过的设备做首次派发不该被判非法（查无此会话 ≠ 会话已陈旧）；"
+            f"实际 verdict={report.verdict.value} reason={report.reject_reason}"
+        )
+
+    def test_stale_dimension_is_not_evaluated_on_dispatch_path(self) -> None:
+        """判据落在维度构成上，而不只是最终 verdict —— 后者可能被别的维度盖住。"""
+        from core.unified_continuity_legality_authority import (
+            ContinuityLegalityDimension,
+            evaluate_continuity_legality,
+        )
+
+        report = evaluate_continuity_legality(
+            ContinuityLegalityPath.ONLINE_DISPATCH_ACCEPTANCE,
+            CommandRouter._build_dispatch_continuity_context(
+                _make_envelope({"source_device_id": "dev-x", "session_id": "s-x"})
+            ),
+        )
+        dims = {d.dimension for d in report.dimensions}
+        assert ContinuityLegalityDimension.stale_runtime_rejection not in dims
+        assert ContinuityLegalityDimension.stale_attachment_rejection not in dims
+
+    def test_recovery_paths_still_get_the_stale_dimension(self) -> None:
+        """反向用例：把下发移出去，不能顺手把恢复路径的保护也削掉。"""
+        from core.unified_continuity_legality_authority import (
+            ContinuityLegalityDimension,
+            evaluate_continuity_legality,
+        )
+
+        for path in (
+            ContinuityLegalityPath.RECONNECT,
+            ContinuityLegalityPath.REPLAY_INGRESS,
+            ContinuityLegalityPath.TERMINAL_RESULT_INGESTION,
+        ):
+            report = evaluate_continuity_legality(
+                path,
+                CommandRouter._build_dispatch_continuity_context(
+                    _make_envelope({"source_device_id": "dev-x", "session_id": "s-x"})
+                ),
+            )
+            dims = {d.dimension for d in report.dimensions}
+            assert (
+                ContinuityLegalityDimension.stale_runtime_rejection in dims
+            ), f"{path.value} 是恢复类路径，必须仍然评估 stale_runtime_rejection"
+
+    def test_terminal_state_is_still_rejected_on_dispatch(self) -> None:
+        """下发路径真正要拦的那条（维度 1）没有被这次收窄削掉。"""
+        from unittest.mock import MagicMock as _MM
+
+        from core.unified_continuity_legality_authority import evaluate_continuity_legality
+
+        entry = _MM()
+        entry.attachment_state = "replaced"
+        entry.runtime_session_id = "rs-old"
+        entry.runtime_attachment_session_id = "as-old"
+        with patch("core.attached_runtime_session_registry.lookup_session_by_device", return_value=entry):
+            report = evaluate_continuity_legality(
+                ContinuityLegalityPath.ONLINE_DISPATCH_ACCEPTANCE,
+                CommandRouter._build_dispatch_continuity_context(
+                    _make_envelope({"source_device_id": "replaced-dev", "runtime_attachment_session_id": "as-old"})
+                ),
+            )
+        assert report.verdict is ContinuityLegalityVerdict.REJECT
