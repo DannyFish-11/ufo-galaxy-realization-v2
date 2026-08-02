@@ -14,7 +14,8 @@ from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 from ci_test_shard import all_test_files, shard  # noqa: E402
 
@@ -49,13 +50,23 @@ def test_single_shard_is_the_whole_set(files):
 
 @pytest.mark.parametrize("total", [2, 4, 8])
 def test_shards_are_reasonably_balanced(files, total):
-    """轮转分配下各分片文件数最多差 1。
+    """各分片大小不得相差过大。
 
-    按目录切会极不均匀(tests/ 顶层近千个文件、子目录寥寥),那样切等于没切:
-    最大的那一份仍然会把 runner 压垮。
+    这条曾经断言"最多差 1" —— 那是**轮转分配**(``i % total``)的精确性质。改成
+    哈希分配后放宽到比例容差，这是一次自觉的取舍，不是把门调松来迁就实现：
+
+      轮转  精确均分，但新增一个文件会重排所有分片 → 分片失败无法归因
+      哈希  略有偏斜(实测 4 片约 12%、8 片约 22%)，但新增文件只动它自己
+
+    分片存在的目的是【别让一个进程扛完四万条用例把 runner 压垮】，不是让四份
+    一样长。十几个百分点的偏斜完全不影响这个目的，而归因能力影响每一次排查。
+
+    容差取 1.5 倍：足以容纳哈希的自然偏斜，又能拦住"某一片畸大"这种真正的退化
+    (比如误按目录切 —— tests/ 顶层近千个文件、子目录寥寥，那样切等于没切)。
     """
     sizes = [len(shard(files, i, total)) for i in range(1, total + 1)]
-    assert max(sizes) - min(sizes) <= 1, f"分片大小失衡: {sizes}"
+    assert min(sizes) > 0, f"有空分片: {sizes}"
+    assert max(sizes) / min(sizes) <= 1.5, f"分片大小失衡: {sizes}"
 
 
 # ── 确定性 ──────────────────────────────────────────────────────────────
@@ -95,3 +106,62 @@ def test_rejects_invalid_shard_parameters(files, index, total):
     然后绿灯"。"""
     with pytest.raises(ValueError):
         shard(files, index, total)
+
+
+# ── 稳定性:新增文件不得重排既有文件 ──────────────────────────────────────
+
+
+@pytest.mark.parametrize("total", [2, 4, 8])
+def test_adding_a_file_does_not_move_existing_files(files, total):
+    """新增一个测试文件，只能影响它自己落在哪一片。
+
+    这条守的是【归因能力】，不是性能。原先的轮转分配按排序后的下标切
+    (``i % total``)，新增一个文件会让排在它后面的所有文件下标 +1 —— 四个分片
+    整体重排。实测新增一个 tests/test_atomic_json.py 就让分片 3 的 262 个文件
+    从第 21 项起全部换掉。
+
+    后果是某个 PR 只要增删一个测试文件，就等于把所有测试重新掷一次骰子：潜伏的
+    顺序依赖会随机地红或绿，而红的那条与该 PR 的改动可能毫无关系。本仓库真的
+    因此排查过一次 —— 一条读全局状态的审计断言被无关的新增文件推到了污染源后面。
+    """
+    # 插一个排序上会落在最前面的名字，对轮转分配是最坏情况
+    injected = "tests/test_000_injected_probe.py"
+    grown = sorted([*files, injected])
+
+    def layout(pool):
+        return {f: next(i for i in range(1, total + 1) if f in shard(pool, i, total)) for f in pool}
+
+    before = layout(files)
+    after = layout(grown)
+
+    moved = [f for f in files if before[f] != after[f]]
+    assert not moved, f"新增一个文件导致 {len(moved)} 个既有文件换片(前 5 个: {moved[:5]})"
+
+
+def test_assignment_is_stable_across_processes():
+    """分片结果不能依赖 PYTHONHASHSEED —— 否则本地无法复现 CI 的某一片。
+
+    内置 hash() 对 str 加了进程级随机盐，用它分片会让同一份文件清单在两个进程里
+    切出不同结果。这里固定一组输入，断言分配与解释器的哈希种子无关。
+    """
+    import subprocess
+    import sys
+
+    sample = [f"tests/test_{c}.py" for c in "abcdefghijklmnopqrstuvwxyz"]
+    expected = shard(sample, 1, 4)
+
+    code = (
+        "import sys; sys.path.insert(0, 'scripts');"
+        "from ci_test_shard import shard;"
+        f"print(shard({sample!r}, 1, 4))"
+    )
+    proc = subprocess.run(
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        env={"PYTHONHASHSEED": "424242", "PATH": "/usr/bin:/bin"},
+        cwd=REPO_ROOT,
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.strip() == str(expected), "不同 PYTHONHASHSEED 下分片结果不一致"
