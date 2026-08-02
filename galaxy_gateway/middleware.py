@@ -19,13 +19,63 @@ from starlette.responses import JSONResponse
 
 logger = logging.getLogger(__name__)
 
-# Paths that are always public regardless of auth setting
-_AUTH_EXEMPT_PATHS = {
-    "/health", "/health/live", "/health/ready", "/health/nats",
-    "/api/v1/health", "/api/v1/config",
-    "/metrics",
-    "/docs", "/openapi.json",
+# ---------------------------------------------------------------------------
+# 鉴权豁免表（B1 / B6 修复）
+# ---------------------------------------------------------------------------
+#
+# 此前是一个纯路径集合，有两个问题：
+#
+#   1. **不分方法**。``/api/v1/config`` 一旦进表，该路径下的 GET 与 POST 一起
+#      被豁免 —— 读配置和写配置拿到同一个待遇。豁免读是合理的（面板角标要在
+#      未登录时也能显示"已配置/未配置"），豁免写不是。
+#   2. **生产下过宽**。``/metrics`` 暴露内部拓扑、设备数、任务量；
+#      ``/docs`` + ``/openapi.json`` 把完整 API 面交给未认证方。开发期方便，
+#      生产期是信息泄漏。
+#
+# 现在：豁免以 (路径 → 允许的方法集合) 表达，且分成「始终豁免」与
+# 「仅非生产豁免」两张表。
+#
+# 注意：这里收紧的是**中间件层**。写端点自身还应有 ``Depends(require_auth)``
+# 作为第二道（见 core/routes/perception.py），不要把中间件当唯一防线 ——
+# ``is_auth_enabled()`` 默认为 False，中间件在默认部署下整个是 no-op。
+
+# 只读探针：任何模式下都公开。值为允许的 HTTP 方法集合。
+_AUTH_EXEMPT: dict = {
+    "/health": {"GET", "HEAD"},
+    "/health/live": {"GET", "HEAD"},
+    "/health/ready": {"GET", "HEAD"},
+    "/health/nats": {"GET", "HEAD"},
+    "/api/v1/health": {"GET", "HEAD"},
+    # 面板角标读端点：只豁免 GET。同路径的 POST（写配置）必须过鉴权。
+    "/api/v1/config": {"GET", "HEAD"},
 }
+
+# 仅在非生产模式豁免；GALAXY_MODE=production 下一律要鉴权。
+_AUTH_EXEMPT_NON_PRODUCTION: dict = {
+    "/metrics": {"GET", "HEAD"},
+    "/docs": {"GET", "HEAD"},
+    "/openapi.json": {"GET", "HEAD"},
+}
+
+
+def _is_exempt(path: str, method: str) -> bool:
+    """返回 ``(path, method)`` 是否属于鉴权豁免。"""
+    import os
+
+    method = (method or "").upper()
+    allowed = _AUTH_EXEMPT.get(path)
+    if allowed and method in allowed:
+        return True
+    if os.environ.get("GALAXY_MODE", "").strip().lower() != "production":
+        allowed = _AUTH_EXEMPT_NON_PRODUCTION.get(path)
+        if allowed and method in allowed:
+            return True
+    return False
+
+
+# 兼容别名：外部（测试/文档）曾直接引用这个名字读取豁免路径集合。
+# 保留为路径视图，但**不要**再用它做鉴权判定 —— 判定请走 _is_exempt()。
+_AUTH_EXEMPT_PATHS = frozenset(_AUTH_EXEMPT) | frozenset(_AUTH_EXEMPT_NON_PRODUCTION)
 
 
 # ============================================================================
@@ -172,8 +222,8 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
         if not is_auth_enabled():
             return await call_next(request)
 
-        # Health probes are always public
-        if request.url.path in _AUTH_EXEMPT_PATHS:
+        # 只读探针公开；写方法一律不豁免（B1/B6）
+        if _is_exempt(request.url.path, request.method):
             return await call_next(request)
 
         active_tokens = get_active_tokens()

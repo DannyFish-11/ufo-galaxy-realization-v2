@@ -20,6 +20,66 @@ PROJECT_ROOT = Path(__file__).parent.parent.absolute()
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+
+# ---------------------------------------------------------------------------
+# 顶层模块名劫持防护：`import main` 必须拿到仓库根的 main.py
+# ---------------------------------------------------------------------------
+# 本仓有 128 个 ``nodes/*/main.py``。任何一个测试只要把某个节点目录插进
+# ``sys.path``（``tests/integration/test_node108_metacognition.py:22`` 与
+# ``tests/test_pr_a_multi_device_runtime_wiring.py:801`` 都这么干），此后
+# 全进程的 ``import main`` 就可能解析到那个节点的 main.py —— 而且一旦被
+# ``sys.modules`` 缓存，同分片里后续所有用例都跟着中招。
+#
+# CI 实证（test-shard (4)）：
+#     AttributeError: <module 'main' from '.../nodes/Node_113_AndroidVLM/main.py'>
+#     has no attribute 'ENV_FILE'
+# 受害者是 test_phase0_env_check_secrets_banner.py 与
+# test_setup_wizard_container_runtime.py —— 它们自己完全正确，单独跑必过，
+# 只有在分片里排到污染者之后才挂。
+#
+# 与 test_no_test_hijacks_a_singleton.py 守的是同一类问题（进程级全局被某个
+# 用例改写后不还原），只是这次被劫持的是**模块名空间**而不是单例对象。
+#
+# 这里在每个用例前做两件事：
+#   1. 保证 PROJECT_ROOT 仍排在 sys.path 最前（有人 insert(0, 节点目录) 就纠正）；
+#   2. 若 sys.modules["main"] 已经指向仓库外的文件，就逐出，让下次 import 重新解析。
+# 两者都只在**检测到被污染时**动手，正常情况零开销、零行为改变。
+
+_TOP_LEVEL_NAMES_TO_PROTECT = ("main",)
+
+
+def _restore_project_root_import_precedence() -> None:
+    """把 PROJECT_ROOT 拉回 sys.path 首位，并逐出被劫持的顶层模块。"""
+    root = str(PROJECT_ROOT)
+    if sys.path and sys.path[0] != root:
+        # 不删除别人加的路径（可能确实需要），只是把仓库根重新排到最前。
+        if root in sys.path:
+            sys.path.remove(root)
+        sys.path.insert(0, root)
+
+    for name in _TOP_LEVEL_NAMES_TO_PROTECT:
+        mod = sys.modules.get(name)
+        if mod is None:
+            continue
+        origin = getattr(mod, "__file__", None)
+        if not origin:
+            continue
+        try:
+            resolved = Path(origin).resolve()
+        except (OSError, ValueError):
+            continue
+        # 仓库根下的 main.py 才是对的；nodes/*/main.py 之类一律逐出。
+        if resolved != (PROJECT_ROOT / f"{name}.py").resolve():
+            sys.modules.pop(name, None)
+
+
+@pytest.fixture(autouse=True)
+def _guard_top_level_module_hijack():
+    """每个用例前后都校正一次 —— 前置保证自己拿到对的，后置不留给下一个。"""
+    _restore_project_root_import_precedence()
+    yield
+    _restore_project_root_import_precedence()
+
 # Set test environment variables
 os.environ.setdefault("GALAXY_MODE", "test")
 os.environ.setdefault("GALAXY_DEV_MODE", "1")

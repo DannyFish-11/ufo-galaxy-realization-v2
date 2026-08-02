@@ -14,6 +14,101 @@ from pathlib import Path
 
 logger = logging.getLogger("Galaxy.NATSServer")
 
+# 固定已知可用版本，避免 API 调用。Windows / Linux 共用同一 tag。
+NATS_RELEASE_TAG = "v2.10.24"
+
+# 镜像源列表（按优先级；两条加速镜像 + 官方 GitHub 直连兜底）。下载物始终是
+# NATS 官方 GitHub release 的原始发布件，镜像只做传输加速，SHA256 校验保证
+# 内容与官方发布一致、镜像不可能夹私货。
+_NATS_MIRRORS = (
+    "https://mirror.ghproxy.com/https://github.com",
+    "https://ghfast.top/https://github.com",
+    "https://github.com",  # 官方直连兜底
+)
+
+
+def _http_get(url: str, timeout: int = 20) -> bytes:
+    import urllib.request
+
+    req = urllib.request.Request(url, headers={"User-Agent": "Galaxy-Installer"})
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        return resp.read()
+
+
+def _download_verified_release(asset_name: str, dest: Path) -> bool:
+    """下载 ``asset_name`` 到 ``dest``，并按官方 SHA256SUMS 校验后才落盘。
+
+    B9 修复的核心：此前 Linux 分支直接 ``sh -c "curl -sf https://get-nats.io | sh"``
+    —— 远端脚本内容一变就是本机 RCE，且无摘要校验、无版本钉住。而**同一个文件的
+    Windows 分支早就做对了**（钉版本 + 官方 SHA256SUMS + 校验不过就换源）。
+    这里把那套已验证的下载逻辑提取出来，两个平台共用，Linux 不再执行远端脚本。
+
+    校验不通过 / 拿不到 SHA256SUMS 时**不安装**，换下一个源；全部源失败返回 False。
+    注意与旧 Windows 分支的一处行为差异：旧代码在 SHA256SUMS 获取失败时会
+    "跳过校验"照常安装，那等于把校验做成了可选项 —— 这里改成拿不到摘要就换源，
+    宁可装不上也不装未经校验的二进制。
+
+    :return: 成功且已校验时 True。
+    """
+    import hashlib
+
+    for mirror in _NATS_MIRRORS:
+        base = f"{mirror}/nats-io/nats-server/releases/download/{NATS_RELEASE_TAG}"
+        try:
+            blob = _http_get(f"{base}/{asset_name}")
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("镜像 %s 下载 %s 失败: %s", mirror, asset_name, exc)
+            continue
+
+        expected = ""
+        try:
+            # 官方 release 附带 SHA256SUMS（每行 "<hash>  <文件名>"）
+            for line in _http_get(f"{base}/SHA256SUMS", timeout=10).decode("utf-8", "replace").splitlines():
+                parts = line.split()
+                if len(parts) >= 2 and parts[-1].lstrip("*./") == asset_name:
+                    expected = parts[0].lower()
+                    break
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("镜像 %s 的 SHA256SUMS 获取失败，弃用该源(不降级为免校验安装): %s", mirror, exc)
+            continue
+
+        if not expected:
+            logger.warning("镜像 %s 的 SHA256SUMS 中找不到 %s，弃用该源", mirror, asset_name)
+            continue
+
+        actual = hashlib.sha256(blob).hexdigest().lower()
+        if actual != expected:
+            logger.error("%s 校验失败(源 %s): sha256 %s != 官方 %s，弃用该源", asset_name, mirror, actual, expected)
+            continue
+
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        with open(dest, "wb") as fh:
+            fh.write(blob)
+        logger.info("%s 下载完成并通过官方 SHA256SUMS 校验(源 %s)", asset_name, mirror)
+        return True
+
+    logger.error("%s 所有下载源均失败或校验不通过 —— 拒绝安装未经校验的二进制", asset_name)
+    return False
+
+
+def _linux_asset_name() -> str | None:
+    """返回当前 Linux 架构对应的官方 release 资产名，不支持的架构返回 None。"""
+    import platform
+
+    machine = platform.machine().lower()
+    arch = {
+        "x86_64": "amd64",
+        "amd64": "amd64",
+        "aarch64": "arm64",
+        "arm64": "arm64",
+        "armv7l": "arm7",
+        "armv6l": "arm6",
+    }.get(machine)
+    if arch is None:
+        logger.error("不支持的 Linux 架构 %s —— 无对应的 nats-server 官方发布件", machine)
+        return None
+    return f"nats-server-{NATS_RELEASE_TAG}-linux-{arch}.tar.gz"
+
 
 class EmbeddedNATSServer:
     """内置NATS服务器"""
@@ -129,14 +224,51 @@ class EmbeddedNATSServer:
 
         try:
             if system == "linux":
-                subprocess.run(
-                    ["sh", "-c", "curl -sf https://get-nats.io | sh"],
-                    check=True,
-                    timeout=120,
-                    capture_output=True,
-                    encoding="utf-8",
-                    errors="replace",
-                )
+                # B9: 此处曾是 ["sh", "-c", "curl -sf https://get-nats.io | sh"] ——
+                # 无摘要校验、无版本钉住的远端脚本执行，等价于把本机交给 get-nats.io。
+                # 改走与 Windows 分支同源的「钉版本 + 官方 SHA256SUMS 校验」路径。
+                import tarfile
+
+                nats_dir = Path.home() / ".lumiv" / "bin"
+                nats_bin = nats_dir / "nats-server"
+
+                # 已装过就复用（与 Windows 分支同样的短路，避免每次启动白等一轮下载）
+                if nats_bin.is_file() and nats_bin.stat().st_size > 0:
+                    os.environ["PATH"] = str(nats_dir) + os.pathsep + os.environ.get("PATH", "")
+                    logger.info("nats-server 已安装,复用 %s(跳过下载)", nats_bin)
+                    return True
+
+                asset = _linux_asset_name()
+                if asset is None:
+                    return False
+
+                nats_dir.mkdir(parents=True, exist_ok=True)
+                tar_path = nats_dir / asset
+                if not _download_verified_release(asset, tar_path):
+                    return False
+
+                try:
+                    with tarfile.open(tar_path, "r:gz") as tf:
+                        for member in tf.getmembers():
+                            if not member.isfile() or Path(member.name).name != "nats-server":
+                                continue
+                            src = tf.extractfile(member)
+                            if src is None:
+                                continue
+                            with src, open(nats_bin, "wb") as out:
+                                shutil.copyfileobj(src, out)
+                            nats_bin.chmod(0o755)
+                            break
+                        else:
+                            logger.error("%s 中未找到 nats-server 可执行文件", asset)
+                            return False
+                except Exception as exc:  # noqa: BLE001
+                    logger.error("nats-server 解包失败: %s", exc)
+                    return False
+                finally:
+                    tar_path.unlink(missing_ok=True)
+
+                os.environ["PATH"] = str(nats_dir) + os.pathsep + os.environ.get("PATH", "")
             elif system == "darwin":
                 subprocess.run(
                     ["brew", "install", "nats-server"],
@@ -147,9 +279,7 @@ class EmbeddedNATSServer:
                     errors="replace",
                 )
             elif system == "windows":
-                import hashlib
-                import urllib.request
-
+                # hashlib / urllib.request 已随下载逻辑一起上移到模块级 helper。
                 nats_dir = Path.home() / ".lumiv" / "bin"
                 nats_dir.mkdir(parents=True, exist_ok=True)
                 nats_exe = nats_dir / "nats-server.exe"
@@ -165,65 +295,16 @@ class EmbeddedNATSServer:
                     os.environ["PATH"] = str(nats_dir) + os.pathsep + os.environ.get("PATH", "")
                     logger.info("nats-server 已安装,复用 %s(跳过下载)", nats_exe)
                     return True
-                # PR-NATS-CN: 使用国内镜像源加速下载，支持超时重试
-                tag = "v2.10.24"  # 固定已知可用版本，避免API调用
-                zip_name = f"nats-server-{tag}-windows-amd64.zip"
-                # 镜像源列表（按优先级;两条镜像 + 官方 GitHub 直连兜底。此前列表里
-                # 同一 ghproxy 地址写了两遍,等于只有一条镜像——修掉重复,换成两家
-                # 独立加速前缀,单点失效时仍有真实备选。下载物始终是 NATS 官方
-                # GitHub release 的原始发布件,镜像只是传输加速,下方 SHA256 校验
-                # 保证内容与官方发布一致、镜像不可能夹私货）
-                mirrors = [
-                    "https://mirror.ghproxy.com/https://github.com",
-                    "https://ghfast.top/https://github.com",
-                    "https://github.com",  # 官方直连兜底
-                ]
-
-                def _http_get(url: str, timeout: int = 20) -> bytes:
-                    req = urllib.request.Request(url, headers={"User-Agent": "Galaxy-Installer"})
-                    with urllib.request.urlopen(req, timeout=timeout) as resp:
-                        return resp.read()
-
                 # 下载 zip 包 + 官方 SHA256SUMS 校验(所有者 Windows 真机 WinError 4551
                 # 整治的一环:确保落盘的是 NATS 官方 GitHub release 的原始二进制、
                 # 未被镜像/中间人篡改;校验不过就换下一个源,绝不安装可疑文件)
-                zip_path = nats_dir / "nats-server.zip"
-                downloaded = False
-                for mirror in mirrors:
-                    base = f"{mirror}/nats-io/nats-server/releases/download/{tag}"
-                    try:
-                        blob = _http_get(f"{base}/{zip_name}")
-                        expected = ""
-                        try:
-                            # 官方 release 附带 SHA256SUMS(每行 "<hash>  <文件名>")
-                            for line in (
-                                _http_get(f"{base}/SHA256SUMS", timeout=10).decode("utf-8", "replace").splitlines()
-                            ):
-                                parts = line.split()
-                                if len(parts) >= 2 and parts[-1].lstrip("*./") == zip_name:
-                                    expected = parts[0].lower()
-                                    break
-                        except Exception as e:  # noqa: BLE001
-                            logger.warning("SHA256SUMS 获取失败(跳过校验,仅此源): %s", e)
-                        if expected:
-                            actual = hashlib.sha256(blob).hexdigest().lower()
-                            if actual != expected:
-                                logger.error(
-                                    "nats-server 校验失败(源 %s): sha256 %s != 官方 %s,弃用该源",
-                                    mirror,
-                                    actual,
-                                    expected,
-                                )
-                                continue  # 内容不符 → 换下一个源
-                            logger.info("nats-server sha256 校验通过(官方 SHA256SUMS)")
-                        with open(zip_path, "wb") as f:
-                            f.write(blob)
-                        downloaded = True
-                        logger.info("nats-server downloaded from %s", mirror)
-                        break
-                    except Exception as e:
-                        logger.debug("Mirror %s failed: %s", mirror, e)
-                        continue
+                #
+                # B9 重构:镜像列表 / _http_get / 下载校验循环原本内联在本分支里,
+                # 现已提取为模块级 _download_verified_release(),与 Linux 分支共用
+                # ——Linux 此前走的是无校验的 `curl | sh`,共用后两个平台同一套保证。
+                zip_name = f"nats-server-{NATS_RELEASE_TAG}-windows-amd64.zip"
+                zip_path = nats_dir / zip_name
+                downloaded = _download_verified_release(zip_name, zip_path)
                 if downloaded:
                     try:
                         import zipfile
