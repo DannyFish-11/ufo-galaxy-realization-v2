@@ -351,6 +351,16 @@ class NATSBus:
         if getattr(self, "_local_mode", False):
             return {"success": True, "local": True, "reason": self._local_reason}
 
+        # 显式关闭跨设备总线时,直接切进程内总线,不连网、更不拉起内置服务器。
+        # 此前这个开关只有 unified_launcher 认;任何绕过启动器的调用方(HTTP 端点、
+        # 后台任务、测试)照样会走完自动安装 + 拉起常驻进程的链路。见
+        # core.nats_server.nats_disabled_by_config 的说明。
+        from core.nats_server import nats_disabled_by_config
+
+        if nats_disabled_by_config():
+            self.enable_local_fallback("GALAXY_NATS_ENABLED=false(按配置显式关闭)")
+            return {"success": True, "local": True, "reason": self._local_reason}
+
         target = url or self._url
 
         # PR-NATS-CORE: If no URL configured, try to start embedded server

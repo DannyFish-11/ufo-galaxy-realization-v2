@@ -86,8 +86,21 @@ class TestWorkerStatusEndpoint:
 
 class TestWorkerToggleEndpoint:
     def test_enable_returns_immediately_with_starting_true(self, client):
-        """POST toggle 必须立即返回(不阻塞在 NATS 冷启动链路上):starting=True。"""
+        """POST toggle 必须立即返回(不阻塞在 NATS 冷启动链路上):starting=True。
+
+        「NATS 不可达」由**注入一个诚实地连不上的 bus** 来构造,不再依赖"本机恰好
+        没装 nats-server"。后者是个会自我毁灭的前提:``core.nats_server`` 在连不上时
+        会自动下载 nats-server 并拉起一个**脱离进程长期存活**的常驻服务 —— 所以第一次
+        跑这条用例就把前提破坏掉了,之后每个新进程都连得上、``running`` 变 True、断言
+        永久红,重跑换分支都不自愈。(conftest 现在统一设 ``GALAXY_NATS_ENABLED=false``
+        堵住了那条副作用;这里再注入一次,让本用例的前提**写在自己身上**,不靠全局配置。)
+        """
         from core.worker_runtime import get_worker_runtime
+
+        unavailable_bus = MagicMock()
+        unavailable_bus.is_connected = MagicMock(return_value=False)
+        unavailable_bus.connect = AsyncMock()  # 连了,但连完仍然 is_connected() == False
+        get_worker_runtime()._nats = unavailable_bus
 
         t0 = time.monotonic()
         r = client.post("/api/v1/mesh/worker/toggle", json={"enable": True})

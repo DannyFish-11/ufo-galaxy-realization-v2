@@ -24,6 +24,23 @@ PROJECT_ROOT = Path(__file__).parent.parent.absolute()
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+@pytest.fixture(autouse=True)
+def _nats_enabled_for_control_plane_tests(monkeypatch):
+    """本文件测的就是 NATS **启用**时的控制面行为,所以在这里显式打开开关。
+
+    tests/conftest.py 现在全局设 ``GALAXY_NATS_ENABLED=false`` —— 因为
+    ``core.nats_server.EmbeddedNATSServer`` 会自动下载 nats-server 并拉起一个
+    **脱离进程长期存活**的常驻服务,那是跑测试不该留下的整机级副作用(它已经
+    造成过一条用例的永久红,详见 conftest 里的说明)。
+
+    但"总线关着"不是本文件的被测前提:这里的用例断言的恰恰是**开着的时候**
+    connect() 会去尝试嵌入式服务器、失败要如实报错而不是伪装成 noop 成功。
+    所以本文件把开关拨回来。安全性由用例自己保证 —— 每条会走到嵌入式分支的
+    用例都把 ``EmbeddedNATSServer`` patch 成了必定失败的桩,不会真去下载或拉起。
+    """
+    monkeypatch.setenv("GALAXY_NATS_ENABLED", "true")
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
