@@ -77,6 +77,19 @@ jobs:
           PYTHONDONTWRITEBYTECODE: "1"
         run: python scripts/check_repo_hygiene.py
 
+      # 新-11 / P18：audit/completion_matrix.json 记录各领域完成度评分，每条带
+      # evidence_file 指向支撑该评分的源码。但此前**没有任何 CI 引用它** ——
+      # 它是一次性审计产物而非强制门，文件被移走/删掉时矩阵会静默过期。
+      # 这与 final_validation_probe 的 SPLIT-01 长期误报红是同一类病：
+      # 审计资产比代码老，久而久之团队就不再相信它。
+      #
+      # 只校验"引用的路径是否存在"这一件能被机器判定的事；评分是否正确是人的
+      # 判断，不在此校验（硬做只会制造噪音）。
+      - name: 审计矩阵引用的证据文件必须存在
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: python scripts/check_completion_matrix.py --strict
+
   # ---------------------------------------------------------------------------
   # 3. Runtime / Structural Validation
   # ---------------------------------------------------------------------------

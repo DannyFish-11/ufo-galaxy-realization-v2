@@ -7,6 +7,86 @@ on:
     branches: [main]
 
 jobs:
+  # ---------------------------------------------------------------------------
+  # 面板构建产物一致性门（B20 / B22 / P14）
+  # ---------------------------------------------------------------------------
+  # electron/renderer/panel/dist/ 是**随仓分发**的构建产物：Electron 生产环境
+  # 直接 loadFile(dist/index.html)。但此前 CI 里没有任何前端构建步骤 ——
+  # 谁改了 panel/src 而忘记重建，用户看到的就是旧界面，且 CI 一声不吭。
+  #
+  # 这个门重建一次再 `git diff --exit-code dist/`。可行性已实测：Vite 产物
+  # 文件名带内容哈希，同源同依赖重建得到逐字节相同的产物
+  # （main-Z6NyW_wA.js / main-Cb-soAen.css 哈希不变）。
+  #
+  # 前提是依赖必须可复现 —— 所以用 `npm ci`（读 package-lock.json）而不是
+  # `npm install`。lock 文件本轮才补上（此前三处 package.json 全无 lock，
+  # 每次安装都可能拉到不同的传递依赖树，那样这个门必然假红）。
+  panel-dist-consistency:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install panel deps (locked)
+        working-directory: electron/renderer/panel
+        run: npm ci --no-audit --no-fund
+      - name: Rebuild panel
+        working-directory: electron/renderer/panel
+        run: npm run build
+      - name: dist/ 必须与源码一致
+        run: |
+          if ! git diff --exit-code -- electron/renderer/panel/dist/; then
+            echo "::error::panel/dist 与 panel/src 不一致 —— 改了源码但没重建构建产物。"
+            echo "::error::Electron 生产环境直接加载 dist/，不重建的话用户看到的是旧界面。"
+            echo "::error::修法: cd electron/renderer/panel && npm ci && npm run build，然后提交 dist/ 的改动。"
+            exit 1
+          fi
+          echo "dist/ 与源码一致。"
+
+  # ---------------------------------------------------------------------------
+  # Windows 冒烟（新-10 / P20）
+  # ---------------------------------------------------------------------------
+  # 审查发现:全仓 56 个 CI 作业**全部** runs-on: ubuntu-latest,零 Windows、零 macOS。
+  # 而仓库明确支持 Windows —— install_windows.ps1 / install_taskscheduler.ps1 /
+  # start.bat / stop.bat / requirements-windows.txt / windows_service/ /
+  # windows_client/ 都在,却没有任何一条 CI 会在 Windows 上跑过。
+  #
+  # 这里刻意做**冒烟**而不是全量:全量跑 Windows runner 又慢又贵,而且本轮的目标
+  # 是"把零覆盖变成有覆盖",不是一步到位。冒烟覆盖真正会因平台而异的那几处:
+  # 路径分隔符、编码、原子写权限语义、脚本存在性。
+  windows-smoke:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install core dependencies
+        run: pip install -r requirements-core.txt -r requirements-dev.txt
+      - name: 入口模块可导入（不执行）
+        # 只 import 不运行 —— main.py 的副作用都关在 __main__ 守卫里,
+        # 这条同时验证了那个守卫在 Windows 上也成立。
+        run: python -c "import main; print('main imported OK:', main.__file__)"
+      - name: Windows 停止脚本存在且语法可解析
+        shell: cmd
+        run: |
+          if not exist stop.bat exit /b 1
+          if not exist start.bat exit /b 1
+          echo Windows 启停脚本齐备
+      - name: 跨平台敏感的单测（路径 / 编码 / 原子写）
+        run: |
+          python -m pytest -q --timeout=120 -p no:cacheprovider `
+            tests/test_atomic_json_permissions.py `
+            tests/test_entrypoint_import_has_no_env_side_effects.py `
+            tests/test_no_test_hijacks_top_level_module.py `
+            tests/test_repo_write_isolation.py
+
   lint:
     runs-on: ubuntu-latest
     permissions:
